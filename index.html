@@ -16,11 +16,20 @@
     .container { max-width: 600px; margin: 0 auto; }
     h1 { font-size: 1.5rem; text-align: center; margin-bottom: 1.5rem; color: var(--text); }
 
+    /* Metrics row */
+    .metrics-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.5rem; margin-bottom: 1rem; }
+    .metric { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 0.625rem; text-align: center; }
+    .metric .value { font-size: 1.125rem; font-weight: 700; color: var(--accent); }
+    .metric .label { font-size: 0.5625rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin-top: 2px; }
+
+    /* Add Section button - at top */
+    #addSectionBtn { width: 100%; padding: 0.75rem; background: var(--card); border: 2px dashed var(--accent); border-radius: 12px; color: var(--accent); font-size: 0.9375rem; font-weight: 600; cursor: pointer; margin-bottom: 0.75rem; transition: all 0.2s; }
+    #addSectionBtn:hover { background: var(--card-hover); }
+
     /* Sections */
     .section { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 1rem; margin-bottom: 0.75rem; }
     .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; }
     .section-title { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); }
-    .section-badge { background: var(--accent); color: #000; font-size: 0.6875rem; font-weight: 700; padding: 2px 8px; border-radius: 100px; }
     .delete-section { background: none; border: none; color: var(--red); font-size: 1.2rem; cursor: pointer; padding: 0 0.25rem; line-height: 1; }
 
     .field { margin-bottom: 0.75rem; }
@@ -31,9 +40,15 @@
     .row { display: flex; gap: 0.75rem; }
     .row .field { flex: 1; }
 
-    /* Add Section button */
-    #addSectionBtn { width: 100%; padding: 0.75rem; background: transparent; border: 2px dashed var(--border); border-radius: 12px; color: var(--text-muted); font-size: 0.9375rem; cursor: pointer; margin-bottom: 1rem; transition: all 0.2s; }
-    #addSectionBtn:hover { border-color: var(--accent); color: var(--accent); }
+    /* Material toggles */
+    .toggles { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.75rem; }
+    .toggle-btn { padding: 0.375rem 0.75rem; border-radius: 100px; font-size: 0.75rem; font-weight: 600; cursor: pointer; border: 1px solid var(--border); background: var(--input-bg); color: var(--text-muted); transition: all 0.15s; }
+    .toggle-btn.active { background: var(--accent); color: #000; border-color: var(--accent); }
+
+    /* Equipment selector */
+    .equip-row { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+    .equip-btn { flex: 1; padding: 0.5rem; border-radius: 8px; font-size: 0.75rem; font-weight: 600; cursor: pointer; border: 1px solid var(--border); background: var(--input-bg); color: var(--text-muted); text-align: center; transition: all 0.15s; }
+    .equip-btn.active { background: var(--green); color: #000; border-color: var(--green); }
 
     /* Cost Cards Button */
     #openCostCards { width: 100%; padding: 0.875rem; background: var(--card); border: 1px solid var(--border); border-radius: 12px; color: var(--text); font-size: 0.9375rem; font-weight: 600; cursor: pointer; margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center; }
@@ -42,11 +57,6 @@
 
     /* Output */
     .output-section { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 1.25rem; margin-bottom: 1rem; }
-    .big-numbers { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 1rem; }
-    .big-num { background: var(--input-bg); border-radius: 10px; padding: 0.75rem; text-align: center; }
-    .big-num .value { font-size: 1.25rem; font-weight: 700; color: var(--accent); }
-    .big-num .label { font-size: 0.625rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin-top: 0.2rem; }
-
     .line-items { border-top: 1px solid var(--border); padding-top: 0.75rem; }
     .line-item { display: flex; justify-content: space-between; padding: 0.3rem 0; font-size: 0.875rem; }
     .line-item .name { color: var(--text-muted); }
@@ -84,7 +94,7 @@
     .card-content { padding: 0 1rem 1.5rem; }
     .card-field { margin-bottom: 0.875rem; }
     .card-field label { font-size: 0.75rem; margin-bottom: 0.25rem; }
-    .card-field input { padding: 0.5rem 0.625rem; font-size: 0.875rem; }
+    .card-field input, .card-field select { padding: 0.5rem 0.625rem; font-size: 0.875rem; width: 100%; }
 
     /* Saved jobs */
     .saved-jobs { margin-top: 1rem; }
@@ -104,8 +114,32 @@
   <div class="container">
     <h1>ScopeCrete</h1>
 
-    <button id="addSectionBtn" onclick="addSection()">+ Add Section</button>
+    <!-- Top metrics row -->
+    <div class="metrics-row">
+      <div class="metric"><div class="value" id="costSqFt">$0.00</div><div class="label">$/SqFt</div></div>
+      <div class="metric"><div class="value" id="costSqYd">$0.00</div><div class="label">$/SqYd</div></div>
+      <div class="metric"><div class="value" id="costDay">$0</div><div class="label">$/Day</div></div>
+    </div>
+
+    <!-- Add Section - prepends to top -->
+    <button id="addSectionBtn" onclick="addSectionTop()">+ Add Section</button>
+
+    <!-- Sections container - new sections prepend -->
     <div id="sectionsContainer"></div>
+
+    <!-- Equipment selector -->
+    <div class="equip-row">
+      <button class="equip-btn active" id="equip-tailgate" onclick="setEquip(0)">Tailgate</button>
+      <button class="equip-btn" id="equip-buggy" onclick="setEquip(1)">Georgia Buggy</button>
+      <button class="equip-btn" id="equip-pump" onclick="setEquip(2)">Pump Truck</button>
+    </div>
+
+    <!-- Material toggles -->
+    <div class="toggles" id="matToggles">
+      <button class="toggle-btn active" id="tog-rebar" onclick="toggleMat('rebar')">Rebar</button>
+      <button class="toggle-btn" id="tog-mesh" onclick="toggleMat('mesh')">Wire Mesh</button>
+      <button class="toggle-btn" id="tog-gravel" onclick="toggleMat('gravel')">Gravel Base</button>
+    </div>
 
     <button id="openCostCards" onclick="openCostCards()">
       <span>My Cost Cards</span>
@@ -113,10 +147,6 @@
     </button>
 
     <div class="output-section">
-      <div class="big-numbers">
-        <div class="big-num"><div class="value" id="totalCY">0.00</div><div class="label">Total CY</div></div>
-        <div class="big-num"><div class="value" id="profitPerDay">$0</div><div class="label">Profit/Day</div></div>
-      </div>
       <div class="line-items" id="lineItems"></div>
       <div class="markup-control">
         <div class="markup-header">
@@ -158,13 +188,14 @@
     const costCards = {
       materials: {
         concrete3000: 150, concrete4000: 160, concrete5000: 175,
-        rebar: 8.50, wireMesh: 45, pumpMin: 450, pumpRate: 15, demoRate: 1.75
+        rebar: 8.50, wireMesh: 45, pumpMin: 450, pumpRate: 15, demoRate: 1.75,
+        buggyDay: 250, gravelSqFt: 0.85
       },
       labor: {
-        crewRate: 65, formingRate: 10, finishingRate: 51, daysPerBid: 1
+        crewRate: 30, crewSize: 4, productionRate: 60, formingRate: 10, finishingRate: 51, logisticsDays: 0.25
       },
       defaults: {
-        defaultPSI: 4000, defaultDepth: 4, defaultMarkup: 22, pumpToggle: false, demoToggle: false
+        defaultPSI: 4000, defaultDepth: 4, defaultMarkup: 22
       }
     };
 
@@ -173,8 +204,26 @@
     let nextSectionId = 2;
     let markupPct = 22;
 
-    function addSection() {
-      sections.push({ id: nextSectionId++, lengthFt: 0, lengthIn: 0, widthFt: 0, widthIn: 0, depthIn: 4 });
+    // ===== MATERIAL TOGGLES =====
+    const mats = { rebar: true, mesh: false, gravel: false };
+
+    // ===== EQUIPMENT =====
+    let equipType = 0; // 0=tailgate, 1=buggy, 2=pump
+
+    function setEquip(t) {
+      equipType = t;
+      document.querySelectorAll('.equip-btn').forEach((b, i) => b.classList.toggle('active', i === t));
+      calculate();
+    }
+
+    function toggleMat(key) {
+      mats[key] = !mats[key];
+      document.getElementById('tog-' + key).classList.toggle('active', mats[key]);
+      calculate();
+    }
+
+    function addSectionTop() {
+      sections.unshift({ id: nextSectionId++, lengthFt: 0, lengthIn: 0, widthFt: 0, widthIn: 0, depthIn: 4 });
       renderSections();
     }
 
@@ -229,18 +278,18 @@
 
     // ===== CALCULATE =====
     function calculate() {
+      let totalSqFt = 0;
       let totalCY = 0;
       let concreteCost = 0;
+      let shortloadFee = 0;
       let rebarCost = 0;
+      let meshCost = 0;
+      let gravelCost = 0;
       let formingLabor = 0;
       let finishingLabor = 0;
-      let pumpCost = 0;
-      let demoCost = 0;
-      let shortloadFee = 0;
+      let equipCost = 0;
 
       const psi = costCards.defaults.defaultPSI;
-      const pumpToggle = costCards.defaults.pumpToggle;
-      const demoToggle = costCards.defaults.demoToggle;
       const concretePrice = psi === 3000 ? costCards.materials.concrete3000 : psi === 5000 ? costCards.materials.concrete5000 : costCards.materials.concrete4000;
 
       sections.forEach(sec => {
@@ -249,82 +298,98 @@
         const depthIn = sec.depthIn || 4;
         const sqft = L * W;
         const cy = (sqft * depthIn / 12) / 27;
+        totalSqFt += sqft;
         totalCY += cy;
 
         const secConcreteCost = cy * concretePrice;
         concreteCost += secConcreteCost;
-
         if (cy < 5) shortloadFee += cy * concretePrice * 0.15;
 
         const perimeter = 2 * (L + W);
-        const rebarPieces = Math.ceil(perimeter * 12 / 24);
-        rebarCost += rebarPieces * costCards.materials.rebar;
+        if (mats.rebar) {
+          const rebarPcs = Math.ceil(perimeter * 12 / 24);
+          rebarCost += rebarPcs * costCards.materials.rebar;
+        }
+        if (mats.mesh) {
+          const rolls = Math.ceil(sqft / 40);
+          meshCost += rolls * costCards.materials.wireMesh;
+        }
+        if (mats.gravel) {
+          gravelCost += sqft * costCards.materials.gravelSqFt;
+        }
 
         const sqyd = sqft / 9;
         formingLabor += perimeter * costCards.labor.formingRate;
         finishingLabor += sqyd * costCards.labor.finishingRate;
       });
 
-      if (pumpToggle) pumpCost = Math.max(totalCY * costCards.materials.pumpRate, costCards.materials.pumpMin);
-      if (demoToggle) demoCost = sections.reduce((sum, sec) => {
-        const sqft = (sec.lengthFt + sec.lengthIn / 12) * (sec.widthFt + sec.widthIn / 12);
-        return sum + sqft * costCards.materials.demoRate;
-      }, 0);
+      // Equipment
+      if (equipType === 1) equipCost = costCards.materials.buggyDay;
+      if (equipType === 2) equipCost = Math.max(totalCY * costCards.materials.pumpRate, costCards.materials.pumpMin);
 
-      const subtotal = concreteCost + shortloadFee + rebarCost + formingLabor + finishingLabor + pumpCost + demoCost;
+      const subtotal = concreteCost + shortloadFee + rebarCost + meshCost + gravelCost + formingLabor + finishingLabor + equipCost;
       const markupAmt = subtotal * (markupPct / 100);
-      const bidPrice = subtotal + markupAmt;
-      const profitPerDay = markupAmt / (costCards.labor.daysPerBid || 1);
+      const bidTotal = subtotal + markupAmt;
 
-      document.getElementById('totalCY').textContent = totalCY.toFixed(2);
-      document.getElementById('profitPerDay').textContent = '$' + profitPerDay.toFixed(0);
-      document.getElementById('markupPctLabel').textContent = markupPct + '%';
-      document.getElementById('bidPrice').textContent = '$' + bidPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      // Day estimation
+      const laborDays = totalSqFt / (costCards.labor.crewSize * costCards.labor.productionRate);
+      const totalDays = laborDays + costCards.labor.logisticsDays;
+      const costPerDay = totalDays > 0 ? bidTotal / totalDays : bidTotal;
 
-      const lineItems = document.getElementById('lineItems');
-      lineItems.innerHTML = `
-        <div class="line-item"><span class="name">Concrete (${totalCY.toFixed(2)} CY)</span><span class="amount">$${concreteCost.toFixed(2)}</span></div>
+      // Metrics
+      document.getElementById('costSqFt').textContent = totalSqFt > 0 ? '$' + (bidTotal / totalSqFt).toFixed(2) : '$0.00';
+      document.getElementById('costSqYd').textContent = totalSqFt > 0 ? '$' + (bidTotal / (totalSqFt / 9)).toFixed(2) : '$0.00';
+      document.getElementById('costDay').textContent = '$' + Math.round(costPerDay);
+
+      // Line items
+      const li = document.getElementById('lineItems');
+      li.innerHTML = `
+        ${concreteCost > 0 ? `<div class="line-item"><span class="name">Concrete ${totalCY.toFixed(2)} CY @ $${concretePrice}/CY</span><span class="amount">$${concreteCost.toFixed(2)}</span></div>` : ''}
         ${shortloadFee > 0 ? `<div class="line-item"><span class="name">Short Load Fee</span><span class="amount">$${shortloadFee.toFixed(2)}</span></div>` : ''}
-        <div class="line-item"><span class="name">Rebar</span><span class="amount">$${rebarCost.toFixed(2)}</span></div>
-        <div class="line-item"><span class="name">Forming Labor</span><span class="amount">$${formingLabor.toFixed(2)}</span></div>
-        <div class="line-item"><span class="name">Finishing Labor</span><span class="amount">$${finishingLabor.toFixed(2)}</span></div>
-        ${pumpCost > 0 ? `<div class="line-item"><span class="name">Pump Truck</span><span class="amount">$${pumpCost.toFixed(2)}</span></div>` : ''}
-        ${demoCost > 0 ? `<div class="line-item"><span class="name">Demo</span><span class="amount">$${demoCost.toFixed(2)}</span></div>` : ''}
+        ${rebarCost > 0 ? `<div class="line-item"><span class="name">Rebar (${mats.rebar ? 'on' : 'off'})</span><span class="amount">$${rebarCost.toFixed(2)}</span></div>` : ''}
+        ${meshCost > 0 ? `<div class="line-item"><span class="name">Wire Mesh (${mats.mesh ? 'on' : 'off'})</span><span class="amount">$${meshCost.toFixed(2)}</span></div>` : ''}
+        ${gravelCost > 0 ? `<div class="line-item"><span class="name">Gravel Base (${mats.gravel ? 'on' : 'off'})</span><span class="amount">$${gravelCost.toFixed(2)}</span></div>` : ''}
+        ${formingLabor > 0 ? `<div class="line-item"><span class="name">Forming Labor</span><span class="amount">$${formingLabor.toFixed(2)}</span></div>` : ''}
+        ${finishingLabor > 0 ? `<div class="line-item"><span class="name">Finishing Labor</span><span class="amount">$${finishingLabor.toFixed(2)}</span></div>` : ''}
+        ${equipCost > 0 ? `<div class="line-item"><span class="name">${equipType === 1 ? 'Georgia Buggy' : 'Pump Truck'}</span><span class="amount">$${equipCost.toFixed(2)}</span></div>` : ''}
         <div class="line-item total-line"><span class="name">Subtotal</span><span class="amount">$${subtotal.toFixed(2)}</span></div>
         <div class="line-item"><span class="name">Markup (${markupPct}%)</span><span class="amount">$${markupAmt.toFixed(2)}</span></div>
-        <div class="line-item total-line"><span class="name">Bid Total</span><span class="amount">$${bidPrice.toFixed(2)}</span></div>
+        <div class="line-item total-line"><span class="name">Bid Total</span><span class="amount">$${bidTotal.toFixed(2)}</span></div>
       `;
+      document.getElementById('bidPrice').textContent = '$' + bidTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
 
     function updateMarkup() {
       markupPct = parseInt(document.getElementById('markupSlider').value);
+      document.getElementById('markupPctLabel').textContent = markupPct + '%';
       calculate();
     }
 
     // ===== COST CARDS MODAL =====
     const cardDefs = [
-      [
+      [ // Materials
         { key: 'concrete3000', label: 'Concrete 3000 PSI ($/CY)' },
         { key: 'concrete4000', label: 'Concrete 4000 PSI ($/CY)' },
         { key: 'concrete5000', label: 'Concrete 5000 PSI ($/CY)' },
         { key: 'rebar', label: 'Rebar ($/piece)' },
         { key: 'wireMesh', label: 'Wire Mesh ($/roll)' },
+        { key: 'buggyDay', label: 'Georgia Buggy ($/day)' },
         { key: 'pumpMin', label: 'Pump Truck Min ($)' },
         { key: 'pumpRate', label: 'Pump Truck ($/CY)' },
-        { key: 'demoRate', label: 'Demo ($/sq ft)' }
+        { key: 'gravelSqFt', label: 'Gravel Base ($/sqft)' }
       ],
-      [
-        { key: 'crewRate', label: 'Crew Hourly Rate ($/hr)' },
+      [ // Labor
+        { key: 'crewRate', label: 'Crew Rate ($/hr/person)' },
+        { key: 'crewSize', label: 'Crew Size (people)' },
+        { key: 'productionRate', label: 'Production Rate (sqft/person/day)' },
         { key: 'formingRate', label: 'Forming Rate ($/linear ft)' },
         { key: 'finishingRate', label: 'Finishing Rate ($/sq yd)' },
-        { key: 'daysPerBid', label: 'Days Per Bid' }
+        { key: 'logisticsDays', label: 'Logistics Days (buffer)' }
       ],
-      [
+      [ // Defaults
         { key: 'defaultPSI', label: 'Default PSI', type: 'select', options: ['3000', '4000', '5000'] },
         { key: 'defaultDepth', label: 'Default Depth (inches)' },
-        { key: 'defaultMarkup', label: 'Default Markup (%)' },
-        { key: 'pumpToggle', label: 'Pump Truck', type: 'toggle' },
-        { key: 'demoToggle', label: 'Include Demo', type: 'toggle' }
+        { key: 'defaultMarkup', label: 'Default Markup (%)' }
       ]
     ];
 
@@ -348,33 +413,27 @@
       const cardKey = keys[idx];
       const content = document.getElementById('cardContent');
       const defs = cardDefs[idx];
-
       content.innerHTML = defs.map(def => {
         const val = costCards[cardKey][def.key];
         if (def.type === 'select') {
           return `<div class="card-field"><label>${def.label}</label><select onchange="updateCard('${cardKey}', '${def.key}', this.value)">${def.options.map(o => `<option value="${o}" ${o == val ? 'selected' : ''}>${o}</option>`).join('')}</select></div>`;
-        } else if (def.type === 'toggle') {
-          return `<div class="card-field"><label>${def.label}</label><label style="display:inline-flex;align-items:center;gap:0.5rem;cursor:pointer"><input type="checkbox" onchange="updateCard('${cardKey}', '${def.key}', this.checked)" ${val ? 'checked' : ''}> ${val ? 'On' : 'Off'}</label></div>`;
         }
         return `<div class="card-field"><label>${def.label}</label><input type="number" value="${val}" onchange="updateCard('${cardKey}', '${def.key}', this.value)"></div>`;
       }).join('');
     }
 
     function updateCard(card, key, val) {
-      if (typeof val === 'string' && val === 'true') val = true;
-      if (typeof val === 'string' && val === 'false') val = false;
-      costCards[card][key] = parseFloat(val) || val;
+      costCards[card][key] = parseFloat(val) || 0;
       calculate();
     }
 
     // ===== SAVE / LOAD =====
     function saveJob() {
       const job = {
-        id: Date.now(),
-        date: new Date().toISOString().split('T')[0],
+        id: Date.now(), date: new Date().toISOString().split('T')[0],
         sections: JSON.parse(JSON.stringify(sections)),
         costCards: JSON.parse(JSON.stringify(costCards)),
-        markupPct,
+        markupPct, mats: {...mats}, equipType,
         bidTotal: document.getElementById('bidPrice').textContent
       };
       const jobs = JSON.parse(localStorage.getItem('scopecrete_jobs') || '[]');
@@ -392,8 +451,15 @@
       sections = job.sections;
       nextSectionId = Math.max(...sections.map(s => s.id)) + 1;
       Object.assign(costCards, job.costCards);
+      Object.assign(mats, job.mats || { rebar: true, mesh: false, gravel: false });
+      equipType = job.equipType || 0;
       markupPct = job.markupPct;
       document.getElementById('markupSlider').value = markupPct;
+      // Update toggles
+      ['rebar', 'mesh', 'gravel'].forEach(k => {
+        document.getElementById('tog-' + k).classList.toggle('active', mats[k]);
+      });
+      document.querySelectorAll('.equip-btn').forEach((b, i) => b.classList.toggle('active', i === equipType));
       renderSections();
       calculate();
       showToast('Job loaded!');
@@ -411,18 +477,7 @@
       const list = document.getElementById('savedJobsList');
       if (jobs.length === 0) { list.innerHTML = ''; return; }
       list.innerHTML = '<div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:0.5rem;">SAVED JOBS</div>' +
-        jobs.map(j => `
-          <div class="saved-job" onclick="loadJob(${j.id})">
-            <div class="saved-job-info">
-              <div class="job-name">${j.date}</div>
-              <div class="job-date">${j.sections.length} section${j.sections.length > 1 ? 's' : ''}</div>
-            </div>
-            <div style="display:flex;align-items:center;gap:0.5rem;">
-              <span class="saved-job-amount">${j.bidTotal}</span>
-              <button class="saved-job-delete" onclick="deleteJob(${j.id}, event)">&#215;</button>
-            </div>
-          </div>
-        `).join('');
+        jobs.map(j => `<div class="saved-job" onclick="loadJob(${j.id})"><div class="saved-job-info"><div class="job-name">${j.date}</div><div class="job-date">${j.sections.length} section${j.sections.length > 1 ? 's' : ''}</div></div><div style="display:flex;align-items:center;gap:0.5rem;"><span class="saved-job-amount">${j.bidTotal}</span><button class="saved-job-delete" onclick="deleteJob(${j.id}, event)">&#215;</button></div></div>`).join('');
     }
 
     function showToast(msg) {
@@ -437,45 +492,52 @@
       const { jsPDF } = window.jspdf;
       const doc = new jsPDF();
       const bid = document.getElementById('bidPrice').textContent;
-      const cy = document.getElementById('totalCY').textContent;
-      const profit = document.getElementById('profitPerDay').textContent;
+      const psi = costCards.defaults.defaultPSI;
       const markup = markupPct;
+      const totalSqFt = sections.reduce((sum, sec) => {
+        const L = sec.lengthFt + sec.lengthIn / 12;
+        const W = sec.widthFt + sec.widthIn / 12;
+        return sum + (L * W);
+      }, 0);
 
-      doc.setFontSize(20);
+      doc.setFontSize(22);
       doc.setFont('helvetica', 'bold');
       doc.text('SCOPECRETE', 20, 25);
       doc.setFontSize(10);
       doc.setFont('helvetica', 'normal');
       doc.text('Concrete Bid Quote', 20, 32);
+      doc.text('Generated with ScopeCrete | scopecrete.ai', 20, 38);
 
       doc.setFontSize(14);
       doc.setFont('helvetica', 'bold');
-      doc.text('Bid Amount: ' + bid, 20, 48);
+      doc.text('Bid: ' + bid, 20, 52);
       doc.setFontSize(10);
       doc.setFont('helvetica', 'normal');
-      doc.text('Total CY: ' + cy + '  |  Markup: ' + markup + '%  |  Profit/Day: ' + profit, 20, 55);
-      doc.text('Date: ' + new Date().toLocaleDateString(), 20, 62);
+      doc.text(`Total: ${totalSqFt.toFixed(0)} sq ft  |  PSI: ${psi}  |  Markup: ${markup}%`, 20, 59);
+      doc.text('Date: ' + new Date().toLocaleDateString(), 20, 66);
 
-      doc.setFontSize(11);
+      let y = 78;
+      doc.setFontSize(12);
       doc.setFont('helvetica', 'bold');
-      doc.text('Scope of Work', 20, 75);
+      doc.text('Scope of Work', 20, y);
+      y += 8;
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(10);
 
-      let y = 82;
       sections.forEach((sec, i) => {
         const L = sec.lengthFt + sec.lengthIn / 12;
         const W = sec.widthFt + sec.widthIn / 12;
-        doc.text(`Section ${i + 1}: ${L.toFixed(1)} x ${W.toFixed(1)} ft @ ${sec.depthIn}" depth`, 20, y);
+        const cy = (L * W * sec.depthIn / 12) / 27;
+        doc.text(`${i + 1}. ${L.toFixed(1)}\' x ${W.toFixed(1)}\' x ${sec.depthIn}" = ${cy.toFixed(2)} CY concrete @ ${psi} PSI`, 20, y);
         y += 7;
       });
 
-      y += 5;
+      y += 4;
       doc.setFont('helvetica', 'bold');
       doc.text('Terms', 20, y);
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(9);
-      doc.text('Quote valid for 30 days. Final pricing subject to site verification.', 20, y + 7);
+      doc.text('Quote valid for 30 days. Final pricing subject to on-site verification.', 20, y + 7);
       doc.text('A 50% deposit is required to schedule. Balance due upon completion.', 20, y + 13);
 
       doc.save('scopecrete-quote-' + Date.now() + '.pdf');

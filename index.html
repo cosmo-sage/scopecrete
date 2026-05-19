@@ -1,1156 +1,236 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ScopeCrete — Multi-Section Calculator</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    :root {
-      --bg: #0f1117;
-      --card: #1a1d27;
-      --card-hover: #21253a;
-      --border: #2a2f45;
-      --text: #e8eaf0;
-      --text-muted: #8891a8;
-      --accent: #f59e0b;
-      --accent-hover: #d97706;
-      --green: #22c55e;
-      --red: #ef4444;
-      --blue: #3b82f6;
-      --input-bg: #0f1117;
-    }
-    body {
-      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      min-height: 100vh;
-      padding: 1rem;
-    }
-    .container { max-width: 900px; margin: 0 auto; }
-    header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 1.5rem;
-    }
-    header h1 { font-size: 1.5rem; font-weight: 700; }
-    .header-actions { display: flex; gap: 0.5rem; }
-    .btn {
-      padding: 0.5rem 1rem;
-      border-radius: 8px;
-      border: 1px solid var(--border);
-      background: var(--card);
-      color: var(--text);
-      font-size: 0.875rem;
-      cursor: pointer;
-      transition: all 0.15s;
-    }
-    .btn:hover { background: var(--card-hover); border-color: var(--accent); }
-    .btn-primary { background: var(--accent); border-color: var(--accent); color: #000; font-weight: 600; }
-    .btn-primary:hover { background: var(--accent-hover); }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scopecrete.ai — Landing</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --orange: #FF6B35;
+            --dark: #1a1a2e;
+            --gray-900: #111;
+            --gray-700: #374151;
+            --gray-500: #6b7280;
+            --gray-300: #d1d5db;
+            --gray-100: #f3f4f6;
+            --gray-50: #f9fafb;
+            --white: #ffffff;
+        }
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            color: var(--gray-900);
+            background: var(--white);
+            line-height: 1.6;
+        }
 
-    /* Totals bar */
-    .totals-bar {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 1rem 1.25rem;
-      margin-bottom: 1rem;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    .totals-bar .job-name {
-      font-size: 1rem;
-      font-weight: 600;
-      color: var(--text);
-    }
-    .totals-bar .job-name input {
-      background: transparent;
-      border: none;
-      border-bottom: 1px dashed var(--border);
-      color: var(--text);
-      font-size: 1rem;
-      font-weight: 600;
-      width: 160px;
-      padding: 2px 4px;
-    }
-    .totals-bar .job-name input:focus { outline: none; border-color: var(--accent); }
-    .totals-summary { display: flex; gap: 1.5rem; align-items: center; }
-    .totals-summary span { font-size: 0.875rem; color: var(--text-muted); }
-    .totals-summary strong { color: var(--accent); margin-left: 0.25rem; }
+        /* HEADER */
+        header {
+            background: var(--dark);
+            padding: 0 40px;
+            height: 64px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .logo { font-size: 20px; font-weight: 800; color: var(--white); letter-spacing: -0.5px; }
+        .logo span { color: var(--orange); }
+        nav { display: flex; gap: 32px; }
+        nav a { color: var(--gray-300); text-decoration: none; font-size: 14px; font-weight: 500; transition: color 0.2s; }
+        nav a:hover { color: var(--orange); }
 
-    /* Sections */
-    .sections-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 0.75rem;
-    }
-    .sections-header span { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); }
-    .section-card {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      margin-bottom: 0.75rem;
-      overflow: hidden;
-      transition: border-color 0.15s;
-    }
-    .section-card:hover { border-color: var(--accent); }
-    .section-card.active { border-color: var(--accent); }
-    .section-main {
-      padding: 1rem 1.25rem;
-      cursor: pointer;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    .section-info { flex: 1; }
-    .section-name {
-      font-size: 0.9375rem;
-      font-weight: 600;
-      color: var(--text);
-      margin-bottom: 0.375rem;
-    }
-    .section-name input {
-      background: transparent;
-      border: none;
-      border-bottom: 1px dashed var(--text-muted);
-      color: var(--text);
-      font-size: 0.9375rem;
-      font-weight: 600;
-      width: 140px;
-    }
-    .section-name input:focus { outline: none; border-color: var(--accent); }
-    .section-dims {
-      font-size: 0.8125rem;
-      color: var(--text-muted);
-    }
-    .section-dims strong { color: var(--text); }
-    .section-meta {
-      display: flex;
-      gap: 1rem;
-      font-size: 0.75rem;
-      color: var(--text-muted);
-      margin-top: 0.25rem;
-    }
-    .section-meta strong { color: var(--text); }
-    .section-cost {
-      text-align: right;
-    }
-    .section-cost .cost-label {
-      font-size: 0.6875rem;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      color: var(--text-muted);
-    }
-    .section-cost .cost-value {
-      font-size: 1.125rem;
-      font-weight: 700;
-      color: var(--green);
-      font-variant-numeric: tabular-nums;
-    }
-    .section-card-menu {
-      position: relative;
-    }
-    .section-menu-btn {
-      background: none;
-      border: none;
-      color: var(--text-muted);
-      cursor: pointer;
-      font-size: 1.25rem;
-      padding: 0.25rem 0.5rem;
-      border-radius: 4px;
-    }
-    .section-menu-btn:hover { background: var(--border); color: var(--text); }
-    .section-dropdown {
-      display: none;
-      position: absolute;
-      top: 100%;
-      right: 0;
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      overflow: hidden;
-      z-index: 10;
-      min-width: 140px;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
-    }
-    .section-dropdown.show { display: block; }
-    .section-dropdown button {
-      display: block;
-      width: 100%;
-      padding: 0.625rem 1rem;
-      background: none;
-      border: none;
-      color: var(--text);
-      font-size: 0.875rem;
-      text-align: left;
-      cursor: pointer;
-    }
-    .section-dropdown button:hover { background: var(--card-hover); }
-    .section-dropdown button.danger { color: var(--red); }
+        /* HERO */
+        .hero {
+            padding: 80px 40px;
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 64px;
+            align-items: center;
+        }
+        .hero h1 {
+            font-size: 56px;
+            font-weight: 800;
+            line-height: 1.05;
+            letter-spacing: -2px;
+            color: var(--gray-900);
+            margin-bottom: 24px;
+        }
+        .hero h1 em { font-style: normal; color: var(--orange); }
+        .hero-sub {
+            font-size: 18px;
+            color: var(--gray-500);
+            margin-bottom: 40px;
+            max-width: 440px;
+        }
+        .cta-btn {
+            display: inline-block;
+            background: var(--orange);
+            color: var(--white);
+            padding: 16px 36px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 16px;
+            transition: opacity 0.2s;
+        }
+        .cta-btn:hover { opacity: 0.88; }
 
-    /* Add section button */
-    .add-section-btn {
-      width: 100%;
-      padding: 0.875rem;
-      border: 2px dashed var(--border);
-      border-radius: 12px;
-      background: transparent;
-      color: var(--text-muted);
-      font-size: 0.875rem;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.15s;
-      text-align: center;
-      margin-bottom: 1.5rem;
-    }
-    .add-section-btn:hover { border-color: var(--accent); color: var(--accent); }
+        /* CHAT WIDGET */
+        .chat-widget {
+            border: 2px solid var(--gray-300);
+            border-radius: 12px;
+            padding: 28px;
+            min-height: 340px;
+        }
+        .chat-header { display: flex; align-items: center; gap: 14px; margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid var(--gray-300); }
+        .chat-avatar {
+            width: 48px; height: 48px;
+            border: 2px dashed var(--gray-300);
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 22px;
+        }
+        .chat-name { font-weight: 700; font-size: 16px; }
+        .chat-status { font-size: 12px; color: var(--orange); font-weight: 600; }
+        .chat-msgs { display: flex; flex-direction: column; gap: 14px; margin-bottom: 16px; }
+        .bubble {
+            border: 1.5px solid var(--gray-300);
+            border-radius: 12px;
+            padding: 12px 16px;
+            font-size: 14px;
+            max-width: 80%;
+        }
+        .bubble.dusty { background: var(--gray-50); }
+        .bubble.dusty strong { color: var(--orange); }
+        .chat-input {
+            border: 1.5px solid var(--gray-300);
+            border-radius: 8px;
+            padding: 12px 16px;
+            font-size: 14px;
+            color: var(--gray-500);
+        }
 
-    /* Cost breakdown panel */
-    .cost-breakdown {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 1.25rem;
-      margin-top: 1rem;
-    }
-    .cost-breakdown-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 1rem;
-    }
-    .cost-breakdown-header span {
-      font-size: 0.75rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      color: var(--text-muted);
-    }
-    .margin-control {
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-    }
-    .margin-control span { font-size: 0.8125rem; color: var(--text-muted); }
-    .margin-control strong { color: var(--accent); }
-    .margin-slider {
-      width: 120px;
-      height: 6px;
-      border-radius: 3px;
-      background: var(--border);
-      -webkit-appearance: none;
-      cursor: pointer;
-    }
-    .margin-slider::-webkit-slider-thumb {
-      -webkit-appearance: none;
-      width: 16px;
-      height: 16px;
-      background: var(--accent);
-      border-radius: 50%;
-    }
-    .cost-lines { margin-bottom: 1rem; }
-    .cost-line {
-      display: flex;
-      justify-content: space-between;
-      padding: 0.375rem 0;
-      font-size: 0.875rem;
-    }
-    .cost-line .label { color: var(--text-muted); }
-    .cost-line .value { font-weight: 600; font-variant-numeric: tabular-nums; }
-    .cost-divider { border-top: 1px solid var(--border); margin: 0.5rem 0; }
-    .cost-subtotal { color: var(--text); font-weight: 600; }
-    .bid-box {
-      background: linear-gradient(135deg, #1a1510 0%, #1f1a0f 100%);
-      border: 1px solid #3d2f0a;
-      border-radius: 10px;
-      padding: 1rem 1.25rem;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    .bid-box-left .bid-label {
-      font-size: 0.6875rem;
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-      color: var(--text-muted);
-    }
-    .bid-box-left .bid-amount {
-      font-size: 1.75rem;
-      font-weight: 800;
-      color: var(--green);
-      font-variant-numeric: tabular-nums;
-    }
-    .bid-box-right { text-align: right; }
-    .bid-box-right .sqft-rate { font-size: 1rem; font-weight: 700; color: var(--accent); }
-    .bid-box-right .profit { font-size: 0.8125rem; color: var(--text-muted); margin-top: 0.25rem; }
-    .bid-box-right .profit strong { color: var(--text); }
+        /* BADGES */
+        .badges { padding: 0 40px 60px; max-width: 1200px; margin: 0 auto; display: flex; gap: 20px; justify-content: center; }
+        .badge {
+            border: 1.5px solid var(--gray-300);
+            color: var(--gray-700);
+            padding: 10px 24px;
+            border-radius: 100px;
+            font-size: 14px;
+            font-weight: 600;
+        }
 
-    /* Action buttons */
-    .action-row {
-      display: flex;
-      gap: 0.75rem;
-      margin-top: 1rem;
-    }
-    .action-row .btn { flex: 1; text-align: center; }
+        /* HOW IT WORKS */
+        .hiw { background: var(--gray-50); padding: 80px 40px; }
+        .hiw-inner { max-width: 1100px; margin: 0 auto; }
+        .hiw h2 { font-size: 32px; font-weight: 700; text-align: center; margin-bottom: 56px; }
+        .steps { display: flex; justify-content: center; gap: 0; }
+        .step { text-align: center; max-width: 280px; padding: 0 32px; }
+        .step-num {
+            width: 56px; height: 56px;
+            border: 2px solid var(--gray-300);
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 22px;
+            font-weight: 700;
+            margin: 0 auto 20px;
+            color: var(--orange);
+        }
+        .step h3 { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
+        .step p { color: var(--gray-500); font-size: 14px; }
+        .step-arrow { display: flex; align-items: center; font-size: 28px; color: var(--gray-300); }
 
-    /* Toast notification */
-    .toast {
-      position: fixed;
-      bottom: 2rem;
-      left: 50%;
-      transform: translateX(-50%) translateY(100px);
-      background: var(--card);
-      border: 1px solid var(--green);
-      color: var(--text);
-      padding: 0.75rem 1.5rem;
-      border-radius: 8px;
-      font-size: 0.875rem;
-      opacity: 0;
-      transition: all 0.3s;
-      z-index: 100;
-    }
-    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-
-    /* Slide-up panel */
-    .panel-overlay {
-      display: none;
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,0.6);
-      z-index: 50;
-      top: 0;
-    }
-    .panel-overlay.show { display: block; }
-    .edit-panel {
-      display: none;
-      position: fixed;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      background: var(--card);
-      border-top: 1px solid var(--border);
-      border-radius: 16px 16px 0 0;
-      padding: 1.5rem;
-      z-index: 51;
-      max-height: 85vh;
-      overflow-y: auto;
-    }
-    .edit-panel.show { display: block; }
-    .edit-panel-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 1.25rem;
-    }
-    .edit-panel-header h3 { font-size: 1rem; font-weight: 600; }
-    .panel-close {
-      background: none;
-      border: none;
-      color: var(--text-muted);
-      font-size: 1.5rem;
-      cursor: pointer;
-      padding: 0.25rem;
-    }
-    .panel-row {
-      display: flex;
-      gap: 0.75rem;
-      margin-bottom: 1rem;
-    }
-    .panel-row .field { flex: 1; }
-    .field label {
-      display: block;
-      font-size: 0.75rem;
-      color: var(--text-muted);
-      margin-bottom: 0.375rem;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-    }
-    .field input, .field select {
-      width: 100%;
-      padding: 0.625rem 0.875rem;
-      background: var(--input-bg);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      color: var(--text);
-      font-size: 0.9375rem;
-    }
-    .field input:focus, .field select:focus { outline: none; border-color: var(--accent); }
-    .computed-note {
-      background: var(--input-bg);
-      border-radius: 8px;
-      padding: 0.875rem 1rem;
-      font-size: 0.8125rem;
-      color: var(--text-muted);
-      margin-bottom: 1rem;
-      line-height: 1.6;
-    }
-    .computed-note strong { color: var(--text); }
-    .panel-actions { display: flex; gap: 0.75rem; margin-top: 1rem; }
-    .panel-actions .btn { flex: 1; text-align: center; padding: 0.75rem; }
-    .btn-danger { border-color: var(--red); color: var(--red); }
-    .btn-danger:hover { background: rgba(239,68,68,0.1); }
-
-    /* Cost cards row */
-    .cost-cards {
-      display: grid;
-      grid-template-columns: 1fr 1fr 1fr;
-      gap: 0.75rem;
-      margin-top: 1rem;
-    }
-    .cost-card {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 1rem;
-      cursor: pointer;
-      transition: all 0.15s;
-    }
-    .cost-card:hover { border-color: var(--accent); }
-    .cost-card.active { border-color: var(--accent); background: rgba(245,158,11,0.05); }
-    .cost-card-title {
-      font-size: 0.6875rem;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      color: var(--text-muted);
-      margin-bottom: 0.5rem;
-    }
-    .cost-card-value {
-      font-size: 1rem;
-      font-weight: 700;
-      color: var(--text);
-    }
-    .cost-card-sub { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem; }
-
-    /* Slides panel */
-    .slides-panel {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 1.25rem;
-      margin-bottom: 1rem;
-    }
-    .slides-panel-title {
-      font-size: 0.75rem;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      color: var(--text-muted);
-      margin-bottom: 1rem;
-    }
-    .slides-panel-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 0.75rem;
-    }
-    .slide-card {
-      background: var(--input-bg);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 0.875rem;
-      text-align: center;
-      cursor: pointer;
-      transition: all 0.15s;
-    }
-    .slide-card:hover { border-color: var(--accent); }
-    .slide-card.active { border-color: var(--accent); background: rgba(245,158,11,0.08); }
-    .slide-card-name {
-      font-size: 0.875rem;
-      font-weight: 600;
-      color: var(--text);
-      margin-bottom: 0.375rem;
-    }
-    .slide-card-desc { font-size: 0.75rem; color: var(--text-muted); }
-    .slide-card-rate { margin-top: 0.5rem; font-size: 0.8125rem; color: var(--accent); font-weight: 600; }
-
-    /* Equipment toggles */
-    .equipment-toggles {
-      display: flex;
-      gap: 0.5rem;
-      flex-wrap: wrap;
-      margin-top: 0.75rem;
-    }
-    .equip-toggle {
-      padding: 0.375rem 0.75rem;
-      border-radius: 20px;
-      border: 1px solid var(--border);
-      background: transparent;
-      color: var(--text-muted);
-      font-size: 0.75rem;
-      cursor: pointer;
-      transition: all 0.15s;
-    }
-    .equip-toggle.active { background: var(--accent); border-color: var(--accent); color: #000; font-weight: 600; }
-    .equip-toggle:hover { border-color: var(--accent); }
-  </style>
+        /* FOOTER */
+        footer {
+            background: var(--dark);
+            padding: 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        footer .logo { font-size: 18px; }
+        .trust { display: flex; gap: 28px; }
+        .trust span { color: var(--gray-300); font-size: 13px; display: flex; align-items: center; gap: 6px; }
+    </style>
 </head>
 <body>
-  <div class="container">
     <header>
-      <h1>ScopeCrete</h1>
-      <div class="header-actions">
-        <button class="btn" onclick="loadJob()">Load</button>
-        <button class="btn" onclick="saveJob()">Save</button>
-        <button class="btn btn-primary" onclick="exportPDF()">PDF</button>
-      </div>
+        <div class="logo">Scope<span>crete</span>.ai</div>
+        <nav>
+            <a href="#how-it-works">How it works</a>
+            <a href="#">Pricing</a>
+            <a href="#">Get started</a>
+        </nav>
     </header>
 
-    <!-- Totals bar -->
-    <div class="totals-bar">
-      <div class="job-name">
-        <input type="text" id="jobName" value="New Job" placeholder="Job name...">
-      </div>
-      <div class="totals-summary">
-        <span><strong id="totalSqft">0</strong> sqft</span>
-        <span><strong id="totalCY">0</strong> CY</span>
-        <span><strong id="totalSections">0</strong> sections</span>
-      </div>
-    </div>
-
-    <!-- Sections -->
-    <div class="sections-header">
-      <span>Sections</span>
-      <button class="btn" onclick="addSection()" style="padding:0.375rem 0.75rem;font-size:0.75rem;">+ Add</button>
-    </div>
-    <div id="sectionsList"></div>
-    <button class="add-section-btn" onclick="addSection()">+ Add Section</button>
-
-    <!-- Cost breakdown -->
-    <div class="cost-breakdown">
-      <div class="cost-breakdown-header">
-        <span>Cost Breakdown</span>
-        <div class="margin-control">
-          <span>Margin</span>
-          <input type="range" class="margin-slider" id="marginSlider" min="5" max="50" value="25">
-          <strong id="marginPct">25%</strong>
+    <section class="hero">
+        <div class="hero-text">
+            <h1>Get a concrete<br>estimate in <em>60 seconds</em></h1>
+            <p class="hero-sub">Describe your project, get an accurate bid, and a contractor texts you within the hour. No phone calls, no guesswork.</p>
+            <a href="#" class="cta-btn">Get your estimate →</a>
         </div>
-      </div>
-      <div class="cost-lines" id="costLines"></div>
-      <div class="bid-box">
-        <div class="bid-box-left">
-          <div class="bid-label">Bid Price</div>
-          <div class="bid-amount" id="bidTotal">$0.00</div>
+        <div class="chat-widget">
+            <div class="chat-header">
+                <div class="chat-avatar">🤖</div>
+                <div>
+                    <div class="chat-name">Dusty</div>
+                    <div class="chat-status">● Online — Ready to help</div>
+                </div>
+            </div>
+            <div class="chat-msgs">
+                <div class="bubble dusty">Hi! I'm <strong>Dusty</strong>. Describe your project and I'll give you an instant concrete estimate. What are you working on?</div>
+                <div class="bubble dusty">Try: "20x40 driveway, 6 inches thick"</div>
+            </div>
+            <div class="chat-input">Type your project details...</div>
         </div>
-        <div class="bid-box-right">
-          <div class="sqft-rate" id="sqftRate">$0.00/sqft</div>
-          <div class="profit">Profit: <strong id="profitPerJob">$0.00</strong></div>
+    </section>
+
+    <section class="badges">
+        <div class="badge">⚡ Fast</div>
+        <div class="badge">🎯 Accurate</div>
+        <div class="badge">📱 No phone call</div>
+    </section>
+
+    <section class="hiw" id="how-it-works">
+        <div class="hiw-inner">
+            <h2>How it works</h2>
+            <div class="steps">
+                <div class="step">
+                    <div class="step-num">1</div>
+                    <h3>Describe</h3>
+                    <p>Tell us your project details — dimensions, type, location</p>
+                </div>
+                <div class="step-arrow">→</div>
+                <div class="step">
+                    <div class="step-num">2</div>
+                    <h3>Estimate</h3>
+                    <p>Get an accurate concrete cost estimate instantly</p>
+                </div>
+                <div class="step-arrow">→</div>
+                <div class="step">
+                    <div class="step-num">3</div>
+                    <h3>Contractor texts you</h3>
+                    <p>A local pro reaches out with a formal quote</p>
+                </div>
+            </div>
         </div>
-      </div>
-    </div>
+    </section>
 
-    <!-- Cost cards (materials / labor / equipment) -->
-    <div class="cost-cards" style="margin-top:1rem;">
-      <div class="cost-card" onclick="openCostCard('materials')">
-        <div class="cost-card-title">Materials</div>
-        <div class="cost-card-value" id="materialsTotal">$0.00</div>
-        <div class="cost-card-sub">concrete + rebar + mesh</div>
-      </div>
-      <div class="cost-card" onclick="openCostCard('labor')">
-        <div class="cost-card-title">Labor</div>
-        <div class="cost-card-value" id="laborTotal">$0.00</div>
-        <div class="cost-card-sub">forming + finishing</div>
-      </div>
-      <div class="cost-card" onclick="openCostCard('equipment')">
-        <div class="cost-card-title">Equipment</div>
-        <div class="cost-card-value" id="equipmentTotal">$0.00</div>
-        <div class="cost-card-sub" id="equipmentNote">pump / buggy / demo</div>
-      </div>
-    </div>
-
-    <div class="action-row">
-      <button class="btn btn-primary" onclick="exportPDF()">Export PDF</button>
-      <button class="btn" onclick="pushToJobTread()">Push to JobTread</button>
-    </div>
-  </div>
-
-  <!-- Edit Panel (slide-up) -->
-  <div class="panel-overlay" id="panelOverlay" onclick="closePanel()"></div>
-  <div class="edit-panel" id="editPanel">
-    <div class="edit-panel-header">
-      <h3>Edit Section</h3>
-      <button class="panel-close" onclick="closePanel()">×</button>
-    </div>
-    <div class="panel-row">
-      <div class="field">
-        <label>Section Name</label>
-        <input type="text" id="panelName" placeholder="e.g. Shop Driveway">
-      </div>
-    </div>
-    <div class="panel-row">
-      <div class="field">
-        <label>Length (ft)</label>
-        <input type="number" id="panelL" value="20" min="1" max="500">
-      </div>
-      <div class="field">
-        <label>Width (ft)</label>
-        <input type="number" id="panelW" value="20" min="1" max="500">
-      </div>
-      <div class="field">
-        <label>Depth (in)</label>
-        <input type="number" id="panelD" value="4" min="1" max="24">
-      </div>
-    </div>
-    <div class="panel-row">
-      <div class="field">
-        <label>PSI Grade</label>
-        <select id="panelPsi">
-          <option value="3000">3000 PSI</option>
-          <option value="4000" selected>4000 PSI</option>
-          <option value="5000">5000 PSI</option>
-        </select>
-      </div>
-      <div class="field">
-        <label>Abutments</label>
-        <input type="number" id="panelAbutments" value="0" min="0" max="4">
-      </div>
-    </div>
-    <div class="computed-note" id="panelComputed"></div>
-    <div class="panel-actions">
-      <button class="btn btn-danger" onclick="deleteCurrentSection()">Delete</button>
-      <button class="btn btn-primary" onclick="saveSection()">Save Section</button>
-    </div>
-  </div>
-
-  <!-- Materials card panel -->
-  <div class="edit-panel" id="materialsPanel">
-    <div class="edit-panel-header">
-      <h3>Materials Costs</h3>
-      <button class="panel-close" onclick="closeMaterialsPanel()">×</button>
-    </div>
-    <div class="panel-row">
-      <div class="field">
-        <label>4000 PSI Concrete ($/CY)</label>
-        <input type="number" id="matConcrete" value="160" step="0.01">
-      </div>
-      <div class="field">
-        <label>Shortload surcharge (CY &lt; 5)</label>
-        <input type="number" id="matShortloadPct" value="15" step="1">
-      </div>
-    </div>
-    <div class="panel-row">
-      <div class="field">
-        <label>Rebar #4 ($/pc)</label>
-        <input type="number" id="matRebar" value="3.50" step="0.01">
-      </div>
-      <div class="field">
-        <label>Wire Mesh ($/roll)</label>
-        <input type="number" id="matMesh" value="239" step="0.01">
-      </div>
-    </div>
-    <div class="panel-row">
-      <div class="field">
-        <label>3000 PSI ($/CY)</label>
-        <input type="number" id="mat3000" value="150" step="0.01">
-      </div>
-      <div class="field">
-        <label>5000 PSI ($/CY)</label>
-        <input type="number" id="mat5000" value="175" step="0.01">
-      </div>
-    </div>
-    <div class="panel-actions">
-      <button class="btn btn-primary" onclick="saveMaterials()">Save</button>
-    </div>
-  </div>
-
-  <!-- Labor card panel -->
-  <div class="edit-panel" id="laborPanel">
-    <div class="edit-panel-header">
-      <h3>Labor Costs</h3>
-      <button class="panel-close" onclick="closeLaborPanel()">×</button>
-    </div>
-    <div class="panel-row">
-      <div class="field">
-        <label>Forming Rate ($/sqft)</label>
-        <input type="number" id="labForming" value="1.50" step="0.01">
-      </div>
-      <div class="field">
-        <label>Finishing Rate ($/sqft)</label>
-        <input type="number" id="labFinishing" value="1.50" step="0.01">
-      </div>
-    </div>
-    <div class="panel-row">
-      <div class="field">
-        <label>Crew Size</label>
-        <input type="number" id="labCrew" value="4" min="1" max="20">
-      </div>
-      <div class="field">
-        <label>Crew Hourly Rate ($/hr/person)</label>
-        <input type="number" id="labRate" value="30" step="1">
-      </div>
-    </div>
-    <div class="panel-row">
-      <div class="field">
-        <label>Production Rate (sqft/person/day)</label>
-        <input type="number" id="labProdRate" value="60" step="1">
-      </div>
-      <div class="field">
-        <label>Logistics Days</label>
-        <input type="number" id="labLogistics" value="0.25" step="0.05">
-      </div>
-    </div>
-    <div class="panel-actions">
-      <button class="btn btn-primary" onclick="saveLabor()">Save</button>
-    </div>
-  </div>
-
-  <!-- Equipment card panel -->
-  <div class="edit-panel" id="equipmentPanel">
-    <div class="edit-panel-header">
-      <h3>Equipment Costs</h3>
-      <button class="panel-close" onclick="closeEquipmentPanel()">×</button>
-    </div>
-    <div class="panel-row">
-      <div class="field">
-        <label>Georgia Buggy ($/day)</label>
-        <input type="number" id="equipBuggy" value="250" step="1">
-      </div>
-      <div class="field">
-        <label>Pump Truck ($/CY)</label>
-        <input type="number" id="equipPumpRate" value="200" step="1">
-      </div>
-    </div>
-    <div class="panel-row">
-      <div class="field">
-        <label>Pump Min Charge ($)</label>
-        <input type="number" id="equipPumpMin" value="140" step="1">
-      </div>
-      <div class="field">
-        <label>Demolition ($/sqft)</label>
-        <input type="number" id="equipDemo" value="8" step="0.5">
-      </div>
-    </div>
-    <div class="slides-panel" style="margin-top:1rem;">
-      <div class="slides-panel-title">Equipment Selection</div>
-      <div class="equipment-toggles" id="equipToggles"></div>
-    </div>
-    <div class="panel-actions">
-      <button class="btn btn-primary" onclick="saveEquipment()">Save</button>
-    </div>
-  </div>
-
-  <div class="toast" id="toast"></div>
-
-<script>
-// === DATA MODEL ===
-const DEFAULT_COST_CARDS = {
-  concretePrices: { 3000: 150, 4000: 160, 5000: 175 },
-  shortloadPct: 15,
-  rebarPrice: 3.50,
-  meshPrice: 239,
-  formingRate: 1.50,
-  finishingRate: 1.50,
-  crewSize: 4,
-  crewHourlyRate: 30,
-  productionRate: 60,
-  logisticsDays: 0.25,
-  buggyRate: 250,
-  pumpRate: 200,
-  pumpMin: 140,
-  demoRate: 8,
-};
-
-let sections = [];
-let costCards = { ...DEFAULT_COST_CARDS };
-let activeSectionId = null;
-let selectedEquipment = 'tailgate'; // tailgate | buggy | pump
-
-// === SECTION MANAGEMENT ===
-function genId() { return Math.random().toString(36).substr(2,9); }
-
-function addSection() {
-  const id = genId();
-  sections.unshift({
-    id,
-    name: '',
-    L: 20, W: 20, depthIn: 4, psi: 4000,
-    abutments: 0,
-  });
-  activeSectionId = id;
-  renderSections();
-  openEditPanel(id);
-}
-
-function deleteSection(id) {
-  sections = sections.filter(s => s.id !== id);
-  renderSections();
-  computeAll();
-}
-
-function renderSections() {
-  const list = document.getElementById('sectionsList');
-  if (sections.length === 0) {
-    list.innerHTML = '';
-    return;
-  }
-  list.innerHTML = sections.map(s => {
-    const dims = computeSection(s);
-    const cost = dims.totalCost;
-    return `
-    <div class="section-card ${s.id === activeSectionId ? 'active' : ''}" id="card-${s.id}">
-      <div class="section-main" onclick="openEditPanel('${s.id}')">
-        <div class="section-info">
-          <div class="section-name">
-            <input type="text" value="${s.name}" placeholder="Section name..." 
-              onclick="event.stopPropagation()"
-              onchange="updateSectionName('${s.id}', this.value)"
-              onclick="event.stopPropagation()">
-          </div>
-          <div class="section-dims">
-            L: <strong>${s.L}</strong> ft &nbsp; W: <strong>${s.W}</strong> ft &nbsp; D: <strong>${s.depthIn}</strong> in
-          </div>
-          <div class="section-meta">
-            <span><strong>${dims.sqft}</strong> sqft</span>
-            <span><strong>${dims.cy.toFixed(2)}</strong> CY</span>
-            <span>${s.abutments} abutment${s.abutments !== 1 ? 's' : ''}</span>
-          </div>
+    <footer>
+        <div class="logo">Scope<span>crete</span>.ai</div>
+        <div class="trust">
+            <span>🔒 Licensed & Insured</span>
+            <span>⭐ 4.9/5 avg rating</span>
+            <span>📍 Serving [City]</span>
         </div>
-        <div class="section-cost">
-          <div class="cost-label">Cost</div>
-          <div class="cost-value">${fmt(cost)}</div>
-        </div>
-        <div class="section-card-menu">
-          <button class="section-menu-btn" onclick="event.stopPropagation(); toggleMenu('${s.id}')">⋮</button>
-          <div class="section-dropdown" id="menu-${s.id}">
-            <button onclick="event.stopPropagation(); openEditPanel('${s.id}')">Edit</button>
-            <button class="danger" onclick="event.stopPropagation(); deleteSection('${s.id}')">Delete</button>
-          </div>
-        </div>
-      </div>
-    </div>`;
-  }).join('');
-
-  document.getElementById('totalSections').textContent = sections.length;
-}
-
-function toggleMenu(id) {
-  document.querySelectorAll('.section-dropdown').forEach(m => m.classList.remove('show'));
-  const menu = document.getElementById('menu-' + id);
-  menu.classList.toggle('show');
-}
-
-function updateSectionName(id, name) {
-  const s = sections.find(s => s.id === id);
-  if (s) s.name = name;
-  renderSections();
-  computeAll();
-}
-
-function openEditPanel(id) {
-  activeSectionId = id;
-  const s = sections.find(s => s.id === id);
-  if (!s) return;
-  document.getElementById('panelName').value = s.name;
-  document.getElementById('panelL').value = s.L;
-  document.getElementById('panelW').value = s.W;
-  document.getElementById('panelD').value = s.depthIn;
-  document.getElementById('panelPsi').value = s.psi;
-  document.getElementById('panelAbutments').value = s.abutments;
-  updatePanelComputed();
-  document.getElementById('panelOverlay').classList.add('show');
-  document.getElementById('editPanel').classList.add('show');
-  renderSections();
-}
-
-function saveSection() {
-  const s = sections.find(s => s.id === activeSectionId);
-  if (!s) return;
-  s.name = document.getElementById('panelName').value;
-  s.L = parseFloat(document.getElementById('panelL').value) || 20;
-  s.W = parseFloat(document.getElementById('panelW').value) || 20;
-  s.depthIn = parseFloat(document.getElementById('panelD').value) || 4;
-  s.psi = parseInt(document.getElementById('panelPsi').value) || 4000;
-  s.abutments = parseInt(document.getElementById('panelAbutments').value) || 0;
-  closePanel();
-  renderSections();
-  computeAll();
-}
-
-function deleteCurrentSection() {
-  if (activeSectionId) deleteSection(activeSectionId);
-  closePanel();
-}
-
-function updatePanelComputed() {
-  const s = {
-    L: parseFloat(document.getElementById('panelL').value) || 20,
-    W: parseFloat(document.getElementById('panelW').value) || 20,
-    depthIn: parseFloat(document.getElementById('panelD').value) || 4,
-    psi: parseInt(document.getElementById('panelPsi').value) || 4000,
-    abutments: parseInt(document.getElementById('panelAbutments').value) || 0,
-  };
-  const dims = computeSection(s);
-  const psi = parseInt(document.getElementById('panelPsi').value) || 4000;
-  const concretePrice = costCards.concretePrices[psi] || 160;
-  document.getElementById('panelComputed').innerHTML = `
-    <strong>${dims.sqft} sqft</strong> &nbsp;·&nbsp;
-    <strong>${dims.cy.toFixed(2)} CY</strong> @ $${concretePrice}/CY = <strong>${fmt(dims.concreteCost)}</strong><br>
-    Dowels: <strong>${dims.dowels}</strong> pcs @ ${fmt(costCards.rebarPrice)} = ${fmt(dims.dowelsCost)}<br>
-    Wire mesh: <strong>${dims.meshRolls.toFixed(2)}</strong> rolls @ ${fmt(costCards.meshPrice)} = ${fmt(dims.meshCost)}<br>
-    Forming: ${dims.perimeter} ft × ${fmt(costCards.formingRate)}/ft = ${fmt(dims.formingCost)}<br>
-    Finishing: ${dims.sqyd} sqyd × ${fmt(costCards.finishingRate)}/sqyd = ${fmt(dims.finishingCost)}<br>
-    <strong>Section cost: ${fmt(dims.totalCost)}</strong>`;
-}
-
-function closePanel() {
-  document.getElementById('panelOverlay').classList.remove('show');
-  document.getElementById('editPanel').classList.remove('show');
-}
-
-// === COST CARDS ===
-function openCostCard(type) {
-  document.getElementById('panelOverlay').classList.add('show');
-  if (type === 'materials') {
-    document.getElementById('matConcrete').value = costCards.concretePrices[4000];
-    document.getElementById('mat3000').value = costCards.concretePrices[3000];
-    document.getElementById('mat5000').value = costCards.concretePrices[5000];
-    document.getElementById('matShortloadPct').value = costCards.shortloadPct;
-    document.getElementById('matRebar').value = costCards.rebarPrice;
-    document.getElementById('matMesh').value = costCards.meshPrice;
-    document.getElementById('materialsPanel').classList.add('show');
-  } else if (type === 'labor') {
-    document.getElementById('labForming').value = costCards.formingRate;
-    document.getElementById('labFinishing').value = costCards.finishingRate;
-    document.getElementById('labCrew').value = costCards.crewSize;
-    document.getElementById('labRate').value = costCards.crewHourlyRate;
-    document.getElementById('labProdRate').value = costCards.productionRate;
-    document.getElementById('labLogistics').value = costCards.logisticsDays;
-    document.getElementById('laborPanel').classList.add('show');
-  } else if (type === 'equipment') {
-    document.getElementById('equipBuggy').value = costCards.buggyRate;
-    document.getElementById('equipPumpRate').value = costCards.pumpRate;
-    document.getElementById('equipPumpMin').value = costCards.pumpMin;
-    document.getElementById('equipDemo').value = costCards.demoRate;
-    renderEquipToggles();
-    document.getElementById('equipmentPanel').classList.add('show');
-  }
-}
-
-function renderEquipToggles() {
-  const types = [
-    { id: 'tailgate', label: 'Tailgate', desc: 'No pump needed' },
-    { id: 'buggy', label: 'Georgia Buggy', desc: '$' + costCards.buggyRate + '/day' },
-    { id: 'pump', label: 'Pump Truck', desc: '$' + costCards.pumpRate + '/CY' },
-    { id: 'demo', label: 'Demo', desc: '$' + costCards.demoRate + '/sqft' },
-  ];
-  document.getElementById('equipToggles').innerHTML = types.map(t => 
-    `<button class="equip-toggle ${selectedEquipment === t.id ? 'active' : ''}" onclick="selectEquipment('${t.id}')">${t.label}</button>`
-  ).join('');
-}
-
-function selectEquipment(id) { selectedEquipment = id; renderEquipToggles(); computeAll(); }
-
-function saveMaterials() {
-  costCards.concretePrices[3000] = parseFloat(document.getElementById('mat3000').value) || 150;
-  costCards.concretePrices[4000] = parseFloat(document.getElementById('matConcrete').value) || 160;
-  costCards.concretePrices[5000] = parseFloat(document.getElementById('mat5000').value) || 175;
-  costCards.shortloadPct = parseFloat(document.getElementById('matShortloadPct').value) || 15;
-  costCards.rebarPrice = parseFloat(document.getElementById('matRebar').value) || 3.50;
-  costCards.meshPrice = parseFloat(document.getElementById('matMesh').value) || 239;
-  closeAllPanels();
-  computeAll();
-}
-
-function saveLabor() {
-  costCards.formingRate = parseFloat(document.getElementById('labForming').value) || 1.50;
-  costCards.finishingRate = parseFloat(document.getElementById('labFinishing').value) || 1.50;
-  costCards.crewSize = parseInt(document.getElementById('labCrew').value) || 4;
-  costCards.crewHourlyRate = parseFloat(document.getElementById('labRate').value) || 30;
-  costCards.productionRate = parseInt(document.getElementById('labProdRate').value) || 60;
-  costCards.logisticsDays = parseFloat(document.getElementById('labLogistics').value) || 0.25;
-  closeAllPanels();
-  computeAll();
-}
-
-function saveEquipment() {
-  costCards.buggyRate = parseFloat(document.getElementById('equipBuggy').value) || 250;
-  costCards.pumpRate = parseFloat(document.getElementById('equipPumpRate').value) || 200;
-  costCards.pumpMin = parseFloat(document.getElementById('equipPumpMin').value) || 140;
-  costCards.demoRate = parseFloat(document.getElementById('equipDemo').value) || 8;
-  closeAllPanels();
-  computeAll();
-}
-
-function closeMaterialsPanel() { closeAllPanels(); }
-function closeLaborPanel() { closeAllPanels(); }
-function closeEquipmentPanel() { closeAllPanels(); }
-
-function closeAllPanels() {
-  document.getElementById('panelOverlay').classList.remove('show');
-  document.getElementById('materialsPanel').classList.remove('show');
-  document.getElementById('laborPanel').classList.remove('show');
-  document.getElementById('equipmentPanel').classList.remove('show');
-}
-
-// === COMPUTATION ENGINE ===
-function computeSection(s) {
-  const sqft = s.L * s.W;
-  const cy = sqft * (s.depthIn / 12) / 27;
-  const sqyd = sqft / 9;
-  const depthFt = s.depthIn / 12;
-  const perimeter = (s.L + s.W) * 2;
-  const concretePrice = costCards.concretePrices[s.psi] || 160;
-  const concreteCost = cy * concretePrice;
-  const shortloadFee = cy < 5 ? cy * concretePrice * (costCards.shortloadPct / 100) : 0;
-  const dowels = s.abutments > 0 ? Math.ceil(perimeter * s.abutments) : 0;
-  const dowelsCost = dowels * costCards.rebarPrice;
-  const meshRolls = sqft / 750;
-  const meshCost = meshRolls * costCards.meshPrice;
-  const formingCost = perimeter * costCards.formingRate;
-  const finishingCost = sqyd * costCards.finishingRate;
-  const laborCost = formingCost + finishingCost;
-  const equipmentCost = computeEquipmentCost(sqft, cy);
-  const demoCost = selectedEquipment === 'demo' ? sqft * costCards.demoRate : 0;
-  const materialsCost = concreteCost + shortloadFee + dowelsCost + meshCost;
-  const totalCost = materialsCost + laborCost + equipmentCost + demoCost;
-  return {
-    sqft, cy, sqyd, perimeter, depthFt,
-    concreteCost, shortloadFee, dowels, dowelsCost, meshRolls, meshCost,
-    formingCost, finishingCost, laborCost, equipmentCost, demoCost,
-    materialsCost, totalCost,
-  };
-}
-
-function computeEquipmentCost(sqft, cy) {
-  if (selectedEquipment === 'buggy') return costCards.buggyRate;
-  if (selectedEquipment === 'pump') return Math.max(cy * costCards.pumpRate, costCards.pumpMin);
-  return 0;
-}
-
-function computeAll() {
-  let totalSqft = 0, totalCY = 0;
-  let totalMaterials = 0, totalLabor = 0, totalEquipment = 0;
-  let totalCost = 0;
-
-  sections.forEach(s => {
-    const d = computeSection(s);
-    totalSqft += d.sqft;
-    totalCY += d.cy;
-    totalMaterials += d.materialsCost;
-    totalLabor += d.laborCost;
-    totalEquipment += d.equipmentCost + d.demoCost;
-    totalCost += d.totalCost;
-  });
-
-  const marginPct = parseInt(document.getElementById('marginSlider').value) / 100;
-  const markupAmt = totalCost * marginPct;
-  const bidTotal = totalCost + markupAmt;
-  const laborDays = totalSqft / (costCards.crewSize * costCards.productionRate);
-  const totalDays = laborDays + costCards.logisticsDays;
-  const profitPerDay = totalDays > 0 ? markupAmt / totalDays : 0;
-
-  // Update totals bar
-  document.getElementById('totalSqft').textContent = Math.round(totalSqft);
-  document.getElementById('totalCY').textContent = totalCY.toFixed(2);
-
-  // Cost lines
-  const lines = [
-    { label: 'Materials', value: totalMaterials },
-    { label: 'Labor', value: totalLabor },
-    { label: 'Equipment', value: totalEquipment },
-  ];
-  document.getElementById('costLines').innerHTML = lines.map(l => 
-    `<div class="cost-line"><span class="label">${l.label}</span><span class="value">${fmt(l.value)}</span></div>`
-  ).join('') +
-  `<div class="cost-divider"></div>
-   <div class="cost-line cost-subtotal"><span>Job Cost</span><span>${fmt(totalCost)}</span></div>`;
-
-  // Bid box
-  document.getElementById('bidTotal').textContent = fmt(bidTotal);
-  document.getElementById('sqftRate').textContent = totalSqft > 0 ? fmt(bidTotal / totalSqft) + '/sqft' : '$0.00/sqft';
-  document.getElementById('profitPerJob').textContent = fmt(markupAmt);
-
-  // Cost cards
-  document.getElementById('materialsTotal').textContent = fmt(totalMaterials);
-  document.getElementById('laborTotal').textContent = fmt(totalLabor);
-  document.getElementById('equipmentTotal').textContent = fmt(totalEquipment);
-  document.getElementById('equipmentNote').textContent = selectedEquipment === 'tailgate' ? 'none selected' : 
-    selectedEquipment === 'buggy' ? fmt(costCards.buggyRate) + '/day' :
-    selectedEquipment === 'pump' ? fmt(costCards.pumpRate) + '/CY' :
-    fmt(costCards.demoRate) + '/sqft demo';
-
-  // Update section cards (re-render costs)
-  renderSections();
-}
-
-// === SAVE / LOAD ===
-function saveJob() {
-  const job = {
-    name: document.getElementById('jobName').value,
-    sections,
-    costCards,
-    selectedEquipment,
-    marginPct: parseInt(document.getElementById('marginSlider').value),
-    createdAt: new Date().toISOString(),
-  };
-  const jobs = JSON.parse(localStorage.getItem('scopecrete_jobs') || '[]');
-  jobs.unshift(job);
-  localStorage.setItem('scopecrete_jobs', JSON.stringify(jobs.slice(0, 20)));
-  showToast('Job saved');
-}
-
-function loadJob() {
-  const jobs = JSON.parse(localStorage.getItem('scopecrete_jobs') || '[]');
-  if (jobs.length === 0) { showToast('No saved jobs'); return; }
-  const job = jobs[0];
-  document.getElementById('jobName').value = job.name || 'Loaded Job';
-  sections = job.sections || [];
-  costCards = { ...DEFAULT_COST_CARDS, ...job.costCards };
-  selectedEquipment = job.selectedEquipment || 'tailgate';
-  document.getElementById('marginSlider').value = job.marginPct || 25;
-  document.getElementById('marginPct').textContent = (job.marginPct || 25) + '%';
-  renderSections();
-  computeAll();
-  showToast('Job loaded: ' + (job.name || 'Untitled'));
-}
-
-function showToast(msg) {
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 2500);
-}
-
-// === MARGIN SLIDER ===
-document.getElementById('marginSlider').addEventListener('input', function() {
-  document.getElementById('marginPct').textContent = this.value + '%';
-  computeAll();
-});
-
-// === PANEL COMPUTED UPDATE ON INPUT CHANGE ===
-['panelL', 'panelW', 'panelD', 'panelPsi', 'panelAbutments'].forEach(id => {
-  const el = document.getElementById(id);
-  if (el) el.addEventListener('input', updatePanelComputed);
-});
-
-// === EXPORT PDF (stub — placeholder) ===
-function exportPDF() {
-  const jobName = document.getElementById('jobName').value;
-  const bid = document.getElementById('bidTotal').textContent;
-  const sqft = document.getElementById('totalSqft').textContent;
-  showToast('PDF export: ' + jobName + ' — ' + bid);
-  // TODO: implement jsPDF export
-}
-
-// === JOBTREAD PUSH (stub) ===
-function pushToJobTread() {
-  showToast('Pushing to JobTread...');
-  // TODO: wire to jobtread-create-job Edge Function
-}
-
-// === INIT ===
-function init() {
-  // Add one default section if empty
-  if (sections.length === 0) {
-    addSection();
-  } else {
-    renderSections();
-    computeAll();
-  }
-}
-
-init();
-</script>
+    </footer>
 </body>
 </html>

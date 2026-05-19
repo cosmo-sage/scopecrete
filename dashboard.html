@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contractor Dashboard — Scopecrete.ai</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --orange: #FF6B35;
+            --dark: #1a1a2e;
+            --gray-900: #111;
+            --gray-700: #374151;
+            --gray-500: #6b7280;
+            --gray-400: #9ca3af;
+            --gray-300: #d1d5db;
+            --gray-200: #e5e7eb;
+            --gray-100: #f3f4f6;
+            --gray-50: #f9fafb;
+            --white: #ffffff;
+        }
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            color: var(--gray-900);
+            background: var(--gray-100);
+            line-height: 1.6;
+        }
+
+        /* LAYOUT */
+        .dashboard { display: flex; min-height: 100vh; }
+
+        /* LEFT NAV */
+        .left-nav {
+            width: 240px;
+            background: var(--dark);
+            color: var(--white);
+            padding: 24px 0;
+            position: fixed;
+            height: 100vh;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+        .nav-logo { padding: 0 20px 24px; margin-bottom: 24px; }
+        .nav-logo h2 { font-size: 20px; font-weight: 800; }
+        .nav-logo span { color: var(--orange); }
+
+        .nav-section { margin-bottom: 24px; }
+        .nav-section-title {
+            padding: 0 20px;
+            font-size: 11px;
+            text-transform: uppercase;
+            color: #666;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 11px 20px;
+            color: var(--gray-400);
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .nav-item:hover { background: rgba(255,255,255,0.05); color: var(--white); }
+        .nav-item.active {
+            background: rgba(255,107,53,0.15);
+            color: var(--orange);
+            border-right: 3px solid var(--orange);
+        }
+        .nav-icon { font-size: 17px; width: 22px; text-align: center; }
+        .nav-badge {
+            background: var(--orange);
+            color: var(--white);
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 10px;
+            margin-left: auto;
+            font-weight: 700;
+        }
+
+        /* MAIN */
+        .main { flex: 1; margin-left: 240px; padding: 28px 32px; }
+
+        /* TOP BAR */
+        .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 28px; }
+        .top-bar h1 { font-size: 22px; font-weight: 700; }
+        .top-actions { display: flex; gap: 10px; }
+        .btn { padding: 9px 18px; border-radius: 7px; font-size: 13px; font-weight: 600; cursor: pointer; border: 1.5px solid transparent; font-family: inherit; transition: all 0.15s; }
+        .btn-primary { background: var(--orange); color: var(--white); }
+        .btn-primary:hover { opacity: 0.88; }
+        .btn-secondary { background: var(--white); color: var(--gray-700); border-color: var(--gray-300); }
+        .btn-secondary:hover { background: var(--gray-50); }
+
+        /* STATS */
+        .stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; margin-bottom: 28px; }
+        .stat-card { background: var(--white); border: 1.5px solid var(--gray-200); border-radius: 10px; padding: 20px; }
+        .stat-label { font-size: 12px; color: var(--gray-500); margin-bottom: 8px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; }
+        .stat-value { font-size: 30px; font-weight: 800; line-height: 1; }
+        .stat-value.blue { color: #2563eb; }
+        .stat-value.orange { color: var(--orange); }
+        .stat-value.green { color: #22c55e; }
+        .stat-value.red { color: #ef4444; }
+        .stat-sub { font-size: 12px; color: var(--gray-400); margin-top: 4px; }
+
+        /* JOB LIST */
+        .job-list-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+        .job-list-header h2 { font-size: 15px; font-weight: 700; }
+        .job-list-header span { font-size: 13px; color: var(--gray-500); }
+
+        .job-table { background: var(--white); border: 1.5px solid var(--gray-200); border-radius: 10px; overflow: hidden; }
+        .job-row { display: grid; grid-template-columns: 2fr 1.5fr 1fr 1fr 90px; padding: 15px 20px; border-bottom: 1px solid var(--gray-100); align-items: center; cursor: pointer; transition: background 0.15s; }
+        .job-row:last-child { border-bottom: none; }
+        .job-row:hover { background: var(--gray-50); }
+        .job-row.header { background: var(--gray-50); font-weight: 700; font-size: 11px; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.4px; cursor: default; }
+        .job-row.header:hover { background: var(--gray-50); }
+
+        .job-customer { font-weight: 600; font-size: 14px; }
+        .job-id { font-size: 12px; color: var(--gray-400); margin-top: 1px; }
+        .job-scope { font-size: 13px; color: var(--gray-500); margin-top: 1px; }
+
+        .job-status {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 700;
+            border: 1.5px solid;
+        }
+        .status-new { background: #eff6ff; color: #2563eb; border-color: #bfdbfe; }
+        .status-progress { background: #fffbeb; color: #d97706; border-color: #fde68a; }
+        .status-sent { background: #f0fdf4; color: #16a34a; border-color: #bbf7d0; }
+        .status-won { background: var(--orange); color: white; border-color: var(--orange); }
+        .status-lost { background: #fef2f2; color: #dc2626; border-color: #fecaca; }
+
+        .job-date { font-size: 13px; color: var(--gray-500); }
+        .job-total { font-weight: 700; font-size: 15px; }
+        .job-margin { font-size: 13px; color: #22c55e; font-weight: 600; }
+
+        .job-actions { display: flex; gap: 6px; }
+        .action-btn { padding: 6px 10px; border-radius: 5px; font-size: 12px; border: 1.5px solid var(--gray-200); background: var(--white); cursor: pointer; font-weight: 500; font-family: inherit; }
+        .action-btn:hover { background: var(--gray-50); border-color: var(--gray-300); }
+
+        /* DETAIL PANEL */
+        .detail-placeholder {
+            background: var(--white);
+            border: 2px dashed var(--gray-300);
+            border-radius: 10px;
+            margin-top: 16px;
+            padding: 48px;
+            text-align: center;
+            color: var(--gray-400);
+            font-size: 14px;
+        }
+
+        /* FLOATING NEW JOB BUTTON (mobile only) */
+        .float-btn { display: none; }
+
+        /* RESPONSIVE */
+        @media (max-width: 900px) {
+            .left-nav { width: 60px; }
+            .nav-logo h2 { display: none; }
+            .nav-item span:not(.nav-icon) { display: none; }
+            .nav-badge { display: none; }
+            .nav-section-title { display: none; }
+            .main { margin-left: 60px; padding: 20px 16px; }
+            .stats { grid-template-columns: repeat(3, 1fr); }
+            .job-table { overflow-x: auto; }
+            .float-btn {
+                display: flex;
+                position: fixed;
+                right: 20px;
+                bottom: 24px;
+                background: var(--orange);
+                color: white;
+                border: none;
+                border-radius: 50%;
+                width: 56px;
+                height: 56px;
+                font-size: 24px;
+                align-items: center;
+                justify-content: center;
+                cursor: pointer;
+                box-shadow: 0 4px 16px rgba(255,107,53,0.4);
+                font-weight: 700;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard">
+        <nav class="left-nav">
+            <div class="nav-logo">
+                <h2>Scope<span>crete</span></h2>
+            </div>
+            <div class="nav-section">
+                <div class="nav-section-title">Work</div>
+                <div class="nav-item active">
+                    <span class="nav-icon">📋</span>
+                    <span>Jobs</span>
+                    <span class="nav-badge">5</span>
+                </div>
+                <div class="nav-item">
+                    <span class="nav-icon">👥</span>
+                    <span>Customers</span>
+                </div>
+                <div class="nav-item">
+                    <span class="nav-icon">📄</span>
+                    <span>My Cost Cards</span>
+                </div>
+            </div>
+            <div class="nav-section">
+                <div class="nav-section-title">Settings</div>
+                <div class="nav-item">
+                    <span class="nav-icon">⚙️</span>
+                    <span>Settings</span>
+                </div>
+            </div>
+        </nav>
+
+        <div class="main">
+            <div class="top-bar">
+                <h1>Jobs</h1>
+                <div class="top-actions">
+                    <button class="btn btn-secondary">Filter</button>
+                    <button class="btn btn-primary">+ New Job</button>
+                </div>
+            </div>
+
+            <div class="stats">
+                <div class="stat-card">
+                    <div class="stat-label">New</div>
+                    <div class="stat-value blue">3</div>
+                    <div class="stat-sub">This week</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">In Progress</div>
+                    <div class="stat-value orange">2</div>
+                    <div class="stat-sub">Active</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Sent</div>
+                    <div class="stat-value">4</div>
+                    <div class="stat-sub">Awaiting reply</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Won</div>
+                    <div class="stat-value green">12</div>
+                    <div class="stat-sub">$42,300</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Lost</div>
+                    <div class="stat-value red">3</div>
+                    <div class="stat-sub">$8,200</div>
+                </div>
+            </div>
+
+            <div class="job-list-header">
+                <h2>All Jobs</h2>
+                <span>24 jobs this month</span>
+            </div>
+
+            <div class="job-table">
+                <div class="job-row header">
+                    <span>Customer / Scope</span>
+                    <span>Status</span>
+                    <span>Date</span>
+                    <span>Total / Margin</span>
+                    <span>Actions</span>
+                </div>
+
+                <div class="job-row">
+                    <div>
+                        <div class="job-customer">Garcia Concrete Co.</div>
+                        <div class="job-scope">200×40 driveway, 6" thick</div>
+                        <div class="job-id">#SC-2024-089</div>
+                    </div>
+                    <div><span class="job-status status-new">New</span></div>
+                    <div class="job-date">May 19, 2026</div>
+                    <div>
+                        <div class="job-total">$4,800</div>
+                        <div class="job-margin">+18%</div>
+                    </div>
+                    <div class="job-actions">
+                        <button class="action-btn">View</button>
+                        <button class="action-btn">Edit</button>
+                    </div>
+                </div>
+
+                <div class="job-row">
+                    <div>
+                        <div class="job-customer">Sarah Mitchell</div>
+                        <div class="job-scope">16×20 patio, stamped pattern</div>
+                        <div class="job-id">#SC-2024-088</div>
+                    </div>
+                    <div><span class="job-status status-progress">In Progress</span></div>
+                    <div class="job-date">May 18, 2026</div>
+                    <div>
+                        <div class="job-total">$3,200</div>
+                        <div class="job-margin">+22%</div>
+                    </div>
+                    <div class="job-actions">
+                        <button class="action-btn">View</button>
+                        <button class="action-btn">Edit</button>
+                    </div>
+                </div>
+
+                <div class="job-row">
+                    <div>
+                        <div class="job-customer">BuildRight Construction</div>
+                        <div class="job-scope">Foundation pad, 40×60</div>
+                        <div class="job-id">#SC-2024-087</div>
+                    </div>
+                    <div><span class="job-status status-sent">Sent</span></div>
+                    <div class="job-date">May 17, 2026</div>
+                    <div>
+                        <div class="job-total">$12,500</div>
+                        <div class="job-margin">+15%</div>
+                    </div>
+                    <div class="job-actions">
+                        <button class="action-btn">View</button>
+                        <button class="action-btn">Edit</button>
+                    </div>
+                </div>
+
+                <div class="job-row">
+                    <div>
+                        <div class="job-customer">Johnson Family Trust</div>
+                        <div class="job-scope">Pool deck, 800 sq ft</div>
+                        <div class="job-id">#SC-2024-086</div>
+                    </div>
+                    <div><span class="job-status status-won">Won</span></div>
+                    <div class="job-date">May 15, 2026</div>
+                    <div>
+                        <div class="job-total">$9,200</div>
+                        <div class="job-margin">+24%</div>
+                    </div>
+                    <div class="job-actions">
+                        <button class="action-btn">View</button>
+                        <button class="action-btn">Edit</button>
+                    </div>
+                </div>
+
+                <div class="job-row">
+                    <div>
+                        <div class="job-customer">Torres & Sons Builders</div>
+                        <div class="job-scope">Warehouse floor, 5000 sq ft</div>
+                        <div class="job-id">#SC-2024-085</div>
+                    </div>
+                    <div><span class="job-status status-lost">Lost</span></div>
+                    <div class="job-date">May 12, 2026</div>
+                    <div>
+                        <div class="job-total">$28,000</div>
+                        <div class="job-margin">—</div>
+                    </div>
+                    <div class="job-actions">
+                        <button class="action-btn">View</button>
+                        <button class="action-btn">Edit</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="detail-placeholder">
+                ← Click a job to view details, or create a new one
+            </div>
+        </div>
+    </div>
+
+    <!-- Floating New Job (mobile) -->
+    <button class="float-btn">+</button>
+</body>
+</html>

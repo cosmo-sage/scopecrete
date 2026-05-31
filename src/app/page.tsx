@@ -368,7 +368,7 @@ export default function LandingPage() {
               Own your leads.
             </h2>
             <p className="text-lg max-w-[52ch] mx-auto" style={{ color: C.textMuted }}>
-              HomeAdvisor charges $1,800–$2,700 per lead. ScopeCrete charges
+              HomeAdvisor charges $1,800–$2,700 per lead. Scope Builder charges
               $79/month. Your customers find you on your own website — and you own
               the relationship forever.
             </p>
@@ -503,7 +503,7 @@ export default function LandingPage() {
             className="mt-10 pt-8 text-xs flex justify-between"
             style={{ borderTop: `1px solid ${C.border}`, color: C.textMuted }}
           >
-            <span>© 2026 ScopeCrete.ai. All rights reserved.</span>
+            <span>© 2026 Scope Builder. All rights reserved.</span>
             <div className="flex gap-4">
               <a href="#" className="hover:text-white transition-colors">Privacy</a>
               <a href="#" className="hover:text-white transition-colors">Terms</a>

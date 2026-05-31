@@ -21,7 +21,7 @@ const caveat = Caveat({
 });
 
 export const metadata: Metadata = {
-  title: "ScopeCrete.ai — Get a concrete estimate in 60 seconds",
+  title: "Scope Builder — Get a concrete estimate in 60 seconds",
   description:
     "Describe your project, get an accurate concrete bid powered by real market data, and a contractor texts you within the hour. No phone calls, no guesswork.",
   keywords: ["concrete estimate", "concrete calculator", "concrete contractor", "Baton Rouge", "Louisiana"],

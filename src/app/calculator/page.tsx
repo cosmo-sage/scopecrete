@@ -572,7 +572,7 @@ export default function CalculatorPage() {
                 <rect x="8" y="8" width="5" height="5" rx="1" fill="#000" />
               </svg>
             </div>
-            <span style={{ fontWeight: 700, fontSize: 16, color: IQ.textPrimary, letterSpacing: "-0.5px" }}>ScopeCrete</span>
+            <span style={{ fontWeight: 700, fontSize: 16, color: IQ.textPrimary, letterSpacing: "-0.5px" }}>Scope Builder</span>
           </div>
           <button onClick={() => window.history.back()} style={{ color: IQ.textMuted, background: "none", border: "none", cursor: "pointer" }}>
             <X size={20} />

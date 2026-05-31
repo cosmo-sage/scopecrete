@@ -1,14 +1,12 @@
 import { supabase } from "@/lib/supabase";
 
-const REDIRECT_TO = typeof window !== "undefined"
-  ? `${window.location.origin}/auth/callback`
-  : "http://localhost:3005/auth/callback";
+const getRedirectUrl = () => `${window.location.origin}/auth/callback`;
 
 export async function signInWithGoogle() {
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "google",
     options: {
-      redirectTo: REDIRECT_TO,
+      redirectTo: getRedirectUrl(),
     },
   });
   if (data.url) {
@@ -21,7 +19,7 @@ export async function signInWithEmail(email: string) {
   const { error } = await supabase.auth.signInWithOtp({
     email,
     options: {
-      emailRedirectTo: REDIRECT_TO,
+      emailRedirectTo: getRedirectUrl(),
     },
   });
   return { error };

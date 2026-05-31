@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState} from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { signInWithGoogle } from "@/lib/auth";
@@ -13,12 +13,6 @@ export default function LoginPage() {
   const [magicSent, setMagicSent] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [formReady, setFormReady] = useState(false);
-
-  // Show form immediately - auth happens on button click
-  useEffect(() => {
-    setFormReady(true);
-  }, []);
 
   const handleGoogle = async () => {
     setLoading(true);
@@ -47,17 +41,6 @@ export default function LoginPage() {
       setLoading(false);
     }
   };
-
-  if (!formReady) {
-    return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: "#F6F7FB" }}>
-        <div className="text-center">
-          <div className="text-3xl mb-3 animate-pulse">⚙️</div>
-          <h2 className="text-lg font-bold" style={{ color: "#1F2937" }}>Loading...</h2>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div

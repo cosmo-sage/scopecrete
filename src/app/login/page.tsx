@@ -13,24 +13,10 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [formReady, setFormReady] = useState(false);
 
-  // Simple session check with hard timeout
+  // Show form immediately - auth happens on button click
   useEffect(() => {
-    const tid = setTimeout(() => {
-      console.log("Session check timed out - showing form anyway");
-      setFormReady(true);
-    }, 4000);
-
-    supabase.auth.getSession().then(({ data }) => {
-      clearTimeout(tid);
-      if (data?.session?.user) {
-        router.push("/dashboard");
-      } else {
-        setFormReady(true);
-      }
-    });
-
-    return () => clearTimeout(tid);
-  }, [router]);
+    setFormReady(true);
+  }, []);
 
   const handleGoogle = async () => {
     setLoading(true);

@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scopecrete.ai — Landing</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --orange: #FF6B35;
+            --dark: #1a1a2e;
+            --gray-900: #111;
+            --gray-700: #374151;
+            --gray-500: #6b7280;
+            --gray-300: #d1d5db;
+            --gray-100: #f3f4f6;
+            --gray-50: #f9fafb;
+            --white: #ffffff;
+        }
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            color: var(--gray-900);
+            background: var(--white);
+            line-height: 1.6;
+        }
+
+        /* HEADER */
+        header {
+            background: var(--dark);
+            padding: 0 40px;
+            height: 64px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .logo { font-size: 20px; font-weight: 800; color: var(--white); letter-spacing: -0.5px; }
+        .logo span { color: var(--orange); }
+        nav { display: flex; gap: 32px; }
+        nav a { color: var(--gray-300); text-decoration: none; font-size: 14px; font-weight: 500; transition: color 0.2s; }
+        nav a:hover { color: var(--orange); }
+
+        /* HERO */
+        .hero {
+            padding: 80px 40px;
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 64px;
+            align-items: center;
+        }
+        .hero h1 {
+            font-size: 56px;
+            font-weight: 800;
+            line-height: 1.05;
+            letter-spacing: -2px;
+            color: var(--gray-900);
+            margin-bottom: 24px;
+        }
+        .hero h1 em { font-style: normal; color: var(--orange); }
+        .hero-sub {
+            font-size: 18px;
+            color: var(--gray-500);
+            margin-bottom: 40px;
+            max-width: 440px;
+        }
+        .cta-btn {
+            display: inline-block;
+            background: var(--orange);
+            color: var(--white);
+            padding: 16px 36px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 16px;
+            transition: opacity 0.2s;
+        }
+        .cta-btn:hover { opacity: 0.88; }
+
+        /* CHAT WIDGET */
+        .chat-widget {
+            border: 2px solid var(--gray-300);
+            border-radius: 12px;
+            padding: 28px;
+            min-height: 340px;
+        }
+        .chat-header { display: flex; align-items: center; gap: 14px; margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid var(--gray-300); }
+        .chat-avatar {
+            width: 48px; height: 48px;
+            border: 2px dashed var(--gray-300);
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 22px;
+        }
+        .chat-name { font-weight: 700; font-size: 16px; }
+        .chat-status { font-size: 12px; color: var(--orange); font-weight: 600; }
+        .chat-msgs { display: flex; flex-direction: column; gap: 14px; margin-bottom: 16px; }
+        .bubble {
+            border: 1.5px solid var(--gray-300);
+            border-radius: 12px;
+            padding: 12px 16px;
+            font-size: 14px;
+            max-width: 80%;
+        }
+        .bubble.dusty { background: var(--gray-50); }
+        .bubble.dusty strong { color: var(--orange); }
+        .chat-input {
+            border: 1.5px solid var(--gray-300);
+            border-radius: 8px;
+            padding: 12px 16px;
+            font-size: 14px;
+            color: var(--gray-500);
+        }
+
+        /* BADGES */
+        .badges { padding: 0 40px 60px; max-width: 1200px; margin: 0 auto; display: flex; gap: 20px; justify-content: center; }
+        .badge {
+            border: 1.5px solid var(--gray-300);
+            color: var(--gray-700);
+            padding: 10px 24px;
+            border-radius: 100px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        /* HOW IT WORKS */
+        .hiw { background: var(--gray-50); padding: 80px 40px; }
+        .hiw-inner { max-width: 1100px; margin: 0 auto; }
+        .hiw h2 { font-size: 32px; font-weight: 700; text-align: center; margin-bottom: 56px; }
+        .steps { display: flex; justify-content: center; gap: 0; }
+        .step { text-align: center; max-width: 280px; padding: 0 32px; }
+        .step-num {
+            width: 56px; height: 56px;
+            border: 2px solid var(--gray-300);
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 22px;
+            font-weight: 700;
+            margin: 0 auto 20px;
+            color: var(--orange);
+        }
+        .step h3 { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
+        .step p { color: var(--gray-500); font-size: 14px; }
+        .step-arrow { display: flex; align-items: center; font-size: 28px; color: var(--gray-300); }
+
+        /* FOOTER */
+        footer {
+            background: var(--dark);
+            padding: 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        footer .logo { font-size: 18px; }
+        .trust { display: flex; gap: 28px; }
+        .trust span { color: var(--gray-300); font-size: 13px; display: flex; align-items: center; gap: 6px; }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="logo">Scope<span>crete</span>.ai</div>
+        <nav>
+            <a href="#how-it-works">How it works</a>
+            <a href="#">Pricing</a>
+            <a href="#">Get started</a>
+        </nav>
+    </header>
+
+    <section class="hero">
+        <div class="hero-text">
+            <h1>Get a concrete<br>estimate in <em>60 seconds</em></h1>
+            <p class="hero-sub">Describe your project, get an accurate bid, and a contractor texts you within the hour. No phone calls, no guesswork.</p>
+            <a href="#" class="cta-btn">Get your estimate →</a>
+        </div>
+        <div class="chat-widget">
+            <div class="chat-header">
+                <div class="chat-avatar">🤖</div>
+                <div>
+                    <div class="chat-name">Dusty</div>
+                    <div class="chat-status">● Online — Ready to help</div>
+                </div>
+            </div>
+            <div class="chat-msgs">
+                <div class="bubble dusty">Hi! I'm <strong>Dusty</strong>. Describe your project and I'll give you an instant concrete estimate. What are you working on?</div>
+                <div class="bubble dusty">Try: "20x40 driveway, 6 inches thick"</div>
+            </div>
+            <div class="chat-input">Type your project details...</div>
+        </div>
+    </section>
+
+    <section class="badges">
+        <div class="badge">⚡ Fast</div>
+        <div class="badge">🎯 Accurate</div>
+        <div class="badge">📱 No phone call</div>
+    </section>
+
+    <section class="hiw" id="how-it-works">
+        <div class="hiw-inner">
+            <h2>How it works</h2>
+            <div class="steps">
+                <div class="step">
+                    <div class="step-num">1</div>
+                    <h3>Describe</h3>
+                    <p>Tell us your project details — dimensions, type, location</p>
+                </div>
+                <div class="step-arrow">→</div>
+                <div class="step">
+                    <div class="step-num">2</div>
+                    <h3>Estimate</h3>
+                    <p>Get an accurate concrete cost estimate instantly</p>
+                </div>
+                <div class="step-arrow">→</div>
+                <div class="step">
+                    <div class="step-num">3</div>
+                    <h3>Contractor texts you</h3>
+                    <p>A local pro reaches out with a formal quote</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <footer>
+        <div class="logo">Scope<span>crete</span>.ai</div>
+        <div class="trust">
+            <span>🔒 Licensed & Insured</span>
+            <span>⭐ 4.9/5 avg rating</span>
+            <span>📍 Serving [City]</span>
+        </div>
+    </footer>
+</body>
+</html>

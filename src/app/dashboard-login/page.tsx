@@ -41,22 +41,37 @@ export default function DashboardLoginPage() {
     >
       <div
         className="w-full max-w-sm p-8 rounded-2xl"
-        style={{ background: "#111827", border: "1px solid #1e293b", boxShadow: "0 4px 24px rgba(0,0,0,0.4)" }}
+        style={{ background: "#1a1a1a", border: "1px solid #2d3748", boxShadow: "0 4px 24px rgba(0,0,0,0.4)" }}
       >
-        {/* Logo */}
-        <div className="flex items-center justify-center gap-1 mb-8">
-          <div className="relative flex items-end" style={{ paddingBottom: 2 }}>
-            <svg width="54" height="22" viewBox="0 0 54 22" fill="none">
-              <rect x="0" y="0" width="52" height="18" rx="9" fill="#2457F5" />
-              <path d="M1 14 L-3 20 L8 14 Z" fill="#2457F5" />
-              <text x="26" y="13" textAnchor="middle" fill="white" fontSize="11" fontFamily="sans-serif" fontWeight="400" letterSpacing="0.3">Scope</text>
-            </svg>
-          </div>
-          <span style={{ color: "#6b7280", fontWeight: 800, fontSize: "18px", letterSpacing: "-0.02em" }}>Crete</span>
-          <span style={{ color: "#e5e7eb", fontSize: "14px", fontWeight: 400, marginLeft: 2 }}>.ai</span>
+        {/* Logo mark */}
+        <div className="flex justify-center mb-8">
+          <svg width="80" height="60" viewBox="0 0 80 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+            {/* Dark slate block */}
+            <rect x="0" y="0" width="80" height="60" rx="8" fill="#2d3748"/>
+            {/* S in Safety Orange with glow */}
+            <text
+              x="17"
+              y="44"
+              fontFamily="Inter, system-ui, sans-serif"
+              fontSize="38"
+              fontWeight="900"
+              fill="#e85d04"
+              style={{ filter: "drop-shadow(0 0 8px #e85d04)" }}
+            >S</text>
+            {/* C in Safety Orange with glow */}
+            <text
+              x="47"
+              y="44"
+              fontFamily="Inter, system-ui, sans-serif"
+              fontSize="38"
+              fontWeight="900"
+              fill="#e85d04"
+              style={{ filter: "drop-shadow(0 0 8px #e85d04)" }}
+            >C</text>
+          </svg>
         </div>
 
-        <h1 className="text-xl font-bold text-center mb-2" style={{ color: "#e5e7eb" }}>Contractor Dashboard</h1>
+        <h1 className="text-xl font-bold text-center mb-2" style={{ color: "#ffffff" }}>Contractor Dashboard</h1>
         <p className="text-sm text-center mb-8" style={{ color: "#6b7280" }}>Enter your credentials to access</p>
 
         {error && (

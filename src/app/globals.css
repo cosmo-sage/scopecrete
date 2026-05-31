@@ -1,20 +1,21 @@
 @import "tailwindcss";
 
 @theme {
-  /* Colors — zinc base, emerald accent (taste-skill rules: no purple/lila, no neon) */
-  --color-background: #ffffff;
-  --color-foreground: #09090b;
-  --color-muted: #f4f4f5;
-  --color-muted-foreground: #71717a;
-  --color-border: #e4e4e7;
-  --color-card: #ffffff;
-  --color-card-foreground: #09090b;
-  --color-primary: #10b981;        /* emerald-500 */
-  --color-primary-foreground: #ffffff;
-  --color-secondary: #f4f4f5;
-  --color-secondary-foreground: #18181b;
-  --color-accent: #10b981;
-  --color-accent-foreground: #ffffff;
+  /* Colors — ScopeCrete dark industrial brand (locked 2026-05-31)
+     Concrete #6b7280 + Safety Orange #e85d04 */
+  --color-background: #0a0a0a;
+  --color-foreground: #ffffff;
+  --color-muted: #1a1a1a;
+  --color-muted-foreground: #6b7280;
+  --color-border: #2d3748;
+  --color-card: #1a1a1a;
+  --color-card-foreground: #ffffff;
+  --color-primary: #e85d04;        /* Safety Orange */
+  --color-primary-foreground: #0a0a0a;
+  --color-secondary: #1a1a1a;
+  --color-secondary-foreground: #e5e7eb;
+  --color-accent: #e85d04;
+  --color-accent-foreground: #0a0a0a;
   --color-destructive: #ef4444;
   --color-destructive-foreground: #ffffff;
 

@@ -227,7 +227,7 @@ export default function LeadsPage() {
                     </div>
                     {lead.customer_email && (
                       <div className="text-xs mt-0.5" style={{ color: "#6B7280" }}>{lead.customer_email}</div>
-                    )}}
+                    )}
                   </td>
                   <td className="px-5 py-4">
                     <span className="text-xs font-medium px-2 py-1 rounded-full" style={{ background: "rgba(36,87,245,0.08)", color: "#2457F5" }}>

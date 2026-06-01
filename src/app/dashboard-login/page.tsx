@@ -1,10 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 
 export default function DashboardLoginPage() {
-  const router = useRouter();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -17,28 +15,46 @@ export default function DashboardLoginPage() {
     setError("");
     setDebug("");
 
-    const body = JSON.stringify({ username, password });
+    const payload = JSON.stringify({ username, password });
+    setDebug(`Payload: ${payload}`);
 
     try {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body,
+        body: payload,
+        credentials: "include",
       });
 
+      setDebug(`Status: ${res.status}`);
       const data = await res.json();
+      setDebug(`Response: ${JSON.stringify(data)}`);
 
       if (res.ok) {
         window.location.href = "/dashboard";
       } else {
-        setError(data.error || "Invalid credentials");
-        setDebug(`Status: ${res.status}, Body: ${JSON.stringify(data)}`);
+        setError(data.error || "Login failed");
         setLoading(false);
       }
     } catch (err) {
-      setError("Connection error");
-      setDebug(`Network error: ${String(err)}`);
+      setError(`Error: ${String(err)}`);
+      setDebug(`Error: ${String(err)}`);
       setLoading(false);
+    }
+  };
+
+  const handleTest = async () => {
+    setDebug("Testing...");
+    try {
+      const res = await fetch("/api/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ test: true }),
+      });
+      const data = await res.json();
+      setDebug(`Test route: ${JSON.stringify(data)}`);
+    } catch (err) {
+      setDebug(`Test error: ${String(err)}`);
     }
   };
 
@@ -109,6 +125,15 @@ export default function DashboardLoginPage() {
             {loading ? "Signing in..." : "Sign in"}
           </button>
         </form>
+
+        {/* Test button */}
+        <button
+          onClick={handleTest}
+          className="mt-4 w-full px-4 py-2 rounded-xl text-xs"
+          style={{ background: "#2d3748", color: "#6b7280", border: "1px solid #3d4a5c" }}
+        >
+          Test API
+        </button>
 
         <div className="mt-6 text-center">
           <a href="/" className="text-sm" style={{ color: "#6b7280" }}>

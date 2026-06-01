@@ -36,10 +36,8 @@ export async function POST(request: NextRequest) {
       const password = params.get("password") || "";
 
       if (username === USERNAME && password === PASSWORD) {
-        // Use absolute URL to avoid localhost redirect
-        const response = NextResponse.redirect(new URL("https://scopecrete.ai/dashboard"), {
-          status: 302,
-        });
+        const redirectUrl = new URL("/dashboard", request.url);
+        const response = NextResponse.redirect(redirectUrl, { status: 302 });
         response.cookies.set("sc_session", "scopecrete_dashboard_session", {
           httpOnly: true,
           secure: true,
@@ -49,11 +47,11 @@ export async function POST(request: NextRequest) {
         });
         return response;
       }
-      return NextResponse.redirect(new URL("https://scopecrete.ai/dashboard-login?error=1"), {
+      return NextResponse.redirect(new URL("/dashboard-login?error=1", request.url), {
         status: 302,
       });
     } catch {
-      return NextResponse.redirect(new URL("https://scopecrete.ai/dashboard-login?error=1"), {
+      return NextResponse.redirect(new URL("/dashboard-login?error=1", request.url), {
         status: 302,
       });
     }

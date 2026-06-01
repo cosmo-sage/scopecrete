@@ -4,6 +4,12 @@ export async function POST(request: NextRequest) {
   const USERNAME = "admin";
   const PASSWORD = "scopecrete2026";
 
+  // Determine base URL — use x-forwarded-host if present (Caddy proxy), else request.url
+  const forwardedHost = request.headers.get("x-forwarded-host");
+  const baseUrl = forwardedHost
+    ? `https://${forwardedHost}`
+    : request.url.replace(/\/api\/auth\/login.*/, "");
+
   const contentType = request.headers.get("content-type") || "";
 
   if (contentType.includes("application/json")) {
@@ -36,7 +42,7 @@ export async function POST(request: NextRequest) {
       const password = params.get("password") || "";
 
       if (username === USERNAME && password === PASSWORD) {
-        const redirectUrl = new URL("/dashboard", request.url);
+        const redirectUrl = new URL("/dashboard", baseUrl);
         const response = NextResponse.redirect(redirectUrl, { status: 302 });
         response.cookies.set("sc_session", "scopecrete_dashboard_session", {
           httpOnly: true,
@@ -47,11 +53,11 @@ export async function POST(request: NextRequest) {
         });
         return response;
       }
-      return NextResponse.redirect(new URL("/dashboard-login?error=1", request.url), {
+      return NextResponse.redirect(new URL("/dashboard-login?error=1", baseUrl), {
         status: 302,
       });
     } catch {
-      return NextResponse.redirect(new URL("/dashboard-login?error=1", request.url), {
+      return NextResponse.redirect(new URL("/dashboard-login?error=1", baseUrl), {
         status: 302,
       });
     }

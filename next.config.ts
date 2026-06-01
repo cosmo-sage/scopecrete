@@ -4,7 +4,6 @@ const nextConfig: NextConfig = {
   images: {
     unoptimized: true,
   },
-  trustHostProxy: true,
 };
 
 export default nextConfig;

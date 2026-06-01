@@ -36,8 +36,8 @@ export async function POST(request: NextRequest) {
       const password = params.get("password") || "";
 
       if (username === USERNAME && password === PASSWORD) {
-        // For form submissions, redirect to dashboard
-        const response = NextResponse.redirect(new URL("/dashboard", request.url), {
+        // Use absolute URL to avoid localhost redirect
+        const response = NextResponse.redirect(new URL("https://scopecrete.ai/dashboard"), {
           status: 302,
         });
         response.cookies.set("sc_session", "scopecrete_dashboard_session", {
@@ -49,12 +49,11 @@ export async function POST(request: NextRequest) {
         });
         return response;
       }
-      // On failure, redirect back to login with error
-      return NextResponse.redirect(new URL("/dashboard-login?error=invalid", request.url), {
+      return NextResponse.redirect(new URL("https://scopecrete.ai/dashboard-login?error=1"), {
         status: 302,
       });
     } catch {
-      return NextResponse.redirect(new URL("/dashboard-login?error=invalid", request.url), {
+      return NextResponse.redirect(new URL("https://scopecrete.ai/dashboard-login?error=1"), {
         status: 302,
       });
     }

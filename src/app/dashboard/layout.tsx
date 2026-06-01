@@ -5,17 +5,14 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   Users,
-  Settings,
   Bell,
   LogOut,
   X,
   Sparkles,
+  Menu,
 } from "lucide-react";
-import { useState } from "react";
-import AIPanel from "@/components/dashboard/AIPanel";
+import { useState, useEffect } from "react";
 
-// Brand tokens — single source of truth for dark industrial theme
-// Concrete Gray #6b7280 + Safety Orange #e85d04
 const SC = {
   bg: "#0a0a0a",
   surface: "#1a1a1a",
@@ -27,201 +24,152 @@ const SC = {
   textSecondary: "#9ca3af",
   textMuted: "#6b7280",
   border: "#2d3748",
-  borderLight: "#3d4a5c",
-  highlight: "#e85d04",
 };
 
-function Sidebar({
-  onCopilotOpen,
-}: {
-  onCopilotOpen: () => void;
-}) {
-  const pathname = usePathname();
-
-  const NAV_ITEMS = [
-    { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-    { href: "/dashboard/leads", label: "Leads", icon: Users },
-  ];
-
-  return (
-    <aside
-      className="w-56 shrink-0 flex flex-col h-full"
-      style={{ background: SC.surface, borderRight: `1px solid ${SC.border}` }}
-    >
-      {/* Logo */}
-      <div className="px-4 py-4 flex items-center justify-between">
-        <Link href="/dashboard" className="flex items-center gap-1">
-          {/* SC block brand mark */}
-          <svg width="36" height="28" viewBox="0 0 36 28" fill="none">
-            <rect x="0" y="0" width="36" height="28" rx="5" fill="#2d3748"/>
-            <text
-              x="7"
-              y="22"
-              fontFamily="Inter, system-ui, sans-serif"
-              fontSize="18"
-              fontWeight="900"
-              fill="#e85d04"
-              style={{ filter: "drop-shadow(0 0 6px #e85d04)" }}
-            >S</text>
-            <text
-              x="21"
-              y="22"
-              fontFamily="Inter, system-ui, sans-serif"
-              fontSize="18"
-              fontWeight="900"
-              fill="#e85d04"
-              style={{ filter: "drop-shadow(0 0 6px #e85d04)" }}
-            >C</text>
-          </svg>
-          <span className="font-extrabold text-sm tracking-tight" style={{ color: SC.textPrimary }}>
-            Crete
-          </span>
-          <span className="text-xs font-normal" style={{ color: SC.textMuted }}>.ai</span>
-        </Link>
-      </div>
-
-      {/* Contractor name */}
-      <div className="px-4 py-2.5 mb-1" style={{ borderBottom: `1px solid ${SC.border}` }}>
-        <div
-          className="text-[10px] font-semibold"
-          style={{ color: SC.textMuted, textTransform: "uppercase", letterSpacing: "0.08em" }}
-        >
-          Contractor
-        </div>
-        <div className="text-sm font-semibold mt-0.5" style={{ color: SC.textPrimary }}>
-          Sacco Builders
-        </div>
-      </div>
-
-      {/* AI Copilot */}
-      <div className="px-3 py-3" style={{ borderBottom: `1px solid ${SC.border}` }}>
-        <button
-          onClick={onCopilotOpen}
-          className="w-full flex items-center gap-1.5 px-3 py-3 rounded-xl text-sm font-semibold transition-colors hover:brightness-110"
-          style={{
-            background: SC.accentMuted,
-            border: `1px solid rgba(232,93,4,0.30)`,
-            color: SC.accent,
-          }}
-        >
-          <div
-            className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
-            style={{ background: SC.accent }}
-          >
-            <Sparkles size={13} color="white" />
-          </div>
-          <div className="text-left">
-            <div>AI Copilot</div>
-            <div className="text-[10px] font-normal" style={{ color: SC.textSecondary }}>
-              Edit quotes by chat
-            </div>
-          </div>
-        </button>
-      </div>
-
-      {/* Nav */}
-      <nav className="flex-1 px-3 py-3 space-y-0.5 overflow-y-auto">
-        {NAV_ITEMS.map((item) => {
-          const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors"
-              style={{
-                background: isActive ? SC.accentMuted : "transparent",
-                color: isActive ? SC.accent : SC.textSecondary,
-              }}
-            >
-              <item.icon size={16} />
-              {item.label}
-            </Link>
-          );
-        })}
-      </nav>
-
-      {/* Bottom */}
-      <div className="px-3 py-3" style={{ borderTop: `1px solid ${SC.border}` }}>
-        <div
-          className="flex items-center gap-3 px-3 py-2.5 rounded-lg"
-          style={{ color: SC.textSecondary }}
-        >
-          <Bell size={15} />
-          <span className="text-sm">Notifications</span>
-        </div>
-        <div
-          className="flex items-center gap-3 px-3 py-2.5 rounded-lg mt-0.5"
-          style={{ color: SC.textMuted }}
-        >
-          <LogOut size={15} />
-          <span className="text-sm">Sign out</span>
-        </div>
-      </div>
-    </aside>
-  );
-}
+const NAV_ITEMS = [
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/dashboard/leads", label: "Leads", icon: Users },
+];
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const [copilotOpen, setCopilotOpen] = useState(false);
+  const pathname = usePathname();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Close sidebar on route change
+  useEffect(() => {
+    setSidebarOpen(false);
+  }, [pathname]);
 
   return (
-    <div
-      className="flex h-screen overflow-hidden"
-      style={{ background: SC.bg }}
-    >
-      {/* Mobile toggle */}
-      <button
-        className="fixed top-4 left-4 z-50 md:hidden"
-        onClick={() => setMobileOpen(!mobileOpen)}
-        style={{
-          background: SC.surface,
-          border: `1px solid ${SC.border}`,
-          borderRadius: 8,
-          padding: "8px",
-          color: SC.textPrimary,
-        }}
-      >
-        {mobileOpen ? <X size={18} /> : <span style={{ fontSize: 11, fontWeight: 700 }}>☰</span>}
-      </button>
-
-      {/* Sidebar */}
-      <div
-        className={`fixed inset-y-0 left-0 z-40 md:static ${
-          mobileOpen ? "translate-x-0" : "-translate-x-full"
-        } md:translate-x-0 transition-transform md:shrink-0`}
-      >
-        <Sidebar onCopilotOpen={() => setCopilotOpen(true)} />
-      </div>
-
-      {/* Overlay */}
-      {mobileOpen && (
+    <div className="flex" style={{ background: SC.bg, minHeight: "100dvh" }}>
+      {/* Mobile overlay */}
+      {sidebarOpen && (
         <div
-          className="fixed inset-0 z-30 bg-black/50 md:hidden"
-          onClick={() => setMobileOpen(false)}
+          className="fixed inset-0 z-30 bg-black/60 md:hidden"
+          onClick={() => setSidebarOpen(false)}
         />
       )}
 
-      {/* Main content */}
-      <main className="flex-1 overflow-y-auto">
-        {children}
-      </main>
+      {/* Sidebar — fixed on mobile, static on desktop */}
+      <aside
+        className={`
+          fixed inset-y-0 left-0 z-40 w-56 flex flex-col
+          transform transition-transform duration-200 ease-in-out
+          md:relative md:translate-x-0 md:shrink-0 md:z-auto
+          ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
+        `}
+        style={{ background: SC.surface, borderRight: `1px solid ${SC.border}` }}
+      >
+        {/* Mobile close */}
+        <div className="flex items-center justify-between p-4 md:hidden">
+          <span className="text-sm font-semibold" style={{ color: SC.textMuted }}>Menu</span>
+          <button
+            onClick={() => setSidebarOpen(false)}
+            className="p-1 rounded"
+            style={{ color: SC.textMuted }}
+          >
+            <X size={20} />
+          </button>
+        </div>
 
-      {/* AI Copilot Panel */}
-      <AIPanel
-        open={copilotOpen}
-        onClose={() => setCopilotOpen(false)}
-        theme="dark"
-        quoteData={{
-          sqft: 720,
-          depth: 4,
-          psi: 3000,
-          zip: "70802",
-          estimate: { low: 7500, high: 9500 },
-          concretePerCY: 175,
-          laborPerSqft: 9,
-        }}
-      />
+        {/* Logo */}
+        <div className="px-4 py-4 hidden md:block" style={{ borderBottom: `1px solid ${SC.border}` }}>
+          <Link href="/dashboard" className="flex items-center gap-1">
+            <svg width="36" height="28" viewBox="0 0 36 28" fill="none">
+              <rect x="0" y="0" width="36" height="28" rx="5" fill="#2d3748"/>
+              <text x="7" y="22" fontFamily="Inter, system-ui, sans-serif" fontSize="18" fontWeight="900" fill="#e85d04" style={{ filter: "drop-shadow(0 0 6px #e85d04)" }}>S</text>
+              <text x="21" y="22" fontFamily="Inter, system-ui, sans-serif" fontSize="18" fontWeight="900" fill="#e85d04" style={{ filter: "drop-shadow(0 0 6px #e85d04)" }}>C</text>
+            </svg>
+            <span className="font-extrabold text-sm tracking-tight" style={{ color: SC.textPrimary }}>Crete</span>
+            <span className="text-xs font-normal" style={{ color: SC.textMuted }}>.ai</span>
+          </Link>
+        </div>
+
+        {/* Contractor name */}
+        <div className="px-4 py-2.5 mb-1 hidden md:block" style={{ borderBottom: `1px solid ${SC.border}` }}>
+          <div className="text-[10px] font-semibold" style={{ color: SC.textMuted, textTransform: "uppercase", letterSpacing: "0.08em" }}>Contractor</div>
+          <div className="text-sm font-semibold mt-0.5" style={{ color: SC.textPrimary }}>Sacco Builders</div>
+        </div>
+
+        {/* AI Copilot button */}
+        <div className="px-3 py-3 hidden md:block" style={{ borderBottom: `1px solid ${SC.border}` }}>
+          <button
+            className="w-full flex items-center gap-1.5 px-3 py-3 rounded-xl text-sm font-semibold"
+            style={{ background: SC.accentMuted, border: `1px solid rgba(232,93,4,0.30)`, color: SC.accent }}
+          >
+            <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: SC.accent }}>
+              <Sparkles size={13} color="white" />
+            </div>
+            <div className="text-left">
+              <div>AI Copilot</div>
+              <div className="text-[10px] font-normal" style={{ color: SC.textSecondary }}>Edit quotes by chat</div>
+            </div>
+          </button>
+        </div>
+
+        {/* Nav */}
+        <nav className="flex-1 px-3 py-3 overflow-y-auto">
+          {NAV_ITEMS.map((item) => {
+            const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium mb-0.5"
+                style={{
+                  background: isActive ? SC.accentMuted : "transparent",
+                  color: isActive ? SC.accent : SC.textSecondary,
+                }}
+              >
+                <item.icon size={16} />
+                {item.label}
+              </Link>
+            );
+          })}
+        </nav>
+
+        {/* Bottom */}
+        <div className="px-3 py-3" style={{ borderTop: `1px solid ${SC.border}` }}>
+          <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg" style={{ color: SC.textSecondary }}>
+            <Bell size={15} />
+            <span className="text-sm">Notifications</span>
+          </div>
+          <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg" style={{ color: SC.textMuted }}>
+            <LogOut size={15} />
+            <span className="text-sm">Sign out</span>
+          </div>
+        </div>
+      </aside>
+
+      {/* Main area */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Mobile header bar */}
+        <header
+          className="flex items-center justify-between px-4 py-3 md:hidden"
+          style={{ background: SC.surface, borderBottom: `1px solid ${SC.border}` }}
+        >
+          <Link href="/dashboard" className="flex items-center gap-1">
+            <svg width="28" height="22" viewBox="0 0 36 28" fill="none">
+              <rect x="0" y="0" width="36" height="28" rx="5" fill="#2d3748"/>
+              <text x="7" y="22" fontFamily="Inter, system-ui, sans-serif" fontSize="18" fontWeight="900" fill="#e85d04">S</text>
+              <text x="21" y="22" fontFamily="Inter, system-ui, sans-serif" fontSize="18" fontWeight="900" fill="#e85d04">C</text>
+            </svg>
+            <span className="font-extrabold text-sm" style={{ color: SC.textPrimary }}>Crete</span>
+          </Link>
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="p-2 rounded-lg"
+            style={{ background: SC.elevated, color: SC.textPrimary }}
+          >
+            <Menu size={20} />
+          </button>
+        </header>
+
+        {/* Page content */}
+        <main className="flex-1 overflow-y-auto">
+          {children}
+        </main>
+      </div>
     </div>
   );
 }

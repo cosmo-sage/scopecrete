@@ -137,7 +137,7 @@ export default function LeadsPage() {
   const wonCount = leads.filter((l) => l.status === "won").length;
 
   return (
-    <div className="min-h-full p-6 lg:p-8" style={{ background: T.bg }}>
+    <div className="p-4 sm:p-6 lg:p-8" style={{ background: T.bg }}>
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div>
@@ -175,7 +175,7 @@ export default function LeadsPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
         <StatCard label="Total leads" value={leads.length} icon={Users} />
         <StatCard
           label="New today"
@@ -195,7 +195,7 @@ export default function LeadsPage() {
 
       {/* Lead list */}
       <div
-        className="rounded-xl overflow-hidden"
+        className="rounded-xl overflow-x-auto"
         style={{ background: T.surface, border: `1px solid ${T.border}` }}
       >
         {loading ? (

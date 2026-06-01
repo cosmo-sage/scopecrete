@@ -94,7 +94,7 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="min-h-full p-6 lg:p-8">
+    <div className="p-4 sm:p-6 lg:p-8">
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div>
@@ -126,7 +126,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
         <StatCard label="Total leads" value={totalLeads} icon={Users} T={T} />
         <StatCard
           label="New today"
@@ -155,7 +155,7 @@ export default function DashboardPage() {
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
         {/* Recent leads */}
         <div
           className="lg:col-span-2 rounded-xl overflow-hidden"

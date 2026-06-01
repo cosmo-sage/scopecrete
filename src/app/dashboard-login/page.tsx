@@ -9,28 +9,35 @@ export default function DashboardLoginPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [debug, setDebug] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError("");
+    setDebug("");
+
+    const body = JSON.stringify({ username, password });
 
     try {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
+        body,
       });
 
+      const data = await res.json();
+
       if (res.ok) {
-        // Full page reload instead of router.push — more reliable
         window.location.href = "/dashboard";
       } else {
-        setError("Invalid credentials");
+        setError(data.error || "Invalid credentials");
+        setDebug(`Status: ${res.status}, Body: ${JSON.stringify(data)}`);
         setLoading(false);
       }
-    } catch {
+    } catch (err) {
       setError("Connection error");
+      setDebug(`Network error: ${String(err)}`);
       setLoading(false);
     }
   };
@@ -46,29 +53,10 @@ export default function DashboardLoginPage() {
       >
         {/* Logo mark */}
         <div className="flex justify-center mb-8">
-          <svg width="80" height="60" viewBox="0 0 80 60" fill="none" xmlns="http://www.w3.org/2000/svg">
-            {/* Dark slate block */}
+          <svg width="80" height="60" viewBox="0 0 80 60" fill="none">
             <rect x="0" y="0" width="80" height="60" rx="8" fill="#2d3748"/>
-            {/* S in Safety Orange with glow */}
-            <text
-              x="17"
-              y="44"
-              fontFamily="Inter, system-ui, sans-serif"
-              fontSize="38"
-              fontWeight="900"
-              fill="#e85d04"
-              style={{ filter: "drop-shadow(0 0 8px #e85d04)" }}
-            >S</text>
-            {/* C in Safety Orange with glow */}
-            <text
-              x="47"
-              y="44"
-              fontFamily="Inter, system-ui, sans-serif"
-              fontSize="38"
-              fontWeight="900"
-              fill="#e85d04"
-              style={{ filter: "drop-shadow(0 0 8px #e85d04)" }}
-            >C</text>
+            <text x="17" y="44" fontFamily="Inter, system-ui, sans-serif" fontSize="38" fontWeight="900" fill="#e85d04" style={{ filter: "drop-shadow(0 0 8px #e85d04)" }}>S</text>
+            <text x="47" y="44" fontFamily="Inter, system-ui, sans-serif" fontSize="38" fontWeight="900" fill="#e85d04" style={{ filter: "drop-shadow(0 0 8px #e85d04)" }}>C</text>
           </svg>
         </div>
 
@@ -78,6 +66,12 @@ export default function DashboardLoginPage() {
         {error && (
           <div className="mb-4 p-3 rounded-lg text-sm" style={{ background: "rgba(239,68,68,0.1)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.2)" }}>
             {error}
+          </div>
+        )}
+
+        {debug && (
+          <div className="mb-4 p-3 rounded-lg text-xs" style={{ background: "#0a0a0a", color: "#6b7280", fontFamily: "monospace" }}>
+            {debug}
           </div>
         )}
 

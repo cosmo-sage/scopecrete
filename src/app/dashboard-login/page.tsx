@@ -3,28 +3,7 @@
 import { useState } from "react";
 
 export default function DashboardLoginPage() {
-  const [username, setUsername] = useState("admin");
-  const [password, setPassword] = useState("scopecrete2026");
-  const [result, setResult] = useState<string>("");
-
-  const handleSubmit = async () => {
-    setResult("Starting fetch...");
-    try {
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
-        credentials: "include",
-      });
-      const data = await res.json();
-      setResult(`Status: ${res.status}, Data: ${JSON.stringify(data)}`);
-      if (res.ok) {
-        window.location.href = "/dashboard";
-      }
-    } catch (err: unknown) {
-      setResult(`Error: ${String(err)}`);
-    }
-  };
+  const [error, setError] = useState("");
 
   return (
     <div
@@ -47,41 +26,46 @@ export default function DashboardLoginPage() {
         <h1 className="text-xl font-bold text-center mb-2" style={{ color: "#ffffff" }}>Contractor Dashboard</h1>
         <p className="text-sm text-center mb-8" style={{ color: "#6b7280" }}>Enter your credentials to access</p>
 
-        {result && (
-          <div className="mb-4 p-3 rounded-lg text-xs" style={{ background: "#0a0a0a", color: "#6b7280", fontFamily: "monospace" }}>
-            {result}
+        {error && (
+          <div className="mb-4 p-3 rounded-lg text-sm" style={{ background: "rgba(239,68,68,0.1)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.2)" }}>
+            {error}
           </div>
         )}
 
-        <div className="space-y-4">
-          <div>
-            <input
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="Username"
-              className="w-full px-4 py-3 rounded-xl text-sm outline-none"
-              style={{ background: "#0a0a0a", border: "1px solid #2d3748", color: "#e5e7eb" }}
-            />
+        {/* Plain HTML form — no JS fetch, works everywhere */}
+        <form action="/api/auth/login" method="POST">
+          <div className="space-y-4">
+            <div>
+              <input
+                type="text"
+                name="username"
+                placeholder="Username"
+                required
+                autoComplete="username"
+                className="w-full px-4 py-3 rounded-xl text-sm outline-none"
+                style={{ background: "#0a0a0a", border: "1px solid #2d3748", color: "#e5e7eb" }}
+              />
+            </div>
+            <div>
+              <input
+                type="password"
+                name="password"
+                placeholder="Password"
+                required
+                autoComplete="current-password"
+                className="w-full px-4 py-3 rounded-xl text-sm outline-none"
+                style={{ background: "#0a0a0a", border: "1px solid #2d3748", color: "#e5e7eb" }}
+              />
+            </div>
+            <button
+              type="submit"
+              className="w-full px-4 py-3 rounded-xl text-sm font-semibold transition-opacity hover:opacity-90"
+              style={{ background: "#e85d04", color: "#0a0a0a" }}
+            >
+              Sign in
+            </button>
           </div>
-          <div>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Password"
-              className="w-full px-4 py-3 rounded-xl text-sm outline-none"
-              style={{ background: "#0a0a0a", border: "1px solid #2d3748", color: "#e5e7eb" }}
-            />
-          </div>
-          <button
-            onClick={handleSubmit}
-            className="w-full px-4 py-3 rounded-xl text-sm font-semibold transition-opacity hover:opacity-90"
-            style={{ background: "#e85d04", color: "#0a0a0a" }}
-          >
-            Sign in
-          </button>
-        </div>
+        </form>
 
         <div className="mt-6 text-center">
           <a href="/" className="text-sm" style={{ color: "#6b7280" }}>

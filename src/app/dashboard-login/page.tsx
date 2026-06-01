@@ -23,7 +23,8 @@ export default function DashboardLoginPage() {
       });
 
       if (res.ok) {
-        router.push("/dashboard");
+        // Full page reload instead of router.push — more reliable
+        window.location.href = "/dashboard";
       } else {
         setError("Invalid credentials");
         setLoading(false);
@@ -37,10 +38,10 @@ export default function DashboardLoginPage() {
   return (
     <div
       className="min-h-screen flex items-center justify-center"
-      style={{ background: "#0a0a0a" }}
+      style={{ background: "#0a0a0a", padding: "16px" }}
     >
       <div
-        className="w-full max-w-sm p-8 rounded-2xl"
+        className="w-full max-w-sm p-6 sm:p-8 rounded-2xl"
         style={{ background: "#1a1a1a", border: "1px solid #2d3748", boxShadow: "0 4px 24px rgba(0,0,0,0.4)" }}
       >
         {/* Logo mark */}

@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Outfit, JetBrains_Mono, Caveat } from "next/font/google";
 import "./globals.css";
 
@@ -20,8 +20,15 @@ const caveat = Caveat({
   display: "swap",
 });
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  themeColor: "#0a0a0a",
+};
+
 export const metadata: Metadata = {
-  title: "Scope Builder — Get a concrete estimate in 60 seconds",
+  title: "ScopeCrete — Contractor Dashboard",
   description:
     "Describe your project, get an accurate concrete bid powered by real market data, and a contractor texts you within the hour. No phone calls, no guesswork.",
   keywords: ["concrete estimate", "concrete calculator", "concrete contractor", "Baton Rouge", "Louisiana"],

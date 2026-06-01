@@ -5,56 +5,46 @@ import { useState } from "react";
 export default function DashboardLoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [debug, setDebug] = useState("");
+  const [phase, setPhase] = useState<"idle" | "clicked" | "loading" | "done">("idle");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
+    setPhase("clicked");
     setError("");
-    setDebug("");
+    setDebug(`Starting... username="${username}"`);
 
-    const payload = JSON.stringify({ username, password });
-    setDebug(`Payload: ${payload}`);
+    // Small delay so user can see the "clicked" state
+    await new Promise(r => setTimeout(r, 200));
+    setPhase("loading");
 
     try {
+      const body = JSON.stringify({ username, password });
+      setDebug(`Body: ${body}`);
+
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: payload,
+        body,
         credentials: "include",
       });
 
-      setDebug(`Status: ${res.status}`);
+      setDebug(`Response status: ${res.status}`);
       const data = await res.json();
-      setDebug(`Response: ${JSON.stringify(data)}`);
+      setDebug(`Response data: ${JSON.stringify(data)}`);
 
       if (res.ok) {
+        setPhase("done");
         window.location.href = "/dashboard";
       } else {
         setError(data.error || "Login failed");
-        setLoading(false);
+        setPhase("idle");
       }
-    } catch (err) {
+    } catch (err: unknown) {
       setError(`Error: ${String(err)}`);
       setDebug(`Error: ${String(err)}`);
-      setLoading(false);
-    }
-  };
-
-  const handleTest = async () => {
-    setDebug("Testing...");
-    try {
-      const res = await fetch("/api/test", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ test: true }),
-      });
-      const data = await res.json();
-      setDebug(`Test route: ${JSON.stringify(data)}`);
-    } catch (err) {
-      setDebug(`Test error: ${String(err)}`);
+      setPhase("idle");
     }
   };
 
@@ -78,6 +68,10 @@ export default function DashboardLoginPage() {
 
         <h1 className="text-xl font-bold text-center mb-2" style={{ color: "#ffffff" }}>Contractor Dashboard</h1>
         <p className="text-sm text-center mb-8" style={{ color: "#6b7280" }}>Enter your credentials to access</p>
+
+        <div className="mb-2 p-2 rounded-lg text-xs text-center" style={{ background: phase === "idle" ? "#1a1a1a" : phase === "clicked" ? "rgba(232,93,4,0.15)" : phase === "loading" ? "rgba(232,93,4,0.25)" : "rgba(34,197,94,0.15)", color: phase === "idle" ? "#6b7280" : "#e85d04", fontFamily: "monospace" }}>
+          {phase === "idle" ? "Ready" : phase === "clicked" ? "Click detected" : phase === "loading" ? "Sending request..." : "Success!"}
+        </div>
 
         {error && (
           <div className="mb-4 p-3 rounded-lg text-sm" style={{ background: "rgba(239,68,68,0.1)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.2)" }}>
@@ -118,22 +112,13 @@ export default function DashboardLoginPage() {
           </div>
           <button
             type="submit"
-            disabled={loading}
+            disabled={phase === "clicked" || phase === "loading"}
             className="w-full px-4 py-3 rounded-xl text-sm font-semibold transition-opacity hover:opacity-90 disabled:opacity-50"
             style={{ background: "#e85d04", color: "#0a0a0a" }}
           >
-            {loading ? "Signing in..." : "Sign in"}
+            {phase === "clicked" || phase === "loading" ? "Signing in..." : "Sign in"}
           </button>
         </form>
-
-        {/* Test button */}
-        <button
-          onClick={handleTest}
-          className="mt-4 w-full px-4 py-2 rounded-xl text-xs"
-          style={{ background: "#2d3748", color: "#6b7280", border: "1px solid #3d4a5c" }}
-        >
-          Test API
-        </button>
 
         <div className="mt-6 text-center">
           <a href="/" className="text-sm" style={{ color: "#6b7280" }}>

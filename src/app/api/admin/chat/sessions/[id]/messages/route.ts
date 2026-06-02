@@ -112,7 +112,7 @@ Be direct and specific. Cite numbers, names, dates.`;
         const ollamaStream = new ReadableStream({
           async start(controller) {
             try {
-              const upstream = await fetch("http://localhost:8000/v1/chat/completions", {
+              const upstream = await fetch("http://100.113.194.47:8000/v1/chat/completions", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({

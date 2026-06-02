@@ -10,19 +10,19 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL("/maintenance", request.url));
   }
 
+  // Protect /admin routes (but not /admin/login which is the auth page itself)
+  if (pathname.startsWith("/admin") && isProduction && pathname !== "/admin/login") {
+    const session = request.cookies.get("sc_session");
+    if (!session || session.value !== "scopecrete_dashboard_session") {
+      return NextResponse.redirect(new URL("/admin/login", request.url));
+    }
+  }
+
   // Protect dashboard routes
   if (pathname.startsWith("/dashboard") && isProduction) {
     const session = request.cookies.get("sc_session");
     if (!session || session.value !== "scopecrete_dashboard_session") {
       return NextResponse.redirect(new URL("/dashboard-login", request.url));
-    }
-  }
-
-  // Protect admin routes — same session cookie, but redirect to admin login
-  if (pathname.startsWith("/admin") && isProduction) {
-    const session = request.cookies.get("sc_session");
-    if (!session || session.value !== "scopecrete_dashboard_session") {
-      return NextResponse.redirect(new URL("/admin/login", request.url));
     }
   }
 
@@ -32,7 +32,7 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     "/",
-    "/dashboard/:path*",
     "/admin/:path*",
+    "/dashboard/:path*",
   ],
 };

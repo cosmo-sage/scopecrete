@@ -2,11 +2,19 @@ import { NextResponse, type NextRequest } from "next/server";
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const forwardedHost = request.headers.get("x-forwarded-host");
+  const isProduction = forwardedHost?.includes("scopecrete.ai");
 
-  // Only protect dashboard in production (not on localhost dev)
-  const isProduction = request.headers.get("x-forwarded-host")?.includes("scopecrete.ai");
-
+  // Protect dashboard routes
   if (pathname.startsWith("/dashboard") && isProduction) {
+    const session = request.cookies.get("sc_session");
+    if (!session || session.value !== "scopecrete_dashboard_session") {
+      return NextResponse.redirect(new URL("/dashboard-login", request.url));
+    }
+  }
+
+  // Protect admin routes — same simple session check
+  if (pathname.startsWith("/admin") && isProduction) {
     const session = request.cookies.get("sc_session");
     if (!session || session.value !== "scopecrete_dashboard_session") {
       return NextResponse.redirect(new URL("/dashboard-login", request.url));
@@ -19,5 +27,6 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     "/dashboard/:path*",
+    "/admin/:path*",
   ],
 };

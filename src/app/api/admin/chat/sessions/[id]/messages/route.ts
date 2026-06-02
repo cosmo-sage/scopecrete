@@ -15,7 +15,6 @@ export async function GET(
       .order("created_at", { ascending: true });
 
     if (error) throw error;
-
     return NextResponse.json({ messages: data ?? [] });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
@@ -53,67 +52,135 @@ export async function POST(
       .update({ updated_at: new Date().toISOString() })
       .eq("id", sessionId);
 
-    // 3. Build context from recent messages (last 10)
+    // 3. Get session history (last 12 messages for context)
     const { data: history } = await supabaseAdmin
       .from("admin_chat_messages")
       .select("role, content")
       .eq("session_id", sessionId)
       .order("created_at", { ascending: true })
-      .limit(10);
+      .limit(12);
 
-    const messages = (history ?? []).map((m: any) => ({
-      role: m.role,
-      content: m.content,
-    }));
+    const historyLines = (history ?? [])
+      .map((m: any) => `${m.role}: ${m.content}`)
+      .join("\n");
 
-    // 4. Call Dusty (Ollama on Clay's PC via SSH tunnel)
-    const SYSTEM_PROMPT =
-      agent === "dusty"
-        ? `You are Dusty, ScopeCrete's AI assistant for platform admins. You have FULL ACCESS to the entire Supabase database (project: cxiusuewtrvcpqequueh) — all contractors, all orgs, all leads, all pricing, all market data. The service role anon key is: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN4aXVzdWV3dHJ2Y3BxZXF1dWVoIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3Njk4NDIzNCwiZXhwIjoyMDkyNTYwMjM0fQ.3MLilsrNQFnf6seZEkZKo2HkeG7-lkASPU538qWov3o
-
-You can query Supabase directly. Tables: orgs, leads, org_members, contacts, market_pricing, pricing_feedback, admin_chat_sessions, admin_chat_messages. Be direct and cite specific data.`
-        : `You are Doctor, ScopeCrete's VPS infrastructure agent. You manage root@2.24.30.51 — PM2, Docker, Nginx, system monitoring. Be direct and technical.`;
-
-    // Non-streaming call to Dusty via VPS tunnel
     let assistantText = "";
 
-    try {
-      const dustyRes = await fetch("http://localhost:8000/v1/chat/completions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "qwen2.5:0.5b",
-          messages: [
-            { role: "system", content: SYSTEM_PROMPT },
-            ...messages,
-            { role: "user", content },
-          ],
-          stream: false,
-        }),
-      });
+    if (agent === "dusty") {
+      // ─── Dusty: global admin data via supabaseAdmin ───
+      try {
+        // Fetch live data for context
+        const [
+          { data: orgs, count: orgCount },
+          { data: leads, count: leadCount },
+          { data: recentLeads },
+          { data: marketData },
+        ] = await Promise.all([
+          supabaseAdmin.from("orgs").select("id, name, slug, plan_tier, created_at", { count: "exact" }),
+          supabaseAdmin.from("leads").select("id, status, customer_name, estimate_total, created_at", { count: "exact" }),
+          supabaseAdmin.from("leads").select("customer_name, status, estimate_total, created_at").order("created_at", { ascending: false }).limit(5),
+          supabaseAdmin.from("market_pricing").select("id, display_name, state_code, rates").limit(10),
+        ]);
 
-      if (dustyRes.ok) {
-        const dustyData = await dustyRes.json();
-        assistantText = dustyData.choices?.[0]?.message?.content ?? "";
-      } else {
-        assistantText = `[Error calling Dusty: ${dustyRes.status}]`;
+        const orgSummary = orgs?.map((o: any) =>
+          `org: ${o.name} (${o.slug}) plan=${o.plan_tier} created=${o.created_at?.slice(0,10)}`
+        ).join("\n") ?? "No orgs found.";
+
+        const leadSummary = leads?.map((l: any) =>
+          `lead: ${l.customer_name ?? "unnamed"} status=${l.status} estimate=$${l.estimate_total ?? 0} created=${l.created_at?.slice(0,10)}`
+        ).join("\n") ?? "No leads found.";
+
+        const marketSummary = marketData?.map((m: any) =>
+          `market: ${m.display_name} (${m.state_code}) rates=${JSON.stringify(m.rates ?? {})}`
+        ).join("\n") ?? "No market data.";
+
+        const systemContext = `You are Dusty, ScopeCrete's AI admin assistant. You have FULL ACCESS to the entire ScopeCrete platform database (project: cxiusuewtrvcpqequueh) via service role.
+
+CURRENT DATA:
+${orgCount ?? 0} orgs total:
+${orgSummary}
+
+${leadCount ?? 0} leads total:
+${leadSummary}
+
+Recent leads:
+${recentLeads?.map((l: any) => `- ${l.customer_name ?? "?"} | ${l.status} | $${l.estimate_total ?? 0} | ${l.created_at?.slice(0,10)}`).join("\n") ?? "none"}
+
+Market pricing:
+${marketSummary}
+
+Be direct and specific. Cite numbers, names, dates. Answer admin questions about any contractor, lead, or pricing data.`;
+
+        // Call Ollama if available (will fail gracefully if tunnel is down)
+        let dustyResponse = "";
+        try {
+          const dustyRes = await fetch("http://localhost:8000/v1/chat/completions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              model: "qwen2.5:0.5b",
+              messages: [
+                { role: "system", content: systemContext },
+                { role: "user", content: historyLines + "\nuser: " + content },
+              ],
+              stream: false,
+            }),
+          });
+
+          if (dustyRes.ok) {
+            const dustyData = await dustyRes.json();
+            dustyResponse = dustyData.choices?.[0]?.message?.content ?? "";
+          }
+        } catch { /* tunnel down — fall through to structured response */ }
+
+        if (dustyResponse) {
+          assistantText = dustyResponse;
+        } else {
+          // Fallback: give a structured data summary directly
+          assistantText = `Data summary from ScopeCrete DB:\n\n` +
+            `**${orgCount ?? 0} contractors**, **${leadCount ?? 0} leads**\n\n` +
+            `Recent leads:\n${recentLeads?.map((l: any) => `• ${l.customer_name ?? "unnamed"} — ${l.status} — $${l.estimate_total ?? 0}`).join("\n") ?? "none yet"}\n\n` +
+            `Market pricing: ${marketData?.length ?? 0} markets configured\n\n` +
+            `The Ollama tunnel is offline. Connect Clay's PC to query via AI.`;
+        }
+      } catch (dbErr: any) {
+        assistantText = `DB error: ${dbErr.message}`;
       }
-    } catch {
-      if (agent === "dusty") {
-        assistantText = "Dusty is offline right now. The Ollama tunnel may not be connected.";
-      } else {
-        assistantText = "Doctor is unavailable. Check VPS connection.";
+    } else {
+      // ─── Doctor: VPS management ───
+      try {
+        const doctorRes = await fetch("http://100.113.194.47:8000/v1/chat/completions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "qwen2.5:0.5b",
+            messages: [
+              { role: "system", content: "You are Doctor, ScopeCrete's VPS infrastructure agent. You manage root@2.24.30.51 — PM2, Docker, Nginx, system monitoring. Be direct and technical. Commands: pm2 status, docker ps, nginx -t, df -h, tail /var/log/syslog" },
+              { role: "user", content },
+            ],
+            stream: false,
+          }),
+        });
+
+        if (doctorRes.ok) {
+          const doctorData = await doctorRes.json();
+          assistantText = doctorData.choices?.[0]?.message?.content ?? "";
+        } else {
+          assistantText = "Doctor is unavailable. VPS may be offline.";
+        }
+      } catch {
+        assistantText = "Doctor is unreachable. Check VPS connection at root@2.24.30.51.";
       }
     }
 
-    // 5. Save assistant response
+    // 4. Save assistant response
     const { data: savedMsg, error: asstErr } = await supabaseAdmin
       .from("admin_chat_messages")
       .insert({
         session_id: sessionId,
         role: "assistant",
         content: assistantText,
-        model: "qwen2.5:0.5b",
+        model: agent === "dusty" ? "qwen2.5:0.5b + supabase" : "qwen2.5:0.5b",
       })
       .select()
       .single();

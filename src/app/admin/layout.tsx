@@ -91,6 +91,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <Bell size={15} />
             <span className="text-sm">Alerts</span>
           </div>
+          <button
+            onClick={() => { setChatTab("dusty"); setChatOpen(true); }}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors cursor-pointer text-left"
+            style={{ color: SC.accent, background: SC.accentMuted }}>
+            <Sparkle size={15} weight="fill" />
+            <span className="text-sm font-medium">Chat with Dusty</span>
+          </button>
           <Link href="/dashboard" className="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors no-underline" style={{ color: SC.textMuted }}>
             <SignOut size={15} />
             <span className="text-sm">Exit Admin</span>

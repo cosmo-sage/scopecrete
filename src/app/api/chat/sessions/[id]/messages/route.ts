@@ -11,7 +11,7 @@ export async function GET(
     const { data, error } = await supabaseAdmin
       .from("chat_messages")
       .select("id, role, content, attachments, model, created_at")
-      .eq("session_id", id)
+      .eq("chat_session_id", id)
       .order("created_at", { ascending: true });
 
     if (error) throw error;
@@ -50,10 +50,10 @@ export async function POST(
     const { error: userErr } = await supabaseAdmin
       .from("chat_messages")
       .insert({
-        session_id: sessionId,
+        chat_session_id: sessionId,
         role: role ?? "user",
         content: content.trim(),
-        attachments: attachments ?? [],
+        
       });
 
     if (userErr) throw userErr;
@@ -62,7 +62,7 @@ export async function POST(
     const { data: history } = await supabaseAdmin
       .from("chat_messages")
       .select("role, content")
-      .eq("session_id", sessionId)
+      .eq("chat_session_id", sessionId)
       .order("created_at", { ascending: true })
       .limit(10);
 
@@ -137,7 +137,7 @@ export async function POST(
     const { data: savedMsg, error: asstErr } = await supabaseAdmin
       .from("chat_messages")
       .insert({
-        session_id: sessionId,
+        chat_session_id: sessionId,
         role: "assistant",
         content: responseText,
         model: "dusty-mcp + qwen2.5:0.5b",

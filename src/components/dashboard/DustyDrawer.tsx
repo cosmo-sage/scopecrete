@@ -24,7 +24,7 @@ const SUGGESTION_CHIPS: Record<string, string[]> = {
   "/dashboard/leads": ["Show new leads", "By source", "Sort by value"],
   "/calculator": ["Price 20x30x4", "What does 4000 PSI cost?", "Add 10% waste"],
   "/scope-builder": ["Add line item", "Price this scope", "Save to lead"],
-  "/": ["Price a driveway", "How much for a slab?", "What PSI do I need?"],
+  "/": ["Price concrete", "Start a conversation", "Get help"],
   default: ["Price concrete", "Start a conversation", "Get help"],
 };
 
@@ -56,6 +56,7 @@ export default function DustyDrawer({ open, onClose }: DustyDrawerProps) {
   const [input, setInput] = useState("");
   const [typing, setTyping] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const [conversation, setConversation] = useState<{ role: string; content: string }[]>([]);
   const pathname = typeof window !== "undefined" ? window.location.pathname : "/";
   const greeting = CONTEXT_GREETINGS[pathname] || CONTEXT_GREETINGS["default"];
   const suggestions = SUGGESTION_CHIPS[pathname] || SUGGESTION_CHIPS["default"];
@@ -63,6 +64,7 @@ export default function DustyDrawer({ open, onClose }: DustyDrawerProps) {
   useEffect(() => {
     if (open && messages.length === 0) {
       setMessages([{ role: "agent", text: greeting }]);
+      setConversation([{ role: "agent", content: greeting }]);
     }
   }, [open, greeting, messages.length]);
 
@@ -70,15 +72,37 @@ export default function DustyDrawer({ open, onClose }: DustyDrawerProps) {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, typing]);
 
-  const handleSend = (text: string) => {
+  const handleSend = async (text: string) => {
     if (!text.trim()) return;
-    setMessages((m) => [...m, { role: "user", text }]);
+    const userText = text.trim();
+    setMessages((m) => [...m, { role: "user", text: userText }]);
     setInput("");
     setTyping(true);
-    setTimeout(() => {
+
+    const updatedConversation = [...conversation, { role: "user", content: userText }];
+    setConversation(updatedConversation);
+
+    try {
+      const res = await fetch("/api/chat/dusty", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "qwen2.5:0.5b",
+          messages: updatedConversation.map(m => ({ role: m.role, content: m.content })),
+          stream: false,
+        }),
+      });
+
+      const data = await res.json();
+      const reply = data.choices?.[0]?.message?.content || data.response || "Sorry, I couldn't get a response.";
+
+      setMessages((m) => [...m, { role: "agent", text: reply }]);
+      setConversation((c) => [...c, { role: "agent", content: reply }]);
+    } catch {
+      setMessages((m) => [...m, { role: "agent", text: "I'm having trouble reaching the AI right now. Try again in a moment." }]);
+    } finally {
       setTyping(false);
-      setMessages((m) => [...m, { role: "agent", text: "Got it — I'll help with that. Let me pull up the details." }]);
-    }, 1500);
+    }
   };
 
   if (!open) return null;

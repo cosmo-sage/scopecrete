@@ -17,7 +17,7 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     async function load() {
-      const [[{ count: orgs }, { count: members }, { count: leads }], orgData, recentLeadsData, orphanedData, allOrgs] = await Promise.all([
+      const [[orgsCount, membersCount, leadsCount], orgData, recentLeadsData, orphanedData, allOrgs] = await Promise.all([
         Promise.all([
           supabaseAdmin.from("orgs").select("*", { count: "exact", head: true }),
           supabaseAdmin.from("org_members").select("*", { count: "exact", head: true }),
@@ -35,7 +35,7 @@ export default function AdminDashboard() {
 
       const monthlyRevenue = wonLeads?.reduce((acc: number, l: any) => acc + (l.estimate_total || 0), 0) ?? 0;
 
-      setStats({ totalOrgs: orgs ?? 0, totalMembers: members ?? 0, totalLeads: leads ?? 0, monthlyRevenue });
+      setStats({ totalOrgs: orgsCount?.count ?? 0, totalMembers: membersCount?.count ?? 0, totalLeads: leadsCount?.count ?? 0, monthlyRevenue });
       setRecentOrgs(orgData ?? []);
       setRecentLeads(recentLeadsData ?? []);
       setOrphanedLeads(orphanedData ?? []);

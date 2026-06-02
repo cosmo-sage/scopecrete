@@ -18,11 +18,11 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // Protect admin routes — same simple session check
+  // Protect admin routes — require sc_admin_session
   if (pathname.startsWith("/admin") && isProduction) {
-    const session = request.cookies.get("sc_session");
-    if (!session || session.value !== "scopecrete_dashboard_session") {
-      return NextResponse.redirect(new URL("/dashboard-login", request.url));
+    const session = request.cookies.get("sc_admin_session");
+    if (!session || session.value !== "scopecrete_admin_session") {
+      return NextResponse.redirect(new URL("/admin/login", request.url));
     }
   }
 

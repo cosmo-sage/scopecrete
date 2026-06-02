@@ -296,7 +296,7 @@ Be direct and specific. Cite numbers, names, dates. Answer admin questions about
 
         let dustyResponse = "";
         try {
-          const dustyRes = await fetch("http://localhost:8000/v1/chat/completions", {
+          const dustyRes = await fetch("http://100.113.194.47:8000/v1/chat/completions", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({

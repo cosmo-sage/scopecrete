@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
-// Ollama on Clay's PC — routed through VPS SSH tunnel
-const OLLAMA_URL = "http://localhost:8000/v1/chat/completions";
+// Ollama on Clay's PC — Tailscale VPN
+const OLLAMA_URL = "http://100.113.194.47:8000/v1/chat/completions";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);

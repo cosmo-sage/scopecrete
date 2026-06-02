@@ -10,15 +10,10 @@ import {
   ArrowUp,
   CaretRight,
   Clock,
-  Sparkle,
-  SignOut,
   Plus,
-  ArrowsClockwise,
 } from "@phosphor-icons/react";
 import { supabase } from "@/lib/supabase";
-import AIPanel from "@/components/dashboard/AIPanel";
 
-// Taste-skill tokens — Zinc-950 base, single Safety Orange accent
 const T = {
   bg: "#09090b",
   surface: "#18181b",
@@ -33,7 +28,6 @@ const T = {
   border: "#27272a",
 };
 
-// Skeleton shimmer component
 function Skeleton({ className }: { className: string }) {
   return (
     <div
@@ -72,7 +66,6 @@ const STATUS_TEXT: Record<string, string> = {
   lost: "#ef4444",
 };
 
-// Inline SVG clipboard — no emoji
 function ClipboardIcon({ size = 32 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="#3f3f46" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -87,7 +80,6 @@ function ClipboardIcon({ size = 32 }: { size?: number }) {
 export default function DashboardPage() {
   const [leads, setLeads] = useState<any[]>([]);
   const [user, setUser] = useState<any>(null);
-  const [copilotOpen, setCopilotOpen] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -124,41 +116,23 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="p-5 md:p-8">
+    <div className="p-5 md:p-8" style={{ width: "100%", maxWidth: "100%", boxSizing: "border-box" }}>
       {/* Header row */}
       <div className="flex items-start justify-between mb-8">
         <div>
-          <h1
-            className="text-[28px] font-bold tracking-tight leading-none"
-            style={{ color: T.textPrimary }}
-          >
+          <h1 className="text-[28px] font-bold tracking-tight leading-none" style={{ color: T.textPrimary }}>
             Overview
           </h1>
           <p className="text-sm mt-1.5" style={{ color: T.textMuted }}>
             {user?.email
               ? `Signed in as ${user.email}`
-              : new Date().toLocaleDateString("en-US", {
-                  weekday: "long",
-                  month: "long",
-                  day: "numeric",
-                })}
+              : new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
           </p>
         </div>
-        <button
-          className="flex items-center gap-2 text-sm px-4 py-2 rounded-xl transition-all active:scale-[0.98]"
-          style={{
-            background: T.surface,
-            border: `1px solid ${T.border}`,
-            color: T.textMuted,
-            cursor: "pointer",
-          }}
-        >
-          <SignOut size={14} />
-          <span className="hidden sm:inline">Sign out</span>
-        </button>
+        <div className="text-xs" style={{ color: T.textMuted }}>Tap the ⚡ Dusty button below to chat</div>
       </div>
 
-      {/* Stats row — conversion is hero, rest are subtle */}
+      {/* Stats row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
         {/* Conversion — accent border + glow */}
         <div
@@ -170,136 +144,61 @@ export default function DashboardPage() {
           }}
         >
           <div className="flex items-start justify-between mb-3">
-            <div
-              className="w-9 h-9 rounded-xl flex items-center justify-center"
-              style={{ background: T.accentMuted }}
-            >
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: T.accentMuted }}>
               <ChartLineUp size={17} color={T.accent} />
             </div>
-            {convPct > 0 && (
-              <ArrowUp size={12} color="#22c55e" weight="bold" />
-            )}
+            {convPct > 0 && <ArrowUp size={12} color="#22c55e" weight="bold" />}
           </div>
-          <div
-            className="text-[32px] font-bold leading-none"
-            style={{ color: T.accent }}
-          >
+          <div className="text-[32px] font-bold leading-none" style={{ color: T.accent }}>
             {totalLeads > 0 ? `${convPct}%` : "—"}
           </div>
-          <div className="text-xs mt-1.5" style={{ color: T.textMuted }}>
-            Conversion
-          </div>
+          <div className="text-xs mt-1.5" style={{ color: T.textMuted }}>Conversion</div>
         </div>
 
         {/* Total leads */}
-        <div
-          className="rounded-2xl p-5 transition-all active:scale-[0.98]"
-          style={{ background: T.surface, border: `1px solid ${T.border}` }}
-        >
+        <div className="rounded-2xl p-5 transition-all active:scale-[0.98]" style={{ background: T.surface, border: `1px solid ${T.border}` }}>
           <div className="flex items-start mb-3">
-            <div
-              className="w-9 h-9 rounded-xl flex items-center justify-center"
-              style={{ background: T.accentMuted }}
-            >
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: T.accentMuted }}>
               <Users size={17} color={T.accent} />
             </div>
           </div>
-          <div
-            className="text-[32px] font-bold leading-none"
-            style={{ color: T.textPrimary }}
-          >
-            {totalLeads}
-          </div>
-          <div className="text-xs mt-1.5" style={{ color: T.textMuted }}>
-            Total leads
-          </div>
+          <div className="text-[32px] font-bold leading-none" style={{ color: T.textPrimary }}>{totalLeads}</div>
+          <div className="text-xs mt-1.5" style={{ color: T.textMuted }}>Total leads</div>
         </div>
 
         {/* New */}
-        <div
-          className="rounded-2xl p-5 transition-all active:scale-[0.98]"
-          style={{ background: T.surface, border: `1px solid ${T.border}` }}
-        >
+        <div className="rounded-2xl p-5 transition-all active:scale-[0.98]" style={{ background: T.surface, border: `1px solid ${T.border}` }}>
           <div className="flex items-start justify-between mb-3">
-            <div
-              className="w-9 h-9 rounded-xl flex items-center justify-center"
-              style={{ background: T.accentMuted }}
-            >
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: T.accentMuted }}>
               <Target size={17} color={T.accent} />
             </div>
             {newCount > 0 && (
-              <span
-                className="text-[10px] font-bold px-1.5 py-0.5 rounded"
-                style={{ background: T.accent, color: "#09090b" }}
-              >
-                {newCount}
-              </span>
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: T.accent, color: "#09090b" }}>{newCount}</span>
             )}
           </div>
-          <div
-            className="text-[32px] font-bold leading-none"
-            style={{ color: T.textPrimary }}
-          >
-            {newCount}
-          </div>
-          <div className="text-xs mt-1.5" style={{ color: T.textMuted }}>
-            New today
-          </div>
+          <div className="text-[32px] font-bold leading-none" style={{ color: T.textPrimary }}>{newCount}</div>
+          <div className="text-xs mt-1.5" style={{ color: T.textMuted }}>New today</div>
         </div>
 
         {/* Won */}
-        <div
-          className="rounded-2xl p-5 transition-all active:scale-[0.98]"
-          style={{ background: T.surface, border: `1px solid ${T.border}` }}
-        >
+        <div className="rounded-2xl p-5 transition-all active:scale-[0.98]" style={{ background: T.surface, border: `1px solid ${T.border}` }}>
           <div className="flex items-start mb-3">
-            <div
-              className="w-9 h-9 rounded-xl flex items-center justify-center"
-              style={{ background: T.accentMuted }}
-            >
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: T.accentMuted }}>
               <CurrencyDollar size={17} color={T.accent} />
             </div>
           </div>
-          <div
-            className="text-[32px] font-bold leading-none"
-            style={{ color: T.textPrimary }}
-          >
-            {wonCount}
-          </div>
-          <div className="text-xs mt-1.5" style={{ color: T.textMuted }}>
-            Won
-          </div>
+          <div className="text-[32px] font-bold leading-none" style={{ color: T.textPrimary }}>{wonCount}</div>
+          <div className="text-xs mt-1.5" style={{ color: T.textMuted }}>Won</div>
         </div>
       </div>
 
-      {/* Main content grid — asymmetric 2fr + 1fr */}
+      {/* Main content grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        {/* Recent Leads — left takes 2 cols */}
-        <div
-          className="lg:col-span-2 rounded-2xl overflow-hidden"
-          style={{
-            background: T.surface,
-            border: `1px solid ${T.border}`,
-          }}
-        >
-          <div
-            className="flex items-center justify-between px-6 py-4"
-            style={{ borderBottom: `1px solid ${T.border}` }}
-          >
-            <h2 className="text-sm font-semibold" style={{ color: T.textPrimary }}>
-              Recent Leads
-            </h2>
-            <Link
-              href="/dashboard/leads"
-              style={{
-                color: T.accent,
-                textDecoration: "none",
-                fontSize: 12,
-                fontWeight: 600,
-              }}
-            >
-              View all →
-            </Link>
+        {/* Recent Leads */}
+        <div className="lg:col-span-2 rounded-2xl overflow-hidden" style={{ background: T.surface, border: `1px solid ${T.border}` }}>
+          <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: `1px solid ${T.border}` }}>
+            <h2 className="text-sm font-semibold" style={{ color: T.textPrimary }}>Recent Leads</h2>
+            <Link href="/dashboard/leads" style={{ color: T.accent, textDecoration: "none", fontSize: 12, fontWeight: 600 }}>View all →</Link>
           </div>
 
           {loading ? (
@@ -318,13 +217,8 @@ export default function DashboardPage() {
           ) : leads.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 px-6">
               <ClipboardIcon size={40} />
-              <p className="text-sm font-medium mt-5" style={{ color: T.textMuted }}>
-                No leads yet
-              </p>
-              <p
-                className="text-xs mt-1.5 text-center max-w-[220px]"
-                style={{ color: T.textMuted, opacity: 0.7 }}
-              >
+              <p className="text-sm font-medium mt-5" style={{ color: T.textMuted }}>No leads yet</p>
+              <p className="text-xs mt-1.5 text-center max-w-[220px]" style={{ color: T.textMuted, opacity: 0.7 }}>
                 Share your calculator or chat link to start capturing leads.
               </p>
             </div>
@@ -335,8 +229,7 @@ export default function DashboardPage() {
                   key={lead.id}
                   className="flex items-center gap-4 px-6 py-4 cursor-pointer transition-all active:scale-[0.99]"
                   style={{
-                    borderBottom:
-                      i < leads.length - 1 ? `1px solid ${T.border}` : "none",
+                    borderBottom: i < leads.length - 1 ? `1px solid ${T.border}` : "none",
                     borderLeft: `2px solid transparent`,
                   }}
                   onMouseEnter={(e) => {
@@ -350,64 +243,34 @@ export default function DashboardPage() {
                     el.style.background = "transparent";
                   }}
                 >
-                  {/* Avatar — initials block */}
                   <div
                     className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0"
                     style={{ background: T.accentMuted, color: T.accent }}
                   >
-                    {(lead.customer_name || lead.customer_phone || "?")
-                      .slice(0, 2)
-                      .toUpperCase()}
+                    {(lead.customer_name || lead.customer_phone || "?") .slice(0, 2).toUpperCase()}
                   </div>
 
-                  {/* Info */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span
-                        className="text-sm font-semibold truncate"
-                        style={{
-                          color: T.textPrimary,
-                          maxWidth: 110,
-                        }}
-                      >
+                      <span className="text-sm font-semibold truncate" style={{ color: T.textPrimary, maxWidth: 110 }}>
                         {lead.customer_name || lead.customer_phone}
                       </span>
-                      <span
-                        className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0"
-                        style={{
-                          background:
-                            STATUS_BG[lead.status] || T.accentMuted,
-                          color: STATUS_TEXT[lead.status] || T.accent,
-                        }}
-                      >
+                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0"
+                        style={{ background: STATUS_BG[lead.status] || T.accentMuted, color: STATUS_TEXT[lead.status] || T.accent }}>
                         {STATUS_LABELS[lead.status] || "New"}
                       </span>
                     </div>
                     <div className="flex items-center gap-2 mt-0.5">
-                      <span
-                        className="text-[11px] truncate max-w-[80px]"
-                        style={{ color: T.textMuted }}
-                      >
-                        {lead.project_type}
-                      </span>
-                      {lead.sqft && (
-                        <span className="text-[11px] shrink-0" style={{ color: T.textMuted }}>
-                          · {lead.sqft} sqft
-                        </span>
-                      )}
+                      <span className="text-[11px] truncate max-w-[80px]" style={{ color: T.textMuted }}>{lead.project_type}</span>
+                      {lead.sqft && <span className="text-[11px] shrink-0" style={{ color: T.textMuted }}>· {lead.sqft} sqft</span>}
                     </div>
                   </div>
 
-                  {/* Source + time — hidden on small mobile */}
                   <div className="text-right shrink-0 hidden sm:block">
-                    <div className="text-[11px] font-medium" style={{ color: T.textSecondary }}>
-                      {lead.source_detail || lead.source_channel}
-                    </div>
+                    <div className="text-[11px] font-medium" style={{ color: T.textSecondary }}>{lead.source_detail || lead.source_channel}</div>
                     <div className="flex items-center justify-end gap-1 mt-0.5">
                       <Clock size={9} style={{ color: T.textMuted }} />
-                      <span className="text-[10px]" style={{ color: T.textMuted }}>
-                        {timeAgo(lead.created_at)}
-                      </span>
+                      <span className="text-[10px]" style={{ color: T.textMuted }}>{timeAgo(lead.created_at)}</span>
                     </div>
                   </div>
 
@@ -418,70 +281,15 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* Right column — tools + quick actions, asymmetric */}
+        {/* Right column */}
         <div className="flex flex-col gap-4">
-          {/* AI Copilot — quiet card, secondary visual weight */}
-          <div
-            className="rounded-2xl p-5"
-            style={{
-              background: T.surface,
-              border: `1px solid ${T.border}`,
-            }}
-          >
-            <div className="flex items-center gap-2 mb-3">
-              <div
-                className="w-6 h-6 rounded-lg flex items-center justify-center"
-                style={{ background: T.elevated }}
-              >
-                <Sparkle size={12} color={T.accent} />
-              </div>
-              <span className="text-xs font-semibold" style={{ color: T.textSecondary }}>
-                AI Copilot
-              </span>
-            </div>
-            <p className="text-[11px] leading-relaxed mb-4" style={{ color: T.textMuted }}>
-              Adjust labor rates, PSI, or margins — by chat.
-            </p>
-            <button
-              onClick={() => setCopilotOpen(true)}
-              className="w-full py-2.5 rounded-xl text-xs font-semibold transition-all active:scale-[0.98]"
-              style={{
-                background: T.elevated,
-                color: T.textSecondary,
-                border: `1px solid ${T.border}`,
-                cursor: "pointer",
-              }}
-            >
-              Open Copilot
-            </button>
-          </div>
-
           {/* Quick actions */}
-          <div
-            className="rounded-2xl p-5"
-            style={{
-              background: T.surface,
-              border: `1px solid ${T.border}`,
-            }}
-          >
-            <h2
-              className="text-[10px] font-semibold uppercase tracking-widest mb-3"
-              style={{ color: T.textMuted }}
-            >
-              Quick Actions
-            </h2>
+          <div className="rounded-2xl p-5" style={{ background: T.surface, border: `1px solid ${T.border}` }}>
+            <h2 className="text-[10px] font-semibold uppercase tracking-widest mb-3" style={{ color: T.textMuted }}>Quick Actions</h2>
             <div className="space-y-1.5">
               {[
-                {
-                  label: "Estimate calculator",
-                  href: "/calculator",
-                  icon: CurrencyDollar,
-                },
-                {
-                  label: "View all leads",
-                  href: "/dashboard/leads",
-                  icon: Users,
-                },
+                { label: "Estimate calculator", href: "/calculator", icon: CurrencyDollar },
+                { label: "View all leads", href: "/dashboard/leads", icon: Users },
               ].map((action) => (
                 <Link
                   key={action.href}
@@ -496,20 +304,9 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Source breakdown — compact data */}
-          <div
-            className="rounded-2xl p-5"
-            style={{
-              background: T.surface,
-              border: `1px solid ${T.border}`,
-            }}
-          >
-            <h2
-              className="text-[10px] font-semibold uppercase tracking-widest mb-3"
-              style={{ color: T.textMuted }}
-            >
-              Lead Sources
-            </h2>
+          {/* Source breakdown */}
+          <div className="rounded-2xl p-5" style={{ background: T.surface, border: `1px solid ${T.border}` }}>
+            <h2 className="text-[10px] font-semibold uppercase tracking-widest mb-3" style={{ color: T.textMuted }}>Lead Sources</h2>
             <div className="space-y-2">
               {[
                 { label: "Calculator", pct: 62 },
@@ -517,51 +314,17 @@ export default function DashboardPage() {
                 { label: "Direct", pct: 10 },
               ].map((src) => (
                 <div key={src.label} className="flex items-center gap-3">
-                  <div
-                    className="text-[10px] font-medium w-20 shrink-0"
-                    style={{ color: T.textSecondary }}
-                  >
-                    {src.label}
+                  <div className="text-[10px] font-medium w-20 shrink-0" style={{ color: T.textSecondary }}>{src.label}</div>
+                  <div className="flex-1 h-1 rounded-full overflow-hidden" style={{ background: T.elevated }}>
+                    <div className="h-full rounded-full" style={{ width: `${src.pct}%`, background: T.accent }} />
                   </div>
-                  <div
-                    className="flex-1 h-1 rounded-full overflow-hidden"
-                    style={{ background: T.elevated }}
-                  >
-                    <div
-                      className="h-full rounded-full"
-                      style={{
-                        width: `${src.pct}%`,
-                        background: T.accent,
-                      }}
-                    />
-                  </div>
-                  <div
-                    className="text-[10px] font-mono font-medium"
-                    style={{ color: T.textMuted }}
-                  >
-                    {src.pct}%
-                  </div>
+                  <div className="text-[10px] font-mono font-medium" style={{ color: T.textMuted }}>{src.pct}%</div>
                 </div>
               ))}
             </div>
           </div>
         </div>
       </div>
-
-      <AIPanel
-        open={copilotOpen}
-        onClose={() => setCopilotOpen(false)}
-        theme="dark"
-        quoteData={{
-          sqft: 720,
-          depth: 4,
-          psi: 3000,
-          zip: "70802",
-          estimate: { low: 7500, high: 9500 },
-          concretePerCY: 175,
-          laborPerSqft: 9,
-        }}
-      />
 
       <style>{`
         @keyframes shimmer {

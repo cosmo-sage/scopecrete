@@ -152,29 +152,32 @@ Be direct and specific. Cite numbers, names, dates. Answer admin questions about
         assistantText = `DB error: ${dbErr.message}`;
       }
     } else {
-      // ─── Doctor: VPS management ───
+      // ─── Doctor: Tailscale gateway on VPS ───
+      const DOCTOR_TOKEN = "18f346bfe7563e8c59cbcf753800db1209df8c2a595ba3683ec42da9ab07bbb6";
+      const DOCTOR_URL = "https://srv1594563.tail0f2914.ts.net/v1/agent/doctor/chat";
+
       try {
-        const doctorRes = await fetch("http://100.110.231.126:8000/v1/chat/completions", {
+        const doctorRes = await fetch(DOCTOR_URL, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Authorization": "Bearer " + DOCTOR_TOKEN,
+            "Content-Type": "application/json",
+          },
           body: JSON.stringify({
-            model: "qwen2.5:0.5b",
-            messages: [
-              { role: "system", content: "You are Doctor, ScopeCrete's VPS infrastructure agent. You manage root@2.24.30.51 — PM2, Docker, Nginx, system monitoring. Be direct and technical." },
-              { role: "user", content },
-            ],
-            stream: false,
+            message: content,
+            channel: "discord",
+            channelId: "1492915967825543352",
           }),
         });
 
         if (doctorRes.ok) {
           const doctorData = await doctorRes.json();
-          assistantText = doctorData.choices?.[0]?.message?.content ?? "";
+          assistantText = doctorData.response ?? doctorData.message ?? JSON.stringify(doctorData);
         } else {
-          assistantText = "Doctor unavailable. VPS may be offline.";
+          assistantText = "Doctor unavailable. Gateway returned " + doctorRes.status;
         }
       } catch {
-        assistantText = "Doctor unreachable. Check VPS at root@2.24.30.51.";
+        assistantText = "Doctor unreachable. Check VPS gateway at srv1594563.tail0f2914.ts.net";
       }
     }
 

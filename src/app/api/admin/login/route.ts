@@ -4,9 +4,6 @@ const ADMIN_USERNAME = "admin";
 const ADMIN_PASSWORD = "scopecrete2026";
 
 export async function POST(request: NextRequest) {
-  const forwardedHost = request.headers.get("x-forwarded-host");
-  const baseUrl = forwardedHost ? `https://${forwardedHost}` : request.url.replace(/\/api\/admin\/login.*/, "");
-
   const contentType = request.headers.get("content-type") || "";
 
   if (contentType.includes("application/json")) {
@@ -15,14 +12,6 @@ export async function POST(request: NextRequest) {
 
       if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
         const response = NextResponse.json({ success: true, redirect: "/admin/dashboard" });
-        response.cookies.set("sc_admin_session", "scopecrete_admin_session", {
-          httpOnly: true,
-          secure: true,
-          sameSite: "lax",
-          maxAge: 60 * 60 * 24,
-          path: "/",
-        });
-        // Also set sc_session for compatibility with existing contractor auth
         response.cookies.set("sc_session", "scopecrete_dashboard_session", {
           httpOnly: true,
           secure: true,

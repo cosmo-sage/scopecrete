@@ -53,11 +53,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         {/* Logo */}
         <div className="px-4 py-4" style={{ borderBottom: `1px solid ${SC.border}` }}>
           <Link href="/admin/dashboard" style={{ textDecoration: "none", display: "flex", alignItems: "center", gap: 8 }}>
-            <svg width="36" height="28" viewBox="0 0 36 28" fill="none">
-              <rect width="36" height="28" rx="5" fill="#27272a" />
-              <text x="7" y="21" fontFamily="Inter, system-ui, sans-serif" fontSize="17" fontWeight="900" fill="#e85d04" style={{ filter: "drop-shadow(0 0 8px rgba(232,93,4,0.6))" }}>S</text>
-              <text x="21" y="21" fontFamily="Inter, system-ui, sans-serif" fontSize="17" fontWeight="900" fill="#e85d04" style={{ filter: "drop-shadow(0 0 8px rgba(232,93,4,0.6))" }}>C</text>
-            </svg>
+            <img src="/logo-34.png" alt="ScopeCrete" width={36} height={36} style={{ borderRadius: 6 }} />
             <span className="font-bold text-sm tracking-tight" style={{ color: SC.textPrimary }}>Crete</span>
             <span className="text-xs" style={{ color: SC.textMuted }}>.ai</span>
           </Link>
@@ -108,11 +104,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <header className="flex items-center justify-between px-4 py-3 md:hidden"
           style={{ background: SC.surface, borderBottom: `1px solid ${SC.border}`, position: "sticky", top: 0, zIndex: 10 }}>
           <Link href="/admin/dashboard" style={{ textDecoration: "none", display: "flex", alignItems: "center", gap: 6 }}>
-            <svg width="26" height="20" viewBox="0 0 36 28" fill="none">
-              <rect width="36" height="28" rx="5" fill="#27272a" />
-              <text x="7" y="21" fontFamily="Inter, system-ui, sans-serif" fontSize="17" fontWeight="900" fill="#e85d04">S</text>
-              <text x="21" y="21" fontFamily="Inter, system-ui, sans-serif" fontSize="17" fontWeight="900" fill="#e85d04">C</text>
-            </svg>
+            <img src="/logo-34.png" alt="ScopeCrete" width={28} height={28} style={{ borderRadius: 5 }} />
             <span className="font-bold text-sm" style={{ color: SC.textPrimary }}>Admin</span>
           </Link>
           <button onClick={() => setSidebarOpen(true)} className="p-2 rounded-lg" style={{ background: SC.elevated, color: SC.textPrimary, border: "none", cursor: "pointer" }}>

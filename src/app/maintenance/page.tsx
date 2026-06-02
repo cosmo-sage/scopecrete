@@ -40,33 +40,22 @@ export default function MaintenancePage() {
           fill="none"
           xmlns="http://www.w3.org/2000/svg"
         >
-          {/* Hard hat */}
           <ellipse cx="40" cy="52" rx="22" ry="6" fill="#27272a" />
-          <path
-            d="M20 48c0-11.046 8.954-20 20-20s20 8.954 20 20"
-            fill="#e85d04"
-            opacity="0.9"
-          />
+          <path d="M20 48c0-11.046 8.954-20 20-20s20 8.954 20 20" fill="#e85d04" opacity="0.9" />
           <rect x="16" y="47" width="48" height="6" rx="3" fill="#e85d04" />
           <ellipse cx="40" cy="47" rx="26" ry="4" fill="#f97316" opacity="0.4" />
-          {/* Cone */}
-          <polygon
-            points="40,62 32,74 48,74"
-            fill="#71717a"
-          />
+          <polygon points="40,62 32,74 48,74" fill="#71717a" />
           <rect x="30" y="74" width="20" height="3" rx="1.5" fill="#52525b" />
-          {/* Stripes on cone */}
           <line x1="36" y1="66" x2="38" y2="70" stroke="#fafafa" strokeWidth="1.5" opacity="0.4" />
           <line x1="42" y1="66" x2="44" y2="70" stroke="#fafafa" strokeWidth="1.5" opacity="0.4" />
         </svg>
       </div>
 
-      {/* Heading */}
       <h1
         className="text-4xl font-bold tracking-tight text-center mb-4"
         style={{ color: "#fafafa" }}
       >
-        Under Construction
+        Coming Soon
       </h1>
       <p
         className="text-base text-center max-w-[320px] leading-relaxed mb-10"
@@ -75,23 +64,15 @@ export default function MaintenancePage() {
         We&apos;re building something powerful. Check back soon for the contractor dashboard.
       </p>
 
-      {/* Login button */}
       <Link
         href="/dashboard-login"
         className="flex items-center gap-2 px-8 py-3.5 rounded-xl text-sm font-semibold transition-all active:scale-95"
-        style={{
-          background: "#e85d04",
-          color: "#09090b",
-        }}
+        style={{ background: "#e85d04", color: "#09090b" }}
       >
-        Login
+        Contractor Login
       </Link>
 
-      {/* Footer note */}
-      <p
-        className="text-xs mt-12"
-        style={{ color: "#3f3f46" }}
-      >
+      <p className="text-xs mt-12" style={{ color: "#3f3f46" }}>
         ScopeCrete &copy; 2026
       </p>
     </div>

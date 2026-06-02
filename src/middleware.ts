@@ -10,6 +10,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL("/maintenance", request.url));
   }
 
+  // Root path → under construction page in production
+  if (pathname === "/" && isProduction) {
+    return NextResponse.redirect(new URL("/maintenance", request.url));
+  }
+
   // Protect dashboard routes
   if (pathname.startsWith("/dashboard") && isProduction) {
     const session = request.cookies.get("sc_session");

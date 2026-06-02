@@ -1,6 +1,6 @@
 "use client";
 
-import { Sparkle } from "@phosphor-icons/react";
+import { Lightning } from "@phosphor-icons/react";
 
 interface DustyFABProps {
   onClick: () => void;
@@ -20,7 +20,7 @@ export default function DustyFAB({ onClick }: DustyFABProps) {
         zIndex: 50,
       }}
     >
-      <Sparkle size={20} weight="fill" color="white" />
+      <Lightning size={22} weight="fill" color="white" />
     </button>
   );
 }

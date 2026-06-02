@@ -1,42 +1,45 @@
 "use client";
 
 import Link from "next/link";
-import { ChartLineUp, Users, Target, CurrencyDollar, CaretRight, Clock } from "@phosphor-icons/react";
+import { ChartLineUp, Users, Target, CurrencyDollar, CaretRight, Clock, Warning, Check } from "@phosphor-icons/react";
 import { SC, PLAN_BADGE, timeAgo, formatCurrency } from "@/lib/theme";
-import { supabase } from "@/lib/supabase";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { useState, useEffect } from "react";
 
 export default function AdminDashboard() {
   const [stats, setStats] = useState({ totalOrgs: 0, totalMembers: 0, totalLeads: 0, monthlyRevenue: 0 });
   const [recentOrgs, setRecentOrgs] = useState<any[]>([]);
   const [recentLeads, setRecentLeads] = useState<any[]>([]);
+  const [orphanedLeads, setOrphanedLeads] = useState<any[]>([]);
+  const [orgs, setOrgs] = useState<any[]>([]);
+  const [assignModal, setAssignModal] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function load() {
-      const [{ count: orgs }, { count: members }, { count: leads }] = await Promise.all([
-        supabase.from("orgs").select("*", { count: "exact", head: true }),
-        supabase.from("org_members").select("*", { count: "exact", head: true }),
-        supabase.from("leads").select("*", { count: "exact", head: true }),
+      const [[{ count: orgs }, { count: members }, { count: leads }], orgData, recentLeadsData, orphanedData, allOrgs] = await Promise.all([
+        Promise.all([
+          supabaseAdmin.from("orgs").select("*", { count: "exact", head: true }),
+          supabaseAdmin.from("org_members").select("*", { count: "exact", head: true }),
+          supabaseAdmin.from("leads").select("*", { count: "exact", head: true }),
+        ]),
+        supabaseAdmin.from("orgs").select("id, name, slug, plan_tier, created_at").order("created_at", { ascending: false }).limit(5),
+        supabaseAdmin.from("leads").select("id, customer_name, status, source_channel, estimate_total, created_at, orgs(name)").not("org_id", "is", null).order("created_at", { ascending: false }).limit(10),
+        supabaseAdmin.from("leads").select("id, customer_name, customer_phone, project_description, status, estimate_total, created_at, source_channel").is("org_id", null).order("created_at", { ascending: false }),
+        supabaseAdmin.from("orgs").select("id, name, slug").order("name"),
       ]);
 
-      const { data: orgData } = await supabase
-        .from("orgs").select("id, name, slug, plan_tier, created_at")
-        .order("created_at", { ascending: false }).limit(5);
-
-      const { data: wonLeads } = await supabase
-        .from("leads").select("estimate_total").eq("status", "won");
+      const [{ data: wonLeads }] = await Promise.all([
+        supabaseAdmin.from("leads").select("estimate_total").eq("status", "won"),
+      ]);
 
       const monthlyRevenue = wonLeads?.reduce((acc: number, l: any) => acc + (l.estimate_total || 0), 0) ?? 0;
 
       setStats({ totalOrgs: orgs ?? 0, totalMembers: members ?? 0, totalLeads: leads ?? 0, monthlyRevenue });
       setRecentOrgs(orgData ?? []);
-
-      const { data: leadData } = await supabase
-        .from("leads").select("id, customer_name, status, source_channel, estimate_total, created_at, orgs(name)")
-        .order("created_at", { ascending: false }).limit(10);
-
-      setRecentLeads(leadData ?? []);
+      setRecentLeads(recentLeadsData ?? []);
+      setOrphanedLeads(orphanedData ?? []);
+      setOrgs(allOrgs ?? []);
       setLoading(false);
     }
     load();
@@ -80,9 +83,61 @@ export default function AdminDashboard() {
         ))}
       </div>
 
+      {/* Orphaned leads alert */}
+      {orphanedLeads.length > 0 && (
+        <div className="mb-6 rounded-2xl p-5" style={{ background: "rgba(232,93,4,0.08)", border: "1px solid rgba(232,93,4,0.25)" }}>
+          <div className="flex items-center gap-2 mb-3">
+            <Warning size={18} color={SC.accent} />
+            <h2 className="text-sm font-semibold" style={{ color: SC.accent }}>
+              {orphanedLeads.length} Orphaned Lead{orphanedLeads.length !== 1 ? "s" : ""} — No Contractor Assigned
+            </h2>
+          </div>
+          <div className="space-y-2">
+            {orphanedLeads.map((lead: any) => (
+              <div key={lead.id} className="flex items-center justify-between rounded-xl px-4 py-3" style={{ background: SC.elevated, border: `1px solid ${SC.border}` }}>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium truncate" style={{ color: SC.textPrimary }}>
+                    {lead.customer_name || lead.customer_phone || "Unknown contact"}
+                  </div>
+                  <div className="text-[11px] mt-0.5" style={{ color: SC.textMuted }}>
+                    {lead.project_description?.slice(0, 40) || "No project description"} · {lead.source_channel || "direct"} · {timeAgo(lead.created_at)} ago
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 ml-3">
+                  <select
+                    defaultValue=""
+                    onChange={async (e) => {
+                      const targetOrgId = e.target.value;
+                      if (!targetOrgId) return;
+                      const res = await fetch("/api/admin/orphaned-leads", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ lead_id: lead.id, org_id: targetOrgId }),
+                      });
+                      if (res.ok) {
+                        setOrphanedLeads(prev => prev.filter(l => l.id !== lead.id));
+                      }
+                    }}
+                    className="text-xs px-3 py-1.5 rounded-lg outline-none cursor-pointer"
+                    style={{ background: SC.surface, color: SC.textPrimary, border: `1px solid ${SC.border}` }}
+                  >
+                    <option value="">Assign to...</option>
+                    {orgs.map((org: any) => (
+                      <option key={org.id} value={org.id}>{org.name}</option>
+                    ))}
+                  </select>
+                  <div className="w-6 h-6 rounded-full flex items-center justify-center" style={{ background: "rgba(232,93,4,0.2)" }}>
+                    <Warning size={12} color={SC.accent} />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Main grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        {/* Recent contractors */}
         <Card title="Recent Contractors" action={{ label: "View all", href: "/admin/contractors" }}>
           {loading ? (
             <SkeletonRows count={3} />
@@ -110,7 +165,6 @@ export default function AdminDashboard() {
           )}
         </Card>
 
-        {/* Recent leads */}
         <Card title="Recent Leads" action={{ label: "View all", href: "/admin/contractors" }}>
           {loading ? (
             <SkeletonRows count={3} />

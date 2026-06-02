@@ -4,7 +4,7 @@ import Link from "next/link";
 import { ChartLineUp, Users, Target, CurrencyDollar, CaretRight, Clock, Warning, Check } from "@phosphor-icons/react";
 import { SC, PLAN_BADGE, timeAgo, formatCurrency } from "@/lib/theme";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 
 export default function AdminDashboard() {
   const [stats, setStats] = useState({ totalOrgs: 0, totalMembers: 0, totalLeads: 0, monthlyRevenue: 0 });
@@ -43,12 +43,12 @@ export default function AdminDashboard() {
     load();
   }, []);
 
-  const statsData = [
+  const statsData = useMemo(() => [
     { label: "Total Contractors", value: stats.totalOrgs, icon: Users,        accent: false },
     { label: "Total Users",       value: stats.totalMembers, icon: ChartLineUp, accent: false },
     { label: "Total Leads",       value: stats.totalLeads,  icon: Target,      accent: false },
     { label: "Monthly Revenue",   value: stats.monthlyRevenue > 0 ? formatCurrency(stats.monthlyRevenue) : "—", icon: CurrencyDollar, accent: true },
-  ];
+  ], [stats.totalOrgs, stats.totalMembers, stats.totalLeads, stats.monthlyRevenue]);
 
   return (
     <div className="p-5 md:p-8">

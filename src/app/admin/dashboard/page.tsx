@@ -23,7 +23,7 @@ export default function AdminDashboard() {
         supabaseAdmin.from("leads").select("*", { count: "exact", head: true }),
         supabaseAdmin.from("orgs").select("id, name, slug, plan_tier, created_at").order("created_at", { ascending: false }).limit(5),
         supabaseAdmin.from("leads").select("id, customer_name, status, source_channel, estimate_total, created_at").not("org_id", "is", null).order("created_at", { ascending: false }).limit(10),
-        supabaseAdmin.from("leads").select("id, customer_name, customer_phone, project_description, status, estimate_total, created_at, source_channel").is("org_id", "is", null).order("created_at", { ascending: false }),
+        supabaseAdmin.from("leads").select("id, customer_name, customer_phone, project_description, status, estimate_total, created_at, source_channel").is("org_id", null).order("created_at", { ascending: false }),
         supabaseAdmin.from("orgs").select("id, name, slug").order("name"),
       ]);
 

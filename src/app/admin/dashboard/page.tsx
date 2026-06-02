@@ -17,25 +17,23 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     async function load() {
-      const [[orgsCount, membersCount, leadsCount], orgData, recentLeadsData, orphanedData, allOrgs] = await Promise.all([
-        Promise.all([
-          supabaseAdmin.from("orgs").select("*", { count: "exact", head: true }),
-          supabaseAdmin.from("org_members").select("*", { count: "exact", head: true }),
-          supabaseAdmin.from("leads").select("*", { count: "exact", head: true }),
-        ]),
+      const [orgsResult, membersResult, leadsResult, orgData, recentLeadsData, orphanedData, allOrgs] = await Promise.all([
+        supabaseAdmin.from("orgs").select("*", { count: "exact", head: true }),
+        supabaseAdmin.from("org_members").select("*", { count: "exact", head: true }),
+        supabaseAdmin.from("leads").select("*", { count: "exact", head: true }),
         supabaseAdmin.from("orgs").select("id, name, slug, plan_tier, created_at").order("created_at", { ascending: false }).limit(5),
-        supabaseAdmin.from("leads").select("id, customer_name, status, source_channel, estimate_total, created_at, orgs(name)").not("org_id", "is", null).order("created_at", { ascending: false }).limit(10),
-        supabaseAdmin.from("leads").select("id, customer_name, customer_phone, project_description, status, estimate_total, created_at, source_channel").is("org_id", null).order("created_at", { ascending: false }),
+        supabaseAdmin.from("leads").select("id, customer_name, status, source_channel, estimate_total, created_at").is("org_id", "not.is", null).order("created_at", { ascending: false }).limit(10),
+        supabaseAdmin.from("leads").select("id, customer_name, customer_phone, project_description, status, estimate_total, created_at, source_channel").is("org_id", "is", null).order("created_at", { ascending: false }),
         supabaseAdmin.from("orgs").select("id, name, slug").order("name"),
       ]);
 
-      const [{ data: wonLeads }] = await Promise.all([
+      const [wonLeadsResult] = await Promise.all([
         supabaseAdmin.from("leads").select("estimate_total").eq("status", "won"),
       ]);
 
-      const monthlyRevenue = wonLeads?.reduce((acc: number, l: any) => acc + (l.estimate_total || 0), 0) ?? 0;
+      const monthlyRevenue = (wonLeadsResult?.data ?? []).reduce((acc: number, l: any) => acc + (l.estimate_total || 0), 0);
 
-      setStats({ totalOrgs: orgsCount?.count ?? 0, totalMembers: membersCount?.count ?? 0, totalLeads: leadsCount?.count ?? 0, monthlyRevenue });
+      setStats({ totalOrgs: orgsResult?.count ?? 0, totalMembers: membersResult?.count ?? 0, totalLeads: leadsResult?.count ?? 0, monthlyRevenue });
       setRecentOrgs((orgData as any)?.data ?? (orgData as any) ?? []);
       setRecentLeads((recentLeadsData as any)?.data ?? (recentLeadsData as any) ?? []);
       setOrphanedLeads((orphanedData as any)?.data ?? (orphanedData as any) ?? []);

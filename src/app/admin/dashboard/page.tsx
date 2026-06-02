@@ -14,31 +14,38 @@ export default function AdminDashboard() {
   const [orgs, setOrgs] = useState<any[]>([]);
   const [assignModal, setAssignModal] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
-      const [orgsResult, membersResult, leadsResult, orgData, recentLeadsData, orphanedData, allOrgs] = await Promise.all([
-        supabaseAdmin.from("orgs").select("*", { count: "exact", head: true }),
-        supabaseAdmin.from("org_members").select("*", { count: "exact", head: true }),
-        supabaseAdmin.from("leads").select("*", { count: "exact", head: true }),
-        supabaseAdmin.from("orgs").select("id, name, slug, plan_tier, created_at").order("created_at", { ascending: false }).limit(5),
-        supabaseAdmin.from("leads").select("id, customer_name, status, source_channel, estimate_total, created_at").not("org_id", "is", null).order("created_at", { ascending: false }).limit(10),
-        supabaseAdmin.from("leads").select("id, customer_name, customer_phone, project_description, status, estimate_total, created_at, source_channel").is("org_id", null).order("created_at", { ascending: false }),
-        supabaseAdmin.from("orgs").select("id, name, slug").order("name"),
-      ]);
+      try {
+        const [orgsResult, membersResult, leadsResult, orgData, recentLeadsData, orphanedData, allOrgs] = await Promise.all([
+          supabaseAdmin.from("orgs").select("*", { count: "exact", head: true }),
+          supabaseAdmin.from("org_members").select("*", { count: "exact", head: true }),
+          supabaseAdmin.from("leads").select("*", { count: "exact", head: true }),
+          supabaseAdmin.from("orgs").select("id, name, slug, plan_tier, created_at").order("created_at", { ascending: false }).limit(5),
+          supabaseAdmin.from("leads").select("id, customer_name, status, source_channel, estimate_total, created_at").not("org_id", "is", null).order("created_at", { ascending: false }).limit(10),
+          supabaseAdmin.from("leads").select("id, customer_name, customer_phone, project_description, status, estimate_total, created_at, source_channel").is("org_id", null).order("created_at", { ascending: false }),
+          supabaseAdmin.from("orgs").select("id, name, slug").order("name"),
+        ]);
 
-      const [wonLeadsResult] = await Promise.all([
-        supabaseAdmin.from("leads").select("estimate_total").eq("status", "won"),
-      ]);
+        const [wonLeadsResult] = await Promise.all([
+          supabaseAdmin.from("leads").select("estimate_total").eq("status", "won"),
+        ]);
 
-      const monthlyRevenue = (wonLeadsResult?.data ?? []).reduce((acc: number, l: any) => acc + (l.estimate_total || 0), 0);
+        const monthlyRevenue = (wonLeadsResult?.data ?? []).reduce((acc: number, l: any) => acc + (l.estimate_total || 0), 0);
 
-      setStats({ totalOrgs: orgsResult?.count ?? 0, totalMembers: membersResult?.count ?? 0, totalLeads: leadsResult?.count ?? 0, monthlyRevenue });
-      setRecentOrgs((orgData as any)?.data ?? (orgData as any) ?? []);
-      setRecentLeads((recentLeadsData as any)?.data ?? (recentLeadsData as any) ?? []);
-      setOrphanedLeads((orphanedData as any)?.data ?? (orphanedData as any) ?? []);
-      setOrgs((allOrgs as any)?.data ?? (allOrgs as any) ?? []);
-      setLoading(false);
+        setStats({ totalOrgs: orgsResult?.count ?? 0, totalMembers: membersResult?.count ?? 0, totalLeads: leadsResult?.count ?? 0, monthlyRevenue });
+        setRecentOrgs(Array.isArray((orgData as any)?.data) ? (orgData as any).data : Array.isArray(orgData) ? orgData : []);
+        setRecentLeads(Array.isArray((recentLeadsData as any)?.data) ? (recentLeadsData as any).data : Array.isArray(recentLeadsData) ? recentLeadsData : []);
+        setOrphanedLeads(Array.isArray((orphanedData as any)?.data) ? (orphanedData as any).data : Array.isArray(orphanedData) ? orphanedData : []);
+        setOrgs(Array.isArray((allOrgs as any)?.data) ? (allOrgs as any).data : Array.isArray(allOrgs) ? allOrgs : []);
+        setLoading(false);
+      } catch (err: any) {
+        console.error('[AdminDashboard load error]', err);
+        setLoadError(err.message);
+        setLoading(false);
+      }
     }
     load();
   }, []);
@@ -56,6 +63,16 @@ export default function AdminDashboard() {
   const guardedRecentOrgs = Array.isArray(recentOrgs) ? recentOrgs : [];
   const guardedRecentLeads = Array.isArray(recentLeads) ? recentLeads : [];
   const guardedOrphanedLeads = Array.isArray(orphanedLeads) ? orphanedLeads : [];
+
+  if (loadError) {
+    return (
+      <div className="p-5 md:p-8" style={{ color: '#fafafa' }}>
+        <h1 className="text-xl font-bold mb-2">Load Error</h1>
+        <p style={{ color: '#e85d04' }}>{loadError}</p>
+        <pre style={{ fontSize: 11, color: '#71717a', marginTop: 8 }}>{loadError.stack}</pre>
+      </div>
+    );
+  }
 
   return (
     <div className="p-5 md:p-8">

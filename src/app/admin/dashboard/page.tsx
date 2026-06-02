@@ -60,7 +60,7 @@ export default function AdminDashboard() {
         totalOrgs: orgs ?? 0,
         totalMembers: members ?? 0,
         totalLeads: leads ?? 0,
-        monthlyRevenue: wonLeads.data?.reduce((acc: number, l: any) => acc + (l.estimate_total || 0), 0) ?? 0,
+        monthlyRevenue,
       });
 
       setRecentOrgs(orgData ?? []);

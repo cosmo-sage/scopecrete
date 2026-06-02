@@ -50,6 +50,13 @@ export default function AdminDashboard() {
     { label: "Monthly Revenue",   value: stats.monthlyRevenue > 0 ? formatCurrency(stats.monthlyRevenue) : "—", icon: CurrencyDollar, accent: true },
   ], [stats.totalOrgs, stats.totalMembers, stats.totalLeads, stats.monthlyRevenue]);
 
+  const guardedStatsData = Array.isArray(statsData) ? statsData : [];
+
+  const guardedOrgs = Array.isArray(orgs) ? orgs : [];
+  const guardedRecentOrgs = Array.isArray(recentOrgs) ? recentOrgs : [];
+  const guardedRecentLeads = Array.isArray(recentLeads) ? recentLeads : [];
+  const guardedOrphanedLeads = Array.isArray(orphanedLeads) ? orphanedLeads : [];
+
   return (
     <div className="p-5 md:p-8">
       <div className="flex items-start justify-between mb-8">
@@ -64,7 +71,7 @@ export default function AdminDashboard() {
 
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
-        {(Array.isArray(statsData) ? statsData : []).map((stat, i) => (
+        {guardedStatsData.map((stat, i) => (
           <div key={i} className="rounded-2xl p-5 active:scale-[0.98] transition-all"
             style={{
               background: SC.surface,
@@ -85,7 +92,7 @@ export default function AdminDashboard() {
       </div>
 
       {/* Orphaned leads alert */}
-      {(Array.isArray(orphanedLeads) ? orphanedLeads : []).length > 0 && (
+      {(guardedOrphanedLeads.length > 0) && (
         <div className="mb-6 rounded-2xl p-5" style={{ background: "rgba(232,93,4,0.08)", border: "1px solid rgba(232,93,4,0.25)" }}>
           <div className="flex items-center gap-2 mb-3">
             <Warning size={18} color={SC.accent} />
@@ -123,7 +130,7 @@ export default function AdminDashboard() {
                     style={{ background: SC.surface, color: SC.textPrimary, border: `1px solid ${SC.border}` }}
                   >
                     <option value="">Assign to...</option>
-                    {(Array.isArray(orgs) ? orgs : []).map((org: any) => (
+            {guardedOrgs.map((org: any) => (
                       <option key={org.id} value={org.id}>{org.name}</option>
                     ))}
                   </select>
@@ -145,7 +152,7 @@ export default function AdminDashboard() {
           ) : recentOrgs.length === 0 ? (
             <EmptyState message="No contractors yet" />
           ) : (
-            {(Array.isArray(recentOrgs) ? recentOrgs : []).map((org: any, i: number) => (
+            {guardedRecentOrgs.map((org: any, i: number) => (
               <TableRow key={org.id} borderBottom={i < recentOrgs.length - 1}>
                 <div className="flex items-center gap-3">
                   <Avatar name={org.name} />
@@ -172,7 +179,7 @@ export default function AdminDashboard() {
           ) : recentLeads.length === 0 ? (
             <EmptyState message="No leads yet" />
           ) : (
-            {(Array.isArray(recentLeads) ? recentLeads : []).map((lead: any, i: number) => (
+            {guardedRecentLeads.map((lead: any, i: number) => (
               <TableRow key={lead.id} borderBottom={i < recentLeads.length - 1}>
                 <div className="flex items-center gap-3">
                   <Avatar name={lead.customer_name} />

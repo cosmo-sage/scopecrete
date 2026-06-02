@@ -10,7 +10,7 @@ export async function GET(
   try {
     const { data, error } = await supabaseAdmin
       .from("chat_messages")
-      .select("id, role, content, attachments, model, created_at")
+      .select("id, role, content, model, created_at")
       .eq("chat_session_id", id)
       .order("created_at", { ascending: true });
 
@@ -50,10 +50,9 @@ export async function POST(
     const { error: userErr } = await supabaseAdmin
       .from("chat_messages")
       .insert({
-        chat_session_id: sessionId,
+        chat_session_id: sessionId, org_id: session.org_id,
         role: role ?? "user",
         content: content.trim(),
-        
       });
 
     if (userErr) throw userErr;
@@ -137,10 +136,9 @@ export async function POST(
     const { data: savedMsg, error: asstErr } = await supabaseAdmin
       .from("chat_messages")
       .insert({
-        chat_session_id: sessionId,
+        chat_session_id: sessionId, org_id: session.org_id,
         role: "assistant",
         content: responseText,
-        model: "dusty-mcp + qwen2.5:0.5b",
       })
       .select()
       .single();

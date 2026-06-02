@@ -64,7 +64,7 @@ export default function AdminDashboard() {
 
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
-        {statsData.map((stat, i) => (
+        {(Array.isArray(statsData) ? statsData : []).map((stat, i) => (
           <div key={i} className="rounded-2xl p-5 active:scale-[0.98] transition-all"
             style={{
               background: SC.surface,
@@ -85,7 +85,7 @@ export default function AdminDashboard() {
       </div>
 
       {/* Orphaned leads alert */}
-      {orphanedLeads.length > 0 && (
+      {(Array.isArray(orphanedLeads) ? orphanedLeads : []).length > 0 && (
         <div className="mb-6 rounded-2xl p-5" style={{ background: "rgba(232,93,4,0.08)", border: "1px solid rgba(232,93,4,0.25)" }}>
           <div className="flex items-center gap-2 mb-3">
             <Warning size={18} color={SC.accent} />
@@ -123,7 +123,7 @@ export default function AdminDashboard() {
                     style={{ background: SC.surface, color: SC.textPrimary, border: `1px solid ${SC.border}` }}
                   >
                     <option value="">Assign to...</option>
-                    {orgs.map((org: any) => (
+                    {(Array.isArray(orgs) ? orgs : []).map((org: any) => (
                       <option key={org.id} value={org.id}>{org.name}</option>
                     ))}
                   </select>
@@ -145,7 +145,7 @@ export default function AdminDashboard() {
           ) : recentOrgs.length === 0 ? (
             <EmptyState message="No contractors yet" />
           ) : (
-            recentOrgs.map((org: any, i: number) => (
+            {(Array.isArray(recentOrgs) ? recentOrgs : []).map((org: any, i: number) => (
               <TableRow key={org.id} borderBottom={i < recentOrgs.length - 1}>
                 <div className="flex items-center gap-3">
                   <Avatar name={org.name} />
@@ -172,7 +172,7 @@ export default function AdminDashboard() {
           ) : recentLeads.length === 0 ? (
             <EmptyState message="No leads yet" />
           ) : (
-            recentLeads.map((lead: any, i: number) => (
+            {(Array.isArray(recentLeads) ? recentLeads : []).map((lead: any, i: number) => (
               <TableRow key={lead.id} borderBottom={i < recentLeads.length - 1}>
                 <div className="flex items-center gap-3">
                   <Avatar name={lead.customer_name} />

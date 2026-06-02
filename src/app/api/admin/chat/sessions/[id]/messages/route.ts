@@ -154,7 +154,7 @@ Be direct and specific. Cite numbers, names, dates. Answer admin questions about
     } else {
       // ─── Doctor: VPS management ───
       try {
-        const doctorRes = await fetch("http://100.113.194.47:8000/v1/chat/completions", {
+        const doctorRes = await fetch("http://100.110.231.126:8000/v1/chat/completions", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({

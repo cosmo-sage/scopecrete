@@ -36,10 +36,10 @@ export default function AdminDashboard() {
       const monthlyRevenue = wonLeads?.reduce((acc: number, l: any) => acc + (l.estimate_total || 0), 0) ?? 0;
 
       setStats({ totalOrgs: orgsCount?.count ?? 0, totalMembers: membersCount?.count ?? 0, totalLeads: leadsCount?.count ?? 0, monthlyRevenue });
-      setRecentOrgs(orgData ?? []);
-      setRecentLeads(recentLeadsData ?? []);
-      setOrphanedLeads(orphanedData ?? []);
-      setOrgs(allOrgs ?? []);
+      setRecentOrgs((orgData as any)?.data ?? (orgData as any) ?? []);
+      setRecentLeads((recentLeadsData as any)?.data ?? (recentLeadsData as any) ?? []);
+      setOrphanedLeads((orphanedData as any)?.data ?? (orphanedData as any) ?? []);
+      setOrgs((allOrgs as any)?.data ?? (allOrgs as any) ?? []);
       setLoading(false);
     }
     load();

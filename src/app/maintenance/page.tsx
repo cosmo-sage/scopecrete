@@ -20,12 +20,7 @@ export default function MaintenancePage() {
 
       {/* Logo */}
       <div className="flex items-center gap-2 mb-12">
-        <div
-          className="w-10 h-10 rounded-xl flex items-center justify-center"
-          style={{ background: "#e85d04" }}
-        >
-          <Lightning size={20} weight="fill" color="white" />
-        </div>
+        <img src="/logo-34.png" alt="ScopeCrete" width={34} height={34} style={{ borderRadius: 8 }} />
         <span className="text-2xl font-bold tracking-tight" style={{ color: "#fafafa" }}>
           Scope<span style={{ color: "#e85d04" }}>Crete</span>
         </span>

@@ -32,6 +32,9 @@ export const metadata: Metadata = {
   description:
     "Describe your project, get an accurate concrete bid powered by real market data, and a contractor texts you within the hour. No phone calls, no guesswork.",
   keywords: ["concrete estimate", "concrete calculator", "concrete contractor", "Baton Rouge", "Louisiana"],
+  icons: {
+    icon: ["/favicon.ico", "/favicon.png"],
+  },
 };
 
 export default function RootLayout({

@@ -134,22 +134,71 @@ export default function AIChatDrawer({ open, onClose, defaultTab = "dusty" }: AI
       } catch { return; }
     }
 
-    setMessages((m) => [...m, { role: "user", content: text }]);
+    // Add user message immediately
+    const tempUserMsg = { role: "user" as const, content: text };
+    setMessages((m) => [...m, tempUserMsg]);
     setInput("");
     setTyping(true);
 
     try {
+      // Try streaming first
       const res = await fetch(`/api/admin/chat/sessions/${session!.id}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: text, agent: activeTab }),
+        body: JSON.stringify({ content: text, agent: activeTab, stream: true }),
       });
-      const data = await res.json();
-      setTyping(false);
-      if (data.message) {
-        setMessages((m) => [...m, data.message]);
-      } else if (data.error) {
-        setMessages((m) => [...m, { role: "assistant", content: `Error: ${data.error}` }]);
+
+      if (res.headers.get("Content-Type")?.includes("text/event-stream")) {
+        // SSE streaming — render tokens as they arrive
+        const reader = res.body?.getReader();
+        const decoder = new TextDecoder();
+        let accumulated = "";
+
+        // Add placeholder for streamed response
+        setMessages((m) => [...m, { role: "assistant", content: "" }]);
+
+        if (reader) {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            const chunk = decoder.decode(value, { stream: true });
+            accumulated += chunk;
+
+            // Parse SSE lines: data: {...}
+            const lines = chunk.split("\n");
+            for (const line of lines) {
+              if (line.startsWith("data: ")) {
+                try {
+                  const parsed = JSON.parse(line.slice(6));
+                  const token = parsed.choices?.[0]?.delta?.content ?? parsed;
+                  const tokenStr = typeof token === "string" ? token : "";
+                  if (tokenStr) {
+                    setMessages((m) => {
+                      const updated = [...m];
+                      const last = updated[updated.length - 1];
+                      if (last && last.role === "assistant") {
+                        updated[updated.length - 1] = { ...last, content: last.content + tokenStr };
+                      }
+                      return updated;
+                    });
+                  }
+                } catch { /* skip malformed */ }
+              }
+            }
+          }
+        }
+
+        setTyping(false);
+      } else {
+        // Non-streaming JSON response
+        setTyping(false);
+        const data = await res.json();
+        if (data.message) {
+          setMessages((m) => [...m, data.message]);
+        } else if (data.error) {
+          setMessages((m) => [...m, { role: "assistant", content: `Error: ${data.error}` }]);
+        }
       }
     } catch {
       setTyping(false);

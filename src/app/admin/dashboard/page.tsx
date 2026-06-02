@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ChartLineUp, Users, Target, CurrencyDollar, CaretRight, Clock, Warning, Check } from "@phosphor-icons/react";
+import { ChartLineUp, Users, Target, CurrencyDollar, CaretRight, Clock, Warning } from "@phosphor-icons/react";
 import { SC, PLAN_BADGE, timeAgo, formatCurrency } from "@/lib/theme";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { useState, useEffect, useMemo } from "react";
@@ -35,11 +35,21 @@ export default function AdminDashboard() {
 
         const monthlyRevenue = (wonLeadsResult?.data ?? []).reduce((acc: number, l: any) => acc + (l.estimate_total || 0), 0);
 
+        // Defensively extract arrays from Supabase response objects — handles all edge cases
+        const extractArray = (result: any): any[] => {
+          if (Array.isArray(result)) return result;
+          if (result && typeof result === "object") {
+            if (Array.isArray(result.data)) return result.data;
+            if (typeof result[0] !== "undefined") return result as any[];
+          }
+          return [];
+        };
+
         setStats({ totalOrgs: orgsResult?.count ?? 0, totalMembers: membersResult?.count ?? 0, totalLeads: leadsResult?.count ?? 0, monthlyRevenue });
-        setRecentOrgs(Array.isArray((orgData as any)?.data) ? (orgData as any).data : Array.isArray(orgData) ? orgData : []);
-        setRecentLeads(Array.isArray((recentLeadsData as any)?.data) ? (recentLeadsData as any).data : Array.isArray(recentLeadsData) ? recentLeadsData : []);
-        setOrphanedLeads(Array.isArray((orphanedData as any)?.data) ? (orphanedData as any).data : Array.isArray(orphanedData) ? orphanedData : []);
-        setOrgs(Array.isArray((allOrgs as any)?.data) ? (allOrgs as any).data : Array.isArray(allOrgs) ? allOrgs : []);
+        setRecentOrgs(extractArray(orgData));
+        setRecentLeads(extractArray(recentLeadsData));
+        setOrphanedLeads(extractArray(orphanedData));
+        setOrgs(extractArray(allOrgs));
         setLoading(false);
       } catch (err: any) {
         console.error('[AdminDashboard load error]', err);
@@ -69,7 +79,6 @@ export default function AdminDashboard() {
       <div className="p-5 md:p-8" style={{ color: '#fafafa' }}>
         <h1 className="text-xl font-bold mb-2">Load Error</h1>
         <p style={{ color: '#e85d04' }}>{loadError}</p>
-        <pre style={{ fontSize: 11, color: '#71717a', marginTop: 8 }}>{loadError.stack}</pre>
       </div>
     );
   }
@@ -109,16 +118,16 @@ export default function AdminDashboard() {
       </div>
 
       {/* Orphaned leads alert */}
-      {(guardedOrphanedLeads.length > 0) && (
+      {guardedOrphanedLeads.length > 0 && (
         <div className="mb-6 rounded-2xl p-5" style={{ background: "rgba(232,93,4,0.08)", border: "1px solid rgba(232,93,4,0.25)" }}>
           <div className="flex items-center gap-2 mb-3">
             <Warning size={18} color={SC.accent} />
             <h2 className="text-sm font-semibold" style={{ color: SC.accent }}>
-              {orphanedLeads.length} Orphaned Lead{orphanedLeads.length !== 1 ? "s" : ""} — No Contractor Assigned
+              {guardedOrphanedLeads.length} Orphaned Lead{guardedOrphanedLeads.length !== 1 ? "s" : ""} — No Contractor Assigned
             </h2>
           </div>
           <div className="space-y-2">
-            {orphanedLeads.map((lead: any) => (
+            {guardedOrphanedLeads.map((lead: any) => (
               <div key={lead.id} className="flex items-center justify-between rounded-xl px-4 py-3" style={{ background: SC.elevated, border: `1px solid ${SC.border}` }}>
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium truncate" style={{ color: SC.textPrimary }}>
@@ -166,11 +175,11 @@ export default function AdminDashboard() {
         <Card title="Recent Contractors" action={{ label: "View all", href: "/admin/contractors" }}>
           {loading ? (
             <SkeletonRows count={3} />
-          ) : recentOrgs.length === 0 ? (
+          ) : guardedRecentOrgs.length === 0 ? (
             <EmptyState message="No contractors yet" />
           ) : (
-            {guardedRecentOrgs.map((org: any, i: number) => (
-              <TableRow key={org.id} borderBottom={i < recentOrgs.length - 1}>
+            guardedRecentOrgs.map((org: any, i: number) => (
+              <TableRow key={org.id} borderBottom={i < guardedRecentOrgs.length - 1}>
                 <div className="flex items-center gap-3">
                   <Avatar name={org.name} />
                   <div className="flex-1 min-w-0">
@@ -193,11 +202,11 @@ export default function AdminDashboard() {
         <Card title="Recent Leads" action={{ label: "View all", href: "/admin/contractors" }}>
           {loading ? (
             <SkeletonRows count={3} />
-          ) : recentLeads.length === 0 ? (
+          ) : guardedRecentLeads.length === 0 ? (
             <EmptyState message="No leads yet" />
           ) : (
-            {guardedRecentLeads.map((lead: any, i: number) => (
-              <TableRow key={lead.id} borderBottom={i < recentLeads.length - 1}>
+            guardedRecentLeads.map((lead: any, i: number) => (
+              <TableRow key={lead.id} borderBottom={i < guardedRecentLeads.length - 1}>
                 <div className="flex items-center gap-3">
                   <Avatar name={lead.customer_name} />
                   <div className="flex-1 min-w-0">

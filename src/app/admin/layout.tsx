@@ -4,41 +4,19 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  House,
-  Users,
-  Package,
-  CurrencyDollar,
-  ChartLineUp,
-  Gear,
-  SignOut,
-  X,
-  Bell,
-  List,
-  Sparkle,
-  FirstAid,
+  House, Users, CurrencyDollar, ChartLineUp, Gear,
+  SignOut, X, Bell, List, Sparkle, FirstAid,
 } from "@phosphor-icons/react";
+import { SC } from "@/lib/theme";
 import AIChatDrawer from "@/components/admin/AIChatDrawer";
 
-const SC = {
-  bg: "#09090b",
-  surface: "#18181b",
-  surfaceHover: "#27272a",
-  elevated: "#3f3f46",
-  accent: "#e85d04",
-  accentMuted: "rgba(232,93,4,0.10)",
-  textPrimary: "#fafafa",
-  textSecondary: "#a1a1aa",
-  textMuted: "#71717a",
-  border: "#27272a",
-};
-
 const NAV_ITEMS = [
-  { href: "/admin/dashboard", label: "Overview", icon: House },
-  { href: "/admin/contractors", label: "Contractors", icon: Users },
-  { href: "/admin/members", label: "Members", icon: Users },
-  { href: "/admin/market-pricing", label: "Market Pricing", icon: CurrencyDollar },
-  { href: "/admin/feedback", label: "Feedback", icon: ChartLineUp },
-  { href: "/admin/settings", label: "Settings", icon: Gear },
+  { href: "/admin/dashboard",     label: "Overview",      icon: House },
+  { href: "/admin/contractors",    label: "Contractors",   icon: Users },
+  { href: "/admin/members",        label: "Members",       icon: Users },
+  { href: "/admin/market-pricing",  label: "Market Pricing", icon: CurrencyDollar },
+  { href: "/admin/feedback",        label: "Feedback",      icon: ChartLineUp },
+  { href: "/admin/settings",        label: "Settings",      icon: Gear },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -47,26 +25,23 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [chatOpen, setChatOpen] = useState(false);
   const [chatTab, setChatTab] = useState<"dusty" | "doctor">("dusty");
 
-  useEffect(() => {
-    setSidebarOpen(false);
-  }, [pathname]);
+  useEffect(() => { setSidebarOpen(false); }, [pathname]);
 
   return (
     <div className="flex" style={{ background: SC.bg, minHeight: "100dvh", width: "100%", maxWidth: "100vw", overflowX: "hidden", position: "relative" }}>
-      {/* Grain texture */}
+      {/* Grain */}
       <div aria-hidden="true" className="fixed inset-0 pointer-events-none" style={{
         backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E")`,
         zIndex: 0,
       }} />
 
       {/* Mobile overlay */}
-      {sidebarOpen && (
-        <div className="fixed inset-0 z-30 bg-black/50 md:hidden" onClick={() => setSidebarOpen(false)} />
-      )}
+      {sidebarOpen && <div className="fixed inset-0 z-30 bg-black/50 md:hidden" onClick={() => setSidebarOpen(false)} />}
 
       {/* Sidebar */}
       <aside className={`fixed inset-y-0 left-0 z-40 w-60 flex flex-col transition-transform duration-200 ease-out md:relative md:translate-x-0 md:shrink-0 md:z-auto ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}
         style={{ background: SC.surface, borderRight: `1px solid ${SC.border}` }}>
+
         {/* Mobile close */}
         <div className="flex items-center justify-between p-4 md:hidden" style={{ borderBottom: `1px solid ${SC.border}` }}>
           <span className="text-sm font-medium" style={{ color: SC.textMuted }}>Menu</span>
@@ -145,11 +120,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </button>
         </header>
 
-        {/* Content */}
         <main className="flex-1 overflow-y-auto">{children}</main>
       </div>
 
-      {/* AI Chat Drawer toggle button — fixed bottom right */}
+      {/* AI Chat buttons — fixed bottom right */}
       <div className="fixed bottom-6 right-6 z-50 flex gap-2">
         <button
           onClick={() => { setChatTab("doctor"); setChatOpen(true); }}
@@ -169,7 +143,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </button>
       </div>
 
-      {/* AI Chat Drawer */}
       <AIChatDrawer open={chatOpen} onClose={() => setChatOpen(false)} defaultTab={chatTab} />
     </div>
   );

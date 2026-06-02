@@ -5,12 +5,7 @@ export async function middleware(request: NextRequest) {
   const forwardedHost = request.headers.get("x-forwarded-host");
   const isProduction = forwardedHost?.includes("scopecrete.ai");
 
-  // Root path → under construction page (site is down for maintenance)
-  if (pathname === "/" && isProduction) {
-    return NextResponse.redirect(new URL("/maintenance", request.url));
-  }
-
-  // Root path → under construction page in production
+  // Root path → coming soon page in production
   if (pathname === "/" && isProduction) {
     return NextResponse.redirect(new URL("/maintenance", request.url));
   }

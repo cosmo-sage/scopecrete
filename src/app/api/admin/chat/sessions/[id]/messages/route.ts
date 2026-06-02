@@ -15,6 +15,7 @@ export async function GET(
       .order("created_at", { ascending: true });
 
     if (error) throw error;
+
     return NextResponse.json({ messages: data ?? [] });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
@@ -52,7 +53,14 @@ export async function POST(
       .update({ updated_at: new Date().toISOString() })
       .eq("id", sessionId);
 
-    // 3. Get session history (last 12 messages for context)
+    // 3. Get session to know org_id for context
+    const { data: session } = await supabaseAdmin
+      .from("admin_chat_sessions")
+      .select("user_id, org_id")
+      .eq("id", sessionId)
+      .single();
+
+    // 4. Get chat history (last 12 messages)
     const { data: history } = await supabaseAdmin
       .from("admin_chat_messages")
       .select("role, content")
@@ -69,7 +77,6 @@ export async function POST(
     if (agent === "dusty") {
       // ─── Dusty: global admin data via supabaseAdmin ───
       try {
-        // Fetch live data for context
         const [
           { data: orgs, count: orgCount },
           { data: leads, count: leadCount },
@@ -111,7 +118,6 @@ ${marketSummary}
 
 Be direct and specific. Cite numbers, names, dates. Answer admin questions about any contractor, lead, or pricing data.`;
 
-        // Call Ollama if available (will fail gracefully if tunnel is down)
         let dustyResponse = "";
         try {
           const dustyRes = await fetch("http://localhost:8000/v1/chat/completions", {
@@ -136,12 +142,11 @@ Be direct and specific. Cite numbers, names, dates. Answer admin questions about
         if (dustyResponse) {
           assistantText = dustyResponse;
         } else {
-          // Fallback: give a structured data summary directly
-          assistantText = `Data summary from ScopeCrete DB:\n\n` +
-            `**${orgCount ?? 0} contractors**, **${leadCount ?? 0} leads**\n\n` +
+          assistantText =
+            `**Data summary:** ${orgCount ?? 0} contractors, ${leadCount ?? 0} leads\n\n` +
             `Recent leads:\n${recentLeads?.map((l: any) => `• ${l.customer_name ?? "unnamed"} — ${l.status} — $${l.estimate_total ?? 0}`).join("\n") ?? "none yet"}\n\n` +
-            `Market pricing: ${marketData?.length ?? 0} markets configured\n\n` +
-            `The Ollama tunnel is offline. Connect Clay's PC to query via AI.`;
+            `Market pricing: ${marketData?.length ?? 0} markets\n\n` +
+            `Ollama tunnel offline — connect Clay's PC for AI responses.`;
         }
       } catch (dbErr: any) {
         assistantText = `DB error: ${dbErr.message}`;
@@ -155,7 +160,7 @@ Be direct and specific. Cite numbers, names, dates. Answer admin questions about
           body: JSON.stringify({
             model: "qwen2.5:0.5b",
             messages: [
-              { role: "system", content: "You are Doctor, ScopeCrete's VPS infrastructure agent. You manage root@2.24.30.51 — PM2, Docker, Nginx, system monitoring. Be direct and technical. Commands: pm2 status, docker ps, nginx -t, df -h, tail /var/log/syslog" },
+              { role: "system", content: "You are Doctor, ScopeCrete's VPS infrastructure agent. You manage root@2.24.30.51 — PM2, Docker, Nginx, system monitoring. Be direct and technical." },
               { role: "user", content },
             ],
             stream: false,
@@ -166,14 +171,14 @@ Be direct and specific. Cite numbers, names, dates. Answer admin questions about
           const doctorData = await doctorRes.json();
           assistantText = doctorData.choices?.[0]?.message?.content ?? "";
         } else {
-          assistantText = "Doctor is unavailable. VPS may be offline.";
+          assistantText = "Doctor unavailable. VPS may be offline.";
         }
       } catch {
-        assistantText = "Doctor is unreachable. Check VPS connection at root@2.24.30.51.";
+        assistantText = "Doctor unreachable. Check VPS at root@2.24.30.51.";
       }
     }
 
-    // 4. Save assistant response
+    // 5. Save assistant response with user_id + org_id
     const { data: savedMsg, error: asstErr } = await supabaseAdmin
       .from("admin_chat_messages")
       .insert({
@@ -181,6 +186,8 @@ Be direct and specific. Cite numbers, names, dates. Answer admin questions about
         role: "assistant",
         content: assistantText,
         model: agent === "dusty" ? "qwen2.5:0.5b + supabase" : "qwen2.5:0.5b",
+        user_id: session?.user_id ?? null,
+        org_id: session?.org_id ?? null,
       })
       .select()
       .single();

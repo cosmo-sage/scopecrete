@@ -187,7 +187,7 @@ Be direct and specific. Cite numbers, names, dates.`;
       } else {
         // Doctor streaming via Tailscale gateway
         const DOCTOR_TOKEN = "18f346bfe7563e8c59cbcf753800db1209df8c2a595ba3683ec42da9ab07bbb6";
-        const DOCTOR_URL = "https://srv1594563.tail0f2914.ts.net/v1/agent/doctor/chat";
+        const DOCTOR_URL = "https://nerve.agents.saccobuilt.com/v1/agent/doctor/chat";
 
         const encoder = new TextEncoder();
         let accumulated = "";
@@ -330,7 +330,7 @@ Be direct and specific. Cite numbers, names, dates. Answer admin questions about
     } else {
       // Doctor non-streaming
       const DOCTOR_TOKEN = "18f346bfe7563e8c59cbcf753800db1209df8c2a595ba3683ec42da9ab07bbb6";
-      const DOCTOR_URL = "https://srv1594563.tail0f2914.ts.net/v1/agent/doctor/chat";
+      const DOCTOR_URL = "https://nerve.agents.saccobuilt.com/v1/agent/doctor/chat";
 
       try {
         const doctorRes = await fetch(DOCTOR_URL, {
@@ -353,7 +353,7 @@ Be direct and specific. Cite numbers, names, dates. Answer admin questions about
           assistantText = "Doctor unavailable. Gateway returned " + doctorRes.status;
         }
       } catch {
-        assistantText = "Doctor unreachable. Check VPS gateway at srv1594563.tail0f2914.ts.net";
+        assistantText = "Doctor unreachable. Check VPS gateway at nerve.agents.saccobuilt.com";
       }
     }
 

@@ -105,7 +105,7 @@ export async function POST(
 
         // Call Ollama for actual AI response (if tunnel available)
         try {
-          const aiRes = await fetch("http://localhost:8000/v1/chat/completions", {
+          const aiRes = await fetch("http://100.113.194.47:8000/v1/chat/completions", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({

@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
     if (agent === "dusty") {
       // Dusty has full Supabase DB access — route to the Dusty model via the existing tunnel
       // Use the same API endpoint as the contractor dashboard chat
-      const dustyResponse = await fetch("http://localhost:8000/v1/chat/completions", {
+      const dustyResponse = await fetch("http://100.113.194.47:8000/v1/chat/completions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

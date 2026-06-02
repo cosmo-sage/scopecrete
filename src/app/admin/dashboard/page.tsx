@@ -53,8 +53,8 @@ export default function AdminDashboard() {
       ]);
 
       // Monthly revenue = sum of won estimates
-      const { sum } = await supabase.from("leads").select("estimate_total").eq("status", "won");
-      const wonLeads = await supabase.from("leads").select("estimate_total").eq("status", "won");
+      const { data: wonLeads } = await supabase.from("leads").select("estimate_total").eq("status", "won");
+      const monthlyRevenue = wonLeads?.reduce((acc: number, l: any) => acc + (l.estimate_total || 0), 0) ?? 0;
 
       setStats({
         totalOrgs: orgs ?? 0,

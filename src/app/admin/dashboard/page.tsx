@@ -53,9 +53,12 @@ export default function AdminDashboard() {
   return (
     <div className="p-5 md:p-8">
       <div className="flex items-start justify-between mb-8">
-        <div>
+        <div className="flex items-center gap-3">
+          <img src="/logo-34.png" alt="ScopeCrete" width={36} height={36} style={{ borderRadius: 8 }} />
+          <div>
           <h1 className="text-[28px] font-bold tracking-tight leading-none" style={{ color: SC.textPrimary }}>Platform Overview</h1>
           <p className="text-sm mt-1.5" style={{ color: SC.textMuted }}>admin@scopecrete.ai</p>
+          </div>
         </div>
       </div>
 

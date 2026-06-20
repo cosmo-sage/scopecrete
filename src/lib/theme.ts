@@ -1,26 +1,5 @@
-import React, { useState, useEffect } from "react";
-import { createClient } from "@supabase/supabase-js";
-import { parseISO, formatDistanceToNow } from "date-fns";
-import { ChartLineUp, Users, CurrencyDollar, Target, Lightning } from "@phosphor-icons/react";
+import { SC } from "./theme"; // Ensure consistent color import path
 
-// Supabase client setup
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
-
-// --- Utility functions (moved here) ---
-export const timeAgo = (dateString: string) => {
-  if (!dateString) return "";
-  const date = parseISO(dateString);
-  return formatDistanceToNow(date, { addSuffix: true });
-};
-
-export const capitalize = (s: string) => {
-  if (typeof s !== "string") return "";
-  return s.charAt(0).toUpperCase() + s.slice(1);
-};
-
-// --- Theme --- 
 export const SC = {
   primary: "#FE580E",
   secondary: "#f59e0b",

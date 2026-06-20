@@ -1,5 +1,3 @@
-import { SC } from "./theme"; // Ensure consistent color import path
-
 export const SC = {
   primary: "#FE580E",
   secondary: "#f59e0b",

@@ -64,8 +64,8 @@ export default function KanbanCard({ lead }: KanbanCardProps) {
       >
         <h3 className="text-md font-medium text-white">{lead.customerName}</h3>
         <p className="text-sm text-gray-300">{lead.projectType} in {lead.address}</p>
-        {lead.estimatedValue > 0 && (
-          <p className="text-sm font-semibold text-green-400">${lead.estimatedValue.toLocaleString()}</p>
+        {(lead.estimatedValue ?? 0) > 0 && (
+          <p className="text-sm font-semibold text-green-400">${(lead.estimatedValue ?? 0).toLocaleString()}</p>
         )}
         <div className="flex justify-between items-center mt-2 text-xs text-gray-400">
           <span>{lead.daysInStage} Days in Stage</span>

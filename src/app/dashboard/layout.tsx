@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChartBar, Users, Bell, SignOut, X, House, ChatCircle, User } from "@phosphor-icons/react";
+import { ChartBar, Users, Bell, SignOut, X, House, ChatCircle, User, ClipboardText } from "@phosphor-icons/react";
 import { SC } from "@/lib/theme";
 import DustyFAB from "@/components/dashboard/DustyFAB";
 import DustyDrawer from "@/components/dashboard/DustyDrawer";
@@ -11,6 +11,7 @@ import DustyDrawer from "@/components/dashboard/DustyDrawer";
 const NAV_ITEMS = [
   { href: "/dashboard",         label: "Home",     icon: House },
   { href: "/dashboard/leads",   label: "Leads",    icon: Users },
+  { href: "/dashboard/leads",   label: "Scope Builder", icon: ClipboardText, hint: "from lead" },
 ];
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -75,7 +76,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   paddingLeft: isActive ? 10 : 12,
                 }}>
                 <item.icon size={16} weight={isActive ? "fill" : "regular"} />
-                {item.label}
+                <div className="flex items-center gap-1.5">
+                  {item.label}
+                  {item.hint && (
+                    <span className="text-[9px] px-1.5 py-0.5 rounded-full"
+                      style={{ background: SC.accentMuted, color: SC.accent }}>
+                      {item.hint}
+                    </span>
+                  )}
+                </div>
               </Link>
             );
           })}
@@ -129,9 +138,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <span className="text-[9px]" style={{ color: pathname === "/dashboard/leads" ? SC.accent : SC.textMuted }}>Leads</span>
           </Link>
           <DustyFAB onClick={() => setDustyOpen(true)} />
-          <Link href="/dashboard/messages" className="flex flex-col items-center gap-0.5 no-underline">
-            <ChatCircle size={20} color={SC.textMuted} />
-            <span className="text-[9px]" style={{ color: SC.textMuted }}>Messages</span>
+          <Link href="/dashboard/leads" className="flex flex-col items-center gap-0.5 no-underline">
+            <ClipboardText size={20} color={SC.textMuted} weight="fill" />
+            <span className="text-[9px]" style={{ color: SC.textMuted }}>Scope</span>
           </Link>
           <Link href="/dashboard/profile" className="flex flex-col items-center gap-0.5 no-underline">
             <User size={20} color={SC.textMuted} />

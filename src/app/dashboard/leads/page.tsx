@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   ChartLineUp,
   Users,
@@ -9,6 +11,7 @@ import {
   Plus,
   ArrowsClockwise,
   Clock,
+  ClipboardText,
 } from "@phosphor-icons/react";
 import { supabase } from "@/lib/supabase";
 
@@ -75,6 +78,7 @@ const STATUS_TEXT: Record<string, string> = {
 };
 
 export default function LeadsPage() {
+  const router = useRouter();
   const [leads, setLeads] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -213,6 +217,10 @@ export default function LeadsPage() {
               {leads.map((lead, i) => (
                 <tr
                   key={lead.id}
+                  onClick={() => router.push(`/dashboard/leads/${lead.id}`)}
+                  onKeyDown={(e) => { if (e.key === "Enter") router.push(`/dashboard/leads/${lead.id}`); }}
+                  tabIndex={0}
+                  role="button"
                   className="transition-all cursor-pointer"
                   style={{
                     borderBottom: i < leads.length - 1 ? `1px solid ${T.border}` : "none",
@@ -238,7 +246,18 @@ export default function LeadsPage() {
                         {lead.customer_email}
                       </div>
                     )}
-                  </td>
+                      <div className="mt-1.5">
+                        <Link
+                          href={`/scope-builder/${lead.id}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-lg transition-all hover:brightness-125 active:scale-95"
+                          style={{ background: T.accentMuted, color: T.accent }}
+                        >
+                          <ClipboardText size={10} weight="fill" />
+                          Build scope
+                        </Link>
+                      </div>
+                    </td>
                   <td className="px-5 py-4">
                     <span
                       className="text-[11px] font-medium px-2 py-0.5 rounded-full"

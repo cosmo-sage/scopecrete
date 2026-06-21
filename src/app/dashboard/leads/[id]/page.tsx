@@ -308,7 +308,16 @@ export default function LeadDetailPage() {
                 Email
               </a>
             </div>
-          </div>
+
+          {/* Scope Builder */}
+          <Link
+            href={`/scope-builder/${lead.id}`}
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold transition-colors"
+            style={{ background: "rgba(245,158,11,0.15)", color: "#F59E0B", border: "1px solid rgba(245,158,11,0.25)" }}
+          >
+            Open in Scope Builder
+          </Link>
+        </div>
 
           {/* Feedback widget */}
           <div

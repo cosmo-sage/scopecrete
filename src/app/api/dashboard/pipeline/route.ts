@@ -75,7 +75,7 @@ export async function GET(req: NextRequest) {
       const estimatedValue = lead.estimated_value || 0;
 
       const customerName = lead.customer_name
-        ?? lead.contacts?.name
+        ?? lead.contacts?.[0]?.name
         ?? lead.customer_phone
         ?? "Unknown Lead";
       

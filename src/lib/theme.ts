@@ -7,9 +7,14 @@ export const SC = {
   blue: "#2563eb", 
   purple: "#6d28d9", 
   surface: "#1a1a1a",
+  bg: "#09090b",
   border: "#333333",
   text: "#e0e0e0",
   textMuted: "#a0a0a0",
+  textPrimary: "#fafafa",
+  textSecondary: "#71717a",
+  elevated: "#27272a",
+  accentMuted: "rgba(139,92,246,0.15)",
 };
 
 export const STATUS_BADGE: Record<string, { bg: string; color: string; icon: string }> = {

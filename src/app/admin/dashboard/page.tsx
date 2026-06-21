@@ -1,238 +1,289 @@
+"use client";
+
+import Link from "next/link";
+import { ChartLineUp, Users, Target, CurrencyDollar, CaretRight, Clock, Warning } from "@phosphor-icons/react";
+import { SC, PLAN_BADGE, timeAgo, formatCurrency } from "@/lib/theme";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { useState, useEffect, useMemo } from "react";
-import { createClient } from "@supabase/supabase-js";
-import { SelectChangeEvent } from "@mui/material";
-import Stack from "@mui/material/Stack";
-import Grid from "@mui/material/Unstable_Grid2";
-import Container from "@mui/material/Container";
-import Typography from "@mui/material/Typography";
-import Box from "@mui/material/Box";
-import CircularProgress from "@mui/material/CircularProgress";
-import Alert from "@mui/material/Alert";
-import AlertTitle from "@mui/material/AlertTitle";
-import MenuItem from "@mui/material/MenuItem";
-import FormControl from "@mui/material/FormControl";
-import InputLabel from "@mui/material/InputLabel";
-import Select from "@mui/material/Select";
-import { useAuth0 } from "@auth0/auth0-react";
-import { enqueueSnackbar } from "notistack";
 
-import { PLAN_BADGE } from "@/lib/theme";
-import { timeAgo, formatCurrency } from "@/lib/utils"; // Moved from theme
-import AnalyticsCurrentVisits from "@/sections/overview/analytics-current-visits";
-import AnalyticsWebsiteVisits from "@/sections/overview/analytics-website-visits";
-import AnalyticsWidgetSummary from "@/sections/overview/analytics-widget-summary";
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
-
-export default function OverviewAppView() {
-
-  const { user } = useAuth0();
-  const orgId = user?.app_metadata?.org_id; // Get orgId from Auth0 user metadata
-
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [metrics, setMetrics] = useState<any>(null);
+export default function AdminDashboard() {
+  const [stats, setStats] = useState({ totalOrgs: 0, totalMembers: 0, totalLeads: 0, monthlyRevenue: 0 });
+  const [recentOrgs, setRecentOrgs] = useState<any[]>([]);
   const [recentLeads, setRecentLeads] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState("all");
-
-  const fetchMetrics = async () => {
-    if (!orgId) {
-      setError("Org ID not found in user metadata.");
-      setLoading(false);
-      return;
-    }
-
-    try {
-      const response = await fetch(`/api/dashboard/metrics?org_id=${orgId}`);
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to fetch metrics");
-      }
-      const data = await response.json();
-      setMetrics(data.metrics);
-      setRecentLeads(data.recentLeads.map((lead: any) => ({ ...lead, createdAt: new Date(lead.created_at) })));
-    } catch (err: any) {
-      console.error("Error fetching metrics:", err);
-      setError(err.message);
-      enqueueSnackbar(err.message, { variant: "error" });
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [orphanedLeads, setOrphanedLeads] = useState<any[]>([]);
+  const [orgs, setOrgs] = useState<any[]>([]);
+  const [assignModal, setAssignModal] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchMetrics();
-  }, [orgId]); // Refetch when orgId changes
+    async function load() {
+      try {
+        const [orgsResult, membersResult, leadsResult, orgData, recentLeadsData, orphanedData, allOrgs] = await Promise.all([
+          supabaseAdmin.from("orgs").select("*", { count: "exact", head: true }),
+          supabaseAdmin.from("org_members").select("*", { count: "exact", head: true }),
+          supabaseAdmin.from("leads").select("*", { count: "exact", head: true }),
+          supabaseAdmin.from("orgs").select("id, name, slug, plan_tier, created_at").order("created_at", { ascending: false }).limit(5),
+          supabaseAdmin.from("leads").select("id, customer_name, status, source_channel, estimate_total, created_at").not("org_id", "is", null).order("created_at", { ascending: false }).limit(10),
+          supabaseAdmin.from("leads").select("id, customer_name, customer_phone, project_description, status, estimate_total, created_at, source_channel").is("org_id", null).order("created_at", { ascending: false }),
+          supabaseAdmin.from("orgs").select("id, name, slug").order("name"),
+        ]);
 
-  // Convert currency amounts for display
-  const currencyMetrics = useMemo(() => {
-    if (!metrics) return null;
-    return {
-      totalPipelineValue: formatCurrency(metrics.totalPipelineValue || 0),
-      totalRevenueBooked: formatCurrency(metrics.totalRevenueBooked || 0),
-    };
-  }, [metrics]);
+        const [wonLeadsResult] = await Promise.all([
+          supabaseAdmin.from("leads").select("estimate_total").eq("status", "won"),
+        ]);
 
-  const filteredLeads = useMemo(() => {
-    if (!recentLeads) return [];
-    if (activeTab === "all") return recentLeads;
-    return recentLeads.filter(lead => lead.source_channel === activeTab);
-  }, [recentLeads, activeTab]);
+        const monthlyRevenue = (wonLeadsResult?.data ?? []).reduce((acc: number, l: any) => acc + (l.estimate_total || 0), 0);
 
-  const handleTabChange = (event: SelectChangeEvent) => {
-    setActiveTab(event.target.value);
-  };
+        // Defensively extract arrays from Supabase response objects — handles all edge cases
+        const extractArray = (result: any): any[] => {
+          if (Array.isArray(result)) return result;
+          if (result && typeof result === "object") {
+            if (Array.isArray(result.data)) return result.data;
+            if (typeof result[0] !== "undefined") return result as any[];
+          }
+          return [];
+        };
 
-  if (loading) {
+        setStats({ totalOrgs: orgsResult?.count ?? 0, totalMembers: membersResult?.count ?? 0, totalLeads: leadsResult?.count ?? 0, monthlyRevenue });
+        setRecentOrgs(extractArray(orgData));
+        setRecentLeads(extractArray(recentLeadsData));
+        setOrphanedLeads(extractArray(orphanedData));
+        setOrgs(extractArray(allOrgs));
+        setLoading(false);
+      } catch (err: any) {
+        console.error('[AdminDashboard load error]', err);
+        setLoadError(err.message);
+        setLoading(false);
+      }
+    }
+    load();
+  }, []);
+
+  const statsData = useMemo(() => [
+    { label: "Total Contractors", value: stats.totalOrgs, icon: Users,        accent: false },
+    { label: "Total Users",       value: stats.totalMembers, icon: ChartLineUp, accent: false },
+    { label: "Total Leads",       value: stats.totalLeads,  icon: Target,      accent: false },
+    { label: "Monthly Revenue",   value: stats.monthlyRevenue > 0 ? formatCurrency(stats.monthlyRevenue) : "—", icon: CurrencyDollar, accent: true },
+  ], [stats.totalOrgs, stats.totalMembers, stats.totalLeads, stats.monthlyRevenue]);
+
+  const guardedStatsData = Array.isArray(statsData) ? statsData : [];
+
+  const guardedOrgs = Array.isArray(orgs) ? orgs : [];
+  const guardedRecentOrgs = Array.isArray(recentOrgs) ? recentOrgs : [];
+  const guardedRecentLeads = Array.isArray(recentLeads) ? recentLeads : [];
+  const guardedOrphanedLeads = Array.isArray(orphanedLeads) ? orphanedLeads : [];
+
+  if (loadError) {
     return (
-      <Container sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-        <CircularProgress />
-      </Container>
-    );
-  }
-
-  if (error) {
-    return (
-      <Container sx={{ mt: 5 }}>
-        <Alert severity="error">
-          <AlertTitle>Error</AlertTitle>
-          {error} — <strong>Please try again later or contact support.</strong>
-        </Alert>
-      </Container>
+      <div className="p-5 md:p-8" style={{ color: '#fafafa' }}>
+        <h1 className="text-xl font-bold mb-2">Load Error</h1>
+        <p style={{ color: '#e85d04' }}>{loadError}</p>
+      </div>
     );
   }
 
   return (
-    <Container maxWidth="xl">
-      <Grid container spacing={3}>
-        <Grid xs={12} sm={6} md={3}>
-          <AnalyticsWidgetSummary
-            title="Total Pipeline Value"
-            total={currencyMetrics?.totalPipelineValue || "$0"}
-            icon="solar:users-group-rounded-bold"
-          />
-        </Grid>
+    <div className="p-5 md:p-8">
+      <div className="flex items-start justify-between mb-8">
+        <div className="flex items-center gap-3">
+          <img src="/logo-34.png" alt="ScopeCrete" width={36} height={36} style={{ borderRadius: 8 }} />
+          <div>
+          <h1 className="text-[28px] font-bold tracking-tight leading-none" style={{ color: SC.textPrimary }}>Platform Overview</h1>
+          <p className="text-sm mt-1.5" style={{ color: SC.textMuted }}>admin@scopecrete.ai</p>
+          </div>
+        </div>
+      </div>
 
-        <Grid xs={12} sm={6} md={3}>
-          <AnalyticsWidgetSummary
-            title="Total Revenue Booked"
-            total={currencyMetrics?.totalRevenueBooked || "$0"}
-            icon="solar:bill-list-bold"
-          />
-        </Grid>
+      {/* Stats */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
+        {guardedStatsData.map((stat, i) => (
+          <div key={i} className="rounded-2xl p-5 active:scale-[0.98] transition-all"
+            style={{
+              background: SC.surface,
+              border: `1px solid ${stat.accent ? SC.accent : SC.border}`,
+              boxShadow: stat.accent ? `0 0 24px ${SC.accentGlow}` : "none",
+            }}>
+            <div className="flex items-start mb-3">
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: SC.accentMuted }}>
+                <stat.icon size={17} color={SC.accent} />
+              </div>
+            </div>
+            <div className="text-[28px] font-bold leading-none" style={{ color: stat.accent ? SC.accent : SC.textPrimary }}>
+              {loading ? "—" : stat.value}
+            </div>
+            <div className="text-xs mt-1.5" style={{ color: SC.textMuted }}>{stat.label}</div>
+          </div>
+        ))}
+      </div>
 
-        <Grid xs={12} sm={6} md={3}>
-          <AnalyticsWidgetSummary
-            title="New Leads Today"
-            total={metrics?.newLeadsToday || 0}
-            color="info"
-            icon="solar:add-circle-bold"
-          />
-        </Grid>
-
-        <Grid xs={12} sm={6} md={3}>
-          <AnalyticsWidgetSummary
-            title="Conversion Rate"
-            total={`${metrics?.conversionRate || 0}%`}
-            color="warning"
-            icon="solar:graph-up-bold"
-          />
-        </Grid>
-        
-        <Grid xs={12} md={6} lg={8}>
-          <AnalyticsWebsiteVisits
-            title="Lead Sources"
-            subheader="(+43% than last year)"
-            chart={{
-              labels: [
-                "01/01/2003",
-                "02/01/2003",
-                "03/01/2003",
-                "04/01/2003",
-                "05/01/2003",
-                "06/01/2003",
-                "07/01/2003",
-                "08/01/2003",
-                "09/01/2003",
-                "10/01/2003",
-                "11/01/2003",
-              ],
-              series: [
-                {
-                  name: "Team A",
-                  type: "column",
-                  fill: "solid",
-                  data: [23, 11, 22, 27, 13, 22, 37, 21, 44, 22, 30],
-                },
-                {
-                  name: "Team B",
-                  type: "area",
-                  fill: "gradient",
-                  data: [44, 55, 41, 67, 22, 43, 21, 41, 56, 27, 43],
-                },
-                {
-                  name: "Team C",
-                  type: "line",
-                  fill: "solid",
-                  data: [30, 25, 36, 30, 45, 35, 64, 52, 59, 36, 39],
-                },
-              ],
-            }}
-          />
-        </Grid>
-
-        <Grid xs={12} md={6} lg={4}>
-          <AnalyticsCurrentVisits
-            title="Current Visits"
-            chart={{
-              series: [
-                { label: "America", value: 4344 },
-                { label: "Asia", value: 5435 },
-                { label: "Europe", value: 1443 },
-                { label: "Africa", value: 4443 },
-              ],
-            }}
-          />
-        </Grid>
-
-        <Grid xs={12} lg={8}>
-          <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
-            <Typography variant="h6">Recent Leads</Typography>
-            <FormControl variant="outlined" size="small" sx={{ minWidth: 120 }}>
-              <InputLabel id="leads-filter-label">Source</InputLabel>
-              <Select
-                labelId="leads-filter-label"
-                id="leads-filter"
-                value={activeTab}
-                label="Source"
-                onChange={handleTabChange}
-              >
-                <MenuItem value="all">All</MenuItem>
-                <MenuItem value="web">Web</MenuItem>
-                <MenuItem value="phone">Phone</MenuItem>
-                <MenuItem value="sms">SMS</MenuItem>
-                <MenuItem value="email">Email</MenuItem>
-              </Select>
-            </FormControl>
-          </Stack>
-          
-          <Box>
-            {filteredLeads.map((lead) => (
-              <Box key={lead.id} sx={{ mb: 2, p: 2, bgcolor: (theme) => theme.palette.background.paper, borderRadius: 1 }}>
-                <Typography variant="subtitle2">{lead.customer_name || lead.customer_phone || "Unknown Lead"}</Typography>
-                <Typography variant="body2" sx={{ color: "text.secondary" }}>{lead.project_type || 'Unspecified Project'} from {lead.source_channel} • {timeAgo(lead.createdAt.toISOString())}</Typography>
-              </Box>
+      {/* Orphaned leads alert */}
+      {guardedOrphanedLeads.length > 0 && (
+        <div className="mb-6 rounded-2xl p-5" style={{ background: "rgba(232,93,4,0.08)", border: "1px solid rgba(232,93,4,0.25)" }}>
+          <div className="flex items-center gap-2 mb-3">
+            <Warning size={18} color={SC.accent} />
+            <h2 className="text-sm font-semibold" style={{ color: SC.accent }}>
+              {guardedOrphanedLeads.length} Orphaned Lead{guardedOrphanedLeads.length !== 1 ? "s" : ""} — No Contractor Assigned
+            </h2>
+          </div>
+          <div className="space-y-2">
+            {guardedOrphanedLeads.map((lead: any) => (
+              <div key={lead.id} className="flex items-center justify-between rounded-xl px-4 py-3" style={{ background: SC.elevated, border: `1px solid ${SC.border}` }}>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium truncate" style={{ color: SC.textPrimary }}>
+                    {lead.customer_name || lead.customer_phone || "Unknown contact"}
+                  </div>
+                  <div className="text-[11px] mt-0.5" style={{ color: SC.textMuted }}>
+                    {lead.project_description?.slice(0, 40) || "No project description"} · {lead.source_channel || "direct"} · {timeAgo(lead.created_at)} ago
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 ml-3">
+                  <select
+                    defaultValue=""
+                    onChange={async (e) => {
+                      const targetOrgId = e.target.value;
+                      if (!targetOrgId) return;
+                      const res = await fetch("/api/admin/orphaned-leads", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ lead_id: lead.id, org_id: targetOrgId }),
+                      });
+                      if (res.ok) {
+                        setOrphanedLeads(prev => prev.filter(l => l.id !== lead.id));
+                      }
+                    }}
+                    className="text-xs px-3 py-1.5 rounded-lg outline-none cursor-pointer"
+                    style={{ background: SC.surface, color: SC.textPrimary, border: `1px solid ${SC.border}` }}
+                  >
+                    <option value="">Assign to...</option>
+            {guardedOrgs.map((org: any) => (
+                      <option key={org.id} value={org.id}>{org.name}</option>
+                    ))}
+                  </select>
+                  <div className="w-6 h-6 rounded-full flex items-center justify-center" style={{ background: "rgba(232,93,4,0.2)" }}>
+                    <Warning size={12} color={SC.accent} />
+                  </div>
+                </div>
+              </div>
             ))}
-            {filteredLeads.length === 0 && <Typography variant="body2" sx={{ color: "text.disabled" }}>No recent leads found.</Typography>}
-          </Box>
-        </Grid>
+          </div>
+        </div>
+      )}
 
-        <Grid xs={12} md={6} lg={4}>
-          {/* Example of a different type of grid item */}
-        </Grid>
-      </Grid>
-    </Container>
+      {/* Main grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <Card title="Recent Contractors" action={{ label: "View all", href: "/admin/contractors" }}>
+          {loading ? (
+            <SkeletonRows count={3} />
+          ) : guardedRecentOrgs.length === 0 ? (
+            <EmptyState message="No contractors yet" />
+          ) : (
+            guardedRecentOrgs.map((org: any, i: number) => (
+              <TableRow key={org.id} borderBottom={i < guardedRecentOrgs.length - 1}>
+                <div className="flex items-center gap-3">
+                  <Avatar name={org.name} />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium truncate" style={{ color: SC.textPrimary }}>{org.name}</div>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded"
+                        style={{ background: PLAN_BADGE[org.plan_tier]?.bg, color: PLAN_BADGE[org.plan_tier]?.color }}>
+                        {PLAN_BADGE[org.plan_tier]?.label ?? org.plan_tier}
+                      </span>
+                      <span style={{ color: SC.textMuted }}>{timeAgo(org.created_at)} ago</span>
+                    </div>
+                  </div>
+                </div>
+                <Link href={`/admin/contractors/${org.id}`}><CaretRight size={13} style={{ color: SC.textMuted }} /></Link>
+              </TableRow>
+            ))
+          )}
+        </Card>
+
+        <Card title="Recent Leads" action={{ label: "View all", href: "/admin/contractors" }}>
+          {loading ? (
+            <SkeletonRows count={3} />
+          ) : guardedRecentLeads.length === 0 ? (
+            <EmptyState message="No leads yet" />
+          ) : (
+            guardedRecentLeads.map((lead: any, i: number) => (
+              <TableRow key={lead.id} borderBottom={i < guardedRecentLeads.length - 1}>
+                <div className="flex items-center gap-3">
+                  <Avatar name={lead.customer_name} />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium truncate" style={{ color: SC.textPrimary }}>{lead.customer_name || "Unknown"}</div>
+                    <div className="text-[11px] mt-0.5" style={{ color: SC.textMuted }}>
+                      {lead.orgs?.name || "—"} · {lead.source_channel || "direct"}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <Clock size={9} style={{ color: SC.textMuted }} />
+                  <span className="text-[10px]" style={{ color: SC.textMuted }}>{timeAgo(lead.created_at)}</span>
+                </div>
+              </TableRow>
+            ))
+          )}
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+// ─── Shared Components ─────────────────────────────────────────────────────────
+
+function Card({ title, action, children }: { title: string; action?: { label: string; href: string }; children: React.ReactNode }) {
+  return (
+    <div className="rounded-2xl overflow-hidden" style={{ background: SC.surface, border: `1px solid ${SC.border}` }}>
+      <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: `1px solid ${SC.border}` }}>
+        <h2 className="text-sm font-semibold" style={{ color: SC.textPrimary }}>{title}</h2>
+        {action && (
+          <Link href={action.href} style={{ color: SC.accent, textDecoration: "none", fontSize: 12, fontWeight: 600 }}>
+            {action.label} →
+          </Link>
+        )}
+      </div>
+      <div>{children}</div>
+    </div>
+  );
+}
+
+function TableRow({ children, borderBottom }: { children: React.ReactNode; borderBottom: boolean }) {
+  return (
+    <div className="flex items-center justify-between px-5 py-3.5 transition-all cursor-pointer"
+      style={{ borderBottom: borderBottom ? `1px solid ${SC.border}` : "none" }}
+      onMouseEnter={(e) => (e.currentTarget.style.background = SC.surfaceHover)}
+      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
+      {children}
+    </div>
+  );
+}
+
+function Avatar({ name }: { name: string }) {
+  return (
+    <div className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0"
+      style={{ background: SC.accentMuted, color: SC.accent }}>
+      {(name || "?").slice(0, 2).toUpperCase()}
+    </div>
+  );
+}
+
+function SkeletonRows({ count }: { count: number }) {
+  return (
+    <div className="p-5 space-y-3">
+      {Array.from({ length: count }).map((_, i) => (
+        <div key={i} className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-full animate-shimmer" />
+          <div className="flex-1 h-3 rounded animate-shimmer" style={{ width: "60%" }} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function EmptyState({ message }: { message: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-12 px-5">
+      <p className="text-sm" style={{ color: SC.textMuted }}>{message}</p>
+    </div>
   );
 }

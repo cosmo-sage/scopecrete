@@ -768,7 +768,7 @@ export default function ScopeBuilderPage() {
   const [lead, setLead] = useState<LeadData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [step, setStep] = useState(0);
+  const [step, setStep] = useState<number>(0);
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -936,16 +936,17 @@ export default function ScopeBuilderPage() {
             {step === 2 && (
               <StepItems snapshot={snapshot} setSnapshot={(s) => setSnapshotAndAdvance(s, 3)} />
             )}
-            {step === 3 && (
-              <StepSummary
-                snapshot={snapshot}
-                lead={lead}
-                onSave={handleSave}
-                saved={saved}
-                saving={saving}
-              />
-            )}
           </div>
+        )}
+
+        {step === 3 && !saved && (
+          <StepSummary
+            snapshot={snapshot}
+            lead={lead}
+            onSave={handleSave}
+            saved={saved}
+            saving={saving}
+          />
         )}
 
         {saved && step === 3 && (

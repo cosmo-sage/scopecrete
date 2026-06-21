@@ -8,6 +8,12 @@ import { SC } from "@/lib/theme";
 import DustyFAB from "@/components/dashboard/DustyFAB";
 import DustyDrawer from "@/components/dashboard/DustyDrawer";
 
+// Dashboard orange palette (overrides shared SC theme used by admin)
+const DASH = {
+  accent: "#e85d04",
+  accentMuted: "rgba(232,93,4,0.15)",
+};
+
 const NAV_ITEMS = [
   { href: "/dashboard",         label: "Home",     icon: House },
   { href: "/dashboard/leads",   label: "Leads",    icon: Users },
@@ -70,17 +76,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <Link key={item.href} href={item.href}
                 className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium mb-0.5 transition-all active:scale-[0.98] no-underline"
                 style={{
-                  background: isActive ? SC.accentMuted : "transparent",
-                  color: isActive ? SC.accent : SC.textSecondary,
-                  borderLeft: isActive ? `2px solid ${SC.accent}` : "2px solid transparent",
+                  background: isActive ? DASH.accentMuted : "transparent",
+                  color: isActive ? DASH.accent : SC.textSecondary,
+                  borderLeft: isActive ? `2px solid ${DASH.accent}` : "2px solid transparent",
                   paddingLeft: isActive ? 10 : 12,
                 }}>
                 <item.icon size={16} weight={isActive ? "fill" : "regular"} />
                 <div className="flex items-center gap-1.5">
                   {item.label}
                   {item.hint && (
-                    <span className="text-[9px] px-1.5 py-0.5 rounded-full"
-                      style={{ background: SC.accentMuted, color: SC.accent }}>
+                    <span className="text-[9px] px-1.5 py-0.5 rounded-full font-medium"
+                      style={{ background: "rgba(255,255,255,0.08)", color: SC.textMuted }}>
                       {item.hint}
                     </span>
                   )}
@@ -139,7 +145,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </Link>
           <DustyFAB onClick={() => setDustyOpen(true)} />
           <Link href="/dashboard/leads" className="flex flex-col items-center gap-0.5 no-underline">
-            <ClipboardText size={20} color={SC.textMuted} weight="fill" />
+            <ClipboardText size={20} color={SC.textMuted} />
             <span className="text-[9px]" style={{ color: SC.textMuted }}>Scope</span>
           </Link>
           <Link href="/dashboard/profile" className="flex flex-col items-center gap-0.5 no-underline">

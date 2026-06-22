@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { createClient } from "@supabase/supabase-js";
 import KanbanBoard from "@/components/dashboard/KanbanBoard";
+import MobilePipeline from "@/components/dashboard/MobilePipeline";
 
 import { timeAgo, formatCurrency } from "@/lib/utils"; // Assuming these are now in utils
 import { SC } from "@/lib/theme"; // For SC.purple etc. in theme
@@ -111,29 +112,37 @@ export default function Dashboard() {
     }
   };
 
-  if (loading) return <div className="p-4 text-center">Loading pipeline...</div>;
+  if (loading) return <div className="p-4 text-center" style={{ color: SC.textMuted }}>Loading pipeline...</div>;
   if (error) return <div className="p-4 text-center text-red-500">Error: {error}</div>;
 
   return (
-    <div className="min-h-screen bg-gray-900 text-gray-100 p-4">
-      {/* Top Stats Row */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        <div className="bg-gray-800 rounded-lg p-4 shadow">
-          <h3 className="text-sm font-medium text-gray-400">Pipeline Value</h3>
-          <p className="text-2xl font-semibold text-white">{formatCurrency(kanbanData.summary.totalPipelineValue)}</p>
-        </div>
-        <div className="bg-gray-800 rounded-lg p-4 shadow">
-          <h3 className="text-sm font-medium text-gray-400">Needs Action</h3>
-          <p className="text-2xl font-semibold text-white">{kanbanData.summary.needsAction}</p>
-        </div>
-        <div className="bg-gray-800 rounded-lg p-4 shadow">
-          <h3 className="text-sm font-medium text-gray-400">Win Rate</h3>
-          <p className="text-2xl font-semibold text-white">{kanbanData.summary.winRate}%</p>
-        </div>
+    <>
+      {/* Mobile: new pipeline UI */}
+      <div className="block md:hidden" style={{ background: SC.bg, minHeight: "100%" }}>
+        <MobilePipeline />
       </div>
 
-      {/* Kanban Board */}
-      <KanbanBoard stages={kanbanData.stages} onDragEnd={onDragEnd} />
-    </div>
+      {/* Desktop: Kanban board */}
+      <div className="hidden md:block min-h-screen p-4" style={{ background: "#09090b", color: SC.textPrimary }}>
+        {/* Top Stats Row */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div className="rounded-lg p-4" style={{ background: SC.surface, border: `1px solid ${SC.border}` }}>
+            <h3 className="text-sm font-medium" style={{ color: SC.textMuted }}>Pipeline Value</h3>
+            <p className="text-2xl font-semibold" style={{ color: SC.textPrimary }}>{formatCurrency(kanbanData.summary.totalPipelineValue)}</p>
+          </div>
+          <div className="rounded-lg p-4" style={{ background: SC.surface, border: `1px solid ${SC.border}` }}>
+            <h3 className="text-sm font-medium" style={{ color: SC.textMuted }}>Needs Action</h3>
+            <p className="text-2xl font-semibold" style={{ color: SC.textPrimary }}>{kanbanData.summary.needsAction}</p>
+          </div>
+          <div className="rounded-lg p-4" style={{ background: SC.surface, border: `1px solid ${SC.border}` }}>
+            <h3 className="text-sm font-medium" style={{ color: SC.textMuted }}>Win Rate</h3>
+            <p className="text-2xl font-semibold" style={{ color: SC.textPrimary }}>{kanbanData.summary.winRate}%</p>
+          </div>
+        </div>
+
+        {/* Kanban Board */}
+        <KanbanBoard stages={kanbanData.stages} onDragEnd={onDragEnd} />
+      </div>
+    </>
   );
 }

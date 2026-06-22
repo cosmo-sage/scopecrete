@@ -17,29 +17,29 @@ import {
 
 // ─── Design Tokens ──────────────────────────────────────────────
 const D = {
-  bg: "#0B0F1A",
-  surface: "#131929",
-  surfaceHover: "#1a2435",
-  elevated: "#1e293b",
-  accent: "#e85d04",
-  accentMuted: "rgba(232,93,4,0.15)",
-  textPrimary: "#FFFFFF",
-  textSecondary: "#94A3B8",
-  textMuted: "#64748B",
-  border: "#1e293b",
-  borderLight: "#2d3a4f",
-  success: "#22C55E",
-  warning: "#F59E0B",
-  error: "#EF4444",
-  info: "#3B82F6",
+  bg: "#F5F0E8",       // Warm bone — field-ready
+  surface: "#FFFFFF",   // Clean white cards
+  surfaceHover: "#F0EBE3",
+  elevated: "#E8E2D9",
+  accent: "#E85D04",    // Construction orange
+  accentMuted: "rgba(232,93,4,0.12)",
+  textPrimary: "#1A1A1A",   // Near-black charcoal
+  textSecondary: "#5C5C5C",
+  textMuted: "#9CA3AF",
+  border: "#D4CEC6",    // Warm light gray
+  borderLight: "#E8E2D9",
+  success: "#16A34A",   // Deep green
+  warning: "#D97706",   // Amber
+  error: "#DC2626",     // Brick red
+  info: "#2563EB",      // Blue
 } as const;
 
 const STAGE_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
-  new:       { label: "New",       color: D.info,    bg: "rgba(59,130,246,0.15)" },
-  contacted: { label: "Contacted", color: D.warning, bg: "rgba(245,158,11,0.15)" },
-  qualified: { label: "Qualified", color: "#8B5CF6", bg: "rgba(139,92,246,0.15)" },
-  won:       { label: "Won",       color: D.success, bg: "rgba(34,197,94,0.15)" },
-  lost:      { label: "Lost",      color: D.error,   bg: "rgba(239,68,68,0.15)" },
+  new:       { label: "New",       color: "#2563EB", bg: "#2563EB" },
+  contacted: { label: "Contacted", color: "#D97706", bg: "#D97706" },
+  qualified: { label: "Qualified", color: "#7C3AED", bg: "#7C3AED" },
+  won:       { label: "Won",       color: "#16A34A", bg: "#16A34A" },
+  lost:      { label: "Lost",      color: "#DC2626", bg: "#DC2626" },
 };
 
 const STAGE_ORDER = ["new", "contacted", "qualified", "won", "lost"];
@@ -182,7 +182,7 @@ function getOverdue(lead: Lead): boolean {
 // ─── Loading Skeleton ──────────────────────────────────────────
 function SkeletonCard() {
   return (
-    <div className="rounded-xl p-4 animate-pulse" style={{ background: D.surface, border: `1px solid ${D.border}` }}>
+    <div className="rounded-xl p-4 animate-pulse" style={{ background: D.surface, border: `1px solid ${D.border}`, boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }}>
       <div className="h-4 w-3/4 rounded mb-3" style={{ background: D.elevated }} />
       <div className="h-3 w-1/2 rounded mb-2" style={{ background: D.elevated }} />
       <div className="h-3 w-1/3 rounded" style={{ background: D.elevated }} />
@@ -220,7 +220,7 @@ function StatsRow({ summary, stages }: { summary: PipelineData["summary"]; stage
         <div
           key={stat.label}
           className="flex-1 min-w-[100px] rounded-xl p-3"
-          style={{ background: D.surface, border: `1px solid ${D.border}` }}
+          style={{ background: D.surface, border: `1px solid ${D.border}`, boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }}
         >
           <div className="flex items-center gap-1.5 mb-2">
             <stat.icon size={14} color={stat.accent ? D.accent : D.textMuted} />
@@ -306,7 +306,7 @@ function LeadCard({
         </span>
         <span
           className="shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full"
-          style={{ background: cfg.bg, color: cfg.color }}
+          style={{ background: cfg.color, color: "#FFFFFF" }}
         >
           {cfg.label}
         </span>
@@ -422,7 +422,7 @@ function LeadDetailSheet({
                 </span>
                 <span
                   className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
-                  style={{ background: cfg.bg, color: cfg.color }}
+                  style={{ background: cfg.color, color: "#FFFFFF" }}
                 >
                   {cfg.label}
                 </span>
@@ -648,7 +648,7 @@ export default function MobileDashboardPage() {
       <div className="flex flex-col gap-3 p-4" style={{ background: D.bg, minHeight: "100%" }}>
         <div className="grid grid-cols-3 gap-3">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="rounded-xl p-3 animate-pulse" style={{ background: D.surface, border: `1px solid ${D.border}` }}>
+            <div key={i} className="rounded-xl p-3 animate-pulse" style={{ background: D.surface, border: `1px solid ${D.border}`, boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }}>
               <div className="h-3 w-2/3 rounded mb-2" style={{ background: D.elevated }} />
               <div className="h-5 w-1/2 rounded" style={{ background: D.elevated }} />
             </div>

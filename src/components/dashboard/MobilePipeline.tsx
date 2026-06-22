@@ -38,12 +38,13 @@ const STAGE_CONFIG: Record<string, { label: string; color: string; bg: string }>
   new:       { label: "New",       color: D.info,    bg: "rgba(59,130,246,0.15)" },
   contacted: { label: "Contacted", color: D.warning, bg: "rgba(245,158,11,0.15)" },
   qualified: { label: "Qualified", color: "#8B5CF6", bg: "rgba(139,92,246,0.15)" },
-  quoted:    { label: "Quoted",    color: D.accent,  bg: D.accentMuted },
   won:       { label: "Won",       color: D.success, bg: "rgba(34,197,94,0.15)" },
   lost:      { label: "Lost",      color: D.error,   bg: "rgba(239,68,68,0.15)" },
 };
 
-const STAGE_ORDER = ["new", "contacted", "qualified", "quoted", "won", "lost"];
+const STAGE_ORDER = ["new", "contacted", "qualified", "won", "lost"];
+
+// quoted stage reserved for future API support
 
 // ─── Types ──────────────────────────────────────────────────────
 interface Lead {

@@ -136,12 +136,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <footer className="fixed bottom-0 left-0 right-0 flex items-center justify-around py-3 md:hidden"
           style={{ background: "#1a1a1a", borderTop: `1px solid ${SC.border}`, zIndex: 45, paddingBottom: "max(3px, env(safe-area-inset-bottom))" }}>
           <Link href="/dashboard" className="flex flex-col items-center gap-0.5 no-underline">
-            <House size={20} color={pathname === "/dashboard" ? SC.accent : SC.textMuted} weight={pathname === "/dashboard" ? "fill" : "regular"} />
-            <span className="text-[9px]" style={{ color: pathname === "/dashboard" ? SC.accent : SC.textMuted }}>Home</span>
+            <House size={20} color={pathname === "/dashboard" ? DASH.accent : SC.textMuted} weight={pathname === "/dashboard" ? "fill" : "regular"} />
+            <span className="text-[9px]" style={{ color: pathname === "/dashboard" ? DASH.accent : SC.textMuted }}>Home</span>
           </Link>
           <Link href="/dashboard/leads" className="flex flex-col items-center gap-0.5 no-underline">
-            <Users size={20} color={pathname === "/dashboard/leads" ? SC.accent : SC.textMuted} weight={pathname === "/dashboard/leads" ? "fill" : "regular"} />
-            <span className="text-[9px]" style={{ color: pathname === "/dashboard/leads" ? SC.accent : SC.textMuted }}>Leads</span>
+            <Users size={20} color={pathname === "/dashboard/leads" ? DASH.accent : SC.textMuted} weight={pathname === "/dashboard/leads" ? "fill" : "regular"} />
+            <span className="text-[9px]" style={{ color: pathname === "/dashboard/leads" ? DASH.accent : SC.textMuted }}>Leads</span>
           </Link>
           <DustyFAB onClick={() => setDustyOpen(true)} />
           <Link href="/dashboard/leads" className="flex flex-col items-center gap-0.5 no-underline">

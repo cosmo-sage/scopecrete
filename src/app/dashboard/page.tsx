@@ -1,148 +1,345 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
-import { createClient } from "@supabase/supabase-js";
-import KanbanBoard from "@/components/dashboard/KanbanBoard";
-import MobilePipeline from "@/components/dashboard/MobilePipeline";
+import React, { useState, useEffect, useMemo } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { Bell, Clock, CurrencyDollar, Target, ChartLineUp } from "@phosphor-icons/react";
+import { DA, STAGE_CONFIG } from "@/lib/design-tokens";
+import { formatCurrency, timeAgo } from "@/lib/utils";
+import DustyDrawer from "@/components/dashboard/DustyDrawer";
 
-import { timeAgo, formatCurrency } from "@/lib/utils"; // Assuming these are now in utils
-import { SC } from "@/lib/theme"; // For SC.purple etc. in theme
+// ─── Types ────────────────────────────────────────────────────
+interface Lead {
+  id: string;
+  customer_name?: string;
+  customer_phone?: string;
+  project_type?: string;
+  address?: string;
+  status: string;
+  estimate_range_min?: number;
+  estimate_range_max?: number;
+  created_at: string;
+  updated_at: string;
+  contact?: { first_name?: string; last_name?: string; phone?: string };
+}
 
-// Supabase client (only for initial auth or if needed for RLS tests)
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// ─── Helpers ───────────────────────────────────────────────────
+function getInitials(name: string): string {
+  return name
+    .split(" ")
+    .slice(0, 2)
+    .map((n) => n[0]?.toUpperCase() || "")
+    .join("");
+}
 
-// Dummy data for initial rendering or until API is ready
-const DUMMY_KANBAN_DATA = {
-  stages: {
-    new: { count: 8, totalValue: 42500, avgDaysInStage: 1.2, leads: [] },
-    contacted: { count: 5, totalValue: 38000, avgDaysInStage: 2.1, leads: [] },
-    qualified: { count: 3, totalValue: 25000, avgDaysInStage: 1.5, leads: [] },
-    quoted: { count: 4, totalValue: 50000, avgDaysInStage: 0.8, leads: [] },
-    won: { count: 12, totalValue: 120000, avgDaysInStage: 5.0, leads: [] },
-    lost: { count: 6, totalValue: 0, avgDaysInStage: 8.0, leads: [] },
-  },
-  summary: {
-    totalPipelineValue: 275500,
-    needsAction: 4,
-    winRate: 23,
-  },
-};
+function formatCurrencyShort(n: number): string {
+  if (n >= 1000) return `$${(n / 1000).toFixed(1)}k`;
+  return `$${n}`;
+}
 
-export default function Dashboard() {
-  const [kanbanData, setKanbanData] = useState<any>(DUMMY_KANBAN_DATA);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+function getGreeting(): string {
+  const h = new Date().getHours();
+  if (h < 12) return "Good morning";
+  if (h < 17) return "Good afternoon";
+  return "Good evening";
+}
 
-  // For now, hardcode orgId as per previous discussion, will come from AuthContext later
-  const orgId = "61e26b09-da88-4c9f-bd0c-a47054b86234"; // Sacco Builders Org ID
+// ─── Skeleton ──────────────────────────────────────────────────
+function SkeletonCard() {
+  return (
+    <div
+      className="rounded-xl p-3 animate-pulse"
+      style={{ background: DA.surface, border: `1px solid ${DA.border}`, boxShadow: DA.shadow }}
+    >
+      <div className="flex items-center gap-3">
+        <div className="w-9 h-9 rounded-full" style={{ background: DA.elevated }} />
+        <div className="flex-1">
+          <div className="h-4 w-3/4 rounded mb-1" style={{ background: DA.elevated }} />
+          <div className="h-3 w-1/2 rounded" style={{ background: DA.elevated }} />
+        </div>
+      </div>
+    </div>
+  );
+}
 
-  const fetchPipelineData = useCallback(async () => {
-    if (!orgId) return; // Should not happen with hardcoded, but good practice
+// ─── Stat Card ─────────────────────────────────────────────────
+function StatCard({
+  label,
+  value,
+  icon: Icon,
+  accent,
+}: {
+  label: string;
+  value: string;
+  icon: React.ElementType;
+  accent?: boolean;
+}) {
+  return (
+    <div
+      className="rounded-xl p-3 text-center"
+      style={{ background: DA.surface, border: `1px solid ${DA.border}`, boxShadow: DA.shadow }}
+    >
+      <div className="flex items-center justify-center gap-1 mb-1">
+        <Icon size={13} color={accent ? DA.accent : DA.textMuted} />
+      </div>
+      <div
+        className="text-lg font-bold"
+        style={{ color: accent ? DA.accent : DA.textPrimary }}
+      >
+        {value}
+      </div>
+      <div className="text-[10px]" style={{ color: DA.textMuted }}>
+        {label}
+      </div>
+    </div>
+  );
+}
 
-    try {
-      setLoading(true);
-      setError(null);
-      const response = await fetch(`/api/dashboard/pipeline?org_id=${orgId}`);
-      if (!response.ok) {
-        const errData = await response.json();
-        throw new Error(errData.error || "Failed to fetch pipeline data");
-      }
-      const data = await response.json();
-      setKanbanData(data);
-    } catch (err: any) {
-      console.error("Error fetching pipeline data:", err);
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [orgId]);
-
-  useEffect(() => {
-    fetchPipelineData();
-  }, [fetchPipelineData]);
-
-  // Handle drag and drop for updating lead status
-  const onDragEnd = async (result: any) => {
-    const { destination, source, draggableId } = result;
-
-    if (!destination) return;
-    if (destination.droppableId === source.droppableId) return; // Dropped in the same column
-
-    const newStatus = destination.droppableId; // Column ID is the new status
-    const leadId = draggableId; // Draggable ID is the lead ID
-
-    // Optimistic UI update
-    const newKanbanData = { ...kanbanData };
-    const sourceStage = newKanbanData.stages[source.droppableId];
-    const destStage = newKanbanData.stages[newStatus];
-    const [movedLead] = sourceStage.leads.splice(source.index, 1);
-    destStage.leads.splice(destination.index, 0, movedLead);
-
-    // Update counts and values (simple re-sum for now)
-    sourceStage.count--;
-    sourceStage.totalValue -= movedLead.estimatedValue || 0;
-    destStage.count++;
-    destStage.totalValue += movedLead.estimatedValue || 0;
-    movedLead.status = newStatus; // Update lead status in UI as well
-    movedLead.daysInStage = 0; // Reset days in stage for new column
-
-    setKanbanData(newKanbanData);
-
-    // API call to update status
-    try {
-      const response = await fetch(`/api/leads/${leadId}/status`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: newStatus, org_id: orgId }),
-      });
-
-      if (!response.ok) {
-        const errData = await response.json();
-        throw new Error(errData.error || "Failed to update lead status");
-      }
-      // Re-fetch full data to ensure consistency and correct aggregates after server update
-      fetchPipelineData();
-    } catch (err: any) {
-      console.error("Error updating lead status via API:", err);
-      // TODO: Revert UI if API call fails
-      setError(err.message);
-      fetchPipelineData(); // Re-fetch to get actual state
-    }
-  };
-
-  if (loading) return <div className="p-4 text-center" style={{ color: SC.textMuted }}>Loading pipeline...</div>;
-  if (error) return <div className="p-4 text-center text-red-500">Error: {error}</div>;
+// ─── Recent Lead Mini Card ──────────────────────────────────────
+function RecentLeadCard({ lead, onClick }: { lead: Lead; onClick: () => void }) {
+  const name =
+    lead.customer_name ||
+    [lead.contact?.first_name, lead.contact?.last_name].filter(Boolean).join(" ") ||
+    "Unknown Lead";
+  const phone = lead.customer_phone || lead.contact?.phone || "";
+  const statusCfg = STAGE_CONFIG[lead.status] || { color: DA.textMuted };
+  const label =
+    lead.status === "new"
+      ? "New"
+      : lead.status === "won"
+      ? "Won"
+      : lead.status === "lost"
+      ? "Lost"
+      : lead.status;
+  const projectType = lead.project_type || "";
+  const address = lead.address || "";
+  const initials = getInitials(name);
 
   return (
-    <>
-      {/* Mobile: new pipeline UI */}
-      <div className="block md:hidden" style={{ background: SC.bg, minHeight: "100%" }}>
-        <MobilePipeline />
+    <button
+      onClick={onClick}
+      className="w-full text-left rounded-xl p-3 transition-all active:scale-[0.98]"
+      style={{
+        background: DA.surface,
+        border: `1px solid ${DA.border}`,
+        borderLeft: `3px solid ${statusCfg.color}`,
+        boxShadow: DA.shadow,
+        cursor: "pointer",
+      }}
+    >
+      <div className="flex items-center gap-3">
+        <div
+          className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-semibold shrink-0"
+          style={{ background: DA.accent }}
+        >
+          {initials}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between">
+            <div className="font-semibold text-sm truncate" style={{ color: DA.textPrimary }}>
+              {name}
+            </div>
+            <span
+              className="shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full ml-2"
+              style={{ background: statusCfg.color, color: "#fff" }}
+            >
+              {label}
+            </span>
+          </div>
+          <div className="text-xs truncate" style={{ color: DA.textSecondary }}>
+            {projectType}
+            {address ? ` · ${address}` : ""}
+          </div>
+        </div>
+      </div>
+    </button>
+  );
+}
+
+// ─── Main Page ─────────────────────────────────────────────────
+export default function HomePage() {
+  const router = useRouter();
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [dustyOpen, setDustyOpen] = useState(false);
+
+  const ORG_ID = "61e26b09-da88-4c9f-bd0c-a47054b86234"; // Sacco Builders
+
+  useEffect(() => {
+    fetch(`/api/dashboard/pipeline?org_id=${ORG_ID}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data) {
+          // Flatten all leads from stages
+          const all: Lead[] = [];
+          for (const stage of Object.values<any>(data.stages || {})) {
+            if (stage.leads) all.push(...stage.leads);
+          }
+          setLeads(all);
+        }
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, []);
+
+  const stats = useMemo(() => {
+    const activeLeads = leads.filter((l) => l.status !== "lost");
+    const pipelineValue = activeLeads.reduce(
+      (s, l) => s + (l.estimate_range_max || l.estimate_range_min || 0),
+      0
+    );
+    const needsAction = leads.filter(
+      (l) => l.status === "new" || (l.status === "contacted" && l.updated_at
+        ? Date.now() - new Date(l.updated_at).getTime() > 72 * 60 * 60 * 1000
+        : false)
+    ).length;
+    const won = leads.filter((l) => l.status === "won").length;
+    const closed = leads.filter((l) => l.status === "won" || l.status === "lost").length;
+    const winRate = closed > 0 ? Math.round((won / closed) * 100) : 0;
+    return { pipelineValue, needsAction, winRate };
+  }, [leads]);
+
+  const recentLeads = useMemo(
+    () =>
+      [...leads]
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        .slice(0, 3),
+    [leads]
+  );
+
+  return (
+    <div className="flex flex-col" style={{ background: DA.bg, minHeight: "100%" }}>
+      {/* Status bar area */}
+      <div className="h-11 px-6 flex items-end pb-1 justify-between">
+        <span className="text-xs font-semibold" style={{ color: "rgba(0,0,0,0.4)" }}>
+          {new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+        </span>
+        <div className="flex items-center gap-1">
+          <span className="text-xs">📶</span>
+          <span className="text-xs">🔋</span>
+        </div>
       </div>
 
-      {/* Desktop: Kanban board */}
-      <div className="hidden md:block min-h-screen p-4" style={{ background: "#09090b", color: SC.textPrimary }}>
-        {/* Top Stats Row */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          <div className="rounded-lg p-4" style={{ background: SC.surface, border: `1px solid ${SC.border}` }}>
-            <h3 className="text-sm font-medium" style={{ color: SC.textMuted }}>Pipeline Value</h3>
-            <p className="text-2xl font-semibold" style={{ color: SC.textPrimary }}>{formatCurrency(kanbanData.summary.totalPipelineValue)}</p>
+      {/* Header */}
+      <div
+        className="px-4 py-3 flex items-center justify-between"
+        style={{ background: DA.surface, borderBottom: `1px solid ${DA.border}` }}
+      >
+        <div className="flex items-center gap-2">
+          <div
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-sm"
+            style={{ background: DA.accent }}
+          >
+            S
           </div>
-          <div className="rounded-lg p-4" style={{ background: SC.surface, border: `1px solid ${SC.border}` }}>
-            <h3 className="text-sm font-medium" style={{ color: SC.textMuted }}>Needs Action</h3>
-            <p className="text-2xl font-semibold" style={{ color: SC.textPrimary }}>{kanbanData.summary.needsAction}</p>
+          <div>
+            <div className="font-bold text-sm leading-tight" style={{ color: DA.textPrimary }}>
+              ScopeCrete
+            </div>
+            <div className="text-xs" style={{ color: DA.textMuted }}>
+              Sacco Builders
+            </div>
           </div>
-          <div className="rounded-lg p-4" style={{ background: SC.surface, border: `1px solid ${SC.border}` }}>
-            <h3 className="text-sm font-medium" style={{ color: SC.textMuted }}>Win Rate</h3>
-            <p className="text-2xl font-semibold" style={{ color: SC.textPrimary }}>{kanbanData.summary.winRate}%</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            className="w-8 h-8 rounded-full flex items-center justify-center"
+            style={{ background: DA.elevated, border: "none", cursor: "pointer", color: DA.textMuted }}
+          >
+            <Bell size={15} />
+          </button>
+          <div
+            className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-semibold"
+            style={{ background: DA.accent }}
+          >
+            CL
+          </div>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="px-4 py-4 space-y-4 flex-1">
+        {/* Greeting */}
+        <div>
+          <div className="text-2xl font-bold" style={{ color: DA.textPrimary }}>
+            {getGreeting()}, Clay
+          </div>
+          <div className="text-sm mt-0.5" style={{ color: DA.textSecondary }}>
+            Here&apos;s what&apos;s happening today.
           </div>
         </div>
 
-        {/* Kanban Board */}
-        <KanbanBoard stages={kanbanData.stages} onDragEnd={onDragEnd} />
+        {/* Stats */}
+        <div className="grid grid-cols-3 gap-2">
+          <StatCard
+            label="Pipeline"
+            value={formatCurrencyShort(stats.pipelineValue)}
+            icon={CurrencyDollar}
+          />
+          <StatCard
+            label="Needs Action"
+            value={String(stats.needsAction)}
+            icon={Target}
+            accent={stats.needsAction > 0}
+          />
+          <StatCard
+            label="Win Rate"
+            value={`${stats.winRate}%`}
+            icon={ChartLineUp}
+          />
+        </div>
+
+        {/* Recent Leads */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <div className="text-sm font-semibold" style={{ color: DA.textPrimary }}>
+              Recent Leads
+            </div>
+            <button
+              onClick={() => router.push("/dashboard/leads")}
+              className="text-xs font-medium"
+              style={{ color: DA.accent, background: "none", border: "none", cursor: "pointer" }}
+            >
+              View all →
+            </button>
+          </div>
+
+          {loading ? (
+            <div className="space-y-2">
+              {[1, 2, 3].map((i) => (
+                <SkeletonCard key={i} />
+              ))}
+            </div>
+          ) : recentLeads.length === 0 ? (
+            <div
+              className="rounded-xl p-6 text-center"
+              style={{ background: DA.surface, border: `1px solid ${DA.border}` }}
+            >
+              <div className="text-sm" style={{ color: DA.textMuted }}>
+                No leads yet
+              </div>
+              <div className="text-xs mt-1" style={{ color: DA.textMuted }}>
+                Incoming leads will appear here
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {recentLeads.map((lead) => (
+                <RecentLeadCard
+                  key={lead.id}
+                  lead={lead}
+                  onClick={() => router.push(`/dashboard/leads/${lead.id}`)}
+                />
+              ))}
+            </div>
+          )}
+        </div>
       </div>
-    </>
+
+      <DustyDrawer
+        open={dustyOpen}
+        onClose={() => setDustyOpen(false)}
+      />
+    </div>
   );
 }

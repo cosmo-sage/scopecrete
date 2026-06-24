@@ -1,420 +1,509 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import Link from "next/link";
 import {
-  ArrowLeft,
   Phone,
-  Mail,
+  ChatCircle,
   MapPin,
   Clock,
-  MessageSquare,
-  ChevronDown,
-  ChevronUp,
-  ThumbsUp,
-  ThumbsDown,
-  Edit,
-  Tag,
-  Check,
-} from "lucide-react";
-import { AK, MOCK_LEADS, type LeadStatus } from "@/lib/contractor-data";
+  Envelope,
+  ArrowLeft,
+  FileText,
+  DotsThree,
+} from "@phosphor-icons/react";
+import { DA, STAGE_CONFIG } from "@/lib/design-tokens";
+import { formatCurrency } from "@/lib/utils";
+import DustyDrawer from "@/components/dashboard/DustyDrawer";
+import ToolboxDrawer from "@/components/dashboard/ToolboxDrawer";
 
-const STATUS_CONFIG: Record<LeadStatus, { label: string; bg: string; color: string }> = {
-  new: { label: "New", bg: "rgba(59,130,246,0.15)", color: "#3B82F6" },
-  contacted: { label: "Contacted", bg: "rgba(245,158,11,0.15)", color: "#F59E0B" },
-  qualified: { label: "Qualified", bg: "rgba(139,92,246,0.15)", color: "#8B5CF6" },
-  won: { label: "Won", bg: "rgba(34,197,94,0.15)", color: "#22C55E" },
-  lost: { label: "Lost", bg: "rgba(239,68,68,0.15)", color: "#EF4444" },
-};
+// ─── Types ────────────────────────────────────────────────────
+interface Lead {
+  id: string;
+  customer_name?: string;
+  customer_phone?: string;
+  project_type?: string;
+  address?: string;
+  status: string;
+  estimate_range_min?: number;
+  estimate_range_max?: number;
+  sqft?: number;
+  depth_in?: number;
+  psi?: number;
+  scope_of_work?: string;
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+  contact?: {
+    first_name?: string;
+    last_name?: string;
+    phone?: string;
+    email?: string;
+    address?: string;
+  };
+}
 
-function timeAgo(ts: string) {
+interface ConversationMessage {
+  role: "customer" | "dusty" | "system";
+  text: string;
+  timestamp: string;
+}
+
+// ─── Mock conversation ─────────────────────────────────────────
+const MOCK_CONVERSATION: ConversationMessage[] = [
+  {
+    role: "dusty",
+    text: "Hi there! Saw your request come in. Can you tell me about the project?",
+    timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+  },
+  {
+    role: "customer",
+    text: "Hey yeah I need a new driveway. About 2,400 sq ft.",
+    timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000 + 3 * 60 * 1000).toISOString(),
+  },
+  {
+    role: "dusty",
+    text: "Got it. For a driveway that size I'd recommend 4\" depth with rebar grid. Want me to put together a quote?",
+    timestamp: new Date(Date.now() - 1.5 * 60 * 60 * 1000).toISOString(),
+  },
+  {
+    role: "customer",
+    text: "Yes please! Also can you send photos of the materials you'd use?",
+    timestamp: new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString(),
+  },
+];
+
+// ─── Helpers ───────────────────────────────────────────────────
+function getInitials(name: string): string {
+  return name.split(" ").slice(0, 2).map((n) => n[0]?.toUpperCase() || "").join("");
+}
+
+function timeAgo(ts: string): string {
   const diff = Date.now() - new Date(ts).getTime();
   const min = Math.floor(diff / 60000);
+  if (min < 1) return "Just now";
   if (min < 60) return `${min}m ago`;
   const hr = Math.floor(min / 60);
   if (hr < 24) return `${hr}h ago`;
   return `${Math.floor(hr / 24)}d ago`;
 }
 
+// ─── Skeleton ──────────────────────────────────────────────────
+function Skeleton() {
+  return (
+    <div className="animate-pulse p-4 space-y-4">
+      {[1, 2, 3].map((i) => (
+        <div key={i} className="h-20 rounded-xl" style={{ background: DA.elevated }} />
+      ))}
+    </div>
+  );
+}
+
+// ─── Main Page ─────────────────────────────────────────────────
 export default function LeadDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const lead = MOCK_LEADS.find((l) => l.id === params.id);
+  const leadId = params?.id as string;
 
-  const [status, setStatus] = useState<LeadStatus>(lead?.status || "new");
-  const [statusOpen, setStatusOpen] = useState(false);
-  const [feedbackVote, setFeedbackVote] = useState<"up" | "down" | null>(null);
-  const [feedbackNote, setFeedbackNote] = useState("");
-  const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
-  const [showEstimate, setShowEstimate] = useState(false);
+  const [lead, setLead] = useState<Lead | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<"chat" | "calls" | "emails" | "notes">("chat");
+  const [dustyOpen, setDustyOpen] = useState(false);
+  const [toolboxOpen, setToolboxOpen] = useState(false);
 
-  if (!lead) {
+  useEffect(() => {
+    if (!leadId) return;
+    fetch(`/api/leads/${leadId}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data) setLead(data);
+        setLoading(false);
+      })
+      .catch(() => {
+        // Use mock data as fallback
+        setLead({
+          id: leadId,
+          customer_name: "Marcus Thibodaux",
+          customer_phone: "(225) 555-0177",
+          project_type: "Driveway",
+          address: "4412 Government St, Baton Rouge, LA",
+          status: "new",
+          estimate_range_min: 4200,
+          estimate_range_max: 5200,
+          sqft: 2400,
+          depth_in: 4,
+          psi: 3000,
+          scope_of_work: "Driveway repair - partial, 4\" depth with rebar",
+          created_at: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+          updated_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+        });
+        setLoading(false);
+      });
+  }, [leadId]);
+
+  if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center h-full gap-4" style={{ background: AK.bg }}>
-        <p style={{ color: AK.textMuted }}>Lead not found.</p>
-        <Link href="/dashboard/leads" className="text-sm font-semibold" style={{ color: AK.accent }}>
-          ← Back to leads
-        </Link>
+      <div style={{ background: DA.bg, minHeight: "100%" }}>
+        <Skeleton />
       </div>
     );
   }
 
-  const statusCfg = STATUS_CONFIG[status];
-
-  const handleStatusChange = (s: LeadStatus) => {
-    setStatus(s);
-    setStatusOpen(false);
-  };
-
-  const handleFeedbackSubmit = () => {
-    if (feedbackVote) setFeedbackSubmitted(true);
-  };
-
-  return (
-    <div className="min-h-full p-6 lg:p-8" style={{ background: AK.bg }}>
-      {/* Header */}
-      <div className="flex items-start gap-4 mb-6">
+  if (!lead) {
+    return (
+      <div className="flex flex-col items-center justify-center" style={{ background: DA.bg, minHeight: "100%" }}>
+        <FileText size={40} color={DA.textMuted} />
+        <p className="text-sm font-medium mt-4" style={{ color: DA.textMuted }}>
+          Lead not found
+        </p>
         <button
           onClick={() => router.back()}
-          className="mt-1 p-2 rounded-lg transition-colors hover:brightness-110 shrink-0"
-          style={{ background: AK.surface, border: `1px solid ${AK.border}` }}
+          className="mt-4 text-sm font-semibold"
+          style={{ color: DA.accent, background: "none", border: "none", cursor: "pointer" }}
         >
-          <ArrowLeft size={16} style={{ color: AK.textSecondary }} />
+          ← Go back
         </button>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-start justify-between gap-4 flex-wrap">
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight" style={{ color: AK.textPrimary }}>
-                {lead.customerName}
-              </h1>
-              <div className="flex items-center gap-3 mt-1 flex-wrap">
-                <a
-                  href={`tel:${lead.phone}`}
-                  className="flex items-center gap-1.5 text-sm"
-                  style={{ color: AK.textSecondary }}
-                >
-                  <Phone size={13} />
-                  {lead.phone}
-                </a>
-                <a
-                  href={`mailto:${lead.email}`}
-                  className="flex items-center gap-1.5 text-sm"
-                  style={{ color: AK.textSecondary }}
-                >
-                  <Mail size={13} />
-                  {lead.email}
-                </a>
-                <span className="flex items-center gap-1.5 text-sm" style={{ color: AK.textMuted }}>
-                  <Clock size={13} />
-                  {timeAgo(lead.createdAt)}
-                </span>
-              </div>
-            </div>
+      </div>
+    );
+  }
 
-            {/* Status dropdown */}
-            <div className="relative">
-              <button
-                onClick={() => setStatusOpen(!statusOpen)}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors"
-                style={{ background: statusCfg.bg, color: statusCfg.color, border: `1px solid ${statusCfg.color}40` }}
-              >
-                {statusCfg.label}
-                {statusOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-              </button>
-              {statusOpen && (
-                <div
-                  className="absolute right-0 top-full mt-1 rounded-lg overflow-hidden z-10 shadow-xl min-w-[140px]"
-                  style={{ background: AK.surface, border: `1px solid ${AK.border}` }}
-                >
-                  {(["new", "contacted", "qualified", "won", "lost"] as LeadStatus[]).map((s) => (
-                    <button
-                      key={s}
-                      onClick={() => handleStatusChange(s)}
-                      className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left transition-colors hover:brightness-110"
-                      style={{ color: STATUS_CONFIG[s].color, background: status === s ? STATUS_CONFIG[s].bg : "transparent" }}
-                    >
-                      {status === s && <Check size={12} />}
-                      {STATUS_CONFIG[s].label}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
+  const name =
+    lead.customer_name ||
+    [lead.contact?.first_name, lead.contact?.last_name].filter(Boolean).join(" ") ||
+    "Unknown Lead";
+  const phone = lead.customer_phone || lead.contact?.phone || "";
+  const email = lead.contact?.email || "";
+  const address = lead.address || lead.contact?.address || "";
+  const cfg = STAGE_CONFIG[lead.status] || { label: lead.status, color: DA.textMuted };
+  const estimate = lead.estimate_range_max || lead.estimate_range_min || 0;
+  const midEstimate = lead.estimate_range_min && lead.estimate_range_max
+    ? Math.round((lead.estimate_range_min + lead.estimate_range_max) / 2)
+    : estimate;
+  const overdue =
+    lead.status === "new" &&
+    Date.now() - new Date(lead.created_at).getTime() > 24 * 60 * 60 * 1000;
+  const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+
+  const TABS = [
+    { key: "chat", label: "Chat" },
+    { key: "calls", label: "Calls" },
+    { key: "emails", label: "Emails" },
+    { key: "notes", label: "Notes" },
+  ] as const;
+
+  return (
+    <div className="flex flex-col" style={{ background: DA.bg, minHeight: "100%" }}>
+      {/* Status bar */}
+      <div className="h-11 px-6 flex items-end pb-1 justify-between flex-shrink-0">
+        <span className="text-xs font-semibold" style={{ color: "rgba(0,0,0,0.4)" }}>
+          {new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+        </span>
+        <div className="flex items-center gap-1">
+          <span className="text-xs">📶</span>
+          <span className="text-xs">🔋</span>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left — conversation + estimate */}
-        <div className="lg:col-span-2 flex flex-col gap-4">
-          {/* Conversation */}
-          <div
-            className="rounded-xl overflow-hidden"
-            style={{ background: AK.surface, border: `1px solid ${AK.border}` }}
+      {/* Header with back */}
+      <div
+        className="px-4 py-3 flex items-center justify-between"
+        style={{ background: DA.surface, borderBottom: `1px solid ${DA.border}` }}
+      >
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => router.back()}
+            className="w-8 h-8 rounded-full flex items-center justify-center"
+            style={{ background: DA.elevated, border: "none", cursor: "pointer", color: DA.textMuted }}
           >
+            <ArrowLeft size={16} />
+          </button>
+          <div
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-sm"
+            style={{ background: DA.accent }}
+          >
+            S
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setToolboxOpen(true)}
+            className="w-8 h-8 rounded-full flex items-center justify-center"
+            style={{ background: DA.elevated, border: "none", cursor: "pointer", color: DA.textMuted }}
+          >
+            🧰
+          </button>
+          <button
+            className="w-8 h-8 rounded-full flex items-center justify-center"
+            style={{ background: DA.elevated, border: "none", cursor: "pointer", color: DA.textMuted }}
+          >
+            <DotsThree size={16} />
+          </button>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+        {/* Customer header card */}
+        <div
+          className="rounded-xl p-4"
+          style={{ background: DA.surface, border: `1px solid ${DA.border}`, boxShadow: DA.shadow }}
+        >
+          <div className="flex items-start gap-3">
             <div
-              className="flex items-center gap-2 px-5 py-4"
-              style={{ borderBottom: `1px solid ${AK.border}` }}
+              className="w-12 h-12 rounded-full flex items-center justify-center text-white text-sm font-semibold shrink-0"
+              style={{ background: DA.accent }}
             >
-              <MessageSquare size={15} style={{ color: AK.accent }} />
-              <h2 className="text-sm font-semibold" style={{ color: AK.textPrimary }}>
-                Conversation
-              </h2>
+              {getInitials(name)}
             </div>
-            <div className="p-5 space-y-4 max-h-[400px] overflow-y-auto">
-              {lead.conversation.map((msg, i) => (
-                <div key={i} className={`flex ${msg.role === "customer" ? "justify-end" : "justify-start"}`}>
+            <div className="flex-1">
+              <div className="font-bold text-base" style={{ color: DA.textPrimary }}>
+                {name}
+              </div>
+              <div className="text-sm" style={{ color: DA.textSecondary }}>
+                {phone}
+              </div>
+              <div className="text-sm" style={{ color: DA.textSecondary }}>
+                {lead.project_type}
+                {address ? ` · ${address}` : ""}
+              </div>
+              <div className="flex items-center gap-2 mt-2">
+                <span
+                  className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                  style={{ background: cfg.color, color: "#fff" }}
+                >
+                  {cfg.label}
+                </span>
+                {overdue && (
+                  <span
+                    className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                    style={{ background: DA.error, color: "#fff" }}
+                  >
+                    ⚠️ Overdue
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Quick stats grid */}
+          <div
+            className="grid grid-cols-3 gap-2 mt-4 pt-3"
+            style={{ borderTop: `1px solid ${DA.border}` }}
+          >
+            <div className="text-center">
+              <div className="text-lg font-bold" style={{ color: DA.textPrimary }}>
+                {midEstimate > 0 ? formatCurrency(midEstimate) : "—"}
+              </div>
+              <div className="text-[10px]" style={{ color: DA.textMuted }}>
+                Est. Value
+              </div>
+            </div>
+            <div className="text-center">
+              <div className="text-lg font-bold" style={{ color: DA.textPrimary }}>
+                {lead.sqft?.toLocaleString() || "—"}
+              </div>
+              <div className="text-[10px]" style={{ color: DA.textMuted }}>
+                Sq Ft
+              </div>
+            </div>
+            <div className="text-center">
+              <div className="text-lg font-bold" style={{ color: DA.textPrimary }}>
+                {lead.depth_in ? `${lead.depth_in}"` : "—"}
+              </div>
+              <div className="text-[10px]" style={{ color: DA.textMuted }}>
+                Depth
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* CTA Buttons */}
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            onClick={() => router.push(`/scope-builder/${lead.id}`)}
+            className="flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-semibold text-white transition-all active:scale-[0.98]"
+            style={{ background: DA.accent, border: "none", cursor: "pointer" }}
+          >
+            📐 Build Scope
+          </button>
+          <a
+            href={`tel:${phone}`}
+            className="flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-semibold transition-all active:scale-[0.98]"
+            style={{ background: DA.elevated, color: DA.textPrimary, border: `1px solid ${DA.border}`, cursor: "pointer" }}
+          >
+            📞 Call
+          </a>
+        </div>
+
+        {/* Scope summary pill */}
+        {lead.scope_of_work && (
+          <div
+            className="rounded-xl p-3 flex items-center justify-between"
+            style={{ background: DA.surface, border: `1px solid ${DA.border}` }}
+          >
+            <div>
+              <div className="text-[10px] uppercase tracking-wider font-semibold" style={{ color: DA.textMuted }}>
+                Scope
+              </div>
+              <div className="text-sm font-medium mt-0.5" style={{ color: DA.textPrimary }}>
+                {lead.scope_of_work}
+              </div>
+            </div>
+            {estimate > 0 && (
+              <div className="text-right">
+                <div className="text-sm font-bold" style={{ color: DA.accent }}>
+                  {formatCurrency(estimate)}
+                </div>
+                <div className="text-[10px]" style={{ color: DA.textMuted }}>
+                  Total
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Contact quick actions */}
+        <div className="flex flex-wrap gap-2">
+          {phone && (
+            <a
+              href={`tel:${phone}`}
+              className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg"
+              style={{ background: DA.elevated, border: `1px solid ${DA.border}`, color: DA.accent }}
+            >
+              <Phone size={12} /> {phone}
+            </a>
+          )}
+          {email && (
+            <a
+              href={`mailto:${email}`}
+              className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg"
+              style={{ background: DA.elevated, border: `1px solid ${DA.border}`, color: DA.accent }}
+            >
+              <Envelope size={12} /> Email
+            </a>
+          )}
+          {address && (
+            <a
+              href={mapsUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg"
+              style={{ background: DA.elevated, border: `1px solid ${DA.border}`, color: DA.accent }}
+            >
+              <MapPin size={12} /> Maps
+            </a>
+          )}
+        </div>
+
+        {/* History tabs */}
+        <div>
+          <div
+            className="flex items-center gap-4 pb-2 mb-3"
+            style={{ borderBottom: `1px solid ${DA.border}` }}
+          >
+            {TABS.map((tab) => (
+              <button
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
+                className="text-xs font-semibold pb-1 transition-all"
+                style={{
+                  color: activeTab === tab.key ? DA.accent : DA.textMuted,
+                  background: "none",
+                  border: "none",
+                  borderBottom: activeTab === tab.key ? `2px solid ${DA.accent}` : "2px solid transparent",
+                  cursor: "pointer",
+                  paddingBottom: 2,
+                }}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Chat messages */}
+          {activeTab === "chat" && (
+            <div className="space-y-3">
+              {MOCK_CONVERSATION.map((msg, i) => (
+                <div
+                  key={i}
+                  className="flex items-end gap-2"
+                  style={{ flexDirection: msg.role === "customer" ? "row-reverse" : "row" }}
+                >
+                  {msg.role !== "customer" && (
+                    <div
+                      className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold shrink-0"
+                      style={{ background: DA.accent }}
+                    >
+                      S
+                    </div>
+                  )}
                   <div
-                    className="max-w-[75%] rounded-2xl px-4 py-3 text-sm leading-relaxed"
-                    style={
-                      msg.role === "customer"
-                        ? { background: AK.accent, color: "#0B0F1A", fontWeight: 600, borderRadius: "16px 16px 4px 16px" }
-                        : { background: AK.elevated, color: AK.textPrimary, border: `1px solid ${AK.border}`, borderRadius: "16px 16px 16px 4px" }
-                    }
+                    className="max-w-[78%] rounded-2xl px-3 py-2 text-xs"
+                    style={{
+                      background: msg.role === "customer" ? DA.accent : "#2D2D2D",
+                      color: "white",
+                      borderRadius:
+                        msg.role === "customer"
+                          ? "18px 18px 4px 18px"
+                          : "18px 18px 18px 4px",
+                    }}
                   >
                     {msg.text}
+                    <div
+                      className="text-[10px] mt-1 text-right"
+                      style={{
+                        color: msg.role === "customer" ? "rgba(255,255,255,0.7)" : "rgba(255,255,255,0.5)",
+                      }}
+                    >
+                      {timeAgo(msg.timestamp)}
+                    </div>
                   </div>
                 </div>
               ))}
             </div>
-          </div>
+          )}
 
-          {/* Estimate details */}
-          <div
-            className="rounded-xl overflow-hidden"
-            style={{ background: AK.surface, border: `1px solid ${AK.border}` }}
-          >
-            <button
-              className="w-full flex items-center justify-between px-5 py-4"
-              onClick={() => setShowEstimate(!showEstimate)}
-              style={{ borderBottom: showEstimate ? `1px solid ${AK.border}` : "none" }}
+          {activeTab === "calls" && (
+            <div className="text-center py-8">
+              <Phone size={28} color={DA.textMuted} className="mx-auto" />
+              <p className="text-sm mt-2" style={{ color: DA.textMuted }}>
+                No call history
+              </p>
+            </div>
+          )}
+
+          {activeTab === "emails" && (
+            <div className="text-center py-8">
+              <Envelope size={28} color={DA.textMuted} className="mx-auto" />
+              <p className="text-sm mt-2" style={{ color: DA.textMuted }}>
+                No emails yet
+              </p>
+            </div>
+          )}
+
+          {activeTab === "notes" && (
+            <div
+              className="rounded-xl p-4"
+              style={{ background: DA.surface, border: `1px solid ${DA.border}` }}
             >
-              <div className="flex items-center gap-2">
-                <div
-                  className="w-6 h-6 rounded-md flex items-center justify-center"
-                  style={{ background: AK.accentMuted }}
-                >
-                  <span style={{ fontSize: 11, color: AK.accent, fontWeight: 800 }}>$</span>
-                </div>
-                <h2 className="text-sm font-semibold" style={{ color: AK.textPrimary }}>
-                  Estimate Breakdown
-                </h2>
-              </div>
-              <div className="flex items-center gap-2">
-                <span
-                  className="text-sm font-bold"
-                  style={{ color: AK.accent }}
-                >
-                  ${lead.estimateMin.toLocaleString()}–${lead.estimateMax.toLocaleString()}
-                </span>
-                {showEstimate ? (
-                  <ChevronUp size={15} style={{ color: AK.textMuted }} />
-                ) : (
-                  <ChevronDown size={15} style={{ color: AK.textMuted }} />
-                )}
-              </div>
-            </button>
-
-            {showEstimate && (
-              <div className="p-5 space-y-3">
-                {[
-                  { label: "Project type", value: lead.projectType },
-                  { label: "Area", value: `${lead.estimateDetails.sqft} sq ft` },
-                  { label: "Depth", value: `${lead.estimateDetails.depthIn}"` },
-                  { label: "PSI grade", value: `${lead.estimateDetails.psi} PSI` },
-                  { label: "Conditions", value: lead.estimateDetails.conditions },
-                  { label: "Volume", value: `${lead.estimateDetails.cy} CY` },
-                  { label: "Estimate type", value: lead.estimateDetails.isBallpark ? "Ballpark" : "Firm" },
-                ].map((row) => (
-                  <div key={row.label} className="flex justify-between items-center">
-                    <span className="text-sm" style={{ color: AK.textMuted }}>
-                      {row.label}
-                    </span>
-                    <span className="text-sm font-semibold capitalize" style={{ color: AK.textPrimary }}>
-                      {row.value}
-                    </span>
-                  </div>
-                ))}
-                <div
-                  className="pt-3 mt-2 flex justify-end"
-                  style={{ borderTop: `1px solid ${AK.border}` }}
-                >
-                  <button
-                    className="flex items-center gap-2 text-xs font-semibold px-3 py-2 rounded-lg transition-colors"
-                    style={{ background: AK.elevated, color: AK.textSecondary }}
-                  >
-                    <Edit size={12} />
-                    Edit estimate
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Right — info + feedback */}
-        <div className="flex flex-col gap-4">
-          {/* Customer info */}
-          <div
-            className="rounded-xl p-5"
-            style={{ background: AK.surface, border: `1px solid ${AK.border}` }}
-          >
-            <h2 className="text-sm font-semibold mb-4" style={{ color: AK.textPrimary }}>
-              Details
-            </h2>
-            <div className="space-y-3">
-              <div className="flex items-start gap-2">
-                <MapPin size={14} className="mt-0.5 shrink-0" style={{ color: AK.textMuted }} />
-                <div>
-                  <div className="text-sm" style={{ color: AK.textPrimary }}>
-                    {lead.address}
-                  </div>
-                  <div className="text-xs" style={{ color: AK.textMuted }}>
-                    {lead.zip}
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <Phone size={14} className="shrink-0" style={{ color: AK.textMuted }} />
-                <a href={`tel:${lead.phone}`} className="text-sm" style={{ color: AK.accent }}>
-                  {lead.phone}
-                </a>
-              </div>
-              <div className="flex items-center gap-2">
-                <Mail size={14} className="shrink-0" style={{ color: AK.textMuted }} />
-                <a href={`mailto:${lead.email}`} className="text-sm truncate" style={{ color: AK.accent }}>
-                  {lead.email}
-                </a>
+              <div className="text-sm" style={{ color: DA.textSecondary }}>
+                {lead.notes || "No notes yet. Tap to add a note..."}
               </div>
             </div>
-
-            {/* Quick actions */}
-            <div className="flex gap-2 mt-5">
-              <a
-                href={`tel:${lead.phone}`}
-                className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold transition-colors"
-                style={{ background: AK.accent, color: "#0B0F1A" }}
-              >
-                <Phone size={14} />
-                Call
-              </a>
-              <a
-                href={`mailto:${lead.email}`}
-                className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold transition-colors"
-                style={{ background: AK.elevated, color: AK.textSecondary, border: `1px solid ${AK.border}` }}
-              >
-                <Mail size={14} />
-                Email
-              </a>
-            </div>
-
-          {/* Scope Builder */}
-          <Link
-            href={`/scope-builder/${lead.id}`}
-            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold transition-colors"
-            style={{ background: "rgba(245,158,11,0.15)", color: "#F59E0B", border: "1px solid rgba(245,158,11,0.25)" }}
-          >
-            Open in Scope Builder
-          </Link>
-        </div>
-
-          {/* Feedback widget */}
-          <div
-            className="rounded-xl p-5"
-            style={{ background: AK.surface, border: `1px solid ${AK.border}` }}
-          >
-            <h2 className="text-sm font-semibold mb-1" style={{ color: AK.textPrimary }}>
-              Was this estimate accurate?
-            </h2>
-            <p className="text-xs mb-4" style={{ color: AK.textMuted }}>
-              Your feedback improves the model
-            </p>
-
-            {!feedbackSubmitted ? (
-              <>
-                <div className="flex gap-2 mb-3">
-                  <button
-                    onClick={() => setFeedbackVote("up")}
-                    className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold transition-colors"
-                    style={{
-                      background: feedbackVote === "up" ? "rgba(34,197,94,0.15)" : AK.elevated,
-                      color: feedbackVote === "up" ? AK.success : AK.textMuted,
-                      border: `1px solid ${feedbackVote === "up" ? AK.success : AK.border}`,
-                    }}
-                  >
-                    <ThumbsUp size={15} />
-                    Accurate
-                  </button>
-                  <button
-                    onClick={() => setFeedbackVote("down")}
-                    className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold transition-colors"
-                    style={{
-                      background: feedbackVote === "down" ? "rgba(239,68,68,0.15)" : AK.elevated,
-                      color: feedbackVote === "down" ? AK.error : AK.textMuted,
-                      border: `1px solid ${feedbackVote === "down" ? AK.error : AK.border}`,
-                    }}
-                  >
-                    <ThumbsDown size={15} />
-                    Off
-                  </button>
-                </div>
-                <textarea
-                  placeholder="What was wrong? (optional)"
-                  value={feedbackNote}
-                  onChange={(e) => setFeedbackNote(e.target.value)}
-                  rows={3}
-                  className="w-full rounded-lg px-3 py-2.5 text-sm resize-none outline-none mb-3"
-                  style={{
-                    background: AK.elevated,
-                    border: `1px solid ${AK.border}`,
-                    color: AK.textPrimary,
-                    fontFamily: "Inter, sans-serif",
-                  }}
-                />
-                <button
-                  onClick={handleFeedbackSubmit}
-                  disabled={!feedbackVote}
-                  className="w-full py-2.5 rounded-lg text-sm font-semibold transition-colors disabled:opacity-40"
-                  style={{ background: feedbackVote ? AK.accent : AK.elevated, color: feedbackVote ? "#0B0F1A" : AK.textMuted }}
-                >
-                  Submit feedback
-                </button>
-              </>
-            ) : (
-              <div
-                className="flex items-center gap-2 py-3 px-4 rounded-lg text-sm font-semibold"
-                style={{ background: "rgba(34,197,94,0.15)", color: AK.success }}
-              >
-                <Check size={16} />
-                Feedback submitted — thanks!
-              </div>
-            )}
-          </div>
-
-          {/* Notes */}
-          <div
-            className="rounded-xl p-5"
-            style={{ background: AK.surface, border: `1px solid ${AK.border}` }}
-          >
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-semibold" style={{ color: AK.textPrimary }}>
-                Notes
-              </h2>
-              <Tag size={13} style={{ color: AK.textMuted }} />
-            </div>
-            {lead.notes ? (
-              <p className="text-sm leading-relaxed" style={{ color: AK.textSecondary }}>
-                {lead.notes}
-              </p>
-            ) : (
-              <p className="text-sm italic" style={{ color: AK.textMuted }}>
-                No notes yet.
-              </p>
-            )}
-          </div>
+          )}
         </div>
       </div>
+
+      <ToolboxDrawer
+        open={toolboxOpen}
+        onClose={() => setToolboxOpen(false)}
+        leadId={lead.id}
+      />
+      <DustyDrawer
+        open={dustyOpen}
+        onClose={() => setDustyOpen(false)}
+        context={{ leadId: lead.id, leadName: name }}
+      />
     </div>
   );
 }

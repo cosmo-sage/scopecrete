@@ -1,108 +1,62 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { X, Lightning, PaperPlaneRight } from "@phosphor-icons/react";
-import { SC } from "@/lib/theme";
+import React, { useState, useRef, useEffect } from "react";
+import { DA } from "@/lib/design-tokens";
 
-interface Message {
-  role: "user" | "agent";
+interface DustyMessage {
+  role: "dusty" | "user";
   text: string;
-}
-
-const CONTEXT_GREETINGS: Record<string, string> = {
-  "/dashboard": "Looking at your pipeline. What do you need?",
-  "/dashboard/leads": "Looking at your leads. What do you need?",
-  "/calculator": "Ready to price a project. What are we working with?",
-  "/scope-builder": "Building a scope. What are we pricing?",
-  "/cost-cards": "Working on costs. Which card?",
-  "/": "Hi! I'm Dusty, your concrete assistant.",
-  default: "Hi! I'm Dusty. What can I help you with?",
-};
-
-const SUGGESTION_CHIPS: Record<string, string[]> = {
-  "/dashboard": ["Show hot leads", "Summarize this week", "What's pending?"],
-  "/dashboard/leads": ["Show new leads", "By source", "Sort by value"],
-  "/calculator": ["Price 20x30x4", "What does 4000 PSI cost?", "Add 10% waste"],
-  "/scope-builder": ["Add line item", "Price this scope", "Save to lead"],
-  "/": ["Price concrete", "Start a conversation", "Get help"],
-  default: ["Price concrete", "Start a conversation", "Get help"],
-};
-
-function TypingIndicator() {
-  return (
-    <div className="flex items-start gap-2.5">
-      <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0" style={{ background: SC.accent }}>
-        <Lightning size={14} weight="fill" color="white" />
-      </div>
-      <div className="rounded-2xl rounded-tl-sm px-4 py-3 max-w-[80%]" style={{ background: SC.surface, border: `1px solid ${SC.border}` }}>
-        <div className="flex gap-1">
-          {[0, 1, 2].map((i) => (
-            <span key={i} className="w-2 h-2 rounded-full inline-block animate-bounce-dot"
-              style={{ background: SC.textMuted, animationDelay: `${i * 200}ms` }} />
-          ))}
-        </div>
-      </div>
-    </div>
-  );
+  suggestions?: string[];
 }
 
 interface DustyDrawerProps {
   open: boolean;
   onClose: () => void;
+  context?: {
+    leadId?: string;
+    leadName?: string;
+    page?: string;
+  };
 }
 
-export default function DustyDrawer({ open, onClose }: DustyDrawerProps) {
-  const [messages, setMessages] = useState<Message[]>([]);
+const DEFAULT_MESSAGES: DustyMessage[] = [
+  {
+    role: "dusty",
+    text: "👋 Hi there! I'm Dusty, your concrete estimating assistant. What can I help you with today?",
+    suggestions: ["Build a new scope", "Check a lead status", "Review an estimate"],
+  },
+];
+
+export default function DustyDrawer({ open, onClose, context }: DustyDrawerProps) {
+  const [messages, setMessages] = useState<DustyMessage[]>(DEFAULT_MESSAGES);
   const [input, setInput] = useState("");
   const [typing, setTyping] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
-  const [conversation, setConversation] = useState<{ role: string; content: string }[]>([]);
-  const pathname = typeof window !== "undefined" ? window.location.pathname : "/";
-  const greeting = CONTEXT_GREETINGS[pathname] || CONTEXT_GREETINGS["default"];
-  const suggestions = SUGGESTION_CHIPS[pathname] || SUGGESTION_CHIPS["default"];
 
   useEffect(() => {
-    if (open && messages.length === 0) {
-      setMessages([{ role: "agent", text: greeting }]);
-      setConversation([{ role: "agent", content: greeting }]);
+    if (open && bottomRef.current) {
+      bottomRef.current.scrollIntoView({ behavior: "smooth" });
     }
-  }, [open, greeting, messages.length]);
+  }, [messages, open]);
 
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, typing]);
-
-  const handleSend = async (text: string) => {
-    if (!text.trim()) return;
-    const userText = text.trim();
-    setMessages((m) => [...m, { role: "user", text: userText }]);
+  const sendMessage = async () => {
+    if (!input.trim()) return;
+    const userText = input.trim();
     setInput("");
+    setMessages((prev) => [...prev, { role: "user", text: userText }]);
     setTyping(true);
 
-    const updatedConversation = [...conversation, { role: "user", content: userText }];
-    setConversation(updatedConversation);
-
-    try {
-      const res = await fetch("/api/chat/dusty", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "qwen2.5:0.5b",
-          messages: updatedConversation.map(m => ({ role: m.role, content: m.content })),
-          stream: false,
-        }),
-      });
-
-      const data = await res.json();
-      const reply = data.choices?.[0]?.message?.content || data.response || "Sorry, I couldn't get a response.";
-
-      setMessages((m) => [...m, { role: "agent", text: reply }]);
-      setConversation((c) => [...c, { role: "agent", content: reply }]);
-    } catch {
-      setMessages((m) => [...m, { role: "agent", text: "I'm having trouble reaching the AI right now. Try again in a moment." }]);
-    } finally {
-      setTyping(false);
-    }
+    // Simulate Dusty response
+    await new Promise((r) => setTimeout(r, 1200));
+    setTyping(false);
+    setMessages((prev) => [
+      ...prev,
+      {
+        role: "dusty",
+        text: `Great question! For "${userText.slice(0, 40)}..." — let me pull that up for you. Is there a specific lead or estimate you'd like me to look at?`,
+        suggestions: ["Yes, show me leads", "Not sure — what can you do?"],
+      },
+    ]);
   };
 
   if (!open) return null;
@@ -110,97 +64,144 @@ export default function DustyDrawer({ open, onClose }: DustyDrawerProps) {
   return (
     <>
       {/* Backdrop */}
-      <div className="fixed inset-0 z-40 bg-black/50" onClick={onClose} />
-
-      {/* Full-screen panel */}
       <div
-        className="fixed inset-0 z-50 flex flex-col"
-        style={{
-          background: SC.bg,
-          borderLeft: `1px solid ${SC.border}`,
-        }}
+        className="fixed inset-0 z-50"
+        style={{ background: "rgba(0,0,0,0.5)" }}
+        onClick={onClose}
+      />
+
+      {/* Sheet */}
+      <div
+        className="fixed bottom-0 left-0 right-0 rounded-t-3xl z-50 flex flex-col"
+        style={{ background: "#1A1A1A", maxHeight: "85vh", height: "85vh" }}
       >
+        {/* Handle */}
+        <div className="flex justify-center py-3">
+          <div className="w-9 h-1 rounded-full" style={{ background: "#444" }} />
+        </div>
+
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 shrink-0"
-          style={{ borderBottom: `1px solid ${SC.border}`, background: SC.surface }}>
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: SC.accent }}>
-              <Lightning size={16} weight="fill" color="white" />
+        <div
+          className="flex items-center justify-between px-5 py-3"
+          style={{ borderBottom: "1px solid #333" }}
+        >
+          <div className="flex items-center gap-2">
+            <div
+              className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold"
+              style={{ background: DA.accent }}
+            >
+              ✨
             </div>
             <div>
-              <div className="text-sm font-bold" style={{ color: SC.accent }}>Dusty</div>
-              <div className="text-[10px]" style={{ color: SC.textMuted }}>
-                {pathname === "/" ? "General" : pathname.replace("/", "").replace(/-/g, " ").replace(/^\w/, (c) => c.toUpperCase())}
+              <div className="text-sm font-semibold text-white">Dusty</div>
+              <div className="text-xs" style={{ color: "#9CA3AF" }}>
+                AI Assistant
+                {context?.leadName ? ` · ${context.leadName}` : ""}
               </div>
             </div>
           </div>
-          <button onClick={onClose}
-            className="w-8 h-8 rounded-lg flex items-center justify-center transition-all active:scale-90"
-            style={{ background: SC.elevated, color: SC.textMuted, border: "none", cursor: "pointer" }}>
-            <X size={14} />
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-full flex items-center justify-center"
+            style={{ background: "#2D2D2D", border: "none", cursor: "pointer", color: "#9CA3AF" }}
+          >
+            ✕
           </button>
         </div>
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4" style={{ overscrollBehavior: "contain" }}>
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
           {messages.map((msg, i) => (
-            <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-              {msg.role === "agent" && (
-                <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mr-2 mt-0.5"
-                  style={{ background: SC.accent }}>
-                  <Lightning size={12} weight="fill" color="white" />
+            <div
+              key={i}
+              className="flex items-end gap-2"
+              style={{ flexDirection: msg.role === "user" ? "row-reverse" : "row" }}
+            >
+              {msg.role === "dusty" && (
+                <div
+                  className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold shrink-0"
+                  style={{ background: DA.accent }}
+                >
+                  ✨
                 </div>
               )}
-              <div className={`max-w-[75%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
-                msg.role === "user" ? "rounded-tr-sm" : "rounded-tl-sm"
-              }`}
-                style={
-                  msg.role === "user"
-                    ? { background: SC.elevated, color: SC.textPrimary, border: `1px solid ${SC.border}` }
-                    : { background: SC.surface, color: SC.textPrimary, border: `1px solid ${SC.border}` }
-                }>
+              <div
+                className="max-w-[78%] rounded-2xl px-3 py-2 text-xs"
+                style={{
+                  background: msg.role === "user" ? DA.accent : "#2D2D2D",
+                  color: "white",
+                  borderRadius: msg.role === "user" ? "18px 18px 4px 18px" : "18px 18px 18px 4px",
+                }}
+              >
                 {msg.text}
               </div>
             </div>
           ))}
-          {typing && <TypingIndicator />}
+
+          {typing && (
+            <div className="flex items-end gap-2">
+              <div
+                className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold shrink-0"
+                style={{ background: DA.accent }}
+              >
+                ✨
+              </div>
+              <div
+                className="rounded-2xl px-3 py-2 flex gap-1"
+                style={{ background: "#2D2D2D", borderRadius: "18px 18px 18px 4px" }}
+              >
+                <span className="w-1.5 h-1.5 rounded-full inline-block animate-bounce" style={{ background: "#666", animationDelay: "0ms" }} />
+                <span className="w-1.5 h-1.5 rounded-full inline-block animate-bounce" style={{ background: "#666", animationDelay: "200ms" }} />
+                <span className="w-1.5 h-1.5 rounded-full inline-block animate-bounce" style={{ background: "#666", animationDelay: "400ms" }} />
+              </div>
+            </div>
+          )}
           <div ref={bottomRef} />
         </div>
 
-        {/* Suggestion chips */}
-        <div className="px-4 py-2 shrink-0" style={{ borderTop: `1px solid ${SC.border}` }}>
-          <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: "none" }}>
-            {suggestions.map((s, i) => (
-              <button key={i} onClick={() => handleSend(s)}
-                className="text-xs px-3 py-1.5 rounded-full whitespace-nowrap transition-all active:scale-95"
-                style={{ background: SC.elevated, color: SC.textSecondary, border: `1px solid ${SC.border}`, cursor: "pointer" }}>
+        {/* Suggestions */}
+        {messages[messages.length - 1]?.suggestions && (
+          <div
+            className="px-5 pb-3 flex gap-2 overflow-x-auto"
+            style={{ flexShrink: 0, scrollbarWidth: "none" }}
+          >
+            {messages[messages.length - 1].suggestions?.map((s) => (
+              <button
+                key={s}
+                onClick={() => setInput(s)}
+                className="shrink-0 rounded-full px-3 py-1.5 text-xs"
+                style={{ background: "#2D2D2D", border: "1px solid #444", color: "white", cursor: "pointer" }}
+              >
                 {s}
               </button>
             ))}
           </div>
-        </div>
+        )}
 
         {/* Input */}
-        <div className="px-4 py-3 shrink-0" style={{ borderTop: `1px solid ${SC.border}`, paddingBottom: "max(12px, env(safe-area-inset-bottom))" }}>
-          <div className="flex items-center gap-2 rounded-xl px-4 py-2.5"
-            style={{ background: SC.surface, border: `1px solid ${SC.border}` }}>
-            <textarea
+        <div
+          className="px-5 pb-5 pt-3 flex gap-2 items-center"
+          style={{ borderTop: "1px solid #333", flexShrink: 0 }}
+        >
+          <div
+            className="flex-1 rounded-full px-4 py-2.5 text-sm"
+            style={{ background: "#2D2D2D" }}
+          >
+            <input
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(input); } }}
-              placeholder="Message Dusty..."
-              rows={1}
-              className="flex-1 text-sm bg-transparent outline-none resize-none"
-              style={{ color: SC.textPrimary, maxHeight: "6rem", overflowY: "auto" }}
+              onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+              placeholder="Ask Dusty anything..."
+              className="w-full bg-transparent outline-none text-white text-sm placeholder:text-white/40"
             />
-            <button
-              onClick={() => handleSend(input)}
-              disabled={!input.trim()}
-              className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-all active:scale-90 disabled:opacity-30"
-              style={{ background: SC.accent, cursor: "pointer", border: "none" }}>
-              <PaperPlaneRight size={14} color="white" />
-            </button>
           </div>
+          <button
+            onClick={sendMessage}
+            className="w-9 h-9 rounded-full flex items-center justify-center text-white shrink-0"
+            style={{ background: DA.accent, border: "none", cursor: "pointer" }}
+          >
+            ➤
+          </button>
         </div>
       </div>
     </>

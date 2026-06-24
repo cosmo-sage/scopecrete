@@ -1,311 +1,365 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import Link from "next/link";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import {
-  ChartLineUp,
-  Users,
-  CurrencyDollar,
-  Target,
-  Plus,
-  ArrowsClockwise,
-  Clock,
-  ClipboardText,
-} from "@phosphor-icons/react";
-import { supabase } from "@/lib/supabase";
+import { Phone, ChatCircle, Clock, Plus, ArrowsClockwise, Users } from "@phosphor-icons/react";
+import { DA, STAGE_CONFIG, STAGE_ORDER } from "@/lib/design-tokens";
+import { formatCurrency } from "@/lib/utils";
+import DustyDrawer from "@/components/dashboard/DustyDrawer";
 
-const T = {
-  bg: "#09090b",
-  surface: "#18181b",
-  surfaceHover: "#27272a",
-  elevated: "#3f3f46",
-  accent: "#e85d04",
-  accentMuted: "rgba(232,93,4,0.10)",
-  textPrimary: "#fafafa",
-  textSecondary: "#a1a1aa",
-  textMuted: "#71717a",
-  border: "#27272a",
-};
+// ─── Types ────────────────────────────────────────────────────
+interface Lead {
+  id: string;
+  customer_name?: string;
+  customer_phone?: string;
+  project_type?: string;
+  address?: string;
+  status: string;
+  estimate_range_min?: number;
+  estimate_range_max?: number;
+  created_at: string;
+  updated_at: string;
+}
 
-function Skeleton({ className }: { className: string }) {
+interface PipelineData {
+  stages: Record<string, { count: number; totalValue: number; leads: Lead[] }>;
+  summary: { totalPipelineValue: number; needsAction: number; winRate: number };
+}
+
+// ─── Helpers ───────────────────────────────────────────────────
+function getInitials(name: string): string {
+  return name.split(" ").slice(0, 2).map((n) => n[0]?.toUpperCase() || "").join("");
+}
+
+function timeAgo(ts: string): string {
+  const diff = Date.now() - new Date(ts).getTime();
+  const min = Math.floor(diff / 60000);
+  if (min < 1) return "Just now";
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  return `${Math.floor(hr / 24)}d ago`;
+}
+
+function getOverdue(lead: Lead): boolean {
+  if (lead.status === "new") {
+    const age = Date.now() - new Date(lead.created_at).getTime();
+    return age > 24 * 60 * 60 * 1000;
+  }
+  if (lead.status === "contacted") {
+    const since = Date.now() - new Date(lead.updated_at).getTime();
+    return since > 72 * 60 * 60 * 1000;
+  }
+  return false;
+}
+
+// ─── Skeleton ──────────────────────────────────────────────────
+function SkeletonCard() {
   return (
-    <div
-      className={className}
+    <div className="rounded-xl p-4 animate-pulse" style={{ background: DA.surface, border: `1px solid ${DA.border}`, borderLeft: `3px solid ${DA.elevated}` }}>
+      <div className="flex items-start gap-3">
+        <div className="w-10 h-10 rounded-full" style={{ background: DA.elevated }} />
+        <div className="flex-1">
+          <div className="h-4 w-2/3 rounded mb-2" style={{ background: DA.elevated }} />
+          <div className="h-3 w-1/2 rounded mb-2" style={{ background: DA.elevated }} />
+          <div className="h-3 w-1/3 rounded" style={{ background: DA.elevated }} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Stage Tab ─────────────────────────────────────────────────
+function StageTab({
+  stage,
+  count,
+  active,
+  onClick,
+}: {
+  stage: string;
+  count: number;
+  active: boolean;
+  onClick: () => void;
+}) {
+  const cfg = STAGE_CONFIG[stage] || { label: stage, color: DA.textMuted };
+  return (
+    <button
+      onClick={onClick}
+      className="shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold transition-all active:scale-95"
       style={{
-        background: "linear-gradient(90deg, #18181b 25%, #27272a 50%, #18181b 75%)",
-        backgroundSize: "200% 100%",
-        animation: "shimmer 1.5s infinite",
-        borderRadius: 6,
+        background: active ? DA.accent : "transparent",
+        color: active ? "#fff" : DA.textSecondary,
+        border: `1px solid ${active ? DA.accent : DA.border}`,
       }}
-    />
+    >
+      {cfg.label} ({count})
+    </button>
   );
 }
 
-function ClipboardIcon({ size = 32 }: { size?: number }) {
+// ─── Lead Card ─────────────────────────────────────────────────
+function LeadCard({ lead, onClick }: { lead: Lead; onClick: () => void }) {
+  const cfg = STAGE_CONFIG[lead.status] || { label: lead.status, color: DA.textMuted };
+  const name =
+    lead.customer_name || lead.customer_phone || "Unknown Lead";
+  const phone = lead.customer_phone || "";
+  const overdue = getOverdue(lead);
+  const estimate = lead.estimate_range_max || lead.estimate_range_min || 0;
+
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="#3f3f46" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="8" y="2" width="8" height="3" rx="1" />
-      <rect x="6" y="5" width="12" height="17" rx="2" />
-      <line x1="9" y1="10" x2="15" y2="10" />
-      <line x1="9" y1="14" x2="13" y2="14" />
-    </svg>
+    <button
+      onClick={onClick}
+      className="w-full text-left rounded-xl p-4 transition-all active:scale-[0.99]"
+      style={{
+        background: DA.surface,
+        border: `1px solid ${DA.border}`,
+        borderLeft: `3px solid ${cfg.color}`,
+        cursor: "pointer",
+      }}
+    >
+      <div className="flex items-start gap-3">
+        <div
+          className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-semibold shrink-0"
+          style={{ background: DA.accent }}
+        >
+          {getInitials(name)}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between mb-0.5">
+            <div className="font-semibold text-sm truncate" style={{ color: DA.textPrimary }}>
+              {name}
+            </div>
+            <span
+              className="shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full ml-2"
+              style={{ background: cfg.color, color: "#fff" }}
+            >
+              {cfg.label}
+            </span>
+          </div>
+          <div className="text-xs" style={{ color: DA.textSecondary }}>
+            {phone}
+          </div>
+          {lead.project_type && (
+            <div className="text-sm font-medium mt-1" style={{ color: DA.textPrimary }}>
+              {lead.project_type}
+            </div>
+          )}
+          {lead.address && (
+            <div className="text-xs" style={{ color: DA.textMuted }}>
+              {lead.address}
+            </div>
+          )}
+          <div className="flex items-center justify-between mt-3">
+            <div>
+              {estimate > 0 && (
+                <div className="text-sm font-bold" style={{ color: DA.accent }}>
+                  {formatCurrency(estimate)}
+                </div>
+              )}
+              <div className="flex items-center gap-1">
+                <Clock size={9} color={overdue ? DA.error : DA.textMuted} />
+                <span className="text-[10px]" style={{ color: overdue ? DA.error : DA.textMuted }}>
+                  {overdue ? "Overdue · " : ""}{timeAgo(lead.created_at)}
+                </span>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              {phone && (
+                <>
+                  <a
+                    href={`tel:${phone}`}
+                    onClick={(e) => e.stopPropagation()}
+                    className="w-8 h-8 rounded-lg flex items-center justify-center"
+                    style={{ background: DA.elevated, border: `1px solid ${DA.border}`, color: DA.textMuted }}
+                  >
+                    <Phone size={14} />
+                  </a>
+                  <a
+                    href={`sms:${phone}`}
+                    onClick={(e) => e.stopPropagation()}
+                    className="w-8 h-8 rounded-lg flex items-center justify-center text-white"
+                    style={{ background: DA.accent, border: "none" }}
+                  >
+                    <ChatCircle size={14} />
+                  </a>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </button>
   );
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  new: "New",
-  contacted: "Contacted",
-  qualified: "Qualified",
-  won: "Won",
-  lost: "Lost",
-};
-
-const STATUS_BG: Record<string, string> = {
-  new: "rgba(232,93,4,0.15)",
-  contacted: "rgba(245,158,11,0.15)",
-  qualified: "rgba(139,92,246,0.15)",
-  won: "rgba(34,197,94,0.15)",
-  lost: "rgba(239,68,68,0.15)",
-};
-
-const STATUS_TEXT: Record<string, string> = {
-  new: "#e85d04",
-  contacted: "#f59e0b",
-  qualified: "#8b5cf6",
-  won: "#22c55e",
-  lost: "#ef4444",
-};
-
+// ─── Main Page ─────────────────────────────────────────────────
 export default function LeadsPage() {
   const router = useRouter();
-  const [leads, setLeads] = useState<any[]>([]);
+  const [pipeline, setPipeline] = useState<PipelineData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [activeStage, setActiveStage] = useState("new");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [dustyOpen, setDustyOpen] = useState(false);
 
-  const fetchLeads = () => {
-    setLoading(true);
-    supabase
-      .from("leads")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(50)
-      .then(({ data }: any) => {
-        if (data) setLeads(data);
-        setLoading(false);
-      });
-  };
+  const ORG_ID = "61e26b09-da88-4c9f-bd0c-a47054b86234";
 
   useEffect(() => {
-    fetchLeads();
+    fetch(`/api/dashboard/pipeline?org_id=${ORG_ID}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data) setPipeline(data);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
   }, []);
 
-  const timeAgo = (ts: string) => {
-    const diff = Date.now() - new Date(ts).getTime();
-    const min = Math.floor(diff / 60000);
-    if (min < 60) return `${min}m`;
-    const hr = Math.floor(min / 60);
-    if (hr < 24) return `${hr}h`;
-    return `${Math.floor(hr / 24)}d`;
-  };
+  const totalLeads = useMemo(() => {
+    if (!pipeline) return 0;
+    return Object.values(pipeline.stages).reduce((s, st) => s + (st.count || 0), 0);
+  }, [pipeline]);
 
-  const newCount = leads.filter((l) => l.status === "new").length;
-  const contactedCount = leads.filter((l) => l.status === "contacted").length;
-  const wonCount = leads.filter((l) => l.status === "won").length;
+  const filteredLeads = useMemo(() => {
+    if (!pipeline) return [];
+    let leads = pipeline.stages[activeStage]?.leads || [];
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      leads = leads.filter(
+        (l) =>
+          (l.customer_name?.toLowerCase().includes(q)) ||
+          (l.customer_phone?.includes(q)) ||
+          (l.project_type?.toLowerCase().includes(q)) ||
+          (l.address?.toLowerCase().includes(q))
+      );
+    }
+    return leads;
+  }, [pipeline, activeStage, searchQuery]);
+
+  const stats = useMemo(() => {
+    if (!pipeline) return { totalPipelineValue: 0, needsAction: 0, winRate: 0 };
+    return pipeline.summary;
+  }, [pipeline]);
 
   return (
-    <div className="p-5 md:p-8" style={{ background: T.bg }}>
+    <div className="flex flex-col" style={{ background: DA.bg, minHeight: "100%" }}>
+      {/* Status bar */}
+      <div className="h-11 px-6 flex items-end pb-1 justify-between flex-shrink-0">
+        <span className="text-xs font-semibold" style={{ color: "rgba(0,0,0,0.4)" }}>
+          {new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+        </span>
+        <div className="flex items-center gap-1">
+          <span className="text-xs">📶</span>
+          <span className="text-xs">🔋</span>
+        </div>
+      </div>
+
       {/* Header */}
-      <div className="flex items-start justify-between mb-8">
-        <div>
-          <h1 className="text-[28px] font-bold tracking-tight leading-none" style={{ color: T.textPrimary }}>
-            Leads
-          </h1>
-          <p className="text-sm mt-1.5" style={{ color: T.textMuted }}>
-            {leads.length} total · {newCount} new · {contactedCount} contacted · {wonCount} won
-          </p>
-        </div>
+      <div
+        className="px-4 py-3 flex items-center justify-between"
+        style={{ background: DA.surface, borderBottom: `1px solid ${DA.border}` }}
+      >
         <div className="flex items-center gap-2">
-          <button
-            onClick={fetchLeads}
-            className="flex items-center gap-1.5 text-sm px-4 py-2 rounded-xl transition-all active:scale-[0.98]"
-            style={{
-              background: T.surface,
-              border: `1px solid ${T.border}`,
-              color: T.textMuted,
-              cursor: "pointer",
-            }}
+          <div
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-sm"
+            style={{ background: DA.accent }}
           >
-            <ArrowsClockwise size={13} className={loading ? "animate-spin" : ""} />
-            <span className="hidden sm:inline">Refresh</span>
-          </button>
-          <button
-            className="flex items-center gap-1.5 text-sm font-semibold px-4 py-2 rounded-xl transition-all active:scale-[0.98]"
-            style={{ background: T.accent, color: "#09090b", cursor: "pointer", border: "none" }}
-          >
-            <Plus size={14} weight="bold" />
-            <span className="hidden sm:inline">New Lead</span>
-          </button>
+            S
+          </div>
         </div>
+        <button
+          className="text-xs font-semibold px-3 py-1.5 rounded-lg text-white"
+          style={{ background: DA.accent, border: "none", cursor: "pointer" }}
+        >
+          + New
+        </button>
+      </div>
+
+      {/* Page title */}
+      <div className="px-4 pt-4 pb-2 flex-shrink-0">
+        <h1 className="text-lg font-bold" style={{ color: DA.textPrimary }}>
+          Lead Pipeline
+        </h1>
+        <p className="text-xs" style={{ color: DA.textMuted }}>
+          {totalLeads} total leads
+        </p>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
-        {[
-          { label: "Total", value: leads.length, icon: Users },
-          { label: "New", value: newCount, icon: Target },
-          { label: "Contacted", value: contactedCount, icon: ChartLineUp },
-          { label: "Won", value: wonCount, icon: CurrencyDollar },
-        ].map(({ label, value, icon: Icon }) => (
-          <div
-            key={label}
-            className="rounded-2xl p-5 transition-all active:scale-[0.98]"
-            style={{ background: T.surface, border: `1px solid ${T.border}` }}
-          >
-            <div className="w-8 h-8 rounded-xl flex items-center justify-center mb-4" style={{ background: T.accentMuted }}>
-              <Icon size={15} color={T.accent} />
-            </div>
-            <div className="text-[28px] font-bold leading-none" style={{ color: label === "New" ? T.accent : T.textPrimary }}>
-              {value}
-            </div>
-            <div className="text-xs mt-1.5" style={{ color: T.textMuted }}>{label}</div>
+      <div className="px-4 pb-3 grid grid-cols-3 gap-2 flex-shrink-0">
+        <div className="rounded-xl p-3 text-center" style={{ background: DA.surface, border: `1px solid ${DA.border}`, boxShadow: DA.shadow }}>
+          <div className="text-lg font-bold" style={{ color: DA.textPrimary }}>
+            {formatCurrency(stats.totalPipelineValue)}
           </div>
-        ))}
+          <div className="text-xs" style={{ color: DA.textMuted }}>Pipeline</div>
+        </div>
+        <div className="rounded-xl p-3 text-center" style={{ background: DA.surface, border: `1px solid ${DA.border}`, boxShadow: DA.shadow }}>
+          <div className="text-lg font-bold" style={{ color: stats.needsAction > 0 ? DA.accent : DA.textPrimary }}>
+            {stats.needsAction}
+          </div>
+          <div className="text-xs" style={{ color: DA.textMuted }}>Needs Action</div>
+        </div>
+        <div className="rounded-xl p-3 text-center" style={{ background: DA.surface, border: `1px solid ${DA.border}`, boxShadow: DA.shadow }}>
+          <div className="text-lg font-bold" style={{ color: DA.textPrimary }}>
+            {stats.winRate}%
+          </div>
+          <div className="text-xs" style={{ color: DA.textMuted }}>Win Rate</div>
+        </div>
       </div>
 
-      {/* Table */}
-      <div
-        className="rounded-2xl overflow-x-auto"
-        style={{ background: T.surface, border: `1px solid ${T.border}` }}
-      >
+      {/* Stage tabs */}
+      <div className="px-4 pb-3 flex items-center gap-2 overflow-x-auto flex-shrink-0" style={{ scrollbarWidth: "none" }}>
+        {STAGE_ORDER.map((stage) => {
+          const count = pipeline?.stages[stage]?.count || 0;
+          return (
+            <StageTab
+              key={stage}
+              stage={stage}
+              count={count}
+              active={activeStage === stage}
+              onClick={() => setActiveStage(stage)}
+            />
+          );
+        })}
+      </div>
+
+      {/* Search */}
+      <div className="px-4 pb-3 flex-shrink-0">
+        <input
+          type="text"
+          placeholder="Search leads..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="w-full rounded-xl px-4 py-2.5 text-sm outline-none"
+          style={{
+            background: DA.surface,
+            border: `1px solid ${DA.border}`,
+            color: DA.textPrimary,
+          }}
+        />
+      </div>
+
+      {/* Leads list */}
+      <div className="flex-1 px-4 pb-4 space-y-3 overflow-y-auto">
         {loading ? (
-          <div className="p-8 space-y-4">
-            {[1, 2, 3, 4, 5].map((i) => (
-              <div key={i} className="flex items-center gap-4">
-                <Skeleton className="h-4 w-32" />
-                <Skeleton className="h-4 w-20" />
-                <Skeleton className="h-4 w-40" />
-                <Skeleton className="h-4 w-16" />
-              </div>
-            ))}
-          </div>
-        ) : leads.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 px-6">
-            <ClipboardIcon size={40} />
-            <p className="text-sm font-medium mt-5" style={{ color: T.textMuted }}>
-              No leads yet
-            </p>
-            <p className="text-xs mt-1.5 text-center max-w-[220px]" style={{ color: T.textMuted, opacity: 0.7 }}>
-              Leads from /calculator and /dusty will appear here once traffic starts flowing.
+          [1, 2, 3, 4].map((i) => <SkeletonCard key={i} />)
+        ) : filteredLeads.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16">
+            <Users size={32} color={DA.textMuted} />
+            <p className="text-sm mt-3" style={{ color: DA.textMuted }}>
+              No leads in {STAGE_CONFIG[activeStage]?.label || activeStage}
             </p>
           </div>
         ) : (
-          <table className="w-full min-w-[520px]">
-            <thead>
-              <tr style={{ borderBottom: `1px solid ${T.border}`, background: T.elevated }}>
-                {["Customer", "Source", "Project", "Status", "Date"].map((h) => (
-                  <th
-                    key={h}
-                    className="text-left px-5 py-3.5 text-[10px] font-semibold uppercase tracking-widest"
-                    style={{ color: T.textMuted }}
-                  >
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {leads.map((lead, i) => (
-                <tr
-                  key={lead.id}
-                  onClick={() => router.push(`/dashboard/leads/${lead.id}`)}
-                  onKeyDown={(e) => { if (e.key === "Enter") router.push(`/dashboard/leads/${lead.id}`); }}
-                  tabIndex={0}
-                  role="button"
-                  className="transition-all cursor-pointer"
-                  style={{
-                    borderBottom: i < leads.length - 1 ? `1px solid ${T.border}` : "none",
-                    borderLeft: `2px solid transparent`,
-                  }}
-                  onMouseEnter={(e) => {
-                    const el = e.currentTarget as HTMLTableRowElement;
-                    el.style.borderLeftColor = T.accent;
-                    el.style.background = T.surfaceHover;
-                  }}
-                  onMouseLeave={(e) => {
-                    const el = e.currentTarget as HTMLTableRowElement;
-                    el.style.borderLeftColor = "transparent";
-                    el.style.background = "transparent";
-                  }}
-                >
-                  <td className="px-5 py-4">
-                    <div className="text-sm font-semibold" style={{ color: T.textPrimary }}>
-                      {lead.customer_name || lead.customer_phone || "—"}
-                    </div>
-                    {lead.customer_email && (
-                      <div className="text-[11px] mt-0.5" style={{ color: T.textMuted }}>
-                        {lead.customer_email}
-                      </div>
-                    )}
-                      <div className="mt-1.5">
-                        <Link
-                          href={`/scope-builder/${lead.id}`}
-                          onClick={(e) => e.stopPropagation()}
-                          className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-lg transition-all hover:brightness-125 active:scale-95"
-                          style={{ background: T.accentMuted, color: T.accent }}
-                        >
-                          <ClipboardText size={10} weight="fill" />
-                          Build scope
-                        </Link>
-                      </div>
-                    </td>
-                  <td className="px-5 py-4">
-                    <span
-                      className="text-[11px] font-medium px-2 py-0.5 rounded-full"
-                      style={{ background: T.accentMuted, color: T.accent }}
-                    >
-                      {lead.source_channel}
-                    </span>
-                  </td>
-                  <td className="px-5 py-4">
-                    <div className="text-sm" style={{ color: T.textSecondary }}>
-                      {lead.project_type || "—"}
-                    </div>
-                    {lead.sqft && (
-                      <div className="text-[11px] mt-0.5" style={{ color: T.textMuted }}>
-                        {lead.sqft} sqft{lead.depth_in ? ` · ${lead.depth_in}"` : ""}{lead.psi ? ` · ${lead.psi} PSI` : ""}
-                      </div>
-                    )}
-                  </td>
-                  <td className="px-5 py-4">
-                    <span
-                      className="text-[11px] font-semibold px-2 py-0.5 rounded-full"
-                      style={{
-                        background: STATUS_BG[lead.status] || T.accentMuted,
-                        color: STATUS_TEXT[lead.status] || T.accent,
-                      }}
-                    >
-                      {STATUS_LABELS[lead.status] || lead.status}
-                    </span>
-                  </td>
-                  <td className="px-5 py-4">
-                    <div className="flex items-center gap-1 text-[11px]" style={{ color: T.textMuted }}>
-                      <Clock size={9} />
-                      {timeAgo(lead.created_at)}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          filteredLeads.map((lead) => (
+            <LeadCard
+              key={lead.id}
+              lead={lead}
+              onClick={() => router.push(`/dashboard/leads/${lead.id}`)}
+            />
+          ))
         )}
       </div>
 
-      <style>{`
-        @keyframes shimmer {
-          0% { background-position: 200% 0; }
-          100% { background-position: -200% 0; }
-        }
-      `}</style>
+      <DustyDrawer open={dustyOpen} onClose={() => setDustyOpen(false)} />
     </div>
   );
 }

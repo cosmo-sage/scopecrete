@@ -284,9 +284,9 @@ function SettingsSheet({ open, onClose, onFixedCosts }: any) {
 
 /* ============================================================ MAIN */
 export default function CashFlow() {
-  const [orgId, setOrgId] = useState<string | null>(null);
   const [data, setData] = useState<CashflowData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   const [selMonth, setSelMonth] = useState<number | null>(null);
   const [selWeek, setSelWeek] = useState<number | null>(null);
@@ -297,17 +297,19 @@ export default function CashFlow() {
   const [ohOpen, setOhOpen] = useState(false);
   const [setOpen, setSetOpen] = useState(false);
 
+  // org_id is resolved server-side from the session — never sent by the client.
   useEffect(() => {
-    fetch("/api/session/org").then((r) => r.json()).then((d) => setOrgId(d.orgId)).catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    if (!orgId) return;
-    fetch(`/api/dashboard/cashflow?org_id=${orgId}`)
-      .then((r) => (r.ok ? r.json() : null))
+    fetch("/api/dashboard/cashflow")
+      .then(async (r) => {
+        if (r.status === 401 || r.status === 403) {
+          setAuthError(r.status === 401 ? "Sign in to see your cash flow." : "Your account isn't attached to an org yet.");
+          return null;
+        }
+        return r.ok ? r.json() : null;
+      })
       .then((d) => { if (d) setData(d); })
       .finally(() => setLoading(false));
-  }, [orgId]);
+  }, []);
 
   const TODAY = data?.today || new Date().toISOString().slice(0, 10);
   const { RIBBON, NOW_IDX } = useMemo(() => {
@@ -434,6 +436,18 @@ export default function CashFlow() {
   const owed = invoices.reduce((s, i) => s + (i.status === "sent" ? i.amount - (paidByInv[i.id] || 0) : 0), 0);
   const monthNet = months[curSelMonth] ? months[curSelMonth].totalIn - months[curSelMonth].totalOut : 0;
   const runColor = runway < 1 ? "#FF6B4A" : runway < 2 ? T.hiviz : T.pulse;
+
+  if (authError) {
+    return (
+      <div style={{ fontFamily: body, background: T.slab, minHeight: "100vh", color: T.ink }}>
+        <div className="sticky top-0 z-30 px-3 flex items-center" style={{ height: 46, background: T.card, borderBottom: `1px solid ${T.hair}` }}>
+          <Emblem size={20} />
+          <span style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 700, marginLeft: 8 }}>SCOPE<span style={{ color: T.hiviz }}>CRETE</span></span>
+        </div>
+        <div style={{ padding: 24, fontSize: F.sm, color: T.ink2 }}>{authError}</div>
+      </div>
+    );
+  }
 
   if (loading || !M) {
     return (

@@ -1,14 +1,47 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createServerClient } from "@supabase/ssr";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+
+interface EstimateEntry {
+  amount: number;
+  createdAt: string;
+}
 
 export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url);
-  const orgId = searchParams.get("org_id");
-  if (!orgId) return NextResponse.json({ error: "org_id is required" }, { status: 400 });
+  // Session-scoped client: RLS applies. org_id is never taken from the
+  // request — it's resolved from the authenticated user's org_members row,
+  // so a caller can only ever see their own org's financials.
+  const cookiesToSet: { name: string; value: string; options: Record<string, unknown> }[] = [];
+  const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+    cookies: {
+      getAll: () => req.cookies.getAll(),
+      setAll: (toSet) => { cookiesToSet.push(...toSet); },
+    },
+  });
+
+  const applyCookies = (res: NextResponse) => {
+    cookiesToSet.forEach(({ name, value, options }) => res.cookies.set(name, value, options as any));
+    return res;
+  };
+
+  const { data: { user }, error: authErr } = await supabase.auth.getUser();
+  if (authErr || !user) {
+    return applyCookies(NextResponse.json({ error: "Not authenticated" }, { status: 401 }));
+  }
+
+  const { data: membership, error: memberErr } = await supabase
+    .from("org_members")
+    .select("org_id")
+    .eq("user_id", user.id)
+    .limit(1)
+    .maybeSingle();
+
+  if (memberErr || !membership) {
+    return applyCookies(NextResponse.json({ error: "No org membership for this user" }, { status: 403 }));
+  }
+  const orgId = membership.org_id;
 
   try {
     const [
@@ -34,26 +67,24 @@ export async function GET(req: NextRequest) {
     ]);
 
     const err = jobsErr || invErr || payErr || recErr || ohErr;
-    if (err) return NextResponse.json({ error: err.message }, { status: 500 });
+    if (err) return applyCookies(NextResponse.json({ error: err.message }, { status: 500 }));
 
     const invoicesByJob: Record<string, number> = {};
     for (const inv of invoices ?? []) {
       invoicesByJob[inv.job_id] = (invoicesByJob[inv.job_id] ?? 0) + Number(inv.amount || 0);
     }
-    const latestEstimateByJob: Record<string, number> = {};
+    const latestEstimateByJob: Record<string, EstimateEntry> = {};
     for (const est of estimates ?? []) {
       if (!est.job_id || est.quote_amount == null) continue;
-      // rows arrive unordered across jobs; keep the most recently created per job
-      const prev = latestEstimateByJob[`${est.job_id}__at`];
-      if (!prev || est.created_at > prev) {
-        latestEstimateByJob[est.job_id] = Number(est.quote_amount);
-        latestEstimateByJob[`${est.job_id}__at`] = est.created_at as any;
+      const prev = latestEstimateByJob[est.job_id];
+      if (!prev || est.created_at > prev.createdAt) {
+        latestEstimateByJob[est.job_id] = { amount: Number(est.quote_amount), createdAt: est.created_at };
       }
     }
 
     const outJobs = (jobs ?? []).map((j) => {
       const invoiced = invoicesByJob[j.id] ?? 0;
-      const estimated = latestEstimateByJob[j.id] ?? 0;
+      const estimated = latestEstimateByJob[j.id]?.amount ?? 0;
       const total = j.status === "won" ? (invoiced || estimated || 0) : (estimated || invoiced || 0);
       return { id: j.id, num: j.job_number || j.id.slice(0, 8), name: j.title || "Untitled job", status: j.status, total };
     });
@@ -107,7 +138,7 @@ export async function GET(req: NextRequest) {
 
     const closeRateRow = Array.isArray(closeRateRows) ? closeRateRows[0] : closeRateRows;
 
-    return NextResponse.json({
+    return applyCookies(NextResponse.json({
       today,
       anchor,
       jobs: outJobs,
@@ -127,9 +158,9 @@ export async function GET(req: NextRequest) {
         rate: Number(closeRateRow?.close_rate_pct || 0),
         sample: Number(closeRateRow?.sample_size || 0),
       },
-    });
+    }));
   } catch (e) {
     console.error(e);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return applyCookies(NextResponse.json({ error: "Internal server error" }, { status: 500 }));
   }
 }

@@ -178,6 +178,18 @@ files.
 Superadmin is cross-tenant. One bad tool call reads or destroys every
 contractor's data at once.
 
+**No API route may use the service-role key on a request path reachable by a
+browser.** This is not limited to the superadmin agent — it applies to every
+route under `src/app/api/`. Service role bypasses RLS entirely, so a
+browser-reachable route holding it is a full cross-tenant data leak whether
+or not it means to be. Use a session-scoped Supabase client (`@supabase/ssr`,
+reading the request's auth cookies) so RLS applies, and derive `org_id` from
+the authenticated session's `org_members` row — never from a query param,
+request body, or any other caller-supplied value. This rule exists because
+`api/dashboard/cashflow/route.ts` shipped in PR #1 with exactly this bug:
+service-role client, `org_id` read straight off the query string, no auth
+check — any unauthenticated caller could pull any org's full financials.
+
 **Do not apply widening database changes on agent judgment.** Restrictive and
 additive changes only, with confirmation.
 

@@ -3,13 +3,14 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { House, Users, ChatCircle, User } from "@phosphor-icons/react";
+import { House, Users, ChatCircle, User, CurrencyDollar } from "@phosphor-icons/react";
 import { DA } from "@/lib/design-tokens";
 import DustyDrawer from "@/components/dashboard/DustyDrawer";
 
 const NAV_ITEMS = [
   { href: "/dashboard",         label: "Home",     icon: House },
   { href: "/dashboard/leads",  label: "Leads",    icon: Users },
+  { href: "/dashboard/cash",   label: "Cash",     icon: CurrencyDollar },
   { href: "/dashboard/messages", label: "Messages", icon: ChatCircle },
   { href: "/dashboard/profile", label: "Profile",  icon: User },
 ];

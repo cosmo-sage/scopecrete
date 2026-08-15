@@ -163,10 +163,12 @@ expected start date per quoted job before it means anything. Add the field.
 
 ## 7. Agent rules
 
-**Git is the coordination layer.** The VPS agent is the only one that merges
-to `master` and deploys. PC and laptop agents work on branches and open PRs.
-Parallel work uses separate git worktrees so two agents cannot touch the same
-files.
+**Git is the coordination layer.** Any agent can merge to `master` and
+deploy — but only when explicitly instructed to, in that conversation, by
+Coy. Never on an agent's own initiative, no matter how green the build looks.
+Default mode is still branches and PRs; a merge is an exception each time,
+not a standing grant carried over from a prior approval. Parallel work uses
+separate git worktrees so two agents cannot touch the same files.
 
 **Superadmin agent guardrails — non-negotiable:**
 

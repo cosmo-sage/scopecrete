@@ -51,10 +51,12 @@ export default function Holding() {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
 
   async function handleSignIn(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    setNotice("");
     if (!email || !password) { setError("Enter your email and password."); return; }
     setBusy(true);
     const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
@@ -68,6 +70,20 @@ export default function Holding() {
       return;
     }
     router.push("/dashboard");
+  }
+
+  async function handleForgotPassword() {
+    setError("");
+    setNotice("");
+    if (!email) { setError("Enter your email above first."); return; }
+    setBusy(true);
+    // Always shows the same confirmation, whether or not the email
+    // exists — same reasoning as the generic sign-in error.
+    await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/auth/callback`,
+    });
+    setBusy(false);
+    setNotice("If that email has an account, a reset link is on its way.");
   }
 
   return (
@@ -185,7 +201,14 @@ export default function Holding() {
                 style={{ width: "100%", height: 44, border: `1px solid ${C.hair}`, padding: "0 12px",
                   fontSize: 16, fontFamily: body, background: "#FCFCFD", marginBottom: 14 }} />
 
-              <label style={{ display: "block", fontSize: 12, color: C.ink2, marginBottom: 5 }}>Password</label>
+              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 5 }}>
+                <label style={{ fontSize: 12, color: C.ink2 }}>Password</label>
+                <button type="button" onClick={handleForgotPassword} disabled={busy}
+                  style={{ fontSize: 12, color: C.chalk, background: "none", border: "none", padding: 0,
+                    cursor: busy ? "default" : "pointer", textDecoration: "underline" }}>
+                  Forgot password?
+                </button>
+              </div>
               <input type="password" value={password} autoComplete="current-password"
                 onChange={(e) => setPassword(e.target.value)}
                 style={{ width: "100%", height: 44, border: `1px solid ${C.hair}`, padding: "0 12px",
@@ -193,6 +216,9 @@ export default function Holding() {
 
               {error && (
                 <div role="alert" style={{ fontSize: 13, color: C.red, marginBottom: 12, lineHeight: 1.4 }}>{error}</div>
+              )}
+              {notice && (
+                <div role="status" style={{ fontSize: 13, color: C.pulse, marginBottom: 12, lineHeight: 1.4 }}>{notice}</div>
               )}
 
               <button type="submit" disabled={busy} style={{

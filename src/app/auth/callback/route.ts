@@ -2,10 +2,12 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
 // PKCE callback for every Supabase Auth flow that lands here: Google
-// OAuth, email OTP, and password recovery. All of them arrive as
-// ?code=... to be exchanged for a session — recovery links are told
-// apart by ?type=recovery and sent on to set a new password instead
-// of straight into the dashboard.
+// OAuth, email OTP, invites, and password recovery. All of them arrive
+// as ?code=... to be exchanged for a session — recovery and invite
+// links are told apart by ?type= and sent on to set a password
+// instead of straight into the dashboard, since this app only offers
+// password sign-in. An invited user who skipped that step would have
+// no way back in on their next visit.
 //
 // The old version of this file (page.tsx) did nothing but redirect to
 // /dashboard-login without ever reading the code from the URL, so the
@@ -15,7 +17,7 @@ export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
   const type = searchParams.get("type");
-  const next = type === "recovery" ? "/auth/reset-password" : "/dashboard";
+  const next = type === "recovery" || type === "invite" ? "/auth/reset-password" : "/dashboard";
 
   if (code) {
     const cookiesToSet: { name: string; value: string; options: Record<string, unknown> }[] = [];

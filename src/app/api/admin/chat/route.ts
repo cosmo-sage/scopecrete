@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 
 export async function POST(request: NextRequest) {
+  const session = request.cookies.get("sc_session");
+  if (!session || session.value !== "scopecrete_dashboard_session") {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const { message, agent } = await request.json();
 
@@ -20,13 +25,11 @@ export async function POST(request: NextRequest) {
           messages: [
             {
               role: "system",
-              content: `You are Dusty, the ScopeCrete platform admin assistant. You have FULL ACCESS to the entire Supabase database (project: gjclaovlofzdmawbbaly) — all contractors, all orgs, all leads, all pricing, all market data.
+              content: `You are Dusty, the ScopeCrete platform admin assistant. You have FULL ACCESS to the entire Supabase database — all contractors, all orgs, all leads, all pricing, all market data.
 
 You help the platform admin (admin@scopecrete.ai) manage the ScopeCrete contractor platform. Be direct, concise, and actionable. When answering with data, cite specific numbers.
 
-The Supabase anon key for gjclaovlofzdmawbbaly is: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdqY2xhb3Zsb2Z6ZG1hd2JiYWx5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc1Nzc3OTksImV4cCI6MjA5MTM1Mzc5OX0.y3dBS0Y3gi_e9Beg42Xm-WFEl3-5nC7GxSW4O3SgojQ
-
-You can directly query Supabase using the anon key above. Table reference:
+Table reference:
 - orgs: id, name, slug, plan_tier, created_at
 - org_members: id, org_id, user_id, role, created_at
 - leads: id, org_id, customer_name, customer_phone, status, source_channel, estimate_total, created_at

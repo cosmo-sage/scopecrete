@@ -67,35 +67,70 @@ function bytesToBase64(bytes: Uint8Array): string {
   return btoa(binary)
 }
 
+/**
+ * Verifies OpenPhone's HMAC signature. Fails CLOSED.
+ *
+ * v4 returned true when the header was absent, had its key guard commented
+ * out, and was never called from the handler at all -- the webhook was fully
+ * unauthenticated.
+ *
+ * Every rejection path logs a DISTINCT reason. If enabling this ever takes
+ * intake offline, the logs must say why within seconds rather than leaving us
+ * guessing between "bad key format", "clock skew" and "genuine mismatch".
+ * The whole body is wrapped: atob() throws on a non-base64 key, and this runs
+ * outside the handler's try/catch, so an unhandled throw here would 500 every
+ * webhook and trigger endless provider retries.
+ */
 async function verifyQuoSignature(req: Request, body: string): Promise<boolean> {
-  // Fail CLOSED. Previously this returned true when the header was absent,
-  // and the key check above it was commented out -- and the function was
-  // never called from the handler at all, so the webhook was completely
-  // unauthenticated (verify_jwt is also false on this function).
-  if (!QUO_SIGNING_KEY) {
-    console.error('[auth] QUO_SIGNING_KEY is not set — rejecting request')
+  try {
+    if (!QUO_SIGNING_KEY) {
+      console.error('[auth] reject: QUO_SIGNING_KEY is not set')
+      return false
+    }
+    const sigHeader = req.headers.get('openphone-signature')
+    if (!sigHeader) {
+      console.error('[auth] reject: no openphone-signature header')
+      return false
+    }
+    const parts = sigHeader.split(';')
+    if (parts.length !== 4 || parts[0] !== 'hmac' || parts[1] !== '1') {
+      console.error(`[auth] reject: unexpected signature header shape (parts=${parts.length}, scheme=${parts[0]}, version=${parts[1]})`)
+      return false
+    }
+    const timestamp = parts[2]
+    const providedSig = parts[3]
+
+    const now = Math.floor(Date.now() / 1000)
+    const skew = Math.abs(now - parseInt(timestamp))
+    if (!Number.isFinite(skew) || skew > 300) {
+      console.error(`[auth] reject: timestamp skew ${skew}s (ts=${timestamp}, now=${now}) — if this is ~1000x too large the provider is sending milliseconds`)
+      return false
+    }
+
+    let keyBytes: Uint8Array
+    try {
+      keyBytes = base64ToBytes(QUO_SIGNING_KEY)
+    } catch {
+      console.error('[auth] reject: QUO_SIGNING_KEY is not valid base64 — store the key exactly as the provider shows it')
+      return false
+    }
+
+    const key = await crypto.subtle.importKey(
+      'raw', keyBytes,
+      { name: 'HMAC', hash: 'SHA-256' },
+      false, ['sign']
+    )
+    const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(timestamp + '.' + body))
+    const computedSig = bytesToBase64(new Uint8Array(sig))
+    if (providedSig !== computedSig) {
+      console.error(`[auth] reject: digest mismatch (provided ${providedSig.length} chars, computed ${computedSig.length}) — key value is wrong, or the signed payload differs`)
+      return false
+    }
+    return true
+  } catch (e) {
+    console.error('[auth] reject: verification threw:', e instanceof Error ? e.message : String(e))
     return false
   }
-  const sigHeader = req.headers.get('openphone-signature')
-  if (!sigHeader) {
-    console.error('[auth] missing openphone-signature header — rejecting request')
-    return false
-  }
-  const parts = sigHeader.split(';')
-  if (parts.length !== 4 || parts[0] !== 'hmac' || parts[1] !== '1') return false
-  const timestamp = parts[2]
-  const providedSig = parts[3]
-  const now = Math.floor(Date.now() / 1000)
-  if (Math.abs(now - parseInt(timestamp)) > 300) return false
-  const signedData = timestamp + '.' + body
-  const key = await crypto.subtle.importKey(
-    'raw', base64ToBytes(QUO_SIGNING_KEY),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false, ['sign']
-  )
-  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(signedData))
-  const computedSig = bytesToBase64(new Uint8Array(sig))
-  return providedSig === computedSig
 }
 
 // ---------------------------------------------------------------------------

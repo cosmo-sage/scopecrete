@@ -1,0 +1,42 @@
+# Supabase CLI config — ScopeCrete.ai
+#
+# WHY THIS FILE EXISTS
+#
+# `supabase functions deploy` sets verify_jwt = true unless told otherwise.
+# Before this file existed there was no per-function config in the repo, so any
+# deploy would have silently turned Supabase's own JWT gate ON for these
+# functions.
+#
+# That is not hypothetical. quo-intake's trailer comments record it happening
+# on 2026-06-22:
+#     v44 verify_jwt check
+#     v45 - redeploy to lock verify_jwt off
+# OpenPhone does not send a Supabase JWT, so with verify_jwt on, every webhook
+# is rejected at the gateway before the function body ever runs and intake
+# goes dark.
+#
+# The values below mirror the settings the deployed functions actually had as
+# of 2026-08-20, so deploying from this repo preserves them instead of
+# resetting them.
+#
+# quo-intake authenticates callers itself, via OpenPhone's HMAC signature
+# (see verifyQuoSignature). That is the intended auth for it — NOT verify_jwt.
+
+project_id = "cxiusuewtrvcpqequueh"
+
+# Webhook receiver. Called by OpenPhone, which cannot present a Supabase JWT.
+# Authenticated by HMAC signature inside the function.
+[functions.quo-intake]
+verify_jwt = false
+
+# Called with a `?secret=` query param rather than a JWT.
+[functions.send-estimate-sms]
+verify_jwt = false
+
+# Authenticates via x-hermes-org / x-hermes-key headers, not a JWT.
+[functions.dusty-mcp]
+verify_jwt = false
+
+# Invoked manually/administratively; JWT gate is appropriate here.
+[functions.enrich-sms-threads]
+verify_jwt = true

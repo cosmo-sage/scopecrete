@@ -1,16 +1,22 @@
 /**
- * quo-intake v4 — ScopeCrete.ai
+ * quo-intake v5 — ScopeCrete.ai
  * File: supabase/functions/quo-intake/index.ts
  * Project: cxiusuewtrvcpqequueh
  *
- * Changes from v3 (quо-intake-enriched.ts):
- * - Stores ALL raw events in quo_events first (phone, body, direction, media_urls, raw_payload)
- * - Links contact_id to quo_events rows
- * - Async Groq enrichment: extracts first_name, last_name, email, address, city, state, zip,
- *   contact_type, scope_of_work from aggregated event text per phone
- * - Upserts contacts with enriched fields
- * - Non-blocking: enrichment fires before response but doesn't delay webhook ack
- * - Uses GROQ_API_KEY env var for enrichment
+ * v5 changes:
+ * - FIX: findOpenLead returned the PostgREST response wrapper, not the row.
+ *   `if (existingLead)` was always true, so createLead was unreachable and
+ *   every downstream call sent id=eq.undefined. No lead had ever been created.
+ * - Handle call.recording.completed / call.transcript.completed /
+ *   call.summary.completed / message.delivered (previously discarded).
+ * - Signature verification is now enforced (it was defined but never called,
+ *   and would have failed open anyway).
+ * - Contacts are keyed on the COUNTERPARTY, not always from_phone, so
+ *   outbound events no longer create a contact for our own number.
+ * - Every database call now checks `error`. Nothing was checked before,
+ *   which is why the lead bug ran silently for the life of the pipeline.
+ * - appendNote removed: it wrote to leads.notes, which does not exist.
+ *   conversation_log (via appendLog) already carries strictly more detail.
  */
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
@@ -21,6 +27,24 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '
 const QUO_ORG_ID = Deno.env.get('QUO_ORG_ID') ?? ''
 const QUO_SIGNING_KEY = Deno.env.get('QUO_SIGNING_KEY') ?? ''
 const GROQ_API_KEY = Deno.env.get('GROQ_API_KEY') ?? ''
+
+// Our own Quo/OpenPhone number. Used to tell our side of a conversation
+// from the customer's. Hoisted from inside the message handler so the
+// call handlers can use it too.
+const QUO_PHONE = Deno.env.get('QUO_PHONE') ?? '+12253782458'
+
+// ---------------------------------------------------------------------------
+// Error handling helper
+// ---------------------------------------------------------------------------
+
+/** Logs a PostgREST error with context. Returns true if there was one. */
+function dbFailed(context: string, error: { message: string } | null): boolean {
+  if (error) {
+    console.error(`[db] ${context}: ${error.message}`)
+    return true
+  }
+  return false
+}
 
 // ---------------------------------------------------------------------------
 // Signature verification
@@ -44,9 +68,19 @@ function bytesToBase64(bytes: Uint8Array): string {
 }
 
 async function verifyQuoSignature(req: Request, body: string): Promise<boolean> {
-  // if (!QUO_SIGNING_KEY) return true
+  // Fail CLOSED. Previously this returned true when the header was absent,
+  // and the key check above it was commented out -- and the function was
+  // never called from the handler at all, so the webhook was completely
+  // unauthenticated (verify_jwt is also false on this function).
+  if (!QUO_SIGNING_KEY) {
+    console.error('[auth] QUO_SIGNING_KEY is not set — rejecting request')
+    return false
+  }
   const sigHeader = req.headers.get('openphone-signature')
-  if (!sigHeader) return true
+  if (!sigHeader) {
+    console.error('[auth] missing openphone-signature header — rejecting request')
+    return false
+  }
   const parts = sigHeader.split(';')
   if (parts.length !== 4 || parts[0] !== 'hmac' || parts[1] !== '1') return false
   const timestamp = parts[2]
@@ -75,6 +109,98 @@ function normalizePhone(phone: string): string | null {
   if (digits.length === 11 && digits[0] === '1') return '+' + digits
   if (phone.startsWith('+') && digits.length >= 10) return phone
   return null
+}
+
+/**
+ * Group texts arrive with `to` as a comma-joined string
+ * ("+12252878292,+12253782458"). A contact row needs a single number, so
+ * take the first recipient that isn't us. Note this only picks a contact --
+ * to_phone still stores the raw value, so group threads are not yet modelled
+ * properly. That is tracked separately.
+ */
+function primaryCounterparty(phone: string | null): string | null {
+  if (!phone) return null
+  if (!phone.includes(',')) return phone
+  const parts = phone.split(',').map(p => normalizePhone(p.trim())).filter(Boolean) as string[]
+  return parts.find(p => p !== QUO_PHONE) ?? parts[0] ?? null
+}
+
+/** The other party in the conversation -- never our own number. */
+function counterpartyPhone(
+  direction: 'inbound' | 'outbound',
+  fromPhone: string | null,
+  toPhone: string | null
+): string | null {
+  return direction === 'outbound'
+    ? primaryCounterparty(toPhone)
+    : primaryCounterparty(fromPhone)
+}
+
+// ---------------------------------------------------------------------------
+// Payload field extraction for the follow-up call events
+//
+// VERIFIED against OpenPhone docs: call.transcript.completed and
+// call.summary.completed key on `callId` (NOT `id`), carry `dialogue[]` and
+// `summary[]`/`nextSteps[]` respectively.
+// INFERRED (docs were unreachable): the exact recording-URL field on
+// call.recording.completed, and the text field on message.delivered. Both are
+// read defensively across the plausible spellings, and the raw payload is
+// stored on every event so the first real one can be checked and corrected.
+// ---------------------------------------------------------------------------
+
+/** Follow-up call events key on `callId`; the call object itself uses `id`. */
+function callIdFromPayload(obj: Record<string, unknown>): string | null {
+  return (obj.callId as string) ?? (obj.id as string) ?? null
+}
+
+function recordingUrlFromPayload(obj: Record<string, unknown>): string | null {
+  const media = obj.media
+  if (Array.isArray(media)) {
+    for (const m of media) {
+      if (typeof m === 'string') return m
+      if (m && typeof m === 'object') {
+        const url = (m as Record<string, unknown>).url
+        if (typeof url === 'string') return url
+      }
+    }
+  }
+  return (obj.recordingUrl as string) ?? (obj.recording_url as string) ?? (obj.url as string) ?? null
+}
+
+/** call.transcript.completed carries `dialogue[]`, each {identifier, content}. */
+function transcriptFromPayload(obj: Record<string, unknown>): string | null {
+  const dialogue = obj.dialogue
+  if (Array.isArray(dialogue) && dialogue.length > 0) {
+    const lines = dialogue.map(d => {
+      const seg = d as Record<string, unknown>
+      const who = (seg.identifier as string) ?? (seg.userId as string) ?? 'unknown'
+      const content = (seg.content as string) ?? ''
+      return content ? `${who}: ${content}` : ''
+    }).filter(Boolean)
+    if (lines.length > 0) return lines.join('\n')
+  }
+  const flat = (obj.transcript as string) ?? (obj.text as string) ?? null
+  return flat && flat.trim() ? flat : null
+}
+
+/** call.summary.completed carries `summary[]` plus `nextSteps[]`. */
+function summaryFromPayload(obj: Record<string, unknown>): string | null {
+  const parts: string[] = []
+  const summary = obj.summary
+  if (Array.isArray(summary)) parts.push(...summary.filter((s): s is string => typeof s === 'string'))
+  else if (typeof summary === 'string' && summary.trim()) parts.push(summary)
+
+  const nextSteps = obj.nextSteps
+  if (Array.isArray(nextSteps)) {
+    const steps = nextSteps.filter((s): s is string => typeof s === 'string')
+    if (steps.length > 0) parts.push('Next steps:', ...steps.map(s => `- ${s}`))
+  }
+  return parts.length > 0 ? parts.join('\n') : null
+}
+
+/** Message text. message.received uses `body`; `text` is the API spelling. */
+function messageTextFromPayload(obj: Record<string, unknown>): string {
+  return (obj.body as string) ?? (obj.text as string) ?? ''
 }
 
 // ---------------------------------------------------------------------------
@@ -156,8 +282,7 @@ async function insertQuoEvent(
     raw_payload: opts.rawPayload,
     business: 'sacco_builders',
   })
-  if (error) console.error('quo_events insert error:', error.message)
-  return !error
+  return !dbFailed(`quo_events insert (${opts.eventType}/${opts.eventId})`, error)
 }
 
 // ---------------------------------------------------------------------------
@@ -328,11 +453,25 @@ ${combinedText.substring(0, 4000)}`
 // Lead helpers
 // ---------------------------------------------------------------------------
 
-async function findOpenLead(supabase: ReturnType<typeof createClient>, contactId: string) {
-  return supabase.from('leads').select('id, status, conversation_log')
+/**
+ * Returns the open lead ROW for a contact, or null.
+ *
+ * This previously returned the PostgREST response wrapper and callers did
+ * `if (existingLead) { leadId = existingLead.id }` -- the wrapper is always
+ * truthy, so `.id` was always undefined, createLead was unreachable, and every
+ * downstream request went out as id=eq.undefined. Destructuring here keeps the
+ * fix in one place so no caller can reintroduce it.
+ */
+async function findOpenLead(
+  supabase: ReturnType<typeof createClient>,
+  contactId: string
+): Promise<{ id: string; status: string } | null> {
+  const { data, error } = await supabase.from('leads').select('id, status')
     .eq('contact_id', contactId)
     .in('status', ['new', 'contacted', 'qualified'])
     .order('created_at', { ascending: false }).limit(1).maybeSingle()
+  if (dbFailed(`findOpenLead(contact=${contactId})`, error)) return null
+  return (data as { id: string; status: string } | null) ?? null
 }
 
 async function createLead(supabase: ReturnType<typeof createClient>, contactId: string, orgId: string, sourceChannel: string) {
@@ -343,19 +482,37 @@ async function createLead(supabase: ReturnType<typeof createClient>, contactId: 
   return data.id
 }
 
-async function appendLog(supabase: ReturnType<typeof createClient>, leadId: string, entry: Record<string, unknown>) {
-  const { data: lead } = await supabase.from('leads').select('conversation_log').eq('id', leadId).single()
-  const log = lead?.conversation_log ?? []
-  log.push({ ...entry, timestamp: new Date().toISOString() })
-  await supabase.from('leads').update({ conversation_log: log }).eq('id', leadId)
+/** Resolves the lead for a contact, creating one if there is no open lead. */
+async function resolveLead(
+  supabase: ReturnType<typeof createClient>,
+  contactId: string,
+  orgId: string,
+  sourceChannel: string
+): Promise<{ leadId: string; created: boolean }> {
+  const existing = await findOpenLead(supabase, contactId)
+  if (existing?.id) return { leadId: existing.id, created: false }
+  return { leadId: await createLead(supabase, contactId, orgId, sourceChannel), created: true }
 }
 
-async function appendNote(supabase: ReturnType<typeof createClient>, leadId: string, note: string) {
-  const { data: lead } = await supabase.from('leads').select('notes').eq('id', leadId).single()
-  const notes = lead?.notes ?? []
-  notes.push(note)
-  await supabase.from('leads').update({ notes }).eq('id', leadId)
+async function appendLog(supabase: ReturnType<typeof createClient>, leadId: string, entry: Record<string, unknown>) {
+  if (!leadId) {
+    console.error('[appendLog] called without a leadId — skipping')
+    return
+  }
+  const { data: lead, error: readErr } = await supabase
+    .from('leads').select('conversation_log').eq('id', leadId).maybeSingle()
+  if (dbFailed(`appendLog read (lead=${leadId})`, readErr)) return
+  const log = Array.isArray(lead?.conversation_log) ? lead.conversation_log : []
+  log.push({ ...entry, timestamp: new Date().toISOString() })
+  const { error: writeErr } = await supabase
+    .from('leads').update({ conversation_log: log }).eq('id', leadId)
+  dbFailed(`appendLog write (lead=${leadId})`, writeErr)
 }
+
+// appendNote() removed in v5. It read and wrote leads.notes, which does not
+// exist on public.leads -- every call produced a 400 on both the SELECT and the
+// UPDATE, silently. conversation_log (appendLog) already records the same
+// events with more structure, so the column was not worth adding.
 
 // ---------------------------------------------------------------------------
 // voip_calls insert
@@ -373,7 +530,33 @@ async function insertVoipCall(supabase: ReturnType<typeof createClient>, row: {
     transcript: row.transcript, recording_url: row.recordingUrl,
     status: row.status, quo_call_id: row.quoCallId, provider: 'quo',
   })
-  if (error) console.error('voip_calls insert error:', error.message)
+  return !dbFailed(`voip_calls insert (call=${row.quoCallId})`, error)
+}
+
+/**
+ * Patches an existing call row from a follow-up event.
+ * voip_calls.quo_call_id carries a UNIQUE constraint, so this matches exactly
+ * one row. Returns the row's org/contact/direction so the caller can log a
+ * quo_event against it, or null when the call has not landed yet.
+ */
+async function updateCallByQuoId(
+  supabase: ReturnType<typeof createClient>,
+  quoCallId: string,
+  patch: Record<string, unknown>
+): Promise<{ id: string; org_id: string; contact_id: string; lead_id: string | null
+             direction: 'inbound' | 'outbound'; from_phone: string; to_phone: string } | null> {
+  const { data, error } = await supabase
+    .from('voip_calls')
+    .update(patch)
+    .eq('quo_call_id', quoCallId)
+    .select('id, org_id, contact_id, lead_id, direction, from_phone, to_phone')
+    .maybeSingle()
+  if (dbFailed(`voip_calls update (call=${quoCallId})`, error)) return null
+  if (!data) {
+    console.error(`[match] no voip_calls row for quo_call_id=${quoCallId} — follow-up event arrived before call.completed, or the call was never stored`)
+    return null
+  }
+  return data as never
 }
 
 // ---------------------------------------------------------------------------
@@ -390,7 +573,35 @@ async function insertSmsThread(supabase: ReturnType<typeof createClient>, row: {
     direction: row.direction, message_body: row.body,
     media_urls: row.mediaUrls, quo_message_id: row.quoMessageId, provider: 'quo',
   })
-  if (error) console.error('sms_threads insert error:', error.message)
+  return !dbFailed(`sms_threads insert (msg=${row.quoMessageId})`, error)
+}
+
+/**
+ * Stores an outbound message from message.delivered.
+ *
+ * Unlike the call follow-ups this is NOT purely an update: outbound messages
+ * were never inserted by any handler, so there is usually no row to patch.
+ * sms_threads.quo_message_id has no UNIQUE constraint, so this reads first
+ * rather than relying on ON CONFLICT. (Adding that constraint would let this
+ * become a real upsert -- worth doing, but it is a schema change.)
+ */
+async function storeOutboundMessage(supabase: ReturnType<typeof createClient>, row: {
+  orgId: string; contactId: string; leadId: string; fromPhone: string; toPhone: string
+  body: string; mediaUrls: unknown; quoMessageId: string
+}): Promise<'inserted' | 'updated' | 'failed'> {
+  const { data: existing, error: readErr } = await supabase
+    .from('sms_threads').select('id').eq('quo_message_id', row.quoMessageId).limit(1).maybeSingle()
+  if (dbFailed(`sms_threads lookup (msg=${row.quoMessageId})`, readErr)) return 'failed'
+
+  if (existing?.id) {
+    const { error } = await supabase.from('sms_threads')
+      .update({ message_body: row.body, media_urls: row.mediaUrls, lead_id: row.leadId })
+      .eq('id', existing.id)
+    return dbFailed(`sms_threads update (msg=${row.quoMessageId})`, error) ? 'failed' : 'updated'
+  }
+
+  const ok = await insertSmsThread(supabase, { ...row, direction: 'outbound' })
+  return ok ? 'inserted' : 'failed'
 }
 
 // ---------------------------------------------------------------------------
@@ -409,6 +620,14 @@ serve(async (req: Request) => {
 
   const rawBody = await req.text()
 
+  // Enforce the HMAC signature before doing anything with the payload.
+  // v4 defined verifyQuoSignature but never called it.
+  if (!(await verifyQuoSignature(req, rawBody))) {
+    return new Response(JSON.stringify({ error: 'Invalid signature' }), {
+      status: 401, headers: { 'Content-Type': 'application/json' }
+    })
+  }
+
   const supabase = makeSupabase()
   let payload: Record<string, unknown>
   try { payload = JSON.parse(rawBody) } catch {
@@ -426,11 +645,20 @@ serve(async (req: Request) => {
       const fromPhone = normalizePhone(fromRaw)
       if (!fromPhone) return new Response(JSON.stringify({ error: 'Invalid phone' }), { status: 400 })
       const toPhone = normalizePhone(toRaw)
-      const { orgId } = await resolveOrg(supabase, toPhone)
-      const contactId = await upsertContact(supabase, orgId, fromPhone)
-
       const quoCallId = (data.id as string) ?? ''
       const direction: 'inbound' | 'outbound' = (data.direction as string) === 'inbound' ? 'inbound' : 'outbound'
+
+      // Key the contact on the counterparty, not always from_phone. On an
+      // outbound call from_phone is OUR number, which previously funnelled all
+      // 426 outbound calls into a single contact row for ourselves.
+      const contactPhone = counterpartyPhone(direction, fromPhone, toPhone)
+      if (!contactPhone) {
+        console.error(`[call.completed] no usable counterparty (from=${fromPhone} to=${toPhone})`)
+        return new Response(JSON.stringify({ error: 'No counterparty phone' }), { status: 400 })
+      }
+      const { orgId } = await resolveOrg(supabase, toPhone)
+      const contactId = await upsertContact(supabase, orgId, contactPhone)
+
       const rawStatus = (data.status as string) ?? 'missed'
       const status = rawStatus === 'completed' ? 'completed' : rawStatus === 'voicemail' ? 'voicemail' : 'missed'
       const durationSec = (data.duration_sec as number | null) ?? (data.duration as number | null) ?? null
@@ -446,20 +674,15 @@ serve(async (req: Request) => {
       })
 
       // Resolve lead
-      let leadId: string
-      const existingLead = await findOpenLead(supabase, contactId)
-      if (existingLead) {
-        leadId = existingLead.id
+      const { leadId, created } = await resolveLead(supabase, contactId, orgId, 'phone')
+      if (!created) {
         await appendLog(supabase, leadId, { type: 'call', direction, preview: transcript ?? `Call ${status}, ${durationSec}s`, duration_sec: durationSec, recording_url: recordingUrl })
-        await appendNote(supabase, leadId, `[${new Date().toISOString()}] Call: ${status}, ${durationSec}s`)
-      } else {
-        leadId = await createLead(supabase, contactId, orgId, 'phone')
       }
 
       await insertVoipCall(supabase, { orgId, contactId, leadId, fromPhone, toPhone: toPhone ?? fromPhone, direction, durationSec, transcript, recordingUrl, status: 'new', quoCallId })
 
       // Fire async enrichment (non-blocking)
-      enrichContact(supabase, orgId, fromPhone, contactId).catch(e => console.error('Enrichment error:', e))
+      enrichContact(supabase, orgId, contactPhone, contactId).catch(e => console.error('Enrichment error:', e))
 
       return new Response(JSON.stringify({ status: 'ok', contact_id: contactId, lead_id: leadId }), { status: 200, headers: { 'Content-Type': 'application/json' } })
     }
@@ -471,14 +694,18 @@ serve(async (req: Request) => {
       const fromPhone = normalizePhone(fromRaw)
       if (!fromPhone) return new Response(JSON.stringify({ error: 'Invalid phone' }), { status: 400 })
       const toPhone = normalizePhone(toRaw)
-      const QUO_PHONE = '+12253782458'
       const direction: 'inbound' | 'outbound' = fromPhone === QUO_PHONE ? 'outbound' : 'inbound'
-      const body = (data.body as string) ?? ''
+      const body = messageTextFromPayload(data)
       const mediaUrls = (data.media as unknown[] | null)
       const quoMessageId = (data.id as string) ?? ''
 
+      const contactPhone = counterpartyPhone(direction, fromPhone, toPhone)
+      if (!contactPhone) {
+        console.error(`[message.received] no usable counterparty (from=${fromPhone} to=${toPhone})`)
+        return new Response(JSON.stringify({ error: 'No counterparty phone' }), { status: 400 })
+      }
       const { orgId } = await resolveOrg(supabase, toPhone)
-      const contactId = await upsertContact(supabase, orgId, fromPhone)
+      const contactId = await upsertContact(supabase, orgId, contactPhone)
 
       // Insert quo_event
       await insertQuoEvent(supabase, {
@@ -488,22 +715,139 @@ serve(async (req: Request) => {
       })
 
       // Resolve lead
-      let leadId: string
-      const existingLead = await findOpenLead(supabase, contactId)
-      if (existingLead) {
-        leadId = existingLead.id
+      const { leadId, created } = await resolveLead(supabase, contactId, orgId, 'sms')
+      if (!created) {
         await appendLog(supabase, leadId, { type: 'sms', direction, preview: body.substring(0, 200) })
-        await appendNote(supabase, leadId, `[${new Date().toISOString()}] SMS: ${body.substring(0, 100)}`)
-      } else {
-        leadId = await createLead(supabase, contactId, orgId, 'sms')
       }
 
       await insertSmsThread(supabase, { orgId, contactId, leadId, fromPhone, toPhone: toPhone ?? fromPhone, direction, body, mediaUrls, quoMessageId })
 
       // Fire async enrichment
-      enrichContact(supabase, orgId, fromPhone, contactId).catch(e => console.error('Enrichment error:', e))
+      enrichContact(supabase, orgId, contactPhone, contactId).catch(e => console.error('Enrichment error:', e))
 
       return new Response(JSON.stringify({ status: 'ok', contact_id: contactId, lead_id: leadId }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    }
+
+    // -------------------- call follow-ups --------------------
+    // recording / transcript / summary arrive as SEPARATE webhooks after
+    // call.completed, so these patch the existing voip_calls row rather than
+    // inserting. They key on `callId` (the call object itself uses `id`), and
+    // voip_calls.quo_call_id is UNIQUE, so the match is exact.
+    if (
+      eventType === 'call.recording.completed' ||
+      eventType === 'call.transcript.completed' ||
+      eventType === 'call.summary.completed'
+    ) {
+      const quoCallId = callIdFromPayload(data)
+      if (!quoCallId) {
+        console.error(`[${eventType}] no callId in payload:`, JSON.stringify(data).substring(0, 500))
+        return new Response(JSON.stringify({ status: 'no_call_id' }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }
+
+      let patch: Record<string, unknown> = {}
+      let logEntry: Record<string, unknown> = {}
+      let bodyForEvent: string | null = null
+      let mediaForEvent: unknown = null
+
+      if (eventType === 'call.recording.completed') {
+        const recordingUrl = recordingUrlFromPayload(data)
+        if (!recordingUrl) {
+          console.error(`[${eventType}] no recording url found:`, JSON.stringify(data).substring(0, 500))
+          return new Response(JSON.stringify({ status: 'no_recording_url' }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        }
+        patch = { recording_url: recordingUrl }
+        logEntry = { type: 'call_recording', recording_url: recordingUrl }
+        mediaForEvent = [recordingUrl]
+      } else if (eventType === 'call.transcript.completed') {
+        const transcript = transcriptFromPayload(data)
+        if (!transcript) {
+          console.error(`[${eventType}] no transcript text found:`, JSON.stringify(data).substring(0, 500))
+          return new Response(JSON.stringify({ status: 'no_transcript' }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        }
+        patch = { transcript }
+        logEntry = { type: 'call_transcript', preview: transcript.substring(0, 200) }
+        bodyForEvent = transcript
+      } else {
+        const summary = summaryFromPayload(data)
+        if (!summary) {
+          console.error(`[${eventType}] no summary text found:`, JSON.stringify(data).substring(0, 500))
+          return new Response(JSON.stringify({ status: 'no_summary' }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        }
+        patch = { summary }
+        logEntry = { type: 'call_summary', preview: summary.substring(0, 200) }
+        bodyForEvent = summary
+      }
+
+      const call = await updateCallByQuoId(supabase, quoCallId, patch)
+      if (!call) {
+        // Raw payload is preserved in the function logs above so nothing is lost.
+        return new Response(JSON.stringify({ status: 'unmatched', call_id: quoCallId }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }
+
+      await insertQuoEvent(supabase, {
+        orgId: call.org_id, contactId: call.contact_id, eventType, eventId: quoCallId,
+        direction: call.direction, fromPhone: call.from_phone, toPhone: call.to_phone,
+        body: bodyForEvent, mediaUrls: mediaForEvent, rawPayload: data, leadId: call.lead_id,
+      })
+
+      if (call.lead_id) await appendLog(supabase, call.lead_id, { ...logEntry, direction: call.direction })
+
+      // A transcript is the richest signal this pipeline gets; re-enrich now
+      // that it exists (enrichContact reads voip_calls.transcript).
+      if (eventType === 'call.transcript.completed') {
+        enrichContact(supabase, call.org_id, call.from_phone, call.contact_id)
+          .catch(e => console.error('Enrichment error:', e))
+      }
+
+      return new Response(JSON.stringify({ status: 'ok', call_id: quoCallId, updated: Object.keys(patch) }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    }
+
+    // -------------------- message.delivered (our outbound texts) --------------------
+    // Unlike the call follow-ups this usually INSERTS: outbound messages were
+    // never captured by any handler, so our side of every conversation is
+    // currently absent. Reads first in case the row already exists.
+    if (eventType === 'message.delivered') {
+      const fromRaw = (data.from as string) ?? ''
+      const toRaw = (data.to as string) ?? ''
+      const fromPhone = normalizePhone(fromRaw)
+      const toPhone = normalizePhone(toRaw)
+      const quoMessageId = (data.id as string) ?? ''
+      const body = messageTextFromPayload(data)
+      const mediaUrls = (data.media as unknown[] | null)
+
+      if (!quoMessageId) {
+        console.error('[message.delivered] no message id in payload:', JSON.stringify(data).substring(0, 500))
+        return new Response(JSON.stringify({ status: 'no_message_id' }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }
+
+      // Delivered means we sent it, so the counterparty is the recipient.
+      const contactPhone = counterpartyPhone('outbound', fromPhone, toPhone)
+      if (!contactPhone) {
+        console.error(`[message.delivered] no usable counterparty (from=${fromPhone} to=${toPhone})`)
+        return new Response(JSON.stringify({ status: 'no_counterparty' }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }
+
+      const { orgId } = await resolveOrg(supabase, fromPhone)
+      const contactId = await upsertContact(supabase, orgId, contactPhone)
+
+      await insertQuoEvent(supabase, {
+        orgId, contactId, eventType, eventId: quoMessageId,
+        direction: 'outbound', fromPhone: fromPhone ?? QUO_PHONE, toPhone: toPhone ?? contactPhone,
+        body, mediaUrls, rawPayload: data, leadId: null,
+      })
+
+      const { leadId, created } = await resolveLead(supabase, contactId, orgId, 'sms')
+      if (!created) {
+        await appendLog(supabase, leadId, { type: 'sms', direction: 'outbound', preview: body.substring(0, 200) })
+      }
+
+      const outcome = await storeOutboundMessage(supabase, {
+        orgId, contactId, leadId,
+        fromPhone: fromPhone ?? QUO_PHONE, toPhone: toPhone ?? contactPhone,
+        body, mediaUrls, quoMessageId,
+      })
+
+      return new Response(JSON.stringify({ status: 'ok', contact_id: contactId, lead_id: leadId, message: outcome }), { status: 200, headers: { 'Content-Type': 'application/json' } })
     }
 
     return new Response(JSON.stringify({ status: 'ignored', type: eventType }), { status: 200, headers: { 'Content-Type': 'application/json' } })

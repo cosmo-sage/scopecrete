@@ -26,6 +26,17 @@ project_id = "cxiusuewtrvcpqequueh"
 
 # Webhook receiver. Called by OpenPhone, which cannot present a Supabase JWT.
 # Authenticated by HMAC signature inside the function.
+#
+# quo-intake also ships an empty functions/quo-intake/deno.json. That is not
+# decorative. Up to v51 the deployment carried
+#     import_map_path = "file:///root/.openclaw/workspace"
+# left behind by whatever machine deployed it, and the platform resolves that
+# path INSIDE each new source bundle. Every redeploy failed with
+#     import map path does not exist - .../source/file:///root/.openclaw/workspace
+# Shipping a real deno.json gives the deploy a valid relative import map to
+# point at, which overwrote the stale absolute path on v52. Deleting the file
+# does not restore the old value, but it does leave the next deploy free to
+# inherit a bad one again, so keep it.
 [functions.quo-intake]
 verify_jwt = false
 

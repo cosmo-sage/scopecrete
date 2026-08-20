@@ -17,6 +17,13 @@
  *   which is why the lead bug ran silently for the life of the pipeline.
  * - appendNote removed: it wrote to leads.notes, which does not exist.
  *   conversation_log (via appendLog) already carries strictly more detail.
+ *
+ * v6 changes — all three found by replaying a real signed request against v52:
+ * - FIX: the signature timestamp is MILLISECONDS. The seconds-only skew check
+ *   rejected every webhook. This is what took intake down on v52.
+ * - FIX: call direction is "incoming"/"outgoing", never "inbound". Every
+ *   inbound call was filed as outbound, keying the contact to our own number.
+ * - Voicemail audio and duration live under data.voicemail, not recording_url.
  */
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
@@ -100,10 +107,26 @@ async function verifyQuoSignature(req: Request, body: string): Promise<boolean> 
     const timestamp = parts[2]
     const providedSig = parts[3]
 
+    // OpenPhone sends the timestamp in MILLISECONDS. Confirmed against a real
+    // signed request on 2026-08-20: ts=1787237087956 vs now=1787237088, i.e. a
+    // true skew of 0.04s that the old seconds-only comparison read as 1.79
+    // BILLION seconds and rejected. Every webhook would have been turned away.
+    //
+    // The HMAC below still signs the RAW header string. The provider computes
+    // its digest over `timestamp + '.' + body` using whatever it sent, so
+    // converting units before hashing would break verification. Only the
+    // freshness window converts. Seconds are still accepted in case the
+    // provider ever changes the unit.
+    const tsRaw = Number(timestamp)
+    if (!Number.isFinite(tsRaw)) {
+      console.error(`[auth] reject: timestamp is not a number (ts=${timestamp})`)
+      return false
+    }
+    const tsSeconds = tsRaw > 1e11 ? tsRaw / 1000 : tsRaw
     const now = Math.floor(Date.now() / 1000)
-    const skew = Math.abs(now - parseInt(timestamp))
-    if (!Number.isFinite(skew) || skew > 300) {
-      console.error(`[auth] reject: timestamp skew ${skew}s (ts=${timestamp}, now=${now}) — if this is ~1000x too large the provider is sending milliseconds`)
+    const skew = Math.abs(now - tsSeconds)
+    if (skew > 300) {
+      console.error(`[auth] reject: timestamp skew ${Math.round(skew)}s (ts=${timestamp}, now=${now})`)
       return false
     }
 
@@ -158,6 +181,18 @@ function primaryCounterparty(phone: string | null): string | null {
   if (!phone.includes(',')) return phone
   const parts = phone.split(',').map(p => normalizePhone(p.trim())).filter(Boolean) as string[]
   return parts.find(p => p !== QUO_PHONE) ?? parts[0] ?? null
+}
+
+/**
+ * OpenPhone's call object spells direction "incoming"/"outgoing" -- NOT
+ * "inbound"/"outbound". The old test `(data.direction) === 'inbound'` therefore
+ * never matched, so EVERY inbound call was filed as outbound. Because the
+ * counterparty of an outbound call is the `to` number, that is our own business
+ * line: the same funnel-every-call-into-one-contact bug the counterparty fix
+ * was meant to close, arriving by a second route. Both spellings accepted.
+ */
+function callDirection(raw: unknown): 'inbound' | 'outbound' {
+  return raw === 'incoming' || raw === 'inbound' ? 'inbound' : 'outbound'
 }
 
 /** The other party in the conversation -- never our own number. */
@@ -681,7 +716,7 @@ serve(async (req: Request) => {
       if (!fromPhone) return new Response(JSON.stringify({ error: 'Invalid phone' }), { status: 400 })
       const toPhone = normalizePhone(toRaw)
       const quoCallId = (data.id as string) ?? ''
-      const direction: 'inbound' | 'outbound' = (data.direction as string) === 'inbound' ? 'inbound' : 'outbound'
+      const direction: 'inbound' | 'outbound' = callDirection(data.direction)
 
       // Key the contact on the counterparty, not always from_phone. On an
       // outbound call from_phone is OUR number, which previously funnelled all
@@ -696,9 +731,20 @@ serve(async (req: Request) => {
 
       const rawStatus = (data.status as string) ?? 'missed'
       const status = rawStatus === 'completed' ? 'completed' : rawStatus === 'voicemail' ? 'voicemail' : 'missed'
-      const durationSec = (data.duration_sec as number | null) ?? (data.duration as number | null) ?? null
+      // A missed call that went to voicemail carries its audio at
+      // data.voicemail.url and its length at data.voicemail.duration. Neither
+      // spelling was read before, so voicemail audio and duration were dropped
+      // on every missed call -- and a missed call IS the lead, for this business.
+      const voicemail = (data.voicemail as Record<string, unknown> | null) ?? null
+      const durationSec = (data.duration_sec as number | null)
+        ?? (data.duration as number | null)
+        ?? (voicemail?.duration as number | null)
+        ?? null
       const transcript = (data.transcript as string | null) ?? (data.transcripts as string | null) ?? null
-      const recordingUrl = (data.recording_url as string | null) ?? (data.recordingUrl as string | null) ?? null
+      const recordingUrl = (data.recording_url as string | null)
+        ?? (data.recordingUrl as string | null)
+        ?? (voicemail?.url as string | null)
+        ?? null
 
       // Insert quo_event
       await insertQuoEvent(supabase, {

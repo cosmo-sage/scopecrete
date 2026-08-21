@@ -51,3 +51,13 @@ verify_jwt = false
 # Invoked manually/administratively; JWT gate is appropriate here.
 [functions.enrich-sms-threads]
 verify_jwt = true
+
+# One-time voicemail backfill. Admin-invoked, never called by a provider, and
+# it spends money on transcription — the JWT gate stays ON.
+[functions.backfill-voicemail]
+verify_jwt = true
+
+# Contact enrichment. Admin-invoked and it spends money per contact, so the
+# JWT gate stays ON. Writes only to contact_proposals, never to contacts.
+[functions.enrich-contacts]
+verify_jwt = true

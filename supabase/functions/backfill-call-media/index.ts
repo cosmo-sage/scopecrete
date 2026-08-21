@@ -45,8 +45,23 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? ''
 // this function loses database access — silently, since createClient does not
 // validate the credential until the first query. Reading the new name first
 // means the rotation does not take intake down.
+const NEW_SECRET_KEY = Deno.env.get('SUPABASE_SECRET_KEY')
 const SUPABASE_SERVICE_ROLE_KEY =
-  Deno.env.get('SUPABASE_SECRET_KEY') ?? Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+  NEW_SECRET_KEY ?? Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+
+// Says WHICH credential is in use, once per cold start.
+//
+// Without this the fallback chain is untestable: if SUPABASE_SECRET_KEY were
+// missing from the function secrets, the function would quietly fall back to
+// the auto-injected legacy key, every query would succeed, and the rotation
+// would look verified while nothing had actually moved. The failure would only
+// surface later, when the legacy key was disabled and intake went silent.
+//
+// Logs the SOURCE and the key's shape, never the value.
+console.log(
+  `[key] source=${NEW_SECRET_KEY ? 'SUPABASE_SECRET_KEY' : 'SUPABASE_SERVICE_ROLE_KEY (legacy fallback)'}` +
+  ` shape=${SUPABASE_SERVICE_ROLE_KEY.startsWith('eyJ') ? 'LEGACY JWT — rotation incomplete' : 'sb_secret (rotated)'}`
+)
 // Accepts either name — the secret store may hold it under either.
 const QUO_API_KEY = Deno.env.get('QUO_API_KEY') ?? Deno.env.get('OPENPHONE_API_KEY') ?? ''
 

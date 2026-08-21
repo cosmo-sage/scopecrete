@@ -24,6 +24,16 @@
  * - FIX: call direction is "incoming"/"outgoing", never "inbound". Every
  *   inbound call was filed as outbound, keying the contact to our own number.
  * - Voicemail audio and duration live under data.voicemail, not recording_url.
+ *
+ * v7 changes:
+ * - Calls are mirrored into public.messages (legacy_id = voip_calls.id,
+ *   import_source = 'voip_calls') on both the initial call.completed and every
+ *   follow-up. messages was empty, which is why
+ *   contact_proposals.evidence_message_id could never cite a real row.
+ * - FIX: follow-up events keyed quo_events.event_id on the CALL id, colliding
+ *   with the call.completed row under the UNIQUE (org_id, event_id) index.
+ *   All three follow-ups failed their audit insert on 2026-08-20. They now use
+ *   the webhook envelope id.
  */
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
@@ -320,6 +330,77 @@ async function upsertContact(
 }
 
 // ---------------------------------------------------------------------------
+// public.messages — the unified comms table
+// ---------------------------------------------------------------------------
+
+/**
+ * Mirrors a call into public.messages, keyed by legacy_id = voip_calls.id.
+ *
+ * messages is where comms are moving; voip_calls and sms_threads are the
+ * legacy shape. Writing both keeps the new table live from today rather than
+ * leaving it to a migration later, and it is what makes
+ * contact_proposals.evidence_message_id (a FK to messages) usable at all —
+ * that table has been empty, so no proposal could cite a real message row.
+ *
+ * Read-then-write rather than upsert: there is no unique index on
+ * (import_source, legacy_id) yet. Migration 012 adds one; until it is applied
+ * this still behaves correctly, just with an extra round trip.
+ *
+ * Never throws. A messages failure must not cost us the voip_calls row.
+ */
+async function syncCallToMessages(
+  supabase: ReturnType<typeof createClient>,
+  row: {
+    voipCallId: string; orgId: string; contactId: string | null
+    direction: 'inbound' | 'outbound'; fromPhone: string; toPhone: string
+    durationSec: number | null; transcript: string | null; recordingUrl: string | null
+    quoCallId: string; occurredAt: string | null
+  }
+): Promise<'inserted' | 'updated' | 'failed'> {
+  const patch: Record<string, unknown> = {
+    org_id: row.orgId,
+    contact_id: row.contactId,
+    channel: 'call',
+    direction: row.direction,
+    from_address: row.fromPhone,
+    to_address: row.toPhone,
+    provider: 'quo',
+    provider_message_id: row.quoCallId,
+    duration_seconds: row.durationSec,
+    recording_url: row.recordingUrl,
+    transcript: row.transcript,
+    // 'received' is the only status that satisfies messages_no_composed_call
+    // for an outbound call without an approver, and it keeps
+    // messages_sent_was_approved happy alongside imported_at.
+    status: 'received',
+    legacy_id: row.voipCallId,
+    import_source: 'voip_calls',
+    imported_at: new Date().toISOString(),
+  }
+  if (row.occurredAt) patch.occurred_at = row.occurredAt
+
+  const { data: existing, error: readErr } = await supabase
+    .from('messages').select('id')
+    .eq('import_source', 'voip_calls').eq('legacy_id', row.voipCallId)
+    .limit(1).maybeSingle()
+  if (dbFailed(`messages lookup (call=${row.quoCallId})`, readErr)) return 'failed'
+
+  if (existing?.id) {
+    // Only overwrite with something. A later webhook that carries no transcript
+    // must not blank a transcript an earlier one delivered.
+    const merged: Record<string, unknown> = { ...patch }
+    for (const k of ['transcript', 'recording_url', 'duration_seconds']) {
+      if (merged[k] === null || merged[k] === undefined) delete merged[k]
+    }
+    const { error } = await supabase.from('messages').update(merged).eq('id', existing.id)
+    return dbFailed(`messages update (call=${row.quoCallId})`, error) ? 'failed' : 'updated'
+  }
+
+  const { error } = await supabase.from('messages').insert(patch)
+  return dbFailed(`messages insert (call=${row.quoCallId})`, error) ? 'failed' : 'inserted'
+}
+
+// ---------------------------------------------------------------------------
 // quo_events insert helper
 // ---------------------------------------------------------------------------
 
@@ -592,15 +673,18 @@ async function insertVoipCall(supabase: ReturnType<typeof createClient>, row: {
   orgId: string; contactId: string; leadId: string; fromPhone: string; toPhone: string
   direction: 'inbound' | 'outbound'; durationSec: number | null; transcript: string | null
   recordingUrl: string | null; status: string; quoCallId: string
-}) {
-  const { error } = await supabase.from('voip_calls').insert({
+}): Promise<string | null> {
+  // Returns the new row id so the call can be mirrored into public.messages
+  // with legacy_id pointing back here. Null on failure.
+  const { data, error } = await supabase.from('voip_calls').insert({
     org_id: row.orgId, contact_id: row.contactId, lead_id: row.leadId,
     from_phone: row.fromPhone, to_phone: row.toPhone,
     direction: row.direction, duration_seconds: row.durationSec,
     transcript: row.transcript, recording_url: row.recordingUrl,
     status: row.status, quo_call_id: row.quoCallId, provider: 'quo',
-  })
-  return !dbFailed(`voip_calls insert (call=${row.quoCallId})`, error)
+  }).select('id').single()
+  if (dbFailed(`voip_calls insert (call=${row.quoCallId})`, error)) return null
+  return (data as { id: string }).id
 }
 
 /**
@@ -760,12 +844,24 @@ serve(async (req: Request) => {
         await appendLog(supabase, leadId, { type: 'call', direction, preview: transcript ?? `Call ${status}, ${durationSec}s`, duration_sec: durationSec, recording_url: recordingUrl })
       }
 
-      await insertVoipCall(supabase, { orgId, contactId, leadId, fromPhone, toPhone: toPhone ?? fromPhone, direction, durationSec, transcript, recordingUrl, status: 'new', quoCallId })
+      const voipCallId = await insertVoipCall(supabase, { orgId, contactId, leadId, fromPhone, toPhone: toPhone ?? fromPhone, direction, durationSec, transcript, recordingUrl, status: 'new', quoCallId })
+
+      // Mirror into public.messages. New calls land in the unified table from
+      // the moment they arrive, not via a later migration.
+      let messageOutcome: string | null = null
+      if (voipCallId) {
+        messageOutcome = await syncCallToMessages(supabase, {
+          voipCallId, orgId, contactId, direction,
+          fromPhone, toPhone: toPhone ?? fromPhone,
+          durationSec, transcript, recordingUrl, quoCallId,
+          occurredAt: (data.createdAt as string) ?? null,
+        })
+      }
 
       // Fire async enrichment (non-blocking)
       enrichContact(supabase, orgId, contactPhone, contactId).catch(e => console.error('Enrichment error:', e))
 
-      return new Response(JSON.stringify({ status: 'ok', contact_id: contactId, lead_id: leadId }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      return new Response(JSON.stringify({ status: 'ok', contact_id: contactId, lead_id: leadId, message: messageOutcome }), { status: 200, headers: { 'Content-Type': 'application/json' } })
     }
 
     // -------------------- message.received --------------------
@@ -865,8 +961,36 @@ serve(async (req: Request) => {
         return new Response(JSON.stringify({ status: 'unmatched', call_id: quoCallId }), { status: 200, headers: { 'Content-Type': 'application/json' } })
       }
 
+      // Mirror the patch into public.messages alongside voip_calls.
+      const msgOutcome = await syncCallToMessages(supabase, {
+        voipCallId: call.id, orgId: call.org_id, contactId: call.contact_id,
+        direction: call.direction, fromPhone: call.from_phone, toPhone: call.to_phone,
+        durationSec: null,
+        transcript: eventType === 'call.transcript.completed' ? bodyForEvent : null,
+        recordingUrl: eventType === 'call.recording.completed'
+          ? (patch.recording_url as string ?? null) : null,
+        quoCallId, occurredAt: null,
+      })
+
+      // event_id must be the ENVELOPE id, not the call id.
+      //
+      // quo_events carries a UNIQUE index on (org_id, event_id). These
+      // follow-ups are three separate webhooks about ONE call, so keying them
+      // on the call id made all three collide with the call.completed row
+      // already stored under it. Observed live on 2026-08-20 21:58 — all three
+      // logged "duplicate key value violates unique constraint
+      // idx_quo_events_org_event_id". The voip_calls patches had already
+      // succeeded, so no call data was lost, but the audit trail for every
+      // follow-up event was silently dropped.
+      //
+      // The envelope's own `id` (EV…) is unique per webhook delivery, which is
+      // exactly what this column wants. call.completed and message.received
+      // keep keying on the object id so the existing joins onto
+      // voip_calls.quo_call_id / sms_threads.quo_message_id still work; the
+      // follow-ups link back through raw_payload->>'callId'.
+      const envelopeId = (payload.id as string) ?? `${quoCallId}:${eventType}`
       await insertQuoEvent(supabase, {
-        orgId: call.org_id, contactId: call.contact_id, eventType, eventId: quoCallId,
+        orgId: call.org_id, contactId: call.contact_id, eventType, eventId: envelopeId,
         direction: call.direction, fromPhone: call.from_phone, toPhone: call.to_phone,
         body: bodyForEvent, mediaUrls: mediaForEvent, rawPayload: data, leadId: call.lead_id,
       })
@@ -880,7 +1004,7 @@ serve(async (req: Request) => {
           .catch(e => console.error('Enrichment error:', e))
       }
 
-      return new Response(JSON.stringify({ status: 'ok', call_id: quoCallId, updated: Object.keys(patch) }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      return new Response(JSON.stringify({ status: 'ok', call_id: quoCallId, updated: Object.keys(patch), message: msgOutcome }), { status: 200, headers: { 'Content-Type': 'application/json' } })
     }
 
     // -------------------- message.delivered (our outbound texts) --------------------

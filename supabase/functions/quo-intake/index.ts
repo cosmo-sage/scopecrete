@@ -337,14 +337,14 @@ async function upsertContact(
  * Mirrors a call into public.messages, keyed by legacy_id = voip_calls.id.
  *
  * messages is where comms are moving; voip_calls and sms_threads are the
- * legacy shape. Writing both keeps the new table live from today rather than
- * leaving it to a migration later, and it is what makes
- * contact_proposals.evidence_message_id (a FK to messages) usable at all —
- * that table has been empty, so no proposal could cite a real message row.
+ * legacy shape. The historical import is already done (1,069 rows as of
+ * 2026-08-21, every voip_calls row twinned), so this keeps NEW calls in step
+ * with it rather than letting the table drift out of date from today onward.
  *
- * Read-then-write rather than upsert: there is no unique index on
- * (import_source, legacy_id) yet. Migration 012 adds one; until it is applied
- * this still behaves correctly, just with an extra round trip.
+ * Read-then-write rather than upsert. Migration 012 added a unique index on
+ * (import_source, legacy_id), so this could become a real upsert; it is left
+ * as a read-then-write because the update path deliberately merges rather than
+ * replaces (see below), which ON CONFLICT would not do.
  *
  * Never throws. A messages failure must not cost us the voip_calls row.
  */

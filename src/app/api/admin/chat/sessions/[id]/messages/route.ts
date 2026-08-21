@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabase";
+import { supabaseAdmin } from "@/lib/supabase-admin";
 
 // Ollama on Clay's PC — Tailscale VPN
 const OLLAMA_URL = "http://100.113.194.47:8000/v1/chat/completions";

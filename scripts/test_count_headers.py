@@ -1,6 +1,10 @@
+import os
+
+# Read from the environment. This file used to inline the live
+# service_role key; the repo was public until 2026-08-13.
 import urllib.request, json
 
-svc_key = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN4aXVzdWV3dHJ2Y3BxZXF1dWVoIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3Njk4NDIzNCwiZXhwIjoyMDkyNTYwMjM0fQ.3MLilsrNQFnf6seZEkZKo2HkeG7-lkASPU538qWov3o'
+svc_key = os.environ['SUPABASE_SECRET_KEY']
 supabase_url = 'https://cxiusuewtrvcpqequueh.supabase.co'
 
 # Simulate the exact queries from admin dashboard page.tsx

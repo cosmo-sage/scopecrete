@@ -1,3 +1,12 @@
+// PM2 config for the VPS deployment.
+//
+// Credentials are READ FROM THE ENVIRONMENT, never written here. This file
+// previously inlined both the anon key and the live service_role key; the repo
+// was public until 2026-08-13, so both are treated as compromised and rotated.
+//
+// Provide these via the process manager's env file or shell, e.g.
+//   pm2 start ecosystem.config.js --env production
+// with SUPABASE_SECRET_KEY exported. See DECISIONS.md §9.
 module.exports = {
   apps: [{
     name: 'scopecrete',
@@ -6,9 +15,9 @@ module.exports = {
     cwd: '/var/www/dev.saccobuilt.com/calculator',
     env: {
       NODE_ENV: 'production',
-      NEXT_PUBLIC_SUPABASE_URL: 'https://cxiusuewtrvcpqequueh.supabase.co',
-      NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN4aXVzdWV3dHJ2Y3BxZXF1dWVoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY5ODQyMzQsImV4cCI6MjA5MjU2MDIzNH0.V4-ORThPINsHYoEOhMavp127ylqpXlH_DtBmNOH3PRA',
-      SUPABASE_SERVICE_ROLE_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN4aXVzdWV3dHJ2Y3BxZXF1dWVoIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3Njk4NDIzNCwiZXhwIjoyMDkyNTYwMjM0fQ.3MLilsrNQFnf6seZEkZKo2HkeG7-lkASPU538qWov3o',
+      NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+      SUPABASE_SECRET_KEY: process.env.SUPABASE_SECRET_KEY,
     }
   }]
 };

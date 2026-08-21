@@ -38,7 +38,15 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? ''
-const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+// SUPABASE_SECRET_KEY (sb_secret_…) first, legacy service_role JWT second.
+//
+// Supabase AUTO-INJECTS SUPABASE_SERVICE_ROLE_KEY into every edge function with
+// the legacy key. Disabling legacy keys therefore kills that injected value and
+// this function loses database access — silently, since createClient does not
+// validate the credential until the first query. Reading the new name first
+// means the rotation does not take intake down.
+const SUPABASE_SERVICE_ROLE_KEY =
+  Deno.env.get('SUPABASE_SECRET_KEY') ?? Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
 // Accepts either name — the secret store may hold it under either.
 const QUO_API_KEY = Deno.env.get('QUO_API_KEY') ?? Deno.env.get('OPENPHONE_API_KEY') ?? ''
 

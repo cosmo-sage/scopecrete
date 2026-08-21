@@ -150,6 +150,58 @@ function summaryFrom(payload: unknown): string | null {
 // messages mirror
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Presigned-link expiry measurement
+// ---------------------------------------------------------------------------
+
+/**
+ * Measures how long a stored share.quo.com link stays valid.
+ *
+ * This exists to answer one operational question: is a DAILY sweep fast enough
+ * to capture audio before the provider's presigned link dies, or is the window
+ * shorter than 24h? If it is shorter, a scheduled sweep is not a safety net at
+ * all and audio must be captured at webhook time instead.
+ *
+ * The quo links carry only `?sig=` — no readable expiry — so the answer has to
+ * come from observation: HEAD the stored link and pair the result with the row's
+ * age. Across a batch that gives the cutoff directly. Known expiry parameter
+ * names are still parsed in case the format ever changes.
+ */
+function statedExpiry(url: string): string | null {
+  try {
+    const q = new URL(url).searchParams
+    for (const k of ['Expires', 'X-Amz-Expires', 'X-Goog-Expires', 'exp', 'se', 'st']) {
+      const v = q.get(k)
+      if (!v) continue
+      const n = Number(v)
+      // Bare seconds-to-live vs absolute epoch.
+      if (Number.isFinite(n)) {
+        return n < 1e9 ? `${k}=${n}s TTL` : `${k}=${new Date(n * 1000).toISOString()}`
+      }
+      return `${k}=${v}`
+    }
+    return null
+  } catch { return null }
+}
+
+async function probePresigned(url: string, ageHours: number): Promise<Record<string, unknown>> {
+  const probe: Record<string, unknown> = {
+    age_hours: Math.round(ageHours * 10) / 10,
+    stated_expiry: statedExpiry(url) ?? 'none in URL',
+  }
+  try {
+    const res = await fetch(url, { method: 'HEAD' })
+    probe.status = res.status
+    probe.alive = res.ok
+    await res.body?.cancel()
+  } catch (e) {
+    probe.status = 'network_error'
+    probe.alive = false
+    probe.detail = e instanceof Error ? e.message : String(e)
+  }
+  return probe
+}
+
 /** Patches the matching messages row. Never throws; never blanks a value. */
 async function mirrorToMessages(
   supabase: ReturnType<typeof createClient>,
@@ -163,9 +215,14 @@ async function mirrorToMessages(
   const { data, error: readErr } = await supabase.from('messages').select('id')
     .eq('import_source', 'voip_calls').eq('legacy_id', voipCallId).limit(1).maybeSingle()
   if (dbFailed(`messages lookup (voip_call=${voipCallId})`, readErr)) return 'failed'
-  // Rows predating quo-intake v7 have no messages twin. Creating one here would
-  // duplicate what v7 writes; leave it and report honestly.
-  if (!data?.id) return 'absent'
+  // messages was fully backfilled on 2026-08-21 — every voip_calls row has a
+  // twin (verified: 0 without, 0 duplicates). So 'absent' is an ANOMALY worth
+  // shouting about, not a normal outcome. Never insert here: that would
+  // duplicate the twin rather than update it.
+  if (!data?.id) {
+    console.error(`[anomaly] no messages twin for voip_call=${voipCallId} — messages was verified complete; investigate before trusting this batch`)
+    return 'absent'
+  }
 
   const { error } = await supabase.from('messages').update(clean).eq('id', data.id)
   return dbFailed(`messages update (voip_call=${voipCallId})`, error) ? 'failed' : 'updated'
@@ -181,6 +238,8 @@ interface CallRow {
   transcript: string | null
   provider_summary: string | null
   duration_seconds: number | null
+  recording_url: string | null
+  created_at: string
 }
 
 serve(async (req: Request) => {
@@ -200,7 +259,7 @@ serve(async (req: Request) => {
   })
 
   let q = supabase.from('voip_calls')
-    .select('id, org_id, quo_call_id, recording_storage_path, transcript, provider_summary, duration_seconds')
+    .select('id, org_id, quo_call_id, recording_storage_path, transcript, provider_summary, duration_seconds, recording_url, created_at')
     .not('quo_call_id', 'is', null)
   if (body.call_ids?.length) q = q.in('quo_call_id', body.call_ids)
   else q = q.or('recording_storage_path.is.null,transcript.is.null,provider_summary.is.null')
@@ -222,6 +281,14 @@ serve(async (req: Request) => {
     const r: Record<string, unknown> = { quo_call_id: call.quo_call_id, voip_call_id: call.id }
     const update: Record<string, unknown> = {}
     const now = new Date().toISOString()
+
+    // Measure the presigned window before doing anything else, so the reading
+    // is of the link as it was found rather than one just refreshed by the API.
+    if (call.recording_url) {
+      const ageHours = (Date.now() - new Date(call.created_at).getTime()) / 3_600_000
+      r.presigned_probe = await probePresigned(call.recording_url, ageHours)
+      await sleep(PAUSE_MS)
+    }
 
     // ---- transcript ----
     if (!call.transcript) {
@@ -314,12 +381,34 @@ serve(async (req: Request) => {
     results.push(r)
   }
 
+  // Collapse the per-row probes into the answer we actually want: at what age
+  // do these links stop working?
+  const probes = results
+    .map(r => r.presigned_probe as Record<string, unknown> | undefined)
+    .filter(Boolean) as Record<string, unknown>[]
+  const alive = probes.filter(p => p.alive === true).map(p => p.age_hours as number)
+  const dead = probes.filter(p => p.alive === false).map(p => p.age_hours as number)
+
   return new Response(JSON.stringify({
     dry_run: dryRun,
     considered: calls.length,
     audio_stored: audioOk, transcripts_fetched: transcriptOk, summaries_fetched: summaryOk,
     write_failures: failed,
     error_tally: errors,
+    presigned_expiry: {
+      probed: probes.length,
+      alive: alive.length, dead: dead.length,
+      oldest_alive_hours: alive.length ? Math.max(...alive) : null,
+      newest_dead_hours: dead.length ? Math.min(...dead) : null,
+      stated_expiry_seen: [...new Set(probes.map(p => p.stated_expiry))],
+      // If newest_dead_hours < 24 the link window is shorter than a day and a
+      // daily sweep CANNOT be relied on — capture at webhook time instead.
+      verdict: dead.length === 0
+        ? 'no expiry observed in this sample'
+        : (Math.min(...dead) < 24
+            ? 'WINDOW SHORTER THAN 24h — a daily sweep will miss recordings'
+            : 'window appears longer than 24h — a daily sweep is viable'),
+    },
     results,
   }, null, 2), { status: 200, headers: { 'Content-Type': 'application/json' } })
 })

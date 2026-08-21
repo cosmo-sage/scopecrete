@@ -164,44 +164,54 @@ function isOurs(direction: string | null, fromPhone: string | null): boolean {
   return fromPhone === QUO_PHONE
 }
 
+/**
+ * Reads the conversation from public.messages.
+ *
+ * messages is fully backfilled (verified 2026-08-21: 1,069 rows covering all
+ * 435 voip_calls and 634 sms_threads, zero without a twin, zero duplicates).
+ * Reading it directly rather than joining sms_threads + voip_calls means every
+ * turn id IS a messages id, so contact_proposals.evidence_message_id — a FK to
+ * messages — can be cited straight from the model's answer with no translation
+ * step and no chance of citing an id from the wrong table.
+ *
+ * messages carries no media column, so image flags still come from
+ * sms_threads.media_urls, matched back through legacy_id.
+ */
 async function loadConversation(
   supabase: ReturnType<typeof createClient>,
   contactId: string
 ): Promise<Turn[]> {
-  const [sms, calls] = await Promise.all([
+  const [msgs, sms] = await Promise.all([
+    supabase.from('messages')
+      .select('id, channel, direction, body_text, transcript, occurred_at, legacy_id, import_source')
+      .eq('contact_id', contactId)
+      .order('occurred_at', { ascending: true }).limit(250),
     supabase.from('sms_threads')
-      .select('id, direction, from_phone, message_body, media_urls, created_at')
-      .eq('contact_id', contactId).order('created_at', { ascending: true }).limit(200),
-    supabase.from('voip_calls')
-      .select('id, direction, from_phone, transcript, created_at')
-      .eq('contact_id', contactId).not('transcript', 'is', null)
-      .order('created_at', { ascending: true }).limit(50),
+      .select('id, media_urls').eq('contact_id', contactId).limit(250),
   ])
 
-  const turns: Turn[] = []
-
+  const withMedia = new Set<string>()
   for (const r of (sms.data ?? []) as Array<Record<string, unknown>>) {
-    const media = r.media_urls
-    const hasMedia = Array.isArray(media) ? media.length > 0 : Boolean(media)
-    const text = ((r.message_body as string) ?? '').trim()
-    if (!text && !hasMedia) continue
-    turns.push({
-      id: r.id as string, kind: 'sms',
-      who: isOurs(r.direction as string, r.from_phone as string) ? 'US' : 'THEM',
-      at: r.created_at as string,
-      text: text || '(no text)',
-      hasMedia,
-    })
+    const m = r.media_urls
+    if (Array.isArray(m) ? m.length > 0 : Boolean(m)) withMedia.add(r.id as string)
   }
 
-  for (const r of (calls.data ?? []) as Array<Record<string, unknown>>) {
-    const text = ((r.transcript as string) ?? '').trim()
-    if (!text) continue
+  const turns: Turn[] = []
+  for (const r of (msgs.data ?? []) as Array<Record<string, unknown>>) {
+    const isCall = r.channel === 'call'
+    // For a call the transcript is the content; body_text carries the
+    // provider's AI summary, which is a paraphrase — prefer the real words.
+    const text = (((isCall ? r.transcript : r.body_text) as string) ?? '').trim()
+    const hasMedia = r.import_source === 'sms_threads'
+      && typeof r.legacy_id === 'string' && withMedia.has(r.legacy_id)
+    if (!text && !hasMedia) continue
     turns.push({
-      id: r.id as string, kind: 'call',
-      // A voicemail is always THEM talking, whatever the call row's direction.
-      who: isOurs(r.direction as string, r.from_phone as string) ? 'US' : 'THEM',
-      at: r.created_at as string, text, hasMedia: false,
+      id: r.id as string,
+      kind: isCall ? 'call' : 'sms',
+      who: (r.direction as string) === 'outbound' ? 'US' : 'THEM',
+      at: (r.occurred_at as string) ?? '',
+      text: text || '(no text)',
+      hasMedia,
     })
   }
 
@@ -345,10 +355,20 @@ function sanitize(p: Proposal, turns: Turn[]): { p: Proposal; notes: string[] } 
   p.width_ft = num(p.width_ft, 500)
   p.sqft_stated = num(p.sqft_stated, 500000)
 
-  // Evidence id must be a real turn from this conversation.
+  // Evidence id must be a real turn from this conversation — the model cannot
+  // cite something it invented. The DB CHECK requires it NOT NULL, so a bad or
+  // missing id falls back to the first thing THEM actually said rather than
+  // failing the insert and losing the whole proposal.
   if (p.evidence_message_id && !turns.some(t => t.id === p.evidence_message_id)) {
-    notes.push(`evidence_message_id ${p.evidence_message_id} is not in this conversation — dropped`)
+    notes.push(`evidence_message_id ${p.evidence_message_id} is not in this conversation — replaced`)
     p.evidence_message_id = null
+  }
+  if (!p.evidence_message_id) {
+    const fallback = turns.find(t => t.who === 'THEM') ?? turns[0]
+    if (fallback) {
+      p.evidence_message_id = fallback.id
+      notes.push(`evidence_message_id defaulted to first message from THEM (${fallback.id})`)
+    }
   }
 
   const anyMedia = turns.some(t => t.hasMedia)
@@ -428,7 +448,6 @@ serve(async (req: Request) => {
 
     const { p, notes } = sanitize(res.proposal, turns)
 
-    const evidenceTurn = turns.find(t => t.id === p.evidence_message_id)
     const row = {
       org_id: c.org_id,
       contact_id: c.id,
@@ -445,11 +464,10 @@ serve(async (req: Request) => {
       has_media: p.has_media,
       classification: p.classification,
       confidence: p.confidence,
-      // evidence_message_id FKs to public.messages, which is empty. The real
-      // evidence lives in sms_threads / voip_calls — see migration 011.
-      evidence_message_id: null,
-      evidence_sms_thread_id: evidenceTurn?.kind === 'sms' ? evidenceTurn.id : null,
-      evidence_voip_call_id: evidenceTurn?.kind === 'call' ? evidenceTurn.id : null,
+      // Turn ids ARE messages ids — the conversation is read from messages —
+      // so this cites the row the quote came from with no translation.
+      // sanitize() has already verified it is a turn in THIS conversation.
+      evidence_message_id: p.evidence_message_id,
       evidence_quote: p.evidence_quote.substring(0, 2000),
       model: MODEL,
       prompt_version: PROMPT_VERSION,

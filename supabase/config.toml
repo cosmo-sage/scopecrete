@@ -52,9 +52,10 @@ verify_jwt = false
 [functions.enrich-sms-threads]
 verify_jwt = true
 
-# One-time voicemail backfill. Admin-invoked, never called by a provider, and
-# it spends money on transcription — the JWT gate stays ON.
-[functions.backfill-voicemail]
+# One-time call-media backfill over the full voip_calls history. Admin-invoked,
+# never called by a provider, and it hits a rate-limited external API — the JWT
+# gate stays ON.
+[functions.backfill-call-media]
 verify_jwt = true
 
 # Contact enrichment. Admin-invoked and it spends money per contact, so the

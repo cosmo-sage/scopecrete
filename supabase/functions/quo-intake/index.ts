@@ -950,7 +950,12 @@ serve(async (req: Request) => {
           console.error(`[${eventType}] no summary text found:`, JSON.stringify(data).substring(0, 500))
           return new Response(JSON.stringify({ status: 'no_summary' }), { status: 200, headers: { 'Content-Type': 'application/json' } })
         }
-        patch = { summary }
+        // Written to BOTH columns so the live webhook and the API backfill
+        // cannot diverge. `summary` is the original; `provider_summary` is the
+        // name that says where the text came from, which will matter once a
+        // ScopeCrete-generated summary exists alongside the provider's.
+        // Retire `summary` once the two are confirmed identical.
+        patch = { summary, provider_summary: summary, provider_summary_fetched_at: new Date().toISOString() }
         logEntry = { type: 'call_summary', preview: summary.substring(0, 200) }
         bodyForEvent = summary
       }

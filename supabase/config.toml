@@ -1,0 +1,64 @@
+# Supabase CLI config — ScopeCrete.ai
+#
+# WHY THIS FILE EXISTS
+#
+# `supabase functions deploy` sets verify_jwt = true unless told otherwise.
+# Before this file existed there was no per-function config in the repo, so any
+# deploy would have silently turned Supabase's own JWT gate ON for these
+# functions.
+#
+# That is not hypothetical. quo-intake's trailer comments record it happening
+# on 2026-06-22:
+#     v44 verify_jwt check
+#     v45 - redeploy to lock verify_jwt off
+# OpenPhone does not send a Supabase JWT, so with verify_jwt on, every webhook
+# is rejected at the gateway before the function body ever runs and intake
+# goes dark.
+#
+# The values below mirror the settings the deployed functions actually had as
+# of 2026-08-20, so deploying from this repo preserves them instead of
+# resetting them.
+#
+# quo-intake authenticates callers itself, via OpenPhone's HMAC signature
+# (see verifyQuoSignature). That is the intended auth for it — NOT verify_jwt.
+
+project_id = "cxiusuewtrvcpqequueh"
+
+# Webhook receiver. Called by OpenPhone, which cannot present a Supabase JWT.
+# Authenticated by HMAC signature inside the function.
+#
+# quo-intake also ships an empty functions/quo-intake/deno.json. That is not
+# decorative. Up to v51 the deployment carried
+#     import_map_path = "file:///root/.openclaw/workspace"
+# left behind by whatever machine deployed it, and the platform resolves that
+# path INSIDE each new source bundle. Every redeploy failed with
+#     import map path does not exist - .../source/file:///root/.openclaw/workspace
+# Shipping a real deno.json gives the deploy a valid relative import map to
+# point at, which overwrote the stale absolute path on v52. Deleting the file
+# does not restore the old value, but it does leave the next deploy free to
+# inherit a bad one again, so keep it.
+[functions.quo-intake]
+verify_jwt = false
+
+# Called with a `?secret=` query param rather than a JWT.
+[functions.send-estimate-sms]
+verify_jwt = false
+
+# Authenticates via x-hermes-org / x-hermes-key headers, not a JWT.
+[functions.dusty-mcp]
+verify_jwt = false
+
+# Invoked manually/administratively; JWT gate is appropriate here.
+[functions.enrich-sms-threads]
+verify_jwt = true
+
+# One-time call-media backfill over the full voip_calls history. Admin-invoked,
+# never called by a provider, and it hits a rate-limited external API — the JWT
+# gate stays ON.
+[functions.backfill-call-media]
+verify_jwt = true
+
+# Contact enrichment. Admin-invoked and it spends money per contact, so the
+# JWT gate stays ON. Writes only to contact_proposals, never to contacts.
+[functions.enrich-contacts]
+verify_jwt = true

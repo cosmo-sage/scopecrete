@@ -641,19 +641,62 @@ async function createLead(supabase: ReturnType<typeof createClient>, contactId: 
   return data.id
 }
 
+/**
+ * Should a NEW lead be created for this contact?
+ *
+ * A lead is someone buying work from us. A sub or a vendor is someone we buy
+ * from, and no amount of talking about driveways makes them a lead. Without
+ * this, every inbound message from Luis (a sub, 324 messages) or a supplier
+ * mints a fresh lead the moment the previous one closes.
+ *
+ * customers.relation is the authority: 'client' | 'vendor' | 'sub'. It is
+ * NOT NULL DEFAULT 'client', so a contact nobody has classified reads as
+ * 'client' and still produces a lead. That is deliberate — unknown is not the
+ * same as not-a-lead, and a missed lead costs revenue while a junk one costs
+ * annoyance. Only an explicit 'vendor' or 'sub' suppresses.
+ *
+ * Fails OPEN: any lookup error creates the lead. A database hiccup must not
+ * silently swallow a real enquiry.
+ */
+async function leadAllowedForContact(
+  supabase: ReturnType<typeof createClient>,
+  contactId: string
+): Promise<{ allowed: boolean; relation: string | null }> {
+  const { data, error } = await supabase
+    .from('contacts')
+    .select('customer_id, customers(relation)')
+    .eq('id', contactId)
+    .maybeSingle()
+  if (dbFailed(`leadAllowedForContact(contact=${contactId})`, error)) {
+    return { allowed: true, relation: null }
+  }
+  const rel = (data as { customers?: { relation?: string } | null } | null)
+    ?.customers?.relation ?? null
+  if (rel === 'vendor' || rel === 'sub') return { allowed: false, relation: rel }
+  return { allowed: true, relation: rel }
+}
+
 /** Resolves the lead for a contact, creating one if there is no open lead. */
 async function resolveLead(
   supabase: ReturnType<typeof createClient>,
   contactId: string,
   orgId: string,
   sourceChannel: string
-): Promise<{ leadId: string; created: boolean }> {
+): Promise<{ leadId: string | null; created: boolean; suppressed?: string }> {
+  // An EXISTING open lead is always returned, whatever the relation. If a human
+  // already made this a lead, a later reclassification should not orphan it.
   const existing = await findOpenLead(supabase, contactId)
   if (existing?.id) return { leadId: existing.id, created: false }
+
+  const { allowed, relation } = await leadAllowedForContact(supabase, contactId)
+  if (!allowed) {
+    console.log(`[lead] suppressed for contact=${contactId} — customers.relation='${relation}'`)
+    return { leadId: null, created: false, suppressed: relation ?? 'unknown' }
+  }
   return { leadId: await createLead(supabase, contactId, orgId, sourceChannel), created: true }
 }
 
-async function appendLog(supabase: ReturnType<typeof createClient>, leadId: string, entry: Record<string, unknown>) {
+async function appendLog(supabase: ReturnType<typeof createClient>, leadId: string | null, entry: Record<string, unknown>) {
   if (!leadId) {
     console.error('[appendLog] called without a leadId — skipping')
     return
@@ -678,7 +721,7 @@ async function appendLog(supabase: ReturnType<typeof createClient>, leadId: stri
 // ---------------------------------------------------------------------------
 
 async function insertVoipCall(supabase: ReturnType<typeof createClient>, row: {
-  orgId: string; contactId: string; leadId: string; fromPhone: string; toPhone: string
+  orgId: string; contactId: string; leadId: string | null; fromPhone: string; toPhone: string
   direction: 'inbound' | 'outbound'; durationSec: number | null; transcript: string | null
   recordingUrl: string | null; status: string; quoCallId: string
 }): Promise<string | null> {
@@ -726,7 +769,7 @@ async function updateCallByQuoId(
 // ---------------------------------------------------------------------------
 
 async function insertSmsThread(supabase: ReturnType<typeof createClient>, row: {
-  orgId: string; contactId: string; leadId: string; fromPhone: string; toPhone: string
+  orgId: string; contactId: string; leadId: string | null; fromPhone: string; toPhone: string
   direction: 'inbound' | 'outbound'; body: string; mediaUrls: unknown; quoMessageId: string
 }) {
   const { error } = await supabase.from('sms_threads').insert({
@@ -748,7 +791,7 @@ async function insertSmsThread(supabase: ReturnType<typeof createClient>, row: {
  * become a real upsert -- worth doing, but it is a schema change.)
  */
 async function storeOutboundMessage(supabase: ReturnType<typeof createClient>, row: {
-  orgId: string; contactId: string; leadId: string; fromPhone: string; toPhone: string
+  orgId: string; contactId: string; leadId: string | null; fromPhone: string; toPhone: string
   body: string; mediaUrls: unknown; quoMessageId: string
 }): Promise<'inserted' | 'updated' | 'failed'> {
   const { data: existing, error: readErr } = await supabase

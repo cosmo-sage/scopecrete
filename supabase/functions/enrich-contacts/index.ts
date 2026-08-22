@@ -43,7 +43,7 @@ const GROQ_API_KEY = Deno.env.get('GROQ_API_KEY') ?? ''
 const QUO_PHONE = Deno.env.get('QUO_PHONE') ?? '+12253782458'
 
 const MODEL = 'openai/gpt-oss-120b'
-const PROMPT_VERSION = 'enrich-v2-2026-08-21'
+const PROMPT_VERSION = 'enrich-v3-direction-of-ask-2026-08-21'
 
 /**
  * Names belonging to OUR side of every conversation. The model is told never
@@ -62,6 +62,85 @@ const SYSTEM_PROMPT = `You read conversations between a concrete contractor and 
 WHO IS WHO — READ THIS TWICE
 The contractor's side is labelled US. The other party is labelled THEM.
 You are describing THEM. You are never describing US.
+
+═══════════════════════════════════════════════════════════════════
+CLASSIFICATION — THE DIRECTION OF THE ASK
+═══════════════════════════════════════════════════════════════════
+
+This is the primary rule and it decides the classification. Read it before
+anything else.
+
+TOPIC DOES NOT CLASSIFY ANYONE. A subcontractor and a customer both discuss
+the address, the crew size, the equipment, the concrete, and the start date.
+Those words tell you nothing about which one you are reading. Do not classify
+on subject matter.
+
+What separates them is WHO WANTS WHAT FROM WHOM.
+
+  Money flowing OUT from US to THEM        -> sub or vendor
+  Money flowing IN from THEM to US         -> customer
+
+  THEM offering their availability to US   -> sub
+  US offering our availability to THEM     -> customer
+
+  THEM asking to be paid                   -> sub or vendor
+  THEM asking what it will cost THEM       -> customer
+
+  THEM telling us what they charge         -> sub or vendor
+  THEM asking what we charge               -> customer
+
+  THEM asking when WE need them            -> sub
+  THEM asking when WE can start            -> customer
+
+A worked example. This contact is a SUB, and none of the words are about
+subject matter:
+
+  "Can you send Luis the payment for Monday he needs it"
+  "could you send the $1300"
+  "if you have anything for Monday for us we are free"
+
+Money flows OUT to him. He offers his availability TO us. He is labour we
+buy, not work we sell. That is a sub, however much he talks about driveways.
+
+A customer sounds like the mirror image:
+
+  "what would you charge for a 20x30 slab"
+  "when could you get us on the schedule"
+  "do you take a deposit"
+
+They ask what it costs THEM and when WE can start.
+
+THE FIVE VALUES
+  customer  — money flows from them to us. They are buying work.
+  vendor    — money flows from us to them for MATERIALS or EQUIPMENT
+              (supplier, batch plant, rental yard).
+  sub       — money flows from us to them for LABOUR. They offer crews,
+              availability, or their own trade.
+  not_work  — personal, spam, robocall, wrong number, political texts.
+  unknown   — the direction of the ask is genuinely not visible in the text.
+
+If you cannot see the direction, the answer is "unknown". Do not fall back to
+"customer" because the conversation mentions concrete. Guessing "customer"
+creates a fake lead; "unknown" costs nothing.
+
+EVIDENCE MUST SHOW THE DIRECTION
+evidence_quote is not decoration and it is not just any line. Quote the line
+that shows WHICH WAY THE ASK RUNS — the payment request, the offer of
+availability, the question about price. A quote about the address or the
+weather is not evidence of a classification, and if that is the best line you
+can find, the classification is "unknown".
+
+Copy it VERBATIM from the conversation. Do not paraphrase, do not clean it up,
+do not invent a quote. Give the message_id of that same line in
+evidence_message_id.
+
+Set direction_of_ask to a short phrase naming the flow you saw, e.g.
+"money out to them", "they ask our price", "they offer availability to us",
+"none visible".
+
+═══════════════════════════════════════════════════════════════════
+
+NAMES — THE OTHER RULE THAT MATTERS
 
 The single most damaging mistake you can make is taking a name from a greeting.
 When THEM writes "Hi Coy" or "Morning Coy, this is about the driveway", the name
@@ -84,28 +163,15 @@ null. A wrong name is worse than no name, because a wrong name gets used.
 If the only name you can see is in a greeting, the answer is null.
 If you are weighing whether it counts, the answer is null.
 
-CLASSIFICATION — exactly one of:
-  customer  — wants concrete work done, asking for a quote or scheduling
-  vendor    — sells materials or services TO the contractor (supplier, batch
-              plant, equipment rental)
-  sub       — a subcontractor offering labour, or one the contractor uses
-  not_work  — personal, spam, robocall, wrong number, political texts
-  unknown   — genuinely cannot tell from the text
+Note: a name spoken ABOUT someone in the third person is not self-identification
+either. "Can you send Luis the payment" does not prove the sender is Luis.
 
 CONFIDENCE, 0-100
-Report how sure you are of the CLASSIFICATION.
-  90+   they said it outright
-  70-89 strongly implied, one plain reading
-  40-69 leaning, could be read another way
-  under 40 guessing — and if you are guessing, prefer "unknown"
-
-EVIDENCE — required, never optional
-Every proposal must quote the actual text the guess came from, in
-evidence_quote, copied VERBATIM from the conversation. Do not paraphrase, do
-not clean it up, do not invent a quote. Give the message_id of that same line
-in evidence_message_id. If you cannot point at a specific line, you do not have
-a proposal — return classification "unknown" with the quote left as the closest
-real line you did read.
+Report how sure you are of the CLASSIFICATION — i.e. of the direction of the ask.
+  90+   they asked to be paid, or asked our price, outright
+  70-89 the direction is clear on one plain reading
+  40-69 leaning, could be read the other way
+  under 40 guessing — and if you are guessing, use "unknown"
 
 DIMENSIONS
 Only when THEM states them. Read them out as given:
@@ -127,11 +193,13 @@ scope_summary MUST say the photos still need a human look. Write it like
 reviewed." Never describe a scope as settled when the evidence is an image.
 
 PROJECT_TYPE — one of driveway, patio, slab, foundation, sidewalk, apron, demo,
-repair, commercial, other. Null if not stated.
+repair, commercial, other. Null if not stated. A sub or vendor can have a
+project_type too — it is the work being discussed, not a classification.
 
 Return ONLY a JSON object, no prose, no code fence:
 {
   "classification": "customer|vendor|sub|not_work|unknown",
+  "direction_of_ask": string,
   "confidence": 0-100,
   "proposed_name": string|null,
   "proposed_company": string|null,
@@ -261,6 +329,7 @@ function worthEnriching(turns: Turn[]): boolean {
 
 interface Proposal {
   classification: string
+  direction_of_ask: string
   confidence: number
   proposed_name: string | null
   proposed_company: string | null
@@ -486,7 +555,8 @@ serve(async (req: Request) => {
     if (dryRun) {
       proposed++
       out.push({ contact_id: c.id, phone: c.phone, outcome: 'would_propose',
-                 turns: turns.length, proposal: row, name_reasoning: p.name_reasoning, notes })
+                 turns: turns.length, proposal: row, direction_of_ask: p.direction_of_ask,
+                 name_reasoning: p.name_reasoning, notes })
       continue
     }
 
@@ -505,7 +575,8 @@ serve(async (req: Request) => {
     proposed++
     out.push({ contact_id: c.id, phone: c.phone, outcome: 'proposed',
                turns: turns.length, classification: p.classification, confidence: p.confidence,
-               proposed_name: p.proposed_name, name_reasoning: p.name_reasoning, notes })
+               proposed_name: p.proposed_name, direction_of_ask: p.direction_of_ask,
+               name_reasoning: p.name_reasoning, notes })
   }
 
   return new Response(JSON.stringify({

@@ -50,32 +50,52 @@ input is what `enrich-contacts` proposes as `classification`
 (customer/vendor/sub/not_work). See §"Interim signal" below for what the data
 already rules out.
 
-**Interim signal — measured, not guessed.** A message-count threshold does not
-work: at lead-creation time Gary had 16 prior messages and Brad had 10. Six
-apart. Any cut separating them is arbitrary and breaks on the next contact.
+**The discriminator is the DIRECTION OF THE ASK, not topic or volume.**
 
-What does separate them is prior engagement FROM US:
+Volume is the wrong signal — a big commercial customer generates hundreds of
+messages too. Topic is also wrong: a sub and a customer both discuss the
+address, crew size, equipment and start dates. What differs is who wants what
+from whom.
 
-    contact  outbound msgs before   calls before
-    Gary                       5              5
-    Luis                      34             67
-    Brad                       0              0
+    money OUT from us to them        -> sub or vendor
+    money IN from them to us         -> customer
+    they offer their availability    -> sub
+    they ask what it costs THEM      -> customer
+    they ask when WE need them       -> sub
+    they ask when WE can start       -> customer
 
-If we have already texted or called someone, the conversation is an ongoing
-relationship rather than an inbound enquiry. That signal is clean on all three,
-and semantically means something, which a message count does not.
+Luis (+1985…8307) is the worked example, classified sub on:
 
-It is NOT free. Two known false negatives:
-- A repeat customer we texted during a past job would never generate a new lead
-  for a new job. A dormancy escape hatch (no activity for N days => eligible
-  again) is the obvious refinement.
-- It does not catch a number that has texted 88 times and never been replied to
-  (+1225…9098 in the current data) — spam or a neglected customer, unclear which.
+    "Can you send Luis the payment for Monday he needs it"
+    "could you send the $1300"
+    "if you have anything for Monday for us we are free"
 
-Because a missed lead costs revenue and a junk lead costs only annoyance, the
-preferred shape is to RECORD the signal rather than suppress the row, and filter
-the list on it. Suppression is the fallback if the volume becomes unworkable
-before the classifier lands.
+Money flows out to him and he offers his availability to us. He is labour we
+buy, not work we sell — however much he talks about driveways.
+
+This is the primary classification rule in the `enrich-contacts` prompt
+(`enrich-v3-direction-of-ask`), and `evidence_quote` must be the line that
+SHOWS the direction. A quote about the address is not evidence of a
+classification; if that is the best line available, the answer is `unknown`.
+
+**The filter is then deterministic and free.** `customers.relation` is already
+`NOT NULL DEFAULT 'client'` with `CHECK (relation IN ('client','vendor','sub'))`:
+
+- a confirmed proposal writes `customers.relation`
+- `quo-intake` does not create a lead when the contact's customer has
+  `relation != 'client'`
+- an unclassified contact defaults to `'client'` and still creates a lead —
+  **unknown is not the same as not-a-lead**
+- an EXISTING open lead is always returned regardless of relation, so a later
+  reclassification never orphans a lead a human already worked
+
+The guard fails OPEN: any lookup error creates the lead. A missed lead costs
+revenue; a junk lead costs annoyance.
+
+**Gap worth closing:** because `relation` is `NOT NULL DEFAULT 'client'`, there
+is no way to distinguish "a human confirmed client" from "nobody ever looked".
+A `relation_confirmed_at timestamptz` would separate the two without changing
+the guard.
 
 **The existing Supabase project is modified additively. Never wiped.** The
 accumulated comms history (quo_events, sms_threads, voip_calls, contacts) is

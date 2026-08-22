@@ -35,6 +35,48 @@ A driveway + patio + demo at one property is ONE job with several sections.
 Invoices, payments, receipts, daily logs, and estimates all hang off the job,
 so quoted-vs-actual is live rather than reconstructed by hand.
 
+**KNOWN ISSUE — every inbound message creates a lead.** As of 2026-08-21
+`quo-intake` calls `resolveLead()` on every `message.received`, `call.completed`
+and `message.delivered`, so any contact with no open lead gets one. That was
+invisible while the lead bug meant no lead was ever created; now that it is
+fixed, 118 contacts carrying traffic can each spawn one.
+
+Confirmed on the first four real leads: Brad Chaney is a genuine inbound
+enquiry, but Luis (a sub who sends crews, 324 messages) and Gary Davis (18
+messages about shop cleanup) are not leads at all.
+
+The rule is NOT settled and no heuristic should be added yet — the deciding
+input is what `enrich-contacts` proposes as `classification`
+(customer/vendor/sub/not_work). See §"Interim signal" below for what the data
+already rules out.
+
+**Interim signal — measured, not guessed.** A message-count threshold does not
+work: at lead-creation time Gary had 16 prior messages and Brad had 10. Six
+apart. Any cut separating them is arbitrary and breaks on the next contact.
+
+What does separate them is prior engagement FROM US:
+
+    contact  outbound msgs before   calls before
+    Gary                       5              5
+    Luis                      34             67
+    Brad                       0              0
+
+If we have already texted or called someone, the conversation is an ongoing
+relationship rather than an inbound enquiry. That signal is clean on all three,
+and semantically means something, which a message count does not.
+
+It is NOT free. Two known false negatives:
+- A repeat customer we texted during a past job would never generate a new lead
+  for a new job. A dormancy escape hatch (no activity for N days => eligible
+  again) is the obvious refinement.
+- It does not catch a number that has texted 88 times and never been replied to
+  (+1225…9098 in the current data) — spam or a neglected customer, unclear which.
+
+Because a missed lead costs revenue and a junk lead costs only annoyance, the
+preferred shape is to RECORD the signal rather than suppress the row, and filter
+the list on it. Suppression is the fallback if the volume becomes unworkable
+before the classifier lands.
+
 **The existing Supabase project is modified additively. Never wiped.** The
 accumulated comms history (quo_events, sms_threads, voip_calls, contacts) is
 worth keeping.

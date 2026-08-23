@@ -649,11 +649,11 @@ async function createLead(supabase: ReturnType<typeof createClient>, contactId: 
  * this, every inbound message from Luis (a sub, 324 messages) or a supplier
  * mints a fresh lead the moment the previous one closes.
  *
- * customers.relation is the authority: 'client' | 'vendor' | 'sub'. It is
- * NOT NULL DEFAULT 'client', so a contact nobody has classified reads as
- * 'client' and still produces a lead. That is deliberate — unknown is not the
+ * customers.relation is the authority: 'customer' | 'vendor' | 'sub'. It is
+ * NOT NULL DEFAULT 'customer', so a contact nobody has classified reads as
+ * 'customer' and still produces a lead. That is deliberate — unknown is not the
  * same as not-a-lead, and a missed lead costs revenue while a junk one costs
- * annoyance. Only an explicit 'vendor' or 'sub' suppresses.
+ * annoyance. Only an explicit 'vendor' or 'sub' with relation_confirmed_at set suppresses.
  *
  * Fails OPEN: any lookup error creates the lead. A database hiccup must not
  * silently swallow a real enquiry.
@@ -664,15 +664,17 @@ async function leadAllowedForContact(
 ): Promise<{ allowed: boolean; relation: string | null }> {
   const { data, error } = await supabase
     .from('contacts')
-    .select('customer_id, customers(relation)')
+    .select('customer_id, customers(relation, relation_confirmed_at)')
     .eq('id', contactId)
     .maybeSingle()
   if (dbFailed(`leadAllowedForContact(contact=${contactId})`, error)) {
     return { allowed: true, relation: null }
   }
-  const rel = (data as { customers?: { relation?: string } | null } | null)
-    ?.customers?.relation ?? null
-  if (rel === 'vendor' || rel === 'sub') return { allowed: false, relation: rel }
+  const customer = (data as { customers?: { relation?: string; relation_confirmed_at?: string } | null } | null)
+    ?.customers
+  const rel = customer?.relation ?? null
+  const confirmed = customer?.relation_confirmed_at ?? null
+  if ((rel === 'vendor' || rel === 'sub') && confirmed) return { allowed: false, relation: rel }
   return { allowed: true, relation: rel }
 }
 

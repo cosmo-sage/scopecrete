@@ -78,24 +78,21 @@ This is the primary classification rule in the `enrich-contacts` prompt
 SHOWS the direction. A quote about the address is not evidence of a
 classification; if that is the best line available, the answer is `unknown`.
 
-**The filter is then deterministic and free.** `customers.relation` is already
-`NOT NULL DEFAULT 'client'` with `CHECK (relation IN ('client','vendor','sub'))`:
+**The filter is then deterministic and free.** `customers.relation` is
+`NOT NULL DEFAULT 'customer'` with `CHECK (relation IN ('customer','vendor','sub'))`,
+plus `relation_confirmed_at timestamptz` (nullable) to separate confirmed from unseen:
 
-- a confirmed proposal writes `customers.relation`
-- `quo-intake` does not create a lead when the contact's customer has
-  `relation != 'client'`
-- an unclassified contact defaults to `'client'` and still creates a lead —
-  **unknown is not the same as not-a-lead**
+- a confirmed proposal writes `customers.relation` and sets `relation_confirmed_at`
+- `quo-intake` suppresses lead creation only when the contact's customer has
+  `relation IN ('vendor','sub')` AND `relation_confirmed_at IS NOT NULL`
+- an unconfirmed or unclassified contact defaults to `relation='customer'` with
+  `relation_confirmed_at=null` and still creates a lead — **unknown is not the
+  same as not-a-lead, and unexamined defaults to customer**
 - an EXISTING open lead is always returned regardless of relation, so a later
   reclassification never orphans a lead a human already worked
 
 The guard fails OPEN: any lookup error creates the lead. A missed lead costs
 revenue; a junk lead costs annoyance.
-
-**Gap worth closing:** because `relation` is `NOT NULL DEFAULT 'client'`, there
-is no way to distinguish "a human confirmed client" from "nobody ever looked".
-A `relation_confirmed_at timestamptz` would separate the two without changing
-the guard.
 
 **The existing Supabase project is modified additively. Never wiped.** The
 accumulated comms history (quo_events, sms_threads, voip_calls, contacts) is

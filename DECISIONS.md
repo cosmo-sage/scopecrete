@@ -4,7 +4,7 @@ Ground truth for every agent working this repo. If code disagrees with this
 document, the code is wrong or this document is stale — resolve it, don't
 guess. Update this file in the same PR that changes the behavior it describes.
 
-Last updated: 2026-08-13
+Last updated: 2026-08-23
 
 ---
 
@@ -41,9 +41,30 @@ and `message.delivered`, so any contact with no open lead gets one. That was
 invisible while the lead bug meant no lead was ever created; now that it is
 fixed, 118 contacts carrying traffic can each spawn one.
 
-Confirmed on the first four real leads: Brad Chaney is a genuine inbound
-enquiry, but Luis (a sub who sends crews, 324 messages) and Gary Davis (18
-messages about shop cleanup) are not leads at all.
+Of the first four real leads, Luis (a sub who sends crews, 324 messages) and
+Gary Davis (18 messages about shop cleanup) are not leads at all.
+
+**CORRECTION 2026-08-23 — "Brad Chaney" is not a customer either.** This
+document previously called that lead a genuine inbound enquiry. It is not.
+Contact `5f02a4d7` / +19012956423 is **Dalton Digital**, a paid lead-generation
+service. All eleven of its messages are the same template:
+
+    "New Lead From Baton Rouge Concreters — <name> needs <service>.
+     Call them at <phone> (<city>). — Dalton Digital"
+
+Brad Chaney is a name inside the FIRST message body — a referred prospect whose
+real number is 2253265685. Something wrote that name onto `contacts.name` for
+the lead-gen service's number. That is the same failure mode as the "Hi Coy"
+bug: a name lifted from message content and attached to the wrong party.
+
+Two consequences. Under the direction-of-ask rule Dalton Digital is a **vendor**
+(we pay them for leads), so the correct classification for that contact is
+`vendor`, not `customer`. And the eleven genuine prospects named in those
+message bodies have never been created as contacts at all — they are the only
+real customers in that thread, and the system cannot see them.
+
+**Do not use this contact as the positive customer case when testing the
+classifier.** A correct classifier returns `vendor` for it.
 
 The rule is NOT settled and no heuristic should be added yet — the deciding
 input is what `enrich-contacts` proposes as `classification`
@@ -78,6 +99,42 @@ This is the primary classification rule in the `enrich-contacts` prompt
 SHOWS the direction. A quote about the address is not evidence of a
 classification; if that is the best line available, the answer is `unknown`.
 
+**BLOCKER — the 12,000-char window truncates away the evidence.** Measured
+2026-08-23 against the live data, before the prompt has ever been run.
+
+`askModel()` sends `conversation.substring(0, 12000)`, and
+`renderConversation()` prefixes every turn with a
+`[message_id: <uuid>] THEM @ <date>` header costing ~69 characters. For Luis:
+
+    256 non-empty turns
+    32,837 chars rendered  =  14,661 chars of actual words
+                            + 17,664 chars of message_id headers (54%)
+    12,000-char window     =  37% of the conversation
+
+All three lines this document cites as the worked example for `sub` sit past
+the cut — at cumulative offsets 30,304 ("could you send the $1300"), 32,175
+("if you have anything for Monday for us we are free") and 32,298 ("Can you
+send Luis the payment for Monday he needs it"). **The model never sees any of
+them.** Two other money-out lines do survive, at 10,800 and 11,548 ("Are you
+able to send the payment for the guys today ?"), so Luis should still classify
+`sub` — but on different evidence, and with only ~450 chars of headroom left.
+
+Any contact with more traffic than Luis loses the direction entirely. Fix the
+plumbing before running the prompt over all 135: drop the uuid headers to a
+short per-turn index (recovering ~54% of the budget), and prefer the TAIL of a
+long conversation over the head, since the direction of the ask is clearest in
+recent traffic.
+
+**The legacy enricher is still live inside quo-intake.** `enrichContact()`
+(`quo-intake/index.ts`, called on `message.received`, `message.delivered` and
+the transcript follow-up) is the enricher this rebuild was meant to replace. It
+still calls the decommissioned `llama-3.3-70b-versatile`, and on success it
+writes `name`, `first_name`, `address` and `contact_type` STRAIGHT ONTO
+`public.contacts` with no review step. It is inert today only because the model
+404s. Fixing that model id without deleting this function would resume
+unreviewed writes onto contacts — and it is the most likely origin of the
+"Brad Chaney" mislabel above. Delete it in the same PR that deploys the guard.
+
 **The filter is then deterministic and free.** `customers.relation` is
 `NOT NULL DEFAULT 'customer'` with `CHECK (relation IN ('customer','vendor','sub'))`,
 plus `relation_confirmed_at timestamptz` (nullable) to separate confirmed from unseen:
@@ -93,6 +150,16 @@ plus `relation_confirmed_at timestamptz` (nullable) to separate confirmed from u
 
 The guard fails OPEN: any lookup error creates the lead. A missed lead costs
 revenue; a junk lead costs annoyance.
+
+**The guard suppresses nothing until relations are confirmed.** Measured
+2026-08-23: all 135 rows in `customers` are `relation='customer'`,
+`relation_source='default'`, `relation_confirmed_at IS NULL` — zero confirmed.
+Because suppression requires `relation IN ('vendor','sub')` AND
+`relation_confirmed_at IS NOT NULL`, deploying the guard is behaviour-neutral
+on day one. It does not stop today's lead-per-message spam. The thing that
+stops it is confirmed proposals, which need `enrich-contacts` run and reviewed
+first. Deploy the guard so it is in place, but do not expect it to change
+anything on its own.
 
 **The existing Supabase project is modified additively. Never wiped.** The
 accumulated comms history (quo_events, sms_threads, voip_calls, contacts) is

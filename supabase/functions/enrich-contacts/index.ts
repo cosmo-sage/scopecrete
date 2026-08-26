@@ -43,7 +43,11 @@ const GROQ_API_KEY = Deno.env.get('GROQ_API_KEY') ?? ''
 const QUO_PHONE = Deno.env.get('QUO_PHONE') ?? '+12253782458'
 
 const MODEL = 'openai/gpt-oss-120b'
-const PROMPT_VERSION = 'enrich-v3-direction-of-ask-2026-08-21'
+// v4 keeps the v3 direction-of-ask rule verbatim. What changed is what reaches
+// the model: short ordinal turn labels instead of uuid headers, and the TAIL of
+// a long conversation instead of its head. A v3 proposal and a v4 proposal are
+// not comparable — v3 was judging roughly the first third of a busy thread.
+const PROMPT_VERSION = 'enrich-v4-tail-window-2026-08-23'
 
 /**
  * Names belonging to OUR side of every conversation. The model is told never
@@ -131,8 +135,12 @@ weather is not evidence of a classification, and if that is the best line you
 can find, the classification is "unknown".
 
 Copy it VERBATIM from the conversation. Do not paraphrase, do not clean it up,
-do not invent a quote. Give the message_id of that same line in
-evidence_message_id.
+do not invent a quote. Every turn is labelled with a number like "#42" — put the
+number of the turn your quote came from in evidence_turn.
+
+A long conversation may be trimmed to its most recent turns. If it was, a note
+at the top says so. Judge on what you are shown and do not speculate about the
+part you cannot see.
 
 Set direction_of_ask to a short phrase naming the flow you saw, e.g.
 "money out to them", "they ask our price", "they offer availability to us",
@@ -212,7 +220,7 @@ Return ONLY a JSON object, no prose, no code fence:
   "sqft_stated": number|null,
   "site_hint": string|null,
   "has_media": true|false,
-  "evidence_message_id": string|null,
+  "evidence_turn": number|null,
   "evidence_quote": string,
   "name_reasoning": string
 }
@@ -295,12 +303,71 @@ async function loadConversation(
   return turns
 }
 
-function renderConversation(turns: Turn[]): string {
-  return turns.map(t => {
-    const media = t.hasMedia ? ' [ATTACHED IMAGES — you cannot see these]' : ''
-    const kind = t.kind === 'call' ? ' (voicemail transcript)' : ''
-    return `[message_id: ${t.id}] ${t.who}${kind} @ ${t.at.substring(0, 10)}${media}\n${t.text}`
-  }).join('\n\n')
+/**
+ * How much conversation the model is shown, in characters.
+ *
+ * This is a COST control, not a context limit — gpt-oss-120b will take far
+ * more than this. Keep it in step with the header scheme below.
+ */
+const WINDOW_CHARS = 12000
+
+/**
+ * Cap on a SINGLE turn, so one outlier cannot eat the whole window.
+ *
+ * The tail-drop below refuses to discard the last remaining turn — otherwise a
+ * conversation could render to nothing — so without this cap one 50,000-char
+ * call transcript would be sent in full. A long voicemail is still worth
+ * reading; it is just not worth four times the budget.
+ */
+const MAX_TURN_CHARS = 4000
+
+/**
+ * One turn, labelled with a SHORT ordinal rather than its uuid.
+ *
+ * The uuid header this replaces cost ~69 characters per turn. Measured against
+ * Luis (contact 63d7e1eb) on 2026-08-23: 256 turns rendered to 32,837 chars of
+ * which 17,664 — 54% — were message_id headers, so the 12,000-char window held
+ * barely a third of the thread and most of that third was uuids. `#42 THEM
+ * 2026-07-10` costs about 20, which buys back roughly half the window.
+ *
+ * The ordinal is 1-based and indexes `turns`, so sanitize() can turn the
+ * model's `evidence_turn` back into a real messages id. The model never sees a
+ * uuid, which also removes any chance of it inventing one.
+ */
+function renderTurn(t: Turn, ordinal: number): string {
+  const media = t.hasMedia ? ' [IMAGES — you cannot see these]' : ''
+  const kind = t.kind === 'call' ? ' (voicemail)' : ''
+  const text = t.text.length > MAX_TURN_CHARS
+    ? `${t.text.slice(0, MAX_TURN_CHARS)} […turn truncated]`
+    : t.text
+  return `#${ordinal} ${t.who}${kind} ${t.at.substring(0, 10)}${media}\n${text}`
+}
+
+/**
+ * Renders the conversation, keeping the TAIL when it will not all fit.
+ *
+ * Taking the head was the wrong end. The direction of the ask is clearest in
+ * recent traffic, and on the worked example every line this repo cites as the
+ * evidence for `sub` sat at offset 30,000+ — past a head-first cut, so the
+ * model never saw any of them.
+ *
+ * Returns the ordinal of the first turn shown so the caller can log how much
+ * was dropped.
+ */
+function renderConversation(turns: Turn[]): { text: string; shownFrom: number } {
+  const rendered = turns.map((t, i) => renderTurn(t, i + 1))
+  const cost = (s: string) => s.length + 2 // + the '\n\n' join
+
+  let total = rendered.reduce((n, s) => n + cost(s), 0)
+  if (total <= WINDOW_CHARS) return { text: rendered.join('\n\n'), shownFrom: 1 }
+
+  let start = 0
+  while (start < rendered.length - 1 && total > WINDOW_CHARS) {
+    total -= cost(rendered[start])
+    start++
+  }
+  const note = `[Showing the most recent ${rendered.length - start} of ${rendered.length} turns. Earlier turns are not shown.]`
+  return { text: [note, ...rendered.slice(start)].join('\n\n'), shownFrom: start + 1 }
 }
 
 /** Stable hash of the conversation, for idempotency. */
@@ -342,6 +409,9 @@ interface Proposal {
   sqft_stated: number | null
   site_hint: string | null
   has_media: boolean
+  /** 1-based ordinal into the turns array, as shown to the model. */
+  evidence_turn: number | null
+  /** Resolved from evidence_turn by sanitize(). The model never sets this. */
   evidence_message_id: string | null
   evidence_quote: string
   name_reasoning: string
@@ -363,7 +433,9 @@ async function askModel(conversation: string): Promise<
         model: MODEL,
         messages: [
           { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user', content: `CONVERSATION:\n\n${conversation.substring(0, 12000)}` },
+          // Already windowed by renderConversation — no second truncation here,
+          // which would cut the tail back off after we deliberately kept it.
+          { role: 'user', content: `CONVERSATION:\n\n${conversation}` },
         ],
         temperature: 0.1,
         max_tokens: 900,
@@ -432,13 +504,18 @@ function sanitize(p: Proposal, turns: Turn[]): { p: Proposal; notes: string[] } 
   p.width_ft = num(p.width_ft, 500)
   p.sqft_stated = num(p.sqft_stated, 500000)
 
-  // Evidence id must be a real turn from this conversation — the model cannot
-  // cite something it invented. The DB CHECK requires it NOT NULL, so a bad or
-  // missing id falls back to the first thing THEM actually said rather than
-  // failing the insert and losing the whole proposal.
-  if (p.evidence_message_id && !turns.some(t => t.id === p.evidence_message_id)) {
-    notes.push(`evidence_message_id ${p.evidence_message_id} is not in this conversation — replaced`)
-    p.evidence_message_id = null
+  // The model cites a turn ORDINAL; the database wants a messages id. Resolving
+  // it here rather than letting the model hand back a uuid means it can only
+  // ever point at a turn that was actually in this conversation — an
+  // out-of-range ordinal is caught, and an invented uuid is now impossible.
+  p.evidence_message_id = null
+  if (p.evidence_turn !== null && p.evidence_turn !== undefined) {
+    const idx = Math.round(Number(p.evidence_turn)) - 1
+    if (Number.isFinite(idx) && idx >= 0 && idx < turns.length) {
+      p.evidence_message_id = turns[idx].id
+    } else {
+      notes.push(`evidence_turn ${p.evidence_turn} is out of range (1-${turns.length}) — replaced`)
+    }
   }
   if (!p.evidence_message_id) {
     const fallback = turns.find(t => t.who === 'THEM') ?? turns[0]
@@ -515,7 +592,7 @@ serve(async (req: Request) => {
       continue
     }
 
-    const conversation = renderConversation(turns)
+    const { text: conversation, shownFrom } = renderConversation(turns)
     const res = await askModel(conversation)
     if (!res.ok) {
       failed++
@@ -555,7 +632,9 @@ serve(async (req: Request) => {
     if (dryRun) {
       proposed++
       out.push({ contact_id: c.id, phone: c.phone, outcome: 'would_propose',
-                 turns: turns.length, proposal: row, direction_of_ask: p.direction_of_ask,
+                 turns: turns.length, turns_shown: turns.length - shownFrom + 1,
+                 proposal: row, direction_of_ask: p.direction_of_ask,
+                 evidence_turn: p.evidence_turn,
                  name_reasoning: p.name_reasoning, notes })
       continue
     }
@@ -574,7 +653,8 @@ serve(async (req: Request) => {
     }
     proposed++
     out.push({ contact_id: c.id, phone: c.phone, outcome: 'proposed',
-               turns: turns.length, classification: p.classification, confidence: p.confidence,
+               turns: turns.length, turns_shown: turns.length - shownFrom + 1,
+               classification: p.classification, confidence: p.confidence,
                proposed_name: p.proposed_name, direction_of_ask: p.direction_of_ask,
                name_reasoning: p.name_reasoning, notes })
   }

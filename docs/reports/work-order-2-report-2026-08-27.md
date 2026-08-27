@@ -10,7 +10,7 @@ and still undeployed.
 **`DECISIONS.md`** (on master, per the ruling that `AGENTS.md` takes precedence
 for documentation):
 
-- New **§2a** (L182–239) — the raw-log/spine split: `quo_events` as universal
+- New **§2a** (L182–238) — the raw-log/spine split: `quo_events` as universal
   raw log with `provider`/`received_at`/`projected_at`/`projection_error`; the
   trigger chain `quo_events_project` → `sc_quo_events_project()` →
   `sc_project_raw_event(quo_events)`; `messages_provider_idx` as the dedupe key;
@@ -18,7 +18,7 @@ for documentation):
   `messages.summary` as display cache with `call_artifacts` authoritative;
   `projection_defects` and `sc_spine_drift`; and why the `quo_events`/`messages`
   gap is artifact events rather than a defect.
-- New **§2b** (L240–262) — the lead guard ships as-is and deliberately does not
+- New **§2b** (L240–261) — the lead guard ships as-is and deliberately does not
   suppress on an unconfirmed classification, with the rule stated as: a machine
   opinion changes what Coy is asked, never what he is shown.
 - L102–109 — marked the 12,000-char truncation blocker **RESOLVED**, keeping the
@@ -26,7 +26,7 @@ for documentation):
 - L136–147 — rewrote the `enrichContact()` entry from "still live inside
   quo-intake" to "removed in source on `claude/pr1-landing-zone`, still live in
   production v55", with the warning not to repair the Groq model id first.
-- L158–159 — cross-referenced §2b from the existing guard note.
+- L173–174 — cross-referenced §2b from the existing guard note.
 - L7 — `Last updated` 2026-08-23 → 2026-08-27.
 
 **`STATUS.md`** — rewritten for post-016: what is live, the second-writer
@@ -63,7 +63,7 @@ conditions are restated in §5.
 One Task 1 item I could check without deploying: **the `[key] source=…` block
 is present in the branch source that will be deployed.** `grep -n` against
 `supabase/functions/quo-intake/index.ts` on `claude/pr1-landing-zone` returns
-it at L50 (`const NEW_SECRET_KEY`), L52 and L64 (the `console.log`). It is in
+it at L68 (`const NEW_SECRET_KEY`), L70 and L82 (the `console.log`). It is in
 the branch, not merely in `claude/edge-key-source-log`. Whether it survives
 into the *deployed* source is unverified until the deploy runs.
 
@@ -186,7 +186,7 @@ transcripts reach ~10,000 characters (10,579), and 16+15+15 = 46, the
 **`quo-intake` is version 55.** `list_edge_functions` output in §2.
 
 **The `[key] source=` block is in the branch.** `git grep` on
-`claude/pr1-landing-zone`: L50, L52, L64 of
+`claude/pr1-landing-zone`: L68, L70, L82 of
 `supabase/functions/quo-intake/index.ts`.
 
 **The merge was clean.** `git merge origin/claude/flag-lead-creation-rule`

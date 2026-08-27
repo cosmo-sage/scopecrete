@@ -34,6 +34,24 @@
  *   with the call.completed row under the UNIQUE (org_id, event_id) index.
  *   All three follow-ups failed their audit insert on 2026-08-20. They now use
  *   the webhook envelope id.
+ *
+ * v8 changes — this function is now a LANDING ZONE ONLY:
+ * - REMOVED syncCallToMessages() and both its call sites. Migration 016 made
+ *   quo_events the raw event log and attached an AFTER INSERT OR UPDATE trigger
+ *   (quo_events_project -> sc_quo_events_project -> sc_project_raw_event) that
+ *   projects into messages. The v7 mirroring above is now the DATABASE's job.
+ *   Two writers racing on the same rows is the failure mode being removed.
+ * - REMOVED enrichContact() and all three call sites. It wrote name,
+ *   first_name, address and contact_type straight onto public.contacts with no
+ *   human review, and called a Groq model that has been returning 404 since
+ *   2026-08-19. Inert by luck, not by design. Its replacement is the
+ *   enrich-contacts edge function, which writes only to contact_proposals.
+ *   GROQ_API_KEY went with it — nothing else in this file used it.
+ * - ADDED the lead guard: leadAllowedForContact() suppresses NEW lead creation
+ *   for a contact whose customer is a CONFIRMED vendor or sub. Fails open.
+ *
+ * Still writes sms_threads and voip_calls. Application code still reads them;
+ * they are dropped in a later migration, not this one.
  */
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
@@ -66,7 +84,6 @@ console.log(
 )
 const QUO_ORG_ID = Deno.env.get('QUO_ORG_ID') ?? ''
 const QUO_SIGNING_KEY = Deno.env.get('QUO_SIGNING_KEY') ?? ''
-const GROQ_API_KEY = Deno.env.get('GROQ_API_KEY') ?? ''
 
 // Our own Quo/OpenPhone number. Used to tell our side of a conversation
 // from the customer's. Hoisted from inside the message handler so the
@@ -353,77 +370,6 @@ async function upsertContact(
 }
 
 // ---------------------------------------------------------------------------
-// public.messages — the unified comms table
-// ---------------------------------------------------------------------------
-
-/**
- * Mirrors a call into public.messages, keyed by legacy_id = voip_calls.id.
- *
- * messages is where comms are moving; voip_calls and sms_threads are the
- * legacy shape. The historical import is already done (1,069 rows as of
- * 2026-08-21, every voip_calls row twinned), so this keeps NEW calls in step
- * with it rather than letting the table drift out of date from today onward.
- *
- * Read-then-write rather than upsert. Migration 012 added a unique index on
- * (import_source, legacy_id), so this could become a real upsert; it is left
- * as a read-then-write because the update path deliberately merges rather than
- * replaces (see below), which ON CONFLICT would not do.
- *
- * Never throws. A messages failure must not cost us the voip_calls row.
- */
-async function syncCallToMessages(
-  supabase: ReturnType<typeof createClient>,
-  row: {
-    voipCallId: string; orgId: string; contactId: string | null
-    direction: 'inbound' | 'outbound'; fromPhone: string; toPhone: string
-    durationSec: number | null; transcript: string | null; recordingUrl: string | null
-    quoCallId: string; occurredAt: string | null
-  }
-): Promise<'inserted' | 'updated' | 'failed'> {
-  const patch: Record<string, unknown> = {
-    org_id: row.orgId,
-    contact_id: row.contactId,
-    channel: 'call',
-    direction: row.direction,
-    from_address: row.fromPhone,
-    to_address: row.toPhone,
-    provider: 'quo',
-    provider_message_id: row.quoCallId,
-    duration_seconds: row.durationSec,
-    recording_url: row.recordingUrl,
-    transcript: row.transcript,
-    // 'received' is the only status that satisfies messages_no_composed_call
-    // for an outbound call without an approver, and it keeps
-    // messages_sent_was_approved happy alongside imported_at.
-    status: 'received',
-    legacy_id: row.voipCallId,
-    import_source: 'voip_calls',
-    imported_at: new Date().toISOString(),
-  }
-  if (row.occurredAt) patch.occurred_at = row.occurredAt
-
-  const { data: existing, error: readErr } = await supabase
-    .from('messages').select('id')
-    .eq('import_source', 'voip_calls').eq('legacy_id', row.voipCallId)
-    .limit(1).maybeSingle()
-  if (dbFailed(`messages lookup (call=${row.quoCallId})`, readErr)) return 'failed'
-
-  if (existing?.id) {
-    // Only overwrite with something. A later webhook that carries no transcript
-    // must not blank a transcript an earlier one delivered.
-    const merged: Record<string, unknown> = { ...patch }
-    for (const k of ['transcript', 'recording_url', 'duration_seconds']) {
-      if (merged[k] === null || merged[k] === undefined) delete merged[k]
-    }
-    const { error } = await supabase.from('messages').update(merged).eq('id', existing.id)
-    return dbFailed(`messages update (call=${row.quoCallId})`, error) ? 'failed' : 'updated'
-  }
-
-  const { error } = await supabase.from('messages').insert(patch)
-  return dbFailed(`messages insert (call=${row.quoCallId})`, error) ? 'failed' : 'inserted'
-}
-
-// ---------------------------------------------------------------------------
 // quo_events insert helper
 // ---------------------------------------------------------------------------
 
@@ -457,170 +403,6 @@ async function insertQuoEvent(
     business: 'sacco_builders',
   })
   return !dbFailed(`quo_events insert (${opts.eventType}/${opts.eventId})`, error)
-}
-
-// ---------------------------------------------------------------------------
-// Groq enrichment — extracts contact fields from aggregated event text
-// ---------------------------------------------------------------------------
-
-interface EnrichedContact {
-  first_name: string | null
-  last_name: string | null
-  email: string | null
-  address: string | null
-  city: string | null
-  state: string | null
-  zip: string | null
-  contact_type: 'customer' | 'vendor_subcontractor' | 'vendor_supplier' | 'vendor_equipment' | 'vendor_other' | 'customer'
-  scope_of_work: string | null
-  scope_confidence: number
-  address_confidence: number
-  name_confidence: number
-}
-
-async function enrichContact(
-  supabase: ReturnType<typeof createClient>,
-  orgId: string,
-  phone: string,
-  contactId: string
-): Promise<void> {
-  if (!GROQ_API_KEY) {
-    console.error('GROQ_API_KEY not set — skipping enrichment')
-    return
-  }
-
-  // Gather all event text for this phone
-  const [smsData, callData] = await Promise.all([
-    supabase.from('sms_threads').select('message_body, direction, created_at')
-      .eq('contact_id', contactId).order('created_at', { ascending: false }).limit(20),
-    supabase.from('voip_calls').select('transcript, direction, duration_seconds, created_at')
-      .eq('contact_id', contactId).order('created_at', { ascending: false }).limit(10),
-  ])
-
-  const smsTexts = (smsData.data ?? []).map((r: { message_body: string; direction: string }) =>
-    `[SMS ${r.direction}]: ${r.message_body}`
-  ).join('\n')
-
-  const callTexts = (callData.data ?? []).map((r: { transcript: string; direction: string; duration_seconds: number }) =>
-    `[CALL ${r.direction} ${r.duration_seconds}s]: ${r.transcript ?? '(no transcript)'}`
-  ).join('\n')
-
-  const combinedText = [callTexts, smsTexts].filter(t => t.length > 10).join('\n\n')
-
-  if (combinedText.length < 20) {
-    console.log(`Skipping enrichment for ${phone} — insufficient text`)
-    return
-  }
-
-  const prompt = `You are a contact intelligence parser for a concrete contractor business (ScopeCrete.ai).
-Extract structured contact information from the following conversation logs.
-
-Rules:
-- name: Extract first and last name. "this is bob" → first_name="bob". "my name is robert smith" → first_name="robert", last_name="smith". "hey it's mike from abc concrete" → first_name="mike". Leave null if no name found.
-- email: Look for email addresses in the text.
-- address: Look for street addresses, lot numbers, property descriptions. "at 123 main street" or "job is on 456 oak ave" or "lattice lane off highway 99". Extract the most specific address mentioned.
-- city/state/zip: Extract city names, states (TX, CA, etc), zip codes. Be conservative.
-- contact_type: "customer" if they're asking for a quote or need work done. "vendor_subcontractor" if they say "we're a sub" or "our company does X". "vendor_supplier" if they say "we supply materials" or "batch plant". "vendor_equipment" if they say "we rent equipment" or "pump truck". Default to "customer" if unclear.
-- scope_of_work: Summarize in 1-3 sentences what kind of concrete work they need. Be specific: "driveway pour 30x40ft", "parking lot slab", "foundation for shed 12x16", etc. If vendor, describe what they offer: "concrete pumping services", "aggregate supply", etc.
-- Confidence scores (0-100): Rate your confidence for each field based on how explicit the information was.
-
-Return ONLY valid JSON:
-{
-  "first_name": "...",
-  "last_name": "...",
-  "email": "...",
-  "address": "...",
-  "city": "...",
-  "state": "...",
-  "zip": "...",
-  "contact_type": "customer" | "vendor_subcontractor" | "vendor_supplier" | "vendor_equipment" | "vendor_other",
-  "scope_of_work": "...",
-  "scope_confidence": 0-100,
-  "address_confidence": 0-100,
-  "name_confidence": 0-100
-}
-
-CONVERSATION LOGS:
-${combinedText.substring(0, 4000)}`
-
-  let extracted: EnrichedContact | null = null
-
-  try {
-    const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${GROQ_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.1,
-        max_tokens: 800,
-      }),
-    })
-
-    if (!groqRes.ok) {
-      const errText = await groqRes.text()
-      console.error('Groq API error:', groqRes.status, errText)
-      return
-    }
-
-    const groqData = await groqRes.json()
-    const rawContent = groqData.choices?.[0]?.message?.content ?? ''
-
-    // Extract JSON from response (handle markdown code blocks)
-    const jsonMatch = rawContent.match(/\{[\s\S]*\}/)
-    if (!jsonMatch) {
-      console.error('No JSON found in Groq response:', rawContent.substring(0, 200))
-      return
-    }
-
-    extracted = JSON.parse(jsonMatch[0]) as EnrichedContact
-  } catch (e) {
-    console.error('Enrichment parse error:', e)
-    return
-  }
-
-  if (!extracted) return
-
-  // Upsert contact with enriched data
-  const updateData: Record<string, unknown> = {
-    last_enriched_at: new Date().toISOString(),
-    enrichment_source: 'quo_events',
-    enrichment_version: 1,
-  }
-
-  if (extracted.first_name) updateData.first_name = extracted.first_name
-  if (extracted.last_name) updateData.last_name = extracted.last_name
-  if (extracted.email) updateData.email = extracted.email
-  if (extracted.address) updateData.address = extracted.address
-  if (extracted.city) updateData.city = extracted.city
-  if (extracted.state) updateData.state = extracted.state
-  if (extracted.zip) updateData.zip = extracted.zip
-  if (extracted.address_confidence) updateData.address_confidence = extracted.address_confidence
-  if (extracted.scope_of_work) {
-    updateData.scope_of_work = extracted.scope_of_work
-    updateData.scope_confidence = extracted.scope_confidence ?? 0
-    updateData.scope_raw = extracted
-  }
-  if (extracted.contact_type) updateData.contact_type = extracted.contact_type
-
-  // Compose full name from parts
-  if (extracted.first_name || extracted.last_name) {
-    updateData.name = [extracted.first_name, extracted.last_name].filter(Boolean).join(' ')
-  }
-
-  const { error: updateError } = await supabase
-    .from('contacts')
-    .update(updateData)
-    .eq('id', contactId)
-
-  if (updateError) {
-    console.error('Failed to update contact:', updateError.message)
-  } else {
-    console.log(`Enriched contact ${contactId} (${phone}):`, JSON.stringify(updateData).substring(0, 200))
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -914,22 +696,13 @@ serve(async (req: Request) => {
 
       const voipCallId = await insertVoipCall(supabase, { orgId, contactId, leadId, fromPhone, toPhone: toPhone ?? fromPhone, direction, durationSec, transcript, recordingUrl, status: 'new', quoCallId })
 
-      // Mirror into public.messages. New calls land in the unified table from
-      // the moment they arrive, not via a later migration.
-      let messageOutcome: string | null = null
-      if (voipCallId) {
-        messageOutcome = await syncCallToMessages(supabase, {
-          voipCallId, orgId, contactId, direction,
-          fromPhone, toPhone: toPhone ?? fromPhone,
-          durationSec, transcript, recordingUrl, quoCallId,
-          occurredAt: (data.createdAt as string) ?? null,
-        })
-      }
+      // public.messages is NOT written here. Migration 016 made quo_events the
+      // raw log and put an AFTER INSERT OR UPDATE trigger on it that projects
+      // into messages via sc_project_raw_event(). Two writers on the same rows
+      // is the failure mode being removed, so this handler's job ends at the
+      // quo_events insert above.
 
-      // Fire async enrichment (non-blocking)
-      enrichContact(supabase, orgId, contactPhone, contactId).catch(e => console.error('Enrichment error:', e))
-
-      return new Response(JSON.stringify({ status: 'ok', contact_id: contactId, lead_id: leadId, message: messageOutcome }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      return new Response(JSON.stringify({ status: 'ok', contact_id: contactId, lead_id: leadId }), { status: 200, headers: { 'Content-Type': 'application/json' } })
     }
 
     // -------------------- message.received --------------------
@@ -966,9 +739,6 @@ serve(async (req: Request) => {
       }
 
       await insertSmsThread(supabase, { orgId, contactId, leadId, fromPhone, toPhone: toPhone ?? fromPhone, direction, body, mediaUrls, quoMessageId })
-
-      // Fire async enrichment
-      enrichContact(supabase, orgId, contactPhone, contactId).catch(e => console.error('Enrichment error:', e))
 
       return new Response(JSON.stringify({ status: 'ok', contact_id: contactId, lead_id: leadId }), { status: 200, headers: { 'Content-Type': 'application/json' } })
     }
@@ -1034,16 +804,10 @@ serve(async (req: Request) => {
         return new Response(JSON.stringify({ status: 'unmatched', call_id: quoCallId }), { status: 200, headers: { 'Content-Type': 'application/json' } })
       }
 
-      // Mirror the patch into public.messages alongside voip_calls.
-      const msgOutcome = await syncCallToMessages(supabase, {
-        voipCallId: call.id, orgId: call.org_id, contactId: call.contact_id,
-        direction: call.direction, fromPhone: call.from_phone, toPhone: call.to_phone,
-        durationSec: null,
-        transcript: eventType === 'call.transcript.completed' ? bodyForEvent : null,
-        recordingUrl: eventType === 'call.recording.completed'
-          ? (patch.recording_url as string ?? null) : null,
-        quoCallId, occurredAt: null,
-      })
+      // public.messages is NOT written here — see the note in call.completed.
+      // The quo_events insert below is what reaches messages, via the
+      // migration 016 projection trigger. Transcripts and summaries also land
+      // in call_artifacts from that same projection.
 
       // event_id must be the ENVELOPE id, not the call id.
       //
@@ -1070,14 +834,7 @@ serve(async (req: Request) => {
 
       if (call.lead_id) await appendLog(supabase, call.lead_id, { ...logEntry, direction: call.direction })
 
-      // A transcript is the richest signal this pipeline gets; re-enrich now
-      // that it exists (enrichContact reads voip_calls.transcript).
-      if (eventType === 'call.transcript.completed') {
-        enrichContact(supabase, call.org_id, call.from_phone, call.contact_id)
-          .catch(e => console.error('Enrichment error:', e))
-      }
-
-      return new Response(JSON.stringify({ status: 'ok', call_id: quoCallId, updated: Object.keys(patch), message: msgOutcome }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      return new Response(JSON.stringify({ status: 'ok', call_id: quoCallId, updated: Object.keys(patch) }), { status: 200, headers: { 'Content-Type': 'application/json' } })
     }
 
     // -------------------- message.delivered (our outbound texts) --------------------

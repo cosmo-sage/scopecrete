@@ -4,7 +4,7 @@ Ground truth for every agent working this repo. If code disagrees with this
 document, the code is wrong or this document is stale — resolve it, don't
 guess. Update this file in the same PR that changes the behavior it describes.
 
-Last updated: 2026-08-23
+Last updated: 2026-08-27
 
 ---
 
@@ -99,8 +99,16 @@ This is the primary classification rule in the `enrich-contacts` prompt
 SHOWS the direction. A quote about the address is not evidence of a
 classification; if that is the best line available, the answer is `unknown`.
 
-**BLOCKER — the 12,000-char window truncates away the evidence.** Measured
-2026-08-23 against the live data, before the prompt has ever been run.
+**RESOLVED 2026-08-27 — was: the 12,000-char window truncates away the
+evidence.** Fixed in `enrich-v4-tail-window-2026-08-23`, deployed as
+`enrich-contacts` version 2. Turn labels are now short ordinals (`#42 THEM
+2026-07-10`, ~20 chars) instead of uuid headers (~69), the window keeps the
+TAIL rather than the head, and `MAX_TURN_CHARS` caps any single turn at 4,000.
+The model cites `evidence_turn`, an ordinal that `sanitize()` resolves back to
+a real `messages` id, so it never sees a uuid and cannot invent one. The
+diagnosis is kept below because it is the reason the design is what it is.
+
+Measured 2026-08-23 against the live data, before the prompt had ever run:
 
 `askModel()` sends `conversation.substring(0, 12000)`, and
 `renderConversation()` prefixes every turn with a
@@ -125,15 +133,18 @@ short per-turn index (recovering ~54% of the budget), and prefer the TAIL of a
 long conversation over the head, since the direction of the ask is clearest in
 recent traffic.
 
-**The legacy enricher is still live inside quo-intake.** `enrichContact()`
-(`quo-intake/index.ts`, called on `message.received`, `message.delivered` and
-the transcript follow-up) is the enricher this rebuild was meant to replace. It
-still calls the decommissioned `llama-3.3-70b-versatile`, and on success it
-writes `name`, `first_name`, `address` and `contact_type` STRAIGHT ONTO
-`public.contacts` with no review step. It is inert today only because the model
-404s. Fixing that model id without deleting this function would resume
-unreviewed writes onto contacts — and it is the most likely origin of the
-"Brad Chaney" mislabel above. Delete it in the same PR that deploys the guard.
+**The legacy enricher is REMOVED IN SOURCE BUT STILL LIVE IN PRODUCTION.**
+`enrichContact()` wrote `name`, `first_name`, `address` and `contact_type`
+straight onto `public.contacts` with no review step, via
+`llama-3.3-70b-versatile` — decommissioned, returning 404 since 2026-08-19, so
+inert by luck rather than design. It is the most likely origin of the "Brad
+Chaney" mislabel above.
+
+It is deleted, with all three call sites, on branch `claude/pr1-landing-zone`.
+That branch is **not deployed**: `quo-intake` in production is still version 55
+and still contains it. Until that deploy happens, repairing the Groq model id
+would immediately resume unreviewed writes onto `contacts`. Do not touch the
+model id first.
 
 **The filter is then deterministic and free.** `customers.relation` is
 `NOT NULL DEFAULT 'customer'` with `CHECK (relation IN ('customer','vendor','sub'))`,
@@ -159,11 +170,92 @@ Because suppression requires `relation IN ('vendor','sub')` AND
 on day one. It does not stop today's lead-per-message spam. The thing that
 stops it is confirmed proposals, which need `enrich-contacts` run and reviewed
 first. Deploy the guard so it is in place, but do not expect it to change
-anything on its own.
+anything on its own. That the confirmation requirement is a deliberate rule
+rather than an unfinished edge is set out in §2b.
 
 **The existing Supabase project is modified additively. Never wiped.** The
 accumulated comms history (quo_events, sms_threads, voip_calls, contacts) is
 worth keeping.
+
+---
+
+## 2a. The raw log and the spine — migration 016
+
+Applied 2026-08-27 as `016_raw_log_and_spine_projection`. This is the shape of
+comms ingestion now, and it replaces the arrangement described above where
+application code wrote `messages` directly.
+
+**Two layers, and the boundary between them is the point.**
+
+    provider webhook -> quo_events (RAW LOG)  -> [db trigger] -> messages (SPINE)
+                                                              -> call_artifacts
+
+`quo_events` is the **universal raw log**. Every event lands there with its
+untouched payload in `raw_payload`, whatever it is and whether or not anything
+downstream understands it. It gained `provider` (default `'quo'`),
+`received_at`, `projected_at` and `projection_error`. It is append-only in
+spirit: nothing edits history, and a payload we cannot parse today is still on
+disk for when we can.
+
+`messages` is the **spine** — the one table the application reads.
+
+**Projection is the DATABASE's job, not the application's.** Trigger
+`quo_events_project` fires `AFTER INSERT OR UPDATE` on `quo_events` and runs
+`sc_quo_events_project()`, which calls `sc_project_raw_event(quo_events)`.
+Application code must not write `messages`. Two writers on the same rows is
+precisely the failure this removes — see §2b.
+
+Dedupe is `messages_provider_idx`, a unique partial index on
+`(provider, provider_message_id) WHERE provider_message_id IS NOT NULL`. As of
+2026-08-27 no row has a null `provider_message_id`, so the index covers the
+whole table and a duplicate is structurally impossible rather than merely
+unlikely.
+
+**`call_artifacts` holds what a call produced**, one row per message per kind
+per source. Live counts on 2026-08-27:
+
+| kind | rows | note |
+|---|---|---|
+| `recording` | 16 | audio, no text content |
+| `summary` | 15 | avg 366 chars |
+| `transcript` | 15 | avg 2,594, **max 10,579** — never load into a list |
+| `next_steps` | 9 | avg 125 chars |
+
+`messages.summary` and `messages.summary_source` are a **display cache**.
+`call_artifacts` is authoritative. If the two disagree, the artifact wins.
+
+Artifact events correctly produce no `messages` row. That is why `quo_events`
+(1,184) exceeded `messages` (1,138) by 46 on 2026-08-27: exactly 16 recordings
++ 15 summaries + 15 transcripts. Not a defect — do not "fix" it.
+
+**`sc_spine_drift` is the alarm that did not exist on 21 August.**
+
+    select count(*) from sc_spine_drift   -- 0 means everything that arrived reached the app
+
+`projection_defects` records what failed and why. On 2026-08-21 at 03:14 UTC
+SMS projection in application code stopped and never ran again; 48 texts landed
+in the database and never reached the app, and nothing was watching. A non-zero
+drift count is that outage, visible this time. Surface it in the UI.
+
+## 2b. Lead creation — the guard, and what it deliberately does not do
+
+`quo-intake` does not create a NEW lead when the contact's customer is a
+**confirmed** vendor or sub: `relation IN ('vendor','sub')` AND
+`relation_confirmed_at IS NOT NULL`. It fails OPEN — any lookup error creates
+the lead — and an existing open lead is always returned regardless of relation,
+so a later reclassification never orphans a lead a human already worked.
+
+**It ships as-is and deliberately does NOT suppress on an unconfirmed
+classification.** This is a rule, not a gap waiting to be closed:
+
+> A machine opinion changes what Coy is **asked**. It never changes what he is
+> **shown**. Suppression requires a human confirmation.
+
+An `enrich-contacts` proposal is an opinion. It can raise the question — "this
+looks like a sub, confirm?" — and once a human answers, the answer is load
+bearing. Until then the lead appears. The cost of that is a junk lead in the
+list; the cost of the alternative is a real customer silently disappearing
+because a model guessed wrong and nobody was asked. Those are not symmetric.
 
 ---
 

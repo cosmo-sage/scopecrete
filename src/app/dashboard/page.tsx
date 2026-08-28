@@ -46,6 +46,68 @@ function StatCard({ label, value, accent }: { label: string; value: string; acce
   );
 }
 
+/**
+ * Spine drift — the alarm that did not exist on 21 August.
+ *
+ * On 2026-08-21 SMS projection stopped in application code and 48 texts landed
+ * in the database without ever reaching the app. Nobody noticed for a week
+ * because nothing was watching. This is the thing that watches.
+ *
+ * Three states, and the third one matters as much as the other two: zero (all
+ * clear), non-zero (something arrived and did not reach the app), and UNKNOWN
+ * (the check itself failed). An alarm that cannot read its source must never
+ * render as "all clear" — that is the original failure with a green light on
+ * top — so the error state is shown in the same warning colour as a real drift.
+ *
+ * Visible without clicking, per the work order.
+ */
+function DriftIndicator() {
+  const [count, setCount] = useState<number | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/dashboard/drift")
+      .then(async (r) => {
+        const body = await r.json().catch(() => ({}));
+        if (!r.ok || typeof body?.count !== "number") throw new Error(body?.error || `HTTP ${r.status}`);
+        return body.count as number;
+      })
+      .then((n) => { if (!cancelled) setCount(n); })
+      .catch(() => { if (!cancelled) setFailed(true); });
+    return () => { cancelled = true; };
+  }, []);
+
+  if (count === null && !failed) return null; // stay quiet until it resolves
+
+  const clear = !failed && count === 0;
+  const tone = clear ? DA.textMuted : DA.error;
+  const label = failed
+    ? "Spine drift: check failed — status unknown"
+    : count === 0
+      ? "Spine drift 0 — everything that arrived reached the app"
+      : `Spine drift ${count} — ${count === 1 ? "an event" : "events"} arrived that did not reach the app`;
+
+  return (
+    <div
+      className="rounded-xl px-3 py-2 flex items-center gap-2"
+      style={{
+        background: clear ? DA.surface : DA.elevated,
+        border: `1px solid ${clear ? DA.border : DA.error}`,
+      }}
+    >
+      <span
+        className="w-2 h-2 rounded-full shrink-0"
+        style={{ background: tone }}
+        aria-hidden
+      />
+      <span className="text-[11px]" style={{ color: clear ? DA.textMuted : DA.textPrimary }}>
+        {label}
+      </span>
+    </div>
+  );
+}
+
 function RecentLeadCard({ lead, onClick }: { lead: Lead; onClick: () => void }) {
   const name = lead.customer_name || lead.customer_phone || "Unknown Lead";
   const cfg = STAGE_CONFIG[lead.status] || { color: DA.textMuted };
@@ -138,6 +200,7 @@ export default function HomePage() {
           <StatCard label="Needs Action" value={String(stats.needsAction)} accent={stats.needsAction > 0} />
           <StatCard label="Win Rate" value={`${stats.winRate}%`} />
         </div>
+        <DriftIndicator />
         <div>
           <div className="flex items-center justify-between mb-2">
             <div className="text-sm font-semibold" style={{ color: DA.textPrimary }}>Recent Leads</div>

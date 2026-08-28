@@ -1,410 +1,331 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Phone, PaperPlaneRight, Paperclip, ArrowLeft } from "@phosphor-icons/react";
+import { Phone, ArrowLeft, CaretDown, CaretRight, WarningCircle } from "@phosphor-icons/react";
 import { DA } from "@/lib/design-tokens";
 import DustyDrawer from "@/components/dashboard/DustyDrawer";
 import ToolboxDrawer from "@/components/dashboard/ToolboxDrawer";
 
-// ─── Types ────────────────────────────────────────────────────
-interface Message {
-  role: "customer" | "dusty" | "system";
-  text: string;
-  timestamp: string;
-  hasQuote?: boolean;
-  quoteData?: {
-    title: string;
-    subtitle: string;
-    subtotal: number;
-    markup: number;
-    total: number;
-  };
-}
+/**
+ * Thread detail — real messages for one contact.
+ *
+ * The route param is a contacts.id (the thread list navigates with it), not the
+ * old "thread-001" mock key.
+ *
+ * The composer that used to live here has been removed rather than left
+ * pointing at real data. It appended a message locally and then faked a "Dusty"
+ * reply after a 1s timeout. Interleaving invented replies into a view of real
+ * customer history is worse than having no composer, and DECISIONS.md §10 is
+ * explicit that all outbound contact is the contractor himself and there is no
+ * bot-initiated outreach. Outbound texting also needs 10DLC registration, which
+ * has not happened. The call button remains — that is the real action available.
+ */
 
-interface Thread {
+interface ThreadMessage {
   id: string;
-  contact_name: string;
-  contact_phone: string;
-  messages: Message[];
+  channel: string | null;
+  direction: string | null;
+  occurred_at: string | null;
+  body_text: string | null;
+  summary: string | null;
+  summary_source: string | null;
+  duration_seconds: number | null;
+  recording_url: string | null;
+  status: string | null;
+  artifact_kinds: string[];
 }
 
-// ─── Mock data ────────────────────────────────────────────────
-const MOCK_THREADS: Record<string, Thread> = {
-  "thread-001": {
-    id: "thread-001",
-    contact_name: "Marcus Thibodaux",
-    contact_phone: "(225) 555-0177",
-    messages: [
-      {
-        role: "dusty",
-        text: "Hi Marcus! Saw your request for a driveway estimate. Can you tell me about the current condition?",
-        timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-      },
-      {
-        role: "customer",
-        text: "Hey! Yeah it's a 2-car driveway, about 2,400 sq ft. Some cracks but mostly surface damage.",
-        timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000 + 3 * 60 * 1000).toISOString(),
-      },
-      {
-        role: "dusty",
-        text: "Got it. For a repair like that I'd recommend 4\" depth with rebar. Want me to put together a quote?",
-        timestamp: new Date(Date.now() - 1.5 * 60 * 60 * 1000).toISOString(),
-      },
-      {
-        role: "customer",
-        text: "Yes please! Also can you send photos of the materials you'd use?",
-        timestamp: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
-      },
-      {
-        role: "dusty",
-        text: "Here's the quote I promised! Let me know if you have any questions.",
-        timestamp: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
-        hasQuote: true,
-        quoteData: {
-          title: "📋 ScopeCrete Estimate",
-          subtitle: "Driveway Repair · 2,400 sq ft",
-          subtotal: 3217,
-          markup: 660,
-          total: 3877,
-        },
-      },
-    ],
-  },
-  "thread-002": {
-    id: "thread-002",
-    contact_name: "Fatima Osei",
-    contact_phone: "(225) 777-8823",
-    messages: [
-      {
-        role: "dusty",
-        text: "Hi Fatima! Got your request for a pool deck. How big is the area?",
-        timestamp: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
-      },
-      {
-        role: "customer",
-        text: "Hi! About 800 sq ft. It's around a pool.",
-        timestamp: new Date(Date.now() - 60 * 60 * 1000 + 5 * 60 * 1000).toISOString(),
-      },
-      {
-        role: "dusty",
-        text: "Thanks! I'll get you an estimate shortly.",
-        timestamp: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
-      },
-    ],
-  },
-};
-
-const DEFAULT_THREAD: Thread = {
-  id: "thread-001",
-  contact_name: "Marcus Thibodaux",
-  contact_phone: "(225) 555-0177",
-  messages: MOCK_THREADS["thread-001"].messages,
-};
-
-// ─── Helpers ───────────────────────────────────────────────────
-function timeAgo(ts: string): string {
-  const diff = Date.now() - new Date(ts).getTime();
-  const min = Math.floor(diff / 60000);
-  if (min < 1) return "Just now";
-  if (min < 60) return `${min}m ago`;
-  const hr = Math.floor(min / 60);
-  if (hr < 24) return `${hr}h ago`;
-  return `${Math.floor(hr / 24)}d ago`;
+interface Artifact {
+  kind: string;
+  source: string | null;
+  content: string | null;
+  url: string | null;
+  fetched_at: string | null;
 }
 
-function formatCurrency(n: number): string {
-  return `$${n.toLocaleString()}`;
+interface ArtifactBundle {
+  transcript: Artifact | null;
+  summary: Artifact | null;
+  next_steps: Artifact | null;
 }
 
-function formatMsgTime(ts: string): string {
-  return new Date(ts).toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
+function formatPhone(raw: string | null): string {
+  if (!raw) return "Unknown";
+  const d = raw.replace(/[^\d]/g, "");
+  const ten = d.length === 11 && d.startsWith("1") ? d.slice(1) : d;
+  if (ten.length !== 10) return raw;
+  return `(${ten.slice(0, 3)}) ${ten.slice(3, 6)}-${ten.slice(6)}`;
+}
+
+function formatDuration(s: number | null): string | null {
+  if (typeof s !== "number" || s <= 0) return null;
+  return s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`;
+}
+
+function formatMsgTime(ts: string | null): string {
+  if (!ts) return "";
+  return new Date(ts).toLocaleString("en-US", {
+    month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
   });
 }
 
-// ─── Quick reply chips ─────────────────────────────────────────
-const QUICK_REPLIES = [
-  "New driveway",
-  "Small pad",
-  "Foundation",
-  "Repair",
-  "Patio",
-  "Pool deck",
-];
+/** One call row. Transcript is fetched only when this is expanded. */
+function CallRow({ m }: { m: ThreadMessage }) {
+  const [open, setOpen] = useState(false);
+  const [bundle, setBundle] = useState<ArtifactBundle | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
 
-// ─── Main Page ─────────────────────────────────────────────────
+  const hasArtifacts = m.artifact_kinds.length > 0;
+  const duration = formatDuration(m.duration_seconds);
+  const isOut = m.direction === "outbound";
+
+  const expand = useCallback(async () => {
+    const next = !open;
+    setOpen(next);
+    // Transcripts reach ~10,600 characters, so the fetch happens here and not
+    // in the thread query. Once loaded it is kept.
+    if (!next || bundle || !hasArtifacts) return;
+    setLoading(true);
+    setErr(null);
+    try {
+      const r = await fetch(`/api/messages/${m.id}/artifacts`);
+      const body = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(body?.error || `HTTP ${r.status}`);
+      setBundle(body as ArtifactBundle);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  }, [open, bundle, hasArtifacts, m.id]);
+
+  return (
+    <div
+      className="rounded-xl px-3 py-2.5 mb-2"
+      style={{ background: DA.surface, border: `1px solid ${DA.border}` }}
+    >
+      <div className="flex items-center gap-2">
+        <Phone size={13} weight="fill" color={isOut ? DA.accent : DA.textMuted} className="shrink-0" />
+        <span className="text-xs font-semibold" style={{ color: DA.textPrimary }}>
+          {isOut ? "Outgoing call" : "Incoming call"}
+        </span>
+        {duration && (
+          <span className="text-[10px] tabular-nums" style={{ color: DA.textMuted }}>{duration}</span>
+        )}
+        {m.status && m.status !== "completed" && (
+          <span className="text-[9px] px-1.5 py-0.5 rounded-full uppercase tracking-wide"
+                style={{ background: DA.elevated, color: DA.textMuted }}>
+            {m.status}
+          </span>
+        )}
+        <span className="text-[10px] ml-auto shrink-0" style={{ color: DA.textMuted }}>
+          {formatMsgTime(m.occurred_at)}
+        </span>
+      </div>
+
+      {/* Glance line. 16 of 462 calls have a summary, so the absent case is the
+          normal one and gets a plain factual line rather than blank space. */}
+      <div className="text-xs mt-1.5" style={{
+        color: m.summary ? DA.textSecondary : DA.textMuted,
+        fontStyle: m.summary ? "normal" : "italic",
+        minHeight: "1.1rem", lineHeight: "1.15rem",
+      }}>
+        {m.summary?.trim() || `No summary${duration ? ` · ${duration}` : ""}`}
+      </div>
+
+      {/* The recording links do not expire — verified alive at 118.8 hours. */}
+      {m.recording_url && (
+        <audio controls preload="none" src={m.recording_url}
+               className="w-full mt-2" style={{ height: 32 }} />
+      )}
+
+      {hasArtifacts && (
+        <button
+          onClick={expand}
+          className="flex items-center gap-1 mt-2 text-[11px]"
+          style={{ background: "none", border: "none", cursor: "pointer", color: DA.accent, padding: 0 }}
+        >
+          {open ? <CaretDown size={11} /> : <CaretRight size={11} />}
+          {open ? "Hide details" : `Details (${m.artifact_kinds.join(", ")})`}
+        </button>
+      )}
+
+      {open && (
+        <div className="mt-2 pt-2" style={{ borderTop: `1px solid ${DA.border}` }}>
+          {loading && <div className="text-[11px]" style={{ color: DA.textMuted }}>Loading…</div>}
+          {err && <div className="text-[11px]" style={{ color: DA.error }}>{err}</div>}
+
+          {/* next_steps first — it is the closest thing the system has to what
+              this person actually wanted, which is the whole receptionist goal. */}
+          {bundle?.next_steps?.content && (
+            <div className="mb-2 rounded-lg px-2.5 py-2" style={{ background: DA.elevated }}>
+              <div className="text-[9px] uppercase tracking-wide mb-1" style={{ color: DA.accent }}>
+                Next steps
+              </div>
+              <div className="text-xs whitespace-pre-wrap" style={{ color: DA.textPrimary }}>
+                {bundle.next_steps.content}
+              </div>
+            </div>
+          )}
+
+          {/* call_artifacts is authoritative; messages.summary is a cache. When
+              both exist and disagree, the artifact is what gets shown. */}
+          {bundle?.summary?.content && bundle.summary.content.trim() !== (m.summary ?? "").trim() && (
+            <div className="mb-2">
+              <div className="text-[9px] uppercase tracking-wide mb-1" style={{ color: DA.textMuted }}>
+                Summary (from call_artifacts)
+              </div>
+              <div className="text-xs whitespace-pre-wrap" style={{ color: DA.textSecondary }}>
+                {bundle.summary.content}
+              </div>
+            </div>
+          )}
+
+          {bundle?.transcript?.content && (
+            <div>
+              <div className="text-[9px] uppercase tracking-wide mb-1" style={{ color: DA.textMuted }}>
+                Transcript
+                {bundle.transcript.source && ` · ${bundle.transcript.source}`}
+              </div>
+              {/* Speaker labels are raw E.164 numbers. Resolving them to names
+                  is not built — see the report. Rendered monospace so the
+                  columns line up and it reads as a transcript, not prose. */}
+              <div
+                className="text-[11px] whitespace-pre-wrap overflow-y-auto"
+                style={{ color: DA.textSecondary, maxHeight: "40vh", fontFamily: "ui-monospace, monospace" }}
+              >
+                {bundle.transcript.content}
+              </div>
+            </div>
+          )}
+
+          {bundle && !bundle.transcript && !bundle.next_steps && !bundle.summary && !loading && (
+            <div className="text-[11px]" style={{ color: DA.textMuted }}>
+              No transcript or summary stored for this call.
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SmsRow({ m }: { m: ThreadMessage }) {
+  const isOut = m.direction === "outbound";
+  return (
+    <div className={`flex mb-2 ${isOut ? "justify-end" : "justify-start"}`}>
+      <div
+        className="max-w-[78%] rounded-2xl px-3 py-2"
+        style={{
+          background: isOut ? DA.accent : DA.surface,
+          border: isOut ? "none" : `1px solid ${DA.border}`,
+        }}
+      >
+        <div className="text-xs whitespace-pre-wrap" style={{ color: isOut ? "#fff" : DA.textPrimary }}>
+          {m.body_text?.trim() || <span style={{ fontStyle: "italic", opacity: 0.7 }}>(no text)</span>}
+        </div>
+        <div className="text-[9px] mt-1" style={{ color: isOut ? "rgba(255,255,255,0.7)" : DA.textMuted }}>
+          {formatMsgTime(m.occurred_at)}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ChatThreadPage() {
   const params = useParams();
   const router = useRouter();
-  const threadId = params?.id as string;
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const contactId = params?.id as string;
 
-  const thread = MOCK_THREADS[threadId] || DEFAULT_THREAD;
-  const [messages, setMessages] = useState<Message[]>(thread.messages);
-  const [input, setInput] = useState("");
-  const [typing, setTyping] = useState(false);
+  const [messages, setMessages] = useState<ThreadMessage[]>([]);
+  const [phone, setPhone] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [dustyOpen, setDustyOpen] = useState(false);
   const [toolboxOpen, setToolboxOpen] = useState(false);
 
   useEffect(() => {
-    if (bottomRef.current) {
-      bottomRef.current.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [messages]);
+    if (!contactId) return;
+    let cancelled = false;
+    fetch(`/api/threads/${contactId}`)
+      .then(async (r) => {
+        const body = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(body?.error || `HTTP ${r.status}`);
+        return body;
+      })
+      .then((data) => {
+        if (cancelled) return;
+        setMessages(Array.isArray(data.messages) ? data.messages : []);
+        setPhone(data.counterparty_phone ?? null);
+        setLoading(false);
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setError(e instanceof Error ? e.message : String(e));
+        setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [contactId]);
 
-  const sendMessage = async () => {
-    if (!input.trim()) return;
-    const userText = input.trim();
-    setInput("");
-    setMessages((prev) => [
-      ...prev,
-      { role: "customer", text: userText, timestamp: new Date().toISOString() },
-    ]);
-    setTyping(true);
-    await new Promise((r) => setTimeout(r, 1000));
-    setTyping(false);
-    setMessages((prev) => [
-      ...prev,
-      {
-        role: "dusty",
-        text: "Got it! I'll follow up with more details shortly.",
-        timestamp: new Date().toISOString(),
-      },
-    ]);
-  };
+  // The counterparty phone is derived server-side from the message addresses
+  // against org_phone_numbers; contacts is not readable through a session
+  // client today (see api/threads/route.ts for why).
+  const headerTitle = formatPhone(phone);
 
   return (
-    <div className="flex flex-col" style={{ background: "#1A1A1A", height: "100dvh" }}>
-      {/* Status bar */}
-      <div className="h-11 px-6 flex items-end pb-1 justify-between flex-shrink-0">
-        <span className="text-xs font-semibold" style={{ color: "rgba(255,255,255,0.4)" }}>
-          {new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
-        </span>
-        <div className="flex items-center gap-1">
-          <span className="text-xs">📶</span>
-          <span className="text-xs">🔋</span>
-        </div>
-      </div>
-
-      {/* Header */}
+    <div className="flex flex-col" style={{ background: DA.bg, height: "100dvh" }}>
       <div
         className="px-4 py-3 flex items-center gap-3 flex-shrink-0"
-        style={{ background: "#1A1A1A", borderBottom: "1px solid #333" }}
+        style={{ background: DA.surface, borderBottom: `1px solid ${DA.border}` }}
       >
         <button
           onClick={() => router.back()}
-          className="text-white/60 text-sm"
-          style={{ background: "none", border: "none", cursor: "pointer" }}
+          style={{ background: "none", border: "none", cursor: "pointer", color: DA.textMuted, padding: 0 }}
+          aria-label="Back"
         >
-          ←
+          <ArrowLeft size={18} />
         </button>
-        <div
-          className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-semibold"
-          style={{ background: DA.accent }}
-        >
-          {thread.contact_name.split(" ").slice(0, 2).map((n) => n[0]).join("").toUpperCase()}
+        <div className="flex-1 min-w-0">
+          <div className="font-semibold text-sm truncate" style={{ color: DA.textPrimary }}>
+            {headerTitle}
+          </div>
+          <div className="text-[10px]" style={{ color: DA.textMuted }}>
+            {loading ? "Loading…" : `${messages.length} message${messages.length === 1 ? "" : "s"}`}
+          </div>
         </div>
-        <div className="flex-1">
-          <div className="font-semibold text-sm text-white">{thread.contact_name}</div>
-          <div className="text-xs text-white/40">Online</div>
-        </div>
-        <a
-          href={`tel:${thread.contact_phone}`}
-          className="text-white/40"
-          style={{ textDecoration: "none" }}
-        >
-          <Phone size={18} />
-        </a>
       </div>
 
-      {/* Chat messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
-        {messages.map((msg, i) => (
-          <div
-            key={i}
-            className="flex items-end gap-2"
-            style={{ flexDirection: msg.role === "customer" ? "row-reverse" : "row" }}
-          >
-            {msg.role !== "customer" && (
-              <div
-                className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold shrink-0"
-                style={{ background: DA.accent }}
-              >
-                S
-              </div>
-            )}
-            <div
-              className="max-w-[78%] rounded-2xl px-3 py-2 text-xs"
-              style={{
-                background: msg.role === "customer" ? DA.accent : "#2D2D2D",
-                color: "white",
-                borderRadius:
-                  msg.role === "customer" ? "18px 18px 4px 18px" : "18px 18px 18px 4px",
-              }}
-            >
-              {/* Quote card */}
-              {msg.hasQuote && msg.quoteData && (
-                <div
-                  className="rounded-lg overflow-hidden mb-2"
-                  style={{ background: "#2D2D2D", border: "1px solid #444" }}
-                >
-                  <div className="p-3" style={{ borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
-                    <div className="text-xs font-semibold text-white">
-                      {msg.quoteData.title}
-                    </div>
-                    <div className="text-[10px] text-white/50">{msg.quoteData.subtitle}</div>
-                  </div>
-                  <div className="p-3 space-y-1">
-                    <div className="flex justify-between text-xs">
-                      <span className="text-white/60">Subtotal</span>
-                      <span className="text-white">
-                        {formatCurrency(msg.quoteData.subtotal)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between text-xs">
-                      <span className="text-white/60">Markup 25%</span>
-                      <span className="text-white">
-                        {formatCurrency(msg.quoteData.markup)}
-                      </span>
-                    </div>
-                    <div
-                      className="flex justify-between text-xs font-bold pt-1 mt-1"
-                      style={{ borderTop: "1px solid rgba(255,255,255,0.1)" }}
-                    >
-                      <span className="text-white">Total</span>
-                      <span style={{ color: DA.accent }}>
-                        {formatCurrency(msg.quoteData.total)}
-                      </span>
-                    </div>
-                  </div>
-                  <div
-                    className="p-2 flex gap-2"
-                    style={{ borderTop: "1px solid rgba(255,255,255,0.1)" }}
-                  >
-                    <button
-                      className="flex-1 rounded-lg py-1.5 text-xs font-semibold text-white"
-                      style={{ background: DA.accent, border: "none", cursor: "pointer" }}
-                    >
-                      Approve
-                    </button>
-                    <button
-                      className="flex-1 rounded-lg py-1.5 text-xs text-white/60"
-                      style={{ background: "#333", border: "none", cursor: "pointer" }}
-                    >
-                      Decline
-                    </button>
-                  </div>
-                </div>
-              )}
-              {msg.text}
-              <div
-                className="text-[10px] mt-1 text-right"
-                style={{
-                  color: msg.role === "customer"
-                    ? "rgba(255,255,255,0.7)"
-                    : "rgba(255,255,255,0.5)",
-                }}
-              >
-                {formatMsgTime(msg.timestamp)}
-              </div>
-            </div>
+      <div className="flex-1 overflow-y-auto px-3 py-3">
+        {loading ? (
+          <div className="space-y-2">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="h-12 rounded-xl animate-pulse" style={{ background: DA.surface }} />
+            ))}
           </div>
-        ))}
-
-        {typing && (
-          <div className="flex items-end gap-2">
-            <div
-              className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold shrink-0"
-              style={{ background: DA.accent }}
-            >
-              S
-            </div>
-            <div
-              className="rounded-2xl px-3 py-2 flex gap-1"
-              style={{ background: "#2D2D2D", borderRadius: "18px 18px 18px 4px" }}
-            >
-              {[0, 200, 400].map((d) => (
-                <span
-                  key={d}
-                  className="w-1.5 h-1.5 rounded-full inline-block"
-                  style={{
-                    background: "#666",
-                    animation: `typingBounce 1.2s infinite`,
-                    animationDelay: `${d}ms`,
-                  }}
-                />
-              ))}
-            </div>
+        ) : error ? (
+          <div className="flex flex-col items-center justify-center py-16 text-center">
+            <WarningCircle size={32} color={DA.error} />
+            <p className="text-sm mt-2 font-semibold" style={{ color: DA.textPrimary }}>
+              Couldn&apos;t load this thread
+            </p>
+            <p className="text-xs mt-1 break-words" style={{ color: DA.textMuted }}>{error}</p>
           </div>
+        ) : messages.length === 0 ? (
+          <div className="text-center text-sm py-16" style={{ color: DA.textMuted }}>
+            No messages in this thread.
+          </div>
+        ) : (
+          messages.map((m) =>
+            m.channel === "call"
+              ? <CallRow key={m.id} m={m} />
+              : <SmsRow key={m.id} m={m} />
+          )
         )}
-        <div ref={bottomRef} />
       </div>
 
-      {/* Quick replies */}
-      <div
-        className="px-4 py-2 flex gap-2 overflow-x-auto flex-shrink-0"
-        style={{ borderTop: "1px solid #333", scrollbarWidth: "none" }}
-      >
-        {QUICK_REPLIES.map((r) => (
-          <button
-            key={r}
-            onClick={() => setInput(r)}
-            className="shrink-0 rounded-full px-3 py-1.5 text-xs"
-            style={{
-              background: "#2D2D2D",
-              border: "1px solid #444",
-              color: "white",
-              cursor: "pointer",
-            }}
-          >
-            {r}
-          </button>
-        ))}
-      </div>
-
-      {/* Input bar */}
-      <div
-        className="px-4 py-3 flex items-center gap-2 flex-shrink-0"
-        style={{ borderTop: "1px solid #333", paddingBottom: "max(12px, env(safe-area-inset-bottom))" }}
-      >
-        <button className="text-white/40 text-lg shrink-0" style={{ background: "none", border: "none", cursor: "pointer" }}>
-          📎
-        </button>
-        <div
-          className="flex-1 rounded-full px-4 py-2.5 text-sm"
-          style={{ background: "#2D2D2D" }}
-        >
-          <input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-            placeholder="Type a message..."
-            className="w-full bg-transparent outline-none text-white text-sm placeholder:text-white/40"
-          />
-        </div>
-        <button
-          onClick={sendMessage}
-          className="w-9 h-9 rounded-full flex items-center justify-center text-white shrink-0"
-          style={{ background: DA.accent, border: "none", cursor: "pointer" }}
-        >
-          <PaperPlaneRight size={16} />
-        </button>
-      </div>
-
-      <style>{`
-        @keyframes typingBounce {
-          0%, 60%, 100% { transform: translateY(0); }
-          30% { transform: translateY(-4px); }
-        }
-      `}</style>
-
-      <DustyDrawer
-        open={dustyOpen}
-        onClose={() => setDustyOpen(false)}
-        context={{ leadName: thread.contact_name }}
-      />
+      <DustyDrawer open={dustyOpen} onClose={() => setDustyOpen(false)} />
       <ToolboxDrawer open={toolboxOpen} onClose={() => setToolboxOpen(false)} />
     </div>
   );

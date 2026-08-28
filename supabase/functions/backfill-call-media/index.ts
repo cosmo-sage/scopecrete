@@ -210,31 +210,22 @@ async function probePresigned(url: string, ageHours: number): Promise<Record<str
   return probe
 }
 
-/** Patches the matching messages row. Never throws; never blanks a value. */
-async function mirrorToMessages(
-  supabase: ReturnType<typeof createClient>,
-  voipCallId: string,
-  patch: Record<string, unknown>
-): Promise<'updated' | 'absent' | 'failed' | 'nothing'> {
-  const clean: Record<string, unknown> = {}
-  for (const [k, v] of Object.entries(patch)) if (v !== null && v !== undefined) clean[k] = v
-  if (Object.keys(clean).length === 0) return 'nothing'
-
-  const { data, error: readErr } = await supabase.from('messages').select('id')
-    .eq('import_source', 'voip_calls').eq('legacy_id', voipCallId).limit(1).maybeSingle()
-  if (dbFailed(`messages lookup (voip_call=${voipCallId})`, readErr)) return 'failed'
-  // messages was fully backfilled on 2026-08-21 — every voip_calls row has a
-  // twin (verified: 0 without, 0 duplicates). So 'absent' is an ANOMALY worth
-  // shouting about, not a normal outcome. Never insert here: that would
-  // duplicate the twin rather than update it.
-  if (!data?.id) {
-    console.error(`[anomaly] no messages twin for voip_call=${voipCallId} — messages was verified complete; investigate before trusting this batch`)
-    return 'absent'
-  }
-
-  const { error } = await supabase.from('messages').update(clean).eq('id', data.id)
-  return dbFailed(`messages update (voip_call=${voipCallId})`, error) ? 'failed' : 'updated'
-}
+// mirrorToMessages() REMOVED. This function no longer writes public.messages.
+//
+// Migration 016 made quo_events the raw log and gave the projection trigger
+// (quo_events_project -> sc_quo_events_project -> sc_project_raw_event) sole
+// ownership of messages. This was the last remaining second writer.
+//
+// It had also quietly stopped working for new data. The lookup keyed on
+//     .eq('import_source', 'voip_calls').eq('legacy_id', voipCallId)
+// and the trigger writes import_source = 'quo_events'. So from 2026-08-27
+// 13:01 onward the lookup matched nothing and logged an '[anomaly]' line for
+// every call, while still updating the 458 rows backfilled on 2026-08-21 that
+// genuinely carry 'voip_calls'. Live for old rows, dead for new ones — a third
+// state nobody was counting, and the same stale-key failure that made
+// quo-intake v55's insert collide with messages_provider_idx.
+//
+// voip_calls writes are deliberately retained; application code still reads it.
 
 // ---------------------------------------------------------------------------
 // Handler
@@ -378,13 +369,9 @@ serve(async (req: Request) => {
     const { error: updErr } = await supabase.from('voip_calls').update(update).eq('id', call.id)
     if (updErr) { failed++; r.outcome = `voip_calls update failed: ${updErr.message}`; results.push(r); continue }
 
-    r.messages_mirror = await mirrorToMessages(supabase, call.id, {
-      transcript: update.transcript ?? null,
-      // messages has no provider_summary column; the provider's summary is the
-      // only summary a call has, so it lands in the generic field there.
-      body_text: update.provider_summary ?? null,
-      duration_seconds: update.duration_seconds ?? null,
-    })
+    // No messages write here — the projection trigger owns that table now.
+    // What lands in voip_calls above reaches messages and call_artifacts via
+    // quo_events, not via this function.
     r.outcome = 'written'
     results.push(r)
   }

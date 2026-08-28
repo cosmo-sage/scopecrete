@@ -111,7 +111,7 @@ condition for deleting it.
 
 Committed to `master` as `d25ebf1` and pushed. Nothing else was touched. In
 particular **`backfill-call-media` is unchanged** — Task 2 is gated on Task 1
-reporting, and its `messages` write at L238/L250 is still there.
+reporting, and its `messages` write — at L223/L235, see §6 — is still there.
 
 ---
 

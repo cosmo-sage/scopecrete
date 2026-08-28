@@ -48,6 +48,7 @@ interface ArtifactBundle {
   transcript: Artifact | null;
   summary: Artifact | null;
   next_steps: Artifact | null;
+  voicemail: Artifact | null;
 }
 
 function formatPhone(raw: string | null): string {
@@ -125,9 +126,16 @@ function CallRow({ m }: { m: ThreadMessage }) {
         </span>
       </div>
 
-      {/* Glance line. 16 of 462 calls have a summary, so the absent case is the
-          normal one and gets a plain factual line rather than blank space. */}
-      <div className="text-xs mt-1.5" style={{
+      {/* Glance line. summary_source distinguishes what this text IS: a
+          voicemail is the caller's own words, Quo's summary is a paraphrase of
+          a conversation. Showing both unlabelled as "summary" would quietly
+          claim someone said something they did not. */}
+      {m.summary?.trim() && m.summary_source === "quo_voicemail" && (
+        <div className="text-[9px] uppercase tracking-wide mt-1.5" style={{ color: DA.accent }}>
+          Voicemail
+        </div>
+      )}
+      <div className="text-xs mt-1" style={{
         color: m.summary ? DA.textSecondary : DA.textMuted,
         fontStyle: m.summary ? "normal" : "italic",
         minHeight: "1.1rem", lineHeight: "1.15rem",
@@ -157,7 +165,30 @@ function CallRow({ m }: { m: ThreadMessage }) {
           {loading && <div className="text-[11px]" style={{ color: DA.textMuted }}>Loading…</div>}
           {err && <div className="text-[11px]" style={{ color: DA.error }}>{err}</div>}
 
-          {/* next_steps first — it is the closest thing the system has to what
+          {/* The voicemail is what the caller ACTUALLY SAID, in their words —
+              not Quo's paraphrase. On a missed call it is the only content that
+              exists, and it is usually a self-identification plus an ask
+              ("this is Don Simpson… give me a call"). So it leads, and it is
+              labelled as a voicemail rather than blurring into "summary". */}
+          {bundle?.voicemail && (bundle.voicemail.content || bundle.voicemail.url) && (
+            <div className="mb-2 rounded-lg px-2.5 py-2" style={{ background: DA.elevated }}>
+              <div className="text-[9px] uppercase tracking-wide mb-1" style={{ color: DA.accent }}>
+                Voicemail{bundle.voicemail.source ? ` · ${bundle.voicemail.source}` : ""}
+              </div>
+              {bundle.voicemail.content && (
+                <div className="text-xs whitespace-pre-wrap" style={{ color: DA.textPrimary }}>
+                  {bundle.voicemail.content}
+                </div>
+              )}
+              {/* Same playback affordance a recording gets. */}
+              {bundle.voicemail.url && (
+                <audio controls preload="none" src={bundle.voicemail.url}
+                       className="w-full mt-2" style={{ height: 32 }} />
+              )}
+            </div>
+          )}
+
+          {/* next_steps — the closest thing the system has to what
               this person actually wanted, which is the whole receptionist goal. */}
           {bundle?.next_steps?.content && (
             <div className="mb-2 rounded-lg px-2.5 py-2" style={{ background: DA.elevated }}>
@@ -201,9 +232,10 @@ function CallRow({ m }: { m: ThreadMessage }) {
             </div>
           )}
 
-          {bundle && !bundle.transcript && !bundle.next_steps && !bundle.summary && !loading && (
+          {bundle && !bundle.transcript && !bundle.next_steps && !bundle.summary
+            && !bundle.voicemail && !loading && (
             <div className="text-[11px]" style={{ color: DA.textMuted }}>
-              No transcript or summary stored for this call.
+              No transcript, voicemail or summary stored for this call.
             </div>
           )}
         </div>

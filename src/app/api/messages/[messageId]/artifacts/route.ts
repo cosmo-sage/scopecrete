@@ -61,5 +61,12 @@ export async function GET(
     summary: byKind("summary"),
     next_steps: byKind("next_steps"),
     recording: byKind("recording"),
+    // A voicemail is what the caller actually SAID — one person talking to a
+    // machine — as opposed to `summary`, which is Quo's paraphrase of a
+    // two-party conversation. Different things, so it gets its own field rather
+    // than being folded into transcript. It was already present in `artifacts`
+    // below, but the UI reads the named fields, so without this line voicemail
+    // content arrived and was never rendered.
+    voicemail: byKind("voicemail"),
   }));
 }

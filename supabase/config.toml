@@ -62,3 +62,10 @@ verify_jwt = true
 # JWT gate stays ON. Writes only to contact_proposals, never to contacts.
 [functions.enrich-contacts]
 verify_jwt = true
+
+# THROWAWAY. Read-only probe of the Quo/OpenPhone API, added for work order 4
+# to find out why backfill-call-media has never fetched a transcript. Writes
+# nothing — no database, no storage. Admin-invoked, so the JWT gate stays ON.
+# Delete this function and this block once the API question is settled.
+[functions.quo-diagnose]
+verify_jwt = true

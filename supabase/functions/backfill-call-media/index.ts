@@ -154,9 +154,27 @@ function summaryFrom(payload: unknown): string | null {
   return parts.length > 0 ? parts.join('\n') : null
 }
 
-// ---------------------------------------------------------------------------
-// messages mirror
-// ---------------------------------------------------------------------------
+/**
+ * Voicemail payload: GET /v1/call-voicemails/{callId}
+ *
+ *   {"data":{"duration":49,"id":"VM…","transcript":"…","recordingUrl":"…","status":"completed"}}
+ *
+ * `transcript` here is a FLAT STRING — one person talking to a machine — not
+ * the dialogue[] array a call transcript carries. Routing it through
+ * transcriptFrom() would look reasonable and return null on every voicemail,
+ * because that function reads turns. This is why it has its own extractor.
+ */
+function voicemailFrom(payload: unknown): { transcript: string | null; url: string | null; duration: number | null } | null {
+  const obj = unwrap(payload)
+  if (!obj) return null
+  const t = obj.transcript
+  const u = (obj.recordingUrl ?? obj.url ?? obj.mediaUrl) as string | undefined
+  const d = Number(obj.duration)
+  const transcript = typeof t === 'string' && t.trim() ? t.trim() : null
+  const url = typeof u === 'string' && u ? u : null
+  if (!transcript && !url) return null
+  return { transcript, url, duration: Number.isFinite(d) && d > 0 ? d : null }
+}
 
 // ---------------------------------------------------------------------------
 // Presigned-link expiry measurement
@@ -271,8 +289,61 @@ serve(async (req: Request) => {
   }
 
   const calls = (rows ?? []) as CallRow[]
+
+  // ---- message_id per call, and which calls already have a voicemail ----
+  //
+  // The link is messages.provider_message_id = voip_calls.quo_call_id, NOT the
+  // legacy_id/import_source pair the removed mirrorToMessages() used. Measured
+  // 2026-08-28 against production: the provider_message_id join covers 462 of
+  // 462 calls; the legacy_id join covers 458. The four it misses are the rows
+  // written by the projection trigger after 016, which carry
+  // import_source='quo_events'. Using the stale key here would silently skip
+  // exactly the newest calls.
+  //
+  // Both lookups happen once for the batch rather than per call.
+  const quoIds = calls.map(c => c.quo_call_id).filter(Boolean)
+  const messageIdByQuoId = new Map<string, string>()
+  const messageHasSummary = new Set<string>()
+  const alreadyHasVoicemail = new Set<string>()
+
+  if (quoIds.length > 0) {
+    const { data: msgRows, error: msgErr } = await supabase
+      .from('messages')
+      .select('id, provider_message_id, summary')
+      .eq('provider', 'quo')
+      .in('provider_message_id', quoIds)
+    if (dbFailed('messages lookup for voicemail linkage', msgErr)) {
+      return new Response(JSON.stringify({ error: 'messages lookup failed' }), {
+        status: 500, headers: { 'Content-Type': 'application/json' },
+      })
+    }
+    for (const m of (msgRows ?? []) as Array<{ id: string; provider_message_id: string; summary: string | null }>) {
+      messageIdByQuoId.set(m.provider_message_id, m.id)
+      if (m.summary && m.summary.trim()) messageHasSummary.add(m.id)
+    }
+
+    const msgIds = [...messageIdByQuoId.values()]
+    if (msgIds.length > 0) {
+      // The guard is on THIS step's own output — an existing voicemail
+      // artifact. Deliberately NOT on voip_calls.transcript, which means a call
+      // transcript: a missed call never has one, so guarding on it would make
+      // this job re-fetch every voicemail on every run, forever.
+      const { data: vmRows, error: vmErr } = await supabase
+        .from('call_artifacts')
+        .select('message_id')
+        .eq('kind', 'voicemail')
+        .in('message_id', msgIds)
+      if (dbFailed('call_artifacts voicemail guard lookup', vmErr)) {
+        return new Response(JSON.stringify({ error: 'call_artifacts lookup failed' }), {
+          status: 500, headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      for (const v of (vmRows ?? []) as Array<{ message_id: string }>) alreadyHasVoicemail.add(v.message_id)
+    }
+  }
+
   const results: Record<string, unknown>[] = []
-  let audioOk = 0, transcriptOk = 0, summaryOk = 0, failed = 0
+  let audioOk = 0, transcriptOk = 0, summaryOk = 0, voicemailOk = 0, failed = 0
   const errors: Record<string, number> = {}
   const note = (e: string) => { errors[e] = (errors[e] ?? 0) + 1 }
 
@@ -358,13 +429,96 @@ serve(async (req: Request) => {
       await sleep(PAUSE_MS)
     } else r.audio_status = 'already_stored'
 
+    // ---- voicemail ----
+    //
+    // 403 of 462 calls have no recording, which is the signature of a missed
+    // call. Quo still transcribes what the caller said to the machine, and it
+    // sits behind an endpoint this function never called. That is the
+    // receptionist gap: "Coy, this is Don Simpson… give me a call".
+    const messageId = messageIdByQuoId.get(call.quo_call_id) ?? null
+    r.message_id = messageId
+
+    if (!messageId) {
+      // No spine row to hang the artifact off. Loud, because every call had one
+      // when measured — this would mean the projection missed something.
+      r.voicemail_status = 'no_messages_row'
+      note('voicemail:no_message')
+    } else if (alreadyHasVoicemail.has(messageId)) {
+      r.voicemail_status = 'already_present'
+    } else {
+      const res = await apiGet(`/call-voicemails/${call.quo_call_id}`)
+      if (res.ok) {
+        const vm = voicemailFrom(res.data)
+        if (!vm) { r.voicemail_status = 'empty'; note('voicemail:empty') }
+        else {
+          r.voicemail_chars = vm.transcript?.length ?? 0
+          r.voicemail_preview = vm.transcript?.substring(0, 1500) ?? null
+          r.voicemail_url_present = Boolean(vm.url)
+          if (dryRun) {
+            r.voicemail_status = 'would_write'
+            r.would_set_summary = !messageHasSummary.has(messageId) && Boolean(vm.transcript)
+          } else {
+            // Conflict target is the (message_id, kind, source) unique index.
+            // coalesce-on-update: a re-run may fill a blank but must never
+            // blank a value that is already there.
+            const { error: artErr } = await supabase
+              .from('call_artifacts')
+              .upsert({
+                org_id: call.org_id,
+                message_id: messageId,
+                kind: 'voicemail',
+                source: 'quo',
+                content: vm.transcript,
+                url: vm.url,
+                fetched_at: now,
+              }, { onConflict: 'message_id,kind,source', ignoreDuplicates: false })
+
+            if (artErr) {
+              failed++
+              r.voicemail_status = `artifact write failed: ${artErr.message}`
+              note('voicemail:artifact_write')
+            } else {
+              voicemailOk++
+              r.voicemail_status = 'written'
+
+              // The glance line in Threads. Only when the row has no summary —
+              // never overwrite one. summary_source records where it came from,
+              // so a voicemail transcript is distinguishable from Quo's own
+              // paraphrase of a conversation.
+              if (vm.transcript && !messageHasSummary.has(messageId)) {
+                const { error: sumErr } = await supabase
+                  .from('messages')
+                  .update({ summary: vm.transcript, summary_source: 'quo_voicemail' })
+                  .eq('id', messageId)
+                  .is('summary', null)
+                if (sumErr) { r.summary_set = `failed: ${sumErr.message}`; note('voicemail:summary_write') }
+                else { r.summary_set = true; messageHasSummary.add(messageId) }
+              } else {
+                r.summary_set = false
+              }
+            }
+          }
+        }
+      } else if (res.absent) { r.voicemail_status = 'not_available'; note('voicemail:404') }
+      else { r.voicemail_status = `error: ${res.error}`; note(`voicemail:${res.error.substring(0, 60)}`) }
+      await sleep(PAUSE_MS)
+    }
+
     // ---- write ----
     if (dryRun) {
       r.would_update = Object.keys(update)
       results.push(r)
       continue
     }
-    if (Object.keys(update).length === 0) { r.outcome = 'nothing_to_write'; results.push(r); continue }
+    // 'update' is the voip_calls patch only. A missed call whose sole new data
+    // was a voicemail has an empty patch but has ALREADY written its artifact
+    // above, so the outcome says so rather than reporting 'nothing_to_write'
+    // over a row that did in fact gain content.
+    if (Object.keys(update).length === 0) {
+      r.outcome = r.voicemail_status === 'written' ? 'voicemail_only' : 'nothing_to_write'
+      results.push(r)
+      continue
+    }
 
     const { error: updErr } = await supabase.from('voip_calls').update(update).eq('id', call.id)
     if (updErr) { failed++; r.outcome = `voip_calls update failed: ${updErr.message}`; results.push(r); continue }
@@ -388,6 +542,7 @@ serve(async (req: Request) => {
     dry_run: dryRun,
     considered: calls.length,
     audio_stored: audioOk, transcripts_fetched: transcriptOk, summaries_fetched: summaryOk,
+    voicemails_fetched: voicemailOk,
     write_failures: failed,
     error_tally: errors,
     presigned_expiry: {

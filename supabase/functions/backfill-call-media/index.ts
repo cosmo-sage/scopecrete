@@ -18,11 +18,18 @@
  *   GET /v1/call-recordings/{callId}
  *   GET /v1/call-transcripts/{callId}
  *   GET /v1/call-summaries/{callId}
+ *   GET /v1/call-voicemails/{callId}
  *   Authorization: <api-key>        <- raw key, NOT "Bearer <key>"
  *
  * Per call: audio -> call-audio bucket, transcript -> voip_calls.transcript,
- * summary -> voip_calls.provider_summary, and transcript + summary mirrored
- * onto the matching public.messages row.
+ * summary -> voip_calls.provider_summary, voicemail -> call_artifacts
+ * (kind='voicemail'), and that voicemail's text onto messages.summary when the
+ * row has none.
+ *
+ * It does NOT write public.messages rows. Migration 016 made projection the
+ * database's job (quo_events -> trigger -> messages); mirrorToMessages() is
+ * deleted. The one messages column this touches is `summary`, a display cache,
+ * and only where it is null.
  *
  * SAFE TO RE-RUN. Each step is guarded on its own output column, so a repeat
  * invocation only picks up what is still missing. Per-call failures never

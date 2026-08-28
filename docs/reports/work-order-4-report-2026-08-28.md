@@ -185,10 +185,29 @@ What each row then tells you, per the work order's own table:
 
 ## 6. What I found but did not touch
 
-**`backfill-call-media` still writes `public.messages` at L238/L250.** The work
-order says to strip it in whichever PR touches this function. This PR does not
-touch it — it adds a separate function — so the write stands. Since the v56
+**`backfill-call-media` still writes `public.messages` — at L223 and L235, not
+L238/L250.** The work order gives 238/250, my work-order-2 and -3 reports
+repeated it, and it is wrong. Verified just now on master:
+
+```
+223:  const { data, error: readErr } = await supabase.from('messages').select('id')
+224:    .eq('import_source', 'voip_calls').eq('legacy_id', voipCallId).limit(1).maybeSingle()
+235:  const { error } = await supabase.from('messages').update(clean).eq('id', data.id)
+```
+
+This PR does not touch that file, so the write stands. Since the v56
 `quo-intake` deploy it is the only remaining second writer.
+
+**And L224 matters more than the line numbers do.** The lookup keys on
+`import_source = 'voip_calls'`. Post-016 the projection trigger writes
+`import_source = 'quo_events'`, so for any call that arrived after 2026-08-27
+13:01 this lookup **finds nothing and the update never fires**. For the 458
+rows backfilled on 2026-08-21 it still matches, because those genuinely carry
+`voip_calls`. So the function's `messages` write is currently live for old
+calls and silently dead for new ones — which is a third state nobody has been
+counting, and it is the same stale-key failure that made v55's insert collide.
+
+That is a Task 2 observation, not a fix. I have not touched it.
 
 **`apiGet`'s 404 handling and scheme short-circuit** (§2) are Task 2 items by
 the work order's own numbering. Not fixed.
@@ -212,6 +231,15 @@ control flow. That is the fifth standing rule in a new form: not "don't trust
 the function name" but "don't trust the docstring". It does not make the auth
 scheme the likely culprit, for the reason in §2, but it does mean one of the two
 things the code claims to have ruled out was never actually tested.
+
+**I had the `backfill-call-media` line numbers wrong in two previous reports.**
+I wrote L238/L250 in the work-order-2 and work-order-3 reports, taking them from
+the work order rather than checking, and only caught it because I re-ran the
+grep while writing §6 here. The real lines are 223 and 235. The finding itself
+was correct and the fix does not change — but two reports you were told to
+check against the source contain a citation that does not resolve, and finding
+that by accident rather than by process is not a system I would trust to catch
+the next one.
 
 **The 404 evidence is thinner than the work order treats it as.** "Every attempt
 404" is currently three dry runs' worth of a boolean produced by a line that

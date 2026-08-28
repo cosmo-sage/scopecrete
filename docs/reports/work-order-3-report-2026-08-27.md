@@ -328,8 +328,10 @@ to mean anything, which is why step 2 of the sequence is "send one real text"
 and not an afterthought.
 
 **Migration 017's four buckets are live and the old values are gone.**
-`contact_type` is now `customer` / `vendor` / `personal` / `spam`, with 138
-customer and 7 vendor. The lead guard I deployed in v56 reads
+Confirmed by my own query, not taken from the work order:
+`select contact_type, count(*) from contacts group by contact_type` returns
+`customer 138`, `vendor 7` — and nothing else, so no row currently sits in
+`personal` or `spam`. The lead guard I deployed in v56 reads
 `customers.relation`, a *different* column on a *different* table, which still
 carries `customer` / `vendor` / `sub`. Both exist, both are populated, and they
 disagree about what a subcontractor is — `relation` has a `sub` value,

@@ -7,23 +7,17 @@ import { createServerClient } from "@supabase/ssr";
 // 01-getting-started/16-proxy.md.
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const forwardedHost = request.headers.get("x-forwarded-host");
-  const isProduction = forwardedHost?.includes("scopecrete.ai");
 
-  // Protect /admin routes (but not /admin/login which is the auth page itself)
-  // Unchanged: this is a separate, static-password admin system, not
-  // contractor auth — out of scope of the Supabase Auth migration below.
-  if (pathname.startsWith("/admin") && isProduction && pathname !== "/admin/login") {
-    const session = request.cookies.get("sc_session");
-    if (!session || session.value !== "scopecrete_dashboard_session") {
-      return NextResponse.redirect(new URL("/admin/login", request.url));
-    }
-  }
+  // The /admin block is gone, and with it the last reader of the sc_session
+  // cookie. It gated a route group that does not exist — there is no
+  // src/app/admin — and redirected failures to /admin/login, itself a 404.
+  // Its password was a literal committed to a repo that was public until
+  // 2026-08-13. Removing a gate that stood in front of nothing is not a
+  // loosening; the only thing it protected was itself.
 
-  // Protect /dashboard routes with a real Supabase session — not the
-  // static sc_session cookie. Uses getClaims() (fast, local JWT
-  // verification) rather than getSession(), per Supabase's guidance that
-  // getSession() is not safe to trust inside Proxy/middleware.
+  // Protect /dashboard with a real Supabase session. Uses getClaims() (fast,
+  // local JWT verification) rather than getSession(), per Supabase's guidance
+  // that getSession() is not safe to trust inside Proxy/middleware.
   if (pathname.startsWith("/dashboard")) {
     let response = NextResponse.next({ request });
 
@@ -59,7 +53,6 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/admin/:path*",
     "/dashboard/:path*",
   ],
 };

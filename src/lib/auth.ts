@@ -28,7 +28,10 @@ export async function signInWithEmail(email: string) {
 export async function signOut() {
   const { error } = await supabase.auth.signOut();
   if (!error) {
-    window.location.href = "/login";
+    // "/" is the only sign-in surface now. The Google-only /login page was
+    // deleted in work order 10; sending a signed-out user there would have
+    // landed them on a 404.
+    window.location.href = "/";
   }
   return { error };
 }

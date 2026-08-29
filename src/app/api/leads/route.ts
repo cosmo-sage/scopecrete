@@ -45,23 +45,38 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `Missing required: ${missing.join(", ")}` }, { status: 400 });
     }
 
-    const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    // This is the public door: a customer filling in the estimator. Two things
+    // used to go wrong here and both reported success.
+    //
+    // The key chain ended `|| NEXT_PUBLIC_SUPABASE_ANON_KEY`, so a missing
+    // service credential produced a working client with anon privileges —
+    // the insert RLS-filtered away, and nothing saying why. And when both
+    // were absent the route returned a fabricated `mock-<timestamp>` id with
+    // HTTP 200, so the customer saw a confirmation for a lead that was never
+    // written. A dropped lead that announces itself as saved is the worst
+    // outcome available here.
+    //
+    // SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY were deleted with the dead
+    // project's integration. SUPABASE_SECRET_KEY is the surviving credential,
+    // matching the chain in src/lib/supabase-admin.ts.
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseKey =
+      process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
 
     if (!supabaseUrl || !supabaseKey) {
-      console.warn("[POST /api/leads] Supabase not configured:", {
+      // Log the lead so it is recoverable from the function logs rather than
+      // lost outright, then fail honestly.
+      console.error("[POST /api/leads] REFUSING: no Supabase service credential. Lead not saved:", {
         source_channel: body.source_channel,
         customer_phone: body.customer_phone,
         project_type: body.project_type,
         sqft: body.sqft,
         estimate_range: `${body.estimate_range_min}–${body.estimate_range_max}`,
       });
-      return NextResponse.json({
-        id: `mock-${Date.now()}`,
-        status: "new",
-        created_at: new Date().toISOString(),
-        _warn: "Supabase not configured",
-      });
+      return NextResponse.json(
+        { error: "Lead capture is not configured on this deployment. Nothing was saved." },
+        { status: 503 },
+      );
     }
 
     const insertPayload = {

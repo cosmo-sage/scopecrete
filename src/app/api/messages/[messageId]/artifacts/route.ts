@@ -22,6 +22,12 @@ export interface Artifact {
   kind: string;
   source: string | null;
   content: string | null;
+  /**
+   * Set once the audio has been copied into Supabase Storage. `url` is a Quo
+   * resource endpoint that a browser cannot fetch — no API key, cross-origin —
+   * so `url` alone is NOT playable. Only storage_path means playback works.
+   */
+  storage_path: string | null;
   url: string | null;
   fetched_at: string | null;
 }
@@ -38,7 +44,7 @@ export async function GET(
 
   const { data, error } = await supabase
     .from("call_artifacts")
-    .select("kind, source, content, url, fetched_at")
+    .select("kind, source, content, storage_path, url, fetched_at")
     .eq("org_id", orgId)
     .eq("message_id", messageId)
     .order("kind", { ascending: true });

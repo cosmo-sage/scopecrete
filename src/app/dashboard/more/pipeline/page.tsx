@@ -50,6 +50,12 @@ export default function PipelineScreen() {
 
   const total = Object.values(stages).reduce((s, st) => s + (st.count || 0), 0);
   const rows = stages[active]?.leads ?? [];
+
+  // Not one of the 21 leads carries an estimate value today, so the sum is 0.
+  // Printing "$0" against 21 real rows asserts the pipeline is worth nothing;
+  // the truth is that no values have been recorded. Same class of bug as the
+  // off-the-top 11%: a number the code can produce from empty data.
+  const anyValued = Object.values(stages).some((st) => (st.leads ?? []).some((l) => l.estimatedValue > 0));
   // Win rate is only meaningful once something has been decided. Printing 0%
   // against nothing decided reads as "you lose everything", which is a claim.
   const decided = (stages.won?.count ?? 0) + (stages.lost?.count ?? 0);
@@ -58,13 +64,17 @@ export default function PipelineScreen() {
     <div>
       <div className="px-3 pt-3 pb-2" style={{ background: T.card, borderBottom: `1px solid ${T.hair}` }}>
         <div style={eyebrow}>Open pipeline</div>
-        <div style={{ fontFamily: disp, fontSize: F.xxl, fontWeight: 700, lineHeight: 1, ...nums }}>
-          {summary ? money0(summary.totalPipelineValue) : "—"}
+        <div style={{
+          fontFamily: disp, fontSize: F.xxl, fontWeight: 700, lineHeight: 1, ...nums,
+          color: anyValued ? T.ink : T.ink3,
+        }}>
+          {summary && anyValued ? money0(summary.totalPipelineValue) : "—"}
         </div>
-        <div style={{ fontSize: F.xs, color: T.ink3, marginTop: 2 }}>
+        <div style={{ fontSize: F.xs, color: T.ink3, marginTop: 2, lineHeight: 1.4 }}>
           {total} lead{total === 1 ? "" : "s"}
           {summary && summary.needsAction > 0 ? ` · ${summary.needsAction} need you` : ""}
           {decided > 0 && summary ? ` · ${summary.winRate}% win rate` : " · no decided jobs yet"}
+          {!anyValued && total > 0 ? " · no estimate values recorded" : ""}
         </div>
       </div>
 

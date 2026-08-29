@@ -24,7 +24,7 @@ export default function ScopeScreen() {
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/dashboard/cashflow")
+    fetch("/api/jobs")
       .then(async (r) => {
         const b = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error(b?.error || `HTTP ${r.status}`);
@@ -54,7 +54,7 @@ export default function ScopeScreen() {
         </div>
       ) : jobs.length === 0 ? (
         <EmptyState title="No jobs yet"
-          detail="A job is created when a scope is built and won. Nothing has reached that stage, so there is nothing to price here yet." />
+          detail="Nothing in the system creates a job yet — there is no writer for this table anywhere, so this is an empty table rather than an empty screen. Creating one is designed but not built." />
       ) : (
         <div>
           {jobs.map((j, i) => (

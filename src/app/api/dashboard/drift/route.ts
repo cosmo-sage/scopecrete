@@ -39,5 +39,11 @@ export async function GET(req: NextRequest) {
     ));
   }
 
-  return applyCookies(NextResponse.json({ count: count ?? 0 }));
+  // A null count is "the query returned nothing to count", not "all clear".
+  // Reporting 0 there would render the green state from an absent answer, which
+  // is the exact failure the drift alarm exists to prevent.
+  return applyCookies(NextResponse.json({
+    count: typeof count === "number" ? count : null,
+    ...(typeof count === "number" ? {} : { error: "sc_spine_drift returned no count" }),
+  }));
 }

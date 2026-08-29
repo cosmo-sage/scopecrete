@@ -3,16 +3,18 @@
 /**
  * Cash — wired to /api/dashboard/cashflow.
  *
- * Every figure on this screen comes from that route. Where the underlying
- * tables are empty the row says so and prints nothing.
+ * THE RULE THIS SCREEN NOW OBEYS: a hardcoded fallback is not a live value. If
+ * the route can produce a number with the database empty, it is a placeholder
+ * and it renders as one.
  *
- * The full v34 treatment — the month RIBBON, the week BAND, the green cash-
- * position line (DECISIONS.md §5) — is a large port that only means anything
- * once there are jobs, invoices and payments to plot. `jobs`, `invoices` and
- * `payments` are all at zero today, so a ribbon here would be an empty axis
- * with a fabricated shape. The numbers that ARE real — the monthly nut from
- * `overhead_items`, the off-the-top percentage and the pay-yourself mode from
- * `org_cost_settings`, the balance anchor — are shown, because those exist.
+ * Three figures here failed that test and were reported as LIVE:
+ *  - off the top printed 11% from a `: 11` fallback with no org_cost_settings
+ *    row. It is the number the bid floor divides by.
+ *  - cash position printed "$0" from an anchor default, asserting an empty
+ *    account when nobody had recorded a balance.
+ *  - pay yourself printed the "fixed draw" explanation from a defaulted mode.
+ *
+ * All three now come back null from the route and print "—" with the reason.
  */
 
 import React, { useEffect, useState } from "react";
@@ -22,14 +24,14 @@ import { EmptyState } from "@/components/v34/primitives";
 interface Overhead { id: string; label: string; amount: number; cadence: string | null; active: boolean }
 interface CashFlow {
   today: string;
-  anchor: { as_of: string; balance: number; expected: number };
+  anchor: { as_of: string; balance: number; expected: number } | null;
   jobs: unknown[];
   invoices: unknown[];
   payments: { amount: number }[];
   receipts: { amount: number }[];
   overhead: Overhead[];
-  comp: { mode: string; monthly_draw: number; profit_pct: number };
-  offTopPct: number;
+  comp: { mode: string; monthly_draw: number; profit_pct: number } | null;
+  offTopPct: number | null;
   close: { rate: number; sample: number };
 }
 
@@ -39,7 +41,7 @@ function Row({ label, value, sub }: { label: string; value: string | null; sub?:
       style={{ background: T.card, borderTop: `1px solid ${T.hair}` }}>
       <div style={{ minWidth: 0, flex: 1 }}>
         <div style={{ fontSize: F.sm, color: T.ink }}>{label}</div>
-        {sub && <div style={{ fontSize: F.xs, color: T.ink3 }}>{sub}</div>}
+        {sub && <div style={{ fontSize: F.xs, color: T.ink3, lineHeight: 1.4 }}>{sub}</div>}
       </div>
       <div style={{
         fontFamily: disp, fontSize: F.lg, fontWeight: 600, ...nums,
@@ -94,40 +96,56 @@ export default function CashScreen() {
   const collected = (d.payments ?? []).reduce((s, p) => s + Number(p.amount || 0), 0);
   const spent = (d.receipts ?? []).reduce((s, r) => s + Number(r.amount || 0), 0);
 
-  // Runway needs a burn rate. With no overhead recorded there is no denominator,
-  // and a runway printed from a zero burn would be infinity dressed as safety.
-  const runway = monthlyNut > 0 ? d.anchor.balance / monthlyNut : null;
+  // Runway needs both a balance and a burn rate. Either one missing makes the
+  // division meaningless, not zero.
+  const runway = d.anchor && monthlyNut > 0 ? d.anchor.balance / monthlyNut : null;
 
   return (
     <div>
       <div className="px-3 pt-3 pb-2" style={{ background: T.card }}>
         <div style={eyebrow}>Cash position</div>
-        <div style={{ fontFamily: disp, fontSize: F.xxl, fontWeight: 700, lineHeight: 1, ...nums }}>
-          {money0(d.anchor.balance)}
+        <div style={{
+          fontFamily: disp, fontSize: F.xxl, fontWeight: 700, lineHeight: 1, ...nums,
+          color: d.anchor ? T.ink : T.ink3,
+        }}>
+          {d.anchor ? money0(d.anchor.balance) : "—"}
         </div>
-        <div style={{ fontSize: F.xs, color: T.ink3, marginTop: 2 }}>
-          Balance checkpoint {d.anchor.as_of === d.today ? "not yet set" : `as of ${d.anchor.as_of}`}
+        <div style={{ fontSize: F.xs, color: T.ink3, marginTop: 2, lineHeight: 1.4 }}>
+          {d.anchor
+            ? `Balance checkpoint as of ${d.anchor.as_of}`
+            : "No balance checkpoint recorded. Starting cash is entered by hand — this is not zero, it is unknown."}
         </div>
       </div>
 
       <Row label="Runway"
         value={runway === null ? null : `${runway.toFixed(1)} mo`}
-        sub={runway === null ? "No monthly overhead recorded, so there is no burn rate to divide by." : undefined} />
+        sub={runway === null
+          ? (!d.anchor ? "Needs a balance checkpoint and a monthly burn rate." : "No monthly overhead recorded, so there is no burn rate to divide by.")
+          : undefined} />
 
       <Row label="Monthly nut"
         value={monthlyNut > 0 ? money0(monthlyNut) : null}
         sub={monthlyNut > 0 ? `${activeOverhead.length} active item(s)` : "No overhead items recorded."} />
 
-      <Row label="Off the top" value={`${d.offTopPct}%`}
-        sub="Owner fee + estimator fee + tax reserve. The bid floor divides by what is left." />
+      <Row label="Off the top"
+        value={d.offTopPct === null ? null : `${d.offTopPct}%`}
+        sub={d.offTopPct === null
+          ? "No cost settings recorded. The bid floor divides by what is left after this, so it is not guessed."
+          : "Owner fee + estimator fee + tax reserve."} />
 
       <Row label="Pay yourself"
-        value={d.comp.mode === "fixed_draw"
-          ? (d.comp.monthly_draw > 0 ? money0(d.comp.monthly_draw) : null)
-          : `${d.comp.profit_pct}%`}
-        sub={d.comp.mode === "fixed_draw"
-          ? "Fixed draw — the bid floor must cover this."
-          : "Percent of profit — taken after a job clears, does not raise the floor."} />
+        value={
+          d.comp === null ? null
+            : d.comp.mode === "fixed_draw"
+              ? (d.comp.monthly_draw > 0 ? money0(d.comp.monthly_draw) : null)
+              : `${d.comp.profit_pct}%`
+        }
+        sub={
+          d.comp === null ? "No cost settings recorded, so no pay-yourself mode has been chosen."
+            : d.comp.mode === "fixed_draw"
+              ? "Fixed draw — the bid floor must cover this."
+              : "Percent of profit — taken after a job clears, does not raise the floor."
+        } />
 
       <Row label="Collected" value={collected > 0 ? money0(collected) : null}
         sub={collected > 0 ? undefined : "No payments recorded."} />

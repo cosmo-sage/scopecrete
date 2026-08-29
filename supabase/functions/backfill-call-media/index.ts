@@ -259,6 +259,8 @@ async function probePresigned(url: string, ageHours: number): Promise<Record<str
 interface CallRow {
   id: string; org_id: string; quo_call_id: string
   recording_storage_path: string | null
+  voicemail_checked_at: string | null
+  voicemail_status: string | null
   transcript: string | null
   provider_summary: string | null
   duration_seconds: number | null
@@ -283,10 +285,28 @@ serve(async (req: Request) => {
   })
 
   let q = supabase.from('voip_calls')
-    .select('id, org_id, quo_call_id, recording_storage_path, transcript, provider_summary, duration_seconds, recording_url, created_at')
+    .select('id, org_id, quo_call_id, recording_storage_path, transcript, provider_summary, duration_seconds, recording_url, created_at, voicemail_checked_at, voicemail_status')
     .not('quo_call_id', 'is', null)
   if (body.call_ids?.length) q = q.in('quo_call_id', body.call_ids)
-  else q = q.or('recording_storage_path.is.null,transcript.is.null,provider_summary.is.null')
+  else {
+    // Voicemail-aware selection, using the columns migration 023 added.
+    //
+    // The old filter was recording/transcript/summary only. A missed call never
+    // gets a voip_calls.transcript — correctly, it had no conversation — so all
+    // 447 of them matched forever. Every re-run spent three dead API calls and
+    // ~1s of PAUSE_MS on each before the voicemail guard skipped the fourth:
+    // roughly 20 minutes of pointless traffic per sweep.
+    //
+    // voicemail_checked_at records that we ASKED, which is the thing that was
+    // missing. A 404 is an answer — "this call has no voicemail" — and has to
+    // count as checked, or the 60% with no message stay candidates permanently.
+    q = q.or([
+      'recording_storage_path.is.null',
+      'transcript.is.null',
+      'provider_summary.is.null',
+      'voicemail_checked_at.is.null',
+    ].join(','))
+  }
 
   const { data: rows, error: readErr } = await q.order('created_at', { ascending: false }).limit(limit)
   if (readErr) {
@@ -468,6 +488,31 @@ serve(async (req: Request) => {
             // Conflict target is the (message_id, kind, source) unique index.
             // coalesce-on-update: a re-run may fill a blank but must never
             // blank a value that is already there.
+            // Copy the audio out of Quo before writing the artifact.
+            //
+            // vm.url is a share.quo.com resource endpoint. It needs the API key
+            // and it is cross-origin, so a browser <audio src> pointed at it
+            // loads nothing and sits at 0:00 / 0:00 — which is exactly what
+            // shipped. storage_path is the copy the app can actually serve.
+            let vmPath: string | null = null
+            if (vm.url) {
+              try {
+                const aRes = await fetch(vm.url)
+                if (!aRes.ok) { note(`voicemail:audio_http${aRes.status}`); await aRes.body?.cancel() }
+                else {
+                  const bytes = new Uint8Array(await aRes.arrayBuffer())
+                  const path = `${call.org_id}/${call.quo_call_id}-voicemail.mp3`
+                  const { error: upErr } = await supabase.storage.from(BUCKET)
+                    .upload(path, bytes, { contentType: 'audio/mpeg', upsert: true })
+                  if (upErr) { note('voicemail:audio_upload'); r.voicemail_audio = `upload: ${upErr.message}` }
+                  else { vmPath = path; r.voicemail_audio = `stored ${bytes.byteLength}b` }
+                }
+              } catch (e) {
+                note('voicemail:audio_throw')
+                r.voicemail_audio = `download: ${e instanceof Error ? e.message : String(e)}`
+              }
+            }
+
             const { error: artErr } = await supabase
               .from('call_artifacts')
               .upsert({
@@ -476,6 +521,7 @@ serve(async (req: Request) => {
                 kind: 'voicemail',
                 source: 'quo',
                 content: vm.transcript,
+                storage_path: vmPath,
                 url: vm.url,
                 fetched_at: now,
               }, { onConflict: 'message_id,kind,source', ignoreDuplicates: false })
@@ -508,6 +554,19 @@ serve(async (req: Request) => {
         }
       } else if (res.absent) { r.voicemail_status = 'not_available'; note('voicemail:404') }
       else { r.voicemail_status = `error: ${res.error}`; note(`voicemail:${res.error.substring(0, 60)}`) }
+
+      // Stamp that we ASKED, whatever the answer was.
+      //
+      // This is what makes the job terminate. A 404 is a real answer — this
+      // call has no voicemail — and without recording it, the ~60% of calls
+      // with no message stay candidates forever and every sweep re-asks them.
+      // Only a transport error is left unstamped, because that is the one case
+      // where we genuinely do not know and a retry is right.
+      if (!dryRun && r.voicemail_status !== undefined
+          && !String(r.voicemail_status).startsWith('error:')) {
+        update.voicemail_checked_at = now
+        update.voicemail_status = String(r.voicemail_status)
+      }
       await sleep(PAUSE_MS)
     }
 

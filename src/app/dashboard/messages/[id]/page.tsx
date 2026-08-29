@@ -59,6 +59,8 @@ interface Artifact {
   kind: string;
   source: string | null;
   content: string | null;
+  /** Only a stored copy is playable in a browser — see StoredAudio below. */
+  storage_path: string | null;
   url: string | null;
   fetched_at: string | null;
 }
@@ -88,6 +90,51 @@ function formatMsgTime(ts: string | null): string {
   return new Date(ts).toLocaleString("en-US", {
     month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
   });
+}
+
+/**
+ * Audio that either plays or is honest about why it cannot.
+ *
+ * `artifact.url` points at Quo and is unusable from a browser. `storage_path`
+ * is a copy in Supabase Storage, and /api/messages/[id]/audio signs a link to
+ * it. With no stored copy this renders one line of explanation and NO player,
+ * because a dead control is worse than an absent one.
+ */
+function StoredAudio({ messageId, kind, artifact }: {
+  messageId: string; kind: string; artifact: Artifact;
+}) {
+  const [src, setSrc] = useState<string | null>(null);
+  const [state, setState] = useState<"idle" | "loading" | "none" | "error">("idle");
+
+  useEffect(() => {
+    if (!artifact.storage_path) { setState("none"); return; }
+    let cancelled = false;
+    setState("loading");
+    fetch(`/api/messages/${messageId}/audio?kind=${encodeURIComponent(kind)}`)
+      .then(async (r) => {
+        const b = await r.json().catch(() => ({}));
+        if (!r.ok || !b?.url) throw new Error(b?.reason ?? b?.error ?? `HTTP ${r.status}`);
+        return b.url as string;
+      })
+      .then((u) => { if (!cancelled) { setSrc(u); setState("idle"); } })
+      .catch(() => { if (!cancelled) setState("error"); });
+    return () => { cancelled = true; };
+  }, [messageId, kind, artifact.storage_path]);
+
+  if (src) {
+    return <audio controls preload="none" src={src} className="w-full mt-2" style={{ height: 32 }} />;
+  }
+  if (state === "loading") {
+    return <div className="text-[11px] mt-2" style={{ color: DA.textMuted }}>Loading audio…</div>;
+  }
+  if (state === "error") {
+    return <div className="text-[11px] mt-2" style={{ color: DA.error }}>Audio could not be loaded.</div>;
+  }
+  return (
+    <div className="text-[11px] mt-2" style={{ color: DA.textMuted }}>
+      Audio not downloaded yet — only the transcript is stored.
+    </div>
+  );
 }
 
 /** One call row. Transcript is fetched only when this is expanded. */
@@ -162,11 +209,11 @@ function CallRow({ m }: { m: ThreadMessage }) {
         {m.summary?.trim() || `No summary${duration ? ` · ${duration}` : ""}`}
       </div>
 
-      {/* The recording links do not expire — verified alive at 118.8 hours. */}
-      {m.recording_url && (
-        <audio controls preload="none" src={m.recording_url}
-               className="w-full mt-2" style={{ height: 32 }} />
-      )}
+      {/* No player here. m.recording_url is a Quo resource endpoint: a browser
+          hitting it has no API key and is cross-origin, so it loads nothing and
+          the control sits at 0:00 / 0:00. A play button that cannot play is a
+          control that lies about what it can do. Playback returns through
+          StoredAudio once the audio is copied into Supabase Storage. */}
 
       {hasArtifacts && (
         <button
@@ -199,11 +246,7 @@ function CallRow({ m }: { m: ThreadMessage }) {
                   {bundle.voicemail.content}
                 </div>
               )}
-              {/* Same playback affordance a recording gets. */}
-              {bundle.voicemail.url && (
-                <audio controls preload="none" src={bundle.voicemail.url}
-                       className="w-full mt-2" style={{ height: 32 }} />
-              )}
+              <StoredAudio messageId={m.id} kind="voicemail" artifact={bundle.voicemail} />
             </div>
           )}
 

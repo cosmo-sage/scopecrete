@@ -126,15 +126,30 @@ export async function GET(req: NextRequest) {
       active: o.active,
     }));
 
+    // NULL, not 11, when there is no org_cost_settings row.
+    //
+    // This used to fall back to 11 — v34's OFF_TOP_PCT constant with a database
+    // label on it. It rendered as a live figure beside six fields correctly
+    // showing "—", and it is the number the bid floor divides by. A hardcoded
+    // fallback is not a live value: if the code can produce the number with the
+    // database empty, it is a placeholder and has to render as one.
     const offTopPct = costSettings
       ? Number(costSettings.owner_fee_pct || 0) + Number(costSettings.estimator_fee_pct || 0) + Number(costSettings.tax_reserve_pct || 0)
-      : 11;
+      : null;
 
     const anchorRow = anchorRows?.[0];
     const today = new Date().toISOString().slice(0, 10);
+    // NULL when no balance checkpoint has been recorded. The old shape returned
+    // balance: 0, which the UI printed as "$0" — a statement that the account is
+    // empty, when the truth is that nobody has told us what is in it. Starting
+    // cash is a manual checkpoint (DECISIONS.md §5); absent is not zero.
     const anchor = anchorRow
-      ? { as_of: anchorRow.as_of_date, balance: Number(anchorRow.balance), expected: anchorRow.expected_balance != null ? Number(anchorRow.expected_balance) : Number(anchorRow.balance) }
-      : { as_of: today, balance: 0, expected: 0 };
+      ? {
+          as_of: anchorRow.as_of_date,
+          balance: Number(anchorRow.balance),
+          expected: anchorRow.expected_balance != null ? Number(anchorRow.expected_balance) : Number(anchorRow.balance),
+        }
+      : null;
 
     const closeRateRow = Array.isArray(closeRateRows) ? closeRateRows[0] : closeRateRows;
 
@@ -146,13 +161,19 @@ export async function GET(req: NextRequest) {
       payments: outPayments,
       receipts: outReceipts,
       overhead: outOverhead,
-      comp: {
-        mode: costSettings?.comp_mode || "fixed_draw",
-        monthly_draw: Number(costSettings?.comp_monthly_draw || 0),
-        // draw_day isn't in org_cost_settings yet — see DECISIONS.md open items.
-        draw_day: 28,
-        profit_pct: Number(costSettings?.comp_profit_pct || 0),
-      },
+      // comp is null with no settings row. Defaulting mode to "fixed_draw" made
+      // the UI assert a pay-yourself mode nobody had chosen — the value showed
+      // "—" while the label underneath still claimed "the bid floor must cover
+      // this". The value was honest and the sentence beside it was not.
+      comp: costSettings
+        ? {
+            mode: costSettings.comp_mode,
+            monthly_draw: Number(costSettings.comp_monthly_draw || 0),
+            // draw_day isn't in org_cost_settings yet — see DECISIONS.md open items.
+            draw_day: 28,
+            profit_pct: Number(costSettings.comp_profit_pct || 0),
+          }
+        : null,
       offTopPct,
       close: {
         rate: Number(closeRateRow?.close_rate_pct || 0),

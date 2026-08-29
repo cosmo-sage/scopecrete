@@ -55,7 +55,12 @@ export async function GET(
     .select("id, channel, direction, occurred_at, body_text, summary, summary_source, duration_seconds, recording_url, status, from_address, to_address")
     .eq("org_id", orgId)
     .eq("contact_id", contactId)
-    .order("occurred_at", { ascending: true })
+    // Newest first. Page one is the most recent traffic, so a 350-message
+    // thread no longer has to load and scroll in full to show what arrived an
+    // hour ago. Accepted cost: inside a rapid exchange a reply reads above the
+    // message it answers. This screen is for triage, not for reconstructing a
+    // conversation.
+    .order("occurred_at", { ascending: false })
     .limit(2000);
 
   if (error) {

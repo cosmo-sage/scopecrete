@@ -53,23 +53,51 @@ export default function Holding() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
+  // A wrong password and a rate limit are different problems with
+  // different fixes, and collapsing them into one sentence cost an
+  // hour: Supabase throttles /auth/v1/token per IP, and the throttled
+  // response was being reported as "incorrect password" for a
+  // credential that was perfectly valid. Telling the two apart is the
+  // whole point of this function.
+  //
+  // Not revealing whether an account exists still matters, so bad
+  // credentials stay deliberately generic. Everything else says what
+  // actually happened, because none of it leaks account existence.
+  function describeAuthError(err: { message?: string; status?: number; code?: string }): string {
+    const status = err.status ?? 0;
+    const code = (err.code ?? "").toLowerCase();
+    const msg = (err.message ?? "").toLowerCase();
+
+    if (status === 429 || code.includes("rate_limit") || msg.includes("rate limit")) {
+      return "Too many attempts. Supabase is throttling sign-ins from this network — wait a few minutes and try again. Your password is probably fine.";
+    }
+    if (code.includes("email_not_confirmed") || msg.includes("not confirmed")) {
+      return "That account exists but its email address has never been confirmed.";
+    }
+    if (msg.includes("invalid login credentials") || status === 400) {
+      return "Email or password is incorrect.";
+    }
+    // Anything unrecognised is shown as-is. A message we did not predict
+    // is exactly the message worth reading.
+    return err.message ? `Sign-in failed: ${err.message}` : "Sign-in failed for an unknown reason.";
+  }
+
   async function handleSignIn(e: React.FormEvent) {
     e.preventDefault();
     setError("");
     setNotice("");
     if (!email || !password) { setError("Enter your email and password."); return; }
     setBusy(true);
-    const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password,
+    });
     setBusy(false);
     if (signInError) {
-      // Generic on purpose — never reveal whether the email exists.
-      // Rate limiting on this endpoint is enforced server-side by
-      // Supabase Auth itself (per-IP token bucket on /auth/v1/token),
-      // not by this app.
-      setError("Email or password is incorrect.");
+      setError(describeAuthError(signInError));
       return;
     }
-    router.push("/dashboard");
+    router.push("/dashboard/messages");
   }
 
   async function handleForgotPassword() {
@@ -77,12 +105,25 @@ export default function Holding() {
     setNotice("");
     if (!email) { setError("Enter your email above first."); return; }
     setBusy(true);
-    // Always shows the same confirmation, whether or not the email
-    // exists — same reasoning as the generic sign-in error.
-    await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/auth/callback`,
+    // type=recovery is carried on the redirect ourselves rather than
+    // relying on Supabase to append it. /auth/callback routes on that
+    // parameter to decide between the dashboard and the set-a-new-
+    // password page; without it a recovery link signs the user in and
+    // never asks for the new password, which looks like the link did
+    // nothing.
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: `${window.location.origin}/auth/callback?type=recovery`,
     });
     setBusy(false);
+    // A rate limit here is worth saying out loud — the built-in SMTP
+    // allows only a couple of messages an hour, and silence looks
+    // identical to a delivered email that never arrives.
+    if (resetError && (resetError.status === 429 || (resetError.message ?? "").toLowerCase().includes("rate"))) {
+      setError("Too many reset emails requested. The built-in mail service allows only a few per hour — wait before trying again.");
+      return;
+    }
+    // Otherwise always the same confirmation, whether or not the email
+    // exists — same reasoning as the generic bad-credentials message.
     setNotice("If that email has an account, a reset link is on its way.");
   }
 

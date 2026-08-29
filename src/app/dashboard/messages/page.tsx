@@ -62,17 +62,27 @@ export default function MessagesPage() {
   const [threads, setThreads] = useState<Thread[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Tracked apart from `error` because it is not a failure. The request
+  // worked, the account is real, and it simply belongs to no organisation —
+  // which needs to read as a state of the account, not a broken page.
+  const [noOrg, setNoOrg] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     fetch("/api/threads")
       .then(async (r) => {
         const body = await r.json().catch(() => ({}));
-        if (!r.ok) throw new Error(body?.error || `HTTP ${r.status}`);
+        if (!r.ok) {
+          if (body?.code === "no_org") {
+            if (!cancelled) { setNoOrg(true); setLoading(false); }
+            return null;
+          }
+          throw new Error(body?.error || `HTTP ${r.status}`);
+        }
         return body;
       })
       .then((data) => {
-        if (cancelled) return;
+        if (cancelled || data === null) return;
         setThreads(Array.isArray(data.threads) ? data.threads : []);
         setLoading(false);
       })
@@ -115,6 +125,21 @@ export default function MessagesPage() {
             {[1, 2, 3, 4, 5, 6].map((i) => (
               <div key={i} className="h-16 rounded-xl animate-pulse" style={{ background: DA.surface }} />
             ))}
+          </div>
+        ) : noOrg ? (
+          // Deliberately NOT the empty-inbox state. An account with no org
+          // membership sees nothing for a reason, and saying so is the
+          // difference between "you have no messages" and "you cannot reach
+          // any messages".
+          <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
+            <WarningCircle size={36} color={DA.warning} />
+            <p className="text-sm mt-3 font-semibold" style={{ color: DA.textPrimary }}>
+              This account isn&apos;t a member of any organisation
+            </p>
+            <p className="text-xs mt-1" style={{ color: DA.textMuted }}>
+              You are signed in, but nothing is shared with this account yet.
+              Ask for an invitation to your organisation.
+            </p>
           </div>
         ) : error ? (
           // Errors are shown, not swallowed. A thread list that silently renders

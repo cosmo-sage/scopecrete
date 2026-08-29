@@ -60,8 +60,19 @@ export async function getApiSession(req: NextRequest): Promise<ApiSessionResult>
     .limit(1)
     .maybeSingle();
 
+  // A signed-in user with no org row is NOT the same as a user with an empty
+  // inbox, and the UI must never render them identically — an authenticated
+  // account seeing zero threads would otherwise look exactly like a broken
+  // query. `code` is what the client keys off; `error` is the sentence a
+  // person reads.
   if (memberErr || !membership) {
-    return { ok: false, response: applyCookies(NextResponse.json({ error: "No org membership for this user" }, { status: 403 })) };
+    return {
+      ok: false,
+      response: applyCookies(NextResponse.json({
+        code: "no_org",
+        error: "This account isn't a member of any organisation.",
+      }, { status: 403 })),
+    };
   }
 
   return {

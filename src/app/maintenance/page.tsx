@@ -60,7 +60,7 @@ export default function MaintenancePage() {
       </p>
 
       <Link
-        href="/dashboard-login"
+        href="/"
         className="flex items-center gap-2 px-8 py-3.5 rounded-xl text-sm font-semibold transition-all active:scale-95"
         style={{ background: "#e85d04", color: "#09090b" }}
       >

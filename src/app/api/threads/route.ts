@@ -39,6 +39,7 @@ interface MessageRow {
   occurred_at: string | null;
   body_text: string | null;
   summary: string | null;
+  summary_source: string | null;
   duration_seconds: number | null;
   from_address: string | null;
   to_address: string | null;
@@ -58,6 +59,13 @@ export interface Thread {
   preview: string;
   /** Which field produced the preview, so the UI can style it honestly. */
   preview_source: "body" | "summary" | "synthesised";
+  /**
+   * Where a `summary` preview came from. 'quo_voicemail' means the text is the
+   * caller's OWN words left on a machine, not Quo's paraphrase of a two-party
+   * conversation. The list labels it, because an unlabelled voicemail preview
+   * reads as though Quo summarised a conversation that never happened.
+   */
+  summary_source: string | null;
   msg_count: number;
 }
 
@@ -105,7 +113,7 @@ export async function GET(req: NextRequest) {
 
   const { data: rows, error: msgErr } = await supabase
     .from("messages")
-    .select("id, contact_id, channel, direction, occurred_at, body_text, summary, duration_seconds, from_address, to_address")
+    .select("id, contact_id, channel, direction, occurred_at, body_text, summary, summary_source, duration_seconds, from_address, to_address")
     .eq("org_id", orgId)
     .not("contact_id", "is", null)
     .order("occurred_at", { ascending: false })
@@ -180,6 +188,7 @@ export async function GET(req: NextRequest) {
       occurred_at: latest.occurred_at,
       preview,
       preview_source,
+      summary_source: preview_source === "summary" ? latest.summary_source : null,
       msg_count: count,
     };
   });

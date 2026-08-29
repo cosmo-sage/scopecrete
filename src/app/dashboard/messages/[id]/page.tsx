@@ -3,9 +3,28 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Phone, ArrowLeft, CaretDown, CaretRight, WarningCircle } from "@phosphor-icons/react";
-import { DA } from "@/lib/design-tokens";
-import DustyDrawer from "@/components/dashboard/DustyDrawer";
-import ToolboxDrawer from "@/components/dashboard/ToolboxDrawer";
+import { T, F, disp } from "@/lib/v34/tokens";
+
+/**
+ * v34 palette, mapped onto the key names this screen already used.
+ *
+ * The screen's logic is the part worth keeping — voicemail rendered distinctly
+ * from a summary, next_steps surfaced, transcripts fetched only on expand
+ * (they reach ~10,600 characters). Only the colours change, so that rewrite
+ * risk stays at zero while the screen stops looking like a different app from
+ * the shell around it.
+ */
+const DA = {
+  bg: T.slab,
+  surface: T.card,
+  elevated: T.hairSoft,
+  accent: T.hiviz,
+  textPrimary: T.ink,
+  textSecondary: T.ink2,
+  textMuted: T.ink3,
+  border: T.hair,
+  error: T.red,
+} as const;
 
 /**
  * Thread detail — real messages for one contact.
@@ -275,8 +294,6 @@ export default function ChatThreadPage() {
   const [phone, setPhone] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [dustyOpen, setDustyOpen] = useState(false);
-  const [toolboxOpen, setToolboxOpen] = useState(false);
 
   useEffect(() => {
     if (!contactId) return;
@@ -357,8 +374,6 @@ export default function ChatThreadPage() {
         )}
       </div>
 
-      <DustyDrawer open={dustyOpen} onClose={() => setDustyOpen(false)} />
-      <ToolboxDrawer open={toolboxOpen} onClose={() => setToolboxOpen(false)} />
     </div>
   );
 }

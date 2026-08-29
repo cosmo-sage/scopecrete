@@ -132,19 +132,12 @@ export default function HomePage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [dustyOpen, setDustyOpen] = useState(false);
-  const [orgId, setOrgId] = useState<string | null>(null);
-
-  // Get orgId from session API (dev: falls back to env)
+  // No orgId state any more. /api/session/org handed one out to anybody who
+  // asked and the org then travelled back as a query parameter; the pipeline
+  // route now derives it from the caller's own session, so the client never
+  // sees or sends it.
   useEffect(() => {
-    fetch("/api/session/org")
-      .then((r) => r.json())
-      .then((d) => setOrgId(d.orgId))
-      .catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    if (!orgId) return;
-    fetch(`/api/dashboard/pipeline?org_id=${orgId}`)
+    fetch("/api/dashboard/pipeline")
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (data) {
@@ -157,7 +150,7 @@ export default function HomePage() {
         setLoading(false);
       })
       .catch(() => setLoading(false));
-  }, [orgId]);
+  }, []);
 
   const stats = useMemo(() => {
     const activeLeads = leads.filter((l) => l.status !== "lost");

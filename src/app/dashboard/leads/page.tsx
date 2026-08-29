@@ -89,22 +89,17 @@ export default function LeadsPage() {
   const [activeStage, setActiveStage] = useState("new");
   const [searchQuery, setSearchQuery] = useState("");
   const [dustyOpen, setDustyOpen] = useState(false);
-  const [orgId, setOrgId] = useState<string | null>(null);
-
+  // The org comes from the session inside the route now, not from a query
+  // parameter the browser supplies.
   useEffect(() => {
-    fetch("/api/session/org").then((r) => r.json()).then((d) => setOrgId(d.orgId)).catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    if (!orgId) return;
-    fetch(`/api/dashboard/pipeline?org_id=${orgId}`)
+    fetch("/api/dashboard/pipeline")
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (data) { setStages(data.stages || {}); setSummary(data.summary || {}); }
         setLoading(false);
       })
       .catch(() => setLoading(false));
-  }, [orgId]);
+  }, []);
 
   const totalLeads = useMemo(() => Object.values(stages).reduce((s: number, st: any) => s + (st.count || 0), 0), [stages]);
 

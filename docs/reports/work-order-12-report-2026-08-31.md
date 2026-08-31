@@ -13,19 +13,19 @@ green under only the three production environment variables; `tsc` 0 errors.
 
 ## 1. Reveal password
 
-`src/app/page.tsx` **L256–279**. Every requirement, and what satisfies it:
+`src/app/page.tsx` **L257–279**. Every requirement, and what satisfies it:
 
 | Requirement | How |
 |---|---|
-| real `<button type="button">` | **L266–267**, not a div or a bare icon |
+| real `<button type="button">` | **L264**, not a div or a bare icon |
 | `aria-pressed` reflects state | **L268** |
 | label changes | **L269** — "Show password" / "Hide password" |
-| toggles `type` on the **same** input | **L259**, `type={showPassword ? "text" : "password"}`. No second input — a swapped element loses the field for password managers |
+| toggles `type` on the **same** input | **L258–259**, `type={showPassword ? "text" : "password"}`. No second input — a swapped element loses the field for password managers |
 | `autocomplete` preserved | **L260** `current-password`; **L243** the email field |
 | default hidden, no persistence | **L65**, plain `useState(false)` — no storage, no cookie |
-| ≥44×44 hit target | **L274**, exactly 44×44 |
+| ≥44×44 hit target | **L273–274**, exactly 44×44 |
 | focus ring on keyboard focus | inherited from the page's `:focus-visible` rule |
-| toggling does not move focus | **L267** `onMouseDown={(e) => e.preventDefault()}` so the button never takes focus, plus an explicit refocus |
+| toggling does not move focus | **L266** `onMouseDown={(e) => e.preventDefault()}` so the button never takes focus, plus an explicit refocus |
 
 **One thing I added that the spec did not ask for**, because the control is
 worse without it: changing an input's `type` resets the selection range in some
@@ -83,7 +83,7 @@ unrecognised provider message verbatim.
 
 The handler was already correct on `master`, from work order 8: `L142–180`
 calls `resetPasswordForEmail` with
-`redirectTo: <origin>/auth/callback?type=recovery`, and the button at **L248**
+`redirectTo: <origin>/auth/callback?type=recovery`, and the button at **L250–254**
 has always been wired to it. I could not find a defect in the button, the
 handler, or the callback route.
 

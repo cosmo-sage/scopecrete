@@ -3,8 +3,18 @@
 -- Rewrite of the 2026-09-14 "AI Answering Service — Supabase Schema Migration"
 -- draft, corrected against the live schema of cxiusuewtrvcpqequueh.
 --
--- NOT APPLIED. Review first. DECISIONS.md §7: no widening database change on
--- agent judgement.
+-- APPLIED 2026-09-14 to cxiusuewtrvcpqequueh, on Coy's explicit instruction
+-- (DECISIONS.md §7). Supabase migration name: ai_answering_service.
+--
+-- Verified after applying:
+--   orgs count ......................... 1        (no second org created)
+--   public.phone_numbers ............... NULL     (no duplicate table)
+--   contact_timeline security_invoker .. true
+--   contact_timeline as NON-member ..... 0 rows   <- RLS proven, not assumed
+--   contact_timeline as Coy ............ 1,340 rows (812 sms + 528 call)
+--   org_phone_numbers where ai_enabled . 0        (AI off until switched on)
+--   new columns ........................ 7 of 7
+--   security advisor ................... 0 new findings
 --
 -- ============================================================================
 -- WHAT CHANGED FROM THE DRAFT, AND WHY

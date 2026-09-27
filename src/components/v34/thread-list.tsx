@@ -629,6 +629,10 @@ export function ThreadList() {
         </div>
       )}
 
+      {filter === "unsorted" && !loading && !error && !noOrg && (
+        <SuggestNamesBar onDone={() => setReload((n) => n + 1)} />
+      )}
+
       {loading ? (
         <div className="p-3 space-y-2">
           {[1, 2, 3, 4, 5, 6].map((i) => (
@@ -660,6 +664,59 @@ export function ThreadList() {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------ suggest names */
+
+/**
+ * Beta: runs the name suggester (/api/enrich, through Hermes) over the next
+ * batch of unnamed contacts that have words on record. It only writes
+ * suggestions — each appears in its row with the quote it came from, and
+ * nothing is named until Coy confirms (DECISIONS §2b). The goal is for this to
+ * run on its own as calls and texts arrive; the button is how it is tried
+ * first.
+ */
+function SuggestNamesBar({ onDone }: { onDone: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+
+  async function run() {
+    setBusy(true); setNote(null);
+    try {
+      const r = await fetch("/api/enrich", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ limit: 10 }) });
+      const b = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(b?.error || `HTTP ${r.status}`);
+      const parts = [
+        `${b.proposed} suggestion${b.proposed === 1 ? "" : "s"} ready to review`,
+        b.skipped_no_words ? `${b.skipped_no_words} skipped (nothing said on record)` : null,
+        b.failed ? `${b.failed} failed` : null,
+        b.remaining ? `${b.remaining} more to go — run again` : null,
+      ].filter(Boolean);
+      setNote(parts.join(" · "));
+      onDone();
+    } catch (e) {
+      setNote(`Couldn't run: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="mx-2.5 mb-2 rounded px-3 py-2 flex items-center gap-2 flex-wrap"
+      style={{ background: T.card, border: `1px dashed ${T.hiviz}` }}>
+      <div style={{ flex: "1 1 180px", minWidth: 0 }}>
+        <div style={{ fontFamily: disp, fontSize: F.md, fontWeight: 600 }}>Suggest names <span style={{ ...eyebrow, color: T.hiviz }}>beta</span></div>
+        <div style={{ fontSize: F.xs, color: T.ink3, lineHeight: 1.4 }}>
+          {note ?? "Dusty reads the next 10 unnamed threads that have words on record and suggests who they are. You confirm each one in its row."}
+        </div>
+      </div>
+      <button onClick={() => void run()} disabled={busy} className="rounded px-3"
+        style={{ height: 34, background: busy ? T.hair : T.hiviz, color: "#fff", fontFamily: disp, fontSize: F.sm,
+                 fontWeight: 600, textTransform: "uppercase", letterSpacing: ".06em", cursor: busy ? "default" : "pointer" }}>
+        {busy ? "Reading…" : "Suggest"}
+      </button>
     </div>
   );
 }

@@ -534,9 +534,14 @@ additive changes only, with confirmation.
 - Web app: Vercel. Preview per branch.
 - VPS: agents, telephony, anything holding a socket or needing a persistent
   process.
-- **Hermes (Dusty's model) on the VPS** is published with Tailscale Funnel at
-  `https://srv1594563.tail0f2914.ts.net/hermes` (`/v1/chat/completions`,
-  `/health`), bearer-key auth. Only `/api/dusty` on Vercel calls it.
+- **Hermes (Dusty's model) on the VPS** is published with Tailscale Funnel on
+  its own port: `https://srv1594563.tail0f2914.ts.net:8443`
+  (`/v1/chat/completions`, `/health`), bearer-key auth. Only `/api/dusty` on
+  Vercel calls it. **Funnel is per port, not per path** — turning it on for 443
+  made OpenClaw and the Hermes dashboard public too. So 8443 carries Hermes
+  alone and is public; 443 (`/` OpenClaw, `/hermes-dash`) is `tailscale serve`
+  only, tailnet-reachable. Never put anything else on the Funnel port, and test
+  public reachability from a device that is NOT on Tailscale.
 - Do not run two production paths for the web app.
 - `scopecrete.ai` points at the Vercel project; Cloudflare DNS-only for that
   record.

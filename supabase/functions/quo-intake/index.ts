@@ -52,6 +52,12 @@
  *
  * Still writes sms_threads and voip_calls. Application code still reads them;
  * they are dropped in a later migration, not this one.
+ *
+ * v9 changes (deployed as quo-intake version 57):
+ * - upsertContact() follows contacts.merged_into_contact_id. Migration 028
+ *   lets two contacts that are the same person be merged; the merged-away row
+ *   keeps its phone, so a lookup by phone must hop to the person it now
+ *   belongs to. Nothing else in this file changed.
  */
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
@@ -354,11 +360,18 @@ async function upsertContact(
 ): Promise<string> {
   const { data } = await supabase
     .from('contacts')
-    .select('id')
+    .select('id, merged_into_contact_id')
     .eq('org_id', orgId)
     .eq('phone', phone)
     .limit(1)
     .maybeSingle()
+  // v9 (migration 028): one contact is one person. When two numbers have been
+  // merged, the merged-away row keeps its phone and points at the person it
+  // was merged into — follow it, so a text from either number lands on one
+  // contact and resolveLead sees one person. Without this, Amber's next text
+  // from her second number would re-split her. sc_merge_contacts keeps these
+  // pointers one level deep, so a single hop is enough.
+  if (data?.merged_into_contact_id) return data.merged_into_contact_id as string
   if (data?.id) return data.id
   const { data: newContact, error } = await supabase
     .from('contacts')

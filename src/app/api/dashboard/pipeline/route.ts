@@ -29,13 +29,13 @@ import { getApiSession } from "@/lib/api-auth";
  * handler, from the caller's own session, and the org comes from their
  * org_members row rather than from anything they can type.
  *
- * KNOWN LIMITATION — reads zero rows until leads/estimates RLS is migrated.
- * Both tables still gate select on `current_setting('app.current_org_id')`, a
- * GUC nothing in this codebase sets. `contacts` moved to get_user_org_ids() in
- * migration 022; leads and estimates did not. Under a session client that
- * predicate is null, so RLS filters everything out and this route returns an
- * empty pipeline. That is a database change and belongs on that side — it is
- * NOT a reason to put the service-role key back.
+ * RESOLVED — this route used to read zero rows. leads and estimates gated
+ * select on `current_setting('app.current_org_id')`, a GUC nothing in this
+ * codebase sets, so under a session client RLS filtered everything out.
+ * Migration 024 moved both onto `org_id = ANY (get_user_org_ids())`; verified
+ * 2026-09-27 (`leads_org_select`, `estimates_org_select`). The fix was on the
+ * database side, as it should have been — never a reason to put the
+ * service-role key back.
  */
 
 export const dynamic = "force-dynamic";

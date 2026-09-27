@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ChevronRight, MapPin, Phone, Check, X, ArrowLeft } from "lucide-react";
+import { ChevronRight, MapPin, Check, X, ArrowLeft } from "lucide-react";
 
 // ─── Palette (Cleo) ───────────────────────────────────────────────
 const IQ = {
@@ -33,6 +33,12 @@ interface WizardSchema {
   estimate: EstimateResult | null;
   step: number;
   sessionId: string;
+  /**
+   * What happened to the lead. The result screen tells the customer the truth
+   * about it: a request that did not reach the contractor must not look like
+   * one that did. `ref` comes from the saved row, never from Math.random().
+   */
+  lead: { saved: boolean; ref: string | null; error: string | null } | null;
 }
 
 interface EstimateResult {
@@ -59,6 +65,7 @@ const initial: WizardSchema = {
   estimate: null,
   step: 0,
   sessionId: "",
+  lead: null,
 };
 
 // ─── Step definitions ─────────────────────────────────────────────
@@ -399,7 +406,10 @@ function StepContact({ state, set }: { state: WizardSchema; set: (s: WizardSchem
     const e: Record<string, string> = {};
     if (!state.name.trim()) e.name = "Name is required";
     if (!/^\d{10}$/.test(state.phone.replace(/\D/g, ""))) e.phone = "Enter a valid 10-digit number";
-    if (!state.email.includes("@")) e.email = "Enter a valid email";
+    // The field is labelled "(optional)", so blank is allowed; only a filled-in
+    // email has to look like one. It used to reject blank, which blocked every
+    // customer who took the label at its word.
+    if (state.email.trim() && !state.email.includes("@")) e.email = "Enter a valid email";
     if (Object.keys(e).length > 0) { setErrors(e); return; }
     setErrors({});
 
@@ -407,7 +417,7 @@ function StepContact({ state, set }: { state: WizardSchema; set: (s: WizardSchem
 
     // Write lead to Supabase (or log if not configured)
     const phoneDigits = state.phone.replace(/\D/g, "");
-    fetch("/api/leads", {
+    const leadRes = await fetch("/api/leads", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -428,12 +438,28 @@ function StepContact({ state, set }: { state: WizardSchema; set: (s: WizardSchem
         estimate_range_max: result?.estimate_range.high ?? 0,
         estimate_mode: result?.mode ?? "firm",
         engine: result?.engine ?? "local-formula",
-        calibration_source: result?.calibration_source ?? "robin_plunket",
+        // Whatever the engine reported, or nothing. The old fallback named
+        // "robin_plunket", a customer invented for a design mockup.
+        calibration_source: result?.calibration_source ?? null,
         wizard_snapshot: { step: state.step, project_type: state.project_type, length_ft: state.length_ft, width_ft: state.width_ft, depth_in: state.depth_in, psi: state.psi, zip: state.zip },
       }),
-    }).catch(console.error);
+    }).catch((err: unknown) => {
+      console.error("[calculator] lead POST failed:", err);
+      return null;
+    });
 
-    set({ ...state, estimate: result, step: 5 });
+    // The reference is the saved lead's own id, shortened. If nothing was
+    // saved there is no reference to give, and the screen says so.
+    let lead: WizardSchema["lead"];
+    if (leadRes && leadRes.ok) {
+      const row = await leadRes.json().catch(() => null) as { id?: string } | null;
+      lead = { saved: true, ref: row?.id ? `SC-${row.id.slice(0, 8).toUpperCase()}` : null, error: null };
+    } else {
+      const body = leadRes ? await leadRes.json().catch(() => null) as { error?: string } | null : null;
+      lead = { saved: false, ref: null, error: body?.error ?? "The request could not be sent." };
+    }
+
+    set({ ...state, estimate: result, step: 5, lead });
   };
 
   return (
@@ -516,26 +542,28 @@ function StepResult({ state }: { state: WizardSchema }) {
         <p style={{ color: IQ.textMuted, fontSize: 11, marginTop: 8, fontStyle: "italic" }}>{est.disclaimer}</p>
       </div>
 
-      <p style={{ color: IQ.textSecondary, fontSize: 15, fontFamily: "Inter, sans-serif", maxWidth: 280 }}>
-        A local contractor will text you an exact quote within the hour.
-      </p>
-
-      <div className="flex flex-col gap-3 w-full" style={{ maxWidth: 320 }}>
-        <GoldButton onClick={() => alert(`Texting breakdown to ${state.phone}...`)}>
-          <Phone size={16} />
-          Text me the breakdown
-        </GoldButton>
-        <button
-          className="w-full rounded-xl font-semibold text-sm transition-all active:scale-[0.98]"
-          style={{ background: "transparent", border: `1.5px solid ${IQ.border}`, color: IQ.textSecondary, padding: "16px 24px", fontFamily: "Inter, sans-serif" }}
-        >
-          Share with contractor
-        </button>
-      </div>
-
-      <p style={{ color: IQ.textMuted, fontSize: 12, fontFamily: "Inter, sans-serif" }}>
-        Ref: #SC-{new Date().toISOString().slice(0, 10).replace(/-/g, "")}-{Math.floor(Math.random() * 9000 + 1000)}
-      </p>
+      {/* Honest about whether the request arrived. The old screen promised a
+          text "within the hour", offered a "Text me the breakdown" button that
+          only showed an alert, a "Share with contractor" button that did
+          nothing, and a reference number made of today's date and
+          Math.random() - on every render, matching nothing. */}
+      {state.lead?.saved ? (
+        <>
+          <p style={{ color: IQ.textSecondary, fontSize: 15, fontFamily: "Inter, sans-serif", maxWidth: 280 }}>
+            Your request reached the contractor. They&apos;ll follow up with an exact quote.
+          </p>
+          {state.lead.ref && (
+            <p style={{ color: IQ.textMuted, fontSize: 12, fontFamily: "Inter, sans-serif" }}>
+              Reference {state.lead.ref}
+            </p>
+          )}
+        </>
+      ) : (
+        <p style={{ color: IQ.error, fontSize: 14, fontFamily: "Inter, sans-serif", maxWidth: 300 }}>
+          Your estimate is above, but your request did not reach the contractor
+          {state.lead?.error ? ` (${state.lead.error})` : ""}. Please call instead.
+        </p>
+      )}
     </div>
   );
 }

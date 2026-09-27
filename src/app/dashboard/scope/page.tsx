@@ -14,9 +14,11 @@
  * winning.
  */
 
-import React, { useCallback, useEffect, useState } from "react";
-import { T, F, disp, eyebrow, nums, clip, relTime } from "@/lib/v34/tokens";
-import { EmptyState, Badge } from "@/components/v34/primitives";
+import React, { useEffect, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { T, F, disp, eyebrow, nums, clip, relTime, formatPhone } from "@/lib/v34/tokens";
+import { EmptyState, Badge, Sheet } from "@/components/v34/primitives";
 
 interface Job {
   id: string;
@@ -38,22 +40,27 @@ export default function ScopeScreen() {
   const [error, setError] = useState<string | null>(null);
   const [noOrg, setNoOrg] = useState(false);
   const [accepting, setAccepting] = useState<string | null>(null);
+  // Bumped after an accept so the list refetches. The fetch lives inside the
+  // effect, with a cancel flag, so a response that lands after the screen is
+  // gone does not set state on an unmounted component.
+  const [reload, setReload] = useState(0);
+  const [newOpen, setNewOpen] = useState(false);
 
-  const load = useCallback(async () => {
-    try {
-      const r = await fetch("/api/jobs");
-      const b = await r.json().catch(() => ({}));
-      if (!r.ok) {
-        if (b?.code === "no_org") { setNoOrg(true); setJobs([]); return; }
-        throw new Error(b?.error || `HTTP ${r.status}`);
-      }
-      setJobs(Array.isArray(b.jobs) ? b.jobs : []);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
-  }, []);
-
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    let off = false;
+    fetch("/api/jobs")
+      .then(async (r) => {
+        const b = await r.json().catch(() => ({}));
+        if (off) return;
+        if (!r.ok) {
+          if (b?.code === "no_org") { setNoOrg(true); setJobs([]); return; }
+          throw new Error(b?.error || `HTTP ${r.status}`);
+        }
+        setJobs(Array.isArray(b.jobs) ? b.jobs : []);
+      })
+      .catch((e) => { if (!off) setError(e instanceof Error ? e.message : String(e)); });
+    return () => { off = true; };
+  }, [reload]);
 
   // Accepting is one job at a time and goes through PATCH {accept:true}. The
   // route sets confirmed_at/confirmed_by; the client never sends them.
@@ -69,7 +76,7 @@ export default function ScopeScreen() {
         const b = await r.json().catch(() => ({}));
         throw new Error(b?.error || `HTTP ${r.status}`);
       }
-      await load();
+      setReload((n) => n + 1);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -98,10 +105,18 @@ export default function ScopeScreen() {
 
   return (
     <div>
+      <NewScopeSheet open={newOpen} onClose={() => setNewOpen(false)} />
       <div className="px-3 pt-3 pb-2" style={{ background: T.card, borderBottom: `1px solid ${T.hair}` }}>
         <div style={eyebrow}>Scope</div>
-        <div style={{ fontFamily: disp, fontSize: F.xl, fontWeight: 600, lineHeight: 1.05 }}>
-          Jobs and sections
+        <div className="flex items-center gap-2">
+          <div style={{ fontFamily: disp, fontSize: F.xl, fontWeight: 600, lineHeight: 1.05, flex: 1 }}>
+            Jobs
+          </div>
+          <button onClick={() => setNewOpen(true)} className="rounded px-3"
+            style={{ height: 34, background: T.hiviz, color: "#fff", fontFamily: disp, fontSize: F.sm, fontWeight: 600,
+                     textTransform: "uppercase", letterSpacing: ".06em", cursor: "pointer" }}>
+            + New project scope
+          </button>
         </div>
         {jobs.length > 0 && (
           <div style={{ fontSize: F.xs, color: T.ink3, marginTop: 2, ...nums }}>
@@ -113,7 +128,7 @@ export default function ScopeScreen() {
 
       {jobs.length === 0 ? (
         <EmptyState title="No jobs yet"
-          detail="A job is the container for a piece of work, from first contact onward — it starts as a lead and is won or lost later. Create one from a thread when someone asks for work." />
+          detail="A job is the container for a piece of work, from first contact onward — it starts as a lead and is won or lost later. Start one with + New project scope." />
       ) : (
         jobs.map((j, i) => {
           const who = j.contact_name || j.contact_phone || "No contact";
@@ -122,9 +137,10 @@ export default function ScopeScreen() {
             <div key={j.id} className="px-3 py-2.5"
               style={{ background: T.card, borderTop: i === 0 ? "none" : `1px solid ${T.hair}` }}>
               <div className="flex items-baseline gap-2" style={{ minWidth: 0 }}>
-                <span style={{ fontFamily: disp, fontSize: F.md, fontWeight: 600, ...clip }}>
-                  {j.title || j.job_number || "Untitled job"}
-                </span>
+                <Link href={`/dashboard/scope/${j.id}`} className="no-underline"
+                  style={{ fontFamily: disp, fontSize: F.md, fontWeight: 600, color: T.ink, ...clip }}>
+                  {j.title || j.job_number || "Untitled job"} ›
+                </Link>
                 <span className="flex-1" />
                 {j.status && <Badge s={j.status} />}
                 {when && <span style={{ fontSize: F.xs, color: T.ink3, ...nums }}>{when}</span>}
@@ -162,5 +178,79 @@ export default function ScopeScreen() {
         })
       )}
     </div>
+  );
+}
+
+/* --------------------------------------------------------- new scope sheet */
+
+interface PickThread { contact_id: string; display_name: string; name_is_phone: boolean; phone: string | null; preview: string }
+
+/**
+ * Who is this for? Pick from the threads, or start with nobody and attach
+ * later. Creates the job through POST /api/jobs (origin 'manual', confirmed —
+ * a person is typing it) and opens the builder.
+ */
+function NewScopeSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const router = useRouter();
+  const [threads, setThreads] = useState<PickThread[] | null>(null);
+  const [q, setQ] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open || threads) return;
+    let cancelled = false;
+    fetch("/api/threads")
+      .then(async (r) => { const b = await r.json().catch(() => ({})); if (!r.ok) throw new Error(b?.error || `HTTP ${r.status}`); return b; })
+      .then((b) => { if (!cancelled) setThreads(Array.isArray(b.threads) ? b.threads : []); })
+      .catch((e) => { if (!cancelled) setErr(e instanceof Error ? e.message : String(e)); });
+    return () => { cancelled = true; };
+  }, [open, threads]);
+
+  async function create(contactId: string | null) {
+    setBusy(true); setErr(null);
+    try {
+      const r = await fetch("/api/jobs", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(contactId ? { contact_id: contactId } : {}),
+      });
+      const b = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(b?.error || `HTTP ${r.status}`);
+      router.push(`/dashboard/scope/${b.job.id}`);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+      setBusy(false);
+    }
+  }
+
+  const needle = q.trim().toLowerCase();
+  const digits = needle.replace(/\D/g, "");
+  const shown = (threads ?? []).filter((t) => !needle
+    || t.display_name.toLowerCase().includes(needle)
+    || (digits.length >= 3 && (t.phone ?? "").replace(/\D/g, "").includes(digits))).slice(0, 60);
+
+  return (
+    <Sheet open={open} onClose={onClose} title="New project scope" sub="Who is it for?">
+      <div className="p-3">
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search a name or number" autoFocus
+          className="w-full rounded px-2.5 outline-none" style={{ height: 40, border: `1px solid ${T.hair}`, fontSize: F.sm }} />
+        <button disabled={busy} onClick={() => void create(null)} className="w-full rounded mt-2"
+          style={{ height: 38, border: `1px dashed ${T.ink3}`, background: T.card, fontFamily: disp, fontSize: F.sm,
+                   textTransform: "uppercase", letterSpacing: ".06em", cursor: "pointer" }}>
+          Nobody yet — attach later
+        </button>
+        {err && <div style={{ fontSize: F.xs, color: T.red, marginTop: 6 }}>{err}</div>}
+      </div>
+      {threads === null && !err && <div className="px-3" style={{ fontSize: F.sm, color: T.ink3 }}>Loading threads…</div>}
+      {shown.map((t) => (
+        <button key={t.contact_id} disabled={busy} onClick={() => void create(t.contact_id)}
+          className="w-full text-left px-3 py-2" style={{ borderTop: `1px solid ${T.hairSoft}`, background: T.card, cursor: "pointer" }}>
+          <div style={{ fontFamily: disp, fontSize: F.md, fontWeight: 600, ...clip }}>{t.display_name}</div>
+          <div style={{ fontSize: F.xs, color: T.ink3, ...clip }}>
+            {t.name_is_phone ? "" : `${formatPhone(t.phone)} · `}{t.preview}
+          </div>
+        </button>
+      ))}
+    </Sheet>
   );
 }

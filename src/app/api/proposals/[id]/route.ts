@@ -35,17 +35,19 @@ export const dynamic = "force-dynamic";
 const RELATION_VALUES = ["customer", "vendor", "sub"] as const;
 
 /**
- * THREE VOCABULARIES, AND THEY DO NOT AGREE. Measured 2026-09-27.
+ * THREE VOCABULARIES. Measured 2026-09-27, after migration 026:
  *
  *   enrich-contacts emits    customer | vendor | sub | not_work | unknown
- *   contact_proposals CHECK  customer | vendor | personal | spam
+ *   contact_proposals CHECK  customer | vendor | sub | not_work | unknown
+ *                            | personal | spam
  *   customers.relation CHECK customer | vendor | sub
  *
- * Only `customer` and `vendor` are legal in all three. `sub`, `not_work` and
- * `unknown` are rejected by `contact_proposals_classification_check` on INSERT,
- * so the enricher cannot store them at all — see docs/reports for the detail
- * and migrations/026_proposal_classification_vocabulary.sql for the fix, which
- * is NOT applied.
+ * Before 026 the proposals CHECK allowed only customer | vendor | personal |
+ * spam, so `sub`, `not_work` and `unknown` failed on INSERT and the enricher
+ * could not store three of its five answers. 026 (applied 2026-09-27) widened
+ * it. customers.relation stays deliberately narrow: `not_work` and `unknown`
+ * are the absence of a relationship, not a kind of one, so this route refuses
+ * to confirm them as a relation.
  *
  * This route has to cope with whatever is actually in the column, including
  * `personal` and `spam` which the enricher never emits but the table allows.

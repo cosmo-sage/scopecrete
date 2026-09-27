@@ -94,8 +94,8 @@ export async function GET(req: NextRequest) {
       const c = j.contact_id ? nameById.get(j.contact_id) : undefined;
       return {
         ...j,
-        // Never invents a name. 124 of 144 contacts have none, and the phone
-        // number is the real identity in that case.
+        // Never invents a name. 176 of 197 contacts have none (2026-09-27), and
+        // the phone number is the real identity in that case.
         contact_name: c?.name ?? null,
         contact_phone: c?.phone ?? null,
         // THE PIPELINE PREDICATE, computed in one place.

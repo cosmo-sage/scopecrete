@@ -4,7 +4,7 @@ Ground truth for every agent working this repo. If code disagrees with this
 document, the code is wrong or this document is stale — resolve it, don't
 guess. Update this file in the same PR that changes the behavior it describes.
 
-Last updated: 2026-08-27
+Last updated: 2026-09-27
 
 ---
 
@@ -133,18 +133,20 @@ short per-turn index (recovering ~54% of the budget), and prefer the TAIL of a
 long conversation over the head, since the direction of the ask is clearest in
 recent traffic.
 
-**The legacy enricher is REMOVED IN SOURCE BUT STILL LIVE IN PRODUCTION.**
-`enrichContact()` wrote `name`, `first_name`, `address` and `contact_type`
-straight onto `public.contacts` with no review step, via
-`llama-3.3-70b-versatile` — decommissioned, returning 404 since 2026-08-19, so
-inert by luck rather than design. It is the most likely origin of the "Brad
-Chaney" mislabel above.
+**The legacy enricher is gone from production AND, as of 2026-09-27, from the
+repo.** `enrichContact()` wrote `name`, `first_name`, `address` and
+`contact_type` straight onto `public.contacts` with no review step. It is the
+most likely origin of the "Brad Chaney" mislabel above.
 
-It is deleted, with all three call sites, on branch `claude/pr1-landing-zone`.
-That branch is **not deployed**: `quo-intake` in production is still version 55
-and still contains it. Until that deploy happens, repairing the Groq model id
-would immediately resume unreviewed writes onto `contacts`. Do not touch the
-model id first.
+CORRECTION 2026-09-27: this section used to say production intake still
+contained it. It did not — deployed `quo-intake` v56 was already the v8
+"landing zone" version with `enrichContact()` and `syncCallToMessages()`
+removed. The drift ran the OTHER way: `master` still carried both, so
+**deploying intake from the repo would have reinstalled the unreviewed
+enricher**. The repo now holds the deployed v56 source (its own commit, no
+behaviour change), and v57 is built on it. **Always read the deployed source
+back with `get_edge_function` before changing an edge function; never assume
+the repo matches production.**
 
 **The filter is then deterministic and free.** `customers.relation` is
 `NOT NULL DEFAULT 'customer'` with `CHECK (relation IN ('customer','vendor','sub'))`,
@@ -237,6 +239,42 @@ SMS projection in application code stopped and never ran again; 48 texts landed
 in the database and never reached the app, and nothing was watching. A non-zero
 drift count is that outage, visible this time. Surface it in the UI.
 
+**Attachments — migration 027 (applied 2026-09-27).** Photos, videos, PDFs and
+contact cards sent by text live in `message_media`, one row per file, written by
+the projection (`sc_project_raw_event()`) and backfilled from
+`quo_events.raw_payload.media` and `sms_threads.media_urls`. Before 027 the
+projection kept only the first URL, and in `messages.recording_url` — a photo
+filed as a call recording. That write is still there for compatibility and
+should go once nothing reads it. Files are copied lazily into the private
+`message-media` bucket the first time a thread is opened
+(`/api/messages/[id]/media`) and served by short-lived signed URL. Storage paths
+are `{org_id}/…` in both `message-media` and `call-audio`, and `storage.objects`
+policies scope reads and writes to `get_user_org_ids()`. Before 027 there were
+**no** storage policies, which is why the call-audio player never worked.
+
+## 2c. One contact is one person — migration 028 (applied 2026-09-27)
+
+A person with two numbers is ONE contact. `contact_phones` lists every number;
+the merged-away contact keeps its row, points at the person with
+`merged_into_contact_id`, and is excluded from every count.
+
+- **Merges are human-confirmed, one pair at a time.** "Same person as…" on the
+  conversation screen. The system never merges on its own; matching names are a
+  suggestion at most.
+- **Merges are reversible.** `sc_merge_contacts()` records every moved row id in
+  `contact_merges.undo_payload`; `sc_unmerge_contacts()` moves back exactly those
+  rows still on the winner. A merge that cannot be undone should not be offered.
+- **The functions are SECURITY DEFINER with an explicit membership check**, not
+  invoker. `voip_calls` has no user write policy and `sms_threads` is
+  service-role only, so an invoker merge would move texts and silently leave
+  calls behind. Execute is granted to `authenticated` only; a stranger gets
+  "contact not found".
+- **Everything that resolves a contact follows the pointer.** `quo-intake` v57
+  `upsertContact()` hops `merged_into_contact_id`; `sc_quo_events_project()`
+  redirects an event keyed to a merged-away contact before projecting it; the
+  conversation API redirects to the person. Pointers are kept one level deep —
+  merging B into C re-points anything already merged into B.
+
 ## 2b. Lead creation — the guard, and what it deliberately does not do
 
 `quo-intake` does not create a NEW lead when the contact's customer is a
@@ -250,6 +288,15 @@ classification.** This is a rule, not a gap waiting to be closed:
 
 > A machine opinion changes what Coy is **asked**. It never changes what he is
 > **shown**. Suppression requires a human confirmation.
+
+**Classifying by hand (2026-09-27).** The Customers screen
+(`/dashboard/customers/[id]`) lets Coy mark a contact customer, vendor or sub
+directly — `PATCH /api/customers/[contactId]/relation`, which writes
+`relation_source='manual'`, `relation_confirmed_at` and `relation_confirmed_by`,
+and creates the `customers` row when the contact has none. That IS the human
+confirmation, so a confirmed vendor or sub is suppressed by the guard; the
+screen says so before the tap. The list shows a relation only when it is
+confirmed — everything else is **Unclassified**, never the column default.
 
 An `enrich-contacts` proposal is an opinion. It can raise the question — "this
 looks like a sub, confirm?" — and once a human answers, the answer is load
@@ -282,6 +329,31 @@ Tax lands on the materials subtotal only (~8.08% in-market), not the full bid.
 
 Equipment rental bills by the day.
 
+**Where it lives (2026-09-27): `src/lib/engine/index.ts`.** Pure functions,
+tested by `npm test` (`node --test tests/*.test.mjs`). It is the ONLY
+place a scope is priced. It is deliberately NOT v34's `computeJob()`, which
+prices labour by crew-hours, uses one global markup and adds overhead as a
+percentage of labour — all three contradict this section and §4.
+
+- **Nothing is assumed.** A missing length, width or depth is `missing`; a
+  missing setting blocks the price and is named. `price()` returns
+  `{ priced: false, blocked: [...] }`, never a number built on a guess.
+- **Rates come only from `org_cost_settings`.** That table carries the Gulfline
+  rates as COLUMN DEFAULTS (migration 004), so `PUT /api/settings/cost` writes
+  every field explicitly — null when blank — and a partial save cannot pull in
+  numbers nobody entered. The Gulfline figures appear in the settings form as a
+  labelled reference, never inside an input.
+- **Tax is a pass-through**: charged at cost on the materials subtotal, carried
+  in both columns, not marked up. Markup applies to materials before tax.
+- **`job_sections.cubic_yards` must not be displayed.** It is a generated
+  column, `… * COALESCE(depth_in, 4)`, so a section with no depth reads 14.8
+  yards for a 30×40 (verified 2026-09-27). The section API writes `depth_in`
+  and `psi` explicitly as null so the schema defaults (4 in, 3000 psi) never
+  stand in for a measurement. Fixing the column needs a migration and Coy's
+  instruction.
+- **Not yet priced:** reinforcement, base, vapor barrier (no rates exist), and
+  day-rate equipment. The builder lists them as "not in this price".
+
 ---
 
 ## 4. Overhead and the bid floor
@@ -313,6 +385,13 @@ one-tap "worked here, no spend" later.
 **Pay-yourself is a mode per org.** `fixed_draw` is a monthly target the bid
 floor MUST cover. `pct_profit` is taken after a job clears and does NOT raise
 the floor. Draws land on a specific day, never smeared evenly.
+
+**Floor implementation (2026-09-27).** `floor()` in `src/lib/engine`:
+nut per crew-day = (active overhead as monthly + fixed draw) ÷
+`assumed_billable_days` (crew-days per month the nut is spread across); the
+job's share = that × `jobs.duration_days`, entered on the builder and labelled
+**estimated** until measured days exist. No crew days, no overhead, or no
+off-the-top → the floor is blocked and says which.
 
 Overhead is NOT baked into the per-sqft rate — the rate varies too much by
 job. The floor's allocation is the one place overhead enters. Do not
@@ -369,13 +448,48 @@ expected start date per quoted job before it means anything. Add the field.
 - Settings opens from the header menu. Fixed costs live there AND open from
   the runway cell on the dashboard. One editor, two doors.
 - Legend collapses to a chip.
+- **Desktop (lg+, 2026-09-27)** takes its LAYOUT from the Claude Design desktop
+  screens and its LOOK from v34 (Barlow Condensed / IBM Plex, hi-viz orange) —
+  one design system, not two. The footer becomes a left rail; the header gains
+  inline search, the primary line, and the unnamed and drift counters. Threads
+  is list · conversation · contact rail. The desktop design calls the list
+  "Triage"; that word is not used — it is **Threads**, where every channel for
+  a contact merges into one conversation. A home dashboard is not designed yet.
 - Dusty has two entry points: COLD from the footer emblem (no job context,
   opens a channels list) and HOT from a job (that job preloaded). The header
   must make obvious which one you're in.
+- **Dusty v1 (2026-09-27)** is wired: `src/components/v34/dusty-panel.tsx`
+  rises from the footer on a phone and slides in from the right on desktop.
+  It is HOT on whatever screen is open — a thread, a scope, a customer, or
+  cost settings — and COLD anywhere else; the header says which. The browser
+  sends only `{kind, id}` from its route; `/api/dusty` fetches the facts itself
+  under the session (`src/lib/dusty/context.ts`), so RLS decides what Dusty can
+  see and nothing typed in the browser becomes "context". Scope answers use
+  the engine's own output, so Dusty quotes exactly the builder's numbers or
+  names what blocks them. **Read-only:** no tools, no writes, nothing sent —
+  drafts come back as text to copy. **Not stored:** the conversation lives in
+  the tab (channels that persist per job/customer, below, are still to come
+  and need a table). **The model runs in the Hermes container on the VPS**
+  (§8), reached over Tailscale Funnel at `HERMES_URL` with `HERMES_API_KEY`
+  (OpenAI-compatible chat completions; Hermes routes via OpenRouter, model
+  `HERMES_MODEL`, default `anthropic/claude-3.5-haiku` while testing). No
+  model-provider key lives in Vercel. The Vercel route stays the only thing
+  that touches customer data — Hermes sees only the context the route sends.
+  Hermes must serve Dusty with its tools OFF: the context carries customer
+  texts, and a text can carry instructions. The old `/api/chat/dusty` — an
+  unauthenticated relay to a private-IP Ollama box — is deleted.
 - Dusty channels persist and are resumable, organized per job/customer.
 - **Receipts are camera-first, always.** Photograph, never type. Dusty reads
   vendor, amount, date and clarifies conversationally. Invoices and payments
   stay quick structured forms.
+- **The composer never appears to send.** (2026-09-27) Text, email and notes
+  have no send path yet — texting waits on 10DLC, and Coy has said sending is
+  not needed now. The composer (thread screen, and compact in the row expand)
+  writes, keeps a per-device draft, copies it for pasting into Quo, and offers
+  Call. Send, attach and hold-to-talk are shown switched off, each with its
+  reason. An earlier composer appended messages locally and faked a Dusty reply
+  a second later; that must not come back. When sending lands, it replaces the
+  disabled Send in `src/components/v34/composer.tsx` — one place.
 
 ---
 
@@ -420,6 +534,9 @@ additive changes only, with confirmation.
 - Web app: Vercel. Preview per branch.
 - VPS: agents, telephony, anything holding a socket or needing a persistent
   process.
+- **Hermes (Dusty's model) on the VPS** is published with Tailscale Funnel at
+  `https://srv1594563.tail0f2914.ts.net/hermes` (`/v1/chat/completions`,
+  `/health`), bearer-key auth. Only `/api/dusty` on Vercel calls it.
 - Do not run two production paths for the web app.
 - `scopecrete.ai` points at the Vercel project; Cloudflare DNS-only for that
   record.
@@ -443,8 +560,15 @@ genuinely required.
   revoked in isolation.
 - Anon-role read policies were removed in a prior migration; anon must not
   regain read access to contact, comms, or job data.
-- `get_user_org_ids()` is the isolation helper. Core isolation still needs
-  migrating off the `app.current_org_id` GUC to `auth.uid()` + `org_members`.
+- `get_user_org_ids()` is the isolation helper, and the migration off the
+  `app.current_org_id` GUC is **done**: measured 2026-09-27, 130 of 149 public
+  policies use `get_user_org_ids()` and **0** reference the GUC (the rest are
+  `service_role`-only). Any new policy uses the helper.
+- **Known exposure, not yet fixed:** the views `sc_spine_drift` and
+  `sc_open_name_questions` are not `security_invoker`, so they run as their
+  owner and bypass RLS — a cross-tenant read the day a second org exists.
+  Harmless at one org today; fix before onboarding another. Views must be
+  created `with (security_invoker = true)`.
 
 ---
 

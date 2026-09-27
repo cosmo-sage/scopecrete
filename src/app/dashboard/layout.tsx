@@ -32,9 +32,10 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { T, F, disp, eyebrow, nums, clip } from "@/lib/v34/tokens";
+import { T, F, disp, eyebrow, nums, clip, formatPhone } from "@/lib/v34/tokens";
 import { Emblem, NavIcon, Sheet } from "@/components/v34/primitives";
 import { PipelineDrop, CreateDrop } from "@/components/v34/shell";
+import { DustyPanel } from "@/components/v34/dusty-panel";
 import { signOut } from "@/lib/auth";
 import "@/styles/v34-shell.css";
 
@@ -47,7 +48,7 @@ const SLOTS: Array<{ k: string; label?: string; href?: string }> = [
   { k: "more", label: "More", href: "/dashboard/more" },
 ];
 
-interface Me { email: string | null; name: string | null; org_name: string | null; role: string | null }
+interface Me { email: string | null; name: string | null; org_name: string | null; role: string | null; line: string | null }
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -58,9 +59,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [pipeOpen, setPipeOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [dustyOpen, setDustyOpen] = useState(false);
+  // True only while a Dusty reply is actually streaming.
+  const [dustyBusy, setDustyBusy] = useState(false);
 
   const [me, setMe] = useState<Me | null>(null);
   const [needs, setNeeds] = useState<number | null>(null);
+  // Desktop top-bar counters. null = unknown, never shown as 0.
+  const [unnamed, setUnnamed] = useState<number | null>(null);
+  const [drift, setDrift] = useState<number | null>(null);
 
   // The emblem's working state. One flag per request rather than a shared
   // counter, so the first response cannot still the mark while the second is
@@ -114,21 +120,37 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     let off = false;
     fetch("/api/threads/counts")
       .then((r) => (r.ok ? r.json() : null))
-      .then((d) => { if (!off && typeof d?.counts?.needs === "number") setNeeds(d.counts.needs); })
+      .then((d) => {
+        if (off) return;
+        if (typeof d?.counts?.needs === "number") setNeeds(d.counts.needs);
+        if (typeof d?.counts?.unsorted === "number") setUnnamed(d.counts.unsorted);
+      })
       .catch(() => {})
       .finally(() => { if (!off) setCountsLoading(false); });
+    return () => { off = true; };
+  }, [pathname]);
+
+  // The spine drift alarm (DECISIONS §2a): events that reached the phone
+  // number and never reached the app. Surfaced in the top bar on desktop.
+  useEffect(() => {
+    let off = false;
+    fetch("/api/dashboard/drift")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (!off && typeof d?.count === "number") setDrift(d.count); })
+      .catch(() => {});
     return () => { off = true; };
   }, [pathname]);
 
   const activeKey =
     pathname.startsWith("/dashboard/messages") ? "threads"
     : pathname.startsWith("/dashboard/scope") ? "scope"
+    : pathname.startsWith("/dashboard/customers") ? "customers"
     : pathname.startsWith("/dashboard/cash") ? "cash"
     : pathname.startsWith("/dashboard/more") ? "more"
     : "";
   const markIdx = SLOTS.findIndex((s) => s.k === activeKey);
 
-  const thinking = meLoading || countsLoading;
+  const thinking = meLoading || countsLoading || dustyBusy;
   const displayName = me?.name ?? me?.email ?? null;
 
   function submitSearch(e: React.FormEvent) {
@@ -155,10 +177,41 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </span>
           </Link>
 
+          {/* ---- desktop top bar: search, the live line, the queues ---- */}
+          <form onSubmit={submitSearch} className="hidden lg:flex items-center flex-1 min-w-0 mx-4" style={{ maxWidth: 560 }}
+            onFocus={() => { if (!query) setQuery(new URLSearchParams(window.location.search).get("q") ?? ""); }}>
+            <input value={query} onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search a number, a name, a word in the latest message"
+              className="w-full px-3 rounded outline-none sc-search"
+              style={{ height: 34, fontSize: F.sm, color: "#fff",
+                       background: "rgba(255,255,255,.10)", border: "1px solid rgba(255,255,255,.18)" }} />
+          </form>
+          <div className="hidden lg:flex items-center gap-4 shrink-0 mr-2" style={{ ...nums }}>
+            {me?.line && (
+              <span className="flex items-center gap-1.5 rounded px-2"
+                style={{ height: 28, border: "1px solid rgba(255,255,255,.2)", color: "#fff", ...eyebrow, fontSize: F.xs }}>
+                <span style={{ width: 7, height: 7, background: T.pulse, display: "inline-block" }} aria-hidden="true" />
+                {formatPhone(me.line)}
+              </span>
+            )}
+            {unnamed !== null && (
+              <Link href="/dashboard/messages?f=unsorted" className="no-underline" title="Numbers with no name on file"
+                style={{ ...eyebrow, fontSize: F.xs, color: "#fff" }}>
+                Unnamed <b style={{ color: unnamed > 0 ? T.hiviz : "#fff" }}>{unnamed}</b>
+              </Link>
+            )}
+            {drift !== null && (
+              <span title="Events that reached the phone number but never reached the app (sc_spine_drift)"
+                style={{ ...eyebrow, fontSize: F.xs, color: "#fff" }}>
+                Drift <b style={{ color: drift > 0 ? "#FF7A66" : T.pulse }}>{drift}</b>
+              </span>
+            )}
+          </div>
+
           <div className="flex items-center gap-1.5 shrink-0">
             <button onClick={() => (searchOpen ? setSearchOpen(false) : openSearch())}
               aria-label="Search" aria-expanded={searchOpen}
-              className="rounded-lg flex items-center justify-center sc-glass-btn"
+              className="rounded-lg flex items-center justify-center sc-glass-btn lg:hidden"
               style={{ ...glassBtn, background: searchOpen ? "rgba(255,255,255,.22)" : undefined }}>
               <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true">
                 <circle cx="6.4" cy="6.4" r="4.5" fill="none" stroke="#fff" strokeWidth="1.6" />
@@ -219,9 +272,40 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {pipeOpen && <PipelineDrop onClose={() => setPipeOpen(false)} />}
       {createOpen && <CreateDrop onClose={() => setCreateOpen(false)} />}
 
-      <main className="flex-1" style={{ paddingBottom: 72 }}>{children}</main>
+      {/* ---- desktop left rail: the footer's destinations, standing up ---- */}
+      <nav aria-label="Main" className="hidden lg:flex fixed left-0 bottom-0 z-30 flex-col items-stretch"
+        style={{ top: 54, width: 84, background: T.dark }}>
+        {/* The rail has room the footer does not: Customers stands here on
+            desktop and is reached from More on a phone. */}
+        {[...SLOTS.filter((s) => s.href).slice(0, 2), { k: "customers", label: "Customers", href: "/dashboard/customers" },
+          ...SLOTS.filter((s) => s.href).slice(2)].map((s) => {
+          const on = activeKey === s.k;
+          return (
+            <Link key={s.k} href={s.href as string} aria-current={on ? "page" : undefined}
+              className="flex flex-col items-center justify-center gap-1 no-underline"
+              style={{ height: 66, borderLeft: `3px solid ${on ? T.hiviz : "transparent"}`,
+                       background: on ? "rgba(255,255,255,.07)" : "transparent", position: "relative" }}>
+              <span style={{ filter: "invert(1)", opacity: on ? 1 : 0.62, display: "flex" }}><NavIcon k={s.k} on={true} /></span>
+              <span style={{ ...eyebrow, fontSize: 9.5, color: on ? "#fff" : "rgba(255,255,255,.55)" }}>{s.label}</span>
+              {s.k === "threads" && needs !== null && needs > 0 && (
+                <span className="absolute rounded-full flex items-center justify-center"
+                  style={{ top: 10, right: 16, minWidth: 15, height: 15, padding: "0 3px", background: T.hiviz, color: "#fff",
+                           fontFamily: disp, fontSize: 9.5, fontWeight: 700, lineHeight: 1, ...nums }}>{needs}</span>
+              )}
+            </Link>
+          );
+        })}
+        <span className="flex-1" />
+        <button onClick={() => { tapEmblem(); setDustyOpen((o) => !o); }} aria-label="Dusty"
+          className="flex items-center justify-center" style={{ height: 70 }}>
+          <Emblem key={`r${emTap}`} size={30} stroke={2.8}
+            className={emTapping ? "sc-em-tap" : thinking ? "sc-em-think" : "sc-em-dream"} />
+        </button>
+      </nav>
 
-      <footer className="fixed bottom-0 left-0 right-0 z-40 flex items-stretch"
+      <main className="flex-1 pb-[72px] lg:pb-0 lg:pl-[84px]">{children}</main>
+
+      <footer className="fixed bottom-0 left-0 right-0 z-40 flex items-stretch lg:hidden"
         style={{ background: T.card, borderTop: `1px solid ${T.hair}`, height: 58,
                  paddingBottom: "env(safe-area-inset-bottom)" }}>
         {markIdx >= 0 && (
@@ -231,7 +315,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           if (s.k === "dusty") {
             // The emblem carries it — no word underneath.
             return (
-              <button key={s.k} onClick={() => { tapEmblem(); setDustyOpen(true); }}
+              <button key={s.k} onClick={() => { tapEmblem(); setDustyOpen((o) => !o); }}
                 aria-label="Dusty" className="sc-tab flex-1 flex items-center justify-center">
                 <span className="sc-tab-ico">
                   <Emblem key={`f${emTap}`} size={30} stroke={2.8}
@@ -263,25 +347,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         })}
       </footer>
 
-      {/* Dusty: the shell, and nothing that implies it is answering.
-          Handoff §6.9 — "design the shell; do not design a conversation that
-          implies it is answering". There is no input box here on purpose. */}
-      <Sheet open={dustyOpen} onClose={() => setDustyOpen(false)} title="Dusty" sub="Not wired yet">
-        <div className="px-4 py-3" style={{ fontSize: F.sm, color: T.ink2, lineHeight: 1.5 }}>
-          <p>
-            Dusty reads threads, calls and scopes, and opens either cold from here or
-            hot from a job with that job already loaded.
-          </p>
-          <p className="mt-2">
-            It is not connected. There is no channels list to show yet and no send path,
-            so rather than an input box that goes nowhere, this says so.
-          </p>
-          <p className="mt-2" style={{ color: T.ink3 }}>
-            It also has no cost settings — <span style={nums}>org_cost_settings</span> is
-            empty — so it could not answer a money question even once it is wired.
-          </p>
-        </div>
-      </Sheet>
+      {/* Dusty — read-only, and it knows the screen you are on. */}
+      <DustyPanel open={dustyOpen} onClose={() => setDustyOpen(false)} onBusy={setDustyBusy} />
 
       <Sheet open={menuOpen} onClose={() => setMenuOpen(false)} title="Account" sub={me?.org_name ?? undefined}>
         <div className="px-4 py-3">

@@ -63,6 +63,21 @@ export async function PATCH(
     if (typeof v === "string") patch[f] = v.trim() === "" ? null : v.trim();
   }
 
+  // Crew days on this job: what the bid floor spreads the monthly nut by
+  // (DECISIONS §4). Entered by a person as an estimate until measured days
+  // exist. null clears it; anything else must be a positive number.
+  if ("duration_days" in body) {
+    const d = body.duration_days;
+    if (d === null) patch.duration_days = null;
+    else if (typeof d === "number" && Number.isFinite(d) && d > 0 && d < 1000) patch.duration_days = d;
+    else {
+      return applyCookies(NextResponse.json({
+        error: "duration_days must be a positive number of crew days, or null.",
+        code: "bad_duration",
+      }, { status: 400 }));
+    }
+  }
+
   if (typeof patch.status === "string" && !VALID_STATUS.includes(patch.status)) {
     return applyCookies(NextResponse.json({
       error: `Unknown status "${patch.status}". One of: ${VALID_STATUS.join(", ")}.`,
@@ -89,7 +104,7 @@ export async function PATCH(
     .update(patch)
     .eq("id", id)
     .eq("org_id", orgId)
-    .select("id, job_number, title, status, origin, confirmed_at, confirmed_by, contact_id, address, city, state, zip, notes, created_at")
+    .select("id, job_number, title, status, origin, confirmed_at, confirmed_by, contact_id, address, city, state, zip, notes, duration_days, created_at")
     .maybeSingle();
 
   if (error) {
@@ -117,7 +132,7 @@ export async function GET(
 
   const { data, error } = await supabase
     .from("jobs")
-    .select("id, job_number, title, status, origin, confirmed_at, confirmed_by, created_from_message_id, contact_id, address, city, state, zip, notes, created_at")
+    .select("id, job_number, title, status, origin, confirmed_at, confirmed_by, created_from_message_id, contact_id, address, city, state, zip, notes, duration_days, created_at")
     .eq("id", id)
     .eq("org_id", orgId)
     .maybeSingle();
@@ -129,5 +144,18 @@ export async function GET(
     return applyCookies(NextResponse.json({ error: "No such job in your organisation.", code: "not_found" }, { status: 404 }));
   }
 
-  return applyCookies(NextResponse.json({ job: data }));
+  // Who the job is for, read separately: `contacts` and `jobs` carry their own
+  // RLS policies and an embed would fail closed on either.
+  let contact: { id: string; name: string | null; phone: string | null } | null = null;
+  if (data.contact_id) {
+    const { data: c } = await supabase
+      .from("contacts")
+      .select("id, name, phone")
+      .eq("id", data.contact_id)
+      .eq("org_id", orgId)
+      .maybeSingle();
+    contact = c ?? null;
+  }
+
+  return applyCookies(NextResponse.json({ job: data, contact }));
 }

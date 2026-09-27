@@ -123,8 +123,9 @@ export async function POST(req: NextRequest) {
 
     const data = await res.json();
     return NextResponse.json(data[0] || data, { status: 201 });
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
     console.error("[POST /api/leads] Unexpected error:", err);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

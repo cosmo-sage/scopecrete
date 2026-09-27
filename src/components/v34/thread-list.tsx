@@ -36,6 +36,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { T, F, disp, eyebrow, nums, clip, relTime } from "@/lib/v34/tokens";
 import { Avatar, EmptyState } from "@/components/v34/primitives";
+import { Composer } from "@/components/v34/composer";
 
 interface Thread {
   contact_id: string;
@@ -382,6 +383,11 @@ function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, deciding }:
               onDecide={(body) => onDecide(t.proposal!.id, body)} />
           )}
 
+          {/* Reply without leaving the list. Same composer as the thread, in
+              its compact form; the draft is shared between the two. */}
+          <Composer contactId={t.contact_id} phone={t.phone}
+            name={t.name_is_phone ? null : t.display_name} compact />
+
           <button onClick={onOpen} className="mt-2 rounded px-3 flex items-center gap-2"
             style={{ height: 32, border: `1px solid ${T.hair}`, background: T.card,
                      fontFamily: disp, fontSize: F.sm, letterSpacing: ".06em",
@@ -408,7 +414,16 @@ export function ThreadList() {
   const [noOrg, setNoOrg] = useState(false);
   const [drift, setDrift] = useState<{ count: number | null; error?: string } | null>(null);
 
-  const [filter, setFilter] = useState("all");
+  // ?f= opens the list on a chip — the desktop top bar's "unnamed" counter
+  // links to ?f=unsorted. Adjusted during render (not in an effect) when the
+  // param changes while the list stays mounted in the messages layout.
+  const fParam = params.get("f");
+  const [filter, setFilter] = useState(fParam ?? "all");
+  const [seenF, setSeenF] = useState(fParam);
+  if (fParam !== seenF) {
+    setSeenF(fParam);
+    if (fParam) setFilter(fParam);
+  }
   const [moreFilters, setMoreFilters] = useState(false);
   const [openRow, setOpenRow] = useState<string | null>(null);
   const [deciding, setDeciding] = useState(false);

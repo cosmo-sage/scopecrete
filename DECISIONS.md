@@ -469,9 +469,15 @@ expected start date per quoted job before it means anything. Add the field.
   names what blocks them. **Read-only:** no tools, no writes, nothing sent —
   drafts come back as text to copy. **Not stored:** the conversation lives in
   the tab (channels that persist per job/customer, below, are still to come
-  and need a table). Model `claude-opus-5` via `ANTHROPIC_API_KEY`, a
-  server-only Vercel secret. The old `/api/chat/dusty` — an unauthenticated
-  relay to a private-IP Ollama box — is deleted.
+  and need a table). **The model runs in the Hermes container on the VPS**
+  (§8), reached over Tailscale Funnel at `HERMES_URL` with `HERMES_API_KEY`
+  (OpenAI-compatible chat completions; Hermes routes via OpenRouter, model
+  `HERMES_MODEL`, default `anthropic/claude-3.5-haiku` while testing). No
+  model-provider key lives in Vercel. The Vercel route stays the only thing
+  that touches customer data — Hermes sees only the context the route sends.
+  Hermes must serve Dusty with its tools OFF: the context carries customer
+  texts, and a text can carry instructions. The old `/api/chat/dusty` — an
+  unauthenticated relay to a private-IP Ollama box — is deleted.
 - Dusty channels persist and are resumable, organized per job/customer.
 - **Receipts are camera-first, always.** Photograph, never type. Dusty reads
   vendor, amount, date and clarifies conversationally. Invoices and payments
@@ -528,6 +534,9 @@ additive changes only, with confirmation.
 - Web app: Vercel. Preview per branch.
 - VPS: agents, telephony, anything holding a socket or needing a persistent
   process.
+- **Hermes (Dusty's model) on the VPS** is published with Tailscale Funnel at
+  `https://srv1594563.tail0f2914.ts.net/hermes` (`/v1/chat/completions`,
+  `/health`), bearer-key auth. Only `/api/dusty` on Vercel calls it.
 - Do not run two production paths for the web app.
 - `scopecrete.ai` points at the Vercel project; Cloudflare DNS-only for that
   record.

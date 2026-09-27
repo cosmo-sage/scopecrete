@@ -439,6 +439,13 @@ expected start date per quoted job before it means anything. Add the field.
 - Settings opens from the header menu. Fixed costs live there AND open from
   the runway cell on the dashboard. One editor, two doors.
 - Legend collapses to a chip.
+- **Desktop (lg+, 2026-09-27)** takes its LAYOUT from the Claude Design desktop
+  screens and its LOOK from v34 (Barlow Condensed / IBM Plex, hi-viz orange) —
+  one design system, not two. The footer becomes a left rail; the header gains
+  inline search, the primary line, and the unnamed and drift counters. Threads
+  is list · conversation · contact rail. The desktop design calls the list
+  "Triage"; that word is not used — it is **Threads**, where every channel for
+  a contact merges into one conversation. A home dashboard is not designed yet.
 - Dusty has two entry points: COLD from the footer emblem (no job context,
   opens a channels list) and HOT from a job (that job preloaded). The header
   must make obvious which one you're in.

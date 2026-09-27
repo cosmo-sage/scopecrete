@@ -756,7 +756,7 @@ export default function ChatThreadPage() {
   const pill: React.CSSProperties = {
     height: 30, border: `1px solid ${DA.border}`, background: DA.surface, color: DA.textSecondary,
     fontFamily: disp, fontSize: F.xs, letterSpacing: ".06em", textTransform: "uppercase", cursor: "pointer",
-    display: "inline-flex", alignItems: "center", textDecoration: "none",
+    alignItems: "center", textDecoration: "none",
   };
 
   // Day separators: one rule each time the date changes.
@@ -795,21 +795,21 @@ export default function ChatThreadPage() {
           {!loading && !error && (
             <div className="flex items-center gap-1.5 shrink-0">
               {phone && (
-                <a href={`tel:${phone}`} aria-label="Call" className="rounded justify-center"
+                <a href={`tel:${phone}`} aria-label="Call" className="rounded inline-flex justify-center"
                   style={{ ...pill, width: 34, padding: 0 }}>
                   <Phone size={14} weight="fill" color={DA.textPrimary} />
                 </a>
               )}
-              <button onClick={() => setMerging(true)} className="rounded px-2.5 hidden sm:inline-flex" style={pill}>
-                Same person as…
+              <button onClick={() => setMerging(true)} className="rounded px-2 inline-flex" style={pill}>
+                <span className="hidden sm:inline">Same person as…</span><span className="sm:hidden">Same as…</span>
               </button>
               {openJob ? (
-                <Link href={`/dashboard/scope/${openJob.id}`} className="rounded px-2.5"
+                <Link href={`/dashboard/scope/${openJob.id}`} className="rounded px-2.5 inline-flex"
                   style={{ ...pill, background: DA.accent, color: "#fff", border: "none" }}>Open scope</Link>
               ) : (
-                <button onClick={() => void newScope()} disabled={starting || jobs === null} className="rounded px-2.5"
+                <button onClick={() => void newScope()} disabled={starting || jobs === null} className="rounded px-2.5 inline-flex"
                   style={{ ...pill, background: DA.accent, color: "#fff", border: "none", opacity: jobs === null ? 0.5 : 1 }}>
-                  {starting ? "Starting…" : "New scope"}
+                  {starting ? "Starting…" : <><span className="hidden sm:inline">New scope</span><span className="sm:hidden">Scope</span></>}
                 </button>
               )}
             </div>
@@ -877,7 +877,7 @@ export default function ChatThreadPage() {
                     makes the next one readable — do it from this row in the thread list.
                   </p>
                   {phone && (
-                    <a href={`tel:${phone}`} className="inline-flex rounded px-3 mt-2 items-center"
+                    <a href={`tel:${phone}`} className="inline-flex rounded px-3 mt-2"
                       style={{ ...pill, height: 34, color: DA.textPrimary }}>Call back</a>
                   )}
                 </div>

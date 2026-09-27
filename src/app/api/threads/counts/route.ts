@@ -24,10 +24,17 @@ import { getApiSession } from "@/lib/api-auth";
  *   evening. The browser knows the right answer, so the browser derives it from
  *   the `occurred_at` values /api/threads already returns.
  *
- * `vendors` counts CONFIRMED relations only — `relation IN ('vendor','sub')`
- * AND `relation_confirmed_at IS NOT NULL`. DECISIONS.md §2b: a machine opinion
- * changes what Coy is asked, never what he is shown. Counting unconfirmed
- * proposals here would put a model's guess into a number on the chrome.
+ * BUCKETS (migration 032). A contact counts in customers / vendors / personal
+ * / spam only when Coy put it there, or Dusty filed it (spam, with Undo) —
+ * `classification_confirmed_at` or `auto_classified_at`. Everyone else is
+ * `unsorted`. The 'customer' column default on 190 legacy rows is a default,
+ * not a classification; counting it would put a guess into a number on the
+ * chrome (DECISIONS §2b). `all` leaves spam out, as the list does.
+ *
+ * `unnamed` is the desktop header's counter: people with no name yet. It used
+ * to be what "Unsorted" meant; sorting and naming are separate questions now.
+ *
+ * Job stages (quoted, won, …) are not here any more — they are the Jobs board.
  */
 
 export const dynamic = "force-dynamic";
@@ -36,26 +43,26 @@ export const dynamic = "force-dynamic";
 export interface ThreadCounts {
   all: number;
   needs: number;
-  unsorted: number;
-  unscoped: number;
-  quoted: number;
-  progress: number;
-  won: number;
-  lost: number;
+  customers: number;
   vendors: number;
+  personal: number;
+  spam: number;
+  unsorted: number;
+  unnamed: number;
 }
 
 interface DirRow { contact_id: string | null; direction: string | null; occurred_at: string | null }
-interface JobRow { id: string; status: string | null }
+interface ContactRow {
+  id: string; name: string | null; contact_type: string | null;
+  classification_confirmed_at: string | null; auto_classified_at: string | null;
+}
 
 export async function GET(req: NextRequest) {
   const result = await getApiSession(req);
   if (!result.ok) return result.response;
   const { supabase, orgId, applyCookies } = result.session;
 
-  // `all` and `needs` both need the LATEST message per contact, so they share
-  // one scan. Three narrow columns over ~1,500 rows, ordered newest-first: the
-  // first row seen for a contact is that contact's latest message.
+  // The LATEST message per contact: the first row seen, newest-first, is it.
   const { data: msgs, error: msgErr } = await supabase
     .from("messages")
     .select("contact_id, direction, occurred_at")
@@ -63,90 +70,39 @@ export async function GET(req: NextRequest) {
     .not("contact_id", "is", null)
     .order("occurred_at", { ascending: false })
     .limit(4000);
-
   if (msgErr) {
     return applyCookies(NextResponse.json({ error: `messages: ${msgErr.message}` }, { status: 500 }));
   }
-
   const latestDir = new Map<string, string | null>();
   for (const m of (msgs ?? []) as DirRow[]) {
     const k = m.contact_id as string;
     if (!latestDir.has(k)) latestDir.set(k, m.direction);
   }
-  const all = latestDir.size;
-  // "Needs you" is a reply owed: the last thing that happened was them talking.
-  const needs = [...latestDir.values()].filter((d) => d === "inbound").length;
 
-  // Unsorted — a contact nobody has put a name to. `contacts` reads cleanly
-  // through a session client since migration 024 moved its SELECT policy onto
-  // get_user_org_ids(); verified as the `authenticated` role, 197 rows.
-  // A contact merged into another (migration 028) is not a separate person any
-  // more — it keeps its row so the merge can be undone, but it must not count.
-  // `all` and `needs` already exclude it: its messages moved with the merge.
+  // Merged-away contacts keep their rows so a merge can be undone; they are
+  // not separate people and never count (migration 028).
   const { data: contacts, error: cErr } = await supabase
     .from("contacts")
-    .select("id, name")
+    .select("id, name, contact_type, classification_confirmed_at, auto_classified_at")
     .eq("org_id", orgId)
     .is("merged_into_contact_id", null);
-
   if (cErr) {
     return applyCookies(NextResponse.json({ error: `contacts: ${cErr.message}` }, { status: 500 }));
   }
-  const unsorted = (contacts ?? []).filter(
-    (c: { name: string | null }) => !c.name || !c.name.trim(),
-  ).length;
 
-  // Jobs. Fetched whole rather than one head-count per status: five statuses
-  // would be five round trips, and `jobs` is 0 rows today and small for a long
-  // while yet. Revisit if it ever isn't.
-  const { data: jobs, error: jErr } = await supabase
-    .from("jobs")
-    .select("id, status")
-    .eq("org_id", orgId);
-
-  if (jErr) {
-    return applyCookies(NextResponse.json({ error: `jobs: ${jErr.message}` }, { status: 500 }));
+  const counts: ThreadCounts = { all: 0, needs: 0, customers: 0, vendors: 0, personal: 0, spam: 0, unsorted: 0, unnamed: 0 };
+  const KEY: Record<string, keyof ThreadCounts> = { customer: "customers", vendor: "vendors", personal: "personal", spam: "spam" };
+  for (const c of (contacts ?? []) as ContactRow[]) {
+    if (!latestDir.has(c.id)) continue; // a thread is a contact with messages
+    if (!c.name?.trim()) counts.unnamed++;
+    const counted = (c.classification_confirmed_at || c.auto_classified_at) && KEY[c.contact_type ?? ""];
+    if (counted) counts[counted]++;
+    else counts.unsorted++;
+    if (counted === "spam") continue;
+    counts.all++;
+    // "Needs you" is a reply owed: the last thing that happened was them talking.
+    if (latestDir.get(c.id) === "inbound") counts.needs++;
   }
-  const jobRows = (jobs ?? []) as JobRow[];
-  const byStatus = (s: string) => jobRows.filter((j) => j.status === s).length;
-
-  // Unscoped — a job with no sections on it yet. A scope IS its job_sections
-  // rows (DECISIONS.md §5.5: there is no `scopes` table), so "unscoped" is the
-  // absence of those rows, not a status.
-  const { data: sections, error: sErr } = await supabase
-    .from("job_sections")
-    .select("job_id")
-    .eq("org_id", orgId);
-
-  if (sErr) {
-    return applyCookies(NextResponse.json({ error: `job_sections: ${sErr.message}` }, { status: 500 }));
-  }
-  const scopedJobIds = new Set((sections ?? []).map((s: { job_id: string }) => s.job_id));
-  const unscoped = jobRows.filter((j) => !scopedJobIds.has(j.id)).length;
-
-  // Vendors — confirmed only. See the header.
-  const { count: vendorCount, error: vErr } = await supabase
-    .from("customers")
-    .select("id", { count: "exact", head: true })
-    .eq("org_id", orgId)
-    .in("relation", ["vendor", "sub"])
-    .not("relation_confirmed_at", "is", null);
-
-  if (vErr) {
-    return applyCookies(NextResponse.json({ error: `customers: ${vErr.message}` }, { status: 500 }));
-  }
-
-  const counts: ThreadCounts = {
-    all,
-    needs,
-    unsorted,
-    unscoped,
-    quoted: byStatus("quoted"),
-    progress: byStatus("in_progress"),
-    won: byStatus("won"),
-    lost: byStatus("lost"),
-    vendors: vendorCount ?? 0,
-  };
 
   return applyCookies(NextResponse.json({ counts }));
 }

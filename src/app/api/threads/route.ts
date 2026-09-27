@@ -79,11 +79,16 @@ export interface Thread {
   /** True when the contact has a job carrying no `job_sections` rows. */
   job_unscoped: boolean;
   /**
-   * 'vendor' | 'sub' — and ONLY when relation_confirmed_at is set. An
-   * unconfirmed proposal is a machine opinion and stays out of the UI
-   * (DECISIONS.md §2b), so this is null for all 135 customers today.
+   * The contact's bucket — customer | vendor | personal | spam — and ONLY when
+   * Coy put them there, or Dusty filed them (spam, with Undo: see bucket_auto).
+   * Null is Unsorted. The 'customer' column default on 190 legacy rows is a
+   * default, not a classification, and never shows here (DECISIONS §2b).
    */
-  relation: string | null;
+  bucket: "customer" | "vendor" | "personal" | "spam" | null;
+  /** org_contact_subtypes slug within the bucket, e.g. subcontractor. */
+  subtype: string | null;
+  /** Set when Dusty filed this contact on its own; carries the line it went on. */
+  bucket_auto: { reason: string | null } | null;
   /**
    * The PENDING enrich-contacts proposal for this contact, if there is one.
    *
@@ -197,17 +202,18 @@ export async function GET(req: NextRequest) {
   // Opportunistic names. Expected to return nothing today — see the header.
   // Failure here is not an error: the list is fully usable without it.
   const contactIds = [...byContact.keys()];
-  const names = new Map<string, { name: string | null; phone: string | null; contact_type: string | null; contact_subtype: string | null; customer_id: string | null; name_source: string | null; name_claim_id: string | null }>();
+  const names = new Map<string, { name: string | null; phone: string | null; contact_type: string | null; contact_subtype: string | null; customer_id: string | null; name_source: string | null; name_claim_id: string | null; confirmed: boolean; auto_at: string | null; auto_reason: string | null }>();
   let contactsReadable = false;
   if (contactIds.length > 0) {
     const { data: contacts } = await supabase
       .from("contacts")
-      .select("id, name, phone, contact_type, contact_subtype, customer_id, name_source, name_claim_id")
+      .select("id, name, phone, contact_type, contact_subtype, customer_id, name_source, name_claim_id, classification_confirmed_at, auto_classified_at, auto_classified_reason")
       .in("id", contactIds.slice(0, 1000));
     for (const c of (contacts ?? []) as Array<Record<string, string | null>>) {
       names.set(c.id as string, {
         name: c.name, phone: c.phone,
         contact_type: c.contact_type, contact_subtype: c.contact_subtype,
+        confirmed: !!c.classification_confirmed_at, auto_at: c.auto_classified_at, auto_reason: c.auto_classified_reason,
         customer_id: c.customer_id,
         name_source: c.name_source, name_claim_id: c.name_claim_id,
       });
@@ -303,21 +309,6 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // Confirmed relations only. An unconfirmed enrich-contacts proposal changes
-  // what Coy is asked, never what he is shown (DECISIONS.md §2b).
-  const relationByCustomer = new Map<string, string>();
-  {
-    const { data: rels } = await supabase
-      .from("customers")
-      .select("id, relation, relation_confirmed_at")
-      .eq("org_id", orgId)
-      .in("relation", ["vendor", "sub"])
-      .not("relation_confirmed_at", "is", null);
-    for (const r of (rels ?? []) as Array<{ id: string; relation: string }>) {
-      relationByCustomer.set(r.id, r.relation);
-    }
-  }
-
   const threads: Thread[] = [...byContact.entries()].map(([contactId, { latest, count }]) => {
     // The counterparty is whichever address is not one of ours.
     const from = latest.from_address;
@@ -325,6 +316,8 @@ export async function GET(req: NextRequest) {
     const derived = from && !ours.has(from) ? from : to && !ours.has(to) ? to : from ?? to ?? null;
 
     const c = names.get(contactId);
+    const bucket = c && (c.confirmed || c.auto_at) && ["customer", "vendor", "personal", "spam"].includes(c.contact_type ?? "")
+      ? (c.contact_type as Thread["bucket"]) : null;
     const phone = c?.phone ?? derived;
     const realName = c?.name && c.name.trim() ? c.name.trim() : null;
 
@@ -346,8 +339,10 @@ export async function GET(req: NextRequest) {
       display_name: realName ?? formatPhone(phone),
       name_is_phone: realName === null,
       phone,
-      contact_type: c?.contact_type ?? null,
-      contact_subtype: c?.contact_subtype ?? null,
+      // Only a bucket that counts (confirmed, or filed by Dusty) reaches the
+      // avatar — never the legacy column default.
+      contact_type: bucket,
+      contact_subtype: bucket ? c?.contact_subtype ?? null : null,
       channel: latest.channel,
       direction: latest.direction,
       occurred_at: latest.occurred_at,
@@ -357,7 +352,9 @@ export async function GET(req: NextRequest) {
       msg_count: count,
       job_status: jobByContact.get(contactId)?.status ?? null,
       job_unscoped: jobByContact.get(contactId)?.unscoped ?? false,
-      relation: c?.customer_id ? relationByCustomer.get(c.customer_id) ?? null : null,
+      bucket,
+      subtype: bucket ? c?.contact_subtype ?? null : null,
+      bucket_auto: bucket && !c?.confirmed && c?.auto_at ? { reason: c.auto_reason } : null,
       // NOT folded into display_name above, and never to be. See the field doc.
       proposal: proposalByContact.get(contactId) ?? null,
       auto_name: realName && c?.name_source === "machine" && c.name_claim_id && autoByClaim.has(c.name_claim_id)

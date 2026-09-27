@@ -10,7 +10,7 @@
 
 import {
   PROMPT_VERSION, SYSTEM_PROMPT, findSelfIdentification, relabelTranscript, renderConversation, sanitize,
-  worthEnriching, type Proposal, type Turn,
+  spamSignal, worthEnriching, type Proposal, type Turn,
 } from './rules.ts'
 
 /**
@@ -22,7 +22,7 @@ export type Db = { from: (table: string) => any }
 
 export type Ask = (conversation: string) => Promise<{ ok: true; proposal: Proposal } | { ok: false; error: string }>
 
-export type Outcome = 'proposed' | 'named' | 'unchanged' | 'no_words' | 'model_error' | 'failed'
+export type Outcome = 'proposed' | 'named' | 'filed' | 'unchanged' | 'no_words' | 'model_error' | 'failed'
 
 export interface ReadResult {
   outcome: Outcome
@@ -54,7 +54,9 @@ export async function pingHermes(cfg: HermesConfig): Promise<{ ok: boolean; deta
 export function hermesAsk(cfg: HermesConfig): Ask {
   return async (conversation) => {
     const ctrl = new AbortController()
-    const timer = setTimeout(() => ctrl.abort(), 45_000)
+    // Hermes answers in 20-85 s (measured 2026-09-27); a small model direct
+    // is under 10. 90 s rather than fail a third of reads while that is fixed.
+    const timer = setTimeout(() => ctrl.abort(), 90_000)
     try {
       const res = await fetch(`${cfg.url.replace(/\/+$/, '')}/v1/chat/completions`, {
         method: 'POST', signal: ctrl.signal,
@@ -202,6 +204,31 @@ export async function applySelfIdentified(sb: Db, orgId: string, contactId: stri
   return { claim_id: claim.id as string, note: hit.quote }
 }
 
+/**
+ * File a contact as spam — the one bucket Dusty sets itself (Coy, 2026-09-27),
+ * shown as Auto with Undo. Only when the model said spam AND spamSignal()
+ * finds the evidence in their words AND Coy never wrote or called back, and
+ * only onto a contact nobody has sorted and Coy has not un-filed before.
+ */
+export async function applyAutoSpam(sb: Db, orgId: string, contactId: string, turns: Turn[], phone: string | null)
+  : Promise<{ filed: boolean; note: string }> {
+  if (turns.some((t) => t.who === 'US')) return { filed: false, note: 'Coy has replied to them' }
+  const sig = spamSignal(turns, phone)
+  if (!sig) return { filed: false, note: 'no spam evidence in their words' }
+  const { data: rows, error } = await sb.from('contacts')
+    .update({
+      contact_type: 'spam', contact_subtype: null, classification_source: 'machine',
+      auto_classified_at: new Date().toISOString(), auto_classified_reason: sig.quote,
+    })
+    .eq('org_id', orgId).eq('id', contactId)
+    .is('classification_confirmed_at', null).is('auto_classify_blocked_at', null).is('auto_classified_at', null)
+    .select('id')
+  if (error) return { filed: false, note: `contacts: ${error.message}` }
+  return ((rows ?? []) as unknown[]).length
+    ? { filed: true, note: sig.quote }
+    : { filed: false, note: 'already sorted, or Coy un-filed it before' }
+}
+
 // ---------------------------------------------------------------------------
 // One contact, start to finish
 // ---------------------------------------------------------------------------
@@ -249,6 +276,10 @@ export async function readContact(sb: Db, orgId: string, contactId: string, ask:
   }).select('id').single()
   if (insErr || !ins) return { outcome: 'failed', note: `proposal: ${insErr?.message ?? 'not written'}` }
 
+  if (p.classification === 'spam') {
+    const spam = await applyAutoSpam(sb, orgId, contactId, turns, numbers[0] ?? null)
+    if (spam.filed) return { outcome: 'filed', proposal_id: ins.id as string, note: spam.note }
+  }
   const auto = await applySelfIdentified(sb, orgId, contactId, p, turns, model)
   return auto.claim_id
     ? { outcome: 'named', proposal_id: ins.id as string, claim_id: auto.claim_id, note: auto.note }

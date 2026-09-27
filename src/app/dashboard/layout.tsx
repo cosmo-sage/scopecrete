@@ -126,7 +126,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       .then((d) => {
         if (off) return;
         if (typeof d?.counts?.needs === "number") setNeeds(d.counts.needs);
-        if (typeof d?.counts?.unsorted === "number") setUnnamed(d.counts.unsorted);
+        if (typeof d?.counts?.unnamed === "number") setUnnamed(d.counts.unnamed);
       })
       .catch(() => {})
       .finally(() => { if (!off) setCountsLoading(false); });

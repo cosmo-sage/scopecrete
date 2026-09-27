@@ -8,7 +8,7 @@
  * the guarantee; the prompt is only a request.
  */
 
-export const PROMPT_VERSION = 'enrich-v5-hermes-2026-09-27'
+export const PROMPT_VERSION = 'enrich-v6-buckets-2026-09-27'
 
 export const OUR_NAMES = ['Coy', 'Coy Sacco', 'Sacco', 'Sacco Builders', 'ScopeCrete', 'Dusty']
 
@@ -69,13 +69,17 @@ A customer sounds like the mirror image:
 
 They ask what it costs THEM and when WE can start.
 
-THE FIVE VALUES
+THE SIX VALUES
   customer  — money flows from them to us. They are buying work.
-  vendor    — money flows from us to them for MATERIALS or EQUIPMENT
-              (supplier, batch plant, rental yard).
+  vendor    — money flows from us to them for MATERIALS, EQUIPMENT or
+              SERVICES (supplier, batch plant, rental yard, lead-generation
+              service, someone selling us blades or software).
   sub       — money flows from us to them for LABOUR. They offer crews,
-              availability, or their own trade.
-  not_work  — personal, spam, robocall, wrong number, political texts.
+              availability, or their own trade — including someone asking US
+              for work as a laborer or independent contractor.
+  personal  — family, friends, personal errands. Not the business at all.
+  spam      — robocalls, verification codes, marketing blasts, scams, wrong
+              numbers, political texts. Nobody is asking for or offering work.
   unknown   — the direction of the ask is genuinely not visible in the text.
 
 If you cannot see the direction, the answer is "unknown". Do not fall back to
@@ -161,7 +165,7 @@ project_type too — it is the work being discussed, not a classification.
 
 Return ONLY a JSON object, no prose, no code fence:
 {
-  "classification": "customer|vendor|sub|not_work|unknown",
+  "classification": "customer|vendor|sub|personal|spam|unknown",
   "direction_of_ask": string,
   "confidence": 0-100,
   "proposed_name": string|null,
@@ -313,7 +317,8 @@ export interface Proposal {
   name_reasoning: string
 }
 
-export const VALID_CLASS = ['customer', 'vendor', 'sub', 'not_work', 'unknown']
+// not_work was v5's single value for personal + spam; still accepted from older answers.
+export const VALID_CLASS = ['customer', 'vendor', 'sub', 'personal', 'spam', 'not_work', 'unknown']
 export const VALID_PROJECT = ['driveway', 'patio', 'slab', 'foundation', 'sidewalk',
                        'apron', 'demo', 'repair', 'commercial', 'other']
 
@@ -525,4 +530,42 @@ export function findSelfIdentification(name: string | null, turns: Turn[], ownNu
   const names = introducedNames(all)
   for (const other of names) if (other !== first) return null
   return hit
+}
+
+// ---------------------------------------------------------------------------
+// Spam — the one bucket Dusty files on its own
+// ---------------------------------------------------------------------------
+
+/**
+ * Evidence, independent of the model, that a thread is spam.
+ *
+ * Coy (2026-09-27): Dusty may file obvious spam itself, with Undo. The model
+ * saying "spam" is not enough; one of these must hold in THEIR words:
+ *   - the sender is a short code, not a phone number (5–6 digit senders);
+ *   - a one-time passcode / verification code;
+ *   - marketing opt-out language ("reply STOP", "to opt out", "unsubscribe");
+ *   - a stock scam line (car warranty, final notice, pre-approved, you've won).
+ * And Coy must never have written or called back — anyone he has answered is
+ * someone he might want, so that is always his call (the caller checks).
+ */
+export interface SpamSignal { kind: 'short_code' | 'passcode' | 'opt_out' | 'scam'; quote: string }
+
+const SPAM_RULES: Array<{ kind: SpamSignal['kind']; re: RegExp }> = [
+  { kind: 'passcode', re: /\b(one[- ]time pass(word|code)|verification code|security code|your (login |sign[- ]in )?code is|is your [\w .'-]{0,40}(code|password|pin)\b)/i },
+  { kind: 'opt_out', re: /\b((reply|text) stop\b|to opt[- ]?out\b|unsubscribe\b|msg ?& ?data rates)/i },
+  { kind: 'scam', re: /\b((car|vehicle|auto) warranty|final notice|pre-?approved for|you('ve| have) (been selected|won)|claim your (prize|reward))/i },
+]
+
+export function spamSignal(turns: Turn[], contactPhone: string | null): SpamSignal | null {
+  const digits = (contactPhone ?? '').replace(/\D/g, '')
+  const theirs = turns.filter(t => t.who === 'THEM' && t.kind === 'sms' && t.text !== '(no text)')
+  if (digits && digits.length <= 6) {
+    return { kind: 'short_code', quote: (theirs[0]?.text ?? `Short-code sender ${contactPhone}`).slice(0, 400) }
+  }
+  for (const t of theirs) {
+    for (const line of t.text.split(/\r?\n/)) {
+      for (const r of SPAM_RULES) if (r.re.test(line)) return { kind: r.kind, quote: line.trim().slice(0, 400) }
+    }
+  }
+  return null
 }

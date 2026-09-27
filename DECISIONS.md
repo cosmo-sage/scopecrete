@@ -298,9 +298,11 @@ confirmation, so a confirmed vendor or sub is suppressed by the guard; the
 screen says so before the tap. The list shows a relation only when it is
 confirmed — everything else is **Unclassified**, never the column default.
 
-**The background enricher (2026-09-27, migrations 029/030).** Contacts are
+**The background enricher (2026-09-27, migrations 029–033).** Contacts are
 read with the app closed. pg_cron calls the `enrich-contacts` edge function
-every five minutes (v3; source in `supabase/functions/enrich-contacts/`:
+every minute (v6; 4 readers, each claiming one contact at a time until the
+queue is empty or 45 s have passed, so a backlog drains in minutes; source in
+`supabase/functions/enrich-contacts/`:
 `rules.ts` the rules, `pipeline.ts` one contact, `index.ts` the worker). There
 is no button.
 
@@ -326,6 +328,10 @@ is no button.
   not_configured / hermes_unreachable / error. The activity line under the
   header (§6) shows it, with every read and the org's waiting count
   (`/api/activity`, `sc_enrich_status()` under RLS).
+- **Hermes is slow** — measured 2026-09-27, successful reads take 20–85 s
+  (a small model direct is under 10) and a third timed out at 55 s. The
+  model timeout is 90 s while the cause on the VPS is found; failed reads
+  retry after 30 minutes on their own.
 - **Pause** — `select cron.unschedule('enrich-contacts');`
 
 The in-app `/api/enrich` route and its button/15-minute browser runner are
@@ -359,6 +365,27 @@ re-applied) — `PATCH /api/name-claims/[id]`. Dry run against the live data on
 Everything else is unchanged. A customer / sub / vendor call is NEVER applied
 automatically — it can hide a real lead — and a name from anywhere other than
 the person's own introduction is still a suggestion to confirm.
+
+**Buckets — one classification (migration 032, 2026-09-27).** Threads
+sorts PEOPLE into four buckets: **customer · vendor · personal · spam**
+(synopsis §5.3: buckets are code, types are data — `org_contact_subtypes`;
+people looking for work are vendor / `looking_for_work`, subs are vendor /
+`subcontractor`). `contacts.contact_type` is the truth. `customers.relation`
+used to be a second, overlapping system; it is now kept in step by
+`sc_classify_contact()`, the one writer (vendor → `vendor`, or `sub` for
+subcontractor / looking for work; customer → `customer`), so the quo-intake
+lead guard keeps working unchanged. A bucket shows only when
+`classification_confirmed_at` (Coy put them there) or `auto_classified_at`
+(Dusty filed them — spam only) is set; everyone else is **Unsorted**. The
+190 legacy `'customer'` defaults are not customers.
+
+**Spam is the one bucket Dusty files itself** (Coy, 2026-09-27), shown as
+"Spam · auto" with **Not spam** in the row. Only when the model says spam AND
+`spamSignal()` finds evidence in their words (short-code sender, one-time
+passcode, "reply STOP" opt-out, stock scam line) AND Coy has never written
+or called back, onto a contact nobody has sorted. Not spam → back to Unsorted,
+`auto_classify_blocked_at` set, never auto-filed again. Dry run 2026-09-27:
+one contact qualifies (Handoff one-time passwords). Filed spam is not re-read.
 
 An `enrich-contacts` proposal is an opinion. It can raise the question — "this
 looks like a sub, confirm?" — and once a human answers, the answer is load
@@ -505,6 +532,13 @@ expected start date per quoted job before it means anything. Add the field.
 ## 6. Interface rules
 
 - ScopeCrete header is sticky on every page.
+- **Threads is people, Jobs is work (2026-09-27).** Threads chips are the
+  buckets: Customers · Vendors · Unsorted · All up front; Needs you, Today,
+  Personal, Spam behind the filter. Spam shows only under its own chip. One
+  tap in an expanded row files a person (Dusty's guess dashed, the confirmed
+  bucket solid, then an optional type). Job stages — New lead, Consultation,
+  Estimating, Follow up, W.I.P., Complete, Lost — are the Jobs board
+  (Scope renamed Jobs), a Kanban, not Threads chips.
 - Cash flow is a footer TAB, not a slide-out drawer — a side drawer's
   horizontal swipe fights the ribbon's horizontal swipe.
 - Settings opens from the header menu. Fixed costs live there AND open from

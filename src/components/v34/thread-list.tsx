@@ -54,7 +54,11 @@ interface Thread {
   msg_count: number;
   job_status: string | null;
   job_unscoped: boolean;
-  relation: string | null;
+  /** Customer · Vendor · Personal · Spam — confirmed, or filed by Dusty. Null = Unsorted. */
+  bucket: Bucket | null;
+  subtype: string | null;
+  /** Dusty filed this one itself (spam), with the line it went on. */
+  bucket_auto: { reason: string | null } | null;
   proposal: Proposal | null;
   /** Applied because they introduced themselves; Keep or Undo in the row. */
   auto_name: { claim_id: string; quote: string | null; channel: string | null } | null;
@@ -90,23 +94,27 @@ interface Proposal {
 }
 
 type Counts = Record<string, number>;
+type Bucket = "customer" | "vendor" | "personal" | "spam";
+type Subtype = { bucket: Bucket; slug: string; label: string };
 
-/** v34's FILTERS (L3543) minus `drafts`. `c` is the count pill's colour. */
+/**
+ * Threads sorts PEOPLE (DECISIONS §6): the four buckets plus Unsorted. Job
+ * stages — lead, quoted, pouring, won — are the Jobs board, not chips here.
+ * `c` is the count pill's colour.
+ */
 const CHIPS: Array<{ k: string; l: string; c: string | null }> = [
-  { k: "today", l: "Today", c: T.ink },
-  { k: "needs", l: "Needs you", c: T.hiviz },
+  { k: "customers", l: "Customers", c: T.green },
+  { k: "vendors", l: "Vendors", c: T.chalk },
   { k: "unsorted", l: "Unsorted", c: T.hiviz },
-  { k: "unscoped", l: "Unscoped", c: T.chalk },
-  { k: "quoted", l: "Quoted", c: T.violet },
-  { k: "progress", l: "Pouring", c: "#0E6F63" },
-  { k: "won", l: "Won", c: null },
-  { k: "lost", l: "Lost", c: null },
-  { k: "vendors", l: "Vendors", c: null },
   { k: "all", l: "All", c: null },
+  { k: "needs", l: "Needs you", c: T.hiviz },
+  { k: "today", l: "Today", c: T.ink },
+  { k: "personal", l: "Personal", c: T.violet },
+  { k: "spam", l: "Spam", c: null },
 ];
 
-/** The three you reach for. The rest live behind the funnel. */
-const FRONT = ["today", "needs", "unsorted"];
+/** Up front. The rest live behind the funnel. */
+const FRONT = ["customers", "vendors", "unsorted"];
 
 /** Local midnight, so "today" means the viewer's today rather than UTC's. */
 function isToday(iso: string | null): boolean {
@@ -120,17 +128,17 @@ function isToday(iso: string | null): boolean {
 }
 
 function matches(t: Thread, k: string): boolean {
+  // Spam shows only under its own chip.
+  if (k !== "spam" && t.bucket === "spam") return false;
   switch (k) {
     case "all": return true;
     case "today": return isToday(t.occurred_at);
     case "needs": return t.direction === "inbound";
-    case "unsorted": return t.name_is_phone;
-    case "unscoped": return t.job_unscoped;
-    case "quoted": return t.job_status === "quoted";
-    case "progress": return t.job_status === "in_progress";
-    case "won": return t.job_status === "won";
-    case "lost": return t.job_status === "lost";
-    case "vendors": return t.relation === "vendor" || t.relation === "sub";
+    case "unsorted": return t.bucket === null;
+    case "customers": return t.bucket === "customer";
+    case "vendors": return t.bucket === "vendor";
+    case "personal": return t.bucket === "personal";
+    case "spam": return t.bucket === "spam";
     default: return true;
   }
 }
@@ -139,14 +147,93 @@ function matches(t: Thread, k: string): boolean {
 const WHY_EMPTY: Record<string, string> = {
   today: "Nothing has come in today. The list is not broken — the phone is quiet.",
   needs: "Every thread's last word is yours. Nothing is waiting on a reply.",
-  unsorted: "Every contact carrying messages has a name on it.",
-  unscoped: "No job is missing its sections. There are no jobs at all yet.",
-  quoted: "No job has reached quoted. Nothing has been priced — estimates is empty.",
-  progress: "No job is pouring.",
-  won: "No job has been won yet.",
-  lost: "No job has been marked lost.",
-  vendors: "No contact has a CONFIRMED vendor or sub relation. 190 of 197 carry the 'customer' default, which is a default and not a classification — nothing has actually been classified yet.",
+  unsorted: "Everyone who has called or texted is in a bucket.",
+  customers: "Nobody is filed as a customer yet. Open a thread in Unsorted and tap Customer.",
+  vendors: "Nobody is filed as a vendor yet — subs, suppliers, rental yards and people looking for work go here.",
+  personal: "Nobody is filed as personal.",
+  spam: "Nothing is filed as spam.",
 };
+
+/* ------------------------------------------------------------- buckets */
+
+const BUCKETS: Array<{ k: Bucket; l: string; c: string }> = [
+  { k: "customer", l: "Customer", c: T.green },
+  { k: "vendor", l: "Vendor", c: T.chalk },
+  { k: "personal", l: "Personal", c: T.violet },
+  { k: "spam", l: "Spam", c: T.ink3 },
+];
+
+/** Dusty's classification, as the bucket it points at. */
+const SUGGESTS: Record<string, Bucket> = {
+  customer: "customer", vendor: "vendor", sub: "vendor", personal: "personal", spam: "spam",
+};
+
+/**
+ * One tap to sort a person. Dusty's guess is outlined; the confirmed bucket is
+ * solid. After a bucket, the types under it (from org_contact_subtypes) are one
+ * more optional tap. Filing someone as a vendor or sub also stops quo-intake
+ * making leads for them (sc_classify_contact keeps the lead guard in step).
+ */
+function BucketPicker({ t, busy, subtypes, onPick }: {
+  t: Thread; busy: boolean; subtypes: Subtype[];
+  onPick: (bucket: Bucket | null, subtype?: string | null) => void;
+}) {
+  const guess = !t.bucket && t.proposal ? SUGGESTS[t.proposal.classification] ?? null : null;
+  const guessSub = guess === "vendor" && t.proposal?.classification === "sub" ? "subcontractor" : null;
+  const types = t.bucket ? subtypes.filter((x) => x.bucket === t.bucket) : [];
+  const chip = (on: boolean, hint: boolean, colour: string): React.CSSProperties => ({
+    height: 30, padding: "0 11px", borderRadius: 3, fontFamily: disp, fontSize: F.sm,
+    letterSpacing: ".04em", textTransform: "uppercase", cursor: busy ? "default" : "pointer",
+    opacity: busy ? 0.5 : 1,
+    border: `1.5px ${hint ? "dashed" : "solid"} ${on || hint ? colour : T.hair}`,
+    background: on ? colour : T.card, color: on ? "#fff" : hint ? colour : T.ink2,
+  });
+
+  if (t.bucket_auto) {
+    return (
+      <div className="mt-2 rounded" style={{ background: T.card, border: `1px solid ${T.hair}`, padding: 10 }}>
+        <div style={{ ...eyebrow, color: T.chalk }}>Filed as spam by Dusty</div>
+        {t.bucket_auto.reason && (
+          <div style={{ fontSize: F.xs, color: T.ink2, marginTop: 5, paddingLeft: 8, borderLeft: `2px solid ${T.chalk}`, fontStyle: "italic" }}>
+            “{t.bucket_auto.reason.length > 200 ? `${t.bucket_auto.reason.slice(0, 200)}…` : t.bucket_auto.reason}”
+          </div>
+        )}
+        <div className="flex gap-1.5 flex-wrap" style={{ marginTop: 8 }}>
+          <button disabled={busy} style={chip(true, false, T.ink)} onClick={() => onPick("spam")}>Keep as spam</button>
+          <button disabled={busy} style={chip(false, false, T.ink)} onClick={() => onPick(null)}>Not spam</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-2">
+      <div style={{ ...eyebrow, color: T.ink3, marginBottom: 4 }}>
+        {t.bucket ? "Filed as" : guess ? `Dusty thinks ${BUCKETS.find((b) => b.k === guess)?.l.toLowerCase()} — tap to file` : "What are they?"}
+      </div>
+      <div className="flex gap-1.5 flex-wrap">
+        {BUCKETS.map((b) => (
+          <button key={b.k} disabled={busy} style={chip(t.bucket === b.k, guess === b.k, b.c)}
+            onClick={() => onPick(t.bucket === b.k ? null : b.k, t.bucket === b.k ? null : guess === b.k ? guessSub : null)}>
+            {b.l}
+          </button>
+        ))}
+      </div>
+      {types.length > 0 && (
+        <div className="flex gap-1 flex-wrap" style={{ marginTop: 6 }}>
+          {types.map((x) => (
+            <button key={x.slug} disabled={busy} onClick={() => onPick(t.bucket, t.subtype === x.slug ? null : x.slug)}
+              className="rounded-full px-2.5"
+              style={{ height: 26, fontSize: F.xs, cursor: "pointer", border: `1px solid ${t.subtype === x.slug ? T.ink : T.hair}`,
+                       background: t.subtype === x.slug ? T.ink : T.card, color: t.subtype === x.slug ? "#fff" : T.ink2 }}>
+              {x.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 /* ------------------------------------------------------------- the review */
 
@@ -157,16 +244,6 @@ const CLASS_LABEL: Record<string, string> = {
   personal: "personal", spam: "spam",
 };
 
-/** Only these three can be written — `customers.relation` allows nothing else. */
-const CONFIRMABLE = ["customer", "vendor", "sub"];
-
-/** Why a classification cannot be confirmed. Mirrors the route's NOT_A_RELATION. */
-const CANNOT_CONFIRM: Record<string, string> = {
-  unknown: "Couldn't tell which way the ask runs — nothing to confirm.",
-  not_work: "Spam or a wrong number. There's nowhere to record that yet.",
-  personal: "Personal, not work. There's nowhere to record that yet.",
-  spam: "Spam. There's nowhere to record that yet.",
-};
 
 /**
  * The proposal, shown as a question with its evidence attached.
@@ -190,7 +267,6 @@ function ProposalReview({ p, onDecide, busy, nameOn }: {
   const [draft, setDraft] = useState(p.proposed_name ?? "");
 
   const who = [p.proposed_name, p.proposed_company].filter(Boolean).join(" · ");
-  const canConfirmRelation = CONFIRMABLE.includes(p.classification);
 
   // The scope seed. Read-only: nothing applies these yet, and a field that
   // looks actionable but writes nothing is worse than one that looks inert.
@@ -268,30 +344,6 @@ function ProposalReview({ p, onDecide, busy, nameOn }: {
         )}
       </div>}
 
-      {/* ---- classification ---- */}
-      <div className="flex items-center gap-1.5 flex-wrap" style={{ marginTop: 6 }}>
-        <span style={{ ...eyebrow, color: T.ink3, minWidth: 54 }}>Is</span>
-        {canConfirmRelation ? (
-          <>
-            <button disabled={busy} style={btn(true)} onClick={() => onDecide({ relation: "accept" })}>
-              Confirm {p.classification}
-            </button>
-            <button disabled={busy} style={btn()} onClick={() => onDecide({ relation: "reject" })}>Reject</button>
-          </>
-        ) : (
-          // `unknown` and `not_work` have nowhere to land — customers.relation
-          // is customer|vendor|sub. Saying so beats a button that 400s.
-          <span style={{ fontSize: F.xs, color: T.ink3, fontStyle: "italic" }}>
-            {CANNOT_CONFIRM[p.classification] ?? `"${p.classification}" is not a relation this system records.`}
-            {" "}
-            <button disabled={busy} onClick={() => onDecide({ relation: "reject" })}
-              style={{ ...eyebrow, color: T.chalk, textDecoration: "underline", cursor: "pointer" }}>
-              Dismiss
-            </button>
-          </span>
-        )}
-      </div>
-
       {caught.length > 0 && (
         <div style={{ marginTop: 8, paddingTop: 6, borderTop: `1px solid #C9D9F5` }}>
           <div style={{ ...eyebrow, color: T.ink3 }}>Also caught — not applied anywhere yet</div>
@@ -343,12 +395,15 @@ function AutoNameStrip({ a, name, busy, onName }: {
 
 /* -------------------------------------------------------------------- row */
 
-function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, onName, deciding }: {
+function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, onName, onBucket, subtypes, deciding }: {
   t: Thread; first: boolean; expanded: boolean; onToggle: () => void; onOpen: () => void;
   onDecide: (proposalId: string, body: Record<string, unknown>) => void;
   onName: (claimId: string, action: "keep" | "undo") => void;
+  onBucket: (contactId: string, bucket: Bucket | null, subtype?: string | null) => void;
+  subtypes: Subtype[];
   deciding: boolean;
 }) {
+  const badge = t.bucket ? BUCKETS.find((b) => b.k === t.bucket) : null;
   const when = relTime(t.occurred_at);
   const isVoicemail = t.summary_source === "quo_voicemail";
   const synthesised = t.preview_source === "synthesised";
@@ -370,6 +425,12 @@ function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, onName, dec
             {t.auto_name && (
               <span className="shrink-0" title="Named from their own words — not yet kept by you"
                 style={{ ...eyebrow, color: T.chalk }}>Auto</span>
+            )}
+            {badge && (
+              <span className="shrink-0" title={t.bucket_auto ? "Filed by Dusty — Undo in the row" : undefined}
+                style={{ ...eyebrow, color: badge.c }}>
+                {badge.l}{t.bucket_auto ? " · auto" : ""}
+              </span>
             )}
             <span className="flex-1" />
             {t.msg_count > 1 && <span style={{ fontSize: F.micro, color: T.ink3, ...nums }}>{t.msg_count}</span>}
@@ -426,6 +487,9 @@ function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, onName, dec
             <AutoNameStrip a={t.auto_name} name={t.display_name} busy={deciding}
               onName={(action) => onName(t.auto_name!.claim_id, action)} />
           )}
+
+          <BucketPicker t={t} busy={deciding} subtypes={subtypes}
+            onPick={(bucket, subtype) => onBucket(t.contact_id, bucket, subtype)} />
 
           {t.proposal && (
             <ProposalReview p={t.proposal} busy={deciding}
@@ -498,6 +562,32 @@ export function ThreadList() {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
+      });
+      const b = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(b?.error || `HTTP ${r.status}`);
+      setReload((n) => n + 1);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setDeciding(false);
+    }
+  }, []);
+
+  // The types under each bucket — data, not code (org_contact_subtypes).
+  const [subtypes, setSubtypes] = useState<Subtype[]>([]);
+  useEffect(() => {
+    let off = false;
+    fetch("/api/contacts/subtypes").then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (!off && Array.isArray(d?.subtypes)) setSubtypes(d.subtypes); }).catch(() => {});
+    return () => { off = true; };
+  }, []);
+
+  /** One tap: put a person in a bucket (or back to Unsorted with null). */
+  const bucketDecide = useCallback(async (contactId: string, bucket: Bucket | null, subtype?: string | null) => {
+    setDeciding(true);
+    try {
+      const r = await fetch(`/api/contacts/${contactId}/bucket`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ bucket, subtype: subtype ?? null }),
       });
       const b = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(b?.error || `HTTP ${r.status}`);
@@ -724,7 +814,7 @@ export function ThreadList() {
               expanded={openRow === t.contact_id}
               onToggle={() => setOpenRow(openRow === t.contact_id ? null : t.contact_id)}
               onOpen={() => router.push(`/dashboard/messages/${t.contact_id}`)}
-              onDecide={decide} onName={nameDecide} deciding={deciding} />
+              onDecide={decide} onName={nameDecide} onBucket={bucketDecide} subtypes={subtypes} deciding={deciding} />
           ))}
         </div>
       )}

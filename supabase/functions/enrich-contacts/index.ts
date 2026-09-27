@@ -1,7 +1,7 @@
 /**
  * enrich-contacts — the background enricher. ScopeCrete, project cxiusuewtrvcpqequueh.
  *
- * pg_cron calls this every five minutes (migration 030), so contacts get read
+ * pg_cron calls this every minute (migration 031), so contacts get read
  * with the app closed. Each call:
  *
  *   1. checks the caller's bearer token against the vault secret
@@ -10,10 +10,13 @@
  *      401 and nothing else;
  *   2. checks Hermes is configured and reachable BEFORE claiming anyone, so an
  *      outage never marks contacts as read;
- *   3. claims up to BATCH due contacts (sc_enrich_claim, view sc_enrich_due:
- *      unnamed, something THEY said, quiet 3 minutes, changed since last read);
- *   4. reads each one (pipeline.ts): a suggestion into contact_proposals, and
- *      the name itself only when the person introduced themselves
+ *   3. keeps claiming due contacts one at a time, CONCURRENCY at once, until
+ *      the queue is empty or CLAIM_BUDGET_MS has passed (sc_enrich_claim, view
+ *      sc_enrich_due: unnamed, something THEY said, quiet 3 minutes, changed
+ *      since last read);
+ *   4. reads each one (pipeline.ts): a suggestion into contact_proposals; the
+ *      name itself only when the person introduced themselves; and the spam
+ *      bucket only on evidence in their words from someone Coy never answered
  *      (DECISIONS §2b). customers.relation is never written here.
  *   5. records every outcome in contact_enrich_runs and a pulse in
  *      sc_worker_heartbeats.
@@ -37,8 +40,15 @@ const WORKER = 'enrich-contacts'
 /** DECISIONS §8: Hermes alone on its own Funnel port. Not a secret — the key is. */
 const DEFAULT_HERMES_URL = 'https://srv1594563.tail0f2914.ts.net:8443'
 const DEFAULT_MODEL = 'anthropic/claude-3.5-haiku'
-const BATCH = 6
-const CONCURRENCY = 3
+/** Readers working at once. Each claims one contact, reads it, claims the next. */
+const CONCURRENCY = 4
+/**
+ * Stop claiming new contacts after this long. A read can take up to the model
+ * timeout (90 s) past it, which keeps a run inside the 150 s wall clock.
+ * pg_cron starts a run every minute and the claim lock keeps overlapping runs
+ * off each other's contacts, so a backlog drains continuously.
+ */
+const CLAIM_BUDGET_MS = 45_000
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? ''
 // SUPABASE_SECRET_KEY (sb_secret_…) first, the injected legacy key second —
@@ -57,24 +67,24 @@ async function beat(sb: any, status: 'ok' | 'not_configured' | 'hermes_unreachab
 }
 
 // deno-lint-ignore no-explicit-any
-async function runBatch(sb: any, cfg: HermesConfig, limit: number) {
-  const { data: claimed, error } = await sb.rpc('sc_enrich_claim', { p_limit: limit })
-  if (error) {
-    await beat(sb, 'error', `claim failed: ${error.message}`)
-    return { error: 'claim failed' }
-  }
-  const queue = (claimed ?? []) as Array<{ run_id: string; org_id: string; contact_id: string }>
+async function runBatch(sb: any, cfg: HermesConfig, maxReads: number) {
+  const started = Date.now()
   const counts: Record<Outcome | 'claimed', number> = {
-    claimed: queue.length, proposed: 0, named: 0, unchanged: 0, no_words: 0, model_error: 0, failed: 0,
+    claimed: 0, proposed: 0, named: 0, filed: 0, unchanged: 0, no_words: 0, model_error: 0, failed: 0,
   }
   const ask = hermesAsk(cfg)
   const model = `hermes:${cfg.model}`
   let firstModelError: string | null = null
+  let claimError: string | null = null
+  let drained = false
 
-  let i = 0
   async function worker() {
-    while (i < queue.length) {
-      const job = queue[i++]
+    while (!drained && !claimError && counts.claimed < maxReads && Date.now() - started < CLAIM_BUDGET_MS) {
+      const { data: claimed, error } = await sb.rpc('sc_enrich_claim', { p_limit: 1 })
+      if (error) { claimError = error.message; return }
+      const job = ((claimed ?? []) as Array<{ run_id: string; org_id: string; contact_id: string }>)[0]
+      if (!job) { drained = true; return }
+      counts.claimed++
       let outcome: Outcome = 'failed'
       let fields: Record<string, unknown> = {}
       try {
@@ -93,11 +103,12 @@ async function runBatch(sb: any, cfg: HermesConfig, limit: number) {
   }
   await Promise.all(Array.from({ length: CONCURRENCY }, worker))
 
-  // A batch where every read hit a model error is a configuration problem
-  // (wrong key, model gone), and the app should say so.
-  if (queue.length && counts.model_error === queue.length) await beat(sb, 'error', firstModelError ?? 'every read failed')
-  else await beat(sb, 'ok', queue.length ? 'last batch finished' : 'nothing due')
-  console.log('enrich batch', JSON.stringify(counts))
+  if (claimError) await beat(sb, 'error', `claim failed: ${claimError}`)
+  // Every read hitting a model error is a configuration problem (wrong key,
+  // model gone) and the app should say so. Some timeouts are just Hermes.
+  else if (counts.claimed && counts.model_error === counts.claimed) await beat(sb, 'error', firstModelError ?? 'every read failed')
+  else await beat(sb, 'ok', counts.claimed ? 'last batch finished' : 'nothing due')
+  if (counts.claimed) console.log('enrich batch', JSON.stringify(counts))
   return counts
 }
 
@@ -129,8 +140,8 @@ Deno.serve(async (req: Request) => {
     return json({ code: 'hermes_unreachable', detail: health.detail }, 502)
   }
 
-  const limit = Math.min(Math.max(Number(body.limit) || BATCH, 1), 12)
-  const work = runBatch(sb, cfg, limit)
+  const maxReads = Math.min(Math.max(Number(body.limit) || 200, 1), 200)
+  const work = runBatch(sb, cfg, maxReads)
   if (body.wait || typeof EdgeRuntime === 'undefined') return json(await work)
   EdgeRuntime.waitUntil(work)
   return json({ accepted: true }, 202)

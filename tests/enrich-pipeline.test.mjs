@@ -40,7 +40,7 @@ function fakeDb(answer) {
 
 const eq = (q, col) => q.filters.find((f) => f[0] === "eq" && f[1] === col)?.[2];
 
-function world({ texts = [], calls = null, contact = { name: null, name_source: "legacy", phone: PHONE }, pending = null, undone = [] }) {
+function world({ texts = [], calls = null, contact = { name: null, name_source: "legacy", phone: PHONE, classification_confirmed_at: null }, pending = null, undone = [] }) {
   return fakeDb((q) => {
     if (q.table !== "contacts" && q.table !== "contact_phones" && q.op === "select") {
       assert.equal(eq(q, "org_id"), ORG, `${q.table} read without the org filter`);
@@ -160,4 +160,32 @@ test("a call transcript reaches the model as US/THEM, never phone numbers, and s
   assert.doesNotMatch(ask.calls[0], /\d{10}/);
   assert.equal(r.outcome, "named", "a call Coy placed still names the person who answered");
   assert.equal(writes(db, "contact_name_claims", "insert")[0].payload.channel, "call");
+});
+
+test("spam with evidence, from someone Coy never answered, is filed — marked auto", async () => {
+  const db = world({ texts: [["THEM", "602153 is your Handoff One Time Password."]] });
+  const r = await readContact(db, ORG, CONTACT, model(proposal({ classification: "spam" })), "hermes:test");
+  assert.equal(r.outcome, "filed");
+  const [upd] = writes(db, "contacts", "update");
+  assert.equal(upd.payload.contact_type, "spam");
+  assert.equal(upd.payload.classification_source, "machine");
+  assert.ok(upd.payload.auto_classified_at);
+  assert.equal(upd.payload.auto_classified_reason, "602153 is your Handoff One Time Password.");
+  for (const col of ["classification_confirmed_at", "auto_classify_blocked_at", "auto_classified_at"]) {
+    assert.ok(upd.filters.some((f) => f[0] === "is" && f[1] === col && f[2] === null), `must require ${col} is null`);
+  }
+});
+
+test("never files someone Coy has written back to", async () => {
+  const db = world({ texts: [["THEM", "602153 is your Handoff One Time Password."], ["US", "who is this?"]] });
+  const r = await readContact(db, ORG, CONTACT, model(proposal({ classification: "spam" })), "hermes:test");
+  assert.equal(r.outcome, "proposed");
+  assert.equal(writes(db, "contacts", "update").length, 0);
+});
+
+test("the model saying spam is not enough without evidence", async () => {
+  const db = world({ texts: [["THEM", "Hi, are you the concrete guy? Call me back"]] });
+  const r = await readContact(db, ORG, CONTACT, model(proposal({ classification: "spam" })), "hermes:test");
+  assert.equal(r.outcome, "proposed");
+  assert.equal(writes(db, "contacts", "update").length, 0);
 });

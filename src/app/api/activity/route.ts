@@ -36,7 +36,7 @@ export interface ActivityItem {
 }
 
 const CLASS: Record<string, string> = {
-  customer: "a customer", vendor: "a vendor", sub: "a sub", not_work: "not work",
+  customer: "a customer", vendor: "a vendor", sub: "a sub", personal: "personal", spam: "spam", not_work: "not work",
 };
 
 type Run = {
@@ -107,6 +107,10 @@ export async function GET(req: NextRequest) {
           tone: bits.length ? "ask" : "quiet" });
         break;
       }
+      case "filed":
+        items.push({ ...base, summary: `Filed ${who} as spam${r.note ? ` — “${clipq(r.note, 50)}”` : ""}`,
+          detail: r.note ? `Their message: “${clipq(r.note, 400)}”. Not spam? Open the row and tap Not spam.` : null, tone: "quiet" });
+        break;
       case "model_error": case "failed": case "abandoned":
         items.push({ ...base, summary: `Couldn't read ${who}${r.note ? ` — ${clipq(r.note, 50)}` : ""}`, detail: r.note, tone: "warn" });
         break;

@@ -298,6 +298,16 @@ confirmation, so a confirmed vendor or sub is suppressed by the guard; the
 screen says so before the tap. The list shows a relation only when it is
 confirmed — everything else is **Unclassified**, never the column default.
 
+**Suggesting names through Hermes (beta, 2026-09-27).** `POST /api/enrich`
+runs the `enrich-contacts` rules (ported verbatim to `src/lib/enrich/rules.ts`,
+prompt `enrich-v5-hermes-2026-09-27`) through Hermes, under Coy's session, and
+writes ONLY `contact_proposals`. Call content is read from `call_artifacts`
+(transcript, else summary). It runs when Coy taps **Suggest** on Threads →
+Unsorted. Coy has said the button is acceptable for the beta but not the goal:
+he wants the system to notice context and update on its own, asking when
+unsure. How far that may go without a confirmation is an open decision
+against the rule above — nothing auto-applies until he settles it.
+
 An `enrich-contacts` proposal is an opinion. It can raise the question — "this
 looks like a sub, confirm?" — and once a human answers, the answer is load
 bearing. Until then the lead appears. The cost of that is a junk lead in the

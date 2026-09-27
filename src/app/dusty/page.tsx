@@ -211,7 +211,7 @@ export default function DustyChatPage() {
           estimate_range_max: result.estimate_range.high,
           estimate_mode: result.mode,
           engine: result.engine,
-          calibration_source: result.calibration_source || "robin_plunket",
+          calibration_source: result.calibration_source || null, // no invented provenance
           conversation_log: conversationLog.map((m) => ({ role: m.role, text: m.text, timestamp: m.timestamp.toISOString() })),
         }),
       }).catch(console.error);
@@ -398,7 +398,7 @@ export default function DustyChatPage() {
       {showBallpark === false && !phoneSubmitted && !showEstimateResult && checkThreshold(schema) === "firm" && (
         <div className="px-6 py-4 shrink-0" style={{ borderTop: `1px solid ${IQ.border}`, background: IQ.bg }}>
           <div className="mb-2 text-sm" style={{ color: IQ.textSecondary }}>
-            Almost done — what's your phone number?
+            Almost done — what&apos;s your phone number?
           </div>
           <div className="flex gap-2">
             <input

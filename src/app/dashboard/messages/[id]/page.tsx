@@ -105,38 +105,40 @@ function formatMsgTime(ts: string | null): string {
 function StoredAudio({ messageId, kind, artifact }: {
   messageId: string; kind: string; artifact: Artifact;
 }) {
+  // "No stored copy" is a fact about the props, not state to set in an
+  // effect — deriving it keeps every setState inside an async callback.
+  const hasCopy = Boolean(artifact.storage_path);
   const [src, setSrc] = useState<string | null>(null);
-  const [state, setState] = useState<"idle" | "loading" | "none" | "error">("idle");
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
-    if (!artifact.storage_path) { setState("none"); return; }
+    if (!hasCopy) return;
     let cancelled = false;
-    setState("loading");
     fetch(`/api/messages/${messageId}/audio?kind=${encodeURIComponent(kind)}`)
       .then(async (r) => {
         const b = await r.json().catch(() => ({}));
         if (!r.ok || !b?.url) throw new Error(b?.reason ?? b?.error ?? `HTTP ${r.status}`);
         return b.url as string;
       })
-      .then((u) => { if (!cancelled) { setSrc(u); setState("idle"); } })
-      .catch(() => { if (!cancelled) setState("error"); });
+      .then((u) => { if (!cancelled) setSrc(u); })
+      .catch(() => { if (!cancelled) setFailed(true); });
     return () => { cancelled = true; };
-  }, [messageId, kind, artifact.storage_path]);
+  }, [messageId, kind, hasCopy]);
 
+  if (!hasCopy) {
+    return (
+      <div className="text-[11px] mt-2" style={{ color: DA.textMuted }}>
+        Audio not downloaded yet — only the transcript is stored.
+      </div>
+    );
+  }
   if (src) {
     return <audio controls preload="none" src={src} className="w-full mt-2" style={{ height: 32 }} />;
   }
-  if (state === "loading") {
-    return <div className="text-[11px] mt-2" style={{ color: DA.textMuted }}>Loading audio…</div>;
-  }
-  if (state === "error") {
+  if (failed) {
     return <div className="text-[11px] mt-2" style={{ color: DA.error }}>Audio could not be loaded.</div>;
   }
-  return (
-    <div className="text-[11px] mt-2" style={{ color: DA.textMuted }}>
-      Audio not downloaded yet — only the transcript is stored.
-    </div>
-  );
+  return <div className="text-[11px] mt-2" style={{ color: DA.textMuted }}>Loading audio…</div>;
 }
 
 /** One call row. Transcript is fetched only when this is expanded. */

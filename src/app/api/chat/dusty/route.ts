@@ -29,8 +29,9 @@ export async function GET(request: NextRequest) {
       response: data.choices?.[0]?.message?.content ?? "",
       done: true,
     });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -59,7 +60,8 @@ export async function POST(request: NextRequest) {
       choices: data.choices,
       done: true,
     });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

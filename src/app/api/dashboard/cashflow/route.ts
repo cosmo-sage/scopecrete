@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
   });
 
   const applyCookies = (res: NextResponse) => {
-    cookiesToSet.forEach(({ name, value, options }) => res.cookies.set(name, value, options as any));
+    cookiesToSet.forEach(({ name, value, options }) => res.cookies.set(name, value, options as Parameters<typeof res.cookies.set>[2]));
     return res;
   };
 

@@ -14,7 +14,7 @@
  * winning.
  */
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { T, F, disp, eyebrow, nums, clip, relTime } from "@/lib/v34/tokens";
 import { EmptyState, Badge } from "@/components/v34/primitives";
 
@@ -38,22 +38,26 @@ export default function ScopeScreen() {
   const [error, setError] = useState<string | null>(null);
   const [noOrg, setNoOrg] = useState(false);
   const [accepting, setAccepting] = useState<string | null>(null);
+  // Bumped after an accept so the list refetches. The fetch lives inside the
+  // effect, with a cancel flag, so a response that lands after the screen is
+  // gone does not set state on an unmounted component.
+  const [reload, setReload] = useState(0);
 
-  const load = useCallback(async () => {
-    try {
-      const r = await fetch("/api/jobs");
-      const b = await r.json().catch(() => ({}));
-      if (!r.ok) {
-        if (b?.code === "no_org") { setNoOrg(true); setJobs([]); return; }
-        throw new Error(b?.error || `HTTP ${r.status}`);
-      }
-      setJobs(Array.isArray(b.jobs) ? b.jobs : []);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
-  }, []);
-
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    let off = false;
+    fetch("/api/jobs")
+      .then(async (r) => {
+        const b = await r.json().catch(() => ({}));
+        if (off) return;
+        if (!r.ok) {
+          if (b?.code === "no_org") { setNoOrg(true); setJobs([]); return; }
+          throw new Error(b?.error || `HTTP ${r.status}`);
+        }
+        setJobs(Array.isArray(b.jobs) ? b.jobs : []);
+      })
+      .catch((e) => { if (!off) setError(e instanceof Error ? e.message : String(e)); });
+    return () => { off = true; };
+  }, [reload]);
 
   // Accepting is one job at a time and goes through PATCH {accept:true}. The
   // route sets confirmed_at/confirmed_by; the client never sends them.
@@ -69,7 +73,7 @@ export default function ScopeScreen() {
         const b = await r.json().catch(() => ({}));
         throw new Error(b?.error || `HTTP ${r.status}`);
       }
-      await load();
+      setReload((n) => n + 1);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {

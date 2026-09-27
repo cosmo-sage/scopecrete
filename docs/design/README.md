@@ -80,7 +80,7 @@ waiting for.
 | Scope builder | `ScopeScreen` (~400 lines) | `dashboard/scope/[jobId]/page.tsx` + `src/lib/engine` | **built** — sections, takeoff, price, discount + floor; desktop layout from 1h. Engine follows DECISIONS §3/§4, not v34's `computeJob` |
 | Cash | `CashFlow` `Ribbon` `Band` `MoneySide` `MoneyCard` (~700 lines) | `dashboard/cash/page.tsx` + `components/v34/cost-settings.tsx` | **partial** — cost settings and the monthly nut are editable (layout from 1g). No ribbon, no band. |
 | Pipeline | `PipelinePanel` `Funnel` `Donut` `Spark` `DayBars` | `dashboard/more/pipeline/page.tsx` + header drop | **partial** |
-| Customers | `CustomersScreen` `CustomerScreen` `PeopleBlock` `ContactLines` (~550) | — | **not built** |
+| Customers | `CustomersScreen` `CustomerScreen` `PeopleBlock` `ContactLines` (~550) | `dashboard/customers/` | **built** — Unclassified / Customers / Vendors & subs tabs on confirmed relations only; person page with classify, numbers, jobs, New scope. No lifetime value (no invoices) |
 | Documents / proposals | `DocsScreen` `DocView` `DocPaper` `FileRow` (~460) | — | **not built** |
 | Schedule | `ScheduleScreen` `MonthGrid` `WeekView` `QuarterView` `YearLoad` (~470) | — | **not built** |
 | Settings | `SettingsSheet` `OverheadSheet` (~340) | — | **not built** |

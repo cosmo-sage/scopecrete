@@ -289,6 +289,15 @@ classification.** This is a rule, not a gap waiting to be closed:
 > A machine opinion changes what Coy is **asked**. It never changes what he is
 > **shown**. Suppression requires a human confirmation.
 
+**Classifying by hand (2026-09-27).** The Customers screen
+(`/dashboard/customers/[id]`) lets Coy mark a contact customer, vendor or sub
+directly — `PATCH /api/customers/[contactId]/relation`, which writes
+`relation_source='manual'`, `relation_confirmed_at` and `relation_confirmed_by`,
+and creates the `customers` row when the contact has none. That IS the human
+confirmation, so a confirmed vendor or sub is suppressed by the guard; the
+screen says so before the tap. The list shows a relation only when it is
+confirmed — everything else is **Unclassified**, never the column default.
+
 An `enrich-contacts` proposal is an opinion. It can raise the question — "this
 looks like a sub, confirm?" — and once a human answers, the answer is load
 bearing. Until then the lead appears. The cost of that is a junk lead in the

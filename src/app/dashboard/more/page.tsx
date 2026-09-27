@@ -18,7 +18,7 @@ const GROUPS: [string, Entry[]][] = [
     { href: "/dashboard/more/pipeline", label: "Pipeline", note: "Leads by stage", live: true },
   ]],
   ["Not yet wired", [
-    { href: "", label: "Customers", note: "Needs a customers route", live: false },
+    { href: "/dashboard/customers", label: "Customers", note: "Everyone who has called or texted", live: true },
     { href: "", label: "Documents", note: "Needs a documents table", live: false },
     { href: "", label: "Schedule", note: "Needs job rows to schedule", live: false },
     { href: "", label: "Dusty", note: "Send path deliberately disabled", live: false },

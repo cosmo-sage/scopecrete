@@ -129,7 +129,18 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
 
     const { error, count } = await supabase
       .from("contacts")
-      .update({ name }, { count: "exact" })
+      // Provenance, not just the value. `contacts` records WHO decided a name,
+      // and CHECK contacts_name_confirmed_is_human requires name_source='human'
+      // whenever name_confirmed_at is set. Writing `name` alone would leave a
+      // name Coy confirmed labelled 'legacy' — indistinguishable from the
+      // unreviewed names the old enricher wrote, which is the one distinction
+      // this whole review step exists to create.
+      .update({
+        name,
+        name_source: "human",
+        name_confirmed_at: new Date().toISOString(),
+        name_confirmed_by: userId,
+      }, { count: "exact" })
       .eq("id", proposal.contact_id)
       .eq("org_id", orgId);
 

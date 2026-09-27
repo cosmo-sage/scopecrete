@@ -10,23 +10,26 @@ import { getApiSession } from "@/lib/api-auth";
  *
  * WHY THIS DOES NOT JOIN contacts IN SQL
  *
- * contacts' SELECT policy is
+ * It used to be that it could not. contacts' SELECT policy was
  *     (org_id = (current_setting('app.current_org_id', true))::uuid)
- * — the GUC that DECISIONS.md §9 records as not yet migrated to
- * auth.uid() + org_members. Nothing in this app sets that GUC (verified:
- * `grep -rn current_org_id src/` returns nothing), so through a session-scoped
- * client the GUC is null, the predicate is null, and contacts returns ZERO
- * rows. A thread list built on an inner join to contacts renders empty.
+ * — a GUC nothing in this app sets, so through a session-scoped client the
+ * predicate was null and contacts returned ZERO rows. A thread list built on an
+ * inner join to contacts rendered empty.
  *
- * messages, call_artifacts and org_phone_numbers all gate on
- * get_user_org_ids(), which works. So the counterparty phone — the thing
- * actually needed for display — is derived from messages itself: the address
- * on the message that is NOT one of the org's own lines.
+ * CORRECTED 2026-09-27: that is no longer true. `contacts_org_select` is now
+ * `org_id = ANY (get_user_org_ids())`, moved by migration 024 along with 54
+ * other policies. Verified as the `authenticated` role inside a rolled-back
+ * transaction: 197 rows readable, 176 of them with no name.
  *
- * Names are then layered on opportunistically. When contacts becomes readable
- * the 20 named contacts gain a name and nothing else changes; until then every
- * row displays its phone number, which is already the correct rendering for the
- * 124 of 144 contacts that have no name.
+ * The derive-from-messages approach is KEPT anyway, and on purpose. The
+ * counterparty phone comes from the address on the message that is not one of
+ * the org's own lines, so the list still renders if contacts ever stops being
+ * readable — and an embed would return null for a row the caller cannot see,
+ * which displays as "no contact" rather than "permission denied". Names are
+ * layered on top opportunistically.
+ *
+ * For 176 of 197 contacts the phone number IS the display name, so that path is
+ * the common one rather than the fallback.
  */
 
 export const dynamic = "force-dynamic";
@@ -67,6 +70,20 @@ export interface Thread {
    */
   summary_source: string | null;
   msg_count: number;
+  /**
+   * The contact's most advanced job status, or null when they have no job.
+   * Carried so the Quoted / Pouring / Won / Lost chips can actually filter
+   * rather than only count. Null for every thread today — `jobs` is 0 rows.
+   */
+  job_status: string | null;
+  /** True when the contact has a job carrying no `job_sections` rows. */
+  job_unscoped: boolean;
+  /**
+   * 'vendor' | 'sub' — and ONLY when relation_confirmed_at is set. An
+   * unconfirmed proposal is a machine opinion and stays out of the UI
+   * (DECISIONS.md §2b), so this is null for all 135 customers today.
+   */
+  relation: string | null;
 }
 
 /** Formats +12253782458 as (225) 378-2458. Leaves anything else alone. */
@@ -137,20 +154,68 @@ export async function GET(req: NextRequest) {
   // Opportunistic names. Expected to return nothing today — see the header.
   // Failure here is not an error: the list is fully usable without it.
   const contactIds = [...byContact.keys()];
-  const names = new Map<string, { name: string | null; phone: string | null; contact_type: string | null; contact_subtype: string | null }>();
+  const names = new Map<string, { name: string | null; phone: string | null; contact_type: string | null; contact_subtype: string | null; customer_id: string | null }>();
   let contactsReadable = false;
   if (contactIds.length > 0) {
     const { data: contacts } = await supabase
       .from("contacts")
-      .select("id, name, phone, contact_type, contact_subtype")
+      .select("id, name, phone, contact_type, contact_subtype, customer_id")
       .in("id", contactIds.slice(0, 1000));
     for (const c of (contacts ?? []) as Array<Record<string, string | null>>) {
       names.set(c.id as string, {
         name: c.name, phone: c.phone,
         contact_type: c.contact_type, contact_subtype: c.contact_subtype,
+        customer_id: c.customer_id,
       });
     }
     contactsReadable = (contacts ?? []).length > 0;
+  }
+
+  // Job state per contact, so the status chips filter and not merely count.
+  // STATUS_RANK picks the most advanced job when a contact has several — a
+  // customer with a won job and a fresh lead belongs under Won.
+  const STATUS_RANK = ["invited", "lead", "scoping", "quoted", "scheduled", "in_progress", "complete", "closed", "lost", "won"];
+  const jobByContact = new Map<string, { status: string | null; unscoped: boolean }>();
+  {
+    const { data: jobs } = await supabase
+      .from("jobs")
+      .select("id, contact_id, status")
+      .eq("org_id", orgId);
+    const jobRows = (jobs ?? []) as Array<{ id: string; contact_id: string | null; status: string | null }>;
+
+    let scopedIds = new Set<string>();
+    if (jobRows.length > 0) {
+      const { data: sections } = await supabase
+        .from("job_sections")
+        .select("job_id")
+        .eq("org_id", orgId);
+      scopedIds = new Set((sections ?? []).map((s: { job_id: string }) => s.job_id));
+    }
+
+    for (const j of jobRows) {
+      if (!j.contact_id) continue;
+      const prev = jobByContact.get(j.contact_id);
+      const better = !prev || STATUS_RANK.indexOf(j.status ?? "") > STATUS_RANK.indexOf(prev.status ?? "");
+      jobByContact.set(j.contact_id, {
+        status: better ? j.status : (prev?.status ?? null),
+        unscoped: (prev?.unscoped ?? false) || !scopedIds.has(j.id),
+      });
+    }
+  }
+
+  // Confirmed relations only. An unconfirmed enrich-contacts proposal changes
+  // what Coy is asked, never what he is shown (DECISIONS.md §2b).
+  const relationByCustomer = new Map<string, string>();
+  {
+    const { data: rels } = await supabase
+      .from("customers")
+      .select("id, relation, relation_confirmed_at")
+      .eq("org_id", orgId)
+      .in("relation", ["vendor", "sub"])
+      .not("relation_confirmed_at", "is", null);
+    for (const r of (rels ?? []) as Array<{ id: string; relation: string }>) {
+      relationByCustomer.set(r.id, r.relation);
+    }
   }
 
   const threads: Thread[] = [...byContact.entries()].map(([contactId, { latest, count }]) => {
@@ -190,6 +255,9 @@ export async function GET(req: NextRequest) {
       preview_source,
       summary_source: preview_source === "summary" ? latest.summary_source : null,
       msg_count: count,
+      job_status: jobByContact.get(contactId)?.status ?? null,
+      job_unscoped: jobByContact.get(contactId)?.unscoped ?? false,
+      relation: c?.customer_id ? relationByCustomer.get(c.customer_id) ?? null : null,
     };
   });
 

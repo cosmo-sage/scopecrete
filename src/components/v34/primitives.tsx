@@ -4,8 +4,9 @@
  * v34 primitives, ported verbatim in behaviour and appearance.
  *
  * Nothing here holds data. Avatar in particular takes whatever label the caller
- * has already decided on — it never reaches for a name of its own. 124 of 144
- * contacts have no name, and for those the phone number IS the display name.
+ * has already decided on — it never reaches for a name of its own. 176 of 197
+ * contacts have no name (measured 2026-09-27), and for those the phone number
+ * IS the display name.
  */
 
 import React, { useEffect } from "react";
@@ -18,10 +19,14 @@ export const Emblem = ({ size = 22, stroke = 2.6, ring = T.hiviz, core = T.pulse
 }) => (
   <svg width={size} height={size} viewBox="0 0 100 100" className={className}
        style={{ display: "block", overflow: "visible" }} aria-hidden="true">
-    <polygon points="50,3 97,50 50,97 3,50" fill="none" stroke={ring}
+    {/* The three class names are load bearing: src/styles/v34-shell.css targets
+        them for the dream / think / tap states. The first port dropped them,
+        which left every emblem animation inert. */}
+    <polygon className="sc-em-diamond" points="50,3 97,50 50,97 3,50" fill="none" stroke={ring}
              strokeWidth={stroke} strokeLinejoin="miter" />
-    <rect x="29" y="29" width="42" height="42" fill="none" stroke={ring} strokeWidth={stroke} />
-    <circle cx="50" cy="50" r="12.5" fill={core} />
+    <rect className="sc-em-square" x="29" y="29" width="42" height="42" fill="none"
+          stroke={ring} strokeWidth={stroke} />
+    <circle className="sc-em-core" cx="50" cy="50" r="12.5" fill={core} />
   </svg>
 );
 

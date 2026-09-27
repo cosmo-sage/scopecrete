@@ -481,8 +481,15 @@ genuinely required.
   revoked in isolation.
 - Anon-role read policies were removed in a prior migration; anon must not
   regain read access to contact, comms, or job data.
-- `get_user_org_ids()` is the isolation helper. Core isolation still needs
-  migrating off the `app.current_org_id` GUC to `auth.uid()` + `org_members`.
+- `get_user_org_ids()` is the isolation helper, and the migration off the
+  `app.current_org_id` GUC is **done**: measured 2026-09-27, 130 of 149 public
+  policies use `get_user_org_ids()` and **0** reference the GUC (the rest are
+  `service_role`-only). Any new policy uses the helper.
+- **Known exposure, not yet fixed:** the views `sc_spine_drift` and
+  `sc_open_name_questions` are not `security_invoker`, so they run as their
+  owner and bypass RLS — a cross-tenant read the day a second org exists.
+  Harmless at one org today; fix before onboarding another. Views must be
+  created `with (security_invoker = true)`.
 
 ---
 

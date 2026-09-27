@@ -61,29 +61,31 @@ exists today and will be for a while.
 
 ## 4. What is actually built — the honest gap
 
-The deployed app is **1,095 lines** across every dashboard screen, tokens and
-primitives. The mobile reference build is **5,732 lines**. That ratio is the
-answer to "why doesn't the site look like the mockup".
+Re-measured 2026-09-27, after PRs #10–#15: the app's dashboard screens, shell,
+tokens and primitives are **3,104 lines**, up from 1,095 when this README was
+first written. The mobile reference build is **5,732**. The shell and Threads
+are now v34; most other screens are not yet built.
 
-The app is not broken — it is *correct and thin*. It prints a dash with a reason
-rather than a fake number, it carries a live drift alarm, and its More screen
-names what each dead entry is waiting for. It just has very little in it.
+The app is *correct and thin*: it prints a dash with a reason rather than a
+fake number, carries a live drift alarm, and names what each dead entry is
+waiting for.
 
 | screen | in `scopecrete-v34.jsx` | in the app | |
 |---|---|---|---|
-| App shell | header + 4-tab footer | `src/app/dashboard/layout.tsx` (136 lines) | **built** |
-| Threads list | `ThreadsScreen` `ThreadRow` `ActivityFeed` `StreamBar` | `dashboard/messages/page.tsx` (185) | **partial** — no filter chips, no row expand |
-| Thread detail | inside `ThreadsScreen` | `dashboard/messages/[id]/page.tsx` | **partial** — opens on newest message, not on a job card |
-| Scope list | `ScopesScreen` `CustomerPicker` | `dashboard/scope/page.tsx` (166) | **empty** — `jobs` is 0 rows and no UI creates one |
+| App shell | glass header + five-slot footer (Dusty centre) | `src/app/dashboard/layout.tsx` + `src/styles/v34-shell.css` | **built** — no StreamBar (it ran on invented sentences) |
+| Threads list | `ThreadsScreen` `ThreadRow` `ActivityFeed` | `src/components/v34/thread-list.tsx` | **built** — ten filter chips on real counts (no Drafts: no outbox table), row expand, proposal review inline |
+| Thread detail | inside `ThreadsScreen` | `dashboard/messages/[id]/page.tsx` | **partial** — calls, texts, photos, "Same person as…" merge; still opens on the newest message, not on a job card; no composer yet |
+| Desktop two-pane | — (v34 is mobile-only) | `dashboard/messages/layout.tsx` | **built** |
+| Scope list | `ScopesScreen` `CustomerPicker` | `dashboard/scope/page.tsx` | **partial** — renders jobs and the accept flow; `jobs` is 0 rows and the + menu has no create form yet |
 | Scope builder | `ScopeScreen` (~400 lines) | — | **not built** |
-| Cash | `CashFlow` `Ribbon` `Band` `MoneySide` `MoneyCard` (~700 lines) | `dashboard/cash/page.tsx` (168) | **partial** — the settings form, correctly all dashes. No ribbon, no band. |
-| Pipeline | `PipelinePanel` `Funnel` `Donut` `Spark` `DayBars` | `dashboard/more/pipeline/page.tsx` | **partial** |
+| Cash | `CashFlow` `Ribbon` `Band` `MoneySide` `MoneyCard` (~700 lines) | `dashboard/cash/page.tsx` | **partial** — the settings form, correctly all dashes. No ribbon, no band. |
+| Pipeline | `PipelinePanel` `Funnel` `Donut` `Spark` `DayBars` | `dashboard/more/pipeline/page.tsx` + header drop | **partial** |
 | Customers | `CustomersScreen` `CustomerScreen` `PeopleBlock` `ContactLines` (~550) | — | **not built** |
 | Documents / proposals | `DocsScreen` `DocView` `DocPaper` `FileRow` (~460) | — | **not built** |
 | Schedule | `ScheduleScreen` `MonthGrid` `WeekView` `QuarterView` `YearLoad` (~470) | — | **not built** |
 | Settings | `SettingsSheet` `OverheadSheet` (~340) | — | **not built** |
-| Dusty | `DustyScreen` (~490) | `/dusty` (outside the shell) | **partial** — send path deliberately disabled |
-| **Triage** | — | — | **not designed for mobile, designed for desktop** — see `desktop-screens.html` |
+| Dusty | `DustyScreen` (~490) | a sheet from the footer emblem saying it is not wired | **shell only** — no conversation that implies it answers |
+| **Triage** | — | — | **not built** — designed for desktop, see `desktop-screens.html` |
 
 What did survive the port cleanly, and is the place to build on:
 
@@ -91,7 +93,10 @@ What did survive the port cleanly, and is the place to build on:
   numerals, status chips, `relTime()`, `formatPhone()`. **This is the live design
   system.** Changing the look means editing this file.
 - `src/components/v34/primitives.tsx` — `Emblem` `NavIcon` `Avatar` `Badge`
-  `Sheet` `EmptyState`.
+  `Toggle` `Segmented` `NumField` `TextField` `DimRow` `Drawer` `Sheet`
+  `EmptyState`.
+- `src/components/v34/shell.tsx` — the header drops (`PipelineDrop`,
+  `CreateDrop`).
 
 ## 5. Two things in `scopecrete-v34.jsx` that will mislead you
 

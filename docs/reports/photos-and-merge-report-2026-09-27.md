@@ -24,17 +24,12 @@ confirmed would have looked exactly like the unreviewed ones.
 - `customer, vendor, sub, not_work, unknown` all insert.
 - `customers.relation='unknown'` is still rejected (23514), as intended.
 
-**Two things wrong in my own 026 file, still wrong in the repo.** A permission
-check blocked edits to an applied migration file, so they're recorded here and
-on PR #13 instead:
-- The header still says NOT APPLIED.
-- Its sample checks are wrong:
-  - The first puts five pending proposals on one contact, which
-    `contact_proposals_one_pending` (a unique index I hadn't found) forbids.
-  - The second uses `update … where false`, which touches no rows and so could
-    never fail.
-
-The correct versions are in the PR #13 comment.
+**Two things were wrong in my own 026 file** — the header said NOT APPLIED, and
+both sample checks were broken (five pending proposals on one contact, which
+`contact_proposals_one_pending` forbids; and an `update … where false` that could
+never fail). A permission check first blocked editing an applied migration;
+Coy then said to fix it, and it is fixed, with the real results recorded in
+the file.
 
 ## 2. Photos (PR #14, migration 027)
 

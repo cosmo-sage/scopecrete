@@ -1,8 +1,9 @@
 -- 026_proposal_classification_vocabulary.sql
 --
--- NOT APPLIED. Migrations are applied only on Coy's explicit instruction, and
--- widening a CHECK is a widening change, which DECISIONS.md §7 says an agent
--- does not do on its own judgment.
+-- APPLIED 2026-09-27 on Coy's explicit instruction (the plan approval covering
+-- 026-028). It waited for that approval because widening a CHECK is a widening
+-- change, which DECISIONS.md §7 says an agent does not make on its own
+-- judgment. Verification results are recorded at the bottom of this file.
 --
 -- THE PROBLEM, measured 2026-09-27
 --
@@ -82,16 +83,28 @@ commit;
 --
 --   -- Passes if all five insert. Fails on 23514, which means the CHECK did not
 --   -- take and enrich-contacts will still drop three of its five answers.
+--   -- The five go on FIVE contacts: contact_proposals_one_pending allows only
+--   -- one pending proposal per contact, so putting them all on one contact
+--   -- fails with 23505 for a reason that has nothing to do with this CHECK.
 --   begin;
 --   insert into public.contact_proposals
 --     (org_id, contact_id, classification, confidence, evidence_quote,
 --      evidence_message_id, model, prompt_version)
---   select '<org>', (select id from public.contacts limit 1), v, 50, 'x',
+--   select '<org>', c.id, v.cls, 50, 'x',
 --          (select id from public.messages limit 1), 'test', 'test'
---     from unnest(array['customer','vendor','sub','not_work','unknown']) v;
+--     from (select id, row_number() over () rn from public.contacts limit 5) c
+--     join (select cls, row_number() over () rn
+--             from unnest(array['customer','vendor','sub','not_work','unknown']) cls) v
+--     using (rn);
 --   rollback;
 --
---   -- Passes if this still FAILS — customers.relation must stay narrow.
+--   Result 2026-09-27: customer, not_work, sub, unknown, vendor — all five.
+--
+--   -- Passes if this FAILS with 23514 — customers.relation must stay narrow.
+--   -- (An earlier draft used `update … where false`, which touches no row and
+--   -- so could never fail. A check that cannot fail is not a check.)
 --   begin;
---   update public.customers set relation = 'unknown' where false;
+--   insert into public.customers (org_id, relation) values ('<org>', 'unknown');
 --   rollback;
+--
+--   Result 2026-09-27: 23514 customers_relation_check — correctly rejected.

@@ -32,29 +32,31 @@ export default function MessagesLayout({ children }: { children: React.ReactNode
 
   return (
     <div className="lg:flex lg:items-stretch" style={{ minHeight: "calc(100vh - 54px - 58px)" }}>
+      {/* A fixed rail on desktop: the list is the constant, the conversation is
+          what changes, so the list must not resize as threads come and go.
+
+          The width lives on THIS element and as a class, not as an inline
+          `width: 100%` on a wrapper. The first version did the latter, and an
+          inline width beats every Tailwind class: combined with `lg:shrink-0`
+          the list claimed the whole flex row, the conversation pane was handed
+          zero width, and it rendered off the right edge. Everything worked and
+          nothing was visible — including "Open thread", which navigated
+          correctly into a pane nobody could see. */}
       <div
-        className={`${conversationOpen ? "hidden lg:block" : "block"} lg:shrink-0 lg:overflow-y-auto`}
-        style={{
-          borderRight: `1px solid ${T.hair}`,
-          // A fixed rail on desktop: the list is a constant, the conversation
-          // is what changes, so the list must not resize as threads come and go.
-          width: "100%",
-          maxWidth: "100%",
-        }}
+        className={`${conversationOpen ? "hidden lg:block" : "block"} w-full lg:w-[380px] xl:w-[420px] lg:shrink-0 lg:overflow-y-auto`}
+        style={{ borderRight: `1px solid ${T.hair}` }}
       >
-        <div className="lg:w-[380px] xl:w-[420px]">
-          {/* ThreadList reads ?q= through useSearchParams, which needs a
-              boundary or the whole subtree opts out of static rendering. */}
-          <Suspense fallback={
-            <div className="p-3 space-y-2">
-              {[1, 2, 3, 4, 5, 6].map((i) => (
-                <div key={i} className="rounded animate-pulse" style={{ height: 52, background: T.hairSoft }} />
-              ))}
-            </div>
-          }>
-            <ThreadList />
-          </Suspense>
-        </div>
+        {/* ThreadList reads ?q= through useSearchParams, which needs a
+            boundary or the whole subtree opts out of static rendering. */}
+        <Suspense fallback={
+          <div className="p-3 space-y-2">
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <div key={i} className="rounded animate-pulse" style={{ height: 52, background: T.hairSoft }} />
+            ))}
+          </div>
+        }>
+          <ThreadList />
+        </Suspense>
       </div>
 
       <div className={`${conversationOpen ? "block" : "hidden lg:block"} lg:flex-1 lg:min-w-0 lg:overflow-y-auto`}>

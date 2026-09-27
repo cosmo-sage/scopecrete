@@ -458,6 +458,20 @@ expected start date per quoted job before it means anything. Add the field.
 - Dusty has two entry points: COLD from the footer emblem (no job context,
   opens a channels list) and HOT from a job (that job preloaded). The header
   must make obvious which one you're in.
+- **Dusty v1 (2026-09-27)** is wired: `src/components/v34/dusty-panel.tsx`
+  rises from the footer on a phone and slides in from the right on desktop.
+  It is HOT on whatever screen is open — a thread, a scope, a customer, or
+  cost settings — and COLD anywhere else; the header says which. The browser
+  sends only `{kind, id}` from its route; `/api/dusty` fetches the facts itself
+  under the session (`src/lib/dusty/context.ts`), so RLS decides what Dusty can
+  see and nothing typed in the browser becomes "context". Scope answers use
+  the engine's own output, so Dusty quotes exactly the builder's numbers or
+  names what blocks them. **Read-only:** no tools, no writes, nothing sent —
+  drafts come back as text to copy. **Not stored:** the conversation lives in
+  the tab (channels that persist per job/customer, below, are still to come
+  and need a table). Model `claude-opus-5` via `ANTHROPIC_API_KEY`, a
+  server-only Vercel secret. The old `/api/chat/dusty` — an unauthenticated
+  relay to a private-IP Ollama box — is deleted.
 - Dusty channels persist and are resumable, organized per job/customer.
 - **Receipts are camera-first, always.** Photograph, never type. Dusty reads
   vendor, amount, date and clarifies conversationally. Invoices and payments

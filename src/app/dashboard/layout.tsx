@@ -35,6 +35,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { T, F, disp, eyebrow, nums, clip, formatPhone } from "@/lib/v34/tokens";
 import { Emblem, NavIcon, Sheet } from "@/components/v34/primitives";
 import { PipelineDrop, CreateDrop } from "@/components/v34/shell";
+import { DustyPanel } from "@/components/v34/dusty-panel";
 import { signOut } from "@/lib/auth";
 import "@/styles/v34-shell.css";
 
@@ -58,6 +59,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [pipeOpen, setPipeOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [dustyOpen, setDustyOpen] = useState(false);
+  // True only while a Dusty reply is actually streaming.
+  const [dustyBusy, setDustyBusy] = useState(false);
 
   const [me, setMe] = useState<Me | null>(null);
   const [needs, setNeeds] = useState<number | null>(null);
@@ -147,7 +150,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     : "";
   const markIdx = SLOTS.findIndex((s) => s.k === activeKey);
 
-  const thinking = meLoading || countsLoading;
+  const thinking = meLoading || countsLoading || dustyBusy;
   const displayName = me?.name ?? me?.email ?? null;
 
   function submitSearch(e: React.FormEvent) {
@@ -293,7 +296,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           );
         })}
         <span className="flex-1" />
-        <button onClick={() => { tapEmblem(); setDustyOpen(true); }} aria-label="Dusty"
+        <button onClick={() => { tapEmblem(); setDustyOpen((o) => !o); }} aria-label="Dusty"
           className="flex items-center justify-center" style={{ height: 70 }}>
           <Emblem key={`r${emTap}`} size={30} stroke={2.8}
             className={emTapping ? "sc-em-tap" : thinking ? "sc-em-think" : "sc-em-dream"} />
@@ -312,7 +315,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           if (s.k === "dusty") {
             // The emblem carries it — no word underneath.
             return (
-              <button key={s.k} onClick={() => { tapEmblem(); setDustyOpen(true); }}
+              <button key={s.k} onClick={() => { tapEmblem(); setDustyOpen((o) => !o); }}
                 aria-label="Dusty" className="sc-tab flex-1 flex items-center justify-center">
                 <span className="sc-tab-ico">
                   <Emblem key={`f${emTap}`} size={30} stroke={2.8}
@@ -344,25 +347,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         })}
       </footer>
 
-      {/* Dusty: the shell, and nothing that implies it is answering.
-          Handoff §6.9 — "design the shell; do not design a conversation that
-          implies it is answering". There is no input box here on purpose. */}
-      <Sheet open={dustyOpen} onClose={() => setDustyOpen(false)} title="Dusty" sub="Not wired yet">
-        <div className="px-4 py-3" style={{ fontSize: F.sm, color: T.ink2, lineHeight: 1.5 }}>
-          <p>
-            Dusty reads threads, calls and scopes, and opens either cold from here or
-            hot from a job with that job already loaded.
-          </p>
-          <p className="mt-2">
-            It is not connected. There is no channels list to show yet and no send path,
-            so rather than an input box that goes nowhere, this says so.
-          </p>
-          <p className="mt-2" style={{ color: T.ink3 }}>
-            It also has no cost settings — <span style={nums}>org_cost_settings</span> is
-            empty — so it could not answer a money question even once it is wired.
-          </p>
-        </div>
-      </Sheet>
+      {/* Dusty — read-only, and it knows the screen you are on. */}
+      <DustyPanel open={dustyOpen} onClose={() => setDustyOpen(false)} onBusy={setDustyBusy} />
 
       <Sheet open={menuOpen} onClose={() => setMenuOpen(false)} title="Account" sub={me?.org_name ?? undefined}>
         <div className="px-4 py-3">

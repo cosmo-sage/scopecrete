@@ -89,7 +89,12 @@ export async function POST(req: NextRequest) {
   } catch (e) {
     clearTimeout(timer);
     const why = (e as Error).name === "AbortError" ? "Hermes took too long to answer" : "couldn't reach Hermes on the VPS";
-    console.error("dusty upstream", why);
+    // The network cause (ECONNREFUSED, ENOTFOUND, a TLS code…) is what says
+    // WHY. It carries the host, never the key.
+    const cause = (e as { cause?: { code?: string; message?: string } }).cause;
+    console.error("dusty upstream", why, JSON.stringify({
+      name: (e as Error).name, message: (e as Error).message, code: cause?.code ?? null, cause: cause?.message ?? null,
+    }));
     return applyCookies(NextResponse.json({ code: "upstream", error: `Dusty ${why}.` }, { status: 502 }));
   }
 

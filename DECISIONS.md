@@ -414,6 +414,14 @@ expected start date per quoted job before it means anything. Add the field.
 - **Receipts are camera-first, always.** Photograph, never type. Dusty reads
   vendor, amount, date and clarifies conversationally. Invoices and payments
   stay quick structured forms.
+- **The composer never appears to send.** (2026-09-27) Text, email and notes
+  have no send path yet — texting waits on 10DLC, and Coy has said sending is
+  not needed now. The composer (thread screen, and compact in the row expand)
+  writes, keeps a per-device draft, copies it for pasting into Quo, and offers
+  Call. Send, attach and hold-to-talk are shown switched off, each with its
+  reason. An earlier composer appended messages locally and faked a Dusty reply
+  a second later; that must not come back. When sending lands, it replaces the
+  disabled Send in `src/components/v34/composer.tsx` — one place.
 
 ---
 

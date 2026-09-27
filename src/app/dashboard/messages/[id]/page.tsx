@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Phone, ArrowLeft, CaretDown, CaretRight, WarningCircle } from "@phosphor-icons/react";
 import { T, F, disp } from "@/lib/v34/tokens";
+import { Composer } from "@/components/v34/composer";
 
 /**
  * v34 palette, mapped onto the key names this screen already used.
@@ -658,7 +659,11 @@ export default function ChatThreadPage() {
   const otherNumbers = phones.filter((p) => p !== phone);
 
   return (
-    <div className="flex flex-col" style={{ background: DA.bg, height: "100dvh" }}>
+    // The space BETWEEN the shell's sticky 54px header and the 72px the shell's
+    // <main> reserves for its fixed footer. A plain 100dvh put the bottom of
+    // this screen — now the composer — underneath the footer.
+    <div className="flex flex-col"
+      style={{ background: DA.bg, height: "calc(100dvh - 54px - 72px)" }}>
       <div
         className="px-4 py-3 flex items-center gap-3 flex-shrink-0"
         style={{ background: DA.surface, borderBottom: `1px solid ${DA.border}` }}
@@ -731,6 +736,13 @@ export default function ChatThreadPage() {
           )
         )}
       </div>
+
+      {/* Rendered only once the thread has loaded — the composer reads a saved
+          draft from this device, which the server cannot see, so rendering it
+          during the server pass would mismatch on hydration. */}
+      {!loading && !error && (
+        <Composer contactId={contactId} phone={phone} name={name} />
+      )}
 
       {merging && (
         <MergeSheet contactId={contactId} keepLabel={headerTitle} keepCount={messages.length}

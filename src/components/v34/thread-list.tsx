@@ -36,6 +36,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { T, F, disp, eyebrow, nums, clip, relTime } from "@/lib/v34/tokens";
 import { Avatar, EmptyState } from "@/components/v34/primitives";
+import { Composer } from "@/components/v34/composer";
 
 interface Thread {
   contact_id: string;
@@ -381,6 +382,11 @@ function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, deciding }:
             <ProposalReview p={t.proposal} busy={deciding}
               onDecide={(body) => onDecide(t.proposal!.id, body)} />
           )}
+
+          {/* Reply without leaving the list. Same composer as the thread, in
+              its compact form; the draft is shared between the two. */}
+          <Composer contactId={t.contact_id} phone={t.phone}
+            name={t.name_is_phone ? null : t.display_name} compact />
 
           <button onClick={onOpen} className="mt-2 rounded px-3 flex items-center gap-2"
             style={{ height: 32, border: `1px solid ${T.hair}`, background: T.card,

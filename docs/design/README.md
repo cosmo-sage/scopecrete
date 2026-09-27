@@ -1,0 +1,147 @@
+# ScopeCrete — design references
+
+**For whoever is designing screens for this product, human or agent.**
+Prepared 27 September 2026 from the live database and the deployed code.
+
+Everything a designer needs that is not already in `/DECISIONS.md` lives here.
+`/DECISIONS.md` is still ground truth for the product, the costing engine and the
+agent rules; it is not repeated here.
+
+---
+
+## 1. What is in this folder
+
+| file | what it is |
+|---|---|
+| `scopecrete-v34.jsx` | **The mobile reference build.** 5,732 lines, ~55 components. Every screen that has been designed for mobile is in here as working React. It is also full of mock data — see §5. |
+| `desktop-screens.html` | **The desktop design, readable.** Eight screens as plain markup, extracted from the bundle below. Open it, or read it as text — this is the one to diff against. |
+| `desktop-standalone.html` | The same desktop design as a self-extracting bundle. Open in a browser to click through it. 420KB, mostly inlined React and fonts; not readable as source. |
+| `ui-handoff-2026-09-16.md` | The brief the desktop design was made from. Contains the anti-brief (§3.5) and the screen inventory (§6). Still current except for the counts. |
+| `synopsis-2026-09-16.md` | Full product and architecture synopsis. Still current except for the counts. |
+
+**The counts in those last two documents are eleven days stale.** §3 below has
+today's.
+
+## 2. Read these three rules before drawing anything
+
+**Nothing may display a number or a status that is not real.** If the code can
+produce a number with the database empty, it is a placeholder and must render as
+one. An empty state holds the layout and says what it is waiting for. This is the
+rule that keeps being broken and it is the reason the desktop design carries no
+dollar figures at all.
+
+**Unclassified is its own state, and it is the majority state.** `contacts.contact_type`
+defaults to `'customer'`, so **190 of 197 contacts** are sitting there labelled
+customer because nobody has told the system otherwise. A design that offers only
+CUSTOMER and VENDOR badges has no way to tell the truth about almost every row.
+
+**Never display an inferred dimension.** No standard driveway, no assumed four
+inches. A missing dimension stays visibly missing all the way to the estimate,
+where it reads as "cannot price without this". A fabricated number on a screen
+gets caught; a fabricated dimension flows into a bid, gets sent, and gets poured.
+
+## 3. The data, measured today
+
+| | 27 Sep 2026 |
+|---|---|
+| contacts | **197**, of which **176 have no name** |
+| contacts labelled `contact_type='customer'` | **190** — see §2, almost all of it is the default, not a classification |
+| messages | 1,504 |
+| calls | 580 |
+| call summaries / transcripts | **79 each** — the other ~500 calls are a number and a timestamp |
+| leads | 84 |
+| spine drift | **1** — one event reached the phone number and never reached the app |
+| **jobs** | **0** |
+| job_sections, estimates, invoices, payments, receipts | **0** |
+| org_cost_settings, overhead_items, balance_checkpoints | **0** |
+
+64 tables; most are empty. **Design every screen empty-first.** For jobs, scopes,
+money and documents the empty state is not an edge case, it is the only state that
+exists today and will be for a while.
+
+## 4. What is actually built — the honest gap
+
+The deployed app is **1,095 lines** across every dashboard screen, tokens and
+primitives. The mobile reference build is **5,732 lines**. That ratio is the
+answer to "why doesn't the site look like the mockup".
+
+The app is not broken — it is *correct and thin*. It prints a dash with a reason
+rather than a fake number, it carries a live drift alarm, and its More screen
+names what each dead entry is waiting for. It just has very little in it.
+
+| screen | in `scopecrete-v34.jsx` | in the app | |
+|---|---|---|---|
+| App shell | header + 4-tab footer | `src/app/dashboard/layout.tsx` (136 lines) | **built** |
+| Threads list | `ThreadsScreen` `ThreadRow` `ActivityFeed` `StreamBar` | `dashboard/messages/page.tsx` (185) | **partial** — no filter chips, no row expand |
+| Thread detail | inside `ThreadsScreen` | `dashboard/messages/[id]/page.tsx` | **partial** — opens on newest message, not on a job card |
+| Scope list | `ScopesScreen` `CustomerPicker` | `dashboard/scope/page.tsx` (166) | **empty** — `jobs` is 0 rows and no UI creates one |
+| Scope builder | `ScopeScreen` (~400 lines) | — | **not built** |
+| Cash | `CashFlow` `Ribbon` `Band` `MoneySide` `MoneyCard` (~700 lines) | `dashboard/cash/page.tsx` (168) | **partial** — the settings form, correctly all dashes. No ribbon, no band. |
+| Pipeline | `PipelinePanel` `Funnel` `Donut` `Spark` `DayBars` | `dashboard/more/pipeline/page.tsx` | **partial** |
+| Customers | `CustomersScreen` `CustomerScreen` `PeopleBlock` `ContactLines` (~550) | — | **not built** |
+| Documents / proposals | `DocsScreen` `DocView` `DocPaper` `FileRow` (~460) | — | **not built** |
+| Schedule | `ScheduleScreen` `MonthGrid` `WeekView` `QuarterView` `YearLoad` (~470) | — | **not built** |
+| Settings | `SettingsSheet` `OverheadSheet` (~340) | — | **not built** |
+| Dusty | `DustyScreen` (~490) | `/dusty` (outside the shell) | **partial** — send path deliberately disabled |
+| **Triage** | — | — | **not designed for mobile, designed for desktop** — see `desktop-screens.html` |
+
+What did survive the port cleanly, and is the place to build on:
+
+- `src/lib/v34/tokens.ts` — colour, money palette, type scale, `eyebrow`, tabular
+  numerals, status chips, `relTime()`, `formatPhone()`. **This is the live design
+  system.** Changing the look means editing this file.
+- `src/components/v34/primitives.tsx` — `Emblem` `NavIcon` `Avatar` `Badge`
+  `Sheet` `EmptyState`.
+
+## 5. Two things in `scopecrete-v34.jsx` that will mislead you
+
+**About sixty mock data constants.** `JOBS` `INVOICES` `PAYMENTS` `RECEIPTS`
+`THREADS` `PEOPLE` `FILES` `SCHED` `BILLS` `ACTIVITY` and more. None of it
+reflects reality — there are no jobs, no invoices and no payments in the database.
+Treat the components as structure and the data inside them as noise.
+
+**`const TODAY = "2026-08-13"`.** Every relative timestamp in the mockup is
+computed from that anchor, which makes each one a fiction that looks completely
+ordinary. The port replaced it with `relTime()`, which takes a real ISO string and
+returns **null** when there isn't one, so a row with no timestamp renders nothing
+rather than something plausible.
+
+## 6. An unresolved fork: there are two design systems here
+
+The mobile build and the desktop design do not share a typeface.
+
+| | mobile (`scopecrete-v34.jsx`, and the live app) | desktop (`desktop-screens.html`) |
+|---|---|---|
+| display face | **Barlow Condensed** | **Archivo** |
+| body face | **IBM Plex Sans** | Archivo |
+| token source | `src/lib/v34/tokens.ts` | a "Modernist" stylesheet inside the bundle |
+
+Loaded in the app via `next/font/google` in `src/app/page.tsx` and
+`src/lib/v34/tokens.ts:42-43`. Desktop and mobile cannot run different typefaces
+and both be ScopeCrete. **This needs deciding before desktop work continues**, and
+it is a decision for Coy, not for whoever draws next.
+
+Also worth knowing: the desktop design's markup is **1,244 inline `style=`
+attributes against 194 `class=`**, and carries no component source. It is a
+picture of eight screens, not code — anything from it is rebuilt as React against
+real endpoints, not imported.
+
+## 7. Where the real implementation is
+
+```
+src/lib/v34/tokens.ts              the live design tokens
+src/components/v34/primitives.tsx  shared components
+src/app/dashboard/layout.tsx       the shell — sticky header, four-tab footer
+src/app/dashboard/*/page.tsx       the screens
+src/app/api/                       every endpoint a screen can read
+DECISIONS.md                       product ground truth
+docs/reports/                      one report per work order, what was built and what was not
+```
+
+## 8. What is NOT in this folder
+
+The **FEAT-009** specs — `WO-17-Threads-and-Shell-to-v34.md`,
+`WO-15-Scope-Builder-and-Proposal-Structures.md`,
+`FEAT-009b-Voice-to-Scope-Agent-Contract.md`, `026_*.sql`, `027_*.sql` and
+`scope-proposals.jsx`. They live in Coy's Obsidian vault and have not been copied
+in. When they arrive they belong at `docs/design/feat-009/`.

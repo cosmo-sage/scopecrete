@@ -20,6 +20,7 @@
 import React, { useEffect, useState } from "react";
 import { T, F, disp, eyebrow, nums, money0 } from "@/lib/v34/tokens";
 import { EmptyState } from "@/components/v34/primitives";
+import { CostSettingsEditor } from "@/components/v34/cost-settings";
 
 interface Overhead { id: string; label: string; amount: number; cadence: string | null; active: boolean }
 interface CashFlow {
@@ -57,6 +58,8 @@ export default function CashScreen() {
   const [d, setD] = useState<CashFlow | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [noOrg, setNoOrg] = useState(false);
+  // Bumped when cost settings save, so the rows above re-read what was written.
+  const [rev, setRev] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -72,7 +75,7 @@ export default function CashScreen() {
       .then((b) => { if (!cancelled && b) setD(b); })
       .catch((e) => { if (!cancelled) setError(e instanceof Error ? e.message : String(e)); });
     return () => { cancelled = true; };
-  }, []);
+  }, [rev]);
 
   if (noOrg) {
     return <EmptyState tone="warn" title="This account isn't a member of any organisation"
@@ -163,6 +166,11 @@ export default function CashScreen() {
         <EmptyState title="No won jobs yet"
           detail="The month ribbon and the weekly band plot money against jobs. Once a job is won and invoiced they will have something to show." />
       )}
+
+      {/* The settings every price and the bid floor stand on. One editor;
+          DECISIONS §6 wants it reachable from Settings too — that door comes
+          with the Settings sheet. */}
+      <CostSettingsEditor onSaved={() => setRev((r) => r + 1)} />
     </div>
   );
 }

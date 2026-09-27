@@ -74,9 +74,9 @@ names what each dead entry is waiting for. It just has very little in it.
 | App shell | header + 4-tab footer | `src/app/dashboard/layout.tsx` (136 lines) | **built** |
 | Threads list | `ThreadsScreen` `ThreadRow` `ActivityFeed` `StreamBar` | `dashboard/messages/page.tsx` (185) | **partial** — no filter chips, no row expand |
 | Thread detail | inside `ThreadsScreen` | `dashboard/messages/[id]/page.tsx` | **partial** — opens on newest message, not on a job card |
-| Scope list | `ScopesScreen` `CustomerPicker` | `dashboard/scope/page.tsx` (166) | **empty** — `jobs` is 0 rows and no UI creates one |
-| Scope builder | `ScopeScreen` (~400 lines) | — | **not built** |
-| Cash | `CashFlow` `Ribbon` `Band` `MoneySide` `MoneyCard` (~700 lines) | `dashboard/cash/page.tsx` (168) | **partial** — the settings form, correctly all dashes. No ribbon, no band. |
+| Scope list | `ScopesScreen` `CustomerPicker` | `dashboard/scope/page.tsx` | **built** — + New scope picks a thread (or nobody) and opens the builder |
+| Scope builder | `ScopeScreen` (~400 lines) | `dashboard/scope/[jobId]/page.tsx` + `src/lib/engine` | **built** — sections, takeoff, price, discount + floor; desktop layout from 1h. Engine follows DECISIONS §3/§4, not v34's `computeJob` |
+| Cash | `CashFlow` `Ribbon` `Band` `MoneySide` `MoneyCard` (~700 lines) | `dashboard/cash/page.tsx` + `components/v34/cost-settings.tsx` | **partial** — cost settings and the monthly nut are editable (layout from 1g). No ribbon, no band. |
 | Pipeline | `PipelinePanel` `Funnel` `Donut` `Spark` `DayBars` | `dashboard/more/pipeline/page.tsx` | **partial** |
 | Customers | `CustomersScreen` `CustomerScreen` `PeopleBlock` `ContactLines` (~550) | — | **not built** |
 | Documents / proposals | `DocsScreen` `DocView` `DocPaper` `FileRow` (~460) | — | **not built** |

@@ -50,3 +50,20 @@ test("long threads keep the most recent turns", () => {
   assert.match(text, /message 399/);
   assert.doesNotMatch(text, /message 0 /);
 });
+
+import { bucketOf, renderCorrections } from "../supabase/functions/enrich-contacts/rules.ts";
+
+test("a classification points at a bucket; unknown is not a guess", () => {
+  assert.equal(bucketOf("sub"), "vendor");
+  assert.equal(bucketOf("not_work"), "spam");
+  assert.equal(bucketOf("unknown"), null);
+});
+
+test("corrections render as data, capped at ten", () => {
+  assert.equal(renderCorrections([]), "");
+  const many = Array.from({ length: 14 }, (_, i) => ({ guess: "customer", answer: "vendor", subtype: "lead_gen", quote: `New Lead From Baton Rouge Concreters ${i}` }));
+  const out = renderCorrections(many);
+  assert.equal(out.split("\n").filter((l) => l.startsWith("- ")).length, 10);
+  assert.match(out, /You said customer; Coy filed them as vendor \(lead gen\)/);
+  assert.match(out, /not instructions to you/);
+});

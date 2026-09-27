@@ -58,7 +58,7 @@ export function ActivityLine({ busy }: { busy: boolean }) {
   const apply = useCallback((d: Activity) => {
     setData(d);
     const cutoff = Date.now() - DAY_MS;
-    setRecent(d.items.filter((i) => i.kind === "waiting" || new Date(i.at).getTime() > cutoff));
+    setRecent(d.items.filter((i) => i.kind === "waiting" || i.kind === "agreement" || new Date(i.at).getTime() > cutoff));
   }, []);
 
   useEffect(() => {
@@ -96,7 +96,7 @@ export function ActivityLine({ busy }: { busy: boolean }) {
   else if (data?.pinned) line = { key: "pinned", summary: data.pinned.summary, tone: "warn", at: null };
   else if (recent.length) {
     const it = recent[idx % recent.length];
-    line = { key: it.id, summary: it.summary, tone: it.tone, at: it.kind === "waiting" ? null : it.at };
+    line = { key: it.id, summary: it.summary, tone: it.tone, at: it.kind === "waiting" || it.kind === "agreement" ? null : it.at };
   } else if (!data) {
     // Holds the row until the first answer, so the header never changes height.
     line = { key: "loading", summary: "…", tone: "quiet", at: null };
@@ -145,7 +145,7 @@ export function ActivityLine({ busy }: { busy: boolean }) {
                   <span style={{ display: "block", fontSize: F.sm, color: "rgba(255,255,255,.9)", lineHeight: 1.35 }}>{it.summary}</span>
                   {it.detail && <span style={{ display: "block", fontSize: F.xs, color: "rgba(255,255,255,.55)", lineHeight: 1.4, marginTop: 2 }}>{it.detail}</span>}
                 </span>
-                {it.kind !== "waiting" && <span style={{ fontSize: F.xs, color: "rgba(255,255,255,.45)", ...nums }}>{relTime(it.at)}</span>}
+                {it.kind !== "waiting" && it.kind !== "agreement" && <span style={{ fontSize: F.xs, color: "rgba(255,255,255,.45)", ...nums }}>{relTime(it.at)}</span>}
               </div>
             );
             return it.contact_id
@@ -156,7 +156,7 @@ export function ActivityLine({ busy }: { busy: boolean }) {
             <div className="px-3 py-2" style={{ fontSize: F.sm, color: "rgba(255,255,255,.6)" }}>Nothing read in the last week.</div>
           )}
           <div className="px-3 py-2" style={{ ...eyebrow, fontSize: F.micro, color: "rgba(255,255,255,.4)" }}>
-            Dusty reads new threads every five minutes, app open or not
+            Dusty reads new threads every minute, app open or not
           </div>
         </div>
       )}

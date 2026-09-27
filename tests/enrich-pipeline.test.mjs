@@ -2,7 +2,7 @@
 // a fake model. `npm test`.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readContact } from "../supabase/functions/enrich-contacts/pipeline.ts";
+import { loadLearning, readContact } from "../supabase/functions/enrich-contacts/pipeline.ts";
 
 const ORG = "org-1", CONTACT = "c-1", PHONE = "+12255550101";
 
@@ -188,4 +188,57 @@ test("the model saying spam is not enough without evidence", async () => {
   const r = await readContact(db, ORG, CONTACT, model(proposal({ classification: "spam" })), "hermes:test");
   assert.equal(r.outcome, "proposed");
   assert.equal(writes(db, "contacts", "update").length, 0);
+});
+
+const learned = (streaks) => ({ corrections: [], streaks });
+
+test("a bucket Dusty has earned (20 in a row) is filed — auto, never confirmed, never the lead guard", async () => {
+  const db = world({ texts: [["THEM", "How much for a 20x30 driveway? Can you start next week"]] });
+  const r = await readContact(db, ORG, CONTACT, model(proposal({ classification: "customer" })), "hermes:test", learned({ customer: 20 }));
+  assert.equal(r.outcome, "filed");
+  const [upd] = writes(db, "contacts", "update");
+  assert.equal(upd.payload.contact_type, "customer");
+  assert.equal(upd.payload.classification_source, "machine");
+  assert.ok(upd.payload.auto_classified_at);
+  assert.equal(upd.payload.classification_confirmed_at, undefined, "auto is never a confirmation");
+  for (const col of ["classification_confirmed_at", "auto_classify_blocked_at", "auto_classified_at"]) {
+    assert.ok(upd.filters.some((f) => f[0] === "is" && f[1] === col && f[2] === null), `must require ${col} is null`);
+  }
+  assert.equal(writes(db, "customers", "update").length + writes(db, "customers", "insert").length, 0);
+});
+
+test("19 in a row is not enough, and one bucket's streak does not unlock another", async () => {
+  for (const [cls, streaks] of [["customer", { customer: 19 }], ["vendor", { customer: 40 }]]) {
+    const db = world({ texts: [["THEM", "could you send the $1300 for Monday"]] });
+    const r = await readContact(db, ORG, CONTACT, model(proposal({ classification: cls })), "hermes:test", learned(streaks));
+    assert.equal(r.outcome, "proposed");
+    assert.equal(writes(db, "contacts", "update").length, 0);
+  }
+});
+
+test("a sub is filed under vendor as a subcontractor", async () => {
+  const db = world({ texts: [["THEM", "if you have anything for Monday for us we are free"]] });
+  const r = await readContact(db, ORG, CONTACT, model(proposal({ classification: "sub" })), "hermes:test", learned({ vendor: 25 }));
+  assert.equal(r.outcome, "filed");
+  const [upd] = writes(db, "contacts", "update");
+  assert.deepEqual([upd.payload.contact_type, upd.payload.contact_subtype], ["vendor", "subcontractor"]);
+});
+
+test("corrections are the confirmed contacts Dusty guessed differently, by his guess before Coy decided", async () => {
+  const db = fakeDb((q) => {
+    assert.equal(eq(q, "org_id"), ORG, `${q.table} read without the org filter`);
+    if (q.table === "sc_bucket_agreement") return { data: [{ bucket: "customer", streak: 3 }] };
+    if (q.table === "contacts") return { data: [
+      { id: "a", contact_type: "vendor", contact_subtype: "lead_gen", classification_confirmed_at: "2026-09-27T10:00:00Z" },
+      { id: "b", contact_type: "customer", contact_subtype: null, classification_confirmed_at: "2026-09-27T09:00:00Z" },
+    ] };
+    if (q.table === "contact_proposals") return { data: [
+      { contact_id: "a", classification: "vendor", evidence_quote: "later guess", created_at: "2026-09-27T11:00:00Z" },
+      { contact_id: "a", classification: "customer", evidence_quote: "New Lead From Baton Rouge Concreters", created_at: "2026-09-27T08:00:00Z" },
+      { contact_id: "b", classification: "customer", evidence_quote: "how much for a slab", created_at: "2026-09-27T08:00:00Z" },
+    ] };
+  });
+  const l = await loadLearning(db, ORG);
+  assert.deepEqual(l.streaks, { customer: 3 });
+  assert.deepEqual(l.corrections, [{ guess: "customer", answer: "vendor", subtype: "lead_gen", quote: "New Lead From Baton Rouge Concreters" }]);
 });

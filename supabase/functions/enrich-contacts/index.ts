@@ -15,8 +15,10 @@
  *      sc_enrich_due: unnamed, something THEY said, quiet 3 minutes, changed
  *      since last read);
  *   4. reads each one (pipeline.ts): a suggestion into contact_proposals; the
- *      name itself only when the person introduced themselves; and the spam
- *      bucket only on evidence in their words from someone Coy never answered
+ *      name itself only when the person introduced themselves; the spam
+ *      bucket only on evidence in their words from someone Coy never answered;
+ *      and any other bucket only once Dusty's last 20 guesses of it matched
+ *      Coy (sc_bucket_agreement). Coy's corrections go into the prompt
  *      (DECISIONS §2b). customers.relation is never written here.
  *   5. records every outcome in contact_enrich_runs and a pulse in
  *      sc_worker_heartbeats.
@@ -34,7 +36,8 @@
  */
 
 import { createClient } from '@supabase/supabase-js'
-import { hermesAsk, pingHermes, readContact, type HermesConfig, type Outcome } from './pipeline.ts'
+import { hermesAsk, loadLearning, pingHermes, readContact, type Ask, type HermesConfig, type Learning, type Outcome } from './pipeline.ts'
+import { renderCorrections } from './rules.ts'
 
 const WORKER = 'enrich-contacts'
 /** DECISIONS §8: Hermes alone on its own Funnel port. Not a secret — the key is. */
@@ -72,7 +75,18 @@ async function runBatch(sb: any, cfg: HermesConfig, maxReads: number) {
   const counts: Record<Outcome | 'claimed', number> = {
     claimed: 0, proposed: 0, named: 0, filed: 0, unchanged: 0, no_words: 0, model_error: 0, failed: 0,
   }
-  const ask = hermesAsk(cfg)
+  // Learning is per org, loaded once per run when the org's first contact is claimed.
+  const perOrg = new Map<string, Promise<{ learning: Learning; ask: Ask }>>()
+  const forOrg = (orgId: string) => {
+    let v = perOrg.get(orgId)
+    if (!v) {
+      v = loadLearning(sb, orgId)
+        .catch(() => ({ corrections: [], streaks: {} }) as Learning)
+        .then((learning) => ({ learning, ask: hermesAsk(cfg, renderCorrections(learning.corrections)) }))
+      perOrg.set(orgId, v)
+    }
+    return v
+  }
   const model = `hermes:${cfg.model}`
   let firstModelError: string | null = null
   let claimError: string | null = null
@@ -88,7 +102,8 @@ async function runBatch(sb: any, cfg: HermesConfig, maxReads: number) {
       let outcome: Outcome = 'failed'
       let fields: Record<string, unknown> = {}
       try {
-        const r = await readContact(sb, job.org_id, job.contact_id, ask, model)
+        const { learning, ask } = await forOrg(job.org_id)
+        const r = await readContact(sb, job.org_id, job.contact_id, ask, model, learning)
         outcome = r.outcome
         fields = { proposal_id: r.proposal_id ?? null, claim_id: r.claim_id ?? null, note: r.note?.slice(0, 300) ?? null }
         if (outcome === 'model_error' && !firstModelError) firstModelError = r.note ?? 'model error'

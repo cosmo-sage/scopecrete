@@ -37,6 +37,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { T, F, disp, eyebrow, nums, clip, relTime } from "@/lib/v34/tokens";
 import { Avatar, EmptyState } from "@/components/v34/primitives";
 import { Composer } from "@/components/v34/composer";
+import { TRAY_PX, decideSwipe, isHorizontal, clampDrag } from "@/lib/swipe";
 
 interface Thread {
   contact_id: string;
@@ -189,18 +190,19 @@ function BucketPicker({ t, busy, subtypes, onPick }: {
     background: on ? colour : T.card, color: on ? "#fff" : hint ? colour : T.ink2,
   });
 
-  if (t.bucket_auto) {
+  if (t.bucket_auto && t.bucket) {
+    const name = BUCKETS.find((b) => b.k === t.bucket)?.l.toLowerCase() ?? t.bucket;
     return (
       <div className="mt-2 rounded" style={{ background: T.card, border: `1px solid ${T.hair}`, padding: 10 }}>
-        <div style={{ ...eyebrow, color: T.chalk }}>Filed as spam by Dusty</div>
+        <div style={{ ...eyebrow, color: T.chalk }}>Filed as {name} by Dusty</div>
         {t.bucket_auto.reason && (
           <div style={{ fontSize: F.xs, color: T.ink2, marginTop: 5, paddingLeft: 8, borderLeft: `2px solid ${T.chalk}`, fontStyle: "italic" }}>
             “{t.bucket_auto.reason.length > 200 ? `${t.bucket_auto.reason.slice(0, 200)}…` : t.bucket_auto.reason}”
           </div>
         )}
         <div className="flex gap-1.5 flex-wrap" style={{ marginTop: 8 }}>
-          <button disabled={busy} style={chip(true, false, T.ink)} onClick={() => onPick("spam")}>Keep as spam</button>
-          <button disabled={busy} style={chip(false, false, T.ink)} onClick={() => onPick(null)}>Not spam</button>
+          <button disabled={busy} style={chip(true, false, T.ink)} onClick={() => onPick(t.bucket!, t.subtype ?? null)}>Keep as {name}</button>
+          <button disabled={busy} style={chip(false, false, T.ink)} onClick={() => onPick(null)}>Not {name}</button>
         </div>
       </div>
     );
@@ -395,8 +397,13 @@ function AutoNameStrip({ a, name, busy, onName }: {
 
 /* -------------------------------------------------------------------- row */
 
-function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, onName, onBucket, subtypes, deciding }: {
+function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, onName, onBucket, subtypes, deciding, trayOpen, onTray, onAccept }: {
   t: Thread; first: boolean; expanded: boolean; onToggle: () => void; onOpen: () => void;
+  /** Swipe right: this row's four-bucket tray is open. One row at a time. */
+  trayOpen: boolean;
+  onTray: (open: boolean) => void;
+  /** Swipe left all the way: file Dusty's guess. */
+  onAccept: (bucket: Bucket) => void;
   onDecide: (proposalId: string, body: Record<string, unknown>) => void;
   onName: (claimId: string, action: "keep" | "undo") => void;
   onBucket: (contactId: string, bucket: Bucket | null, subtype?: string | null) => void;
@@ -404,13 +411,69 @@ function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, onName, onB
   deciding: boolean;
 }) {
   const badge = t.bucket ? BUCKETS.find((b) => b.k === t.bucket) : null;
+  // Dusty's guess, shown on the collapsed row so the list can be read — and
+  // accepted with a left swipe — without opening anything.
+  const guess = !t.bucket && t.proposal ? SUGGESTS[t.proposal.classification] ?? null : null;
+  const guessB = guess ? BUCKETS.find((b) => b.k === guess)! : null;
   const when = relTime(t.occurred_at);
+
+  // Swipe: right opens the buckets, left all the way accepts the guess.
+  // touch-action: pan-y leaves vertical scrolling to the browser.
+  const [drag, setDrag] = useState<number | null>(null);
+  const start = React.useRef<{ x: number; y: number; w: number; on: boolean } | null>(null);
+  const swipeable = !expanded;
+  const offset = drag ?? (trayOpen ? TRAY_PX : 0);
+  const onTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (!swipeable) return;
+    const p = e.touches[0];
+    start.current = { x: p.clientX, y: p.clientY, w: e.currentTarget.clientWidth, on: false };
+  };
+  const onTouchMove = (e: React.TouchEvent) => {
+    const st = start.current; if (!st) return;
+    const p = e.touches[0];
+    const dx = p.clientX - st.x + (trayOpen ? TRAY_PX : 0), dy = p.clientY - st.y;
+    if (!st.on) { if (!isHorizontal(p.clientX - st.x, dy)) return; st.on = true; }
+    setDrag(clampDrag(dx, st.w, !!guess));
+  };
+  const onTouchEnd = () => {
+    const st = start.current; start.current = null;
+    if (!st?.on || drag === null) { setDrag(null); return; }
+    const r = decideSwipe(drag, st.w, !!guess);
+    setDrag(null);
+    if (r === "open") onTray(true);
+    else { onTray(false); if (r === "accept" && guess) onAccept(guess); }
+  };
   const isVoicemail = t.summary_source === "quo_voicemail";
   const synthesised = t.preview_source === "synthesised";
 
   return (
-    <div style={{ background: T.card, borderTop: first ? "none" : `1px solid ${T.hair}` }}>
-      <button onClick={onToggle} aria-expanded={expanded}
+    <div className="relative overflow-hidden" style={{ borderTop: first ? "none" : `1px solid ${T.hair}` }}>
+      {/* Behind the row, left: the four buckets (swipe right). */}
+      {offset > 0 && (
+        <div className="absolute inset-y-0 left-0 flex" style={{ width: TRAY_PX }} aria-label="File as">
+          {BUCKETS.map((b) => (
+            <button key={b.k} disabled={deciding} onClick={() => { onTray(false); onBucket(t.contact_id, b.k, guess === b.k && t.proposal?.classification === "sub" ? "subcontractor" : null); }}
+              className="flex-1 flex flex-col items-center justify-center gap-0.5"
+              style={{ background: b.c, color: "#fff", fontFamily: disp, fontSize: F.micro, fontWeight: 700, textTransform: "uppercase",
+                       letterSpacing: 0, boxShadow: guess === b.k ? "inset 0 0 0 3px rgba(255,255,255,.85)" : undefined }}>
+              {b.l}
+              {guess === b.k && <span style={{ fontSize: F.micro, opacity: 0.9 }}>Dusty</span>}
+            </button>
+          ))}
+        </div>
+      )}
+      {/* Behind the row, right: accept Dusty's guess (swipe left). */}
+      {offset < 0 && guessB && (
+        <div className="absolute inset-0 flex items-center justify-end pr-4"
+          style={{ background: guessB.c, color: "#fff", fontFamily: disp, fontSize: F.md, fontWeight: 600, textTransform: "uppercase" }}>
+          {offset < -120 ? `✓ ${guessB.l}` : guessB.l}
+        </div>
+      )}
+      <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} onTouchCancel={onTouchEnd}
+        style={{ background: T.card, position: "relative", touchAction: "pan-y",
+                 transform: offset ? `translateX(${offset}px)` : undefined,
+                 transition: drag === null ? "transform .18s ease-out" : "none" }}>
+      <button onClick={() => (trayOpen ? onTray(false) : onToggle())} aria-expanded={expanded}
         className="w-full px-2.5 py-2 flex gap-2.5 items-start text-left">
         <Avatar label={t.display_name} kind={t.contact_type} dim={t.name_is_phone} />
         <span style={{ minWidth: 0, flex: 1, display: "block" }}>
@@ -430,6 +493,12 @@ function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, onName, onB
               <span className="shrink-0" title={t.bucket_auto ? "Filed by Dusty — Undo in the row" : undefined}
                 style={{ ...eyebrow, color: badge.c }}>
                 {badge.l}{t.bucket_auto ? " · auto" : ""}
+              </span>
+            )}
+            {guessB && (
+              <span className="shrink-0 rounded px-1" title="Dusty's guess — swipe left to accept, right for all four"
+                style={{ ...eyebrow, color: guessB.c, border: `1px dashed ${guessB.c}` }}>
+                {guessB.l}?
               </span>
             )}
             <span className="flex-1" />
@@ -511,6 +580,7 @@ function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, onName, onB
           </button>
         </div>
       )}
+      </div>
     </div>
   );
 }
@@ -541,6 +611,9 @@ export function ThreadList() {
   }
   const [moreFilters, setMoreFilters] = useState(false);
   const [openRow, setOpenRow] = useState<string | null>(null);
+  // Swipe tray: one row at a time. Toast: what was just filed, with Undo.
+  const [trayRow, setTrayRow] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ contactId: string; label: string } | null>(null);
   const [deciding, setDeciding] = useState(false);
 
   // Bumped after a confirm, so the list and the chip counts both refetch: the
@@ -598,6 +671,15 @@ export function ThreadList() {
       setDeciding(false);
     }
   }, []);
+
+  /** File from the row or a swipe, then offer Undo for five seconds. */
+  const fileAndToast = useCallback((contactId: string, bucket: Bucket | null, subtype?: string | null) => {
+    void bucketDecide(contactId, bucket, subtype);
+    if (bucket) {
+      setToast({ contactId, label: BUCKETS.find((b) => b.k === bucket)?.l ?? bucket });
+      setTimeout(() => setToast((cur) => (cur?.contactId === contactId ? null : cur)), 5000);
+    }
+  }, [bucketDecide]);
 
   const nameDecide = useCallback(async (claimId: string, action: "keep" | "undo") => {
     setDeciding(true);
@@ -699,6 +781,15 @@ export function ThreadList() {
 
   return (
     <div>
+      {toast && (
+        <div className="fixed left-3 right-3 lg:left-auto lg:right-6 lg:w-[360px] bottom-[84px] lg:bottom-6 z-40 rounded-lg px-3 flex items-center gap-2"
+          role="status" style={{ height: 44, background: T.ink, color: "#fff", boxShadow: "0 6px 20px rgba(0,0,0,.25)" }}>
+          <span style={{ fontSize: F.sm, flex: 1 }}>Filed as {toast.label}</span>
+          <button onClick={() => { const c = toast.contactId; setToast(null); void bucketDecide(c, null); }}
+            style={{ ...eyebrow, color: T.hiviz, fontSize: F.sm, cursor: "pointer" }}>Undo</button>
+        </div>
+      )}
+
       {/* Drift: 0 is all-clear, >0 is an outage that reached the app, and a
           failure to read it renders as UNKNOWN — never as all-clear. */}
       {drift && (drift.count === null || drift.count > 0) && (
@@ -814,7 +905,11 @@ export function ThreadList() {
               expanded={openRow === t.contact_id}
               onToggle={() => setOpenRow(openRow === t.contact_id ? null : t.contact_id)}
               onOpen={() => router.push(`/dashboard/messages/${t.contact_id}`)}
-              onDecide={decide} onName={nameDecide} onBucket={bucketDecide} subtypes={subtypes} deciding={deciding} />
+              onDecide={decide} onName={nameDecide} onBucket={(id, bucket, sub) => fileAndToast(id, bucket, sub)}
+              subtypes={subtypes} deciding={deciding}
+              trayOpen={trayRow === t.contact_id}
+              onTray={(open) => setTrayRow(open ? t.contact_id : null)}
+              onAccept={(bucket) => fileAndToast(t.contact_id, bucket, bucket === "vendor" && t.proposal?.classification === "sub" ? "subcontractor" : null)} />
           ))}
         </div>
       )}

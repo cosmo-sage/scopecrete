@@ -323,7 +323,7 @@ confirmed — everything else is **Unclassified**, never the column default.
 
 **The background enricher (2026-09-27, migrations 029–033).** Contacts are
 read with the app closed. pg_cron calls the `enrich-contacts` edge function
-every minute (v6; 4 readers, each claiming one contact at a time until the
+every minute (v7; 4 readers, each claiming one contact at a time until the
 queue is empty or 45 s have passed, so a backlog drains in minutes; source in
 `supabase/functions/enrich-contacts/`:
 `rules.ts` the rules, `pipeline.ts` one contact, `index.ts` the worker). There
@@ -399,7 +399,7 @@ used to be a second, overlapping system; it is now kept in step by
 subcontractor / looking for work; customer → `customer`), so the quo-intake
 lead guard keeps working unchanged. A bucket shows only when
 `classification_confirmed_at` (Coy put them there) or `auto_classified_at`
-(Dusty filed them — spam only) is set; everyone else is **Unsorted**. The
+(Dusty filed them — spam, or a bucket he has earned, below) is set; everyone else is **Unsorted**. The
 190 legacy `'customer'` defaults are not customers.
 
 **Spam is the one bucket Dusty files itself** (Coy, 2026-09-27), shown as
@@ -409,6 +409,30 @@ passcode, "reply STOP" opt-out, stock scam line) AND Coy has never written
 or called back, onto a contact nobody has sorted. Not spam → back to Unsorted,
 `auto_classify_blocked_at` set, never auto-filed again. Dry run 2026-09-27:
 one contact qualifies (Handoff one-time passwords). Filed spam is not re-read.
+
+**Dusty learns from Coy's sorting, and earns the other buckets (Coy,
+2026-09-27; migration 036, `enrich-contacts` v7).** Every contact Coy files is
+a labelled example: Dusty's guess (the latest `contact_proposals` row made
+before Coy decided) against Coy's answer.
+
+- **Track record** — view `sc_bucket_agreement` (security_invoker): per org
+  and bucket, `guesses`, `agreed`, and `streak` (hits since the last miss).
+  Computed, never stored, so it cannot drift. A miss is Coy filing a guess
+  somewhere else, or undoing an automatic filing. The activity line shows it
+  ("matched you on 18 of 20 customers — 7/20 in a row").
+- **Corrections go into the prompt** — the last 10 contacts Coy filed
+  differently from Dusty's guess, with the quoted line, appended to the system
+  prompt as data ("You said customer; Coy filed them as vendor (lead gen)").
+  Loaded once per org per run, service role, org filter explicit.
+- **Earned autonomy** — once a bucket's `streak` reaches **20**
+  (`AUTO_STREAK`), Dusty files new guesses of that bucket himself: the same
+  marks and conditions as spam (`auto_classified_at`, nobody sorted them, never
+  un-filed), shown "Filed as X by Dusty" with **Keep** / **Not X**. One miss
+  and he is back to asking.
+- **An automatic vendor or sub never hides a lead.** Only
+  `contacts.contact_type` is written; `customers.relation` stays unconfirmed,
+  so quo-intake keeps creating their leads until Coy taps Keep. §2b's rule
+  holds: suppression requires a human.
 
 An `enrich-contacts` proposal is an opinion. It can raise the question — "this
 looks like a sub, confirm?" — and once a human answers, the answer is load
@@ -559,7 +583,11 @@ expected start date per quoted job before it means anything. Add the field.
   buckets: Customers · Vendors · Unsorted · All up front; Needs you, Today,
   Personal, Spam behind the filter. Spam shows only under its own chip. One
   tap in an expanded row files a person (Dusty's guess dashed, the confirmed
-  bucket solid, then an optional type). Job stages — New lead, Consultation,
+  bucket solid, then an optional type). **Swipe on a phone (Coy,
+  2026-09-27):** an unsorted row with a guess shows it as a dashed "Vendor?"
+  tag; swipe LEFT most of the way (60% of the row) to accept that guess, swipe
+  RIGHT to open the four buckets behind the row (Dusty's marked). Either shows
+  "Filed as X · Undo" for 5 s. Thresholds live in `src/lib/swipe.ts`. Job stages — New lead, Consultation,
   Estimating, Follow up, W.I.P., Complete, Lost — are the Jobs board
   (Scope renamed Jobs), a Kanban, not Threads chips.
 - **Jobs board (migration 034, 2026-09-27)** — `/dashboard/scope`, stages in

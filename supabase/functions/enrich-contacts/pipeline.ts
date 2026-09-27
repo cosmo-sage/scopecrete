@@ -9,8 +9,8 @@
  */
 
 import {
-  PROMPT_VERSION, SYSTEM_PROMPT, findSelfIdentification, relabelTranscript, renderConversation, sanitize,
-  spamSignal, worthEnriching, type Proposal, type Turn,
+  AUTO_STREAK, PROMPT_VERSION, SYSTEM_PROMPT, bucketOf, findSelfIdentification, relabelTranscript, renderConversation,
+  sanitize, spamSignal, worthEnriching, type Correction, type Proposal, type Turn,
 } from './rules.ts'
 
 /**
@@ -51,7 +51,9 @@ export async function pingHermes(cfg: HermesConfig): Promise<{ ok: boolean; deta
   }
 }
 
-export function hermesAsk(cfg: HermesConfig): Ask {
+/** `extraSystem` carries the org's corrections (renderCorrections); '' adds nothing. */
+export function hermesAsk(cfg: HermesConfig, extraSystem = ''): Ask {
+  const system = extraSystem ? `${SYSTEM_PROMPT}\n\n${extraSystem}` : SYSTEM_PROMPT
   return async (conversation) => {
     const ctrl = new AbortController()
     // Hermes answers in 20-85 s (measured 2026-09-27); a small model direct
@@ -64,7 +66,7 @@ export function hermesAsk(cfg: HermesConfig): Ask {
         body: JSON.stringify({
           model: cfg.model, stream: false, temperature: 0.1, max_tokens: 900,
           messages: [
-            { role: 'system', content: SYSTEM_PROMPT },
+            { role: 'system', content: system },
             { role: 'user', content: `CONVERSATION:\n\n${conversation}` },
           ],
         }),
@@ -230,10 +232,95 @@ export async function applyAutoSpam(sb: Db, orgId: string, contactId: string, tu
 }
 
 // ---------------------------------------------------------------------------
+// Learning from Coy's sorting (DECISIONS §2b, migration 036)
+// ---------------------------------------------------------------------------
+
+export type Bucket = 'customer' | 'vendor' | 'personal' | 'spam'
+
+export interface Learning {
+  /** Where Coy filed someone differently from Dusty's guess, newest first, max 10. */
+  corrections: Correction[]
+  /** Consecutive agreements per bucket since the last miss (sc_bucket_agreement). */
+  streaks: Partial<Record<Bucket, number>>
+}
+
+export const NO_LEARNING: Learning = { corrections: [], streaks: {} }
+
+/**
+ * Loaded once per org per run. Service role, so the org filter is explicit on
+ * every read. A failure is not fatal: the read goes ahead without learning,
+ * and without learning nothing is ever filed on a streak.
+ */
+export async function loadLearning(sb: Db, orgId: string): Promise<Learning> {
+  const [{ data: agree }, { data: decided }] = await Promise.all([
+    sb.from('sc_bucket_agreement').select('bucket, streak').eq('org_id', orgId),
+    sb.from('contacts').select('id, contact_type, contact_subtype, classification_confirmed_at')
+      .eq('org_id', orgId).not('classification_confirmed_at', 'is', null).is('merged_into_contact_id', null)
+      .order('classification_confirmed_at', { ascending: false }).limit(60),
+  ])
+  const streaks: Learning['streaks'] = {}
+  for (const a of (agree ?? []) as Array<{ bucket: Bucket; streak: number }>) streaks[a.bucket] = a.streak
+
+  const people = (decided ?? []) as Array<{ id: string; contact_type: string; contact_subtype: string | null; classification_confirmed_at: string }>
+  if (!people.length) return { corrections: [], streaks }
+  const { data: props } = await sb.from('contact_proposals')
+    .select('contact_id, classification, evidence_quote, created_at')
+    .eq('org_id', orgId).in('contact_id', people.map((c) => c.id))
+    .order('created_at', { ascending: false })
+  const byContact = new Map<string, Array<{ classification: string | null; evidence_quote: string | null; created_at: string }>>()
+  for (const p of (props ?? []) as Array<{ contact_id: string; classification: string | null; evidence_quote: string | null; created_at: string }>) {
+    const list = byContact.get(p.contact_id) ?? []
+    list.push(p)
+    byContact.set(p.contact_id, list)
+  }
+
+  const corrections: Correction[] = []
+  for (const c of people) {
+    // Dusty's guess is the latest suggestion made before Coy decided — the same
+    // comparison the agreement view makes.
+    const guess = byContact.get(c.id)?.find((p) => p.created_at <= c.classification_confirmed_at)
+    const gb = bucketOf(guess?.classification)
+    if (!guess || !gb || gb === c.contact_type) continue
+    corrections.push({ guess: guess.classification as string, answer: c.contact_type, subtype: c.contact_subtype, quote: guess.evidence_quote ?? '' })
+    if (corrections.length >= 10) break
+  }
+  return { corrections, streaks }
+}
+
+/**
+ * File a contact in a bucket Dusty has earned: his last AUTO_STREAK guesses of
+ * it all matched Coy. Same conditions as spam — nobody sorted them, Coy never
+ * un-filed them — and the same marks: auto, with Undo.
+ *
+ * Only contacts.contact_type is written. customers.relation is not, so an
+ * automatically filed vendor or sub is NOT a confirmed one and quo-intake
+ * still creates their leads until Coy keeps it. A machine opinion never hides
+ * a lead (§2b).
+ */
+export async function applyAutoBucket(sb: Db, orgId: string, contactId: string, classification: string, reason: string)
+  : Promise<{ filed: boolean; note: string }> {
+  const bucket = bucketOf(classification)
+  if (!bucket || bucket === 'spam') return { filed: false, note: 'not a streak bucket' }
+  const { data: rows, error } = await sb.from('contacts')
+    .update({
+      contact_type: bucket, contact_subtype: classification === 'sub' ? 'subcontractor' : null,
+      classification_source: 'machine',
+      auto_classified_at: new Date().toISOString(), auto_classified_reason: reason.slice(0, 500),
+    })
+    .eq('org_id', orgId).eq('id', contactId)
+    .is('classification_confirmed_at', null).is('auto_classify_blocked_at', null).is('auto_classified_at', null)
+    .select('id')
+  if (error) return { filed: false, note: `contacts: ${error.message}` }
+  return ((rows ?? []) as unknown[]).length
+    ? { filed: true, note: reason }
+    : { filed: false, note: 'already sorted, or Coy un-filed it before' }
+}
+
+// ---------------------------------------------------------------------------
 // One contact, start to finish
 // ---------------------------------------------------------------------------
 
-export async function readContact(sb: Db, orgId: string, contactId: string, ask: Ask, model: string): Promise<ReadResult> {
+export async function readContact(sb: Db, orgId: string, contactId: string, ask: Ask, model: string, learning: Learning = NO_LEARNING): Promise<ReadResult> {
   const [turns, numbers] = await Promise.all([loadTurns(sb, orgId, contactId), contactNumbers(sb, orgId, contactId)])
   // What the model reads and what "their words" means: transcripts with US /
   // THEM speakers. findSelfIdentification() keeps the numbered originals.
@@ -279,6 +366,16 @@ export async function readContact(sb: Db, orgId: string, contactId: string, ask:
   if (p.classification === 'spam') {
     const spam = await applyAutoSpam(sb, orgId, contactId, turns, numbers[0] ?? null)
     if (spam.filed) return { outcome: 'filed', proposal_id: ins.id as string, note: spam.note }
+  }
+  const b = bucketOf(p.classification)
+  if (b && b !== 'spam' && (learning.streaks[b] ?? 0) >= AUTO_STREAK) {
+    const filed = await applyAutoBucket(sb, orgId, contactId, p.classification, p.evidence_quote)
+    if (filed.filed) {
+      // Filing does not stop the name: someone who introduced themselves is
+      // still named, and the run records the filing.
+      const named = await applySelfIdentified(sb, orgId, contactId, p, turns, model)
+      return { outcome: 'filed', proposal_id: ins.id as string, claim_id: named.claim_id, note: filed.note }
+    }
   }
   const auto = await applySelfIdentified(sb, orgId, contactId, p, turns, model)
   return auto.claim_id

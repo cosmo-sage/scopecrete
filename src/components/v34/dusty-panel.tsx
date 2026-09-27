@@ -96,9 +96,9 @@ export function DustyPanel({ open, onClose, onBusy }: { open: boolean; onClose: 
       });
       if (!r.ok || !r.body) {
         const b = await r.json().catch(() => ({}));
-        append(b?.code === "no_key"
-          ? "I'm not connected yet. Add ANTHROPIC_API_KEY in Vercel (Settings → Environment Variables, marked Sensitive, Preview and Production), then redeploy."
-          : `I couldn't answer: ${b?.error || `HTTP ${r.status}`}`);
+        append(b?.code === "not_connected"
+          ? "I'm not connected yet. In Vercel, set HERMES_URL (the Funnel address) and HERMES_API_KEY (Hermes's own access key — not an Anthropic key), then redeploy."
+          : b?.error ? String(b.error) : `I couldn't answer: ${b?.error || `HTTP ${r.status}`}`);
         return;
       }
       const h = r.headers.get("X-Dusty-Context");

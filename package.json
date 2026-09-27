@@ -10,7 +10,6 @@
     "test": "node --test tests/*.test.mjs"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.128.0",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "@emotion/react": "^11.14.0",

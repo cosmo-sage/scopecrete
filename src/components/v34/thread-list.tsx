@@ -54,6 +54,36 @@ interface Thread {
   job_status: string | null;
   job_unscoped: boolean;
   relation: string | null;
+  proposal: Proposal | null;
+}
+
+/**
+ * A pending enrich-contacts proposal. A QUESTION, not an answer.
+ *
+ * It must never reach `display_name` or the Avatar. A proposed name that shows
+ * up in the list before anyone confirmed it is the "Hi Coy" bug and the "Brad
+ * Chaney" mislabel a third time — both were a name lifted from message content
+ * and attached to the wrong party with no review step.
+ */
+interface Proposal {
+  id: string;
+  proposed_name: string | null;
+  proposed_company: string | null;
+  proposed_role: string | null;
+  classification: string;
+  confidence: number;
+  evidence_quote: string | null;
+  evidence_message_id: string | null;
+  project_type: string | null;
+  scope_summary: string | null;
+  start_timing: string | null;
+  length_ft: number | null;
+  width_ft: number | null;
+  sqft_stated: number | null;
+  site_hint: string | null;
+  has_media: boolean;
+  model: string | null;
+  prompt_version: string | null;
 }
 
 type Counts = Record<string, number>;
@@ -115,10 +145,168 @@ const WHY_EMPTY: Record<string, string> = {
   vendors: "No contact has a CONFIRMED vendor or sub relation. 190 of 197 carry the 'customer' default, which is a default and not a classification — nothing has actually been classified yet.",
 };
 
+/* ------------------------------------------------------------- the review */
+
+const CLASS_LABEL: Record<string, string> = {
+  customer: "a customer", vendor: "a vendor", sub: "a sub",
+  not_work: "not work", unknown: "unclear",
+  // The table's CHECK allows these two; the enricher never emits them.
+  personal: "personal", spam: "spam",
+};
+
+/** Only these three can be written — `customers.relation` allows nothing else. */
+const CONFIRMABLE = ["customer", "vendor", "sub"];
+
+/** Why a classification cannot be confirmed. Mirrors the route's NOT_A_RELATION. */
+const CANNOT_CONFIRM: Record<string, string> = {
+  unknown: "Couldn't tell which way the ask runs — nothing to confirm.",
+  not_work: "Spam or a wrong number. There's nowhere to record that yet.",
+  personal: "Personal, not work. There's nowhere to record that yet.",
+  spam: "Spam. There's nowhere to record that yet.",
+};
+
+/**
+ * The proposal, shown as a question with its evidence attached.
+ *
+ * Name and classification confirm SEPARATELY, because Coy may believe one and
+ * not the other. "Yes that's Amber, no she isn't a vendor" has to be
+ * expressible, and folding them together would make the cheap judgement carry
+ * the expensive one.
+ *
+ * The evidence quote is the whole reason this is reviewable in two seconds
+ * rather than two minutes. A proposal without it is an assertion.
+ */
+function ProposalReview({ p, onDecide, busy }: {
+  p: Proposal;
+  busy: boolean;
+  onDecide: (body: Record<string, unknown>) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(p.proposed_name ?? "");
+
+  const who = [p.proposed_name, p.proposed_company].filter(Boolean).join(" · ");
+  const canConfirmRelation = CONFIRMABLE.includes(p.classification);
+
+  // The scope seed. Read-only: nothing applies these yet, and a field that
+  // looks actionable but writes nothing is worse than one that looks inert.
+  const caught: Array<[string, string]> = [];
+  if (p.project_type) caught.push(["Type", p.project_type]);
+  if (p.sqft_stated) caught.push(["Stated", `${p.sqft_stated} sqft`]);
+  else if (p.length_ft && p.width_ft) caught.push(["Stated", `${p.length_ft} × ${p.width_ft} ft`]);
+  if (p.site_hint) caught.push(["Site", p.site_hint]);
+  if (p.start_timing) caught.push(["Timing", p.start_timing]);
+
+  const btn = (primary?: boolean): React.CSSProperties => ({
+    height: 28, padding: "0 10px", borderRadius: 3,
+    border: `1px solid ${primary ? T.ink : T.hair}`,
+    background: primary ? T.ink : T.card, color: primary ? "#fff" : T.ink2,
+    fontFamily: disp, fontSize: F.xs, letterSpacing: ".06em",
+    textTransform: "uppercase", cursor: busy ? "default" : "pointer",
+    opacity: busy ? 0.5 : 1,
+  });
+
+  return (
+    <div className="mt-2 rounded" style={{ background: T.chalkDim, border: `1px solid #C9D9F5`, padding: 10 }}>
+      <div style={{ ...eyebrow, color: T.chalk }}>
+        Dusty thinks · {p.confidence}% sure
+      </div>
+
+      <div style={{ fontSize: F.sm, color: T.ink, marginTop: 3, lineHeight: 1.35 }}>
+        {who
+          ? <>This is <strong>{who}</strong>{p.proposed_role ? `, ${p.proposed_role}` : ""} — {CLASS_LABEL[p.classification] ?? p.classification}.</>
+          : <>No name found. Looks like {CLASS_LABEL[p.classification] ?? p.classification}.</>}
+      </div>
+
+      {/* Verbatim, and visibly a quote. This is what makes it judgeable. */}
+      {p.evidence_quote && (
+        <div style={{
+          fontSize: F.xs, color: T.ink2, marginTop: 6, paddingLeft: 8,
+          borderLeft: `2px solid ${T.chalk}`, fontStyle: "italic", lineHeight: 1.4,
+        }}>
+          “{p.evidence_quote.length > 240 ? `${p.evidence_quote.slice(0, 240)}…` : p.evidence_quote}”
+        </div>
+      )}
+
+      {p.has_media && (
+        <div style={{ fontSize: F.xs, color: "#8A4200", marginTop: 6 }}>
+          Photos attached — the scope is not settled until someone looks at them.
+        </div>
+      )}
+
+      {/* ---- name ---- */}
+      <div className="flex items-center gap-1.5 flex-wrap" style={{ marginTop: 8 }}>
+        <span style={{ ...eyebrow, color: T.ink3, minWidth: 54 }}>Name</span>
+        {editing ? (
+          <>
+            <input autoFocus value={draft} onChange={(e) => setDraft(e.target.value)}
+              placeholder="Type the name"
+              className="rounded px-2 outline-none"
+              style={{ height: 28, fontSize: F.sm, border: `1px solid ${T.chalk}`,
+                       background: T.card, color: T.ink, minWidth: 0, flex: "1 1 120px" }} />
+            <button disabled={busy || !draft.trim()} style={btn(true)}
+              onClick={() => onDecide({ name: "accept", name_override: draft.trim() })}>
+              Save
+            </button>
+            <button disabled={busy} style={btn()} onClick={() => setEditing(false)}>Cancel</button>
+          </>
+        ) : (
+          <>
+            <button disabled={busy || !p.proposed_name} style={btn(true)}
+              onClick={() => onDecide({ name: "accept" })}>
+              {p.proposed_name ? "Confirm" : "No name"}
+            </button>
+            <button disabled={busy} style={btn()} onClick={() => { setDraft(p.proposed_name ?? ""); setEditing(true); }}>
+              {p.proposed_name ? "Edit" : "Type one"}
+            </button>
+            <button disabled={busy} style={btn()} onClick={() => onDecide({ name: "reject" })}>Reject</button>
+          </>
+        )}
+      </div>
+
+      {/* ---- classification ---- */}
+      <div className="flex items-center gap-1.5 flex-wrap" style={{ marginTop: 6 }}>
+        <span style={{ ...eyebrow, color: T.ink3, minWidth: 54 }}>Is</span>
+        {canConfirmRelation ? (
+          <>
+            <button disabled={busy} style={btn(true)} onClick={() => onDecide({ relation: "accept" })}>
+              Confirm {p.classification}
+            </button>
+            <button disabled={busy} style={btn()} onClick={() => onDecide({ relation: "reject" })}>Reject</button>
+          </>
+        ) : (
+          // `unknown` and `not_work` have nowhere to land — customers.relation
+          // is customer|vendor|sub. Saying so beats a button that 400s.
+          <span style={{ fontSize: F.xs, color: T.ink3, fontStyle: "italic" }}>
+            {CANNOT_CONFIRM[p.classification] ?? `"${p.classification}" is not a relation this system records.`}
+            {" "}
+            <button disabled={busy} onClick={() => onDecide({ relation: "reject" })}
+              style={{ ...eyebrow, color: T.chalk, textDecoration: "underline", cursor: "pointer" }}>
+              Dismiss
+            </button>
+          </span>
+        )}
+      </div>
+
+      {caught.length > 0 && (
+        <div style={{ marginTop: 8, paddingTop: 6, borderTop: `1px solid #C9D9F5` }}>
+          <div style={{ ...eyebrow, color: T.ink3 }}>Also caught — not applied anywhere yet</div>
+          <div className="flex flex-wrap gap-x-3" style={{ fontSize: F.xs, color: T.ink2, marginTop: 2 }}>
+            {caught.map(([k, v]) => (
+              <span key={k}><span style={{ color: T.ink3 }}>{k}</span> {v}</span>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* -------------------------------------------------------------------- row */
 
-function ThreadRow({ t, first, expanded, onToggle, onOpen }: {
+function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, deciding }: {
   t: Thread; first: boolean; expanded: boolean; onToggle: () => void; onOpen: () => void;
+  onDecide: (proposalId: string, body: Record<string, unknown>) => void;
+  deciding: boolean;
 }) {
   const when = relTime(t.occurred_at);
   const isVoicemail = t.summary_source === "quo_voicemail";
@@ -180,10 +368,18 @@ function ThreadRow({ t, first, expanded, onToggle, onOpen }: {
             )}
           </div>
 
-          {t.name_is_phone && (
+          {/* Still says this when there is no proposal — the absence of an
+              opinion is itself information, and 176 of 197 contacts are in
+              exactly this state. */}
+          {t.name_is_phone && !t.proposal && (
             <div style={{ fontSize: F.xs, color: T.ink3, marginTop: 4, fontStyle: "italic" }}>
               Nobody has put a name to this number yet.
             </div>
+          )}
+
+          {t.proposal && (
+            <ProposalReview p={t.proposal} busy={deciding}
+              onDecide={(body) => onDecide(t.proposal!.id, body)} />
           )}
 
           <button onClick={onOpen} className="mt-2 rounded px-3 flex items-center gap-2"
@@ -215,6 +411,37 @@ export function ThreadList() {
   const [filter, setFilter] = useState("all");
   const [moreFilters, setMoreFilters] = useState(false);
   const [openRow, setOpenRow] = useState<string | null>(null);
+  const [deciding, setDeciding] = useState(false);
+
+  // Bumped after a confirm, so the list and the chip counts both refetch: the
+  // row's display_name becomes the real name and Unsorted drops by one. A
+  // client-side patch of the row would leave the counts lying.
+  const [reload, setReload] = useState(0);
+
+  /**
+   * Confirm or reject half a proposal.
+   *
+   * One contact at a time, deliberately. DECISIONS.md §2b requires a human
+   * confirmation, and fifty accepted with one tap is a human dismissing a
+   * prompt rather than confirming anything.
+   */
+  const decide = useCallback(async (proposalId: string, body: Record<string, unknown>) => {
+    setDeciding(true);
+    try {
+      const r = await fetch(`/api/proposals/${proposalId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const b = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(b?.error || `HTTP ${r.status}`);
+      setReload((n) => n + 1);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setDeciding(false);
+    }
+  }, []);
 
   useEffect(() => {
     let off = false;
@@ -250,7 +477,7 @@ export function ThreadList() {
       .catch(() => { if (!off) setDrift({ count: null, error: "unreachable" }); });
 
     return () => { off = true; };
-  }, []);
+  }, [reload]);
 
   // `today` is derived here; everything else comes from the counts route.
   const chipCount = useCallback((k: string): number | null => {
@@ -413,7 +640,8 @@ export function ThreadList() {
             <ThreadRow key={t.contact_id} t={t} first={i === 0}
               expanded={openRow === t.contact_id}
               onToggle={() => setOpenRow(openRow === t.contact_id ? null : t.contact_id)}
-              onOpen={() => router.push(`/dashboard/messages/${t.contact_id}`)} />
+              onOpen={() => router.push(`/dashboard/messages/${t.contact_id}`)}
+              onDecide={decide} deciding={deciding} />
           ))}
         </div>
       )}

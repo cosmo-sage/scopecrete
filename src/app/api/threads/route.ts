@@ -84,6 +84,42 @@ export interface Thread {
    * (DECISIONS.md §2b), so this is null for all 135 customers today.
    */
   relation: string | null;
+  /**
+   * The PENDING enrich-contacts proposal for this contact, if there is one.
+   *
+   * This is a QUESTION, never an answer. It is carried so the row can ask
+   * "is this Amber?" with the evidence attached — it must never reach
+   * `display_name`. DECISIONS.md §2b: a machine opinion changes what Coy is
+   * asked, never what he is shown. A proposed name appearing in the list
+   * before anyone confirmed it is the "Hi Coy" and "Brad Chaney" failure a
+   * third time.
+   *
+   * Only `status='pending'`. An accepted proposal has already become the name;
+   * a rejected one is history.
+   */
+  proposal: ThreadProposal | null;
+}
+
+export interface ThreadProposal {
+  id: string;
+  proposed_name: string | null;
+  proposed_company: string | null;
+  proposed_role: string | null;
+  classification: string;
+  confidence: number;
+  evidence_quote: string | null;
+  evidence_message_id: string | null;
+  /** The scope seed. Displayed read-only — nothing applies these yet. */
+  project_type: string | null;
+  scope_summary: string | null;
+  start_timing: string | null;
+  length_ft: number | null;
+  width_ft: number | null;
+  sqft_stated: number | null;
+  site_hint: string | null;
+  has_media: boolean;
+  model: string | null;
+  prompt_version: string | null;
 }
 
 /** Formats +12253782458 as (225) 378-2458. Leaves anything else alone. */
@@ -203,6 +239,46 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // The pending proposals, keyed by contact. This is the ASK side of §2b — the
+  // same rule that keeps unconfirmed relations out of `relation` above is what
+  // puts the proposal here instead, as a question with its evidence attached.
+  const proposalByContact = new Map<string, ThreadProposal>();
+  if (contactIds.length > 0) {
+    const { data: props } = await supabase
+      .from("contact_proposals")
+      .select("id, contact_id, proposed_name, proposed_company, proposed_role, classification, confidence, evidence_quote, evidence_message_id, project_type, scope_summary, start_timing, length_ft, width_ft, sqft_stated, site_hint, has_media, model, prompt_version, created_at")
+      .eq("org_id", orgId)
+      .eq("status", "pending")
+      .order("created_at", { ascending: false });
+    for (const p of (props ?? []) as Array<Record<string, unknown>>) {
+      const key = p.contact_id as string | null;
+      // Newest-first, first-wins: enrich-contacts supersedes rather than
+      // deletes, so a contact can briefly carry more than one pending row if a
+      // supersede failed. Showing the newest is right; showing two is not.
+      if (!key || proposalByContact.has(key)) continue;
+      proposalByContact.set(key, {
+        id: p.id as string,
+        proposed_name: (p.proposed_name as string) ?? null,
+        proposed_company: (p.proposed_company as string) ?? null,
+        proposed_role: (p.proposed_role as string) ?? null,
+        classification: (p.classification as string) ?? "unknown",
+        confidence: Number(p.confidence ?? 0),
+        evidence_quote: (p.evidence_quote as string) ?? null,
+        evidence_message_id: (p.evidence_message_id as string) ?? null,
+        project_type: (p.project_type as string) ?? null,
+        scope_summary: (p.scope_summary as string) ?? null,
+        start_timing: (p.start_timing as string) ?? null,
+        length_ft: p.length_ft === null || p.length_ft === undefined ? null : Number(p.length_ft),
+        width_ft: p.width_ft === null || p.width_ft === undefined ? null : Number(p.width_ft),
+        sqft_stated: p.sqft_stated === null || p.sqft_stated === undefined ? null : Number(p.sqft_stated),
+        site_hint: (p.site_hint as string) ?? null,
+        has_media: p.has_media === true,
+        model: (p.model as string) ?? null,
+        prompt_version: (p.prompt_version as string) ?? null,
+      });
+    }
+  }
+
   // Confirmed relations only. An unconfirmed enrich-contacts proposal changes
   // what Coy is asked, never what he is shown (DECISIONS.md §2b).
   const relationByCustomer = new Map<string, string>();
@@ -258,6 +334,8 @@ export async function GET(req: NextRequest) {
       job_status: jobByContact.get(contactId)?.status ?? null,
       job_unscoped: jobByContact.get(contactId)?.unscoped ?? false,
       relation: c?.customer_id ? relationByCustomer.get(c.customer_id) ?? null : null,
+      // NOT folded into display_name above, and never to be. See the field doc.
+      proposal: proposalByContact.get(contactId) ?? null,
     };
   });
 

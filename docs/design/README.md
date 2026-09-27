@@ -74,11 +74,11 @@ waiting for.
 |---|---|---|---|
 | App shell | glass header + five-slot footer (Dusty centre) | `src/app/dashboard/layout.tsx` + `src/styles/v34-shell.css` | **built** — no StreamBar (it ran on invented sentences) |
 | Threads list | `ThreadsScreen` `ThreadRow` `ActivityFeed` | `src/components/v34/thread-list.tsx` | **built** — ten filter chips on real counts (no Drafts: no outbox table), row expand, proposal review inline |
-| Thread detail | inside `ThreadsScreen` | `dashboard/messages/[id]/page.tsx` | **partial** — calls, texts, photos, "Same person as…" merge; still opens on the newest message, not on a job card; no composer yet |
-| Desktop two-pane | — (v34 is mobile-only) | `dashboard/messages/layout.tsx` | **built** |
-| Scope list | `ScopesScreen` `CustomerPicker` | `dashboard/scope/page.tsx` | **partial** — renders jobs and the accept flow; `jobs` is 0 rows and the + menu has no create form yet |
-| Scope builder | `ScopeScreen` (~400 lines) | — | **not built** |
-| Cash | `CashFlow` `Ribbon` `Band` `MoneySide` `MoneyCard` (~700 lines) | `dashboard/cash/page.tsx` | **partial** — the settings form, correctly all dashes. No ribbon, no band. |
+| Thread detail | inside `ThreadsScreen` | `dashboard/messages/[id]/page.tsx` | **built** — oldest to newest with day breaks, calls with next steps, texts with photos, composer (drafts; no send path), "Same person as…" merge, contact rail on desktop |
+| Desktop shell + panes | — (v34 is mobile-only) | `dashboard/layout.tsx` (top bar, left rail) + `dashboard/messages/layout.tsx` | **built** — from the desktop design, in v34's look |
+| Scope list | `ScopesScreen` `CustomerPicker` | `dashboard/scope/page.tsx` | **built** — + New scope picks a thread (or nobody) and opens the builder |
+| Scope builder | `ScopeScreen` (~400 lines) | `dashboard/scope/[jobId]/page.tsx` + `src/lib/engine` | **built** — sections, takeoff, price, discount + floor; desktop layout from 1h. Engine follows DECISIONS §3/§4, not v34's `computeJob` |
+| Cash | `CashFlow` `Ribbon` `Band` `MoneySide` `MoneyCard` (~700 lines) | `dashboard/cash/page.tsx` + `components/v34/cost-settings.tsx` | **partial** — cost settings and the monthly nut are editable (layout from 1g). No ribbon, no band. |
 | Pipeline | `PipelinePanel` `Funnel` `Donut` `Spark` `DayBars` | `dashboard/more/pipeline/page.tsx` + header drop | **partial** |
 | Customers | `CustomersScreen` `CustomerScreen` `PeopleBlock` `ContactLines` (~550) | — | **not built** |
 | Documents / proposals | `DocsScreen` `DocView` `DocPaper` `FileRow` (~460) | — | **not built** |

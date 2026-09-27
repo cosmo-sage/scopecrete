@@ -320,6 +320,31 @@ Tax lands on the materials subtotal only (~8.08% in-market), not the full bid.
 
 Equipment rental bills by the day.
 
+**Where it lives (2026-09-27): `src/lib/engine/index.ts`.** Pure functions,
+tested by `npm test` (`tests/engine.test.mjs`, `node --test`). It is the ONLY
+place a scope is priced. It is deliberately NOT v34's `computeJob()`, which
+prices labour by crew-hours, uses one global markup and adds overhead as a
+percentage of labour — all three contradict this section and §4.
+
+- **Nothing is assumed.** A missing length, width or depth is `missing`; a
+  missing setting blocks the price and is named. `price()` returns
+  `{ priced: false, blocked: [...] }`, never a number built on a guess.
+- **Rates come only from `org_cost_settings`.** That table carries the Gulfline
+  rates as COLUMN DEFAULTS (migration 004), so `PUT /api/settings/cost` writes
+  every field explicitly — null when blank — and a partial save cannot pull in
+  numbers nobody entered. The Gulfline figures appear in the settings form as a
+  labelled reference, never inside an input.
+- **Tax is a pass-through**: charged at cost on the materials subtotal, carried
+  in both columns, not marked up. Markup applies to materials before tax.
+- **`job_sections.cubic_yards` must not be displayed.** It is a generated
+  column, `… * COALESCE(depth_in, 4)`, so a section with no depth reads 14.8
+  yards for a 30×40 (verified 2026-09-27). The section API writes `depth_in`
+  and `psi` explicitly as null so the schema defaults (4 in, 3000 psi) never
+  stand in for a measurement. Fixing the column needs a migration and Coy's
+  instruction.
+- **Not yet priced:** reinforcement, base, vapor barrier (no rates exist), and
+  day-rate equipment. The builder lists them as "not in this price".
+
 ---
 
 ## 4. Overhead and the bid floor
@@ -351,6 +376,13 @@ one-tap "worked here, no spend" later.
 **Pay-yourself is a mode per org.** `fixed_draw` is a monthly target the bid
 floor MUST cover. `pct_profit` is taken after a job clears and does NOT raise
 the floor. Draws land on a specific day, never smeared evenly.
+
+**Floor implementation (2026-09-27).** `floor()` in `src/lib/engine`:
+nut per crew-day = (active overhead as monthly + fixed draw) ÷
+`assumed_billable_days` (crew-days per month the nut is spread across); the
+job's share = that × `jobs.duration_days`, entered on the builder and labelled
+**estimated** until measured days exist. No crew days, no overhead, or no
+off-the-top → the floor is blocked and says which.
 
 Overhead is NOT baked into the per-sqft rate — the rate varies too much by
 job. The floor's allocation is the one place overhead enters. Do not

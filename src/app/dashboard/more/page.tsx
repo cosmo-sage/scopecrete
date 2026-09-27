@@ -15,10 +15,14 @@ interface Entry { href: string; label: string; note: string; live: boolean }
 
 const GROUPS: [string, Entry[]][] = [
   ["Work", [
+    { href: "/dashboard/customers", label: "Customers", note: "Everyone who has called or texted", live: true },
     { href: "/dashboard/more/pipeline", label: "Pipeline", note: "Leads by stage", live: true },
   ]],
+  ["Settings", [
+    { href: "/dashboard/more/lines", label: "Phone lines", note: "Your numbers, their provider, and the lead source each one means", live: true },
+    { href: "/dashboard/cash", label: "Costs and rates", note: "What the engine prices from", live: true },
+  ]],
   ["Not yet wired", [
-    { href: "/dashboard/customers", label: "Customers", note: "Everyone who has called or texted", live: true },
     { href: "", label: "Documents", note: "Needs a documents table", live: false },
     { href: "", label: "Schedule", note: "Needs job rows to schedule", live: false },
     { href: "", label: "Dusty", note: "Send path deliberately disabled", live: false },

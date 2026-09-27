@@ -57,6 +57,8 @@ interface ThreadMessage {
   artifact_kinds: string[];
   /** Files on this message (message_media). Fetched lazily by MessageMedia. */
   media_count: number;
+  /** Our line, by name — only when this thread used more than one (migration 035). */
+  line?: string | null;
 }
 
 interface Artifact {
@@ -213,6 +215,9 @@ function CallRow({ m }: { m: ThreadMessage }) {
         <span style={{ ...eyebrow, color: DA.textPrimary }}>
           {isOut ? "Outbound call" : "Inbound call"}
         </span>
+        {m.line && (
+          <span className="text-[10px]" style={{ color: DA.textMuted }}>{m.line}</span>
+        )}
         {duration && (
           <span className="text-[10px] tabular-nums" style={{ color: DA.textMuted }}>{duration}</span>
         )}
@@ -472,7 +477,7 @@ function SmsRow({ m }: { m: ThreadMessage }) {
         )}
         {m.media_count > 0 && <MessageMedia messageId={m.id} count={m.media_count} isOut={isOut} />}
         <div className="text-[9px] mt-1" style={{ color: isOut ? "rgba(255,255,255,0.7)" : DA.textMuted, letterSpacing: ".06em" }}>
-          {isOut ? "OUT" : "IN"} · {formatTime(m.occurred_at)}
+          {isOut ? "OUT" : "IN"} · {formatTime(m.occurred_at)}{m.line ? ` · ${m.line}` : ""}
         </div>
       </div>
     </div>

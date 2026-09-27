@@ -252,6 +252,29 @@ are `{org_id}/…` in both `message-media` and `call-audio`, and `storage.object
 policies scope reads and writes to `get_user_org_ids()`. Before 027 there were
 **no** storage policies, which is why the call-audio player never worked.
 
+## 2d. Lines and providers — migration 035 (applied 2026-09-27)
+
+Quo today; other providers or Coy's own AI voice stack later, on the same
+schema. **A contact is the other person's number; the line is a property of
+each message.** One person calling two of Coy's lines is one thread.
+
+- `org_phone_numbers.provider` (quo | twilio | telnyx | retell | vapi |
+  own_stack | other), `provider_number_id`, and `default_lead_source` — a
+  tracking number printed only on the website makes its callers website leads.
+  Provider was set only where the data proves it (Main and Cell: every message
+  projected from Quo); Third is unknown until Coy sets it.
+- `messages.phone_number_id` is filled by trigger `messages_set_line`
+  (whichever address is one of the org's lines) and was backfilled: 1,466 of
+  1,505 messages; 39 involve none of the three lines and stay null.
+- `messages.provider` stays per message — where that event came from — and the
+  dedupe index `(provider, provider_message_id)` still keys on it.
+- More → Phone lines edits label, provider and default source
+  (`/api/lines`). A thread shows the line on each message only when it spans
+  more than one.
+- Seen in the data: (225) 529-9098 is a relay that texts "New call from:
+  Baton Rouge Concreters, Number: +1…" for every website call (~150). Each of
+  those numbers is a website lead — the first real input for lead sources.
+
 ## 2c. One contact is one person — migration 028 (applied 2026-09-27)
 
 A person with two numbers is ONE contact. `contact_phones` lists every number;

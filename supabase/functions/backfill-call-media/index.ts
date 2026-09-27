@@ -555,17 +555,38 @@ serve(async (req: Request) => {
       } else if (res.absent) { r.voicemail_status = 'not_available'; note('voicemail:404') }
       else { r.voicemail_status = `error: ${res.error}`; note(`voicemail:${res.error.substring(0, 60)}`) }
 
-      // Stamp that we ASKED, whatever the answer was.
+      // Stamp the ANSWER, not just the success.
       //
-      // This is what makes the job terminate. A 404 is a real answer — this
-      // call has no voicemail — and without recording it, the ~60% of calls
+      // This is what makes the job terminate. A 404 is a real answer — "this
+      // call has no voicemail" — and without recording it the ~60% of calls
       // with no message stay candidates forever and every sweep re-asks them.
-      // Only a transport error is left unstamped, because that is the one case
-      // where we genuinely do not know and a retry is right.
-      if (!dryRun && r.voicemail_status !== undefined
-          && !String(r.voicemail_status).startsWith('error:')) {
+      // Harmless on a one-time backlog run; permanent under a daily schedule.
+      //
+      // ALLOWLIST, not a blocklist. An earlier version excluded statuses
+      // beginning 'error:' and stamped everything else, which quietly marked
+      // 'artifact write failed: …' as checked — a call whose voicemail we found
+      // and then FAILED to store would never be retried. Only the four states
+      // below are answers; anything else leaves the row unstamped so it is
+      // picked up again.
+      //
+      // Deliberately NOT stamped:
+      //   error: …            transport, including 429. Genuinely unknown.
+      //   artifact write …    we have the voicemail but did not store it.
+      //   no_messages_row     never probed — the spine row is missing, which is
+      //                       a projection defect. Stamping it 'checked' would
+      //                       hide that behind a green tick. Population was 0
+      //                       when measured (462/462 calls had a twin), so this
+      //                       cannot cause the non-termination it looks like.
+      const VOICEMAIL_ANSWER: Record<string, string> = {
+        written:        'found',   // fetched and stored this run
+        already_present:'found',   // a voicemail artifact already exists
+        not_available:  'none',    // 404 — the provider says there is none
+        empty:          'empty',   // 200, but no transcript and no url
+      }
+      const answer = VOICEMAIL_ANSWER[String(r.voicemail_status ?? '')]
+      if (!dryRun && answer) {
         update.voicemail_checked_at = now
-        update.voicemail_status = String(r.voicemail_status)
+        update.voicemail_status = answer
       }
       await sleep(PAUSE_MS)
     }

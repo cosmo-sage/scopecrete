@@ -1,0 +1,1580 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="73fe7577-f3fd-4005-925f-44109f0010c7"></script>
+
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics=""><meta name="design_doc_mode" content="canvas">
+<style>/* Modernist — design-system tokens and component classes. This file is the source of truth for the system's look; retune it here and see readme.md. */
+/* vietnamese */
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 400;
+  font-stretch: 100%;
+  font-display: swap;
+  src: url("687d09a8-fe29-4eb4-900d-cc248e31ecfa") format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 400;
+  font-stretch: 100%;
+  font-display: swap;
+  src: url("0334aab6-dcd8-47a1-b767-eb77d2a25828") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 400;
+  font-stretch: 100%;
+  font-display: swap;
+  src: url("746c6098-e136-465c-bd01-fa22b911b73c") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 600;
+  font-stretch: 100%;
+  font-display: swap;
+  src: url("687d09a8-fe29-4eb4-900d-cc248e31ecfa") format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 600;
+  font-stretch: 100%;
+  font-display: swap;
+  src: url("0334aab6-dcd8-47a1-b767-eb77d2a25828") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 600;
+  font-stretch: 100%;
+  font-display: swap;
+  src: url("746c6098-e136-465c-bd01-fa22b911b73c") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 800;
+  font-stretch: 100%;
+  font-display: swap;
+  src: url("687d09a8-fe29-4eb4-900d-cc248e31ecfa") format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 800;
+  font-stretch: 100%;
+  font-display: swap;
+  src: url("0334aab6-dcd8-47a1-b767-eb77d2a25828") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 800;
+  font-stretch: 100%;
+  font-display: swap;
+  src: url("746c6098-e136-465c-bd01-fa22b911b73c") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+
+:root {
+  --color-bg: #f3f2f2;
+  --color-surface: #eae9e9;
+  --color-text: #201e1d;
+  --color-accent: #ec3013;
+  --color-accent-2: #e15b47;
+  --color-divider: color-mix(in srgb, #201e1d 40%, transparent);
+
+  /* Tonal ramps — generated in OKLCH on one shared lightness scale, so the
+     same step of any role matches the others in visual value. */
+  --color-neutral-100: #f8f4f4;
+  --color-neutral-200: #eae7e7;
+  --color-neutral-300: #d7d3d3;
+  --color-neutral-400: #bab6b6;
+  --color-neutral-500: #9b9797;
+  --color-neutral-600: #7d7979;
+  --color-neutral-700: #605d5d;
+  --color-neutral-800: #444141;
+  --color-neutral-900: #2d2b2b;
+
+  --color-accent-100: #fff2ef;
+  --color-accent-200: #ffe0d9;
+  --color-accent-300: #ffc4b8;
+  --color-accent-400: #ff9783;
+  --color-accent-500: #ff563c;
+  --color-accent-600: #dd2b0f;
+  --color-accent-700: #ae1800;
+  --color-accent-800: #7c1405;
+  --color-accent-900: #4d170e;
+
+  --color-accent-2-100: #fff2ef;
+  --color-accent-2-200: #ffe0da;
+  --color-accent-2-300: #ffc4b9;
+  --color-accent-2-400: #ff9784;
+  --color-accent-2-500: #ef6853;
+  --color-accent-2-600: #c94b39;
+  --color-accent-2-700: #9e3526;
+  --color-accent-2-800: #71261b;
+  --color-accent-2-900: #471d16;
+
+  --font-heading: "Archivo", system-ui, sans-serif;
+  --font-heading-weight: 800;
+  --font-body: "Archivo", system-ui, sans-serif;
+
+  --space-1: 4.0px;
+  --space-2: 8.0px;
+  --space-3: 12.0px;
+  --space-4: 16.0px;
+  --space-6: 24.0px;
+  --space-8: 32.0px;
+
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+
+  /* Elevation — derived from the ground: soft ink-tinted shadows on a
+     light theme, a hairline edge + ambient darkness on a dark one. */
+  --shadow-sm: 0 1px 2px color-mix(in srgb, #2d2b2b 14%, transparent);
+  --shadow-md: 0 3px 10px color-mix(in srgb, #2d2b2b 16%, transparent);
+  --shadow-lg: 0 12px 32px color-mix(in srgb, #2d2b2b 22%, transparent);
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-body);
+}
+h1, h2, h3, h4 { font-family: var(--font-heading); font-weight: var(--font-heading-weight); }
+
+.grayscale{filter:grayscale(1) contrast(1.08)}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Components — built with the tokens above. Plain CSS
+   on plain HTML: no JavaScript, no build step. Each class is documented in
+   readme.md and demonstrated in foundations/ and components/.
+   ══════════════════════════════════════════════════════════════════════ */
+
+*, *::before, *::after { box-sizing: border-box; }
+body { margin: 0; font-size: 15px; line-height: 1.55; font-weight: 400; }
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading); font-weight: var(--font-heading-weight);
+  line-height: 1.12; letter-spacing: -0.015em; margin: 0 0 var(--space-2);
+}
+h1 { font-size: 42px; }
+h2 { font-size: 32px; }
+h3 { font-size: 25px; }
+h4 { font-size: 20px; }
+h5 { font-size: 16px; }
+h6 { font-size: 13px; }
+h6 { letter-spacing: 0.08em; text-transform: uppercase; }
+p { margin: 0 0 var(--space-3); }
+a { color: var(--color-accent); text-underline-offset: 3px; }
+img { display: block; max-width: 100%; }
+figure { margin: 0; }
+figcaption {
+  font-size: 11px; margin-top: var(--space-1);
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+.text-muted { color: color-mix(in srgb, var(--color-text) 55%, transparent); }
+:focus { outline: none; }
+:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+::selection { background: color-mix(in srgb, var(--color-accent) 30%, transparent); }
+
+/* — rules — */
+.hr {
+  height: 2px; border: 0; margin: var(--space-4) 0;
+  background: var(--color-divider);
+}
+
+/* — buttons — */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  cursor: pointer; text-decoration: none;
+  font-family: var(--font-heading); font-weight: var(--font-heading-weight);
+  font-size: 14px; line-height: 1.2; color: var(--color-text); /* matches the .input's 14px —
+     the pair sits side by side in sign-up rows */
+  background: transparent; border: 1px solid transparent;
+  padding: var(--space-2) calc(var(--space-3) * 1.2);
+  border-radius: var(--radius-md);
+}
+.btn svg { display: block; }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn-primary { background: var(--color-accent); color: var(--color-bg); }
+.btn-primary:hover { background: var(--color-accent-600); }
+.btn-primary:active { background: var(--color-accent-700); }
+.btn-secondary { border-color: var(--color-divider); }
+.btn-secondary:hover { background: color-mix(in srgb, var(--color-text) 7%, transparent); }
+.btn-secondary:active { background: color-mix(in srgb, var(--color-text) 14%, transparent); }
+.btn-ghost { color: var(--color-accent); padding-inline: var(--space-1); }
+.btn-ghost:hover { background: color-mix(in srgb, var(--color-accent) 10%, transparent); }
+.btn-ghost:active { background: color-mix(in srgb, var(--color-accent) 18%, transparent); }
+.btn-icon { width: 36px; height: 36px; padding: 0; }
+.btn-block { width: 100%; margin-top: var(--space-2); justify-content: flex-start; text-align: left; }
+
+/* — forms — */
+.field > label {
+  display: block; font-size: 12px; margin-bottom: 5px;
+  color: color-mix(in srgb, var(--color-text) 70%, transparent);
+}
+.input {
+  width: 100%; min-height: 36px; padding: 6px 10px; font: inherit;
+  font-size: 14px; color: var(--color-text); caret-color: var(--color-accent);
+  background: var(--color-surface);
+  border: 1px solid var(--color-divider); border-radius: var(--radius-md);
+}
+.input:hover { border-color: color-mix(in srgb, var(--color-text) 45%, transparent); }
+.input:focus-visible { border-color: var(--color-accent); outline-offset: 0; }
+textarea.input { min-height: 90px; resize: vertical; }
+.radio { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 14px; }
+.radio input, .seg-opt input {
+  position: absolute; opacity: 0; width: 0; height: 0; pointer-events: none;
+}
+.radio .dot {
+  width: 16px; height: 16px; flex: none; border-radius: 50%;
+  border: 1.5px solid var(--color-divider);
+}
+.radio:hover .dot { border-color: var(--color-accent); }
+.radio input:checked + .dot {
+  border-color: var(--color-accent); background: var(--color-accent);
+  box-shadow: inset 0 0 0 4px var(--color-bg);
+}
+.radio input:focus-visible + .dot { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.seg {
+  display: inline-flex; overflow: hidden;
+  border: 1px solid var(--color-divider); border-radius: var(--radius-md);
+}
+.seg-opt {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 12px; font-size: 13px; cursor: pointer;
+}
+.seg-opt + .seg-opt { border-left: 1px solid var(--color-divider); }
+.seg-opt:has(input:checked) { background: var(--color-accent); color: var(--color-bg); }
+.seg-opt:not(:has(input:checked)):hover { background: color-mix(in srgb, var(--color-text) 7%, transparent); }
+.seg-opt:has(input:focus-visible) { outline: 2px solid var(--color-accent); outline-offset: -2px; }
+
+/* — cards — */
+.card {
+  display: flex; flex-direction: column; gap: var(--space-2);
+  padding: var(--space-3); border-radius: var(--radius-md); background: var(--color-surface);
+}
+.card-kicker { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-accent); }
+.card-title {
+  font-family: var(--font-heading); font-weight: var(--font-heading-weight);
+  font-size: 17px; line-height: 1.2;
+}
+.card-body { margin: 0; font-size: 13px; opacity: 0.8; flex: 1; }
+.card-meta {
+  display: flex; align-items: center; gap: 6px; font-size: 11px;
+  color: color-mix(in srgb, var(--color-text) 50%, transparent);
+}
+.elev-sm { box-shadow: var(--shadow-sm); }
+.elev-md { box-shadow: var(--shadow-md); }
+.elev-lg { box-shadow: var(--shadow-lg); }
+
+/* — tags — */
+.tag {
+  display: inline-flex; align-items: center; font-size: 11px;
+  letter-spacing: 0.02em; padding: 3px 10px;
+  border-radius: calc(var(--radius-md) * 0.75);
+}
+.tag-accent { background: var(--color-accent-100); color: var(--color-accent-800); }
+.tag-accent-2 { background: var(--color-accent-2-100); color: var(--color-accent-2-800); }
+.tag-neutral { background: var(--color-neutral-100); color: var(--color-neutral-800); }
+.tag-outline { border: 1px solid var(--color-accent); color: var(--color-accent); }
+
+/* — navigation — */
+.nav {
+  display: flex; align-items: center; gap: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 2px solid var(--color-divider);
+}
+.nav-brand {
+  font-family: var(--font-heading); font-weight: var(--font-heading-weight);
+  font-size: 18px; margin-right: auto;
+}
+.nav a { color: inherit; text-decoration: none; font-size: 14px; }
+.nav a:hover, .nav a[aria-current='page'] { color: var(--color-accent); }
+
+/* — tables — */
+.table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.table th {
+  text-align: left; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+  padding: var(--space-2); border-bottom: 2px solid var(--color-divider);
+}
+.table td {
+  padding: var(--space-2);
+  border-bottom: 1px solid var(--color-divider);
+}
+.table tbody tr:hover { background: color-mix(in srgb, var(--color-text) 4%, transparent); }
+
+/* — dialog — */
+.dialog-backdrop {
+  position: fixed; inset: 0; display: grid; place-items: center;
+  padding: var(--space-4);
+  background: color-mix(in srgb, var(--color-neutral-900) 50%, transparent);
+}
+.dialog {
+  width: min(440px, 100%); display: flex; flex-direction: column; gap: var(--space-3);
+  padding: var(--space-4); border-radius: var(--radius-lg);
+  background: var(--color-surface); box-shadow: var(--shadow-lg);
+}
+.dialog-title {
+  font-family: var(--font-heading); font-weight: var(--font-heading-weight);
+  font-size: 20px;
+}
+.dialog-body { font-size: 14px; opacity: 0.85; }
+.dialog-actions { display: flex; justify-content: flex-end; gap: var(--space-2); margin-top: var(--space-2); }
+
+</style>
+<script src="a87c108c-31f3-4271-8d17-d821726ae935"></script>
+<style>
+body{margin:0;background:#d7d3d3;font-family:var(--font-body)}
+a{color:var(--color-accent)}a:hover{color:var(--color-accent-700)}
+.dv-turn{padding:44px 48px 36px;border-bottom:2px solid rgba(32,30,29,.25);scroll-margin-top:16px}
+.dv-thd{display:flex;align-items:baseline;gap:12px;margin:0 0 8px}
+.dv-tid{font:800 11px/1 var(--font-heading);letter-spacing:.06em;padding:5px 8px;background:#201e1d;color:#f3f2f2;text-decoration:none}
+.dv-tname{font:800 15px/1.2 var(--font-heading);letter-spacing:-.01em;color:#201e1d;text-transform:uppercase}
+.dv-opts{display:flex;flex-wrap:wrap;gap:36px;align-items:flex-start}
+.dv-opt{flex:none;display:flex;flex-direction:column;gap:10px;scroll-margin-top:16px}
+.dv-oid{font:800 11px/1 var(--font-heading);letter-spacing:.06em;padding:4px 8px;background:rgba(32,30,29,.14);color:#201e1d;text-decoration:none}
+.dv-olabel{display:flex;align-items:baseline;gap:10px;font:400 12px/1.3 var(--font-body);color:rgba(32,30,29,.6)}
+.dv-olabel b{font:800 12px/1.3 var(--font-heading);letter-spacing:.02em;color:#201e1d;text-transform:uppercase}
+.dv-card{max-width:100%;background:var(--color-bg);border:2px solid rgba(32,30,29,.4);overflow:hidden}
+.dv-opt:target .dv-oid{background:var(--color-accent);color:#f3f2f2}
+.dv-next{margin:26px 0 0;font:12px/1.6 var(--font-body);color:rgba(32,30,29,.6)}
+.sc-ico{display:block;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:square}
+</style></helmet>
+
+<section class="dv-turn" id="t1">
+<div class="dv-thd"><a class="dv-tid" href="#t1">1</a><span class="dv-tname">ScopeCrete desktop — triage, threads, pipeline, money, scope</span></div>
+
+<div style="max-width:1000px;margin:0 0 30px;border-left:3px solid var(--color-accent);padding:2px 0 2px 18px">
+<p style="margin:0 0 10px;font:800 13px/1.3 var(--font-heading);letter-spacing:.06em;text-transform:uppercase">What I decided, and where I think you're wrong</p>
+<p style="margin:0 0 8px;font-size:13px;line-height:1.65">Every figure on these screens traces to a count you gave me: 144 contacts / 124 unnamed, 1,156 messages, 464 calls with 18 carrying any text, 21 leads, 0 jobs, 1 drift. <b>No dollar figure appears anywhere in this file</b> — you told me the money in your mobile screenshots is demo data, so it is gone: leads carry square feet, threads carry quantities, and the takeoff ends in cubic yards. The two counts I had to invent are the sample-day ones (TODAY 9, NEEDS YOU 7); everything else is yours.</p>
+<p style="margin:0 0 8px;font-size:13px;line-height:1.65"><b>Where I pushed back:</b> a strictly chronological river buries the thing that justifies this screen — the permit voicemail that sat five days sinks to the bottom by definition. You chose lanes as filters, so I kept the order honest and gave <i>age</i> a voice instead: any row past its silence threshold carries a red <span style="font:800 10px var(--font-heading);letter-spacing:.08em;color:var(--color-accent)">SAT 5 DAYS</span> stamp in the row, and the extracted next step — the data nobody reads — is promoted to its own line rather than hidden in a summary. Nothing is reordered. Nothing is scored.</p>
+<p style="margin:0;font-size:13px;line-height:1.65"><b>Second push:</b> the pipeline has no WON column. You can't win a lead into nothing, and there are 0 jobs — so WON/LOST sits below the board as a stated absence instead of an empty column pretending to be a destination. Same logic on Money: it is a setup form that names what each missing setting unlocks, not a dashboard with zeros in it.</p>
+<p style="margin:8px 0 0;font-size:13px;line-height:1.65"><b>Added this pass:</b> global chrome across all eight screens — brand cell aligned to the rail, one scoped search field (<i>a number, a name, a street, a word someone said</i> — full-text over 1,156 messages, which is the desktop’s real advantage over the phone), the tracked line’s live state, and three counters that are queues rather than notifications: 18 voicemails, 124 unnamed numbers, 1 drift. No bell: drift <i>is</i> the alarm.</p>
+</div>
+
+<div class="dv-opts">
+
+<!-- ══ 1a  TRIAGE — POPULATED ══ -->
+<div class="dv-opt" id="1a">
+<div class="dv-olabel"><a class="dv-oid" href="#1a">1a</a><b>Triage · populated</b> act-in-row · the primary direction</div>
+<div class="dv-card" style="width:1440px;height:900px;display:flex;flex-direction:column">
+  <!-- global chrome -->
+  <div style="flex:none;height:54px;display:flex;align-items:stretch;background:var(--color-text);color:var(--color-bg);border-bottom:2px solid rgba(243,242,242,.26)">
+    <div style="width:84px;flex:none;display:flex;align-items:center;justify-content:center;border-right:1px solid rgba(243,242,242,.16)"><svg width="28" height="28" sc-camel-view-box="0 0 28 28" style="display:block"><rect x="5.5" y="5.5" width="17" height="17" transform="rotate(45 14 14)" fill="none" stroke="#ec3013" stroke-width="2"></rect><circle cx="14" cy="14" r="3.4" fill="#4f9d70"></circle></svg></div>
+    <div style="flex:none;display:flex;align-items:center;padding:0 20px;border-right:1px solid rgba(243,242,242,.16)"><span style="font:800 15px var(--font-heading);letter-spacing:.15em">SCOPECRETE</span></div>
+    <div style="flex:1;min-width:0;display:flex;align-items:center;padding:0 18px">
+      <div style="flex:1;max-width:600px;display:flex;align-items:stretch;height:34px;border:2px solid rgba(243,242,242,.24);background:rgba(243,242,242,.07)">
+        <div style="flex:none;display:flex;align-items:center;gap:6px;padding:0 11px;border-right:2px solid rgba(243,242,242,.24);cursor:pointer" style-hover="background:rgba(243,242,242,.1)"><span style="font:800 11px var(--font-heading);letter-spacing:.07em">ALL</span><svg width="9" height="9" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M3 5l5 5 5-5"></path></svg></div>
+        <div style="flex:1;min-width:0;display:flex;align-items:center;gap:9px;padding:0 11px"><span style="flex:none;opacity:.6"><svg width="15" height="15" sc-camel-view-box="0 0 16 16" class="sc-ico"><circle cx="7" cy="7" r="4.6"></circle><path d="M10.4 10.4L14 14"></path></svg></span><span style="font-size:12.5px;color:rgba(243,242,242,.5);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Search a number, a name, a street, a word someone said</span></div>
+        <div style="flex:none;display:flex;align-items:center;padding:0 10px;border-left:1px solid rgba(243,242,242,.16)"><span style="font:800 10px var(--font-heading);letter-spacing:.06em;color:rgba(243,242,242,.42)">⌘K</span></div>
+      </div>
+    </div>
+    <div style="flex:none;display:flex;align-items:center;padding:0 14px;border-left:1px solid rgba(243,242,242,.16)">
+      <div style="display:flex;align-items:center;gap:8px;height:32px;padding:0 11px;border:2px solid rgba(243,242,242,.24)"><span style="width:7px;height:7px;flex:none;background:#4f9d70"></span><span style="font:800 11px var(--font-heading);letter-spacing:.05em;font-variant-numeric:tabular-nums">(225) 555-0141 LIVE</span></div>
+    </div>
+    <div title="Voicemails waiting" style="flex:none;display:flex;align-items:center;gap:7px;padding:0 13px;border-left:1px solid rgba(243,242,242,.16);cursor:pointer;opacity:.9" style-hover="background:rgba(243,242,242,.12);opacity:1"><svg width="17" height="17" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M2 5h12v6H2z"></path><path d="M5 8h6"></path></svg><span style="font:800 12px var(--font-heading);font-variant-numeric:tabular-nums;color:rgba(243,242,242,.72)">18</span></div>
+    <div title="Numbers with no name" style="flex:none;display:flex;align-items:center;gap:7px;padding:0 13px;border-left:1px solid rgba(243,242,242,.16);cursor:pointer;opacity:.9" style-hover="background:rgba(243,242,242,.12);opacity:1"><svg width="17" height="17" sc-camel-view-box="0 0 16 16" class="sc-ico"><circle cx="8" cy="6" r="2.6"></circle><path d="M3 14a5 5 0 0110 0"></path><path d="M11.5 3.5h3"></path></svg><span style="font:800 12px var(--font-heading);font-variant-numeric:tabular-nums;color:rgba(243,242,242,.72)">124</span></div>
+    <div title="Drift — messages that never reached the app" style="flex:none;display:flex;align-items:center;gap:7px;padding:0 13px;border-left:1px solid rgba(243,242,242,.16);cursor:pointer;opacity:.9" style-hover="background:rgba(243,242,242,.12);opacity:1"><svg width="17" height="17" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M8 2l6 11H2z"></path><path d="M8 6v3"></path></svg><span style="font:800 12px var(--font-heading);font-variant-numeric:tabular-nums;color:var(--color-accent-400)">1</span></div>
+    <div title="Help" style="flex:none;display:flex;align-items:center;gap:7px;padding:0 13px;border-left:1px solid rgba(243,242,242,.16);cursor:pointer;opacity:.9" style-hover="background:rgba(243,242,242,.12);opacity:1"><svg width="17" height="17" sc-camel-view-box="0 0 16 16" class="sc-ico"><circle cx="8" cy="8" r="6"></circle><path d="M6.4 6.2a1.7 1.7 0 013.2.8c0 1.1-1.6 1.3-1.6 2.4"></path><path d="M8 12h0"></path></svg></div>
+  </div>
+  <div style="flex:1;min-height:0;display:flex">
+
+  <!-- icon rail -->
+  <div style="width:84px;flex:none;background:var(--color-text);color:var(--color-bg);display:flex;flex-direction:column;align-items:center;padding:0 0 0">
+    <div style="margin-top:0;display:flex;flex-direction:column;gap:2px;width:100%">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:5px;padding:11px 0;background:rgba(243,242,242,.13);border-left:3px solid var(--color-accent)"><svg width="18" height="18" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M2 3h12v9H6l-4 3z"></path></svg><span style="font:800 10px var(--font-heading);letter-spacing:.06em">THREADS</span></div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:5px;padding:11px 0;opacity:.62;border-left:3px solid transparent"><svg width="18" height="18" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M2 5h12v6H2z"></path><path d="M6 5v6M10 5v6"></path></svg><span style="font:800 10px var(--font-heading);letter-spacing:.06em">SCOPE</span></div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:5px;padding:11px 0;opacity:.62;border-left:3px solid transparent"><svg width="18" height="18" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M2 2h4v12H2z"></path><path d="M10 2h4v8h-4z"></path></svg><span style="font:800 10px var(--font-heading);letter-spacing:.06em">LEADS</span></div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:5px;padding:11px 0;opacity:.62;border-left:3px solid transparent"><svg width="18" height="18" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M2 4h12v8H2z"></path><circle cx="8" cy="8" r="1.8"></circle></svg><span style="font:800 10px var(--font-heading);letter-spacing:.06em">MONEY</span></div>
+    </div>
+    <div style="margin-top:auto;padding:0 0 16px;opacity:.45"><svg width="18" height="18" sc-camel-view-box="0 0 16 16" class="sc-ico"><circle cx="8" cy="8" r="6"></circle><path d="M8 5v3l2 2"></path></svg></div>
+  </div>
+
+  <!-- centre -->
+  <div style="flex:1;min-width:0;display:flex;flex-direction:column;border-right:2px solid var(--color-divider)">
+
+    <sc-if value="{{ driftAlarm }}" hint-placeholder-val="{{ true }}">
+    <div style="display:flex;align-items:center;gap:12px;padding:9px 24px;background:var(--color-text);color:var(--color-bg)">
+      <span style="width:7px;height:7px;background:var(--color-accent);flex:none"></span>
+      <span style="font:800 11px var(--font-heading);letter-spacing:.09em">DRIFT</span>
+      <span style="font-size:12.5px;opacity:.85">1 message reached the number and never reached this app — 14 Aug, 4:02p</span>
+      <a href="#1a" style="margin-left:auto;font:800 11px var(--font-heading);letter-spacing:.06em;color:var(--color-accent-400);text-decoration:none">RECONCILE</a>
+    </div>
+    </sc-if>
+
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;padding:20px 24px 14px">
+      <div>
+        <h1 style="margin:0;font-size:34px;letter-spacing:-.02em">Triage</h1>
+        <p style="margin:3px 0 0;font-size:12.5px;color:rgba(32,30,29,.55);font-variant-numeric:tabular-nums">Saturday 30 Aug · newest first · 9 in today</p>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-secondary" style="font-size:12px">Name numbers <span style="font-variant-numeric:tabular-nums;opacity:.6">124</span></button>
+        <button class="btn btn-primary" style="font-size:12px">New scope</button>
+      </div>
+    </div>
+
+    <!-- lanes -->
+    <div style="display:flex;border-top:2px solid var(--color-divider);border-bottom:2px solid var(--color-divider)">
+      <div style="display:flex;align-items:center;gap:9px;padding:11px 20px;background:var(--color-accent);color:var(--color-bg)"><span style="font:800 12px var(--font-heading);letter-spacing:.07em">TODAY</span><span style="font:800 12px var(--font-heading);font-variant-numeric:tabular-nums">9</span></div>
+      <div style="display:flex;align-items:center;gap:9px;padding:11px 20px;border-left:1px solid var(--color-divider)"><span style="font:800 12px var(--font-heading);letter-spacing:.07em">NEEDS YOU</span><span style="font:800 12px var(--font-heading);font-variant-numeric:tabular-nums;color:var(--color-accent)">7</span></div>
+      <div style="display:flex;align-items:center;gap:9px;padding:11px 20px;border-left:1px solid var(--color-divider)"><span style="font:800 12px var(--font-heading);letter-spacing:.07em">UNSORTED</span><span style="font:800 12px var(--font-heading);font-variant-numeric:tabular-nums;opacity:.5">124</span></div>
+      <div style="display:flex;align-items:center;gap:9px;padding:11px 20px;border-left:1px solid var(--color-divider)"><span style="font:800 12px var(--font-heading);letter-spacing:.07em">VOICEMAILS</span><span style="font:800 12px var(--font-heading);font-variant-numeric:tabular-nums;opacity:.5">18</span></div>
+      <div style="display:flex;align-items:center;gap:9px;padding:11px 20px;border-left:1px solid var(--color-divider)"><span style="font:800 12px var(--font-heading);letter-spacing:.07em">ALL</span><span style="font:800 12px var(--font-heading);font-variant-numeric:tabular-nums;opacity:.5">1,156</span></div>
+      <div style="margin-left:auto;display:flex;align-items:center;padding:0 20px;border-left:1px solid var(--color-divider);font:800 11px var(--font-heading);letter-spacing:.07em;color:rgba(32,30,29,.5)" title="They sit on one line in the river so the 18 that say something can breathe.">464 CALLS · 446 CARRY NO TEXT</div>
+    </div>
+
+    <!-- river -->
+    <div style="flex:1;overflow:hidden">
+
+      <!-- row: voicemail, unnamed, AI label -->
+      <div style="display:grid;grid-template-columns:74px 20px 1fr auto;gap:14px;align-items:start;padding:11px 24px;border-bottom:1px solid rgba(32,30,29,.16)">
+        <div style="font:800 12px var(--font-heading);font-variant-numeric:tabular-nums;color:rgba(32,30,29,.5);padding-top:2px">4:41p</div>
+        <div style="color:var(--color-accent);padding-top:2px"><svg width="17" height="17" sc-camel-view-box="0 0 16 16" class="sc-ico"><circle cx="4" cy="9" r="2.6"></circle><circle cx="12" cy="9" r="2.6"></circle><path d="M4 11.6h8"></path></svg></div>
+        <div style="min-width:0">
+          <div style="display:flex;align-items:baseline;gap:10px">
+            <span style="font:800 16px var(--font-heading);font-variant-numeric:tabular-nums">(225) 555-0288</span>
+            <span style="display:inline-flex;align-items:center;gap:4px;font:800 10px var(--font-heading);letter-spacing:.07em;color:var(--color-accent-700);background:var(--color-accent-100);padding:3px 7px"><svg width="9" height="9" sc-camel-view-box="0 0 16 16" style="fill:currentColor;stroke:none"><path d="M8 1l1.6 4.9L14.5 8l-4.9 1.6L8 15l-1.6-5.4L1.5 8l4.9-2.1z"></path></svg>LIKELY CAMERON</span>
+            <span style="font:800 10px var(--font-heading);letter-spacing:.07em;color:var(--color-neutral-700)">VOICEMAIL 0:14</span>
+          </div>
+          <p style="margin:5px 0 0;font-size:13.5px">“Yeah that works — go ahead and put me down for that.”</p>
+          <div style="margin-top:7px;display:flex;align-items:center;gap:8px;font-size:12px;color:rgba(32,30,29,.5)"><span style="font:800 10px var(--font-heading);letter-spacing:.08em;color:var(--color-neutral-700)">NEXT STEP</span>none extracted — no scope words in this voicemail</div>
+        </div>
+        <sc-if value="{{ rowActions }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;gap:2px;color:rgba(32,30,29,.55)">
+          <button class="btn btn-icon" title="Play"><svg width="16" height="16" sc-camel-view-box="0 0 16 16" style="fill:currentColor;stroke:none"><path d="M4 2l9 6-9 6z"></path></svg></button>
+          <button class="btn btn-icon" title="Text back"><svg width="16" height="16" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M6 4L2 8l4 4"></path><path d="M2 8h8a4 4 0 014 4"></path></svg></button>
+          <button class="btn btn-icon" title="Call"><svg width="16" height="16" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M3 3h3l1 3-2 1a7 7 0 004 4l1-2 3 1v3H13A11 11 0 013 4z"></path></svg></button>
+          <button class="btn btn-icon" title="Snooze"><svg width="16" height="16" sc-camel-view-box="0 0 16 16" class="sc-ico"><circle cx="8" cy="8" r="6"></circle><path d="M8 5v3l2 2"></path></svg></button>
+          <button class="btn btn-icon" title="Mark handled"><svg width="16" height="16" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M3 8l3.5 3.5L13 4"></path></svg></button>
+        </div>
+        </sc-if>
+      </div>
+
+      <!-- row: expanded, text back inline + full action set -->
+      <div style="border-bottom:1px solid rgba(32,30,29,.16);background:var(--color-surface);border-left:3px solid var(--color-accent)">
+        <div style="display:grid;grid-template-columns:74px 20px 1fr auto;gap:14px;align-items:start;padding:11px 24px 10px 21px">
+          <div style="font:800 12px var(--font-heading);font-variant-numeric:tabular-nums;color:rgba(32,30,29,.55);padding-top:2px">2:12p</div>
+          <div style="padding-top:2px"><svg width="17" height="17" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M2 3h12v9H6l-4 3z"></path></svg></div>
+          <div style="min-width:0">
+            <div style="display:flex;align-items:baseline;gap:10px">
+              <span style="font:800 16px var(--font-heading)">Robin Plunket</span>
+              <span style="font:800 10px var(--font-heading);letter-spacing:.07em;color:var(--color-neutral-700)">14 TEXTS · 3 CALLS</span>
+              <span style="font:800 10px var(--font-heading);letter-spacing:.07em;color:var(--color-accent)">UNANSWERED QUESTION</span>
+            </div>
+            <p style="margin:5px 0 0;font-size:13.5px">“Wants it poured before the 20th. No demo — it's grass now. Measured Thursday, confirmed 240 sq ft.”</p>
+            <div style="margin-top:9px;display:flex;flex-wrap:wrap;gap:6px">
+              <span style="font:400 12px var(--font-body);border:1px solid var(--color-divider);padding:3px 9px">Dimensions <b style="font-variant-numeric:tabular-nums">12 × 20 ft</b></span>
+              <span style="font:400 12px var(--font-body);border:1px solid var(--color-divider);padding:3px 9px">Existing slab <b>none</b></span>
+              <span style="font:400 12px var(--font-body);border:1px solid var(--color-divider);padding:3px 9px">Finish <b>broom</b></span>
+              <span style="font:400 12px var(--font-body);border:1px solid var(--color-divider);padding:3px 9px">Deadline <b>the 20th</b></span>
+              <span style="font:400 12px var(--font-body);border:1px solid var(--color-divider);padding:3px 9px">Confirmed <b style="font-variant-numeric:tabular-nums">240 sq ft</b></span>
+            </div>
+            <div style="margin-top:10px;display:flex;align-items:baseline;gap:9px;padding:8px 11px;background:var(--color-bg);border-left:2px solid var(--color-accent)">
+              <span style="font:800 10px var(--font-heading);letter-spacing:.08em;color:var(--color-accent);flex:none">NEXT STEP</span>
+              <span style="font-size:13px">Confirm the 20th works. Extracted from her call 14 Jun — <b>not done</b>.</span>
+            </div>
+            <div style="margin-top:12px;display:flex;gap:8px;align-items:stretch">
+              <div style="flex:1;background:var(--color-bg);border:1px solid var(--color-divider);padding:9px 11px;font-size:13.5px;color:rgba(32,30,29,.45)">Text Robin back…</div>
+              <button class="btn btn-primary" style="font-size:12px">Send</button>
+            </div>
+            <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:14px;font:800 10.5px var(--font-heading);letter-spacing:.07em;color:rgba(32,30,29,.55)">
+              <span>CALL</span><span>SNOOZE</span><span>MARK HANDLED</span><span>TURN INTO A LEAD</span><span>ADD A NOTE</span><span>OPEN THREAD</span>
+            </div>
+          </div>
+          <div style="display:flex;gap:2px;color:rgba(32,30,29,.55)"><button class="btn btn-icon" title="Collapse"><svg width="16" height="16" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M3 10l5-5 5 5"></path></svg></button></div>
+        </div>
+      </div>
+
+      <!-- row: stale voicemail -->
+      <div style="display:grid;grid-template-columns:74px 20px 1fr auto;gap:14px;align-items:start;padding:11px 24px;border-bottom:1px solid rgba(32,30,29,.16)">
+        <div style="font:800 12px var(--font-heading);font-variant-numeric:tabular-nums;color:rgba(32,30,29,.5);padding-top:2px">9:48a</div>
+        <div style="color:var(--color-accent);padding-top:2px"><svg width="17" height="17" sc-camel-view-box="0 0 16 16" class="sc-ico"><circle cx="4" cy="9" r="2.6"></circle><circle cx="12" cy="9" r="2.6"></circle><path d="M4 11.6h8"></path></svg></div>
+        <div style="min-width:0">
+          <div style="display:flex;align-items:baseline;gap:10px">
+            <span style="font:800 16px var(--font-heading);font-variant-numeric:tabular-nums">(225) 555-0377</span>
+            <span style="display:inline-flex;align-items:center;gap:4px;font:800 10px var(--font-heading);letter-spacing:.07em;color:var(--color-accent-700);background:var(--color-accent-100);padding:3px 7px">PERMIT OFFICE?</span>
+            <span style="font:800 10px var(--font-heading);letter-spacing:.07em;color:var(--color-bg);background:var(--color-accent);padding:3px 7px">SAT 5 DAYS</span>
+          </div>
+          <p style="margin:5px 0 0;font-size:13.5px">“…calling about the pour permit on Old Hammond, we need a start date from you before we can release it.”</p>
+          <div style="margin-top:10px;display:flex;align-items:baseline;gap:9px;padding:8px 11px;background:var(--color-accent-100);border-left:2px solid var(--color-accent)">
+            <span style="font:800 10px var(--font-heading);letter-spacing:.08em;color:var(--color-accent);flex:none">NEXT STEP</span>
+            <span style="font-size:13px">Give the permit office a start date. First heard <b>Monday 25 Aug, 9:48a</b> — nobody has called back.</span>
+          </div>
+        </div>
+        <div style="display:flex;gap:2px;color:rgba(32,30,29,.55)">
+          <button class="btn btn-icon" title="Play"><svg width="16" height="16" sc-camel-view-box="0 0 16 16" style="fill:currentColor;stroke:none"><path d="M4 2l9 6-9 6z"></path></svg></button>
+          <button class="btn btn-icon" title="Call"><svg width="16" height="16" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M3 3h3l1 3-2 1a7 7 0 004 4l1-2 3 1v3H13A11 11 0 013 4z"></path></svg></button>
+          <button class="btn btn-icon" title="Name it"><svg width="16" height="16" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M8 3v10M3 8h10"></path></svg></button>
+          <button class="btn btn-icon" title="Mark handled"><svg width="16" height="16" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M3 8l3.5 3.5L13 4"></path></svg></button>
+        </div>
+      </div>
+
+      <!-- row: scope auto-drafted -->
+      <div style="display:grid;grid-template-columns:74px 20px 1fr auto;gap:14px;align-items:start;padding:11px 24px;border-bottom:1px solid rgba(32,30,29,.16)">
+        <div style="font:800 12px var(--font-heading);font-variant-numeric:tabular-nums;color:rgba(32,30,29,.5);padding-top:2px">9:12a</div>
+        <div style="padding-top:2px"><svg width="17" height="17" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M3 3h3l1 3-2 1a7 7 0 004 4l1-2 3 1v3H13A11 11 0 013 4z"></path></svg></div>
+        <div style="min-width:0">
+          <div style="display:flex;align-items:baseline;gap:10px">
+            <span style="font:800 16px var(--font-heading)">Marisol Vega</span>
+            <span style="font:800 10px var(--font-heading);letter-spacing:.07em;color:var(--color-neutral-700)">CALL 6:12 · TRANSCRIPT</span>
+            <span style="font:800 10px var(--font-heading);letter-spacing:.07em;color:var(--color-accent-700);background:var(--color-accent-100);padding:3px 7px">SCOPE AUTO-DRAFTED</span>
+          </div>
+          <p style="margin:5px 0 0;font-size:13.5px">“30 by 40 shop slab out back, and there's a little apron at the door — never called her back after the first quote.”</p>
+          <div style="margin-top:9px;display:flex;flex-wrap:wrap;gap:6px;font-variant-numeric:tabular-nums">
+            <span style="font:400 12px var(--font-body);border:1px solid var(--color-divider);padding:3px 9px">2 sections</span>
+            <span style="font:400 12px var(--font-body);border:1px solid var(--color-divider);padding:3px 9px"><b>1,320 sq ft</b></span>
+            <span style="font:400 12px var(--font-body);border:1px solid var(--color-divider);padding:3px 9px">no price recorded</span>
+          </div>
+        </div>
+        <div style="display:flex;gap:2px;color:rgba(32,30,29,.55)">
+          <button class="btn btn-secondary" style="font-size:11.5px">Open scope</button>
+          <button class="btn btn-icon" title="Snooze"><svg width="16" height="16" sc-camel-view-box="0 0 16 16" class="sc-ico"><circle cx="8" cy="8" r="6"></circle><path d="M8 5v3l2 2"></path></svg></button>
+        </div>
+      </div>
+
+      <!-- row: gone quiet -->
+      <div style="display:grid;grid-template-columns:74px 20px 1fr auto;gap:14px;align-items:start;padding:11px 24px;border-bottom:1px solid rgba(32,30,29,.16)">
+        <div style="font:800 12px var(--font-heading);font-variant-numeric:tabular-nums;color:rgba(32,30,29,.5);padding-top:2px">8:26a</div>
+        <div style="padding-top:2px"><svg width="17" height="17" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M2 3h12v9H6l-4 3z"></path></svg></div>
+        <div style="min-width:0">
+          <div style="display:flex;align-items:baseline;gap:10px">
+            <span style="font:800 16px var(--font-heading)">Dale Hawkins</span>
+            <span style="font:800 10px var(--font-heading);letter-spacing:.07em;color:var(--color-neutral-700)">31 TEXTS · 5 CALLS</span>
+            <span style="font:800 10px var(--font-heading);letter-spacing:.07em;color:var(--color-bg);background:var(--color-text);padding:3px 7px">QUIET 9 DAYS</span>
+          </div>
+          <p style="margin:5px 0 0;font-size:13.5px">“Asked whether the apron could go on the same pour. Last word was yours.”</p>
+        </div>
+        <div style="display:flex;gap:2px;color:rgba(32,30,29,.55)">
+          <button class="btn btn-icon" title="Text back"><svg width="16" height="16" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M6 4L2 8l4 4"></path><path d="M2 8h8a4 4 0 014 4"></path></svg></button>
+          <button class="btn btn-icon" title="Call"><svg width="16" height="16" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M3 3h3l1 3-2 1a7 7 0 004 4l1-2 3 1v3H13A11 11 0 013 4z"></path></svg></button>
+          <button class="btn btn-icon" title="Mark handled"><svg width="16" height="16" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M3 8l3.5 3.5L13 4"></path></svg></button>
+        </div>
+      </div>
+
+      <!-- collapsed contentless calls -->
+      <div style="display:grid;grid-template-columns:74px 20px 1fr auto;gap:14px;align-items:center;padding:9px 24px;border-bottom:1px solid rgba(32,30,29,.16);color:rgba(32,30,29,.55)">
+        <div style="font:800 12px var(--font-heading);font-variant-numeric:tabular-nums;padding-top:0">8:02a</div>
+        <div><svg width="15" height="15" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M3 3h3l1 3-2 1a7 7 0 004 4l1-2 3 1v3H13A11 11 0 013 4z"></path></svg></div>
+        <div style="display:flex;align-items:baseline;gap:10px;font-size:13px;font-variant-numeric:tabular-nums"><span style="font-weight:600">(985) 555-0413</span><span>missed call · no voicemail, no transcript</span></div>
+        <div style="font:800 10px var(--font-heading);letter-spacing:.07em">NAME IT</div>
+      </div>
+      <div style="display:grid;grid-template-columns:74px 20px 1fr auto;gap:14px;align-items:center;padding:9px 24px;border-bottom:1px solid rgba(32,30,29,.16);color:rgba(32,30,29,.55)">
+        <div style="font:800 12px var(--font-heading);font-variant-numeric:tabular-nums">7:51a</div>
+        <div><svg width="15" height="15" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M3 3h3l1 3-2 1a7 7 0 004 4l1-2 3 1v3H13A11 11 0 013 4z"></path></svg></div>
+        <div style="display:flex;align-items:baseline;gap:10px;font-size:13px;font-variant-numeric:tabular-nums"><span style="font-weight:600">(985) 570-4968</span><span>missed call · no voicemail, no transcript</span></div>
+        <div style="font:800 10px var(--font-heading);letter-spacing:.07em">NAME IT</div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Dusty rail -->
+  <div style="width:320px;flex:none;display:flex;flex-direction:column;background:var(--color-surface)">
+    <div style="display:flex;align-items:center;gap:9px;padding:14px 18px;border-bottom:2px solid var(--color-divider)">
+      <svg width="18" height="18" sc-camel-view-box="0 0 28 28"><rect x="5.5" y="5.5" width="17" height="17" transform="rotate(45 14 14)" fill="none" stroke="#ec3013" stroke-width="2.4"></rect><circle cx="14" cy="14" r="3.4" fill="#4f9d70"></circle></svg>
+      <span style="font:800 12px var(--font-heading);letter-spacing:.08em">DUSTY</span>
+      <span style="margin-left:auto;font:800 10px var(--font-heading);letter-spacing:.07em;color:var(--color-neutral-700)">READ OF THE DAY</span>
+    </div>
+    <sc-if value="{{ readFirst }}" hint-placeholder-val="{{ true }}">
+    <div style="padding:18px;border-bottom:1px solid var(--color-divider)">
+      <p style="margin:0;font-size:14px;line-height:1.6">Nine came in today. Seven of them still want something from you.</p>
+      <p style="margin:10px 0 0;font-size:14px;line-height:1.6">The permit office called Monday morning and nobody has called back — that one has been sitting five days and it is holding the Old Hammond pour.</p>
+      <p style="margin:10px 0 0;font-size:14px;line-height:1.6">Marisol's call had a whole job in it, so I drafted the sections. I did not put a number on it.</p>
+      <p style="margin:10px 0 0;font-size:14px;line-height:1.6">Three of today's numbers I still can't put a name to.</p>
+    </div>
+    </sc-if>
+    <div style="padding:14px 18px 6px;font:800 10px var(--font-heading);letter-spacing:.09em;color:rgba(32,30,29,.5)">3 QUESTIONS FOR YOU</div>
+    <div style="border-top:1px solid var(--color-divider)">
+      <div style="display:flex;gap:10px;padding:12px 18px;border-bottom:1px solid var(--color-divider)"><span style="width:7px;height:7px;background:var(--color-accent);flex:none;margin-top:6px"></span><div><div style="font:800 13.5px var(--font-heading)">Who is (225) 555-0288?</div><div style="font-size:12px;color:rgba(32,30,29,.55);margin-top:2px">Two calls and a voicemail. Sounds like Cameron.</div></div></div>
+      <div style="display:flex;gap:10px;padding:12px 18px;border-bottom:1px solid var(--color-divider)"><span style="width:7px;height:7px;background:var(--color-accent);flex:none;margin-top:6px"></span><div><div style="font:800 13.5px var(--font-heading)">Give the permit office a date?</div><div style="font-size:12px;color:rgba(32,30,29,.55);margin-top:2px">I can send it as soon as you pick one.</div></div></div>
+      <div style="display:flex;gap:10px;padding:12px 18px;border-bottom:1px solid var(--color-divider)"><span style="width:7px;height:7px;background:var(--color-text);flex:none;margin-top:6px;opacity:.4"></span><div><div style="font:800 13.5px var(--font-heading)">Confirm the 20th with Robin?</div><div style="font-size:12px;color:rgba(32,30,29,.55);margin-top:2px">Draft is written. Needs your yes.</div></div></div>
+    </div>
+    <div style="margin-top:auto;padding:14px 18px;border-top:2px solid var(--color-divider)">
+      <div style="background:var(--color-bg);border:1px solid var(--color-divider);padding:10px 12px;font-size:13.5px;color:rgba(32,30,29,.45)">Ask Dusty</div>
+      <p style="margin:9px 0 0;font-size:11px;color:var(--color-neutral-700);line-height:1.5">Dusty reads threads, calls and scopes. It has no cost settings yet, so it will not answer money questions.</p>
+    </div>
+  </div>
+
+  </div>
+</div>
+</div>
+
+<!-- ══ 1b  TRIAGE — EMPTY ══ -->
+<div class="dv-opt" id="1b">
+<div class="dv-olabel"><a class="dv-oid" href="#1b">1b</a><b>Triage · empty</b> the same frame with nothing in it</div>
+<div class="dv-card" style="width:1440px;height:900px;display:flex;flex-direction:column">
+  <!-- global chrome -->
+  <div style="flex:none;height:54px;display:flex;align-items:stretch;background:var(--color-text);color:var(--color-bg);border-bottom:2px solid rgba(243,242,242,.26)">
+    <div style="width:84px;flex:none;display:flex;align-items:center;justify-content:center;border-right:1px solid rgba(243,242,242,.16)"><svg width="28" height="28" sc-camel-view-box="0 0 28 28" style="display:block"><rect x="5.5" y="5.5" width="17" height="17" transform="rotate(45 14 14)" fill="none" stroke="#ec3013" stroke-width="2"></rect><circle cx="14" cy="14" r="3.4" fill="#4f9d70"></circle></svg></div>
+    <div style="flex:none;display:flex;align-items:center;padding:0 20px;border-right:1px solid rgba(243,242,242,.16)"><span style="font:800 15px var(--font-heading);letter-spacing:.15em">SCOPECRETE</span></div>
+    <div style="flex:1;min-width:0;display:flex;align-items:center;padding:0 18px">
+      <div style="flex:1;max-width:600px;display:flex;align-items:stretch;height:34px;border:2px solid rgba(243,242,242,.24);background:rgba(243,242,242,.07)">
+        <div style="flex:none;display:flex;align-items:center;gap:6px;padding:0 11px;border-right:2px solid rgba(243,242,242,.24);cursor:pointer" style-hover="background:rgba(243,242,242,.1)"><span style="font:800 11px var(--font-heading);letter-spacing:.07em">ALL</span><svg width="9" height="9" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M3 5l5 5 5-5"></path></svg></div>
+        <div style="flex:1;min-width:0;display:flex;align-items:center;gap:9px;padding:0 11px"><span style="flex:none;opacity:.6"><svg width="15" height="15" sc-camel-view-box="0 0 16 16" class="sc-ico"><circle cx="7" cy="7" r="4.6"></circle><path d="M10.4 10.4L14 14"></path></svg></span><span style="font-size:12.5px;color:rgba(243,242,242,.5);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Search a number, a name, a street, a word someone said</span></div>
+        <div style="flex:none;display:flex;align-items:center;padding:0 10px;border-left:1px solid rgba(243,242,242,.16)"><span style="font:800 10px var(--font-heading);letter-spacing:.06em;color:rgba(243,242,242,.42)">⌘K</span></div>
+      </div>
+    </div>
+    <div style="flex:none;display:flex;align-items:center;padding:0 14px;border-left:1px solid rgba(243,242,242,.16)">
+      <div style="display:flex;align-items:center;gap:8px;height:32px;padding:0 11px;border:2px solid rgba(243,242,242,.24)"><span style="width:7px;height:7px;flex:none;background:#4f9d70"></span><span style="font:800 11px var(--font-heading);letter-spacing:.05em;font-variant-numeric:tabular-nums">(225) 555-0141 LIVE</span></div>
+    </div>
+    <div title="Voicemails waiting" style="flex:none;display:flex;align-items:center;gap:7px;padding:0 13px;border-left:1px solid rgba(243,242,242,.16);cursor:pointer;opacity:.9" style-hover="background:rgba(243,242,242,.12);opacity:1"><svg width="17" height="17" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M2 5h12v6H2z"></path><path d="M5 8h6"></path></svg><span style="font:800 12px var(--font-heading);font-variant-numeric:tabular-nums;color:rgba(243,242,242,.72)">18</span></div>
+    <div title="Numbers with no name" style="flex:none;display:flex;align-items:center;gap:7px;padding:0 13px;border-left:1px solid rgba(243,242,242,.16);cursor:pointer;opacity:.9" style-hover="background:rgba(243,242,242,.12);opacity:1"><svg width="17" height="17" sc-camel-view-box="0 0 16 16" class="sc-ico"><circle cx="8" cy="6" r="2.6"></circle><path d="M3 14a5 5 0 0110 0"></path><path d="M11.5 3.5h3"></path></svg><span style="font:800 12px var(--font-heading);font-variant-numeric:tabular-nums;color:rgba(243,242,242,.72)">124</span></div>
+    <div title="Drift — messages that never reached the app" style="flex:none;display:flex;align-items:center;gap:7px;padding:0 13px;border-left:1px solid rgba(243,242,242,.16);cursor:pointer;opacity:.9" style-hover="background:rgba(243,242,242,.12);opacity:1"><svg width="17" height="17" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M8 2l6 11H2z"></path><path d="M8 6v3"></path></svg><span style="font:800 12px var(--font-heading);font-variant-numeric:tabular-nums;color:var(--color-accent-400)">1</span></div>
+    <div title="Help" style="flex:none;display:flex;align-items:center;gap:7px;padding:0 13px;border-left:1px solid rgba(243,242,242,.16);cursor:pointer;opacity:.9" style-hover="background:rgba(243,242,242,.12);opacity:1"><svg width="17" height="17" sc-camel-view-box="0 0 16 16" class="sc-ico"><circle cx="8" cy="8" r="6"></circle><path d="M6.4 6.2a1.7 1.7 0 013.2.8c0 1.1-1.6 1.3-1.6 2.4"></path><path d="M8 12h0"></path></svg></div>
+  </div>
+  <div style="flex:1;min-height:0;display:flex">
+
+  <div style="width:84px;flex:none;background:var(--color-text);color:var(--color-bg);display:flex;flex-direction:column;align-items:center;padding:0 0 0">
+    <div style="margin-top:0;display:flex;flex-direction:column;gap:2px;width:100%">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:5px;padding:11px 0;background:rgba(243,242,242,.13);border-left:3px solid var(--color-accent)"><svg width="18" height="18" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M2 3h12v9H6l-4 3z"></path></svg><span style="font:800 10px var(--font-heading);letter-spacing:.06em">THREADS</span></div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:5px;padding:11px 0;opacity:.62;border-left:3px solid transparent"><svg width="18" height="18" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M2 5h12v6H2z"></path><path d="M6 5v6M10 5v6"></path></svg><span style="font:800 10px var(--font-heading);letter-spacing:.06em">SCOPE</span></div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:5px;padding:11px 0;opacity:.62;border-left:3px solid transparent"><svg width="18" height="18" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M2 2h4v12H2z"></path><path d="M10 2h4v8h-4z"></path></svg><span style="font:800 10px var(--font-heading);letter-spacing:.06em">LEADS</span></div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:5px;padding:11px 0;opacity:.62;border-left:3px solid transparent"><svg width="18" height="18" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M2 4h12v8H2z"></path><circle cx="8" cy="8" r="1.8"></circle></svg><span style="font:800 10px var(--font-heading);letter-spacing:.06em">MONEY</span></div>
+    </div>
+  </div>
+
+  <div style="flex:1;min-width:0;display:flex;flex-direction:column;border-right:2px solid var(--color-divider)">
+    <div style="display:flex;align-items:center;gap:12px;padding:9px 24px;background:var(--color-text);color:var(--color-bg)">
+      <span style="width:7px;height:7px;background:#4f9d70;flex:none"></span>
+      <span style="font:800 11px var(--font-heading);letter-spacing:.09em">DRIFT</span>
+      <span style="font-size:12.5px;opacity:.7">Nothing has drifted. Last checked 6:02p.</span>
+    </div>
+
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;padding:20px 24px 14px">
+      <div>
+        <h1 style="margin:0;font-size:34px;letter-spacing:-.02em">Triage</h1>
+        <p style="margin:3px 0 0;font-size:12.5px;color:rgba(32,30,29,.55);font-variant-numeric:tabular-nums">Sunday 31 Aug · nothing in today</p>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-secondary" style="font-size:12px">Name numbers <span style="font-variant-numeric:tabular-nums;opacity:.6">124</span></button>
+        <button class="btn btn-primary" style="font-size:12px">New scope</button>
+      </div>
+    </div>
+
+    <div style="display:flex;border-top:2px solid var(--color-divider);border-bottom:2px solid var(--color-divider)">
+      <div style="display:flex;align-items:center;gap:9px;padding:11px 20px;background:var(--color-accent);color:var(--color-bg)"><span style="font:800 12px var(--font-heading);letter-spacing:.07em">TODAY</span><span style="font:800 12px var(--font-heading);font-variant-numeric:tabular-nums">0</span></div>
+      <div style="display:flex;align-items:center;gap:9px;padding:11px 20px;border-left:1px solid var(--color-divider);opacity:.45"><span style="font:800 12px var(--font-heading);letter-spacing:.07em">NEEDS YOU</span><span style="font:800 12px var(--font-heading);font-variant-numeric:tabular-nums">0</span></div>
+      <div style="display:flex;align-items:center;gap:9px;padding:11px 20px;border-left:1px solid var(--color-divider)"><span style="font:800 12px var(--font-heading);letter-spacing:.07em">UNSORTED</span><span style="font:800 12px var(--font-heading);font-variant-numeric:tabular-nums;color:var(--color-accent)">124</span></div>
+      <div style="display:flex;align-items:center;gap:9px;padding:11px 20px;border-left:1px solid var(--color-divider)"><span style="font:800 12px var(--font-heading);letter-spacing:.07em">VOICEMAILS</span><span style="font:800 12px var(--font-heading);font-variant-numeric:tabular-nums;opacity:.5">18</span></div>
+      <div style="display:flex;align-items:center;gap:9px;padding:11px 20px;border-left:1px solid var(--color-divider)"><span style="font:800 12px var(--font-heading);letter-spacing:.07em">ALL</span><span style="font:800 12px var(--font-heading);font-variant-numeric:tabular-nums;opacity:.5">1,156</span></div>
+    </div>
+
+    <div style="flex:1;display:flex;flex-direction:column;justify-content:center;padding:0 24px">
+      <div style="border-top:2px solid var(--color-text);border-bottom:2px solid var(--color-text);padding:34px 0">
+        <h2 style="margin:0;font-size:40px;letter-spacing:-.025em">Nothing came in today.</h2>
+        <p style="margin:12px 0 0;font-size:15px;max-width:640px;line-height:1.6;text-wrap:pretty">The last message arrived <b style="font-variant-numeric:tabular-nums">Thursday 4:41p</b>. Every voicemail with a next step on it has been dealt with. This screen is not broken — the phone is just quiet.</p>
+      </div>
+      <div style="margin-top:26px;display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid var(--color-divider)">
+        <div style="padding:20px 22px;border-right:1px solid var(--color-divider)">
+          <div style="font:800 10px var(--font-heading);letter-spacing:.09em;color:rgba(32,30,29,.5)">THE WORK WHEN THE PHONE IS QUIET</div>
+          <div style="margin-top:8px;display:flex;align-items:baseline;gap:10px"><span style="font:800 38px var(--font-heading);font-variant-numeric:tabular-nums;letter-spacing:-.03em">124</span><span style="font-size:13.5px;line-height:1.5">numbers in this database have called or texted and still have no name on them.</span></div>
+          <button class="btn btn-primary" style="margin-top:14px;font-size:12px">Start naming numbers</button>
+        </div>
+        <div style="padding:20px 22px">
+          <div style="font:800 10px var(--font-heading);letter-spacing:.09em;color:rgba(32,30,29,.5)">ALSO WAITING</div>
+          <div style="margin-top:10px;display:flex;flex-direction:column;gap:9px;font-size:13.5px">
+            <div style="display:flex;gap:10px"><span style="font:800 12px var(--font-heading);font-variant-numeric:tabular-nums;width:26px;flex:none">21</span><span>leads on the board, none of them scoped past square feet</span></div>
+            <div style="display:flex;gap:10px"><span style="font:800 12px var(--font-heading);font-variant-numeric:tabular-nums;width:26px;flex:none">7</span><span>cost settings not recorded — nothing can be priced until they are</span></div>
+            <div style="display:flex;gap:10px"><span style="font:800 12px var(--font-heading);font-variant-numeric:tabular-nums;width:26px;flex:none">0</span><span>jobs, estimates, invoices, payments or receipts on file</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="width:320px;flex:none;display:flex;flex-direction:column;background:var(--color-surface)">
+    <div style="display:flex;align-items:center;gap:9px;padding:14px 18px;border-bottom:2px solid var(--color-divider)">
+      <svg width="18" height="18" sc-camel-view-box="0 0 28 28"><rect x="5.5" y="5.5" width="17" height="17" transform="rotate(45 14 14)" fill="none" stroke="#ec3013" stroke-width="2.4"></rect><circle cx="14" cy="14" r="3.4" fill="#4f9d70"></circle></svg>
+      <span style="font:800 12px var(--font-heading);letter-spacing:.08em">DUSTY</span>
+    </div>
+    <div style="padding:18px">
+      <p style="margin:0;font-size:15px;line-height:1.6"><b>Nothing needs you right now.</b></p>
+      <p style="margin:10px 0 0;font-size:14px;line-height:1.6">No unanswered questions, no voicemail sitting. I have no questions for you either.</p>
+      <p style="margin:10px 0 0;font-size:14px;line-height:1.6">If you want to spend twenty minutes well: name a few of those 124 numbers. Every name makes the next call easier to read.</p>
+    </div>
+    <div style="margin-top:auto;padding:14px 18px;border-top:2px solid var(--color-divider)">
+      <div style="background:var(--color-bg);border:1px solid var(--color-divider);padding:10px 12px;font-size:13.5px;color:rgba(32,30,29,.45)">Ask Dusty</div>
+    </div>
+  </div>
+
+  </div>
+</div>
+</div>
+
+<!-- ══ 1c  TRIAGE — ALT: RIVER + PREVIEW ══ -->
+<div class="dv-opt" id="1c">
+<div class="dv-olabel"><a class="dv-oid" href="#1c">1c</a><b>Triage · alt direction</b> select-and-read instead of act-in-row</div>
+<div class="dv-card" style="width:1440px;height:900px;display:flex;flex-direction:column">
+  <!-- global chrome -->
+  <div style="flex:none;height:54px;display:flex;align-items:stretch;background:var(--color-text);color:var(--color-bg);border-bottom:2px solid rgba(243,242,242,.26)">
+    <div style="width:84px;flex:none;display:flex;align-items:center;justify-content:center;border-right:1px solid rgba(243,242,242,.16)"><svg width="28" height="28" sc-camel-view-box="0 0 28 28" style="display:block"><rect x="5.5" y="5.5" width="17" height="17" transform="rotate(45 14 14)" fill="none" stroke="#ec3013" stroke-width="2"></rect><circle cx="14" cy="14" r="3.4" fill="#4f9d70"></circle></svg></div>
+    <div style="flex:none;display:flex;align-items:center;padding:0 20px;border-right:1px solid rgba(243,242,242,.16)"><span style="font:800 15px var(--font-heading);letter-spacing:.15em">SCOPECRETE</span></div>
+    <div style="flex:1;min-width:0;display:flex;align-items:center;padding:0 18px">
+      <div style="flex:1;max-width:600px;display:flex;align-items:stretch;height:34px;border:2px solid rgba(243,242,242,.24);background:rgba(243,242,242,.07)">
+        <div style="flex:none;display:flex;align-items:center;gap:6px;padding:0 11px;border-right:2px solid rgba(243,242,242,.24);cursor:pointer" style-hover="background:rgba(243,242,242,.1)"><span style="font:800 11px var(--font-heading);letter-spacing:.07em">ALL</span><svg width="9" height="9" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M3 5l5 5 5-5"></path></svg></div>
+        <div style="flex:1;min-width:0;display:flex;align-items:center;gap:9px;padding:0 11px"><span style="flex:none;opacity:.6"><svg width="15" height="15" sc-camel-view-box="0 0 16 16" class="sc-ico"><circle cx="7" cy="7" r="4.6"></circle><path d="M10.4 10.4L14 14"></path></svg></span><span style="font-size:12.5px;color:rgba(243,242,242,.5);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Search a number, a name, a street, a word someone said</span></div>
+        <div style="flex:none;display:flex;align-items:center;padding:0 10px;border-left:1px solid rgba(243,242,242,.16)"><span style="font:800 10px var(--font-heading);letter-spacing:.06em;color:rgba(243,242,242,.42)">⌘K</span></div>
+      </div>
+    </div>
+    <div style="flex:none;display:flex;align-items:center;padding:0 14px;border-left:1px solid rgba(243,242,242,.16)">
+      <div style="display:flex;align-items:center;gap:8px;height:32px;padding:0 11px;border:2px solid rgba(243,242,242,.24)"><span style="width:7px;height:7px;flex:none;background:#4f9d70"></span><span style="font:800 11px var(--font-heading);letter-spacing:.05em;font-variant-numeric:tabular-nums">(225) 555-0141 LIVE</span></div>
+    </div>
+    <div title="Voicemails waiting" style="flex:none;display:flex;align-items:center;gap:7px;padding:0 13px;border-left:1px solid rgba(243,242,242,.16);cursor:pointer;opacity:.9" style-hover="background:rgba(243,242,242,.12);opacity:1"><svg width="17" height="17" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M2 5h12v6H2z"></path><path d="M5 8h6"></path></svg><span style="font:800 12px var(--font-heading);font-variant-numeric:tabular-nums;color:rgba(243,242,242,.72)">18</span></div>
+    <div title="Numbers with no name" style="flex:none;display:flex;align-items:center;gap:7px;padding:0 13px;border-left:1px solid rgba(243,242,242,.16);cursor:pointer;opacity:.9" style-hover="background:rgba(243,242,242,.12);opacity:1"><svg width="17" height="17" sc-camel-view-box="0 0 16 16" class="sc-ico"><circle cx="8" cy="6" r="2.6"></circle><path d="M3 14a5 5 0 0110 0"></path><path d="M11.5 3.5h3"></path></svg><span style="font:800 12px var(--font-heading);font-variant-numeric:tabular-nums;color:rgba(243,242,242,.72)">124</span></div>
+    <div title="Drift — messages that never reached the app" style="flex:none;display:flex;align-items:center;gap:7px;padding:0 13px;border-left:1px solid rgba(243,242,242,.16);cursor:pointer;opacity:.9" style-hover="background:rgba(243,242,242,.12);opacity:1"><svg width="17" height="17" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M8 2l6 11H2z"></path><path d="M8 6v3"></path></svg><span style="font:800 12px var(--font-heading);font-variant-numeric:tabular-nums;color:var(--color-accent-400)">1</span></div>
+    <div title="Help" style="flex:none;display:flex;align-items:center;gap:7px;padding:0 13px;border-left:1px solid rgba(243,242,242,.16);cursor:pointer;opacity:.9" style-hover="background:rgba(243,242,242,.12);opacity:1"><svg width="17" height="17" sc-camel-view-box="0 0 16 16" class="sc-ico"><circle cx="8" cy="8" r="6"></circle><path d="M6.4 6.2a1.7 1.7 0 013.2.8c0 1.1-1.6 1.3-1.6 2.4"></path><path d="M8 12h0"></path></svg></div>
+  </div>
+  <div style="flex:1;min-height:0;display:flex">
+
+  <div style="width:84px;flex:none;background:var(--color-text);color:var(--color-bg);display:flex;flex-direction:column;align-items:center;padding:0 0 0">
+    <div style="margin-top:0;display:flex;flex-direction:column;gap:2px;width:100%">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:5px;padding:11px 0;background:rgba(243,242,242,.13);border-left:3px solid var(--color-accent)"><svg width="18" height="18" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M2 3h12v9H6l-4 3z"></path></svg><span style="font:800 10px var(--font-heading);letter-spacing:.06em">THREADS</span></div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:5px;padding:11px 0;opacity:.62;border-left:3px solid transparent"><svg width="18" height="18" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M2 5h12v6H2z"></path><path d="M6 5v6M10 5v6"></path></svg><span style="font:800 10px var(--font-heading);letter-spacing:.06em">SCOPE</span></div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:5px;padding:11px 0;opacity:.62;border-left:3px solid transparent"><svg width="18" height="18" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M2 2h4v12H2z"></path><path d="M10 2h4v8h-4z"></path></svg><span style="font:800 10px var(--font-heading);letter-spacing:.06em">LEADS</span></div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:5px;padding:11px 0;opacity:.62;border-left:3px solid transparent"><svg width="18" height="18" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M2 4h12v8H2z"></path><circle cx="8" cy="8" r="1.8"></circle></svg><span style="font:800 10px var(--font-heading);letter-spacing:.06em">MONEY</span></div>
+    </div>
+  </div>
+
+  <!-- narrow river -->
+  <div style="width:392px;flex:none;display:flex;flex-direction:column;border-right:2px solid var(--color-divider)">
+    <div style="padding:16px 18px 12px"><h1 style="margin:0;font-size:26px;letter-spacing:-.02em">Triage</h1><p style="margin:2px 0 0;font:800 11px var(--font-heading);letter-spacing:.07em;color:rgba(32,30,29,.5);font-variant-numeric:tabular-nums">9 IN TODAY · NEWEST FIRST</p></div>
+    <div style="display:flex;flex-wrap:wrap;border-top:2px solid var(--color-divider);border-bottom:2px solid var(--color-divider)">
+      <div style="padding:8px 13px;background:var(--color-accent);color:var(--color-bg);font:800 11px var(--font-heading);letter-spacing:.06em">TODAY 9</div>
+      <div style="padding:8px 13px;border-left:1px solid var(--color-divider);font:800 11px var(--font-heading);letter-spacing:.06em">NEEDS YOU <span style="color:var(--color-accent)">7</span></div>
+      <div style="padding:8px 13px;border-left:1px solid var(--color-divider);font:800 11px var(--font-heading);letter-spacing:.06em;opacity:.55">UNSORTED 124</div>
+      <div style="padding:8px 13px;border-left:1px solid var(--color-divider);font:800 11px var(--font-heading);letter-spacing:.06em;opacity:.55">VM 18</div>
+      <div style="padding:8px 13px;border-left:1px solid var(--color-divider);font:800 11px var(--font-heading);letter-spacing:.06em;opacity:.55">ALL 1,156</div>
+    </div>
+    <div style="flex:1;overflow:hidden">
+      <div style="padding:12px 18px;border-bottom:1px solid rgba(32,30,29,.16)"><div style="display:flex;justify-content:space-between;gap:8px"><span style="font:800 14px var(--font-heading);font-variant-numeric:tabular-nums">(225) 555-0288</span><span style="font:800 11px var(--font-heading);font-variant-numeric:tabular-nums;color:rgba(32,30,29,.5)">4:41p</span></div><p style="margin:3px 0 0;font-size:12.5px;color:rgba(32,30,29,.7);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">“Yeah that works — put me down for that.”</p><span style="display:inline-block;margin-top:6px;font:800 9.5px var(--font-heading);letter-spacing:.07em;color:var(--color-accent-700);background:var(--color-accent-100);padding:2px 6px">LIKELY CAMERON</span></div>
+      <div style="padding:12px 18px;border-bottom:1px solid rgba(32,30,29,.16);background:var(--color-text);color:var(--color-bg)"><div style="display:flex;justify-content:space-between;gap:8px"><span style="font:800 14px var(--font-heading);font-variant-numeric:tabular-nums">(225) 555-0377</span><span style="font:800 11px var(--font-heading);font-variant-numeric:tabular-nums;opacity:.6">9:48a</span></div><p style="margin:3px 0 0;font-size:12.5px;opacity:.8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">“…need a start date before we release it.”</p><span style="display:inline-block;margin-top:6px;font:800 9.5px var(--font-heading);letter-spacing:.07em;color:var(--color-bg);background:var(--color-accent);padding:2px 6px">SAT 5 DAYS</span></div>
+      <div style="padding:12px 18px;border-bottom:1px solid rgba(32,30,29,.16)"><div style="display:flex;justify-content:space-between;gap:8px"><span style="font:800 14px var(--font-heading)">Robin Plunket</span><span style="font:800 11px var(--font-heading);font-variant-numeric:tabular-nums;color:rgba(32,30,29,.5)">2:12p</span></div><p style="margin:3px 0 0;font-size:12.5px;color:rgba(32,30,29,.7);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">“Poured before the 20th. No demo.”</p><span style="display:inline-block;margin-top:6px;font:800 9.5px var(--font-heading);letter-spacing:.07em;color:var(--color-accent)">UNANSWERED QUESTION</span></div>
+      <div style="padding:12px 18px;border-bottom:1px solid rgba(32,30,29,.16)"><div style="display:flex;justify-content:space-between;gap:8px"><span style="font:800 14px var(--font-heading)">Marisol Vega</span><span style="font:800 11px var(--font-heading);font-variant-numeric:tabular-nums;color:rgba(32,30,29,.5)">9:12a</span></div><p style="margin:3px 0 0;font-size:12.5px;color:rgba(32,30,29,.7);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">30×40 shop slab + apron</p><span style="display:inline-block;margin-top:6px;font:800 9.5px var(--font-heading);letter-spacing:.07em;color:var(--color-accent-700);background:var(--color-accent-100);padding:2px 6px">SCOPE DRAFTED</span></div>
+      <div style="padding:12px 18px;border-bottom:1px solid rgba(32,30,29,.16)"><div style="display:flex;justify-content:space-between;gap:8px"><span style="font:800 14px var(--font-heading)">Dale Hawkins</span><span style="font:800 11px var(--font-heading);font-variant-numeric:tabular-nums;color:rgba(32,30,29,.5)">8:26a</span></div><p style="margin:3px 0 0;font-size:12.5px;color:rgba(32,30,29,.7);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Apron on the same pour?</p><span style="display:inline-block;margin-top:6px;font:800 9.5px var(--font-heading);letter-spacing:.07em;color:rgba(32,30,29,.55)">QUIET 9 DAYS</span></div>
+      <div style="padding:8px 18px;border-bottom:1px solid rgba(32,30,29,.16);display:flex;justify-content:space-between;color:rgba(32,30,29,.5);font-size:12px;font-variant-numeric:tabular-nums"><span>(985) 555-0413 · no voicemail</span><span>8:02a</span></div>
+      <div style="padding:8px 18px;border-bottom:1px solid rgba(32,30,29,.16);display:flex;justify-content:space-between;color:rgba(32,30,29,.5);font-size:12px;font-variant-numeric:tabular-nums"><span>(985) 570-4968 · no voicemail</span><span>7:51a</span></div>
+    </div>
+  </div>
+
+  <!-- preview -->
+  <div style="flex:1;min-width:0;display:flex;flex-direction:column">
+    <div style="padding:20px 26px 16px;border-bottom:2px solid var(--color-divider)">
+      <div style="display:flex;align-items:baseline;gap:12px">
+        <h2 style="margin:0;font-size:30px;letter-spacing:-.02em;font-variant-numeric:tabular-nums">(225) 555-0377</h2>
+        <span style="font:800 10px var(--font-heading);letter-spacing:.07em;color:var(--color-bg);background:var(--color-accent);padding:4px 8px">SAT 5 DAYS</span>
+        <span style="font:800 10px var(--font-heading);letter-spacing:.07em;color:var(--color-accent-700);background:var(--color-accent-100);padding:4px 8px">PERMIT OFFICE?</span>
+      </div>
+      <p style="margin:6px 0 0;font-size:12.5px;color:rgba(32,30,29,.55);font-variant-numeric:tabular-nums">First heard Monday 25 Aug 9:48a · 3 calls, 1 voicemail, 0 texts · no name on file</p>
+    </div>
+    <div style="padding:22px 26px;border-bottom:1px solid var(--color-divider)">
+      <div style="font:800 10px var(--font-heading);letter-spacing:.09em;color:rgba(32,30,29,.5)">VOICEMAIL · 0:31</div>
+      <div style="margin-top:10px;display:flex;align-items:center;gap:14px">
+        <button class="btn btn-primary" style="width:44px;height:44px;padding:0;flex:none"><svg width="16" height="16" sc-camel-view-box="0 0 16 16" style="fill:currentColor;stroke:none"><path d="M4 2l9 6-9 6z"></path></svg></button>
+        <div style="flex:1;height:44px;display:flex;align-items:center;gap:2px">
+          <div style="width:3px;height:12px;background:rgba(32,30,29,.3)"></div><div style="width:3px;height:22px;background:rgba(32,30,29,.3)"></div><div style="width:3px;height:34px;background:rgba(32,30,29,.3)"></div><div style="width:3px;height:18px;background:rgba(32,30,29,.3)"></div><div style="width:3px;height:28px;background:rgba(32,30,29,.3)"></div><div style="width:3px;height:40px;background:rgba(32,30,29,.3)"></div><div style="width:3px;height:20px;background:rgba(32,30,29,.3)"></div><div style="width:3px;height:30px;background:rgba(32,30,29,.3)"></div><div style="width:3px;height:14px;background:rgba(32,30,29,.3)"></div><div style="width:3px;height:26px;background:rgba(32,30,29,.3)"></div><div style="width:3px;height:36px;background:rgba(32,30,29,.3)"></div><div style="width:3px;height:16px;background:rgba(32,30,29,.3)"></div><div style="width:3px;height:24px;background:rgba(32,30,29,.3)"></div><div style="width:3px;height:32px;background:rgba(32,30,29,.3)"></div><div style="width:3px;height:12px;background:rgba(32,30,29,.3)"></div><div style="width:3px;height:28px;background:rgba(32,30,29,.3)"></div><div style="width:3px;height:38px;background:rgba(32,30,29,.3)"></div><div style="width:3px;height:18px;background:rgba(32,30,29,.3)"></div><div style="width:3px;height:22px;background:rgba(32,30,29,.3)"></div><div style="width:3px;height:30px;background:rgba(32,30,29,.3)"></div>
+        </div>
+        <span style="font:800 12px var(--font-heading);font-variant-numeric:tabular-nums;color:rgba(32,30,29,.5)">0:31</span>
+      </div>
+      <p style="margin:16px 0 0;font-size:15px;line-height:1.65;max-width:660px;text-wrap:pretty">“Hey, this is the parish calling about the pour permit on Old Hammond. We've got everything except a start date from you — soon as you give us one we can release it. Give us a call back.”</p>
+    </div>
+    <div style="padding:20px 26px;border-bottom:1px solid var(--color-divider)">
+      <div style="display:flex;align-items:baseline;gap:10px;padding:11px 14px;background:var(--color-accent-100);border-left:3px solid var(--color-accent)">
+        <span style="font:800 10px var(--font-heading);letter-spacing:.08em;color:var(--color-accent);flex:none">NEXT STEP</span>
+        <span style="font-size:14px">Give the permit office a start date for Old Hammond.</span>
+      </div>
+    </div>
+    <div style="padding:20px 26px;display:flex;flex-wrap:wrap;gap:8px">
+      <button class="btn btn-primary" style="font-size:12.5px">Call back</button>
+      <button class="btn btn-secondary" style="font-size:12.5px">Text a date</button>
+      <button class="btn btn-secondary" style="font-size:12.5px">Name this number</button>
+      <button class="btn btn-secondary" style="font-size:12.5px">Snooze to Monday</button>
+      <button class="btn btn-secondary" style="font-size:12.5px">Add a note</button>
+      <button class="btn btn-secondary" style="font-size:12.5px">Mark handled</button>
+    </div>
+    <div style="margin-top:auto;padding:18px 26px;border-top:2px solid var(--color-divider);background:var(--color-surface);display:flex;gap:12px;align-items:flex-start">
+      <svg width="18" height="18" sc-camel-view-box="0 0 28 28" style="flex:none;margin-top:2px"><rect x="5.5" y="5.5" width="17" height="17" transform="rotate(45 14 14)" fill="none" stroke="#ec3013" stroke-width="2.4"></rect><circle cx="14" cy="14" r="3.4" fill="#4f9d70"></circle></svg>
+      <p style="margin:0;font-size:13.5px;line-height:1.6;max-width:760px">This number called three times in five days and never got a call back. It is the only thing on today's list holding up work you already sold. Everything else can wait until tomorrow.</p>
+    </div>
+  </div>
+
+  </div>
+</div>
+</div>
+
+<!-- ══ 1d  THREAD — POPULATED ══ -->
+<div class="dv-opt" id="1d">
+<div class="dv-olabel"><a class="dv-oid" href="#1d">1d</a><b>Thread · populated</b> list · ledger · contact + Dusty</div>
+<div class="dv-card" style="width:1440px;height:900px;display:flex;flex-direction:column">
+  <!-- global chrome -->
+  <div style="flex:none;height:54px;display:flex;align-items:stretch;background:var(--color-text);color:var(--color-bg);border-bottom:2px solid rgba(243,242,242,.26)">
+    <div style="width:84px;flex:none;display:flex;align-items:center;justify-content:center;border-right:1px solid rgba(243,242,242,.16)"><svg width="28" height="28" sc-camel-view-box="0 0 28 28" style="display:block"><rect x="5.5" y="5.5" width="17" height="17" transform="rotate(45 14 14)" fill="none" stroke="#ec3013" stroke-width="2"></rect><circle cx="14" cy="14" r="3.4" fill="#4f9d70"></circle></svg></div>
+    <div style="flex:none;display:flex;align-items:center;padding:0 20px;border-right:1px solid rgba(243,242,242,.16)"><span style="font:800 15px var(--font-heading);letter-spacing:.15em">SCOPECRETE</span></div>
+    <div style="flex:1;min-width:0;display:flex;align-items:center;padding:0 18px">
+      <div style="flex:1;max-width:600px;display:flex;align-items:stretch;height:34px;border:2px solid rgba(243,242,242,.24);background:rgba(243,242,242,.07)">
+        <div style="flex:none;display:flex;align-items:center;gap:6px;padding:0 11px;border-right:2px solid rgba(243,242,242,.24);cursor:pointer" style-hover="background:rgba(243,242,242,.1)"><span style="font:800 11px var(--font-heading);letter-spacing:.07em">ALL</span><svg width="9" height="9" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M3 5l5 5 5-5"></path></svg></div>
+        <div style="flex:1;min-width:0;display:flex;align-items:center;gap:9px;padding:0 11px"><span style="flex:none;opacity:.6"><svg width="15" height="15" sc-camel-view-box="0 0 16 16" class="sc-ico"><circle cx="7" cy="7" r="4.6"></circle><path d="M10.4 10.4L14 14"></path></svg></span><span style="font-size:12.5px;color:rgba(243,242,242,.5);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Search a number, a name, a street, a word someone said</span></div>
+        <div style="flex:none;display:flex;align-items:center;padding:0 10px;border-left:1px solid rgba(243,242,242,.16)"><span style="font:800 10px var(--font-heading);letter-spacing:.06em;color:rgba(243,242,242,.42)">⌘K</span></div>
+      </div>
+    </div>
+    <div style="flex:none;display:flex;align-items:center;padding:0 14px;border-left:1px solid rgba(243,242,242,.16)">
+      <div style="display:flex;align-items:center;gap:8px;height:32px;padding:0 11px;border:2px solid rgba(243,242,242,.24)"><span style="width:7px;height:7px;flex:none;background:#4f9d70"></span><span style="font:800 11px var(--font-heading);letter-spacing:.05em;font-variant-numeric:tabular-nums">(225) 555-0141 LIVE</span></div>
+    </div>
+    <div title="Voicemails waiting" style="flex:none;display:flex;align-items:center;gap:7px;padding:0 13px;border-left:1px solid rgba(243,242,242,.16);cursor:pointer;opacity:.9" style-hover="background:rgba(243,242,242,.12);opacity:1"><svg width="17" height="17" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M2 5h12v6H2z"></path><path d="M5 8h6"></path></svg><span style="font:800 12px var(--font-heading);font-variant-numeric:tabular-nums;color:rgba(243,242,242,.72)">18</span></div>
+    <div title="Numbers with no name" style="flex:none;display:flex;align-items:center;gap:7px;padding:0 13px;border-left:1px solid rgba(243,242,242,.16);cursor:pointer;opacity:.9" style-hover="background:rgba(243,242,242,.12);opacity:1"><svg width="17" height="17" sc-camel-view-box="0 0 16 16" class="sc-ico"><circle cx="8" cy="6" r="2.6"></circle><path d="M3 14a5 5 0 0110 0"></path><path d="M11.5 3.5h3"></path></svg><span style="font:800 12px var(--font-heading);font-variant-numeric:tabular-nums;color:rgba(243,242,242,.72)">124</span></div>
+    <div title="Drift — messages that never reached the app" style="flex:none;display:flex;align-items:center;gap:7px;padding:0 13px;border-left:1px solid rgba(243,242,242,.16);cursor:pointer;opacity:.9" style-hover="background:rgba(243,242,242,.12);opacity:1"><svg width="17" height="17" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M8 2l6 11H2z"></path><path d="M8 6v3"></path></svg><span style="font:800 12px var(--font-heading);font-variant-numeric:tabular-nums;color:var(--color-accent-400)">1</span></div>
+    <div title="Help" style="flex:none;display:flex;align-items:center;gap:7px;padding:0 13px;border-left:1px solid rgba(243,242,242,.16);cursor:pointer;opacity:.9" style-hover="background:rgba(243,242,242,.12);opacity:1"><svg width="17" height="17" sc-camel-view-box="0 0 16 16" class="sc-ico"><circle cx="8" cy="8" r="6"></circle><path d="M6.4 6.2a1.7 1.7 0 013.2.8c0 1.1-1.6 1.3-1.6 2.4"></path><path d="M8 12h0"></path></svg></div>
+  </div>
+  <div style="flex:1;min-height:0;display:flex">
+
+  <div style="width:84px;flex:none;background:var(--color-text);color:var(--color-bg);display:flex;flex-direction:column;align-items:center;padding:0 0 0">
+    <div style="margin-top:0;display:flex;flex-direction:column;gap:2px;width:100%">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:5px;padding:11px 0;background:rgba(243,242,242,.13);border-left:3px solid var(--color-accent)"><svg width="18" height="18" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M2 3h12v9H6l-4 3z"></path></svg><span style="font:800 10px var(--font-heading);letter-spacing:.06em">THREADS</span></div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:5px;padding:11px 0;opacity:.62;border-left:3px solid transparent"><svg width="18" height="18" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M2 5h12v6H2z"></path><path d="M6 5v6M10 5v6"></path></svg><span style="font:800 10px var(--font-heading);letter-spacing:.06em">SCOPE</span></div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:5px;padding:11px 0;opacity:.62;border-left:3px solid transparent"><svg width="18" height="18" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M2 2h4v12H2z"></path><path d="M10 2h4v8h-4z"></path></svg><span style="font:800 10px var(--font-heading);letter-spacing:.06em">LEADS</span></div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:5px;padding:11px 0;opacity:.62;border-left:3px solid transparent"><svg width="18" height="18" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M2 4h12v8H2z"></path><circle cx="8" cy="8" r="1.8"></circle></svg><span style="font:800 10px var(--font-heading);letter-spacing:.06em">MONEY</span></div>
+    </div>
+  </div>
+
+  <!-- contact list -->
+  <div style="width:288px;flex:none;display:flex;flex-direction:column;border-right:2px solid var(--color-divider)">
+    <div style="padding:14px 16px 10px">
+      <div style="background:var(--color-surface);border:1px solid var(--color-divider);padding:8px 10px;font-size:13px;color:rgba(32,30,29,.45)">Search 144 contacts</div>
+      <div style="margin-top:10px;display:flex;gap:0;border:1px solid var(--color-divider)">
+        <div style="flex:1;text-align:center;padding:6px 0;background:var(--color-accent);color:var(--color-bg);font:800 10.5px var(--font-heading);letter-spacing:.06em">NAMED 20</div>
+        <div style="flex:1;text-align:center;padding:6px 0;border-left:1px solid var(--color-divider);font:800 10.5px var(--font-heading);letter-spacing:.06em">UNNAMED 124</div>
+      </div>
+    </div>
+    <div style="flex:1;overflow:hidden;border-top:2px solid var(--color-divider)">
+      <div style="padding:11px 16px;border-bottom:1px solid rgba(32,30,29,.16);background:var(--color-surface);border-left:3px solid var(--color-accent)"><div style="display:flex;justify-content:space-between"><span style="font:800 14px var(--font-heading)">Robin Plunket</span><span style="font:800 11px var(--font-heading);font-variant-numeric:tabular-nums;color:rgba(32,30,29,.5)">2:12p</span></div><p style="margin:2px 0 0;font-size:12px;color:rgba(32,30,29,.6);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Poured before the 20th. No demo.</p></div>
+      <div style="padding:11px 16px;border-bottom:1px solid rgba(32,30,29,.16)"><div style="display:flex;justify-content:space-between"><span style="font:800 14px var(--font-heading)">Gulfline Paving</span><span style="font:800 11px var(--font-heading);font-variant-numeric:tabular-nums;color:rgba(32,30,29,.5)">11:04a</span></div><p style="margin:2px 0 0;font-size:12px;color:rgba(32,30,29,.6);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Old Hammond lot</p></div>
+      <div style="padding:11px 16px;border-bottom:1px solid rgba(32,30,29,.16)"><div style="display:flex;justify-content:space-between"><span style="font:800 14px var(--font-heading)">Marisol Vega</span><span style="font:800 11px var(--font-heading);font-variant-numeric:tabular-nums;color:rgba(32,30,29,.5)">9:12a</span></div><p style="margin:2px 0 0;font-size:12px;color:rgba(32,30,29,.6);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">30×40 shop slab + apron</p></div>
+      <div style="padding:11px 16px;border-bottom:1px solid rgba(32,30,29,.16)"><div style="display:flex;justify-content:space-between"><span style="font:800 14px var(--font-heading)">Dale Hawkins</span><span style="font:800 11px var(--font-heading);font-variant-numeric:tabular-nums;color:rgba(32,30,29,.5)">8:26a</span></div><p style="margin:2px 0 0;font-size:12px;color:rgba(32,30,29,.6);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Apron on the same pour?</p></div>
+      <div style="padding:11px 16px;border-bottom:1px solid rgba(32,30,29,.16);color:rgba(32,30,29,.65)"><div style="display:flex;justify-content:space-between"><span style="font:600 13.5px var(--font-body);font-variant-numeric:tabular-nums">(225) 555-0288</span><span style="font:800 11px var(--font-heading);font-variant-numeric:tabular-nums;color:rgba(32,30,29,.5)">4:41p</span></div><p style="margin:2px 0 0;font-size:12px;color:rgba(32,30,29,.55);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">“Yeah that works”</p></div>
+      <div style="padding:11px 16px;border-bottom:1px solid rgba(32,30,29,.16);color:rgba(32,30,29,.65)"><div style="display:flex;justify-content:space-between"><span style="font:600 13.5px var(--font-body);font-variant-numeric:tabular-nums">(225) 555-0377</span><span style="font:800 11px var(--font-heading);font-variant-numeric:tabular-nums;color:rgba(32,30,29,.5)">9:48a</span></div><p style="margin:2px 0 0;font-size:12px;color:rgba(32,30,29,.55);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Permit — needs a start date</p></div>
+      <div style="padding:11px 16px;border-bottom:1px solid rgba(32,30,29,.16);color:rgba(32,30,29,.5)"><div style="display:flex;justify-content:space-between"><span style="font:600 13.5px var(--font-body);font-variant-numeric:tabular-nums">(985) 570-4968</span><span style="font:800 11px var(--font-heading);font-variant-numeric:tabular-nums">7:51a</span></div><p style="margin:2px 0 0;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">3 calls · nothing on record</p></div>
+      <div style="padding:11px 16px;border-bottom:1px solid rgba(32,30,29,.16);color:rgba(32,30,29,.5)"><div style="display:flex;justify-content:space-between"><span style="font:600 13.5px var(--font-body);font-variant-numeric:tabular-nums">(225) 555-0104</span><span style="font:800 11px var(--font-heading);font-variant-numeric:tabular-nums">Thu</span></div><p style="margin:2px 0 0;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">1 call · nothing on record</p></div>
+      <div style="padding:11px 16px;border-bottom:1px solid rgba(32,30,29,.16);color:rgba(32,30,29,.5)"><div style="display:flex;justify-content:space-between"><span style="font:600 13.5px var(--font-body);font-variant-numeric:tabular-nums">(504) 555-0921</span><span style="font:800 11px var(--font-heading);font-variant-numeric:tabular-nums">Thu</span></div><p style="margin:2px 0 0;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">2 calls · nothing on record</p></div>
+    </div>
+  </div>
+
+  <!-- thread ledger -->
+  <div style="flex:1;min-width:0;display:flex;flex-direction:column;border-right:2px solid var(--color-divider)">
+    <div style="padding:16px 22px 14px;border-bottom:2px solid var(--color-divider);display:flex;align-items:flex-start;justify-content:space-between;gap:16px">
+      <div>
+        <h2 style="margin:0;font-size:26px;letter-spacing:-.02em">Robin Plunket</h2>
+        <p style="margin:3px 0 0;font-size:12px;color:rgba(32,30,29,.55);font-variant-numeric:tabular-nums">(225) 555-0142 · first heard 12 Jun · 14 texts, 3 calls</p>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-icon btn-secondary" title="Call"><svg width="15" height="15" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M3 3h3l1 3-2 1a7 7 0 004 4l1-2 3 1v3H13A11 11 0 013 4z"></path></svg></button>
+        <button class="btn btn-secondary" style="font-size:12px">Open scope</button>
+      </div>
+    </div>
+
+    <div style="flex:1;overflow:hidden">
+      <div style="padding:8px 22px;background:var(--color-surface);border-bottom:1px solid var(--color-divider);font:800 10px var(--font-heading);letter-spacing:.09em;color:rgba(32,30,29,.5)">THURSDAY 14 AUG</div>
+
+      <div style="display:grid;grid-template-columns:62px 30px 1fr;gap:12px;padding:13px 22px;border-bottom:1px solid rgba(32,30,29,.14)">
+        <div style="font:800 11px var(--font-heading);font-variant-numeric:tabular-nums;color:rgba(32,30,29,.5);padding-top:2px">9:04a</div>
+        <div style="font:800 10px var(--font-heading);letter-spacing:.06em;color:var(--color-neutral-700);padding-top:2px">IN</div>
+        <p style="margin:0;font-size:14.5px;line-height:1.55">Morning — are y'all still doing patios out in Zachary?</p>
+      </div>
+      <div style="display:grid;grid-template-columns:62px 30px 1fr;gap:12px;padding:13px 22px;border-bottom:1px solid rgba(32,30,29,.14);background:var(--color-surface)">
+        <div style="font:800 11px var(--font-heading);font-variant-numeric:tabular-nums;color:rgba(32,30,29,.5);padding-top:2px">9:31a</div>
+        <div style="font:800 10px var(--font-heading);letter-spacing:.06em;color:var(--color-accent);padding-top:2px">OUT</div>
+        <p style="margin:0;font-size:14.5px;line-height:1.55">We are. What are you looking at?</p>
+      </div>
+
+      <!-- call with everything on it -->
+      <div style="padding:15px 22px;border-bottom:1px solid rgba(32,30,29,.14);border-left:3px solid var(--color-text)">
+        <div style="display:flex;align-items:baseline;gap:12px">
+          <span style="font:800 11px var(--font-heading);font-variant-numeric:tabular-nums;color:rgba(32,30,29,.5);width:50px">10:12a</span>
+          <svg width="15" height="15" sc-camel-view-box="0 0 16 16" class="sc-ico" style="flex:none"><path d="M3 3h3l1 3-2 1a7 7 0 004 4l1-2 3 1v3H13A11 11 0 013 4z"></path></svg>
+          <span style="font:800 13px var(--font-heading);letter-spacing:.02em">INBOUND CALL</span>
+          <span style="font:800 11px var(--font-heading);font-variant-numeric:tabular-nums;color:rgba(32,30,29,.5)">6:41</span>
+          <span style="font:800 10px var(--font-heading);letter-spacing:.07em;color:var(--color-neutral-700)">TRANSCRIPT · SUMMARY · 2 NEXT STEPS</span>
+        </div>
+        <p style="margin:11px 0 0 62px;font-size:14.5px;line-height:1.6;max-width:600px;text-wrap:pretty">Wants a back patio poured before the 20th. Twelve by twenty. It's grass now, so no demo. Asked for a broom finish. Said she measured it Thursday and it came to 240 square feet.</p>
+        <div style="margin:12px 0 0 62px;display:flex;flex-wrap:wrap;gap:6px;font-variant-numeric:tabular-nums">
+          <span style="font:400 12px var(--font-body);border:1px solid var(--color-divider);padding:3px 9px">Section <b>patio</b></span>
+          <span style="font:400 12px var(--font-body);border:1px solid var(--color-divider);padding:3px 9px">Dimensions <b>12 × 20 ft</b></span>
+          <span style="font:400 12px var(--font-body);border:1px solid var(--color-divider);padding:3px 9px">Area <b>240 sq ft</b></span>
+          <span style="font:400 12px var(--font-body);border:1px solid var(--color-divider);padding:3px 9px">Existing slab <b>none</b></span>
+          <span style="font:400 12px var(--font-body);border:1px solid var(--color-divider);padding:3px 9px">Finish <b>broom</b></span>
+        </div>
+        <div style="margin:13px 0 0 62px;border:1px solid var(--color-divider)">
+          <div style="padding:7px 12px;border-bottom:1px solid var(--color-divider);font:800 10px var(--font-heading);letter-spacing:.09em;color:rgba(32,30,29,.5)">EXTRACTED NEXT STEPS</div>
+          <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--color-divider)"><span style="width:14px;height:14px;border:1.5px solid var(--color-accent);flex:none"></span><span style="font-size:13.5px">Confirm the 20th works</span><span style="margin-left:auto;font:800 10px var(--font-heading);letter-spacing:.07em;color:var(--color-accent)">STILL OPEN · 16 DAYS</span></div>
+          <div style="display:flex;align-items:center;gap:10px;padding:9px 12px"><span style="width:14px;height:14px;background:var(--color-text);flex:none;display:flex;align-items:center;justify-content:center"><svg width="10" height="10" sc-camel-view-box="0 0 16 16" style="fill:none;stroke:#f3f2f2;stroke-width:2.6"><path d="M3 8l3.5 3.5L13 4"></path></svg></span><span style="font-size:13.5px;color:rgba(32,30,29,.55);text-decoration:line-through">Get the measurement</span><span style="margin-left:auto;font:800 10px var(--font-heading);letter-spacing:.07em;color:var(--color-neutral-700)">DONE 21 AUG</span></div>
+        </div>
+        <div style="margin:11px 0 0 62px"><button class="btn btn-ghost" style="font-size:12px;padding-left:0">Read the full transcript</button></div>
+      </div>
+
+      <div style="padding:8px 22px;background:var(--color-surface);border-bottom:1px solid var(--color-divider);border-top:1px solid var(--color-divider);font:800 10px var(--font-heading);letter-spacing:.09em;color:rgba(32,30,29,.5)">TODAY</div>
+      <div style="display:grid;grid-template-columns:62px 30px 1fr;gap:12px;padding:13px 22px;border-bottom:1px solid rgba(32,30,29,.14)">
+        <div style="font:800 11px var(--font-heading);font-variant-numeric:tabular-nums;color:rgba(32,30,29,.5);padding-top:2px">2:12p</div>
+        <div style="font:800 10px var(--font-heading);letter-spacing:.06em;color:var(--color-neutral-700);padding-top:2px">IN</div>
+        <div>
+          <p style="margin:0;font-size:14.5px;line-height:1.55">Still good for before the 20th? I need to tell the fence guy when to come.</p>
+          <span style="display:inline-block;margin-top:7px;font:800 10px var(--font-heading);letter-spacing:.07em;color:var(--color-accent)">UNANSWERED · 4 HOURS</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="border-top:2px solid var(--color-divider);padding:14px 22px;display:flex;gap:10px;align-items:flex-end">
+      <div style="flex:1;background:var(--color-surface);border:1px solid var(--color-divider);padding:10px 12px;font-size:14px;color:rgba(32,30,29,.45);min-height:44px">Text Robin…</div>
+      <button class="btn btn-secondary" style="font-size:12px">Use draft</button>
+      <button class="btn btn-primary" style="font-size:12px">Send</button>
+    </div>
+  </div>
+
+  <!-- contact context + Dusty -->
+  <div style="width:328px;flex:none;display:flex;flex-direction:column;background:var(--color-surface)">
+    <div style="padding:16px 18px 14px;border-bottom:2px solid var(--color-divider)">
+      <div style="font:800 10px var(--font-heading);letter-spacing:.09em;color:rgba(32,30,29,.5)">CONTACT</div>
+      <div style="margin-top:10px;display:flex;flex-direction:column;gap:0;font-size:13px">
+        <div style="display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid var(--color-divider)"><span style="color:rgba(32,30,29,.55)">Name</span><span style="font-weight:600">Robin Plunket</span></div>
+        <div style="display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid var(--color-divider)"><span style="color:rgba(32,30,29,.55)">Number</span><span style="font-weight:600;font-variant-numeric:tabular-nums">(225) 555-0142</span></div>
+        <div style="display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid var(--color-divider)"><span style="color:rgba(32,30,29,.55)">Address</span><span style="font-weight:600;text-align:right">Zachary — not recorded</span></div>
+        <div style="display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid var(--color-divider)"><span style="color:rgba(32,30,29,.55)">First heard</span><span style="font-weight:600;font-variant-numeric:tabular-nums">12 Jun</span></div>
+        <div style="display:flex;justify-content:space-between;gap:10px;padding:7px 0"><span style="color:rgba(32,30,29,.55)">Messages</span><span style="font-weight:600;font-variant-numeric:tabular-nums">14 texts · 3 calls</span></div>
+      </div>
+    </div>
+    <div style="padding:14px 18px;border-bottom:2px solid var(--color-divider)">
+      <div style="font:800 10px var(--font-heading);letter-spacing:.09em;color:rgba(32,30,29,.5)">SCOPE ON FILE</div>
+      <div style="margin-top:9px;border:1px solid var(--color-divider);background:var(--color-bg)">
+        <div style="padding:9px 12px;border-bottom:1px solid var(--color-divider);display:flex;justify-content:space-between;align-items:baseline"><span style="font:800 13.5px var(--font-heading)">Back patio</span><span style="font:800 12px var(--font-heading);font-variant-numeric:tabular-nums">240 sq ft</span></div>
+        <div style="padding:9px 12px;font-size:12.5px;color:rgba(32,30,29,.6);font-variant-numeric:tabular-nums">1 section · 12 × 20 · 4 in · broom · 3.0 cu yd</div>
+        <div style="padding:9px 12px;border-top:1px solid var(--color-divider);display:flex;justify-content:space-between;align-items:baseline"><span style="font:800 10px var(--font-heading);letter-spacing:.08em;color:rgba(32,30,29,.5)">PRICE</span><span style="font:800 11px var(--font-heading);letter-spacing:.04em;color:var(--color-accent)">NO RATES RECORDED</span></div>
+      </div>
+    </div>
+    <div style="padding:14px 18px;border-bottom:2px solid var(--color-divider)">
+      <div style="font:800 10px var(--font-heading);letter-spacing:.09em;color:rgba(32,30,29,.5)">MONEY WITH ROBIN</div>
+      <p style="margin:8px 0 0;font-size:13px;line-height:1.55;color:rgba(32,30,29,.7)">No estimate, invoice or payment has ever been recorded against this contact. Nothing owed, nothing paid.</p>
+    </div>
+    <div style="flex:1;padding:14px 18px;display:flex;flex-direction:column;min-height:0">
+      <div style="display:flex;align-items:center;gap:8px">
+        <svg width="16" height="16" sc-camel-view-box="0 0 28 28"><rect x="5.5" y="5.5" width="17" height="17" transform="rotate(45 14 14)" fill="none" stroke="#ec3013" stroke-width="2.4"></rect><circle cx="14" cy="14" r="3.4" fill="#4f9d70"></circle></svg>
+        <span style="font:800 11px var(--font-heading);letter-spacing:.08em">DUSTY ON ROBIN</span>
+      </div>
+      <p style="margin:10px 0 0;font-size:13.5px;line-height:1.6">She has asked twice about the 20th and hasn't been answered either time. Her measurement is the only one in this database that came from the customer instead of you.</p>
+      <div style="margin-top:12px;border:1px solid var(--color-divider);background:var(--color-bg);padding:11px 12px">
+        <div style="font:800 10px var(--font-heading);letter-spacing:.08em;color:rgba(32,30,29,.5)">DRAFT REPLY</div>
+        <p style="margin:6px 0 0;font-size:13.5px;line-height:1.55">“Yes ma'am — before the 20th. I'll confirm the day once the permit clears. Tell your fence guy the 22nd to be safe.”</p>
+        <div style="margin-top:10px;display:flex;gap:6px"><button class="btn btn-primary" style="font-size:11.5px">Send it</button><button class="btn btn-secondary" style="font-size:11.5px">Edit</button></div>
+      </div>
+      <div style="margin-top:auto;padding-top:12px"><div style="background:var(--color-bg);border:1px solid var(--color-divider);padding:9px 11px;font-size:13px;color:rgba(32,30,29,.45)">Ask about Robin</div></div>
+    </div>
+  </div>
+
+  </div>
+</div>
+</div>
+
+<!-- ══ 1e  THREAD — EMPTY / UNNAMED NUMBER ══ -->
+<div class="dv-opt" id="1e">
+<div class="dv-olabel"><a class="dv-oid" href="#1e">1e</a><b>Thread · empty</b> the 446-call reality — a number that never said anything</div>
+<div class="dv-card" style="width:1440px;height:900px;display:flex;flex-direction:column">
+  <!-- global chrome -->
+  <div style="flex:none;height:54px;display:flex;align-items:stretch;background:var(--color-text);color:var(--color-bg);border-bottom:2px solid rgba(243,242,242,.26)">
+    <div style="width:84px;flex:none;display:flex;align-items:center;justify-content:center;border-right:1px solid rgba(243,242,242,.16)"><svg width="28" height="28" sc-camel-view-box="0 0 28 28" style="display:block"><rect x="5.5" y="5.5" width="17" height="17" transform="rotate(45 14 14)" fill="none" stroke="#ec3013" stroke-width="2"></rect><circle cx="14" cy="14" r="3.4" fill="#4f9d70"></circle></svg></div>
+    <div style="flex:none;display:flex;align-items:center;padding:0 20px;border-right:1px solid rgba(243,242,242,.16)"><span style="font:800 15px var(--font-heading);letter-spacing:.15em">SCOPECRETE</span></div>
+    <div style="flex:1;min-width:0;display:flex;align-items:center;padding:0 18px">
+      <div style="flex:1;max-width:600px;display:flex;align-items:stretch;height:34px;border:2px solid rgba(243,242,242,.24);background:rgba(243,242,242,.07)">
+        <div style="flex:none;display:flex;align-items:center;gap:6px;padding:0 11px;border-right:2px solid rgba(243,242,242,.24);cursor:pointer" style-hover="background:rgba(243,242,242,.1)"><span style="font:800 11px var(--font-heading);letter-spacing:.07em">ALL</span><svg width="9" height="9" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M3 5l5 5 5-5"></path></svg></div>
+        <div style="flex:1;min-width:0;display:flex;align-items:center;gap:9px;padding:0 11px"><span style="flex:none;opacity:.6"><svg width="15" height="15" sc-camel-view-box="0 0 16 16" class="sc-ico"><circle cx="7" cy="7" r="4.6"></circle><path d="M10.4 10.4L14 14"></path></svg></span><span style="font-size:12.5px;color:rgba(243,242,242,.5);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Search a number, a name, a street, a word someone said</span></div>
+        <div style="flex:none;display:flex;align-items:center;padding:0 10px;border-left:1px solid rgba(243,242,242,.16)"><span style="font:800 10px var(--font-heading);letter-spacing:.06em;color:rgba(243,242,242,.42)">⌘K</span></div>
+      </div>
+    </div>
+    <div style="flex:none;display:flex;align-items:center;padding:0 14px;border-left:1px solid rgba(243,242,242,.16)">
+      <div style="display:flex;align-items:center;gap:8px;height:32px;padding:0 11px;border:2px solid rgba(243,242,242,.24)"><span style="width:7px;height:7px;flex:none;background:#4f9d70"></span><span style="font:800 11px var(--font-heading);letter-spacing:.05em;font-variant-numeric:tabular-nums">(225) 555-0141 LIVE</span></div>
+    </div>
+    <div title="Voicemails waiting" style="flex:none;display:flex;align-items:center;gap:7px;padding:0 13px;border-left:1px solid rgba(243,242,242,.16);cursor:pointer;opacity:.9" style-hover="background:rgba(243,242,242,.12);opacity:1"><svg width="17" height="17" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M2 5h12v6H2z"></path><path d="M5 8h6"></path></svg><span style="font:800 12px var(--font-heading);font-variant-numeric:tabular-nums;color:rgba(243,242,242,.72)">18</span></div>
+    <div title="Numbers with no name" style="flex:none;display:flex;align-items:center;gap:7px;padding:0 13px;border-left:1px solid rgba(243,242,242,.16);cursor:pointer;opacity:.9" style-hover="background:rgba(243,242,242,.12);opacity:1"><svg width="17" height="17" sc-camel-view-box="0 0 16 16" class="sc-ico"><circle cx="8" cy="6" r="2.6"></circle><path d="M3 14a5 5 0 0110 0"></path><path d="M11.5 3.5h3"></path></svg><span style="font:800 12px var(--font-heading);font-variant-numeric:tabular-nums;color:rgba(243,242,242,.72)">124</span></div>
+    <div title="Drift — messages that never reached the app" style="flex:none;display:flex;align-items:center;gap:7px;padding:0 13px;border-left:1px solid rgba(243,242,242,.16);cursor:pointer;opacity:.9" style-hover="background:rgba(243,242,242,.12);opacity:1"><svg width="17" height="17" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M8 2l6 11H2z"></path><path d="M8 6v3"></path></svg><span style="font:800 12px var(--font-heading);font-variant-numeric:tabular-nums;color:var(--color-accent-400)">1</span></div>
+    <div title="Help" style="flex:none;display:flex;align-items:center;gap:7px;padding:0 13px;border-left:1px solid rgba(243,242,242,.16);cursor:pointer;opacity:.9" style-hover="background:rgba(243,242,242,.12);opacity:1"><svg width="17" height="17" sc-camel-view-box="0 0 16 16" class="sc-ico"><circle cx="8" cy="8" r="6"></circle><path d="M6.4 6.2a1.7 1.7 0 013.2.8c0 1.1-1.6 1.3-1.6 2.4"></path><path d="M8 12h0"></path></svg></div>
+  </div>
+  <div style="flex:1;min-height:0;display:flex">
+
+  <div style="width:84px;flex:none;background:var(--color-text);color:var(--color-bg);display:flex;flex-direction:column;align-items:center;padding:0 0 0">
+    <div style="margin-top:0;display:flex;flex-direction:column;gap:2px;width:100%">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:5px;padding:11px 0;background:rgba(243,242,242,.13);border-left:3px solid var(--color-accent)"><svg width="18" height="18" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M2 3h12v9H6l-4 3z"></path></svg><span style="font:800 10px var(--font-heading);letter-spacing:.06em">THREADS</span></div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:5px;padding:11px 0;opacity:.62;border-left:3px solid transparent"><svg width="18" height="18" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M2 5h12v6H2z"></path><path d="M6 5v6M10 5v6"></path></svg><span style="font:800 10px var(--font-heading);letter-spacing:.06em">SCOPE</span></div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:5px;padding:11px 0;opacity:.62;border-left:3px solid transparent"><svg width="18" height="18" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M2 2h4v12H2z"></path><path d="M10 2h4v8h-4z"></path></svg><span style="font:800 10px var(--font-heading);letter-spacing:.06em">LEADS</span></div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:5px;padding:11px 0;opacity:.62;border-left:3px solid transparent"><svg width="18" height="18" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M2 4h12v8H2z"></path><circle cx="8" cy="8" r="1.8"></circle></svg><span style="font:800 10px var(--font-heading);letter-spacing:.06em">MONEY</span></div>
+    </div>
+  </div>
+
+  <div style="width:288px;flex:none;display:flex;flex-direction:column;border-right:2px solid var(--color-divider)">
+    <div style="padding:14px 16px 10px">
+      <div style="background:var(--color-surface);border:1px solid var(--color-divider);padding:8px 10px;font-size:13px;color:rgba(32,30,29,.45)">Search 144 contacts</div>
+      <div style="margin-top:10px;display:flex;gap:0;border:1px solid var(--color-divider)">
+        <div style="flex:1;text-align:center;padding:6px 0;font:800 10.5px var(--font-heading);letter-spacing:.06em">NAMED 20</div>
+        <div style="flex:1;text-align:center;padding:6px 0;border-left:1px solid var(--color-divider);background:var(--color-accent);color:var(--color-bg);font:800 10.5px var(--font-heading);letter-spacing:.06em">UNNAMED 124</div>
+      </div>
+    </div>
+    <div style="flex:1;overflow:hidden;border-top:2px solid var(--color-divider)">
+      <div style="padding:11px 16px;border-bottom:1px solid rgba(32,30,29,.16);background:var(--color-surface);border-left:3px solid var(--color-accent)"><div style="display:flex;justify-content:space-between"><span style="font:600 13.5px var(--font-body);font-variant-numeric:tabular-nums">(985) 570-4968</span><span style="font:800 11px var(--font-heading);font-variant-numeric:tabular-nums;color:rgba(32,30,29,.5)">7:51a</span></div><p style="margin:2px 0 0;font-size:12px;color:rgba(32,30,29,.55)">3 calls · nothing on record</p></div>
+      <div style="padding:11px 16px;border-bottom:1px solid rgba(32,30,29,.16);color:rgba(32,30,29,.6)"><div style="display:flex;justify-content:space-between"><span style="font:600 13.5px var(--font-body);font-variant-numeric:tabular-nums">(225) 555-0288</span><span style="font:800 11px var(--font-heading);font-variant-numeric:tabular-nums">4:41p</span></div><p style="margin:2px 0 0;font-size:12px">1 voicemail · likely Cameron</p></div>
+      <div style="padding:11px 16px;border-bottom:1px solid rgba(32,30,29,.16);color:rgba(32,30,29,.55)"><div style="display:flex;justify-content:space-between"><span style="font:600 13.5px var(--font-body);font-variant-numeric:tabular-nums">(225) 555-0104</span><span style="font:800 11px var(--font-heading);font-variant-numeric:tabular-nums">Thu</span></div><p style="margin:2px 0 0;font-size:12px">1 call · nothing on record</p></div>
+      <div style="padding:11px 16px;border-bottom:1px solid rgba(32,30,29,.16);color:rgba(32,30,29,.55)"><div style="display:flex;justify-content:space-between"><span style="font:600 13.5px var(--font-body);font-variant-numeric:tabular-nums">(504) 555-0921</span><span style="font:800 11px var(--font-heading);font-variant-numeric:tabular-nums">Thu</span></div><p style="margin:2px 0 0;font-size:12px">2 calls · nothing on record</p></div>
+      <div style="padding:11px 16px;border-bottom:1px solid rgba(32,30,29,.16);color:rgba(32,30,29,.55)"><div style="display:flex;justify-content:space-between"><span style="font:600 13.5px var(--font-body);font-variant-numeric:tabular-nums">(225) 555-0611</span><span style="font:800 11px var(--font-heading);font-variant-numeric:tabular-nums">Wed</span></div><p style="margin:2px 0 0;font-size:12px">1 call · nothing on record</p></div>
+      <div style="padding:11px 16px;border-bottom:1px solid rgba(32,30,29,.16);color:rgba(32,30,29,.55)"><div style="display:flex;justify-content:space-between"><span style="font:600 13.5px var(--font-body);font-variant-numeric:tabular-nums">(225) 555-0455</span><span style="font:800 11px var(--font-heading);font-variant-numeric:tabular-nums">Wed</span></div><p style="margin:2px 0 0;font-size:12px">4 calls · nothing on record</p></div>
+      <div style="padding:11px 16px;border-bottom:1px solid rgba(32,30,29,.16);color:rgba(32,30,29,.55)"><div style="display:flex;justify-content:space-between"><span style="font:600 13.5px var(--font-body);font-variant-numeric:tabular-nums">(337) 555-0138</span><span style="font:800 11px var(--font-heading);font-variant-numeric:tabular-nums">Tue</span></div><p style="margin:2px 0 0;font-size:12px">1 call · nothing on record</p></div>
+      <div style="padding:14px 16px;font-size:12px;color:rgba(32,30,29,.5);line-height:1.5">117 more numbers with no name.</div>
+    </div>
+  </div>
+
+  <div style="flex:1;min-width:0;display:flex;flex-direction:column;border-right:2px solid var(--color-divider)">
+    <div style="padding:16px 22px 14px;border-bottom:2px solid var(--color-divider);display:flex;align-items:flex-start;justify-content:space-between;gap:16px">
+      <div>
+        <div style="display:flex;align-items:baseline;gap:10px">
+          <h2 style="margin:0;font-size:26px;letter-spacing:-.02em;font-variant-numeric:tabular-nums">(985) 570-4968</h2>
+          <span style="display:inline-flex;align-items:center;gap:4px;font:800 10px var(--font-heading);letter-spacing:.07em;color:var(--color-accent-700);background:var(--color-accent-100);padding:3px 7px"><svg width="9" height="9" sc-camel-view-box="0 0 16 16" style="fill:currentColor;stroke:none"><path d="M8 1l1.6 4.9L14.5 8l-4.9 1.6L8 15l-1.6-5.4L1.5 8l4.9-2.1z"></path></svg>POSSIBLY CAMERON</span>
+        </div>
+        <p style="margin:4px 0 0;font-size:12px;color:rgba(32,30,29,.55)">Guessed from a text on 4 Jul that mentioned a Cameron at a 985 number. Not confirmed.</p>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-icon btn-secondary" title="Call"><svg width="15" height="15" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M3 3h3l1 3-2 1a7 7 0 004 4l1-2 3 1v3H13A11 11 0 013 4z"></path></svg></button>
+        <button class="btn btn-primary" style="font-size:12px">Name this number</button>
+      </div>
+    </div>
+
+    <div style="padding:0">
+      <div style="display:grid;grid-template-columns:62px 30px 1fr auto;gap:12px;align-items:center;padding:10px 22px;border-bottom:1px solid rgba(32,30,29,.14);color:rgba(32,30,29,.6)">
+        <div style="font:800 11px var(--font-heading);font-variant-numeric:tabular-nums">7:51a</div>
+        <div><svg width="14" height="14" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M3 3h3l1 3-2 1a7 7 0 004 4l1-2 3 1v3H13A11 11 0 013 4z"></path></svg></div>
+        <div style="font-size:13px">Missed call · no voicemail, no transcript</div>
+        <div style="font:800 11px var(--font-heading);font-variant-numeric:tabular-nums">0:00</div>
+      </div>
+      <div style="display:grid;grid-template-columns:62px 30px 1fr auto;gap:12px;align-items:center;padding:10px 22px;border-bottom:1px solid rgba(32,30,29,.14);color:rgba(32,30,29,.6)">
+        <div style="font:800 11px var(--font-heading);font-variant-numeric:tabular-nums">21 Aug</div>
+        <div><svg width="14" height="14" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M3 3h3l1 3-2 1a7 7 0 004 4l1-2 3 1v3H13A11 11 0 013 4z"></path></svg></div>
+        <div style="font-size:13px">Missed call · no voicemail, no transcript</div>
+        <div style="font:800 11px var(--font-heading);font-variant-numeric:tabular-nums">0:00</div>
+      </div>
+      <div style="display:grid;grid-template-columns:62px 30px 1fr auto;gap:12px;align-items:center;padding:10px 22px;border-bottom:2px solid var(--color-divider);color:rgba(32,30,29,.6)">
+        <div style="font:800 11px var(--font-heading);font-variant-numeric:tabular-nums">4 Jul</div>
+        <div><svg width="14" height="14" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M3 3h3l1 3-2 1a7 7 0 004 4l1-2 3 1v3H13A11 11 0 013 4z"></path></svg></div>
+        <div style="font-size:13px">Answered · 0:19 · not recorded</div>
+        <div style="font:800 11px var(--font-heading);font-variant-numeric:tabular-nums">0:19</div>
+      </div>
+    </div>
+
+    <div style="flex:1;display:flex;flex-direction:column;justify-content:center;padding:0 22px">
+      <div style="border-top:2px solid var(--color-text);border-bottom:2px solid var(--color-text);padding:30px 0">
+        <h3 style="margin:0;font-size:32px;letter-spacing:-.025em">Nothing was said on record.</h3>
+        <p style="margin:11px 0 0;font-size:15px;line-height:1.6;max-width:560px;text-wrap:pretty">Three calls from this number. No voicemail, no transcript, no summary. All this thread knows is that the phone rang.</p>
+        <p style="margin:9px 0 0;font-size:13.5px;line-height:1.6;max-width:560px;color:rgba(32,30,29,.6)">This is the shape of <b style="font-variant-numeric:tabular-nums">446</b> of your <b style="font-variant-numeric:tabular-nums">464</b> calls. Naming the number is the only thing that makes the next one readable.</p>
+        <div style="margin-top:18px;display:flex;gap:8px">
+          <button class="btn btn-primary" style="font-size:12.5px">Name this number</button>
+          <button class="btn btn-secondary" style="font-size:12.5px">Call back</button>
+          <button class="btn btn-secondary" style="font-size:12.5px">Text and ask who it is</button>
+        </div>
+      </div>
+    </div>
+
+    <div style="border-top:2px solid var(--color-divider);padding:14px 22px;display:flex;gap:10px;align-items:flex-end">
+      <div style="flex:1;background:var(--color-surface);border:1px solid var(--color-divider);padding:10px 12px;font-size:14px;color:rgba(32,30,29,.45);min-height:44px">Text this number…</div>
+      <button class="btn btn-primary" style="font-size:12px">Send</button>
+    </div>
+  </div>
+
+  <div style="width:328px;flex:none;display:flex;flex-direction:column;background:var(--color-surface)">
+    <div style="padding:16px 18px 14px;border-bottom:2px solid var(--color-divider)">
+      <div style="font:800 10px var(--font-heading);letter-spacing:.09em;color:rgba(32,30,29,.5)">CONTACT</div>
+      <div style="margin-top:10px;display:flex;flex-direction:column;font-size:13px">
+        <div style="display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid var(--color-divider)"><span style="color:rgba(32,30,29,.55)">Name</span><span style="font:800 11px var(--font-heading);letter-spacing:.05em;color:var(--color-accent)">NOT RECORDED</span></div>
+        <div style="display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid var(--color-divider)"><span style="color:rgba(32,30,29,.55)">Number</span><span style="font-weight:600;font-variant-numeric:tabular-nums">(985) 570-4968</span></div>
+        <div style="display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid var(--color-divider)"><span style="color:rgba(32,30,29,.55)">Address</span><span style="font:800 11px var(--font-heading);letter-spacing:.05em;color:var(--color-neutral-700)">NOT RECORDED</span></div>
+        <div style="display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid var(--color-divider)"><span style="color:rgba(32,30,29,.55)">First heard</span><span style="font-weight:600;font-variant-numeric:tabular-nums">4 Jul</span></div>
+        <div style="display:flex;justify-content:space-between;gap:10px;padding:7px 0"><span style="color:rgba(32,30,29,.55)">Messages</span><span style="font-weight:600;font-variant-numeric:tabular-nums">0 texts · 3 calls</span></div>
+      </div>
+    </div>
+    <div style="padding:14px 18px;border-bottom:2px solid var(--color-divider)">
+      <div style="font:800 10px var(--font-heading);letter-spacing:.09em;color:rgba(32,30,29,.5)">SCOPE ON FILE</div>
+      <div style="margin-top:9px;border:1px solid var(--color-divider);padding:14px 12px;text-align:left">
+        <div style="font:800 12px var(--font-heading);letter-spacing:.05em;color:var(--color-neutral-700)">NONE</div>
+        <p style="margin:5px 0 0;font-size:12.5px;line-height:1.5;color:rgba(32,30,29,.6)">No scope words have ever come off this number, because nothing it said was recorded.</p>
+      </div>
+    </div>
+    <div style="padding:14px 18px;border-bottom:2px solid var(--color-divider)">
+      <div style="font:800 10px var(--font-heading);letter-spacing:.09em;color:rgba(32,30,29,.5)">MONEY</div>
+      <p style="margin:8px 0 0;font-size:13px;line-height:1.55;color:rgba(32,30,29,.6)">Nothing recorded either way.</p>
+    </div>
+    <div style="flex:1;padding:14px 18px;display:flex;flex-direction:column;min-height:0">
+      <div style="display:flex;align-items:center;gap:8px">
+        <svg width="16" height="16" sc-camel-view-box="0 0 28 28"><rect x="5.5" y="5.5" width="17" height="17" transform="rotate(45 14 14)" fill="none" stroke="#ec3013" stroke-width="2.4"></rect><circle cx="14" cy="14" r="3.4" fill="#4f9d70"></circle></svg>
+        <span style="font:800 11px var(--font-heading);letter-spacing:.08em">DUSTY</span>
+      </div>
+      <p style="margin:10px 0 0;font-size:13.5px;line-height:1.6"><b>I can't tell you anything about this number.</b></p>
+      <p style="margin:9px 0 0;font-size:13.5px;line-height:1.6">The only reason I say Cameron is a text from 4 Jul that mentioned a Cameron on a 985 line. That is a guess and I would not act on it.</p>
+      <p style="margin:9px 0 0;font-size:13.5px;line-height:1.6">If you name it, I can go back through 464 calls and label the rest.</p>
+      <div style="margin-top:auto;padding-top:12px"><div style="background:var(--color-bg);border:1px solid var(--color-divider);padding:9px 11px;font-size:13px;color:rgba(32,30,29,.45)">Ask Dusty</div></div>
+    </div>
+  </div>
+
+  </div>
+</div>
+</div>
+
+
+<!-- ══ 1f  PIPELINE ══ -->
+<div class="dv-opt" id="1f">
+<div class="dv-olabel"><a class="dv-oid" href="#1f">1f</a><b>Pipeline · populated</b> 21 leads, stage columns, square feet as the only magnitude</div>
+<div class="dv-card" style="width:1440px;height:900px;display:flex;flex-direction:column">
+  <!-- global chrome -->
+  <div style="flex:none;height:54px;display:flex;align-items:stretch;background:var(--color-text);color:var(--color-bg);border-bottom:2px solid rgba(243,242,242,.26)">
+    <div style="width:84px;flex:none;display:flex;align-items:center;justify-content:center;border-right:1px solid rgba(243,242,242,.16)"><svg width="28" height="28" sc-camel-view-box="0 0 28 28" style="display:block"><rect x="5.5" y="5.5" width="17" height="17" transform="rotate(45 14 14)" fill="none" stroke="#ec3013" stroke-width="2"></rect><circle cx="14" cy="14" r="3.4" fill="#4f9d70"></circle></svg></div>
+    <div style="flex:none;display:flex;align-items:center;padding:0 20px;border-right:1px solid rgba(243,242,242,.16)"><span style="font:800 15px var(--font-heading);letter-spacing:.15em">SCOPECRETE</span></div>
+    <div style="flex:1;min-width:0;display:flex;align-items:center;padding:0 18px">
+      <div style="flex:1;max-width:600px;display:flex;align-items:stretch;height:34px;border:2px solid rgba(243,242,242,.24);background:rgba(243,242,242,.07)">
+        <div style="flex:none;display:flex;align-items:center;gap:6px;padding:0 11px;border-right:2px solid rgba(243,242,242,.24);cursor:pointer" style-hover="background:rgba(243,242,242,.1)"><span style="font:800 11px var(--font-heading);letter-spacing:.07em">ALL</span><svg width="9" height="9" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M3 5l5 5 5-5"></path></svg></div>
+        <div style="flex:1;min-width:0;display:flex;align-items:center;gap:9px;padding:0 11px"><span style="flex:none;opacity:.6"><svg width="15" height="15" sc-camel-view-box="0 0 16 16" class="sc-ico"><circle cx="7" cy="7" r="4.6"></circle><path d="M10.4 10.4L14 14"></path></svg></span><span style="font-size:12.5px;color:rgba(243,242,242,.5);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Search a number, a name, a street, a word someone said</span></div>
+        <div style="flex:none;display:flex;align-items:center;padding:0 10px;border-left:1px solid rgba(243,242,242,.16)"><span style="font:800 10px var(--font-heading);letter-spacing:.06em;color:rgba(243,242,242,.42)">⌘K</span></div>
+      </div>
+    </div>
+    <div style="flex:none;display:flex;align-items:center;padding:0 14px;border-left:1px solid rgba(243,242,242,.16)">
+      <div style="display:flex;align-items:center;gap:8px;height:32px;padding:0 11px;border:2px solid rgba(243,242,242,.24)"><span style="width:7px;height:7px;flex:none;background:#4f9d70"></span><span style="font:800 11px var(--font-heading);letter-spacing:.05em;font-variant-numeric:tabular-nums">(225) 555-0141 LIVE</span></div>
+    </div>
+    <div title="Voicemails waiting" style="flex:none;display:flex;align-items:center;gap:7px;padding:0 13px;border-left:1px solid rgba(243,242,242,.16);cursor:pointer;opacity:.9" style-hover="background:rgba(243,242,242,.12);opacity:1"><svg width="17" height="17" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M2 5h12v6H2z"></path><path d="M5 8h6"></path></svg><span style="font:800 12px var(--font-heading);font-variant-numeric:tabular-nums;color:rgba(243,242,242,.72)">18</span></div>
+    <div title="Numbers with no name" style="flex:none;display:flex;align-items:center;gap:7px;padding:0 13px;border-left:1px solid rgba(243,242,242,.16);cursor:pointer;opacity:.9" style-hover="background:rgba(243,242,242,.12);opacity:1"><svg width="17" height="17" sc-camel-view-box="0 0 16 16" class="sc-ico"><circle cx="8" cy="6" r="2.6"></circle><path d="M3 14a5 5 0 0110 0"></path><path d="M11.5 3.5h3"></path></svg><span style="font:800 12px var(--font-heading);font-variant-numeric:tabular-nums;color:rgba(243,242,242,.72)">124</span></div>
+    <div title="Drift — messages that never reached the app" style="flex:none;display:flex;align-items:center;gap:7px;padding:0 13px;border-left:1px solid rgba(243,242,242,.16);cursor:pointer;opacity:.9" style-hover="background:rgba(243,242,242,.12);opacity:1"><svg width="17" height="17" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M8 2l6 11H2z"></path><path d="M8 6v3"></path></svg><span style="font:800 12px var(--font-heading);font-variant-numeric:tabular-nums;color:var(--color-accent-400)">1</span></div>
+    <div title="Help" style="flex:none;display:flex;align-items:center;gap:7px;padding:0 13px;border-left:1px solid rgba(243,242,242,.16);cursor:pointer;opacity:.9" style-hover="background:rgba(243,242,242,.12);opacity:1"><svg width="17" height="17" sc-camel-view-box="0 0 16 16" class="sc-ico"><circle cx="8" cy="8" r="6"></circle><path d="M6.4 6.2a1.7 1.7 0 013.2.8c0 1.1-1.6 1.3-1.6 2.4"></path><path d="M8 12h0"></path></svg></div>
+  </div>
+  <div style="flex:1;min-height:0;display:flex">
+
+  <div style="width:84px;flex:none;background:var(--color-text);color:var(--color-bg);display:flex;flex-direction:column;align-items:center;padding:0 0 0">
+    <div style="margin-top:0;display:flex;flex-direction:column;gap:2px;width:100%">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:5px;padding:11px 0;opacity:.62;border-left:3px solid transparent"><svg width="18" height="18" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M2 3h12v9H6l-4 3z"></path></svg><span style="font:800 10px var(--font-heading);letter-spacing:.06em">THREADS</span></div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:5px;padding:11px 0;opacity:.62;border-left:3px solid transparent"><svg width="18" height="18" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M2 5h12v6H2z"></path><path d="M6 5v6M10 5v6"></path></svg><span style="font:800 10px var(--font-heading);letter-spacing:.06em">SCOPE</span></div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:5px;padding:11px 0;background:rgba(243,242,242,.13);border-left:3px solid var(--color-accent)"><svg width="18" height="18" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M2 2h4v12H2z"></path><path d="M10 2h4v8h-4z"></path></svg><span style="font:800 10px var(--font-heading);letter-spacing:.06em">LEADS</span></div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:5px;padding:11px 0;opacity:.62;border-left:3px solid transparent"><svg width="18" height="18" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M2 4h12v8H2z"></path><circle cx="8" cy="8" r="1.8"></circle></svg><span style="font:800 10px var(--font-heading);letter-spacing:.06em">MONEY</span></div>
+    </div>
+  </div>
+
+  <div style="flex:1;min-width:0;display:flex;flex-direction:column">
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;padding:20px 26px 16px">
+      <div>
+        <h1 style="margin:0;font-size:34px;letter-spacing:-.02em">Leads</h1>
+        <p style="margin:3px 0 0;font-size:12.5px;color:rgba(32,30,29,.55);line-height:1.5;max-width:720px">21 leads. No price is recorded on any of them, so this board does not sort by value and does not total one. Cards are sized by nothing and ordered by how long since anyone spoke.</p>
+      </div>
+      <button class="btn btn-primary" style="font-size:12px">New lead</button>
+    </div>
+
+    <div style="flex:1;display:grid;grid-template-columns:repeat(5,1fr);border-top:2px solid var(--color-divider)">
+
+      <!-- NEW -->
+      <div style="border-right:1px solid var(--color-divider);display:flex;flex-direction:column;min-width:0">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;padding:12px 14px;border-bottom:2px solid var(--color-text)"><span style="font:800 12px var(--font-heading);letter-spacing:.08em">NEW</span><span style="font:800 20px var(--font-heading);font-variant-numeric:tabular-nums;letter-spacing:-.02em">9</span></div>
+        <div style="padding:10px;display:flex;flex-direction:column;gap:8px;overflow:hidden">
+          <div style="border:1px solid var(--color-divider);background:var(--color-bg);padding:10px 11px"><div style="font:600 13px var(--font-body);font-variant-numeric:tabular-nums">(225) 555-0288</div><div style="margin-top:3px;font-size:11.5px;color:rgba(32,30,29,.55)">voicemail only · no scope words</div><div style="margin-top:7px;display:flex;justify-content:space-between;align-items:baseline"><span style="font:800 10px var(--font-heading);letter-spacing:.06em;color:var(--color-neutral-700)">NO SIZE</span><span style="font:800 10px var(--font-heading);font-variant-numeric:tabular-nums;color:rgba(32,30,29,.5)">3h</span></div></div>
+          <div style="border:1px solid var(--color-divider);background:var(--color-bg);padding:10px 11px"><div style="font:800 13.5px var(--font-heading)">Marisol Vega</div><div style="margin-top:3px;font-size:11.5px;color:rgba(32,30,29,.55)">shop slab + apron · 2 sections</div><div style="margin-top:7px;display:flex;justify-content:space-between;align-items:baseline"><span style="font:800 12px var(--font-heading);font-variant-numeric:tabular-nums">1,320 sq ft</span><span style="font:800 10px var(--font-heading);font-variant-numeric:tabular-nums;color:rgba(32,30,29,.5)">1d</span></div></div>
+          <div style="border:1px solid var(--color-divider);background:var(--color-bg);padding:10px 11px"><div style="font:600 13px var(--font-body);font-variant-numeric:tabular-nums">(504) 555-0921</div><div style="margin-top:3px;font-size:11.5px;color:rgba(32,30,29,.55)">2 calls · nothing on record</div><div style="margin-top:7px;display:flex;justify-content:space-between;align-items:baseline"><span style="font:800 10px var(--font-heading);letter-spacing:.06em;color:var(--color-neutral-700)">NO SIZE</span><span style="font:800 10px var(--font-heading);font-variant-numeric:tabular-nums;color:rgba(32,30,29,.5)">2d</span></div></div>
+          <div style="border:1px solid var(--color-divider);background:var(--color-bg);padding:10px 11px"><div style="font:800 13.5px var(--font-heading)">Terrance Boudreaux</div><div style="margin-top:3px;font-size:11.5px;color:rgba(32,30,29,.55)">sidewalk replacement</div><div style="margin-top:7px;display:flex;justify-content:space-between;align-items:baseline"><span style="font:800 12px var(--font-heading);font-variant-numeric:tabular-nums">~60 lin ft</span><span style="font:800 10px var(--font-heading);font-variant-numeric:tabular-nums;color:rgba(32,30,29,.5)">4d</span></div></div>
+          <div style="border:1px solid var(--color-divider);background:var(--color-bg);padding:10px 11px"><div style="font:600 13px var(--font-body);font-variant-numeric:tabular-nums">(225) 555-0455</div><div style="margin-top:3px;font-size:11.5px;color:rgba(32,30,29,.55)">4 calls · nothing on record</div><div style="margin-top:7px;display:flex;justify-content:space-between;align-items:baseline"><span style="font:800 10px var(--font-heading);letter-spacing:.06em;color:var(--color-neutral-700)">NO SIZE</span><span style="font:800 10px var(--font-heading);font-variant-numeric:tabular-nums;color:rgba(32,30,29,.5)">5d</span></div></div>
+          <div style="padding:6px 2px;font:800 10px var(--font-heading);letter-spacing:.07em;color:var(--color-neutral-700)">+ 4 MORE</div>
+        </div>
+      </div>
+
+      <!-- TALKED -->
+      <div style="border-right:1px solid var(--color-divider);display:flex;flex-direction:column;min-width:0">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;padding:12px 14px;border-bottom:2px solid var(--color-text)"><span style="font:800 12px var(--font-heading);letter-spacing:.08em">TALKED</span><span style="font:800 20px var(--font-heading);font-variant-numeric:tabular-nums;letter-spacing:-.02em">5</span></div>
+        <div style="padding:10px;display:flex;flex-direction:column;gap:8px;overflow:hidden">
+          <div style="border:1px solid var(--color-divider);background:var(--color-bg);padding:10px 11px"><div style="font:800 13.5px var(--font-heading)">Dale Hawkins</div><div style="margin-top:3px;font-size:11.5px;color:rgba(32,30,29,.55)">driveway + apron question</div><div style="margin-top:7px;display:flex;justify-content:space-between;align-items:baseline"><span style="font:800 12px var(--font-heading);font-variant-numeric:tabular-nums">~640 sq ft</span><span style="font:800 10px var(--font-heading);font-variant-numeric:tabular-nums;color:var(--color-accent)">9d</span></div></div>
+          <div style="border:1px solid var(--color-divider);background:var(--color-bg);padding:10px 11px"><div style="font:800 13.5px var(--font-heading)">Nettie Arceneaux</div><div style="margin-top:3px;font-size:11.5px;color:rgba(32,30,29,.55)">carport slab · wants a date first</div><div style="margin-top:7px;display:flex;justify-content:space-between;align-items:baseline"><span style="font:800 10px var(--font-heading);letter-spacing:.06em;color:var(--color-neutral-700)">NOT MEASURED</span><span style="font:800 10px var(--font-heading);font-variant-numeric:tabular-nums;color:rgba(32,30,29,.5)">6d</span></div></div>
+          <div style="border:1px solid var(--color-divider);background:var(--color-bg);padding:10px 11px"><div style="font:600 13px var(--font-body);font-variant-numeric:tabular-nums">(337) 555-0138</div><div style="margin-top:3px;font-size:11.5px;color:rgba(32,30,29,.55)">steps and a landing</div><div style="margin-top:7px;display:flex;justify-content:space-between;align-items:baseline"><span style="font:800 10px var(--font-heading);letter-spacing:.06em;color:var(--color-neutral-700)">NOT MEASURED</span><span style="font:800 10px var(--font-heading);font-variant-numeric:tabular-nums;color:rgba(32,30,29,.5)">8d</span></div></div>
+          <div style="border:1px solid var(--color-divider);background:var(--color-bg);padding:10px 11px"><div style="font:800 13.5px var(--font-heading)">Wade Comeaux</div><div style="margin-top:3px;font-size:11.5px;color:rgba(32,30,29,.55)">patio, back of the house</div><div style="margin-top:7px;display:flex;justify-content:space-between;align-items:baseline"><span style="font:800 12px var(--font-heading);font-variant-numeric:tabular-nums">~300 sq ft</span><span style="font:800 10px var(--font-heading);font-variant-numeric:tabular-nums;color:var(--color-accent)">14d</span></div></div>
+          <div style="border:1px solid var(--color-divider);background:var(--color-bg);padding:10px 11px"><div style="font:600 13px var(--font-body);font-variant-numeric:tabular-nums">(225) 555-0611</div><div style="margin-top:3px;font-size:11.5px;color:rgba(32,30,29,.55)">asked about demo only</div><div style="margin-top:7px;display:flex;justify-content:space-between;align-items:baseline"><span style="font:800 10px var(--font-heading);letter-spacing:.06em;color:var(--color-neutral-700)">NO SIZE</span><span style="font:800 10px var(--font-heading);font-variant-numeric:tabular-nums;color:var(--color-accent)">21d</span></div></div>
+        </div>
+      </div>
+
+      <!-- MEASURED -->
+      <div style="border-right:1px solid var(--color-divider);display:flex;flex-direction:column;min-width:0">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;padding:12px 14px;border-bottom:2px solid var(--color-text)"><span style="font:800 12px var(--font-heading);letter-spacing:.08em">MEASURED</span><span style="font:800 20px var(--font-heading);font-variant-numeric:tabular-nums;letter-spacing:-.02em">3</span></div>
+        <div style="padding:10px;display:flex;flex-direction:column;gap:8px;overflow:hidden">
+          <div style="border:1px solid var(--color-divider);background:var(--color-bg);padding:10px 11px"><div style="font:800 13.5px var(--font-heading)">Robin Plunket</div><div style="margin-top:3px;font-size:11.5px;color:rgba(32,30,29,.55)">back patio · 12 × 20 · broom</div><div style="margin-top:7px;display:flex;justify-content:space-between;align-items:baseline"><span style="font:800 12px var(--font-heading);font-variant-numeric:tabular-nums">240 sq ft</span><span style="font:800 10px var(--font-heading);font-variant-numeric:tabular-nums;color:rgba(32,30,29,.5)">4h</span></div></div>
+          <div style="border:1px solid var(--color-divider);background:var(--color-bg);padding:10px 11px"><div style="font:800 13.5px var(--font-heading)">Hollis Guidry</div><div style="margin-top:3px;font-size:11.5px;color:rgba(32,30,29,.55)">driveway · 24 × 30</div><div style="margin-top:7px;display:flex;justify-content:space-between;align-items:baseline"><span style="font:800 12px var(--font-heading);font-variant-numeric:tabular-nums">720 sq ft</span><span style="font:800 10px var(--font-heading);font-variant-numeric:tabular-nums;color:rgba(32,30,29,.5)">3d</span></div></div>
+          <div style="border:1px solid var(--color-divider);background:var(--color-bg);padding:10px 11px"><div style="font:800 13.5px var(--font-heading)">Alcide Thibodeaux</div><div style="margin-top:3px;font-size:11.5px;color:rgba(32,30,29,.55)">warehouse apron · demo first</div><div style="margin-top:7px;display:flex;justify-content:space-between;align-items:baseline"><span style="font:800 12px var(--font-heading);font-variant-numeric:tabular-nums">2,400 sq ft</span><span style="font:800 10px var(--font-heading);font-variant-numeric:tabular-nums;color:var(--color-accent)">11d</span></div></div>
+        </div>
+      </div>
+
+      <!-- SCOPED -->
+      <div style="border-right:1px solid var(--color-divider);display:flex;flex-direction:column;min-width:0">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;padding:12px 14px;border-bottom:2px solid var(--color-text)"><span style="font:800 12px var(--font-heading);letter-spacing:.08em">SCOPED</span><span style="font:800 20px var(--font-heading);font-variant-numeric:tabular-nums;letter-spacing:-.02em">3</span></div>
+        <div style="padding:10px;display:flex;flex-direction:column;gap:8px;overflow:hidden">
+          <div style="border:1px solid var(--color-divider);background:var(--color-bg);padding:10px 11px"><div style="font:800 13.5px var(--font-heading)">Gulfline Paving</div><div style="margin-top:3px;font-size:11.5px;color:rgba(32,30,29,.55)">Old Hammond lot · 3 sections</div><div style="margin-top:7px;display:flex;justify-content:space-between;align-items:baseline"><span style="font:800 12px var(--font-heading);font-variant-numeric:tabular-nums">4,100 sq ft</span><span style="font:800 10px var(--font-heading);font-variant-numeric:tabular-nums;color:rgba(32,30,29,.5)">7h</span></div><div style="margin-top:7px;padding-top:7px;border-top:1px solid var(--color-divider);font:800 10px var(--font-heading);letter-spacing:.05em;color:var(--color-accent)">NO RATES RECORDED</div></div>
+          <div style="border:1px solid var(--color-divider);background:var(--color-bg);padding:10px 11px"><div style="font:800 13.5px var(--font-heading)">Odette Landry</div><div style="margin-top:3px;font-size:11.5px;color:rgba(32,30,29,.55)">walkway + steps · 2 sections</div><div style="margin-top:7px;display:flex;justify-content:space-between;align-items:baseline"><span style="font:800 12px var(--font-heading);font-variant-numeric:tabular-nums">185 sq ft</span><span style="font:800 10px var(--font-heading);font-variant-numeric:tabular-nums;color:rgba(32,30,29,.5)">5d</span></div><div style="margin-top:7px;padding-top:7px;border-top:1px solid var(--color-divider);font:800 10px var(--font-heading);letter-spacing:.05em;color:var(--color-accent)">NO RATES RECORDED</div></div>
+          <div style="border:1px solid var(--color-divider);background:var(--color-bg);padding:10px 11px"><div style="font:800 13.5px var(--font-heading)">Percy Fontenot</div><div style="margin-top:3px;font-size:11.5px;color:rgba(32,30,29,.55)">shed slab · 1 section</div><div style="margin-top:7px;display:flex;justify-content:space-between;align-items:baseline"><span style="font:800 12px var(--font-heading);font-variant-numeric:tabular-nums">400 sq ft</span><span style="font:800 10px var(--font-heading);font-variant-numeric:tabular-nums;color:var(--color-accent)">17d</span></div><div style="margin-top:7px;padding-top:7px;border-top:1px solid var(--color-divider);font:800 10px var(--font-heading);letter-spacing:.05em;color:var(--color-accent)">NO RATES RECORDED</div></div>
+        </div>
+      </div>
+
+      <!-- SENT -->
+      <div style="display:flex;flex-direction:column;min-width:0">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;padding:12px 14px;border-bottom:2px solid var(--color-text)"><span style="font:800 12px var(--font-heading);letter-spacing:.08em">SENT</span><span style="font:800 20px var(--font-heading);font-variant-numeric:tabular-nums;letter-spacing:-.02em">1</span></div>
+        <div style="padding:10px;display:flex;flex-direction:column;gap:8px;overflow:hidden">
+          <div style="border:1px solid var(--color-divider);background:var(--color-bg);padding:10px 11px"><div style="font:800 13.5px var(--font-heading)">Loreen Babin</div><div style="margin-top:3px;font-size:11.5px;color:rgba(32,30,29,.55)">driveway · quote read over the phone</div><div style="margin-top:7px;display:flex;justify-content:space-between;align-items:baseline"><span style="font:800 12px var(--font-heading);font-variant-numeric:tabular-nums">540 sq ft</span><span style="font:800 10px var(--font-heading);font-variant-numeric:tabular-nums;color:var(--color-accent)">23d</span></div><div style="margin-top:7px;padding-top:7px;border-top:1px solid var(--color-divider);font-size:11.5px;color:rgba(32,30,29,.6);line-height:1.45">Price was said out loud, never written down. <b style="color:var(--color-accent)">Not recorded here.</b></div></div>
+          <div style="margin-top:4px;border:1px dashed rgba(32,30,29,.3);padding:12px 11px"><div style="font:800 10px var(--font-heading);letter-spacing:.07em;color:rgba(32,30,29,.5)">NOTHING ELSE HAS GONE OUT</div><p style="margin:6px 0 0;font-size:11.5px;line-height:1.5;color:rgba(32,30,29,.6)">0 estimates exist in the system. This lead is here because you told the app you quoted it.</p></div>
+        </div>
+      </div>
+
+    </div>
+
+    <div style="border-top:2px solid var(--color-text);padding:16px 26px;background:var(--color-surface);display:flex;gap:34px;align-items:flex-start">
+      <div style="flex:none">
+        <div style="font:800 10px var(--font-heading);letter-spacing:.09em;color:rgba(32,30,29,.5)">WON / LOST</div>
+        <div style="margin-top:6px;font:800 26px var(--font-heading);letter-spacing:-.02em;font-variant-numeric:tabular-nums">No board</div>
+      </div>
+      <p style="margin:0;font-size:13.5px;line-height:1.6;max-width:820px;text-wrap:pretty">There are <b style="font-variant-numeric:tabular-nums">0 jobs</b> in this database, so a lead has nowhere to be won <i>into</i>. I left the columns out rather than draw two empty ones that look like destinations. The day the first job is created, WON appears — and it will mean a real record, not a stage anyone dragged a card to.</p>
+      <div style="margin-left:auto;flex:none;text-align:right">
+        <div style="font:800 10px var(--font-heading);letter-spacing:.09em;color:rgba(32,30,29,.5)">TOTAL ON THE BOARD</div>
+        <div style="margin-top:6px;font:800 26px var(--font-heading);letter-spacing:-.02em;font-variant-numeric:tabular-nums">21 leads</div>
+        <div style="margin-top:2px;font-size:11.5px;color:rgba(32,30,29,.55)">no pipeline value — none exists</div>
+      </div>
+    </div>
+  </div>
+
+  </div>
+</div>
+</div>
+
+<!-- ══ 1g  MONEY — EMPTY SETUP ══ -->
+<div class="dv-opt" id="1g">
+<div class="dv-olabel"><a class="dv-oid" href="#1g">1g</a><b>Money · empty</b> a setup form that names what each blank is holding up</div>
+<div class="dv-card" style="width:1440px;height:900px;display:flex;flex-direction:column">
+  <!-- global chrome -->
+  <div style="flex:none;height:54px;display:flex;align-items:stretch;background:var(--color-text);color:var(--color-bg);border-bottom:2px solid rgba(243,242,242,.26)">
+    <div style="width:84px;flex:none;display:flex;align-items:center;justify-content:center;border-right:1px solid rgba(243,242,242,.16)"><svg width="28" height="28" sc-camel-view-box="0 0 28 28" style="display:block"><rect x="5.5" y="5.5" width="17" height="17" transform="rotate(45 14 14)" fill="none" stroke="#ec3013" stroke-width="2"></rect><circle cx="14" cy="14" r="3.4" fill="#4f9d70"></circle></svg></div>
+    <div style="flex:none;display:flex;align-items:center;padding:0 20px;border-right:1px solid rgba(243,242,242,.16)"><span style="font:800 15px var(--font-heading);letter-spacing:.15em">SCOPECRETE</span></div>
+    <div style="flex:1;min-width:0;display:flex;align-items:center;padding:0 18px">
+      <div style="flex:1;max-width:600px;display:flex;align-items:stretch;height:34px;border:2px solid rgba(243,242,242,.24);background:rgba(243,242,242,.07)">
+        <div style="flex:none;display:flex;align-items:center;gap:6px;padding:0 11px;border-right:2px solid rgba(243,242,242,.24);cursor:pointer" style-hover="background:rgba(243,242,242,.1)"><span style="font:800 11px var(--font-heading);letter-spacing:.07em">ALL</span><svg width="9" height="9" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M3 5l5 5 5-5"></path></svg></div>
+        <div style="flex:1;min-width:0;display:flex;align-items:center;gap:9px;padding:0 11px"><span style="flex:none;opacity:.6"><svg width="15" height="15" sc-camel-view-box="0 0 16 16" class="sc-ico"><circle cx="7" cy="7" r="4.6"></circle><path d="M10.4 10.4L14 14"></path></svg></span><span style="font-size:12.5px;color:rgba(243,242,242,.5);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Search a number, a name, a street, a word someone said</span></div>
+        <div style="flex:none;display:flex;align-items:center;padding:0 10px;border-left:1px solid rgba(243,242,242,.16)"><span style="font:800 10px var(--font-heading);letter-spacing:.06em;color:rgba(243,242,242,.42)">⌘K</span></div>
+      </div>
+    </div>
+    <div style="flex:none;display:flex;align-items:center;padding:0 14px;border-left:1px solid rgba(243,242,242,.16)">
+      <div style="display:flex;align-items:center;gap:8px;height:32px;padding:0 11px;border:2px solid rgba(243,242,242,.24)"><span style="width:7px;height:7px;flex:none;background:#4f9d70"></span><span style="font:800 11px var(--font-heading);letter-spacing:.05em;font-variant-numeric:tabular-nums">(225) 555-0141 LIVE</span></div>
+    </div>
+    <div title="Voicemails waiting" style="flex:none;display:flex;align-items:center;gap:7px;padding:0 13px;border-left:1px solid rgba(243,242,242,.16);cursor:pointer;opacity:.9" style-hover="background:rgba(243,242,242,.12);opacity:1"><svg width="17" height="17" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M2 5h12v6H2z"></path><path d="M5 8h6"></path></svg><span style="font:800 12px var(--font-heading);font-variant-numeric:tabular-nums;color:rgba(243,242,242,.72)">18</span></div>
+    <div title="Numbers with no name" style="flex:none;display:flex;align-items:center;gap:7px;padding:0 13px;border-left:1px solid rgba(243,242,242,.16);cursor:pointer;opacity:.9" style-hover="background:rgba(243,242,242,.12);opacity:1"><svg width="17" height="17" sc-camel-view-box="0 0 16 16" class="sc-ico"><circle cx="8" cy="6" r="2.6"></circle><path d="M3 14a5 5 0 0110 0"></path><path d="M11.5 3.5h3"></path></svg><span style="font:800 12px var(--font-heading);font-variant-numeric:tabular-nums;color:rgba(243,242,242,.72)">124</span></div>
+    <div title="Drift — messages that never reached the app" style="flex:none;display:flex;align-items:center;gap:7px;padding:0 13px;border-left:1px solid rgba(243,242,242,.16);cursor:pointer;opacity:.9" style-hover="background:rgba(243,242,242,.12);opacity:1"><svg width="17" height="17" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M8 2l6 11H2z"></path><path d="M8 6v3"></path></svg><span style="font:800 12px var(--font-heading);font-variant-numeric:tabular-nums;color:var(--color-accent-400)">1</span></div>
+    <div title="Help" style="flex:none;display:flex;align-items:center;gap:7px;padding:0 13px;border-left:1px solid rgba(243,242,242,.16);cursor:pointer;opacity:.9" style-hover="background:rgba(243,242,242,.12);opacity:1"><svg width="17" height="17" sc-camel-view-box="0 0 16 16" class="sc-ico"><circle cx="8" cy="8" r="6"></circle><path d="M6.4 6.2a1.7 1.7 0 013.2.8c0 1.1-1.6 1.3-1.6 2.4"></path><path d="M8 12h0"></path></svg></div>
+  </div>
+  <div style="flex:1;min-height:0;display:flex">
+
+  <div style="width:84px;flex:none;background:var(--color-text);color:var(--color-bg);display:flex;flex-direction:column;align-items:center;padding:0 0 0">
+    <div style="margin-top:0;display:flex;flex-direction:column;gap:2px;width:100%">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:5px;padding:11px 0;opacity:.62;border-left:3px solid transparent"><svg width="18" height="18" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M2 3h12v9H6l-4 3z"></path></svg><span style="font:800 10px var(--font-heading);letter-spacing:.06em">THREADS</span></div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:5px;padding:11px 0;opacity:.62;border-left:3px solid transparent"><svg width="18" height="18" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M2 5h12v6H2z"></path><path d="M6 5v6M10 5v6"></path></svg><span style="font:800 10px var(--font-heading);letter-spacing:.06em">SCOPE</span></div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:5px;padding:11px 0;opacity:.62;border-left:3px solid transparent"><svg width="18" height="18" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M2 2h4v12H2z"></path><path d="M10 2h4v8h-4z"></path></svg><span style="font:800 10px var(--font-heading);letter-spacing:.06em">LEADS</span></div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:5px;padding:11px 0;background:rgba(243,242,242,.13);border-left:3px solid var(--color-accent)"><svg width="18" height="18" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M2 4h12v8H2z"></path><circle cx="8" cy="8" r="1.8"></circle></svg><span style="font:800 10px var(--font-heading);letter-spacing:.06em">MONEY</span></div>
+    </div>
+  </div>
+
+  <div style="flex:1;min-width:0;display:flex;flex-direction:column">
+    <div style="padding:20px 26px 16px;border-bottom:2px solid var(--color-text)">
+      <h1 style="margin:0;font-size:34px;letter-spacing:-.02em">Money</h1>
+      <p style="margin:5px 0 0;font-size:14px;line-height:1.6;max-width:900px;text-wrap:pretty">This side of the business has no data in it. Rather than show you a cash position of zero — which would read as broke instead of unknown — this screen is the seven settings that have to exist before any number here can be true.</p>
+    </div>
+
+    <div style="flex:1;display:grid;grid-template-columns:1.35fr 1fr;min-height:0">
+
+      <!-- settings -->
+      <div style="border-right:2px solid var(--color-divider);display:flex;flex-direction:column;min-height:0">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;padding:14px 26px;border-bottom:2px solid var(--color-divider)">
+          <span style="font:800 12px var(--font-heading);letter-spacing:.08em">COST SETTINGS</span>
+          <span style="font:800 11px var(--font-heading);letter-spacing:.06em;color:var(--color-accent);font-variant-numeric:tabular-nums">0 OF 7 RECORDED</span>
+        </div>
+        <div style="flex:1;overflow:hidden">
+          <div style="display:grid;grid-template-columns:1fr 190px;gap:16px;align-items:center;padding:14px 26px;border-bottom:1px solid rgba(32,30,29,.16)">
+            <div><div style="font:800 14.5px var(--font-heading)">Monthly overhead</div><div style="margin-top:2px;font-size:12px;color:rgba(32,30,29,.55)">Truck, insurance, phone, shop — what leaves whether or not you pour.</div></div>
+            <div><div style="background:var(--color-surface);border:1px solid var(--color-divider);padding:9px 11px;font:800 13px var(--font-heading);letter-spacing:.04em;color:var(--color-neutral-700)">NOT RECORDED</div></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 190px;gap:16px;align-items:center;padding:14px 26px;border-bottom:1px solid rgba(32,30,29,.16)">
+            <div><div style="font:800 14.5px var(--font-heading)">Off-the-top percentage</div><div style="margin-top:2px;font-size:12px;color:rgba(32,30,29,.55)">What you take out of every job before you call the rest profit.</div></div>
+            <div><div style="background:var(--color-surface);border:1px solid var(--color-divider);padding:9px 11px;font:800 13px var(--font-heading);letter-spacing:.04em;color:var(--color-neutral-700)">NOT RECORDED</div></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 190px;gap:16px;align-items:center;padding:14px 26px;border-bottom:1px solid rgba(32,30,29,.16)">
+            <div><div style="font:800 14.5px var(--font-heading)">Concrete cost per yard</div><div style="margin-top:2px;font-size:12px;color:rgba(32,30,29,.55)">Delivered price from the plant you actually use.</div></div>
+            <div><div style="background:var(--color-surface);border:1px solid var(--color-divider);padding:9px 11px;font:800 13px var(--font-heading);letter-spacing:.04em;color:var(--color-neutral-700)">NOT RECORDED</div></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 190px;gap:16px;align-items:center;padding:14px 26px;border-bottom:1px solid rgba(32,30,29,.16)">
+            <div><div style="font:800 14.5px var(--font-heading)">Crew day rate</div><div style="margin-top:2px;font-size:12px;color:rgba(32,30,29,.55)">A full day with the crew you normally run.</div></div>
+            <div><div style="background:var(--color-surface);border:1px solid var(--color-divider);padding:9px 11px;font:800 13px var(--font-heading);letter-spacing:.04em;color:var(--color-neutral-700)">NOT RECORDED</div></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 190px;gap:16px;align-items:center;padding:14px 26px;border-bottom:1px solid rgba(32,30,29,.16)">
+            <div><div style="font:800 14.5px var(--font-heading)">Pump &amp; delivery fees</div><div style="margin-top:2px;font-size:12px;color:rgba(32,30,29,.55)">Short-load fee, pump, Saturday charge.</div></div>
+            <div><div style="background:var(--color-surface);border:1px solid var(--color-divider);padding:9px 11px;font:800 13px var(--font-heading);letter-spacing:.04em;color:var(--color-neutral-700)">NOT RECORDED</div></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 190px;gap:16px;align-items:center;padding:14px 26px;border-bottom:1px solid rgba(32,30,29,.16)">
+            <div><div style="font:800 14.5px var(--font-heading)">Minimum job charge</div><div style="margin-top:2px;font-size:12px;color:rgba(32,30,29,.55)">Below this you would rather not roll the truck.</div></div>
+            <div><div style="background:var(--color-surface);border:1px solid var(--color-divider);padding:9px 11px;font:800 13px var(--font-heading);letter-spacing:.04em;color:var(--color-neutral-700)">NOT RECORDED</div></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 190px;gap:16px;align-items:center;padding:14px 26px;border-bottom:2px solid var(--color-divider)">
+            <div><div style="font:800 14.5px var(--font-heading)">Target margin</div><div style="margin-top:2px;font-size:12px;color:rgba(32,30,29,.55)">What you are aiming to keep after everything is paid.</div></div>
+            <div><div style="background:var(--color-surface);border:1px solid var(--color-divider);padding:9px 11px;font:800 13px var(--font-heading);letter-spacing:.04em;color:var(--color-neutral-700)">NOT RECORDED</div></div>
+          </div>
+          <div style="padding:18px 26px;display:flex;gap:10px;align-items:center">
+            <button class="btn btn-primary" style="font-size:13px">Start with overhead</button>
+            <span style="font-size:12.5px;color:rgba(32,30,29,.55)">Takes about ten minutes. Overhead and off-the-top do the most work.</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- what it unlocks + ledger stub -->
+      <div style="display:flex;flex-direction:column;background:var(--color-surface);min-height:0">
+        <div style="padding:14px 22px;border-bottom:2px solid var(--color-divider);font:800 12px var(--font-heading);letter-spacing:.08em">WHAT EACH BLANK IS HOLDING UP</div>
+        <div>
+          <div style="padding:13px 22px;border-bottom:1px solid var(--color-divider)"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px"><span style="font:800 14px var(--font-heading)">Cash position</span><span style="font:800 10px var(--font-heading);letter-spacing:.06em;color:var(--color-neutral-700)">LOCKED</span></div><div style="margin-top:3px;font-size:12px;color:rgba(32,30,29,.6)">needs a starting balance and one recorded payment</div></div>
+          <div style="padding:13px 22px;border-bottom:1px solid var(--color-divider)"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px"><span style="font:800 14px var(--font-heading)">Runway</span><span style="font:800 10px var(--font-heading);letter-spacing:.06em;color:var(--color-neutral-700)">LOCKED</span></div><div style="margin-top:3px;font-size:12px;color:rgba(32,30,29,.6)">needs monthly overhead</div></div>
+          <div style="padding:13px 22px;border-bottom:1px solid var(--color-divider)"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px"><span style="font:800 14px var(--font-heading)">What you are owed</span><span style="font:800 10px var(--font-heading);letter-spacing:.06em;color:var(--color-neutral-700)">LOCKED</span></div><div style="margin-top:3px;font-size:12px;color:rgba(32,30,29,.6)">needs one invoice to exist</div></div>
+          <div style="padding:13px 22px;border-bottom:1px solid var(--color-divider)"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px"><span style="font:800 14px var(--font-heading)">A price on a scope</span><span style="font:800 10px var(--font-heading);letter-spacing:.06em;color:var(--color-neutral-700)">LOCKED</span></div><div style="margin-top:3px;font-size:12px;color:rgba(32,30,29,.6)">needs concrete cost, crew rate and off-the-top</div></div>
+          <div style="padding:13px 22px;border-bottom:2px solid var(--color-divider)"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px"><span style="font:800 14px var(--font-heading)">What you kept on a job</span><span style="font:800 10px var(--font-heading);letter-spacing:.06em;color:var(--color-neutral-700)">LOCKED</span></div><div style="margin-top:3px;font-size:12px;color:rgba(32,30,29,.6)">needs a finished job with receipts on it</div></div>
+        </div>
+
+        <div style="padding:14px 22px;border-bottom:2px solid var(--color-divider);font:800 12px var(--font-heading);letter-spacing:.08em">THE LEDGER, WHEN THERE IS ONE</div>
+        <div style="padding:0 22px 18px">
+          <sc-raw-table class="table" style="font-size:13px">
+            <sc-raw-thead><sc-raw-tr><sc-raw-th style="padding-left:0">Job</sc-raw-th><sc-raw-th>Quoted</sc-raw-th><sc-raw-th>Costs in</sc-raw-th><sc-raw-th style="text-align:right;padding-right:0">Kept</sc-raw-th></sc-raw-tr></sc-raw-thead>
+            <sc-raw-tbody>
+              <sc-raw-tr><sc-raw-td colspan="4" style="padding:22px 0;border-bottom:1px solid var(--color-divider)">
+                <div style="font:800 15px var(--font-heading)">No jobs yet.</div>
+                <p style="margin:5px 0 0;font-size:12.5px;color:rgba(32,30,29,.6);line-height:1.55">These four columns stay named and empty until the first scope becomes a job. The row will fill left to right as the job runs — quoted at the start, costs as receipts come in, kept at the end.</p>
+              </sc-raw-td></sc-raw-tr>
+            </sc-raw-tbody>
+          </sc-raw-table>
+          <div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:0;border:1px solid var(--color-divider);font-variant-numeric:tabular-nums">
+            <div style="flex:1;min-width:80px;padding:9px 10px;border-right:1px solid var(--color-divider)"><div style="font:800 16px var(--font-heading)">0</div><div style="font:800 9px var(--font-heading);letter-spacing:.07em;color:rgba(32,30,29,.5);margin-top:1px">JOBS</div></div>
+            <div style="flex:1;min-width:80px;padding:9px 10px;border-right:1px solid var(--color-divider)"><div style="font:800 16px var(--font-heading)">0</div><div style="font:800 9px var(--font-heading);letter-spacing:.07em;color:rgba(32,30,29,.5);margin-top:1px">ESTIMATES</div></div>
+            <div style="flex:1;min-width:80px;padding:9px 10px;border-right:1px solid var(--color-divider)"><div style="font:800 16px var(--font-heading)">0</div><div style="font:800 9px var(--font-heading);letter-spacing:.07em;color:rgba(32,30,29,.5);margin-top:1px">INVOICES</div></div>
+            <div style="flex:1;min-width:80px;padding:9px 10px;border-right:1px solid var(--color-divider)"><div style="font:800 16px var(--font-heading)">0</div><div style="font:800 9px var(--font-heading);letter-spacing:.07em;color:rgba(32,30,29,.5);margin-top:1px">PAYMENTS</div></div>
+            <div style="flex:1;min-width:80px;padding:9px 10px"><div style="font:800 16px var(--font-heading)">0</div><div style="font:800 9px var(--font-heading);letter-spacing:.07em;color:rgba(32,30,29,.5);margin-top:1px">RECEIPTS</div></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  </div>
+</div>
+</div>
+
+<!-- ══ 1h  SCOPE BUILDER ══ -->
+<div class="dv-opt" id="1h">
+<div class="dv-olabel"><a class="dv-oid" href="#1h">1h</a><b>Scope builder</b> auto-drafted off a call · quantities only · every figure cites its source</div>
+<div class="dv-card" style="width:1440px;height:900px;display:flex;flex-direction:column">
+  <!-- global chrome -->
+  <div style="flex:none;height:54px;display:flex;align-items:stretch;background:var(--color-text);color:var(--color-bg);border-bottom:2px solid rgba(243,242,242,.26)">
+    <div style="width:84px;flex:none;display:flex;align-items:center;justify-content:center;border-right:1px solid rgba(243,242,242,.16)"><svg width="28" height="28" sc-camel-view-box="0 0 28 28" style="display:block"><rect x="5.5" y="5.5" width="17" height="17" transform="rotate(45 14 14)" fill="none" stroke="#ec3013" stroke-width="2"></rect><circle cx="14" cy="14" r="3.4" fill="#4f9d70"></circle></svg></div>
+    <div style="flex:none;display:flex;align-items:center;padding:0 20px;border-right:1px solid rgba(243,242,242,.16)"><span style="font:800 15px var(--font-heading);letter-spacing:.15em">SCOPECRETE</span></div>
+    <div style="flex:1;min-width:0;display:flex;align-items:center;padding:0 18px">
+      <div style="flex:1;max-width:600px;display:flex;align-items:stretch;height:34px;border:2px solid rgba(243,242,242,.24);background:rgba(243,242,242,.07)">
+        <div style="flex:none;display:flex;align-items:center;gap:6px;padding:0 11px;border-right:2px solid rgba(243,242,242,.24);cursor:pointer" style-hover="background:rgba(243,242,242,.1)"><span style="font:800 11px var(--font-heading);letter-spacing:.07em">ALL</span><svg width="9" height="9" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M3 5l5 5 5-5"></path></svg></div>
+        <div style="flex:1;min-width:0;display:flex;align-items:center;gap:9px;padding:0 11px"><span style="flex:none;opacity:.6"><svg width="15" height="15" sc-camel-view-box="0 0 16 16" class="sc-ico"><circle cx="7" cy="7" r="4.6"></circle><path d="M10.4 10.4L14 14"></path></svg></span><span style="font-size:12.5px;color:rgba(243,242,242,.5);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Search a number, a name, a street, a word someone said</span></div>
+        <div style="flex:none;display:flex;align-items:center;padding:0 10px;border-left:1px solid rgba(243,242,242,.16)"><span style="font:800 10px var(--font-heading);letter-spacing:.06em;color:rgba(243,242,242,.42)">⌘K</span></div>
+      </div>
+    </div>
+    <div style="flex:none;display:flex;align-items:center;padding:0 14px;border-left:1px solid rgba(243,242,242,.16)">
+      <div style="display:flex;align-items:center;gap:8px;height:32px;padding:0 11px;border:2px solid rgba(243,242,242,.24)"><span style="width:7px;height:7px;flex:none;background:#4f9d70"></span><span style="font:800 11px var(--font-heading);letter-spacing:.05em;font-variant-numeric:tabular-nums">(225) 555-0141 LIVE</span></div>
+    </div>
+    <div title="Voicemails waiting" style="flex:none;display:flex;align-items:center;gap:7px;padding:0 13px;border-left:1px solid rgba(243,242,242,.16);cursor:pointer;opacity:.9" style-hover="background:rgba(243,242,242,.12);opacity:1"><svg width="17" height="17" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M2 5h12v6H2z"></path><path d="M5 8h6"></path></svg><span style="font:800 12px var(--font-heading);font-variant-numeric:tabular-nums;color:rgba(243,242,242,.72)">18</span></div>
+    <div title="Numbers with no name" style="flex:none;display:flex;align-items:center;gap:7px;padding:0 13px;border-left:1px solid rgba(243,242,242,.16);cursor:pointer;opacity:.9" style-hover="background:rgba(243,242,242,.12);opacity:1"><svg width="17" height="17" sc-camel-view-box="0 0 16 16" class="sc-ico"><circle cx="8" cy="6" r="2.6"></circle><path d="M3 14a5 5 0 0110 0"></path><path d="M11.5 3.5h3"></path></svg><span style="font:800 12px var(--font-heading);font-variant-numeric:tabular-nums;color:rgba(243,242,242,.72)">124</span></div>
+    <div title="Drift — messages that never reached the app" style="flex:none;display:flex;align-items:center;gap:7px;padding:0 13px;border-left:1px solid rgba(243,242,242,.16);cursor:pointer;opacity:.9" style-hover="background:rgba(243,242,242,.12);opacity:1"><svg width="17" height="17" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M8 2l6 11H2z"></path><path d="M8 6v3"></path></svg><span style="font:800 12px var(--font-heading);font-variant-numeric:tabular-nums;color:var(--color-accent-400)">1</span></div>
+    <div title="Help" style="flex:none;display:flex;align-items:center;gap:7px;padding:0 13px;border-left:1px solid rgba(243,242,242,.16);cursor:pointer;opacity:.9" style-hover="background:rgba(243,242,242,.12);opacity:1"><svg width="17" height="17" sc-camel-view-box="0 0 16 16" class="sc-ico"><circle cx="8" cy="8" r="6"></circle><path d="M6.4 6.2a1.7 1.7 0 013.2.8c0 1.1-1.6 1.3-1.6 2.4"></path><path d="M8 12h0"></path></svg></div>
+  </div>
+  <div style="flex:1;min-height:0;display:flex">
+
+  <div style="width:84px;flex:none;background:var(--color-text);color:var(--color-bg);display:flex;flex-direction:column;align-items:center;padding:0 0 0">
+    <div style="margin-top:0;display:flex;flex-direction:column;gap:2px;width:100%">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:5px;padding:11px 0;opacity:.62;border-left:3px solid transparent"><svg width="18" height="18" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M2 3h12v9H6l-4 3z"></path></svg><span style="font:800 10px var(--font-heading);letter-spacing:.06em">THREADS</span></div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:5px;padding:11px 0;background:rgba(243,242,242,.13);border-left:3px solid var(--color-accent)"><svg width="18" height="18" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M2 5h12v6H2z"></path><path d="M6 5v6M10 5v6"></path></svg><span style="font:800 10px var(--font-heading);letter-spacing:.06em">SCOPE</span></div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:5px;padding:11px 0;opacity:.62;border-left:3px solid transparent"><svg width="18" height="18" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M2 2h4v12H2z"></path><path d="M10 2h4v8h-4z"></path></svg><span style="font:800 10px var(--font-heading);letter-spacing:.06em">LEADS</span></div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:5px;padding:11px 0;opacity:.62;border-left:3px solid transparent"><svg width="18" height="18" sc-camel-view-box="0 0 16 16" class="sc-ico"><path d="M2 4h12v8H2z"></path><circle cx="8" cy="8" r="1.8"></circle></svg><span style="font:800 10px var(--font-heading);letter-spacing:.06em">MONEY</span></div>
+    </div>
+  </div>
+
+  <!-- source transcript -->
+  <div style="width:326px;flex:none;display:flex;flex-direction:column;border-right:2px solid var(--color-divider);background:var(--color-surface)">
+    <div style="padding:14px 18px;border-bottom:2px solid var(--color-divider)">
+      <div style="font:800 10px var(--font-heading);letter-spacing:.09em;color:rgba(32,30,29,.5)">DRAFTED FROM</div>
+      <div style="margin-top:5px;font:800 15px var(--font-heading)">Marisol Vega · inbound call</div>
+      <div style="margin-top:2px;font-size:11.5px;color:rgba(32,30,29,.55);font-variant-numeric:tabular-nums">30 Aug 9:12a · 6:12 · transcript</div>
+    </div>
+    <div style="flex:1;padding:16px 18px;overflow:hidden">
+      <p style="margin:0 0 12px;font-size:13.5px;line-height:1.65">“…out back behind the shop. It's <span style="background:var(--color-accent-200);padding:0 2px;font-weight:600">thirty by forty</span>, and I want a <span style="background:var(--color-accent-200);padding:0 2px;font-weight:600">shop slab</span> in there so I can get the trailer off the grass.”</p>
+      <p style="margin:0 0 12px;font-size:13.5px;line-height:1.65">“There's a <span style="background:var(--color-accent-200);padding:0 2px;font-weight:600">little apron</span> at the door too — <span style="background:var(--color-accent-200);padding:0 2px;font-weight:600">ten by twelve</span> maybe? Just so the door doesn't dump onto dirt.”</p>
+      <p style="margin:0 0 12px;font-size:13.5px;line-height:1.65">“Nothing to tear out, it's all grass. <span style="background:var(--color-accent-200);padding:0 2px;font-weight:600">No demo</span>.”</p>
+      <p style="margin:0;font-size:13.5px;line-height:1.65;color:rgba(32,30,29,.6)">“Y'all quoted me back in the spring and I never called you back, that's my fault.”</p>
+    </div>
+    <div style="padding:14px 18px;border-top:2px solid var(--color-divider)">
+      <div style="font:800 10px var(--font-heading);letter-spacing:.09em;color:rgba(32,30,29,.5)">SHE NEVER SAID</div>
+      <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px;font-size:12.5px">
+        <div style="display:flex;justify-content:space-between;gap:10px;padding-bottom:6px;border-bottom:1px solid var(--color-divider)"><span>Thickness</span><span style="font:800 10px var(--font-heading);letter-spacing:.05em;color:var(--color-accent)">YOU SET IT</span></div>
+        <div style="display:flex;justify-content:space-between;gap:10px;padding-bottom:6px;border-bottom:1px solid var(--color-divider)"><span>Rebar or mesh</span><span style="font:800 10px var(--font-heading);letter-spacing:.05em;color:var(--color-accent)">YOU SET IT</span></div>
+        <div style="display:flex;justify-content:space-between;gap:10px"><span>Finish</span><span style="font:800 10px var(--font-heading);letter-spacing:.05em;color:var(--color-accent)">YOU SET IT</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- sections -->
+  <div style="flex:1;min-width:0;display:flex;flex-direction:column;border-right:2px solid var(--color-divider)">
+    <div style="padding:18px 24px 14px;display:flex;align-items:flex-start;justify-content:space-between;gap:16px;border-bottom:2px solid var(--color-text)">
+      <div>
+        <div style="display:flex;align-items:baseline;gap:10px">
+          <h2 style="margin:0;font-size:27px;letter-spacing:-.02em">Vega — shop out back</h2>
+          <span style="font:800 10px var(--font-heading);letter-spacing:.07em;color:var(--color-accent-700);background:var(--color-accent-100);padding:3px 7px">AUTO-DRAFTED</span>
+        </div>
+        <p style="margin:4px 0 0;font-size:12.5px;color:rgba(32,30,29,.55)">One address · 2 sections · nothing sent, nothing priced</p>
+      </div>
+      <div style="display:flex;gap:6px"><button class="btn btn-secondary" style="font-size:12px">Add a section</button><button class="btn btn-primary" style="font-size:12px">Save scope</button></div>
+    </div>
+
+    <div style="flex:1;overflow:hidden">
+
+      <!-- section 1 -->
+      <div style="border-bottom:2px solid var(--color-divider)">
+        <div style="display:flex;align-items:baseline;gap:12px;padding:13px 24px 10px">
+          <span style="font:800 11px var(--font-heading);letter-spacing:.08em;color:rgba(32,30,29,.5);font-variant-numeric:tabular-nums">SECTION 1</span>
+          <span style="font:800 17px var(--font-heading)">Shop slab</span>
+          <span style="font:800 10px var(--font-heading);letter-spacing:.06em;color:var(--color-neutral-700)">AREA · SQ FT</span>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(5,1fr);border-top:1px solid var(--color-divider);border-bottom:1px solid var(--color-divider)">
+          <div style="padding:10px 14px;border-right:1px solid var(--color-divider)"><div style="font:800 9.5px var(--font-heading);letter-spacing:.08em;color:rgba(32,30,29,.5)">LENGTH</div><div style="margin-top:4px;font:800 19px var(--font-heading);font-variant-numeric:tabular-nums">30 ft</div><div style="margin-top:2px;font-size:10.5px;color:var(--color-accent)">from the call</div></div>
+          <div style="padding:10px 14px;border-right:1px solid var(--color-divider)"><div style="font:800 9.5px var(--font-heading);letter-spacing:.08em;color:rgba(32,30,29,.5)">WIDTH</div><div style="margin-top:4px;font:800 19px var(--font-heading);font-variant-numeric:tabular-nums">40 ft</div><div style="margin-top:2px;font-size:10.5px;color:var(--color-accent)">from the call</div></div>
+          <div style="padding:10px 14px;border-right:1px solid var(--color-divider);background:var(--color-surface)"><div style="font:800 9.5px var(--font-heading);letter-spacing:.08em;color:rgba(32,30,29,.5)">AREA</div><div style="margin-top:4px;font:800 19px var(--font-heading);font-variant-numeric:tabular-nums">1,200 sq ft</div><div style="margin-top:2px;font-size:10.5px;color:rgba(32,30,29,.5)">30 × 40</div></div>
+          <div style="padding:10px 14px;border-right:1px solid var(--color-divider)"><div style="font:800 9.5px var(--font-heading);letter-spacing:.08em;color:rgba(32,30,29,.5)">THICKNESS</div><div style="margin-top:4px;font:800 19px var(--font-heading);font-variant-numeric:tabular-nums">4 in</div><div style="margin-top:2px;font-size:10.5px;color:rgba(32,30,29,.5)">you set it</div></div>
+          <div style="padding:10px 14px;background:var(--color-surface)"><div style="font:800 9.5px var(--font-heading);letter-spacing:.08em;color:rgba(32,30,29,.5)">CONCRETE</div><div style="margin-top:4px;font:800 19px var(--font-heading);font-variant-numeric:tabular-nums">16.3 cu yd</div><div style="margin-top:2px;font-size:10.5px;color:rgba(32,30,29,.5)">1,200 × 4in ÷ 27 + 10%</div></div>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;padding:11px 24px 14px">
+          <span style="font:400 12px var(--font-body);border:1px solid var(--color-divider);padding:4px 10px">Finish <b>not set</b></span>
+          <span style="font:400 12px var(--font-body);border:1px solid var(--color-divider);padding:4px 10px">Reinforcement <b>not set</b></span>
+          <span style="font:400 12px var(--font-body);border:1px solid var(--color-divider);padding:4px 10px">Prep <b>grass — strip and compact</b></span>
+          <span style="font:400 12px var(--font-body);border:1px solid var(--color-divider);padding:4px 10px">Access <b>not noted</b></span>
+        </div>
+      </div>
+
+      <!-- section 2 -->
+      <div style="border-bottom:2px solid var(--color-divider)">
+        <div style="display:flex;align-items:baseline;gap:12px;padding:13px 24px 10px">
+          <span style="font:800 11px var(--font-heading);letter-spacing:.08em;color:rgba(32,30,29,.5);font-variant-numeric:tabular-nums">SECTION 2</span>
+          <span style="font:800 17px var(--font-heading)">Apron at the door</span>
+          <span style="font:800 10px var(--font-heading);letter-spacing:.06em;color:var(--color-neutral-700)">AREA · SQ FT</span>
+          <span style="font:800 10px var(--font-heading);letter-spacing:.06em;color:var(--color-accent)">SHE SAID “MAYBE” — CONFIRM</span>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(5,1fr);border-top:1px solid var(--color-divider);border-bottom:1px solid var(--color-divider)">
+          <div style="padding:10px 14px;border-right:1px solid var(--color-divider)"><div style="font:800 9.5px var(--font-heading);letter-spacing:.08em;color:rgba(32,30,29,.5)">LENGTH</div><div style="margin-top:4px;font:800 19px var(--font-heading);font-variant-numeric:tabular-nums">10 ft</div><div style="margin-top:2px;font-size:10.5px;color:var(--color-accent)">from the call · unsure</div></div>
+          <div style="padding:10px 14px;border-right:1px solid var(--color-divider)"><div style="font:800 9.5px var(--font-heading);letter-spacing:.08em;color:rgba(32,30,29,.5)">WIDTH</div><div style="margin-top:4px;font:800 19px var(--font-heading);font-variant-numeric:tabular-nums">12 ft</div><div style="margin-top:2px;font-size:10.5px;color:var(--color-accent)">from the call · unsure</div></div>
+          <div style="padding:10px 14px;border-right:1px solid var(--color-divider);background:var(--color-surface)"><div style="font:800 9.5px var(--font-heading);letter-spacing:.08em;color:rgba(32,30,29,.5)">AREA</div><div style="margin-top:4px;font:800 19px var(--font-heading);font-variant-numeric:tabular-nums">120 sq ft</div><div style="margin-top:2px;font-size:10.5px;color:rgba(32,30,29,.5)">10 × 12</div></div>
+          <div style="padding:10px 14px;border-right:1px solid var(--color-divider)"><div style="font:800 9.5px var(--font-heading);letter-spacing:.08em;color:rgba(32,30,29,.5)">THICKNESS</div><div style="margin-top:4px;font:800 19px var(--font-heading);font-variant-numeric:tabular-nums">4 in</div><div style="margin-top:2px;font-size:10.5px;color:rgba(32,30,29,.5)">you set it</div></div>
+          <div style="padding:10px 14px;background:var(--color-surface)"><div style="font:800 9.5px var(--font-heading);letter-spacing:.08em;color:rgba(32,30,29,.5)">CONCRETE</div><div style="margin-top:4px;font:800 19px var(--font-heading);font-variant-numeric:tabular-nums">1.6 cu yd</div><div style="margin-top:2px;font-size:10.5px;color:rgba(32,30,29,.5)">120 × 4in ÷ 27 + 10%</div></div>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;padding:11px 24px 14px">
+          <span style="font:400 12px var(--font-body);border:1px solid var(--color-divider);padding:4px 10px">Finish <b>not set</b></span>
+          <span style="font:400 12px var(--font-body);border:1px solid var(--color-divider);padding:4px 10px">Reinforcement <b>not set</b></span>
+          <span style="font:400 12px var(--font-body);border:1px solid var(--color-divider);padding:4px 10px">Tie into slab <b>not noted</b></span>
+        </div>
+      </div>
+
+      <!-- excluded -->
+      <div style="padding:14px 24px;display:flex;gap:14px;align-items:flex-start;background:var(--color-surface)">
+        <span style="font:800 10px var(--font-heading);letter-spacing:.08em;color:rgba(32,30,29,.5);flex:none;padding-top:2px">NOT IN THIS SCOPE</span>
+        <div style="display:flex;flex-wrap:wrap;gap:8px">
+          <span style="font:400 12px var(--font-body);border:1px solid var(--color-divider);padding:4px 10px;text-decoration:line-through;color:rgba(32,30,29,.55)">Demo &amp; haul-off</span>
+          <span style="font-size:12px;color:rgba(32,30,29,.6);align-self:center">— she said it's all grass. Kept as a stated exclusion so nobody argues about it later.</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- takeoff read-out -->
+  <div style="width:312px;flex:none;display:flex;flex-direction:column;background:var(--color-text);color:var(--color-bg)">
+    <div style="padding:16px 20px;border-bottom:2px solid rgba(243,242,242,.28)">
+      <div style="font:800 10px var(--font-heading);letter-spacing:.09em;opacity:.6">TAKEOFF</div>
+      <div style="margin-top:3px;font:800 17px var(--font-heading)">Read this on the phone</div>
+    </div>
+    <div style="padding:18px 20px;border-bottom:1px solid rgba(243,242,242,.2)">
+      <div style="font:800 10px var(--font-heading);letter-spacing:.08em;opacity:.55">TOTAL AREA</div>
+      <div style="margin-top:4px;font:800 46px var(--font-heading);letter-spacing:-.03em;font-variant-numeric:tabular-nums;line-height:1">1,320</div>
+      <div style="margin-top:2px;font:800 12px var(--font-heading);letter-spacing:.06em;opacity:.6">SQUARE FEET · 2 SECTIONS</div>
+    </div>
+    <div style="padding:18px 20px;border-bottom:1px solid rgba(243,242,242,.2)">
+      <div style="font:800 10px var(--font-heading);letter-spacing:.08em;opacity:.55">CONCRETE TO ORDER</div>
+      <div style="margin-top:4px;font:800 46px var(--font-heading);letter-spacing:-.03em;font-variant-numeric:tabular-nums;line-height:1">17.9</div>
+      <div style="margin-top:2px;font:800 12px var(--font-heading);letter-spacing:.06em;opacity:.6">CUBIC YARDS · 4 IN · 10% WASTE</div>
+    </div>
+    <div style="padding:16px 20px;border-bottom:1px solid rgba(243,242,242,.2);font-variant-numeric:tabular-nums">
+      <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(243,242,242,.16);font-size:13px"><span style="opacity:.7">Shop slab 30 × 40</span><span style="font-weight:600">16.3 cu yd</span></div>
+      <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(243,242,242,.16);font-size:13px"><span style="opacity:.7">Apron 10 × 12</span><span style="font-weight:600">1.6 cu yd</span></div>
+      <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px"><span style="opacity:.7">Demo</span><span style="font-weight:600;opacity:.55">excluded</span></div>
+    </div>
+    <div style="padding:16px 20px">
+      <div style="font:800 10px var(--font-heading);letter-spacing:.08em;opacity:.55">STILL OPEN</div>
+      <div style="margin-top:8px;display:flex;flex-direction:column;gap:7px;font-size:12.5px">
+        <div style="display:flex;gap:9px"><span style="width:12px;height:12px;border:1.5px solid var(--color-accent);flex:none;margin-top:3px"></span><span>Confirm the apron is really 10 × 12</span></div>
+        <div style="display:flex;gap:9px"><span style="width:12px;height:12px;border:1.5px solid var(--color-accent);flex:none;margin-top:3px"></span><span>Pick a finish and reinforcement</span></div>
+        <div style="display:flex;gap:9px"><span style="width:12px;height:12px;border:1.5px solid var(--color-accent);flex:none;margin-top:3px"></span><span>Check truck access behind the shop</span></div>
+      </div>
+    </div>
+    <div style="margin-top:auto;padding:16px 20px;border-top:2px solid var(--color-accent);background:rgba(236,48,19,.14)">
+      <div style="font:800 11px var(--font-heading);letter-spacing:.07em;color:var(--color-accent-400)">NO PRICE ON THIS SCOPE</div>
+      <p style="margin:6px 0 0;font-size:12.5px;line-height:1.55;opacity:.85">Quantities are arithmetic on numbers you gave me. A price needs concrete cost, crew rate and your off-the-top — none of the seven cost settings are recorded, so this scope carries yards, not dollars.</p>
+      <button class="btn btn-primary" style="margin-top:11px;font-size:12px">Record cost settings</button>
+    </div>
+  </div>
+
+  </div>
+</div>
+</div>
+
+</div>
+
+<p class="dv-next">Try next: “push the alt <a class="dv-oid" href="#1c">1c</a> further — make the preview pane the whole screen” · “give <a class="dv-oid" href="#1h">1h</a> a linear-foot section so sidewalks work” · “tighten <a class="dv-oid" href="#1a">1a</a>'s row density, it can take two more rows” · “show me Money once four of the seven settings are in”</p>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script="" data-props="{&quot;driftAlarm&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Triage&quot;},&quot;rowActions&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Triage&quot;},&quot;dustyMode&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Read of the day&quot;,&quot;Questions first&quot;],&quot;default&quot;:&quot;Read of the day&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Dusty rail&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const p = this.props;
+    const mode = p.dustyMode ?? "Read of the day";
+    return {
+      driftAlarm: p.driftAlarm ?? true,
+      rowActions: p.rowActions ?? true,
+      readFirst: mode === "Read of the day"
+    };
+  }
+}
+</script>
+
+
+</body></html>

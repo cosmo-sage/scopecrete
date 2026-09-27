@@ -230,10 +230,19 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   // `accepted` only when both halves are settled. A row where the name was
   // taken and the classification was not is still an open question, and
   // closing it would hide that question forever.
-  const nameSettled = nameDecision !== undefined;
+  // A name already applied — typed by Coy, or applied because the person
+  // introduced themselves (/api/enrich) — settles the name half on its own,
+  // so deciding the classification can close the row.
+  let nameAlreadyOn = false;
+  if (nameDecision === undefined && proposal.proposed_name?.trim()) {
+    const { data: c } = await supabase.from("contacts").select("name")
+      .eq("id", proposal.contact_id).eq("org_id", orgId).maybeSingle();
+    nameAlreadyOn = (c?.name as string | null)?.trim().toLowerCase() === proposal.proposed_name.trim().toLowerCase();
+  }
+  const nameSettled = nameDecision !== undefined || nameAlreadyOn;
   const relationSettled = relationDecision !== undefined;
   const bothSettled = nameSettled && relationSettled;
-  const anyAccepted = nameDecision === "accept" || relationDecision === "accept";
+  const anyAccepted = nameDecision === "accept" || nameAlreadyOn || relationDecision === "accept";
 
   let status = "pending";
   if (bothSettled) status = anyAccepted ? "accepted" : "rejected";

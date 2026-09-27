@@ -98,6 +98,13 @@ export interface Thread {
    * a rejected one is history.
    */
   proposal: ThreadProposal | null;
+  /**
+   * Set when display_name was applied automatically because the person
+   * introduced themselves (DECISIONS §2b) and Coy has not yet kept or undone
+   * it. Carries the line they said it in, so the row can show it with Keep and
+   * Undo. Null for every name Coy typed or confirmed.
+   */
+  auto_name: { claim_id: string; quote: string | null; channel: string | null } | null;
 }
 
 export interface ThreadProposal {
@@ -190,18 +197,19 @@ export async function GET(req: NextRequest) {
   // Opportunistic names. Expected to return nothing today — see the header.
   // Failure here is not an error: the list is fully usable without it.
   const contactIds = [...byContact.keys()];
-  const names = new Map<string, { name: string | null; phone: string | null; contact_type: string | null; contact_subtype: string | null; customer_id: string | null }>();
+  const names = new Map<string, { name: string | null; phone: string | null; contact_type: string | null; contact_subtype: string | null; customer_id: string | null; name_source: string | null; name_claim_id: string | null }>();
   let contactsReadable = false;
   if (contactIds.length > 0) {
     const { data: contacts } = await supabase
       .from("contacts")
-      .select("id, name, phone, contact_type, contact_subtype, customer_id")
+      .select("id, name, phone, contact_type, contact_subtype, customer_id, name_source, name_claim_id")
       .in("id", contactIds.slice(0, 1000));
     for (const c of (contacts ?? []) as Array<Record<string, string | null>>) {
       names.set(c.id as string, {
         name: c.name, phone: c.phone,
         contact_type: c.contact_type, contact_subtype: c.contact_subtype,
         customer_id: c.customer_id,
+        name_source: c.name_source, name_claim_id: c.name_claim_id,
       });
     }
     contactsReadable = (contacts ?? []).length > 0;
@@ -279,6 +287,22 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // Names applied automatically, with the line that licensed each one.
+  const autoByClaim = new Map<string, { quote: string | null; channel: string | null }>();
+  {
+    const claimIds = [...names.values()]
+      .filter((c) => c.name_source === "machine" && c.name_claim_id)
+      .map((c) => c.name_claim_id as string);
+    if (claimIds.length) {
+      const { data: claims } = await supabase.from("contact_name_claims")
+        .select("id, evidence_quote, channel")
+        .eq("org_id", orgId).eq("status", "accepted").in("id", claimIds);
+      for (const k of (claims ?? []) as Array<{ id: string; evidence_quote: string | null; channel: string | null }>) {
+        autoByClaim.set(k.id, { quote: k.evidence_quote, channel: k.channel });
+      }
+    }
+  }
+
   // Confirmed relations only. An unconfirmed enrich-contacts proposal changes
   // what Coy is asked, never what he is shown (DECISIONS.md §2b).
   const relationByCustomer = new Map<string, string>();
@@ -336,6 +360,9 @@ export async function GET(req: NextRequest) {
       relation: c?.customer_id ? relationByCustomer.get(c.customer_id) ?? null : null,
       // NOT folded into display_name above, and never to be. See the field doc.
       proposal: proposalByContact.get(contactId) ?? null,
+      auto_name: realName && c?.name_source === "machine" && c.name_claim_id && autoByClaim.has(c.name_claim_id)
+        ? { claim_id: c.name_claim_id, ...autoByClaim.get(c.name_claim_id)! }
+        : null,
     };
   });
 

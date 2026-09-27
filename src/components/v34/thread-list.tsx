@@ -56,6 +56,8 @@ interface Thread {
   job_unscoped: boolean;
   relation: string | null;
   proposal: Proposal | null;
+  /** Applied because they introduced themselves; Keep or Undo in the row. */
+  auto_name: { claim_id: string; quote: string | null; channel: string | null } | null;
 }
 
 /**
@@ -177,9 +179,11 @@ const CANNOT_CONFIRM: Record<string, string> = {
  * The evidence quote is the whole reason this is reviewable in two seconds
  * rather than two minutes. A proposal without it is an assertion.
  */
-function ProposalReview({ p, onDecide, busy }: {
+function ProposalReview({ p, onDecide, busy, nameOn }: {
   p: Proposal;
   busy: boolean;
+  /** The proposed name is already this contact's name — nothing to ask. */
+  nameOn: boolean;
   onDecide: (body: Record<string, unknown>) => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -235,7 +239,7 @@ function ProposalReview({ p, onDecide, busy }: {
       )}
 
       {/* ---- name ---- */}
-      <div className="flex items-center gap-1.5 flex-wrap" style={{ marginTop: 8 }}>
+      {!nameOn && <div className="flex items-center gap-1.5 flex-wrap" style={{ marginTop: 8 }}>
         <span style={{ ...eyebrow, color: T.ink3, minWidth: 54 }}>Name</span>
         {editing ? (
           <>
@@ -262,7 +266,7 @@ function ProposalReview({ p, onDecide, busy }: {
             <button disabled={busy} style={btn()} onClick={() => onDecide({ name: "reject" })}>Reject</button>
           </>
         )}
-      </div>
+      </div>}
 
       {/* ---- classification ---- */}
       <div className="flex items-center gap-1.5 flex-wrap" style={{ marginTop: 6 }}>
@@ -302,11 +306,47 @@ function ProposalReview({ p, onDecide, busy }: {
   );
 }
 
+/**
+ * A name the system applied because the person introduced themselves. Shown
+ * with the line they said it in; Keep makes it Coy's, Undo takes it off and it
+ * is never applied to this contact again.
+ */
+function AutoNameStrip({ a, name, busy, onName }: {
+  a: NonNullable<Thread["auto_name"]>; name: string; busy: boolean;
+  onName: (action: "keep" | "undo") => void;
+}) {
+  const btn = (primary?: boolean): React.CSSProperties => ({
+    height: 28, padding: "0 10px", borderRadius: 3,
+    border: `1px solid ${primary ? T.ink : T.hair}`,
+    background: primary ? T.ink : T.card, color: primary ? "#fff" : T.ink2,
+    fontFamily: disp, fontSize: F.xs, letterSpacing: ".06em",
+    textTransform: "uppercase", cursor: busy ? "default" : "pointer", opacity: busy ? 0.5 : 1,
+  });
+  return (
+    <div className="mt-2 rounded" style={{ background: T.card, border: `1px solid ${T.hair}`, padding: 10 }}>
+      <div style={{ ...eyebrow, color: T.chalk }}>
+        Named automatically — they said it {a.channel === "call" ? "on a call" : "in a text"}
+      </div>
+      {a.quote && (
+        <div style={{ fontSize: F.xs, color: T.ink2, marginTop: 5, paddingLeft: 8,
+                      borderLeft: `2px solid ${T.chalk}`, fontStyle: "italic", lineHeight: 1.4 }}>
+          “{a.quote.length > 240 ? `${a.quote.slice(0, 240)}…` : a.quote}”
+        </div>
+      )}
+      <div className="flex items-center gap-1.5 flex-wrap" style={{ marginTop: 8 }}>
+        <button disabled={busy} style={btn(true)} onClick={() => onName("keep")}>Keep {name}</button>
+        <button disabled={busy} style={btn()} onClick={() => onName("undo")}>Undo</button>
+      </div>
+    </div>
+  );
+}
+
 /* -------------------------------------------------------------------- row */
 
-function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, deciding }: {
+function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, onName, deciding }: {
   t: Thread; first: boolean; expanded: boolean; onToggle: () => void; onOpen: () => void;
   onDecide: (proposalId: string, body: Record<string, unknown>) => void;
+  onName: (claimId: string, action: "keep" | "undo") => void;
   deciding: boolean;
 }) {
   const when = relTime(t.occurred_at);
@@ -327,6 +367,10 @@ function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, deciding }:
               // fill the gap.
               color: t.name_is_phone ? T.ink2 : T.ink,
             }}>{t.display_name}</span>
+            {t.auto_name && (
+              <span className="shrink-0" title="Named from their own words — not yet kept by you"
+                style={{ ...eyebrow, color: T.chalk }}>Auto</span>
+            )}
             <span className="flex-1" />
             {t.msg_count > 1 && <span style={{ fontSize: F.micro, color: T.ink3, ...nums }}>{t.msg_count}</span>}
             {when && <span className="shrink-0" style={{ fontSize: F.xs, color: T.ink3, ...nums }}>{when}</span>}
@@ -378,8 +422,15 @@ function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, deciding }:
             </div>
           )}
 
+          {t.auto_name && (
+            <AutoNameStrip a={t.auto_name} name={t.display_name} busy={deciding}
+              onName={(action) => onName(t.auto_name!.claim_id, action)} />
+          )}
+
           {t.proposal && (
             <ProposalReview p={t.proposal} busy={deciding}
+              nameOn={!t.name_is_phone && !!t.proposal.proposed_name
+                && t.proposal.proposed_name.trim().toLowerCase() === t.display_name.trim().toLowerCase()}
               onDecide={(body) => onDecide(t.proposal!.id, body)} />
           )}
 
@@ -457,6 +508,26 @@ export function ThreadList() {
       setDeciding(false);
     }
   }, []);
+
+  const nameDecide = useCallback(async (claimId: string, action: "keep" | "undo") => {
+    setDeciding(true);
+    try {
+      const r = await fetch(`/api/name-claims/${claimId}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action }),
+      });
+      const b = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(b?.error || `HTTP ${r.status}`);
+      setReload((n) => n + 1);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setDeciding(false);
+    }
+  }, []);
+
+  // Dusty reads new traffic on its own whenever Threads is open — no button.
+  const bump = useCallback(() => setReload((n) => n + 1), []);
+  const enrich = useEnrichRunner(bump);
 
   useEffect(() => {
     let off = false;
@@ -629,8 +700,13 @@ export function ThreadList() {
         </div>
       )}
 
+      {enrich.note && filter !== "unsorted" && (
+        <div className="px-3 py-1.5" style={{ fontSize: F.xs, color: T.ink3, borderBottom: `1px solid ${T.hair}` }}>
+          {enrich.note}
+        </div>
+      )}
       {filter === "unsorted" && !loading && !error && !noOrg && (
-        <SuggestNamesBar onDone={() => setReload((n) => n + 1)} />
+        <SuggestNamesBar runner={enrich} />
       )}
 
       {loading ? (
@@ -660,7 +736,7 @@ export function ThreadList() {
               expanded={openRow === t.contact_id}
               onToggle={() => setOpenRow(openRow === t.contact_id ? null : t.contact_id)}
               onOpen={() => router.push(`/dashboard/messages/${t.contact_id}`)}
-              onDecide={decide} deciding={deciding} />
+              onDecide={decide} onName={nameDecide} deciding={deciding} />
           ))}
         </div>
       )}
@@ -678,44 +754,95 @@ export function ThreadList() {
  * run on its own as calls and texts arrive; the button is how it is tried
  * first.
  */
-function SuggestNamesBar({ onDone }: { onDone: () => void }) {
+/* ------------------------------------------------------ reading on its own */
+
+type EnrichResult = { proposed?: number; named?: number; failed?: number; skipped_no_words?: number; remaining?: number; error?: string };
+const ENRICH_KEY = "sc.enrich.lastRun";
+const ENRICH_EVERY_MS = 15 * 60 * 1000;
+const AUTO_BATCH = 5;
+
+function describe(b: EnrichResult): string | null {
+  const parts = [
+    b.named ? `named ${b.named} who introduced themselves` : null,
+    b.proposed && b.proposed - (b.named ?? 0) > 0 ? `${b.proposed - (b.named ?? 0)} suggestion${b.proposed - (b.named ?? 0) === 1 ? "" : "s"} to review` : null,
+    b.failed ? `${b.failed} failed` : null,
+  ].filter(Boolean);
+  return parts.length ? `Dusty read new threads: ${parts.join(" · ")}.` : null;
+}
+
+/**
+ * Coy's rule: no button to push. While Threads is open, Dusty reads the most
+ * recent unnamed threads every 15 minutes (per device) and says what it did.
+ * It names only people who introduced themselves; everything else lands as a
+ * suggestion in the row. The Unsorted chip keeps a "read more now" for the
+ * backlog.
+ *
+ * This runs from the browser because it runs under Coy's session — RLS and no
+ * service key. Reading traffic the moment it arrives, with the app closed,
+ * needs a server-side worker; that is the next step, not this one.
+ */
+function useEnrichRunner(onChange: () => void) {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+  const inflight = React.useRef(false);
 
-  async function run() {
+  const call = useCallback(async (limit: number): Promise<EnrichResult> => {
+    const r = await fetch("/api/enrich", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ limit }) });
+    const b = (await r.json().catch(() => ({}))) as EnrichResult;
+    if (!r.ok) throw new Error(b?.error || `HTTP ${r.status}`);
+    try { localStorage.setItem(ENRICH_KEY, String(Date.now())); } catch { /* storage blocked */ }
+    return b;
+  }, []);
+
+  useEffect(() => {
+    let last = 0;
+    try { last = Number(localStorage.getItem(ENRICH_KEY)) || 0; } catch { /* storage blocked */ }
+    if (Date.now() - last < ENRICH_EVERY_MS || inflight.current) return;
+    inflight.current = true;
+    call(AUTO_BATCH)
+      .then((b) => { const d = describe(b); if (d) { setNote(d); onChange(); } })
+      .catch(() => { /* quiet: the manual run in Unsorted reports errors */ })
+      .finally(() => { inflight.current = false; });
+  }, [call, onChange]);
+
+  const runNow = useCallback(async () => {
+    if (inflight.current) { setNote("Dusty is already reading — give it a minute."); return; }
+    inflight.current = true;
     setBusy(true); setNote(null);
     try {
-      const r = await fetch("/api/enrich", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ limit: 10 }) });
-      const b = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(b?.error || `HTTP ${r.status}`);
-      const parts = [
-        `${b.proposed} suggestion${b.proposed === 1 ? "" : "s"} ready to review`,
-        b.skipped_no_words ? `${b.skipped_no_words} skipped (nothing said on record)` : null,
-        b.failed ? `${b.failed} failed` : null,
-        b.remaining ? `${b.remaining} more to go — run again` : null,
-      ].filter(Boolean);
-      setNote(parts.join(" · "));
-      onDone();
+      const b = await call(10);
+      setNote([
+        describe(b) ?? "Nothing new to name or suggest.",
+        b.skipped_no_words ? `${b.skipped_no_words} skipped (nothing said on record).` : null,
+        b.remaining ? `${b.remaining} more to go.` : null,
+      ].filter(Boolean).join(" "));
+      onChange();
     } catch (e) {
       setNote(`Couldn't run: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setBusy(false);
+      inflight.current = false;
     }
-  }
+  }, [call, onChange]);
 
+  return { busy, note, runNow };
+}
+
+function SuggestNamesBar({ runner }: { runner: ReturnType<typeof useEnrichRunner> }) {
+  const { busy, note, runNow } = runner;
   return (
     <div className="mx-2.5 mb-2 rounded px-3 py-2 flex items-center gap-2 flex-wrap"
       style={{ background: T.card, border: `1px dashed ${T.hiviz}` }}>
       <div style={{ flex: "1 1 180px", minWidth: 0 }}>
-        <div style={{ fontFamily: disp, fontSize: F.md, fontWeight: 600 }}>Suggest names <span style={{ ...eyebrow, color: T.hiviz }}>beta</span></div>
+        <div style={{ fontFamily: disp, fontSize: F.md, fontWeight: 600 }}>Dusty reads these on its own <span style={{ ...eyebrow, color: T.hiviz }}>beta</span></div>
         <div style={{ fontSize: F.xs, color: T.ink3, lineHeight: 1.4 }}>
-          {note ?? "Dusty reads the next 10 unnamed threads that have words on record and suggests who they are. You confirm each one in its row."}
+          {note ?? "Every 15 minutes while Threads is open. Someone who introduced themselves gets named (Keep or Undo in the row); everyone else gets a suggestion for you to confirm."}
         </div>
       </div>
-      <button onClick={() => void run()} disabled={busy} className="rounded px-3"
+      <button onClick={() => void runNow()} disabled={busy} className="rounded px-3"
         style={{ height: 34, background: busy ? T.hair : T.hiviz, color: "#fff", fontFamily: disp, fontSize: F.sm,
                  fontWeight: 600, textTransform: "uppercase", letterSpacing: ".06em", cursor: busy ? "default" : "pointer" }}>
-        {busy ? "Reading…" : "Suggest"}
+        {busy ? "Reading…" : "Read more now"}
       </button>
     </div>
   );

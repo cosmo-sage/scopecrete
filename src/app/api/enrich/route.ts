@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createHash } from "node:crypto";
 import { getApiSession } from "@/lib/api-auth";
 import {
-  PROMPT_VERSION, SYSTEM_PROMPT, renderConversation, sanitize, worthEnriching,
+  PROMPT_VERSION, SYSTEM_PROMPT, findSelfIdentification, renderConversation, sanitize, worthEnriching,
   type Proposal, type Turn,
 } from "@/lib/enrich/rules";
 
@@ -11,10 +11,20 @@ import {
  *
  * POST { limit?: number, contact_ids?: string[] }  →  a summary per contact.
  *
- * WRITES ONLY contact_proposals (DECISIONS §2b). Nothing here touches
- * contacts.name or customers.relation — a suggestion appears in the thread
- * row and Coy confirms or rejects it there. The rules and the safety checks
- * are the enrich-contacts edge function's, verbatim (src/lib/enrich/rules.ts).
+ * Writes contact_proposals — a question for Coy — for every contact it reads.
+ * customers.relation is never touched: a customer/sub/vendor call always waits
+ * for Coy (DECISIONS §2b).
+ *
+ * ONE EXCEPTION, Coy's rule of 2026-09-27: when the person introduced
+ * themselves in their own words ("this is Maegan"), and the contact has no
+ * name, the name is written — with name_source='machine', a
+ * contact_name_claims row carrying the exact line, and an Undo in the row. The
+ * model only proposes; findSelfIdentification() must independently find them
+ * saying it. A name Coy confirmed is protected by the database itself
+ * (sc_guard_contact_identity), and a name he undid is never re-applied.
+ *
+ * The rules and the safety checks are the enrich-contacts edge function's,
+ * verbatim (src/lib/enrich/rules.ts).
  *
  * What changed from the edge function:
  * - the model runs in Hermes on the VPS (HERMES_URL / HERMES_API_KEY), the
@@ -76,6 +86,61 @@ async function loadTurns(sb: Sb, orgId: string, contactId: string): Promise<Turn
     });
   }
   return turns;
+}
+
+/**
+ * Write the name when — and only when — the person introduced themselves.
+ * Every failure here leaves the suggestion in place as a question; nothing is
+ * worse off than before.
+ */
+async function applySelfIdentified(sb: Sb, orgId: string, contactId: string, p: Proposal, turns: Turn[], model: string)
+  : Promise<{ named: boolean; note: string }> {
+  if (!p.proposed_name) return { named: false, note: "no name proposed" };
+
+  const [{ data: c }, { data: phones }, { data: undone }] = await Promise.all([
+    sb.from("contacts").select("name, name_source, phone").eq("org_id", orgId).eq("id", contactId).maybeSingle(),
+    sb.from("contact_phones").select("phone_e164").eq("org_id", orgId).eq("contact_id", contactId),
+    sb.from("contact_name_claims").select("claimed_name").eq("org_id", orgId).eq("contact_id", contactId).eq("status", "rejected"),
+  ]);
+  if (!c) return { named: false, note: "contact not readable" };
+  if ((c.name as string | null)?.trim() || c.name_source === "human") return { named: false, note: "already has a name" };
+
+  const name = p.proposed_name.trim().replace(/\s+/g, " ");
+  if (((undone ?? []) as Array<{ claimed_name: string | null }>).some((u) => u.claimed_name?.trim().toLowerCase() === name.toLowerCase())) {
+    return { named: false, note: "Coy undid this name before" };
+  }
+
+  const numbers = [c.phone as string | null, ...((phones ?? []) as Array<{ phone_e164: string }>).map((x) => x.phone_e164)]
+    .filter((x): x is string => !!x);
+  const hit = findSelfIdentification(name, turns, numbers);
+  if (!hit) return { named: false, note: "they never introduced themselves by that name" };
+
+  const now = new Date().toISOString();
+  const { data: claim, error: cErr } = await sb.from("contact_name_claims").insert({
+    org_id: orgId, contact_id: contactId, claimed_name: name, claimed_company: p.proposed_company,
+    claim_type: "self_identification", channel: hit.channel, source_message_id: hit.turnId,
+    evidence_quote: hit.quote, provider: "hermes", model, prompt_version: PROMPT_VERSION,
+    confidence: p.confidence, status: "accepted", decided_at: now,
+  }).select("id").single();
+  if (cErr || !claim) return { named: false, note: `claim: ${cErr?.message ?? "not written"}` };
+
+  // Only onto an empty, non-human name. The filter makes a race with Coy
+  // typing a name a no-op rather than an overwrite.
+  const { data: rows, error: uErr } = await sb.from("contacts")
+    .update({ name, name_source: "machine", name_claim_id: claim.id, enrichment_source: "hermes-self-id" })
+    .eq("org_id", orgId).eq("id", contactId).neq("name_source", "human").or("name.is.null,name.eq.")
+    .select("name");
+  // The reserved-names trigger can blank the name (e.g. one of our own); then
+  // there is no name to stand behind, so the claim stands down too.
+  const landed = !uErr && ((rows ?? []) as Array<{ name: string | null }>).some((r) => !!r.name?.trim());
+  if (!landed) {
+    await sb.from("contact_name_claims").update({ status: "superseded" }).eq("org_id", orgId).eq("id", claim.id);
+    if (!uErr && (rows ?? []).length) {
+      await sb.from("contacts").update({ name_claim_id: null, name_source: "legacy" }).eq("org_id", orgId).eq("id", contactId).eq("name_claim_id", claim.id);
+    }
+    return { named: false, note: uErr ? `contacts: ${uErr.message}` : "name was refused or already set" };
+  }
+  return { named: true, note: hit.quote };
 }
 
 function fingerprint(turns: Turn[]): string {
@@ -147,13 +212,15 @@ export async function POST(req: NextRequest) {
   for (const r of (recent ?? []) as Array<{ contact_id: string; occurred_at: string }>) {
     if (!lastAt.has(r.contact_id)) lastAt.set(r.contact_id, r.occurred_at);
   }
+  // A contact with a pending suggestion is read again only when its traffic
+  // changed (the fingerprint check below), so new words get a fresh look.
   const queue = unnamed
-    .filter((c) => only || !pending.has(c.id))
     .sort((a, b) => (lastAt.get(b.id) ?? "").localeCompare(lastAt.get(a.id) ?? ""))
     .slice(0, SCAN_CAP);
 
   const results: Array<Record<string, unknown>> = [];
-  let proposed = 0, failed = 0, skipped = 0, unchanged = 0, scanned = 0;
+  let proposed = 0, failed = 0, skipped = 0, unchanged = 0, scanned = 0, named = 0;
+  const model = `hermes:${process.env.HERMES_MODEL || DEFAULT_MODEL}`;
   let i = 0;
 
   async function worker() {
@@ -175,26 +242,30 @@ export async function POST(req: NextRequest) {
       if (existing?.id) {
         await supabase.from("contact_proposals").update({ status: "superseded" }).eq("id", existing.id).eq("org_id", orgId);
       }
-      const { error: insErr } = await supabase.from("contact_proposals").insert({
+      const { data: ins, error: insErr } = await supabase.from("contact_proposals").insert({
         org_id: orgId, contact_id: c.id,
         proposed_name: p.proposed_name, proposed_company: p.proposed_company, proposed_role: p.proposed_role,
         project_type: p.project_type, scope_summary: p.scope_summary, start_timing: p.start_timing,
         length_ft: p.length_ft, width_ft: p.width_ft, sqft_stated: p.sqft_stated, site_hint: p.site_hint,
         has_media: !!p.has_media, classification: p.classification, confidence: p.confidence,
         evidence_message_id: p.evidence_message_id, evidence_quote: p.evidence_quote.slice(0, 2000),
-        model: `hermes:${process.env.HERMES_MODEL || DEFAULT_MODEL}`, prompt_version: PROMPT_VERSION,
+        model, prompt_version: PROMPT_VERSION,
         source_fingerprint: fp, status: "pending",
-      });
-      if (insErr) { failed++; results.push({ contact_id: c.id, outcome: "insert_error", error: insErr.message }); continue; }
+      }).select("id").single();
+      if (insErr || !ins) { failed++; results.push({ contact_id: c.id, outcome: "insert_error", error: insErr?.message }); continue; }
       proposed++;
-      results.push({ contact_id: c.id, outcome: "proposed", name: p.proposed_name, classification: p.classification, confidence: p.confidence });
+
+      const auto = await applySelfIdentified(supabase, orgId, c.id, p, turns, model);
+      if (auto.named) named++;
+      results.push({ contact_id: c.id, outcome: "proposed", name: p.proposed_name, classification: p.classification,
+        confidence: p.confidence, auto_named: auto.named, auto_note: auto.note });
     }
   }
   await Promise.all(Array.from({ length: CONCURRENCY }, worker));
 
-  console.log("enrich run", JSON.stringify({ proposed, failed, skipped, unchanged, scanned }));
+  console.log("enrich run", JSON.stringify({ proposed, named, failed, skipped, unchanged, scanned }));
   return applyCookies(NextResponse.json({
-    prompt_version: PROMPT_VERSION, proposed, failed, skipped_no_words: skipped, unchanged, scanned,
+    prompt_version: PROMPT_VERSION, proposed, named, failed, skipped_no_words: skipped, unchanged, scanned,
     remaining: Math.max(queue.length - scanned, 0), results,
   }));
 }

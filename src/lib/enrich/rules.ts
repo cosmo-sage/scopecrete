@@ -388,3 +388,113 @@ export function sanitize(p: Proposal, turns: Turn[]): { p: Proposal; notes: stri
 
   return { p, notes }
 }
+
+// ---------------------------------------------------------------------------
+// Self-identification — the one case a name applies without asking
+// ---------------------------------------------------------------------------
+
+/**
+ * Where the person said, in their own words, who they are.
+ *
+ * Coy's rule (2026-09-27, DECISIONS §2b): a name is written automatically ONLY
+ * when the person introduced themselves — "this is Maegan", "it's Amber with
+ * The Arts", "my name is Jen McLean". Everything else is still a question.
+ *
+ * This does NOT trust the model. The model proposes a name; this function then
+ * has to find the person saying that name about themselves, independently:
+ *
+ * - only THEIR words count: an inbound text, or a transcript line spoken from
+ *   one of the contact's own numbers. Our outbound texts and our side of a call
+ *   never count, and a call summary (a paraphrase, with no speaker) never does.
+ * - the WHOLE proposed name must follow the introduction. "It's Amber" does not
+ *   license "Amber Smith".
+ * - "this is Mike's wife" is not Mike. A possessive after the name fails.
+ * - if they introduced themselves under two different names, it is a shared
+ *   line or a relay, and nothing is applied — that is a question for Coy.
+ *
+ * Returns the turn and the exact line, which become the claim's evidence.
+ */
+export interface SelfId {
+  turnId: string
+  channel: 'sms' | 'call'
+  quote: string
+}
+
+const INTRO = String.raw`(?:this is|my name is|my name's|my name’s|it's|it’s|its|it is|i'm|i’m|i am)`
+const NOT_A_NAME = new Set([
+  'a', 'an', 'the', 'what', 'your', 'my', 'our', 'this', 'that', 'it', 'not', 'just', 'here', 'there',
+  'so', 'sorry', 'also', 'going', 'good', 'on', 'at', 'in', 'from', 'with', 'working', 'done', 'ok', 'okay',
+  'valid', 'about', 'still', 'coming', 'available', 'free', 'ready', 'outside', 'running', 'late', 'back',
+  // transcripts stutter: "I'm I'm pretty open this week"
+  'i', "i'm", 'i’m', 'im', "i've", 'i’ve', "it's", 'it’s', 'yeah', 'yes', 'no', 'hey', 'hi', 'hello',
+  'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday', 'today', 'tomorrow',
+  // places said after "it's" ("it's Baton Rouge, off Airline")
+  'baton', 'rouge', 'louisiana', 'orleans', 'new', 'central', 'prairieville', 'gonzales', 'denham', 'zachary',
+  'south', 'north', 'east', 'west',
+  'january', 'february', 'march', 'april', 'june', 'july', 'august', 'september', 'october', 'november', 'december',
+])
+
+const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+const digits10 = (s: string) => s.replace(/\D/g, '').slice(-10)
+
+/** The lines of a turn that are the contact speaking, or [] if none are. */
+export function theirLines(t: Turn, ownNumbers: string[]): string[] {
+  if (t.kind === 'sms') return t.who === 'THEM' ? t.text.split(/\r?\n/) : []
+  // Transcripts label every line "+12253782458: words", whichever side placed
+  // the call. Keep only the lines from the contact's numbers; an unlabelled
+  // call text is a summary and never counts.
+  const mine = new Set(ownNumbers.map(digits10).filter(d => d.length === 10))
+  const out: string[] = []
+  for (const line of t.text.split(/\r?\n/)) {
+    const m = line.match(/^\s*(\+?[\d\s().-]{10,})\s*:\s*(.*)$/)
+    if (m && mine.has(digits10(m[1]))) out.push(m[2])
+  }
+  return out
+}
+
+/** Every first name the contact introduced themselves with. Lower-cased. */
+function introducedNames(lines: string[]): Set<string> {
+  const found = new Set<string>()
+  const re = new RegExp(String.raw`(?:^|[\s,.!;:(-])${INTRO}\s+([A-Za-z][A-Za-z'’-]{1,})`, 'gi')
+  for (const line of lines) {
+    for (const m of line.matchAll(re)) {
+      const w = m[1].replace(/['’]s$/i, '').toLowerCase()
+      // Only a Capitalised word is a name here ("it's working" is not).
+      if (m[1][0] !== m[1][0].toUpperCase()) continue
+      if (NOT_A_NAME.has(w) || OUR_NAMES.some(n => n.toLowerCase() === w)) continue
+      found.add(w)
+    }
+  }
+  return found
+}
+
+export function findSelfIdentification(name: string | null, turns: Turn[], ownNumbers: string[]): SelfId | null {
+  const n = (name ?? '').trim().replace(/\s+/g, ' ')
+  if (n.length < 2 || n.length > 60 || !/^[A-Za-z][A-Za-z .'’-]*$/.test(n)) return null
+  const lower = n.toLowerCase()
+  if (OUR_NAMES.some(o => lower === o.toLowerCase() || lower.includes(o.toLowerCase()))) return null
+  if (NOT_A_NAME.has(lower.split(' ')[0])) return null
+  // Every word Capitalised: "Marjorie with" is a parse, not a name.
+  if (n.split(' ').some(w => w[0] !== w[0].toUpperCase() || NOT_A_NAME.has(w.toLowerCase()))) return null
+
+  const nameRe = n.split(' ').map(esc).join(String.raw`\s+`)
+  const said = new RegExp(String.raw`(?:^|[\s,.!;:(-])${INTRO}\s+${nameRe}(?![A-Za-z'’])`, 'i')
+  const signed = new RegExp(String.raw`^\s*${nameRe}\s+here\b`, 'i')
+
+  const all: string[] = []
+  let hit: SelfId | null = null
+  for (const t of turns) {
+    const lines = theirLines(t, ownNumbers)
+    all.push(...lines)
+    if (hit) continue
+    const line = lines.find(l => said.test(l) || signed.test(l))
+    if (line) hit = { turnId: t.id, channel: t.kind, quote: line.trim().slice(0, 400) }
+  }
+  if (!hit) return null
+
+  // Two different introductions on one number: shared line or relay. Ask.
+  const first = lower.split(' ')[0]
+  const names = introducedNames(all)
+  for (const other of names) if (other !== first) return null
+  return hit
+}

@@ -641,6 +641,7 @@ export default function ChatThreadPage() {
   const [phone, setPhone] = useState<string | null>(null);
   const [name, setName] = useState<string | null>(null);
   const [nameConfirmed, setNameConfirmed] = useState(false);
+  const [nameSource, setNameSource] = useState<string | null>(null);
   const [address, setAddress] = useState<string | null>(null);
   const [phones, setPhones] = useState<string[]>([]);
   const [merges, setMerges] = useState<MergeInfo[]>([]);
@@ -676,6 +677,7 @@ export default function ChatThreadPage() {
         setPhone(data.counterparty_phone ?? null);
         setName(typeof data.name === "string" ? data.name : null);
         setNameConfirmed(data.name_confirmed === true);
+        setNameSource(typeof data.name_source === "string" ? data.name_source : null);
         setAddress(typeof data.address === "string" ? data.address : null);
         setPhones(Array.isArray(data.phones) ? data.phones : []);
         setMerges(Array.isArray(data.merges) ? data.merges : []);
@@ -900,7 +902,7 @@ export default function ChatThreadPage() {
           style={{ width: 300, background: DA.surface, borderLeft: `1px solid ${DA.border}` }}>
           <RailSection title="Contact">
             <RailRow k="Name" v={name ?? null} missing="Not recorded"
-              note={name ? (nameConfirmed ? "confirmed by you" : "not confirmed") : undefined} />
+              note={name ? (nameConfirmed ? "confirmed by you" : nameSource === "machine" ? "they introduced themselves — keep or undo it in Threads" : "not confirmed") : undefined} />
             <RailRow k={phones.length > 1 ? "Numbers" : "Number"}
               v={(phones.length ? phones : phone ? [phone] : []).map(formatPhone).join(", ") || null} missing="Unknown" />
             <RailRow k="Address" v={address} missing="Not recorded" />

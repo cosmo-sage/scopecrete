@@ -44,7 +44,7 @@ export async function buildContext(sb: Sb, orgId: string, ref: ContextRef): Prom
 
 async function contactBlock(sb: Sb, orgId: string, contactId: string) {
   const { data: c } = await sb.from("contacts")
-    .select("id, name, name_confirmed_at, phone, address, customer_id, merged_into_contact_id")
+    .select("id, name, name_source, name_confirmed_at, phone, address, customer_id, merged_into_contact_id")
     .eq("org_id", orgId).eq("id", contactId).maybeSingle();
   if (!c) return null;
   const [{ data: phones }, { data: cust }, { data: jobs }] = await Promise.all([
@@ -60,7 +60,7 @@ async function contactBlock(sb: Sb, orgId: string, contactId: string) {
   const block: Block = {
     title: "Contact",
     lines: [
-      `Name: ${name ? `${name}${c.name_confirmed_at ? " (confirmed by Coy)" : " (NOT confirmed — may be wrong)"}` : "not recorded"}`,
+      `Name: ${name ? `${name}${c.name_confirmed_at ? " (confirmed by Coy)" : c.name_source === "machine" ? " (they introduced themselves by this name; Coy hasn't confirmed it)" : " (NOT confirmed — may be wrong)"}` : "not recorded"}`,
       `Numbers: ${numbers.join(", ") || "not recorded"}`,
       `Address: ${(c.address as string | null)?.trim() || "not recorded"}`,
       `What they are to the business: ${relation}`,

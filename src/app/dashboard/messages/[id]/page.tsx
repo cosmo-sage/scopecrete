@@ -53,6 +53,8 @@ interface ThreadMessage {
   recording_url: string | null;
   status: string | null;
   artifact_kinds: string[];
+  /** Files on this message (message_media). Fetched lazily by MessageMedia. */
+  media_count: number;
 }
 
 interface Artifact {
@@ -306,8 +308,109 @@ function CallRow({ m }: { m: ThreadMessage }) {
   );
 }
 
+interface MediaItem {
+  id: string;
+  kind: string;
+  mime_type: string | null;
+  state: "ready" | "unavailable";
+  url: string | null;
+  reason: string | null;
+}
+
+const KIND_LABEL: Record<string, string> = {
+  image: "Photo", video: "Video", audio: "Audio", document: "Document", vcard: "Contact card", other: "File",
+};
+
+/**
+ * The files on one text. Fetched only for messages that have any
+ * (media_count > 0), and only when the row renders — the route copies each file
+ * out of Quo into private storage the first time it is asked, so opening a
+ * thread is what captures its photos.
+ *
+ * A file that cannot be fetched says why in words. It never renders as a broken
+ * image, which reads as a bug in the app rather than a fact about the file.
+ */
+function MessageMedia({ messageId, count, isOut }: { messageId: string; count: number; isOut: boolean }) {
+  const [items, setItems] = useState<MediaItem[] | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [open, setOpen] = useState<string | null>(null);
+
+  useEffect(() => {
+    let off = false;
+    fetch(`/api/messages/${messageId}/media`)
+      .then(async (r) => {
+        const b = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(b?.error || `HTTP ${r.status}`);
+        if (!off) setItems(Array.isArray(b.items) ? b.items : []);
+      })
+      .catch((e) => { if (!off) setErr(e instanceof Error ? e.message : String(e)); });
+    return () => { off = true; };
+  }, [messageId]);
+
+  const muted = isOut ? "rgba(255,255,255,0.8)" : DA.textMuted;
+
+  if (err) return <div className="text-[11px] mt-1" style={{ color: muted }}>Couldn&apos;t load {count === 1 ? "the attachment" : "attachments"}: {err}</div>;
+  if (!items) {
+    return (
+      <div className="flex gap-1.5 mt-1">
+        {Array.from({ length: Math.min(count, 3) }).map((_, i) => (
+          <div key={i} className="rounded-lg animate-pulse" style={{ width: 96, height: 96, background: isOut ? "rgba(255,255,255,0.25)" : DA.elevated }} />
+        ))}
+      </div>
+    );
+  }
+
+  const full = items.find((x) => x.id === open && x.url);
+
+  return (
+    <>
+      <div className="flex flex-wrap gap-1.5 mt-1">
+        {items.map((it) => {
+          if (it.state !== "ready" || !it.url) {
+            return (
+              <div key={it.id} className="rounded-lg px-2 py-1.5 text-[11px]"
+                style={{ background: isOut ? "rgba(255,255,255,0.18)" : DA.elevated, color: muted, maxWidth: 220 }}>
+                {KIND_LABEL[it.kind] ?? "File"} not available — {it.reason}
+              </div>
+            );
+          }
+          if (it.kind === "image") {
+            return (
+              <button key={it.id} onClick={() => setOpen(it.id)} aria-label="Open photo"
+                className="rounded-lg overflow-hidden" style={{ width: 120, height: 120, padding: 0, border: "none", cursor: "zoom-in" }}>
+                {/* eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL, not a static asset */}
+                <img src={it.url} alt="Photo sent in this message" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+              </button>
+            );
+          }
+          if (it.kind === "video") {
+            return <video key={it.id} src={it.url} controls style={{ maxWidth: 220, borderRadius: 8 }} />;
+          }
+          return (
+            <a key={it.id} href={it.url} target="_blank" rel="noopener noreferrer"
+              className="rounded-lg px-2.5 py-1.5 text-[11px] no-underline"
+              style={{ background: isOut ? "rgba(255,255,255,0.18)" : DA.elevated, color: isOut ? "#fff" : DA.textPrimary }}>
+              {KIND_LABEL[it.kind] ?? "File"} — open
+            </a>
+          );
+        })}
+      </div>
+
+      {full && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4"
+          style={{ background: "rgba(10,12,14,0.86)", cursor: "zoom-out" }} onClick={() => setOpen(null)}>
+          {/* eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL */}
+          <img src={full.url as string} alt="Photo sent in this message"
+            style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", borderRadius: 6 }} />
+        </div>
+      )}
+    </>
+  );
+}
+
 function SmsRow({ m }: { m: ThreadMessage }) {
   const isOut = m.direction === "outbound";
+  const text = m.body_text?.trim();
   return (
     <div className={`flex mb-2 ${isOut ? "justify-end" : "justify-start"}`}>
       <div
@@ -317,9 +420,15 @@ function SmsRow({ m }: { m: ThreadMessage }) {
           border: isOut ? "none" : `1px solid ${DA.border}`,
         }}
       >
-        <div className="text-xs whitespace-pre-wrap" style={{ color: isOut ? "#fff" : DA.textPrimary }}>
-          {m.body_text?.trim() || <span style={{ fontStyle: "italic", opacity: 0.7 }}>(no text)</span>}
-        </div>
+        {/* "(no text)" only when there is genuinely nothing — a photo with no
+            caption is not an empty message, and labelling it one is how two of
+            Amber's photos read as blank bubbles. */}
+        {(text || m.media_count === 0) && (
+          <div className="text-xs whitespace-pre-wrap" style={{ color: isOut ? "#fff" : DA.textPrimary }}>
+            {text || <span style={{ fontStyle: "italic", opacity: 0.7 }}>(no text)</span>}
+          </div>
+        )}
+        {m.media_count > 0 && <MessageMedia messageId={m.id} count={m.media_count} isOut={isOut} />}
         <div className="text-[9px] mt-1" style={{ color: isOut ? "rgba(255,255,255,0.7)" : DA.textMuted }}>
           {formatMsgTime(m.occurred_at)}
         </div>

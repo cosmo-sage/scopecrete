@@ -321,7 +321,7 @@ Tax lands on the materials subtotal only (~8.08% in-market), not the full bid.
 Equipment rental bills by the day.
 
 **Where it lives (2026-09-27): `src/lib/engine/index.ts`.** Pure functions,
-tested by `npm test` (`tests/engine.test.mjs`, `node --test`). It is the ONLY
+tested by `npm test` (`node --test tests/*.test.mjs`). It is the ONLY
 place a scope is priced. It is deliberately NOT v34's `computeJob()`, which
 prices labour by crew-hours, uses one global markup and adds overhead as a
 percentage of labour — all three contradict this section and §4.

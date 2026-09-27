@@ -21,9 +21,9 @@
  *
  * The emblem's "asking" state. v34 quickens the mark when Dusty has questions,
  * counted off mock data. Nothing computes a real question count, so the
- * animation would be asserting something untrue. `sc-em-breathe` and
- * `sc-em-asking` are left out of the stylesheet entirely rather than left
- * unused, so nothing can reach for them by accident.
+ * animation would be asserting something untrue. No rule in v34-shell.css
+ * defines `sc-em-breathe` or `sc-em-asking` — they are named there only in a
+ * comment saying why — so nothing can reach for them by accident.
  *
  * `thinking` is honest: it is on only while a request this shell issued is
  * actually in flight.

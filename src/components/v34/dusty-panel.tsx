@@ -132,7 +132,7 @@ export function DustyPanel({ open, onClose, onBusy }: { open: boolean; onClose: 
 
       <section role="dialog" aria-label="Dusty" aria-hidden={!open}
         className={`fixed z-50 flex flex-col left-0 right-0 bottom-[58px] h-[82dvh] rounded-t-2xl
-                    lg:left-auto lg:right-0 lg:top-[54px] lg:bottom-0 lg:h-auto lg:w-[420px] lg:rounded-none
+                    lg:left-auto lg:right-0 lg:top-[var(--sc-head)] lg:bottom-0 lg:h-auto lg:w-[420px] lg:rounded-none
                     transition-transform duration-200 ease-out
                     ${open ? "translate-y-0 lg:translate-x-0" : "translate-y-[110%] lg:translate-y-0 lg:translate-x-[110%]"}`}
         style={{ background: T.card, boxShadow: "0 -12px 40px rgba(10,14,18,.25)", borderLeft: `1px solid ${T.hair}`, color: T.ink }}>

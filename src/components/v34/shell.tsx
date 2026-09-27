@@ -46,7 +46,7 @@ function Drop({ onClose, children }: { onClose: () => void; children: React.Reac
   return (
     <div className="fixed inset-0 z-[45]" onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} className="absolute sc-glass sc-drop"
-        style={{ top: 54, left: 8, right: 8, borderRadius: "0 0 12px 12px", overflow: "hidden" }}>
+        style={{ top: "var(--sc-head)", left: 8, right: 8, borderRadius: "0 0 12px 12px", overflow: "hidden" }}>
         {children}
       </div>
     </div>

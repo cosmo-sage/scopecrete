@@ -770,9 +770,9 @@ export default function ChatThreadPage() {
   return (
     <div className="flex">
       {/* ================= the conversation ================= */}
-      {/* The space between the shell's sticky 54px header and, on a phone, the
+      {/* The space between the shell's sticky header (--sc-head) and, on a phone, the
           72px the shell reserves for its fixed footer. Desktop has no footer. */}
-      <div className="flex flex-col flex-1 min-w-0 h-[calc(100dvh-54px-72px)] lg:h-[calc(100dvh-54px)]"
+      <div className="flex flex-col flex-1 min-w-0 h-[calc(100dvh-var(--sc-head)-72px)] lg:h-[calc(100dvh-var(--sc-head))]"
         style={{ background: DA.bg }}>
         <div className="px-4 py-2.5 flex items-center gap-3 flex-shrink-0"
           style={{ background: DA.surface, borderBottom: `1px solid ${DA.border}` }}>
@@ -898,7 +898,7 @@ export default function ChatThreadPage() {
 
       {/* ================= the contact rail (desktop, 1d) ================= */}
       {!loading && !error && (
-        <aside className="hidden xl:block shrink-0 overflow-y-auto h-[calc(100dvh-54px)]"
+        <aside className="hidden xl:block shrink-0 overflow-y-auto h-[calc(100dvh-var(--sc-head))]"
           style={{ width: 300, background: DA.surface, borderLeft: `1px solid ${DA.border}` }}>
           <RailSection title="Contact">
             <RailRow k="Name" v={name ?? null} missing="Not recorded"

@@ -90,8 +90,6 @@ export function ActivityLine({ busy }: { busy: boolean }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [open]);
 
-  if (!data && !busy) return null;
-
   const running = recent.some((i) => i.kind === "running");
   let line: { key: string; summary: string; tone: Tone; at: string | null };
   if (busy) line = { key: "busy", summary: "Dusty is working on your question…", tone: "live", at: null };
@@ -99,6 +97,9 @@ export function ActivityLine({ busy }: { busy: boolean }) {
   else if (recent.length) {
     const it = recent[idx % recent.length];
     line = { key: it.id, summary: it.summary, tone: it.tone, at: it.kind === "waiting" ? null : it.at };
+  } else if (!data) {
+    // Holds the row until the first answer, so the header never changes height.
+    line = { key: "loading", summary: "…", tone: "quiet", at: null };
   } else {
     line = {
       key: "idle",

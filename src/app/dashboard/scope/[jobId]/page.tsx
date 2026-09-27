@@ -20,6 +20,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { JOB_TYPE_LABEL, LEAD_SOURCES, stageOf } from "@/lib/jobs/stages";
 import { T, F, disp, eyebrow, nums, clip, money, money0, formatPhone } from "@/lib/v34/tokens";
 import { EmptyState, Badge } from "@/components/v34/primitives";
 import {
@@ -37,6 +38,7 @@ interface Section extends SectionInput {
 interface Job {
   id: string; title: string | null; status: string | null; address: string | null;
   contact_id: string | null; duration_days: number | null; created_from_message_id: string | null;
+  job_type: string | null; lead_source: string | null;
 }
 interface Contact { id: string; name: string | null; phone: string | null }
 
@@ -143,11 +145,11 @@ export default function ScopeBuilder() {
   const who = contact ? (contact.name || formatPhone(contact.phone)) : null;
 
   return (
-    <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_360px] lg:min-h-[calc(100dvh-54px)]" style={{ color: T.ink }}>
+    <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_360px] lg:min-h-[calc(100dvh-var(--sc-head))]" style={{ color: T.ink }}>
       {/* ================= sections ================= */}
       <div style={{ minWidth: 0 }} className="pb-24 lg:pb-6">
         <div className="px-3 pt-2.5 pb-2" style={{ background: T.card, borderBottom: `1px solid ${T.hair}` }}>
-          <Link href="/dashboard/scope" className="no-underline" style={{ ...eyebrow, color: T.ink2 }}>‹ All scopes</Link>
+          <Link href="/dashboard/scope" className="no-underline" style={{ ...eyebrow, color: T.ink2 }}>‹ Jobs</Link>
           <div className="flex items-start gap-2 mt-1">
             <div style={{ minWidth: 0, flex: 1 }}>
               <input defaultValue={job.title ?? ""} placeholder="Name this scope"
@@ -166,12 +168,15 @@ export default function ScopeBuilder() {
             {job.status && <Badge s={job.status} />}
           </div>
           {saveErr.job && <div style={{ fontSize: F.xs, color: T.red }}>{saveErr.job}</div>}
+          <JobMeta job={job} onSet={(field, value) => void send(`/api/jobs/${jobId}`, "PATCH", { [field]: value })
+            .then((b) => setJob((j) => j && { ...j, job_type: b.job.job_type, lead_source: b.job.lead_source }))
+            .catch((er) => setSaveErr((m) => ({ ...m, job: String(er.message ?? er) })))} />
         </div>
 
         {/* Phone: the takeoff rail sits below the sections, so the three
             numbers you read out loud ride along under the header. */}
         <div className="lg:hidden sticky z-10 px-3 py-1.5 flex items-baseline gap-3"
-          style={{ top: 54, background: T.dark, color: "#fff", ...nums }}>
+          style={{ top: "var(--sc-head)", background: T.dark, color: "#fff", ...nums }}>
           <span style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 700 }}>{t.sqft > 0 ? n1(t.sqft) : "—"}<span style={{ fontSize: F.xs, color: "#8E99A5" }}> sf</span></span>
           <span style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 700, color: T.hiviz }}>
             {(t.cy_order ?? t.cy_neat) > 0 ? n2(t.cy_order ?? t.cy_neat) : "—"}<span style={{ fontSize: F.xs, color: "#8E99A5" }}> cu yd{t.cy_order === null ? " neat" : ""}</span>
@@ -384,7 +389,7 @@ function TakeoffRail({ t, priced, fl, job, discount, setDiscount, onCrewDays, ha
 
   const orderCy = t.cy_order ?? t.cy_neat;
   return (
-    <aside style={{ background: T.dark, color: "#fff" }} className="lg:sticky lg:top-[54px] lg:self-start lg:max-h-[calc(100dvh-54px)] lg:overflow-y-auto">
+    <aside style={{ background: T.dark, color: "#fff" }} className="lg:sticky lg:top-[var(--sc-head)] lg:self-start lg:max-h-[calc(100dvh-var(--sc-head))] lg:overflow-y-auto">
       <div className="px-4 pt-3 pb-3">
         <div style={{ ...eyebrow, color: dim }}>Takeoff</div>
         <div style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 600 }}>Read this on the phone</div>
@@ -522,5 +527,36 @@ function TakeoffRail({ t, priced, fl, job, discount, setDiscount, onCrewDays, ha
         </>
       )}
     </aside>
+  );
+}
+
+/**
+ * Residential / commercial / government, and how the job reached us — the two
+ * facts the Jobs board shows on every card. One tap each.
+ * (Who referred it is picked when the job is created on the board.)
+ */
+function JobMeta({ job, onSet }: { job: Job; onSet: (field: "job_type" | "lead_source", value: string) => void }) {
+  const chip = (on: boolean): React.CSSProperties => ({
+    height: 26, padding: "0 9px", borderRadius: 3, fontSize: F.xs, cursor: "pointer", whiteSpace: "nowrap",
+    fontFamily: disp, textTransform: "uppercase", letterSpacing: ".04em",
+    border: `1px solid ${on ? T.ink : T.hair}`, background: on ? T.ink : T.card, color: on ? "#fff" : T.ink2,
+  });
+  return (
+    <div className="flex flex-wrap items-center gap-1.5" style={{ marginTop: 8 }}>
+      <span style={{ ...eyebrow, color: T.ink3 }}>{stageOf(job.status).label}</span>
+      <span style={{ width: 1, height: 16, background: T.hair }} />
+      {Object.entries(JOB_TYPE_LABEL).map(([k, l]) => (
+        // job_type is NOT NULL with a 'residential' default, so it switches
+        // between the three rather than clearing.
+        <button key={k} style={chip(job.job_type === k)} onClick={() => { if (job.job_type !== k) onSet("job_type", k); }}>{l}</button>
+      ))}
+      <span style={{ width: 1, height: 16, background: T.hair }} />
+      <select value={job.lead_source ?? ""} onChange={(e) => onSet("lead_source", e.target.value)}
+        className="rounded px-1.5 outline-none"
+        style={{ height: 26, fontSize: F.xs, border: `1px solid ${job.lead_source ? T.ink : T.hair}`, background: T.card, color: T.ink }}>
+        <option value="">Source: not set</option>
+        {LEAD_SOURCES.map((l) => <option key={l.k} value={l.k}>{l.label}</option>)}
+      </select>
+    </div>
   );
 }

@@ -21,7 +21,7 @@ import { T, F, disp, eyebrow } from "@/lib/v34/tokens";
 export default function ThreadsIndexPane() {
   return (
     <div className="hidden lg:flex items-center justify-center h-full px-8"
-      style={{ minHeight: "calc(100vh - 54px - 58px)" }}>
+      style={{ minHeight: "calc(100vh - var(--sc-head) - 58px)" }}>
       <div style={{ maxWidth: 380, textAlign: "center" }}>
         <div style={eyebrow}>Threads</div>
         <div style={{ fontFamily: disp, fontSize: F.xl, fontWeight: 600, lineHeight: 1.1, marginTop: 2 }}>

@@ -8,7 +8,7 @@
  * carrying a wordmark and a burger, which is where most of "the site looks
  * nothing like the mockup" came from.
  *
- * THE FOOTER IS FIVE SLOTS, NOT FIVE TABS. Threads · Scope · Dusty · Cash ·
+ * THE FOOTER IS FIVE SLOTS, NOT FIVE TABS. Threads · Jobs · Dusty · Cash ·
  * More, with Dusty as the centre emblem and no word underneath it. v34's own
  * comment at L3410 is "the four footer destinations — Dusty is a conversation,
  * not a landing", which is also DECISIONS.md §6: Dusty is reached COLD from the
@@ -45,7 +45,7 @@ import "@/styles/v34-shell.css";
 /** Five slots. `dusty` carries no label — the emblem is the control. */
 const SLOTS: Array<{ k: string; label?: string; href?: string }> = [
   { k: "threads", label: "Threads", href: "/dashboard/messages" },
-  { k: "scope", label: "Scope", href: "/dashboard/scope" },
+  { k: "scope", label: "Jobs", href: "/dashboard/scope" },
   { k: "dusty" },
   { k: "cash", label: "Cash", href: "/dashboard/cash" },
   { k: "more", label: "More", href: "/dashboard/more" },
@@ -280,7 +280,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       {/* ---- desktop left rail: the footer's destinations, standing up ---- */}
       <nav aria-label="Main" className="hidden lg:flex fixed left-0 bottom-0 z-30 flex-col items-stretch"
-        style={{ top: 54, width: 84, background: T.dark }}>
+        style={{ top: "var(--sc-head)", width: 84, background: T.dark }}>
         {/* The rail has room the footer does not: Customers stands here on
             desktop and is reached from More on a phone. */}
         {[...SLOTS.filter((s) => s.href).slice(0, 2), { k: "customers", label: "Customers", href: "/dashboard/customers" },

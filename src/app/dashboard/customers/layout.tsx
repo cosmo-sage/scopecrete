@@ -56,7 +56,7 @@ export default function CustomersLayout({ children }: { children: React.ReactNod
   }, [people, tab, q]);
 
   return (
-    <div className="lg:flex lg:items-stretch lg:h-[calc(100dvh-54px)]">
+    <div className="lg:flex lg:items-stretch lg:h-[calc(100dvh-var(--sc-head))]">
       <div className={`${open ? "hidden lg:block" : "block"} w-full lg:w-[380px] xl:w-[420px] lg:shrink-0 lg:overflow-y-auto`}
         style={{ borderRight: `1px solid ${T.hair}`, background: T.slab }}>
         <div className="px-2.5 pt-2.5">

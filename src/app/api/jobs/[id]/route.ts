@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
+import { ALL_STATUSES, LEAD_SOURCES } from "@/lib/jobs/stages";
 
 /**
  * One job — read, edit, and ACCEPT.
@@ -19,14 +20,13 @@ import { getApiSession } from "@/lib/api-auth";
 
 export const dynamic = "force-dynamic";
 
-const EDITABLE = ["title", "address", "city", "state", "zip", "job_number", "notes", "status"] as const;
+const EDITABLE = ["title", "address", "city", "state", "zip", "job_number", "notes", "status",
+  "job_type", "lead_source", "referred_by_contact_id"] as const;
+const JOB_TYPES = ["residential", "commercial", "public"];
 const FORBIDDEN = ["origin", "confirmed_at", "confirmed_by", "org_id", "id", "created_from_message_id"] as const;
 
-/** Mirrors jobs_status_check. Rejecting here gives a readable error. */
-const VALID_STATUS = [
-  "invited", "lead", "scoping", "quoted", "won",
-  "lost", "scheduled", "in_progress", "complete", "closed",
-];
+/** Mirrors jobs_status_check (migration 034), via the board's stage map. */
+const VALID_STATUS = ALL_STATUSES;
 
 export async function PATCH(
   req: NextRequest,
@@ -85,6 +85,18 @@ export async function PATCH(
     }, { status: 400 }));
   }
 
+  if (patch.status) patch.stage_changed_at = new Date().toISOString();
+  if (typeof patch.job_type === "string" && !JOB_TYPES.includes(patch.job_type)) {
+    return applyCookies(NextResponse.json({ error: `job_type must be one of ${JOB_TYPES.join(", ")}.` }, { status: 400 }));
+  }
+  if (typeof patch.lead_source === "string" && !LEAD_SOURCES.some((l) => l.k === patch.lead_source)) {
+    return applyCookies(NextResponse.json({ error: "Unknown lead_source." }, { status: 400 }));
+  }
+  if (typeof patch.referred_by_contact_id === "string") {
+    const { data: ref } = await supabase.from("contacts").select("id").eq("org_id", orgId).eq("id", patch.referred_by_contact_id).maybeSingle();
+    if (!ref) return applyCookies(NextResponse.json({ error: "That referrer is not a contact in your organisation." }, { status: 403 }));
+  }
+
   if (accept) {
     patch.confirmed_at = new Date().toISOString();
     patch.confirmed_by = userId;
@@ -104,7 +116,7 @@ export async function PATCH(
     .update(patch)
     .eq("id", id)
     .eq("org_id", orgId)
-    .select("id, job_number, title, status, origin, confirmed_at, confirmed_by, contact_id, address, city, state, zip, notes, duration_days, created_at")
+    .select("id, job_number, title, status, origin, confirmed_at, confirmed_by, contact_id, address, city, state, zip, notes, duration_days, created_at, job_type, lead_source, referred_by_contact_id")
     .maybeSingle();
 
   if (error) {
@@ -132,7 +144,7 @@ export async function GET(
 
   const { data, error } = await supabase
     .from("jobs")
-    .select("id, job_number, title, status, origin, confirmed_at, confirmed_by, created_from_message_id, contact_id, address, city, state, zip, notes, duration_days, created_at")
+    .select("id, job_number, title, status, origin, confirmed_at, confirmed_by, created_from_message_id, contact_id, address, city, state, zip, notes, duration_days, created_at, job_type, lead_source, referred_by_contact_id")
     .eq("id", id)
     .eq("org_id", orgId)
     .maybeSingle();

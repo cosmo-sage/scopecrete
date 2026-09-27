@@ -539,6 +539,21 @@ expected start date per quoted job before it means anything. Add the field.
   bucket solid, then an optional type). Job stages — New lead, Consultation,
   Estimating, Follow up, W.I.P., Complete, Lost — are the Jobs board
   (Scope renamed Jobs), a Kanban, not Threads chips.
+- **Jobs board (migration 034, 2026-09-27)** — `/dashboard/scope`, stages in
+  `src/lib/jobs/stages.ts` mapped onto `jobs.status` (`consultation` added;
+  W.I.P. holds won → scheduled → in_progress, shown as a tag). Phone: stage
+  strip + columns that swipe one per screen; desktop: all seven side by side.
+  Cards: customer, address, type (residential / commercial / government =
+  `public`), source, sections; Move sheet or one-tap next stage; unreviewed
+  machine jobs shown with Accept, never counted. **Customer vs source:**
+  `contact_id` / `customer_id` is who pays; `lead_source` (website, referral,
+  gc_invite, lead_gen, repeat, direct, other) and `referred_by_contact_id` are
+  how it reached us — Jeremy's referral: homeowner is customer, Jeremy the
+  referrer; LA Contracting's bid invite: LA Contracting is customer.
+  `jobs.job_type` is NOT NULL DEFAULT 'residential', so a new job must pick its
+  type rather than inherit the default silently; making it nullable is Coy's
+  call. The header is 54px + the 38px activity line = `--sc-head` (92px);
+  everything under or beside it measures from that variable.
 - Cash flow is a footer TAB, not a slide-out drawer — a side drawer's
   horizontal swipe fights the ribbon's horizontal swipe.
 - Settings opens from the header menu. Fixed costs live there AND open from

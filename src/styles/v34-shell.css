@@ -1,3 +1,8 @@
+/* The sticky header's height: 54px glass bar + 38px activity line
+   (activity-line.tsx always holds its row). Everything that sits under or
+   beside the header measures from this — one number, not five. */
+:root { --sc-head: 92px; }
+
 /**
  * v34 shell CSS — ported from scopecrete-v34.jsx L5155-5320.
  *

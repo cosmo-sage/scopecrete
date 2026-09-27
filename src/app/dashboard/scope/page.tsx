@@ -113,12 +113,12 @@ export default function ScopeScreen() {
         <div style={eyebrow}>Scope</div>
         <div className="flex items-center gap-2">
           <div style={{ fontFamily: disp, fontSize: F.xl, fontWeight: 600, lineHeight: 1.05, flex: 1 }}>
-            Jobs and sections
+            Jobs
           </div>
           <button onClick={() => setNewOpen(true)} className="rounded px-3"
             style={{ height: 34, background: T.hiviz, color: "#fff", fontFamily: disp, fontSize: F.sm, fontWeight: 600,
                      textTransform: "uppercase", letterSpacing: ".06em", cursor: "pointer" }}>
-            + New scope
+            + New project scope
           </button>
         </div>
         {jobs.length > 0 && (
@@ -131,7 +131,7 @@ export default function ScopeScreen() {
 
       {jobs.length === 0 ? (
         <EmptyState title="No jobs yet"
-          detail="A job is the container for a piece of work, from first contact onward — it starts as a lead and is won or lost later. Start one with + New scope." />
+          detail="A job is the container for a piece of work, from first contact onward — it starts as a lead and is won or lost later. Start one with + New project scope." />
       ) : (
         jobs.map((j, i) => {
           const who = j.contact_name || j.contact_phone || "No contact";
@@ -233,7 +233,7 @@ function NewScopeSheet({ open, onClose }: { open: boolean; onClose: () => void }
     || (digits.length >= 3 && (t.phone ?? "").replace(/\D/g, "").includes(digits))).slice(0, 60);
 
   return (
-    <Sheet open={open} onClose={onClose} title="New scope" sub="Who is it for?">
+    <Sheet open={open} onClose={onClose} title="New project scope" sub="Who is it for?">
       <div className="p-3">
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search a name or number" autoFocus
           className="w-full rounded px-2.5 outline-none" style={{ height: 40, border: `1px solid ${T.hair}`, fontSize: F.sm }} />

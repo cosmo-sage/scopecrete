@@ -53,7 +53,7 @@ export async function GET(
   // empty thread that reads as "this number never said anything".
   const { data: self } = await supabase
     .from("contacts")
-    .select("id, merged_into_contact_id, name, name_source")
+    .select("id, merged_into_contact_id, name, name_source, name_confirmed_at, address")
     .eq("org_id", orgId)
     .eq("id", contactId)
     .maybeSingle();
@@ -102,9 +102,8 @@ export async function GET(
     .eq("contact_id", contactId)
     // Newest first. Page one is the most recent traffic, so a 350-message
     // thread no longer has to load and scroll in full to show what arrived an
-    // hour ago. Accepted cost: inside a rapid exchange a reply reads above the
-    // message it answers. This screen is for triage, not for reconstructing a
-    // conversation.
+    // hour ago. The conversation screen turns the page round so it reads top to
+    // bottom with the newest last.
     .order("occurred_at", { ascending: false })
     .limit(2000);
 
@@ -167,6 +166,10 @@ export async function GET(
     counterparty_phone: counterpartyPhone,
     /** contacts.name when one is set, else null — the header falls back to the phone. */
     name: (self?.name as string | null)?.trim() || null,
+    /** Where the name came from, and whether a person confirmed it. */
+    name_source: (self?.name_source as string | null) ?? null,
+    name_confirmed: !!self?.name_confirmed_at,
+    address: (self?.address as string | null)?.trim() || null,
     /** Every number on this contact (contact_phones). Empty until a merge adds them. */
     phones,
     /** Merges into this contact that are still in force — each can be undone. */

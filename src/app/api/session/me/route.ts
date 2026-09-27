@@ -53,7 +53,20 @@ export async function GET(req: NextRequest) {
     .eq("org_id", orgId)
     .maybeSingle();
 
+  // The line the desktop top bar shows as live: the org's primary active
+  // number. Null when none is marked primary — the bar then shows nothing
+  // rather than picking one.
+  const { data: line } = await supabase
+    .from("org_phone_numbers")
+    .select("phone_e164, label")
+    .eq("org_id", orgId)
+    .eq("is_primary", true)
+    .eq("active", true)
+    .limit(1)
+    .maybeSingle();
+
   return applyCookies(NextResponse.json({
+    line: line?.phone_e164 ?? null,
     user_id: userId,
     email,
     name,

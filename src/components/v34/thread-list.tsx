@@ -414,7 +414,16 @@ export function ThreadList() {
   const [noOrg, setNoOrg] = useState(false);
   const [drift, setDrift] = useState<{ count: number | null; error?: string } | null>(null);
 
-  const [filter, setFilter] = useState("all");
+  // ?f= opens the list on a chip — the desktop top bar's "unnamed" counter
+  // links to ?f=unsorted. Adjusted during render (not in an effect) when the
+  // param changes while the list stays mounted in the messages layout.
+  const fParam = params.get("f");
+  const [filter, setFilter] = useState(fParam ?? "all");
+  const [seenF, setSeenF] = useState(fParam);
+  if (fParam !== seenF) {
+    setSeenF(fParam);
+    if (fParam) setFilter(fParam);
+  }
   const [moreFilters, setMoreFilters] = useState(false);
   const [openRow, setOpenRow] = useState<string | null>(null);
   const [deciding, setDeciding] = useState(false);

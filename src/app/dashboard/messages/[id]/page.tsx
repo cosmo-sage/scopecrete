@@ -3,7 +3,8 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Phone, ArrowLeft, CaretDown, CaretRight, WarningCircle } from "@phosphor-icons/react";
-import { T, F, disp } from "@/lib/v34/tokens";
+import Link from "next/link";
+import { T, F, disp, eyebrow, nums, clip } from "@/lib/v34/tokens";
 import { Composer } from "@/components/v34/composer";
 
 /**
@@ -83,9 +84,24 @@ function formatPhone(raw: string | null): string {
   return `(${ten.slice(0, 3)}) ${ten.slice(3, 6)}-${ten.slice(6)}`;
 }
 
+/** Quo writes next steps as bullet or numbered lines; show them as a list. */
+function splitSteps(text: string): string[] {
+  return text.split(/\n+/).map((l) => l.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, "").trim()).filter(Boolean);
+}
+
 function formatDuration(s: number | null): string | null {
   if (typeof s !== "number" || s <= 0) return null;
   return s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`;
+}
+
+function formatTime(ts: string | null): string {
+  if (!ts) return "";
+  return new Date(ts).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+}
+
+function dayLabel(ts: string | null): string {
+  if (!ts) return "Undated";
+  return new Date(ts).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" });
 }
 
 function formatMsgTime(ts: string | null): string {
@@ -150,8 +166,22 @@ function CallRow({ m }: { m: ThreadMessage }) {
   const [err, setErr] = useState<string | null>(null);
 
   const hasArtifacts = m.artifact_kinds.length > 0;
+  const hasNext = m.artifact_kinds.includes("next_steps");
   const duration = formatDuration(m.duration_seconds);
   const isOut = m.direction === "outbound";
+
+  // Next steps are what the caller wanted — the receptionist's whole job — so
+  // a call that has them shows them without a tap (desktop design, 1d). Only
+  // those calls fetch up front; transcripts stay behind the expand.
+  useEffect(() => {
+    if (!hasNext) return;
+    let off = false;
+    fetch(`/api/messages/${m.id}/artifacts`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((b) => { if (!off && b) setBundle(b as ArtifactBundle); })
+      .catch(() => {});
+    return () => { off = true; };
+  }, [hasNext, m.id]);
 
   const expand = useCallback(async () => {
     const next = !open;
@@ -180,8 +210,8 @@ function CallRow({ m }: { m: ThreadMessage }) {
     >
       <div className="flex items-center gap-2">
         <Phone size={13} weight="fill" color={isOut ? DA.accent : DA.textMuted} className="shrink-0" />
-        <span className="text-xs font-semibold" style={{ color: DA.textPrimary }}>
-          {isOut ? "Outgoing call" : "Incoming call"}
+        <span style={{ ...eyebrow, color: DA.textPrimary }}>
+          {isOut ? "Outbound call" : "Inbound call"}
         </span>
         {duration && (
           <span className="text-[10px] tabular-nums" style={{ color: DA.textMuted }}>{duration}</span>
@@ -220,6 +250,15 @@ function CallRow({ m }: { m: ThreadMessage }) {
           control that lies about what it can do. Playback returns through
           StoredAudio once the audio is copied into Supabase Storage. */}
 
+      {!open && bundle?.next_steps?.content && (
+        <div className="mt-2 rounded px-2.5 py-2" style={{ background: DA.elevated }}>
+          <div style={{ ...eyebrow, color: DA.accent, marginBottom: 3 }}>Next steps — extracted from the call</div>
+          <ul style={{ fontSize: F.xs, color: DA.textPrimary, lineHeight: 1.45, paddingLeft: 14, listStyle: "square" }}>
+            {splitSteps(bundle.next_steps.content).map((line, i) => <li key={i}>{line}</li>)}
+          </ul>
+        </div>
+      )}
+
       {hasArtifacts && (
         <button
           onClick={expand}
@@ -227,7 +266,7 @@ function CallRow({ m }: { m: ThreadMessage }) {
           style={{ background: "none", border: "none", cursor: "pointer", color: DA.accent, padding: 0 }}
         >
           {open ? <CaretDown size={11} /> : <CaretRight size={11} />}
-          {open ? "Hide details" : `Details (${m.artifact_kinds.join(", ")})`}
+          {open ? "Hide details" : m.artifact_kinds.includes("transcript") ? "Read the full transcript" : `Details (${m.artifact_kinds.join(", ")})`}
         </button>
       )}
 
@@ -432,8 +471,8 @@ function SmsRow({ m }: { m: ThreadMessage }) {
           </div>
         )}
         {m.media_count > 0 && <MessageMedia messageId={m.id} count={m.media_count} isOut={isOut} />}
-        <div className="text-[9px] mt-1" style={{ color: isOut ? "rgba(255,255,255,0.7)" : DA.textMuted }}>
-          {formatMsgTime(m.occurred_at)}
+        <div className="text-[9px] mt-1" style={{ color: isOut ? "rgba(255,255,255,0.7)" : DA.textMuted, letterSpacing: ".06em" }}>
+          {isOut ? "OUT" : "IN"} · {formatTime(m.occurred_at)}
         </div>
       </div>
     </div>
@@ -591,6 +630,8 @@ function MergeSheet({ contactId, keepLabel, keepCount, onClose, onMerged }: {
   );
 }
 
+interface ContactJob { id: string; title: string | null; status: string | null; contact_id: string | null }
+
 export default function ChatThreadPage() {
   const params = useParams();
   const router = useRouter();
@@ -599,13 +640,18 @@ export default function ChatThreadPage() {
   const [messages, setMessages] = useState<ThreadMessage[]>([]);
   const [phone, setPhone] = useState<string | null>(null);
   const [name, setName] = useState<string | null>(null);
+  const [nameConfirmed, setNameConfirmed] = useState(false);
+  const [address, setAddress] = useState<string | null>(null);
   const [phones, setPhones] = useState<string[]>([]);
   const [merges, setMerges] = useState<MergeInfo[]>([]);
+  const [jobs, setJobs] = useState<ContactJob[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
   const [merging, setMerging] = useState(false);
   const [undoing, setUndoing] = useState<string | null>(null);
+  const [starting, setStarting] = useState(false);
+  const scrollRef = React.useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!contactId) return;
@@ -623,9 +669,14 @@ export default function ChatThreadPage() {
           router.replace(`/dashboard/messages/${data.redirect_to}`);
           return;
         }
-        setMessages(Array.isArray(data.messages) ? data.messages : []);
+        // The API returns newest first. A conversation reads top to bottom
+        // with the composer under the latest message — v34 and the desktop
+        // design both — so it is turned round here and scrolled to the end.
+        setMessages(Array.isArray(data.messages) ? [...data.messages].reverse() : []);
         setPhone(data.counterparty_phone ?? null);
         setName(typeof data.name === "string" ? data.name : null);
+        setNameConfirmed(data.name_confirmed === true);
+        setAddress(typeof data.address === "string" ? data.address : null);
         setPhones(Array.isArray(data.phones) ? data.phones : []);
         setMerges(Array.isArray(data.merges) ? data.merges : []);
         setLoading(false);
@@ -637,6 +688,26 @@ export default function ChatThreadPage() {
       });
     return () => { cancelled = true; };
   }, [contactId, reload, router]);
+
+  // Scope on file: this contact's jobs. /api/jobs is the org's list; `jobs` is
+  // small (0 rows today), so filtering here beats a second route.
+  useEffect(() => {
+    if (!contactId) return;
+    let off = false;
+    fetch("/api/jobs")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((b) => {
+        if (off) return;
+        const all = Array.isArray(b?.jobs) ? (b.jobs as ContactJob[]) : null;
+        setJobs(all ? all.filter((j) => j.contact_id === contactId) : null);
+      })
+      .catch(() => {});
+    return () => { off = true; };
+  }, [contactId, reload]);
+
+  useEffect(() => {
+    if (!loading && scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  }, [loading, messages.length]);
 
   async function undo(mergeId: string) {
     setUndoing(mergeId);
@@ -653,95 +724,222 @@ export default function ChatThreadPage() {
     }
   }
 
+  async function newScope() {
+    setStarting(true);
+    try {
+      const r = await fetch("/api/jobs", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contact_id: contactId }),
+      });
+      const b = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(b?.error || `HTTP ${r.status}`);
+      router.push(`/dashboard/scope/${b.job.id}`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setStarting(false);
+    }
+  }
+
   // A confirmed name when there is one; the number otherwise. Never a guess —
   // an unconfirmed proposal lives in the thread list's review, not here.
   const headerTitle = name ?? formatPhone(phone);
   const otherNumbers = phones.filter((p) => p !== phone);
+  const texts = messages.filter((m) => m.channel !== "call").length;
+  const calls = messages.length - texts;
+  const firstHeard = messages.find((m) => m.occurred_at)?.occurred_at ?? null;
+  // Nothing on record: every message is a call with no words attached — the
+  // shape of most of the 580 calls (desktop design, 1e).
+  const silent = messages.length > 0 && messages.every((m) =>
+    m.channel === "call" && !m.summary?.trim() && m.artifact_kinds.length === 0);
+  const openJob = jobs && jobs.length > 0 ? jobs[0] : null;
+
+  const pill: React.CSSProperties = {
+    height: 30, border: `1px solid ${DA.border}`, background: DA.surface, color: DA.textSecondary,
+    fontFamily: disp, fontSize: F.xs, letterSpacing: ".06em", textTransform: "uppercase", cursor: "pointer",
+    display: "inline-flex", alignItems: "center", textDecoration: "none",
+  };
+
+  // Day separators: one rule each time the date changes.
+  const rows = messages.map((m, i) => {
+    const day = dayLabel(m.occurred_at);
+    return { m, day, sep: i === 0 || day !== dayLabel(messages[i - 1].occurred_at) };
+  });
 
   return (
-    // The space BETWEEN the shell's sticky 54px header and the 72px the shell's
-    // <main> reserves for its fixed footer. A plain 100dvh put the bottom of
-    // this screen — now the composer — underneath the footer.
-    <div className="flex flex-col"
-      style={{ background: DA.bg, height: "calc(100dvh - 54px - 72px)" }}>
-      <div
-        className="px-4 py-3 flex items-center gap-3 flex-shrink-0"
-        style={{ background: DA.surface, borderBottom: `1px solid ${DA.border}` }}
-      >
-        <button
-          onClick={() => router.back()}
-          style={{ background: "none", border: "none", cursor: "pointer", color: DA.textMuted, padding: 0 }}
-          aria-label="Back"
-        >
-          <ArrowLeft size={18} />
-        </button>
-        <div className="flex-1 min-w-0">
-          <div className="font-semibold text-sm truncate" style={{ color: DA.textPrimary }}>
-            {headerTitle}
+    <div className="flex">
+      {/* ================= the conversation ================= */}
+      {/* The space between the shell's sticky 54px header and, on a phone, the
+          72px the shell reserves for its fixed footer. Desktop has no footer. */}
+      <div className="flex flex-col flex-1 min-w-0 h-[calc(100dvh-54px-72px)] lg:h-[calc(100dvh-54px)]"
+        style={{ background: DA.bg }}>
+        <div className="px-4 py-2.5 flex items-center gap-3 flex-shrink-0"
+          style={{ background: DA.surface, borderBottom: `1px solid ${DA.border}` }}>
+          <button onClick={() => router.back()} className="lg:hidden"
+            style={{ background: "none", border: "none", cursor: "pointer", color: DA.textMuted, padding: 0 }}
+            aria-label="Back">
+            <ArrowLeft size={18} />
+          </button>
+          <div className="flex-1 min-w-0">
+            <div style={{ fontFamily: disp, fontSize: F.xl, fontWeight: 600, lineHeight: 1.05, color: DA.textPrimary, ...clip }}>
+              {headerTitle}
+            </div>
+            <div style={{ fontSize: F.xs, color: DA.textMuted, ...clip, ...nums }}>
+              {loading ? "Loading…" : [
+                name && phone ? formatPhone(phone) : null,
+                otherNumbers.length ? `also ${otherNumbers.map(formatPhone).join(", ")}` : null,
+                firstHeard ? `first heard ${new Date(firstHeard).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : null,
+                `${texts} text${texts === 1 ? "" : "s"} · ${calls} call${calls === 1 ? "" : "s"}`,
+              ].filter(Boolean).join(" · ")}
+            </div>
           </div>
-          <div className="text-[10px] truncate" style={{ color: DA.textMuted }}>
-            {loading ? "Loading…" : `${messages.length} message${messages.length === 1 ? "" : "s"}`}
-            {!loading && name && phone && ` · ${formatPhone(phone)}`}
-            {!loading && otherNumbers.length > 0 && ` · also ${otherNumbers.map(formatPhone).join(", ")}`}
-          </div>
+          {!loading && !error && (
+            <div className="flex items-center gap-1.5 shrink-0">
+              {phone && (
+                <a href={`tel:${phone}`} aria-label="Call" className="rounded justify-center"
+                  style={{ ...pill, width: 34, padding: 0 }}>
+                  <Phone size={14} weight="fill" color={DA.textPrimary} />
+                </a>
+              )}
+              <button onClick={() => setMerging(true)} className="rounded px-2.5 hidden sm:inline-flex" style={pill}>
+                Same person as…
+              </button>
+              {openJob ? (
+                <Link href={`/dashboard/scope/${openJob.id}`} className="rounded px-2.5"
+                  style={{ ...pill, background: DA.accent, color: "#fff", border: "none" }}>Open scope</Link>
+              ) : (
+                <button onClick={() => void newScope()} disabled={starting || jobs === null} className="rounded px-2.5"
+                  style={{ ...pill, background: DA.accent, color: "#fff", border: "none", opacity: jobs === null ? 0.5 : 1 }}>
+                  {starting ? "Starting…" : "New scope"}
+                </button>
+              )}
+            </div>
+          )}
         </div>
+
+        {/* Every merge still in force, with its way back. */}
+        {!loading && merges.map((m) => (
+          <div key={m.id} className="px-4 py-1.5 flex items-center gap-2 text-[11px] flex-shrink-0"
+            style={{ background: DA.elevated, borderBottom: `1px solid ${DA.border}`, color: DA.textSecondary }}>
+            <span className="flex-1 min-w-0 truncate">
+              {m.phone ? formatPhone(m.phone) : "Another number"} was merged into this thread
+            </span>
+            <button onClick={() => void undo(m.id)} disabled={undoing === m.id}
+              style={{ color: DA.accent, fontWeight: 600, cursor: "pointer", background: "none", border: "none" }}>
+              {undoing === m.id ? "Undoing…" : "Undo"}
+            </button>
+          </div>
+        ))}
+
+        <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 py-3">
+          {loading ? (
+            <div className="space-y-2">
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="h-12 rounded-xl animate-pulse" style={{ background: DA.surface }} />
+              ))}
+            </div>
+          ) : error ? (
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <WarningCircle size={32} color={DA.error} />
+              <p className="text-sm mt-2 font-semibold" style={{ color: DA.textPrimary }}>
+                Couldn&apos;t load this thread
+              </p>
+              <p className="text-xs mt-1 break-words" style={{ color: DA.textMuted }}>{error}</p>
+            </div>
+          ) : messages.length === 0 ? (
+            <div className="text-center text-sm py-16" style={{ color: DA.textMuted }}>
+              No messages in this thread.
+            </div>
+          ) : (
+            <>
+              {rows.map(({ m, day, sep }) => {
+                return (
+                  <React.Fragment key={m.id}>
+                    {sep && (
+                      <div className="flex items-center gap-2 my-2.5" aria-hidden="true">
+                        <span className="flex-1" style={{ height: 1, background: DA.border }} />
+                        <span style={{ ...eyebrow }}>{day}</span>
+                        <span className="flex-1" style={{ height: 1, background: DA.border }} />
+                      </div>
+                    )}
+                    {m.channel === "call" ? <CallRow m={m} /> : <SmsRow m={m} />}
+                  </React.Fragment>
+                );
+              })}
+
+              {silent && (
+                <div className="mt-4 py-4" style={{ borderTop: `2px solid ${DA.textPrimary}`, borderBottom: `2px solid ${DA.textPrimary}` }}>
+                  <div style={{ fontFamily: disp, fontSize: F.xl, fontWeight: 700, color: DA.textPrimary }}>
+                    Nothing was said on record.
+                  </div>
+                  <p style={{ fontSize: F.sm, color: DA.textSecondary, lineHeight: 1.5, marginTop: 4 }}>
+                    {calls} call{calls === 1 ? "" : "s"} from this number. No voicemail, no transcript, no summary.
+                    All this thread knows is that the phone rang. Naming the number is the only thing that
+                    makes the next one readable — do it from this row in the thread list.
+                  </p>
+                  {phone && (
+                    <a href={`tel:${phone}`} className="inline-flex rounded px-3 mt-2 items-center"
+                      style={{ ...pill, height: 34, color: DA.textPrimary }}>Call back</a>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Rendered only once the thread has loaded — the composer reads a saved
+            draft from this device, which the server cannot see, so rendering it
+            during the server pass would mismatch on hydration. */}
         {!loading && !error && (
-          <button onClick={() => setMerging(true)}
-            className="shrink-0 rounded px-2.5"
-            style={{ height: 30, border: `1px solid ${DA.border}`, background: DA.surface, color: DA.textSecondary,
-                     fontFamily: disp, fontSize: F.xs, letterSpacing: ".06em", textTransform: "uppercase", cursor: "pointer" }}>
-            Same person as…
-          </button>
+          <Composer contactId={contactId} phone={phone} name={name} />
         )}
       </div>
 
-      {/* Every merge still in force, with its way back. */}
-      {!loading && merges.map((m) => (
-        <div key={m.id} className="px-4 py-1.5 flex items-center gap-2 text-[11px] flex-shrink-0"
-          style={{ background: DA.elevated, borderBottom: `1px solid ${DA.border}`, color: DA.textSecondary }}>
-          <span className="flex-1 min-w-0 truncate">
-            {m.phone ? formatPhone(m.phone) : "Another number"} was merged into this thread
-          </span>
-          <button onClick={() => void undo(m.id)} disabled={undoing === m.id}
-            style={{ color: DA.accent, fontWeight: 600, cursor: "pointer", background: "none", border: "none" }}>
-            {undoing === m.id ? "Undoing…" : "Undo"}
-          </button>
-        </div>
-      ))}
-
-      <div className="flex-1 overflow-y-auto px-3 py-3">
-        {loading ? (
-          <div className="space-y-2">
-            {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="h-12 rounded-xl animate-pulse" style={{ background: DA.surface }} />
-            ))}
-          </div>
-        ) : error ? (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <WarningCircle size={32} color={DA.error} />
-            <p className="text-sm mt-2 font-semibold" style={{ color: DA.textPrimary }}>
-              Couldn&apos;t load this thread
-            </p>
-            <p className="text-xs mt-1 break-words" style={{ color: DA.textMuted }}>{error}</p>
-          </div>
-        ) : messages.length === 0 ? (
-          <div className="text-center text-sm py-16" style={{ color: DA.textMuted }}>
-            No messages in this thread.
-          </div>
-        ) : (
-          messages.map((m) =>
-            m.channel === "call"
-              ? <CallRow key={m.id} m={m} />
-              : <SmsRow key={m.id} m={m} />
-          )
-        )}
-      </div>
-
-      {/* Rendered only once the thread has loaded — the composer reads a saved
-          draft from this device, which the server cannot see, so rendering it
-          during the server pass would mismatch on hydration. */}
+      {/* ================= the contact rail (desktop, 1d) ================= */}
       {!loading && !error && (
-        <Composer contactId={contactId} phone={phone} name={name} />
+        <aside className="hidden xl:block shrink-0 overflow-y-auto h-[calc(100dvh-54px)]"
+          style={{ width: 300, background: DA.surface, borderLeft: `1px solid ${DA.border}` }}>
+          <RailSection title="Contact">
+            <RailRow k="Name" v={name ?? null} missing="Not recorded"
+              note={name ? (nameConfirmed ? "confirmed by you" : "not confirmed") : undefined} />
+            <RailRow k={phones.length > 1 ? "Numbers" : "Number"}
+              v={(phones.length ? phones : phone ? [phone] : []).map(formatPhone).join(", ") || null} missing="Unknown" />
+            <RailRow k="Address" v={address} missing="Not recorded" />
+            <RailRow k="First heard" v={firstHeard ? new Date(firstHeard).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : null} missing="—" />
+            <RailRow k="Messages" v={`${texts} texts · ${calls} calls`} missing="" />
+          </RailSection>
+
+          <RailSection title="Scope on file">
+            {jobs === null ? (
+              <div style={{ fontSize: F.xs, color: DA.textMuted }}>Couldn&apos;t read jobs.</div>
+            ) : jobs.length === 0 ? (
+              <div className="rounded px-2.5 py-2" style={{ border: `1px solid ${DA.border}` }}>
+                <div style={{ fontFamily: disp, fontSize: F.md, fontWeight: 600 }}>None</div>
+                <div style={{ fontSize: F.xs, color: DA.textMuted, lineHeight: 1.4 }}>
+                  No scope has been started for this contact.
+                </div>
+              </div>
+            ) : jobs.map((j) => (
+              <Link key={j.id} href={`/dashboard/scope/${j.id}`} className="block rounded px-2.5 py-2 mb-1.5 no-underline"
+                style={{ border: `1px solid ${DA.border}`, color: DA.textPrimary }}>
+                <div style={{ fontFamily: disp, fontSize: F.md, fontWeight: 600, ...clip }}>{j.title || "Untitled scope"} ›</div>
+                <div style={{ ...eyebrow }}>{j.status ?? ""}</div>
+              </Link>
+            ))}
+          </RailSection>
+
+          <RailSection title="Money">
+            <div style={{ fontSize: F.xs, color: DA.textMuted, lineHeight: 1.45 }}>
+              Nothing recorded. Invoices and payments hang off a job, and none exist yet.
+            </div>
+          </RailSection>
+
+          <RailSection title="Dusty">
+            <div style={{ fontSize: F.xs, color: DA.textMuted, lineHeight: 1.45 }}>
+              Not connected. When it is, this is where its read of this contact goes — and a draft
+              reply for you to send yourself.
+            </div>
+          </RailSection>
+        </aside>
       )}
 
       {merging && (
@@ -749,6 +947,29 @@ export default function ChatThreadPage() {
           onClose={() => setMerging(false)}
           onMerged={() => { setMerging(false); setLoading(true); setReload((n) => n + 1); }} />
       )}
+    </div>
+  );
+}
+
+function RailSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="px-3.5 py-3" style={{ borderBottom: `1px solid ${DA.border}` }}>
+      <div style={{ ...eyebrow, marginBottom: 6 }}>{title}</div>
+      {children}
+    </div>
+  );
+}
+
+function RailRow({ k, v, missing, note }: { k: string; v: string | null; missing: string; note?: string }) {
+  return (
+    <div className="flex items-baseline gap-2 py-1.5" style={{ borderTop: `1px solid ${DA.elevated}` }}>
+      <span style={{ fontSize: F.xs, color: DA.textSecondary }}>{k}</span>
+      <span className="flex-1" />
+      <span className="text-right" style={{ fontSize: F.xs, fontWeight: 600, color: v ? DA.textPrimary : DA.accent,
+        textTransform: v ? "none" : "uppercase", letterSpacing: v ? 0 : ".06em", minWidth: 0 }}>
+        {v ?? missing}
+        {note && <span style={{ display: "block", fontWeight: 400, color: DA.textMuted }}>{note}</span>}
+      </span>
     </div>
   );
 }

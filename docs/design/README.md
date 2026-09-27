@@ -85,7 +85,7 @@ waiting for.
 | Schedule | `ScheduleScreen` `MonthGrid` `WeekView` `QuarterView` `YearLoad` (~470) | — | **not built** |
 | Settings | `SettingsSheet` `OverheadSheet` (~340) | — | **not built** |
 | Dusty | `DustyScreen` (~490) | a sheet from the footer emblem saying it is not wired | **shell only** — no conversation that implies it answers |
-| **Triage** | — | — | **not built** — designed for desktop, see `desktop-screens.html` |
+| **Threads, desktop** | — (the desktop design calls it "Triage"; Coy's name for it is **Threads** — that word is not used in the app) | `dashboard/layout.tsx` (top bar, left rail) + `messages/layout.tsx` + `messages/[id]/page.tsx` (contact rail at xl) | **built** — list · conversation · contact rail. Row-level snooze/handled and the Dusty read are not built |
 
 What did survive the port cleanly, and is the place to build on:
 

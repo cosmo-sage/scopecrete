@@ -29,6 +29,13 @@ export interface ThreadMessage {
   status: string | null;
   /** Artifact kinds present for this message, e.g. ["transcript","next_steps"]. */
   artifact_kinds: string[];
+  /**
+   * Photos, videos, PDFs and contact cards on this message (message_media,
+   * migration 027). A count only — the files themselves come from
+   * /api/messages/[id]/media, which captures and signs them on demand, so a
+   * thread with fifty photos does not fetch fifty files just to render.
+   */
+  media_count: number;
 }
 
 export async function GET(
@@ -99,9 +106,22 @@ export async function GET(
     }
   }
 
+  const mediaByMessage = new Map<string, number>();
+  if (messages.length > 0) {
+    const { data: media } = await supabase
+      .from("message_media")
+      .select("message_id")
+      .eq("org_id", orgId)
+      .in("message_id", messages.map((m) => m.id).slice(0, 1000));
+    for (const r of (media ?? []) as Array<{ message_id: string }>) {
+      mediaByMessage.set(r.message_id, (mediaByMessage.get(r.message_id) ?? 0) + 1);
+    }
+  }
+
   const withKinds: ThreadMessage[] = messages.map((m) => ({
     ...m,
     artifact_kinds: (kindsByMessage.get(m.id) ?? []).sort(),
+    media_count: mediaByMessage.get(m.id) ?? 0,
   }));
 
   return applyCookies(NextResponse.json({

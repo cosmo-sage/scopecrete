@@ -140,15 +140,16 @@ export function PipelineDrop({ onClose }: { onClose: () => void }) {
  * Every entry names what it is waiting for rather than being hidden, so the
  * shape of the product stays legible without any of them pretending to work.
  *
- * NOTHING IS LIVE HERE YET, and that is a sequencing fact rather than an
- * oversight. `/api/jobs` on `master` is GET only — the POST writer is work
- * order 13, sitting unmerged in PR #10. Wiring "New job" to a create flow on
- * this branch would give you a control that 404s until that merges. When it
- * does, this row gets an `href` and becomes the first UI caller that route has
- * ever had.
+ * NOTHING IS LIVE HERE YET. On the branch this was written, "New job" was
+ * waiting on `POST /api/jobs`, which existed only in PR #10. That PR has since
+ * merged, so the writer is live — but there is still no form to drive it, and
+ * a row that opens nothing is the same dead control either way. The sub-text
+ * says which of the two is actually missing, because "needs a writer" and
+ * "needs a form" are a database problem and a UI problem and they do not get
+ * fixed by the same work.
  */
 const CREATE_ROWS: Array<{ label: string; sub: string; href?: string }> = [
-  { label: "New job", sub: "Needs the jobs writer — PR #10, not merged" },
+  { label: "New job", sub: "Needs a create form — POST /api/jobs is live" },
   { label: "New scope", sub: "Needs the scope builder — work order 15" },
   { label: "New invoice", sub: "Needs a job to invoice against" },
   { label: "Log a receipt", sub: "Camera-first; needs the capture path" },

@@ -525,10 +525,6 @@ export function ThreadList() {
     }
   }, []);
 
-  // Dusty reads new traffic on its own whenever Threads is open — no button.
-  const bump = useCallback(() => setReload((n) => n + 1), []);
-  const enrich = useEnrichRunner(bump);
-
   useEffect(() => {
     let off = false;
     fetch("/api/threads")
@@ -700,13 +696,8 @@ export function ThreadList() {
         </div>
       )}
 
-      {enrich.note && filter !== "unsorted" && (
-        <div className="px-3 py-1.5" style={{ fontSize: F.xs, color: T.ink3, borderBottom: `1px solid ${T.hair}` }}>
-          {enrich.note}
-        </div>
-      )}
       {filter === "unsorted" && !loading && !error && !noOrg && (
-        <SuggestNamesBar runner={enrich} />
+        <EnrichStatusBar reload={reload} />
       )}
 
       {loading ? (
@@ -754,96 +745,66 @@ export function ThreadList() {
  * run on its own as calls and texts arrive; the button is how it is tried
  * first.
  */
-/* ------------------------------------------------------ reading on its own */
+/* ------------------------------------------------ the background reader */
 
-type EnrichResult = { proposed?: number; named?: number; failed?: number; skipped_no_words?: number; remaining?: number; error?: string };
-const ENRICH_KEY = "sc.enrich.lastRun";
-const ENRICH_EVERY_MS = 15 * 60 * 1000;
-const AUTO_BATCH = 5;
-
-function describe(b: EnrichResult): string | null {
-  const parts = [
-    b.named ? `named ${b.named} who introduced themselves` : null,
-    b.proposed && b.proposed - (b.named ?? 0) > 0 ? `${b.proposed - (b.named ?? 0)} suggestion${b.proposed - (b.named ?? 0) === 1 ? "" : "s"} to review` : null,
-    b.failed ? `${b.failed} failed` : null,
-  ].filter(Boolean);
-  return parts.length ? `Dusty read new threads: ${parts.join(" · ")}.` : null;
-}
+type EnrichStatus = {
+  waiting: number; last_read_at: string | null; named_7d: number;
+  worker: { status: string; detail: string | null; ticked_at: string } | null;
+};
 
 /**
- * Coy's rule: no button to push. While Threads is open, Dusty reads the most
- * recent unnamed threads every 15 minutes (per device) and says what it did.
- * It names only people who introduced themselves; everything else lands as a
- * suggestion in the row. The Unsorted chip keeps a "read more now" for the
- * backlog.
- *
- * This runs from the browser because it runs under Coy's session — RLS and no
- * service key. Reading traffic the moment it arrives, with the app closed,
- * needs a server-side worker; that is the next step, not this one.
+ * What Dusty's background reader is doing. There is no button: pg_cron runs
+ * supabase/functions/enrich-contacts every five minutes, app open or not
+ * (DECISIONS §2b). This only reports — including, plainly, when the reader is
+ * not connected or cannot reach Hermes, so silence never looks like "all read".
  */
-function useEnrichRunner(onChange: () => void) {
-  const [busy, setBusy] = useState(false);
-  const [note, setNote] = useState<string | null>(null);
-  const inflight = React.useRef(false);
-
-  const call = useCallback(async (limit: number): Promise<EnrichResult> => {
-    const r = await fetch("/api/enrich", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ limit }) });
-    const b = (await r.json().catch(() => ({}))) as EnrichResult;
-    if (!r.ok) throw new Error(b?.error || `HTTP ${r.status}`);
-    try { localStorage.setItem(ENRICH_KEY, String(Date.now())); } catch { /* storage blocked */ }
-    return b;
-  }, []);
+function EnrichStatusBar({ reload }: { reload: number }) {
+  const [s, setS] = useState<EnrichStatus | null>(null);
+  const [staleMin, setStaleMin] = useState(0);
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
-    let last = 0;
-    try { last = Number(localStorage.getItem(ENRICH_KEY)) || 0; } catch { /* storage blocked */ }
-    if (Date.now() - last < ENRICH_EVERY_MS || inflight.current) return;
-    inflight.current = true;
-    call(AUTO_BATCH)
-      .then((b) => { const d = describe(b); if (d) { setNote(d); onChange(); } })
-      .catch(() => { /* quiet: the manual run in Unsorted reports errors */ })
-      .finally(() => { inflight.current = false; });
-  }, [call, onChange]);
+    let off = false;
+    fetch("/api/enrich/status")
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((d: EnrichStatus) => {
+        if (off) return;
+        setS(d); setFailed(false);
+        setStaleMin(d.worker ? (Date.now() - new Date(d.worker.ticked_at).getTime()) / 60000 : 0);
+      })
+      .catch(() => { if (!off) setFailed(true); });
+    return () => { off = true; };
+  }, [reload]);
 
-  const runNow = useCallback(async () => {
-    if (inflight.current) { setNote("Dusty is already reading — give it a minute."); return; }
-    inflight.current = true;
-    setBusy(true); setNote(null);
-    try {
-      const b = await call(10);
-      setNote([
-        describe(b) ?? "Nothing new to name or suggest.",
-        b.skipped_no_words ? `${b.skipped_no_words} skipped (nothing said on record).` : null,
-        b.remaining ? `${b.remaining} more to go.` : null,
-      ].filter(Boolean).join(" "));
-      onChange();
-    } catch (e) {
-      setNote(`Couldn't run: ${e instanceof Error ? e.message : String(e)}`);
-    } finally {
-      setBusy(false);
-      inflight.current = false;
-    }
-  }, [call, onChange]);
+  if (!s && !failed) return null;
 
-  return { busy, note, runNow };
-}
+  const w = s?.worker;
+  let tone: "ok" | "warn" = "ok";
+  let line: string;
+  if (failed || !s) { tone = "warn"; line = "Couldn't read the background reader's status."; }
+  else if (!w) { tone = "warn"; line = "The background reader hasn't run yet."; }
+  else if (w.status === "not_configured") { tone = "warn"; line = "Not connected yet: add HERMES_API_KEY in Supabase → Edge Functions → Secrets."; }
+  else if (w.status === "hermes_unreachable") { tone = "warn"; line = `Can't reach Hermes on the VPS — ${w.detail ?? "no detail"}.`; }
+  else if (w.status === "error") { tone = "warn"; line = `Stopped on an error — ${w.detail ?? "no detail"}.`; }
+  else if (staleMin > 15) { tone = "warn"; line = `Hasn't checked in for ${Math.round(staleMin)} minutes.`; }
+  else {
+    line = [
+      s.waiting ? `${s.waiting} waiting to be read` : "Everything with words on record has been read",
+      s.last_read_at ? `last read ${relTime(s.last_read_at)} ago` : null,
+      s.named_7d ? `named ${s.named_7d} this week` : null,
+    ].filter(Boolean).join(" · ") + ".";
+  }
 
-function SuggestNamesBar({ runner }: { runner: ReturnType<typeof useEnrichRunner> }) {
-  const { busy, note, runNow } = runner;
   return (
-    <div className="mx-2.5 mb-2 rounded px-3 py-2 flex items-center gap-2 flex-wrap"
-      style={{ background: T.card, border: `1px dashed ${T.hiviz}` }}>
-      <div style={{ flex: "1 1 180px", minWidth: 0 }}>
-        <div style={{ fontFamily: disp, fontSize: F.md, fontWeight: 600 }}>Dusty reads these on its own <span style={{ ...eyebrow, color: T.hiviz }}>beta</span></div>
-        <div style={{ fontSize: F.xs, color: T.ink3, lineHeight: 1.4 }}>
-          {note ?? "Every 15 minutes while Threads is open. Someone who introduced themselves gets named (Keep or Undo in the row); everyone else gets a suggestion for you to confirm."}
-        </div>
+    <div className="mx-2.5 mb-2 rounded px-3 py-2"
+      style={{ background: T.card, border: `1px ${tone === "ok" ? "solid" : "dashed"} ${tone === "ok" ? T.hair : T.hiviz}` }}>
+      <div style={{ fontFamily: disp, fontSize: F.md, fontWeight: 600 }}>
+        Dusty reads these in the background <span style={{ ...eyebrow, color: T.hiviz }}>beta</span>
       </div>
-      <button onClick={() => void runNow()} disabled={busy} className="rounded px-3"
-        style={{ height: 34, background: busy ? T.hair : T.hiviz, color: "#fff", fontFamily: disp, fontSize: F.sm,
-                 fontWeight: 600, textTransform: "uppercase", letterSpacing: ".06em", cursor: busy ? "default" : "pointer" }}>
-        {busy ? "Reading…" : "Read more now"}
-      </button>
+      <div style={{ fontSize: F.xs, color: tone === "ok" ? T.ink3 : "#8A4200", lineHeight: 1.4 }}>{line}</div>
+      <div style={{ fontSize: F.xs, color: T.ink3, lineHeight: 1.4, marginTop: 2 }}>
+        Every five minutes, app open or not. Someone who introduced themselves gets named — Keep or Undo in the row. Everyone else gets a suggestion for you to confirm.
+      </div>
     </div>
   );
 }

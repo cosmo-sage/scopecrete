@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { findSelfIdentification } from "../src/lib/enrich/rules.ts";
+import { findSelfIdentification } from "../supabase/functions/enrich-contacts/rules.ts";
 
 const THEM = "+12255550101";
 const US = "+12253782458";

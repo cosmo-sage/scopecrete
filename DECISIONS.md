@@ -298,14 +298,38 @@ confirmation, so a confirmed vendor or sub is suppressed by the guard; the
 screen says so before the tap. The list shows a relation only when it is
 confirmed — everything else is **Unclassified**, never the column default.
 
-**Suggesting names through Hermes (beta, 2026-09-27).** `POST /api/enrich`
-runs the `enrich-contacts` rules (ported verbatim to `src/lib/enrich/rules.ts`,
-prompt `enrich-v5-hermes-2026-09-27`) through Hermes, under Coy's session.
-Call content is read from `call_artifacts` (transcript, else summary). There
-is no button to push: while Threads is open it reads the most recent unnamed
-threads every 15 minutes per device (5 at a time); Unsorted keeps "Read more
-now" for the backlog. Reading traffic with the app closed needs a server-side
-worker and is not built.
+**The background enricher (2026-09-27, migrations 029/030).** Contacts are
+read with the app closed. pg_cron calls the `enrich-contacts` edge function
+every five minutes (v3; source in `supabase/functions/enrich-contacts/`:
+`rules.ts` the rules, `pipeline.ts` one contact, `index.ts` the worker). There
+is no button.
+
+- **Who is read** — view `sc_enrich_due` (security_invoker): unnamed, not
+  merged, name not human-confirmed, something THEY said (inbound text, or a
+  call transcript/summary), quiet for 3 minutes (a burst of texts, or a
+  transcript landing after its call, is read once), and never read or changed
+  since the last read. A failed read retries after 30 minutes.
+- **Claiming** — `sc_enrich_claim(n)` (service role only) inserts a `running`
+  row in `contact_enrich_runs`; a partial unique index makes a double claim
+  impossible; a run not finished in 10 minutes is reaped as `abandoned`. Every
+  read ends as proposed / named / unchanged / no_words / model_error / failed.
+- **Auth** — the call carries vault secret `enrich_worker_token`, checked by
+  `sc_enrich_worker_authorized()`. Nobody types it or sees it. `verify_jwt` is
+  off because the token is not a JWT (see `supabase/config.toml`).
+- **Hermes first** — the worker checks `HERMES_API_KEY` is set and Hermes
+  `/health` answers BEFORE claiming, so an outage never marks anyone read.
+  Hermes URL defaults to §8's; key in Supabase → Edge Functions → Secrets.
+- **Transcripts reach the model as US:/THEM:**, never phone numbers.
+  "Their words" on a call are the THEM lines whichever side dialled — before
+  this, a call Coy placed counted as nothing the caller said.
+- **Visible** — `sc_worker_heartbeats` (no tenant data) says ok /
+  not_configured / hermes_unreachable / error; Threads → Unsorted shows it,
+  with the org's waiting count and last read (`/api/enrich/status`,
+  `sc_enrich_status()` under RLS).
+- **Pause** — `select cron.unschedule('enrich-contacts');`
+
+The in-app `/api/enrich` route and its button/15-minute browser runner are
+gone: one reader, one place.
 
 **ONE exception to asking first — self-introductions (Coy, 2026-09-27).**
 *"If AI is smart enough to create a summary of the transcript, then it should
@@ -607,6 +631,11 @@ genuinely required.
   `app.current_org_id` GUC is **done**: measured 2026-09-27, 130 of 149 public
   policies use `get_user_org_ids()` and **0** reference the GUC (the rest are
   `service_role`-only). Any new policy uses the helper.
+- **Fixed 2026-09-27: `enrich-contacts` v2 was callable with the public anon
+  key.** It had `verify_jwt` on and no auth of its own; the anon key in the
+  browser bundle IS a valid JWT, so anyone could invoke it and get contacts'
+  phone numbers back (`dry_run` returned whole proposal rows). v3 checks a
+  vault token and returns counts only. `verify_jwt` alone is not auth.
 - **Known exposure, not yet fixed:** the views `sc_spine_drift` and
   `sc_open_name_questions` are not `security_invoker`, so they run as their
   owner and bypass RLS — a cross-tenant read the day a second org exists.

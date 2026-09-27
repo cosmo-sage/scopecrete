@@ -1,7 +1,7 @@
 // The name suggester's safety checks. `npm test`.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { sanitize, worthEnriching, renderConversation } from "../src/lib/enrich/rules.ts";
+import { sanitize, worthEnriching, renderConversation } from "../supabase/functions/enrich-contacts/rules.ts";
 
 const turn = (id, who, text, extra = {}) => ({ id, kind: "sms", who, at: "2026-09-24T10:00:00Z", text, hasMedia: false, ...extra });
 const base = (o = {}) => ({ classification: "customer", direction_of_ask: "they ask our price", confidence: 80,

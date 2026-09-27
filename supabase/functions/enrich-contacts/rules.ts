@@ -1,15 +1,14 @@
 /**
- * The name/classification suggester, shared between the app route
- * (/api/enrich, through Hermes) and — until it is retired — the
- * enrich-contacts edge function it was ported from.
+ * The rules of the background enricher (index.ts). Pure: no I/O, no imports,
+ * so the same file runs in the Deno worker and under `node --test`.
  *
- * Pure: no I/O. The prompt, the rules and the safety checks are the edge
- * function's v4 verbatim (supabase/functions/enrich-contacts/index.ts); only
- * where the model runs changed. The checks in sanitize() are the guarantee;
- * the prompt is only a request.
+ * The prompt, the name rules and sanitize() are the v4 enricher's verbatim;
+ * v5 moved the model to Hermes and added findSelfIdentification() — the one
+ * case a name is applied without asking (DECISIONS §2b). The checks here are
+ * the guarantee; the prompt is only a request.
  */
 
-export const PROMPT_VERSION = "enrich-v5-hermes-2026-09-27";
+export const PROMPT_VERSION = 'enrich-v5-hermes-2026-09-27'
 
 export const OUR_NAMES = ['Coy', 'Coy Sacco', 'Sacco', 'Sacco Builders', 'ScopeCrete', 'Dusty']
 
@@ -225,7 +224,9 @@ const MAX_TURN_CHARS = 4000
  */
 export function renderTurn(t: Turn, ordinal: number): string {
   const media = t.hasMedia ? ' [IMAGES — you cannot see these]' : ''
-  const kind = t.kind === 'call' ? ' (voicemail)' : ''
+  // A call is a voicemail, a transcript (lines labelled US:/THEM:) or a
+  // summary; "(voicemail)" was the v4 label and was wrong for the other two.
+  const kind = t.kind === 'call' ? ' (call)' : ''
   const text = t.text.length > MAX_TURN_CHARS
     ? `${t.text.slice(0, MAX_TURN_CHARS)} […turn truncated]`
     : t.text
@@ -265,11 +266,24 @@ export function renderConversation(turns: Turn[]): { text: string; shownFrom: nu
  * thirds of the book looks like that.
  */
 export function worthEnriching(turns: Turn[]): boolean {
-  const theirs = turns.filter(t => t.who === 'THEM')
+  const theirs = turns.filter(t => theirText(t) || (t.who === 'THEM' && t.hasMedia))
   if (theirs.length === 0) return false
-  const substance = theirs.reduce((n, t) => n + (t.hasMedia ? 40 : 0) + t.text.length, 0)
+  const substance = theirs.reduce((n, t) => n + (t.hasMedia ? 40 : 0) + theirText(t).length, 0)
   if (turns.length <= 1 && substance < 25) return false
   return substance >= 15
+}
+
+/**
+ * What THEY said in a turn. A text is theirs or ours whole. A call is both:
+ * once relabelled (relabelTranscript) its THEM: lines are theirs whichever side
+ * dialled — Coy placing the call does not make the caller's words his. A call
+ * with no speaker labels (a summary or voicemail) belongs to whoever called.
+ */
+export function theirText(t: Turn): string {
+  if (t.kind === 'call' && /^(US|THEM): /m.test(t.text)) {
+    return t.text.split(/\r?\n/).filter(l => l.startsWith('THEM: ')).map(l => l.slice(6)).join('\n')
+  }
+  return t.who === 'THEM' && t.text !== '(no text)' ? t.text : ''
 }
 
 // ---------------------------------------------------------------------------
@@ -335,7 +349,7 @@ export function sanitize(p: Proposal, turns: Turn[]): { p: Proposal; notes: stri
     } else {
       // Does this name appear anywhere THEM actually wrote it? If it only shows
       // up in our own outbound text, it is not self-identification.
-      const inTheirWords = turns.some(t => t.who === 'THEM' && t.text.toLowerCase().includes(lower.split(/\s+/)[0]))
+      const inTheirWords = turns.some(t => theirText(t).toLowerCase().includes(lower.split(/\s+/)[0]))
       if (!inTheirWords) {
         notes.push(`proposed_name "${name}" never appears in a message from THEM — dropped`)
         p.proposed_name = null
@@ -450,6 +464,20 @@ export function theirLines(t: Turn, ownNumbers: string[]): string[] {
     if (m && mine.has(digits10(m[1]))) out.push(m[2])
   }
   return out
+}
+
+/**
+ * A transcript as the MODEL sees it: each "+12253782458:" speaker label
+ * becomes THEM or US. Unrelabelled, the model is handed two phone numbers and
+ * no way to know which is the contractor's — and it does not need the numbers.
+ * findSelfIdentification() works on the original labels, not this.
+ */
+export function relabelTranscript(text: string, ownNumbers: string[]): string {
+  const mine = new Set(ownNumbers.map(digits10).filter(d => d.length === 10))
+  return text.split(/\r?\n/).map(line => {
+    const m = line.match(/^\s*(\+?[\d\s().-]{10,})\s*:\s*(.*)$/)
+    return m ? `${mine.has(digits10(m[1])) ? 'THEM' : 'US'}: ${m[2]}` : line
+  }).join('\n')
 }
 
 /** Every first name the contact introduced themselves with. Lower-cased. */

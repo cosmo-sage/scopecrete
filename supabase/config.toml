@@ -58,10 +58,14 @@ verify_jwt = true
 [functions.backfill-call-media]
 verify_jwt = true
 
-# Contact enrichment. Admin-invoked and it spends money per contact, so the
-# JWT gate stays ON. Writes only to contact_proposals, never to contacts.
+# The background enricher (migration 029/030). Called every five minutes by
+# pg_cron with a bearer token from the vault (enrich_worker_token), which the
+# function checks itself via sc_enrich_worker_authorized(). That token is not a
+# JWT, so the gateway check is OFF. It was ON before, and that was worse than
+# it looked: the public anon key IS a valid JWT, so anyone holding the browser
+# bundle could invoke v2 and get contacts' phone numbers back.
 [functions.enrich-contacts]
-verify_jwt = true
+verify_jwt = false
 
 # THROWAWAY. Read-only probe of the Quo/OpenPhone API, added for work order 4
 # to find out why backfill-call-media has never fetched a transcript. Writes

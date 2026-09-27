@@ -80,10 +80,14 @@ export async function GET(req: NextRequest) {
   // Unsorted — a contact nobody has put a name to. `contacts` reads cleanly
   // through a session client since migration 024 moved its SELECT policy onto
   // get_user_org_ids(); verified as the `authenticated` role, 197 rows.
+  // A contact merged into another (migration 028) is not a separate person any
+  // more — it keeps its row so the merge can be undone, but it must not count.
+  // `all` and `needs` already exclude it: its messages moved with the merge.
   const { data: contacts, error: cErr } = await supabase
     .from("contacts")
     .select("id, name")
-    .eq("org_id", orgId);
+    .eq("org_id", orgId)
+    .is("merged_into_contact_id", null);
 
   if (cErr) {
     return applyCookies(NextResponse.json({ error: `contacts: ${cErr.message}` }, { status: 500 }));

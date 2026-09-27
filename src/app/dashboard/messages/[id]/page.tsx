@@ -437,6 +437,157 @@ function SmsRow({ m }: { m: ThreadMessage }) {
   );
 }
 
+interface ThreadListItem {
+  contact_id: string;
+  display_name: string;
+  name_is_phone: boolean;
+  phone: string | null;
+  preview: string;
+  msg_count: number;
+}
+
+interface MergeInfo { id: string; merged_at: string; phone: string | null }
+
+/**
+ * "Same person as…" — pick another thread and fold it into this one.
+ *
+ * One pair, one confirmation. The confirm step shows both sides with their
+ * message counts, because the thing being asked is "are these the same
+ * person?" and that is answered by looking, not by a button label. The thread
+ * that is open is the one kept; the picked one's calls, texts and photos move
+ * onto it. Undo is offered straight after, and stays on the thread.
+ */
+function MergeSheet({ contactId, keepLabel, keepCount, onClose, onMerged }: {
+  contactId: string;
+  keepLabel: string;
+  keepCount: number;
+  onClose: () => void;
+  onMerged: () => void;
+}) {
+  const [list, setList] = useState<ThreadListItem[] | null>(null);
+  const [q, setQ] = useState("");
+  const [pick, setPick] = useState<ThreadListItem | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    let off = false;
+    fetch("/api/threads")
+      .then(async (r) => {
+        const b = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(b?.error || `HTTP ${r.status}`);
+        if (!off) setList((Array.isArray(b.threads) ? b.threads : []).filter((t: ThreadListItem) => t.contact_id !== contactId));
+      })
+      .catch((e) => { if (!off) setErr(e instanceof Error ? e.message : String(e)); });
+    return () => { off = true; };
+  }, [contactId]);
+
+  const needle = q.trim().toLowerCase();
+  const digits = needle.replace(/\D/g, "");
+  const shown = (list ?? []).filter((t) =>
+    !needle
+    || t.display_name.toLowerCase().includes(needle)
+    || (digits.length >= 3 && (t.phone ?? "").replace(/\D/g, "").includes(digits))
+    || t.preview.toLowerCase().includes(needle)).slice(0, 40);
+
+  async function merge() {
+    if (!pick) return;
+    setBusy(true); setErr(null);
+    try {
+      const r = await fetch("/api/contacts/merge", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ winner_id: contactId, loser_id: pick.contact_id }),
+      });
+      const b = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(b?.error || `HTTP ${r.status}`);
+      onMerged();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+      setBusy(false);
+    }
+  }
+
+  const btn = (primary?: boolean): React.CSSProperties => ({
+    height: 34, padding: "0 14px", borderRadius: 4, cursor: busy ? "default" : "pointer",
+    border: `1px solid ${primary ? DA.textPrimary : DA.border}`,
+    background: primary ? DA.textPrimary : DA.surface, color: primary ? "#fff" : DA.textPrimary,
+    fontFamily: disp, fontSize: F.sm, letterSpacing: ".06em", textTransform: "uppercase", opacity: busy ? 0.6 : 1,
+  });
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-end lg:items-center justify-center"
+      style={{ background: "rgba(10,12,14,0.5)" }} onClick={onClose}>
+      <div className="w-full lg:max-w-lg rounded-t-xl lg:rounded-xl flex flex-col"
+        style={{ background: DA.surface, maxHeight: "85dvh" }} onClick={(e) => e.stopPropagation()}>
+        <div className="px-4 pt-3 pb-2" style={{ borderBottom: `1px solid ${DA.border}` }}>
+          <div className="text-[10px] uppercase tracking-wide" style={{ color: DA.textMuted }}>Same person as…</div>
+          <div className="text-sm font-semibold" style={{ color: DA.textPrimary }}>
+            {pick ? "Confirm these are one person" : `Pick the other number ${keepLabel} uses`}
+          </div>
+        </div>
+
+        {!pick ? (
+          <>
+            <div className="px-4 py-2">
+              <input autoFocus value={q} onChange={(e) => setQ(e.target.value)}
+                placeholder="A name, a number, a word they said"
+                className="w-full rounded px-2.5 outline-none text-sm"
+                style={{ height: 36, border: `1px solid ${DA.border}`, background: DA.bg, color: DA.textPrimary }} />
+            </div>
+            <div className="overflow-y-auto flex-1">
+              {err && <div className="px-4 py-2 text-xs" style={{ color: DA.error }}>{err}</div>}
+              {!list && !err && <div className="px-4 py-3 text-xs" style={{ color: DA.textMuted }}>Loading threads…</div>}
+              {list && shown.length === 0 && (
+                <div className="px-4 py-3 text-xs" style={{ color: DA.textMuted }}>Nothing matches.</div>
+              )}
+              {shown.map((t) => (
+                <button key={t.contact_id} onClick={() => setPick(t)}
+                  className="w-full text-left px-4 py-2" style={{ borderTop: `1px solid ${DA.border}` }}>
+                  <div className="text-sm font-semibold truncate" style={{ color: t.name_is_phone ? DA.textSecondary : DA.textPrimary }}>
+                    {t.display_name}
+                    <span className="text-[10px] font-normal ml-2" style={{ color: DA.textMuted }}>{t.msg_count} msg</span>
+                  </div>
+                  <div className="text-xs truncate" style={{ color: DA.textMuted }}>{t.preview}</div>
+                </button>
+              ))}
+            </div>
+          </>
+        ) : (
+          <div className="px-4 py-3">
+            <div className="grid grid-cols-2 gap-2">
+              <div className="rounded p-2.5" style={{ border: `1px solid ${DA.border}` }}>
+                <div className="text-[10px] uppercase tracking-wide" style={{ color: DA.textMuted }}>Keep</div>
+                <div className="text-sm font-semibold truncate" style={{ color: DA.textPrimary }}>{keepLabel}</div>
+                <div className="text-[11px]" style={{ color: DA.textMuted }}>{keepCount} messages</div>
+              </div>
+              <div className="rounded p-2.5" style={{ border: `1px solid ${DA.accent}` }}>
+                <div className="text-[10px] uppercase tracking-wide" style={{ color: DA.accent }}>Fold in</div>
+                <div className="text-sm font-semibold truncate" style={{ color: DA.textPrimary }}>{pick.display_name}</div>
+                <div className="text-[11px]" style={{ color: DA.textMuted }}>{pick.msg_count} messages</div>
+              </div>
+            </div>
+            <p className="text-xs mt-3" style={{ color: DA.textSecondary, lineHeight: 1.5 }}>
+              Every call, text, photo and lead on <strong>{pick.display_name}</strong> moves onto this
+              thread, and both numbers are kept. You can undo it afterwards.
+            </p>
+            {err && <p className="text-xs mt-2" style={{ color: DA.error }}>{err}</p>}
+            <div className="flex gap-2 mt-3">
+              <button disabled={busy} style={btn(true)} onClick={() => void merge()}>
+                {busy ? "Merging…" : "Same person — merge"}
+              </button>
+              <button disabled={busy} style={btn()} onClick={() => setPick(null)}>Back</button>
+            </div>
+          </div>
+        )}
+
+        <div className="px-4 py-2" style={{ borderTop: `1px solid ${DA.border}` }}>
+          <button onClick={onClose} className="text-xs" style={{ color: DA.textMuted }}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ChatThreadPage() {
   const params = useParams();
   const router = useRouter();
@@ -444,8 +595,14 @@ export default function ChatThreadPage() {
 
   const [messages, setMessages] = useState<ThreadMessage[]>([]);
   const [phone, setPhone] = useState<string | null>(null);
+  const [name, setName] = useState<string | null>(null);
+  const [phones, setPhones] = useState<string[]>([]);
+  const [merges, setMerges] = useState<MergeInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [reload, setReload] = useState(0);
+  const [merging, setMerging] = useState(false);
+  const [undoing, setUndoing] = useState<string | null>(null);
 
   useEffect(() => {
     if (!contactId) return;
@@ -458,8 +615,16 @@ export default function ChatThreadPage() {
       })
       .then((data) => {
         if (cancelled) return;
+        // Merged into someone else: their thread is where this history lives.
+        if (data.redirect_to) {
+          router.replace(`/dashboard/messages/${data.redirect_to}`);
+          return;
+        }
         setMessages(Array.isArray(data.messages) ? data.messages : []);
         setPhone(data.counterparty_phone ?? null);
+        setName(typeof data.name === "string" ? data.name : null);
+        setPhones(Array.isArray(data.phones) ? data.phones : []);
+        setMerges(Array.isArray(data.merges) ? data.merges : []);
         setLoading(false);
       })
       .catch((e) => {
@@ -468,12 +633,27 @@ export default function ChatThreadPage() {
         setLoading(false);
       });
     return () => { cancelled = true; };
-  }, [contactId]);
+  }, [contactId, reload, router]);
 
-  // The counterparty phone is derived server-side from the message addresses
-  // against org_phone_numbers; contacts is not readable through a session
-  // client today (see api/threads/route.ts for why).
-  const headerTitle = formatPhone(phone);
+  async function undo(mergeId: string) {
+    setUndoing(mergeId);
+    try {
+      const r = await fetch(`/api/contacts/merge/${mergeId}/undo`, { method: "POST" });
+      const b = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(b?.error || `HTTP ${r.status}`);
+      setLoading(true);
+      setReload((n) => n + 1);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setUndoing(null);
+    }
+  }
+
+  // A confirmed name when there is one; the number otherwise. Never a guess —
+  // an unconfirmed proposal lives in the thread list's review, not here.
+  const headerTitle = name ?? formatPhone(phone);
+  const otherNumbers = phones.filter((p) => p !== phone);
 
   return (
     <div className="flex flex-col" style={{ background: DA.bg, height: "100dvh" }}>
@@ -492,11 +672,35 @@ export default function ChatThreadPage() {
           <div className="font-semibold text-sm truncate" style={{ color: DA.textPrimary }}>
             {headerTitle}
           </div>
-          <div className="text-[10px]" style={{ color: DA.textMuted }}>
+          <div className="text-[10px] truncate" style={{ color: DA.textMuted }}>
             {loading ? "Loading…" : `${messages.length} message${messages.length === 1 ? "" : "s"}`}
+            {!loading && name && phone && ` · ${formatPhone(phone)}`}
+            {!loading && otherNumbers.length > 0 && ` · also ${otherNumbers.map(formatPhone).join(", ")}`}
           </div>
         </div>
+        {!loading && !error && (
+          <button onClick={() => setMerging(true)}
+            className="shrink-0 rounded px-2.5"
+            style={{ height: 30, border: `1px solid ${DA.border}`, background: DA.surface, color: DA.textSecondary,
+                     fontFamily: disp, fontSize: F.xs, letterSpacing: ".06em", textTransform: "uppercase", cursor: "pointer" }}>
+            Same person as…
+          </button>
+        )}
       </div>
+
+      {/* Every merge still in force, with its way back. */}
+      {!loading && merges.map((m) => (
+        <div key={m.id} className="px-4 py-1.5 flex items-center gap-2 text-[11px] flex-shrink-0"
+          style={{ background: DA.elevated, borderBottom: `1px solid ${DA.border}`, color: DA.textSecondary }}>
+          <span className="flex-1 min-w-0 truncate">
+            {m.phone ? formatPhone(m.phone) : "Another number"} was merged into this thread
+          </span>
+          <button onClick={() => void undo(m.id)} disabled={undoing === m.id}
+            style={{ color: DA.accent, fontWeight: 600, cursor: "pointer", background: "none", border: "none" }}>
+            {undoing === m.id ? "Undoing…" : "Undo"}
+          </button>
+        </div>
+      ))}
 
       <div className="flex-1 overflow-y-auto px-3 py-3">
         {loading ? (
@@ -526,6 +730,11 @@ export default function ChatThreadPage() {
         )}
       </div>
 
+      {merging && (
+        <MergeSheet contactId={contactId} keepLabel={headerTitle} keepCount={messages.length}
+          onClose={() => setMerging(false)}
+          onMerged={() => { setMerging(false); setLoading(true); setReload((n) => n + 1); }} />
+      )}
     </div>
   );
 }

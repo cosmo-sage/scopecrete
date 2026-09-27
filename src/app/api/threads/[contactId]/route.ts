@@ -48,6 +48,44 @@ export async function GET(
   if (!result.ok) return result.response;
   const { supabase, orgId, applyCookies } = result.session;
 
+  // Merged away? Then this contact's history now lives on the person it was
+  // merged into (migration 028) — send the caller there rather than render an
+  // empty thread that reads as "this number never said anything".
+  const { data: self } = await supabase
+    .from("contacts")
+    .select("id, merged_into_contact_id, name, name_source")
+    .eq("org_id", orgId)
+    .eq("id", contactId)
+    .maybeSingle();
+  if (self?.merged_into_contact_id) {
+    return applyCookies(NextResponse.json({ redirect_to: self.merged_into_contact_id as string }));
+  }
+
+  // Every number this person uses, and the merges that put them here — the
+  // header lists the numbers and offers Undo on each merge that is still in
+  // force.
+  const [{ data: phoneRows }, { data: mergeRows }] = await Promise.all([
+    supabase.from("contact_phones")
+      .select("phone_e164, is_primary")
+      .eq("org_id", orgId).eq("contact_id", contactId)
+      .order("is_primary", { ascending: false }),
+    supabase.from("contact_merges")
+      .select("id, loser_id, merged_at")
+      .eq("org_id", orgId).eq("winner_id", contactId)
+      .is("undone_at", null)
+      .order("merged_at", { ascending: false }),
+  ]);
+  const loserIds = (mergeRows ?? []).map((m: { loser_id: string }) => m.loser_id);
+  const loserPhone = new Map<string, string | null>();
+  if (loserIds.length > 0) {
+    const { data: losers } = await supabase.from("contacts").select("id, phone").in("id", loserIds);
+    for (const l of (losers ?? []) as Array<{ id: string; phone: string | null }>) loserPhone.set(l.id, l.phone);
+  }
+  const phones = (phoneRows ?? []).map((p: { phone_e164: string }) => p.phone_e164);
+  const merges = (mergeRows ?? []).map((m: { id: string; loser_id: string; merged_at: string }) => ({
+    id: m.id, merged_at: m.merged_at, phone: loserPhone.get(m.loser_id) ?? null,
+  }));
+
   // The org's own lines, so the header can show who the thread is WITH.
   // Membership in org_phone_numbers is the test — not orgs.business_phone,
   // which holds one number while there are three lines.
@@ -127,6 +165,12 @@ export async function GET(
   return applyCookies(NextResponse.json({
     contact_id: contactId,
     counterparty_phone: counterpartyPhone,
+    /** contacts.name when one is set, else null — the header falls back to the phone. */
+    name: (self?.name as string | null)?.trim() || null,
+    /** Every number on this contact (contact_phones). Empty until a merge adds them. */
+    phones,
+    /** Merges into this contact that are still in force — each can be undone. */
+    merges,
     messages: withKinds,
   }));
 }

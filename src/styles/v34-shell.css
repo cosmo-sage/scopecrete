@@ -181,6 +181,16 @@
 
 /* ------------------------------------------------------- reduced motion */
 
+/* ACTIVITY LINE — the dot pulses only while something is really running
+   (a claimed read, or a Dusty reply streaming). Each new line fades in. */
+@keyframes scDotPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.35; transform: scale(0.7); }
+}
+.sc-dot-live { animation: scDotPulse 1.2s ease-in-out infinite; }
+@keyframes scLineIn { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+.sc-line-in { animation: scLineIn 0.35s ease-out; }
+
 @media (prefers-reduced-motion: reduce) {
   .sc-burger-bar,
   .sc-burger-bar::before,
@@ -199,4 +209,6 @@
   .sc-tab-pop { transition: none; animation: none; }
   .sc-tab-mark { transition: none; }
   .sc-drop { animation: none; }
+  .sc-dot-live,
+  .sc-line-in { animation: none; }
 }

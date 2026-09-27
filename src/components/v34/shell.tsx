@@ -24,8 +24,9 @@
  * DREAM_LINES — ten hardcoded sentences including "3 quotes out · 41,180
  * waiting on somebody else" and "Gulfline deposit cleared Tuesday · 8,530".
  * Nothing in the system produces those, and ambient copy that states figures is
- * the most deniable kind of fabrication. It comes back when something real
- * feeds it.
+ * the most deniable kind of fabrication. It came back (2026-09-27) as
+ * ActivityLine (activity-line.tsx), fed only by real rows from the background
+ * enricher.
  */
 
 import React, { useEffect, useState } from "react";

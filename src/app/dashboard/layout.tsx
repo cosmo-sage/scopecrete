@@ -16,8 +16,10 @@
  *
  * WHAT IS DELIBERATELY NOT HERE
  *
- * StreamBar. v34 hangs it under the header and feeds it DREAM_LINES — ten
- * hardcoded sentences carrying dollar figures. See src/components/v34/shell.tsx.
+ * StreamBar AS v34 BUILT IT. v34 hung it under the header and fed it
+ * DREAM_LINES — ten hardcoded sentences carrying dollar figures. The line under
+ * the header now is ActivityLine, fed only by the background enricher's own
+ * rows (/api/activity). It came back when something real could feed it.
  *
  * The emblem's "asking" state. v34 quickens the mark when Dusty has questions,
  * counted off mock data. Nothing computes a real question count, so the
@@ -36,6 +38,7 @@ import { T, F, disp, eyebrow, nums, clip, formatPhone } from "@/lib/v34/tokens";
 import { Emblem, NavIcon, Sheet } from "@/components/v34/primitives";
 import { PipelineDrop, CreateDrop } from "@/components/v34/shell";
 import { DustyPanel } from "@/components/v34/dusty-panel";
+import { ActivityLine } from "@/components/v34/activity-line";
 import { signOut } from "@/lib/auth";
 import "@/styles/v34-shell.css";
 
@@ -249,6 +252,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </button>
           </div>
         </header>
+
+        {/* What Dusty is doing, from real rows only — see activity-line.tsx. */}
+        <ActivityLine busy={dustyBusy} />
 
         {/* Search lives under the glass, same place on every page — it never
             becomes a row on the page itself. */}

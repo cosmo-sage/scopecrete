@@ -696,9 +696,6 @@ export function ThreadList() {
         </div>
       )}
 
-      {filter === "unsorted" && !loading && !error && !noOrg && (
-        <EnrichStatusBar reload={reload} />
-      )}
 
       {loading ? (
         <div className="p-3 space-y-2">
@@ -731,80 +728,6 @@ export function ThreadList() {
           ))}
         </div>
       )}
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------ suggest names */
-
-/**
- * Beta: runs the name suggester (/api/enrich, through Hermes) over the next
- * batch of unnamed contacts that have words on record. It only writes
- * suggestions — each appears in its row with the quote it came from, and
- * nothing is named until Coy confirms (DECISIONS §2b). The goal is for this to
- * run on its own as calls and texts arrive; the button is how it is tried
- * first.
- */
-/* ------------------------------------------------ the background reader */
-
-type EnrichStatus = {
-  waiting: number; last_read_at: string | null; named_7d: number;
-  worker: { status: string; detail: string | null; ticked_at: string } | null;
-};
-
-/**
- * What Dusty's background reader is doing. There is no button: pg_cron runs
- * supabase/functions/enrich-contacts every five minutes, app open or not
- * (DECISIONS §2b). This only reports — including, plainly, when the reader is
- * not connected or cannot reach Hermes, so silence never looks like "all read".
- */
-function EnrichStatusBar({ reload }: { reload: number }) {
-  const [s, setS] = useState<EnrichStatus | null>(null);
-  const [staleMin, setStaleMin] = useState(0);
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    let off = false;
-    fetch("/api/enrich/status")
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((d: EnrichStatus) => {
-        if (off) return;
-        setS(d); setFailed(false);
-        setStaleMin(d.worker ? (Date.now() - new Date(d.worker.ticked_at).getTime()) / 60000 : 0);
-      })
-      .catch(() => { if (!off) setFailed(true); });
-    return () => { off = true; };
-  }, [reload]);
-
-  if (!s && !failed) return null;
-
-  const w = s?.worker;
-  let tone: "ok" | "warn" = "ok";
-  let line: string;
-  if (failed || !s) { tone = "warn"; line = "Couldn't read the background reader's status."; }
-  else if (!w) { tone = "warn"; line = "The background reader hasn't run yet."; }
-  else if (w.status === "not_configured") { tone = "warn"; line = "Not connected yet: add HERMES_API_KEY in Supabase → Edge Functions → Secrets."; }
-  else if (w.status === "hermes_unreachable") { tone = "warn"; line = `Can't reach Hermes on the VPS — ${w.detail ?? "no detail"}.`; }
-  else if (w.status === "error") { tone = "warn"; line = `Stopped on an error — ${w.detail ?? "no detail"}.`; }
-  else if (staleMin > 15) { tone = "warn"; line = `Hasn't checked in for ${Math.round(staleMin)} minutes.`; }
-  else {
-    line = [
-      s.waiting ? `${s.waiting} waiting to be read` : "Everything with words on record has been read",
-      s.last_read_at ? `last read ${relTime(s.last_read_at)} ago` : null,
-      s.named_7d ? `named ${s.named_7d} this week` : null,
-    ].filter(Boolean).join(" · ") + ".";
-  }
-
-  return (
-    <div className="mx-2.5 mb-2 rounded px-3 py-2"
-      style={{ background: T.card, border: `1px ${tone === "ok" ? "solid" : "dashed"} ${tone === "ok" ? T.hair : T.hiviz}` }}>
-      <div style={{ fontFamily: disp, fontSize: F.md, fontWeight: 600 }}>
-        Dusty reads these in the background <span style={{ ...eyebrow, color: T.hiviz }}>beta</span>
-      </div>
-      <div style={{ fontSize: F.xs, color: tone === "ok" ? T.ink3 : "#8A4200", lineHeight: 1.4 }}>{line}</div>
-      <div style={{ fontSize: F.xs, color: T.ink3, lineHeight: 1.4, marginTop: 2 }}>
-        Every five minutes, app open or not. Someone who introduced themselves gets named — Keep or Undo in the row. Everyone else gets a suggestion for you to confirm.
-      </div>
     </div>
   );
 }

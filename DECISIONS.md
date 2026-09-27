@@ -323,9 +323,9 @@ is no button.
   "Their words" on a call are the THEM lines whichever side dialled — before
   this, a call Coy placed counted as nothing the caller said.
 - **Visible** — `sc_worker_heartbeats` (no tenant data) says ok /
-  not_configured / hermes_unreachable / error; Threads → Unsorted shows it,
-  with the org's waiting count and last read (`/api/enrich/status`,
-  `sc_enrich_status()` under RLS).
+  not_configured / hermes_unreachable / error. The activity line under the
+  header (§6) shows it, with every read and the org's waiting count
+  (`/api/activity`, `sc_enrich_status()` under RLS).
 - **Pause** — `select cron.unschedule('enrich-contacts');`
 
 The in-app `/api/enrich` route and its button/15-minute browser runner are
@@ -540,6 +540,17 @@ expected start date per quoted job before it means anything. Add the field.
   Hermes must serve Dusty with its tools OFF: the context carries customer
   texts, and a text can carry instructions. The old `/api/chat/dusty` — an
   unauthenticated relay to a private-IP Ollama box — is deleted.
+- **Dusty's activity line (2026-09-27)** sits under the header on every
+  screen (`src/components/v34/activity-line.tsx`, `/api/activity`). v34's
+  StreamBar, fed by hardcoded DREAM_LINES, was never ported; this replaces it
+  with **real rows only** — each line is a `contact_enrich_runs` row (reading,
+  named, suggested, couldn't read), the waiting count, or the heartbeat. One
+  line, cycling every 4 s through the last day; tap to drop down the last
+  ~20 with detail, each linking to its thread. A reader that isn't working
+  (not configured, Hermes unreachable, error, silent >15 min) **pins** the line
+  in amber and stops the cycling. The dot pulses only while a read is running
+  or a Dusty reply is streaming. Idle says when something last happened; it
+  never invents something happening now.
 - Dusty channels persist and are resumable, organized per job/customer.
 - **Receipts are camera-first, always.** Photograph, never type. Dusty reads
   vendor, amount, date and clarifies conversationally. Invoices and payments

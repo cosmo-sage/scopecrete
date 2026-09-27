@@ -4,7 +4,7 @@ Ground truth for every agent working this repo. If code disagrees with this
 document, the code is wrong or this document is stale — resolve it, don't
 guess. Update this file in the same PR that changes the behavior it describes.
 
-Last updated: 2026-08-27
+Last updated: 2026-09-27
 
 ---
 
@@ -133,18 +133,20 @@ short per-turn index (recovering ~54% of the budget), and prefer the TAIL of a
 long conversation over the head, since the direction of the ask is clearest in
 recent traffic.
 
-**The legacy enricher is REMOVED IN SOURCE BUT STILL LIVE IN PRODUCTION.**
-`enrichContact()` wrote `name`, `first_name`, `address` and `contact_type`
-straight onto `public.contacts` with no review step, via
-`llama-3.3-70b-versatile` — decommissioned, returning 404 since 2026-08-19, so
-inert by luck rather than design. It is the most likely origin of the "Brad
-Chaney" mislabel above.
+**The legacy enricher is gone from production AND, as of 2026-09-27, from the
+repo.** `enrichContact()` wrote `name`, `first_name`, `address` and
+`contact_type` straight onto `public.contacts` with no review step. It is the
+most likely origin of the "Brad Chaney" mislabel above.
 
-It is deleted, with all three call sites, on branch `claude/pr1-landing-zone`.
-That branch is **not deployed**: `quo-intake` in production is still version 55
-and still contains it. Until that deploy happens, repairing the Groq model id
-would immediately resume unreviewed writes onto `contacts`. Do not touch the
-model id first.
+CORRECTION 2026-09-27: this section used to say production intake still
+contained it. It did not — deployed `quo-intake` v56 was already the v8
+"landing zone" version with `enrichContact()` and `syncCallToMessages()`
+removed. The drift ran the OTHER way: `master` still carried both, so
+**deploying intake from the repo would have reinstalled the unreviewed
+enricher**. The repo now holds the deployed v56 source (its own commit, no
+behaviour change), and v57 is built on it. **Always read the deployed source
+back with `get_edge_function` before changing an edge function; never assume
+the repo matches production.**
 
 **The filter is then deterministic and free.** `customers.relation` is
 `NOT NULL DEFAULT 'customer'` with `CHECK (relation IN ('customer','vendor','sub'))`,
@@ -236,6 +238,42 @@ Artifact events correctly produce no `messages` row. That is why `quo_events`
 SMS projection in application code stopped and never ran again; 48 texts landed
 in the database and never reached the app, and nothing was watching. A non-zero
 drift count is that outage, visible this time. Surface it in the UI.
+
+**Attachments — migration 027 (applied 2026-09-27).** Photos, videos, PDFs and
+contact cards sent by text live in `message_media`, one row per file, written by
+the projection (`sc_project_raw_event()`) and backfilled from
+`quo_events.raw_payload.media` and `sms_threads.media_urls`. Before 027 the
+projection kept only the first URL, and in `messages.recording_url` — a photo
+filed as a call recording. That write is still there for compatibility and
+should go once nothing reads it. Files are copied lazily into the private
+`message-media` bucket the first time a thread is opened
+(`/api/messages/[id]/media`) and served by short-lived signed URL. Storage paths
+are `{org_id}/…` in both `message-media` and `call-audio`, and `storage.objects`
+policies scope reads and writes to `get_user_org_ids()`. Before 027 there were
+**no** storage policies, which is why the call-audio player never worked.
+
+## 2c. One contact is one person — migration 028 (applied 2026-09-27)
+
+A person with two numbers is ONE contact. `contact_phones` lists every number;
+the merged-away contact keeps its row, points at the person with
+`merged_into_contact_id`, and is excluded from every count.
+
+- **Merges are human-confirmed, one pair at a time.** "Same person as…" on the
+  conversation screen. The system never merges on its own; matching names are a
+  suggestion at most.
+- **Merges are reversible.** `sc_merge_contacts()` records every moved row id in
+  `contact_merges.undo_payload`; `sc_unmerge_contacts()` moves back exactly those
+  rows still on the winner. A merge that cannot be undone should not be offered.
+- **The functions are SECURITY DEFINER with an explicit membership check**, not
+  invoker. `voip_calls` has no user write policy and `sms_threads` is
+  service-role only, so an invoker merge would move texts and silently leave
+  calls behind. Execute is granted to `authenticated` only; a stranger gets
+  "contact not found".
+- **Everything that resolves a contact follows the pointer.** `quo-intake` v57
+  `upsertContact()` hops `merged_into_contact_id`; `sc_quo_events_project()`
+  redirects an event keyed to a merged-away contact before projecting it; the
+  conversation API redirects to the person. Pointers are kept one level deep —
+  merging B into C re-points anything already merged into B.
 
 ## 2b. Lead creation — the guard, and what it deliberately does not do
 

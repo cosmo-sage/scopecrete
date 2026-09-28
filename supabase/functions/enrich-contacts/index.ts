@@ -18,7 +18,8 @@
  *      name itself only when the person introduced themselves; the spam
  *      bucket only on evidence in their words from someone Coy never answered;
  *      and any other bucket only once Dusty's last 20 guesses of it matched
- *      Coy (sc_bucket_agreement). Coy's corrections go into the prompt
+ *      Coy (sc_bucket_agreement); and for everyone, named and sorted or not,
+ *      Dusty's status line (migration 037). Coy's corrections go into the prompt
  *      (DECISIONS §2b). customers.relation is never written here.
  *   5. records every outcome in contact_enrich_runs and a pulse in
  *      sc_worker_heartbeats.
@@ -73,7 +74,7 @@ async function beat(sb: any, status: 'ok' | 'not_configured' | 'hermes_unreachab
 async function runBatch(sb: any, cfg: HermesConfig, maxReads: number) {
   const started = Date.now()
   const counts: Record<Outcome | 'claimed', number> = {
-    claimed: 0, proposed: 0, named: 0, filed: 0, unchanged: 0, no_words: 0, model_error: 0, failed: 0,
+    claimed: 0, proposed: 0, named: 0, filed: 0, summarized: 0, unchanged: 0, no_words: 0, model_error: 0, failed: 0,
   }
   // Learning is per org, loaded once per run when the org's first contact is claimed.
   const perOrg = new Map<string, Promise<{ learning: Learning; ask: Ask }>>()

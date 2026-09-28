@@ -323,14 +323,16 @@ confirmed — everything else is **Unclassified**, never the column default.
 
 **The background enricher (2026-09-27, migrations 029–033).** Contacts are
 read with the app closed. pg_cron calls the `enrich-contacts` edge function
-every minute (v7; 4 readers, each claiming one contact at a time until the
+every minute (v8; 4 readers, each claiming one contact at a time until the
 queue is empty or 45 s have passed, so a backlog drains in minutes; source in
 `supabase/functions/enrich-contacts/`:
 `rules.ts` the rules, `pipeline.ts` one contact, `index.ts` the worker). There
 is no button.
 
-- **Who is read** — view `sc_enrich_due` (security_invoker): unnamed, not
-  merged, name not human-confirmed, something THEY said (inbound text, or a
+- **Who is read** — view `sc_enrich_due` (security_invoker): everyone not
+  merged and not filed as spam — named and sorted people too, since migration
+  037, for their status line; the name and bucket steps still only touch the
+  unnamed and the unsorted — with something THEY said (inbound text, or a
   call transcript/summary), quiet for 3 minutes (a burst of texts, or a
   transcript landing after its call, is read once), and never read or changed
   since the last read. A failed read retries after 30 minutes.
@@ -409,6 +411,17 @@ passcode, "reply STOP" opt-out, stock scam line) AND Coy has never written
 or called back, onto a contact nobody has sorted. Not spam → back to Unsorted,
 `auto_classify_blocked_at` set, never auto-filed again. Dry run 2026-09-27:
 one contact qualifies (Handoff one-time passwords). Filed spam is not re-read.
+
+**Status lines (migration 037, `enrich-contacts` v8, 2026-09-28).** Each read
+also writes `contacts.status_summary` (one sentence: where things stand),
+`recent_summary` (two to four sentences on the latest conversations) and, for
+customers, `job_type_hint`, stamped `status_summary_at`. A display cache of
+Dusty's words, like `messages.summary` — it classifies nothing and names
+nobody, and phone numbers are stripped out of it. A person already named AND
+sorted is read for this alone (outcome `summarized`, no proposal, nothing
+asked). Our own messages count as a change, so a quote sent refreshes the
+line. Everyone read before 2026-09-28 00:15 UTC was read once more to
+backfill.
 
 **Dusty learns from Coy's sorting, and earns the other buckets (Coy,
 2026-09-27; migration 036, `enrich-contacts` v7).** Every contact Coy files is
@@ -579,17 +592,29 @@ expected start date per quoted job before it means anything. Add the field.
 ## 6. Interface rules
 
 - ScopeCrete header is sticky on every page.
-- **Threads is people, Jobs is work (2026-09-27).** Threads chips are the
-  buckets: Customers · Vendors · Unsorted · All up front; Needs you, Today,
-  Personal, Spam behind the filter. Spam shows only under its own chip. One
-  tap in an expanded row files a person (Dusty's guess dashed, the confirmed
-  bucket solid, then an optional type). **Swipe on a phone (Coy,
-  2026-09-27):** an unsorted row with a guess shows it as a dashed "Vendor?"
-  tag; swipe LEFT most of the way (60% of the row) to accept that guess, swipe
-  RIGHT to open the four buckets behind the row (Dusty's marked). Either shows
-  "Filed as X · Undo" for 5 s. Thresholds live in `src/lib/swipe.ts`. Job stages — New lead, Consultation,
-  Estimating, Follow up, W.I.P., Complete, Lost — are the Jobs board
-  (Scope renamed Jobs), a Kanban, not Threads chips.
+- **Threads is people, Jobs is work (2026-09-27; reshaped 2026-09-28).**
+  Five chips, all on screen, no funnel: **Unsorted · Customer · Vendor ·
+  Personal · Spam**. Unsorted is the inbox and opens first; filing someone
+  moves them out of it into their bucket (the row leaves at once). A search
+  looks in every bucket. Each bucket has one colour — Unsorted hi-viz, Customer
+  green, Vendor blue, Personal violet, Spam red — used by its chip AND its tag
+  on the row. The tag says how sure: **solid with ✓** Coy confirmed it,
+  **outlined · auto** Dusty filed it, **dashed ?** Dusty's guess. A customer
+  also shows the job type: the job's own when there is one, otherwise Dusty's
+  `job_type_hint` with a "?". **Swipe on a phone:** left most of the way (60%
+  of the row) accepts the guess; right opens the four buckets behind the row.
+  Either shows "Filed as X · Undo" for 5 s (`src/lib/swipe.ts`).
+  **The row, collapsed:** name, tag, job type, and Dusty's one sentence on
+  where things stand (`contacts.status_summary`), falling back to the last
+  message until he has read them. **Expanded:** his short summary of the
+  latest conversations (`recent_summary`), the sorting buttons only while they
+  are unsorted or auto-filed ("Change bucket" otherwise), the name question
+  only for a number with no name, and ONE button through to their page. No
+  call / text / email / composer in the row (Coy, 2026-09-28) — engaging on
+  every channel, transcripts and a next-steps checklist belong on the
+  customer / vendor page, which is still to be designed. Job stages — New
+  lead, Consultation, Estimating, Follow up, W.I.P., Complete, Lost — are the
+  Jobs board (Scope renamed Jobs), a Kanban, not Threads chips.
 - **Jobs board (migration 034, 2026-09-27)** — `/dashboard/scope`, stages in
   `src/lib/jobs/stages.ts` mapped onto `jobs.status` (`consultation` added;
   W.I.P. holds won → scheduled → in_progress, shown as a tag). Phone: stage

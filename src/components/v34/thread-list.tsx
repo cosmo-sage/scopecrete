@@ -17,17 +17,10 @@
  *  - the drift banner reads the real /api/dashboard/drift, and a failure to read
  *    it renders as UNKNOWN, never as all-clear
  *
- * Added by work order 17: the filter chips and the row expand.
- *
- * THE CHIP RULE. A chip is rendered only when there is a real source for its
- * number. v34 has eleven filters; ten appear here. `Drafts` does not, because
- * there is no outbox table in the schema — see the header of
- * src/app/api/threads/counts/route.ts. `Today` is the one count computed on
- * this side, because "today" depends on the viewer's timezone and the server
- * has no timezone to work from.
- *
- * A chip reading 0 is fine and often the point: `Quoted 0` is a true statement
- * about a query that ran. What is not fine is a chip with nothing behind it.
+ * The chips are the five places a person can be (Coy, 2026-09-28): Unsorted,
+ * the inbox, then Customers · Vendors · Personal · Spam. Filing someone moves
+ * them out of Unsorted. Every count comes from /api/threads/counts; one that
+ * could not be read shows "·", never 0.
  *
  * No mock constants. v34's THREADS array is not imported and must not be.
  */
@@ -36,7 +29,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { T, F, disp, eyebrow, nums, clip, relTime } from "@/lib/v34/tokens";
 import { Avatar, EmptyState } from "@/components/v34/primitives";
-import { Composer } from "@/components/v34/composer";
+import { JOB_TYPE_LABEL } from "@/lib/jobs/stages";
 import { TRAY_PX, decideSwipe, isHorizontal, clampDrag } from "@/lib/swipe";
 
 interface Thread {
@@ -55,6 +48,13 @@ interface Thread {
   msg_count: number;
   job_status: string | null;
   job_unscoped: boolean;
+  /** From the contact's most advanced job: residential | commercial | public. */
+  job_type: string | null;
+  /** Dusty's words (migration 037): where things stand, and the latest conversations. */
+  status_summary: string | null;
+  recent_summary: string | null;
+  /** Dusty's guess at the job type, when there is no job to take it from. */
+  job_type_hint: string | null;
   /** Customer · Vendor · Personal · Spam — confirmed, or filed by Dusty. Null = Unsorted. */
   bucket: Bucket | null;
   subtype: string | null;
@@ -99,42 +99,21 @@ type Bucket = "customer" | "vendor" | "personal" | "spam";
 type Subtype = { bucket: Bucket; slug: string; label: string };
 
 /**
- * Threads sorts PEOPLE (DECISIONS §6): the four buckets plus Unsorted. Job
- * stages — lead, quoted, pouring, won — are the Jobs board, not chips here.
- * `c` is the count pill's colour.
+ * Threads sorts PEOPLE (DECISIONS §6): Unsorted first — the inbox — then the
+ * four buckets. Filing someone moves them out of Unsorted into their bucket.
+ * Every chip is on screen, no funnel. Each carries its bucket's colour, the
+ * same colour as that bucket's tag on the row. Job stages are the Jobs board.
  */
-const CHIPS: Array<{ k: string; l: string; c: string | null }> = [
-  { k: "customers", l: "Customers", c: T.green },
-  { k: "vendors", l: "Vendors", c: T.chalk },
+const CHIPS: Array<{ k: string; l: string; c: string }> = [
   { k: "unsorted", l: "Unsorted", c: T.hiviz },
-  { k: "all", l: "All", c: null },
-  { k: "needs", l: "Needs you", c: T.hiviz },
-  { k: "today", l: "Today", c: T.ink },
+  { k: "customers", l: "Customer", c: T.green },
+  { k: "vendors", l: "Vendor", c: T.chalk },
   { k: "personal", l: "Personal", c: T.violet },
-  { k: "spam", l: "Spam", c: null },
+  { k: "spam", l: "Spam", c: T.red },
 ];
 
-/** Up front. The rest live behind the funnel. */
-const FRONT = ["customers", "vendors", "unsorted"];
-
-/** Local midnight, so "today" means the viewer's today rather than UTC's. */
-function isToday(iso: string | null): boolean {
-  if (!iso) return false;
-  const d = new Date(iso);
-  if (!Number.isFinite(d.getTime())) return false;
-  const now = new Date();
-  return d.getFullYear() === now.getFullYear()
-    && d.getMonth() === now.getMonth()
-    && d.getDate() === now.getDate();
-}
-
 function matches(t: Thread, k: string): boolean {
-  // Spam shows only under its own chip.
-  if (k !== "spam" && t.bucket === "spam") return false;
   switch (k) {
-    case "all": return true;
-    case "today": return isToday(t.occurred_at);
-    case "needs": return t.direction === "inbound";
     case "unsorted": return t.bucket === null;
     case "customers": return t.bucket === "customer";
     case "vendors": return t.bucket === "vendor";
@@ -146,10 +125,8 @@ function matches(t: Thread, k: string): boolean {
 
 /** What an empty filtered list should say — the reason, not just "nothing". */
 const WHY_EMPTY: Record<string, string> = {
-  today: "Nothing has come in today. The list is not broken — the phone is quiet.",
-  needs: "Every thread's last word is yours. Nothing is waiting on a reply.",
   unsorted: "Everyone who has called or texted is in a bucket.",
-  customers: "Nobody is filed as a customer yet. Open a thread in Unsorted and tap Customer.",
+  customers: "Nobody is filed as a customer yet. In Unsorted, swipe a row right and tap Customer.",
   vendors: "Nobody is filed as a vendor yet — subs, suppliers, rental yards and people looking for work go here.",
   personal: "Nobody is filed as personal.",
   spam: "Nothing is filed as spam.",
@@ -161,7 +138,7 @@ const BUCKETS: Array<{ k: Bucket; l: string; c: string }> = [
   { k: "customer", l: "Customer", c: T.green },
   { k: "vendor", l: "Vendor", c: T.chalk },
   { k: "personal", l: "Personal", c: T.violet },
-  { k: "spam", l: "Spam", c: T.ink3 },
+  { k: "spam", l: "Spam", c: T.red },
 ];
 
 /** Dusty's classification, as the bucket it points at. */
@@ -397,6 +374,24 @@ function AutoNameStrip({ a, name, busy, onName }: {
 
 /* -------------------------------------------------------------------- row */
 
+/**
+ * A bucket on the row, in its colour. Confirmed (Coy put them there): solid
+ * with a tick. Filed by Dusty: outlined, "· auto". Dusty's guess: dashed, "?".
+ */
+function BucketTag({ label, c, state }: { label: string; c: string; state: "confirmed" | "auto" | "suggested" }) {
+  const title = state === "confirmed" ? "Confirmed by you"
+    : state === "auto" ? "Filed by Dusty — Keep or undo it in the row"
+    : "Dusty's guess — swipe left to accept, right for all four";
+  return (
+    <span className="shrink-0 rounded" title={title}
+      style={{ ...eyebrow, lineHeight: "15px", padding: "0 4px", letterSpacing: ".06em",
+               color: state === "confirmed" ? "#fff" : c, background: state === "confirmed" ? c : "transparent",
+               border: `1px ${state === "suggested" ? "dashed" : "solid"} ${c}` }}>
+      {label}{state === "confirmed" ? " ✓" : state === "auto" ? " · auto" : "?"}
+    </span>
+  );
+}
+
 function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, onName, onBucket, subtypes, deciding, trayOpen, onTray, onAccept }: {
   t: Thread; first: boolean; expanded: boolean; onToggle: () => void; onOpen: () => void;
   /** Swipe right: this row's four-bucket tray is open. One row at a time. */
@@ -416,10 +411,18 @@ function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, onName, onB
   const guess = !t.bucket && t.proposal ? SUGGESTS[t.proposal.classification] ?? null : null;
   const guessB = guess ? BUCKETS.find((b) => b.k === guess)! : null;
   const when = relTime(t.occurred_at);
+  // Customers carry their job type: the job's own when there is one, else
+  // Dusty's guess, marked with "?" like his bucket guess.
+  const isCustomer = t.bucket === "customer" || guess === "customer";
+  const jobType = !isCustomer ? null
+    : t.job_type ? { l: JOB_TYPE_LABEL[t.job_type] ?? t.job_type, sure: true }
+    : t.job_type_hint ? { l: JOB_TYPE_LABEL[t.job_type_hint] ?? t.job_type_hint, sure: false }
+    : null;
 
   // Swipe: right opens the buckets, left all the way accepts the guess.
   // touch-action: pan-y leaves vertical scrolling to the browser.
   const [drag, setDrag] = useState<number | null>(null);
+  const [rebucket, setRebucket] = useState(false);
   const start = React.useRef<{ x: number; y: number; w: number; on: boolean } | null>(null);
   const swipeable = !expanded;
   const offset = drag ?? (trayOpen ? TRAY_PX : 0);
@@ -490,15 +493,13 @@ function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, onName, onB
                 style={{ ...eyebrow, color: T.chalk }}>Auto</span>
             )}
             {badge && (
-              <span className="shrink-0" title={t.bucket_auto ? "Filed by Dusty — Undo in the row" : undefined}
-                style={{ ...eyebrow, color: badge.c }}>
-                {badge.l}{t.bucket_auto ? " · auto" : ""}
-              </span>
+              <BucketTag label={badge.l} c={badge.c} state={t.bucket_auto ? "auto" : "confirmed"} />
             )}
-            {guessB && (
-              <span className="shrink-0 rounded px-1" title="Dusty's guess — swipe left to accept, right for all four"
-                style={{ ...eyebrow, color: guessB.c, border: `1px dashed ${guessB.c}` }}>
-                {guessB.l}?
+            {guessB && <BucketTag label={guessB.l} c={guessB.c} state="suggested" />}
+            {jobType && (
+              <span className="shrink-0" title={jobType.sure ? "From the job" : "Dusty's guess — set when the job is made"}
+                style={{ ...eyebrow, color: jobType.sure ? T.ink2 : T.ink3 }}>
+                {jobType.l}{jobType.sure ? "" : "?"}
               </span>
             )}
             <span className="flex-1" />
@@ -506,49 +507,46 @@ function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, onName, onB
             {when && <span className="shrink-0" style={{ fontSize: F.xs, color: T.ink3, ...nums }}>{when}</span>}
           </span>
 
-          {isVoicemail && (
-            <span style={{ ...eyebrow, color: T.hiviz, display: "block", marginTop: 2 }}>Voicemail</span>
+          {/* Dusty's one line on where things stand. Until he has read them,
+              their latest message — labelled when it is a voicemail. */}
+          {t.status_summary ? (
+            <span style={{
+              display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden",
+              fontSize: F.sm, marginTop: 2, color: T.ink2, lineHeight: "1.15rem",
+            }}>{t.status_summary}</span>
+          ) : (
+            <>
+              {isVoicemail && (
+                <span style={{ ...eyebrow, color: T.hiviz, display: "block", marginTop: 2 }}>Voicemail</span>
+              )}
+              <span style={{
+                display: "block", fontSize: F.sm, marginTop: 2,
+                color: synthesised ? T.ink3 : T.ink2,
+                fontStyle: synthesised ? "italic" : "normal",
+                minHeight: "1.1rem", lineHeight: "1.15rem",
+                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+              }}>{t.preview}</span>
+            </>
           )}
-
-          {/* Fixed height so several hundred rows gaining a summary changes no
-              geometry. Unclipped once expanded. */}
-          <span style={{
-            display: "block", fontSize: F.sm, marginTop: 2,
-            color: synthesised ? T.ink3 : T.ink2,
-            fontStyle: synthesised ? "italic" : "normal",
-            minHeight: "1.1rem", lineHeight: "1.15rem",
-            ...(expanded
-              ? { whiteSpace: "normal" as const }
-              : { overflow: "hidden" as const, textOverflow: "ellipsis" as const, whiteSpace: "nowrap" as const }),
-          }}>{t.preview}</span>
         </span>
       </button>
 
-      {/* The expanded region shows only what exists. v34's version offers
-          "Tell Dusty what this is", an About-them channel and scope actions;
-          none of those have a writer, and a button that does nothing is worse
-          than no button. */}
+      {/* Expanded: what has been going on, anything still to decide about
+          who they are, and one way through to their page (Coy, 2026-09-28).
+          Calling, texting and email live on that page, not here. */}
       {expanded && (
         <div className="px-2.5 pb-2.5" style={{ paddingLeft: 46 }}>
-          <div className="flex flex-wrap gap-x-3 gap-y-0.5" style={{ fontSize: F.xs, color: T.ink3 }}>
-            {t.channel && <span>{t.channel === "call" ? "Call" : "Text"}</span>}
-            <span style={nums}>{t.msg_count} message{t.msg_count === 1 ? "" : "s"}</span>
-            {t.phone && <span style={nums}>{t.phone}</span>}
-            {t.occurred_at && (
-              <span style={nums}>
-                {new Date(t.occurred_at).toLocaleString("en-US", {
-                  month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
-                })}
-              </span>
-            )}
-          </div>
-
-          {/* Still says this when there is no proposal — the absence of an
-              opinion is itself information, and 176 of 197 contacts are in
-              exactly this state. */}
-          {t.name_is_phone && !t.proposal && (
-            <div style={{ fontSize: F.xs, color: T.ink3, marginTop: 4, fontStyle: "italic" }}>
-              Nobody has put a name to this number yet.
+          {t.recent_summary ? (
+            <div>
+              <div style={{ ...eyebrow, color: T.ink3 }}>Latest · Dusty</div>
+              <div style={{ fontSize: F.sm, color: T.ink, lineHeight: 1.4, marginTop: 2 }}>{t.recent_summary}</div>
+            </div>
+          ) : (
+            <div>
+              <div style={{ ...eyebrow, color: T.ink3 }}>
+                Last {t.channel === "call" ? "call" : "message"}{t.status_summary ? "" : " · Dusty hasn't summarised them yet"}
+              </div>
+              <div style={{ fontSize: F.sm, color: T.ink2, lineHeight: 1.4, marginTop: 2 }}>{t.preview}</div>
             </div>
           )}
 
@@ -557,27 +555,32 @@ function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, onName, onB
               onName={(action) => onName(t.auto_name!.claim_id, action)} />
           )}
 
-          <BucketPicker t={t} busy={deciding} subtypes={subtypes}
-            onPick={(bucket, subtype) => onBucket(t.contact_id, bucket, subtype)} />
+          {/* Sorting is a question only while they are unsorted, or Dusty filed
+              them. A confirmed bucket can still be changed, one tap away. */}
+          {!t.bucket || t.bucket_auto || rebucket ? (
+            <BucketPicker t={t} busy={deciding} subtypes={subtypes}
+              onPick={(bucket, subtype) => { setRebucket(false); onBucket(t.contact_id, bucket, subtype); }} />
+          ) : null}
 
-          {t.proposal && (
-            <ProposalReview p={t.proposal} busy={deciding}
-              nameOn={!t.name_is_phone && !!t.proposal.proposed_name
-                && t.proposal.proposed_name.trim().toLowerCase() === t.display_name.trim().toLowerCase()}
+          {/* The name question, only for a number with no name. */}
+          {t.proposal && t.name_is_phone && t.proposal.proposed_name && (
+            <ProposalReview p={t.proposal} busy={deciding} nameOn={false}
               onDecide={(body) => onDecide(t.proposal!.id, body)} />
           )}
 
-          {/* Reply without leaving the list. Same composer as the thread, in
-              its compact form; the draft is shared between the two. */}
-          <Composer contactId={t.contact_id} phone={t.phone}
-            name={t.name_is_phone ? null : t.display_name} compact />
-
-          <button onClick={onOpen} className="mt-2 rounded px-3 flex items-center gap-2"
-            style={{ height: 32, border: `1px solid ${T.hair}`, background: T.card,
-                     fontFamily: disp, fontSize: F.sm, letterSpacing: ".06em",
-                     textTransform: "uppercase", cursor: "pointer" }}>
-            Open thread <span style={{ color: T.hiviz }}>›</span>
-          </button>
+          <div className="mt-2.5 flex items-center gap-3">
+            <button onClick={onOpen} className="rounded px-4 flex items-center gap-2"
+              style={{ height: 36, border: "none", background: T.ink, color: "#fff",
+                       fontFamily: disp, fontSize: F.sm, letterSpacing: ".06em",
+                       textTransform: "uppercase", cursor: "pointer" }}>
+              Open {badge ? badge.l.toLowerCase() : "thread"} <span style={{ color: T.hiviz }}>›</span>
+            </button>
+            {t.bucket && !t.bucket_auto && !rebucket && (
+              <button onClick={() => setRebucket(true)} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>
+                Change bucket
+              </button>
+            )}
+          </div>
         </div>
       )}
       </div>
@@ -603,13 +606,13 @@ export function ThreadList() {
   // links to ?f=unsorted. Adjusted during render (not in an effect) when the
   // param changes while the list stays mounted in the messages layout.
   const fParam = params.get("f");
-  const [filter, setFilter] = useState(fParam ?? "all");
+  // Unsorted is the inbox: filing someone moves them out of it.
+  const [filter, setFilter] = useState(fParam ?? "unsorted");
   const [seenF, setSeenF] = useState(fParam);
   if (fParam !== seenF) {
     setSeenF(fParam);
     if (fParam) setFilter(fParam);
   }
-  const [moreFilters, setMoreFilters] = useState(false);
   const [openRow, setOpenRow] = useState<string | null>(null);
   // Swipe tray: one row at a time. Toast: what was just filed, with Undo.
   const [trayRow, setTrayRow] = useState<string | null>(null);
@@ -658,6 +661,11 @@ export function ThreadList() {
   /** One tap: put a person in a bucket (or back to Unsorted with null). */
   const bucketDecide = useCallback(async (contactId: string, bucket: Bucket | null, subtype?: string | null) => {
     setDeciding(true);
+    // Move the row at once — out of Unsorted, into its bucket. The refetch
+    // below brings the counts and the server's word.
+    setThreads((ts) => ts.map((t) => t.contact_id === contactId
+      ? { ...t, bucket, subtype: subtype ?? null, bucket_auto: null, contact_type: bucket }
+      : t));
     try {
       const r = await fetch(`/api/contacts/${contactId}/bucket`, {
         method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ bucket, subtype: subtype ?? null }),
@@ -733,18 +741,15 @@ export function ThreadList() {
     return () => { off = true; };
   }, [reload]);
 
-  // `today` is derived here; everything else comes from the counts route.
   const chipCount = useCallback((k: string): number | null => {
-    if (k === "today") return loading ? null : threads.filter((t) => isToday(t.occurred_at)).length;
     if (!counts) return null;
     return typeof counts[k] === "number" ? counts[k] : null;
-  }, [counts, threads, loading]);
+  }, [counts]);
 
-  // Only chips with a real number. A key the API omits never reaches the row.
-  const live = useMemo(() => CHIPS.filter((c) => chipCount(c.k) !== null), [chipCount]);
 
   const visible = useMemo(() => {
-    let rows = threads.filter((t) => matches(t, filter));
+    // A search looks in every bucket; otherwise the chip decides.
+    let rows = q ? threads : threads.filter((t) => matches(t, filter));
     if (q) {
       rows = rows.filter((t) =>
         t.display_name.toLowerCase().includes(q)
@@ -753,31 +758,6 @@ export function ThreadList() {
     }
     return rows;
   }, [threads, filter, q]);
-
-  const hiddenActive = !FRONT.includes(filter) && filter !== "all";
-  const frontChips = [
-    ...(hiddenActive ? live.filter((c) => c.k === filter) : []),
-    ...live.filter((c) => FRONT.includes(c.k)),
-  ].slice(0, 4);
-
-  function chipStyle(on: boolean): React.CSSProperties {
-    return {
-      height: 30, flex: "0 1 auto", minWidth: 0,
-      border: `1px solid ${on ? T.ink : T.hair}`,
-      background: on ? T.ink : T.card, color: on ? "#fff" : T.ink2,
-      fontFamily: disp, fontSize: F.sm, textTransform: "uppercase",
-    };
-  }
-
-  function Pill({ n, on, c }: { n: number; on: boolean; c: string | null }) {
-    return (
-      <span className="flex items-center justify-center rounded-full shrink-0"
-        style={{ minWidth: 17, height: 17, padding: "0 4px",
-                 background: on ? "rgba(255,255,255,.92)" : (n > 0 && c ? c : T.hairSoft),
-                 color: on ? T.ink : (n > 0 && c ? "#fff" : T.ink3),
-                 fontFamily: disp, fontSize: F.xs, fontWeight: 700, ...nums }}>{n}</span>
-    );
-  }
 
   return (
     <div>
@@ -817,66 +797,27 @@ export function ThreadList() {
         </div>
       )}
 
-      {/* One row, no scrolling. The three you reach for live out here; the rest
-          sit behind the funnel. If you pick one from inside it takes the front
-          slot, so you can always see what you are filtered to. */}
-      {live.length > 0 && (
-        <div className="flex gap-1 px-2.5 pt-2.5 pb-1.5 items-center sc-chips">
-          {frontChips.map(({ k, l, c }) => {
+      {/* All five on screen, one row, no funnel. Each chip wears its bucket's
+          colour — the same colour as that bucket's tag on the rows. */}
+      {!q && (
+        <div className="grid gap-1 px-2.5 pt-2.5 pb-1.5" style={{ gridTemplateColumns: `repeat(${CHIPS.length}, minmax(0, 1fr))` }}
+          role="tablist" aria-label="Buckets">
+          {CHIPS.map(({ k, l, c }) => {
             const on = filter === k;
-            const n = chipCount(k) ?? 0;
+            const n = chipCount(k);
             return (
-              <button key={k} onClick={() => setFilter(on ? "all" : k)}
-                className="pl-2.5 pr-2 rounded flex items-center gap-1.5" style={chipStyle(on)}>
-                <span style={clip}>{l}</span>
-                <Pill n={n} on={on} c={c} />
+              <button key={k} role="tab" aria-selected={on} onClick={() => { setFilter(k); setOpenRow(null); setTrayRow(null); }}
+                className="rounded flex flex-col items-center justify-center"
+                style={{ height: 42, minWidth: 0, padding: "0 2px", cursor: "pointer",
+                         border: `1.5px solid ${c}`, background: on ? c : T.card, color: on ? "#fff" : c }}>
+                <span style={{ fontFamily: disp, fontSize: F.md, fontWeight: 700, lineHeight: 1, ...nums }}>{n ?? "·"}</span>
+                <span style={{ fontFamily: disp, fontSize: F.micro, fontWeight: 600, letterSpacing: 0,
+                               textTransform: "uppercase", marginTop: 2, maxWidth: "100%", ...clip }}>{l}</span>
               </button>
             );
           })}
-
-          <button onClick={() => setMoreFilters((o) => !o)} aria-label="All filters"
-            aria-expanded={moreFilters}
-            className="rounded flex items-center justify-center shrink-0 relative ml-auto"
-            style={{ width: 32, height: 30,
-                     border: `1px solid ${moreFilters || hiddenActive ? T.ink : T.hair}`,
-                     background: moreFilters ? T.ink : T.card }}>
-            <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true">
-              <path d="M1.6 2.6h11.8L9.1 7.5v4.3l-3.2 1.6V7.5z" fill="none"
-                stroke={moreFilters ? "#fff" : T.ink2} strokeWidth="1.4" strokeLinejoin="round" />
-            </svg>
-            {hiddenActive && !moreFilters && (
-              <span className="absolute rounded-full"
-                style={{ top: -3, right: -3, width: 8, height: 8, background: T.hiviz }} />
-            )}
-          </button>
         </div>
       )}
-
-      {moreFilters && (
-        <div className="mx-2.5 mb-2 rounded px-2 py-2" style={{ background: T.card, border: `1px solid ${T.hair}` }}>
-          <div className="grid grid-cols-2 gap-1">
-            {live.map(({ k, l, c }) => {
-              const on = filter === k;
-              const n = chipCount(k) ?? 0;
-              return (
-                <button key={k} onClick={() => { setFilter(k); setMoreFilters(false); }}
-                  className="rounded px-2.5 flex items-center justify-between gap-1.5"
-                  style={{ ...chipStyle(on), height: 32 }}>
-                  <span style={clip}>{l}</span>
-                  <Pill n={n} on={on} c={c} />
-                </button>
-              );
-            })}
-          </div>
-          {/* Says what is missing and why, rather than leaving a gap where v34
-              has a chip. */}
-          <div style={{ fontSize: F.xs, color: T.ink3, marginTop: 8, lineHeight: 1.4 }}>
-            No Drafts filter: there is no outbox in the schema yet, so a count
-            would be invented rather than zero.
-          </div>
-        </div>
-      )}
-
 
       {loading ? (
         <div className="p-3 space-y-2">

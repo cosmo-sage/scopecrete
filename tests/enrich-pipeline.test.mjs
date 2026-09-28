@@ -40,7 +40,7 @@ function fakeDb(answer) {
 
 const eq = (q, col) => q.filters.find((f) => f[0] === "eq" && f[1] === col)?.[2];
 
-function world({ texts = [], calls = null, contact = { name: null, name_source: "legacy", phone: PHONE, classification_confirmed_at: null }, pending = null, undone = [] }) {
+function world({ texts = [], calls = null, contact = { name: null, name_source: "legacy", phone: PHONE, classification_confirmed_at: null, status_summary_at: "2026-09-27" }, pending = null, undone = [] }) {
   return fakeDb((q) => {
     if (q.table !== "contacts" && q.table !== "contact_phones" && q.op === "select") {
       assert.equal(eq(q, "org_id"), ORG, `${q.table} read without the org filter`);
@@ -241,4 +241,38 @@ test("corrections are the confirmed contacts Dusty guessed differently, by his g
   const l = await loadLearning(db, ORG);
   assert.deepEqual(l.streaks, { customer: 3 });
   assert.deepEqual(l.corrections, [{ guess: "customer", answer: "vendor", subtype: "lead_gen", quote: "New Lead From Baton Rouge Concreters" }]);
+});
+
+test("someone named and sorted gets only a status line: no proposal, no question", async () => {
+  const db = world({ texts: [["THEM", "Can you come look at the cracks Tuesday?"]],
+    contact: { name: "Amber", name_source: "human", phone: PHONE, classification_confirmed_at: "2026-09-27", auto_classified_at: null, status_summary_at: null } });
+  const r = await readContact(db, ORG, CONTACT, model(proposal({ status_summary: "Wants the cracks looked at Tuesday.", job_type: "public" })), "hermes:test");
+  assert.equal(r.outcome, "summarized");
+  assert.equal(writes(db, "contact_proposals", "insert").length, 0);
+  const [upd] = writes(db, "contacts", "update");
+  assert.equal(upd.payload.status_summary, "Wants the cracks looked at Tuesday.");
+  assert.equal(upd.payload.job_type_hint, "public");
+  assert.equal(upd.payload.name, undefined, "a status write never touches the name");
+  assert.equal(upd.payload.contact_type, undefined, "or the bucket");
+});
+
+test("a named contact is never asked about a name, and the status line never carries a number", async () => {
+  const db = world({ texts: [["THEM", "this is Maegan, call me at 225-555-0199"]],
+    contact: { name: "Meg", name_source: "legacy", phone: PHONE, classification_confirmed_at: null } });
+  const r = await readContact(db, ORG, CONTACT, model(proposal({ proposed_name: "Maegan", status_summary: "Asked to be called at 225-555-0199." })), "hermes:test");
+  assert.equal(r.outcome, "proposed");
+  assert.equal(writes(db, "contact_proposals", "insert")[0].payload.proposed_name, null);
+  assert.equal(writes(db, "contacts", "update")[0].payload.status_summary, "Asked to be called at their number.");
+});
+
+test("no status line yet: the unchanged shortcut does not skip the read that writes it", async () => {
+  const texts = [["THEM", "Hey it's Tommy, any update on the truck?"]];
+  const first = world({ texts });
+  await readContact(first, ORG, CONTACT, model(proposal()), "hermes:test");
+  const fp = writes(first, "contact_proposals", "insert")[0].payload.source_fingerprint;
+  const db = world({ texts, pending: { id: "p-old", source_fingerprint: fp, proposed_name: null, proposed_company: null, confidence: 70 },
+    contact: { name: null, name_source: "legacy", phone: PHONE, classification_confirmed_at: null, status_summary_at: null } });
+  const ask = model(proposal({ status_summary: "Asking about the truck." }));
+  await readContact(db, ORG, CONTACT, ask, "hermes:test");
+  assert.equal(ask.calls.length, 1);
 });

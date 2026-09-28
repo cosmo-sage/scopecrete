@@ -78,6 +78,17 @@ export interface Thread {
   job_status: string | null;
   /** True when the contact has a job carrying no `job_sections` rows. */
   job_unscoped: boolean;
+  /** residential | commercial | public, from the contact's most advanced job. */
+  job_type: string | null;
+  /**
+   * Dusty's status lines (migration 037, enrich-contacts v8). A display cache
+   * of his summary — shown as his words, never as a fact about the contact.
+   * `job_type_hint` is his guess at the job type, shown only when there is no
+   * job to take it from.
+   */
+  status_summary: string | null;
+  recent_summary: string | null;
+  job_type_hint: string | null;
   /**
    * The contact's bucket — customer | vendor | personal | spam — and ONLY when
    * Coy put them there, or Dusty filed them (spam, with Undo: see bucket_auto).
@@ -202,12 +213,12 @@ export async function GET(req: NextRequest) {
   // Opportunistic names. Expected to return nothing today — see the header.
   // Failure here is not an error: the list is fully usable without it.
   const contactIds = [...byContact.keys()];
-  const names = new Map<string, { name: string | null; phone: string | null; contact_type: string | null; contact_subtype: string | null; customer_id: string | null; name_source: string | null; name_claim_id: string | null; confirmed: boolean; auto_at: string | null; auto_reason: string | null }>();
+  const names = new Map<string, { name: string | null; phone: string | null; contact_type: string | null; contact_subtype: string | null; customer_id: string | null; name_source: string | null; name_claim_id: string | null; confirmed: boolean; auto_at: string | null; auto_reason: string | null; status_summary: string | null; recent_summary: string | null; job_type_hint: string | null }>();
   let contactsReadable = false;
   if (contactIds.length > 0) {
     const { data: contacts } = await supabase
       .from("contacts")
-      .select("id, name, phone, contact_type, contact_subtype, customer_id, name_source, name_claim_id, classification_confirmed_at, auto_classified_at, auto_classified_reason")
+      .select("id, name, phone, contact_type, contact_subtype, customer_id, name_source, name_claim_id, classification_confirmed_at, auto_classified_at, auto_classified_reason, status_summary, recent_summary, job_type_hint")
       .in("id", contactIds.slice(0, 1000));
     for (const c of (contacts ?? []) as Array<Record<string, string | null>>) {
       names.set(c.id as string, {
@@ -216,6 +227,7 @@ export async function GET(req: NextRequest) {
         confirmed: !!c.classification_confirmed_at, auto_at: c.auto_classified_at, auto_reason: c.auto_classified_reason,
         customer_id: c.customer_id,
         name_source: c.name_source, name_claim_id: c.name_claim_id,
+        status_summary: c.status_summary, recent_summary: c.recent_summary, job_type_hint: c.job_type_hint,
       });
     }
     contactsReadable = (contacts ?? []).length > 0;
@@ -225,13 +237,13 @@ export async function GET(req: NextRequest) {
   // STATUS_RANK picks the most advanced job when a contact has several — a
   // customer with a won job and a fresh lead belongs under Won.
   const STATUS_RANK = ["invited", "lead", "scoping", "quoted", "scheduled", "in_progress", "complete", "closed", "lost", "won"];
-  const jobByContact = new Map<string, { status: string | null; unscoped: boolean }>();
+  const jobByContact = new Map<string, { status: string | null; unscoped: boolean; type: string | null }>();
   {
     const { data: jobs } = await supabase
       .from("jobs")
-      .select("id, contact_id, status")
+      .select("id, contact_id, status, job_type")
       .eq("org_id", orgId);
-    const jobRows = (jobs ?? []) as Array<{ id: string; contact_id: string | null; status: string | null }>;
+    const jobRows = (jobs ?? []) as Array<{ id: string; contact_id: string | null; status: string | null; job_type: string | null }>;
 
     let scopedIds = new Set<string>();
     if (jobRows.length > 0) {
@@ -248,6 +260,7 @@ export async function GET(req: NextRequest) {
       const better = !prev || STATUS_RANK.indexOf(j.status ?? "") > STATUS_RANK.indexOf(prev.status ?? "");
       jobByContact.set(j.contact_id, {
         status: better ? j.status : (prev?.status ?? null),
+        type: better ? j.job_type : (prev?.type ?? null),
         unscoped: (prev?.unscoped ?? false) || !scopedIds.has(j.id),
       });
     }
@@ -352,6 +365,10 @@ export async function GET(req: NextRequest) {
       msg_count: count,
       job_status: jobByContact.get(contactId)?.status ?? null,
       job_unscoped: jobByContact.get(contactId)?.unscoped ?? false,
+      job_type: jobByContact.get(contactId)?.type ?? null,
+      status_summary: c?.status_summary ?? null,
+      recent_summary: c?.recent_summary ?? null,
+      job_type_hint: c?.job_type_hint ?? null,
       bucket,
       subtype: bucket ? c?.contact_subtype ?? null : null,
       bucket_auto: bucket && !c?.confirmed && c?.auto_at ? { reason: c.auto_reason } : null,

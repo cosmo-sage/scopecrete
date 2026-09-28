@@ -22,7 +22,7 @@ export type Db = { from: (table: string) => any }
 
 export type Ask = (conversation: string) => Promise<{ ok: true; proposal: Proposal } | { ok: false; error: string }>
 
-export type Outcome = 'proposed' | 'named' | 'filed' | 'unchanged' | 'no_words' | 'model_error' | 'failed'
+export type Outcome = 'proposed' | 'named' | 'filed' | 'summarized' | 'unchanged' | 'no_words' | 'model_error' | 'failed'
 
 export interface ReadResult {
   outcome: Outcome
@@ -320,8 +320,38 @@ export async function applyAutoBucket(sb: Db, orgId: string, contactId: string, 
 // One contact, start to finish
 // ---------------------------------------------------------------------------
 
+/** What the contact already is: whether a read still has anything to ASK. */
+interface ContactState {
+  name: string | null; name_source: string | null
+  classification_confirmed_at: string | null; auto_classified_at: string | null
+  status_summary_at: string | null
+}
+
+/**
+ * Dusty's status lines on the contact (migration 037): a display cache of his
+ * summary, shown as his words. Never a name, never a bucket. Only written when
+ * the model gave one, so an old answer is not blanked by a thin read.
+ */
+async function writeStatus(sb: Db, orgId: string, contactId: string, p: Proposal): Promise<void> {
+  if (!p.status_summary && !p.recent_summary) return
+  await sb.from('contacts').update({
+    status_summary: p.status_summary ?? null, recent_summary: p.recent_summary ?? null,
+    job_type_hint: p.job_type ?? null, status_summary_at: new Date().toISOString(),
+  }).eq('org_id', orgId).eq('id', contactId)
+}
+
 export async function readContact(sb: Db, orgId: string, contactId: string, ask: Ask, model: string, learning: Learning = NO_LEARNING): Promise<ReadResult> {
-  const [turns, numbers] = await Promise.all([loadTurns(sb, orgId, contactId), contactNumbers(sb, orgId, contactId)])
+  const [turns, numbers, { data: st }] = await Promise.all([
+    loadTurns(sb, orgId, contactId), contactNumbers(sb, orgId, contactId),
+    sb.from('contacts').select('name, name_source, classification_confirmed_at, auto_classified_at, status_summary_at')
+      .eq('org_id', orgId).eq('id', contactId).maybeSingle(),
+  ])
+  const state = (st ?? {}) as Partial<ContactState>
+  const named = !!state.name?.trim() || state.name_source === 'human'
+  const sorted = !!(state.classification_confirmed_at || state.auto_classified_at)
+  // Named AND sorted: nothing left to ask. The read is for the status line only.
+  const asking = !named || !sorted
+
   // What the model reads and what "their words" means: transcripts with US /
   // THEM speakers. findSelfIdentification() keeps the numbered originals.
   const shown = turns.map((t) => t.kind === 'call' ? { ...t, text: relabelTranscript(t.text, numbers) } : t)
@@ -335,8 +365,9 @@ export async function readContact(sb: Db, orgId: string, contactId: string, ask:
   const pending = ((pend ?? []) as Array<{ id: string; source_fingerprint: string | null } & Named>)[0]
 
   // Nothing new said: no model call. The standing suggestion still gets its
-  // chance to name them — it may predate the self-introduction rule.
-  if (pending && pending.source_fingerprint === fp) {
+  // chance to name them — it may predate the self-introduction rule. Not when
+  // they have no status line yet: that read is what writes it.
+  if (pending && pending.source_fingerprint === fp && state.status_summary_at) {
     const auto = await applySelfIdentified(sb, orgId, contactId, pending, turns, model)
     return auto.claim_id
       ? { outcome: 'named', proposal_id: pending.id, claim_id: auto.claim_id, note: auto.note }
@@ -348,6 +379,11 @@ export async function readContact(sb: Db, orgId: string, contactId: string, ask:
   if (!res.ok) return { outcome: 'model_error', note: res.error }
   const { p } = sanitize(res.proposal, shown)
   if (!p.evidence_message_id) return { outcome: 'failed', note: 'no evidence line' }
+
+  await writeStatus(sb, orgId, contactId, p)
+  if (!asking) return { outcome: 'summarized', note: p.status_summary ?? undefined }
+  // A name is only a question for someone without one.
+  if (named) p.proposed_name = null
 
   if (pending?.id) {
     await sb.from('contact_proposals').update({ status: 'superseded' }).eq('org_id', orgId).eq('id', pending.id)

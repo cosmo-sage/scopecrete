@@ -8,7 +8,7 @@
  * the guarantee; the prompt is only a request.
  */
 
-export const PROMPT_VERSION = 'enrich-v7-corrections-2026-09-27'
+export const PROMPT_VERSION = 'enrich-v8-status-2026-09-28'
 
 export const OUR_NAMES = ['Coy', 'Coy Sacco', 'Sacco', 'Sacco Builders', 'ScopeCrete', 'Dusty']
 
@@ -163,6 +163,21 @@ PROJECT_TYPE — one of driveway, patio, slab, foundation, sidewalk, apron, demo
 repair, commercial, other. Null if not stated. A sub or vendor can have a
 project_type too — it is the work being discussed, not a classification.
 
+STATUS — THE LINE COY READS IN HIS LIST
+These describe the conversation; they classify nothing and name nobody.
+  status_summary — ONE plain sentence, under 140 characters: where things
+    stand with THEM right now. A customer: what they want and where it is
+    (asked for a price, waiting on our quote, quote sent, scheduled, poured,
+    a complaint). A vendor or sub: the latest ask or activity. Facts from the
+    conversation only — no advice, no guesses, no phone numbers. Refer to them
+    as "they" unless they gave their name.
+    e.g. "Wants a 20x30 patio; waiting on our quote since Tuesday."
+  recent_summary — two to four sentences on the latest conversations, most
+    recent first, for when Coy opens the row. Same rules.
+  job_type — customers only: "residential" (a home or homeowner),
+    "commercial" (a business, builder or GC), "public" (government, school,
+    city, parish). Null for anyone else, or when it is not clear.
+
 Return ONLY a JSON object, no prose, no code fence:
 {
   "classification": "customer|vendor|sub|personal|spam|unknown",
@@ -181,7 +196,10 @@ Return ONLY a JSON object, no prose, no code fence:
   "has_media": true|false,
   "evidence_turn": number|null,
   "evidence_quote": string,
-  "name_reasoning": string
+  "name_reasoning": string,
+  "status_summary": string|null,
+  "recent_summary": string|null,
+  "job_type": "residential|commercial|public"|null
 }
 
 name_reasoning is one short sentence stating why proposed_name is what it is.
@@ -315,6 +333,11 @@ export interface Proposal {
   evidence_message_id: string | null
   evidence_quote: string
   name_reasoning: string
+  /** Where things stand, one sentence (enrich v8). Display only. */
+  status_summary?: string | null
+  /** The latest conversations, two to four sentences. Display only. */
+  recent_summary?: string | null
+  job_type?: string | null
 }
 
 // not_work was v5's single value for personal + spam; still accepted from older answers.
@@ -398,6 +421,16 @@ export function sanitize(p: Proposal, turns: Turn[]): { p: Proposal; notes: stri
     p.scope_summary = `${p.scope_summary} (Photos attached — scope not established until reviewed.)`
     notes.push('appended photo-review caveat to scope_summary')
   }
+
+  // Status lines: plain text, clipped, and never carrying a phone number.
+  const line = (v: unknown, max: number) => {
+    if (typeof v !== 'string') return null
+    const t = v.replace(/(?:\+?1[\s.-]?)?\(?\b\d{3}\)?[\s.-]*\d{3}[\s.-]*\d{4}\b/g, 'their number').replace(/\s+/g, ' ').trim()
+    return t ? (t.length > max ? `${t.slice(0, max - 1)}…` : t) : null
+  }
+  p.status_summary = line(p.status_summary, 180)
+  p.recent_summary = line(p.recent_summary, 600)
+  if (!['residential', 'commercial', 'public'].includes(p.job_type ?? '')) p.job_type = null
 
   if (!p.evidence_quote || !p.evidence_quote.trim()) {
     const firstTheirs = turns.find(t => t.who === 'THEM' && t.text !== '(no text)')

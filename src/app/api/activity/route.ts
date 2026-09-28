@@ -95,6 +95,8 @@ export async function GET(req: NextRequest) {
 
   const items: ActivityItem[] = [];
   let quietCount = 0;
+  let summarized = 0;
+  let summarizedAt: string | null = null;
   let quietAt: string | null = null;
   for (const r of (runRows ?? []) as unknown as Run[]) {
     const who = r.contacts?.name?.trim() || formatPhone(r.contacts?.phone);
@@ -128,6 +130,11 @@ export async function GET(req: NextRequest) {
           detail: r.note ? `Going on: “${clipq(r.note, 400)}”. Wrong? Open the row and tap Not ${b}.` : null, tone: "quiet" });
         break;
       }
+      case "summarized":
+        // Someone already named and sorted: only their status line changed.
+        summarized++;
+        if (!summarizedAt) summarizedAt = at;
+        break;
       case "model_error": case "failed": case "abandoned":
         items.push({ ...base, summary: `Couldn't read ${who}${r.note ? ` — ${clipq(r.note, 50)}` : ""}`, detail: r.note, tone: "warn" });
         break;
@@ -137,11 +144,16 @@ export async function GET(req: NextRequest) {
         if (!quietAt) quietAt = at;
     }
   }
+  if (summarized) {
+    items.push({ id: "summarized", at: summarizedAt!, kind: "quiet", contact_id: null,
+      summary: `Updated where things stand for ${summarized} ${summarized === 1 ? "person" : "people"}`,
+      detail: "The line under each name on Threads. Dusty's words, from their latest calls and texts.", tone: "quiet" });
+  }
   if (quietCount) {
     items.push({ id: "quiet", at: quietAt!, kind: "quiet", contact_id: null,
       summary: `Checked ${quietCount} with nothing new to say`, detail: "Threads with no words from them on record, or nothing new since the last read.", tone: "quiet" });
-    items.sort((a, b) => b.at.localeCompare(a.at));
   }
+  if (quietCount || summarized) items.sort((a, b) => b.at.localeCompare(a.at));
   if (waiting > 0) {
     items.push({ id: "waiting", at: new Date().toISOString(), kind: "waiting", contact_id: null,
       summary: `${waiting} thread${waiting === 1 ? "" : "s"} waiting to be read`, detail: "Read four at a time, every minute, until none are left.", tone: "quiet" });

@@ -23,7 +23,8 @@ export const dynamic = "force-dynamic";
 const EDITABLE = ["title", "address", "city", "state", "zip", "job_number", "notes", "status",
   "job_type", "lead_source", "referred_by_contact_id"] as const;
 const JOB_TYPES = ["residential", "commercial", "public"];
-const FORBIDDEN = ["origin", "confirmed_at", "confirmed_by", "org_id", "id", "created_from_message_id"] as const;
+const FORBIDDEN = ["origin", "confirmed_at", "confirmed_by", "org_id", "id", "created_from_message_id",
+  "archived_at", "archived_reason", "flag_reason"] as const;
 
 /** Mirrors jobs_status_check (migration 034), via the board's stage map. */
 const VALID_STATUS = ALL_STATUSES;
@@ -101,10 +102,22 @@ export async function PATCH(
     patch.confirmed_at = new Date().toISOString();
     patch.confirmed_by = userId;
   }
+  // A flagged job (its customer was re-filed, migration 038): Coy archives it
+  // or keeps it. Archiving hides it everywhere and is reversible; nothing is
+  // deleted. `{"archive": false}` brings an archived job back.
+  if (body.archive === true) {
+    patch.archived_at = new Date().toISOString();
+    patch.archived_reason = "archived by Coy";
+    patch.flag_reason = null;
+  } else if (body.archive === false) {
+    patch.archived_at = null;
+    patch.archived_reason = null;
+  }
+  if (body.keep === true) patch.flag_reason = null;
 
   if (Object.keys(patch).length === 0) {
     return applyCookies(NextResponse.json({
-      error: "Nothing to change. Send a field to edit, or {\"accept\": true}.",
+      error: "Nothing to change. Send a field to edit, {\"accept\": true}, {\"archive\": true} or {\"keep\": true}.",
     }, { status: 400 }));
   }
 

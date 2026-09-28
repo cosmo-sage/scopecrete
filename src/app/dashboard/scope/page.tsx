@@ -41,6 +41,8 @@ interface Job {
   referred_by_name: string | null;
   section_count: number;
   counts_toward_value: boolean;
+  /** Its customer was re-filed (migration 038): archive it, or keep it. */
+  flag_reason: string | null;
 }
 
 const SOURCE_LABEL = Object.fromEntries(LEAD_SOURCES.map((l) => [l.k, l.label]));
@@ -166,7 +168,8 @@ export default function JobsBoard() {
                     next={i < STAGES.length - 2 ? STAGES[i + 1] : null}
                     onNext={(status) => void patch(j.id, { status })}
                     onMove={() => setMoving(j)}
-                    onAccept={() => void patch(j.id, { accept: true })} />
+                    onAccept={() => void patch(j.id, { accept: true })}
+                    onFlag={(archive) => void patch(j.id, archive ? { archive: true } : { keep: true })} />
                 ))}
               </div>
             </section>
@@ -179,9 +182,10 @@ export default function JobsBoard() {
 
 /* ------------------------------------------------------------------ card */
 
-function JobCard({ j, busy, next, onNext, onMove, onAccept }: {
+function JobCard({ j, busy, next, onNext, onMove, onAccept, onFlag }: {
   j: Job; busy: boolean; next: (typeof STAGES)[number] | null;
   onNext: (status: string) => void; onMove: () => void; onAccept: () => void;
+  onFlag: (archive: boolean) => void;
 }) {
   const who = j.contact_name?.trim() || (j.contact_phone ? formatPhone(j.contact_phone) : "No customer yet");
   const tag = j.status ? STATUS_TAG[j.status] : null;
@@ -208,12 +212,23 @@ function JobCard({ j, busy, next, onNext, onMove, onAccept }: {
       </div>
       <div className="flex flex-wrap gap-x-2.5 gap-y-0.5" style={{ marginTop: 4 }}>
         {tag && <span style={small(T.hiviz)}>{tag}</span>}
-        {j.job_type && <span style={small(T.chalk)}>{JOB_TYPE_LABEL[j.job_type] ?? j.job_type}</span>}
+        {j.job_type
+          ? <span style={small(T.chalk)}>{JOB_TYPE_LABEL[j.job_type] ?? j.job_type}</span>
+          : <span style={small(T.hiviz)} title="Made automatically with no type — set it on the job">Type?</span>}
         {source && <span style={small(T.violet)}>{source}</span>}
         <span style={small(j.section_count ? T.ink3 : T.hiviz)}>
           {j.section_count ? `${j.section_count} section${j.section_count === 1 ? "" : "s"}` : "Not scoped"}
         </span>
       </div>
+      {j.flag_reason && (
+        <div className="rounded px-2 py-1.5 mt-2" style={{ background: T.hivizDim, border: `1px solid ${T.hiviz}` }}>
+          <div style={{ fontSize: F.xs, color: T.ink }}>{j.flag_reason}</div>
+          <div className="flex gap-1.5 mt-1.5">
+            <button disabled={busy} onClick={() => onFlag(true)} style={{ ...btn, background: T.ink, color: "#fff", borderColor: T.ink }}>Archive</button>
+            <button disabled={busy} onClick={() => onFlag(false)} style={btn}>Keep</button>
+          </div>
+        </div>
+      )}
       <div className="flex items-center gap-1.5" style={{ marginTop: 8 }}>
         {!j.counts_toward_value ? (
           <>

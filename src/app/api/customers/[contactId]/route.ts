@@ -30,7 +30,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ contactId: 
       ? supabase.from("customers").select("relation, relation_confirmed_at, relation_source").eq("id", c.customer_id).eq("org_id", orgId).maybeSingle()
       : Promise.resolve({ data: null, error: null }),
     supabase.from("contact_phones").select("phone_e164").eq("org_id", orgId).eq("contact_id", contactId),
-    supabase.from("jobs").select("id, title, status, created_at").eq("org_id", orgId).eq("contact_id", contactId)
+    supabase.from("jobs").select("id, title, status, created_at").eq("org_id", orgId).eq("contact_id", contactId).is("archived_at", null)
       .order("created_at", { ascending: false }),
   ]);
   if (cust.error) return applyCookies(NextResponse.json({ error: `customers: ${cust.error.message}` }, { status: 500 }));

@@ -52,7 +52,7 @@ export async function GET(req: NextRequest) {
     supabase.from("contacts").select("id, name, phone, address, customer_id")
       .eq("org_id", orgId).is("merged_into_contact_id", null).limit(5000),
     supabase.from("customers").select("id, relation, relation_confirmed_at").eq("org_id", orgId).limit(5000),
-    supabase.from("jobs").select("id, contact_id").eq("org_id", orgId).limit(5000),
+    supabase.from("jobs").select("id, contact_id").eq("org_id", orgId).is("archived_at", null).limit(5000),
     allMessages(),
   ]);
 

@@ -546,8 +546,8 @@ function JobMeta({ job, onSet }: { job: Job; onSet: (field: "job_type" | "lead_s
       <span style={{ ...eyebrow, color: T.ink3 }}>{stageOf(job.status).label}</span>
       <span style={{ width: 1, height: 16, background: T.hair }} />
       {Object.entries(JOB_TYPE_LABEL).map(([k, l]) => (
-        // job_type is NOT NULL with a 'residential' default, so it switches
-        // between the three rather than clearing.
+        // Picks one of the three. An automatic job may start with none
+        // (migration 038) and shows no chip on until one is chosen.
         <button key={k} style={chip(job.job_type === k)} onClick={() => { if (job.job_type !== k) onSet("job_type", k); }}>{l}</button>
       ))}
       <span style={{ width: 1, height: 16, background: T.hair }} />

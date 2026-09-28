@@ -447,6 +447,37 @@ before Coy decided) against Coy's answer.
   so quo-intake keeps creating their leads until Coy taps Keep. §2b's rule
   holds: suppression requires a human.
 
+**Jobs follow the bucket (migration 038, Coy 2026-09-28).** *"If a contact is
+categorized as a customer because there is context for a job like Amber, then
+the job should automatically be created"* — and a mistake is undone by moving
+them out. Trigger `contacts_bucket_jobs` → `sc_customer_job_for()`:
+
+- **Becomes a customer** (Coy, or Dusty on an earned streak), has no live job,
+  and Dusty's latest read names the work, the site or the size → one job in
+  New lead, `origin='classification'`, title from project type + site, type
+  from `job_type_hint`, lead source from the first message's line. Coy filed
+  them → it counts (`confirmed_at`). Dusty filed them → **Accept** on the
+  board, not counted, until Coy keeps the customer (which confirms the job).
+- **Leaves Customer** → that automatic job is archived (`archived_at`,
+  `archived_reason='moved to vendor'`) if nobody worked it (still New lead, no
+  sections). A worked job — or any other job of theirs — is never touched on
+  its own: it gets `flag_reason` ("Customer is now filed as vendor — archive
+  this job?") with **Archive / Keep** on the board.
+- **Comes back to Customer** → the archived job is restored and the flag
+  cleared. Nothing is deleted.
+- Archived jobs are out of the board, Threads, the Customers screens, cash
+  flow and Dusty's context. `jobs.job_type` is now nullable with no default
+  (Coy's call, 2026-09-28): an automatic job with no hint shows **Type?**.
+- Backfill 2026-09-28: Amber already had a job, so none was made; the other
+  confirmed customer got "Repair" — Dusty's summary says Coy referred them on,
+  so that one is for Coy to move to Lost.
+
+**Vendors on jobs** — `job_vendors` (job, contact, role = vendor subtype,
+note), RLS by `get_user_org_ids()`. **Next steps** — `contact_tasks` (title,
+due date, `source` coy | dusty, `status` open | done | dismissed, the line
+that prompted it); `title_key` recognises the same item so a dismissed Dusty
+suggestion is never re-added. Anon is refused on both (verified).
+
 An `enrich-contacts` proposal is an opinion. It can raise the question — "this
 looks like a sub, confirm?" — and once a human answers, the answer is load
 bearing. Until then the lead appears. The cost of that is a junk lead in the
@@ -626,9 +657,8 @@ expected start date per quoted job before it means anything. Add the field.
   gc_invite, lead_gen, repeat, direct, other) and `referred_by_contact_id` are
   how it reached us — Jeremy's referral: homeowner is customer, Jeremy the
   referrer; LA Contracting's bid invite: LA Contracting is customer.
-  `jobs.job_type` is NOT NULL DEFAULT 'residential', so a new job must pick its
-  type rather than inherit the default silently; making it nullable is Coy's
-  call. The header is 54px + the 38px activity line = `--sc-head` (92px);
+  `jobs.job_type` is nullable since 038 (Coy, 2026-09-28): the New job sheet
+  still requires a type; an automatic job with no hint shows **Type?**. The header is 54px + the 38px activity line = `--sc-head` (92px);
   everything under or beside it measures from that variable.
 - Cash flow is a footer TAB, not a slide-out drawer — a side drawer's
   horizontal swipe fights the ribbon's horizontal swipe.

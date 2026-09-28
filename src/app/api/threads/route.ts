@@ -242,7 +242,8 @@ export async function GET(req: NextRequest) {
     const { data: jobs } = await supabase
       .from("jobs")
       .select("id, contact_id, status, job_type")
-      .eq("org_id", orgId);
+      .eq("org_id", orgId)
+      .is("archived_at", null);
     const jobRows = (jobs ?? []) as Array<{ id: string; contact_id: string | null; status: string | null; job_type: string | null }>;
 
     let scopedIds = new Set<string>();

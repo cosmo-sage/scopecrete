@@ -52,7 +52,7 @@ async function contactBlock(sb: Sb, orgId: string, contactId: string) {
     c.customer_id
       ? sb.from("customers").select("relation, relation_confirmed_at").eq("org_id", orgId).eq("id", c.customer_id).maybeSingle()
       : Promise.resolve({ data: null }),
-    sb.from("jobs").select("id, title, status, created_at").eq("org_id", orgId).eq("contact_id", contactId),
+    sb.from("jobs").select("id, title, status, created_at").eq("org_id", orgId).eq("contact_id", contactId).is("archived_at", null),
   ]);
   const numbers = [...new Set([c.phone, ...((phones ?? []) as Array<{ phone_e164: string }>).map((p) => p.phone_e164)].filter(Boolean))];
   const name = (c.name as string | null)?.trim() || null;

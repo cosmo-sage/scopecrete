@@ -747,7 +747,7 @@ expected start date per quoted job before it means anything. Add the field.
   and need a table). **The model runs in the Hermes container on the VPS**
   (§8), reached over Tailscale Funnel at `HERMES_URL` with `HERMES_API_KEY`
   (OpenAI-compatible chat completions; Hermes routes via OpenRouter, model
-  `HERMES_MODEL`, default `anthropic/claude-3.5-haiku` while testing). No
+  `HERMES_MODEL`, default `anthropic/claude-haiku-4.5` since 2026-09-28 — 3.5-haiku began returning empty 200s). No
   model-provider key lives in Vercel. The Vercel route stays the only thing
   that touches customer data — Hermes sees only the context the route sends.
   Hermes must serve Dusty with its tools OFF: the context carries customer

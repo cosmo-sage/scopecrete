@@ -27,7 +27,7 @@ export const maxDuration = 120;
 
 const MAX_TURNS = 30;
 const MAX_USER_CHARS = 4000;
-const DEFAULT_MODEL = "anthropic/claude-3.5-haiku";
+const DEFAULT_MODEL = "anthropic/claude-haiku-4.5";
 const TIMEOUT_MS = 60_000;
 
 type Turn = { role: "user" | "assistant"; content: string };

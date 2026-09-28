@@ -43,7 +43,9 @@ import { renderCorrections } from './rules.ts'
 const WORKER = 'enrich-contacts'
 /** DECISIONS §8: Hermes alone on its own Funnel port. Not a secret — the key is. */
 const DEFAULT_HERMES_URL = 'https://srv1594563.tail0f2914.ts.net:8443'
-const DEFAULT_MODEL = 'anthropic/claude-3.5-haiku'
+// Doctor, 2026-09-28: 3.5-haiku now answers 200 with an empty stub via
+// OpenRouter; haiku-4.5 returns real completions in ~4 s.
+const DEFAULT_MODEL = 'anthropic/claude-haiku-4.5'
 /** Readers working at once. Each claims one contact, reads it, claims the next. */
 const CONCURRENCY = 4
 /**

@@ -8,7 +8,12 @@
  * real to say: every item comes from /api/activity, which reads the background
  * enricher's own rows (contact_enrich_runs) and pulse (sc_worker_heartbeats).
  *
- * - Collapsed: one line, cycling through the last day's real activity.
+ * - Collapsed: one line. Each new thing is shown ONCE on this device, then
+ *   it is gone from the line (Coy, 2026-09-28: "don't be redundant"); the
+ *   drop-down keeps the history. Reminders show once a day.
+ * - With nothing new: Dusty's musings — a light line he wrote about a real
+ *   conversation he read (contact_enrich_runs.musing, migration 039), each
+ *   once. Then just when he last read.
  * - Tap: the list drops down — each item with its time and detail, linking to
  *   the thread. Like a model's "thinking" disclosure: summary first, detail on
  *   demand.
@@ -27,6 +32,8 @@ type Tone = "live" | "good" | "ask" | "warn" | "quiet";
 interface Item { id: string; at: string; kind: string; contact_id: string | null; summary: string; detail: string | null; tone: Tone }
 interface Activity {
   pinned: { summary: string; detail: string | null } | null;
+  /** Dusty's light lines about conversations he read (migration 039). */
+  musings?: Item[];
   waiting: number;
   last_read_at: string | null;
   items: Item[];
@@ -35,6 +42,19 @@ interface Activity {
 const POLL_MS = 20_000;
 const CYCLE_MS = 4_000;
 const DAY_MS = 86_400_000;
+const SEEN_KEY = "sc-activity-seen";
+
+/** What this device has already shown. Browser storage can be missing; then everything is new. */
+function loadSeen(): Set<string> {
+  try { return new Set(JSON.parse(localStorage.getItem(SEEN_KEY) ?? "[]") as string[]); } catch { return new Set(); }
+}
+function saveSeen(seen: Set<string>) {
+  try { localStorage.setItem(SEEN_KEY, JSON.stringify([...seen].slice(-400))); } catch { /* private mode */ }
+}
+/** Reminders come back once a day; everything else once ever. */
+const seenKey = (it: Item) => it.kind === "reminder" ? `${it.id}@${new Date().toDateString()}` : it.id;
+/** Standing lines and routine reads are for the drop-down, not the line. */
+const ON_LINE = (it: Item) => !["waiting", "agreement", "quiet"].includes(it.kind);
 
 const DOT: Record<Tone, string> = {
   live: T.pulse, good: T.pulse, ask: "#6FA0FF", warn: "#FFB547", quiet: "rgba(255,255,255,.35)",
@@ -51,6 +71,9 @@ export function ActivityLine({ busy }: { busy: boolean }) {
   const [data, setData] = useState<Activity | null>(null);
   // Items from the last day — decided when the data arrives, not in render.
   const [recent, setRecent] = useState<Item[]>([]);
+  // What the collapsed line still has to show: new since this device last
+  // looked, then Dusty's unseen musings. Each leaves the queue once shown.
+  const [queue, setQueue] = useState<Item[]>([]);
   const [idx, setIdx] = useState(0);
   const [open, setOpen] = useState(false);
   const [hover, setHover] = useState(false);
@@ -59,6 +82,12 @@ export function ActivityLine({ busy }: { busy: boolean }) {
     setData(d);
     const cutoff = Date.now() - DAY_MS;
     setRecent(d.items.filter((i) => i.kind === "waiting" || i.kind === "agreement" || i.kind === "reminder" || new Date(i.at).getTime() > cutoff));
+    const seen = loadSeen();
+    const fresh = d.items.filter((i) => ON_LINE(i) && (i.kind === "running" || !seen.has(seenKey(i)))
+      && (i.kind === "reminder" || new Date(i.at).getTime() > cutoff));
+    const muse = (d.musings ?? []).filter((m) => !seen.has(m.id));
+    setQueue([...fresh, ...muse]);
+    setIdx(0);
   }, []);
 
   useEffect(() => {
@@ -76,12 +105,21 @@ export function ActivityLine({ busy }: { busy: boolean }) {
     return () => { off = true; clearInterval(t); document.removeEventListener("visibilitychange", load); };
   }, [apply]);
 
-  const cycling = !busy && !data?.pinned && recent.length > 1 && !open && !hover;
+  // Walk the queue once; the last item stays until something new arrives.
+  const current = queue.length ? queue[Math.min(idx, queue.length - 1)] : null;
+  const cycling = !busy && !data?.pinned && idx < queue.length - 1 && !open && !hover;
   useEffect(() => {
     if (!cycling) return;
     const t = setInterval(() => setIdx((i) => i + 1), CYCLE_MS);
     return () => clearInterval(t);
   }, [cycling]);
+  // Shown means seen — it will not come round again on this device.
+  useEffect(() => {
+    if (!current || current.kind === "running" || busy || data?.pinned) return;
+    const seen = loadSeen();
+    const k = seenKey(current);
+    if (!seen.has(k)) { seen.add(k); saveSeen(seen); }
+  }, [current, busy, data?.pinned]);
 
   useEffect(() => {
     if (!open) return;
@@ -94,16 +132,18 @@ export function ActivityLine({ busy }: { busy: boolean }) {
   let line: { key: string; summary: string; tone: Tone; at: string | null };
   if (busy) line = { key: "busy", summary: "Dusty is working on your question…", tone: "live", at: null };
   else if (data?.pinned) line = { key: "pinned", summary: data.pinned.summary, tone: "warn", at: null };
-  else if (recent.length) {
-    const it = recent[idx % recent.length];
-    line = { key: it.id, summary: it.summary, tone: it.tone, at: it.kind === "waiting" || it.kind === "agreement" || it.kind === "reminder" ? null : it.at };
+  else if (current) {
+    line = { key: current.id, summary: current.summary, tone: current.tone,
+             at: current.kind === "reminder" || current.kind === "musing" ? null : current.at };
   } else if (!data) {
     // Holds the row until the first answer, so the header never changes height.
     line = { key: "loading", summary: "…", tone: "quiet", at: null };
   } else {
     line = {
       key: "idle",
-      summary: data?.last_read_at ? `Last read ${relTime(data.last_read_at)} ago · ${data.waiting} waiting` : "Nothing read yet",
+      summary: data?.last_read_at
+        ? `All caught up · last read ${relTime(data.last_read_at)} ago${data.waiting ? ` · ${data.waiting} waiting` : ""}`
+        : "Nothing read yet",
       tone: "quiet", at: null,
     };
   }

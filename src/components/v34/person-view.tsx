@@ -41,6 +41,8 @@ export interface Person {
   }>;
   vendor_jobs: Array<{ id: string; title: string | null; status: string | null; job_type: string | null; role: string | null; customer: string | null }>;
   tasks: Task[];
+  /** Another live contact with the same name or email — maybe the same person. */
+  possible_duplicates?: Array<{ id: string; name: string | null; phone: string | null; same: "name" | "email" }>;
   scope: { project_type: string | null; scope_summary: string | null; site_hint: string | null; sqft_stated: number | null;
            length_ft: number | null; width_ft: number | null; start_timing: string | null; has_media: boolean } | null;
 }
@@ -76,7 +78,8 @@ export function PersonView({ person, messages, onReload, onMerge }: {
   person: Person;
   messages: ThreadMessage[];
   onReload: () => void;
-  onMerge: () => void;
+  /** Open "Same person as…", optionally straight on a suggested match. */
+  onMerge: (preselectId?: string) => void;
 }) {
   const router = useRouter();
   const c = person.contact;
@@ -150,6 +153,8 @@ export function PersonView({ person, messages, onReload, onMerge }: {
         </div>
       </div>
 
+      <SamePerson person={person} onMerge={onMerge} />
+
       {error && <div className="mx-3 mt-2" style={{ fontSize: F.xs, color: T.red }}>{error}</div>}
 
       <NextSteps contactId={c.id} tasks={person.tasks} onChanged={onReload} onError={setError} />
@@ -165,11 +170,38 @@ export function PersonView({ person, messages, onReload, onMerge }: {
         ))}
       </div>
 
-      {tab === "activity" && <Activity messages={messages} phone={phone} contactId={c.id} name={c.name} onMerge={onMerge} />}
+      {tab === "activity" && <Activity messages={messages} phone={phone} contactId={c.id} name={c.name} onMerge={() => onMerge()} />}
       {tab === "jobs" && (isVendor
         ? <VendorJobs person={person} onChanged={onReload} onError={setError} />
         : <CustomerJobs person={person} onChanged={onReload} onError={setError} />)}
       {tab === "about" && <About person={person} />}
+    </div>
+  );
+}
+
+/* ----------------------------------------------------------- same person */
+
+/**
+ * "Also Amber · (225) 926-8939 — same person?" Another live contact with the
+ * same name or email. One tap opens the merge on its confirm step; nothing is
+ * merged without that tap (DECISIONS §2c), and every merge can be undone.
+ */
+export function SamePerson({ person, onMerge }: { person: Pick<Person, "possible_duplicates">; onMerge: (id?: string) => void }) {
+  const dups = person.possible_duplicates ?? [];
+  if (!dups.length) return null;
+  return (
+    <div className="mx-3 mt-3 rounded px-3 py-2" style={{ background: T.chalkDim, border: `1px solid ${T.chalk}` }}>
+      {dups.map((d) => (
+        <div key={d.id} className="flex items-center gap-2 py-0.5">
+          <span style={{ fontSize: F.sm, color: T.ink, flex: 1, minWidth: 0 }}>
+            Also <b>{d.name ?? formatPhone(d.phone)}</b>{d.phone ? ` · ${formatPhone(d.phone)}` : ""}
+            <span style={{ color: T.ink2 }}> — same {d.same}. Same person?</span>
+          </span>
+          <button onClick={() => onMerge(d.id)} className="rounded px-2.5 shrink-0"
+            style={{ height: 30, background: T.chalk, color: "#fff", border: "none", fontFamily: disp, fontSize: F.xs,
+                     letterSpacing: ".04em", textTransform: "uppercase", cursor: "pointer" }}>Review</button>
+        </div>
+      ))}
     </div>
   );
 }

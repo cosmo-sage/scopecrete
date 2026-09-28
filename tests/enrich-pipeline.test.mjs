@@ -303,3 +303,13 @@ test("no checklist is seeded for someone filed personal", async () => {
   assert.equal(n, 0);
   assert.equal(db.log.length, 0);
 });
+
+test("a job title is at most three words and goes on the suggestion; the musing comes back for the run", async () => {
+  const db = world({ texts: [["THEM", "Need a price on the pool deck and the driveway"]] });
+  const r = await readContact(db, ORG, CONTACT, model(proposal({ job_title: "Pool deck.", musing: "Pool season waits for no one." })), "hermes:test");
+  assert.equal(writes(db, "contact_proposals", "insert")[0].payload.job_title, "Pool deck");
+  assert.equal(r.musing, "Pool season waits for no one.");
+  const long = world({ texts: [["THEM", "Need a price on the pool deck and the driveway"]] });
+  await readContact(long, ORG, CONTACT, model(proposal({ job_title: "Replace the whole pool deck and driveway" })), "hermes:test");
+  assert.equal(writes(long, "contact_proposals", "insert")[0].payload.job_title, null);
+});

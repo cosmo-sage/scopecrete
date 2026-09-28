@@ -211,10 +211,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               </Link>
             )}
             {drift !== null && (
-              <span title="Events that reached the phone number but never reached the app (sc_spine_drift)"
+              <Link href="/dashboard/more/logs" className="no-underline" title="Messages that reached your line but never reached the app — details on Logs"
                 style={{ ...eyebrow, fontSize: F.xs, color: "#fff" }}>
                 Drift <b style={{ color: drift > 0 ? "#FF7A66" : T.pulse }}>{drift}</b>
-              </span>
+              </Link>
             )}
           </div>
 
@@ -363,7 +363,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* Dusty — read-only, and it knows the screen you are on. */}
       <DustyPanel open={dustyOpen} onClose={() => setDustyOpen(false)} onBusy={setDustyBusy} />
 
-      <Sheet open={menuOpen} onClose={() => setMenuOpen(false)} title="Account" sub={me?.org_name ?? undefined}>
+      {/* Starts under the header and the activity line (--sc-head), so the
+          line never covers it and the burger stays tappable to close it. */}
+      <Sheet open={menuOpen} onClose={() => setMenuOpen(false)} title="Account" sub={me?.org_name ?? undefined} below>
         <div className="px-4 py-3">
           {displayName ? (
             <>

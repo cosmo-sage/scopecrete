@@ -506,10 +506,12 @@ export interface MergeInfo { id: string; merged_at: string; phone: string | null
  * that is open is the one kept; the picked one's calls, texts and photos move
  * onto it. Undo is offered straight after, and stays on the thread.
  */
-export function MergeSheet({ contactId, keepLabel, keepCount, onClose, onMerged }: {
+export function MergeSheet({ contactId, keepLabel, keepCount, onClose, onMerged, preselectId }: {
   contactId: string;
   keepLabel: string;
   keepCount: number;
+  /** A suggested match ("Also Amber") opens straight on the confirm step. */
+  preselectId?: string | null;
   onClose: () => void;
   onMerged: () => void;
 }) {
@@ -525,11 +527,14 @@ export function MergeSheet({ contactId, keepLabel, keepCount, onClose, onMerged 
       .then(async (r) => {
         const b = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error(b?.error || `HTTP ${r.status}`);
-        if (!off) setList((Array.isArray(b.threads) ? b.threads : []).filter((t: ThreadListItem) => t.contact_id !== contactId));
+        const rows = (Array.isArray(b.threads) ? b.threads : []).filter((t: ThreadListItem) => t.contact_id !== contactId);
+        if (off) return;
+        setList(rows);
+        if (preselectId) setPick(rows.find((t: ThreadListItem) => t.contact_id === preselectId) ?? null);
       })
       .catch((e) => { if (!off) setErr(e instanceof Error ? e.message : String(e)); });
     return () => { off = true; };
-  }, [contactId]);
+  }, [contactId, preselectId]);
 
   const needle = q.trim().toLowerCase();
   const digits = needle.replace(/\D/g, "");

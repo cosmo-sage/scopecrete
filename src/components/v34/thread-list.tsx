@@ -27,6 +27,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { T, F, disp, eyebrow, nums, clip, relTime } from "@/lib/v34/tokens";
 import { Avatar, EmptyState } from "@/components/v34/primitives";
 import { JOB_TYPE_LABEL } from "@/lib/jobs/stages";
@@ -770,7 +771,8 @@ export function ThreadList() {
         </div>
       )}
 
-      {/* Drift: 0 is all-clear, >0 is an outage that reached the app, and a
+      {/* Drift: only a message that never reached the app shows here (the
+          alarm); notes on messages that did arrive live on More → Logs. A
           failure to read it renders as UNKNOWN — never as all-clear. */}
       {drift && (drift.count === null || drift.count > 0) && (
         <div className="px-3 py-1.5 flex items-center gap-2"
@@ -778,11 +780,12 @@ export function ThreadList() {
           <span style={{ ...eyebrow, color: "#C24A00" }}>
             {drift.count === null ? "Drift unknown" : `Drift ${drift.count}`}
           </span>
-          <span style={{ fontSize: F.xs, color: T.ink2, ...clip }}>
+          <span style={{ fontSize: F.xs, color: T.ink2, ...clip, flex: 1 }}>
             {drift.count === null
-              ? "Could not read the spine-drift check."
-              : "message(s) arrived but never reached the app."}
+              ? "Could not read the data check."
+              : `${drift.count === 1 ? "A message" : "Messages"} reached your line but not the app.`}
           </span>
+          <Link href="/dashboard/more/logs" style={{ ...eyebrow, color: T.chalk }}>Logs ›</Link>
         </div>
       )}
 
@@ -792,8 +795,11 @@ export function ThreadList() {
           <span style={eyebrow}>Searching</span>
           <span style={{ fontSize: F.sm, color: T.ink, ...clip }}>{q}</span>
           <span className="flex-1" />
-          <button onClick={() => router.push("/dashboard/messages")}
-            style={{ ...eyebrow, color: T.chalk }}>Clear</button>
+          {/* A real button, not a word: on a phone the text alone was too
+              small to hit (Coy, 2026-09-28). */}
+          <button onClick={() => router.replace("/dashboard/messages")} aria-label="Clear search"
+            className="rounded px-3 shrink-0"
+            style={{ ...eyebrow, height: 30, color: T.chalk, border: `1px solid ${T.chalk}`, background: T.card, cursor: "pointer" }}>✕ Clear</button>
         </div>
       )}
 

@@ -33,7 +33,18 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ contactId: 
   if (!c) return applyCookies(NextResponse.json({ error: "Contact not found." }, { status: 404 }));
   if (c.merged_into_contact_id) return applyCookies(NextResponse.json({ redirect_to: c.merged_into_contact_id }));
 
-  const [phones, jobs, links, tasks, prop, subtypes] = await Promise.all([
+  // Maybe the same person under another number (Coy, 2026-09-28: two Ambers).
+  // Same name or same email on another live contact. A suggestion only — a
+  // merge is always Coy's tap (DECISIONS §2c).
+  const nm = c.name?.trim() ?? "";
+  const em = c.email?.trim() ?? "";
+  const dupQuery = nm || em
+    ? supabase.from("contacts").select("id, name, phone, email").eq("org_id", orgId).is("merged_into_contact_id", null)
+        .neq("id", contactId).or([nm ? `name.ilike.${nm.replace(/[,%()*]/g, "")}` : null, em ? `email.ilike.${em.replace(/[,%()*]/g, "")}` : null].filter(Boolean).join(","))
+        .limit(5)
+    : Promise.resolve({ data: [], error: null });
+
+  const [phones, jobs, links, tasks, prop, subtypes, dups] = await Promise.all([
     supabase.from("contact_phones").select("phone_e164").eq("org_id", orgId).eq("contact_id", contactId),
     supabase.from("jobs").select("id, title, status, job_type, flag_reason, origin, confirmed_at, address, created_at")
       .eq("org_id", orgId).eq("contact_id", contactId).is("archived_at", null).order("created_at", { ascending: false }),
@@ -44,6 +55,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ contactId: 
     supabase.from("contact_proposals").select("project_type, scope_summary, site_hint, sqft_stated, length_ft, width_ft, start_timing, has_media")
       .eq("org_id", orgId).eq("contact_id", contactId).order("created_at", { ascending: false }).limit(1),
     supabase.from("org_contact_subtypes").select("bucket, slug, label").eq("org_id", orgId),
+    dupQuery,
   ]);
   for (const [what, r] of [["contact_phones", phones], ["jobs", jobs], ["job_vendors", links], ["contact_tasks", tasks], ["contact_proposals", prop]] as const) {
     if (r.error) return fail(what, r.error.message);
@@ -108,5 +120,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ contactId: 
       }),
     tasks: tasks.data ?? [],
     scope: ((prop.data ?? []) as unknown[])[0] ?? null,
+    possible_duplicates: ((dups.data ?? []) as Array<{ id: string; name: string | null; phone: string | null; email: string | null }>)
+      .map((d) => ({ id: d.id, name: d.name?.trim() || null, phone: d.phone, same: d.email && em && d.email.trim().toLowerCase() === em.toLowerCase() ? "email" : "name" })),
   }));
 }

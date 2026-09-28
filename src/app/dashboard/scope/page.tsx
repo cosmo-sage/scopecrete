@@ -43,6 +43,8 @@ interface Job {
   counts_toward_value: boolean;
   /** Its customer was re-filed (migration 038): archive it, or keep it. */
   flag_reason: string | null;
+  /** A short line on what they asked for (migration 039). */
+  description: string | null;
 }
 
 const SOURCE_LABEL = Object.fromEntries(LEAD_SOURCES.map((l) => [l.k, l.label]));
@@ -203,13 +205,19 @@ function JobCard({ j, busy, next, onNext, onMove, onAccept, onFlag }: {
       <div className="flex items-baseline gap-2" style={{ minWidth: 0 }}>
         <Link href={`/dashboard/scope/${j.id}`} className="no-underline"
           style={{ fontFamily: disp, fontSize: F.md, fontWeight: 600, color: T.ink, ...clip, flex: 1, minWidth: 0 }}>
-          {j.title || j.address || "Untitled job"} ›
+          {j.title || "Untitled job"} ›
         </Link>
         {since && <span style={{ fontSize: F.xs, color: T.ink3, ...nums }}>{since}</span>}
       </div>
+      {/* Coy, 2026-09-28: a 1–3 word title; the customer, the address and a
+          short description under it — never the whole description as the title. */}
       <div style={{ fontSize: F.xs, color: T.ink2, ...clip, marginTop: 1 }}>
-        {who}{j.address && j.title ? ` · ${j.address}` : ""}
+        {who}{j.address ? ` · ${j.address}` : ""}
       </div>
+      {j.description && (
+        <div style={{ fontSize: F.xs, color: T.ink3, marginTop: 1, display: "-webkit-box", WebkitLineClamp: 2,
+                      WebkitBoxOrient: "vertical", overflow: "hidden", lineHeight: 1.3 }}>{j.description}</div>
+      )}
       <div className="flex flex-wrap gap-x-2.5 gap-y-0.5" style={{ marginTop: 4 }}>
         {tag && <span style={small(T.hiviz)}>{tag}</span>}
         {j.job_type

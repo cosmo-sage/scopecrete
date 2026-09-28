@@ -29,6 +29,8 @@ export interface ReadResult {
   proposal_id?: string | null
   claim_id?: string | null
   note?: string
+  /** Dusty's light line about the conversation, for the activity line (migration 039). */
+  musing?: string | null
 }
 
 export interface HermesConfig { url: string; key: string; model: string }
@@ -401,7 +403,8 @@ export async function readContact(sb: Db, orgId: string, contactId: string, ask:
 
   await writeStatus(sb, orgId, contactId, p)
   await seedNextSteps(sb, orgId, contactId, p, sorted ? state.contact_type ?? null : null)
-  if (!asking) return { outcome: 'summarized', note: p.status_summary ?? undefined }
+  const musing = p.musing ?? null
+  if (!asking) return { outcome: 'summarized', note: p.status_summary ?? undefined, musing }
   // A name is only a question for someone without one.
   if (named) p.proposed_name = null
 
@@ -415,13 +418,13 @@ export async function readContact(sb: Db, orgId: string, contactId: string, ask:
     length_ft: p.length_ft, width_ft: p.width_ft, sqft_stated: p.sqft_stated, site_hint: p.site_hint,
     has_media: !!p.has_media, classification: p.classification, confidence: p.confidence,
     evidence_message_id: p.evidence_message_id, evidence_quote: p.evidence_quote.slice(0, 2000),
-    model, prompt_version: PROMPT_VERSION, source_fingerprint: fp, status: 'pending',
+    model, prompt_version: PROMPT_VERSION, source_fingerprint: fp, status: 'pending', job_title: p.job_title ?? null,
   }).select('id').single()
   if (insErr || !ins) return { outcome: 'failed', note: `proposal: ${insErr?.message ?? 'not written'}` }
 
   if (p.classification === 'spam') {
     const spam = await applyAutoSpam(sb, orgId, contactId, turns, numbers[0] ?? null)
-    if (spam.filed) return { outcome: 'filed', proposal_id: ins.id as string, note: spam.note }
+    if (spam.filed) return { outcome: 'filed', proposal_id: ins.id as string, note: spam.note, musing }
   }
   const b = bucketOf(p.classification)
   if (b && b !== 'spam' && (learning.streaks[b] ?? 0) >= AUTO_STREAK) {
@@ -430,11 +433,11 @@ export async function readContact(sb: Db, orgId: string, contactId: string, ask:
       // Filing does not stop the name: someone who introduced themselves is
       // still named, and the run records the filing.
       const named = await applySelfIdentified(sb, orgId, contactId, p, turns, model)
-      return { outcome: 'filed', proposal_id: ins.id as string, claim_id: named.claim_id, note: filed.note }
+      return { outcome: 'filed', proposal_id: ins.id as string, claim_id: named.claim_id, note: filed.note, musing }
     }
   }
   const auto = await applySelfIdentified(sb, orgId, contactId, p, turns, model)
   return auto.claim_id
-    ? { outcome: 'named', proposal_id: ins.id as string, claim_id: auto.claim_id, note: auto.note }
-    : { outcome: 'proposed', proposal_id: ins.id as string, note: auto.note }
+    ? { outcome: 'named', proposal_id: ins.id as string, claim_id: auto.claim_id, note: auto.note, musing }
+    : { outcome: 'proposed', proposal_id: ins.id as string, note: auto.note, musing }
 }

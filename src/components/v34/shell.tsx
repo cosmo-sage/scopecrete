@@ -124,11 +124,13 @@ export function PipelineDrop({ onClose }: { onClose: () => void }) {
           ))}
         </div>
       )}
-      <Link href="/dashboard/more/pipeline" onClick={onClose}
+      {/* The old pipeline page listed unnamed contacts as leads and duplicated
+          the Jobs board (Coy, 2026-09-28). Jobs until a home dashboard exists. */}
+      <Link href="/dashboard/scope" onClick={onClose}
         className="w-full px-3 flex items-center justify-between no-underline"
         style={{ height: 42, color: "#fff", fontFamily: disp, fontSize: F.md,
                  letterSpacing: ".06em", textTransform: "uppercase" }}>
-        <span>Full pipeline</span>
+        <span>Jobs board</span>
         <span style={{ color: T.hiviz }}>›</span>
       </Link>
     </Drop>

@@ -16,7 +16,7 @@ interface Entry { href: string; label: string; note: string; live: boolean }
 const GROUPS: [string, Entry[]][] = [
   ["Work", [
     { href: "/dashboard/messages?f=customers", label: "Customers", note: "Everyone filed as a customer — on Threads", live: true },
-    { href: "/dashboard/more/pipeline", label: "Pipeline", note: "Leads by stage", live: true },
+    { href: "/dashboard/more/logs", label: "Logs", note: "Data checks, Dusty's reads, merges", live: true },
   ]],
   ["Settings", [
     { href: "/dashboard/more/lines", label: "Phone lines", note: "Your numbers, their provider, and the lead source each one means", live: true },

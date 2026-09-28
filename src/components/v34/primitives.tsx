@@ -192,7 +192,7 @@ export function Drawer({ open, onClose, title, sub, right, children, hideClose, 
        below: still a side drawer, but it starts under the header assembly
        so the stream and the burger are never covered. Default: covers all. */
     <div className={`fixed left-0 right-0 bottom-0 ${full ? "z-30" : "z-50"}`}
-      style={{ top: full || below ? 84 : 0, background: full ? "transparent" : "rgba(18,22,26,.44)" }}
+      style={{ top: full || below ? "var(--sc-head)" : 0, background: full ? "transparent" : "rgba(18,22,26,.44)" }}
       onClick={full ? undefined : onClose}>
       <div onClick={(e) => e.stopPropagation()} role="dialog" aria-label={title}
         className={`absolute top-0 right-0 bottom-0 flex flex-col ${full ? "left-0" : ""}`}
@@ -228,10 +228,10 @@ export function Drawer({ open, onClose, title, sub, right, children, hideClose, 
 }
 
 /** Kept as `Sheet` so the panels that already used it don't change. */
-export function Sheet({ open, onClose, title, sub, children }: {
-  open: boolean; onClose: () => void; title: string; sub?: string; children: React.ReactNode;
+export function Sheet({ open, onClose, title, sub, children, below }: {
+  open: boolean; onClose: () => void; title: string; sub?: string; children: React.ReactNode; below?: boolean;
 }) {
-  return <Drawer open={open} onClose={onClose} title={title} sub={sub}>{children}</Drawer>;
+  return <Drawer open={open} onClose={onClose} title={title} sub={sub} below={below}>{children}</Drawer>;
 }
 
 /* -------------------------------------------------------------- EmptyState */

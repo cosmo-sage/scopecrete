@@ -7,7 +7,7 @@ import Link from "next/link";
 import { T, F, disp, eyebrow, nums, clip } from "@/lib/v34/tokens";
 import { Composer } from "@/components/v34/composer";
 import { DA, MergeSheet, Timeline, formatPhone, type MergeInfo, type ThreadMessage } from "@/components/v34/conversation";
-import { PersonView, type Person } from "@/components/v34/person-view";
+import { PersonView, SamePerson, type Person } from "@/components/v34/person-view";
 
 /**
  * One person. A customer or a vendor gets their page (person-view.tsx) — Coy,
@@ -35,7 +35,8 @@ export default function ChatThreadPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
-  const [merging, setMerging] = useState(false);
+  // Open, and optionally on a suggested match ("Also Amber").
+  const [merging, setMerging] = useState<false | { preselect: string | null }>(false);
   const [undoing, setUndoing] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
   // Their page, when they are a customer or a vendor (/api/people). A failure
@@ -167,9 +168,10 @@ export default function ChatThreadPage() {
           </div>
         ))}
         <PersonView person={person} messages={messages}
-          onReload={() => setReload((n) => n + 1)} onMerge={() => setMerging(true)} />
+          onReload={() => setReload((n) => n + 1)} onMerge={(id) => setMerging({ preselect: id ?? null })} />
         {merging && (
           <MergeSheet contactId={contactId} keepLabel={headerTitle} keepCount={messages.length}
+            preselectId={merging ? merging.preselect : null}
             onClose={() => setMerging(false)}
             onMerged={() => { setMerging(false); setLoading(true); setReload((n) => n + 1); }} />
         )}
@@ -212,7 +214,7 @@ export default function ChatThreadPage() {
                   <Phone size={14} weight="fill" color={DA.textPrimary} />
                 </a>
               )}
-              <button onClick={() => setMerging(true)} className="rounded px-2 inline-flex" style={pill}>
+              <button onClick={() => setMerging({ preselect: null })} className="rounded px-2 inline-flex" style={pill}>
                 <span className="hidden sm:inline">Same person as…</span><span className="sm:hidden">Same as…</span>
               </button>
               {openJob ? (
@@ -241,6 +243,8 @@ export default function ChatThreadPage() {
             </button>
           </div>
         ))}
+
+        {person && <SamePerson person={person} onMerge={(id) => setMerging({ preselect: id ?? null })} />}
 
         <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 py-3">
           {loading ? (
@@ -320,6 +324,7 @@ export default function ChatThreadPage() {
 
       {merging && (
         <MergeSheet contactId={contactId} keepLabel={headerTitle} keepCount={messages.length}
+          preselectId={merging ? merging.preselect : null}
           onClose={() => setMerging(false)}
           onMerged={() => { setMerging(false); setLoading(true); setReload((n) => n + 1); }} />
       )}

@@ -239,6 +239,15 @@ SMS projection in application code stopped and never ran again; 48 texts landed
 in the database and never reached the app, and nothing was watching. A non-zero
 drift count is that outage, visible this time. Surface it in the UI.
 
+**Two kinds of drift row (2026-09-28).** `unprojected_raw_event` is the alarm —
+an event landed and never became a message; it alone is the drift *count*
+(`/api/dashboard/drift`), the desktop header counter and a banner on Threads.
+`open_defect` is a note on a message that DID arrive (e.g. Quo called a text
+from Coy's own Cell line "inbound"; the projection filed it outbound) — shown
+only on **More → Logs** (`/api/logs`), with Dusty's reads and same-person
+merges. Coy: drift belongs on a logs page, not in the inbox. The one open
+defect on 2026-09-28 is that Cell-line text; nothing is missing.
+
 **Attachments — migration 027 (applied 2026-09-27).** Photos, videos, PDFs and
 contact cards sent by text live in `message_media`, one row per file, written by
 the projection (`sc_project_raw_event()`) and backfilled from
@@ -292,6 +301,11 @@ the merged-away contact keeps its row, points at the person with
   service-role only, so an invoker merge would move texts and silently leave
   calls behind. Execute is granted to `authenticated` only; a stranger gets
   "contact not found".
+- **Same name, same email → a suggestion (2026-09-28).** Amber texted from two
+  numbers and became two contacts, both named Amber. The person page (and
+  the plain conversation) now shows "Also Amber · (225) … — same name. Same
+  person?" with **Review**, which opens the merge on its confirm step. Still
+  one human tap per pair; nothing merges on a match alone.
 - **Everything that resolves a contact follows the pointer.** `quo-intake` v57
   `upsertContact()` hops `merged_into_contact_id`; `sc_quo_events_project()`
   redirects an event keyed to a merged-away contact before projecting it; the
@@ -323,7 +337,7 @@ confirmed — everything else is **Unclassified**, never the column default.
 
 **The background enricher (2026-09-27, migrations 029–033).** Contacts are
 read with the app closed. pg_cron calls the `enrich-contacts` edge function
-every minute (v10; 4 readers, each claiming one contact at a time until the
+every minute (v11; 4 readers, each claiming one contact at a time until the
 queue is empty or 45 s have passed, so a backlog drains in minutes; source in
 `supabase/functions/enrich-contacts/`:
 `rules.ts` the rules, `pipeline.ts` one contact, `index.ts` the worker). There
@@ -481,6 +495,19 @@ Coy's own items are `source='coy'`. **Reminders:** the activity line shows
 every open item due today or overdue (Central time), each linking to the
 person; Dusty's context on a person includes their open next steps and his
 status line, so "what do I owe Amber?" is answered from the checklist.
+
+**Job titles and musings (migrations 039–040, `enrich-contacts` v11,
+2026-09-28).** Coy: *"a 1-3 word summary should be the job title. But the
+customer name and address and a short description below."* An automatic job
+is titled with Dusty's `job_title` (1–3 words, sanitised: more words → none)
+or else the kind of work ("Repair"); `jobs.address` takes his site hint and
+`jobs.description` his scope summary; the board card shows title, then
+customer · address, then the description. Existing automatic jobs were
+rewritten the same way. Each read also leaves a **musing** on its run row
+(`contact_enrich_runs.musing`) — one light line about the conversation, no
+names or numbers, about what happened, never claiming anything is happening
+now. Commercial jobs from emailed bid requests and plans will carry their job
+information from the request once email reaches the app (not yet).
 
 **Vendors on jobs** — `job_vendors` (job, contact, role = vendor subtype,
 note), RLS by `get_user_org_ids()`. **Next steps** — `contact_tasks` (title,
@@ -690,7 +717,11 @@ expected start date per quoted job before it means anything. Add the field.
 - Cash flow is a footer TAB, not a slide-out drawer — a side drawer's
   horizontal swipe fights the ribbon's horizontal swipe.
 - Settings opens from the header menu. Fixed costs live there AND open from
-  the runway cell on the dashboard. One editor, two doors.
+  the runway cell on the dashboard. One editor, two doors. The Account sheet
+  starts under the whole header (`--sc-head`), never under the activity line.
+- The header's pipeline drop-down links to the Jobs board; the old
+  `/more/pipeline` page (unnamed contacts listed as leads) is deleted until a
+  home dashboard is designed.
 - Legend collapses to a chip.
 - **Desktop (lg+, 2026-09-27)** takes its LAYOUT from the Claude Design desktop
   screens and its LOOK from v34 (Barlow Condensed / IBM Plex, hi-viz orange) —
@@ -726,9 +757,11 @@ expected start date per quoted job before it means anything. Add the field.
   screen (`src/components/v34/activity-line.tsx`, `/api/activity`). v34's
   StreamBar, fed by hardcoded DREAM_LINES, was never ported; this replaces it
   with **real rows only** — each line is a `contact_enrich_runs` row (reading,
-  named, suggested, couldn't read), the waiting count, or the heartbeat. One
-  line, cycling every 4 s through the last day; tap to drop down the last
-  ~20 with detail, each linking to its thread. A reader that isn't working
+  named, suggested, couldn't read), the waiting count, or the heartbeat. **Each
+  new thing shows once per device, then leaves the line** (Coy, 2026-09-28:
+  "don't be redundant"; reminders once a day); with nothing new it shows
+  Dusty's unseen **musings** (above), then "All caught up · last read …". Tap
+  to drop down the last ~20 with detail, each linking to its thread. A reader that isn't working
   (not configured, Hermes unreachable, error, silent >15 min) **pins** the line
   in amber and stops the cycling. The dot pulses only while a read is running
   or a Dusty reply is streaming. Idle says when something last happened; it

@@ -106,7 +106,7 @@ async function runBatch(sb: any, cfg: HermesConfig, maxReads: number) {
         const { learning, ask } = await forOrg(job.org_id)
         const r = await readContact(sb, job.org_id, job.contact_id, ask, model, learning)
         outcome = r.outcome
-        fields = { proposal_id: r.proposal_id ?? null, claim_id: r.claim_id ?? null, note: r.note?.slice(0, 300) ?? null }
+        fields = { proposal_id: r.proposal_id ?? null, claim_id: r.claim_id ?? null, note: r.note?.slice(0, 300) ?? null, musing: r.musing ?? null }
         if (outcome === 'model_error' && !firstModelError) firstModelError = r.note ?? 'model error'
       } catch (e) {
         fields = { note: `threw: ${(e as Error).message}`.slice(0, 300) }

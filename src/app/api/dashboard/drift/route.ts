@@ -26,11 +26,20 @@ export const dynamic = "force-dynamic";
 export async function GET(req: NextRequest) {
   const result = await getApiSession(req);
   if (!result.ok) return result.response;
-  const { supabase, applyCookies } = result.session;
+  const { supabase, orgId, applyCookies } = result.session;
 
-  const { count, error } = await supabase
-    .from("sc_spine_drift")
-    .select("*", { count: "exact", head: true });
+  // Two kinds of row (2026-09-28). `unprojected_raw_event` is the alarm: an
+  // event landed and never became a message. `open_defect` is a note on a
+  // message that DID land (e.g. Quo's direction disagreed with our lines) — a
+  // thing to review on More → Logs, not an outage. `count` is the alarm only.
+  // The view is not security_invoker (DECISIONS §9), so the org is filtered
+  // here explicitly, from the session.
+  const [{ count, error }, { count: review }] = await Promise.all([
+    supabase.from("sc_spine_drift").select("*", { count: "exact", head: true })
+      .eq("org_id", orgId).eq("issue", "unprojected_raw_event"),
+    supabase.from("sc_spine_drift").select("*", { count: "exact", head: true })
+      .eq("org_id", orgId).eq("issue", "open_defect"),
+  ]);
 
   if (error) {
     return applyCookies(NextResponse.json(
@@ -44,6 +53,7 @@ export async function GET(req: NextRequest) {
   // is the exact failure the drift alarm exists to prevent.
   return applyCookies(NextResponse.json({
     count: typeof count === "number" ? count : null,
+    review: typeof review === "number" ? review : null,
     ...(typeof count === "number" ? {} : { error: "sc_spine_drift returned no count" }),
   }));
 }

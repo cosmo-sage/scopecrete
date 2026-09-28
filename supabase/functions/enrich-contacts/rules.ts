@@ -8,7 +8,7 @@
  * the guarantee; the prompt is only a request.
  */
 
-export const PROMPT_VERSION = 'enrich-v9-next-steps-2026-09-28'
+export const PROMPT_VERSION = 'enrich-v11-titles-musings-2026-09-28'
 
 export const OUR_NAMES = ['Coy', 'Coy Sacco', 'Sacco', 'Sacco Builders', 'ScopeCrete', 'Dusty']
 
@@ -184,6 +184,14 @@ These describe the conversation; they classify nothing and name nobody.
     said, as YYYY-MM-DD, else null. quote: the line that shows it is owed,
     copied verbatim. An empty list when nothing is waiting on us — never
     invent work.
+  job_title — for work being discussed: 1 to 3 words naming the job, like
+    "Pool deck", "Driveway replacement", "Building 6 slab". Never the whole
+    description, never the customer's name. Null when no work is discussed.
+  musing — one short, light line (under 90 characters) Dusty might think after
+    reading this conversation: wry or warm, never mean, never advice. About
+    what happened, not what is happening now. No names, no phone numbers,
+    no addresses. e.g. "Nothing says fall like someone discovering their
+    rebar." Null if nothing comes to mind.
 
 Return ONLY a JSON object, no prose, no code fence:
 {
@@ -207,7 +215,9 @@ Return ONLY a JSON object, no prose, no code fence:
   "status_summary": string|null,
   "recent_summary": string|null,
   "job_type": "residential|commercial|public"|null,
-  "next_steps": [{ "title": string, "due_on": "YYYY-MM-DD"|null, "quote": string }]
+  "next_steps": [{ "title": string, "due_on": "YYYY-MM-DD"|null, "quote": string }],
+  "job_title": string|null,
+  "musing": string|null
 }
 
 name_reasoning is one short sentence stating why proposed_name is what it is.
@@ -348,6 +358,10 @@ export interface Proposal {
   job_type?: string | null
   /** Up to 3 things waiting on Coy (enrich v9): seeded into contact_tasks. */
   next_steps?: NextStep[] | null
+  /** 1–3 words naming the job (enrich v11): the automatic job's title. */
+  job_title?: string | null
+  /** A light line about the conversation for the activity line (enrich v11). */
+  musing?: string | null
 }
 
 export interface NextStep { title: string; due_on: string | null; quote: string | null }
@@ -460,6 +474,11 @@ export function sanitize(p: Proposal, turns: Turn[]): { p: Proposal; notes: stri
     if (steps.length === 3) break
   }
   p.next_steps = steps
+
+  // A job title is at most three words; anything longer is a description.
+  const jt = line(p.job_title, 40)
+  p.job_title = jt && jt.split(' ').length <= 3 ? jt.replace(/[.!]+$/, '') : null
+  p.musing = line(p.musing, 110)
 
   if (!p.evidence_quote || !p.evidence_quote.trim()) {
     const firstTheirs = turns.find(t => t.who === 'THEM' && t.text !== '(no text)')

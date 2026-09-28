@@ -204,8 +204,24 @@
   50%      { opacity: 0.35; transform: scale(0.7); }
 }
 .sc-dot-live { animation: scDotPulse 1.2s ease-in-out infinite; }
+/* Recording: a button that pulses must not shrink under the thumb. */
+@keyframes scRec { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+.sc-rec { animation: scRec 1.2s ease-in-out infinite; }
 @keyframes scLineIn { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
 .sc-line-in { animation: scLineIn 0.35s ease-out; }
+
+/* The line from the emblem to Dusty's words. While he works, a light runs
+   down it on the same 1.4 s beat as the emblem's turn. */
+.sc-thread-live {
+  background: linear-gradient(180deg, rgba(255,255,255,.18) 0%, rgba(255,255,255,.18) 30%, #1FA971 50%, rgba(255,255,255,.18) 70%, rgba(255,255,255,.18) 100%);
+  background-size: 100% 300%;
+  animation: scThread 1.4s linear infinite;
+}
+@keyframes scThread { from { background-position: 0 100%; } to { background-position: 0 0%; } }
+/* Dusty's history rail, in from the left. */
+@keyframes scRailIn { from { transform: translateX(-100%); } to { transform: none; } }
+.sc-rail-in { animation: scRailIn 0.2s cubic-bezier(0.22, 0.85, 0.3, 1); }
+.sc-caret { opacity: .6; animation: scDotPulse 0.9s ease-in-out infinite; margin-left: 1px; }
 
 @media (prefers-reduced-motion: reduce) {
   .sc-burger-bar,
@@ -226,5 +242,9 @@
   .sc-tab-mark { transition: none; }
   .sc-drop { animation: none; }
   .sc-dot-live,
-  .sc-line-in { animation: none; }
+  .sc-line-in,
+  .sc-thread-live,
+  .sc-rail-in,
+  .sc-rec,
+  .sc-caret { animation: none; }
 }

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
-import { readSectionFields, SECTION_SELECT } from "../fields";
+import { defaultReinforcement, readSectionFields, SECTION_SELECT } from "../fields";
 
 /** Edit or remove one section. Scoped by job, section AND org. */
 
@@ -25,6 +25,27 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   if (!fields.ok) return applyCookies(NextResponse.json({ error: fields.error }, { status: 400 }));
   if (Object.keys(fields.patch).length === 0) {
     return applyCookies(NextResponse.json({ error: "Nothing to change." }, { status: 400 }));
+  }
+
+  // The FK alone would accept another org's type; the org filter here does not.
+  if (typeof fields.patch.reinforcement_type_id === "string") {
+    const { data: rt } = await supabase.from("org_reinforcement_types").select("id")
+      .eq("org_id", orgId).eq("id", fields.patch.reinforcement_type_id).maybeSingle();
+    if (!rt) return applyCookies(NextResponse.json({ error: "That reinforcement is not in your settings." }, { status: 400 }));
+  }
+
+  // A new work type brings its own default — unless Coy picked the
+  // reinforcement himself (source 'set'), which is never swapped.
+  if (typeof fields.patch.work_type === "string" && !("reinforcement_type_id" in fields.patch)) {
+    const [{ data: cur }, { data: job }] = await Promise.all([
+      supabase.from("job_sections").select("reinforcement_source").eq("id", sectionId).eq("job_id", id).eq("org_id", orgId).maybeSingle(),
+      supabase.from("jobs").select("job_type").eq("id", id).eq("org_id", orgId).maybeSingle(),
+    ]);
+    if (cur && cur.reinforcement_source !== "set") {
+      const d = await defaultReinforcement(supabase, orgId, (job?.job_type as string | null) ?? null, fields.patch.work_type);
+      fields.patch.reinforcement_type_id = d;
+      fields.patch.reinforcement_source = d ? "default" : null;
+    }
   }
 
   const { data, error } = await supabase

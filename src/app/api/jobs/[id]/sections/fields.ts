@@ -17,7 +17,9 @@ const NUMERIC = ["length_ft", "width_ft", "sqft_override", "depth_in"] as const;
 const TEXT = ["name", "rebar", "prep_notes", "access_notes"] as const;
 
 export const SECTION_SELECT =
-  "id, job_id, name, work_type, length_ft, width_ft, sqft_override, depth_in, psi, rebar, prep_notes, access_notes, sort_order, created_at, updated_at";
+  "id, job_id, name, work_type, length_ft, width_ft, sqft_override, depth_in, psi, rebar, prep_notes, access_notes, sort_order, created_at, updated_at, reinforcement_type_id, reinforcement_source";
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function readSectionFields(body: Record<string, unknown>):
   { ok: true; patch: Record<string, unknown> } | { ok: false; error: string } {
@@ -54,6 +56,15 @@ export function readSectionFields(body: Record<string, unknown>):
     patch.work_type = body.work_type;
   }
 
+  // Reinforcement Coy picked (migration 042): 'set', so a later work-type
+  // change never swaps it for a default. null = none chosen.
+  if ("reinforcement_type_id" in body) {
+    const v = body.reinforcement_type_id;
+    if (v === null || v === "") { patch.reinforcement_type_id = null; patch.reinforcement_source = null; }
+    else if (typeof v === "string" && UUID.test(v)) { patch.reinforcement_type_id = v; patch.reinforcement_source = "set"; }
+    else return { ok: false, error: "reinforcement_type_id must be an id, or null." };
+  }
+
   if ("sort_order" in body) {
     if (typeof body.sort_order !== "number" || !Number.isInteger(body.sort_order)) {
       return { ok: false, error: "sort_order must be a whole number." };
@@ -62,4 +73,17 @@ export function readSectionFields(body: Record<string, unknown>):
   }
 
   return { ok: true, patch };
+}
+
+/**
+ * The default reinforcement for a job type × work type (migration 042), or
+ * null. Used when a section is created, and when a section whose
+ * reinforcement came from the defaults changes work type.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function defaultReinforcement(supabase: any, orgId: string, jobType: string | null, workType: string | null): Promise<string | null> {
+  if (!jobType || !workType) return null;
+  const { data } = await supabase.from("org_reinforcement_defaults").select("reinforcement_type_id")
+    .eq("org_id", orgId).eq("job_type", jobType).eq("work_type", workType).maybeSingle();
+  return (data?.reinforcement_type_id as string | undefined) ?? null;
 }

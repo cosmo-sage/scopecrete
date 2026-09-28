@@ -20,6 +20,11 @@
  * - A reader that is not working pins the line in amber and it stops cycling.
  * - The dot pulses only while something is running: a claimed read, or a
  *   Dusty reply streaming in this tab. Otherwise it is still.
+ * - No bubble (Coy, 2026-09-28): the words sit on the grey glass row, typed in
+ *   letter by letter as each thought arrives; a live Dusty reply shows its
+ *   real tokens as they stream. A thin line drops from the header emblem to
+ *   the dot, so the mark, the thinking and the words read as one thing — a
+ *   pulse runs down it while Dusty is working, in step with the emblem.
  * - Nothing in the last day: says when something last happened. Never invents
  *   something happening now.
  */
@@ -67,7 +72,24 @@ function Dot({ tone, live }: { tone: Tone; live: boolean }) {
   );
 }
 
-export function ActivityLine({ busy }: { busy: boolean }) {
+/** Types `text` in, a letter at a time, whenever `k` changes. Reduced motion: whole. */
+function useTyped(text: string, k: string): string {
+  const [shown, setShown] = useState({ k, n: text.length });
+  useEffect(() => {
+    const still = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    if (still) return;
+    let n = 0;
+    const t = setInterval(() => {
+      n += 1;
+      setShown({ k, n });
+      if (n >= text.length) clearInterval(t);
+    }, 18);
+    return () => clearInterval(t);
+  }, [k, text]);
+  return shown.k === k ? text.slice(0, shown.n) : "";
+}
+
+export function ActivityLine({ busy, live }: { busy: boolean; live?: string }) {
   const [data, setData] = useState<Activity | null>(null);
   // Items from the last day — decided when the data arrives, not in render.
   const [recent, setRecent] = useState<Item[]>([]);
@@ -130,7 +152,11 @@ export function ActivityLine({ busy }: { busy: boolean }) {
 
   const running = recent.some((i) => i.kind === "running");
   let line: { key: string; summary: string; tone: Tone; at: string | null };
-  if (busy) line = { key: "busy", summary: "Dusty is working on your question…", tone: "live", at: null };
+  if (busy) {
+    // A reply streaming in this tab: its own words, the tail that fits.
+    const said = (live ?? "").replace(/\s+/g, " ").trim();
+    line = { key: "busy", summary: said ? (said.length > 90 ? `…${said.slice(-90)}` : said) : "Dusty is thinking…", tone: "live", at: null };
+  }
   else if (data?.pinned) line = { key: "pinned", summary: data.pinned.summary, tone: "warn", at: null };
   else if (current) {
     line = { key: current.id, summary: current.summary, tone: current.tone,
@@ -147,19 +173,29 @@ export function ActivityLine({ busy }: { busy: boolean }) {
       tone: "quiet", at: null,
     };
   }
-  const live = busy || running;
+  const working = busy || running;
+  // The streamed reply already arrives a token at a time; everything else types in.
+  const typed = useTyped(line.summary, line.key);
+  const text = busy ? line.summary : typed;
+  const lineColour = line.tone === "warn" ? "#FFB547" : "rgba(255,255,255,.28)";
 
   return (
-    <div className="px-2.5 pb-2 sc-glass" onPointerEnter={(e) => { if (e.pointerType === "mouse") setHover(true); }} onPointerLeave={() => setHover(false)}>
+    <div className="relative px-2.5 pb-2 sc-glass" onPointerEnter={(e) => { if (e.pointerType === "mouse") setHover(true); }} onPointerLeave={() => setHover(false)}>
+      {/* From the emblem (centre 22px from the edge, bottom ~15px above this
+          row) down to the dot. */}
+      <span aria-hidden="true" className={working ? "sc-thread-live" : undefined}
+        style={{ position: "absolute", left: 21.25, top: -15, height: 30, width: 1.5, borderRadius: 1,
+                 background: working ? undefined : lineColour }} />
       <button onClick={() => setOpen((o) => !o)} aria-expanded={open}
         aria-label={open ? "Hide Dusty's activity" : "Show Dusty's activity"}
-        className="w-full rounded-lg flex items-center gap-2 px-3 text-left"
-        style={{ height: 30, background: "rgba(0,0,0,.32)", border: "1px solid rgba(255,255,255,.08)", cursor: "pointer" }}>
-        <Dot tone={line.tone} live={live} />
-        <span key={line.key} className="sc-line-in" aria-live="polite"
+        className="w-full flex items-center gap-2 text-left"
+        style={{ height: 30, padding: "0 4px 0 8px", background: "transparent", border: "none", cursor: "pointer" }}>
+        <Dot tone={line.tone} live={working} />
+        <span aria-live="polite"
           style={{ flex: 1, minWidth: 0, fontSize: F.sm, fontStyle: "italic",
                    color: line.tone === "warn" ? "#FFD08A" : "rgba(255,255,255,.86)", ...clip }}>
-          {line.summary}
+          {text}
+          {!busy && text.length < line.summary.length && <span className="sc-caret" aria-hidden="true">▍</span>}
         </span>
         {line.at && <span style={{ fontSize: F.xs, color: "rgba(255,255,255,.45)", ...nums }}>{relTime(line.at)}</span>}
         <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"

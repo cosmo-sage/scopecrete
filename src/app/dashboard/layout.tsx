@@ -71,6 +71,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }, []);
   // True only while a Dusty reply is actually streaming.
   const [dustyBusy, setDustyBusy] = useState(false);
+  // The reply as it streams, so the activity line can show Dusty's own words.
+  const [dustyLive, setDustyLive] = useState("");
 
   const [me, setMe] = useState<Me | null>(null);
   const [needs, setNeeds] = useState<number | null>(null);
@@ -261,7 +263,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </header>
 
         {/* What Dusty is doing, from real rows only — see activity-line.tsx. */}
-        <ActivityLine busy={dustyBusy} />
+        <ActivityLine busy={dustyBusy} live={dustyLive} />
 
         {/* Search lives under the glass, same place on every page — it never
             becomes a row on the page itself. */}
@@ -360,8 +362,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         })}
       </footer>
 
-      {/* Dusty — read-only, and it knows the screen you are on. */}
-      <DustyPanel open={dustyOpen} onClose={() => setDustyOpen(false)} onBusy={setDustyBusy} />
+      {/* Dusty — full screen under the header; read-only toward the business. */}
+      <DustyPanel open={dustyOpen} onClose={() => setDustyOpen(false)} onBusy={setDustyBusy} onStream={setDustyLive} />
 
       {/* Starts under the header and the activity line (--sc-head), so the
           line never covers it and the burger stays tappable to close it. */}

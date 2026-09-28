@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
-import { readSectionFields, SECTION_SELECT } from "./fields";
+import { defaultReinforcement, readSectionFields, SECTION_SELECT } from "./fields";
 
 /**
  * A job's sections — read and create. Session client, org from the session
@@ -45,8 +45,15 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const fields = readSectionFields(body);
   if (!fields.ok) return applyCookies(NextResponse.json({ error: fields.error }, { status: 400 }));
 
+  // The FK alone would accept another org's type; the org filter here does not.
+  if (typeof fields.patch.reinforcement_type_id === "string") {
+    const { data: rt } = await supabase.from("org_reinforcement_types").select("id")
+      .eq("org_id", orgId).eq("id", fields.patch.reinforcement_type_id).maybeSingle();
+    if (!rt) return applyCookies(NextResponse.json({ error: "That reinforcement is not in your settings." }, { status: 400 }));
+  }
+
   const { data: job, error: jobErr } = await supabase
-    .from("jobs").select("id").eq("id", id).eq("org_id", orgId).maybeSingle();
+    .from("jobs").select("id, job_type").eq("id", id).eq("org_id", orgId).maybeSingle();
   if (jobErr) return applyCookies(NextResponse.json({ error: `jobs: ${jobErr.message}` }, { status: 500 }));
   if (!job) return applyCookies(NextResponse.json({ error: "No such job in your organisation.", code: "not_found" }, { status: 404 }));
 
@@ -59,6 +66,11 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     org_id: orgId,
     job_id: id,
   };
+  // Coy's default for this kind of job and work (migration 042), labelled as a default.
+  if (!("reinforcement_type_id" in fields.patch)) {
+    const d = await defaultReinforcement(supabase, orgId, job.job_type as string | null, (fields.patch.work_type as string | undefined) ?? "slab");
+    if (d) Object.assign(insert, { reinforcement_type_id: d, reinforcement_source: "default" });
+  }
 
   const { data, error } = await supabase.from("job_sections").insert(insert).select(SECTION_SELECT).single();
   if (error) return applyCookies(NextResponse.json({ error: `job_sections insert: ${error.message}` }, { status: 500 }));

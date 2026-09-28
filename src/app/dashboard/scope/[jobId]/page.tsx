@@ -20,17 +20,18 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { JOB_TYPE_LABEL, LEAD_SOURCES, stageOf } from "@/lib/jobs/stages";
 import { T, F, disp, eyebrow, nums, clip, money, money0, formatPhone } from "@/lib/v34/tokens";
-import { EmptyState, Badge } from "@/components/v34/primitives";
+import { EmptyState } from "@/components/v34/primitives";
+import { JobChips } from "@/components/v34/job-chips";
 import {
-  price as priceJob, floor as floorOf, takeoff as takeoffOf, quantities,
-  type CostSettings, type OverheadItem, type SectionInput,
+  price as priceJob, floor as floorOf, takeoff as takeoffOf, quantities, reinforcementQty,
+  type CostSettings, type OverheadItem, type ReinforcementType, type SectionInput,
 } from "@/lib/engine";
 
 interface Section extends SectionInput {
   id: string;
   rebar: string | null;
+  reinforcement_source?: "set" | "default" | null;
   prep_notes: string | null;
   access_notes: string | null;
   sort_order: number;
@@ -68,14 +69,22 @@ export default function ScopeBuilder() {
   const [saveErr, setSaveErr] = useState<Record<string, string>>({});
   const [adding, setAdding] = useState(false);
   const [discount, setDiscount] = useState(0);
+  const [rtypes, setRtypes] = useState<ReinforcementType[]>([]);
 
   const load = useCallback(async () => {
     try {
-      const [j, s, c] = await Promise.all([
+      const [j, s, c, r] = await Promise.all([
         send(`/api/jobs/${jobId}`, "GET"),
         send(`/api/jobs/${jobId}/sections`, "GET"),
         send("/api/settings/cost", "GET"),
+        // Reinforcement types (migration 042). A failure leaves none to pick, not a broken page.
+        send("/api/settings/reinforcement", "GET").catch(() => ({ types: [] })),
       ]);
+      setRtypes(((r.types ?? []) as Array<Record<string, unknown>>).map((x) => ({
+        ...(x as unknown as ReinforcementType),
+        unit_cost: num(x.unit_cost), sheet_sqft: num(x.sheet_sqft), spacing_in: num(x.spacing_in),
+        stick_ft: num(x.stick_ft), lap_pct: num(x.lap_pct), per_cy: num(x.per_cy),
+      })));
       setJob(j.job); setContact(j.contact ?? null);
       setSections((s.sections as Section[]).map(numify));
       setSettings(c.settings ? numifySettings(c.settings) : null);
@@ -88,7 +97,7 @@ export default function ScopeBuilder() {
   useEffect(() => { void load(); }, [load]);
 
   const t = useMemo(() => takeoffOf(sections ?? [], settings?.concrete_overage_pct ?? null), [sections, settings]);
-  const priced = useMemo(() => priceJob(sections ?? [], settings ?? EMPTY, { discount }), [sections, settings, discount]);
+  const priced = useMemo(() => priceJob(sections ?? [], settings ?? EMPTY, { discount, reinforcement: rtypes }), [sections, settings, discount, rtypes]);
   const fl = useMemo(() => (priced.priced ? floorOf(priced.cost.total, settings ?? EMPTY, overhead, job?.duration_days ?? null) : null),
     [priced, settings, overhead, job]);
 
@@ -165,13 +174,10 @@ export default function ScopeBuilder() {
                 {job.created_from_message_id ? " · drafted from a message" : " · entered by hand"}
               </div>
             </div>
-            {job.status && <Badge s={job.status} />}
           </div>
           {saveErr.job && <div style={{ fontSize: F.xs, color: T.red }}>{saveErr.job}</div>}
-          <JobMeta job={job} onSet={(field, value) => void send(`/api/jobs/${jobId}`, "PATCH", { [field]: value })
-            .then((b) => setJob((j) => j && { ...j, job_type: b.job.job_type, lead_source: b.job.lead_source }))
-            .catch((er) => setSaveErr((m) => ({ ...m, job: String(er.message ?? er) })))} />
-          <JobCrew jobId={jobId} />
+          <JobChips job={job} onSet={(field, value) => send(`/api/jobs/${jobId}`, "PATCH", { [field]: value })
+            .then((b) => setJob((j) => j && { ...j, status: b.job.status, job_type: b.job.job_type, lead_source: b.job.lead_source }))} />
         </div>
 
         {/* Phone: the takeoff rail sits below the sections, so the three
@@ -194,7 +200,7 @@ export default function ScopeBuilder() {
         )}
 
         {sections.map((s, i) => (
-          <SectionCard key={s.id} s={s} index={i} err={saveErr[s.id]}
+          <SectionCard key={s.id} s={s} index={i} err={saveErr[s.id]} rtypes={rtypes} jobType={job.job_type} jobId={jobId}
             onLocal={(p) => patchLocal(s.id, p)} onSave={(p) => void save(s.id, p)}
             onRemove={() => void removeSection(s.id)} overage={settings?.concrete_overage_pct ?? null} />
         ))}
@@ -250,8 +256,8 @@ function splitFt(v: number | null): [number | "", number | ""] {
   return [ft, inch === 0 ? "" : inch];
 }
 
-function SectionCard({ s, index, err, onLocal, onSave, onRemove, overage }: {
-  s: Section; index: number; err?: string; overage: number | null;
+function SectionCard({ s, index, err, onLocal, onSave, onRemove, overage, rtypes, jobType, jobId }: {
+  s: Section; index: number; err?: string; overage: number | null; rtypes: ReinforcementType[]; jobType: string | null; jobId: string;
   onLocal: (p: Partial<Section>) => void; onSave: (p: Partial<Section>) => void; onRemove: () => void;
 }) {
   const q = quantities(s);
@@ -287,6 +293,7 @@ function SectionCard({ s, index, err, onLocal, onSave, onRemove, overage }: {
           className="rounded px-1.5 outline-none" style={{ height: 28, border: `1px solid ${T.hair}`, background: "#fff", fontSize: F.xs }}>
           {WORK_TYPES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
         </select>
+        <Dictate jobId={jobId} s={s} onApply={(p) => { onLocal(p as Partial<Section>); onSave(p as Partial<Section>); }} />
         <button onClick={onRemove} aria-label="Remove section" style={{ ...eyebrow, color: T.red, cursor: "pointer" }}>Remove</button>
       </div>
 
@@ -329,7 +336,8 @@ function SectionCard({ s, index, err, onLocal, onSave, onRemove, overage }: {
 
       {concrete && (
         <div className="px-3 py-2 grid grid-cols-1 sm:grid-cols-3 gap-2" style={{ borderTop: `1px solid ${T.hairSoft}` }}>
-          <NoteIn label="Reinforcement" value={s.rebar} onLocal={(v) => onLocal({ rebar: v })} onSave={(v) => onSave({ rebar: v })} placeholder="not set" />
+          <ReinforcementPick s={s} q={q} rtypes={rtypes} jobType={jobType}
+            onPick={(id) => { onLocal({ reinforcement_type_id: id, reinforcement_source: id ? "set" : null }); onSave({ reinforcement_type_id: id }); }} />
           <NoteIn label="Prep" value={s.prep_notes} onLocal={(v) => onLocal({ prep_notes: v })} onSave={(v) => onSave({ prep_notes: v })} placeholder="not noted" />
           <NoteIn label="Access" value={s.access_notes} onLocal={(v) => onLocal({ access_notes: v })} onSave={(v) => onSave({ access_notes: v })} placeholder="not noted" />
         </div>
@@ -338,6 +346,126 @@ function SectionCard({ s, index, err, onLocal, onSave, onRemove, overage }: {
     </div>
   );
 }
+
+/**
+ * Dictate this section (Coy, 2026-09-28): tap, say "front drive, twenty four
+ * by thirty, four inch, 6x6 mesh", tap again. Groq writes the words, Dusty
+ * puts them in the boxes, and only numbers that were said are kept
+ * (src/lib/dictate.ts). What changed shows as "Heard: …" with Undo.
+ */
+function Dictate({ jobId, s, onApply }: { jobId: string; s: Section; onApply: (p: Record<string, unknown>) => void }) {
+  const [state, setState] = useState<"idle" | "rec" | "busy">("idle");
+  const [heard, setHeard] = useState<{ text: string; prev: Record<string, unknown>; changed: string[]; note?: string } | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const rec = React.useRef<MediaRecorder | null>(null);
+  const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); rec.current?.stop(); }, []);
+
+  const start = async () => {
+    setErr(null); setHeard(null);
+    if (typeof MediaRecorder === "undefined" || !navigator.mediaDevices) { setErr("This browser can't record audio."); return; }
+    let stream: MediaStream;
+    try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+    catch { setErr("Microphone blocked — allow it for this site."); return; }
+    const chunks: Blob[] = [];
+    const r = new MediaRecorder(stream);
+    r.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+    r.onstop = () => {
+      stream.getTracks().forEach((t) => t.stop());
+      if (timer.current) clearTimeout(timer.current);
+      void send(new Blob(chunks, { type: r.mimeType || "audio/webm" }));
+    };
+    rec.current = r;
+    r.start();
+    setState("rec");
+    timer.current = setTimeout(() => r.state === "recording" && r.stop(), 60_000);
+  };
+
+  const send = async (blob: Blob) => {
+    setState("busy");
+    try {
+      const fd = new FormData();
+      fd.append("audio", blob, blob.type.includes("mp4") ? "section.mp4" : "section.webm");
+      const r = await fetch(`/api/jobs/${jobId}/sections/${s.id}/dictate`, { method: "POST", body: fd });
+      const b = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(b?.error || `HTTP ${r.status}`);
+      const patch = (b.patch ?? {}) as Record<string, unknown>;
+      const keys = Object.keys(patch);
+      const prev = Object.fromEntries(keys.map((k) => [k, (s as unknown as Record<string, unknown>)[k] ?? null]));
+      if (keys.length) onApply(patch);
+      setHeard({ text: String(b.transcript ?? ""), prev, changed: keys, note: b.note ?? (keys.length ? undefined : "Nothing in that matched a box.") });
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setState("idle");
+    }
+  };
+
+  const LABEL: Record<string, string> = { length_ft: "length", width_ft: "width", depth_in: "thickness", psi: "PSI", work_type: "type",
+    name: "name", reinforcement_type_id: "reinforcement", prep_notes: "prep", access_notes: "access" };
+  return (
+    <>
+      <button onClick={() => (state === "rec" ? rec.current?.stop() : state === "idle" ? void start() : undefined)}
+        disabled={state === "busy"} aria-label={state === "rec" ? "Stop and fill the section" : "Dictate this section"}
+        className={state === "rec" ? "sc-rec inline-flex items-center gap-1 rounded px-2" : "inline-flex items-center gap-1 rounded px-2"}
+        style={{ height: 28, border: `1px solid ${state === "rec" ? T.red : T.hair}`, background: state === "rec" ? T.red : "#fff",
+                 color: state === "rec" ? "#fff" : T.ink2, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", cursor: "pointer" }}>
+        <svg width="12" height="12" viewBox="0 0 15 15" aria-hidden="true">
+          <rect x="5.4" y="1.6" width="4.2" height="7.6" rx="2.1" fill="none" stroke="currentColor" strokeWidth="1.5" />
+          <path d="M3 7.4a4.5 4.5 0 0 0 9 0 M7.5 11.9v1.6" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+        </svg>
+        {state === "rec" ? "Stop" : state === "busy" ? "Listening…" : "Dictate"}
+      </button>
+      {(heard || err) && (
+        <div className="w-full rounded px-2.5 py-1.5" style={{ background: err ? "#FBECE9" : "#EAF0FC", fontSize: F.xs, lineHeight: 1.4 }}>
+          {err ? <span style={{ color: T.red }}>{err}</span> : heard && (
+            <>
+              <span style={{ color: T.ink2 }}>Heard: </span><span style={{ fontStyle: "italic" }}>“{heard.text}”</span>
+              {heard.changed.length > 0 && <span style={{ color: T.ink2 }}> · filled {heard.changed.map((k) => LABEL[k] ?? k).join(", ")}</span>}
+              {heard.note && <span style={{ color: T.ink3 }}> · {heard.note}</span>}
+              {heard.changed.length > 0 && (
+                <button onClick={() => { onApply(heard.prev); setHeard(null); }} style={{ marginLeft: 8, color: T.chalk, fontWeight: 600, cursor: "pointer" }}>Undo</button>
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </>
+  );
+}
+
+/**
+ * Reinforcement from Coy's list (migration 042), priced by its own unit. A
+ * default is labelled as one; the quantity shows in the unit he buys.
+ */
+function ReinforcementPick({ s, q, rtypes, jobType, onPick }: {
+  s: Section; q: ReturnType<typeof quantities>; rtypes: ReinforcementType[]; jobType: string | null;
+  onPick: (id: string | null) => void;
+}) {
+  const t = rtypes.find((r) => r.id === s.reinforcement_type_id) ?? null;
+  const qty = t ? reinforcementQty(q, t) : null;
+  const plural = (w: string) => (w.endsWith("s") ? w : `${w}s`);
+  const source = !t ? (s.reinforcement_type_id ? "removed from settings" : "none chosen — not in the price")
+    : s.reinforcement_source === "default" ? `default for ${jobType ? `${JOB_WORD[jobType] ?? jobType} ` : ""}${plural(s.work_type)}` : "you set it";
+  return (
+    <label className="block" style={{ minWidth: 0 }}>
+      <span style={eyebrow}>Reinforcement</span>
+      <select value={s.reinforcement_type_id ?? ""} onChange={(e) => onPick(e.target.value || null)}
+        className="w-full rounded px-2 outline-none mt-0.5"
+        style={{ height: 32, border: `1px solid ${t ? T.hair : T.hiviz}`, background: "#fff", fontSize: F.sm }}>
+        <option value="">{rtypes.length ? "None" : "None — add types in cost settings"}</option>
+        {rtypes.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+      </select>
+      <span style={{ display: "block", fontSize: 9.5, color: T.ink3 }}>
+        {source}{qty && qty.ok ? ` · ${qty.qty.toLocaleString("en-US")} ${qty.unit}${qty.qty !== 1 && ["sheet", "stick", "bag"].includes(qty.unit) ? "s" : ""}` : ""}
+        {qty && !qty.ok ? ` · needs ${qty.missing.join(", ")}` : ""}
+      </span>
+      {s.rebar && <span style={{ display: "block", fontSize: 9.5, color: T.ink2 }}>Note: {s.rebar}</span>}
+    </label>
+  );
+}
+
+const JOB_WORD: Record<string, string> = { residential: "residential", commercial: "commercial", public: "government" };
 
 function Cell({ label, missing, source, children }: { label: string; missing: boolean; source: string; children: React.ReactNode }) {
   return (
@@ -528,93 +656,5 @@ function TakeoffRail({ t, priced, fl, job, discount, setDiscount, onCrewDays, ha
         </>
       )}
     </aside>
-  );
-}
-
-/**
- * Residential / commercial / government, and how the job reached us — the two
- * facts the Jobs board shows on every card. One tap each.
- * (Who referred it is picked when the job is created on the board.)
- */
-function JobMeta({ job, onSet }: { job: Job; onSet: (field: "job_type" | "lead_source", value: string) => void }) {
-  const chip = (on: boolean): React.CSSProperties => ({
-    height: 26, padding: "0 9px", borderRadius: 3, fontSize: F.xs, cursor: "pointer", whiteSpace: "nowrap",
-    fontFamily: disp, textTransform: "uppercase", letterSpacing: ".04em",
-    border: `1px solid ${on ? T.ink : T.hair}`, background: on ? T.ink : T.card, color: on ? "#fff" : T.ink2,
-  });
-  return (
-    <div className="flex flex-wrap items-center gap-1.5" style={{ marginTop: 8 }}>
-      <span style={{ ...eyebrow, color: T.ink3 }}>{stageOf(job.status).label}</span>
-      <span style={{ width: 1, height: 16, background: T.hair }} />
-      {Object.entries(JOB_TYPE_LABEL).map(([k, l]) => (
-        // Picks one of the three. An automatic job may start with none
-        // (migration 038) and shows no chip on until one is chosen.
-        <button key={k} style={chip(job.job_type === k)} onClick={() => { if (job.job_type !== k) onSet("job_type", k); }}>{l}</button>
-      ))}
-      <span style={{ width: 1, height: 16, background: T.hair }} />
-      <select value={job.lead_source ?? ""} onChange={(e) => onSet("lead_source", e.target.value)}
-        className="rounded px-1.5 outline-none"
-        style={{ height: 26, fontSize: F.xs, border: `1px solid ${job.lead_source ? T.ink : T.hair}`, background: T.card, color: T.ink }}>
-        <option value="">Source: not set</option>
-        {LEAD_SOURCES.map((l) => <option key={l.k} value={l.k}>{l.label}</option>)}
-      </select>
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ crew */
-
-/**
- * Crew & suppliers on this job — the vendors side of "jobs should be
- * connected to vendors" (Coy, 2026-09-28; job_vendors, migration 038). Each
- * one links to their Vendor page, where the same link shows from their side.
- */
-function JobCrew({ jobId }: { jobId: string }) {
-  const [crew, setCrew] = useState<Array<{ contact_id: string; name: string | null; phone: string | null; role: string | null }> | null>(null);
-  const [vendors, setVendors] = useState<Array<{ id: string; name: string | null; phone: string | null; subtype: string | null }>>([]);
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  const [tick, setTick] = useState(0);
-  useEffect(() => {
-    let off = false;
-    fetch(`/api/jobs/${jobId}/vendors`).then((r) => (r.ok ? r.json() : null))
-      .then((b) => { if (!off) setCrew(Array.isArray(b?.vendors) ? b.vendors : []); }).catch(() => {});
-    return () => { off = true; };
-  }, [jobId, tick]);
-  useEffect(() => {
-    let off = false;
-    fetch("/api/people?bucket=vendor").then((r) => (r.ok ? r.json() : null))
-      .then((b) => { if (!off && Array.isArray(b?.people)) setVendors(b.people); }).catch(() => {});
-    return () => { off = true; };
-  }, []);
-  const run = (p: Promise<unknown>) => {
-    setBusy(true); setErr(null);
-    p.then(() => setTick((n) => n + 1)).catch((e) => setErr(String(e?.message ?? e))).finally(() => setBusy(false));
-  };
-  if (crew === null) return null;
-  const free = vendors.filter((v) => !crew.some((c) => c.contact_id === v.id));
-  return (
-    <div className="flex flex-wrap items-center gap-1.5" style={{ marginTop: 6 }}>
-      <span style={{ ...eyebrow, color: T.ink3 }}>Crew & suppliers</span>
-      {crew.length === 0 && <span style={{ fontSize: F.xs, color: T.ink3 }}>none yet</span>}
-      {crew.map((c) => (
-        <span key={c.contact_id} className="rounded inline-flex items-center gap-1 px-1.5"
-          style={{ height: 24, border: `1px solid ${T.chalk}`, fontSize: F.xs }}>
-          <Link href={`/dashboard/messages/${c.contact_id}`} style={{ color: T.chalk }}>{c.name ?? formatPhone(c.phone)}</Link>
-          {c.role && <span style={{ color: T.ink3 }}>{c.role.replace(/_/g, " ")}</span>}
-          <button disabled={busy} aria-label="Remove from job" style={{ color: T.ink3, cursor: "pointer" }}
-            onClick={() => run(send(`/api/jobs/${jobId}/vendors?contact_id=${c.contact_id}`, "DELETE"))}>×</button>
-        </span>
-      ))}
-      {free.length > 0 && (
-        <select disabled={busy} value="" aria-label="Add a vendor to this job"
-          onChange={(e) => { if (e.target.value) run(send(`/api/jobs/${jobId}/vendors`, "POST", { contact_id: e.target.value })); }}
-          className="rounded px-1.5 outline-none" style={{ height: 24, fontSize: F.xs, border: `1px dashed ${T.chalk}`, background: T.card, color: T.chalk }}>
-          <option value="">+ Add</option>
-          {free.map((v) => <option key={v.id} value={v.id}>{v.name ?? formatPhone(v.phone)}{v.subtype ? ` — ${v.subtype.replace(/_/g, " ")}` : ""}</option>)}
-        </select>
-      )}
-      {err && <span style={{ fontSize: F.xs, color: T.red }}>{err}</span>}
-    </div>
   );
 }

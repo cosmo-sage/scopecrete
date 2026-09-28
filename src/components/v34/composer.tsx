@@ -209,7 +209,7 @@ export function Composer({ contactId, phone, name, compact = false, onNoteSaved 
             aria-label={!canDictate ? "Dictation isn't available in this browser" : listening ? "Stop listening" : "Talk — the words land in the box"}
             aria-pressed={listening}
             title={!canDictate ? "This browser has no speech recognition" : listening ? "Listening — tap to stop" : "Tap and talk"}
-            className={listening ? "sc-dot-live" : undefined}
+            className={listening ? "sc-rec" : undefined}
             style={{ ...iconBtn, opacity: canDictate ? 1 : 0.45, cursor: canDictate ? "pointer" : "not-allowed",
                      background: listening ? T.red : T.card, borderColor: listening ? T.red : T.hair }}>
             <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true">

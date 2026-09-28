@@ -591,8 +591,30 @@ percentage of labour — all three contradict this section and §4.
   and `psi` explicitly as null so the schema defaults (4 in, 3000 psi) never
   stand in for a measurement. Fixing the column needs a migration and Coy's
   instruction.
-- **Not yet priced:** reinforcement, base, vapor barrier (no rates exist), and
-  day-rate equipment. The builder lists them as "not in this price".
+- **Reinforcement (migration 042, Coy 2026-09-28)** is priced by the unit it
+  is bought in: mesh by the sheet (`sheet_sqft` a sheet covers after lap) or
+  sq ft; rebar by the stick or the foot (a grid both ways at `spacing_in`,
+  plus `lap_pct`); fiber by the lb or bag per yard (`per_cy`) —
+  `reinforcementQty()`. It is a material: marked up and taxed with materials.
+  Types live in Cost settings → Concrete (`org_reinforcement_types`,
+  `/api/settings/reinforcement`); **defaults** per job type × work type
+  (`org_reinforcement_defaults`: "residential driveways are 6x6 10 ga mesh")
+  fill a new section — or one whose work type changes and whose reinforcement
+  Coy did not pick — labelled "default for residential driveways". Coy's pick
+  (`reinforcement_source='set'`) is never swapped. A default is Coy's own
+  setting, not an assumption; a missing number on the chosen type still blocks
+  the price and is named. A section with none chosen is listed as not in the
+  price.
+- **Not yet priced:** base, vapor barrier (no rates exist), and day-rate
+  equipment. The builder lists them as "not in this price".
+- **Dictating a section (2026-09-28).** Dictate on a section card records up
+  to 60 s; `/api/jobs/[id]/sections/[sectionId]/dictate` sends the audio to
+  Groq Whisper (`GROQ_API_KEY`, server side — only audio goes to Groq), asks
+  Dusty (Hermes) to put the words into fields, and `sanitizeDictation()`
+  (`src/lib/dictate.ts`) keeps a number only if it was **said** — digits or
+  words, feet-and-inches included — and a work type or reinforcement only if
+  it is a real one. The card applies it through the normal section PATCH and
+  shows "Heard: …" with Undo. Nothing is estimated.
 
 ---
 
@@ -776,14 +798,26 @@ expected start date per quoted job before it means anything. Add the field.
   under the session (`src/lib/dusty/context.ts`), so RLS decides what Dusty can
   see and nothing typed in the browser becomes "context". Scope answers use
   the engine's own output, so Dusty quotes exactly the builder's numbers or
-  names what blocks them. **Read-only:** no tools, no writes, nothing sent —
-  drafts come back as text to copy. **Not stored:** the conversation lives in
-  the tab (channels that persist per job/customer, below, are still to come
-  and need a table). **The model runs in the Hermes container on the VPS**
+  names what blocks them. **Read-only toward the business:** no tools, no
+  record changed, nothing sent — drafts come back as text to copy.
+  **Full screen, and kept (migration 043, Coy 2026-09-28: "reference older
+  conversations in a side project panel to select and continue").** Dusty is a
+  page under the header, over the footer (v34 DustyScreen): header with
+  hamburger, title, "Looking at …", + and ×; the history rail slides in from
+  the LEFT on a phone and stays open on a desktop, grouped *About this
+  person/job* · People · Jobs · Everything else; answers read like a page —
+  the question as a heading, the answer full width, Copy under it.
+  `dusty_conversations` / `dusty_messages` are private to the person (RLS:
+  org member AND `user_id = auth.uid()`; verified a second user sees none).
+  `/api/dusty` takes `{question, conversation_id?}`, reads the history from
+  the database — never from the browser — and a continued chat keeps the
+  context it started with. Opening Dusty on a person or job picks up the
+  latest chat about them. **The model runs in the Hermes container on the VPS**
   (§8), reached over Tailscale Funnel at `HERMES_URL` with `HERMES_API_KEY`
   (OpenAI-compatible chat completions; Hermes routes via OpenRouter, model
   `HERMES_MODEL`, default `anthropic/claude-haiku-4.5` since 2026-09-28 — 3.5-haiku began returning empty 200s). No
-  model-provider key lives in Vercel. The Vercel route stays the only thing
+  model-provider key lives in Vercel — except `GROQ_API_KEY`, for speech to
+  text only (section dictation, above). The Vercel route stays the only thing
   that touches customer data — Hermes sees only the context the route sends.
   Hermes must serve Dusty with its tools OFF: the context carries customer
   texts, and a text can carry instructions. The old `/api/chat/dusty` — an
@@ -800,8 +834,17 @@ expected start date per quoted job before it means anything. Add the field.
   (not configured, Hermes unreachable, error, silent >15 min) **pins** the line
   in amber and stops the cycling. The dot pulses only while a read is running
   or a Dusty reply is streaming. Idle says when something last happened; it
-  never invents something happening now.
-- Dusty channels persist and are resumable, organized per job/customer.
+  never invents something happening now. **No bubble (2026-09-28):** the
+  words sit on the grey glass row and type in letter by letter; a streaming
+  Dusty reply shows its own tokens. A thin line drops from the header emblem
+  to the dot, and while Dusty works a light runs down it on the emblem's
+  1.4 s beat.
+- Dusty conversations persist and are resumable (above), grouped by the
+  person or job they are about.
+- **Job header (2026-09-28)** — four tappable chips, each opening its list:
+  **Status** (the seven stages, with W.I.P.'s won / scheduled / pouring),
+  **Type**, **Source** and **Vendors (n)** (crew on the job, add by subtype)
+  — `src/components/v34/job-chips.tsx`.
 - **Receipts are camera-first, always.** Photograph, never type. Dusty reads
   vendor, amount, date and clarifies conversationally. Invoices and payments
   stay quick structured forms.

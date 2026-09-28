@@ -16,13 +16,14 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { T, F, disp, eyebrow, nums, money0 } from "@/lib/v34/tokens";
 import { Segmented } from "@/components/v34/primitives";
 import { monthlyNut, type CostSettings, type OverheadItem } from "@/lib/engine";
+import { ReinforcementSettings } from "@/components/v34/reinforcement-settings";
 
 type Key = keyof CostSettings | "markup_subcontract_pct" | "comp_profit_pct";
 
 interface FieldDef { k: Key; label: string; unit: string; ref?: string; hint?: string }
 
 const GROUPS: { title: string; note: string; fields: FieldDef[] }[] = [
-  { title: "Concrete", note: "What the plant charges, and what you order over neat yards.", fields: [
+  { title: "Concrete", note: "Materials. What the plant charges, and what you order over neat yards.", fields: [
     { k: "concrete_price_per_cy", label: "Concrete price", unit: "$ / cu yd", ref: "$236.13" },
     { k: "concrete_overage_pct", label: "Waste", unit: "%", ref: "3.4%" },
     { k: "shortload_threshold_cy", label: "Short load under", unit: "cu yd", ref: "5" },
@@ -167,6 +168,7 @@ export function CostSettingsEditor({ onSaved }: { onSaved?: () => void }) {
                 </label>
               ))}
             </div>
+            {g.title === "Concrete" && <ReinforcementSettings />}
             {g.title === "Sales tax" && (
               <div className="mt-2">
                 <span style={eyebrow}>Applies to</span>

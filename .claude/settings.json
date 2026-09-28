@@ -1,0 +1,34 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash",
+      "mcp__Supabase__execute_sql",
+      "mcp__Supabase__apply_migration",
+      "mcp__Supabase__deploy_edge_function",
+      "mcp__Supabase__get_edge_function",
+      "mcp__Supabase__list_tables",
+      "mcp__Supabase__list_migrations",
+      "mcp__Supabase__list_edge_functions",
+      "mcp__Supabase__list_extensions",
+      "mcp__Supabase__get_advisors",
+      "mcp__Supabase__query_logs",
+      "mcp__Supabase__get_project_url",
+      "mcp__Supabase__search_docs",
+      "mcp__Supabase__generate_typescript_types",
+      "mcp__Vercel__list_toolbar_threads",
+      "mcp__Vercel__get_toolbar_thread",
+      "mcp__Vercel__reply_to_toolbar_thread",
+      "mcp__Vercel__change_toolbar_thread_resolve_status",
+      "mcp__Vercel__filter_project_envs",
+      "mcp__Vercel__list_deployments",
+      "mcp__Vercel__get_deployment",
+      "mcp__Vercel__list_deployment_events",
+      "mcp__Vercel__get_runtime_logs",
+      "mcp__Vercel__get_runtime_errors",
+      "mcp__Vercel__get_project",
+      "mcp__Vercel__list_projects",
+      "mcp__Vercel__web_fetch_vercel_url",
+      "mcp__Vercel__get_access_to_vercel_url"
+    ]
+  }
+}

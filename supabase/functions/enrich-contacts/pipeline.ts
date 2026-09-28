@@ -10,7 +10,7 @@
 
 import {
   AUTO_STREAK, PROMPT_VERSION, SYSTEM_PROMPT, bucketOf, findSelfIdentification, relabelTranscript, renderConversation,
-  sanitize, spamSignal, titleKey, worthEnriching, type Correction, type Proposal, type Turn,
+  renderNotes, sanitize, spamSignal, titleKey, worthEnriching, type CoyNote, type Correction, type Proposal, type Turn,
 } from './rules.ts'
 
 /**
@@ -362,10 +362,13 @@ export async function seedNextSteps(sb: Db, orgId: string, contactId: string, p:
 }
 
 export async function readContact(sb: Db, orgId: string, contactId: string, ask: Ask, model: string, learning: Learning = NO_LEARNING): Promise<ReadResult> {
-  const [turns, numbers, { data: st }] = await Promise.all([
+  const [turns, numbers, { data: st }, { data: noteRows }] = await Promise.all([
     loadTurns(sb, orgId, contactId), contactNumbers(sb, orgId, contactId),
     sb.from('contacts').select('name, name_source, contact_type, classification_confirmed_at, auto_classified_at, status_summary_at')
       .eq('org_id', orgId).eq('id', contactId).maybeSingle(),
+    // Coy's notes (migration 041). Read with the conversation, never counted as it.
+    sb.from('contact_notes').select('body, created_at')
+      .eq('org_id', orgId).eq('contact_id', contactId).order('created_at', { ascending: false }).limit(20),
   ])
   const state = (st ?? {}) as Partial<ContactState>
   const named = !!state.name?.trim() || state.name_source === 'human'
@@ -395,8 +398,9 @@ export async function readContact(sb: Db, orgId: string, contactId: string, ask:
       : { outcome: 'unchanged', proposal_id: pending.id }
   }
 
-  const { text } = renderConversation(shown)
-  const res = await ask(text)
+  const { text: convo } = renderConversation(shown)
+  const notes = renderNotes((noteRows ?? []) as CoyNote[])
+  const res = await ask(notes ? `${convo}\n\n${notes}` : convo)
   if (!res.ok) return { outcome: 'model_error', note: res.error }
   const { p } = sanitize(res.proposal, shown)
   if (!p.evidence_message_id) return { outcome: 'failed', note: 'no evidence line' }

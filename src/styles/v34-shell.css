@@ -1,7 +1,18 @@
 /* The sticky header's height: 54px glass bar + 38px activity line
    (activity-line.tsx always holds its row). Everything that sits under or
    beside the header measures from this — one number, not five. */
-:root { --sc-head: 92px; }
+:root { --sc-head: 92px; --sc-foot: 58px; }
+
+/* The footer's height on a phone (layout.tsx, border-box, safe area inside it).
+   A page that must not scroll as a whole — a conversation, a person — is
+   pinned between the header and the footer, so only its own list scrolls and
+   its name bar can never slide up under the header (Coy, 2026-09-28). Before
+   this the page subtracted 72px for a 58px footer: a 14px grey gap, and a body
+   that scrolled on Android. Desktop has no footer and sizes by height. */
+.sc-pinned { position: fixed; top: var(--sc-head); bottom: var(--sc-foot); left: 0; right: 0; }
+@media (min-width: 1024px) {
+  .sc-pinned { position: static; height: calc(100dvh - var(--sc-head)); }
+}
 
 /**
  * v34 shell CSS — ported from scopecrete-v34.jsx L5155-5320.

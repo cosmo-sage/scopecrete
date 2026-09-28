@@ -8,6 +8,7 @@ import { T, F, disp, eyebrow, nums, clip } from "@/lib/v34/tokens";
 import { Composer } from "@/components/v34/composer";
 import { DA, MergeSheet, Timeline, formatPhone, type MergeInfo, type ThreadMessage } from "@/components/v34/conversation";
 import { PersonView, SamePerson, type Person } from "@/components/v34/person-view";
+import { NameEditor, FileAsSheet } from "@/components/v34/contact-edit";
 
 /**
  * One person. A customer or a vendor gets their page (person-view.tsx) — Coy,
@@ -39,6 +40,7 @@ export default function ChatThreadPage() {
   const [merging, setMerging] = useState<false | { preselect: string | null }>(false);
   const [undoing, setUndoing] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
+  const [filing, setFiling] = useState(false);
   // Their page, when they are a customer or a vendor (/api/people). A failure
   // here leaves the plain conversation, which still works.
   const [person, setPerson] = useState<Person | null>(null);
@@ -149,14 +151,14 @@ export default function ChatThreadPage() {
   const openJob = jobs && jobs.length > 0 ? jobs[0] : null;
 
   const pill: React.CSSProperties = {
-    height: 30, border: `1px solid ${DA.border}`, background: DA.surface, color: DA.textSecondary,
+    height: 26, border: `1px solid ${DA.border}`, background: DA.surface, color: DA.textSecondary,
     fontFamily: disp, fontSize: F.xs, letterSpacing: ".06em", textTransform: "uppercase", cursor: "pointer",
     alignItems: "center", textDecoration: "none",
   };
 
   if (person && !loading && !error && (person.contact.bucket === "customer" || person.contact.bucket === "vendor")) {
     return (
-      <div className="overflow-y-auto h-[calc(100dvh-var(--sc-head)-72px)] lg:h-[calc(100dvh-var(--sc-head))]" style={{ background: T.slab }}>
+      <div className="sc-pinned overflow-y-auto" style={{ background: T.slab }}>
         {merges.map((m) => (
           <div key={m.id} className="px-4 py-1.5 flex items-center gap-2 text-[11px]"
             style={{ background: DA.elevated, borderBottom: `1px solid ${DA.border}`, color: DA.textSecondary }}>
@@ -180,50 +182,64 @@ export default function ChatThreadPage() {
   }
 
   return (
-    <div className="flex">
+    <div className="flex sc-pinned">
       {/* ================= the conversation ================= */}
-      {/* The space between the shell's sticky header (--sc-head) and, on a phone, the
-          72px the shell reserves for its fixed footer. Desktop has no footer. */}
-      <div className="flex flex-col flex-1 min-w-0 h-[calc(100dvh-var(--sc-head)-72px)] lg:h-[calc(100dvh-var(--sc-head))]"
-        style={{ background: DA.bg }}>
-        <div className="px-4 py-2.5 flex items-center gap-3 flex-shrink-0"
-          style={{ background: DA.surface, borderBottom: `1px solid ${DA.border}` }}>
-          <button onClick={() => router.back()} className="lg:hidden"
-            style={{ background: "none", border: "none", cursor: "pointer", color: DA.textMuted, padding: 0 }}
-            aria-label="Back">
-            <ArrowLeft size={18} />
-          </button>
-          <div className="flex-1 min-w-0">
-            <div style={{ fontFamily: disp, fontSize: F.xl, fontWeight: 600, lineHeight: 1.05, color: DA.textPrimary, ...clip }}>
-              {headerTitle}
+      {/* Pinned between the header and the footer (.sc-pinned): only the
+          messages scroll, so this name bar never slides under the header. */}
+      <div className="flex flex-col flex-1 min-w-0 h-full" style={{ background: DA.bg }}>
+        {/* Three rows (Coy, 2026-09-28: "the name needs to fit"): who, then the
+            facts at full width so nothing cuts them off, then the actions. */}
+        <div className="px-3 pt-2 pb-2 flex-shrink-0" style={{ background: DA.surface, borderBottom: `1px solid ${DA.border}` }}>
+          <div className="flex items-center gap-2">
+            <button onClick={() => router.back()} className="lg:hidden shrink-0"
+              style={{ background: "none", border: "none", cursor: "pointer", color: DA.textMuted, padding: 0 }}
+              aria-label="Back">
+              <ArrowLeft size={18} />
+            </button>
+            <div className="flex-1 min-w-0">
+              {loading ? (
+                <div style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 600, color: DA.textPrimary }}>{headerTitle}</div>
+              ) : (
+                <NameEditor contactId={contactId} name={name} fallback={formatPhone(phone)}
+                  onSaved={(v) => { setName(v); setNameConfirmed(true); setNameSource("human"); }}
+                  style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 600, lineHeight: 1.1, color: DA.textPrimary }} />
+              )}
             </div>
-            <div style={{ fontSize: F.xs, color: DA.textMuted, ...clip, ...nums }}>
-              {loading ? "Loading…" : [
-                name && phone ? formatPhone(phone) : null,
-                otherNumbers.length ? `also ${otherNumbers.map(formatPhone).join(", ")}` : null,
-                firstHeard ? `first heard ${new Date(firstHeard).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : null,
-                `${texts} text${texts === 1 ? "" : "s"} · ${calls} call${calls === 1 ? "" : "s"}`,
-              ].filter(Boolean).join(" · ")}
-            </div>
+            {person && (
+              <span className="shrink-0 rounded px-1.5" style={{ ...eyebrow, fontSize: F.micro, lineHeight: "18px",
+                border: `1px ${person.contact.bucket ? "solid" : "dashed"} ${DA.border}`, color: DA.textSecondary }}>
+                {person.contact.bucket ?? "Unsorted"}
+              </span>
+            )}
+          </div>
+          <div style={{ fontSize: F.xs, color: DA.textMuted, lineHeight: 1.35, marginTop: 1, ...nums }}>
+            {loading ? "Loading…" : [
+              name && phone ? formatPhone(phone) : null,
+              otherNumbers.length ? `also ${otherNumbers.map(formatPhone).join(", ")}` : null,
+              firstHeard ? `first heard ${new Date(firstHeard).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : null,
+              `${texts} text${texts === 1 ? "" : "s"} · ${calls} call${calls === 1 ? "" : "s"}`,
+            ].filter(Boolean).join(" · ")}
           </div>
           {!loading && !error && (
-            <div className="flex items-center gap-1.5 shrink-0">
+            <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
               {phone && (
-                <a href={`tel:${phone}`} aria-label="Call" className="rounded inline-flex justify-center"
-                  style={{ ...pill, width: 34, padding: 0 }}>
-                  <Phone size={14} weight="fill" color={DA.textPrimary} />
+                <a href={`tel:${phone}`} className="rounded px-2 inline-flex gap-1" style={pill}>
+                  <Phone size={12} weight="fill" color={DA.textPrimary} /> Call
                 </a>
               )}
+              <button onClick={() => setFiling(true)} className="rounded px-2 inline-flex" style={pill}>
+                {person?.contact.bucket ? "Change bucket" : "File as…"}
+              </button>
               <button onClick={() => setMerging({ preselect: null })} className="rounded px-2 inline-flex" style={pill}>
-                <span className="hidden sm:inline">Same person as…</span><span className="sm:hidden">Same as…</span>
+                Same as…
               </button>
               {openJob ? (
-                <Link href={`/dashboard/scope/${openJob.id}`} className="rounded px-2.5 inline-flex"
+                <Link href={`/dashboard/scope/${openJob.id}`} className="rounded px-2 inline-flex"
                   style={{ ...pill, background: DA.accent, color: "#fff", border: "none" }}>Open scope</Link>
               ) : (
-                <button onClick={() => void newScope()} disabled={starting || jobs === null} className="rounded px-2.5 inline-flex"
+                <button onClick={() => void newScope()} disabled={starting || jobs === null} className="rounded px-2 inline-flex"
                   style={{ ...pill, background: DA.accent, color: "#fff", border: "none", opacity: jobs === null ? 0.5 : 1 }}>
-                  {starting ? "Starting…" : <><span className="hidden sm:inline">New scope</span><span className="sm:hidden">Scope</span></>}
+                  {starting ? "Starting…" : "New scope"}
                 </button>
               )}
             </div>
@@ -262,7 +278,7 @@ export default function ChatThreadPage() {
               <p className="text-xs mt-1 break-words" style={{ color: DA.textMuted }}>{error}</p>
             </div>
           ) : (
-            <Timeline messages={messages} phone={phone} />
+            <Timeline messages={messages} notes={person?.notes ?? []} phone={phone} />
           )}
         </div>
 
@@ -270,13 +286,13 @@ export default function ChatThreadPage() {
             draft from this device, which the server cannot see, so rendering it
             during the server pass would mismatch on hydration. */}
         {!loading && !error && (
-          <Composer contactId={contactId} phone={phone} name={name} />
+          <Composer contactId={contactId} phone={phone} name={name} onNoteSaved={() => setReload((n) => n + 1)} />
         )}
       </div>
 
       {/* ================= the contact rail (desktop, 1d) ================= */}
       {!loading && !error && (
-        <aside className="hidden xl:block shrink-0 overflow-y-auto h-[calc(100dvh-var(--sc-head))]"
+        <aside className="hidden xl:block shrink-0 overflow-y-auto h-full"
           style={{ width: 300, background: DA.surface, borderLeft: `1px solid ${DA.border}` }}>
           <RailSection title="Contact">
             <RailRow k="Name" v={name ?? null} missing="Not recorded"
@@ -328,6 +344,14 @@ export default function ChatThreadPage() {
           onClose={() => setMerging(false)}
           onMerged={() => { setMerging(false); setLoading(true); setReload((n) => n + 1); }} />
       )}
+
+      {/* Filed customer or vendor → their page takes over on the reload. */}
+      <FileAsSheet open={filing} onClose={() => setFiling(false)} contactId={contactId}
+        target={{ bucket: person?.contact.bucket ?? null, subtype: person?.contact.subtype ?? null,
+                  bucket_auto: person?.contact.bucket_state === "auto" ? { reason: null } : null,
+                  proposal: person?.contact.guess ? { classification: person.contact.guess } : null }}
+        subtypes={person?.subtypes}
+        onFiled={() => { setFiling(false); setReload((n) => n + 1); }} />
     </div>
   );
 }

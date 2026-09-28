@@ -67,7 +67,7 @@ interface Artifact {
   kind: string;
   source: string | null;
   content: string | null;
-  /** Only a stored copy is playable in a browser — see StoredAudio below. */
+  /** A copy in the call-audio bucket, once PlayAudio has fetched it from Quo. */
   storage_path: string | null;
   url: string | null;
   fetched_at: string | null;
@@ -116,50 +116,54 @@ function formatMsgTime(ts: string | null): string {
 }
 
 /**
- * Audio that either plays or is honest about why it cannot.
- *
- * `artifact.url` points at Quo and is unusable from a browser. `storage_path`
- * is a copy in Supabase Storage, and /api/messages/[id]/audio signs a link to
- * it. With no stored copy this renders one line of explanation and NO player,
- * because a dead control is worse than an absent one.
+ * Call audio, on a tap (Coy, 2026-09-28: the recordings belong on the
+ * customer and vendor pages). /api/messages/[id]/audio copies the file out of
+ * Quo into private storage the first time anyone plays it, then hands back a
+ * signed link; after that it plays straight from the copy. Nothing is fetched
+ * until the tap — a page of calls does not download a page of audio. When the
+ * file can't be had, the row says why instead of showing a dead player.
  */
-function StoredAudio({ messageId, kind, artifact }: {
-  messageId: string; kind: string; artifact: Artifact;
+export function PlayAudio({ messageId, kind, label }: {
+  messageId: string; kind: "recording" | "voicemail"; label: string;
 }) {
-  // "No stored copy" is a fact about the props, not state to set in an
-  // effect — deriving it keeps every setState inside an async callback.
-  const hasCopy = Boolean(artifact.storage_path);
+  const [state, setState] = useState<"idle" | "loading" | "ready" | "failed">("idle");
   const [src, setSrc] = useState<string | null>(null);
-  const [failed, setFailed] = useState(false);
+  const [why, setWhy] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!hasCopy) return;
-    let cancelled = false;
-    fetch(`/api/messages/${messageId}/audio?kind=${encodeURIComponent(kind)}`)
-      .then(async (r) => {
-        const b = await r.json().catch(() => ({}));
-        if (!r.ok || !b?.url) throw new Error(b?.reason ?? b?.error ?? `HTTP ${r.status}`);
-        return b.url as string;
-      })
-      .then((u) => { if (!cancelled) setSrc(u); })
-      .catch(() => { if (!cancelled) setFailed(true); });
-    return () => { cancelled = true; };
-  }, [messageId, kind, hasCopy]);
+  const load = async () => {
+    setState("loading");
+    try {
+      const r = await fetch(`/api/messages/${messageId}/audio?kind=${kind}`);
+      const b = await r.json().catch(() => ({}));
+      if (!r.ok || !b?.url) throw new Error(b?.reason ?? b?.error ?? `HTTP ${r.status}`);
+      setSrc(b.url as string);
+      setState("ready");
+    } catch (e) {
+      setWhy(e instanceof Error ? e.message : String(e));
+      setState("failed");
+    }
+  };
 
-  if (!hasCopy) {
+  if (state === "ready" && src) {
+    return <audio controls autoPlay preload="auto" src={src} className="w-full mt-2" style={{ height: 32 }} />;
+  }
+  if (state === "failed") {
     return (
-      <div className="text-[11px] mt-2" style={{ color: DA.textMuted }}>
-        Audio not downloaded yet — only the transcript is stored.
+      <div className="flex items-center gap-2 mt-2 text-[11px]" style={{ color: DA.error }}>
+        <span className="flex-1 min-w-0">{why}</span>
+        <button onClick={() => void load()} style={{ color: DA.accent, background: "none", border: "none", cursor: "pointer", fontWeight: 600 }}>Retry</button>
       </div>
     );
   }
-  if (src) {
-    return <audio controls preload="none" src={src} className="w-full mt-2" style={{ height: 32 }} />;
-  }
-  if (failed) {
-    return <div className="text-[11px] mt-2" style={{ color: DA.error }}>Audio could not be loaded.</div>;
-  }
-  return <div className="text-[11px] mt-2" style={{ color: DA.textMuted }}>Loading audio…</div>;
+  return (
+    <button onClick={() => void load()} disabled={state === "loading"}
+      className="mt-2 inline-flex items-center gap-1.5 rounded px-2.5"
+      style={{ height: 28, border: `1px solid ${DA.border}`, background: DA.surface, color: DA.textPrimary, cursor: "pointer",
+               fontFamily: disp, fontSize: F.xs, letterSpacing: ".06em", textTransform: "uppercase" }}>
+      <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 1 L9 5 L2 9 Z" fill="currentColor" /></svg>
+      {state === "loading" ? "Getting it from Quo…" : label}
+    </button>
+  );
 }
 
 /** One call row. Transcript is fetched only when this is expanded. */
@@ -169,7 +173,9 @@ export function CallRow({ m }: { m: ThreadMessage }) {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  const hasArtifacts = m.artifact_kinds.length > 0;
+  // The recording plays from its own button; "details" are the words.
+  const detailKinds = m.artifact_kinds.filter((k) => k !== "recording");
+  const hasArtifacts = detailKinds.length > 0;
   const hasNext = m.artifact_kinds.includes("next_steps");
   const duration = formatDuration(m.duration_seconds);
   const isOut = m.direction === "outbound";
@@ -251,11 +257,9 @@ export function CallRow({ m }: { m: ThreadMessage }) {
         {m.summary?.trim() || `No summary${duration ? ` · ${duration}` : ""}`}
       </div>
 
-      {/* No player here. m.recording_url is a Quo resource endpoint: a browser
-          hitting it has no API key and is cross-origin, so it loads nothing and
-          the control sits at 0:00 / 0:00. A play button that cannot play is a
-          control that lies about what it can do. Playback returns through
-          StoredAudio once the audio is copied into Supabase Storage. */}
+      {m.artifact_kinds.includes("recording") && (
+        <PlayAudio messageId={m.id} kind="recording" label={`Play recording${duration ? ` · ${duration}` : ""}`} />
+      )}
 
       {!open && bundle?.next_steps?.content && (
         <div className="mt-2 rounded px-2.5 py-2" style={{ background: DA.elevated }}>
@@ -273,7 +277,7 @@ export function CallRow({ m }: { m: ThreadMessage }) {
           style={{ background: "none", border: "none", cursor: "pointer", color: DA.accent, padding: 0 }}
         >
           {open ? <CaretDown size={11} /> : <CaretRight size={11} />}
-          {open ? "Hide details" : m.artifact_kinds.includes("transcript") ? "Read the full transcript" : `Details (${m.artifact_kinds.join(", ")})`}
+          {open ? "Hide details" : m.artifact_kinds.includes("transcript") ? "Read the full transcript" : `Details (${detailKinds.join(", ")})`}
         </button>
       )}
 
@@ -297,7 +301,7 @@ export function CallRow({ m }: { m: ThreadMessage }) {
                   {bundle.voicemail.content}
                 </div>
               )}
-              <StoredAudio messageId={m.id} kind="voicemail" artifact={bundle.voicemail} />
+              {bundle.voicemail.url || bundle.voicemail.storage_path ? <PlayAudio messageId={m.id} kind="voicemail" label="Play voicemail" /> : null}
             </div>
           )}
 
@@ -647,20 +651,40 @@ export function MergeSheet({ contactId, keepLabel, keepCount, onClose, onMerged,
  * The timeline itself: day rules, one row per call or text, and the "nothing
  * on record" note for a number that only ever rang.
  */
-export function Timeline({ messages, phone }: { messages: ThreadMessage[]; phone: string | null }) {
+export interface Note { id: string; body: string; created_at: string }
+
+/** One of Coy's notes (migration 041), in the timeline where he wrote it. */
+function NoteRow({ n }: { n: Note }) {
+  return (
+    <div className="my-1.5 rounded px-2.5 py-2" style={{ background: "#FFF8E1", border: `1px solid #F0DDA0` }}>
+      <div style={{ ...eyebrow, color: "#8A6D1A" }}>
+        Your note · {new Date(n.created_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+      </div>
+      <div style={{ fontSize: F.sm, color: DA.textPrimary, lineHeight: 1.4, whiteSpace: "pre-wrap", marginTop: 2 }}>{n.body}</div>
+    </div>
+  );
+}
+
+export function Timeline({ messages, phone, notes = [] }: { messages: ThreadMessage[]; phone: string | null; notes?: Note[] }) {
   const calls = messages.filter((m) => m.channel === "call").length;
-  const silent = messages.length > 0 && messages.every((m) =>
-    m.channel === "call" && !m.summary?.trim() && m.artifact_kinds.length === 0);
-  if (messages.length === 0) {
+  const silent = notes.length === 0 && messages.length > 0 && messages.every((m) =>
+    m.channel === "call" && !m.summary?.trim() && m.artifact_kinds.filter((k) => k !== "recording").length === 0);
+  if (messages.length === 0 && notes.length === 0) {
     return <div className="text-center text-sm py-16" style={{ color: DA.textMuted }}>No messages in this thread.</div>;
   }
+  // Messages arrive oldest first; notes are slotted in by when they were written.
+  const items: Array<{ at: string | null; m?: ThreadMessage; n?: Note }> = [
+    ...messages.map((m) => ({ at: m.occurred_at, m })),
+    ...notes.map((n) => ({ at: n.created_at, n })),
+  ];
+  if (notes.length) items.sort((a, b) => (a.at ? Date.parse(a.at) : 0) - (b.at ? Date.parse(b.at) : 0));
   return (
     <>
-      {messages.map((m, i) => {
-        const day = dayLabel(m.occurred_at);
-        const sep = i === 0 || day !== dayLabel(messages[i - 1].occurred_at);
+      {items.map((it, i) => {
+        const day = dayLabel(it.at);
+        const sep = i === 0 || day !== dayLabel(items[i - 1].at);
         return (
-          <React.Fragment key={m.id}>
+          <React.Fragment key={it.m?.id ?? `note-${it.n!.id}`}>
             {sep && (
               <div className="flex items-center gap-2 my-2.5" aria-hidden="true">
                 <span className="flex-1" style={{ height: 1, background: DA.border }} />
@@ -668,7 +692,7 @@ export function Timeline({ messages, phone }: { messages: ThreadMessage[]; phone
                 <span className="flex-1" style={{ height: 1, background: DA.border }} />
               </div>
             )}
-            {m.channel === "call" ? <CallRow m={m} /> : <SmsRow m={m} />}
+            {it.n ? <NoteRow n={it.n} /> : it.m!.channel === "call" ? <CallRow m={it.m!} /> : <SmsRow m={it.m!} />}
           </React.Fragment>
         );
       })}

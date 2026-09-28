@@ -47,13 +47,17 @@ async function contactBlock(sb: Sb, orgId: string, contactId: string) {
     .select("id, name, name_source, name_confirmed_at, phone, address, customer_id, merged_into_contact_id, contact_type, contact_subtype, classification_confirmed_at, auto_classified_at, status_summary")
     .eq("org_id", orgId).eq("id", contactId).maybeSingle();
   if (!c) return null;
-  const [{ data: phones }, { data: jobs }, { data: tasks }] = await Promise.all([
+  const [{ data: phones }, { data: jobs }, { data: tasks }, { data: notes }] = await Promise.all([
     sb.from("contact_phones").select("phone_e164").eq("org_id", orgId).eq("contact_id", contactId),
     sb.from("jobs").select("id, title, status, created_at").eq("org_id", orgId).eq("contact_id", contactId).is("archived_at", null),
     // The next-steps checklist (migration 038) — Coy's own items and Dusty's —
     // so "what do I owe them?" is answered from it.
     sb.from("contact_tasks").select("title, due_on, source").eq("org_id", orgId).eq("contact_id", contactId)
       .eq("status", "open").order("due_on", { ascending: true, nullsFirst: false }).limit(15),
+    // Coy's own notes on them (migration 041): "Dusty needs access to all
+    // customer and vendor notes." Newest 20.
+    sb.from("contact_notes").select("body, created_at").eq("org_id", orgId).eq("contact_id", contactId)
+      .order("created_at", { ascending: false }).limit(20),
   ]);
   const numbers = [...new Set([c.phone, ...((phones ?? []) as Array<{ phone_e164: string }>).map((p) => p.phone_e164)].filter(Boolean))];
   const name = (c.name as string | null)?.trim() || null;
@@ -72,6 +76,9 @@ async function contactBlock(sb: Sb, orgId: string, contactId: string) {
       `Jobs: ${(jobs ?? []).length ? (jobs as Array<{ title: string | null; status: string | null }>).map((j) => `${j.title || "untitled"} (${j.status})`).join("; ") : "none"}`,
       `Where it stands (Dusty's earlier read): ${(c.status_summary as string | null) ?? "not read yet"}`,
       `Open next steps: ${todo.length ? todo.map((t) => `${t.title}${t.due_on ? ` (due ${t.due_on})` : ""}${t.source === "coy" ? " [Coy's own]" : " [suggested]"}`).join("; ") : "none"}`,
+      `Coy's notes on them (newest first): ${((notes ?? []) as Array<{ body: string; created_at: string }>).length
+        ? ((notes ?? []) as Array<{ body: string; created_at: string }>).map((n) => `[${day(n.created_at)}] ${n.body.replace(/\s+/g, " ").slice(0, 600)}`).join(" | ")
+        : "none"}`,
     ],
   };
   return { block, name: name ?? (numbers[0] as string | undefined) ?? "unknown number" };

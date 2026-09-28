@@ -4,7 +4,7 @@ Ground truth for every agent working this repo. If code disagrees with this
 document, the code is wrong or this document is stale — resolve it, don't
 guess. Update this file in the same PR that changes the behavior it describes.
 
-Last updated: 2026-09-27
+Last updated: 2026-09-28
 
 ---
 
@@ -261,6 +261,19 @@ are `{org_id}/…` in both `message-media` and `call-audio`, and `storage.object
 policies scope reads and writes to `get_user_org_ids()`. Before 027 there were
 **no** storage policies, which is why the call-audio player never worked.
 
+**Call audio — copied on first play (migration 041, 2026-09-28).** Coy: the
+recordings belong on the customer and vendor pages. A call with a recording
+shows **Play recording**; the tap calls `/api/messages/[id]/audio?kind=recording`
+(or `voicemail`), which signs the stored copy if there is one, and otherwise
+asks the Quo API for a fresh link (`GET /v1/call-recordings/{callId}`,
+`QUO_API_KEY` server-side), falls back to the link on record, copies the file
+into `call-audio/{org_id}/{message_id}-{kind}.mp3`, stamps
+`call_artifacts.storage_path`, and signs that. Nothing downloads until the tap.
+Migration 041 added the missing INSERT policy on `call-audio` (the caller's own
+org folder only — verified). When Quo refuses, the row says why ("may need
+QUO_API_KEY"), never a dead player. As of 2026-09-28 `QUO_API_KEY` is **not**
+set in Vercel; 129 calls carry a recording link, none copied yet.
+
 ## 2d. Lines and providers — migration 035 (applied 2026-09-27)
 
 Quo today; other providers or Coy's own AI voice stack later, on the same
@@ -337,7 +350,7 @@ confirmed — everything else is **Unclassified**, never the column default.
 
 **The background enricher (2026-09-27, migrations 029–033).** Contacts are
 read with the app closed. pg_cron calls the `enrich-contacts` edge function
-every minute (v11; 4 readers, each claiming one contact at a time until the
+every minute (v13; 4 readers, each claiming one contact at a time until the
 queue is empty or 45 s have passed, so a backlog drains in minutes; source in
 `supabase/functions/enrich-contacts/`:
 `rules.ts` the rules, `pipeline.ts` one contact, `index.ts` the worker). There
@@ -495,6 +508,16 @@ Coy's own items are `source='coy'`. **Reminders:** the activity line shows
 every open item due today or overdue (Central time), each linking to the
 person; Dusty's context on a person includes their open next steps and his
 status line, so "what do I owe Amber?" is answered from the checklist.
+
+**Coy's notes (migration 041, `enrich-contacts` v13, 2026-09-28).** *"Where
+do notes land? Dusty needs access to all customer and vendor notes."* The
+composer's Note tab saves to `contact_notes` (`POST /api/people/[id]/notes`,
+RLS by `get_user_org_ids()`, anon refused). Notes show in the person's
+timeline (a Notes filter on their page), in Dusty's chat context (newest 20)
+and in the background read as a COY'S NOTES block after the conversation —
+used for the status line and next steps, never as evidence, never as a
+self-introduction, and not a turn (so `evidence_turn` still indexes messages).
+A note alone does not queue a re-read; the next message does.
 
 **Job titles and musings (migrations 039–040, `enrich-contacts` v11,
 2026-09-28).** Coy: *"a 1-3 word summary should be the job title. But the
@@ -713,7 +736,19 @@ expected start date per quoted job before it means anything. Add the field.
   referrer; LA Contracting's bid invite: LA Contracting is customer.
   `jobs.job_type` is nullable since 038 (Coy, 2026-09-28): the New job sheet
   still requires a type; an automatic job with no hint shows **Type?**. The header is 54px + the 38px activity line = `--sc-head` (92px);
-  everything under or beside it measures from that variable.
+  everything under or beside it measures from that variable. The phone footer
+  is 58px = `--sc-foot`. A conversation or person page is `.sc-pinned` —
+  fixed between the two on a phone — so only its list scrolls and its name bar
+  never slides under the header (Coy, 2026-09-28; the old 72px guess left a
+  14px gap and a scrolling body).
+- **Correcting a person from their page (2026-09-28).** The pencil by the name
+  saves Coy's name (`PATCH /api/contacts/[id]/name`, `name_source='human'`) —
+  "Gary Davis" on Vance's number came from a contact card Vance texted. **File
+  as… / Change bucket** opens the same bucket picker as Threads
+  (`src/components/v34/bucket-picker.tsx`) on the plain conversation and the
+  customer / vendor page. The plain conversation header is three rows: name
+  (wraps to two lines), the facts at full width, then Call · File as · Same
+  as · Scope.
 - Cash flow is a footer TAB, not a slide-out drawer — a side drawer's
   horizontal swipe fights the ribbon's horizontal swipe.
 - Settings opens from the header menu. Fixed costs live there AND open from
@@ -770,12 +805,15 @@ expected start date per quoted job before it means anything. Add the field.
 - **Receipts are camera-first, always.** Photograph, never type. Dusty reads
   vendor, amount, date and clarifies conversationally. Invoices and payments
   stay quick structured forms.
-- **The composer never appears to send.** (2026-09-27) Text, email and notes
+- **The composer never appears to send.** (2026-09-27) Text and email
   have no send path yet — texting waits on 10DLC, and Coy has said sending is
   not needed now. The composer (thread screen, and compact in the row expand)
-  writes, keeps a per-device draft, copies it for pasting into Quo, and offers
-  Call. Send, attach and hold-to-talk are shown switched off, each with its
-  reason. An earlier composer appended messages locally and faked a Dusty reply
+  writes, keeps a per-device draft and copies it for pasting into Quo; Send is
+  shown switched off with its reason. **Notes save** (2026-09-28, above). The
+  **mic dictates** into the box with the browser's own speech recognition —
+  Chrome sends the audio to Google to transcribe; nothing of ours stores it;
+  off, with the reason, where the browser has none. The composer's Call and +
+  attach are gone (Coy: the Call is at the top; attach did nothing). An earlier composer appended messages locally and faked a Dusty reply
   a second later; that must not come back. When sending lands, it replaces the
   disabled Send in `src/components/v34/composer.tsx` — one place.
 

@@ -44,7 +44,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ contactId: 
         .limit(5)
     : Promise.resolve({ data: [], error: null });
 
-  const [phones, jobs, links, tasks, prop, subtypes, dups] = await Promise.all([
+  const [phones, jobs, links, tasks, prop, subtypes, dups, notes] = await Promise.all([
     supabase.from("contact_phones").select("phone_e164").eq("org_id", orgId).eq("contact_id", contactId),
     supabase.from("jobs").select("id, title, status, job_type, flag_reason, origin, confirmed_at, address, created_at")
       .eq("org_id", orgId).eq("contact_id", contactId).is("archived_at", null).order("created_at", { ascending: false }),
@@ -52,12 +52,15 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ contactId: 
     supabase.from("contact_tasks").select("id, title, due_on, source, status, evidence_quote, job_id, created_at, done_at")
       .eq("org_id", orgId).eq("contact_id", contactId).neq("status", "dismissed")
       .order("created_at", { ascending: true }),
-    supabase.from("contact_proposals").select("project_type, scope_summary, site_hint, sqft_stated, length_ft, width_ft, start_timing, has_media")
+    supabase.from("contact_proposals").select("classification, project_type, scope_summary, site_hint, sqft_stated, length_ft, width_ft, start_timing, has_media")
       .eq("org_id", orgId).eq("contact_id", contactId).order("created_at", { ascending: false }).limit(1),
     supabase.from("org_contact_subtypes").select("bucket, slug, label").eq("org_id", orgId),
     dupQuery,
+    // Coy's notes (migration 041) — newest first; the timeline merges them in.
+    supabase.from("contact_notes").select("id, body, created_at").eq("org_id", orgId).eq("contact_id", contactId)
+      .order("created_at", { ascending: false }).limit(200),
   ]);
-  for (const [what, r] of [["contact_phones", phones], ["jobs", jobs], ["job_vendors", links], ["contact_tasks", tasks], ["contact_proposals", prop]] as const) {
+  for (const [what, r] of [["contact_phones", phones], ["jobs", jobs], ["job_vendors", links], ["contact_tasks", tasks], ["contact_proposals", prop], ["contact_notes", notes]] as const) {
     if (r.error) return fail(what, r.error.message);
   }
 
@@ -107,7 +110,11 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ contactId: 
       // Dusty's words (migration 037) — a display cache, shown as his.
       status_summary: c.status_summary, recent_summary: c.recent_summary,
       job_type_hint: c.job_type_hint, status_summary_at: c.status_summary_at,
+      // Dusty's latest guess, for the bucket picker's dashed outline.
+      guess: (((prop.data ?? []) as Array<{ classification: string | null }>)[0]?.classification) ?? null,
     },
+    subtypes: subtypes.data ?? [],
+    notes: notes.data ?? [],
     jobs: jobRows.map((j) => ({
       ...j,
       counts: j.origin === "manual" || j.confirmed_at !== null,

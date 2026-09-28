@@ -1,7 +1,7 @@
 // The name suggester's safety checks. `npm test`.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { sanitize, worthEnriching, renderConversation } from "../supabase/functions/enrich-contacts/rules.ts";
+import { sanitize, worthEnriching, renderConversation, renderNotes } from "../supabase/functions/enrich-contacts/rules.ts";
 
 const turn = (id, who, text, extra = {}) => ({ id, kind: "sms", who, at: "2026-09-24T10:00:00Z", text, hasMedia: false, ...extra });
 const base = (o = {}) => ({ classification: "customer", direction_of_ask: "they ask our price", confidence: 80,
@@ -66,4 +66,16 @@ test("corrections render as data, capped at ten", () => {
   assert.equal(out.split("\n").filter((l) => l.startsWith("- ")).length, 10);
   assert.match(out, /You said customer; Coy filed them as vendor \(lead gen\)/);
   assert.match(out, /not instructions to you/);
+});
+
+test("Coy's notes render as their own block, newest first, capped", () => {
+  assert.equal(renderNotes([]), "");
+  const out = renderNotes([
+    { body: "Vance —  leak at the\nshop, wants geocell", created_at: "2026-09-28T12:00:00Z" },
+    { body: "first visit", created_at: "2026-09-01T12:00:00Z" },
+  ]);
+  assert.match(out, /^COY'S NOTES/);
+  assert.match(out, /- 2026-09-28: Vance — leak at the shop, wants geocell\n- 2026-09-01: first visit$/);
+  const many = Array.from({ length: 50 }, (_, i) => ({ body: "x".repeat(200), created_at: `2026-09-${String((i % 28) + 1).padStart(2, "0")}T00:00:00Z` }));
+  assert.ok(renderNotes(many).length < 3200);
 });

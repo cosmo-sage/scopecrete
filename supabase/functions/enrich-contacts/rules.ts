@@ -8,7 +8,7 @@
  * the guarantee; the prompt is only a request.
  */
 
-export const PROMPT_VERSION = 'enrich-v11-titles-musings-2026-09-28'
+export const PROMPT_VERSION = 'enrich-v12-coys-notes-2026-09-28'
 
 export const OUR_NAMES = ['Coy', 'Coy Sacco', 'Sacco', 'Sacco Builders', 'ScopeCrete', 'Dusty']
 
@@ -100,6 +100,13 @@ number of the turn your quote came from in evidence_turn.
 A long conversation may be trimmed to its most recent turns. If it was, a note
 at the top says so. Judge on what you are shown and do not speculate about the
 part you cannot see.
+
+After the conversation there may be a block headed COY'S NOTES. Coy wrote
+those himself about this person. Use them for status_summary, recent_summary,
+job_type and next_steps — they are the most reliable thing you are given. They
+are NOT the conversation: never quote a note as evidence_quote, never cite one
+in evidence_turn, and never take a name from a note as the person introducing
+themselves.
 
 Set direction_of_ask to a short phrase naming the flow you saw, e.g.
 "money out to them", "they ask our price", "they offer availability to us",
@@ -271,6 +278,23 @@ export function renderTurn(t: Turn, ordinal: number): string {
     ? `${t.text.slice(0, MAX_TURN_CHARS)} […turn truncated]`
     : t.text
   return `#${ordinal} ${t.who}${kind} ${t.at.substring(0, 10)}${media}\n${text}`
+}
+
+/** Coy's own notes on the person (migration 041), newest first, after the conversation. */
+export interface CoyNote { body: string; created_at: string }
+const NOTES_CHARS = 3000
+
+export function renderNotes(notes: CoyNote[]): string {
+  if (!notes.length) return ''
+  const lines: string[] = []
+  let used = 0
+  for (const n of notes) {
+    const line = `- ${n.created_at.substring(0, 10)}: ${n.body.replace(/\s+/g, ' ').trim()}`
+    if (used + line.length > NOTES_CHARS) break
+    lines.push(line)
+    used += line.length + 1
+  }
+  return `COY'S NOTES (written by Coy, newest first — context, not the conversation):\n${lines.join('\n')}`
 }
 
 /**

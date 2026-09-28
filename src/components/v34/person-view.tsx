@@ -21,8 +21,9 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft } from "@phosphor-icons/react";
 import { T, F, disp, eyebrow, nums, clip } from "@/lib/v34/tokens";
 import { Composer } from "@/components/v34/composer";
-import { Timeline, formatPhone, type ThreadMessage } from "@/components/v34/conversation";
+import { Timeline, formatPhone, type Note, type ThreadMessage } from "@/components/v34/conversation";
 import { JOB_TYPE_LABEL, stageOf } from "@/lib/jobs/stages";
+import { NameEditor, FileAsSheet } from "@/components/v34/contact-edit";
 
 export interface Person {
   contact: {
@@ -33,7 +34,12 @@ export interface Person {
     subtype: string | null; subtype_label: string | null;
     status_summary: string | null; recent_summary: string | null;
     job_type_hint: string | null; status_summary_at: string | null;
+    /** Dusty's latest classification — the picker's dashed guess. */
+    guess?: string | null;
   };
+  subtypes?: Array<{ bucket: "customer" | "vendor" | "personal" | "spam"; slug: string; label: string }>;
+  /** Coy's notes (migration 041), newest first. */
+  notes?: Array<{ id: string; body: string; created_at: string }>;
   jobs: Array<{
     id: string; title: string | null; status: string | null; job_type: string | null; flag_reason: string | null;
     counts: boolean; address: string | null;
@@ -89,6 +95,7 @@ export function PersonView({ person, messages, onReload, onMerge }: {
   const colour = c.bucket ? COLOUR[c.bucket] : T.ink3;
   const [tab, setTab] = useState<"activity" | "jobs" | "about">("activity");
   const [error, setError] = useState<string | null>(null);
+  const [filing, setFiling] = useState(false);
 
   const jobType = !isVendor
     ? (person.jobs.find((j) => j.job_type)?.job_type
@@ -122,10 +129,18 @@ export function PersonView({ person, messages, onReload, onMerge }: {
           </span>
           {c.subtype_label && <span style={{ ...eyebrow, color: T.ink2 }}>{c.subtype_label}</span>}
           {jobType && <span style={{ ...eyebrow, color: jobType.sure ? T.ink2 : T.ink3 }}>{jobType.l}{jobType.sure ? "" : "?"}</span>}
+          <span className="flex-1" />
+          {/* Coy, 2026-09-28: "this is a vendor but there is no way to change this from within the contact page". */}
+          <button onClick={() => setFiling(true)} className="rounded px-2 shrink-0"
+            style={{ height: 24, border: `1px solid ${T.hair}`, background: T.card, color: T.ink2, cursor: "pointer",
+                     fontFamily: disp, fontSize: F.xs, letterSpacing: ".04em", textTransform: "uppercase" }}>
+            Change bucket
+          </button>
         </div>
-        <h1 style={{ fontFamily: disp, fontSize: F.xl, fontWeight: 700, lineHeight: 1.1, margin: "4px 0 0", color: c.name ? T.ink : T.ink2, ...clip }}>
-          {title}
-        </h1>
+        <div style={{ marginTop: 4 }}>
+          <NameEditor contactId={c.id} name={c.name} fallback={title} onSaved={() => onReload()}
+            style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 700, lineHeight: 1.1, color: c.name ? T.ink : T.ink2 }} />
+        </div>
         {c.company && <div style={{ fontSize: F.sm, color: T.ink2 }}>{c.company}</div>}
         <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1" style={{ fontSize: F.xs, color: T.ink2, ...nums }}>
           {c.phones.map((p) => <a key={p} href={`tel:${p}`} style={{ color: T.ink2 }}>{formatPhone(p)}</a>)}
@@ -170,11 +185,18 @@ export function PersonView({ person, messages, onReload, onMerge }: {
         ))}
       </div>
 
-      {tab === "activity" && <Activity messages={messages} phone={phone} contactId={c.id} name={c.name} onMerge={() => onMerge()} />}
+      {tab === "activity" && <Activity messages={messages} notes={person.notes ?? []} phone={phone} contactId={c.id} name={c.name}
+        onMerge={() => onMerge()} onNoteSaved={onReload} />}
       {tab === "jobs" && (isVendor
         ? <VendorJobs person={person} onChanged={onReload} onError={setError} />
         : <CustomerJobs person={person} onChanged={onReload} onError={setError} />)}
       {tab === "about" && <About person={person} />}
+
+      <FileAsSheet open={filing} onClose={() => setFiling(false)} contactId={c.id}
+        target={{ bucket: c.bucket, subtype: c.subtype, bucket_auto: c.bucket_state === "auto" ? { reason: null } : null,
+                  proposal: c.guess ? { classification: c.guess } : null }}
+        subtypes={person.subtypes}
+        onFiled={() => { setFiling(false); onReload(); }} />
     </div>
   );
 }
@@ -305,22 +327,24 @@ function NextSteps({ contactId, tasks, onChanged, onError }: {
 
 /* ------------------------------------------------------------- activity */
 
-function Activity({ messages, phone, contactId, name, onMerge }: {
-  messages: ThreadMessage[]; phone: string | null; contactId: string; name: string | null; onMerge: () => void;
+function Activity({ messages, notes, phone, contactId, name, onMerge, onNoteSaved }: {
+  messages: ThreadMessage[]; notes: Note[]; phone: string | null; contactId: string; name: string | null;
+  onMerge: () => void; onNoteSaved: () => void;
 }) {
-  const [chan, setChan] = useState<"all" | "sms" | "call">("all");
-  const shown = useMemo(() => chan === "all" ? messages
+  const [chan, setChan] = useState<"all" | "sms" | "call" | "notes">("all");
+  const shown = useMemo(() => chan === "all" ? messages : chan === "notes" ? []
     : messages.filter((m) => (chan === "call" ? m.channel === "call" : m.channel !== "call")), [messages, chan]);
+  const shownNotes = chan === "all" || chan === "notes" ? notes : [];
   const n = (k: "sms" | "call") => messages.filter((m) => (k === "call" ? m.channel === "call" : m.channel !== "call")).length;
   const scroller = React.useRef<HTMLDivElement | null>(null);
-  useEffect(() => { if (scroller.current) scroller.current.scrollTop = scroller.current.scrollHeight; }, [shown.length]);
+  useEffect(() => { if (scroller.current) scroller.current.scrollTop = scroller.current.scrollHeight; }, [shown.length, shownNotes.length]);
 
   return (
     <div className="mx-3 mt-2">
       <div className="flex gap-1 items-center">
-        {([["all", "All"], ["sms", "Texts"], ["call", "Calls"]] as const).map(([k, l]) => {
+        {([["all", "All"], ["sms", "Texts"], ["call", "Calls"], ["notes", "Notes"]] as const).map(([k, l]) => {
           const on = chan === k;
-          const count = k === "all" ? messages.length : n(k);
+          const count = k === "all" ? messages.length + notes.length : k === "notes" ? notes.length : n(k);
           return (
             <button key={k} onClick={() => setChan(k)} disabled={!count} className="rounded px-2"
               style={{ height: 28, whiteSpace: "nowrap", flexShrink: 0, background: on ? T.ink : T.card, color: on ? "#fff" : count ? T.ink2 : T.ink3,
@@ -337,10 +361,10 @@ function Activity({ messages, phone, contactId, name, onMerge }: {
       </div>
       <div ref={scroller} className="mt-1.5 rounded px-2.5 py-1 overflow-y-auto"
         style={{ background: T.slab, border: `1px solid ${T.hair}`, maxHeight: "60vh" }}>
-        <Timeline messages={shown} phone={phone} />
+        <Timeline messages={shown} notes={shownNotes} phone={phone} />
       </div>
       <div id="person-composer" className="mt-1.5 rounded overflow-hidden" style={{ border: `1px solid ${T.hair}` }}>
-        <Composer contactId={contactId} phone={phone} name={name} />
+        <Composer contactId={contactId} phone={phone} name={name} onNoteSaved={onNoteSaved} />
       </div>
     </div>
   );

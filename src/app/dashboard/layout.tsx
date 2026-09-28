@@ -316,7 +316,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </button>
       </nav>
 
-      <main className="flex-1 pb-[72px] lg:pb-0 lg:pl-[84px]">{children}</main>
+      <main className="flex-1 pb-[var(--sc-foot)] lg:pb-0 lg:pl-[84px]">{children}</main>
 
       <footer className="fixed bottom-0 left-0 right-0 z-40 flex items-stretch lg:hidden"
         style={{ background: T.card, borderTop: `1px solid ${T.hair}`, height: 58,

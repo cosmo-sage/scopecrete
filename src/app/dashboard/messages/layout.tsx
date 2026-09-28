@@ -31,7 +31,7 @@ export default function MessagesLayout({ children }: { children: React.ReactNode
   const conversationOpen = /^\/dashboard\/messages\/[^/]+/.test(pathname);
 
   return (
-    <div className="lg:flex lg:items-stretch min-h-[calc(100vh-var(--sc-head)-58px)] lg:h-[calc(100dvh-var(--sc-head))] lg:min-h-0">
+    <div className={`lg:flex lg:items-stretch ${conversationOpen ? "" : "min-h-[calc(100dvh-var(--sc-head)-var(--sc-foot))]"} lg:h-[calc(100dvh-var(--sc-head))] lg:min-h-0`}>
       {/* A fixed rail on desktop: the list is the constant, the conversation is
           what changes, so the list must not resize as threads come and go.
 

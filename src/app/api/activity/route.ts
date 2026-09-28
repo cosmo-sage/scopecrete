@@ -69,7 +69,10 @@ export async function GET(req: NextRequest) {
   const { supabase, orgId, applyCookies } = result.session;
 
   const since = new Date(Date.now() - 7 * 86400_000).toISOString();
-  const [{ data: runRows, error }, { data: statusRows }, { data: beat }, { data: agreeRows }] = await Promise.all([
+  // Reminders: open next steps due today or overdue (contact_tasks, migration
+  // 038). Central time is Coy's; the server has no timezone of its own.
+  const todayLocal = new Date().toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
+  const [{ data: runRows, error }, { data: statusRows }, { data: beat }, { data: agreeRows }, { data: dueRows }] = await Promise.all([
     supabase.from("contact_enrich_runs")
       .select("id, started_at, finished_at, outcome, note, contact_id, contacts(name, phone), contact_name_claims(claimed_name, evidence_quote), contact_proposals(proposed_name, classification, evidence_quote)")
       .eq("org_id", orgId).gte("started_at", since)
@@ -77,6 +80,8 @@ export async function GET(req: NextRequest) {
     supabase.rpc("sc_enrich_status"),
     supabase.from("sc_worker_heartbeats").select("status, detail, ticked_at").eq("worker", "enrich-contacts").maybeSingle(),
     supabase.from("sc_bucket_agreement").select("bucket, guesses, agreed, streak").eq("org_id", orgId),
+    supabase.from("contact_tasks").select("id, title, due_on, contact_id, contacts(name, phone)")
+      .eq("org_id", orgId).eq("status", "open").lte("due_on", todayLocal).order("due_on", { ascending: true }).limit(6),
   ]);
   if (error) return applyCookies(NextResponse.json({ error: `contact_enrich_runs: ${error.message}` }, { status: 500 }));
 
@@ -161,6 +166,18 @@ export async function GET(req: NextRequest) {
   // Spam is filed on evidence from the start; the other buckets are earned.
   // Standing lines: never cut by the 20-item cap, never timestamped.
   const standing: ActivityItem[] = [];
+  // Dusty reminds: what is due today or late, each linking to the person.
+  type Due = { id: string; title: string; due_on: string; contact_id: string;
+    contacts: { name: string | null; phone: string | null } | { name: string | null; phone: string | null }[] | null };
+  for (const t of (dueRows ?? []) as unknown as Due[]) {
+    const c = Array.isArray(t.contacts) ? t.contacts[0] : t.contacts;
+    const who = c?.name?.trim() || formatPhone(c?.phone ?? null);
+    const late = t.due_on < todayLocal;
+    standing.push({ id: `due-${t.id}`, at: new Date().toISOString(), kind: "reminder", contact_id: t.contact_id,
+      summary: `${late ? "Overdue" : "Due today"}: ${clipq(t.title, 60)} — ${who}`,
+      detail: `On ${who}'s next steps${late ? `, due ${t.due_on}` : ""}. Tick it off there when it's done.`,
+      tone: late ? "warn" : "ask" });
+  }
   for (const a of (agreeRows ?? []) as Array<{ bucket: string; guesses: number; agreed: number; streak: number }>) {
     const plural = PLURAL[a.bucket];
     if (!plural || !a.guesses) continue;

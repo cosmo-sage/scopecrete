@@ -44,19 +44,24 @@ export async function buildContext(sb: Sb, orgId: string, ref: ContextRef): Prom
 
 async function contactBlock(sb: Sb, orgId: string, contactId: string) {
   const { data: c } = await sb.from("contacts")
-    .select("id, name, name_source, name_confirmed_at, phone, address, customer_id, merged_into_contact_id")
+    .select("id, name, name_source, name_confirmed_at, phone, address, customer_id, merged_into_contact_id, contact_type, contact_subtype, classification_confirmed_at, auto_classified_at, status_summary")
     .eq("org_id", orgId).eq("id", contactId).maybeSingle();
   if (!c) return null;
-  const [{ data: phones }, { data: cust }, { data: jobs }] = await Promise.all([
+  const [{ data: phones }, { data: jobs }, { data: tasks }] = await Promise.all([
     sb.from("contact_phones").select("phone_e164").eq("org_id", orgId).eq("contact_id", contactId),
-    c.customer_id
-      ? sb.from("customers").select("relation, relation_confirmed_at").eq("org_id", orgId).eq("id", c.customer_id).maybeSingle()
-      : Promise.resolve({ data: null }),
     sb.from("jobs").select("id, title, status, created_at").eq("org_id", orgId).eq("contact_id", contactId).is("archived_at", null),
+    // The next-steps checklist (migration 038) — Coy's own items and Dusty's —
+    // so "what do I owe them?" is answered from it.
+    sb.from("contact_tasks").select("title, due_on, source").eq("org_id", orgId).eq("contact_id", contactId)
+      .eq("status", "open").order("due_on", { ascending: true, nullsFirst: false }).limit(15),
   ]);
   const numbers = [...new Set([c.phone, ...((phones ?? []) as Array<{ phone_e164: string }>).map((p) => p.phone_e164)].filter(Boolean))];
   const name = (c.name as string | null)?.trim() || null;
-  const relation = cust?.relation_confirmed_at ? `${cust.relation} (confirmed by Coy)` : "unclassified — nobody has said";
+  // The bucket, only when it counts (DECISIONS §2b): Coy's, or Dusty's own filing.
+  const relation = c.classification_confirmed_at
+    ? `${c.contact_type}${c.contact_subtype ? ` (${String(c.contact_subtype).replace(/_/g, " ")})` : ""} — confirmed by Coy`
+    : c.auto_classified_at ? `${c.contact_type} — filed by Dusty, not yet kept by Coy` : "unsorted — nobody has said";
+  const todo = (tasks ?? []) as Array<{ title: string; due_on: string | null; source: string }>;
   const block: Block = {
     title: "Contact",
     lines: [
@@ -65,6 +70,8 @@ async function contactBlock(sb: Sb, orgId: string, contactId: string) {
       `Address: ${(c.address as string | null)?.trim() || "not recorded"}`,
       `What they are to the business: ${relation}`,
       `Jobs: ${(jobs ?? []).length ? (jobs as Array<{ title: string | null; status: string | null }>).map((j) => `${j.title || "untitled"} (${j.status})`).join("; ") : "none"}`,
+      `Where it stands (Dusty's earlier read): ${(c.status_summary as string | null) ?? "not read yet"}`,
+      `Open next steps: ${todo.length ? todo.map((t) => `${t.title}${t.due_on ? ` (due ${t.due_on})` : ""}${t.source === "coy" ? " [Coy's own]" : " [suggested]"}`).join("; ") : "none"}`,
     ],
   };
   return { block, name: name ?? (numbers[0] as string | undefined) ?? "unknown number" };

@@ -323,7 +323,7 @@ confirmed — everything else is **Unclassified**, never the column default.
 
 **The background enricher (2026-09-27, migrations 029–033).** Contacts are
 read with the app closed. pg_cron calls the `enrich-contacts` edge function
-every minute (v8; 4 readers, each claiming one contact at a time until the
+every minute (v10; 4 readers, each claiming one contact at a time until the
 queue is empty or 45 s have passed, so a backlog drains in minutes; source in
 `supabase/functions/enrich-contacts/`:
 `rules.ts` the rules, `pipeline.ts` one contact, `index.ts` the worker). There
@@ -471,6 +471,16 @@ them out. Trigger `contacts_bucket_jobs` → `sc_customer_job_for()`:
 - Backfill 2026-09-28: Amber already had a job, so none was made; the other
   confirmed customer got "Repair" — Dusty's summary says Coy referred them on,
   so that one is for Coy to move to Lost.
+
+**Dusty seeds next steps (`enrich-contacts` v9+, 2026-09-28).** Each read
+may add up to three things waiting on Coy — "Send the walkway repair price" —
+to `contact_tasks` with `source='dusty'`, the line that shows it is owed, and a
+due date only when one was said. Never one that matches an item Coy already
+has, done or dismissed (`title_key`); never for someone filed personal or spam.
+Coy's own items are `source='coy'`. **Reminders:** the activity line shows
+every open item due today or overdue (Central time), each linking to the
+person; Dusty's context on a person includes their open next steps and his
+status line, so "what do I owe Amber?" is answered from the checklist.
 
 **Vendors on jobs** — `job_vendors` (job, contact, role = vendor subtype,
 note), RLS by `get_user_org_ids()`. **Next steps** — `contact_tasks` (title,
@@ -642,8 +652,25 @@ expected start date per quoted job before it means anything. Add the field.
   are unsorted or auto-filed ("Change bucket" otherwise), the name question
   only for a number with no name, and ONE button through to their page. No
   call / text / email / composer in the row (Coy, 2026-09-28) — engaging on
-  every channel, transcripts and a next-steps checklist belong on the
-  customer / vendor page, which is still to be designed. Job stages — New
+  every channel belongs on the person's page.
+- **Customer page and Vendor page (2026-09-28)** — `/dashboard/messages/[id]`
+  renders `src/components/v34/person-view.tsx` for anyone filed customer or
+  vendor (unsorted, personal and spam keep the plain conversation; the old
+  `/dashboard/customers` screens redirect to Threads). Header: bucket tag
+  (✓ / auto), subtype or job type, Dusty's status line, numbers, email,
+  address. **Call · Text · Email · Ask Dusty** — Text writes a draft to copy
+  into Quo (no send path, below); Email is mailto: and off when no address is
+  known; Ask Dusty opens the panel on this person (`sc:dusty-open`). **Next
+  steps**: Dusty's items marked with "why" (the line), Coy's own, due dates,
+  overdue in red; tick, dismiss, add. Tabs **Activity** (the timeline, filter
+  All · Texts · Calls; Email shown off until email is connected; composer;
+  Same as…) · **Jobs** (customer: their jobs with stage, type, flags and Crew
+  & suppliers, + Start a job; vendor: the jobs they're on, + Put them on a
+  job) · **About** (Dusty's latest summary and what they said about the work).
+  The job page carries the same Crew & suppliers row. APIs:
+  `/api/people/[id]`, `/api/people?bucket=`, `/api/people/[id]/tasks`,
+  `/api/tasks/[id]`, `/api/jobs/[id]/vendors` — session client, org from the
+  session. Job stages — New
   lead, Consultation, Estimating, Follow up, W.I.P., Complete, Lost — are the
   Jobs board (Scope renamed Jobs), a Kanban, not Threads chips.
 - **Jobs board (migration 034, 2026-09-27)** — `/dashboard/scope`, stages in

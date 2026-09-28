@@ -10,7 +10,7 @@
 
 import {
   AUTO_STREAK, PROMPT_VERSION, SYSTEM_PROMPT, bucketOf, findSelfIdentification, relabelTranscript, renderConversation,
-  sanitize, spamSignal, worthEnriching, type Correction, type Proposal, type Turn,
+  sanitize, spamSignal, titleKey, worthEnriching, type Correction, type Proposal, type Turn,
 } from './rules.ts'
 
 /**
@@ -64,7 +64,7 @@ export function hermesAsk(cfg: HermesConfig, extraSystem = ''): Ask {
         method: 'POST', signal: ctrl.signal,
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.key}` },
         body: JSON.stringify({
-          model: cfg.model, stream: false, temperature: 0.1, max_tokens: 900,
+          model: cfg.model, stream: false, temperature: 0.1, max_tokens: 1200,
           messages: [
             { role: 'system', content: system },
             { role: 'user', content: `CONVERSATION:\n\n${conversation}` },
@@ -322,7 +322,7 @@ export async function applyAutoBucket(sb: Db, orgId: string, contactId: string, 
 
 /** What the contact already is: whether a read still has anything to ASK. */
 interface ContactState {
-  name: string | null; name_source: string | null
+  name: string | null; name_source: string | null; contact_type: string | null
   classification_confirmed_at: string | null; auto_classified_at: string | null
   status_summary_at: string | null
 }
@@ -340,10 +340,29 @@ async function writeStatus(sb: Db, orgId: string, contactId: string, p: Proposal
   }).eq('org_id', orgId).eq('id', contactId)
 }
 
+/**
+ * Dusty's next steps into the checklist (migration 038, enrich v9): source
+ * 'dusty', with the line that prompted each. Never one Coy already has — open,
+ * done, or dismissed (a dismissed suggestion stays dismissed). Not for people
+ * filed personal or spam: their pages have no checklist.
+ */
+export async function seedNextSteps(sb: Db, orgId: string, contactId: string, p: Proposal, bucket: string | null): Promise<number> {
+  const steps = p.next_steps ?? []
+  if (!steps.length || bucket === 'personal' || bucket === 'spam') return 0
+  const { data: have } = await sb.from('contact_tasks').select('title_key').eq('org_id', orgId).eq('contact_id', contactId)
+  const seen = new Set(((have ?? []) as Array<{ title_key: string }>).map((t) => t.title_key))
+  const rows = steps.filter((x) => !seen.has(titleKey(x.title))).map((x) => ({
+    org_id: orgId, contact_id: contactId, title: x.title, due_on: x.due_on, source: 'dusty', evidence_quote: x.quote,
+  }))
+  if (!rows.length) return 0
+  const { error } = await sb.from('contact_tasks').insert(rows)
+  return error ? 0 : rows.length
+}
+
 export async function readContact(sb: Db, orgId: string, contactId: string, ask: Ask, model: string, learning: Learning = NO_LEARNING): Promise<ReadResult> {
   const [turns, numbers, { data: st }] = await Promise.all([
     loadTurns(sb, orgId, contactId), contactNumbers(sb, orgId, contactId),
-    sb.from('contacts').select('name, name_source, classification_confirmed_at, auto_classified_at, status_summary_at')
+    sb.from('contacts').select('name, name_source, contact_type, classification_confirmed_at, auto_classified_at, status_summary_at')
       .eq('org_id', orgId).eq('id', contactId).maybeSingle(),
   ])
   const state = (st ?? {}) as Partial<ContactState>
@@ -381,6 +400,7 @@ export async function readContact(sb: Db, orgId: string, contactId: string, ask:
   if (!p.evidence_message_id) return { outcome: 'failed', note: 'no evidence line' }
 
   await writeStatus(sb, orgId, contactId, p)
+  await seedNextSteps(sb, orgId, contactId, p, sorted ? state.contact_type ?? null : null)
   if (!asking) return { outcome: 'summarized', note: p.status_summary ?? undefined }
   // A name is only a question for someone without one.
   if (named) p.proposed_name = null

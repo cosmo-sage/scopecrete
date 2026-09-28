@@ -2,7 +2,7 @@
 // a fake model. `npm test`.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { loadLearning, readContact } from "../supabase/functions/enrich-contacts/pipeline.ts";
+import { loadLearning, readContact, seedNextSteps } from "../supabase/functions/enrich-contacts/pipeline.ts";
 
 const ORG = "org-1", CONTACT = "c-1", PHONE = "+12255550101";
 
@@ -40,7 +40,7 @@ function fakeDb(answer) {
 
 const eq = (q, col) => q.filters.find((f) => f[0] === "eq" && f[1] === col)?.[2];
 
-function world({ texts = [], calls = null, contact = { name: null, name_source: "legacy", phone: PHONE, classification_confirmed_at: null, status_summary_at: "2026-09-27" }, pending = null, undone = [] }) {
+function world({ texts = [], calls = null, contact = { name: null, name_source: "legacy", phone: PHONE, classification_confirmed_at: null, status_summary_at: "2026-09-27" }, pending = null, undone = [], taskKeys = [] }) {
   return fakeDb((q) => {
     if (q.table !== "contacts" && q.table !== "contact_phones" && q.op === "select") {
       assert.equal(eq(q, "org_id"), ORG, `${q.table} read without the org filter`);
@@ -62,6 +62,9 @@ function world({ texts = [], calls = null, contact = { name: null, name_source: 
       case "contacts":
         if (q.op === "update") return { data: [{ name: q.payload.name ?? null }] };
         return { data: contact };
+      case "contact_tasks":
+        if (q.op === "insert") return { data: null };
+        return { data: taskKeys.map((k) => ({ title_key: k })) };
       case "contact_name_claims":
         if (q.op === "insert") return { data: { id: "k-new" } };
         if (q.op === "update") return { data: null };
@@ -275,4 +278,28 @@ test("no status line yet: the unchanged shortcut does not skip the read that wri
   const ask = model(proposal({ status_summary: "Asking about the truck." }));
   await readContact(db, ORG, CONTACT, ask, "hermes:test");
   assert.equal(ask.calls.length, 1);
+});
+
+test("Dusty's next steps go into the checklist once — never one Coy already has or dismissed", async () => {
+  const db = world({ texts: [["THEM", "Can I get a price before the board meets?"]],
+    taskKeys: ["callamberback"] });
+  await readContact(db, ORG, CONTACT, model(proposal({ status_summary: "Wants a price.", next_steps: [
+    { title: "Send the walkway repair price", due_on: "2026-10-14", quote: "Can I get a price before the board meets?" },
+    { title: "Call Amber back!", due_on: "Tuesday", quote: null },
+    { title: "send the walkway REPAIR price", due_on: null, quote: null },
+    { title: "Four", due_on: null, quote: null }, { title: "Five", due_on: null, quote: null },
+  ] })), "hermes:test");
+  const [ins] = writes(db, "contact_tasks", "insert");
+  assert.deepEqual(ins.payload.map((t) => [t.title, t.due_on, t.source]), [
+    ["Send the walkway repair price", "2026-10-14", "dusty"],
+    ["Four", null, "dusty"],
+  ]);
+  assert.equal(ins.payload[0].evidence_quote, "Can I get a price before the board meets?");
+});
+
+test("no checklist is seeded for someone filed personal", async () => {
+  const db = fakeDb(() => ({ data: [] }));
+  const n = await seedNextSteps(db, ORG, CONTACT, { next_steps: [{ title: "Pick up the kids", due_on: null, quote: null }] }, "personal");
+  assert.equal(n, 0);
+  assert.equal(db.log.length, 0);
 });

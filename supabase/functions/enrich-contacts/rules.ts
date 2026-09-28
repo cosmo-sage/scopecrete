@@ -8,7 +8,7 @@
  * the guarantee; the prompt is only a request.
  */
 
-export const PROMPT_VERSION = 'enrich-v8-status-2026-09-28'
+export const PROMPT_VERSION = 'enrich-v9-next-steps-2026-09-28'
 
 export const OUR_NAMES = ['Coy', 'Coy Sacco', 'Sacco', 'Sacco Builders', 'ScopeCrete', 'Dusty']
 
@@ -177,6 +177,13 @@ These describe the conversation; they classify nothing and name nobody.
   job_type — customers only: "residential" (a home or homeowner),
     "commercial" (a business, builder or GC), "public" (government, school,
     city, parish). Null for anyone else, or when it is not clear.
+  next_steps — up to 3 things that are waiting on US (Coy), from the
+    conversation: a price he owes, a call back, photos to look at, a payment
+    to send, a date to confirm. A short instruction under 80 characters
+    ("Send the walkway repair price"). due_on only when a date was actually
+    said, as YYYY-MM-DD, else null. quote: the line that shows it is owed,
+    copied verbatim. An empty list when nothing is waiting on us — never
+    invent work.
 
 Return ONLY a JSON object, no prose, no code fence:
 {
@@ -199,7 +206,8 @@ Return ONLY a JSON object, no prose, no code fence:
   "name_reasoning": string,
   "status_summary": string|null,
   "recent_summary": string|null,
-  "job_type": "residential|commercial|public"|null
+  "job_type": "residential|commercial|public"|null,
+  "next_steps": [{ "title": string, "due_on": "YYYY-MM-DD"|null, "quote": string }]
 }
 
 name_reasoning is one short sentence stating why proposed_name is what it is.
@@ -338,6 +346,15 @@ export interface Proposal {
   /** The latest conversations, two to four sentences. Display only. */
   recent_summary?: string | null
   job_type?: string | null
+  /** Up to 3 things waiting on Coy (enrich v9): seeded into contact_tasks. */
+  next_steps?: NextStep[] | null
+}
+
+export interface NextStep { title: string; due_on: string | null; quote: string | null }
+
+/** Same as contact_tasks.title_key (migration 038): how "the same item" is recognised. */
+export function titleKey(title: string): string {
+  return title.toLowerCase().replace(/[^a-z0-9]+/g, '')
 }
 
 // not_work was v5's single value for personal + spam; still accepted from older answers.
@@ -431,6 +448,18 @@ export function sanitize(p: Proposal, turns: Turn[]): { p: Proposal; notes: stri
   p.status_summary = line(p.status_summary, 180)
   p.recent_summary = line(p.recent_summary, 600)
   if (!['residential', 'commercial', 'public'].includes(p.job_type ?? '')) p.job_type = null
+
+  // Next steps: at most three, each a short line; a date only in date form.
+  const steps: NextStep[] = []
+  for (const x of Array.isArray(p.next_steps) ? p.next_steps : []) {
+    const title = line((x as NextStep)?.title, 120)
+    if (!title || !titleKey(title) || steps.some(s => titleKey(s.title) === titleKey(title))) continue
+    const due = typeof (x as NextStep).due_on === 'string' && /^\d{4}-\d{2}-\d{2}$/.test((x as NextStep).due_on as string)
+      ? (x as NextStep).due_on : null
+    steps.push({ title, due_on: due, quote: line((x as NextStep).quote, 300) })
+    if (steps.length === 3) break
+  }
+  p.next_steps = steps
 
   if (!p.evidence_quote || !p.evidence_quote.trim()) {
     const firstTheirs = turns.find(t => t.who === 'THEM' && t.text !== '(no text)')

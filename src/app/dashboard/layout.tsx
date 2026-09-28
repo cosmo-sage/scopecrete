@@ -62,6 +62,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [pipeOpen, setPipeOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [dustyOpen, setDustyOpen] = useState(false);
+  // Any screen can open Dusty on what it shows — the person pages' "Ask
+  // Dusty" dispatches this. The panel still reads its context from the route.
+  useEffect(() => {
+    const open = () => setDustyOpen(true);
+    window.addEventListener("sc:dusty-open", open);
+    return () => window.removeEventListener("sc:dusty-open", open);
+  }, []);
   // True only while a Dusty reply is actually streaming.
   const [dustyBusy, setDustyBusy] = useState(false);
 
@@ -283,7 +290,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         style={{ top: "var(--sc-head)", width: 84, background: T.dark }}>
         {/* The rail has room the footer does not: Customers stands here on
             desktop and is reached from More on a phone. */}
-        {[...SLOTS.filter((s) => s.href).slice(0, 2), { k: "customers", label: "Customers", href: "/dashboard/customers" },
+        {[...SLOTS.filter((s) => s.href).slice(0, 2), { k: "customers", label: "Customers", href: "/dashboard/messages?f=customers" },
           ...SLOTS.filter((s) => s.href).slice(2)].map((s) => {
           const on = activeKey === s.k;
           return (

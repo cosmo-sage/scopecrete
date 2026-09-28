@@ -171,6 +171,7 @@ export default function ScopeBuilder() {
           <JobMeta job={job} onSet={(field, value) => void send(`/api/jobs/${jobId}`, "PATCH", { [field]: value })
             .then((b) => setJob((j) => j && { ...j, job_type: b.job.job_type, lead_source: b.job.lead_source }))
             .catch((er) => setSaveErr((m) => ({ ...m, job: String(er.message ?? er) })))} />
+          <JobCrew jobId={jobId} />
         </div>
 
         {/* Phone: the takeoff rail sits below the sections, so the three
@@ -557,6 +558,63 @@ function JobMeta({ job, onSet }: { job: Job; onSet: (field: "job_type" | "lead_s
         <option value="">Source: not set</option>
         {LEAD_SOURCES.map((l) => <option key={l.k} value={l.k}>{l.label}</option>)}
       </select>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ crew */
+
+/**
+ * Crew & suppliers on this job — the vendors side of "jobs should be
+ * connected to vendors" (Coy, 2026-09-28; job_vendors, migration 038). Each
+ * one links to their Vendor page, where the same link shows from their side.
+ */
+function JobCrew({ jobId }: { jobId: string }) {
+  const [crew, setCrew] = useState<Array<{ contact_id: string; name: string | null; phone: string | null; role: string | null }> | null>(null);
+  const [vendors, setVendors] = useState<Array<{ id: string; name: string | null; phone: string | null; subtype: string | null }>>([]);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    let off = false;
+    fetch(`/api/jobs/${jobId}/vendors`).then((r) => (r.ok ? r.json() : null))
+      .then((b) => { if (!off) setCrew(Array.isArray(b?.vendors) ? b.vendors : []); }).catch(() => {});
+    return () => { off = true; };
+  }, [jobId, tick]);
+  useEffect(() => {
+    let off = false;
+    fetch("/api/people?bucket=vendor").then((r) => (r.ok ? r.json() : null))
+      .then((b) => { if (!off && Array.isArray(b?.people)) setVendors(b.people); }).catch(() => {});
+    return () => { off = true; };
+  }, []);
+  const run = (p: Promise<unknown>) => {
+    setBusy(true); setErr(null);
+    p.then(() => setTick((n) => n + 1)).catch((e) => setErr(String(e?.message ?? e))).finally(() => setBusy(false));
+  };
+  if (crew === null) return null;
+  const free = vendors.filter((v) => !crew.some((c) => c.contact_id === v.id));
+  return (
+    <div className="flex flex-wrap items-center gap-1.5" style={{ marginTop: 6 }}>
+      <span style={{ ...eyebrow, color: T.ink3 }}>Crew & suppliers</span>
+      {crew.length === 0 && <span style={{ fontSize: F.xs, color: T.ink3 }}>none yet</span>}
+      {crew.map((c) => (
+        <span key={c.contact_id} className="rounded inline-flex items-center gap-1 px-1.5"
+          style={{ height: 24, border: `1px solid ${T.chalk}`, fontSize: F.xs }}>
+          <Link href={`/dashboard/messages/${c.contact_id}`} style={{ color: T.chalk }}>{c.name ?? formatPhone(c.phone)}</Link>
+          {c.role && <span style={{ color: T.ink3 }}>{c.role.replace(/_/g, " ")}</span>}
+          <button disabled={busy} aria-label="Remove from job" style={{ color: T.ink3, cursor: "pointer" }}
+            onClick={() => run(send(`/api/jobs/${jobId}/vendors?contact_id=${c.contact_id}`, "DELETE"))}>×</button>
+        </span>
+      ))}
+      {free.length > 0 && (
+        <select disabled={busy} value="" aria-label="Add a vendor to this job"
+          onChange={(e) => { if (e.target.value) run(send(`/api/jobs/${jobId}/vendors`, "POST", { contact_id: e.target.value })); }}
+          className="rounded px-1.5 outline-none" style={{ height: 24, fontSize: F.xs, border: `1px dashed ${T.chalk}`, background: T.card, color: T.chalk }}>
+          <option value="">+ Add</option>
+          {free.map((v) => <option key={v.id} value={v.id}>{v.name ?? formatPhone(v.phone)}{v.subtype ? ` — ${v.subtype.replace(/_/g, " ")}` : ""}</option>)}
+        </select>
+      )}
+      {err && <span style={{ fontSize: F.xs, color: T.red }}>{err}</span>}
     </div>
   );
 }

@@ -797,7 +797,12 @@ export function ThreadList() {
           <span className="flex-1" />
           {/* A real button, not a word: on a phone the text alone was too
               small to hit (Coy, 2026-09-28). */}
-          <button onClick={() => router.replace("/dashboard/messages")} aria-label="Clear search"
+          {/* history.replaceState, not router.replace: in the production build
+              router.replace to the same route minus ?q= did nothing at all
+              (reproduced 2026-09-28 with `next start`; the dev server hid it).
+              Next syncs useSearchParams with the History API, so the list
+              re-renders without the search. */}
+          <button onClick={() => window.history.replaceState(null, "", "/dashboard/messages")} aria-label="Clear search"
             className="rounded px-3 shrink-0"
             style={{ ...eyebrow, height: 30, color: T.chalk, border: `1px solid ${T.chalk}`, background: T.card, cursor: "pointer" }}>✕ Clear</button>
         </div>

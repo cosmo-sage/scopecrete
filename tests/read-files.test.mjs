@@ -78,3 +78,34 @@ test("price lines from a photo are marked for checking", () => {
   assert.equal(r.facts.price_lines.length, 1);
   assert.equal(r.facts.price_lines_from_photo, true);
 });
+
+test("a vendor's invoice: who issued it and the tax rate, each only if printed", () => {
+  const text = "ACME READY MIX LLC\n1200 Plank Rd, Baton Rouge LA\n(225) 555-0142  orders@acmemix.test\nBILL TO: Sample Customer\n3000 PSI CY 10 $152.00\nShort load fee LOAD 1 $95.00\nSales tax 9.45% $143.64";
+  const r = sanitizeRead({ summary: "Ready-mix invoice.", kind: "receipt", facts: {},
+    price_lines: [{ name: "3000 PSI", unit: "CY", unit_cost: 152, qty: 10 }, { name: "Short load fee", unit: "LOAD", unit_cost: 95, qty: 1 }],
+    vendor_details: { name: "Acme Ready Mix LLC", phone: "225-555-0142", email: "orders@acmemix.test", address: "1200 Plank Rd, Baton Rouge LA" },
+    tax_pct: 9.45 }, text);
+  assert.deepEqual(r.facts.vendor_details, { name: "Acme Ready Mix LLC", phone: "225-555-0142", email: "orders@acmemix.test", address: "1200 Plank Rd, Baton Rouge LA" });
+  assert.equal(r.facts.tax_pct, 9.45);
+  assert.equal(r.facts.price_lines.length, 2);
+
+  const bad = sanitizeRead({ summary: "x", facts: {},
+    vendor_details: { name: "Other Supply", phone: "225-555-9999", email: "x@y.test", address: "77 Nowhere St" }, tax_pct: 8.5 }, text);
+  assert.equal(bad.facts.vendor_details, undefined);
+  assert.equal(bad.facts.tax_pct, undefined);
+  assert.match(bad.dropped.join("|"), /vendor phone: 225-555-9999 is not written/);
+  assert.match(bad.dropped.join("|"), /tax_pct: 8.5 is not written/);
+
+  const photo = sanitizeRead({ summary: "x", facts: {}, vendor_details: { name: "Acme", phone: "555" }, tax_pct: 60 }, null);
+  assert.deepEqual(photo.facts.vendor_details, { name: "Acme" });
+  assert.equal(photo.facts.tax_pct, undefined);
+});
+
+test("tax as printed: an amount and a subtotal, never a rate worked out", () => {
+  const text = "Subtotal $3,807.00\nTAX $399.74\nTotal $4,206.74";
+  const r = sanitizeRead({ summary: "x", facts: {}, subtotal: 3807, tax_amount: "$399.74", tax_pct: 10.5 }, text);
+  assert.equal(r.facts.subtotal, 3807);
+  assert.equal(r.facts.tax_amount, 399.74);
+  assert.equal(r.facts.tax_pct, undefined);
+  assert.match(r.dropped.join("|"), /tax_pct: 10.5 is not written/);
+});

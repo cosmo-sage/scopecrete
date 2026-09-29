@@ -7,7 +7,7 @@
  * number is kept only if it is written in the document.
  */
 
-export const READ_PROMPT_VERSION = 'read-files-v2-price-lines-2026-09-29'
+export const READ_PROMPT_VERSION = 'read-files-v3-vendor-details-2026-09-29'
 
 export const SYSTEM_PROMPT = `You read one file for a concrete contractor (driveways, slabs, sidewalks, curbs; residential, commercial and government work). The file is a photo or a document: plans, a spec, a bid invite, a vendor's quote, a receipt, a contract.
 
@@ -16,7 +16,9 @@ Return ONLY a JSON object, no prose:
  "facts": {"bid_due": "YYYY-MM-DD"|null, "date": "YYYY-MM-DD"|null, "address": string|null, "vendor": string|null,
            "amount": number|null, "psi": number|null, "thickness_in": number|null, "reinforcement": string|null,
            "dimensions": string[], "quantities": string[], "notes": string[]},
- "price_lines": [{"name": string, "sku": string|null, "unit": string|null, "unit_cost": number, "qty": number|null}]}
+ "price_lines": [{"name": string, "sku": string|null, "unit": string|null, "unit_cost": number, "qty": number|null}],
+ "vendor_details": {"name": string|null, "phone": string|null, "email": string|null, "address": string|null}|null,
+ "tax_pct": number|null, "subtotal": number|null, "tax_amount": number|null}
 
 Rules:
 - summary: 1-3 plain sentences a contractor would want: what it is and what matters in it. No filler.
@@ -25,7 +27,11 @@ Rules:
 - notes: at most 5 short items that would change a price or a schedule (access, demo, pump, prevailing wage, bonds, alternates, liquidated damages).
 - For a photo: describe what is in it (existing concrete, damage, forms, a pour, a site), and anything written or measured on it.
 - For a receipt: vendor, date and amount (the total paid).
-- price_lines: ONLY for a vendor's quote, price list, receipt or invoice — every priced item, in order, as written (at most 200). name as written; sku = the vendor's item/part number if shown; unit as written (CY, EA, SF, LF, BAG, SHEET, STICK, DAY…); unit_cost = the price PER UNIT as written, never the line total and never a number you worked out; qty as written or null. Taxes, delivery and fuel charges are lines too if they are priced per unit. Anything else: [].`
+- price_lines: ONLY for a vendor's quote, price list, receipt or invoice — every priced item, in order, as written (at most 200). name as written; sku = the vendor's product code / item number if shown (never a ticket, order or invoice number); unit as written (CY, EA, SF, LF, BAG, SHEET, STICK, DAY…); unit_cost = the price PER UNIT as written, never the line total and never a number you worked out; qty as written or null. Fees are lines too — delivery, short load, fuel, environmental, washout, standby — each with its own price as written (unit as written, or LOAD / EA for a flat fee). An add-on priced per yard (slump, fiber, accelerator, retarder, hot water) is its own line. When the same item appears on several tickets or loads, list each as it appears. Sales tax is NOT a line. Anything else: [].
+- vendor_details: ONLY for a vendor's quote, price list, receipt or invoice — the business that issued it (the seller, not the customer, not "bill to" / "ship to"): name, phone, email and address exactly as printed. Anything not printed is null. Otherwise null.
+- vendor_details.name: the business name as printed in the issuer block (e.g. "ACME CONCRETE GROUP, LLC"), not a logo tagline.
+- tax_pct: the sales tax RATE only if it is printed as a percent (9.45% → 9.45). Never work it out from amounts. Otherwise null.
+- subtotal and tax_amount: the pre-tax subtotal and the sales tax charged, as printed, for a quote, receipt or invoice. Otherwise null.`
 
 const CATS = new Set(['photo', 'plan', 'spec', 'bid', 'vendor_quote', 'receipt', 'contract', 'other'])
 const ISO = /^\d{4}-\d{2}-\d{2}$/
@@ -114,8 +120,67 @@ export function sanitizeRead(raw: unknown, text: string | null): Read | null {
     facts.price_lines = kept
     if (!text) facts.price_lines_from_photo = true
   }
+  // Who issued it (v3): each detail kept only if it is printed — a phone's
+  // digits, an email, the name's words must appear in the text. From a photo
+  // there is no text to check; the receipt import shows them for Coy to confirm.
+  const vd = readVendor(r.vendor_details, text, dropped)
+  if (vd) facts.vendor_details = vd
+  if (r.tax_pct !== null && r.tax_pct !== undefined && r.tax_pct !== '') {
+    const t = typeof r.tax_pct === 'number' ? r.tax_pct : Number(String(r.tax_pct).replace(/[%\s]/g, ''))
+    if (!Number.isFinite(t) || t <= 0 || t >= 50) dropped.push(`tax_pct: ${r.tax_pct}`)
+    else if (!said(t)) dropped.push(`tax_pct: ${t} is not written in the file`)
+    else facts.tax_pct = t
+  }
+  for (const k of ['subtotal', 'tax_amount'] as const) {
+    const v = r[k]
+    if (v === null || v === undefined || v === '') continue
+    const n = typeof v === 'number' ? v : Number(String(v).replace(/[$,\s]/g, ''))
+    if (!Number.isFinite(n) || n <= 0 || n > 10_000_000) dropped.push(`${k}: ${v}`)
+    else if (!said(n)) dropped.push(`${k}: ${n} is not written in the file`)
+    else facts[k] = n
+  }
   const kind = typeof r.kind === 'string' && CATS.has(r.kind) ? r.kind : null
   return { summary, kind, facts, dropped }
+}
+
+const digits = (s: string) => s.replace(/\D/g, '')
+const fold = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+
+/** The issuer block, each field only if printed (when there is text to check). */
+export function readVendor(v: unknown, text: string | null, dropped: string[]): Record<string, string> | null {
+  if (!v || typeof v !== 'object') return null
+  const o = v as Record<string, unknown>
+  const out: Record<string, string> = {}
+  const t = text ?? ''
+  const tDigits = digits(t)
+  const tFold = ' ' + fold(t) + ' '
+  const name = str(o.name, 120)
+  if (name) {
+    if (!text || tFold.includes(' ' + fold(name) + ' ')) out.name = name
+    else dropped.push(`vendor name: "${name}" is not written in the file`)
+  }
+  const phone = str(o.phone, 40)
+  if (phone) {
+    const d = digits(phone)
+    if (d.length < 10) dropped.push(`vendor phone: ${phone}`)
+    else if (text && !tDigits.includes(d.slice(-10))) dropped.push(`vendor phone: ${phone} is not written in the file`)
+    else out.phone = phone
+  }
+  const email = str(o.email, 120)
+  if (email) {
+    if (!/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(email)) dropped.push(`vendor email: ${email}`)
+    else if (text && !t.toLowerCase().includes(email.toLowerCase())) dropped.push(`vendor email: ${email} is not written in the file`)
+    else out.email = email
+  }
+  const address = str(o.address, 200)
+  if (address) {
+    // An address is kept when its street number and first word are printed.
+    const num = address.match(/\d+/)?.[0]
+    const word = fold(address).split(' ').find((w) => /^[a-z]{3,}$/.test(w))
+    if (!text || ((!num || numbersIn(t).has(Number(num))) && (!word || tFold.includes(' ' + word + ' ')))) out.address = address
+    else dropped.push(`vendor address: "${address}" is not written in the file`)
+  }
+  return Object.keys(out).length ? out : null
 }
 
 /** Pull the first JSON object out of a model reply. */

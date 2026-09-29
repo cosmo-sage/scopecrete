@@ -20,7 +20,9 @@
  *
  * Service role inside this function only; no browser reaches it.
  * `{"wait": true}` runs inline and returns counts; `{"ping": true}` checks Hermes;
- * `{"sample_quote": true}` reads a made-up supplier quote and returns the price lines kept.
+ * `{"sample_quote": true}` reads a made-up supplier quote (`"invoice"`: a made-up ready-mix invoice)
+ * and returns the price lines, vendor block and tax kept; `{"sample_text": "…"}` does the same
+ * for text a human pastes in. Neither stores anything.
  */
 
 import { createClient } from '@supabase/supabase-js'
@@ -174,7 +176,7 @@ Deno.serve(async (req: Request) => {
   const { data: authorized } = await sb.rpc('sc_enrich_worker_authorized', { p_token: token })
   if (authorized !== true) return json({ error: 'unauthorized' }, 401)
 
-  let body: { wait?: boolean; ping?: boolean; probe?: boolean; sample_quote?: boolean; limit?: number } = {}
+  let body: { wait?: boolean; ping?: boolean; probe?: boolean; sample_quote?: boolean | 'invoice'; sample_text?: string; limit?: number } = {}
   try { body = await req.json() } catch { /* empty is fine */ }
   const cfg: Cfg = {
     url: Deno.env.get('HERMES_URL') || DEFAULT_HERMES_URL,
@@ -193,12 +195,16 @@ Deno.serve(async (req: Request) => {
   }
   // Price lines (v2) on a made-up supplier quote — no customer data — run
   // through the same sanitiser, so a human can see what would be kept.
-  if (body.sample_quote) {
-    const text = 'SAMPLE SUPPLY CO. — QUOTE Q-0001 — valid 30 days\nItem  Description  Unit  Qty  Unit price  Ext\nRM3000  3000 PSI ready mix  CY  40  $152.00  $6,080.00\nRM4000  4000 PSI ready mix  CY  12  $164.50  $1,974.00\nRB4-20  #4 rebar 20 ft  EA  90  $14.25  $1,282.50\nWWM66  6x6 W2.9 mesh sheet  SHEET  30  $18.40  $552.00\nSHORT  Short load fee (under 5 CY)  LOAD  1  $95.00  $95.00\nSubtotal $9,983.50  Tax 9.45% $943.44  Total $10,926.94'
+  // `sample_text`: a document's text a human pasted in to check a read (only
+  // with the worker token); nothing is stored.
+  if (body.sample_quote || typeof body.sample_text === 'string') {
+    const text = typeof body.sample_text === 'string' ? body.sample_text.slice(0, 20_000) : body.sample_quote === 'invoice'
+      ? 'SAMPLE READY MIX LLC\n1200 Plank Rd, Sampletown LA 70000\nPhone (225) 555-0142  orders@sample-mix.test\nINVOICE 88121   Date 09/22/2026\nBILL TO: Sample Customer, 9 Test Ln\nTicket  Product  Unit  Qty  Price  Amount\n4471  3000 PSI 4" slump  CY  9.5  $152.00  $1,444.00\n4471  Short load fee  LOAD  1  $95.00  $95.00\n4471  Fuel surcharge  LOAD  1  $18.00  $18.00\n4471  Environmental fee  CY  9.5  $3.50  $33.25\nSubtotal $1,590.25  Sales tax 9.45% $150.28  Total $1,740.53'
+      : 'SAMPLE SUPPLY CO. — QUOTE Q-0001 — valid 30 days\nItem  Description  Unit  Qty  Unit price  Ext\nRM3000  3000 PSI ready mix  CY  40  $152.00  $6,080.00\nRM4000  4000 PSI ready mix  CY  12  $164.50  $1,974.00\nRB4-20  #4 rebar 20 ft  EA  90  $14.25  $1,282.50\nWWM66  6x6 W2.9 mesh sheet  SHEET  30  $18.40  $552.00\nSHORT  Short load fee (under 5 CY)  LOAD  1  $95.00  $95.00\nSubtotal $9,983.50  Tax 9.45% $943.44  Total $10,926.94'
     const got = await ask(cfg, `FILE: sample-quote.pdf (1 page)\n\n${text}`)
     if (!got.ok) return json(got)
     const r = sanitizeRead(parseReply(got.raw), text)
-    return json({ ok: !!r, price_lines: r?.facts.price_lines ?? null, dropped: r?.dropped ?? null, kind: r?.kind ?? null })
+    return json({ ok: !!r, price_lines: r?.facts.price_lines ?? null, vendor_details: r?.facts.vendor_details ?? null, tax_pct: r?.facts.tax_pct ?? null, subtotal: r?.facts.subtotal ?? null, tax_amount: r?.facts.tax_amount ?? null, dropped: r?.dropped ?? null, kind: r?.kind ?? null })
   }
   if (!cfg.key) { await beat(sb, 'not_configured', 'HERMES_API_KEY is not set in the Supabase Edge Function secrets.'); return json({ code: 'not_configured' }, 503) }
   if (!health.ok) { await beat(sb, 'hermes_unreachable', health.detail); return json({ code: 'hermes_unreachable', detail: health.detail }, 502) }

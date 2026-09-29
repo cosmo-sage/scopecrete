@@ -1,8 +1,10 @@
 "use client";
 
 /**
- * Cost settings — the numbers the costing engine and the bid floor stand on
- * (DECISIONS.md §3, §4). Laid out like the desktop design's Money setup screen
+ * Cost settings — the numbers the job budget and the bid floor stand on
+ * (DECISIONS.md §3, §4). Since step 3b there are no rates here: what things
+ * cost lives on cost cards in the Price book; this screen keeps the markups,
+ * tax, waste, overhead and the floor. Laid out like the desktop design's Money setup screen
  * (docs/design/desktop-screens.html, 1g): the settings on the left, and on the
  * right what each blank is holding up.
  *
@@ -17,32 +19,23 @@ import { T, F, disp, eyebrow, nums, money0 } from "@/lib/v34/tokens";
 import { Segmented } from "@/components/v34/primitives";
 import Link from "next/link";
 import { monthlyNut, type CostSettings, type OverheadItem } from "@/lib/engine";
-import { ReinforcementSettings } from "@/components/v34/reinforcement-settings";
 
 type Key = keyof CostSettings | "markup_subcontract_pct" | "comp_profit_pct";
 
 interface FieldDef { k: Key; label: string; unit: string; ref?: string; hint?: string }
 
 const GROUPS: { title: string; note: string; fields: FieldDef[] }[] = [
-  { title: "Concrete", note: "Materials. What the plant charges, and what you order over neat yards.", fields: [
-    { k: "concrete_price_per_cy", label: "Concrete price", unit: "$ / cu yd", ref: "$236.13" },
+  { title: "Concrete", note: "What you order over neat yards, and when the plant charges a short load. The price per yard is a cost card.", fields: [
     { k: "concrete_overage_pct", label: "Waste", unit: "%", ref: "3.4%" },
     { k: "shortload_threshold_cy", label: "Short load under", unit: "cu yd", ref: "5" },
-    { k: "shortload_pct", label: "Short-load charge", unit: "%", ref: "15%" },
   ] },
-  { title: "Labor — by the square foot", note: "Not crew-hours. Bigger jobs run cheaper per foot; this is your usual rate.", fields: [
-    { k: "form_finish_per_sqft", label: "Form & finish", unit: "$ / sq ft", ref: "$1.43" },
-    { k: "demo_per_sqft", label: "Demolition", unit: "$ / sq ft", ref: "$2.00" },
-  ] },
-  { title: "Equipment", note: "Per job. Day-rate rentals are not modelled yet.", fields: [
-    { k: "mobilization_fee", label: "Mobilization", unit: "$ / job", ref: "$750" },
-  ] },
-  { title: "Markup — per cost type", note: "Each cost type carries its own markup.", fields: [
+  { title: "Markup — per cost type", note: "Used when a card and its group carry no markup of their own.", fields: [
     { k: "markup_material_pct", label: "Materials", unit: "%", ref: "30.61%" },
     { k: "markup_labor_pct", label: "Labor", unit: "%", ref: "41.77%" },
     { k: "markup_equipment_pct", label: "Equipment", unit: "%", ref: "30.12%" },
+    { k: "markup_subcontract_pct", label: "Subcontract", unit: "%" },
   ] },
-  { title: "Sales tax", note: "In-market it lands on materials only.", fields: [
+  { title: "Sales tax", note: "Charged at cost on the cards marked taxed, when the budget's tax switch is on.", fields: [
     { k: "sales_tax_pct", label: "Sales tax", unit: "%", ref: "8.08%" },
   ] },
   { title: "Off the top", note: "Taken off gross before anything else. The floor divides by what is left.", fields: [
@@ -55,7 +48,7 @@ const GROUPS: { title: string; note: string; fields: FieldDef[] }[] = [
   ] },
 ];
 
-const ALL_KEYS: Key[] = [...GROUPS.flatMap((g) => g.fields.map((f) => f.k)), "comp_monthly_draw", "comp_profit_pct", "markup_subcontract_pct"];
+const ALL_KEYS: Key[] = [...GROUPS.flatMap((g) => g.fields.map((f) => f.k)), "comp_monthly_draw", "comp_profit_pct"];
 
 interface Loaded { settings: Record<string, unknown> | null; overhead: (OverheadItem & { id: string; category: string })[] }
 
@@ -72,7 +65,6 @@ export function CostSettingsEditor({ onSaved }: { onSaved?: () => void }) {
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   const [form, setForm] = useState<Record<string, string>>({});
   const [compMode, setCompMode] = useState<"" | "fixed_draw" | "pct_profit">("");
-  const [taxTo, setTaxTo] = useState<"" | "materials" | "full_bid" | "none">("");
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ tone: "ok" | "err"; text: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -82,7 +74,6 @@ export function CostSettingsEditor({ onSaved }: { onSaved?: () => void }) {
     const s = (b.settings ?? {}) as Record<string, unknown>;
     setForm(Object.fromEntries(ALL_KEYS.map((k) => [k, toStr(s[k])])));
     setCompMode((s.comp_mode as "fixed_draw" | "pct_profit") ?? "");
-    setTaxTo((s.tax_applies_to as "materials" | "full_bid" | "none") ?? "");
   }, []);
 
   const load = useCallback(async () => {
@@ -100,7 +91,7 @@ export function CostSettingsEditor({ onSaved }: { onSaved?: () => void }) {
   async function save() {
     setSaving(true); setMsg(null);
     try {
-      const payload: Record<string, unknown> = { comp_mode: compMode || null, tax_applies_to: taxTo || null };
+      const payload: Record<string, unknown> = { comp_mode: compMode || null };
       for (const k of ALL_KEYS) payload[k] = form[k] === "" ? null : Number(form[k]);
       const r = await fetch("/api/settings/cost", {
         method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
@@ -128,9 +119,8 @@ export function CostSettingsEditor({ onSaved }: { onSaved?: () => void }) {
 
   const blank = (k: string) => (form[k] ?? "") === "";
   const holding = [
-    { what: "A price on a scope", needs: ["concrete_price_per_cy", "concrete_overage_pct", "shortload_threshold_cy", "shortload_pct",
-      "form_finish_per_sqft", "markup_material_pct", "markup_labor_pct", "markup_equipment_pct", "mobilization_fee", "sales_tax_pct"],
-      extra: taxTo ? [] : ["what sales tax applies to"] },
+    { what: "A job's budget", needs: ["concrete_overage_pct", "markup_material_pct", "markup_labor_pct", "markup_equipment_pct", "sales_tax_pct"],
+      extra: ["cost cards in the Price book"] },
     { what: "The bid floor", needs: ["owner_fee_pct", "estimator_fee_pct", "tax_reserve_pct", "assumed_billable_days"],
       extra: [...(compMode ? [] : ["pay-yourself mode"]), ...(loaded.overhead.some((o) => o.active) ? [] : ["monthly overhead"])] },
     { what: "Runway", needs: [], extra: [...(loaded.overhead.some((o) => o.active) ? [] : ["monthly overhead"]), "a balance checkpoint (not built yet)"] },
@@ -169,16 +159,6 @@ export function CostSettingsEditor({ onSaved }: { onSaved?: () => void }) {
                 </label>
               ))}
             </div>
-            {g.title === "Concrete" && <ReinforcementSettings />}
-            {g.title === "Sales tax" && (
-              <div className="mt-2">
-                <span style={eyebrow}>Applies to</span>
-                <div className="mt-0.5" style={{ maxWidth: 360 }}>
-                  <Segmented small value={taxTo} onChange={(v) => setTaxTo(v as typeof taxTo)}
-                    options={[["materials", "Materials"], ["full_bid", "Whole bid"], ["none", "No tax"]]} />
-                </div>
-              </div>
-            )}
           </div>
         ))}
 
@@ -186,7 +166,7 @@ export function CostSettingsEditor({ onSaved }: { onSaved?: () => void }) {
         <Link href="/dashboard/price-book" className="flex items-center gap-2 px-3 py-2.5 no-underline" style={{ borderBottom: `1px solid ${T.hairSoft}`, color: T.ink }}>
           <span style={{ flex: 1, minWidth: 0 }}>
             <span style={{ display: "block", fontFamily: disp, fontSize: F.md, fontWeight: 600 }}>Cost cards</span>
-            <span style={{ display: "block", fontSize: F.xs, color: T.ink3 }}>What you buy and charge for, by vendor — they live in the Price book.</span>
+            <span style={{ display: "block", fontSize: F.xs, color: T.ink3 }}>What things cost — concrete by the yard, form & finish by the foot, mesh by the sheet — and the assemblies that fill a new area. They live in the Price book.</span>
           </span>
           <span style={{ ...eyebrow, color: T.chalk }}>Price book →</span>
         </Link>

@@ -216,17 +216,29 @@ export function toRows(table: unknown[][], map: Record<Target, number | null>): 
     }
     if (markup !== null && markup > 500) { problems.push("markup over 500%"); markup = null; from = null; }
     const tax = map.taxable === null ? null : parseBool(at(r, "taxable"));
+    // A cost code is the card's group (Coy, 2026-09-29) unless the file has
+    // its own group column; then the code is kept in the description.
     const code = txt(at(r, "cost_code"), 60);
-    const desc = [txt(at(r, "description"), 440), code ? `Cost code ${code}` : null].filter(Boolean).join(" · ") || null;
+    const fileGroup = txt(at(r, "group"), 60);
+    const group = fileGroup ?? code;
+    const desc = [txt(at(r, "description"), 440), code && fileGroup && fileGroup !== code ? `Cost code ${code}` : null].filter(Boolean).join(" · ") || null;
+    // How it is counted, guessed from the unit — but slab geometry (yards,
+    // sq ft, edge, sheets, sticks) only for concrete: a gutter sold by the
+    // foot is not counted by a slab's perimeter.
+    const guess = ruleFromUnit(unit);
+    const qtyRule: QtyRule = GEOMETRY.has(guess) && group && !/concrete/i.test(group) ? "manual" : guess;
     out.push({
-      line: i, name, group: txt(at(r, "group"), 60), cost_type: ty.type, type_known: ty.known, unit,
+      line: i, name, group, cost_type: ty.type, type_known: ty.known, unit,
       unit_cost: typeof cost === "number" ? cost : null, markup_pct: markup, markup_from: from,
       taxable: tax ?? ty.type === "material", description: desc, vendor: txt(at(r, "vendor"), 120), sku: txt(at(r, "sku"), 60),
-      qty_rule: ruleFromUnit(unit), problems,
+      qty_rule: qtyRule, problems,
     });
   }
   return out;
 }
+
+/** The rules that measure a slab: only concrete cards are counted this way. */
+export const GEOMETRY = new Set<QtyRule>(["per_cy", "per_sqft", "per_lf_perimeter", "per_sheet", "per_stick"]);
 
 // ---------------------------------------------------------------- matching
 

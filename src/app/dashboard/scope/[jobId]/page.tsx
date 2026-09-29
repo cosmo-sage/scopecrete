@@ -26,13 +26,16 @@ import { JobChips } from "@/components/v34/job-chips";
 import { FilesPanel } from "@/components/v34/files-panel";
 import { JobBudget, type BudgetSummary } from "@/components/v34/job-budget";
 import {
-  price as priceJob, floor as floorOf, takeoff as takeoffOf, quantities, reinforcementQty,
-  type CostSettings, type OverheadItem, type ReinforcementType, type SectionInput,
+  floor as floorOf, takeoff as takeoffOf, quantities, ruleQty,
+  type CostSettings, type OverheadItem, type SectionInput,
 } from "@/lib/engine";
+import { isReinforcementCard } from "@/lib/cost-cards";
 
 interface Section extends SectionInput {
   id: string;
   rebar: string | null;
+  /** The reinforcement card (step 3b): carried as the area's reinforcement line on the budget. */
+  reinforcement_item_id?: string | null;
   reinforcement_source?: "set" | "default" | null;
   prep_notes: string | null;
   access_notes: string | null;
@@ -81,11 +84,12 @@ export default function ScopeBuilder() {
   const [error, setError] = useState<string | null>(null);
   const [saveErr, setSaveErr] = useState<Record<string, string>>({});
   const [adding, setAdding] = useState(false);
-  const [discount, setDiscount] = useState(0);
-  const [rtypes, setRtypes] = useState<ReinforcementType[]>([]);
-  // The budget's own totals (migration 048). Once it has lines it is THE price;
-  // the rate-based price stays only until then, labelled "from rates".
+  const [rcards, setRcards] = useState<RCard[]>([]);
+  // The budget's own totals (migration 048). Since step 3b it is the ONLY price.
   const [budget, setBudget] = useState<BudgetSummary | null>(null);
+  // Bumped when a section change may have changed the budget on the server
+  // (an assembly loaded, a reinforcement line swapped, an area removed).
+  const [budgetTick, setBudgetTick] = useState(0);
 
   const load = useCallback(async () => {
     try {
@@ -93,14 +97,13 @@ export default function ScopeBuilder() {
         send(`/api/jobs/${jobId}`, "GET"),
         send(`/api/jobs/${jobId}/sections`, "GET"),
         send("/api/settings/cost", "GET"),
-        // Reinforcement types (migration 042). A failure leaves none to pick, not a broken page.
-        send("/api/settings/reinforcement", "GET").catch(() => ({ types: [] })),
+        // Reinforcement is a card (step 3b). A failure leaves none to pick, not a broken page.
+        send("/api/cost-items", "GET").catch(() => ({ items: [] })),
       ]);
-      setRtypes(((r.types ?? []) as Array<Record<string, unknown>>).map((x) => ({
-        ...(x as unknown as ReinforcementType),
-        unit_cost: num(x.unit_cost), sheet_sqft: num(x.sheet_sqft), spacing_in: num(x.spacing_in),
-        stick_ft: num(x.stick_ft), lap_pct: num(x.lap_pct), per_cy: num(x.per_cy),
-      })));
+      setRcards(((r.items ?? []) as Array<Record<string, unknown>>)
+        .map((x) => ({ id: x.id as string, name: x.name as string, unit: x.unit as string, unit_cost: num(x.unit_cost),
+          qty_rule: x.qty_rule as string, rule_params: (x.rule_params ?? {}) as Record<string, number> }))
+        .filter(isReinforcementCard));
       setJob(j.job); setContact(j.contact ?? null); setWhy(j.why ?? null);
       setSections((s.sections as Section[]).map(numify));
       setSettings(c.settings ? numifySettings(c.settings) : null);
@@ -113,9 +116,6 @@ export default function ScopeBuilder() {
   useEffect(() => { void load(); }, [load]);
 
   const t = useMemo(() => takeoffOf(sections ?? [], settings?.concrete_overage_pct ?? null), [sections, settings]);
-  const priced = useMemo(() => priceJob(sections ?? [], settings ?? EMPTY, { discount, reinforcement: rtypes }), [sections, settings, discount, rtypes]);
-  const fl = useMemo(() => (priced.priced ? floorOf(priced.cost.total, settings ?? EMPTY, overhead, job?.duration_days ?? null) : null),
-    [priced, settings, overhead, job]);
 
   const patchLocal = (id: string, patch: Partial<Section>) =>
     setSections((a) => (a ?? []).map((s) => (s.id === id ? { ...s, ...patch } : s)));
@@ -124,6 +124,7 @@ export default function ScopeBuilder() {
     try {
       const b = await send(`/api/jobs/${jobId}/sections/${id}`, "PATCH", patch);
       patchLocal(id, numify(b.section));
+      if ("work_type" in patch || "reinforcement_item_id" in patch) setBudgetTick((n) => n + 1);
       setSaveErr((m) => Object.fromEntries(Object.entries(m).filter(([k]) => k !== id)));
     } catch (e) {
       setSaveErr((m) => ({ ...m, [id]: e instanceof Error ? e.message : String(e) }));
@@ -137,6 +138,7 @@ export default function ScopeBuilder() {
         name: `Section ${(sections?.length ?? 0) + 1}`, work_type: "slab", sort_order: sections?.length ?? 0,
       });
       setSections((a) => [...(a ?? []), numify(b.section)]);
+      setBudgetTick((n) => n + 1);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -148,6 +150,7 @@ export default function ScopeBuilder() {
     try {
       await send(`/api/jobs/${jobId}/sections/${id}`, "DELETE");
       setSections((a) => (a ?? []).filter((s) => s.id !== id));
+      setBudgetTick((n) => n + 1);
     } catch (e) {
       setSaveErr((m) => ({ ...m, [id]: e instanceof Error ? e.message : String(e) }));
     }
@@ -215,10 +218,7 @@ export default function ScopeBuilder() {
               {budget.tiers.map((b) => b.priced ? money0(b.total) : "blocked").join(" · ")}
             </span>
           ) : (
-            <span style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 700, color: priced.priced ? "#fff" : "#8E99A5" }}>
-              {priced.priced ? money0(priced.price.total) : "no price"}
-              {priced.priced && <span style={{ fontSize: F.xs, color: "#8E99A5" }}> from rates</span>}
-            </span>
+            <span style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 700, color: "#8E99A5" }}>no price</span>
           )}
         </div>
 
@@ -228,7 +228,7 @@ export default function ScopeBuilder() {
         )}
 
         {sections.map((s, i) => (
-          <SectionCard key={s.id} s={s} index={i} err={saveErr[s.id]} rtypes={rtypes} jobType={job.job_type} jobId={jobId}
+          <SectionCard key={s.id} s={s} index={i} err={saveErr[s.id]} rcards={rcards} jobType={job.job_type} jobId={jobId}
             onLocal={(p) => patchLocal(s.id, p)} onSave={(p) => void save(s.id, p)}
             onRemove={() => void removeSection(s.id)} overage={settings?.concrete_overage_pct ?? null} />
         ))}
@@ -243,7 +243,7 @@ export default function ScopeBuilder() {
 
         {/* The budget: lines from cost cards, good / better / best (migration 048). */}
         <div className="px-3 pb-3">
-          <JobBudget jobId={job.id} sections={sections} crewDays={job.duration_days} onSummary={setBudget} />
+          <JobBudget jobId={job.id} sections={sections} crewDays={job.duration_days} onSummary={setBudget} refresh={budgetTick} />
         </div>
 
         {/* Photos, plans, specs, receipts — Dusty reads them (migration 045). */}
@@ -253,20 +253,22 @@ export default function ScopeBuilder() {
       </div>
 
       {/* ================= takeoff rail ================= */}
-      <TakeoffRail t={t} priced={priced} fl={fl} job={job} discount={discount} setDiscount={setDiscount}
-        onCrewDays={(v) => void saveCrewDays(v)} hasSettings={!!settings}
+      <TakeoffRail t={t} job={job} onCrewDays={(v) => void saveCrewDays(v)} jobType={job.job_type}
+        workType={sections[0]?.work_type ?? null}
         budget={budget} floorFor={(hard) => floorOf(hard, settings ?? EMPTY, overhead, job.duration_days ?? null)} />
     </div>
   );
 }
 
 const EMPTY: CostSettings = {
-  concrete_price_per_cy: null, concrete_overage_pct: null, shortload_threshold_cy: null, shortload_pct: null,
-  form_finish_per_sqft: null, demo_per_sqft: null, mobilization_fee: null, sales_tax_pct: null, tax_applies_to: null,
+  concrete_overage_pct: null, shortload_threshold_cy: null, sales_tax_pct: null,
   markup_material_pct: null, markup_labor_pct: null, markup_equipment_pct: null,
   owner_fee_pct: null, estimator_fee_pct: null, tax_reserve_pct: null, assumed_billable_days: null,
   comp_mode: null, comp_monthly_draw: null,
 };
+
+/** A reinforcement card from the Price book (mesh by the sheet, rebar by the stick, fiber per yard). */
+interface RCard { id: string; name: string; unit: string; unit_cost: number | null; qty_rule: string; rule_params: Record<string, number> }
 
 /** PostgREST returns numeric columns as strings or numbers; the engine wants numbers or null. */
 function num(v: unknown): number | null {
@@ -281,7 +283,7 @@ function numify(s: Section): Section {
 function numifySettings(raw: Record<string, unknown>): CostSettings {
   const out = { ...EMPTY } as Record<string, unknown>;
   for (const k of Object.keys(EMPTY)) {
-    out[k] = k === "tax_applies_to" || k === "comp_mode" ? (raw[k] ?? null) : num(raw[k]);
+    out[k] = k === "comp_mode" ? (raw[k] ?? null) : num(raw[k]);
   }
   return out as unknown as CostSettings;
 }
@@ -295,8 +297,8 @@ function splitFt(v: number | null): [number | "", number | ""] {
   return [ft, inch === 0 ? "" : inch];
 }
 
-function SectionCard({ s, index, err, onLocal, onSave, onRemove, overage, rtypes, jobType, jobId }: {
-  s: Section; index: number; err?: string; overage: number | null; rtypes: ReinforcementType[]; jobType: string | null; jobId: string;
+function SectionCard({ s, index, err, onLocal, onSave, onRemove, overage, rcards, jobType, jobId }: {
+  s: Section; index: number; err?: string; overage: number | null; rcards: RCard[]; jobType: string | null; jobId: string;
   onLocal: (p: Partial<Section>) => void; onSave: (p: Partial<Section>) => void; onRemove: () => void;
 }) {
   const q = quantities(s);
@@ -375,8 +377,8 @@ function SectionCard({ s, index, err, onLocal, onSave, onRemove, overage, rtypes
 
       {concrete && (
         <div className="px-3 py-2 grid grid-cols-1 sm:grid-cols-3 gap-2" style={{ borderTop: `1px solid ${T.hairSoft}` }}>
-          <ReinforcementPick s={s} q={q} rtypes={rtypes} jobType={jobType}
-            onPick={(id) => { onLocal({ reinforcement_type_id: id, reinforcement_source: id ? "set" : null }); onSave({ reinforcement_type_id: id }); }} />
+          <ReinforcementPick s={s} rcards={rcards} jobType={jobType} overage={overage}
+            onPick={(id) => { onLocal({ reinforcement_item_id: id, reinforcement_source: id ? "set" : null }); onSave({ reinforcement_item_id: id }); }} />
           <NoteIn label="Prep" value={s.prep_notes} onLocal={(v) => onLocal({ prep_notes: v })} onSave={(v) => onSave({ prep_notes: v })} placeholder="not noted" />
           <NoteIn label="Access" value={s.access_notes} onLocal={(v) => onLocal({ access_notes: v })} onSave={(v) => onSave({ access_notes: v })} placeholder="not noted" />
         </div>
@@ -441,7 +443,7 @@ function Dictate({ jobId, s, onApply }: { jobId: string; s: Section; onApply: (p
   };
 
   const LABEL: Record<string, string> = { length_ft: "length", width_ft: "width", depth_in: "thickness", psi: "PSI", work_type: "type",
-    name: "name", reinforcement_type_id: "reinforcement", prep_notes: "prep", access_notes: "access" };
+    name: "name", reinforcement_item_id: "reinforcement", prep_notes: "prep", access_notes: "access" };
   return (
     <>
       <button onClick={() => (state === "rec" ? rec.current?.stop() : state === "idle" ? void start() : undefined)}
@@ -474,29 +476,31 @@ function Dictate({ jobId, s, onApply }: { jobId: string; s: Section; onApply: (p
 }
 
 /**
- * Reinforcement from Coy's list (migration 042), priced by its own unit. A
- * default is labelled as one; the quantity shows in the unit he buys.
+ * Reinforcement is a card (step 3b): Coy's mesh / rebar / fiber cards from the
+ * Price book. Picking one puts it on this area of the budget, counted by its
+ * rule; an assembly's pick is labelled as the default it is.
  */
-function ReinforcementPick({ s, q, rtypes, jobType, onPick }: {
-  s: Section; q: ReturnType<typeof quantities>; rtypes: ReinforcementType[]; jobType: string | null;
+function ReinforcementPick({ s, rcards, jobType, overage, onPick }: {
+  s: Section; rcards: RCard[]; jobType: string | null; overage: number | null;
   onPick: (id: string | null) => void;
 }) {
-  const t = rtypes.find((r) => r.id === s.reinforcement_type_id) ?? null;
-  const qty = t ? reinforcementQty(q, t) : null;
+  const card = rcards.find((r) => r.id === s.reinforcement_item_id) ?? null;
+  const qty = card ? ruleQty({ name: card.name, qty_rule: card.qty_rule, rule_params: card.rule_params, qty_source: "rule", quantity: null, section_id: s.id },
+    [s], overage, null) : null;
   const plural = (w: string) => (w.endsWith("s") ? w : `${w}s`);
-  const source = !t ? (s.reinforcement_type_id ? "removed from settings" : "none chosen — not in the price")
+  const source = !card ? (s.reinforcement_item_id ? "that card was retired" : "none chosen — not in the price")
     : s.reinforcement_source === "default" ? `default for ${jobType ? `${JOB_WORD[jobType] ?? jobType} ` : ""}${plural(s.work_type)}` : "you set it";
   return (
     <label className="block" style={{ minWidth: 0 }}>
       <span style={eyebrow}>Reinforcement</span>
-      <select value={s.reinforcement_type_id ?? ""} onChange={(e) => onPick(e.target.value || null)}
+      <select value={s.reinforcement_item_id ?? ""} onChange={(e) => onPick(e.target.value || null)}
         className="w-full rounded px-2 outline-none mt-0.5"
-        style={{ height: 32, border: `1px solid ${t ? T.hair : T.hiviz}`, background: "#fff", fontSize: F.sm }}>
-        <option value="">{rtypes.length ? "None" : "None — add types in cost settings"}</option>
-        {rtypes.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+        style={{ height: 32, border: `1px solid ${card ? T.hair : T.hiviz}`, background: "#fff", fontSize: F.sm }}>
+        <option value="">{rcards.length ? "None" : "None — add mesh or rebar cards in the Price book"}</option>
+        {rcards.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
       </select>
       <span style={{ display: "block", fontSize: 9.5, color: T.ink3 }}>
-        {source}{qty && qty.ok ? ` · ${qty.qty.toLocaleString("en-US")} ${qty.unit}${qty.qty !== 1 && ["sheet", "stick", "bag"].includes(qty.unit) ? "s" : ""}` : ""}
+        {source}{qty && qty.ok ? ` · ${qty.qty.toLocaleString("en-US")} ${card?.unit ?? ""} · on the budget` : ""}
         {qty && !qty.ok ? ` · needs ${qty.missing.join(", ")}` : ""}
       </span>
       {s.rebar && <span style={{ display: "block", fontSize: 9.5, color: T.ink2 }}>Note: {s.rebar}</span>}
@@ -543,15 +547,11 @@ function NoteIn({ label, value, onLocal, onSave, placeholder }: {
 
 /* ----------------------------------------------------------- takeoff rail */
 
-function TakeoffRail({ t, priced, fl, job, discount, setDiscount, onCrewDays, hasSettings, budget, floorFor }: {
+function TakeoffRail({ t, job, onCrewDays, jobType, workType, budget, floorFor }: {
   t: ReturnType<typeof takeoffOf>;
-  priced: ReturnType<typeof priceJob>;
-  fl: ReturnType<typeof floorOf> | null;
-  job: Job; discount: number; setDiscount: (n: number) => void;
-  onCrewDays: (v: number | null) => void; hasSettings: boolean;
+  job: Job; onCrewDays: (v: number | null) => void; jobType: string | null; workType: string | null;
   budget: BudgetSummary | null; floorFor: (hardCost: number) => ReturnType<typeof floorOf>;
 }) {
-  const [showFloor, setShowFloor] = useState(false);
   const [crew, setCrew] = useState<number | "">(job.duration_days ?? "");
   const dim = "#8E99A5";
   const line = { borderTop: `1px solid ${T.darkHair}` };
@@ -590,85 +590,20 @@ function TakeoffRail({ t, priced, fl, job, discount, setDiscount, onCrewDays, ha
 
       {budget?.has_lines ? (
         <BudgetRail budget={budget} floorFor={floorFor} sqft={t.sqft} crew={crew} setCrew={setCrew} onCrewDays={onCrewDays} />
-      ) : !priced.priced ? (
-        <div className="px-4 py-3" style={{ borderTop: `2px solid ${T.hiviz}`, background: "#2A1712" }}>
-          <div style={{ ...eyebrow, color: T.hiviz }}>No price on this scope</div>
-          <div style={{ fontSize: F.sm, color: "#DCC9C2", lineHeight: 1.45, marginTop: 4 }}>
-            {hasSettings ? "The quantities above are arithmetic on the numbers you gave. A price also needs:" :
-              "The quantities above are arithmetic on the numbers you gave. No cost settings are recorded, so this scope carries yards, not dollars. It needs:"}
-          </div>
-          <ul className="mt-1.5" style={{ fontSize: F.sm, color: "#fff", lineHeight: 1.5, paddingLeft: 16, listStyle: "square" }}>
-            {priced.blocked.map((b) => <li key={b}>{b}</li>)}
-          </ul>
-          <Link href="/dashboard/cash" className="inline-flex items-center rounded px-3 mt-2.5 no-underline"
-            style={{ height: 36, background: T.hiviz, color: "#fff", fontFamily: disp, fontSize: F.md, fontWeight: 600,
-                     textTransform: "uppercase", letterSpacing: ".06em" }}>Record cost settings</Link>
-        </div>
       ) : (
         <>
-          <div className="px-4 py-3" style={line}>
-            <div style={{ ...eyebrow, color: dim }}>Price · from rates</div>
-            <div style={{ fontFamily: disp, fontSize: 40, fontWeight: 700, lineHeight: 1, ...nums }}>{money0(priced.price.total)}</div>
-            <div style={{ ...eyebrow, color: dim, ...nums }}>
-              cost {money0(priced.cost.total)} · margin {(priced.margin * 100).toFixed(1)}%
-              {t.sqft > 0 ? ` · ${money(priced.price.total / t.sqft)}/sf` : ""}
+          <div className="px-4 py-3" style={{ borderTop: `2px solid ${T.hiviz}`, background: "#2A1712" }}>
+            <div style={{ ...eyebrow, color: T.hiviz }}>No price yet</div>
+            <div style={{ fontSize: F.sm, color: "#DCC9C2", lineHeight: 1.45, marginTop: 4 }}>
+              A price comes only from cost cards on this job&apos;s budget. Add cards to the budget below, or set up an assembly
+              {workType ? ` for ${jobType ? `${JOB_WORD[jobType] ?? jobType} ` : ""}${workType.endsWith("s") ? workType : `${workType}s`}` : ""} so new areas fill themselves.
             </div>
+            <Link href="/dashboard/price-book?tab=assemblies" className="inline-flex items-center rounded px-3 mt-2.5 no-underline"
+              style={{ height: 36, background: T.hiviz, color: "#fff", fontFamily: disp, fontSize: F.md, fontWeight: 600,
+                       textTransform: "uppercase", letterSpacing: ".06em" }}>Assemblies</Link>
           </div>
-
-          <div className="px-4 py-2" style={line}>
-            {(["materials", "labor", "equipment"] as const).map((k) => (
-              <div key={k} className="py-1">
-                <div className="flex justify-between" style={{ fontSize: F.sm, ...nums }}>
-                  <span style={{ textTransform: "capitalize", fontWeight: 600 }}>{k}</span>
-                  <span>{money0(priced.cost[k])} → {money0(priced.price[k])}</span>
-                </div>
-                {priced.lines.filter((l) => l.type === k).map((l) => (
-                  <div key={l.label} className="flex justify-between" style={{ fontSize: F.xs, color: "#9AA5B1", ...nums }}>
-                    <span style={{ ...clip, paddingRight: 8 }}>{l.label}</span>
-                    <span>{l.unit === "load" || l.unit === "job" ? money0(l.cost) : `${n2(l.qty)} ${l.unit} × ${money(l.rate)}`}</span>
-                  </div>
-                ))}
-              </div>
-            ))}
-            {priced.price.tax > 0 && (
-              <div className="flex justify-between py-1" style={{ fontSize: F.sm, ...nums }}>
-                <span style={{ fontWeight: 600 }}>Sales tax</span><span>{money0(priced.price.tax)}</span>
-              </div>
-            )}
-          </div>
-
-          {/* The discount slider with the floor as a live red line (DECISIONS §4). */}
           <div className="px-4 py-3" style={line}>
-            <div className="flex justify-between items-baseline">
-              <span style={{ ...eyebrow, color: dim }}>Discount</span>
-              <span style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 700, ...nums }}>{money0(discount)}</span>
-            </div>
-            <div className="relative" style={{ marginTop: 4 }}>
-              <input type="range" min={0} max={Math.max(0, Math.round(priced.price.subtotal))} step={25} value={discount}
-                onChange={(e) => setDiscount(Number(e.target.value))} className="w-full" aria-label="Discount" />
-              {fl && fl.ok && fl.floor < priced.price.subtotal && (
-                <span aria-hidden="true" className="absolute" style={{ top: -2, bottom: -2, width: 2, background: T.red,
-                  left: `${((priced.price.subtotal - fl.floor) / priced.price.subtotal) * 100}%` }} />
-              )}
-            </div>
-            <div style={{ fontSize: 9.5, color: dim }}>Touches the price only — cost stays what it is.</div>
-          </div>
-
-          <div className="px-4 py-3" style={line}>
-            <button onClick={() => setShowFloor((v) => !v)} className="w-full text-left" style={{ color: "#fff", cursor: "pointer" }}>
-              <div className="flex justify-between items-baseline">
-                <span style={{ ...eyebrow, color: dim }}>Bid floor {showFloor ? "▴" : "▾"}</span>
-                <span style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 700, ...nums,
-                               color: fl && fl.ok ? (priced.price.total < fl.floor ? T.red : "#fff") : dim }}>
-                  {fl && fl.ok ? money0(fl.floor) : "—"}
-                </span>
-              </div>
-              {fl && fl.ok && priced.price.total < fl.floor && (
-                <div style={{ fontSize: F.xs, color: "#F3A89A" }}>This price is under the floor.</div>
-              )}
-            </button>
-
-            <label className="flex items-center gap-2 mt-2" style={{ fontSize: F.xs, color: "#C3CBD4" }}>
+            <label className="flex items-center gap-2" style={{ fontSize: F.xs, color: "#C3CBD4" }}>
               Crew days on this job
               <input type="number" inputMode="decimal" value={crew}
                 onChange={(e) => setCrew(e.target.value === "" ? "" : Number(e.target.value))}
@@ -677,23 +612,6 @@ function TakeoffRail({ t, priced, fl, job, discount, setDiscount, onCrewDays, ha
                   border: `1px solid ${T.darkHair}`, fontFamily: disp, fontSize: F.md, ...nums }} />
               <span style={{ color: dim }}>estimated</span>
             </label>
-
-            {fl && !fl.ok && (
-              <div style={{ fontSize: F.xs, color: "#C3CBD4", marginTop: 6, lineHeight: 1.45 }}>
-                The floor needs: {fl.blocked.join(", ")}.
-              </div>
-            )}
-            {showFloor && fl && fl.ok && (
-              <div className="mt-2" style={{ fontSize: F.xs, color: "#C3CBD4", lineHeight: 1.6, ...nums }}>
-                <div>Hard cost {money0(fl.hard_cost)}</div>
-                <div>+ nut share {money0(fl.nut_share)}: {money0(fl.nut_monthly)}/mo{fl.draw_included ? ` (incl. ${money0(fl.draw_included)} draw)` : ""} is {money(fl.nut_per_crew_day)} a crew-day, × {fl.crew_days} crew days ({fl.crew_days_basis})</div>
-                <div>÷ {(1 - fl.off_top_pct / 100).toFixed(2)} ({fl.off_top_pct}% off the top)</div>
-              </div>
-            )}
-          </div>
-
-          <div className="px-4 py-3" style={{ ...line, fontSize: F.xs, color: dim, lineHeight: 1.45 }}>
-            Not in this price: {priced.excluded.join("; ")}.
           </div>
         </>
       )}
@@ -712,6 +630,7 @@ function BudgetRail({ budget, floorFor, sqft, crew, setCrew, onCrewDays }: {
   crew: number | ""; setCrew: (v: number | "") => void; onCrewDays: (v: number | null) => void;
 }) {
   const dim = "#8E99A5";
+  const [showFloor, setShowFloor] = useState<number | null>(null);
   const line = { borderTop: `1px solid ${T.darkHair}` };
   const floors = budget.tiers.map((b) => (b.priced ? floorFor(b.cost + b.tax) : null));
   const blockedFloor = floors.find((f) => f && !f.ok) as { ok: false; blocked: string[] } | undefined;
@@ -732,8 +651,16 @@ function BudgetRail({ budget, floorFor, sqft, crew, setCrew, onCrewDays }: {
                   {sqft > 0 ? ` · ${money(b.total / sqft)}/sf` : ""}
                 </div>
                 {f && f.ok && (
-                  <div style={{ fontSize: F.xs, color: under ? "#F3A89A" : "#C3CBD4", ...nums }}>
-                    floor {money0(f.floor)}{under ? " — this price is under it" : ""}
+                  <button onClick={() => setShowFloor((x) => (x === i ? null : i))} className="text-left" aria-expanded={showFloor === i}
+                    style={{ display: "block", fontSize: F.xs, color: under ? "#F3A89A" : "#C3CBD4", cursor: "pointer", ...nums }}>
+                    floor {money0(f.floor)} {showFloor === i ? "▴" : "▾"}{under ? " — this price is under it" : ""}
+                  </button>
+                )}
+                {f && f.ok && showFloor === i && (
+                  <div className="mt-1" style={{ fontSize: F.xs, color: "#C3CBD4", lineHeight: 1.6, ...nums }}>
+                    <div>Hard cost {money0(f.hard_cost)} (cost + tax)</div>
+                    <div>+ nut share {money0(f.nut_share)}: {money0(f.nut_monthly)}/mo{f.draw_included ? ` (incl. ${money0(f.draw_included)} draw)` : ""} is {money(f.nut_per_crew_day)} a crew-day, × {f.crew_days} crew days ({f.crew_days_basis})</div>
+                    <div>÷ {(1 - f.off_top_pct / 100).toFixed(2)} ({f.off_top_pct}% off the top)</div>
                   </div>
                 )}
               </>

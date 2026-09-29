@@ -119,8 +119,8 @@ export function sanitizeDictation(p: DictatedSection, transcript: string, reinfo
       const n = r.name.toLowerCase().replace(/[^a-z0-9]+/g, "");
       return n === want || n.includes(want) || want.includes(n);
     });
-    if (hit) patch.reinforcement_type_id = hit.id;
-    else dropped.push(`reinforcement: "${p.reinforcement}" is not in your settings`);
+    if (hit) patch.reinforcement_item_id = hit.id;
+    else dropped.push(`reinforcement: "${p.reinforcement}" is not one of your reinforcement cards`);
   }
   return { patch, dropped };
 }

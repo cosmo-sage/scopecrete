@@ -36,9 +36,9 @@ test("unknown work type and reinforcement are dropped; a known one matches by na
   const types = [{ id: "m", name: "6x6 10ga wire mesh" }];
   const a = sanitizeDictation({ work_type: "pool", reinforcement: "6x6 mesh" }, "pool with 6x6 mesh", types);
   assert.equal(a.patch.work_type, undefined);
-  assert.equal(a.patch.reinforcement_type_id, undefined);
+  assert.equal(a.patch.reinforcement_item_id, undefined);
   const b = sanitizeDictation({ reinforcement: "6x6 10ga" }, "6x6 10ga", types);
-  assert.equal(b.patch.reinforcement_type_id, "m");
+  assert.equal(b.patch.reinforcement_item_id, "m");
 });
 
 test("insane values are dropped even if said", () => {

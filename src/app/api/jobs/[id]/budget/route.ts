@@ -22,7 +22,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   if (!(await jobInOrg(supabase, orgId, id))) return applyCookies(NextResponse.json({ error: "No such job." }, { status: 404 }));
 
   const est = await workingEstimate(supabase, orgId, id, false);
-  const [opts, lines, groups, cards, settings] = await Promise.all([
+  const [opts, lines, groups, cards, settings, assemblies] = await Promise.all([
     est ? supabase.from("estimate_options").select("id, label, description, sort_order").eq("org_id", orgId).eq("estimate_id", est.id as string).order("sort_order")
       : Promise.resolve({ data: [] }),
     est ? supabase.from("estimate_line_items").select(LINE_COLUMNS).eq("estimate_id", est.id as string).order("sort_order").order("name")
@@ -32,6 +32,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       .eq("org_id", orgId).eq("active", true).order("sort_order").order("name"),
     supabase.from("org_cost_settings").select("markup_material_pct, markup_labor_pct, markup_equipment_pct, markup_subcontract_pct, sales_tax_pct, concrete_overage_pct, shortload_threshold_cy")
       .eq("org_id", orgId).maybeSingle(),
+    supabase.from("cost_assemblies").select("id, name, job_type, work_type").eq("org_id", orgId).order("sort_order").order("name"),
   ]);
   const vendorIds = [...new Set(((lines.data ?? []) as Array<{ vendor_contact_id: string | null }>).map((l) => l.vendor_contact_id).filter(Boolean) as string[])];
   const { data: vendors } = vendorIds.length
@@ -46,6 +47,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     groups: ((groups.data ?? []) as Array<Record<string, unknown>>).map((g) => ({ ...g, default_markup_pct: g.default_markup_pct === null ? null : Number(g.default_markup_pct) })),
     cards: ((cards.data ?? []) as Array<Record<string, unknown>>).map((c) => ({ ...c, unit_cost: c.unit_cost === null ? null : Number(c.unit_cost), markup_pct: c.markup_pct === null ? null : Number(c.markup_pct) })),
     vendors: vendors ?? [],
+    assemblies: assemblies.data ?? [],
     settings: {
       markup_material_pct: n("markup_material_pct"), markup_labor_pct: n("markup_labor_pct"), markup_equipment_pct: n("markup_equipment_pct"),
       markup_subcontract_pct: n("markup_subcontract_pct"), sales_tax_pct: n("sales_tax_pct"),

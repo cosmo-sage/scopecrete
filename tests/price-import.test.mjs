@@ -47,7 +47,7 @@ test("rows: blank cost stays blank, markup from price, taxed defaults by type, c
   ];
   const r = toRows(table, guessMapping(table[0]));
   assert.equal(r[0].unit_cost, 150); assert.equal(r[0].markup_pct, 30); assert.equal(r[0].markup_from, "price");
-  assert.equal(r[0].taxable, true); assert.equal(r[0].qty_rule, "per_cy"); assert.equal(r[0].description, "Cost code 03-300");
+  assert.equal(r[0].taxable, true); assert.equal(r[0].qty_rule, "manual"); assert.equal(r[0].description, null); assert.equal(r[0].group, "03-300"); // a code not named concrete: no slab guess
   assert.equal(r[1].unit_cost, null); assert.equal(r[1].taxable, false); assert.deepEqual(r[1].problems, []);
   assert.deepEqual(r[2].problems, ["no name"]);
   assert.deepEqual(r[3].problems, ["no unit", "unit cost isn't a number"]);
@@ -89,4 +89,21 @@ test("a vendor quote's lines become rows; a line with no unit is skipped by name
   const m = matchRows(rows, [{ id: "c1", name: "3000 psi", unit: "cy", unit_cost: 145, vendor_contact_id: "v1", vendor_sku: null }], () => "v1");
   assert.deepEqual(m.map((x) => x.status), ["change", "skip"]);
   assert.deepEqual(quoteRows(null), []);
+});
+
+test("JobTread cost codes become groups; slab-geometry guesses only for concrete", () => {
+  const table = [
+    ["Name", "Cost Code", "Unit", "Unit Cost"],
+    ["3000 psi", "2800 Concrete", "Cubic Yards", "150"],
+    ["Serenity gutter", "3066 Gutters", "Linear Feet", "12.79"],
+    ["Mini-excavator", "0000 Uncategorized", "Days", "250"],
+  ];
+  const r = toRows(table, guessMapping(table[0]));
+  assert.deepEqual(r.map((x) => x.group), ["2800 Concrete", "3066 Gutters", "0000 Uncategorized"]);
+  assert.deepEqual(r.map((x) => x.qty_rule), ["per_cy", "manual", "per_day"]);
+  assert.deepEqual(r.map((x) => x.description), [null, null, null]);
+  // A file with its own group column keeps the code in the description.
+  const t2 = [["Name", "Group", "Cost Code", "Unit", "Cost"], ["Mesh", "Steel", "2800 Concrete", "sheet", "12"]];
+  const r2 = toRows(t2, guessMapping(t2[0]));
+  assert.equal(r2[0].group, "Steel"); assert.equal(r2[0].description, "Cost code 2800 Concrete"); assert.equal(r2[0].qty_rule, "manual");
 });

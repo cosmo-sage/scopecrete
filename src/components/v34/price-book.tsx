@@ -24,6 +24,7 @@ import { Cell } from "@/components/v34/cell";
 import { COST_TYPE_LABEL, QTY_RULE_LABEL, cardGaps, defaultTaxable, type CostType } from "@/lib/cost-cards";
 import { CardSheet, GroupSheet, call, numify, dateLabel, type Card, type Group, type Vendor } from "@/components/v34/cost-cards";
 import { PriceImport } from "@/components/v34/price-import";
+import { Assemblies } from "@/components/v34/assemblies";
 
 type View = "group" | "vendor";
 interface Imp {
@@ -43,6 +44,7 @@ export function PriceBook() {
   const [note, setNote] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
   const [view, setViewState] = useState<View>("group");
+  const [tab, setTab] = useState<"cards" | "assemblies">("cards");
   const [q, setQ] = useState("");
   const [retired, setRetired] = useState(false);
   const [open, setOpen] = useState<Record<string, boolean>>({});
@@ -65,6 +67,8 @@ export function PriceBook() {
         setNow(Date.now());
         if (tick === 0) {
           try { const v = localStorage.getItem(VIEW_KEY); if (v === "vendor" || v === "group") setViewState(v); } catch { /* private mode */ }
+          // The scope page's "Assemblies" button opens this tab.
+          if (new URLSearchParams(window.location.search).get("tab") === "assemblies") setTab("assemblies");
         }
         setItems((b.items as Array<Record<string, unknown>>).map(numify)); setGroups(b.groups); setVendors(b.vendors); setImports(i.imports ?? []);
         setErr(null);
@@ -168,6 +172,17 @@ export function PriceBook() {
         </div>
       </div>
 
+      <div className="flex gap-1 mt-3" role="tablist" aria-label="Price book">
+        {(["cards", "assemblies"] as const).map((k) => (
+          <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)} className="rounded px-3"
+            style={{ height: 32, background: tab === k ? T.ink : T.card, color: tab === k ? "#fff" : T.ink2, border: `1px solid ${tab === k ? T.ink : T.hair}`,
+              fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", letterSpacing: ".06em", cursor: "pointer" }}>
+            {k === "cards" ? `Cards${items ? ` · ${active.length}` : ""}` : "Assemblies"}
+          </button>
+        ))}
+      </div>
+
+      {tab === "assemblies" ? <Assemblies cards={items ?? []} /> : (<>
       {/* ---- find, view ---- */}
       <div className="flex items-center gap-2 flex-wrap mt-3">
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find: 3000, rebar, Angelle, item #…" aria-label="Find a card"
@@ -338,6 +353,8 @@ export function PriceBook() {
           })}
         </div>
       )}
+
+      </>)}
 
       <CardSheet card={editing} groups={groups} vendors={vendors} lockVendor={null}
         onClose={() => setEditing(null)} onSaved={() => { setEditing(null); reload(); }} />

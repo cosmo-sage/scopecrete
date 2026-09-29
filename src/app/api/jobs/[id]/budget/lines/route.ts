@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
 import { cleanCard } from "@/lib/cost-cards";
-import { LINE_COLUMNS, jobInOrg, numLine, workingEstimate } from "@/lib/budget-server";
+import { CARD_COLS, LINE_COLUMNS, cardToLine, jobInOrg, numLine, workingEstimate } from "@/lib/budget-server";
 
 /**
  * Add lines to the job's budget.
@@ -17,7 +17,6 @@ import { LINE_COLUMNS, jobInOrg, numLine, workingEstimate } from "@/lib/budget-s
 
 export const dynamic = "force-dynamic";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const CARD_COLS = "id, cost_group_id, name, description, cost_type, unit, unit_cost, taxable, markup_pct, vendor_contact_id, price_as_of, price_source, qty_rule, rule_params";
 
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
@@ -61,14 +60,8 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   }
 
   const { count } = await supabase.from("estimate_line_items").select("id", { count: "exact", head: true }).eq("estimate_id", est.id as string);
-  const rows = cards.map((c, i) => ({
-    org_id: orgId, estimate_id: est.id, option_id: optionId, section_id: sectionId,
-    cost_item_id: c.id ?? null, cost_group_id: c.cost_group_id ?? null, name: c.name, description: c.description ?? null,
-    cost_type: c.cost_type, unit: c.unit, unit_cost: c.unit_cost ?? null, markup_pct: c.markup_pct ?? null,
-    taxable: c.taxable === true, qty_rule: c.qty_rule ?? "manual", rule_params: c.rule_params ?? {},
-    qty_source: (c.qty_rule ?? "manual") === "manual" ? "set" : "rule", quantity: null,
-    vendor_contact_id: c.vendor_contact_id ?? null, price_as_of: c.price_as_of ?? null, price_source: c.price_source ?? null,
-    sort_order: (count ?? 0) + i,
+  const rows = cards.map((c, i) => cardToLine(c, {
+    orgId, estimateId: est.id as string, sectionId, optionId, sortOrder: (count ?? 0) + i,
   }));
   const { data, error } = await supabase.from("estimate_line_items").insert(rows).select(LINE_COLUMNS);
   if (error) return bad(`Couldn't add: ${error.message}`, 500);

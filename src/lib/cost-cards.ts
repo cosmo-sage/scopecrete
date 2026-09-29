@@ -135,3 +135,11 @@ export function cardGaps(c: Pick<CardInput, "unit_cost" | "qty_rule" | "rule_par
   if (c.qty_rule === "per_stick" && !c.rule_params?.stick_ft) g.push("stick length");
   return g;
 }
+
+/**
+ * A card a section can pick as its reinforcement (step 3b): counted by the
+ * sheet (mesh) or the stick (rebar), or a per-yard dose (fiber).
+ */
+export function isReinforcementCard(c: { qty_rule: string; rule_params?: Record<string, number> | null }): boolean {
+  return c.qty_rule === "per_sheet" || c.qty_rule === "per_stick" || (c.qty_rule === "per_cy" && !!c.rule_params?.per_cy);
+}

@@ -14,24 +14,31 @@ import { getApiSession } from "@/lib/api-auth";
  * show a price built from numbers nobody entered for this business.
  *
  * So PUT requires the whole object. Every nullable rate is written, as null
- * when blank. The six NOT NULL columns must be supplied — a blank there is a
- * 400 naming the field, not a silent default.
+ * when blank. The NOT NULL numbers and the pay-yourself mode must be
+ * supplied — a blank there is a 400 naming the field, not a silent default.
+ *
+ * Step 3b (migration 050): a job is priced only by its budget (cost cards), so
+ * the old per-yard / per-sq-ft / mobilization rates are no longer read or
+ * shown. They are still WRITTEN, as null, so a first save cannot pull the
+ * Gulfline column defaults into this business's row. tax_applies_to (NOT
+ * NULL) is written as 'materials' and unused: each card says if it is taxed.
  */
 
 export const dynamic = "force-dynamic";
 
 /** Nullable numeric columns. Blank means "not recorded" and is stored as null. */
 const RATES = [
-  "concrete_price_per_cy", "concrete_overage_pct", "shortload_threshold_cy", "shortload_pct",
-  "form_finish_per_sqft", "demo_per_sqft", "mobilization_fee", "sales_tax_pct",
+  "concrete_overage_pct", "shortload_threshold_cy", "sales_tax_pct",
   "markup_material_pct", "markup_labor_pct", "markup_equipment_pct", "markup_subcontract_pct",
   "comp_monthly_draw", "comp_profit_pct",
 ] as const;
+/** Retired by step 3b — always written as null (see above), never read. */
+const RETIRED = ["concrete_price_per_cy", "shortload_pct", "form_finish_per_sqft", "demo_per_sqft", "mobilization_fee"] as const;
 
 /** NOT NULL numeric columns — must be given. */
 const REQUIRED_NUM = ["owner_fee_pct", "estimator_fee_pct", "tax_reserve_pct", "assumed_billable_days"] as const;
 
-const COLUMNS = [...RATES, ...REQUIRED_NUM, "comp_mode", "tax_applies_to", "use_measured_days", "updated_at"].join(", ");
+const COLUMNS = [...RATES, ...REQUIRED_NUM, "comp_mode", "use_measured_days", "updated_at"].join(", ");
 
 export async function GET(req: NextRequest) {
   const result = await getApiSession(req);
@@ -87,8 +94,8 @@ export async function PUT(req: NextRequest) {
 
   if (body.comp_mode === "fixed_draw" || body.comp_mode === "pct_profit") row.comp_mode = body.comp_mode;
   else missing.push("comp_mode");
-  if (body.tax_applies_to === "materials" || body.tax_applies_to === "full_bid" || body.tax_applies_to === "none") row.tax_applies_to = body.tax_applies_to;
-  else missing.push("tax_applies_to");
+  for (const f of RETIRED) row[f] = null;
+  row.tax_applies_to = "materials";
   // Measured crew-days do not exist yet (no receipts, no daily logs), so this
   // stays false until they do. Not client-settable.
   row.use_measured_days = false;

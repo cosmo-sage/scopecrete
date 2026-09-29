@@ -17,12 +17,12 @@ const NUMERIC = ["length_ft", "width_ft", "sqft_override", "depth_in"] as const;
 const TEXT = ["name", "rebar", "prep_notes", "access_notes"] as const;
 
 export const SECTION_SELECT =
-  "id, job_id, name, work_type, length_ft, width_ft, sqft_override, depth_in, psi, rebar, prep_notes, access_notes, sort_order, created_at, updated_at, reinforcement_type_id, reinforcement_source";
+  "id, job_id, name, work_type, length_ft, width_ft, sqft_override, depth_in, psi, rebar, prep_notes, access_notes, sort_order, created_at, updated_at, reinforcement_item_id, reinforcement_source";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function readSectionFields(body: Record<string, unknown>):
-  { ok: true; patch: Record<string, unknown> } | { ok: false; error: string } {
+  { ok: true; patch: Record<string, unknown>; reinforcement?: string | null } | { ok: false; error: string } {
   const patch: Record<string, unknown> = {};
 
   for (const f of NUMERIC) {
@@ -56,13 +56,15 @@ export function readSectionFields(body: Record<string, unknown>):
     patch.work_type = body.work_type;
   }
 
-  // Reinforcement Coy picked (migration 042): 'set', so a later work-type
-  // change never swaps it for a default. null = none chosen.
-  if ("reinforcement_type_id" in body) {
-    const v = body.reinforcement_type_id;
-    if (v === null || v === "") { patch.reinforcement_type_id = null; patch.reinforcement_source = null; }
-    else if (typeof v === "string" && UUID.test(v)) { patch.reinforcement_type_id = v; patch.reinforcement_source = "set"; }
-    else return { ok: false, error: "reinforcement_type_id must be an id, or null." };
+  // Reinforcement is a card (step 3b, migration 050). It is not a column
+  // write: the route records it AND puts that card on the area's budget
+  // (setReinforcement in src/lib/budget-server.ts). null = none.
+  let reinforcement: string | null | undefined;
+  if ("reinforcement_item_id" in body) {
+    const v = body.reinforcement_item_id;
+    if (v === null || v === "") reinforcement = null;
+    else if (typeof v === "string" && UUID.test(v)) reinforcement = v;
+    else return { ok: false, error: "reinforcement_item_id must be a card id, or null." };
   }
 
   if ("sort_order" in body) {
@@ -72,18 +74,5 @@ export function readSectionFields(body: Record<string, unknown>):
     patch.sort_order = body.sort_order;
   }
 
-  return { ok: true, patch };
-}
-
-/**
- * The default reinforcement for a job type × work type (migration 042), or
- * null. Used when a section is created, and when a section whose
- * reinforcement came from the defaults changes work type.
- */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function defaultReinforcement(supabase: any, orgId: string, jobType: string | null, workType: string | null): Promise<string | null> {
-  if (!jobType || !workType) return null;
-  const { data } = await supabase.from("org_reinforcement_defaults").select("reinforcement_type_id")
-    .eq("org_id", orgId).eq("job_type", jobType).eq("work_type", workType).maybeSingle();
-  return (data?.reinforcement_type_id as string | undefined) ?? null;
+  return { ok: true, patch, ...(reinforcement !== undefined ? { reinforcement } : {}) };
 }

@@ -624,35 +624,44 @@ prices labour by crew-hours, uses one global markup and adds overhead as a
 percentage of labour — all three contradict this section and §4.
 
 - **Nothing is assumed.** A missing length, width or depth is `missing`; a
-  missing setting blocks the price and is named. `price()` returns
-  `{ priced: false, blocked: [...] }`, never a number built on a guess.
-- **Rates come only from `org_cost_settings`.** That table carries the Gulfline
-  rates as COLUMN DEFAULTS (migration 004), so `PUT /api/settings/cost` writes
-  every field explicitly — null when blank — and a partial save cannot pull in
-  numbers nobody entered. The Gulfline figures appear in the settings form as a
-  labelled reference, never inside an input.
-- **Tax is a pass-through**: charged at cost on the materials subtotal, carried
-  in both columns, not marked up. Markup applies to materials before tax.
+  missing setting or card price blocks the line and its option and is named
+  (`budget()`), never a number built on a guess.
+- **Prices come only from cost cards (step 3b, migration 050, 2026-09-29).**
+  A job is priced by its budget — lines copied from Coy's cards in the Price
+  book — and nothing else. The old rate path (`price()`: a price per yard,
+  form & finish and demo per sq ft, mobilization, short-load %, "what tax
+  applies to", reinforcement types) is gone from the engine, the scope page,
+  Cost settings and Dusty; those things are cards now. Measured before it
+  went: no rates were ever recorded and no section used a reinforcement
+  type, so nothing priced changed. The retired `org_cost_settings` columns
+  stay in the table unused and are written as null (they carry Gulfline
+  COLUMN DEFAULTS from migration 004, so a first save must not leave them to
+  the database). Cost settings keeps what the budget and floor read:
+  markups per type (the fallback under a card's and its group's), sales tax
+  %, concrete waste %, short-load threshold, overhead, off-the-top, crew
+  days per month, pay-yourself. A job with no budget lines has **no price**,
+  and the scope rail and Dusty say so.
+- **Tax is a pass-through**: charged at cost on the lines whose card is taxed
+  (materials by default), carried in both columns, not marked up, while the
+  budget's tax switch is on.
 - **`job_sections.cubic_yards` must not be displayed.** It is a generated
   column, `… * COALESCE(depth_in, 4)`, so a section with no depth reads 14.8
   yards for a 30×40 (verified 2026-09-27). The section API writes `depth_in`
   and `psi` explicitly as null so the schema defaults (4 in, 3000 psi) never
   stand in for a measurement. Fixing the column needs a migration and Coy's
   instruction.
-- **Reinforcement (migration 042, Coy 2026-09-28)** is priced by the unit it
-  is bought in: mesh by the sheet (`sheet_sqft` a sheet covers after lap) or
-  sq ft; rebar by the stick or the foot (a grid both ways at `spacing_in`,
-  plus `lap_pct`); fiber by the lb or bag per yard (`per_cy`) —
-  `reinforcementQty()`. It is a material: marked up and taxed with materials.
-  Types live in Cost settings → Concrete (`org_reinforcement_types`,
-  `/api/settings/reinforcement`); **defaults** per job type × work type
-  (`org_reinforcement_defaults`: "residential driveways are 6x6 10 ga mesh")
-  fill a new section — or one whose work type changes and whose reinforcement
-  Coy did not pick — labelled "default for residential driveways". Coy's pick
-  (`reinforcement_source='set'`) is never swapped. A default is Coy's own
-  setting, not an assumption; a missing number on the chosen type still blocks
-  the price and is named. A section with none chosen is listed as not in the
-  price.
+- **Reinforcement is a card (step 3b; was migration 042's types).** Mesh by
+  the sheet, rebar by the stick, fiber by a per-yard dose — any card counted
+  that way (`isReinforcementCard()`), with its numbers on the card's rule
+  (`ruleQty()`: sheet coverage; spacing both ways, stick length, lap; dose).
+  A section's Reinforcement picker lists those cards; picking one records it
+  on the section (`reinforcement_item_id`) and puts that card on the area's
+  budget as its one reinforcement line (`section_role`); changing it swaps
+  the line, none removes it (`setReinforcement()` in
+  `src/lib/budget-server.ts`). An assembly's reinforcement is labelled
+  "default for residential driveways" and never replaces Coy's own pick.
+  Dictation matches the spoken reinforcement against these cards.
+  `org_reinforcement_types` / `_defaults` are no longer read (tables kept).
 - **Cost cards (migration 047, Coy 2026-09-29)** — `cost_items`: Coy's
   catalog of what he buys and charges for, each with its **vendor** (a
   contact), group (`cost_groups`), cost type, unit and unit cost, taxed or
@@ -665,12 +674,34 @@ percentage of labour — all three contradict this section and §4.
   uses it will be blocked by name. Edited in the **Price book** (below;
   `/api/cost-items`, `/api/cost-groups`) and seen per vendor on the vendor
   page → **Prices**. Retiring a card keeps it (`active=false`)
-  so a budget that used it still reads. The rate fields above and the
-  reinforcement types fold into cards in the next step (3b, with
-  assemblies per job type × work type); until then a job with no budget
-  lines is still priced from the rates, labelled **from rates**. Anon's grants on
+  so a budget that used it still reads. Anon's grants on
   `cost_groups`, `estimates`, `estimate_line_items`, `documents`,
   `document_events`, `invoices`, `payments` were revoked with it.
+- **Assemblies (step 3b, migration 050, Coy 2026-09-29)** —
+  `cost_assemblies` + `cost_assembly_items`: Coy's default set of cards for
+  a kind of area ("Residential driveway": 3000 psi by the yard, form &
+  finish by the foot, 6x6 mesh), for a job type (or any) × a kind of area
+  (or any — then only loaded by hand), with an optional reinforcement card
+  and a quantity for cards counted by hand. At most one auto-loading
+  assembly per job type × kind of area (unique index); `pickAssembly()`
+  takes the exact job type, else "any job". When a section is added or its
+  kind changes, `loadAssembly()` fills that area's budget — **only if the
+  area has no lines yet**, so it never swaps or duplicates — each line
+  "from Residential driveway" (`estimate_line_items.assembly_id`). It is
+  Coy's own setting, not an assumption. The budget's card picker loads any
+  assembly onto an area by hand (`POST /api/jobs/[id]/budget/assembly`).
+  Removing a section removes its lines from the working budget. APIs:
+  `/api/assemblies[/id[/items[/itemId]]]`, session client, every id checked.
+- **The imported catalog, cleaned up (migration 050, Coy's choices).** His
+  JobTread import had put each cost code in the description and left 0
+  groups: cost codes became **groups** (24; 426 of 427 cards filed; the
+  "Cost code …" text taken out of descriptions), and slab-geometry rules
+  guessed from units (yards, sq ft, edge, sheets, sticks) were reset to
+  typed quantities outside 2800 Concrete (52 cards; by the day and once per
+  job kept everywhere). Snapshot first in `cost_items_backup_050` (no app
+  access) so it can be put back. Imports now do the same: a cost code is
+  the group when the file has no group column, and a slab-geometry guess is
+  made only when the group is concrete (or there is none).
 - **The Price book (migration 049, Coy 2026-09-29)** — the cost catalog's
   own page, `/dashboard/price-book` (JobTread calls it the cost catalog; Coy
   named it). **Price history:** `cost_item_prices`, one row per price a card
@@ -729,15 +760,15 @@ percentage of labour — all three contradict this section and §4.
   same `budget()`. APIs: `/api/jobs/[id]/budget` (GET, PATCH tax/discount),
   `…/budget/lines[/lineId]`, `…/budget/options[/optionId]` — session client,
   org from the session; lines carry `org_id` with a restrictive org policy.
-- **Not yet priced:** base, vapor barrier (no rates exist), and day-rate
-  equipment. The builder lists them as "not in this price".
+- **Base, vapor barrier and day-rate equipment** are cards like anything
+  else (by the sq ft, by the day); nothing is priced that has no card.
 - **Dictating a section (2026-09-28).** Dictate on a section card records up
   to 60 s; `/api/jobs/[id]/sections/[sectionId]/dictate` sends the audio to
   Groq Whisper (`GROQ_API_KEY`, server side — only audio goes to Groq), asks
   Dusty (Hermes) to put the words into fields, and `sanitizeDictation()`
   (`src/lib/dictate.ts`) keeps a number only if it was **said** — digits or
   words, feet-and-inches included — and a work type or reinforcement only if
-  it is a real one. The card applies it through the normal section PATCH and
+  it is a real one (a reinforcement card, since step 3b). The card applies it through the normal section PATCH and
   shows "Heard: …" with Undo. Nothing is estimated.
 
 ---
@@ -772,7 +803,9 @@ one-tap "worked here, no spend" later.
 floor MUST cover. `pct_profit` is taken after a job clears and does NOT raise
 the floor. Draws land on a specific day, never smeared evenly.
 
-**Floor implementation (2026-09-27).** `floor()` in `src/lib/engine`:
+**Floor implementation (2026-09-27).** Since step 3b the floor is shown per
+budget option, on that option's hard cost (cost + pass-through tax), and
+opens to its parameters with one tap. `floor()` in `src/lib/engine`:
 nut per crew-day = (active overhead as monthly + fixed draw) ÷
 `assumed_billable_days` (crew-days per month the nut is spread across); the
 job's share = that × `jobs.duration_days`, entered on the builder and labelled
@@ -1013,6 +1046,21 @@ expected start date per quoted job before it means anything. Add the field.
   from where). **Import ▾** opens the import (`price-import.tsx`) as a wide
   sheet over everything: file → columns and vendors → preview → Import N;
   recent imports sit under the header with **Undo**.
+- **Scope rail with no budget (step 3b).** No lines → **No price yet**:
+  "a price comes only from cost cards on this job's budget", with a link to
+  Assemblies and the crew-days box. With lines → each option's total, cost,
+  margin, $/sf and floor (tap for its parameters). The section's
+  Reinforcement picker lists reinforcement cards and says "default for …"
+  when an assembly chose it.
+- **Price book → Assemblies (step 3b)** — `src/components/v34/assemblies.tsx`,
+  the second tab (`?tab=assemblies`). A row: name, what it applies to
+  ("Residential · Driveway", "Any job · Patio", "Loaded by hand"), card
+  count, reinforcement, **Auto**. The sheet: name, job type, kind of area,
+  "Fill new areas on its own", reinforcement card, its cards (rule and
+  cost, a quantity box for typed ones, ×), + Add cards (search), delete.
+  The budget's card picker has **Load an assembly** (pick the area first)
+  and shows groups folded until you search; lines say "from X" and
+  "reinforcement".
 - **Budget (2026-09-29)** — `src/components/v34/job-budget.tsx` under the
   sections on the job page. Option bar (All options · Good · Better · Best ·
   + Option, each with its total; rename / delete an option). **Wide (≥900px

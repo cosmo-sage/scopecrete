@@ -31,7 +31,9 @@ import { Cell } from "@/components/v34/cell";
 interface Line extends BudgetLine {
   description: string | null; cost_item_id: string | null; vendor_contact_id: string | null;
   price_as_of: string | null; show_on_doc: boolean; sort_order: number; updated_at: string;
+  assembly_id?: string | null; section_role?: "reinforcement" | null;
 }
+interface Assembly { id: string; name: string; job_type: string | null; work_type: string | null }
 interface Option { id: string; label: string; description: string | null; sort_order: number }
 interface Group { id: string; name: string; cost_type: CostType; default_markup_pct: number | null }
 interface Card {
@@ -40,7 +42,7 @@ interface Card {
 }
 interface Data {
   estimate: { id: string; tax_on: boolean; discount_amount: number } | null;
-  options: Option[]; lines: Line[]; groups: Group[]; cards: Card[];
+  options: Option[]; lines: Line[]; groups: Group[]; cards: Card[]; assemblies?: Assembly[];
   vendors: Array<{ id: string; name: string | null; phone: string | null }>;
   settings: BudgetSettings;
 }
@@ -59,9 +61,11 @@ async function call(url: string, method: string, body?: unknown) {
 const qtyFmt = (n: number | null) => n === null ? "—" : n.toLocaleString("en-US", { maximumFractionDigits: 2 });
 const pct = (n: number | null) => n === null ? "—" : `${(n * 100).toFixed(1)}%`;
 
-export function JobBudget({ jobId, sections, crewDays, onSummary }: {
+export function JobBudget({ jobId, sections, crewDays, onSummary, refresh = 0 }: {
   jobId: string; sections: Array<SectionInput & { id: string }>; crewDays: number | null;
   onSummary?: (s: BudgetSummary) => void;
+  /** Bumped by the scope page when a section change may have changed the budget on the server. */
+  refresh?: number;
 }) {
   const [data, setData] = useState<Data | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -78,7 +82,7 @@ export function JobBudget({ jobId, sections, crewDays, onSummary }: {
       .then((b) => { if (!off) { setData(b as Data); setErr(null); } })
       .catch((e) => { if (!off) setErr(e instanceof Error ? e.message : String(e)); });
     return () => { off = true; };
-  }, [jobId, tick]);
+  }, [jobId, tick, refresh]);
 
   const run = useCallback(async (fn: () => Promise<unknown>) => {
     setErr(null);
@@ -113,6 +117,7 @@ export function JobBudget({ jobId, sections, crewDays, onSummary }: {
   const areaName = (id: string | null) => (id ? sections.find((s) => s.id === id)?.name || "Unnamed area" : "Whole job");
   const groupName = (l: Line) => (l.cost_group_id ? data.groups.find((g) => g.id === l.cost_group_id)?.name : null) ?? COST_TYPE_LABEL[l.cost_type as CostType] ?? "Other";
   const optLabel = (id: string | null) => (id ? opts.find((o) => o.id === id)?.label ?? "?" : null);
+  const asmName = (id: string | null | undefined) => (id ? data.assemblies?.find((a) => a.id === id)?.name ?? null : null);
   const vendorName = (id: string | null) => { const v = id ? data.vendors.find((x) => x.id === id) : null; return v ? v.name || formatPhone(v.phone) : null; };
   const cardNewer = (l: Line) => { const c = l.cost_item_id ? data.cards.find((x) => x.id === l.cost_item_id) : null; return !!c && c.unit_cost !== l.unit_cost; };
 
@@ -171,7 +176,7 @@ export function JobBudget({ jobId, sections, crewDays, onSummary }: {
       {err && <div className="px-3 pb-2" style={{ fontSize: F.xs, color: T.red }}>{err}</div>}
       {data.lines.length === 0 && (
         <div className="px-3 pb-3" style={{ fontSize: F.sm, color: T.ink3 }}>
-          {data.cards.length ? "No lines yet. Add cost cards to the areas above — quantities come from the scope." : "No cost cards yet. Make them in Cost settings → Cost cards, then add them here."}
+          {data.cards.length ? "No lines yet. Add cost cards to the areas above, or load an assembly — quantities come from the scope." : "No cost cards yet. Make or import them in the Price book, then add them here — or set up an assembly so new areas fill themselves."}
         </div>
       )}
 
@@ -217,6 +222,8 @@ export function JobBudget({ jobId, sections, crewDays, onSummary }: {
                               <button onClick={() => setEditing(l)} className="text-left" style={{ cursor: "pointer", color: T.ink, fontWeight: 500, ...clip, display: "block", maxWidth: 240 }}>{l.name}</button>
                               <div style={{ fontSize: 9.5, color: T.ink3, ...clip }}>
                                 {optLabel(l.option_id) ? <span style={{ color: T.chalk }}>{optLabel(l.option_id)} only · </span> : opts.length ? "every option · " : ""}
+                                {l.section_role === "reinforcement" ? "reinforcement · " : ""}
+                                {asmName(l.assembly_id) ? `from ${asmName(l.assembly_id)} · ` : ""}
                                 {QTY_RULE_LABEL[l.qty_rule as keyof typeof QTY_RULE_LABEL] ?? l.qty_rule}
                                 {cardNewer(l) && <> · <button onClick={() => void patchLine(l.id, { refresh: true })} style={{ color: T.hiviz, cursor: "pointer" }}>card price changed — update</button></>}
                               </div>
@@ -268,7 +275,7 @@ export function JobBudget({ jobId, sections, crewDays, onSummary }: {
               <div className="flex items-baseline justify-between" style={{ ...eyebrow, color: T.ink, marginTop: 4 }}>
                 <span>{a.name}</span><span style={{ ...nums }}>{money0(sum(a.lines, "ext_price"))}</span>
               </div>
-              {a.groups.map((g) => <GroupCard key={g.name} name={g.name} lines={g.lines} res={res} optLabel={optLabel} onOpen={setEditing}
+              {a.groups.map((g) => <GroupCard key={g.name} name={g.name} lines={g.lines} res={res} optLabel={optLabel} asmName={asmName} onOpen={setEditing}
                 cost={sum(g.lines, "ext_cost")} price={sum(g.lines, "ext_price")} />)}
             </div>
           ))}
@@ -317,7 +324,8 @@ export function JobBudget({ jobId, sections, crewDays, onSummary }: {
 
       <CardPicker open={picker} onClose={() => setPicker(false)} data={data} sections={sections} tier={tier === "all" ? null : tier}
         tierLabel={optLabel(tier === "all" ? null : tier)}
-        onAdd={(body) => run(() => call(`/api/jobs/${jobId}/budget/lines`, "POST", body))} />
+        onAdd={(body) => run(() => call(`/api/jobs/${jobId}/budget/lines`, "POST", body))}
+        onLoadAssembly={(assemblyId, sectionId) => run(() => call(`/api/jobs/${jobId}/budget/assembly`, "POST", { assembly_id: assemblyId, section_id: sectionId }))} />
       <LineSheet line={editing} data={data} sections={sections} res={editing ? res.lines[editing.id] : null}
         onClose={() => setEditing(null)}
         onPatch={(body) => editing && run(() => call(`/api/jobs/${jobId}/budget/lines/${editing.id}`, "PATCH", body))}
@@ -336,8 +344,9 @@ function TierTab({ on, onClick, label, sub }: { on: boolean; onClick: () => void
   );
 }
 
-function GroupCard({ name, lines, res, optLabel, onOpen, cost, price }: {
+function GroupCard({ name, lines, res, optLabel, asmName, onOpen, cost, price }: {
   name: string; lines: Line[]; res: ReturnType<typeof priceBudget>; optLabel: (id: string | null) => string | null;
+  asmName: (id: string | null | undefined) => string | null;
   onOpen: (l: Line) => void; cost: number; price: number;
 }) {
   const [open, setOpen] = useState(true);
@@ -363,6 +372,8 @@ function GroupCard({ name, lines, res, optLabel, onOpen, cost, price }: {
               <span style={{ display: "block", fontSize: 10, color: r.blocked.length ? T.hiviz : T.ink3, ...nums }}>
                 {r.blocked.length ? `needs ${r.blocked.join(", ")}` : `${qtyFmt(r.qty)} ${l.unit} × ${l.unit_cost === null ? "—" : money(l.unit_cost)}${r.qty_basis === "set" ? " ✎" : " ƒ"}`}
                 {optLabel(l.option_id) ? ` · ${optLabel(l.option_id)} only` : ""}
+                {l.section_role === "reinforcement" ? " · reinforcement" : ""}
+                {asmName(l.assembly_id) ? ` · from ${asmName(l.assembly_id)}` : ""}
               </span>
             </span>
             <span style={{ fontFamily: disp, fontSize: F.md, fontWeight: 600, ...nums }}>{r.ext_price === null ? "—" : money(r.ext_price)}</span>
@@ -373,10 +384,12 @@ function GroupCard({ name, lines, res, optLabel, onOpen, cost, price }: {
   );
 }
 
-function CardPicker({ open, onClose, data, sections, tier, tierLabel, onAdd }: {
+function CardPicker({ open, onClose, data, sections, tier, tierLabel, onAdd, onLoadAssembly }: {
   open: boolean; onClose: () => void; data: Data; sections: Array<SectionInput & { id: string }>;
   tier: string | null; tierLabel: string | null; onAdd: (body: Record<string, unknown>) => Promise<void>;
+  onLoadAssembly: (assemblyId: string, sectionId: string) => Promise<void>;
 }) {
+  const [openG, setOpenG] = useState<Record<string, boolean>>({});
   const [q, setQ] = useState("");
   const [area, setArea] = useState<string>("");
   const [custom, setCustom] = useState({ name: "", cost_type: "material" as CostType, unit: "each", unit_cost: "" });
@@ -401,14 +414,31 @@ function CardPicker({ open, onClose, data, sections, tier, tierLabel, onAdd }: {
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="rebar, pump, 3000…" style={field} /></label>
         </div>
         {added && <div style={{ fontSize: F.xs, color: T.green }}>Added {added}</div>}
-        {groups.length === 0 && <div style={{ fontSize: F.sm, color: T.ink3 }}>{data.cards.length ? "No card matches." : "No cost cards yet — make them in Cost settings → Cost cards."}</div>}
+        {(data.assemblies?.length ?? 0) > 0 && (
+          <div className="rounded p-2.5" style={{ border: `1px solid ${T.hair}` }}>
+            <div style={{ ...eyebrow, color: T.ink }}>Load an assembly</div>
+            {!area && <div style={{ fontSize: 10, color: T.ink3 }}>Pick the area first — an assembly fills one area.</div>}
+            <div className="flex flex-wrap gap-1.5 mt-1">
+              {data.assemblies!.map((a) => (
+                <button key={a.id} disabled={!area} onClick={() => void onLoadAssembly(a.id, area).then(() => { setAdded(a.name); setTimeout(() => setAdded(null), 1600); })}
+                  className="rounded px-2" style={{ height: 30, border: `1px solid ${T.hair}`, background: "#fff", fontSize: F.xs, opacity: area ? 1 : 0.5, cursor: area ? "pointer" : "default" }}>
+                  {a.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {groups.length === 0 && <div style={{ fontSize: F.sm, color: T.ink3 }}>{data.cards.length ? "No card matches." : "No cost cards yet — make them in the Price book."}</div>}
         {groups.map((g) => (
           <div key={g.id ?? "none"} className="rounded" style={{ border: `1px solid ${T.hair}` }}>
             <div className="flex items-center px-2.5 py-1.5" style={{ background: T.slab }}>
-              <span style={{ fontFamily: disp, fontSize: F.sm, fontWeight: 600, textTransform: "uppercase", flex: 1 }}>{g.name}</span>
+              <button onClick={() => setOpenG((o) => ({ ...o, [g.id ?? "none"]: !o[g.id ?? "none"] }))} aria-expanded={!!q.trim() || !!openG[g.id ?? "none"]}
+                className="text-left" style={{ fontFamily: disp, fontSize: F.sm, fontWeight: 600, textTransform: "uppercase", flex: 1, cursor: "pointer" }}>
+                {q.trim() || openG[g.id ?? "none"] ? "−" : "+"} {g.name} <span style={{ fontSize: 10, color: T.ink3, fontWeight: 400 }}>{g.cards.length}</span>
+              </button>
               {g.id && <button onClick={() => void add({ cost_group_id: g.id }, g.name)} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>Add all</button>}
             </div>
-            {g.cards.map((c) => (
+            {(q.trim() || openG[g.id ?? "none"]) && g.cards.map((c) => (
               <button key={c.id} onClick={() => void add({ cost_item_id: c.id }, c.name)} className="w-full flex items-baseline justify-between gap-2 px-2.5 py-1.5 text-left"
                 style={{ borderTop: `1px solid ${T.hairSoft}`, cursor: "pointer" }}>
                 <span style={{ minWidth: 0, flex: 1 }}>

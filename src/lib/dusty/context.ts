@@ -6,7 +6,7 @@
  */
 
 import type { ApiSession } from "@/lib/api-auth";
-import { price, floor, takeoff, budget, type BudgetLine, type CostSettings, type OverheadItem, type SectionInput } from "@/lib/engine";
+import { floor, takeoff, budget, type BudgetLine, type CostSettings, type OverheadItem, type SectionInput } from "@/lib/engine";
 import { assemble, coldContext, scopeLines, type Assembled, type Block } from "./prompt";
 
 export type ContextRef =
@@ -167,12 +167,11 @@ async function settingsAndOverhead(sb: Sb, orgId: string) {
     sb.from("org_cost_settings").select("*").eq("org_id", orgId).maybeSingle(),
     sb.from("overhead_items").select("label, amount, cadence, active").eq("org_id", orgId),
   ]);
-  const keys: (keyof CostSettings)[] = ["concrete_price_per_cy", "concrete_overage_pct", "shortload_threshold_cy", "shortload_pct",
-    "form_finish_per_sqft", "demo_per_sqft", "mobilization_fee", "sales_tax_pct", "tax_applies_to", "markup_material_pct",
+  const keys: (keyof CostSettings)[] = ["concrete_overage_pct", "shortload_threshold_cy", "sales_tax_pct", "markup_material_pct",
     "markup_labor_pct", "markup_equipment_pct", "owner_fee_pct", "estimator_fee_pct", "tax_reserve_pct",
     "assumed_billable_days", "comp_mode", "comp_monthly_draw"];
   const settings = Object.fromEntries(keys.map((k) => [k,
-    k === "tax_applies_to" || k === "comp_mode" ? ((s as Record<string, unknown> | null)?.[k] ?? null) : num((s as Record<string, unknown> | null)?.[k])])) as unknown as CostSettings;
+    k === "comp_mode" ? ((s as Record<string, unknown> | null)?.[k] ?? null) : num((s as Record<string, unknown> | null)?.[k])])) as unknown as CostSettings;
   const overhead = ((oh ?? []) as Array<{ label: string; amount: unknown; cadence: string; active: boolean }>)
     .map((o) => ({ ...o, amount: Number(o.amount) })) as OverheadItem[];
   return { settings, overhead, recorded: !!s, markup_subcontract_pct: num((s as Record<string, unknown> | null)?.markup_subcontract_pct) };
@@ -194,9 +193,7 @@ async function scopeContext(sb: Sb, orgId: string, jobId: string): Promise<Assem
     length_ft: num(r.length_ft), width_ft: num(r.width_ft), sqft_override: num(r.sqft_override), depth_in: num(r.depth_in), psi: num(r.psi),
   }));
   const t = takeoff(sections, so.settings.concrete_overage_pct);
-  const p = price(sections, so.settings);
   const crew = num(job.duration_days);
-  const fl = p.priced ? floor(p.cost.total, so.settings, so.overhead, crew) : null;
   const bud = await budgetBlock(sb, orgId, jobId, sections, crew, so);
   const notes = ((secs ?? []) as Array<Record<string, unknown>>).flatMap((r) =>
     [["reinforcement", r.rebar], ["prep", r.prep_notes], ["access", r.access_notes]]
@@ -205,7 +202,7 @@ async function scopeContext(sb: Sb, orgId: string, jobId: string): Promise<Assem
   return assemble(`scope: ${title}`, [
     { title: "Job", lines: [`Title: ${title}`, `Status: ${job.status}`, `Address: ${(job.address as string | null) || "not recorded"}`,
       `Crew days on this job: ${crew ?? "not set"}`, `For: ${who ? who.name : "no customer attached"}`] },
-    { title: bud ? "Sections and the rate-based numbers (superseded by the budget below)" : "Sections and the engine's numbers (exactly what the builder shows)", lines: scopeLines(t, p, fl) },
+    { title: "Sections and their quantities (exactly what the builder shows)", lines: scopeLines(t, !!bud) },
     ...(bud ? [bud] : []),
     { title: "Section notes", lines: notes },
     ...(so.recorded ? [] : [{ title: "Cost settings", lines: ["None recorded for this business yet."] }]),
@@ -244,13 +241,17 @@ async function budgetBlock(sb: Sb, orgId: string, jobId: string, sections: Secti
     tax_on: est.tax_on !== false, discount: Number(est.discount_amount ?? 0),
     groupMarkup: Object.fromEntries(((groups ?? []) as Array<{ id: string; default_markup_pct: unknown }>).map((g) => [g.id, num(g.default_markup_pct)])),
   });
+  const floorLine = (hard: number) => {
+    const f = floor(hard, st, so.overhead, crew);
+    return f.ok ? `; bid floor $${f.floor.toFixed(0)} (${f.crew_days} ${f.crew_days_basis} crew days)` : `; bid floor blocked by: ${f.blocked.join(", ")}`;
+  };
   const secName = (id: string | null) => (id ? sections.find((x) => x.id === id)?.name || "section" : "whole job");
   const optName = (id: string | null) => (id ? options.find((o) => o.id === id)?.label ?? "option" : "all options");
   const out: string[] = [];
   for (const tr of res.tiers) {
     const head = tr.option_id ? `Option ${optName(tr.option_id)}` : "Budget";
     out.push(tr.priced
-      ? `${head}: price $${tr.total.toFixed(0)} (cost $${tr.cost.toFixed(0)}, tax $${tr.tax.toFixed(0)}, discount $${tr.discount.toFixed(0)}, margin ${(tr.margin * 100).toFixed(1)}%)`
+      ? `${head}: price $${tr.total.toFixed(0)} (cost $${tr.cost.toFixed(0)}, tax $${tr.tax.toFixed(0)}, discount $${tr.discount.toFixed(0)}, margin ${(tr.margin * 100).toFixed(1)}%)${floorLine(tr.cost + tr.tax)}`
       : `${head}: NOT PRICED — needs ${tr.blocked.join(", ")}`);
   }
   out.push(`Tax ${est.tax_on === false ? "switched off" : "on"}.${est.discount_reason ? ` Discount reason: ${est.discount_reason}.` : ""}`);

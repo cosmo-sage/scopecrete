@@ -89,7 +89,11 @@ function useTyped(text: string, k: string): string {
   return shown.k === k ? text.slice(0, shown.n) : "";
 }
 
-export function ActivityLine({ busy, live }: { busy: boolean; live?: string }) {
+export function ActivityLine({ busy, live, onWorking }: {
+  busy: boolean; live?: string;
+  /** True while the background reader has a read running — the header emblem spins for it. */
+  onWorking?: (working: boolean) => void;
+}) {
   const [data, setData] = useState<Activity | null>(null);
   // Items from the last day — decided when the data arrives, not in render.
   const [recent, setRecent] = useState<Item[]>([]);
@@ -151,6 +155,7 @@ export function ActivityLine({ busy, live }: { busy: boolean; live?: string }) {
   }, [open]);
 
   const running = recent.some((i) => i.kind === "running");
+  useEffect(() => { onWorking?.(running); }, [running, onWorking]);
   let line: { key: string; summary: string; tone: Tone; at: string | null };
   if (busy) {
     // A reply streaming in this tab: its own words, the tail that fits.

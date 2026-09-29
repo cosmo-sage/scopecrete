@@ -9,6 +9,7 @@ import { Composer } from "@/components/v34/composer";
 import { DA, MergeSheet, Timeline, formatPhone, type MergeInfo, type ThreadMessage } from "@/components/v34/conversation";
 import { PersonView, SamePerson, type Person } from "@/components/v34/person-view";
 import { NameEditor, FileAsSheet } from "@/components/v34/contact-edit";
+import { useWide } from "@/lib/v34/use-wide";
 
 /**
  * One person. A customer or a vendor gets their page (person-view.tsx) — Coy,
@@ -41,6 +42,9 @@ export default function ChatThreadPage() {
   const [undoing, setUndoing] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
   const [filing, setFiling] = useState(false);
+  // The contact rail stands beside the conversation only when there is room
+  // for both — measured, since Dusty docked on the right takes 400px of it.
+  const [measure, roomy] = useWide<HTMLDivElement>(920);
   // Their page, when they are a customer or a vendor (/api/people). A failure
   // here leaves the plain conversation, which still works.
   const [person, setPerson] = useState<Person | null>(null);
@@ -158,7 +162,7 @@ export default function ChatThreadPage() {
 
   if (person && !loading && !error && (person.contact.bucket === "customer" || person.contact.bucket === "vendor")) {
     return (
-      <div className="sc-pinned overflow-y-auto" style={{ background: T.slab }}>
+      <div className="sc-pinned overflow-y-auto flex flex-col" style={{ background: T.slab }}>
         {merges.map((m) => (
           <div key={m.id} className="px-4 py-1.5 flex items-center gap-2 text-[11px]"
             style={{ background: DA.elevated, borderBottom: `1px solid ${DA.border}`, color: DA.textSecondary }}>
@@ -182,7 +186,7 @@ export default function ChatThreadPage() {
   }
 
   return (
-    <div className="flex sc-pinned">
+    <div ref={measure} className="flex sc-pinned">
       {/* ================= the conversation ================= */}
       {/* Pinned between the header and the footer (.sc-pinned): only the
           messages scroll, so this name bar never slides under the header. */}
@@ -292,7 +296,7 @@ export default function ChatThreadPage() {
 
       {/* ================= the contact rail (desktop, 1d) ================= */}
       {!loading && !error && (
-        <aside className="hidden xl:block shrink-0 overflow-y-auto h-full"
+        <aside className={`${roomy ? "hidden lg:block" : "hidden"} shrink-0 overflow-y-auto h-full`}
           style={{ width: 300, background: DA.surface, borderLeft: `1px solid ${DA.border}` }}>
           <RailSection title="Contact">
             <RailRow k="Name" v={name ?? null} missing="Not recorded"
@@ -330,10 +334,12 @@ export default function ChatThreadPage() {
           </RailSection>
 
           <RailSection title="Dusty">
-            <div style={{ fontSize: F.xs, color: DA.textMuted, lineHeight: 1.45 }}>
-              Not connected. When it is, this is where its read of this contact goes — and a draft
-              reply for you to send yourself.
+            <div style={{ fontSize: F.xs, color: person?.contact.status_summary ? DA.textPrimary : DA.textMuted, lineHeight: 1.45 }}>
+              {person?.contact.status_summary ?? "Not read yet — Dusty reads a contact a few minutes after they say something."}
             </div>
+            <button onClick={() => window.dispatchEvent(new Event("sc:dusty-open"))} className="mt-2 rounded px-2.5"
+              style={{ height: 28, border: `1px solid ${T.hiviz}`, color: T.hiviz, background: "transparent", cursor: "pointer",
+                       fontFamily: disp, fontSize: F.xs, letterSpacing: ".06em", textTransform: "uppercase" }}>Ask Dusty</button>
           </RailSection>
         </aside>
       )}

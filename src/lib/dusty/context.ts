@@ -14,6 +14,7 @@ export type ContextRef =
   | { kind: "scope"; id: string }
   | { kind: "customer"; id: string }
   | { kind: "cash" }
+  | { kind: "activity"; since: string }
   | { kind: "cold" };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -22,6 +23,14 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export function parseRef(raw: unknown): ContextRef {
   const r = (raw ?? {}) as { kind?: unknown; id?: unknown };
   if (r.kind === "cash") return { kind: "cash" };
+  if (r.kind === "activity") {
+    // "What's new since I last looked" — the emblem tap. The window is the
+    // device's last catch-up, clamped to a week; anything unreadable is 24 h.
+    const s = typeof (r as { since?: unknown }).since === "string" ? Date.parse((r as { since: string }).since) : NaN;
+    const floor = Date.now() - 7 * 86400_000;
+    const at = Number.isFinite(s) ? Math.min(Math.max(s, floor), Date.now()) : Date.now() - 86400_000;
+    return { kind: "activity", since: new Date(at).toISOString() };
+  }
   if ((r.kind === "thread" || r.kind === "scope" || r.kind === "customer") && typeof r.id === "string" && UUID.test(r.id)) {
     return { kind: r.kind, id: r.id };
   }
@@ -38,6 +47,7 @@ export async function buildContext(sb: Sb, orgId: string, ref: ContextRef): Prom
   if (ref.kind === "scope") return scopeContext(sb, orgId, ref.id);
   if (ref.kind === "customer") return customerContext(sb, orgId, ref.id);
   if (ref.kind === "cash") return cashContext(sb, orgId);
+  if (ref.kind === "activity") return activityContext(sb, orgId, ref.since);
   const { data: org } = await sb.from("orgs").select("name").eq("id", orgId).maybeSingle();
   return coldContext((org?.name as string | null) ?? null, today);
 }
@@ -194,5 +204,75 @@ async function cashContext(sb: Sb, orgId: string): Promise<Assembled> {
   return assemble("Cash and cost settings", [
     { title: "Cost settings", lines: so.recorded ? lines : ["None recorded yet — every rate is blank."] },
     { title: "Monthly overhead items", lines: oh },
+  ]);
+}
+
+/**
+ * The catch-up (Coy, 2026-09-29: "clicking on the dusty emblem triggers an
+ * automatic review of the latest activity"). Real rows only: who got in touch
+ * since `since`, what Dusty read, what is due, and how many are unsorted.
+ */
+async function activityContext(sb: Sb, orgId: string, since: string): Promise<Assembled> {
+  const central = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Chicago" }).format(new Date());
+  const [{ data: msgs }, { data: runs }, { data: due }, { count: unsorted }] = await Promise.all([
+    sb.from("messages").select("contact_id, channel, direction, occurred_at, body_text, summary")
+      .eq("org_id", orgId).gte("occurred_at", since).order("occurred_at", { ascending: false }).limit(300),
+    sb.from("contact_enrich_runs").select("contact_id, outcome, finished_at, musing")
+      .eq("org_id", orgId).gte("started_at", since).order("started_at", { ascending: false }).limit(100),
+    sb.from("contact_tasks").select("contact_id, title, due_on, source").eq("org_id", orgId).eq("status", "open")
+      .lte("due_on", central).order("due_on").limit(30),
+    sb.from("contacts").select("id", { count: "exact", head: true }).eq("org_id", orgId)
+      .is("merged_into_contact_id", null).is("classification_confirmed_at", null).is("auto_classified_at", null),
+  ]);
+  type M = { contact_id: string | null; channel: string; direction: string; occurred_at: string | null; body_text: string | null; summary: string | null };
+  const rows = (msgs ?? []) as M[];
+  const ids = [...new Set([
+    ...rows.map((m) => m.contact_id),
+    ...((runs ?? []) as Array<{ contact_id: string }>).map((r) => r.contact_id),
+    ...((due ?? []) as Array<{ contact_id: string }>).map((t) => t.contact_id),
+  ].filter(Boolean) as string[])].slice(0, 150);
+  const { data: people } = ids.length
+    ? await sb.from("contacts").select("id, name, phone, contact_type, classification_confirmed_at, auto_classified_at, status_summary")
+        .eq("org_id", orgId).in("id", ids)
+    : { data: [] };
+  type P = { id: string; name: string | null; phone: string | null; contact_type: string | null; classification_confirmed_at: string | null; auto_classified_at: string | null; status_summary: string | null };
+  const who = new Map(((people ?? []) as P[]).map((p) => [p.id, p]));
+  const label = (id: string | null) => {
+    const p = id ? who.get(id) : null;
+    if (!p) return "unknown contact";
+    const bucket = p.classification_confirmed_at || p.auto_classified_at ? p.contact_type : "unsorted";
+    return `${p.name?.trim() || p.phone || "no name"} [${bucket}]`;
+  };
+
+  const byPerson = new Map<string, M[]>();
+  for (const m of rows) { const k = m.contact_id ?? "none"; byPerson.set(k, [...(byPerson.get(k) ?? []), m]); }
+  const spam = (id: string) => who.get(id)?.contact_type === "spam" && !!(who.get(id)?.classification_confirmed_at || who.get(id)?.auto_classified_at);
+  const personLines = [...byPerson.entries()].filter(([id]) => !spam(id)).map(([id, ms]) => {
+    const inbound = ms.filter((m) => m.direction !== "outbound").length;
+    const latest = ms[0];
+    const said = latest.channel === "call" ? `CALL — ${latest.summary?.trim() || "no summary"}` : `TEXT: ${latest.body_text?.trim() || "(attachment)"}`;
+    const st = id !== "none" ? who.get(id)?.status_summary : null;
+    return `- ${label(id)}: ${ms.length} message${ms.length === 1 ? "" : "s"} (${inbound} from them), latest ${day(latest.occurred_at)} ${latest.direction === "outbound" ? "OUT" : "IN"} ${said.slice(0, 400)}${st ? ` | where it stands: ${st}` : ""}`;
+  });
+  const spamCount = [...byPerson.keys()].filter(spam).length;
+
+  const r = (runs ?? []) as Array<{ contact_id: string; outcome: string | null; finished_at: string | null; musing: string | null }>;
+  const outcomes = new Map<string, number>();
+  for (const x of r) outcomes.set(x.outcome ?? "running", (outcomes.get(x.outcome ?? "running") ?? 0) + 1);
+  const readLines = [
+    r.length ? `Reads: ${[...outcomes.entries()].map(([k, n]) => `${n} ${k}`).join(", ")}` : "No reads in this window.",
+    ...r.filter((x) => x.outcome === "proposed" || x.outcome === "named" || x.outcome === "filed").slice(0, 20)
+      .map((x) => `- ${x.outcome} on ${label(x.contact_id)} at ${day(x.finished_at)}`),
+  ];
+  const dueLines = ((due ?? []) as Array<{ contact_id: string; title: string; due_on: string; source: string }>)
+    .map((t) => `- ${t.due_on < central ? "OVERDUE" : "due today"} (${t.due_on}): ${t.title} — ${label(t.contact_id)}${t.source === "coy" ? " [Coy's own]" : " [suggested]"}`);
+
+  return assemble("the latest activity", [
+    { title: "Catch-up window", lines: [`Since ${day(since)} UTC. Today in Louisiana: ${central}.`,
+      "Coy tapped the emblem to be caught up. Lead with what needs him; keep it short; name people; say plainly when nothing happened."] },
+    { title: `Who got in touch (${personLines.length} people, ${rows.length} messages${spamCount ? `; ${spamCount} spam senders left out` : ""})`, lines: personLines, trimmable: true },
+    { title: "Next steps due today or overdue", lines: dueLines },
+    { title: "What Dusty's background reader did", lines: readLines },
+    { title: "Unsorted", lines: [`${unsorted ?? "unknown"} contacts nobody has sorted yet.`] },
   ]);
 }

@@ -69,10 +69,12 @@ export async function POST(req: NextRequest) {
   let ref = parseRef(body.context);
   if (typeof body.conversation_id === "string") {
     const { data: conv } = await supabase.from("dusty_conversations")
-      .select("id, context_kind, context_id").eq("org_id", orgId).eq("id", body.conversation_id).maybeSingle();
+      .select("id, context_kind, context_id, created_at").eq("org_id", orgId).eq("id", body.conversation_id).maybeSingle();
     if (!conv) return applyCookies(NextResponse.json({ error: "That conversation isn't yours or no longer exists." }, { status: 404 }));
     convId = conv.id as string;
-    ref = parseRef({ kind: conv.context_kind, id: conv.context_id });
+    // A continued catch-up looks at the day before it started (and since).
+    ref = parseRef({ kind: conv.context_kind, id: conv.context_id,
+      since: new Date(Date.parse(conv.created_at as string) - 86400_000).toISOString() });
   }
 
   const ctx = await buildContext(supabase, orgId, ref);
@@ -85,7 +87,10 @@ export async function POST(req: NextRequest) {
     while (history.length && history[0].role !== "user") history.shift();
   } else {
     const { data: made, error: mkErr } = await supabase.from("dusty_conversations").insert({
-      org_id: orgId, title: question.replace(/\s+/g, " ").slice(0, 60),
+      org_id: orgId,
+      title: ref.kind === "activity"
+        ? `Catch-up · ${new Intl.DateTimeFormat("en-US", { timeZone: "America/Chicago", month: "short", day: "numeric" }).format(new Date())}`
+        : question.replace(/\s+/g, " ").slice(0, 60),
       context_kind: ref.kind, context_id: "id" in ref ? ref.id : null, context_label: ctx.label.slice(0, 120),
     }).select("id").single();
     if (mkErr || !made) return applyCookies(NextResponse.json({ error: `Couldn't start the conversation: ${mkErr?.message ?? "no row"}` }, { status: 500 }));

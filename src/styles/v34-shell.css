@@ -1,7 +1,7 @@
 /* The sticky header's height: 54px glass bar + 38px activity line
    (activity-line.tsx always holds its row). Everything that sits under or
    beside the header measures from this — one number, not five. */
-:root { --sc-head: 92px; --sc-foot: 58px; }
+:root { --sc-head: 92px; --sc-foot: 58px; --sc-dusty: 400px; }
 
 /* The footer's height on a phone (layout.tsx, border-box, safe area inside it).
    A page that must not scroll as a whole — a conversation, a person — is
@@ -221,6 +221,13 @@
 /* Dusty's history rail, in from the left. */
 @keyframes scRailIn { from { transform: translateX(-100%); } to { transform: none; } }
 .sc-rail-in { animation: scRailIn 0.2s cubic-bezier(0.22, 0.85, 0.3, 1); }
+/* Dusty docked on the right on a desktop (Coy, 2026-09-29). */
+@keyframes scDockIn { from { transform: translateX(100%); } to { transform: none; } }
+@media (min-width: 1024px) { .sc-dock-in { animation: scDockIn 0.22s cubic-bezier(0.22, 0.85, 0.3, 1); } }
+/* The page beside Dusty keeps its width minus his column. */
+@media (min-width: 1024px) {
+  .sc-with-dusty { padding-right: var(--sc-dusty); }
+}
 .sc-caret { opacity: .6; animation: scDotPulse 0.9s ease-in-out infinite; margin-left: 1px; }
 
 @media (prefers-reduced-motion: reduce) {
@@ -245,6 +252,7 @@
   .sc-line-in,
   .sc-thread-live,
   .sc-rail-in,
+  .sc-dock-in,
   .sc-rec,
   .sc-caret { animation: none; }
 }

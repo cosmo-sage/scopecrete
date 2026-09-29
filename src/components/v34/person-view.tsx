@@ -24,6 +24,7 @@ import { Composer } from "@/components/v34/composer";
 import { Timeline, formatPhone, type Note, type ThreadMessage } from "@/components/v34/conversation";
 import { JOB_TYPE_LABEL, stageOf } from "@/lib/jobs/stages";
 import { NameEditor, FileAsSheet } from "@/components/v34/contact-edit";
+import { useWide } from "@/lib/v34/use-wide";
 
 export interface Person {
   contact: {
@@ -96,6 +97,11 @@ export function PersonView({ person, messages, onReload, onMerge }: {
   const [tab, setTab] = useState<"activity" | "jobs" | "about">("activity");
   const [error, setError] = useState<string | null>(null);
   const [filing, setFiling] = useState(false);
+  // Room for two columns (Coy, 2026-09-29: no dead space either side on a
+  // desktop). The conversation fills the left; next steps, jobs and about
+  // stand in a column on the right, as in the desktop design's 1d. Narrow —
+  // a phone, or a desktop with Dusty docked — keeps the single column + tabs.
+  const [measure, wide] = useWide<HTMLDivElement>(880);
 
   const jobType = !isVendor
     ? (person.jobs.find((j) => j.job_type)?.job_type
@@ -114,7 +120,9 @@ export function PersonView({ person, messages, onReload, onMerge }: {
   };
 
   return (
-    <div className="mx-auto w-full" style={{ maxWidth: 760, paddingBottom: 24 }}>
+    <div ref={measure} className={wide ? "w-full flex-1 min-h-0 grid" : "w-full"}
+      style={wide ? { gridTemplateColumns: "minmax(0,1fr) 340px" } : { paddingBottom: 24 }}>
+      <div className={wide ? "flex flex-col min-h-0 min-w-0" : undefined}>
       {/* ---------------- who they are ---------------- */}
       <div className="px-3 pt-2.5 pb-3" style={{ background: T.card, borderBottom: `1px solid ${T.hair}` }}>
         <div className="flex items-center gap-2">
@@ -168,14 +176,13 @@ export function PersonView({ person, messages, onReload, onMerge }: {
         </div>
       </div>
 
-      <SamePerson person={person} onMerge={onMerge} />
-
       {error && <div className="mx-3 mt-2" style={{ fontSize: F.xs, color: T.red }}>{error}</div>}
 
-      <NextSteps contactId={c.id} tasks={person.tasks} onChanged={onReload} onError={setError} />
+      {!wide && <SamePerson person={person} onMerge={onMerge} />}
+      {!wide && <NextSteps contactId={c.id} tasks={person.tasks} onChanged={onReload} onError={setError} />}
 
-      {/* ---------------- tabs ---------------- */}
-      <div className="flex mt-3 px-3" style={{ gap: 2 }}>
+      {/* ---------------- tabs (narrow only) ---------------- */}
+      {!wide && <div className="flex mt-3 px-3" style={{ gap: 2 }}>
         {([["activity", "Activity"], ["jobs", `${isVendor ? "On jobs" : "Jobs"} (${jobCount})`], ["about", "About"]] as const).map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)} className="flex-1"
             style={{ height: 34, background: tab === k ? T.card : "transparent", cursor: "pointer",
@@ -183,14 +190,29 @@ export function PersonView({ person, messages, onReload, onMerge }: {
                      fontFamily: disp, fontSize: F.sm, fontWeight: 600, textTransform: "uppercase",
                      color: tab === k ? T.ink : T.ink3 }}>{l}</button>
         ))}
-      </div>
+      </div>}
 
-      {tab === "activity" && <Activity messages={messages} notes={person.notes ?? []} phone={phone} contactId={c.id} name={c.name}
-        onMerge={() => onMerge()} onNoteSaved={onReload} />}
-      {tab === "jobs" && (isVendor
+      {(wide || tab === "activity") && <Activity messages={messages} notes={person.notes ?? []} phone={phone} contactId={c.id} name={c.name}
+        onMerge={() => onMerge()} onNoteSaved={onReload} fill={wide} />}
+      {!wide && tab === "jobs" && (isVendor
         ? <VendorJobs person={person} onChanged={onReload} onError={setError} />
         : <CustomerJobs person={person} onChanged={onReload} onError={setError} />)}
-      {tab === "about" && <About person={person} />}
+      {!wide && tab === "about" && <About person={person} />}
+      </div>
+
+      {/* ---------------- the right column (wide only) ---------------- */}
+      {wide && (
+        <aside className="min-h-0 overflow-y-auto pb-4" style={{ borderLeft: `1px solid ${T.hair}`, background: T.slab }} aria-label="Next steps, jobs and about">
+          <SamePerson person={person} onMerge={onMerge} />
+          <NextSteps contactId={c.id} tasks={person.tasks} onChanged={onReload} onError={setError} />
+          <div className="mx-3 mt-4" style={{ ...eyebrow, color: T.ink }}>{isVendor ? "On jobs" : "Jobs"} ({jobCount})</div>
+          {isVendor
+            ? <VendorJobs person={person} onChanged={onReload} onError={setError} />
+            : <CustomerJobs person={person} onChanged={onReload} onError={setError} />}
+          <div className="mx-3 mt-4" style={{ ...eyebrow, color: T.ink }}>About</div>
+          <About person={person} />
+        </aside>
+      )}
 
       <FileAsSheet open={filing} onClose={() => setFiling(false)} contactId={c.id}
         target={{ bucket: c.bucket, subtype: c.subtype, bucket_auto: c.bucket_state === "auto" ? { reason: null } : null,
@@ -327,9 +349,11 @@ function NextSteps({ contactId, tasks, onChanged, onError }: {
 
 /* ------------------------------------------------------------- activity */
 
-function Activity({ messages, notes, phone, contactId, name, onMerge, onNoteSaved }: {
+function Activity({ messages, notes, phone, contactId, name, onMerge, onNoteSaved, fill }: {
   messages: ThreadMessage[]; notes: Note[]; phone: string | null; contactId: string; name: string | null;
   onMerge: () => void; onNoteSaved: () => void;
+  /** Wide layout: the timeline takes the column's full height, composer under it. */
+  fill?: boolean;
 }) {
   const [chan, setChan] = useState<"all" | "sms" | "call" | "notes">("all");
   const shown = useMemo(() => chan === "all" ? messages : chan === "notes" ? []
@@ -340,8 +364,8 @@ function Activity({ messages, notes, phone, contactId, name, onMerge, onNoteSave
   useEffect(() => { if (scroller.current) scroller.current.scrollTop = scroller.current.scrollHeight; }, [shown.length, shownNotes.length]);
 
   return (
-    <div className="mx-3 mt-2">
-      <div className="flex gap-1 items-center">
+    <div className={fill ? "mx-3 mt-2 mb-3 flex flex-col flex-1 min-h-0" : "mx-3 mt-2"}>
+      <div className="flex gap-1 items-center shrink-0">
         {([["all", "All"], ["sms", "Texts"], ["call", "Calls"], ["notes", "Notes"]] as const).map(([k, l]) => {
           const on = chan === k;
           const count = k === "all" ? messages.length + notes.length : k === "notes" ? notes.length : n(k);
@@ -359,11 +383,11 @@ function Activity({ messages, notes, phone, contactId, name, onMerge, onNoteSave
         <span className="flex-1" />
         <button onClick={onMerge} style={{ ...eyebrow, color: T.chalk, cursor: "pointer", whiteSpace: "nowrap" }}>Same as…</button>
       </div>
-      <div ref={scroller} className="mt-1.5 rounded px-2.5 py-1 overflow-y-auto"
-        style={{ background: T.slab, border: `1px solid ${T.hair}`, maxHeight: "60vh" }}>
+      <div ref={scroller} className={`mt-1.5 rounded px-2.5 py-1 overflow-y-auto${fill ? " flex-1 min-h-0" : ""}`}
+        style={{ background: T.slab, border: `1px solid ${T.hair}`, maxHeight: fill ? undefined : "60vh" }}>
         <Timeline messages={shown} notes={shownNotes} phone={phone} />
       </div>
-      <div id="person-composer" className="mt-1.5 rounded overflow-hidden" style={{ border: `1px solid ${T.hair}` }}>
+      <div id="person-composer" className="mt-1.5 rounded overflow-hidden shrink-0" style={{ border: `1px solid ${T.hair}` }}>
         <Composer contactId={contactId} phone={phone} name={name} onNoteSaved={onNoteSaved} />
       </div>
     </div>

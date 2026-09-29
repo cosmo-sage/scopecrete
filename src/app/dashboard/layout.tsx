@@ -73,6 +73,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [dustyBusy, setDustyBusy] = useState(false);
   // The reply as it streams, so the activity line can show Dusty's own words.
   const [dustyLive, setDustyLive] = useState("");
+  // Bumped by a tap on the header emblem: Dusty reviews the latest activity.
+  const [catchUp, setCatchUp] = useState(0);
+  // The background reader is working (a claimed read) — the emblem spins for it.
+  const [readerWorking, setReaderWorking] = useState(false);
 
   const [me, setMe] = useState<Me | null>(null);
   const [needs, setNeeds] = useState<number | null>(null);
@@ -162,7 +166,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     : "";
   const markIdx = SLOTS.findIndex((s) => s.k === activeKey);
 
-  const thinking = meLoading || countsLoading || dustyBusy;
+  const thinking = meLoading || countsLoading || dustyBusy || readerWorking;
   const displayName = me?.name ?? me?.email ?? null;
 
   function submitSearch(e: React.FormEvent) {
@@ -178,16 +182,23 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <div className="flex flex-col min-h-screen" style={{ background: T.slab, color: T.ink }}>
       <div style={{ position: "sticky", top: 0, zIndex: menuOpen ? 60 : 40 }}>
         <header className="px-2.5 flex items-center justify-between gap-2 sc-glass" style={{ height: 54 }}>
-          <Link href="/dashboard/messages" onClick={tapEmblem}
-            className="flex items-center gap-2 shrink-0 no-underline" style={{ height: 44 }}>
-            {/* One mark. tap > working > dreaming — never two at once. */}
-            <Emblem key={`h${emTap}`} size={24} stroke={3}
-              className={emTapping ? "sc-em-tap" : thinking ? "sc-em-think" : "sc-em-dream"} />
+          <div className="flex items-center gap-2 shrink-0" style={{ height: 44 }}>
+            {/* One mark. tap > working > dreaming — never two at once. A tap
+                asks Dusty to catch you up on the latest activity (Coy,
+                2026-09-29); the word mark beside it still goes to Threads. */}
+            <button onClick={() => { tapEmblem(); setDustyOpen(true); setCatchUp((n) => n + 1); }}
+              aria-label="Dusty — catch me up" title="Catch me up"
+              className="flex items-center justify-center" style={{ width: 32, height: 44, marginLeft: -4, background: "none", border: "none", cursor: "pointer" }}>
+              <Emblem key={`h${emTap}`} size={24} stroke={3}
+                className={emTapping ? "sc-em-tap" : thinking ? "sc-em-think" : "sc-em-dream"} />
+            </button>
+            <Link href="/dashboard/messages" className="no-underline">
             <span style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 700, color: "#fff",
                            letterSpacing: ".08em", textTransform: "lowercase" }}>
               scopecrete<span style={{ color: T.hiviz }}>.ai</span>
             </span>
-          </Link>
+            </Link>
+          </div>
 
           {/* ---- desktop top bar: search, the live line, the queues ---- */}
           <form onSubmit={submitSearch} className="hidden lg:flex items-center flex-1 min-w-0 mx-4" style={{ maxWidth: 560 }}
@@ -263,7 +274,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </header>
 
         {/* What Dusty is doing, from real rows only — see activity-line.tsx. */}
-        <ActivityLine busy={dustyBusy} live={dustyLive} />
+        <ActivityLine busy={dustyBusy} live={dustyLive} onWorking={setReaderWorking} />
 
         {/* Search lives under the glass, same place on every page — it never
             becomes a row on the page itself. */}
@@ -318,7 +329,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </button>
       </nav>
 
-      <main className="flex-1 pb-[var(--sc-foot)] lg:pb-0 lg:pl-[84px]">{children}</main>
+      <main className={["flex-1 pb-[var(--sc-foot)] lg:pb-0 lg:pl-[84px]", dustyOpen ? "sc-with-dusty" : ""].join(" ")}>{children}</main>
 
       <footer className="fixed bottom-0 left-0 right-0 z-40 flex items-stretch lg:hidden"
         style={{ background: T.card, borderTop: `1px solid ${T.hair}`, height: 58,
@@ -362,8 +373,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         })}
       </footer>
 
-      {/* Dusty — full screen under the header; read-only toward the business. */}
-      <DustyPanel open={dustyOpen} onClose={() => setDustyOpen(false)} onBusy={setDustyBusy} onStream={setDustyLive} />
+      {/* Dusty — full screen on a phone, docked right on a desktop; read-only toward the business. */}
+      <DustyPanel open={dustyOpen} onClose={() => setDustyOpen(false)} onBusy={setDustyBusy} onStream={setDustyLive} catchUp={catchUp} />
 
       {/* Starts under the header and the activity line (--sc-head), so the
           line never covers it and the burger stays tappable to close it. */}

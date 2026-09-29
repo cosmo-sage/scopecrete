@@ -23,6 +23,10 @@ export const DA = {
   textMuted: T.ink3,
   border: T.hair,
   error: T.red,
+  // Bubbles (Coy, 2026-09-29: "more muted colors for both sides that are easy
+  // on the eyes"): warm paper for them, soft slate for us, ink text on both.
+  bubbleIn: "#F7F6F2",
+  bubbleOut: "#D8E1E8",
 } as const;
 
 /**
@@ -400,14 +404,14 @@ function MessageMedia({ messageId, count, isOut }: { messageId: string; count: n
     return () => { off = true; };
   }, [messageId]);
 
-  const muted = isOut ? "rgba(255,255,255,0.8)" : DA.textMuted;
+  const muted = DA.textMuted;
 
   if (err) return <div className="text-[11px] mt-1" style={{ color: muted }}>Couldn&apos;t load {count === 1 ? "the attachment" : "attachments"}: {err}</div>;
   if (!items) {
     return (
       <div className="flex gap-1.5 mt-1">
         {Array.from({ length: Math.min(count, 3) }).map((_, i) => (
-          <div key={i} className="rounded-lg animate-pulse" style={{ width: 96, height: 96, background: isOut ? "rgba(255,255,255,0.25)" : DA.elevated }} />
+          <div key={i} className="rounded-lg animate-pulse" style={{ width: 96, height: 96, background: isOut ? "rgba(18,22,26,0.08)" : DA.elevated }} />
         ))}
       </div>
     );
@@ -422,7 +426,7 @@ function MessageMedia({ messageId, count, isOut }: { messageId: string; count: n
           if (it.state !== "ready" || !it.url) {
             return (
               <div key={it.id} className="rounded-lg px-2 py-1.5 text-[11px]"
-                style={{ background: isOut ? "rgba(255,255,255,0.18)" : DA.elevated, color: muted, maxWidth: 220 }}>
+                style={{ background: isOut ? "rgba(18,22,26,0.07)" : DA.elevated, color: muted, maxWidth: 220 }}>
                 {KIND_LABEL[it.kind] ?? "File"} not available — {it.reason}
               </div>
             );
@@ -442,7 +446,7 @@ function MessageMedia({ messageId, count, isOut }: { messageId: string; count: n
           return (
             <a key={it.id} href={it.url} target="_blank" rel="noopener noreferrer"
               className="rounded-lg px-2.5 py-1.5 text-[11px] no-underline"
-              style={{ background: isOut ? "rgba(255,255,255,0.18)" : DA.elevated, color: isOut ? "#fff" : DA.textPrimary }}>
+              style={{ background: isOut ? "rgba(18,22,26,0.07)" : DA.elevated, color: DA.textPrimary }}>
               {KIND_LABEL[it.kind] ?? "File"} — open
             </a>
           );
@@ -469,20 +473,20 @@ export function SmsRow({ m }: { m: ThreadMessage }) {
       <div
         className="max-w-[78%] rounded-2xl px-3 py-2"
         style={{
-          background: isOut ? DA.accent : DA.surface,
-          border: isOut ? "none" : `1px solid ${DA.border}`,
+          background: isOut ? DA.bubbleOut : DA.bubbleIn,
+          border: isOut ? "1px solid #CCD6DE" : `1px solid ${DA.border}`,
         }}
       >
         {/* "(no text)" only when there is genuinely nothing — a photo with no
             caption is not an empty message, and labelling it one is how two of
             Amber's photos read as blank bubbles. */}
         {(text || m.media_count === 0) && (
-          <div className="text-xs whitespace-pre-wrap" style={{ color: isOut ? "#fff" : DA.textPrimary }}>
+          <div className="text-xs whitespace-pre-wrap" style={{ color: DA.textPrimary }}>
             {text || <span style={{ fontStyle: "italic", opacity: 0.7 }}>(no text)</span>}
           </div>
         )}
         {m.media_count > 0 && <MessageMedia messageId={m.id} count={m.media_count} isOut={isOut} />}
-        <div className="text-[9px] mt-1" style={{ color: isOut ? "rgba(255,255,255,0.7)" : DA.textMuted, letterSpacing: ".06em" }}>
+        <div className="text-[9px] mt-1" style={{ color: DA.textSecondary, letterSpacing: ".06em" }}>
           {isOut ? "OUT" : "IN"} · {formatTime(m.occurred_at)}{m.line ? ` · ${m.line}` : ""}
         </div>
       </div>

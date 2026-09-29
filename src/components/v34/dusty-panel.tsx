@@ -24,6 +24,8 @@ import { T, F, disp, eyebrow, body, clip, relTime } from "@/lib/v34/tokens";
 import { Emblem } from "@/components/v34/primitives";
 
 type Ref = { kind: "thread" | "scope" | "customer"; id: string } | { kind: "cash" } | { kind: "cold" };
+type Ctx = Ref | { kind: "activity"; since: string };
+const CATCHUP_KEY = "sc:dusty-catchup-at";
 type Turn = { role: "user" | "assistant"; content: string };
 interface Conv { id: string; title: string; context_kind: string; context_id: string | null; context_label: string | null; updated_at: string }
 
@@ -37,6 +39,9 @@ export function refFor(pathname: string): Ref {
 const GUESS: Record<Ref["kind"], string> = {
   thread: "this person", scope: "this job", customer: "this customer", cash: "your cost settings", cold: "your business",
 };
+const PAGE: Record<Ref["kind"], string> = {
+  thread: "this person", scope: "this job", customer: "this customer", cash: "cost settings", cold: "",
+};
 const STARTERS: Record<Ref["kind"], string[]> = {
   thread: ["What does this person want?", "What do I owe them?", "Draft a reply I can send"],
   scope: ["Check these numbers", "What's stopping a price?", "What should I still ask them?"],
@@ -47,8 +52,10 @@ const STARTERS: Record<Ref["kind"], string[]> = {
 
 const sameRef = (c: Conv, r: Ref) => "id" in r ? c.context_kind === r.kind && c.context_id === r.id : c.context_kind === r.kind && r.kind === "cash";
 
-export function DustyPanel({ open, onClose, onBusy, onStream }: {
+export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
   open: boolean; onClose: () => void; onBusy: (b: boolean) => void;
+  /** Bumped by an emblem tap: start a catch-up on the latest activity. */
+  catchUp?: number;
   /** The reply as it streams, for the activity line. "" when idle. */
   onStream?: (text: string) => void;
 }) {
@@ -119,9 +126,29 @@ export function DustyPanel({ open, onClose, onBusy, onStream }: {
   }
   if (!open && openedFor !== null) setOpenedFor(null);
 
-  async function ask(text: string) {
+  // The emblem tap (Coy, 2026-09-29): a fresh chat that reviews what came in
+  // since this device last asked. Deferred a tick so no state is set inside
+  // the effect body; openedFor is claimed so the list arriving afterwards
+  // doesn't swap in an older chat under it.
+  const caughtUp = useRef(0);
+  useEffect(() => {
+    if (!open || !catchUp || caughtUp.current === catchUp) return;
+    caughtUp.current = catchUp;
+    const t = setTimeout(() => {
+      let since = "";
+      try { since = localStorage.getItem(CATCHUP_KEY) ?? ""; localStorage.setItem(CATCHUP_KEY, new Date().toISOString()); } catch { /* private mode */ }
+      setOpenedFor(refKey);
+      select(null);
+      void ask("What's new since I last looked?", { fresh: true, ctx: { kind: "activity", since } });
+    }, 0);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, catchUp]);
+
+  async function ask(text: string, opts?: { fresh?: boolean; ctx?: Ctx }) {
     const q = text.trim();
-    if (!q || busy) return;
+    if (!q || (busy && !opts?.fresh)) return;
+    const convId = opts?.fresh ? null : activeId;
     setItems((a) => [...a, { role: "user", content: q }, { role: "assistant", content: "" }]);
     setDraft(""); setErr(null); setBusy(true);
     const ctrl = new AbortController();
@@ -140,7 +167,7 @@ export function DustyPanel({ open, onClose, onBusy, onStream }: {
     try {
       const r = await fetch("/api/dusty", {
         method: "POST", headers: { "Content-Type": "application/json" }, signal: ctrl.signal,
-        body: JSON.stringify({ question: q, conversation_id: activeId, context: activeId ? undefined : ref }),
+        body: JSON.stringify({ question: q, conversation_id: convId, context: convId ? undefined : (opts?.ctx ?? ref) }),
       });
       if (!r.ok || !r.body) {
         const b = await r.json().catch(() => ({}));
@@ -150,7 +177,7 @@ export function DustyPanel({ open, onClose, onBusy, onStream }: {
         return;
       }
       const cid = r.headers.get("X-Dusty-Conversation");
-      if (cid && cid !== activeId) setActiveId(cid);
+      if (cid && cid !== convId) setActiveId(cid);
       const reader = r.body.getReader();
       const dec = new TextDecoder();
       for (;;) {
@@ -182,7 +209,10 @@ export function DustyPanel({ open, onClose, onBusy, onStream }: {
 
   const active = convs?.find((c) => c.id === activeId) ?? null;
   const hot = active ? active.context_kind !== "cold" : ref.kind !== "cold";
-  const lookingAt = active ? (active.context_kind === "cold" ? null : active.context_label) : ref.kind === "cold" ? null : GUESS[ref.kind];
+  // A catch-up just started has no row in the list yet — say what it is.
+  const catching = !active && activeId !== null && items[0]?.content === "What's new since I last looked?";
+  const lookingAt = active ? (active.context_kind === "cold" ? null : active.context_label)
+    : catching ? "the latest activity" : ref.kind === "cold" ? null : GUESS[ref.kind];
 
   const groups: Array<[string, Conv[]]> = [];
   if (convs) {
@@ -190,10 +220,12 @@ export function DustyPanel({ open, onClose, onBusy, onStream }: {
     const rest = convs.filter((c) => !here.includes(c));
     const people = rest.filter((c) => c.context_kind === "thread" || c.context_kind === "customer");
     const jobs = rest.filter((c) => c.context_kind === "scope");
-    const other = rest.filter((c) => !people.includes(c) && !jobs.includes(c));
+    const catchups = rest.filter((c) => c.context_kind === "activity");
+    const other = rest.filter((c) => !people.includes(c) && !jobs.includes(c) && !catchups.includes(c));
     if (here.length) groups.push([`About ${GUESS[ref.kind]}`, here]);
     if (people.length) groups.push(["People", people]);
     if (jobs.length) groups.push(["Jobs", jobs]);
+    if (catchups.length) groups.push(["Catch-ups", catchups]);
     if (other.length) groups.push(["Everything else", other]);
   }
 
@@ -233,14 +265,16 @@ export function DustyPanel({ open, onClose, onBusy, onStream }: {
   );
 
   return (
-    <section role="dialog" aria-label="Dusty" className="fixed left-0 right-0 bottom-0 z-50 flex lg:left-[84px]"
-      style={{ top: "var(--sc-head)", background: T.slab, color: T.ink }}>
-      {/* history: always open on a desktop */}
-      <div className="hidden lg:block shrink-0" style={{ width: 290, borderRight: `1px solid ${T.hair}` }}>{rail}</div>
-
-      {/* history: from the left on a phone */}
+    // Phone: a full page under the header. Desktop (Coy, 2026-09-29: "slide in
+    // on the right… so I can see the rest of the dashboard"): a column docked
+    // on the right, no backdrop; the layout pads <main> by --sc-dusty so the
+    // page beside it stays whole and usable.
+    <section role="dialog" aria-label="Dusty"
+      className="fixed left-0 right-0 bottom-0 z-50 flex lg:left-auto lg:w-[var(--sc-dusty)] sc-dock-in"
+      style={{ top: "var(--sc-head)", background: T.slab, color: T.ink, borderLeft: `1px solid ${T.hair}`, boxShadow: "-10px 0 30px rgba(10,14,18,.10)" }}>
+      {/* history: from the left, over the chat */}
       {railOpen && (
-        <div className="lg:hidden fixed left-0 right-0 bottom-0 z-[60]" style={{ top: "var(--sc-head)", background: "rgba(18,22,26,.4)" }}
+        <div className="absolute inset-0 z-[60]" style={{ background: "rgba(18,22,26,.4)" }}
           onClick={() => setRailOpen(false)}>
           <div className="absolute top-0 left-0 bottom-0 sc-rail-in" style={{ width: "min(320px, 86vw)", boxShadow: "14px 0 40px rgba(10,14,18,.22)" }}
             onClick={(e) => e.stopPropagation()}>{rail}</div>
@@ -249,7 +283,7 @@ export function DustyPanel({ open, onClose, onBusy, onStream }: {
 
       <div className="flex-1 min-w-0 flex flex-col">
         <header className="shrink-0 px-2.5 py-2 flex items-center gap-2" style={{ borderBottom: `1px solid ${T.hair}`, background: T.card }}>
-          <button onClick={() => setRailOpen(true)} aria-label="Conversations" className="lg:hidden flex-col gap-[3.5px]" style={iconBtn}>
+          <button onClick={() => setRailOpen(true)} aria-label="Conversations" className="flex-col gap-[3.5px]" style={iconBtn}>
             {[0, 1, 2].map((i) => <span key={i} style={{ width: 13, height: 1.5, background: T.ink2, borderRadius: 1 }} />)}
           </button>
           <Emblem key={activeId ?? "new"} size={22} stroke={2.6} className={busy ? "sc-em-think" : "sc-em-tap"} />
@@ -265,6 +299,12 @@ export function DustyPanel({ open, onClose, onBusy, onStream }: {
           </button>
         </header>
 
+        {active && ref.kind !== "cold" && !sameRef(active, ref) && (
+          <button onClick={() => select(null)} className="shrink-0 w-full text-left px-3 py-1.5"
+            style={{ background: T.chalkDim, borderBottom: `1px solid ${T.hair}`, fontSize: F.xs, color: T.ink2, cursor: "pointer" }}>
+            This chat is about {active.context_label || "something else"}. <b style={{ color: T.ink }}>Ask about {PAGE[ref.kind]} instead →</b>
+          </button>
+        )}
         <div ref={scroller} className="flex-1 overflow-y-auto">
           <div className="mx-auto w-full px-4 py-4" style={{ maxWidth: 760 }}>
             {loadingConv && <div className="rounded animate-pulse" style={{ height: 80, background: T.hairSoft }} />}

@@ -39,9 +39,18 @@ interface Section extends SectionInput {
 interface Job {
   id: string; title: string | null; status: string | null; address: string | null;
   contact_id: string | null; duration_days: number | null; created_from_message_id: string | null;
-  job_type: string | null; lead_source: string | null;
+  job_type: string | null; lead_source: string | null; description?: string | null; origin?: string | null;
 }
 interface Contact { id: string; name: string | null; phone: string | null }
+interface Why {
+  filed_at: string | null; filed_by: "coy" | "dusty" | null;
+  status_summary: string | null; recent_summary: string | null;
+  evidence_quote: string | null; evidence_at: string | null;
+  company: string | null; scope_summary: string | null;
+}
+// The trigger's fallback title when Dusty had no job title and no kind of
+// work (migration 040). Not a name — shown as an empty box asking for one.
+const PLACEHOLDER_TITLES = new Set(["New job", "Untitled scope"]);
 
 const WORK_TYPES: [string, string][] = [
   ["slab", "Slab"], ["driveway", "Driveway"], ["patio", "Patio"], ["sidewalk", "Sidewalk"],
@@ -62,6 +71,8 @@ export default function ScopeBuilder() {
   const { jobId } = useParams<{ jobId: string }>();
   const [job, setJob] = useState<Job | null>(null);
   const [contact, setContact] = useState<Contact | null>(null);
+  const [why, setWhy] = useState<Why | null>(null);
+  const [whyHidden, setWhyHidden] = useState(false);
   const [sections, setSections] = useState<Section[] | null>(null);
   const [settings, setSettings] = useState<CostSettings | null>(null);
   const [overhead, setOverhead] = useState<OverheadItem[]>([]);
@@ -85,7 +96,7 @@ export default function ScopeBuilder() {
         unit_cost: num(x.unit_cost), sheet_sqft: num(x.sheet_sqft), spacing_in: num(x.spacing_in),
         stick_ft: num(x.stick_ft), lap_pct: num(x.lap_pct), per_cy: num(x.per_cy),
       })));
-      setJob(j.job); setContact(j.contact ?? null);
+      setJob(j.job); setContact(j.contact ?? null); setWhy(j.why ?? null);
       setSections((s.sections as Section[]).map(numify));
       setSettings(c.settings ? numifySettings(c.settings) : null);
       setOverhead((c.overhead ?? []).map((o: OverheadItem) => ({ ...o, amount: Number(o.amount) })));
@@ -152,6 +163,8 @@ export default function ScopeBuilder() {
   }
 
   const who = contact ? (contact.name || formatPhone(contact.phone)) : null;
+  const realTitle = job.title && !PLACEHOLDER_TITLES.has(job.title.trim()) ? job.title : "";
+  const titleHint = `Name this job${why?.company || contact?.name ? ` (e.g. ${why?.company || contact?.name} slab)` : ""}`;
 
   return (
     <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_360px] lg:min-h-[calc(100dvh-var(--sc-head))]" style={{ color: T.ink }}>
@@ -161,8 +174,8 @@ export default function ScopeBuilder() {
           <Link href="/dashboard/scope" className="no-underline" style={{ ...eyebrow, color: T.ink2 }}>‹ Jobs</Link>
           <div className="flex items-start gap-2 mt-1">
             <div style={{ minWidth: 0, flex: 1 }}>
-              <input defaultValue={job.title ?? ""} placeholder="Name this scope"
-                onBlur={(e) => { const v = e.target.value; if (v !== (job.title ?? "")) void send(`/api/jobs/${jobId}`, "PATCH", { title: v }).then((b) => setJob((j) => j && { ...j, title: b.job.title })).catch((er) => setSaveErr((m) => ({ ...m, job: String(er.message ?? er) }))); }}
+              <input defaultValue={realTitle} placeholder={titleHint} aria-label="Job name"
+                onBlur={(e) => { const v = e.target.value; if (v !== realTitle) void send(`/api/jobs/${jobId}`, "PATCH", { title: v }).then((b) => setJob((j) => j && { ...j, title: b.job.title })).catch((er) => setSaveErr((m) => ({ ...m, job: String(er.message ?? er) }))); }}
                 className="w-full bg-transparent outline-none"
                 style={{ fontFamily: disp, fontSize: F.xl, fontWeight: 600, lineHeight: 1.1, color: T.ink }} />
               <div style={{ fontSize: F.xs, color: who ? T.ink3 : T.hiviz, ...clip }}>
@@ -171,14 +184,17 @@ export default function ScopeBuilder() {
                 ) : "Not attached to a customer yet"}
                 {job.address ? ` · ${job.address}` : ""}
                 {` · ${sections.length} section${sections.length === 1 ? "" : "s"}`}
-                {job.created_from_message_id ? " · drafted from a message" : " · entered by hand"}
+                {job.origin === "classification" ? " · made when filed as a customer" : job.created_from_message_id ? " · drafted from a message" : " · entered by hand"}
               </div>
             </div>
           </div>
+          {job.description && <div style={{ fontSize: F.sm, color: T.ink2, lineHeight: 1.4, marginTop: 2 }}>{job.description}</div>}
           {saveErr.job && <div style={{ fontSize: F.xs, color: T.red }}>{saveErr.job}</div>}
           <JobChips job={job} onSet={(field, value) => send(`/api/jobs/${jobId}`, "PATCH", { [field]: value })
             .then((b) => setJob((j) => j && { ...j, status: b.job.status, job_type: b.job.job_type, lead_source: b.job.lead_source }))} />
         </div>
+
+        {why && !whyHidden && <WhyThisJob why={why} contact={contact} description={job.description ?? null} onHide={() => setWhyHidden(true)} />}
 
         {/* Phone: the takeoff rail sits below the sections, so the three
             numbers you read out loud ride along under the header. */}
@@ -656,5 +672,49 @@ function TakeoffRail({ t, priced, fl, job, discount, setDiscount, onCrewDays, ha
         </>
       )}
     </aside>
+  );
+}
+
+/**
+ * Why this job exists — for one made when a contact was filed as a customer
+ * (migration 038). Coy, 2026-09-29: "I have no reference for why this job was
+ * created… No idea what the job is or why it was classified as a customer."
+ */
+function WhyThisJob({ why, contact, description, onHide }: { why: Why; contact: Contact | null; description: string | null; onHide: () => void }) {
+  const when = why.filed_at ? new Date(why.filed_at).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/Chicago" }) : null;
+  const whom = contact ? (contact.name || formatPhone(contact.phone)) : "this contact";
+  return (
+    <section className="mx-3 mt-2.5 rounded px-3 py-2.5" aria-label="Why this job"
+      style={{ background: T.chalkDim, border: `1px solid ${T.hair}` }}>
+      <div className="flex items-baseline gap-2">
+        <span style={{ ...eyebrow, color: T.chalk }}>Why this job</span>
+        <span className="flex-1" />
+        <button onClick={onHide} aria-label="Hide" style={{ color: T.ink3, fontSize: F.md, lineHeight: 1, background: "none", border: "none", cursor: "pointer" }}>×</button>
+      </div>
+      <div style={{ fontSize: F.sm, color: T.ink, lineHeight: 1.45, marginTop: 2 }}>
+        Made{when ? ` ${when}` : ""} when {why.filed_by === "dusty" ? "Dusty filed" : "you filed"} {whom} as a customer
+        {why.company ? <> — Dusty thinks it&apos;s <b>{why.company}</b></> : null}.
+      </div>
+      {why.status_summary && (
+        <div style={{ fontSize: F.sm, color: T.ink2, lineHeight: 1.45, marginTop: 4 }}>
+          <span style={{ ...eyebrow, color: T.ink3 }}>Dusty · </span>{why.status_summary}
+        </div>
+      )}
+      {why.scope_summary && why.scope_summary !== description && (
+        <div style={{ fontSize: F.sm, color: T.ink2, lineHeight: 1.45, marginTop: 4 }}>
+          <span style={{ ...eyebrow, color: T.ink3 }}>The work · </span>{why.scope_summary}
+        </div>
+      )}
+      {why.evidence_quote && (
+        <div style={{ fontSize: F.sm, color: T.ink2, fontStyle: "italic", lineHeight: 1.45, marginTop: 5, paddingLeft: 7, borderLeft: `2px solid ${T.chalk}` }}>
+          “{why.evidence_quote}”
+        </div>
+      )}
+      {contact && (
+        <Link href={`/dashboard/messages/${contact.id}`} className="inline-block mt-1.5 no-underline" style={{ ...eyebrow, color: T.chalk }}>
+          Open their page →
+        </Link>
+      )}
+    </section>
   );
 }

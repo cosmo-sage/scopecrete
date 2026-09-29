@@ -4,7 +4,7 @@ Ground truth for every agent working this repo. If code disagrees with this
 document, the code is wrong or this document is stale — resolve it, don't
 guess. Update this file in the same PR that changes the behavior it describes.
 
-Last updated: 2026-09-28
+Last updated: 2026-09-29
 
 ---
 
@@ -498,6 +498,14 @@ them out. Trigger `contacts_bucket_jobs` → `sc_customer_job_for()`:
 - Backfill 2026-09-28: Amber already had a job, so none was made; the other
   confirmed customer got "Repair" — Dusty's summary says Coy referred them on,
   so that one is for Coy to move to Lost.
+- **An automatic job says why it exists (2026-09-29).** Coy: *"It just says
+  new job, and there is a phone number. No idea what the job is or why it was
+  classified as a customer."* `GET /api/jobs/[id]` returns `description` and,
+  for `origin='classification'`, a `why` block read from the contact and its
+  latest customer proposal: when and by whom they were filed, Dusty's status
+  line, the company he heard, and the quoted line. The job page shows it as
+  **Why this job** with a link to their page. The trigger's fallback title
+  ("New job") is not a name: the page shows the box empty, asking for one.
 
 **Dusty seeds next steps (`enrich-contacts` v9+, 2026-09-28).** Each read
 may add up to three things waiting on Coy — "Send the walkway repair price" —
@@ -784,7 +792,13 @@ expected start date per quoted job before it means anything. Add the field.
   screens and its LOOK from v34 (Barlow Condensed / IBM Plex, hi-viz orange) —
   one design system, not two. The footer becomes a left rail; the header gains
   inline search, the primary line, and the unnamed and drift counters. Threads
-  is list · conversation · contact rail. The desktop design calls the list
+  is list · conversation · contact rail. **No dead margins (2026-09-29):** the
+  customer / vendor page fills its pane — conversation on the left at full
+  height, Next steps · Jobs · About in a 340px column on the right (the
+  design's 1d) — whenever the pane is at least 880px wide, measured
+  (`src/lib/v34/use-wide.ts`), not by breakpoint; narrower (a phone, or Dusty
+  docked) it is the single column with tabs. The plain conversation's contact
+  rail follows the same rule at 920px and carries Dusty's status line. The desktop design calls the list
   "Triage"; that word is not used — it is **Threads**, where every channel for
   a contact merges into one conversation. A home dashboard is not designed yet.
 - Dusty has two entry points: COLD from the footer emblem (no job context,
@@ -800,6 +814,23 @@ expected start date per quoted job before it means anything. Add the field.
   the engine's own output, so Dusty quotes exactly the builder's numbers or
   names what blocks them. **Read-only toward the business:** no tools, no
   record changed, nothing sent — drafts come back as text to copy.
+  **Docked on the right on a desktop (2026-09-29, Coy: "integrated into the
+  main dashboard neatly so that I can see the rest of the dashboard").** At
+  lg+ Dusty is a 400px column (`--sc-dusty`) under the header, no backdrop;
+  `<main>` gains `.sc-with-dusty` (padding-right) so the page beside him stays
+  whole and usable. He stays HOT on the page that is open; a continued chat
+  about something else offers "Ask about this page instead". History is behind
+  ☰ in his header on every size. On a phone he is still the full page below.
+  **The emblem tap is a catch-up (2026-09-29).** Tapping the HEADER emblem
+  opens Dusty and asks "What's new since I last looked?" with context kind
+  `activity` (migration 044): `activityContext()` reads, under RLS, who got in
+  touch since this device's last catch-up (`localStorage`, clamped to 7 days,
+  default 24 h) with Dusty's status lines, spam senders left out; the
+  reader's runs; next steps due today or overdue (Central); and the unsorted
+  count. Saved as "Catch-up · <date>". It does not make the background reader
+  run early (that needs the worker token, which no browser request may reach).
+  The word mark beside the emblem still goes to Threads; the footer emblem
+  still just opens Dusty.
   **Full screen, and kept (migration 043, Coy 2026-09-28: "reference older
   conversations in a side project panel to select and continue").** Dusty is a
   page under the header, over the footer (v34 DustyScreen): header with
@@ -838,7 +869,14 @@ expected start date per quoted job before it means anything. Add the field.
   words sit on the grey glass row and type in letter by letter; a streaming
   Dusty reply shows its own tokens. A thin line drops from the header emblem
   to the dot, and while Dusty works a light runs down it on the emblem's
-  1.4 s beat.
+  1.4 s beat. **The emblem spins for the reader too (2026-09-29):** outer
+  diamond clockwise, inner square counter-clockwise (`sc-em-think`) while a
+  read is running (`onWorking` from the activity line), not only while the
+  page loads or a reply streams.
+- **Chat bubbles are muted (2026-09-29, Coy: "easy on the eyes"):** theirs
+  warm paper `#F7F6F2`, ours soft slate `#D8E1E8`, ink text on both
+  (`DA.bubbleIn` / `DA.bubbleOut` in `conversation.tsx`). Hi-viz orange is
+  for actions, not for our own words.
 - Dusty conversations persist and are resumable (above), grouped by the
   person or job they are about.
 - **Job header (2026-09-28)** — four tappable chips, each opening its list:

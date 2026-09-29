@@ -157,7 +157,7 @@ export async function GET(
 
   const { data, error } = await supabase
     .from("jobs")
-    .select("id, job_number, title, status, origin, confirmed_at, confirmed_by, created_from_message_id, contact_id, address, city, state, zip, notes, duration_days, created_at, job_type, lead_source, referred_by_contact_id")
+    .select("id, job_number, title, status, origin, confirmed_at, confirmed_by, created_from_message_id, contact_id, address, city, state, zip, notes, duration_days, created_at, job_type, lead_source, referred_by_contact_id, description")
     .eq("id", id)
     .eq("org_id", orgId)
     .maybeSingle();
@@ -182,5 +182,35 @@ export async function GET(
     contact = c ?? null;
   }
 
-  return applyCookies(NextResponse.json({ job: data, contact }));
+  // Why this job exists, for one made by filing someone as a customer (Coy,
+  // 2026-09-29: "No idea what the job is or why it was classified as a
+  // customer"). Everything here is already on the contact or its latest
+  // proposal — nothing is inferred for the page.
+  let why: {
+    filed_at: string | null; filed_by: "coy" | "dusty" | null;
+    status_summary: string | null; recent_summary: string | null;
+    evidence_quote: string | null; evidence_at: string | null;
+    company: string | null; scope_summary: string | null;
+  } | null = null;
+  if (data.origin === "classification" && data.contact_id) {
+    const [{ data: c }, { data: p }] = await Promise.all([
+      supabase.from("contacts").select("classification_confirmed_at, auto_classified_at, status_summary, recent_summary")
+        .eq("org_id", orgId).eq("id", data.contact_id).maybeSingle(),
+      supabase.from("contact_proposals").select("evidence_quote, created_at, proposed_company, scope_summary")
+        .eq("org_id", orgId).eq("contact_id", data.contact_id).eq("classification", "customer")
+        .order("created_at", { ascending: false }).limit(1).maybeSingle(),
+    ]);
+    why = {
+      filed_at: (c?.classification_confirmed_at ?? c?.auto_classified_at ?? null) as string | null,
+      filed_by: c?.classification_confirmed_at ? "coy" : c?.auto_classified_at ? "dusty" : null,
+      status_summary: (c?.status_summary as string | null) ?? null,
+      recent_summary: (c?.recent_summary as string | null) ?? null,
+      evidence_quote: (p?.evidence_quote as string | null) ?? null,
+      evidence_at: (p?.created_at as string | null) ?? null,
+      company: (p?.proposed_company as string | null) ?? null,
+      scope_summary: (p?.scope_summary as string | null) ?? null,
+    };
+  }
+
+  return applyCookies(NextResponse.json({ job: data, contact, why }));
 }

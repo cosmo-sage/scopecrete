@@ -1,6 +1,7 @@
 # Cost cards, the job budget, and proposals — plan
 
-Status: **draft for Coy's review**, 2026-09-29. Nothing here is built yet.
+Status: **draft for Coy's review**, 2026-09-29 (revised after Coy's answers and
+three example quotes). Nothing here is built yet.
 Ground truth is still `DECISIONS.md` (§3 engine, §4 floor, §6 interface); this
 plan changes it only where it says so, and DECISIONS is updated in the same PR
 as each piece ships.
@@ -112,82 +113,170 @@ draft) + its `estimate_line_items`.
   Existing tests keep passing; new ones cover the four-step math, tax on/off,
   discount, overrides, and blocked cards.
 
-## 3. The proposal
+## 3. The proposal — what Coy's quotes show
 
-A proposal is a **frozen version** of the budget: `estimates` gets a new row
-per version (v1, v2… as v34 showed, with "▲ $X vs V1"), and the lines are
-copied, so what was sent never changes when the budget does.
+Three of Coy's residential quotes (JobTread, 24-302 Costco curb, 24-315 Hawkins
+driveway, 24-372 Watkins driveway repairs; not committed — they carry customer
+details) share one shape:
 
-**Choices on a version** (v34 `DocView`, kept):
-- Estimate (non-binding) vs Quote (firm for N days).
-- **Layout — what the customer sees:** Total + scope · By section · By cost
-  group · Line by line (with v34's warnings: line by line exposes unit costs).
-- Payment schedule (10/50/40, 50/50, net on completion, custom).
-- Your side (never on the document): cost, profit, margin, floor.
+1. **Header** — Sacco Built logo · Quote 24-372-**1** (job number – version) ·
+   issue date · status stamp (APPROVED).
+2. **Prepared by / Prepared for** — Coy, company, phone, email, office
+   address | customer name (and contact person for a business: Costco / Ashley),
+   phone, email, address.
+3. **Quote details** — job address, one plain paragraph ("This is a turn-key
+   price to remove and replace 14' × 18.5' of driveway… 3000 psi at 4" thick…
+   wire mesh and rebar dowels as shown in the drawings"), then **Scope of
+   work** as dashes (Mobilization, Demolition and removal, Forming, Grading,
+   Steel doweling, Pouring and finishing, Wreck forms and cleanup).
+4. **The description table — a tree, not a price list.** A top group
+   ("Driveway Repairs — 668 Square Feet × $10.78 = $7,200", "2 areas below")
+   → areas ("Area 1 – Apron Entrance, 528 sq ft", with a note and **photos**)
+   → cost groups (Forming Lumber, Steel, **Ready Mix – Angelle Materials** —
+   the vendor is in the group name, Fill, Labor, Equipment) → items with a
+   short description ("6" × 6" 10 ga Wire Mesh — 5' × 150' roll", "Mini-Skid
+   Steer — Vermeer ST925tx"), sometimes a **product photo**, sometimes a qty
+   ("7 Cubic Yards", "1 Each").
+   **Prices appear only where Coy chose**: 24-372 shows qty / unit price /
+   total on the top group only; 24-315 shows one total on the area; 24-302
+   shows only the grand total. Columns (Description · Qty · Unit price ·
+   Total) are chosen per quote; each group or item can hide its price, qty or
+   itself.
+5. **Total**, then **Payment schedule** — named rows with % and amount
+   (Deposit 10% · Payment 2 50% · Payment 3 40%; or 100% on completion), each
+   with its condition in the terms ("50% once concrete demolition is done and
+   we are ready to pour").
+6. **Terms** — "Delays due to weather are possible", the warranty (two
+   versions in use: a 5-year general warranty, and the newer 1-year limited
+   concrete warranty with covered / not-covered table, remedies, Louisiana
+   limitations, notice), a collections clause, payment terms.
+7. **Acceptance** — "The above specifications, costs, and terms are hereby
+   accepted": **typed name or drawn signature**, name printed under it, date
+   and time stamped (24-372 is drawn; 24-302/315 typed).
 
-**The document** — sections, in order: company header · prepared for / by ·
-scope of work (per section: name, size, depth, psi, and the included items as
-plain sentences) · price in the chosen layout · exclusions (the engine's
-"not in this price" + Coy's own) · schedule (quote only: working days, cure
-before use) · payment schedule · terms & warranty · acceptance (name, date,
-signature). Needs a small `org_profile` (company name, logo, license no.,
-phone, email, address, default terms/warranty/exclusions text). **The exact
-look waits for Coy's example proposals.**
+(JobTread's "Payments starting from $X/month — Learn more" is a financing ad;
+not carried over.)
 
-**One renderer.** The proposal is one React component, used for the preview
-in the builder, the customer's link, and the PDF — so the preview is exactly
-what they receive.
+**So the budget is a tree, and every node carries its document settings.**
+`estimate_line_items` gains `parent_id` (group → area → cost group → item),
+`description`, and three switches — `show_on_doc`, `show_qty`,
+`show_price` — plus photos (files, §5). The Scope Builder's sections are the
+areas; the cost cards' groups sit under them. What JobTread calls "document
+columns" is a per-version setting: which of Qty / Unit price / Total print.
 
-## 4. Preview, PDF, send
+**Versions** — a proposal is a frozen copy of the tree: `estimates` row per
+version (24-372-**1**, -2…), lines copied, "▲ $X vs V1", so what was sent never
+changes when the budget does. Estimate (non-binding) vs Quote (firm N days).
+Your side (never printed): cost, profit, margin, floor.
 
-- **Preview** — beside the budget on desktop (split), below it on a phone.
-- **Customer link** — `documents` row with a random `token`: a public page
-  `/p/<token>` that shows that one frozen version, logs `document_events`
-  (viewed, time on page), and lets the customer **Accept** (typed name → sets
-  `decided_at`, estimate `accepted_at`, job → Won) or decline with a reason.
-  No login; the token is the key; Coy can revoke it. The page reads through a
-  narrow server route that returns only that document — never the service
-  role on a general path (§7).
-- **PDF** — recommended: render the same page to PDF on the server with
-  headless Chromium (`puppeteer-core` + `@sparticuz/chromium` on Vercel), so
-  the PDF is pixel-identical to the preview. Fallback while that's set up:
-  the browser's Print → Save as PDF with a print stylesheet.
-- **Send by text** — there is no send path yet (10DLC). Today: **Text** opens
-  the phone's messages app pre-filled (`sms:` link) with a short note and the
-  proposal link; on desktop it copies the note for Quo. Real sending replaces
-  that button when texting lands (§6: one place).
-- **Send by email** — today: `mailto:` pre-filled with the link. Next: send
-  from the app with the PDF attached through an email service (Resend or
-  Postmark; one API key in Vercel, a verified sending domain on
-  scopecrete.ai), logged on the job and the person's timeline.
-- Every send writes `documents.sent_at` and a timeline row on the customer.
+**Templates** — `org_profile` (logo, company, license, phone, email, office
+address) and `doc_templates`: named blocks of text Coy reuses — scope-of-work
+dash lists per work type, the warranty (both versions), weather, collections,
+payment-terms wording — and payment schedule presets with their conditions.
+A residential template first, built from these quotes; **commercial and
+government templates later** (bid forms, unit-price schedules, bonds,
+insurance, alternates — DECISIONS §10 keeps public-work *pricing* a separate
+engine, but the proposal can still be templated).
+
+**One renderer.** One React component draws the proposal for the preview in
+the builder, the customer's link and the PDF — the preview is exactly what
+they receive.
+
+## 4. Preview, PDF, sign, send
+
+- **Preview** — beside the budget on desktop, below it on a phone.
+- **Customer link** — `documents` row with a random `token` → public page
+  `/p/<token>` showing that one frozen version; `document_events` logs views
+  and time on page. **Accept** like JobTread: type your name *or* draw a
+  signature (finger or mouse), stamped with date, time and time zone; stored
+  as the typed name + a PNG of the drawing, with IP hash and user agent.
+  Accepting sets `documents.decided_at`, `estimates.accepted_at`, and moves
+  the job to Won. Decline with a reason. Coy can revoke a link. A narrow
+  server route returns only that document — never the service role on a
+  general path (§7).
+- **PDF** — server-rendered with headless Chromium (`puppeteer-core` +
+  `@sparticuz/chromium` on Vercel) from the same page, so it matches the
+  preview; the signed copy carries the signature. Stored in Supabase Storage
+  (`proposals/{org_id}/…`) for now, **S3 later** (Coy) — behind one small
+  storage module so the move is one file.
+- **Send by text** — no send path yet (10DLC): **Text** opens the phone's
+  messages app pre-filled (`sms:`) with a note and the link; on desktop it
+  copies the note for Quo.
+- **Send by email** — `mailto:` with the link for now. **AgentMail**
+  (agentmail.to) later, when Coy wants it: sends from the app with the PDF
+  attached, and replies land in Threads.
+- Every send writes `documents.sent_at` and a row on the customer's timeline.
+
+## 5. Files — upload, keep, let Dusty read them
+
+Coy: *"I need to be able to upload documents and photos for Dusty to parse."*
+Today only texted photos exist (`message_media`, migration 027); nothing can
+be uploaded.
+
+- **`files` table** — org, and what it belongs to: `job_id`, `section_id`
+  (an area), `contact_id`, `estimate_line_id` (a product photo on a proposal
+  line); `kind` (photo, plan, spec, bid invite, quote from a vendor, receipt,
+  contract, other), name, mime, size, pages, `storage_path`, uploaded_by,
+  `source` (upload · text · email), tags, `show_on_proposal`. RLS by
+  `get_user_org_ids()`; private bucket `job-files/{org_id}/…`, short-lived
+  signed URLs, same as `message-media`. Texted photos appear here too (a view
+  over `message_media`), so a job's photos are one list.
+- **Upload** — on a job, a section, a person, and in Dusty's chat: camera or
+  file picker on a phone (many at once), drag and drop on desktop. Big plan
+  sets upload straight to storage from the browser (resumable), never through
+  a Vercel function.
+- **Dusty reads them** — a background reader like `enrich-contacts`, with the
+  same shape (claim, run row, heartbeat, retries):
+  - photos → Hermes with the image (Haiku 4.5 reads images): what it shows,
+    anything measurable written on it;
+  - PDFs with text → text pulled out (no model), then Hermes summarises;
+    scanned PDFs → page images → Hermes;
+  - output: `files.summary`, extracted text for search, and **proposals** —
+    "Bid due Oct 14", "Spec calls for 4000 psi, #4 at 12" o.c.", "Receipt:
+    Home Depot $312.44" — shown for Coy to apply, never applied on their own
+    (§2b: a machine opinion changes what Coy is asked, not what he is shown).
+    A receipt proposal files a cost on the job (camera-first receipts, §6).
+  - Dusty's chat context includes a job's file summaries, and he can be
+    asked about one file ("what does page 3 of the plans say about joints?").
+- **Proposal photos** — any job photo can be ticked onto an area or a line of
+  the proposal, as the Watkins quote does.
 
 ## Build order (each a PR, each shippable)
 
-1. **Catalog + vendor price list** — `cost_items` migration, `/api/cost-items`,
-   Cost settings → Cost cards (grouped list, add/edit), Vendor page → Price
-   list tab. Reinforcement types fold in.
-2. **Budget** — lines on the job (`estimates` v-draft + `estimate_line_items`),
-   engine from-lines path + tests, desktop grid under the Scope Builder, phone
-   cost cards, tax switch, discount, floor.
-3. **Proposal builder + preview** — versions, estimate/quote, layouts,
-   payment schedule, `org_profile`, the one renderer. Layout from Coy's
-   examples.
-4. **Customer link + accept** — `/p/<token>`, events, accept/decline, revoke.
-5. **PDF** — server render; download button on the proposal and the job.
-6. **Email sending** — provider, domain, attach PDF, timeline. (Text sending
-   waits on 10DLC.)
+1. **Files** — table, bucket, upload on job / section / person, gallery,
+   texted photos merged in. (Needed by the proposal and by Dusty.)
+2. **Cost cards + vendor price list** — `cost_items`, Cost settings → Cost
+   cards, Vendor page → Price list; reinforcement types and the rate fields
+   fold into cards (Coy: agreed).
+3. **Budget tree** — sections as areas, cards under them, JobTread math, tax
+   switch, discount, floor; desktop grid under the Scope Builder, phone cost
+   cards; per-node show-on-document switches.
+4. **Proposal builder + preview** — versions, estimate/quote, columns,
+   `org_profile`, `doc_templates` (scope dashes, both warranties, payment
+   schedules with conditions), the one renderer, the residential template
+   from Coy's quotes.
+5. **Customer link, sign, accept** — `/p/<token>`, typed or drawn signature,
+   events, revoke, job → Won.
+6. **PDF** — server render, stored, download on the proposal and the job.
+7. **Dusty reads files** — the file reader, summaries, proposals from
+   documents and photos, receipts.
+8. **Later** — AgentMail email with the PDF attached; S3 storage;
+   commercial and government templates; texting when 10DLC lands.
 
-## Decisions for Coy
+## Answered (Coy, 2026-09-29)
 
-1. **Proposal examples** — upload them (to `docs/design/proposals/`); step 3's
-   look is built from them.
-2. **Email** — OK to add Resend (or Postmark) and verify a sending address on
-   scopecrete.ai? Until then email is `mailto:` with the link.
-3. **PDF** — server-rendered Chromium (exact match, heavier) vs browser print
-   (free, but depends on the device)? Recommended: Chromium.
-4. **Cards replace the rate fields** — the per-sqft labor, concrete $/cy,
-   demo, mobilization fields move into cards, and Cost settings keeps only
-   markups, tax, overage, off-the-top and crew days. OK?
-5. **Customer acceptance** — typed name + date on the link is enough for now,
-   or do you need a drawn signature / e-sign service?
+- Examples — three residential quotes (above). Commercial and government
+  designs to be refined later.
+- Email — AgentMail (agentmail.to), not set up yet; `mailto:` until then.
+- PDF — rendered on the server; S3 later.
+- Rates move onto cost cards — agreed.
+- Acceptance — typed and drawn, like JobTread.
+
+## Still open
+
+1. **Warranty** — which one goes on new quotes by default: the 5-year general
+   or the 1-year limited concrete warranty (24-372)? Both become templates.
+2. **Quote numbers** — keep JobTread's `24-372-1` (year? – job – version) and
+   continue from the last number, or start fresh?
+3. **Order** — files first (it unblocks Dusty and proposal photos), then cost
+   cards? Or cost cards first?

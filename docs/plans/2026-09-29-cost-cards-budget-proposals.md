@@ -272,11 +272,18 @@ be uploaded.
 - Rates move onto cost cards — agreed.
 - Acceptance — typed and drawn, like JobTread.
 
-## Still open
+## Answered (Coy, 2026-09-29, second round)
 
-1. **Warranty** — which one goes on new quotes by default: the 5-year general
-   or the 1-year limited concrete warranty (24-372)? Both become templates.
-2. **Quote numbers** — keep JobTread's `24-372-1` (year? – job – version) and
-   continue from the last number, or start fresh?
-3. **Order** — files first (it unblocks Dusty and proposal photos), then cost
-   cards? Or cost cards first?
+- **Warranty** — the 1-year limited concrete warranty is the default. Coy
+  edits it by hand, or asks Dusty for a change: Dusty returns a redline that
+  Coy accepts, he never saves it himself.
+- **Order** — files first (built: migrations 045–046, `read-files`), then
+  cost cards.
+- **Numbering** — not JobTread's. Proposed, for Coy's review:
+  - a job gets `YY-NNN` in order within the year: `26-014`;
+  - documents take the job number, a letter for the kind and a version:
+    `Q26-014.2` quote version 2, `I26-014.1` first invoice, `CO26-014.1`
+    first change order;
+  - short enough to read out on a call, sorts, and the letter says what it
+    is. Stored as `jobs.job_number` + `estimates.version`, written when the
+    job is created, so nothing is renumbered.

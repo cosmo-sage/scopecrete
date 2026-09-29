@@ -94,6 +94,28 @@ async function contactBlock(sb: Sb, orgId: string, contactId: string) {
   return { block, name: name ?? (numbers[0] as string | undefined) ?? "unknown number" };
 }
 
+
+/** What Dusty has read in the files on a job or a person (migration 045), newest 20. */
+async function filesBlock(sb: Sb, orgId: string, by: { jobId?: string; contactId?: string }): Promise<Block | null> {
+  let q = sb.from("job_files").select("name, category, summary, facts, read_state, read_error, created_at")
+    .eq("org_id", orgId).is("deleted_at", null).order("created_at", { ascending: false }).limit(20);
+  q = by.jobId ? q.eq("job_id", by.jobId) : q.eq("contact_id", by.contactId as string);
+  const { data } = await q;
+  const rows = (data ?? []) as Array<{ name: string; category: string | null; summary: string | null; facts: Record<string, unknown> | null; read_state: string | null; read_error: string | null; created_at: string }>;
+  if (!rows.length) return null;
+  return {
+    title: "Files on it (uploaded; your earlier reads — suggestions, not confirmed)",
+    trimmable: true,
+    lines: rows.map((f) => {
+      const facts = f.facts ? Object.entries(f.facts).filter(([k]) => !["prompt", "dropped"].includes(k))
+        .map(([k, v]) => `${k.replace(/_/g, " ")}: ${Array.isArray(v) ? v.join(", ") : String(v)}`).join("; ") : "";
+      const said = f.read_state === "read" ? `${f.summary ?? ""}${facts ? ` [${facts}]` : ""}`
+        : f.read_state === "skipped" || f.read_state === "failed" ? `not read (${f.read_error ?? f.read_state})` : "not read yet";
+      return `[${day(f.created_at)}] ${f.name}${f.category ? ` (${f.category})` : ""} — ${said}`.slice(0, 1500);
+    }),
+  };
+}
+
 async function threadContext(sb: Sb, orgId: string, contactId: string): Promise<Assembled> {
   const who = await contactBlock(sb, orgId, contactId);
   if (!who) return coldContext(null, new Date().toISOString().slice(0, 10));
@@ -131,8 +153,10 @@ async function threadContext(sb: Sb, orgId: string, contactId: string): Promise<
   const recentTranscripts = msgs.filter((m) => transcripts.has(m.id)).slice(-3)
     .map((m) => `[${day(m.occurred_at)} call]\n${transcripts.get(m.id)!.slice(0, 12000)}`);
 
+  const files = await filesBlock(sb, orgId, { contactId });
   return assemble(`${who.name}'s thread`, [
     who.block,
+    ...(files ? [files] : []),
     { title: `Messages (last ${msgs.length}, oldest first)`, lines, trimmable: true },
     { title: "Full transcripts of the most recent calls", lines: recentTranscripts, trimmable: true },
   ]);
@@ -158,11 +182,12 @@ async function scopeContext(sb: Sb, orgId: string, jobId: string): Promise<Assem
   const { data: job } = await sb.from("jobs").select("id, title, status, address, contact_id, duration_days")
     .eq("org_id", orgId).eq("id", jobId).maybeSingle();
   if (!job) return coldContext(null, new Date().toISOString().slice(0, 10));
-  const [{ data: secs }, so, who] = await Promise.all([
+  const [{ data: secs }, so, who, files] = await Promise.all([
     sb.from("job_sections").select("name, work_type, length_ft, width_ft, sqft_override, depth_in, psi, rebar, prep_notes, access_notes")
       .eq("org_id", orgId).eq("job_id", jobId).order("sort_order"),
     settingsAndOverhead(sb, orgId),
     job.contact_id ? contactBlock(sb, orgId, job.contact_id as string) : Promise.resolve(null),
+    filesBlock(sb, orgId, { jobId }),
   ]);
   const sections: SectionInput[] = ((secs ?? []) as Array<Record<string, unknown>>).map((r) => ({
     name: r.name as string | null, work_type: r.work_type as string,
@@ -182,6 +207,7 @@ async function scopeContext(sb: Sb, orgId: string, jobId: string): Promise<Assem
     { title: "Sections and the engine's numbers (exactly what the builder shows)", lines: scopeLines(t, p, fl) },
     { title: "Section notes", lines: notes },
     ...(so.recorded ? [] : [{ title: "Cost settings", lines: ["None recorded for this business yet."] }]),
+    ...(files ? [files] : []),
     ...(who ? [who.block] : []),
   ]);
 }
@@ -193,7 +219,8 @@ async function customerContext(sb: Sb, orgId: string, contactId: string): Promis
     .eq("org_id", orgId).eq("contact_id", contactId).order("occurred_at", { ascending: false }).limit(15);
   const lines = ((last ?? []) as Array<{ channel: string; direction: string; occurred_at: string | null; body_text: string | null; summary: string | null }>)
     .reverse().map((m) => `${day(m.occurred_at)} ${m.direction === "outbound" ? "OUT" : "IN"} ${m.channel === "call" ? `CALL — ${m.summary?.trim() || "no summary"}` : `TEXT: ${m.body_text?.trim() || "(attachment)"}`}`);
-  return assemble(`${who.name} (customer page)`, [who.block, { title: "Most recent messages", lines, trimmable: true }]);
+  const files = await filesBlock(sb, orgId, { contactId });
+  return assemble(`${who.name} (customer page)`, [who.block, ...(files ? [files] : []), { title: "Most recent messages", lines, trimmable: true }]);
 }
 
 async function cashContext(sb: Sb, orgId: string): Promise<Assembled> {

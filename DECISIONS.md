@@ -297,6 +297,38 @@ each message.** One person calling two of Coy's lines is one thread.
   Baton Rouge Concreters, Number: +1…" for every website call (~150). Each of
   those numbers is a website lead — the first real input for lead sources.
 
+## 2e. Files — uploads Dusty reads (migrations 045–046, 2026-09-29)
+
+Coy: *"I need to be able to upload documents and photos for Dusty to parse."*
+
+- **`job_files`** (existing table, extended) holds every upload: on a job, an
+  area (`section_id`) or a person (`contact_id`); `category` (photo, plan,
+  spec, bid, vendor quote, receipt, contract, other — a first guess from the
+  name, Coy's to change), note, `show_on_proposal`, soft delete. RLS by
+  `get_user_org_ids()`; anon's grants on it were revoked.
+- **Bytes go straight to storage.** `POST /api/files` records the row and
+  returns a signed upload link to the private bucket `job-files`
+  (`{org_id}/{job|contact}/{file}/{name}`, 100 MB); the browser sends the file
+  there, never through a Vercel function; `/api/files/[id]/done` confirms it
+  arrived. Storage lives behind `src/lib/files.ts` / `files-server.ts` so S3
+  (Coy, later) is one module.
+- **Texted photos are in the same list** ("From texts") — `message_media`,
+  copied in lazily by the thread's media route as before.
+- **Dusty reads them in the background** — edge function `read-files`,
+  pg_cron every minute, claim `sc_files_claim` (service role), the enricher's
+  vault token, heartbeat `read-files`. JPEG/PNG photos go to Hermes as images
+  (verified 2026-09-29: an image passes through); PDFs have their text pulled
+  out (unpdf) and read; scanned PDFs, HEIC photos, video and spreadsheets are
+  **skipped with the reason**, never marked read. He writes `summary`,
+  `extracted_text` and `facts` (bid due, date, address, vendor, amount, psi,
+  thickness, reinforcement, dimensions, quantities, notes). **Facts are
+  suggestions** (§2b) — shown on the file, never applied — and from a
+  document a number is kept only if it is written in it (`sanitizeRead()`,
+  the dictation rule). Failed reads retry after 30 minutes, three tries.
+- Dusty's chat context on a job or person includes their files' reads
+  (newest 20); the activity line shows each read, and "Reading …" spins the
+  emblem.
+
 ## 2c. One contact is one person — migration 028 (applied 2026-09-27)
 
 A person with two numbers is ONE contact. `contact_phones` lists every number;
@@ -879,6 +911,12 @@ expected start date per quoted job before it means anything. Add the field.
   for actions, not for our own words.
 - Dusty conversations persist and are resumable (above), grouped by the
   person or job they are about.
+- **Files panel (2026-09-29)** — `src/components/v34/files-panel.tsx` on the
+  job page (under the sections) and the customer / vendor page (right column
+  when wide, a Files tab when narrow): Add photos / files (camera or library,
+  many at once; drag and drop on a desktop) with progress and retry; a grid
+  filtered All · Photos · Documents · From texts; tap for the viewer — name,
+  what it is, area, note, Show on proposal, delete, and Dusty's read.
 - **Job header (2026-09-28)** — four tappable chips, each opening its list:
   **Status** (the seven stages, with W.I.P.'s won / scheduled / pouring),
   **Type**, **Source** and **Vendors (n)** (crew on the job, add by subtype)

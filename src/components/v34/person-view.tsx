@@ -25,6 +25,7 @@ import { Timeline, formatPhone, type Note, type ThreadMessage } from "@/componen
 import { JOB_TYPE_LABEL, stageOf } from "@/lib/jobs/stages";
 import { NameEditor, FileAsSheet } from "@/components/v34/contact-edit";
 import { useWide } from "@/lib/v34/use-wide";
+import { FilesPanel } from "@/components/v34/files-panel";
 
 export interface Person {
   contact: {
@@ -94,7 +95,7 @@ export function PersonView({ person, messages, onReload, onMerge }: {
   const phone = c.phones[0] ?? null;
   const title = c.name ?? formatPhone(phone);
   const colour = c.bucket ? COLOUR[c.bucket] : T.ink3;
-  const [tab, setTab] = useState<"activity" | "jobs" | "about">("activity");
+  const [tab, setTab] = useState<"activity" | "jobs" | "files" | "about">("activity");
   const [error, setError] = useState<string | null>(null);
   const [filing, setFiling] = useState(false);
   // Room for two columns (Coy, 2026-09-29: no dead space either side on a
@@ -183,7 +184,7 @@ export function PersonView({ person, messages, onReload, onMerge }: {
 
       {/* ---------------- tabs (narrow only) ---------------- */}
       {!wide && <div className="flex mt-3 px-3" style={{ gap: 2 }}>
-        {([["activity", "Activity"], ["jobs", `${isVendor ? "On jobs" : "Jobs"} (${jobCount})`], ["about", "About"]] as const).map(([k, l]) => (
+        {([["activity", "Activity"], ["jobs", `${isVendor ? "On jobs" : "Jobs"} (${jobCount})`], ["files", "Files"], ["about", "About"]] as const).map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)} className="flex-1"
             style={{ height: 34, background: tab === k ? T.card : "transparent", cursor: "pointer",
                      borderBottom: tab === k ? `2px solid ${T.hiviz}` : `1px solid ${T.hair}`,
@@ -197,6 +198,7 @@ export function PersonView({ person, messages, onReload, onMerge }: {
       {!wide && tab === "jobs" && (isVendor
         ? <VendorJobs person={person} onChanged={onReload} onError={setError} />
         : <CustomerJobs person={person} onChanged={onReload} onError={setError} />)}
+      {!wide && tab === "files" && <div className="mx-3 mt-2"><FilesPanel contactId={c.id} /></div>}
       {!wide && tab === "about" && <About person={person} />}
       </div>
 
@@ -209,6 +211,7 @@ export function PersonView({ person, messages, onReload, onMerge }: {
           {isVendor
             ? <VendorJobs person={person} onChanged={onReload} onError={setError} />
             : <CustomerJobs person={person} onChanged={onReload} onError={setError} />}
+          <div className="mx-3 mt-4"><FilesPanel contactId={c.id} compact /></div>
           <div className="mx-3 mt-4" style={{ ...eyebrow, color: T.ink }}>About</div>
           <About person={person} />
         </aside>

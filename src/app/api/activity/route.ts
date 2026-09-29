@@ -163,7 +163,19 @@ export async function GET(req: NextRequest) {
     items.push({ id: "quiet", at: quietAt!, kind: "quiet", contact_id: null,
       summary: `Checked ${quietCount} with nothing new to say`, detail: "Threads with no words from them on record, or nothing new since the last read.", tone: "quiet" });
   }
-  if (quietCount || summarized) items.sort((a, b) => b.at.localeCompare(a.at));
+  // Files Dusty read (migration 045/046): each read is a line; one being read
+  // is "running", so the emblem spins for it too.
+  const { data: fileRows } = await supabase.from("job_files")
+    .select("id, name, contact_id, read_state, read_at, summary, read_error")
+    .eq("org_id", orgId).is("deleted_at", null).in("read_state", ["reading", "read", "failed"])
+    .gte("read_at", new Date(Date.now() - 24 * 3600_000).toISOString()).order("read_at", { ascending: false }).limit(10);
+  for (const f of (fileRows ?? []) as Array<{ id: string; name: string; contact_id: string | null; read_state: string; read_at: string; summary: string | null; read_error: string | null }>) {
+    const base = { id: `file-${f.id}-${f.read_state}`, at: f.read_at, contact_id: f.contact_id };
+    if (f.read_state === "reading") items.push({ ...base, kind: "running", summary: `Reading ${clipq(f.name, 40)}…`, detail: null, tone: "live" });
+    else if (f.read_state === "read") items.push({ ...base, kind: "file", summary: `Read ${clipq(f.name, 32)}${f.summary ? ` — ${clipq(f.summary, 70)}` : ""}`, detail: f.summary, tone: "good" });
+    else items.push({ ...base, kind: "file", summary: `Couldn't read ${clipq(f.name, 40)}`, detail: f.read_error, tone: "warn" });
+  }
+  items.sort((a, b) => b.at.localeCompare(a.at));
   if (waiting > 0) {
     items.push({ id: "waiting", at: new Date().toISOString(), kind: "waiting", contact_id: null,
       summary: `${waiting} thread${waiting === 1 ? "" : "s"} waiting to be read`, detail: "Read four at a time, every minute, until none are left.", tone: "quiet" });

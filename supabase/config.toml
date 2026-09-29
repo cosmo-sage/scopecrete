@@ -73,3 +73,9 @@ verify_jwt = false
 # Delete this function and this block once the API question is settled.
 [functions.quo-diagnose]
 verify_jwt = true
+
+# Dusty's file reader (migration 046). Same shape as enrich-contacts: pg_cron
+# every minute with the vault bearer token, checked in the function via
+# sc_enrich_worker_authorized(). Not a JWT, so the gateway check is OFF.
+[functions.read-files]
+verify_jwt = false

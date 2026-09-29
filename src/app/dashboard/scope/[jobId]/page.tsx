@@ -23,6 +23,7 @@ import { useParams } from "next/navigation";
 import { T, F, disp, eyebrow, nums, clip, money, money0, formatPhone } from "@/lib/v34/tokens";
 import { EmptyState } from "@/components/v34/primitives";
 import { JobChips } from "@/components/v34/job-chips";
+import { FilesPanel } from "@/components/v34/files-panel";
 import {
   price as priceJob, floor as floorOf, takeoff as takeoffOf, quantities, reinforcementQty,
   type CostSettings, type OverheadItem, type ReinforcementType, type SectionInput,
@@ -227,6 +228,11 @@ export default function ScopeBuilder() {
                      fontWeight: 600, textTransform: "uppercase", letterSpacing: ".06em", color: T.ink, cursor: "pointer" }}>
             {adding ? "Adding…" : "+ Add a section"}
           </button>
+        </div>
+
+        {/* Photos, plans, specs, receipts — Dusty reads them (migration 045). */}
+        <div className="px-3 pb-3">
+          <FilesPanel jobId={job.id} sections={sections.map((x) => ({ id: x.id, name: x.name ?? null }))} />
         </div>
       </div>
 

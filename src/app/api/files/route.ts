@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
-import { MAX_FILE_BYTES, FILES_BUCKET, categoryGuess, kindOf, storagePath } from "@/lib/files";
+import { CATEGORIES, MAX_FILE_BYTES, FILES_BUCKET, categoryGuess, kindOf, storagePath } from "@/lib/files";
 import { FILE_COLUMNS, signFiles } from "@/lib/files-server";
 
 /**
  * Files on a job or a person (migration 045). Coy, 2026-09-29: "I need to be
  * able to upload documents and photos for Dusty to parse."
  *
- * POST  { name, mime, size, job_id?, section_id?, contact_id? }
+ * POST  { name, mime, size, job_id?, section_id?, contact_id?, category? }
  *   → the row, plus a signed upload URL. The browser sends the bytes straight
  *     to storage, so a 60 MB plan set never passes through a Vercel function.
  *     POST /api/files/[id]/done confirms it arrived.
@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
   const { supabase, orgId, userId, applyCookies } = result.session;
   const bad = (m: string, s = 400) => applyCookies(NextResponse.json({ error: m }, { status: s }));
 
-  let b: { name?: unknown; mime?: unknown; size?: unknown; job_id?: unknown; section_id?: unknown; contact_id?: unknown };
+  let b: { name?: unknown; mime?: unknown; size?: unknown; job_id?: unknown; section_id?: unknown; contact_id?: unknown; category?: unknown };
   try { b = await req.json(); } catch { return bad("Body must be JSON."); }
   const name = typeof b.name === "string" ? b.name.trim().slice(0, 200) : "";
   const mime = typeof b.mime === "string" ? b.mime.slice(0, 120) : "";
@@ -116,7 +116,8 @@ export async function POST(req: NextRequest) {
   const path = storagePath(orgId, jobId ?? contactId ?? (sectionId as string), fileId, name);
   const { data: row, error } = await supabase.from("job_files").insert({
     id: fileId, org_id: orgId, job_id: jobId, section_id: sectionId, contact_id: contactId, name, kind,
-    category: categoryGuess(kind, name), mime_type: mime || null, byte_size: size, storage_path: path,
+    // The Price book's vendor-quote import says what it is; otherwise a first guess from the name.
+    category: (CATEGORIES as readonly string[]).includes(String(b.category)) ? b.category : categoryGuess(kind, name), mime_type: mime || null, byte_size: size, storage_path: path,
     source: "upload", fetch_state: "pending", created_by: userId,
   }).select(FILE_COLUMNS).single();
   if (error || !row) return bad(`Couldn't record the file: ${error?.message ?? "no row"}`, 500);

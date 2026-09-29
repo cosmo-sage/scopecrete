@@ -1,7 +1,7 @@
 // Price book imports — `npm test`. CSV, column guesses, values, matching.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseCsv, findHeader, guessMapping, parseMoney, parsePct, parseBool, mapType, ruleFromUnit, toRows, matchRows } from "../src/lib/price-import.ts";
+import { parseCsv, findHeader, quoteRows, guessMapping, parseMoney, parsePct, parseBool, mapType, ruleFromUnit, toRows, matchRows } from "../src/lib/price-import.ts";
 
 test("CSV: quotes, embedded commas and newlines, escaped quotes, BOM, CRLF, blank lines", () => {
   const t = '﻿Name,Description,Unit Cost\r\n"Mesh, 6x6","10 ga\nsheets","$12.00"\r\n\r\n"4"" pipe",,3\n';
@@ -80,4 +80,13 @@ test("matching: sku first, then name + unit per vendor; new, change, same, skip"
 test("header row found under a title line", () => {
   assert.equal(findHeader([["Cost Catalog Export"], ["2026-09-29"], ["Name", "Unit", "Unit Cost"], ["Mesh", "sheet", "12"]]), 2);
   assert.equal(findHeader([["a", "b"], ["c", "d"]]), 0);
+});
+
+test("a vendor quote's lines become rows; a line with no unit is skipped by name", () => {
+  const rows = quoteRows([{ name: "3000 PSI", sku: null, unit: "CY", unit_cost: 148, qty: 42 }, { name: "Fuel surcharge", unit: null, unit_cost: 25 }]);
+  assert.equal(rows[0].qty_rule, "per_cy"); assert.equal(rows[0].cost_type, "material"); assert.equal(rows[0].unit_cost, 148);
+  assert.deepEqual(rows[1].problems, ["no unit on the quote"]);
+  const m = matchRows(rows, [{ id: "c1", name: "3000 psi", unit: "cy", unit_cost: 145, vendor_contact_id: "v1", vendor_sku: null }], () => "v1");
+  assert.deepEqual(m.map((x) => x.status), ["change", "skip"]);
+  assert.deepEqual(quoteRows(null), []);
 });

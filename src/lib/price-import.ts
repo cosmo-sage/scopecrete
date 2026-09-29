@@ -276,3 +276,33 @@ export function matchRows(rows: ImportRow[], cards: ExistingCard[], vendorOf: (r
     return { line: r.line, status: same ? "same" : "change", card_id: hit.id, old_cost: hit.unit_cost, why: null };
   });
 }
+
+// ---------------------------------------------------------------- vendor quotes
+
+export interface PriceLine { name: string; sku: string | null; unit: string | null; unit_cost: number; qty: number | null }
+
+/**
+ * Dusty's read of a vendor quote (read-files v2, `facts.price_lines`) → rows
+ * for the same preview a spreadsheet gets. A quote's lines are what that
+ * vendor sells, so they start as materials (taxed) — Coy changes a card
+ * afterwards if one is labor or a rental. A line with no unit is flagged: a
+ * card needs one.
+ */
+export function quoteRows(lines: unknown): ImportRow[] {
+  if (!Array.isArray(lines)) return [];
+  return lines.slice(0, 200).map((x, i) => {
+    const l = (x && typeof x === "object" ? x : {}) as Partial<PriceLine>;
+    const name = txt(l.name, 120);
+    const unit = txt(l.unit, 20);
+    const cost = typeof l.unit_cost === "number" && Number.isFinite(l.unit_cost) && l.unit_cost >= 0 ? l.unit_cost : null;
+    const problems: string[] = [];
+    if (!name) problems.push("no name");
+    if (!unit) problems.push("no unit on the quote");
+    if (cost === null) problems.push("no unit price");
+    return {
+      line: i + 1, name, group: null, cost_type: "material" as CostType, type_known: true, unit, unit_cost: cost,
+      markup_pct: null, markup_from: null, taxable: true, description: null, vendor: null, sku: txt(l.sku, 60),
+      qty_rule: ruleFromUnit(unit), problems,
+    };
+  });
+}

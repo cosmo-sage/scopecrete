@@ -48,7 +48,7 @@ export function PriceBook() {
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [editing, setEditing] = useState<Partial<Card> | null>(null);
   const [addingGroup, setAddingGroup] = useState(false);
-  const [importing, setImporting] = useState(false);
+  const [importing, setImporting] = useState<null | "sheet" | "quote">(null);
   const [menu, setMenu] = useState(false);
   const [measure, wide] = useWide<HTMLDivElement>(900);
   // "Now" as of the last load — for "old price" and recent imports — so render stays pure.
@@ -157,12 +157,12 @@ export function PriceBook() {
           <button onClick={() => setMenu((m) => !m)} aria-expanded={menu} style={btn(true)}>Import ▾</button>
           {menu && (
             <div className="absolute right-0 z-20 mt-1 rounded" style={{ background: T.card, border: `1px solid ${T.hair}`, boxShadow: "0 8px 24px rgba(10,14,18,.14)", width: 250 }}>
-              <button onClick={() => { setMenu(false); setImporting(true); }} className="w-full text-left px-3 py-2" style={{ fontSize: F.sm, cursor: "pointer" }}>
+              <button onClick={() => { setMenu(false); setImporting("sheet"); }} className="w-full text-left px-3 py-2" style={{ fontSize: F.sm, cursor: "pointer" }}>
                 A spreadsheet<span style={{ display: "block", fontSize: 10, color: T.ink3 }}>CSV or Excel from JobTread, another CRM, or your own</span>
               </button>
-              <div className="w-full text-left px-3 py-2" style={{ fontSize: F.sm, color: T.ink3, borderTop: `1px solid ${T.hairSoft}` }}>
-                A vendor&apos;s quote<span style={{ display: "block", fontSize: 10 }}>Dusty reads it — coming next</span>
-              </div>
+              <button onClick={() => { setMenu(false); setImporting("quote"); }} className="w-full text-left px-3 py-2" style={{ fontSize: F.sm, cursor: "pointer", borderTop: `1px solid ${T.hairSoft}` }}>
+                A vendor&apos;s quote<span style={{ display: "block", fontSize: 10, color: T.ink3 }}>PDF or photo — Dusty reads the prices, you check them</span>
+              </button>
             </div>
           )}
         </div>
@@ -342,8 +342,10 @@ export function PriceBook() {
       <CardSheet card={editing} groups={groups} vendors={vendors} lockVendor={null}
         onClose={() => setEditing(null)} onSaved={() => { setEditing(null); reload(); }} />
       <GroupSheet open={addingGroup} onClose={() => setAddingGroup(false)} onSaved={() => { setAddingGroup(false); reload(); }} />
-      <PriceImport open={importing} onClose={() => setImporting(false)} cards={items ?? []} vendors={vendors}
-        onDone={(m) => { setImporting(false); setNote(m); reload(); }} />
+      {importing && (
+        <PriceImport key={importing} open start={importing} onClose={() => setImporting(null)} cards={items ?? []} vendors={vendors}
+          onDone={(m) => { setImporting(null); setNote(m); reload(); }} />
+      )}
     </div>
   );
 }

@@ -16,6 +16,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { T, F, disp, eyebrow, clip, relTime } from "@/lib/v34/tokens";
 import { Sheet } from "@/components/v34/primitives";
 import { CATEGORIES, CATEGORY_LABEL, sizeLabel, type Category } from "@/lib/files";
@@ -39,7 +40,7 @@ async function call(url: string, method: string, body?: unknown) {
 }
 
 /** PUT the file to the signed upload link, reporting progress. */
-function sendBytes(url: string, file: File, onPct: (n: number) => void): Promise<void> {
+export function sendBytes(url: string, file: File, onPct: (n: number) => void): Promise<void> {
   return new Promise((resolve, reject) => {
     const x = new XMLHttpRequest();
     x.open("PUT", url);
@@ -269,7 +270,10 @@ function Viewer({ f, sections, onClose, onSaved, onDeleted }: {
     catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
   };
   const field: React.CSSProperties = { height: 34, border: `1px solid ${T.hair}`, background: "#fff", fontSize: F.sm, borderRadius: 4, padding: "0 8px", width: "100%" };
-  const facts = f.facts && typeof f.facts === "object" ? Object.entries(f.facts).filter(([, v]) => v !== null && v !== "" && !(Array.isArray(v) && !v.length)) : [];
+  // Price lines (read-files v2) are a table, not a fact: counted here, checked and imported in the Price book.
+  const HIDDEN = new Set(["price_lines", "price_lines_from_photo"]);
+  const facts = f.facts && typeof f.facts === "object" ? Object.entries(f.facts).filter(([k, v]) => !HIDDEN.has(k) && v !== null && v !== "" && !(Array.isArray(v) && !v.length)) : [];
+  const priceLines = Array.isArray(f.facts?.price_lines) ? (f.facts?.price_lines as unknown[]).length : 0;
 
   return (
     <Sheet open onClose={onClose} title={f.name} sub={`${f.category ? CATEGORY_LABEL[f.category] : "File"} · ${sizeLabel(f.byte_size)}${f.page_count ? ` · ${f.page_count} pages` : ""}`}>
@@ -291,6 +295,13 @@ function Viewer({ f, sections, onClose, onSaved, onDeleted }: {
             <div className="mt-1.5" style={{ fontSize: F.xs, color: T.ink2 }}>
               <div style={{ ...eyebrow, color: T.ink3 }}>What he noticed · suggestions, nothing changed</div>
               {facts.map(([k, v]) => <div key={k}>{k.replace(/_/g, " ")}: <b style={{ color: T.ink }}>{Array.isArray(v) ? v.join(", ") : String(v)}</b></div>)}
+            </div>
+          )}
+          {priceLines > 0 && (
+            <div className="mt-1.5" style={{ fontSize: F.xs, color: T.ink2 }}>
+              {priceLines} price{priceLines === 1 ? "" : "s"} on it{f.facts?.price_lines_from_photo === true ? " (read from a photo — check each)" : ""}.{" "}
+              <Link href="/dashboard/price-book" style={{ color: T.chalk }}>Check them against the Price book →</Link>
+              <span style={{ display: "block", color: T.ink3 }}>Price book → Import → A vendor&apos;s quote → pick this vendor, then this file.</span>
             </div>
           )}
         </div>

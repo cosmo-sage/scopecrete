@@ -325,6 +325,14 @@ Coy: *"I need to be able to upload documents and photos for Dusty to parse."*
   suggestions** (§2b) — shown on the file, never applied — and from a
   document a number is kept only if it is written in it (`sanitizeRead()`,
   the dictation rule). Failed reads retry after 30 minutes, three tries.
+  **v3 (2026-09-29, prompt `read-files-v2-price-lines`)** also reads
+  `price_lines` off a quote, price list, receipt or invoice — name, item #,
+  unit, unit price, qty — keeping a line only if its unit price is written
+  in the document (never a line total divided out); read from a photo there
+  is no text to check, so they are marked `price_lines_from_photo`. The file
+  viewer counts them and points to the Price book, where they are imported
+  (§3). `{"sample_quote": true}` reads a made-up quote with no customer data
+  (verified 2026-09-29: all 5 lines, exact prices, subtotal/tax left out).
 - Dusty's chat context on a job or person includes their files' reads
   (newest 20); the activity line shows each read, and "Reading …" spins the
   emblem.
@@ -686,7 +694,14 @@ percentage of labour — all three contradict this section and §4.
   org). A price change touches **the price only** — markup, group, rule
   stay. A group named in the file is made. **Undo** (`…/import/[id]/undo`)
   retires the cards the import made and puts back the prices it changed,
-  unless Coy changed them since.
+  unless Coy changed them since. **A vendor's quote** takes the same road:
+  pick the vendor and the PDF or photo, it is saved to their files
+  (`category='vendor_quote'`), Dusty reads it in the background (§2e), and
+  its `price_lines` land in the same preview, matched against that vendor's
+  cards — or pick a quote he has already read. Imported with
+  `kind='vendor_quote'`, `price_source='quote'` and the file on each price,
+  so history links back to the quote. Quote lines start as materials; a line
+  with no unit is skipped by name. A suggestion until Coy imports it (§2b).
 - **The job budget (migration 048, Coy 2026-09-29)** — JobTread's maths on
   lines from cost cards. A job has ONE working estimate (`status='draft'`,
   unique per job); its `estimate_line_items` are the budget, and proposal

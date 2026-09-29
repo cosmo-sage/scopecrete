@@ -7,7 +7,7 @@
  * number is kept only if it is written in the document.
  */
 
-export const READ_PROMPT_VERSION = 'read-files-v1-2026-09-29'
+export const READ_PROMPT_VERSION = 'read-files-v2-price-lines-2026-09-29'
 
 export const SYSTEM_PROMPT = `You read one file for a concrete contractor (driveways, slabs, sidewalks, curbs; residential, commercial and government work). The file is a photo or a document: plans, a spec, a bid invite, a vendor's quote, a receipt, a contract.
 
@@ -15,7 +15,8 @@ Return ONLY a JSON object, no prose:
 {"summary": string, "kind": "photo"|"plan"|"spec"|"bid"|"vendor_quote"|"receipt"|"contract"|"other",
  "facts": {"bid_due": "YYYY-MM-DD"|null, "date": "YYYY-MM-DD"|null, "address": string|null, "vendor": string|null,
            "amount": number|null, "psi": number|null, "thickness_in": number|null, "reinforcement": string|null,
-           "dimensions": string[], "quantities": string[], "notes": string[]}}
+           "dimensions": string[], "quantities": string[], "notes": string[]},
+ "price_lines": [{"name": string, "sku": string|null, "unit": string|null, "unit_cost": number, "qty": number|null}]}
 
 Rules:
 - summary: 1-3 plain sentences a contractor would want: what it is and what matters in it. No filler.
@@ -23,7 +24,8 @@ Rules:
 - dimensions: as written ("24' x 30'", "6\\" slab"). quantities: as written ("42 CY 4000 psi", "310 LF curb").
 - notes: at most 5 short items that would change a price or a schedule (access, demo, pump, prevailing wage, bonds, alternates, liquidated damages).
 - For a photo: describe what is in it (existing concrete, damage, forms, a pour, a site), and anything written or measured on it.
-- For a receipt: vendor, date and amount (the total paid).`
+- For a receipt: vendor, date and amount (the total paid).
+- price_lines: ONLY for a vendor's quote, price list, receipt or invoice — every priced item, in order, as written (at most 200). name as written; sku = the vendor's item/part number if shown; unit as written (CY, EA, SF, LF, BAG, SHEET, STICK, DAY…); unit_cost = the price PER UNIT as written, never the line total and never a number you worked out; qty as written or null. Taxes, delivery and fuel charges are lines too if they are priced per unit. Anything else: [].`
 
 const CATS = new Set(['photo', 'plan', 'spec', 'bid', 'vendor_quote', 'receipt', 'contract', 'other'])
 const ISO = /^\d{4}-\d{2}-\d{2}$/
@@ -89,6 +91,28 @@ export function sanitizeRead(raw: unknown, text: string | null): Read | null {
   for (const k of Object.keys(facts)) {
     const v = facts[k]
     if (v === null || (Array.isArray(v) && v.length === 0)) delete facts[k]
+  }
+  // Price lines (v2): a line is kept only with a name and a unit price that
+  // is written in the document — never a total divided out, never a guess.
+  // From a photo there is no text to check, so they are marked for Coy to
+  // check each one; they are suggestions either way (§2b).
+  const lines = Array.isArray(r.price_lines) ? r.price_lines.slice(0, 200) : []
+  const kept: Array<Record<string, unknown>> = []
+  let unwritten = 0
+  for (const x of lines) {
+    if (!x || typeof x !== 'object') continue
+    const l = x as Record<string, unknown>
+    const name = str(l.name, 120)
+    const cost = typeof l.unit_cost === 'number' ? l.unit_cost : Number(String(l.unit_cost ?? '').replace(/[$,\s]/g, ''))
+    if (!name || !Number.isFinite(cost) || cost <= 0 || cost > 1_000_000) continue
+    if (!said(cost)) { unwritten++; continue }
+    const q = l.qty === null || l.qty === undefined || l.qty === '' ? null : Number(String(l.qty).replace(/,/g, ''))
+    kept.push({ name, sku: str(l.sku, 60), unit: str(l.unit, 20), unit_cost: cost, qty: q !== null && Number.isFinite(q) && q > 0 && said(q) ? q : null })
+  }
+  if (unwritten) dropped.push(`price_lines: ${unwritten} price${unwritten === 1 ? '' : 's'} not written in the file`)
+  if (kept.length) {
+    facts.price_lines = kept
+    if (!text) facts.price_lines_from_photo = true
   }
   const kind = typeof r.kind === 'string' && CATS.has(r.kind) ? r.kind : null
   return { summary, kind, facts, dropped }

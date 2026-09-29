@@ -11,31 +11,49 @@
  * Only the rows Coy ticks are sent, to /api/price-book/import. The pure parts
  * are src/lib/price-import.ts (tested).
  *
+ * A vendor's quote takes the same road: Coy picks the vendor and the PDF or
+ * photo, it is uploaded to their files (category vendor_quote, /api/files),
+ * Dusty reads it in the background (read-files v2 → facts.price_lines, each
+ * unit price kept only if it is written in the quote), and the lines land in
+ * the same preview, matched against that vendor's cards. A suggestion until
+ * Coy imports it (§2b).
+ *
  * Nothing is assumed: a blank cost stays blank, an unknown type is flagged,
  * how a card is counted is marked "guess" until Coy picks it, and no contact
  * is ever made — a vendor is one of his or none.
  */
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { T, F, disp, eyebrow, nums, clip, money, formatPhone } from "@/lib/v34/tokens";
 import { Drawer } from "@/components/v34/primitives";
 import { useWide } from "@/lib/v34/use-wide";
 import { QTY_RULES, QTY_RULE_LABEL, COST_TYPE_LABEL } from "@/lib/cost-cards";
 import {
-  parseCsv, findHeader, guessMapping, toRows, matchRows, TARGETS, TARGET_LABEL,
+  parseCsv, findHeader, guessMapping, toRows, matchRows, quoteRows, TARGETS, TARGET_LABEL,
   type Target, type ImportRow, type Matched, type RowStatus, type QtyRule,
 } from "@/lib/price-import";
 import { call, type Card, type Vendor } from "@/components/v34/cost-cards";
+import { sendBytes } from "@/components/v34/files-panel";
 
-type Stage = "pick" | "map" | "preview";
+type Stage = "pick" | "map" | "preview" | "quote" | "reading";
+interface QuoteFile { id: string; name: string; read_state: string | null; read_error: string | null; summary: string | null; created_at: string; facts: Record<string, unknown> | null }
+const READ_POLL_MS = 6000;
+const READ_GIVE_UP_MS = 5 * 60_000;
 const SOURCES = ["JobTread", "Another CRM", "A spreadsheet"];
 const STATUS_LABEL: Record<RowStatus, string> = { new: "New", change: "Price change", same: "Same", skip: "Skipped" };
 const STATUS_COLOR: Record<RowStatus, string> = { new: T.green, change: T.hiviz, same: T.ink3, skip: T.red };
 
-export function PriceImport({ open, onClose, cards, vendors, onDone }: {
-  open: boolean; onClose: () => void; cards: Card[]; vendors: Vendor[]; onDone: (msg: string) => void;
+export function PriceImport({ open, onClose, cards, vendors, onDone, start = "sheet" }: {
+  open: boolean; onClose: () => void; cards: Card[]; vendors: Vendor[]; onDone: (msg: string) => void; start?: "sheet" | "quote";
 }) {
-  const [stage, setStage] = useState<Stage>("pick");
+  const [stage, setStage] = useState<Stage>(start === "quote" ? "quote" : "pick");
+  const [quoteVendor, setQuoteVendor] = useState("");
+  const [quoteFile, setQuoteFile] = useState<QuoteFile | null>(null);
+  const [earlier, setEarlier] = useState<QuoteFile[] | null>(null);
+  const [readTick, setReadTick] = useState(0);
+  const [readSince, setReadSince] = useState(0);
+  const [pct, setPct] = useState<number | null>(null);
+  const [slow, setSlow] = useState(false);
   const [source, setSource] = useState(SOURCES[0]);
   const [file, setFile] = useState<{ name: string; kind: "csv" | "xlsx"; sheets: Array<{ name: string; data: unknown[][] }> } | null>(null);
   const [sheetIdx, setSheetIdx] = useState(0);
@@ -51,7 +69,7 @@ export function PriceImport({ open, onClose, cards, vendors, onDone }: {
   const [measure, wide] = useWide<HTMLDivElement>(760);
 
   const reset = () => {
-    setStage("pick"); setFile(null); setSheetIdx(0); setHeaderIdx(0); setMap(null); setVendorPick({}); setDefaultVendor("");
+    setStage(start === "quote" ? "quote" : "pick"); setQuoteVendor(""); setQuoteFile(null); setEarlier(null); setPct(null); setFile(null); setSheetIdx(0); setHeaderIdx(0); setMap(null); setVendorPick({}); setDefaultVendor("");
     setRules({}); setUnticked({}); setFilter("all"); setErr(null);
   };
   const close = () => { reset(); onClose(); };
@@ -59,9 +77,12 @@ export function PriceImport({ open, onClose, cards, vendors, onDone }: {
   const data = useMemo(() => file?.sheets[sheetIdx]?.data ?? [], [file, sheetIdx]);
   const table = useMemo(() => data.slice(headerIdx), [data, headerIdx]);
   const headers = useMemo(() => (table[0] ?? []).map((c) => (c === null || c === undefined ? "" : String(c).trim())), [table]);
-  const rows: ImportRow[] = useMemo(() => (map && table.length > 1 ? toRows(table, map) : []), [table, map]);
+  const quote = !!quoteFile;
+  const rows: ImportRow[] = useMemo(() => (quoteFile ? quoteRows(quoteFile.facts?.price_lines)
+    : map && table.length > 1 ? toRows(table, map) : []), [quoteFile, table, map]);
   const vendorNames = useMemo(() => [...new Set(rows.map((r) => r.vendor).filter((v): v is string => !!v))], [rows]);
-  const vendorOf = useMemo(() => (r: ImportRow) => (r.vendor ? vendorPick[r.vendor.toLowerCase()] || null : defaultVendor || null), [vendorPick, defaultVendor]);
+  const vendorOf = useMemo(() => (r: ImportRow) => (quoteFile ? quoteVendor || null
+    : r.vendor ? vendorPick[r.vendor.toLowerCase()] || null : defaultVendor || null), [vendorPick, defaultVendor, quoteFile, quoteVendor]);
   const matched: Matched[] = useMemo(() => matchRows(rows, cards, vendorOf), [rows, cards, vendorOf]);
   const ticked = (m: Matched) => (m.status === "new" || m.status === "change") && !unticked[m.line];
   const counts = useMemo(() => {
@@ -125,6 +146,51 @@ export function PriceImport({ open, onClose, cards, vendors, onDone }: {
     setRules({}); setUnticked({});
   };
 
+  // ---- vendor quote: the vendor's earlier quotes Dusty has read, and waiting on a new read
+  useEffect(() => {
+    if (!quoteVendor || stage !== "quote") return;
+    let off = false;
+    call(`/api/files?contact_id=${quoteVendor}`, "GET")
+      .then((b) => { if (!off) setEarlier(((b.files ?? []) as QuoteFile[]).filter((f) => Array.isArray(f.facts?.price_lines) && (f.facts?.price_lines as unknown[]).length > 0)); })
+      .catch(() => { if (!off) setEarlier([]); });
+    return () => { off = true; };
+  }, [quoteVendor, stage]);
+
+  useEffect(() => {
+    if (stage !== "reading" || !quoteFile || !quoteVendor) return;
+    let off = false;
+    const t = setTimeout(() => {
+      call(`/api/files?contact_id=${quoteVendor}`, "GET").then((b) => {
+        if (off) return;
+        const f = ((b.files ?? []) as QuoteFile[]).find((x) => x.id === quoteFile.id);
+        if (f && (f.read_state === "read" || f.read_state === "skipped" || f.read_state === "failed")) {
+          setQuoteFile(f);
+          if (f.read_state === "read" && Array.isArray(f.facts?.price_lines) && (f.facts?.price_lines as unknown[]).length) { setFilter("all"); setStage("preview"); }
+        } else {
+          setSlow(Date.now() - readSince > READ_GIVE_UP_MS);
+          setReadTick((n) => n + 1);
+        }
+      }).catch(() => { if (!off) setReadTick((n) => n + 1); });
+    }, READ_POLL_MS);
+    return () => { off = true; clearTimeout(t); };
+  }, [stage, quoteFile, quoteVendor, readTick, readSince]);
+
+  const lines = Array.isArray(quoteFile?.facts?.price_lines) ? (quoteFile?.facts?.price_lines as unknown[]) : [];
+
+  const sendQuote = async (f: File) => {
+    if (!quoteVendor) return;
+    setErr(null); setBusy(true); setPct(0);
+    try {
+      const made = await call("/api/files", "POST", { name: f.name, mime: f.type, size: f.size, contact_id: quoteVendor, category: "vendor_quote" });
+      await sendBytes(made.upload.signed_url, f, setPct);
+      const done = await call(`/api/files/${made.file.id}/done`, "POST");
+      setQuoteFile(done.file as QuoteFile);
+      setReadSince(Date.now()); setSlow(false);
+      setStage("reading");
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); setPct(null); }
+  };
+  const pickEarlier = (f: QuoteFile) => { setQuoteFile(f); setUnticked({}); setRules({}); setFilter("all"); setStage("preview"); };
+
   const submit = async () => {
     setBusy(true); setErr(null);
     const byLine = new Map(rows.map((r) => [r.line, r]));
@@ -139,11 +205,14 @@ export function PriceImport({ open, onClose, cards, vendors, onDone }: {
     });
     try {
       const b = await call("/api/price-book/import", "POST", {
-        kind: file?.kind, file_name: file?.name, source, rows: payload,
+        ...(quoteFile
+          ? { kind: "vendor_quote", file_name: quoteFile.name, source: "vendor quote", source_file_id: quoteFile.id, vendor_contact_id: quoteVendor }
+          : { kind: file?.kind, file_name: file?.name, source }),
+        rows: payload,
         unchanged: counts.same, skipped: matched.length - payload.length - counts.same,
       });
       const i = b.import as { created: number; updated: number; groups: number };
-      onDone(`Imported ${file?.name}: ${i.created} new card${i.created === 1 ? "" : "s"}, ${i.updated} price change${i.updated === 1 ? "" : "s"}${i.groups ? `, ${i.groups} new group${i.groups === 1 ? "" : "s"}` : ""}.`);
+      onDone(`Imported ${quoteFile?.name ?? file?.name}: ${i.created} new card${i.created === 1 ? "" : "s"}, ${i.updated} price change${i.updated === 1 ? "" : "s"}${i.groups ? `, ${i.groups} new group${i.groups === 1 ? "" : "s"}` : ""}.`);
       reset();
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
   };
@@ -160,8 +229,11 @@ export function PriceImport({ open, onClose, cards, vendors, onDone }: {
   const byLine = new Map(rows.map((r) => [r.line, r]));
 
   return (
-    <Drawer open={open} onClose={close} wide title="Import into the Price book"
-      sub={stage === "pick" ? "CSV or Excel — nothing is saved until you check the preview" : file ? `${file.name} · ${source}` : undefined}>
+    <Drawer open={open} onClose={close} wide title={start === "quote" ? "Import a vendor's quote" : "Import into the Price book"}
+      sub={stage === "pick" ? "CSV or Excel — nothing is saved until you check the preview"
+        : quoteFile ? `${quoteFile.name} · ${vendorName(quoteVendor) ?? "vendor"}`
+        : stage === "quote" ? "A vendor's quote — Dusty reads the prices, you check them"
+        : file ? `${file.name} · ${source}` : undefined}>
       <div ref={measure} className="px-4 py-3 mx-auto" style={{ maxWidth: 1180 }}>
         {err && <div className="mb-2 rounded px-3 py-2" style={{ fontSize: F.sm, color: T.red, background: "#FBEAEA" }}>{err}</div>}
 
@@ -180,6 +252,63 @@ export function PriceImport({ open, onClose, cards, vendors, onDone }: {
               <input type="file" accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="hidden"
                 aria-label="Spreadsheet file" disabled={busy} onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void choose(f); }} />
             </label>
+          </div>
+        )}
+
+        {stage === "quote" && (
+          <div className="flex flex-col gap-3" style={{ maxWidth: 560 }}>
+            <p style={{ fontSize: F.sm, color: T.ink2, lineHeight: 1.5 }}>
+              Pick the vendor, then their quote, price sheet or receipt — a PDF, or a photo (JPEG or PNG). It&apos;s saved to their files, Dusty reads the prices
+              (usually under a minute), and you check every line against their cards before anything changes. A price is kept only if it&apos;s written on the quote.
+            </p>
+            <label className="block"><span style={eyebrow}>Vendor</span>
+              <select value={quoteVendor} onChange={(e) => { setQuoteVendor(e.target.value); setEarlier(null); }} style={field} aria-label="Vendor">
+                <option value="">Pick a vendor</option>
+                {vendors.map((v) => <option key={v.id} value={v.id}>{v.name || formatPhone(v.phone)}</option>)}
+              </select>
+              {vendors.length === 0 && <span style={{ fontSize: 9.5, color: T.ink3 }}>File someone as a vendor on Threads first.</span>}</label>
+            <label className="flex items-center justify-center rounded" style={{ ...btn(true), height: 48, opacity: busy || !quoteVendor ? 0.5 : 1, cursor: quoteVendor ? "pointer" : "default" }}>
+              {pct !== null ? `Uploading… ${pct}%` : "Choose the quote"}
+              <input type="file" accept="application/pdf,image/jpeg,image/png" className="hidden" aria-label="Quote file" disabled={busy || !quoteVendor}
+                onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void sendQuote(f); }} />
+            </label>
+            {quoteVendor && earlier && earlier.length > 0 && (
+              <div>
+                <div style={{ ...eyebrow, color: T.ink }}>Quotes Dusty has already read</div>
+                {earlier.map((f) => (
+                  <button key={f.id} onClick={() => pickEarlier(f)} className="w-full text-left flex items-baseline gap-2 py-1.5" style={{ borderTop: `1px solid ${T.hairSoft}`, cursor: "pointer" }}>
+                    <span style={{ flex: 1, minWidth: 0, fontSize: F.sm, ...clip }}>{f.name}</span>
+                    <span style={{ fontSize: F.xs, color: T.ink3 }}>{(f.facts?.price_lines as unknown[]).length} prices · {new Date(f.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
+                    <span style={{ ...eyebrow, color: T.chalk }}>Use</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {stage === "reading" && quoteFile && (
+          <div className="flex flex-col gap-3" style={{ maxWidth: 560 }}>
+            {quoteFile.read_state === "read" && lines.length === 0 ? (
+              <div style={{ fontSize: F.sm, color: T.ink2, lineHeight: 1.5 }}>
+                Dusty read it but found no prices on it{quoteFile.summary ? `: ${quoteFile.summary}` : "."} It&apos;s kept in {vendorName(quoteVendor) ?? "the vendor"}&apos;s files.
+              </div>
+            ) : quoteFile.read_state === "skipped" || quoteFile.read_state === "failed" ? (
+              <div style={{ fontSize: F.sm, color: T.red, lineHeight: 1.5 }}>
+                Dusty couldn&apos;t read it: {quoteFile.read_error ?? "no reason given"}.{quoteFile.read_state === "failed" ? " He'll try again in 30 minutes." : ""} It&apos;s kept in {vendorName(quoteVendor) ?? "the vendor"}&apos;s files.
+              </div>
+            ) : (
+              <div className="flex items-center gap-2" style={{ fontSize: F.sm, color: T.ink2 }}>
+                <span className="rounded-full animate-pulse" style={{ width: 10, height: 10, background: T.hiviz }} />
+                Dusty is reading {quoteFile.name}…
+                {slow
+                  ? " Still going. You can close this — the quote will be under “Quotes Dusty has already read” when he's done."
+                  : " Reads usually take under a minute."}
+              </div>
+            )}
+            <div className="flex gap-2">
+              <button onClick={() => { setQuoteFile(null); setStage("quote"); }} style={btn(false)}>Back</button>
+            </div>
           </div>
         )}
 
@@ -266,6 +395,11 @@ export function PriceImport({ open, onClose, cards, vendors, onDone }: {
                 </button>
               ))}
             </div>
+            {quote && quoteFile?.facts?.price_lines_from_photo === true && (
+              <div className="rounded px-3 py-2" style={{ fontSize: F.sm, background: T.hivizDim, color: T.ink }}>
+                Read from a photo, so there was no text to check these prices against. Check each one against the quote before importing.
+              </div>
+            )}
             <div style={{ fontSize: F.xs, color: T.ink3 }}>
               A price change updates the price only — your markup, group and how it&apos;s counted stay. &quot;Guess&quot; means the way it&apos;s counted on a job came from its unit; pick another if it&apos;s wrong.
             </div>
@@ -351,7 +485,7 @@ export function PriceImport({ open, onClose, cards, vendors, onDone }: {
             )}
 
             <div className="sticky bottom-0 flex gap-2 items-center py-2 flex-wrap" style={{ background: T.card, borderTop: `1px solid ${T.hair}` }}>
-              <button onClick={() => setStage("map")} style={btn(false)}>Back</button>
+              <button onClick={() => { if (quote) { setQuoteFile(null); setStage("quote"); } else setStage("map"); }} style={btn(false)}>Back</button>
               <button onClick={() => void submit()} disabled={busy || nNew + nChange === 0}
                 style={{ ...btn(true), opacity: busy || nNew + nChange === 0 ? 0.5 : 1 }}>
                 {busy ? "Importing…" : `Import ${nNew + nChange}`}

@@ -53,3 +53,28 @@ test("long documents are clipped from the end", () => {
   assert.equal(text.length, 40_000);
   assert.ok(clipped);
 });
+
+test("price lines: kept only when the unit price is written in the quote", () => {
+  const text = "Angelle Materials — Quote Q-1182\n3000 PSI  CY  42  $148.00  $6,216.00\n#4 Rebar 20' RB-4 EA 120 14.50 1,740.00\nFuel surcharge 25.00";
+  const r = sanitizeRead({ summary: "Angelle quote.", kind: "vendor_quote", facts: {}, price_lines: [
+    { name: "3000 PSI", sku: null, unit: "CY", unit_cost: 148, qty: 42 },
+    { name: "#4 Rebar 20'", sku: "RB-4", unit: "EA", unit_cost: "14.50", qty: 120 },
+    { name: "4000 PSI", unit: "CY", unit_cost: 158, qty: null },          // not in the text
+    { name: "Line total mistaken", unit: "CY", unit_cost: 6216 / 42 + 1 }, // worked out, not written
+    { name: "", unit_cost: 25 },                                            // no name
+    { name: "Fuel surcharge", unit: null, unit_cost: 25, qty: 3 },          // qty 3 not written
+  ] }, text);
+  assert.deepEqual(r.facts.price_lines, [
+    { name: "3000 PSI", sku: null, unit: "CY", unit_cost: 148, qty: 42 },
+    { name: "#4 Rebar 20'", sku: "RB-4", unit: "EA", unit_cost: 14.5, qty: 120 },
+    { name: "Fuel surcharge", sku: null, unit: null, unit_cost: 25, qty: null },
+  ]);
+  assert.match(r.dropped.join("|"), /price_lines: 2 prices not written/);
+  assert.equal(r.facts.price_lines_from_photo, undefined);
+});
+
+test("price lines from a photo are marked for checking", () => {
+  const r = sanitizeRead({ summary: "Receipt.", kind: "receipt", facts: {}, price_lines: [{ name: "Rebar chairs", unit: "BAG", unit_cost: 18.9 }] }, null);
+  assert.equal(r.facts.price_lines.length, 1);
+  assert.equal(r.facts.price_lines_from_photo, true);
+});

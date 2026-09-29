@@ -1,15 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
 import { cleanCard } from "@/lib/cost-cards";
+import { setVendorPrice } from "@/lib/sources-server";
 
 /**
  * One cost card: change any field, or retire it. A retired card is kept
  * (active=false) so a budget that already used it still reads; it just leaves
  * the catalog.
+ *
+ * Vendor prices (migration 051): once a card has a default vendor, its price
+ * IS that vendor's price, so a price or item # typed here is written to the
+ * vendor's price (a trigger copies it back onto the card). Choosing a vendor
+ * here makes them the default, carrying the card's price; clearing it leaves
+ * the price as the card's own.
  */
 
 export const dynamic = "force-dynamic";
-const COLUMNS = "id, cost_group_id, name, description, cost_type, unit, unit_cost, taxable, markup_pct, vendor_contact_id, vendor_sku, price_as_of, price_source, qty_rule, rule_params, active, sort_order, updated_at, import_id, price_import_id, price_file_id";
+const COLUMNS = "id, cost_group_id, name, description, cost_type, unit, unit_cost, taxable, markup_pct, vendor_contact_id, vendor_sku, price_as_of, price_source, qty_rule, rule_params, active, sort_order, updated_at, import_id, price_import_id, price_file_id, default_source_id";
 
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
@@ -19,7 +26,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   const bad = (m: string, s = 400) => applyCookies(NextResponse.json({ error: m }, { status: s }));
   let b: Record<string, unknown>;
   try { b = await req.json(); } catch { return bad("Body must be JSON."); }
-  const { data: cur } = await supabase.from("cost_items").select("id, qty_rule").eq("org_id", orgId).eq("id", id).maybeSingle();
+  const { data: cur } = await supabase.from("cost_items").select("id, qty_rule, unit_cost, vendor_contact_id, default_source_id").eq("org_id", orgId).eq("id", id).maybeSingle();
   if (!cur) return bad("No such card.", 404);
   // Rule numbers are checked against the rule the card will have.
   const c = cleanCard({ ...b, ...("rule_params" in b && !("qty_rule" in b) ? { qty_rule: cur.qty_rule } : {}) }, true);
@@ -39,6 +46,29 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   // A price set here is set by hand: history (migration 049) records it as such,
   // not as the import or the vendor quote that set the one before.
   if ("unit_cost" in patch) { patch.price_import_id = null; patch.price_file_id = null; }
+  const today = new Date().toISOString().slice(0, 10);
+  const typed = (cost: unknown) => ({ unit_cost: (cost ?? null) as number | null, price_as_of: cost === null || cost === undefined ? null : today, price_source: cost === null || cost === undefined ? null : "typed", price_file_id: null, price_import_id: null });
+
+  // ---- the vendor: choosing one makes them the default, carrying the price
+  if ("vendor_contact_id" in patch && patch.vendor_contact_id !== cur.vendor_contact_id) {
+    const vendor = patch.vendor_contact_id as string | null;
+    const cost = "unit_cost" in patch ? patch.unit_cost : cur.unit_cost === null ? null : Number(cur.unit_cost);
+    if (vendor) {
+      const r = await setVendorPrice(supabase, orgId, id, vendor, { ...typed(cost), vendor_sku: (patch.vendor_sku as string | null | undefined) ?? null }, true);
+      if (!r.ok) return bad(r.error, 500);
+      for (const k of ["vendor_contact_id", "unit_cost", "vendor_sku", "price_as_of", "price_source", "price_import_id", "price_file_id"]) delete patch[k];
+    } else {
+      patch.default_source_id = null;
+    }
+  } else if (cur.default_source_id && ("unit_cost" in patch || "vendor_sku" in patch)) {
+    // ---- a price or item # typed on a card with a default vendor is that vendor's
+    const fields: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    if ("unit_cost" in patch) Object.assign(fields, typed(patch.unit_cost));
+    if ("vendor_sku" in patch) fields.vendor_sku = patch.vendor_sku;
+    const { error } = await supabase.from("cost_item_sources").update(fields).eq("org_id", orgId).eq("id", cur.default_source_id);
+    if (error) return bad(error.message, 500);
+    for (const k of ["unit_cost", "vendor_sku", "price_as_of", "price_source", "price_import_id", "price_file_id"]) delete patch[k];
+  }
   patch.updated_at = new Date().toISOString();
   const { data, error } = await supabase.from("cost_items").update(patch).eq("id", id).eq("org_id", orgId).select(COLUMNS).single();
   if (error || !data) return bad(error?.message ?? "not saved", 500);

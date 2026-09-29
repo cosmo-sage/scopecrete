@@ -23,6 +23,7 @@ import { useWide } from "@/lib/v34/use-wide";
 import { Cell } from "@/components/v34/cell";
 import { COST_TYPE_LABEL, QTY_RULE_LABEL, cardGaps, defaultTaxable, type CostType } from "@/lib/cost-cards";
 import { CardSheet, GroupSheet, call, numify, dateLabel, type Card, type Group, type Vendor } from "@/components/v34/cost-cards";
+import { ReceiptImport } from "@/components/v34/receipt-import";
 import { PriceImport } from "@/components/v34/price-import";
 import { Assemblies } from "@/components/v34/assemblies";
 
@@ -33,6 +34,8 @@ interface Imp {
 }
 const STALE_DAYS = 90;
 const VIEW_KEY = "sc:pricebook-view";
+/** One vendor's price on an item (migration 051), as the "By vendor" view needs it. */
+interface Src { id: string; cost_item_id: string; vendor_contact_id: string; unit_cost: number | null; vendor_sku: string | null; price_as_of: string | null; price_source: string | null }
 const SOURCE_SHORT: Record<string, string> = { quote: "quote", receipt: "receipt", invoice: "invoice", typed: "typed", import: "import" };
 
 export function PriceBook() {
@@ -50,7 +53,8 @@ export function PriceBook() {
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [editing, setEditing] = useState<Partial<Card> | null>(null);
   const [addingGroup, setAddingGroup] = useState(false);
-  const [importing, setImporting] = useState<null | "sheet" | "quote">(null);
+  const [importing, setImporting] = useState<null | "sheet" | "receipt">(null);
+  const [sources, setSources] = useState<Src[]>([]);
   const [menu, setMenu] = useState(false);
   const [measure, wide] = useWide<HTMLDivElement>(900);
   // "Now" as of the last load — for "old price" and recent imports — so render stays pure.
@@ -61,7 +65,7 @@ export function PriceBook() {
 
   useEffect(() => {
     let off = false;
-    Promise.all([call("/api/cost-items?all=1", "GET"), call("/api/price-book/import", "GET").catch(() => ({ imports: [] }))])
+    Promise.all([call("/api/cost-items?all=1&sources=1", "GET"), call("/api/price-book/import", "GET").catch(() => ({ imports: [] }))])
       .then(([b, i]) => {
         if (off) return;
         setNow(Date.now());
@@ -70,7 +74,7 @@ export function PriceBook() {
           // The scope page's "Assemblies" button opens this tab.
           if (new URLSearchParams(window.location.search).get("tab") === "assemblies") setTab("assemblies");
         }
-        setItems((b.items as Array<Record<string, unknown>>).map(numify)); setGroups(b.groups); setVendors(b.vendors); setImports(i.imports ?? []);
+        setItems((b.items as Array<Record<string, unknown>>).map(numify)); setGroups(b.groups); setVendors(b.vendors); setImports(i.imports ?? []); setSources((b.sources ?? []) as Src[]);
         setErr(null);
       })
       .catch((e) => { if (!off) setErr(e instanceof Error ? e.message : String(e)); });
@@ -102,25 +106,40 @@ export function PriceBook() {
       const loose = visible.filter((c) => !c.cost_group_id || !groups.some((g) => g.id === c.cost_group_id));
       if (loose.length) out.push({ key: "none", title: "Not in a group", sub: "", cards: loose });
     } else {
-      const ids = [...new Set(visible.map((c) => c.vendor_contact_id).filter((v): v is string => !!v))];
+      // Every vendor who prices something (migration 051): an item is listed under
+      // each of them, at THEIR price, ★ where theirs is the one budgets use.
+      const byVendor = new Map<string, Src[]>();
+      for (const x of sources) byVendor.set(x.vendor_contact_id, [...(byVendor.get(x.vendor_contact_id) ?? []), x]);
+      const ids = [...new Set([...byVendor.keys(), ...visible.map((c) => c.vendor_contact_id).filter((v): v is string => !!v)])];
       ids.sort((a, b) => (vendorLabel(a) ?? "").localeCompare(vendorLabel(b) ?? ""));
       for (const id of ids) {
-        const cards = visible.filter((c) => c.vendor_contact_id === id);
+        const theirs = new Map((byVendor.get(id) ?? []).map((x) => [x.cost_item_id, x]));
+        const cards: Card[] = visible.filter((c) => theirs.has(c.id) || (!c.default_source_id && c.vendor_contact_id === id)).map((c) => {
+          const x = theirs.get(c.id);
+          return x ? { ...c, unit_cost: x.unit_cost, price_as_of: x.price_as_of, price_source: x.price_source, vendor_sku: x.vendor_sku ?? c.vendor_sku, _src: x.id, _star: c.default_source_id === x.id } as Card : c;
+        });
+        if (!cards.length) continue;
         const newest = cards.map((c) => c.price_as_of).filter((d): d is string => !!d).sort().at(-1) ?? null;
-        out.push({ key: id, title: vendorLabel(id) ?? "Vendor", href: `/dashboard/messages/${id}`, cards,
-          sub: `${cards.length} card${cards.length === 1 ? "" : "s"}${newest ? ` · newest price ${dateLabel(newest)}` : " · no price dates"}` });
+        out.push({ key: id, title: vendorLabel(id) ?? "Vendor", href: `/dashboard/vendors/${id}`, cards,
+          sub: `${cards.length} item${cards.length === 1 ? "" : "s"}${newest ? ` · newest price ${dateLabel(newest)}` : " · no price dates"}` });
       }
-      const none = visible.filter((c) => !c.vendor_contact_id);
+      const none = visible.filter((c) => !c.vendor_contact_id && !sources.some((x) => x.cost_item_id === c.id));
       if (none.length) out.push({ key: "none", title: "No vendor", sub: "your own, or not tied to a supplier yet", cards: none });
     }
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible, groups, view, q, vendors]);
+  }, [visible, groups, view, q, vendors, sources]);
 
   const patch = async (c: Card, body: Record<string, unknown>) => {
     setErr(null);
     setItems((xs) => (xs ?? []).map((x) => (x.id === c.id ? { ...x, ...body } as Card : x)));
     try { await call(`/api/cost-items/${c.id}`, "PATCH", body); }
+    catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+    finally { reload(); }
+  };
+  const patchSource = async (c: Card, v: number | null) => {
+    setErr(null);
+    try { await call(`/api/cost-items/${c.id}/sources/${c._src}`, "PATCH", { unit_cost: v }); }
     catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
     finally { reload(); }
   };
@@ -164,8 +183,8 @@ export function PriceBook() {
               <button onClick={() => { setMenu(false); setImporting("sheet"); }} className="w-full text-left px-3 py-2" style={{ fontSize: F.sm, cursor: "pointer" }}>
                 A spreadsheet<span style={{ display: "block", fontSize: 10, color: T.ink3 }}>CSV or Excel from JobTread, another CRM, or your own</span>
               </button>
-              <button onClick={() => { setMenu(false); setImporting("quote"); }} className="w-full text-left px-3 py-2" style={{ fontSize: F.sm, cursor: "pointer", borderTop: `1px solid ${T.hairSoft}` }}>
-                A vendor&apos;s quote<span style={{ display: "block", fontSize: 10, color: T.ink3 }}>PDF or photo — Dusty reads the prices, you check them</span>
+              <button onClick={() => { setMenu(false); setImporting("receipt"); }} className="w-full text-left px-3 py-2" style={{ fontSize: F.sm, cursor: "pointer", borderTop: `1px solid ${T.hairSoft}` }}>
+                A receipt, invoice or quote<span style={{ display: "block", fontSize: 10, color: T.ink3 }}>Photo or PDF — Dusty reads the vendor and the prices, you check them</span>
               </button>
             </div>
           )}
@@ -274,14 +293,16 @@ export function PriceBook() {
                             )}
                           </td>
                           <td style={{ padding: "4px 8px", color: T.ink2, maxWidth: 170, ...clip }}>
-                            {view === "group" ? vendorLabel(c.vendor_contact_id) ?? "—" : groupLabel(c.cost_group_id) ?? "—"}
+                            {view === "group"
+                              ? <>{vendorLabel(c.vendor_contact_id) ?? "—"}{(c.vendors ?? 0) > (c.vendor_contact_id ? 1 : 0) && <span style={{ fontSize: 10, color: T.chalk }}> +{(c.vendors ?? 0) - (c.vendor_contact_id ? 1 : 0)}</span>}</>
+                              : <>{c._star && <span title="Their price is the one budgets use" style={{ color: T.hiviz }}>★ </span>}{groupLabel(c.cost_group_id) ?? "—"}</>}
                           </td>
                           <td style={{ padding: "4px 8px", color: T.ink3, maxWidth: 100, ...clip }}>{c.vendor_sku ?? ""}</td>
                           <td style={{ padding: "4px 8px", color: T.ink2 }}>{COST_TYPE_LABEL[c.cost_type]}</td>
                           <td style={{ padding: "4px 8px" }}>{c.unit}</td>
                           <td style={{ padding: "2px 4px", textAlign: "right" }}>
                             <Cell value={c.unit_cost} money label={`Unit cost of ${c.name}`} warn={c.unit_cost === null}
-                              onSave={(v) => void patch(c, { unit_cost: v, price_as_of: v === null ? null : new Date().toISOString().slice(0, 10), price_source: v === null ? null : "typed" })} />
+                              onSave={(v) => void (c._src ? patchSource(c, v) : patch(c, { unit_cost: v, price_as_of: v === null ? null : new Date().toISOString().slice(0, 10), price_source: v === null ? null : "typed" }))} />
                           </td>
                           <td style={{ padding: "2px 4px", textAlign: "right", whiteSpace: "nowrap" }}>
                             <Cell value={c.markup_pct} label={`Markup on ${c.name}`} suffix="%" placeholder="default" onSave={(v) => void patch(c, { markup_pct: v })} />
@@ -322,7 +343,8 @@ export function PriceBook() {
                   <div style={{ borderTop: `1px solid ${T.hair}` }}>
                     {s.cards.map((c, i) => {
                       const gaps = cardGaps(c);
-                      const other = view === "group" ? vendorLabel(c.vendor_contact_id) : groupLabel(c.cost_group_id);
+                      const more = (c.vendors ?? 0) - (c.vendor_contact_id ? 1 : 0);
+                      const other = view === "group" ? `${vendorLabel(c.vendor_contact_id) ?? ""}${more > 0 ? ` +${more}` : ""}` || null : `${c._star ? "★ " : ""}${groupLabel(c.cost_group_id) ?? ""}` || null;
                       return (
                         <button key={c.id} onClick={() => setEditing(c)} className="w-full text-left flex items-start gap-2 px-2.5 py-2"
                           style={{ borderTop: i ? `1px solid ${T.hairSoft}` : "none", cursor: "pointer", opacity: c.active ? 1 : 0.5 }}>
@@ -356,10 +378,13 @@ export function PriceBook() {
 
       </>)}
 
-      <CardSheet card={editing} groups={groups} vendors={vendors} lockVendor={null}
+      <CardSheet card={editing ? (items ?? []).find((x) => x.id === editing.id) ?? editing : null} groups={groups} vendors={vendors} lockVendor={null} items={items ?? []}
         onClose={() => setEditing(null)} onSaved={() => { setEditing(null); reload(); }} />
       <GroupSheet open={addingGroup} onClose={() => setAddingGroup(false)} onSaved={() => { setAddingGroup(false); reload(); }} />
-      {importing && (
+      {importing === "receipt" && (
+        <ReceiptImport open onClose={() => setImporting(null)} onDone={(m) => { setImporting(null); setNote(m); reload(); }} />
+      )}
+      {importing === "sheet" && (
         <PriceImport key={importing} open start={importing} onClose={() => setImporting(null)} cards={items ?? []} vendors={vendors}
           onDone={(m) => { setImporting(null); setNote(m); reload(); }} />
       )}

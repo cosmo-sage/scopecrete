@@ -28,6 +28,9 @@ export interface Card {
   unit: string; unit_cost: number | null; taxable: boolean; markup_pct: number | null;
   vendor_contact_id: string | null; vendor_sku: string | null; price_as_of: string | null; price_source: string | null;
   qty_rule: QtyRule; rule_params: Record<string, number>; active: boolean; sort_order: number; updated_at: string;
+  default_source_id?: string | null; vendors?: number;
+  /** The Price book's "By vendor" view: which vendor price this row shows, and whether it is the default. */
+  _src?: string; _star?: boolean;
   import_id?: string | null; price_import_id?: string | null; price_file_id?: string | null;
 }
 export interface Group { id: string; name: string; cost_type: CostType; default_markup_pct: number | null; sort_order: number }
@@ -104,7 +107,7 @@ export function CostCards({ vendorId, vendorName }: { vendorId?: string; vendorN
           <div style={{ fontFamily: disp, fontSize: F.md, fontWeight: 600 }}>{vendorId ? "Price list" : "Cost cards"}</div>
           <div style={{ fontSize: F.xs, color: T.ink3, lineHeight: 1.4 }}>
             {vendorId
-              ? `What you buy from ${vendorName ?? "them"}, and when each price was last confirmed.`
+              ? `What you buy from ${vendorName ?? "them"}, at their price, and when it was last confirmed. Change prices and the default on their Vendors page.`
               : "What you buy and charge for, each with its vendor. A job's budget is built from these."}
           </div>
         </div>
@@ -141,20 +144,24 @@ export function CostCards({ vendorId, vendorName }: { vendorId?: string; vendorN
                 <div style={{ borderTop: `1px solid ${T.hair}` }}>
                   {s.cards.map((c, i) => {
                     const gaps = cardGaps(c);
+                    // A vendor's price list shows THEIR price (migration 051); ★ when it's the one budgets use.
+                    const theirs = vendorId ? (c as Card & { vendor_source?: { id: string; unit_cost: number | null; price_as_of: string | null; price_source: string | null } | null }).vendor_source ?? null : null;
+                    const shown = theirs ? { ...c, unit_cost: theirs.unit_cost, price_as_of: theirs.price_as_of, price_source: theirs.price_source } : c;
+                    const star = !!theirs && c.default_source_id === theirs.id;
                     return (
-                      <button key={c.id} onClick={() => setEditing(c)} className="w-full text-left flex items-start gap-2 px-2.5 py-2"
+                      <button key={c.id} onClick={() => { if (vendorId) window.location.href = `/dashboard/vendors/${vendorId}`; else setEditing(c); }} className="w-full text-left flex items-start gap-2 px-2.5 py-2"
                         style={{ borderTop: i ? `1px solid ${T.hairSoft}` : "none", cursor: "pointer" }}>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: F.sm, fontWeight: 600, color: T.ink, ...clip }}>{c.name}</div>
                           <div style={{ fontSize: F.xs, color: T.ink3, ...clip }}>
-                            {[vendorLabel(c.vendor_contact_id), QTY_RULE_LABEL[c.qty_rule], c.price_as_of ? `price ${dateLabel(c.price_as_of)}${c.price_source ? ` (${c.price_source})` : ""}` : null]
+                            {[vendorId ? (star ? "★ the price budgets use" : theirs ? "not the default" : null) : vendorLabel(c.vendor_contact_id), QTY_RULE_LABEL[c.qty_rule], shown.price_as_of ? `price ${dateLabel(shown.price_as_of)}${shown.price_source ? ` (${shown.price_source})` : ""}` : null]
                               .filter(Boolean).join(" · ")}
                           </div>
                           {gaps.length > 0 && <div style={{ fontSize: F.xs, color: T.hiviz }}>needs {gaps.join(", ")}</div>}
                         </div>
                         <div className="text-right shrink-0" style={{ ...nums }}>
-                          <div style={{ fontFamily: disp, fontSize: F.md, fontWeight: 600, color: c.unit_cost === null ? T.ink3 : T.ink }}>
-                            {c.unit_cost === null ? "—" : money(c.unit_cost)}
+                          <div style={{ fontFamily: disp, fontSize: F.md, fontWeight: 600, color: shown.unit_cost === null ? T.ink3 : T.ink }}>
+                            {shown.unit_cost === null ? "—" : money(shown.unit_cost)}
                           </div>
                           <div style={{ fontSize: 9.5, color: T.ink3 }}>per {c.unit}{c.taxable ? " · taxed" : ""}</div>
                         </div>
@@ -209,9 +216,9 @@ export function GroupSheet({ open, onClose, onSaved }: { open: boolean; onClose:
   );
 }
 
-export function CardSheet({ card, groups, vendors, lockVendor, onClose, onSaved }: {
+export function CardSheet({ card, groups, vendors, lockVendor, onClose, onSaved, items }: {
   card: Partial<Card> | null; groups: Group[]; vendors: Vendor[]; lockVendor: { id: string; name: string | null } | null;
-  onClose: () => void; onSaved: () => void;
+  onClose: () => void; onSaved: () => void; items?: Card[];
 }) {
   const [f, setF] = useState<Partial<Card>>({});
   const [params, setParams] = useState<Record<string, string>>({});
@@ -293,7 +300,7 @@ export function CardSheet({ card, groups, vendors, lockVendor, onClose, onSaved 
           </div>
         )}
         <div className="grid grid-cols-2 gap-2">
-          <label className="block"><span style={eyebrow}>Unit cost</span>
+          <label className="block"><span style={eyebrow}>Unit cost{card.default_source_id && !lockVendor ? " · default vendor's" : ""}</span>
             <input type="number" inputMode="decimal" value={numField(f.unit_cost)} placeholder="not recorded"
               onChange={(e) => set({ unit_cost: e.target.value === "" ? null : Number(e.target.value) })}
               style={{ ...field, borderColor: f.unit_cost === null || f.unit_cost === undefined ? T.hiviz : T.hair }} /></label>
@@ -307,7 +314,7 @@ export function CardSheet({ card, groups, vendors, lockVendor, onClose, onSaved 
             Sales tax applies</label>
         </div>
         {!lockVendor && (
-          <label className="block"><span style={eyebrow}>Vendor</span>
+          <label className="block"><span style={eyebrow}>Default vendor · the price budgets use</span>
             <select value={f.vendor_contact_id ?? ""} onChange={(e) => set({ vendor_contact_id: e.target.value || null })} style={field}>
               <option value="">None — my own</option>
               {vendors.map((v) => <option key={v.id} value={v.id}>{v.name || formatPhone(v.phone)}{v.contact_subtype ? ` (${v.contact_subtype.replace(/_/g, " ")})` : ""}</option>)}
@@ -342,9 +349,126 @@ export function CardSheet({ card, groups, vendors, lockVendor, onClose, onSaved 
         {card.id && card.active === false && (
           <button onClick={() => void unretire()} disabled={busy} className="self-start" style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>Put back in the catalog</button>
         )}
+        {card.id && !lockVendor && <VendorPrices card={card as Card} vendors={vendors} onChanged={onSaved} />}
+        {card.id && !lockVendor && card.active !== false && items && <SameItem card={card as Card} items={items} onDone={onSaved} />}
         {card.id && <PriceHistory cardId={card.id} unit={card.unit ?? ""} key={`${card.id}${card.updated_at ?? ""}`} />}
       </div>
     </Sheet>
+  );
+}
+
+interface Src {
+  id: string; unit_cost: number | null; vendor_sku: string | null; unit: string | null; price_as_of: string | null; price_source: string | null;
+  vendor: { id: string; name: string | null; company_name: string | null; service_area: string | null; phone: string | null } | null;
+}
+
+/**
+ * Every vendor's price for this item (migration 051), cheapest first. ★ is the
+ * default — the price budgets use; tap another to make it the default. Add a
+ * vendor's price by hand, or take a vendor off.
+ */
+function VendorPrices({ card, vendors, onChanged }: { card: Card; vendors: Vendor[]; onChanged: () => void }) {
+  const [rows, setRows] = useState<Src[] | null>(null);
+  const [def, setDef] = useState<string | null>(card.default_source_id ?? null);
+  const [adding, setAdding] = useState({ vendor: "", cost: "" });
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    let off = false;
+    call(`/api/cost-items/${card.id}/sources`, "GET").then((b) => { if (!off) { setRows(b.sources); setDef(b.default_source_id); } })
+      .catch((e) => { if (!off) setErr(String(e?.message ?? e)); });
+    return () => { off = true; };
+  }, [card.id]);
+  const run = async (p: Promise<{ sources?: Src[]; item?: { default_source_id: string | null } }>) => {
+    setBusy(true); setErr(null);
+    try { const b = await p; if (b.sources) setRows(b.sources); if (b.item) setDef(b.item.default_source_id); onChanged(); }
+    catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
+  };
+  const name = (s: Src) => s.vendor?.name || s.vendor?.company_name || formatPhone(s.vendor?.phone ?? null);
+  const field: React.CSSProperties = { height: 32, border: `1px solid ${T.hair}`, background: "#fff", fontSize: F.sm, borderRadius: 4, padding: "0 8px", minWidth: 0 };
+  const taken = new Set((rows ?? []).map((r) => r.vendor?.id));
+  return (
+    <div className="mt-1" style={{ borderTop: `1px solid ${T.hairSoft}`, paddingTop: 8 }}>
+      <div style={{ ...eyebrow, color: T.ink }}>Vendors · {rows?.length ?? "…"}</div>
+      <div style={{ fontSize: 9.5, color: T.ink3 }}>★ = the price budgets use. Tap another vendor&apos;s star to use theirs.</div>
+      {err && <div style={{ fontSize: F.xs, color: T.red }}>{err}</div>}
+      {rows?.length === 0 && <div style={{ fontSize: F.xs, color: T.ink3 }}>No vendor prices yet — the card&apos;s own price is used.</div>}
+      {(rows ?? []).map((s) => (
+        <div key={s.id} className="flex items-center gap-2 py-1" style={{ borderTop: `1px solid ${T.hairSoft}`, fontSize: F.xs }}>
+          <button onClick={() => { if (s.id !== def) void run(call(`/api/cost-items/${card.id}/sources/${s.id}`, "PATCH", { default: true })); }} disabled={busy}
+            aria-label={s.id === def ? `${name(s)} is the default` : `Make ${name(s)} the default`}
+            style={{ fontSize: 17, lineHeight: 1, width: 20, color: s.id === def ? T.hiviz : T.hair, cursor: s.id === def ? "default" : "pointer" }}>★</button>
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ display: "block", fontWeight: 600, ...clip }}>{name(s)}</span>
+            <span style={{ display: "block", fontSize: 9.5, color: T.ink3, ...clip }}>
+              {[s.vendor?.service_area, s.vendor_sku ? `#${s.vendor_sku}` : null, s.price_as_of ? dateLabel(s.price_as_of) : null, s.price_source].filter(Boolean).join(" · ") || " "}
+            </span>
+          </span>
+          <span style={{ ...nums, fontWeight: 600 }}>{s.unit_cost === null ? "—" : money(s.unit_cost)}<span style={{ fontSize: 9.5, color: T.ink3, fontWeight: 400 }}>/{s.unit ?? card.unit}</span></span>
+          <button onClick={() => { if (window.confirm(`Take ${name(s)} off ${card.name}?${s.id === def ? " The card keeps their price as its own until you pick another default." : ""}`)) void run(call(`/api/cost-items/${card.id}/sources/${s.id}`, "DELETE")); }}
+            disabled={busy} aria-label={`Remove ${name(s)}`} style={{ color: T.ink3, fontSize: 15, width: 18, cursor: "pointer" }}>×</button>
+        </div>
+      ))}
+      <div className="flex gap-1.5 mt-1 items-center">
+        <select value={adding.vendor} onChange={(e) => setAdding({ ...adding, vendor: e.target.value })} style={{ ...field, flex: 1 }} aria-label="Add a vendor's price">
+          <option value="">+ Another vendor&apos;s price…</option>
+          {vendors.filter((v) => !taken.has(v.id)).map((v) => <option key={v.id} value={v.id}>{v.name || formatPhone(v.phone)}</option>)}
+        </select>
+        {adding.vendor && <>
+          <input type="number" inputMode="decimal" value={adding.cost} onChange={(e) => setAdding({ ...adding, cost: e.target.value })} placeholder={`$ / ${card.unit}`}
+            aria-label="Their price" style={{ ...field, width: 90 }} />
+          <button onClick={() => { void run(call(`/api/cost-items/${card.id}/sources`, "POST", { vendor_contact_id: adding.vendor, unit_cost: adding.cost === "" ? null : Number(adding.cost) })); setAdding({ vendor: "", cost: "" }); }}
+            disabled={busy} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>Add</button>
+        </>}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * "Same item as…" (migration 052): this card and another are one thing —
+ * "3000 PSI ready mix" from a receipt and "3000 psi" from JobTread. This one's
+ * vendor prices move to the other and this one is retired. Undo right here.
+ */
+function SameItem({ card, items, onDone }: { card: Card; items: Card[]; onDone: () => void }) {
+  const [into, setInto] = useState("");
+  const [done, setDone] = useState<{ id: string; msg: string } | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const opts = items.filter((i) => i.active && i.id !== card.id).sort((a, b) => a.name.localeCompare(b.name));
+  const merge = async () => {
+    const target = opts.find((i) => i.id === into);
+    if (!target || !window.confirm(`${card.name} is the same as ${target.name}? Its vendor prices move to ${target.name} and ${card.name} is taken out of the catalog. Budgets keep their lines. You can undo it.`)) return;
+    setErr(null);
+    try {
+      const b = await call(`/api/cost-items/${card.id}/merge`, "POST", { into_id: into });
+      const m = b.merge as { id: string; moved: number; kept_on_retired: number };
+      setDone({ id: m.id, msg: `Merged into ${target.name}: ${m.moved} vendor price${m.moved === 1 ? "" : "s"} moved${m.kept_on_retired ? `, ${m.kept_on_retired} kept on this one (that vendor already prices ${target.name})` : ""}.` });
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+  };
+  const undo = async () => {
+    if (!done) return;
+    try { await call(`/api/cost-item-merges/${done.id}/undo`, "POST"); setDone(null); onDone(); }
+    catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+  };
+  return (
+    <div className="mt-1" style={{ borderTop: `1px solid ${T.hairSoft}`, paddingTop: 8 }}>
+      <div style={{ ...eyebrow, color: T.ink }}>Same item as…</div>
+      {done ? (
+        <div style={{ fontSize: F.xs, lineHeight: 1.5 }}>{done.msg}{" "}
+          <button onClick={() => void undo()} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>Undo</button>{" "}
+          <button onClick={onDone} style={{ ...eyebrow, color: T.ink2, cursor: "pointer" }}>Done</button></div>
+      ) : (
+        <div className="flex gap-1.5 items-center">
+          <select value={into} onChange={(e) => setInto(e.target.value)} aria-label="Same item as"
+            style={{ height: 32, border: `1px solid ${T.hair}`, background: "#fff", fontSize: F.sm, borderRadius: 4, padding: "0 8px", minWidth: 0, flex: 1 }}>
+            <option value="">Pick the item this duplicates…</option>
+            {opts.map((i) => <option key={i.id} value={i.id}>{i.name} · {i.unit}</option>)}
+          </select>
+          {into && <button onClick={() => void merge()} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>Merge</button>}
+        </div>
+      )}
+      {err && <div style={{ fontSize: F.xs, color: T.red }}>{err}</div>}
+    </div>
   );
 }
 
@@ -356,7 +480,7 @@ const SOURCE_WORD: Record<string, string> = { quote: "their quote", receipt: "a 
  */
 function PriceHistory({ cardId, unit }: { cardId: string; unit: string }) {
   const [rows, setRows] = useState<Array<{ id: string; unit_cost: number | null; price_as_of: string | null; price_source: string | null;
-    recorded_at: string; import_name: string | null; file_name: string | null }> | null>(null);
+    recorded_at: string; import_name: string | null; file_name: string | null; vendor_id: string | null; vendor_name: string | null }> | null>(null);
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => {
     let off = false;
@@ -372,7 +496,8 @@ function PriceHistory({ cardId, unit }: { cardId: string; unit: string }) {
       {rows === null && !err && <div className="rounded animate-pulse mt-1" style={{ height: 28, background: T.hairSoft }} />}
       {rows !== null && rows.length === 0 && <div style={{ fontSize: F.xs, color: T.ink3 }}>No price recorded yet.</div>}
       {rows !== null && rows.map((r, i) => {
-        const prev = rows[i + 1]?.unit_cost ?? null;
+        // The move is against the same vendor's price before (migration 051), not another vendor's.
+        const prev = rows.slice(i + 1).find((x) => x.vendor_id === r.vendor_id)?.unit_cost ?? null;
         const d = r.unit_cost !== null && prev !== null && prev > 0 ? (r.unit_cost - prev) / prev : null;
         const when = dateLabel(r.price_as_of) ?? new Date(r.recorded_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
         return (
@@ -381,7 +506,7 @@ function PriceHistory({ cardId, unit }: { cardId: string; unit: string }) {
             <span style={{ fontWeight: 600, color: T.ink, minWidth: 70 }}>{r.unit_cost === null ? "cleared" : `${money(r.unit_cost)}/${unit}`}</span>
             {d !== null && Math.abs(d) >= 0.0005 && <span style={{ color: d > 0 ? T.red : T.green }}>{d > 0 ? "▲" : "▼"} {(Math.abs(d) * 100).toFixed(1)}%</span>}
             <span className="flex-1" style={{ color: T.ink3, ...clip }}>
-              {[r.price_source ? SOURCE_WORD[r.price_source] ?? r.price_source : null, r.import_name, r.file_name].filter(Boolean).join(" · ")}
+              {[r.vendor_name, r.price_source ? SOURCE_WORD[r.price_source] ?? r.price_source : null, r.import_name, r.file_name].filter(Boolean).join(" · ")}
             </span>
           </div>
         );

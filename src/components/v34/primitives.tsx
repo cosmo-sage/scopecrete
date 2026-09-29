@@ -169,6 +169,12 @@ export const NavIcon = ({ k, on }: { k: string; on: boolean }) => {
       <path {...p} d="M4 14.4a1 1 0 0 1 1-1h9.6M7 6h5M7 8.8h3.4" />
     </svg>
   );
+  if (k === "vendors") return (
+    <svg {...box}>
+      <path {...p} d="M1.8 5.6h9.4v7.6H1.8zM11.2 8h3.2l2.6 2.6v2.6h-5.8" />
+      <circle {...p} cx="5" cy="14.4" r="1.5" /><circle {...p} cx="13.8" cy="14.4" r="1.5" />
+    </svg>
+  );
   if (k === "cash") return <svg {...box}><rect {...p} x="2.4" y="5.1" width="14.2" height="8.8" rx="1.2" /><circle {...p} cx="9.5" cy="9.5" r="2.3" /></svg>;
   if (k === "more") return (
     <svg {...box}>

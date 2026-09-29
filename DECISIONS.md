@@ -333,6 +333,24 @@ Coy: *"I need to be able to upload documents and photos for Dusty to parse."*
   viewer counts them and points to the Price book, where they are imported
   (§3). `{"sample_quote": true}` reads a made-up quote with no customer data
   (verified 2026-09-29: all 5 lines, exact prices, subtotal/tax left out).
+  **v5 (2026-09-29, prompt `read-files-v3-vendor-details`)** reads, from a
+  receipt, invoice, quote or price list, **who issued it** —
+  `vendor_details` {name, phone, email, address} as printed in the issuer
+  block (the seller, never "sold to" / "bill to") — and the tax **as
+  printed**: `tax_pct` only if a rate is printed, else `subtotal` and
+  `tax_amount`. Each is kept only if it is in the text (`readVendor()`: the
+  phone's digits, the email, the name's words, the address's number and
+  street). The item # is the product code, never a ticket or order number;
+  fees (fuel, short load, environmental, delivery) and per-yard add-ons
+  (slump, fiber) are their own lines; the same product on several tickets
+  is listed each time and folded into one row by the import. Checked
+  against Coy's real Angelle Concrete Group invoice (text sent with
+  `{"sample_text": …}`, bank lines removed, nothing stored): all 9 lines with
+  codes 8006 / MR6 / 2 and exact prices, the vendor block, subtotal $3,807.00
+  and tax $399.74 — **no rate printed, none invented**. A receipt or quote
+  may be uploaded with no job or person (`/api/files`, "inbox"); it is filed
+  on its vendor (`PATCH /api/files/[id] {contact_id}`) once Coy confirms who
+  it is from (§3).
 - Dusty's chat context on a job or person includes their files' reads
   (newest 20); the activity line shows each read, and "Reading …" spins the
   emblem.
@@ -733,6 +751,53 @@ percentage of labour — all three contradict this section and §4.
   `kind='vendor_quote'`, `price_source='quote'` and the file on each price,
   so history links back to the quote. Quote lines start as materials; a line
   with no unit is skipped by name. A suggestion until Coy imports it (§2b).
+- **One item, many vendors (migrations 051–052, Coy 2026-09-29).** *"I would
+  have multiple vendors to choose from for concrete ready mix … still have
+  that in a unified cost book … I can select default vendor in the costbook
+  and vendor page. That's the price that pulls into the budget."*
+  `cost_item_sources` is one vendor's price for one item (unit cost, their
+  item #, unit, date, where from, the receipt, the tax rate printed on their
+  invoice; unique per item × vendor; member RLS, anon revoked).
+  `cost_items.default_source_id` is **the vendor whose price budgets use**.
+  While it is set, triggers keep the item's own price fields (unit cost,
+  vendor, item #, date, source, file) **in step with that vendor's price**
+  (`cost_items_default_source`, `cost_item_sources_sync`) — so the budget
+  copy, the grid and history read the item as before, and there is one
+  writer per value: a price typed on a card with a default vendor is
+  written to that vendor's price (`PATCH /api/cost-items/[id]`), a vendor
+  chosen on a card becomes its default carrying the price, a vendor named
+  on a new card becomes its first price. An item with no vendor price keeps
+  its own. **History is per vendor** (`cost_item_prices.source_id`; the
+  ▲▼ compares a vendor with their own last price); choosing a default is
+  not a new price and writes no row (052). `contacts.service_area` says
+  where a vendor delivers — **price and area now, distance later** (Coy;
+  needs a maps key). **APIs:** `/api/cost-items/[id]/sources` (list
+  cheapest first, add by hand), `…/sources/[sourceId]` (`{default:true}`,
+  re-price, remove — the default leaving keeps its price as the item's
+  own), `/api/vendors` (list with counts; create — Coy's tap, filed vendor
+  via `sc_classify_contact`, a phone or email already on a contact returns
+  409 naming them instead), `/api/vendors/[id]` (prices with ★ and the
+  cheapest other vendor, files, jobs; edit). **Imports with a vendor**
+  (a receipt, a quote, or a spreadsheet row naming one) write THAT
+  vendor's price — made, re-priced, or **added to an existing item** (the
+  merge Coy asked for: Angelle's price on "3000 psi ready mix") — and make
+  them the default when the row says so or the item has none; what each
+  did is kept in `cost_imports.undo_payload`, and Undo puts back exactly
+  that (a price Coy changed since is kept). **"Same item as…"**
+  (`POST /api/cost-items/[id]/merge`, 052 `cost_item_merges`): this item's
+  vendor prices move to the other (a vendor who already prices it keeps
+  that price; theirs stays on the retired item, named), it is retired, its
+  assembly rows follow; the default comes along only if the other has
+  none. Budget lines keep their copies. Undo
+  (`/api/cost-item-merges/[id]/undo`) moves back what is still where the
+  merge left it. **The budget:** a card copies its default vendor's price
+  and remembers the vendor (`estimate_line_items.source_id`); the line's
+  **Vendor** picker pulls another vendor's price onto that line only
+  (`source_pinned`, ✎) or goes back to Default. A later change is shown,
+  never applied: "vendor's price changed", "default vendor is now X", or
+  "card price changed" — each with update. **New vendors are made only by
+  Coy's tap** (receipt flow, + Vendor); a spreadsheet import still never
+  creates a contact.
 - **The job budget (migration 048, Coy 2026-09-29)** — JobTread's maths on
   lines from cost cards. A job has ONE working estimate (`status='draft'`,
   unique per job); its `estimate_line_items` are the budget, and proposal
@@ -1061,6 +1126,51 @@ expected start date per quoted job before it means anything. Add the field.
   The budget's card picker has **Load an assembly** (pick the area first)
   and shows groups folded until you search; lines say "from X" and
   "reinforcement".
+- **Vendors (migration 051, Coy 2026-09-29)** — its own page,
+  `/dashboard/vendors`, on the desktop rail after Price book and under More
+  on a phone (`src/components/v34/vendors.tsx`). The list: find, All ·
+  Suppliers · Subs · Equipment, each vendor's kind, where they deliver,
+  phone, prices, how many items they are default on, newest price,
+  receipts; **+ Vendor** (no phone needed) and **+ Add a receipt or quote**
+  (the main button). A vendor's page (`/dashboard/vendors/[id]`) is
+  business first: name, kind, area, phone, email, address (Edit), Call,
+  Conversation (if they have messages); **Prices** — each item they price
+  with their price, date, source, the cheaper/next vendor, and a **★**
+  (theirs is the price budgets use; tap to make it so); **Receipts &
+  quotes**; **Jobs** they're on. Their Threads page keeps its Prices tab,
+  now at THEIR price with ★, linking here to change it.
+- **A receipt → the vendor and their prices (2026-09-29)** —
+  `src/components/v34/receipt-import.tsx`, from the Vendors list, a
+  vendor's page, or Price book → Import → "A receipt, invoice or quote".
+  Receipt · Invoice · Quote; **Take a photo** (camera) or **Choose a file**.
+  With no vendor chosen it is saved unfiled and Dusty reads who it's from
+  (§2e); `matchVendor()` (`src/lib/vendor-match.ts`, tested) matches the
+  printed phone, then email (or its domain spelling the vendor's name —
+  billing@angellematerials.com is Angelle Materials), then the name, then a
+  distinctive first word only one vendor has — never a guess between two.
+  Match → "From X", changeable, with "add the phone, email and address from
+  it where their page has none". No match → **New vendor** with the details
+  as printed and **Create vendor** — nothing is made without the tap; a
+  number already on a contact offers to file that contact as vendor
+  instead. Then the prices: repeated ticket lines folded to one row per
+  item (`collapseLines()`: 10 + 10 + 3 CY → 23 CY on 3 tickets); each row
+  matched by `matchItem()` (their item #, the name, a close name with every
+  number the same — 3000 is never 4000) and saying **Price change** (old →
+  new), **Add their price** (to an item priced by someone else or no one),
+  **New item** (type / counted / group, guesses labelled) or **Same**, with
+  an item picker to point it elsewhere and **Make default** (ticked for a
+  new item or one with no default). Tax is shown as printed, or as
+  "$399.74 on $3,807.00 — works out to 10.50% (worked out; no rate
+  printed)"; it is not a price and does not change Cost settings. From a
+  photo the screen says the prices could not be checked against text.
+- **Price book with vendors (2026-09-29)** — the grid's Vendor column shows
+  the default vendor and "+2" when others price the item; **By vendor**
+  lists an item under every vendor that prices it, at that vendor's price
+  (edited in the cell), ★ on the default. The card sheet: "Unit cost ·
+  default vendor's", **Default vendor**, a **Vendors** section (each
+  vendor's price, area, item #, date; ★ to switch; × to remove; + another
+  vendor's price), **Same item as…** (merge, with Undo), and price history
+  naming each price's vendor.
 - **Budget (2026-09-29)** — `src/components/v34/job-budget.tsx` under the
   sections on the job page. Option bar (All options · Good · Better · Best ·
   + Option, each with its total; rename / delete an option). **Wide (≥900px

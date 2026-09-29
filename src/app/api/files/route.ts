@@ -11,7 +11,10 @@ import { FILE_COLUMNS, signFiles } from "@/lib/files-server";
  *   → the row, plus a signed upload URL. The browser sends the bytes straight
  *     to storage, so a 60 MB plan set never passes through a Vercel function.
  *     POST /api/files/[id]/done confirms it arrived.
- * GET   ?job_id= | ?contact_id=
+ *   A receipt or vendor quote may be sent with none of these (migration 051):
+ *   it waits unfiled ("inbox") while Dusty reads who it is from, and is filed
+ *   on that vendor by PATCH /api/files/[id] { contact_id } once Coy confirms.
+ * GET   ?job_id= | ?contact_id= | ?inbox=1 (unfiled receipts and quotes)
  *   → { files, texted } — uploads with short-lived signed links, and the
  *     photos that person texted (message_media), which the thread's media
  *     route copies in lazily when they have not been opened yet.
@@ -31,6 +34,13 @@ export async function GET(req: NextRequest) {
   const { supabase, orgId, applyCookies } = result.session;
   const jobId = req.nextUrl.searchParams.get("job_id");
   const contactId = req.nextUrl.searchParams.get("contact_id");
+  if (req.nextUrl.searchParams.get("inbox") === "1") {
+    const { data: rows, error } = await supabase.from("job_files").select(FILE_COLUMNS).eq("org_id", orgId).is("deleted_at", null)
+      .is("job_id", null).is("contact_id", null).in("category", ["receipt", "vendor_quote"])
+      .order("created_at", { ascending: false }).limit(50);
+    if (error) return applyCookies(NextResponse.json({ error: `job_files: ${error.message}` }, { status: 500 }));
+    return applyCookies(NextResponse.json({ files: await signFiles(supabase, (rows ?? []) as Array<Record<string, unknown>>), texted: [] }));
+  }
   if ((!jobId || !UUID.test(jobId)) && (!contactId || !UUID.test(contactId))) {
     return applyCookies(NextResponse.json({ error: "Name a job_id or a contact_id." }, { status: 400 }));
   }
@@ -92,7 +102,8 @@ export async function POST(req: NextRequest) {
   let jobId = id(b.job_id);
   const sectionId = id(b.section_id);
   let contactId = id(b.contact_id);
-  if (!jobId && !contactId && !sectionId) return bad("Say what the file belongs to: a job, an area or a person.");
+  const unfiled = !jobId && !contactId && !sectionId;
+  if (unfiled && b.category !== "receipt" && b.category !== "vendor_quote") return bad("Say what the file belongs to: a job, an area or a person.");
 
   // Everything named must be this org's.
   if (sectionId) {
@@ -113,7 +124,7 @@ export async function POST(req: NextRequest) {
 
   const kind = kindOf(mime, name);
   const fileId = crypto.randomUUID();
-  const path = storagePath(orgId, jobId ?? contactId ?? (sectionId as string), fileId, name);
+  const path = storagePath(orgId, jobId ?? contactId ?? sectionId ?? "inbox", fileId, name);
   const { data: row, error } = await supabase.from("job_files").insert({
     id: fileId, org_id: orgId, job_id: jobId, section_id: sectionId, contact_id: contactId, name, kind,
     // The Price book's vendor-quote import says what it is; otherwise a first guess from the name.

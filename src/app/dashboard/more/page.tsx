@@ -17,6 +17,7 @@ const GROUPS: [string, Entry[]][] = [
   ["Work", [
     { href: "/dashboard/messages?f=customers", label: "Customers", note: "Everyone filed as a customer — on Threads", live: true },
     { href: "/dashboard/price-book", label: "Price book", note: "What you buy and charge for, by vendor — import from JobTread or a spreadsheet", live: true },
+    { href: "/dashboard/vendors", label: "Vendors", note: "Suppliers, subs and rentals — their prices, receipts and where they deliver", live: true },
     { href: "/dashboard/more/logs", label: "Logs", note: "Data checks, Dusty's reads, merges", live: true },
   ]],
   ["Settings", [

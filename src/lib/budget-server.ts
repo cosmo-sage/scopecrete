@@ -10,7 +10,7 @@ import { pickAssembly } from "@/lib/engine";
 
 type Sb = ApiSession["supabase"];
 
-export const LINE_COLUMNS = "id, estimate_id, option_id, section_id, cost_group_id, cost_item_id, name, description, cost_type, unit, unit_cost, markup_pct, taxable, qty_rule, rule_params, qty_source, quantity, vendor_contact_id, price_as_of, price_source, show_on_doc, show_qty, show_price, sort_order, updated_at, assembly_id, section_role";
+export const LINE_COLUMNS = "id, estimate_id, option_id, section_id, cost_group_id, cost_item_id, name, description, cost_type, unit, unit_cost, markup_pct, taxable, qty_rule, rule_params, qty_source, quantity, vendor_contact_id, price_as_of, price_source, show_on_doc, show_qty, show_price, sort_order, updated_at, assembly_id, section_role, source_id, source_pinned";
 export const ESTIMATE_COLUMNS = "id, job_id, status, tax_on, discount_amount, discount_reason, selected_option_id, version, updated_at";
 
 export async function jobInOrg(sb: Sb, orgId: string, jobId: string) {
@@ -40,12 +40,14 @@ export const numLine = (r: Record<string, unknown>) => ({
 
 // ---------------------------------------------------------------- cards onto lines
 
-export const CARD_COLS = "id, cost_group_id, name, description, cost_type, unit, unit_cost, taxable, markup_pct, vendor_contact_id, price_as_of, price_source, qty_rule, rule_params, active";
+export const CARD_COLS = "id, cost_group_id, name, description, cost_type, unit, unit_cost, taxable, markup_pct, vendor_contact_id, price_as_of, price_source, qty_rule, rule_params, active, default_source_id";
 
 /**
  * A card COPIED onto a budget line — name, unit, unit cost, type, taxed,
  * markup, rule, vendor and price date — so a later change to the card never
- * silently reprices a budget or a quote that went out. A typed quantity (an
+ * silently reprices a budget or a quote that went out. The card's price is
+ * its default vendor's (migration 051), and the line remembers which vendor
+ * (`source_id`). A typed quantity (an
  * assembly's, for a card counted by hand) makes the line `set`.
  */
 export function cardToLine(c: Record<string, unknown>, at: {
@@ -61,6 +63,7 @@ export function cardToLine(c: Record<string, unknown>, at: {
     taxable: c.taxable === true, qty_rule: c.qty_rule ?? "manual", rule_params: c.rule_params ?? {},
     qty_source: manual || typed ? "set" : "rule", quantity: typed ? at.quantity : null,
     vendor_contact_id: c.vendor_contact_id ?? null, price_as_of: c.price_as_of ?? null, price_source: c.price_source ?? null,
+    source_id: c.default_source_id ?? null, source_pinned: false,
     sort_order: at.sortOrder, assembly_id: at.assemblyId ?? null, section_role: at.role ?? null,
   };
 }

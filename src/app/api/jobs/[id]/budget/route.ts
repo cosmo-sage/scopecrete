@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
 import { ESTIMATE_COLUMNS, LINE_COLUMNS, jobInOrg, numLine, workingEstimate } from "@/lib/budget-server";
+import { sourcesFor } from "@/lib/sources-server";
 
 /**
  * The job's budget (migration 048): the working estimate, its options (good /
@@ -8,6 +9,8 @@ import { ESTIMATE_COLUMNS, LINE_COLUMNS, jobInOrg, numLine, workingEstimate } fr
  * the markups, tax and waste from Cost settings, each group's markup, and the
  * active cost cards. The engine prices it (src/lib/engine budget()), in the
  * browser and for Dusty alike, so there is one set of numbers.
+ * `sources`: every vendor's price on the items the lines came from — the
+ * line's vendor picker (migration 051).
  *
  * PATCH { tax_on?, discount_amount?, discount_reason? } — the budget's own switches.
  */
@@ -28,12 +31,14 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     est ? supabase.from("estimate_line_items").select(LINE_COLUMNS).eq("estimate_id", est.id as string).order("sort_order").order("name")
       : Promise.resolve({ data: [] }),
     supabase.from("cost_groups").select("id, name, cost_type, default_markup_pct, sort_order").eq("org_id", orgId).order("sort_order").order("name"),
-    supabase.from("cost_items").select("id, cost_group_id, name, description, cost_type, unit, unit_cost, taxable, markup_pct, vendor_contact_id, price_as_of, price_source, qty_rule, rule_params, updated_at")
+    supabase.from("cost_items").select("id, cost_group_id, name, description, cost_type, unit, unit_cost, taxable, markup_pct, vendor_contact_id, price_as_of, price_source, qty_rule, rule_params, updated_at, default_source_id")
       .eq("org_id", orgId).eq("active", true).order("sort_order").order("name"),
     supabase.from("org_cost_settings").select("markup_material_pct, markup_labor_pct, markup_equipment_pct, markup_subcontract_pct, sales_tax_pct, concrete_overage_pct, shortload_threshold_cy")
       .eq("org_id", orgId).maybeSingle(),
     supabase.from("cost_assemblies").select("id, name, job_type, work_type").eq("org_id", orgId).order("sort_order").order("name"),
   ]);
+  const lineItems = [...new Set(((lines.data ?? []) as Array<{ cost_item_id: string | null }>).map((l) => l.cost_item_id).filter(Boolean) as string[])];
+  const sources = await sourcesFor(supabase, orgId, lineItems);
   const vendorIds = [...new Set(((lines.data ?? []) as Array<{ vendor_contact_id: string | null }>).map((l) => l.vendor_contact_id).filter(Boolean) as string[])];
   const { data: vendors } = vendorIds.length
     ? await supabase.from("contacts").select("id, name, phone").eq("org_id", orgId).in("id", vendorIds)
@@ -47,6 +52,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     groups: ((groups.data ?? []) as Array<Record<string, unknown>>).map((g) => ({ ...g, default_markup_pct: g.default_markup_pct === null ? null : Number(g.default_markup_pct) })),
     cards: ((cards.data ?? []) as Array<Record<string, unknown>>).map((c) => ({ ...c, unit_cost: c.unit_cost === null ? null : Number(c.unit_cost), markup_pct: c.markup_pct === null ? null : Number(c.markup_pct) })),
     vendors: vendors ?? [],
+    sources,
     assemblies: assemblies.data ?? [],
     settings: {
       markup_material_pct: n("markup_material_pct"), markup_labor_pct: n("markup_labor_pct"), markup_equipment_pct: n("markup_equipment_pct"),

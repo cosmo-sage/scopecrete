@@ -7,16 +7,19 @@ import { LINE_COLUMNS, jobInOrg, numLine } from "@/lib/budget-server";
  *   quantity (a typed quantity → qty_source 'set'; { qty_source: 'rule' } goes
  *   back to the rule), unit_cost, markup_pct, taxable, option_id, section_id,
  *   name, description, the show switches — or { refresh: true } to copy the
- *   card's current price onto it. DELETE removes it.
+ *   current price onto it (the vendor Coy picked for this line, else the
+ *   card's default vendor). { source_id } picks a vendor for this line only
+ *   and pulls their price (migration 051); { source_id: null } goes back to
+ *   the card's default vendor. DELETE removes it.
  */
 
 export const dynamic = "force-dynamic";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 async function lineOf(sb: Parameters<typeof jobInOrg>[0], orgId: string, jobId: string, lineId: string) {
-  const { data } = await sb.from("estimate_line_items").select("id, estimate_id, cost_item_id, qty_rule, estimates!inner(job_id, org_id)")
+  const { data } = await sb.from("estimate_line_items").select("id, estimate_id, cost_item_id, qty_rule, source_id, source_pinned, estimates!inner(job_id, org_id)")
     .eq("id", lineId).eq("estimates.job_id", jobId).eq("estimates.org_id", orgId).maybeSingle();
-  return data as { id: string; estimate_id: string; cost_item_id: string | null; qty_rule: string } | null;
+  return data as { id: string; estimate_id: string; cost_item_id: string | null; qty_rule: string; source_id: string | null; source_pinned: boolean } | null;
 }
 
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string; lineId: string }> }) {
@@ -73,11 +76,31 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       patch.option_id = o.id;
     } else return bad("Bad option.");
   }
-  if (b.refresh === true) {
+  // A vendor's price onto the line: the one Coy picked, or the card's default.
+  const fromSource = async (sourceId: string, pinned: boolean) => {
+    const { data: src } = await supabase.from("cost_item_sources").select("id, cost_item_id, vendor_contact_id, unit_cost, price_as_of, price_source")
+      .eq("org_id", orgId).eq("id", sourceId).maybeSingle();
+    if (!src || src.cost_item_id !== line.cost_item_id) return false;
+    Object.assign(patch, { unit_cost: src.unit_cost, price_as_of: src.price_as_of, price_source: src.price_source,
+      vendor_contact_id: src.vendor_contact_id, source_id: src.id, source_pinned: pinned });
+    return true;
+  };
+  const fromCard = async () => {
+    const { data: c } = await supabase.from("cost_items").select("unit_cost, price_as_of, price_source, unit, vendor_contact_id, default_source_id").eq("org_id", orgId).eq("id", line.cost_item_id as string).maybeSingle();
+    if (!c) return false;
+    Object.assign(patch, { unit_cost: c.unit_cost, price_as_of: c.price_as_of, price_source: c.price_source, unit: c.unit,
+      vendor_contact_id: c.vendor_contact_id, source_id: c.default_source_id, source_pinned: false });
+    return true;
+  };
+  if ("source_id" in b) {
     if (!line.cost_item_id) return bad("This line didn't come from a card.");
-    const { data: c } = await supabase.from("cost_items").select("unit_cost, price_as_of, price_source, unit").eq("org_id", orgId).eq("id", line.cost_item_id).maybeSingle();
-    if (!c) return bad("That card is gone.");
-    Object.assign(patch, { unit_cost: c.unit_cost, price_as_of: c.price_as_of, price_source: c.price_source, unit: c.unit });
+    if (b.source_id === null) { if (!(await fromCard())) return bad("That card is gone."); }
+    else if (typeof b.source_id !== "string" || !UUID.test(b.source_id) || !(await fromSource(b.source_id, true))) return bad("That vendor doesn't price this item.");
+  } else if (b.refresh === true) {
+    if (!line.cost_item_id) return bad("This line didn't come from a card.");
+    // A picked vendor who no longer prices it falls back to the card's default.
+    const ok = (line.source_pinned && line.source_id && await fromSource(line.source_id, true)) || await fromCard();
+    if (!ok) return bad("That card is gone.");
   }
   if (!Object.keys(patch).length) return bad("Nothing to change.");
   patch.updated_at = new Date().toISOString();

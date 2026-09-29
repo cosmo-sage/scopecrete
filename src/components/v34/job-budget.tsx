@@ -32,18 +32,22 @@ interface Line extends BudgetLine {
   description: string | null; cost_item_id: string | null; vendor_contact_id: string | null;
   price_as_of: string | null; show_on_doc: boolean; sort_order: number; updated_at: string;
   assembly_id?: string | null; section_role?: "reinforcement" | null;
+  source_id?: string | null; source_pinned?: boolean;
 }
+/** A vendor's price on an item (migration 051) — the line's vendor picker. */
+interface Source { id: string; cost_item_id: string; unit_cost: number | null; vendor: { id: string; name: string | null; company_name: string | null; phone: string | null } | null }
 interface Assembly { id: string; name: string; job_type: string | null; work_type: string | null }
 interface Option { id: string; label: string; description: string | null; sort_order: number }
 interface Group { id: string; name: string; cost_type: CostType; default_markup_pct: number | null }
 interface Card {
   id: string; cost_group_id: string | null; name: string; cost_type: CostType; unit: string; unit_cost: number | null;
-  qty_rule: string; vendor_contact_id: string | null; updated_at: string; price_as_of: string | null;
+  qty_rule: string; vendor_contact_id: string | null; updated_at: string; price_as_of: string | null; default_source_id?: string | null;
 }
 interface Data {
   estimate: { id: string; tax_on: boolean; discount_amount: number } | null;
   options: Option[]; lines: Line[]; groups: Group[]; cards: Card[]; assemblies?: Assembly[];
   vendors: Array<{ id: string; name: string | null; phone: string | null }>;
+  sources?: Source[];
   settings: BudgetSettings;
 }
 export interface BudgetSummary {
@@ -118,8 +122,25 @@ export function JobBudget({ jobId, sections, crewDays, onSummary, refresh = 0 }:
   const groupName = (l: Line) => (l.cost_group_id ? data.groups.find((g) => g.id === l.cost_group_id)?.name : null) ?? COST_TYPE_LABEL[l.cost_type as CostType] ?? "Other";
   const optLabel = (id: string | null) => (id ? opts.find((o) => o.id === id)?.label ?? "?" : null);
   const asmName = (id: string | null | undefined) => (id ? data.assemblies?.find((a) => a.id === id)?.name ?? null : null);
-  const vendorName = (id: string | null) => { const v = id ? data.vendors.find((x) => x.id === id) : null; return v ? v.name || formatPhone(v.phone) : null; };
-  const cardNewer = (l: Line) => { const c = l.cost_item_id ? data.cards.find((x) => x.id === l.cost_item_id) : null; return !!c && c.unit_cost !== l.unit_cost; };
+  const vendorName = (id: string | null): string | null => {
+    if (!id) return null;
+    const v = data.vendors.find((x) => x.id === id);
+    if (v) return v.name || formatPhone(v.phone);
+    const s = data.sources?.find((x) => x.vendor?.id === id)?.vendor;
+    return s ? s.name || s.company_name || formatPhone(s.phone) : null;
+  };
+  // What changed since the line copied its price (migration 051): the vendor Coy picked for this
+  // line re-priced; the card's default vendor is someone else now; or the card's price moved.
+  const stale = (l: Line): string | null => {
+    const c = l.cost_item_id ? data.cards.find((x) => x.id === l.cost_item_id) : null;
+    if (!c) return null;
+    if (l.source_pinned && l.source_id) {
+      const s = data.sources?.find((x) => x.id === l.source_id);
+      return s && s.unit_cost !== l.unit_cost ? "vendor's price changed — update" : null;
+    }
+    if ((c.default_source_id ?? null) !== (l.source_id ?? null)) return `default vendor is now ${vendorName(c.vendor_contact_id) ?? "none"} — update`;
+    return c.unit_cost !== l.unit_cost ? "card price changed — update" : null;
+  };
 
   // area ▸ group ▸ lines, in the order the scope lists its areas.
   const areas = [...sections.map((s) => s.id), null].map((aid) => {
@@ -225,11 +246,13 @@ export function JobBudget({ jobId, sections, crewDays, onSummary, refresh = 0 }:
                                 {l.section_role === "reinforcement" ? "reinforcement · " : ""}
                                 {asmName(l.assembly_id) ? `from ${asmName(l.assembly_id)} · ` : ""}
                                 {QTY_RULE_LABEL[l.qty_rule as keyof typeof QTY_RULE_LABEL] ?? l.qty_rule}
-                                {cardNewer(l) && <> · <button onClick={() => void patchLine(l.id, { refresh: true })} style={{ color: T.hiviz, cursor: "pointer" }}>card price changed — update</button></>}
+                                {stale(l) && <> · <button onClick={() => void patchLine(l.id, { refresh: true })} style={{ color: T.hiviz, cursor: "pointer" }}>{stale(l)}</button></>}
                               </div>
                               {r.blocked.length > 0 && <div style={{ fontSize: 9.5, color: T.hiviz }}>needs {r.blocked.join(", ")}</div>}
                             </td>
-                            <td style={{ padding: "4px 8px", color: T.ink2, maxWidth: 140, ...clip }}>{vendorName(l.vendor_contact_id) ?? "—"}</td>
+                            <td style={{ padding: "2px 4px", color: T.ink2, maxWidth: 170, ...clip }}>
+                              <VendorPick line={l} sources={data.sources ?? []} name={vendorName} onPick={(id) => void patchLine(l.id, { source_id: id })} />
+                            </td>
                             <td style={{ padding: "2px 4px", textAlign: "right", whiteSpace: "nowrap" }}>
                               <Cell value={r.qty} placeholder={blockedQty ? "?" : ""} label={`Quantity of ${l.name}`} warn={blockedQty}
                                 onSave={(v) => void patchLine(l.id, { quantity: v })} />
@@ -500,6 +523,12 @@ function LineSheet({ line, data, sections, res, onClose, onPatch, onDelete }: {
           <label className="flex items-center gap-2 mt-5" style={{ fontSize: F.sm }}>
             <input type="checkbox" checked={line.taxable} onChange={(e) => onPatch({ taxable: e.target.checked })} style={{ width: 18, height: 18, accentColor: T.chalk }} /> Sales tax applies</label>
         </div>
+        {(data.sources ?? []).some((x) => x.cost_item_id === line.cost_item_id) && (
+          <label className="block"><span style={eyebrow}>Vendor · whose price this line uses</span>
+            <VendorPick line={line} sources={data.sources ?? []} full
+              name={(id) => { const v = data.sources?.find((x) => x.vendor?.id === id)?.vendor; return v ? v.name || v.company_name || formatPhone(v.phone) : null; }}
+              onPick={(id) => onPatch({ source_id: id })} /></label>
+        )}
         <label className="block"><span style={eyebrow}>Area</span>
           <select value={line.section_id ?? ""} onChange={(e) => onPatch({ section_id: e.target.value || null })} style={field}>
             <option value="">Whole job</option>
@@ -520,5 +549,26 @@ function LineSheet({ line, data, sections, res, onClose, onPatch, onDelete }: {
         <button onClick={onDelete} className="self-start" style={{ ...eyebrow, color: T.red, cursor: "pointer" }}>Take off the budget</button>
       </div>
     </Sheet>
+  );
+}
+
+/**
+ * Whose price a line uses (migration 051). "Default" follows the card's
+ * default vendor; picking one vendor pins this line to their price only.
+ * Shown as plain text when only one vendor prices the item.
+ */
+function VendorPick({ line, sources, name, onPick, full }: {
+  line: Line; sources: Source[]; name: (id: string | null) => string | null; onPick: (sourceId: string | null) => void; full?: boolean;
+}) {
+  const mine = sources.filter((x) => x.cost_item_id === line.cost_item_id);
+  if (mine.length < 2 && !full) return <span style={{ padding: "0 4px" }}>{name(line.vendor_contact_id) ?? "—"}</span>;
+  const label = (x: Source) => `${x.unit_cost === null ? "no price" : money(x.unit_cost)} · ${x.vendor?.name || x.vendor?.company_name || formatPhone(x.vendor?.phone ?? null)}`;
+  return (
+    <select value={line.source_pinned && line.source_id ? line.source_id : ""} aria-label={`Vendor for ${line.name}`}
+      onChange={(e) => onPick(e.target.value || null)}
+      style={{ height: full ? 36 : 28, width: "100%", maxWidth: full ? undefined : 166, border: `1px solid ${T.hair}`, background: "#fff", fontSize: full ? F.sm : F.xs, borderRadius: 4, padding: "0 4px" }}>
+      <option value="">Default{line.source_pinned ? "" : ` (${name(line.vendor_contact_id) ?? "none"})`}</option>
+      {mine.map((x) => <option key={x.id} value={x.id}>{label(x)}{line.source_pinned && line.source_id === x.id ? " ✎" : ""}</option>)}
+    </select>
   );
 }

@@ -77,6 +77,11 @@ export function ReceiptImport({ open, onClose, vendorId, onDone }: {
   const [draft, setDraft] = useState<{ name: string; phone: string; email: string; address: string; service_area: string; subtype: string } | null>(null);
   const [existing, setExisting] = useState<{ id: string; name: string | null; bucket: string | null } | null>(null);
   const [fillBlanks, setFillBlanks] = useState(true);
+  const [matchHow, setMatchHow] = useState<"phone" | "email" | "name" | null>(null);
+  const [nameDraft, setNameDraft] = useState("");          // a name for a matched vendor who has none
+  const [newName, setNewName] = useState<Record<number, string>>({});
+  const [info, setInfo] = useState(false);
+  const [renaming, setRenaming] = useState<string | null>(null);
   const [items, setItems] = useState<Item[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [pick, setPick] = useState<Record<number, string>>({});       // row → item id, or "new"
@@ -91,6 +96,7 @@ export function ReceiptImport({ open, onClose, vendorId, onDone }: {
 
   const reset = () => {
     setStage("pick"); setVendor(vendorId ?? ""); setFile(null); setPct(null); setDraft(null); setExisting(null); setFillBlanks(true);
+    setMatchHow(null); setNameDraft(""); setNewName({}); setInfo(false); setRenaming(null);
     setPick({}); setMakeDefault({}); setOff({}); setNewType({}); setNewRule({}); setNewGroup({}); setErr(null); setSlow(false);
   };
   const close = () => { reset(); onClose(); };
@@ -116,6 +122,11 @@ export function ReceiptImport({ open, onClose, vendorId, onDone }: {
     const v = vendors.find((x) => x.id === id);
     return v ? v.name || v.company_name || formatPhone(v.phone) : null;
   };
+  // A vendor's NAME only — never their number in a title or summary (Coy, 2026-09-29).
+  const vendorTitle = (id: string | null | undefined) => {
+    const v = vendors.find((x) => x.id === id);
+    return v ? v.name || v.company_name || null : null;
+  };
 
   // ---- the prices
   const loadItems = async (vid: string) => {
@@ -136,10 +147,23 @@ export function ReceiptImport({ open, onClose, vendorId, onDone }: {
     setFile(f);
     const priced = Array.isArray(f.facts?.price_lines) && (f.facts?.price_lines as unknown[]).length > 0;
     if (f.read_state !== "read" || !priced) { setStage("reading"); return; }
-    if (f.contact_id) { setVendor(f.contact_id); void loadItems(f.contact_id); return; }
     const d = (f.facts?.vendor_details ?? {}) as Details;
+    setNameDraft(titleCase(d.name ?? ""));
+    // Already on a vendor: straight to the prices — unless that vendor has no
+    // name and the document prints one, which is worth one question first.
+    if (f.contact_id) {
+      setVendor(f.contact_id);
+      const v = vendors.find((x) => x.id === f.contact_id);
+      if (v && !v.name && !v.company_name && d.name) {
+        setMatchHow(null);
+        setDraft({ name: titleCase(d.name), phone: d.phone ?? "", email: d.email ?? "", address: d.address ?? "", service_area: "", subtype: "supplier" });
+        setStage("vendor");
+        return;
+      }
+      void loadItems(f.contact_id); return;
+    }
     const m = matchVendor({ name: d.name, phone: d.phone, email: d.email }, vendors);
-    setVendor(m?.id ?? "");
+    setVendor(m?.id ?? ""); setMatchHow(m?.how ?? null);
     setDraft({ name: titleCase(d.name ?? ""), phone: d.phone ?? "", email: d.email ?? "", address: d.address ?? "", service_area: "", subtype: "supplier" });
     setStage("vendor");
   };
@@ -172,6 +196,15 @@ export function ReceiptImport({ open, onClose, vendorId, onDone }: {
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); setPct(null); }
   };
 
+  const rename = async () => {
+    if (!file || renaming === null) return;
+    const n = renaming.trim();
+    setRenaming(null);
+    if (!n || n === file.name) return;
+    try { const b = await call(`/api/files/${file.id}`, "PATCH", { name: n }); setFile({ ...file, name: (b.file as RFile).name }); }
+    catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+  };
+
   // ---- the vendor: pick one, or create the one Dusty read
   const fileOn = async (id: string) => {
     if (!file) return;
@@ -180,6 +213,11 @@ export function ReceiptImport({ open, onClose, vendorId, onDone }: {
       setFile({ ...(b.file as RFile) });
     }
     const v = vendors.find((x) => x.id === id);
+    // A vendor with no name takes the one Coy confirmed here (Dusty's reading of the document, edited).
+    if (v && !v.name && !v.company_name && nameDraft.trim()) {
+      await call(`/api/vendors/${id}`, "PATCH", { name: nameDraft.trim(), company_name: nameDraft.trim() });
+      setVendors((vs) => vs.map((x) => (x.id === id ? { ...x, name: nameDraft.trim(), company_name: nameDraft.trim() } : x)));
+    }
     if (v && fillBlanks && details) {
       const add: Record<string, string> = {};
       if (!v.phone && details.phone) add.phone = details.phone;
@@ -240,7 +278,7 @@ export function ReceiptImport({ open, onClose, vendorId, onDone }: {
       const payload = chosen.map((r) => r.item
         ? { action: "change", card_id: r.item.id, unit_cost: r.l.unit_cost, vendor_sku: r.l.sku, unit: r.l.unit, make_default: r.dflt }
         : {
-            action: "new", name: r.l.name, cost_type: typeOf(r), unit: r.l.unit ?? "EA", unit_cost: r.l.unit_cost,
+            action: "new", name: (newName[r.n] ?? titleCase(r.l.name.replace(/_/g, " "))).trim() || r.l.name, cost_type: typeOf(r), unit: r.l.unit ?? "EA", unit_cost: r.l.unit_cost,
             taxable: defaultTaxable(typeOf(r)), vendor_contact_id: vendor, vendor_sku: r.l.sku, qty_rule: newRule[r.n] ?? ruleFromUnit(r.l.unit),
             rule_params: {}, group: newGroup[r.n] || null, make_default: r.dflt,
           });
@@ -262,13 +300,24 @@ export function ReceiptImport({ open, onClose, vendorId, onDone }: {
   const btn = (primary: boolean): React.CSSProperties => ({ height: 38, padding: "0 14px", borderRadius: 4, fontFamily: disp, fontSize: F.sm, textTransform: "uppercase",
     letterSpacing: ".06em", background: primary ? T.ink : T.card, color: primary ? "#fff" : T.ink, border: primary ? "none" : `1px solid ${T.hair}`, cursor: "pointer" });
   const STATUS: Record<Row["status"], [string, string]> = { new: ["New item", T.green], add: ["Add their price", T.chalk], change: ["Price change", T.hiviz], same: ["Same", T.ink3] };
-  const itemOptions = useMemo(() => items.filter((i) => i.active).slice().sort((a, b) => a.name.localeCompare(b.name)), [items]);
+  const groupName = useMemo(() => new Map(groups.map((g) => [g.id, g.name])), [groups]);
   const taxWorked = taxRateFrom(facts.subtotal as number | undefined, facts.tax_amount as number | undefined);
 
   return (
-    <Drawer open={open} onClose={close} wide title="Receipt or quote"
-      sub={file ? `${file.name}${vendor ? ` · ${vendorName(vendor) ?? ""}` : ""}` : "A photo or a PDF — Dusty reads the vendor and the prices, you check them"}>
+    <Drawer open={open} onClose={close} wide title={file ? file.name : "Add a receipt or quote"}
+      sub={file ? vendorTitle(vendor) ?? undefined : "A photo or a PDF — Dusty reads the vendor and the prices, you check them"}
+      right={file && renaming === null ? (
+        <button onClick={() => setRenaming(file.name)} aria-label="Rename the document" title="Rename"
+          style={{ color: T.ink3, fontSize: 16, cursor: "pointer", padding: "0 6px" }}>✎</button>) : undefined}>
       <div ref={measure} className="px-4 py-3 mx-auto" style={{ maxWidth: 1180 }}>
+        {file && renaming !== null && (
+          <div className="flex gap-2 items-center mb-2">
+            <input value={renaming} autoFocus onChange={(e) => setRenaming(e.target.value)} aria-label="Document name"
+              onKeyDown={(e) => { if (e.key === "Enter") void rename(); if (e.key === "Escape") setRenaming(null); }} style={{ ...field, flex: 1 }} />
+            <button onClick={() => void rename()} style={btn(true)}>Save</button>
+            <button onClick={() => setRenaming(null)} style={btn(false)}>Cancel</button>
+          </div>
+        )}
         {err && <div className="mb-2 rounded px-3 py-2" style={{ fontSize: F.sm, color: T.red, background: T.redDim }}>{err}</div>}
 
         {stage === "pick" && (
@@ -354,9 +403,18 @@ export function ReceiptImport({ open, onClose, vendorId, onDone }: {
 
             {vendor ? (
               <div className="flex flex-col gap-2">
-                <div style={{ fontSize: F.sm }}>From <b>{vendorName(vendor)}</b> <span style={{ color: T.ink3 }}>— matched to your vendors</span></div>
+                <div style={{ fontSize: F.sm, lineHeight: 1.45 }}>
+                  {vendorTitle(vendor) ? <>From <b>{vendorTitle(vendor)}</b></> : <>From your contact <b>{vendorName(vendor)}</b></>}
+                  <span style={{ color: T.ink3 }}>
+                    {matchHow === "phone" ? " — matched by the phone number on it" : matchHow === "email" ? " — matched by the email on it" : matchHow === "name" ? " — matched by name" : ""}
+                  </span>
+                </div>
+                {!vendorTitle(vendor) && (
+                  <label className="block"><span style={eyebrow}>Their name{details?.name ? " · from the " + KIND_LABEL[kind].toLowerCase() : ""}</span>
+                    <input value={nameDraft} onChange={(e) => setNameDraft(e.target.value)} placeholder="Name this vendor" style={field} aria-label="Vendor name" /></label>
+                )}
                 <label className="block"><span style={eyebrow}>Not them? Pick another</span>
-                  <select value={vendor} onChange={(e) => setVendor(e.target.value)} style={field} aria-label="Vendor">
+                  <select value={vendor} onChange={(e) => { setVendor(e.target.value); setMatchHow(null); }} style={field} aria-label="Vendor">
                     <option value="">— none of these: a new vendor</option>
                     {vendors.map((v) => <option key={v.id} value={v.id}>{v.name || v.company_name || formatPhone(v.phone)}</option>)}
                   </select></label>
@@ -407,22 +465,32 @@ export function ReceiptImport({ open, onClose, vendorId, onDone }: {
         {stage === "preview" && file && (
           <div className="flex flex-col gap-2">
             <div className="flex flex-wrap gap-x-4 gap-y-1 items-baseline" style={{ fontSize: F.sm }}>
-              <span><b>{vendorName(vendor)}</b> · {lines.length} item{lines.length === 1 ? "" : "s"}</span>
+              <span>{vendorTitle(vendor) && <><b>{vendorTitle(vendor)}</b> · </>}{lines.length} item{lines.length === 1 ? "" : "s"}</span>
               {typeof facts.tax_pct === "number" ? (
                 <span style={{ color: T.ink2 }}>Tax {facts.tax_pct as number}% (printed)</span>
               ) : taxWorked !== null ? (
                 <span style={{ color: T.ink2 }}>Tax {money(facts.tax_amount as number)} on {money(facts.subtotal as number)} — works out to {taxWorked}% <span style={{ color: T.ink3 }}>(worked out; no rate printed)</span></span>
               ) : null}
+              <button onClick={() => setInfo((x) => !x)} aria-expanded={info} aria-label="What these mean" title="What these mean"
+                className="rounded-full" style={{ width: 20, height: 20, border: `1px solid ${info ? T.ink : T.hair}`, background: info ? T.ink : T.card,
+                  color: info ? "#fff" : T.ink2, fontSize: 11, fontWeight: 700, fontStyle: "italic", lineHeight: "18px", cursor: "pointer", alignSelf: "center" }}>i</button>
             </div>
             {fromPhoto && (
               <div className="rounded px-3 py-2" style={{ fontSize: F.sm, background: T.hivizDim }}>
                 Read from a photo, so there was no text to check these prices against. Check each one against the {KIND_LABEL[kind].toLowerCase()} before importing.
               </div>
             )}
-            <div style={{ fontSize: F.xs, color: T.ink3 }}>
-              Each row is one item — the same item on several tickets is one row, quantities added. Point a row at another item if Dusty&apos;s match is wrong.
-              &quot;Make default&quot; makes {vendorName(vendor)}&apos;s price the one budgets use. Tax is not a price: your tax rate stays in Cost settings.
-            </div>
+            {info && (
+              <div className="rounded px-3 py-2" style={{ fontSize: F.xs, color: T.ink2, background: T.slab, lineHeight: 1.5 }}>
+                <div><b style={{ color: T.green }}>New item</b> — not in your Price book yet; it&apos;s added with their price. Edit the name first.</div>
+                <div><b style={{ color: T.chalk }}>Add their price</b> — the item is in your Price book; their price is added to it.</div>
+                <div><b style={{ color: T.hiviz }}>Price change</b> — they already price it; old → new.</div>
+                <div><b style={{ color: T.ink3 }}>Same</b> — nothing to change.</div>
+                <div>Find the right item in the box on each row if the match is wrong — next time their item # matches it on its own.</div>
+                <div><b>Make default</b> — their price becomes the one budgets use for that item.</div>
+                <div>The same item on several tickets is one row, quantities added. Tax isn&apos;t a price: your tax rate stays in Cost settings.</div>
+              </div>
+            )}
 
             <div className="flex flex-col">
               {rows.map((r) => {
@@ -436,7 +504,10 @@ export function ReceiptImport({ open, onClose, vendorId, onDone }: {
                         style={{ width: 18, height: 18, marginTop: 2, accentColor: T.chalk }} />
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div className="flex items-baseline gap-2">
-                          <span style={{ fontSize: F.sm, fontWeight: 600, flex: 1, minWidth: 0, ...clip }}>{r.l.name}</span>
+                          {r.item ? <span style={{ fontSize: F.sm, fontWeight: 600, flex: 1, minWidth: 0, ...clip }}>{r.l.name}</span>
+                            : <input value={newName[r.n] ?? titleCase(r.l.name.replace(/_/g, " "))} onChange={(e) => setNewName((x) => ({ ...x, [r.n]: e.target.value }))}
+                                aria-label={`Name of the new item for ${r.l.name}`} title={`On the ${KIND_LABEL[kind].toLowerCase()}: ${r.l.name}`}
+                                style={{ ...field, height: 30, fontWeight: 600, flex: 1 }} />}
                           <span style={{ ...nums, fontSize: F.sm }}>
                             {r.status === "change" && theirs && <span style={{ color: T.ink3, textDecoration: "line-through", marginRight: 4 }}>{theirs.unit_cost === null ? "blank" : money(theirs.unit_cost)}</span>}
                             {money(r.l.unit_cost)}<span style={{ fontSize: 10, color: T.ink3 }}>/{r.l.unit ?? "?"}</span>
@@ -444,18 +515,16 @@ export function ReceiptImport({ open, onClose, vendorId, onDone }: {
                         </div>
                         <div style={{ fontSize: 10, color: T.ink3, ...clip }}>
                           <span style={{ color, fontWeight: 600 }}>{label}</span>
+                          {!r.item && (newName[r.n] ?? titleCase(r.l.name.replace(/_/g, " "))) !== r.l.name ? ` · "${r.l.name}"` : ""}
                           {r.l.sku ? ` · #${r.l.sku}` : ""}{r.l.qty !== null ? ` · ${r.l.qty} ${r.l.unit ?? ""}` : ""}{r.l.times > 1 ? ` on ${r.l.times} tickets` : ""}
                           {r.item && !theirs && r.item.unit_cost !== null ? ` · now ${money(r.item.unit_cost)}${r.item.vendor_contact_id ? ` from ${vendorName(r.item.vendor_contact_id) ?? "another vendor"}` : ""}` : ""}
                         </div>
                         <div className="grid gap-2 mt-1 items-center" style={{ gridTemplateColumns: wide ? "minmax(0, 2fr) auto" : "minmax(0, 1fr)" }}>
-                          <select value={pickOf(r.n)} onChange={(e) => {
-                            const v = e.target.value;
-                            setPick((p) => ({ ...p, [r.n]: v }));
-                            setMakeDefault((d) => { const x = { ...d }; delete x[r.n]; return x; });
-                          }} style={{ ...field, height: 30 }} aria-label={`Item for ${r.l.name}`}>
-                            <option value="new">New item: {r.l.name}</option>
-                            {itemOptions.map((i) => <option key={i.id} value={i.id}>{i.name} · {i.unit}</option>)}
-                          </select>
+                          <ItemSearch items={items} groupName={groupName} value={r.item} label={r.l.name}
+                            onPick={(id) => {
+                              setPick((p) => ({ ...p, [r.n]: id }));
+                              setMakeDefault((d) => { const x = { ...d }; delete x[r.n]; return x; });
+                            }} />
                           <label className="flex items-center gap-1.5" style={{ fontSize: F.xs, whiteSpace: "nowrap" }}>
                             <input type="checkbox" checked={isDefault || r.dflt} disabled={isDefault}
                               onChange={(e) => setMakeDefault((d) => ({ ...d, [r.n]: e.target.checked }))} style={{ width: 16, height: 16, accentColor: T.chalk }} />
@@ -505,4 +574,61 @@ export function ReceiptImport({ open, onClose, vendorId, onDone }: {
 function titleCase(s: string): string {
   if (!s || s !== s.toUpperCase()) return s;
   return s.toLowerCase().replace(/\b([a-z])/g, (c) => c.toUpperCase()).replace(/\b(Llc|Inc|Co|Lp|Llp)\b/g, (w) => w.toUpperCase());
+}
+
+/**
+ * Find the item a line is (Coy, 2026-09-29: "the item list is not searchable,
+ * and there's hundreds of items"). A search box over the Price book — every
+ * word must be in the name, group or item # ("4000 psi", "rebar #4") — with
+ * New item first; at most 30 shown, under their groups.
+ */
+function ItemSearch({ items, groupName, value, label, onPick }: {
+  items: Array<{ id: string; name: string; unit: string; cost_group_id: string | null; vendor_sku: string | null; active: boolean; unit_cost: number | null }>;
+  groupName: Map<string, string>; value: { id: string; name: string; unit: string } | null; label: string; onPick: (id: string) => void;
+}) {
+  const [q, setQ] = useState("");
+  const [open, setOpen] = useState(false);
+  const words = q.toLowerCase().replace(/(\d),(\d{3})/g, "$1$2").split(/\s+/).filter(Boolean);
+  const hits = open ? items.filter((i) => i.active && words.every((w) =>
+    `${i.name} ${groupName.get(i.cost_group_id ?? "") ?? ""} ${i.vendor_sku ?? ""}`.toLowerCase().replace(/(\d),(\d{3})/g, "$1$2").includes(w)))
+    .sort((a, b) => (groupName.get(a.cost_group_id ?? "") ?? "~").localeCompare(groupName.get(b.cost_group_id ?? "") ?? "~") || a.name.localeCompare(b.name)).slice(0, 30) : [];
+  const box: React.CSSProperties = { height: 30, border: `1px solid ${T.hair}`, background: "#fff", fontSize: F.sm, borderRadius: 4, padding: "0 8px", minWidth: 0, width: "100%" };
+  const choose = (id: string) => { onPick(id); setOpen(false); setQ(""); };
+  if (!open) {
+    return (
+      <button onClick={() => setOpen(true)} aria-label={`Item for ${label}`} className="text-left flex items-center gap-2" style={{ ...box, cursor: "pointer" }}>
+        <span style={{ flex: 1, minWidth: 0, ...clip, color: value ? T.ink : T.green }}>{value ? `${value.name} · ${value.unit}` : "New item"}</span>
+        <span style={{ fontSize: 10, color: T.chalk, whiteSpace: "nowrap" }}>Change ▾</span>
+      </button>
+    );
+  }
+  const gOf = (i: (typeof hits)[number]) => groupName.get(i.cost_group_id ?? "") ?? "Not in a group";
+  return (
+    <div className="rounded" style={{ border: `1px solid ${T.ink}`, background: "#fff" }}>
+      <input value={q} autoFocus onChange={(e) => setQ(e.target.value)} placeholder="Find in your Price book: 4000 psi, rebar, 8006…"
+        aria-label={`Find the item for ${label}`} onKeyDown={(e) => { if (e.key === "Escape") setOpen(false); }}
+        style={{ ...box, border: "none", borderBottom: `1px solid ${T.hair}`, borderRadius: 0, height: 34 }} />
+      <div style={{ maxHeight: 260, overflowY: "auto" }}>
+        <button onClick={() => choose("new")} className="w-full text-left px-2 py-1.5" style={{ fontSize: F.sm, color: T.green, cursor: "pointer", borderBottom: `1px solid ${T.hairSoft}` }}>
+          + New item
+        </button>
+        {hits.map((i, k) => {
+          const g = gOf(i);
+          const head = k === 0 || gOf(hits[k - 1]) !== g;
+          return (
+            <React.Fragment key={i.id}>
+              {head && <div className="px-2 pt-1.5" style={{ ...eyebrow, fontSize: 9, color: T.ink3 }}>{g}</div>}
+              <button onClick={() => choose(i.id)} className="w-full text-left px-2 py-1 flex items-baseline gap-2" style={{ fontSize: F.sm, cursor: "pointer" }}>
+                <span style={{ flex: 1, minWidth: 0, ...clip }}>{i.name}</span>
+                <span style={{ fontSize: 10, color: T.ink3, ...nums }}>{i.unit_cost === null ? "" : money(i.unit_cost)}/{i.unit}</span>
+              </button>
+            </React.Fragment>
+          );
+        })}
+        {q && hits.length === 0 && <div className="px-2 py-1.5" style={{ fontSize: F.xs, color: T.ink3 }}>Nothing in your Price book matches &ldquo;{q}&rdquo;.</div>}
+        {!q && <div className="px-2 py-1.5" style={{ fontSize: F.xs, color: T.ink3 }}>Type to find an item — words, sizes or their item #.</div>}
+      </div>
+      <button onClick={() => setOpen(false)} className="w-full py-1" style={{ ...eyebrow, color: T.ink2, borderTop: `1px solid ${T.hairSoft}`, cursor: "pointer" }}>Close</button>
+    </div>
+  );
 }

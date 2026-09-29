@@ -939,6 +939,10 @@ expected start date per quoted job before it means anything. Add the field.
   `job_type_hint` with a "?". **Swipe on a phone:** left most of the way (60%
   of the row) accepts the guess; right opens the four buckets behind the row.
   Either shows "Filed as X · Undo" for 5 s (`src/lib/swipe.ts`).
+  **The tag is not repeated (Coy, 2026-09-28):** a row in a bucket's own
+  chip shows no bucket tag, and the customer / vendor page shows none (only
+  a small "auto" when Dusty filed them); Dusty's guesses on Unsorted rows and
+  tags in search results (which cross buckets) stay.
   **The row, collapsed:** name, tag, job type, and Dusty's one sentence on
   where things stand (`contacts.status_summary`), falling back to the last
   message until he has read them. **Expanded:** his short summary of the
@@ -1163,6 +1167,17 @@ expected start date per quoted job before it means anything. Add the field.
   "$399.74 on $3,807.00 — works out to 10.50% (worked out; no rate
   printed)"; it is not a price and does not change Cost settings. From a
   photo the screen says the prices could not be checked against text.
+  **After Coy's first real invoice (2026-09-29):** the drawer's title is the
+  document's name (✎ renames it) and its subtitle the vendor's NAME — never
+  a phone number. A vendor matched by the number on the invoice but saved
+  with no name (Angelle's line was one of his unnamed contacts) gets a Name
+  box filled with the invoice's name, saved as Coy's on Next; the match says
+  how it matched. The explanation sits behind **ⓘ**. Each row's item is
+  found with a **search box** over the Price book (every word in the name,
+  group or item #, grouped, 30 at most; + New item first) — never a
+  427-item dropdown — and once Coy points Angelle's 8006 at his item, their
+  item # is saved on their price, so the next invoice matches by # on its
+  own. A new item's name is editable (Dusty's text, title-cased).
 - **Price book with vendors (2026-09-29)** — the grid's Vendor column shows
   the default vendor and "+2" when others price the item; **By vendor**
   lists an item under every vendor that prices it, at that vendor's price

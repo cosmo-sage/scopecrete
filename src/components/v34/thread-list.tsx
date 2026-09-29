@@ -310,8 +310,10 @@ function BucketTag({ label, c, state }: { label: string; c: string; state: "conf
   );
 }
 
-function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, onName, onBucket, subtypes, deciding, trayOpen, onTray, onAccept }: {
+function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, onName, onBucket, subtypes, deciding, trayOpen, onTray, onAccept, chipShown }: {
   t: Thread; first: boolean; expanded: boolean; onToggle: () => void; onOpen: () => void;
+  /** The open chip already says the bucket (Coy, 2026-09-28: the tag is redundant there). */
+  chipShown: boolean;
   /** Swipe right: this row's four-bucket tray is open. One row at a time. */
   trayOpen: boolean;
   onTray: (open: boolean) => void;
@@ -410,7 +412,7 @@ function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, onName, onB
               <span className="shrink-0" title="Named from their own words — not yet kept by you"
                 style={{ ...eyebrow, color: T.chalk }}>Auto</span>
             )}
-            {badge && (
+            {badge && !chipShown && (
               <BucketTag label={badge.l} c={badge.c} state={t.bucket_auto ? "auto" : "confirmed"} />
             )}
             {guessB && <BucketTag label={guessB.l} c={guessB.c} state="suggested" />}
@@ -776,6 +778,7 @@ export function ThreadList() {
               onOpen={() => router.push(`/dashboard/messages/${t.contact_id}`)}
               onDecide={decide} onName={nameDecide} onBucket={(id, bucket, sub) => fileAndToast(id, bucket, sub)}
               subtypes={subtypes} deciding={deciding}
+              chipShown={!q && filter !== "unsorted"}
               trayOpen={trayRow === t.contact_id}
               onTray={(open) => setTrayRow(open ? t.contact_id : null)}
               onAccept={(bucket) => fileAndToast(t.contact_id, bucket, bucket === "vendor" && t.proposal?.classification === "sub" ? "subcontractor" : null)} />

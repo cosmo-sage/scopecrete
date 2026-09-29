@@ -62,7 +62,6 @@ interface Task {
 }
 
 const COLOUR: Record<string, string> = { customer: T.green, vendor: T.chalk, personal: T.violet, spam: T.red };
-const LABEL: Record<string, string> = { customer: "Customer", vendor: "Vendor", personal: "Personal", spam: "Spam" };
 
 async function send(url: string, method: string, body?: unknown) {
   const r = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
@@ -132,11 +131,11 @@ export function PersonView({ person, messages, onReload, onMerge }: {
             style={{ background: "none", border: "none", color: T.ink3, padding: 0, cursor: "pointer" }}>
             <ArrowLeft size={18} />
           </button>
-          <span className="rounded" style={{ ...eyebrow, lineHeight: "16px", padding: "0 5px", color: c.bucket_state === "confirmed" ? "#fff" : colour,
-            background: c.bucket_state === "confirmed" ? colour : "transparent", border: `1px solid ${colour}` }}
-            title={c.bucket_state === "confirmed" ? "Confirmed by you" : "Filed by Dusty — keep or undo it on Threads"}>
-            {c.bucket ? LABEL[c.bucket] : "Unsorted"}{c.bucket_state === "confirmed" ? " ✓" : c.bucket_state === "auto" ? " · auto" : ""}
-          </span>
+          {/* No bucket tag: the page (and the chip it was opened from) already says
+              customer or vendor (Coy, 2026-09-28). Dusty's own filing keeps a small mark. */}
+          {c.bucket_state === "auto" && (
+            <span style={{ ...eyebrow, color: colour }} title="Filed by Dusty — keep or undo it on Threads">auto</span>
+          )}
           {c.subtype_label && <span style={{ ...eyebrow, color: T.ink2 }}>{c.subtype_label}</span>}
           {jobType && <span style={{ ...eyebrow, color: jobType.sure ? T.ink2 : T.ink3 }}>{jobType.l}{jobType.sure ? "" : "?"}</span>}
           <span className="flex-1" />

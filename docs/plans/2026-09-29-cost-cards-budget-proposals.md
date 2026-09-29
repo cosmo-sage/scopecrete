@@ -287,3 +287,16 @@ be uploaded.
   - short enough to read out on a call, sorts, and the letter says what it
     is. Stored as `jobs.job_number` + `estimates.version`, written when the
     job is created, so nothing is renumbered.
+
+## SumoQuote and CompanyCam (researched 2026-09-29)
+
+- **SumoQuote — not building on it.** Roofing proposal software (~$85–209/mo,
+  REST API for projects/reports). Using it would make a second copy of every
+  line (two sources of truth, §2a), cost every contractor a subscription, and
+  it knows roof squares, not yards. The proposal stays ours. **Borrowed:**
+  good / better / best options the customer picks on the link, and a cover
+  page / photo-led layout.
+- **CompanyCam — an optional import later**, only if the crews already use it
+  (API on its higher plans; REST + webhooks, OAuth per org). Photos would land
+  in `job_files` with `source='companycam'` and Dusty reads them like any
+  upload. Our own uploads (045–046) stay the default.

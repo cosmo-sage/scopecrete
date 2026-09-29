@@ -1,3 +1,19 @@
+/* The sticky header's height: 54px glass bar + 38px activity line
+   (activity-line.tsx always holds its row). Everything that sits under or
+   beside the header measures from this — one number, not five. */
+:root { --sc-head: 92px; --sc-foot: 58px; --sc-dusty: 400px; }
+
+/* The footer's height on a phone (layout.tsx, border-box, safe area inside it).
+   A page that must not scroll as a whole — a conversation, a person — is
+   pinned between the header and the footer, so only its own list scrolls and
+   its name bar can never slide up under the header (Coy, 2026-09-28). Before
+   this the page subtracted 72px for a 58px footer: a 14px grey gap, and a body
+   that scrolled on Android. Desktop has no footer and sizes by height. */
+.sc-pinned { position: fixed; top: var(--sc-head); bottom: var(--sc-foot); left: 0; right: 0; }
+@media (min-width: 1024px) {
+  .sc-pinned { position: static; height: calc(100dvh - var(--sc-head)); }
+}
+
 /**
  * v34 shell CSS — ported from scopecrete-v34.jsx L5155-5320.
  *
@@ -181,6 +197,39 @@
 
 /* ------------------------------------------------------- reduced motion */
 
+/* ACTIVITY LINE — the dot pulses only while something is really running
+   (a claimed read, or a Dusty reply streaming). Each new line fades in. */
+@keyframes scDotPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.35; transform: scale(0.7); }
+}
+.sc-dot-live { animation: scDotPulse 1.2s ease-in-out infinite; }
+/* Recording: a button that pulses must not shrink under the thumb. */
+@keyframes scRec { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+.sc-rec { animation: scRec 1.2s ease-in-out infinite; }
+@keyframes scLineIn { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+.sc-line-in { animation: scLineIn 0.35s ease-out; }
+
+/* The line from the emblem to Dusty's words. While he works, a light runs
+   down it on the same 1.4 s beat as the emblem's turn. */
+.sc-thread-live {
+  background: linear-gradient(180deg, rgba(255,255,255,.18) 0%, rgba(255,255,255,.18) 30%, #1FA971 50%, rgba(255,255,255,.18) 70%, rgba(255,255,255,.18) 100%);
+  background-size: 100% 300%;
+  animation: scThread 1.4s linear infinite;
+}
+@keyframes scThread { from { background-position: 0 100%; } to { background-position: 0 0%; } }
+/* Dusty's history rail, in from the left. */
+@keyframes scRailIn { from { transform: translateX(-100%); } to { transform: none; } }
+.sc-rail-in { animation: scRailIn 0.2s cubic-bezier(0.22, 0.85, 0.3, 1); }
+/* Dusty docked on the right on a desktop (Coy, 2026-09-29). */
+@keyframes scDockIn { from { transform: translateX(100%); } to { transform: none; } }
+@media (min-width: 1024px) { .sc-dock-in { animation: scDockIn 0.22s cubic-bezier(0.22, 0.85, 0.3, 1); } }
+/* The page beside Dusty keeps its width minus his column. */
+@media (min-width: 1024px) {
+  .sc-with-dusty { padding-right: var(--sc-dusty); }
+}
+.sc-caret { opacity: .6; animation: scDotPulse 0.9s ease-in-out infinite; margin-left: 1px; }
+
 @media (prefers-reduced-motion: reduce) {
   .sc-burger-bar,
   .sc-burger-bar::before,
@@ -199,4 +248,11 @@
   .sc-tab-pop { transition: none; animation: none; }
   .sc-tab-mark { transition: none; }
   .sc-drop { animation: none; }
+  .sc-dot-live,
+  .sc-line-in,
+  .sc-thread-live,
+  .sc-rail-in,
+  .sc-dock-in,
+  .sc-rec,
+  .sc-caret { animation: none; }
 }

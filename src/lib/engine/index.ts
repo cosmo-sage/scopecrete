@@ -38,6 +38,32 @@ export interface SectionInput {
   sqft_override: number | null;
   depth_in: number | null;
   psi?: number | null;
+  /** One of the org's reinforcement types (migration 042), or none chosen. */
+  reinforcement_type_id?: string | null;
+}
+
+/**
+ * A reinforcement Coy prices by its own unit (DECISIONS §3, 2026-09-28): mesh
+ * by the sheet, rebar by the stick or the foot, fiber by the pound or bag per
+ * yard. Every quantity rule needs its own number; a missing one blocks the
+ * price and is named, never filled in.
+ */
+export interface ReinforcementType {
+  id: string;
+  name: string;
+  kind: "mesh" | "rebar" | "fiber" | "other" | string;
+  unit: "sheet" | "stick" | "lf" | "lb" | "bag" | "sqft" | string;
+  unit_cost: number | null;
+  /** Mesh: area one sheet covers after lap. */
+  sheet_sqft?: number | null;
+  /** Rebar: spacing on centre, both ways. */
+  spacing_in?: number | null;
+  /** Rebar sold by the stick: its length. */
+  stick_ft?: number | null;
+  /** Rebar: extra for laps and ends. null = no allowance. */
+  lap_pct?: number | null;
+  /** Fiber: pounds or bags per cubic yard. */
+  per_cy?: number | null;
 }
 
 /** The subset of `org_cost_settings` the engine reads. null = not recorded. */
@@ -175,6 +201,54 @@ export function takeoff(sections: SectionInput[], overage_pct: number | null): T
 }
 
 // ---------------------------------------------------------------------------
+// Reinforcement — by its own unit
+// ---------------------------------------------------------------------------
+
+export type ReinforcementQty =
+  | { ok: true; qty: number; unit: string; note: string }
+  | { ok: false; missing: string[] };
+
+/** How much of a reinforcement a section needs, in the unit it is bought by. */
+export function reinforcementQty(q: SectionQuantities, t: ReinforcementType): ReinforcementQty {
+  const missing: string[] = [];
+  const pos = (v: number | null | undefined): v is number => has(v) && v > 0;
+  // Round away float dust first: 1,760.0000000002 ft is 88 sticks, not 89.
+  const up = (x: number) => Math.ceil(Math.round(x * 1e6) / 1e6);
+  if (!has(t.unit_cost) || t.unit_cost < 0) missing.push(`${t.name}: cost per ${t.unit}`);
+  if (q.sqft === null) return { ok: false, missing: [...missing, `${q.name || "A section"}: area`] };
+  const sqft = q.sqft;
+
+  if (t.kind === "mesh") {
+    if (t.unit === "sqft") return missing.length ? { ok: false, missing } : { ok: true, qty: sqft, unit: "sq ft", note: "by area" };
+    if (t.unit !== "sheet") return { ok: false, missing: [...missing, `${t.name}: mesh is bought by the sheet or the sq ft`] };
+    if (!pos(t.sheet_sqft)) missing.push(`${t.name}: sq ft one sheet covers`);
+    if (missing.length) return { ok: false, missing };
+    return { ok: true, qty: up(sqft / (t.sheet_sqft as number)), unit: "sheet", note: `${t.sheet_sqft} sq ft a sheet` };
+  }
+  if (t.kind === "rebar") {
+    if (!pos(t.spacing_in)) missing.push(`${t.name}: spacing`);
+    if (t.unit === "stick" && !pos(t.stick_ft)) missing.push(`${t.name}: stick length`);
+    if (t.unit !== "stick" && t.unit !== "lf") missing.push(`${t.name}: rebar is bought by the stick or the foot`);
+    if (missing.length) return { ok: false, missing };
+    const lap = has(t.lap_pct) ? t.lap_pct : 0;
+    // A grid both ways: 12 ÷ spacing bars per foot, each way.
+    const lf = sqft * 2 * (12 / (t.spacing_in as number)) * (1 + lap / 100);
+    const note = `${t.spacing_in}" o.c. both ways${lap ? `, +${lap}% lap` : ", no lap allowance"}`;
+    return t.unit === "stick"
+      ? { ok: true, qty: up(lf / (t.stick_ft as number)), unit: "stick", note: `${note}, ${Math.round(lf)} ft` }
+      : { ok: true, qty: up(lf), unit: "ft", note };
+  }
+  if (t.kind === "fiber") {
+    if (!pos(t.per_cy)) missing.push(`${t.name}: amount per yard`);
+    if (q.cy_neat === null) missing.push(`${q.name || "A section"}: depth`);
+    if (missing.length) return { ok: false, missing };
+    return { ok: true, qty: up((q.cy_neat as number) * (t.per_cy as number) * 10) / 10, unit: t.unit, note: `${t.per_cy} ${t.unit} a yard` };
+  }
+  if (t.unit === "sqft") return missing.length ? { ok: false, missing } : { ok: true, qty: sqft, unit: "sq ft", note: "by area" };
+  return { ok: false, missing: [...missing, `${t.name}: set it as mesh, rebar or fiber, or price it by the sq ft`] };
+}
+
+// ---------------------------------------------------------------------------
 // Price — needs settings. Blocks, by name, on anything missing.
 // ---------------------------------------------------------------------------
 
@@ -229,7 +303,7 @@ export function applyDiscount(cost: number, price: number, discount: number) {
 export function price(
   sections: SectionInput[],
   s: CostSettings,
-  opts: { discount?: number } = {},
+  opts: { discount?: number; reinforcement?: ReinforcementType[] } = {},
 ): Priced | Blocked {
   const t = takeoff(sections, s.concrete_overage_pct);
   const blocked: string[] = [];
@@ -245,6 +319,23 @@ export function price(
     if (q.work_type === "prep") blocked.push(`${q.name || "Prep section"}: there is no prep rate in cost settings`);
   }
   if (sections.length === 0) blocked.push("No sections yet");
+
+  // Reinforcement chosen on a section is priced by its own unit; a missing
+  // number on its type blocks the price, like any other missing setting.
+  const types = new Map((opts.reinforcement ?? []).map((r) => [r.id, r]));
+  const reinf: Array<{ q: SectionQuantities; t: ReinforcementType; qty: number; unit: string; note: string }> = [];
+  const unreinforced: string[] = [];
+  sections.forEach((sec, i) => {
+    const q = t.sections[i];
+    if (!q.concrete) return;
+    if (!sec.reinforcement_type_id) { unreinforced.push(q.name || q.work_type); return; }
+    const ty = types.get(sec.reinforcement_type_id);
+    if (!ty) { blocked.push(`${q.name || "A section"}: its reinforcement type no longer exists`); return; }
+    if (q.sqft === null) return; // already blocked on its dimensions
+    const r = reinforcementQty(q, ty);
+    if (!r.ok) blocked.push(...r.missing);
+    else reinf.push({ q, t: ty, qty: r.qty, unit: r.unit, note: r.note });
+  });
 
   const anyConcrete = t.sections.some((q) => q.concrete);
   const anyDemo = t.sections.some((q) => q.work_type === "demo");
@@ -277,6 +368,11 @@ export function price(
       lines.push({ type: "materials", label: `Short load (under ${n(s.shortload_threshold_cy)} cu yd)`,
         qty: 1, unit: "load", rate: base * n(s.shortload_pct) / 100, cost: base * n(s.shortload_pct) / 100 });
     }
+  }
+
+  for (const r of reinf) {
+    lines.push({ type: "materials", label: `${r.t.name} — ${r.q.name || r.q.work_type}`, qty: r.qty, unit: r.unit,
+      rate: n(r.t.unit_cost), cost: r.qty * n(r.t.unit_cost) });
   }
 
   // Labor by the square foot, per section (DECISIONS §3).
@@ -319,7 +415,9 @@ export function price(
     cost: { materials: mat, labor: lab, equipment: eq, tax, total: costTotal },
     price: { materials: pMat, labor: pLab, equipment: pEq, tax, subtotal: subtotal + taxOnBid, discount, total: d.price },
     margin: d.margin,
-    excluded: ["Reinforcement, base and vapor barrier — no rates for them in cost settings yet",
+    excluded: [
+      ...(unreinforced.length ? [`Reinforcement — none chosen for ${unreinforced.join(", ")}`] : []),
+      "Base and vapor barrier — no rates for them in cost settings yet",
       "Equipment rental by the day — not modelled yet"],
   };
 }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
+import { ALL_STATUSES, LEAD_SOURCES } from "@/lib/jobs/stages";
 
 /**
  * Jobs for the signed-in user's org — read and create.
@@ -34,6 +35,11 @@ export interface JobRow {
   state: string | null;
   zip: string | null;
   created_at: string | null;
+  job_type: string | null;
+  lead_source: string | null;
+  referred_by_contact_id: string | null;
+  stage_changed_at: string | null;
+  updated_at: string | null;
 }
 
 /**
@@ -46,7 +52,9 @@ export interface JobRow {
  * prevent — see DECISIONS.md §2b: a machine opinion changes what Coy is asked,
  * never what he is shown.
  */
-const CREATABLE = ["contact_id", "title", "address", "city", "state", "zip", "job_number"] as const;
+const CREATABLE = ["contact_id", "title", "address", "city", "state", "zip", "job_number",
+  "job_type", "lead_source", "referred_by_contact_id", "status"] as const;
+const JOB_TYPES = ["residential", "commercial", "public"];
 const FORBIDDEN = ["origin", "confirmed_at", "confirmed_by", "org_id", "created_from_message_id"] as const;
 
 export async function GET(req: NextRequest) {
@@ -58,8 +66,10 @@ export async function GET(req: NextRequest) {
 
   let q = supabase
     .from("jobs")
-    .select("id, job_number, title, status, origin, confirmed_at, created_from_message_id, contact_id, address, city, state, zip, created_at")
+    .select("id, job_number, title, status, origin, confirmed_at, created_from_message_id, contact_id, address, city, state, zip, created_at, job_type, lead_source, referred_by_contact_id, stage_changed_at, updated_at, flag_reason, description")
     .eq("org_id", orgId)
+    // Archived jobs (a customer re-filed by mistake, migration 038) are off the board.
+    .is("archived_at", null)
     .order("created_at", { ascending: false });
 
   if (status) q = q.eq("status", status);
@@ -75,7 +85,7 @@ export async function GET(req: NextRequest) {
   // `contacts` and `jobs` carry separate RLS policies and a PostgREST embed
   // silently returns null for rows the caller cannot see — which would look
   // like a job with no contact rather than a permissions result.
-  const contactIds = [...new Set(jobs.map((j) => j.contact_id).filter(Boolean))] as string[];
+  const contactIds = [...new Set(jobs.flatMap((j) => [j.contact_id, j.referred_by_contact_id]).filter(Boolean))] as string[];
   const nameById = new Map<string, { name: string | null; phone: string | null }>();
 
   if (contactIds.length > 0) {
@@ -89,15 +99,26 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // Sections per job: a card says "3 sections" or "not scoped yet".
+  const sectionCount = new Map<string, number>();
+  if (jobs.length > 0) {
+    const { data: secs } = await supabase.from("job_sections").select("job_id").eq("org_id", orgId)
+      .in("job_id", jobs.map((j) => j.id));
+    for (const r of (secs ?? []) as Array<{ job_id: string }>) sectionCount.set(r.job_id, (sectionCount.get(r.job_id) ?? 0) + 1);
+  }
+
   return applyCookies(NextResponse.json({
     jobs: jobs.map((j) => {
       const c = j.contact_id ? nameById.get(j.contact_id) : undefined;
+      const ref = j.referred_by_contact_id ? nameById.get(j.referred_by_contact_id) : undefined;
       return {
         ...j,
         // Never invents a name. 176 of 197 contacts have none (2026-09-27), and
         // the phone number is the real identity in that case.
         contact_name: c?.name ?? null,
         contact_phone: c?.phone ?? null,
+        referred_by_name: ref ? (ref.name?.trim() || ref.phone) : null,
+        section_count: sectionCount.get(j.id) ?? 0,
         // THE PIPELINE PREDICATE, computed in one place.
         //
         //     origin === 'manual' || confirmed_at !== null
@@ -144,11 +165,22 @@ export async function POST(req: NextRequest) {
     if (typeof v === "string" && v.trim()) insert[f] = v.trim();
   }
 
+  if (insert.job_type !== undefined && !JOB_TYPES.includes(insert.job_type as string)) {
+    return applyCookies(NextResponse.json({ error: `job_type must be one of ${JOB_TYPES.join(", ")}.` }, { status: 400 }));
+  }
+  if (insert.lead_source !== undefined && !LEAD_SOURCES.some((l) => l.k === insert.lead_source)) {
+    return applyCookies(NextResponse.json({ error: `lead_source must be one of ${LEAD_SOURCES.map((l) => l.k).join(", ")}.` }, { status: 400 }));
+  }
+  if (insert.status !== undefined && !ALL_STATUSES.includes(insert.status as string)) {
+    return applyCookies(NextResponse.json({ error: `status must be one of ${ALL_STATUSES.join(", ")}.` }, { status: 400 }));
+  }
+
   // A job created by a person is confirmed by definition — he is the one
   // typing it. confirmed_at is what the pipeline counts on, so setting it here
   // is the difference between a manual job appearing in the total and not.
   insert.origin = "manual";
-  insert.status = "lead";
+  insert.status = insert.status ?? "lead";
+  insert.stage_changed_at = new Date().toISOString();
   insert.confirmed_at = new Date().toISOString();
   insert.confirmed_by = userId;
 
@@ -157,11 +189,12 @@ export async function POST(req: NextRequest) {
   // check a caller could attach their job to another org's contact and get a
   // successful insert. A clear 403 also beats the opaque RLS error a bad
   // org_id would otherwise produce.
-  if (typeof insert.contact_id === "string") {
+  for (const field of ["contact_id", "referred_by_contact_id"] as const) {
+    if (typeof insert[field] !== "string") continue;
     const { data: contact, error: contactErr } = await supabase
       .from("contacts")
       .select("id")
-      .eq("id", insert.contact_id)
+      .eq("id", insert[field] as string)
       .eq("org_id", orgId)
       .maybeSingle();
 
@@ -186,7 +219,7 @@ export async function POST(req: NextRequest) {
   const { data, error } = await supabase
     .from("jobs")
     .insert(insert)
-    .select("id, job_number, title, status, origin, confirmed_at, contact_id, address, city, state, zip, created_at")
+    .select("id, job_number, title, status, origin, confirmed_at, contact_id, address, city, state, zip, created_at, job_type, lead_source, referred_by_contact_id")
     .single();
 
   if (error) {

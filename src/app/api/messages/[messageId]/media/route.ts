@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
+import { fetchFromProvider } from "@/lib/quo";
 
 /**
  * The photos, videos, PDFs and contact cards on one text message — each as a
@@ -34,8 +35,6 @@ export const dynamic = "force-dynamic";
 
 const BUCKET = "message-media";
 const EXPIRES_SECONDS = 60 * 30;
-const FETCH_TIMEOUT_MS = 12_000;
-const MAX_BYTES = 25 * 1024 * 1024; // matches the bucket's file_size_limit
 
 const EXT: Record<string, string> = {
   "image/jpeg": "jpg", "image/png": "png", "image/gif": "gif", "image/webp": "webp",
@@ -59,48 +58,6 @@ export interface MediaItem {
   state: "ready" | "unavailable";
   url: string | null;
   reason: string | null;
-}
-
-/** Fetch the provider copy. Bare signed URL first; the API key only if refused. */
-async function fetchFromProvider(url: string): Promise<{ bytes: ArrayBuffer; type: string | null } | { error: string }> {
-  const attempt = async (headers?: Record<string, string>) => {
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
-    try {
-      return await fetch(url, { headers, signal: ctrl.signal, cache: "no-store" });
-    } finally {
-      clearTimeout(t);
-    }
-  };
-
-  let res: Response;
-  try {
-    res = await attempt();
-    const key = process.env.QUO_API_KEY;
-    if ((res.status === 401 || res.status === 403) && key) {
-      res = await attempt({ Authorization: key });
-    }
-  } catch (e) {
-    return { error: e instanceof Error && e.name === "AbortError" ? "provider timed out" : `fetch failed: ${e instanceof Error ? e.message : String(e)}` };
-  }
-
-  if (!res.ok) {
-    // 401/403 with no key configured means the signature is not enough on its
-    // own. Say that, because the fix is a setting, not a code change.
-    if ((res.status === 401 || res.status === 403) && !process.env.QUO_API_KEY) {
-      return { error: `Quo refused the link (${res.status}) — it may need QUO_API_KEY set on the server` };
-    }
-    if (res.status === 404 || res.status === 410) {
-      return { error: `Quo no longer has this file (${res.status}) — the link has likely expired` };
-    }
-    return { error: `Quo answered ${res.status}` };
-  }
-
-  const len = Number(res.headers.get("content-length") ?? 0);
-  if (len > MAX_BYTES) return { error: `file is ${Math.round(len / 1048576)} MB, over the 25 MB limit` };
-  const bytes = await res.arrayBuffer();
-  if (bytes.byteLength > MAX_BYTES) return { error: "file is over the 25 MB limit" };
-  return { bytes, type: res.headers.get("content-type") };
 }
 
 export async function GET(req: NextRequest, ctx: { params: Promise<{ messageId: string }> }) {

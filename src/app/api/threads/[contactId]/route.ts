@@ -36,6 +36,11 @@ export interface ThreadMessage {
    * thread with fifty photos does not fetch fifty files just to render.
    */
   media_count: number;
+  /**
+   * Which of our lines it used (migration 035), by name — set only when this
+   * thread spans more than one line, so a one-line thread stays uncluttered.
+   */
+  line: string | null;
 }
 
 export async function GET(
@@ -91,13 +96,15 @@ export async function GET(
   // which holds one number while there are three lines.
   const { data: orgLines } = await supabase
     .from("org_phone_numbers")
-    .select("phone_e164")
+    .select("id, phone_e164, label")
     .eq("org_id", orgId);
   const ours = new Set((orgLines ?? []).map((r: { phone_e164: string }) => r.phone_e164));
+  const lineName = new Map(((orgLines ?? []) as Array<{ id: string; phone_e164: string; label: string | null }>)
+    .map((r) => [r.id, r.label?.trim() || formatLine(r.phone_e164)]));
 
   const { data: rows, error } = await supabase
     .from("messages")
-    .select("id, channel, direction, occurred_at, body_text, summary, summary_source, duration_seconds, recording_url, status, from_address, to_address")
+    .select("id, channel, direction, occurred_at, body_text, summary, summary_source, duration_seconds, recording_url, status, from_address, to_address, phone_number_id")
     .eq("org_id", orgId)
     .eq("contact_id", contactId)
     // Newest first. Page one is the most recent traffic, so a 350-message
@@ -111,9 +118,10 @@ export async function GET(
     return applyCookies(NextResponse.json({ error: `messages: ${error.message}` }, { status: 500 }));
   }
 
-  type Row = Omit<ThreadMessage, "artifact_kinds"> & {
+  type Row = Omit<ThreadMessage, "artifact_kinds" | "line"> & {
     from_address: string | null;
     to_address: string | null;
+    phone_number_id: string | null;
   };
   const raw = (rows ?? []) as Row[];
 
@@ -126,7 +134,12 @@ export async function GET(
     if (cand) { counterpartyPhone = cand; break; }
   }
 
-  const messages = raw.map(({ from_address: _f, to_address: _t, ...rest }) => rest);
+  const linesUsed = new Set(raw.map((r) => r.phone_number_id).filter(Boolean));
+  const messages = raw.map((r) => {
+    const { from_address, to_address, phone_number_id, ...rest } = r;
+    void from_address; void to_address;
+    return { ...rest, line: linesUsed.size > 1 && phone_number_id ? lineName.get(phone_number_id) ?? null : null };
+  });
 
   // Which messages have artifacts, without pulling any content.
   const kindsByMessage = new Map<string, string[]>();
@@ -176,4 +189,10 @@ export async function GET(
     merges,
     messages: withKinds,
   }));
+}
+
+/** "(985) 860-8287" for a line with no name. */
+function formatLine(e164: string): string {
+  const d = e164.replace(/\D/g, "").slice(-10);
+  return d.length === 10 ? `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}` : e164;
 }

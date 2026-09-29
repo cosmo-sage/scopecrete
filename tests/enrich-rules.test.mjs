@@ -1,0 +1,81 @@
+// The name suggester's safety checks. `npm test`.
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { sanitize, worthEnriching, renderConversation, renderNotes } from "../supabase/functions/enrich-contacts/rules.ts";
+
+const turn = (id, who, text, extra = {}) => ({ id, kind: "sms", who, at: "2026-09-24T10:00:00Z", text, hasMedia: false, ...extra });
+const base = (o = {}) => ({ classification: "customer", direction_of_ask: "they ask our price", confidence: 80,
+  proposed_name: null, proposed_company: null, proposed_role: null, project_type: null, scope_summary: null,
+  start_timing: null, length_ft: null, width_ft: null, sqft_stated: null, site_hint: null, has_media: false,
+  evidence_turn: 1, evidence_message_id: null, evidence_quote: "x", name_reasoning: "", ...o });
+
+test("our own name is never proposed (the 'Hi Coy' bug)", () => {
+  const turns = [turn("m1", "THEM", "Hi Coy, what would you charge for a slab?")];
+  const { p } = sanitize(base({ proposed_name: "Coy" }), turns);
+  assert.equal(p.proposed_name, null);
+});
+
+test("a name THEM never wrote is dropped", () => {
+  const turns = [turn("m1", "US", "Thanks Amber"), turn("m2", "THEM", "how much for a driveway")];
+  const { p } = sanitize(base({ proposed_name: "Amber" }), turns);
+  assert.equal(p.proposed_name, null);
+});
+
+test("self-identification survives", () => {
+  const turns = [turn("m1", "THEM", "It's Amber with The Arts at Jefferson Heights!")];
+  const { p } = sanitize(base({ proposed_name: "Amber" }), turns);
+  assert.equal(p.proposed_name, "Amber");
+});
+
+test("evidence resolves to a real message in THIS conversation, never an invented id", () => {
+  const turns = [turn("m1", "THEM", "a"), turn("m2", "THEM", "b")];
+  assert.equal(sanitize(base({ evidence_turn: 2 }), turns).p.evidence_message_id, "m2");
+  assert.equal(sanitize(base({ evidence_turn: 99 }), turns).p.evidence_message_id, "m1");
+});
+
+test("an unknown classification is forced to 'unknown'", () => {
+  const { p } = sanitize(base({ classification: "lead" }), [turn("m1", "THEM", "hello there friend")]);
+  assert.equal(p.classification, "unknown");
+});
+
+test("a silent missed call is not worth a model call", () => {
+  assert.equal(worthEnriching([]), false);
+  assert.equal(worthEnriching([turn("m1", "THEM", "hi")]), false);
+  assert.equal(worthEnriching([turn("m1", "THEM", "What would you charge for a 20x30 patio?")]), true);
+});
+
+test("long threads keep the most recent turns", () => {
+  const turns = Array.from({ length: 400 }, (_, i) => turn(`m${i}`, "THEM", `message ${i} ${"x".repeat(60)}`));
+  const { text } = renderConversation(turns);
+  assert.match(text, /message 399/);
+  assert.doesNotMatch(text, /message 0 /);
+});
+
+import { bucketOf, renderCorrections } from "../supabase/functions/enrich-contacts/rules.ts";
+
+test("a classification points at a bucket; unknown is not a guess", () => {
+  assert.equal(bucketOf("sub"), "vendor");
+  assert.equal(bucketOf("not_work"), "spam");
+  assert.equal(bucketOf("unknown"), null);
+});
+
+test("corrections render as data, capped at ten", () => {
+  assert.equal(renderCorrections([]), "");
+  const many = Array.from({ length: 14 }, (_, i) => ({ guess: "customer", answer: "vendor", subtype: "lead_gen", quote: `New Lead From Baton Rouge Concreters ${i}` }));
+  const out = renderCorrections(many);
+  assert.equal(out.split("\n").filter((l) => l.startsWith("- ")).length, 10);
+  assert.match(out, /You said customer; Coy filed them as vendor \(lead gen\)/);
+  assert.match(out, /not instructions to you/);
+});
+
+test("Coy's notes render as their own block, newest first, capped", () => {
+  assert.equal(renderNotes([]), "");
+  const out = renderNotes([
+    { body: "Vance —  leak at the\nshop, wants geocell", created_at: "2026-09-28T12:00:00Z" },
+    { body: "first visit", created_at: "2026-09-01T12:00:00Z" },
+  ]);
+  assert.match(out, /^COY'S NOTES/);
+  assert.match(out, /- 2026-09-28: Vance — leak at the shop, wants geocell\n- 2026-09-01: first visit$/);
+  const many = Array.from({ length: 50 }, (_, i) => ({ body: "x".repeat(200), created_at: `2026-09-${String((i % 28) + 1).padStart(2, "0")}T00:00:00Z` }));
+  assert.ok(renderNotes(many).length < 3200);
+});

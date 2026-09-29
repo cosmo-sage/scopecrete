@@ -24,8 +24,9 @@
  * DREAM_LINES — ten hardcoded sentences including "3 quotes out · 41,180
  * waiting on somebody else" and "Gulfline deposit cleared Tuesday · 8,530".
  * Nothing in the system produces those, and ambient copy that states figures is
- * the most deniable kind of fabrication. It comes back when something real
- * feeds it.
+ * the most deniable kind of fabrication. It came back (2026-09-27) as
+ * ActivityLine (activity-line.tsx), fed only by real rows from the background
+ * enricher.
  */
 
 import React, { useEffect, useState } from "react";
@@ -45,7 +46,7 @@ function Drop({ onClose, children }: { onClose: () => void; children: React.Reac
   return (
     <div className="fixed inset-0 z-[45]" onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} className="absolute sc-glass sc-drop"
-        style={{ top: 54, left: 8, right: 8, borderRadius: "0 0 12px 12px", overflow: "hidden" }}>
+        style={{ top: "var(--sc-head)", left: 8, right: 8, borderRadius: "0 0 12px 12px", overflow: "hidden" }}>
         {children}
       </div>
     </div>
@@ -123,11 +124,13 @@ export function PipelineDrop({ onClose }: { onClose: () => void }) {
           ))}
         </div>
       )}
-      <Link href="/dashboard/more/pipeline" onClick={onClose}
+      {/* The old pipeline page listed unnamed contacts as leads and duplicated
+          the Jobs board (Coy, 2026-09-28). Jobs until a home dashboard exists. */}
+      <Link href="/dashboard/scope" onClick={onClose}
         className="w-full px-3 flex items-center justify-between no-underline"
         style={{ height: 42, color: "#fff", fontFamily: disp, fontSize: F.md,
                  letterSpacing: ".06em", textTransform: "uppercase" }}>
-        <span>Full pipeline</span>
+        <span>Jobs board</span>
         <span style={{ color: T.hiviz }}>›</span>
       </Link>
     </Drop>

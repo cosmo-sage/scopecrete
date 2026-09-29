@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
+import { ALL_STATUSES, LEAD_SOURCES } from "@/lib/jobs/stages";
 
 /**
  * One job — read, edit, and ACCEPT.
@@ -19,14 +20,14 @@ import { getApiSession } from "@/lib/api-auth";
 
 export const dynamic = "force-dynamic";
 
-const EDITABLE = ["title", "address", "city", "state", "zip", "job_number", "notes", "status"] as const;
-const FORBIDDEN = ["origin", "confirmed_at", "confirmed_by", "org_id", "id", "created_from_message_id"] as const;
+const EDITABLE = ["title", "address", "city", "state", "zip", "job_number", "notes", "status",
+  "job_type", "lead_source", "referred_by_contact_id"] as const;
+const JOB_TYPES = ["residential", "commercial", "public"];
+const FORBIDDEN = ["origin", "confirmed_at", "confirmed_by", "org_id", "id", "created_from_message_id",
+  "archived_at", "archived_reason", "flag_reason"] as const;
 
-/** Mirrors jobs_status_check. Rejecting here gives a readable error. */
-const VALID_STATUS = [
-  "invited", "lead", "scoping", "quoted", "won",
-  "lost", "scheduled", "in_progress", "complete", "closed",
-];
+/** Mirrors jobs_status_check (migration 034), via the board's stage map. */
+const VALID_STATUS = ALL_STATUSES;
 
 export async function PATCH(
   req: NextRequest,
@@ -85,14 +86,38 @@ export async function PATCH(
     }, { status: 400 }));
   }
 
+  if (patch.status) patch.stage_changed_at = new Date().toISOString();
+  if (typeof patch.job_type === "string" && !JOB_TYPES.includes(patch.job_type)) {
+    return applyCookies(NextResponse.json({ error: `job_type must be one of ${JOB_TYPES.join(", ")}.` }, { status: 400 }));
+  }
+  if (typeof patch.lead_source === "string" && !LEAD_SOURCES.some((l) => l.k === patch.lead_source)) {
+    return applyCookies(NextResponse.json({ error: "Unknown lead_source." }, { status: 400 }));
+  }
+  if (typeof patch.referred_by_contact_id === "string") {
+    const { data: ref } = await supabase.from("contacts").select("id").eq("org_id", orgId).eq("id", patch.referred_by_contact_id).maybeSingle();
+    if (!ref) return applyCookies(NextResponse.json({ error: "That referrer is not a contact in your organisation." }, { status: 403 }));
+  }
+
   if (accept) {
     patch.confirmed_at = new Date().toISOString();
     patch.confirmed_by = userId;
   }
+  // A flagged job (its customer was re-filed, migration 038): Coy archives it
+  // or keeps it. Archiving hides it everywhere and is reversible; nothing is
+  // deleted. `{"archive": false}` brings an archived job back.
+  if (body.archive === true) {
+    patch.archived_at = new Date().toISOString();
+    patch.archived_reason = "archived by Coy";
+    patch.flag_reason = null;
+  } else if (body.archive === false) {
+    patch.archived_at = null;
+    patch.archived_reason = null;
+  }
+  if (body.keep === true) patch.flag_reason = null;
 
   if (Object.keys(patch).length === 0) {
     return applyCookies(NextResponse.json({
-      error: "Nothing to change. Send a field to edit, or {\"accept\": true}.",
+      error: "Nothing to change. Send a field to edit, {\"accept\": true}, {\"archive\": true} or {\"keep\": true}.",
     }, { status: 400 }));
   }
 
@@ -104,7 +129,7 @@ export async function PATCH(
     .update(patch)
     .eq("id", id)
     .eq("org_id", orgId)
-    .select("id, job_number, title, status, origin, confirmed_at, confirmed_by, contact_id, address, city, state, zip, notes, duration_days, created_at")
+    .select("id, job_number, title, status, origin, confirmed_at, confirmed_by, contact_id, address, city, state, zip, notes, duration_days, created_at, job_type, lead_source, referred_by_contact_id")
     .maybeSingle();
 
   if (error) {
@@ -132,7 +157,7 @@ export async function GET(
 
   const { data, error } = await supabase
     .from("jobs")
-    .select("id, job_number, title, status, origin, confirmed_at, confirmed_by, created_from_message_id, contact_id, address, city, state, zip, notes, duration_days, created_at")
+    .select("id, job_number, title, status, origin, confirmed_at, confirmed_by, created_from_message_id, contact_id, address, city, state, zip, notes, duration_days, created_at, job_type, lead_source, referred_by_contact_id, description")
     .eq("id", id)
     .eq("org_id", orgId)
     .maybeSingle();
@@ -157,5 +182,35 @@ export async function GET(
     contact = c ?? null;
   }
 
-  return applyCookies(NextResponse.json({ job: data, contact }));
+  // Why this job exists, for one made by filing someone as a customer (Coy,
+  // 2026-09-29: "No idea what the job is or why it was classified as a
+  // customer"). Everything here is already on the contact or its latest
+  // proposal — nothing is inferred for the page.
+  let why: {
+    filed_at: string | null; filed_by: "coy" | "dusty" | null;
+    status_summary: string | null; recent_summary: string | null;
+    evidence_quote: string | null; evidence_at: string | null;
+    company: string | null; scope_summary: string | null;
+  } | null = null;
+  if (data.origin === "classification" && data.contact_id) {
+    const [{ data: c }, { data: p }] = await Promise.all([
+      supabase.from("contacts").select("classification_confirmed_at, auto_classified_at, status_summary, recent_summary")
+        .eq("org_id", orgId).eq("id", data.contact_id).maybeSingle(),
+      supabase.from("contact_proposals").select("evidence_quote, created_at, proposed_company, scope_summary")
+        .eq("org_id", orgId).eq("contact_id", data.contact_id).eq("classification", "customer")
+        .order("created_at", { ascending: false }).limit(1).maybeSingle(),
+    ]);
+    why = {
+      filed_at: (c?.classification_confirmed_at ?? c?.auto_classified_at ?? null) as string | null,
+      filed_by: c?.classification_confirmed_at ? "coy" : c?.auto_classified_at ? "dusty" : null,
+      status_summary: (c?.status_summary as string | null) ?? null,
+      recent_summary: (c?.recent_summary as string | null) ?? null,
+      evidence_quote: (p?.evidence_quote as string | null) ?? null,
+      evidence_at: (p?.created_at as string | null) ?? null,
+      company: (p?.proposed_company as string | null) ?? null,
+      scope_summary: (p?.scope_summary as string | null) ?? null,
+    };
+  }
+
+  return applyCookies(NextResponse.json({ job: data, contact, why }));
 }

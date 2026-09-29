@@ -13,18 +13,23 @@
  *     thread does not lose it.
  *   - Copy: the draft onto the clipboard, to paste into Quo — which is how Coy
  *     texts today.
- *   - Call: a tel: link to the contact's number. A real action on a phone.
+ *   - Notes (migration 041, 2026-09-28): Save writes a contact_notes row. It
+ *     shows on their timeline, and Dusty reads it — in chat and when he reads
+ *     the thread in the background.
+ *   - The mic: dictation, through the browser's own speech recognition (Chrome
+ *     sends the audio to Google to turn into words; nothing of ours stores
+ *     it). Tap, talk, the words land in the box. Where the browser has no
+ *     recognition the mic is shown off with that reason.
  *
  * WHAT DOES NOT, AND SAYS SO
- *   - Send. There is no send path: outbound texting needs 10DLC registration,
- *     email has no ingestion or sending at all, and a note has no table to live
- *     in yet (job_notes arrives with FEAT-009's migration). The old composer on
- *     this screen appended the message locally and then faked a "Dusty" reply a
- *     second later; that is the thing this must never do again. So Send is
- *     visibly off, with the reason next to it — never a button that appears to
- *     work.
- *   - Attach and hold-to-talk: same, for the same reasons. Voice capture is
- *     work order 16.
+ *   - Send for texts and email. There is no send path: outbound texting needs
+ *     10DLC registration, email has no ingestion or sending at all. The old
+ *     composer on this screen appended the message locally and then faked a
+ *     "Dusty" reply a second later; that is the thing this must never do
+ *     again. So Send is visibly off, with the reason next to it.
+ *
+ * GONE (Coy, 2026-09-28): the Call button here — the page has one at the top —
+ * and the + attach menu, which could do nothing until sending exists.
  *
  * DRAFTS ARE LOCAL. localStorage, per contact, per device. That is a
  * convenience, not a record: it is not shared, not backed up, and gone if the
@@ -42,7 +47,7 @@ type Channel = "text" | "email" | "note";
 const NOT_CONNECTED: Record<Channel, string> = {
   text: "Texts aren't sent from here yet — copy it into Quo.",
   email: "Email isn't connected yet — copy it into your mail.",
-  note: "Notes can't be saved yet — they need the notes table from FEAT-009.",
+  note: "Saved to their page. Dusty reads your notes.",
 };
 
 const draftKey = (contactId: string) => `sc:draft:${contactId}`;
@@ -67,7 +72,20 @@ function writeDraft(contactId: string, channel: Channel, text: string) {
   }
 }
 
-export function Composer({ contactId, phone, name, compact = false }: {
+/** The browser's speech recognition, where there is one (Chrome: webkit-prefixed). */
+type Recognition = {
+  lang: string; interimResults: boolean; continuous: boolean;
+  onresult: ((e: { resultIndex: number; results: ArrayLike<ArrayLike<{ transcript: string }> & { isFinal: boolean }> }) => void) | null;
+  onend: (() => void) | null; onerror: ((e: { error: string }) => void) | null;
+  start: () => void; stop: () => void;
+};
+function recognitionCtor(): (new () => Recognition) | null {
+  if (typeof window === "undefined") return null;
+  const w = window as unknown as { SpeechRecognition?: new () => Recognition; webkitSpeechRecognition?: new () => Recognition };
+  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
+}
+
+export function Composer({ contactId, phone, name, compact = false, onNoteSaved }: {
   contactId: string;
   /** E.164, for the Call link. */
   phone: string | null;
@@ -75,6 +93,8 @@ export function Composer({ contactId, phone, name, compact = false }: {
   name?: string | null;
   /** The small form used inside an expanded thread row. */
   compact?: boolean;
+  /** A note was saved — the page reloads its timeline. */
+  onNoteSaved?: () => void;
 }) {
   // Lazy init reads the saved draft once, on mount. No effect needed, so no
   // setState inside one.
@@ -82,12 +102,56 @@ export function Composer({ contactId, phone, name, compact = false }: {
     typeof window === "undefined" ? "text" : readDraft(contactId).channel);
   const [text, setText] = useState(() =>
     typeof window === "undefined" ? "" : readDraft(contactId).text);
-  const [attachOpen, setAttachOpen] = useState(false);
   const [copied, setCopied] = useState<"ok" | "failed" | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [noteMsg, setNoteMsg] = useState<string | null>(null);
+  const [canDictate] = useState(() => recognitionCtor() !== null);
+  const [listening, setListening] = useState(false);
+  const [micError, setMicError] = useState<string | null>(null);
+  const rec = useRef<Recognition | null>(null);
   const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => { writeDraft(contactId, channel, text); }, [contactId, channel, text]);
   useEffect(() => () => { if (copiedTimer.current) clearTimeout(copiedTimer.current); }, []);
+  useEffect(() => () => { rec.current?.stop(); }, []);
+
+  function dictate() {
+    if (listening) { rec.current?.stop(); return; }
+    const Ctor = recognitionCtor();
+    if (!Ctor) return;
+    const r = new Ctor();
+    r.lang = "en-US"; r.interimResults = false; r.continuous = false;
+    r.onresult = (e) => {
+      let said = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) if (e.results[i].isFinal) said += e.results[i][0].transcript;
+      said = said.trim();
+      if (said) setText((t) => (t.trim() ? `${t.trimEnd()} ${said}` : said));
+    };
+    r.onerror = (e) => setMicError(e.error === "not-allowed" ? "Microphone blocked — allow it for this site in Chrome." : `Didn't catch that (${e.error}).`);
+    r.onend = () => { setListening(false); rec.current = null; };
+    setMicError(null);
+    try { r.start(); rec.current = r; setListening(true); } catch { setListening(false); }
+  }
+
+  async function saveNote() {
+    const body = text.trim();
+    if (!body || saving) return;
+    setSaving(true); setNoteMsg(null);
+    try {
+      const r = await fetch(`/api/people/${contactId}/notes`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ body }),
+      });
+      const b = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(b?.error || `HTTP ${r.status}`);
+      setText("");
+      setNoteMsg("Note saved");
+      onNoteSaved?.();
+    } catch (e) {
+      setNoteMsg(`Couldn't save: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setSaving(false);
+    }
+  }
 
   async function copy() {
     try {
@@ -101,6 +165,8 @@ export function Composer({ contactId, phone, name, compact = false }: {
   }
 
   const who = name || (phone ? phone : null);
+  // First name only in the box, so the hint fits one line.
+  const first = name?.trim().split(/\s+/)[0] || null;
   const has = text.trim().length > 0;
   const iconBtn: React.CSSProperties = {
     width: 34, height: 34, border: `1px solid ${T.hair}`, background: T.card, borderRadius: 8,
@@ -130,45 +196,40 @@ export function Composer({ contactId, phone, name, compact = false }: {
         </div>
       )}
 
-      {attachOpen && (
-        <div className="flex gap-1.5 pb-2">
-          {[["Photo", "needs a send path"], ["Files", "needs a send path"], ["Receipt", "camera capture isn't built"]].map(([l, sub]) => (
-            <div key={l} aria-disabled="true" className="flex-1 rounded px-2 py-2"
-              style={{ background: T.slab, border: `1px solid ${T.hair}`, minWidth: 0, opacity: 0.6 }}>
-              <div style={{ fontFamily: disp, fontSize: F.sm, fontWeight: 600 }}>{l}</div>
-              <div style={{ fontSize: 9.5, color: T.ink3, lineHeight: 1.3 }}>{sub}</div>
-            </div>
-          ))}
-        </div>
-      )}
-
       <div className="flex items-end gap-1.5">
-        {!compact && (
-          <button onClick={() => setAttachOpen((o) => !o)} aria-label="Attach" aria-expanded={attachOpen}
-            style={{ ...iconBtn, background: attachOpen ? T.ink : T.card, color: attachOpen ? "#fff" : T.ink2,
-                     fontSize: 19, lineHeight: 1, cursor: "pointer" }}>+</button>
-        )}
-
         <textarea value={text} onChange={(e) => setText(e.target.value)} rows={compact ? 2 : 1}
           placeholder={channel === "note" ? "A note about them — stays internal"
-            : channel === "email" ? "Write the email" : `Text ${who ?? "them"} back…`}
+            : channel === "email" ? "Write the email" : `Text ${first ?? "them"} back…`}
           className="flex-1 px-2.5 py-2 rounded-lg outline-none resize-none"
           style={{ border: `1px solid ${T.hair}`, background: T.card, fontSize: F.sm,
                    maxHeight: 120, lineHeight: 1.4, fontFamily: body, minWidth: 0 }} />
 
         {!compact && (
-          // Hold-to-talk: shown, off. Voice capture is work order 16.
-          <button disabled aria-label="Hold to talk — not built yet" title="Voice capture isn't built yet"
-            style={{ ...iconBtn, opacity: 0.45, cursor: "not-allowed" }}>
+          <button onClick={dictate} disabled={!canDictate}
+            aria-label={!canDictate ? "Dictation isn't available in this browser" : listening ? "Stop listening" : "Talk — the words land in the box"}
+            aria-pressed={listening}
+            title={!canDictate ? "This browser has no speech recognition" : listening ? "Listening — tap to stop" : "Tap and talk"}
+            className={listening ? "sc-rec" : undefined}
+            style={{ ...iconBtn, opacity: canDictate ? 1 : 0.45, cursor: canDictate ? "pointer" : "not-allowed",
+                     background: listening ? T.red : T.card, borderColor: listening ? T.red : T.hair }}>
             <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true">
-              <rect x="5.4" y="1.6" width="4.2" height="7.6" rx="2.1" fill="none" stroke={T.ink2} strokeWidth="1.5" />
-              <path d="M3 7.4a4.5 4.5 0 0 0 9 0" fill="none" stroke={T.ink2} strokeWidth="1.5" strokeLinecap="round" />
-              <path d="M7.5 11.9v1.6" stroke={T.ink2} strokeWidth="1.5" strokeLinecap="round" />
+              <rect x="5.4" y="1.6" width="4.2" height="7.6" rx="2.1" fill="none" stroke={listening ? "#fff" : T.ink2} strokeWidth="1.5" />
+              <path d="M3 7.4a4.5 4.5 0 0 0 9 0" fill="none" stroke={listening ? "#fff" : T.ink2} strokeWidth="1.5" strokeLinecap="round" />
+              <path d="M7.5 11.9v1.6" stroke={listening ? "#fff" : T.ink2} strokeWidth="1.5" strokeLinecap="round" />
             </svg>
           </button>
         )}
 
-        {has && (
+        {has && channel === "note" && (
+          <button onClick={() => void saveNote()} disabled={saving} aria-label="Save note"
+            style={{ ...iconBtn, background: T.ink, borderColor: T.ink, cursor: saving ? "default" : "pointer", opacity: saving ? 0.5 : 1 }}>
+            <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true">
+              <path d="M7.5 12.4V2.8M3.4 6.9 7.5 2.6l4.1 4.3" fill="none" stroke="#fff"
+                strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+        )}
+        {has && channel !== "note" && (
           // Send: present where v34 puts it, and visibly off. Never a button
           // that looks like it worked.
           <button disabled aria-label="Send — not connected" title={NOT_CONNECTED[channel]}
@@ -183,14 +244,7 @@ export function Composer({ contactId, phone, name, compact = false }: {
 
       {/* The things that DO work, and the plain reason Send does not. */}
       <div className="flex items-center gap-2 flex-wrap" style={{ marginTop: 6 }}>
-        {phone && (
-          <a href={`tel:${phone}`} className="rounded px-2.5 no-underline flex items-center"
-            style={{ height: 28, border: `1px solid ${T.hair}`, color: T.ink,
-                     fontFamily: disp, fontSize: F.xs, letterSpacing: ".06em", textTransform: "uppercase" }}>
-            Call
-          </a>
-        )}
-        {has && (
+        {has && channel !== "note" && (
           <button onClick={() => void copy()} className="rounded px-2.5"
             style={{ height: 28, border: `1px solid ${T.hair}`, background: T.card, color: T.ink,
                      fontFamily: disp, fontSize: F.xs, letterSpacing: ".06em", textTransform: "uppercase", cursor: "pointer" }}>
@@ -198,7 +252,9 @@ export function Composer({ contactId, phone, name, compact = false }: {
           </button>
         )}
         <span style={{ fontSize: F.xs, color: T.ink3, lineHeight: 1.3, flex: "1 1 160px" }}>
-          {has ? NOT_CONNECTED[channel] : "Drafts stay on this device until they can be sent."}
+          {micError ?? (listening ? "Listening…" : noteMsg && !has ? noteMsg
+            : has ? NOT_CONNECTED[channel]
+            : channel === "note" ? "Notes stay internal. Dusty reads them." : "Drafts stay on this device until they can be sent.")}
         </span>
       </div>
     </div>

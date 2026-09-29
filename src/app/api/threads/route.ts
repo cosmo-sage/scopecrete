@@ -78,12 +78,28 @@ export interface Thread {
   job_status: string | null;
   /** True when the contact has a job carrying no `job_sections` rows. */
   job_unscoped: boolean;
+  /** residential | commercial | public, from the contact's most advanced job. */
+  job_type: string | null;
   /**
-   * 'vendor' | 'sub' — and ONLY when relation_confirmed_at is set. An
-   * unconfirmed proposal is a machine opinion and stays out of the UI
-   * (DECISIONS.md §2b), so this is null for all 135 customers today.
+   * Dusty's status lines (migration 037, enrich-contacts v8). A display cache
+   * of his summary — shown as his words, never as a fact about the contact.
+   * `job_type_hint` is his guess at the job type, shown only when there is no
+   * job to take it from.
    */
-  relation: string | null;
+  status_summary: string | null;
+  recent_summary: string | null;
+  job_type_hint: string | null;
+  /**
+   * The contact's bucket — customer | vendor | personal | spam — and ONLY when
+   * Coy put them there, or Dusty filed them (spam, with Undo: see bucket_auto).
+   * Null is Unsorted. The 'customer' column default on 190 legacy rows is a
+   * default, not a classification, and never shows here (DECISIONS §2b).
+   */
+  bucket: "customer" | "vendor" | "personal" | "spam" | null;
+  /** org_contact_subtypes slug within the bucket, e.g. subcontractor. */
+  subtype: string | null;
+  /** Set when Dusty filed this contact on its own; carries the line it went on. */
+  bucket_auto: { reason: string | null } | null;
   /**
    * The PENDING enrich-contacts proposal for this contact, if there is one.
    *
@@ -98,6 +114,13 @@ export interface Thread {
    * a rejected one is history.
    */
   proposal: ThreadProposal | null;
+  /**
+   * Set when display_name was applied automatically because the person
+   * introduced themselves (DECISIONS §2b) and Coy has not yet kept or undone
+   * it. Carries the line they said it in, so the row can show it with Keep and
+   * Undo. Null for every name Coy typed or confirmed.
+   */
+  auto_name: { claim_id: string; quote: string | null; channel: string | null } | null;
 }
 
 export interface ThreadProposal {
@@ -190,18 +213,21 @@ export async function GET(req: NextRequest) {
   // Opportunistic names. Expected to return nothing today — see the header.
   // Failure here is not an error: the list is fully usable without it.
   const contactIds = [...byContact.keys()];
-  const names = new Map<string, { name: string | null; phone: string | null; contact_type: string | null; contact_subtype: string | null; customer_id: string | null }>();
+  const names = new Map<string, { name: string | null; phone: string | null; contact_type: string | null; contact_subtype: string | null; customer_id: string | null; name_source: string | null; name_claim_id: string | null; confirmed: boolean; auto_at: string | null; auto_reason: string | null; status_summary: string | null; recent_summary: string | null; job_type_hint: string | null }>();
   let contactsReadable = false;
   if (contactIds.length > 0) {
     const { data: contacts } = await supabase
       .from("contacts")
-      .select("id, name, phone, contact_type, contact_subtype, customer_id")
+      .select("id, name, phone, contact_type, contact_subtype, customer_id, name_source, name_claim_id, classification_confirmed_at, auto_classified_at, auto_classified_reason, status_summary, recent_summary, job_type_hint")
       .in("id", contactIds.slice(0, 1000));
     for (const c of (contacts ?? []) as Array<Record<string, string | null>>) {
       names.set(c.id as string, {
         name: c.name, phone: c.phone,
         contact_type: c.contact_type, contact_subtype: c.contact_subtype,
+        confirmed: !!c.classification_confirmed_at, auto_at: c.auto_classified_at, auto_reason: c.auto_classified_reason,
         customer_id: c.customer_id,
+        name_source: c.name_source, name_claim_id: c.name_claim_id,
+        status_summary: c.status_summary, recent_summary: c.recent_summary, job_type_hint: c.job_type_hint,
       });
     }
     contactsReadable = (contacts ?? []).length > 0;
@@ -211,13 +237,14 @@ export async function GET(req: NextRequest) {
   // STATUS_RANK picks the most advanced job when a contact has several — a
   // customer with a won job and a fresh lead belongs under Won.
   const STATUS_RANK = ["invited", "lead", "scoping", "quoted", "scheduled", "in_progress", "complete", "closed", "lost", "won"];
-  const jobByContact = new Map<string, { status: string | null; unscoped: boolean }>();
+  const jobByContact = new Map<string, { status: string | null; unscoped: boolean; type: string | null }>();
   {
     const { data: jobs } = await supabase
       .from("jobs")
-      .select("id, contact_id, status")
-      .eq("org_id", orgId);
-    const jobRows = (jobs ?? []) as Array<{ id: string; contact_id: string | null; status: string | null }>;
+      .select("id, contact_id, status, job_type")
+      .eq("org_id", orgId)
+      .is("archived_at", null);
+    const jobRows = (jobs ?? []) as Array<{ id: string; contact_id: string | null; status: string | null; job_type: string | null }>;
 
     let scopedIds = new Set<string>();
     if (jobRows.length > 0) {
@@ -234,6 +261,7 @@ export async function GET(req: NextRequest) {
       const better = !prev || STATUS_RANK.indexOf(j.status ?? "") > STATUS_RANK.indexOf(prev.status ?? "");
       jobByContact.set(j.contact_id, {
         status: better ? j.status : (prev?.status ?? null),
+        type: better ? j.job_type : (prev?.type ?? null),
         unscoped: (prev?.unscoped ?? false) || !scopedIds.has(j.id),
       });
     }
@@ -279,18 +307,19 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // Confirmed relations only. An unconfirmed enrich-contacts proposal changes
-  // what Coy is asked, never what he is shown (DECISIONS.md §2b).
-  const relationByCustomer = new Map<string, string>();
+  // Names applied automatically, with the line that licensed each one.
+  const autoByClaim = new Map<string, { quote: string | null; channel: string | null }>();
   {
-    const { data: rels } = await supabase
-      .from("customers")
-      .select("id, relation, relation_confirmed_at")
-      .eq("org_id", orgId)
-      .in("relation", ["vendor", "sub"])
-      .not("relation_confirmed_at", "is", null);
-    for (const r of (rels ?? []) as Array<{ id: string; relation: string }>) {
-      relationByCustomer.set(r.id, r.relation);
+    const claimIds = [...names.values()]
+      .filter((c) => c.name_source === "machine" && c.name_claim_id)
+      .map((c) => c.name_claim_id as string);
+    if (claimIds.length) {
+      const { data: claims } = await supabase.from("contact_name_claims")
+        .select("id, evidence_quote, channel")
+        .eq("org_id", orgId).eq("status", "accepted").in("id", claimIds);
+      for (const k of (claims ?? []) as Array<{ id: string; evidence_quote: string | null; channel: string | null }>) {
+        autoByClaim.set(k.id, { quote: k.evidence_quote, channel: k.channel });
+      }
     }
   }
 
@@ -301,6 +330,8 @@ export async function GET(req: NextRequest) {
     const derived = from && !ours.has(from) ? from : to && !ours.has(to) ? to : from ?? to ?? null;
 
     const c = names.get(contactId);
+    const bucket = c && (c.confirmed || c.auto_at) && ["customer", "vendor", "personal", "spam"].includes(c.contact_type ?? "")
+      ? (c.contact_type as Thread["bucket"]) : null;
     const phone = c?.phone ?? derived;
     const realName = c?.name && c.name.trim() ? c.name.trim() : null;
 
@@ -322,8 +353,10 @@ export async function GET(req: NextRequest) {
       display_name: realName ?? formatPhone(phone),
       name_is_phone: realName === null,
       phone,
-      contact_type: c?.contact_type ?? null,
-      contact_subtype: c?.contact_subtype ?? null,
+      // Only a bucket that counts (confirmed, or filed by Dusty) reaches the
+      // avatar — never the legacy column default.
+      contact_type: bucket,
+      contact_subtype: bucket ? c?.contact_subtype ?? null : null,
       channel: latest.channel,
       direction: latest.direction,
       occurred_at: latest.occurred_at,
@@ -333,9 +366,18 @@ export async function GET(req: NextRequest) {
       msg_count: count,
       job_status: jobByContact.get(contactId)?.status ?? null,
       job_unscoped: jobByContact.get(contactId)?.unscoped ?? false,
-      relation: c?.customer_id ? relationByCustomer.get(c.customer_id) ?? null : null,
+      job_type: jobByContact.get(contactId)?.type ?? null,
+      status_summary: c?.status_summary ?? null,
+      recent_summary: c?.recent_summary ?? null,
+      job_type_hint: c?.job_type_hint ?? null,
+      bucket,
+      subtype: bucket ? c?.contact_subtype ?? null : null,
+      bucket_auto: bucket && !c?.confirmed && c?.auto_at ? { reason: c.auto_reason } : null,
       // NOT folded into display_name above, and never to be. See the field doc.
       proposal: proposalByContact.get(contactId) ?? null,
+      auto_name: realName && c?.name_source === "machine" && c.name_claim_id && autoByClaim.has(c.name_claim_id)
+        ? { claim_id: c.name_claim_id, ...autoByClaim.get(c.name_claim_id)! }
+        : null,
     };
   });
 

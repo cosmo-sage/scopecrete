@@ -6,7 +6,8 @@ import { DUSTY_SYSTEM } from "@/lib/dusty/prompt";
 /**
  * Dusty — read-only, and it knows what Coy has open.
  *
- * POST { messages: [{role, content}], context: {kind, id} }  →  streamed text.
+ * POST { question, conversation_id?, context?: {kind, id} }  →  streamed text,
+ * with X-Dusty-Conversation naming the conversation it went into.
  *
  * The model runs in the Hermes container on the VPS (DECISIONS §8), reached
  * over Tailscale Funnel at HERMES_URL with a bearer key. Hermes routes to the
@@ -16,8 +17,12 @@ import { DUSTY_SYSTEM } from "@/lib/dusty/prompt";
  * - signed-in only; org from the session (DECISIONS §7);
  * - the context is fetched here under RLS — the browser names a screen, it
  *   never supplies facts — and Hermes sees only what this route sends;
- * - read-only: nothing is written, nothing is sent to a customer;
- * - nothing is stored. The conversation lives in the browser tab.
+ * - read-only toward the business: nothing is sent to a customer, no record
+ *   is changed;
+ * - the conversation IS kept (migration 043, Coy 2026-09-28: "select and
+ *   continue older conversations") — private to the person, under RLS. The
+ *   history comes from the database, never from the browser, and a continued
+ *   chat keeps the context it started with (a job chat stays about that job).
  *
  * HERMES_API_KEY is server-only and never logged.
  */
@@ -27,7 +32,7 @@ export const maxDuration = 120;
 
 const MAX_TURNS = 30;
 const MAX_USER_CHARS = 4000;
-const DEFAULT_MODEL = "anthropic/claude-3.5-haiku";
+const DEFAULT_MODEL = "anthropic/claude-haiku-4.5";
 const TIMEOUT_MS = 60_000;
 
 type Turn = { role: "user" | "assistant"; content: string };
@@ -46,29 +51,56 @@ export async function POST(req: NextRequest) {
     }, { status: 503 }));
   }
 
-  let body: { messages?: unknown; context?: unknown };
+  let body: { question?: unknown; conversation_id?: unknown; context?: unknown };
   try {
     body = await req.json();
   } catch {
     return applyCookies(NextResponse.json({ error: "Body must be JSON." }, { status: 400 }));
   }
+  const question = typeof body.question === "string" ? body.question.trim() : "";
+  if (!question) return applyCookies(NextResponse.json({ error: "Nothing to answer." }, { status: 400 }));
+  if (question.length > MAX_USER_CHARS) {
+    return applyCookies(NextResponse.json({ error: `Keep a message under ${MAX_USER_CHARS} characters.` }, { status: 400 }));
+  }
 
-  const raw = Array.isArray(body.messages) ? body.messages : [];
+  // The conversation: an existing one of yours (RLS: owner only), or a new
+  // one about what you have open.
+  let convId: string | null = null;
+  let ref = parseRef(body.context);
+  if (typeof body.conversation_id === "string") {
+    const { data: conv } = await supabase.from("dusty_conversations")
+      .select("id, context_kind, context_id, created_at").eq("org_id", orgId).eq("id", body.conversation_id).maybeSingle();
+    if (!conv) return applyCookies(NextResponse.json({ error: "That conversation isn't yours or no longer exists." }, { status: 404 }));
+    convId = conv.id as string;
+    // A continued catch-up looks at the day before it started (and since).
+    ref = parseRef({ kind: conv.context_kind, id: conv.context_id,
+      since: new Date(Date.parse(conv.created_at as string) - 86400_000).toISOString() });
+  }
+
+  const ctx = await buildContext(supabase, orgId, ref);
+
   const history: Turn[] = [];
-  for (const m of raw.slice(-MAX_TURNS)) {
-    const r = m as { role?: unknown; content?: unknown };
-    if ((r.role !== "user" && r.role !== "assistant") || typeof r.content !== "string" || !r.content.trim()) continue;
-    if (r.role === "user" && r.content.length > MAX_USER_CHARS) {
-      return applyCookies(NextResponse.json({ error: `Keep a message under ${MAX_USER_CHARS} characters.` }, { status: 400 }));
-    }
-    history.push({ role: r.role, content: r.content.slice(0, 20000) });
+  if (convId) {
+    const { data: past } = await supabase.from("dusty_messages").select("role, content")
+      .eq("conversation_id", convId).order("created_at", { ascending: false }).limit(MAX_TURNS);
+    history.push(...((past ?? []) as Turn[]).reverse());
+    while (history.length && history[0].role !== "user") history.shift();
+  } else {
+    const { data: made, error: mkErr } = await supabase.from("dusty_conversations").insert({
+      org_id: orgId,
+      title: ref.kind === "activity"
+        ? `Catch-up · ${new Intl.DateTimeFormat("en-US", { timeZone: "America/Chicago", month: "short", day: "numeric" }).format(new Date())}`
+        : question.replace(/\s+/g, " ").slice(0, 60),
+      context_kind: ref.kind, context_id: "id" in ref ? ref.id : null, context_label: ctx.label.slice(0, 120),
+    }).select("id").single();
+    if (mkErr || !made) return applyCookies(NextResponse.json({ error: `Couldn't start the conversation: ${mkErr?.message ?? "no row"}` }, { status: 500 }));
+    convId = made.id as string;
   }
-  while (history.length && history[0].role !== "user") history.shift();
-  if (!history.length || history[history.length - 1].role !== "user") {
-    return applyCookies(NextResponse.json({ error: "Nothing to answer." }, { status: 400 }));
-  }
+  history.push({ role: "user", content: question });
+  const { error: qErr } = await supabase.from("dusty_messages").insert({ conversation_id: convId, org_id: orgId, role: "user", content: question });
+  if (qErr) return applyCookies(NextResponse.json({ error: `Couldn't save the question: ${qErr.message}` }, { status: 500 }));
+  await supabase.from("dusty_conversations").update({ updated_at: new Date().toISOString() }).eq("id", convId);
 
-  const ctx = await buildContext(supabase, orgId, parseRef(body.context));
   const model = process.env.HERMES_MODEL || DEFAULT_MODEL;
 
   const ctrl = new AbortController();
@@ -110,15 +142,23 @@ export async function POST(req: NextRequest) {
   const isStream = (upstream.headers.get("content-type") ?? "").includes("text/event-stream");
   const reader = upstream.body.getReader();
 
+  let said = "";
+  const saveAnswer = async () => {
+    if (!said.trim()) return;
+    await supabase.from("dusty_messages").insert({ conversation_id: convId, org_id: orgId, role: "assistant", content: said.slice(0, 40000) });
+    await supabase.from("dusty_conversations").update({ updated_at: new Date().toISOString() }).eq("id", convId);
+  };
+
   const out = new ReadableStream<Uint8Array>({
     async start(controller) {
+      const emit = (t: string) => { said += t; controller.enqueue(encoder.encode(t)); };
       try {
         if (!isStream) {
           // Some OpenAI-compatible servers ignore `stream` and answer once.
           let text = "";
           for (;;) { const { done, value } = await reader.read(); if (done) break; text += decoder.decode(value, { stream: true }); }
           const j = JSON.parse(text) as { choices?: Array<{ message?: { content?: string } }> };
-          controller.enqueue(encoder.encode(j.choices?.[0]?.message?.content ?? "[Dusty returned nothing.]"));
+          emit(j.choices?.[0]?.message?.content ?? "[Dusty returned nothing.]");
         } else {
           let buf = "";
           let finish: string | null = null;
@@ -136,21 +176,22 @@ export async function POST(req: NextRequest) {
               try {
                 const j = JSON.parse(data) as { choices?: Array<{ delta?: { content?: string }; finish_reason?: string | null }> };
                 const piece = j.choices?.[0]?.delta?.content;
-                if (piece) controller.enqueue(encoder.encode(piece));
+                if (piece) emit(piece);
                 if (j.choices?.[0]?.finish_reason) finish = j.choices[0].finish_reason;
               } catch { /* a keep-alive or partial line — skip it */ }
             }
           }
-          if (finish === "length") controller.enqueue(encoder.encode("\n\n[Cut off — ask for the rest.]"));
-          if (finish === "content_filter") controller.enqueue(encoder.encode("\n\n[Dusty declined to answer that one.]"));
+          if (finish === "length") emit("\n\n[Cut off — ask for the rest.]");
+          if (finish === "content_filter") emit("\n\n[Dusty declined to answer that one.]");
         }
         console.log("dusty ok", JSON.stringify({ model, ctx: ctx.label.slice(0, 40), truncated: ctx.truncated }));
       } catch (e) {
         const why = (e as Error).name === "AbortError" ? "Hermes took too long" : "the connection to Hermes dropped";
         console.error("dusty stream", why);
-        controller.enqueue(encoder.encode(`\n\n[Dusty couldn't finish: ${why}.]`));
+        emit(`\n\n[Dusty couldn't finish: ${why}.]`);
       } finally {
         clearTimeout(timer);
+        await saveAnswer().catch(() => { /* the reply was shown; it just won't be in the history */ });
         controller.close();
       }
     },
@@ -162,6 +203,7 @@ export async function POST(req: NextRequest) {
       "Content-Type": "text/plain; charset=utf-8",
       "Cache-Control": "no-store",
       "X-Dusty-Context": encodeURIComponent(ctx.label),
+      "X-Dusty-Conversation": convId,
     },
   }));
 }

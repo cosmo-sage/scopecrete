@@ -1,10 +1,10 @@
-import { EmptyState } from "@/components/v34/primitives";
+import { redirect } from "next/navigation";
 
-/** Right pane on desktop until a person is picked. On a phone the list shows instead. */
-export default function CustomersIndex() {
-  return (
-    <div className="hidden lg:block">
-      <EmptyState title="Pick someone" detail="Their numbers, what they are to the business, and their jobs show here." />
-    </div>
-  );
+/**
+ * Customers are a Threads bucket now (DECISIONS §6, 2026-09-28): the list is
+ * Threads → Customer, and one person opens their Customer page. The old
+ * relation-based list (and its Unclassified tab) is superseded by the buckets.
+ */
+export default function CustomersPage() {
+  redirect("/dashboard/messages?f=customers");
 }

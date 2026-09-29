@@ -5,7 +5,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { quantities, takeoff, price, floor, applyDiscount, monthlyNut } from "../src/lib/engine/index.ts";
+import { quantities, takeoff, price, floor, applyDiscount, monthlyNut, reinforcementQty } from "../src/lib/engine/index.ts";
 
 const close = (a, b, eps = 1e-6) => assert.ok(Math.abs(a - b) < eps, `${a} ≉ ${b}`);
 
@@ -150,4 +150,44 @@ test("monthly nut: quarterly ÷3, annual ÷12, one-time and inactive excluded", 
     { label: "d", amount: 5000, cadence: "one_time", active: true },
     { label: "e", amount: 999, cadence: "monthly", active: false },
   ]), 300 + 300 + 100);
+});
+
+// ---------------------------------------------------------------- reinforcement
+
+const MESH = { id: "m", name: "6x6 10ga mesh", kind: "mesh", unit: "sheet", unit_cost: 12.5, sheet_sqft: 45 };
+const REBAR = { id: "r", name: "#4 @ 18", kind: "rebar", unit: "stick", unit_cost: 9, spacing_in: 18, stick_ft: 20, lap_pct: 10 };
+const FIBER = { id: "f", name: "Fiber", kind: "fiber", unit: "lb", unit_cost: 6, per_cy: 1.5 };
+
+test("reinforcement: mesh is whole sheets — 1,200 sq ft at 45 a sheet is 27", () => {
+  const r = reinforcementQty(quantities(slab()), MESH);
+  assert.ok(r.ok); assert.equal(r.qty, 27); assert.equal(r.unit, "sheet");
+});
+
+test("reinforcement: rebar grid both ways, lap, to 20 ft sticks", () => {
+  // 1,200 sf × 2 × (12/18) × 1.1 = 1,760 ft → 88 sticks
+  const r = reinforcementQty(quantities(slab()), REBAR);
+  assert.ok(r.ok); assert.equal(r.qty, 88); assert.equal(r.unit, "stick");
+});
+
+test("reinforcement: fiber by the yard, needs depth", () => {
+  const r = reinforcementQty(quantities(slab()), FIBER);
+  assert.ok(r.ok); close(r.qty, Math.ceil((1200 * 4 / 12 / 27) * 1.5 * 10) / 10);
+  const no = reinforcementQty(quantities(slab({ depth_in: null })), FIBER);
+  assert.equal(no.ok, false);
+});
+
+test("reinforcement: a missing number on the type blocks the price and is named — never assumed", () => {
+  const p = price([slab({ reinforcement_type_id: "m" })], GULFLINE, { reinforcement: [{ ...MESH, sheet_sqft: null }] });
+  assert.equal(p.priced, false);
+  assert.ok(p.blocked.some((b) => /sheet covers/.test(b)));
+});
+
+test("reinforcement: priced as a material — marked up and taxed with materials", () => {
+  const without = price([slab()], GULFLINE);
+  const withMesh = price([slab({ reinforcement_type_id: "m" })], GULFLINE, { reinforcement: [MESH] });
+  assert.ok(without.priced && withMesh.priced);
+  close(withMesh.cost.materials - without.cost.materials, 27 * 12.5);
+  close(withMesh.price.materials - without.price.materials, 27 * 12.5 * (1 + 30.61 / 100));
+  assert.ok(without.excluded.some((e) => /none chosen/.test(e)));
+  assert.ok(!withMesh.excluded.some((e) => /none chosen/.test(e)));
 });

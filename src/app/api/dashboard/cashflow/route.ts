@@ -55,7 +55,7 @@ export async function GET(req: NextRequest) {
       { data: estimates },
       { data: closeRateRows },
     ] = await Promise.all([
-      supabase.from("jobs").select("id, job_number, title, status").eq("org_id", orgId),
+      supabase.from("jobs").select("id, job_number, title, status").eq("org_id", orgId).is("archived_at", null),
       supabase.from("invoices").select("id, job_id, milestone_label, amount, due_on, status").eq("org_id", orgId),
       supabase.from("payments").select("id, invoice_id, job_id, amount, received_on").eq("org_id", orgId),
       supabase.from("receipts").select("id, job_id, vendor_name, amount, purchased_on, cost_type").eq("org_id", orgId),

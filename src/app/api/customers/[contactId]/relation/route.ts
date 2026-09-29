@@ -4,9 +4,10 @@ import { getApiSession } from "@/lib/api-auth";
 /**
  * A person says what this contact is: customer, vendor or sub.
  *
- * This is the human confirmation DECISIONS §2b makes load-bearing. It writes
- * `customers.relation`, `relation_source='manual'`, `relation_confirmed_at`
- * and `relation_confirmed_by`. A confirmed vendor or sub STOPS quo-intake
+ * This is the human confirmation DECISIONS §2b makes load-bearing. Since
+ * migration 032 it goes through sc_classify_contact(), the one writer: the
+ * contact's bucket (sub = vendor / subcontractor) and `customers.relation`,
+ * `relation_source='manual'`, `relation_confirmed_at` in step. A confirmed vendor or sub STOPS quo-intake
  * creating new leads for the contact — the screen says so before the tap.
  *
  * 63 contacts have no customer row. One is created here, as the proposals
@@ -22,7 +23,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ contactId
   const { contactId } = await ctx.params;
   const result = await getApiSession(req);
   if (!result.ok) return result.response;
-  const { supabase, orgId, userId, applyCookies } = result.session;
+  const { supabase, orgId, applyCookies } = result.session;
 
   let body: Record<string, unknown>;
   try {
@@ -48,32 +49,14 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ contactId
     return applyCookies(NextResponse.json({ error: "This contact was merged into another. Classify that one.", redirect_to: contact.merged_into_contact_id }, { status: 409 }));
   }
 
-  const now = new Date().toISOString();
-  const confirmed = relation === null
-    ? { relation_confirmed_at: null, relation_confirmed_by: null, relation_source: "default" }
-    : { relation, relation_confirmed_at: now, relation_confirmed_by: userId, relation_source: "manual" };
+  // One writer since migration 032: sc_classify_contact() sets the contact's
+  // bucket and keeps customers.relation (the lead guard's input) in step.
+  // A sub is a vendor whose type is subcontractor.
+  const [bucket, subtype] = relation === null ? [null, null]
+    : relation === "sub" ? ["vendor", "subcontractor"] : [relation as string, null];
+  const { data, error } = await supabase.rpc("sc_classify_contact", { p_contact: contactId, p_bucket: bucket, p_subtype: subtype });
+  if (error) return applyCookies(NextResponse.json({ error: error.message }, { status: 500 }));
+  const row = ((data ?? []) as Array<{ customer_created: boolean }>)[0];
 
-  let created = false;
-  if (!contact.customer_id) {
-    if (relation === null) return applyCookies(NextResponse.json({ ok: true, relation: "unclassified" }));
-    const { data: cust, error: insErr } = await supabase
-      .from("customers")
-      .insert({ org_id: orgId, name: (contact.name as string | null) || (contact.phone as string | null), ...confirmed })
-      .select("id")
-      .single();
-    if (insErr) return applyCookies(NextResponse.json({ error: `customers: ${insErr.message}` }, { status: 500 }));
-    const { error: linkErr } = await supabase.from("contacts").update({ customer_id: cust.id }).eq("id", contactId).eq("org_id", orgId);
-    if (linkErr) return applyCookies(NextResponse.json({ error: `contacts: ${linkErr.message}` }, { status: 500 }));
-    created = true;
-  } else {
-    const { error: upErr, count } = await supabase
-      .from("customers")
-      .update(confirmed, { count: "exact" })
-      .eq("id", contact.customer_id)
-      .eq("org_id", orgId);
-    if (upErr) return applyCookies(NextResponse.json({ error: `customers: ${upErr.message}` }, { status: 500 }));
-    if (!count) return applyCookies(NextResponse.json({ error: "The customer record for this contact is not in your organisation." }, { status: 404 }));
-  }
-
-  return applyCookies(NextResponse.json({ ok: true, relation: relation ?? "unclassified", customer_created: created }));
+  return applyCookies(NextResponse.json({ ok: true, relation: relation ?? "unclassified", customer_created: !!row?.customer_created }));
 }

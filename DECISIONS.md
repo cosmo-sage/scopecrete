@@ -4,7 +4,7 @@ Ground truth for every agent working this repo. If code disagrees with this
 document, the code is wrong or this document is stale — resolve it, don't
 guess. Update this file in the same PR that changes the behavior it describes.
 
-Last updated: 2026-09-27
+Last updated: 2026-09-29
 
 ---
 
@@ -239,6 +239,15 @@ SMS projection in application code stopped and never ran again; 48 texts landed
 in the database and never reached the app, and nothing was watching. A non-zero
 drift count is that outage, visible this time. Surface it in the UI.
 
+**Two kinds of drift row (2026-09-28).** `unprojected_raw_event` is the alarm —
+an event landed and never became a message; it alone is the drift *count*
+(`/api/dashboard/drift`), the desktop header counter and a banner on Threads.
+`open_defect` is a note on a message that DID arrive (e.g. Quo called a text
+from Coy's own Cell line "inbound"; the projection filed it outbound) — shown
+only on **More → Logs** (`/api/logs`), with Dusty's reads and same-person
+merges. Coy: drift belongs on a logs page, not in the inbox. The one open
+defect on 2026-09-28 is that Cell-line text; nothing is missing.
+
 **Attachments — migration 027 (applied 2026-09-27).** Photos, videos, PDFs and
 contact cards sent by text live in `message_media`, one row per file, written by
 the projection (`sc_project_raw_event()`) and backfilled from
@@ -251,6 +260,42 @@ should go once nothing reads it. Files are copied lazily into the private
 are `{org_id}/…` in both `message-media` and `call-audio`, and `storage.objects`
 policies scope reads and writes to `get_user_org_ids()`. Before 027 there were
 **no** storage policies, which is why the call-audio player never worked.
+
+**Call audio — copied on first play (migration 041, 2026-09-28).** Coy: the
+recordings belong on the customer and vendor pages. A call with a recording
+shows **Play recording**; the tap calls `/api/messages/[id]/audio?kind=recording`
+(or `voicemail`), which signs the stored copy if there is one, and otherwise
+asks the Quo API for a fresh link (`GET /v1/call-recordings/{callId}`,
+`QUO_API_KEY` server-side), falls back to the link on record, copies the file
+into `call-audio/{org_id}/{message_id}-{kind}.mp3`, stamps
+`call_artifacts.storage_path`, and signs that. Nothing downloads until the tap.
+Migration 041 added the missing INSERT policy on `call-audio` (the caller's own
+org folder only — verified). When Quo refuses, the row says why ("may need
+QUO_API_KEY"), never a dead player. As of 2026-09-28 `QUO_API_KEY` is **not**
+set in Vercel; 129 calls carry a recording link, none copied yet.
+
+## 2d. Lines and providers — migration 035 (applied 2026-09-27)
+
+Quo today; other providers or Coy's own AI voice stack later, on the same
+schema. **A contact is the other person's number; the line is a property of
+each message.** One person calling two of Coy's lines is one thread.
+
+- `org_phone_numbers.provider` (quo | twilio | telnyx | retell | vapi |
+  own_stack | other), `provider_number_id`, and `default_lead_source` — a
+  tracking number printed only on the website makes its callers website leads.
+  Provider was set only where the data proves it (Main and Cell: every message
+  projected from Quo); Third is unknown until Coy sets it.
+- `messages.phone_number_id` is filled by trigger `messages_set_line`
+  (whichever address is one of the org's lines) and was backfilled: 1,466 of
+  1,505 messages; 39 involve none of the three lines and stay null.
+- `messages.provider` stays per message — where that event came from — and the
+  dedupe index `(provider, provider_message_id)` still keys on it.
+- More → Phone lines edits label, provider and default source
+  (`/api/lines`). A thread shows the line on each message only when it spans
+  more than one.
+- Seen in the data: (225) 529-9098 is a relay that texts "New call from:
+  Baton Rouge Concreters, Number: +1…" for every website call (~150). Each of
+  those numbers is a website lead — the first real input for lead sources.
 
 ## 2c. One contact is one person — migration 028 (applied 2026-09-27)
 
@@ -269,6 +314,11 @@ the merged-away contact keeps its row, points at the person with
   service-role only, so an invoker merge would move texts and silently leave
   calls behind. Execute is granted to `authenticated` only; a stranger gets
   "contact not found".
+- **Same name, same email → a suggestion (2026-09-28).** Amber texted from two
+  numbers and became two contacts, both named Amber. The person page (and
+  the plain conversation) now shows "Also Amber · (225) … — same name. Same
+  person?" with **Review**, which opens the merge on its confirm step. Still
+  one human tap per pair; nothing merges on a match alone.
 - **Everything that resolves a contact follows the pointer.** `quo-intake` v57
   `upsertContact()` hops `merged_into_contact_id`; `sc_quo_events_project()`
   redirects an event keyed to a merged-away contact before projecting it; the
@@ -297,6 +347,204 @@ and creates the `customers` row when the contact has none. That IS the human
 confirmation, so a confirmed vendor or sub is suppressed by the guard; the
 screen says so before the tap. The list shows a relation only when it is
 confirmed — everything else is **Unclassified**, never the column default.
+
+**The background enricher (2026-09-27, migrations 029–033).** Contacts are
+read with the app closed. pg_cron calls the `enrich-contacts` edge function
+every minute (v13; 4 readers, each claiming one contact at a time until the
+queue is empty or 45 s have passed, so a backlog drains in minutes; source in
+`supabase/functions/enrich-contacts/`:
+`rules.ts` the rules, `pipeline.ts` one contact, `index.ts` the worker). There
+is no button.
+
+- **Who is read** — view `sc_enrich_due` (security_invoker): everyone not
+  merged and not filed as spam — named and sorted people too, since migration
+  037, for their status line; the name and bucket steps still only touch the
+  unnamed and the unsorted — with something THEY said (inbound text, or a
+  call transcript/summary), quiet for 3 minutes (a burst of texts, or a
+  transcript landing after its call, is read once), and never read or changed
+  since the last read. A failed read retries after 30 minutes.
+- **Claiming** — `sc_enrich_claim(n)` (service role only) inserts a `running`
+  row in `contact_enrich_runs`; a partial unique index makes a double claim
+  impossible; a run not finished in 10 minutes is reaped as `abandoned`. Every
+  read ends as proposed / named / unchanged / no_words / model_error / failed.
+- **Auth** — the call carries vault secret `enrich_worker_token`, checked by
+  `sc_enrich_worker_authorized()`. Nobody types it or sees it. `verify_jwt` is
+  off because the token is not a JWT (see `supabase/config.toml`).
+- **Hermes first** — the worker checks `HERMES_API_KEY` is set and Hermes
+  `/health` answers BEFORE claiming, so an outage never marks anyone read.
+  Hermes URL defaults to §8's; key in Supabase → Edge Functions → Secrets.
+- **Transcripts reach the model as US:/THEM:**, never phone numbers.
+  "Their words" on a call are the THEM lines whichever side dialled — before
+  this, a call Coy placed counted as nothing the caller said.
+- **Visible** — `sc_worker_heartbeats` (no tenant data) says ok /
+  not_configured / hermes_unreachable / error. The activity line under the
+  header (§6) shows it, with every read and the org's waiting count
+  (`/api/activity`, `sc_enrich_status()` under RLS).
+- **Hermes is slow** — measured 2026-09-27, successful reads take 20–85 s
+  (a small model direct is under 10) and a third timed out at 55 s. The
+  model timeout is 90 s while the cause on the VPS is found; failed reads
+  retry after 30 minutes on their own.
+- **Pause** — `select cron.unschedule('enrich-contacts');`
+
+The in-app `/api/enrich` route and its button/15-minute browser runner are
+gone: one reader, one place.
+
+**ONE exception to asking first — self-introductions (Coy, 2026-09-27).**
+*"If AI is smart enough to create a summary of the transcript, then it should
+be smart enough to label the phone number with the name of the person."* A
+name is written without asking ONLY when all of these hold:
+
+- the contact has no name, and its name is not human-confirmed (the database
+  enforces the second: `sc_guard_contact_identity`);
+- the model proposed the name, AND `findSelfIdentification()` independently
+  finds the person saying it about themselves — "this is / my name is / it's /
+  I'm <name>", or "<name> here" — in an inbound text or on a transcript line
+  spoken from the contact's own number. Our side never counts; a call summary
+  (no speaker) never counts; the whole name must be said; "this is Mike's
+  wife" is not Mike;
+- they did not introduce themselves under a second name on that number
+  (shared line, relay, or "It's Jose, spelled j o s e" correcting a mishearing)
+  — that is a question;
+- Coy has not undone that name for that contact before.
+
+It is written with `name_source='machine'`, a `contact_name_claims` row
+(`claim_type='self_identification'`, the exact line as `evidence_quote`) and
+`name_claim_id`. The row shows **Auto** and, expanded, the line with **Keep**
+(→ `name_source='human'`) and **Undo** (name off, claim `rejected`, never
+re-applied) — `PATCH /api/name-claims/[id]`. Dry run against the live data on
+2026-09-27: 29 of the 176 unnamed contacts qualify.
+
+Everything else is unchanged. A customer / sub / vendor call is NEVER applied
+automatically — it can hide a real lead — and a name from anywhere other than
+the person's own introduction is still a suggestion to confirm.
+
+**Buckets — one classification (migration 032, 2026-09-27).** Threads
+sorts PEOPLE into four buckets: **customer · vendor · personal · spam**
+(synopsis §5.3: buckets are code, types are data — `org_contact_subtypes`;
+people looking for work are vendor / `looking_for_work`, subs are vendor /
+`subcontractor`). `contacts.contact_type` is the truth. `customers.relation`
+used to be a second, overlapping system; it is now kept in step by
+`sc_classify_contact()`, the one writer (vendor → `vendor`, or `sub` for
+subcontractor / looking for work; customer → `customer`), so the quo-intake
+lead guard keeps working unchanged. A bucket shows only when
+`classification_confirmed_at` (Coy put them there) or `auto_classified_at`
+(Dusty filed them — spam, or a bucket he has earned, below) is set; everyone else is **Unsorted**. The
+190 legacy `'customer'` defaults are not customers.
+
+**Spam is the one bucket Dusty files itself** (Coy, 2026-09-27), shown as
+"Spam · auto" with **Not spam** in the row. Only when the model says spam AND
+`spamSignal()` finds evidence in their words (short-code sender, one-time
+passcode, "reply STOP" opt-out, stock scam line) AND Coy has never written
+or called back, onto a contact nobody has sorted. Not spam → back to Unsorted,
+`auto_classify_blocked_at` set, never auto-filed again. Dry run 2026-09-27:
+one contact qualifies (Handoff one-time passwords). Filed spam is not re-read.
+
+**Status lines (migration 037, `enrich-contacts` v8, 2026-09-28).** Each read
+also writes `contacts.status_summary` (one sentence: where things stand),
+`recent_summary` (two to four sentences on the latest conversations) and, for
+customers, `job_type_hint`, stamped `status_summary_at`. A display cache of
+Dusty's words, like `messages.summary` — it classifies nothing and names
+nobody, and phone numbers are stripped out of it. A person already named AND
+sorted is read for this alone (outcome `summarized`, no proposal, nothing
+asked). Our own messages count as a change, so a quote sent refreshes the
+line. Everyone read before 2026-09-28 00:15 UTC was read once more to
+backfill.
+
+**Dusty learns from Coy's sorting, and earns the other buckets (Coy,
+2026-09-27; migration 036, `enrich-contacts` v7).** Every contact Coy files is
+a labelled example: Dusty's guess (the latest `contact_proposals` row made
+before Coy decided) against Coy's answer.
+
+- **Track record** — view `sc_bucket_agreement` (security_invoker): per org
+  and bucket, `guesses`, `agreed`, and `streak` (hits since the last miss).
+  Computed, never stored, so it cannot drift. A miss is Coy filing a guess
+  somewhere else, or undoing an automatic filing. The activity line shows it
+  ("matched you on 18 of 20 customers — 7/20 in a row").
+- **Corrections go into the prompt** — the last 10 contacts Coy filed
+  differently from Dusty's guess, with the quoted line, appended to the system
+  prompt as data ("You said customer; Coy filed them as vendor (lead gen)").
+  Loaded once per org per run, service role, org filter explicit.
+- **Earned autonomy** — once a bucket's `streak` reaches **20**
+  (`AUTO_STREAK`), Dusty files new guesses of that bucket himself: the same
+  marks and conditions as spam (`auto_classified_at`, nobody sorted them, never
+  un-filed), shown "Filed as X by Dusty" with **Keep** / **Not X**. One miss
+  and he is back to asking.
+- **An automatic vendor or sub never hides a lead.** Only
+  `contacts.contact_type` is written; `customers.relation` stays unconfirmed,
+  so quo-intake keeps creating their leads until Coy taps Keep. §2b's rule
+  holds: suppression requires a human.
+
+**Jobs follow the bucket (migration 038, Coy 2026-09-28).** *"If a contact is
+categorized as a customer because there is context for a job like Amber, then
+the job should automatically be created"* — and a mistake is undone by moving
+them out. Trigger `contacts_bucket_jobs` → `sc_customer_job_for()`:
+
+- **Becomes a customer** (Coy, or Dusty on an earned streak), has no live job,
+  and Dusty's latest read names the work, the site or the size → one job in
+  New lead, `origin='classification'`, title from project type + site, type
+  from `job_type_hint`, lead source from the first message's line. Coy filed
+  them → it counts (`confirmed_at`). Dusty filed them → **Accept** on the
+  board, not counted, until Coy keeps the customer (which confirms the job).
+- **Leaves Customer** → that automatic job is archived (`archived_at`,
+  `archived_reason='moved to vendor'`) if nobody worked it (still New lead, no
+  sections). A worked job — or any other job of theirs — is never touched on
+  its own: it gets `flag_reason` ("Customer is now filed as vendor — archive
+  this job?") with **Archive / Keep** on the board.
+- **Comes back to Customer** → the archived job is restored and the flag
+  cleared. Nothing is deleted.
+- Archived jobs are out of the board, Threads, the Customers screens, cash
+  flow and Dusty's context. `jobs.job_type` is now nullable with no default
+  (Coy's call, 2026-09-28): an automatic job with no hint shows **Type?**.
+- Backfill 2026-09-28: Amber already had a job, so none was made; the other
+  confirmed customer got "Repair" — Dusty's summary says Coy referred them on,
+  so that one is for Coy to move to Lost.
+- **An automatic job says why it exists (2026-09-29).** Coy: *"It just says
+  new job, and there is a phone number. No idea what the job is or why it was
+  classified as a customer."* `GET /api/jobs/[id]` returns `description` and,
+  for `origin='classification'`, a `why` block read from the contact and its
+  latest customer proposal: when and by whom they were filed, Dusty's status
+  line, the company he heard, and the quoted line. The job page shows it as
+  **Why this job** with a link to their page. The trigger's fallback title
+  ("New job") is not a name: the page shows the box empty, asking for one.
+
+**Dusty seeds next steps (`enrich-contacts` v9+, 2026-09-28).** Each read
+may add up to three things waiting on Coy — "Send the walkway repair price" —
+to `contact_tasks` with `source='dusty'`, the line that shows it is owed, and a
+due date only when one was said. Never one that matches an item Coy already
+has, done or dismissed (`title_key`); never for someone filed personal or spam.
+Coy's own items are `source='coy'`. **Reminders:** the activity line shows
+every open item due today or overdue (Central time), each linking to the
+person; Dusty's context on a person includes their open next steps and his
+status line, so "what do I owe Amber?" is answered from the checklist.
+
+**Coy's notes (migration 041, `enrich-contacts` v13, 2026-09-28).** *"Where
+do notes land? Dusty needs access to all customer and vendor notes."* The
+composer's Note tab saves to `contact_notes` (`POST /api/people/[id]/notes`,
+RLS by `get_user_org_ids()`, anon refused). Notes show in the person's
+timeline (a Notes filter on their page), in Dusty's chat context (newest 20)
+and in the background read as a COY'S NOTES block after the conversation —
+used for the status line and next steps, never as evidence, never as a
+self-introduction, and not a turn (so `evidence_turn` still indexes messages).
+A note alone does not queue a re-read; the next message does.
+
+**Job titles and musings (migrations 039–040, `enrich-contacts` v11,
+2026-09-28).** Coy: *"a 1-3 word summary should be the job title. But the
+customer name and address and a short description below."* An automatic job
+is titled with Dusty's `job_title` (1–3 words, sanitised: more words → none)
+or else the kind of work ("Repair"); `jobs.address` takes his site hint and
+`jobs.description` his scope summary; the board card shows title, then
+customer · address, then the description. Existing automatic jobs were
+rewritten the same way. Each read also leaves a **musing** on its run row
+(`contact_enrich_runs.musing`) — one light line about the conversation, no
+names or numbers, about what happened, never claiming anything is happening
+now. Commercial jobs from emailed bid requests and plans will carry their job
+information from the request once email reaches the app (not yet).
+
+**Vendors on jobs** — `job_vendors` (job, contact, role = vendor subtype,
+note), RLS by `get_user_org_ids()`. **Next steps** — `contact_tasks` (title,
+due date, `source` coy | dusty, `status` open | done | dismissed, the line
+that prompted it); `title_key` recognises the same item so a dismissed Dusty
+suggestion is never re-added. Anon is refused on both (verified).
 
 An `enrich-contacts` proposal is an opinion. It can raise the question — "this
 looks like a sub, confirm?" — and once a human answers, the answer is load
@@ -351,8 +599,30 @@ percentage of labour — all three contradict this section and §4.
   and `psi` explicitly as null so the schema defaults (4 in, 3000 psi) never
   stand in for a measurement. Fixing the column needs a migration and Coy's
   instruction.
-- **Not yet priced:** reinforcement, base, vapor barrier (no rates exist), and
-  day-rate equipment. The builder lists them as "not in this price".
+- **Reinforcement (migration 042, Coy 2026-09-28)** is priced by the unit it
+  is bought in: mesh by the sheet (`sheet_sqft` a sheet covers after lap) or
+  sq ft; rebar by the stick or the foot (a grid both ways at `spacing_in`,
+  plus `lap_pct`); fiber by the lb or bag per yard (`per_cy`) —
+  `reinforcementQty()`. It is a material: marked up and taxed with materials.
+  Types live in Cost settings → Concrete (`org_reinforcement_types`,
+  `/api/settings/reinforcement`); **defaults** per job type × work type
+  (`org_reinforcement_defaults`: "residential driveways are 6x6 10 ga mesh")
+  fill a new section — or one whose work type changes and whose reinforcement
+  Coy did not pick — labelled "default for residential driveways". Coy's pick
+  (`reinforcement_source='set'`) is never swapped. A default is Coy's own
+  setting, not an assumption; a missing number on the chosen type still blocks
+  the price and is named. A section with none chosen is listed as not in the
+  price.
+- **Not yet priced:** base, vapor barrier (no rates exist), and day-rate
+  equipment. The builder lists them as "not in this price".
+- **Dictating a section (2026-09-28).** Dictate on a section card records up
+  to 60 s; `/api/jobs/[id]/sections/[sectionId]/dictate` sends the audio to
+  Groq Whisper (`GROQ_API_KEY`, server side — only audio goes to Groq), asks
+  Dusty (Hermes) to put the words into fields, and `sanitizeDictation()`
+  (`src/lib/dictate.ts`) keeps a number only if it was **said** — digits or
+  words, feet-and-inches included — and a work type or reinforcement only if
+  it is a real one. The card applies it through the normal section PATCH and
+  shows "Heard: …" with Undo. Nothing is estimated.
 
 ---
 
@@ -443,16 +713,92 @@ expected start date per quoted job before it means anything. Add the field.
 ## 6. Interface rules
 
 - ScopeCrete header is sticky on every page.
+- **Threads is people, Jobs is work (2026-09-27; reshaped 2026-09-28).**
+  Five chips, all on screen, no funnel: **Unsorted · Customer · Vendor ·
+  Personal · Spam**. Unsorted is the inbox and opens first; filing someone
+  moves them out of it into their bucket (the row leaves at once). A search
+  looks in every bucket. Each bucket has one colour — Unsorted hi-viz, Customer
+  green, Vendor blue, Personal violet, Spam red — used by its chip AND its tag
+  on the row. The tag says how sure: **solid with ✓** Coy confirmed it,
+  **outlined · auto** Dusty filed it, **dashed ?** Dusty's guess. A customer
+  also shows the job type: the job's own when there is one, otherwise Dusty's
+  `job_type_hint` with a "?". **Swipe on a phone:** left most of the way (60%
+  of the row) accepts the guess; right opens the four buckets behind the row.
+  Either shows "Filed as X · Undo" for 5 s (`src/lib/swipe.ts`).
+  **The row, collapsed:** name, tag, job type, and Dusty's one sentence on
+  where things stand (`contacts.status_summary`), falling back to the last
+  message until he has read them. **Expanded:** his short summary of the
+  latest conversations (`recent_summary`), the sorting buttons only while they
+  are unsorted or auto-filed ("Change bucket" otherwise), the name question
+  only for a number with no name, and ONE button through to their page. No
+  call / text / email / composer in the row (Coy, 2026-09-28) — engaging on
+  every channel belongs on the person's page.
+- **Customer page and Vendor page (2026-09-28)** — `/dashboard/messages/[id]`
+  renders `src/components/v34/person-view.tsx` for anyone filed customer or
+  vendor (unsorted, personal and spam keep the plain conversation; the old
+  `/dashboard/customers` screens redirect to Threads). Header: bucket tag
+  (✓ / auto), subtype or job type, Dusty's status line, numbers, email,
+  address. **Call · Text · Email · Ask Dusty** — Text writes a draft to copy
+  into Quo (no send path, below); Email is mailto: and off when no address is
+  known; Ask Dusty opens the panel on this person (`sc:dusty-open`). **Next
+  steps**: Dusty's items marked with "why" (the line), Coy's own, due dates,
+  overdue in red; tick, dismiss, add. Tabs **Activity** (the timeline, filter
+  All · Texts · Calls; Email shown off until email is connected; composer;
+  Same as…) · **Jobs** (customer: their jobs with stage, type, flags and Crew
+  & suppliers, + Start a job; vendor: the jobs they're on, + Put them on a
+  job) · **About** (Dusty's latest summary and what they said about the work).
+  The job page carries the same Crew & suppliers row. APIs:
+  `/api/people/[id]`, `/api/people?bucket=`, `/api/people/[id]/tasks`,
+  `/api/tasks/[id]`, `/api/jobs/[id]/vendors` — session client, org from the
+  session. Job stages — New
+  lead, Consultation, Estimating, Follow up, W.I.P., Complete, Lost — are the
+  Jobs board (Scope renamed Jobs), a Kanban, not Threads chips.
+- **Jobs board (migration 034, 2026-09-27)** — `/dashboard/scope`, stages in
+  `src/lib/jobs/stages.ts` mapped onto `jobs.status` (`consultation` added;
+  W.I.P. holds won → scheduled → in_progress, shown as a tag). Phone: stage
+  strip + columns that swipe one per screen; desktop: all seven side by side.
+  Cards: customer, address, type (residential / commercial / government =
+  `public`), source, sections; Move sheet or one-tap next stage; unreviewed
+  machine jobs shown with Accept, never counted. **Customer vs source:**
+  `contact_id` / `customer_id` is who pays; `lead_source` (website, referral,
+  gc_invite, lead_gen, repeat, direct, other) and `referred_by_contact_id` are
+  how it reached us — Jeremy's referral: homeowner is customer, Jeremy the
+  referrer; LA Contracting's bid invite: LA Contracting is customer.
+  `jobs.job_type` is nullable since 038 (Coy, 2026-09-28): the New job sheet
+  still requires a type; an automatic job with no hint shows **Type?**. The header is 54px + the 38px activity line = `--sc-head` (92px);
+  everything under or beside it measures from that variable. The phone footer
+  is 58px = `--sc-foot`. A conversation or person page is `.sc-pinned` —
+  fixed between the two on a phone — so only its list scrolls and its name bar
+  never slides under the header (Coy, 2026-09-28; the old 72px guess left a
+  14px gap and a scrolling body).
+- **Correcting a person from their page (2026-09-28).** The pencil by the name
+  saves Coy's name (`PATCH /api/contacts/[id]/name`, `name_source='human'`) —
+  "Gary Davis" on Vance's number came from a contact card Vance texted. **File
+  as… / Change bucket** opens the same bucket picker as Threads
+  (`src/components/v34/bucket-picker.tsx`) on the plain conversation and the
+  customer / vendor page. The plain conversation header is three rows: name
+  (wraps to two lines), the facts at full width, then Call · File as · Same
+  as · Scope.
 - Cash flow is a footer TAB, not a slide-out drawer — a side drawer's
   horizontal swipe fights the ribbon's horizontal swipe.
 - Settings opens from the header menu. Fixed costs live there AND open from
-  the runway cell on the dashboard. One editor, two doors.
+  the runway cell on the dashboard. One editor, two doors. The Account sheet
+  starts under the whole header (`--sc-head`), never under the activity line.
+- The header's pipeline drop-down links to the Jobs board; the old
+  `/more/pipeline` page (unnamed contacts listed as leads) is deleted until a
+  home dashboard is designed.
 - Legend collapses to a chip.
 - **Desktop (lg+, 2026-09-27)** takes its LAYOUT from the Claude Design desktop
   screens and its LOOK from v34 (Barlow Condensed / IBM Plex, hi-viz orange) —
   one design system, not two. The footer becomes a left rail; the header gains
   inline search, the primary line, and the unnamed and drift counters. Threads
-  is list · conversation · contact rail. The desktop design calls the list
+  is list · conversation · contact rail. **No dead margins (2026-09-29):** the
+  customer / vendor page fills its pane — conversation on the left at full
+  height, Next steps · Jobs · About in a 340px column on the right (the
+  design's 1d) — whenever the pane is at least 880px wide, measured
+  (`src/lib/v34/use-wide.ts`), not by breakpoint; narrower (a phone, or Dusty
+  docked) it is the single column with tabs. The plain conversation's contact
+  rail follows the same rule at 920px and carries Dusty's status line. The desktop design calls the list
   "Triage"; that word is not used — it is **Threads**, where every channel for
   a contact merges into one conversation. A home dashboard is not designed yet.
 - Dusty has two entry points: COLD from the footer emblem (no job context,
@@ -466,28 +812,89 @@ expected start date per quoted job before it means anything. Add the field.
   under the session (`src/lib/dusty/context.ts`), so RLS decides what Dusty can
   see and nothing typed in the browser becomes "context". Scope answers use
   the engine's own output, so Dusty quotes exactly the builder's numbers or
-  names what blocks them. **Read-only:** no tools, no writes, nothing sent —
-  drafts come back as text to copy. **Not stored:** the conversation lives in
-  the tab (channels that persist per job/customer, below, are still to come
-  and need a table). **The model runs in the Hermes container on the VPS**
+  names what blocks them. **Read-only toward the business:** no tools, no
+  record changed, nothing sent — drafts come back as text to copy.
+  **Docked on the right on a desktop (2026-09-29, Coy: "integrated into the
+  main dashboard neatly so that I can see the rest of the dashboard").** At
+  lg+ Dusty is a 400px column (`--sc-dusty`) under the header, no backdrop;
+  `<main>` gains `.sc-with-dusty` (padding-right) so the page beside him stays
+  whole and usable. He stays HOT on the page that is open; a continued chat
+  about something else offers "Ask about this page instead". History is behind
+  ☰ in his header on every size. On a phone he is still the full page below.
+  **The emblem tap is a catch-up (2026-09-29).** Tapping the HEADER emblem
+  opens Dusty and asks "What's new since I last looked?" with context kind
+  `activity` (migration 044): `activityContext()` reads, under RLS, who got in
+  touch since this device's last catch-up (`localStorage`, clamped to 7 days,
+  default 24 h) with Dusty's status lines, spam senders left out; the
+  reader's runs; next steps due today or overdue (Central); and the unsorted
+  count. Saved as "Catch-up · <date>". It does not make the background reader
+  run early (that needs the worker token, which no browser request may reach).
+  The word mark beside the emblem still goes to Threads; the footer emblem
+  still just opens Dusty.
+  **Full screen, and kept (migration 043, Coy 2026-09-28: "reference older
+  conversations in a side project panel to select and continue").** Dusty is a
+  page under the header, over the footer (v34 DustyScreen): header with
+  hamburger, title, "Looking at …", + and ×; the history rail slides in from
+  the LEFT on a phone and stays open on a desktop, grouped *About this
+  person/job* · People · Jobs · Everything else; answers read like a page —
+  the question as a heading, the answer full width, Copy under it.
+  `dusty_conversations` / `dusty_messages` are private to the person (RLS:
+  org member AND `user_id = auth.uid()`; verified a second user sees none).
+  `/api/dusty` takes `{question, conversation_id?}`, reads the history from
+  the database — never from the browser — and a continued chat keeps the
+  context it started with. Opening Dusty on a person or job picks up the
+  latest chat about them. **The model runs in the Hermes container on the VPS**
   (§8), reached over Tailscale Funnel at `HERMES_URL` with `HERMES_API_KEY`
   (OpenAI-compatible chat completions; Hermes routes via OpenRouter, model
-  `HERMES_MODEL`, default `anthropic/claude-3.5-haiku` while testing). No
-  model-provider key lives in Vercel. The Vercel route stays the only thing
+  `HERMES_MODEL`, default `anthropic/claude-haiku-4.5` since 2026-09-28 — 3.5-haiku began returning empty 200s). No
+  model-provider key lives in Vercel — except `GROQ_API_KEY`, for speech to
+  text only (section dictation, above). The Vercel route stays the only thing
   that touches customer data — Hermes sees only the context the route sends.
   Hermes must serve Dusty with its tools OFF: the context carries customer
   texts, and a text can carry instructions. The old `/api/chat/dusty` — an
   unauthenticated relay to a private-IP Ollama box — is deleted.
-- Dusty channels persist and are resumable, organized per job/customer.
+- **Dusty's activity line (2026-09-27)** sits under the header on every
+  screen (`src/components/v34/activity-line.tsx`, `/api/activity`). v34's
+  StreamBar, fed by hardcoded DREAM_LINES, was never ported; this replaces it
+  with **real rows only** — each line is a `contact_enrich_runs` row (reading,
+  named, suggested, couldn't read), the waiting count, or the heartbeat. **Each
+  new thing shows once per device, then leaves the line** (Coy, 2026-09-28:
+  "don't be redundant"; reminders once a day); with nothing new it shows
+  Dusty's unseen **musings** (above), then "All caught up · last read …". Tap
+  to drop down the last ~20 with detail, each linking to its thread. A reader that isn't working
+  (not configured, Hermes unreachable, error, silent >15 min) **pins** the line
+  in amber and stops the cycling. The dot pulses only while a read is running
+  or a Dusty reply is streaming. Idle says when something last happened; it
+  never invents something happening now. **No bubble (2026-09-28):** the
+  words sit on the grey glass row and type in letter by letter; a streaming
+  Dusty reply shows its own tokens. A thin line drops from the header emblem
+  to the dot, and while Dusty works a light runs down it on the emblem's
+  1.4 s beat. **The emblem spins for the reader too (2026-09-29):** outer
+  diamond clockwise, inner square counter-clockwise (`sc-em-think`) while a
+  read is running (`onWorking` from the activity line), not only while the
+  page loads or a reply streams.
+- **Chat bubbles are muted (2026-09-29, Coy: "easy on the eyes"):** theirs
+  warm paper `#F7F6F2`, ours soft slate `#D8E1E8`, ink text on both
+  (`DA.bubbleIn` / `DA.bubbleOut` in `conversation.tsx`). Hi-viz orange is
+  for actions, not for our own words.
+- Dusty conversations persist and are resumable (above), grouped by the
+  person or job they are about.
+- **Job header (2026-09-28)** — four tappable chips, each opening its list:
+  **Status** (the seven stages, with W.I.P.'s won / scheduled / pouring),
+  **Type**, **Source** and **Vendors (n)** (crew on the job, add by subtype)
+  — `src/components/v34/job-chips.tsx`.
 - **Receipts are camera-first, always.** Photograph, never type. Dusty reads
   vendor, amount, date and clarifies conversationally. Invoices and payments
   stay quick structured forms.
-- **The composer never appears to send.** (2026-09-27) Text, email and notes
+- **The composer never appears to send.** (2026-09-27) Text and email
   have no send path yet — texting waits on 10DLC, and Coy has said sending is
   not needed now. The composer (thread screen, and compact in the row expand)
-  writes, keeps a per-device draft, copies it for pasting into Quo, and offers
-  Call. Send, attach and hold-to-talk are shown switched off, each with its
-  reason. An earlier composer appended messages locally and faked a Dusty reply
+  writes, keeps a per-device draft and copies it for pasting into Quo; Send is
+  shown switched off with its reason. **Notes save** (2026-09-28, above). The
+  **mic dictates** into the box with the browser's own speech recognition —
+  Chrome sends the audio to Google to transcribe; nothing of ours stores it;
+  off, with the reason, where the browser has none. The composer's Call and +
+  attach are gone (Coy: the Call is at the top; attach did nothing). An earlier composer appended messages locally and faked a Dusty reply
   a second later; that must not come back. When sending lands, it replaces the
   disabled Send in `src/components/v34/composer.tsx` — one place.
 
@@ -569,6 +976,11 @@ genuinely required.
   `app.current_org_id` GUC is **done**: measured 2026-09-27, 130 of 149 public
   policies use `get_user_org_ids()` and **0** reference the GUC (the rest are
   `service_role`-only). Any new policy uses the helper.
+- **Fixed 2026-09-27: `enrich-contacts` v2 was callable with the public anon
+  key.** It had `verify_jwt` on and no auth of its own; the anon key in the
+  browser bundle IS a valid JWT, so anyone could invoke it and get contacts'
+  phone numbers back (`dry_run` returned whole proposal rows). v3 checks a
+  vault token and returns counts only. `verify_jwt` alone is not auth.
 - **Known exposure, not yet fixed:** the views `sc_spine_drift` and
   `sc_open_name_questions` are not `security_invoker`, so they run as their
   owner and bypass RLS — a cross-tenant read the day a second org exists.

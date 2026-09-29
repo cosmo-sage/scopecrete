@@ -8,7 +8,7 @@
  * carrying a wordmark and a burger, which is where most of "the site looks
  * nothing like the mockup" came from.
  *
- * THE FOOTER IS FIVE SLOTS, NOT FIVE TABS. Threads · Scope · Dusty · Cash ·
+ * THE FOOTER IS FIVE SLOTS, NOT FIVE TABS. Threads · Jobs · Dusty · Cash ·
  * More, with Dusty as the centre emblem and no word underneath it. v34's own
  * comment at L3410 is "the four footer destinations — Dusty is a conversation,
  * not a landing", which is also DECISIONS.md §6: Dusty is reached COLD from the
@@ -16,8 +16,10 @@
  *
  * WHAT IS DELIBERATELY NOT HERE
  *
- * StreamBar. v34 hangs it under the header and feeds it DREAM_LINES — ten
- * hardcoded sentences carrying dollar figures. See src/components/v34/shell.tsx.
+ * StreamBar AS v34 BUILT IT. v34 hung it under the header and fed it
+ * DREAM_LINES — ten hardcoded sentences carrying dollar figures. The line under
+ * the header now is ActivityLine, fed only by the background enricher's own
+ * rows (/api/activity). It came back when something real could feed it.
  *
  * The emblem's "asking" state. v34 quickens the mark when Dusty has questions,
  * counted off mock data. Nothing computes a real question count, so the
@@ -36,13 +38,14 @@ import { T, F, disp, eyebrow, nums, clip, formatPhone } from "@/lib/v34/tokens";
 import { Emblem, NavIcon, Sheet } from "@/components/v34/primitives";
 import { PipelineDrop, CreateDrop } from "@/components/v34/shell";
 import { DustyPanel } from "@/components/v34/dusty-panel";
+import { ActivityLine } from "@/components/v34/activity-line";
 import { signOut } from "@/lib/auth";
 import "@/styles/v34-shell.css";
 
 /** Five slots. `dusty` carries no label — the emblem is the control. */
 const SLOTS: Array<{ k: string; label?: string; href?: string }> = [
   { k: "threads", label: "Threads", href: "/dashboard/messages" },
-  { k: "scope", label: "Scope", href: "/dashboard/scope" },
+  { k: "scope", label: "Jobs", href: "/dashboard/scope" },
   { k: "dusty" },
   { k: "cash", label: "Cash", href: "/dashboard/cash" },
   { k: "more", label: "More", href: "/dashboard/more" },
@@ -59,8 +62,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [pipeOpen, setPipeOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [dustyOpen, setDustyOpen] = useState(false);
+  // Any screen can open Dusty on what it shows — the person pages' "Ask
+  // Dusty" dispatches this. The panel still reads its context from the route.
+  useEffect(() => {
+    const open = () => setDustyOpen(true);
+    window.addEventListener("sc:dusty-open", open);
+    return () => window.removeEventListener("sc:dusty-open", open);
+  }, []);
   // True only while a Dusty reply is actually streaming.
   const [dustyBusy, setDustyBusy] = useState(false);
+  // The reply as it streams, so the activity line can show Dusty's own words.
+  const [dustyLive, setDustyLive] = useState("");
+  // Bumped by a tap on the header emblem: Dusty reviews the latest activity.
+  const [catchUp, setCatchUp] = useState(0);
+  // The background reader is working (a claimed read) — the emblem spins for it.
+  const [readerWorking, setReaderWorking] = useState(false);
 
   const [me, setMe] = useState<Me | null>(null);
   const [needs, setNeeds] = useState<number | null>(null);
@@ -123,7 +139,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       .then((d) => {
         if (off) return;
         if (typeof d?.counts?.needs === "number") setNeeds(d.counts.needs);
-        if (typeof d?.counts?.unsorted === "number") setUnnamed(d.counts.unsorted);
+        if (typeof d?.counts?.unnamed === "number") setUnnamed(d.counts.unnamed);
       })
       .catch(() => {})
       .finally(() => { if (!off) setCountsLoading(false); });
@@ -150,7 +166,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     : "";
   const markIdx = SLOTS.findIndex((s) => s.k === activeKey);
 
-  const thinking = meLoading || countsLoading || dustyBusy;
+  const thinking = meLoading || countsLoading || dustyBusy || readerWorking;
   const displayName = me?.name ?? me?.email ?? null;
 
   function submitSearch(e: React.FormEvent) {
@@ -166,16 +182,23 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <div className="flex flex-col min-h-screen" style={{ background: T.slab, color: T.ink }}>
       <div style={{ position: "sticky", top: 0, zIndex: menuOpen ? 60 : 40 }}>
         <header className="px-2.5 flex items-center justify-between gap-2 sc-glass" style={{ height: 54 }}>
-          <Link href="/dashboard/messages" onClick={tapEmblem}
-            className="flex items-center gap-2 shrink-0 no-underline" style={{ height: 44 }}>
-            {/* One mark. tap > working > dreaming — never two at once. */}
-            <Emblem key={`h${emTap}`} size={24} stroke={3}
-              className={emTapping ? "sc-em-tap" : thinking ? "sc-em-think" : "sc-em-dream"} />
+          <div className="flex items-center gap-2 shrink-0" style={{ height: 44 }}>
+            {/* One mark. tap > working > dreaming — never two at once. A tap
+                asks Dusty to catch you up on the latest activity (Coy,
+                2026-09-29); the word mark beside it still goes to Threads. */}
+            <button onClick={() => { tapEmblem(); setDustyOpen(true); setCatchUp((n) => n + 1); }}
+              aria-label="Dusty — catch me up" title="Catch me up"
+              className="flex items-center justify-center" style={{ width: 32, height: 44, marginLeft: -4, background: "none", border: "none", cursor: "pointer" }}>
+              <Emblem key={`h${emTap}`} size={24} stroke={3}
+                className={emTapping ? "sc-em-tap" : thinking ? "sc-em-think" : "sc-em-dream"} />
+            </button>
+            <Link href="/dashboard/messages" className="no-underline">
             <span style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 700, color: "#fff",
                            letterSpacing: ".08em", textTransform: "lowercase" }}>
               scopecrete<span style={{ color: T.hiviz }}>.ai</span>
             </span>
-          </Link>
+            </Link>
+          </div>
 
           {/* ---- desktop top bar: search, the live line, the queues ---- */}
           <form onSubmit={submitSearch} className="hidden lg:flex items-center flex-1 min-w-0 mx-4" style={{ maxWidth: 560 }}
@@ -201,10 +224,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               </Link>
             )}
             {drift !== null && (
-              <span title="Events that reached the phone number but never reached the app (sc_spine_drift)"
+              <Link href="/dashboard/more/logs" className="no-underline" title="Messages that reached your line but never reached the app — details on Logs"
                 style={{ ...eyebrow, fontSize: F.xs, color: "#fff" }}>
                 Drift <b style={{ color: drift > 0 ? "#FF7A66" : T.pulse }}>{drift}</b>
-              </span>
+              </Link>
             )}
           </div>
 
@@ -250,6 +273,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
         </header>
 
+        {/* What Dusty is doing, from real rows only — see activity-line.tsx. */}
+        <ActivityLine busy={dustyBusy} live={dustyLive} onWorking={setReaderWorking} />
+
         {/* Search lives under the glass, same place on every page — it never
             becomes a row on the page itself. */}
         {searchOpen && (
@@ -274,10 +300,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       {/* ---- desktop left rail: the footer's destinations, standing up ---- */}
       <nav aria-label="Main" className="hidden lg:flex fixed left-0 bottom-0 z-30 flex-col items-stretch"
-        style={{ top: 54, width: 84, background: T.dark }}>
+        style={{ top: "var(--sc-head)", width: 84, background: T.dark }}>
         {/* The rail has room the footer does not: Customers stands here on
             desktop and is reached from More on a phone. */}
-        {[...SLOTS.filter((s) => s.href).slice(0, 2), { k: "customers", label: "Customers", href: "/dashboard/customers" },
+        {[...SLOTS.filter((s) => s.href).slice(0, 2), { k: "customers", label: "Customers", href: "/dashboard/messages?f=customers" },
           ...SLOTS.filter((s) => s.href).slice(2)].map((s) => {
           const on = activeKey === s.k;
           return (
@@ -303,7 +329,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </button>
       </nav>
 
-      <main className="flex-1 pb-[72px] lg:pb-0 lg:pl-[84px]">{children}</main>
+      <main className={["flex-1 pb-[var(--sc-foot)] lg:pb-0 lg:pl-[84px]", dustyOpen ? "sc-with-dusty" : ""].join(" ")}>{children}</main>
 
       <footer className="fixed bottom-0 left-0 right-0 z-40 flex items-stretch lg:hidden"
         style={{ background: T.card, borderTop: `1px solid ${T.hair}`, height: 58,
@@ -347,10 +373,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         })}
       </footer>
 
-      {/* Dusty — read-only, and it knows the screen you are on. */}
-      <DustyPanel open={dustyOpen} onClose={() => setDustyOpen(false)} onBusy={setDustyBusy} />
+      {/* Dusty — full screen on a phone, docked right on a desktop; read-only toward the business. */}
+      <DustyPanel open={dustyOpen} onClose={() => setDustyOpen(false)} onBusy={setDustyBusy} onStream={setDustyLive} catchUp={catchUp} />
 
-      <Sheet open={menuOpen} onClose={() => setMenuOpen(false)} title="Account" sub={me?.org_name ?? undefined}>
+      {/* Starts under the header and the activity line (--sc-head), so the
+          line never covers it and the burger stays tappable to close it. */}
+      <Sheet open={menuOpen} onClose={() => setMenuOpen(false)} title="Account" sub={me?.org_name ?? undefined} below>
         <div className="px-4 py-3">
           {displayName ? (
             <>

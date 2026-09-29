@@ -1,7 +1,9 @@
 # Cost cards, the job budget, and proposals — plan
 
 Status: **draft for Coy's review**, 2026-09-29 (revised after Coy's answers and
-three example quotes). Nothing here is built yet.
+three example quotes). **Built so far:** files (045–046), cost cards (047),
+the job budget with good / better / best (048). Next: 3b (rates and
+reinforcement into cards, assemblies), then the proposal.
 Ground truth is still `DECISIONS.md` (§3 engine, §4 floor, §6 interface); this
 plan changes it only where it says so, and DECISIONS is updated in the same PR
 as each piece ships.
@@ -299,4 +301,11 @@ be uploaded.
 - **CompanyCam — an optional import later**, only if the crews already use it
   (API on its higher plans; REST + webhooks, OAuth per org). Photos would land
   in `job_files` with `source='companycam'` and Dusty reads them like any
-  upload. Our own uploads (045–046) stay the default.
+  upload. Our own uploads (045–046) stay the default. **Coy, 2026-09-29: no
+  CompanyCam today; he is weighing it or an open-source copy.** So the plan
+  is our own CompanyCam-lite, after the proposal, inside the Files panel: a
+  burst **Take photos** mode stamped with time and GPS and filed to the
+  nearest job; tags (before, during, after, damage, measurement); a
+  before / after pair view; a read-only gallery link for the customer.
+- **Good / better / best — confirmed by Coy (2026-09-29)** and built into
+  the budget (048); the proposal and the customer link show the options.

@@ -656,11 +656,39 @@ percentage of labour — all three contradict this section and §4.
   uses it will be blocked by name. Edited in Cost settings → Cost cards
   (grouped cards, `/api/cost-items`, `/api/cost-groups`) and seen per vendor
   on the vendor page → **Prices**. Retiring a card keeps it (`active=false`)
-  so a budget that used it still reads. **Until the job budget lands (next
-  step) the engine still prices from the rate fields above;** then those
-  fields and the reinforcement types fold into cards. Anon's grants on
+  so a budget that used it still reads. The rate fields above and the
+  reinforcement types fold into cards in the next step (3b, with
+  assemblies per job type × work type); until then a job with no budget
+  lines is still priced from the rates, labelled **from rates**. Anon's grants on
   `cost_groups`, `estimates`, `estimate_line_items`, `documents`,
   `document_events`, `invoices`, `payments` were revoked with it.
+- **The job budget (migration 048, Coy 2026-09-29)** — JobTread's maths on
+  lines from cost cards. A job has ONE working estimate (`status='draft'`,
+  unique per job); its `estimate_line_items` are the budget, and proposal
+  versions (next) will be frozen copies of it. Adding a card **copies it
+  onto the line** (name, unit, unit cost, type, taxed, markup, rule, vendor,
+  price date), so a later card change never reprices a sent quote — the line
+  says "card price changed — update" instead. Per line (`budget()` /
+  `ruleQty()` in `src/lib/engine`, tested in `tests/budget.test.mjs`):
+  **qty** from the card's rule on the line's area (whole job = every area)
+  — yards with waste, sq ft, perimeter (needs L and W), sheets, sticks,
+  crew days, once — or typed by Coy (`qty_source='set'`, ✎, ↺ back to the
+  rule); **ext cost** = qty × unit cost; **markup** = the line's, else its
+  group's default, else the type's in Cost settings, else blocked by name;
+  **ext price**; **margin** = (price − cost) ÷ price. **Tax is a switch**
+  (`estimates.tax_on`): at cost, on taxed lines, at the settings rate, a
+  pass-through. **Discount** is on price only. Anything missing blocks that
+  line and its tier by name. Under the short-load threshold with no
+  short-load line the budget says so; it adds nothing on its own.
+  **Good / better / best** — `estimate_options`: a line with no option is in
+  every option; a line with one is in that option only; each option's total
+  = shared + its own. `estimates.selected_option_id` is the one the customer
+  accepts (step 5). Once a budget has lines it IS the price: the takeoff
+  rail and phone strip show each option's total, cost, margin and its bid
+  floor (on cost + tax); Dusty's scope context quotes each option from the
+  same `budget()`. APIs: `/api/jobs/[id]/budget` (GET, PATCH tax/discount),
+  `…/budget/lines[/lineId]`, `…/budget/options[/optionId]` — session client,
+  org from the session; lines carry `org_id` with a restrictive org policy.
 - **Not yet priced:** base, vapor barrier (no rates exist), and day-rate
   equipment. The builder lists them as "not in this price".
 - **Dictating a section (2026-09-28).** Dictate on a section card records up
@@ -933,6 +961,17 @@ expected start date per quoted job before it means anything. Add the field.
   many at once; drag and drop on a desktop) with progress and retry; a grid
   filtered All · Photos · Documents · From texts; tap for the viewer — name,
   what it is, area, note, Show on proposal, delete, and Dusty's read.
+- **Budget (2026-09-29)** — `src/components/v34/job-budget.tsx` under the
+  sections on the job page. Option bar (All options · Good · Better · Best ·
+  + Option, each with its total; rename / delete an option). **Wide (≥900px
+  measured): a spreadsheet** — Item · Vendor · Qty · Unit · Unit cost · Ext
+  cost · Markup · Unit price · Ext price · Margin · Tax, rows area ▸ cost
+  group ▸ line with subtotals, qty / unit cost / markup edited in the cell,
+  ƒ = from the rule, ✎ = typed. **Narrow: cost cards** — one per group with
+  its total, lines inside, tap a line for its sheet. Footer: tax switch,
+  discount, each option's cost / price / total / margin or what blocks it.
+  **+ Add from cost cards**: pick the area, search, add a card or a whole
+  group, or a one-off line.
 - **Job header (2026-09-28)** — four tappable chips, each opening its list:
   **Status** (the seven stages, with W.I.P.'s won / scheduled / pouring),
   **Type**, **Source** and **Vendors (n)** (crew on the job, add by subtype)

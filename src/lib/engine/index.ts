@@ -475,3 +475,233 @@ export function floor(
     crew_days_basis: "estimated", draw_included: draw,
   };
 }
+
+// ---------------------------------------------------------------------------
+// The job budget (migration 048, Coy 2026-09-29) — JobTread's maths on lines
+// copied from cost cards:
+//   ext cost = qty × unit cost
+//   unit price = unit cost × (1 + markup)      ext price = qty × unit price
+//   margin = (price − cost) ÷ price
+// Quantities come from the scope by each line's rule, or are typed (✎).
+// Markup: the line's own (a card's is copied onto it), else its group's
+// default, else the cost type's markup in Cost settings — never assumed.
+// Tax is a pass-through on taxable lines, at cost, in both columns (§3), and
+// only while the budget's tax switch is on. Discount touches price only (§3).
+// Good / better / best: a line with no option is in every tier.
+// ---------------------------------------------------------------------------
+
+export type QtyRule = "per_cy" | "per_sqft" | "per_lf_perimeter" | "per_sheet" | "per_stick" | "per_day" | "per_job" | "manual";
+export type BudgetCostType = "material" | "labor" | "equipment" | "subcontract" | "other";
+
+export interface BudgetLine {
+  id: string;
+  name: string;
+  cost_type: BudgetCostType | string;
+  unit: string;
+  unit_cost: number | null;
+  markup_pct: number | null;
+  taxable: boolean;
+  qty_rule: QtyRule | string;
+  rule_params: Record<string, number>;
+  qty_source: "rule" | "set" | string;
+  /** Typed quantity (qty_source 'set' or rule 'manual'). */
+  quantity: number | null;
+  section_id: string | null;
+  option_id: string | null;
+  cost_group_id: string | null;
+}
+
+export interface BudgetSettings {
+  markup_material_pct: number | null;
+  markup_labor_pct: number | null;
+  markup_equipment_pct: number | null;
+  markup_subcontract_pct?: number | null;
+  sales_tax_pct: number | null;
+  concrete_overage_pct: number | null;
+  shortload_threshold_cy: number | null;
+}
+
+export interface LineResult {
+  id: string;
+  qty: number | null;
+  /** Where the quantity came from, said the way the grid shows it. */
+  qty_basis: "rule" | "set";
+  qty_note: string | null;
+  markup: number | null;
+  markup_from: "line" | "group" | "type" | null;
+  ext_cost: number | null;
+  unit_price: number | null;
+  ext_price: number | null;
+  margin: number | null;
+  tax: number;
+  /** Everything missing for this line, by name. Empty = priced. */
+  blocked: string[];
+}
+
+export interface TierTotal {
+  option_id: string | null;
+  cost: number;
+  price: number;
+  tax: number;
+  discount: number;
+  /** price + tax − discount */
+  total: number;
+  /** (total − (cost + tax)) ÷ total */
+  margin: number;
+  priced: boolean;
+  blocked: string[];
+  line_ids: string[];
+}
+
+export interface BudgetResult {
+  lines: Record<string, LineResult>;
+  /** One per option; one with option_id null when there are no options. */
+  tiers: TierTotal[];
+  hints: string[];
+}
+
+const TYPE_MARKUP: Record<string, keyof BudgetSettings> = {
+  material: "markup_material_pct", labor: "markup_labor_pct", equipment: "markup_equipment_pct", subcontract: "markup_subcontract_pct",
+};
+const TYPE_NAME: Record<string, string> = { material: "Materials", labor: "Labor", equipment: "Equipment", subcontract: "Subcontract", other: "Other" };
+
+/** How many of something a line needs, from the scope. Whole-job lines (no section) sum every section. */
+export function ruleQty(
+  line: Pick<BudgetLine, "name" | "qty_rule" | "rule_params" | "qty_source" | "quantity" | "section_id">,
+  sections: SectionInput[],
+  overage_pct: number | null,
+  crewDays: number | null,
+): { ok: true; qty: number; basis: "rule" | "set"; note: string } | { ok: false; missing: string[] } {
+  if (line.qty_source === "set" || line.qty_rule === "manual") {
+    if (has(line.quantity) && line.quantity >= 0) return { ok: true, qty: line.quantity, basis: "set", note: "typed" };
+    return { ok: false, missing: [`${line.name}: quantity`] };
+  }
+  const up = (x: number) => Math.ceil(Math.round(x * 1e6) / 1e6);
+  const scope = line.section_id ? sections.filter((s) => s.id === line.section_id) : sections;
+  if (line.section_id && !scope.length) return { ok: false, missing: [`${line.name}: its area was removed`] };
+  if (!scope.length) return { ok: false, missing: [`${line.name}: no areas on this job yet`] };
+  const qs = scope.map(quantities);
+  const label = (q: SectionQuantities) => q.name || "An area";
+  const p = line.rule_params ?? {};
+  const pos = (v: unknown): v is number => has(v as number) && (v as number) > 0;
+
+  switch (line.qty_rule) {
+    case "per_job": return { ok: true, qty: 1, basis: "rule", note: "once" };
+    case "per_day":
+      return has(crewDays) && crewDays > 0 ? { ok: true, qty: crewDays, basis: "rule", note: "crew days" } : { ok: false, missing: ["Crew days on this job"] };
+    case "per_sqft": {
+      const miss = qs.filter((q) => q.sqft === null).map((q) => `${label(q)}: area`);
+      if (miss.length) return { ok: false, missing: miss };
+      return { ok: true, qty: qs.reduce((a, q) => a + (q.sqft as number), 0), basis: "rule", note: "sq ft" };
+    }
+    case "per_lf_perimeter": {
+      const miss: string[] = [];
+      let lf = 0;
+      for (const s of scope) {
+        if (!has(s.length_ft) || !has(s.width_ft) || s.length_ft <= 0 || s.width_ft <= 0) miss.push(`${s.name || "An area"}: length and width (for the edge)`);
+        else lf += 2 * (s.length_ft + s.width_ft);
+      }
+      return miss.length ? { ok: false, missing: miss } : { ok: true, qty: lf, basis: "rule", note: "ft of edge" };
+    }
+    case "per_cy": {
+      const conc = qs.filter((q) => q.concrete);
+      if (!conc.length) return { ok: false, missing: [`${line.name}: no concrete areas`] };
+      const miss = conc.filter((q) => q.cy_neat === null).map((q) => `${label(q)}: ${q.missing.join(" and ") || "size"}`);
+      if (miss.length) return { ok: false, missing: miss };
+      const neat = conc.reduce((a, q) => a + (q.cy_neat as number), 0);
+      if (pos(p.per_cy)) return { ok: true, qty: up(neat * p.per_cy * 10) / 10, basis: "rule", note: `${p.per_cy} a yard` };
+      if (!has(overage_pct)) return { ok: false, missing: [SETTING_LABEL.concrete_overage_pct] };
+      return { ok: true, qty: Math.round(neat * (1 + overage_pct / 100) * 100) / 100, basis: "rule", note: `yards + ${overage_pct}% waste` };
+    }
+    case "per_sheet": {
+      if (!pos(p.sheet_sqft)) return { ok: false, missing: [`${line.name}: what one sheet covers`] };
+      const miss = qs.filter((q) => q.sqft === null).map((q) => `${label(q)}: area`);
+      if (miss.length) return { ok: false, missing: miss };
+      const sqft = qs.reduce((a, q) => a + (q.sqft as number), 0);
+      return { ok: true, qty: up(sqft / p.sheet_sqft), basis: "rule", note: `${p.sheet_sqft} sq ft a sheet` };
+    }
+    case "per_stick": {
+      const miss: string[] = [];
+      if (!pos(p.spacing_in)) miss.push(`${line.name}: bar spacing`);
+      if (!pos(p.stick_ft)) miss.push(`${line.name}: stick length`);
+      miss.push(...qs.filter((q) => q.sqft === null).map((q) => `${label(q)}: area`));
+      if (miss.length) return { ok: false, missing: miss };
+      const sqft = qs.reduce((a, q) => a + (q.sqft as number), 0);
+      const lf = sqft * 2 * (12 / p.spacing_in) * (1 + (pos(p.lap_pct) ? p.lap_pct : 0) / 100);
+      return { ok: true, qty: up(lf / p.stick_ft), basis: "rule", note: `${p.spacing_in}" grid, ${p.stick_ft}' sticks` };
+    }
+    default:
+      return { ok: false, missing: [`${line.name}: unknown quantity rule`] };
+  }
+}
+
+export function budget(
+  lines: BudgetLine[],
+  optionIds: string[],
+  s: BudgetSettings,
+  sections: SectionInput[],
+  crewDays: number | null,
+  opts: { tax_on: boolean; discount: number; groupMarkup?: Record<string, number | null> },
+): BudgetResult {
+  const out: Record<string, LineResult> = {};
+  const taxRate = has(s.sales_tax_pct) ? s.sales_tax_pct : null;
+
+  for (const l of lines) {
+    const blocked: string[] = [];
+    const q = ruleQty(l, sections, s.concrete_overage_pct, crewDays);
+    const qty = q.ok ? q.qty : null;
+    if (!q.ok) blocked.push(...q.missing);
+    if (!has(l.unit_cost)) blocked.push(`${l.name}: unit cost`);
+
+    let markup: number | null = null;
+    let from: LineResult["markup_from"] = null;
+    const gm = l.cost_group_id ? opts.groupMarkup?.[l.cost_group_id] : null;
+    if (has(l.markup_pct)) { markup = l.markup_pct; from = "line"; }
+    else if (has(gm)) { markup = gm; from = "group"; }
+    else {
+      const k = TYPE_MARKUP[l.cost_type];
+      const v = k ? s[k] : null;
+      if (has(v as number)) { markup = v as number; from = "type"; }
+      else blocked.push(`${TYPE_NAME[l.cost_type] ?? "Other"} markup %`);
+    }
+    if (opts.tax_on && l.taxable && taxRate === null) blocked.push(SETTING_LABEL.sales_tax_pct);
+
+    const ext_cost = qty !== null && has(l.unit_cost) ? qty * l.unit_cost : null;
+    const unit_price = has(l.unit_cost) && markup !== null ? l.unit_cost * (1 + markup / 100) : null;
+    const ext_price = qty !== null && unit_price !== null ? qty * unit_price : null;
+    const tax = opts.tax_on && l.taxable && ext_cost !== null && taxRate !== null ? ext_cost * taxRate / 100 : 0;
+    out[l.id] = {
+      id: l.id, qty, qty_basis: q.ok ? q.basis : (l.qty_source === "set" ? "set" : "rule"), qty_note: q.ok ? q.note : null,
+      markup, markup_from: from, ext_cost, unit_price, ext_price,
+      margin: ext_price && ext_cost !== null ? (ext_price - ext_cost) / ext_price : null,
+      tax, blocked,
+    };
+  }
+
+  const tierOf = (optionId: string | null): TierTotal => {
+    const inTier = lines.filter((l) => l.option_id === null || (optionId !== null && l.option_id === optionId)
+      || (optionId === null && optionIds.length === 0));
+    const rs = inTier.map((l) => out[l.id]);
+    const cost = rs.reduce((a, r) => a + (r.ext_cost ?? 0), 0);
+    const price = rs.reduce((a, r) => a + (r.ext_price ?? 0), 0);
+    const tax = rs.reduce((a, r) => a + r.tax, 0);
+    const discount = has(opts.discount) && opts.discount > 0 ? opts.discount : 0;
+    const total = price + tax - discount;
+    const blocked = [...new Set(rs.flatMap((r) => r.blocked))];
+    return {
+      option_id: optionId, cost, price, tax, discount, total,
+      margin: total > 0 ? (total - (cost + tax)) / total : 0,
+      priced: blocked.length === 0 && inTier.length > 0, blocked, line_ids: inTier.map((l) => l.id),
+    };
+  };
+  const tiers = optionIds.length ? optionIds.map(tierOf) : [tierOf(null)];
+
+  const hints: string[] = [];
+  const t = takeoff(sections, s.concrete_overage_pct);
+  const yards = t.cy_order ?? t.cy_neat;
+  if (has(s.shortload_threshold_cy) && yards > 0 && yards < s.shortload_threshold_cy
+      && !lines.some((l) => /short[\s-]?load/i.test(l.name))) {
+    hints.push(`Under ${s.shortload_threshold_cy} yd — add your short-load card if the plant charges one.`);
+  }
+  return { lines: out, tiers, hints };
+}

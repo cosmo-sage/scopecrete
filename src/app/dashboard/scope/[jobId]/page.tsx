@@ -24,6 +24,7 @@ import { T, F, disp, eyebrow, nums, clip, money, money0, formatPhone } from "@/l
 import { EmptyState } from "@/components/v34/primitives";
 import { JobChips } from "@/components/v34/job-chips";
 import { FilesPanel } from "@/components/v34/files-panel";
+import { JobBudget, type BudgetSummary } from "@/components/v34/job-budget";
 import {
   price as priceJob, floor as floorOf, takeoff as takeoffOf, quantities, reinforcementQty,
   type CostSettings, type OverheadItem, type ReinforcementType, type SectionInput,
@@ -82,6 +83,9 @@ export default function ScopeBuilder() {
   const [adding, setAdding] = useState(false);
   const [discount, setDiscount] = useState(0);
   const [rtypes, setRtypes] = useState<ReinforcementType[]>([]);
+  // The budget's own totals (migration 048). Once it has lines it is THE price;
+  // the rate-based price stays only until then, labelled "from rates".
+  const [budget, setBudget] = useState<BudgetSummary | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -206,9 +210,16 @@ export default function ScopeBuilder() {
             {(t.cy_order ?? t.cy_neat) > 0 ? n2(t.cy_order ?? t.cy_neat) : "—"}<span style={{ fontSize: F.xs, color: "#8E99A5" }}> cu yd{t.cy_order === null ? " neat" : ""}</span>
           </span>
           <span className="flex-1" />
-          <span style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 700, color: priced.priced ? "#fff" : "#8E99A5" }}>
-            {priced.priced ? money0(priced.price.total) : "no price"}
-          </span>
+          {budget?.has_lines ? (
+            <span style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 700, ...nums }}>
+              {budget.tiers.map((b) => b.priced ? money0(b.total) : "blocked").join(" · ")}
+            </span>
+          ) : (
+            <span style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 700, color: priced.priced ? "#fff" : "#8E99A5" }}>
+              {priced.priced ? money0(priced.price.total) : "no price"}
+              {priced.priced && <span style={{ fontSize: F.xs, color: "#8E99A5" }}> from rates</span>}
+            </span>
+          )}
         </div>
 
         {sections.length === 0 && (
@@ -230,6 +241,11 @@ export default function ScopeBuilder() {
           </button>
         </div>
 
+        {/* The budget: lines from cost cards, good / better / best (migration 048). */}
+        <div className="px-3 pb-3">
+          <JobBudget jobId={job.id} sections={sections} crewDays={job.duration_days} onSummary={setBudget} />
+        </div>
+
         {/* Photos, plans, specs, receipts — Dusty reads them (migration 045). */}
         <div className="px-3 pb-3">
           <FilesPanel jobId={job.id} sections={sections.map((x) => ({ id: x.id, name: x.name ?? null }))} />
@@ -238,7 +254,8 @@ export default function ScopeBuilder() {
 
       {/* ================= takeoff rail ================= */}
       <TakeoffRail t={t} priced={priced} fl={fl} job={job} discount={discount} setDiscount={setDiscount}
-        onCrewDays={(v) => void saveCrewDays(v)} hasSettings={!!settings} />
+        onCrewDays={(v) => void saveCrewDays(v)} hasSettings={!!settings}
+        budget={budget} floorFor={(hard) => floorOf(hard, settings ?? EMPTY, overhead, job.duration_days ?? null)} />
     </div>
   );
 }
@@ -526,12 +543,13 @@ function NoteIn({ label, value, onLocal, onSave, placeholder }: {
 
 /* ----------------------------------------------------------- takeoff rail */
 
-function TakeoffRail({ t, priced, fl, job, discount, setDiscount, onCrewDays, hasSettings }: {
+function TakeoffRail({ t, priced, fl, job, discount, setDiscount, onCrewDays, hasSettings, budget, floorFor }: {
   t: ReturnType<typeof takeoffOf>;
   priced: ReturnType<typeof priceJob>;
   fl: ReturnType<typeof floorOf> | null;
   job: Job; discount: number; setDiscount: (n: number) => void;
   onCrewDays: (v: number | null) => void; hasSettings: boolean;
+  budget: BudgetSummary | null; floorFor: (hardCost: number) => ReturnType<typeof floorOf>;
 }) {
   const [showFloor, setShowFloor] = useState(false);
   const [crew, setCrew] = useState<number | "">(job.duration_days ?? "");
@@ -570,7 +588,9 @@ function TakeoffRail({ t, priced, fl, job, discount, setDiscount, onCrewDays, ha
         ))}
       </div>
 
-      {!priced.priced ? (
+      {budget?.has_lines ? (
+        <BudgetRail budget={budget} floorFor={floorFor} sqft={t.sqft} crew={crew} setCrew={setCrew} onCrewDays={onCrewDays} />
+      ) : !priced.priced ? (
         <div className="px-4 py-3" style={{ borderTop: `2px solid ${T.hiviz}`, background: "#2A1712" }}>
           <div style={{ ...eyebrow, color: T.hiviz }}>No price on this scope</div>
           <div style={{ fontSize: F.sm, color: "#DCC9C2", lineHeight: 1.45, marginTop: 4 }}>
@@ -587,7 +607,7 @@ function TakeoffRail({ t, priced, fl, job, discount, setDiscount, onCrewDays, ha
       ) : (
         <>
           <div className="px-4 py-3" style={line}>
-            <div style={{ ...eyebrow, color: dim }}>Price</div>
+            <div style={{ ...eyebrow, color: dim }}>Price · from rates</div>
             <div style={{ fontFamily: disp, fontSize: 40, fontWeight: 700, lineHeight: 1, ...nums }}>{money0(priced.price.total)}</div>
             <div style={{ ...eyebrow, color: dim, ...nums }}>
               cost {money0(priced.cost.total)} · margin {(priced.margin * 100).toFixed(1)}%
@@ -678,6 +698,73 @@ function TakeoffRail({ t, priced, fl, job, discount, setDiscount, onCrewDays, ha
         </>
       )}
     </aside>
+  );
+}
+
+/**
+ * The rail once the budget has lines: one total per tier (shared lines + the
+ * tier's own), its cost and true margin, what blocks it, and the bid floor on
+ * that tier's hard cost (cost + pass-through tax). The discount lives in the
+ * budget's own footer, so there is no slider here — one number, never two.
+ */
+function BudgetRail({ budget, floorFor, sqft, crew, setCrew, onCrewDays }: {
+  budget: BudgetSummary; floorFor: (hardCost: number) => ReturnType<typeof floorOf>; sqft: number;
+  crew: number | ""; setCrew: (v: number | "") => void; onCrewDays: (v: number | null) => void;
+}) {
+  const dim = "#8E99A5";
+  const line = { borderTop: `1px solid ${T.darkHair}` };
+  const floors = budget.tiers.map((b) => (b.priced ? floorFor(b.cost + b.tax) : null));
+  const blockedFloor = floors.find((f) => f && !f.ok) as { ok: false; blocked: string[] } | undefined;
+  return (
+    <>
+      {budget.tiers.map((b, i) => {
+        const f = floors[i];
+        const under = f && f.ok && b.total < f.floor;
+        return (
+          <div key={b.option_id ?? "all"} className="px-4 py-3" style={b.priced ? line : { borderTop: `2px solid ${T.hiviz}`, background: "#2A1712" }}>
+            <div style={{ ...eyebrow, color: b.priced ? dim : T.hiviz }}>{b.label ? `${b.label}` : "Price"} · budget</div>
+            {b.priced ? (
+              <>
+                <div style={{ fontFamily: disp, fontSize: budget.tiers.length > 1 ? 30 : 40, fontWeight: 700, lineHeight: 1, ...nums }}>{money0(b.total)}</div>
+                <div style={{ ...eyebrow, color: dim, ...nums }}>
+                  cost {money0(b.cost)} · margin {(b.margin * 100).toFixed(1)}%
+                  {b.tax > 0 ? ` · tax ${money0(b.tax)}` : budget.tax_on ? "" : " · no tax"}
+                  {sqft > 0 ? ` · ${money(b.total / sqft)}/sf` : ""}
+                </div>
+                {f && f.ok && (
+                  <div style={{ fontSize: F.xs, color: under ? "#F3A89A" : "#C3CBD4", ...nums }}>
+                    floor {money0(f.floor)}{under ? " — this price is under it" : ""}
+                  </div>
+                )}
+              </>
+            ) : (
+              <ul className="mt-1" style={{ fontSize: F.sm, color: "#fff", lineHeight: 1.5, paddingLeft: 16, listStyle: "square" }}>
+                {b.blocked.map((x) => <li key={x}>{x}</li>)}
+              </ul>
+            )}
+          </div>
+        );
+      })}
+      <div className="px-4 py-3" style={line}>
+        <label className="flex items-center gap-2" style={{ fontSize: F.xs, color: "#C3CBD4" }}>
+          Crew days on this job
+          <input type="number" inputMode="decimal" value={crew}
+            onChange={(e) => setCrew(e.target.value === "" ? "" : Number(e.target.value))}
+            onBlur={() => onCrewDays(crew === "" ? null : Number(crew))}
+            className="rounded px-1.5 outline-none" style={{ width: 60, height: 28, background: "#20262C", color: "#fff",
+              border: `1px solid ${T.darkHair}`, fontFamily: disp, fontSize: F.md, ...nums }} />
+          <span style={{ color: dim }}>estimated</span>
+        </label>
+        {blockedFloor && (
+          <div style={{ fontSize: F.xs, color: "#C3CBD4", marginTop: 6, lineHeight: 1.45 }}>
+            The floor needs: {blockedFloor.blocked.join(", ")}.
+          </div>
+        )}
+        <div style={{ fontSize: F.xs, color: dim, marginTop: 6, lineHeight: 1.45 }}>
+          Lines, markup, tax and discount are in the budget under the sections.
+        </div>
+      </div>
+    </>
   );
 }
 

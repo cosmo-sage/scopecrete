@@ -6,7 +6,7 @@
  */
 
 import type { ApiSession } from "@/lib/api-auth";
-import { price, floor, takeoff, type CostSettings, type OverheadItem, type SectionInput } from "@/lib/engine";
+import { price, floor, takeoff, budget, type BudgetLine, type CostSettings, type OverheadItem, type SectionInput } from "@/lib/engine";
 import { assemble, coldContext, scopeLines, type Assembled, type Block } from "./prompt";
 
 export type ContextRef =
@@ -175,7 +175,7 @@ async function settingsAndOverhead(sb: Sb, orgId: string) {
     k === "tax_applies_to" || k === "comp_mode" ? ((s as Record<string, unknown> | null)?.[k] ?? null) : num((s as Record<string, unknown> | null)?.[k])])) as unknown as CostSettings;
   const overhead = ((oh ?? []) as Array<{ label: string; amount: unknown; cadence: string; active: boolean }>)
     .map((o) => ({ ...o, amount: Number(o.amount) })) as OverheadItem[];
-  return { settings, overhead, recorded: !!s };
+  return { settings, overhead, recorded: !!s, markup_subcontract_pct: num((s as Record<string, unknown> | null)?.markup_subcontract_pct) };
 }
 
 async function scopeContext(sb: Sb, orgId: string, jobId: string): Promise<Assembled> {
@@ -183,20 +183,21 @@ async function scopeContext(sb: Sb, orgId: string, jobId: string): Promise<Assem
     .eq("org_id", orgId).eq("id", jobId).maybeSingle();
   if (!job) return coldContext(null, new Date().toISOString().slice(0, 10));
   const [{ data: secs }, so, who, files] = await Promise.all([
-    sb.from("job_sections").select("name, work_type, length_ft, width_ft, sqft_override, depth_in, psi, rebar, prep_notes, access_notes")
+    sb.from("job_sections").select("id, name, work_type, length_ft, width_ft, sqft_override, depth_in, psi, rebar, prep_notes, access_notes")
       .eq("org_id", orgId).eq("job_id", jobId).order("sort_order"),
     settingsAndOverhead(sb, orgId),
     job.contact_id ? contactBlock(sb, orgId, job.contact_id as string) : Promise.resolve(null),
     filesBlock(sb, orgId, { jobId }),
   ]);
   const sections: SectionInput[] = ((secs ?? []) as Array<Record<string, unknown>>).map((r) => ({
-    name: r.name as string | null, work_type: r.work_type as string,
+    id: r.id as string, name: r.name as string | null, work_type: r.work_type as string,
     length_ft: num(r.length_ft), width_ft: num(r.width_ft), sqft_override: num(r.sqft_override), depth_in: num(r.depth_in), psi: num(r.psi),
   }));
   const t = takeoff(sections, so.settings.concrete_overage_pct);
   const p = price(sections, so.settings);
   const crew = num(job.duration_days);
   const fl = p.priced ? floor(p.cost.total, so.settings, so.overhead, crew) : null;
+  const bud = await budgetBlock(sb, orgId, jobId, sections, crew, so);
   const notes = ((secs ?? []) as Array<Record<string, unknown>>).flatMap((r) =>
     [["reinforcement", r.rebar], ["prep", r.prep_notes], ["access", r.access_notes]]
       .filter(([, v]) => typeof v === "string" && v).map(([k, v]) => `- ${r.name || "section"} ${k}: ${v}`));
@@ -204,12 +205,62 @@ async function scopeContext(sb: Sb, orgId: string, jobId: string): Promise<Assem
   return assemble(`scope: ${title}`, [
     { title: "Job", lines: [`Title: ${title}`, `Status: ${job.status}`, `Address: ${(job.address as string | null) || "not recorded"}`,
       `Crew days on this job: ${crew ?? "not set"}`, `For: ${who ? who.name : "no customer attached"}`] },
-    { title: "Sections and the engine's numbers (exactly what the builder shows)", lines: scopeLines(t, p, fl) },
+    { title: bud ? "Sections and the rate-based numbers (superseded by the budget below)" : "Sections and the engine's numbers (exactly what the builder shows)", lines: scopeLines(t, p, fl) },
+    ...(bud ? [bud] : []),
     { title: "Section notes", lines: notes },
     ...(so.recorded ? [] : [{ title: "Cost settings", lines: ["None recorded for this business yet."] }]),
     ...(files ? [files] : []),
     ...(who ? [who.block] : []),
   ]);
+}
+
+/**
+ * The job's budget (migration 048), priced by the same budget() the screen
+ * uses, so Dusty quotes the builder's numbers tier by tier — or names what
+ * blocks a tier. Null when the job has no budget lines yet.
+ */
+async function budgetBlock(sb: Sb, orgId: string, jobId: string, sections: SectionInput[], crew: number | null,
+  so: Awaited<ReturnType<typeof settingsAndOverhead>>): Promise<Block | null> {
+  const { data: est } = await sb.from("estimates").select("id, tax_on, discount_amount, discount_reason")
+    .eq("org_id", orgId).eq("job_id", jobId).eq("status", "draft").maybeSingle();
+  if (!est) return null;
+  const [{ data: opts }, { data: rows }, { data: groups }] = await Promise.all([
+    sb.from("estimate_options").select("id, label").eq("org_id", orgId).eq("estimate_id", est.id).order("sort_order"),
+    sb.from("estimate_line_items").select("id, name, cost_type, unit, unit_cost, markup_pct, taxable, qty_rule, rule_params, qty_source, quantity, section_id, option_id, cost_group_id")
+      .eq("estimate_id", est.id).order("sort_order"),
+    sb.from("cost_groups").select("id, default_markup_pct").eq("org_id", orgId),
+  ]);
+  if (!rows?.length) return null;
+  const lines = (rows as Array<Record<string, unknown>>).map((r) => ({
+    ...r, unit_cost: num(r.unit_cost), markup_pct: num(r.markup_pct), quantity: num(r.quantity),
+  })) as unknown as BudgetLine[];
+  const options = (opts ?? []) as Array<{ id: string; label: string }>;
+  const st = so.settings;
+  const res = budget(lines, options.map((o) => o.id), {
+    markup_material_pct: st.markup_material_pct, markup_labor_pct: st.markup_labor_pct, markup_equipment_pct: st.markup_equipment_pct,
+    markup_subcontract_pct: so.markup_subcontract_pct, sales_tax_pct: st.sales_tax_pct,
+    concrete_overage_pct: st.concrete_overage_pct, shortload_threshold_cy: st.shortload_threshold_cy,
+  }, sections, crew, {
+    tax_on: est.tax_on !== false, discount: Number(est.discount_amount ?? 0),
+    groupMarkup: Object.fromEntries(((groups ?? []) as Array<{ id: string; default_markup_pct: unknown }>).map((g) => [g.id, num(g.default_markup_pct)])),
+  });
+  const secName = (id: string | null) => (id ? sections.find((x) => x.id === id)?.name || "section" : "whole job");
+  const optName = (id: string | null) => (id ? options.find((o) => o.id === id)?.label ?? "option" : "all options");
+  const out: string[] = [];
+  for (const tr of res.tiers) {
+    const head = tr.option_id ? `Option ${optName(tr.option_id)}` : "Budget";
+    out.push(tr.priced
+      ? `${head}: price $${tr.total.toFixed(0)} (cost $${tr.cost.toFixed(0)}, tax $${tr.tax.toFixed(0)}, discount $${tr.discount.toFixed(0)}, margin ${(tr.margin * 100).toFixed(1)}%)`
+      : `${head}: NOT PRICED — needs ${tr.blocked.join(", ")}`);
+  }
+  out.push(`Tax ${est.tax_on === false ? "switched off" : "on"}.${est.discount_reason ? ` Discount reason: ${est.discount_reason}.` : ""}`);
+  for (const l of lines) {
+    const r = res.lines[l.id];
+    out.push(`- ${l.name} [${secName(l.section_id)}; ${optName(l.option_id)}]: ${r.blocked.length ? `blocked — ${r.blocked.join(", ")}` :
+      `${r.qty} ${l.unit ?? ""} × $${l.unit_cost} = cost $${(r.ext_cost ?? 0).toFixed(2)}, price $${(r.ext_price ?? 0).toFixed(2)}`}`);
+  }
+  for (const h of res.hints) out.push(`Note: ${h}`);
+  return { title: "The job budget (THE price — quote these numbers, each option separately)", lines: out };
 }
 
 async function customerContext(sb: Sb, orgId: string, contactId: string): Promise<Assembled> {

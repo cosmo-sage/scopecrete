@@ -15,6 +15,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { T, F, disp, eyebrow, nums, money0 } from "@/lib/v34/tokens";
 import { Segmented } from "@/components/v34/primitives";
+import { CostCards } from "@/components/v34/cost-cards";
 import { monthlyNut, type CostSettings, type OverheadItem } from "@/lib/engine";
 import { ReinforcementSettings } from "@/components/v34/reinforcement-settings";
 
@@ -180,6 +181,9 @@ export function CostSettingsEditor({ onSaved }: { onSaved?: () => void }) {
             )}
           </div>
         ))}
+
+        {/* ---- the catalog: what you buy and charge for, by vendor (migration 047) ---- */}
+        <CostCards />
 
         {/* ---- pay yourself ---- */}
         <div className="px-3 py-2.5" style={{ borderBottom: `1px solid ${T.hairSoft}` }}>

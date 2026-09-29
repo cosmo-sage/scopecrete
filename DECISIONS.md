@@ -645,6 +645,22 @@ percentage of labour — all three contradict this section and §4.
   setting, not an assumption; a missing number on the chosen type still blocks
   the price and is named. A section with none chosen is listed as not in the
   price.
+- **Cost cards (migration 047, Coy 2026-09-29)** — `cost_items`: Coy's
+  catalog of what he buys and charges for, each with its **vendor** (a
+  contact), group (`cost_groups`), cost type, unit and unit cost, taxed or
+  not (materials default taxed), optional markup, the vendor's item number,
+  when and how the price was confirmed (quote, receipt, invoice, typed), and
+  the rule that turns a scope into a quantity (by the yard, sq ft, foot of
+  edge, sheet, stick, day, once per job, or typed). A blank unit cost stays
+  blank; the card says what it still needs (`cardGaps()`) and a price that
+  uses it will be blocked by name. Edited in Cost settings → Cost cards
+  (grouped cards, `/api/cost-items`, `/api/cost-groups`) and seen per vendor
+  on the vendor page → **Prices**. Retiring a card keeps it (`active=false`)
+  so a budget that used it still reads. **Until the job budget lands (next
+  step) the engine still prices from the rate fields above;** then those
+  fields and the reinforcement types fold into cards. Anon's grants on
+  `cost_groups`, `estimates`, `estimate_line_items`, `documents`,
+  `document_events`, `invoices`, `payments` were revoked with it.
 - **Not yet priced:** base, vapor barrier (no rates exist), and day-rate
   equipment. The builder lists them as "not in this price".
 - **Dictating a section (2026-09-28).** Dictate on a section card records up

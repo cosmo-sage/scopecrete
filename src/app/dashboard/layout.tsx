@@ -161,6 +161,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     pathname.startsWith("/dashboard/messages") ? "threads"
     : pathname.startsWith("/dashboard/scope") ? "scope"
     : pathname.startsWith("/dashboard/customers") ? "customers"
+    : pathname.startsWith("/dashboard/price-book") ? "pricebook"
     : pathname.startsWith("/dashboard/cash") ? "cash"
     : pathname.startsWith("/dashboard/more") ? "more"
     : "";
@@ -301,9 +302,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* ---- desktop left rail: the footer's destinations, standing up ---- */}
       <nav aria-label="Main" className="hidden lg:flex fixed left-0 bottom-0 z-30 flex-col items-stretch"
         style={{ top: "var(--sc-head)", width: 84, background: T.dark }}>
-        {/* The rail has room the footer does not: Customers stands here on
-            desktop and is reached from More on a phone. */}
+        {/* The rail has room the footer does not: Customers and the Price book
+            stand here on desktop and are reached from More on a phone. */}
         {[...SLOTS.filter((s) => s.href).slice(0, 2), { k: "customers", label: "Customers", href: "/dashboard/messages?f=customers" },
+          { k: "pricebook", label: "Price book", href: "/dashboard/price-book" },
           ...SLOTS.filter((s) => s.href).slice(2)].map((s) => {
           const on = activeKey === s.k;
           return (

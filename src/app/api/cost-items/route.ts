@@ -7,7 +7,8 @@ import { cleanCard, defaultTaxable, type CostType } from "@/lib/cost-cards";
  * each tied to its vendor.
  *
  * GET  ?vendor=<contact id>  → { items, groups, vendors } (active cards; one
- *      vendor's price list when named). Vendors are the org's contacts filed
+ *      vendor's price list when named; ?all=1 includes retired cards — the
+ *      Price book's "show retired"). Vendors are the org's contacts filed
  *      vendor, for the picker.
  * POST card fields           → the new card.
  *
@@ -17,15 +18,15 @@ import { cleanCard, defaultTaxable, type CostType } from "@/lib/cost-cards";
 
 export const dynamic = "force-dynamic";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const ITEM_COLUMNS = "id, cost_group_id, name, description, cost_type, unit, unit_cost, taxable, markup_pct, vendor_contact_id, vendor_sku, price_as_of, price_source, qty_rule, rule_params, active, sort_order, updated_at";
+const ITEM_COLUMNS = "id, cost_group_id, name, description, cost_type, unit, unit_cost, taxable, markup_pct, vendor_contact_id, vendor_sku, price_as_of, price_source, qty_rule, rule_params, active, sort_order, updated_at, import_id, price_import_id, price_file_id";
 
 export async function GET(req: NextRequest) {
   const result = await getApiSession(req);
   if (!result.ok) return result.response;
   const { supabase, orgId, applyCookies } = result.session;
   const vendor = req.nextUrl.searchParams.get("vendor");
-  let q = supabase.from("cost_items").select(ITEM_COLUMNS).eq("org_id", orgId).eq("active", true)
-    .order("sort_order").order("name");
+  let q = supabase.from("cost_items").select(ITEM_COLUMNS).eq("org_id", orgId).order("sort_order").order("name");
+  if (req.nextUrl.searchParams.get("all") !== "1") q = q.eq("active", true);
   if (vendor) {
     if (!UUID.test(vendor)) return applyCookies(NextResponse.json({ error: "Bad vendor." }, { status: 400 }));
     q = q.eq("vendor_contact_id", vendor);

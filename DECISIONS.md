@@ -649,19 +649,44 @@ percentage of labour — all three contradict this section and §4.
   catalog of what he buys and charges for, each with its **vendor** (a
   contact), group (`cost_groups`), cost type, unit and unit cost, taxed or
   not (materials default taxed), optional markup, the vendor's item number,
-  when and how the price was confirmed (quote, receipt, invoice, typed), and
+  when and how the price was confirmed (quote, receipt, invoice, typed,
+  import), and
   the rule that turns a scope into a quantity (by the yard, sq ft, foot of
   edge, sheet, stick, day, once per job, or typed). A blank unit cost stays
   blank; the card says what it still needs (`cardGaps()`) and a price that
-  uses it will be blocked by name. Edited in Cost settings → Cost cards
-  (grouped cards, `/api/cost-items`, `/api/cost-groups`) and seen per vendor
-  on the vendor page → **Prices**. Retiring a card keeps it (`active=false`)
+  uses it will be blocked by name. Edited in the **Price book** (below;
+  `/api/cost-items`, `/api/cost-groups`) and seen per vendor on the vendor
+  page → **Prices**. Retiring a card keeps it (`active=false`)
   so a budget that used it still reads. The rate fields above and the
   reinforcement types fold into cards in the next step (3b, with
   assemblies per job type × work type); until then a job with no budget
   lines is still priced from the rates, labelled **from rates**. Anon's grants on
   `cost_groups`, `estimates`, `estimate_line_items`, `documents`,
   `document_events`, `invoices`, `payments` were revoked with it.
+- **The Price book (migration 049, Coy 2026-09-29)** — the cost catalog's
+  own page, `/dashboard/price-book` (JobTread calls it the cost catalog; Coy
+  named it). **Price history:** `cost_item_prices`, one row per price a card
+  has had, written by trigger `cost_items_price_log` (as the caller, under
+  RLS) whenever `unit_cost` is set or changes, carrying the card's
+  `price_as_of` / `price_source` and — new on `cost_items` —
+  `price_import_id` / `price_file_id`, which a price set by hand clears. No
+  path changes a price without a history row. **Imports** (`cost_imports`):
+  a CSV or .xlsx from JobTread, another CRM or any spreadsheet is parsed in
+  the browser (`src/lib/price-import.ts`, tested; `read-excel-file`) — the
+  file is never uploaded. The header row is found under any title lines;
+  columns are guessed from header words and Coy confirms them; each vendor
+  name is matched to a contact filed as vendor, or none — **no contact is
+  ever created**. Values: money parsed, markup from the file or derived from
+  price ÷ cost ("from price"), a blank cost stays blank, an unknown type is
+  Other and flagged, how a card is counted is a **guess** from its unit that
+  Coy can change. Matching: vendor + item # first, else vendor + name + unit
+  (retired cards don't match). The preview says New · Price change (old →
+  new) · Same · Skipped (why) per row, and only ticked rows are sent
+  (`POST /api/price-book/import`, ≤ 2,000 rows, every id checked against the
+  org). A price change touches **the price only** — markup, group, rule
+  stay. A group named in the file is made. **Undo** (`…/import/[id]/undo`)
+  retires the cards the import made and puts back the prices it changed,
+  unless Coy changed them since.
 - **The job budget (migration 048, Coy 2026-09-29)** — JobTread's maths on
   lines from cost cards. A job has ONE working estimate (`status='draft'`,
   unique per job); its `estimate_line_items` are the budget, and proposal
@@ -961,6 +986,18 @@ expected start date per quoted job before it means anything. Add the field.
   many at once; drag and drop on a desktop) with progress and retry; a grid
   filtered All · Photos · Documents · From texts; tap for the viewer — name,
   what it is, area, note, Show on proposal, delete, and Dusty's read.
+- **Price book (2026-09-29)** — `src/components/v34/price-book.tsx`. On the
+  desktop rail after Customers, and under More on a phone; Cost settings
+  links to it (one editor), and a vendor's page keeps its Prices door.
+  Find, **By group · By vendor** (remembered per device), Show retired.
+  **Wide (≥900px measured): a spreadsheet** — Item · Vendor (or Group) ·
+  Item # · Type · Unit · Unit cost · Markup · Taxed · Counted on a job ·
+  Price date · From; cost, markup and taxed edited in the cell (a cost typed
+  there is stamped today, "typed"); a price older than 90 days says **old**.
+  Narrow: cards. The card sheet shows **Price history** (date, price, ▲▼ %,
+  from where). **Import ▾** opens the import (`price-import.tsx`) as a wide
+  sheet over everything: file → columns and vendors → preview → Import N;
+  recent imports sit under the header with **Undo**.
 - **Budget (2026-09-29)** — `src/components/v34/job-budget.tsx` under the
   sections on the job page. Option bar (All options · Good · Better · Best ·
   + Option, each with its total; rename / delete an option). **Wide (≥900px

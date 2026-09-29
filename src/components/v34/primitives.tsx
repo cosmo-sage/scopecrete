@@ -163,6 +163,12 @@ export const NavIcon = ({ k, on }: { k: string; on: boolean }) => {
       <path {...p} d="M3.6 16.2c.6-3.2 3-5 5.9-5s5.3 1.8 5.9 5" />
     </svg>
   );
+  if (k === "pricebook") return (
+    <svg {...box}>
+      <path {...p} d="M4 2.6h9.6a1 1 0 0 1 1 1v12.8H5a1 1 0 0 1-1-1z" />
+      <path {...p} d="M4 14.4a1 1 0 0 1 1-1h9.6M7 6h5M7 8.8h3.4" />
+    </svg>
+  );
   if (k === "cash") return <svg {...box}><rect {...p} x="2.4" y="5.1" width="14.2" height="8.8" rx="1.2" /><circle {...p} cx="9.5" cy="9.5" r="2.3" /></svg>;
   if (k === "more") return (
     <svg {...box}>
@@ -174,10 +180,10 @@ export const NavIcon = ({ k, on }: { k: string; on: boolean }) => {
 
 /* ------------------------------------------------------------------ Drawer */
 
-export function Drawer({ open, onClose, title, sub, right, children, hideClose, full, below }: {
+export function Drawer({ open, onClose, title, sub, right, children, hideClose, full, below, wide }: {
   open: boolean; onClose: () => void; title: string; sub?: string;
   right?: React.ReactNode; children: React.ReactNode;
-  hideClose?: boolean; full?: boolean; below?: boolean;
+  hideClose?: boolean; full?: boolean; below?: boolean; wide?: boolean;
 }) {
   useEffect(() => {
     if (!open) return;
@@ -190,13 +196,15 @@ export function Drawer({ open, onClose, title, sub, right, children, hideClose, 
   return (
     /* Three shapes, one component. full: fills the width under the header.
        below: still a side drawer, but it starts under the header assembly
-       so the stream and the burger are never covered. Default: covers all. */
+       so the stream and the burger are never covered. Default: covers all.
+       wide: covers all like the default (over the phone footer too), but as
+       wide as the work needs — a table to check before saving. */
     <div className={`fixed left-0 right-0 bottom-0 ${full ? "z-30" : "z-50"}`}
       style={{ top: full || below ? "var(--sc-head)" : 0, background: full ? "transparent" : "rgba(18,22,26,.44)" }}
       onClick={full ? undefined : onClose}>
       <div onClick={(e) => e.stopPropagation()} role="dialog" aria-label={title}
         className={`absolute top-0 right-0 bottom-0 flex flex-col ${full ? "left-0" : ""}`}
-        style={{ width: full ? "auto" : "min(408px, 90vw)", background: T.card,
+        style={{ width: full ? "auto" : wide ? "min(1180px, 100vw)" : "min(408px, 90vw)", background: T.card,
                  boxShadow: full ? "none" : "-14px 0 40px rgba(10,14,18,.22)" }}>
 
         <div className="sticky top-0 z-10 shrink-0 px-4 flex items-center gap-3"

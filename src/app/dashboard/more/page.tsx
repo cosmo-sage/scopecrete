@@ -16,11 +16,12 @@ interface Entry { href: string; label: string; note: string; live: boolean }
 const GROUPS: [string, Entry[]][] = [
   ["Work", [
     { href: "/dashboard/messages?f=customers", label: "Customers", note: "Everyone filed as a customer — on Threads", live: true },
+    { href: "/dashboard/price-book", label: "Price book", note: "What you buy and charge for, by vendor — import from JobTread or a spreadsheet", live: true },
     { href: "/dashboard/more/logs", label: "Logs", note: "Data checks, Dusty's reads, merges", live: true },
   ]],
   ["Settings", [
     { href: "/dashboard/more/lines", label: "Phone lines", note: "Your numbers, their provider, and the lead source each one means", live: true },
-    { href: "/dashboard/cash", label: "Costs and rates", note: "What the engine prices from", live: true },
+    { href: "/dashboard/cash", label: "Costs and rates", note: "Markups, tax, waste, overhead and the floor", live: true },
   ]],
   ["Not yet wired", [
     { href: "", label: "Documents", note: "Needs a documents table", live: false },

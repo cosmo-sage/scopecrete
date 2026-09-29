@@ -9,7 +9,7 @@ import { cleanCard } from "@/lib/cost-cards";
  */
 
 export const dynamic = "force-dynamic";
-const COLUMNS = "id, cost_group_id, name, description, cost_type, unit, unit_cost, taxable, markup_pct, vendor_contact_id, vendor_sku, price_as_of, price_source, qty_rule, rule_params, active, sort_order, updated_at";
+const COLUMNS = "id, cost_group_id, name, description, cost_type, unit, unit_cost, taxable, markup_pct, vendor_contact_id, vendor_sku, price_as_of, price_source, qty_rule, rule_params, active, sort_order, updated_at, import_id, price_import_id, price_file_id";
 
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
@@ -34,7 +34,11 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     const { data: v } = await supabase.from("contacts").select("id").eq("org_id", orgId).eq("id", patch.vendor_contact_id as string).maybeSingle();
     if (!v) return bad("No such vendor.", 404);
   }
+  if ("active" in b && b.active === true) patch.active = true; // un-retire from the Price book
   if (!Object.keys(patch).length) return bad("Nothing to change.");
+  // A price set here is set by hand: history (migration 049) records it as such,
+  // not as the import or the vendor quote that set the one before.
+  if ("unit_cost" in patch) { patch.price_import_id = null; patch.price_file_id = null; }
   patch.updated_at = new Date().toISOString();
   const { data, error } = await supabase.from("cost_items").update(patch).eq("id", id).eq("org_id", orgId).select(COLUMNS).single();
   if (error || !data) return bad(error?.message ?? "not saved", 500);

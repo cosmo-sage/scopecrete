@@ -26,6 +26,7 @@ import { Sheet } from "@/components/v34/primitives";
 import { budget as priceBudget, type BudgetLine, type BudgetSettings, type SectionInput, type TierTotal } from "@/lib/engine";
 import { COST_TYPES, COST_TYPE_LABEL, QTY_RULE_LABEL, type CostType } from "@/lib/cost-cards";
 import { useWide } from "@/lib/v34/use-wide";
+import { Cell } from "@/components/v34/cell";
 
 interface Line extends BudgetLine {
   description: string | null; cost_item_id: string | null; vendor_contact_id: string | null;
@@ -332,29 +333,6 @@ function TierTab({ on, onClick, label, sub }: { on: boolean; onClick: () => void
       <span style={{ fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", letterSpacing: ".06em" }}>{label}</span>
       {sub && <span style={{ fontSize: 10, marginLeft: 6, opacity: 0.75, ...nums }}>{sub}</span>}
     </button>
-  );
-}
-
-/** A number cell: shows the value, edits on focus, saves on blur or Enter. Blank saves as blank. */
-function Cell({ value, onSave, label, money: isMoney, placeholder, warn, suffix }: {
-  value: number | null; onSave: (v: number | null) => void; label: string; money?: boolean; placeholder?: string; warn?: boolean; suffix?: string;
-}) {
-  const [draft, setDraft] = useState<string | null>(null);
-  const shown = draft ?? (value === null ? "" : isMoney ? value.toFixed(2) : String(Math.round(value * 100) / 100));
-  const commit = () => {
-    if (draft === null) return;
-    const v = draft.trim() === "" ? null : Number(draft.replace(/[$,%\s]/g, ""));
-    setDraft(null);
-    if (v !== null && !Number.isFinite(v)) return;
-    if (v !== value) onSave(v);
-  };
-  return (
-    <input value={shown} placeholder={placeholder} aria-label={label} inputMode="decimal"
-      onChange={(e) => setDraft(e.target.value)} onBlur={commit}
-      onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); if (e.key === "Escape") setDraft(null); }}
-      className="rounded text-right outline-none"
-      style={{ width: suffix ? 52 : 76, height: 26, padding: "0 5px", border: `1px solid ${warn ? T.hiviz : "transparent"}`, background: warn ? T.hivizDim : "transparent", fontSize: F.sm, ...nums }}
-      onFocus={(e) => { e.currentTarget.style.borderColor = T.chalk; e.currentTarget.style.background = "#fff"; }} />
   );
 }
 

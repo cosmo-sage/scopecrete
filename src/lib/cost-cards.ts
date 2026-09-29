@@ -33,7 +33,7 @@ export const RULE_UNIT: Record<QtyRule, string> = {
   per_cy: "cy", per_sqft: "sq ft", per_lf_perimeter: "lf", per_sheet: "sheet", per_stick: "stick",
   per_day: "day", per_job: "job", manual: "each",
 };
-export const PRICE_SOURCES = ["quote", "receipt", "invoice", "typed"] as const;
+export const PRICE_SOURCES = ["quote", "receipt", "invoice", "typed", "import"] as const;
 
 /** Materials are taxed in-market (§3); everything else isn't, unless Coy says. */
 export const defaultTaxable = (t: CostType) => t === "material";
@@ -109,7 +109,7 @@ export function cleanCard(b: Record<string, unknown>, partial = false): { ok: tr
   }
   if (has("price_source")) {
     const s = txt(b.price_source, 20);
-    if (s && !(PRICE_SOURCES as readonly string[]).includes(s)) return { ok: false, error: "Price source is quote, receipt, invoice or typed." };
+    if (s && !(PRICE_SOURCES as readonly string[]).includes(s)) return { ok: false, error: "Price source is quote, receipt, invoice, typed or import." };
     out.price_source = s;
   }
   if (has("rule_params")) {

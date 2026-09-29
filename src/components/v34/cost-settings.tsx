@@ -15,7 +15,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { T, F, disp, eyebrow, nums, money0 } from "@/lib/v34/tokens";
 import { Segmented } from "@/components/v34/primitives";
-import { CostCards } from "@/components/v34/cost-cards";
+import Link from "next/link";
 import { monthlyNut, type CostSettings, type OverheadItem } from "@/lib/engine";
 import { ReinforcementSettings } from "@/components/v34/reinforcement-settings";
 
@@ -182,8 +182,14 @@ export function CostSettingsEditor({ onSaved }: { onSaved?: () => void }) {
           </div>
         ))}
 
-        {/* ---- the catalog: what you buy and charge for, by vendor (migration 047) ---- */}
-        <CostCards />
+        {/* ---- the catalog lives in the Price book (migration 049): one editor ---- */}
+        <Link href="/dashboard/price-book" className="flex items-center gap-2 px-3 py-2.5 no-underline" style={{ borderBottom: `1px solid ${T.hairSoft}`, color: T.ink }}>
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ display: "block", fontFamily: disp, fontSize: F.md, fontWeight: 600 }}>Cost cards</span>
+            <span style={{ display: "block", fontSize: F.xs, color: T.ink3 }}>What you buy and charge for, by vendor — they live in the Price book.</span>
+          </span>
+          <span style={{ ...eyebrow, color: T.chalk }}>Price book →</span>
+        </Link>
 
         {/* ---- pay yourself ---- */}
         <div className="px-3 py-2.5" style={{ borderBottom: `1px solid ${T.hairSoft}` }}>

@@ -6,11 +6,10 @@
  * built from (the next step); on a phone they read as cards because that is
  * easier to read on a tailgate.
  *
- * Two places, one component:
- *   - Cost settings → Cost cards: every card, grouped (Ready mix, Steel,
- *     Forming lumber, Labor, Equipment…), add groups and cards;
- *   - a vendor's page → Price list: that vendor's cards; a new card there
- *     starts with them as the vendor.
+ * The whole catalog lives in the Price book (/dashboard/price-book,
+ * price-book.tsx, migration 049), which reuses the sheets here. This list is
+ * the per-vendor door: a vendor's page → Prices shows that vendor's cards,
+ * and a new card there starts with them as the vendor.
  *
  * A blank unit cost stays blank and the card says what it still needs —
  * nothing is filled in for Coy (DECISIONS §3).
@@ -29,20 +28,21 @@ export interface Card {
   unit: string; unit_cost: number | null; taxable: boolean; markup_pct: number | null;
   vendor_contact_id: string | null; vendor_sku: string | null; price_as_of: string | null; price_source: string | null;
   qty_rule: QtyRule; rule_params: Record<string, number>; active: boolean; sort_order: number; updated_at: string;
+  import_id?: string | null; price_import_id?: string | null; price_file_id?: string | null;
 }
-interface Group { id: string; name: string; cost_type: CostType; default_markup_pct: number | null; sort_order: number }
-interface Vendor { id: string; name: string | null; phone: string | null; contact_subtype: string | null }
+export interface Group { id: string; name: string; cost_type: CostType; default_markup_pct: number | null; sort_order: number }
+export interface Vendor { id: string; name: string | null; phone: string | null; contact_subtype: string | null }
 
-async function call(url: string, method: string, body?: unknown) {
+export async function call(url: string, method: string, body?: unknown) {
   const r = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
   const b = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(b?.error || `HTTP ${r.status}`);
   return b;
 }
-const numify = (c: Record<string, unknown>) => ({
+export const numify = (c: Record<string, unknown>) => ({
   ...c, unit_cost: c.unit_cost === null ? null : Number(c.unit_cost), markup_pct: c.markup_pct === null ? null : Number(c.markup_pct),
 }) as unknown as Card;
-const dateLabel = (d: string | null) => d ? new Date(`${d}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : null;
+export const dateLabel = (d: string | null) => d ? new Date(`${d}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : null;
 
 const RULE_FIELDS: Partial<Record<QtyRule, Array<{ k: string; label: string; unit: string; hint: string }>>> = {
   per_sheet: [{ k: "sheet_sqft", label: "One sheet covers", unit: "sq ft", hint: "after lap — a 5×10 sheet is about 45" }],
@@ -105,7 +105,7 @@ export function CostCards({ vendorId, vendorName }: { vendorId?: string; vendorN
           <div style={{ fontSize: F.xs, color: T.ink3, lineHeight: 1.4 }}>
             {vendorId
               ? `What you buy from ${vendorName ?? "them"}, and when each price was last confirmed.`
-              : "What you buy and charge for, each with its vendor. Jobs are built from these once the budget lands; today's price still comes from the rates above."}
+              : "What you buy and charge for, each with its vendor. A job's budget is built from these."}
           </div>
         </div>
         {!vendorId && (
@@ -180,7 +180,7 @@ export function CostCards({ vendorId, vendorName }: { vendorId?: string; vendorN
   );
 }
 
-function GroupSheet({ open, onClose, onSaved }: { open: boolean; onClose: () => void; onSaved: () => void }) {
+export function GroupSheet({ open, onClose, onSaved }: { open: boolean; onClose: () => void; onSaved: () => void }) {
   const [name, setName] = useState("");
   const [type, setType] = useState<CostType>("material");
   const [markup, setMarkup] = useState("");
@@ -209,7 +209,7 @@ function GroupSheet({ open, onClose, onSaved }: { open: boolean; onClose: () => 
   );
 }
 
-function CardSheet({ card, groups, vendors, lockVendor, onClose, onSaved }: {
+export function CardSheet({ card, groups, vendors, lockVendor, onClose, onSaved }: {
   card: Partial<Card> | null; groups: Group[]; vendors: Vendor[]; lockVendor: { id: string; name: string | null } | null;
   onClose: () => void; onSaved: () => void;
 }) {
@@ -249,6 +249,13 @@ function CardSheet({ card, groups, vendors, lockVendor, onClose, onSaved }: {
     if (!card.id || !window.confirm(`Take ${card.name} out of the catalog? Budgets that used it keep it.`)) return;
     setBusy(true);
     try { await call(`/api/cost-items/${card.id}`, "DELETE"); onSaved(); }
+    catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
+  };
+
+  const unretire = async () => {
+    if (!card.id) return;
+    setBusy(true);
+    try { await call(`/api/cost-items/${card.id}`, "PATCH", { active: true }); onSaved(); }
     catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
   };
 
@@ -313,7 +320,7 @@ function CardSheet({ card, groups, vendors, lockVendor, onClose, onSaved }: {
           <label className="block"><span style={eyebrow}>From</span>
             <select value={f.price_source ?? ""} onChange={(e) => set({ price_source: e.target.value || null })} style={field}>
               <option value="">—</option><option value="quote">Their quote</option><option value="receipt">A receipt</option>
-              <option value="invoice">An invoice</option><option value="typed">I typed it</option>
+              <option value="invoice">An invoice</option><option value="typed">I typed it</option><option value="import">An import</option>
             </select></label>
         </div>
         <label className="block"><span style={eyebrow}>Their item # (optional)</span>
@@ -331,8 +338,54 @@ function CardSheet({ card, groups, vendors, lockVendor, onClose, onSaved }: {
           style={{ height: 42, background: T.ink, color: "#fff", fontFamily: disp, fontSize: F.sm, textTransform: "uppercase", letterSpacing: ".06em", opacity: busy || !(f.name ?? "").trim() ? 0.5 : 1 }}>
           {card.id ? "Save card" : "Add card"}
         </button>
-        {card.id && <button onClick={() => void retire()} disabled={busy} className="self-start" style={{ ...eyebrow, color: T.red, cursor: "pointer" }}>Take out of the catalog</button>}
+        {card.id && card.active !== false && <button onClick={() => void retire()} disabled={busy} className="self-start" style={{ ...eyebrow, color: T.red, cursor: "pointer" }}>Take out of the catalog</button>}
+        {card.id && card.active === false && (
+          <button onClick={() => void unretire()} disabled={busy} className="self-start" style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>Put back in the catalog</button>
+        )}
+        {card.id && <PriceHistory cardId={card.id} unit={card.unit ?? ""} key={`${card.id}${card.updated_at ?? ""}`} />}
       </div>
     </Sheet>
+  );
+}
+
+const SOURCE_WORD: Record<string, string> = { quote: "their quote", receipt: "a receipt", invoice: "an invoice", typed: "typed", import: "import" };
+
+/**
+ * Every price this card has had (migration 049), newest first, with the move
+ * from the one before. Written by the database whenever the price changes.
+ */
+function PriceHistory({ cardId, unit }: { cardId: string; unit: string }) {
+  const [rows, setRows] = useState<Array<{ id: string; unit_cost: number | null; price_as_of: string | null; price_source: string | null;
+    recorded_at: string; import_name: string | null; file_name: string | null }> | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => {
+    let off = false;
+    call(`/api/cost-items/${cardId}/history`, "GET")
+      .then((b) => { if (!off) setRows(b.history); })
+      .catch((e) => { if (!off) setErr(e instanceof Error ? e.message : String(e)); });
+    return () => { off = true; };
+  }, [cardId]);
+  return (
+    <div className="mt-1" style={{ borderTop: `1px solid ${T.hairSoft}`, paddingTop: 8 }}>
+      <div style={{ ...eyebrow, color: T.ink }}>Price history</div>
+      {err && <div style={{ fontSize: F.xs, color: T.red }}>{err}</div>}
+      {rows === null && !err && <div className="rounded animate-pulse mt-1" style={{ height: 28, background: T.hairSoft }} />}
+      {rows !== null && rows.length === 0 && <div style={{ fontSize: F.xs, color: T.ink3 }}>No price recorded yet.</div>}
+      {rows !== null && rows.map((r, i) => {
+        const prev = rows[i + 1]?.unit_cost ?? null;
+        const d = r.unit_cost !== null && prev !== null && prev > 0 ? (r.unit_cost - prev) / prev : null;
+        const when = dateLabel(r.price_as_of) ?? new Date(r.recorded_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+        return (
+          <div key={r.id} className="flex items-baseline gap-2 py-1" style={{ borderTop: i ? `1px solid ${T.hairSoft}` : "none", fontSize: F.xs, ...nums }}>
+            <span style={{ width: 86, color: T.ink2 }}>{when}</span>
+            <span style={{ fontWeight: 600, color: T.ink, minWidth: 70 }}>{r.unit_cost === null ? "cleared" : `${money(r.unit_cost)}/${unit}`}</span>
+            {d !== null && Math.abs(d) >= 0.0005 && <span style={{ color: d > 0 ? T.red : T.green }}>{d > 0 ? "▲" : "▼"} {(Math.abs(d) * 100).toFixed(1)}%</span>}
+            <span className="flex-1" style={{ color: T.ink3, ...clip }}>
+              {[r.price_source ? SOURCE_WORD[r.price_source] ?? r.price_source : null, r.import_name, r.file_name].filter(Boolean).join(" · ")}
+            </span>
+          </div>
+        );
+      })}
+    </div>
   );
 }

@@ -306,3 +306,6 @@ body { background: var(--sc-slab); color: var(--sc-ink); }
 .sc-rail a, .sc-rail button { color: var(--sc-rail-ink); }
 .sc-rail a[aria-current="page"], .sc-rail button[aria-pressed="true"] { background: var(--sc-rail-active); border-left-color: var(--sc-hiviz-soft) !important; color: var(--sc-rail-ink-on); }
 .sc-rail-label { font-family: 'Barlow Condensed', sans-serif; font-weight: 500; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: inherit; text-align: center; line-height: 1.1; }
+
+/* Header lockup (design/org-branding): on a narrow phone the org's logo stands alone. */
+@media (max-width: 339px) { .sc-powered { display: none !important; } }

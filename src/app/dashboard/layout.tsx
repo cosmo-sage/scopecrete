@@ -19,20 +19,24 @@
  *     the latest thought beside it. Search is a magnifying glass. No phone
  *     number, no "unnamed", no "drift" (drift is on Logs). Phone keeps the
  *     activity row under the header.
- *   - Settings (☰): account, Phone lines, Markups & overhead, Menus.
+ *   - Settings (☰): You, Organisation (name, logo, people — design/org-branding),
+ *     Phone lines, Markups & overhead, Appearance, Menus.
+ *   - The header shows the org's logo with "powered by scopecrete.ai"
+ *     (OrgLockup); with no logo, the scopecrete.ai wordmark as before.
  */
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { T, F, disp, eyebrow, nums, clip } from "@/lib/v34/tokens";
+import { T, F, disp, eyebrow, nums } from "@/lib/v34/tokens";
 import { NavIcon, Sheet } from "@/components/v34/primitives";
 import { PipelineDrop, CreateDrop } from "@/components/v34/shell";
 import { DustyPanel } from "@/components/v34/dusty-panel";
 import { DustyAvatar } from "@/components/v34/dusty-avatar";
 import { ActivityLine } from "@/components/v34/activity-line";
 import { SearchPanel } from "@/components/v34/search-panel";
-import { Wordmark } from "@/components/v34/wordmark";
+import { OrgLockup } from "@/components/v34/org-lockup";
+import { YouSection, OrgSection } from "@/components/v34/org-settings";
 import { ThemePicker, useTheme } from "@/components/v34/theme-picker";
 import { Toolbox, MenuEditor } from "@/components/v34/toolbox";
 import { PAGE, DEFAULT_MENUS, cleanMenus, activePage, type Menus } from "@/lib/v34/pages";
@@ -40,7 +44,10 @@ import { usePref } from "@/lib/v34/prefs";
 import { signOut } from "@/lib/auth";
 import "@/styles/v34-shell.css";
 
-interface Me { email: string | null; name: string | null; org_name: string | null; role: string | null; line: string | null }
+interface Me {
+  email: string | null; name: string | null; org_name: string | null; role: string | null; line: string | null;
+  logo_light?: boolean; logo_dark?: boolean; logo_stamp?: string | null;
+}
 
 /** Desktop or not — decided after mount; the phone layout is the first paint. */
 function useDesktop(): boolean {
@@ -63,7 +70,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [menusOpen, setMenusOpen] = useState(false);
   const [looksOpen, setLooksOpen] = useState(false);
   // The colour theme follows the account (Settings → Appearance).
-  useTheme();
+  const [theme] = useTheme();
   const [searchOpen, setSearchOpen] = useState(false);
   const [pipeOpen, setPipeOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
@@ -88,12 +95,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [savedMenus, setSavedMenus] = usePref<Menus>("menus", DEFAULT_MENUS);
   const menus = cleanMenus(savedMenus);
 
+  // Who is signed in, the org's name and logos. Reloaded after Settings
+  // changes a name or a logo, so the header follows without a page reload.
+  const [meRev, setMeRev] = useState(0);
   useEffect(() => {
     let off = false;
     fetch("/api/session/me").then((r) => (r.ok ? r.json() : null))
       .then((d) => { if (!off && d && !d.error) setMe(d); }).catch(() => {});
     return () => { off = true; };
-  }, []);
+  }, [meRev]);
+  const reloadMe = () => setMeRev((n) => n + 1);
 
   // Replies owed (the Threads badge) and the drift alarm (a red dot on Logs).
   // Null until known — never 0 as a placeholder.
@@ -115,7 +126,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const toolActive = toolKeys.includes(active);
   const badge = { logs: (drift ?? 0) > 0 };
   const working = dustyBusy || readerWorking;
-  const displayName = me?.name ?? me?.email ?? null;
   const glassBtn = { width: 32, height: 32 } as const;
   const closeDrops = () => { setPipeOpen(false); setCreateOpen(false); setSearchOpen(false); };
 
@@ -135,7 +145,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <div style={{ position: "sticky", top: 0, zIndex: menuOpen ? 60 : 40 }}>
         <header className="px-2.5 lg:px-4 flex items-center gap-3 sc-paper" style={{ height: 54 }}>
           <Link href="/dashboard" className="no-underline shrink-0" aria-label="Dashboard">
-            <Wordmark size={desktop ? 26 : 22} />
+            <OrgLockup name={me?.org_name ?? null} hasLight={!!me?.logo_light} hasDark={!!me?.logo_dark} stamp={me?.logo_stamp ?? null}
+              dark={theme.dark} phone={!desktop} />
           </Link>
 
           {/* Desktop: the activity line in the header row, after a divider. */}
@@ -277,21 +288,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* Settings: starts under the header (--sc-head) so the ☰ stays tappable to close it. */}
       <Sheet open={menuOpen} onClose={() => { setMenuOpen(false); setMenusOpen(false); }} title="Settings" sub={me?.org_name ?? undefined} below>
         <div className="px-4 py-3">
-          {displayName ? (
+          {me ? (
             <>
-              <div style={eyebrow}>Signed in as</div>
-              <div style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 600, ...clip }}>{displayName}</div>
-              {me?.email && me.email !== displayName && <div style={{ fontSize: F.sm, color: T.ink3, ...clip }}>{me.email}</div>}
-              {me?.org_name && (
-                <div className="mt-2">
-                  <div style={eyebrow}>Organisation</div>
-                  <div style={{ fontSize: F.sm, color: T.ink2 }}>{me.org_name}{me.role ? ` · ${me.role}` : ""}</div>
-                </div>
-              )}
+              <YouSection key={me.name ?? ""} name={me.name} email={me.email} orgName={me.org_name} role={me.role} onSaved={reloadMe} />
+              <div className="mt-3" style={{ borderTop: `1px solid ${T.hair}` }}>
+                <OrgSection key={me.name ?? ""} onChanged={reloadMe} />
+              </div>
             </>
           ) : <div style={{ fontSize: F.sm, color: T.ink3 }}>Loading your account…</div>}
 
-          <div className="mt-4 flex flex-col" style={{ borderTop: `1px solid ${T.hair}` }}>
+          <div className="flex flex-col" style={{ borderTop: `1px solid ${T.hair}` }}>
             {[
               { href: "/dashboard/more/lines", label: "Phone lines", note: "Your numbers, their provider, and the lead source each one means" },
               { href: "/dashboard/costs", label: "Markups & overhead", note: "Markups, tax, waste, overhead and the bid floor — not prices (those are the Price book)" },

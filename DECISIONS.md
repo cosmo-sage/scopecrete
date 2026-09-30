@@ -215,6 +215,48 @@ list."* (Claude Design handoff, `design/customer-and-themes/`.)
   shared contact vendor left the company a customer; undo; a stranger gets
   "contact not found"; anon has no execute.
 
+## 2g. The org — its name and logo (migration 056, applied 2026-09-30)
+
+Coy: *"We need a way to change the Organization name … that will reflect
+across the database … I also want to be able to upload a logo for my org."*
+(Claude Design handoff, `design/org-branding/`.)
+
+- **The name lives once, in `orgs.name`.** The header, `/api/session/me`,
+  Settings and Dusty all read it by `org_id`; no table keeps its own copy.
+  Renaming is `sc_rename_org(org, name)` — SECURITY DEFINER, owners only
+  (`get_user_owner_org_ids()`), 1–120 characters, execute for
+  `authenticated` only — through `PATCH /api/org`. It is deliberately **not**
+  an UPDATE policy on `orgs`, which would also let a caller rewrite
+  `plan_tier`, `api_key_hash` and `webhook_url`. When quotes and invoices can
+  be sent, each will keep a copy of the name it was sent under; nothing is
+  sent yet. The reader's `OUR_NAMES` (`enrich-contacts/rules.ts`) is still a
+  hard-coded list; "Sacco" in it covers "Sacco Enterprises" by substring, so
+  the rename needed no deploy — it becomes per-org before a second org.
+- **Logos:** `orgs.logo_light_path` (dark lettering — Site Office, Blueprint,
+  Kraft Yard) and `logo_dark_path` (light lettering — Night Shift), storage
+  paths in the **private** bucket `org-branding`
+  (`{org_id}/logo-{variant}-{stamp}.{ext}`; PNG, WebP or SVG, 5 MB). Members
+  read; only that org's owners write. The browser shrinks a PNG/WebP to 1200px
+  and sends it straight to storage (`POST /api/org/logo` → signed link →
+  `…/done`); `done` cleans an SVG (`src/lib/svg-clean.ts`, tested: scripts,
+  handlers, outside references, entities) and calls `sc_set_org_logo()`,
+  which accepts only a path in the org's own folder. `GET
+  /api/org/logo/[variant]` redirects to a signed link, so `<img>` works and
+  the bucket stays private. `DELETE /api/org/logo?variant=` removes one.
+- **The header lockup** (`org-lockup.tsx`): the theme's logo (else the other),
+  28px (24 on a phone), a pencil rule, "powered by" over a small wordmark
+  (dropped under 340px). No logo, or one that fails to load → the
+  scopecrete.ai wordmark as before.
+- **`org_audit`** records `org_renamed` and `logo_set` / `logo_removed`, old →
+  new, who and when; members read it, only the functions write it.
+- **People:** `sc_org_people(org)` (SECURITY DEFINER, members only) returns
+  each member's name, email and role — the one way a teammate's email is read.
+  Your own name is saved on your auth account (`PATCH /api/me`, `full_name`).
+- Rehearsed before applying: owner renames and it is audited; blank refused;
+  a path in another org's folder or with `..` refused; a direct UPDATE on
+  `orgs` changes nothing; a stranger can't rename, set a logo, or see people
+  or the audit; anon has no execute.
+
 ## 2a. The raw log and the spine — migration 016
 
 Applied 2026-08-27 as `016_raw_log_and_spine_projection`. This is the shape of
@@ -1035,9 +1077,12 @@ expected start date per quoted job before it means anything. Add the field.
   as · Scope.
 - Cash flow is a page (in the Toolbox by default), not a slide-out drawer —
   a side drawer's horizontal swipe fights the ribbon's horizontal swipe.
-- Settings opens from the header ☰: **Phone lines**, **Markups & overhead**
+- Settings opens from the header ☰: **You** (User — your name, ✎ — ·
+  Email · Organization and role; 2026-09-30, Coy: the email is not the
+  user), **Organisation** (name, logo, people — §2g), **Phone lines**,
+  **Markups & overhead**
   (`/dashboard/costs` — markups, tax, waste, overhead, the floor; not the
-  Price book, which is what things cost), **Menus**, Sign out. Markups &
+  Price book, which is what things cost), **Appearance**, **Menus**, Sign out. Markups &
   overhead also opens from the Cash page: one editor, two doors. The Settings
   sheet starts under the whole header (`--sc-head`).
 - The header's pipeline drop-down links to the Jobs board.

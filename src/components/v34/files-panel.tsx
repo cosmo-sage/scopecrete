@@ -190,18 +190,18 @@ export function FilesPanel({ jobId, contactId, sectionId, sections, title = "Fil
             {filter === "all" ? "Nothing yet. Add photos, plans, specs or receipts — Dusty reads them." : "None of these."}
           </div>
         )}
-        {filter !== "texts" && shown.map((f) => <Tile key={f.id} f={f} onOpen={() => setOpen(f)} />)}
+        {filter !== "texts" && shown.map((f) => <FileTile key={f.id} f={f} onOpen={() => setOpen(f)} />)}
         {filter === "texts" && texted.map((m) => <TextedTile key={m.id} m={m} />)}
       </div>
 
-      <Viewer f={open} sections={sections} onClose={() => setOpen(null)}
+      <FileViewer f={open} sections={sections} onClose={() => setOpen(null)}
         onSaved={(nf) => { setFiles((a) => (a ?? []).map((x) => (x.id === nf.id ? nf : x))); setOpen(nf); }}
         onDeleted={(id) => { setFiles((a) => (a ?? []).filter((x) => x.id !== id)); setOpen(null); }} />
     </section>
   );
 }
 
-function Tile({ f, onOpen }: { f: FileRow; onOpen: () => void }) {
+export function FileTile({ f, onOpen }: { f: FileRow; onOpen: () => void }) {
   const img = f.kind === "image" && f.url;
   return (
     <button onClick={onOpen} className="rounded overflow-hidden text-left flex flex-col" title={f.name}
@@ -251,8 +251,10 @@ function TextedTile({ m }: { m: Texted }) {
   );
 }
 
-function Viewer({ f, sections, onClose, onSaved, onDeleted }: {
+export function FileViewer({ f, sections, onClose, onSaved, onDeleted, links }: {
   f: FileRow | null; sections?: Array<{ id: string; name: string | null }>;
+  /** Extra doors at the top of the sheet (Documents: its job, their page). */
+  links?: React.ReactNode;
   onClose: () => void; onSaved: (f: FileRow) => void; onDeleted: (id: string) => void;
 }) {
   const [busy, setBusy] = useState(false);
@@ -278,6 +280,7 @@ function Viewer({ f, sections, onClose, onSaved, onDeleted }: {
   return (
     <Sheet open onClose={onClose} title={f.name} sub={`${f.category ? CATEGORY_LABEL[f.category] : "File"} · ${sizeLabel(f.byte_size)}${f.page_count ? ` · ${f.page_count} pages` : ""}`}>
       <div className="px-4 py-3 flex flex-col gap-3">
+        {links}
         {f.url && f.kind === "image" && (
           // eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL
           <img src={f.url} alt={f.name} style={{ width: "100%", maxHeight: "50vh", objectFit: "contain", background: T.slab, borderRadius: 4 }} />

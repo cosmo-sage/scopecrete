@@ -39,15 +39,6 @@ const C = {
 const disp = `${barlowCondensed.style.fontFamily}, 'Oswald', system-ui, sans-serif`;
 const body = `${ibmPlexSans.style.fontFamily}, system-ui, sans-serif`;
 
-const Emblem = ({ size = 26, stroke = 2.6 }: { size?: number; stroke?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 100 100" style={{ display: "block", overflow: "visible" }} aria-hidden="true">
-    {/* diamond → square → circle, spaced */}
-    <polygon points="50,3 97,50 50,97 3,50" fill="none" stroke={C.hiviz} strokeWidth={stroke} strokeLinejoin="miter" />
-    <rect x="29" y="29" width="42" height="42" fill="none" stroke={C.hiviz} strokeWidth={stroke} />
-    <circle className="sc-core" cx="50" cy="50" r="12.5" fill={C.pulse} />
-  </svg>
-);
-
 /** Eye / eye-with-slash. Purely decorative — the button carries the label. */
 const EyeIcon = ({ off }: { off: boolean }) => (
   <svg width="19" height="19" viewBox="0 0 19 19" aria-hidden="true" focusable="false">
@@ -136,7 +127,7 @@ export default function SignIn() {
       setError(describeAuthError(signInError));
       return;
     }
-    router.push("/dashboard/messages");
+    router.push("/dashboard");
   }
 
   async function handleForgotPassword() {
@@ -189,14 +180,8 @@ export default function SignIn() {
         .sc-in { animation: scRise .7s cubic-bezier(.2,.7,.3,1) both; }
         .sc-d1 { animation-delay: .10s }
         @keyframes scRise { from { opacity: 0; transform: translateY(9px) } to { opacity: 1; transform: none } }
-        .sc-core { animation: scCore 4s ease-in-out infinite; transform-origin: 50% 50%; }
-        @keyframes scCore {
-          0%, 100% { opacity: .62; transform: scale(.9) }
-          50%      { opacity: 1;   transform: scale(1) }
-        }
         @media (prefers-reduced-motion: reduce) {
           .sc-in { animation: none !important; opacity: 1 !important; transform: none !important; }
-          .sc-core { animation: none !important; opacity: 1 !important; transform: none !important; }
         }
       `}</style>
 
@@ -222,7 +207,6 @@ export default function SignIn() {
         alignItems: "center", justifyContent: "center", gap: 22, padding: "32px 22px",
       }}>
         <div className="sc-in" style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <Emblem size={26} />
           <span style={{ fontFamily: disp, fontSize: 25, fontWeight: 700, letterSpacing: ".015em", lineHeight: 1 }}>
             SCOPE<span style={{ color: C.hiviz }}>CRETE</span><span style={{ color: C.ink3, fontWeight: 400 }}>.ai</span>
           </span>

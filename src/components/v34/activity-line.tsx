@@ -22,9 +22,14 @@
  *   Dusty reply streaming in this tab. Otherwise it is still.
  * - No bubble (Coy, 2026-09-28): the words sit on the grey glass row, typed in
  *   letter by letter as each thought arrives; a live Dusty reply shows its
- *   real tokens as they stream. A thin line drops from the header emblem to
- *   the dot, so the mark, the thinking and the words read as one thing — a
- *   pulse runs down it while Dusty is working, in step with the emblem.
+ *   real tokens as they stream.
+ * - Desktop (Coy, 2026-09-30): `inline` puts it in the header row beside the
+ *   logo, after a divider, with its drop-down anchored under it at a fixed
+ *   width. The phone keeps it as a row under the header. The old emblem and
+ *   the line from it to the dot are gone.
+ * - The dot's colour and rhythm say what kind of work it is: reading someone
+ *   (slow blue), Dusty answering (quick amber), just filed or named (one
+ *   green blink), the reader broken (steady red); still when idle.
  * - Nothing in the last day: says when something last happened. Never invents
  *   something happening now.
  */
@@ -65,10 +70,22 @@ const DOT: Record<Tone, string> = {
   live: T.pulse, good: T.pulse, ask: "#6FA0FF", warn: "#FFB547", quiet: "rgba(255,255,255,.35)",
 };
 
-function Dot({ tone, live }: { tone: Tone; live: boolean }) {
+type Work = "read" | "reply" | "done" | "warn" | null;
+const WORK_DOT: Record<Exclude<Work, null>, string> = { read: "#6FA0FF", reply: "#FFB547", done: "#1FA971", warn: "#FF6B57" };
+
+/** "just now", "5m ago", or "on 3 Sep" — relTime alone reads "now ago". */
+function ago(iso: string | null | undefined): string {
+  const r = relTime(iso);
+  if (!r) return "—";
+  if (r === "now") return "just now";
+  return /^\d+[mhd]$/.test(r) ? `${r} ago` : `on ${r}`;
+}
+
+function Dot({ tone, live, work }: { tone: Tone; live: boolean; work?: Work }) {
+  const cls = work ? `sc-dot-${work}` : live ? "sc-dot-live" : undefined;
   return (
-    <span aria-hidden="true" className={live ? "sc-dot-live" : undefined}
-      style={{ width: 7, height: 7, borderRadius: 999, background: DOT[tone], flex: "0 0 auto", display: "inline-block" }} />
+    <span aria-hidden="true" className={cls}
+      style={{ width: work ? 8 : 7, height: work ? 8 : 7, borderRadius: 999, background: work ? WORK_DOT[work] : DOT[tone], flex: "0 0 auto", display: "inline-block" }} />
   );
 }
 
@@ -89,8 +106,10 @@ function useTyped(text: string, k: string): string {
   return shown.k === k ? text.slice(0, shown.n) : "";
 }
 
-export function ActivityLine({ busy, live, onWorking }: {
+export function ActivityLine({ busy, live, onWorking, inline }: {
   busy: boolean; live?: string;
+  /** Desktop: sit in the header row beside the logo (no row of its own). */
+  inline?: boolean;
   /** True while the background reader has a read running — the header emblem spins for it. */
   onWorking?: (working: boolean) => void;
 }) {
@@ -173,7 +192,7 @@ export function ActivityLine({ busy, live, onWorking }: {
     line = {
       key: "idle",
       summary: data?.last_read_at
-        ? `All caught up · last read ${relTime(data.last_read_at)} ago${data.waiting ? ` · ${data.waiting} waiting` : ""}`
+        ? `All caught up · last read ${ago(data.last_read_at)}${data.waiting ? ` · ${data.waiting} waiting` : ""}`
         : "Nothing read yet",
       tone: "quiet", at: null,
     };
@@ -182,20 +201,18 @@ export function ActivityLine({ busy, live, onWorking }: {
   // The streamed reply already arrives a token at a time; everything else types in.
   const typed = useTyped(line.summary, line.key);
   const text = busy ? line.summary : typed;
-  const lineColour = line.tone === "warn" ? "#FFB547" : "rgba(255,255,255,.28)";
+  // The kind of work, for the dot: broken > answering > reading > just done.
+  const work: Work = line.tone === "warn" ? "warn" : busy ? "reply" : running ? "read"
+    : line.key !== "idle" && line.key !== "loading" && line.tone === "good" ? "done" : null;
 
   return (
-    <div className="relative px-2.5 pb-2 sc-glass" onPointerEnter={(e) => { if (e.pointerType === "mouse") setHover(true); }} onPointerLeave={() => setHover(false)}>
-      {/* From the emblem (centre 22px from the edge, bottom ~15px above this
-          row) down to the dot. */}
-      <span aria-hidden="true" className={working ? "sc-thread-live" : undefined}
-        style={{ position: "absolute", left: 21.25, top: -15, height: 30, width: 1.5, borderRadius: 1,
-                 background: working ? undefined : lineColour }} />
+    <div className={inline ? "relative flex-1 min-w-0" : "relative px-2.5 pb-2 sc-glass"}
+      onPointerEnter={(e) => { if (e.pointerType === "mouse") setHover(true); }} onPointerLeave={() => setHover(false)}>
       <button onClick={() => setOpen((o) => !o)} aria-expanded={open}
         aria-label={open ? "Hide Dusty's activity" : "Show Dusty's activity"}
         className="w-full flex items-center gap-2 text-left"
         style={{ height: 30, padding: "0 4px 0 8px", background: "transparent", border: "none", cursor: "pointer" }}>
-        <Dot tone={line.tone} live={working} />
+        <Dot key={`${work}-${line.key}`} tone={line.tone} live={working} work={work} />
         <span aria-live="polite"
           style={{ flex: 1, minWidth: 0, fontSize: F.sm, fontStyle: "italic",
                    color: line.tone === "warn" ? "#FFD08A" : "rgba(255,255,255,.86)", ...clip }}>
@@ -210,8 +227,10 @@ export function ActivityLine({ busy, live, onWorking }: {
       </button>
 
       {open && (
-        <div className="mt-1.5 rounded-lg overflow-y-auto sc-drop lg:max-w-[760px]"
-          style={{ maxHeight: "min(60vh, 420px)", background: "rgba(0,0,0,.32)", border: "1px solid rgba(255,255,255,.08)" }}>
+        <div className={inline ? "absolute left-0 rounded-lg overflow-y-auto sc-drop sc-glass" : "mt-1.5 rounded-lg overflow-y-auto sc-drop"}
+          style={inline
+            ? { top: "calc(100% + 8px)", width: 560, maxWidth: "calc(100vw - 120px)", maxHeight: "min(60vh, 460px)", background: "rgba(20,24,28,.94)", border: "1px solid rgba(255,255,255,.1)", boxShadow: "0 12px 32px rgba(0,0,0,.35)", zIndex: 60 }
+            : { maxHeight: "min(60vh, 420px)", background: "rgba(0,0,0,.32)", border: "1px solid rgba(255,255,255,.08)" }}>
           {data?.pinned && (
             <div className="px-3 py-2" style={{ borderBottom: "1px solid rgba(255,255,255,.08)" }}>
               <div style={{ fontSize: F.sm, color: "#FFD08A" }}>{data.pinned.summary}</div>

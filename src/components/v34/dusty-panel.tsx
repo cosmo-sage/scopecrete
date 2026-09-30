@@ -21,7 +21,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { T, F, disp, eyebrow, body, clip, relTime } from "@/lib/v34/tokens";
-import { Emblem } from "@/components/v34/primitives";
+import { DustyAvatar, type DustyState } from "@/components/v34/dusty-avatar";
 
 type Ref = { kind: "thread" | "scope" | "customer"; id: string } | { kind: "cash" } | { kind: "cold" };
 type Ctx = Ref | { kind: "activity"; since: string };
@@ -54,7 +54,7 @@ const sameRef = (c: Conv, r: Ref) => "id" in r ? c.context_kind === r.kind && c.
 
 export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
   open: boolean; onClose: () => void; onBusy: (b: boolean) => void;
-  /** Bumped by an emblem tap: start a catch-up on the latest activity. */
+  /** Bumped from outside to start a catch-up on the latest activity. */
   catchUp?: number;
   /** The reply as it streams, for the activity line. "" when idle. */
   onStream?: (text: string) => void;
@@ -74,6 +74,9 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
   const [loadingConv, setLoadingConv] = useState(false);
   const [listTick, setListTick] = useState(0);
   const [openedFor, setOpenedFor] = useState<string | null>(null);
+  // How the last answer ended — Dusty pours concrete on a good one, scratches his head on a failed one.
+  const [mood, setMood] = useState<"done" | "error" | null>(null);
+  const [catchUpLocal, setCatchUpLocal] = useState(0);
   const scroller = useRef<HTMLDivElement | null>(null);
   const abort = useRef<AbortController | null>(null);
 
@@ -131,9 +134,10 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
   // the effect body; openedFor is claimed so the list arriving afterwards
   // doesn't swap in an older chat under it.
   const caughtUp = useRef(0);
+  const catchUpN = catchUp + catchUpLocal;
   useEffect(() => {
-    if (!open || !catchUp || caughtUp.current === catchUp) return;
-    caughtUp.current = catchUp;
+    if (!open || !catchUpN || caughtUp.current === catchUpN) return;
+    caughtUp.current = catchUpN;
     const t = setTimeout(() => {
       let since = "";
       try { since = localStorage.getItem(CATCHUP_KEY) ?? ""; localStorage.setItem(CATCHUP_KEY, new Date().toISOString()); } catch { /* private mode */ }
@@ -143,14 +147,15 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
     }, 0);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, catchUp]);
+  }, [open, catchUpN]);
 
   async function ask(text: string, opts?: { fresh?: boolean; ctx?: Ctx }) {
     const q = text.trim();
     if (!q || (busy && !opts?.fresh)) return;
     const convId = opts?.fresh ? null : activeId;
     setItems((a) => [...a, { role: "user", content: q }, { role: "assistant", content: "" }]);
-    setDraft(""); setErr(null); setBusy(true);
+    setDraft(""); setErr(null); setBusy(true); setMood(null);
+    let failed = false;
     const ctrl = new AbortController();
     abort.current = ctrl;
     let said = "";
@@ -171,6 +176,7 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
       });
       if (!r.ok || !r.body) {
         const b = await r.json().catch(() => ({}));
+        failed = true;
         append(b?.code === "not_connected"
           ? "I'm not connected. In Vercel, set HERMES_URL and HERMES_API_KEY (Hermes's own key from Doctor), then redeploy."
           : String(b?.error ?? `I couldn't answer (HTTP ${r.status}).`));
@@ -186,9 +192,10 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
         append(dec.decode(value, { stream: true }));
       }
     } catch (e) {
-      if ((e as Error).name !== "AbortError") append("\n\n[The connection dropped.]");
+      if ((e as Error).name !== "AbortError") { failed = true; append("\n\n[The connection dropped.]"); }
     } finally {
       setBusy(false);
+      setMood(failed ? "error" : said.trim() ? "done" : null);
       onStream?.("");
       abort.current = null;
       setListTick((n) => n + 1);
@@ -264,6 +271,8 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
     </nav>
   );
 
+  const dustyState: DustyState = busy ? "calculating" : loadingConv ? "loading" : mood ?? "idle";
+
   return (
     // Phone: a full page under the header. Desktop (Coy, 2026-09-29: "slide in
     // on the right… so I can see the rest of the dashboard"): a column docked
@@ -286,13 +295,16 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
           <button onClick={() => setRailOpen(true)} aria-label="Conversations" className="flex-col gap-[3.5px]" style={iconBtn}>
             {[0, 1, 2].map((i) => <span key={i} style={{ width: 13, height: 1.5, background: T.ink2, borderRadius: 1 }} />)}
           </button>
-          <Emblem key={activeId ?? "new"} size={22} stroke={2.6} className={busy ? "sc-em-think" : "sc-em-tap"} />
+          <DustyAvatar state={dustyState} size={40} />
           <div className="flex-1 min-w-0">
             <div style={{ fontFamily: disp, fontSize: F.md, fontWeight: 600, lineHeight: 1.1, ...clip }}>{active ? active.title : "New chat"}</div>
             <div style={{ ...eyebrow, fontSize: 9, color: hot ? T.hiviz : T.ink3, ...clip }}>
               {lookingAt ? `Looking at ${lookingAt}` : "Cold — your jobs, costs and threads"}
             </div>
           </div>
+          <button onClick={() => setCatchUpLocal((n) => n + 1)} disabled={busy} title="What's new since I last looked?"
+            className="rounded px-2" style={{ height: 30, border: `1px solid ${T.hair}`, background: T.card, fontSize: F.xs, color: T.ink2, cursor: "pointer", whiteSpace: "nowrap" }}>
+            What&apos;s new?</button>
           <button onClick={() => select(null)} aria-label="New chat" style={{ ...iconBtn, fontSize: 18, color: T.ink2 }}>+</button>
           <button onClick={onClose} aria-label="Close Dusty" style={iconBtn}>
             <svg width="12" height="12" viewBox="0 0 13 13" aria-hidden="true"><path d="M1 1 L12 12 M12 1 L1 12" stroke={T.ink} strokeWidth="1.8" /></svg>
@@ -310,6 +322,7 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
             {loadingConv && <div className="rounded animate-pulse" style={{ height: 80, background: T.hairSoft }} />}
             {!loadingConv && items.length === 0 && (
               <div className="text-center py-6">
+                <div className="flex justify-center mb-2"><DustyAvatar state={dustyState} size={96} /></div>
                 <div style={{ fontFamily: disp, fontSize: F.xl, fontWeight: 600 }}>What are we working on?</div>
                 <p style={{ fontSize: F.sm, color: T.ink3, lineHeight: 1.5, maxWidth: 360, margin: "4px auto 14px" }}>
                   {ref.kind === "cold" ? "Dusty has your jobs, costs, threads and notes." : `Dusty can see ${GUESS[ref.kind]} and everything behind it.`}
@@ -327,7 +340,9 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
               <h2 key={i} style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 600, lineHeight: 1.25, margin: i === 0 ? "0 0 8px" : "22px 0 8px",
                 paddingTop: i === 0 ? 0 : 16, borderTop: i === 0 ? "none" : `1px solid ${T.hair}` }}>{it.content}</h2>
             ) : (
-              <div key={i}>
+              <div key={i} className="flex gap-2.5 items-start">
+                <DustyAvatar state={busy && i === items.length - 1 ? "calculating" : "idle"} size={32} still={!(busy && i === items.length - 1)} hidden />
+                <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: F.md, lineHeight: 1.6, whiteSpace: "pre-wrap", fontFamily: body, color: T.ink }}>
                   {it.content || <span style={{ color: T.ink3 }}>Reading…</span>}
                 </div>
@@ -336,6 +351,7 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
                     {copied === i ? "Copied" : "Copy"}
                   </button>
                 )}
+                </div>
               </div>
             ))}
             {err && <div style={{ fontSize: F.sm, color: T.red, marginTop: 8 }}>{err}</div>}

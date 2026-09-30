@@ -4,7 +4,7 @@ Ground truth for every agent working this repo. If code disagrees with this
 document, the code is wrong or this document is stale — resolve it, don't
 guess. Update this file in the same PR that changes the behavior it describes.
 
-Last updated: 2026-09-29
+Last updated: 2026-09-30
 
 ---
 
@@ -241,10 +241,12 @@ drift count is that outage, visible this time. Surface it in the UI.
 
 **Two kinds of drift row (2026-09-28).** `unprojected_raw_event` is the alarm —
 an event landed and never became a message; it alone is the drift *count*
-(`/api/dashboard/drift`), the desktop header counter and a banner on Threads.
+(`/api/dashboard/drift`), a banner on Threads, a red banner at the top of
+**Logs** and a red dot on the Logs icon (2026-09-30: out of the header —
+Coy).
 `open_defect` is a note on a message that DID arrive (e.g. Quo called a text
 from Coy's own Cell line "inbound"; the projection filed it outbound) — shown
-only on **More → Logs** (`/api/logs`), with Dusty's reads and same-person
+only on **Logs** (`/api/logs`), with Dusty's reads and same-person
 merges. Coy: drift belongs on a logs page, not in the inbox. The one open
 defect on 2026-09-28 is that Cell-line text; nothing is missing.
 
@@ -290,7 +292,7 @@ each message.** One person calling two of Coy's lines is one thread.
   1,505 messages; 39 involve none of the three lines and stay null.
 - `messages.provider` stays per message — where that event came from — and the
   dedupe index `(provider, provider_message_id)` still keys on it.
-- More → Phone lines edits label, provider and default source
+- Settings → Phone lines edits label, provider and default source
   (`/api/lines`). A thread shows the line on each message only when it spans
   more than one.
 - Seen in the data: (225) 529-9098 is a relay that texts "New call from:
@@ -997,19 +999,69 @@ expected start date per quoted job before it means anything. Add the field.
   customer / vendor page. The plain conversation header is three rows: name
   (wraps to two lines), the facts at full width, then Call · File as · Same
   as · Scope.
-- Cash flow is a footer TAB, not a slide-out drawer — a side drawer's
-  horizontal swipe fights the ribbon's horizontal swipe.
-- Settings opens from the header menu. Fixed costs live there AND open from
-  the runway cell on the dashboard. One editor, two doors. The Account sheet
-  starts under the whole header (`--sc-head`), never under the activity line.
-- The header's pipeline drop-down links to the Jobs board; the old
-  `/more/pipeline` page (unnamed contacts listed as leads) is deleted until a
-  home dashboard is designed.
+- Cash flow is a page (in the Toolbox by default), not a slide-out drawer —
+  a side drawer's horizontal swipe fights the ribbon's horizontal swipe.
+- Settings opens from the header ☰: **Phone lines**, **Markups & overhead**
+  (`/dashboard/costs` — markups, tax, waste, overhead, the floor; not the
+  Price book, which is what things cost), **Menus**, Sign out. Markups &
+  overhead also opens from the Cash page: one editor, two doors. The Settings
+  sheet starts under the whole header (`--sc-head`).
+- The header's pipeline drop-down links to the Jobs board.
+- **Navigation (2026-09-30, Coy).** Pages are listed once in
+  `src/lib/v34/pages.ts`: Dashboard · Threads · Jobs · Cash · Customers ·
+  Price book · Vendors · Documents · Logs. **Phone footer:** three pages Coy
+  picks (default Dashboard · Threads · Jobs) around **Dusty in the centre**,
+  and **Toolbox** last. The Toolbox is a drawer that rises just above the
+  footer (not a list over the page), its icons on the footer's own five
+  columns; a page opens between the header and the footer, so Dusty stays
+  one tap away. **Desktop rail:** every page, plus a Dusty item, in Coy's
+  order. **Settings → Menus** reorders the rail (and the Toolbox) and ticks
+  the three footer pages (`src/components/v34/toolbox.tsx`). The **More page
+  is gone** — `/dashboard/more` redirects to the Dashboard; Lines and Logs
+  keep their addresses.
+- **Preferences follow the account (migration 053).** `user_preferences`
+  (org, user, `prefs` jsonb < 64 KB), RLS org member AND `user_id =
+  auth.uid()`, anon revoked (rehearsed: another user's row refused, a
+  stranger sees none). `/api/prefs` GET, PATCH `{key, value}` for `menus`,
+  `home`, `pricebook_cols` only; `usePref()` (`src/lib/v34/prefs.ts`) mirrors
+  to the browser for the first paint and saves 600 ms after a change.
+- **The Dashboard (2026-09-30, Coy: "customizable and will evolve")** is where
+  the app lands (`/dashboard`, `src/components/v34/home.tsx`,
+  `/api/dashboard/home`). Tiles: **calls today** (inbound calls since
+  midnight Central), **new leads** (New lead stage; a job Dusty made counts
+  only once accepted), **jobs in progress** and **quoted** (count, and $ from
+  each job's budget through the engine — `src/lib/job-totals.ts`: the
+  accepted option, else the only one, else "from" the lowest; a job with no
+  budget is "no price yet", never $0), **work runway** (crew days of W.I.P.
+  work ÷ crew days a month), **cash this month** (payments − receipts) and
+  **profit this month** (less the monthly overhead; blank while overhead is
+  not entered, since it would overstate). A blank tile shows "—" and says
+  why. **Edit** shows, hides and orders tiles (saved to the account).
+- **Search (migration 054, 2026-09-30).** The header's 🔍 opens a panel
+  (~480px on a desktop, full width on a phone; `search-panel.tsx`,
+  `/api/search`) over **everything**: people and vendors (name, company,
+  email, address, service area, Dusty's status lines), messages (text, call
+  summary, transcript), call artifacts, Coy's notes, jobs and files (name,
+  note, Dusty's read, the document's text). Stored generated `search_tsv`
+  columns with GIN indexes; `sc_search(q, per_kind)` is SECURITY INVOKER
+  (RLS decides), execute for `authenticated` only; websearch syntax; 4+
+  digits also match phone numbers. Rehearsed: a stranger gets nothing.
+- **Documents (2026-09-30)** — `/dashboard/documents`
+  (`src/components/v34/documents.tsx`, `/api/documents`): every uploaded file,
+  newest first, searched through the same index, filtered by category (or
+  Unfiled), job, person and date; tap for the files viewer, with links to its
+  job and person. `?file=` opens one (search results link here). Proposals
+  join it when a proposal can be sent; texted photos stay on the person's
+  page.
 - Legend collapses to a chip.
 - **Desktop (lg+, 2026-09-27)** takes its LAYOUT from the Claude Design desktop
   screens and its LOOK from v34 (Barlow Condensed / IBM Plex, hi-viz orange) —
-  one design system, not two. The footer becomes a left rail; the header gains
-  inline search, the primary line, and the unnamed and drift counters. Threads
+  one design system, not two. The footer becomes a left rail. **The desktop
+  header (2026-09-30, Coy):** logo │ Dusty's activity line on the same row,
+  then 🔍 · pipeline · + · ☰ — no phone number, no "unnamed", no drift
+  counter (drift is on Logs). `--sc-head` is 54px on a desktop (the line
+  lives in the header) and 92px on a phone (the line is the row beneath).
+  Threads
   is list · conversation · contact rail. **No dead margins (2026-09-29):** the
   customer / vendor page fills its pane — conversation on the left at full
   height, Next steps · Jobs · About in a 340px column on the right (the
@@ -1018,10 +1070,22 @@ expected start date per quoted job before it means anything. Add the field.
   docked) it is the single column with tabs. The plain conversation's contact
   rail follows the same rule at 920px and carries Dusty's status line. The desktop design calls the list
   "Triage"; that word is not used — it is **Threads**, where every channel for
-  a contact merges into one conversation. A home dashboard is not designed yet.
-- Dusty has two entry points: COLD from the footer emblem (no job context,
-  opens a channels list) and HOT from a job (that job preloaded). The header
-  must make obvious which one you're in.
+  a contact merges into one conversation.
+- **Dusty is a pixel foreman (2026-09-30, `design/dusty/`, pixel v5).** The
+  old diamond emblem is gone everywhere — header, rail, landing page,
+  favicon. Dusty lives in two places only: the **centre of the phone footer**
+  (and the rail's Dusty item on a desktop) and the **chat**.
+  `src/components/v34/dusty-avatar.tsx`, served from `public/dusty/`, to the
+  pack's rules: `image-rendering: pixelated`; nothing animates at 16–24px;
+  `prefers-reduced-motion` makes every sprite static. States come from real
+  events only: **idle** (the 6 s loop at 32px+), **loading** (hard hat, a
+  chat loading), **calculating** (the mixer truck replaces him, 200 ms
+  crossfade, while a reply streams or the reader is reading), **done** (the
+  pour, then thumbs up 2 s) and **error** (head scratch). In the chat: 40px
+  in its header, 96px when empty, 32px still beside each answer. The
+  favicon is his 24px sprite.
+- Dusty has two entry points: COLD from the footer (no job context) and HOT
+  from a page (that page preloaded). The chat's header says which.
 - **Dusty v1 (2026-09-27)** is wired: `src/components/v34/dusty-panel.tsx`
   rises from the footer on a phone and slides in from the right on desktop.
   It is HOT on whatever screen is open — a thread, a scope, a customer, or
@@ -1039,16 +1103,15 @@ expected start date per quoted job before it means anything. Add the field.
   whole and usable. He stays HOT on the page that is open; a continued chat
   about something else offers "Ask about this page instead". History is behind
   ☰ in his header on every size. On a phone he is still the full page below.
-  **The emblem tap is a catch-up (2026-09-29).** Tapping the HEADER emblem
-  opens Dusty and asks "What's new since I last looked?" with context kind
+  **The catch-up (2026-09-29; since 2026-09-30 the chat's "What's new?"
+  button, the header emblem being gone)** asks "What's new since I last looked?" with context kind
   `activity` (migration 044): `activityContext()` reads, under RLS, who got in
   touch since this device's last catch-up (`localStorage`, clamped to 7 days,
   default 24 h) with Dusty's status lines, spam senders left out; the
   reader's runs; next steps due today or overdue (Central); and the unsorted
   count. Saved as "Catch-up · <date>". It does not make the background reader
   run early (that needs the worker token, which no browser request may reach).
-  The word mark beside the emblem still goes to Threads; the footer emblem
-  still just opens Dusty.
+  The logo goes to the Dashboard; the footer Dusty just opens the chat.
   **Full screen, and kept (migration 043, Coy 2026-09-28: "reference older
   conversations in a side project panel to select and continue").** Dusty is a
   page under the header, over the footer (v34 DustyScreen): header with
@@ -1085,12 +1148,14 @@ expected start date per quoted job before it means anything. Add the field.
   or a Dusty reply is streaming. Idle says when something last happened; it
   never invents something happening now. **No bubble (2026-09-28):** the
   words sit on the grey glass row and type in letter by letter; a streaming
-  Dusty reply shows its own tokens. A thin line drops from the header emblem
-  to the dot, and while Dusty works a light runs down it on the emblem's
-  1.4 s beat. **The emblem spins for the reader too (2026-09-29):** outer
-  diamond clockwise, inner square counter-clockwise (`sc-em-think`) while a
-  read is running (`onWorking` from the activity line), not only while the
-  page loads or a reply streams.
+  Dusty reply shows its own tokens. **The dot says what kind of work
+  (2026-09-30):** blue, slow glow — reading someone; amber, quick — Dusty
+  answering; green, one blink — just named or filed; red, steady — the
+  reader isn't working; grey — idle. Reduced motion stills it. On a desktop
+  the line sits in the header beside the logo and its drop-down is ~560px
+  wide under it; on a phone it is the row under the header. The emblem and
+  the line from it are gone; while a read runs the footer Dusty shows the
+  mixer.
 - **Chat bubbles are muted (2026-09-29, Coy: "easy on the eyes"):** theirs
   warm paper `#F7F6F2`, ours soft slate `#D8E1E8`, ink text on both
   (`DA.bubbleIn` / `DA.bubbleOut` in `conversation.tsx`). Hi-viz orange is
@@ -1104,7 +1169,7 @@ expected start date per quoted job before it means anything. Add the field.
   filtered All · Photos · Documents · From texts; tap for the viewer — name,
   what it is, area, note, Show on proposal, delete, and Dusty's read.
 - **Price book (2026-09-29)** — `src/components/v34/price-book.tsx`. On the
-  desktop rail after Customers, and under More on a phone; Cost settings
+  desktop rail after Customers, and in the Toolbox on a phone; Cost settings
   links to it (one editor), and a vendor's page keeps its Prices door.
   Find, **By group · By vendor** (remembered per device), Show retired.
   **Wide (≥900px measured): a spreadsheet** — Item · Vendor (or Group) ·
@@ -1115,6 +1180,9 @@ expected start date per quoted job before it means anything. Add the field.
   from where). **Import ▾** opens the import (`price-import.tsx`) as a wide
   sheet over everything: file → columns and vendors → preview → Import N;
   recent imports sit under the header with **Undo**.
+  **Columns (2026-09-30):** drag a header divider to size a column
+  (double-click resets it); **Columns ▾** shows or hides any but Item.
+  Saved to the account (`pricebook_cols`). The phone view is unchanged.
 - **Scope rail with no budget (step 3b).** No lines → **No price yet**:
   "a price comes only from cost cards on this job's budget", with a link to
   Assemblies and the crew-days box. With lines → each option's total, cost,
@@ -1131,7 +1199,7 @@ expected start date per quoted job before it means anything. Add the field.
   and shows groups folded until you search; lines say "from X" and
   "reinforcement".
 - **Vendors (migration 051, Coy 2026-09-29)** — its own page,
-  `/dashboard/vendors`, on the desktop rail after Price book and under More
+  `/dashboard/vendors`, on the desktop rail after Price book and in the Toolbox
   on a phone (`src/components/v34/vendors.tsx`). The list: find, All ·
   Suppliers · Subs · Equipment, each vendor's kind, where they deliver,
   phone, prices, how many items they are default on, newest price,

@@ -26,6 +26,7 @@ import { CardSheet, GroupSheet, call, numify, dateLabel, type Card, type Group, 
 import { ReceiptImport } from "@/components/v34/receipt-import";
 import { PriceImport } from "@/components/v34/price-import";
 import { Assemblies } from "@/components/v34/assemblies";
+import { usePref } from "@/lib/v34/prefs";
 
 type View = "group" | "vendor";
 interface Imp {
@@ -37,6 +38,18 @@ const VIEW_KEY = "sc:pricebook-view";
 /** One vendor's price on an item (migration 051), as the "By vendor" view needs it. */
 interface Src { id: string; cost_item_id: string; vendor_contact_id: string; unit_cost: number | null; vendor_sku: string | null; price_as_of: string | null; price_source: string | null }
 const SOURCE_SHORT: Record<string, string> = { quote: "quote", receipt: "receipt", invoice: "invoice", typed: "typed", import: "import" };
+
+/** The spreadsheet's columns (Coy, 2026-09-30: drag the dividers, and a Columns
+ * button to show or hide them). Widths and hidden columns are saved to his
+ * account (usePref "pricebook_cols", migration 053). Item always shows. */
+const COLS: Array<{ k: string; label: string; w: number; align?: "right" | "center" }> = [
+  { k: "item", label: "Item", w: 300 }, { k: "other", label: "Vendor", w: 170 }, { k: "sku", label: "Item #", w: 100 },
+  { k: "type", label: "Type", w: 100 }, { k: "unit", label: "Unit", w: 70 }, { k: "cost", label: "Unit cost", w: 110, align: "right" },
+  { k: "markup", label: "Markup", w: 100, align: "right" }, { k: "taxed", label: "Taxed", w: 64, align: "center" },
+  { k: "rule", label: "Counted on a job", w: 150 }, { k: "date", label: "Price date", w: 110 }, { k: "from", label: "From", w: 80 },
+];
+interface ColPrefs { w: Record<string, number>; hidden: string[] }
+const MIN_W = 48;
 
 export function PriceBook() {
   const [items, setItems] = useState<Card[] | null>(null);
@@ -57,6 +70,9 @@ export function PriceBook() {
   const [sources, setSources] = useState<Src[]>([]);
   const [menu, setMenu] = useState(false);
   const [measure, wide] = useWide<HTMLDivElement>(900);
+  const [colPrefs, setColPrefs] = usePref<ColPrefs>("pricebook_cols", { w: {}, hidden: [] });
+  const [liveW, setLiveW] = useState<Record<string, number> | null>(null);
+  const [colMenu, setColMenu] = useState(false);
   // "Now" as of the last load — for "old price" and recent imports — so render stays pure.
   const [now, setNow] = useState(0);
   const reload = () => setTick((n) => n + 1);
@@ -159,6 +175,25 @@ export function PriceBook() {
 
   const stale = (d: string | null) => !!d && now > 0 && now - new Date(`${d}T12:00:00`).getTime() > STALE_DAYS * 864e5;
   const active = (items ?? []).filter((c) => c.active);
+
+  // Spreadsheet columns: saved widths, a live width while a divider is dragged.
+  const cp: ColPrefs = { w: colPrefs?.w && typeof colPrefs.w === "object" ? colPrefs.w : {}, hidden: Array.isArray(colPrefs?.hidden) ? colPrefs.hidden : [] };
+  const hiddenCols = cp.hidden.filter((k) => k !== "item" && COLS.some((c) => c.k === k));
+  const shownCols = COLS.filter((c) => !hiddenCols.includes(c.k));
+  const widthOf = (k: string) => Math.max(MIN_W, liveW?.[k] ?? cp.w[k] ?? COLS.find((c) => c.k === k)?.w ?? 100);
+  const tableW = shownCols.reduce((a, c) => a + widthOf(c.k), 0);
+  const startResize = (e: React.PointerEvent, k: string) => {
+    e.preventDefault(); e.stopPropagation();
+    const x0 = e.clientX, w0 = widthOf(k);
+    let last = w0;
+    const move = (ev: PointerEvent) => { last = Math.max(MIN_W, Math.round(w0 + ev.clientX - x0)); setLiveW({ [k]: last }); };
+    const up = () => {
+      window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up);
+      setLiveW(null);
+      if (last !== w0) setColPrefs({ ...cp, w: { ...cp.w, [k]: last } });
+    };
+    window.addEventListener("pointermove", move); window.addEventListener("pointerup", up);
+  };
   const recentImports = imports.filter((i) => now - new Date(i.created_at).getTime() < 30 * 864e5);
   const btn = (primary: boolean): React.CSSProperties => ({ height: 32, padding: "0 10px", borderRadius: 4, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase",
     letterSpacing: ".06em", background: primary ? T.ink : T.card, color: primary ? "#fff" : T.ink, border: primary ? "none" : `1px solid ${T.hair}`, cursor: "pointer", whiteSpace: "nowrap" });
@@ -218,6 +253,28 @@ export function PriceBook() {
           <input type="checkbox" checked={retired} onChange={(e) => setRetired(e.target.checked)} style={{ width: 15, height: 15, accentColor: T.chalk }} />
           Show retired
         </label>
+        {wide && (
+          <div className="relative">
+            <button onClick={() => setColMenu((m) => !m)} aria-expanded={colMenu} className="rounded px-2.5"
+              style={{ height: 30, border: `1px solid ${T.hair}`, background: T.card, color: T.ink2, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", letterSpacing: ".05em", cursor: "pointer" }}>
+              Columns{hiddenCols.length ? ` · ${hiddenCols.length} hidden` : ""} ▾
+            </button>
+            {colMenu && (
+              <div className="absolute left-0 z-20 mt-1 rounded py-1" style={{ background: T.card, border: `1px solid ${T.hair}`, boxShadow: "0 8px 24px rgba(10,14,18,.14)", width: 220 }}>
+                {COLS.map((col) => (
+                  <label key={col.k} className="flex items-center gap-2 px-3 py-1" style={{ fontSize: F.sm, color: col.k === "item" ? T.ink3 : T.ink }}>
+                    <input type="checkbox" checked={!hiddenCols.includes(col.k)} disabled={col.k === "item"}
+                      onChange={() => setColPrefs({ ...cp, hidden: hiddenCols.includes(col.k) ? hiddenCols.filter((x) => x !== col.k) : [...hiddenCols, col.k] })}
+                      style={{ width: 15, height: 15, accentColor: T.chalk }} />
+                    {col.k === "other" ? (view === "group" ? "Vendor" : "Group") : col.label}
+                  </label>
+                ))}
+                <button onClick={() => { setColPrefs({ w: {}, hidden: [] }); setColMenu(false); }} className="w-full text-left px-3 py-1.5"
+                  style={{ ...eyebrow, color: T.chalk, borderTop: `1px solid ${T.hairSoft}`, marginTop: 4, cursor: "pointer" }}>Reset widths and columns</button>
+              </div>
+            )}
+          </div>
+        )}
         <span style={{ fontSize: F.xs, color: T.ink3 }}>{active.length} card{active.length === 1 ? "" : "s"} · {active.filter((c) => c.unit_cost === null).length} without a cost</span>
       </div>
 
@@ -252,11 +309,17 @@ export function PriceBook() {
       {/* ---- the book ---- */}
       {wide ? (
         <div className="mt-3 rounded overflow-x-auto" style={{ background: T.card, border: `1px solid ${T.hair}` }}>
-          <table className="w-full" style={{ borderCollapse: "collapse", fontSize: F.sm, ...nums }}>
+          <table style={{ borderCollapse: "collapse", fontSize: F.sm, tableLayout: "fixed", width: tableW, minWidth: "100%", ...nums }}>
+            <colgroup>{shownCols.map((col) => <col key={col.k} style={{ width: widthOf(col.k) }} />)}</colgroup>
             <thead>
               <tr style={{ background: T.slab }}>
-                {["Item", view === "group" ? "Vendor" : "Group", "Item #", "Type", "Unit", "Unit cost", "Markup", "Taxed", "Counted on a job", "Price date", "From"].map((h, i) => (
-                  <th key={h} style={{ ...eyebrow, textAlign: h === "Unit cost" || h === "Markup" ? "right" : h === "Taxed" ? "center" : "left", padding: "6px 8px", whiteSpace: "nowrap", borderBottom: `1px solid ${T.hair}`, width: i === 0 ? "26%" : undefined }}>{h}</th>
+                {shownCols.map((col) => (
+                  <th key={col.k} style={{ ...eyebrow, textAlign: col.align ?? "left", padding: "6px 8px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", borderBottom: `1px solid ${T.hair}`, position: "relative" }}>
+                    {col.k === "other" ? (view === "group" ? "Vendor" : "Group") : col.label}
+                    <span role="separator" aria-orientation="vertical" aria-label={`Resize ${col.label}`} title="Drag to resize · double-click to reset"
+                      onPointerDown={(e) => startResize(e, col.k)} onDoubleClick={() => { const w = { ...cp.w }; delete w[col.k]; setColPrefs({ ...cp, w }); }}
+                      className="sc-col-grip" style={{ position: "absolute", top: 0, right: -3, width: 7, height: "100%", cursor: "col-resize", zIndex: 1, touchAction: "none" }} />
+                  </th>
                 ))}
               </tr>
             </thead>
@@ -266,7 +329,7 @@ export function PriceBook() {
                 return (
                   <React.Fragment key={s.key}>
                     <tr style={{ background: T.ink, color: "#fff" }}>
-                      <td colSpan={11} style={{ padding: "5px 8px" }}>
+                      <td colSpan={shownCols.length} style={{ padding: "5px 8px" }}>
                         <span className="flex items-center gap-2">
                           <button onClick={() => setOpen((o) => ({ ...o, [s.key]: shut }))} aria-expanded={!shut} style={{ color: "#fff", cursor: "pointer", fontFamily: disp, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".04em" }}>
                             {shut ? "+" : "−"} {s.title}
@@ -279,43 +342,58 @@ export function PriceBook() {
                       </td>
                     </tr>
                     {!shut && s.cards.length === 0 && (
-                      <tr><td colSpan={11} style={{ padding: "6px 24px", fontSize: F.xs, color: T.ink3 }}>No cards in this group yet.</td></tr>
+                      <tr><td colSpan={shownCols.length} style={{ padding: "6px 24px", fontSize: F.xs, color: T.ink3 }}>No cards in this group yet.</td></tr>
                     )}
                     {!shut && s.cards.map((c) => {
                       const gaps = cardGaps(c);
                       const old = stale(c.price_as_of);
-                      return (
-                        <tr key={c.id} style={{ borderTop: `1px solid ${T.hairSoft}`, opacity: c.active ? 1 : 0.5 }}>
-                          <td style={{ padding: "4px 8px 4px 16px", maxWidth: 320 }}>
-                            <button onClick={() => setEditing(c)} className="text-left" style={{ cursor: "pointer", fontWeight: 500, color: T.ink, ...clip, display: "block", maxWidth: 300 }}>{c.name}</button>
+                      const cell: Record<string, React.ReactNode> = {
+                        item: (
+                          <td key="item" style={{ padding: "4px 8px 4px 16px", overflow: "hidden" }}>
+                            <button onClick={() => setEditing(c)} className="text-left" style={{ cursor: "pointer", fontWeight: 500, color: T.ink, ...clip, display: "block", maxWidth: "100%" }}>{c.name}</button>
                             {(gaps.length > 0 || !c.active) && (
-                              <div style={{ fontSize: 9.5, color: c.active ? T.hiviz : T.ink3 }}>{c.active ? `needs ${gaps.join(", ")}` : "retired"}</div>
+                              <div style={{ fontSize: 9.5, color: c.active ? T.hiviz : T.ink3, ...clip }}>{c.active ? `needs ${gaps.join(", ")}` : "retired"}</div>
                             )}
                           </td>
-                          <td style={{ padding: "4px 8px", color: T.ink2, maxWidth: 170, ...clip }}>
+                        ),
+                        other: (
+                          <td key="other" style={{ padding: "4px 8px", color: T.ink2, ...clip }}>
                             {view === "group"
                               ? <>{vendorLabel(c.vendor_contact_id) ?? "—"}{(c.vendors ?? 0) > (c.vendor_contact_id ? 1 : 0) && <span style={{ fontSize: 10, color: T.chalk }}> +{(c.vendors ?? 0) - (c.vendor_contact_id ? 1 : 0)}</span>}</>
                               : <>{c._star && <span title="Their price is the one budgets use" style={{ color: T.hiviz }}>★ </span>}{groupLabel(c.cost_group_id) ?? "—"}</>}
                           </td>
-                          <td style={{ padding: "4px 8px", color: T.ink3, maxWidth: 100, ...clip }}>{c.vendor_sku ?? ""}</td>
-                          <td style={{ padding: "4px 8px", color: T.ink2 }}>{COST_TYPE_LABEL[c.cost_type]}</td>
-                          <td style={{ padding: "4px 8px" }}>{c.unit}</td>
-                          <td style={{ padding: "2px 4px", textAlign: "right" }}>
+                        ),
+                        sku: <td key="sku" style={{ padding: "4px 8px", color: T.ink3, ...clip }}>{c.vendor_sku ?? ""}</td>,
+                        type: <td key="type" style={{ padding: "4px 8px", color: T.ink2, ...clip }}>{COST_TYPE_LABEL[c.cost_type]}</td>,
+                        unit: <td key="unit" style={{ padding: "4px 8px", ...clip }}>{c.unit}</td>,
+                        cost: (
+                          <td key="cost" style={{ padding: "2px 4px", textAlign: "right" }}>
                             <Cell value={c.unit_cost} money label={`Unit cost of ${c.name}`} warn={c.unit_cost === null}
                               onSave={(v) => void (c._src ? patchSource(c, v) : patch(c, { unit_cost: v, price_as_of: v === null ? null : new Date().toISOString().slice(0, 10), price_source: v === null ? null : "typed" }))} />
                           </td>
-                          <td style={{ padding: "2px 4px", textAlign: "right", whiteSpace: "nowrap" }}>
+                        ),
+                        markup: (
+                          <td key="markup" style={{ padding: "2px 4px", textAlign: "right", whiteSpace: "nowrap" }}>
                             <Cell value={c.markup_pct} label={`Markup on ${c.name}`} suffix="%" placeholder="default" onSave={(v) => void patch(c, { markup_pct: v })} />
                           </td>
-                          <td style={{ padding: "4px 8px", textAlign: "center" }}>
+                        ),
+                        taxed: (
+                          <td key="taxed" style={{ padding: "4px 8px", textAlign: "center" }}>
                             <input type="checkbox" checked={c.taxable} aria-label={`Tax on ${c.name}`} onChange={(e) => void patch(c, { taxable: e.target.checked })}
                               style={{ width: 16, height: 16, accentColor: T.chalk }} />
                           </td>
-                          <td style={{ padding: "4px 8px", color: T.ink2, fontSize: F.xs, whiteSpace: "nowrap" }}>{QTY_RULE_LABEL[c.qty_rule]}</td>
-                          <td style={{ padding: "4px 8px", whiteSpace: "nowrap", color: old ? T.ink3 : T.ink2 }} title={old ? `Over ${STALE_DAYS} days old` : undefined}>
+                        ),
+                        rule: <td key="rule" style={{ padding: "4px 8px", color: T.ink2, fontSize: F.xs, ...clip }}>{QTY_RULE_LABEL[c.qty_rule]}</td>,
+                        date: (
+                          <td key="date" style={{ padding: "4px 8px", color: old ? T.ink3 : T.ink2, ...clip }} title={old ? `Over ${STALE_DAYS} days old` : undefined}>
                             {dateLabel(c.price_as_of) ?? "—"}{old && <span style={{ fontSize: 9.5, color: T.hiviz }}> old</span>}
                           </td>
-                          <td style={{ padding: "4px 8px", color: T.ink3, fontSize: F.xs }}>{c.price_source ? SOURCE_SHORT[c.price_source] ?? c.price_source : ""}</td>
+                        ),
+                        from: <td key="from" style={{ padding: "4px 8px", color: T.ink3, fontSize: F.xs, ...clip }}>{c.price_source ? SOURCE_SHORT[c.price_source] ?? c.price_source : ""}</td>,
+                      };
+                      return (
+                        <tr key={c.id} style={{ borderTop: `1px solid ${T.hairSoft}`, opacity: c.active ? 1 : 0.5 }}>
+                          {shownCols.map((col) => cell[col.k])}
                         </tr>
                       );
                     })}

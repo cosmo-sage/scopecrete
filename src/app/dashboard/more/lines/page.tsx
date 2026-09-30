@@ -12,7 +12,6 @@
  */
 
 import React, { useEffect, useState } from "react";
-import Link from "next/link";
 import { T, F, disp, eyebrow, nums, formatPhone } from "@/lib/v34/tokens";
 import { EmptyState } from "@/components/v34/primitives";
 import { LEAD_SOURCES } from "@/lib/jobs/stages";
@@ -57,7 +56,6 @@ export default function LinesScreen() {
   return (
     <div style={{ color: T.ink }}>
       <div className="px-3 pt-3 pb-2" style={{ background: T.card, borderBottom: `1px solid ${T.hair}` }}>
-        <Link href="/dashboard/more" className="no-underline" style={{ ...eyebrow, color: T.ink2 }}>‹ More</Link>
         <div style={{ fontFamily: disp, fontSize: F.xl, fontWeight: 600, lineHeight: 1.05 }}>Phone lines</div>
         <div style={{ fontSize: F.xs, color: T.ink3, marginTop: 2 }}>
           Every number of yours, what runs it, and what a call to it means. One person calling two lines is still one thread.

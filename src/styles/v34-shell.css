@@ -2,6 +2,9 @@
    (activity-line.tsx always holds its row). Everything that sits under or
    beside the header measures from this — one number, not five. */
 :root { --sc-head: 92px; --sc-foot: 58px; --sc-dusty: 400px; }
+/* Desktop (Coy, 2026-09-30): the activity line moved up into the 54px header
+   beside the logo, so the header is one row. */
+@media (min-width: 1024px) { :root { --sc-head: 54px; } }
 
 /* The footer's height on a phone (layout.tsx, border-box, safe area inside it).
    A page that must not scroll as a whole — a conversation, a person — is
@@ -24,10 +27,8 @@
  * Animation names are kept byte-identical to v34 (scEmTurn, scTabPop, …) so a
  * future diff against the mockup is a real diff rather than a rename hunt.
  *
- * The emblem animations target .sc-em-diamond / .sc-em-square / .sc-em-core.
- * Those class names live on the shapes inside <Emblem> in
- * src/components/v34/primitives.tsx — the first port dropped them, which meant
- * every emblem state was inert. Do not remove them again.
+ * The diamond emblem and its dream / think / tap animations are gone
+ * (2026-09-30) — Dusty the pixel foreman replaced it (dusty-avatar.tsx).
  */
 
 /* ---------------------------------------------------------------- the glass */
@@ -101,55 +102,6 @@
 .sc-burger[data-status="open"] { background: transparent; border-color: transparent; }
 .sc-burger[data-status="open"] .sc-burger-bar::before,
 .sc-burger[data-status="open"] .sc-burger-bar::after { background: #12161a; }
-
-/* ------------------------------------------------------------- the emblem */
-
-.sc-em-diamond,
-.sc-em-square,
-.sc-em-core {
-  transform-box: fill-box;
-  transform-origin: center;
-}
-
-/* DREAMING — the core alone, slow and organic. No rotation: rotation means
-   real work, and the two must never read alike. This is the resting state. */
-@keyframes scDream {
-  0%, 100% { transform: scale(0.82); opacity: 0.55; }
-  50%      { transform: scale(1.1);  opacity: 1; }
-}
-.sc-em-dream .sc-em-core { animation: scDream 3.4s ease-in-out infinite; }
-
-/* WORKING — diamond and square counter-rotate, core pulses faster than it
-   breathes. Fires only while a real request is in flight. Stills when done. */
-.sc-em-think .sc-em-diamond { animation: scThinkTurn 1.4s linear infinite; }
-.sc-em-think .sc-em-square  { animation: scThinkBack 1.4s linear infinite; }
-.sc-em-think .sc-em-core    { animation: scThinkCore 1.1s cubic-bezier(0.42, 0, 0.32, 1) infinite; }
-@keyframes scThinkTurn { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-@keyframes scThinkBack { from { transform: rotate(0deg); } to { transform: rotate(-360deg); } }
-@keyframes scThinkCore {
-  0%   { transform: scale(0.72); opacity: 0.5; }
-  45%  { transform: scale(1.18); opacity: 1; }
-  100% { transform: scale(0.72); opacity: 0.5; }
-}
-
-/* TAPPED — the mark turns a quarter and lands on itself. Both shapes have
-   four-fold symmetry, so a 90° counter-rotation is a full return. */
-.sc-em-tap .sc-em-diamond { animation: scEmTurn     620ms cubic-bezier(0.22, 0.9, 0.24, 1); }
-.sc-em-tap .sc-em-square  { animation: scEmTurnBack 620ms cubic-bezier(0.22, 0.9, 0.24, 1); }
-.sc-em-tap .sc-em-core    { animation: scEmCore     620ms cubic-bezier(0.22, 0.9, 0.24, 1); }
-@keyframes scEmTurn     { from { transform: rotate(0deg); } to { transform: rotate(90deg); } }
-@keyframes scEmTurnBack { from { transform: rotate(0deg); } to { transform: rotate(-90deg); } }
-@keyframes scEmCore {
-  0%   { transform: scale(1); }
-  34%  { transform: scale(0.55); }
-  72%  { transform: scale(1.18); }
-  100% { transform: scale(1); }
-}
-
-/* v34 also defines .sc-em-breathe / .sc-em-asking for "Dusty has questions".
-   Deliberately not ported: nothing computes a real question count, and an
-   animation that says there is something waiting when there is not is a
-   fabricated status. It comes back when there is a number behind it. */
 
 /* ------------------------------------------------------------- the footer */
 
@@ -228,6 +180,22 @@
 @media (min-width: 1024px) {
   .sc-with-dusty { padding-right: var(--sc-dusty); }
 }
+/* The activity dot's colour and rhythm say what kind of work it is
+   (Coy, 2026-09-30): reading someone — slow blue breath; Dusty answering —
+   quick amber; just filed or named — one green blink; the reader broken —
+   steady red. Idle is still. */
+@keyframes scDotGlow { 0%, 100% { opacity: 1; box-shadow: 0 0 6px 1px currentColor; } 50% { opacity: .45; box-shadow: 0 0 0 0 currentColor; } }
+.sc-dot-read  { color: #6FA0FF; animation: scDotGlow 2.2s ease-in-out infinite; }
+.sc-dot-reply { color: #FFB547; animation: scDotGlow 0.8s ease-in-out infinite; }
+@keyframes scDotBlink { 0% { box-shadow: 0 0 0 0 currentColor; } 30% { box-shadow: 0 0 8px 2px currentColor; } 100% { box-shadow: 0 0 0 0 currentColor; } }
+.sc-dot-done  { color: #1FA971; animation: scDotBlink 1.2s ease-out 1; }
+.sc-dot-warn  { color: #FF6B57; box-shadow: 0 0 6px 1px #FF6B57; }
+/* Dusty's sprite changes crossfade (the pack's 200 ms). */
+@keyframes scDustyIn { from { opacity: 0; } to { opacity: 1; } }
+.sc-dusty { animation: scDustyIn 0.2s ease-out; }
+/* The Toolbox drawer: rises from just above the phone footer. */
+@keyframes scToolUp { from { transform: translateY(100%); opacity: 0; } to { transform: none; opacity: 1; } }
+.sc-tool-up { animation: scToolUp 0.2s cubic-bezier(0.22, 0.85, 0.3, 1); }
 .sc-caret { opacity: .6; animation: scDotPulse 0.9s ease-in-out infinite; margin-left: 1px; }
 
 @media (prefers-reduced-motion: reduce) {
@@ -237,13 +205,6 @@
   .sc-plus-bar,
   .sc-plus-bar::before { transition: none; }
   .sc-menu-item { animation: none; opacity: 1; transform: none; }
-  .sc-em-tap .sc-em-diamond,
-  .sc-em-tap .sc-em-square,
-  .sc-em-tap .sc-em-core,
-  .sc-em-think .sc-em-diamond,
-  .sc-em-think .sc-em-square,
-  .sc-em-think .sc-em-core,
-  .sc-em-dream .sc-em-core { animation: none; }
   .sc-tab-ico,
   .sc-tab-pop { transition: none; animation: none; }
   .sc-tab-mark { transition: none; }
@@ -254,5 +215,14 @@
   .sc-rail-in,
   .sc-dock-in,
   .sc-rec,
-  .sc-caret { animation: none; }
+  .sc-caret,
+  .sc-dot-read,
+  .sc-dot-reply,
+  .sc-dot-done,
+  .sc-dusty,
+  .sc-tool-up { animation: none; }
 }
+
+/* Price book: a column divider shows where it can be dragged. */
+.sc-col-grip::after { content: ""; position: absolute; top: 20%; bottom: 20%; left: 3px; width: 1px; background: #DCE0E5; }
+.sc-col-grip:hover::after, .sc-col-grip:active::after { background: #1B5FD9; width: 2px; left: 2px; top: 0; bottom: 0; }

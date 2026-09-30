@@ -28,8 +28,13 @@ const OUTCOME: Record<string, string> = {
 export default function LogsScreen() {
   const [logs, setLogs] = useState<Logs | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // undefined = not asked yet; null = couldn't read (shown as unknown).
+  const [drift, setDrift] = useState<number | null | undefined>(undefined);
   useEffect(() => {
     let off = false;
+    fetch("/api/dashboard/drift").then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (!off) setDrift(typeof d?.count === "number" ? d.count : null); })
+      .catch(() => { if (!off) setDrift(null); });
     fetch("/api/logs")
       .then(async (r) => { const b = await r.json().catch(() => ({})); if (!r.ok) throw new Error(b?.error || `HTTP ${r.status}`); return b; })
       .then((b) => { if (!off) setLogs(b as Logs); })
@@ -52,10 +57,21 @@ export default function LogsScreen() {
   return (
     <div style={{ paddingBottom: 24, maxWidth: 760 }} className="mx-auto">
       <div className="px-3 pt-3">
-        <Link href="/dashboard/more" style={{ ...eyebrow, color: T.chalk }}>‹ More</Link>
-        <h1 style={{ fontFamily: disp, fontSize: F.xl, fontWeight: 700, margin: "2px 0 0" }}>Logs</h1>
+        <h1 style={{ fontFamily: disp, fontSize: F.xl, fontWeight: 700, margin: 0 }}>Logs</h1>
         <div style={{ fontSize: F.xs, color: T.ink3 }}>What happened behind the scenes. Nothing here needs you unless it is red.</div>
       </div>
+
+      {/* The drift alarm (DECISIONS §2a) — out of the header since 2026-09-30,
+          so it is loud here: a red banner while anything is missing, and
+          "unknown" (never "clear") when the count can't be read. */}
+      {drift !== undefined && drift !== 0 && (
+        <div role="alert" className="mx-3 mt-3 rounded px-3 py-2"
+          style={{ background: drift === null ? T.hairSoft : T.red, color: drift === null ? T.ink : "#fff", fontSize: F.sm, lineHeight: 1.4 }}>
+          {drift === null
+            ? "Couldn't check whether every call and text reached the app. This is unknown, not clear."
+            : `${drift} ${drift === 1 ? "event" : "events"} reached your lines but never reached the app. Listed under Data checks below.`}
+        </div>
+      )}
 
       {section(`Data checks · ${alarms ? `${alarms} missing` : "nothing missing"}`,
         logs.checks.length === 0

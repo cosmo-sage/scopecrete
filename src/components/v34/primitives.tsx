@@ -12,24 +12,6 @@
 import React, { useEffect } from "react";
 import { T, F, disp, body, eyebrow, nums, clip, STATUS, StatusStyle } from "@/lib/v34/tokens";
 
-/* ------------------------------------------------------------------ Emblem */
-
-export const Emblem = ({ size = 22, stroke = 2.6, ring = T.hiviz, core = T.pulse, className = "" }: {
-  size?: number; stroke?: number; ring?: string; core?: string; className?: string;
-}) => (
-  <svg width={size} height={size} viewBox="0 0 100 100" className={className}
-       style={{ display: "block", overflow: "visible" }} aria-hidden="true">
-    {/* The three class names are load bearing: src/styles/v34-shell.css targets
-        them for the dream / think / tap states. The first port dropped them,
-        which left every emblem animation inert. */}
-    <polygon className="sc-em-diamond" points="50,3 97,50 50,97 3,50" fill="none" stroke={ring}
-             strokeWidth={stroke} strokeLinejoin="miter" />
-    <rect className="sc-em-square" x="29" y="29" width="42" height="42" fill="none"
-          stroke={ring} strokeWidth={stroke} />
-    <circle className="sc-em-core" cx="50" cy="50" r="12.5" fill={core} />
-  </svg>
-);
-
 /* ------------------------------------------------------------ Badge/Avatar */
 
 export const Badge = ({ s, map = STATUS }: { s: string; map?: Record<string, StatusStyle> }) => {
@@ -167,6 +149,30 @@ export const NavIcon = ({ k, on }: { k: string; on: boolean }) => {
     <svg {...box}>
       <path {...p} d="M4 2.6h9.6a1 1 0 0 1 1 1v12.8H5a1 1 0 0 1-1-1z" />
       <path {...p} d="M4 14.4a1 1 0 0 1 1-1h9.6M7 6h5M7 8.8h3.4" />
+    </svg>
+  );
+  if (k === "dashboard") return (
+    <svg {...box}>
+      <path {...p} d="M2.6 13.6a6.9 6.9 0 0 1 13.8 0" />
+      <path {...p} d="M9.5 13.6l3.3-4.2M2.6 16.2h13.8" />
+    </svg>
+  );
+  if (k === "toolbox") return (
+    <svg {...box}>
+      <rect {...p} x="2.2" y="7" width="14.6" height="8.6" rx="1" />
+      <path {...p} d="M6.8 7V4.6h5.4V7M2.2 10.6h14.6M8.2 10.6v1.6h2.6v-1.6" />
+    </svg>
+  );
+  if (k === "documents") return (
+    <svg {...box}>
+      <path {...p} d="M4.4 2.4h6.8l3.4 3.4v10.8H4.4z" />
+      <path {...p} d="M11 2.4v3.6h3.6M6.8 9.4h5.4M6.8 12.2h5.4" />
+    </svg>
+  );
+  if (k === "logs") return (
+    <svg {...box}>
+      <path {...p} d="M6.6 4.6h9.2M6.6 9.5h9.2M6.6 14.4h9.2" />
+      <circle cx="3.6" cy="4.6" r="1" fill={c} /><circle cx="3.6" cy="9.5" r="1" fill={c} /><circle cx="3.6" cy="14.4" r="1" fill={c} />
     </svg>
   );
   if (k === "vendors") return (

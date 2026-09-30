@@ -33,7 +33,7 @@ import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { T, F, disp, eyebrow, nums, clip } from "@/lib/v34/tokens";
 
-const HAIR = "1px solid rgba(255,255,255,.09)";
+const HAIR = `1px solid ${T.hairSoft}`;
 
 /** Shared chrome: a glass panel hanging off the bottom edge of the header. */
 function Drop({ onClose, children }: { onClose: () => void; children: React.ReactNode }) {
@@ -45,8 +45,8 @@ function Drop({ onClose, children }: { onClose: () => void; children: React.Reac
 
   return (
     <div className="fixed inset-0 z-[45]" onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} className="absolute sc-glass sc-drop"
-        style={{ top: "var(--sc-head)", left: 8, right: 8, borderRadius: "0 0 12px 12px", overflow: "hidden" }}>
+      <div onClick={(e) => e.stopPropagation()} className="absolute sc-activity-drop sc-drop"
+        style={{ top: "var(--sc-head)", left: 8, right: 8, borderRadius: "0 0 6px 6px", overflow: "hidden" }}>
         {children}
       </div>
     </div>
@@ -104,7 +104,7 @@ export function PipelineDrop({ onClose }: { onClose: () => void }) {
   return (
     <Drop onClose={onClose}>
       {err ? (
-        <div className="px-3 py-3" style={{ fontSize: F.sm, color: "rgba(255,255,255,.75)" }}>
+        <div className="px-3 py-3" style={{ fontSize: F.sm, color: T.ink2 }}>
           Couldn&apos;t read the pipeline — {err}
         </div>
       ) : (
@@ -112,14 +112,14 @@ export function PipelineDrop({ onClose }: { onClose: () => void }) {
           {cells.map((c, i) => (
             <div key={c.l} className="px-3 py-2.5"
               style={{ borderBottom: HAIR, borderRight: i % 2 === 0 ? HAIR : "none" }}>
-              <div style={{ ...eyebrow, color: "rgba(255,255,255,.55)" }}>{c.l}</div>
+              <div style={{ ...eyebrow, color: T.ink3 }}>{c.l}</div>
               <div style={{
                 fontFamily: disp, fontSize: F.xl, fontWeight: 600, lineHeight: 1.05,
-                color: c.v === null ? "rgba(255,255,255,.4)" : "#fff", ...nums,
+                color: c.v === null ? T.ink3 : T.ink, ...nums,
               }}>
                 {body === null && !err ? "·" : (c.v ?? "—")}
               </div>
-              <div style={{ fontSize: 10, color: "rgba(255,255,255,.42)", ...clip }}>{c.s}</div>
+              <div style={{ fontSize: 10, color: T.ink3, ...clip }}>{c.s}</div>
             </div>
           ))}
         </div>
@@ -128,7 +128,7 @@ export function PipelineDrop({ onClose }: { onClose: () => void }) {
           the Jobs board (Coy, 2026-09-28). Jobs until a home dashboard exists. */}
       <Link href="/dashboard/scope" onClick={onClose}
         className="w-full px-3 flex items-center justify-between no-underline"
-        style={{ height: 42, color: "#fff", fontFamily: disp, fontSize: F.md,
+        style={{ height: 42, color: T.ink, fontFamily: disp, fontSize: F.md,
                  letterSpacing: ".06em", textTransform: "uppercase" }}>
         <span>Jobs board</span>
         <span style={{ color: T.hiviz }}>›</span>
@@ -164,7 +164,7 @@ export function CreateDrop({ onClose }: { onClose: () => void }) {
     <Drop onClose={onClose}>
       {!anyLive && (
         <div className="px-3 pt-2.5 pb-1"
-          style={{ ...eyebrow, color: "rgba(255,255,255,.55)" }}>
+          style={{ ...eyebrow, color: T.ink3 }}>
           Nothing is creatable yet — each row says what it needs
         </div>
       )}
@@ -174,9 +174,9 @@ export function CreateDrop({ onClose }: { onClose: () => void }) {
             <span className="min-w-0">
               <span style={{
                 display: "block", fontFamily: disp, fontSize: F.md, fontWeight: 600,
-                color: r.href ? "#fff" : "rgba(255,255,255,.45)", ...clip,
+                color: r.href ? T.ink : T.ink3, ...clip,
               }}>{r.label}</span>
-              <span style={{ display: "block", fontSize: 10, color: "rgba(255,255,255,.45)", ...clip }}>
+              <span style={{ display: "block", fontSize: 10, color: T.ink3, ...clip }}>
                 {r.sub}
               </span>
             </span>

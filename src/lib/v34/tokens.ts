@@ -11,17 +11,45 @@
  * layout.
  */
 
+/**
+ * "Site Office" palette (Claude Design handoff, 2026-09-30 — design/palette-logo).
+ * Cream ground, warm ink, terracotta accent. Same keys as v34, plus new ones.
+ * One deviation from the handoff: it set `dark` to the light rail colour, but
+ * the job page's money strip and takeoff rail use `dark` with white text, so
+ * the nav rail gets its own key (`rail`) and `dark` stays dark, warmed.
+ */
 export const T = {
-  slab: "#E9EBEE", card: "#FFFFFF", ink: "#12161A", ink2: "#616B77", ink3: "#8A95A1",
-  hair: "#DCE0E5", hairSoft: "#F0F2F4",
-  chalk: "#1B5FD9", chalkDim: "#EAF0FC",
-  hiviz: "#F2610C", hivizDim: "#FFF1E7",
-  green: "#0F8A4F", greenDim: "#E6F5ED",
-  violet: "#6B4BD6", violetDim: "#F1EFFB",
-  red: "#C0341D", redDim: "#FBECE9",
-  dark: "#14181C", darkHair: "#262C33",
-  pulse: "#1FA971",
+  // ground + surfaces
+  slab: "#FBF6EC", card: "#FFFFFF", ink: "#2A2A2A", ink2: "#5E5A52", ink3: "#8C8578",
+  hair: "#E6DCC8", hairSoft: "#F1E9DA",
+  // roles
+  chalk: "#1E5AA8", chalkDim: "#DCE6F4",     // links, info, Vendor bucket
+  hiviz: "#B85A3C", hivizDim: "#F6E2D8",     // primary action, Unsorted bucket, badges (terracotta)
+  green: "#2F8A5B", greenDim: "#DDEEE3",     // Customer bucket, good
+  violet: "#6A55B0", violetDim: "#ECE8F6",   // Personal bucket
+  red: "#B5412C", redDim: "#F7DCD6",         // Spam bucket, drift alarm, bad
+  // dark panels (job money strip, takeoff rail) — white text on these
+  dark: "#2A2A2A", darkHair: "#3D3A34",
+  pulse: "#2F8A5B",
+  /* ---- new (handoff) ---- */
+  rail: "#F3ECDD", railInk: "#6E685D",       // the light nav rail
+  hivizSoft: "#D97757",   // checkbox rings, outlined "Ask Dusty", active rail edge
+  hivizText: "#9A4527",   // accent-coloured text on light grounds
+  hairStrong: "#D9CDB6",  // input + button outlines
+  sun: "#6B4E12", sunDim: "#F7EBC9",
+  dustyTint: "#FBEDE6",   // Dusty's cards, next-steps box
+  paper: "#FAF8F3", paperGrid: "rgba(89,128,166,.08)",
+  pencil: "#3A3E43", pencilMuted: "#5A5F66", pencilLine: "rgba(58,62,68,.30)",
+  logoOrange: "#D9550A",  // "crete" in the wordmark ONLY
 } as const;
+
+/** The "logo orange" alternate accent — swap these keys into T to pull the UI toward the wordmark's orange. */
+export const LOGO_ACCENT = {
+  hiviz: "#C24E0C", hivizDim: "#FBE3D3", hivizSoft: "#D9550A", hivizText: "#9A3F08", dustyTint: "#FDEEE4",
+} as const;
+
+/** Bucket colours — unchanged mapping, new values. */
+export const BUCKET = { unsorted: T.hiviz, customer: T.green, vendor: T.chalk, personal: T.violet, spam: T.red } as const;
 
 /* ---- money palette ----
    Softer than the UI tokens: teal for cash already in, indigo for
@@ -41,6 +69,12 @@ export const F = { xxl: 34, xl: 26, lg: 19, md: 15, sm: 13, xs: 11, micro: 9.5 }
 
 export const disp = "'Barlow Condensed', system-ui, sans-serif";
 export const body = "'IBM Plex Sans', system-ui, sans-serif";
+/** Names, numbers, counts, tile values (600/700). */
+export const strong = "'Lexend', system-ui, sans-serif";
+/** Panel titles (300). */
+export const light = "'Inter', system-ui, sans-serif";
+/** Dusty's voice — the activity line, his cards, chat titles. */
+export const hand = "'Kalam', cursive";
 
 export const eyebrow: React.CSSProperties = {
   fontFamily: disp, fontSize: F.micro, letterSpacing: ".14em",

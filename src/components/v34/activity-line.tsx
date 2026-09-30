@@ -67,11 +67,11 @@ const seenKey = (it: Item) => it.kind === "reminder" ? `${it.id}@${new Date().to
 const ON_LINE = (it: Item) => !["waiting", "agreement", "quiet"].includes(it.kind);
 
 const DOT: Record<Tone, string> = {
-  live: T.pulse, good: T.pulse, ask: "#6FA0FF", warn: "#FFB547", quiet: "rgba(255,255,255,.35)",
+  live: T.pulse, good: T.pulse, ask: "#3F74C9", warn: "#C98A12", quiet: "#B3AA9A",
 };
 
 type Work = "read" | "reply" | "done" | "warn" | null;
-const WORK_DOT: Record<Exclude<Work, null>, string> = { read: "#6FA0FF", reply: "#FFB547", done: "#1FA971", warn: "#FF6B57" };
+const WORK_DOT: Record<Exclude<Work, null>, string> = { read: "#3F74C9", reply: "#C98A12", done: "#2F8A5B", warn: "#B5412C" };
 
 /** "just now", "5m ago", or "on 3 Sep" — relTime alone reads "now ago". */
 function ago(iso: string | null | undefined): string {
@@ -206,46 +206,45 @@ export function ActivityLine({ busy, live, onWorking, inline }: {
     : line.key !== "idle" && line.key !== "loading" && line.tone === "good" ? "done" : null;
 
   return (
-    <div className={inline ? "relative flex-1 min-w-0" : "relative px-2.5 pb-2 sc-glass"}
+    <div className={inline ? "relative flex-1 min-w-0" : "relative px-2.5 pb-2 sc-paper"}
       onPointerEnter={(e) => { if (e.pointerType === "mouse") setHover(true); }} onPointerLeave={() => setHover(false)}>
       <button onClick={() => setOpen((o) => !o)} aria-expanded={open}
         aria-label={open ? "Hide Dusty's activity" : "Show Dusty's activity"}
         className="w-full flex items-center gap-2 text-left"
         style={{ height: 30, padding: "0 4px 0 8px", background: "transparent", border: "none", cursor: "pointer" }}>
         <Dot key={`${work}-${line.key}`} tone={line.tone} live={working} work={work} />
-        <span aria-live="polite"
-          style={{ flex: 1, minWidth: 0, fontSize: F.sm, fontStyle: "italic",
-                   color: line.tone === "warn" ? "#FFD08A" : "rgba(255,255,255,.86)", ...clip }}>
+        <span aria-live="polite" className="sc-activity-text"
+          style={{ flex: 1, minWidth: 0, color: line.tone === "warn" ? T.hivizText : undefined, ...clip }}>
           {text}
           {!busy && text.length < line.summary.length && <span className="sc-caret" aria-hidden="true">▍</span>}
         </span>
-        {line.at && <span style={{ fontSize: F.xs, color: "rgba(255,255,255,.45)", ...nums }}>{relTime(line.at)}</span>}
+        {line.at && <span className="sc-activity-time" style={nums}>{relTime(line.at)}</span>}
         <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"
           style={{ flex: "0 0 auto", transform: open ? "rotate(180deg)" : "none", transition: "transform .15s" }}>
-          <path d="M1.5 3.5 L5 7 L8.5 3.5" fill="none" stroke="rgba(255,255,255,.6)" strokeWidth="1.5" />
+          <path d="M1.5 3.5 L5 7 L8.5 3.5" fill="none" stroke="#5A5F66" strokeWidth="1.5" />
         </svg>
       </button>
 
       {open && (
-        <div className={inline ? "absolute left-0 rounded-lg overflow-y-auto sc-drop sc-glass" : "mt-1.5 rounded-lg overflow-y-auto sc-drop"}
+        <div className={inline ? "absolute left-0 overflow-y-auto sc-drop sc-activity-drop" : "mt-1.5 overflow-y-auto sc-drop sc-activity-drop"}
           style={inline
-            ? { top: "calc(100% + 8px)", width: 560, maxWidth: "calc(100vw - 120px)", maxHeight: "min(60vh, 460px)", background: "rgba(20,24,28,.94)", border: "1px solid rgba(255,255,255,.1)", boxShadow: "0 12px 32px rgba(0,0,0,.35)", zIndex: 60 }
-            : { maxHeight: "min(60vh, 420px)", background: "rgba(0,0,0,.32)", border: "1px solid rgba(255,255,255,.08)" }}>
+            ? { top: "calc(100% + 8px)", width: 560, maxWidth: "calc(100vw - 120px)", maxHeight: "min(60vh, 460px)", zIndex: 60 }
+            : { maxHeight: "min(60vh, 420px)" }}>
           {data?.pinned && (
-            <div className="px-3 py-2" style={{ borderBottom: "1px solid rgba(255,255,255,.08)" }}>
-              <div style={{ fontSize: F.sm, color: "#FFD08A" }}>{data.pinned.summary}</div>
-              {data.pinned.detail && <div style={{ fontSize: F.xs, color: "rgba(255,255,255,.6)", marginTop: 2 }}>{data.pinned.detail}</div>}
+            <div className="px-3 py-2" style={{ borderBottom: `1px solid ${T.hairSoft}` }}>
+              <div style={{ fontSize: F.sm, color: T.hivizText }}>{data.pinned.summary}</div>
+              {data.pinned.detail && <div style={{ fontSize: F.xs, color: T.ink2, marginTop: 2 }}>{data.pinned.detail}</div>}
             </div>
           )}
           {(data?.items ?? []).map((it) => {
             const body = (
-              <div className="px-3 py-2 flex gap-2.5 items-start" style={{ borderBottom: "1px solid rgba(255,255,255,.06)" }}>
+              <div className="px-3 py-2 flex gap-2.5 items-start" style={{ borderBottom: `1px solid ${T.hairSoft}` }}>
                 <span style={{ paddingTop: 5 }}><Dot tone={it.tone} live={it.kind === "running"} /></span>
                 <span style={{ flex: 1, minWidth: 0 }}>
-                  <span style={{ display: "block", fontSize: F.sm, color: "rgba(255,255,255,.9)", lineHeight: 1.35 }}>{it.summary}</span>
-                  {it.detail && <span style={{ display: "block", fontSize: F.xs, color: "rgba(255,255,255,.55)", lineHeight: 1.4, marginTop: 2 }}>{it.detail}</span>}
+                  <span style={{ display: "block", fontSize: F.sm, color: T.ink, lineHeight: 1.35 }}>{it.summary}</span>
+                  {it.detail && <span style={{ display: "block", fontSize: F.xs, color: T.ink2, lineHeight: 1.4, marginTop: 2 }}>{it.detail}</span>}
                 </span>
-                {it.kind !== "waiting" && it.kind !== "agreement" && it.kind !== "reminder" && <span style={{ fontSize: F.xs, color: "rgba(255,255,255,.45)", ...nums }}>{relTime(it.at)}</span>}
+                {it.kind !== "waiting" && it.kind !== "agreement" && it.kind !== "reminder" && <span style={{ fontSize: F.xs, color: T.ink3, ...nums }}>{relTime(it.at)}</span>}
               </div>
             );
             return it.contact_id
@@ -253,9 +252,9 @@ export function ActivityLine({ busy, live, onWorking, inline }: {
               : <div key={it.id}>{body}</div>;
           })}
           {!data?.items.length && !data?.pinned && (
-            <div className="px-3 py-2" style={{ fontSize: F.sm, color: "rgba(255,255,255,.6)" }}>Nothing read in the last week.</div>
+            <div className="px-3 py-2" style={{ fontSize: F.sm, color: T.ink2 }}>Nothing read in the last week.</div>
           )}
-          <div className="px-3 py-2" style={{ ...eyebrow, fontSize: F.micro, color: "rgba(255,255,255,.4)" }}>
+          <div className="px-3 py-2" style={{ ...eyebrow, fontSize: F.micro, color: T.ink3 }}>
             Dusty reads new threads every minute, app open or not
           </div>
         </div>

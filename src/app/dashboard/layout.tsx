@@ -32,6 +32,7 @@ import { DustyPanel } from "@/components/v34/dusty-panel";
 import { DustyAvatar } from "@/components/v34/dusty-avatar";
 import { ActivityLine } from "@/components/v34/activity-line";
 import { SearchPanel } from "@/components/v34/search-panel";
+import { Wordmark } from "@/components/v34/wordmark";
 import { Toolbox, MenuEditor } from "@/components/v34/toolbox";
 import { PAGE, DEFAULT_MENUS, cleanMenus, activePage, type Menus } from "@/lib/v34/pages";
 import { usePref } from "@/lib/v34/prefs";
@@ -128,17 +129,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <div className="flex flex-col min-h-screen" style={{ background: T.slab, color: T.ink }}>
       <div style={{ position: "sticky", top: 0, zIndex: menuOpen ? 60 : 40 }}>
-        <header className="px-2.5 lg:px-4 flex items-center gap-3 sc-glass" style={{ height: 54 }}>
+        <header className="px-2.5 lg:px-4 flex items-center gap-3 sc-paper" style={{ height: 54 }}>
           <Link href="/dashboard" className="no-underline shrink-0" aria-label="Dashboard">
-            <span style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 700, color: "#fff", letterSpacing: ".08em", textTransform: "lowercase" }}>
-              scopecrete<span style={{ color: T.hiviz }}>.ai</span>
-            </span>
+            <Wordmark size={desktop ? 26 : 22} />
           </Link>
 
           {/* Desktop: the activity line in the header row, after a divider. */}
           {desktop ? (
             <>
-              <span aria-hidden="true" style={{ width: 1, height: 22, background: "rgba(255,255,255,.28)" }} />
+              <span aria-hidden="true" className="sc-paper-divider" />
               <div className="flex-1 min-w-0 flex" style={{ maxWidth: 720 }}>
                 <ActivityLine inline busy={dustyBusy} live={dustyLive} onWorking={setReaderWorking} />
               </div>
@@ -149,32 +148,32 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <div className="flex items-center gap-1.5 shrink-0 relative">
             <button onClick={() => { const o = !searchOpen; closeDrops(); setSearchOpen(o); }}
               aria-label="Search" aria-expanded={searchOpen}
-              className="rounded-lg flex items-center justify-center sc-glass-btn"
-              style={{ ...glassBtn, background: searchOpen ? "rgba(255,255,255,.22)" : undefined }}>
+              className="flex items-center justify-center sc-paper-btn"
+              style={glassBtn}>
               <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true">
-                <circle cx="6.4" cy="6.4" r="4.5" fill="none" stroke="#fff" strokeWidth="1.6" />
-                <path d="M9.8 9.8 L13.4 13.4" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" />
+                <circle cx="6.4" cy="6.4" r="4.5" fill="none" stroke="#3A3E43" strokeWidth="1.6" />
+                <path d="M9.8 9.8 L13.4 13.4" stroke="#3A3E43" strokeWidth="1.6" strokeLinecap="round" />
               </svg>
             </button>
 
             {/* pipeline — ascending bars, like signal strength */}
             <button onClick={() => { const o = !pipeOpen; closeDrops(); setPipeOpen(o); }}
               aria-label="Pipeline" aria-expanded={pipeOpen}
-              className="rounded-lg flex items-end justify-center gap-[2.5px] sc-glass-btn"
-              style={{ ...glassBtn, paddingBottom: 9, background: pipeOpen ? "rgba(255,255,255,.22)" : undefined }}>
+              className="flex items-end justify-center gap-[2.5px] sc-paper-btn"
+              style={{ ...glassBtn, paddingBottom: 9 }}>
               {[5, 8, 11, 14].map((h, i) => (
-                <span key={i} style={{ width: 3, height: h, borderRadius: 0.5, background: i === 3 ? T.hiviz : "#fff" }} />
+                <span key={i} style={{ width: 3, height: h, borderRadius: 0.5, background: i === 3 ? T.logoOrange : "#3A3E43" }} />
               ))}
             </button>
 
             <button onClick={() => { const o = !createOpen; closeDrops(); setCreateOpen(o); }}
               aria-label={createOpen ? "Close" : "Create"} aria-expanded={createOpen}
-              className="sc-plus sc-glass-btn rounded-lg flex items-center justify-center"
+              className="sc-plus sc-paper-btn flex items-center justify-center"
               data-status={createOpen ? "open" : "closed"} style={{ ...glassBtn, position: "relative" }}>
               <span className="sc-plus-bar" aria-hidden="true" />
             </button>
 
-            <button onClick={() => setMenuOpen((o) => !o)} className="sc-burger sc-glass-btn rounded-lg"
+            <button onClick={() => setMenuOpen((o) => !o)} className="sc-burger sc-paper-btn"
               data-status={menuOpen ? "open" : "closed"} aria-expanded={menuOpen} aria-label={menuOpen ? "Close settings" : "Settings"}
               style={{ ...glassBtn, position: "relative" }}>
               <span className="sc-burger-bar" aria-hidden="true" />
@@ -192,16 +191,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {createOpen && <CreateDrop onClose={() => setCreateOpen(false)} />}
 
       {/* ---- desktop left rail: every page, in Coy's order ---- */}
-      <nav aria-label="Main" className="hidden lg:flex fixed left-0 bottom-0 z-30 flex-col items-stretch overflow-y-auto"
-        style={{ top: "var(--sc-head)", width: 84, background: T.dark }}>
+      <nav aria-label="Main" className="hidden lg:flex fixed left-0 bottom-0 z-30 flex-col items-stretch overflow-y-auto sc-rail"
+        style={{ top: "var(--sc-head)", width: 84 }}>
         {menus.rail.map((k) => {
           if (k === "dusty") {
             return (
               <button key={k} onClick={() => setDustyOpen((o) => !o)} aria-label="Dusty" aria-pressed={dustyOpen}
                 className="flex flex-col items-center justify-center gap-1 shrink-0"
-                style={{ height: 60, borderLeft: `3px solid ${dustyOpen ? T.hiviz : "transparent"}`, background: dustyOpen ? "rgba(255,255,255,.07)" : "transparent", cursor: "pointer" }}>
+                style={{ height: 60, borderLeft: "3px solid transparent", background: "transparent", cursor: "pointer" }}>
                 <DustyAvatar state={working ? "calculating" : "idle"} size={24} hidden />
-                <span style={{ ...eyebrow, fontSize: 9.5, color: dustyOpen ? "#fff" : "rgba(255,255,255,.55)" }}>Dusty</span>
+                <span className="sc-rail-label">Dusty</span>
               </button>
             );
           }
@@ -211,12 +210,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           return (
             <Link key={k} href={p.href} aria-current={on ? "page" : undefined}
               className="flex flex-col items-center justify-center gap-1 no-underline shrink-0"
-              style={{ height: 60, borderLeft: `3px solid ${on ? T.hiviz : "transparent"}`,
-                       background: on ? "rgba(255,255,255,.07)" : "transparent", position: "relative" }}>
-              <span style={{ filter: "invert(1)", opacity: on ? 1 : 0.62, display: "flex" }}><NavIcon k={k} on={true} /></span>
-              <span style={{ ...eyebrow, fontSize: 9.5, color: on ? "#fff" : "rgba(255,255,255,.55)", textAlign: "center", lineHeight: 1.1 }}>{p.label}</span>
+              style={{ height: 60, borderLeft: "3px solid transparent", position: "relative" }}>
+              <span style={{ opacity: on ? 1 : 0.7, display: "flex" }}><NavIcon k={k} on={on} /></span>
+              <span className="sc-rail-label">{p.label}</span>
               {k === "threads" && needs !== null && needs > 0 && <Badge n={needs} style={{ top: 8, right: 16 }} />}
-              {k === "logs" && badge.logs && <span className="absolute rounded-full" style={{ top: 12, right: 24, width: 8, height: 8, background: "#FF6B57" }} />}
+              {k === "logs" && badge.logs && <span className="absolute rounded-full" style={{ top: 12, right: 24, width: 8, height: 8, background: T.red }} />}
             </Link>
           );
         })}

@@ -1,3 +1,9 @@
+/* Fonts for the Site Office palette (design/palette-logo): Lexend (names,
+   numbers), Inter 300 (panel titles), Kalam (Dusty's voice), Barlow
+   Condensed (labels) and IBM Plex Sans (body). Before this the dashboard
+   named Barlow and Plex but never loaded them. */
+@import url("https://fonts.googleapis.com/css2?family=Lexend:wght@600;700&family=Inter:wght@300&family=Kalam:wght@400;700&family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap");
+
 /* The sticky header's height: 54px glass bar + 38px activity line
    (activity-line.tsx always holds its row). Everything that sits under or
    beside the header measures from this — one number, not five. */
@@ -185,11 +191,11 @@
    quick amber; just filed or named — one green blink; the reader broken —
    steady red. Idle is still. */
 @keyframes scDotGlow { 0%, 100% { opacity: 1; box-shadow: 0 0 6px 1px currentColor; } 50% { opacity: .45; box-shadow: 0 0 0 0 currentColor; } }
-.sc-dot-read  { color: #6FA0FF; animation: scDotGlow 2.2s ease-in-out infinite; }
-.sc-dot-reply { color: #FFB547; animation: scDotGlow 0.8s ease-in-out infinite; }
+.sc-dot-read  { color: #3F74C9; animation: scDotGlow 2.2s ease-in-out infinite; }
+.sc-dot-reply { color: #C98A12; animation: scDotGlow 0.8s ease-in-out infinite; }
 @keyframes scDotBlink { 0% { box-shadow: 0 0 0 0 currentColor; } 30% { box-shadow: 0 0 8px 2px currentColor; } 100% { box-shadow: 0 0 0 0 currentColor; } }
-.sc-dot-done  { color: #1FA971; animation: scDotBlink 1.2s ease-out 1; }
-.sc-dot-warn  { color: #FF6B57; box-shadow: 0 0 6px 1px #FF6B57; }
+.sc-dot-done  { color: #2F8A5B; animation: scDotBlink 1.2s ease-out 1; }
+.sc-dot-warn  { color: #B5412C; box-shadow: 0 0 0 3px rgba(181,65,44,.18); }
 /* Dusty's sprite changes crossfade (the pack's 200 ms). */
 @keyframes scDustyIn { from { opacity: 0; } to { opacity: 1; } }
 .sc-dusty { animation: scDustyIn 0.2s ease-out; }
@@ -226,3 +232,62 @@
 /* Price book: a column divider shows where it can be dragged. */
 .sc-col-grip::after { content: ""; position: absolute; top: 20%; bottom: 20%; left: 3px; width: 1px; background: #DCE0E5; }
 .sc-col-grip:hover::after, .sc-col-grip:active::after { background: #1B5FD9; width: 2px; left: 2px; top: 0; bottom: 0; }
+
+/* ------------------------------------------------ Site Office (2026-09-30)
+   Claude Design handoff, design/palette-logo: the palette as variables, the
+   draft-paper header, pencil-outlined buttons, the activity line on paper and
+   the light rail. */
+:root {
+  --sc-slab: #FBF6EC; --sc-card: #FFFFFF;
+  --sc-ink: #2A2A2A; --sc-ink2: #5E5A52; --sc-ink3: #8C8578;
+  --sc-hair: #E6DCC8; --sc-hair-soft: #F1E9DA; --sc-hair-strong: #D9CDB6;
+  --sc-accent: #B85A3C; --sc-accent-dim: #F6E2D8; --sc-accent-soft: #D97757; --sc-accent-text: #9A4527;
+  --sc-rail: #F3ECDD; --sc-rail-ink: #6E685D;
+  --sc-paper: #FAF8F3; --sc-pencil: #3A3E43; --sc-pencil-muted: #5A5F66; --sc-pencil-line: rgba(58,62,68,.30);
+  --sc-logo-orange: #D9550A;
+}
+
+.sc-paper {
+  background-color: #FAF8F3;
+  background-image:
+    linear-gradient(rgba(89,128,166,.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(89,128,166,.08) 1px, transparent 1px);
+  background-size: 10px 10px;
+  border-bottom: 1px solid rgba(58,62,68,.28);
+  box-shadow: 0 3px 0 -2px rgba(58,62,68,.14); /* doubled pencil rule */
+  color: #3A3E43;
+}
+.sc-paper-divider { width: 1px; height: 22px; background: rgba(58,62,68,.28); flex: none; }
+
+/* Activity line on paper: Kalam, graphite; time in Barlow Condensed. */
+.sc-activity-text { font-family: 'Kalam', cursive; font-size: 15.5px; font-style: normal; color: #3F4348; }
+.sc-activity-time { font-family: 'Barlow Condensed', sans-serif; font-weight: 500; font-size: 12px; letter-spacing: .08em; color: #7A7367; }
+.sc-paper .sc-dot-read  { background: #3F74C9 !important; }
+.sc-paper .sc-dot-reply { background: #C98A12 !important; }
+.sc-paper .sc-dot-done  { background: #2F8A5B !important; }
+.sc-paper .sc-dot-warn  { background: #B5412C !important; }
+
+/* Search · pipeline · + · settings — pencil-outlined squares */
+.sc-paper-btn {
+  border-radius: 3px;
+  border: 1px solid rgba(58,62,68,.30); background: rgba(255,255,255,.55);
+  transition: background .15s;
+}
+.sc-paper-btn:hover { background: rgba(255,255,255,.9); }
+.sc-paper-btn:active, .sc-paper-btn[aria-expanded="true"] { background: #F6E2D8; border-color: #D97757; }
+.sc-paper-btn:focus-visible { outline: 2px solid #B85A3C; outline-offset: 2px; }
+.sc-paper .sc-plus-bar, .sc-paper .sc-plus-bar::before,
+.sc-paper .sc-burger-bar, .sc-paper .sc-burger-bar::before, .sc-paper .sc-burger-bar::after { background: #3A3E43; }
+.sc-paper .sc-burger[data-status="open"] .sc-burger-bar { background: transparent; }
+
+/* Drop-downs under the paper header: a white card, not dark glass. */
+.sc-activity-drop {
+  background: #FFFFFF; border: 1px solid #E6DCC8; border-radius: 6px;
+  box-shadow: 0 12px 32px rgba(42,32,20,.16); color: #2A2A2A;
+}
+
+/* The light rail (was T.dark + invert). */
+.sc-rail { background: #F3ECDD; border-right: 1px solid #E6DCC8; }
+.sc-rail a[aria-current="page"], .sc-rail button[aria-pressed="true"] { background: #FFFFFF; border-left-color: #D97757 !important; color: #2A2A2A; }
+.sc-rail-label { font-family: 'Barlow Condensed', sans-serif; font-weight: 500; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: #6E685D; text-align: center; line-height: 1.1; }
+.sc-rail [aria-current="page"] .sc-rail-label, .sc-rail [aria-pressed="true"] .sc-rail-label { color: #2A2A2A; }

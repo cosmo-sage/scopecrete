@@ -1071,6 +1071,26 @@ expected start date per quoted job before it means anything. Add the field.
   rail follows the same rule at 920px and carries Dusty's status line. The desktop design calls the list
   "Triage"; that word is not used — it is **Threads**, where every channel for
   a contact merges into one conversation.
+- **Site Office palette and wordmark (2026-09-30, Claude Design handoff,
+  `design/palette-logo/`) — on `claude/feedback` for Coy's review.** Cream
+  ground `#FBF6EC`, warm ink, terracotta accent `#B85A3C` (soft `#D97757`,
+  text `#9A4527`); buckets Customer `#2F8A5B` · Vendor `#1E5AA8` · Personal
+  `#6A55B0` · Spam `#B5412C` · Unsorted = accent. All of it is `T` in
+  `src/lib/v34/tokens.ts` (same keys, so every screen follows), plus
+  `LOGO_ACCENT` (the orange alternative), `BUCKET` and the font stacks
+  `strong` (Lexend), `light` (Inter 300), `hand` (Kalam — Dusty's voice).
+  **Header** is draft paper (`.sc-paper`, pencil-outlined `.sc-paper-btn`)
+  with the **wordmark** (`src/components/v34/wordmark.tsx`: hatched "scope",
+  thin orange "crete", Kalam ".ai"); the activity line is Kalam on paper and
+  its drop-down, like the pipeline and create drop-downs, is a white card.
+  The **rail is light** (`T.rail` `#F3ECDD`, no icon invert, active = white
+  with a `#D97757` edge). One deviation from the handoff: it put the rail
+  colour in `T.dark`, but the job page's money strip and takeoff rail use
+  `T.dark` with white text — so the rail has its own key and `dark` stays
+  dark (warm `#2A2A2A`). Fonts load from Google Fonts in `v34-shell.css`
+  (before this, Barlow and Plex were named but never loaded on the
+  dashboard). Type roles beyond the header and activity line (Lexend names
+  and numbers, Inter panel titles) wait for Coy's feedback.
 - **Dusty is a pixel foreman (2026-09-30, `design/dusty/`, pixel v5).** The
   old diamond emblem is gone everywhere — header, rail, landing page,
   favicon. Dusty lives in two places only: the **centre of the phone footer**

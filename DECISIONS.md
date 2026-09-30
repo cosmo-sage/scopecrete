@@ -1295,6 +1295,27 @@ Default mode is still branches and PRs; a merge is an exception each time,
 not a standing grant carried over from a prior approval. Parallel work uses
 separate git worktrees so two agents cannot touch the same files.
 
+**Checks every change passes (2026-09-30, Coy).** Three layers, the same
+checks in each:
+
+- **CI** — `.github/workflows/ci.yml` on every pull request and every push to
+  `master`: `npm ci`, typecheck (`tsc --noEmit`), `npm run lint`, `npm test`,
+  `npm run build` (placeholder Supabase values; no secret). To make it a gate
+  Coy turns on branch protection for `master` (require a PR, require the
+  "typecheck · lint · test · build" check, block direct pushes) — a GitHub
+  setting no agent can change.
+- **Agents** — a Claude Code `Stop` hook (`.claude/settings.json` →
+  `.claude/hooks/verify.sh`) runs typecheck, lint on the changed files and the
+  tests whenever an agent has changed code (uncommitted, untracked or
+  unpushed) and will not let it stop while they fail; after one retry it lets
+  it stop but makes it say what fails. It skips the build (too slow for
+  every turn) — CI has it.
+- **Lint scope** — everything except `docs/**` and `design/**` (mockups).
+  In `supabase/functions/**` an `any` is a warning, not an error: those files
+  must match the deployed functions byte for byte (§2). `master` lints with
+  0 errors since the dead mock-data `/scope-builder/[leadId]` page and the
+  unused v0 `ScopeTab` were deleted.
+
 **Superadmin agent guardrails — non-negotiable:**
 
 1. The agent gets **named RPC functions**, never raw SQL, and never the

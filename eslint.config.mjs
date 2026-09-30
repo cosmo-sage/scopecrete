@@ -12,7 +12,17 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Design references and mockups (docs/design/*.jsx, design/dusty) — not app code.
+    "docs/**",
+    "design/**",
   ]),
+  // Edge functions are Deno and must match what is deployed byte for byte
+  // (DECISIONS §2: read the deployed source back before changing one), so an
+  // `any` there is a warning, not a reason to edit a deployed function.
+  {
+    files: ["supabase/functions/**"],
+    rules: { "@typescript-eslint/no-explicit-any": "warn" },
+  },
 ]);
 
 export default eslintConfig;

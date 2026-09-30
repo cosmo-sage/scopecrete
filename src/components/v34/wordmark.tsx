@@ -11,18 +11,19 @@ import * as React from "react";
 
 type Props = { size?: number; guides?: boolean; className?: string };
 
-const INK = "58,62,68";
-const hLine = (o: number): React.CSSProperties => ({ position: "absolute", height: 1, pointerEvents: "none",
-  background: `linear-gradient(90deg,transparent,rgba(${INK},${o}) 12%,rgba(${INK},${o}) 88%,transparent)` });
-const vLine = (o: number): React.CSSProperties => ({ position: "absolute", width: 1, pointerEvents: "none",
-  background: `linear-gradient(180deg,transparent,rgba(${INK},${o}) 20%,rgba(${INK},${o}) 80%,transparent)` });
+// Colours come from the theme (--sc-hatch, --sc-guide, --sc-crete) so the mark
+// follows Settings → Appearance; in Night Shift the hatching is chalk-white.
+const hLine = (o: number): React.CSSProperties => ({ position: "absolute", height: 1, pointerEvents: "none", opacity: o / 0.35,
+  background: "linear-gradient(90deg,transparent,var(--sc-guide) 12%,var(--sc-guide) 88%,transparent)" });
+const vLine = (o: number): React.CSSProperties => ({ position: "absolute", width: 1, pointerEvents: "none", opacity: o / 0.35,
+  background: "linear-gradient(180deg,transparent,var(--sc-guide) 20%,var(--sc-guide) 80%,transparent)" });
 
 /** size = font-size of "scope"/"crete". Header: 26. Display: 100+. */
 export function Wordmark({ size = 26, guides = true, className }: Props) {
   const display = size >= 60;
   const hatch = display
-    ? "repeating-linear-gradient(118deg,rgba(52,56,61,.85) 0 1.2px,transparent 1.2px 3.4px),repeating-linear-gradient(104deg,rgba(52,56,61,.4) 0 .8px,transparent .8px 5px)"
-    : "repeating-linear-gradient(118deg,rgba(52,56,61,.95) 0 .9px,transparent .9px 2.1px)";
+    ? "repeating-linear-gradient(118deg,var(--sc-hatch) 0 1.2px,transparent 1.2px 3.4px),repeating-linear-gradient(104deg,var(--sc-hatch-edge) 0 .8px,transparent .8px 5px)"
+    : "repeating-linear-gradient(118deg,var(--sc-hatch) 0 .9px,transparent .9px 2.1px)";
 
   return (
     <span className={className} role="img" aria-label="scopecrete.ai"
@@ -32,7 +33,7 @@ export function Wordmark({ size = 26, guides = true, className }: Props) {
           display: "block", fontFamily: "'Lexend', sans-serif", fontWeight: 700, fontSize: size, lineHeight: 1,
           letterSpacing: ".02em", paddingBottom: ".28em", marginBottom: "-.28em", // keeps hatch under the "p" descender
           color: "transparent", backgroundImage: hatch, WebkitBackgroundClip: "text", backgroundClip: "text",
-          WebkitTextStroke: `${display ? 0.8 : 0.5}px rgba(52,56,61,${display ? 0.55 : 0.7})`,
+          WebkitTextStroke: `${display ? 0.8 : 0.5}px var(--sc-hatch-edge)`,
         }}>scope</span>
         {guides && (<>
           <span style={{ ...hLine(0.35), left: "-10%", right: "-6%", top: "84%" }} />
@@ -47,7 +48,7 @@ export function Wordmark({ size = 26, guides = true, className }: Props) {
         </>)}
       </span>
       <span aria-hidden style={{ position: "relative", fontFamily: "'Inter', sans-serif", fontWeight: 300, fontSize: size,
-        lineHeight: 1, letterSpacing: "-.01em", color: "#D9550A" }}>
+        lineHeight: 1, letterSpacing: "-.01em", color: "var(--sc-crete)" }}>
         crete
         {guides && (<>
           <span style={{ ...hLine(0.35), left: "-4%", right: "-10%", top: "86%" }} />
@@ -55,7 +56,7 @@ export function Wordmark({ size = 26, guides = true, className }: Props) {
         </>)}
       </span>
       <span aria-hidden style={{ fontFamily: "'Kalam', cursive", fontSize: size * (display ? 0.5 : 0.62), lineHeight: 1,
-        color: "#5A5F66", marginLeft: 1 }}>.ai</span>
+        color: "var(--sc-pencil-muted)", marginLeft: 1 }}>.ai</span>
     </span>
   );
 }

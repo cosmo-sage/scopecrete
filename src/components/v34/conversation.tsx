@@ -25,8 +25,10 @@ export const DA = {
   error: T.red,
   // Bubbles (Coy, 2026-09-29: "more muted colors for both sides that are easy
   // on the eyes"): warm paper for them, soft slate for us, ink text on both.
-  bubbleIn: "#F7F6F2",
-  bubbleOut: "#D8E1E8",
+  // Themed since 2026-09-30: theirs on the sunk ground, ours on the theme's
+  // outgoing colour (terracotta-dim in Site Office).
+  bubbleIn: T.sunk,
+  bubbleOut: T.outBg,
 } as const;
 
 /**
@@ -387,7 +389,7 @@ const KIND_LABEL: Record<string, string> = {
  * A file that cannot be fetched says why in words. It never renders as a broken
  * image, which reads as a bug in the app rather than a fact about the file.
  */
-function MessageMedia({ messageId, count, isOut }: { messageId: string; count: number; isOut: boolean }) {
+export function MessageMedia({ messageId, count, isOut }: { messageId: string; count: number; isOut: boolean }) {
   const [items, setItems] = useState<MediaItem[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
@@ -474,19 +476,19 @@ export function SmsRow({ m }: { m: ThreadMessage }) {
         className="max-w-[78%] rounded-2xl px-3 py-2"
         style={{
           background: isOut ? DA.bubbleOut : DA.bubbleIn,
-          border: isOut ? "1px solid #CCD6DE" : `1px solid ${DA.border}`,
+          border: `1px solid ${DA.border}`, color: isOut ? T.outInk : DA.textPrimary,
         }}
       >
         {/* "(no text)" only when there is genuinely nothing — a photo with no
             caption is not an empty message, and labelling it one is how two of
             Amber's photos read as blank bubbles. */}
         {(text || m.media_count === 0) && (
-          <div className="text-xs whitespace-pre-wrap" style={{ color: DA.textPrimary }}>
+          <div className="text-xs whitespace-pre-wrap" style={{ color: "inherit" }}>
             {text || <span style={{ fontStyle: "italic", opacity: 0.7 }}>(no text)</span>}
           </div>
         )}
         {m.media_count > 0 && <MessageMedia messageId={m.id} count={m.media_count} isOut={isOut} />}
-        <div className="text-[9px] mt-1" style={{ color: DA.textSecondary, letterSpacing: ".06em" }}>
+        <div className="text-[9px] mt-1" style={{ color: "inherit", opacity: 0.7, letterSpacing: ".06em" }}>
           {isOut ? "OUT" : "IN"} · {formatTime(m.occurred_at)}{m.line ? ` · ${m.line}` : ""}
         </div>
       </div>
@@ -572,7 +574,7 @@ export function MergeSheet({ contactId, keepLabel, keepCount, onClose, onMerged,
   const btn = (primary?: boolean): React.CSSProperties => ({
     height: 34, padding: "0 14px", borderRadius: 4, cursor: busy ? "default" : "pointer",
     border: `1px solid ${primary ? DA.textPrimary : DA.border}`,
-    background: primary ? DA.textPrimary : DA.surface, color: primary ? "#fff" : DA.textPrimary,
+    background: primary ? DA.textPrimary : DA.surface, color: primary ? T.card : DA.textPrimary,
     fontFamily: disp, fontSize: F.sm, letterSpacing: ".06em", textTransform: "uppercase", opacity: busy ? 0.6 : 1,
   });
 

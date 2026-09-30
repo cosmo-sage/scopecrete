@@ -331,7 +331,7 @@ function SectionCard({ s, index, err, onLocal, onSave, onRemove, overage, rcards
           onChange={(e) => onLocal({ name: e.target.value })} onBlur={(e) => onSave({ name: e.target.value })}
           className="bg-transparent outline-none" style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 600, minWidth: 0, flex: "1 1 140px" }} />
         <select value={s.work_type} onChange={(e) => { onLocal({ work_type: e.target.value }); onSave({ work_type: e.target.value }); }}
-          className="rounded px-1.5 outline-none" style={{ height: 28, border: `1px solid ${T.hair}`, background: "#fff", fontSize: F.xs }}>
+          className="rounded px-1.5 outline-none" style={{ height: 28, border: `1px solid ${T.hair}`, background: T.card, fontSize: F.xs }}>
           {WORK_TYPES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
         </select>
         <Dictate jobId={jobId} s={s} onApply={(p) => { onLocal(p as Partial<Section>); onSave(p as Partial<Section>); }} />
@@ -449,8 +449,8 @@ function Dictate({ jobId, s, onApply }: { jobId: string; s: Section; onApply: (p
       <button onClick={() => (state === "rec" ? rec.current?.stop() : state === "idle" ? void start() : undefined)}
         disabled={state === "busy"} aria-label={state === "rec" ? "Stop and fill the section" : "Dictate this section"}
         className={state === "rec" ? "sc-rec inline-flex items-center gap-1 rounded px-2" : "inline-flex items-center gap-1 rounded px-2"}
-        style={{ height: 28, border: `1px solid ${state === "rec" ? T.red : T.hair}`, background: state === "rec" ? T.red : "#fff",
-                 color: state === "rec" ? "#fff" : T.ink2, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", cursor: "pointer" }}>
+        style={{ height: 28, border: `1px solid ${state === "rec" ? T.red : T.hair}`, background: state === "rec" ? T.red : T.card,
+                 color: state === "rec" ? T.card : T.ink2, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", cursor: "pointer" }}>
         <svg width="12" height="12" viewBox="0 0 15 15" aria-hidden="true">
           <rect x="5.4" y="1.6" width="4.2" height="7.6" rx="2.1" fill="none" stroke="currentColor" strokeWidth="1.5" />
           <path d="M3 7.4a4.5 4.5 0 0 0 9 0 M7.5 11.9v1.6" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
@@ -495,7 +495,7 @@ function ReinforcementPick({ s, rcards, jobType, overage, onPick }: {
       <span style={eyebrow}>Reinforcement</span>
       <select value={s.reinforcement_item_id ?? ""} onChange={(e) => onPick(e.target.value || null)}
         className="w-full rounded px-2 outline-none mt-0.5"
-        style={{ height: 32, border: `1px solid ${card ? T.hair : T.hiviz}`, background: "#fff", fontSize: F.sm }}>
+        style={{ height: 32, border: `1px solid ${card ? T.hair : T.hiviz}`, background: T.card, fontSize: F.sm }}>
         <option value="">{rcards.length ? "None" : "None — add mesh or rebar cards in the Price book"}</option>
         {rcards.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
       </select>
@@ -526,7 +526,7 @@ function NumIn({ value, onChange, onBlur, w }: { value: number | ""; onChange: (
     <input type="number" inputMode="decimal" value={value} onBlur={onBlur}
       onChange={(e) => onChange(e.target.value === "" ? "" : Number(e.target.value))}
       className="bg-transparent outline-none rounded px-1"
-      style={{ width: w, border: `1px solid ${T.hair}`, background: "#fff", height: 28,
+      style={{ width: w, border: `1px solid ${T.hair}`, background: T.card, height: 28,
                fontFamily: disp, fontSize: F.lg, fontWeight: 600, ...nums }} />
   );
 }
@@ -599,7 +599,7 @@ function TakeoffRail({ t, job, onCrewDays, jobType, workType, budget, floorFor }
               {workType ? ` for ${jobType ? `${JOB_WORD[jobType] ?? jobType} ` : ""}${workType.endsWith("s") ? workType : `${workType}s`}` : ""} so new areas fill themselves.
             </div>
             <Link href="/dashboard/price-book?tab=assemblies" className="inline-flex items-center rounded px-3 mt-2.5 no-underline"
-              style={{ height: 36, background: T.hiviz, color: "#fff", fontFamily: disp, fontSize: F.md, fontWeight: 600,
+              style={{ height: 36, background: T.hiviz, color: T.onHiviz, fontFamily: disp, fontSize: F.md, fontWeight: 600,
                        textTransform: "uppercase", letterSpacing: ".06em" }}>Assemblies</Link>
           </div>
           <div className="px-4 py-3" style={line}>

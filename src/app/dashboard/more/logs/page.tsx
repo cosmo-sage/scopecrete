@@ -66,7 +66,7 @@ export default function LogsScreen() {
           "unknown" (never "clear") when the count can't be read. */}
       {drift !== undefined && drift !== 0 && (
         <div role="alert" className="mx-3 mt-3 rounded px-3 py-2"
-          style={{ background: drift === null ? T.hairSoft : T.red, color: drift === null ? T.ink : "#fff", fontSize: F.sm, lineHeight: 1.4 }}>
+          style={{ background: drift === null ? T.hairSoft : T.red, color: drift === null ? T.ink : T.card, fontSize: F.sm, lineHeight: 1.4 }}>
           {drift === null
             ? "Couldn't check whether every call and text reached the app. This is unknown, not clear."
             : `${drift} ${drift === 1 ? "event" : "events"} reached your lines but never reached the app. Listed under Data checks below.`}

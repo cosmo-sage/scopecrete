@@ -123,7 +123,7 @@ export default function JobsBoard() {
         <div className="flex items-center gap-2">
           <div style={{ fontFamily: disp, fontSize: F.xl, fontWeight: 600, lineHeight: 1.05, flex: 1 }}>Jobs</div>
           <button onClick={() => setNewOpen(true)} className="rounded px-3"
-            style={{ height: 34, background: T.hiviz, color: "#fff", fontFamily: disp, fontSize: F.sm, fontWeight: 600,
+            style={{ height: 34, background: T.hiviz, color: T.onHiviz, fontFamily: disp, fontSize: F.sm, fontWeight: 600,
                      textTransform: "uppercase", letterSpacing: ".06em", cursor: "pointer" }}>
             + New job
           </button>
@@ -135,7 +135,7 @@ export default function JobsBoard() {
           {STAGES.map((s, i) => (
             <button key={s.k} onClick={() => goTo(i)} className="shrink-0 rounded px-2.5 flex items-center gap-1.5"
               style={{ height: 30, border: `1px solid ${col === i ? T.ink : T.hair}`, background: col === i ? T.ink : T.card,
-                       color: col === i ? "#fff" : T.ink2, fontFamily: disp, fontSize: F.sm, textTransform: "uppercase", cursor: "pointer" }}>
+                       color: col === i ? T.card : T.ink2, fontFamily: disp, fontSize: F.sm, textTransform: "uppercase", cursor: "pointer" }}>
               {s.label}
               <span style={{ ...nums, fontSize: F.xs, opacity: 0.8 }}>{jobs ? byStage[i].length : "·"}</span>
             </button>
@@ -232,7 +232,7 @@ function JobCard({ j, busy, next, onNext, onMove, onAccept, onFlag }: {
         <div className="rounded px-2 py-1.5 mt-2" style={{ background: T.hivizDim, border: `1px solid ${T.hiviz}` }}>
           <div style={{ fontSize: F.xs, color: T.ink }}>{j.flag_reason}</div>
           <div className="flex gap-1.5 mt-1.5">
-            <button disabled={busy} onClick={() => onFlag(true)} style={{ ...btn, background: T.ink, color: "#fff", borderColor: T.ink }}>Archive</button>
+            <button disabled={busy} onClick={() => onFlag(true)} style={{ ...btn, background: T.ink, color: T.card, borderColor: T.ink }}>Archive</button>
             <button disabled={busy} onClick={() => onFlag(false)} style={btn}>Keep</button>
           </div>
         </div>
@@ -241,7 +241,7 @@ function JobCard({ j, busy, next, onNext, onMove, onAccept, onFlag }: {
         {!j.counts_toward_value ? (
           <>
             <span style={{ ...eyebrow, color: T.hiviz, flex: 1 }}>Suggested — not counted</span>
-            <button disabled={busy} onClick={onAccept} style={{ ...btn, background: T.ink, color: "#fff", borderColor: T.ink }}>Accept</button>
+            <button disabled={busy} onClick={onAccept} style={{ ...btn, background: T.ink, color: T.card, borderColor: T.ink }}>Accept</button>
           </>
         ) : (
           <>
@@ -282,7 +282,7 @@ function MoveSheet({ job, onClose, onMove }: { job: Job | null; onClose: () => v
                   <button key={st} onClick={() => onMove(st)} disabled={job?.status === st}
                     className="rounded-full px-2.5"
                     style={{ height: 26, fontSize: F.xs, border: `1px solid ${job?.status === st ? T.ink : T.hair}`,
-                             background: job?.status === st ? T.ink : T.card, color: job?.status === st ? "#fff" : T.ink2, cursor: "pointer" }}>
+                             background: job?.status === st ? T.ink : T.card, color: job?.status === st ? T.card : T.ink2, cursor: "pointer" }}>
                     {STATUS_NAME[st] ?? st}
                   </button>
                 ))}
@@ -359,7 +359,7 @@ function NewJobSheet({ open, onClose }: { open: boolean; onClose: () => void }) 
   const chip = (on: boolean): React.CSSProperties => ({
     height: 30, padding: "0 10px", borderRadius: 3, fontSize: F.xs, cursor: "pointer",
     fontFamily: disp, textTransform: "uppercase", letterSpacing: ".04em",
-    border: `1px solid ${on ? T.ink : T.hair}`, background: on ? T.ink : T.card, color: on ? "#fff" : T.ink2,
+    border: `1px solid ${on ? T.ink : T.hair}`, background: on ? T.ink : T.card, color: on ? T.card : T.ink2,
   });
 
   const choosing = customer === null || (picking === "referrer" && !referrer && source === "referral");
@@ -434,7 +434,7 @@ function NewJobSheet({ open, onClose }: { open: boolean; onClose: () => void }) 
           </div>
           {err && <div style={{ fontSize: F.xs, color: T.red }}>{err}</div>}
           <button disabled={busy || !jobType} onClick={() => void create()} className="w-full rounded"
-            style={{ height: 40, background: jobType ? T.hiviz : T.hair, color: "#fff", fontFamily: disp, fontSize: F.md, fontWeight: 600,
+            style={{ height: 40, background: jobType ? T.hiviz : T.hair, color: T.onHiviz, fontFamily: disp, fontSize: F.md, fontWeight: 600,
                      textTransform: "uppercase", letterSpacing: ".06em", cursor: "pointer" }}>
             {busy ? "Creating…" : jobType ? "Create and open the scope" : "Pick a type first"}
           </button>

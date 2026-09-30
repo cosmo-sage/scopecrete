@@ -30,6 +30,6 @@ export function Cell({ value, onSave, label, money: isMoney, placeholder, warn, 
       onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); if (e.key === "Escape") setDraft(null); }}
       className="rounded text-right outline-none"
       style={{ width: width ?? (suffix ? 52 : 76), height: 26, padding: "0 5px", fontSize: F.sm, ...nums,
-        border: `1px solid ${focus ? T.chalk : warn ? T.hiviz : "transparent"}`, background: focus ? "#fff" : warn ? T.hivizDim : "transparent" }} />
+        border: `1px solid ${focus ? T.chalk : warn ? T.hiviz : "transparent"}`, background: focus ? T.card : warn ? T.hivizDim : "transparent" }} />
   );
 }

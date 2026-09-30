@@ -30,7 +30,7 @@ import { CostCards } from "@/components/v34/cost-cards";
 
 export interface Person {
   contact: {
-    id: string; name: string | null; name_confirmed: boolean; phones: string[];
+    id: string; customer_id?: string | null; name: string | null; name_confirmed: boolean; phones: string[];
     email: string | null; address: string | null; company: string | null;
     bucket: "customer" | "vendor" | "personal" | "spam" | null;
     bucket_state: "confirmed" | "auto" | null;
@@ -167,7 +167,7 @@ export function PersonView({ person, messages, onReload, onMerge }: {
 
         {/* Every channel, one row. Nothing here sends on its own. */}
         <div className="flex gap-1.5 mt-2.5">
-          {phone ? <a href={`tel:${phone}`} style={{ ...act, background: T.ink, color: "#fff", borderColor: T.ink }}>Call</a>
+          {phone ? <a href={`tel:${phone}`} style={{ ...act, background: T.ink, color: T.card, borderColor: T.ink }}>Call</a>
             : <span style={{ ...act, opacity: 0.4 }}>Call</span>}
           <button onClick={() => { setTab("activity"); setTimeout(() => document.getElementById("person-composer")?.scrollIntoView({ behavior: "smooth", block: "center" }), 50); }}
             style={act} title="Write it here, copy it into Quo — sending waits on 10DLC">Text</button>
@@ -247,7 +247,7 @@ export function SamePerson({ person, onMerge }: { person: Pick<Person, "possible
             <span style={{ color: T.ink2 }}> — same {d.same}. Same person?</span>
           </span>
           <button onClick={() => onMerge(d.id)} className="rounded px-2.5 shrink-0"
-            style={{ height: 30, background: T.chalk, color: "#fff", border: "none", fontFamily: disp, fontSize: F.xs,
+            style={{ height: 30, background: T.chalk, color: T.card, border: "none", fontFamily: disp, fontSize: F.xs,
                      letterSpacing: ".04em", textTransform: "uppercase", cursor: "pointer" }}>Review</button>
         </div>
       ))}
@@ -330,7 +330,7 @@ function NextSteps({ contactId, tasks, onChanged, onError }: {
         <input type="date" value={due} onChange={(e) => setDue(e.target.value)} aria-label="Due date"
           className="rounded px-1.5 outline-none" style={{ height: 34, fontSize: F.xs, width: 128, border: `1px solid ${T.hair}`, background: T.card, color: T.ink2 }} />
         <button type="submit" disabled={busy || !draft.trim()} className="rounded px-3"
-          style={{ height: 34, background: T.ink, color: "#fff", fontFamily: disp, fontSize: F.sm, textTransform: "uppercase",
+          style={{ height: 34, background: T.ink, color: T.card, fontFamily: disp, fontSize: F.sm, textTransform: "uppercase",
                    opacity: busy || !draft.trim() ? 0.5 : 1, cursor: "pointer", border: "none" }}>Add</button>
       </form>
       {done.length > 0 && (
@@ -376,7 +376,7 @@ function Activity({ messages, notes, phone, contactId, name, onMerge, onNoteSave
           const count = k === "all" ? messages.length + notes.length : k === "notes" ? notes.length : n(k);
           return (
             <button key={k} onClick={() => setChan(k)} disabled={!count} className="rounded px-2"
-              style={{ height: 28, whiteSpace: "nowrap", flexShrink: 0, background: on ? T.ink : T.card, color: on ? "#fff" : count ? T.ink2 : T.ink3,
+              style={{ height: 28, whiteSpace: "nowrap", flexShrink: 0, background: on ? T.ink : T.card, color: on ? T.card : count ? T.ink2 : T.ink3,
                        border: `1px solid ${on ? T.ink : T.hair}`, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase",
                        opacity: count ? 1 : 0.45, cursor: "pointer" }}>
               {l}{k !== "all" && count ? ` · ${count}` : ""}

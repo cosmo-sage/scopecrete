@@ -13,6 +13,7 @@ import { FILE_COLUMNS, signFiles } from "@/lib/files-server";
  *     &since= 7 | 30 | 365 (days)
  *     &job= / &contact= (uuid)
  *     &file= (uuid) — that one file, for a link from search
+ *     &customer= (uuid) — its people's and its jobs' files (the customer page)
  * → { files (signed links), jobs, people } — the names for the job and person
  *   filters, from the files returned.
  *
@@ -42,6 +43,18 @@ export async function GET(req: NextRequest) {
   else if (cat) {
     if (!(CATEGORIES as readonly string[]).includes(cat)) return bad("Unknown category.");
     q = q.eq("category", cat);
+  }
+  // A customer's documents: its people's files and its jobs' files (migration 055).
+  const cust = p.get("customer");
+  if (cust) {
+    if (!UUID.test(cust)) return bad("Not a customer id.");
+    const { data: cs } = await supabase.from("contacts").select("id").eq("org_id", orgId).eq("customer_id", cust).is("merged_into_contact_id", null);
+    const cIds = ((cs ?? []) as Array<{ id: string }>).map((c) => c.id);
+    const { data: js } = await supabase.from("jobs").select("id").eq("org_id", orgId).or([`customer_id.eq.${cust}`, ...(cIds.length ? [`contact_id.in.(${cIds.join(",")})`] : [])].join(","));
+    const jIds = ((js ?? []) as Array<{ id: string }>).map((j) => j.id);
+    const ors = [...(cIds.length ? [`contact_id.in.(${cIds.join(",")})`] : []), ...(jIds.length ? [`job_id.in.(${jIds.join(",")})`] : [])];
+    if (!ors.length) return applyCookies(NextResponse.json({ files: [], jobs: [], people: [] }));
+    q = q.or(ors.join(","));
   }
   for (const [k, col] of [["job", "job_id"], ["contact", "contact_id"]] as const) {
     const v = p.get(k);

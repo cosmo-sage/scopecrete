@@ -296,9 +296,9 @@ export function ReceiptImport({ open, onClose, vendorId, onDone }: {
   const typeOf = (r: Row): CostType => newType[r.n] ?? (FEE.test(r.l.name.replace(/_/g, " ")) ? "other" : "material");
 
   // ---- look
-  const field: React.CSSProperties = { height: 34, border: `1px solid ${T.hair}`, background: "#fff", fontSize: F.sm, borderRadius: 4, padding: "0 8px", minWidth: 0, width: "100%" };
+  const field: React.CSSProperties = { height: 34, border: `1px solid ${T.hair}`, background: T.card, fontSize: F.sm, borderRadius: 4, padding: "0 8px", minWidth: 0, width: "100%" };
   const btn = (primary: boolean): React.CSSProperties => ({ height: 38, padding: "0 14px", borderRadius: 4, fontFamily: disp, fontSize: F.sm, textTransform: "uppercase",
-    letterSpacing: ".06em", background: primary ? T.ink : T.card, color: primary ? "#fff" : T.ink, border: primary ? "none" : `1px solid ${T.hair}`, cursor: "pointer" });
+    letterSpacing: ".06em", background: primary ? T.ink : T.card, color: primary ? T.card : T.ink, border: primary ? "none" : `1px solid ${T.hair}`, cursor: "pointer" });
   const STATUS: Record<Row["status"], [string, string]> = { new: ["New item", T.green], add: ["Add their price", T.chalk], change: ["Price change", T.hiviz], same: ["Same", T.ink3] };
   const groupName = useMemo(() => new Map(groups.map((g) => [g.id, g.name])), [groups]);
   const taxWorked = taxRateFrom(facts.subtotal as number | undefined, facts.tax_amount as number | undefined);
@@ -325,7 +325,7 @@ export function ReceiptImport({ open, onClose, vendorId, onDone }: {
             <div className="flex gap-1" role="radiogroup" aria-label="What it is">
               {(Object.keys(KIND_LABEL) as Kind[]).map((k) => (
                 <button key={k} role="radio" aria-checked={kind === k} onClick={() => setKind(k)} className="rounded px-3"
-                  style={{ height: 32, background: kind === k ? T.ink : T.card, color: kind === k ? "#fff" : T.ink2, border: `1px solid ${kind === k ? T.ink : T.hair}`,
+                  style={{ height: 32, background: kind === k ? T.ink : T.card, color: kind === k ? T.card : T.ink2, border: `1px solid ${kind === k ? T.ink : T.hair}`,
                     fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", letterSpacing: ".05em", cursor: "pointer" }}>{KIND_LABEL[k]}</button>
               ))}
             </div>
@@ -473,7 +473,7 @@ export function ReceiptImport({ open, onClose, vendorId, onDone }: {
               ) : null}
               <button onClick={() => setInfo((x) => !x)} aria-expanded={info} aria-label="What these mean" title="What these mean"
                 className="rounded-full" style={{ width: 20, height: 20, border: `1px solid ${info ? T.ink : T.hair}`, background: info ? T.ink : T.card,
-                  color: info ? "#fff" : T.ink2, fontSize: 11, fontWeight: 700, fontStyle: "italic", lineHeight: "18px", cursor: "pointer", alignSelf: "center" }}>i</button>
+                  color: info ? T.card : T.ink2, fontSize: 11, fontWeight: 700, fontStyle: "italic", lineHeight: "18px", cursor: "pointer", alignSelf: "center" }}>i</button>
             </div>
             {fromPhoto && (
               <div className="rounded px-3 py-2" style={{ fontSize: F.sm, background: T.hivizDim }}>
@@ -592,7 +592,7 @@ function ItemSearch({ items, groupName, value, label, onPick }: {
   const hits = open ? items.filter((i) => i.active && words.every((w) =>
     `${i.name} ${groupName.get(i.cost_group_id ?? "") ?? ""} ${i.vendor_sku ?? ""}`.toLowerCase().replace(/(\d),(\d{3})/g, "$1$2").includes(w)))
     .sort((a, b) => (groupName.get(a.cost_group_id ?? "") ?? "~").localeCompare(groupName.get(b.cost_group_id ?? "") ?? "~") || a.name.localeCompare(b.name)).slice(0, 30) : [];
-  const box: React.CSSProperties = { height: 30, border: `1px solid ${T.hair}`, background: "#fff", fontSize: F.sm, borderRadius: 4, padding: "0 8px", minWidth: 0, width: "100%" };
+  const box: React.CSSProperties = { height: 30, border: `1px solid ${T.hair}`, background: T.card, fontSize: F.sm, borderRadius: 4, padding: "0 8px", minWidth: 0, width: "100%" };
   const choose = (id: string) => { onPick(id); setOpen(false); setQ(""); };
   if (!open) {
     return (
@@ -604,7 +604,7 @@ function ItemSearch({ items, groupName, value, label, onPick }: {
   }
   const gOf = (i: (typeof hits)[number]) => groupName.get(i.cost_group_id ?? "") ?? "Not in a group";
   return (
-    <div className="rounded" style={{ border: `1px solid ${T.ink}`, background: "#fff" }}>
+    <div className="rounded" style={{ border: `1px solid ${T.ink}`, background: T.card }}>
       <input value={q} autoFocus onChange={(e) => setQ(e.target.value)} placeholder="Find in your Price book: 4000 psi, rebar, 8006…"
         aria-label={`Find the item for ${label}`} onKeyDown={(e) => { if (e.key === "Escape") setOpen(false); }}
         style={{ ...box, border: "none", borderBottom: `1px solid ${T.hair}`, borderRadius: 0, height: 34 }} />

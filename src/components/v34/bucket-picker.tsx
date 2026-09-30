@@ -54,7 +54,7 @@ export function BucketPicker({ t, busy, subtypes, onPick }: {
     letterSpacing: ".04em", textTransform: "uppercase", cursor: busy ? "default" : "pointer",
     opacity: busy ? 0.5 : 1,
     border: `1.5px ${hint ? "dashed" : "solid"} ${on || hint ? colour : T.hair}`,
-    background: on ? colour : T.card, color: on ? "#fff" : hint ? colour : T.ink2,
+    background: on ? colour : T.card, color: on ? T.card : hint ? colour : T.ink2,
   });
 
   if (t.bucket_auto && t.bucket) {
@@ -94,7 +94,7 @@ export function BucketPicker({ t, busy, subtypes, onPick }: {
             <button key={x.slug} disabled={busy} onClick={() => onPick(t.bucket, t.subtype === x.slug ? null : x.slug)}
               className="rounded-full px-2.5"
               style={{ height: 26, fontSize: F.xs, cursor: "pointer", border: `1px solid ${t.subtype === x.slug ? T.ink : T.hair}`,
-                       background: t.subtype === x.slug ? T.ink : T.card, color: t.subtype === x.slug ? "#fff" : T.ink2 }}>
+                       background: t.subtype === x.slug ? T.ink : T.card, color: t.subtype === x.slug ? T.card : T.ink2 }}>
               {x.label}
             </button>
           ))}

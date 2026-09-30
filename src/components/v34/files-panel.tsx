@@ -139,7 +139,7 @@ export function FilesPanel({ jobId, contactId, sectionId, sections, title = "Fil
         <span className="hidden lg:inline" style={{ fontSize: F.xs, color: T.ink3 }}>drop files here · Dusty reads them</span>
         <span className="flex-1" />
         <button onClick={() => input.current?.click()} className="rounded px-2.5"
-          style={{ height: 30, background: T.ink, color: "#fff", fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", letterSpacing: ".06em", cursor: "pointer" }}>
+          style={{ height: 30, background: T.ink, color: T.card, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", letterSpacing: ".06em", cursor: "pointer" }}>
           + Add photos / files
         </button>
         <input ref={input} type="file" multiple hidden accept="image/*,video/*,application/pdf,.doc,.docx,.xls,.xlsx,.csv,.txt"
@@ -152,7 +152,7 @@ export function FilesPanel({ jobId, contactId, sectionId, sections, title = "Fil
             const n = count(k); const on = filter === k;
             return (
               <button key={k} onClick={() => setFilter(k)} disabled={!n && k !== "all"} className="rounded px-2"
-                style={{ height: 26, background: on ? T.ink : T.card, color: on ? "#fff" : n ? T.ink2 : T.ink3, border: `1px solid ${on ? T.ink : T.hair}`,
+                style={{ height: 26, background: on ? T.ink : T.card, color: on ? T.card : n ? T.ink2 : T.ink3, border: `1px solid ${on ? T.ink : T.hair}`,
                          fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", opacity: n || k === "all" ? 1 : 0.45, cursor: "pointer" }}>
                 {l}{n ? ` · ${n}` : ""}
               </button>
@@ -271,7 +271,7 @@ export function FileViewer({ f, sections, onClose, onSaved, onDeleted, links }: 
     try { await call(`/api/files/${f.id}`, "DELETE"); onDeleted(f.id); }
     catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
   };
-  const field: React.CSSProperties = { height: 34, border: `1px solid ${T.hair}`, background: "#fff", fontSize: F.sm, borderRadius: 4, padding: "0 8px", width: "100%" };
+  const field: React.CSSProperties = { height: 34, border: `1px solid ${T.hair}`, background: T.card, fontSize: F.sm, borderRadius: 4, padding: "0 8px", width: "100%" };
   // Price lines (read-files v2) are a table, not a fact: counted here, checked and imported in the Price book.
   const HIDDEN = new Set(["price_lines", "price_lines_from_photo"]);
   const facts = f.facts && typeof f.facts === "object" ? Object.entries(f.facts).filter(([k, v]) => !HIDDEN.has(k) && v !== null && v !== "" && !(Array.isArray(v) && !v.length)) : [];

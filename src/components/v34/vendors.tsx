@@ -29,8 +29,8 @@ const SUB_LABEL: Record<string, string> = { supplier: "Supplier", subcontractor:
 const label = (v: { name: string | null; company_name?: string | null; phone: string | null }) => v.name || v.company_name || formatPhone(v.phone);
 
 const btn = (primary: boolean): React.CSSProperties => ({ height: 36, padding: "0 12px", borderRadius: 4, fontFamily: disp, fontSize: F.sm, textTransform: "uppercase",
-  letterSpacing: ".06em", background: primary ? T.hiviz : T.card, color: primary ? "#fff" : T.ink, border: primary ? "none" : `1px solid ${T.hair}`, cursor: "pointer", whiteSpace: "nowrap" });
-const field: React.CSSProperties = { height: 34, border: `1px solid ${T.hair}`, background: "#fff", fontSize: F.sm, borderRadius: 4, padding: "0 8px", minWidth: 0, width: "100%" };
+  letterSpacing: ".06em", background: primary ? T.hiviz : T.card, color: primary ? T.onHiviz : T.ink, border: primary ? "none" : `1px solid ${T.hair}`, cursor: "pointer", whiteSpace: "nowrap" });
+const field: React.CSSProperties = { height: 34, border: `1px solid ${T.hair}`, background: T.card, fontSize: F.sm, borderRadius: 4, padding: "0 8px", minWidth: 0, width: "100%" };
 
 export function VendorList() {
   const [rows, setRows] = useState<VRow[] | null>(null);
@@ -70,7 +70,7 @@ export function VendorList() {
         <div className="flex gap-1" role="tablist" aria-label="Kind">
           {SUBTYPES.map(([k, l]) => (
             <button key={k} role="tab" aria-selected={sub === k} onClick={() => setSub(k)} className="rounded px-2.5"
-              style={{ height: 30, background: sub === k ? T.ink : T.card, color: sub === k ? "#fff" : T.ink2, border: `1px solid ${sub === k ? T.ink : T.hair}`,
+              style={{ height: 30, background: sub === k ? T.ink : T.card, color: sub === k ? T.card : T.ink2, border: `1px solid ${sub === k ? T.ink : T.hair}`,
                 fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", letterSpacing: ".05em", cursor: "pointer" }}>{l}</button>
           ))}
         </div>

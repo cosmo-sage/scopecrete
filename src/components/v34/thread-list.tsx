@@ -177,7 +177,7 @@ function ProposalReview({ p, onDecide, busy, nameOn }: {
   const btn = (primary?: boolean): React.CSSProperties => ({
     height: 28, padding: "0 10px", borderRadius: 3,
     border: `1px solid ${primary ? T.ink : T.hair}`,
-    background: primary ? T.ink : T.card, color: primary ? "#fff" : T.ink2,
+    background: primary ? T.ink : T.card, color: primary ? T.card : T.ink2,
     fontFamily: disp, fontSize: F.xs, letterSpacing: ".06em",
     textTransform: "uppercase", cursor: busy ? "default" : "pointer",
     opacity: busy ? 0.5 : 1,
@@ -267,7 +267,7 @@ function AutoNameStrip({ a, name, busy, onName }: {
   const btn = (primary?: boolean): React.CSSProperties => ({
     height: 28, padding: "0 10px", borderRadius: 3,
     border: `1px solid ${primary ? T.ink : T.hair}`,
-    background: primary ? T.ink : T.card, color: primary ? "#fff" : T.ink2,
+    background: primary ? T.ink : T.card, color: primary ? T.card : T.ink2,
     fontFamily: disp, fontSize: F.xs, letterSpacing: ".06em",
     textTransform: "uppercase", cursor: busy ? "default" : "pointer", opacity: busy ? 0.5 : 1,
   });
@@ -303,7 +303,7 @@ function BucketTag({ label, c, state }: { label: string; c: string; state: "conf
   return (
     <span className="shrink-0 rounded" title={title}
       style={{ ...eyebrow, lineHeight: "15px", padding: "0 4px", letterSpacing: ".06em",
-               color: state === "confirmed" ? "#fff" : c, background: state === "confirmed" ? c : "transparent",
+               color: state === "confirmed" ? T.card : c, background: state === "confirmed" ? c : "transparent",
                border: `1px ${state === "suggested" ? "dashed" : "solid"} ${c}` }}>
       {label}{state === "confirmed" ? " ✓" : state === "auto" ? " · auto" : "?"}
     </span>
@@ -377,7 +377,7 @@ function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, onName, onB
           {BUCKETS.map((b) => (
             <button key={b.k} disabled={deciding} onClick={() => { onTray(false); onBucket(t.contact_id, b.k, guess === b.k && t.proposal?.classification === "sub" ? "subcontractor" : null); }}
               className="flex-1 flex flex-col items-center justify-center gap-0.5"
-              style={{ background: b.c, color: "#fff", fontFamily: disp, fontSize: F.micro, fontWeight: 700, textTransform: "uppercase",
+              style={{ background: b.c, color: T.card, fontFamily: disp, fontSize: F.micro, fontWeight: 700, textTransform: "uppercase",
                        letterSpacing: 0, boxShadow: guess === b.k ? "inset 0 0 0 3px rgba(255,255,255,.85)" : undefined }}>
               {b.l}
               {guess === b.k && <span style={{ fontSize: F.micro, opacity: 0.9 }}>Dusty</span>}
@@ -388,7 +388,7 @@ function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, onName, onB
       {/* Behind the row, right: accept Dusty's guess (swipe left). */}
       {offset < 0 && guessB && (
         <div className="absolute inset-0 flex items-center justify-end pr-4"
-          style={{ background: guessB.c, color: "#fff", fontFamily: disp, fontSize: F.md, fontWeight: 600, textTransform: "uppercase" }}>
+          style={{ background: guessB.c, color: T.card, fontFamily: disp, fontSize: F.md, fontWeight: 600, textTransform: "uppercase" }}>
           {offset < -120 ? `✓ ${guessB.l}` : guessB.l}
         </div>
       )}
@@ -490,7 +490,7 @@ function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, onName, onB
 
           <div className="mt-2.5 flex items-center gap-3">
             <button onClick={onOpen} className="rounded px-4 flex items-center gap-2"
-              style={{ height: 36, border: "none", background: T.ink, color: "#fff",
+              style={{ height: 36, border: "none", background: T.ink, color: T.card,
                        fontFamily: disp, fontSize: F.sm, letterSpacing: ".06em",
                        textTransform: "uppercase", cursor: "pointer" }}>
               Open {badge ? badge.l.toLowerCase() : "thread"} <span style={{ color: T.hiviz }}>›</span>
@@ -683,7 +683,7 @@ export function ThreadList() {
     <div>
       {toast && (
         <div className="fixed left-3 right-3 lg:left-auto lg:right-6 lg:w-[360px] bottom-[84px] lg:bottom-6 z-40 rounded-lg px-3 flex items-center gap-2"
-          role="status" style={{ height: 44, background: T.ink, color: "#fff", boxShadow: "0 6px 20px rgba(0,0,0,.25)" }}>
+          role="status" style={{ height: 44, background: T.ink, color: T.card, boxShadow: "0 6px 20px rgba(0,0,0,.25)" }}>
           <span style={{ fontSize: F.sm, flex: 1 }}>Filed as {toast.label}</span>
           <button onClick={() => { const c = toast.contactId; setToast(null); void bucketDecide(c, null); }}
             style={{ ...eyebrow, color: T.hiviz, fontSize: F.sm, cursor: "pointer" }}>Undo</button>
@@ -739,7 +739,7 @@ export function ThreadList() {
               <button key={k} role="tab" aria-selected={on} onClick={() => { setFilter(k); setOpenRow(null); setTrayRow(null); }}
                 className="rounded flex flex-col items-center justify-center"
                 style={{ height: 42, minWidth: 0, padding: "0 2px", cursor: "pointer",
-                         border: `1.5px solid ${c}`, background: on ? c : T.card, color: on ? "#fff" : c }}>
+                         border: `1.5px solid ${c}`, background: on ? c : T.card, color: on ? T.card : c }}>
                 <span style={{ fontFamily: disp, fontSize: F.md, fontWeight: 700, lineHeight: 1, ...nums }}>{n ?? "·"}</span>
                 <span style={{ fontFamily: disp, fontSize: F.micro, fontWeight: 600, letterSpacing: 0,
                                textTransform: "uppercase", marginTop: 2, maxWidth: "100%", ...clip }}>{l}</span>

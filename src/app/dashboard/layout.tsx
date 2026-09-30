@@ -33,6 +33,7 @@ import { DustyAvatar } from "@/components/v34/dusty-avatar";
 import { ActivityLine } from "@/components/v34/activity-line";
 import { SearchPanel } from "@/components/v34/search-panel";
 import { Wordmark } from "@/components/v34/wordmark";
+import { ThemePicker, useTheme } from "@/components/v34/theme-picker";
 import { Toolbox, MenuEditor } from "@/components/v34/toolbox";
 import { PAGE, DEFAULT_MENUS, cleanMenus, activePage, type Menus } from "@/lib/v34/pages";
 import { usePref } from "@/lib/v34/prefs";
@@ -60,6 +61,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [menusOpen, setMenusOpen] = useState(false);
+  const [looksOpen, setLooksOpen] = useState(false);
+  // The colour theme follows the account (Settings → Appearance).
+  useTheme();
   const [searchOpen, setSearchOpen] = useState(false);
   const [pipeOpen, setPipeOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
@@ -122,7 +126,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const Badge = ({ n, style }: { n: number; style: React.CSSProperties }) => (
     <span className="absolute rounded-full flex items-center justify-center"
-      style={{ minWidth: 15, height: 15, padding: "0 3px", background: T.hiviz, color: "#fff", fontFamily: disp,
+      style={{ minWidth: 15, height: 15, padding: "0 3px", background: T.hiviz, color: T.onHiviz, fontFamily: disp,
                fontSize: 9.5, fontWeight: 700, lineHeight: 1, ...nums, ...style }}>{n}</span>
   );
 
@@ -151,8 +155,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               className="flex items-center justify-center sc-paper-btn"
               style={glassBtn}>
               <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true">
-                <circle cx="6.4" cy="6.4" r="4.5" fill="none" stroke="#3A3E43" strokeWidth="1.6" />
-                <path d="M9.8 9.8 L13.4 13.4" stroke="#3A3E43" strokeWidth="1.6" strokeLinecap="round" />
+                <circle cx="6.4" cy="6.4" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
+                <path d="M9.8 9.8 L13.4 13.4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
               </svg>
             </button>
 
@@ -162,7 +166,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               className="flex items-end justify-center gap-[2.5px] sc-paper-btn"
               style={{ ...glassBtn, paddingBottom: 9 }}>
               {[5, 8, 11, 14].map((h, i) => (
-                <span key={i} style={{ width: 3, height: h, borderRadius: 0.5, background: i === 3 ? T.logoOrange : "#3A3E43" }} />
+                <span key={i} style={{ width: 3, height: h, borderRadius: 0.5, background: i === 3 ? T.logoOrange : T.pencil }} />
               ))}
             </button>
 
@@ -211,7 +215,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <Link key={k} href={p.href} aria-current={on ? "page" : undefined}
               className="flex flex-col items-center justify-center gap-1 no-underline shrink-0"
               style={{ height: 60, borderLeft: "3px solid transparent", position: "relative" }}>
-              <span style={{ opacity: on ? 1 : 0.7, display: "flex" }}><NavIcon k={k} on={on} /></span>
+              <span style={{ opacity: on ? 1 : 0.8, display: "flex" }}><NavIcon k={k} on={on} color="currentColor" /></span>
               <span className="sc-rail-label">{p.label}</span>
               {k === "threads" && needs !== null && needs > 0 && <Badge n={needs} style={{ top: 8, right: 16 }} />}
               {k === "logs" && badge.logs && <span className="absolute rounded-full" style={{ top: 12, right: 24, width: 8, height: 8, background: T.red }} />}
@@ -297,6 +301,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 <div style={{ fontSize: F.xs, color: T.ink3 }}>{l.note}</div>
               </Link>
             ))}
+            <button onClick={() => setLooksOpen((o) => !o)} aria-expanded={looksOpen} className="text-left py-2.5" style={{ borderBottom: `1px solid ${T.hairSoft}`, cursor: "pointer" }}>
+              <div style={{ fontSize: F.md, fontWeight: 600 }}>Appearance {looksOpen ? "−" : "+"}</div>
+              <div style={{ fontSize: F.xs, color: T.ink3 }}>Colours: Site Office, Blueprint, Kraft Yard or Night Shift (dark)</div>
+            </button>
+            {looksOpen && <div className="py-2"><ThemePicker /></div>}
             <button onClick={() => setMenusOpen((o) => !o)} aria-expanded={menusOpen} className="text-left py-2.5" style={{ borderBottom: `1px solid ${T.hairSoft}`, cursor: "pointer" }}>
               <div style={{ fontSize: F.md, fontWeight: 600 }}>Menus {menusOpen ? "−" : "+"}</div>
               <div style={{ fontSize: F.xs, color: T.ink3 }}>The order of your pages, and which ones sit in the phone footer</div>

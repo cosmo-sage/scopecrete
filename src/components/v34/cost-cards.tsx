@@ -116,7 +116,7 @@ export function CostCards({ vendorId, vendorName }: { vendorId?: string; vendorN
             style={{ height: 30, border: `1px solid ${T.hair}`, background: T.card, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", letterSpacing: ".06em", cursor: "pointer" }}>+ Group</button>
         )}
         <button onClick={() => newCard()} className="rounded px-2.5"
-          style={{ height: 30, background: T.ink, color: "#fff", fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", letterSpacing: ".06em", cursor: "pointer" }}>+ Card</button>
+          style={{ height: 30, background: T.ink, color: T.card, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", letterSpacing: ".06em", cursor: "pointer" }}>+ Card</button>
       </div>
 
       {err && <div style={{ fontSize: F.xs, color: T.red, marginTop: 4 }}>{err}</div>}
@@ -197,7 +197,7 @@ export function GroupSheet({ open, onClose, onSaved }: { open: boolean; onClose:
     try { await call("/api/cost-groups", "POST", { name, cost_type: type, default_markup_pct: markup === "" ? null : markup }); setName(""); setMarkup(""); onSaved(); }
     catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
   };
-  const field: React.CSSProperties = { height: 36, border: `1px solid ${T.hair}`, background: "#fff", fontSize: F.sm, borderRadius: 4, padding: "0 8px", width: "100%" };
+  const field: React.CSSProperties = { height: 36, border: `1px solid ${T.hair}`, background: T.card, fontSize: F.sm, borderRadius: 4, padding: "0 8px", width: "100%" };
   return (
     <Sheet open={open} onClose={onClose} title="New group" sub="How cards are organised on the budget and the proposal">
       <div className="px-4 py-3 flex flex-col gap-3">
@@ -210,7 +210,7 @@ export function GroupSheet({ open, onClose, onSaved }: { open: boolean; onClose:
         <label className="block" style={{ maxWidth: 200 }}><span style={eyebrow}>Markup (optional)</span>
           <input type="number" inputMode="decimal" value={markup} onChange={(e) => setMarkup(e.target.value)} placeholder="blank = the type's markup" style={field} /></label>
         {err && <div style={{ fontSize: F.xs, color: T.red }}>{err}</div>}
-        <button onClick={() => void save()} disabled={!name.trim()} className="rounded" style={{ height: 40, background: T.ink, color: "#fff", fontFamily: disp, fontSize: F.sm, textTransform: "uppercase", opacity: name.trim() ? 1 : 0.5 }}>Add group</button>
+        <button onClick={() => void save()} disabled={!name.trim()} className="rounded" style={{ height: 40, background: T.ink, color: T.card, fontFamily: disp, fontSize: F.sm, textTransform: "uppercase", opacity: name.trim() ? 1 : 0.5 }}>Add group</button>
       </div>
     </Sheet>
   );
@@ -234,7 +234,7 @@ export function CardSheet({ card, groups, vendors, lockVendor, onClose, onSaved,
   if (!card) return <Sheet open={false} onClose={onClose} title="">{null}</Sheet>;
   const set = (p: Partial<Card>) => setF((x) => ({ ...x, ...p }));
   const rule = (f.qty_rule ?? "manual") as QtyRule;
-  const field: React.CSSProperties = { height: 36, border: `1px solid ${T.hair}`, background: "#fff", fontSize: F.sm, borderRadius: 4, padding: "0 8px", width: "100%", minWidth: 0 };
+  const field: React.CSSProperties = { height: 36, border: `1px solid ${T.hair}`, background: T.card, fontSize: F.sm, borderRadius: 4, padding: "0 8px", width: "100%", minWidth: 0 };
   const numField = (v: number | null | undefined) => (v === null || v === undefined ? "" : String(v));
 
   const save = async () => {
@@ -342,7 +342,7 @@ export function CardSheet({ card, groups, vendors, lockVendor, onClose, onSaved,
         )}
         {err && <div style={{ fontSize: F.xs, color: T.red }}>{err}</div>}
         <button onClick={() => void save()} disabled={busy || !(f.name ?? "").trim()} className="rounded"
-          style={{ height: 42, background: T.ink, color: "#fff", fontFamily: disp, fontSize: F.sm, textTransform: "uppercase", letterSpacing: ".06em", opacity: busy || !(f.name ?? "").trim() ? 0.5 : 1 }}>
+          style={{ height: 42, background: T.ink, color: T.card, fontFamily: disp, fontSize: F.sm, textTransform: "uppercase", letterSpacing: ".06em", opacity: busy || !(f.name ?? "").trim() ? 0.5 : 1 }}>
           {card.id ? "Save card" : "Add card"}
         </button>
         {card.id && card.active !== false && <button onClick={() => void retire()} disabled={busy} className="self-start" style={{ ...eyebrow, color: T.red, cursor: "pointer" }}>Take out of the catalog</button>}
@@ -385,7 +385,7 @@ function VendorPrices({ card, vendors, onChanged }: { card: Card; vendors: Vendo
     catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
   };
   const name = (s: Src) => s.vendor?.name || s.vendor?.company_name || formatPhone(s.vendor?.phone ?? null);
-  const field: React.CSSProperties = { height: 32, border: `1px solid ${T.hair}`, background: "#fff", fontSize: F.sm, borderRadius: 4, padding: "0 8px", minWidth: 0 };
+  const field: React.CSSProperties = { height: 32, border: `1px solid ${T.hair}`, background: T.card, fontSize: F.sm, borderRadius: 4, padding: "0 8px", minWidth: 0 };
   const taken = new Set((rows ?? []).map((r) => r.vendor?.id));
   return (
     <div className="mt-1" style={{ borderTop: `1px solid ${T.hairSoft}`, paddingTop: 8 }}>
@@ -460,7 +460,7 @@ function SameItem({ card, items, onDone }: { card: Card; items: Card[]; onDone: 
       ) : (
         <div className="flex gap-1.5 items-center">
           <select value={into} onChange={(e) => setInto(e.target.value)} aria-label="Same item as"
-            style={{ height: 32, border: `1px solid ${T.hair}`, background: "#fff", fontSize: F.sm, borderRadius: 4, padding: "0 8px", minWidth: 0, flex: 1 }}>
+            style={{ height: 32, border: `1px solid ${T.hair}`, background: T.card, fontSize: F.sm, borderRadius: 4, padding: "0 8px", minWidth: 0, flex: 1 }}>
             <option value="">Pick the item this duplicates…</option>
             {opts.map((i) => <option key={i.id} value={i.id}>{i.name} · {i.unit}</option>)}
           </select>

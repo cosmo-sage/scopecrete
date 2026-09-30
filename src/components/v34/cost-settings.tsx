@@ -146,7 +146,7 @@ export function CostSettingsEditor({ onSaved }: { onSaved?: () => void }) {
                 <label key={f.k} className="block" style={{ minWidth: 0 }}>
                   <span style={eyebrow}>{f.label}</span>
                   <div className="flex items-center rounded mt-0.5"
-                    style={{ border: `1px solid ${blank(f.k) ? T.hiviz : T.hair}`, background: "#fff", height: 38 }}>
+                    style={{ border: `1px solid ${blank(f.k) ? T.hiviz : T.hair}`, background: T.card, height: 38 }}>
                     <input type="number" inputMode="decimal" value={form[f.k] ?? ""}
                       onChange={(e) => setForm((s) => ({ ...s, [f.k]: e.target.value }))}
                       className="w-full bg-transparent outline-none px-2"
@@ -184,7 +184,7 @@ export function CostSettingsEditor({ onSaved }: { onSaved?: () => void }) {
           {compMode && (
             <label className="block mt-2" style={{ maxWidth: 200 }}>
               <span style={eyebrow}>{compMode === "fixed_draw" ? "Monthly draw" : "Percent of profit"}</span>
-              <div className="flex items-center rounded mt-0.5" style={{ border: `1px solid ${T.hair}`, background: "#fff", height: 38 }}>
+              <div className="flex items-center rounded mt-0.5" style={{ border: `1px solid ${T.hair}`, background: T.card, height: 38 }}>
                 <input type="number" inputMode="decimal"
                   value={form[compMode === "fixed_draw" ? "comp_monthly_draw" : "comp_profit_pct"] ?? ""}
                   onChange={(e) => setForm((s) => ({ ...s, [compMode === "fixed_draw" ? "comp_monthly_draw" : "comp_profit_pct"]: e.target.value }))}
@@ -198,7 +198,7 @@ export function CostSettingsEditor({ onSaved }: { onSaved?: () => void }) {
 
         <div className="px-3 py-3 flex items-center gap-3 flex-wrap">
           <button onClick={() => void save()} disabled={saving} className="rounded px-4"
-            style={{ height: 38, background: T.hiviz, color: "#fff", fontFamily: disp, fontSize: F.md,
+            style={{ height: 38, background: T.hiviz, color: T.onHiviz, fontFamily: disp, fontSize: F.md,
                      fontWeight: 600, textTransform: "uppercase", letterSpacing: ".06em", cursor: saving ? "default" : "pointer" }}>
             {saving ? "Saving…" : "Save settings"}
           </button>
@@ -305,7 +305,7 @@ function OverheadEditor({ items, onChanged }: {
         <label className="block" style={{ flex: "1 1 110px", minWidth: 0 }}>
           <span style={eyebrow}>Every</span>
           <select value={cadence} onChange={(e) => setCadence(e.target.value)}
-            className="w-full rounded mt-0.5 px-1.5 outline-none" style={{ border: `1px solid ${T.hair}`, height: 38, fontSize: F.sm, background: "#fff" }}>
+            className="w-full rounded mt-0.5 px-1.5 outline-none" style={{ border: `1px solid ${T.hair}`, height: 38, fontSize: F.sm, background: T.card }}>
             <option value="monthly">month</option><option value="quarterly">quarter</option>
             <option value="annual">year</option><option value="one_time">one time</option>
           </select>

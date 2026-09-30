@@ -11,7 +11,7 @@ import { getApiSession } from "@/lib/api-auth";
  */
 
 export const dynamic = "force-dynamic";
-const KEYS = new Set(["menus", "home", "pricebook_cols"]);
+const KEYS = new Set(["menus", "home", "pricebook_cols", "theme"]);
 
 export async function GET(req: NextRequest) {
   const result = await getApiSession(req);

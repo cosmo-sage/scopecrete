@@ -69,7 +69,7 @@ export function Home() {
       <div className="flex items-baseline gap-2" style={{ marginBottom: 8 }}>
         <h1 style={{ fontFamily: disp, fontSize: F.xl, fontWeight: 700, margin: 0, flex: 1 }}>Dashboard</h1>
         <button onClick={() => setEdit((e) => !e)} aria-pressed={edit}
-          style={{ ...eyebrow, color: edit ? "#fff" : T.chalk, background: edit ? T.chalk : "transparent", border: `1px solid ${T.chalk}`, borderRadius: 4, padding: "4px 10px", cursor: "pointer" }}>
+          style={{ ...eyebrow, color: edit ? T.card : T.chalk, background: edit ? T.chalk : "transparent", border: `1px solid ${T.chalk}`, borderRadius: 4, padding: "4px 10px", cursor: "pointer" }}>
           {edit ? "Done" : "Edit"}
         </button>
       </div>

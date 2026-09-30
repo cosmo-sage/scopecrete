@@ -244,7 +244,7 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
       <div className="px-3 py-2.5 flex items-center gap-2 shrink-0" style={{ borderBottom: `1px solid ${T.hair}` }}>
         <span style={{ ...eyebrow, color: T.ink, flex: 1 }}>Conversations</span>
         <button onClick={() => select(null)} className="rounded px-2.5"
-          style={{ height: 28, background: T.ink, color: "#fff", fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", letterSpacing: ".06em" }}>
+          style={{ height: 28, background: T.ink, color: T.card, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", letterSpacing: ".06em" }}>
           + New
         </button>
       </div>
@@ -307,7 +307,7 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
             What&apos;s new?</button>
           <button onClick={() => select(null)} aria-label="New chat" style={{ ...iconBtn, fontSize: 18, color: T.ink2 }}>+</button>
           <button onClick={onClose} aria-label="Close Dusty" style={iconBtn}>
-            <svg width="12" height="12" viewBox="0 0 13 13" aria-hidden="true"><path d="M1 1 L12 12 M12 1 L1 12" stroke={T.ink} strokeWidth="1.8" /></svg>
+            <svg width="12" height="12" viewBox="0 0 13 13" aria-hidden="true"><path d="M1 1 L12 12 M12 1 L1 12" stroke="currentColor" style={{ color: T.ink }} strokeWidth="1.8" /></svg>
           </button>
         </header>
 
@@ -367,7 +367,7 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
               className="flex-1 rounded-lg px-3 py-2 outline-none resize-none"
               style={{ border: `1px solid ${T.hair}`, fontSize: F.sm, maxHeight: 140, fontFamily: body, minWidth: 0 }} />
             <button type="submit" disabled={busy || !draft.trim()} className="rounded-lg px-3"
-              style={{ height: 38, background: busy || !draft.trim() ? T.hair : T.hiviz, color: "#fff", fontFamily: disp,
+              style={{ height: 38, background: busy || !draft.trim() ? T.hair : T.hiviz, color: T.onHiviz, fontFamily: disp,
                        fontSize: F.sm, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".06em" }}>
               {busy ? "…" : "Ask"}
             </button>

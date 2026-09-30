@@ -98,7 +98,7 @@ export function Documents() {
           const on = cat === k;
           return (
             <button key={k || "all"} onClick={() => { setCat(k); if (fileParam) clearFile(); }} aria-pressed={on} className="rounded px-2"
-              style={{ height: 26, background: on ? T.ink : T.card, color: on ? "#fff" : T.ink2, border: `1px solid ${on ? T.ink : T.hair}`,
+              style={{ height: 26, background: on ? T.ink : T.card, color: on ? T.card : T.ink2, border: `1px solid ${on ? T.ink : T.hair}`,
                        fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", cursor: "pointer" }}>{l}</button>
           );
         })}

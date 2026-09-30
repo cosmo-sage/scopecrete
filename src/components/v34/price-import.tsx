@@ -217,9 +217,9 @@ export function PriceImport({ open, onClose, cards, vendors, onDone, start = "sh
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
   };
 
-  const field: React.CSSProperties = { height: 34, border: `1px solid ${T.hair}`, background: "#fff", fontSize: F.sm, borderRadius: 4, padding: "0 8px", minWidth: 0, width: "100%" };
+  const field: React.CSSProperties = { height: 34, border: `1px solid ${T.hair}`, background: T.card, fontSize: F.sm, borderRadius: 4, padding: "0 8px", minWidth: 0, width: "100%" };
   const btn = (primary: boolean): React.CSSProperties => ({ height: 38, padding: "0 14px", borderRadius: 4, fontFamily: disp, fontSize: F.sm, textTransform: "uppercase",
-    letterSpacing: ".06em", background: primary ? T.ink : T.card, color: primary ? "#fff" : T.ink, border: primary ? "none" : `1px solid ${T.hair}`, cursor: "pointer" });
+    letterSpacing: ".06em", background: primary ? T.ink : T.card, color: primary ? T.card : T.ink, border: primary ? "none" : `1px solid ${T.hair}`, cursor: "pointer" });
   const sample = (col: number | null) => {
     if (col === null) return "";
     const r = table.slice(1).find((x) => x[col] !== null && x[col] !== undefined && String(x[col]).trim() !== "");
@@ -389,7 +389,7 @@ export function PriceImport({ open, onClose, cards, vendors, onDone, start = "sh
             <div className="flex gap-1 flex-wrap" role="tablist" aria-label="Show">
               {(["all", "new", "change", "same", "skip"] as const).map((k) => (
                 <button key={k} role="tab" aria-selected={filter === k} onClick={() => setFilter(k)} className="rounded px-2.5"
-                  style={{ height: 30, background: filter === k ? T.ink : T.card, color: filter === k ? "#fff" : T.ink2, border: `1px solid ${filter === k ? T.ink : T.hair}`,
+                  style={{ height: 30, background: filter === k ? T.ink : T.card, color: filter === k ? T.card : T.ink2, border: `1px solid ${filter === k ? T.ink : T.hair}`,
                     fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", letterSpacing: ".05em", cursor: "pointer" }}>
                   {k === "all" ? `All ${matched.length}` : `${STATUS_LABEL[k]} ${counts[k]}`}
                 </button>

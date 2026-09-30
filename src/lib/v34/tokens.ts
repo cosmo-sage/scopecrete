@@ -12,35 +12,39 @@
  */
 
 /**
- * "Site Office" palette (Claude Design handoff, 2026-09-30 — design/palette-logo).
- * Cream ground, warm ink, terracotta accent. Same keys as v34, plus new ones.
- * One deviation from the handoff: it set `dark` to the light rail colour, but
- * the job page's money strip and takeoff rail use `dark` with white text, so
- * the nav rail gets its own key (`rail`) and `dark` stays dark, warmed.
+ * Colour tokens read the theme (Settings → Appearance; src/lib/v34/themes.ts,
+ * variables in v34-shell.css): Site Office (default), Blueprint, Kraft Yard,
+ * Night Shift. Every `T.x` is a CSS variable, so every screen follows the
+ * chosen theme with no branching. The *Dim fills the themes don't name are
+ * mixed from their colour and the card. `dark` / `darkHair` stay fixed: the
+ * job page's money strip and takeoff rail are dark with white text in every
+ * theme. Where JS must do maths on a colour, use THEMES[..] hex values.
  */
+const v = (name: string) => `var(--sc-${name})`;
+const dim = (name: string) => `color-mix(in srgb, var(--sc-${name}) 14%, var(--sc-card))`;
 export const T = {
   // ground + surfaces
-  slab: "#FBF6EC", card: "#FFFFFF", ink: "#2A2A2A", ink2: "#5E5A52", ink3: "#8C8578",
-  hair: "#E6DCC8", hairSoft: "#F1E9DA",
+  slab: v("slab"), card: v("card"), sunk: v("sunk"), ink: v("ink"), ink2: v("ink2"), ink3: v("ink3"),
+  hair: v("hair"), hairSoft: v("hair-soft"), hairStrong: v("hair-strong"),
   // roles
-  chalk: "#1E5AA8", chalkDim: "#DCE6F4",     // links, info, Vendor bucket
-  hiviz: "#B85A3C", hivizDim: "#F6E2D8",     // primary action, Unsorted bucket, badges (terracotta)
-  green: "#2F8A5B", greenDim: "#DDEEE3",     // Customer bucket, good
-  violet: "#6A55B0", violetDim: "#ECE8F6",   // Personal bucket
-  red: "#B5412C", redDim: "#F7DCD6",         // Spam bucket, drift alarm, bad
-  // dark panels (job money strip, takeoff rail) — white text on these
+  chalk: v("chalk"), chalkDim: v("chalk-dim"),          // links, info
+  hiviz: v("hiviz"), hivizDim: v("hiviz-dim"),          // primary action, badges
+  onHiviz: v("on-hiviz"),                               // text on the accent (dark in Night Shift)
+  hivizSoft: v("hiviz-soft"), hivizText: v("hiviz-text"),
+  green: v("green"), greenDim: dim("green"),
+  violet: v("violet"), violetDim: dim("violet"),
+  red: v("red"), redDim: dim("red"),
+  teal: v("teal"),
+  // dark panels (job money strip, takeoff rail) — white text on these, every theme
   dark: "#2A2A2A", darkHair: "#3D3A34",
-  pulse: "#2F8A5B",
-  /* ---- new (handoff) ---- */
-  rail: "#F3ECDD", railInk: "#6E685D",       // the light nav rail
-  hivizSoft: "#D97757",   // checkbox rings, outlined "Ask Dusty", active rail edge
-  hivizText: "#9A4527",   // accent-coloured text on light grounds
-  hairStrong: "#D9CDB6",  // input + button outlines
+  pulse: v("green"),
+  rail: v("rail"), railInk: v("rail-ink"), railActive: v("rail-active"), railInkOn: v("rail-ink-on"),
   sun: "#6B4E12", sunDim: "#F7EBC9",
-  dustyTint: "#FBEDE6",   // Dusty's cards, next-steps box
-  paper: "#FAF8F3", paperGrid: "rgba(89,128,166,.08)",
-  pencil: "#3A3E43", pencilMuted: "#5A5F66", pencilLine: "rgba(58,62,68,.30)",
-  logoOrange: "#D9550A",  // "crete" in the wordmark ONLY
+  dustyTint: v("dusty-tint"), dustyText: v("dusty-text"), dustyEdge: v("dusty-edge"),
+  outBg: v("out-bg"), outInk: v("out-ink"),
+  paper: v("paper"), paperGrid: v("paper-grid"),
+  pencil: v("pencil"), pencilMuted: v("pencil-muted"), pencilLine: v("pencil-line"),
+  logoOrange: v("crete"),  // "crete" in the wordmark ONLY
 } as const;
 
 /** The "logo orange" alternate accent — swap these keys into T to pull the UI toward the wordmark's orange. */
@@ -49,7 +53,7 @@ export const LOGO_ACCENT = {
 } as const;
 
 /** Bucket colours — unchanged mapping, new values. */
-export const BUCKET = { unsorted: T.hiviz, customer: T.green, vendor: T.chalk, personal: T.violet, spam: T.red } as const;
+export const BUCKET = { unsorted: v("bucket-unsorted"), customer: v("bucket-customer"), vendor: v("bucket-vendor"), personal: v("bucket-personal"), spam: v("bucket-spam") } as const;
 
 /* ---- money palette ----
    Softer than the UI tokens: teal for cash already in, indigo for

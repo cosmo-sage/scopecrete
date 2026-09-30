@@ -196,7 +196,7 @@ export function PriceBook() {
   };
   const recentImports = imports.filter((i) => now - new Date(i.created_at).getTime() < 30 * 864e5);
   const btn = (primary: boolean): React.CSSProperties => ({ height: 32, padding: "0 10px", borderRadius: 4, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase",
-    letterSpacing: ".06em", background: primary ? T.ink : T.card, color: primary ? "#fff" : T.ink, border: primary ? "none" : `1px solid ${T.hair}`, cursor: "pointer", whiteSpace: "nowrap" });
+    letterSpacing: ".06em", background: primary ? T.ink : T.card, color: primary ? T.card : T.ink, border: primary ? "none" : `1px solid ${T.hair}`, cursor: "pointer", whiteSpace: "nowrap" });
 
   return (
     <div ref={measure} className="px-3 py-3 lg:px-5">
@@ -229,7 +229,7 @@ export function PriceBook() {
       <div className="flex gap-1 mt-3" role="tablist" aria-label="Price book">
         {(["cards", "assemblies"] as const).map((k) => (
           <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)} className="rounded px-3"
-            style={{ height: 32, background: tab === k ? T.ink : T.card, color: tab === k ? "#fff" : T.ink2, border: `1px solid ${tab === k ? T.ink : T.hair}`,
+            style={{ height: 32, background: tab === k ? T.ink : T.card, color: tab === k ? T.card : T.ink2, border: `1px solid ${tab === k ? T.ink : T.hair}`,
               fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", letterSpacing: ".06em", cursor: "pointer" }}>
             {k === "cards" ? `Cards${items ? ` · ${active.length}` : ""}` : "Assemblies"}
           </button>
@@ -240,11 +240,11 @@ export function PriceBook() {
       {/* ---- find, view ---- */}
       <div className="flex items-center gap-2 flex-wrap mt-3">
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find: 3000, rebar, Angelle, item #…" aria-label="Find a card"
-          className="rounded px-2 outline-none" style={{ height: 32, border: `1px solid ${T.hair}`, background: "#fff", fontSize: F.sm, flex: 1, minWidth: 180, maxWidth: 360 }} />
+          className="rounded px-2 outline-none" style={{ height: 32, border: `1px solid ${T.hair}`, background: T.card, fontSize: F.sm, flex: 1, minWidth: 180, maxWidth: 360 }} />
         <div className="flex rounded overflow-hidden" role="tablist" aria-label="View" style={{ border: `1px solid ${T.hair}` }}>
           {(["group", "vendor"] as const).map((v) => (
             <button key={v} role="tab" aria-selected={view === v} onClick={() => setView(v)} className="px-2.5"
-              style={{ height: 30, background: view === v ? T.ink : T.card, color: view === v ? "#fff" : T.ink2, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", letterSpacing: ".05em", cursor: "pointer" }}>
+              style={{ height: 30, background: view === v ? T.ink : T.card, color: view === v ? T.card : T.ink2, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", letterSpacing: ".05em", cursor: "pointer" }}>
               By {v}
             </button>
           ))}
@@ -328,16 +328,16 @@ export function PriceBook() {
                 const shut = open[s.key] === false;
                 return (
                   <React.Fragment key={s.key}>
-                    <tr style={{ background: T.ink, color: "#fff" }}>
+                    <tr style={{ background: T.ink, color: T.card }}>
                       <td colSpan={shownCols.length} style={{ padding: "5px 8px" }}>
                         <span className="flex items-center gap-2">
-                          <button onClick={() => setOpen((o) => ({ ...o, [s.key]: shut }))} aria-expanded={!shut} style={{ color: "#fff", cursor: "pointer", fontFamily: disp, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".04em" }}>
+                          <button onClick={() => setOpen((o) => ({ ...o, [s.key]: shut }))} aria-expanded={!shut} style={{ color: T.card, cursor: "pointer", fontFamily: disp, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".04em" }}>
                             {shut ? "+" : "−"} {s.title}
                           </button>
                           <span style={{ fontSize: F.xs, color: "#AEB8C2" }}>{s.sub}</span>
                           {s.href && <Link href={s.href} style={{ fontSize: F.xs, color: "#AEB8C2" }}>their page →</Link>}
                           <span className="flex-1" />
-                          {s.groupId && <button onClick={() => newCard(s.groupId)} style={{ ...eyebrow, color: "#fff", cursor: "pointer" }}>+ Card</button>}
+                          {s.groupId && <button onClick={() => newCard(s.groupId)} style={{ ...eyebrow, color: T.card, cursor: "pointer" }}>+ Card</button>}
                         </span>
                       </td>
                     </tr>

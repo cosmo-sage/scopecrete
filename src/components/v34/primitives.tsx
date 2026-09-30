@@ -40,7 +40,7 @@ export const Avatar = ({ label, kind, dim, size = 34 }: {
     <span className="shrink-0 rounded-full flex items-center justify-center"
       style={{
         width: size, height: size, background: dim ? T.hair : AVATAR_COLORS[idx],
-        color: dim ? T.ink3 : "#fff", fontFamily: disp, fontSize: size * 0.44, fontWeight: 700,
+        color: dim ? T.ink3 : T.card, fontFamily: disp, fontSize: size * 0.44, fontWeight: 700,
       }}>
       {kind === "vendor" ? "▣" : kind === "sub" ? "⚒" : ch}
     </span>
@@ -66,7 +66,7 @@ export const Segmented = ({ options, value, onChange, small }: {
   <div className="flex rounded overflow-hidden" style={{ border: `1px solid ${T.hair}`, height: small ? 30 : 36 }}>
     {options.map(([k, l]) => (
       <button key={k} onClick={() => onChange(k)} className="flex-1 px-2"
-        style={{ background: value === k ? T.ink : "#fff", color: value === k ? "#fff" : T.ink2, fontFamily: disp, fontSize: small ? F.sm : F.md, textTransform: "uppercase", letterSpacing: ".08em", whiteSpace: "nowrap" }}>
+        style={{ background: value === k ? T.ink : T.card, color: value === k ? T.card : T.ink2, fontFamily: disp, fontSize: small ? F.sm : F.md, textTransform: "uppercase", letterSpacing: ".08em", whiteSpace: "nowrap" }}>
         {l}
       </button>
     ))}
@@ -78,7 +78,7 @@ export const NumField = ({ label, value, onChange, suffix }: {
 }) => (
   <label className="block" style={{ minWidth: 0 }}>
     <span style={eyebrow}>{label}</span>
-    <div className="flex items-center rounded mt-0.5" style={{ border: `1px solid ${T.hair}`, background: "#fff", height: 40 }}>
+    <div className="flex items-center rounded mt-0.5" style={{ border: `1px solid ${T.hair}`, background: T.card, height: 40 }}>
       <input type="number" inputMode="decimal" value={value}
         onChange={(e) => onChange(e.target.value === "" ? "" : Number(e.target.value))}
         className="w-full bg-transparent outline-none px-2"
@@ -98,11 +98,11 @@ export const TextField = ({ label, value, onChange, placeholder, type = "text", 
     {multiline ? (
       <textarea value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} rows={2}
         className="w-full rounded mt-0.5 px-2 py-1.5 outline-none"
-        style={{ border: `1px solid ${T.hair}`, background: "#fff", fontSize: F.sm, fontFamily: body, resize: "none", lineHeight: 1.45 }} />
+        style={{ border: `1px solid ${T.hair}`, background: T.card, fontSize: F.sm, fontFamily: body, resize: "none", lineHeight: 1.45 }} />
     ) : (
       <input type={type} inputMode={inputMode} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder}
         className="w-full rounded mt-0.5 px-2 outline-none"
-        style={{ border: `1px solid ${T.hair}`, background: "#fff", height: 40, fontSize: F.sm, fontFamily: body, minWidth: 0 }} />
+        style={{ border: `1px solid ${T.hair}`, background: T.card, height: 40, fontSize: F.sm, fontFamily: body, minWidth: 0 }} />
     )}
   </label>
 );
@@ -113,12 +113,12 @@ export const DimRow = ({ axis, ft, inches, onFt, onIn }: {
 }) => (
   <div className="flex items-center gap-1.5">
     <span style={{ fontFamily: disp, fontSize: F.md, fontWeight: 700, color: T.ink3, width: 14 }}>{axis}</span>
-    <div className="flex items-center rounded flex-1" style={{ border: `1px solid ${T.hair}`, background: "#fff", height: 38, minWidth: 0 }}>
+    <div className="flex items-center rounded flex-1" style={{ border: `1px solid ${T.hair}`, background: T.card, height: 38, minWidth: 0 }}>
       <input type="number" inputMode="decimal" value={ft} onChange={(e) => onFt(e.target.value === "" ? "" : Number(e.target.value))}
         className="w-full bg-transparent outline-none px-2" style={{ fontFamily: disp, fontSize: F.md, fontWeight: 600, ...nums, minWidth: 0 }} />
       <span className="pr-1.5 shrink-0" style={{ fontSize: F.micro, color: T.ink3, letterSpacing: ".08em" }}>FT</span>
     </div>
-    <div className="flex items-center rounded" style={{ border: `1px solid ${T.hair}`, background: "#fff", height: 38, width: 72 }}>
+    <div className="flex items-center rounded" style={{ border: `1px solid ${T.hair}`, background: T.card, height: 38, width: 72 }}>
       <input type="number" inputMode="decimal" value={inches} onChange={(e) => onIn(e.target.value === "" ? "" : Number(e.target.value))}
         className="w-full bg-transparent outline-none px-2" style={{ fontFamily: disp, fontSize: F.md, fontWeight: 600, ...nums, minWidth: 0 }} />
       <span className="pr-1.5 shrink-0" style={{ fontSize: F.micro, color: T.ink3, letterSpacing: ".08em" }}>IN</span>
@@ -128,10 +128,11 @@ export const DimRow = ({ axis, ft, inches, onFt, onIn }: {
 
 /* ----------------------------------------------------------------- NavIcon */
 
-export const NavIcon = ({ k, on }: { k: string; on: boolean }) => {
-  const c = on ? T.ink : T.ink3;
+export const NavIcon = ({ k, on, color }: { k: string; on: boolean; color?: string }) => {
+  // Drawn in currentColor so a theme (CSS variables) or the rail can colour it.
+  const c = "currentColor";
+  const box = { width: 19, height: 19, viewBox: "0 0 19 19", style: { color: color ?? (on ? T.ink : T.ink3) } };
   const p = { fill: "none", stroke: c, strokeWidth: 1.6, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
-  const box = { width: 19, height: 19, viewBox: "0 0 19 19" };
   if (k === "threads") return <svg {...box}><path {...p} d="M2.6 4.4h13.8v8.4H8.9l-4 3v-3H2.6z" /></svg>;
   if (k === "scope") return (
     <svg {...box}>
@@ -233,7 +234,7 @@ export function Drawer({ open, onClose, title, sub, right, children, hideClose, 
               className="shrink-0 rounded-lg flex items-center justify-center"
               style={{ width: 32, height: 32, border: `1px solid ${T.hair}`, background: T.card }}>
               <svg width="13" height="13" viewBox="0 0 13 13" aria-hidden="true">
-                <path d="M1 1 L12 12 M12 1 L1 12" stroke={T.ink} strokeWidth="1.8" strokeLinecap="square" />
+                <path d="M1 1 L12 12 M12 1 L1 12" stroke="currentColor" style={{ color: T.ink }} strokeWidth="1.8" strokeLinecap="square" />
               </svg>
             </button>
           )}

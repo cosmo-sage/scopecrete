@@ -193,7 +193,7 @@ export async function POST(req: NextRequest) {
     if (typeof insert[field] !== "string") continue;
     const { data: contact, error: contactErr } = await supabase
       .from("contacts")
-      .select("id")
+      .select("id, customer_id")
       .eq("id", insert[field] as string)
       .eq("org_id", orgId)
       .maybeSingle();
@@ -207,6 +207,12 @@ export async function POST(req: NextRequest) {
         code: "contact_not_in_org",
       }, { status: 403 }));
     }
+  }
+
+  // A job belongs to the customer (migration 055): the contact's customer.
+  if (typeof insert.contact_id === "string" && !insert.customer_id) {
+    const { data: cc } = await supabase.from("contacts").select("customer_id").eq("org_id", orgId).eq("id", insert.contact_id).maybeSingle();
+    if (cc?.customer_id) insert.customer_id = cc.customer_id;
   }
 
   // job_number is left NULL unless the caller supplies one.

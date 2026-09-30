@@ -48,7 +48,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${outfit.variable} ${jetbrainsMono.variable} ${caveat.variable}`}>
+    <html lang="en" className={`${outfit.variable} ${jetbrainsMono.variable} ${caveat.variable}`} suppressHydrationWarning>
+      <head>
+        {/* The colour theme (Settings → Appearance) before first paint, so a
+            dark theme never flashes cream. Saved per device by useTheme(). */}
+        <script dangerouslySetInnerHTML={{ __html: "try{document.documentElement.dataset.theme=localStorage.getItem('sc-theme')||'site-office'}catch(e){}" }} />
+      </head>
       <body className="font-sans antialiased">
         {children}
       </body>

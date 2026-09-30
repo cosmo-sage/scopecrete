@@ -50,9 +50,9 @@ export function NameEditor({ contactId, name, fallback, onSaved, style }: {
             onKeyDown={(e) => { if (e.key === "Enter") void save(); if (e.key === "Escape") setEditing(false); }}
             aria-label="Name" placeholder="Their name"
             className="flex-1 min-w-0 rounded px-2"
-            style={{ height: 30, border: `1px solid ${T.ink}`, fontSize: F.md, background: "#fff", color: T.ink }} />
+            style={{ height: 30, border: `1px solid ${T.ink}`, fontSize: F.md, background: T.card, color: T.ink }} />
           <button onClick={() => void save()} disabled={busy || !draft.trim()} className="rounded px-2.5"
-            style={{ height: 30, background: T.ink, color: "#fff", fontFamily: disp, fontSize: F.xs, letterSpacing: ".06em",
+            style={{ height: 30, background: T.ink, color: T.card, fontFamily: disp, fontSize: F.xs, letterSpacing: ".06em",
                      textTransform: "uppercase", border: "none", opacity: busy || !draft.trim() ? 0.5 : 1 }}>
             {busy ? "Saving…" : "Save"}
           </button>

@@ -161,7 +161,7 @@ export function JobBudget({ jobId, sections, crewDays, onSummary, refresh = 0 }:
         <span style={{ fontSize: F.xs, color: T.ink3 }}>qty × unit cost → markup → price</span>
         <span className="flex-1" />
         <button onClick={() => setPicker(true)} className="rounded px-2.5"
-          style={{ height: 30, background: T.ink, color: "#fff", fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", letterSpacing: ".06em", cursor: "pointer" }}>
+          style={{ height: 30, background: T.ink, color: T.card, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", letterSpacing: ".06em", cursor: "pointer" }}>
           + Add from cost cards
         </button>
       </div>
@@ -215,7 +215,7 @@ export function JobBudget({ jobId, sections, crewDays, onSummary, refresh = 0 }:
             <tbody>
               {areas.map((a) => (
                 <React.Fragment key={a.id ?? "job"}>
-                  <tr style={{ background: T.ink, color: "#fff" }}>
+                  <tr style={{ background: T.ink, color: T.card }}>
                     <td colSpan={5} style={{ padding: "5px 8px", fontFamily: disp, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".04em" }}>{a.name}</td>
                     <td style={{ padding: "5px 8px", textAlign: "right" }}>{money0(sum(a.lines, "ext_cost"))}</td>
                     <td colSpan={2} />
@@ -360,7 +360,7 @@ export function JobBudget({ jobId, sections, crewDays, onSummary, refresh = 0 }:
 function TierTab({ on, onClick, label, sub }: { on: boolean; onClick: () => void; label: string; sub?: string }) {
   return (
     <button role="tab" aria-selected={on} onClick={onClick} className="rounded px-2.5 text-left"
-      style={{ minHeight: 30, background: on ? T.ink : T.card, color: on ? "#fff" : T.ink2, border: `1px solid ${on ? T.ink : T.hair}`, cursor: "pointer" }}>
+      style={{ minHeight: 30, background: on ? T.ink : T.card, color: on ? T.card : T.ink2, border: `1px solid ${on ? T.ink : T.hair}`, cursor: "pointer" }}>
       <span style={{ fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", letterSpacing: ".06em" }}>{label}</span>
       {sub && <span style={{ fontSize: 10, marginLeft: 6, opacity: 0.75, ...nums }}>{sub}</span>}
     </button>
@@ -374,7 +374,7 @@ function GroupCard({ name, lines, res, optLabel, asmName, onOpen, cost, price }:
 }) {
   const [open, setOpen] = useState(true);
   return (
-    <div className="rounded mt-1.5" style={{ border: `1px solid ${T.hair}`, background: "#fff" }}>
+    <div className="rounded mt-1.5" style={{ border: `1px solid ${T.hair}`, background: T.card }}>
       <button onClick={() => setOpen((o) => !o)} aria-expanded={open} className="w-full flex items-center justify-between px-2.5" style={{ height: 40, cursor: "pointer" }}>
         <span className="flex items-center gap-1.5">
           <span style={{ fontFamily: disp, fontSize: F.xs, color: T.ink3, width: 10 }}>{open ? "−" : "+"}</span>
@@ -423,7 +423,7 @@ function CardPicker({ open, onClose, data, sections, tier, tierLabel, onAdd, onL
     .filter((g) => g.cards.length);
   const base = { section_id: area || null, option_id: tier };
   const add = async (body: Record<string, unknown>, what: string) => { await onAdd({ ...base, ...body }); setAdded(what); setTimeout(() => setAdded(null), 1600); };
-  const field: React.CSSProperties = { height: 34, border: `1px solid ${T.hair}`, background: "#fff", fontSize: F.sm, borderRadius: 4, padding: "0 8px", width: "100%", minWidth: 0 };
+  const field: React.CSSProperties = { height: 34, border: `1px solid ${T.hair}`, background: T.card, fontSize: F.sm, borderRadius: 4, padding: "0 8px", width: "100%", minWidth: 0 };
   return (
     <Sheet open={open} onClose={onClose} title="Add to the budget" sub={tierLabel ? `Into ${tierLabel}` : "Into every option"}>
       <div className="px-4 py-3 flex flex-col gap-2.5">
@@ -444,7 +444,7 @@ function CardPicker({ open, onClose, data, sections, tier, tierLabel, onAdd, onL
             <div className="flex flex-wrap gap-1.5 mt-1">
               {data.assemblies!.map((a) => (
                 <button key={a.id} disabled={!area} onClick={() => void onLoadAssembly(a.id, area).then(() => { setAdded(a.name); setTimeout(() => setAdded(null), 1600); })}
-                  className="rounded px-2" style={{ height: 30, border: `1px solid ${T.hair}`, background: "#fff", fontSize: F.xs, opacity: area ? 1 : 0.5, cursor: area ? "pointer" : "default" }}>
+                  className="rounded px-2" style={{ height: 30, border: `1px solid ${T.hair}`, background: T.card, fontSize: F.xs, opacity: area ? 1 : 0.5, cursor: area ? "pointer" : "default" }}>
                   {a.name}
                 </button>
               ))}
@@ -483,7 +483,7 @@ function CardPicker({ open, onClose, data, sections, tier, tierLabel, onAdd, onL
             <input value={custom.unit} onChange={(e) => setCustom((c) => ({ ...c, unit: e.target.value }))} placeholder="unit" aria-label="One-off unit" style={field} />
             <input value={custom.unit_cost} onChange={(e) => setCustom((c) => ({ ...c, unit_cost: e.target.value }))} placeholder="unit cost" inputMode="decimal" aria-label="One-off unit cost" style={field} />
             <button disabled={!custom.name.trim()} onClick={() => void add({ ...custom, qty_rule: "manual", unit_cost: custom.unit_cost === "" ? null : custom.unit_cost }, custom.name).then(() => setCustom({ name: "", cost_type: "material", unit: "each", unit_cost: "" }))}
-              className="rounded" style={{ height: 34, background: T.ink, color: "#fff", fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", opacity: custom.name.trim() ? 1 : 0.5 }}>Add line</button>
+              className="rounded" style={{ height: 34, background: T.ink, color: T.card, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", opacity: custom.name.trim() ? 1 : 0.5 }}>Add line</button>
           </div>
           <div style={{ fontSize: 9.5, color: T.ink3, marginTop: 3 }}>Type its quantity on the budget.</div>
         </div>
@@ -497,7 +497,7 @@ function LineSheet({ line, data, sections, res, onClose, onPatch, onDelete }: {
   onClose: () => void; onPatch: (body: Record<string, unknown>) => void; onDelete: () => void;
 }) {
   if (!line || !res) return <Sheet open={false} onClose={onClose} title="">{null}</Sheet>;
-  const field: React.CSSProperties = { height: 36, border: `1px solid ${T.hair}`, background: "#fff", fontSize: F.sm, borderRadius: 4, padding: "0 8px", width: "100%", minWidth: 0 };
+  const field: React.CSSProperties = { height: 36, border: `1px solid ${T.hair}`, background: T.card, fontSize: F.sm, borderRadius: 4, padding: "0 8px", width: "100%", minWidth: 0 };
   const num = (v: string) => (v.trim() === "" ? null : Number(v));
   return (
     <Sheet open onClose={onClose} title={line.name} sub={`${QTY_RULE_LABEL[line.qty_rule as keyof typeof QTY_RULE_LABEL] ?? line.qty_rule}`}>
@@ -566,7 +566,7 @@ function VendorPick({ line, sources, name, onPick, full }: {
   return (
     <select value={line.source_pinned && line.source_id ? line.source_id : ""} aria-label={`Vendor for ${line.name}`}
       onChange={(e) => onPick(e.target.value || null)}
-      style={{ height: full ? 36 : 28, width: "100%", maxWidth: full ? undefined : 166, border: `1px solid ${T.hair}`, background: "#fff", fontSize: full ? F.sm : F.xs, borderRadius: 4, padding: "0 4px" }}>
+      style={{ height: full ? 36 : 28, width: "100%", maxWidth: full ? undefined : 166, border: `1px solid ${T.hair}`, background: T.card, fontSize: full ? F.sm : F.xs, borderRadius: 4, padding: "0 4px" }}>
       <option value="">Default{line.source_pinned ? "" : ` (${name(line.vendor_contact_id) ?? "none"})`}</option>
       {mine.map((x) => <option key={x.id} value={x.id}>{label(x)}{line.source_pinned && line.source_id === x.id ? " ✎" : ""}</option>)}
     </select>

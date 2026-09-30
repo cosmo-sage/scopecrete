@@ -181,6 +181,40 @@ worth keeping.
 
 ---
 
+## 2f. A customer is not a contact — migration 055 (applied 2026-09-30)
+
+Coy: *"Amber is the contact for this commercial customer. The customer is a
+business: Art Apartments. Every customer should have a separate contact
+list."* (Claude Design handoff, `design/customer-and-themes/`.)
+
+- **The customer owns the address and the jobs**; its **contacts** are the
+  people who speak for it. `customers` (one row per contact until now, made by
+  `sc_classify_contact`, carrying `relation` for the lead guard) gained
+  `customer_type` (residential / commercial / public — else read from its
+  jobs), `subtype`, `lead_source`, `status`, `since` (first won job),
+  `primary_contact_id`, and the address (`address_line1`, `city`, `state`,
+  `zip`, `address_formatted`, `lat`/`lng`, `geocoded_at`, `address_source`
+  contact | coy | geocode). `contacts.customer_id` / `role` / `is_primary`
+  already existed; `contact_phones.can_text` and `contact_notes.message_id`
+  (a note on one call) are new. Backfill: each customer's one contact is its
+  primary; the 9 contacts with an address gave it to their customer
+  (`address_source='contact'`, the page says "check it"); jobs got the
+  customer of their contact (20 linked).
+- **Moving people is Coy's tap and undoable.** `sc_attach_contact(contact,
+  customer)` / `sc_detach_contact(contact)` / `sc_undo_contact_move(move)` —
+  SECURITY DEFINER with an explicit membership check, execute for
+  `authenticated` only. The contact's own jobs move with it; every moved id is
+  recorded in `customer_contact_moves`, and undo puts back only what is still
+  where the move left it. `contacts_one_primary` holds: a mover arrives as
+  primary only when the customer has none.
+- **One person's filing never flips a company.** `sc_classify_contact()`
+  first gives a contact that SHARES its customer a customer of its own when
+  it is filed vendor / personal / spam — the lead guard reads
+  `customers.relation`.
+- Rehearsed before applying: attach + jobs follow + one primary; filing a
+  shared contact vendor left the company a customer; undo; a stranger gets
+  "contact not found"; anon has no execute.
+
 ## 2a. The raw log and the spine — migration 016
 
 Applied 2026-08-27 as `016_raw_log_and_spine_projection`. This is the shape of
@@ -399,14 +433,13 @@ classification.** This is a rule, not a gap waiting to be closed:
 > A machine opinion changes what Coy is **asked**. It never changes what he is
 > **shown**. Suppression requires a human confirmation.
 
-**Classifying by hand (2026-09-27).** The Customers screen
-(`/dashboard/customers/[id]`) lets Coy mark a contact customer, vendor or sub
-directly — `PATCH /api/customers/[contactId]/relation`, which writes
-`relation_source='manual'`, `relation_confirmed_at` and `relation_confirmed_by`,
-and creates the `customers` row when the contact has none. That IS the human
-confirmation, so a confirmed vendor or sub is suppressed by the guard; the
-screen says so before the tap. The list shows a relation only when it is
-confirmed — everything else is **Unclassified**, never the column default.
+**Classifying by hand (2026-09-27; since 2026-09-28 the Threads buckets).**
+Filing a person in Threads (`sc_classify_contact`) writes the relation with
+`relation_source='manual'`, `relation_confirmed_at` and
+`relation_confirmed_by`, and creates the `customers` row when the contact has
+none. That IS the human confirmation, so a confirmed vendor or sub is
+suppressed by the guard. (The old `/api/customers/[contactId]/relation` route
+and its Unclassified list are gone — 2026-09-30.)
 
 **The background enricher (2026-09-27, migrations 029–033).** Contacts are
 read with the app closed. pg_cron calls the `enrich-contacts` edge function
@@ -954,9 +987,10 @@ expected start date per quoted job before it means anything. Add the field.
   call / text / email / composer in the row (Coy, 2026-09-28) — engaging on
   every channel belongs on the person's page.
 - **Customer page and Vendor page (2026-09-28)** — `/dashboard/messages/[id]`
-  renders `src/components/v34/person-view.tsx` for anyone filed customer or
-  vendor (unsorted, personal and spam keep the plain conversation; the old
-  `/dashboard/customers` screens redirect to Threads). Header: bucket tag
+  renders `src/components/v34/person-view.tsx` for anyone filed vendor (and a
+  customer's person with `?person=1`; since 2026-09-30 a customer's person
+  otherwise opens the customer page, below); unsorted, personal and spam keep
+  the plain conversation. Header: bucket tag
   (✓ / auto), subtype or job type, Dusty's status line, numbers, email,
   address. **Call · Text · Email · Ask Dusty** — Text writes a draft to copy
   into Quo (no send path, below); Email is mailto: and off when no address is
@@ -1071,8 +1105,54 @@ expected start date per quoted job before it means anything. Add the field.
   rail follows the same rule at 920px and carries Dusty's status line. The desktop design calls the list
   "Triage"; that word is not used — it is **Threads**, where every channel for
   a contact merges into one conversation.
+- **Colour themes (2026-09-30, Claude Design handoff,
+  `design/customer-and-themes/themes`).** Settings (☰) → **Appearance**:
+  **Site Office** (default), **Blueprint**, **Kraft Yard**, **Night Shift**
+  (dark). `src/lib/v34/themes.ts` holds them; `v34-shell.css` carries each as
+  `--sc-*` variables under `html[data-theme]` (generated from `themes.ts`);
+  an inline script in `app/layout.tsx` sets `data-theme` from
+  `localStorage` before first paint, and `useTheme()`
+  (`theme-picker.tsx`) saves the choice to the account (`usePref("theme")`,
+  migration 053). **Every `T.x` is a CSS variable**, so every screen follows
+  with no branching; the *Dim fills the themes don't name are mixed from
+  their colour and the card; `T.dark` stays dark (job money panels, white
+  text) in every theme. Rules that keep dark themes readable: no hard-coded
+  white backgrounds (`T.card`), text on the accent is `T.onHiviz` (dark in
+  Night Shift), SVG icons draw in `currentColor`. The rail, paper header,
+  wordmark (`--sc-hatch`, `--sc-guide`, `--sc-crete`) and chat bubbles
+  (`T.sunk` / `T.outBg`) follow the theme.
+- **The customer page (2026-09-30, migration 055)** —
+  `/dashboard/customers/[customerId]` (`src/components/v34/customer-page.tsx`)
+  and the **Customers list** `/dashboard/customers` (one row per customer,
+  not per person; the rail's Customers item). A contact filed customer,
+  opened from Threads, lands on its customer's page, Threads tab, filtered to
+  them (`?person=1` keeps the person page). **Header:** CUSTOMER · name
+  (Lexend) · address · contacts · jobs · since; Call · Text · Email · Edit ·
+  **+ New scope** (a job for the primary contact, filed on the customer).
+  **Tabs:** Details (Dusty's summary, job cards with Quote/Paid/Open or
+  Invoiced/Paid/Open from the budget and payments, the newest four across
+  channels) · **Threads** (every contact's calls and texts in one timeline,
+  oldest at top, opening at the bottom; channel and contact filters with
+  counts; the green phone button by each contact is the only Call control;
+  call cards: Dusty's summary → next steps → recording → transcript on tap →
+  **notes on that call** (`POST /api/messages/[id]/notes`); the message box
+  only when Texts is picked; Email says it isn't connected) · Jobs ·
+  Documents (`/api/documents?customer=`) · Payments · Files (on the primary
+  contact) · Schedule — each says what is missing when empty. **Right panel
+  (440px; on a phone the top of Details):** Location (address with Copy and
+  Open in Maps; the map and street view only with
+  `NEXT_PUBLIC_GOOGLE_MAPS_EMBED_KEY`, street view only once
+  `GOOGLE_MAPS_GEOCODE_KEY` has placed the address — neither is set yet, and
+  the keyless embed is never used), the customer's facts (Edit), and
+  **Contacts** — each with role, ★ Primary, one line per number or email
+  (Call · Text), Make primary, Remove from customer, and **+ Add contact**
+  (search, attach, Undo). APIs: `/api/customers`, `/api/customers/[id]`
+  (GET/PATCH), `…/contacts` (search, attach), `…/contacts/[contactId]`
+  (role, primary, detach), `…/timeline`, `/api/customer-moves/[id]/undo` —
+  session client, org from the session. Dusty's "customer" context is the
+  customer: its facts, every contact's block and their latest messages.
 - **Site Office palette and wordmark (2026-09-30, Claude Design handoff,
-  `design/palette-logo/`) — on `claude/feedback` for Coy's review.** Cream
+  `design/palette-logo/`) — now the default theme.** Cream
   ground `#FBF6EC`, warm ink, terracotta accent `#B85A3C` (soft `#D97757`,
   text `#9A4527`); buckets Customer `#2F8A5B` · Vendor `#1E5AA8` · Personal
   `#6A55B0` · Spam `#B5412C` · Unsorted = accent. All of it is `T` in
@@ -1408,6 +1488,9 @@ genuinely required.
   browser bundle IS a valid JWT, so anyone could invoke it and get contacts'
   phone numbers back (`dry_run` returned whole proposal rows). v3 checks a
   vault token and returns counts only. `verify_jwt` alone is not auth.
+- **Google Maps keys (2026-09-30):** `NEXT_PUBLIC_GOOGLE_MAPS_EMBED_KEY` is
+  public by design — restrict it to the app's domains in Google Cloud.
+  `GOOGLE_MAPS_GEOCODE_KEY` is server-side only (geocoding on address save).
 - **Known exposure, not yet fixed:** the views `sc_spine_drift` and
   `sc_open_name_questions` are not `security_invoker`, so they run as their
   owner and bypass RLS — a cross-tenant read the day a second org exists.

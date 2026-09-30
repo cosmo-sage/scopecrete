@@ -80,7 +80,7 @@ export function JobChips({ job, onSet }: {
   const caret = <span aria-hidden="true" style={{ fontSize: 9, opacity: 0.7 }}>▾</span>;
   const row = (on: boolean): React.CSSProperties => ({
     width: "100%", textAlign: "left", padding: "10px 12px", borderRadius: 4, cursor: busy ? "default" : "pointer",
-    border: `1px solid ${on ? T.ink : T.hair}`, background: on ? T.ink : T.card, color: on ? "#fff" : T.ink,
+    border: `1px solid ${on ? T.ink : T.hair}`, background: on ? T.ink : T.card, color: on ? T.card : T.ink,
     fontSize: F.sm, opacity: busy ? 0.6 : 1,
   });
   const free = vendors.filter((v) => !(crew ?? []).some((c) => c.contact_id === v.id));
@@ -122,7 +122,7 @@ export function JobChips({ job, onSet }: {
                   {s.statuses.map((st) => (
                     <button key={st} disabled={busy} onClick={() => void pick("status", st)} className="rounded-full px-2.5"
                       style={{ height: 26, fontSize: F.xs, cursor: "pointer", border: `1px solid ${job.status === st ? T.ink : T.hair}`,
-                               background: job.status === st ? T.ink : T.card, color: job.status === st ? "#fff" : T.ink2 }}>
+                               background: job.status === st ? T.ink : T.card, color: job.status === st ? T.card : T.ink2 }}>
                       {STATUS_NAME[st] ?? st}
                     </button>
                   ))}

@@ -52,9 +52,18 @@ export default function ChatThreadPage() {
     if (!contactId) return;
     let off = false;
     fetch(`/api/people/${contactId}`).then((r) => (r.ok ? r.json() : null))
-      .then((b) => { if (!off && b?.contact) setPerson(b as Person); }).catch(() => {});
+      .then((b) => {
+        if (off || !b?.contact) return;
+        // A customer's person opens on their customer's page, on the Threads tab
+        // filtered to them (migration 055). ?person=1 keeps the person page.
+        if (b.contact.bucket === "customer" && b.contact.customer_id && !new URLSearchParams(window.location.search).get("person")) {
+          router.replace(`/dashboard/customers/${b.contact.customer_id}?contact=${contactId}`);
+          return;
+        }
+        setPerson(b as Person);
+      }).catch(() => {});
     return () => { off = true; };
-  }, [contactId, reload]);
+  }, [contactId, reload, router]);
   const scrollRef = React.useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -239,10 +248,10 @@ export default function ChatThreadPage() {
               </button>
               {openJob ? (
                 <Link href={`/dashboard/scope/${openJob.id}`} className="rounded px-2 inline-flex"
-                  style={{ ...pill, background: DA.accent, color: "#fff", border: "none" }}>Open scope</Link>
+                  style={{ ...pill, background: DA.accent, color: T.onHiviz, border: "none" }}>Open scope</Link>
               ) : (
                 <button onClick={() => void newScope()} disabled={starting || jobs === null} className="rounded px-2 inline-flex"
-                  style={{ ...pill, background: DA.accent, color: "#fff", border: "none", opacity: jobs === null ? 0.5 : 1 }}>
+                  style={{ ...pill, background: DA.accent, color: T.onHiviz, border: "none", opacity: jobs === null ? 0.5 : 1 }}>
                   {starting ? "Starting…" : "New scope"}
                 </button>
               )}

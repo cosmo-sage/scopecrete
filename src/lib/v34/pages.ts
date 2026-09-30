@@ -9,10 +9,10 @@ export interface PageDef { k: string; label: string; href: string; match: (path:
 
 export const PAGES: PageDef[] = [
   { k: "dashboard", label: "Dashboard", href: "/dashboard", match: (p) => p === "/dashboard" },
-  { k: "threads", label: "Threads", href: "/dashboard/messages", match: (p, q) => p.startsWith("/dashboard/messages") && !q.includes("f=customers") },
+  { k: "threads", label: "Threads", href: "/dashboard/messages", match: (p) => p.startsWith("/dashboard/messages") },
   { k: "scope", label: "Jobs", href: "/dashboard/scope", match: (p) => p.startsWith("/dashboard/scope") },
   { k: "cash", label: "Cash", href: "/dashboard/cash", match: (p) => p.startsWith("/dashboard/cash") },
-  { k: "customers", label: "Customers", href: "/dashboard/messages?f=customers", match: (p, q) => p.startsWith("/dashboard/messages") && q.includes("f=customers") },
+  { k: "customers", label: "Customers", href: "/dashboard/customers", match: (p) => p.startsWith("/dashboard/customers") },
   { k: "pricebook", label: "Price book", href: "/dashboard/price-book", match: (p) => p.startsWith("/dashboard/price-book") },
   { k: "vendors", label: "Vendors", href: "/dashboard/vendors", match: (p) => p.startsWith("/dashboard/vendors") },
   { k: "documents", label: "Documents", href: "/dashboard/documents", match: (p) => p.startsWith("/dashboard/documents") },

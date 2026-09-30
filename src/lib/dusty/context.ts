@@ -264,7 +264,37 @@ async function budgetBlock(sb: Sb, orgId: string, jobId: string, sections: Secti
   return { title: "The job budget (THE price — quote these numbers, each option separately)", lines: out };
 }
 
-async function customerContext(sb: Sb, orgId: string, contactId: string): Promise<Assembled> {
+async function customerContext(sb: Sb, orgId: string, id: string): Promise<Assembled> {
+  // Since migration 055 a customer page is a CUSTOMER (Art Apartments), with
+  // several people under it. The id may still be a contact's (older links).
+  const { data: cu } = await sb.from("customers")
+    .select("id, name, customer_type, subtype, lead_source, status, notes, address_formatted, primary_contact_id")
+    .eq("org_id", orgId).eq("id", id).maybeSingle();
+  if (cu) {
+    const { data: people } = await sb.from("contacts").select("id").eq("org_id", orgId).eq("customer_id", id)
+      .is("merged_into_contact_id", null).order("created_at").limit(6);
+    const ids = ((people ?? []) as Array<{ id: string }>).map((p) => p.id);
+    const blocks = (await Promise.all(ids.map((cid) => contactBlock(sb, orgId, cid)))).filter(Boolean) as Array<{ name: string; block: Block }>;
+    const facts = [
+      `Customer: ${cu.name ?? "unnamed"}${cu.customer_type ? ` (${cu.customer_type}${cu.subtype ? `, ${cu.subtype}` : ""})` : ""}`,
+      `Address: ${cu.address_formatted ?? "not recorded"}`,
+      ...(cu.lead_source ? [`Lead source: ${cu.lead_source}`] : []),
+      ...(cu.status ? [`Status: ${cu.status}`] : []),
+      ...(cu.notes ? [`Coy's notes on the customer: ${cu.notes}`] : []),
+      `Contacts (the people who speak for this customer): ${blocks.map((b) => b.name).join(", ") || "none"}`,
+    ];
+    const { data: last } = ids.length ? await sb.from("messages").select("contact_id, channel, direction, occurred_at, body_text, summary")
+      .eq("org_id", orgId).in("contact_id", ids).order("occurred_at", { ascending: false }).limit(20) : { data: [] };
+    const nameOf = new Map(blocks.map((b, i) => [ids[i], b.name]));
+    const lines = ((last ?? []) as Array<{ contact_id: string; channel: string; direction: string; occurred_at: string | null; body_text: string | null; summary: string | null }>)
+      .reverse().map((m) => `${day(m.occurred_at)} ${m.direction === "outbound" ? "OUT" : `IN (${nameOf.get(m.contact_id) ?? "contact"})`} ${m.channel === "call" ? `CALL — ${m.summary?.trim() || "no summary"}` : `TEXT: ${m.body_text?.trim() || "(attachment)"}`}`);
+    return assemble(`${cu.name ?? "Customer"} (customer page)`, [
+      { title: "The customer", lines: facts },
+      ...blocks.map((b) => b.block),
+      { title: "Most recent messages, all contacts", lines, trimmable: true },
+    ]);
+  }
+  const contactId = id;
   const who = await contactBlock(sb, orgId, contactId);
   if (!who) return coldContext(null, new Date().toISOString().slice(0, 10));
   const { data: last } = await sb.from("messages").select("channel, direction, occurred_at, body_text, summary")

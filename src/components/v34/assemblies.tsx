@@ -58,7 +58,7 @@ export function Assemblies({ cards }: { cards: Card[] }) {
           The cards a kind of area always needs. Add a driveway to a residential job and its assembly fills the budget for that area — you still see and change every line.
         </div>
         <button onClick={() => void add()} className="rounded px-2.5"
-          style={{ height: 32, background: T.ink, color: "#fff", fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", letterSpacing: ".06em", cursor: "pointer" }}>
+          style={{ height: 32, background: T.ink, color: T.card, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", letterSpacing: ".06em", cursor: "pointer" }}>
           + Assembly
         </button>
       </div>
@@ -100,7 +100,7 @@ function AssemblySheet({ a, cards, cardById, onClose, onChanged, onLocal, onDele
 }) {
   const [err, setErr] = useState<string | null>(null);
   const [q, setQ] = useState("");
-  const field: React.CSSProperties = { height: 36, border: `1px solid ${T.hair}`, background: "#fff", fontSize: F.sm, borderRadius: 4, padding: "0 8px", width: "100%", minWidth: 0 };
+  const field: React.CSSProperties = { height: 36, border: `1px solid ${T.hair}`, background: T.card, fontSize: F.sm, borderRadius: 4, padding: "0 8px", width: "100%", minWidth: 0 };
   const run = async (fn: () => Promise<unknown>) => {
     setErr(null);
     try { await fn(); } catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { onChanged(); }

@@ -64,16 +64,28 @@ export async function PATCH(
     if (typeof v === "string") patch[f] = v.trim() === "" ? null : v.trim();
   }
 
-  // Crew days on this job: what the bid floor spreads the monthly nut by
-  // (DECISIONS §4). Entered by a person as an estimate until measured days
-  // exist. null clears it; anything else must be a positive number.
+  // Days on this job: its minimum is the day minimum × these (migration 057,
+  // Coy: no default days). null clears it; anything else must be positive.
+  // Sales tax for this job (migration 057): its parish (else read from the
+  // address), or a rate Coy typed. { tax_parish } | { tax_rate_pct } | { tax_reset: true }.
+  if ("tax_parish" in body) {
+    const p = typeof body.tax_parish === "string" ? body.tax_parish.trim().replace(/\s+parish$/i, "").slice(0, 60) : "";
+    patch.tax_parish = p || null; patch.tax_rate_source = null; patch.tax_rate_pct = null;
+  }
+  if ("tax_rate_pct" in body) {
+    const r = body.tax_rate_pct;
+    if (r === null) { patch.tax_rate_pct = null; patch.tax_rate_source = null; }
+    else if (typeof r === "number" && Number.isFinite(r) && r >= 0 && r < 30) { patch.tax_rate_pct = r; patch.tax_rate_source = "override"; }
+    else return applyCookies(NextResponse.json({ error: "A tax rate is a % under 30." }, { status: 400 }));
+  }
+  if (body.tax_reset === true) { patch.tax_parish = null; patch.tax_rate_pct = null; patch.tax_rate_source = null; }
   if ("duration_days" in body) {
     const d = body.duration_days;
     if (d === null) patch.duration_days = null;
     else if (typeof d === "number" && Number.isFinite(d) && d > 0 && d < 1000) patch.duration_days = d;
     else {
       return applyCookies(NextResponse.json({
-        error: "duration_days must be a positive number of crew days, or null.",
+        error: "duration_days must be a positive number of days, or null.",
         code: "bad_duration",
       }, { status: 400 }));
     }

@@ -79,3 +79,9 @@ verify_jwt = true
 # sc_enrich_worker_authorized(). Not a JWT, so the gateway check is OFF.
 [functions.read-files]
 verify_jwt = false
+
+# Dusty's dreaming (migration 058): every two hours, the enricher's vault
+# bearer token checked in the function via sc_enrich_worker_authorized().
+# Not a JWT, so the gateway check is OFF.
+[functions.dusty-dream]
+verify_jwt = false

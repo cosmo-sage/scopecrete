@@ -6,7 +6,8 @@
  */
 
 import type { ApiSession } from "@/lib/api-auth";
-import { floor, takeoff, budget, type BudgetLine, type CostSettings, type OverheadItem, type SectionInput } from "@/lib/engine";
+import { takeoff, budget, jobMinimum, type BudgetLine, type OverheadItem, type SectionInput } from "@/lib/engine";
+import { moneySettings, pricingFor, type JobPricing } from "@/lib/pricing-server";
 import { assemble, coldContext, scopeLines, type Assembled, type Block } from "./prompt";
 
 export type ContextRef =
@@ -163,28 +164,23 @@ async function threadContext(sb: Sb, orgId: string, contactId: string): Promise<
 }
 
 async function settingsAndOverhead(sb: Sb, orgId: string) {
-  const [{ data: s }, { data: oh }] = await Promise.all([
-    sb.from("org_cost_settings").select("*").eq("org_id", orgId).maybeSingle(),
+  const [money, { data: oh }] = await Promise.all([
+    moneySettings(sb, orgId),
     sb.from("overhead_items").select("label, amount, cadence, active").eq("org_id", orgId),
   ]);
-  const keys: (keyof CostSettings)[] = ["concrete_overage_pct", "shortload_threshold_cy", "sales_tax_pct", "markup_material_pct",
-    "markup_labor_pct", "markup_equipment_pct", "owner_fee_pct", "estimator_fee_pct", "tax_reserve_pct",
-    "assumed_billable_days", "comp_mode", "comp_monthly_draw"];
-  const settings = Object.fromEntries(keys.map((k) => [k,
-    k === "comp_mode" ? ((s as Record<string, unknown> | null)?.[k] ?? null) : num((s as Record<string, unknown> | null)?.[k])])) as unknown as CostSettings;
   const overhead = ((oh ?? []) as Array<{ label: string; amount: unknown; cadence: string; active: boolean }>)
     .map((o) => ({ ...o, amount: Number(o.amount) })) as OverheadItem[];
-  return { settings, overhead, recorded: !!s, markup_subcontract_pct: num((s as Record<string, unknown> | null)?.markup_subcontract_pct) };
+  return { money, overhead };
 }
 
 async function scopeContext(sb: Sb, orgId: string, jobId: string): Promise<Assembled> {
   const { data: job } = await sb.from("jobs").select("id, title, status, address, contact_id, duration_days")
     .eq("org_id", orgId).eq("id", jobId).maybeSingle();
   if (!job) return coldContext(null, new Date().toISOString().slice(0, 10));
-  const [{ data: secs }, so, who, files] = await Promise.all([
+  const [{ data: secs }, pricing, who, files] = await Promise.all([
     sb.from("job_sections").select("id, name, work_type, length_ft, width_ft, sqft_override, depth_in, psi, rebar, prep_notes, access_notes")
       .eq("org_id", orgId).eq("job_id", jobId).order("sort_order"),
-    settingsAndOverhead(sb, orgId),
+    pricingFor(sb, orgId, [jobId]),
     job.contact_id ? contactBlock(sb, orgId, job.contact_id as string) : Promise.resolve(null),
     filesBlock(sb, orgId, { jobId }),
   ]);
@@ -192,20 +188,22 @@ async function scopeContext(sb: Sb, orgId: string, jobId: string): Promise<Assem
     id: r.id as string, name: r.name as string | null, work_type: r.work_type as string,
     length_ft: num(r.length_ft), width_ft: num(r.width_ft), sqft_override: num(r.sqft_override), depth_in: num(r.depth_in), psi: num(r.psi),
   }));
-  const t = takeoff(sections, so.settings.concrete_overage_pct);
-  const crew = num(job.duration_days);
-  const bud = await budgetBlock(sb, orgId, jobId, sections, crew, so);
+  const t = takeoff(sections, null);
+  const days = num(job.duration_days);
+  const jp = pricing.get(jobId) ?? null;
+  const bud = await budgetBlock(sb, orgId, jobId, sections, days, jp);
   const notes = ((secs ?? []) as Array<Record<string, unknown>>).flatMap((r) =>
     [["reinforcement", r.rebar], ["prep", r.prep_notes], ["access", r.access_notes]]
       .filter(([, v]) => typeof v === "string" && v).map(([k, v]) => `- ${r.name || "section"} ${k}: ${v}`));
   const title = (job.title as string | null) || "Untitled scope";
   return assemble(`scope: ${title}`, [
     { title: "Job", lines: [`Title: ${title}`, `Status: ${job.status}`, `Address: ${(job.address as string | null) || "not recorded"}`,
-      `Crew days on this job: ${crew ?? "not set"}`, `For: ${who ? who.name : "no customer attached"}`] },
+      `Days on this job: ${days ?? "not set"}`, `For: ${who ? who.name : "no customer attached"}`,
+      `Pricing: O.H. ${jp?.settings.overhead_pct ?? "NOT SET"}%, margin ${jp?.settings.margin_pct ?? "NOT SET"}% — price = cost × (1 + O.H.) ÷ (1 − margin)`,
+      `Sales tax: ${jp?.tax.rate !== null && jp?.tax.rate !== undefined ? `${jp.tax.rate}% (${jp.tax.source === "override" ? "typed for this job" : `${jp.tax.parish} parish`})` : `unknown — ${jp?.tax.missing ?? "no rate"}`}`] },
     { title: "Sections and their quantities (exactly what the builder shows)", lines: scopeLines(t, !!bud) },
     ...(bud ? [bud] : []),
     { title: "Section notes", lines: notes },
-    ...(so.recorded ? [] : [{ title: "Cost settings", lines: ["None recorded for this business yet."] }]),
     ...(files ? [files] : []),
     ...(who ? [who.block] : []),
   ]);
@@ -216,51 +214,50 @@ async function scopeContext(sb: Sb, orgId: string, jobId: string): Promise<Assem
  * uses, so Dusty quotes the builder's numbers tier by tier — or names what
  * blocks a tier. Null when the job has no budget lines yet.
  */
-async function budgetBlock(sb: Sb, orgId: string, jobId: string, sections: SectionInput[], crew: number | null,
-  so: Awaited<ReturnType<typeof settingsAndOverhead>>): Promise<Block | null> {
+async function budgetBlock(sb: Sb, orgId: string, jobId: string, sections: SectionInput[], days: number | null,
+  jp: JobPricing | null): Promise<Block | null> {
   const { data: est } = await sb.from("estimates").select("id, tax_on, discount_amount, discount_reason")
     .eq("org_id", orgId).eq("job_id", jobId).eq("status", "draft").maybeSingle();
   if (!est) return null;
-  const [{ data: opts }, { data: rows }, { data: groups }] = await Promise.all([
+  const [{ data: opts }, { data: rows }] = await Promise.all([
     sb.from("estimate_options").select("id, label").eq("org_id", orgId).eq("estimate_id", est.id).order("sort_order"),
-    sb.from("estimate_line_items").select("id, name, cost_type, unit, unit_cost, markup_pct, taxable, qty_rule, rule_params, qty_source, quantity, section_id, option_id, cost_group_id")
+    sb.from("estimate_line_items").select("id, name, cost_type, unit, unit_cost, margin_pct, taxable, qty_rule, rule_params, qty_source, quantity, section_id, option_id, cost_group_id")
       .eq("estimate_id", est.id).order("sort_order"),
-    sb.from("cost_groups").select("id, default_markup_pct").eq("org_id", orgId),
   ]);
   if (!rows?.length) return null;
   const lines = (rows as Array<Record<string, unknown>>).map((r) => ({
-    ...r, unit_cost: num(r.unit_cost), markup_pct: num(r.markup_pct), quantity: num(r.quantity),
+    ...r, unit_cost: num(r.unit_cost), margin_pct: num(r.margin_pct), quantity: num(r.quantity),
   })) as unknown as BudgetLine[];
   const options = (opts ?? []) as Array<{ id: string; label: string }>;
-  const st = so.settings;
-  const res = budget(lines, options.map((o) => o.id), {
-    markup_material_pct: st.markup_material_pct, markup_labor_pct: st.markup_labor_pct, markup_equipment_pct: st.markup_equipment_pct,
-    markup_subcontract_pct: so.markup_subcontract_pct, sales_tax_pct: st.sales_tax_pct,
-    concrete_overage_pct: st.concrete_overage_pct, shortload_threshold_cy: st.shortload_threshold_cy,
-  }, sections, crew, {
-    tax_on: est.tax_on !== false, discount: Number(est.discount_amount ?? 0),
-    groupMarkup: Object.fromEntries(((groups ?? []) as Array<{ id: string; default_markup_pct: unknown }>).map((g) => [g.id, num(g.default_markup_pct)])),
-  });
-  const floorLine = (hard: number) => {
-    const f = floor(hard, st, so.overhead, crew);
-    return f.ok ? `; bid floor $${f.floor.toFixed(0)} (${f.crew_days} ${f.crew_days_basis} crew days)` : `; bid floor blocked by: ${f.blocked.join(", ")}`;
-  };
+  const res = budget(lines, options.map((o) => o.id), jp?.settings ?? { margin_pct: null, overhead_pct: null, tax_rate_pct: null },
+    sections, days, { tax_on: est.tax_on !== false, discount: Number(est.discount_amount ?? 0) });
+  const min = jobMinimum(jp?.day_minimum ?? null, days);
+  const minLine = (total: number) => min.ok
+    ? `; job minimum $${min.minimum.toFixed(0)} (${min.days} days × $${min.day_minimum.toFixed(0)})${total < min.minimum ? " — UNDER THE MINIMUM" : ""}`
+    : `; job minimum unknown (${min.blocked.join(", ")})`;
   const secName = (id: string | null) => (id ? sections.find((x) => x.id === id)?.name || "section" : "whole job");
   const optName = (id: string | null) => (id ? options.find((o) => o.id === id)?.label ?? "option" : "all options");
   const out: string[] = [];
   for (const tr of res.tiers) {
     const head = tr.option_id ? `Option ${optName(tr.option_id)}` : "Budget";
     out.push(tr.priced
-      ? `${head}: price $${tr.total.toFixed(0)} (cost $${tr.cost.toFixed(0)}, tax $${tr.tax.toFixed(0)}, discount $${tr.discount.toFixed(0)}, margin ${(tr.margin * 100).toFixed(1)}%)${floorLine(tr.cost + tr.tax)}`
+      ? `${head}: total $${tr.total.toFixed(0)} (cost $${tr.cost.toFixed(0)}, O.H. $${tr.overhead.toFixed(0)}, tax $${tr.tax.toFixed(0)}, discount $${tr.discount.toFixed(0)}, profit $${tr.profit.toFixed(0)}, margin ${(tr.margin * 100).toFixed(1)}%)${minLine(tr.total)}`
       : `${head}: NOT PRICED — needs ${tr.blocked.join(", ")}`);
   }
   out.push(`Tax ${est.tax_on === false ? "switched off" : "on"}.${est.discount_reason ? ` Discount reason: ${est.discount_reason}.` : ""}`);
-  for (const l of lines) {
-    const r = res.lines[l.id];
-    out.push(`- ${l.name} [${secName(l.section_id)}; ${optName(l.option_id)}]: ${r.blocked.length ? `blocked — ${r.blocked.join(", ")}` :
-      `${r.qty} ${l.unit ?? ""} × $${l.unit_cost} = cost $${(r.ext_cost ?? 0).toFixed(2)}, price $${(r.ext_price ?? 0).toFixed(2)}`}`);
+  // Per area, then per line — so Dusty can show each area's calculation as a table.
+  const areas = [...new Set(lines.map((l) => l.section_id))];
+  for (const a of areas) {
+    const ls = lines.filter((l) => l.section_id === a);
+    const rs = ls.map((l) => res.lines[l.id]);
+    const sum = (k: "ext_cost" | "overhead" | "ext_price") => rs.reduce((x, r) => x + (r[k] ?? 0), 0);
+    out.push(`AREA ${secName(a)}: cost $${sum("ext_cost").toFixed(2)}, O.H. $${sum("overhead").toFixed(2)}, price $${sum("ext_price").toFixed(2)}${rs.some((r) => r.blocked.length) ? " (partial — some lines blocked)" : ""}`);
+    for (const l of ls) {
+      const r = res.lines[l.id];
+      out.push(`  - ${l.name} [${optName(l.option_id)}]: ${r.blocked.length ? `blocked — ${r.blocked.join(", ")}` :
+        `${r.qty} ${l.unit ?? ""} (${r.qty_note ?? ""}) × $${l.unit_cost} = cost $${(r.ext_cost ?? 0).toFixed(2)}; O.H. $${(r.overhead ?? 0).toFixed(2)}; margin ${r.margin_pct}% (${r.margin_from}) → price $${(r.ext_price ?? 0).toFixed(2)}`}`);
+    }
   }
-  for (const h of res.hints) out.push(`Note: ${h}`);
   return { title: "The job budget (THE price — quote these numbers, each option separately)", lines: out };
 }
 
@@ -307,12 +304,17 @@ async function customerContext(sb: Sb, orgId: string, id: string): Promise<Assem
 
 async function cashContext(sb: Sb, orgId: string): Promise<Assembled> {
   const so = await settingsAndOverhead(sb, orgId);
-  const s = so.settings as unknown as Record<string, unknown>;
-  const lines = Object.entries(s).map(([k, v]) => `${k}: ${v === null ? "NOT RECORDED" : v}`);
+  const m = so.money;
+  const v = (x: number | null, unit: string) => (x === null ? "NOT RECORDED" : `${x}${unit}`);
+  const lines = [
+    `Default margin: ${v(m.default_margin_pct, "%")}`, `Default O.H.: ${v(m.default_overhead_pct, "%")}`,
+    `Day minimum: ${m.day_minimum === null ? "NOT RECORDED" : `$${m.day_minimum}`}`,
+    `Pay yourself: ${m.comp_mode === "fixed_draw" ? `fixed draw ${m.comp_monthly_draw === null ? "(amount not recorded)" : `$${m.comp_monthly_draw}/mo`}` : m.comp_mode === "pct_profit" ? `${v(m.comp_profit_pct, "%")} of profit` : "NOT RECORDED"}`,
+  ];
   const oh = so.overhead.map((o) => `- ${o.label}: $${o.amount} ${o.cadence}${o.active ? "" : " (paused)"}`);
-  return assemble("Cash and cost settings", [
-    { title: "Cost settings", lines: so.recorded ? lines : ["None recorded yet — every rate is blank."] },
-    { title: "Monthly overhead items", lines: oh },
+  return assemble("Cash and pricing defaults", [
+    { title: "Pricing defaults", lines },
+    { title: "Monthly overhead items (the burn rate)", lines: oh },
   ]);
 }
 

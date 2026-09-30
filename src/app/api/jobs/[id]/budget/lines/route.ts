@@ -9,7 +9,7 @@ import { CARD_COLS, LINE_COLUMNS, cardToLine, jobInOrg, numLine, workingEstimate
  * POST { cost_item_id | cost_group_id (the whole group) | custom card fields,
  *        section_id?, option_id? }
  *
- * A card is COPIED onto the line — name, unit, unit cost, type, taxed, markup,
+ * A card is COPIED onto the line — name, unit, unit cost, type, taxed,
  * rule, vendor and price date — so a later change to the card never silently
  * reprices a budget or a quote that went out; the screen offers "update"
  * when the card is newer. The working estimate is made on first use.

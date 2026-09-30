@@ -54,7 +54,10 @@ const RULE_FIELDS: Partial<Record<QtyRule, Array<{ k: string; label: string; uni
     { k: "spacing_in", label: "Spacing", unit: "in o.c.", hint: "both ways" },
     { k: "lap_pct", label: "Lap & ends", unit: "%", hint: "blank = none" },
   ],
-  per_cy: [{ k: "per_cy", label: "Per yard", unit: "unit / cu yd", hint: "for fiber — blank for concrete itself" }],
+  per_cy: [
+    { k: "waste_pct", label: "Waste", unit: "%", hint: "concrete itself: what you order over neat yards (0 is fine)" },
+    { k: "per_cy", label: "Per yard", unit: "unit / cu yd", hint: "for fiber — blank for concrete itself" },
+  ],
 };
 
 export function CostCards({ vendorId, vendorName }: { vendorId?: string; vendorName?: string | null }) {
@@ -85,7 +88,7 @@ export function CostCards({ vendorId, vendorName }: { vendorId?: string; vendorN
   const sections = useMemo(() => {
     const list = items ?? [];
     const out: Array<{ key: string; title: string; sub: string; cards: Card[] }> = groups
-      .map((g) => ({ key: g.id, title: g.name, sub: `${COST_TYPE_LABEL[g.cost_type]}${g.default_markup_pct !== null ? ` · ${Number(g.default_markup_pct)}% markup` : ""}`,
+      .map((g) => ({ key: g.id, title: g.name, sub: `${COST_TYPE_LABEL[g.cost_type]}`,
         cards: list.filter((c) => c.cost_group_id === g.id) }))
       .filter((s) => !vendorId || s.cards.length);
     const loose = list.filter((c) => !c.cost_group_id || !groups.some((g) => g.id === c.cost_group_id));
@@ -190,11 +193,10 @@ export function CostCards({ vendorId, vendorName }: { vendorId?: string; vendorN
 export function GroupSheet({ open, onClose, onSaved }: { open: boolean; onClose: () => void; onSaved: () => void }) {
   const [name, setName] = useState("");
   const [type, setType] = useState<CostType>("material");
-  const [markup, setMarkup] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const save = async () => {
     setErr(null);
-    try { await call("/api/cost-groups", "POST", { name, cost_type: type, default_markup_pct: markup === "" ? null : markup }); setName(""); setMarkup(""); onSaved(); }
+    try { await call("/api/cost-groups", "POST", { name, cost_type: type }); setName(""); onSaved(); }
     catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
   };
   const field: React.CSSProperties = { height: 36, border: `1px solid ${T.hair}`, background: T.card, fontSize: F.sm, borderRadius: 4, padding: "0 8px", width: "100%" };
@@ -207,8 +209,6 @@ export function GroupSheet({ open, onClose, onSaved }: { open: boolean; onClose:
           <select value={type} onChange={(e) => setType(e.target.value as CostType)} style={field}>
             {COST_TYPES.map((t) => <option key={t} value={t}>{COST_TYPE_LABEL[t]}</option>)}
           </select></label>
-        <label className="block" style={{ maxWidth: 200 }}><span style={eyebrow}>Markup (optional)</span>
-          <input type="number" inputMode="decimal" value={markup} onChange={(e) => setMarkup(e.target.value)} placeholder="blank = the type's markup" style={field} /></label>
         {err && <div style={{ fontSize: F.xs, color: T.red }}>{err}</div>}
         <button onClick={() => void save()} disabled={!name.trim()} className="rounded" style={{ height: 40, background: T.ink, color: T.card, fontFamily: disp, fontSize: F.sm, textTransform: "uppercase", opacity: name.trim() ? 1 : 0.5 }}>Add group</button>
       </div>
@@ -306,9 +306,6 @@ export function CardSheet({ card, groups, vendors, lockVendor, onClose, onSaved,
               style={{ ...field, borderColor: f.unit_cost === null || f.unit_cost === undefined ? T.hiviz : T.hair }} /></label>
           <label className="block"><span style={eyebrow}>Per</span>
             <input value={f.unit ?? ""} onChange={(e) => set({ unit: e.target.value })} placeholder={RULE_UNIT[rule]} style={field} /></label>
-          <label className="block"><span style={eyebrow}>Markup %</span>
-            <input type="number" inputMode="decimal" value={numField(f.markup_pct)} placeholder="group / type default"
-              onChange={(e) => set({ markup_pct: e.target.value === "" ? null : Number(e.target.value) })} style={field} /></label>
           <label className="flex items-center gap-2 mt-4" style={{ fontSize: F.sm }}>
             <input type="checkbox" checked={!!f.taxable} onChange={(e) => set({ taxable: e.target.checked })} style={{ width: 18, height: 18, accentColor: T.chalk }} />
             Sales tax applies</label>

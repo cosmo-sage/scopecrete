@@ -10,8 +10,8 @@ import { pickAssembly } from "@/lib/engine";
 
 type Sb = ApiSession["supabase"];
 
-export const LINE_COLUMNS = "id, estimate_id, option_id, section_id, cost_group_id, cost_item_id, name, description, cost_type, unit, unit_cost, markup_pct, taxable, qty_rule, rule_params, qty_source, quantity, vendor_contact_id, price_as_of, price_source, show_on_doc, show_qty, show_price, sort_order, updated_at, assembly_id, section_role, source_id, source_pinned";
-export const ESTIMATE_COLUMNS = "id, job_id, status, tax_on, discount_amount, discount_reason, selected_option_id, version, updated_at";
+export const LINE_COLUMNS = "id, estimate_id, option_id, section_id, cost_group_id, cost_item_id, name, description, cost_type, unit, unit_cost, markup_pct, margin_pct, taxable, qty_rule, rule_params, qty_source, quantity, vendor_contact_id, price_as_of, price_source, show_on_doc, show_qty, show_price, sort_order, updated_at, assembly_id, section_role, source_id, source_pinned";
+export const ESTIMATE_COLUMNS = "id, job_id, status, tax_on, discount_amount, discount_reason, selected_option_id, version, updated_at, margin_pct, overhead_pct";
 
 export async function jobInOrg(sb: Sb, orgId: string, jobId: string) {
   const { data } = await sb.from("jobs").select("id, contact_id, duration_days").eq("org_id", orgId).eq("id", jobId).maybeSingle();
@@ -22,8 +22,12 @@ export async function workingEstimate(sb: Sb, orgId: string, jobId: string, crea
   const { data: found } = await sb.from("estimates").select(ESTIMATE_COLUMNS).eq("org_id", orgId).eq("job_id", jobId)
     .eq("status", "draft").maybeSingle();
   if (found || !create) return found as Record<string, unknown> | null;
+  // A new budget starts from the org's defaults (Price book → Defaults,
+  // migration 057) — copied, so changing a default later never reprices it.
+  const { data: money } = await sb.from("org_money_settings").select("default_margin_pct, default_overhead_pct").eq("org_id", orgId).maybeSingle();
   const { data: made, error } = await sb.from("estimates")
-    .insert({ org_id: orgId, job_id: jobId, status: "draft", doc_kind: "estimate", engine_version: "budget-v1" })
+    .insert({ org_id: orgId, job_id: jobId, status: "draft", doc_kind: "estimate", engine_version: "budget-v2",
+      margin_pct: money?.default_margin_pct ?? null, overhead_pct: money?.default_overhead_pct ?? null })
     .select(ESTIMATE_COLUMNS).single();
   if (error) {
     // Two taps at once: the unique index let one through; read that one.
@@ -35,7 +39,7 @@ export async function workingEstimate(sb: Sb, orgId: string, jobId: string, crea
 
 const num = (v: unknown) => (v === null || v === undefined ? null : Number(v));
 export const numLine = (r: Record<string, unknown>) => ({
-  ...r, unit_cost: num(r.unit_cost), markup_pct: num(r.markup_pct), quantity: num(r.quantity),
+  ...r, unit_cost: num(r.unit_cost), markup_pct: num(r.markup_pct), margin_pct: num(r.margin_pct), quantity: num(r.quantity),
 });
 
 // ---------------------------------------------------------------- cards onto lines
@@ -44,7 +48,8 @@ export const CARD_COLS = "id, cost_group_id, name, description, cost_type, unit,
 
 /**
  * A card COPIED onto a budget line — name, unit, unit cost, type, taxed,
- * markup, rule, vendor and price date — so a later change to the card never
+ * rule, vendor and price date (not its markup: since migration 057 a job is
+ * priced by its own O.H. and margin) — so a later change to the card never
  * silently reprices a budget or a quote that went out. The card's price is
  * its default vendor's (migration 051), and the line remembers which vendor
  * (`source_id`). A typed quantity (an
@@ -59,7 +64,7 @@ export function cardToLine(c: Record<string, unknown>, at: {
   return {
     org_id: at.orgId, estimate_id: at.estimateId, option_id: at.optionId, section_id: at.sectionId,
     cost_item_id: c.id ?? null, cost_group_id: c.cost_group_id ?? null, name: c.name, description: c.description ?? null,
-    cost_type: c.cost_type, unit: c.unit, unit_cost: c.unit_cost ?? null, markup_pct: c.markup_pct ?? null,
+    cost_type: c.cost_type, unit: c.unit, unit_cost: c.unit_cost ?? null, markup_pct: null,
     taxable: c.taxable === true, qty_rule: c.qty_rule ?? "manual", rule_params: c.rule_params ?? {},
     qty_source: manual || typed ? "set" : "rule", quantity: typed ? at.quantity : null,
     vendor_contact_id: c.vendor_contact_id ?? null, price_as_of: c.price_as_of ?? null, price_source: c.price_source ?? null,

@@ -72,7 +72,7 @@ export async function GET(req: NextRequest) {
   // Reminders: open next steps due today or overdue (contact_tasks, migration
   // 038). Central time is Coy's; the server has no timezone of its own.
   const todayLocal = new Date().toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
-  const [{ data: runRows, error }, { data: statusRows }, { data: beat }, { data: agreeRows }, { data: dueRows }, { data: museRows }] = await Promise.all([
+  const [{ data: runRows, error }, { data: statusRows }, { data: beat }, { data: agreeRows }, { data: dueRows }, { data: museRows }, { data: dreamRows }] = await Promise.all([
     supabase.from("contact_enrich_runs")
       .select("id, started_at, finished_at, outcome, note, contact_id, contacts(name, phone), contact_name_claims(claimed_name, evidence_quote), contact_proposals(proposed_name, classification, evidence_quote)")
       .eq("org_id", orgId).gte("started_at", since)
@@ -87,6 +87,11 @@ export async function GET(req: NextRequest) {
     supabase.from("contact_enrich_runs").select("id, finished_at, musing, contact_id")
       .eq("org_id", orgId).not("musing", "is", null).gte("started_at", new Date(Date.now() - 3 * 86400_000).toISOString())
       .order("started_at", { ascending: false }).limit(12),
+    // Dusty's dreams (migration 058): light lines about a stretch of calls and
+    // texts — today, or a day weeks back — written in the background.
+    supabase.from("dusty_dreams").select("id, created_at, dream, contact_ids")
+      .eq("org_id", orgId).gte("created_at", new Date(Date.now() - 3 * 86400_000).toISOString())
+      .order("created_at", { ascending: false }).limit(12),
   ]);
   if (error) return applyCookies(NextResponse.json({ error: `contact_enrich_runs: ${error.message}` }, { status: 500 }));
 
@@ -211,8 +216,11 @@ export async function GET(req: NextRequest) {
 
   return applyCookies(NextResponse.json({
     pinned, waiting, last_read_at: status?.last_read_at ?? null, items: [...items.slice(0, 20 - standing.length), ...standing],
-    musings: ((museRows ?? []) as Array<{ id: string; finished_at: string | null; musing: string; contact_id: string }>).map((m) => ({
+    musings: ((museRows ?? []) as Array<{ id: string; finished_at: string | null; musing: string; contact_id: string | null }>).map((m) => ({
       id: `muse-${m.id}`, at: m.finished_at ?? new Date().toISOString(), kind: "musing", contact_id: m.contact_id,
-      summary: m.musing, detail: null, tone: "quiet" as const })),
+      summary: m.musing, detail: null, tone: "quiet" as const })).concat(
+      ((dreamRows ?? []) as Array<{ id: string; created_at: string; dream: string; contact_ids: string[] | null }>).map((d) => ({
+        id: `dream-${d.id}`, at: d.created_at, kind: "musing", contact_id: d.contact_ids?.[0] ?? null,
+        summary: d.dream, detail: null, tone: "quiet" as const }))),
   }));
 }

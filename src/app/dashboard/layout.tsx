@@ -20,7 +20,8 @@
  *     number, no "unnamed", no "drift" (drift is on Logs). Phone keeps the
  *     activity row under the header.
  *   - Settings (☰): You, Organisation (name, logo, people — design/org-branding),
- *     Phone lines, Markups & overhead, Appearance, Menus.
+ *     Phone lines, Appearance, Menus. (Markups & overhead is gone — margin,
+ *     O.H. and tax are Price book → Defaults; overhead is on Cash.)
  *   - The header shows the org's logo with "powered by scopecrete.ai"
  *     (OrgLockup); with no logo, the scopecrete.ai wordmark as before.
  */
@@ -30,7 +31,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { T, F, disp, eyebrow, nums } from "@/lib/v34/tokens";
 import { NavIcon, Sheet } from "@/components/v34/primitives";
-import { PipelineDrop, CreateDrop } from "@/components/v34/shell";
+import { CreateDrop } from "@/components/v34/shell";
 import { DustyPanel } from "@/components/v34/dusty-panel";
 import { DustyAvatar } from "@/components/v34/dusty-avatar";
 import { ActivityLine } from "@/components/v34/activity-line";
@@ -72,7 +73,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   // The colour theme follows the account (Settings → Appearance).
   const [theme] = useTheme();
   const [searchOpen, setSearchOpen] = useState(false);
-  const [pipeOpen, setPipeOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [toolOpen, setToolOpen] = useState(false);
   const [dustyOpen, setDustyOpen] = useState(false);
@@ -81,6 +81,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     window.addEventListener("sc:dusty-open", open);
     return () => window.removeEventListener("sc:dusty-open", open);
   }, []);
+  // Pages that change shape while Dusty is docked (the job page moves its
+  // totals into his panel) read this from <html data-dusty>.
+  useEffect(() => {
+    document.documentElement.dataset.dusty = dustyOpen ? "open" : "";
+    window.dispatchEvent(new Event("sc:dusty-state"));
+  }, [dustyOpen]);
   // True only while a Dusty reply is actually streaming.
   const [dustyBusy, setDustyBusy] = useState(false);
   const [dustyLive, setDustyLive] = useState("");
@@ -127,7 +133,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const badge = { logs: (drift ?? 0) > 0 };
   const working = dustyBusy || readerWorking;
   const glassBtn = { width: 32, height: 32 } as const;
-  const closeDrops = () => { setPipeOpen(false); setCreateOpen(false); setSearchOpen(false); };
+  const closeDrops = () => { setCreateOpen(false); setSearchOpen(false); };
 
   // Footer: page · page · Dusty · page · Toolbox.
   const f = menus.footer;
@@ -171,15 +177,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               </svg>
             </button>
 
-            {/* pipeline — ascending bars, like signal strength */}
-            <button onClick={() => { const o = !pipeOpen; closeDrops(); setPipeOpen(o); }}
-              aria-label="Pipeline" aria-expanded={pipeOpen}
-              className="flex items-end justify-center gap-[2.5px] sc-paper-btn"
-              style={{ ...glassBtn, paddingBottom: 9 }}>
-              {[5, 8, 11, 14].map((h, i) => (
-                <span key={i} style={{ width: 3, height: h, borderRadius: 0.5, background: i === 3 ? T.logoOrange : T.pencil }} />
-              ))}
-            </button>
+            {/* Dusty (Coy, 2026-09-30): on a desktop he opens down from the
+                header on the right, so his button lives here, where the
+                pipeline button was (the Dashboard carries the pipeline now).
+                On a phone he rises from the centre of the footer. */}
+            {desktop && (
+              <button onClick={() => { closeDrops(); setDustyOpen((o) => !o); }} aria-label="Dusty" aria-pressed={dustyOpen}
+                className="flex items-center justify-center sc-paper-btn"
+                style={{ ...glassBtn, background: dustyOpen ? "var(--sc-hiviz-dim)" : undefined, borderColor: dustyOpen ? "var(--sc-hiviz-soft)" : undefined }}>
+                <DustyAvatar state={working ? "calculating" : "idle"} size={24} hidden />
+              </button>
+            )}
 
             <button onClick={() => { const o = !createOpen; closeDrops(); setCreateOpen(o); }}
               aria-label={createOpen ? "Close" : "Create"} aria-expanded={createOpen}
@@ -202,23 +210,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {!desktop && <ActivityLine busy={dustyBusy} live={dustyLive} onWorking={setReaderWorking} />}
       </div>
 
-      {pipeOpen && <PipelineDrop onClose={() => setPipeOpen(false)} />}
       {createOpen && <CreateDrop onClose={() => setCreateOpen(false)} />}
 
       {/* ---- desktop left rail: every page, in Coy's order ---- */}
       <nav aria-label="Main" className="hidden lg:flex fixed left-0 bottom-0 z-30 flex-col items-stretch overflow-y-auto sc-rail"
         style={{ top: "var(--sc-head)", width: 84 }}>
         {menus.rail.map((k) => {
-          if (k === "dusty") {
-            return (
-              <button key={k} onClick={() => setDustyOpen((o) => !o)} aria-label="Dusty" aria-pressed={dustyOpen}
-                className="flex flex-col items-center justify-center gap-1 shrink-0"
-                style={{ height: 60, borderLeft: "3px solid transparent", background: "transparent", cursor: "pointer" }}>
-                <DustyAvatar state={working ? "calculating" : "idle"} size={24} hidden />
-                <span className="sc-rail-label">Dusty</span>
-              </button>
-            );
-          }
+          // Dusty's desktop door is the header button (Coy, 2026-09-30).
+          if (k === "dusty") return null;
           const p = PAGE.get(k);
           if (!p) return null;
           const on = active === k;
@@ -300,7 +299,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <div className="flex flex-col" style={{ borderTop: `1px solid ${T.hair}` }}>
             {[
               { href: "/dashboard/more/lines", label: "Phone lines", note: "Your numbers, their provider, and the lead source each one means" },
-              { href: "/dashboard/costs", label: "Markups & overhead", note: "Markups, tax, waste, overhead and the bid floor — not prices (those are the Price book)" },
+              { href: "/dashboard/price-book?tab=defaults", label: "Pricing defaults", note: "Margin, O.H., day minimum and sales tax by parish — in the Price book" },
             ].map((l) => (
               <Link key={l.href} href={l.href} onClick={() => setMenuOpen(false)} className="block py-2.5 no-underline" style={{ borderBottom: `1px solid ${T.hairSoft}`, color: T.ink }}>
                 <div style={{ fontSize: F.md, fontWeight: 600 }}>{l.label}</div>

@@ -676,6 +676,20 @@ names or numbers, about what happened, never claiming anything is happening
 now. Commercial jobs from emailed bid requests and plans will carry their job
 information from the request once email reaches the app (not yet).
 
+**Dusty dreams (migration 058, `dusty-dream` v1, Coy 2026-09-30).** *"I'd
+like him to compile and learn and make funny comments about phone
+conversations and text messages that are in the database from today and
+days/weeks past."* pg_cron runs `dusty-dream` every two hours (the
+enricher's vault token, Hermes first). Per org it takes today's calls and
+texts since its last "today" dream (at least 4), else one earlier day in the
+last 30 it hasn't dreamed about, and writes 1–3 light, past-tense lines to
+`dusty_dreams` with the message ids they are about. People filed personal or
+spam are left out; phone numbers and emails are scrubbed before the model
+sees anything and again from what it writes; a line claiming "right now", a
+dollar amount, or tied to no real message is dropped (`rules.ts`, tested).
+The activity line shows unseen dreams like musings, linked to the thread.
+Nothing else is written. First run 2026-09-30: five memory dreams.
+
 **Vendors on jobs** — `job_vendors` (job, contact, role = vendor subtype,
 note), RLS by `get_user_org_ids()`. **Next steps** — `contact_tasks` (title,
 due date, `source` coy | dusty, `status` open | done | dismissed, the line
@@ -700,8 +714,20 @@ two errors that happened to cancel.
 job: $1.43/sqft form-up-and-finish, $2.00/sqft demolition. Production rate
 scales with job size — bigger jobs are more efficient per sqft.
 
-**Markup is per cost type, not one global multiplier.** Reference: materials
-30.61%, labor 41.77%, equipment 30.12%.
+**How a job is priced (Coy, 2026-09-30; migration 057) — this replaces
+markup per cost type and §4's off-the-top floor:**
+
+    price = cost × (1 + O.H.) ÷ (1 − margin)
+
+O.H. (overhead, default **15%** on Coy's word) and margin are the JOB's —
+`estimates.overhead_pct` / `margin_pct`, copied from the org's defaults
+(`org_money_settings`, edited in **Price book → Defaults**) when a budget is
+made, then changed on that budget alone. A line can carry its own margin
+(`estimate_line_items.margin_pct`). Card markups, group markups and markup
+per cost type are no longer read (the columns stay). Coy: *"All the markup
+and margin exists only per job in the budget … There can be default margin
+settings applied across any new job budget."* The old Gulfline markups
+(materials 30.61%, labor 41.77%, equipment 30.12%) are history, not inputs.
 
 **Discounts touch the PRICE column only.** This is not a preference, it is a
 correctness rule. On the reference job a $4,000 discount was entered as a
@@ -709,7 +735,13 @@ negative line in BOTH cost and price, which dropped reported cost and inflated
 margin from a true 27.7% to a reported 39.4%. The schema enforces
 `discount_amount CHECK >= 0` so the old shape is structurally impossible.
 
-Tax lands on the materials subtotal only (~8.08% in-market), not the full bid.
+Tax lands on the taxed lines' cost only, not the full bid, at the **job's**
+rate — its parish's (`tax_parishes`, the org's own rates, entered in Price
+book → Defaults; `src/lib/tax.ts` finds the parish from the job's address,
+else the customer's), or a rate typed on the job (`jobs.tax_rate_source =
+'override'`). No parish or no rate → the taxed lines are blocked by name
+("parish unknown — set it on the job"). Coy: *"Sales tax should be
+calculated from the job location."*
 
 Equipment rental bills by the day.
 
@@ -732,14 +764,17 @@ percentage of labour — all three contradict this section and §4.
   type, so nothing priced changed. The retired `org_cost_settings` columns
   stay in the table unused and are written as null (they carry Gulfline
   COLUMN DEFAULTS from migration 004, so a first save must not leave them to
-  the database). Cost settings keeps what the budget and floor read:
-  markups per type (the fallback under a card's and its group's), sales tax
-  %, concrete waste %, short-load threshold, overhead, off-the-top, crew
-  days per month, pay-yourself. A job with no budget lines has **no price**,
-  and the scope rail and Dusty say so.
+  the database). Since migration 057 **nothing in `org_cost_settings` is
+  read**: waste is on the concrete card (`rule_params.waste_pct`, 0 allowed,
+  blank blocks), a short-load fee is its own card, tax is the job's, and
+  margin / O.H. / the day minimum / pay-yourself live in
+  `org_money_settings` (no column defaults, so nothing is filled in that
+  nobody entered). The Markups & overhead page is gone (`/dashboard/costs`
+  redirects to Price book → Defaults). A job with no budget lines has **no
+  price**, and the scope rail and Dusty say so.
 - **Tax is a pass-through**: charged at cost on the lines whose card is taxed
-  (materials by default), carried in both columns, not marked up, while the
-  budget's tax switch is on.
+  (materials by default), carried in both columns, not given O.H. or
+  margin, while the budget's tax switch is on.
 - **`job_sections.cubic_yards` must not be displayed.** It is a generated
   column, `… * COALESCE(depth_in, 4)`, so a section with no depth reads 14.8
   yards for a 30×40 (verified 2026-09-27). The section API writes `depth_in`
@@ -885,22 +920,25 @@ percentage of labour — all three contradict this section and §4.
   says "card price changed — update" instead. Per line (`budget()` /
   `ruleQty()` in `src/lib/engine`, tested in `tests/budget.test.mjs`):
   **qty** from the card's rule on the line's area (whole job = every area)
-  — yards with waste, sq ft, perimeter (needs L and W), sheets, sticks,
-  crew days, once — or typed by Coy (`qty_source='set'`, ✎, ↺ back to the
-  rule); **ext cost** = qty × unit cost; **markup** = the line's, else its
-  group's default, else the type's in Cost settings, else blocked by name;
-  **ext price**; **margin** = (price − cost) ÷ price. **Tax is a switch**
-  (`estimates.tax_on`): at cost, on taxed lines, at the settings rate, a
-  pass-through. **Discount** is on price only. Anything missing blocks that
-  line and its tier by name. Under the short-load threshold with no
-  short-load line the budget says so; it adds nothing on its own.
+  — yards with the card's waste, sq ft, perimeter (needs L and W), sheets,
+  sticks, days on the job, once — or typed by Coy (`qty_source='set'`, ✎,
+  ↺ back to the rule); **ext cost** = qty × unit cost; **O.H.** = ext cost ×
+  the job's O.H. %; **ext price** = (ext cost + O.H.) ÷ (1 − margin), the
+  line's margin else the job's, else blocked by name. **Tax is a switch**
+  (`estimates.tax_on`): at cost, on taxed lines, at the job's rate, a
+  pass-through. **Discount** is on price only. A tier shows cost, O.H.,
+  profit and margin = (total − tax − cost − O.H.) ÷ (total − tax). Anything
+  missing blocks that line and its tier by name.
   **Good / better / best** — `estimate_options`: a line with no option is in
   every option; a line with one is in that option only; each option's total
   = shared + its own. `estimates.selected_option_id` is the one the customer
   accepts (step 5). Once a budget has lines it IS the price: the takeoff
-  rail and phone strip show each option's total, cost, margin and its bid
-  floor (on cost + tax); Dusty's scope context quotes each option from the
-  same `budget()`. APIs: `/api/jobs/[id]/budget` (GET, PATCH tax/discount),
+  rail and phone strip show each option's total, cost, O.H., margin and
+  whether it is under the **job minimum** (§4); Dusty's scope context
+  quotes each option, area by area, from the same `budget()`
+  (`src/lib/pricing-server.ts` is the one reader of a job's pricing for the
+  budget API, the Dashboard and Dusty). APIs: `/api/jobs/[id]/budget` (GET,
+  PATCH tax / discount / margin_pct / overhead_pct),
   `…/budget/lines[/lineId]`, `…/budget/options[/optionId]` — session client,
   org from the session; lines carry `org_id` with a restrictive org policy.
 - **Base, vapor barrier and day-rate equipment** are cards like anything
@@ -916,48 +954,33 @@ percentage of labour — all three contradict this section and §4.
 
 ---
 
-## 4. Overhead and the bid floor
+## 4. Overhead, the job minimum, and burn (rewritten 2026-09-30)
 
-Overhead has two shapes and they behave differently.
+Coy's notes on the old Markups & overhead page replaced this section's
+off-the-top divisor (11%) and the crew-day floor:
 
-**Off the top — scales with revenue.** 5% owner entity fee + 3% estimator-fee
-subaccount + 3% taxes/savings = **11% off gross, 89% operating.** Implemented
-as a divisor, not a subtraction.
-
-**The monthly nut — fixed.** ~$3,500–3,600/mo: equipment notes, software,
-amortized insurance, fuel and misc. Spread across jobs by **crew-days, not
-job count** — the work mixes many sub-$10k jobs with occasional $20–40k ones,
-and per-job spreading misprices both ends.
-
-    floor = (hard_cost + job's share of the monthly nut) / 0.89
-
-The floor is a live red line on the discount slider, and it is
-**interrogable** — one tap opens the parameters that produced it, including
-whether it is standing on estimated or measured crew-days.
-
-**Production days are DISCOVERED, not entered.** A receipt filed to a job
-flags that date as a production day for that job; a daily log does the same.
-The floor starts from a ~10-day placeholder and is replaced by measured days
-as evidence accumulates. Receipt-only counting undercounts (some workdays
-have no spend) — that errs conservative, which is the safe direction. Add
-one-tap "worked here, no spend" later.
-
-**Pay-yourself is a mode per org.** `fixed_draw` is a monthly target the bid
-floor MUST cover. `pct_profit` is taken after a job clears and does NOT raise
-the floor. Draws land on a specific day, never smeared evenly.
-
-**Floor implementation (2026-09-27).** Since step 3b the floor is shown per
-budget option, on that option's hard cost (cost + pass-through tax), and
-opens to its parameters with one tap. `floor()` in `src/lib/engine`:
-nut per crew-day = (active overhead as monthly + fixed draw) ÷
-`assumed_billable_days` (crew-days per month the nut is spread across); the
-job's share = that × `jobs.duration_days`, entered on the builder and labelled
-**estimated** until measured days exist. No crew days, no overhead, or no
-off-the-top → the floor is blocked and says which.
-
-Overhead is NOT baked into the per-sqft rate — the rate varies too much by
-job. The floor's allocation is the one place overhead enters. Do not
-double-count it.
+- **Overhead is a % on every job** — *"This is really considered Overhead
+  (O.H.). 15% overhead can be applied to every job."* It is in the price
+  (§3: cost × (1 + O.H.) ÷ (1 − margin)), not a separate floor.
+- **The job minimum.** *"There are no default crew days. And there is no
+  default number of people on a crew. There is only a minimum of $ per day
+  that people require to show up and work. And therefore there is a
+  minimum for a job."* `org_money_settings.day_minimum` × the days Coy sets
+  on the job (`jobs.duration_days`, blank until he does) =
+  `jobMinimum()` in `src/lib/engine`. The budget footer and the scope rail
+  show it and say "under the job minimum" when a tier's total is below it;
+  with no days or no day minimum they name what is missing.
+- **Burn and pay-yourself live on the Cash page** — *"Our monthly burn rate
+  can be calculated in the 'cash' page."* Recurring overhead items
+  (`overhead_items`; quarterly ÷ 3, annual ÷ 12, one-time excluded) plus a
+  fixed draw = the monthly burn; runway = cash ÷ burn. `pct_profit` comes
+  out after a job clears. Both are edited there (`CashSettings`,
+  `/api/settings/money`).
+- **Production days are still DISCOVERED, not entered** (receipts, daily
+  logs) — when they exist they will replace the days Coy types.
+- The old columns (`owner_fee_pct`, `estimator_fee_pct`, `tax_reserve_pct`,
+  `assumed_billable_days`, markups per type, `sales_tax_pct`, waste and
+  short load) stay in `org_cost_settings`, unread. Nothing was dropped.
 
 ---
 
@@ -1081,12 +1104,14 @@ expected start date per quoted job before it means anything. Add the field.
 - Settings opens from the header ☰: **You** (User — your name, ✎ — ·
   Email · Organization and role; 2026-09-30, Coy: the email is not the
   user), **Organisation** (name, logo, people — §2g), **Phone lines**,
-  **Markups & overhead**
-  (`/dashboard/costs` — markups, tax, waste, overhead, the floor; not the
-  Price book, which is what things cost), **Appearance**, **Menus**, Sign out. Markups &
-  overhead also opens from the Cash page: one editor, two doors. The Settings
-  sheet starts under the whole header (`--sc-head`).
-- The header's pipeline drop-down links to the Jobs board.
+  **Pricing defaults** (→ Price book → Defaults: margin, O.H., day minimum,
+  parish tax rates — §3, §4), **Appearance**, **Menus**, Sign out. Pay-yourself
+  and recurring overhead are on the **Cash** page. The Settings sheet starts
+  under the whole header (`--sc-head`).
+- **The header's pipeline button is gone (Coy, 2026-09-30)** — the
+  Dashboard carries the pipeline. **On a desktop its place, right of 🔍, is
+  Dusty's button**: he opens down from the header on the right, and the
+  rail has no Dusty item. On a phone he stays in the centre of the footer.
 - **Navigation (2026-09-30, Coy).** Pages are listed once in
   `src/lib/v34/pages.ts`: Dashboard · Threads · Jobs · Cash · Customers ·
   Price book · Vendors · Documents · Logs. **Phone footer:** three pages Coy
@@ -1223,16 +1248,36 @@ expected start date per quoted job before it means anything. Add the field.
 - **Dusty is a pixel foreman (2026-09-30, `design/dusty/`, pixel v5).** The
   old diamond emblem is gone everywhere — header, rail, landing page,
   favicon. Dusty lives in two places only: the **centre of the phone footer**
-  (and the rail's Dusty item on a desktop) and the **chat**.
+  (the header button on a desktop, 2026-09-30) and the **chat**.
   `src/components/v34/dusty-avatar.tsx`, served from `public/dusty/`, to the
   pack's rules: `image-rendering: pixelated`; nothing animates at 16–24px;
   `prefers-reduced-motion` makes every sprite static. States come from real
   events only: **idle** (the 6 s loop at 32px+), **loading** (hard hat, a
   chat loading), **calculating** (the mixer truck replaces him, 200 ms
   crossfade, while a reply streams or the reader is reading), **done** (the
-  pour, then thumbs up 2 s) and **error** (head scratch). In the chat: 40px
-  in its header, 96px when empty, 32px still beside each answer. The
-  favicon is his 24px sprite.
+  pour, then thumbs up 2 s) and **error** (head scratch). In the chat: 96px
+  when empty; once a chat is going, **32px in the message bar**, in his real
+  state (Coy, 2026-09-30 — not in the chat's header, not beside each
+  answer). The favicon is his 24px sprite.
+- **Dusty answers in Markdown (2026-09-30).** Coy: *"showing the
+  calculations in .md format in the chat panel."* His prompt asks for
+  lists, bold and, for a job, a table per area (area · qty · cost · O.H. ·
+  margin · price) from the budget; `src/lib/markdown.ts` (tested) turns it
+  into a tree and `markdown.tsx` renders it with React elements only — no
+  HTML from a reply ever reaches the page.
+- **The job page, 2026-09-30:** "Why this job" is an **ⓘ** in the header
+  that opens it in a sheet. Each section has **Photos** under its
+  dimensions — a camera button (several shots on a phone) filing each photo
+  on that section (`job_files.section_id`, `section-photos.tsx`). While
+  Dusty is docked on a desktop, the job's totals move **into his panel**
+  (`#sc-dusty-slot`, `use-dusty-docked.ts`), folded to one line, and the
+  page drops its right column.
+- **The customer page header, 2026-09-30:** one row — "CUSTOMER | Maurice
+  Watkins" (Lexend 18) with "1 contact · 1 job" beside it (contact → Details
+  at Contacts; job → Jobs); Dusty's summary in Inter 300. **On a desktop the
+  seven tabs are a second icon rail** beside the main one (`sub-rail.tsx`,
+  72px, Details first) — the main rail picks the page, this one the
+  sub-page; the phone keeps its row of tabs.
 - Dusty has two entry points: COLD from the footer (no job context) and HOT
   from a page (that page preloaded). The chat's header says which.
 - **Dusty v1 (2026-09-27)** is wired: `src/components/v34/dusty-panel.tsx`
@@ -1334,8 +1379,8 @@ expected start date per quoted job before it means anything. Add the field.
   Saved to the account (`pricebook_cols`). The phone view is unchanged.
 - **Scope rail with no budget (step 3b).** No lines → **No price yet**:
   "a price comes only from cost cards on this job's budget", with a link to
-  Assemblies and the crew-days box. With lines → each option's total, cost,
-  margin, $/sf and floor (tap for its parameters). The section's
+  Assemblies and the days box. With lines → each option's total, cost, O.H.,
+  margin, $/sf, and the job minimum (day minimum × days). The section's
   Reinforcement picker lists reinforcement cards and says "default for …"
   when an assembly chose it.
 - **Price book → Assemblies (step 3b)** — `src/components/v34/assemblies.tsx`,

@@ -25,6 +25,7 @@ import { COST_TYPE_LABEL, QTY_RULE_LABEL, cardGaps, defaultTaxable, type CostTyp
 import { CardSheet, GroupSheet, call, numify, dateLabel, type Card, type Group, type Vendor } from "@/components/v34/cost-cards";
 import { ReceiptImport } from "@/components/v34/receipt-import";
 import { PriceImport } from "@/components/v34/price-import";
+import { PricingDefaults } from "@/components/v34/money-settings";
 import { Assemblies } from "@/components/v34/assemblies";
 import { usePref } from "@/lib/v34/prefs";
 
@@ -45,7 +46,7 @@ const SOURCE_SHORT: Record<string, string> = { quote: "quote", receipt: "receipt
 const COLS: Array<{ k: string; label: string; w: number; align?: "right" | "center" }> = [
   { k: "item", label: "Item", w: 300 }, { k: "other", label: "Vendor", w: 170 }, { k: "sku", label: "Item #", w: 100 },
   { k: "type", label: "Type", w: 100 }, { k: "unit", label: "Unit", w: 70 }, { k: "cost", label: "Unit cost", w: 110, align: "right" },
-  { k: "markup", label: "Markup", w: 100, align: "right" }, { k: "taxed", label: "Taxed", w: 64, align: "center" },
+  { k: "taxed", label: "Taxed", w: 64, align: "center" },
   { k: "rule", label: "Counted on a job", w: 150 }, { k: "date", label: "Price date", w: 110 }, { k: "from", label: "From", w: 80 },
 ];
 interface ColPrefs { w: Record<string, number>; hidden: string[] }
@@ -60,7 +61,7 @@ export function PriceBook() {
   const [note, setNote] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
   const [view, setViewState] = useState<View>("group");
-  const [tab, setTab] = useState<"cards" | "assemblies">("cards");
+  const [tab, setTab] = useState<"cards" | "assemblies" | "defaults">("cards");
   const [q, setQ] = useState("");
   const [retired, setRetired] = useState(false);
   const [open, setOpen] = useState<Record<string, boolean>>({});
@@ -88,7 +89,8 @@ export function PriceBook() {
         if (tick === 0) {
           try { const v = localStorage.getItem(VIEW_KEY); if (v === "vendor" || v === "group") setViewState(v); } catch { /* private mode */ }
           // The scope page's "Assemblies" button opens this tab.
-          if (new URLSearchParams(window.location.search).get("tab") === "assemblies") setTab("assemblies");
+          const want = new URLSearchParams(window.location.search).get("tab");
+          if (want === "assemblies" || want === "defaults") setTab(want);
         }
         setItems((b.items as Array<Record<string, unknown>>).map(numify)); setGroups(b.groups); setVendors(b.vendors); setImports(i.imports ?? []); setSources((b.sources ?? []) as Src[]);
         setErr(null);
@@ -117,7 +119,7 @@ export function PriceBook() {
       for (const g of groups) {
         const cards = visible.filter((c) => c.cost_group_id === g.id);
         if (cards.length || !q.trim()) out.push({ key: g.id, groupId: g.id, title: g.name, cards,
-          sub: `${g.cost_type ? COST_TYPE_LABEL[g.cost_type] : ""}${g.default_markup_pct !== null ? ` · ${Number(g.default_markup_pct)}% markup` : ""}` });
+          sub: `${g.cost_type ? COST_TYPE_LABEL[g.cost_type] : ""}` });
       }
       const loose = visible.filter((c) => !c.cost_group_id || !groups.some((g) => g.id === c.cost_group_id));
       if (loose.length) out.push({ key: "none", title: "Not in a group", sub: "", cards: loose });
@@ -227,16 +229,17 @@ export function PriceBook() {
       </div>
 
       <div className="flex gap-1 mt-3" role="tablist" aria-label="Price book">
-        {(["cards", "assemblies"] as const).map((k) => (
+        {(["cards", "assemblies", "defaults"] as const).map((k) => (
           <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)} className="rounded px-3"
             style={{ height: 32, background: tab === k ? T.ink : T.card, color: tab === k ? T.card : T.ink2, border: `1px solid ${tab === k ? T.ink : T.hair}`,
               fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", letterSpacing: ".06em", cursor: "pointer" }}>
-            {k === "cards" ? `Cards${items ? ` · ${active.length}` : ""}` : "Assemblies"}
+            {k === "cards" ? `Cards${items ? ` · ${active.length}` : ""}` : k === "assemblies" ? "Assemblies" : "Defaults"}
           </button>
         ))}
       </div>
 
-      {tab === "assemblies" ? <Assemblies cards={items ?? []} /> : (<>
+      {tab === "defaults" ? <div className="mt-3 rounded" style={{ background: T.card, border: `1px solid ${T.hair}` }}><PricingDefaults /></div>
+        : tab === "assemblies" ? <Assemblies cards={items ?? []} /> : (<>
       {/* ---- find, view ---- */}
       <div className="flex items-center gap-2 flex-wrap mt-3">
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find: 3000, rebar, Angelle, item #…" aria-label="Find a card"
@@ -370,11 +373,6 @@ export function PriceBook() {
                           <td key="cost" style={{ padding: "2px 4px", textAlign: "right" }}>
                             <Cell value={c.unit_cost} money label={`Unit cost of ${c.name}`} warn={c.unit_cost === null}
                               onSave={(v) => void (c._src ? patchSource(c, v) : patch(c, { unit_cost: v, price_as_of: v === null ? null : new Date().toISOString().slice(0, 10), price_source: v === null ? null : "typed" }))} />
-                          </td>
-                        ),
-                        markup: (
-                          <td key="markup" style={{ padding: "2px 4px", textAlign: "right", whiteSpace: "nowrap" }}>
-                            <Cell value={c.markup_pct} label={`Markup on ${c.name}`} suffix="%" placeholder="default" onSave={(v) => void patch(c, { markup_pct: v })} />
                           </td>
                         ),
                         taxed: (

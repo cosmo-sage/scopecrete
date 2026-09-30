@@ -22,6 +22,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { T, F, disp, eyebrow, body, clip, relTime } from "@/lib/v34/tokens";
 import { DustyAvatar, type DustyState } from "@/components/v34/dusty-avatar";
+import { Markdown } from "@/components/v34/markdown";
 
 type Ref = { kind: "thread" | "scope" | "customer"; id: string } | { kind: "cash" } | { kind: "cold" };
 type Ctx = Ref | { kind: "activity"; since: string };
@@ -46,7 +47,7 @@ const STARTERS: Record<Ref["kind"], string[]> = {
   thread: ["What does this person want?", "What do I owe them?", "Draft a reply I can send"],
   scope: ["Check these numbers", "What's stopping a price?", "What should I still ask them?"],
   customer: ["Summarise who this is", "What's open with them?"],
-  cash: ["Which settings matter most first?", "What does the floor need?"],
+  cash: ["What is my monthly burn?", "How long is my runway?"],
   cold: ["What's waiting on me today?", "Price a 24×30 driveway", "Who haven't I called back?"],
 };
 
@@ -295,7 +296,6 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
           <button onClick={() => setRailOpen(true)} aria-label="Conversations" className="flex-col gap-[3.5px]" style={iconBtn}>
             {[0, 1, 2].map((i) => <span key={i} style={{ width: 13, height: 1.5, background: T.ink2, borderRadius: 1 }} />)}
           </button>
-          <DustyAvatar state={dustyState} size={40} />
           <div className="flex-1 min-w-0">
             <div style={{ fontFamily: disp, fontSize: F.md, fontWeight: 600, lineHeight: 1.1, ...clip }}>{active ? active.title : "New chat"}</div>
             <div style={{ ...eyebrow, fontSize: 9, color: hot ? T.hiviz : T.ink3, ...clip }}>
@@ -317,6 +317,9 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
             This chat is about {active.context_label || "something else"}. <b style={{ color: T.ink }}>Ask about {PAGE[ref.kind]} instead →</b>
           </button>
         )}
+        {/* A page can put its own numbers here while Dusty is docked beside it
+            (the job page's totals — Coy, 2026-09-30). */}
+        <div id="sc-dusty-slot" className="shrink-0" />
         <div ref={scroller} className="flex-1 overflow-y-auto">
           <div className="mx-auto w-full px-4 py-4" style={{ maxWidth: 760 }}>
             {loadingConv && <div className="rounded animate-pulse" style={{ height: 80, background: T.hairSoft }} />}
@@ -340,11 +343,10 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
               <h2 key={i} style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 600, lineHeight: 1.25, margin: i === 0 ? "0 0 8px" : "22px 0 8px",
                 paddingTop: i === 0 ? 0 : 16, borderTop: i === 0 ? "none" : `1px solid ${T.hair}` }}>{it.content}</h2>
             ) : (
-              <div key={i} className="flex gap-2.5 items-start">
-                <DustyAvatar state={busy && i === items.length - 1 ? "calculating" : "idle"} size={32} still={!(busy && i === items.length - 1)} hidden />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: F.md, lineHeight: 1.6, whiteSpace: "pre-wrap", fontFamily: body, color: T.ink }}>
-                  {it.content || <span style={{ color: T.ink3 }}>Reading…</span>}
+              <div key={i}>
+                <div style={{ minWidth: 0 }}>
+                <div style={{ fontFamily: body }}>
+                  {it.content ? <Markdown text={it.content} /> : <span style={{ color: T.ink3 }}>Reading…</span>}
                 </div>
                 {it.content && !(busy && i === items.length - 1) && (
                   <button onClick={() => void copy(i, it.content)} className="mt-1.5" style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>
@@ -361,6 +363,9 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
         <form onSubmit={(e) => { e.preventDefault(); void ask(draft); }} className="shrink-0 px-3 py-2.5"
           style={{ borderTop: `1px solid ${T.hair}`, background: T.card }}>
           <div className="mx-auto flex items-end gap-2" style={{ maxWidth: 760 }}>
+            {/* Coy, 2026-09-30: once a chat is going, Dusty lives here, beside
+                the box — his real state: fetching, working, done, or stuck. */}
+            {items.length > 0 && <span className="shrink-0" style={{ alignSelf: "center" }}><DustyAvatar state={dustyState} size={32} /></span>}
             <textarea value={draft} onChange={(e) => setDraft(e.target.value)} rows={1} maxLength={4000}
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void ask(draft); } }}
               placeholder={active ? "Follow up…" : hot ? `Ask about ${GUESS[ref.kind]}…` : "Ask Dusty…"}

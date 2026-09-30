@@ -7,11 +7,13 @@
  *
  * WHAT IT DELIBERATELY IS NOT
  *
- * It is not v34's computeJob(). That one prices labour by crew-hours, applies
- * one global markup, and adds overhead as a percentage of labour. DECISIONS §3
- * says labour is priced by the SQUARE FOOT and markup is PER COST TYPE; §4 says
- * overhead enters in exactly one place, the floor, spread by crew-days. All
- * three would be double-counts or mispricings here.
+ * It is not v34's computeJob(), which prices labour by crew-hours. Since Coy's
+ * pricing notes (2026-09-30, migration 057) a line's price is
+ *   cost × (1 + O.H.) ÷ (1 − margin)
+ * with the job's O.H. % and margin % (copied from the org's defaults onto
+ * each budget), a line's own margin overriding the job's. Card and group
+ * markups, markup per cost type, the off-the-top divisor and the crew-day
+ * floor are gone; a job has a MINIMUM instead: the day minimum × its days.
  *
  * THE RULE THAT SHAPES EVERY RETURN VALUE
  *
@@ -45,44 +47,13 @@ export interface SectionInput {
   psi?: number | null;
 }
 
-/** The subset of `org_cost_settings` the engine reads. null = not recorded. */
-export interface CostSettings {
-  concrete_overage_pct: number | null;
-  shortload_threshold_cy: number | null;
-  sales_tax_pct: number | null;
-  markup_material_pct: number | null;
-  markup_labor_pct: number | null;
-  markup_equipment_pct: number | null;
-  owner_fee_pct: number | null;
-  estimator_fee_pct: number | null;
-  tax_reserve_pct: number | null;
-  assumed_billable_days: number | null;
-  comp_mode: "fixed_draw" | "pct_profit" | string | null;
-  comp_monthly_draw: number | null;
-}
-
+/** One line of recurring overhead — the Cash page's burn rate. */
 export interface OverheadItem {
   label: string;
   amount: number;
   cadence: "monthly" | "quarterly" | "annual" | "one_time" | string;
   active: boolean;
 }
-
-/** Plain-English names for every input, used in `blocked` lists. */
-export const SETTING_LABEL: Record<keyof CostSettings, string> = {
-  concrete_overage_pct: "Concrete waste %",
-  shortload_threshold_cy: "Short-load threshold",
-  sales_tax_pct: "Sales tax %",
-  markup_material_pct: "Materials markup %",
-  markup_labor_pct: "Labor markup %",
-  markup_equipment_pct: "Equipment markup %",
-  owner_fee_pct: "Owner fee %",
-  estimator_fee_pct: "Estimator fee %",
-  tax_reserve_pct: "Tax reserve %",
-  assumed_billable_days: "Crew-days per month",
-  comp_mode: "Pay-yourself mode",
-  comp_monthly_draw: "Monthly draw",
-};
 
 const has = (n: number | null | undefined): n is number =>
   typeof n === "number" && Number.isFinite(n);
@@ -167,82 +138,41 @@ export function takeoff(sections: SectionInput[], overage_pct: number | null): T
   };
 }
 
-/** Overhead as a monthly figure — the nut the floor spreads by crew-days (§4). */
+/** Recurring overhead as a monthly figure — the Cash page's burn rate. */
 export function monthlyNut(items: OverheadItem[]): number {
   return items.filter((i) => i.active).reduce((a, i) => {
     if (i.cadence === "monthly") return a + i.amount;
     if (i.cadence === "quarterly") return a + i.amount / 3;
     if (i.cadence === "annual") return a + i.amount / 12;
-    return a; // one_time is a dated cash event, not part of the recurring nut
+    return a; // one_time is a dated cash event, not part of the recurring burn
   }, 0);
 }
 
 // ---------------------------------------------------------------------------
-// Floor — DECISIONS §4. floor = (hard_cost + job's share of the nut) / (1 − off-the-top)
+// The job minimum (Coy, 2026-09-30): "There are no default crew days … only a
+// minimum of $ per day that people require to show up and work. And
+// therefore there is a minimum for a job."  minimum = day minimum × days.
 // ---------------------------------------------------------------------------
 
-export interface Floor {
-  ok: true;
-  floor: number;
-  hard_cost: number;
-  nut_monthly: number;
-  nut_per_crew_day: number;
-  crew_days: number;
-  nut_share: number;
-  off_top_pct: number;
-  /** Whether crew days on this job were entered by a person or measured. */
-  crew_days_basis: "estimated";
-  draw_included: number;
-}
-
-export function floor(
-  hardCost: number,
-  s: CostSettings,
-  overhead: OverheadItem[],
-  crewDays: number | null,
-): Floor | { ok: false; blocked: string[] } {
+export function jobMinimum(dayMinimum: number | null, days: number | null):
+  { ok: true; minimum: number; day_minimum: number; days: number } | { ok: false; blocked: string[] } {
   const blocked: string[] = [];
-  if (!has(s.owner_fee_pct)) blocked.push(SETTING_LABEL.owner_fee_pct);
-  if (!has(s.estimator_fee_pct)) blocked.push(SETTING_LABEL.estimator_fee_pct);
-  if (!has(s.tax_reserve_pct)) blocked.push(SETTING_LABEL.tax_reserve_pct);
-  if (!has(s.assumed_billable_days) || s.assumed_billable_days <= 0) blocked.push(SETTING_LABEL.assumed_billable_days);
-  if (!s.comp_mode) blocked.push(SETTING_LABEL.comp_mode);
-  if (s.comp_mode === "fixed_draw" && !has(s.comp_monthly_draw)) blocked.push(SETTING_LABEL.comp_monthly_draw);
-  if (overhead.filter((o) => o.active).length === 0) blocked.push("Monthly overhead (no items recorded)");
-  if (!has(crewDays) || crewDays <= 0) blocked.push("Crew days on this job");
-
-  const offTop = (s.owner_fee_pct ?? 0) + (s.estimator_fee_pct ?? 0) + (s.tax_reserve_pct ?? 0);
-  if (offTop >= 100) blocked.push("Off-the-top adds to 100% or more");
+  if (!has(dayMinimum) || dayMinimum <= 0) blocked.push("Day minimum (Price book → Defaults)");
+  if (!has(days) || days <= 0) blocked.push("Days on this job");
   if (blocked.length) return { ok: false, blocked };
-
-  // fixed_draw behaves like an overhead line the floor MUST cover; pct_profit
-  // comes out after a job clears and does NOT raise the floor (§4).
-  const draw = s.comp_mode === "fixed_draw" ? (s.comp_monthly_draw as number) : 0;
-  const nut = monthlyNut(overhead) + draw;
-  const perDay = nut / (s.assumed_billable_days as number);
-  const share = perDay * (crewDays as number);
-  return {
-    ok: true,
-    // A divisor, not a subtraction: 11% off the top means ÷ 0.89.
-    floor: (hardCost + share) / (1 - offTop / 100),
-    hard_cost: hardCost, nut_monthly: nut, nut_per_crew_day: perDay,
-    crew_days: crewDays as number, nut_share: share, off_top_pct: offTop,
-    crew_days_basis: "estimated", draw_included: draw,
-  };
+  return { ok: true, minimum: (dayMinimum as number) * (days as number), day_minimum: dayMinimum as number, days: days as number };
 }
 
 // ---------------------------------------------------------------------------
-// The job budget (migration 048, Coy 2026-09-29) — JobTread's maths on lines
-// copied from cost cards:
-//   ext cost = qty × unit cost
-//   unit price = unit cost × (1 + markup)      ext price = qty × unit price
-//   margin = (price − cost) ÷ price
+// The job budget (migration 048; priced Coy's way since migration 057):
+//   ext cost  = qty × unit cost
+//   O.H.      = ext cost × the job's O.H. %
+//   ext price = (ext cost + O.H.) ÷ (1 − margin)      unit price = ext price ÷ qty
+//   margin    = the line's own, else the job's — never assumed
 // Quantities come from the scope by each line's rule, or are typed (✎).
-// Markup: the line's own (a card's is copied onto it), else its group's
-// default, else the cost type's markup in Cost settings — never assumed.
-// Tax is a pass-through on taxable lines, at cost, in both columns (§3), and
-// only while the budget's tax switch is on. Discount touches price only (§3).
-// Good / better / best: a line with no option is in every tier.
+// Tax is a pass-through on taxable lines, at cost, at the JOB's rate (from its
+// parish), only while the budget's tax switch is on. Discount touches price
+// only (§3). Good / better / best: a line with no option is in every tier.
 // ---------------------------------------------------------------------------
 
 export type QtyRule = "per_cy" | "per_sqft" | "per_lf_perimeter" | "per_sheet" | "per_stick" | "per_day" | "per_job" | "manual";
@@ -254,7 +184,8 @@ export interface BudgetLine {
   cost_type: BudgetCostType | string;
   unit: string;
   unit_cost: number | null;
-  markup_pct: number | null;
+  /** This line's own margin %, overriding the job's. */
+  margin_pct?: number | null;
   taxable: boolean;
   qty_rule: QtyRule | string;
   rule_params: Record<string, number>;
@@ -266,14 +197,14 @@ export interface BudgetLine {
   cost_group_id: string | null;
 }
 
+/** The job's pricing: its own O.H. and margin (else the org's defaults), and its tax rate. */
 export interface BudgetSettings {
-  markup_material_pct: number | null;
-  markup_labor_pct: number | null;
-  markup_equipment_pct: number | null;
-  markup_subcontract_pct?: number | null;
-  sales_tax_pct: number | null;
-  concrete_overage_pct: number | null;
-  shortload_threshold_cy: number | null;
+  overhead_pct: number | null;
+  margin_pct: number | null;
+  /** The job's sales tax %, from its parish or typed. null = not known. */
+  tax_rate_pct: number | null;
+  /** Why the rate is missing, said plainly ("parish unknown"). */
+  tax_missing?: string;
 }
 
 export interface LineResult {
@@ -282,11 +213,13 @@ export interface LineResult {
   /** Where the quantity came from, said the way the grid shows it. */
   qty_basis: "rule" | "set";
   qty_note: string | null;
-  markup: number | null;
-  markup_from: "line" | "group" | "type" | null;
+  margin_pct: number | null;
+  margin_from: "line" | "job" | null;
   ext_cost: number | null;
+  overhead: number | null;
   unit_price: number | null;
   ext_price: number | null;
+  /** (price − cost − O.H.) ÷ price — equals the margin used. */
   margin: number | null;
   tax: number;
   /** Everything missing for this line, by name. Empty = priced. */
@@ -296,13 +229,15 @@ export interface LineResult {
 export interface TierTotal {
   option_id: string | null;
   cost: number;
+  overhead: number;
   price: number;
   tax: number;
   discount: number;
   /** price + tax − discount */
   total: number;
-  /** (total − (cost + tax)) ÷ total */
+  /** (total − tax − cost − O.H.) ÷ (total − tax): what is left after cost and O.H. */
   margin: number;
+  profit: number;
   priced: boolean;
   blocked: string[];
   line_ids: string[];
@@ -315,17 +250,11 @@ export interface BudgetResult {
   hints: string[];
 }
 
-const TYPE_MARKUP: Record<string, keyof BudgetSettings> = {
-  material: "markup_material_pct", labor: "markup_labor_pct", equipment: "markup_equipment_pct", subcontract: "markup_subcontract_pct",
-};
-const TYPE_NAME: Record<string, string> = { material: "Materials", labor: "Labor", equipment: "Equipment", subcontract: "Subcontract", other: "Other" };
-
 /** How many of something a line needs, from the scope. Whole-job lines (no section) sum every section. */
 export function ruleQty(
   line: Pick<BudgetLine, "name" | "qty_rule" | "rule_params" | "qty_source" | "quantity" | "section_id">,
   sections: SectionInput[],
-  overage_pct: number | null,
-  crewDays: number | null,
+  days: number | null,
 ): { ok: true; qty: number; basis: "rule" | "set"; note: string } | { ok: false; missing: string[] } {
   if (line.qty_source === "set" || line.qty_rule === "manual") {
     if (has(line.quantity) && line.quantity >= 0) return { ok: true, qty: line.quantity, basis: "set", note: "typed" };
@@ -343,7 +272,7 @@ export function ruleQty(
   switch (line.qty_rule) {
     case "per_job": return { ok: true, qty: 1, basis: "rule", note: "once" };
     case "per_day":
-      return has(crewDays) && crewDays > 0 ? { ok: true, qty: crewDays, basis: "rule", note: "crew days" } : { ok: false, missing: ["Crew days on this job"] };
+      return has(days) && days > 0 ? { ok: true, qty: days, basis: "rule", note: "days" } : { ok: false, missing: ["Days on this job"] };
     case "per_sqft": {
       const miss = qs.filter((q) => q.sqft === null).map((q) => `${label(q)}: area`);
       if (miss.length) return { ok: false, missing: miss };
@@ -365,8 +294,10 @@ export function ruleQty(
       if (miss.length) return { ok: false, missing: miss };
       const neat = conc.reduce((a, q) => a + (q.cy_neat as number), 0);
       if (pos(p.per_cy)) return { ok: true, qty: up(neat * p.per_cy * 10) / 10, basis: "rule", note: `${p.per_cy} a yard` };
-      if (!has(overage_pct)) return { ok: false, missing: [SETTING_LABEL.concrete_overage_pct] };
-      return { ok: true, qty: Math.round(neat * (1 + overage_pct / 100) * 100) / 100, basis: "rule", note: `yards + ${overage_pct}% waste` };
+      // Waste is the card's (Coy: concrete is set in the cost book) — 0 is a
+      // real answer, blank is not.
+      if (!has(p.waste_pct) || p.waste_pct < 0) return { ok: false, missing: [`${line.name}: waste % (on the card)`] };
+      return { ok: true, qty: Math.round(neat * (1 + p.waste_pct / 100) * 100) / 100, basis: "rule", note: p.waste_pct ? `yards + ${p.waste_pct}% waste` : "yards, no waste" };
     }
     case "per_sheet": {
       if (!pos(p.sheet_sqft)) return { ok: false, missing: [`${line.name}: what one sheet covers`] };
@@ -395,40 +326,39 @@ export function budget(
   optionIds: string[],
   s: BudgetSettings,
   sections: SectionInput[],
-  crewDays: number | null,
-  opts: { tax_on: boolean; discount: number; groupMarkup?: Record<string, number | null> },
+  days: number | null,
+  opts: { tax_on: boolean; discount: number },
 ): BudgetResult {
   const out: Record<string, LineResult> = {};
-  const taxRate = has(s.sales_tax_pct) ? s.sales_tax_pct : null;
+  const taxRate = has(s.tax_rate_pct) ? s.tax_rate_pct : null;
+  const oh = has(s.overhead_pct) ? s.overhead_pct : null;
 
   for (const l of lines) {
     const blocked: string[] = [];
-    const q = ruleQty(l, sections, s.concrete_overage_pct, crewDays);
+    const q = ruleQty(l, sections, days);
     const qty = q.ok ? q.qty : null;
     if (!q.ok) blocked.push(...q.missing);
     if (!has(l.unit_cost)) blocked.push(`${l.name}: unit cost`);
+    if (oh === null) blocked.push("O.H. % (Price book → Defaults, or this budget)");
 
-    let markup: number | null = null;
-    let from: LineResult["markup_from"] = null;
-    const gm = l.cost_group_id ? opts.groupMarkup?.[l.cost_group_id] : null;
-    if (has(l.markup_pct)) { markup = l.markup_pct; from = "line"; }
-    else if (has(gm)) { markup = gm; from = "group"; }
-    else {
-      const k = TYPE_MARKUP[l.cost_type];
-      const v = k ? s[k] : null;
-      if (has(v as number)) { markup = v as number; from = "type"; }
-      else blocked.push(`${TYPE_NAME[l.cost_type] ?? "Other"} markup %`);
-    }
-    if (opts.tax_on && l.taxable && taxRate === null) blocked.push(SETTING_LABEL.sales_tax_pct);
+    let m: number | null = null;
+    let from: LineResult["margin_from"] = null;
+    if (has(l.margin_pct)) { m = l.margin_pct; from = "line"; }
+    else if (has(s.margin_pct)) { m = s.margin_pct; from = "job"; }
+    else blocked.push("Margin % (Price book → Defaults, or this budget)");
+    if (m !== null && m >= 100) { blocked.push(`${l.name}: margin must be under 100%`); m = null; }
+    if (opts.tax_on && l.taxable && taxRate === null) blocked.push(`Sales tax for this job${s.tax_missing ? ` (${s.tax_missing})` : ""}`);
 
     const ext_cost = qty !== null && has(l.unit_cost) ? qty * l.unit_cost : null;
-    const unit_price = has(l.unit_cost) && markup !== null ? l.unit_cost * (1 + markup / 100) : null;
-    const ext_price = qty !== null && unit_price !== null ? qty * unit_price : null;
+    const overhead = ext_cost !== null && oh !== null ? ext_cost * oh / 100 : null;
+    const ext_price = ext_cost !== null && overhead !== null && m !== null ? (ext_cost + overhead) / (1 - m / 100) : null;
+    const unit_price = ext_price !== null && qty ? ext_price / qty
+      : has(l.unit_cost) && oh !== null && m !== null ? l.unit_cost * (1 + oh / 100) / (1 - m / 100) : null;
     const tax = opts.tax_on && l.taxable && ext_cost !== null && taxRate !== null ? ext_cost * taxRate / 100 : 0;
     out[l.id] = {
       id: l.id, qty, qty_basis: q.ok ? q.basis : (l.qty_source === "set" ? "set" : "rule"), qty_note: q.ok ? q.note : null,
-      markup, markup_from: from, ext_cost, unit_price, ext_price,
-      margin: ext_price && ext_cost !== null ? (ext_price - ext_cost) / ext_price : null,
+      margin_pct: m, margin_from: from, ext_cost, overhead, unit_price, ext_price,
+      margin: ext_price && ext_cost !== null && overhead !== null ? (ext_price - ext_cost - overhead) / ext_price : null,
       tax, blocked,
     };
   }
@@ -438,27 +368,22 @@ export function budget(
       || (optionId === null && optionIds.length === 0));
     const rs = inTier.map((l) => out[l.id]);
     const cost = rs.reduce((a, r) => a + (r.ext_cost ?? 0), 0);
+    const overhead = rs.reduce((a, r) => a + (r.overhead ?? 0), 0);
     const price = rs.reduce((a, r) => a + (r.ext_price ?? 0), 0);
     const tax = rs.reduce((a, r) => a + r.tax, 0);
     const discount = has(opts.discount) && opts.discount > 0 ? opts.discount : 0;
     const total = price + tax - discount;
+    const net = total - tax;
+    const profit = net - cost - overhead;
     const blocked = [...new Set(rs.flatMap((r) => r.blocked))];
     return {
-      option_id: optionId, cost, price, tax, discount, total,
-      margin: total > 0 ? (total - (cost + tax)) / total : 0,
+      option_id: optionId, cost, overhead, price, tax, discount, total, profit,
+      margin: net > 0 ? profit / net : 0,
       priced: blocked.length === 0 && inTier.length > 0, blocked, line_ids: inTier.map((l) => l.id),
     };
   };
   const tiers = optionIds.length ? optionIds.map(tierOf) : [tierOf(null)];
-
-  const hints: string[] = [];
-  const t = takeoff(sections, s.concrete_overage_pct);
-  const yards = t.cy_order ?? t.cy_neat;
-  if (has(s.shortload_threshold_cy) && yards > 0 && yards < s.shortload_threshold_cy
-      && !lines.some((l) => /short[\s-]?load/i.test(l.name))) {
-    hints.push(`Under ${s.shortload_threshold_cy} yd — add your short-load card if the plant charges one.`);
-  }
-  return { lines: out, tiers, hints };
+  return { lines: out, tiers, hints: [] };
 }
 
 // ---------------------------------------------------------------------------

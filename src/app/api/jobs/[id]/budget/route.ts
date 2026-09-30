@@ -2,17 +2,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
 import { ESTIMATE_COLUMNS, LINE_COLUMNS, jobInOrg, numLine, workingEstimate } from "@/lib/budget-server";
 import { sourcesFor } from "@/lib/sources-server";
+import { pricingFor } from "@/lib/pricing-server";
 
 /**
  * The job's budget (migration 048): the working estimate, its options (good /
  * better / best) and lines, plus what the maths and the card picker need —
- * the markups, tax and waste from Cost settings, each group's markup, and the
- * active cost cards. The engine prices it (src/lib/engine budget()), in the
+ * the job's pricing (its O.H. and margin, else the org's defaults, and its
+ * sales tax from its parish — src/lib/pricing-server.ts), and the active
+ * cost cards. The engine prices it (src/lib/engine budget()), in the
  * browser and for Dusty alike, so there is one set of numbers.
  * `sources`: every vendor's price on the items the lines came from — the
  * line's vendor picker (migration 051).
  *
- * PATCH { tax_on?, discount_amount?, discount_reason? } — the budget's own switches.
+ * PATCH { tax_on?, discount_amount?, discount_reason?, margin_pct?, overhead_pct? }
+ *   — the budget's own switches; null margin / O.H. goes back to the default.
  */
 
 export const dynamic = "force-dynamic";
@@ -25,7 +28,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   if (!(await jobInOrg(supabase, orgId, id))) return applyCookies(NextResponse.json({ error: "No such job." }, { status: 404 }));
 
   const est = await workingEstimate(supabase, orgId, id, false);
-  const [opts, lines, groups, cards, settings, assemblies] = await Promise.all([
+  const [opts, lines, groups, cards, pricing, assemblies] = await Promise.all([
     est ? supabase.from("estimate_options").select("id, label, description, sort_order").eq("org_id", orgId).eq("estimate_id", est.id as string).order("sort_order")
       : Promise.resolve({ data: [] }),
     est ? supabase.from("estimate_line_items").select(LINE_COLUMNS).eq("estimate_id", est.id as string).order("sort_order").order("name")
@@ -33,8 +36,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     supabase.from("cost_groups").select("id, name, cost_type, default_markup_pct, sort_order").eq("org_id", orgId).order("sort_order").order("name"),
     supabase.from("cost_items").select("id, cost_group_id, name, description, cost_type, unit, unit_cost, taxable, markup_pct, vendor_contact_id, price_as_of, price_source, qty_rule, rule_params, updated_at, default_source_id")
       .eq("org_id", orgId).eq("active", true).order("sort_order").order("name"),
-    supabase.from("org_cost_settings").select("markup_material_pct, markup_labor_pct, markup_equipment_pct, markup_subcontract_pct, sales_tax_pct, concrete_overage_pct, shortload_threshold_cy")
-      .eq("org_id", orgId).maybeSingle(),
+    pricingFor(supabase, orgId, [id]),
     supabase.from("cost_assemblies").select("id, name, job_type, work_type").eq("org_id", orgId).order("sort_order").order("name"),
   ]);
   const lineItems = [...new Set(((lines.data ?? []) as Array<{ cost_item_id: string | null }>).map((l) => l.cost_item_id).filter(Boolean) as string[])];
@@ -43,8 +45,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   const { data: vendors } = vendorIds.length
     ? await supabase.from("contacts").select("id, name, phone").eq("org_id", orgId).in("id", vendorIds)
     : { data: [] };
-  const s = (settings.data ?? {}) as Record<string, unknown>;
-  const n = (k: string) => (s[k] === null || s[k] === undefined ? null : Number(s[k]));
+  const p = pricing.get(id);
   return applyCookies(NextResponse.json({
     estimate: est ? { ...est, discount_amount: Number(est.discount_amount ?? 0) } : null,
     options: opts.data ?? [],
@@ -54,11 +55,8 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     vendors: vendors ?? [],
     sources,
     assemblies: assemblies.data ?? [],
-    settings: {
-      markup_material_pct: n("markup_material_pct"), markup_labor_pct: n("markup_labor_pct"), markup_equipment_pct: n("markup_equipment_pct"),
-      markup_subcontract_pct: n("markup_subcontract_pct"), sales_tax_pct: n("sales_tax_pct"),
-      concrete_overage_pct: n("concrete_overage_pct"), shortload_threshold_cy: n("shortload_threshold_cy"),
-    },
+    settings: p?.settings ?? { margin_pct: null, overhead_pct: null, tax_rate_pct: null },
+    pricing: p ? { tax: p.tax, days: p.days, day_minimum: p.day_minimum, margin_from: p.margin_from, overhead_from: p.overhead_from } : null,
   }));
 }
 
@@ -78,6 +76,14 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     // Discount is a positive number taken off the price column only (§3).
     if (!Number.isFinite(d) || d < 0) return bad("A discount is a positive amount.");
     patch.discount_amount = d;
+  }
+  for (const k of ["margin_pct", "overhead_pct"] as const) {
+    if (!(k in b)) continue;
+    if (b[k] === null || b[k] === "") { patch[k] = null; continue; }
+    const v = Number(b[k]);
+    const max = k === "margin_pct" ? 99.9 : 200;
+    if (!Number.isFinite(v) || v < 0 || v > max) return bad(k === "margin_pct" ? "Margin is 0 to under 100%." : "O.H. is 0 to 200%.");
+    patch[k] = v;
   }
   if ("discount_reason" in b) patch.discount_reason = typeof b.discount_reason === "string" && b.discount_reason.trim() ? b.discount_reason.trim().slice(0, 200) : null;
   if (!Object.keys(patch).length) return bad("Nothing to change.");

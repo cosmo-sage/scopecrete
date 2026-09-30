@@ -5,7 +5,7 @@ import { LINE_COLUMNS, jobInOrg, numLine } from "@/lib/budget-server";
 /**
  * One budget line. PATCH what Coy changes in the grid or the phone sheet:
  *   quantity (a typed quantity → qty_source 'set'; { qty_source: 'rule' } goes
- *   back to the rule), unit_cost, markup_pct, taxable, option_id, section_id,
+ *   back to the rule), unit_cost, margin_pct (this line's own margin), taxable, option_id, section_id,
  *   name, description, the show switches — or { refresh: true } to copy the
  *   current price onto it (the vendor Coy picked for this line, else the
  *   card's default vendor). { source_id } picks a vendor for this line only
@@ -51,7 +51,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     patch.qty_source = "rule"; patch.quantity = null;
   }
   if ("unit_cost" in b) { const v = numOrNull(b.unit_cost, 0, 1_000_000, "Unit cost"); if (v instanceof Error) return bad(v.message); patch.unit_cost = v; }
-  if ("markup_pct" in b) { const v = numOrNull(b.markup_pct, 0, 500, "Markup"); if (v instanceof Error) return bad(v.message); patch.markup_pct = v; }
+  if ("margin_pct" in b) { const v = numOrNull(b.margin_pct, 0, 99.9, "Margin"); if (v instanceof Error) return bad(v.message); patch.margin_pct = v; }
   if ("taxable" in b) patch.taxable = b.taxable === true;
   for (const k of ["show_on_doc", "show_qty", "show_price"] as const) if (k in b) patch[k] = b[k] === true;
   if ("name" in b) {

@@ -1,5 +1,6 @@
 import type { ApiSession } from "@/lib/api-auth";
 import { budget, type BudgetLine, type SectionInput } from "@/lib/engine";
+import { pricingFor } from "@/lib/pricing-server";
 
 /**
  * What jobs are worth, by the same budget() the job page and Dusty use
@@ -25,22 +26,13 @@ export async function jobValues(sb: Sb, orgId: string, jobs: Array<{ id: string;
     .eq("org_id", orgId).eq("status", "draft").in("job_id", ids);
   const estRows = (ests ?? []) as Array<{ id: string; job_id: string; tax_on: boolean | null; discount_amount: unknown; selected_option_id: string | null }>;
   const estIds = estRows.map((e) => e.id);
-  const [{ data: opts }, { data: rows }, { data: groups }, { data: settings }, { data: secs }] = await Promise.all([
+  const [{ data: opts }, { data: rows }, pricing, { data: secs }] = await Promise.all([
     estIds.length ? sb.from("estimate_options").select("id, estimate_id").eq("org_id", orgId).in("estimate_id", estIds) : Promise.resolve({ data: [] }),
-    estIds.length ? sb.from("estimate_line_items").select("id, estimate_id, name, cost_type, unit, unit_cost, markup_pct, taxable, qty_rule, rule_params, qty_source, quantity, section_id, option_id, cost_group_id")
+    estIds.length ? sb.from("estimate_line_items").select("id, estimate_id, name, cost_type, unit, unit_cost, margin_pct, taxable, qty_rule, rule_params, qty_source, quantity, section_id, option_id, cost_group_id")
       .in("estimate_id", estIds) : Promise.resolve({ data: [] }),
-    sb.from("cost_groups").select("id, default_markup_pct").eq("org_id", orgId),
-    sb.from("org_cost_settings").select("markup_material_pct, markup_labor_pct, markup_equipment_pct, markup_subcontract_pct, sales_tax_pct, concrete_overage_pct, shortload_threshold_cy")
-      .eq("org_id", orgId).maybeSingle(),
+    pricingFor(sb, orgId, ids),
     sb.from("job_sections").select("id, job_id, name, work_type, length_ft, width_ft, sqft_override, depth_in, psi").eq("org_id", orgId).in("job_id", ids),
   ]);
-  const s = (settings ?? {}) as Record<string, unknown>;
-  const st = {
-    markup_material_pct: num(s.markup_material_pct), markup_labor_pct: num(s.markup_labor_pct), markup_equipment_pct: num(s.markup_equipment_pct),
-    markup_subcontract_pct: num(s.markup_subcontract_pct), sales_tax_pct: num(s.sales_tax_pct),
-    concrete_overage_pct: num(s.concrete_overage_pct), shortload_threshold_cy: num(s.shortload_threshold_cy),
-  };
-  const groupMarkup = Object.fromEntries(((groups ?? []) as Array<{ id: string; default_markup_pct: unknown }>).map((g) => [g.id, num(g.default_markup_pct)]));
   const lineRows = (rows ?? []) as Array<Record<string, unknown>>;
   const optRows = (opts ?? []) as Array<{ id: string; estimate_id: string }>;
   const secRows = (secs ?? []) as Array<Record<string, unknown>>;
@@ -48,7 +40,7 @@ export async function jobValues(sb: Sb, orgId: string, jobs: Array<{ id: string;
   for (const j of jobs) {
     const est = estRows.find((e) => e.job_id === j.id);
     const lines = est ? lineRows.filter((l) => l.estimate_id === est.id).map((r) => ({
-      ...r, unit_cost: num(r.unit_cost), markup_pct: num(r.markup_pct), quantity: num(r.quantity),
+      ...r, unit_cost: num(r.unit_cost), margin_pct: num(r.margin_pct), quantity: num(r.quantity),
     })) as unknown as BudgetLine[] : [];
     if (!est || !lines.length) { out.set(j.id, { total: null, basis: null, why: "no budget" }); continue; }
     const sections: SectionInput[] = secRows.filter((r) => r.job_id === j.id).map((r) => ({
@@ -56,8 +48,9 @@ export async function jobValues(sb: Sb, orgId: string, jobs: Array<{ id: string;
       length_ft: num(r.length_ft), width_ft: num(r.width_ft), sqft_override: num(r.sqft_override), depth_in: num(r.depth_in), psi: num(r.psi),
     }));
     const optionIds = optRows.filter((o) => o.estimate_id === est.id).map((o) => o.id);
+    const st = pricing.get(j.id)?.settings ?? { margin_pct: null, overhead_pct: null, tax_rate_pct: null };
     const res = budget(lines, optionIds, st, sections, num(j.duration_days), {
-      tax_on: est.tax_on !== false, discount: Number(est.discount_amount ?? 0), groupMarkup,
+      tax_on: est.tax_on !== false, discount: Number(est.discount_amount ?? 0),
     });
     const chosen = est.selected_option_id ? res.tiers.find((t) => t.option_id === est.selected_option_id) : null;
     if (chosen) { out.set(j.id, chosen.priced ? { total: chosen.total, basis: "accepted", why: null } : { total: null, basis: null, why: "blocked" }); continue; }

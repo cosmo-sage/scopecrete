@@ -1,8 +1,8 @@
 "use client";
 
 /**
- * The Scope builder — one job, its sections, the takeoff and (when the
- * settings exist) the price and the floor.
+ * The Scope builder — one job, its sections, the takeoff, the budget's price
+ * and the job minimum (day minimum × days, migration 057).
  *
  * Structure from v34's ScopeScreen (sections as cards with L × W, thickness,
  * a dark money panel) and, at lg+, the desktop design's scope builder
@@ -18,16 +18,20 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
+import { useDustyDocked } from "@/lib/v34/use-dusty-docked";
+import { Sheet } from "@/components/v34/primitives";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { T, F, disp, eyebrow, nums, clip, money, money0, formatPhone } from "@/lib/v34/tokens";
 import { EmptyState } from "@/components/v34/primitives";
 import { JobChips } from "@/components/v34/job-chips";
-import { FilesPanel } from "@/components/v34/files-panel";
+import { FilesPanel, type FileRow } from "@/components/v34/files-panel";
+import { SectionPhotos } from "@/components/v34/section-photos";
 import { JobBudget, type BudgetSummary } from "@/components/v34/job-budget";
 import {
-  floor as floorOf, takeoff as takeoffOf, quantities, ruleQty,
-  type CostSettings, type OverheadItem, type SectionInput,
+  takeoff as takeoffOf, quantities, ruleQty,
+  type SectionInput,
 } from "@/lib/engine";
 import { isReinforcementCard } from "@/lib/cost-cards";
 
@@ -77,14 +81,35 @@ export default function ScopeBuilder() {
   const [job, setJob] = useState<Job | null>(null);
   const [contact, setContact] = useState<Contact | null>(null);
   const [why, setWhy] = useState<Why | null>(null);
-  const [whyHidden, setWhyHidden] = useState(false);
+  const [whyOpen, setWhyOpen] = useState(false);
+  // Dusty docked on a desktop: the totals move into his panel (Coy, 2026-09-30).
+  const docked = useDustyDocked();
+  const [slot, setSlot] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    if (!docked) return;
+    let raf = 0;
+    const find = () => { const el = document.getElementById("sc-dusty-slot"); if (el) setSlot(el); else raf = requestAnimationFrame(find); };
+    raf = requestAnimationFrame(find);
+    return () => cancelAnimationFrame(raf);
+  }, [docked]);
+  const railSlot = docked && slot?.isConnected ? slot : null;
   const [sections, setSections] = useState<Section[] | null>(null);
-  const [settings, setSettings] = useState<CostSettings | null>(null);
-  const [overhead, setOverhead] = useState<OverheadItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [saveErr, setSaveErr] = useState<Record<string, string>>({});
   const [adding, setAdding] = useState(false);
   const [rcards, setRcards] = useState<RCard[]>([]);
+  // The job's files, for each section's Photos strip (Coy, 2026-09-30).
+  const [jobFiles, setJobFiles] = useState<FileRow[]>([]);
+  const [filesTick, setFilesTick] = useState(0);
+  useEffect(() => {
+    let off = false;
+    send(`/api/files?job_id=${jobId}`, "GET").then((b) => { if (!off) setJobFiles(b.files as FileRow[]); }).catch(() => {});
+    return () => { off = true; };
+  }, [jobId, filesTick]);
+  const fileChanged = useCallback((f: FileRow | null, removedId?: string) => {
+    setJobFiles((a) => (removedId ? a.filter((x) => x.id !== removedId) : f ? [f, ...a.filter((x) => x.id !== f.id)] : a));
+    setFilesTick((n) => n + 1);
+  }, []);
   // The budget's own totals (migration 048). Since step 3b it is the ONLY price.
   const [budget, setBudget] = useState<BudgetSummary | null>(null);
   // Bumped when a section change may have changed the budget on the server
@@ -93,10 +118,9 @@ export default function ScopeBuilder() {
 
   const load = useCallback(async () => {
     try {
-      const [j, s, c, r] = await Promise.all([
+      const [j, s, r] = await Promise.all([
         send(`/api/jobs/${jobId}`, "GET"),
         send(`/api/jobs/${jobId}/sections`, "GET"),
-        send("/api/settings/cost", "GET"),
         // Reinforcement is a card (step 3b). A failure leaves none to pick, not a broken page.
         send("/api/cost-items", "GET").catch(() => ({ items: [] })),
       ]);
@@ -106,8 +130,6 @@ export default function ScopeBuilder() {
         .filter(isReinforcementCard));
       setJob(j.job); setContact(j.contact ?? null); setWhy(j.why ?? null);
       setSections((s.sections as Section[]).map(numify));
-      setSettings(c.settings ? numifySettings(c.settings) : null);
-      setOverhead((c.overhead ?? []).map((o: OverheadItem) => ({ ...o, amount: Number(o.amount) })));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -115,7 +137,7 @@ export default function ScopeBuilder() {
 
   useEffect(() => { void load(); }, [load]);
 
-  const t = useMemo(() => takeoffOf(sections ?? [], settings?.concrete_overage_pct ?? null), [sections, settings]);
+  const t = useMemo(() => takeoffOf(sections ?? [], null), [sections]);
 
   const patchLocal = (id: string, patch: Partial<Section>) =>
     setSections((a) => (a ?? []).map((s) => (s.id === id ? { ...s, ...patch } : s)));
@@ -175,7 +197,7 @@ export default function ScopeBuilder() {
   const titleHint = `Name this job${why?.company || contact?.name ? ` (e.g. ${why?.company || contact?.name} slab)` : ""}`;
 
   return (
-    <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_360px] lg:min-h-[calc(100dvh-var(--sc-head))]" style={{ color: T.ink }}>
+    <div className={railSlot ? "lg:min-h-[calc(100dvh-var(--sc-head))]" : "lg:grid lg:grid-cols-[minmax(0,1fr)_360px] lg:min-h-[calc(100dvh-var(--sc-head))]"} style={{ color: T.ink }}>
       {/* ================= sections ================= */}
       <div style={{ minWidth: 0 }} className="pb-24 lg:pb-6">
         <div className="px-3 pt-2.5 pb-2" style={{ background: T.card, borderBottom: `1px solid ${T.hair}` }}>
@@ -195,6 +217,12 @@ export default function ScopeBuilder() {
                 {job.origin === "classification" ? " · made when filed as a customer" : job.created_from_message_id ? " · drafted from a message" : " · entered by hand"}
               </div>
             </div>
+            {/* Coy, 2026-09-30: "Why this job" is an ⓘ in the header — tap to see it. */}
+            {why && (
+              <button onClick={() => setWhyOpen(true)} aria-label="Why this job was made" title="Why this job was made"
+                className="shrink-0 rounded-full flex items-center justify-center mt-1"
+                style={{ width: 26, height: 26, border: `1px solid ${T.hairStrong}`, color: T.chalk, fontFamily: "Georgia, serif", fontStyle: "italic", fontWeight: 700, fontSize: 14, background: T.card, cursor: "pointer" }}>i</button>
+            )}
           </div>
           {job.description && <div style={{ fontSize: F.sm, color: T.ink2, lineHeight: 1.4, marginTop: 2 }}>{job.description}</div>}
           {saveErr.job && <div style={{ fontSize: F.xs, color: T.red }}>{saveErr.job}</div>}
@@ -202,7 +230,11 @@ export default function ScopeBuilder() {
             .then((b) => setJob((j) => j && { ...j, status: b.job.status, job_type: b.job.job_type, lead_source: b.job.lead_source }))} />
         </div>
 
-        {why && !whyHidden && <WhyThisJob why={why} contact={contact} description={job.description ?? null} onHide={() => setWhyHidden(true)} />}
+        {why && (
+          <Sheet open={whyOpen} onClose={() => setWhyOpen(false)} title="Why this job" sub="How it was made">
+            <WhyThisJob why={why} contact={contact} description={job.description ?? null} onHide={() => setWhyOpen(false)} />
+          </Sheet>
+        )}
 
         {/* Phone: the takeoff rail sits below the sections, so the three
             numbers you read out loud ride along under the header. */}
@@ -229,8 +261,11 @@ export default function ScopeBuilder() {
 
         {sections.map((s, i) => (
           <SectionCard key={s.id} s={s} index={i} err={saveErr[s.id]} rcards={rcards} jobType={job.job_type} jobId={jobId}
+            photos={<SectionPhotos jobId={jobId} sectionId={s.id} sectionName={s.name ?? null}
+              photos={jobFiles.filter((f) => f.section_id === s.id && (f.kind === "image" || f.kind === "video"))}
+              sections={sections.map((x) => ({ id: x.id, name: x.name ?? null }))} onChange={fileChanged} />}
             onLocal={(p) => patchLocal(s.id, p)} onSave={(p) => void save(s.id, p)}
-            onRemove={() => void removeSection(s.id)} overage={settings?.concrete_overage_pct ?? null} />
+            onRemove={() => void removeSection(s.id)} />
         ))}
 
         <div className="px-3 py-3">
@@ -243,7 +278,7 @@ export default function ScopeBuilder() {
 
         {/* The budget: lines from cost cards, good / better / best (migration 048). */}
         <div className="px-3 pb-3">
-          <JobBudget jobId={job.id} sections={sections} crewDays={job.duration_days} onSummary={setBudget} refresh={budgetTick} />
+          <JobBudget jobId={job.id} sections={sections} days={job.duration_days} onSummary={setBudget} refresh={budgetTick} />
         </div>
 
         {/* Photos, plans, specs, receipts — Dusty reads them (migration 045). */}
@@ -253,19 +288,14 @@ export default function ScopeBuilder() {
       </div>
 
       {/* ================= takeoff rail ================= */}
-      <TakeoffRail t={t} job={job} onCrewDays={(v) => void saveCrewDays(v)} jobType={job.job_type}
-        workType={sections[0]?.work_type ?? null}
-        budget={budget} floorFor={(hard) => floorOf(hard, settings ?? EMPTY, overhead, job.duration_days ?? null)} />
+      {(() => {
+        const rail = <TakeoffRail t={t} job={job} onCrewDays={(v) => void saveCrewDays(v)} jobType={job.job_type}
+          workType={sections[0]?.work_type ?? null} budget={budget} inPanel={!!railSlot} />;
+        return railSlot ? createPortal(rail, railSlot) : rail;
+      })()}
     </div>
   );
 }
-
-const EMPTY: CostSettings = {
-  concrete_overage_pct: null, shortload_threshold_cy: null, sales_tax_pct: null,
-  markup_material_pct: null, markup_labor_pct: null, markup_equipment_pct: null,
-  owner_fee_pct: null, estimator_fee_pct: null, tax_reserve_pct: null, assumed_billable_days: null,
-  comp_mode: null, comp_monthly_draw: null,
-};
 
 /** A reinforcement card from the Price book (mesh by the sheet, rebar by the stick, fiber per yard). */
 interface RCard { id: string; name: string; unit: string; unit_cost: number | null; qty_rule: string; rule_params: Record<string, number> }
@@ -280,14 +310,6 @@ function numify(s: Section): Section {
   return { ...s, length_ft: num(s.length_ft), width_ft: num(s.width_ft), sqft_override: num(s.sqft_override),
     depth_in: num(s.depth_in), psi: num(s.psi) };
 }
-function numifySettings(raw: Record<string, unknown>): CostSettings {
-  const out = { ...EMPTY } as Record<string, unknown>;
-  for (const k of Object.keys(EMPTY)) {
-    out[k] = k === "comp_mode" ? (raw[k] ?? null) : num(raw[k]);
-  }
-  return out as unknown as CostSettings;
-}
-
 /* ------------------------------------------------------------- a section */
 
 function splitFt(v: number | null): [number | "", number | ""] {
@@ -297,8 +319,10 @@ function splitFt(v: number | null): [number | "", number | ""] {
   return [ft, inch === 0 ? "" : inch];
 }
 
-function SectionCard({ s, index, err, onLocal, onSave, onRemove, overage, rcards, jobType, jobId }: {
-  s: Section; index: number; err?: string; overage: number | null; rcards: RCard[]; jobType: string | null; jobId: string;
+function SectionCard({ s, index, err, onLocal, onSave, onRemove, rcards, jobType, jobId, photos }: {
+  s: Section; index: number; err?: string; rcards: RCard[]; jobType: string | null; jobId: string;
+  /** The area's photos, under its dimensions. */
+  photos?: React.ReactNode;
   onLocal: (p: Partial<Section>) => void; onSave: (p: Partial<Section>) => void; onRemove: () => void;
 }) {
   const q = quantities(s);
@@ -366,7 +390,7 @@ function SectionCard({ s, index, err, onLocal, onSave, onRemove, overage, rcards
         )}
         {concrete && (
           <Cell label="Concrete" missing={q.cy_neat === null}
-            source={q.cy_neat === null ? "needs area and thickness" : overage === null ? "neat · no waste set" : `neat · +${overage}% waste to order`}>
+            source={q.cy_neat === null ? "needs area and thickness" : "neat · waste is on the concrete card"}>
             <span style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 600, ...nums }}>
               {q.cy_neat === null ? "—" : `${n2(q.cy_neat)}`}
             </span>
@@ -375,9 +399,11 @@ function SectionCard({ s, index, err, onLocal, onSave, onRemove, overage, rcards
         )}
       </div>
 
+      {photos}
+
       {concrete && (
         <div className="px-3 py-2 grid grid-cols-1 sm:grid-cols-3 gap-2" style={{ borderTop: `1px solid ${T.hairSoft}` }}>
-          <ReinforcementPick s={s} rcards={rcards} jobType={jobType} overage={overage}
+          <ReinforcementPick s={s} rcards={rcards} jobType={jobType}
             onPick={(id) => { onLocal({ reinforcement_item_id: id, reinforcement_source: id ? "set" : null }); onSave({ reinforcement_item_id: id }); }} />
           <NoteIn label="Prep" value={s.prep_notes} onLocal={(v) => onLocal({ prep_notes: v })} onSave={(v) => onSave({ prep_notes: v })} placeholder="not noted" />
           <NoteIn label="Access" value={s.access_notes} onLocal={(v) => onLocal({ access_notes: v })} onSave={(v) => onSave({ access_notes: v })} placeholder="not noted" />
@@ -480,13 +506,13 @@ function Dictate({ jobId, s, onApply }: { jobId: string; s: Section; onApply: (p
  * Price book. Picking one puts it on this area of the budget, counted by its
  * rule; an assembly's pick is labelled as the default it is.
  */
-function ReinforcementPick({ s, rcards, jobType, overage, onPick }: {
-  s: Section; rcards: RCard[]; jobType: string | null; overage: number | null;
+function ReinforcementPick({ s, rcards, jobType, onPick }: {
+  s: Section; rcards: RCard[]; jobType: string | null;
   onPick: (id: string | null) => void;
 }) {
   const card = rcards.find((r) => r.id === s.reinforcement_item_id) ?? null;
   const qty = card ? ruleQty({ name: card.name, qty_rule: card.qty_rule, rule_params: card.rule_params, qty_source: "rule", quantity: null, section_id: s.id },
-    [s], overage, null) : null;
+    [s], null) : null;
   const plural = (w: string) => (w.endsWith("s") ? w : `${w}s`);
   const source = !card ? (s.reinforcement_item_id ? "that card was retired" : "none chosen — not in the price")
     : s.reinforcement_source === "default" ? `default for ${jobType ? `${JOB_WORD[jobType] ?? jobType} ` : ""}${plural(s.work_type)}` : "you set it";
@@ -547,22 +573,39 @@ function NoteIn({ label, value, onLocal, onSave, placeholder }: {
 
 /* ----------------------------------------------------------- takeoff rail */
 
-function TakeoffRail({ t, job, onCrewDays, jobType, workType, budget, floorFor }: {
+function TakeoffRail({ t, job, onCrewDays, jobType, workType, budget, inPanel }: {
   t: ReturnType<typeof takeoffOf>;
   job: Job; onCrewDays: (v: number | null) => void; jobType: string | null; workType: string | null;
-  budget: BudgetSummary | null; floorFor: (hardCost: number) => ReturnType<typeof floorOf>;
+  budget: BudgetSummary | null;
+  /** Shown at the top of Dusty's docked panel: folded to the totals, scrolls on its own. */
+  inPanel?: boolean;
 }) {
+  const [folded, setFolded] = useState(false);
   const [crew, setCrew] = useState<number | "">(job.duration_days ?? "");
   const dim = "#8E99A5";
   const line = { borderTop: `1px solid ${T.darkHair}` };
 
   const orderCy = t.cy_order ?? t.cy_neat;
   return (
-    <aside style={{ background: T.dark, color: "#fff" }} className="lg:sticky lg:top-[var(--sc-head)] lg:self-start lg:max-h-[calc(100dvh-var(--sc-head))] lg:overflow-y-auto">
-      <div className="px-4 pt-3 pb-3">
-        <div style={{ ...eyebrow, color: dim }}>Takeoff</div>
-        <div style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 600 }}>Read this on the phone</div>
-      </div>
+    <aside style={{ background: T.dark, color: "#fff", ...(inPanel ? { maxHeight: folded ? undefined : "45vh", overflowY: "auto" as const } : {}) }}
+      className={inPanel ? "" : "lg:sticky lg:top-[var(--sc-head)] lg:self-start lg:max-h-[calc(100dvh-var(--sc-head))] lg:overflow-y-auto"}>
+      {inPanel ? (
+        <button onClick={() => setFolded((f) => !f)} aria-expanded={!folded} className="w-full flex items-baseline gap-2 px-4 py-2 text-left" style={{ color: "#fff", cursor: "pointer" }}>
+          <span style={{ ...eyebrow, color: dim }}>This job</span>
+          <span style={{ fontFamily: disp, fontSize: F.md, fontWeight: 700, ...nums }}>
+            {t.sqft > 0 ? `${n1(t.sqft)} sf` : "—"}
+            {budget?.has_lines ? ` · ${budget.tiers.map((b) => (b.priced ? money0(b.total) : "not priced")).join(" · ")}` : ""}
+          </span>
+          <span className="flex-1" />
+          <span style={{ color: dim }}>{folded ? "▾" : "▴"}</span>
+        </button>
+      ) : (
+        <div className="px-4 pt-3 pb-3">
+          <div style={{ ...eyebrow, color: dim }}>Takeoff</div>
+          <div style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 600 }}>Read this on the phone</div>
+        </div>
+      )}
+      {!(inPanel && folded) && (<>
 
       <div className="px-4 py-3" style={line}>
         <div style={{ ...eyebrow, color: dim }}>Total area</div>
@@ -576,7 +619,7 @@ function TakeoffRail({ t, job, onCrewDays, jobType, workType, budget, floorFor }
           {orderCy > 0 ? n2(orderCy) : "—"}
         </div>
         <div style={{ ...eyebrow, color: dim }}>
-          cubic yards · {t.overage_pct === null ? "neat — no waste % recorded" : `${t.overage_pct}% waste`}
+          cubic yards, neat · waste is added by the concrete card
         </div>
         {t.sections.map((q, i) => (
           <div key={q.id ?? i} className="flex justify-between py-1.5" style={{ ...line, fontSize: F.sm, marginTop: i === 0 ? 8 : 0 }}>
@@ -589,7 +632,7 @@ function TakeoffRail({ t, job, onCrewDays, jobType, workType, budget, floorFor }
       </div>
 
       {budget?.has_lines ? (
-        <BudgetRail budget={budget} floorFor={floorFor} sqft={t.sqft} crew={crew} setCrew={setCrew} onCrewDays={onCrewDays} />
+        <BudgetRail budget={budget} sqft={t.sqft} crew={crew} setCrew={setCrew} onCrewDays={onCrewDays} />
       ) : (
         <>
           <div className="px-4 py-3" style={{ borderTop: `2px solid ${T.hiviz}`, background: "#2A1712" }}>
@@ -604,7 +647,7 @@ function TakeoffRail({ t, job, onCrewDays, jobType, workType, budget, floorFor }
           </div>
           <div className="px-4 py-3" style={line}>
             <label className="flex items-center gap-2" style={{ fontSize: F.xs, color: "#C3CBD4" }}>
-              Crew days on this job
+              Days on this job
               <input type="number" inputMode="decimal" value={crew}
                 onChange={(e) => setCrew(e.target.value === "" ? "" : Number(e.target.value))}
                 onBlur={() => onCrewDays(crew === "" ? null : Number(crew))}
@@ -615,30 +658,28 @@ function TakeoffRail({ t, job, onCrewDays, jobType, workType, budget, floorFor }
           </div>
         </>
       )}
+      </>)}
     </aside>
   );
 }
 
 /**
  * The rail once the budget has lines: one total per tier (shared lines + the
- * tier's own), its cost and true margin, what blocks it, and the bid floor on
- * that tier's hard cost (cost + pass-through tax). The discount lives in the
- * budget's own footer, so there is no slider here — one number, never two.
+ * tier's own), its cost, O.H., profit and margin, what blocks it, and the job
+ * minimum (day minimum × days — Coy, 2026-09-30). The discount, O.H. and
+ * margin live in the budget's own footer — one number, never two.
  */
-function BudgetRail({ budget, floorFor, sqft, crew, setCrew, onCrewDays }: {
-  budget: BudgetSummary; floorFor: (hardCost: number) => ReturnType<typeof floorOf>; sqft: number;
+function BudgetRail({ budget, sqft, crew, setCrew, onCrewDays }: {
+  budget: BudgetSummary; sqft: number;
   crew: number | ""; setCrew: (v: number | "") => void; onCrewDays: (v: number | null) => void;
 }) {
   const dim = "#8E99A5";
-  const [showFloor, setShowFloor] = useState<number | null>(null);
   const line = { borderTop: `1px solid ${T.darkHair}` };
-  const floors = budget.tiers.map((b) => (b.priced ? floorFor(b.cost + b.tax) : null));
-  const blockedFloor = floors.find((f) => f && !f.ok) as { ok: false; blocked: string[] } | undefined;
+  const min = budget.minimum;
   return (
     <>
-      {budget.tiers.map((b, i) => {
-        const f = floors[i];
-        const under = f && f.ok && b.total < f.floor;
+      {budget.tiers.map((b) => {
+        const under = min.ok && b.priced && b.total < min.minimum;
         return (
           <div key={b.option_id ?? "all"} className="px-4 py-3" style={b.priced ? line : { borderTop: `2px solid ${T.hiviz}`, background: "#2A1712" }}>
             <div style={{ ...eyebrow, color: b.priced ? dim : T.hiviz }}>{b.label ? `${b.label}` : "Price"} · budget</div>
@@ -646,23 +687,11 @@ function BudgetRail({ budget, floorFor, sqft, crew, setCrew, onCrewDays }: {
               <>
                 <div style={{ fontFamily: disp, fontSize: budget.tiers.length > 1 ? 30 : 40, fontWeight: 700, lineHeight: 1, ...nums }}>{money0(b.total)}</div>
                 <div style={{ ...eyebrow, color: dim, ...nums }}>
-                  cost {money0(b.cost)} · margin {(b.margin * 100).toFixed(1)}%
+                  cost {money0(b.cost)} · O.H. {money0(b.overhead)} · margin {(b.margin * 100).toFixed(1)}%
                   {b.tax > 0 ? ` · tax ${money0(b.tax)}` : budget.tax_on ? "" : " · no tax"}
                   {sqft > 0 ? ` · ${money(b.total / sqft)}/sf` : ""}
                 </div>
-                {f && f.ok && (
-                  <button onClick={() => setShowFloor((x) => (x === i ? null : i))} className="text-left" aria-expanded={showFloor === i}
-                    style={{ display: "block", fontSize: F.xs, color: under ? "#F3A89A" : "#C3CBD4", cursor: "pointer", ...nums }}>
-                    floor {money0(f.floor)} {showFloor === i ? "▴" : "▾"}{under ? " — this price is under it" : ""}
-                  </button>
-                )}
-                {f && f.ok && showFloor === i && (
-                  <div className="mt-1" style={{ fontSize: F.xs, color: "#C3CBD4", lineHeight: 1.6, ...nums }}>
-                    <div>Hard cost {money0(f.hard_cost)} (cost + tax)</div>
-                    <div>+ nut share {money0(f.nut_share)}: {money0(f.nut_monthly)}/mo{f.draw_included ? ` (incl. ${money0(f.draw_included)} draw)` : ""} is {money(f.nut_per_crew_day)} a crew-day, × {f.crew_days} crew days ({f.crew_days_basis})</div>
-                    <div>÷ {(1 - f.off_top_pct / 100).toFixed(2)} ({f.off_top_pct}% off the top)</div>
-                  </div>
-                )}
+                {under && <div style={{ fontSize: F.xs, color: "#F3A89A", ...nums }}>under the job minimum of {money0(min.minimum)}</div>}
               </>
             ) : (
               <ul className="mt-1" style={{ fontSize: F.sm, color: "#fff", lineHeight: 1.5, paddingLeft: 16, listStyle: "square" }}>
@@ -674,21 +703,18 @@ function BudgetRail({ budget, floorFor, sqft, crew, setCrew, onCrewDays }: {
       })}
       <div className="px-4 py-3" style={line}>
         <label className="flex items-center gap-2" style={{ fontSize: F.xs, color: "#C3CBD4" }}>
-          Crew days on this job
+          Days on this job
           <input type="number" inputMode="decimal" value={crew}
             onChange={(e) => setCrew(e.target.value === "" ? "" : Number(e.target.value))}
             onBlur={() => onCrewDays(crew === "" ? null : Number(crew))}
             className="rounded px-1.5 outline-none" style={{ width: 60, height: 28, background: "#20262C", color: "#fff",
               border: `1px solid ${T.darkHair}`, fontFamily: disp, fontSize: F.md, ...nums }} />
-          <span style={{ color: dim }}>estimated</span>
         </label>
-        {blockedFloor && (
-          <div style={{ fontSize: F.xs, color: "#C3CBD4", marginTop: 6, lineHeight: 1.45 }}>
-            The floor needs: {blockedFloor.blocked.join(", ")}.
-          </div>
-        )}
+        <div style={{ fontSize: F.xs, color: "#C3CBD4", marginTop: 6, lineHeight: 1.45, ...nums }}>
+          Job minimum: {min.ok ? `${money0(min.minimum)} — ${min.days} days × ${money0(min.day_minimum)} a day` : `needs ${min.blocked.join(" and ")}`}
+        </div>
         <div style={{ fontSize: F.xs, color: dim, marginTop: 6, lineHeight: 1.45 }}>
-          Lines, markup, tax and discount are in the budget under the sections.
+          Lines, O.H., margin, tax and discount are in the budget under the sections.
         </div>
       </div>
     </>

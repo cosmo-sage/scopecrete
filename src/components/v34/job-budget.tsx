@@ -6,13 +6,17 @@
  * and how each line item is multiplied by the unit and price which creates the
  * extended price and then Markup and margin are added. Tax can be toggeled
  * on/off. This is how Jobtread budgets work." And: good / better / best.
+ * Since 2026-09-30 (migration 057) a line is priced Coy's way:
+ *   cost × (1 + the job's O.H.) ÷ (1 − margin) — the job's margin, or the line's own.
+ * The footer holds the job's O.H. %, margin %, tax (from its parish) and its
+ * minimum (day minimum × days).
  *
  * - Lines come from cost cards (copied onto the line) or are typed as a one-off.
  * - Quantities are counted from the scope by each line's rule (ƒ), or typed (✎,
  *   with ↺ back to the rule). Nothing is assumed: a missing input blocks the
  *   line and says what it needs.
  * - Desktop (wide): the grid — Item · Area · Vendor · Qty · Unit · Unit cost ·
- *   Ext cost · Markup · Unit price · Ext price · Margin · Tax, grouped area ▸
+ *   Ext cost · O.H. · Margin · Unit price · Ext price · Tax, grouped area ▸
  *   cost group ▸ line. Phone: v34's cost cards, one per group.
  * - Options: a line with no option is in every tier; each tier's total shows.
  *
@@ -23,7 +27,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { T, F, disp, eyebrow, nums, clip, money, money0, formatPhone } from "@/lib/v34/tokens";
 import { Sheet } from "@/components/v34/primitives";
-import { budget as priceBudget, type BudgetLine, type BudgetSettings, type SectionInput, type TierTotal } from "@/lib/engine";
+import { budget as priceBudget, jobMinimum, type BudgetLine, type BudgetSettings, type SectionInput, type TierTotal } from "@/lib/engine";
 import { COST_TYPES, COST_TYPE_LABEL, QTY_RULE_LABEL, type CostType } from "@/lib/cost-cards";
 import { useWide } from "@/lib/v34/use-wide";
 import { Cell } from "@/components/v34/cell";
@@ -38,22 +42,29 @@ interface Line extends BudgetLine {
 interface Source { id: string; cost_item_id: string; unit_cost: number | null; vendor: { id: string; name: string | null; company_name: string | null; phone: string | null } | null }
 interface Assembly { id: string; name: string; job_type: string | null; work_type: string | null }
 interface Option { id: string; label: string; description: string | null; sort_order: number }
-interface Group { id: string; name: string; cost_type: CostType; default_markup_pct: number | null }
+interface Group { id: string; name: string; cost_type: CostType }
 interface Card {
   id: string; cost_group_id: string | null; name: string; cost_type: CostType; unit: string; unit_cost: number | null;
   qty_rule: string; vendor_contact_id: string | null; updated_at: string; price_as_of: string | null; default_source_id?: string | null;
 }
 interface Data {
-  estimate: { id: string; tax_on: boolean; discount_amount: number } | null;
+  estimate: { id: string; tax_on: boolean; discount_amount: number; margin_pct?: number | null; overhead_pct?: number | null } | null;
   options: Option[]; lines: Line[]; groups: Group[]; cards: Card[]; assemblies?: Assembly[];
   vendors: Array<{ id: string; name: string | null; phone: string | null }>;
   sources?: Source[];
   settings: BudgetSettings;
+  pricing: {
+    tax: { rate: number | null; parish: string | null; source: "override" | "parish" | null; missing: string | null };
+    days: number | null; day_minimum: number | null; margin_from: "budget" | "default" | null; overhead_from: "budget" | "default" | null;
+  } | null;
 }
 export interface BudgetSummary {
   has_lines: boolean;
   tiers: Array<TierTotal & { label: string | null }>;
   tax_on: boolean;
+  /** The job minimum (day minimum × days), or what it needs. */
+  minimum: { ok: true; minimum: number; day_minimum: number; days: number } | { ok: false; blocked: string[] };
+  overhead_pct: number | null; margin_pct: number | null;
 }
 
 async function call(url: string, method: string, body?: unknown) {
@@ -65,8 +76,8 @@ async function call(url: string, method: string, body?: unknown) {
 const qtyFmt = (n: number | null) => n === null ? "—" : n.toLocaleString("en-US", { maximumFractionDigits: 2 });
 const pct = (n: number | null) => n === null ? "—" : `${(n * 100).toFixed(1)}%`;
 
-export function JobBudget({ jobId, sections, crewDays, onSummary, refresh = 0 }: {
-  jobId: string; sections: Array<SectionInput & { id: string }>; crewDays: number | null;
+export function JobBudget({ jobId, sections, days, onSummary, refresh = 0 }: {
+  jobId: string; sections: Array<SectionInput & { id: string }>; days: number | null;
   onSummary?: (s: BudgetSummary) => void;
   /** Bumped by the scope page when a section change may have changed the budget on the server. */
   refresh?: number;
@@ -77,6 +88,7 @@ export function JobBudget({ jobId, sections, crewDays, onSummary, refresh = 0 }:
   const [tier, setTier] = useState<string>("all");
   const [picker, setPicker] = useState(false);
   const [editing, setEditing] = useState<Line | null>(null);
+  const [taxOpen, setTaxOpen] = useState(false);
   const [measure, wide] = useWide<HTMLDivElement>(900);
   const reload = useCallback(() => setTick((n) => n + 1), []);
 
@@ -95,18 +107,19 @@ export function JobBudget({ jobId, sections, crewDays, onSummary, refresh = 0 }:
 
   const res = useMemo(() => {
     if (!data) return null;
-    const groupMarkup = Object.fromEntries(data.groups.map((g) => [g.id, g.default_markup_pct]));
-    return priceBudget(data.lines, data.options.map((o) => o.id), data.settings, sections, crewDays,
-      { tax_on: data.estimate?.tax_on ?? true, discount: data.estimate?.discount_amount ?? 0, groupMarkup });
-  }, [data, sections, crewDays]);
+    return priceBudget(data.lines, data.options.map((o) => o.id), data.settings, sections, days,
+      { tax_on: data.estimate?.tax_on ?? true, discount: data.estimate?.discount_amount ?? 0 });
+  }, [data, sections, days]);
+  const minimum = useMemo(() => jobMinimum(data?.pricing?.day_minimum ?? null, days), [data, days]);
 
   useEffect(() => {
     if (!onSummary || !data || !res) return;
     onSummary({
       has_lines: data.lines.length > 0, tax_on: data.estimate?.tax_on ?? true,
       tiers: res.tiers.map((t) => ({ ...t, label: data.options.find((o) => o.id === t.option_id)?.label ?? null })),
+      minimum, overhead_pct: data.settings.overhead_pct, margin_pct: data.settings.margin_pct,
     });
-  }, [data, res, onSummary]);
+  }, [data, res, onSummary, minimum]);
 
   if (!data || !res) {
     return (
@@ -148,7 +161,9 @@ export function JobBudget({ jobId, sections, crewDays, onSummary, refresh = 0 }:
     const groups = [...new Set(inArea.map(groupName))].map((g) => ({ name: g, lines: inArea.filter((l) => groupName(l) === g) }));
     return { id: aid, name: areaName(aid), lines: inArea, groups };
   }).filter((a) => a.lines.length);
-  const sum = (ls: Line[], k: "ext_cost" | "ext_price") => ls.reduce((a, l) => a + (res.lines[l.id]?.[k] ?? 0), 0);
+  const sum = (ls: Line[], k: "ext_cost" | "ext_price" | "overhead") => ls.reduce((a, l) => a + (res.lines[l.id]?.[k] ?? 0), 0);
+  // What is left after cost and O.H. — the same margin the lines and totals show.
+  const marginOf = (ls: Line[]) => { const p = sum(ls, "ext_price"); return p > 0 ? pct((p - sum(ls, "ext_cost") - sum(ls, "overhead")) / p) : ""; };
 
   const shownTiers = tier === "all" ? res.tiers : res.tiers.filter((t) => t.option_id === tier);
   const patchLine = (id: string, body: Record<string, unknown>) => run(() => call(`/api/jobs/${jobId}/budget/lines/${id}`, "PATCH", body));
@@ -158,7 +173,7 @@ export function JobBudget({ jobId, sections, crewDays, onSummary, refresh = 0 }:
       {/* ---- header + options ---- */}
       <div className="px-3 pt-2.5 pb-2 flex items-center gap-2 flex-wrap" style={{ borderBottom: `1px solid ${T.hair}` }}>
         <span style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 700 }}>Budget</span>
-        <span style={{ fontSize: F.xs, color: T.ink3 }}>qty × unit cost → markup → price</span>
+        <span style={{ fontSize: F.xs, color: T.ink3 }}>qty × unit cost → + O.H. → ÷ (1 − margin) → price</span>
         <span className="flex-1" />
         <button onClick={() => setPicker(true)} className="rounded px-2.5"
           style={{ height: 30, background: T.ink, color: T.card, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", letterSpacing: ".06em", cursor: "pointer" }}>
@@ -207,7 +222,7 @@ export function JobBudget({ jobId, sections, crewDays, onSummary, refresh = 0 }:
           <table className="w-full" style={{ borderCollapse: "collapse", fontSize: F.sm, ...nums }}>
             <thead>
               <tr style={{ background: T.slab }}>
-                {["Item", "Vendor", "Qty", "Unit", "Unit cost", "Ext cost", "Markup", "Unit price", "Ext price", "Margin", "Tax"].map((h, i) => (
+                {["Item", "Vendor", "Qty", "Unit", "Unit cost", "Ext cost", "O.H.", "Margin", "Unit price", "Ext price", "Tax"].map((h, i) => (
                   <th key={h} style={{ ...eyebrow, textAlign: i < 2 || h === "Unit" ? "left" : "right", padding: "6px 8px", whiteSpace: "nowrap", borderBottom: `1px solid ${T.hair}` }}>{h}</th>
                 ))}
               </tr>
@@ -218,20 +233,21 @@ export function JobBudget({ jobId, sections, crewDays, onSummary, refresh = 0 }:
                   <tr style={{ background: T.ink, color: T.card }}>
                     <td colSpan={5} style={{ padding: "5px 8px", fontFamily: disp, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".04em" }}>{a.name}</td>
                     <td style={{ padding: "5px 8px", textAlign: "right" }}>{money0(sum(a.lines, "ext_cost"))}</td>
-                    <td colSpan={2} />
+                    <td style={{ padding: "5px 8px", textAlign: "right" }}>{money0(sum(a.lines, "overhead"))}</td>
+                    <td style={{ padding: "5px 8px", textAlign: "right" }}>{marginOf(a.lines)}</td>
+                    <td />
                     <td style={{ padding: "5px 8px", textAlign: "right" }}>{money0(sum(a.lines, "ext_price"))}</td>
-                    <td colSpan={2} />
+                    <td />
                   </tr>
                   {a.groups.map((g) => (
                     <React.Fragment key={g.name}>
                       <tr style={{ background: T.hairSoft }}>
                         <td colSpan={5} style={{ padding: "4px 8px 4px 16px", fontWeight: 600 }}>{g.name}</td>
                         <td style={{ padding: "4px 8px", textAlign: "right", fontWeight: 600 }}>{money0(sum(g.lines, "ext_cost"))}</td>
-                        <td colSpan={2} />
+                        <td style={{ padding: "4px 8px", textAlign: "right", color: T.ink2 }}>{money0(sum(g.lines, "overhead"))}</td>
+                        <td style={{ padding: "4px 8px", textAlign: "right", color: T.ink3 }}>{marginOf(g.lines)}</td>
+                        <td />
                         <td style={{ padding: "4px 8px", textAlign: "right", fontWeight: 600 }}>{money0(sum(g.lines, "ext_price"))}</td>
-                        <td style={{ padding: "4px 8px", textAlign: "right", color: T.ink3 }}>
-                          {sum(g.lines, "ext_price") > 0 ? pct((sum(g.lines, "ext_price") - sum(g.lines, "ext_cost")) / sum(g.lines, "ext_price")) : ""}
-                        </td>
                         <td />
                       </tr>
                       {g.lines.map((l) => {
@@ -269,14 +285,16 @@ export function JobBudget({ jobId, sections, crewDays, onSummary, refresh = 0 }:
                               <Cell value={l.unit_cost} money label={`Unit cost of ${l.name}`} warn={l.unit_cost === null} onSave={(v) => void patchLine(l.id, { unit_cost: v })} />
                             </td>
                             <td style={{ padding: "4px 8px", textAlign: "right" }}>{r.ext_cost === null ? "—" : money(r.ext_cost)}</td>
+                            <td style={{ padding: "4px 8px", textAlign: "right", color: T.ink2 }}>
+                              {r.overhead === null ? "—" : money(r.overhead)}
+                            </td>
                             <td style={{ padding: "2px 4px", textAlign: "right", whiteSpace: "nowrap" }}>
-                              <Cell value={l.markup_pct} placeholder={r.markup === null ? "?" : `${r.markup}`} label={`Markup on ${l.name}`} suffix="%"
-                                onSave={(v) => void patchLine(l.id, { markup_pct: v })} />
-                              {l.markup_pct === null && r.markup !== null && <span style={{ fontSize: 9.5, color: T.ink3 }} title={`from the ${r.markup_from}`}> {r.markup_from}</span>}
+                              <Cell value={l.margin_pct ?? null} placeholder={r.margin_pct === null ? "?" : `${r.margin_pct}`} label={`Margin on ${l.name}`} suffix="%"
+                                onSave={(v) => void patchLine(l.id, { margin_pct: v })} />
+                              {(l.margin_pct ?? null) === null && r.margin_pct !== null && <span style={{ fontSize: 9.5, color: T.ink3 }} title="the job's margin"> job</span>}
                             </td>
                             <td style={{ padding: "4px 8px", textAlign: "right" }}>{r.unit_price === null ? "—" : money(r.unit_price)}</td>
                             <td style={{ padding: "4px 8px", textAlign: "right", fontWeight: 600 }}>{r.ext_price === null ? "—" : money(r.ext_price)}</td>
-                            <td style={{ padding: "4px 8px", textAlign: "right", color: T.ink2 }}>{pct(r.margin)}</td>
                             <td style={{ padding: "4px 8px", textAlign: "right" }}>
                               <input type="checkbox" checked={l.taxable} aria-label={`Tax on ${l.name}`} onChange={(e) => void patchLine(l.id, { taxable: e.target.checked })}
                                 style={{ width: 16, height: 16, accentColor: T.chalk }} />
@@ -318,7 +336,24 @@ export function JobBudget({ jobId, sections, crewDays, onSummary, refresh = 0 }:
                   void run(() => call(`/api/jobs/${jobId}/budget`, "PATCH", { tax_on: on }));
                 }}
                 style={{ width: 16, height: 16, accentColor: T.chalk }} />
-              Sales tax {data.settings.sales_tax_pct !== null ? `(${data.settings.sales_tax_pct}% on taxed lines, at cost)` : "(no rate recorded)"}
+              Sales tax {data.pricing?.tax.rate !== null && data.pricing?.tax.rate !== undefined
+                ? `${data.pricing.tax.rate}% ${data.pricing.tax.source === "override" ? "(typed for this job)" : `(${data.pricing.tax.parish} parish)`} on taxed lines, at cost`
+                : <span style={{ color: T.hiviz }}>— {data.pricing?.tax.missing ?? "no rate"}</span>}
+            </label>
+            <button onClick={() => setTaxOpen(true)} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>Change</button>
+            <label className="flex items-center gap-1.5">
+              O.H.
+              <Cell value={data.estimate?.overhead_pct ?? null} placeholder={data.settings.overhead_pct !== null ? `${data.settings.overhead_pct}` : "?"} suffix="%" label="O.H. on this job"
+                warn={data.settings.overhead_pct === null}
+                onSave={(v) => void run(() => call(`/api/jobs/${jobId}/budget`, "PATCH", { overhead_pct: v }))} />
+              {data.pricing?.overhead_from === "default" && <span style={{ fontSize: 9.5, color: T.ink3 }}>default</span>}
+            </label>
+            <label className="flex items-center gap-1.5">
+              Margin
+              <Cell value={data.estimate?.margin_pct ?? null} placeholder={data.settings.margin_pct !== null ? `${data.settings.margin_pct}` : "?"} suffix="%" label="Margin on this job"
+                warn={data.settings.margin_pct === null}
+                onSave={(v) => void run(() => call(`/api/jobs/${jobId}/budget`, "PATCH", { margin_pct: v }))} />
+              {data.pricing?.margin_from === "default" && <span style={{ fontSize: 9.5, color: T.ink3 }}>default</span>}
             </label>
             <label className="flex items-center gap-1.5">
               Discount $
@@ -336,15 +371,20 @@ export function JobBudget({ jobId, sections, crewDays, onSummary, refresh = 0 }:
                 {t.tax > 0 && <span style={{ fontSize: F.xs, color: T.ink2 }}>tax {money0(t.tax)}</span>}
                 {t.discount > 0 && <span style={{ fontSize: F.xs, color: T.ink2 }}>− {money0(t.discount)}</span>}
                 <span style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 700, color: t.priced ? T.ink : T.ink3 }}>{t.priced ? money0(t.total) : "not priced"}</span>
-                {t.priced && <span style={{ fontSize: F.xs, color: T.ink3 }}>margin {pct(t.margin)}</span>}
+                {t.priced && <span style={{ fontSize: F.xs, color: T.ink3 }}>O.H. {money0(t.overhead)} · profit {money0(t.profit)} · margin {pct(t.margin)}</span>}
+                {t.priced && minimum.ok && t.total < minimum.minimum && <span style={{ fontSize: F.xs, color: T.red }}>under the job minimum {money0(minimum.minimum)}</span>}
                 {!t.priced && t.blocked.length > 0 && <span style={{ fontSize: F.xs, color: T.hiviz }}>needs {t.blocked.slice(0, 4).join(", ")}{t.blocked.length > 4 ? ` +${t.blocked.length - 4}` : ""}</span>}
               </div>
             ))}
           </div>
-          {res.hints.map((h) => <div key={h} style={{ fontSize: F.xs, color: T.hiviz, marginTop: 4 }}>{h}</div>)}
+          <div style={{ fontSize: F.xs, color: T.ink3, marginTop: 4 }}>
+            Job minimum: {minimum.ok ? `${money0(minimum.minimum)} (${minimum.days} days × ${money0(minimum.day_minimum)} a day)` : `needs ${minimum.blocked.join(" and ")}`}
+          </div>
         </div>
       )}
 
+      <TaxSheet open={taxOpen} onClose={() => setTaxOpen(false)} tax={data.pricing?.tax ?? null}
+        onSave={(body) => run(() => call(`/api/jobs/${jobId}`, "PATCH", body)).then(() => setTaxOpen(false))} />
       <CardPicker open={picker} onClose={() => setPicker(false)} data={data} sections={sections} tier={tier === "all" ? null : tier}
         tierLabel={optLabel(tier === "all" ? null : tier)}
         onAdd={(body) => run(() => call(`/api/jobs/${jobId}/budget/lines`, "POST", body))}
@@ -504,7 +544,7 @@ function LineSheet({ line, data, sections, res, onClose, onPatch, onDelete }: {
       <div className="px-4 py-3 flex flex-col gap-3" key={line.id + line.updated_at}>
         <div className="rounded px-3 py-2" style={{ background: T.slab, ...nums, fontSize: F.sm }}>
           {res.blocked.length ? <span style={{ color: T.hiviz }}>Needs {res.blocked.join(", ")}</span> : (
-            <>{qtyFmt(res.qty)} {line.unit} × {money(line.unit_cost ?? 0)} = <b>{money(res.ext_cost ?? 0)}</b> cost · +{res.markup}% → <b>{money(res.ext_price ?? 0)}</b> · margin {pct(res.margin)}</>
+            <>{qtyFmt(res.qty)} {line.unit} × {money(line.unit_cost ?? 0)} = <b>{money(res.ext_cost ?? 0)}</b> cost · + O.H. {money(res.overhead ?? 0)} · ÷ (1 − {res.margin_pct}%) → <b>{money(res.ext_price ?? 0)}</b></>
           )}
         </div>
         <div className="grid grid-cols-2 gap-2">
@@ -517,9 +557,9 @@ function LineSheet({ line, data, sections, res, onClose, onPatch, onDelete }: {
           <label className="block"><span style={eyebrow}>Unit cost / {line.unit}</span>
             <input defaultValue={line.unit_cost ?? ""} inputMode="decimal" placeholder="not recorded" style={{ ...field, borderColor: line.unit_cost === null ? T.hiviz : T.hair }} aria-label="Unit cost"
               onBlur={(e) => { const v = num(e.target.value); if (v !== line.unit_cost) onPatch({ unit_cost: v }); }} /></label>
-          <label className="block"><span style={eyebrow}>Markup %</span>
-            <input defaultValue={line.markup_pct ?? ""} inputMode="decimal" placeholder={res.markup !== null ? `${res.markup} (${res.markup_from})` : "not recorded"} style={field} aria-label="Markup"
-              onBlur={(e) => { const v = num(e.target.value); if (v !== line.markup_pct) onPatch({ markup_pct: v }); }} /></label>
+          <label className="block"><span style={eyebrow}>Margin % · this line only</span>
+            <input defaultValue={line.margin_pct ?? ""} inputMode="decimal" placeholder={res.margin_pct !== null ? `${res.margin_pct} (the job's)` : "not recorded"} style={field} aria-label="Margin"
+              onBlur={(e) => { const v = num(e.target.value); if (v !== (line.margin_pct ?? null)) onPatch({ margin_pct: v }); }} /></label>
           <label className="flex items-center gap-2 mt-5" style={{ fontSize: F.sm }}>
             <input type="checkbox" checked={line.taxable} onChange={(e) => onPatch({ taxable: e.target.checked })} style={{ width: 18, height: 18, accentColor: T.chalk }} /> Sales tax applies</label>
         </div>
@@ -570,5 +610,48 @@ function VendorPick({ line, sources, name, onPick, full }: {
       <option value="">Default{line.source_pinned ? "" : ` (${name(line.vendor_contact_id) ?? "none"})`}</option>
       {mine.map((x) => <option key={x.id} value={x.id}>{label(x)}{line.source_pinned && line.source_id === x.id ? " ✎" : ""}</option>)}
     </select>
+  );
+}
+
+/** The job's sales tax (migration 057): its parish's rate, or one typed for this job. */
+function TaxSheet({ open, onClose, tax, onSave }: {
+  open: boolean; onClose: () => void;
+  tax: { rate: number | null; parish: string | null; source: "override" | "parish" | null; missing: string | null } | null;
+  onSave: (body: Record<string, unknown>) => Promise<void>;
+}) {
+  const [parishes, setParishes] = useState<Array<{ parish: string; rate_pct: number }> | null>(null);
+  const [rate, setRate] = useState("");
+  useEffect(() => {
+    if (!open) return;
+    let off = false;
+    call("/api/tax-parishes", "GET").then((b) => { if (!off) setParishes(b.parishes); }).catch(() => { if (!off) setParishes([]); });
+    return () => { off = true; };
+  }, [open]);
+  const row: React.CSSProperties = { borderTop: `1px solid ${T.hairSoft}`, minHeight: 44, cursor: "pointer" };
+  return (
+    <Sheet open={open} onClose={onClose} title="Sales tax on this job"
+      sub={tax?.rate != null ? `${tax.rate}% — ${tax.source === "override" ? "typed for this job" : `${tax.parish} parish`}` : tax?.missing ?? ""}>
+      <div className="px-4 py-3">
+        <div style={{ ...eyebrow, marginBottom: 4 }}>The job is in</div>
+        {parishes === null ? <div style={{ fontSize: F.sm, color: T.ink3 }}>Loading…</div> : parishes.length === 0 ? (
+          <div style={{ fontSize: F.sm, color: T.ink3 }}>No parish rates yet — add them in Price book → Defaults.</div>
+        ) : parishes.map((p) => (
+          <button key={p.parish} onClick={() => void onSave({ tax_parish: p.parish })} className="w-full flex items-center px-1 text-left" style={row}>
+            <span className="flex-1" style={{ fontSize: F.sm, fontWeight: tax?.parish === p.parish && tax.source === "parish" ? 700 : 400 }}>{p.parish}</span>
+            <span style={{ ...nums, fontSize: F.sm }}>{p.rate_pct}%</span>
+          </button>
+        ))}
+        <button onClick={() => void onSave({ tax_reset: true })} className="w-full flex items-center px-1 text-left" style={row}>
+          <span style={{ fontSize: F.sm, color: T.chalk }}>From the address</span>
+        </button>
+        <div style={{ ...eyebrow, margin: "12px 0 4px" }}>Or type this job&apos;s rate</div>
+        <div className="flex gap-2" style={{ maxWidth: 240 }}>
+          <input type="number" inputMode="decimal" value={rate} onChange={(e) => setRate(e.target.value)} aria-label="Tax rate %"
+            className="rounded px-2 outline-none flex-1" style={{ height: 36, border: `1px solid ${T.hair}`, background: T.card, color: T.ink, ...nums }} />
+          <button disabled={rate === ""} onClick={() => void onSave({ tax_rate_pct: Number(rate) })} className="rounded px-3"
+            style={{ height: 36, background: T.ink, color: T.card, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", opacity: rate === "" ? 0.5 : 1 }}>Use</button>
+        </div>
+      </div>
+    </Sheet>
   );
 }

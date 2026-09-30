@@ -54,10 +54,12 @@ const numOrNull = (v: unknown): number | null | "bad" => {
   return Number.isFinite(n) ? n : "bad";
 };
 
-/** The rule's own numbers (sheet coverage, stick length, spacing, lap, dose). Only known keys, only positive. */
+/** The rule's own numbers (sheet coverage, stick length, spacing, lap, dose, waste). Only known keys, only positive — waste may be 0. */
 const RULE_KEYS: Partial<Record<QtyRule, string[]>> = {
-  per_sheet: ["sheet_sqft"], per_stick: ["stick_ft", "spacing_in", "lap_pct"], per_cy: ["per_cy"],
+  per_sheet: ["sheet_sqft"], per_stick: ["stick_ft", "spacing_in", "lap_pct"], per_cy: ["per_cy", "waste_pct"],
 };
+/** Keys where 0 is a real answer (no waste), not a missing one. */
+const ZERO_OK = new Set(["waste_pct", "lap_pct"]);
 
 /**
  * Check a card from the browser. `partial` for a PATCH: only the fields sent
@@ -118,7 +120,7 @@ export function cleanCard(b: Record<string, unknown>, partial = false): { ok: tr
     const params: Record<string, number> = {};
     for (const k of allowed) {
       const n = numOrNull(raw[k]);
-      if (n === "bad" || (n !== null && n <= 0)) return { ok: false, error: `${k.replace(/_/g, " ")} must be a positive number.` };
+      if (n === "bad" || (n !== null && (ZERO_OK.has(k) ? n < 0 : n <= 0))) return { ok: false, error: `${k.replace(/_/g, " ")} must be a positive number.` };
       if (n !== null) params[k] = n;
     }
     out.rule_params = params;
@@ -133,6 +135,8 @@ export function cardGaps(c: Pick<CardInput, "unit_cost" | "qty_rule" | "rule_par
   if (c.qty_rule === "per_sheet" && !c.rule_params?.sheet_sqft) g.push("what one sheet covers");
   if (c.qty_rule === "per_stick" && !c.rule_params?.spacing_in) g.push("bar spacing");
   if (c.qty_rule === "per_stick" && !c.rule_params?.stick_ft) g.push("stick length");
+  // Concrete itself (no per-yard dose) needs its waste %; 0 is an answer.
+  if (c.qty_rule === "per_cy" && !c.rule_params?.per_cy && typeof c.rule_params?.waste_pct !== "number") g.push("waste %");
   return g;
 }
 

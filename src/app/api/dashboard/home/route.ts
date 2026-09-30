@@ -42,14 +42,13 @@ export async function GET(req: NextRequest) {
   const dayStartIso = centralMidnight(today);
   const weekAgo = new Date(Date.now() - 7 * 86400_000).toISOString();
 
-  const [calls, jobsQ, pays, recs, oh, settings] = await Promise.all([
+  const [calls, jobsQ, pays, recs, oh] = await Promise.all([
     sb.from("messages").select("direction").eq("org_id", orgId).eq("channel", "call").gte("occurred_at", dayStartIso),
     sb.from("jobs").select("id, status, origin, confirmed_at, created_at, duration_days, scheduled_start")
       .eq("org_id", orgId).is("archived_at", null),
     sb.from("payments").select("amount, received_on").eq("org_id", orgId).gte("received_on", monthStart).lte("received_on", today),
     sb.from("receipts").select("amount, purchased_on").eq("org_id", orgId).gte("purchased_on", monthStart).lte("purchased_on", today),
     sb.from("overhead_items").select("label, amount, cadence, active").eq("org_id", orgId),
-    sb.from("org_cost_settings").select("assumed_billable_days").eq("org_id", orgId).maybeSingle(),
   ]);
   const err = calls.error || jobsQ.error || pays.error || recs.error || oh.error;
   if (err) return applyCookies(NextResponse.json({ error: err.message }, { status: 500 }));
@@ -99,21 +98,17 @@ export async function GET(req: NextRequest) {
   tiles.wip = moneyTile(wip, "in progress");
   tiles.quoted = moneyTile(quoted, "quoted");
 
-  // Work runway — crew days of approved work not yet finished, in months of
-  // crew days (Cost settings). Blank until the jobs carry their crew days.
-  const perMonth = settings.data?.assumed_billable_days != null ? Number(settings.data.assumed_billable_days) : null;
+  // Work runway — the days of approved work not yet finished, from each
+  // job's own days (there are no default crew days — Coy, 2026-09-30).
   const withDays = wip.filter((j) => j.duration_days != null && Number(j.duration_days) > 0);
   const days = withDays.reduce((a, j) => a + Number(j.duration_days), 0);
   if (!wip.length) tiles.runway = { value: null, detail: "No approved work on the books", href: "/dashboard/scope" };
-  else if (!withDays.length) tiles.runway = { value: null, detail: `${plural(wip.length, "approved job")}, none with crew days entered`, href: "/dashboard/scope" };
+  else if (!withDays.length) tiles.runway = { value: null, detail: `${plural(wip.length, "approved job")}, none with days entered`, href: "/dashboard/scope" };
   else {
     const missing = wip.length - withDays.length;
-    const span = perMonth && perMonth > 0
-      ? (days / perMonth >= 1 ? `${(days / perMonth).toFixed(1)} mo` : `${Math.round((days / perMonth) * 4.33 * 10) / 10} wk`)
-      : null;
     tiles.runway = {
-      value: span ?? `${days} days`,
-      detail: [`${days} crew days`, span ? `at ${perMonth} a month` : "set crew days per month in Markups & overhead", missing ? `${missing} job(s) with no crew days` : null].filter(Boolean).join(" · "),
+      value: `${days} days`,
+      detail: [`of work booked`, missing ? `${missing} job(s) with no days set` : null].filter(Boolean).join(" · "),
       href: "/dashboard/scope",
     };
   }

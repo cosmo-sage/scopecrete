@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@600;700&family=Inter:wght@300;400&family=Kalam:wght@400;700&family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400&display=swap" rel="stylesheet">
+<style>body{margin:0;background:#E4DED2;font-family:'IBM Plex Sans',system-ui,sans-serif;color:#2A2A2A}a{color:#1E5AA8;text-decoration:none}a:hover{color:#163C78}img.px{image-rendering:pixelated}</style>
+</helmet>
+<div data-screen-label="Plan room v2" style="padding:32px;display:flex;justify-content:safe center">
+<div style="width:1440px;flex:none;height:900px;display:flex;flex-direction:column;background:#FBF6EC;color:#2A2A2A;overflow:hidden;border-radius:6px;box-shadow:0 14px 44px rgba(42,32,20,.18);position:relative">
+
+  <div style="flex:none;height:54px;padding:0 16px 0 18px;display:flex;align-items:center;gap:14px;background-color:#FAF8F3;background-image:linear-gradient(rgba(89,128,166,.08) 1px,transparent 1px),linear-gradient(90deg,rgba(89,128,166,.08) 1px,transparent 1px);background-size:10px 10px;border-bottom:1px solid rgba(58,62,68,.28);box-shadow:0 3px 0 -2px rgba(58,62,68,.14);position:relative;z-index:3">
+    <div style="display:flex;align-items:center;gap:10px;flex:none">
+      <img src="assets/org/sacco-light.png" alt="Sacco Enterprises" style="height:28px;width:auto;display:block">
+      <div style="display:flex;flex-direction:column;gap:1px;padding-left:10px;border-left:1px solid rgba(58,62,68,.28)">
+        <span style="font-family:'Inter',sans-serif;font-weight:300;font-size:8.5px;letter-spacing:.06em;color:#7A7367">powered by</span>
+        <span style="display:flex;align-items:baseline"><span style="font-family:'Lexend',sans-serif;font-weight:700;font-size:10.5px;line-height:1;color:#34383D">scope</span><span style="font-family:'Inter',sans-serif;font-weight:300;font-size:10.5px;line-height:1;color:#D9550A">crete</span><span style="font-family:'Kalam',cursive;font-size:7px;color:#5A5F66">.ai</span></span>
+      </div>
+    </div>
+    <span style="width:1px;height:22px;background:rgba(58,62,68,.28);flex:none"></span>
+    <div style="flex:1;min-width:0;max-width:720px;display:flex;align-items:center;gap:9px"><span style="width:8px;height:8px;border-radius:999px;background:{{ dot }};flex:none;box-shadow:0 0 0 3px {{ dotHalo }}"></span><span style="font-family:'Inter',sans-serif;font-weight:300;font-size:13.5px;color:#3F4348;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ activity }}</span></div>
+    <span style="flex:1"></span>
+    <div style="display:flex;gap:6px">
+      <span style="width:32px;height:32px;border:1px solid rgba(58,62,68,.3);border-radius:3px;background:rgba(255,255,255,.55);display:flex;align-items:center;justify-content:center"><svg width="15" height="15" viewBox="0 0 15 15"><circle cx="6.4" cy="6.4" r="4.5" fill="none" stroke="#3A3E43" stroke-width="1.5"></circle><path d="M9.8 9.8 L13.4 13.4" stroke="#3A3E43" stroke-width="1.5" stroke-linecap="round"></path></svg></span>
+      <span style="width:32px;height:32px;border:1px solid rgba(58,62,68,.3);border-radius:3px;background:rgba(255,255,255,.55);display:flex;align-items:center;justify-content:center"><svg width="17" height="17" viewBox="0 0 17 17" stroke="#3A3E43" stroke-width="1.6" stroke-linecap="round"><path d="M8.5 1.5v14M1.5 8.5h14"></path></svg></span>
+      <span style="width:32px;height:32px;border:1px solid rgba(58,62,68,.3);border-radius:3px;background:rgba(255,255,255,.55);display:flex;align-items:center;justify-content:center"><svg width="18" height="14" viewBox="0 0 18 14" stroke="#3A3E43" stroke-width="1.6" stroke-linecap="round"><path d="M1 1h16M1 7h16M1 13h16"></path></svg></span>
+    </div>
+  </div>
+
+  <div style="flex:1;min-height:0;display:flex">
+    <nav style="width:84px;flex:none;background:#F3ECDD;border-right:1px solid #E6DCC8;display:flex;flex-direction:column">
+      <sc-for list="{{ rail }}" as="n" hint-placeholder-count="11">
+        <div style="height:58px;flex:none;border-left:3px solid {{ n.edge }};background:{{ n.bg }};color:{{ n.fg }};display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px">
+          <sc-if value="{{ n.dusty }}" hint-placeholder-val="{{ false }}"><img class="px" src="assets/dusty/idle.png" width="24" height="24"></sc-if>
+          <sc-if value="{{ n.icon }}" hint-placeholder-val="{{ true }}"><svg width="19" height="19" viewBox="0 0 19 19" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="{{ n.icon }}"></path></svg></sc-if>
+          <span style="font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:500;letter-spacing:.1em;text-transform:uppercase;line-height:1.1">{{ n.label }}</span>
+        </div>
+      </sc-for>
+    </nav>
+
+    <div style="flex:1;min-width:0;display:flex;flex-direction:column">
+      <div style="flex:none;background:#FFFFFF;border-bottom:1px solid #E6DCC8;padding:12px 20px 0;display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="height:32px;padding:0 10px;border:1px solid #D9CDB6;border-radius:3px;display:flex;align-items:center;gap:8px;font-size:13px"><span style="font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#8C8578">Job</span><b style="font-weight:600">Drive-through Pickup Cover</b><span style="color:#8C8578">· Slaughter Elementary</span><span style="color:#8C8578">▾</span></span>
+          <span style="height:32px;padding:0 10px;border:1px solid #D9CDB6;border-radius:3px;display:flex;align-items:center;gap:8px;font-size:13px"><span style="font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#8C8578">Set</span><b style="font-weight:600">CD set · Rev 2</b><span style="color:#8C8578">· Sep 24</span><span style="color:#8C8578">▾</span></span>
+          <span style="flex:1"></span>
+          <span style="height:28px;padding:0 9px;border-radius:3px;background:#DDEEE3;color:#1F5C3A;display:flex;align-items:center;gap:6px;font-family:'Barlow Condensed',sans-serif;font-size:12px;font-weight:600;letter-spacing:.08em">✓ {{ scaleLine }}</span>
+          <span onClick="{{ goFiles }}" style="height:32px;padding:0 13px;border-radius:3px;background:#B85A3C;color:#FFFFFF;display:flex;align-items:center;gap:6px;font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;cursor:pointer">↑ Add plans</span>
+        </div>
+        <div style="display:flex;gap:2px">
+          <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="4">
+            <div onClick="{{ t.go }}" style="height:38px;padding:0 14px;display:flex;align-items:center;gap:7px;cursor:pointer;border-bottom:2px solid {{ t.edge }};color:{{ t.fg }};font-family:'Barlow Condensed',sans-serif;font-size:14px;font-weight:600;letter-spacing:.1em;text-transform:uppercase" style-hover="color:#2A2A2A"><span style="font-family:'Lexend',sans-serif;font-size:10px;width:17px;height:17px;border-radius:999px;border:1px solid {{ t.edge2 }};display:flex;align-items:center;justify-content:center;letter-spacing:0">{{ t.step }}</span>{{ t.label }}<sc-if value="{{ t.n }}" hint-placeholder-val="{{ false }}"><span style="font-family:'Lexend',sans-serif;font-size:10.5px;letter-spacing:0;padding:1px 6px;border-radius:999px;background:#F3ECDD;color:#5E5A52">{{ t.n }}</span></sc-if></div>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="flex:1;min-height:0;display:flex">
+        <div style="flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden">
+
+          <sc-if value="{{ isFiles }}" hint-placeholder-val="{{ true }}">
+            <div style="flex:1;overflow-y:auto;padding:18px 20px;display:flex;flex-direction:column;gap:14px">
+              <div style="height:120px;border:2px dashed #D9CDB6;border-radius:6px;background:#FFFFFF;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px">
+                <span style="font-family:'Lexend',sans-serif;font-weight:600;font-size:17px">Drop plan sets, sketches or photos</span>
+                <span style="font-size:12.5px;color:#8C8578">PDF, JPG, PNG, HEIC · or forward the bid email to plans@saccoenterprises.scopecrete.ai</span>
+                <span style="margin-top:2px;height:28px;padding:0 12px;border:1px solid #D9CDB6;border-radius:3px;display:flex;align-items:center;font-family:'Barlow Condensed',sans-serif;font-size:12px;font-weight:600;letter-spacing:.1em;text-transform:uppercase">Choose files</span>
+              </div>
+              <div style="display:flex;align-items:baseline;gap:10px"><span style="font-family:'Inter',sans-serif;font-weight:300;font-size:20px">Already on this job</span><span style="font-size:12.5px;color:#8C8578">Files Dusty filed from email and Documents. Toggle what belongs in the plan room.</span></div>
+              <div style="background:#FFFFFF;border:1px solid #E6DCC8;border-radius:4px;overflow:hidden">
+                <div style="display:grid;grid-template-columns:44px 1.6fr 1fr 1.1fr 130px 120px;gap:10px;padding:8px 14px;background:#F3ECDD;font-family:'Barlow Condensed',sans-serif;font-size:11.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#5E5A52"><span></span><span>File</span><span>Came from</span><span>Sheets · scale</span><span>Read status</span><span style="text-align:right">In plan room</span></div>
+                <sc-for list="{{ files }}" as="f" hint-placeholder-count="4">
+                  <div style="display:grid;grid-template-columns:44px 1.6fr 1fr 1.1fr 130px 120px;gap:10px;padding:10px 14px;border-top:1px solid #F1E9DA;align-items:center;font-size:13px;opacity:{{ f.op }}">
+                    <div style="width:40px;height:32px;border:1px solid #E6DCC8;border-radius:2px;background-color:#FAF8F3;background-image:linear-gradient(rgba(89,128,166,.14) 1px,transparent 1px),linear-gradient(90deg,rgba(89,128,166,.14) 1px,transparent 1px);background-size:6px 6px;display:flex;align-items:flex-end;justify-content:flex-end;padding:2px;box-sizing:border-box"><span style="font-family:'Barlow Condensed',sans-serif;font-size:9px;font-weight:600;letter-spacing:.1em;color:#5E5A52">{{ f.ext }}</span></div>
+                    <div style="display:flex;flex-direction:column;gap:2px;min-width:0"><span style="font-family:'Lexend',sans-serif;font-weight:600;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ f.name }}</span><span style="font-size:11.5px;color:#8C8578">{{ f.kind }}</span></div>
+                    <div style="display:flex;align-items:center;gap:6px"><span style="font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:600;letter-spacing:.08em;padding:2px 6px;border-radius:2px;border:1px solid #D9CDB6;color:#1E5AA8">{{ f.srcTag }}</span><span style="font-size:12px;color:#5E5A52">{{ f.src }}</span></div>
+                    <div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:12.5px">{{ f.sheets }}</span><span style="font-size:11.5px;color:{{ f.scaleInk }}">{{ f.scale }}</span></div>
+                    <div style="display:flex;align-items:center;gap:6px"><span style="width:6px;height:6px;border-radius:999px;background:{{ f.stC }}"></span><span style="font-size:12px;color:#5E5A52">{{ f.status }}</span></div>
+                    <div style="display:flex;justify-content:flex-end"><span onClick="{{ f.toggle }}" style="width:38px;height:22px;border-radius:999px;background:{{ f.swBg }};position:relative;cursor:pointer"><span style="position:absolute;top:3px;left:{{ f.swX }};width:16px;height:16px;border-radius:999px;background:#FFFFFF;box-shadow:0 1px 2px rgba(0,0,0,.2)"></span></span></div>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px">
+                <div style="background:#FFFFFF;border:1px solid #E6DCC8;border-radius:4px;padding:12px 14px;display:flex;flex-direction:column;gap:6px"><span style="font-family:'Barlow Condensed',sans-serif;font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#5E5A52">Auto-scale</span><span style="font-size:12.5px;line-height:1.45;color:#3F4348">Dusty reads the scale from each title block, then checks it against three printed dimensions on the sheet. A sheet only counts as calibrated when both agree within 0.5%.</span></div>
+                <div style="background:#FFFFFF;border:1px solid #E6DCC8;border-radius:4px;padding:12px 14px;display:flex;flex-direction:column;gap:6px"><span style="font-family:'Barlow Condensed',sans-serif;font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#5E5A52">Scopes you pick</span><span style="font-size:12.5px;line-height:1.45;color:#3F4348">Dusty asks what to look for before reading. He only builds parameter groups for those scopes — nothing you didn't ask for.</span></div>
+                <div style="background:#FBEDE6;border:1px solid #F1D5C8;border-radius:4px;padding:12px 14px;display:flex;flex-direction:column;gap:6px"><span style="font-family:'Barlow Condensed',sans-serif;font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#9A4527">Straight to budget</span><span style="font-size:12.5px;line-height:1.45;color:#3F4348">Every parameter group maps to a budget line. Totals roll up by group and stay broken out by section, so the budget shows where each number came from.</span></div>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isSheets }}" hint-placeholder-val="{{ false }}">
+            <div style="flex:1;min-height:0;display:flex">
+              <div style="width:190px;flex:none;border-right:1px solid #E6DCC8;background:#FFFFFF;padding:12px 10px;display:flex;flex-direction:column;gap:2px">
+                <span style="font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:#8C8578;padding:0 8px 6px">Discipline</span>
+                <sc-for list="{{ disc }}" as="d" hint-placeholder-count="7">
+                  <div onClick="{{ d.go }}" style="height:32px;padding:0 8px;border-radius:3px;display:flex;align-items:center;gap:8px;cursor:pointer;background:{{ d.bg }};font-size:13px;font-weight:{{ d.w }}" style-hover="background:#FBF6EC"><span style="width:8px;height:8px;border-radius:2px;background:{{ d.c }}"></span><span style="flex:1">{{ d.label }}</span><span style="font-family:'Lexend',sans-serif;font-size:11px;color:#8C8578">{{ d.n }}</span></div>
+                </sc-for>
+              </div>
+              <div style="flex:1;min-height:0;overflow-y:auto;padding:14px 16px 16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;align-content:start">
+                <sc-for list="{{ sheets }}" as="sh" hint-placeholder-count="12">
+                  <div onClick="{{ sh.go }}" style="background:#FFFFFF;border:1px solid #E6DCC8;border-radius:4px;overflow:hidden;display:flex;flex-direction:column;cursor:pointer" style-hover="border-color:#B85A3C">
+                    <div style="height:104px;position:relative;background-color:#FAF8F3;background-image:linear-gradient(rgba(89,128,166,.1) 1px,transparent 1px),linear-gradient(90deg,rgba(89,128,166,.1) 1px,transparent 1px);background-size:8px 8px;border-bottom:1px solid #E6DCC8">
+                      <span style="position:absolute;left:12%;top:16%;width:52%;height:46%;border:1.5px solid rgba(58,62,68,.45)"></span>
+                      <span style="position:absolute;left:30%;top:36%;width:50%;height:30%;border:1px solid rgba(58,62,68,.3)"></span>
+                      <sc-if value="{{ sh.concrete }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;left:6px;top:6px;font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;padding:1px 5px;border-radius:2px;background:#B85A3C;color:#FFFFFF">Concrete</span></sc-if>
+                      <span style="position:absolute;right:6px;bottom:6px;font-family:'Barlow Condensed',sans-serif;font-size:10.5px;font-weight:600;letter-spacing:.06em;padding:2px 6px;border-radius:2px;background:{{ sh.scBg }};color:{{ sh.scFg }}">{{ sh.scale }}</span>
+                    </div>
+                    <div style="padding:8px 10px;display:flex;flex-direction:column;gap:3px">
+                      <div style="display:flex;align-items:center;gap:6px"><span style="font-family:'Lexend',sans-serif;font-weight:600;font-size:13px">{{ sh.num }}</span><span style="flex:1"></span><span style="font-family:'Barlow Condensed',sans-serif;font-size:11px;letter-spacing:.08em;color:#8C8578">p.{{ sh.page }}</span></div>
+                      <span style="font-size:12.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ sh.title }}</span>
+                    </div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isTakeoff }}" hint-placeholder-val="{{ false }}">
+            <div style="flex:1;min-height:0;display:flex;position:{{ fsPos }};inset:0;z-index:{{ fsZ }};background:#FBF6EC">
+              <sc-if value="{{ paramsHidden }}" hint-placeholder-val="{{ false }}">
+                <div onClick="{{ toggleParams }}" style="width:44px;flex:none;border-right:1px solid #E6DCC8;background:#FFFFFF;display:flex;flex-direction:column;align-items:center;padding-top:12px;gap:10px;cursor:pointer">
+                  <span style="font-size:14px;color:#5E5A52">›</span>
+                  <span style="font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#5E5A52;writing-mode:vertical-rl;transform:rotate(180deg)">Parameters · {{ groupCount }} groups</span>
+                </div>
+              </sc-if>
+              <sc-if value="{{ paramsShown }}" hint-placeholder-val="{{ true }}">
+              <div style="width:340px;flex:none;border-right:1px solid #E6DCC8;background:#FFFFFF;display:flex;flex-direction:column">
+                <div style="flex:none;padding:10px 12px 8px;display:flex;align-items:center;gap:8px;border-bottom:1px solid #F1E9DA">
+                  <span style="font-family:'Inter',sans-serif;font-weight:300;font-size:20px;flex:1">Parameters</span>
+                  <span style="font-family:'Barlow Condensed',sans-serif;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#8C8578">{{ groupCount }} groups · {{ measCount }} takeoffs</span>
+                  <span onClick="{{ toggleParams }}" title="Collapse" style="width:24px;height:24px;border:1px solid #E6DCC8;border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:13px;color:#5E5A52;cursor:pointer">‹</span>
+                </div>
+                <div style="flex:1;min-height:0;overflow-y:auto">
+                  <sc-for list="{{ groups }}" as="g" hint-placeholder-count="5">
+                    <div style="border-bottom:1px solid #F1E9DA">
+                      <div onClick="{{ g.go }}" style="display:flex;align-items:center;gap:6px;padding:8px 10px 8px 8px;cursor:pointer;background:{{ g.bg }};border-left:3px solid {{ g.edge }}" style-hover="background:#FBF6EC">
+                        <span title="{{ g.typeLabel }}" style="width:22px;height:22px;flex:none;display:flex;align-items:center;justify-content:center;color:{{ g.c }}"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="{{ g.typeIcon }}"></path></svg></span>
+                        <span style="width:14px;font-size:11px;color:#8C8578;transform:rotate({{ g.rot }});display:flex;justify-content:center">›</span>
+                        <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:1px">
+                          <span style="font-weight:600;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ g.name }}</span>
+                          <span style="font-family:'Barlow Condensed',sans-serif;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:{{ g.codeInk }}">{{ g.typeLabel }} · {{ g.code }}</span>
+                        </div>
+                        <div style="display:flex;flex-direction:column;align-items:flex-end;flex:none"><span style="font-family:'Lexend',sans-serif;font-weight:700;font-size:14px;font-variant-numeric:tabular-nums">{{ g.total }}</span><span style="font-family:'Barlow Condensed',sans-serif;font-size:10.5px;letter-spacing:.1em;color:#8C8578">{{ g.unit }}</span></div>
+                      </div>
+                      <sc-if value="{{ g.open }}" hint-placeholder-val="{{ false }}">
+                        <sc-for list="{{ g.items }}" as="m" hint-placeholder-count="3">
+                          <div onClick="{{ m.go }}" style="display:flex;align-items:center;gap:8px;padding:7px 10px 7px 12px;cursor:pointer;background:{{ m.bg }};border-left:3px solid {{ m.edge }}" style-hover="background:#FBF6EC">
+                            <span style="width:4px;height:22px;border-radius:1px;background:{{ g.c }};flex:none"></span>
+                            <div style="flex:1;min-width:0;display:flex;flex-direction:column"><span style="font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ m.name }}</span><span style="font-size:11px;color:#8C8578">{{ m.sheet }} · {{ m.how }}</span></div>
+                            <span style="font-family:'Lexend',sans-serif;font-weight:600;font-size:13px;font-variant-numeric:tabular-nums">{{ m.qty }} <span style="font-family:'Barlow Condensed',sans-serif;font-weight:500;font-size:10.5px;color:#8C8578">{{ g.unit }}</span></span>
+                          </div>
+                        </sc-for>
+                        <div style="padding:6px 10px 8px 34px;font-family:'Barlow Condensed',sans-serif;font-size:12px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:#1E5AA8;cursor:pointer">+ Measurement</div>
+                      </sc-if>
+                    </div>
+                  </sc-for>
+                </div>
+                <div style="flex:none;padding:10px 12px;border-top:1px solid #E6DCC8;display:flex;gap:6px">
+                  <span style="flex:1;height:34px;border-radius:3px;background:#2A2A2A;color:#FBF6EC;display:flex;align-items:center;justify-content:center;gap:6px;font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;cursor:pointer">+ Parameter</span>
+                  <span onClick="{{ sendBudget }}" style="flex:1;height:34px;border-radius:3px;background:#B85A3C;color:#FFFFFF;display:flex;align-items:center;justify-content:center;font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;cursor:pointer">{{ sendLabel }}</span>
+                </div>
+              </div>
+              </sc-if>
+
+              <div style="flex:1;min-width:0;display:flex;flex-direction:column">
+                <div style="flex:none;height:42px;padding:0 12px;display:flex;align-items:center;gap:6px;background:#FFFFFF;border-bottom:1px solid #E6DCC8">
+                  <sc-for list="{{ tools }}" as="tl" hint-placeholder-count="7"><span onClick="{{ tl.go }}" title="{{ tl.label }}" style="height:28px;padding:0 8px;border-radius:3px;border:1px solid {{ tl.line }};background:{{ tl.bg }};color:{{ tl.fg }};display:flex;align-items:center;gap:5px;cursor:pointer;font-size:12px"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="{{ tl.icon }}"></path></svg>{{ tl.short }}</span></sc-for>
+                  <span style="flex:1"></span>
+                  <span style="font-family:'Barlow Condensed',sans-serif;font-size:12px;letter-spacing:.08em;color:#5E5A52">{{ actSheet }} · <b style="color:#1F5C3A">1/8" = 1'-0" auto</b></span>
+                  <span style="width:1px;height:22px;background:#E6DCC8;margin:0 4px"></span>
+                  <span onClick="{{ toggleFs }}" title="{{ fsLabel }}" style="width:30px;height:28px;border-radius:3px;border:1px solid {{ fsLine }};background:{{ fsBg }};color:{{ fsFg }};display:flex;align-items:center;justify-content:center;cursor:pointer"><svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="{{ fsIcon }}"></path></svg></span>
+                </div>
+                <div style="flex:1;min-height:0;position:relative;background:#E9E4DA;overflow:hidden">
+                  <svg viewBox="0 0 1000 620" preserveAspectRatio="xMidYMid meet" style="position:absolute;inset:14px;width:calc(100% - 28px);height:calc(100% - 28px);background:#FCFBF7;box-shadow:0 2px 10px rgba(0,0,0,.08)">
+                    <defs><pattern id="g2" width="20" height="20" patternUnits="userSpaceOnUse"><path d="M20 0H0V20" fill="none" stroke="rgba(89,128,166,.08)" stroke-width="1"></path></pattern></defs>
+                    <rect x="0" y="0" width="1000" height="620" fill="url(#g2)"></rect>
+                    <rect x="30" y="30" width="940" height="560" fill="none" stroke="#3A3E43" stroke-width="1" stroke-dasharray="14 5 3 5"></rect>
+                    <rect x="70" y="70" width="440" height="230" fill="none" stroke="#2A2A2A" stroke-width="3"></rect>
+                    <text x="290" y="190" text-anchor="middle" font-family="IBM Plex Sans" font-size="15" fill="#5E5A52">EXISTING SCHOOL BUILDING</text>
+                    <rect x="560" y="120" width="340" height="110" fill="none" stroke="#2A2A2A" stroke-width="1.5" stroke-dasharray="8 4"></rect>
+                    <text x="730" y="112" text-anchor="middle" font-family="IBM Plex Sans" font-size="11" fill="#5E5A52">PICKUP CANOPY ABOVE (SEE S-101)</text>
+                    <path d="M510 250 H940 V350 H510" fill="none" stroke="#3A3E43" stroke-width="1.5"></path>
+                    <path d="M510 300 H70 V340 H510" fill="none" stroke="#3A3E43" stroke-width="1"></path>
+                    <path d="M940 350 V560 M850 350 V560" fill="none" stroke="#3A3E43" stroke-width="1.2"></path>
+                    <g opacity="{{ ly.drive }}"><path d="M510 250 H940 V560 H850 V350 H510 Z" fill="rgba(217,119,87,.28)" stroke="#D97757" stroke-width="2.5"></path><rect x="700" y="266" width="22" height="22" fill="#FCFBF7" stroke="#D97757" stroke-width="2" stroke-dasharray="4 3"></rect><rect x="880" y="480" width="22" height="22" fill="#FCFBF7" stroke="#D97757" stroke-width="2" stroke-dasharray="4 3"></rect></g>
+                    <g opacity="{{ ly.walk }}"><path d="M70 300 H510 V340 H70 Z" fill="rgba(217,119,87,.22)" stroke="#D97757" stroke-width="2.5"></path></g>
+                    <g opacity="{{ ly.island }}"><rect x="580" y="135" width="300" height="80" fill="rgba(217,119,87,.22)" stroke="#D97757" stroke-width="2.5"></rect></g>
+                    <g opacity="{{ ly.curbN }}"><path d="M510 250 H940 V560" fill="none" stroke="#2F8A5B" stroke-width="4" stroke-linecap="round"></path></g>
+                    <g opacity="{{ ly.curbS }}"><path d="M510 350 H850 V560" fill="none" stroke="#2F8A5B" stroke-width="4" stroke-linecap="round"></path></g>
+                    <g opacity="{{ ly.gbeam }}"><rect x="560" y="120" width="340" height="110" fill="none" stroke="#C98A12" stroke-width="4"></rect></g>
+                    <g opacity="{{ ly.trench }}"><path d="M525 300 H925" fill="none" stroke="#0F7C86" stroke-width="4" stroke-dasharray="10 5"></path></g>
+                    <g opacity="{{ ly.piersA }}" fill="#FCFBF7" stroke="#6A55B0" stroke-width="3"><circle cx="580" cy="140" r="9"></circle><circle cx="690" cy="140" r="9"></circle><circle cx="800" cy="140" r="9"></circle><circle cx="880" cy="140" r="9"></circle></g>
+                    <g opacity="{{ ly.piersB }}" fill="#FCFBF7" stroke="#6A55B0" stroke-width="3"><circle cx="580" cy="210" r="9"></circle><circle cx="690" cy="210" r="9"></circle><circle cx="800" cy="210" r="9"></circle><circle cx="880" cy="210" r="9"></circle></g>
+                    <g><rect x="780" y="570" width="170" height="14" fill="none" stroke="#2A2A2A"></rect><rect x="780" y="570" width="85" height="14" fill="#2A2A2A"></rect><text x="780" y="600" font-family="IBM Plex Sans" font-size="10" fill="#2A2A2A">0</text><text x="945" y="600" text-anchor="end" font-family="IBM Plex Sans" font-size="10" fill="#2A2A2A">40'</text></g>
+                  </svg>
+                  <div style="position:absolute;right:38px;top:38px;width:88px;height:38px;border:1px solid #2A2A2A;background:#FFFFFF;display:flex;flex-direction:column;align-items:center;justify-content:center"><span style="font-family:'Lexend',sans-serif;font-weight:700;font-size:15px;line-height:1">{{ actSheet }}</span><span style="font-size:8px;color:#5E5A52;letter-spacing:.04em">SITE PAVING PLAN</span></div>
+                  <div style="position:absolute;left:{{ lbl.left }};top:{{ lbl.top }};padding:7px 11px;border-radius:3px;background:#2A2A2A;color:#FFFFFF;display:flex;flex-direction:column;gap:2px;box-shadow:0 4px 12px rgba(0,0,0,.2);pointer-events:none"><span style="font-family:'Lexend',sans-serif;font-weight:600;font-size:13.5px;white-space:nowrap">{{ lbl.line1 }}</span><span style="font-family:'Barlow Condensed',sans-serif;font-size:12px;color:#F6E2D8;white-space:nowrap">{{ lbl.line2 }}</span></div>
+                  <div style="position:absolute;left:24px;bottom:22px;display:flex;gap:4px">
+                    <sc-for list="{{ sheetTabs }}" as="st" hint-placeholder-count="4"><span onClick="{{ st.go }}" style="height:26px;padding:0 10px;border-radius:3px;border:1px solid {{ st.line }};background:{{ st.bg }};display:flex;align-items:center;font-family:'Lexend',sans-serif;font-weight:600;font-size:12px;color:{{ st.fg }};cursor:pointer">{{ st.n }}</span></sc-for>
+                  </div>
+                  <div style="position:absolute;right:24px;bottom:22px;display:flex;border:1px solid #D9CDB6;border-radius:3px;background:#FFFFFF;overflow:hidden"><span style="width:28px;height:26px;display:flex;align-items:center;justify-content:center">−</span><span style="height:26px;padding:0 8px;display:flex;align-items:center;border-left:1px solid #E6DCC8;border-right:1px solid #E6DCC8;font-family:'Barlow Condensed',sans-serif;font-size:12px">100%</span><span style="width:28px;height:26px;display:flex;align-items:center;justify-content:center">+</span></div>
+                </div>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isBudget }}" hint-placeholder-val="{{ false }}">
+            <div style="flex:1;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:12px">
+              <div style="display:flex;gap:8px">
+                <sc-for list="{{ budgetCards }}" as="r" hint-placeholder-count="4"><div style="flex:1;background:#FFFFFF;border:1px solid #E6DCC8;border-radius:4px;padding:10px 12px;display:flex;flex-direction:column;gap:2px"><span style="font-family:'Barlow Condensed',sans-serif;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#8C8578">{{ r.k }}</span><span style="font-family:'Lexend',sans-serif;font-weight:700;font-size:22px;line-height:1.1;font-variant-numeric:tabular-nums">{{ r.v }}</span><span style="font-size:11.5px;color:#8C8578">{{ r.d }}</span></div></sc-for>
+              </div>
+              <div style="background:#FFFFFF;border:1px solid #E6DCC8;border-radius:4px;overflow:hidden">
+                <div style="display:grid;grid-template-columns:1.7fr 1.3fr 110px 80px 100px 120px;gap:10px;padding:8px 14px;background:#F3ECDD;font-family:'Barlow Condensed',sans-serif;font-size:11.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#5E5A52"><span>Budget line ← parameter</span><span>Sheet · method</span><span style="text-align:right">Qty</span><span>Unit</span><span style="text-align:right">Rate</span><span style="text-align:right">Total</span></div>
+                <sc-for list="{{ budgetRows }}" as="b" hint-placeholder-count="12">
+                  <div style="display:grid;grid-template-columns:1.7fr 1.3fr 110px 80px 100px 120px;gap:10px;padding:{{ b.pad }};border-top:1px solid #F1E9DA;background:{{ b.bg }};align-items:center;font-size:13px">
+                    <div style="display:flex;align-items:center;gap:8px;padding-left:{{ b.indent }}"><span style="width:{{ b.swW }};height:10px;border-radius:2px;background:{{ b.c }};flex:none"></span><div style="display:flex;flex-direction:column"><span style="font-weight:{{ b.w }};font-size:{{ b.fs }}">{{ b.name }}</span><sc-if value="{{ b.sub }}" hint-placeholder-val="{{ false }}"><span style="font-family:'Barlow Condensed',sans-serif;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:{{ b.subInk }}">{{ b.sub }}</span></sc-if></div></div>
+                    <span style="font-size:12px;color:#5E5A52">{{ b.method }}</span>
+                    <span style="text-align:right;font-family:'Lexend',sans-serif;font-weight:{{ b.w }};font-variant-numeric:tabular-nums">{{ b.qty }}</span>
+                    <span style="font-family:'Barlow Condensed',sans-serif;font-size:11.5px;letter-spacing:.1em;color:#8C8578">{{ b.unit }}</span>
+                    <span style="text-align:right;color:{{ b.rateInk }};font-variant-numeric:tabular-nums">{{ b.rate }}</span>
+                    <span style="text-align:right;font-family:'Lexend',sans-serif;font-weight:{{ b.w }};font-variant-numeric:tabular-nums;color:{{ b.totInk }}">{{ b.total }}</span>
+                  </div>
+                </sc-for>
+                <div style="padding:10px 14px;border-top:1px solid #E6DCC8;display:flex;align-items:center;gap:12px"><span style="flex:1;font-size:12.5px;color:#5E5A52">Section rows stay linked. Re-measure on the plan and the budget line moves with it.</span><span style="font-family:'Barlow Condensed',sans-serif;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#8C8578">Concrete total</span><span style="font-family:'Lexend',sans-serif;font-weight:700;font-size:20px">{{ grand }}</span><span style="height:32px;padding:0 14px;border-radius:3px;background:#2A2A2A;color:#FBF6EC;display:flex;align-items:center;font-family:'Barlow Condensed',sans-serif;font-size:12.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;cursor:pointer">Open in Jobs › Budget</span></div>
+              </div>
+            </div>
+          </sc-if>
+        </div>
+
+        <sc-if value="{{ fs }}" hint-placeholder-val="{{ false }}">
+          <div onClick="{{ toggleFs }}" style="position:absolute;right:0;top:0;bottom:0;width:44px;z-index:21;background:#FFFFFF;border-left:1px solid #E6DCC8;display:flex;flex-direction:column;align-items:center;padding-top:10px;gap:10px;cursor:pointer">
+            <img class="px" src="assets/dusty/idle.png" width="26" height="26">
+            <span style="font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#9A4527;writing-mode:vertical-rl;transform:rotate(180deg)">Dusty · {{ msgCount }} notes · exit full screen</span>
+          </div>
+        </sc-if>
+        <section style="width:380px;flex:none;background:#FBF6EC;border-left:1px solid #E6DCC8;box-shadow:-10px 0 30px rgba(42,32,20,.08);display:flex;flex-direction:column">
+          <div style="padding:8px 10px;display:flex;align-items:center;gap:8px;background:#FFFFFF;border-bottom:1px solid #E6DCC8">
+            <img class="px" src="assets/dusty/idle.png" width="32" height="32">
+            <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:1px"><span style="font-family:'Kalam',cursive;font-weight:700;font-size:17px;line-height:1.1">Dusty</span><span style="font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#9A4527">Looking at this plan set · {{ ctx }}</span></div>
+            <span style="width:32px;height:32px;border:1px solid #E6DCC8;border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:18px;color:#5E5A52">+</span>
+            <span style="width:32px;height:32px;border:1px solid #E6DCC8;border-radius:3px;display:flex;align-items:center;justify-content:center"><svg width="11" height="11" viewBox="0 0 13 13"><path d="M1 1 L12 12 M12 1 L1 12" stroke="#2A2A2A" stroke-width="1.6"></path></svg></span>
+          </div>
+          <div style="flex:1;min-height:0;overflow-y:auto;padding:14px 12px;display:flex;flex-direction:column;gap:10px">
+            <sc-for list="{{ msgs }}" as="m" hint-placeholder-count="3">
+              <div style="display:flex;gap:8px;align-items:flex-start;flex-direction:{{ m.dir }}">
+                <sc-if value="{{ m.dusty }}" hint-placeholder-val="{{ true }}"><img class="px" src="assets/dusty/idle.png" width="26" height="26" style="flex:none;margin-top:2px"></sc-if>
+                <div style="max-width:300px;padding:9px 11px;border-radius:5px;background:{{ m.bg }};color:{{ m.fg }};font-size:13px;line-height:1.5;display:flex;flex-direction:column;gap:8px">
+                  <span>{{ m.text }}</span>
+                  <sc-if value="{{ m.chips }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;flex-wrap:wrap;gap:5px">
+                      <sc-for list="{{ m.chips }}" as="c" hint-placeholder-count="6"><span onClick="{{ c.go }}" style="height:26px;padding:0 9px;border-radius:999px;border:1px solid {{ c.line }};background:{{ c.bg }};color:{{ c.fg }};display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer">{{ c.mark }}{{ c.label }}</span></sc-for>
+                    </div>
+                    <div style="height:30px;border-radius:3px;border:1px dashed #D9CDB6;background:#FFFFFF;display:flex;align-items:center;padding:0 10px;font-size:12px;color:#8C8578">Anything else? e.g. "rebar tonnage", "sawcut joints"</div>
+                  </sc-if>
+                  <sc-if value="{{ m.action }}" hint-placeholder-val="{{ false }}"><span onClick="{{ m.act }}" style="align-self:flex-start;height:30px;padding:0 12px;border-radius:3px;background:#B85A3C;color:#FFFFFF;display:flex;align-items:center;font-family:'Barlow Condensed',sans-serif;font-size:12.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;cursor:pointer">{{ m.action }}</span></sc-if>
+                  <sc-if value="{{ m.opts }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:5px;flex-wrap:wrap"><sc-for list="{{ m.opts }}" as="o" hint-placeholder-count="2"><span onClick="{{ o.go }}" style="height:28px;padding:0 10px;border-radius:3px;border:1px solid #D9CDB6;background:#FFFFFF;color:#2A2A2A;display:flex;align-items:center;font-family:'Barlow Condensed',sans-serif;font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;cursor:pointer">{{ o.label }}</span></sc-for></div></sc-if>
+                  <sc-if value="{{ m.facts }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-direction:column;border-top:1px solid rgba(0,0,0,.08)"><sc-for list="{{ m.facts }}" as="f" hint-placeholder-count="3"><div style="display:flex;gap:8px;padding:4px 0;border-bottom:1px solid rgba(0,0,0,.06);font-size:12px"><span style="flex:1;color:#5E5A52">{{ f.k }}</span><span style="font-family:'Lexend',sans-serif;font-weight:600;font-variant-numeric:tabular-nums">{{ f.v }}</span></div></sc-for></div></sc-if>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="padding:10px 12px;border-top:1px solid #E6DCC8;background:#FFFFFF;display:flex;gap:8px;align-items:center">
+            <div style="flex:1;height:38px;border-radius:4px;border:1px solid #E6DCC8;display:flex;align-items:center;padding:0 12px;font-size:13px;color:#8C8578">{{ askPh }}</div>
+            <div style="height:38px;padding:0 14px;border-radius:4px;background:#B85A3C;color:#FFFFFF;display:flex;align-items:center;font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:600;letter-spacing:.08em;text-transform:uppercase">Ask</div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1504,&quot;height&quot;:964}}">
+class Component extends DCLogic {
+  state = { tab: 'files', disc: 'concrete', scopes: { slab: 1, curb: 1, found: 1, trench: 1, piers: 0, rebar: 0, drains: 0, joints: 0 }, started: false, inRoom: { 0: true, 1: true, 2: false, 3: false }, open: { slab: true }, sel: 'drive', group: 'slab', tool: 'area', sheet: 'C-3', sent: false, trenchCode: '', fs: false, params: true };
+  renderVals() {
+    const s = this.state;
+    const icons = {
+      dashboard: 'M2.5 2.5h6v6h-6zM10.5 2.5h6v4h-6zM10.5 8.5h6v8h-6zM2.5 10.5h6v6h-6z', threads: 'M2.6 4.4h13.8v8.4H8.9l-4 3v-3H2.6z',
+      scope: 'M2.4 5.4h14.2v8.2H2.4zM2.4 3.1h14.2', plans: 'M2.5 3.5l4.5-1.5 5 1.5 4.5-1.5v13l-4.5 1.5-5-1.5-4.5 1.5zM7 2v13M12 3.5v13',
+      cash: 'M2.4 5.1h14.2v8.8H2.4zM7.2 9.5a2.3 2.3 0 1 0 4.6 0a2.3 2.3 0 1 0-4.6 0', customers: 'M6.5 6.4a3 3 0 1 0 6 0a3 3 0 1 0-6 0M3.6 16.2c.6-3.2 3-5 5.9-5s5.3 1.8 5.9 5',
+      pricebook: 'M4 2.5h10v14H4zM7 6h4M7 9h4M7 12h2', vendors: 'M2.5 8.5l7-5 7 5M4 7.5v8h11v-8M8 15.5v-4h3v4', documents: 'M5 2.5h6l3.5 3.5v10.5H5zM11 2.5V6h3.5', logs: 'M3 4.5h13M3 9.5h13M3 14.5h8'
+    };
+    const rail = [['dashboard', 'Dashboard'], ['threads', 'Threads'], ['dusty', 'Dusty'], ['scope', 'Jobs'], ['plans', 'Plan room'], ['cash', 'Cash'], ['customers', 'Customers'], ['pricebook', 'Price book'], ['vendors', 'Vendors'], ['documents', 'Documents'], ['logs', 'Logs']]
+      .map(([k, l]) => ({ label: l, dusty: k === 'dusty', icon: k === 'dusty' ? '' : icons[k], edge: k === 'plans' || k === 'dusty' ? '#D97757' : 'transparent', bg: k === 'plans' || k === 'dusty' ? '#FFFFFF' : 'transparent', fg: k === 'plans' || k === 'dusty' ? '#2A2A2A' : '#6E685D' }));
+
+    const TYPE = { area: ['Area', 'M3 4l8-1 3 7-5 4-6-3z'], linear: ['Linear', 'M2 12l4-6 4 3 4-6'], count: ['Count', 'M5 5a1.5 1.5 0 1 0 .1 0M11 5a1.5 1.5 0 1 0 .1 0M8 11a1.5 1.5 0 1 0 .1 0'] };
+    const fmt = n => n.toLocaleString('en-US', { maximumFractionDigits: 0 });
+    const money = n => '$' + n.toLocaleString('en-US', { maximumFractionDigits: 0 });
+    const G = [
+      { k: 'slab', name: 'Slab on grade 6"', type: 'area', unit: 'SF', c: '#D97757', code: '03-300 Flatwork', rate: 9.4, items: [['drive', 'Drive-through lane', 4824, 'C-3', 'Polygon − 2 inlets'], ['walk', 'Entry walk', 1920, 'C-3', 'Rectangle'], ['island', 'Pickup island slab', 640, 'S-102', 'Polygon']] },
+      { k: 'curb', name: 'Curb & gutter 24"', type: 'linear', unit: 'LF', c: '#2F8A5B', code: '03-350 Curb', rate: 32, items: [['curbN', 'North side', 306, 'C-3', 'Polyline'], ['curbS', 'South side', 306, 'C-3', 'Polyline']] },
+      { k: 'gbeam', name: 'Grade beam 12×24', type: 'linear', unit: 'LF', c: '#C98A12', code: '03-310 Foundations', rate: 58, items: [['gbeam', 'Canopy perimeter', 96, 'S-101', 'Polyline']] },
+      { k: 'piers', name: 'Drilled piers 24"Ø', type: 'count', unit: 'EA', c: '#6A55B0', code: '03-310 Foundations', rate: 1850, items: [['piersA', 'Row A · gridline 1', 4, 'S-101', 'Count'], ['piersB', 'Row B · gridline 2', 4, 'S-101', 'Count']] },
+      { k: 'trench', name: 'Trench drain', type: 'linear', unit: 'LF', c: '#0F7C86', code: s.trenchCode || 'No budget line', rate: s.trenchCode ? 48 : 0, items: [['trench', 'Drive lane centerline', 82, 'C-4', 'Polyline']] }
+    ];
+    const total = g => g.items.reduce((a, it) => a + it[2], 0);
+    const allItems = G.flatMap(g => g.items.map(it => ({ g, k: it[0], name: it[1], qty: it[2], sheet: it[3], how: it[4] })));
+    const cur = allItems.find(x => x.k === s.sel) || allItems[0];
+    const curG = G.find(g => g.k === s.group) || G[0];
+
+    const tabDef = [['files', 'Files', '3', 1], ['sheets', 'Sheets', '48', 2], ['takeoff', 'Takeoff', String(G.length), 3], ['budget', 'Budget', (s.sent ? G.filter(g => g.rate).length : 0) + '/' + G.length, 4]];
+    const DC = { G: ['General', '#8C8578'], C: ['Civil', '#2F8A5B'], A: ['Architectural', '#1E5AA8'], S: ['Structural', '#B85A3C'], M: ['Mechanical', '#6A55B0'], E: ['Electrical', '#C98A12'], P: ['Plumbing', '#0F7C86'] };
+    const raw = [['G-001', 'Cover sheet & sheet index', 'G', 0, 'NTS'], ['G-002', 'Code summary', 'G', 0, 'NTS'], ['C-1', 'Existing conditions & demo', 'C', 0, '1" = 20\''], ['C-2', 'Erosion control', 'C', 0, '1" = 20\''], ['C-3', 'Site paving plan', 'C', 1, '1/8" = 1\'-0"'], ['C-4', 'Grading & drainage', 'C', 1, '1/8" = 1\'-0"'], ['C-5', 'Paving details & schedule', 'C', 1, 'Detail · NTS'], ['C-6', 'Utility plan', 'C', 0, '1" = 20\''], ['A-101', 'Floor plan — entry', 'A', 0, '1/8" = 1\'-0"'], ['A-501', 'Entry walk details', 'A', 1, 'Detail · NTS'], ['S-001', 'Structural general notes', 'S', 1, 'NTS'], ['S-101', 'Foundation plan', 'S', 1, '1/8" = 1\'-0"'], ['S-102', 'Canopy framing plan', 'S', 1, '1/8" = 1\'-0"'], ['S-501', 'Pier & footing details', 'S', 1, 'Detail · NTS'], ['S-502', 'Slab details', 'S', 1, 'Detail · NTS']];
+    let sheetsAll = raw.map(([num, title, d, concrete, scale], i) => ({ num, title, d, concrete: !!concrete, scale, page: i + 1 }));
+    for (let i = 0; i < 33; i++) { const d = 'MEP'[i % 3]; sheetsAll.push({ num: d + '-' + (101 + Math.floor(i / 3)), title: { M: 'Mechanical plan', E: 'Electrical plan', P: 'Plumbing plan' }[d] + ' — area ' + (1 + Math.floor(i / 3)), d, scale: '1/8" = 1\'-0"', page: 16 + i }); }
+    const cnt = k => k === 'all' ? sheetsAll.length : k === 'concrete' ? sheetsAll.filter(x => x.concrete).length : sheetsAll.filter(x => x.d === k).length;
+    const filtered = sheetsAll.filter(x => s.disc === 'all' ? true : s.disc === 'concrete' ? x.concrete : x.d === s.disc);
+
+    const scopeDef = [['slab', 'Slab on grade / paving'], ['curb', 'Curb & gutter'], ['found', 'Footings & grade beams'], ['piers', 'Drilled piers'], ['trench', 'Trench drains'], ['drains', 'Floor drains'], ['rebar', 'Rebar tonnage'], ['joints', 'Sawcut joints']];
+    const nScopes = Object.values(s.scopes).filter(Boolean).length;
+    const chips = scopeDef.map(([k, label]) => { const on = !!s.scopes[k]; return { label, mark: on ? '✓ ' : '+ ', line: on ? '#B85A3C' : '#D9CDB6', bg: on ? '#B85A3C' : '#FFFFFF', fg: on ? '#FFFFFF' : '#2A2A2A', go: () => this.setState(st => ({ scopes: { ...st.scopes, [k]: !st.scopes[k] } })) }; });
+    const D = (text, extra) => ({ dusty: true, dir: 'row', bg: '#FFFFFF', fg: '#2A2A2A', text, ...extra });
+    const ME = text => ({ dusty: false, dir: 'row-reverse', bg: '#2A2A2A', fg: '#FBF6EC', text });
+    const go = tab => () => this.setState({ tab });
+    let msgs = [];
+    if (s.tab === 'files') {
+      msgs.push(D('This job already has 3 files. Slaughter_CD_Rev2.pdf came in on the bid email Sep 24 and I filed it under Documents — it\'s pulled into the plan room now. The stamped S-501 pier detail is in too. Dana\'s island sketch has no scale, so I left it out for now.'));
+      if (!s.started) msgs.push(D('What should I pull out of these plans? Pick the scopes and I\'ll only read for those — nothing you didn\'t ask for.', { chips, action: 'Read for ' + nScopes + ' scopes', act: () => this.setState({ started: true }) }));
+      else {
+        msgs.push(ME(scopeDef.filter(([k]) => s.scopes[k]).map(x => x[1]).join(', ')));
+        msgs.push(D('Scale first. 11 plan sheets say 1/8" = 1\'-0" in the title block; I checked each against three printed dimensions and all land within 0.4%, so they\'re calibrated. C-1, C-2 and C-6 are 1" = 20\'. The 5 detail sheets have no plan scale and are skipped for measuring.', { facts: [{ k: 'Calibrated automatically', v: '43 of 48' }, { k: 'Detail sheets (no scale)', v: '5' }, { k: 'Needed your help', v: '0' }] }));
+        msgs.push(D('Done reading. ' + G.length + ' parameter groups and ' + allItems.length + ' takeoffs, each tagged with the sheet and the method. Open the takeoff to check them.', { action: 'Open takeoff ›', act: go('takeoff') }));
+      }
+    } else if (s.tab === 'sheets') {
+      msgs.push(D('Every card shows the scale I read and verified. Green means title block and printed dimensions agree. Grey is a detail sheet — nothing to measure there, but I read the specs off them.'));
+      msgs.push(D('Only 9 of 48 sheets carry the scopes you asked for. Filter to "Concrete scope" and the rest get out of the way.'));
+    } else if (s.tab === 'takeoff') {
+      msgs.push(D('Slab on grade totals ' + fmt(total(G[0])) + ' SF across 3 sections. C-5 schedules the drive lane at 5,020 SF; I measured 4,824 with both inlets cut out — 4% under. Worth a question to the engineer.'));
+      msgs.push(D('Looking at ' + cur.name + ' — ' + fmt(cur.qty) + ' ' + cur.g.unit + ' on ' + cur.sheet + ' by ' + cur.how.toLowerCase() + '. It rolls into ' + cur.g.name + ' → ' + cur.g.code + '.', { facts: [{ k: 'Group total', v: fmt(total(cur.g)) + ' ' + cur.g.unit }, { k: 'This section', v: fmt(cur.qty) + ' ' + cur.g.unit }, { k: 'Share', v: Math.round(cur.qty / total(cur.g) * 100) + '%' }] }));
+      if (!s.trenchCode) msgs.push(D('Trench drain (82 LF) has no budget line yet. Map it to 03-350 Curb, or make a new line?', { opts: [{ label: '03-350 Curb', go: () => this.setState({ trenchCode: '03-350 Curb' }) }, { label: 'New line 03-360', go: () => this.setState({ trenchCode: '03-360 Trench drain' }) }] }));
+      else msgs.push(D('Trench drain is on ' + s.trenchCode + ' at $48/LF — last job\'s rate. Change it in the budget if the price book says otherwise.'));
+    } else {
+      msgs.push(D((s.sent ? G.filter(g => g.rate).length + ' of ' + G.length + ' groups are on the budget' : 'Nothing sent yet — the table below is a preview') + ', totals by group and broken out by section so you can see where each number came from.'));
+      if (!s.trenchCode) msgs.push(D('Trench drain is still waiting on a cost code, so it shows without a rate.', { opts: [{ label: '03-350 Curb', go: () => this.setState({ trenchCode: '03-350 Curb' }) }, { label: 'New line 03-360', go: () => this.setState({ trenchCode: '03-360 Trench drain' }) }] }));
+      msgs.push(D('Piers are priced at $1,850 each from the S-501 stamped detail — same rate as the Zachary canopy job. Flatwork is your price-book $9.40/SF at 6".'));
+    }
+
+    const toolDef = [['area', 'Area (polygon)', 'Area', 'M3 4l8-1 3 7-5 4-6-3z'], ['rect', 'Rectangle', 'Rect', 'M2.5 4h11v8h-11z'], ['linear', 'Linear', 'Linear', 'M2 12l4-6 4 3 4-6'], ['count', 'Count', 'Count', 'M5 5a1.5 1.5 0 1 0 .1 0M11 5a1.5 1.5 0 1 0 .1 0M8 11a1.5 1.5 0 1 0 .1 0'], ['cutout', 'Cutout', 'Cutout', 'M2.5 3h11v10h-11zM6 6h4v4H6z'], ['auto', 'Auto-detect (Dusty)', 'Auto', 'M8 2l1.5 3.5L13 7l-3.5 1.5L8 12l-1.5-3.5L3 7l3.5-1.5z'], ['calibrate', 'Re-calibrate', 'Scale', 'M2 12l10-10M3 9l2 2M6 6l2 2M9 3l2 2']];
+    const LBL = { drive: [640, 380], walk: [200, 355], island: [640, 150], curbN: [700, 200], curbS: [560, 370], gbeam: [600, 235], piersA: [620, 60], piersB: [620, 225], trench: [640, 312] };
+    const lp = LBL[cur.k] || LBL.drive;
+    const vis = k => k === cur.k ? 1 : (allItems.find(x => x.k === k).g.k === curG.k ? 0.7 : 0.14);
+    const ly = {}; allItems.forEach(x => ly[x.k] = vis(x.k));
+    const grandN = G.reduce((a, g) => a + total(g) * g.rate, 0);
+    const budgetRows = [];
+    G.forEach(g => {
+      const on = !!g.rate;
+      budgetRows.push({ name: g.name, sub: g.code, subInk: on ? '#8C8578' : '#9A4527', c: g.c, swW: '10px', w: 600, fs: '13.5px', pad: '9px 14px', indent: '0', bg: '#FBF6EC', method: TYPE[g.type][0] + ' · ' + g.items.length + ' sections', qty: fmt(total(g)), unit: g.unit, rate: on ? '$' + g.rate.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'no rate', rateInk: on ? '#5E5A52' : '#9A4527', total: on ? money(total(g) * g.rate) : '—', totInk: on ? '#2A2A2A' : '#9A4527' });
+      g.items.forEach(it => budgetRows.push({ name: it[1], sub: '', c: g.c, swW: '4px', w: 400, fs: '13px', pad: '6px 14px', indent: '22px', bg: '#FFFFFF', method: it[3] + ' · ' + it[4], qty: fmt(it[2]), unit: g.unit, rate: '', rateInk: '#5E5A52', total: on ? money(it[2] * g.rate) : '—', totInk: '#5E5A52' }));
+    });
+    const activity = s.tab === 'files' ? (s.started ? 'Calibrated 43 sheets from title blocks · read for ' + nScopes + ' scopes' : 'Waiting on which scopes to read for') : s.tab === 'takeoff' ? 'Auto-detected the drive lane edge on C-3 · 2 inlets cut out' : s.tab === 'budget' ? 'Budget lines linked to ' + G.length + ' parameter groups' : '15 of 48 sheets carry the scopes you picked';
+    const fileDef = [['Slaughter_CD_Rev2.pdf', 'PDF', 'Plan set · 48 pages · 212 MB', 'Email', 'plans@ inbox · Sep 24', '48 sheets', '43 calibrated · 5 details', '#2F8A5B', 'Read · calibrated'], ['S-501_pier_detail_STAMPED.pdf', 'PDF', 'Stamped detail · 1 page', 'Email', 'J. Landry PE · Sep 19', '1 sheet', 'Detail · no plan scale', '#2F8A5B', 'Read · sealed'], ['Island_sketch_from_Dana.jpg', 'JPG', 'Photo of a hand sketch', 'Documents', 'Dana · Sep 22', '1 image', 'No scale — needs 1 dimension', '#C98A12', 'Not read'], ['Geotech_report_Slaughter.pdf', 'PDF', 'Report · 34 pages', 'Documents', 'Uploaded Sep 10', '—', 'Not a drawing', '#B3AA9A', 'Skipped']];
+    return {
+      rail, activity, dot: s.tab === 'files' && !s.started ? '#C98A12' : '#2F8A5B', dotHalo: s.tab === 'files' && !s.started ? 'rgba(201,138,18,.2)' : 'rgba(47,138,91,.18)',
+      scaleLine: '43 of 48 sheets auto-scaled',
+      tabs: tabDef.map(([k, l, n, step]) => ({ label: l, n, step, edge: s.tab === k ? '#B85A3C' : 'transparent', edge2: s.tab === k ? '#B85A3C' : '#D9CDB6', fg: s.tab === k ? '#2A2A2A' : '#8C8578', go: go(k) })),
+      isFiles: s.tab === 'files', isSheets: s.tab === 'sheets', isTakeoff: s.tab === 'takeoff', isBudget: s.tab === 'budget', goFiles: go('files'),
+      files: fileDef.map(([name, ext, kind, srcTag, src, sheets, scale, stC, status], i) => { const on = !!s.inRoom[i]; return { name, ext, kind, srcTag, src, sheets, scale, stC, status, scaleInk: stC === '#C98A12' ? '#9A4527' : '#8C8578', op: on ? 1 : 0.6, swBg: on ? '#2F8A5B' : '#D9CDB6', swX: on ? '19px' : '3px', toggle: () => this.setState(st => ({ inRoom: { ...st.inRoom, [i]: !st.inRoom[i] } })) }; }),
+      disc: [['concrete', 'Concrete scope', '#B85A3C'], ['all', 'All sheets', '#2A2A2A'], ['G', 'General', DC.G[1]], ['C', 'Civil', DC.C[1]], ['A', 'Architectural', DC.A[1]], ['S', 'Structural', DC.S[1]], ['M', 'Mechanical', DC.M[1]], ['E', 'Electrical', DC.E[1]], ['P', 'Plumbing', DC.P[1]]].map(([k, l, c]) => ({ label: l, c, n: cnt(k), bg: s.disc === k ? '#F6E2D8' : 'transparent', w: s.disc === k ? 600 : 400, go: () => this.setState({ disc: k }) })),
+      sheets: filtered.map(x => { const det = /NTS/.test(x.scale); return { ...x, scBg: det ? '#F3ECDD' : '#DDEEE3', scFg: det ? '#5E5A52' : '#1F5C3A', scale: det ? x.scale : '✓ ' + x.scale, go: () => this.setState({ tab: 'takeoff', sheet: x.num }) }; }),
+      groupCount: G.length, measCount: allItems.length,
+      groups: G.map(g => { const open = !!s.open[g.k]; const on = curG.k === g.k; return { name: g.name, c: g.c, unit: g.unit, code: g.code, codeInk: g.rate ? '#8C8578' : '#9A4527', typeLabel: TYPE[g.type][0], typeIcon: TYPE[g.type][1], total: fmt(total(g)), open, rot: open ? '90deg' : '0deg', bg: on && !open ? '#FBF6EC' : 'transparent', edge: on ? g.c : 'transparent',
+        go: () => this.setState(st => ({ open: { ...st.open, [g.k]: !st.open[g.k] }, group: g.k, sel: g.items[0][0], sheet: g.items[0][3] })),
+        items: g.items.map(it => ({ name: it[1], qty: fmt(it[2]), sheet: it[3], how: it[4], bg: cur.k === it[0] ? '#FBF6EC' : 'transparent', edge: cur.k === it[0] ? g.c : 'transparent', go: (e) => { e.stopPropagation(); this.setState({ sel: it[0], group: g.k, sheet: it[3], tool: g.type === 'count' ? 'count' : g.type === 'linear' ? 'linear' : 'area' }); } })) }; }),
+      tools: toolDef.map(([k, label, short, icon]) => ({ label, short, icon, line: s.tool === k ? '#B85A3C' : '#E6DCC8', bg: s.tool === k ? '#F6E2D8' : '#FFFFFF', fg: s.tool === k ? '#9A4527' : '#3F4348', go: () => this.setState({ tool: k }) })),
+      actSheet: s.sheet, ly,
+      fs: s.fs, fsPos: s.fs ? 'absolute' : 'static', fsZ: s.fs ? 20 : 'auto', toggleFs: () => this.setState(st => ({ fs: !st.fs })),
+      fsLabel: s.fs ? 'Exit full screen' : 'Full screen', fsIcon: s.fs ? 'M6 2v4H2M10 2v4h4M6 14v-4H2M10 14v-4h4' : 'M2 6V2h4M14 6V2h-4M2 10v4h4M14 10v4h-4',
+      fsLine: s.fs ? '#2A2A2A' : '#E6DCC8', fsBg: s.fs ? '#2A2A2A' : '#FFFFFF', fsFg: s.fs ? '#FBF6EC' : '#3F4348', msgCount: msgs.length, paramsShown: s.params, paramsHidden: !s.params, toggleParams: () => this.setState(st => ({ params: !st.params })),
+      lbl: { left: (lp[0] / 1000 * 100) + '%', top: (lp[1] / 620 * 100) + '%', line1: fmt(cur.qty) + ' ' + cur.g.unit + ' · ' + cur.name, line2: cur.g.name + ' → ' + fmt(total(cur.g)) + ' ' + cur.g.unit + ' total' },
+      sheetTabs: ['C-3', 'C-4', 'S-101', 'S-102'].map(n => ({ n, line: s.sheet === n ? '#2A2A2A' : '#D9CDB6', bg: s.sheet === n ? '#2A2A2A' : '#FFFFFF', fg: s.sheet === n ? '#FBF6EC' : '#2A2A2A', go: () => this.setState({ sheet: n }) })),
+      sendLabel: s.sent ? 'On budget ✓' : 'Send to budget', sendBudget: () => this.setState({ sent: true, tab: 'budget' }),
+      budgetCards: [{ k: 'Concrete budget', v: money(grandN), d: G.filter(g => g.rate).length + ' of ' + G.length + ' groups priced' }, { k: 'Flatwork', v: fmt(total(G[0])) + ' SF', d: '3 sections · 137 CY @ 6"' }, { k: 'Linear', v: fmt(total(G[1]) + total(G[2]) + total(G[4])) + ' LF', d: 'curb · grade beam · trench' }, { k: 'Count', v: fmt(total(G[3])) + ' EA', d: '2 rows of piers' }],
+      budgetRows, grand: money(grandN),
+      msgs, ctx: { files: 'Files', sheets: 'Sheets', takeoff: cur.sheet + ' · ' + cur.g.name, budget: 'Budget' }[s.tab],
+      askPh: s.tab === 'takeoff' ? 'Ask about this takeoff… "why 4% under?"' : s.tab === 'budget' ? 'Ask Dusty… "price the trench at $52"' : 'Ask Dusty…'
+    };
+  }
+}
+</script>
+</body>
+</html>

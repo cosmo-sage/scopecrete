@@ -30,6 +30,7 @@ import { PlayAudio, MessageMedia } from "@/components/v34/conversation";
 import { Composer } from "@/components/v34/composer";
 import { FilesPanel } from "@/components/v34/files-panel";
 import { STATUS_NAME } from "@/lib/jobs/stages";
+import { SubRail, type SubIcon } from "@/components/v34/sub-rail";
 
 interface Method { kind: "mobile" | "office" | "home" | "phone" | "email"; value: string; can_text: boolean | null; primary: boolean }
 interface Contact { id: string; name: string | null; role: string | null; primary: boolean; bucket: string | null; status_summary: string | null; recent_summary: string | null; last_contacted: string | null; methods: Method[] }
@@ -97,8 +98,14 @@ export function CustomerPage({ customerId, focusContact }: { customerId: string;
   const primary = contacts.find((c) => c.primary) ?? contacts[0];
   const phone = firstPhone(primary);
   const email = firstEmail(primary);
-  const meta = [cu.address_formatted, `${contacts.length} contact${contacts.length === 1 ? "" : "s"}`, `${jobs.length} job${jobs.length === 1 ? "" : "s"}`,
+  const meta = [cu.address_formatted,
     cu.since ? `customer since ${new Date(cu.since).toLocaleDateString("en-US", { month: "short", year: "numeric" })}` : null].filter(Boolean).join(" · ");
+  // "1 contact" opens Details at the contacts; "1 job" opens Jobs (Coy, 2026-09-30).
+  const toContacts = () => {
+    setTab("details");
+    requestAnimationFrame(() => document.getElementById("sc-customer-contacts")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+  };
+  const countLink: React.CSSProperties = { fontSize: F.sm, color: T.chalk, cursor: "pointer", background: "none", border: "none", padding: 0, textDecoration: "underline", textUnderlineOffset: 2, textDecorationColor: T.hairStrong };
 
   const newScope = async () => {
     try {
@@ -121,9 +128,18 @@ export function CustomerPage({ customerId, focusContact }: { customerId: string;
       <div className="px-4 pt-3 pb-2" style={{ borderBottom: `1px solid ${T.hair}` }}>
         <div className="flex items-start gap-3 flex-wrap">
           <div style={{ flex: 1, minWidth: 220 }}>
-            <Link href="/dashboard/customers" style={{ ...eyebrow, color: T.ink3 }}>Customer</Link>
-            <h1 style={{ fontFamily: strong, fontWeight: 700, fontSize: wide ? 28 : 23, lineHeight: 1.15, margin: "2px 0 0", color: T.ink }}>{cu.name || "Unnamed customer"}</h1>
-            <div style={{ fontSize: F.sm, color: T.ink2, marginTop: 2 }}>{meta}</div>
+            {/* Coy, 2026-09-30: one row, smaller — "Customer | Maurice Watkins", then the counts. */}
+            <div className="flex items-baseline gap-2 flex-wrap">
+              <Link href="/dashboard/customers" style={{ ...eyebrow, color: T.ink3 }}>Customer</Link>
+              <span aria-hidden="true" style={{ color: T.hairStrong }}>|</span>
+              <h1 style={{ fontFamily: strong, fontWeight: 600, fontSize: 18, lineHeight: 1.2, margin: 0, color: T.ink }}>{cu.name || "Unnamed customer"}</h1>
+              <span className="flex items-baseline gap-2" style={{ marginLeft: 4 }}>
+                <button onClick={toContacts} style={countLink}>{contacts.length} contact{contacts.length === 1 ? "" : "s"}</button>
+                <span style={{ color: T.ink3 }}>·</span>
+                <button onClick={() => setTab("jobs")} style={countLink}>{jobs.length} job{jobs.length === 1 ? "" : "s"}</button>
+              </span>
+            </div>
+            {meta && <div style={{ fontSize: F.sm, color: T.ink2, marginTop: 2 }}>{meta}</div>}
           </div>
           <div className="flex gap-1.5 flex-wrap items-center">
             {phone ? <a href={`tel:${phone}`} style={btn()}>Call</a> : <span style={{ ...btn(), opacity: 0.45 }} title="No number on file">Call</span>}
@@ -141,16 +157,19 @@ export function CustomerPage({ customerId, focusContact }: { customerId: string;
             <button onClick={() => setNote(null)} aria-label="Dismiss" style={{ color: T.ink3, cursor: "pointer" }}>×</button>
           </div>
         )}
-        <div role="tablist" className="flex gap-4 mt-3 overflow-x-auto" style={{ marginBottom: -9 }}>
+        {!wide && <div role="tablist" className="flex gap-4 mt-3 overflow-x-auto" style={{ marginBottom: -9 }}>
           {TABS.map(([k, l]) => (
             <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)}
               style={{ ...lbl, fontSize: 13, padding: "6px 0", whiteSpace: "nowrap", cursor: "pointer", color: tab === k ? T.ink : T.ink3,
                        borderBottom: `2px solid ${tab === k ? T.hiviz : "transparent"}` }}>{l}</button>
           ))}
-        </div>
+        </div>}
       </div>
 
       <div className={wide ? "flex items-start" : ""}>
+        {/* Desktop: the sub-pages as a second rail beside the main one (Coy, 2026-09-30). */}
+        {wide && <SubRail label="Customer pages" value={tab} onChange={setTab}
+          items={TABS.map(([k, l]) => ({ k, label: l, icon: k as SubIcon }))} />}
         <div style={{ flex: 1, minWidth: 0 }}>
           {!wide && tab === "details" && <div style={{ borderBottom: `1px solid ${T.hair}` }}>{panel}</div>}
           {tab === "details" && <Details cu={cu} contacts={contacts} jobs={jobs} onThreads={() => setTab("threads")} />}
@@ -301,7 +320,7 @@ function Contacts({ cu, contacts, onChanged, onNote }: { cu: Customer; contacts:
   const methodLabel: Record<Method["kind"], string> = { mobile: "Mobile", office: "Office", home: "Home", phone: "Phone", email: "Email" };
 
   return (
-    <section style={{ padding: "12px 16px 16px" }}>
+    <section id="sc-customer-contacts" style={{ padding: "12px 16px 16px", scrollMarginTop: "calc(var(--sc-head) + 8px)" }}>
       <div className="flex items-center">
         <h3 style={{ ...panelTitle, flex: 1 }}>Contacts</h3>
         <button onClick={() => setAdding((a) => !a)} style={{ ...lbl, fontSize: 11, color: T.chalk, cursor: "pointer" }}>{adding ? "Close" : "+ Add contact"}</button>
@@ -437,7 +456,7 @@ function Details({ cu, contacts, jobs, onThreads }: { cu: Customer; contacts: Co
   return (
     <div className="p-4 flex flex-col gap-4">
       {summaries.length > 0
-        ? <div className="rounded" style={{ background: T.dustyTint, borderLeft: `3px solid ${T.dustyEdge}`, padding: "10px 12px", fontSize: 14, lineHeight: 1.55, color: T.ink }}>
+        ? <div className="rounded" style={{ background: T.dustyTint, borderLeft: `3px solid ${T.dustyEdge}`, padding: "10px 14px", fontFamily: light, fontWeight: 300, fontSize: 15, lineHeight: 1.65, letterSpacing: ".005em", color: T.ink }}>
             {summaries.slice(0, 2).join(" ")}
           </div>
         : <div style={{ fontSize: F.sm, color: T.ink3 }}>Dusty hasn&apos;t read this customer&apos;s conversations yet.</div>}

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
 import { OVERHEAD_SELECT, readOverheadFields } from "./fields";
 
-/** Add a line to the monthly nut. Listing is part of GET /api/settings/cost. */
+/** Add a line of recurring overhead (the Cash page's burn rate). Listing is part of GET /api/settings/money. */
 
 export const dynamic = "force-dynamic";
 

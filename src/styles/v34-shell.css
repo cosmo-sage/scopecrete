@@ -272,8 +272,11 @@ body { background: var(--sc-slab); color: var(--sc-ink); }
 }
 .sc-paper-divider { width: 1px; height: 22px; background: var(--sc-pencil-line); flex: none; }
 
-/* Activity line on paper: Kalam, graphite; time in Barlow Condensed. */
-.sc-activity-text { font-family: 'Kalam', cursive; font-size: 15.5px; font-style: normal; color: var(--sc-pencil); }
+/* Activity line: the face of "crete" in the wordmark (Inter 300), graphite;
+   time in Barlow Condensed. Coy, 2026-09-30: the draft paper is the logo row
+   only — on a phone the line's own row is a solid colour. */
+.sc-activity-text { font-family: 'Inter', sans-serif; font-weight: 300; font-size: 14.5px; letter-spacing: -.005em; font-style: normal; color: var(--sc-pencil); }
+.sc-activity-row { background: var(--sc-paper); border-bottom: 1px solid var(--sc-pencil-line); }
 .sc-activity-time { font-family: 'Barlow Condensed', sans-serif; font-weight: 500; font-size: 12px; letter-spacing: .08em; color: var(--sc-pencil-muted); }
 .sc-dot-read  { color: var(--sc-work-dot-read); background: var(--sc-work-dot-read) !important; }
 .sc-dot-reply { color: var(--sc-work-dot-reply); background: var(--sc-work-dot-reply) !important; }

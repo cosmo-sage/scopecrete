@@ -244,8 +244,9 @@ across the database … I also want to be able to upload a logo for my org."*
   /api/org/logo/[variant]` redirects to a signed link, so `<img>` works and
   the bucket stays private. `DELETE /api/org/logo?variant=` removes one.
 - **The header lockup** (`org-lockup.tsx`): the theme's logo (else the other),
-  28px (24 on a phone), a pencil rule, "powered by" over a small wordmark
-  (dropped under 340px). No logo, or one that fails to load → the
+  28px (24 on a phone), a pencil rule, "powered by" over the wordmark — the
+  block exactly the logo's height (Coy: "the same size as the Sacco
+  Enterprises logo"; dropped under 340px). No logo, or one that fails to load → the
   scopecrete.ai wordmark as before.
 - **`org_audit`** records `org_renamed` and `logo_set` / `logo_removed`, old →
   new, who and when; members read it, only the functions write it.
@@ -1206,8 +1207,11 @@ expected start date per quoted job before it means anything. Add the field.
   `strong` (Lexend), `light` (Inter 300), `hand` (Kalam — Dusty's voice).
   **Header** is draft paper (`.sc-paper`, pencil-outlined `.sc-paper-btn`)
   with the **wordmark** (`src/components/v34/wordmark.tsx`: hatched "scope",
-  thin orange "crete", Kalam ".ai"); the activity line is Kalam on paper and
+  thin orange "crete", Kalam ".ai"); the activity line (Inter 300, below) and
   its drop-down, like the pipeline and create drop-downs, is a white card.
+  **Paper is the logo row only (Coy, 2026-09-30):** the activity line is set
+  in the face of "crete" (Inter 300), and on a phone its own row is a solid
+  `--sc-paper` with no grid (`.sc-activity-row`).
   The **rail is light** (`T.rail` `#F3ECDD`, no icon invert, active = white
   with a `#D97757` edge). One deviation from the handoff: it put the rail
   colour in `T.dark`, but the job page's money strip and takeoff rail use

@@ -398,7 +398,7 @@ function EditSheet({ open, cu, onClose, onSaved }: { open: boolean; cu: Customer
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
   };
   return (
-    <Sheet open={open} onClose={onClose} title="Edit customer" sub="The customer, not a person — Art Apartments, not Amber">
+    <Sheet open={open} onClose={onClose} title="Edit customer">
       <div className="px-4 py-3 flex flex-col gap-3">
         <L k="Name"><input value={f.name ?? ""} onChange={set("name")} style={field} /></L>
         <div className="grid gap-2" style={{ gridTemplateColumns: "1fr 1fr" }}>

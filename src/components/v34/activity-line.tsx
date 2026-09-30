@@ -206,7 +206,7 @@ export function ActivityLine({ busy, live, onWorking, inline }: {
     : line.key !== "idle" && line.key !== "loading" && line.tone === "good" ? "done" : null;
 
   return (
-    <div className={inline ? "relative flex-1 min-w-0" : "relative px-2.5 pb-2 sc-paper"}
+    <div className={inline ? "relative flex-1 min-w-0" : "relative px-2.5 pb-2 sc-activity-row"}
       onPointerEnter={(e) => { if (e.pointerType === "mouse") setHover(true); }} onPointerLeave={() => setHover(false)}>
       <button onClick={() => setOpen((o) => !o)} aria-expanded={open}
         aria-label={open ? "Hide Dusty's activity" : "Show Dusty's activity"}

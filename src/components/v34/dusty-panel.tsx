@@ -160,8 +160,14 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
     const ctrl = new AbortController();
     abort.current = ctrl;
     let said = "";
-    const append = (s: string) => {
-      said += s;
+    // Tokens arrive faster than frames: gather them and draw once per frame,
+    // so a long answer never queues a render per token (interaction timing).
+    let pending = "";
+    let frame = 0;
+    const flush = () => {
+      frame = 0;
+      if (!pending) return;
+      const s = pending; pending = "";
       onStream?.(said);
       setItems((a) => {
         const copy = [...a];
@@ -169,6 +175,10 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
         if (last?.role === "assistant") copy[copy.length - 1] = { ...last, content: last.content + s };
         return copy;
       });
+    };
+    const append = (s: string) => {
+      said += s; pending += s;
+      if (!frame) frame = requestAnimationFrame(flush);
     };
     try {
       const r = await fetch("/api/dusty", {
@@ -195,6 +205,8 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
     } catch (e) {
       if ((e as Error).name !== "AbortError") { failed = true; append("\n\n[The connection dropped.]"); }
     } finally {
+      if (frame) cancelAnimationFrame(frame);
+      flush();
       setBusy(false);
       setMood(failed ? "error" : said.trim() ? "done" : null);
       onStream?.("");

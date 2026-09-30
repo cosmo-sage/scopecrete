@@ -16,7 +16,8 @@ function Text({ parts }: { parts: Inline[] }) {
     : <React.Fragment key={i}>{p.v}</React.Fragment>)}</>;
 }
 
-export function Markdown({ text }: { text: string }) {
+/** Memoised: while an answer streams, the earlier answers are not re-parsed. */
+export const Markdown = React.memo(function Markdown({ text }: { text: string }) {
   const blocks = parseMarkdown(text);
   return (
     <div className="sc-md" style={{ fontSize: F.md, lineHeight: 1.6, color: T.ink }}>
@@ -44,4 +45,4 @@ export function Markdown({ text }: { text: string }) {
       })}
     </div>
   );
-}
+});

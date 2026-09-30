@@ -203,6 +203,15 @@
 @keyframes scToolUp { from { transform: translateY(100%); opacity: 0; } to { transform: none; opacity: 1; } }
 .sc-tool-up { animation: scToolUp 0.2s cubic-bezier(0.22, 0.85, 0.3, 1); }
 .sc-caret { opacity: .6; animation: scDotPulse 0.9s ease-in-out infinite; margin-left: 1px; }
+/* The activity line types in with one stepped clip — no render per letter. */
+.sc-typed {
+  display: inline-block; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; vertical-align: bottom;
+  animation: scType var(--sc-type-ms, 1s) steps(var(--sc-type-steps, 40), end) both;
+}
+/* Its own compositor layer: the line's typing and pulsing dot repaint the line,
+   not the page under it (a 427-row Price book repainted every step before). */
+.sc-own-layer { will-change: transform; }
+@keyframes scType { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
 
 @media (prefers-reduced-motion: reduce) {
   .sc-burger-bar,
@@ -222,6 +231,7 @@
   .sc-dock-in,
   .sc-rec,
   .sc-caret,
+  .sc-typed,
   .sc-dot-read,
   .sc-dot-reply,
   .sc-dot-done,

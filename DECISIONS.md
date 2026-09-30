@@ -769,8 +769,9 @@ percentage of labour — all three contradict this section and §4.
   blank blocks), a short-load fee is its own card, tax is the job's, and
   margin / O.H. / the day minimum / pay-yourself live in
   `org_money_settings` (no column defaults, so nothing is filled in that
-  nobody entered). The Markups & overhead page is gone (`/dashboard/costs`
-  redirects to Price book → Defaults). A job with no budget lines has **no
+  nobody entered). The Markups & overhead page is gone entirely (Coy, 2026-09-30:
+  "remove it from the settings completely") — no Settings entry, no
+  `/dashboard/costs` route; Price book → Defaults is the one place. A job with no budget lines has **no
   price**, and the scope rail and Dusty say so.
 - **Tax is a pass-through**: charged at cost on the lines whose card is taxed
   (materials by default), carried in both columns, not given O.H. or
@@ -1104,9 +1105,9 @@ expected start date per quoted job before it means anything. Add the field.
 - Settings opens from the header ☰: **You** (User — your name, ✎ — ·
   Email · Organization and role; 2026-09-30, Coy: the email is not the
   user), **Organisation** (name, logo, people — §2g), **Phone lines**,
-  **Pricing defaults** (→ Price book → Defaults: margin, O.H., day minimum,
-  parish tax rates — §3, §4), **Appearance**, **Menus**, Sign out. Pay-yourself
-  and recurring overhead are on the **Cash** page. The Settings sheet starts
+  **Appearance**, **Menus**, Sign out. Pricing defaults (margin, O.H., day
+  minimum, parish tax rates — §3, §4) are only in Price book → Defaults;
+  pay-yourself and recurring overhead are on the **Cash** page. The Settings sheet starts
   under the whole header (`--sc-head`).
 - **The header's pipeline button is gone (Coy, 2026-09-30)** — the
   Dashboard carries the pipeline. **On a desktop its place, right of 🔍, is
@@ -1350,6 +1351,17 @@ expected start date per quoted job before it means anything. Add the field.
   wide under it; on a phone it is the row under the header. The emblem and
   the line from it are gone; while a read runs the footer Dusty shows the
   mixer.
+- **Taps stay quick (2026-09-30, Coy's interaction timing: INP 1,056 ms,
+  976 ms of it input delay).** The activity line typed by setting React
+  state every 18 ms and re-laid-out the page per letter; it now types with
+  one stepped CSS clip (`.sc-typed`) on its own layer, the button is
+  `contain: strict`. Dusty's streamed reply reaches the line through a small
+  store (`src/lib/v34/dusty-live.ts`), not layout state, and tokens are
+  drawn once per frame; earlier answers' Markdown is memoised. The Price
+  book draws its rows 60 at a time (`ROW_CHUNK`). Measured in the harness at
+  4× CPU slowdown: idle long tasks on the Price book 11 → 1 in 5 s, its
+  biggest load task 775 → ~230 ms, every tap under 200 ms. Don't put
+  per-frame or per-token state in `dashboard/layout.tsx`.
 - **Chat bubbles are muted (2026-09-29, Coy: "easy on the eyes"):** theirs
   warm paper `#F7F6F2`, ours soft slate `#D8E1E8`, ink text on both
   (`DA.bubbleIn` / `DA.bubbleOut` in `conversation.tsx`). Hi-viz orange is

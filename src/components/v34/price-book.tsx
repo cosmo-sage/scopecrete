@@ -16,7 +16,7 @@
  * card sheet (cost-cards.tsx), which also shows the card's price history.
  */
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { startTransition, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { T, F, disp, eyebrow, nums, clip, money, formatPhone } from "@/lib/v34/tokens";
 import { useWide } from "@/lib/v34/use-wide";
@@ -51,6 +51,8 @@ const COLS: Array<{ k: string; label: string; w: number; align?: "right" | "cent
 ];
 interface ColPrefs { w: Record<string, number>; hidden: string[] }
 const MIN_W = 48;
+
+const ROW_CHUNK = 60;
 
 export function PriceBook() {
   const [items, setItems] = useState<Card[] | null>(null);
@@ -92,8 +94,12 @@ export function PriceBook() {
           const want = new URLSearchParams(window.location.search).get("tab");
           if (want === "assemblies" || want === "defaults") setTab(want);
         }
-        setItems((b.items as Array<Record<string, unknown>>).map(numify)); setGroups(b.groups); setVendors(b.vendors); setImports(i.imports ?? []); setSources((b.sources ?? []) as Src[]);
-        setErr(null);
+        // Hundreds of rows: draw them as a transition, which React breaks into
+        // slices and pauses for a tap, so the page never locks up while it fills.
+        startTransition(() => {
+          setItems((b.items as Array<Record<string, unknown>>).map(numify)); setGroups(b.groups); setVendors(b.vendors); setImports(i.imports ?? []); setSources((b.sources ?? []) as Src[]);
+          setErr(null);
+        });
       })
       .catch((e) => { if (!off) setErr(e instanceof Error ? e.message : String(e)); });
     return () => { off = true; };
@@ -196,6 +202,20 @@ export function PriceBook() {
     };
     window.addEventListener("pointermove", move); window.addEventListener("pointerup", up);
   };
+  // A long book is drawn in slices of ROW_CHUNK rows, one slice per task
+  // (interaction timing, 2026-09-30): 427 rows at once was one ~190 ms task of
+  // style and layout that a tap had to wait behind.
+  const totalRows = sections.reduce((n, s) => n + (open[s.key] === false ? 0 : s.cards.length), 0);
+  const [rowBudget, setRowBudget] = useState(ROW_CHUNK);
+  useEffect(() => {
+    if (rowBudget >= totalRows) return;
+    const t = setTimeout(() => setRowBudget((b) => b + ROW_CHUNK), 0);
+    return () => clearTimeout(t);
+  }, [rowBudget, totalRows]);
+  const caps = (() => {
+    let left = rowBudget;
+    return sections.map((s) => { if (open[s.key] === false) return 0; const n = Math.min(left, s.cards.length); left -= n; return n; });
+  })();
   const recentImports = imports.filter((i) => now - new Date(i.created_at).getTime() < 30 * 864e5);
   const btn = (primary: boolean): React.CSSProperties => ({ height: 32, padding: "0 10px", borderRadius: 4, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase",
     letterSpacing: ".06em", background: primary ? T.ink : T.card, color: primary ? T.card : T.ink, border: primary ? "none" : `1px solid ${T.hair}`, cursor: "pointer", whiteSpace: "nowrap" });
@@ -327,7 +347,7 @@ export function PriceBook() {
               </tr>
             </thead>
             <tbody>
-              {sections.map((s) => {
+              {sections.map((s, si) => {
                 const shut = open[s.key] === false;
                 return (
                   <React.Fragment key={s.key}>
@@ -347,7 +367,7 @@ export function PriceBook() {
                     {!shut && s.cards.length === 0 && (
                       <tr><td colSpan={shownCols.length} style={{ padding: "6px 24px", fontSize: F.xs, color: T.ink3 }}>No cards in this group yet.</td></tr>
                     )}
-                    {!shut && s.cards.map((c) => {
+                    {!shut && s.cards.slice(0, caps[si]).map((c) => {
                       const gaps = cardGaps(c);
                       const old = stale(c.price_as_of);
                       const cell: Record<string, React.ReactNode> = {

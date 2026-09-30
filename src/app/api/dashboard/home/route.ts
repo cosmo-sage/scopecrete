@@ -123,7 +123,7 @@ export async function GET(req: NextRequest) {
   const items = ((oh.data ?? []) as Array<{ label: string; amount: unknown; cadence: string; active: boolean }>).map((i) => ({ ...i, amount: Number(i.amount || 0) }));
   const nut = monthlyNut(items);
   if (!nPay && !nRec) tiles.profit = { value: null, detail: "Nothing collected or spent recorded this month", href: "/dashboard/cash" };
-  else if (!items.some((i) => i.active)) tiles.profit = { value: null, detail: "Overhead isn't entered, so profit would be overstated", href: "/dashboard/costs" };
+  else if (!items.some((i) => i.active)) tiles.profit = { value: null, detail: "Overhead isn't entered, so profit would be overstated", href: "/dashboard/cash" };
   else {
     const p = collected - spent - nut;
     tiles.profit = { value: money(p), detail: `after receipts and ${money(nut)} overhead`, href: "/dashboard/cash", tone: p >= 0 ? "good" : "bad" };

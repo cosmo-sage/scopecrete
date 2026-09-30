@@ -20,14 +20,15 @@
  *     number, no "unnamed", no "drift" (drift is on Logs). Phone keeps the
  *     activity row under the header.
  *   - Settings (☰): You, Organisation (name, logo, people — design/org-branding),
- *     Phone lines, Appearance, Menus. (Markups & overhead is gone — margin,
- *     O.H. and tax are Price book → Defaults; overhead is on Cash.)
+ *     Phone lines, Appearance, Menus. (Markups & overhead is gone entirely —
+ *     margin, O.H. and tax are Price book → Defaults; overhead is on Cash.)
  *   - The header shows the org's logo with "powered by scopecrete.ai"
  *     (OrgLockup); with no logo, the scopecrete.ai wordmark as before.
  */
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
+import { setDustyLive } from "@/lib/v34/dusty-live";
 import { usePathname } from "next/navigation";
 import { T, F, disp, eyebrow, nums } from "@/lib/v34/tokens";
 import { NavIcon, Sheet } from "@/components/v34/primitives";
@@ -89,7 +90,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }, [dustyOpen]);
   // True only while a Dusty reply is actually streaming.
   const [dustyBusy, setDustyBusy] = useState(false);
-  const [dustyLive, setDustyLive] = useState("");
   // The background reader has a read running.
   const [readerWorking, setReaderWorking] = useState(false);
 
@@ -160,7 +160,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <>
               <span aria-hidden="true" className="sc-paper-divider" />
               <div className="flex-1 min-w-0 flex" style={{ maxWidth: 720 }}>
-                <ActivityLine inline busy={dustyBusy} live={dustyLive} onWorking={setReaderWorking} />
+                <ActivityLine inline busy={dustyBusy} onWorking={setReaderWorking} />
               </div>
             </>
           ) : <span className="flex-1" />}
@@ -207,7 +207,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </header>
 
         {/* Phone: what Dusty is doing, a row under the header. */}
-        {!desktop && <ActivityLine busy={dustyBusy} live={dustyLive} onWorking={setReaderWorking} />}
+        {!desktop && <ActivityLine busy={dustyBusy} onWorking={setReaderWorking} />}
       </div>
 
       {createOpen && <CreateDrop onClose={() => setCreateOpen(false)} />}
@@ -299,7 +299,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <div className="flex flex-col" style={{ borderTop: `1px solid ${T.hair}` }}>
             {[
               { href: "/dashboard/more/lines", label: "Phone lines", note: "Your numbers, their provider, and the lead source each one means" },
-              { href: "/dashboard/price-book?tab=defaults", label: "Pricing defaults", note: "Margin, O.H., day minimum and sales tax by parish — in the Price book" },
             ].map((l) => (
               <Link key={l.href} href={l.href} onClick={() => setMenuOpen(false)} className="block py-2.5 no-underline" style={{ borderBottom: `1px solid ${T.hairSoft}`, color: T.ink }}>
                 <div style={{ fontSize: F.md, fontWeight: 600 }}>{l.label}</div>

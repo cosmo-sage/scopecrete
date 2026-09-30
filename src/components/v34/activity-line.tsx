@@ -37,6 +37,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { T, F, eyebrow, clip, nums, relTime } from "@/lib/v34/tokens";
+import { useDustyLive } from "@/lib/v34/dusty-live";
 
 type Tone = "live" | "good" | "ask" | "warn" | "quiet";
 interface Item { id: string; at: string; kind: string; contact_id: string | null; summary: string; detail: string | null; tone: Tone }
@@ -89,30 +90,14 @@ function Dot({ tone, live, work }: { tone: Tone; live: boolean; work?: Work }) {
   );
 }
 
-/** Types `text` in, a letter at a time, whenever `k` changes. Reduced motion: whole. */
-function useTyped(text: string, k: string): string {
-  const [shown, setShown] = useState({ k, n: text.length });
-  useEffect(() => {
-    const still = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    if (still) return;
-    let n = 0;
-    const t = setInterval(() => {
-      n += 1;
-      setShown({ k, n });
-      if (n >= text.length) clearInterval(t);
-    }, 18);
-    return () => clearInterval(t);
-  }, [k, text]);
-  return shown.k === k ? text.slice(0, shown.n) : "";
-}
-
-export function ActivityLine({ busy, live, onWorking, inline }: {
-  busy: boolean; live?: string;
+export function ActivityLine({ busy, onWorking, inline }: {
+  busy: boolean;
   /** Desktop: sit in the header row beside the logo (no row of its own). */
   inline?: boolean;
   /** True while the background reader has a read running — the header emblem spins for it. */
   onWorking?: (working: boolean) => void;
 }) {
+  const live = useDustyLive();
   const [data, setData] = useState<Activity | null>(null);
   // Items from the last day — decided when the data arrives, not in render.
   const [recent, setRecent] = useState<Item[]>([]);
@@ -198,25 +183,30 @@ export function ActivityLine({ busy, live, onWorking, inline }: {
     };
   }
   const working = busy || running;
-  // The streamed reply already arrives a token at a time; everything else types in.
-  const typed = useTyped(line.summary, line.key);
-  const text = busy ? line.summary : typed;
+  // The streamed reply already arrives a token at a time; everything else types
+  // in — drawn by CSS (a stepped clip on one element), never a render per letter.
+  const typing = !busy && line.summary.length > 0;
   // The kind of work, for the dot: broken > answering > reading > just done.
   const work: Work = line.tone === "warn" ? "warn" : busy ? "reply" : running ? "read"
     : line.key !== "idle" && line.key !== "loading" && line.tone === "good" ? "done" : null;
 
   return (
-    <div className={inline ? "relative flex-1 min-w-0" : "relative px-2.5 pb-2 sc-activity-row"}
+    <div className={inline ? "relative flex-1 min-w-0 sc-own-layer" : "relative px-2.5 pb-2 sc-activity-row sc-own-layer"}
       onPointerEnter={(e) => { if (e.pointerType === "mouse") setHover(true); }} onPointerLeave={() => setHover(false)}>
       <button onClick={() => setOpen((o) => !o)} aria-expanded={open}
         aria-label={open ? "Hide Dusty's activity" : "Show Dusty's activity"}
         className="w-full flex items-center gap-2 text-left"
-        style={{ height: 30, padding: "0 4px 0 8px", background: "transparent", border: "none", cursor: "pointer" }}>
+        // Strict containment: a new line of text never makes the browser lay out the page around it.
+        style={{ height: 30, padding: "0 4px 0 8px", background: "transparent", border: "none", cursor: "pointer", contain: "strict" }}>
         <Dot key={`${work}-${line.key}`} tone={line.tone} live={working} work={work} />
         <span aria-live="polite" className="sc-activity-text"
           style={{ flex: 1, minWidth: 0, color: line.tone === "warn" ? T.hivizText : undefined, ...clip }}>
-          {text}
-          {!busy && text.length < line.summary.length && <span className="sc-caret" aria-hidden="true">▍</span>}
+          {typing ? (
+            <span key={line.key} className="sc-typed"
+              style={{ "--sc-type-steps": Math.min(line.summary.length, 160), "--sc-type-ms": `${Math.min(line.summary.length, 160) * 18}ms` } as React.CSSProperties}>
+              {line.summary}
+            </span>
+          ) : line.summary}
         </span>
         {line.at && <span className="sc-activity-time" style={nums}>{relTime(line.at)}</span>}
         <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"

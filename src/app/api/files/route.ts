@@ -90,7 +90,7 @@ export async function POST(req: NextRequest) {
   const { supabase, orgId, userId, applyCookies } = result.session;
   const bad = (m: string, s = 400) => applyCookies(NextResponse.json({ error: m }, { status: s }));
 
-  let b: { name?: unknown; mime?: unknown; size?: unknown; job_id?: unknown; section_id?: unknown; contact_id?: unknown; category?: unknown };
+  let b: { name?: unknown; mime?: unknown; size?: unknown; job_id?: unknown; section_id?: unknown; contact_id?: unknown; category?: unknown; in_plan_room?: unknown };
   try { b = await req.json(); } catch { return bad("Body must be JSON."); }
   const name = typeof b.name === "string" ? b.name.trim().slice(0, 200) : "";
   const mime = typeof b.mime === "string" ? b.mime.slice(0, 120) : "";
@@ -130,6 +130,8 @@ export async function POST(req: NextRequest) {
     // The Price book's vendor-quote import says what it is; otherwise a first guess from the name.
     category: (CATEGORIES as readonly string[]).includes(String(b.category)) ? b.category : categoryGuess(kind, name), mime_type: mime || null, byte_size: size, storage_path: path,
     source: "upload", fetch_state: "pending", created_by: userId,
+    // Dropped into the Plan Room (059): it is a plan from the start.
+    ...(b.in_plan_room === true && jobId ? { in_plan_room: true } : {}),
   }).select(FILE_COLUMNS).single();
   if (error || !row) return bad(`Couldn't record the file: ${error?.message ?? "no row"}`, 500);
 

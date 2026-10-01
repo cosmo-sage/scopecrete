@@ -3,7 +3,7 @@ import { FILES_BUCKET } from "@/lib/files";
 
 /** Server-only helpers for the files routes (a route file may only export its handlers). */
 
-export const FILE_COLUMNS = "id, job_id, contact_id, section_id, name, kind, category, mime_type, byte_size, storage_path, source, note, show_on_proposal, page_count, fetch_state, read_state, read_at, read_error, summary, facts, created_at";
+export const FILE_COLUMNS = "id, job_id, contact_id, section_id, name, kind, category, mime_type, byte_size, storage_path, source, note, show_on_proposal, in_plan_room, page_count, fetch_state, read_state, read_at, read_error, summary, facts, created_at";
 
 const SIGN_SECONDS = 60 * 30;
 

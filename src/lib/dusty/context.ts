@@ -8,6 +8,8 @@
 import type { ApiSession } from "@/lib/api-auth";
 import { takeoff, budget, jobMinimum, type BudgetLine, type OverheadItem, type SectionInput } from "@/lib/engine";
 import { moneySettings, pricingFor, type JobPricing } from "@/lib/pricing-server";
+import { loadTakeoff, takeoffTotalsFor } from "@/lib/plans-server";
+import { fmtQty, scaleLabel } from "@/lib/takeoff";
 import { assemble, coldContext, scopeLines, type Assembled, type Block } from "./prompt";
 
 export type ContextRef =
@@ -191,7 +193,7 @@ async function scopeContext(sb: Sb, orgId: string, jobId: string): Promise<Assem
   const t = takeoff(sections, null);
   const days = num(job.duration_days);
   const jp = pricing.get(jobId) ?? null;
-  const bud = await budgetBlock(sb, orgId, jobId, sections, days, jp);
+  const [bud, plans] = await Promise.all([budgetBlock(sb, orgId, jobId, sections, days, jp), plansBlock(sb, orgId, jobId)]);
   const notes = ((secs ?? []) as Array<Record<string, unknown>>).flatMap((r) =>
     [["reinforcement", r.rebar], ["prep", r.prep_notes], ["access", r.access_notes]]
       .filter(([, v]) => typeof v === "string" && v).map(([k, v]) => `- ${r.name || "section"} ${k}: ${v}`));
@@ -203,10 +205,33 @@ async function scopeContext(sb: Sb, orgId: string, jobId: string): Promise<Assem
       `Sales tax: ${jp?.tax.rate !== null && jp?.tax.rate !== undefined ? `${jp.tax.rate}% (${jp.tax.source === "override" ? "typed for this job" : `${jp.tax.parish} parish`})` : `unknown — ${jp?.tax.missing ?? "no rate"}`}`] },
     { title: "Sections and their quantities (exactly what the builder shows)", lines: scopeLines(t, !!bud) },
     ...(bud ? [bud] : []),
+    ...(plans ? [plans] : []),
     { title: "Section notes", lines: notes },
     ...(files ? [files] : []),
     ...(who ? [who.block] : []),
   ]);
+}
+
+/**
+ * The Plan Room (migration 059): each sheet's scale and each takeoff group's
+ * measured total, worked out by src/lib/takeoff.ts exactly as the page shows
+ * it — or why it has no number (a sheet whose scale isn't set).
+ */
+async function plansBlock(sb: Sb, orgId: string, jobId: string): Promise<Block | null> {
+  const { sheets, params, measurements, totals } = await loadTakeoff(sb, orgId, [jobId]);
+  if (!sheets.length && !params.length) return null;
+  const lines: string[] = [];
+  const scaled = sheets.filter((s) => s.scale_ft_per_pt);
+  lines.push(`${sheets.length} plan sheets; ${scaled.length} with a scale set${sheets.length > scaled.length ? ` (${sheets.length - scaled.length} not set — nothing measured on them counts)` : ""}.`);
+  for (const s of sheets.slice(0, 40)) {
+    lines.push(`- ${s.number ?? `p.${s.page}`}${s.title ? ` ${s.title}` : ""}: ${s.scale_ft_per_pt ? `${scaleLabel(s.scale_ft_per_pt)} (${s.scale_method === "manual" ? "measured by Coy" : "printed scale, applied by Coy"})` : s.scale_method === "none" ? "not to scale" : `scale not set${s.scale_text ? ` (prints ${s.scale_text})` : ""}`}`);
+  }
+  for (const p of params) {
+    const t = totals[p.id];
+    const n = measurements.filter((m) => m.parameter_id === p.id).length;
+    lines.push(`Takeoff group "${p.name}" (${p.kind}${p.depth_in ? `, ${p.depth_in}" deep` : ""}): ${t?.qty !== null && t?.qty !== undefined ? `${fmtQty(t.qty, t.unit)}${t.cy !== null ? ` = ${t.cy.toFixed(1)} CY neat` : ""}` : `no total — ${t?.blocked ?? "nothing measured"}`} from ${n} shape${n === 1 ? "" : "s"}`);
+  }
+  return { title: "Plan Room takeoff (measured on the plans by Coy)", lines };
 }
 
 /**
@@ -221,7 +246,7 @@ async function budgetBlock(sb: Sb, orgId: string, jobId: string, sections: Secti
   if (!est) return null;
   const [{ data: opts }, { data: rows }] = await Promise.all([
     sb.from("estimate_options").select("id, label").eq("org_id", orgId).eq("estimate_id", est.id).order("sort_order"),
-    sb.from("estimate_line_items").select("id, name, cost_type, unit, unit_cost, margin_pct, taxable, qty_rule, rule_params, qty_source, quantity, section_id, option_id, cost_group_id")
+    sb.from("estimate_line_items").select("id, name, cost_type, unit, unit_cost, margin_pct, taxable, qty_rule, rule_params, qty_source, quantity, section_id, option_id, cost_group_id, takeoff_parameter_id")
       .eq("estimate_id", est.id).order("sort_order"),
   ]);
   if (!rows?.length) return null;
@@ -229,8 +254,9 @@ async function budgetBlock(sb: Sb, orgId: string, jobId: string, sections: Secti
     ...r, unit_cost: num(r.unit_cost), margin_pct: num(r.margin_pct), quantity: num(r.quantity),
   })) as unknown as BudgetLine[];
   const options = (opts ?? []) as Array<{ id: string; label: string }>;
+  const measured = await takeoffTotalsFor(sb, orgId, jobId);
   const res = budget(lines, options.map((o) => o.id), jp?.settings ?? { margin_pct: null, overhead_pct: null, tax_rate_pct: null },
-    sections, days, { tax_on: est.tax_on !== false, discount: Number(est.discount_amount ?? 0) });
+    sections, days, { tax_on: est.tax_on !== false, discount: Number(est.discount_amount ?? 0), takeoff: measured });
   const min = jobMinimum(jp?.day_minimum ?? null, days);
   const minLine = (total: number) => min.ok
     ? `; job minimum $${min.minimum.toFixed(0)} (${min.days} days × $${min.day_minimum.toFixed(0)})${total < min.minimum ? " — UNDER THE MINIMUM" : ""}`

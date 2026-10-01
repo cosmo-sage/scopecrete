@@ -53,7 +53,7 @@ Layout: parameter panel 340px | canvas (flex).
 - Group total = sum of its sections, live.
 
 **Canvas**
-- Toolbar 42px: Area, Rect, Linear, Count, Cutout, Auto (Dusty auto-detect), Scale (re-calibrate). Active tool `#F6E2D8` bg, `#B85A3C` border, `#9A4527` text. Right: "{sheet} · 1/8" = 1'-0" auto" + **full-screen icon button** (30×28, 18px Lucide-style maximize/minimize, tooltip only — no text label).
+- Toolbar 42px: Area, Rect, Linear, Count, Cutout, Auto (Dusty auto-detect), Scale (re-calibrate). Active tool `#F6E2D8` bg, `#B85A3C` border, `#9A4527` text. Right: "{sheet} · 1/8" = 1'-0" auto" + **full-screen icon button** (30×28, 18px Lucide maximize/minimize, tooltip only — no text label; dark fill `#2A2A2A` while in full screen).
 - Drawing: real PDF page. Overlays per measurement in group color; selected section opacity 1, same-group 0.7, others 0.14. Floating dark label near the selection: "4,824 SF · Drive-through lane" / "Slab on grade 6" → 7,384 SF total". Title-block stamp top-right, sheet tabs bottom-left, zoom control bottom-right.
 - **Full screen**: parameters + canvas expand to cover the whole app frame (header, rail, sub-header); Dusty collapses to a 44px vertical strip on the right ("Dusty · N notes · exit full screen"), click to exit. Combine with the parameter collapse to give the drawing the full width.
 

@@ -10,7 +10,7 @@ import { pickAssembly } from "@/lib/engine";
 
 type Sb = ApiSession["supabase"];
 
-export const LINE_COLUMNS = "id, estimate_id, option_id, section_id, cost_group_id, cost_item_id, name, description, cost_type, unit, unit_cost, markup_pct, margin_pct, taxable, qty_rule, rule_params, qty_source, quantity, vendor_contact_id, price_as_of, price_source, show_on_doc, show_qty, show_price, sort_order, updated_at, assembly_id, section_role, source_id, source_pinned";
+export const LINE_COLUMNS = "id, estimate_id, option_id, section_id, cost_group_id, cost_item_id, name, description, cost_type, unit, unit_cost, markup_pct, margin_pct, taxable, qty_rule, rule_params, qty_source, quantity, vendor_contact_id, price_as_of, price_source, show_on_doc, show_qty, show_price, sort_order, updated_at, assembly_id, section_role, source_id, source_pinned, takeoff_parameter_id";
 export const ESTIMATE_COLUMNS = "id, job_id, status, tax_on, discount_amount, discount_reason, selected_option_id, version, updated_at, margin_pct, overhead_pct";
 
 export async function jobInOrg(sb: Sb, orgId: string, jobId: string) {

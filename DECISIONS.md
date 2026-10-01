@@ -942,6 +942,18 @@ percentage of labour — all three contradict this section and §4.
   PATCH tax / discount / margin_pct / overhead_pct),
   `…/budget/lines[/lineId]`, `…/budget/options[/optionId]` — session client,
   org from the session; lines carry `org_id` with a restrictive org policy.
+- **Quantities measured on the plans (migration 059, Coy 2026-09-30).** A
+  budget line can be counted from a Plan Room takeoff group: `qty_rule =
+  'from_takeoff'` with `estimate_line_items.takeoff_parameter_id`. Its
+  quantity is the group's measured total in the card's unit (SF, LF or EA;
+  CY from an area group that has a depth, no waste added) — `ruleQty()` /
+  `takeoffUnit()` in `src/lib/engine`, tested in `tests/takeoff.test.mjs`. A
+  unit that doesn't match, a group with nothing measured, or any of its shapes
+  on a sheet with no scale **blocks the line by name** ("Takeoff: Slab on
+  grade — sheet C-6 scale not set"); a total that left a shape out would be
+  wrong. Re-measuring moves the line. The totals come from one reader,
+  `loadTakeoff()` (`src/lib/plans-server.ts`), used by the budget API, the
+  Dashboard's `job-totals.ts` and Dusty — the same number everywhere.
 - **Base, vapor barrier and day-rate equipment** are cards like anything
   else (by the sq ft, by the day); nothing is priced that has no card.
 - **Dictating a section (2026-09-28).** Dictate on a section card records up
@@ -1471,6 +1483,49 @@ expected start date per quoted job before it means anything. Add the field.
   discount, each option's cost / price / total / margin or what blocks it.
   **+ Add from cost cards**: pick the area, search, add a card or a whole
   group, or a one-off line.
+- **The Plan Room (migration 059, 2026-09-30; Claude Design,
+  `design/plan-room`).** Coy: *"scopecrete.ai will be a tool for me to do
+  takeoffs manually."* (His own Hermes agent reads the bid emails he forwards
+  to intake-concrete@agentmail.to; ScopeCrete will only mirror that inbox —
+  next.) `/dashboard/scope/[jobId]/plans`, opened from the job header's
+  **Plan room** button; the rail's Jobs stays lit and Dusty is HOT on the job.
+  Four steps:
+  **Files** — the job's PDFs and images, each with **In plan room**
+  (`job_files.in_plan_room`); drop plan sets to add them.
+  **Sheets** — each in-room PDF is opened in the browser with **pdf.js**
+  (`pdfjs-dist` legacy build — the modern one needs JavaScript most browsers
+  don't have yet — and its worker from our own bundle, no CDN;
+  `src/lib/pdf.ts`). Each page's text is read for its title block
+  (`src/lib/plan-sheets.ts`, tested): sheet number, title, discipline from
+  the prefix, and the printed scale. A first reading, kept apart from Coy's
+  own (`number_source`). Several different scales and none in the title
+  block → "set it with the Scale tool". Thumbnails are drawn in memory, never
+  stored. Discipline filter, "Concrete scope" = civil + structural.
+  **Takeoff** — the page on a canvas with an SVG layer in PDF points; tools
+  Area, Rect, Linear, Count, Cutout, Scale (Auto is shown off: Dusty doesn't
+  read drawings). **A sheet's scale is only ever one Coy set** — "Use 1/8" =
+  1'-0"" (the printed one, his tap), or two clicks on a known dimension and
+  its length; until then nothing drawn there is counted. Groups
+  (`takeoff_parameters`: area / linear / count, colour, optional depth) total
+  their shapes (`takeoff_measurements`, geometry in points); quantities are
+  worked out (`src/lib/takeoff.ts`: shoelace minus cutouts, polyline length,
+  count × the sheet's feet per point) and **never stored**. JobTread's tree:
+  group row with total (and CY with a depth), a row per shape; the selected
+  shape carries a floating label. Full screen; the hint bar floats over the
+  drawing so starting a shape never moves the sheet under the next click.
+  **Budget** — each group and the line that counts it, priced by the
+  engine's `budget()`, each shape's share as a child row; **Send to budget**
+  picks a Price book card (matching units first) and adds a `from_takeoff`
+  line. Checked in the harness on a generated sheet: a 30×40 ft rectangle at
+  1/8" = 1'-0" is exactly 1,200 SF (14.8 CY at 4"), $2,467 on a $1.43 card at
+  15% O.H. and 20% margin; a 10×20 apron moved the line to 1,400 SF / $2,878;
+  taps ~16 ms. Dusty's job context includes each sheet's scale and each
+  group's total. APIs: `/api/jobs/[id]/plans` (GET), `…/plans/sheets`
+  (POST, the browser's reading), `/api/plan-sheets/[id]` (PATCH scale /
+  number / title), `/api/jobs/[id]/takeoff/parameters[/pid]`,
+  `…/takeoff/measurements[/mid]` — session client, org from the session,
+  every id checked against the job; triggers keep a shape's group and sheet
+  on one job, and a sheet's file on its job.
 - **Job header (2026-09-28)** — four tappable chips, each opening its list:
   **Status** (the seven stages, with W.I.P.'s won / scheduled / pouring),
   **Type**, **Source** and **Vendors (n)** (crew on the job, add by subtype)

@@ -27,7 +27,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { T, F, disp, eyebrow, nums, clip, money, money0, formatPhone } from "@/lib/v34/tokens";
 import { Sheet } from "@/components/v34/primitives";
-import { budget as priceBudget, jobMinimum, type BudgetLine, type BudgetSettings, type SectionInput, type TierTotal } from "@/lib/engine";
+import { budget as priceBudget, jobMinimum, type BudgetLine, type BudgetSettings, type SectionInput, type TakeoffTotal, type TierTotal } from "@/lib/engine";
 import { COST_TYPES, COST_TYPE_LABEL, QTY_RULE_LABEL, type CostType } from "@/lib/cost-cards";
 import { useWide } from "@/lib/v34/use-wide";
 import { Cell } from "@/components/v34/cell";
@@ -57,6 +57,8 @@ interface Data {
     tax: { rate: number | null; parish: string | null; source: "override" | "parish" | null; missing: string | null };
     days: number | null; day_minimum: number | null; margin_from: "budget" | "default" | null; overhead_from: "budget" | "default" | null;
   } | null;
+  /** Plan Room group totals (059), keyed by group id. */
+  takeoff?: Record<string, TakeoffTotal>;
 }
 export interface BudgetSummary {
   has_lines: boolean;
@@ -108,7 +110,7 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0 }: {
   const res = useMemo(() => {
     if (!data) return null;
     return priceBudget(data.lines, data.options.map((o) => o.id), data.settings, sections, days,
-      { tax_on: data.estimate?.tax_on ?? true, discount: data.estimate?.discount_amount ?? 0 });
+      { tax_on: data.estimate?.tax_on ?? true, discount: data.estimate?.discount_amount ?? 0, takeoff: data.takeoff });
   }, [data, sections, days]);
   const minimum = useMemo(() => jobMinimum(data?.pricing?.day_minimum ?? null, days), [data, days]);
 

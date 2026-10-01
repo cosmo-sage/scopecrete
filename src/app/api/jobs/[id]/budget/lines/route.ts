@@ -2,12 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
 import { cleanCard } from "@/lib/cost-cards";
 import { CARD_COLS, LINE_COLUMNS, cardToLine, jobInOrg, numLine, workingEstimate } from "@/lib/budget-server";
+import { paramInJob } from "@/lib/plans-server";
 
 /**
  * Add lines to the job's budget.
  *
  * POST { cost_item_id | cost_group_id (the whole group) | custom card fields,
- *        section_id?, option_id? }
+ *        section_id?, option_id?, takeoff_parameter_id? }
+ *
+ * With takeoff_parameter_id (the Plan Room's Send to budget, migration 059)
+ * the line's quantity is that group's measured total: rule 'from_takeoff',
+ * so re-measuring moves the line. One card only.
  *
  * A card is COPIED onto the line — name, unit, unit cost, type, taxed,
  * rule, vendor and price date — so a later change to the card never silently
@@ -42,6 +47,12 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     if (!o) return bad("No such option.");
   }
 
+  const takeoffId = uuid(b.takeoff_parameter_id);
+  if (b.takeoff_parameter_id !== undefined && b.takeoff_parameter_id !== null) {
+    if (!takeoffId || !(await paramInJob(supabase, orgId, id, takeoffId))) return bad("No such takeoff group on this job.", 404);
+    if (uuid(b.cost_group_id)) return bad("Send a takeoff group to one card, not a whole group of cards.");
+  }
+
   // Which cards: one, a whole group, or a one-off typed here.
   let cards: Array<Record<string, unknown>> = [];
   if (uuid(b.cost_item_id)) {
@@ -60,9 +71,11 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   }
 
   const { count } = await supabase.from("estimate_line_items").select("id", { count: "exact", head: true }).eq("estimate_id", est.id as string);
-  const rows = cards.map((c, i) => cardToLine(c, {
-    orgId, estimateId: est.id as string, sectionId, optionId, sortOrder: (count ?? 0) + i,
-  }));
+  const rows = cards.map((c, i) => {
+    const row = cardToLine(c, { orgId, estimateId: est.id as string, sectionId, optionId, sortOrder: (count ?? 0) + i });
+    // Measured on the plans: the group's total, in the card's unit (the engine checks they agree).
+    return takeoffId ? { ...row, qty_rule: "from_takeoff", qty_source: "rule", quantity: null, takeoff_parameter_id: takeoffId, section_id: null } : row;
+  });
   const { data, error } = await supabase.from("estimate_line_items").insert(rows).select(LINE_COLUMNS);
   if (error) return bad(`Couldn't add: ${error.message}`, 500);
   return applyCookies(NextResponse.json({ lines: ((data ?? []) as Array<Record<string, unknown>>).map(numLine), estimate_id: est.id }, { status: 201 }));

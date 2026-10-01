@@ -175,7 +175,7 @@ export function jobMinimum(dayMinimum: number | null, days: number | null):
 // only (§3). Good / better / best: a line with no option is in every tier.
 // ---------------------------------------------------------------------------
 
-export type QtyRule = "per_cy" | "per_sqft" | "per_lf_perimeter" | "per_sheet" | "per_stick" | "per_day" | "per_job" | "manual";
+export type QtyRule = "per_cy" | "per_sqft" | "per_lf_perimeter" | "per_sheet" | "per_stick" | "per_day" | "per_job" | "manual" | "from_takeoff";
 export type BudgetCostType = "material" | "labor" | "equipment" | "subcontract" | "other";
 
 export interface BudgetLine {
@@ -195,6 +195,32 @@ export interface BudgetLine {
   section_id: string | null;
   option_id: string | null;
   cost_group_id: string | null;
+  /** Rule 'from_takeoff': the Plan Room group whose measured total is this line's quantity. */
+  takeoff_parameter_id?: string | null;
+}
+
+/**
+ * A Plan Room group's measured total (migration 059), worked out from the
+ * drawings by src/lib/takeoff.ts — never stored. `qty` is null and `blocked`
+ * says why when any of its shapes sits on a sheet whose scale isn't set.
+ */
+export interface TakeoffTotal {
+  name: string;
+  unit: "SF" | "LF" | "EA";
+  qty: number | null;
+  /** Area groups with a depth: cubic yards (no waste). */
+  cy: number | null;
+  blocked: string | null;
+}
+
+/** A card's unit said as SF / LF / EA / CY, or null when it is none of them. */
+export function takeoffUnit(unit: string): "SF" | "LF" | "EA" | "CY" | null {
+  const u = unit.trim().toLowerCase().replace(/[.\s]/g, "");
+  if (["sf", "sqft", "sft", "ft2", "squarefeet", "squarefoot"].includes(u)) return "SF";
+  if (["lf", "ft", "linft", "linearfeet", "linearfoot", "feet", "foot"].includes(u)) return "LF";
+  if (["ea", "each", "count", "ct", "pcs", "pc", "no"].includes(u)) return "EA";
+  if (["cy", "yd", "yd3", "cuyd", "cubicyard", "cubicyards", "yards", "yard"].includes(u)) return "CY";
+  return null;
 }
 
 /** The job's pricing: its own O.H. and margin (else the org's defaults), and its tax rate. */
@@ -252,13 +278,27 @@ export interface BudgetResult {
 
 /** How many of something a line needs, from the scope. Whole-job lines (no section) sum every section. */
 export function ruleQty(
-  line: Pick<BudgetLine, "name" | "qty_rule" | "rule_params" | "qty_source" | "quantity" | "section_id">,
+  line: Pick<BudgetLine, "name" | "qty_rule" | "rule_params" | "qty_source" | "quantity" | "section_id"> & { unit?: string; takeoff_parameter_id?: string | null },
   sections: SectionInput[],
   days: number | null,
+  takeoff?: Record<string, TakeoffTotal>,
 ): { ok: true; qty: number; basis: "rule" | "set"; note: string } | { ok: false; missing: string[] } {
   if (line.qty_source === "set" || line.qty_rule === "manual") {
     if (has(line.quantity) && line.quantity >= 0) return { ok: true, qty: line.quantity, basis: "set", note: "typed" };
     return { ok: false, missing: [`${line.name}: quantity`] };
+  }
+  // Measured on the plans (migration 059): the group's total, in the card's unit.
+  if (line.qty_rule === "from_takeoff") {
+    const t = line.takeoff_parameter_id ? takeoff?.[line.takeoff_parameter_id] : undefined;
+    if (!t) return { ok: false, missing: [`${line.name}: its takeoff group was removed`] };
+    if (t.blocked || t.qty === null) return { ok: false, missing: [`Takeoff: ${t.name} — ${t.blocked ?? "nothing measured"}`] };
+    const want = takeoffUnit(line.unit ?? "");
+    if (want === t.unit) return { ok: true, qty: t.qty, basis: "rule", note: `takeoff · ${t.name}` };
+    if (want === "CY" && t.unit === "SF") {
+      return t.cy !== null ? { ok: true, qty: Math.round(t.cy * 100) / 100, basis: "rule", note: `takeoff · ${t.name}, yards` }
+        : { ok: false, missing: [`Takeoff: ${t.name} — a depth (to count yards)`] };
+    }
+    return { ok: false, missing: [`${line.name}: counted in ${line.unit || "no unit"}, but ${t.name} is measured in ${t.unit}`] };
   }
   const up = (x: number) => Math.ceil(Math.round(x * 1e6) / 1e6);
   const scope = line.section_id ? sections.filter((s) => s.id === line.section_id) : sections;
@@ -327,7 +367,7 @@ export function budget(
   s: BudgetSettings,
   sections: SectionInput[],
   days: number | null,
-  opts: { tax_on: boolean; discount: number },
+  opts: { tax_on: boolean; discount: number; takeoff?: Record<string, TakeoffTotal> },
 ): BudgetResult {
   const out: Record<string, LineResult> = {};
   const taxRate = has(s.tax_rate_pct) ? s.tax_rate_pct : null;
@@ -335,7 +375,7 @@ export function budget(
 
   for (const l of lines) {
     const blocked: string[] = [];
-    const q = ruleQty(l, sections, days);
+    const q = ruleQty(l, sections, days, opts.takeoff);
     const qty = q.ok ? q.qty : null;
     if (!q.ok) blocked.push(...q.missing);
     if (!has(l.unit_cost)) blocked.push(`${l.name}: unit cost`);

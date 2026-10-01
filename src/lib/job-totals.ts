@@ -1,6 +1,7 @@
 import type { ApiSession } from "@/lib/api-auth";
 import { budget, type BudgetLine, type SectionInput } from "@/lib/engine";
 import { pricingFor } from "@/lib/pricing-server";
+import { loadTakeoff } from "@/lib/plans-server";
 
 /**
  * What jobs are worth, by the same budget() the job page and Dusty use
@@ -26,12 +27,14 @@ export async function jobValues(sb: Sb, orgId: string, jobs: Array<{ id: string;
     .eq("org_id", orgId).eq("status", "draft").in("job_id", ids);
   const estRows = (ests ?? []) as Array<{ id: string; job_id: string; tax_on: boolean | null; discount_amount: unknown; selected_option_id: string | null }>;
   const estIds = estRows.map((e) => e.id);
-  const [{ data: opts }, { data: rows }, pricing, { data: secs }] = await Promise.all([
+  const [{ data: opts }, { data: rows }, pricing, { data: secs }, takeoff] = await Promise.all([
     estIds.length ? sb.from("estimate_options").select("id, estimate_id").eq("org_id", orgId).in("estimate_id", estIds) : Promise.resolve({ data: [] }),
-    estIds.length ? sb.from("estimate_line_items").select("id, estimate_id, name, cost_type, unit, unit_cost, margin_pct, taxable, qty_rule, rule_params, qty_source, quantity, section_id, option_id, cost_group_id")
+    estIds.length ? sb.from("estimate_line_items").select("id, estimate_id, name, cost_type, unit, unit_cost, margin_pct, taxable, qty_rule, rule_params, qty_source, quantity, section_id, option_id, cost_group_id, takeoff_parameter_id")
       .in("estimate_id", estIds) : Promise.resolve({ data: [] }),
     pricingFor(sb, orgId, ids),
     sb.from("job_sections").select("id, job_id, name, work_type, length_ft, width_ft, sqft_override, depth_in, psi").eq("org_id", orgId).in("job_id", ids),
+    // Plan Room groups (059): a line counted from a takeoff reads its measured total.
+    estIds.length ? loadTakeoff(sb, orgId, ids) : Promise.resolve({ totals: {} }),
   ]);
   const lineRows = (rows ?? []) as Array<Record<string, unknown>>;
   const optRows = (opts ?? []) as Array<{ id: string; estimate_id: string }>;
@@ -50,7 +53,7 @@ export async function jobValues(sb: Sb, orgId: string, jobs: Array<{ id: string;
     const optionIds = optRows.filter((o) => o.estimate_id === est.id).map((o) => o.id);
     const st = pricing.get(j.id)?.settings ?? { margin_pct: null, overhead_pct: null, tax_rate_pct: null };
     const res = budget(lines, optionIds, st, sections, num(j.duration_days), {
-      tax_on: est.tax_on !== false, discount: Number(est.discount_amount ?? 0),
+      tax_on: est.tax_on !== false, discount: Number(est.discount_amount ?? 0), takeoff: takeoff.totals,
     });
     const chosen = est.selected_option_id ? res.tiers.find((t) => t.option_id === est.selected_option_id) : null;
     if (chosen) { out.set(j.id, chosen.priced ? { total: chosen.total, basis: "accepted", why: null } : { total: null, basis: null, why: "blocked" }); continue; }

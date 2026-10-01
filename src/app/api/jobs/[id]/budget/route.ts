@@ -3,6 +3,7 @@ import { getApiSession } from "@/lib/api-auth";
 import { ESTIMATE_COLUMNS, LINE_COLUMNS, jobInOrg, numLine, workingEstimate } from "@/lib/budget-server";
 import { sourcesFor } from "@/lib/sources-server";
 import { pricingFor } from "@/lib/pricing-server";
+import { takeoffTotalsFor } from "@/lib/plans-server";
 
 /**
  * The job's budget (migration 048): the working estimate, its options (good /
@@ -28,7 +29,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   if (!(await jobInOrg(supabase, orgId, id))) return applyCookies(NextResponse.json({ error: "No such job." }, { status: 404 }));
 
   const est = await workingEstimate(supabase, orgId, id, false);
-  const [opts, lines, groups, cards, pricing, assemblies] = await Promise.all([
+  const [opts, lines, groups, cards, pricing, assemblies, takeoff] = await Promise.all([
     est ? supabase.from("estimate_options").select("id, label, description, sort_order").eq("org_id", orgId).eq("estimate_id", est.id as string).order("sort_order")
       : Promise.resolve({ data: [] }),
     est ? supabase.from("estimate_line_items").select(LINE_COLUMNS).eq("estimate_id", est.id as string).order("sort_order").order("name")
@@ -38,6 +39,8 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       .eq("org_id", orgId).eq("active", true).order("sort_order").order("name"),
     pricingFor(supabase, orgId, [id]),
     supabase.from("cost_assemblies").select("id, name, job_type, work_type").eq("org_id", orgId).order("sort_order").order("name"),
+    // Plan Room groups (059): lines counted from a takeoff read these totals.
+    takeoffTotalsFor(supabase, orgId, id),
   ]);
   const lineItems = [...new Set(((lines.data ?? []) as Array<{ cost_item_id: string | null }>).map((l) => l.cost_item_id).filter(Boolean) as string[])];
   const sources = await sourcesFor(supabase, orgId, lineItems);
@@ -57,6 +60,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     assemblies: assemblies.data ?? [],
     settings: p?.settings ?? { margin_pct: null, overhead_pct: null, tax_rate_pct: null },
     pricing: p ? { tax: p.tax, days: p.days, day_minimum: p.day_minimum, margin_from: p.margin_from, overhead_from: p.overhead_from } : null,
+    takeoff,
   }));
 }
 

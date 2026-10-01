@@ -21,7 +21,7 @@ import { CATEGORY_LABEL, sizeLabel, type Category } from "@/lib/files";
 
 const CHIPS: Array<[string, string]> = [
   ["", "All"], ["photo", "Photos"], ["plan", "Plans"], ["spec", "Specs"], ["bid", "Bid invites"],
-  ["vendor_quote", "Vendor quotes"], ["receipt", "Receipts"], ["contract", "Contracts"], ["other", "Other"], ["unfiled", "Unfiled"],
+  ["vendor_quote", "Vendor quotes"], ["receipt", "Receipts"], ["contract", "Contracts"], ["proposal", "Proposals"], ["other", "Other"], ["unfiled", "Unfiled"],
 ];
 const SINCE: Array<[string, string]> = [["", "Any time"], ["7", "7 days"], ["30", "30 days"], ["365", "This year"]];
 
@@ -34,6 +34,7 @@ export function Documents() {
   const [person, setPerson] = useState("");
   const [fileParam, setFileParam] = useState<string | null>(null);
   const [files, setFiles] = useState<FileRow[] | null>(null);
+  const [proposals, setProposals] = useState<Array<{ id: string; job_id: string; version: number; finalized_at: string; number: string | null; total: number | null; title: string | null; customer: string | null }>>([]);
   const [err, setErr] = useState<string | null>(null);
   const [open, setOpen] = useState<FileRow | null>(null);
   // Names seen so far, so a filter's list doesn't shrink to the one chosen.
@@ -70,6 +71,7 @@ export function Documents() {
         const fs = b.files as FileRow[];
         setErr(null);
         setFiles(fs);
+        setProposals(b.proposals ?? []);
         setJobNames((m) => ({ ...m, ...Object.fromEntries((b.jobs as Array<{ id: string; name: string }>).map((j) => [j.id, j.name])) }));
         setPeopleNames((m) => ({ ...m, ...Object.fromEntries((b.people as Array<{ id: string; name: string }>).map((c) => [c.id, c.name])) }));
         if (fileParam && fs.length === 1) setOpen(fs[0]);
@@ -121,7 +123,24 @@ export function Documents() {
 
       {err && <div role="alert" style={{ fontSize: F.sm, color: T.red, marginTop: 8 }}>Couldn&apos;t load documents: {err}</div>}
 
-      <div className="rounded overflow-hidden" style={{ marginTop: 10, background: T.card, border: `1px solid ${T.hair}` }}>
+      {proposals.length > 0 && (
+        <div className="rounded overflow-hidden" style={{ marginTop: 10, background: T.card, border: `1px solid ${T.hair}` }}>
+          <div className="px-3 py-1.5" style={{ ...eyebrow, borderBottom: `1px solid ${T.hairSoft}` }}>Proposals sent · final</div>
+          {proposals.map((r, i) => (
+            <Link key={r.id} href={`/dashboard/scope/${r.job_id}/proposal?v=${r.version}`} className="flex items-center gap-3 px-3 py-2 no-underline"
+              style={{ borderTop: i ? `1px solid ${T.hairSoft}` : "none", color: T.ink }}>
+              <span className="shrink-0 rounded flex items-center justify-center" style={{ width: 40, height: 40, background: "#F6E2D8", color: "#9A4527", fontFamily: disp, fontSize: 11, fontWeight: 700 }}>PROP</span>
+              <span className="flex-1" style={{ minWidth: 0 }}>
+                <span style={{ display: "block", fontSize: F.sm, fontWeight: 600 }}>Proposal {r.number ?? `v${r.version}`} · {r.title || "Untitled job"}</span>
+                <span style={{ display: "block", fontSize: F.xs, color: T.ink3 }}>{[r.customer, new Date(r.finalized_at).toLocaleDateString()].filter(Boolean).join(" · ")}</span>
+              </span>
+              {r.total !== null && <span style={{ fontFamily: disp, fontSize: F.md, fontWeight: 600 }}>{r.total.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 })}</span>}
+            </Link>
+          ))}
+        </div>
+      )}
+
+      {cat !== "proposal" && <div className="rounded overflow-hidden" style={{ marginTop: 10, background: T.card, border: `1px solid ${T.hair}` }}>
         {files === null && !err && [1, 2, 3].map((i) => <div key={i} className="animate-pulse" style={{ height: 56, borderTop: i > 1 ? `1px solid ${T.hairSoft}` : "none", background: T.hairSoft }} />)}
         {files?.length === 0 && (
           <div className="px-3 py-4" style={{ fontSize: F.sm, color: T.ink3 }}>
@@ -155,7 +174,8 @@ export function Documents() {
             </button>
           );
         })}
-      </div>
+      </div>}
+      {cat === "proposal" && !proposals.length && !err && <div className="px-3 py-4" style={{ fontSize: F.sm, color: T.ink3 }}>No proposal has been marked final yet.</div>}
 
       <FileViewer f={open} onClose={() => setOpen(null)}
         links={open && (open.job_id || open.contact_id) ? (

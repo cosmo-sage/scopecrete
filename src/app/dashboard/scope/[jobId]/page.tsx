@@ -223,6 +223,11 @@ export default function ScopeBuilder() {
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true"><path d="M2 3.5 6 2l4 1.5L14 2v10.5L10 14l-4-1.5L2 14z" /><path d="M6 2v10.5M10 3.5V14" /></svg>
               Plan room
             </Link>
+            <Link href={`/dashboard/scope/${jobId}/proposal`} className="shrink-0 rounded flex items-center gap-1.5 mt-1 no-underline"
+              style={{ height: 28, padding: "0 10px", border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink, fontFamily: disp, fontSize: F.xs, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase" }}>
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true"><path d="M4 1.5h5.5L13 5v9.5H4z" /><path d="M9.5 1.5V5H13M6 8h5M6 10.5h5M6 13h3" /></svg>
+              Proposal
+            </Link>
             {/* Coy, 2026-09-30: "Why this job" is an ⓘ in the header — tap to see it. */}
             {why && (
               <button onClick={() => setWhyOpen(true)} aria-label="Why this job was made" title="Why this job was made"

@@ -22,3 +22,21 @@ const getServer = () => "";
 export function useDustyLive(): string {
   return useSyncExternalStore(subscribe, get, getServer);
 }
+
+/**
+ * "Use this" — a page that is editing text (the proposal's warranty or terms)
+ * registers where Dusty's answer can go; Dusty's panel then offers
+ * "Use this in the warranty" under each answer. Coy's tap puts it there: Dusty
+ * never writes to the page himself (§6 — read-only toward the business).
+ */
+export interface DustyUseTarget { label: string; apply: (text: string) => void }
+let target: DustyUseTarget | null = null;
+const useSubs = new Set<() => void>();
+export function setDustyUse(next: DustyUseTarget | null) {
+  target = next;
+  for (const f of useSubs) f();
+}
+function subscribeUse(f: () => void) { useSubs.add(f); return () => { useSubs.delete(f); }; }
+export function useDustyUse(): DustyUseTarget | null {
+  return useSyncExternalStore(subscribeUse, () => target, () => null);
+}

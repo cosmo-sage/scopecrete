@@ -23,6 +23,7 @@ import { usePathname } from "next/navigation";
 import { T, F, disp, eyebrow, body, clip, relTime } from "@/lib/v34/tokens";
 import { DustyAvatar, type DustyState } from "@/components/v34/dusty-avatar";
 import { Markdown } from "@/components/v34/markdown";
+import { useDustyUse } from "@/lib/v34/dusty-live";
 
 type Ref = { kind: "thread" | "scope" | "customer"; id: string } | { kind: "cash" } | { kind: "cold" };
 type Ctx = Ref | { kind: "activity"; since: string };
@@ -72,6 +73,7 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
   const [err, setErr] = useState<string | null>(null);
   const [railOpen, setRailOpen] = useState(false);
   const [copied, setCopied] = useState<number | null>(null);
+  const useTarget = useDustyUse();
   const [loadingConv, setLoadingConv] = useState(false);
   const [listTick, setListTick] = useState(0);
   const [openedFor, setOpenedFor] = useState<string | null>(null);
@@ -149,6 +151,18 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, catchUpN]);
+
+  // A page can hand Dusty a question to start from (the proposal's "Edit with
+  // Dusty"): it lands in the message box for Coy to send or change — Dusty
+  // never sends it on his own.
+  useEffect(() => {
+    const put = (e: Event) => {
+      const q = (e as CustomEvent<{ text?: string }>).detail?.text;
+      if (typeof q === "string" && q.trim()) setDraft(q.slice(0, 4000));
+    };
+    window.addEventListener("sc:dusty-draft", put);
+    return () => window.removeEventListener("sc:dusty-draft", put);
+  }, []);
 
   async function ask(text: string, opts?: { fresh?: boolean; ctx?: Ctx }) {
     const q = text.trim();
@@ -363,6 +377,11 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
                 {it.content && !(busy && i === items.length - 1) && (
                   <button onClick={() => void copy(i, it.content)} className="mt-1.5" style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>
                     {copied === i ? "Copied" : "Copy"}
+                  </button>
+                )}
+                {useTarget && it.content && !(busy && i === items.length - 1) && (
+                  <button onClick={() => useTarget.apply(it.content)} className="mt-1.5 ml-4" style={{ ...eyebrow, color: T.hiviz, cursor: "pointer" }}>
+                    Use this {useTarget.label}
                   </button>
                 )}
                 </div>

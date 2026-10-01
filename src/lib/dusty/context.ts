@@ -6,6 +6,8 @@
  */
 
 import type { ApiSession } from "@/lib/api-auth";
+import { priceBundle, proposalBundle } from "@/lib/proposal-server";
+import { termsText, warrantyText, type DocTemplate, type Draw, type ProposalDisplay } from "@/lib/proposal";
 import { takeoff, budget, jobMinimum, type BudgetLine, type OverheadItem, type SectionInput } from "@/lib/engine";
 import { moneySettings, pricingFor, type JobPricing } from "@/lib/pricing-server";
 import { loadTakeoff, takeoffTotalsFor } from "@/lib/plans-server";
@@ -193,7 +195,7 @@ async function scopeContext(sb: Sb, orgId: string, jobId: string): Promise<Assem
   const t = takeoff(sections, null);
   const days = num(job.duration_days);
   const jp = pricing.get(jobId) ?? null;
-  const [bud, plans] = await Promise.all([budgetBlock(sb, orgId, jobId, sections, days, jp), plansBlock(sb, orgId, jobId)]);
+  const [bud, plans, prop] = await Promise.all([budgetBlock(sb, orgId, jobId, sections, days, jp), plansBlock(sb, orgId, jobId), proposalBlock(sb, orgId, jobId)]);
   const notes = ((secs ?? []) as Array<Record<string, unknown>>).flatMap((r) =>
     [["reinforcement", r.rebar], ["prep", r.prep_notes], ["access", r.access_notes]]
       .filter(([, v]) => typeof v === "string" && v).map(([k, v]) => `- ${r.name || "section"} ${k}: ${v}`));
@@ -206,10 +208,42 @@ async function scopeContext(sb: Sb, orgId: string, jobId: string): Promise<Assem
     { title: "Sections and their quantities (exactly what the builder shows)", lines: scopeLines(t, !!bud) },
     ...(bud ? [bud] : []),
     ...(plans ? [plans] : []),
+    ...(prop ? [prop] : []),
     { title: "Section notes", lines: notes },
     ...(files ? [files] : []),
     ...(who ? [who.block] : []),
   ]);
+}
+
+/**
+ * The job's proposal (migration 060) — the draft, or the latest final — priced
+ * by the same priceDraft() the page uses: the rounded total, what is hidden,
+ * and whether the draws add up. Reads only; never makes a draft.
+ */
+async function proposalBlock(sb: Sb, orgId: string, jobId: string): Promise<Block | null> {
+  const b = await proposalBundle(sb, orgId, jobId, { create: false });
+  if (!b?.proposal) return null;
+  const p = b.proposal as Record<string, unknown>;
+  const d = (p.display ?? {}) as ProposalDisplay;
+  const { priced, check } = priceBundle(b);
+  const type = b.types.find((t) => t.key === p.project_type);
+  const orgName = b.org?.name ?? "";
+  const w = warrantyText(p.warranty as never, b.templates as DocTemplate[], orgName);
+  const t = termsText(p.terms as never, b.templates as DocTemplate[], orgName);
+  const lines = [
+    `Proposal ${(b.job.job_number as string | null) ?? "P"}-${p.version} · ${p.status === "final" ? `FINAL (frozen ${String(p.finalized_at).slice(0, 10)} — what the customer was shown)` : "draft"} · type ${type?.label ?? "not set"}`,
+  ];
+  if (priced.ok) {
+    lines.push(`Customer's total ${priced.total.toFixed(2)} (budget price ${priced.calc.toFixed(2)} rounded UP to ${priced.rounded} — the proposal rounds to the next $50, the budget keeps the exact number; tax ${priced.tax.toFixed(2)}${priced.tax_shown ? " shown as a line" : " folded into the areas"}${priced.discount ? `; discount ${priced.discount.toFixed(2)}` : ""})`);
+    lines.push(`Cost ${priced.cost.toFixed(2)}, O.H. ${priced.overhead.toFixed(2)}, profit ${priced.profit.toFixed(2)}${priced.addons_total ? `; optional add-ons not in the total ${priced.addons_total.toFixed(2)}` : ""}`);
+    for (const g of priced.groups) lines.push(`- ${g.name}: ${g.hidden ? "HIDDEN from the proposal" : g.price_hidden ? "price hidden (still counted)" : g.sell.toFixed(2)}${g.items.some((i) => i.hidden) ? ` (${g.items.filter((i) => i.hidden).length} line(s) hidden)` : ""}`);
+  } else lines.push(`No price yet: ${priced.blocked.slice(0, 5).join("; ")}`);
+  const off = Object.keys(d.off ?? {});
+  lines.push(`Sections hidden: ${off.length ? off.join(", ") : "none"}. Shows item prices: ${d.show_item_prices ? "yes" : "no"}; qty: ${d.show_qty ? "yes" : "no"}.`);
+  lines.push(`Draws: ${((p.draws ?? []) as Draw[]).map((x) => `${x.amt !== null && x.amt !== undefined ? `$${x.amt}` : `${x.pct ?? 0}%`} ${x.when}`).join(" · ") || "none"}${check ? (check.ok ? " — add up to the total" : ` — DO NOT add up: ${check.sum.toFixed(2)} against ${priced.ok ? priced.total.toFixed(2) : "?"}`) : ""}`);
+  lines.push(`Warranty: ${w.template?.name ?? (w.edited ? "written for this job" : "none")}${w.edited ? " (edited)" : ""}${w.starter ? " — starter text, not yet checked by Coy's attorney" : ""}`);
+  lines.push(`Contract: ${t.template?.name ?? (t.edited ? "written for this job" : "none")}, ${t.clauses.length} clauses${t.starter ? " — starter text" : ""}`);
+  return { title: "Proposal (what the customer sees)", lines };
 }
 
 /**

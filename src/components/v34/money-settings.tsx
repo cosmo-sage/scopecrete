@@ -51,7 +51,7 @@ function useMoney() {
 }
 
 /** A number box that saves on blur. Blank = not recorded. */
-function NumField({ label, unit, value, onSave, note }: { label: string; unit: string; value: number | null; onSave: (v: number | null) => Promise<void>; note?: string }) {
+export function NumField({ label, unit, value, onSave, note }: { label: string; unit: string; value: number | null; onSave: (v: number | null) => Promise<void>; note?: string }) {
   const [v, setV] = useState(value === null ? "" : String(value));
   const [state, setState] = useState<"idle" | "saving" | "saved" | "err">("idle");
   const [err, setErr] = useState<string | null>(null);

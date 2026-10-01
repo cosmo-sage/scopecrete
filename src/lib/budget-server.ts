@@ -22,12 +22,19 @@ export async function workingEstimate(sb: Sb, orgId: string, jobId: string, crea
   const { data: found } = await sb.from("estimates").select(ESTIMATE_COLUMNS).eq("org_id", orgId).eq("job_id", jobId)
     .eq("status", "draft").maybeSingle();
   if (found || !create) return found as Record<string, unknown> | null;
-  // A new budget starts from the org's defaults (Price book → Defaults,
-  // migration 057) — copied, so changing a default later never reprices it.
-  const { data: money } = await sb.from("org_money_settings").select("default_margin_pct, default_overhead_pct").eq("org_id", orgId).maybeSingle();
+  // A new budget starts from its job type's defaults (migration 060), else the
+  // org's (Price book → Defaults, 057) — copied, so changing a default later
+  // never reprices it.
+  const [{ data: money }, { data: job }] = await Promise.all([
+    sb.from("org_money_settings").select("default_margin_pct, default_overhead_pct").eq("org_id", orgId).maybeSingle(),
+    sb.from("jobs").select("job_type").eq("org_id", orgId).eq("id", jobId).maybeSingle(),
+  ]);
+  const { data: type } = job?.job_type
+    ? await sb.from("org_project_types").select("margin_pct, overhead_pct").eq("org_id", orgId).eq("key", job.job_type as string).maybeSingle()
+    : { data: null };
   const { data: made, error } = await sb.from("estimates")
     .insert({ org_id: orgId, job_id: jobId, status: "draft", doc_kind: "estimate", engine_version: "budget-v2",
-      margin_pct: money?.default_margin_pct ?? null, overhead_pct: money?.default_overhead_pct ?? null })
+      margin_pct: type?.margin_pct ?? money?.default_margin_pct ?? null, overhead_pct: type?.overhead_pct ?? money?.default_overhead_pct ?? null })
     .select(ESTIMATE_COLUMNS).single();
   if (error) {
     // Two taps at once: the unique index let one through; read that one.

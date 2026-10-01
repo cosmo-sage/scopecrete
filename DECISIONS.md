@@ -4,7 +4,7 @@ Ground truth for every agent working this repo. If code disagrees with this
 document, the code is wrong or this document is stale — resolve it, don't
 guess. Update this file in the same PR that changes the behavior it describes.
 
-Last updated: 2026-09-30
+Last updated: 2026-10-01
 
 ---
 
@@ -942,6 +942,24 @@ percentage of labour — all three contradict this section and §4.
   PATCH tax / discount / margin_pct / overhead_pct),
   `…/budget/lines[/lineId]`, `…/budget/options[/optionId]` — session client,
   org from the session; lines carry `org_id` with a restrictive org policy.
+- **The proposal's price (migration 060, Coy 2026-10-01).** The proposal is
+  the budget made presentable; it never prices anything. `priceDraft()`
+  (`src/lib/proposal.ts`, tested in `tests/proposal.test.mjs`) runs the
+  engine's `budget()` for the chosen option, then **rounds the price (before
+  tax and discount) UP to the next $50 — on the proposal only** (Coy); the
+  budget, the Dashboard and Dusty keep the exact number. The extra is profit.
+  Each line sells at its own price × rounded ÷ calculated, the largest line
+  taking the last cent, so the lines add up to the total exactly. A hidden
+  line or area drops out of the total; a hidden price shows "—" and still
+  counts; an optional add-on is priced and listed, never in the total (and the
+  rest is rounded without it). Tax stays a pass-through: its own line, or
+  folded into the taxed lines (same total either way). Draws (% or $) must add
+  up to the total within $1 before Print or Final (`drawsCheck()`, checked
+  again on the server). **Project types** (`org_project_types`: Residential,
+  Commercial, Government and any Coy adds) carry an O.H. and margin that a
+  new budget for a job of that type copies (`workingEstimate()`; blank = the
+  org defaults), plus what a proposal shows, its draws, and which warranty
+  and contract load — edited in **Price book → Defaults**.
 - **Quantities measured on the plans (migration 059, Coy 2026-09-30).** A
   budget line can be counted from a Plan Room takeoff group: `qty_rule =
   'from_takeoff'` with `estimate_line_items.takeoff_parameter_id`. Its
@@ -1168,8 +1186,10 @@ expected start date per quoted job before it means anything. Add the field.
   (`src/components/v34/documents.tsx`, `/api/documents`): every uploaded file,
   newest first, searched through the same index, filtered by category (or
   Unfiled), job, person and date; tap for the files viewer, with links to its
-  job and person. `?file=` opens one (search results link here). Proposals
-  join it when a proposal can be sent; texted photos stay on the person's
+  job and person. `?file=` opens one (search results link here). **Final
+  proposals** are listed above the files (chip Proposals; number, job,
+  customer, total — `job_proposals` with `status='final'`, read from their
+  snapshots), each opening that version. Texted photos stay on the person's
   page.
 - Legend collapses to a chip.
 - **Desktop (lg+, 2026-09-27)** takes its LAYOUT from the Claude Design desktop
@@ -1526,6 +1546,39 @@ expected start date per quoted job before it means anything. Add the field.
   `…/takeoff/measurements[/mid]` — session client, org from the session,
   every id checked against the job; triggers keep a shape's group and sheet
   on one job, and a sheet's file on its job.
+- **Job › Proposal (migration 060, 2026-10-01; Claude Design,
+  `design/proposal`).** Coy: *"Go ahead with the proposals."*
+  `/dashboard/scope/[jobId]/proposal`, from the job header's **Proposal**
+  button (`src/components/v34/proposal/`). Left, the job panel (a sheet on a
+  phone): project type (switching loads that type's defaults, asking first),
+  the option, cost → price by cost type with the **margin** (slider and box —
+  it writes the job's `estimates.margin_pct`, so budget and proposal never
+  disagree), "Calculated $X → rounded to $Y", the sub split (20/80, 30/70 —
+  never on the document), and the warranty and contract pickers. Middle, the
+  document — always white paper, whatever the theme: Cover (a photo from the
+  job's files), Header, Scope (intro + each area's size and spec), Pricing,
+  Payments, Warranty, Terms, Sign — each with an on/off pill; quick toggles
+  Item prices · Qty · unit · Tax line; groups and lines shown/hidden, prices
+  hidden, lines made optional. Warranty and terms are edited in place;
+  **Save as template** writes them back (same name updates it, a new name
+  makes one). **Edit with Dusty** opens him with a starter question, and
+  **Use this** under his answer (`setDustyUse()` in `dusty-live.ts`) puts it
+  in the section — Coy's tap; Dusty writes nothing. **Print / PDF** is the
+  browser's print (`@media print` shows the pages only); a PDF filed on the
+  job needs a server renderer — later. **Mark final** freezes the document
+  in `job_proposals.snapshot` (the priced document and the warranty and
+  terms as worded), refused while draws don't add up; the database refuses
+  any change to a final (`sc_job_proposal_guard`); **New version** starts
+  the next draft. One draft per job. `doc_templates` were seeded from the
+  design's text (from Coy's won quotes) as **starter** text — "{org}" is the
+  org's name, the license number a blank — marked "check it with your
+  attorney" until Coy saves his own. Dusty's job context has the proposal
+  (total, rounding, what's hidden, draws) and never makes a draft. APIs:
+  `/api/jobs/[id]/proposal` (GET, PATCH), `…/final`, `…/new-version`,
+  `/api/project-types[/id]`, `/api/doc-templates[/id]` — session client, org
+  from the session, every id checked. Rehearsed: one draft per job; a final
+  with no snapshot, or an edit to a final, refused; a stranger sees 0 rows
+  and can't write; anon refused.
 - **Job header (2026-09-28)** — four tappable chips, each opening its list:
   **Status** (the seven stages, with W.I.P.'s won / scheduled / pouring),
   **Type**, **Source** and **Vendors (n)** (crew on the job, add by subtype)

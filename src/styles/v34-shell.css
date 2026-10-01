@@ -322,3 +322,30 @@ body { background: var(--sc-slab); color: var(--sc-ink); }
 
 /* Header lockup (design/org-branding): on a narrow phone the org's logo stands alone. */
 @media (max-width: 339px) { .sc-powered { display: none !important; } }
+
+/* ── The proposal (migration 060) ────────────────────────────────────────────
+   The desk under the pages: warm grey by day, near-black in Night Shift. */
+.sc-proposal { --sc-doc-ground: color-mix(in srgb, var(--sc-slab) 70%, #9C907C 30%); }
+html[data-theme="night-shift"] .sc-proposal { --sc-doc-ground: #15171A; }
+/*
+   The document is paper: white, ink, whatever the theme. Its editors show a
+   dashed outline on hover and the accent on focus. Printing shows the pages
+   only — Print / PDF uses the browser's own "Save as PDF". */
+.sc-doc-edit:hover { border-color: #C9BDA6 !important; }
+.sc-doc-edit:focus { outline: 2px solid #D97757; outline-offset: 1px; border-color: transparent !important; }
+.sc-doc-edit::placeholder { color: #B3AA9A; }
+.sc-print-only { display: none; }
+@media print {
+  .sc-print-only { display: inline; }
+  .sc-doc-edit::placeholder { color: transparent; }
+  @page { margin: 12mm; }
+  body * { visibility: hidden !important; }
+  .sc-doc, .sc-doc * { visibility: visible !important; }
+  .sc-doc { position: absolute !important; left: 0; top: 0; width: 100% !important; max-width: none !important; box-shadow: none !important; }
+  .sc-no-print { display: none !important; }
+  .sc-doc section[data-section="cover"] { break-after: page; }
+  .sc-doc section[data-section="warranty"], .sc-doc section[data-section="terms"] { break-before: auto; }
+  .sc-doc section[data-section="sign"] { break-inside: avoid; }
+  .sc-doc-edit { border: 0 !important; }
+  html, body { background: #fff !important; }
+}

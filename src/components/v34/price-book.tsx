@@ -25,6 +25,7 @@ import { COST_TYPE_LABEL, QTY_RULE_LABEL, cardGaps, defaultTaxable, type CostTyp
 import { CardSheet, GroupSheet, call, numify, dateLabel, type Card, type Group, type Vendor } from "@/components/v34/cost-cards";
 import { ReceiptImport } from "@/components/v34/receipt-import";
 import { PriceImport } from "@/components/v34/price-import";
+import { ProjectTypes } from "@/components/v34/project-types";
 import { PricingDefaults } from "@/components/v34/money-settings";
 import { Assemblies } from "@/components/v34/assemblies";
 import { usePref } from "@/lib/v34/prefs";
@@ -258,7 +259,7 @@ export function PriceBook() {
         ))}
       </div>
 
-      {tab === "defaults" ? <div className="mt-3 rounded" style={{ background: T.card, border: `1px solid ${T.hair}` }}><PricingDefaults /></div>
+      {tab === "defaults" ? <div className="mt-3 rounded" style={{ background: T.card, border: `1px solid ${T.hair}` }}><PricingDefaults /><ProjectTypes /></div>
         : tab === "assemblies" ? <Assemblies cards={items ?? []} /> : (<>
       {/* ---- find, view ---- */}
       <div className="flex items-center gap-2 flex-wrap mt-3">

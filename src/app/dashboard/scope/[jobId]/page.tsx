@@ -28,6 +28,7 @@ import { EmptyState } from "@/components/v34/primitives";
 import { JobChips } from "@/components/v34/job-chips";
 import { FilesPanel, type FileRow } from "@/components/v34/files-panel";
 import { SectionPhotos } from "@/components/v34/section-photos";
+import { BidStrip } from "@/components/v34/bid-strip";
 import { JobBudget, type BudgetSummary } from "@/components/v34/job-budget";
 import {
   takeoff as takeoffOf, quantities, ruleQty,
@@ -264,6 +265,9 @@ export default function ScopeBuilder() {
             <span style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 700, color: "#8E99A5" }}>no price</span>
           )}
         </div>
+
+        {/* The bid behind it, when a forwarded bid email made or fed this job (migration 063). */}
+        <BidStrip jobId={jobId} onUndone={() => { window.location.href = "/dashboard/scope"; }} />
 
         {sections.length === 0 && (
           <EmptyState title="No sections yet"

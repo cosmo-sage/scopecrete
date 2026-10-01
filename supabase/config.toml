@@ -91,3 +91,8 @@ verify_jwt = false
 # worker calls carry the vault token (sc_enrich_worker_authorized).
 [functions.email-intake]
 verify_jwt = false
+
+# The bid reader (migration 063): pg_cron calls it with the enricher's vault
+# token, which is not a JWT — the function checks it itself.
+[functions.bid-intake]
+verify_jwt = false

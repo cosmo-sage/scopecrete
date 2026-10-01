@@ -456,9 +456,10 @@ Coy: *"I need to be able to upload documents and photos for Dusty to parse."*
 
 Coy forwards bid emails from admin@saccobuilt.com to
 **intake-concrete@agentmail.to**; his own Hermes agent reads them for scopes.
-ScopeCrete only **mirrors** that inbox (Coy, 2026-10-01): each email is kept,
-its attachments become the org's files, and it is filed on the right customer.
-**Nothing is extracted here.** The §2a shape, for email:
+ScopeCrete mirrors that inbox (Coy, 2026-10-01): each email is kept, its
+attachments become the org's files, and it is filed on the right customer.
+**Nothing is extracted here** — since §2i (same day) the bid reader does
+that, and it replaces his Hermes agent. The §2a shape, for email:
 
     AgentMail webhook -> email-intake (signature checked) -> email_events (RAW LOG)
                                                           -> emails (SPINE) -> email_attachments -> job_files
@@ -486,7 +487,8 @@ its attachments become the org's files, and it is filed on the right customer.
   customer, `match='exact'`, shown "Auto". The same company domain on exactly
   one customer → **a suggestion only** (`domain_suggested`, one tap to
   accept); free mail and the org's own domain never match. Otherwise
-  **Unfiled**. A job is never guessed. **No contact is ever created.**
+  **Unfiled**. A job is never guessed here and no contact is created here —
+  the bid reader (§2i) does both for a forwarded bid, on Coy's instruction.
 - **Files.** Each attachment is fetched with `AGENTMAIL_API_KEY` into the
   private `job-files` bucket (`{org}/email/{email}/{file}/{name}`) as a
   `job_files` row with `source='email'`, `email_id`, the email's contact and
@@ -519,6 +521,85 @@ its attachments become the org's files, and it is filed on the right customer.
   deployed** (verify_jwt off). Smoke test via `pg_net`: an unsigned POST →
   503 "not configured" (no webhook secret yet), nothing stored; `{"ping"}` →
   `AGENTMAIL_API_KEY` set and AgentMail answers 200.
+
+## 2i. Bid intake — a forwarded bid email becomes the job (migration 063, `bid-intake`, 2026-10-01)
+
+Coy: *"fully automatic … this should replace the Hermes agent because this
+system should become my harness for quote."* His bids arrive as emails
+linking a Box folder ("an Organization folder … named the same as the
+folder in the Box.com download"); he wants the job, the customer, the
+concrete scope and the plans in the Plan Room without a tap, and the
+answers in Dusty's chat and on the dashboard instead of Discord.
+
+**This reverses two §2h rules, on Coy's instruction, for a bid email he
+forwarded:** the customer and the estimator's contact ARE created, and the
+job IS made (or an addendum joins the open one). §2b's rule still holds in
+spirit — the reader only ADDS (it never suppresses a lead or hides
+anything), everything it makes is recorded, and **Undo bid** takes it back.
+
+    email-intake (§2h) → emails ─► sc_bid_claim opens a bid_packages row per email
+      bid-intake (pg_cron every minute, vault token, Hermes first):
+        waiting → listing (Box) → fetching → scanning → extracting → filing → filed
+
+- **Box** — `boxLinks()` finds app.box.com/s/…, acme.app.box.com/s/…,
+  /v/vanity and /folder/123 links (also inside Outlook Safe Links). The
+  folder is listed with the Box API (Client Credentials Grant: Coy's own Box
+  app, `BOX_CLIENT_ID` / `BOX_CLIENT_SECRET` / `BOX_SUBJECT_ID` [/
+  `BOX_SUBJECT_TYPE`] in Supabase secrets; the `BoxApi: shared_link=` header
+  reads a GC's "people with the link" folder) — up to 400 files, 6 folders
+  deep. Without the keys a package waits in **needs_setup** and the activity
+  line says so. Each file is copied into `job-files`
+  (`{org}/bid/{package}/{file}/{name}`) as a `job_files` row with
+  `source='email'` and the email's id; ≤ 40 MB in memory, bigger streamed;
+  over 100 MB (the bucket's limit) skipped with the reason; a .zip ≤ 60 MB
+  unpacked. Drawings are `category='plan'` and go **In plan room**; specs and
+  the ITB go to Dusty's file reader (§2e).
+- **Reading** — each PDF ≤ 40 MB is read page by page on the server: the
+  title block with the app's own reader (`sheets.ts`, a generated copy of
+  `src/lib/plan-sheets.ts` + `parsePrintedScale`, tested equal) and the pages
+  that talk about concrete or the bid (`concretePage()`, `bidPage()`). One
+  Hermes call (prompt `bid-intake-v1`) over the email, the excerpts
+  (labelled file · page · sheet) and the sheet index returns the bid facts
+  and **every concrete item**. `sanitizeBid()` keeps a value only if it is
+  written there: names by their words, emails and phones by their digits, a
+  psi or thickness only as printed, a due ISO only when its month and day
+  match the words (then Central → UTC), a sheet only if one by that number
+  was read, an item only with its exact line. Our own names are never the GC.
+- **Filing** — customer: the email's exact match, else the estimator's
+  email on a contact, else the company domain on exactly one customer, else
+  a NEW customer named from the GC as written (no name → none is made);
+  contact: the estimator (name, email, phone as printed) unless their
+  number is already a contact, filed customer as **auto** with
+  `auto_classified_reason`; job: an open job with the same Box link, or the
+  same customer + `projectKey()` (an addendum) — else a new one in **New
+  lead / Bid invite** (`status='invited'`, `origin='machine'`,
+  `lead_source='gc_invite'`, counted), title, site, `bid_due_at`,
+  `itb_received_at`, `box_url`, the scope summary. **Each concrete item is a
+  section** (`origin='bid'`, `source_ref` = sheets · spec · the line; psi and
+  depth only as written, dimensions blank for the Plan Room; a re-read never
+  overwrites one). The drawings' sheets become `plan_sheets`
+  (`number_source='read'`; scale printed, never applied — §6 Plan Room).
+  Assemblies do not load on bid sections (dimensions are measured first).
+  The email is filed on the job.
+- **Undo bid** (`sc_undo_bid`, SECURITY DEFINER, members): the job it made
+  archived, the Box files it copied hidden, a contact it made back to
+  Unsorted and archived (unless Coy confirmed them since), a customer it
+  made archived, the email back to Unfiled; the package is never re-run.
+  Nothing is deleted.
+- **Where Coy sees it** — the job page's **Bid** strip (GC, estimator, due
+  with hours left in red under 48, pre-bid, the Box folder, files copied /
+  sheets read, **Scope from the bid** with each item's sheet and line, the
+  email, Undo bid; `/api/jobs/[id]/bid`); the Dashboard's **Bids due** tile;
+  the activity line ("New bid: …", "Bid stuck: …", "Reading a bid…"); Dusty's
+  job context (**The bid** block) and catch-up. `{"ping"}`,
+  `{"package": id}` and `{"retry": id}` with the worker token.
+- Rehearsed before applying: a package opened per email; members read, can't
+  write or claim; Undo archives the job and contact and unfiles the email; a
+  stranger sees nothing and can't undo; anon refused. **Applied 2026-10-01**
+  (piecewise via `execute_sql`, no `drop`), `bid-intake` v1 deployed
+  (verify_jwt off; ping: Box not configured, Hermes ok; no token → 401), cron
+  `bid-intake` every minute. Waiting on: the AgentMail webhook + secret
+  (§2h) and Coy's Box app keys, then a real forward to verify end to end.
 
 ## 2c. One contact is one person — migration 028 (applied 2026-09-27)
 
@@ -1709,6 +1790,11 @@ expected start date per quoted job before it means anything. Add the field.
   from the session, every id checked. Rehearsed: one draft per job; a final
   with no snapshot, or an edit to a final, refused; a stranger sees 0 rows
   and can't write; anon refused.
+- **The job's Bid strip (2026-10-01, §2i)** — on a job a forwarded bid made
+  or fed: GC, estimator, bids due (hours left, red under 48), pre-bid, the
+  Box folder and what was copied and read, **Scope from the bid** (each
+  item with its sheet, spec and line) and **Undo bid**. The Dashboard has a
+  **Bids due** tile (open bid invites by due date).
 - **Job header (2026-09-28)** — four tappable chips, each opening its list:
   **Status** (the seven stages, with W.I.P.'s won / scheduled / pouring),
   **Type**, **Source** and **Vendors (n)** (crew on the job, add by subtype)
@@ -1801,8 +1887,9 @@ additive changes only, with confirmation.
   only, tailnet-reachable. Never put anything else on the Funnel port, and test
   public reachability from a device that is NOT on Tailscale.
 - **`email-intake`** (Supabase edge function, §2h) is the only door for
-  mail: AgentMail's webhook → it, signed. A second webhook beside Coy's own
-  Hermes agent's; his stays as it is.
+  mail: AgentMail's webhook → it, signed. **`bid-intake`** (§2i) reads what
+  it mirrors. Once a real bid lands correctly, Coy turns off his own Hermes
+  agent's AgentMail webhook — ScopeCrete replaces it (Coy, 2026-10-01).
 - Do not run two production paths for the web app.
 - `scopecrete.ai` points at the Vercel project; Cloudflare DNS-only for that
   record.

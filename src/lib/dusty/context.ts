@@ -103,7 +103,7 @@ async function contactBlock(sb: Sb, orgId: string, contactId: string) {
 /** What Dusty has read in the files on a job or a person (migration 045), newest 20. */
 /**
  * Emails forwarded to the intake inbox and filed here (migration 061):
- * subject, sender and date only — Coy's own agent reads the bodies; this is
+ * subject, sender and date only — the bid reader reads the bodies (see The bid); this is
  * so Dusty can say "the plans came in Ben's email of 9/30".
  */
 async function emailsBlock(sb: Sb, orgId: string, by: { jobId?: string; customerId?: string }): Promise<Block | null> {
@@ -117,6 +117,39 @@ async function emailsBlock(sb: Sb, orgId: string, by: { jobId?: string; customer
     title: "Emails filed here (forwarded to the intake inbox; their files are in the files list)",
     trimmable: true,
     lines: rows.map((e) => `[${day(e.sent_at ?? e.created_at)}] from ${e.original_from_name || e.original_from_address || e.from_address || "unknown"} — ${e.subject || "(no subject)"}`.slice(0, 300)),
+  };
+}
+
+/**
+ * The bid behind a job (migration 063): what the bid reader kept from the
+ * forwarded email, its documents and its Box folder — every value written
+ * there — and the concrete scope with the sheet and line that shows each item.
+ */
+async function bidBlock(sb: Sb, orgId: string, jobId: string): Promise<Block | null> {
+  const { data } = await sb.from("bid_packages").select("state, error, facts, box_url, box_folder_name, filed_at, created_at")
+    .eq("org_id", orgId).eq("job_id", jobId).neq("state", "undone").order("created_at", { ascending: false }).limit(3);
+  const pkgs = (data ?? []) as Array<{ state: string; error: string | null; facts: Record<string, unknown> | null; box_url: string | null; box_folder_name: string | null; filed_at: string | null; created_at: string }>;
+  if (!pkgs.length) return null;
+  const f = (pkgs[0].facts ?? {}) as {
+    project_name?: string | null; gc_company?: string | null; bid_due_text?: string | null; prebid_text?: string | null; scope_summary?: string | null
+    estimator?: { name?: string | null; email?: string | null; phone?: string | null }; address?: { line?: string | null; city?: string | null }
+    items?: Array<{ name: string; psi: number | null; thickness_in: number | null; reinforcement: string | null; spec_section: string | null; sheets: string[]; quote: string }>
+  };
+  const est = f.estimator ?? {};
+  return {
+    title: `The bid (read by the bid reader from ${pkgs.length} forwarded email${pkgs.length === 1 ? "" : "s"}${pkgs[0].box_folder_name ? ` and the Box folder "${pkgs[0].box_folder_name}"` : ""}; every value below is written in them)`,
+    lines: [
+      `State: ${pkgs[0].state}${pkgs[0].error ? ` (${pkgs[0].error})` : ""}`,
+      f.project_name ? `Project: ${f.project_name}` : null,
+      f.gc_company ? `GC: ${f.gc_company}` : null,
+      est.name || est.email ? `Estimator: ${[est.name, est.email, est.phone].filter(Boolean).join(" · ")}` : null,
+      f.bid_due_text ? `Bids due: ${f.bid_due_text}` : "Bids due: not written in what was read",
+      f.prebid_text ? `Pre-bid: ${f.prebid_text}` : null,
+      f.address?.line ? `Site: ${[f.address.line, f.address.city].filter(Boolean).join(", ")}` : null,
+      f.scope_summary ? `Scope summary: ${f.scope_summary}` : null,
+      "Concrete scope items (name · psi · thickness · reinforcement · spec · sheets — the line that shows it):",
+      ...(f.items ?? []).map((i) => `- ${i.name} · ${i.psi ?? "—"} psi · ${i.thickness_in ?? "—"}" · ${i.reinforcement ?? "—"} · ${i.spec_section ?? "—"} · ${i.sheets.join(", ") || "—"} — "${i.quote}"`.slice(0, 500)),
+    ].filter((x): x is string => !!x),
   };
 }
 
@@ -214,7 +247,7 @@ async function scopeContext(sb: Sb, orgId: string, jobId: string): Promise<Assem
   const t = takeoff(sections, null);
   const days = num(job.duration_days);
   const jp = pricing.get(jobId) ?? null;
-  const [bud, plans, prop, mail] = await Promise.all([budgetBlock(sb, orgId, jobId, sections, days, jp), plansBlock(sb, orgId, jobId), proposalBlock(sb, orgId, jobId), emailsBlock(sb, orgId, { jobId })]);
+  const [bud, plans, prop, mail, bid] = await Promise.all([budgetBlock(sb, orgId, jobId, sections, days, jp), plansBlock(sb, orgId, jobId), proposalBlock(sb, orgId, jobId), emailsBlock(sb, orgId, { jobId }), bidBlock(sb, orgId, jobId)]);
   const notes = ((secs ?? []) as Array<Record<string, unknown>>).flatMap((r) =>
     [["reinforcement", r.rebar], ["prep", r.prep_notes], ["access", r.access_notes]]
       .filter(([, v]) => typeof v === "string" && v).map(([k, v]) => `- ${r.name || "section"} ${k}: ${v}`));
@@ -224,6 +257,7 @@ async function scopeContext(sb: Sb, orgId: string, jobId: string): Promise<Assem
       `Days on this job: ${days ?? "not set"}`, `For: ${who ? who.name : "no customer attached"}`,
       `Pricing: O.H. ${jp?.settings.overhead_pct ?? "NOT SET"}%, margin ${jp?.settings.margin_pct ?? "NOT SET"}% — price = cost × (1 + O.H.) ÷ (1 − margin)`,
       `Sales tax: ${jp?.tax.rate !== null && jp?.tax.rate !== undefined ? `${jp.tax.rate}% (${jp.tax.source === "override" ? "typed for this job" : `${jp.tax.parish} parish`})` : `unknown — ${jp?.tax.missing ?? "no rate"}`}`] },
+    ...(bid ? [bid] : []),
     { title: "Sections and their quantities (exactly what the builder shows)", lines: scopeLines(t, !!bud) },
     ...(bud ? [bud] : []),
     ...(plans ? [plans] : []),
@@ -407,7 +441,7 @@ async function cashContext(sb: Sb, orgId: string): Promise<Assembled> {
  */
 async function activityContext(sb: Sb, orgId: string, since: string): Promise<Assembled> {
   const central = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Chicago" }).format(new Date());
-  const [{ data: msgs }, { data: runs }, { data: due }, { count: unsorted }] = await Promise.all([
+  const [{ data: msgs }, { data: runs }, { data: due }, { count: unsorted }, { data: bids }] = await Promise.all([
     sb.from("messages").select("contact_id, channel, direction, occurred_at, body_text, summary")
       .eq("org_id", orgId).gte("occurred_at", since).order("occurred_at", { ascending: false }).limit(300),
     sb.from("contact_enrich_runs").select("contact_id, outcome, finished_at, musing")
@@ -416,7 +450,13 @@ async function activityContext(sb: Sb, orgId: string, since: string): Promise<As
       .lte("due_on", central).order("due_on").limit(30),
     sb.from("contacts").select("id", { count: "exact", head: true }).eq("org_id", orgId)
       .is("merged_into_contact_id", null).is("classification_confirmed_at", null).is("auto_classified_at", null),
+    sb.from("bid_packages").select("state, error, facts, box_folder_name, updated_at").eq("org_id", orgId).gte("updated_at", since)
+      .not("state", "in", "(undone,not_a_bid)").order("updated_at", { ascending: false }).limit(10),
   ]);
+  const bidLines = ((bids ?? []) as Array<{ state: string; error: string | null; facts: Record<string, unknown> | null; box_folder_name: string | null; updated_at: string }>).map((b) => {
+    const f = (b.facts ?? {}) as { project_name?: string | null; gc_company?: string | null; bid_due_text?: string | null; items?: unknown[] };
+    return `- ${f.project_name ?? b.box_folder_name ?? "a bid"}${f.gc_company ? ` (${f.gc_company})` : ""}: ${b.state === "filed" ? `filed as a job, ${(f.items ?? []).length} concrete items` : b.state}${f.bid_due_text ? `, due ${f.bid_due_text}` : ""}${b.error ? ` — ${b.error}` : ""}`;
+  });
   type M = { contact_id: string | null; channel: string; direction: string; occurred_at: string | null; body_text: string | null; summary: string | null };
   const rows = (msgs ?? []) as M[];
   const ids = [...new Set([
@@ -465,6 +505,7 @@ async function activityContext(sb: Sb, orgId: string, since: string): Promise<As
       "Coy tapped the emblem to be caught up. Lead with what needs him; keep it short; name people; say plainly when nothing happened."] },
     { title: `Who got in touch (${personLines.length} people, ${rows.length} messages${spamCount ? `; ${spamCount} spam senders left out` : ""})`, lines: personLines, trimmable: true },
     { title: "Next steps due today or overdue", lines: dueLines },
+    { title: "Bids that came in (forwarded bid emails the bid reader read)", lines: bidLines },
     { title: "What Dusty's background reader did", lines: readLines },
     { title: "Unsorted", lines: [`${unsorted ?? "unknown"} contacts nobody has sorted yet.`] },
   ]);

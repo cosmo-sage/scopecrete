@@ -34,6 +34,8 @@ export interface ActivityItem {
   at: string;
   kind: string;
   contact_id: string | null;
+  /** Where the line goes when it isn't a person (a bid → its job). */
+  href?: string | null;
   summary: string;
   detail: string | null;
   tone: Tone;
@@ -195,6 +197,27 @@ export async function GET(req: NextRequest) {
           : `Email from ${clipq(who, 30)}${subj} — file it in Documents › Emails`,
       detail: m.subject, tone: m.status === "filed" ? "good" : "ask",
     });
+  }
+  // The bid reader (migration 063): each bid it filed, or the step it's stuck on.
+  const { data: bidRows } = await supabase.from("bid_packages")
+    .select("id, state, error, job_id, facts, box_folder_name, filed_at, updated_at, created")
+    .eq("org_id", orgId).gte("updated_at", new Date(Date.now() - 24 * 3600_000).toISOString()).order("updated_at", { ascending: false }).limit(6);
+  for (const b of (bidRows ?? []) as Array<{ id: string; state: string; error: string | null; job_id: string | null; facts: Record<string, unknown> | null; box_folder_name: string | null; filed_at: string | null; updated_at: string; created: Record<string, unknown> | null }>) {
+    const f = (b.facts ?? {}) as { project_name?: string | null; gc_company?: string | null; bid_due_text?: string | null; items?: unknown[] };
+    const name = clipq(f.project_name ?? b.box_folder_name ?? "a bid", 40);
+    const href = b.job_id ? `/dashboard/scope/${b.job_id}` : "/dashboard/documents?cat=email";
+    if (b.state === "filed") {
+      const isNew = !!(b.created ?? {}).job_id;
+      items.push({ id: `bid-${b.id}-filed`, at: b.filed_at ?? b.updated_at, kind: "bid", contact_id: null, href,
+        summary: `${isNew ? "New bid" : "Bid updated"}: ${name}${f.gc_company ? ` — ${clipq(f.gc_company, 30)}` : ""}${f.bid_due_text ? ` · due ${clipq(f.bid_due_text, 30)}` : ""}`,
+        detail: `${(f.items ?? []).length} concrete item(s) read into the job's scope. Undo bid on the job takes it all back.`, tone: "good" });
+    } else if (["needs_setup", "failed"].includes(b.state)) {
+      items.push({ id: `bid-${b.id}-${b.state}`, at: b.updated_at, kind: "bid", contact_id: null, href,
+        summary: `Bid stuck: ${name} — ${clipq(b.error ?? b.state, 60)}`, detail: b.error, tone: "warn" });
+    } else if (!["undone", "not_a_bid"].includes(b.state)) {
+      items.push({ id: `bid-${b.id}-${b.state}`, at: b.updated_at, kind: "running", contact_id: null, href,
+        summary: `Reading a bid: ${name}…`, detail: b.error, tone: "live" });
+    }
   }
   items.sort((a, b) => b.at.localeCompare(a.at));
   if (waiting > 0) {

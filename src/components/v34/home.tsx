@@ -19,6 +19,7 @@ interface Tile { value: string | null; detail: string; href: string; tone?: "goo
 export const TILES: Array<{ k: string; label: string }> = [
   { k: "calls", label: "Calls today" },
   { k: "leads", label: "New leads" },
+  { k: "bids", label: "Bids due" },
   { k: "wip", label: "Jobs in progress" },
   { k: "quoted", label: "Quoted" },
   { k: "runway", label: "Work runway" },

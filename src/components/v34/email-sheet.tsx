@@ -40,10 +40,12 @@ function StatusTag({ e }: { e: EmailRow }) {
 }
 
 /** Mirrored emails, waiting-on-Coy first. `customer` narrows to one customer's. */
-export function EmailList({ customer, q, onCount }: { customer?: string; q?: string; onCount?: (n: number) => void }) {
+export function EmailList({ customer, q, onCount, openId }: { customer?: string; q?: string; onCount?: (n: number) => void; openId?: string | null }) {
   const [rows, setRows] = useState<EmailRow[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [open, setOpen] = useState<string | null>(null);
+  const [open, setOpen] = useState<string | null>(openId ?? null);
+  const [seenOpen, setSeenOpen] = useState(openId ?? null);
+  if ((openId ?? null) !== seenOpen) { setSeenOpen(openId ?? null); if (openId) setOpen(openId); }
   const [tick, setTick] = useState(0);
   useEffect(() => {
     let off = false;

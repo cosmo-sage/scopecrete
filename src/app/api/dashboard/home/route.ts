@@ -44,7 +44,7 @@ export async function GET(req: NextRequest) {
 
   const [calls, jobsQ, pays, recs, oh] = await Promise.all([
     sb.from("messages").select("direction").eq("org_id", orgId).eq("channel", "call").gte("occurred_at", dayStartIso),
-    sb.from("jobs").select("id, status, origin, confirmed_at, created_at, duration_days, scheduled_start")
+    sb.from("jobs").select("id, title, status, origin, confirmed_at, created_at, duration_days, scheduled_start, bid_due_at")
       .eq("org_id", orgId).is("archived_at", null),
     sb.from("payments").select("amount, received_on").eq("org_id", orgId).gte("received_on", monthStart).lte("received_on", today),
     sb.from("receipts").select("amount, purchased_on").eq("org_id", orgId).gte("purchased_on", monthStart).lte("purchased_on", today),
@@ -64,7 +64,23 @@ export async function GET(req: NextRequest) {
     href: "/dashboard/messages",
   };
 
-  const jobs = (jobsQ.data ?? []) as Array<{ id: string; status: string | null; origin: string | null; confirmed_at: string | null; created_at: string; duration_days: unknown; scheduled_start: string | null }>;
+  const jobs = (jobsQ.data ?? []) as Array<{ id: string; title: string | null; status: string | null; origin: string | null; confirmed_at: string | null; created_at: string; duration_days: unknown; scheduled_start: string | null; bid_due_at: string | null }>;
+
+  // Bids due (migration 063): open bid invites with a due date still ahead, soonest first.
+  const now = Date.now();
+  const bids = jobs.filter((j) => j.bid_due_at && Date.parse(j.bid_due_at) > now && ["invited", "lead", "consultation", "scoping"].includes(j.status ?? ""))
+    .sort((a, b) => Date.parse(a.bid_due_at!) - Date.parse(b.bid_due_at!));
+  if (!bids.length) tiles.bids = { value: null, detail: "No bids due — forwarded bid invitations land here", href: "/dashboard/scope" };
+  else {
+    const next = bids[0];
+    const h = Math.floor((Date.parse(next.bid_due_at!) - now) / 3.6e6);
+    const when = new Date(next.bid_due_at!).toLocaleString("en-US", { timeZone: TZ, weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+    tiles.bids = {
+      value: String(bids.length),
+      detail: `next: ${next.title ?? "a bid"} · ${when}${h < 48 ? ` (${h} h)` : ""}`,
+      href: `/dashboard/scope/${next.id}`, ...(h < 48 ? { tone: "bad" as const } : {}),
+    };
+  }
   // Real leads: New lead stage, and counted — a job Dusty made on his own is
   // not counted until Coy accepts it (§2b).
   const newLead = jobs.filter((j) => ["lead", "invited"].includes(j.status ?? "lead"));

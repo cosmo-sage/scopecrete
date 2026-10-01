@@ -40,7 +40,7 @@ import { T, F, eyebrow, clip, nums, relTime } from "@/lib/v34/tokens";
 import { useDustyLive } from "@/lib/v34/dusty-live";
 
 type Tone = "live" | "good" | "ask" | "warn" | "quiet";
-interface Item { id: string; at: string; kind: string; contact_id: string | null; summary: string; detail: string | null; tone: Tone }
+interface Item { id: string; at: string; kind: string; contact_id: string | null; href?: string | null; summary: string; detail: string | null; tone: Tone }
 interface Activity {
   pinned: { summary: string; detail: string | null } | null;
   /** Dusty's light lines about conversations he read (migration 039). */
@@ -237,8 +237,9 @@ export function ActivityLine({ busy, onWorking, inline }: {
                 {it.kind !== "waiting" && it.kind !== "agreement" && it.kind !== "reminder" && <span style={{ fontSize: F.xs, color: T.ink3, ...nums }}>{relTime(it.at)}</span>}
               </div>
             );
-            return it.contact_id
-              ? <Link key={it.id} href={`/dashboard/messages/${it.contact_id}`} onClick={() => setOpen(false)} className="block no-underline">{body}</Link>
+            const to = it.href ?? (it.contact_id ? `/dashboard/messages/${it.contact_id}` : null);
+            return to
+              ? <Link key={it.id} href={to} onClick={() => setOpen(false)} className="block no-underline">{body}</Link>
               : <div key={it.id}>{body}</div>;
           })}
           {!data?.items.length && !data?.pinned && (

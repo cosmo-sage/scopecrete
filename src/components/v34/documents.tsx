@@ -38,6 +38,7 @@ export function Documents() {
   const [proposals, setProposals] = useState<Array<{ id: string; job_id: string; version: number; finalized_at: string; number: string | null; total: number | null; title: string | null; customer: string | null }>>([]);
   const [err, setErr] = useState<string | null>(null);
   const [open, setOpen] = useState<FileRow | null>(null);
+  const [emailParam, setEmailParam] = useState<string | null>(null);
   // Names seen so far, so a filter's list doesn't shrink to the one chosen.
   const [jobNames, setJobNames] = useState<Record<string, string>>({});
   const [peopleNames, setPeopleNames] = useState<Record<string, string>>({});
@@ -48,7 +49,14 @@ export function Documents() {
   }, [q]);
   useEffect(() => {
     let off = false;
-    Promise.resolve().then(() => { if (!off) setFileParam(new URLSearchParams(window.location.search).get("file")); });
+    Promise.resolve().then(() => {
+      if (off) return;
+      const sp = new URLSearchParams(window.location.search);
+      setFileParam(sp.get("file"));
+      // ?email= opens one mirrored email (the job's Bid strip links here).
+      const em = sp.get("email");
+      if (em) { setEmailParam(em); setCat("email"); }
+    });
     return () => { off = true; };
   }, []);
 
@@ -126,7 +134,7 @@ export function Documents() {
 
       {cat === "email" && (
         <div className="rounded overflow-hidden" style={{ marginTop: 10, background: T.card, border: `1px solid ${T.hair}` }}>
-          <EmailList q={qDeb} />
+          <EmailList q={qDeb} openId={emailParam} />
         </div>
       )}
 

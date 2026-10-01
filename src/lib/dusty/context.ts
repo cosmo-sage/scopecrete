@@ -101,6 +101,25 @@ async function contactBlock(sb: Sb, orgId: string, contactId: string) {
 
 
 /** What Dusty has read in the files on a job or a person (migration 045), newest 20. */
+/**
+ * Emails forwarded to the intake inbox and filed here (migration 061):
+ * subject, sender and date only — Coy's own agent reads the bodies; this is
+ * so Dusty can say "the plans came in Ben's email of 9/30".
+ */
+async function emailsBlock(sb: Sb, orgId: string, by: { jobId?: string; customerId?: string }): Promise<Block | null> {
+  let q = sb.from("emails").select("subject, original_from_name, original_from_address, from_address, sent_at, created_at")
+    .eq("org_id", orgId).order("created_at", { ascending: false }).limit(10);
+  q = by.jobId ? q.eq("job_id", by.jobId) : q.eq("customer_id", by.customerId as string);
+  const { data } = await q;
+  const rows = (data ?? []) as Array<{ subject: string | null; original_from_name: string | null; original_from_address: string | null; from_address: string | null; sent_at: string | null; created_at: string }>;
+  if (!rows.length) return null;
+  return {
+    title: "Emails filed here (forwarded to the intake inbox; their files are in the files list)",
+    trimmable: true,
+    lines: rows.map((e) => `[${day(e.sent_at ?? e.created_at)}] from ${e.original_from_name || e.original_from_address || e.from_address || "unknown"} — ${e.subject || "(no subject)"}`.slice(0, 300)),
+  };
+}
+
 async function filesBlock(sb: Sb, orgId: string, by: { jobId?: string; contactId?: string }): Promise<Block | null> {
   let q = sb.from("job_files").select("name, category, summary, facts, read_state, read_error, created_at")
     .eq("org_id", orgId).is("deleted_at", null).order("created_at", { ascending: false }).limit(20);
@@ -195,7 +214,7 @@ async function scopeContext(sb: Sb, orgId: string, jobId: string): Promise<Assem
   const t = takeoff(sections, null);
   const days = num(job.duration_days);
   const jp = pricing.get(jobId) ?? null;
-  const [bud, plans, prop] = await Promise.all([budgetBlock(sb, orgId, jobId, sections, days, jp), plansBlock(sb, orgId, jobId), proposalBlock(sb, orgId, jobId)]);
+  const [bud, plans, prop, mail] = await Promise.all([budgetBlock(sb, orgId, jobId, sections, days, jp), plansBlock(sb, orgId, jobId), proposalBlock(sb, orgId, jobId), emailsBlock(sb, orgId, { jobId })]);
   const notes = ((secs ?? []) as Array<Record<string, unknown>>).flatMap((r) =>
     [["reinforcement", r.rebar], ["prep", r.prep_notes], ["access", r.access_notes]]
       .filter(([, v]) => typeof v === "string" && v).map(([k, v]) => `- ${r.name || "section"} ${k}: ${v}`));
@@ -209,6 +228,7 @@ async function scopeContext(sb: Sb, orgId: string, jobId: string): Promise<Assem
     ...(bud ? [bud] : []),
     ...(plans ? [plans] : []),
     ...(prop ? [prop] : []),
+    ...(mail ? [mail] : []),
     { title: "Section notes", lines: notes },
     ...(files ? [files] : []),
     ...(who ? [who.block] : []),
@@ -345,9 +365,11 @@ async function customerContext(sb: Sb, orgId: string, id: string): Promise<Assem
     const nameOf = new Map(blocks.map((b, i) => [ids[i], b.name]));
     const lines = ((last ?? []) as Array<{ contact_id: string; channel: string; direction: string; occurred_at: string | null; body_text: string | null; summary: string | null }>)
       .reverse().map((m) => `${day(m.occurred_at)} ${m.direction === "outbound" ? "OUT" : `IN (${nameOf.get(m.contact_id) ?? "contact"})`} ${m.channel === "call" ? `CALL — ${m.summary?.trim() || "no summary"}` : `TEXT: ${m.body_text?.trim() || "(attachment)"}`}`);
+    const mail = await emailsBlock(sb, orgId, { customerId: id });
     return assemble(`${cu.name ?? "Customer"} (customer page)`, [
       { title: "The customer", lines: facts },
       ...blocks.map((b) => b.block),
+      ...(mail ? [mail] : []),
       { title: "Most recent messages, all contacts", lines, trimmable: true },
     ]);
   }

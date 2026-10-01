@@ -434,6 +434,64 @@ Coy: *"I need to be able to upload documents and photos for Dusty to parse."*
   (newest 20); the activity line shows each read, and "Reading …" spins the
   emblem.
 
+## 2h. The email mirror — migration 061, `email-intake` (2026-10-01)
+
+Coy forwards bid emails from admin@saccobuilt.com to
+**intake-concrete@agentmail.to**; his own Hermes agent reads them for scopes.
+ScopeCrete only **mirrors** that inbox (Coy, 2026-10-01): each email is kept,
+its attachments become the org's files, and it is filed on the right customer.
+**Nothing is extracted here.** The §2a shape, for email:
+
+    AgentMail webhook -> email-intake (signature checked) -> email_events (RAW LOG)
+                                                          -> emails (SPINE) -> email_attachments -> job_files
+
+- **Signed or nothing.** `verify_jwt` is off (`supabase/config.toml`); the
+  function checks the webhook signature itself (Svix scheme, HMAC-SHA256 with
+  `AGENTMAIL_WEBHOOK_SECRET`, five-minute window — `verifySvix()` in
+  `rules.ts`). Unsigned or wrong → 401, nothing stored; no secret → 503 and the
+  heartbeat says "not configured". A refusal records the header NAMES only,
+  never values. Worker calls (`{"retry"}`, `{"ping"}`, `{"reproject"}`) carry
+  the enricher's vault token.
+- **Raw first.** The untouched payload goes into `email_events`, keyed on the
+  delivery id (a retry is a no-op), before anything parses it; 200 at once,
+  projection in the background. AgentMail's docs and API are refused by this
+  container's network policy, so `readMessage()` reads fields tolerantly and a
+  row that doesn't parse keeps its reason (`projection_error`) and can be
+  re-projected once the real payload is seen.
+- **Whose mail counts.** `org_inbound_addresses` maps the inbox to the org;
+  `org_inbound_senders` (admin@saccobuilt.com, coysacco@gmail.com) are the
+  forwarders. Anything else is kept as **quarantined**, its files **held**
+  (not fetched) until Coy files it.
+- **Who it's from, and where it goes.** `originalSender()` reads the
+  forwarded block (Gmail, Outlook, Apple). Its address exactly on a contact
+  (`contact_emails`, merges followed) → filed on that contact and its
+  customer, `match='exact'`, shown "Auto". The same company domain on exactly
+  one customer → **a suggestion only** (`domain_suggested`, one tap to
+  accept); free mail and the org's own domain never match. Otherwise
+  **Unfiled**. A job is never guessed. **No contact is ever created.**
+- **Files.** Each attachment is fetched with `AGENTMAIL_API_KEY` into the
+  private `job-files` bucket (`{org}/email/{email}/{file}/{name}`) as a
+  `job_files` row with `source='email'`, `email_id`, the email's contact and
+  customer, and `read_state='waiting'` so Dusty's reader reads it (§2e). Small
+  inline images are signature logos, skipped with the reason. A failed fetch
+  retries every 5 minutes (pg_cron `email-intake-retry`), three tries.
+- **Coy files it** (`PATCH /api/emails/[id]`, `match='coy'`): a customer
+  and/or a job; filing on a job moves its files onto the job and turns **In
+  plan room** on for its PDFs; all empty puts it back to Unfiled (Undo).
+  Members may update only the filing columns (column grants);
+  `sc_email_filing_guard` (SECURITY DEFINER) refuses another org's customer,
+  contact or job and releases a quarantined email's held files.
+- **Where Coy sees it:** Documents → **Emails** (unfiled and quarantined
+  first; the sheet has the sender, the files, the text and the filing); the
+  customer page's Threads → **Emails** channel (no longer "not connected");
+  the activity line (each email in the last day, "file it" when unfiled);
+  Dusty's job and customer context (subjects, senders, dates — not bodies).
+- Rehearsed before applying: the inbox and both forwarders seeded on the
+  org; a duplicate delivery refused; Coy sees the email, files it, and its
+  held file is released; Coy can't edit the subject or write the raw log;
+  another org's customer refused; a stranger sees and updates nothing; anon
+  refused.
+
 ## 2c. One contact is one person — migration 028 (applied 2026-09-27)
 
 A person with two numbers is ONE contact. `contact_phones` lists every number;
@@ -1189,8 +1247,9 @@ expected start date per quoted job before it means anything. Add the field.
   job and person. `?file=` opens one (search results link here). **Final
   proposals** are listed above the files (chip Proposals; number, job,
   customer, total — `job_proposals` with `status='final'`, read from their
-  snapshots), each opening that version. Texted photos stay on the person's
-  page.
+  snapshots), each opening that version. **Emails** (migration 061, §2h):
+  the mirrored inbox, unfiled first, each opening a sheet to file it.
+  Texted photos stay on the person's page.
 - Legend collapses to a chip.
 - **Desktop (lg+, 2026-09-27)** takes its LAYOUT from the Claude Design desktop
   screens and its LOOK from v34 (Barlow Condensed / IBM Plex, hi-viz orange) —
@@ -1240,7 +1299,8 @@ expected start date per quoted job before it means anything. Add the field.
   counts; the green phone button by each contact is the only Call control;
   call cards: Dusty's summary → next steps → recording → transcript on tap →
   **notes on that call** (`POST /api/messages/[id]/notes`); the message box
-  only when Texts is picked; Email says it isn't connected) · Jobs ·
+  only when Texts is picked; **Emails** lists the customer's mirrored emails,
+  §2h) · Jobs ·
   Documents (`/api/documents?customer=`) · Payments · Files (on the primary
   contact) · Schedule — each says what is missing when empty. **Right panel
   (440px; on a phone the top of Details):** Location (address with Copy and
@@ -1670,6 +1730,9 @@ additive changes only, with confirmation.
   alone and is public; 443 (`/` OpenClaw, `/hermes-dash`) is `tailscale serve`
   only, tailnet-reachable. Never put anything else on the Funnel port, and test
   public reachability from a device that is NOT on Tailscale.
+- **`email-intake`** (Supabase edge function, §2h) is the only door for
+  mail: AgentMail's webhook → it, signed. A second webhook beside Coy's own
+  Hermes agent's; his stays as it is.
 - Do not run two production paths for the web app.
 - `scopecrete.ai` points at the Vercel project; Cloudflare DNS-only for that
   record.

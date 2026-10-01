@@ -85,3 +85,9 @@ verify_jwt = false
 # Not a JWT, so the gateway check is OFF.
 [functions.dusty-dream]
 verify_jwt = false
+
+# The email mirror (migration 061). AgentMail sends no Supabase JWT; the
+# function checks the webhook's own signature (AGENTMAIL_WEBHOOK_SECRET), and
+# worker calls carry the vault token (sc_enrich_worker_authorized).
+[functions.email-intake]
+verify_jwt = false

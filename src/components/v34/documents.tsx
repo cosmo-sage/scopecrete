@@ -17,11 +17,12 @@ import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { T, F, disp, eyebrow, clip, relTime } from "@/lib/v34/tokens";
 import { FileViewer, type FileRow } from "@/components/v34/files-panel";
+import { EmailList } from "@/components/v34/email-sheet";
 import { CATEGORY_LABEL, sizeLabel, type Category } from "@/lib/files";
 
 const CHIPS: Array<[string, string]> = [
   ["", "All"], ["photo", "Photos"], ["plan", "Plans"], ["spec", "Specs"], ["bid", "Bid invites"],
-  ["vendor_quote", "Vendor quotes"], ["receipt", "Receipts"], ["contract", "Contracts"], ["proposal", "Proposals"], ["other", "Other"], ["unfiled", "Unfiled"],
+  ["vendor_quote", "Vendor quotes"], ["receipt", "Receipts"], ["contract", "Contracts"], ["proposal", "Proposals"], ["email", "Emails"], ["other", "Other"], ["unfiled", "Unfiled"],
 ];
 const SINCE: Array<[string, string]> = [["", "Any time"], ["7", "7 days"], ["30", "30 days"], ["365", "This year"]];
 
@@ -55,7 +56,7 @@ export function Documents() {
     const u = new URLSearchParams();
     if (fileParam) u.set("file", fileParam);
     if (qDeb.length >= 2) u.set("q", qDeb);
-    if (cat) u.set("cat", cat);
+    if (cat && cat !== "email") u.set("cat", cat);
     if (since) u.set("since", since);
     if (job) u.set("job", job);
     if (person) u.set("contact", person);
@@ -123,7 +124,13 @@ export function Documents() {
 
       {err && <div role="alert" style={{ fontSize: F.sm, color: T.red, marginTop: 8 }}>Couldn&apos;t load documents: {err}</div>}
 
-      {proposals.length > 0 && (
+      {cat === "email" && (
+        <div className="rounded overflow-hidden" style={{ marginTop: 10, background: T.card, border: `1px solid ${T.hair}` }}>
+          <EmailList q={qDeb} />
+        </div>
+      )}
+
+      {cat !== "email" && proposals.length > 0 && (
         <div className="rounded overflow-hidden" style={{ marginTop: 10, background: T.card, border: `1px solid ${T.hair}` }}>
           <div className="px-3 py-1.5" style={{ ...eyebrow, borderBottom: `1px solid ${T.hairSoft}` }}>Proposals sent · final</div>
           {proposals.map((r, i) => (
@@ -140,7 +147,7 @@ export function Documents() {
         </div>
       )}
 
-      {cat !== "proposal" && <div className="rounded overflow-hidden" style={{ marginTop: 10, background: T.card, border: `1px solid ${T.hair}` }}>
+      {cat !== "proposal" && cat !== "email" && <div className="rounded overflow-hidden" style={{ marginTop: 10, background: T.card, border: `1px solid ${T.hair}` }}>
         {files === null && !err && [1, 2, 3].map((i) => <div key={i} className="animate-pulse" style={{ height: 56, borderTop: i > 1 ? `1px solid ${T.hairSoft}` : "none", background: T.hairSoft }} />)}
         {files?.length === 0 && (
           <div className="px-3 py-4" style={{ fontSize: F.sm, color: T.ink3 }}>

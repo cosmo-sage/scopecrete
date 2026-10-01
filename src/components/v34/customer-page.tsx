@@ -20,6 +20,7 @@
  * an empty tab says what is missing. Email is not connected yet and says so.
  */
 
+import { EmailList } from "@/components/v34/email-sheet";
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -579,6 +580,7 @@ function Threads({ customerId, contacts, focusContact, wide }: { customerId: str
   const [items, setItems] = useState<Item[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [channel, setChannel] = useState<ChannelFilter>("all");
+  const [emailCount, setEmailCount] = useState<number | null>(null);
   const [who, setWho] = useState<string | null>(focusContact && contacts.some((c) => c.id === focusContact) ? focusContact : null);
   const scroller = useRef<HTMLDivElement | null>(null);
 
@@ -614,7 +616,7 @@ function Threads({ customerId, contacts, focusContact, wide }: { customerId: str
       <div className={wide ? "flex flex-col" : "flex gap-1 flex-wrap"}>
         {([["all", "All channels"], ["call", "Calls"], ["text", "Texts"], ["email", "Emails"]] as const).map(([k, l]) => (
           <button key={k} onClick={() => setChannel(k)} style={{ ...chip(channel === k), width: wide ? "100%" : "auto" }}>
-            <span style={{ flex: 1 }}>{l}</span><span style={{ fontSize: F.xs, color: T.ink3, ...nums }}>{k === "email" ? "—" : count(k)}</span>
+            <span style={{ flex: 1 }}>{l}</span><span style={{ fontSize: F.xs, color: T.ink3, ...nums }}>{k === "email" ? (emailCount ?? "—") : count(k)}</span>
           </button>
         ))}
       </div>
@@ -647,7 +649,8 @@ function Threads({ customerId, contacts, focusContact, wide }: { customerId: str
         <div ref={scroller} className="overflow-y-auto px-4 py-3" style={{ flex: 1 }}>
           {err && <div style={{ color: T.red, fontSize: F.sm }}>{err}</div>}
           {items === null && !err && <div className="rounded animate-pulse" style={{ height: 120, background: T.hairSoft }} />}
-          {channel === "email" && <div className="py-6" style={{ fontSize: F.sm, color: T.ink3 }}>Email isn&apos;t connected yet — nothing to show. Calls and texts are here.</div>}
+          {/* The email mirror (migration 061): bid emails forwarded to the intake inbox, filed on this customer. */}
+          {channel === "email" && <div className="-mx-4 -my-3"><EmailList customer={customerId} onCount={setEmailCount} /></div>}
           {items && channel !== "email" && shown.length === 0 && <div className="py-6" style={{ fontSize: F.sm, color: T.ink3 }}>Nothing here.</div>}
           {channel !== "email" && shown.map((m) => {
             const d = day(m.at);

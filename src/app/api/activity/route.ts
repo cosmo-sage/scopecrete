@@ -180,6 +180,22 @@ export async function GET(req: NextRequest) {
     else if (f.read_state === "read") items.push({ ...base, kind: "file", summary: `Read ${clipq(f.name, 32)}${f.summary ? ` — ${clipq(f.summary, 70)}` : ""}`, detail: f.summary, tone: "good" });
     else items.push({ ...base, kind: "file", summary: `Couldn't read ${clipq(f.name, 40)}`, detail: f.read_error, tone: "warn" });
   }
+  // The email mirror (migration 061): each forwarded email is a line — filed,
+  // a suggestion to confirm, or one to file. Its files then show as reads above.
+  const { data: mailRows } = await supabase.from("emails")
+    .select("id, created_at, subject, original_from_name, original_from_address, from_address, contact_id, status, suggested_customer_id, customer_id")
+    .eq("org_id", orgId).gte("created_at", new Date(Date.now() - 24 * 3600_000).toISOString()).order("created_at", { ascending: false }).limit(8);
+  for (const m of (mailRows ?? []) as Array<{ id: string; created_at: string; subject: string | null; original_from_name: string | null; original_from_address: string | null; from_address: string | null; contact_id: string | null; status: string; suggested_customer_id: string | null; customer_id: string | null }>) {
+    const who = m.original_from_name || m.original_from_address || m.from_address || "someone";
+    const subj = m.subject ? ` — ${clipq(m.subject, 50)}` : "";
+    items.push({
+      id: `email-${m.id}-${m.status}`, at: m.created_at, kind: "email", contact_id: m.contact_id,
+      summary: m.status === "filed" ? `Email from ${clipq(who, 30)}${subj}`
+        : m.status === "quarantined" ? `Email from an address that isn't yours${subj} — file it in Documents › Emails`
+          : `Email from ${clipq(who, 30)}${subj} — file it in Documents › Emails`,
+      detail: m.subject, tone: m.status === "filed" ? "good" : "ask",
+    });
+  }
   items.sort((a, b) => b.at.localeCompare(a.at));
   if (waiting > 0) {
     items.push({ id: "waiting", at: new Date().toISOString(), kind: "waiting", contact_id: null,

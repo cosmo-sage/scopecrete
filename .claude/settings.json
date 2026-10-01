@@ -28,7 +28,9 @@
       "mcp__Vercel__get_project",
       "mcp__Vercel__list_projects",
       "mcp__Vercel__web_fetch_vercel_url",
-      "mcp__Vercel__get_access_to_vercel_url"
+      "mcp__Vercel__get_access_to_vercel_url",
+      "mcp__github__pull_request_read",
+      "mcp__Claude_Code_Remote__read_documentation"
     ]
   },
   "hooks": {

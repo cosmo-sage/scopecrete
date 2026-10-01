@@ -456,7 +456,7 @@ export function MessageMedia({ messageId, count, isOut }: { messageId: string; c
       </div>
 
       {full && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4"
+        <div className="fixed inset-0 sc-drawer z-[70] flex items-center justify-center p-4"
           style={{ background: "rgba(10,12,14,0.86)", cursor: "zoom-out" }} onClick={() => setOpen(null)}>
           {/* eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL */}
           <img src={full.url as string} alt="Photo sent in this message"
@@ -579,7 +579,7 @@ export function MergeSheet({ contactId, keepLabel, keepCount, onClose, onMerged,
   });
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-end lg:items-center justify-center"
+    <div className="fixed inset-0 sc-drawer z-[60] flex items-end lg:items-center justify-center"
       style={{ background: "rgba(10,12,14,0.5)" }} onClick={onClose}>
       <div className="w-full lg:max-w-lg rounded-t-xl lg:rounded-xl flex flex-col"
         style={{ background: DA.surface, maxHeight: "85dvh" }} onClick={(e) => e.stopPropagation()}>

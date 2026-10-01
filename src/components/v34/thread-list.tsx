@@ -112,6 +112,19 @@ const CHIPS: Array<{ k: string; l: string; c: string }> = [
   { k: "spam", l: "Spam", c: T.red },
 ];
 
+/** The same five as the desktop's bucket rail (messages/layout.tsx). */
+export const THREAD_BUCKETS: Array<{ k: string; label: string; icon: "unsorted" | "customer" | "vendor" | "personal" | "spam"; color: string }> = [
+  { k: "customers", label: "Customer", icon: "customer", color: T.green },
+  { k: "unsorted", label: "Unsorted", icon: "unsorted", color: T.hiviz },
+  { k: "vendors", label: "Vendor", icon: "vendor", color: T.chalk },
+  { k: "personal", label: "Personal", icon: "personal", color: T.violet },
+  { k: "spam", label: "Spam", icon: "spam", color: T.red },
+];
+/** On a desktop Threads opens on Customer (Coy, 2026-10-01); a phone on Unsorted, the inbox. */
+export const DESKTOP_DEFAULT_BUCKET = "customers";
+/** Buckets that are directories, listed by name, not by the last message. */
+const BY_NAME = new Set(["customers", "vendors", "personal"]);
+
 function matches(t: Thread, k: string): boolean {
   switch (k) {
     case "unsorted": return t.bucket === null;
@@ -533,6 +546,14 @@ export function ThreadList() {
     setSeenF(fParam);
     if (fParam) setFilter(fParam);
   }
+  // A desktop with no ?f= opens on Customer, the bucket rail's first tab.
+  useEffect(() => {
+    let off = false;
+    Promise.resolve().then(() => {
+      if (!off && !new URLSearchParams(window.location.search).get("f") && window.matchMedia("(min-width: 1024px)").matches) setFilter(DESKTOP_DEFAULT_BUCKET);
+    });
+    return () => { off = true; };
+  }, []);
   const [openRow, setOpenRow] = useState<string | null>(null);
   // Swipe tray: one row at a time. Toast: what was just filed, with Undo.
   const [trayRow, setTrayRow] = useState<string | null>(null);
@@ -648,7 +669,12 @@ export function ThreadList() {
     // it never falls back to zero.
     fetch("/api/threads/counts")
       .then((r) => (r.ok ? r.json() : null))
-      .then((d) => { if (!off && d?.counts) setCounts(d.counts as Counts); })
+      .then((d) => {
+        if (!off && d?.counts) {
+          setCounts(d.counts as Counts);
+          window.dispatchEvent(new CustomEvent("sc:thread-counts", { detail: d.counts }));
+        }
+      })
       .catch(() => {});
 
     // v34 has a mock constant also called DRIFT. It is not imported anywhere
@@ -675,6 +701,12 @@ export function ThreadList() {
         t.display_name.toLowerCase().includes(q)
         || (t.phone ?? "").toLowerCase().includes(q)
         || t.preview.toLowerCase().includes(q));
+    }
+    // Customer, Vendor and Personal are directories: A–Z by name (Coy,
+    // 2026-10-01: "organized by customer names"), a bare number last.
+    if (!q && BY_NAME.has(filter)) {
+      const bare = (t: Thread) => /^[+\d\s().-]+$/.test(t.display_name);
+      rows = [...rows].sort((a, b) => Number(bare(a)) - Number(bare(b)) || a.display_name.localeCompare(b.display_name, undefined, { sensitivity: "base" }));
     }
     return rows;
   }, [threads, filter, q]);
@@ -730,7 +762,7 @@ export function ThreadList() {
       {/* All five on screen, one row, no funnel. Each chip wears its bucket's
           colour — the same colour as that bucket's tag on the rows. */}
       {!q && (
-        <div className="grid gap-1 px-2.5 pt-2.5 pb-1.5" style={{ gridTemplateColumns: `repeat(${CHIPS.length}, minmax(0, 1fr))` }}
+        <div className="grid gap-1 px-2.5 pt-2.5 pb-1.5 lg:hidden" style={{ gridTemplateColumns: `repeat(${CHIPS.length}, minmax(0, 1fr))` }}
           role="tablist" aria-label="Buckets">
           {CHIPS.map(({ k, l, c }) => {
             const on = filter === k;
@@ -746,6 +778,18 @@ export function ThreadList() {
               </button>
             );
           })}
+        </div>
+      )}
+
+      {/* Desktop: the bucket rail picks; this says which, and how it's sorted. */}
+      {!q && (
+        <div className="hidden lg:flex items-baseline gap-2 px-3 pt-2.5 pb-1.5" style={{ borderBottom: `1px solid ${T.hairSoft}` }}>
+          <span style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 700, textTransform: "uppercase", color: CHIPS.find((c) => c.k === filter)?.c ?? T.ink }}>
+            {CHIPS.find((c) => c.k === filter)?.l ?? filter}
+          </span>
+          <span style={{ ...nums, fontSize: F.xs, color: T.ink3 }}>{chipCount(filter) ?? ""}</span>
+          <span className="flex-1" />
+          <span style={{ ...eyebrow, color: T.ink3 }}>{BY_NAME.has(filter) ? "A–Z" : "Newest first"}</span>
         </div>
       )}
 

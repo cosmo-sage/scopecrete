@@ -80,3 +80,25 @@ export async function getApiSession(req: NextRequest): Promise<ApiSessionResult>
     session: { supabase, orgId: membership.org_id as string, userId: user.id, applyCookies },
   };
 }
+
+/**
+ * Signed in, org or not — for the one place a person without an org may act:
+ * accepting an invite (migration 062). Everything it can do goes through
+ * SECURITY DEFINER functions that check the caller's own email; no table is
+ * read by org here.
+ */
+export async function getUserSession(req: NextRequest): Promise<
+  | { ok: true; session: { supabase: ReturnType<typeof createServerClient>; userId: string; email: string | null; applyCookies: (res: NextResponse) => NextResponse } }
+  | { ok: false; response: NextResponse }> {
+  const cookiesToSet: { name: string; value: string; options: Record<string, unknown> }[] = [];
+  const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+    cookies: { getAll: () => req.cookies.getAll(), setAll: (toSet) => { cookiesToSet.push(...toSet); } },
+  });
+  const applyCookies = (res: NextResponse) => {
+    cookiesToSet.forEach(({ name, value, options }) => res.cookies.set(name, value, options as Parameters<typeof res.cookies.set>[2]));
+    return res;
+  };
+  const { data: { user }, error } = await supabase.auth.getUser();
+  if (error || !user) return { ok: false, response: applyCookies(NextResponse.json({ error: "Not authenticated" }, { status: 401 })) };
+  return { ok: true, session: { supabase, userId: user.id, email: user.email ?? null, applyCookies } };
+}

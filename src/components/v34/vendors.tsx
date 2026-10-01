@@ -42,6 +42,15 @@ export function VendorList() {
   const [receipt, setReceipt] = useState(false);
   const [tick, setTick] = useState(0);
   const [measure, wide] = useWide<HTMLDivElement>(900);
+  // ?receipt=1 — Dusty's + menu → Add a receipt.
+  useEffect(() => {
+    let off = false;
+    Promise.resolve().then(() => { if (!off && new URLSearchParams(window.location.search).get("receipt") === "1") setReceipt(true); });
+    // Already on this page: the menu says so with an event.
+    const on = (e: Event) => { if ((e as CustomEvent<string>).detail === "receipt") setReceipt(true); };
+    window.addEventListener("sc:create", on);
+    return () => { off = true; window.removeEventListener("sc:create", on); };
+  }, []);
 
   useEffect(() => {
     let off = false;
@@ -144,7 +153,7 @@ function NewVendor({ onClose, onMade }: { onClose: () => void; onMade: (id: stri
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
   };
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center" style={{ background: "rgba(0,0,0,.35)", paddingTop: "calc(var(--sc-head) + 12px)" }} onClick={onClose}>
+    <div className="fixed inset-0 sc-drawer z-50 flex items-start justify-center" style={{ background: "rgba(0,0,0,.35)", paddingTop: "calc(var(--sc-head) + 12px)" }} onClick={onClose}>
       <div className="rounded p-3 flex flex-col gap-2" style={{ background: T.card, width: "min(460px, calc(100vw - 24px))" }} onClick={(e) => e.stopPropagation()} role="dialog" aria-label="New vendor">
         <div style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 700, textTransform: "uppercase" }}>New vendor</div>
         {([["name", "Name"], ["phone", "Phone (optional)"], ["email", "Email"], ["address", "Address"], ["service_area", "Where they deliver"]] as const).map(([k, l]) => (
@@ -312,7 +321,7 @@ function EditVendor({ v, onClose, onSaved }: { v: VRow; onClose: () => void; onS
     catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
   };
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center" style={{ background: "rgba(0,0,0,.35)", paddingTop: "calc(var(--sc-head) + 12px)" }} onClick={onClose}>
+    <div className="fixed inset-0 sc-drawer z-50 flex items-start justify-center" style={{ background: "rgba(0,0,0,.35)", paddingTop: "calc(var(--sc-head) + 12px)" }} onClick={onClose}>
       <div className="rounded p-3 flex flex-col gap-2" style={{ background: T.card, width: "min(460px, calc(100vw - 24px))" }} onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Edit vendor">
         <div style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 700, textTransform: "uppercase" }}>Edit vendor</div>
         {([["name", "Name"], ["phone", "Phone"], ["email", "Email"], ["address", "Address"], ["service_area", "Where they deliver"]] as const).map(([k, l]) => (

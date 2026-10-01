@@ -32,7 +32,6 @@ import { setDustyLive } from "@/lib/v34/dusty-live";
 import { usePathname } from "next/navigation";
 import { T, F, disp, eyebrow, nums } from "@/lib/v34/tokens";
 import { NavIcon, Sheet } from "@/components/v34/primitives";
-import { CreateDrop } from "@/components/v34/shell";
 import { DustyPanel } from "@/components/v34/dusty-panel";
 import { DustyAvatar } from "@/components/v34/dusty-avatar";
 import { ActivityLine } from "@/components/v34/activity-line";
@@ -74,7 +73,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   // The colour theme follows the account (Settings → Appearance).
   const [theme] = useTheme();
   const [searchOpen, setSearchOpen] = useState(false);
-  const [createOpen, setCreateOpen] = useState(false);
   const [toolOpen, setToolOpen] = useState(false);
   const [dustyOpen, setDustyOpen] = useState(false);
   useEffect(() => {
@@ -106,8 +104,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [meRev, setMeRev] = useState(0);
   useEffect(() => {
     let off = false;
-    fetch("/api/session/me").then((r) => (r.ok ? r.json() : null))
-      .then((d) => { if (!off && d && !d.error) setMe(d); }).catch(() => {});
+    fetch("/api/session/me").then(async (r) => {
+      const d = await r.json().catch(() => null);
+      // Signed in from an invite link but landed here with no org yet: back to the invite (062).
+      if (d?.code === "no_org") {
+        let pending: string | null = null;
+        try { pending = localStorage.getItem("sc:pending-invite"); } catch { /* private mode */ }
+        if (pending && /^[0-9a-f]{48}$/.test(pending)) { window.location.href = `/invite/${pending}`; return null; }
+      }
+      return r.ok ? d : null;
+    }).then((d) => { if (!off && d && !d.error) setMe(d); }).catch(() => {});
     return () => { off = true; };
   }, [meRev]);
   const reloadMe = () => setMeRev((n) => n + 1);
@@ -133,7 +139,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const badge = { logs: (drift ?? 0) > 0 };
   const working = dustyBusy || readerWorking;
   const glassBtn = { width: 32, height: 32 } as const;
-  const closeDrops = () => { setCreateOpen(false); setSearchOpen(false); };
+  const closeDrops = () => { setSearchOpen(false); };
 
   // Footer: page · page · Dusty · page · Toolbox.
   const f = menus.footer;
@@ -189,12 +195,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               </button>
             )}
 
-            <button onClick={() => { const o = !createOpen; closeDrops(); setCreateOpen(o); }}
-              aria-label={createOpen ? "Close" : "Create"} aria-expanded={createOpen}
-              className="sc-plus sc-paper-btn flex items-center justify-center"
-              data-status={createOpen ? "open" : "closed"} style={{ ...glassBtn, position: "relative" }}>
-              <span className="sc-plus-bar" aria-hidden="true" />
-            </button>
+            {/* The header's + is gone (Coy, 2026-10-01): its menu opened under
+                Dusty. New customer / job / receipt live in Dusty's own + menu. */}
 
             <button onClick={() => setMenuOpen((o) => !o)} className="sc-burger sc-paper-btn"
               data-status={menuOpen ? "open" : "closed"} aria-expanded={menuOpen} aria-label={menuOpen ? "Close settings" : "Settings"}
@@ -209,8 +211,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {/* Phone: what Dusty is doing, a row under the header. */}
         {!desktop && <ActivityLine busy={dustyBusy} onWorking={setReaderWorking} />}
       </div>
-
-      {createOpen && <CreateDrop onClose={() => setCreateOpen(false)} />}
 
       {/* ---- desktop left rail: every page, in Coy's order ---- */}
       <nav aria-label="Main" className="hidden lg:flex fixed left-0 bottom-0 z-30 flex-col items-stretch overflow-y-auto sc-rail"

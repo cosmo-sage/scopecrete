@@ -114,7 +114,7 @@ export function EmailSheet({ id, onClose, onChanged }: { id: string; onClose: ()
   const sel: React.CSSProperties = { height: 32, border: `1px solid ${T.hair}`, borderRadius: 4, background: T.card, color: T.ink, fontSize: F.sm, width: "100%" };
   const jobs = d ? d.options.jobs.filter((j) => !e?.customer_id || !j.customer_id || j.customer_id === e.customer_id) : [];
   return (
-    <div className="fixed inset-0 z-50 flex justify-end" style={{ background: "rgba(0,0,0,.35)" }} onClick={onClose}>
+    <div className="fixed inset-0 sc-drawer z-50 flex justify-end" style={{ background: "rgba(0,0,0,.35)" }} onClick={onClose}>
       <div onClick={(x) => x.stopPropagation()} className="h-full overflow-y-auto" style={{ width: "min(560px, 100vw)", background: T.card, color: T.ink, paddingTop: "var(--sc-head)" }}>
         <div className="flex items-start gap-2 px-4 py-3" style={{ borderBottom: `1px solid ${T.hair}` }}>
           <div style={{ flex: 1, minWidth: 0 }}>

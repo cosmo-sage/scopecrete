@@ -185,6 +185,8 @@
 /* The page beside Dusty keeps its width minus his column. */
 @media (min-width: 1024px) {
   .sc-with-dusty { padding-right: var(--sc-dusty); }
+  /* A sheet opened while Dusty is docked lands in the page beside him. */
+  html[data-dusty="open"] .sc-drawer { right: var(--sc-dusty) !important; left: 84px !important; top: var(--sc-head) !important; }
 }
 /* The activity dot's colour and rhythm say what kind of work it is
    (Coy, 2026-09-30): reading someone — slow blue breath; Dusty answering —
@@ -349,3 +351,7 @@ html[data-theme="night-shift"] .sc-proposal { --sc-doc-ground: #15171A; }
   .sc-doc-edit { border: 0 !important; }
   html, body { background: #fff !important; }
 }
+/* Recording a voice message to Dusty: the red dot breathes (2026-10-01). */
+@keyframes scRecDot { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .35; transform: scale(.8); } }
+.sc-rec-dot { animation: scRecDot 1s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .sc-rec-dot { animation: none; } }

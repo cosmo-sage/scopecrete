@@ -212,12 +212,14 @@ export function Drawer({ open, onClose, title, sub, right, children, hideClose, 
        so the stream and the burger are never covered. Default: covers all.
        wide: covers all like the default (over the phone footer too), but as
        wide as the work needs — a table to check before saving. */
-    <div className={`fixed left-0 right-0 bottom-0 ${full ? "z-30" : "z-50"}`}
+    // sc-drawer: on a desktop with Dusty docked it opens in the page beside
+    // him, between the rail and his column — never under him (Coy, 2026-10-01).
+    <div className={`fixed left-0 right-0 bottom-0 sc-drawer ${full ? "z-30" : "z-50"}`}
       style={{ top: full || below ? "var(--sc-head)" : 0, background: full ? "transparent" : "rgba(18,22,26,.44)" }}
       onClick={full ? undefined : onClose}>
       <div onClick={(e) => e.stopPropagation()} role="dialog" aria-label={title}
         className={`absolute top-0 right-0 bottom-0 flex flex-col ${full ? "left-0" : ""}`}
-        style={{ width: full ? "auto" : wide ? "min(1180px, 100vw)" : "min(408px, 90vw)", background: T.card,
+        style={{ width: full ? "auto" : wide ? "min(1180px, 100%)" : "min(408px, 90%)", background: T.card,
                  boxShadow: full ? "none" : "-14px 0 40px rgba(10,14,18,.22)" }}>
 
         <div className="sticky top-0 z-10 shrink-0 px-4 flex items-center gap-3"

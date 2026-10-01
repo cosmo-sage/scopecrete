@@ -253,6 +253,24 @@ across the database … I also want to be able to upload a logo for my org."*
 - **People:** `sc_org_people(org)` (SECURITY DEFINER, members only) returns
   each member's name, email and role — the one way a teammate's email is read.
   Your own name is saved on your auth account (`PATCH /api/me`, `full_name`).
+- **Invites (migration 062, written 2026-10-01 — NOT YET APPLIED, its
+  rehearsal awaits Coy's approval).** Coy: *"add other users to my Org …
+  and send invites to the dashboard."* Settings → Organisation → People →
+  **+ Invite**: an email and a role (owner · member · field crew) →
+  `sc_create_invite()` (owners only) → a link `/invite/<token>` shown ONCE to
+  copy, email or text from Coy's own account — ScopeCrete sends nothing
+  (§10). Only the token's SHA-256 is stored; one use, 14 days, a new invite
+  for the same email replaces the old; **Withdraw** (`sc_revoke_invite`).
+  The invitee signs in on the invite page (Google, or Supabase's emailed
+  sign-in link) with THAT email and taps Join → `sc_accept_invite()` writes
+  the `org_members` row; another email is refused by name. An owner can
+  remove a member (`sc_remove_member`: never themselves, never the last
+  owner). All SECURITY DEFINER, execute for `authenticated` only, no INSERT
+  policy on `org_invites`; audited (`member_invited`, `invite_revoked`,
+  `member_joined`, `member_removed`). `getUserSession()` (signed in, no org
+  needed) serves only `/api/invites/[token]`. **Roles don't limit what a
+  member sees yet** — everyone in the org reads everything under
+  `get_user_org_ids()`; only owners manage the org.
 - Rehearsed before applying: owner renames and it is audited; blank refused;
   a path in another org's folder or with `..` refused; a direct UPDATE on
   `orgs` changes nothing; a stranger can't rename, set a logo, or see people
@@ -881,8 +899,7 @@ percentage of labour — all three contradict this section and §4.
   `cost_assemblies` + `cost_assembly_items`: Coy's default set of cards for
   a kind of area ("Residential driveway": 3000 psi by the yard, form &
   finish by the foot, 6x6 mesh), for a job type (or any) × a kind of area
-  (or any — then only loaded by hand), with an optional reinforcement card
-  and a quantity for cards counted by hand. At most one auto-loading
+  (or any — then only loaded by hand), and a quantity for cards counted by hand. At most one auto-loading
   assembly per job type × kind of area (unique index); `pickAssembly()`
   takes the exact job type, else "any job". When a section is added or its
   kind changes, `loadAssembly()` fills that area's budget — **only if the
@@ -1127,6 +1144,11 @@ expected start date per quoted job before it means anything. Add the field.
 ## 6. Interface rules
 
 - ScopeCrete header is sticky on every page.
+- **Threads on a desktop (2026-10-01, Coy):** the five buckets are a second
+  icon rail beside the main one (`SubRail`, with counts), **Customer**
+  first and the default; the list follows `?f=` and says its bucket.
+  Customer, Vendor and Personal list **A–Z by name** (a bare number last);
+  Unsorted and Spam stay newest first. The phone keeps the chips.
 - **Threads is people, Jobs is work (2026-09-27; reshaped 2026-09-28).**
   Five chips, all on screen, no funnel: **Unsorted · Customer · Vendor ·
   Personal · Spam**. Unsorted is the inbox and opens first; filing someone
@@ -1207,6 +1229,16 @@ expected start date per quoted job before it means anything. Add the field.
   minimum, parish tax rates — §3, §4) are only in Price book → Defaults;
   pay-yourself and recurring overhead are on the **Cash** page. The Settings sheet starts
   under the whole header (`--sc-head`).
+- **The header's + is gone too (Coy, 2026-10-01)** — its menu opened under
+  Dusty. **Dusty's + (his header) is the create menu:** New chat · New
+  customer · New job · Add a receipt or quote · New invoice (off: not built).
+  Each opens its own form on the page beside him (`?new=1` / `?receipt=1`,
+  or the `sc:create` event when that page is already open); on a phone he
+  steps aside. He creates nothing himself — the form is Coy's tap (§6 Dusty:
+  read-only toward the business).
+- **Sheets open beside Dusty (2026-10-01).** A drawer or modal
+  (`.sc-drawer`) opened while Dusty is docked on a desktop sits in the page
+  between the rail and his column, never under him.
 - **The header's pipeline button is gone (Coy, 2026-09-30)** — the
   Dashboard carries the pipeline. **On a desktop its place, right of 🔍, is
   Dusty's button**: he opens down from the header on the right, and the
@@ -1297,7 +1329,21 @@ expected start date per quoted job before it means anything. Add the field.
 - **The customer page (2026-09-30, migration 055)** —
   `/dashboard/customers/[customerId]` (`src/components/v34/customer-page.tsx`)
   and the **Customers list** `/dashboard/customers` (one row per customer,
-  not per person; the rail's Customers item). A contact filed customer,
+  not per person; the rail's Customers item). **The list (2026-10-01, Coy):**
+  type chips with counts (Residential · Commercial · Government · Type?) and
+  a job-stage filter; views **Table** (wide: sort by any column; **Columns ▾**
+  — last communication, recent conversations, first / last contact, contact,
+  phone, email, address, city, state, zip, contacts, jobs, source, customer
+  since), **Cards** (the phone's, with a sort) and **Board** (by the Jobs
+  board's stage of their jobs, plus No job); view, sort and columns saved
+  to the account (`customers_view`). **+ New customer** (`POST
+  /api/customers`: a named customer, its contact filed customer through
+  `sc_classify_contact`, the address as Coy's; a phone or email already on a
+  contact is a 409 naming them). **No unnamed customers:** a customer's name
+  is its own, else its people's — a name that is only a phone number (how
+  `sc_classify_contact` names one made for an unnamed number) is no name;
+  with none it is not listed, and the list says how many are waiting with
+  a link to name each. A contact filed customer,
   opened from Threads, lands on its customer's page, Threads tab, filtered to
   them (`?person=1` keeps the person page). **Header:** CUSTOMER · name
   (Lexend) · address · contacts · jobs · since; Call · Text · Email · Edit ·
@@ -1382,7 +1428,19 @@ expected start date per quoted job before it means anything. Add the field.
   72px, Details first) — the main rail picks the page, this one the
   sub-page; the phone keeps its row of tabs.
 - Dusty has two entry points: COLD from the footer (no job context) and HOT
-  from a page (that page preloaded). The chat's header says which.
+  from a page (that page preloaded). The chat's header says "Looking at …"
+  only when HOT; cold has no sub-line (Coy, 2026-10-01).
+- **Voice messages and attachments (2026-10-01).** An empty message box
+  offers the **mic** (Telegram's way; typing turns it into Ask): it records
+  at once with a breathing red dot, the time and a live level meter
+  (`voice-recorder.tsx`), × throws it away, ➤ sends the audio to
+  `/api/dusty/transcribe` (Groq Whisper, `GROQ_API_KEY`; nothing kept) and
+  the words go to Dusty as the question. Three minutes at most. **+** left
+  of the box attaches photos and files: uploaded through `/api/files` onto
+  what the chat is about (the job, the person, the customer —
+  `job_files.customer_id`), else unfiled in Documents (`from_dusty`); the
+  question carries their ids and Dusty is given each one's read, or told it
+  isn't read yet (the background reader reads it within minutes).
 - **Dusty v1 (2026-09-27)** is wired: `src/components/v34/dusty-panel.tsx`
   rises from the footer on a phone and slides in from the right on desktop.
   It is HOT on whatever screen is open — a thread, a scope, a customer, or
@@ -1501,7 +1559,9 @@ expected start date per quoted job before it means anything. Add the field.
   the second tab (`?tab=assemblies`). A row: name, what it applies to
   ("Residential · Driveway", "Any job · Patio", "Loaded by hand"), card
   count, reinforcement, **Auto**. The sheet: name, job type, kind of area,
-  "Fill new areas on its own", reinforcement card, its cards (rule and
+  "Fill new areas on its own", its cards (no reinforcement dropdown since
+  2026-10-01 — Coy; mesh or rebar is a card like any other, and one set
+  before shows with × to take it off) (rule and
   cost, a quantity box for typed ones, ×), + Add cards (search), delete.
   The budget's card picker has **Load an assembly** (pick the area first)
   and shows groups folded until you search; lines say "from X" and

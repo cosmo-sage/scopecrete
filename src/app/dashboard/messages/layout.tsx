@@ -20,10 +20,37 @@
  * behaviour and must stay exactly that: the phone is the primary device.
  */
 
-import React, { Suspense } from "react";
-import { usePathname } from "next/navigation";
+import React, { Suspense, useEffect, useState } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
 import { T } from "@/lib/v34/tokens";
-import { ThreadList } from "@/components/v34/thread-list";
+import { ThreadList, THREAD_BUCKETS, DESKTOP_DEFAULT_BUCKET } from "@/components/v34/thread-list";
+import { SubRail } from "@/components/v34/sub-rail";
+
+/**
+ * Desktop (Coy, 2026-10-01): the five buckets as a second icon rail beside the
+ * main one — the main rail picks Threads, this one the bucket, Customer first.
+ * The list follows ?f=; the phone keeps its row of chips.
+ */
+function BucketRail() {
+  const params = useSearchParams();
+  const pathname = usePathname();
+  const value = params.get("f") ?? DESKTOP_DEFAULT_BUCKET;
+  const [counts, setCounts] = useState<Record<string, number> | null>(null);
+  useEffect(() => {
+    const on = (e: Event) => setCounts((e as CustomEvent<Record<string, number>>).detail);
+    window.addEventListener("sc:thread-counts", on);
+    return () => window.removeEventListener("sc:thread-counts", on);
+  }, []);
+  return (
+    <div className="hidden lg:block shrink-0">
+      <SubRail label="Buckets" value={value}
+        items={THREAD_BUCKETS.map((b) => ({ ...b, count: counts ? counts[b.k] ?? null : null }))}
+        // history, not the router: Next keeps useSearchParams in step with it,
+        // and the open conversation stays open (see thread-list's search note).
+        onChange={(k) => window.history.replaceState(null, "", `${pathname}?f=${k}`)} />
+    </div>
+  );
+}
 
 export default function MessagesLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -32,6 +59,7 @@ export default function MessagesLayout({ children }: { children: React.ReactNode
 
   return (
     <div className={`lg:flex lg:items-stretch ${conversationOpen ? "" : "min-h-[calc(100dvh-var(--sc-head)-var(--sc-foot))]"} lg:h-[calc(100dvh-var(--sc-head))] lg:min-h-0`}>
+      <Suspense fallback={null}><BucketRail /></Suspense>
       {/* A fixed rail on desktop: the list is the constant, the conversation is
           what changes, so the list must not resize as threads come and go.
 

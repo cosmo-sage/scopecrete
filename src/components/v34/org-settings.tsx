@@ -187,7 +187,65 @@ export function OrgSection({ onChanged }: { onChanged: () => void }) {
         Transparent PNG, SVG or WebP, at least 600px wide. Shown 28px tall in the header with &ldquo;powered by scopecrete.ai&rdquo; beside it.
       </div>
 
-      <div style={{ ...eyebrow, marginTop: 12, color: T.ink2 }}>People</div>
+      <People people={people} canEdit={canEdit} onRemoved={(id) => setPeople((a) => a.filter((p) => p.user_id !== id))} />
+    </section>
+  );
+}
+
+/**
+ * People and invites (migration 062; Coy, 2026-10-01: "add other users to my
+ * Org … and send invites to the dashboard"). An owner invites an email as
+ * owner, member or field crew; the link is shown once, to copy, text or mail
+ * from his own account — ScopeCrete sends nothing. Pending invites can be
+ * withdrawn; a member can be removed (never yourself, never the last owner).
+ */
+interface Invite { id: string; email: string; role: string; created_at: string; expires_at: string; accepted_at: string | null; revoked_at: string | null }
+function People({ people, canEdit, onRemoved }: { people: Person[]; canEdit: boolean; onRemoved: (userId: string) => void }) {
+  const [invites, setInvites] = useState<Invite[]>([]);
+  const [open, setOpen] = useState(false);
+  const [email, setEmail] = useState("");
+  const [role, setRole] = useState("member");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [made, setMade] = useState<{ email: string; link: string } | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    if (!canEdit) return;
+    let off = false;
+    fetch("/api/org/invites").then((r) => (r.ok ? r.json() : null)).then((b) => { if (!off && b?.invites) setInvites(b.invites); }).catch(() => {});
+    return () => { off = true; };
+  }, [canEdit, tick]);
+  const pending = invites.filter((i) => !i.accepted_at && !i.revoked_at && new Date(i.expires_at) > new Date());
+
+  async function invite() {
+    setBusy(true); setErr(null); setMade(null); setCopied(false);
+    const r = await fetch("/api/org/invites", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, role }) });
+    const b = await r.json().catch(() => ({}));
+    setBusy(false);
+    if (!r.ok) { setErr(b?.error ?? `HTTP ${r.status}`); return; }
+    setMade({ email: b.invite.email, link: b.link }); setEmail(""); setTick((n) => n + 1);
+  }
+  async function revoke(id: string) {
+    const r = await fetch(`/api/org/invites/${id}`, { method: "DELETE" });
+    if (r.ok) setTick((n) => n + 1); else setErr(((await r.json().catch(() => ({}))) as { error?: string }).error ?? "Couldn't withdraw it.");
+  }
+  async function remove(p: Person) {
+    if (!window.confirm(`Take ${p.name ?? p.email} out of the organisation? Their account stays; they stop seeing it.`)) return;
+    const r = await fetch(`/api/org/members/${p.user_id}`, { method: "DELETE" });
+    if (r.ok) onRemoved(p.user_id); else setErr(((await r.json().catch(() => ({}))) as { error?: string }).error ?? "Couldn't remove them.");
+  }
+  async function copy() { try { await navigator.clipboard.writeText(made!.link); setCopied(true); } catch { /* blocked */ } }
+  const mail = made ? `mailto:${made.email}?subject=${encodeURIComponent("Join me on ScopeCrete")}&body=${encodeURIComponent(`Here's your invite to our ScopeCrete dashboard:\n\n${made.link}\n\nSign in with this email address (${made.email}). The link works once and expires in 14 days.`)}` : "";
+  const sms = made ? `sms:?&body=${encodeURIComponent(`Your ScopeCrete invite (sign in as ${made.email}): ${made.link}`)}` : "";
+  const small: React.CSSProperties = { ...btn, fontSize: 12, height: 30, padding: "0 10px", borderRadius: 4, border: `1px solid ${T.hair}`, background: T.card, color: T.ink, cursor: "pointer", display: "inline-flex", alignItems: "center" };
+
+  return (
+    <>
+      <div className="flex items-center" style={{ marginTop: 12 }}>
+        <span className="flex-1" style={{ ...eyebrow, color: T.ink2 }}>People</span>
+        {canEdit && !open && <button onClick={() => { setOpen(true); setMade(null); }} style={small}>+ Invite</button>}
+      </div>
       <div className="mt-1" style={{ border: `1px solid ${T.hair}`, borderRadius: 4, background: T.card }}>
         {people.length === 0 && <div style={{ padding: "8px 10px", fontSize: F.sm, color: T.ink3 }}>No one listed.</div>}
         {people.map((p, i) => (
@@ -197,10 +255,61 @@ export function OrgSection({ onChanged }: { onChanged: () => void }) {
               <div style={{ fontSize: F.xs, color: T.ink3, ...clip }}>{p.email ?? "—"}</div>
             </div>
             {p.role && <span style={{ ...eyebrow, fontFamily: disp, color: T.ink2 }}>{p.role}</span>}
+            {canEdit && !p.you && <button onClick={() => void remove(p)} aria-label={`Remove ${p.name ?? p.email}`} title="Remove from the organisation" style={{ color: T.ink3, cursor: "pointer", padding: "0 4px" }}>×</button>}
+          </div>
+        ))}
+        {pending.map((v) => (
+          <div key={v.id} className="flex items-center gap-2" style={{ padding: "7px 10px", borderTop: `1px solid ${T.hairSoft}`, background: T.slab }}>
+            <div className="flex-1 min-w-0">
+              <div style={{ fontSize: F.sm, ...clip }}>{v.email}</div>
+              <div style={{ fontSize: F.xs, color: T.ink3 }}>Invited · waiting · expires {new Date(v.expires_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</div>
+            </div>
+            <span style={{ ...eyebrow, fontFamily: disp, color: T.ink3 }}>{v.role}</span>
+            <button onClick={() => void revoke(v.id)} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>Withdraw</button>
           </div>
         ))}
       </div>
-    </section>
+
+      {canEdit && open && (
+        <div className="mt-2 rounded p-2.5 flex flex-col gap-2" style={{ border: `1px solid ${T.hair}`, background: T.card }}>
+          {made ? (
+            <>
+              <div style={{ fontSize: F.sm }}>Invite made for <b>{made.email}</b>. Send them this link — it works once, for that email, for 14 days:</div>
+              <input readOnly value={made.link} onFocus={(e) => e.target.select()} aria-label="Invite link"
+                style={{ height: 32, border: `1px solid ${T.hair}`, borderRadius: 4, padding: "0 8px", fontSize: F.xs, background: T.slab, color: T.ink, width: "100%" }} />
+              <div className="flex gap-1.5 flex-wrap">
+                <button onClick={() => void copy()} style={small}>{copied ? "Copied ✓" : "Copy link"}</button>
+                <a href={mail} style={small}>Email it</a>
+                <a href={sms} style={small}>Text it</a>
+                <span className="flex-1" />
+                <button onClick={() => { setMade(null); }} style={small}>Invite another</button>
+                <button onClick={() => { setOpen(false); setMade(null); }} style={small}>Done</button>
+              </div>
+              <div style={{ fontSize: F.xs, color: T.ink3 }}>The link is shown only now. Lost it? Invite the same email again — the old link stops working.</div>
+            </>
+          ) : (
+            <form onSubmit={(e) => { e.preventDefault(); void invite(); }} className="flex flex-col gap-2">
+              <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="their@email.com" aria-label="Their email" autoFocus
+                style={{ height: 34, border: `1px solid ${T.hairStrong}`, borderRadius: 4, padding: "0 10px", fontSize: F.sm, background: T.card, color: T.ink }} />
+              <div className="flex gap-1.5 items-center flex-wrap">
+                {([["member", "Member"], ["field", "Field crew"], ["owner", "Owner"]] as const).map(([k, l]) => (
+                  <button key={k} type="button" onClick={() => setRole(k)} aria-pressed={role === k}
+                    style={{ ...small, background: role === k ? T.ink : T.card, color: role === k ? T.card : T.ink }}>{l}</button>
+                ))}
+              </div>
+              <div style={{ fontSize: F.xs, color: T.ink3, lineHeight: 1.4 }}>
+                {role === "owner" ? "Owners can also rename the organisation, change the logo and invite or remove people." : "For now every member sees the whole dashboard; only owners manage the organisation."}
+              </div>
+              <div className="flex gap-1.5 justify-end">
+                <button type="button" onClick={() => { setOpen(false); setErr(null); }} style={small}>Cancel</button>
+                <button type="submit" disabled={busy || !email.trim()} style={{ ...small, background: T.hiviz, color: T.onHiviz, border: "none" }}>{busy ? "Making…" : "Make invite link"}</button>
+              </div>
+            </form>
+          )}
+        </div>
+      )}
+      {err && <div style={{ fontSize: F.xs, color: T.red, marginTop: 4 }}>{err}</div>}
+    </>
   );
 }
 

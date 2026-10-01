@@ -15,7 +15,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { T, F, disp, eyebrow, nums, clip, money } from "@/lib/v34/tokens";
 import { Sheet } from "@/components/v34/primitives";
-import { QTY_RULE_LABEL, isReinforcementCard, type QtyRule } from "@/lib/cost-cards";
+import { QTY_RULE_LABEL, type QtyRule } from "@/lib/cost-cards";
 import { JOB_TYPES, JOB_TYPE_LABEL, WORK_TYPES, WORK_TYPE_LABEL, appliesTo } from "@/lib/assemblies";
 import { call, type Card } from "@/components/v34/cost-cards";
 
@@ -106,7 +106,6 @@ function AssemblySheet({ a, cards, cardById, onClose, onChanged, onLocal, onDele
     try { await fn(); } catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { onChanged(); }
   };
   const patch = (body: Record<string, unknown>) => { onLocal(body as Partial<Assembly>); return run(() => call(`/api/assemblies/${a.id}`, "PATCH", body)); };
-  const rcards = cards.filter((c) => c.active && isReinforcementCard(c));
   const inIt = new Set(a.items.map((i) => i.cost_item_id));
   const found = q.trim()
     ? cards.filter((c) => c.active && !inIt.has(c.id) && c.name.toLowerCase().includes(q.trim().toLowerCase())).slice(0, 30)
@@ -139,15 +138,16 @@ function AssemblySheet({ a, cards, cardById, onClose, onChanged, onLocal, onDele
             </span>
           </span>
         </label>
-        <label className="block"><span style={eyebrow}>Reinforcement</span>
-          <select value={a.reinforcement_item_id ?? ""} style={field} aria-label="Reinforcement"
-            onChange={(e) => void patch({ reinforcement_item_id: e.target.value || null })}>
-            <option value="">None</option>
-            {rcards.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-          <span style={{ fontSize: 9.5, color: T.ink3 }}>
-            {rcards.length ? "Becomes the area's reinforcement — marked as the default, never over one you picked." : "No mesh or rebar cards yet — a card counted by the sheet or the stick shows here."}
-          </span></label>
+        {/* No reinforcement dropdown (Coy, 2026-10-01: "probably need to remove
+            this dropdown entirely") — mesh or rebar is a card like any other,
+            added below. One set before this stays until it is taken off. */}
+        {a.reinforcement_item_id && (
+          <div className="flex items-center gap-2" style={{ fontSize: F.sm }}>
+            <span style={{ ...eyebrow }}>Reinforcement</span>
+            <span style={{ flex: 1, minWidth: 0, ...clip }}>{cardById.get(a.reinforcement_item_id)?.name ?? "a retired card"}</span>
+            <button onClick={() => void patch({ reinforcement_item_id: null })} aria-label="Take off the reinforcement" style={{ color: T.ink3, cursor: "pointer" }}>×</button>
+          </div>
+        )}
 
         <div>
           <div style={{ ...eyebrow, color: T.ink }}>Cards · {a.items.length}</div>

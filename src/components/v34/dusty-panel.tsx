@@ -19,16 +19,19 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { usePathname } from "next/navigation";
-import { T, F, disp, eyebrow, body, clip, relTime } from "@/lib/v34/tokens";
+import { usePathname, useRouter } from "next/navigation";
+import { T, F, disp, eyebrow, body, clip, relTime, nums } from "@/lib/v34/tokens";
 import { DustyAvatar, type DustyState } from "@/components/v34/dusty-avatar";
 import { Markdown } from "@/components/v34/markdown";
 import { useDustyUse } from "@/lib/v34/dusty-live";
+import { sendBytes } from "@/components/v34/files-panel";
+import { VoiceRecorder } from "@/components/v34/voice-recorder";
 
 type Ref = { kind: "thread" | "scope" | "customer"; id: string } | { kind: "cash" } | { kind: "cold" };
 type Ctx = Ref | { kind: "activity"; since: string };
 const CATCHUP_KEY = "sc:dusty-catchup-at";
 type Turn = { role: "user" | "assistant"; content: string };
+type Att = { key: string; name: string; pct: number; id: string | null; error: string | null };
 interface Conv { id: string; title: string; context_kind: string; context_id: string | null; context_label: string | null; updated_at: string }
 
 export function refFor(pathname: string): Ref {
@@ -82,6 +85,15 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
   const [catchUpLocal, setCatchUpLocal] = useState(0);
   const scroller = useRef<HTMLDivElement | null>(null);
   const abort = useRef<AbortController | null>(null);
+  const router = useRouter();
+  // The + menu in the header (Coy, 2026-10-01): a new chat, or a new customer,
+  // job or receipt — each opens its own form on the page beside him.
+  const [plusOpen, setPlusOpen] = useState(false);
+  // Files attached to the next message (the + left of the box).
+  const [atts, setAtts] = useState<Att[]>([]);
+  const fileInput = useRef<HTMLInputElement | null>(null);
+  const [recording, setRecording] = useState(false);
+  const [hearing, setHearing] = useState(false);
 
   useEffect(() => { onBusy(busy); }, [busy, onBusy]);
   useEffect(() => () => abort.current?.abort(), []);
@@ -165,8 +177,12 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
   }, []);
 
   async function ask(text: string, opts?: { fresh?: boolean; ctx?: Ctx }) {
-    const q = text.trim();
+    const ready = opts?.fresh ? [] : atts.filter((a) => a.id && !a.error);
+    if (!opts?.fresh && atts.some((a) => !a.id && !a.error)) return; // still uploading
+    const said0 = text.trim() || (ready.length ? "What's in this?" : "");
+    const q = ready.length ? `${said0}\n\n📎 ${ready.map((a) => a.name).join(", ")}` : said0;
     if (!q || (busy && !opts?.fresh)) return;
+    if (ready.length) setAtts([]);
     const convId = opts?.fresh ? null : activeId;
     setItems((a) => [...a, { role: "user", content: q }, { role: "assistant", content: "" }]);
     setDraft(""); setErr(null); setBusy(true); setMood(null);
@@ -197,7 +213,7 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
     try {
       const r = await fetch("/api/dusty", {
         method: "POST", headers: { "Content-Type": "application/json" }, signal: ctrl.signal,
-        body: JSON.stringify({ question: q, conversation_id: convId, context: convId ? undefined : (opts?.ctx ?? ref) }),
+        body: JSON.stringify({ question: q, conversation_id: convId, context: convId ? undefined : (opts?.ctx ?? ref), file_ids: ready.map((a) => a.id) }),
       });
       if (!r.ok || !r.body) {
         const b = await r.json().catch(() => ({}));
@@ -237,6 +253,57 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
 
   async function copy(i: number, text: string) {
     try { await navigator.clipboard.writeText(text); setCopied(i); setTimeout(() => setCopied(null), 1800); } catch { /* blocked */ }
+  }
+
+  // Where an attachment is filed: on what the chat is about — the job, the
+  // person, the customer — else unfiled in Documents. Dusty's reader reads it.
+  function attachTarget(): Record<string, unknown> {
+    const a = convs?.find((c) => c.id === activeId);
+    const kind = a ? a.context_kind : ref.kind;
+    const id = a ? a.context_id : "id" in ref ? ref.id : null;
+    if (id && kind === "scope") return { job_id: id };
+    if (id && kind === "thread") return { contact_id: id };
+    if (id && kind === "customer") return { customer_id: id };
+    return { from_dusty: true };
+  }
+  async function attach(list: FileList | null) {
+    const picked = Array.from(list ?? []).slice(0, 8);
+    if (fileInput.current) fileInput.current.value = "";
+    for (const file of picked) {
+      const key = `${Date.now()}-${file.name}`;
+      setAtts((a) => [...a, { key, name: file.name, pct: 0, id: null, error: null }]);
+      const set = (p: Partial<Att>) => setAtts((a) => a.map((x) => (x.key === key ? { ...x, ...p } : x)));
+      try {
+        const r = await fetch("/api/files", { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: file.name, mime: file.type, size: file.size, ...attachTarget() }) });
+        const made = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(made?.error || `HTTP ${r.status}`);
+        await sendBytes(made.upload.signed_url, file, (pct) => set({ pct }));
+        const d = await fetch(`/api/files/${made.file.id}/done`, { method: "POST" });
+        if (!d.ok) throw new Error("the upload didn't finish");
+        set({ id: made.file.id as string, pct: 100 });
+      } catch (e) { set({ error: e instanceof Error ? e.message : String(e) }); }
+    }
+  }
+  async function voice(blob: Blob) {
+    setRecording(false); setHearing(true); setErr(null);
+    try {
+      const fd = new FormData();
+      fd.append("audio", blob, blob.type.includes("mp4") ? "voice.mp4" : "voice.webm");
+      const r = await fetch("/api/dusty/transcribe", { method: "POST", body: fd });
+      const b = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(b?.error || `HTTP ${r.status}`);
+      void ask(`${draft.trim() ? `${draft.trim()} ` : ""}${String(b.text)}`);
+    } catch (e) { setErr(`Voice message: ${e instanceof Error ? e.message : String(e)}`); }
+    finally { setHearing(false); }
+  }
+  function create(what: "customer" | "job" | "receipt") {
+    setPlusOpen(false);
+    const href = what === "customer" ? "/dashboard/customers?new=1" : what === "job" ? "/dashboard/scope?new=1" : "/dashboard/vendors?receipt=1";
+    // On a phone Dusty covers the page, so he steps aside for the form.
+    if (!window.matchMedia("(min-width: 1024px)").matches) onClose();
+    router.push(href);
+    setTimeout(() => window.dispatchEvent(new CustomEvent("sc:create", { detail: what })), 0);
   }
 
   if (!open) return null;
@@ -324,14 +391,39 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
           </button>
           <div className="flex-1 min-w-0">
             <div style={{ fontFamily: disp, fontSize: F.md, fontWeight: 600, lineHeight: 1.1, ...clip }}>{active ? active.title : "New chat"}</div>
-            <div style={{ ...eyebrow, fontSize: 9, color: hot ? T.hiviz : T.ink3, ...clip }}>
-              {lookingAt ? `Looking at ${lookingAt}` : "Cold — your jobs, costs and threads"}
-            </div>
+            {/* Only when he is looking at something (Coy, 2026-10-01: "remove
+                this sub line entirely. Unless it is looking at a job, customer…"). */}
+            {hot && lookingAt && <div style={{ ...eyebrow, fontSize: 9, color: T.hiviz, ...clip }}>Looking at {lookingAt}</div>}
           </div>
           <button onClick={() => setCatchUpLocal((n) => n + 1)} disabled={busy} title="What's new since I last looked?"
             className="rounded px-2" style={{ height: 30, border: `1px solid ${T.hair}`, background: T.card, fontSize: F.xs, color: T.ink2, cursor: "pointer", whiteSpace: "nowrap" }}>
             What&apos;s new?</button>
-          <button onClick={() => select(null)} aria-label="New chat" style={{ ...iconBtn, fontSize: 18, color: T.ink2 }}>+</button>
+          <div className="relative">
+            <button onClick={() => setPlusOpen((o) => !o)} aria-label="New…" aria-expanded={plusOpen} style={{ ...iconBtn, fontSize: 18, color: T.ink2, background: plusOpen ? T.chalkDim : T.card }}>+</button>
+            {plusOpen && (
+              <>
+                <button aria-label="Close the menu" onClick={() => setPlusOpen(false)} className="fixed inset-0" style={{ zIndex: 70, cursor: "default" }} />
+                <div role="menu" className="absolute right-0 mt-1 rounded overflow-hidden" style={{ zIndex: 71, width: 230, background: T.card, border: `1px solid ${T.hair}`, boxShadow: "0 10px 30px rgba(0,0,0,.18)" }}>
+                  {([
+                    ["chat", "New chat", "Start fresh with Dusty"],
+                    ["customer", "New customer", "A household, business or school"],
+                    ["job", "New job", "For a customer — on the Jobs board"],
+                    ["receipt", "Add a receipt or quote", "Photo or file — Dusty reads the vendor and prices"],
+                  ] as const).map(([k, l, sub], i) => (
+                    <button key={k} role="menuitem" onClick={() => { if (k === "chat") { setPlusOpen(false); select(null); } else create(k); }}
+                      className="w-full text-left px-3 py-2" style={{ borderTop: i ? `1px solid ${T.hairSoft}` : "none", cursor: "pointer" }}>
+                      <span style={{ display: "block", fontFamily: disp, fontSize: F.md, fontWeight: 600, color: T.ink }}>{l}</span>
+                      <span style={{ display: "block", fontSize: 10, color: T.ink3 }}>{sub}</span>
+                    </button>
+                  ))}
+                  <div className="px-3 py-2" aria-disabled="true" style={{ borderTop: `1px solid ${T.hairSoft}` }}>
+                    <span style={{ display: "block", fontFamily: disp, fontSize: F.md, fontWeight: 600, color: T.ink3 }}>New invoice</span>
+                    <span style={{ display: "block", fontSize: 10, color: T.ink3 }}>Not built yet — invoices come after proposals</span>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
           <button onClick={onClose} aria-label="Close Dusty" style={iconBtn}>
             <svg width="12" height="12" viewBox="0 0 13 13" aria-hidden="true"><path d="M1 1 L12 12 M12 1 L1 12" stroke="currentColor" style={{ color: T.ink }} strokeWidth="1.8" /></svg>
           </button>
@@ -393,20 +485,56 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
 
         <form onSubmit={(e) => { e.preventDefault(); void ask(draft); }} className="shrink-0 px-3 py-2.5"
           style={{ borderTop: `1px solid ${T.hair}`, background: T.card }}>
+          {atts.length > 0 && (
+            <div className="mx-auto flex flex-wrap gap-1.5 mb-2" style={{ maxWidth: 760 }}>
+              {atts.map((a) => (
+                <span key={a.key} className="rounded px-2 flex items-center gap-1.5" title={a.error ?? undefined}
+                  style={{ height: 26, maxWidth: 220, border: `1px solid ${a.error ? T.red : T.hair}`, background: T.slab, fontSize: F.xs, color: a.error ? T.red : T.ink2 }}>
+                  <span style={{ ...clip }}>📎 {a.name}</span>
+                  <span style={{ ...nums, color: T.ink3 }}>{a.error ? "failed" : a.id ? "" : `${a.pct}%`}</span>
+                  <button type="button" onClick={() => setAtts((x) => x.filter((y) => y.key !== a.key))} aria-label={`Remove ${a.name}`} style={{ color: T.ink3, cursor: "pointer" }}>×</button>
+                </span>
+              ))}
+            </div>
+          )}
           <div className="mx-auto flex items-end gap-2" style={{ maxWidth: 760 }}>
-            {/* Coy, 2026-09-30: once a chat is going, Dusty lives here, beside
-                the box — his real state: fetching, working, done, or stuck. */}
-            {items.length > 0 && <span className="shrink-0" style={{ alignSelf: "center" }}><DustyAvatar state={dustyState} size={32} /></span>}
-            <textarea value={draft} onChange={(e) => setDraft(e.target.value)} rows={1} maxLength={4000}
-              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void ask(draft); } }}
-              placeholder={active ? "Follow up…" : hot ? `Ask about ${GUESS[ref.kind]}…` : "Ask Dusty…"}
-              className="flex-1 rounded-lg px-3 py-2 outline-none resize-none"
-              style={{ border: `1px solid ${T.hair}`, fontSize: F.sm, maxHeight: 140, fontFamily: body, minWidth: 0 }} />
-            <button type="submit" disabled={busy || !draft.trim()} className="rounded-lg px-3"
-              style={{ height: 38, background: busy || !draft.trim() ? T.hair : T.hiviz, color: T.onHiviz, fontFamily: disp,
-                       fontSize: F.sm, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".06em" }}>
-              {busy ? "…" : "Ask"}
-            </button>
+            {recording ? (
+              <VoiceRecorder onSend={(b) => void voice(b)} onCancel={() => setRecording(false)} />
+            ) : (
+              <>
+                {/* + attach (Coy, 2026-10-01): photos and files, filed on what the chat is about. */}
+                <input ref={fileInput} type="file" multiple hidden onChange={(e) => void attach(e.target.files)}
+                  accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.csv,.txt" />
+                <button type="button" onClick={() => fileInput.current?.click()} aria-label="Attach photos or files" title="Attach photos or files"
+                  className="shrink-0 rounded-full flex items-center justify-center" style={{ width: 38, height: 38, border: `1px solid ${T.hair}`, background: T.card, color: T.ink2, fontSize: 20, cursor: "pointer" }}>+</button>
+                {/* Coy, 2026-09-30: once a chat is going, Dusty lives here, beside
+                    the box — his real state: fetching, working, done, or stuck. */}
+                {items.length > 0 && <span className="shrink-0 hidden sm:inline" style={{ alignSelf: "center" }}><DustyAvatar state={hearing ? "loading" : dustyState} size={32} /></span>}
+                <textarea value={draft} onChange={(e) => setDraft(e.target.value)} rows={1} maxLength={4000}
+                  onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void ask(draft); } }}
+                  placeholder={hearing ? "Listening back…" : active ? "Follow up…" : hot ? `Ask about ${GUESS[ref.kind]}…` : "Ask Dusty…"}
+                  className="flex-1 rounded-lg px-3 py-2 outline-none resize-none"
+                  style={{ border: `1px solid ${T.hair}`, fontSize: F.sm, maxHeight: 140, fontFamily: body, minWidth: 0, background: T.card, color: T.ink }} />
+                {/* Telegram's way: an empty box offers the mic, a typed one the send. */}
+                {!draft.trim() && !atts.length ? (
+                  <button type="button" onClick={() => { setErr(null); setRecording(true); }} disabled={busy || hearing} aria-label="Record a voice message" title="Record a voice message"
+                    className="shrink-0 rounded-full flex items-center justify-center" style={{ width: 38, height: 38, background: busy || hearing ? T.hair : T.hiviz, color: T.onHiviz, cursor: "pointer" }}>
+                    {hearing ? "…" : (
+                      <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
+                        <rect x="5.5" y="1.5" width="5" height="8.5" rx="2.5" fill="currentColor" stroke="none" />
+                        <path d="M3 7.5a5 5 0 0 0 10 0M8 12.5v2.2" />
+                      </svg>
+                    )}
+                  </button>
+                ) : (
+                  <button type="submit" disabled={busy || atts.some((a) => !a.id && !a.error)} className="rounded-lg px-3"
+                    style={{ height: 38, background: busy ? T.hair : T.hiviz, color: T.onHiviz, fontFamily: disp,
+                             fontSize: F.sm, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".06em" }}>
+                    {busy ? "…" : "Ask"}
+                  </button>
+                )}
+              </>
+            )}
           </div>
         </form>
       </div>

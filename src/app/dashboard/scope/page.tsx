@@ -59,6 +59,15 @@ export default function JobsBoard() {
   const [moving, setMoving] = useState<Job | null>(null);
   const [col, setCol] = useState(0);
   const lane = useRef<HTMLDivElement | null>(null);
+  // ?new=1 — Dusty's + menu → New job (2026-10-01).
+  useEffect(() => {
+    let off = false;
+    Promise.resolve().then(() => { if (!off && new URLSearchParams(window.location.search).get("new") === "1") setNewOpen(true); });
+    // Already on this page: the menu says so with an event.
+    const on = (e: Event) => { if ((e as CustomEvent<string>).detail === "job") setNewOpen(true); };
+    window.addEventListener("sc:create", on);
+    return () => { off = true; window.removeEventListener("sc:create", on); };
+  }, []);
 
   useEffect(() => {
     let off = false;

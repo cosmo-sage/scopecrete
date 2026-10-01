@@ -90,7 +90,7 @@ export async function POST(req: NextRequest) {
   const { supabase, orgId, userId, applyCookies } = result.session;
   const bad = (m: string, s = 400) => applyCookies(NextResponse.json({ error: m }, { status: s }));
 
-  let b: { name?: unknown; mime?: unknown; size?: unknown; job_id?: unknown; section_id?: unknown; contact_id?: unknown; category?: unknown; in_plan_room?: unknown };
+  let b: { name?: unknown; mime?: unknown; size?: unknown; job_id?: unknown; section_id?: unknown; contact_id?: unknown; category?: unknown; in_plan_room?: unknown; customer_id?: unknown; from_dusty?: unknown };
   try { b = await req.json(); } catch { return bad("Body must be JSON."); }
   const name = typeof b.name === "string" ? b.name.trim().slice(0, 200) : "";
   const mime = typeof b.mime === "string" ? b.mime.slice(0, 120) : "";
@@ -102,8 +102,14 @@ export async function POST(req: NextRequest) {
   let jobId = id(b.job_id);
   const sectionId = id(b.section_id);
   let contactId = id(b.contact_id);
-  const unfiled = !jobId && !contactId && !sectionId;
-  if (unfiled && b.category !== "receipt" && b.category !== "vendor_quote") return bad("Say what the file belongs to: a job, an area or a person.");
+  const customerId = id(b.customer_id);
+  const unfiled = !jobId && !contactId && !sectionId && !customerId;
+  // Attached in Dusty's chat with nothing open (2026-10-01): it waits unfiled in Documents.
+  if (unfiled && b.category !== "receipt" && b.category !== "vendor_quote" && b.from_dusty !== true) return bad("Say what the file belongs to: a job, an area or a person.");
+  if (customerId) {
+    const { data: cu } = await supabase.from("customers").select("id").eq("org_id", orgId).eq("id", customerId).maybeSingle();
+    if (!cu) return bad("No such customer.", 404);
+  }
 
   // Everything named must be this org's.
   if (sectionId) {
@@ -124,9 +130,10 @@ export async function POST(req: NextRequest) {
 
   const kind = kindOf(mime, name);
   const fileId = crypto.randomUUID();
-  const path = storagePath(orgId, jobId ?? contactId ?? sectionId ?? "inbox", fileId, name);
+  const path = storagePath(orgId, jobId ?? contactId ?? sectionId ?? customerId ?? "inbox", fileId, name);
   const { data: row, error } = await supabase.from("job_files").insert({
     id: fileId, org_id: orgId, job_id: jobId, section_id: sectionId, contact_id: contactId, name, kind,
+    ...(customerId ? { customer_id: customerId } : {}),
     // The Price book's vendor-quote import says what it is; otherwise a first guess from the name.
     category: (CATEGORIES as readonly string[]).includes(String(b.category)) ? b.category : categoryGuess(kind, name), mime_type: mime || null, byte_size: size, storage_path: path,
     source: "upload", fetch_state: "pending", created_by: userId,

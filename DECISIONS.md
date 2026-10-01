@@ -253,8 +253,8 @@ across the database … I also want to be able to upload a logo for my org."*
 - **People:** `sc_org_people(org)` (SECURITY DEFINER, members only) returns
   each member's name, email and role — the one way a teammate's email is read.
   Your own name is saved on your auth account (`PATCH /api/me`, `full_name`).
-- **Invites (migration 062, written 2026-10-01 — NOT YET APPLIED, its
-  rehearsal awaits Coy's approval).** Coy: *"add other users to my Org …
+- **Invites (migration 062, applied 2026-10-01 on Coy's "apply 062" —
+  except `sc_remove_member`, below).** Coy: *"add other users to my Org …
   and send invites to the dashboard."* Settings → Organisation → People →
   **+ Invite**: an email and a role (owner · member · field crew) →
   `sc_create_invite()` (owners only) → a link `/invite/<token>` shown ONCE to
@@ -268,7 +268,14 @@ across the database … I also want to be able to upload a logo for my org."*
   owner). All SECURITY DEFINER, execute for `authenticated` only, no INSERT
   policy on `org_invites`; audited (`member_invited`, `invite_revoked`,
   `member_joined`, `member_removed`). `getUserSession()` (signed in, no org
-  needed) serves only `/api/invites/[token]`. **Roles don't limit what a
+  needed) serves only `/api/invites/[token]`. Rehearsed (rolled back): an
+  existing member and a direct insert refused; a stranger sees no invites and
+  can't invite; the wrong email refused; the invitee joins and sees the org;
+  a member can't invite; a used link can't be reused; withdraw works; anon
+  refused. **`sc_remove_member` is NOT applied:** its `delete` statement is
+  held at the Supabase connector's approval gate (timed out twice); until it
+  is approved and applied, the × on a person says "Removing people isn't
+  switched on yet". **Roles don't limit what a
   member sees yet** — everyone in the org reads everything under
   `get_user_org_ids()`; only owners manage the org.
 - Rehearsed before applying: owner renames and it is audited; blank refused;

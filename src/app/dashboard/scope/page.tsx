@@ -376,7 +376,7 @@ function NewJobSheet({ open, onClose }: { open: boolean; onClose: () => void }) 
 
   return (
     <Sheet open={open} onClose={close} title="New job"
-      sub={choosing ? (picking === "referrer" ? "Who sent it?" : "Who is it for? (who pays)") : "What kind of job?"}>
+      sub={choosing ? (picking === "referrer" ? "Who sent it?" : undefined) : "What kind of job?"}>
       {choosing ? (
         <>
           <div className="p-3">

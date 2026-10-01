@@ -52,6 +52,8 @@ interface Activity {
 
 const POLL_MS = 20_000;
 const CYCLE_MS = 4_000;
+/** Musings and dreams linger (Coy, 2026-10-01: "every 15-30 seconds"); news moves on quicker. */
+const MUSE_MS = 20_000;
 const DAY_MS = 86_400_000;
 const SEEN_KEY = "sc-activity-seen";
 
@@ -138,11 +140,12 @@ export function ActivityLine({ busy, onWorking, inline }: {
   // Walk the queue once; the last item stays until something new arrives.
   const current = queue.length ? queue[Math.min(idx, queue.length - 1)] : null;
   const cycling = !busy && !data?.pinned && idx < queue.length - 1 && !open && !hover;
+  const lingers = current?.kind === "musing";
   useEffect(() => {
     if (!cycling) return;
-    const t = setInterval(() => setIdx((i) => i + 1), CYCLE_MS);
-    return () => clearInterval(t);
-  }, [cycling]);
+    const t = setTimeout(() => setIdx((i) => i + 1), lingers ? MUSE_MS : CYCLE_MS);
+    return () => clearTimeout(t);
+  }, [cycling, idx, lingers]);
   // Shown means seen — it will not come round again on this device.
   useEffect(() => {
     if (!current || current.kind === "running" || busy || data?.pinned) return;

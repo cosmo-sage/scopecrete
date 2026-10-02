@@ -84,7 +84,8 @@ export function BidStrip({ jobId, onUndone, onSummary }: { jobId: string; onUndo
   ) : null
 
   return (
-    <section className="mx-3 mt-3 rounded" style={{ background: T.card, border: `1px solid ${T.hair}` }} aria-label="The bid">
+    // Full width like the section cards under it (Coy, 2026-10-02: "needs to be the same width as everything else").
+    <section style={{ background: T.card, borderBottom: `1px solid ${T.hair}`, marginBottom: 8 }} aria-label="The bid">
       <div className="flex items-center gap-2 px-3 py-2" style={{ borderBottom: open ? `1px solid ${T.hairSoft}` : "none" }}>
         <button onClick={() => setOpen(!open)} aria-expanded={open} className="flex items-center gap-1.5" style={{ cursor: "pointer", color: T.ink }}>
           <span aria-hidden="true" style={{ fontSize: 10, color: T.ink3, display: "inline-block", transform: open ? "rotate(90deg)" : "none", transition: "transform .15s" }}>▶</span>

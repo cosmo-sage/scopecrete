@@ -75,6 +75,10 @@ const fmt = (n: number, max = 0, min = 0) => n.toLocaleString("en-US", { maximum
 export function scopeLines(t: Takeoff, priced: boolean): string[] {
   const out: string[] = [];
   for (const q of t.sections) {
+    if (q.count !== null && q.count_unit === "LF") {
+      out.push(`- ${q.name || "Unnamed section"} (${q.work_type}): ${fmt(q.count, 2)} linear ft${q.sqft !== null ? `, ${fmt(q.sqft, 1)} sq ft in plan` : ""}${!q.concrete ? "" : q.cy_neat === null ? ` — yards need ${q.missing.join(", ")}` : `, ${q.depth_in} in deep, ${fmt(q.cy_neat, 2, 2)} cu yd neat`}`);
+      continue;
+    }
     if (q.count !== null) { out.push(`- ${q.name || "Unnamed section"} (${q.work_type}): counted — ${fmt(q.count, 2)} ${q.count_unit} (no area, no pour)`); continue; }
     const dims = q.sqft === null ? `area not set (${q.missing.join(", ")} missing)` : `${fmt(q.sqft, 1)} sq ft`;
     const conc = !q.concrete ? "no pour" : q.cy_neat === null ? `thickness ${q.depth_in === null ? "NOT SET" : `${q.depth_in} in`}, yards unknown` : `${q.depth_in} in thick, ${fmt(q.cy_neat, 2, 2)} cu yd neat`;

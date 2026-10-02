@@ -90,6 +90,21 @@ export interface SectionQuantities {
 }
 
 export function quantities(s: SectionInput): SectionQuantities {
+  const countUnit = (s.count_unit || "EA").toUpperCase();
+  // Measured in linear feet (Coy, 2026-10-02: "in addition to length/width, area and
+  // counts, I need linear ft"): the length is the count, in LF, so lines priced per LF
+  // take it. A grade beam's width (width_ft) and depth make its plan area and yards;
+  // without them a pour names what it needs, and nothing per LF is held up.
+  if (countUnit === "LF" && has(s.count_qty) && s.count_qty > 0 && !(has(s.sqft_override) && s.sqft_override > 0) && !has(s.length_ft)) {
+    const concrete = isConcrete(s.work_type);
+    const width = has(s.width_ft) && s.width_ft > 0 ? s.width_ft : null;
+    const depth = has(s.depth_in) && s.depth_in > 0 ? s.depth_in : null;
+    const sqft = width !== null ? s.count_qty * width : null;
+    const missing = concrete ? [...(width === null ? ["width"] : []), ...(depth === null ? ["depth"] : [])] : [];
+    return { id: s.id, name: s.name ?? null, work_type: s.work_type, concrete, sqft, sqft_source: sqft === null ? null : "dimensions",
+      depth_in: depth, cy_neat: concrete && sqft !== null && depth !== null ? (sqft * depth) / 12 / 27 : null,
+      missing, count: s.count_qty, count_unit: "LF" };
+  }
   // Counted, not measured (Coy, 2026-10-02: "it's not an area, it's a quantity"):
   // no area, no pour, nothing missing — its lines take the count.
   if (has(s.count_qty) && s.count_qty > 0 && !(has(s.sqft_override) && s.sqft_override > 0) && !has(s.length_ft) && !has(s.width_ft)) {
@@ -237,10 +252,10 @@ export function takeoffUnit(unit: string): "SF" | "SY" | "LF" | "EA" | "CY" | nu
   return null;
 }
 
-/** Does a line's unit count the same thing as an area's count? EA ≈ each / ea / count; otherwise the same word. */
+/** Does a line's unit count the same thing as an area's count? EA ≈ each / ea / count, LF ≈ lin ft; otherwise the same word. */
 export function countUnitMatches(lineUnit: string, countUnit: string): boolean {
   const a = takeoffUnit(lineUnit), b = takeoffUnit(countUnit);
-  if (a === "EA" && b === "EA") return true;
+  if (a && a === b) return true;
   return lineUnit.trim().toLowerCase().replace(/[.\s]/g, "") === countUnit.trim().toLowerCase().replace(/[.\s]/g, "");
 }
 

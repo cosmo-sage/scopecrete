@@ -24,7 +24,7 @@
  * the proposal read — so there is one set of numbers.
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { T, F, disp, eyebrow, nums, clip, money, money0, formatPhone } from "@/lib/v34/tokens";
 import { Sheet, Drawer } from "@/components/v34/primitives";
 import { PriceBook } from "@/components/v34/price-book";
@@ -117,7 +117,30 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0 }: {
   }, []);
   const [editing, setEditing] = useState<Line | null>(null);
   const [taxOpen, setTaxOpen] = useState(false);
-  const [measure, wide] = useWide<HTMLDivElement>(900);
+  const [measureWide, roomy] = useWide<HTMLDivElement>(900);
+  // The grid only when it fits: a table wider than its room hid its last columns
+  // behind Dusty's docked panel (Coy, 2026-10-02). If it overflows at this width,
+  // the cards are used until the budget is wider than where it overflowed.
+  const [width, setWidth] = useState(0);
+  const [tightAt, setTightAt] = useState<number | null>(null);
+  const sizeObs = useRef<ResizeObserver | null>(null);
+  const measure = useCallback((el: HTMLDivElement | null) => {
+    measureWide(el);
+    sizeObs.current?.disconnect();
+    if (!el || typeof ResizeObserver === "undefined") return;
+    sizeObs.current = new ResizeObserver(([e]) => setWidth(Math.round(e.contentRect.width)));
+    sizeObs.current.observe(el);
+  }, [measureWide]);
+  const wide = roomy && !(tightAt !== null && width <= tightAt);
+  const tableObs = useRef<ResizeObserver | null>(null);
+  const tableBox = useCallback((el: HTMLDivElement | null) => {
+    tableObs.current?.disconnect();
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const check = () => { if (el.scrollWidth > el.clientWidth + 2) setTightAt(Math.round(el.getBoundingClientRect().width) + 2); };
+    tableObs.current = new ResizeObserver(check);
+    tableObs.current.observe(el);
+    if (el.firstElementChild) tableObs.current.observe(el.firstElementChild);
+  }, []);
   const reload = useCallback(() => setTick((n) => n + 1), []);
 
   useEffect(() => {
@@ -265,7 +288,7 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0 }: {
 
       {/* ---- the lines ---- */}
       {wide ? (
-        <div className="overflow-x-auto">
+        <div ref={tableBox} className="overflow-x-auto">
           <table className="w-full" style={{ borderCollapse: "collapse", fontSize: F.sm, ...nums }}>
             <thead>
               <tr style={{ background: T.slab }}>

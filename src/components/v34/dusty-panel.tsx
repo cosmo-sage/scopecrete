@@ -394,10 +394,12 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
             {[0, 1, 2].map((i) => <span key={i} style={{ width: 13, height: 1.5, background: T.ink2, borderRadius: 1 }} />)}
           </button>
           <div className="flex-1 min-w-0">
-            <div style={{ fontFamily: disp, fontSize: F.md, fontWeight: 600, lineHeight: 1.1, ...clip }}>{active ? active.title : "New chat"}</div>
-            {/* Only when he is looking at something (Coy, 2026-10-01: "remove
-                this sub line entirely. Unless it is looking at a job, customer…"). */}
-            {hot && lookingAt && <div style={{ ...eyebrow, fontSize: 9, color: T.hiviz, ...clip }}>Looking at {lookingAt}</div>}
+            {/* One line (Coy, 2026-10-02): "Looking at: <the job>" when he is on something,
+                else the chat's own title. */}
+            <div title={hot && lookingAt ? `Looking at: ${lookingAt}` : undefined}
+              style={{ fontFamily: disp, fontSize: F.md, fontWeight: 600, lineHeight: 1.1, ...clip }}>
+              {hot && lookingAt ? <><span style={{ color: T.ink3, fontWeight: 500 }}>Looking at: </span>{lookingAt}</> : active ? active.title : "New chat"}
+            </div>
           </div>
           <button onClick={() => setCatchUpLocal((n) => n + 1)} disabled={busy} title="What's new since I last looked?"
             className="rounded px-2" style={{ height: 30, border: `1px solid ${T.hair}`, background: T.card, fontSize: F.xs, color: T.ink2, cursor: "pointer", whiteSpace: "nowrap" }}>

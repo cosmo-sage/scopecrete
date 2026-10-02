@@ -8,6 +8,7 @@
    (activity-line.tsx always holds its row). Everything that sits under or
    beside the header measures from this — one number, not five. */
 :root { --sc-head: 92px; --sc-foot: 58px; --sc-dusty: 400px; }
+.sc-sheets { top: var(--sc-head); bottom: 0; right: 0; left: 0; }
 /* Desktop (Coy, 2026-09-30): the activity line moved up into the 54px header
    beside the logo, so the header is one row. */
 @media (min-width: 1024px) { :root { --sc-head: 54px; } }
@@ -187,6 +188,12 @@
   .sc-with-dusty { padding-right: var(--sc-dusty); }
   /* A sheet opened while Dusty is docked lands in the page beside him. */
   html[data-dusty="open"] .sc-drawer { right: var(--sc-dusty) !important; left: 84px !important; top: var(--sc-head) !important; }
+  /* The plan sheets beside the budget (2026-10-02): the right part of the page, the budget left of it, Dusty right of it. */
+  .sc-sheets { left: calc(84px + (100vw - 84px) * .42) !important; }
+  html[data-dusty="open"] .sc-sheets { right: var(--sc-dusty) !important; left: calc(84px + (100vw - 84px - var(--sc-dusty)) * .38) !important; }
+  /* …and the page itself narrows to the room left of it, so nothing is hidden underneath. */
+  html[data-sheets="open"] main { padding-right: calc((100vw - 84px) * .58) !important; }
+  html[data-sheets="open"][data-dusty="open"] main { padding-right: calc(var(--sc-dusty) + (100vw - 84px - var(--sc-dusty)) * .62) !important; }
 }
 /* The activity dot's colour and rhythm say what kind of work it is
    (Coy, 2026-09-30): reading someone — slow blue breath; Dusty answering —

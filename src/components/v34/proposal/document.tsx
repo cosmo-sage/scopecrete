@@ -323,7 +323,8 @@ function TemplateTag({ name, starter, edited }: { name: string | null; starter: 
 function areaSpec(a: DocArea) {
   const bits: string[] = [];
   if (a.length_ft && a.width_ft) bits.push(`${qtyFmt(a.length_ft)} × ${qtyFmt(a.width_ft)} ft`);
-  if (a.sqft) bits.push(`${Math.round(a.sqft).toLocaleString("en-US")} sf`);
+  if (a.count && (a.count_unit ?? "").toUpperCase() === "LF") bits.push(`${qtyFmt(a.count)} LF`);
+  else if (a.sqft) bits.push(`${Math.round(a.sqft).toLocaleString("en-US")} sf`);
   else if (a.count) bits.push(`${qtyFmt(a.count)} ${a.count_unit ?? "EA"}`);
   if (a.depth_in) bits.push(`${qtyFmt(a.depth_in)}" thick`);
   if (a.psi) bits.push(`${a.psi} psi`);

@@ -1253,6 +1253,16 @@ percentage of labour — all three contradict this section and §4.
   The budget shows "8 EA · $X/EA"; the proposal shows "8 EA"; Dusty sees
   "counted 8 EA". A section set to Count shows no Thickness or Concrete
   cells (Coy: "thickness isn't required for counted items").
+- **A section measured in linear feet (Coy, 2026-10-02: "in addition to
+  length/width, area and counts, I need linear ft").** **Measured by** gains
+  **Linear ft**: the length is stored as the count with `count_unit='LF'`
+  (no migration); a line on it priced per LF (LF, lin ft, ft) takes it. For a
+  pour — a grade beam, a curb — the beam's **width (in)** is kept in
+  `width_ft` and its **depth** in `depth_in`: plan area = LF × width, yards =
+  area × depth (`quantities()`, tested on Walker High's 430 LF of 8" × 18"
+  grade beams). Without them the yards name what they need; nothing per LF
+  waits. A bid line's "430 LF" is one tap. The proposal shows "430 LF";
+  Dusty sees the LF, the plan area and the yards.
 - **Dusty plans budgets; Coy applies them (Coy, 2026-10-02: "chat with Dusty
   to analyze the list of items in my cost book and apply the items that I
   might need or create new items or modify cost items and organize by
@@ -1638,8 +1648,9 @@ expected start date per quoted job before it means anything. Add the field.
   72px, Details first) — the main rail picks the page, this one the
   sub-page; the phone keeps its row of tabs.
 - Dusty has two entry points: COLD from the footer (no job context) and HOT
-  from a page (that page preloaded). The chat's header says "Looking at …"
-  only when HOT; cold has no sub-line (Coy, 2026-10-01).
+  from a page (that page preloaded). The chat's header is one line (Coy,
+  2026-10-02): **"Looking at: <the job>"** when HOT, else the chat's title
+  ("New chat").
 - **Voice messages and attachments (2026-10-01).** An empty message box
   offers the **mic** (Telegram's way; typing turns it into Ask): it records
   at once with a breathing red dot, the time and a live level meter
@@ -1724,7 +1735,9 @@ expected start date per quoted job before it means anything. Add the field.
   the line sits in the header beside the logo and its drop-down is ~560px
   wide under it; on a phone it is the row under the header. The emblem and
   the line from it are gone; while a read runs the footer Dusty shows the
-  mixer.
+  mixer. **On a desktop it takes all the header's room up to the buttons**
+  (2026-10-02, Coy: "there is enough room … don't cut it off"; it was capped
+  at 720px with an empty spacer beside it).
 - **Taps stay quick (2026-09-30, Coy's interaction timing: INP 1,056 ms,
   976 ms of it input delay).** The activity line typed by setting React
   state every 18 ms and re-laid-out the page per letter; it now types with
@@ -1847,7 +1860,10 @@ expected start date per quoted job before it means anything. Add the field.
   its total, lines inside, tap a line for its sheet. Footer: tax switch,
   discount, each option's cost / price / total / margin or what blocks it.
   **+ Add from cost cards**: pick the area, search, add a card or a whole
-  group, or a one-off line.
+  group, or a one-off line. **The grid only when it fits (2026-10-02):** a table wider than
+  its room hid its last columns behind Dusty's docked panel (Coy); when it
+  would overflow, the budget shows the cards until it has more room than
+  that.
 - **The Plan Room (migration 059, 2026-09-30; Claude Design,
   `design/plan-room`).** Coy: *"scopecrete.ai will be a tool for me to do
   takeoffs manually."* (His own Hermes agent reads the bid emails he forwards
@@ -1998,7 +2014,9 @@ expected start date per quoted job before it means anything. Add the field.
   from the session, every id checked. Rehearsed: one draft per job; a final
   with no snapshot, or an edit to a final, refused; a stranger sees 0 rows
   and can't write; anon refused.
-- **The job's Bid strip (2026-10-01, §2i)** — folded by default since
+- **The job's Bid strip (2026-10-01, §2i)** — full width like the section
+  cards (2026-10-02, Coy: "needs to be the same width as everything else");
+  folded by default since
   2026-10-02 (Coy: "doesn't take up a lot of space on my mobile phone") to
   one row, "Bid · due Tue, Oct 13 …", ▶ opens it, remembered per device. On a job a forwarded bid made
   or fed: GC, estimator, bids due (hours left, red under 48), pre-bid, the
@@ -2023,6 +2041,31 @@ expected start date per quoted job before it means anything. Add the field.
   **Proposal settings** strip (project type, option, warranty, contract;
   folded on a phone, open on a desktop). The proposal's sub-line says the
   total and "rounded up to …", or why there is no price.
+- **Each section's plan sheets (Coy, 2026-10-02: "I need to verify the
+  scopes on the sheets the scopes were taken from … expand and view each
+  sheet … on desktop, a panel to the left or right of the budget").** Under
+  a section's bid line, **Check it on A2.1 · A2.2** — the sheets its line
+  names, linked only when a sheet by that exact number was read off the
+  plans (`sheetsFor()`, `src/lib/section-sheets.ts`, tested: A2.1 is never
+  A2.10). A tap opens the **sheet viewer** (`sheet-viewer.tsx`): on a desktop
+  a panel over the right ~58% of the page — the page itself narrows to the
+  room left of it (`html[data-sheets]`), so the budget stays in view, and
+  with Dusty docked it sits between the page and him — with the sheets down
+  its side: this section's, the other sections', then the rest of the set;
+  on a phone the whole screen with the sheets as chips. Fit · − · + (ctrl +
+  wheel), drag to pan, ‹ › and the arrow keys. **Measure in the Plan Room ›**
+  opens Takeoff on that sheet (`?step=takeoff&sheet=`) — measuring stays
+  there, with its scale rule. The job header's **Plan sheets (n)** opens the
+  same panel on every section's sheets. Attaching a sheet a bid line didn't
+  name needs a place to keep it (a column on `job_sections`) — not built.
+- **Dusty reads the plans' words (2026-10-02).** Asked to check each scope on
+  its sheet, he answered that the plan files were "not read" — he had only
+  their names. His job context now carries **What the plans and specs say**:
+  the bid reader's text of every page that mentions concrete, labelled
+  `[file · p.N · A2.1 Title]` (drawings first, ~40k characters), with the
+  instruction to quote the sheet and point out what disagrees, and to send
+  Coy to the sheet under the section. What is drawn but not written isn't
+  in it, and he says so.
 - **Job header (2026-09-28)** — four tappable chips, each opening its list:
   **Status** (the seven stages, with W.I.P.'s won / scheduled / pouring),
   **Type**, **Source** and **Vendors (n)** (crew on the job, add by subtype)

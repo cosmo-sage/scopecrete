@@ -212,6 +212,7 @@ async function filesBlock(sb: Sb, orgId: string, by: { jobId?: string; contactId
       const facts = f.facts ? Object.entries(f.facts).filter(([k]) => !["prompt", "dropped"].includes(k))
         .map(([k, v]) => `${k.replace(/_/g, " ")}: ${Array.isArray(v) ? v.join(", ") : String(v)}`).join("; ") : "";
       const said = f.read_state === "read" ? `${f.summary ?? ""}${facts ? ` [${facts}]` : ""}`
+        : f.category === "plan" && f.read_state === "skipped" ? "plan sheets — their text is under \"What the plans and specs say\" when the bid reader read them"
         : f.read_state === "skipped" || f.read_state === "failed" ? `not read (${f.read_error ?? f.read_state})` : "not read yet";
       return `[${day(f.created_at)}] ${f.name}${f.category ? ` (${f.category})` : ""} — ${said}`.slice(0, 1500);
     }),
@@ -293,7 +294,7 @@ async function scopeContext(sb: Sb, orgId: string, jobId: string): Promise<Assem
   const t = takeoff(sections, null);
   const days = num(job.duration_days);
   const jp = pricing.get(jobId) ?? null;
-  const [bud, plans, prop, mail, bid, ocr, book] = await Promise.all([budgetBlock(sb, orgId, jobId, sections, days, jp), plansBlock(sb, orgId, jobId), proposalBlock(sb, orgId, jobId), emailsBlock(sb, orgId, { jobId }), bidBlock(sb, orgId, jobId), ocrBlock(sb, orgId, jobId), priceBookBlock(sb, orgId)]);
+  const [bud, plans, prop, mail, bid, ocr, book, bidText] = await Promise.all([budgetBlock(sb, orgId, jobId, sections, days, jp), plansBlock(sb, orgId, jobId), proposalBlock(sb, orgId, jobId), emailsBlock(sb, orgId, { jobId }), bidBlock(sb, orgId, jobId), ocrBlock(sb, orgId, jobId), priceBookBlock(sb, orgId), bidTextBlock(sb, orgId, jobId)]);
   // Areas by ref, for a budget plan (src/lib/dusty/plan.ts).
   const areaRefs = ((secs ?? []) as Array<Record<string, unknown>>).map((r) => {
     const sq = num(r.sqft_override) ?? (num(r.length_ft) !== null && num(r.width_ft) !== null ? (num(r.length_ft) as number) * (num(r.width_ft) as number) : null);
@@ -316,6 +317,7 @@ async function scopeContext(sb: Sb, orgId: string, jobId: string): Promise<Assem
     ...(book ? [book] : []),
     ...(plans ? [plans] : []),
     ...(ocr ? [ocr] : []),
+    ...(bidText ? [bidText] : []),
     ...(prop ? [prop] : []),
     ...(mail ? [mail] : []),
     { title: "Section notes", lines: notes },
@@ -437,6 +439,34 @@ async function ocrBlock(sb: Sb, orgId: string, jobId: string): Promise<Block | n
   const rest = rows.filter((r) => !shown.has(`${r.page}`));
   if (rest.length) lines.push(`Also read, not shown here (ask by sheet): ${rest.slice(0, 80).map(name).join("; ")}`);
   return { title: "Plan sheets read by OCR (scans)", lines };
+}
+
+/**
+ * The words on the plans and specs, as the bid reader pulled them (§2i): each
+ * page that talks about concrete, labelled "[file · p.N · A2.1 Title]". Coy,
+ * 2026-10-02, asking Dusty to check each section on its sheets — he had only
+ * the sheet names and called the files "not read". Drawings first, then specs.
+ */
+const BID_TEXT_ROOM = 40_000;
+async function bidTextBlock(sb: Sb, orgId: string, jobId: string): Promise<Block | null> {
+  const { data: pkgs } = await sb.from("bid_packages").select("id").eq("org_id", orgId).eq("job_id", jobId).neq("state", "undone").limit(5);
+  const ids = ((pkgs ?? []) as Array<{ id: string }>).map((p) => p.id);
+  if (!ids.length) return null;
+  const { data } = await sb.from("bid_package_files").select("name, role, text_excerpt").eq("org_id", orgId).in("package_id", ids)
+    .not("text_excerpt", "is", null).limit(40);
+  const order: Record<string, number> = { drawings: 0, itb: 1, spec: 2 };
+  const rows = ((data ?? []) as Array<{ name: string; role: string | null; text_excerpt: string }>)
+    .filter((r) => r.text_excerpt.trim()).sort((a, b) => (order[a.role ?? ""] ?? 3) - (order[b.role ?? ""] ?? 3));
+  if (!rows.length) return null;
+  const lines = ["The text of the plan pages and spec pages that mention concrete, as printed (the drawings themselves are pictures — what is drawn but not written isn't here). Each page starts with [file · page · sheet]. To check a section, find its sheet here, quote what the sheet says, and point out anything that disagrees with the section or the bid. Coy opens a sheet by tapping its number under the section (\"Check it on A2.1\") or Plan sheets in the job header — it opens beside the budget."];
+  let room = BID_TEXT_ROOM;
+  for (const r of rows) {
+    if (room <= 200) { lines.push(`(${r.name}: left out for room — ask about a sheet by number)`); continue; }
+    const t = r.text_excerpt.slice(0, room);
+    room -= t.length;
+    lines.push(`══ ${r.name} (${r.role === "drawings" ? "plans" : r.role ?? "file"}) ══\n${t.replace(/\n\[/g, "\n\n[")}${t.length < r.text_excerpt.length ? "\n(… cut for room)" : ""}`);
+  }
+  return { title: "What the plans and specs say (pulled out by the bid reader)", lines };
 }
 
 /**

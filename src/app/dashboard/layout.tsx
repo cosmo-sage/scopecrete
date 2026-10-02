@@ -165,12 +165,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           {desktop ? (
             <>
               <span aria-hidden="true" className="sc-paper-divider" />
-              <div className="flex-1 min-w-0 flex" style={{ maxWidth: 720 }}>
+              {/* All the room up to the buttons (Coy, 2026-10-02: "there is enough room … don't cut it off"). */}
+              <div className="flex-1 min-w-0 flex">
                 <ActivityLine inline busy={dustyBusy} onWorking={setReaderWorking} />
               </div>
             </>
           ) : <span className="flex-1" />}
-          {desktop && <span className="flex-1" />}
 
           <div className="flex items-center gap-1.5 shrink-0 relative">
             <button onClick={() => { const o = !searchOpen; closeDrops(); setSearchOpen(o); }}

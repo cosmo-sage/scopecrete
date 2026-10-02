@@ -133,3 +133,18 @@ test("a card counted by hand, just added (qty_source set, no qty), takes the are
   const dw = { id: "d", name: "DW", work_type: "other", length_ft: null, width_ft: null, sqft_override: null, depth_in: null, count_qty: 8, count_unit: "EA" };
   assert.equal(ruleQty(L({ qty_rule: "manual", unit: "EA", section_id: "d", qty_source: "set", quantity: null }), [dw], null).qty, 8);
 });
+
+test("a section measured in linear feet: LF items take the length; a beam's width and depth give its yards", () => {
+  // Walker High: "Perimeter grade beams (8"x18") — 430 LF".
+  const gb = { id: "g", name: "Grade beams", work_type: "footing", length_ft: null, width_ft: null, sqft_override: null, depth_in: null, count_qty: 430, count_unit: "LF" };
+  let q = quantities(gb);
+  assert.equal(q.count, 430); assert.equal(q.count_unit, "LF"); assert.equal(q.cy_neat, null);
+  assert.deepEqual(q.missing, ["width", "depth"]);
+  assert.equal(ruleQty(L({ qty_rule: "manual", unit: "lin ft", section_id: "g" }), [gb], null).qty, 430, "lin ft is LF");
+  q = quantities({ ...gb, width_ft: 8 / 12, depth_in: 18 });
+  near(q.sqft, 430 * 8 / 12);
+  near(q.cy_neat, 430 * (8 / 12) * 1.5 / 27);
+  assert.deepEqual(q.missing, []);
+  // A saw cut in LF has no pour and nothing missing.
+  assert.deepEqual(quantities({ ...gb, work_type: "demo" }).missing, []);
+});

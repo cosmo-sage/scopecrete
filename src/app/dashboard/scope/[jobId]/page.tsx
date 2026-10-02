@@ -31,6 +31,9 @@ import { SectionPhotos } from "@/components/v34/section-photos";
 import { BidStrip } from "@/components/v34/bid-strip";
 import { JobTabs } from "@/components/v34/job-tabs";
 import { JobBudget, type BudgetSummary } from "@/components/v34/job-budget";
+import { SheetViewer, type SheetGroup } from "@/components/v34/sheet-viewer";
+import type { PlansData } from "@/components/v34/plan-room/shared";
+import { sheetsFor } from "@/lib/section-sheets";
 import {
   takeoff as takeoffOf, quantities, ruleQty,
   type SectionInput,
@@ -117,6 +120,14 @@ export default function ScopeBuilder() {
     setJobFiles((a) => (removedId ? a.filter((x) => x.id !== removedId) : f ? [f, ...a.filter((x) => x.id !== f.id)] : a));
     setFilesTick((n) => n + 1);
   }, []);
+  // The plan sheets each section's scope came from, to check it against (Coy, 2026-10-02).
+  const [plans, setPlans] = useState<PlansData | null>(null);
+  const [viewer, setViewer] = useState<{ title: string; groups: SheetGroup[]; start: string | null } | null>(null);
+  useEffect(() => {
+    let off = false;
+    send(`/api/jobs/${jobId}/plans`, "GET").then((b) => { if (!off) setPlans(b as PlansData); }).catch(() => {});
+    return () => { off = true; };
+  }, [jobId]);
   // The budget's own totals (migration 048). Since step 3b it is the ONLY price.
   const [budget, setBudget] = useState<BudgetSummary | null>(null);
   // Bumped when a section change may have changed the budget on the server
@@ -202,9 +213,20 @@ export default function ScopeBuilder() {
   const who = contact ? (contact.name || formatPhone(contact.phone)) : null;
   const realTitle = job.title && !PLACEHOLDER_TITLES.has(job.title.trim()) ? job.title : "";
   const titleHint = `Name this job${why?.company || contact?.name ? ` (e.g. ${why?.company || contact?.name} slab)` : ""}`;
+  // Each section's sheets: the ones its bid line names, read off the plans (src/lib/section-sheets.ts).
+  const planSheets = plans?.sheets ?? [];
+  const sheetsOf = (x: Section) => sheetsFor(x.source_ref, planSheets);
+  const openSheets = (focus: Section | null, start: string | null) => {
+    const label = (x: Section) => x.name || `Section ${sections.indexOf(x) + 1}`;
+    const others = sections.filter((x) => x !== focus);
+    const groups: SheetGroup[] = focus
+      ? [{ label: label(focus), ids: sheetsOf(focus).map((x) => x.id) }, { label: "Other sections' sheets", ids: others.flatMap((x) => sheetsOf(x).map((y) => y.id)) }]
+      : sections.map((x) => ({ label: label(x), ids: sheetsOf(x).map((y) => y.id) }));
+    setViewer({ title: focus ? `Sheets for ${label(focus)}` : "Plan sheets for this job's scope", groups, start });
+  };
 
   return (
-    <div className={railSlot ? "lg:min-h-[calc(100dvh-var(--sc-head))]" : "lg:grid lg:grid-cols-[minmax(0,1fr)_360px] lg:min-h-[calc(100dvh-var(--sc-head))]"} style={{ color: T.ink }}>
+    <div className={railSlot || viewer ? "lg:min-h-[calc(100dvh-var(--sc-head))]" : "lg:grid lg:grid-cols-[minmax(0,1fr)_360px] lg:min-h-[calc(100dvh-var(--sc-head))]"} style={{ color: T.ink }}>
       {/* ================= sections ================= */}
       <div style={{ minWidth: 0 }} className="pb-24 lg:pb-6">
         <div className="px-3 pt-2.5 pb-2" style={{ background: T.card, borderBottom: `1px solid ${T.hair}` }}>
@@ -237,7 +259,13 @@ export default function ScopeBuilder() {
           {job.description && !bidSummary && <div style={{ fontSize: F.sm, color: T.ink2, lineHeight: 1.4, marginTop: 2 }}>{job.description}</div>}
           {saveErr.job && <div style={{ fontSize: F.xs, color: T.red }}>{saveErr.job}</div>}
           {/* Budget · Plan room · Proposal — one switch on all three (Coy, 2026-10-02). */}
-          <div className="flex justify-end" style={{ marginTop: 6 }}>
+          <div className="flex justify-end items-center gap-2" style={{ marginTop: 6 }}>
+            {planSheets.length > 0 && (
+              <button onClick={() => openSheets(null, null)} className="rounded px-2.5"
+                style={{ height: 28, border: `1px solid ${T.hairStrong}`, background: T.card, fontFamily: disp, fontSize: F.xs, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".05em", color: T.ink, cursor: "pointer" }}>
+                Plan sheets ({planSheets.length})
+              </button>
+            )}
             <JobTabs jobId={jobId} active="job" />
           </div>
         </div>
@@ -276,6 +304,7 @@ export default function ScopeBuilder() {
 
         {sections.map((s, i) => (
           <SectionCard key={s.id} s={s} index={i} err={saveErr[s.id]} rcards={rcards} jobType={job.job_type} jobId={jobId}
+            sheets={sheetsOf(s)} hasPlans={planSheets.length > 0} onSheets={(start) => openSheets(s, start)}
             photos={<SectionPhotos jobId={jobId} sectionId={s.id} sectionName={s.name ?? null}
               photos={jobFiles.filter((f) => f.section_id === s.id && (f.kind === "image" || f.kind === "video"))}
               sections={sections.map((x) => ({ id: x.id, name: x.name ?? null }))} onChange={fileChanged} />}
@@ -302,8 +331,13 @@ export default function ScopeBuilder() {
         </div>
       </div>
 
-      {/* ================= takeoff rail ================= */}
-      {(() => {
+      {viewer && plans && (
+        <SheetViewer jobId={jobId} title={viewer.title} sheets={planSheets} files={plans.files} groups={viewer.groups} start={viewer.start}
+          onClose={() => setViewer(null)} />
+      )}
+
+      {/* ================= takeoff rail ================= (hidden while the sheets are open beside the page) */}
+      {!viewer && (() => {
         const rail = <TakeoffRail t={t} job={job} onCrewDays={(v) => void saveCrewDays(v)} jobType={job.job_type}
           workType={sections[0]?.work_type ?? null} budget={budget} inPanel={!!railSlot} />;
         return railSlot ? createPortal(rail, railSlot) : rail;
@@ -334,8 +368,10 @@ function splitFt(v: number | null): [number | "", number | ""] {
   return [ft, inch === 0 ? "" : inch];
 }
 
-function SectionCard({ s, index, err, onLocal, onSave, onRemove, jobType, jobId, photos }: {
+function SectionCard({ s, index, err, onLocal, onSave, onRemove, jobType, jobId, photos, sheets, hasPlans, onSheets }: {
   s: Section; index: number; err?: string; rcards: RCard[]; jobType: string | null; jobId: string;
+  /** The plan sheets its bid line names (Coy, 2026-10-02: "verify the scopes on the sheets"). */
+  sheets: Array<{ id: string; number: string | null; title: string | null }>; hasPlans: boolean; onSheets: (start: string | null) => void;
   /** The area's photos, under its dimensions. */
   photos?: React.ReactNode;
   onLocal: (p: Partial<Section>) => void; onSave: (p: Partial<Section>) => void; onRemove: () => void;
@@ -350,8 +386,13 @@ function SectionCard({ s, index, err, onLocal, onSave, onRemove, jobType, jobId,
   const bidSY = /\bSY\b/.test(s.source_ref ?? "");
   // Or by count (migration 065): "it's not an area, it's a quantity" — 8 EA.
   const bidEA = /\b\d[\d,.]*\s*(EA|EACH|LS)\b/i.test(s.source_ref ?? "");
-  const [mode, setMode] = useState<"dims" | "area" | "count">(() =>
-    s.count_qty != null && s.sqft_override === null && s.length_ft === null && s.width_ft === null ? "count"
+  // Or in linear feet (Coy, 2026-10-02): grade beams, saw cuts, joints — "430 LF". The length
+  // is the count in LF; a beam's width (in) and depth give its yards.
+  const bidLF = /\b\d[\d,.]*\s*(LF|LIN\.?\s*FT)\b/i.test(s.source_ref ?? "");
+  const [mode, setMode] = useState<"dims" | "area" | "count" | "linear">(() =>
+    (s.count_unit ?? "").toUpperCase() === "LF" && s.length_ft === null && s.sqft_override === null ? "linear"
+      : s.count_qty != null && s.sqft_override === null && s.length_ft === null && s.width_ft === null ? "count"
+      : s.length_ft === null && s.width_ft === null && s.sqft_override === null && bidLF ? "linear"
       : s.length_ft === null && s.width_ft === null && s.sqft_override === null && bidEA ? "count"
       : s.length_ft === null && s.width_ft === null && (s.sqft_override !== null || bidSY || jobType === "public") ? "area" : "dims");
   const unitKey = `sc:area-unit:${s.id}`;
@@ -360,14 +401,20 @@ function SectionCard({ s, index, err, onLocal, onSave, onRemove, jobType, jobId,
     return bidSY || jobType === "public" ? "sy" : "sf";
   });
   const setUnit = (u: "sf" | "sy") => { setUnitState(u); try { localStorage.setItem(unitKey, u); } catch { /* no storage */ } };
-  const toMode = (m: "dims" | "area" | "count") => {
+  const toMode = (m: "dims" | "area" | "count" | "linear") => {
     if (m === mode) return;
+    const wasLinear = mode === "linear";
     setMode(m);
-    if (m === "count") {
-      const p = { length_ft: null, width_ft: null, sqft_override: null };
+    if (m === "count" || m === "linear") {
+      // A linear count keeps its LF; the beam width belongs to linear only.
+      const p = { length_ft: null, width_ft: null, sqft_override: null,
+        count_unit: m === "linear" ? "LF" : (s.count_unit ?? "").toUpperCase() === "LF" ? "EA" : s.count_unit ?? "EA",
+        count_qty: (m === "linear") === wasLinear ? s.count_qty ?? null : null };
       onLocal(p); onSave(p);
-    } else if (s.count_qty != null) {
-      onLocal({ count_qty: null }); onSave({ count_qty: null });
+      return;
+    } else if (s.count_qty != null || wasLinear) {
+      const p = { count_qty: null, ...(wasLinear ? { width_ft: null, count_unit: null } : {}) };
+      onLocal(p); onSave(p);
     }
     if (m === "area") {
       // Keep what L × W gave as the area, then drop the sides.
@@ -378,9 +425,19 @@ function SectionCard({ s, index, err, onLocal, onSave, onRemove, jobType, jobId,
     }
   };
   // The bid's own quantity ("… – 1,769.80 SY"), offered as one tap — never filled in by itself.
-  const bidQty = (() => { const m = /([\d,]+(?:\.\d+)?)\s*(SY|SF|EA|EACH|LS)\b/i.exec(s.source_ref ?? ""); return m ? { n: Number(m[1].replace(/,/g, "")), u: (m[2].toUpperCase() === "EACH" ? "EA" : m[2].toUpperCase()) as "SY" | "SF" | "EA" | "LS" } : null; })();
+  const bidQty = (() => {
+    const m = /([\d,]+(?:\.\d+)?)\s*(SY|SF|EA|EACH|LS|LF|LIN\.?\s*FT)\b/i.exec(s.source_ref ?? "");
+    if (!m) return null;
+    const raw = m[2].toUpperCase();
+    return { n: Number(m[1].replace(/,/g, "")), u: (raw === "EACH" ? "EA" : raw.startsWith("LIN") ? "LF" : raw) as "SY" | "SF" | "EA" | "LS" | "LF" };
+  })();
   const useBidQty = () => {
     if (!bidQty || !(bidQty.n > 0)) return;
+    if (bidQty.u === "LF") {
+      const p = { length_ft: null, sqft_override: null, count_qty: bidQty.n, count_unit: "LF", ...(mode === "linear" ? {} : { width_ft: null }) };
+      setMode("linear"); onLocal(p); onSave(p);
+      return;
+    }
     if (bidQty.u === "EA" || bidQty.u === "LS") {
       const p = { length_ft: null, width_ft: null, sqft_override: null, count_qty: bidQty.n, count_unit: bidQty.u };
       setMode("count"); onLocal(p); onSave(p);
@@ -389,7 +446,7 @@ function SectionCard({ s, index, err, onLocal, onSave, onRemove, jobType, jobId,
     const p = { length_ft: null, width_ft: null, sqft_override: bidQty.u === "SY" ? Math.round(bidQty.n * 9 * 100) / 100 : bidQty.n, count_qty: null };
     setMode("area"); setUnit(bidQty.u === "SY" ? "sy" : "sf"); onLocal(p); onSave(p);
   };
-  const bidQtyUsed = bidQty && (bidQty.u === "EA" || bidQty.u === "LS" ? q.count !== null : q.sqft !== null);
+  const bidQtyUsed = bidQty && (bidQty.u === "EA" || bidQty.u === "LS" || bidQty.u === "LF" ? q.count !== null : q.sqft !== null);
   const areaShown = s.sqft_override === null ? "" : unit === "sy" ? Math.round((s.sqft_override / 9) * 100) / 100 : s.sqft_override;
 
   const dimCell = (label: string, key: "length_ft" | "width_ft") => {
@@ -430,11 +487,26 @@ function SectionCard({ s, index, err, onLocal, onSave, onRemove, jobType, jobId,
       {s.source_ref && (
         <div className="px-3" style={{ fontSize: F.xs, color: T.ink3, marginTop: 2 }}>From the bid: {s.source_ref.replace(/^"|"$/g, "")}</div>
       )}
+      {(sheets.length > 0 || hasPlans) && (
+        <div className="px-3 pt-1.5 flex items-center gap-1.5 flex-wrap">
+          <span style={{ ...eyebrow }}>{sheets.length ? "Check it on" : "Plan sheets"}</span>
+          {sheets.map((x) => (
+            <button key={x.id} onClick={() => onSheets(x.id)} title={x.title ?? undefined} className="rounded px-2"
+              style={{ height: 24, border: `1px solid ${T.chalk}`, color: T.chalk, background: T.card, fontSize: F.xs, fontWeight: 600, cursor: "pointer" }}>
+              {x.number}{x.title ? <span style={{ fontWeight: 400, color: T.ink2 }}> {x.title.length > 24 ? `${x.title.slice(0, 24)}…` : x.title}</span> : null}
+            </button>
+          ))}
+          <button onClick={() => onSheets(sheets[0]?.id ?? null)} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>
+            {sheets.length ? "Open beside the budget ›" : "Browse the set ›"}
+          </button>
+        </div>
+      )}
       <div className="px-3 pt-1.5 flex items-center gap-x-2 gap-y-1 flex-wrap">
         <span style={{ ...eyebrow }}>Measured by</span>
         <span className="inline-flex rounded overflow-hidden" role="group" aria-label="Measured by" style={{ border: `1px solid ${T.hair}` }}>
           <button onClick={() => toMode("dims")} aria-pressed={mode === "dims"} style={seg(mode === "dims")}>Length × width</button>
           <button onClick={() => toMode("area")} aria-pressed={mode === "area"} style={seg(mode === "area")}>Area only</button>
+          <button onClick={() => toMode("linear")} aria-pressed={mode === "linear"} style={seg(mode === "linear")}>Linear ft</button>
           <button onClick={() => toMode("count")} aria-pressed={mode === "count"} style={seg(mode === "count")}>Count</button>
         </span>
         {bidQty && !bidQtyUsed && (
@@ -461,7 +533,29 @@ function SectionCard({ s, index, err, onLocal, onSave, onRemove, jobType, jobId,
             </div>
           </Cell>
         )}
-        {mode !== "count" && <Cell label="Area" missing={q.sqft === null}
+        {mode === "linear" && (
+          <Cell label="Length" missing={q.count === null}
+            source={q.count === null ? "type the linear feet" : "items priced per LF on this area take this length"}>
+            <div className="flex items-baseline gap-1">
+              <NumIn value={s.count_qty ?? ""} w={70}
+                onChange={(v) => onLocal({ count_qty: v === "" ? null : Number(v) })}
+                onBlur={() => onSave({ count_qty: s.count_qty ?? null, count_unit: "LF" })} />
+              <span style={{ fontSize: F.xs, color: T.ink3 }}>LF</span>
+            </div>
+          </Cell>
+        )}
+        {mode === "linear" && concrete && (
+          <Cell label="Width" missing={s.width_ft === null}
+            source={s.width_ft === null ? "a beam or curb's width — for yards" : `${n1(q.sqft ?? 0)} sq ft in plan`}>
+            <div className="flex items-baseline gap-1">
+              <NumIn value={s.width_ft === null ? "" : Math.round(s.width_ft * 12 * 100) / 100} w={52}
+                onChange={(v) => onLocal({ width_ft: v === "" ? null : Number(v) / 12 })}
+                onBlur={() => onSave({ width_ft: s.width_ft })} />
+              <span style={{ fontSize: F.xs, color: T.ink3 }}>in</span>
+            </div>
+          </Cell>
+        )}
+        {mode !== "count" && mode !== "linear" && <Cell label="Area" missing={q.sqft === null}
           source={mode === "area"
             ? (q.sqft === null ? "type the area" : unit === "sy" ? `= ${n1(q.sqft)} sq ft` : `= ${n2(q.sqft / 9)} sq yd`)
             : q.sqft_source === "dimensions" ? `length × width · ${n2(q.sqft! / 9)} sq yd` : "needs length and width"}>
@@ -485,7 +579,7 @@ function SectionCard({ s, index, err, onLocal, onSave, onRemove, jobType, jobId,
           </div>
         </Cell>}
         {concrete && mode !== "count" && (
-          <Cell label="Thickness" missing={s.depth_in === null} source={s.depth_in === null ? "not set — never assumed" : "you set it"}>
+          <Cell label={mode === "linear" ? "Depth" : "Thickness"} missing={s.depth_in === null} source={s.depth_in === null ? "not set — never assumed" : "you set it"}>
             <div className="flex items-baseline gap-1">
               <NumIn value={s.depth_in ?? ""} w={52}
                 onChange={(v) => onLocal({ depth_in: v === "" ? null : Number(v) })}
@@ -496,7 +590,7 @@ function SectionCard({ s, index, err, onLocal, onSave, onRemove, jobType, jobId,
         )}
         {concrete && mode !== "count" && (
           <Cell label="Concrete" missing={q.cy_neat === null}
-            source={q.cy_neat === null ? "needs area and thickness" : "neat · waste is on the concrete card"}>
+            source={q.cy_neat === null ? (mode === "linear" ? "needs width and depth" : "needs area and thickness") : "neat · waste is on the concrete card"}>
             <span style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 600, ...nums }}>
               {q.cy_neat === null ? "—" : `${n2(q.cy_neat)}`}
             </span>
@@ -700,7 +794,7 @@ function TakeoffRail({ t, job, onCrewDays, budget, inPanel }: {
           <div key={q.id ?? i} className="flex justify-between py-1.5" style={{ ...line, fontSize: F.sm, marginTop: i === 0 ? 8 : 0 }}>
             <span style={{ color: "#C3CBD4", ...clip }}>{q.name || `Section ${i + 1}`}{q.sqft !== null ? ` · ${n1(q.sqft)} sf` : ""}</span>
             <span style={{ ...nums, fontWeight: 600 }}>
-              {q.count !== null ? `${q.count} ${q.count_unit}` : !q.concrete ? (q.work_type === "demo" ? "demo" : "no pour") : q.cy_neat === null ? `needs ${q.missing.join(", ")}` : `${n2(q.cy_neat)} cu yd`}
+              {q.count !== null ? `${q.count} ${q.count_unit}${q.cy_neat !== null ? ` · ${n2(q.cy_neat)} cu yd` : ""}` : !q.concrete ? (q.work_type === "demo" ? "demo" : "no pour") : q.cy_neat === null ? `needs ${q.missing.join(", ")}` : `${n2(q.cy_neat)} cu yd`}
             </span>
           </div>
         ))}

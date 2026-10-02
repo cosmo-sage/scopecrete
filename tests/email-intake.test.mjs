@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   verifySvix, svixSign, readMessage, parseAddress, originalSender, matchableDomain, attachmentSkip, htmlToText,
-  fileKind, categoryGuess, safeName,
+  fileKind, categoryGuess, safeName, bodyFrom, mimeParts,
 } from "../supabase/functions/email-intake/rules.ts";
 import * as files from "../src/lib/files.ts";
 
@@ -82,4 +82,22 @@ test("the function's file rules match the app's (src/lib/files.ts)", () => {
 
 test("HTML-only email becomes text", () => {
   assert.equal(htmlToText("<p>Hi&nbsp;Coy</p><p>Plans attached &amp; specs.</p><style>x{}</style>"), "Hi Coy\nPlans attached & specs.");
+});
+
+test("a big email's body: a link instead of text, read from JSON, HTML or raw MIME", () => {
+  const m = readMessage({ event_type: "message.received", message: { inbox_id: "i@x.to", message_id: "<m@x>", subject: "Fw: Re: Fields", body_url: "https://example.test/body?sig=1" } });
+  assert.equal(m.text, null);
+  assert.equal(m.bodyUrl, "https://example.test/body?sig=1");
+  assert.deepEqual(bodyFrom('{"text":"hello","html":null}', "application/json"), { text: "hello", html: null });
+  assert.deepEqual(bodyFrom('{"message":{"extracted_text":"hi"}}', null), { text: "hi", html: null });
+  assert.equal(bodyFrom("<div>Hi <b>Coy</b></div>", "text/html").html, "<div>Hi <b>Coy</b></div>");
+  const eml = [
+    "From: Coy <admin@example.com>", "Subject: Fw: Re: Fields", 'Content-Type: multipart/mixed; boundary="OUT"', "", "--OUT",
+    'Content-Type: multipart/alternative; boundary="ALT"', "", "--ALT", "Content-Type: text/plain; charset=utf-8",
+    "Content-Transfer-Encoding: quoted-printable", "", "Bid due Oct 14 =E2=80=94 see the =", "link", "--ALT",
+    "Content-Type: text/html", "Content-Transfer-Encoding: base64", "", Buffer.from("<p>Bid due</p>").toString("base64"), "--ALT--",
+    "--OUT", "Content-Type: application/pdf", "Content-Disposition: attachment; filename=a.pdf", "", "JVBERi0=", "--OUT--",
+  ].join("\r\n");
+  assert.deepEqual(mimeParts(eml), { text: "Bid due Oct 14 — see the link", html: "<p>Bid due</p>" });
+  assert.equal(bodyFrom(eml, "message/rfc822").text, "Bid due Oct 14 — see the link");
 });

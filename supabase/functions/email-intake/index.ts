@@ -30,7 +30,7 @@
  */
 
 import { createClient } from '@supabase/supabase-js'
-import { attachmentSkip, categoryGuess, fileKind, htmlToText, matchableDomain, originalSender, readMessage, safeName, verifySvix, type Msg } from './rules.ts'
+import { attachmentSkip, bodyFrom, categoryGuess, fileKind, htmlToText, matchableDomain, originalSender, readMessage, safeName, verifySvix, type Msg } from './rules.ts'
 
 const WORKER = 'email-intake'
 const BUCKET = 'job-files'
@@ -51,6 +51,32 @@ async function beat(sb: Sb, status: 'ok' | 'not_configured' | 'error', detail: s
 
 // ── projection ───────────────────────────────────────────────────────────────
 
+/**
+ * A big email is delivered with no text or html, only `body_url` (Coy's Walker
+ * High forward, 2026-10-02 — stored with an empty body, so the bid reader saw
+ * a subject and nothing else). Ask AgentMail for the message itself, then try
+ * the body link; whatever answers first with words wins.
+ */
+async function fetchBody(msg: Msg): Promise<{ text: string | null; html: string | null; why: string | null }> {
+  const key = Deno.env.get('AGENTMAIL_API_KEY') ?? ''
+  const tries: string[] = []
+  if (key && msg.inbox && msg.messageId) {
+    try {
+      const r = await fetch(`${API}/v0/inboxes/${encodeURIComponent(msg.inbox)}/messages/${encodeURIComponent(msg.messageId)}`, { headers: { Authorization: `Bearer ${key}` } })
+      if (r.ok) { const b = bodyFrom(await r.text(), r.headers.get('content-type')); if (b.text || b.html) return { ...b, why: null } ; tries.push('the message API had no body') }
+      else tries.push(`the message API answered ${r.status}`)
+    } catch (e) { tries.push(`the message API: ${(e as Error).message}`) }
+  }
+  if (msg.bodyUrl) {
+    try {
+      const r = await fetch(msg.bodyUrl)
+      if (r.ok) { const b = bodyFrom(await r.text(), r.headers.get('content-type')); if (b.text || b.html) return { ...b, why: null }; tries.push('the body link was empty') }
+      else tries.push(`the body link answered ${r.status}`)
+    } catch (e) { tries.push(`the body link: ${(e as Error).message}`) }
+  }
+  return { text: null, html: null, why: tries.join('; ') || 'no body in the delivery' }
+}
+
 interface EventRow { id: string; org_id: string | null; raw_payload: unknown; attempts: number }
 
 async function project(sb: Sb, ev: EventRow): Promise<string> {
@@ -69,6 +95,11 @@ async function project(sb: Sb, ev: EventRow): Promise<string> {
   const ours = ((senders ?? []) as Array<{ email: string }>).map((s) => s.email)
   const allowed = !!msg.from && ours.includes(msg.from.address)
 
+  let bodyNote: string | null = null
+  if (!msg.text && !msg.html) {
+    const b = await fetchBody(msg)
+    msg.text = b.text; msg.html = b.html; bodyNote = b.why
+  }
   const text = msg.text ?? (msg.html ? htmlToText(msg.html) : null)
   // A forward names its writer in the forwarded block; an email straight from someone else is its own writer.
   const orig = originalSender(text) ?? (allowed ? null : msg.from)
@@ -113,8 +144,19 @@ async function project(sb: Sb, ev: EventRow): Promise<string> {
   }
   const { data: existing } = await sb.from('emails').select('id').eq('provider', PROVIDER).eq('provider_message_id', msg.messageId).maybeSingle()
   let emailId: string
-  if (existing) emailId = existing.id
-  else {
+  if (existing) {
+    emailId = existing.id
+    // Re-projected after its body arrived: fill what was blank, never overwrite Coy's filing.
+    const { data: cur } = await sb.from('emails').select('text_body, original_from_address, status').eq('id', emailId).maybeSingle()
+    if (cur && !cur.text_body && row.text_body) {
+      await sb.from('emails').update({
+        text_body: row.text_body,
+        ...(cur.original_from_address ? {} : { original_from_address: row.original_from_address, original_from_name: row.original_from_name }),
+        ...(cur.status === 'unfiled' && row.status === 'filed' ? { contact_id: row.contact_id, customer_id: row.customer_id, match: row.match, match_note: row.match_note, status: 'filed', filed_at: row.filed_at } : {}),
+        ...(cur.status === 'unfiled' && row.match === 'domain_suggested' ? { suggested_customer_id: row.suggested_customer_id, match: row.match, match_note: row.match_note } : {}),
+      }).eq('id', emailId)
+    }
+  } else {
     const { data: made, error } = await sb.from('emails').insert(row).select('id').single()
     if (error || !made) { await done({ projection_error: `email row: ${error?.message ?? 'not saved'}`.slice(0, 300) }); return 'email insert failed' }
     emailId = made.id
@@ -126,7 +168,7 @@ async function project(sb: Sb, ev: EventRow): Promise<string> {
       fetch_state: skip ? 'skipped' : status === 'quarantined' ? 'held' : 'waiting', fetch_error: skip,
     }, { onConflict: 'email_id,provider_attachment_id', ignoreDuplicates: true })
   }
-  await done({ projected_at: new Date().toISOString(), projection_error: null })
+  await done({ projected_at: new Date().toISOString(), projection_error: text ? null : `no body: ${bodyNote ?? 'none in the delivery'}`.slice(0, 300) })
   if (status !== 'quarantined') await fetchDue(sb, { emailId })
   return status
 }

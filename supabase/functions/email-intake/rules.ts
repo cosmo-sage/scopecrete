@@ -20,6 +20,8 @@ export interface Msg {
   eventId: string | null; eventType: string | null;
   messageId: string | null; inbox: string | null; to: string[];
   from: Addr | null; subject: string | null; text: string | null; html: string | null;
+  /** A big email comes with no text or html — only a link to its body (AgentMail, 2026-10-02). */
+  bodyUrl: string | null;
   sentAt: string | null; attachments: Att[];
 }
 
@@ -113,7 +115,8 @@ export function readMessage(payload: unknown): Msg {
     from: parseAddress(pick(inner, "from", "from_", "sender")),
     subject: str(pick(inner, "subject")),
     text: str(pick(inner, "text", "extracted_text", "text_body", "plain")),
-    html: str(pick(inner, "html", "html_body")),
+    html: str(pick(inner, "html", "extracted_html", "html_body")),
+    bodyUrl: str(pick(inner, "body_url", "bodyUrl")),
     sentAt: str(pick(inner, "timestamp", "sent_at", "date", "created_at")),
     attachments,
   };
@@ -124,6 +127,62 @@ export function htmlToText(html: string): string {
   return html.replace(/<(script|style)[\s\S]*?<\/\1>/gi, "").replace(/<br\s*\/?>/gi, "\n").replace(/<\/(p|div|tr|li|h\d)>/gi, "\n")
     .replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'")
     .replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+/** Text and HTML from whatever a body fetch returned: AgentMail's JSON, HTML, plain text, or a raw MIME message. */
+export function bodyFrom(raw: string, contentType: string | null): { text: string | null; html: string | null } {
+  const type = (contentType ?? "").toLowerCase();
+  if (type.includes("json") || /^\s*\{/.test(raw)) {
+    try {
+      const o = JSON.parse(raw) as Record<string, unknown>;
+      const m = (o && typeof o.message === "object" ? o.message : o) as Record<string, unknown>;
+      return { text: str(pick(m, "text", "extracted_text", "text_body", "plain")), html: str(pick(m, "html", "extracted_html", "html_body")) };
+    } catch { /* not JSON after all */ }
+  }
+  if (/^(?:[A-Za-z-]+:.*\r?\n)+/.test(raw) && /\ncontent-type:/i.test("\n" + raw.slice(0, 20_000))) return mimeParts(raw);
+  if (type.includes("html") || /<(html|body|div|p|br)\b/i.test(raw.slice(0, 2000))) return { text: null, html: raw };
+  return { text: raw.trim() || null, html: null };
+}
+
+function decodePart(body: string, headers: string): string {
+  const enc = /content-transfer-encoding:\s*([\w-]+)/i.exec(headers)?.[1]?.toLowerCase();
+  if (enc === "base64") {
+    try { return new TextDecoder().decode(Uint8Array.from(atob(body.replace(/\s+/g, "")), (c) => c.charCodeAt(0))); } catch { return body; }
+  }
+  if (enc === "quoted-printable") {
+    const bytes: number[] = [];
+    const s = body.replace(/=\r?\n/g, "");
+    for (let i = 0; i < s.length; i++) {
+      if (s[i] === "=" && /^[0-9A-F]{2}$/i.test(s.slice(i + 1, i + 3))) { bytes.push(parseInt(s.slice(i + 1, i + 3), 16)); i += 2; }
+      else bytes.push(...new TextEncoder().encode(s[i]));
+    }
+    return new TextDecoder().decode(new Uint8Array(bytes));
+  }
+  return body;
+}
+
+/** The first text/plain and text/html parts of a raw MIME message (nested multiparts followed). */
+export function mimeParts(raw: string): { text: string | null; html: string | null } {
+  const out: { text: string | null; html: string | null } = { text: null, html: null };
+  const walk = (part: string, depth: number) => {
+    if (depth > 6 || (out.text && out.html)) return;
+    const split = /\r?\n\r?\n/.exec(part);
+    const headers = split ? part.slice(0, split.index) : part;
+    const body = split ? part.slice(split.index + split[0].length) : "";
+    const unfolded = headers.replace(/\r?\n[ \t]+/g, " ");
+    const ctype = /content-type:\s*([^;\r\n]+)/i.exec(unfolded)?.[1]?.trim().toLowerCase() ?? "text/plain";
+    if (ctype.startsWith("multipart/")) {
+      const b = /boundary="?([^";\r\n]+)"?/i.exec(unfolded)?.[1];
+      if (!b) return;
+      for (const p of body.split(`--${b}`).slice(1)) { if (p.startsWith("--")) break; walk(p.replace(/^\r?\n/, ""), depth + 1); }
+      return;
+    }
+    if (/content-disposition:\s*attachment/i.test(unfolded)) return;
+    if (ctype === "text/plain" && !out.text) out.text = decodePart(body, unfolded).trim() || null;
+    else if (ctype === "text/html" && !out.html) out.html = decodePart(body, unfolded);
+  };
+  walk(raw, 0);
+  return out;
 }
 
 const FORWARD_MARKERS = [
@@ -198,7 +257,7 @@ export function safeName(name: string): string {
   const trimmed = name.trim().replace(/[/\\]+/g, "_");
   const dot = trimmed.lastIndexOf(".");
   const base = (dot > 0 ? trimmed.slice(0, dot) : trimmed)
-    .normalize("NFKD").replace(/[̀-ͯ]/g, "")
+    .normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
     .replace(/[^A-Za-z0-9._-]+/g, "-").replace(/-+/g, "-").replace(/^[-.]+|[-.]+$/g, "").slice(0, 80) || "file";
   const ext = dot > 0 ? trimmed.slice(dot + 1).toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 8) : "";
   return ext ? `${base}.${ext}` : base;

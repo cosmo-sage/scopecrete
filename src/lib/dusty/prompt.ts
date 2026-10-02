@@ -64,7 +64,7 @@ export function assemble(label: string, blocks: Block[], budget = 60000): Assemb
 export function coldContext(orgName: string | null, today: string): Assembled {
   return {
     label: "nothing open",
-    text: `CONTEXT — nothing specific is open. Business: ${orgName ?? "not recorded"}. Today: ${today}. You have no thread, scope or customer in front of you; if Coy asks about one, ask him to open it or name it.`,
+    text: `CONTEXT — nothing specific is open. Business: ${orgName ?? "not recorded"}. Today: ${today}. You have no thread, scope or customer in front of you; if Coy asks about one, ask him to open it or name it. You DO see the intake inbox below (emails Coy forwards to intake-concrete@agentmail.to): when he asks whether an email came in, answer from it.`,
     truncated: false,
   };
 }

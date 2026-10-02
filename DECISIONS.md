@@ -484,6 +484,21 @@ that, and it replaces his Hermes agent. The §2a shape, for email:
   container's network policy, so `readMessage()` reads fields tolerantly and a
   row that doesn't parse keeps its reason (`projection_error`) and can be
   re-projected once the real payload is seen.
+- **A big email comes without its text (2026-10-02, `email-intake` v10).**
+  AgentMail leaves `text` / `html` out of the webhook for a large message
+  and sends only `body_url`. Coy's Walker High forward (Ben Bourgeois, LA
+  Contracting) was stored with an empty body, so the bid reader saw a
+  subject alone and called it "not a bid". Now, when a delivery has no
+  text, the function asks AgentMail's message API for it, then the body
+  link (`bodyFrom()` reads JSON, HTML, plain text or raw MIME, tested); a
+  re-projection fills a blank body on the existing row without touching
+  Coy's filing; still none → `projection_error` says why.
+- **Dusty sees the inbox with nothing open (2026-10-02).** Coy asked a cold
+  chat "did you get it?" and Dusty had no context at all. The cold chat and
+  the catch-up carry **The intake inbox**: the last 8 emails (sender,
+  subject, where filed, what the bid reader made of it, or that its text
+  didn't come through) and the newest one's text when it is under two days
+  old (`inboxBlock()` in `src/lib/dusty/context.ts`, under RLS).
 - **Whose mail counts.** `org_inbound_addresses` maps the inbox to the org;
   `org_inbound_senders` (admin@saccobuilt.com, coysacco@gmail.com) are the
   forwarders. Anything else is kept as **quarantined**, its files **held**

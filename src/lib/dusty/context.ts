@@ -54,8 +54,52 @@ export async function buildContext(sb: Sb, orgId: string, ref: ContextRef): Prom
   if (ref.kind === "customer") return customerContext(sb, orgId, ref.id);
   if (ref.kind === "cash") return cashContext(sb, orgId);
   if (ref.kind === "activity") return activityContext(sb, orgId, ref.since);
-  const { data: org } = await sb.from("orgs").select("name").eq("id", orgId).maybeSingle();
-  return coldContext((org?.name as string | null) ?? null, today);
+  const [{ data: org }, inbox] = await Promise.all([
+    sb.from("orgs").select("name").eq("id", orgId).maybeSingle(),
+    inboxBlock(sb, orgId),
+  ]);
+  const cold = coldContext((org?.name as string | null) ?? null, today);
+  // Even with nothing open, "did you get the email I just forwarded?" has an answer (Coy, 2026-10-02).
+  return { ...cold, text: `${cold.text}\n\n## ${inbox.title}\n${inbox.lines.join("\n")}` };
+}
+
+const BID_STATE: Record<string, string> = {
+  waiting: "waiting to be read", listing: "listing its Box folder", fetching: "copying its files", scanning: "reading its plans and specs",
+  extracting: "being read", filing: "being filed", filed: "read and filed as a job", needs_setup: "waiting — Box isn't set up",
+  failed: "stuck", not_a_bid: "read — the bid reader found no bid in it", undone: "taken back (Undo bid)",
+};
+
+/**
+ * The intake inbox (§2h): the latest emails Coy forwarded, who wrote them, where
+ * each was filed and what the bid reader made of it — plus the newest one's
+ * text when it came in the last two days, so Dusty can say what Ben wants.
+ */
+async function inboxBlock(sb: Sb, orgId: string): Promise<Block> {
+  const { data } = await sb.from("emails")
+    .select("id, subject, original_from_name, original_from_address, from_address, created_at, status, job_id, text_body")
+    .eq("org_id", orgId).order("created_at", { ascending: false }).limit(8);
+  const rows = (data ?? []) as Array<{ id: string; subject: string | null; original_from_name: string | null; original_from_address: string | null; from_address: string | null; created_at: string; status: string; job_id: string | null; text_body: string | null }>;
+  const title = "The intake inbox — latest forwarded emails, newest first (times UTC)";
+  if (!rows.length) return { title, lines: ["No emails have come in."] };
+  const ids = rows.map((r) => r.id);
+  const jobIds = [...new Set(rows.map((r) => r.job_id).filter(Boolean))] as string[];
+  const [{ data: pkgs }, { data: jobs }, { count: files }] = await Promise.all([
+    sb.from("bid_packages").select("email_id, state, error").eq("org_id", orgId).in("email_id", ids),
+    jobIds.length ? sb.from("jobs").select("id, title").eq("org_id", orgId).in("id", jobIds) : Promise.resolve({ data: [] }),
+    sb.from("job_files").select("id", { count: "exact", head: true }).eq("org_id", orgId).eq("email_id", rows[0].id).is("deleted_at", null),
+  ]);
+  const pkg = new Map(((pkgs ?? []) as Array<{ email_id: string; state: string; error: string | null }>).map((p) => [p.email_id, p]));
+  const job = new Map(((jobs ?? []) as Array<{ id: string; title: string | null }>).map((j) => [j.id, j.title]));
+  const lines = rows.map((e) => {
+    const p = pkg.get(e.id);
+    const who = e.original_from_name || e.original_from_address || e.from_address || "unknown";
+    return `- [${day(e.created_at)}] from ${who} — "${e.subject || "(no subject)"}" · ${e.job_id ? `filed on the job "${job.get(e.job_id) ?? "untitled"}"` : e.status}${p ? ` · bid reader: ${BID_STATE[p.state] ?? p.state}${p.error ? ` (${p.error})` : ""}` : ""}${e.text_body ? "" : " · (its text didn't come through)"}`.slice(0, 400);
+  });
+  const newest = rows[0];
+  if (newest.text_body && Date.now() - Date.parse(newest.created_at) < 2 * 86400_000) {
+    lines.push("", `Newest email's text (${files ?? 0} file${files === 1 ? "" : "s"} came with it):`, newest.text_body.replace(/\n{3,}/g, "\n\n").slice(0, 8000));
+  }
+  return { title, lines };
 }
 
 async function contactBlock(sb: Sb, orgId: string, contactId: string) {
@@ -579,6 +623,7 @@ async function activityContext(sb: Sb, orgId: string, since: string): Promise<As
     { title: `Who got in touch (${personLines.length} people, ${rows.length} messages${spamCount ? `; ${spamCount} spam senders left out` : ""})`, lines: personLines, trimmable: true },
     { title: "Next steps due today or overdue", lines: dueLines },
     { title: "Bids that came in (forwarded bid emails the bid reader read)", lines: bidLines },
+    await inboxBlock(sb, orgId),
     { title: "What Dusty's background reader did", lines: readLines },
     { title: "Unsorted", lines: [`${unsorted ?? "unknown"} contacts nobody has sorted yet.`] },
   ]);

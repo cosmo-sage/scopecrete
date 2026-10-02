@@ -1222,7 +1222,8 @@ percentage of labour — all three contradict this section and §4.
   same unit word) takes the count as its quantity unless Coy types one
   (`ruleQty()`), and its items and groups sit under it like any other area.
   The budget shows "8 EA · $X/EA"; the proposal shows "8 EA"; Dusty sees
-  "counted 8 EA".
+  "counted 8 EA". A section set to Count shows no Thickness or Concrete
+  cells (Coy: "thickness isn't required for counted items").
 - **Dusty plans budgets; Coy applies them (Coy, 2026-10-02: "chat with Dusty
   to analyze the list of items in my cost book and apply the items that I
   might need or create new items or modify cost items and organize by
@@ -1733,9 +1734,10 @@ expected start date per quoted job before it means anything. Add the field.
   **Columns (2026-09-30):** drag a header divider to size a column
   (double-click resets it); **Columns ▾** shows or hides any but Item.
   Saved to the account (`pricebook_cols`). The phone view is unchanged.
-- **Scope rail with no budget (step 3b).** No lines → **No price yet**:
-  "a price comes only from cost cards on this job's budget", with a link to
-  Assemblies and the days box. With lines → each option's total, cost, O.H.,
+- **Scope rail with no budget (step 3b).** No lines → just the days box
+  (since 2026-10-02, Coy: the orange **No price yet** box and its Assemblies
+  button are gone — assemblies load inside the budget's areas — and so is
+  the rail's "Read this on the phone" title). With lines → each option's total, cost, O.H.,
   margin, $/sf, and the job minimum (day minimum × days). The section's
   Reinforcement picker lists reinforcement cards and says "default for …"
   when an assembly chose it.

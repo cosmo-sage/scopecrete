@@ -492,7 +492,7 @@ function SectionCard({ s, index, err, onLocal, onSave, onRemove, jobType, jobId,
             )}
           </div>
         </Cell>}
-        {concrete && (
+        {concrete && mode !== "count" && (
           <Cell label="Thickness" missing={s.depth_in === null} source={s.depth_in === null ? "not set — never assumed" : "you set it"}>
             <div className="flex items-baseline gap-1">
               <NumIn value={s.depth_in ?? ""} w={52}
@@ -502,7 +502,7 @@ function SectionCard({ s, index, err, onLocal, onSave, onRemove, jobType, jobId,
             </div>
           </Cell>
         )}
-        {concrete && (
+        {concrete && mode !== "count" && (
           <Cell label="Concrete" missing={q.cy_neat === null}
             source={q.cy_neat === null ? "needs area and thickness" : "neat · waste is on the concrete card"}>
             <span style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 600, ...nums }}>
@@ -624,8 +624,6 @@ function Dictate({ jobId, s, onApply }: { jobId: string; s: Section; onApply: (p
   );
 }
 
-const JOB_WORD: Record<string, string> = { residential: "residential", commercial: "commercial", public: "government" };
-
 function Cell({ label, missing, source, children }: { label: string; missing: boolean; source: string; children: React.ReactNode }) {
   return (
     <div className="px-3 py-2" style={{ borderRight: `1px solid ${T.hairSoft}`, borderBottom: `1px solid ${T.hairSoft}`, minWidth: 0,
@@ -663,7 +661,7 @@ function NoteIn({ label, value, onLocal, onSave, placeholder }: {
 
 /* ----------------------------------------------------------- takeoff rail */
 
-function TakeoffRail({ t, job, onCrewDays, jobType, workType, budget, inPanel }: {
+function TakeoffRail({ t, job, onCrewDays, budget, inPanel }: {
   t: ReturnType<typeof takeoffOf>;
   job: Job; onCrewDays: (v: number | null) => void; jobType: string | null; workType: string | null;
   budget: BudgetSummary | null;
@@ -689,15 +687,10 @@ function TakeoffRail({ t, job, onCrewDays, jobType, workType, budget, inPanel }:
           <span className="flex-1" />
           <span style={{ color: dim }}>{folded ? "▾" : "▴"}</span>
         </button>
-      ) : (
-        <div className="px-4 pt-3 pb-3">
-          <div style={{ ...eyebrow, color: dim }}>Takeoff</div>
-          <div style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 600 }}>Read this on the phone</div>
-        </div>
-      )}
+      ) : null /* no title line (Coy, 2026-10-02: "remove … read this on the phone") */}
       {!(inPanel && folded) && (<>
 
-      <div className="px-4 py-3" style={line}>
+      <div className="px-4 py-3" style={inPanel ? line : undefined}>
         <div style={{ ...eyebrow, color: dim }}>Total area</div>
         <div style={{ fontFamily: disp, fontSize: 40, fontWeight: 700, lineHeight: 1, ...nums }}>{t.sqft > 0 ? n1(t.sqft) : "—"}</div>
         <div style={{ ...eyebrow, color: dim }}>sq ft · {t.sections.length} section{t.sections.length === 1 ? "" : "s"}{t.incomplete ? " · incomplete" : ""}</div>
@@ -715,7 +708,7 @@ function TakeoffRail({ t, job, onCrewDays, jobType, workType, budget, inPanel }:
           <div key={q.id ?? i} className="flex justify-between py-1.5" style={{ ...line, fontSize: F.sm, marginTop: i === 0 ? 8 : 0 }}>
             <span style={{ color: "#C3CBD4", ...clip }}>{q.name || `Section ${i + 1}`}{q.sqft !== null ? ` · ${n1(q.sqft)} sf` : ""}</span>
             <span style={{ ...nums, fontWeight: 600 }}>
-              {!q.concrete ? (q.work_type === "demo" ? "demo" : "no pour") : q.cy_neat === null ? `needs ${q.missing.join(", ")}` : `${n2(q.cy_neat)} cu yd`}
+              {q.count !== null ? `${q.count} ${q.count_unit}` : !q.concrete ? (q.work_type === "demo" ? "demo" : "no pour") : q.cy_neat === null ? `needs ${q.missing.join(", ")}` : `${n2(q.cy_neat)} cu yd`}
             </span>
           </div>
         ))}
@@ -725,16 +718,7 @@ function TakeoffRail({ t, job, onCrewDays, jobType, workType, budget, inPanel }:
         <BudgetRail budget={budget} sqft={t.sqft} crew={crew} setCrew={setCrew} onCrewDays={onCrewDays} />
       ) : (
         <>
-          <div className="px-4 py-3" style={{ borderTop: `2px solid ${T.hiviz}`, background: "#2A1712" }}>
-            <div style={{ ...eyebrow, color: T.hiviz }}>No price yet</div>
-            <div style={{ fontSize: F.sm, color: "#DCC9C2", lineHeight: 1.45, marginTop: 4 }}>
-              A price comes only from cost cards on this job&apos;s budget. Add cards to the budget below, or set up an assembly
-              {workType ? ` for ${jobType ? `${JOB_WORD[jobType] ?? jobType} ` : ""}${workType.endsWith("s") ? workType : `${workType}s`}` : ""} so new areas fill themselves.
-            </div>
-            <Link href="/dashboard/price-book?tab=assemblies" className="inline-flex items-center rounded px-3 mt-2.5 no-underline"
-              style={{ height: 36, background: T.hiviz, color: T.onHiviz, fontFamily: disp, fontSize: F.md, fontWeight: 600,
-                       textTransform: "uppercase", letterSpacing: ".06em" }}>Assemblies</Link>
-          </div>
+          {/* No "No price yet" box or Assemblies button (Coy, 2026-10-02): assemblies load inside the budget's areas. */}
           <div className="px-4 py-3" style={line}>
             <label className="flex items-center gap-2" style={{ fontSize: F.xs, color: "#C3CBD4" }}>
               Days on this job

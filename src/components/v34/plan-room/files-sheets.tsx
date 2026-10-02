@@ -3,9 +3,9 @@
  * Plan Room steps 1 and 2 (design/plan-room): the job's files with In plan
  * room, and the sheets read from them.
  */
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { T, F, disp, eyebrow, clip, strong, light } from "@/lib/v34/tokens";
-import { pageThumb } from "@/lib/pdf";
+import { drawPage, openPdf, pageThumb } from "@/lib/pdf";
 import { scaleLabel } from "@/lib/takeoff";
 import { CONCRETE_DISC, DISC_COLOR, DISC_LABEL, isPlanFile, sheetLabel, type PlanFile, type Sheet } from "./shared";
 
@@ -109,8 +109,65 @@ function Thumb({ fileId, url, page }: { fileId: string; url: string | null; page
   );
 }
 
-export function SheetsStep({ sheets, files, onOpen }: { sheets: Sheet[]; files: PlanFile[]; onOpen: (s: Sheet) => void }) {
-  const [disc, setDisc] = useState<string>("concrete");
+/**
+ * A page that isn't a drawing, read like any PDF reader: fit to width, zoom, previous / next.
+ * Nothing is measured here.
+ */
+export function PageReader({ pages, files, start, onClose }: { pages: Sheet[]; files: PlanFile[]; start: number; onClose: () => void }) {
+  const [i, setI] = useState(start);
+  const [zoom, setZoom] = useState(1);
+  const [fail, setFail] = useState<string | null>(null);
+  const canvas = useRef<HTMLCanvasElement>(null);
+  const box = useRef<HTMLDivElement>(null);
+  const s = pages[i];
+  const url = files.find((f) => f.id === s?.file_id)?.url ?? null;
+  useEffect(() => {
+    if (!s || !url || !canvas.current || !box.current) return;
+    let off = false;
+    let job: { cancel: () => void } | null = null;
+    setFail(null);
+    openPdf(s.file_id, url).then((doc) => {
+      if (off || !canvas.current || !box.current) return;
+      const fit = Math.max(200, box.current.clientWidth - 24) / Math.max(1, s.page_w);
+      job = drawPage(doc, s.page, canvas.current, fit * zoom);
+    }).catch((e) => { if (!off) setFail(e instanceof Error ? e.message : String(e)); });
+    return () => { off = true; job?.cancel(); };
+  }, [s, url, zoom]);
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+      if (e.key === "ArrowRight") setI((n) => Math.min(pages.length - 1, n + 1));
+      if (e.key === "ArrowLeft") setI((n) => Math.max(0, n - 1));
+    };
+    window.addEventListener("keydown", k);
+    return () => window.removeEventListener("keydown", k);
+  }, [pages.length, onClose]);
+  if (!s) return null;
+  const btn: React.CSSProperties = { height: 32, minWidth: 32, padding: "0 10px", borderRadius: 4, border: `1px solid ${T.hairStrong}`, background: T.card, fontFamily: disp, fontSize: 13, fontWeight: 600, cursor: "pointer" };
+  return (
+    <div role="dialog" aria-label="Read pages" className="fixed inset-0 flex flex-col" style={{ zIndex: 70, background: T.sunk }}>
+      <div className="flex items-center gap-2 px-3" style={{ height: 48, background: T.card, borderBottom: `1px solid ${T.hair}` }}>
+        <button onClick={onClose} style={btn} aria-label="Close">✕</button>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: F.sm, fontWeight: 600, ...clip }}>{files.find((f) => f.id === s.file_id)?.name ?? "Page"} · p.{s.page}</div>
+          <div style={{ fontSize: 10.5, color: T.ink3 }}>{i + 1} of {pages.length} pages to read · not a drawing, so nothing is measured here</div>
+        </div>
+        <button onClick={() => setZoom((z) => Math.max(0.5, z / 1.25))} style={btn} aria-label="Zoom out">−</button>
+        <button onClick={() => setZoom((z) => Math.min(4, z * 1.25))} style={btn} aria-label="Zoom in">+</button>
+        <button onClick={() => setI((n) => Math.max(0, n - 1))} disabled={i === 0} style={{ ...btn, opacity: i === 0 ? 0.4 : 1 }} aria-label="Previous page">‹</button>
+        <button onClick={() => setI((n) => Math.min(pages.length - 1, n + 1))} disabled={i === pages.length - 1} style={{ ...btn, opacity: i === pages.length - 1 ? 0.4 : 1 }} aria-label="Next page">›</button>
+      </div>
+      <div ref={box} className="flex-1 overflow-auto p-3" style={{ minHeight: 0 }}>
+        {fail ? <div style={{ fontSize: F.sm, color: T.red }}>Couldn&apos;t open this page: {fail}</div>
+          : <canvas ref={canvas} style={{ display: "block", margin: "0 auto", background: "#fff", boxShadow: "0 1px 4px rgba(0,0,0,.15)" }} />}
+      </div>
+    </div>
+  );
+}
+
+export function SheetsStep({ sheets, docPages = [], files, onOpen }: { sheets: Sheet[]; docPages?: Sheet[]; files: PlanFile[]; onOpen: (s: Sheet) => void }) {
+  const [disc, setDisc] = useState<string>(sheets.length ? "concrete" : "pages");
+  const [reading, setReading] = useState<number | null>(null);
   const url = useMemo(() => new Map(files.map((f) => [f.id, f.url])), [files]);
   const counts = useMemo(() => {
     const c: Record<string, number> = {};
@@ -118,17 +175,19 @@ export function SheetsStep({ sheets, files, onOpen }: { sheets: Sheet[]; files: 
     return c;
   }, [sheets]);
   const concrete = sheets.filter((s) => CONCRETE_DISC.has(s.discipline ?? ""));
-  const filters = [["concrete", "Concrete scope", concrete.length], ["all", "All", sheets.length],
-    ...Object.keys(counts).sort().map((d) => [d, DISC_LABEL[d] ?? d, counts[d]] as const)] as Array<readonly [string, string, number]>;
-  const shown = disc === "all" ? sheets : disc === "concrete" ? (concrete.length ? concrete : sheets) : sheets.filter((s) => (s.discipline ?? "other") === disc);
-  if (!sheets.length) return <div className="p-5" style={{ fontSize: F.sm, color: T.ink3 }}>No sheets yet. Put a PDF in the plan room on the Files step and its pages are read here.</div>;
+  const filters = [["concrete", "Concrete scope", concrete.length], ["all", "All drawings", sheets.length],
+    ...Object.keys(counts).sort().map((d) => [d, DISC_LABEL[d] ?? d, counts[d]] as const),
+    ...(docPages.length ? [["pages", "Pages to read", docPages.length] as const] : [])] as Array<readonly [string, string, number]>;
+  const isPages = disc === "pages";
+  const shown = isPages ? docPages : disc === "all" ? sheets : disc === "concrete" ? (concrete.length ? concrete : sheets) : sheets.filter((s) => (s.discipline ?? "other") === disc);
+  if (!sheets.length && !docPages.length) return <div className="p-5" style={{ fontSize: F.sm, color: T.ink3 }}>No sheets yet. Put a PDF in the plan room on the Files step and its pages are read here.</div>;
   return (
     <div className="lg:flex" style={{ minHeight: 0 }}>
       <div className="flex lg:flex-col gap-1 p-2 lg:p-3 overflow-x-auto lg:overflow-visible" style={{ flex: "0 0 auto", width: undefined, minWidth: 0 }}>
         {filters.map(([k, label, n]) => (
           <button key={k} onClick={() => setDisc(k)} className="flex items-center gap-2 rounded px-2 text-left shrink-0"
             style={{ height: 30, background: disc === k ? T.hivizDim : "transparent", fontSize: F.sm, cursor: "pointer", minWidth: 150 }}>
-            <span style={{ width: 9, height: 9, borderRadius: 2, background: k === "concrete" ? T.hiviz : k === "all" ? T.ink3 : DISC_COLOR[k] ?? T.ink3 }} />
+            <span style={{ width: 9, height: 9, borderRadius: k === "pages" ? 0 : 2, background: k === "concrete" ? T.hiviz : k === "all" ? T.ink3 : k === "pages" ? T.hairStrong : DISC_COLOR[k] ?? T.ink3 }} />
             <span style={{ flex: 1 }}>{label}</span>
             <span style={{ fontFamily: strong, fontSize: 10.5, color: T.ink3 }}>{n}</span>
           </button>
@@ -136,12 +195,13 @@ export function SheetsStep({ sheets, files, onOpen }: { sheets: Sheet[]; files: 
         {disc === "concrete" && !concrete.length && <div className="hidden lg:block px-2" style={{ fontSize: F.xs, color: T.ink3, maxWidth: 170 }}>No civil or structural sheets found — showing all.</div>}
       </div>
       <div className="flex-1 p-3 grid gap-2.5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", alignContent: "start" }}>
-        {shown.map((s) => (
-          <button key={s.id} onClick={() => onOpen(s)} className="text-left rounded overflow-hidden" style={{ background: T.card, border: `1px solid ${T.hair}`, cursor: "pointer" }}>
+        {isPages && <div style={{ gridColumn: "1 / -1", fontSize: F.xs, color: T.ink3 }}>Letter- and legal-size pages in the plan file — specs, notes, forms. Tap one to read it; drawings are the measured sheets.</div>}
+        {shown.map((s, idx) => (
+          <button key={s.id} onClick={() => (isPages ? setReading(idx) : onOpen(s))} className="text-left rounded overflow-hidden" style={{ background: T.card, border: `1px solid ${T.hair}`, cursor: "pointer" }}>
             <div style={{ position: "relative" }}>
               <Thumb fileId={s.file_id} url={url.get(s.file_id) ?? null} page={s.page} />
               {CONCRETE_DISC.has(s.discipline ?? "") && <span style={{ position: "absolute", top: 5, left: 5, ...eyebrow, fontSize: 9, background: T.hiviz, color: T.onHiviz, borderRadius: 2, padding: "1px 4px" }}>Concrete</span>}
-              <span style={{ position: "absolute", bottom: 5, right: 5 }}><ScaleBadge s={s} small /></span>
+              {!isPages && <span style={{ position: "absolute", bottom: 5, right: 5 }}><ScaleBadge s={s} small /></span>}
             </div>
             <div className="px-2 py-1.5">
               <div className="flex items-baseline gap-1.5">
@@ -153,6 +213,7 @@ export function SheetsStep({ sheets, files, onOpen }: { sheets: Sheet[]; files: 
           </button>
         ))}
       </div>
+      {reading !== null && <PageReader pages={docPages} files={files} start={reading} onClose={() => setReading(null)} />}
     </div>
   );
 }

@@ -15,7 +15,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { T, F, disp, strong, clip } from "@/lib/v34/tokens";
 import { sendBytes } from "@/components/v34/files-panel";
 import { openPdf, readPlanPages } from "@/lib/pdf";
-import { call, isPlanFile, type Param, type PlanFile, type PlansData, type Sheet } from "./shared";
+import { call, isDrawing, isPlanFile, type Param, type PlanFile, type PlansData, type Sheet } from "./shared";
 import { FilesStep, SheetsStep } from "./files-sheets";
 import { TakeoffStep } from "./takeoff";
 import { BudgetStep, SendSheet, useBudget } from "./budget-step";
@@ -98,15 +98,20 @@ export function PlanRoom({ jobId }: { jobId: string }) {
   }, [load]);
 
   const inRoom = useMemo(() => new Set((data?.files ?? []).filter((f) => f.in_plan_room).map((f) => f.id)), [data]);
-  const sheets: Sheet[] = useMemo(() => (data?.sheets ?? []).filter((s) => inRoom.has(s.file_id)), [data, inRoom]);
+  const roomSheets: Sheet[] = useMemo(() => (data?.sheets ?? []).filter((s) => inRoom.has(s.file_id)), [data, inRoom]);
+  // Drawings are measured; other pages are read (a spec page bound into a plan set). A page
+  // something was already measured on stays a drawing.
+  const measured = useMemo(() => new Set((data?.measurements ?? []).map((m) => m.sheet_id)), [data]);
+  const sheets = useMemo(() => roomSheets.filter((s) => isDrawing(s) || measured.has(s.id)), [roomSheets, measured]);
+  const docPages = useMemo(() => roomSheets.filter((s) => !isDrawing(s) && !measured.has(s.id)), [roomSheets, measured]);
   const scoped = data ? { ...data, sheets } : null;
-  const current = step ?? (sheets.length ? (data?.params.length ? "takeoff" : "sheets") : "files");
+  const current = step ?? (roomSheets.length ? (data?.params.length && sheets.length ? "takeoff" : "sheets") : "files");
   const scaled = sheets.filter((s) => s.scale_ft_per_pt).length;
   const planFiles = (data?.files ?? []).filter(isPlanFile);
   const sent = data ? data.params.filter((p) => data.lines.some((l) => l.takeoff_parameter_id === p.id)).length : 0;
   const counts: Record<Step, string | null> = {
     files: planFiles.length ? String(planFiles.filter((f) => f.in_plan_room).length) : null,
-    sheets: sheets.length ? String(sheets.length) : null,
+    sheets: roomSheets.length ? String(sheets.length || roomSheets.length) : null,
     takeoff: data?.params.length ? String(data.params.length) : null,
     budget: data?.params.length ? `${sent}/${data.params.length}` : null,
   };
@@ -148,7 +153,7 @@ export function PlanRoom({ jobId }: { jobId: string }) {
       {data && scoped && (
         <div className="flex-1 flex flex-col" style={{ minHeight: 0 }}>
           {current === "files" && <FilesStep files={data.files} sheets={data.sheets} reading={reading} onToggle={(f, on) => void toggle(f, on)} onAdd={(l) => void upload(l)} uploading={uploading} />}
-          {current === "sheets" && <SheetsStep sheets={sheets} files={data.files} onOpen={(s) => go("takeoff", s.id)} />}
+          {current === "sheets" && <SheetsStep sheets={sheets} docPages={docPages} files={data.files} onOpen={(s) => go("takeoff", s.id)} />}
           {current === "takeoff" && (
             <TakeoffStep jobId={jobId} data={scoped} files={data.files} sheetId={sheetParam} setSheetId={(id) => go("takeoff", id)}
               reload={reload} onSend={setSending} fullscreen={fullscreen} setFullscreen={setFullscreen} />

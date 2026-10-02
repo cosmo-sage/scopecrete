@@ -1774,10 +1774,26 @@ expected start date per quoted job before it means anything. Add the field.
   decoders (JBIG2, JPEG 2000 — `wasmUrl`), standard fonts, CMaps and ICC
   profiles from `public/pdfjs/`, copied out of `pdfjs-dist` before
   `dev`/`build` (`scripts/copy-pdfjs-assets.mjs`, not committed); without
-  them a scanned drawing was a white page (verified in the harness: 0
-  painted pixels without, the drawing with). The Plan Room lists only the
+  them a scanned drawing was a white page. Burgess Ave's `PLANS.pdf` is 74
+  pages, each ONE 1-bit CCITT G4 image of ~10,191 × 6,603 px on a 34×22 in
+  sheet — and pdf.js v5 decodes CCITT through the same wasm module, so it
+  was blank everywhere (reproduced on a copy of that shape: 0 painted
+  pixels without, the drawing with). Phones also refused the ~67 MP image:
+  pdf.js is told the canvas limit (`canvasMaxAreaInBytes`; ~16.7 MP on a
+  touch device, ~33.5 MP on a desktop) so the worker shrinks it first, and a
+  zoomed page canvas is capped the same way (sharpness gives, never the
+  picture). `pdf-probe` (edge function, worker token, returns encodings and
+  sizes only) is how the file was diagnosed. The Plan Room lists only the
   sheets of files that are **In plan room** (and any sheet with a shape on
-  it); taking a file out takes its pages with it. Discipline filter, "Concrete scope" = civil + structural.
+  it); taking a file out takes its pages with it.
+  **Drawings vs pages to read (Coy, 2026-10-02).** A page bigger than legal
+  (longest side ≥ 1,150 pt, so 11×17 half-size sets count) is a drawing:
+  measured, scaled, in Takeoff. A letter or legal page bound into a plan
+  file is a **page to read** — listed under "Pages to read" and opened in a
+  plain reader (fit width, zoom, previous / next), never offered for
+  takeoff, unless Coy sets a scale on it (`isDrawing()`, `shared.ts`,
+  tested). Coy suggested "no scale found" as the test; it can't be — a
+  scanned set never has a readable scale, and those ARE the drawings. Discipline filter, "Concrete scope" = civil + structural.
   **Takeoff** — the page on a canvas with an SVG layer in PDF points; tools
   Area, Rect, Linear, Count, Cutout, Scale (Auto is shown off: Dusty doesn't
   read drawings). **A sheet's scale is only ever one Coy set** — "Use 1/8" =

@@ -23,6 +23,9 @@ function pdfjs(): Promise<PdfJs> {
   return lib;
 }
 
+/** The most pixels one canvas may hold here: ~16.7 MP on a phone or tablet, ~33.5 MP on a desktop. */
+const MAX_CANVAS_PX = typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches ? 2 ** 24 : 2 ** 25;
+
 const docs = new Map<string, Promise<Doc>>();
 /** Open a plan PDF by its file id and (signed) link — once per visit. */
 export function openPdf(fileId: string, url: string): Promise<Doc> {
@@ -34,6 +37,10 @@ export function openPdf(fileId: string, url: string): Promise<Doc> {
     d = pdfjs().then((m) => m.getDocument({
       url, wasmUrl: `${base}wasm/`, standardFontDataUrl: `${base}standard_fonts/`,
       cMapUrl: `${base}cmaps/`, cMapPacked: true, iccUrl: `${base}iccs/`,
+      // A scanned D-size sheet is one ~67-megapixel image (Burgess Ave: 10,191 × 6,603, CCITT G4).
+      // pdf.js guesses the canvas limit by probing, and a phone says yes to a size it then can't
+      // draw — a white page. Told the limit, it shrinks the image in the worker first.
+      canvasMaxAreaInBytes: MAX_CANVAS_PX * 4,
     }).promise);
     d.catch(() => docs.delete(fileId));
     docs.set(fileId, d);
@@ -74,7 +81,12 @@ export function drawPage(doc: Doc, pageNo: number, canvas: HTMLCanvasElement, sc
   let cancelled = false;
   const done = doc.getPage(pageNo).then((p) => {
     if (cancelled) return;
-    const dpr = Math.min(typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1, 2);
+    let dpr = Math.min(typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1, 2);
+    // Zoomed far in on a big sheet, the canvas would pass what the device can draw: give up
+    // sharpness, never the picture.
+    const base = p.getViewport({ scale });
+    const fit = Math.sqrt(MAX_CANVAS_PX / Math.max(1, base.width * base.height));
+    dpr = Math.min(dpr, fit);
     const v = p.getViewport({ scale: scale * dpr });
     canvas.width = Math.floor(v.width);
     canvas.height = Math.floor(v.height);

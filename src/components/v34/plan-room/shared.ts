@@ -29,6 +29,17 @@ export async function call(url: string, method: string, body?: unknown) {
   return b;
 }
 
+/**
+ * A drawing is a sheet you measure on; anything else in a plan file is a page you read
+ * (Coy, 2026-10-02: "if it's not a drawing … I should just be able to see the sheets like any
+ * reader"). The test is the page's size, not what was read off it — a scanned plan set has no
+ * text, so no number or scale is ever found on it. Bigger than legal (8½×14, 1,008 pt) is a
+ * drawing, so an 11×17 half-size set counts; a letter or legal page is a document page unless
+ * Coy has set a scale on it.
+ */
+export const isDrawing = (s: Pick<Sheet, "page_w" | "page_h" | "scale_ft_per_pt" | "scale_method">) =>
+  Math.max(s.page_w, s.page_h) >= 1150 || !!s.scale_ft_per_pt || s.scale_method === "manual";
+
 export const sheetLabel = (s: Pick<Sheet, "number" | "page">) => s.number ?? `p.${s.page}`;
 export const isPlanFile = (f: PlanFile) => f.kind === "pdf" || f.kind === "image";
 

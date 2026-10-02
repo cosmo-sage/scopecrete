@@ -1737,7 +1737,11 @@ expected start date per quoted job before it means anything. Add the field.
   the line from it are gone; while a read runs the footer Dusty shows the
   mixer. **On a desktop it takes all the header's room up to the buttons**
   (2026-10-02, Coy: "there is enough room … don't cut it off"; it was capped
-  at 720px with an empty spacer beside it).
+  at 720px with an empty spacer beside it). The words aren't cut before they
+  reach it either: `/api/activity` clipped file names to 40 characters
+  ("Reading 2635 Walker High Dugouts Specs 2026 08……"); its one-line
+  summaries now carry up to ~140–220 characters and the line trims to the
+  room it has.
 - **Taps stay quick (2026-09-30, Coy's interaction timing: INP 1,056 ms,
   976 ms of it input delay).** The activity line typed by setting React
   state every 18 ms and re-laid-out the page per letter; it now types with
@@ -2051,7 +2055,9 @@ expected start date per quoted job before it means anything. Add the field.
   a panel over the right ~58% of the page — the page itself narrows to the
   room left of it (`html[data-sheets]`), so the budget stays in view, and
   with Dusty docked it sits between the page and him — with the sheets down
-  its side: this section's, the other sections', then the rest of the set;
+  its side: this section's, the other sections', then the rest of the set
+  — each sheet once, in the first group that names it (several sections
+  share a sheet; the first build listed them over and over);
   on a phone the whole screen with the sheets as chips. Fit · − · + (ctrl +
   wheel), drag to pan, ‹ › and the arrow keys. **Measure in the Plan Room ›**
   opens Takeoff on that sheet (`?step=takeoff&sheet=`) — measuring stays

@@ -31,8 +31,12 @@ export function SheetViewer({ jobId, title, sheets, files, groups, start, onClos
     const seen = new Set<string>();
     const out: Array<{ label: string; items: Sheet[] }> = [];
     for (const g of groups) {
-      const items = g.ids.map((id) => byId.get(id)).filter((s): s is Sheet => !!s && !seen.has(s.id));
-      items.forEach((s) => seen.add(s.id));
+      // Once each, in the first group that names it — several sections share a sheet (Coy, 2026-10-02: "doubled up").
+      const items: Sheet[] = [];
+      for (const id of g.ids) {
+        const x = byId.get(id);
+        if (x && !seen.has(x.id)) { seen.add(x.id); items.push(x); }
+      }
       if (items.length) out.push({ label: g.label, items });
     }
     const rest = sheets.filter((s) => !seen.has(s.id));
@@ -138,13 +142,17 @@ export function SheetViewer({ jobId, title, sheets, files, groups, start, onClos
         {/* The list: down the side on a desktop, a row of chips on a phone. */}
         <div className={wide ? "overflow-y-auto shrink-0" : "overflow-x-auto shrink-0 flex gap-1.5 px-3 py-2"}
           style={wide ? { width: 220, background: T.card, borderRight: `1px solid ${T.hair}`, padding: "6px 6px 12px" } : { background: T.card, borderBottom: `1px solid ${T.hair}` }}>
-          {listed.map((g) => wide ? (
+          {listed.map((g, gi) => wide ? (
             <div key={g.label} style={{ marginBottom: 8 }}>
               <div style={{ ...eyebrow, padding: "4px 8px" }}>{g.label}</div>
               {g.items.map(pick)}
             </div>
           ) : (
-            <React.Fragment key={g.label}>{g.items.map(pick)}</React.Fragment>
+            <React.Fragment key={g.label}>
+              {/* On a phone the chips run on in one row; a small label says where a group starts. */}
+              {gi > 0 && <span style={{ ...eyebrow, alignSelf: "center", whiteSpace: "nowrap", flexShrink: 0, paddingLeft: 4 }}>{g.label}</span>}
+              {g.items.map(pick)}
+            </React.Fragment>
           ))}
           {!order.length && <div style={{ fontSize: F.sm, color: T.ink3, padding: 8 }}>No sheets have been read on this job yet — put the plan set in the Plan Room.</div>}
         </div>

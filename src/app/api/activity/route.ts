@@ -60,6 +60,8 @@ const BUCKET_OF: Record<string, string> = {
 const AUTO_STREAK = 20;
 const PLURAL: Record<string, string> = { customer: "customers", vendor: "vendors", personal: "personal contacts" };
 
+// Summaries are long enough for a desktop header; the line itself trims to the room it has
+// (Coy, 2026-10-02: "Reading 2635 Walker High Dugouts Specs 2026 08 ……" was cut here, not on screen).
 const clipq = (s: string | null | undefined, n = 90) => {
   const t = (s ?? "").replace(/\s+/g, " ").trim();
   return t.length > n ? `${t.slice(0, n - 1)}…` : t;
@@ -125,7 +127,7 @@ export async function GET(req: NextRequest) {
         break;
       case "named": {
         const q = r.contact_name_claims?.evidence_quote;
-        items.push({ ...base, summary: `Named ${r.contact_name_claims?.claimed_name ?? who}${q ? ` — “${clipq(q, 60)}”` : ""}`,
+        items.push({ ...base, summary: `Named ${r.contact_name_claims?.claimed_name ?? who}${q ? ` — “${clipq(q, 180)}”` : ""}`,
           detail: q ? `They said: “${clipq(q, 400)}”. Keep or Undo it in the thread row.` : null, tone: "good" });
         break;
       }
@@ -143,7 +145,7 @@ export async function GET(req: NextRequest) {
         // The bucket Dusty filed into is his suggestion's; the contact's own
         // column may since have been undone.
         const b = BUCKET_OF[r.contact_proposals?.classification ?? ""] ?? "spam";
-        items.push({ ...base, summary: `Filed ${who} as ${b}${r.note ? ` — “${clipq(r.note, 50)}”` : ""}`,
+        items.push({ ...base, summary: `Filed ${who} as ${b}${r.note ? ` — “${clipq(r.note, 160)}”` : ""}`,
           detail: r.note ? `Going on: “${clipq(r.note, 400)}”. Wrong? Open the row and tap Not ${b}.` : null, tone: "quiet" });
         break;
       }
@@ -153,7 +155,7 @@ export async function GET(req: NextRequest) {
         if (!summarizedAt) summarizedAt = at;
         break;
       case "model_error": case "failed": case "abandoned":
-        items.push({ ...base, summary: `Couldn't read ${who}${r.note ? ` — ${clipq(r.note, 50)}` : ""}`, detail: r.note, tone: "warn" });
+        items.push({ ...base, summary: `Couldn't read ${who}${r.note ? ` — ${clipq(r.note, 160)}` : ""}`, detail: r.note, tone: "warn" });
         break;
       default:
         // no_words / unchanged / skipped: real, but one line each would be noise.
@@ -178,9 +180,9 @@ export async function GET(req: NextRequest) {
     .gte("read_at", new Date(Date.now() - 24 * 3600_000).toISOString()).order("read_at", { ascending: false }).limit(10);
   for (const f of (fileRows ?? []) as Array<{ id: string; name: string; contact_id: string | null; read_state: string; read_at: string; summary: string | null; read_error: string | null }>) {
     const base = { id: `file-${f.id}-${f.read_state}`, at: f.read_at, contact_id: f.contact_id };
-    if (f.read_state === "reading") items.push({ ...base, kind: "running", summary: `Reading ${clipq(f.name, 40)}…`, detail: null, tone: "live" });
-    else if (f.read_state === "read") items.push({ ...base, kind: "file", summary: `Read ${clipq(f.name, 32)}${f.summary ? ` — ${clipq(f.summary, 70)}` : ""}`, detail: f.summary, tone: "good" });
-    else items.push({ ...base, kind: "file", summary: `Couldn't read ${clipq(f.name, 40)}`, detail: f.read_error, tone: "warn" });
+    if (f.read_state === "reading") items.push({ ...base, kind: "running", summary: `Reading ${clipq(f.name, 140)}…`, detail: null, tone: "live" });
+    else if (f.read_state === "read") items.push({ ...base, kind: "file", summary: `Read ${clipq(f.name, 120)}${f.summary ? ` — ${clipq(f.summary, 220)}` : ""}`, detail: f.summary, tone: "good" });
+    else items.push({ ...base, kind: "file", summary: `Couldn't read ${clipq(f.name, 140)}`, detail: f.read_error, tone: "warn" });
   }
   // The email mirror (migration 061): each forwarded email is a line — filed,
   // a suggestion to confirm, or one to file. Its files then show as reads above.
@@ -189,10 +191,10 @@ export async function GET(req: NextRequest) {
     .eq("org_id", orgId).gte("created_at", new Date(Date.now() - 24 * 3600_000).toISOString()).order("created_at", { ascending: false }).limit(8);
   for (const m of (mailRows ?? []) as Array<{ id: string; created_at: string; subject: string | null; original_from_name: string | null; original_from_address: string | null; from_address: string | null; contact_id: string | null; status: string; suggested_customer_id: string | null; customer_id: string | null }>) {
     const who = m.original_from_name || m.original_from_address || m.from_address || "someone";
-    const subj = m.subject ? ` — ${clipq(m.subject, 50)}` : "";
+    const subj = m.subject ? ` — ${clipq(m.subject, 160)}` : "";
     items.push({
       id: `email-${m.id}-${m.status}`, at: m.created_at, kind: "email", contact_id: m.contact_id,
-      summary: m.status === "filed" ? `Email from ${clipq(who, 30)}${subj}`
+      summary: m.status === "filed" ? `Email from ${clipq(who, 80)}${subj}`
         : m.status === "quarantined" ? `Email from an address that isn't yours${subj} — file it in Documents › Emails`
           : `Email from ${clipq(who, 30)}${subj} — file it in Documents › Emails`,
       detail: m.subject, tone: m.status === "filed" ? "good" : "ask",
@@ -204,16 +206,16 @@ export async function GET(req: NextRequest) {
     .eq("org_id", orgId).gte("updated_at", new Date(Date.now() - 24 * 3600_000).toISOString()).order("updated_at", { ascending: false }).limit(6);
   for (const b of (bidRows ?? []) as Array<{ id: string; state: string; error: string | null; job_id: string | null; facts: Record<string, unknown> | null; box_folder_name: string | null; filed_at: string | null; updated_at: string; created: Record<string, unknown> | null }>) {
     const f = (b.facts ?? {}) as { project_name?: string | null; gc_company?: string | null; bid_due_text?: string | null; items?: unknown[] };
-    const name = clipq(f.project_name ?? b.box_folder_name ?? "a bid", 40);
+    const name = clipq(f.project_name ?? b.box_folder_name ?? "a bid", 140);
     const href = b.job_id ? `/dashboard/scope/${b.job_id}` : "/dashboard/documents?cat=email";
     if (b.state === "filed") {
       const isNew = !!(b.created ?? {}).job_id;
       items.push({ id: `bid-${b.id}-filed`, at: b.filed_at ?? b.updated_at, kind: "bid", contact_id: null, href,
-        summary: `${isNew ? "New bid" : "Bid updated"}: ${name}${f.gc_company ? ` — ${clipq(f.gc_company, 30)}` : ""}${f.bid_due_text ? ` · due ${clipq(f.bid_due_text, 30)}` : ""}`,
+        summary: `${isNew ? "New bid" : "Bid updated"}: ${name}${f.gc_company ? ` — ${clipq(f.gc_company, 80)}` : ""}${f.bid_due_text ? ` · due ${clipq(f.bid_due_text, 80)}` : ""}`,
         detail: `${(f.items ?? []).length} concrete item(s) read into the job's scope. Undo bid on the job takes it all back.`, tone: "good" });
     } else if (["needs_setup", "failed"].includes(b.state)) {
       items.push({ id: `bid-${b.id}-${b.state}`, at: b.updated_at, kind: "bid", contact_id: null, href,
-        summary: `Bid stuck: ${name} — ${clipq(b.error ?? b.state, 60)}`, detail: b.error, tone: "warn" });
+        summary: `Bid stuck: ${name} — ${clipq(b.error ?? b.state, 180)}`, detail: b.error, tone: "warn" });
     } else if (!["undone", "not_a_bid"].includes(b.state)) {
       items.push({ id: `bid-${b.id}-${b.state}`, at: b.updated_at, kind: "running", contact_id: null, href,
         summary: `Reading a bid: ${name}…`, detail: b.error, tone: "live" });
@@ -235,7 +237,7 @@ export async function GET(req: NextRequest) {
     const who = c?.name?.trim() || formatPhone(c?.phone ?? null);
     const late = t.due_on < todayLocal;
     standing.push({ id: `due-${t.id}`, at: new Date().toISOString(), kind: "reminder", contact_id: t.contact_id,
-      summary: `${late ? "Overdue" : "Due today"}: ${clipq(t.title, 60)} — ${who}`,
+      summary: `${late ? "Overdue" : "Due today"}: ${clipq(t.title, 180)} — ${who}`,
       detail: `On ${who}'s next steps${late ? `, due ${t.due_on}` : ""}. Tick it off there when it's done.`,
       tone: late ? "warn" : "ask" });
   }

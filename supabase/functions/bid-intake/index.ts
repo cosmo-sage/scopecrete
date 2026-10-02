@@ -36,6 +36,7 @@ const DEFAULT_HERMES_URL = 'https://srv1594563.tail0f2914.ts.net:8443'
 const DEFAULT_MODEL = 'anthropic/claude-haiku-4.5'
 const BUDGET_MS = 50_000
 const BUCKET = 'job-files'
+const SCAN_MARK = 'reading…'
 const BUFFER_MAX = 40 * 1024 * 1024   // read into memory (and scan) up to this; bigger files stream
 const ZIP_MAX = 60 * 1024 * 1024
 const MAX_FILES = 400
@@ -60,7 +61,7 @@ interface Email {
 }
 interface PFile {
   id: string; package_id: string; org_id: string; box_file_id: string | null; path: string | null; name: string; byte_size: number | null
-  role: string | null; job_file_id: string | null; fetch_state: string; scan_state: string; attempts: number
+  role: string | null; job_file_id: string | null; fetch_state: string; scan_state: string; scan_error: string | null; attempts: number
   pages: Array<Record<string, unknown>> | null; text_excerpt: string | null
 }
 
@@ -509,11 +510,21 @@ async function step(sb: Sb, pkg: Pkg, until: number): Promise<string> {
     }
     case 'scanning': {
       let n = 0
-      for (const f of (await files()).filter((x) => x.fetch_state === 'fetched' && x.scan_state === 'waiting' && x.job_file_id)) {
+      // Smallest first, so an addendum is read before a book that may not fit (Walker High, 2026-10-02).
+      const due = (await files()).filter((x) => x.fetch_state === 'fetched' && x.scan_state === 'waiting' && x.job_file_id)
+        .sort((a, b) => (a.byte_size ?? 0) - (b.byte_size ?? 0))
+      for (const f of due) {
         if (Date.now() > until) break
         const pdf = /\.pdf$/i.test(f.name)
         if (!pdf || f.role === 'other') { await sb.from('bid_package_files').update({ scan_state: 'skipped', scan_error: pdf ? null : 'not a PDF' }).eq('id', f.id); continue }
         if ((f.byte_size ?? 0) > BUFFER_MAX) { await sb.from('bid_package_files').update({ scan_state: 'skipped', scan_error: 'over 40 MB — its sheets are read when it is opened in the Plan Room' }).eq('id', f.id); continue }
+        // A run the platform stopped (CPU time) leaves this mark behind: that file doesn't fit a server read,
+        // so it is skipped with the reason — never retried forever. Dusty's file reader and the Plan Room still read it.
+        if (f.scan_error === SCAN_MARK) {
+          await sb.from('bid_package_files').update({ scan_state: 'skipped', scan_error: 'too big to read on the server in one go — Dusty\'s file reader and the Plan Room read it' }).eq('id', f.id)
+          continue
+        }
+        await sb.from('bid_package_files').update({ scan_error: SCAN_MARK }).eq('id', f.id)
         try {
           const { pages, excerpt } = await scanPdf(sb, f)
           await sb.from('bid_package_files').update({ scan_state: 'scanned', pages, text_excerpt: excerpt.slice(0, 60_000), scan_error: excerpt ? null : 'no text in it — a scanned PDF' }).eq('id', f.id)

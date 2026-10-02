@@ -652,6 +652,12 @@ anything), everything it makes is recorded, and **Undo bid** takes it back.
     Sidewalk – Phase 4") and Coy's own lines above the forwarded message are
     read as his notes (prompt `bid-intake-v2-folder-and-notes`). A re-run of
     a package updates the job IT made (title, site, customer, due).
+  - **A file too big for a server read is skipped, not retried forever
+    (v12, Walker High, 2026-10-02).** A 25 MB spec book ran the function
+    out of CPU time mid-scan, every minute. Files are now scanned smallest
+    first, and each is marked before its read; a file found still marked
+    (the platform stopped the run) is skipped with the reason — Dusty's
+    file reader and the Plan Room still read it.
   - Still Coy's: Dylan is two contacts (work line, cell) under two
     customers — "Same person as…" and + Add contact join them.
 
@@ -1228,7 +1234,7 @@ percentage of labour — all three contradict this section and §4.
   N added so far". A bid line's own area ("1,769.80 SY") becomes the section's area
   (`itemQuantity()` in `bid-intake/rules.ts` — the number is on the line the
   bid wrote; a count like "8 EA" isn't an area and stays for the line).
-  **Committed, not yet deployed** — `bid-intake` is still v11.
+  Deployed in `bid-intake` v12 (2026-10-02).
   **Fixed 2026-10-02:** every card from the JobTread import carries
   `price_source='import'`, which a budget line's check (048) does not
   allow, so no card could be added. `lineSource()` (`budget-server.ts`)

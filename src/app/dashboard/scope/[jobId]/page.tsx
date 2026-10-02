@@ -329,7 +329,7 @@ function num(v: unknown): number | null {
 }
 function numify(s: Section): Section {
   return { ...s, length_ft: num(s.length_ft), width_ft: num(s.width_ft), sqft_override: num(s.sqft_override),
-    depth_in: num(s.depth_in), psi: num(s.psi) };
+    depth_in: num(s.depth_in), psi: num(s.psi), count_qty: num(s.count_qty) };
 }
 /* ------------------------------------------------------------- a section */
 
@@ -354,17 +354,27 @@ function SectionCard({ s, index, err, onLocal, onSave, onRemove, rcards, jobType
   // Area mode keeps only the area (and the depth); the area is typed in sq ft or
   // sq yd and stored as sq ft (sqft_override), so the engine is unchanged.
   const bidSY = /\bSY\b/.test(s.source_ref ?? "");
-  const [mode, setMode] = useState<"dims" | "area">(() =>
-    s.length_ft === null && s.width_ft === null && (s.sqft_override !== null || bidSY || jobType === "public") ? "area" : "dims");
+  // Or by count (migration 065): "it's not an area, it's a quantity" — 8 EA.
+  const bidEA = /\b\d[\d,.]*\s*(EA|EACH|LS)\b/i.test(s.source_ref ?? "");
+  const [mode, setMode] = useState<"dims" | "area" | "count">(() =>
+    s.count_qty != null && s.sqft_override === null && s.length_ft === null && s.width_ft === null ? "count"
+      : s.length_ft === null && s.width_ft === null && s.sqft_override === null && bidEA ? "count"
+      : s.length_ft === null && s.width_ft === null && (s.sqft_override !== null || bidSY || jobType === "public") ? "area" : "dims");
   const unitKey = `sc:area-unit:${s.id}`;
   const [unit, setUnitState] = useState<"sf" | "sy">(() => {
     try { const v = localStorage.getItem(unitKey); if (v === "sf" || v === "sy") return v; } catch { /* no storage */ }
     return bidSY || jobType === "public" ? "sy" : "sf";
   });
   const setUnit = (u: "sf" | "sy") => { setUnitState(u); try { localStorage.setItem(unitKey, u); } catch { /* no storage */ } };
-  const toMode = (m: "dims" | "area") => {
+  const toMode = (m: "dims" | "area" | "count") => {
     if (m === mode) return;
     setMode(m);
+    if (m === "count") {
+      const p = { length_ft: null, width_ft: null, sqft_override: null };
+      onLocal(p); onSave(p);
+    } else if (s.count_qty != null) {
+      onLocal({ count_qty: null }); onSave({ count_qty: null });
+    }
     if (m === "area") {
       // Keep what L × W gave as the area, then drop the sides.
       const p = { length_ft: null, width_ft: null, sqft_override: q.sqft_source === "dimensions" ? q.sqft : s.sqft_override };
@@ -374,12 +384,18 @@ function SectionCard({ s, index, err, onLocal, onSave, onRemove, rcards, jobType
     }
   };
   // The bid's own quantity ("… – 1,769.80 SY"), offered as one tap — never filled in by itself.
-  const bidQty = (() => { const m = /([\d,]+(?:\.\d+)?)\s*(SY|SF)\b/.exec(s.source_ref ?? ""); return m ? { n: Number(m[1].replace(/,/g, "")), u: m[2] as "SY" | "SF" } : null; })();
+  const bidQty = (() => { const m = /([\d,]+(?:\.\d+)?)\s*(SY|SF|EA|EACH|LS)\b/i.exec(s.source_ref ?? ""); return m ? { n: Number(m[1].replace(/,/g, "")), u: (m[2].toUpperCase() === "EACH" ? "EA" : m[2].toUpperCase()) as "SY" | "SF" | "EA" | "LS" } : null; })();
   const useBidQty = () => {
     if (!bidQty || !(bidQty.n > 0)) return;
-    const p = { length_ft: null, width_ft: null, sqft_override: bidQty.u === "SY" ? Math.round(bidQty.n * 9 * 100) / 100 : bidQty.n };
+    if (bidQty.u === "EA" || bidQty.u === "LS") {
+      const p = { length_ft: null, width_ft: null, sqft_override: null, count_qty: bidQty.n, count_unit: bidQty.u };
+      setMode("count"); onLocal(p); onSave(p);
+      return;
+    }
+    const p = { length_ft: null, width_ft: null, sqft_override: bidQty.u === "SY" ? Math.round(bidQty.n * 9 * 100) / 100 : bidQty.n, count_qty: null };
     setMode("area"); setUnit(bidQty.u === "SY" ? "sy" : "sf"); onLocal(p); onSave(p);
   };
+  const bidQtyUsed = bidQty && (bidQty.u === "EA" || bidQty.u === "LS" ? q.count !== null : q.sqft !== null);
   const areaShown = s.sqft_override === null ? "" : unit === "sy" ? Math.round((s.sqft_override / 9) * 100) / 100 : s.sqft_override;
 
   const dimCell = (label: string, key: "length_ft" | "width_ft") => {
@@ -425,8 +441,9 @@ function SectionCard({ s, index, err, onLocal, onSave, onRemove, rcards, jobType
         <span className="inline-flex rounded overflow-hidden" role="group" aria-label="Measured by" style={{ border: `1px solid ${T.hair}` }}>
           <button onClick={() => toMode("dims")} aria-pressed={mode === "dims"} style={seg(mode === "dims")}>Length × width</button>
           <button onClick={() => toMode("area")} aria-pressed={mode === "area"} style={seg(mode === "area")}>Area only</button>
+          <button onClick={() => toMode("count")} aria-pressed={mode === "count"} style={seg(mode === "count")}>Count</button>
         </span>
-        {bidQty && q.sqft === null && (
+        {bidQty && !bidQtyUsed && (
           <button onClick={useBidQty} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>
             Use the bid&apos;s {bidQty.n.toLocaleString("en-US")} {bidQty.u}
           </button>
@@ -436,7 +453,21 @@ function SectionCard({ s, index, err, onLocal, onSave, onRemove, rcards, jobType
       <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 mt-2" style={{ borderTop: `1px solid ${T.hairSoft}` }}>
         {mode === "dims" && dimCell("Length", "length_ft")}
         {mode === "dims" && dimCell("Width", "width_ft")}
-        <Cell label="Area" missing={q.sqft === null}
+        {mode === "count" && (
+          <Cell label="How many" missing={q.count === null}
+            source={q.count === null ? "type how many" : "items priced per each on this area take this number"}>
+            <div className="flex items-baseline gap-1 flex-wrap">
+              <NumIn value={s.count_qty ?? ""} w={80}
+                onChange={(v) => onLocal({ count_qty: v === "" ? null : Number(v) })}
+                onBlur={() => onSave({ count_qty: s.count_qty ?? null, count_unit: s.count_unit ?? "EA" })} />
+              <input defaultValue={s.count_unit ?? "EA"} aria-label="Unit counted" maxLength={12}
+                onBlur={(e) => { const u = e.target.value.trim().toUpperCase() || "EA"; onLocal({ count_unit: u }); onSave({ count_unit: u }); }}
+                className="bg-transparent outline-none rounded px-1"
+                style={{ width: 52, height: 28, border: `1px solid ${T.hair}`, background: T.card, fontSize: F.sm, textTransform: "uppercase" }} />
+            </div>
+          </Cell>
+        )}
+        {mode !== "count" && <Cell label="Area" missing={q.sqft === null}
           source={mode === "area"
             ? (q.sqft === null ? "type the area" : unit === "sy" ? `= ${n1(q.sqft)} sq ft` : `= ${n2(q.sqft / 9)} sq yd`)
             : q.sqft_source === "dimensions" ? `length × width · ${n2(q.sqft! / 9)} sq yd` : "needs length and width"}>
@@ -458,7 +489,7 @@ function SectionCard({ s, index, err, onLocal, onSave, onRemove, rcards, jobType
               </>
             )}
           </div>
-        </Cell>
+        </Cell>}
         {concrete && (
           <Cell label="Thickness" missing={s.depth_in === null} source={s.depth_in === null ? "not set — never assumed" : "you set it"}>
             <div className="flex items-baseline gap-1">

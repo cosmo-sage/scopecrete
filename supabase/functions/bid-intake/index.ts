@@ -422,6 +422,9 @@ async function file(sb: Sb, pkg: Pkg, email: Email, files: PFile[]) {
       psi: it.psi, depth_in: it.thickness_in, rebar: it.reinforcement, length_ft: null, width_ft: null,
       // The bid's own area for this item ("1,769.80 SY"), as written on its line.
       sqft_override: itemQuantity(it.quote)?.sqft ?? null,
+      // A count ("8 EA") is the section's count (migration 065), not an area.
+      count_qty: ['EA', 'LS'].includes(itemQuantity(it.quote)?.unit ?? '') ? itemQuantity(it.quote)!.qty : null,
+      count_unit: ['EA', 'LS'].includes(itemQuantity(it.quote)?.unit ?? '') ? itemQuantity(it.quote)!.unit : null,
       origin: 'bid', source_ref: ref, sort_order: order++,
     }).select('id').single()
     if (!error && s) sectionIds.push(s.id)

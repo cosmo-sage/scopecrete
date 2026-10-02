@@ -72,7 +72,8 @@ function areasOf(rows: Rec[]): DocArea[] {
   return rows.map((s) => {
     const L = n(s.length_ft), W = n(s.width_ft), o = n(s.sqft_override);
     return { id: String(s.id), name: str(s.name), work_type: str(s.work_type), length_ft: L, width_ft: W,
-      sqft: o ?? (L && W ? L * W : null), depth_in: n(s.depth_in), psi: n(s.psi), rebar: str(s.rebar) };
+      sqft: o ?? (L && W ? L * W : null), depth_in: n(s.depth_in), psi: n(s.psi), rebar: str(s.rebar),
+      count: n(s.count_qty), count_unit: str(s.count_unit) };
   });
 }
 

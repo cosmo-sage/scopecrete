@@ -18,7 +18,7 @@ export const SECTIONS: Array<[string, string]> = [
   ["pay", "Payments"], ["warranty", "Warranty"], ["terms", "Terms"], ["sign", "Sign"],
 ];
 
-export interface DocArea { id: string; name: string | null; work_type: string | null; length_ft: number | null; width_ft: number | null; sqft: number | null; depth_in: number | null; psi: number | null; rebar: string | null }
+export interface DocArea { id: string; name: string | null; work_type: string | null; length_ft: number | null; width_ft: number | null; sqft: number | null; depth_in: number | null; psi: number | null; rebar: string | null; count?: number | null; count_unit?: string | null }
 export interface DocVM {
   number: string; date: string; readOnly: boolean;
   typeKey: string | null; typeLabel: string;
@@ -313,6 +313,7 @@ function areaSpec(a: DocArea) {
   const bits: string[] = [];
   if (a.length_ft && a.width_ft) bits.push(`${qtyFmt(a.length_ft)} × ${qtyFmt(a.width_ft)} ft`);
   if (a.sqft) bits.push(`${Math.round(a.sqft).toLocaleString("en-US")} sf`);
+  else if (a.count) bits.push(`${qtyFmt(a.count)} ${a.count_unit ?? "EA"}`);
   if (a.depth_in) bits.push(`${qtyFmt(a.depth_in)}" thick`);
   if (a.psi) bits.push(`${a.psi} psi`);
   if (a.rebar) bits.push(a.rebar);

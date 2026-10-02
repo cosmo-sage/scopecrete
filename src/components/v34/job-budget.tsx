@@ -194,6 +194,7 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0 }: {
     const s = aid ? sections.find((x) => x.id === aid) : null;
     if (!s) return null;
     const q = quantities(s);
+    if (q.count !== null) return { text: `${qtyFmt(q.count)} ${q.count_unit}`, per: (price) => `${money(price / (q.count as number))}/${q.count_unit}` };
     if (q.sqft === null || q.sqft <= 0) return null;
     const sy = areaUnit(s) === "sy";
     const n = sy ? q.sqft / 9 : q.sqft;
@@ -547,7 +548,7 @@ function CardPicker({ open, initialArea, onClose, data, sections, tier, tierLabe
   const [q, setQ] = useState("");
   const [area, setArea] = useState<string>(initialArea);
   const areaSec = sections.find((x) => x.id === area);
-  const [custom, setCustom] = useState({ name: "", cost_type: "material" as CostType, unit: areaSec && areaUnit(areaSec) === "sy" ? "SY" : "each", unit_cost: "", qty_rule: "manual", save: true });
+  const [custom, setCustom] = useState({ name: "", cost_type: "material" as CostType, unit: areaSec && quantities(areaSec).count !== null ? (areaSec.count_unit || "EA") : areaSec && areaUnit(areaSec) === "sy" ? "SY" : "each", unit_cost: "", qty_rule: "manual", save: true });
   const [saving, setSaving] = useState<string | null>(null);
   const [added, setAdded] = useState<string | null>(null);
   const match = (c: Card) => !q.trim() || c.name.toLowerCase().includes(q.trim().toLowerCase());

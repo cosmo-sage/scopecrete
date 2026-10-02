@@ -32,7 +32,7 @@ export async function jobValues(sb: Sb, orgId: string, jobs: Array<{ id: string;
     estIds.length ? sb.from("estimate_line_items").select("id, estimate_id, name, cost_type, unit, unit_cost, margin_pct, taxable, qty_rule, rule_params, qty_source, quantity, section_id, option_id, cost_group_id, takeoff_parameter_id")
       .in("estimate_id", estIds) : Promise.resolve({ data: [] }),
     pricingFor(sb, orgId, ids),
-    sb.from("job_sections").select("id, job_id, name, work_type, length_ft, width_ft, sqft_override, depth_in, psi").eq("org_id", orgId).in("job_id", ids),
+    sb.from("job_sections").select("id, job_id, name, work_type, length_ft, width_ft, sqft_override, depth_in, psi, count_qty, count_unit").eq("org_id", orgId).in("job_id", ids),
     // Plan Room groups (059): a line counted from a takeoff reads its measured total.
     estIds.length ? loadTakeoff(sb, orgId, ids) : Promise.resolve({ totals: {} }),
   ]);
@@ -48,7 +48,7 @@ export async function jobValues(sb: Sb, orgId: string, jobs: Array<{ id: string;
     if (!est || !lines.length) { out.set(j.id, { total: null, basis: null, why: "no budget" }); continue; }
     const sections: SectionInput[] = secRows.filter((r) => r.job_id === j.id).map((r) => ({
       id: r.id as string, name: r.name as string | null, work_type: r.work_type as string,
-      length_ft: num(r.length_ft), width_ft: num(r.width_ft), sqft_override: num(r.sqft_override), depth_in: num(r.depth_in), psi: num(r.psi),
+      length_ft: num(r.length_ft), width_ft: num(r.width_ft), sqft_override: num(r.sqft_override), depth_in: num(r.depth_in), psi: num(r.psi), count_qty: num(r.count_qty), count_unit: (r.count_unit as string | null) ?? null,
     }));
     const optionIds = optRows.filter((o) => o.estimate_id === est.id).map((o) => o.id);
     const st = pricing.get(j.id)?.settings ?? { margin_pct: null, overhead_pct: null, tax_rate_pct: null };

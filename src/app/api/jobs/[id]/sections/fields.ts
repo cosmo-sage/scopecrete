@@ -13,11 +13,11 @@
 
 export const WORK_TYPES = ["slab", "driveway", "patio", "sidewalk", "footing", "curb", "demo", "prep", "other"] as const;
 
-const NUMERIC = ["length_ft", "width_ft", "sqft_override", "depth_in"] as const;
+const NUMERIC = ["length_ft", "width_ft", "sqft_override", "depth_in", "count_qty"] as const;
 const TEXT = ["name", "rebar", "prep_notes", "access_notes"] as const;
 
 export const SECTION_SELECT =
-  "id, job_id, name, work_type, length_ft, width_ft, sqft_override, depth_in, psi, rebar, prep_notes, access_notes, sort_order, created_at, updated_at, reinforcement_item_id, reinforcement_source, origin, source_ref";
+  "id, job_id, name, work_type, length_ft, width_ft, sqft_override, depth_in, psi, rebar, prep_notes, access_notes, sort_order, created_at, updated_at, reinforcement_item_id, reinforcement_source, origin, source_ref, count_qty, count_unit";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -47,6 +47,14 @@ export function readSectionFields(body: Record<string, unknown>):
     if (v === null) patch[f] = null;
     else if (typeof v === "string") patch[f] = v.trim() === "" ? null : v.trim().slice(0, 500);
     else return { ok: false, error: `${f} must be text.` };
+  }
+
+  // Measured by count (migration 065): the unit counted, short ("EA", "LS").
+  if ("count_unit" in body) {
+    const v = body.count_unit;
+    if (v === null || v === "") patch.count_unit = null;
+    else if (typeof v === "string" && v.trim().length <= 12) patch.count_unit = v.trim().toUpperCase();
+    else return { ok: false, error: "count_unit must be a short unit like EA, or null." };
   }
 
   if ("work_type" in body) {

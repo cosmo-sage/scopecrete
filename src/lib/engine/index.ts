@@ -45,6 +45,9 @@ export interface SectionInput {
   sqft_override: number | null;
   depth_in: number | null;
   psi?: number | null;
+  /** Measured by count (migration 065): 8 detectable warning panels. */
+  count_qty?: number | null;
+  count_unit?: string | null;
 }
 
 /** One line of recurring overhead — the Cash page's burn rate. */
@@ -81,9 +84,18 @@ export interface SectionQuantities {
   cy_neat: number | null;
   /** What gets missing to reach a price: 'length', 'width', 'depth'. */
   missing: string[];
+  /** Measured by count instead of size (065): how many, and of what. */
+  count: number | null;
+  count_unit: string | null;
 }
 
 export function quantities(s: SectionInput): SectionQuantities {
+  // Counted, not measured (Coy, 2026-10-02: "it's not an area, it's a quantity"):
+  // no area, no pour, nothing missing — its lines take the count.
+  if (has(s.count_qty) && s.count_qty > 0 && !(has(s.sqft_override) && s.sqft_override > 0) && !has(s.length_ft) && !has(s.width_ft)) {
+    return { id: s.id, name: s.name ?? null, work_type: s.work_type, concrete: false, sqft: null, sqft_source: null,
+      depth_in: null, cy_neat: null, missing: [], count: s.count_qty, count_unit: (s.count_unit || "EA").toUpperCase() };
+  }
   const concrete = isConcrete(s.work_type);
   const missing: string[] = [];
 
@@ -110,7 +122,7 @@ export function quantities(s: SectionInput): SectionQuantities {
 
   return {
     id: s.id, name: s.name ?? null, work_type: s.work_type, concrete,
-    sqft, sqft_source, depth_in: depth, cy_neat, missing,
+    sqft, sqft_source, depth_in: depth, cy_neat, missing, count: null, count_unit: null,
   };
 }
 
@@ -225,6 +237,13 @@ export function takeoffUnit(unit: string): "SF" | "SY" | "LF" | "EA" | "CY" | nu
   return null;
 }
 
+/** Does a line's unit count the same thing as an area's count? EA ≈ each / ea / count; otherwise the same word. */
+export function countUnitMatches(lineUnit: string, countUnit: string): boolean {
+  const a = takeoffUnit(lineUnit), b = takeoffUnit(countUnit);
+  if (a === "EA" && b === "EA") return true;
+  return lineUnit.trim().toLowerCase().replace(/[.\s]/g, "") === countUnit.trim().toLowerCase().replace(/[.\s]/g, "");
+}
+
 /** The job's pricing: its own O.H. and margin (else the org's defaults), and its tax rate. */
 export interface BudgetSettings {
   overhead_pct: number | null;
@@ -285,6 +304,14 @@ export function ruleQty(
   days: number | null,
   takeoff?: Record<string, TakeoffTotal>,
 ): { ok: true; qty: number; basis: "rule" | "set"; note: string } | { ok: false; missing: string[] } {
+  // A line priced per each on a counted area takes the count (065): 8 EA → qty 8.
+  if (line.qty_source !== "set" && line.section_id && line.qty_rule === "manual") {
+    const area = sections.find((s) => s.id === line.section_id);
+    const q = area ? quantities(area) : null;
+    if (q && q.count !== null && countUnitMatches(line.unit ?? "", q.count_unit ?? "EA")) {
+      return { ok: true, qty: q.count, basis: "rule", note: `${q.count} ${q.count_unit} on the area` };
+    }
+  }
   if (line.qty_source === "set" || line.qty_rule === "manual") {
     if (has(line.quantity) && line.quantity >= 0) return { ok: true, qty: line.quantity, basis: "set", note: "typed" };
     return { ok: false, missing: [`${line.name}: quantity`] };

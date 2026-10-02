@@ -2,7 +2,7 @@
 // (migration 057): price = cost × (1 + O.H.) ÷ (1 − margin).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { budget, ruleQty, jobMinimum } from "../src/lib/engine/index.ts";
+import { budget, ruleQty, jobMinimum, quantities } from "../src/lib/engine/index.ts";
 
 const S = { overhead_pct: 15, margin_pct: 20, tax_rate_pct: 10 };
 const drive = { id: "s1", name: "Drive", work_type: "driveway", length_ft: 30, width_ft: 20, sqft_override: null, depth_in: 4 };
@@ -114,4 +114,17 @@ test("government bid items: an area with no length or width, counted in square y
   // A takeoff group in SF feeds an SY card.
   const t = { g: { name: "Walk", unit: "SF", qty: 900, cy: null, blocked: null } };
   assert.equal(ruleQty(L({ qty_rule: "from_takeoff", unit: "SY", takeoff_parameter_id: "g" }), [walk], null, t).qty, 100);
+});
+
+test("a section measured by count: an item priced per each takes the count", () => {
+  // Burgess Ave NS-MSC-00080 Detectable Warning — 8 EA.
+  const dw = { id: "d", name: "Detectable warning", work_type: "other", length_ft: null, width_ft: null, sqft_override: null, depth_in: null, count_qty: 8, count_unit: "EA" };
+  const q = quantities(dw);
+  assert.equal(q.concrete, false); assert.deepEqual(q.missing, []); assert.equal(q.count, 8);
+  assert.deepEqual(ruleQty(L({ qty_rule: "manual", unit: "each", section_id: "d" }), [dw], null), { ok: true, qty: 8, basis: "rule", note: "8 EA on the area" });
+  assert.equal(ruleQty(L({ qty_rule: "manual", unit: "EA", section_id: "d", qty_source: "set", quantity: 10 }), [dw], null).qty, 10, "a typed qty wins");
+  assert.equal(ruleQty(L({ qty_rule: "manual", unit: "SY", section_id: "d" }), [dw], null).ok, false, "a different unit still needs its qty");
+  assert.equal(ruleQty(L({ qty_rule: "per_job", unit: "EA", section_id: "d" }), [dw], null).qty, 1, "once per job stays once");
+  const b = budget([L({ id: "x", qty_rule: "manual", unit: "EA", unit_cost: 120, section_id: "d" })], [], S, [dw], null, { tax_on: false, discount: 0 });
+  near(b.lines.x.ext_cost, 960);
 });

@@ -235,7 +235,7 @@ async function scopeContext(sb: Sb, orgId: string, jobId: string): Promise<Assem
     .eq("org_id", orgId).eq("id", jobId).maybeSingle();
   if (!job) return coldContext(null, new Date().toISOString().slice(0, 10));
   const [{ data: secs }, pricing, who, files] = await Promise.all([
-    sb.from("job_sections").select("id, name, work_type, length_ft, width_ft, sqft_override, depth_in, psi, rebar, prep_notes, access_notes, source_ref")
+    sb.from("job_sections").select("id, name, work_type, length_ft, width_ft, sqft_override, depth_in, psi, rebar, prep_notes, access_notes, source_ref, count_qty, count_unit")
       .eq("org_id", orgId).eq("job_id", jobId).order("sort_order"),
     pricingFor(sb, orgId, [jobId]),
     job.contact_id ? contactBlock(sb, orgId, job.contact_id as string) : Promise.resolve(null),
@@ -244,6 +244,7 @@ async function scopeContext(sb: Sb, orgId: string, jobId: string): Promise<Assem
   const sections: SectionInput[] = ((secs ?? []) as Array<Record<string, unknown>>).map((r) => ({
     id: r.id as string, name: r.name as string | null, work_type: r.work_type as string,
     length_ft: num(r.length_ft), width_ft: num(r.width_ft), sqft_override: num(r.sqft_override), depth_in: num(r.depth_in), psi: num(r.psi),
+    count_qty: num(r.count_qty), count_unit: (r.count_unit as string | null) ?? null,
   }));
   const t = takeoff(sections, null);
   const days = num(job.duration_days);
@@ -252,7 +253,8 @@ async function scopeContext(sb: Sb, orgId: string, jobId: string): Promise<Assem
   // Areas by ref, for a budget plan (src/lib/dusty/plan.ts).
   const areaRefs = ((secs ?? []) as Array<Record<string, unknown>>).map((r) => {
     const sq = num(r.sqft_override) ?? (num(r.length_ft) !== null && num(r.width_ft) !== null ? (num(r.length_ft) as number) * (num(r.width_ft) as number) : null);
-    return `- ${String(r.id).slice(0, 8)} · ${r.name || "Unnamed area"} (${r.work_type})${sq !== null ? ` · ${fmt0(sq)} sf = ${(sq / 9).toFixed(2)} SY` : " · area not set"}${num(r.depth_in) !== null ? ` · ${num(r.depth_in)} in` : ""}${r.source_ref ? ` · from the bid: ${String(r.source_ref).slice(0, 160)}` : ""}`;
+    const cnt = num(r.count_qty);
+    return `- ${String(r.id).slice(0, 8)} · ${r.name || "Unnamed area"} (${r.work_type})${cnt !== null && sq === null ? ` · counted ${cnt} ${(r.count_unit as string | null) ?? "EA"} (an item priced per each with no typed qty takes this count)` : sq !== null ? ` · ${fmt0(sq)} sf = ${(sq / 9).toFixed(2)} SY` : " · area not set"}${num(r.depth_in) !== null ? ` · ${num(r.depth_in)} in` : ""}${r.source_ref ? ` · from the bid: ${String(r.source_ref).slice(0, 160)}` : ""}`;
   });
   const notes = ((secs ?? []) as Array<Record<string, unknown>>).flatMap((r) =>
     [["reinforcement", r.rebar], ["prep", r.prep_notes], ["access", r.access_notes]]

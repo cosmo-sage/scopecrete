@@ -1201,6 +1201,18 @@ percentage of labour — all three contradict this section and §4.
   (`itemQuantity()` in `bid-intake/rules.ts` — the number is on the line the
   bid wrote; a count like "8 EA" isn't an area and stays for the line).
   **Committed, not yet deployed** — `bid-intake` is still v11.
+- **A section measured by count (migration 065, applied 2026-10-02 on
+  Coy's "Apply 065").** Coy: *"it's actually a quantity per item. So it's not
+  an area, it's a quantity."* `job_sections.count_qty` / `count_unit`
+  (nullable, checked > 0, unit ≤ 12 characters; additive, RLS unchanged). A
+  section is **Measured by** Length × width · Area only · **Count** — "How
+  many" and its unit (EA by default); a bid line's "8 EA" is one tap. A
+  counted section has no area and no pour, so nothing on it is missing; a
+  line on it priced per each (typed-quantity rule, unit EA / each, or the
+  same unit word) takes the count as its quantity unless Coy types one
+  (`ruleQty()`), and its items and groups sit under it like any other area.
+  The budget shows "8 EA · $X/EA"; the proposal shows "8 EA"; Dusty sees
+  "counted 8 EA".
 - **Dusty plans budgets; Coy applies them (Coy, 2026-10-02: "chat with Dusty
   to analyze the list of items in my cost book and apply the items that I
   might need or create new items or modify cost items and organize by

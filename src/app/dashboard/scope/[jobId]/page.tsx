@@ -86,6 +86,8 @@ export default function ScopeBuilder() {
   const [contact, setContact] = useState<Contact | null>(null);
   const [why, setWhy] = useState<Why | null>(null);
   const [whyOpen, setWhyOpen] = useState(false);
+  // The bid strip shows the bid's scope summary; the header doesn't repeat it (Coy, 2026-10-02).
+  const [bidSummary, setBidSummary] = useState<string | null>(null);
   // Dusty docked on a desktop: the totals move into his panel (Coy, 2026-09-30).
   const docked = useDustyDocked();
   const [slot, setSlot] = useState<HTMLElement | null>(null);
@@ -231,7 +233,7 @@ export default function ScopeBuilder() {
             {` · ${sections.length} section${sections.length === 1 ? "" : "s"}`}
             {job.origin === "classification" ? " · made when filed as a customer" : job.created_from_message_id ? " · drafted from a message" : ""}
           </div>
-          {job.description && <div style={{ fontSize: F.sm, color: T.ink2, lineHeight: 1.4, marginTop: 2 }}>{job.description}</div>}
+          {job.description && !bidSummary && <div style={{ fontSize: F.sm, color: T.ink2, lineHeight: 1.4, marginTop: 2 }}>{job.description}</div>}
           {saveErr.job && <div style={{ fontSize: F.xs, color: T.red }}>{saveErr.job}</div>}
           <div className="flex items-center justify-end gap-1.5" style={{ marginTop: 6 }}>
             {/* The Plan Room (059): plan sheets, takeoff, and its lines on the budget. */}
@@ -273,7 +275,7 @@ export default function ScopeBuilder() {
         </div>
 
         {/* The bid behind it, when a forwarded bid email made or fed this job (migration 063). */}
-        <BidStrip jobId={jobId} onUndone={() => { window.location.href = "/dashboard/scope"; }} />
+        <BidStrip jobId={jobId} onSummary={setBidSummary} onUndone={() => { window.location.href = "/dashboard/scope"; }} />
 
         {sections.length === 0 && (
           <EmptyState title="No sections yet"

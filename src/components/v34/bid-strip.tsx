@@ -38,7 +38,9 @@ function due(at: string | null): { text: string; hot: boolean } | null {
   return { text: `${when} · ${h < 48 ? `${h} h left` : `${Math.floor(h / 24)} days`}`, hot: h < 48 }
 }
 
-export function BidStrip({ jobId, onUndone }: { jobId: string; onUndone: () => void }) {
+export function BidStrip({ jobId, onUndone, onSummary }: { jobId: string; onUndone: () => void
+  /** The bid's scope summary, once loaded — the job header leaves out its copy of it. */
+  onSummary?: (s: string | null) => void }) {
   const [bid, setBid] = useState<Bid | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -48,6 +50,7 @@ export function BidStrip({ jobId, onUndone }: { jobId: string; onUndone: () => v
     fetch(`/api/jobs/${jobId}/bid`).then((r) => (r.ok ? r.json() : null)).then((b) => { if (!off) setBid(b?.bid ?? null) }).catch(() => {})
     return () => { off = true }
   }, [jobId, tick])
+  useEffect(() => { onSummary?.(bid?.facts?.scope_summary ?? null) }, [bid, onSummary])
   // While the reader is still working, look again every 20 s.
   const working = !!bid && !["filed", "not_a_bid", "failed", "needs_setup"].includes(bid.state)
   useEffect(() => {

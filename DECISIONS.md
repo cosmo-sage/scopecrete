@@ -1964,8 +1964,9 @@ expected start date per quoted job before it means anything. Add the field.
   **Bids due** tile (open bid invites by due date).
 - **Job header (2026-10-02, Coy's notes on the Burgess job):** ‹ Jobs and
   the job name on one row (bold, smaller), the four chips small on one row
-  under it, the customer line and description, then **Plan room** and
-  **Proposal** small and right-aligned above the money strip.
+  under it, the customer line and description (left out when the Bid strip
+  below shows the bid's scope summary — Coy: "redundant"), then **Plan
+  room** and **Proposal** small and right-aligned above the money strip.
 - **Job header (2026-09-28)** — four tappable chips, each opening its list:
   **Status** (the seven stages, with W.I.P.'s won / scheduled / pouring),
   **Type**, **Source** and **Vendors (n)** (crew on the job, add by subtype)

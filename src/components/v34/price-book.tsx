@@ -98,17 +98,31 @@ export function PriceBook({ pick }: { pick?: PricePick } = {}) {
   const reload = () => setTick((n) => n + 1);
   const [flash, setFlash] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  // What was added while the book is open: the + turns into a green ✓ (with a count when added twice),
+  // and a toast at the bottom says what went on (Coy, 2026-10-02: "something that signifies that it was added").
+  const [added, setAdded] = useState<Record<string, number>>({});
   const took = async (key: string, what: string, fn: () => Promise<void>) => {
     setBusy(key); setErr(null);
-    try { await fn(); setFlash(`Added ${what}`); setTimeout(() => setFlash((f) => (f === `Added ${what}` ? null : f)), 2200); }
+    try {
+      await fn();
+      setAdded((m) => ({ ...m, [key]: (m[key] ?? 0) + 1 }));
+      setFlash(`Added ${what} to the budget`); setTimeout(() => setFlash((f) => (f === `Added ${what} to the budget` ? null : f)), 2600);
+    }
     catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(null); }
   };
-  const plus = (c: Card) => pick && c.active ? (
-    <button onClick={(e) => { e.stopPropagation(); void took(c.id, c.name, () => pick.onCard(c)); }} disabled={busy === c.id}
-      aria-label={`Add ${c.name} to the budget`} title="Add to the budget" className="rounded shrink-0"
-      style={{ width: 30, height: 28, background: T.ink, color: T.card, fontFamily: disp, fontSize: 16, lineHeight: "28px", cursor: "pointer", opacity: busy === c.id ? 0.5 : 1 }}>+</button>
-  ) : null;
+  const plus = (c: Card) => {
+    if (!pick || !c.active) return null;
+    const n = added[c.id] ?? 0;
+    return (
+      <button onClick={(e) => { e.stopPropagation(); void took(c.id, c.name, () => pick.onCard(c)); }} disabled={busy === c.id}
+        aria-label={n ? `Added ${c.name} — add it again` : `Add ${c.name} to the budget`} title={n ? "Added — tap to add again" : "Add to the budget"} className="rounded shrink-0"
+        style={{ minWidth: 30, height: 28, padding: "0 4px", background: n ? T.green : T.ink, color: n ? "#fff" : T.card, fontFamily: disp, fontSize: n ? 13 : 16,
+          fontWeight: 700, lineHeight: "28px", cursor: "pointer", opacity: busy === c.id ? 0.5 : 1, transition: "background .15s" }}>
+        {busy === c.id ? "…" : n ? `✓${n > 1 ? n : ""}` : "+"}
+      </button>
+    );
+  };
 
   const setView = (v: View) => { setViewState(v); try { localStorage.setItem(VIEW_KEY, v); } catch { /* private mode */ } };
 
@@ -286,7 +300,13 @@ export function PriceBook({ pick }: { pick?: PricePick } = {}) {
         </div>}
       </div>
       {pick?.top && <div className="mt-2">{pick.top}</div>}
-      {flash && <div className="mt-2 rounded px-3 py-1.5" style={{ fontSize: F.sm, background: T.greenDim, color: T.ink }}>✓ {flash}</div>}
+      {flash && (
+        <div role="status" aria-live="polite" className={pick ? "sticky z-20 rounded px-3 py-2 flex items-center gap-2" : "mt-2 rounded px-3 py-1.5"}
+          style={pick ? { top: 4, fontSize: F.sm, background: T.green, color: "#fff", fontWeight: 600, boxShadow: "0 6px 18px rgba(0,0,0,.25)", marginTop: 8 } : { fontSize: F.sm, background: T.greenDim, color: T.ink }}>
+          ✓ {flash}
+          {pick && Object.keys(added).length > 0 && <span style={{ fontWeight: 400, opacity: 0.9 }}>· {Object.values(added).reduce((a, b) => a + b, 0)} added so far</span>}
+        </div>
+      )}
 
       <div className="flex gap-1 mt-3" role="tablist" aria-label="Price book">
         {(pick ? (["cards", "assemblies"] as const) : (["cards", "assemblies", "defaults"] as const)).map((k) => (

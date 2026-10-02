@@ -1202,7 +1202,9 @@ percentage of labour — all three contradict this section and §4.
   opens the real Price book page (`PriceBook` with `pick`) wide over the job:
   find, by group / by vendor, columns — plus **+** on every item, **Add all
   N** on every group and **Load** on every assembly, into the area picked at
-  the top. A bid line's own area ("1,769.80 SY") becomes the section's area
+  the top. A tapped **+** turns into a green **✓** (✓2 when added twice) and a
+  green toast pinned at the top of the book says "Added X to the budget ·
+  N added so far". A bid line's own area ("1,769.80 SY") becomes the section's area
   (`itemQuantity()` in `bid-intake/rules.ts` — the number is on the line the
   bid wrote; a count like "8 EA" isn't an area and stays for the line).
   **Committed, not yet deployed** — `bid-intake` is still v11.

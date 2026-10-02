@@ -43,3 +43,6 @@ next-env.d.ts
 # supabase cli scratch (version cache, local stack state) — not source
 supabase/.temp/
 supabase/.branches/
+
+# pdf.js assets, copied by scripts/copy-pdfjs-assets.mjs
+/public/pdfjs/

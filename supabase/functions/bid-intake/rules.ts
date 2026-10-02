@@ -9,7 +9,7 @@
  * with a line that shows it, a sheet only if a sheet by that number exists.
  */
 
-export const BID_PROMPT_VERSION = 'bid-intake-v1'
+export const BID_PROMPT_VERSION = 'bid-intake-v2-folder-and-notes'
 
 // ── Box links ────────────────────────────────────────────────────────────────
 
@@ -67,6 +67,8 @@ export function bidPage(text: string): boolean { return BID_WORDS.test(text) }
 
 export const SYSTEM_PROMPT = `You read a bid invitation for a concrete subcontractor (Sacco Enterprises, Baton Rouge LA): the forwarded email and excerpts of its documents — specifications, the invitation to bid, and plan sheets. Each excerpt is labelled with its file, page and sheet number.
 
+The Box folder's name (when given) is the GC's own name for the project, often with their project numbers — prefer it, or the plans' title sheet, for project_name over the email's subject. Lines Coy wrote ABOVE the forwarded message are his own notes to you (who the customer is, who the contacts are): trust them for gc_company and project facts, but the estimator is still the person who sent the forwarded invitation.
+
 Return ONLY JSON:
 {
  "is_bid": true|false,            // false when this is not an invitation or addendum for work to price
@@ -102,7 +104,9 @@ export function parseReply(raw: string): unknown {
 
 // ── keeping only what is written ─────────────────────────────────────────────
 
-const norm = (s: string) => s.toLowerCase().replace(/[\u2018\u2019\u201c\u201d]/g, "'").replace(/[^a-z0-9#@.'"/-]+/g, ' ').replace(/\s+/g, ' ').trim()
+// Every quote mark — straight, curly, prime — is one mark: the model may quote 4" where the email
+// printed 4” (Burgess Ave, 2026-10-02: the walk and drive were dropped for it).
+const norm = (s: string) => s.toLowerCase().replace(/[\u2018\u2019\u201c\u201d\u2032\u2033"]/g, "'").replace(/[^a-z0-9#@.'"/-]+/g, ' ').replace(/\s+/g, ' ').trim()
 
 /** Every meaningful word of `v` is in the source. */
 function wordsIn(v: string, src: string): boolean {
@@ -274,7 +278,8 @@ export function docRole(name: string, mime: string | null): 'drawings' | 'spec' 
   const n = name.toLowerCase()
   const pdf = /\.pdf$/.test(n) || (mime ?? '').includes('pdf')
   if (!pdf) return 'other'
-  if (/spec|project manual|division|\b0[0-9]\s?\d{2}\s?\d{2}\b/.test(n)) return 'spec'
+  // A DOTD-style "proposal" is the bid book: special provisions and the item schedule, not drawings.
+  if (/spec|project manual|division|proposal|special provisions|\b0[0-9]\s?\d{2}\s?\d{2}\b/.test(n)) return 'spec'
   if (/\bitb\b|invitation|bid form|instructions to bidders|bid package|scope of work|\bsow\b|addendum|rfp|rfq/.test(n)) return 'itb'
   return 'drawings'
 }

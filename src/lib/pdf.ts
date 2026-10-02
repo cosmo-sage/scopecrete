@@ -28,7 +28,13 @@ const docs = new Map<string, Promise<Doc>>();
 export function openPdf(fileId: string, url: string): Promise<Doc> {
   let d = docs.get(fileId);
   if (!d) {
-    d = pdfjs().then((m) => m.getDocument({ url }).promise);
+    // Scanned plan sets store their drawings as JBIG2 / JPEG 2000 images: without the
+    // decoders (public/pdfjs, copied at build) every page renders white.
+    const base = `${window.location.origin}/pdfjs/`;
+    d = pdfjs().then((m) => m.getDocument({
+      url, wasmUrl: `${base}wasm/`, standardFontDataUrl: `${base}standard_fonts/`,
+      cMapUrl: `${base}cmaps/`, cMapPacked: true, iccUrl: `${base}iccs/`,
+    }).promise);
     d.catch(() => docs.delete(fileId));
     docs.set(fileId, d);
   }

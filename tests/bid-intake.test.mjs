@@ -69,6 +69,13 @@ test("the model's reading is kept only where it is written", () => {
   assert.match(r.dropped.join("\n"), /Curb and gutter/);
 });
 
+test("a straight quote mark matches a curly one in the email", () => {
+  const src = "706-01-00100 \u2013 Concrete Walk (4\u201d Thick) \u2013 1,769.80 SY";
+  const r = sanitizeBid({ items: [{ name: "Concrete Walk", work_type: "sidewalk", thickness_in: 4, quote: '706-01-00100 \u2013 Concrete Walk (4" Thick) \u2013 1,769.80 SY' }] }, src, []);
+  assert.equal(r.facts.items.length, 1);
+  assert.equal(r.facts.items[0].thickness_in, 4);
+});
+
 test("numbers, names and dates that aren't written are dropped", () => {
   const r = sanitizeBid({
     gc_company: "Sacco Enterprises", estimator: { name: "Jordan Smith", email: "x@nowhere.test", phone: "225-555-0000" },
@@ -101,6 +108,8 @@ test("what a file is, and what is skipped", () => {
   assert.equal(docRole("Addendum 2.pdf", null), "itb");
   assert.equal(docRole("C-101 Site Plan.pdf", "application/pdf"), "drawings");
   assert.equal(docRole("bid form.xlsx", null), "other");
+  assert.equal(docRole("_h.015211_proposal.pdf", null), "spec", "a DOTD proposal is the bid book, not drawings");
+  assert.equal(docRole("PLANS.pdf", null), "drawings");
   assert.match(skipBoxFile(".DS_Store", 10), /system/);
   assert.match(skipBoxFile("Plans.pdf", 200 * 1024 * 1024), /100 MB/);
   assert.equal(skipBoxFile("Plans.pdf", 5e6), null);

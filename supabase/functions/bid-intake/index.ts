@@ -50,7 +50,7 @@ declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void } | undefined
 // deno-lint-ignore no-explicit-any
 type Sb = any
 interface Pkg {
-  id: string; org_id: string; email_id: string; state: string; box_url: string | null; box_folder_id: string | null
+  id: string; org_id: string; email_id: string; state: string; box_url: string | null; box_folder_id: string | null; box_folder_name?: string | null
   facts: BidFacts | null; created: Record<string, unknown>; attempts: number; job_id: string | null
 }
 interface Email {
@@ -234,7 +234,10 @@ async function scanPdf(sb: Sb, f: PFile): Promise<{ pages: Array<Record<string, 
       }
       p.cleanup()
     }
-  } finally { await doc.destroy() }
+  } finally {
+    // unpdf's proxy may not carry destroy(); a missing one must never fail a read that already finished.
+    try { await (doc as { destroy?: () => Promise<void> }).destroy?.() } catch { /* nothing to free */ }
+  }
   return { pages, excerpt: parts.join('\n') }
 }
 
@@ -288,6 +291,20 @@ async function file(sb: Sb, pkg: Pkg, email: Email, files: PFile[]) {
       if (person) { contactId = person.id; customerId = customerId ?? person.customer_id ?? null }
     }
   }
+  const phone = f.estimator.phone ? `+1${f.estimator.phone.replace(/\D/g, '').slice(-10)}` : null
+  if (!contactId && phone) {
+    // Their number is already one of Coy's contacts: that is the person — and their customer is the
+    // customer (Dylan's work line had texted before; 2026-10-02 the reader made a second customer).
+    const { data: byPhone } = await sb.from('contacts').select('id, customer_id, merged_into_contact_id').eq('org_id', org).eq('phone', phone).limit(1)
+    let p = byPhone?.[0] as { id: string; customer_id: string | null; merged_into_contact_id: string | null } | undefined
+    if (!p) {
+      const { data: alt } = await sb.from('contact_phones').select('contact_id').eq('org_id', org).eq('phone_e164', phone).limit(1)
+      const cid = alt?.[0]?.contact_id
+      if (cid) p = (await sb.from('contacts').select('id, customer_id, merged_into_contact_id').eq('id', cid).maybeSingle()).data ?? undefined
+    }
+    if (p?.merged_into_contact_id) p = (await sb.from('contacts').select('id, customer_id, merged_into_contact_id').eq('id', p.merged_into_contact_id).maybeSingle()).data ?? p
+    if (p) { contactId = p.id; customerId = customerId ?? p.customer_id ?? null }
+  }
   if (contactId && !customerId) customerId = (await sb.from('contacts').select('customer_id').eq('id', contactId).maybeSingle()).data?.customer_id ?? null
   if (!customerId && estEmail && !ours(estEmail)) {
     const domain = matchableDomain(estEmail, OUR_EMAILS)
@@ -314,12 +331,30 @@ async function file(sb: Sb, pkg: Pkg, email: Email, files: PFile[]) {
       created.customer_id = cu.id
     }
   }
-  const phone = f.estimator.phone ? `+1${f.estimator.phone.replace(/\D/g, '').slice(-10)}` : null
-  if (!contactId && phone) {
-    // Their number is already one of Coy's contacts: that is the person.
-    const { data: byPhone } = await sb.from('contacts').select('id, customer_id, merged_into_contact_id').eq('org_id', org).eq('phone', phone).limit(1)
-    const p = byPhone?.[0]
-    if (p) { contactId = p.merged_into_contact_id ?? p.id; customerId = customerId ?? p.customer_id ?? null }
+  // An existing customer or contact with a blank is filled in from the bid as written — never
+  // overwritten. What was filled is listed on the package so Undo bid can blank it again.
+  if (customerId && f.gc_company && !created.customer_id) {
+    const { data: cu } = await sb.from('customers').select('id, name, kind, customer_type').eq('id', customerId).maybeSingle()
+    if (cu && !cu.name) {
+      await sb.from('customers').update({ name: f.gc_company, kind: 'company', customer_type: cu.customer_type ?? 'commercial' }).eq('id', cu.id)
+      created.filled_customer = { id: cu.id, kind: cu.kind, customer_type: cu.customer_type }
+    }
+  }
+  if (contactId && !created.contact_id) {
+    const { data: ct } = await sb.from('contacts').select('id, name, name_source').eq('id', contactId).maybeSingle()
+    const fill: Record<string, unknown> = {}
+    // Their own signature on their own email: the person saying who they are (§2b's self-introduction rule).
+    if (ct && !ct.name && estName && ct.name_source !== 'human') { fill.name = estName; fill.name_source = 'machine' }
+    if (Object.keys(fill).length) await sb.from('contacts').update(fill).eq('id', contactId)
+    let addedEmail: string | null = null
+    if (estEmail && !ours(estEmail)) {
+      const { data: has } = await sb.from('contact_emails').select('contact_id').eq('org_id', org).eq('email', estEmail).limit(1)
+      if (!has?.length) {
+        const { error } = await sb.from('contact_emails').insert({ org_id: org, contact_id: contactId, email: estEmail, is_primary: true, source: 'inbound_email' })
+        if (!error) addedEmail = estEmail
+      }
+    }
+    if (fill.name || addedEmail) created.filled_contact = { id: contactId, name: !!fill.name, email: addedEmail }
   }
   if (!contactId && customerId && (estName || estEmail) && !ours(estEmail)) {
     const now = new Date().toISOString()
@@ -343,8 +378,20 @@ async function file(sb: Sb, pkg: Pkg, email: Email, files: PFile[]) {
   const key = projectKey(f.project_name)
   const match = (open ?? []).find((j: { box_url: string | null; customer_id: string | null; title: string | null }) =>
     (pkg.box_url && j.box_url === pkg.box_url) || (key && j.customer_id === customerId && projectKey(j.title) === key))
-  if (match) jobId = match.id
-  else {
+  if (match) {
+    jobId = match.id
+    // Re-reading this package's OWN job (a retry, not an addendum): it takes the new reading.
+    if (created.job_id === match.id) {
+      const addr = f.address
+      await sb.from('jobs').update({
+        customer_id: customerId, contact_id: contactId,
+        title: (f.job_title ?? f.project_name ?? match.title ?? 'Bid').slice(0, 120),
+        address: addr.line, city: addr.city, state: addr.state, zip: addr.zip,
+        description: f.scope_summary?.slice(0, 900) ?? null, bid_due_at: f.bid_due_at,
+        notes: [f.project_name && `Project: ${f.project_name}`, f.bid_due_text && `Bids due: ${f.bid_due_text}`, f.prebid_text && `Pre-bid: ${f.prebid_text}`].filter(Boolean).join('\n') || null,
+      }).eq('id', match.id)
+    }
+  } else {
     const addr = f.address
     const { data: job, error } = await sb.from('jobs').insert({
       org_id: org, customer_id: customerId, contact_id: contactId,
@@ -479,7 +526,7 @@ async function step(sb: Sb, pkg: Pkg, until: number): Promise<string> {
       const all = await files()
       const sheetNos = all.flatMap((f) => (f.pages ?? []).map((p) => (typeof p.number === 'string' ? p.number : null)).filter((x): x is string => !!x))
       const index = all.filter((f) => f.pages?.length).map((f) => `${f.name}: ${(f.pages ?? []).map((p) => [p.number, p.title].filter(Boolean).join(' ')).filter(Boolean).join('; ')}`).join('\n')
-      const header = `EMAIL\nSubject: ${email.subject ?? ''}\nForwarded by: ${email.from_address ?? ''}\nOriginally from: ${email.original_from_name ?? ''} <${email.original_from_address ?? ''}>\n\n${(email.text_body ?? '').slice(0, 15_000)}`
+      const header = `${pkg.box_folder_name ? `BOX FOLDER: ${pkg.box_folder_name}\n\n` : ''}EMAIL\nSubject: ${email.subject ?? ''}\nForwarded by: ${email.from_address ?? ''}\nOriginally from: ${email.original_from_name ?? ''} <${email.original_from_address ?? ''}>\n\n${(email.text_body ?? '').slice(0, 15_000)}`
       const order = { itb: 0, spec: 1, drawings: 2, other: 3 } as Record<string, number>
       let body = ''
       for (const f of all.slice().sort((a, b) => (order[a.role ?? 'other'] ?? 3) - (order[b.role ?? 'other'] ?? 3))) {

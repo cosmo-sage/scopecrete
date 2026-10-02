@@ -4,7 +4,7 @@ Ground truth for every agent working this repo. If code disagrees with this
 document, the code is wrong or this document is stale — resolve it, don't
 guess. Update this file in the same PR that changes the behavior it describes.
 
-Last updated: 2026-10-01
+Last updated: 2026-10-02
 
 ---
 
@@ -605,8 +605,40 @@ anything), everything it makes is recorded, and **Undo bid** takes it back.
   stranger sees nothing and can't undo; anon refused. **Applied 2026-10-01**
   (piecewise via `execute_sql`, no `drop`), `bid-intake` v1 deployed
   (verify_jwt off; ping: Box not configured, Hermes ok; no token → 401), cron
-  `bid-intake` every minute. Waiting on: the AgentMail webhook + secret
-  (§2h) and Coy's Box app keys, then a real forward to verify end to end.
+  `bid-intake` every minute.
+- **Live 2026-10-02.** AgentMail webhook + `AGENTMAIL_WEBHOOK_SECRET` set;
+  Coy's Box app (Client Credentials, `BOX_SUBJECT_TYPE=user`, his user id —
+  not the enterprise id, which Box refuses with HTTP 400) answers. First
+  real bid: LA Contracting's Burgess Ave. Sidewalk – Phase 4 (DOTD), a Box
+  folder with `PLANS.pdf` and `_h.015211_proposal.pdf`, filed 20 s after it
+  landed. What it taught, all fixed (`bid-intake` v11):
+  - **The plans are the drawings; everything else is words** (Coy). A
+    DOTD "proposal" is the bid book — special provisions and the item
+    schedule — so `docRole()` files *proposal* / *special provisions* as
+    **spec**: read for scope and requirements, kept out of the Plan Room,
+    and handed to Dusty's file reader (§2e). Its 200+ pages had become fake
+    "sheets" (D-1 "Demolition"…).
+  - **Scanned plan sets have no text.** `PLANS.pdf` (74 pages) is images,
+    so no sheet number, title or scale can be read and nothing in it can be
+    quoted; the scope comes from the email and the spec book, and the
+    takeoff is Coy's. (OCR of drawings is not built.)
+  - unpdf's document has no `destroy()`; calling it failed every scan after
+    the read had finished. Optional now.
+  - **A known phone is the person, and their customer is the customer** —
+    checked before a customer is made (`contacts.phone`, then
+    `contact_phones`, merges followed). The first run made a second
+    customer for Dylan's work line; it was folded in
+    (`merged_into_customer_id`). An existing customer or contact with a
+    BLANK name is filled from the bid as written (`filled_customer`,
+    `filled_contact` on the package), never overwritten.
+  - A quote mark is a quote mark: straight, curly and prime are one mark
+    in `sanitizeBid()` (the walk and drive were dropped for `4"` vs `4”`).
+  - The Box folder's name goes to the model ("BD26178 H.015211 Burgess Ave.
+    Sidewalk – Phase 4") and Coy's own lines above the forwarded message are
+    read as his notes (prompt `bid-intake-v2-folder-and-notes`). A re-run of
+    a package updates the job IT made (title, site, customer, due).
+  - Still Coy's: Dylan is two contacts (work line, cell) under two
+    customers — "Same person as…" and + Add contact join them.
 
 ## 2c. One contact is one person — migration 028 (applied 2026-09-27)
 
@@ -1738,7 +1770,14 @@ expected start date per quoted job before it means anything. Add the field.
   the prefix, and the printed scale. A first reading, kept apart from Coy's
   own (`number_source`). Several different scales and none in the title
   block → "set it with the Scale tool". Thumbnails are drawn in memory, never
-  stored. Discipline filter, "Concrete scope" = civil + structural.
+  stored. **Scanned sets render (2026-10-02):** pdf.js is given its image
+  decoders (JBIG2, JPEG 2000 — `wasmUrl`), standard fonts, CMaps and ICC
+  profiles from `public/pdfjs/`, copied out of `pdfjs-dist` before
+  `dev`/`build` (`scripts/copy-pdfjs-assets.mjs`, not committed); without
+  them a scanned drawing was a white page (verified in the harness: 0
+  painted pixels without, the drawing with). The Plan Room lists only the
+  sheets of files that are **In plan room** (and any sheet with a shape on
+  it); taking a file out takes its pages with it. Discipline filter, "Concrete scope" = civil + structural.
   **Takeoff** — the page on a canvas with an SVG layer in PDF points; tools
   Area, Rect, Linear, Count, Cutout, Scale (Auto is shown off: Dusty doesn't
   read drawings). **A sheet's scale is only ever one Coy set** — "Use 1/8" =

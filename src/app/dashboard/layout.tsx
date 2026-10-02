@@ -154,7 +154,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex flex-col min-h-screen" style={{ background: T.slab, color: T.ink, fontFamily: body }}>
-      <div style={{ position: "sticky", top: 0, zIndex: menuOpen ? 60 : 40 }}>
+      <div className="sc-head-wrap" style={{ position: "sticky", top: 0, zIndex: menuOpen ? 60 : 40 }}>
         <header className="px-2.5 lg:px-4 flex items-center gap-3 sc-paper" style={{ height: 54 }}>
           <Link href="/dashboard" className="no-underline shrink-0" aria-label="Dashboard">
             <OrgLockup name={me?.org_name ?? null} hasLight={!!me?.logo_light} hasDark={!!me?.logo_dark} stamp={me?.logo_stamp ?? null}

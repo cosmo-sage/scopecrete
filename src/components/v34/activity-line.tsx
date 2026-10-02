@@ -36,7 +36,7 @@
 
 import React, { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { T, F, eyebrow, clip, nums, relTime } from "@/lib/v34/tokens";
+import { T, F, eyebrow, agent, clip, nums, relTime } from "@/lib/v34/tokens";
 import { useDustyLive } from "@/lib/v34/dusty-live";
 import { usePlanOcr } from "@/lib/v34/plan-ocr-runner";
 
@@ -130,6 +130,13 @@ export function ActivityLine({ busy, onWorking, inline }: {
   const [idx, setIdx] = useState(0);
   const [open, setOpen] = useState(false);
   const [hover, setHover] = useState(false);
+  // Open, the drop-down sits over everything — the plan sheets, Dusty, any sheet (Coy, 2026-10-02):
+  // the header's own layer is lifted while it is down (v34-shell.css, html[data-head-drop]).
+  useEffect(() => {
+    if (!open) return;
+    document.documentElement.setAttribute("data-head-drop", "open");
+    return () => document.documentElement.removeAttribute("data-head-drop");
+  }, [open]);
 
   const apply = useCallback((d: Activity) => {
     setData(d);
@@ -238,8 +245,8 @@ export function ActivityLine({ busy, onWorking, inline }: {
       {open && (
         <div className={inline ? "absolute left-0 overflow-y-auto sc-drop sc-activity-drop" : "mt-1.5 overflow-y-auto sc-drop sc-activity-drop"}
           style={inline
-            ? { top: "calc(100% + 8px)", width: 560, maxWidth: "calc(100vw - 120px)", maxHeight: "min(60vh, 460px)", zIndex: 60 }
-            : { maxHeight: "min(60vh, 420px)" }}>
+            ? { top: "calc(100% + 8px)", width: 560, maxWidth: "calc(100vw - 120px)", maxHeight: "min(60vh, 460px)", zIndex: 60, fontFamily: agent }
+            : { maxHeight: "min(60vh, 420px)", fontFamily: agent }}>
           {data?.pinned && (
             <div className="px-3 py-2" style={{ borderBottom: `1px solid ${T.hairSoft}` }}>
               <div style={{ fontSize: F.sm, color: T.hivizText }}>{data.pinned.summary}</div>

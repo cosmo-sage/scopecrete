@@ -17,10 +17,10 @@ function Text({ parts }: { parts: Inline[] }) {
 }
 
 /** Memoised: while an answer streams, the earlier answers are not re-parsed. */
-export const Markdown = React.memo(function Markdown({ text }: { text: string }) {
+export const Markdown = React.memo(function Markdown({ text, size = F.md }: { text: string; size?: number }) {
   const blocks = parseMarkdown(text);
   return (
-    <div className="sc-md" style={{ fontSize: F.md, lineHeight: 1.6, color: T.ink }}>
+    <div className="sc-md" style={{ fontSize: size, lineHeight: 1.6, color: T.ink }}>
       {blocks.map((b, i) => {
         const gap = { margin: i === 0 ? "0 0 8px" : "8px 0" };
         if (b.k === "h") return <div key={i} style={{ ...gap, fontWeight: 700, fontSize: b.level === 1 ? F.lg : F.md }}><Text parts={b.text} /></div>;

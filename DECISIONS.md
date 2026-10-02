@@ -1750,6 +1750,13 @@ expected start date per quoted job before it means anything. Add the field.
   ("Reading 2635 Walker High Dugouts Specs 2026 08……"); its one-line
   summaries now carry up to ~140–220 characters and the line trims to the
   room it has.
+  **Dusty's type is JetBrains Mono (Coy, 2026-10-02: "JetBrains Mono for the
+  AI agent font")** — the activity line, its drop-down, and the chat
+  (questions, answers at 14px, the message box), in every theme (`agent` in
+  `tokens.ts` → `--sc-font-agent`, next/font's `--font-mono`). Buttons and
+  headers keep the theme's faces. **The drop-down comes down over
+  everything** — the plan sheets panel, Dusty, any sheet: while it is open
+  the header's layer is lifted (`html[data-head-drop] .sc-head-wrap`).
 - **Taps stay quick (2026-09-30, Coy's interaction timing: INP 1,056 ms,
   976 ms of it input delay).** The activity line typed by setting React
   state every 18 ms and re-laid-out the page per letter; it now types with

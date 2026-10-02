@@ -20,7 +20,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { T, F, disp, eyebrow, body, clip, relTime, nums } from "@/lib/v34/tokens";
+import { T, F, disp, eyebrow, agent, clip, relTime, nums } from "@/lib/v34/tokens";
 import { DustyAvatar, type DustyState } from "@/components/v34/dusty-avatar";
 import { Markdown } from "@/components/v34/markdown";
 import { PlanCard } from "@/components/v34/plan-card";
@@ -464,19 +464,19 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
               </div>
             )}
             {items.map((it, i) => it.role === "user" ? (
-              <h2 key={i} style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 600, lineHeight: 1.25, margin: i === 0 ? "0 0 8px" : "22px 0 8px",
+              <h2 key={i} style={{ fontFamily: agent, fontSize: F.md + 1, fontWeight: 700, lineHeight: 1.35, margin: i === 0 ? "0 0 8px" : "22px 0 8px",
                 paddingTop: i === 0 ? 0 : 16, borderTop: i === 0 ? "none" : `1px solid ${T.hair}` }}>{it.content}</h2>
             ) : (
               <div key={i}>
                 <div style={{ minWidth: 0 }}>
-                <div style={{ fontFamily: body }}>
+                <div style={{ fontFamily: agent }}>
                   {it.content ? (() => {
                     // A budget plan rides at the end of an answer: shown as steps with Apply, not as code.
                     const p = parsePlan(it.content);
                     const streaming = busy && i === items.length - 1;
                     const shown = streaming ? it.content.replace(/```scopecrete-plan[\s\S]*$/, "").trim() : p.shown;
                     return (<>
-                      <Markdown text={shown} />
+                      <Markdown text={shown} size={14} />
                       {streaming && /```scopecrete-plan/.test(it.content) && <div style={{ fontSize: F.xs, color: T.ink3, marginTop: 6 }}>Writing up the plan…</div>}
                       {!streaming && (p.actions.length > 0 || p.dropped > 0) && (
                         <PlanCard jobId={planJob} actions={p.actions} dropped={p.dropped} done={!streaming} />
@@ -532,7 +532,7 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
                   onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void ask(draft); } }}
                   placeholder={hearing ? "Listening back…" : active ? "Follow up…" : hot ? `Ask about ${GUESS[ref.kind]}…` : "Ask Dusty…"}
                   className="flex-1 rounded-lg px-3 py-2 outline-none resize-none"
-                  style={{ border: `1px solid ${T.hair}`, fontSize: F.sm, maxHeight: 140, fontFamily: body, minWidth: 0, background: T.card, color: T.ink }} />
+                  style={{ border: `1px solid ${T.hair}`, fontSize: F.sm, maxHeight: 140, fontFamily: agent, minWidth: 0, background: T.card, color: T.ink }} />
                 {/* Telegram's way: an empty box offers the mic, a typed one the send. */}
                 {!draft.trim() && !atts.length ? (
                   <button type="button" onClick={() => { setErr(null); setRecording(true); }} disabled={busy || hearing} aria-label="Record a voice message" title="Record a voice message"

@@ -23,6 +23,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { T, F, disp, eyebrow, body, clip, relTime, nums } from "@/lib/v34/tokens";
 import { DustyAvatar, type DustyState } from "@/components/v34/dusty-avatar";
 import { Markdown } from "@/components/v34/markdown";
+import { PlanCard } from "@/components/v34/plan-card";
+import { parsePlan } from "@/lib/dusty/plan";
 import { useDustyUse } from "@/lib/v34/dusty-live";
 import { sendBytes } from "@/components/v34/files-panel";
 import { VoiceRecorder } from "@/components/v34/voice-recorder";
@@ -309,6 +311,8 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
   if (!open) return null;
 
   const active = convs?.find((c) => c.id === activeId) ?? null;
+  // The job a plan applies to: the chat's own job, else the job page that's open.
+  const planJob = active ? (active.context_kind === "scope" ? active.context_id : null) : ref.kind === "scope" ? ref.id : null;
   const hot = active ? active.context_kind !== "cold" : ref.kind !== "cold";
   // A catch-up just started has no row in the list yet — say what it is.
   const catching = !active && activeId !== null && items[0]?.content === "What's new since I last looked?";
@@ -464,7 +468,19 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
               <div key={i}>
                 <div style={{ minWidth: 0 }}>
                 <div style={{ fontFamily: body }}>
-                  {it.content ? <Markdown text={it.content} /> : <span style={{ color: T.ink3 }}>Reading…</span>}
+                  {it.content ? (() => {
+                    // A budget plan rides at the end of an answer: shown as steps with Apply, not as code.
+                    const p = parsePlan(it.content);
+                    const streaming = busy && i === items.length - 1;
+                    const shown = streaming ? it.content.replace(/```scopecrete-plan[\s\S]*$/, "").trim() : p.shown;
+                    return (<>
+                      <Markdown text={shown} />
+                      {streaming && /```scopecrete-plan/.test(it.content) && <div style={{ fontSize: F.xs, color: T.ink3, marginTop: 6 }}>Writing up the plan…</div>}
+                      {!streaming && (p.actions.length > 0 || p.dropped > 0) && (
+                        <PlanCard jobId={planJob} actions={p.actions} dropped={p.dropped} done={!streaming} />
+                      )}
+                    </>);
+                  })() : <span style={{ color: T.ink3 }}>Reading…</span>}
                 </div>
                 {it.content && !(busy && i === items.length - 1) && (
                   <button onClick={() => void copy(i, it.content)} className="mt-1.5" style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>

@@ -55,7 +55,23 @@ const MIN_W = 48;
 
 const ROW_CHUNK = 60;
 
-export function PriceBook() {
+/**
+ * The Price book opened from a job's budget (Coy, 2026-10-02: "toggle back and
+ * forth … to the cost book and pull items from there"). The same page — find,
+ * by group / by vendor, columns — with + on every card, Add all on every group
+ * and Load on every assembly. Adding is the caller's: it puts the card on the
+ * area picked in `top`.
+ */
+export interface PricePick {
+  title: string; sub?: string;
+  /** Above the book: where the cards go (the area, the option). */
+  top?: React.ReactNode;
+  onCard: (c: Card) => Promise<void>;
+  onGroup: (groupId: string, name: string) => Promise<void>;
+  onAssembly?: (assemblyId: string, name: string) => Promise<void>;
+}
+
+export function PriceBook({ pick }: { pick?: PricePick } = {}) {
   const [items, setItems] = useState<Card[] | null>(null);
   const [groups, setGroups] = useState<Group[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
@@ -80,6 +96,19 @@ export function PriceBook() {
   // "Now" as of the last load — for "old price" and recent imports — so render stays pure.
   const [now, setNow] = useState(0);
   const reload = () => setTick((n) => n + 1);
+  const [flash, setFlash] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const took = async (key: string, what: string, fn: () => Promise<void>) => {
+    setBusy(key); setErr(null);
+    try { await fn(); setFlash(`Added ${what}`); setTimeout(() => setFlash((f) => (f === `Added ${what}` ? null : f)), 2200); }
+    catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(null); }
+  };
+  const plus = (c: Card) => pick && c.active ? (
+    <button onClick={(e) => { e.stopPropagation(); void took(c.id, c.name, () => pick.onCard(c)); }} disabled={busy === c.id}
+      aria-label={`Add ${c.name} to the budget`} title="Add to the budget" className="rounded shrink-0"
+      style={{ width: 30, height: 28, background: T.ink, color: T.card, fontFamily: disp, fontSize: 16, lineHeight: "28px", cursor: "pointer", opacity: busy === c.id ? 0.5 : 1 }}>+</button>
+  ) : null;
 
   const setView = (v: View) => { setViewState(v); try { localStorage.setItem(VIEW_KEY, v); } catch { /* private mode */ } };
 
@@ -225,6 +254,13 @@ export function PriceBook() {
     <div ref={measure} className="px-3 py-3 lg:px-5">
       {/* ---- title + actions ---- */}
       <div className="flex items-end gap-2 flex-wrap">
+        {pick ? (
+          <div style={{ flex: 1, minWidth: 200 }}>
+            <div style={{ ...eyebrow }}>Price book → budget</div>
+            <div style={{ fontFamily: disp, fontSize: 20, fontWeight: 700, lineHeight: 1.1 }}>{pick.title}</div>
+            {pick.sub && <div style={{ fontSize: F.xs, color: T.ink3, marginTop: 2 }}>{pick.sub}</div>}
+          </div>
+        ) : (
         <div style={{ flex: 1, minWidth: 200 }}>
           <div style={{ ...eyebrow }}>Costs</div>
           <h1 style={{ fontFamily: disp, fontSize: 26, fontWeight: 700, lineHeight: 1 }}>Price book</h1>
@@ -232,9 +268,10 @@ export function PriceBook() {
             What you buy and charge for, each with its vendor. A job&apos;s budget copies a card when you add it, so changing a price here never changes a quote you&apos;ve sent.
           </div>
         </div>
+        )}
         <button onClick={() => setAddingGroup(true)} style={btn(false)}>+ Group</button>
         <button onClick={() => newCard()} style={btn(false)}>+ Card</button>
-        <div className="relative">
+        {!pick && <div className="relative">
           <button onClick={() => setMenu((m) => !m)} aria-expanded={menu} style={btn(true)}>Import ▾</button>
           {menu && (
             <div className="absolute right-0 z-20 mt-1 rounded" style={{ background: T.card, border: `1px solid ${T.hair}`, boxShadow: "0 8px 24px rgba(10,14,18,.14)", width: 250 }}>
@@ -246,11 +283,13 @@ export function PriceBook() {
               </button>
             </div>
           )}
-        </div>
+        </div>}
       </div>
+      {pick?.top && <div className="mt-2">{pick.top}</div>}
+      {flash && <div className="mt-2 rounded px-3 py-1.5" style={{ fontSize: F.sm, background: T.greenDim, color: T.ink }}>✓ {flash}</div>}
 
       <div className="flex gap-1 mt-3" role="tablist" aria-label="Price book">
-        {(["cards", "assemblies", "defaults"] as const).map((k) => (
+        {(pick ? (["cards", "assemblies"] as const) : (["cards", "assemblies", "defaults"] as const)).map((k) => (
           <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)} className="rounded px-3"
             style={{ height: 32, background: tab === k ? T.ink : T.card, color: tab === k ? T.card : T.ink2, border: `1px solid ${tab === k ? T.ink : T.hair}`,
               fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", letterSpacing: ".06em", cursor: "pointer" }}>
@@ -260,7 +299,8 @@ export function PriceBook() {
       </div>
 
       {tab === "defaults" ? <div className="mt-3 rounded" style={{ background: T.card, border: `1px solid ${T.hair}` }}><PricingDefaults /><ProjectTypes /></div>
-        : tab === "assemblies" ? <Assemblies cards={items ?? []} /> : (<>
+        : tab === "assemblies" ? <Assemblies cards={items ?? []}
+          onPick={pick?.onAssembly ? (id, name) => void took(id, name, () => pick.onAssembly!(id, name)) : undefined} /> : (<>
       {/* ---- find, view ---- */}
       <div className="flex items-center gap-2 flex-wrap mt-3">
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find: 3000, rebar, Angelle, item #…" aria-label="Find a card"
@@ -334,9 +374,10 @@ export function PriceBook() {
       {wide ? (
         <div className="mt-3 rounded overflow-x-auto" style={{ background: T.card, border: `1px solid ${T.hair}` }}>
           <table style={{ borderCollapse: "collapse", fontSize: F.sm, tableLayout: "fixed", width: tableW, minWidth: "100%", ...nums }}>
-            <colgroup>{shownCols.map((col) => <col key={col.k} style={{ width: widthOf(col.k) }} />)}</colgroup>
+            <colgroup>{pick && <col style={{ width: 44 }} />}{shownCols.map((col) => <col key={col.k} style={{ width: widthOf(col.k) }} />)}</colgroup>
             <thead>
               <tr style={{ background: T.slab }}>
+                {pick && <th style={{ borderBottom: `1px solid ${T.hair}` }} />}
                 {shownCols.map((col) => (
                   <th key={col.k} style={{ ...eyebrow, textAlign: col.align ?? "left", padding: "6px 8px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", borderBottom: `1px solid ${T.hair}`, position: "relative" }}>
                     {col.k === "other" ? (view === "group" ? "Vendor" : "Group") : col.label}
@@ -353,7 +394,7 @@ export function PriceBook() {
                 return (
                   <React.Fragment key={s.key}>
                     <tr style={{ background: T.ink, color: T.card }}>
-                      <td colSpan={shownCols.length} style={{ padding: "5px 8px" }}>
+                      <td colSpan={shownCols.length + (pick ? 1 : 0)} style={{ padding: "5px 8px" }}>
                         <span className="flex items-center gap-2">
                           <button onClick={() => setOpen((o) => ({ ...o, [s.key]: shut }))} aria-expanded={!shut} style={{ color: T.card, cursor: "pointer", fontFamily: disp, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".04em" }}>
                             {shut ? "+" : "−"} {s.title}
@@ -361,12 +402,16 @@ export function PriceBook() {
                           <span style={{ fontSize: F.xs, color: "#AEB8C2" }}>{s.sub}</span>
                           {s.href && <Link href={s.href} style={{ fontSize: F.xs, color: "#AEB8C2" }}>their page →</Link>}
                           <span className="flex-1" />
+                          {pick && s.groupId && s.cards.length > 0 && (
+                            <button onClick={() => void took(s.key, `all of ${s.title}`, () => pick.onGroup(s.groupId!, s.title))} disabled={busy === s.key}
+                              style={{ ...eyebrow, color: T.card, cursor: "pointer", border: `1px solid ${T.card}`, borderRadius: 3, padding: "1px 6px" }}>Add all {s.cards.length}</button>
+                          )}
                           {s.groupId && <button onClick={() => newCard(s.groupId)} style={{ ...eyebrow, color: T.card, cursor: "pointer" }}>+ Card</button>}
                         </span>
                       </td>
                     </tr>
                     {!shut && s.cards.length === 0 && (
-                      <tr><td colSpan={shownCols.length} style={{ padding: "6px 24px", fontSize: F.xs, color: T.ink3 }}>No cards in this group yet.</td></tr>
+                      <tr><td colSpan={shownCols.length + (pick ? 1 : 0)} style={{ padding: "6px 24px", fontSize: F.xs, color: T.ink3 }}>No cards in this group yet.</td></tr>
                     )}
                     {!shut && s.cards.slice(0, caps[si]).map((c) => {
                       const gaps = cardGaps(c);
@@ -412,6 +457,7 @@ export function PriceBook() {
                       };
                       return (
                         <tr key={c.id} style={{ borderTop: `1px solid ${T.hairSoft}`, opacity: c.active ? 1 : 0.5 }}>
+                          {pick && <td style={{ padding: "2px 4px 2px 8px" }}>{plus(c)}</td>}
                           {shownCols.map((col) => cell[col.k])}
                         </tr>
                       );
@@ -436,6 +482,12 @@ export function PriceBook() {
                   </span>
                   <span style={{ ...eyebrow, color: T.ink3 }}>{s.cards.length}</span>
                 </button>
+                {pick && s.groupId && s.cards.length > 0 && !shut && (
+                  <button onClick={() => void took(s.key, `all of ${s.title}`, () => pick.onGroup(s.groupId!, s.title))} disabled={busy === s.key}
+                    className="w-full text-left px-2.5 py-1.5" style={{ ...eyebrow, color: T.chalk, borderTop: `1px solid ${T.hairSoft}`, cursor: "pointer" }}>
+                    + Add all {s.cards.length} in {s.title}
+                  </button>
+                )}
                 {!shut && (
                   <div style={{ borderTop: `1px solid ${T.hair}` }}>
                     {s.cards.map((c, i) => {
@@ -443,8 +495,10 @@ export function PriceBook() {
                       const more = (c.vendors ?? 0) - (c.vendor_contact_id ? 1 : 0);
                       const other = view === "group" ? `${vendorLabel(c.vendor_contact_id) ?? ""}${more > 0 ? ` +${more}` : ""}` || null : `${c._star ? "★ " : ""}${groupLabel(c.cost_group_id) ?? ""}` || null;
                       return (
-                        <button key={c.id} onClick={() => setEditing(c)} className="w-full text-left flex items-start gap-2 px-2.5 py-2"
+                        <div key={c.id} role="button" tabIndex={0} onClick={() => setEditing(c)} onKeyDown={(e) => { if (e.key === "Enter") setEditing(c); }}
+                          className="w-full text-left flex items-start gap-2 px-2.5 py-2"
                           style={{ borderTop: i ? `1px solid ${T.hairSoft}` : "none", cursor: "pointer", opacity: c.active ? 1 : 0.5 }}>
+                          {plus(c)}
                           <span style={{ flex: 1, minWidth: 0 }}>
                             <span style={{ display: "block", fontSize: F.sm, fontWeight: 600, color: T.ink, ...clip }}>{c.name}</span>
                             <span style={{ display: "block", fontSize: F.xs, color: T.ink3, ...clip }}>
@@ -457,7 +511,7 @@ export function PriceBook() {
                             <span style={{ display: "block", fontFamily: disp, fontSize: F.md, fontWeight: 600, color: c.unit_cost === null ? T.ink3 : T.ink }}>{c.unit_cost === null ? "—" : money(c.unit_cost)}</span>
                             <span style={{ display: "block", fontSize: 9.5, color: T.ink3 }}>per {c.unit}{c.taxable ? " · taxed" : ""}</span>
                           </span>
-                        </button>
+                        </div>
                       );
                     })}
                     {s.groupId && (

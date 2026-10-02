@@ -25,7 +25,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { getDocumentProxy } from 'unpdf'
 import { unzipSync } from 'fflate'
-import {
+import { itemQuantity,
   BID_PROMPT_VERSION, SYSTEM_PROMPT, boxLinks, bidPage, categoryGuess, concretePage, docRole, fileKind,
   matchableDomain, parseReply, projectKey, safeName, sanitizeBid, skipBoxFile, type BidFacts,
 } from './rules.ts'
@@ -420,6 +420,8 @@ async function file(sb: Sb, pkg: Pkg, email: Email, files: PFile[]) {
     const { data: s, error } = await sb.from('job_sections').insert({
       org_id: org, job_id: jobId, name: it.name.slice(0, 80), work_type: it.work_type,
       psi: it.psi, depth_in: it.thickness_in, rebar: it.reinforcement, length_ft: null, width_ft: null,
+      // The bid's own area for this item ("1,769.80 SY"), as written on its line.
+      sqft_override: itemQuantity(it.quote)?.sqft ?? null,
       origin: 'bid', source_ref: ref, sort_order: order++,
     }).select('id').single()
     if (!error && s) sectionIds.push(s.id)

@@ -480,6 +480,15 @@ function SectionCard({ s, index, err, onLocal, onSave, onRemove, rcards, jobType
         )}
       </div>
 
+      {/* The area's budget: straight to the Price book (Coy, 2026-10-02). */}
+      <div className="px-3 py-1.5 flex items-center gap-2" style={{ borderTop: `1px solid ${T.hairSoft}` }}>
+        <span style={{ ...eyebrow }}>Budget</span>
+        <span className="flex-1" />
+        <button onClick={() => window.dispatchEvent(new CustomEvent("sc:budget-add", { detail: { area: s.id } }))}
+          className="rounded px-2.5" style={{ height: 28, background: T.ink, color: T.card, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", letterSpacing: ".05em", cursor: "pointer" }}>
+          + Add items from the Price book
+        </button>
+      </div>
       {photos}
 
       {concrete && (

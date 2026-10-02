@@ -25,7 +25,7 @@ interface Assembly {
   reinforcement_item_id: string | null; sort_order: number; items: Item[];
 }
 
-export function Assemblies({ cards }: { cards: Card[] }) {
+export function Assemblies({ cards, onPick }: { cards: Card[]; onPick?: (id: string, name: string) => void }) {
   const [list, setList] = useState<Assembly[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
@@ -73,7 +73,8 @@ export function Assemblies({ cards }: { cards: Card[] }) {
         {(list ?? []).map((a) => {
           const r = a.reinforcement_item_id ? cardById.get(a.reinforcement_item_id) : null;
           return (
-            <button key={a.id} onClick={() => setOpen(a.id)} className="w-full text-left rounded px-3 py-2.5 flex items-center gap-3"
+            <div key={a.id} role="button" tabIndex={0} onClick={() => setOpen(a.id)} onKeyDown={(e) => { if (e.key === "Enter") setOpen(a.id); }}
+              className="w-full text-left rounded px-3 py-2.5 flex items-center gap-3"
               style={{ background: T.card, border: `1px solid ${T.hair}`, cursor: "pointer" }}>
               <span style={{ minWidth: 0, flex: 1 }}>
                 <span style={{ display: "block", fontFamily: disp, fontSize: F.md, fontWeight: 600, ...clip }}>{a.name}</span>
@@ -82,7 +83,11 @@ export function Assemblies({ cards }: { cards: Card[] }) {
                 </span>
               </span>
               {a.auto_load && a.work_type && <span className="rounded px-1.5" style={{ ...eyebrow, color: T.green, border: `1px solid ${T.green}` }}>Auto</span>}
-            </button>
+              {onPick && (
+                <button onClick={(e) => { e.stopPropagation(); onPick(a.id, a.name); }} className="rounded px-2.5 shrink-0"
+                  style={{ height: 30, background: T.ink, color: T.card, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", cursor: "pointer" }}>Load</button>
+              )}
+            </div>
           );
         })}
       </div>

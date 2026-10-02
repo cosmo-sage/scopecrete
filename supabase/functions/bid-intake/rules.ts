@@ -274,6 +274,24 @@ export function sanitizeBid(raw: unknown, source: string, sheetNumbers: string[]
 // ── what a file is, from its name and type ───────────────────────────────────
 
 /** Drawings go to the Plan Room; specs and the ITB are read for the scope. */
+/**
+ * A bid item's own quantity, read off its quoted line ("… Concrete Walk (4" Thick)
+ * – 1,769.80 SY") — the line is already checked to be written in the bid, so the
+ * number is the bid's, not a guess (Coy, 2026-10-02: "why wasn't it able to
+ * extract the area square yards"). An area becomes the section's area (stored as
+ * sq ft); a count or length is kept for the budget line.
+ */
+export function itemQuantity(line: string): { qty: number; unit: 'SY' | 'SF' | 'LF' | 'EA' | 'CY'; sqft: number | null } | null {
+  const m = /(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)\s*(SY|SQ\.?\s*YDS?|SF|SQ\.?\s*FT|LF|LIN\.?\s*FT|EA|EACH|CY|CU\.?\s*YDS?)\b/i.exec(line)
+  if (!m) return null
+  const qty = Number(m[1].replace(/,/g, ''))
+  if (!(qty > 0)) return null
+  const u = m[2].toUpperCase().replace(/[.\s]/g, '')
+  const unit = u.startsWith('SQYD') || u === 'SY' ? 'SY' : u.startsWith('SQFT') || u === 'SF' ? 'SF' : u.startsWith('LIN') || u === 'LF' ? 'LF'
+    : u.startsWith('CU') || u === 'CY' ? 'CY' : 'EA'
+  return { qty, unit, sqft: unit === 'SY' ? Math.round(qty * 9 * 100) / 100 : unit === 'SF' ? qty : null }
+}
+
 export function docRole(name: string, mime: string | null): 'drawings' | 'spec' | 'itb' | 'other' {
   const n = name.toLowerCase()
   const pdf = /\.pdf$/.test(n) || (mime ?? '').includes('pdf')

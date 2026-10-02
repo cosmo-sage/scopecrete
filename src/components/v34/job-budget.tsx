@@ -26,7 +26,8 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { T, F, disp, eyebrow, nums, clip, money, money0, formatPhone } from "@/lib/v34/tokens";
-import { Sheet } from "@/components/v34/primitives";
+import { Sheet, Drawer } from "@/components/v34/primitives";
+import { PriceBook } from "@/components/v34/price-book";
 import { budget as priceBudget, jobMinimum, quantities, type BudgetLine, type BudgetSettings, type SectionInput, type TakeoffTotal, type TierTotal } from "@/lib/engine";
 import { COST_TYPES, COST_TYPE_LABEL, QTY_RULE_LABEL, type CostType } from "@/lib/cost-cards";
 import { useWide } from "@/lib/v34/use-wide";
@@ -98,6 +99,20 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0 }: {
   const [tier, setTier] = useState<string>("all");
   // The picker opens on an area (its own "+ Add") or on the whole job.
   const [picker, setPicker] = useState<{ area: string } | null>(null);
+  // The Price book itself, opened over the job (Coy, 2026-10-02) — "+ Add" goes here.
+  const [book, setBook] = useState<{ area: string } | null>(null);
+  // A section card's "Add items" opens the book on that area.
+  useEffect(() => {
+    const on = (e: Event) => { const area = (e as CustomEvent<{ area?: string }>).detail?.area ?? ""; setBook({ area }); };
+    window.addEventListener("sc:budget-add", on);
+    return () => window.removeEventListener("sc:budget-add", on);
+  }, []);
+  // A Dusty plan Coy applied (src/lib/dusty/apply-plan.ts) changed the budget.
+  useEffect(() => {
+    const bump = () => setTick((n) => n + 1);
+    window.addEventListener("sc:budget-changed", bump);
+    return () => window.removeEventListener("sc:budget-changed", bump);
+  }, []);
   const [editing, setEditing] = useState<Line | null>(null);
   const [taxOpen, setTaxOpen] = useState(false);
   const [measure, wide] = useWide<HTMLDivElement>(900);
@@ -200,9 +215,9 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0 }: {
         <span style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 700 }}>Budget</span>
         <span style={{ fontSize: F.xs, color: T.ink3 }}>qty × unit cost → + O.H. → ÷ (1 − margin) → price</span>
         <span className="flex-1" />
-        <button onClick={() => setPicker({ area: "" })} className="rounded px-2.5"
+        <button onClick={() => setBook({ area: "" })} className="rounded px-2.5"
           style={{ height: 30, background: T.ink, color: T.card, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", letterSpacing: ".06em", cursor: "pointer" }}>
-          + Add from cost cards
+          + Add from the Price book
         </button>
       </div>
       <div className="px-3 py-2 flex items-center gap-1 flex-wrap" role="tablist" aria-label="Options">
@@ -259,7 +274,7 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0 }: {
                     <td colSpan={5} style={{ padding: "5px 8px" }}>
                       <span style={{ fontFamily: disp, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".04em" }}>{a.name}</span>
                       {areaSize(a.id) && <span style={{ fontSize: F.xs, opacity: 0.75, marginLeft: 8 }}>{areaSize(a.id)!.text}</span>}
-                      <button onClick={() => setPicker({ area: a.id ?? "" })} style={{ ...eyebrow, color: T.card, opacity: 0.85, marginLeft: 10, cursor: "pointer", textDecoration: "underline" }}>+ Add</button>
+                      <button onClick={() => setBook({ area: a.id ?? "" })} style={{ ...eyebrow, color: T.card, opacity: 0.85, marginLeft: 10, cursor: "pointer", textDecoration: "underline" }}>+ Add</button>
                     </td>
                     <td style={{ padding: "5px 8px", textAlign: "right" }}>{a.lines.length ? money0(sum(a.lines, "ext_cost")) : ""}</td>
                     <td style={{ padding: "5px 8px", textAlign: "right" }}>{a.lines.length ? money0(sum(a.lines, "overhead")) : ""}</td>
@@ -270,7 +285,7 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0 }: {
                   </tr>
                   {a.lines.length === 0 && (
                     <tr><td colSpan={11} style={{ padding: "6px 8px 6px 16px", fontSize: F.xs, color: T.ink3 }}>
-                      No lines on this area yet — <button onClick={() => setPicker({ area: a.id ?? "" })} style={{ color: T.chalk, cursor: "pointer" }}>add cards from the Price book</button>.
+                      No lines on this area yet — <button onClick={() => setBook({ area: a.id ?? "" })} style={{ color: T.chalk, cursor: "pointer" }}>add cards from the Price book</button>.
                     </td></tr>
                   )}
                   {a.groups.map((g) => (
@@ -353,7 +368,7 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0 }: {
                 <span className="flex-1" />
                 {areaPriced(a.lines) && areaSize(a.id) && <span style={{ color: T.ink3, textTransform: "none", letterSpacing: 0, ...nums }}>{areaSize(a.id)!.per(sum(a.lines, "ext_price"))}</span>}
                 {a.lines.length > 0 && <span style={{ ...nums }}>{money0(sum(a.lines, "ext_price"))}</span>}
-                <button onClick={() => setPicker({ area: a.id ?? "" })} style={{ color: T.chalk, cursor: "pointer" }}>+ Add</button>
+                <button onClick={() => setBook({ area: a.id ?? "" })} style={{ color: T.chalk, cursor: "pointer" }}>+ Add</button>
               </div>
               {a.lines.length === 0 && <div style={{ fontSize: F.xs, color: T.ink3 }}>No lines yet.</div>}
               {a.groups.map((g) => <GroupCard key={g.name} name={g.name} lines={g.lines} res={res} optLabel={optLabel} asmName={asmName} onOpen={setEditing}
@@ -425,6 +440,36 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0 }: {
 
       <TaxSheet open={taxOpen} onClose={() => setTaxOpen(false)} tax={data.pricing?.tax ?? null}
         onSave={(body) => run(() => call(`/api/jobs/${jobId}`, "PATCH", body)).then(() => setTaxOpen(false))} />
+      {book && (
+        <Drawer open wide onClose={() => { setBook(null); reload(); }} title="Add from the Price book"
+          sub={`${areaName(book.area || null)}${optLabel(tier === "all" ? null : tier) ? ` · into ${optLabel(tier)}` : " · into every option"}`}>
+          <PriceBook pick={{
+            title: `Into ${areaName(book.area || null)}`,
+            sub: "Tap + to put an item on this area of the budget, Add all for a whole group, Load for an assembly. Quantities come from the area by each item's rule.",
+            top: (
+              <div className="flex items-center gap-2 flex-wrap">
+                <label className="flex items-center gap-1.5" style={{ fontSize: F.sm }}>
+                  <span style={eyebrow}>Area</span>
+                  <select value={book.area} onChange={(e) => setBook({ area: e.target.value })} aria-label="Area"
+                    style={{ height: 32, border: `1px solid ${T.hair}`, background: T.card, fontSize: F.sm, borderRadius: 4, padding: "0 6px", maxWidth: 260 }}>
+                    <option value="">Whole job</option>
+                    {sections.map((x) => <option key={x.id} value={x.id}>{x.name || "Unnamed area"}</option>)}
+                  </select>
+                </label>
+                <button onClick={() => { const a = book.area; setBook(null); setPicker({ area: a }); }} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>
+                  Not in the Price book? Make it here
+                </button>
+              </div>
+            ),
+            onCard: (c) => call(`/api/jobs/${jobId}/budget/lines`, "POST", { section_id: book.area || null, option_id: tier === "all" ? null : tier, cost_item_id: c.id }).then(() => undefined),
+            onGroup: (g) => call(`/api/jobs/${jobId}/budget/lines`, "POST", { section_id: book.area || null, option_id: tier === "all" ? null : tier, cost_group_id: g }).then(() => undefined),
+            onAssembly: (id) => {
+              if (!book.area) return Promise.reject(new Error("Pick an area first — an assembly fills one area."));
+              return call(`/api/jobs/${jobId}/budget/assembly`, "POST", { assembly_id: id, section_id: book.area }).then(() => undefined);
+            },
+          }} />
+        </Drawer>
+      )}
       <CardPicker key={picker ? `p-${picker.area}` : "closed"} open={!!picker} initialArea={picker?.area ?? ""} onClose={() => setPicker(null)} data={data} sections={sections} tier={tier === "all" ? null : tier}
         tierLabel={optLabel(tier === "all" ? null : tier)}
         onAdd={(body) => run(() => call(`/api/jobs/${jobId}/budget/lines`, "POST", body))}

@@ -141,3 +141,12 @@ test("the function's file rules match the app's and email-intake's", async () =>
   assert.equal(bid.matchableDomain("pat@example-gc.com"), "example-gc.com");
   assert.equal(bid.matchableDomain("pat@gmail.com"), null);
 });
+
+test("a bid item's own quantity comes off its written line", async () => {
+  const { itemQuantity } = await import("../supabase/functions/bid-intake/rules.ts");
+  assert.deepEqual(itemQuantity("706-01-00100 – Concrete Walk (4” Thick) – 1,769.80 SY"), { qty: 1769.8, unit: "SY", sqft: 15928.2 });
+  assert.deepEqual(itemQuantity("706-02-00200 – Concrete Drive (6” Thick) – 450 SY"), { qty: 450, unit: "SY", sqft: 4050 });
+  assert.deepEqual(itemQuantity("NS-MSC-00080 – Detectable Warning Surface – 8 EA"), { qty: 8, unit: "EA", sqft: null });
+  assert.equal(itemQuantity("Concrete walk, 4 inch")?.unit, undefined);
+  assert.equal(itemQuantity("4000 psi slab"), null);
+});

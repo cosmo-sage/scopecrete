@@ -235,7 +235,7 @@ async function scopeContext(sb: Sb, orgId: string, jobId: string): Promise<Assem
     .eq("org_id", orgId).eq("id", jobId).maybeSingle();
   if (!job) return coldContext(null, new Date().toISOString().slice(0, 10));
   const [{ data: secs }, pricing, who, files] = await Promise.all([
-    sb.from("job_sections").select("id, name, work_type, length_ft, width_ft, sqft_override, depth_in, psi, rebar, prep_notes, access_notes")
+    sb.from("job_sections").select("id, name, work_type, length_ft, width_ft, sqft_override, depth_in, psi, rebar, prep_notes, access_notes, source_ref")
       .eq("org_id", orgId).eq("job_id", jobId).order("sort_order"),
     pricingFor(sb, orgId, [jobId]),
     job.contact_id ? contactBlock(sb, orgId, job.contact_id as string) : Promise.resolve(null),
@@ -248,7 +248,12 @@ async function scopeContext(sb: Sb, orgId: string, jobId: string): Promise<Assem
   const t = takeoff(sections, null);
   const days = num(job.duration_days);
   const jp = pricing.get(jobId) ?? null;
-  const [bud, plans, prop, mail, bid, ocr] = await Promise.all([budgetBlock(sb, orgId, jobId, sections, days, jp), plansBlock(sb, orgId, jobId), proposalBlock(sb, orgId, jobId), emailsBlock(sb, orgId, { jobId }), bidBlock(sb, orgId, jobId), ocrBlock(sb, orgId, jobId)]);
+  const [bud, plans, prop, mail, bid, ocr, book] = await Promise.all([budgetBlock(sb, orgId, jobId, sections, days, jp), plansBlock(sb, orgId, jobId), proposalBlock(sb, orgId, jobId), emailsBlock(sb, orgId, { jobId }), bidBlock(sb, orgId, jobId), ocrBlock(sb, orgId, jobId), priceBookBlock(sb, orgId)]);
+  // Areas by ref, for a budget plan (src/lib/dusty/plan.ts).
+  const areaRefs = ((secs ?? []) as Array<Record<string, unknown>>).map((r) => {
+    const sq = num(r.sqft_override) ?? (num(r.length_ft) !== null && num(r.width_ft) !== null ? (num(r.length_ft) as number) * (num(r.width_ft) as number) : null);
+    return `- ${String(r.id).slice(0, 8)} · ${r.name || "Unnamed area"} (${r.work_type})${sq !== null ? ` · ${fmt0(sq)} sf = ${(sq / 9).toFixed(2)} SY` : " · area not set"}${num(r.depth_in) !== null ? ` · ${num(r.depth_in)} in` : ""}${r.source_ref ? ` · from the bid: ${String(r.source_ref).slice(0, 160)}` : ""}`;
+  });
   const notes = ((secs ?? []) as Array<Record<string, unknown>>).flatMap((r) =>
     [["reinforcement", r.rebar], ["prep", r.prep_notes], ["access", r.access_notes]]
       .filter(([, v]) => typeof v === "string" && v).map(([k, v]) => `- ${r.name || "section"} ${k}: ${v}`));
@@ -260,7 +265,9 @@ async function scopeContext(sb: Sb, orgId: string, jobId: string): Promise<Assem
       `Sales tax: ${jp?.tax.rate !== null && jp?.tax.rate !== undefined ? `${jp.tax.rate}% (${jp.tax.source === "override" ? "typed for this job" : `${jp.tax.parish} parish`})` : `unknown — ${jp?.tax.missing ?? "no rate"}`}`] },
     ...(bid ? [bid] : []),
     { title: "Sections and their quantities (exactly what the builder shows)", lines: scopeLines(t, !!bud) },
+    { title: "Areas — refs for a budget plan (\"job\" = whole job)", lines: areaRefs },
     ...(bud ? [bud] : []),
+    ...(book ? [book] : []),
     ...(plans ? [plans] : []),
     ...(ocr ? [ocr] : []),
     ...(prop ? [prop] : []),
@@ -268,7 +275,37 @@ async function scopeContext(sb: Sb, orgId: string, jobId: string): Promise<Assem
     { title: "Section notes", lines: notes },
     ...(files ? [files] : []),
     ...(who ? [who.block] : []),
+  ], 110000);
+}
+
+const fmt0 = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 1 });
+
+/**
+ * Coy's Price book, one line per active item with an 8-character ref, for
+ * Dusty to choose from and to plan with (Coy, 2026-10-02: "analyze the list of
+ * items in my cost book and apply the items that I might need"). Read under the
+ * session (RLS); names, units, costs, rules and groups only.
+ */
+async function priceBookBlock(sb: Sb, orgId: string): Promise<Block | null> {
+  const [{ data: items }, { data: groups }, { data: asm }] = await Promise.all([
+    sb.from("cost_items").select("id, name, unit, unit_cost, cost_type, qty_rule, cost_group_id").eq("org_id", orgId).eq("active", true).order("name").limit(1500),
+    sb.from("cost_groups").select("id, name, cost_type").eq("org_id", orgId).order("sort_order").order("name"),
+    sb.from("cost_assemblies").select("name").eq("org_id", orgId),
   ]);
+  if (!items?.length && !groups?.length) return { title: "Price book", lines: ["Empty — no items yet. Propose new_item steps if Coy asks."] };
+  const gName = new Map(((groups ?? []) as Array<{ id: string; name: string }>).map((g) => [g.id, g.name]));
+  const byGroup = new Map<string, string[]>();
+  for (const r of (items ?? []) as Array<Record<string, unknown>>) {
+    const g = gName.get(r.cost_group_id as string) ?? "Not in a group";
+    const cost = r.unit_cost === null || r.unit_cost === undefined ? "no cost" : `$${Number(r.unit_cost)}`;
+    const line = `  ${String(r.id).slice(0, 8)} | ${String(r.name).slice(0, 70)} | ${r.unit} | ${cost} | ${r.qty_rule} | ${r.cost_type}`;
+    byGroup.set(g, [...(byGroup.get(g) ?? []), line]);
+  }
+  const out = [`${items?.length ?? 0} items in ${groups?.length ?? 0} groups. Each line: ref | name | unit | unit cost | how counted | type.`];
+  for (const g of (groups ?? []) as Array<{ name: string }>) if (!byGroup.has(g.name)) out.push(`GROUP ${g.name}: (empty)`);
+  for (const [g, ls] of byGroup) out.push(`GROUP ${g}:`, ...ls);
+  if (asm?.length) out.push(`Assemblies (Coy loads these himself from the budget): ${(asm as Array<{ name: string }>).map((a) => a.name).join(", ")}`);
+  return { title: "Price book (items you can plan with, by ref)", lines: out };
 }
 
 /**

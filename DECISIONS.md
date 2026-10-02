@@ -1191,6 +1191,30 @@ percentage of labour — all three contradict this section and §4.
   its price per SY / SF — how a unit-price bid reads. **Not in the Price
   book? Make it here** in the card picker creates the card in the Price book
   and puts it on the budget in one go (or on this budget only).
+- **The budget opens the Price book itself (Coy, 2026-10-02: "toggle back
+  and forth … to the cost book and pull items from there").** Every area's
+  **+ Add** (and **+ Add items from the Price book** on each section card)
+  opens the real Price book page (`PriceBook` with `pick`) wide over the job:
+  find, by group / by vendor, columns — plus **+** on every item, **Add all
+  N** on every group and **Load** on every assembly, into the area picked at
+  the top. A bid line's own area ("1,769.80 SY") becomes the section's area
+  (`itemQuantity()` in `bid-intake/rules.ts` — the number is on the line the
+  bid wrote; a count like "8 EA" isn't an area and stays for the line).
+  **Committed, not yet deployed** — `bid-intake` is still v11.
+- **Dusty plans budgets; Coy applies them (Coy, 2026-10-02: "chat with Dusty
+  to analyze the list of items in my cost book and apply the items that I
+  might need or create new items or modify cost items and organize by
+  groups").** On a job Dusty's context carries every area by an 8-character
+  ref (with its SF and SY) and the whole Price book by item ref, group, unit,
+  cost and rule. Asked to build or fix the budget he answers in words and ends
+  with one ```` ```scopecrete-plan ```` block — add an item or a whole group to
+  an area (a qty only when written or said), make a new item (and put it on
+  the budget), change an item's cost / unit / name / group, make a group
+  (`src/lib/dusty/plan.ts`, tested: refs only from the context, a made-up ref
+  or step is dropped, no cost stays null). The panel shows it as numbered
+  steps with **Apply** (`plan-card.tsx`); the tap runs them through the same
+  APIs Coy's own taps use, under his session (`apply-plan.ts`), and the
+  budget reloads. **Dusty still changes nothing himself.**
 - **Base, vapor barrier and day-rate equipment** are cards like anything
   else (by the sq ft, by the day); nothing is priced that has no card.
 - **Dictating a section (2026-09-28).** Dictate on a section card records up
@@ -1584,7 +1608,8 @@ expected start date per quoted job before it means anything. Add the field.
   see and nothing typed in the browser becomes "context". Scope answers use
   the engine's own output, so Dusty quotes exactly the builder's numbers or
   names what blocks them. **Read-only toward the business:** no tools, no
-  record changed, nothing sent — drafts come back as text to copy.
+  record changed, nothing sent — drafts come back as text to copy; on a job,
+  a budget plan comes back as steps Coy applies with a tap (§3).
   **Docked on the right on a desktop (2026-09-29, Coy: "integrated into the
   main dashboard neatly so that I can see the rest of the dashboard").** At
   lg+ Dusty is a 400px column (`--sc-dusty`) under the header, no backdrop;

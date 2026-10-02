@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
 import { buildContext, parseRef } from "@/lib/dusty/context";
 import { DUSTY_SYSTEM } from "@/lib/dusty/prompt";
+import { PLAN_RULES } from "@/lib/dusty/plan";
 
 /**
  * Dusty — read-only, and it knows what Coy has open.
@@ -128,8 +129,9 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify({
         model,
         stream: true,
-        max_tokens: 2000,
-        messages: [{ role: "system", content: `${DUSTY_SYSTEM}\n\n${ctx.text}` }, ...history],
+        // On a job he may end with a budget plan (src/lib/dusty/plan.ts) — room for it.
+        max_tokens: ref.kind === "scope" ? 4000 : 2000,
+        messages: [{ role: "system", content: `${DUSTY_SYSTEM}${ref.kind === "scope" ? `\n\n${PLAN_RULES}` : ""}\n\n${ctx.text}` }, ...history],
       }),
     });
   } catch (e) {

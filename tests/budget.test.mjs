@@ -128,3 +128,8 @@ test("a section measured by count: an item priced per each takes the count", () 
   const b = budget([L({ id: "x", qty_rule: "manual", unit: "EA", unit_cost: 120, section_id: "d" })], [], S, [dw], null, { tax_on: false, discount: 0 });
   near(b.lines.x.ext_cost, 960);
 });
+
+test("a card counted by hand, just added (qty_source set, no qty), takes the area's count", () => {
+  const dw = { id: "d", name: "DW", work_type: "other", length_ft: null, width_ft: null, sqft_override: null, depth_in: null, count_qty: 8, count_unit: "EA" };
+  assert.equal(ruleQty(L({ qty_rule: "manual", unit: "EA", section_id: "d", qty_source: "set", quantity: null }), [dw], null).qty, 8);
+});

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
-import { LINE_COLUMNS, jobInOrg, numLine } from "@/lib/budget-server";
+import { LINE_COLUMNS, jobInOrg, lineSource, numLine } from "@/lib/budget-server";
 
 /**
  * One budget line. PATCH what Coy changes in the grid or the phone sheet:
@@ -81,14 +81,14 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     const { data: src } = await supabase.from("cost_item_sources").select("id, cost_item_id, vendor_contact_id, unit_cost, price_as_of, price_source")
       .eq("org_id", orgId).eq("id", sourceId).maybeSingle();
     if (!src || src.cost_item_id !== line.cost_item_id) return false;
-    Object.assign(patch, { unit_cost: src.unit_cost, price_as_of: src.price_as_of, price_source: src.price_source,
+    Object.assign(patch, { unit_cost: src.unit_cost, price_as_of: src.price_as_of, price_source: lineSource(src.price_source),
       vendor_contact_id: src.vendor_contact_id, source_id: src.id, source_pinned: pinned });
     return true;
   };
   const fromCard = async () => {
     const { data: c } = await supabase.from("cost_items").select("unit_cost, price_as_of, price_source, unit, vendor_contact_id, default_source_id").eq("org_id", orgId).eq("id", line.cost_item_id as string).maybeSingle();
     if (!c) return false;
-    Object.assign(patch, { unit_cost: c.unit_cost, price_as_of: c.price_as_of, price_source: c.price_source, unit: c.unit,
+    Object.assign(patch, { unit_cost: c.unit_cost, price_as_of: c.price_as_of, price_source: lineSource(c.price_source), unit: c.unit,
       vendor_contact_id: c.vendor_contact_id, source_id: c.default_source_id, source_pinned: false });
     return true;
   };

@@ -62,6 +62,15 @@ export const CARD_COLS = "id, cost_group_id, name, description, cost_type, unit,
  * (`source_id`). A typed quantity (an
  * assembly's, for a card counted by hand) makes the line `set`.
  */
+/**
+ * Where a card's price came from, in the words a budget line accepts. A line's
+ * check (migration 048) predates imports: "import" — every card from Coy's
+ * JobTread file — was refused, and no card could be added (2026-10-02). A
+ * source the line can't hold is left blank on the line; the card keeps it.
+ */
+const LINE_SOURCES = new Set(["org_settings", "market", "manual", "vendor_quote", "quote", "receipt", "invoice", "typed"]);
+export const lineSource = (v: unknown): string | null => (typeof v === "string" && LINE_SOURCES.has(v) ? v : null);
+
 export function cardToLine(c: Record<string, unknown>, at: {
   orgId: string; estimateId: string; sectionId: string | null; optionId: string | null; sortOrder: number;
   assemblyId?: string | null; quantity?: number | null; role?: "reinforcement" | null;
@@ -74,7 +83,7 @@ export function cardToLine(c: Record<string, unknown>, at: {
     cost_type: c.cost_type, unit: c.unit, unit_cost: c.unit_cost ?? null, markup_pct: null,
     taxable: c.taxable === true, qty_rule: c.qty_rule ?? "manual", rule_params: c.rule_params ?? {},
     qty_source: manual || typed ? "set" : "rule", quantity: typed ? at.quantity : null,
-    vendor_contact_id: c.vendor_contact_id ?? null, price_as_of: c.price_as_of ?? null, price_source: c.price_source ?? null,
+    vendor_contact_id: c.vendor_contact_id ?? null, price_as_of: c.price_as_of ?? null, price_source: lineSource(c.price_source),
     source_id: c.default_source_id ?? null, source_pinned: false,
     sort_order: at.sortOrder, assembly_id: at.assemblyId ?? null, section_role: at.role ?? null,
   };

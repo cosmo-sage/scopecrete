@@ -342,7 +342,7 @@ function splitFt(v: number | null): [number | "", number | ""] {
   return [ft, inch === 0 ? "" : inch];
 }
 
-function SectionCard({ s, index, err, onLocal, onSave, onRemove, rcards, jobType, jobId, photos }: {
+function SectionCard({ s, index, err, onLocal, onSave, onRemove, jobType, jobId, photos }: {
   s: Section; index: number; err?: string; rcards: RCard[]; jobType: string | null; jobId: string;
   /** The area's photos, under its dimensions. */
   photos?: React.ReactNode;
@@ -525,9 +525,9 @@ function SectionCard({ s, index, err, onLocal, onSave, onRemove, rcards, jobType
       {photos}
 
       {concrete && (
-        <div className="px-3 py-2 grid grid-cols-1 sm:grid-cols-3 gap-2" style={{ borderTop: `1px solid ${T.hairSoft}` }}>
-          <ReinforcementPick s={s} rcards={rcards} jobType={jobType}
-            onPick={(id) => { onLocal({ reinforcement_item_id: id, reinforcement_source: id ? "set" : null }); onSave({ reinforcement_item_id: id }); }} />
+        // No Reinforcement field (Coy, 2026-10-02: "I'm going to pull things in from the
+        // price book") — mesh and rebar are budget lines like anything else.
+        <div className="px-3 py-2 grid grid-cols-1 sm:grid-cols-2 gap-2" style={{ borderTop: `1px solid ${T.hairSoft}` }}>
           <NoteIn label="Prep" value={s.prep_notes} onLocal={(v) => onLocal({ prep_notes: v })} onSave={(v) => onSave({ prep_notes: v })} placeholder="not noted" />
           <NoteIn label="Access" value={s.access_notes} onLocal={(v) => onLocal({ access_notes: v })} onSave={(v) => onSave({ access_notes: v })} placeholder="not noted" />
         </div>
@@ -621,39 +621,6 @@ function Dictate({ jobId, s, onApply }: { jobId: string; s: Section; onApply: (p
         </div>
       )}
     </>
-  );
-}
-
-/**
- * Reinforcement is a card (step 3b): Coy's mesh / rebar / fiber cards from the
- * Price book. Picking one puts it on this area of the budget, counted by its
- * rule; an assembly's pick is labelled as the default it is.
- */
-function ReinforcementPick({ s, rcards, jobType, onPick }: {
-  s: Section; rcards: RCard[]; jobType: string | null;
-  onPick: (id: string | null) => void;
-}) {
-  const card = rcards.find((r) => r.id === s.reinforcement_item_id) ?? null;
-  const qty = card ? ruleQty({ name: card.name, qty_rule: card.qty_rule, rule_params: card.rule_params, qty_source: "rule", quantity: null, section_id: s.id },
-    [s], null) : null;
-  const plural = (w: string) => (w.endsWith("s") ? w : `${w}s`);
-  const source = !card ? (s.reinforcement_item_id ? "that card was retired" : "none chosen — not in the price")
-    : s.reinforcement_source === "default" ? `default for ${jobType ? `${JOB_WORD[jobType] ?? jobType} ` : ""}${plural(s.work_type)}` : "you set it";
-  return (
-    <label className="block" style={{ minWidth: 0 }}>
-      <span style={eyebrow}>Reinforcement</span>
-      <select value={s.reinforcement_item_id ?? ""} onChange={(e) => onPick(e.target.value || null)}
-        className="w-full rounded px-2 outline-none mt-0.5"
-        style={{ height: 32, border: `1px solid ${card ? T.hair : T.hiviz}`, background: T.card, fontSize: F.sm }}>
-        <option value="">{rcards.length ? "None" : "None — add mesh or rebar cards in the Price book"}</option>
-        {rcards.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
-      </select>
-      <span style={{ display: "block", fontSize: 9.5, color: T.ink3 }}>
-        {source}{qty && qty.ok ? ` · ${qty.qty.toLocaleString("en-US")} ${card?.unit ?? ""} · on the budget` : ""}
-        {qty && !qty.ok ? ` · needs ${qty.missing.join(", ")}` : ""}
-      </span>
-      {s.rebar && <span style={{ display: "block", fontSize: 9.5, color: T.ink2 }}>Note: {s.rebar}</span>}
-    </label>
   );
 }
 

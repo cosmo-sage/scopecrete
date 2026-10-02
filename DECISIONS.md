@@ -1000,6 +1000,11 @@ percentage of labour — all three contradict this section and §4.
   "default for residential driveways" and never replaces Coy's own pick.
   Dictation matches the spoken reinforcement against these cards.
   `org_reinforcement_types` / `_defaults` are no longer read (tables kept).
+  **The section card's Reinforcement field is gone (Coy, 2026-10-02: "I'm
+  going to pull things in from the price book")** — mesh and rebar are
+  budget lines added from the Price book like anything else; a
+  reinforcement line already on a budget stays, and dictation and
+  assemblies still set one.
 - **Cost cards (migration 047, Coy 2026-09-29)** — `cost_items`: Coy's
   catalog of what he buys and charges for, each with its **vendor** (a
   contact), group (`cost_groups`), cost type, unit and unit cost, taxed or
@@ -1201,6 +1206,11 @@ percentage of labour — all three contradict this section and §4.
   (`itemQuantity()` in `bid-intake/rules.ts` — the number is on the line the
   bid wrote; a count like "8 EA" isn't an area and stays for the line).
   **Committed, not yet deployed** — `bid-intake` is still v11.
+  **Fixed 2026-10-02:** every card from the JobTread import carries
+  `price_source='import'`, which a budget line's check (048) does not
+  allow, so no card could be added. `lineSource()` (`budget-server.ts`)
+  leaves a source the line can't hold blank on the line (the card keeps
+  it).
 - **A section measured by count (migration 065, applied 2026-10-02 on
   Coy's "Apply 065").** Coy: *"it's actually a quantity per item. So it's not
   an area, it's a quantity."* `job_sections.count_qty` / `count_unit`
@@ -1957,7 +1967,9 @@ expected start date per quoted job before it means anything. Add the field.
   from the session, every id checked. Rehearsed: one draft per job; a final
   with no snapshot, or an edit to a final, refused; a stranger sees 0 rows
   and can't write; anon refused.
-- **The job's Bid strip (2026-10-01, §2i)** — on a job a forwarded bid made
+- **The job's Bid strip (2026-10-01, §2i)** — folded by default since
+  2026-10-02 (Coy: "doesn't take up a lot of space on my mobile phone") to
+  one row, "Bid · due Tue, Oct 13 …", ▶ opens it, remembered per device. On a job a forwarded bid made
   or fed: GC, estimator, bids due (hours left, red under 48), pre-bid, the
   Box folder and what was copied and read, **Scope from the bid** (each
   item with its sheet, spec and line) and **Undo bid**. The Dashboard has a

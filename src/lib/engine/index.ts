@@ -305,7 +305,8 @@ export function ruleQty(
   takeoff?: Record<string, TakeoffTotal>,
 ): { ok: true; qty: number; basis: "rule" | "set"; note: string } | { ok: false; missing: string[] } {
   // A line priced per each on a counted area takes the count (065): 8 EA → qty 8.
-  if (line.qty_source !== "set" && line.section_id && line.qty_rule === "manual") {
+  // (A card counted by hand lands as qty_source 'set' with no quantity yet — that still takes the count.)
+  if (line.section_id && line.qty_rule === "manual" && !(line.qty_source === "set" && has(line.quantity))) {
     const area = sections.find((s) => s.id === line.section_id);
     const q = area ? quantities(area) : null;
     if (q && q.count !== null && countUnitMatches(line.unit ?? "", q.count_unit ?? "EA")) {

@@ -45,6 +45,10 @@ export function BidStrip({ jobId, onUndone, onSummary }: { jobId: string; onUndo
   const [err, setErr] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [tick, setTick] = useState(0)
+  // Folded by default so it doesn't fill a phone (Coy, 2026-10-02); opening it is remembered.
+  // (The strip draws nothing until its data arrives, so reading storage here can't mismatch the server's HTML.)
+  const [open, setOpenState] = useState(() => { try { return typeof window !== "undefined" && localStorage.getItem("sc:bid-open") === "1" } catch { return false } })
+  const setOpen = (v: boolean) => { setOpenState(v); try { localStorage.setItem("sc:bid-open", v ? "1" : "0") } catch { /* no storage */ } }
   useEffect(() => {
     let off = false
     fetch(`/api/jobs/${jobId}/bid`).then((r) => (r.ok ? r.json() : null)).then((b) => { if (!off) setBid(b?.bid ?? null) }).catch(() => {})
@@ -81,8 +85,12 @@ export function BidStrip({ jobId, onUndone, onSummary }: { jobId: string; onUndo
 
   return (
     <section className="mx-3 mt-3 rounded" style={{ background: T.card, border: `1px solid ${T.hair}` }} aria-label="The bid">
-      <div className="flex items-center gap-2 px-3 py-2" style={{ borderBottom: `1px solid ${T.hairSoft}` }}>
-        <span style={{ fontFamily: disp, fontSize: F.md, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".04em" }}>Bid</span>
+      <div className="flex items-center gap-2 px-3 py-2" style={{ borderBottom: open ? `1px solid ${T.hairSoft}` : "none" }}>
+        <button onClick={() => setOpen(!open)} aria-expanded={open} className="flex items-center gap-1.5" style={{ cursor: "pointer", color: T.ink }}>
+          <span aria-hidden="true" style={{ fontSize: 10, color: T.ink3, display: "inline-block", transform: open ? "rotate(90deg)" : "none", transition: "transform .15s" }}>▶</span>
+          <span style={{ fontFamily: disp, fontSize: F.md, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".04em" }}>Bid</span>
+        </button>
+        {!open && d && <span style={{ fontSize: F.xs, color: d.hot ? T.red : T.ink2, ...nums, ...clip, minWidth: 0 }}>due {d.text}</span>}
         <span style={{ fontSize: F.xs, color: bid.state === "filed" ? T.green : ["failed", "needs_setup"].includes(bid.state) ? T.red : T.ink3 }}>
           {STATE[bid.state] ?? bid.state}{bid.packages > 1 ? ` · ${bid.packages} emails` : ""}
         </span>
@@ -90,7 +98,7 @@ export function BidStrip({ jobId, onUndone, onSummary }: { jobId: string; onUndo
         <Link href={`/dashboard/documents?email=${bid.email_id}`} style={{ ...eyebrow, color: T.chalk }}>Email</Link>
         <button onClick={() => void undo()} disabled={busy} style={{ ...eyebrow, color: T.ink3, cursor: "pointer" }}>{busy ? "…" : "Undo bid"}</button>
       </div>
-      <div className="px-3 py-2 flex flex-col gap-1">
+      {open && <><div className="px-3 py-2 flex flex-col gap-1">
         {row("Project", f?.project_name)}
         {row("GC", f?.gc_company)}
         {row("Estimator", f?.estimator?.name || f?.estimator?.email ? (
@@ -124,6 +132,7 @@ export function BidStrip({ jobId, onUndone, onSummary }: { jobId: string; onUndo
           ))}
         </div>
       )}
+      </>}
     </section>
   )
 }

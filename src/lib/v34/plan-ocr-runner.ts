@@ -55,11 +55,15 @@ export function stopPlanOcr() { stop = true; }
 type Sched = { addJob: (a: "recognize", img: HTMLCanvasElement, o: object, out: object) => Promise<{ data: { blocks: Block[] | null } }>; terminate: () => Promise<unknown> };
 interface Block { paragraphs: Array<{ lines: Array<{ words: OcrWord[] }> }> }
 
+/** How many parts are read at once — one per tesseract worker. */
+let lanes = 1;
+
 async function scheduler(): Promise<Sched> {
   const T = await import("tesseract.js");
   const sch = T.createScheduler();
   const coarse = window.matchMedia?.("(pointer: coarse)").matches;
   const n = coarse ? 1 : Math.min(3, Math.max(1, (navigator.hardwareConcurrency || 2) - 1));
+  lanes = n;
   for (let i = 0; i < n; i++) {
     const w = await T.createWorker("eng", 1, {
       workerPath: "/tesseract/worker.min.js", corePath: "/tesseract/core", langPath: "/tesseract/lang", gzip: true,
@@ -71,8 +75,13 @@ async function scheduler(): Promise<Sched> {
   return sch as unknown as Sched;
 }
 
-/** One part's reading may take this long; past it the part is skipped and the reader restarted. */
+/**
+ * One part's reading may take this long; past it the part is skipped and the reader
+ * restarted. On Burgess Ave's profile sheet some parts never finish at all — a longer
+ * wait only wasted minutes — so a dense drawing is read in part, and says which parts.
+ */
 const PART_MS = 45_000;
+const partMs = () => PART_MS;
 class PartTimeout extends Error {}
 function within<T>(p: Promise<T>, ms: number): Promise<T> {
   return new Promise((ok, no) => {
@@ -84,7 +93,7 @@ function within<T>(p: Promise<T>, ms: number): Promise<T> {
 async function read(sch: Sched, doc: Awaited<ReturnType<typeof openPdf>>, page: number, r: Rect, scale: number): Promise<OcrItem[]> {
   const c = await renderRegion(doc, page, r, scale);
   try {
-    const res = await within(sch.addJob("recognize", c, {}, { blocks: true, text: false }), PART_MS);
+    const res = await within(sch.addJob("recognize", c, {}, { blocks: true, text: false }), partMs());
     const words = (res.data.blocks ?? []).flatMap((b) => b.paragraphs.flatMap((p) => p.lines.flatMap((l) => l.words)));
     return toItems(words, r, scale);
   } finally { c.width = 0; c.height = 0; }
@@ -105,7 +114,7 @@ async function readTurned(sch: Sched, doc: Awaited<ReturnType<typeof openPdf>>, 
     ctx.translate(t.width, 0);
     ctx.rotate(Math.PI / 2);
     ctx.drawImage(c, 0, 0);
-    const res = await within(sch.addJob("recognize", t, {}, { blocks: true, text: false }), PART_MS);
+    const res = await within(sch.addJob("recognize", t, {}, { blocks: true, text: false }), partMs());
     const words = (res.data.blocks ?? []).flatMap((b) => b.paragraphs.flatMap((p) => p.lines.flatMap((l) => l.words)));
     return toItems(words, { x: 0, y: 0, w: t.width / scale, h: t.height / scale }, scale);
   } finally { c.width = 0; c.height = 0; t.width = 0; t.height = 0; }
@@ -150,15 +159,19 @@ async function run(job: { id: string; title: string | null }, titles: OcrSheet[]
       set({ phase: "title", done: i, total: titles.length, label: `Reading sheet titles · ${name} · ${label(s)} · ${i + 1} of ${titles.length}` });
       try {
         const doc = await openPdf(s.file_id, urls.get(s.file_id)!);
-        const items: OcrItem[] = [];
-        for (const r of titleRegions(s.page_w, s.page_h)) { items.push(...await read(sch, doc, s.page, r, scaleFor(r, 3, MAX_CANVAS_PX))); await breathe(); }
-        const m = mergeItems(items);
-        const sheet = readSheet(m, s.page_w, s.page_h);
-        // The edge turned a quarter too — many civil sets run the title up the side. Every
-        // title-like run from both, biggest first; which one is the title is decided against
-        // the whole set below (what repeats on every sheet is a logo, not a title).
+        // The title block flat (right strip, bottom band) and the right edge turned a quarter —
+        // many civil sets run the title up the side — read at once. Every title-like run from
+        // both, biggest first; which one is the title is decided against the whole set below
+        // (what repeats on every sheet is a logo, not a title).
         const edge = { x: s.page_w * 0.9, y: 0, w: s.page_w * 0.1, h: s.page_h };
-        const turned = mergeItems(await readTurned(sch, doc, s.page, edge, scaleFor(edge, 3, MAX_CANVAS_PX)));
+        const reader = sch;
+        const [flatParts, turnedItems] = await Promise.all([
+          Promise.all(titleRegions(s.page_w, s.page_h).map((r) => read(reader, doc, s.page, r, scaleFor(r, 3, MAX_CANVAS_PX)))),
+          readTurned(reader, doc, s.page, edge, scaleFor(edge, 3, MAX_CANVAS_PX)),
+        ]);
+        const m = mergeItems(flatParts.flat());
+        const sheet = readSheet(m, s.page_w, s.page_h);
+        const turned = mergeItems(turnedItems);
         const flat = titleCandidates(m).filter((c) => inTitleCorner(c, s.page_w, s.page_h));
         const cands = [...flat, ...titleCandidates(turned).map((c) => ({ ...c, turned: true }))]
           .filter((c, i, a) => a.findIndex((x) => x.text.toUpperCase() === c.text.toUpperCase()) === i)
@@ -195,24 +208,29 @@ async function run(job: { id: string; title: string | null }, titles: OcrSheet[]
         const tiles = tilesFor(s.page_w, s.page_h, 3);
         const items: OcrItem[] = [];
         const skipped: number[] = [];
-        for (let t = 0; t < tiles.length && !stop; t++) {
-          set({ phase: "full", done: i, total: order.length, label: `Reading the plans · ${name} · ${label(s)} · sheet ${i + 1} of ${order.length} · part ${t + 1}/${tiles.length}` });
-          let got: OcrItem[] = [];
-          try {
-            got = await read(sch, doc, s.page, tiles[t], scaleFor(tiles[t], 3, MAX_CANVAS_PX));
+        // As many parts at once as there are readers (three on a desktop, one on a phone).
+        for (let t = 0; t < tiles.length && !stop; t += lanes) {
+          const batch = tiles.slice(t, t + lanes);
+          const parts = batch.length > 1 ? `parts ${t + 1}–${t + batch.length}` : `part ${t + 1}`;
+          set({ phase: "full", done: i, total: order.length, label: `Reading the plans · ${name} · ${label(s)} · sheet ${i + 1} of ${order.length} · ${parts} of ${tiles.length}` });
+          const reader = sch;
+          const results = await Promise.allSettled(batch.map(async (tile) => {
+            let got = await read(reader, doc, s.page, tile, scaleFor(tile, 3, MAX_CANVAS_PX));
             // Hermes's habit: a part that read poorly is read again, finer.
             if (got.length && (meanConf(got) ?? 100) < 60) {
-              const fine = await read(sch, doc, s.page, tiles[t], scaleFor(tiles[t], 4, MAX_CANVAS_PX));
+              const fine = await read(reader, doc, s.page, tile, scaleFor(tile, 4, MAX_CANVAS_PX));
               if ((meanConf(fine) ?? 0) > (meanConf(got) ?? 0)) got = fine;
             }
-          } catch (e) {
-            if (!(e instanceof PartTimeout)) throw e;
-            // A dense drawing can hold tesseract for minutes: skip the part, start a fresh reader.
-            skipped.push(t + 1);
-            void sch.terminate();
-            sch = await scheduler();
-          }
-          items.push(...got);
+            return got;
+          }));
+          let stuck = false;
+          results.forEach((r, k) => {
+            if (r.status === "fulfilled") items.push(...r.value);
+            else if (r.reason instanceof PartTimeout) { skipped.push(t + k + 1); stuck = true; }
+            else throw r.reason;
+          });
+          // A dense drawing can hold tesseract for minutes: skip the part, start a fresh reader.
+          if (stuck) { void sch.terminate(); sch = await scheduler(); }
           await breathe();
         }
         if (stop) break;

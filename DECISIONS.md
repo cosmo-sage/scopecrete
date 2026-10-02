@@ -1812,10 +1812,12 @@ expected start date per quoted job before it means anything. Add the field.
   loosely — OCR spells a name several ways), the seal and the review /
   initials boxes are never titles, and flat-vs-sideways is decided once for
   the set by which is lettered bigger; **2 · whole sheets** in 2,400 px tiles
-  at 3× (~216 dpi — at 2× table totals were lost), a tile under 60 %
+  at 3× (~216 dpi — at 2× table totals were lost), as many parts at once as
+  there are readers (three on a desktop, one on a phone), a tile under 60 %
   confidence read again at 4×, civil and structural first; a part that
   takes over 45 s is skipped, the reader restarted, and the sheet says which
-  parts weren't read. Words are kept in page points (`ocr_words`), the
+  parts weren't read (on the dense profile sheet some parts never finish —
+  a longer wait only cost minutes — so such a sheet is read in part). Words are kept in page points (`ocr_words`), the
   text as rows with " | " between columns so a table row reads
   "104+55 | RT | DRIVE | 39" (`ocr_text`), mean confidence (`ocr_conf`).
   Saved per sheet as it finishes (`POST /api/plan-sheets/[id]/ocr`: never
@@ -1833,7 +1835,7 @@ expected start date per quoted job before it means anything. Add the field.
   `pdf-probe`'s `{"image": n}`, processed in scratch only): titles "TITLE
   SHEET", "SUMMARY TABLES", "PROFILE"; the summary sheet's Proposed Concrete
   Drives table read "TOTAL | 450" (Dylan's email: 450 SY), 426 words at 88 %;
-  ~15 s a sheet on a desktop, about the same with the phone's one reader;
+  ~6 s a sheet on a desktop with three readers, ~15 s on a phone's one;
   the dense profile sheet read at 54 % with three parts timed out. Sheet
   numbers on DOTD sets are plain digits ("3"), which the reader does not
   take for a sheet number — they show as p.3. `findDimensions()` finds

@@ -1757,6 +1757,23 @@ expected start date per quoted job before it means anything. Add the field.
   headers keep the theme's faces. **The drop-down comes down over
   everything** — the plan sheets panel, Dusty, any sheet: while it is open
   the header's layer is lifted (`html[data-head-drop] .sc-head-wrap`).
+  **Thoughts can be read, traced and talked about (Coy, 2026-10-02: "this
+  thought can be found nowhere in the dropdown and it doesn't scroll … it
+  would be more interesting if I knew what the thought was being processed
+  from … and maybe even comment on it in the dusty chat").** A line too long
+  for its row, once typed, slides to its end, rests and slides back
+  (`.sc-typed[data-marq]`, 40 px/s, measured on the DOM — no React state;
+  still under reduced motion), and stays up long enough to slide through
+  twice (`lingerMs()`, at least 20 s for a thought). The drop-down opens
+  with **Dusty's thoughts**: each musing and dream in full, newest first,
+  with where it came from — "From reading Dylan Ordoyne's calls and texts",
+  or "A dream about Mon, Sep 28's calls and texts — Amber, Luis"
+  (`/api/activity`). Tapping one goes to that person's page and opens Dusty
+  there with `About your thought — "…" —` in his message box; his context on
+  a person carries his own recent thoughts and dreams about them, so he can
+  say what in the conversation it came from. **On a phone Dusty's chat
+  covers the activity row** (it starts under the logo row, `.sc-dusty-sheet`
+  at 54px) — his sprite in the message bar already says what he is doing.
 - **Taps stay quick (2026-09-30, Coy's interaction timing: INP 1,056 ms,
   976 ms of it input delay).** The activity line typed by setting React
   state every 18 ms and re-laid-out the page per letter; it now types with

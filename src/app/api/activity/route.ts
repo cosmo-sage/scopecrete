@@ -88,12 +88,12 @@ export async function GET(req: NextRequest) {
       .eq("org_id", orgId).eq("status", "open").lte("due_on", todayLocal).order("due_on", { ascending: true }).limit(6),
     // Dusty's musings: a light line about a conversation he read (migration
     // 039). About something that happened, never something happening now.
-    supabase.from("contact_enrich_runs").select("id, finished_at, musing, contact_id")
+    supabase.from("contact_enrich_runs").select("id, finished_at, musing, contact_id, contacts(name, phone)")
       .eq("org_id", orgId).not("musing", "is", null).gte("started_at", new Date(Date.now() - 3 * 86400_000).toISOString())
       .order("started_at", { ascending: false }).limit(12),
     // Dusty's dreams (migration 058): light lines about a stretch of calls and
     // texts — today, or a day weeks back — written in the background.
-    supabase.from("dusty_dreams").select("id, created_at, dream, contact_ids")
+    supabase.from("dusty_dreams").select("id, created_at, dream, contact_ids, span, window_start")
       .eq("org_id", orgId).gte("created_at", new Date(Date.now() - 3 * 86400_000).toISOString())
       .order("created_at", { ascending: false }).limit(12),
   ]);
@@ -255,13 +255,32 @@ export async function GET(req: NextRequest) {
       tone: earned ? "good" : "quiet" });
   }
 
+  // Each thought says where it came from (Coy, 2026-10-02: "it would be more interesting if I knew
+  // what the thought was being processed from"): the thread he read, or the day a dream was about.
+  type Who = { name: string | null; phone: string | null };
+  const one = (c: Who | Who[] | null | undefined) => (Array.isArray(c) ? c[0] : c) ?? null;
+  const whoOf = (c: Who | null) => c?.name?.trim() || (c?.phone ? formatPhone(c.phone) : null);
+  const dreams = (dreamRows ?? []) as Array<{ id: string; created_at: string; dream: string; contact_ids: string[] | null; span: string; window_start: string }>;
+  const dreamIds = [...new Set(dreams.flatMap((d) => (d.contact_ids ?? []).slice(0, 3)))];
+  const { data: dreamPeople } = dreamIds.length
+    ? await supabase.from("contacts").select("id, name, phone").eq("org_id", orgId).in("id", dreamIds)
+    : { data: [] as Array<{ id: string } & Who> };
+  const people = new Map(((dreamPeople ?? []) as Array<{ id: string } & Who>).map((c) => [c.id, whoOf(c)]));
+  const dayName = (iso: string) => new Date(iso).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "America/Chicago" });
+
   return applyCookies(NextResponse.json({
     pinned, waiting, last_read_at: status?.last_read_at ?? null, items: [...items.slice(0, 20 - standing.length), ...standing],
-    musings: ((museRows ?? []) as Array<{ id: string; finished_at: string | null; musing: string; contact_id: string | null }>).map((m) => ({
-      id: `muse-${m.id}`, at: m.finished_at ?? new Date().toISOString(), kind: "musing", contact_id: m.contact_id,
-      summary: m.musing, detail: null, tone: "quiet" as const })).concat(
-      ((dreamRows ?? []) as Array<{ id: string; created_at: string; dream: string; contact_ids: string[] | null }>).map((d) => ({
-        id: `dream-${d.id}`, at: d.created_at, kind: "musing", contact_id: d.contact_ids?.[0] ?? null,
-        summary: d.dream, detail: null, tone: "quiet" as const }))),
+    musings: ((museRows ?? []) as Array<{ id: string; finished_at: string | null; musing: string; contact_id: string | null; contacts: Who | Who[] | null }>).map((m) => {
+      const who = whoOf(one(m.contacts));
+      return { id: `muse-${m.id}`, at: m.finished_at ?? new Date().toISOString(), kind: "musing", contact_id: m.contact_id,
+        summary: m.musing, detail: `From reading ${who ? `${who}'s` : "a"} calls and texts`, tone: "quiet" as const };
+    }).concat(dreams.map((d) => {
+      const names = (d.contact_ids ?? []).slice(0, 3).map((id) => people.get(id)).filter(Boolean);
+      const extra = (d.contact_ids ?? []).length - names.length;
+      return { id: `dream-${d.id}`, at: d.created_at, kind: "musing", contact_id: d.contact_ids?.[0] ?? null,
+        summary: d.dream,
+        detail: `A dream about ${d.span === "today" ? "today's" : `${dayName(d.window_start)}'s`} calls and texts${names.length ? ` — ${names.join(", ")}${extra > 0 ? ` +${extra}` : ""}` : ""}`,
+        tone: "quiet" as const };
+    })).sort((a, b) => b.at.localeCompare(a.at)),
   }));
 }

@@ -34,8 +34,9 @@
  *   something happening now.
  */
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { T, F, eyebrow, agent, clip, nums, relTime } from "@/lib/v34/tokens";
 import { useDustyLive } from "@/lib/v34/dusty-live";
 import { usePlanOcr } from "@/lib/v34/plan-ocr-runner";
@@ -55,6 +56,14 @@ const POLL_MS = 20_000;
 const CYCLE_MS = 4_000;
 /** Musings and dreams linger (Coy, 2026-10-01: "every 15-30 seconds"); news moves on quicker. */
 const MUSE_MS = 20_000;
+/** A line wider than its room slides along so all of it is read (Coy, 2026-10-02), at this speed. */
+const SCROLL_PX_S = 40;
+/** How long a line stays: long enough to type in and slide through twice (Coy: "stay a little longer"). */
+function lingerMs(it: Item, room: number): number {
+  const typed = Math.min(it.summary.length, 160) * 18;
+  const slide = Math.max(0, it.summary.length * 8.2 - room) / SCROLL_PX_S * 1000; // ~8px a character in the mono face
+  return it.kind === "musing" ? Math.max(MUSE_MS, typed + 2 * (2 * slide + 4000) + 3000) : Math.max(CYCLE_MS, typed + slide + 3500);
+}
 const DAY_MS = 86_400_000;
 const SEEN_KEY = "sc-activity-seen";
 
@@ -130,6 +139,9 @@ export function ActivityLine({ busy, onWorking, inline }: {
   const [idx, setIdx] = useState(0);
   const [open, setOpen] = useState(false);
   const [hover, setHover] = useState(false);
+  const router = useRouter();
+  // The line's words: when they don't fit, they slide along (CSS, measured once per line, no state).
+  const textRef = useRef<HTMLSpanElement>(null);
   // Open, the drop-down sits over everything — the plan sheets, Dusty, any sheet (Coy, 2026-10-02):
   // the header's own layer is lifted while it is down (v34-shell.css, html[data-head-drop]).
   useEffect(() => {
@@ -168,12 +180,11 @@ export function ActivityLine({ busy, onWorking, inline }: {
   // Walk the queue once; the last item stays until something new arrives.
   const current = queue.length ? queue[Math.min(idx, queue.length - 1)] : null;
   const cycling = !busy && !data?.pinned && idx < queue.length - 1 && !open && !hover;
-  const lingers = current?.kind === "musing";
   useEffect(() => {
-    if (!cycling) return;
-    const t = setTimeout(() => setIdx((i) => i + 1), lingers ? MUSE_MS : CYCLE_MS);
+    if (!cycling || !current) return;
+    const t = setTimeout(() => setIdx((i) => i + 1), lingerMs(current, textRef.current?.clientWidth ?? 260));
     return () => clearTimeout(t);
-  }, [cycling, idx, lingers]);
+  }, [cycling, idx, current]);
   // Shown means seen — it will not come round again on this device.
   useEffect(() => {
     if (!current || current.kind === "running" || busy || data?.pinned) return;
@@ -221,6 +232,35 @@ export function ActivityLine({ busy, onWorking, inline }: {
   const work: Work = line.tone === "warn" ? "warn" : busy ? "reply" : running || ocr.running ? "read"
     : line.key !== "idle" && line.key !== "loading" && line.tone === "good" ? "done" : null;
 
+  // Too long for the row: once typed, slide to the end, rest, slide back — over and over while it is up.
+  useEffect(() => {
+    const el = textRef.current;
+    const inner = el?.firstElementChild as HTMLElement | null;
+    if (!el || !inner) return;
+    inner.removeAttribute("data-marq");
+    if (busy) return;
+    const t = setTimeout(() => {
+      const dx = inner.scrollWidth - el.clientWidth;
+      if (dx <= 8) return;
+      const slide = Math.round((dx / SCROLL_PX_S) * 1000);
+      inner.style.setProperty("--sc-marq-dx", `-${dx}px`);
+      inner.style.setProperty("--sc-marq-ms", `${2 * slide + 5000}ms`);
+      inner.setAttribute("data-marq", "1");
+    }, Math.min(line.summary.length, 160) * 18 + 1200);
+    return () => clearTimeout(t);
+  }, [line.key, line.summary, busy]);
+
+  // Tapping a thought takes Coy to what it came from, with Dusty open and the thought in his message box.
+  const talkAbout = (it: Item) => {
+    setOpen(false);
+    if (it.contact_id) router.push(`/dashboard/messages/${it.contact_id}`);
+    setTimeout(() => {
+      window.dispatchEvent(new Event("sc:dusty-open"));
+      setTimeout(() => window.dispatchEvent(new CustomEvent("sc:dusty-draft", { detail: { text: `About your thought — "${it.summary}" — ` } })), 300);
+    }, it.contact_id ? 700 : 0);
+  };
+  const thoughts = data?.musings ?? [];
+
   return (
     <div className={inline ? "relative flex-1 min-w-0 sc-own-layer" : "relative px-2.5 pb-2 sc-activity-row sc-own-layer"}
       onPointerEnter={(e) => { if (e.pointerType === "mouse") setHover(true); }} onPointerLeave={() => setHover(false)}>
@@ -230,10 +270,10 @@ export function ActivityLine({ busy, onWorking, inline }: {
         // Strict containment: a new line of text never makes the browser lay out the page around it.
         style={{ height: 30, padding: "0 4px 0 4px", background: "transparent", border: "none", cursor: "pointer", contain: "strict" }}>
         <Diamond key={`${work}-${line.key}`} work={work} open={open} />
-        <span aria-live="polite" className="sc-activity-text"
+        <span ref={textRef} aria-live="polite" className="sc-activity-text"
           style={{ flex: 1, minWidth: 0, color: line.tone === "warn" ? T.hivizText : undefined, ...clip }}>
           {typing ? (
-            <span key={line.key} className="sc-typed"
+            <span key={line.key} className="sc-typed" title={line.summary}
               style={{ "--sc-type-steps": Math.min(line.summary.length, 160), "--sc-type-ms": `${Math.min(line.summary.length, 160) * 18}ms` } as React.CSSProperties}>
               {line.summary}
             </span>
@@ -251,6 +291,22 @@ export function ActivityLine({ busy, onWorking, inline }: {
             <div className="px-3 py-2" style={{ borderBottom: `1px solid ${T.hairSoft}` }}>
               <div style={{ fontSize: F.sm, color: T.hivizText }}>{data.pinned.summary}</div>
               {data.pinned.detail && <div style={{ fontSize: F.xs, color: T.ink2, marginTop: 2 }}>{data.pinned.detail}</div>}
+            </div>
+          )}
+          {thoughts.length > 0 && (
+            <div style={{ borderBottom: `1px solid ${T.hair}` }}>
+              <div className="px-3 pt-2 pb-1" style={{ ...eyebrow, fontSize: F.micro, color: T.ink3 }}>Dusty&apos;s thoughts · tap one to talk about it</div>
+              {thoughts.map((it) => (
+                <button key={it.id} onClick={() => talkAbout(it)} className="w-full text-left px-3 py-2 flex gap-2.5 items-start"
+                  style={{ borderTop: `1px solid ${T.hairSoft}`, background: current?.id === it.id ? T.sunk : "transparent", cursor: "pointer" }}>
+                  <span aria-hidden="true" style={{ paddingTop: 4, color: T.ink3, fontSize: 11 }}>◆</span>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ display: "block", fontSize: F.sm, color: T.ink, lineHeight: 1.4 }}>{it.summary}</span>
+                    {it.detail && <span style={{ display: "block", fontSize: F.xs, color: T.ink2, lineHeight: 1.4, marginTop: 2 }}>{it.detail}{it.contact_id ? " ›" : ""}</span>}
+                  </span>
+                  <span style={{ fontSize: F.xs, color: T.ink3, ...nums }}>{relTime(it.at)}</span>
+                </button>
+              ))}
             </div>
           )}
           {(data?.items ?? []).map((it) => {

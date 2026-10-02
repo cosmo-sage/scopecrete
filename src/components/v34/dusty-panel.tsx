@@ -377,7 +377,7 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
     // on the right, no backdrop; the layout pads <main> by --sc-dusty so the
     // page beside it stays whole and usable.
     <section role="dialog" aria-label="Dusty"
-      className="fixed left-0 right-0 bottom-0 z-50 flex lg:left-auto lg:w-[var(--sc-dusty)] sc-dock-in"
+      className="fixed left-0 right-0 bottom-0 z-50 flex lg:left-auto lg:w-[var(--sc-dusty)] sc-dock-in sc-dusty-sheet"
       style={{ top: "var(--sc-head)", background: T.slab, color: T.ink, borderLeft: `1px solid ${T.hair}`, boxShadow: "-10px 0 30px rgba(10,14,18,.10)" }}>
       {/* history: from the left, over the chat */}
       {railOpen && (

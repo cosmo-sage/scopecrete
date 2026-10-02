@@ -107,7 +107,7 @@ async function contactBlock(sb: Sb, orgId: string, contactId: string) {
     .select("id, name, name_source, name_confirmed_at, phone, address, customer_id, merged_into_contact_id, contact_type, contact_subtype, classification_confirmed_at, auto_classified_at, status_summary")
     .eq("org_id", orgId).eq("id", contactId).maybeSingle();
   if (!c) return null;
-  const [{ data: phones }, { data: jobs }, { data: tasks }, { data: notes }] = await Promise.all([
+  const [{ data: phones }, { data: jobs }, { data: tasks }, { data: notes }, { data: musings }, { data: dreams }] = await Promise.all([
     sb.from("contact_phones").select("phone_e164").eq("org_id", orgId).eq("contact_id", contactId),
     sb.from("jobs").select("id, title, status, created_at").eq("org_id", orgId).eq("contact_id", contactId).is("archived_at", null),
     // The next-steps checklist (migration 038) — Coy's own items and Dusty's —
@@ -118,6 +118,12 @@ async function contactBlock(sb: Sb, orgId: string, contactId: string) {
     // customer and vendor notes." Newest 20.
     sb.from("contact_notes").select("body, created_at").eq("org_id", orgId).eq("contact_id", contactId)
       .order("created_at", { ascending: false }).limit(20),
+    // His own passing thoughts about them, as the activity line showed them — Coy taps one
+    // to talk about it (2026-10-02), so Dusty has to know what he said.
+    sb.from("contact_enrich_runs").select("musing, finished_at").eq("org_id", orgId).eq("contact_id", contactId)
+      .not("musing", "is", null).order("started_at", { ascending: false }).limit(5),
+    sb.from("dusty_dreams").select("dream, created_at").eq("org_id", orgId).contains("contact_ids", [contactId])
+      .order("created_at", { ascending: false }).limit(3),
   ]);
   const numbers = [...new Set([c.phone, ...((phones ?? []) as Array<{ phone_e164: string }>).map((p) => p.phone_e164)].filter(Boolean))];
   const name = (c.name as string | null)?.trim() || null;
@@ -139,6 +145,9 @@ async function contactBlock(sb: Sb, orgId: string, contactId: string) {
       `Coy's notes on them (newest first): ${((notes ?? []) as Array<{ body: string; created_at: string }>).length
         ? ((notes ?? []) as Array<{ body: string; created_at: string }>).map((n) => `[${day(n.created_at)}] ${n.body.replace(/\s+/g, " ").slice(0, 600)}`).join(" | ")
         : "none"}`,
+      `Your own passing thoughts about them, as the activity line showed them (if Coy asks about one, it is one of these; say what in the conversation it came from): ${
+        [...((musings ?? []) as Array<{ musing: string; finished_at: string | null }>).map((m) => `[${day(m.finished_at)}] "${m.musing}"`),
+         ...((dreams ?? []) as Array<{ dream: string; created_at: string }>).map((d) => `[${day(d.created_at)}, a dream] "${d.dream}"`)].join(" | ") || "none"}`,
     ],
   };
   return { block, name: name ?? (numbers[0] as string | undefined) ?? "unknown number" };

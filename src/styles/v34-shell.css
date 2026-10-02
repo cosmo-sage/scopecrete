@@ -233,6 +233,11 @@
    not the page under it (a 427-row Price book repainted every step before). */
 .sc-own-layer { will-change: transform; }
 @keyframes scType { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+/* A line too long for its row slides to its end, rests, and slides back (Coy, 2026-10-02: "it doesn't scroll so I can't read the full thought"). */
+.sc-typed[data-marq] { max-width: none; overflow: visible; text-overflow: clip; animation: scMarq var(--sc-marq-ms, 12s) ease-in-out infinite; }
+@keyframes scMarq { 0%, 12% { transform: translateX(0); } 44%, 56% { transform: translateX(var(--sc-marq-dx, 0)); } 88%, 100% { transform: translateX(0); } }
+/* On a phone Dusty's chat covers the activity row under the logo — his own sprite says what he is doing. */
+@media (max-width: 1023.98px) { .sc-dusty-sheet { top: 54px !important; } }
 
 @media (prefers-reduced-motion: reduce) {
   .sc-burger-bar,
@@ -253,6 +258,7 @@
   .sc-rec,
   .sc-caret,
   .sc-typed,
+  .sc-typed[data-marq],
   .sc-dot-read,
   .sc-dot-reply,
   .sc-dot-done,

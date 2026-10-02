@@ -314,7 +314,7 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0 }: {
                                 {QTY_RULE_LABEL[l.qty_rule as keyof typeof QTY_RULE_LABEL] ?? l.qty_rule}
                                 {stale(l) && <> · <button onClick={() => void patchLine(l.id, { refresh: true })} style={{ color: T.hiviz, cursor: "pointer" }}>{stale(l)}</button></>}
                               </div>
-                              {r.blocked.length > 0 && <div style={{ fontSize: 9.5, color: T.hiviz }}>needs {r.blocked.join(", ")}</div>}
+                              {r.blocked.length > 0 && <div style={{ fontSize: 9.5, color: T.hiviz, whiteSpace: "normal", overflowWrap: "anywhere" }}>needs {r.blocked.join(", ")}</div>}
                             </td>
                             <td style={{ padding: "2px 4px", color: T.ink2, maxWidth: 170, ...clip }}>
                               <VendorPick line={l} sources={data.sources ?? []} name={vendorName} onPick={(id) => void patchLine(l.id, { source_id: id })} />
@@ -429,7 +429,7 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0 }: {
                 <span style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 700, color: t.priced ? T.ink : T.ink3 }}>{t.priced ? money0(t.total) : "not priced"}</span>
                 {t.priced && <span style={{ fontSize: F.xs, color: T.ink3 }}>O.H. {money0(t.overhead)} · profit {money0(t.profit)} · margin {pct(t.margin)}</span>}
                 {t.priced && minimum.ok && t.total < minimum.minimum && <span style={{ fontSize: F.xs, color: T.red }}>under the job minimum {money0(minimum.minimum)}</span>}
-                {!t.priced && t.blocked.length > 0 && <span style={{ fontSize: F.xs, color: T.hiviz }}>needs {t.blocked.slice(0, 4).join(", ")}{t.blocked.length > 4 ? ` +${t.blocked.length - 4}` : ""}</span>}
+                {!t.priced && t.blocked.length > 0 && <span style={{ fontSize: F.xs, color: T.hiviz, whiteSpace: "normal", overflowWrap: "anywhere", minWidth: 0 }}>needs {t.blocked.slice(0, 4).join(", ")}{t.blocked.length > 4 ? ` +${t.blocked.length - 4}` : ""}</span>}
               </div>
             ))}
           </div>
@@ -523,7 +523,8 @@ function GroupCard({ name, lines, res, optLabel, asmName, onOpen, cost, price }:
             style={{ borderTop: `1px solid ${i ? T.hairSoft : T.hair}`, cursor: "pointer" }}>
             <span style={{ minWidth: 0, flex: 1 }}>
               <span style={{ display: "block", fontSize: F.sm, color: T.ink, ...clip }}>{l.name}</span>
-              <span style={{ display: "block", fontSize: 10, color: r.blocked.length ? T.hiviz : T.ink3, ...nums }}>
+              {/* A "needs …" note can be long (the tax one names the parish and where to fix it) — it wraps, never widens the page. */}
+              <span style={{ display: "block", fontSize: 10, color: r.blocked.length ? T.hiviz : T.ink3, ...nums, ...(r.blocked.length ? { whiteSpace: "normal", overflowWrap: "anywhere" } : {}) }}>
                 {r.blocked.length ? `needs ${r.blocked.join(", ")}` : `${qtyFmt(r.qty)} ${l.unit} × ${l.unit_cost === null ? "—" : money(l.unit_cost)}${r.qty_basis === "set" ? " ✎" : " ƒ"}`}
                 {optLabel(l.option_id) ? ` · ${optLabel(l.option_id)} only` : ""}
                 {l.section_role === "reinforcement" ? " · reinforcement" : ""}

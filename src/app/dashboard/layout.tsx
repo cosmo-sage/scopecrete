@@ -30,7 +30,7 @@ import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { setDustyLive } from "@/lib/v34/dusty-live";
 import { usePathname } from "next/navigation";
-import { T, F, disp, eyebrow, nums } from "@/lib/v34/tokens";
+import { T, F, disp, body, eyebrow, nums } from "@/lib/v34/tokens";
 import { NavIcon, Sheet } from "@/components/v34/primitives";
 import { DustyPanel } from "@/components/v34/dusty-panel";
 import { DustyAvatar } from "@/components/v34/dusty-avatar";
@@ -153,7 +153,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   );
 
   return (
-    <div className="flex flex-col min-h-screen" style={{ background: T.slab, color: T.ink }}>
+    <div className="flex flex-col min-h-screen" style={{ background: T.slab, color: T.ink, fontFamily: body }}>
       <div style={{ position: "sticky", top: 0, zIndex: menuOpen ? 60 : 40 }}>
         <header className="px-2.5 lg:px-4 flex items-center gap-3 sc-paper" style={{ height: 54 }}>
           <Link href="/dashboard" className="no-underline shrink-0" aria-label="Dashboard">
@@ -307,7 +307,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             ))}
             <button onClick={() => setLooksOpen((o) => !o)} aria-expanded={looksOpen} className="text-left py-2.5" style={{ borderBottom: `1px solid ${T.hairSoft}`, cursor: "pointer" }}>
               <div style={{ fontSize: F.md, fontWeight: 600 }}>Appearance {looksOpen ? "−" : "+"}</div>
-              <div style={{ fontSize: F.xs, color: T.ink3 }}>Colours: Site Office, Blueprint, Kraft Yard or Night Shift (dark)</div>
+              <div style={{ fontSize: F.xs, color: T.ink3 }}>Eight colour schemes, one dark — some change the typeface too</div>
             </button>
             {looksOpen && <div className="py-2"><ThemePicker /></div>}
             <button onClick={() => setMenusOpen((o) => !o)} aria-expanded={menusOpen} className="text-left py-2.5" style={{ borderBottom: `1px solid ${T.hairSoft}`, cursor: "pointer" }}>

@@ -71,14 +71,14 @@ export const M = {
 
 export const F = { xxl: 34, xl: 26, lg: 19, md: 15, sm: 13, xs: 11, micro: 9.5 } as const;
 
-export const disp = "'Barlow Condensed', system-ui, sans-serif";
-export const body = "'IBM Plex Sans', system-ui, sans-serif";
+export const disp = "var(--sc-font-disp, 'Barlow Condensed', system-ui, sans-serif)";
+export const body = "var(--sc-font-body, 'IBM Plex Sans', system-ui, sans-serif)";
 /** Names, numbers, counts, tile values (600/700). */
-export const strong = "'Lexend', system-ui, sans-serif";
+export const strong = "var(--sc-font-strong, 'Lexend', system-ui, sans-serif)";
 /** Panel titles (300). */
-export const light = "'Inter', system-ui, sans-serif";
+export const light = "var(--sc-font-light, 'Inter', system-ui, sans-serif)";
 /** Dusty's voice — the activity line, his cards, chat titles. */
-export const hand = "'Kalam', cursive";
+export const hand = "var(--sc-font-hand, 'Kalam', cursive)";
 
 export const eyebrow: React.CSSProperties = {
   fontFamily: disp, fontSize: F.micro, letterSpacing: ".14em",

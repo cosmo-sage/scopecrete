@@ -1533,7 +1533,15 @@ expected start date per quoted job before it means anything. Add the field.
 - **Colour themes (2026-09-30, Claude Design handoff,
   `design/customer-and-themes/themes`).** Settings (☰) → **Appearance**:
   **Site Office** (default), **Blueprint**, **Kraft Yard**, **Night Shift**
-  (dark). `src/lib/v34/themes.ts` holds them; `v34-shell.css` carries each as
+  (dark), and since 2026-10-02 (themes v2, Claude Design) **Steel**,
+  **Signal**, **Plex Office** and **Kraft (clean)**. **A theme carries its
+  typefaces too** (`Theme.font`: display, body, strong, light, hand →
+  `--sc-font-*`; the `disp` / `body` / … tokens read those variables, and the
+  dashboard's base text is the theme's body face — IBM Plex Sans in Site
+  Office, where it was Outfit; Barlow, Archivo, Atkinson Hyperlegible in the
+  new ones). The wordmark keeps its own fixed letters, and chat bubbles keep
+  Coy's muted colours (`DA` in `conversation.tsx`) rather than the handoff's
+  `outBg`. `src/lib/v34/themes.ts` holds them; `v34-shell.css` carries each as
   `--sc-*` variables under `html[data-theme]` (generated from `themes.ts`);
   an inline script in `app/layout.tsx` sets `data-theme` from
   `localStorage` before first paint, and `useTheme()`

@@ -46,8 +46,8 @@ export function ThemePicker() {
               </div>
             </div>
             <div style={{ padding: "6px 8px", background: t.card, borderTop: `1px solid ${t.hair}` }}>
-              <div style={{ fontFamily: "'Lexend', sans-serif", fontWeight: 600, fontSize: 13, color: t.ink }}>{t.label}{on ? " ✓" : ""}</div>
-              <div style={{ fontSize: 11, color: t.ink3 }}>{t.note}</div>
+              <div style={{ fontFamily: t.font.strong, fontWeight: 600, fontSize: 13, color: t.ink }}>{t.label}{on ? " ✓" : ""}</div>
+              <div style={{ fontSize: 11, color: t.ink3, fontFamily: t.font.body }}>{t.note}</div>
             </div>
           </button>
         );

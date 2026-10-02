@@ -6,6 +6,7 @@
  */
 
 import type { ApiSession } from "@/lib/api-auth";
+import { findDimensions } from "@/lib/plan-ocr";
 import { priceBundle, proposalBundle } from "@/lib/proposal-server";
 import { termsText, warrantyText, type DocTemplate, type Draw, type ProposalDisplay } from "@/lib/proposal";
 import { takeoff, budget, jobMinimum, type BudgetLine, type OverheadItem, type SectionInput } from "@/lib/engine";
@@ -247,7 +248,7 @@ async function scopeContext(sb: Sb, orgId: string, jobId: string): Promise<Assem
   const t = takeoff(sections, null);
   const days = num(job.duration_days);
   const jp = pricing.get(jobId) ?? null;
-  const [bud, plans, prop, mail, bid] = await Promise.all([budgetBlock(sb, orgId, jobId, sections, days, jp), plansBlock(sb, orgId, jobId), proposalBlock(sb, orgId, jobId), emailsBlock(sb, orgId, { jobId }), bidBlock(sb, orgId, jobId)]);
+  const [bud, plans, prop, mail, bid, ocr] = await Promise.all([budgetBlock(sb, orgId, jobId, sections, days, jp), plansBlock(sb, orgId, jobId), proposalBlock(sb, orgId, jobId), emailsBlock(sb, orgId, { jobId }), bidBlock(sb, orgId, jobId), ocrBlock(sb, orgId, jobId)]);
   const notes = ((secs ?? []) as Array<Record<string, unknown>>).flatMap((r) =>
     [["reinforcement", r.rebar], ["prep", r.prep_notes], ["access", r.access_notes]]
       .filter(([, v]) => typeof v === "string" && v).map(([k, v]) => `- ${r.name || "section"} ${k}: ${v}`));
@@ -261,6 +262,7 @@ async function scopeContext(sb: Sb, orgId: string, jobId: string): Promise<Assem
     { title: "Sections and their quantities (exactly what the builder shows)", lines: scopeLines(t, !!bud) },
     ...(bud ? [bud] : []),
     ...(plans ? [plans] : []),
+    ...(ocr ? [ocr] : []),
     ...(prop ? [prop] : []),
     ...(mail ? [mail] : []),
     { title: "Section notes", lines: notes },
@@ -320,6 +322,38 @@ async function plansBlock(sb: Sb, orgId: string, jobId: string): Promise<Block |
     lines.push(`Takeoff group "${p.name}" (${p.kind}${p.depth_in ? `, ${p.depth_in}" deep` : ""}): ${t?.qty !== null && t?.qty !== undefined ? `${fmtQty(t.qty, t.unit)}${t.cy !== null ? ` = ${t.cy.toFixed(1)} CY neat` : ""}` : `no total — ${t?.blocked ?? "nothing measured"}`} from ${n} shape${n === 1 ? "" : "s"}`);
   }
   return { title: "Plan Room takeoff (measured on the plans by Coy)", lines };
+}
+
+/**
+ * What OCR read off the job's scanned plan sheets (migration 064). Whole sheets,
+ * table rows kept together ("TOTAL | 450"), the sheets that talk most about
+ * concrete first, until the room runs out — then the rest by number and title.
+ * Read off a scan, so Dusty says it may be misread and points Coy to the sheet.
+ * Nothing here is a measurement; quantities come from the takeoff.
+ */
+const OCR_CONCRETE = /\bconc|\bpsi\b|\brebar|\breinf|\bslab|\bfooting|\bpaving|\bpavement|\bcurb|\bgutter|\bsidewalk|\bwalk\b|\bdrives?\b|\bdriveway|\bramp|\bjoint|\bthick|\bwwf|\bmesh|\bsq\.? ?yd|\bdetectable|\bdome/gi;
+const OCR_ROOM = 24_000;
+async function ocrBlock(sb: Sb, orgId: string, jobId: string): Promise<Block | null> {
+  const { data } = await sb.from("plan_sheets").select("number, page, title, ocr_text, ocr_conf").eq("org_id", orgId).eq("job_id", jobId)
+    .not("ocr_text", "is", null).order("page").limit(200);
+  const rows = (data ?? []) as Array<{ number: string | null; page: number; title: string | null; ocr_text: string; ocr_conf: number | null }>;
+  if (!rows.length) return null;
+  const name = (r: (typeof rows)[number]) => `${r.number ?? `p.${r.page}`}${r.title ? ` ${r.title}` : ""}`;
+  const ranked = rows.map((r) => ({ r, hits: (r.ocr_text.match(OCR_CONCRETE) ?? []).length + findDimensions(r.ocr_text).length }))
+    .filter((x) => x.hits > 0).sort((a, b) => b.hits - a.hits);
+  const lines: string[] = [`${rows.length} scanned sheet${rows.length === 1 ? "" : "s"} read by OCR in the Plan Room. These are readings off a scan: a digit or a "+" can be misread (104+55 may show as 104455). Quote the sheet, and tell Coy to check a number there before he prices it. Table rows read left to right, " | " between columns.`];
+  let room = OCR_ROOM;
+  const shown = new Set<string>();
+  for (const { r } of ranked) {
+    const text = r.ocr_text.split("\n").map((l) => l.trim()).filter((l) => l.length >= 2).join("\n");
+    if (text.length + 80 > room) continue;
+    room -= text.length + 80;
+    shown.add(`${r.page}`);
+    lines.push(`── ${name(r)}${r.ocr_conf !== null ? ` (read ${Math.round(r.ocr_conf)}% sure)` : ""} ──\n${text}`);
+  }
+  const rest = rows.filter((r) => !shown.has(`${r.page}`));
+  if (rest.length) lines.push(`Also read, not shown here (ask by sheet): ${rest.slice(0, 80).map(name).join("; ")}`);
+  return { title: "Plan sheets read by OCR (scans)", lines };
 }
 
 /**

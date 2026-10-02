@@ -1793,7 +1793,51 @@ expected start date per quoted job before it means anything. Add the field.
   plain reader (fit width, zoom, previous / next), never offered for
   takeoff, unless Coy sets a scale on it (`isDrawing()`, `shared.ts`,
   tested). Coy suggested "no scale found" as the test; it can't be — a
-  scanned set never has a readable scale, and those ARE the drawings. Discipline filter, "Concrete scope" = civil + structural.
+  scanned set never has a readable scale, and those ARE the drawings.
+  **Reading scanned sheets — OCR in the browser (migration 064, Coy
+  2026-10-02: "option A … I just want to see if I can get some dimensions
+  off of plans accurately"; the VPS service, option B, later).** A scan has no
+  text, and a Supabase function has ~2 s of CPU, so the Plan Room reads it:
+  tesseract.js (worker, LSTM cores and the `best_int` English data copied
+  into `public/tesseract/` with pdf.js's files by
+  `scripts/copy-static-assets.mjs` — our own origin, no CDN), PSM 11 (sparse
+  text), 300 dpi. `src/lib/v34/plan-ocr-runner.ts` is one module-level
+  reader (outside React, so it keeps going while Coy moves around the
+  dashboard and never re-renders the layout; it stops on a reload, and the
+  next Plan Room visit carries on): **1 · title blocks** of every scanned
+  drawing — the right strip and bottom band flat, and the right edge turned
+  a quarter (DOTD runs the title up the side) — then each sheet's title is
+  chosen against the whole set (`chooseTitles()`): what is on ~every sheet
+  is boilerplate (the firm, the project, the parish, the engineer, read
+  loosely — OCR spells a name several ways), the seal and the review /
+  initials boxes are never titles, and flat-vs-sideways is decided once for
+  the set by which is lettered bigger; **2 · whole sheets** in 2,400 px tiles
+  at 3× (~216 dpi — at 2× table totals were lost), a tile under 60 %
+  confidence read again at 4×, civil and structural first; a part that
+  takes over 45 s is skipped, the reader restarted, and the sheet says which
+  parts weren't read. Words are kept in page points (`ocr_words`), the
+  text as rows with " | " between columns so a table row reads
+  "104+55 | RT | DRIVE | 39" (`ocr_text`), mean confidence (`ocr_conf`).
+  Saved per sheet as it finishes (`POST /api/plan-sheets/[id]/ocr`: never
+  over a number or title Coy typed; a printed scale is stored as printed,
+  applied only by his tap). **Where it shows:** the activity line (header on
+  a desktop, the bar on a phone) — "Reading sheet titles · Burgess Ave … ·
+  12 of 74", then "Reading the plans · … · sheet 3 of 74 · part 5/12" — and
+  a chip in the Plan Room header; the Sheets step refreshes as titles land.
+  **Dusty** gets whole OCR'd sheets (the most concrete-heavy first, ~24k
+  characters, the rest listed by sheet), told they are readings off a scan
+  — a "+" can read as "4" (104+55 → 104455) — to quote the sheet and have
+  Coy check a number there before he prices it. Nothing read is a
+  measurement; quantities come from the takeoff. **Checked on Burgess Ave's
+  real sheets** (three pages rebuilt from the stored scans with
+  `pdf-probe`'s `{"image": n}`, processed in scratch only): titles "TITLE
+  SHEET", "SUMMARY TABLES", "PROFILE"; the summary sheet's Proposed Concrete
+  Drives table read "TOTAL | 450" (Dylan's email: 450 SY), 426 words at 88 %;
+  ~15 s a sheet on a desktop, about the same with the phone's one reader;
+  the dense profile sheet read at 54 % with three parts timed out. Sheet
+  numbers on DOTD sets are plain digits ("3"), which the reader does not
+  take for a sheet number — they show as p.3. `findDimensions()` finds
+  12'-6", 5'-0", 6" in what was read (not the 2 of 1/2") for later use. Discipline filter, "Concrete scope" = civil + structural.
   **Takeoff** — the page on a canvas with an SVG layer in PDF points; tools
   Area, Rect, Linear, Count, Cutout, Scale (Auto is shown off: Dusty doesn't
   read drawings). **A sheet's scale is only ever one Coy set** — "Use 1/8" =

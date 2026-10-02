@@ -44,5 +44,6 @@ next-env.d.ts
 supabase/.temp/
 supabase/.branches/
 
-# pdf.js assets, copied by scripts/copy-pdfjs-assets.mjs
+# pdf.js and tesseract.js assets, copied by scripts/copy-static-assets.mjs
 /public/pdfjs/
+/public/tesseract/

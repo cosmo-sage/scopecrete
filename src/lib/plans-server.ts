@@ -11,7 +11,7 @@ import { groupTotals, type GroupTotal, type MeasurementIn, type ParameterIn, typ
 
 type Sb = ApiSession["supabase"];
 
-export const SHEET_COLS = "id, job_id, file_id, page, page_w, page_h, number, title, discipline, scale_text, printed_ft_per_pt, scale_ft_per_pt, scale_method, scale_set_at, number_source, updated_at";
+export const SHEET_COLS = "id, job_id, file_id, page, page_w, page_h, number, title, discipline, scale_text, printed_ft_per_pt, scale_ft_per_pt, scale_method, scale_set_at, number_source, updated_at, ocr_title_at, ocr_at, ocr_conf, ocr_error";
 export const PARAM_COLS = "id, job_id, name, kind, color, depth_in, sort_order, updated_at";
 export const MEAS_COLS = "id, parameter_id, sheet_id, name, geometry, cutouts, method, sort_order, updated_at";
 
@@ -21,6 +21,7 @@ export interface SheetRow {
   scale_text: string | null; printed_ft_per_pt: number | null;
   scale_ft_per_pt: number | null; scale_method: "title_block" | "manual" | "none" | null; scale_set_at: string | null;
   number_source: string; updated_at: string;
+  ocr_title_at: string | null; ocr_at: string | null; ocr_conf: number | null; ocr_error: string | null;
 }
 export interface ParamRow { id: string; job_id: string; name: string; kind: TakeoffKind; color: string; depth_in: number | null; sort_order: number; updated_at: string }
 export interface MeasRow { id: string; parameter_id: string; sheet_id: string; name: string | null; geometry: Pt[]; cutouts: Pt[][]; method: string; sort_order: number; updated_at: string }

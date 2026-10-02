@@ -15,6 +15,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { T, F, disp, strong, clip } from "@/lib/v34/tokens";
 import { sendBytes } from "@/components/v34/files-panel";
 import { openPdf, readPlanPages } from "@/lib/pdf";
+import { startPlanOcr, usePlanOcr } from "@/lib/v34/plan-ocr-runner";
 import { call, isDrawing, isPlanFile, type Param, type PlanFile, type PlansData, type Sheet } from "./shared";
 import { FilesStep, SheetsStep } from "./files-sheets";
 import { TakeoffStep } from "./takeoff";
@@ -76,6 +77,23 @@ export function PlanRoom({ jobId }: { jobId: string }) {
     }
   }, [data, jobId, load]);
 
+  // Scanned drawings are read with OCR in the background (migration 064): title blocks, then
+  // whole sheets. It keeps going if Coy leaves the page; the activity line shows where it is.
+  const ocr = usePlanOcr();
+  useEffect(() => {
+    if (!data || Object.keys(reading).length) return;
+    const room = new Set(data.files.filter((f) => f.in_plan_room && f.kind === "pdf" && f.url).map((f) => f.id));
+    const urls = new Map(data.files.filter((f) => room.has(f.id)).map((f) => [f.id, f.url as string]));
+    const drawings = data.sheets.filter((s) => room.has(s.file_id) && isDrawing(s));
+    if (drawings.length) startPlanOcr({ id: jobId, title: data.job?.title ?? null }, drawings, urls);
+  }, [data, reading, jobId]);
+  // What it read shows up as it goes — a fresh look every few sheets, and at the end.
+  const lastSaved = useRef(0);
+  useEffect(() => {
+    if (ocr.jobId !== jobId) return;
+    if (ocr.saved - lastSaved.current >= 4 || (!ocr.running && ocr.saved !== lastSaved.current)) { lastSaved.current = ocr.saved; void load(); }
+  }, [ocr.saved, ocr.running, ocr.jobId, jobId, load]);
+
   const upload = useCallback(async (list: FileList) => {
     const files = Array.from(list);
     for (let i = 0; i < files.length; i++) {
@@ -126,6 +144,11 @@ export function PlanRoom({ jobId }: { jobId: string }) {
             <span style={{ fontSize: F.sm, fontWeight: 600, ...clip }}>{data?.job?.title || "This job"}</span>
           </Link>
           <span className="flex-1" />
+          {ocr.running && ocr.jobId === jobId && (
+            <span title={ocr.label} style={{ fontSize: 11.5, borderRadius: 3, padding: "3px 8px", background: T.dustyTint, color: T.ink2, fontWeight: 600 }}>
+              Reading {ocr.phase === "title" ? "sheet titles" : "the plans"} · {ocr.done + 1} of {ocr.total}
+            </span>
+          )}
           {sheets.length > 0 && (
             <span style={{ fontSize: 11.5, borderRadius: 3, padding: "3px 8px", background: scaled === sheets.length ? T.greenDim : T.sunDim, color: scaled === sheets.length ? T.green : T.sun, fontWeight: 600 }}>
               {scaled === sheets.length ? "✓ " : ""}{scaled} of {sheets.length} sheets scaled

@@ -38,6 +38,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { T, F, eyebrow, clip, nums, relTime } from "@/lib/v34/tokens";
 import { useDustyLive } from "@/lib/v34/dusty-live";
+import { usePlanOcr } from "@/lib/v34/plan-ocr-runner";
 
 type Tone = "live" | "good" | "ask" | "warn" | "quiet";
 interface Item { id: string; at: string; kind: string; contact_id: string | null; href?: string | null; summary: string; detail: string | null; tone: Tone }
@@ -100,6 +101,8 @@ export function ActivityLine({ busy, onWorking, inline }: {
   onWorking?: (working: boolean) => void;
 }) {
   const live = useDustyLive();
+  // Reading scanned plans in this tab (migration 064): where it is, sheet by sheet.
+  const ocr = usePlanOcr();
   const [data, setData] = useState<Activity | null>(null);
   // Items from the last day — decided when the data arrives, not in render.
   const [recent, setRecent] = useState<Item[]>([]);
@@ -169,6 +172,7 @@ export function ActivityLine({ busy, onWorking, inline }: {
     const said = (live ?? "").replace(/\s+/g, " ").trim();
     line = { key: "busy", summary: said ? (said.length > 90 ? `…${said.slice(-90)}` : said) : "Dusty is thinking…", tone: "live", at: null };
   }
+  else if (ocr.running) line = { key: `ocr-${ocr.phase}-${ocr.done}`, summary: ocr.label, tone: "live", at: null };
   else if (data?.pinned) line = { key: "pinned", summary: data.pinned.summary, tone: "warn", at: null };
   else if (current) {
     line = { key: current.id, summary: current.summary, tone: current.tone,
@@ -185,12 +189,12 @@ export function ActivityLine({ busy, onWorking, inline }: {
       tone: "quiet", at: null,
     };
   }
-  const working = busy || running;
+  const working = busy || running || ocr.running;
   // The streamed reply already arrives a token at a time; everything else types
   // in — drawn by CSS (a stepped clip on one element), never a render per letter.
   const typing = !busy && line.summary.length > 0;
   // The kind of work, for the dot: broken > answering > reading > just done.
-  const work: Work = line.tone === "warn" ? "warn" : busy ? "reply" : running ? "read"
+  const work: Work = line.tone === "warn" ? "warn" : busy ? "reply" : running || ocr.running ? "read"
     : line.key !== "idle" && line.key !== "loading" && line.tone === "good" ? "done" : null;
 
   return (

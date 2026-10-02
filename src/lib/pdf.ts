@@ -24,7 +24,7 @@ function pdfjs(): Promise<PdfJs> {
 }
 
 /** The most pixels one canvas may hold here: ~16.7 MP on a phone or tablet, ~33.5 MP on a desktop. */
-const MAX_CANVAS_PX = typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches ? 2 ** 24 : 2 ** 25;
+export const MAX_CANVAS_PX = typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches ? 2 ** 24 : 2 ** 25;
 
 const docs = new Map<string, Promise<Doc>>();
 /** Open a plan PDF by its file id and (signed) link — once per visit. */
@@ -122,4 +122,23 @@ export function pageThumb(fileId: string, url: string, pageNo: number, width = 3
     thumbs.set(k, t);
   }
   return t;
+}
+
+/**
+ * One region of a page (PDF points, y down) drawn at `scale` onto a fresh canvas —
+ * for reading a scanned sheet with OCR (src/lib/v34/plan-ocr-runner.ts). White
+ * behind, as on paper.
+ */
+export async function renderRegion(doc: Doc, pageNo: number, r: { x: number; y: number; w: number; h: number }, scale: number): Promise<HTMLCanvasElement> {
+  const p = await doc.getPage(pageNo);
+  const v = p.getViewport({ scale, offsetX: -r.x * scale, offsetY: -r.y * scale });
+  const c = document.createElement("canvas");
+  c.width = Math.max(1, Math.floor(r.w * scale));
+  c.height = Math.max(1, Math.floor(r.h * scale));
+  const ctx = c.getContext("2d", { willReadFrequently: true });
+  if (!ctx) throw new Error("no canvas");
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0, 0, c.width, c.height);
+  await (p.render({ canvasContext: ctx, viewport: v, canvas: c }) as unknown as { promise: Promise<void> }).promise;
+  return c;
 }

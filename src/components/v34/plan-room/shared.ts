@@ -12,6 +12,8 @@ export interface Sheet {
   scale_text: string | null; printed_ft_per_pt: number | null;
   scale_ft_per_pt: number | null; scale_method: "title_block" | "manual" | "none" | null; scale_set_at: string | null;
   number_source: string;
+  /** OCR of a scanned sheet (migration 064): title block, then the whole sheet. */
+  ocr_title_at?: string | null; ocr_at?: string | null; ocr_conf?: number | null; ocr_error?: string | null;
 }
 export interface Param { id: string; job_id: string; name: string; kind: TakeoffKind; color: string; depth_in: number | null; sort_order: number }
 export interface Meas { id: string; parameter_id: string; sheet_id: string; name: string | null; geometry: Pt[]; cutouts: Pt[][]; method: string; sort_order: number }

@@ -9,7 +9,7 @@
  */
 
 import {
-  AUTO_STREAK, PROMPT_VERSION, SYSTEM_PROMPT, bucketOf, findSelfIdentification, relabelTranscript, renderConversation,
+  AUTO_STREAK, PROMPT_VERSION, SYSTEM_PROMPT, bucketOf, findSelfIdentification, introducedName, relabelTranscript, renderConversation,
   renderNotes, sanitize, spamSignal, titleKey, worthEnriching, type CoyNote, type Correction, type Proposal, type Turn,
 } from './rules.ts'
 
@@ -160,6 +160,12 @@ type Named = Pick<Proposal, 'proposed_name' | 'proposed_company' | 'confidence'>
  * (DECISIONS §2b). Any failure leaves the suggestion standing as a question;
  * nothing is worse off than before.
  */
+/** The name to put forward: the model's if they introduced themselves by it, else the one they did introduce. */
+export function introducedOver(proposed: string | null, turns: Turn[], numbers: string[]): string | null {
+  if (proposed && findSelfIdentification(proposed, turns, numbers)) return proposed
+  return introducedName(turns, numbers) ?? proposed
+}
+
 export async function applySelfIdentified(sb: Db, orgId: string, contactId: string, p: Named, turns: Turn[], model: string)
   : Promise<{ claim_id: string | null; note: string }> {
   if (!p.proposed_name) return { claim_id: null, note: 'no name proposed' }
@@ -392,7 +398,7 @@ export async function readContact(sb: Db, orgId: string, contactId: string, ask:
   // chance to name them — it may predate the self-introduction rule. Not when
   // they have no status line yet: that read is what writes it.
   if (pending && pending.source_fingerprint === fp && state.status_summary_at) {
-    const auto = await applySelfIdentified(sb, orgId, contactId, pending, turns, model)
+    const auto = await applySelfIdentified(sb, orgId, contactId, { ...pending, proposed_name: introducedOver(pending.proposed_name, turns, numbers) }, turns, model)
     return auto.claim_id
       ? { outcome: 'named', proposal_id: pending.id, claim_id: auto.claim_id, note: auto.note }
       : { outcome: 'unchanged', proposal_id: pending.id }
@@ -411,6 +417,9 @@ export async function readContact(sb: Db, orgId: string, contactId: string, ask:
   if (!asking) return { outcome: 'summarized', note: p.status_summary ?? undefined, musing }
   // A name is only a question for someone without one.
   if (named) p.proposed_name = null
+  // The model's pick loses to a name they introduced themselves with (Coy, 2026-10-02:
+  // "Charlie", a misheard hello, over "My name is Jonette, j o h n e t t e, Wilson").
+  else p.proposed_name = introducedOver(p.proposed_name, turns, numbers)
 
   if (pending?.id) {
     await sb.from('contact_proposals').update({ status: 'superseded' }).eq('org_id', orgId).eq('id', pending.id)

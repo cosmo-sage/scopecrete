@@ -91,3 +91,35 @@ test("a caller who corrects the name is asked about, not named", () => {
   assert.equal(findSelfIdentification("Joe", [call("THEM", t)], [THEM]), null);
   assert.equal(findSelfIdentification("Jose", [call("THEM", t)], [THEM]), null);
 });
+
+// Coy, 2026-10-02: a caller answered "Hello?", heard as "Charlie.", then said
+// "My name is Jonette, j o h n e t t e, Wilson." The reader proposed Charlie.
+// (Same shape, made-up name.)
+const SPELLED_CALL = `${THEM}: Charlie.\n${US}: Hey.\n${US}: This is Corey.\n${THEM}: I wanted to see about getting an estimate on a driveway repair.\n${US}: And what was your name, ma'am?\n${THEM}: My name is Ranette, r a y n e t t e, Holloway.\n${US}: Okay.`;
+
+test("a spelled-out name is the name, surname and all", async () => {
+  const { introducedName, withSpelledNames } = await import("../supabase/functions/enrich-contacts/rules.ts");
+  assert.equal(withSpelledNames("My name is Ranette, r a y n e t t e, Holloway."), "My name is Raynette Holloway.");
+  assert.equal(introducedName([call("THEM", SPELLED_CALL)], [THEM]), "Raynette Holloway");
+  const hit = findSelfIdentification("Raynette Holloway", [call("THEM", SPELLED_CALL, "k")], [THEM]);
+  assert.ok(hit);
+  assert.equal(hit.quote, "My name is Ranette, r a y n e t t e, Holloway.");
+});
+
+test("a lone misheard word at the top of a call is never the name", async () => {
+  const { introducedOver } = await import("../supabase/functions/enrich-contacts/pipeline.ts");
+  assert.equal(findSelfIdentification("Charlie", [call("THEM", SPELLED_CALL)], [THEM]), null);
+  assert.equal(introducedOver("Charlie", [call("THEM", SPELLED_CALL)], [THEM]), "Raynette Holloway");
+});
+
+test("spelling that doesn't belong to the word is left alone", async () => {
+  const { withSpelledNames } = await import("../supabase/functions/enrich-contacts/rules.ts");
+  assert.equal(withSpelledNames("It's Mike, a b c corner"), "It's Mike, a b c corner");
+  assert.equal(withSpelledNames("We poured Tuesday, then left"), "We poured Tuesday, then left");
+});
+
+test("our side's 'Corey' is Coy to the model", async () => {
+  const { relabelTranscript } = await import("../supabase/functions/enrich-contacts/rules.ts");
+  const out = relabelTranscript(`${US}: This is Corey.\n${THEM}: Hi Corey, it's Cory from the plant`, [THEM]);
+  assert.equal(out, "US: This is Coy.\nTHEM: Hi Corey, it's Cory from the plant");
+});

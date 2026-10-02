@@ -770,6 +770,24 @@ name is written without asking ONLY when all of these hold:
   — that is a question;
 - Coy has not undone that name for that contact before.
 
+**A spelled name is the name; a misheard hello is not (`enrich-contacts`
+v24, prompt `enrich-v13-spelled-names-2026-10-02`).** Johnette Wilson's first
+call (2026-10-02) opened with "Charlie." — the transcriber's hearing of her
+hello — and later "My name is Jonette, j o h n e t t e, Wilson." The model
+proposed Charlie and nothing named her. Now: letters spelled right after a
+heard name ARE the name (`withSpelledNames()`: same first letter, length
+within three — "Jonette, j o h n e t t e," reads "Johnette"); when the
+model's pick isn't something they introduced themselves by, the pipeline puts
+forward the one name they did introduce, with a Capitalised surname when said
+right after it (`introducedName()` / `introducedOver()`), and
+`findSelfIdentification()` still has to find it before it is written — the
+evidence is the line as spoken, spelling and all. Two different introductions
+("My name is Joe … It's Jose, spelled j o s e") are still a question. The
+prompt says a lone word at the top of a call is not a name, and that "Corey"
+on our side is Coy; the transcript the model reads has our side's
+"Corey/Cory" turned into Coy (`relabelTranscript()`). Tested in
+`tests/enrich-selfid.test.mjs`. Deployed source read back equal to the repo.
+
 It is written with `name_source='machine'`, a `contact_name_claims` row
 (`claim_type='self_identification'`, the exact line as `evidence_quote`) and
 `name_claim_id`. The row shows **Auto** and, expanded, the line with **Keep**

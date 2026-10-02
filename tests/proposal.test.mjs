@@ -139,3 +139,10 @@ test("with tax folded in, the lines still add up to their group", () => {
   const p = price({ show_tax_line: false });
   for (const g of p.groups) near(g.items.filter((i) => !i.addon && !i.hidden).reduce((a, i) => a + i.sell, 0), g.sell, 0.001);
 });
+
+test("every line an add-on: no price, and each add-on named so it can be put back", () => {
+  const p = price({ addons: lines.map((l) => l.id) });
+  assert.equal(p.ok, false);
+  assert.match(p.blocked[0], /optional add-on/);
+  assert.deepEqual(p.addons.map((a) => a.name), lines.map((l) => l.name));
+});

@@ -43,7 +43,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     takeoffTotalsFor(supabase, orgId, id),
   ]);
   // The proposal's sub split lives on the budget page too (Coy, 2026-10-02: one job page) — read, never made here.
-  const { data: draftP } = await supabase.from("job_proposals").select("split").eq("org_id", orgId).eq("job_id", id).eq("status", "draft").maybeSingle();
+  const { data: draftP } = await supabase.from("job_proposals").select("split, display").eq("org_id", orgId).eq("job_id", id).eq("status", "draft").maybeSingle();
   const lineItems = [...new Set(((lines.data ?? []) as Array<{ cost_item_id: string | null }>).map((l) => l.cost_item_id).filter(Boolean) as string[])];
   const sources = await sourcesFor(supabase, orgId, lineItems);
   const vendorIds = [...new Set(((lines.data ?? []) as Array<{ vendor_contact_id: string | null }>).map((l) => l.vendor_contact_id).filter(Boolean) as string[])];
@@ -63,7 +63,8 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     settings: p?.settings ?? { margin_pct: null, overhead_pct: null, tax_rate_pct: null },
     pricing: p ? { tax: p.tax, days: p.days, day_minimum: p.day_minimum, margin_from: p.margin_from, overhead_from: p.overhead_from } : null,
     takeoff,
-    proposal: { has_draft: !!draftP, split: (draftP?.split as string | null) ?? "none" },
+    proposal: { has_draft: !!draftP, split: (draftP?.split as string | null) ?? "none",
+      addons: (((draftP?.display as { addons?: unknown } | null)?.addons ?? []) as unknown[]).filter((x): x is string => typeof x === "string") },
   }));
 }
 

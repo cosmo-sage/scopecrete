@@ -51,7 +51,7 @@ export interface ProposalGroup {
   items: ProposalItem[];
 }
 export type ProposalPrice =
-  | { ok: false; blocked: string[] }
+  | { ok: false; blocked: string[]; /** When the add-ons are why: each, by name, so the page can put it back. */ addons?: Array<{ id: string; name: string }> }
   | {
     ok: true;
     /** Cost side, before any hiding — what the job costs and earns. */
@@ -85,7 +85,7 @@ export function priceProposal(
   const blocked = [...new Set(inTier.flatMap((l) => res.lines[l.id]?.blocked ?? []))];
   if (!counted.length) return { ok: false, blocked: [inTier.length
     ? `Every line is marked an optional add-on — mark at least one as part of the price (${inTier.length} add-on${inTier.length === 1 ? "" : "s"})`
-    : "Nothing on the budget for this option yet"] };
+    : "Nothing on the budget for this option yet"], addons: inTier.map((l) => ({ id: l.id, name: l.name })) };
   if (blocked.length) return { ok: false, blocked };
 
   const r = (l: BudgetLine) => res.lines[l.id];

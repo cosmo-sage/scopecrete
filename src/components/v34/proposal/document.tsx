@@ -212,6 +212,17 @@ export function ProposalDocument({ vm, edits, narrow }: { vm: DocVM; edits: DocE
             <div className="mt-2" style={{ background: "#F7EBC9", color: "#6B4E12", borderRadius: 4, padding: "10px 12px", fontSize: 12.5 }}>
               <b>No price yet.</b> The budget can&apos;t be priced until these are set:
               <ul style={{ margin: "6px 0 0 18px" }}>{vm.priced.blocked.slice(0, 8).map((b) => <li key={b}>{b}</li>)}</ul>
+              {/* Every line an add-on: the per-line toggle lives in the price list, which isn't drawn — so it is here (Coy, 2026-10-02). */}
+              {edits && !!vm.priced.addons?.length && (
+                <div className="sc-no-print mt-2 flex flex-col gap-1">
+                  {vm.priced.addons.map((a) => (
+                    <div key={a.id} className="flex items-center gap-2 flex-wrap">
+                      <span style={{ flex: 1, minWidth: 0 }}>{a.name} <span style={{ color: "#8C8578" }}>· optional add-on</span></span>
+                      <button type="button" onClick={() => setD({ addons: (vm.display.addons ?? []).filter((x) => x !== a.id) })} style={plainChip}>Put in the price</button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           ) : (
             <Pricing vm={vm} narrow={narrow} edits={edits} flip={flip} setD={setD} />

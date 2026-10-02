@@ -61,7 +61,7 @@ interface Data {
   /** Plan Room group totals (059), keyed by group id. */
   takeoff?: Record<string, TakeoffTotal>;
   /** The proposal draft's sub split — shown and set here too (the job page is the one place for money). */
-  proposal?: { has_draft: boolean; split: string };
+  proposal?: { has_draft: boolean; split: string; addons?: string[] };
 }
 export interface BudgetSummary {
   has_lines: boolean;
@@ -210,6 +210,10 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0 }: {
 
   const shownTiers = tier === "all" ? res.tiers : res.tiers.filter((t) => t.option_id === tier);
   const patchLine = (id: string, body: Record<string, unknown>) => run(() => call(`/api/jobs/${jobId}/budget/lines/${id}`, "PATCH", body));
+  // A line offered as an optional add-on on the proposal (priced, not in its total) — marked here
+  // too, and switched off here, so it never vanishes from sight (Coy, 2026-10-02).
+  const addons = new Set(data.proposal?.addons ?? []);
+  const setAddon = (id: string, on: boolean) => run(() => call(`/api/jobs/${jobId}/proposal`, "PATCH", { addon: { line_id: id, on } }));
 
   return (
     <section ref={measure} aria-label="Budget" className="rounded" style={{ background: T.card, border: `1px solid ${T.hair}` }}>
@@ -311,6 +315,8 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0 }: {
                               <button onClick={() => setEditing(l)} className="text-left" style={{ cursor: "pointer", color: T.ink, fontWeight: 500, ...clip, display: "block", maxWidth: 240 }}>{l.name}</button>
                               <div style={{ fontSize: 9.5, color: T.ink3, ...clip }}>
                                 {optLabel(l.option_id) ? <span style={{ color: T.chalk }}>{optLabel(l.option_id)} only · </span> : opts.length ? "every option · " : ""}
+                                {addons.has(l.id) && <><button onClick={() => void setAddon(l.id, false)} title="Optional add-on on the proposal — tap to put it back in the price"
+                                  style={{ color: T.chalk, cursor: "pointer", textDecoration: "underline dotted" }}>optional on the proposal ×</button> · </>}
                                 {l.section_role === "reinforcement" ? "reinforcement · " : ""}
                                 {asmName(l.assembly_id) ? `from ${asmName(l.assembly_id)} · ` : ""}
                                 {QTY_RULE_LABEL[l.qty_rule as keyof typeof QTY_RULE_LABEL] ?? l.qty_rule}
@@ -374,7 +380,7 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0 }: {
                 <button onClick={() => setBook({ area: a.id ?? "" })} style={{ color: T.chalk, cursor: "pointer" }}>+ Add</button>
               </div>
               {a.lines.length === 0 && <div style={{ fontSize: F.xs, color: T.ink3 }}>No lines yet.</div>}
-              {a.groups.map((g) => <GroupCard key={g.name} name={g.name} lines={g.lines} res={res} optLabel={optLabel} asmName={asmName} onOpen={setEditing}
+              {a.groups.map((g) => <GroupCard key={g.name} name={g.name} lines={g.lines} res={res} optLabel={optLabel} asmName={asmName} addons={addons} onOpen={setEditing}
                 cost={sum(g.lines, "ext_cost")} price={sum(g.lines, "ext_price")} />)}
             </div>
           ))}
@@ -484,6 +490,7 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0 }: {
         }}
         onLoadAssembly={(assemblyId, sectionId) => run(() => call(`/api/jobs/${jobId}/budget/assembly`, "POST", { assembly_id: assemblyId, section_id: sectionId }))} />
       <LineSheet line={editing} data={data} sections={sections} res={editing ? res.lines[editing.id] : null}
+        addon={editing ? addons.has(editing.id) : false} onAddon={(on) => editing && void setAddon(editing.id, on)}
         onClose={() => setEditing(null)}
         onPatch={(body) => editing && run(() => call(`/api/jobs/${jobId}/budget/lines/${editing.id}`, "PATCH", body))}
         onDelete={() => { if (editing && window.confirm(`Take ${editing.name} off the budget?`)) { const id = editing.id; setEditing(null); void run(() => call(`/api/jobs/${jobId}/budget/lines/${id}`, "DELETE")); } }} />
@@ -501,9 +508,9 @@ function TierTab({ on, onClick, label, sub }: { on: boolean; onClick: () => void
   );
 }
 
-function GroupCard({ name, lines, res, optLabel, asmName, onOpen, cost, price }: {
+function GroupCard({ name, lines, res, optLabel, asmName, addons, onOpen, cost, price }: {
   name: string; lines: Line[]; res: ReturnType<typeof priceBudget>; optLabel: (id: string | null) => string | null;
-  asmName: (id: string | null | undefined) => string | null;
+  asmName: (id: string | null | undefined) => string | null; addons: Set<string>;
   onOpen: (l: Line) => void; cost: number; price: number;
 }) {
   const [open, setOpen] = useState(true);
@@ -530,6 +537,7 @@ function GroupCard({ name, lines, res, optLabel, asmName, onOpen, cost, price }:
               <span style={{ display: "block", fontSize: 10, color: r.blocked.length ? T.hiviz : T.ink3, ...nums, ...(r.blocked.length ? { whiteSpace: "normal", overflowWrap: "anywhere" } : {}) }}>
                 {r.blocked.length ? `needs ${r.blocked.join(", ")}` : `${qtyFmt(r.qty)} ${l.unit} × ${l.unit_cost === null ? "—" : money(l.unit_cost)}${r.qty_basis === "set" ? " ✎" : " ƒ"}`}
                 {optLabel(l.option_id) ? ` · ${optLabel(l.option_id)} only` : ""}
+                {addons.has(l.id) ? " · optional on the proposal" : ""}
                 {l.section_role === "reinforcement" ? " · reinforcement" : ""}
                 {asmName(l.assembly_id) ? ` · from ${asmName(l.assembly_id)}` : ""}
               </span>
@@ -714,8 +722,9 @@ function CardPicker({ open, initialArea, onClose, data, sections, tier, tierLabe
   );
 }
 
-function LineSheet({ line, data, sections, res, onClose, onPatch, onDelete }: {
+function LineSheet({ line, data, sections, res, addon, onAddon, onClose, onPatch, onDelete }: {
   line: Line | null; data: Data; sections: Array<SectionInput & { id: string }>; res: ReturnType<typeof priceBudget>["lines"][string] | null;
+  addon: boolean; onAddon: (on: boolean) => void;
   onClose: () => void; onPatch: (body: Record<string, unknown>) => void; onDelete: () => void;
 }) {
   if (!line || !res) return <Sheet open={false} onClose={onClose} title="">{null}</Sheet>;
@@ -768,6 +777,11 @@ function LineSheet({ line, data, sections, res, onClose, onPatch, onDelete }: {
             onBlur={(e) => { if ((e.target.value.trim() || null) !== (line.description ?? null)) onPatch({ description: e.target.value }); }} /></label>
         <label className="flex items-center gap-2" style={{ fontSize: F.sm }}>
           <input type="checkbox" checked={line.show_on_doc} onChange={(e) => onPatch({ show_on_doc: e.target.checked })} style={{ width: 18, height: 18, accentColor: T.chalk }} /> Show on the proposal</label>
+        {data.proposal?.has_draft && (
+          <label className="flex items-center gap-2" style={{ fontSize: F.sm }}>
+            <input type="checkbox" checked={addon} onChange={(e) => onAddon(e.target.checked)} style={{ width: 18, height: 18, accentColor: T.chalk }} />
+            Optional add-on on the proposal <span style={{ color: T.ink3, fontSize: F.xs }}>(priced, not in the total)</span></label>
+        )}
         <button onClick={onDelete} className="self-start" style={{ ...eyebrow, color: T.red, cursor: "pointer" }}>Take off the budget</button>
       </div>
     </Sheet>

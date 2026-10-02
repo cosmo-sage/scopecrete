@@ -60,6 +60,17 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       show_item_prices: d.show_item_prices === true, show_qty: d.show_qty === true, show_tax_line: d.show_tax_line === true,
     };
   }
+  // One line in or out of the add-ons, from the budget page (it doesn't hold the whole display).
+  if ("addon" in b && !("display" in b)) {
+    const a = b.addon as Record<string, unknown> | null;
+    if (!a || typeof a.line_id !== "string" || !UUID.test(a.line_id)) return bad("Bad add-on.");
+    const { data: cur } = await supabase.from("job_proposals").select("display").eq("id", draft.id).maybeSingle();
+    const disp = (cur?.display ?? {}) as Record<string, unknown>;
+    const list = Array.isArray(disp.addons) ? (disp.addons as unknown[]).filter((x): x is string => typeof x === "string") : [];
+    const next = list.filter((x) => x !== a.line_id);
+    if (a.on === true) next.push(a.line_id);
+    patch.display = { ...disp, addons: next.slice(0, 400) };
+  }
   if ("draws" in b) {
     if (!Array.isArray(b.draws) || b.draws.length > 20) return bad("Up to 20 draws.");
     const out = [];

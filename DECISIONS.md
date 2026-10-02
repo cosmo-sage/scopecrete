@@ -1164,7 +1164,11 @@ percentage of labour — all three contradict this section and §4.
   counts; an optional add-on is priced and listed, never in the total (and the
   rest is rounded without it). When every line is an add-on the proposal
   says so ("Every line is marked an optional add-on …"), not "nothing on
-  the budget". Tax stays a pass-through: its own line, or
+  the budget", and lists each add-on with **Put in the price** — the
+  per-line toggle is in the price list, which a blocked proposal doesn't draw
+  (Coy, 2026-10-02: "I clicked it, and then it disappeared"). The budget
+  marks such a line "optional on the proposal ×" (tap to put it back) and
+  its line sheet has the switch (`PATCH …/proposal {addon: {line_id, on}}`). Tax stays a pass-through: its own line, or
   folded into the taxed lines (same total either way). Draws (% or $) must add
   up to the total within $1 before Print or Final (`drawsCheck()`, checked
   again on the server). **Project types** (`org_project_types`: Residential,

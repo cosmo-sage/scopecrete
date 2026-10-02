@@ -85,6 +85,24 @@ function ago(iso: string | null | undefined): string {
   return /^\d+[mhd]$/.test(r) ? `${r} ago` : `on ${r}`;
 }
 
+/**
+ * The line's button (Coy, 2026-10-02): a diamond that always glows, its colour
+ * and rhythm the kind of work — grey and slow when idle — with a small arrow
+ * under it that says it opens. It replaced the dot on the left and the chevron
+ * on the right, so the words get the whole width.
+ */
+function Diamond({ work, open }: { work: Work; open: boolean }) {
+  const colour = `var(--sc-work-dot-${work ?? "idle"}, ${work ? WORK_DOT[work] : "#9C9385"})`;
+  return (
+    <span aria-hidden="true" className="flex flex-col items-center justify-center" style={{ flex: "0 0 auto", width: 14, gap: 2 }}>
+      <span className={`sc-dia sc-dia-${work ?? "idle"}`} style={{ width: 9, height: 9, background: colour, color: colour, transform: "rotate(45deg)", borderRadius: 1.5, display: "block" }} />
+      <svg width="8" height="5" viewBox="0 0 8 5" style={{ display: "block", transform: open ? "rotate(180deg)" : "none", transition: "transform .15s" }}>
+        <path d="M1 1 L4 4 L7 1" fill="none" stroke="currentColor" strokeWidth="1.3" style={{ color: "var(--sc-pencil-muted, #8A8478)" }} />
+      </svg>
+    </span>
+  );
+}
+
 function Dot({ tone, live, work }: { tone: Tone; live: boolean; work?: Work }) {
   const cls = work ? `sc-dot-${work}` : live ? "sc-dot-live" : undefined;
   return (
@@ -189,7 +207,6 @@ export function ActivityLine({ busy, onWorking, inline }: {
       tone: "quiet", at: null,
     };
   }
-  const working = busy || running || ocr.running;
   // The streamed reply already arrives a token at a time; everything else types
   // in — drawn by CSS (a stepped clip on one element), never a render per letter.
   const typing = !busy && line.summary.length > 0;
@@ -204,8 +221,8 @@ export function ActivityLine({ busy, onWorking, inline }: {
         aria-label={open ? "Hide Dusty's activity" : "Show Dusty's activity"}
         className="w-full flex items-center gap-2 text-left"
         // Strict containment: a new line of text never makes the browser lay out the page around it.
-        style={{ height: 30, padding: "0 4px 0 8px", background: "transparent", border: "none", cursor: "pointer", contain: "strict" }}>
-        <Dot key={`${work}-${line.key}`} tone={line.tone} live={working} work={work} />
+        style={{ height: 30, padding: "0 4px 0 4px", background: "transparent", border: "none", cursor: "pointer", contain: "strict" }}>
+        <Diamond key={`${work}-${line.key}`} work={work} open={open} />
         <span aria-live="polite" className="sc-activity-text"
           style={{ flex: 1, minWidth: 0, color: line.tone === "warn" ? T.hivizText : undefined, ...clip }}>
           {typing ? (
@@ -216,10 +233,6 @@ export function ActivityLine({ busy, onWorking, inline }: {
           ) : line.summary}
         </span>
         {line.at && <span className="sc-activity-time" style={nums}>{relTime(line.at)}</span>}
-        <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"
-          style={{ flex: "0 0 auto", transform: open ? "rotate(180deg)" : "none", transition: "transform .15s" }}>
-          <path d="M1.5 3.5 L5 7 L8.5 3.5" fill="none" stroke="#5A5F66" strokeWidth="1.5" />
-        </svg>
       </button>
 
       {open && (

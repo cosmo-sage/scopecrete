@@ -4,7 +4,7 @@ Ground truth for every agent working this repo. If code disagrees with this
 document, the code is wrong or this document is stale — resolve it, don't
 guess. Update this file in the same PR that changes the behavior it describes.
 
-Last updated: 2026-10-02
+Last updated: 2026-10-02 (unit-price areas, square yards)
 
 ---
 
@@ -1177,6 +1177,20 @@ percentage of labour — all three contradict this section and §4.
   wrong. Re-measuring moves the line. The totals come from one reader,
   `loadTakeoff()` (`src/lib/plans-server.ts`), used by the budget API, the
   Dashboard's `job-totals.ts` and Dusty — the same number everywhere.
+- **Square yards and areas with no sides (Coy, 2026-10-02).** *"The existing
+  section fields do not apply to government work … I need to be able to
+  remove the length, width … calculate not just square feet, but square
+  yards."* A section is **Measured by** Length × width or **Area only**; area
+  only keeps the area (and the thickness), typed in sq ft or sq yd and stored
+  as sq ft in `sqft_override` (no migration; the sq ft / sq yd choice is kept
+  per device, sq yd by default when the bid's line says SY). A bid section
+  offers **Use the bid's 1,769.80 SY** — one tap, never filled by itself. A
+  card counted **by the area** whose unit is SY counts square yards (sq ft ÷
+  9, `ruleQty()`; a takeoff area group feeds an SY card the same way). The
+  budget lists every area, lines or not, each with **+ Add**, its size and
+  its price per SY / SF — how a unit-price bid reads. **Not in the Price
+  book? Make it here** in the card picker creates the card in the Price book
+  and puts it on the budget in one go (or on this budget only).
 - **Base, vapor barrier and day-rate equipment** are cards like anything
   else (by the sq ft, by the day); nothing is priced that has no card.
 - **Dictating a section (2026-09-28).** Dictate on a section card records up
@@ -1626,7 +1640,10 @@ expected start date per quoted job before it means anything. Add the field.
   Dusty reply shows its own tokens. **The dot says what kind of work
   (2026-09-30):** blue, slow glow — reading someone; amber, quick — Dusty
   answering; green, one blink — just named or filed; red, steady — the
-  reader isn't working; grey — idle. Reduced motion stills it. On a desktop
+  reader isn't working; grey — idle. Reduced motion stills it. **Since 2026-10-02 it
+  is a diamond** that always glows (idle a slow grey breath), with a small
+  arrow under it — the expand button; the chevron on the right is gone so
+  musings get the whole width (Coy). On a desktop
   the line sits in the header beside the logo and its drop-down is ~560px
   wide under it; on a phone it is the row under the header. The emblem and
   the line from it are gone; while a read runs the footer Dusty shows the
@@ -1820,6 +1837,11 @@ expected start date per quoted job before it means anything. Add the field.
   a longer wait only cost minutes — so such a sheet is read in part). Words are kept in page points (`ocr_words`), the
   text as rows with " | " between columns so a table row reads
   "104+55 | RT | DRIVE | 39" (`ocr_text`), mean confidence (`ocr_conf`).
+  **A sheet is read once** (stamped `ocr_title_at` / `ocr_at`); a desktop
+  starts the rest on its own, a **phone only on a tap** ("Read the rest" —
+  it crashed mobile browsers, Coy 2026-10-02), with no 4× re-reads there;
+  **Pause** holds it for the tab; the Plan Room shows "36 of 74 scanned
+  sheets read".
   Saved per sheet as it finishes (`POST /api/plan-sheets/[id]/ocr`: never
   over a number or title Coy typed; a printed scale is stored as printed,
   applied only by his tap). **Where it shows:** the activity line (header on
@@ -1903,6 +1925,10 @@ expected start date per quoted job before it means anything. Add the field.
   Box folder and what was copied and read, **Scope from the bid** (each
   item with its sheet, spec and line) and **Undo bid**. The Dashboard has a
   **Bids due** tile (open bid invites by due date).
+- **Job header (2026-10-02, Coy's notes on the Burgess job):** ‹ Jobs and
+  the job name on one row (bold, smaller), the four chips small on one row
+  under it, the customer line and description, then **Plan room** and
+  **Proposal** small and right-aligned above the money strip.
 - **Job header (2026-09-28)** — four tappable chips, each opening its list:
   **Status** (the seven stages, with W.I.P.'s won / scheduled / pouring),
   **Type**, **Source** and **Vendors (n)** (crew on the job, add by subtype)
@@ -2044,7 +2070,10 @@ genuinely required.
 ## 10. Parked
 
 - State and public work — separate engine. Prevailing wage, certified payroll,
-  bid bonds, prequal, DOT specs, unit-price bid schedules. Do not bolt onto
-  the private-work estimator.
+  bid bonds, prequal, DOT specs. Do not bolt onto the private-work estimator.
+  **Exception (Coy, 2026-10-02):** a public bid's unit-price items (SY, EA)
+  are priced in the ordinary budget — areas measured by area alone, cards
+  counted in square yards (§3). That is the estimator, not the public-work
+  engine.
 - Outbound texting needs 10DLC registration. Launch voice-first.
 - All outbound contact is the contractor himself. No bot-initiated outreach.

@@ -15,7 +15,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { T, F, disp, strong, clip } from "@/lib/v34/tokens";
 import { sendBytes } from "@/components/v34/files-panel";
 import { openPdf, readPlanPages } from "@/lib/pdf";
-import { startPlanOcr, usePlanOcr } from "@/lib/v34/plan-ocr-runner";
+import { mayAutoRead, ocrPending, pausePlanOcr, resumePlanOcrAllowed, startPlanOcr, usePlanOcr } from "@/lib/v34/plan-ocr-runner";
 import { call, isDrawing, isPlanFile, type Param, type PlanFile, type PlansData, type Sheet } from "./shared";
 import { FilesStep, SheetsStep } from "./files-sheets";
 import { TakeoffStep } from "./takeoff";
@@ -79,14 +79,26 @@ export function PlanRoom({ jobId }: { jobId: string }) {
 
   // Scanned drawings are read with OCR in the background (migration 064): title blocks, then
   // whole sheets. It keeps going if Coy leaves the page; the activity line shows where it is.
+  // A sheet is read once. A desktop starts by itself; a phone only on a tap (it ran out of
+  // memory on the 10,000-px scans), and Pause holds it for the rest of the tab.
   const ocr = usePlanOcr();
-  useEffect(() => {
-    if (!data || Object.keys(reading).length) return;
+  const ocrInput = useMemo(() => {
+    if (!data) return null;
     const room = new Set(data.files.filter((f) => f.in_plan_room && f.kind === "pdf" && f.url).map((f) => f.id));
     const urls = new Map(data.files.filter((f) => room.has(f.id)).map((f) => [f.id, f.url as string]));
     const drawings = data.sheets.filter((s) => room.has(s.file_id) && isDrawing(s));
-    if (drawings.length) startPlanOcr({ id: jobId, title: data.job?.title ?? null }, drawings, urls);
-  }, [data, reading, jobId]);
+    return { urls, drawings, left: ocrPending(drawings, urls) };
+  }, [data]);
+  const readPlans = useCallback(() => {
+    if (!ocrInput?.drawings.length) return;
+    resumePlanOcrAllowed(jobId);
+    startPlanOcr({ id: jobId, title: data?.job?.title ?? null }, ocrInput.drawings, ocrInput.urls);
+  }, [ocrInput, jobId, data?.job?.title]);
+  useEffect(() => {
+    if (!ocrInput || Object.keys(reading).length || !ocrInput.drawings.length || !mayAutoRead(jobId)) return;
+    startPlanOcr({ id: jobId, title: data?.job?.title ?? null }, ocrInput.drawings, ocrInput.urls);
+  }, [ocrInput, reading, jobId, data?.job?.title]);
+  const ocrLeft = ocrInput ? ocrInput.left.titles.length + ocrInput.left.full.length : 0;
   // What it read shows up as it goes — a fresh look every few sheets, and at the end.
   const lastSaved = useRef(0);
   useEffect(() => {
@@ -144,11 +156,17 @@ export function PlanRoom({ jobId }: { jobId: string }) {
             <span style={{ fontSize: F.sm, fontWeight: 600, ...clip }}>{data?.job?.title || "This job"}</span>
           </Link>
           <span className="flex-1" />
-          {ocr.running && ocr.jobId === jobId && (
-            <span title={ocr.label} style={{ fontSize: 11.5, borderRadius: 3, padding: "3px 8px", background: T.dustyTint, color: T.ink2, fontWeight: 600 }}>
+          {ocr.running && ocr.jobId === jobId ? (
+            <span className="flex items-center gap-1.5" title={ocr.label} style={{ fontSize: 11.5, borderRadius: 3, padding: "3px 8px", background: T.dustyTint, color: T.ink2, fontWeight: 600 }}>
               Reading {ocr.phase === "title" ? "sheet titles" : "the plans"} · {ocr.done + 1} of {ocr.total}
+              <button onClick={() => pausePlanOcr(jobId)} style={{ color: T.chalk, cursor: "pointer", fontWeight: 600 }}>Pause</button>
             </span>
-          )}
+          ) : ocrInput && ocrInput.left.scans > 0 ? (
+            <span className="flex items-center gap-1.5" style={{ fontSize: 11.5, borderRadius: 3, padding: "3px 8px", background: T.slab, color: T.ink2, fontWeight: 600 }}>
+              {ocrInput.left.read} of {ocrInput.left.scans} scanned sheets read
+              {ocrLeft > 0 && <button onClick={readPlans} style={{ color: T.chalk, cursor: "pointer", fontWeight: 600 }}>Read the rest</button>}
+            </span>
+          ) : null}
           {sheets.length > 0 && (
             <span style={{ fontSize: 11.5, borderRadius: 3, padding: "3px 8px", background: scaled === sheets.length ? T.greenDim : T.sunDim, color: scaled === sheets.length ? T.green : T.sun, fontWeight: 600 }}>
               {scaled === sheets.length ? "✓ " : ""}{scaled} of {sheets.length} sheets scaled

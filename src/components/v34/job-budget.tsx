@@ -27,7 +27,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { T, F, disp, eyebrow, nums, clip, money, money0, formatPhone } from "@/lib/v34/tokens";
 import { Sheet } from "@/components/v34/primitives";
-import { budget as priceBudget, jobMinimum, type BudgetLine, type BudgetSettings, type SectionInput, type TakeoffTotal, type TierTotal } from "@/lib/engine";
+import { budget as priceBudget, jobMinimum, quantities, type BudgetLine, type BudgetSettings, type SectionInput, type TakeoffTotal, type TierTotal } from "@/lib/engine";
 import { COST_TYPES, COST_TYPE_LABEL, QTY_RULE_LABEL, type CostType } from "@/lib/cost-cards";
 import { useWide } from "@/lib/v34/use-wide";
 import { Cell } from "@/components/v34/cell";
@@ -78,8 +78,16 @@ async function call(url: string, method: string, body?: unknown) {
 const qtyFmt = (n: number | null) => n === null ? "—" : n.toLocaleString("en-US", { maximumFractionDigits: 2 });
 const pct = (n: number | null) => n === null ? "—" : `${(n * 100).toFixed(1)}%`;
 
+type Area = SectionInput & { id: string; source_ref?: string | null };
+
+/** How an area's size is said on the budget: square yards for a bid item counted in SY (or when Coy picked sq yd on it), else square feet. */
+function areaUnit(s: Area): "sy" | "sf" {
+  try { const v = localStorage.getItem(`sc:area-unit:${s.id}`); if (v === "sf" || v === "sy") return v; } catch { /* no storage */ }
+  return /\bSY\b/.test(s.source_ref ?? "") ? "sy" : "sf";
+}
+
 export function JobBudget({ jobId, sections, days, onSummary, refresh = 0 }: {
-  jobId: string; sections: Array<SectionInput & { id: string }>; days: number | null;
+  jobId: string; sections: Area[]; days: number | null;
   onSummary?: (s: BudgetSummary) => void;
   /** Bumped by the scope page when a section change may have changed the budget on the server. */
   refresh?: number;
@@ -88,7 +96,8 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0 }: {
   const [err, setErr] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
   const [tier, setTier] = useState<string>("all");
-  const [picker, setPicker] = useState(false);
+  // The picker opens on an area (its own "+ Add") or on the whole job.
+  const [picker, setPicker] = useState<{ area: string } | null>(null);
   const [editing, setEditing] = useState<Line | null>(null);
   const [taxOpen, setTaxOpen] = useState(false);
   const [measure, wide] = useWide<HTMLDivElement>(900);
@@ -157,12 +166,26 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0 }: {
     return c.unit_cost !== l.unit_cost ? "card price changed — update" : null;
   };
 
-  // area ▸ group ▸ lines, in the order the scope lists its areas.
+  // area ▸ group ▸ lines, in the order the scope lists its areas. Every area
+  // shows, lines or not, so each one has its own "+ Add" (Coy, 2026-10-02: the
+  // bid's three items had no way onto the budget).
   const areas = [...sections.map((s) => s.id), null].map((aid) => {
     const inArea = visible.filter((l) => (l.section_id ?? null) === aid || (aid === null && l.section_id && !sections.some((s) => s.id === l.section_id)));
     const groups = [...new Set(inArea.map(groupName))].map((g) => ({ name: g, lines: inArea.filter((l) => groupName(l) === g) }));
     return { id: aid, name: areaName(aid), lines: inArea, groups };
-  }).filter((a) => a.lines.length);
+  }).filter((a) => a.lines.length || a.id !== null);
+  // An area's size, and its price per unit of it — how a unit-price bid reads ("$/SY").
+  const areaSize = (aid: string | null): { text: string; per: (price: number) => string } | null => {
+    const s = aid ? sections.find((x) => x.id === aid) : null;
+    if (!s) return null;
+    const q = quantities(s);
+    if (q.sqft === null || q.sqft <= 0) return null;
+    const sy = areaUnit(s) === "sy";
+    const n = sy ? q.sqft / 9 : q.sqft;
+    const u = sy ? "sq yd" : "sq ft";
+    return { text: `${qtyFmt(Math.round(n * 100) / 100)} ${u}`, per: (price) => `${money(price / n)}/${sy ? "SY" : "SF"}` };
+  };
+  const areaPriced = (ls: Line[]) => ls.length > 0 && ls.every((l) => res.lines[l.id]?.ext_price !== null);
   const sum = (ls: Line[], k: "ext_cost" | "ext_price" | "overhead") => ls.reduce((a, l) => a + (res.lines[l.id]?.[k] ?? 0), 0);
   // What is left after cost and O.H. — the same margin the lines and totals show.
   const marginOf = (ls: Line[]) => { const p = sum(ls, "ext_price"); return p > 0 ? pct((p - sum(ls, "ext_cost") - sum(ls, "overhead")) / p) : ""; };
@@ -177,7 +200,7 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0 }: {
         <span style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 700 }}>Budget</span>
         <span style={{ fontSize: F.xs, color: T.ink3 }}>qty × unit cost → + O.H. → ÷ (1 − margin) → price</span>
         <span className="flex-1" />
-        <button onClick={() => setPicker(true)} className="rounded px-2.5"
+        <button onClick={() => setPicker({ area: "" })} className="rounded px-2.5"
           style={{ height: 30, background: T.ink, color: T.card, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", letterSpacing: ".06em", cursor: "pointer" }}>
           + Add from cost cards
         </button>
@@ -233,14 +256,23 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0 }: {
               {areas.map((a) => (
                 <React.Fragment key={a.id ?? "job"}>
                   <tr style={{ background: T.ink, color: T.card }}>
-                    <td colSpan={5} style={{ padding: "5px 8px", fontFamily: disp, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".04em" }}>{a.name}</td>
-                    <td style={{ padding: "5px 8px", textAlign: "right" }}>{money0(sum(a.lines, "ext_cost"))}</td>
-                    <td style={{ padding: "5px 8px", textAlign: "right" }}>{money0(sum(a.lines, "overhead"))}</td>
+                    <td colSpan={5} style={{ padding: "5px 8px" }}>
+                      <span style={{ fontFamily: disp, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".04em" }}>{a.name}</span>
+                      {areaSize(a.id) && <span style={{ fontSize: F.xs, opacity: 0.75, marginLeft: 8 }}>{areaSize(a.id)!.text}</span>}
+                      <button onClick={() => setPicker({ area: a.id ?? "" })} style={{ ...eyebrow, color: T.card, opacity: 0.85, marginLeft: 10, cursor: "pointer", textDecoration: "underline" }}>+ Add</button>
+                    </td>
+                    <td style={{ padding: "5px 8px", textAlign: "right" }}>{a.lines.length ? money0(sum(a.lines, "ext_cost")) : ""}</td>
+                    <td style={{ padding: "5px 8px", textAlign: "right" }}>{a.lines.length ? money0(sum(a.lines, "overhead")) : ""}</td>
                     <td style={{ padding: "5px 8px", textAlign: "right" }}>{marginOf(a.lines)}</td>
-                    <td />
-                    <td style={{ padding: "5px 8px", textAlign: "right" }}>{money0(sum(a.lines, "ext_price"))}</td>
+                    <td style={{ padding: "5px 8px", textAlign: "right", whiteSpace: "nowrap" }}>{areaPriced(a.lines) && areaSize(a.id) ? areaSize(a.id)!.per(sum(a.lines, "ext_price")) : ""}</td>
+                    <td style={{ padding: "5px 8px", textAlign: "right" }}>{a.lines.length ? money0(sum(a.lines, "ext_price")) : ""}</td>
                     <td />
                   </tr>
+                  {a.lines.length === 0 && (
+                    <tr><td colSpan={11} style={{ padding: "6px 8px 6px 16px", fontSize: F.xs, color: T.ink3 }}>
+                      No lines on this area yet — <button onClick={() => setPicker({ area: a.id ?? "" })} style={{ color: T.chalk, cursor: "pointer" }}>add cards from the Price book</button>.
+                    </td></tr>
+                  )}
                   {a.groups.map((g) => (
                     <React.Fragment key={g.name}>
                       <tr style={{ background: T.hairSoft }}>
@@ -315,9 +347,15 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0 }: {
         <div className="px-3 pb-2 flex flex-col gap-2">
           {areas.map((a) => (
             <div key={a.id ?? "job"}>
-              <div className="flex items-baseline justify-between" style={{ ...eyebrow, color: T.ink, marginTop: 4 }}>
-                <span>{a.name}</span><span style={{ ...nums }}>{money0(sum(a.lines, "ext_price"))}</span>
+              <div className="flex items-baseline gap-2" style={{ ...eyebrow, color: T.ink, marginTop: 4 }}>
+                <span style={{ minWidth: 0, ...clip }}>{a.name}</span>
+                {areaSize(a.id) && <span style={{ color: T.ink3, textTransform: "none", letterSpacing: 0, whiteSpace: "nowrap" }}>{areaSize(a.id)!.text}</span>}
+                <span className="flex-1" />
+                {areaPriced(a.lines) && areaSize(a.id) && <span style={{ color: T.ink3, textTransform: "none", letterSpacing: 0, ...nums }}>{areaSize(a.id)!.per(sum(a.lines, "ext_price"))}</span>}
+                {a.lines.length > 0 && <span style={{ ...nums }}>{money0(sum(a.lines, "ext_price"))}</span>}
+                <button onClick={() => setPicker({ area: a.id ?? "" })} style={{ color: T.chalk, cursor: "pointer" }}>+ Add</button>
               </div>
+              {a.lines.length === 0 && <div style={{ fontSize: F.xs, color: T.ink3 }}>No lines yet.</div>}
               {a.groups.map((g) => <GroupCard key={g.name} name={g.name} lines={g.lines} res={res} optLabel={optLabel} asmName={asmName} onOpen={setEditing}
                 cost={sum(g.lines, "ext_cost")} price={sum(g.lines, "ext_price")} />)}
             </div>
@@ -387,9 +425,14 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0 }: {
 
       <TaxSheet open={taxOpen} onClose={() => setTaxOpen(false)} tax={data.pricing?.tax ?? null}
         onSave={(body) => run(() => call(`/api/jobs/${jobId}`, "PATCH", body)).then(() => setTaxOpen(false))} />
-      <CardPicker open={picker} onClose={() => setPicker(false)} data={data} sections={sections} tier={tier === "all" ? null : tier}
+      <CardPicker key={picker ? `p-${picker.area}` : "closed"} open={!!picker} initialArea={picker?.area ?? ""} onClose={() => setPicker(null)} data={data} sections={sections} tier={tier === "all" ? null : tier}
         tierLabel={optLabel(tier === "all" ? null : tier)}
         onAdd={(body) => run(() => call(`/api/jobs/${jobId}/budget/lines`, "POST", body))}
+        onNewCard={async (card, line) => {
+          // A new Price book card, then onto this budget — one connection, not a one-off.
+          const b = await call("/api/cost-items", "POST", card);
+          await run(() => call(`/api/jobs/${jobId}/budget/lines`, "POST", { ...line, cost_item_id: b.item.id }));
+        }}
         onLoadAssembly={(assemblyId, sectionId) => run(() => call(`/api/jobs/${jobId}/budget/assembly`, "POST", { assembly_id: assemblyId, section_id: sectionId }))} />
       <LineSheet line={editing} data={data} sections={sections} res={editing ? res.lines[editing.id] : null}
         onClose={() => setEditing(null)}
@@ -449,15 +492,18 @@ function GroupCard({ name, lines, res, optLabel, asmName, onOpen, cost, price }:
   );
 }
 
-function CardPicker({ open, onClose, data, sections, tier, tierLabel, onAdd, onLoadAssembly }: {
-  open: boolean; onClose: () => void; data: Data; sections: Array<SectionInput & { id: string }>;
+function CardPicker({ open, initialArea, onClose, data, sections, tier, tierLabel, onAdd, onNewCard, onLoadAssembly }: {
+  open: boolean; initialArea: string; onClose: () => void; data: Data; sections: Area[];
   tier: string | null; tierLabel: string | null; onAdd: (body: Record<string, unknown>) => Promise<void>;
+  onNewCard: (card: Record<string, unknown>, line: Record<string, unknown>) => Promise<void>;
   onLoadAssembly: (assemblyId: string, sectionId: string) => Promise<void>;
 }) {
   const [openG, setOpenG] = useState<Record<string, boolean>>({});
   const [q, setQ] = useState("");
-  const [area, setArea] = useState<string>("");
-  const [custom, setCustom] = useState({ name: "", cost_type: "material" as CostType, unit: "each", unit_cost: "" });
+  const [area, setArea] = useState<string>(initialArea);
+  const areaSec = sections.find((x) => x.id === area);
+  const [custom, setCustom] = useState({ name: "", cost_type: "material" as CostType, unit: areaSec && areaUnit(areaSec) === "sy" ? "SY" : "each", unit_cost: "", qty_rule: "manual", save: true });
+  const [saving, setSaving] = useState<string | null>(null);
   const [added, setAdded] = useState<string | null>(null);
   const match = (c: Card) => !q.trim() || c.name.toLowerCase().includes(q.trim().toLowerCase());
   const groups = [...data.groups.map((g) => ({ id: g.id, name: g.name, cards: data.cards.filter((c) => c.cost_group_id === g.id && match(c)) })),
@@ -516,18 +562,44 @@ function CardPicker({ open, onClose, data, sections, tier, tierLabel, onAdd, onL
           </div>
         ))}
         <div className="rounded p-2.5" style={{ border: `1px dashed ${T.hair}` }}>
-          <div style={{ ...eyebrow, color: T.ink }}>A one-off line</div>
+          <div style={{ ...eyebrow, color: T.ink }}>Not in the Price book? Make it here</div>
           <div className="grid grid-cols-2 gap-2 mt-1">
-            <input value={custom.name} onChange={(e) => setCustom((c) => ({ ...c, name: e.target.value }))} placeholder="Name" aria-label="One-off name" style={{ ...field, gridColumn: "1 / -1" }} />
-            <select value={custom.cost_type} onChange={(e) => setCustom((c) => ({ ...c, cost_type: e.target.value as CostType }))} style={field} aria-label="One-off type">
+            <input value={custom.name} onChange={(e) => setCustom((c) => ({ ...c, name: e.target.value }))} placeholder="Name (e.g. Concrete walk 4in — labor)" aria-label="New item name" style={{ ...field, gridColumn: "1 / -1" }} />
+            <select value={custom.cost_type} onChange={(e) => setCustom((c) => ({ ...c, cost_type: e.target.value as CostType }))} style={field} aria-label="New item type">
               {COST_TYPES.map((t) => <option key={t} value={t}>{COST_TYPE_LABEL[t]}</option>)}
             </select>
-            <input value={custom.unit} onChange={(e) => setCustom((c) => ({ ...c, unit: e.target.value }))} placeholder="unit" aria-label="One-off unit" style={field} />
-            <input value={custom.unit_cost} onChange={(e) => setCustom((c) => ({ ...c, unit_cost: e.target.value }))} placeholder="unit cost" inputMode="decimal" aria-label="One-off unit cost" style={field} />
-            <button disabled={!custom.name.trim()} onClick={() => void add({ ...custom, qty_rule: "manual", unit_cost: custom.unit_cost === "" ? null : custom.unit_cost }, custom.name).then(() => setCustom({ name: "", cost_type: "material", unit: "each", unit_cost: "" }))}
-              className="rounded" style={{ height: 34, background: T.ink, color: T.card, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", opacity: custom.name.trim() ? 1 : 0.5 }}>Add line</button>
+            <input value={custom.unit} onChange={(e) => setCustom((c) => ({ ...c, unit: e.target.value }))} placeholder="unit" aria-label="New item unit" list="sc-units" style={field} />
+            <datalist id="sc-units">{["SY", "SF", "CY", "LF", "EA", "day", "LS"].map((u) => <option key={u} value={u} />)}</datalist>
+            <select value={custom.qty_rule} onChange={(e) => setCustom((c) => ({ ...c, qty_rule: e.target.value }))} style={field} aria-label="How it is counted">
+              <option value="manual">I&apos;ll type the quantity</option>
+              <option value="per_sqft">By the area (SF, or SY by its unit)</option>
+              <option value="per_cy">By the yard of concrete</option>
+              <option value="per_lf_perimeter">By the foot of edge</option>
+              <option value="per_day">By the day</option>
+              <option value="per_job">Once per job</option>
+            </select>
+            <input value={custom.unit_cost} onChange={(e) => setCustom((c) => ({ ...c, unit_cost: e.target.value }))} placeholder="unit cost" inputMode="decimal" aria-label="New item unit cost" style={field} />
+            <label className="flex items-center gap-1.5" style={{ fontSize: F.xs, gridColumn: "1 / -1" }}>
+              <input type="checkbox" checked={custom.save} onChange={(e) => setCustom((c) => ({ ...c, save: e.target.checked }))} style={{ width: 16, height: 16, accentColor: T.chalk }} />
+              Save it to the Price book too (so the next job can use it)
+            </label>
+            <button disabled={!custom.name.trim() || !!saving} style={{ height: 34, background: T.ink, color: T.card, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", opacity: custom.name.trim() ? 1 : 0.5, gridColumn: "1 / -1", borderRadius: 4 }}
+              onClick={() => {
+                const name = custom.name.trim();
+                const unit_cost = custom.unit_cost.trim() === "" ? null : custom.unit_cost;
+                setSaving(name);
+                const done = custom.save
+                  ? onNewCard({ name, cost_type: custom.cost_type, unit: custom.unit, unit_cost, qty_rule: custom.qty_rule, rule_params: {} }, base)
+                  : onAdd({ ...base, name, cost_type: custom.cost_type, unit: custom.unit, qty_rule: custom.qty_rule, unit_cost });
+                void done.then(() => { setAdded(name); setTimeout(() => setAdded(null), 1600); setCustom((c) => ({ ...c, name: "", unit_cost: "" })); })
+                  .finally(() => setSaving(null));
+              }}>
+              {saving ? "Adding…" : custom.save ? "Add to the Price book and this budget" : "Add to this budget only"}
+            </button>
           </div>
-          <div style={{ fontSize: 9.5, color: T.ink3, marginTop: 3 }}>Type its quantity on the budget.</div>
+          <div style={{ fontSize: 9.5, color: T.ink3, marginTop: 3 }}>
+            {custom.qty_rule === "manual" ? "Type its quantity on the budget." : custom.qty_rule === "per_cy" ? "Counted from the area and thickness; set its waste % on the card." : "Counted from the area it is on."}
+          </div>
         </div>
       </div>
     </Sheet>

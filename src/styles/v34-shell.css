@@ -198,6 +198,16 @@
 @keyframes scDotBlink { 0% { box-shadow: 0 0 0 0 currentColor; } 30% { box-shadow: 0 0 8px 2px currentColor; } 100% { box-shadow: 0 0 0 0 currentColor; } }
 .sc-dot-done  { color: #2F8A5B; animation: scDotBlink 1.2s ease-out 1; }
 .sc-dot-warn  { color: #B5412C; box-shadow: 0 0 0 3px rgba(181,65,44,.18); }
+/* The activity diamond (Coy, 2026-10-02): always a glow — idle a slow grey
+   breath, reading blue, answering quick amber, just done one green flare,
+   broken steady red. The glow stays inside the line's button. */
+@keyframes scDiaGlow { 0%, 100% { box-shadow: 0 0 5px 1px currentColor; opacity: 1; } 50% { box-shadow: 0 0 1px 0 currentColor; opacity: .55; } }
+@keyframes scDiaFlare { 0% { box-shadow: 0 0 0 0 currentColor; } 30% { box-shadow: 0 0 9px 3px currentColor; } 100% { box-shadow: 0 0 4px 1px currentColor; } }
+.sc-dia-idle  { animation: scDiaGlow 3.6s ease-in-out infinite; }
+.sc-dia-read  { animation: scDiaGlow 2.2s ease-in-out infinite; }
+.sc-dia-reply { animation: scDiaGlow 0.8s ease-in-out infinite; }
+.sc-dia-done  { animation: scDiaFlare 1.4s ease-out 1 both; }
+.sc-dia-warn  { box-shadow: 0 0 6px 2px currentColor; }
 /* Dusty's sprite changes crossfade (the pack's 200 ms). */
 @keyframes scDustyIn { from { opacity: 0; } to { opacity: 1; } }
 .sc-dusty { animation: scDustyIn 0.2s ease-out; }
@@ -237,6 +247,10 @@
   .sc-dot-read,
   .sc-dot-reply,
   .sc-dot-done,
+  .sc-dia-idle,
+  .sc-dia-read,
+  .sc-dia-reply,
+  .sc-dia-done,
   .sc-dusty,
   .sc-tool-up { animation: none; }
 }

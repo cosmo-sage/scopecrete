@@ -213,10 +213,12 @@ export interface TakeoffTotal {
   blocked: string | null;
 }
 
-/** A card's unit said as SF / LF / EA / CY, or null when it is none of them. */
-export function takeoffUnit(unit: string): "SF" | "LF" | "EA" | "CY" | null {
+/** A card's unit said as SF / SY / LF / EA / CY, or null when it is none of them. */
+export function takeoffUnit(unit: string): "SF" | "SY" | "LF" | "EA" | "CY" | null {
   const u = unit.trim().toLowerCase().replace(/[.\s]/g, "");
   if (["sf", "sqft", "sft", "ft2", "squarefeet", "squarefoot"].includes(u)) return "SF";
+  // Government bid items are counted in square yards (Coy, 2026-10-02: "706-01 Concrete Walk … 1,769.80 SY").
+  if (["sy", "sqyd", "syd", "yd2", "squareyard", "squareyards"].includes(u)) return "SY";
   if (["lf", "ft", "linft", "linearfeet", "linearfoot", "feet", "foot"].includes(u)) return "LF";
   if (["ea", "each", "count", "ct", "pcs", "pc", "no"].includes(u)) return "EA";
   if (["cy", "yd", "yd3", "cuyd", "cubicyard", "cubicyards", "yards", "yard"].includes(u)) return "CY";
@@ -294,6 +296,7 @@ export function ruleQty(
     if (t.blocked || t.qty === null) return { ok: false, missing: [`Takeoff: ${t.name} — ${t.blocked ?? "nothing measured"}`] };
     const want = takeoffUnit(line.unit ?? "");
     if (want === t.unit) return { ok: true, qty: t.qty, basis: "rule", note: `takeoff · ${t.name}` };
+    if (want === "SY" && t.unit === "SF") return { ok: true, qty: Math.round((t.qty / 9) * 100) / 100, basis: "rule", note: `takeoff · ${t.name}, sq yd` };
     if (want === "CY" && t.unit === "SF") {
       return t.cy !== null ? { ok: true, qty: Math.round(t.cy * 100) / 100, basis: "rule", note: `takeoff · ${t.name}, yards` }
         : { ok: false, missing: [`Takeoff: ${t.name} — a depth (to count yards)`] };
@@ -316,7 +319,10 @@ export function ruleQty(
     case "per_sqft": {
       const miss = qs.filter((q) => q.sqft === null).map((q) => `${label(q)}: area`);
       if (miss.length) return { ok: false, missing: miss };
-      return { ok: true, qty: qs.reduce((a, q) => a + (q.sqft as number), 0), basis: "rule", note: "sq ft" };
+      const sf = qs.reduce((a, q) => a + (q.sqft as number), 0);
+      // The card's unit decides: a card sold by the square yard counts yards (sq ft ÷ 9).
+      if (takeoffUnit(line.unit ?? "") === "SY") return { ok: true, qty: Math.round((sf / 9) * 100) / 100, basis: "rule", note: "sq yd" };
+      return { ok: true, qty: sf, basis: "rule", note: "sq ft" };
     }
     case "per_lf_perimeter": {
       const miss: string[] = [];

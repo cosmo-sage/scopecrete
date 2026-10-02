@@ -17,7 +17,7 @@ const NUMERIC = ["length_ft", "width_ft", "sqft_override", "depth_in"] as const;
 const TEXT = ["name", "rebar", "prep_notes", "access_notes"] as const;
 
 export const SECTION_SELECT =
-  "id, job_id, name, work_type, length_ft, width_ft, sqft_override, depth_in, psi, rebar, prep_notes, access_notes, sort_order, created_at, updated_at, reinforcement_item_id, reinforcement_source";
+  "id, job_id, name, work_type, length_ft, width_ft, sqft_override, depth_in, psi, rebar, prep_notes, access_notes, sort_order, created_at, updated_at, reinforcement_item_id, reinforcement_source, origin, source_ref";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 

@@ -102,3 +102,16 @@ test("job minimum = day minimum × days; nothing assumed", () => {
   assert.deepEqual(jobMinimum(1800, null), { ok: false, blocked: ["Days on this job"] });
   assert.equal(jobMinimum(null, 2).ok, false);
 });
+
+test("government bid items: an area with no length or width, counted in square yards", () => {
+  // Burgess Ave (DOTD): 706-01 Concrete Walk (4" thick) — 1,769.80 SY, entered as its area alone.
+  const walk = { id: "w", name: "Concrete Walk", work_type: "sidewalk", length_ft: null, width_ft: null, sqft_override: 1769.8 * 9, depth_in: 4 };
+  assert.equal(ruleQty(L({ qty_rule: "per_sqft", unit: "SY" }), [walk], null).qty, 1769.8);
+  assert.equal(ruleQty(L({ qty_rule: "per_sqft", unit: "sq yd" }), [walk], null).note, "sq yd");
+  near(ruleQty(L({ qty_rule: "per_sqft", unit: "sf" }), [walk], null).qty, 15928.2);
+  // 15,928.2 sf × 4" = 196.65 neat yd
+  assert.equal(ruleQty(L({ qty_rule: "per_cy", rule_params: { waste_pct: 0 } }), [walk], null).qty, 196.64);
+  // A takeoff group in SF feeds an SY card.
+  const t = { g: { name: "Walk", unit: "SF", qty: 900, cy: null, blocked: null } };
+  assert.equal(ruleQty(L({ qty_rule: "from_takeoff", unit: "SY", takeoff_parameter_id: "g" }), [walk], null, t).qty, 100);
+});

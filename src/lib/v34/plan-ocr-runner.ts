@@ -135,12 +135,42 @@ async function save(id: string, body: object): Promise<Partial<OcrSheet> | null>
  * Start reading a job's scanned drawings, unless this job is already being read.
  * `sheets` are the drawings in the plan room; `urls` their files' signed links.
  */
-export function startPlanOcr(job: { id: string; title: string | null }, sheets: OcrSheet[], urls: Map<string, string>) {
-  if (state.running) return;
+/**
+ * What is left to read of a job's scanned drawings, and what is done. A sheet read
+ * once is never read again (its ocr_title_at / ocr_at are stamped), so a visit after
+ * the reader finished does nothing.
+ */
+export function ocrPending(sheets: OcrSheet[], urls: Map<string, string>) {
   // A scan has no text layer: nothing was read off it. A digital sheet already has its words.
   const scans = sheets.filter((s) => s.number_source !== "coy" && (s.ocr_title_at || (!s.number && !s.title)));
   const titles = scans.filter((s) => !s.ocr_title_at && urls.has(s.file_id));
   const full = scans.filter((s) => !s.ocr_at && urls.has(s.file_id));
+  return { scans: scans.length, read: scans.filter((s) => s.ocr_at).length, titles, full };
+}
+
+/**
+ * Whether this device may start reading on its own. A phone never does (Coy,
+ * 2026-10-02: it "tends to want to crash the mobile browser") — there it is a
+ * tap — and a desktop doesn't restart a job Coy paused in this tab.
+ */
+export function mayAutoRead(jobId: string): boolean {
+  if (typeof window === "undefined") return false;
+  if (window.matchMedia?.("(pointer: coarse)").matches) return false;
+  try { if (sessionStorage.getItem(`sc:ocr-paused:${jobId}`)) return false; } catch { /* no storage */ }
+  return true;
+}
+export function pausePlanOcr(jobId: string) {
+  try { sessionStorage.setItem(`sc:ocr-paused:${jobId}`, "1"); } catch { /* no storage */ }
+  stop = true;
+  set({ label: "Pausing after this part…" });
+}
+export function resumePlanOcrAllowed(jobId: string) {
+  try { sessionStorage.removeItem(`sc:ocr-paused:${jobId}`); } catch { /* no storage */ }
+}
+
+export function startPlanOcr(job: { id: string; title: string | null }, sheets: OcrSheet[], urls: Map<string, string>) {
+  if (state.running) return;
+  const { titles, full } = ocrPending(sheets, urls);
   if (!titles.length && !full.length) return;
   stop = false;
   set({ ...IDLE, running: true, jobId: job.id, jobTitle: job.title, phase: titles.length ? "title" : "full", total: titles.length || full.length, label: "Opening the plan reader…" });
@@ -216,8 +246,9 @@ async function run(job: { id: string; title: string | null }, titles: OcrSheet[]
           const reader = sch;
           const results = await Promise.allSettled(batch.map(async (tile) => {
             let got = await read(reader, doc, s.page, tile, scaleFor(tile, 3, MAX_CANVAS_PX));
-            // Hermes's habit: a part that read poorly is read again, finer.
-            if (got.length && (meanConf(got) ?? 100) < 60) {
+            // Hermes's habit: a part that read poorly is read again, finer — not on a phone,
+            // where a 4× render of a 10,000-px scan is what runs it out of memory.
+            if (lanes > 1 && got.length && (meanConf(got) ?? 100) < 60) {
               const fine = await read(reader, doc, s.page, tile, scaleFor(tile, 4, MAX_CANVAS_PX));
               if ((meanConf(fine) ?? 0) > (meanConf(got) ?? 0)) got = fine;
             }

@@ -20,7 +20,7 @@ export type QtyRule = (typeof QTY_RULES)[number];
 /** How a card turns a scope into a quantity — said the way Coy would. */
 export const QTY_RULE_LABEL: Record<QtyRule, string> = {
   per_cy: "by the yard of concrete",
-  per_sqft: "by the square foot",
+  per_sqft: "by the area (sq ft, or sq yd when the unit is SY)",
   per_lf_perimeter: "by the foot of edge (forms)",
   per_sheet: "by the sheet (mesh)",
   per_stick: "by the stick (rebar)",

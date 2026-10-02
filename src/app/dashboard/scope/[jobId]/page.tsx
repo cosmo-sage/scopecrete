@@ -45,6 +45,9 @@ interface Section extends SectionInput {
   prep_notes: string | null;
   access_notes: string | null;
   sort_order: number;
+  /** 'bid' when a forwarded bid made it (063); source_ref is the line it came from. */
+  origin?: string | null;
+  source_ref?: string | null;
 }
 interface Job {
   id: string; title: string | null; status: string | null; address: string | null;
@@ -202,44 +205,47 @@ export default function ScopeBuilder() {
       {/* ================= sections ================= */}
       <div style={{ minWidth: 0 }} className="pb-24 lg:pb-6">
         <div className="px-3 pt-2.5 pb-2" style={{ background: T.card, borderBottom: `1px solid ${T.hair}` }}>
-          <Link href="/dashboard/scope" className="no-underline" style={{ ...eyebrow, color: T.ink2 }}>‹ Jobs</Link>
-          <div className="flex items-start gap-2 mt-1">
-            <div style={{ minWidth: 0, flex: 1 }}>
-              <input defaultValue={realTitle} placeholder={titleHint} aria-label="Job name"
-                onBlur={(e) => { const v = e.target.value; if (v !== realTitle) void send(`/api/jobs/${jobId}`, "PATCH", { title: v }).then((b) => setJob((j) => j && { ...j, title: b.job.title })).catch((er) => setSaveErr((m) => ({ ...m, job: String(er.message ?? er) }))); }}
-                className="w-full bg-transparent outline-none"
-                style={{ fontFamily: disp, fontSize: F.xl, fontWeight: 600, lineHeight: 1.1, color: T.ink }} />
-              <div style={{ fontSize: F.xs, color: who ? T.ink3 : T.hiviz, ...clip }}>
-                {who ? (
-                  <Link href={`/dashboard/messages/${contact!.id}`} style={{ color: T.ink2 }}>{who}</Link>
-                ) : "Not attached to a customer yet"}
-                {job.address ? ` · ${job.address}` : ""}
-                {` · ${sections.length} section${sections.length === 1 ? "" : "s"}`}
-                {job.origin === "classification" ? " · made when filed as a customer" : job.created_from_message_id ? " · drafted from a message" : " · entered by hand"}
-              </div>
-            </div>
-            {/* The Plan Room (059): plan sheets, takeoff, and its lines on the budget. */}
-            <Link href={`/dashboard/scope/${jobId}/plans`} className="shrink-0 rounded flex items-center gap-1.5 mt-1 no-underline"
-              style={{ height: 28, padding: "0 10px", border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink, fontFamily: disp, fontSize: F.xs, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase" }}>
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true"><path d="M2 3.5 6 2l4 1.5L14 2v10.5L10 14l-4-1.5L2 14z" /><path d="M6 2v10.5M10 3.5V14" /></svg>
-              Plan room
-            </Link>
-            <Link href={`/dashboard/scope/${jobId}/proposal`} className="shrink-0 rounded flex items-center gap-1.5 mt-1 no-underline"
-              style={{ height: 28, padding: "0 10px", border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink, fontFamily: disp, fontSize: F.xs, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase" }}>
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true"><path d="M4 1.5h5.5L13 5v9.5H4z" /><path d="M9.5 1.5V5H13M6 8h5M6 10.5h5M6 13h3" /></svg>
-              Proposal
-            </Link>
+          {/* Coy, 2026-10-02: the name on the Jobs row, bold but smaller; the four
+              chips small on one row under it; the description; then Plan room and
+              Proposal, out of the way above the money strip. */}
+          <div className="flex items-center gap-2">
+            <Link href="/dashboard/scope" className="no-underline shrink-0" style={{ ...eyebrow, color: T.ink2 }}>‹ Jobs</Link>
+            <input defaultValue={realTitle} placeholder={titleHint} aria-label="Job name"
+              onBlur={(e) => { const v = e.target.value; if (v !== realTitle) void send(`/api/jobs/${jobId}`, "PATCH", { title: v }).then((b) => setJob((j) => j && { ...j, title: b.job.title })).catch((er) => setSaveErr((m) => ({ ...m, job: String(er.message ?? er) }))); }}
+              className="bg-transparent outline-none"
+              style={{ flex: 1, minWidth: 0, fontFamily: disp, fontSize: F.lg, fontWeight: 700, lineHeight: 1.15, color: T.ink }} />
             {/* Coy, 2026-09-30: "Why this job" is an ⓘ in the header — tap to see it. */}
             {why && (
               <button onClick={() => setWhyOpen(true)} aria-label="Why this job was made" title="Why this job was made"
-                className="shrink-0 rounded-full flex items-center justify-center mt-1"
-                style={{ width: 26, height: 26, border: `1px solid ${T.hairStrong}`, color: T.chalk, fontFamily: "Georgia, serif", fontStyle: "italic", fontWeight: 700, fontSize: 14, background: T.card, cursor: "pointer" }}>i</button>
+                className="shrink-0 rounded-full flex items-center justify-center"
+                style={{ width: 22, height: 22, border: `1px solid ${T.hairStrong}`, color: T.chalk, fontFamily: "Georgia, serif", fontStyle: "italic", fontWeight: 700, fontSize: 12, background: T.card, cursor: "pointer" }}>i</button>
             )}
+          </div>
+          <JobChips job={job} onSet={(field, value) => send(`/api/jobs/${jobId}`, "PATCH", { [field]: value })
+            .then((b) => setJob((j) => j && { ...j, status: b.job.status, job_type: b.job.job_type, lead_source: b.job.lead_source }))} />
+          <div style={{ fontSize: F.xs, color: who ? T.ink3 : T.hiviz, marginTop: 4, ...clip }}>
+            {who ? (
+              <Link href={`/dashboard/messages/${contact!.id}`} style={{ color: T.ink2 }}>{who}</Link>
+            ) : "Not attached to a customer yet"}
+            {job.address ? ` · ${job.address}` : ""}
+            {` · ${sections.length} section${sections.length === 1 ? "" : "s"}`}
+            {job.origin === "classification" ? " · made when filed as a customer" : job.created_from_message_id ? " · drafted from a message" : ""}
           </div>
           {job.description && <div style={{ fontSize: F.sm, color: T.ink2, lineHeight: 1.4, marginTop: 2 }}>{job.description}</div>}
           {saveErr.job && <div style={{ fontSize: F.xs, color: T.red }}>{saveErr.job}</div>}
-          <JobChips job={job} onSet={(field, value) => send(`/api/jobs/${jobId}`, "PATCH", { [field]: value })
-            .then((b) => setJob((j) => j && { ...j, status: b.job.status, job_type: b.job.job_type, lead_source: b.job.lead_source }))} />
+          <div className="flex items-center justify-end gap-1.5" style={{ marginTop: 6 }}>
+            {/* The Plan Room (059): plan sheets, takeoff, and its lines on the budget. */}
+            <Link href={`/dashboard/scope/${jobId}/plans`} className="rounded flex items-center gap-1 no-underline"
+              style={{ height: 24, padding: "0 8px", border: `1px solid ${T.hair}`, background: T.card, color: T.ink2, fontFamily: disp, fontSize: 10.5, fontWeight: 600, letterSpacing: ".06em", textTransform: "uppercase" }}>
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true"><path d="M2 3.5 6 2l4 1.5L14 2v10.5L10 14l-4-1.5L2 14z" /><path d="M6 2v10.5M10 3.5V14" /></svg>
+              Plan room
+            </Link>
+            <Link href={`/dashboard/scope/${jobId}/proposal`} className="rounded flex items-center gap-1 no-underline"
+              style={{ height: 24, padding: "0 8px", border: `1px solid ${T.hair}`, background: T.card, color: T.ink2, fontFamily: disp, fontSize: 10.5, fontWeight: 600, letterSpacing: ".06em", textTransform: "uppercase" }}>
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true"><path d="M4 1.5h5.5L13 5v9.5H4z" /><path d="M9.5 1.5V5H13M6 8h5M6 10.5h5M6 13h3" /></svg>
+              Proposal
+            </Link>
+          </div>
         </div>
 
         {why && (
@@ -343,6 +349,39 @@ function SectionCard({ s, index, err, onLocal, onSave, onRemove, rcards, jobType
   const q = quantities(s);
   const concrete = q.concrete;
 
+  // Measured by length × width, or by its area alone (Coy, 2026-10-02: government
+  // work gives a bid item's area — "Concrete Walk … 1,769.80 SY" — not its sides).
+  // Area mode keeps only the area (and the depth); the area is typed in sq ft or
+  // sq yd and stored as sq ft (sqft_override), so the engine is unchanged.
+  const bidSY = /\bSY\b/.test(s.source_ref ?? "");
+  const [mode, setMode] = useState<"dims" | "area">(() =>
+    s.length_ft === null && s.width_ft === null && (s.sqft_override !== null || bidSY || jobType === "public") ? "area" : "dims");
+  const unitKey = `sc:area-unit:${s.id}`;
+  const [unit, setUnitState] = useState<"sf" | "sy">(() => {
+    try { const v = localStorage.getItem(unitKey); if (v === "sf" || v === "sy") return v; } catch { /* no storage */ }
+    return bidSY || jobType === "public" ? "sy" : "sf";
+  });
+  const setUnit = (u: "sf" | "sy") => { setUnitState(u); try { localStorage.setItem(unitKey, u); } catch { /* no storage */ } };
+  const toMode = (m: "dims" | "area") => {
+    if (m === mode) return;
+    setMode(m);
+    if (m === "area") {
+      // Keep what L × W gave as the area, then drop the sides.
+      const p = { length_ft: null, width_ft: null, sqft_override: q.sqft_source === "dimensions" ? q.sqft : s.sqft_override };
+      onLocal(p); onSave(p);
+    } else if (s.sqft_override !== null) {
+      onLocal({ sqft_override: null }); onSave({ sqft_override: null });
+    }
+  };
+  // The bid's own quantity ("… – 1,769.80 SY"), offered as one tap — never filled in by itself.
+  const bidQty = (() => { const m = /([\d,]+(?:\.\d+)?)\s*(SY|SF)\b/.exec(s.source_ref ?? ""); return m ? { n: Number(m[1].replace(/,/g, "")), u: m[2] as "SY" | "SF" } : null; })();
+  const useBidQty = () => {
+    if (!bidQty || !(bidQty.n > 0)) return;
+    const p = { length_ft: null, width_ft: null, sqft_override: bidQty.u === "SY" ? Math.round(bidQty.n * 9 * 100) / 100 : bidQty.n };
+    setMode("area"); setUnit(bidQty.u === "SY" ? "sy" : "sf"); onLocal(p); onSave(p);
+  };
+  const areaShown = s.sqft_override === null ? "" : unit === "sy" ? Math.round((s.sqft_override / 9) * 100) / 100 : s.sqft_override;
+
   const dimCell = (label: string, key: "length_ft" | "width_ft") => {
     const [ft, inch] = splitFt(s[key]);
     const set = (f: number | "", i: number | "") => {
@@ -350,8 +389,8 @@ function SectionCard({ s, index, err, onLocal, onSave, onRemove, rcards, jobType
       onLocal({ [key]: v } as Partial<Section>);
     };
     return (
-      <Cell label={label} missing={s[key] === null && s.sqft_override === null}
-        source={s[key] === null ? (s.sqft_override !== null ? "using area" : "not set") : "you set it"}>
+      <Cell label={label} missing={s[key] === null}
+        source={s[key] === null ? "not set" : "you set it"}>
         <div className="flex items-baseline gap-1">
           <NumIn value={ft} onChange={(v) => set(v, inch)} onBlur={() => onSave({ [key]: s[key] } as Partial<Section>)} w={58} />
           <span style={{ fontSize: F.xs, color: T.ink3 }}>ft</span>
@@ -361,6 +400,8 @@ function SectionCard({ s, index, err, onLocal, onSave, onRemove, rcards, jobType
       </Cell>
     );
   };
+  const seg = (on: boolean): React.CSSProperties => ({ height: 22, padding: "0 7px", fontSize: 10, fontFamily: disp, fontWeight: 600, letterSpacing: ".05em",
+    textTransform: "uppercase", whiteSpace: "nowrap", background: on ? T.ink : T.card, color: on ? T.card : T.ink2, cursor: "pointer" });
 
   return (
     <div style={{ background: T.card, borderBottom: `1px solid ${T.hair}`, marginTop: index === 0 ? 0 : 8 }}>
@@ -376,21 +417,46 @@ function SectionCard({ s, index, err, onLocal, onSave, onRemove, rcards, jobType
         <Dictate jobId={jobId} s={s} onApply={(p) => { onLocal(p as Partial<Section>); onSave(p as Partial<Section>); }} />
         <button onClick={onRemove} aria-label="Remove section" style={{ ...eyebrow, color: T.red, cursor: "pointer" }}>Remove</button>
       </div>
+      {s.source_ref && (
+        <div className="px-3" style={{ fontSize: F.xs, color: T.ink3, marginTop: 2 }}>From the bid: {s.source_ref.replace(/^"|"$/g, "")}</div>
+      )}
+      <div className="px-3 pt-1.5 flex items-center gap-x-2 gap-y-1 flex-wrap">
+        <span style={{ ...eyebrow }}>Measured by</span>
+        <span className="inline-flex rounded overflow-hidden" role="group" aria-label="Measured by" style={{ border: `1px solid ${T.hair}` }}>
+          <button onClick={() => toMode("dims")} aria-pressed={mode === "dims"} style={seg(mode === "dims")}>Length × width</button>
+          <button onClick={() => toMode("area")} aria-pressed={mode === "area"} style={seg(mode === "area")}>Area only</button>
+        </span>
+        {bidQty && q.sqft === null && (
+          <button onClick={useBidQty} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>
+            Use the bid&apos;s {bidQty.n.toLocaleString("en-US")} {bidQty.u}
+          </button>
+        )}
+      </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 mt-2" style={{ borderTop: `1px solid ${T.hairSoft}` }}>
-        {dimCell("Length", "length_ft")}
-        {dimCell("Width", "width_ft")}
+        {mode === "dims" && dimCell("Length", "length_ft")}
+        {mode === "dims" && dimCell("Width", "width_ft")}
         <Cell label="Area" missing={q.sqft === null}
-          source={q.sqft_source === "override" ? "you set the area" : q.sqft_source === "dimensions" ? "length × width" : "needs L × W or an area"}>
-          <div className="flex items-baseline gap-1">
-            {q.sqft_source === "override" || (s.length_ft === null && s.width_ft === null) ? (
-              <NumIn value={s.sqft_override ?? ""} w={70}
-                onChange={(v) => onLocal({ sqft_override: v === "" ? null : Number(v) })}
-                onBlur={() => onSave({ sqft_override: s.sqft_override })} />
+          source={mode === "area"
+            ? (q.sqft === null ? "type the area" : unit === "sy" ? `= ${n1(q.sqft)} sq ft` : `= ${n2(q.sqft / 9)} sq yd`)
+            : q.sqft_source === "dimensions" ? `length × width · ${n2(q.sqft! / 9)} sq yd` : "needs length and width"}>
+          <div className="flex items-baseline gap-1 flex-wrap">
+            {mode === "area" ? (
+              <>
+                <NumIn value={areaShown} w={100}
+                  onChange={(v) => onLocal({ sqft_override: v === "" ? null : unit === "sy" ? Number(v) * 9 : Number(v) })}
+                  onBlur={() => onSave({ sqft_override: s.sqft_override })} />
+                <span className="inline-flex rounded overflow-hidden" role="group" aria-label="Area unit" style={{ border: `1px solid ${T.hair}` }}>
+                  <button onClick={() => setUnit("sf")} aria-pressed={unit === "sf"} style={seg(unit === "sf")}>sq ft</button>
+                  <button onClick={() => setUnit("sy")} aria-pressed={unit === "sy"} style={seg(unit === "sy")}>sq yd</button>
+                </span>
+              </>
             ) : (
-              <span style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 600, ...nums }}>{q.sqft === null ? "—" : n1(q.sqft)}</span>
+              <>
+                <span style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 600, ...nums }}>{q.sqft === null ? "—" : n1(q.sqft)}</span>
+                <span style={{ fontSize: F.xs, color: T.ink3 }}>sq ft</span>
+              </>
             )}
-            <span style={{ fontSize: F.xs, color: T.ink3 }}>sq ft</span>
           </div>
         </Cell>
         {concrete && (

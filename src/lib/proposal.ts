@@ -83,7 +83,9 @@ export function priceProposal(
   const inTier = lines.filter((l) => tier.line_ids.includes(l.id));
   const counted = inTier.filter((l) => !addons.has(l.id));
   const blocked = [...new Set(inTier.flatMap((l) => res.lines[l.id]?.blocked ?? []))];
-  if (!counted.length) return { ok: false, blocked: ["Nothing on the budget for this option yet"] };
+  if (!counted.length) return { ok: false, blocked: [inTier.length
+    ? `Every line is marked an optional add-on — mark at least one as part of the price (${inTier.length} add-on${inTier.length === 1 ? "" : "s"})`
+    : "Nothing on the budget for this option yet"] };
   if (blocked.length) return { ok: false, blocked };
 
   const r = (l: BudgetLine) => res.lines[l.id];

@@ -60,6 +60,8 @@ interface Data {
   } | null;
   /** Plan Room group totals (059), keyed by group id. */
   takeoff?: Record<string, TakeoffTotal>;
+  /** The proposal draft's sub split — shown and set here too (the job page is the one place for money). */
+  proposal?: { has_draft: boolean; split: string };
 }
 export interface BudgetSummary {
   has_lines: boolean;
@@ -433,6 +435,7 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0 }: {
               </div>
             ))}
           </div>
+          <PriceSummary jobId={jobId} lines={visible} res={res} tiers={shownTiers} proposal={data.proposal} onChanged={reload} />
           <div style={{ fontSize: F.xs, color: T.ink3, marginTop: 4 }}>
             Job minimum: {minimum.ok ? `${money0(minimum.minimum)} (${minimum.days} days × ${money0(minimum.day_minimum)} a day)` : `needs ${minimum.blocked.join(" and ")}`}
           </div>
@@ -535,6 +538,64 @@ function GroupCard({ name, lines, res, optLabel, asmName, onOpen, cost, price }:
           </button>
         );
       })}
+    </div>
+  );
+}
+
+const TYPE_COLORS: Record<string, string> = { material: "#1E5AA8", labor: "#D97757", equipment: "#6A55B0", subcontract: "#2F8A5B", other: "#8C8578" };
+
+/**
+ * What used to be the proposal's job panel (Coy, 2026-10-02: "integrated into
+ * the main job budget page"): cost by type as one bar, and the profit split
+ * with a sub — yours only, never on the proposal, never changes the price.
+ * The split is saved on the proposal draft.
+ */
+function PriceSummary({ jobId, lines, res, tiers, proposal, onChanged }: {
+  jobId: string; lines: Line[]; res: ReturnType<typeof priceBudget>; tiers: TierTotal[];
+  proposal?: { has_draft: boolean; split: string }; onChanged: () => void;
+}) {
+  const [split, setSplit] = useState(proposal?.split ?? "none");
+  const [err, setErr] = useState<string | null>(null);
+  const t = tiers.length === 1 ? tiers[0] : null;
+  const byType: Record<string, number> = {};
+  for (const l of lines) {
+    if (t && !t.line_ids.includes(l.id)) continue;
+    const c = res.lines[l.id]?.ext_cost;
+    if (c) byType[String(l.cost_type)] = (byType[String(l.cost_type)] ?? 0) + c;
+  }
+  const total = Object.values(byType).reduce((a, b) => a + b, 0);
+  const parts = split === "20_80" ? [20, 80] : split === "30_70" ? [30, 70] : null;
+  const pick = async (k: string) => {
+    setSplit(k); setErr(null);
+    try { await call(`/api/jobs/${jobId}/proposal`, "PATCH", { split: k }); onChanged(); }
+    catch (e) { setErr(e instanceof Error && /no draft/i.test(e.message) ? "Open the Proposal once to start its draft, then set the split." : e instanceof Error ? e.message : String(e)); }
+  };
+  if (!total) return null;
+  return (
+    <div className="mt-2.5 pt-2" style={{ borderTop: `1px solid ${T.hair}` }}>
+      <div style={{ ...eyebrow }}>Cost by type{t?.option_id ? "" : ""}</div>
+      <div className="flex mt-1 rounded overflow-hidden" style={{ height: 8, background: T.hairSoft }}>
+        {Object.entries(byType).map(([k, v]) => <span key={k} title={`${COST_TYPE_LABEL[k as CostType] ?? k} ${money0(v)}`} style={{ width: `${(v / total) * 100}%`, background: TYPE_COLORS[k] ?? TYPE_COLORS.other }} />)}
+      </div>
+      <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1" style={{ fontSize: F.xs, color: T.ink2, ...nums }}>
+        {Object.entries(byType).map(([k, v]) => (
+          <span key={k} className="flex items-center gap-1"><span style={{ width: 8, height: 8, borderRadius: 2, background: TYPE_COLORS[k] ?? TYPE_COLORS.other }} />{COST_TYPE_LABEL[k as CostType] ?? k} {money0(v)}</span>
+        ))}
+      </div>
+      <div className="flex items-center gap-2 mt-2 flex-wrap">
+        <span style={{ ...eyebrow }}>Profit split with a sub</span>
+        <span className="inline-flex rounded overflow-hidden" style={{ border: `1px solid ${T.hair}` }}>
+          {([["none", "No sub"], ["20_80", "20 / 80"], ["30_70", "30 / 70"]] as const).map(([k, l], i) => (
+            <button key={k} onClick={() => void pick(k)} aria-pressed={split === k}
+              style={{ height: 24, padding: "0 8px", fontSize: 11, background: split === k ? T.ink : T.card, color: split === k ? T.card : T.ink2, borderLeft: i ? `1px solid ${T.hair}` : "none", cursor: "pointer" }}>{l}</button>
+          ))}
+        </span>
+        {parts && t?.priced && (
+          <span style={{ fontSize: F.xs, color: T.ink2, ...nums }}>you keep {money0(t.profit * parts[0] / 100)} · sub {money0(t.profit * parts[1] / 100)}</span>
+        )}
+      </div>
+      <div style={{ fontSize: 10, color: T.ink3, marginTop: 2 }}>Yours only — never on the proposal, never changes the price.</div>
+      {err && <div style={{ fontSize: F.xs, color: T.red }}>{err}</div>}
     </div>
   );
 }

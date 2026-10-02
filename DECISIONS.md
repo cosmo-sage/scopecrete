@@ -1162,7 +1162,9 @@ percentage of labour — all three contradict this section and §4.
   taking the last cent, so the lines add up to the total exactly. A hidden
   line or area drops out of the total; a hidden price shows "—" and still
   counts; an optional add-on is priced and listed, never in the total (and the
-  rest is rounded without it). Tax stays a pass-through: its own line, or
+  rest is rounded without it). When every line is an add-on the proposal
+  says so ("Every line is marked an optional add-on …"), not "nothing on
+  the budget". Tax stays a pass-through: its own line, or
   folded into the taxed lines (same total either way). Draws (% or $) must add
   up to the total within $1 before Print or Final (`drawsCheck()`, checked
   again on the server). **Project types** (`org_project_types`: Residential,
@@ -1981,8 +1983,21 @@ expected start date per quoted job before it means anything. Add the field.
 - **Job header (2026-10-02, Coy's notes on the Burgess job):** ‹ Jobs and
   the job name on one row (bold, smaller), the four chips small on one row
   under it, the customer line and description (left out when the Bid strip
-  below shows the bid's scope summary — Coy: "redundant"), then **Plan
-  room** and **Proposal** small and right-aligned above the money strip.
+  below shows the bid's scope summary — Coy: "redundant"), then the job's
+  switch above the money strip.
+- **One job, three views (Coy, 2026-10-02: "no way … to get back from the
+  proposal page" and "one job budget page, and I can toggle between that
+  budget and the proposal").** **Budget · Plan room · Proposal** — the same
+  segmented switch (`job-tabs.tsx`) on the job page, the Plan Room header
+  and the proposal toolbar, so each is one tap from the others. The
+  proposal's slide-over **Job panel is gone**: the money moved to the
+  Budget (margin and O.H. already there; **cost by type** as one bar and the
+  **profit split with a sub** — saved on the proposal draft, never on the
+  document, never changing the price — in the budget footer,
+  `PriceSummary`), and what shapes the document stays on the proposal as a
+  **Proposal settings** strip (project type, option, warranty, contract;
+  folded on a phone, open on a desktop). The proposal's sub-line says the
+  total and "rounded up to …", or why there is no price.
 - **Job header (2026-09-28)** — four tappable chips, each opening its list:
   **Status** (the seven stages, with W.I.P.'s won / scheduled / pouring),
   **Type**, **Source** and **Vendors (n)** (crew on the job, add by subtype)

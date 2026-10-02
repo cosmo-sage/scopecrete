@@ -12,8 +12,9 @@
  */
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { T, F, disp, strong, nums } from "@/lib/v34/tokens";
+import { T, disp, strong } from "@/lib/v34/tokens";
 import { useWide } from "@/lib/v34/use-wide";
+import { JobTabs } from "@/components/v34/job-tabs";
 import { setDustyUse } from "@/lib/v34/dusty-live";
 import {
   drawsCheck, parseClauses, plainText, priceDraft, termsText, warrantyText,
@@ -262,25 +263,24 @@ export function Proposal({ jobId }: { jobId: string }) {
     <button key={k} onClick={() => quick(k)} aria-pressed={!!d[k]} className="rounded-full shrink-0"
       style={{ height: 26, padding: "0 10px", fontSize: 11.5, border: `1px solid ${d[k] ? "#B85A3C" : T.hair}`, background: d[k] ? "#F6E2D8" : T.card, color: d[k] ? "#9A4527" : T.ink2 }}>{label}</button>
   ));
-  const aside = (
-    <JobPanel b={b} p={p} vm={vm} priced={priced} margin={margin} editable={editable}
-      onMargin={(m) => { setMargin(m); save("margin_pct", m, 500); }}
-      onType={setType} onSplit={(s) => change("split", s, 0)} onOption={(id) => change("option_id", id, 0)}
+  // What used to be the slide-over "Job panel" (Coy, 2026-10-02): the money — margin, cost by type, the
+  // sub split — lives on the job's Budget now; what shapes the DOCUMENT stays here, as one strip.
+  const settings = (
+    <ProposalSettings b={b} p={p} editable={editable} onType={setType} onOption={(id) => change("option_id", id, 0)}
       onWarrantyTpl={(id) => change("warranty", { template_id: id }, 0)} onTermsTpl={(id) => change("terms", { template_id: id }, 0)} />
   );
+  const ok = vm.priced.ok ? vm.priced : null;
 
   return (
     <div ref={wideRef} className="sc-proposal flex" style={{ minHeight: "calc(100dvh - var(--sc-head))", background: "var(--sc-doc-ground, #E9E4DA)" }}>
-      {wide && <aside className="sc-no-print shrink-0" style={{ width: 300, background: T.card, borderRight: `1px solid ${T.hair}`, overflowY: "auto", maxHeight: "calc(100dvh - var(--sc-head))", position: "sticky", top: "var(--sc-head)" }}>{aside}</aside>}
       <div className="flex-1 flex flex-col" style={{ minWidth: 0 }}>
         <div className="sc-no-print flex items-center gap-2 flex-wrap" style={{ background: T.card, borderBottom: `1px solid ${T.hair}`, padding: "6px 12px", minHeight: 44, position: "sticky", top: "var(--sc-head)", zIndex: 5 }}>
-          {!wide && (
-            <button onClick={() => setPanel(true)} className="rounded flex items-center gap-1.5" style={{ height: 30, padding: "0 10px", border: `1px solid ${T.hairStrong}`, fontFamily: disp, fontSize: 12, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase", color: T.ink }}>☰ Job</button>
-          )}
-          {wide && <Link href={`/dashboard/scope/${jobId}`} className="no-underline" style={{ color: T.ink3, fontSize: F.xs }}>← Job</Link>}
-          <div className="flex-1" style={{ minWidth: 0 }}>
-            <div style={{ fontFamily: strong, fontWeight: 600, fontSize: 14, color: T.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{wide ? "Proposal " : ""}{vm.number}{isFinal || finalShown ? " · final" : " · draft"}</div>
-            <div style={{ fontSize: 11, color: T.ink3 }}>{vm.priced.ok ? usd(vm.priced.total) : "no price yet"} · {sectionsOn}/8 sections</div>
+          <JobTabs jobId={jobId} active="proposal" />
+          <div className="flex-1" style={{ minWidth: 120 }}>
+            <div style={{ fontFamily: strong, fontWeight: 600, fontSize: 14, color: T.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b.job.title || "Proposal"} · {vm.number}{isFinal || finalShown ? " · final" : " · draft"}</div>
+            <div style={{ fontSize: 11, color: T.ink3, overflowWrap: "anywhere" }}>
+              {ok ? `${usd(ok.total)}${ok.rounded !== ok.calc ? ` · ${usd(ok.calc)} rounded up to ${usd0(ok.rounded)}` : ""}` : `no price yet${!vm.priced.ok ? ` — ${vm.priced.blocked[0]}` : ""}`} · {sectionsOn}/8 sections
+            </div>
           </div>
           {b.finals.length > 0 && (
             <select aria-label="Version" value={viewFinal ?? ""} onChange={(e) => setViewFinal(e.target.value ? Number(e.target.value) : null)}
@@ -302,6 +302,14 @@ export function Proposal({ jobId }: { jobId: string }) {
               style={{ height: 30, padding: "0 12px", background: "#B85A3C", color: "#fff", fontFamily: disp, fontSize: 12, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase" }}>{wide ? "New version" : "New ver."}</button>
           )}
         </div>
+        <div className="sc-no-print" style={{ background: T.card, borderBottom: `1px solid ${T.hair}` }}>
+          <button onClick={() => setPanel((x) => !x)} aria-expanded={panel || wide} className="w-full flex items-center gap-2 text-left" style={{ padding: "6px 12px", display: wide ? "none" : "flex", cursor: "pointer", color: T.ink2, fontSize: 12 }}>
+            <span style={{ fontFamily: disp, fontSize: 11, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase" }}>Proposal settings</span>
+            <span style={{ color: T.ink3 }}>{[type?.label, p.warranty?.template_id ? "warranty" : null, p.terms?.template_id ? "contract" : null].filter(Boolean).join(" · ")}</span>
+            <span className="flex-1" /><span style={{ color: T.ink3 }}>{panel ? "▴" : "▾"}</span>
+          </button>
+          {(wide || panel) && settings}
+        </div>
         {(busy || err || (isFinal && !finalShown) || finalShown) && (
           <div className="sc-no-print" style={{ padding: "6px 14px", fontSize: 12, background: err ? T.redDim : T.sunk, color: err ? T.red : T.ink2 }}>
             {err ?? busy ?? `Final — frozen ${new Date((finalShown ?? b.finals.find((f) => f.version === p.version))?.finalized_at ?? p.finalized_at ?? p.created_at).toLocaleString()}. This is what the customer was shown; the job's budget can move on. Start a new version to change it.`}
@@ -313,17 +321,6 @@ export function Proposal({ jobId }: { jobId: string }) {
           {editable && <div className="sc-no-print" style={{ maxWidth: 720, margin: "12px auto 0", fontSize: 11.5, color: "#5E5A52" }}>Photos &amp; plan pages, an options comparison and references come later.</div>}
         </div>
       </div>
-
-      {!wide && panel && (
-        <div className="sc-no-print fixed inset-x-0 z-40 flex flex-col" style={{ top: "var(--sc-head)", bottom: 0, background: T.card }}>
-          <div className="flex items-center" style={{ height: 44, padding: "0 12px", borderBottom: `1px solid ${T.hair}` }}>
-            <span style={{ fontFamily: disp, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase", fontSize: 13, color: T.ink }}>Job panel</span>
-            <span className="flex-1" />
-            <button onClick={() => setPanel(false)} className="rounded" style={{ height: 30, padding: "0 12px", background: "#2A2A2A", color: "#FBF6EC", fontFamily: disp, fontSize: 12, letterSpacing: ".08em", textTransform: "uppercase" }}>× Close</button>
-          </div>
-          <div className="flex-1 overflow-y-auto">{aside}</div>
-        </div>
-      )}
 
       {coverPick && (
         <div className="sc-no-print fixed inset-0 z-50 flex items-center justify-center" style={{ background: "rgba(0,0,0,.4)" }} onClick={() => setCoverPick(false)}>
@@ -345,132 +342,49 @@ export function Proposal({ jobId }: { jobId: string }) {
 }
 
 const lbl: React.CSSProperties = { fontFamily: disp, fontSize: 11, fontWeight: 600, letterSpacing: ".14em", textTransform: "uppercase", color: T.ink3 };
-const TYPE_COLORS: Record<string, string> = { material: "#1E5AA8", labor: "#D97757", equipment: "#6A55B0", other: "#8C8578" };
-const TYPE_LABEL: Record<string, string> = { material: "Materials", labor: "Labor", equipment: "Equipment", other: "Misc" };
 
-function JobPanel({ b, p, vm, priced, margin, editable, onMargin, onType, onSplit, onOption, onWarrantyTpl, onTermsTpl }: {
-  b: Bundle; p: Prop; vm: DocVM; priced: ReturnType<typeof priceDraft>; margin: number | null; editable: boolean;
-  onMargin: (m: number) => void; onType: (k: string) => void; onSplit: (s: Prop["split"]) => void; onOption: (id: string | null) => void;
+/** What shapes the document: the project type (loads its defaults), the option, and the warranty and contract. */
+function ProposalSettings({ b, p, editable, onType, onOption, onWarrantyTpl, onTermsTpl }: {
+  b: Bundle; p: Prop; editable: boolean;
+  onType: (k: string) => void; onOption: (id: string | null) => void;
   onWarrantyTpl: (id: string | null) => void; onTermsTpl: (id: string | null) => void;
 }) {
-  const pr = vm.readOnly ? vm.priced : priced.priced;
-  const ok = pr.ok ? pr : null;
-  const direct = ok ? ok.cost : 0;
-  const oh = b.settings.overhead_pct;
   const forType = (kind: "warranty" | "terms") => b.templates.filter((t) => t.kind === kind && (!p.project_type || !t.project_types.length || t.project_types.includes(p.project_type)));
-  const split = p.split === "20_80" ? [20, 80] : p.split === "30_70" ? [30, 70] : null;
-  const sec = { padding: "12px 14px", borderBottom: `1px solid ${T.hairSoft}` };
+  const sel: React.CSSProperties = { height: 28, border: `1px solid ${T.hair}`, borderRadius: 3, background: T.card, color: T.ink, fontSize: 12, maxWidth: 220 };
   return (
-    <div style={{ color: T.ink, fontSize: 12.5 }}>
-      <div style={sec}>
-        <div className="flex items-center gap-2">
-          <span style={lbl}>Job {b.job.job_number ?? ""}</span>
-          <span style={{ fontSize: 10.5, borderRadius: 3, padding: "0 6px", background: vm.readOnly ? T.greenDim : "#F7EBC9", color: vm.readOnly ? T.green : "#6B4E12" }}>{vm.readOnly ? "Proposal final" : "Proposal draft"}</span>
-        </div>
-        <div style={{ fontFamily: strong, fontWeight: 700, fontSize: 18, lineHeight: 1.2, marginTop: 4 }}>{b.job.title || "Untitled job"}</div>
-        <div style={{ color: T.ink2, fontSize: 12.5 }}>{[vm.customer.name, vm.customer.address ?? b.job.address].filter(Boolean).join(" · ") || "No customer yet"}</div>
-      </div>
-
-      <div style={sec}>
+    <div className="flex flex-wrap items-end gap-x-4 gap-y-2" style={{ padding: "8px 12px", color: T.ink, fontSize: 12 }}>
+      <div>
         <div style={lbl}>Project type</div>
-        <div className="flex mt-1.5 rounded overflow-hidden" style={{ border: `1px solid ${T.hairStrong}` }}>
-          {b.types.map((t) => (
-            <button key={t.key} disabled={!editable} onClick={() => onType(t.key)} className="flex-1"
-              style={{ height: 26, fontSize: 12, background: p.project_type === t.key ? "#2A2A2A" : T.card, color: p.project_type === t.key ? "#FBF6EC" : T.ink2, borderLeft: `1px solid ${T.hair}` }}>{t.label}</button>
+        <div className="flex mt-1 rounded overflow-hidden" style={{ border: `1px solid ${T.hairStrong}` }}>
+          {b.types.map((t, i) => (
+            <button key={t.key} disabled={!editable} onClick={() => onType(t.key)}
+              style={{ height: 26, padding: "0 10px", fontSize: 12, background: p.project_type === t.key ? "#2A2A2A" : T.card, color: p.project_type === t.key ? "#FBF6EC" : T.ink2, borderLeft: i ? `1px solid ${T.hair}` : "none" }}>{t.label}</button>
           ))}
         </div>
-        <div style={{ fontSize: 11.5, color: T.ink3, marginTop: 6 }}>
-          {p.project_type ? "The type sets what is shown, the draws, and which warranty and contract load." : "Pick a type to load its defaults."} Defaults per type are in{" "}
-          <Link href="/dashboard/price-book?tab=defaults" style={{ color: T.chalk }}>Price book → Defaults</Link>.
-        </div>
       </div>
-
       {b.options.length > 0 && (
-        <div style={sec}>
-          <div style={lbl}>Option on this proposal</div>
-          <select disabled={!editable} value={p.option_id ?? ""} onChange={(e) => onOption(e.target.value || null)} className="mt-1.5 w-full"
-            style={{ height: 28, border: `1px solid ${T.hair}`, borderRadius: 3, background: T.card, color: T.ink }}>
+        <label className="block"><span style={lbl}>Option</span><br />
+          <select disabled={!editable} value={p.option_id ?? ""} onChange={(e) => onOption(e.target.value || null)} className="mt-1" style={sel}>
             <option value="">{b.options[0]?.label ?? "First"} (first)</option>
             {b.options.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
           </select>
-        </div>
+        </label>
       )}
-
-      <div style={sec}>
-        <div className="flex items-center"><span style={lbl}>Cost → price</span><span className="flex-1" /><Link href={`/dashboard/scope/${b.job.id}#budget`} style={{ fontSize: 11, color: T.chalk }}>From budget</Link></div>
-        {!ok ? (
-          <div className="mt-2" style={{ fontSize: 12, color: "#6B4E12", background: "#F7EBC9", borderRadius: 3, padding: "8px 10px" }}>
-            No price yet — {!pr.ok ? pr.blocked.slice(0, 3).join("; ") : ""}{!pr.ok && pr.blocked.length > 3 ? "…" : ""}
-          </div>
-        ) : (
-          <>
-            {(["material", "labor", "equipment", "other"] as const).map((k) => ok.by_type[k] > 0 && (
-              <div key={k} className="flex items-center gap-2 mt-1.5"><span style={{ width: 8, height: 8, borderRadius: 2, background: TYPE_COLORS[k] }} /><span className="flex-1">{TYPE_LABEL[k]}</span><span style={nums}>{usd0(ok.by_type[k])}</span></div>
-            ))}
-            <div className="flex mt-2 rounded overflow-hidden" style={{ height: 8, background: T.sunk }}>
-              {(["material", "labor", "equipment", "other"] as const).map((k) => <span key={k} style={{ width: `${direct ? (ok.by_type[k] / direct) * 100 : 0}%`, background: TYPE_COLORS[k] }} />)}
-            </div>
-            <div className="flex mt-2"><span className="flex-1">Direct cost</span><b style={nums}>{usd0(direct)}</b></div>
-            <div className="flex mt-1"><span className="flex-1">Overhead {oh ?? "—"}%</span><span style={nums}>{usd0(ok.overhead)}</span></div>
-            <div className="flex items-center gap-2 mt-1">
-              <span className="flex-1">Profit</span>
-              <span style={nums}>{usd0(ok.profit)}</span>
-            </div>
-          </>
-        )}
-        <div className="flex items-center gap-2 mt-2">
-          <span style={{ fontSize: 12 }}>Margin</span>
-          <input type="range" min={5} max={45} step={0.5} value={margin ?? 20} disabled={!editable} aria-label="Margin" onChange={(e) => onMargin(Number(e.target.value))} className="flex-1" style={{ accentColor: "#B85A3C" }} />
-          <input inputMode="decimal" value={margin ?? ""} placeholder="—" disabled={!editable} aria-label="Margin percent"
-            onChange={(e) => { const v = Number(e.target.value); if (e.target.value !== "" && v >= 0 && v < 100) onMargin(v); }}
-            style={{ width: 46, textAlign: "right", border: `1px solid ${T.hair}`, borderRadius: 3, background: T.card, color: T.ink, padding: "1px 4px" }} />
-          <span>%</span>
-        </div>
-        {margin === null && <div style={{ fontSize: 11.5, color: T.red, marginTop: 4 }}>No margin set for this job — set one to price it.</div>}
-        {ok && (
-          <>
-            <div className="flex items-baseline mt-2"><span className="flex-1" style={{ fontWeight: 600 }}>Price</span><span style={{ fontFamily: strong, fontWeight: 700, fontSize: 18, ...nums }}>{usd0(ok.rounded)}</span></div>
-            <div style={{ fontSize: 11, color: T.ink3 }}>Calculated {usd(ok.calc)} → rounded to {usd0(ok.rounded)} (+{usd(ok.rounded - ok.calc)}). Rounds up to the nearest $50; the extra is profit. The budget keeps the exact number.</div>
-            {ok.tax > 0 && <div style={{ fontSize: 11, color: T.ink3, marginTop: 2 }}>Plus {usd(ok.tax)} sales tax (a pass-through){ok.discount ? `, less ${usd(ok.discount)} discount` : ""} = {usd(ok.total)}.</div>}
-          </>
-        )}
-        <div style={{ fontSize: 11, color: T.ink3, marginTop: 4 }}>The margin here is the job&apos;s — the budget uses the same number.</div>
-      </div>
-
-      <div style={sec}>
-        <div style={lbl}>Profit split with a sub</div>
-        <div className="flex gap-1 mt-1.5">
-          {([["none", "No sub"], ["20_80", "20 / 80"], ["30_70", "30 / 70"]] as const).map(([k, l]) => (
-            <button key={k} disabled={!editable} onClick={() => onSplit(k)} className="rounded flex-1"
-              style={{ height: 26, fontSize: 12, border: `1px solid ${p.split === k ? "#2A2A2A" : T.hair}`, background: p.split === k ? "#2A2A2A" : T.card, color: p.split === k ? "#FBF6EC" : T.ink2 }}>{l}</button>
-          ))}
-        </div>
-        {split && ok && (
-          <div className="grid grid-cols-2 gap-2 mt-2">
-            <div className="rounded" style={{ background: T.sunk, padding: "6px 8px" }}><div style={{ fontSize: 10.5, color: T.ink3 }}>You keep {split[0]}%</div><b style={nums}>{usd0(ok.profit * split[0] / 100)}</b></div>
-            <div className="rounded" style={{ background: T.sunk, padding: "6px 8px" }}><div style={{ fontSize: 10.5, color: T.ink3 }}>Sub {split[1]}%</div><b style={nums}>{usd0(ok.profit * split[1] / 100)}</b></div>
-          </div>
-        )}
-        <div style={{ fontSize: 11, color: T.ink3, marginTop: 4 }}>Yours only — never on the proposal, never changes the price.</div>
-      </div>
-
-      <div style={sec}>
-        <div style={lbl}>Templates</div>
-        <label className="block mt-1.5" style={{ fontSize: 11.5, color: T.ink2 }}>Warranty
-          <select disabled={!editable} value={p.warranty?.template_id ?? ""} onChange={(e) => onWarrantyTpl(e.target.value || null)} className="w-full mt-0.5"
-            style={{ height: 28, border: `1px solid ${T.hair}`, borderRadius: 3, background: T.card, color: T.ink }}>
-            <option value="">None</option>
-            {forType("warranty").map((t) => <option key={t.id} value={t.id}>{t.name}{t.starter ? " (starter)" : ""}</option>)}
-          </select>
-        </label>
-        <label className="block mt-1.5" style={{ fontSize: 11.5, color: T.ink2 }}>Contract
-          <select disabled={!editable} value={p.terms?.template_id ?? ""} onChange={(e) => onTermsTpl(e.target.value || null)} className="w-full mt-0.5"
-            style={{ height: 28, border: `1px solid ${T.hair}`, borderRadius: 3, background: T.card, color: T.ink }}>
-            <option value="">None</option>
-            {forType("terms").map((t) => <option key={t.id} value={t.id}>{t.name}{t.starter ? " (starter)" : ""}</option>)}
-          </select>
-        </label>
-        <div style={{ fontSize: 11, color: T.ink3, marginTop: 6 }}>Picking a template replaces this proposal&apos;s edits to that section. Edits here stay on this proposal unless you Save as template. Starter text came from the design — check it with your attorney.</div>
+      <label className="block"><span style={lbl}>Warranty</span><br />
+        <select disabled={!editable} value={p.warranty?.template_id ?? ""} onChange={(e) => onWarrantyTpl(e.target.value || null)} className="mt-1" style={sel}>
+          <option value="">None</option>
+          {forType("warranty").map((t) => <option key={t.id} value={t.id}>{t.name}{t.starter ? " (starter)" : ""}</option>)}
+        </select>
+      </label>
+      <label className="block"><span style={lbl}>Contract</span><br />
+        <select disabled={!editable} value={p.terms?.template_id ?? ""} onChange={(e) => onTermsTpl(e.target.value || null)} className="mt-1" style={sel}>
+          <option value="">None</option>
+          {forType("terms").map((t) => <option key={t.id} value={t.id}>{t.name}{t.starter ? " (starter)" : ""}</option>)}
+        </select>
+      </label>
+      <div style={{ fontSize: 11, color: T.ink3, flexBasis: "100%" }}>
+        Margin, O.H., tax and the sub split are on the job&apos;s <Link href={`/dashboard/scope/${b.job.id}`} style={{ color: T.chalk }}>Budget</Link>. Defaults per type are in{" "}
+        <Link href="/dashboard/price-book?tab=defaults" style={{ color: T.chalk }}>Price book → Defaults</Link>. Picking a template replaces this proposal&apos;s edits to that section.
       </div>
     </div>
   );

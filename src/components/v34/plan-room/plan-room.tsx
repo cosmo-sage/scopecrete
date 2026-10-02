@@ -10,11 +10,11 @@
  * correct. Dusty stays docked and sees the takeoff (src/lib/dusty/context.ts).
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { T, F, disp, strong, clip } from "@/lib/v34/tokens";
 import { sendBytes } from "@/components/v34/files-panel";
 import { openPdf, readPlanPages } from "@/lib/pdf";
+import { JobTabs } from "@/components/v34/job-tabs";
 import { mayAutoRead, ocrPending, pausePlanOcr, resumePlanOcrAllowed, startPlanOcr, usePlanOcr } from "@/lib/v34/plan-ocr-runner";
 import { call, isDrawing, isPlanFile, type Param, type PlanFile, type PlansData, type Sheet } from "./shared";
 import { FilesStep, SheetsStep } from "./files-sheets";
@@ -150,11 +150,8 @@ export function PlanRoom({ jobId }: { jobId: string }) {
     <div className="flex flex-col" style={{ minHeight: "calc(100dvh - var(--sc-head))" }}>
       <div style={{ background: T.card, borderBottom: `1px solid ${T.hair}`, padding: "10px 16px 0" }}>
         <div className="flex items-center gap-2 flex-wrap">
-          <Link href={`/dashboard/scope/${jobId}`} className="no-underline flex items-center gap-1.5 rounded px-2" title="Back to the job"
-            style={{ height: 32, border: `1px solid ${T.hairStrong}`, color: T.ink, minWidth: 0, maxWidth: "60vw" }}>
-            <span style={{ fontFamily: disp, fontSize: 11, fontWeight: 600, letterSpacing: ".14em", color: T.ink3 }}>JOB</span>
-            <span style={{ fontSize: F.sm, fontWeight: 600, ...clip }}>{data?.job?.title || "This job"}</span>
-          </Link>
+          <JobTabs jobId={jobId} active="plans" />
+          <span style={{ fontSize: F.sm, fontWeight: 600, color: T.ink, ...clip, minWidth: 0, maxWidth: "40vw" }}>{data?.job?.title || ""}</span>
           <span className="flex-1" />
           {ocr.running && ocr.jobId === jobId ? (
             <span className="flex items-center gap-1.5" title={ocr.label} style={{ fontSize: 11.5, borderRadius: 3, padding: "3px 8px", background: T.dustyTint, color: T.ink2, fontWeight: 600 }}>

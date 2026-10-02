@@ -29,6 +29,7 @@ import { JobChips } from "@/components/v34/job-chips";
 import { FilesPanel, type FileRow } from "@/components/v34/files-panel";
 import { SectionPhotos } from "@/components/v34/section-photos";
 import { BidStrip } from "@/components/v34/bid-strip";
+import { JobTabs } from "@/components/v34/job-tabs";
 import { JobBudget, type BudgetSummary } from "@/components/v34/job-budget";
 import {
   takeoff as takeoffOf, quantities, ruleQty,
@@ -235,18 +236,9 @@ export default function ScopeBuilder() {
           </div>
           {job.description && !bidSummary && <div style={{ fontSize: F.sm, color: T.ink2, lineHeight: 1.4, marginTop: 2 }}>{job.description}</div>}
           {saveErr.job && <div style={{ fontSize: F.xs, color: T.red }}>{saveErr.job}</div>}
-          <div className="flex items-center justify-end gap-1.5" style={{ marginTop: 6 }}>
-            {/* The Plan Room (059): plan sheets, takeoff, and its lines on the budget. */}
-            <Link href={`/dashboard/scope/${jobId}/plans`} className="rounded flex items-center gap-1 no-underline"
-              style={{ height: 24, padding: "0 8px", border: `1px solid ${T.hair}`, background: T.card, color: T.ink2, fontFamily: disp, fontSize: 10.5, fontWeight: 600, letterSpacing: ".06em", textTransform: "uppercase" }}>
-              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true"><path d="M2 3.5 6 2l4 1.5L14 2v10.5L10 14l-4-1.5L2 14z" /><path d="M6 2v10.5M10 3.5V14" /></svg>
-              Plan room
-            </Link>
-            <Link href={`/dashboard/scope/${jobId}/proposal`} className="rounded flex items-center gap-1 no-underline"
-              style={{ height: 24, padding: "0 8px", border: `1px solid ${T.hair}`, background: T.card, color: T.ink2, fontFamily: disp, fontSize: 10.5, fontWeight: 600, letterSpacing: ".06em", textTransform: "uppercase" }}>
-              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true"><path d="M4 1.5h5.5L13 5v9.5H4z" /><path d="M9.5 1.5V5H13M6 8h5M6 10.5h5M6 13h3" /></svg>
-              Proposal
-            </Link>
+          {/* Budget · Plan room · Proposal — one switch on all three (Coy, 2026-10-02). */}
+          <div className="flex justify-end" style={{ marginTop: 6 }}>
+            <JobTabs jobId={jobId} active="job" />
           </div>
         </div>
 

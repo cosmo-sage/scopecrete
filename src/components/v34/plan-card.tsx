@@ -23,7 +23,13 @@ export function PlanCard({ jobId, actions, dropped, done }: { jobId: string | nu
   if (!actions.length && !dropped) return null;
   const names = {
     item: (r: string) => (look ? byRef(look.items, r)?.name ?? null : r),
-    area: (r: string | null) => (r === null ? "the whole job" : look ? byRef(look.sections, r)?.name ?? `area ${r} (not on this job)` : `area ${r}`),
+    area: (r: string | null) => {
+      if (r === null) return "the whole job";
+      const made = actions.find((x) => x.do === "new_area" && x.key === r);
+      if (made && made.do === "new_area") return `the new area “${made.name}”`;
+      return look ? byRef(look.sections, r)?.name ?? `area ${r} (not on this job)` : `area ${r}`;
+    },
+    takeoff: (r: string) => (look ? byRef(look.takeoff, r)?.name ?? null : null),
   };
   const run = async () => {
     if (!jobId || !look) return;

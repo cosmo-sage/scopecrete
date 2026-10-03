@@ -4,7 +4,7 @@ Ground truth for every agent working this repo. If code disagrees with this
 document, the code is wrong or this document is stale — resolve it, don't
 guess. Update this file in the same PR that changes the behavior it describes.
 
-Last updated: 2026-10-03 (aerial sheets)
+Last updated: 2026-10-03 (call notes → Dusty's quote; aerial sheets)
 
 ---
 
@@ -1330,6 +1330,12 @@ percentage of labour — all three contradict this section and §4.
   steps with **Apply** (`plan-card.tsx`); the tap runs them through the same
   APIs Coy's own taps use, under his session (`apply-plan.ts`), and the
   budget reloads. **Dusty still changes nothing himself.**
+  **Since 2026-10-03 a plan can also make areas and count from a takeoff:**
+  `new_area` (a key — new1, new2 — a name, a kind of area, and a size in
+  sq ft, LF or a count and a depth only when written in the context) which
+  later steps put items on by its key; and `add` with `takeoff: <group ref>`,
+  a line counted from a Plan Room group (the aerial or a sheet) that moves
+  when Coy re-measures. The context lists takeoff groups by ref.
 - **Base, vapor barrier and day-rate equipment** are cards like anything
   else (by the sq ft, by the day); nothing is priced that has no card.
 - **Dictating a section (2026-09-28).** Dictate on a section card records up
@@ -2183,6 +2189,33 @@ expected start date per quoted job before it means anything. Add the field.
   instruction to quote the sheet and point out what disagrees, and to send
   Coy to the sheet under the section. What is drawn but not written isn't
   in it, and he says so.
+- **Call notes → Dusty's quote (Coy, 2026-10-03: "make notes on a live
+  call so that Dusty can finish putting the quote together from aerial
+  imagery afterwards").** **Call notes** on the person page and the customer
+  page opens a pad (`call-notes-pad.tsx`, drawn at the page's top level) that
+  saves as Coy types: the first words make a `contact_notes` row
+  (`POST /api/people/[id]/notes`), each pause updates it
+  (`PATCH /api/notes/[id]`), and a copy stays on the device until the server
+  has it. **Quo sends a call only after hang-up** (no ringing event reaches
+  us — measured 2026-10-03), so the note waits on the person; once the call
+  arrives it is attached to the call it was written during —
+  `callForNote()` (`src/lib/call-notes.ts`, tested): the call's own window
+  from Quo's `call.completed` (`createdAt` → `completedAt`, raw log §2a),
+  from 2 minutes before it rang to 15 minutes after hang-up, a note during a
+  call beating the tail of the one before. A note in no window stays a plain
+  note; a call with no window takes none. Attaching is done by the reads that
+  show notes (the pad, the person and customer timelines, Dusty's job
+  context — `settleCallNotes()`, session client, notes from the last three
+  days with no call yet, no migration). The pad then says "On the 3:54 PM
+  call" with **Draft the quote**, also on every call card:
+  `POST /api/messages/[id]/quote` finds the call's job, else the caller's or
+  their customer's newest open job — or, on Coy's yes, starts one — opens
+  it, and puts the question in Dusty's box for Coy to send. Dusty's job
+  context carries **Calls about this job** (the newest four with summary,
+  next steps and Coy's notes on each; transcripts of the newest two, marked
+  machine-heard, Coy's notes winning) beside the Plan Room's measured
+  aerial, and he answers with a budget plan (§3) Coy applies. A "Call
+  starting" banner needs Quo's ringing event switched on — not built.
 - **Job header (2026-09-28)** — four tappable chips, each opening its list:
   **Status** (the seven stages, with W.I.P.'s won / scheduled / pouring),
   **Type**, **Source** and **Vendors (n)** (crew on the job, add by subtype)

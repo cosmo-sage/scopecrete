@@ -13,6 +13,7 @@ import { takeoff, budget, jobMinimum, type BudgetLine, type OverheadItem, type S
 import { moneySettings, pricingFor, type JobPricing } from "@/lib/pricing-server";
 import { loadTakeoff, takeoffTotalsFor } from "@/lib/plans-server";
 import { fmtQty, scaleLabel } from "@/lib/takeoff";
+import { settleCallNotes } from "@/lib/call-notes-server";
 import { assemble, coldContext, scopeLines, type Assembled, type Block } from "./prompt";
 
 export type ContextRef =
@@ -285,7 +286,7 @@ async function settingsAndOverhead(sb: Sb, orgId: string) {
 }
 
 async function scopeContext(sb: Sb, orgId: string, jobId: string): Promise<Assembled> {
-  const { data: job } = await sb.from("jobs").select("id, title, status, address, contact_id, duration_days")
+  const { data: job } = await sb.from("jobs").select("id, title, status, address, contact_id, customer_id, duration_days")
     .eq("org_id", orgId).eq("id", jobId).maybeSingle();
   if (!job) return coldContext(null, new Date().toISOString().slice(0, 10));
   const [{ data: secs }, pricing, who, files] = await Promise.all([
@@ -303,7 +304,8 @@ async function scopeContext(sb: Sb, orgId: string, jobId: string): Promise<Assem
   const t = takeoff(sections, null);
   const days = num(job.duration_days);
   const jp = pricing.get(jobId) ?? null;
-  const [bud, plans, prop, mail, bid, ocr, book, bidText] = await Promise.all([budgetBlock(sb, orgId, jobId, sections, days, jp), plansBlock(sb, orgId, jobId), proposalBlock(sb, orgId, jobId), emailsBlock(sb, orgId, { jobId }), bidBlock(sb, orgId, jobId), ocrBlock(sb, orgId, jobId), priceBookBlock(sb, orgId), bidTextBlock(sb, orgId, jobId)]);
+  const [bud, plans, prop, mail, bid, ocr, book, bidText, calls] = await Promise.all([budgetBlock(sb, orgId, jobId, sections, days, jp), plansBlock(sb, orgId, jobId), proposalBlock(sb, orgId, jobId), emailsBlock(sb, orgId, { jobId }), bidBlock(sb, orgId, jobId), ocrBlock(sb, orgId, jobId), priceBookBlock(sb, orgId), bidTextBlock(sb, orgId, jobId),
+    callsBlock(sb, orgId, job.contact_id as string | null, job.customer_id as string | null)]);
   // Areas by ref, for a budget plan (src/lib/dusty/plan.ts).
   const areaRefs = ((secs ?? []) as Array<Record<string, unknown>>).map((r) => {
     const sq = num(r.sqft_override) ?? (num(r.length_ft) !== null && num(r.width_ft) !== null ? (num(r.length_ft) as number) * (num(r.width_ft) as number) : null);
@@ -320,6 +322,7 @@ async function scopeContext(sb: Sb, orgId: string, jobId: string): Promise<Assem
       `Pricing: O.H. ${jp?.settings.overhead_pct ?? "NOT SET"}%, margin ${jp?.settings.margin_pct ?? "NOT SET"}% — price = cost × (1 + O.H.) ÷ (1 − margin)`,
       `Sales tax: ${jp?.tax.rate !== null && jp?.tax.rate !== undefined ? `${jp.tax.rate}% (${jp.tax.source === "override" ? "typed for this job" : `${jp.tax.parish} parish`})` : `unknown — ${jp?.tax.missing ?? "no rate"}`}`] },
     ...(bid ? [bid] : []),
+    ...(calls ?? []),
     { title: "Sections and their quantities (exactly what the builder shows)", lines: scopeLines(t, !!bud) },
     { title: "Areas — refs for a budget plan (\"job\" = whole job)", lines: areaRefs },
     ...(bud ? [bud] : []),
@@ -333,6 +336,47 @@ async function scopeContext(sb: Sb, orgId: string, jobId: string): Promise<Assem
     ...(files ? [files] : []),
     ...(who ? [who.block] : []),
   ], 110000);
+}
+
+/**
+ * The calls about a job (Coy, 2026-10-03: notes on a live call, then "Dusty can
+ * finish putting the quote together"): the caller's and their customer's latest
+ * calls, each with its summary, next steps and Coy's notes taken on it, and the
+ * full transcripts of the newest two. Read under the session.
+ */
+async function callsBlock(sb: Sb, orgId: string, contactId: string | null, customerId: string | null): Promise<Block[] | null> {
+  let ids = contactId ? [contactId] : [];
+  if (customerId) {
+    const { data } = await sb.from("contacts").select("id").eq("org_id", orgId).eq("customer_id", customerId).is("merged_into_contact_id", null).limit(20);
+    ids = [...new Set([...ids, ...((data ?? []) as Array<{ id: string }>).map((c) => c.id)])];
+  }
+  if (!ids.length) return null;
+  await settleCallNotes(sb, orgId, ids);
+  const { data: rows } = await sb.from("messages").select("id, direction, occurred_at, summary")
+    .eq("org_id", orgId).in("contact_id", ids).eq("channel", "call").order("occurred_at", { ascending: false }).limit(4);
+  const calls = (rows ?? []) as Array<{ id: string; direction: string; occurred_at: string | null; summary: string | null }>;
+  if (!calls.length) return null;
+  const callIds = calls.map((c) => c.id);
+  const [{ data: arts }, { data: notes }] = await Promise.all([
+    sb.from("call_artifacts").select("message_id, kind, content").eq("org_id", orgId).in("message_id", callIds).in("kind", ["next_steps", "transcript"]),
+    sb.from("contact_notes").select("message_id, body, created_at").eq("org_id", orgId).in("message_id", callIds).order("created_at"),
+  ]);
+  const art = new Map<string, string>();
+  for (const a of (arts ?? []) as Array<{ message_id: string; kind: string; content: string | null }>) if (a.content) art.set(`${a.kind}:${a.message_id}`, a.content.trim());
+  const noteBy = new Map<string, string[]>();
+  for (const n of (notes ?? []) as Array<{ message_id: string; body: string }>) noteBy.set(n.message_id, [...(noteBy.get(n.message_id) ?? []), n.body.replace(/\s+/g, " ").slice(0, 2000)]);
+  const lines = calls.map((c) => [
+    `[${day(c.occurred_at)} ${c.direction === "outbound" ? "Coy called" : "they called"}]`,
+    `summary: ${c.summary?.trim() || "none"}`,
+    art.has(`next_steps:${c.id}`) ? `next steps: ${art.get(`next_steps:${c.id}`)!.replace(/\n+/g, " / ")}` : null,
+    noteBy.has(c.id) ? `COY'S NOTES TAKEN ON THIS CALL: ${noteBy.get(c.id)!.join(" | ")}` : "Coy's notes on this call: none",
+  ].filter(Boolean).join(" — "));
+  const tx = calls.filter((c) => art.has(`transcript:${c.id}`)).slice(0, 2)
+    .map((c) => `[${day(c.occurred_at)} call]\n${art.get(`transcript:${c.id}`)!.slice(0, 10000)}`);
+  return [
+    { title: "Calls about this job (newest first; Coy's notes on a call are his own words — what he heard and wants)", lines },
+    ...(tx.length ? [{ title: "Transcripts of the newest calls (machine-heard: names and numbers can be misheard; Coy's notes win where they differ)", lines: tx, trimmable: true }] : []),
+  ];
 }
 
 const fmt0 = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 1 });
@@ -413,9 +457,9 @@ async function plansBlock(sb: Sb, orgId: string, jobId: string): Promise<Block |
   for (const p of params) {
     const t = totals[p.id];
     const n = measurements.filter((m) => m.parameter_id === p.id).length;
-    lines.push(`Takeoff group "${p.name}" (${p.kind}${p.depth_in ? `, ${p.depth_in}" deep` : ""}): ${t?.qty !== null && t?.qty !== undefined ? `${fmtQty(t.qty, t.unit)}${t.cy !== null ? ` = ${t.cy.toFixed(1)} CY neat` : ""}` : `no total — ${t?.blocked ?? "nothing measured"}`} from ${n} shape${n === 1 ? "" : "s"}`);
+    lines.push(`Takeoff group ${p.id.slice(0, 8)} "${p.name}" (${p.kind}${p.depth_in ? `, ${p.depth_in}" deep` : ""}): ${t?.qty !== null && t?.qty !== undefined ? `${fmtQty(t.qty, t.unit)}${t.cy !== null ? ` = ${t.cy.toFixed(1)} CY neat` : ""}` : `no total — ${t?.blocked ?? "nothing measured"}`} from ${n} shape${n === 1 ? "" : "s"}`);
   }
-  return { title: "Plan Room takeoff (measured on the plans by Coy)", lines };
+  return { title: "Plan Room takeoff (measured by Coy on the plans or the aerial; a group's 8-character ref lets a plan count an item from it)", lines };
 }
 
 /**

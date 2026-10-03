@@ -27,6 +27,7 @@ import { NameEditor, FileAsSheet } from "@/components/v34/contact-edit";
 import { useWide } from "@/lib/v34/use-wide";
 import { FilesPanel } from "@/components/v34/files-panel";
 import { CostCards } from "@/components/v34/cost-cards";
+import { CallNotesPad } from "@/components/v34/call-notes-pad";
 
 export interface Person {
   contact: {
@@ -98,6 +99,7 @@ export function PersonView({ person, messages, onReload, onMerge }: {
   const [tab, setTab] = useState<"activity" | "jobs" | "prices" | "files" | "about">("activity");
   const [error, setError] = useState<string | null>(null);
   const [filing, setFiling] = useState(false);
+  const [callNotes, setCallNotes] = useState(false);
   // Room for two columns (Coy, 2026-09-29: no dead space either side on a
   // desktop). The conversation fills the left; next steps, jobs and about
   // stand in a column on the right, as in the desktop design's 1d. Narrow —
@@ -173,8 +175,10 @@ export function PersonView({ person, messages, onReload, onMerge }: {
             style={act} title="Write it here, copy it into Quo — sending waits on 10DLC">Text</button>
           {c.email ? <a href={`mailto:${c.email}`} style={act}>Email</a>
             : <span style={{ ...act, opacity: 0.4, cursor: "default" }} title="No email on file for them">Email</span>}
+          <button onClick={() => setCallNotes(true)} style={act} title="Notes while you're on the phone — they land on the call">Call notes</button>
           <button onClick={() => window.dispatchEvent(new Event("sc:dusty-open"))} style={{ ...act, color: T.hiviz, borderColor: T.hiviz }}>Ask Dusty</button>
         </div>
+        <CallNotesPad contactId={c.id} who={title} open={callNotes} onClose={() => { setCallNotes(false); onReload(); }} />
       </div>
 
       {error && <div className="mx-3 mt-2" style={{ fontSize: F.xs, color: T.red }}>{error}</div>}

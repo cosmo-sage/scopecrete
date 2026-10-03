@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
+import { settleCallNotes } from "@/lib/call-notes-server";
 
 /**
  * Everything about one person for their Customer or Vendor page (Coy,
@@ -32,6 +33,8 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ contactId: 
   if (cErr) return fail("contacts", cErr.message);
   if (!c) return applyCookies(NextResponse.json({ error: "Contact not found." }, { status: 404 }));
   if (c.merged_into_contact_id) return applyCookies(NextResponse.json({ redirect_to: c.merged_into_contact_id }));
+  // Notes Coy took during a call land on it once Quo has sent the call (src/lib/call-notes.ts).
+  await settleCallNotes(supabase, orgId, [contactId]);
 
   // Maybe the same person under another number (Coy, 2026-09-28: two Ambers).
   // Same name or same email on another live contact. A suggestion only — a

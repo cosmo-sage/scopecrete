@@ -32,6 +32,7 @@ import { Composer } from "@/components/v34/composer";
 import { FilesPanel } from "@/components/v34/files-panel";
 import { STATUS_NAME } from "@/lib/jobs/stages";
 import { SubRail, type SubIcon } from "@/components/v34/sub-rail";
+import { CallNotesPad, DraftQuoteButton } from "@/components/v34/call-notes-pad";
 
 interface Method { kind: "mobile" | "office" | "home" | "phone" | "email"; value: string; can_text: boolean | null; primary: boolean }
 interface Contact { id: string; name: string | null; role: string | null; primary: boolean; bucket: string | null; status_summary: string | null; recent_summary: string | null; last_contacted: string | null; methods: Method[] }
@@ -80,6 +81,7 @@ export function CustomerPage({ customerId, focusContact }: { customerId: string;
   const [tick, setTick] = useState(0);
   const [tab, setTab] = useState<Tab>(focusContact ? "threads" : "details");
   const [editing, setEditing] = useState(false);
+  const [callNotes, setCallNotes] = useState(false);
   const [note, setNote] = useState<{ text: string; undo?: string } | null>(null);
   const [measure, wide] = useWide<HTMLDivElement>(1000);
   const reload = () => setTick((n) => n + 1);
@@ -146,9 +148,11 @@ export function CustomerPage({ customerId, focusContact }: { customerId: string;
             {phone ? <a href={`tel:${phone}`} style={btn()}>Call</a> : <span style={{ ...btn(), opacity: 0.45 }} title="No number on file">Call</span>}
             <button onClick={() => setTab("threads")} style={btn()}>Text</button>
             {email ? <a href={`mailto:${email}`} style={btn()}>Email</a> : <span style={{ ...btn(), opacity: 0.45 }} title="No email on file">Email</span>}
+            <button onClick={() => setCallNotes(true)} disabled={!primary} style={btn()} title="Notes while you're on the phone — they land on the call">Call notes</button>
             <button onClick={() => setEditing(true)} style={btn()}>Edit</button>
             <button onClick={() => void newScope()} disabled={!primary} style={btn(true)}>+ New scope</button>
           </div>
+          {primary && <CallNotesPad contactId={primary.id} who={primary.name || cu.name || "this customer"} open={callNotes} onClose={() => { setCallNotes(false); setTick((n) => n + 1); }} />}
         </div>
         {note && (
           <div className="mt-2 rounded px-3 py-1.5 flex items-center gap-2" style={{ background: T.hivizDim, fontSize: F.sm }}>
@@ -719,6 +723,7 @@ function CallCard({ m, who, onAddNote }: { m: Item; who: string; onAddNote: (id:
         <span className="flex-1" />
         <span style={{ ...lbl, fontWeight: 400, fontSize: 11, color: T.ink3 }}>{time(m.at)}</span>
       </header>
+      <DraftQuoteButton messageId={m.id} style={{ alignSelf: "flex-start" }} />
       {m.summary && <div><div style={{ ...lbl, fontSize: 11, color: T.hivizText }}>Summary · Dusty</div><p style={{ margin: "3px 0 0", fontSize: 13.5, lineHeight: 1.5, color: T.ink }}>{m.summary}</p></div>}
       {steps.length > 0 && (
         <div style={{ background: T.dustyTint, borderRadius: 3, padding: "7px 11px" }}>

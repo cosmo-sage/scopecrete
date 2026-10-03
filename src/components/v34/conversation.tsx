@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Phone, CaretDown, CaretRight } from "@phosphor-icons/react";
 import { T, F, disp, eyebrow } from "@/lib/v34/tokens";
+import { DraftQuoteButton } from "@/components/v34/call-notes-pad";
 
 /**
  * v34 palette, mapped onto the key names this screen already used.
@@ -266,6 +267,8 @@ export function CallRow({ m }: { m: ThreadMessage }) {
       {m.artifact_kinds.includes("recording") && (
         <PlayAudio messageId={m.id} kind="recording" label={`Play recording${duration ? ` · ${duration}` : ""}`} />
       )}
+
+      <DraftQuoteButton messageId={m.id} style={{ display: "block", marginTop: 6 }} />
 
       {!open && bundle?.next_steps?.content && (
         <div className="mt-2 rounded px-2.5 py-2" style={{ background: DA.elevated }}>

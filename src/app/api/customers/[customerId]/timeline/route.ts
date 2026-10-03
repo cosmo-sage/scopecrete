@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
+import { settleCallNotes } from "@/lib/call-notes-server";
 
 /**
  * One timeline for a customer: every call and text from all of its contacts,
@@ -37,6 +38,8 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ customerId:
   const contacts = (cs ?? []) as Array<{ id: string; name: string | null; phone: string | null }>;
   if (!contacts.length) return applyCookies(NextResponse.json({ items: [], contacts: [] }));
   const ids = contacts.map((c) => c.id);
+  // Notes Coy took during a call land on it once Quo has sent the call (src/lib/call-notes.ts).
+  await settleCallNotes(sb, orgId, ids);
 
   const { data: rows, error } = await sb.from("messages")
     .select("id, contact_id, channel, direction, occurred_at, body_text, summary, duration_seconds, status")

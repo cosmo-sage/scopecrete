@@ -12,6 +12,18 @@ import { GROUP_COLORS, PARAM_COLS } from "@/lib/plans-server";
 export const dynamic = "force-dynamic";
 const KINDS = ["area", "linear", "count"];
 
+/** The job's takeoff groups (for Dusty's plans, which name them by ref). */
+export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const { id } = await ctx.params;
+  const result = await getApiSession(req);
+  if (!result.ok) return result.response;
+  const { supabase, orgId, applyCookies } = result.session;
+  if (!(await jobInOrg(supabase, orgId, id))) return applyCookies(NextResponse.json({ error: "No such job." }, { status: 404 }));
+  const { data, error } = await supabase.from("takeoff_parameters").select(PARAM_COLS).eq("org_id", orgId).eq("job_id", id).order("sort_order");
+  if (error) return applyCookies(NextResponse.json({ error: error.message }, { status: 500 }));
+  return applyCookies(NextResponse.json({ parameters: data ?? [] }));
+}
+
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
   const result = await getApiSession(req);

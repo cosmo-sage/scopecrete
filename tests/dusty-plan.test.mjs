@@ -46,3 +46,28 @@ test("steps read in plain words", () => {
   assert.match(describe(p.actions[2], names), /New Price book item “Detectable warning panel” — EA, material, no cost yet, in Sidewalk → on Concrete Walk, qty 8/);
   assert.equal(describe(p.actions[3], names), "Change item aaaaaaaa (not found): unit cost $18.5");
 });
+
+test("a quote from a call: new areas by key, items on them, and a line counted from the aerial", () => {
+  const p = parsePlan(`Driveway and apron from your notes.
+\`\`\`scopecrete-plan
+[{"do":"new_area","key":"new1","name":"Driveway","work_type":"driveway","sqft":800,"depth_in":4},
+ {"do":"new_area","key":"NEW2","name":"Walk","work_type":"sidewalk","lf":42},
+ {"do":"add","item":"3f2a91c0","area":"new1"},
+ {"do":"add_group","group":"Flatwork","area":"new2"},
+ {"do":"add","item":"3f2a91c0","takeoff":"9c1d2e3f"},
+ {"do":"add","item":"3f2a91c0","takeoff":"not-a-ref"},
+ {"do":"new_area","key":"new3","name":"Both","work_type":"slab","sqft":100,"lf":10},
+ {"do":"new_area","key":"x1","name":"Bad key","work_type":"slab"},
+ {"do":"new_area","key":"new4","name":"Pool","work_type":"pool"}]
+\`\`\``);
+  assert.equal(p.actions.length, 5);
+  assert.equal(p.dropped, 4, "a bad takeoff ref, two sizes at once, a bad key and an unknown kind of area");
+  assert.deepEqual(p.actions[0], { do: "new_area", key: "new1", name: "Driveway", work_type: "driveway", sqft: 800, lf: null, count: null, unit: null, depth_in: 4 });
+  assert.equal(p.actions[1].key, "new2");
+  assert.equal(p.actions[2].area, "new1");
+  assert.equal(p.actions[3].area, "new2");
+  assert.deepEqual(p.actions[4], { do: "add", item: "3f2a91c0", area: null, qty: null, takeoff: "9c1d2e3f" });
+  const names = { item: () => "Form & finish", area: (r) => (r === "new1" ? "the new area “Driveway”" : String(r)), takeoff: () => "Driveway (aerial)" };
+  assert.equal(describe(p.actions[0], names), "New area “Driveway” (driveway, 800 sf, 4\")");
+  assert.equal(describe(p.actions[4], names), "Add Form & finish, counted from the measured “Driveway (aerial)”");
+});

@@ -788,6 +788,24 @@ on our side is Coy; the transcript the model reads has our side's
 "Corey/Cory" turned into Coy (`relabelTranscript()`). Tested in
 `tests/enrich-selfid.test.mjs`. Deployed source read back equal to the repo.
 
+**Nothing waits on a new message any more (`enrich-contacts` v25–v26,
+2026-10-03).** Coy: *"This last phone call from Johnette … was as clear as
+day … And it's still unnamed in the threads … we need to figure out where the
+gaps are and close them."* Three gaps, measured on her thread:
+- **Old reads kept old outcomes.** A contact is read again only when something
+  new is said, so a rule fixed after a read never reached them. Johnette's text
+  "Hi, this is Johnette." was blocked by the v12 rule that counted the call's
+  heard "Jonette" as a second name; v24 fixed the rule, but nothing re-asked.
+  Every run now ends with `recheckNames()` (no model call): the unnamed with a
+  standing name suggestion first, then one-word names Dusty wrote, through
+  `applySelfIdentified()` as a fresh read would. It named Johnette and
+  Pashawn on its first run.
+- **Half a name.** When the model's pick ("Johnette") was said and the fuller
+  name ("Johnette Wilson") was too, the whole one wins (`introducedOver()`),
+  and a one-word name Dusty wrote may grow into it — never a name Coy wrote
+  (`extending` in `applySelfIdentified()`).
+- **Customers waited for a 20-in-a-row streak.** See the next paragraph.
+
 It is written with `name_source='machine'`, a `contact_name_claims` row
 (`claim_type='self_identification'`, the exact line as `evidence_quote`) and
 `name_claim_id`. The row shows **Auto** and, expanded, the line with **Keep**
@@ -850,6 +868,23 @@ before Coy decided) against Coy's answer.
   marks and conditions as spam (`auto_classified_at`, nobody sorted them, never
   un-filed), shown "Filed as X by Dusty" with **Keep** / **Not X**. One miss
   and he is back to asking.
+  **Superseded 2026-10-03 — Dusty files everyone (Coy: "Just let Dusty work
+  on filing everything. I can always change it to a different bucket.").**
+  Measured that day: customer guesses matched Coy 19 of 21 times, but the last
+  miss had reset the streak to 0, and 158 people sat in Unsorted. Now any
+  suggestion of customer / vendor / sub / personal at **70+** confidence
+  (`AUTO_FILE_CONFIDENCE`) is filed — the streak still files below it — and
+  spam at **85+** (`AUTO_SPAM_CONFIDENCE`) even without a stock spam line, but
+  never someone Coy wrote to or called back. "unknown" is never filed; anyone
+  Coy filed or un-filed is never touched. Same marks as before: auto, Keep /
+  Not X. People already read are filed from their standing suggestion by
+  `recheckBuckets()` (25 a run, no model call): the first run filed 17
+  customers, 7 vendors and 1 personal, all at 70+, and the jobs trigger made
+  their New-lead jobs, each with **Accept** and uncounted until Coy keeps
+  the customer. **What did not change:** an automatic vendor or sub writes
+  only `contacts.contact_type`, never `customers.relation`, so quo-intake
+  still makes their leads until Coy taps Keep — a machine opinion still never
+  hides a lead.
 - **An automatic vendor or sub never hides a lead.** Only
   `contacts.contact_type` is written; `customers.relation` stays unconfirmed,
   so quo-intake keeps creating their leads until Coy taps Keep. §2b's rule

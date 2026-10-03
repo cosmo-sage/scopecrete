@@ -538,7 +538,7 @@ export function sanitize(p: Proposal, turns: Turn[]): { p: Proposal; notes: stri
  * The Arts", "my name is Jen McLean". Everything else is still a question.
  *
  * This does NOT trust the model. The model proposes a name; this function then
- * has to find the person saying that name about themselves, independently:
+ * has to find the person saying it about themselves, independently:
  *
  * - only THEIR words count: an inbound text, or a transcript line spoken from
  *   one of the contact's own numbers. Our outbound texts and our side of a call

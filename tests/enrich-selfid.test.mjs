@@ -123,3 +123,14 @@ test("our side's 'Corey' is Coy to the model", async () => {
   const out = relabelTranscript(`${US}: This is Corey.\n${THEM}: Hi Corey, it's Cory from the plant`, [THEM]);
   assert.equal(out, "US: This is Coy.\nTHEM: Hi Corey, it's Cory from the plant");
 });
+
+// Coy, 2026-10-03: the same caller then texted "Hi, this is Johnette." and still
+// wasn't named — the call's heard "Jonette" counted as a second introduction.
+test("a text and a spelled call that agree are one introduction", async () => {
+  const { introducedOver } = await import("../supabase/functions/enrich-contacts/pipeline.ts");
+  const turns = [call("THEM", SPELLED_CALL, "c1"), sms("THEM", "Hi, this is Raynette.  Here are the pictures you requested.", "s1")];
+  assert.ok(findSelfIdentification("Raynette", turns, [THEM]));
+  assert.equal(introducedOver("Raynette", turns, [THEM]), "Raynette Holloway", "the whole name they said");
+  assert.equal(introducedOver(null, turns, [THEM]), "Raynette Holloway");
+  assert.ok(findSelfIdentification("Raynette Holloway", turns, [THEM]));
+});

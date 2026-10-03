@@ -162,8 +162,12 @@ type Named = Pick<Proposal, 'proposed_name' | 'proposed_company' | 'confidence'>
  */
 /** The name to put forward: the model's if they introduced themselves by it, else the one they did introduce. */
 export function introducedOver(proposed: string | null, turns: Turn[], numbers: string[]): string | null {
-  if (proposed && findSelfIdentification(proposed, turns, numbers)) return proposed
-  return introducedName(turns, numbers) ?? proposed
+  const intro = introducedName(turns, numbers)
+  if (proposed && findSelfIdentification(proposed, turns, numbers)) {
+    // "Johnette" said, "Johnette Wilson" also said: the whole name (Coy, 2026-10-03).
+    return intro && intro.toLowerCase().startsWith(`${proposed.trim().toLowerCase()} `) ? intro : proposed
+  }
+  return intro ?? proposed
 }
 
 export async function applySelfIdentified(sb: Db, orgId: string, contactId: string, p: Named, turns: Turn[], model: string)
@@ -176,9 +180,11 @@ export async function applySelfIdentified(sb: Db, orgId: string, contactId: stri
     sb.from('contact_name_claims').select('claimed_name').eq('org_id', orgId).eq('contact_id', contactId).eq('status', 'rejected'),
   ])
   if (!c) return { claim_id: null, note: 'contact not readable' }
-  if ((c.name as string | null)?.trim() || c.name_source === 'human') return { claim_id: null, note: 'already has a name' }
-
   const name = p.proposed_name.trim().replace(/\s+/g, ' ')
+  const had = (c.name as string | null)?.trim() || ''
+  // A name Dusty wrote may only grow into the fuller one they said; Coy's is never touched.
+  const extending = !!had && c.name_source === 'machine' && name.toLowerCase().startsWith(`${had.toLowerCase()} `)
+  if ((had && !extending) || c.name_source === 'human') return { claim_id: null, note: 'already has a name' }
   if (((undone ?? []) as Array<{ claimed_name: string | null }>).some((u) => u.claimed_name?.trim().toLowerCase() === name.toLowerCase())) {
     return { claim_id: null, note: 'Coy undid this name before' }
   }
@@ -196,9 +202,10 @@ export async function applySelfIdentified(sb: Db, orgId: string, contactId: stri
 
   // Only onto an empty, non-human name: a race with Coy typing a name is a
   // no-op, not an overwrite. sc_guard_contact_identity enforces the same.
-  const { data: rows, error: uErr } = await sb.from('contacts')
+  const target = sb.from('contacts')
     .update({ name, name_source: 'machine', name_claim_id: claim.id, enrichment_source: 'hermes-self-id' })
-    .eq('org_id', orgId).eq('id', contactId).neq('name_source', 'human').or('name.is.null,name.eq.')
+    .eq('org_id', orgId).eq('id', contactId).neq('name_source', 'human')
+  const { data: rows, error: uErr } = await (extending ? target.eq('name_source', 'machine').eq('name', had) : target.or('name.is.null,name.eq.'))
     .select('name')
   // The reserved-names trigger can blank the name (one of our own); then there
   // is no name to stand behind, and the claim stands down too.
@@ -215,15 +222,100 @@ export async function applySelfIdentified(sb: Db, orgId: string, contactId: stri
 }
 
 /**
+ * Names waiting on a rule, not on a message (Coy, 2026-10-03: Johnette texted
+ * "Hi, this is Johnette" and stayed unnamed). A contact is only read again when
+ * something new is said, so when the name rules improve, everyone already read
+ * under the old ones keeps their old outcome. Each run therefore re-checks the
+ * unnamed people whose standing suggestion carries a name — no model call: the
+ * same applySelfIdentified() a fresh read uses, on the turns as they are.
+ * Cheap (a few reads each) and bounded; a name still has to be one they said.
+ */
+export async function recheckNames(sb: Db, model: string, limit = 25): Promise<{ checked: number; named: number }> {
+  const { data: props } = await sb.from('contact_proposals')
+    .select('org_id, contact_id, proposed_name, proposed_company, confidence')
+    .eq('status', 'pending').not('proposed_name', 'is', null)
+    .order('created_at', { ascending: false }).limit(150)
+  const list = (props ?? []) as Array<{ org_id: string; contact_id: string } & Named>
+  if (!list.length) return { checked: 0, named: 0 }
+  // Unnamed, or a one-word name Dusty wrote that a fuller introduction may extend.
+  // Never Coy's name, never merged away. Each row is checked against its own org below.
+  const { data: open } = await sb.from('contacts').select('id, org_id, name')
+    .in('id', [...new Set(list.map((r) => r.contact_id))])
+    .is('merged_into_contact_id', null).neq('name_source', 'human').or('name.is.null,name.eq.,name_source.eq.machine')
+  const rank = new Map<string, number>()
+  for (const c of (open ?? []) as Array<{ id: string; org_id: string; name: string | null }>) {
+    const n = c.name?.trim() ?? ''
+    if (!n) rank.set(`${c.org_id}:${c.id}`, 0)
+    else if (!n.includes(' ')) rank.set(`${c.org_id}:${c.id}`, 1)
+  }
+  const rows = list.filter((r) => rank.has(`${r.org_id}:${r.contact_id}`))
+    .sort((a, b) => rank.get(`${a.org_id}:${a.contact_id}`)! - rank.get(`${b.org_id}:${b.contact_id}`)!)
+    .slice(0, limit)
+  let checked = 0, named = 0
+  for (const r of rows) {
+    checked++
+    const [turns, numbers] = await Promise.all([loadTurns(sb, r.org_id, r.contact_id), contactNumbers(sb, r.org_id, r.contact_id)])
+    const res = await applySelfIdentified(sb, r.org_id, r.contact_id,
+      { ...r, proposed_name: introducedOver(r.proposed_name, turns, numbers) }, turns, model)
+    if (res.claim_id) named++
+  }
+  return { checked, named }
+}
+
+/**
+ * Dusty files everyone (Coy, 2026-10-03: "Just let Dusty work on filing
+ * everything. I can always change it to a different bucket."). A suggestion
+ * he is this sure of is filed, marked auto, with Keep / Not X — the earned
+ * streak (AUTO_STREAK) still files anything below it. "unknown" is never
+ * filed; someone Coy filed, or un-filed, is never touched; spam also needs
+ * that Coy never wrote or called back. An automatic vendor or sub still makes
+ * leads until Coy keeps it (§2b) — only contacts.contact_type is written.
+ */
+export const AUTO_FILE_CONFIDENCE = 70
+export const AUTO_SPAM_CONFIDENCE = 85
+
+/**
+ * The same, for people read before the rule: each run files up to `limit`
+ * unsorted contacts from their standing suggestion — no model call.
+ */
+export async function recheckBuckets(sb: Db, limit = 25): Promise<{ checked: number; filed: number }> {
+  const { data: open } = await sb.from('contacts').select('id, org_id, phone')
+    .is('merged_into_contact_id', null).is('classification_confirmed_at', null)
+    .is('auto_classified_at', null).is('auto_classify_blocked_at', null)
+    .order('updated_at', { ascending: false }).limit(150)
+  const people = (open ?? []) as Array<{ id: string; org_id: string; phone: string | null }>
+  if (!people.length) return { checked: 0, filed: 0 }
+  const { data: props } = await sb.from('contact_proposals')
+    .select('org_id, contact_id, classification, confidence, evidence_quote')
+    .eq('status', 'pending').neq('classification', 'unknown')
+    .in('contact_id', people.map((c) => c.id))
+  const byId = new Map(people.map((c) => [`${c.org_id}:${c.id}`, c]))
+  let checked = 0, filed = 0
+  for (const r of (props ?? []) as Array<{ org_id: string; contact_id: string; classification: string; confidence: number; evidence_quote: string | null }>) {
+    const c = byId.get(`${r.org_id}:${r.contact_id}`)
+    const b = bucketOf(r.classification)
+    if (!c || !b || checked >= limit) continue
+    if (r.confidence < (b === 'spam' ? AUTO_SPAM_CONFIDENCE : AUTO_FILE_CONFIDENCE)) continue
+    checked++
+    const res = b === 'spam'
+      ? await applyAutoSpam(sb, r.org_id, r.contact_id, await loadTurns(sb, r.org_id, r.contact_id), c.phone, r.confidence, r.evidence_quote ?? '')
+      : await applyAutoBucket(sb, r.org_id, r.contact_id, r.classification, r.evidence_quote ?? '')
+    if (res.filed) filed++
+  }
+  return { checked, filed }
+}
+
+/**
  * File a contact as spam — the one bucket Dusty sets itself (Coy, 2026-09-27),
  * shown as Auto with Undo. Only when the model said spam AND spamSignal()
  * finds the evidence in their words AND Coy never wrote or called back, and
  * only onto a contact nobody has sorted and Coy has not un-filed before.
  */
-export async function applyAutoSpam(sb: Db, orgId: string, contactId: string, turns: Turn[], phone: string | null)
+export async function applyAutoSpam(sb: Db, orgId: string, contactId: string, turns: Turn[], phone: string | null, confidence = 0, quote = '')
   : Promise<{ filed: boolean; note: string }> {
   if (turns.some((t) => t.who === 'US')) return { filed: false, note: 'Coy has replied to them' }
-  const sig = spamSignal(turns, phone)
+  // Evidence in their words, or (since Coy's "let Dusty file everything", 2026-10-03) Dusty sure of it.
+  const sig = spamSignal(turns, phone) ?? (confidence >= AUTO_SPAM_CONFIDENCE && quote ? { kind: 'scam' as const, quote } : null)
   if (!sig) return { filed: false, note: 'no spam evidence in their words' }
   const { data: rows, error } = await sb.from('contacts')
     .update({
@@ -436,11 +528,11 @@ export async function readContact(sb: Db, orgId: string, contactId: string, ask:
   if (insErr || !ins) return { outcome: 'failed', note: `proposal: ${insErr?.message ?? 'not written'}` }
 
   if (p.classification === 'spam') {
-    const spam = await applyAutoSpam(sb, orgId, contactId, turns, numbers[0] ?? null)
+    const spam = await applyAutoSpam(sb, orgId, contactId, turns, numbers[0] ?? null, p.confidence, p.evidence_quote)
     if (spam.filed) return { outcome: 'filed', proposal_id: ins.id as string, note: spam.note, musing }
   }
   const b = bucketOf(p.classification)
-  if (b && b !== 'spam' && (learning.streaks[b] ?? 0) >= AUTO_STREAK) {
+  if (b && b !== 'spam' && (p.confidence >= AUTO_FILE_CONFIDENCE || (learning.streaks[b] ?? 0) >= AUTO_STREAK)) {
     const filed = await applyAutoBucket(sb, orgId, contactId, p.classification, p.evidence_quote)
     if (filed.filed) {
       // Filing does not stop the name: someone who introduced themselves is

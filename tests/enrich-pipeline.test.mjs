@@ -73,7 +73,8 @@ function world({ texts = [], calls = null, contact = { name: null, name_source: 
   });
 }
 
-const proposal = (o = {}) => ({ classification: "customer", direction_of_ask: "x", confidence: 80,
+// 60: below the line where Dusty files on his own word (AUTO_FILE_CONFIDENCE 70), so naming tests stay about naming.
+const proposal = (o = {}) => ({ classification: "customer", direction_of_ask: "x", confidence: 60,
   proposed_name: null, proposed_company: null, proposed_role: null, project_type: null, scope_summary: null,
   start_timing: null, length_ft: null, width_ft: null, sqft_stated: null, site_hint: null, has_media: false,
   evidence_turn: 1, evidence_message_id: null, evidence_quote: "x", name_reasoning: "", ...o });
@@ -217,6 +218,29 @@ test("19 in a row is not enough, and one bucket's streak does not unlock another
     assert.equal(r.outcome, "proposed");
     assert.equal(writes(db, "contacts", "update").length, 0);
   }
+});
+
+test("Dusty files every bucket he is sure of — auto, never the lead guard (Coy, 2026-10-03)", async () => {
+  for (const cls of ["customer", "vendor", "sub", "personal"]) {
+    const db = world({ texts: [["THEM", "How much for a 20x30 driveway?"]] });
+    const r = await readContact(db, ORG, CONTACT, model(proposal({ classification: cls, confidence: 80 })), "hermes:test");
+    assert.equal(r.outcome, "filed", cls);
+    const [upd] = writes(db, "contacts", "update");
+    assert.equal(upd.payload.classification_source, "machine");
+    assert.equal(writes(db, "customers", "update").length + writes(db, "customers", "insert").length, 0, "the lead guard is never written");
+  }
+});
+
+test("unknown is never filed, and spam on Dusty's word needs him sure and Coy never to have answered", async () => {
+  let db = world({ texts: [["THEM", "Hey there, saw your truck on Airline yesterday"]] });
+  let r = await readContact(db, ORG, CONTACT, model(proposal({ classification: "unknown", confidence: 95 })), "hermes:test");
+  assert.equal(r.outcome, "proposed");
+  db = world({ texts: [["THEM", "Congratulations, claim your reward now at this link"]] });
+  r = await readContact(db, ORG, CONTACT, model(proposal({ classification: "spam", confidence: 90, evidence_quote: "claim your reward" })), "hermes:test");
+  assert.equal(r.outcome, "filed");
+  db = world({ texts: [["THEM", "Is this the concrete guy?"], ["US", "Yes sir"]] });
+  r = await readContact(db, ORG, CONTACT, model(proposal({ classification: "spam", confidence: 95 })), "hermes:test");
+  assert.notEqual(r.outcome, "filed", "someone Coy answered is his call");
 });
 
 test("a sub is filed under vendor as a subcontractor", async () => {

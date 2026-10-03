@@ -72,6 +72,7 @@ export interface PricePick {
 }
 
 export function PriceBook({ pick }: { pick?: PricePick } = {}) {
+  const [pickHelp, setPickHelp] = useState(false);
   const [items, setItems] = useState<Card[] | null>(null);
   const [groups, setGroups] = useState<Group[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
@@ -271,8 +272,15 @@ export function PriceBook({ pick }: { pick?: PricePick } = {}) {
         {pick ? (
           <div style={{ flex: 1, minWidth: 200 }}>
             <div style={{ ...eyebrow }}>Price book → budget</div>
-            <div style={{ fontFamily: disp, fontSize: 20, fontWeight: 700, lineHeight: 1.1 }}>{pick.title}</div>
-            {pick.sub && <div style={{ fontSize: F.xs, color: T.ink3, marginTop: 2 }}>{pick.sub}</div>}
+            {/* The how-to sits behind ⓘ beside the title (Coy, 2026-10-03). */}
+            <div className="flex items-center gap-2">
+              <div style={{ fontFamily: disp, fontSize: 20, fontWeight: 700, lineHeight: 1.1 }}>{pick.title}</div>
+              {pick.sub && (
+                <button onClick={() => setPickHelp((v) => !v)} aria-expanded={pickHelp} aria-label="How this works" title="How this works"
+                  className="shrink-0 flex items-center justify-center rounded-full" style={{ width: 22, height: 22, border: `1px solid ${pickHelp ? T.chalk : T.hairStrong}`, color: T.chalk, fontSize: 12, fontWeight: 700, cursor: "pointer", background: T.card }}>i</button>
+              )}
+            </div>
+            {pick.sub && pickHelp && <div style={{ fontSize: F.xs, color: T.ink2, marginTop: 4, maxWidth: 560, lineHeight: 1.45 }}>{pick.sub}</div>}
           </div>
         ) : (
         <div style={{ flex: 1, minWidth: 200 }}>

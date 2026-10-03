@@ -478,7 +478,8 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0 }: {
         <Drawer open wide onClose={() => { setBook(null); reload(); }} title="Add from the Price book"
           sub={`${areaName(book.area || null)}${optLabel(tier === "all" ? null : tier) ? ` · into ${optLabel(tier)}` : " · into every option"}`}>
           <PriceBook pick={{
-            title: `Into ${areaName(book.area || null)}`,
+            // Coy, 2026-10-03: "Full Drive Replacement - Add Cost Items".
+            title: `${areaName(book.area || null).replace(/\b\w/g, (c) => c.toUpperCase())} - Add Cost Items`,
             sub: "Tap + to put an item on this area of the budget, Add all for a whole group, Load for an assembly. Quantities come from the area by each item's rule.",
             top: (
               <div className="flex items-center gap-2 flex-wrap">

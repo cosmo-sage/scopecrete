@@ -45,7 +45,8 @@ function ThreadCells({ onPick, wide }: { onPick?: () => void; wide?: boolean }) 
   const go = (t: string) => { setThread(t); onPick?.(); };
   const cell = (on: boolean, edge: string): React.CSSProperties => ({
     cursor: "pointer", border: "none", borderLeft: `3px solid ${on ? edge : "transparent"}`,
-    background: on ? T.card : "transparent", color: on ? T.ink : T.ink2, width: "100%",
+    // On the list's own colour (Coy, 2026-10-03): the picked thread is tinted with its colour, not lifted to white.
+    background: on ? `color-mix(in srgb, ${edge} 12%, var(--sc-card))` : "transparent", color: on ? T.ink : T.ink2, width: "100%",
   });
   return (
     <>
@@ -96,7 +97,7 @@ function ThreadCells({ onPick, wide }: { onPick?: () => void; wide?: boolean }) 
 export function ThreadRail() {
   return (
     <nav aria-label="Threads" className="hidden lg:flex shrink-0 flex-col"
-      style={{ width: 72, background: T.rail, borderRight: `1px solid ${T.hair}`, position: "sticky", top: "var(--sc-head)", height: "calc(100dvh - var(--sc-head))", overflowY: "auto" }}>
+      style={{ width: 72, background: T.card, borderRight: `1px solid ${T.hairSoft}`, position: "sticky", top: "var(--sc-head)", height: "calc(100dvh - var(--sc-head))", overflowY: "auto" }}>
       <ThreadCells />
     </nav>
   );
@@ -109,7 +110,7 @@ export function ThreadDrawer() {
   return (
     <div className="lg:hidden fixed inset-0 z-50" style={{ top: "var(--sc-head)", bottom: "var(--sc-foot)" }}>
       <button aria-label="Close" onClick={() => ctx.setDrawer(false)} className="absolute inset-0" style={{ background: "rgba(0,0,0,.36)", border: "none" }} />
-      <nav aria-label="Threads" className="absolute left-0 top-0 bottom-0 flex flex-col overflow-y-auto" style={{ width: 220, background: T.rail, paddingTop: 6 }}>
+      <nav aria-label="Threads" className="absolute left-0 top-0 bottom-0 flex flex-col overflow-y-auto" style={{ width: 220, background: T.card, paddingTop: 6 }}>
         <ThreadCells wide onPick={() => ctx.setDrawer(false)} />
       </nav>
     </div>

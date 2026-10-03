@@ -76,3 +76,27 @@ test("the PDF opens, is the window's size, draws every tile and keeps the text",
   assert.match(text, /50 ft/); assert.match(text, /Imagery \(c\) Esri/); assert.match(text, /Raynette's/);
   await doc.destroy();
 });
+
+test("a tile's box in Web Mercator metres: the world at zoom 0, and a zoom-20 tile 38.2 m across", async () => {
+  const { tileBbox } = await import("../src/lib/aerial.ts");
+  const [a, b, c, d] = tileBbox(0, 0, 0);
+  near(a, -20037508.342789244, 1e-6); near(b, -20037508.342789244, 1e-6); near(c, 20037508.342789244, 1e-6); near(d, 20037508.342789244, 1e-6);
+  const t = tileBbox(20, 524288, 400000);
+  near(t[2] - t[0], 38.2185, 1e-3); near(t[3] - t[1], 38.2185, 1e-3);
+  near(t[0], 0, 1e-6); // tile x = 2^19 starts on the meridian
+  // neighbours share an edge
+  near(tileBbox(20, 524289, 400000)[0], t[2], 1e-6); near(tileBbox(20, 524288, 400001)[3], t[1], 1e-6);
+});
+
+test("address suggestions: Mapbox carries its point, Esri a key; junk and collections dropped", async () => {
+  const { mapboxSuggestions, esriSuggestions } = await import("../src/lib/aerial.ts");
+  assert.deepEqual(mapboxSuggestions({ features: [
+    { place_name: "100 Example Rd, Baton Rouge, Louisiana 70810", center: [-91.1, 30.4] },
+    { place_name: "no centre" }, { center: [1, 2] },
+  ] }), [{ label: "100 Example Rd, Baton Rouge, Louisiana 70810", lat: 30.4, lng: -91.1 }]);
+  assert.deepEqual(esriSuggestions({ suggestions: [
+    { text: "100 Example Rd, Baton Rouge, LA, 70810, USA", magicKey: "k1", isCollection: false },
+    { text: "Coffee", magicKey: "k2", isCollection: true }, { text: "no key" },
+  ] }), [{ label: "100 Example Rd, Baton Rouge, LA, 70810, USA", key: "k1" }]);
+  assert.deepEqual(mapboxSuggestions(null), []); assert.deepEqual(esriSuggestions({ error: {} }), []);
+});

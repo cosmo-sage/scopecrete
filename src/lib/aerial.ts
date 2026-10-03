@@ -62,6 +62,48 @@ export function windowTiles(lat: number, lng: number, z: number, w = WIN_W, h = 
   return { left, top, tiles };
 }
 
+/**
+ * A tile's bounding box in Web Mercator metres (EPSG:3857): xmin, ymin, xmax,
+ * ymax. Esri's map export draws exactly this box from the best imagery it has,
+ * which is how a tile Esri has no photo for at this zoom is filled in.
+ */
+export function tileBbox(z: number, x: number, y: number): [number, number, number, number] {
+  const half = Math.PI * 6378137, size = (2 * half) / 2 ** z;
+  const xmin = -half + x * size, ymax = half - y * size;
+  return [xmin, ymax - size, xmin + size, ymax];
+}
+
+/**
+ * Esri's public tiles answer a zoom they have no photo for with a small grey
+ * "Map data not yet available" picture rather than an error. Real 256-px photo
+ * tiles are tens of KB; the placeholder is a few. A real tile under the line
+ * (open water) is only redrawn from the same imagery, so a false alarm costs
+ * nothing but one more request.
+ */
+export const ESRI_PLACEHOLDER_BYTES = 6000;
+
+export interface AddressSuggestion { label: string; lat?: number; lng?: number; key?: string }
+
+/** Mapbox's autocomplete answer → suggestions that carry their own point. */
+export function mapboxSuggestions(b: unknown): AddressSuggestion[] {
+  const f = (b as { features?: unknown })?.features;
+  if (!Array.isArray(f)) return [];
+  return f.flatMap((x: { place_name?: unknown; center?: unknown }) => {
+    const c = x?.center;
+    if (typeof x?.place_name !== "string" || !Array.isArray(c) || typeof c[0] !== "number" || typeof c[1] !== "number") return [];
+    return [{ label: x.place_name, lat: c[1], lng: c[0] }];
+  }).slice(0, 6);
+}
+
+/** Esri's suggest answer → suggestions to resolve by their magicKey when picked (collections like "Coffee" left out). */
+export function esriSuggestions(b: unknown): AddressSuggestion[] {
+  const s = (b as { suggestions?: unknown })?.suggestions;
+  if (!Array.isArray(s)) return [];
+  return s.flatMap((x: { text?: unknown; magicKey?: unknown; isCollection?: unknown }) =>
+    typeof x?.text === "string" && typeof x?.magicKey === "string" && !x.isCollection ? [{ label: x.text, key: x.magicKey }] : [],
+  ).slice(0, 6);
+}
+
 export function validCenter(lat: unknown, lng: unknown, z: unknown, p: AerialProvider): { lat: number; lng: number; z: number } | null {
   const a = Number(lat), b = Number(lng), zz = Number(z);
   if (!Number.isFinite(a) || !Number.isFinite(b) || !Number.isInteger(zz)) return null;

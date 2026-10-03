@@ -8,7 +8,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { T, F, disp, clip } from "@/lib/v34/tokens";
 import { Drawer } from "@/components/v34/primitives";
-import { MAX_ZOOM, MIN_ZOOM, PROVIDER_LABEL, WIN_H, WIN_W, ftPerPt, project, unproject, windowTiles, type AerialProvider } from "@/lib/aerial";
+import { MAX_ZOOM, MIN_ZOOM, PROVIDER_LABEL, WIN_H, WIN_W, ftPerPt, project, unproject, windowTiles, type AddressSuggestion, type AerialProvider } from "@/lib/aerial";
 import { call } from "./shared";
 
 interface Info {
@@ -31,6 +31,17 @@ export function AerialPicker({ jobId, open, onClose, onSaved }: { jobId: string;
   const [c, setC] = useState<{ lat: number; lng: number } | null>(null);
   const [z, setZ] = useState(20);
   const [settled, setSettled] = useState<{ lat: number; lng: number } | null>(null);
+  // What the map is on now — the drawer's subtitle and the saved sheet's name.
+  const [place, setPlace] = useState<{ label: string; by: string } | null>(null);
+  const [sugg, setSugg] = useState<AddressSuggestion[]>([]);
+  const [hi, setHi] = useState(-1);
+  const typed = useRef(false);
+  const cRef = useRef(c);
+  useEffect(() => { cRef.current = c; }, [c]);
+
+  const goTo = (f: { lat: number; lng: number; label: string; by: string }) => {
+    setC({ lat: f.lat, lng: f.lng }); setSettled({ lat: f.lat, lng: f.lng }); setPlace({ label: f.label, by: f.by }); setErr(null);
+  };
 
   const look = useCallback(async (query?: string) => {
     setBusy("Finding the address…"); setErr(null);
@@ -38,11 +49,39 @@ export function AerialPicker({ jobId, open, onClose, onSaved }: { jobId: string;
       const d = (await call(`/api/jobs/${jobId}/aerial${query ? `?q=${encodeURIComponent(query)}` : ""}`, "GET")) as Info;
       setInfo(d);
       if (!query) setQ(d.query ?? "");
-      if (d.found) { setC({ lat: d.found.lat, lng: d.found.lng }); setSettled({ lat: d.found.lat, lng: d.found.lng }); }
+      if (d.found) { const f = d.found; setC({ lat: f.lat, lng: f.lng }); setSettled({ lat: f.lat, lng: f.lng }); setPlace({ label: f.label, by: f.by }); }
       else setErr(d.query ? `Couldn't find "${d.query}". Type it the way you'd put it in a map.` : "This job has no address yet — type one.");
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(null); }
   }, [jobId]);
+  // Suggestions as Coy types (not when a pick fills the box), a quarter second after the last key.
+  useEffect(() => {
+    if (!typed.current) return;
+    const text = q.trim();
+    const t = setTimeout(async () => {
+      if (text.length < 3) { setSugg([]); return; }
+      const near = cRef.current;
+      try {
+        const r = await fetch(`/api/aerial/suggest?q=${encodeURIComponent(text)}${near ? `&lat=${near.lat}&lng=${near.lng}` : ""}`);
+        const b = r.ok ? await r.json() : null;
+        setSugg(Array.isArray(b?.suggestions) ? b.suggestions : []); setHi(-1);
+      } catch { setSugg([]); }
+    }, 250);
+    return () => clearTimeout(t);
+  }, [q]);
+
+  const choose = async (s: AddressSuggestion) => {
+    typed.current = false; setQ(s.label); setSugg([]); setHi(-1);
+    if (typeof s.lat === "number" && typeof s.lng === "number") { goTo({ lat: s.lat, lng: s.lng, label: s.label, by: "Mapbox" }); return; }
+    if (!s.key) return;
+    setBusy("Finding the address…");
+    try {
+      const r = await fetch(`/api/aerial/suggest?text=${encodeURIComponent(s.label)}&key=${encodeURIComponent(s.key)}`);
+      const b = r.ok ? await r.json() : null;
+      if (b?.found) goTo(b.found); else void look(s.label);
+    } finally { setBusy(null); }
+  };
+
   useEffect(() => {
     if (!open || info) return;
     const t = setTimeout(() => void look(), 0);
@@ -72,7 +111,7 @@ export function AerialPicker({ jobId, open, onClose, onSaved }: { jobId: string;
     if (!c || p === "google") return;
     setBusy(`Saving the ${PROVIDER_LABEL[p]} aerial…`); setErr(null);
     try {
-      const label = info?.found?.label?.split(",")[0] ?? "";
+      const label = place?.label?.split(",")[0] ?? "";
       const r = await call(`/api/jobs/${jobId}/aerial`, "POST", { provider: p, lat: c.lat, lng: c.lng, z, label });
       onSaved((r as { sheet: { id: string } }).sheet.id);
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
@@ -83,12 +122,37 @@ export function AerialPicker({ jobId, open, onClose, onSaved }: { jobId: string;
   const prov = info?.providers;
   const feet = c ? Math.round(WIN_W * ftPerPt(c.lat, z)) : null;
   return (
-    <Drawer open={open} onClose={onClose} wide title="Aerial of the site" sub={info?.found ? `${info.found.label} · found by ${info.found.by}` : info?.address ?? undefined}>
+    <Drawer open={open} onClose={onClose} wide title="Aerial of the site" sub={place ? `${place.label} · found by ${place.by}` : info?.address ?? undefined}>
       <div className="p-3 flex flex-col gap-2">
-        <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); if (q.trim()) void look(q.trim()); }}>
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Address of the site" aria-label="Address of the site"
+        <form className="flex gap-2 relative" onSubmit={(e) => {
+          e.preventDefault();
+          if (hi >= 0 && sugg[hi]) { void choose(sugg[hi]); return; }
+          typed.current = false; setSugg([]);
+          if (q.trim()) void look(q.trim());
+        }}>
+          <input value={q} onChange={(e) => { typed.current = true; setQ(e.target.value); }} placeholder="Address of the site" aria-label="Address of the site"
+            role="combobox" aria-controls="sc-aerial-sugg" aria-expanded={sugg.length > 0} aria-autocomplete="list" autoComplete="off"
+            onKeyDown={(e) => {
+              if (!sugg.length) return;
+              if (e.key === "ArrowDown") { e.preventDefault(); setHi((h) => Math.min(sugg.length - 1, h + 1)); }
+              else if (e.key === "ArrowUp") { e.preventDefault(); setHi((h) => Math.max(-1, h - 1)); }
+              else if (e.key === "Escape") { e.preventDefault(); setSugg([]); }
+            }}
+            onBlur={() => setTimeout(() => setSugg([]), 150)}
             className="flex-1" style={{ height: 34, border: `1px solid ${T.hairStrong}`, borderRadius: 3, padding: "0 8px", background: T.card, color: T.ink, fontSize: F.sm, minWidth: 0 }} />
           <button type="submit" style={btn(false)}>Find</button>
+          {sugg.length > 0 && (
+            <div id="sc-aerial-sugg" role="listbox" className="absolute left-0 rounded" style={{ top: 36, right: 52, zIndex: 5, background: T.card, border: `1px solid ${T.hairStrong}`, boxShadow: "0 6px 18px rgba(0,0,0,.18)" }}>
+              {sugg.map((s, i) => (
+                <button key={`${s.label}-${i}`} type="button" role="option" aria-selected={i === hi}
+                  onMouseDown={(e) => e.preventDefault()} onClick={() => void choose(s)}
+                  className="block w-full text-left px-2"
+                  style={{ minHeight: 34, fontSize: F.sm, color: T.ink, background: i === hi ? T.sunk : "transparent", borderTop: i ? `1px solid ${T.hair}` : "none", cursor: "pointer" }}>
+                  {s.label}
+                </button>
+              ))}
+            </div>
+          )}
         </form>
         {info?.from === "customer" && <div style={{ fontSize: F.xs, color: T.ink3 }}>The job has no address of its own — this is the customer&apos;s.</div>}
 

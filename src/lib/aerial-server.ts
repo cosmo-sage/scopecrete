@@ -1,4 +1,4 @@
-import type { AerialProvider } from "@/lib/aerial";
+import { ESRI_PLACEHOLDER_BYTES, esriSuggestions, mapboxSuggestions, tileBbox, type AddressSuggestion, type AerialProvider } from "@/lib/aerial";
 
 /**
  * Server side of the aerial sheet (src/lib/aerial.ts): where each provider's
@@ -42,14 +42,35 @@ export function googleStaticUrl(lat: number, lng: number, z: number, w: number, 
   return `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=${z - 1}&size=${Math.round(w / 2)}x${Math.round(h / 2)}&scale=2&maptype=satellite&format=jpg&key=${encodeURIComponent(k)}`;
 }
 
-export async function fetchTile(p: "esri" | "mapbox", z: number, x: number, y: number): Promise<Uint8Array | null> {
-  const url = tileUrl(p, z, x, y);
-  if (!url) return null;
+const isJpeg = (b: Uint8Array) => b.length > 2 && b[0] === 0xff && b[1] === 0xd8;
+
+async function getBytes(url: string): Promise<Uint8Array | null> {
   try {
     const r = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(15_000) });
     if (!r.ok) return null;
     return new Uint8Array(await r.arrayBuffer());
   } catch { return null; }
+}
+
+/**
+ * Esri's map export for one tile's box: drawn from the sharpest imagery Esri has
+ * there, so where its tiles stop (often zoom 19) the next zoom still shows the
+ * photo, enlarged, instead of "Map data not yet available".
+ */
+function esriExportUrl(z: number, x: number, y: number): string {
+  const [a, b, c, d] = tileBbox(z, x, y);
+  return `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?bbox=${a},${b},${c},${d}&bboxSR=3857&imageSR=3857&size=256,256&format=jpg&f=image`;
+}
+
+export async function fetchTile(p: "esri" | "mapbox", z: number, x: number, y: number): Promise<Uint8Array | null> {
+  const url = tileUrl(p, z, x, y);
+  if (!url) return null;
+  // blankTile=false asks Esri for a 404 instead of its grey placeholder; the size check catches it when ignored.
+  const b = await getBytes(p === "esri" ? `${url}${url.includes("?") ? "&" : "?"}blankTile=false` : url);
+  if (p !== "esri" || (b && isJpeg(b) && b.length >= ESRI_PLACEHOLDER_BYTES)) return b;
+  const e = await getBytes(esriExportUrl(z, x, y));
+  if (e && isJpeg(e) && e.length >= ESRI_PLACEHOLDER_BYTES) return e;
+  return b && isJpeg(b) ? b : e && isJpeg(e) ? e : null;
 }
 
 export interface Found { lat: number; lng: number; label: string; by: string }
@@ -80,5 +101,41 @@ export async function findAddress(q: string): Promise<Found | null> {
     const c = b?.candidates?.[0];
     if (typeof c?.location?.y === "number" && (c.score ?? 0) >= 80) return { lat: c.location.y, lng: c.location.x, label: String(c.address ?? query), by: "Esri" };
   } catch { /* nothing found */ }
+  return null;
+}
+
+/**
+ * Suggestions while Coy types an address: Mapbox's autocomplete when its token
+ * is set, else Esri's public suggest (resolved by its key when picked). Near the
+ * map's centre when there is one. Nothing stored.
+ */
+export async function suggestAddresses(q: string, near?: { lat: number; lng: number }): Promise<AddressSuggestion[]> {
+  const text = q.trim().slice(0, 120);
+  if (text.length < 3) return [];
+  const get = async (url: string) => {
+    const r = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(6_000) });
+    return r.ok ? r.json() : null;
+  };
+  try {
+    const m = env("MAPBOX_TOKEN");
+    if (m) {
+      const prox = near ? `&proximity=${near.lng},${near.lat}` : "";
+      const out = mapboxSuggestions(await get(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(text)}.json?autocomplete=true&limit=6&country=us&types=address,poi,place${prox}&access_token=${encodeURIComponent(m)}`));
+      if (out.length) return out;
+    }
+    const e = env("ESRI_API_KEY");
+    const loc = near ? `&location=${near.lng},${near.lat}` : "";
+    return esriSuggestions(await get(`https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/suggest?f=json&maxSuggestions=6&countryCode=USA${loc}&text=${encodeURIComponent(text)}${e ? `&token=${encodeURIComponent(e)}` : ""}`));
+  } catch { return []; }
+}
+
+/** The point of an Esri suggestion Coy picked. */
+export async function resolveSuggestion(text: string, key: string): Promise<Found | null> {
+  const e = env("ESRI_API_KEY");
+  try {
+    const r = await fetch(`https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates?f=json&maxLocations=1&SingleLine=${encodeURIComponent(text.slice(0, 200))}&magicKey=${encodeURIComponent(key.slice(0, 2000))}${e ? `&token=${encodeURIComponent(e)}` : ""}`, { cache: "no-store", signal: AbortSignal.timeout(8_000) });
+    const c = r.ok ? (await r.json())?.candidates?.[0] : null;
+    if (typeof c?.location?.y === "number" && typeof c?.location?.x === "number") return { lat: c.location.y, lng: c.location.x, label: String(c.address ?? text), by: "Esri" };
+  } catch { /* not found */ }
   return null;
 }

@@ -2137,7 +2137,19 @@ expected start date per quoted job before it means anything. Add the field.
   Keys stay on the server (`/api/aerial/tile`, `/api/aerial/google`,
   `/api/jobs/[id]/aerial`, session client): `MAPBOX_TOKEN`, optional
   `ESRI_API_KEY` (without it the public World Imagery tiles), and
-  `GOOGLE_MAPS_GEOCODE_KEY` with the Maps Static API on. Not built: the
+  `GOOGLE_MAPS_GEOCODE_KEY` with the Maps Static API on.
+  **Esri's grey tiles (2026-10-03):** where Esri's public tiles stop
+  (often zoom 19) it answers with a small "Map data not yet available"
+  picture. `fetchTile()` asks with `blankTile=false` and treats a tile
+  under 6 KB as that placeholder, then draws the tile's box with Esri's map
+  export, which uses the sharpest photo it has there — enlarged, not a
+  sharper photo. Not testable from the agent container (map hosts are
+  refused); check it on the preview.
+  **Suggestions while typing (2026-10-03):** the address box offers up to
+  six matches a quarter second after the last key (`/api/aerial/suggest`:
+  Mapbox autocomplete when `MAPBOX_TOKEN` is set, else Esri's public
+  suggest, resolved by its key when picked; nearest the map first; nothing
+  stored). The drawer's subtitle names the place the map is on. Not built: the
   photo's date (Esri's metadata service), and Dusty outlining the
   driveway himself — when he does, it is a dashed suggestion Coy accepts.
   **Budget** — each group and the line that counts it, priced by the

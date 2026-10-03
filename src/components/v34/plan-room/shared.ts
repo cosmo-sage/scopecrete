@@ -16,7 +16,13 @@ export interface Sheet {
   ocr_title_at?: string | null; ocr_at?: string | null; ocr_conf?: number | null; ocr_error?: string | null;
 }
 export interface Param { id: string; job_id: string; name: string; kind: TakeoffKind; color: string; depth_in: number | null; sort_order: number }
-export interface Meas { id: string; parameter_id: string; sheet_id: string; name: string | null; geometry: Pt[]; cutouts: Pt[][]; method: string; sort_order: number; section_id?: string | null }
+export interface Meas { id: string; parameter_id: string; sheet_id: string; name: string | null; geometry: Pt[]; cutouts: Pt[][]; method: string; sort_order: number; section_id?: string | null; color?: string | null }
+/**
+ * Colours a shape can take in the Plan Room (migration 070; Coy, 2026-10-03: "different colors for each
+ * measurement … it's just for the plan room"). A shape with none takes its group's colour.
+ */
+export const SHAPE_COLORS = ["#D97757", "#B5412C", "#C98A12", "#E0B33A", "#2F8A5B", "#7FA34A", "#0F7C86", "#1E5AA8", "#6A55B0", "#C2508A", "#5E5A52", "#2A2A2A"];
+export const shapeColor = (m: { color?: string | null }, p: { color: string } | null | undefined) => m.color ?? p?.color ?? "#D97757";
 export interface PlansData {
   job: { id: string; title: string | null; address: string | null; job_type: string | null; status: string | null } | null;
   files: PlanFile[]; sheets: Sheet[]; params: Param[]; measurements: Meas[];

@@ -14,7 +14,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { T, F, disp, eyebrow, clip, strong, light, nums } from "@/lib/v34/tokens";
 import { openPdf, drawPage } from "@/lib/pdf";
 import { dist, fmtQty, parseFeet, rectPoints, scaleFromPoints, scaleLabel, KIND_UNIT, type Pt, type TakeoffKind } from "@/lib/takeoff";
-import { call, KIND_LABEL, sheetLabel, type Meas, type Param, type PlanFile, type PlansData, type Sheet } from "./shared";
+import { call, KIND_LABEL, SHAPE_COLORS, shapeColor, sheetLabel, type Meas, type Param, type PlanFile, type PlansData, type Sheet } from "./shared";
 import { ScaleBadge } from "./files-sheets";
 import { ShapePhotos } from "./shape-photos";
 
@@ -372,16 +372,16 @@ function Drawing({ sheet, fileUrl, zoom, setZoom, tool, data, groupId, selId, se
               const pick = (e: React.PointerEvent) => { if (tool === "select") { e.stopPropagation(); setSelId(m.id); } };
               if (p.kind === "count") return (
                 <g key={m.id} opacity={op} onPointerUp={pick} style={{ cursor: tool === "select" ? "pointer" : undefined }}>
-                  {m.geometry.map((pt, i) => <circle key={i} cx={pt[0]} cy={pt[1]} r={r * (isSel ? 1.3 : 1)} fill={p.color} stroke="#fff" strokeWidth={sw / 2} />)}
+                  {m.geometry.map((pt, i) => <circle key={i} cx={pt[0]} cy={pt[1]} r={r * (isSel ? 1.3 : 1)} fill={shapeColor(m, p)} stroke="#fff" strokeWidth={sw / 2} />)}
                 </g>
               );
               if (p.kind === "linear") return (
-                <path key={m.id} d={pathOf(m.geometry, false)} fill="none" stroke={p.color} strokeWidth={sw * (isSel ? 2.2 : 1.6)} opacity={op}
+                <path key={m.id} d={pathOf(m.geometry, false)} fill="none" stroke={shapeColor(m, p)} strokeWidth={sw * (isSel ? 2.2 : 1.6)} opacity={op}
                   strokeLinejoin="round" strokeLinecap="round" onPointerUp={pick} style={{ cursor: tool === "select" ? "pointer" : undefined }} />
               );
               return (
                 <path key={m.id} d={pathOf(m.geometry, true) + (m.cutouts ?? []).map((c) => " " + pathOf(c, true)).join("")} fillRule="evenodd"
-                  fill={p.color} fillOpacity={isSel ? 0.35 : 0.22} stroke={p.color} strokeWidth={sw * (isSel ? 1.6 : 1)} opacity={op}
+                  fill={shapeColor(m, p)} fillOpacity={isSel ? 0.35 : 0.22} stroke={shapeColor(m, p)} strokeWidth={sw * (isSel ? 1.6 : 1)} opacity={op}
                   onPointerUp={pick} style={{ cursor: tool === "select" ? "pointer" : undefined }} />
               );
             })}
@@ -402,11 +402,11 @@ function Drawing({ sheet, fileUrl, zoom, setZoom, tool, data, groupId, selId, se
               return (
                 <g>
                   {mids.map(({ i, at }) => (
-                    <circle key={`m${i}`} cx={at[0]} cy={at[1]} r={r * 0.7} fill={selGroup.color} fillOpacity={0.55} stroke="#fff" strokeWidth={sw / 2}
+                    <circle key={`m${i}`} cx={at[0]} cy={at[1]} r={r * 0.7} fill={shapeColor(selM, selGroup)} fillOpacity={0.55} stroke="#fff" strokeWidth={sw / 2}
                       style={{ cursor: "copy", touchAction: "none" }} onPointerDown={grab(i + 1, [...pts.slice(0, i + 1), at, ...pts.slice(i + 1)])} />
                   ))}
                   {pts.map((pt, i) => (
-                    <circle key={`v${i}`} cx={pt[0]} cy={pt[1]} r={r * 1.1} fill="#fff" stroke={selGroup.color} strokeWidth={sw}
+                    <circle key={`v${i}`} cx={pt[0]} cy={pt[1]} r={r * 1.1} fill="#fff" stroke={shapeColor(selM, selGroup)} strokeWidth={sw}
                       style={{ cursor: "move", touchAction: "none" }} onPointerDown={grab(i, pts)}
                       onDoubleClick={(e) => { e.stopPropagation(); if (pts.length > min) { setEdit(null); void saveShape(selM.id, pts.filter((_, j) => j !== i)); } }}>
                       <title>Drag to move · double-click to remove</title>
@@ -454,6 +454,8 @@ function ParamPanel({ jobId, data, groupId, setGroupId, selId, onSelect, act, on
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
+  // The takeoff whose colour swatches are open under its row.
+  const [painting, setPainting] = useState<string | null>(null);
   const sheetsById = useMemo(() => new Map(data.sheets.map((s) => [s.id, s])), [data.sheets]);
   const linked = (p: Param) => data.lines.find((l) => l.takeoff_parameter_id === p.id);
   // How many of a group's shapes are counted in budget sections (migration 069).
@@ -504,10 +506,13 @@ function ParamPanel({ jobId, data, groupId, setGroupId, selId, onSelect, act, on
                       const q = t?.parts.find((x) => x.id === m.id);
                       const s = sheetsById.get(m.sheet_id);
                       const on = m.id === selId;
+                      const col = shapeColor(m, p);
                       return (
-                        <div key={m.id} className="flex items-center gap-2 pr-2.5" onClick={() => onSelect(m)}
-                          style={{ paddingLeft: 26, minHeight: 34, background: on ? T.slab : "transparent", borderLeft: `3px solid ${on ? p.color : "transparent"}`, cursor: "pointer" }}>
-                          <span style={{ width: 4, alignSelf: "stretch", margin: "6px 0", background: p.color, borderRadius: 2 }} />
+                        <React.Fragment key={m.id}>
+                        <div className="flex items-center gap-2 pr-2.5" onClick={() => onSelect(m)}
+                          style={{ paddingLeft: 26, minHeight: 34, background: on ? T.slab : "transparent", borderLeft: `3px solid ${on ? col : "transparent"}`, cursor: "pointer" }}>
+                          <button onClick={(e) => { e.stopPropagation(); setPainting(painting === m.id ? null : m.id); }} aria-label="Colour of this takeoff" aria-expanded={painting === m.id}
+                            title="Colour of this takeoff" style={{ width: 12, alignSelf: "stretch", margin: "5px 0", background: col, borderRadius: 3, border: `1px solid ${painting === m.id ? T.ink : "transparent"}`, cursor: "pointer", padding: 0, flex: "0 0 auto" }} />
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <MeasName jobId={jobId} m={m} fallback={`${p.name} ${i + 1}`} act={act} />
                             <div style={{ fontSize: 11, color: T.ink3 }}>{s ? sheetLabel(s) : "sheet removed"} · {m.method}{(m.cutouts?.length ?? 0) > 0 ? ` · ${m.cutouts.length} cutout${m.cutouts.length === 1 ? "" : "s"}` : ""}</div>
@@ -517,6 +522,11 @@ function ParamPanel({ jobId, data, groupId, setGroupId, selId, onSelect, act, on
                           <button onClick={(e) => { e.stopPropagation(); void act(() => call(`/api/jobs/${jobId}/takeoff/measurements/${m.id}`, "DELETE")); }}
                             aria-label="Remove this takeoff" style={{ color: T.ink3, width: 18, cursor: "pointer" }}>×</button>
                         </div>
+                        {painting === m.id && (
+                          <ShapeColors current={m.color ?? null} group={p.color}
+                            onPick={(c) => { setPainting(null); if (c !== (m.color ?? null)) void act(() => call(`/api/jobs/${jobId}/takeoff/measurements/${m.id}`, "PATCH", { color: c })); }} />
+                        )}
+                        </React.Fragment>
                       );
                     })}
                     {!shapes.length && <div style={{ paddingLeft: 32, fontSize: F.xs, color: T.ink3 }}>Pick a tool and draw on the sheet.</div>}
@@ -596,5 +606,21 @@ function GroupEdit({ jobId, p, act, onDone }: { jobId: string; p: Param; act: (f
           style={{ ...tb(false), color: T.red }}>{sure ? "Remove group + its takeoffs?" : "Remove"}</button>
       </div>
     </form>
+  );
+}
+
+/** A takeoff's own colour (migration 070) — the Plan Room only; the budget and proposal keep the group's. */
+function ShapeColors({ current, group, onPick }: { current: string | null; group: string; onPick: (c: string | null) => void }) {
+  const sw = (c: string, on: boolean, label: string, pick: string | null) => (
+    <button key={label} onClick={() => onPick(pick)} aria-label={label} aria-pressed={on} title={label}
+      style={{ width: 22, height: 22, borderRadius: 999, background: c, border: `2px solid ${on ? T.ink : T.card}`, boxShadow: `0 0 0 1px ${T.hair}`, cursor: "pointer", padding: 0 }} />
+  );
+  return (
+    <div className="flex items-center gap-1.5 flex-wrap" style={{ padding: "6px 10px 8px 32px", background: T.slab }} onClick={(e) => e.stopPropagation()}>
+      <span className="flex items-center gap-1" style={{ fontSize: 11, color: T.ink3, marginRight: 4 }}>
+        {sw(group, current === null, "The group's colour", null)} group
+      </span>
+      {SHAPE_COLORS.filter((c) => c.toLowerCase() !== group.toLowerCase()).map((c) => sw(c, current?.toLowerCase() === c.toLowerCase(), c, c))}
+    </div>
   );
 }

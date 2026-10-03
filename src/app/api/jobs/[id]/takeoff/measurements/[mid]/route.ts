@@ -3,7 +3,7 @@ import { getApiSession } from "@/lib/api-auth";
 import { MEAS_COLS, cleanPoints, paramInJob } from "@/lib/plans-server";
 import { syncTakeoffSections } from "@/lib/takeoff-sections-server";
 
-/** Rename a shape, move it to another group of the same kind, redraw it, set its cutouts, or remove it. */
+/** Rename a shape, colour it, move it to another group of the same kind, redraw it, set its cutouts, or remove it. */
 
 export const dynamic = "force-dynamic";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -27,6 +27,11 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   try { b = await req.json(); } catch { return bad("Body must be JSON."); }
   const patch: Record<string, unknown> = {};
   if ("name" in b) patch.name = typeof b.name === "string" && b.name.trim() ? b.name.replace(/\s+/g, " ").trim().slice(0, 80) : null;
+  // Its own colour in the Plan Room (migration 070); null goes back to the group's.
+  if ("color" in b) {
+    if (b.color !== null && !(typeof b.color === "string" && /^#[0-9a-fA-F]{6}$/.test(b.color))) return bad("A colour is #rrggbb.");
+    patch.color = b.color;
+  }
   if ("geometry" in b) {
     const g = cleanPoints(b.geometry);
     if (!g) return bad("Bad shape.");
@@ -49,8 +54,8 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   if (!Object.keys(patch).length) return bad("Nothing to change.");
   const { data, error } = await supabase.from("takeoff_measurements").update(patch).eq("id", mid).eq("org_id", orgId).select(MEAS_COLS).single();
   if (error || !data) return bad(error?.message ?? "not saved", 500);
-  // The budget section it is counted in follows it (migration 069).
-  await syncTakeoffSections(supabase, orgId, id);
+  // The budget section it is counted in follows it (migration 069) — a colour changes no size.
+  if (Object.keys(patch).some((k) => k !== "color" && k !== "name")) await syncTakeoffSections(supabase, orgId, id);
   return applyCookies(NextResponse.json({ measurement: data }));
 }
 

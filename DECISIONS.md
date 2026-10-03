@@ -4,7 +4,7 @@ Ground truth for every agent working this repo. If code disagrees with this
 document, the code is wrong or this document is stale — resolve it, don't
 guess. Update this file in the same PR that changes the behavior it describes.
 
-Last updated: 2026-10-03 (sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
+Last updated: 2026-10-03 (a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
 
 ---
 
@@ -2253,6 +2253,18 @@ expected start date per quoted job before it means anything. Add the field.
   a ticked photo was filed on the shape. Rehearsed (rolled back) before
   applying: a shape or photo on another job's section refused, the following
   on by default, a stranger sees nothing.
+  **A colour per takeoff (migration 070, applied 2026-10-03 on Coy's "Apply
+  070").** Coy: *"the ability to select different colors for each
+  measurement in the parameters panel … The colors should show different on
+  the drawing as well. The colors don't need to move over to the budget, it's
+  just for the plan room."* `takeoff_measurements.color` (nullable `#rrggbb`,
+  checked; null = the group's colour, as before). The colour bar on each
+  takeoff's row in Parameters opens its swatches (`SHAPE_COLORS`, "group"
+  first) and the drawing — fill, outline, corners — uses it (`shapeColor()`,
+  `shared.ts`); a colour alone doesn't re-sync sections. The budget, the
+  proposal's area maps and the sheet viewer keep the group's colour.
+  Rehearsed (rolled back): a hex kept, anything else refused. Checked in the
+  harness: the Apron recoloured blue on its row and on the sheet.
   Checked in the harness on a generated sheet: a 30×40 ft rectangle at
   1/8" = 1'-0" is exactly 1,200 SF (14.8 CY at 4"), $2,467 on a $1.43 card at
   15% O.H. and 20% margin; a 10×20 apron moved the line to 1,400 SF / $2,878;

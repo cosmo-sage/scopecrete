@@ -13,7 +13,7 @@ type Sb = ApiSession["supabase"];
 
 export const SHEET_COLS = "id, job_id, file_id, page, page_w, page_h, number, title, discipline, scale_text, printed_ft_per_pt, scale_ft_per_pt, scale_method, scale_set_at, number_source, updated_at, ocr_title_at, ocr_at, ocr_conf, ocr_error";
 export const PARAM_COLS = "id, job_id, name, kind, color, depth_in, sort_order, updated_at";
-export const MEAS_COLS = "id, parameter_id, sheet_id, name, geometry, cutouts, method, sort_order, updated_at, section_id";
+export const MEAS_COLS = "id, parameter_id, sheet_id, name, geometry, cutouts, method, sort_order, updated_at, section_id, color";
 
 export interface SheetRow {
   id: string; job_id: string; file_id: string; page: number; page_w: number; page_h: number;

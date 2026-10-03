@@ -32,6 +32,10 @@ export interface ProposalDisplay {
   show_item_prices?: boolean;
   show_qty?: boolean;
   show_tax_line?: boolean;
+  /** Areas whose map and photos are left off the Scope (Coy, 2026-10-03: "the map view + photos for that map area"). */
+  picsOff?: Record<string, boolean>;
+  /** Every area's map and photos off at once. */
+  hide_area_pics?: boolean;
 }
 
 export interface ProposalArea { id: string; name: string | null; sqft: number | null }

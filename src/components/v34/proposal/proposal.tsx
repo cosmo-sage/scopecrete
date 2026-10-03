@@ -22,6 +22,8 @@ import {
 } from "@/lib/proposal";
 import type { BudgetSettings, TakeoffTotal } from "@/lib/engine";
 import { ProposalDocument, SECTIONS, usd, usd0, type DocArea, type DocVM } from "./document";
+import { areaVisuals } from "./area-visuals";
+import type { PlansData } from "@/components/v34/plan-room/shared";
 
 interface ProjectType {
   id: string; key: string; label: string; overhead_pct: number | null; margin_pct: number | null;
@@ -93,6 +95,13 @@ export function Proposal({ jobId }: { jobId: string }) {
   const [coverPick, setCoverPick] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [wideRef, wide] = useWide<HTMLDivElement>(1000);
+  // The Plan Room's shapes and photos, for each area's map and photos on the Scope.
+  const [plans, setPlans] = useState<PlansData | null>(null);
+  useEffect(() => {
+    let off = false;
+    call(`/api/jobs/${jobId}/plans`, "GET").then((d: PlansData) => { if (!off) setPlans(d); }).catch(() => {});
+    return () => { off = true; };
+  }, [jobId]);
 
   const load = useCallback(async () => {
     try {
@@ -156,7 +165,7 @@ export function Proposal({ jobId }: { jobId: string }) {
       return {
         number: snap.number, date: snap.made_at, readOnly: true, typeKey: p.project_type, typeLabel: type?.label ?? "",
         org, customer, job: { title: snap.job.title, address: snap.job.address, description: null }, coverUrl,
-        scopeIntro: snap.scope_intro, areas: areasOf(snap.sections), priced: snap.price, display: snap.display, draws: snap.draws,
+        scopeIntro: snap.scope_intro, areas: areasOf(snap.sections), visuals: areaVisuals(plans, snap.sections.map((x) => String(x.id))), priced: snap.price, display: snap.display, draws: snap.draws,
         check: snap.price.ok ? drawsCheck(snap.draws, snap.price.total) : null,
         warranty: { ...snap.warranty_text, template: snap.warranty_text.template?.name ?? null },
         terms: { ...snap.terms_text, template: snap.terms_text.template?.name ?? null }, typeDraws: [],
@@ -169,12 +178,12 @@ export function Proposal({ jobId }: { jobId: string }) {
       typeKey: p.project_type, typeLabel: type?.label ?? "", org, customer,
       job: { title: b.job.title, address: b.job.address, description: b.job.description },
       coverUrl: b.photos.find((f) => f.id === p.cover_file_id)?.url ?? null,
-      scopeIntro: p.scope_intro, areas: areasOf(b.sections), priced: priced!.priced, display: p.display ?? {}, draws: p.draws ?? [],
+      scopeIntro: p.scope_intro, areas: areasOf(b.sections), visuals: areaVisuals(plans, b.sections.map((x) => x.id)), priced: priced!.priced, display: p.display ?? {}, draws: p.draws ?? [],
       check: priced!.check, warranty: { ...w, template: w.template?.name ?? null }, terms: { ...t, template: t.template?.name ?? null },
       typeDraws: type?.draws ?? [],
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps -- logo() reads b.org only
-  }, [b, p, priced, finalShown, isFinal, type, orgName]);
+  }, [b, p, priced, finalShown, isFinal, type, orgName, plans]);
 
   // "Edit with Dusty": open him with a starter question; "Use this" brings his answer back here.
   const dusty = useCallback((kind: "warranty" | "terms" | "scope") => {
@@ -258,11 +267,15 @@ export function Proposal({ jobId }: { jobId: string }) {
     dusty, pickCover: () => setCoverPick(true),
   } : null;
 
-  const quick = (k: "show_item_prices" | "show_qty" | "show_tax_line") => edits?.display({ ...d, [k]: !d[k] });
-  const chips = ([["show_item_prices", "Item prices"], ["show_qty", "Qty · unit"], ["show_tax_line", "Tax line"]] as const).map(([k, label]) => (
-    <button key={k} onClick={() => quick(k)} aria-pressed={!!d[k]} className="rounded-full shrink-0"
-      style={{ height: 26, padding: "0 10px", fontSize: 11.5, border: `1px solid ${d[k] ? "#B85A3C" : T.hair}`, background: d[k] ? "#F6E2D8" : T.card, color: d[k] ? "#9A4527" : T.ink2 }}>{label}</button>
-  ));
+  const quick = (k: "show_item_prices" | "show_qty" | "show_tax_line" | "hide_area_pics") => edits?.display({ ...d, [k]: !d[k] });
+  // "Maps & photos" is on unless switched off (hide_area_pics), the others off unless switched on.
+  const chips = ([["show_item_prices", "Item prices"], ["show_qty", "Qty · unit"], ["show_tax_line", "Tax line"], ["hide_area_pics", "Maps & photos"]] as const).map(([k, label]) => {
+    const on = k === "hide_area_pics" ? !d[k] : !!d[k];
+    return (
+      <button key={k} onClick={() => quick(k)} aria-pressed={on} className="rounded-full shrink-0"
+        style={{ height: 26, padding: "0 10px", fontSize: 11.5, border: `1px solid ${on ? "#B85A3C" : T.hair}`, background: on ? "#F6E2D8" : T.card, color: on ? "#9A4527" : T.ink2 }}>{label}</button>
+    );
+  });
   // What used to be the slide-over "Job panel" (Coy, 2026-10-02): the money — margin, cost by type, the
   // sub split — lives on the job's Budget now; what shapes the DOCUMENT stays here, as one strip.
   const settings = (

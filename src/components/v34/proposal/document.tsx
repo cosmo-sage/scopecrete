@@ -11,6 +11,7 @@
  */
 import React from "react";
 import { disp, strong, light, hand, nums } from "@/lib/v34/tokens";
+import { AreaMap, type AreaVisual } from "./area-visuals";
 import { drawAmount, fixLastDraw, type Clause, type Draw, type ProposalDisplay, type ProposalPrice, type ProposalGroup } from "@/lib/proposal";
 
 export const SECTIONS: Array<[string, string]> = [
@@ -28,6 +29,8 @@ export interface DocVM {
   coverUrl: string | null;
   scopeIntro: string | null;
   areas: DocArea[];
+  /** Each area's map and photos, from the Plan Room (read live, like the cover). */
+  visuals?: Record<string, AreaVisual>;
   priced: ProposalPrice;
   display: ProposalDisplay;
   draws: Draw[];
@@ -115,7 +118,7 @@ export function ProposalDocument({ vm, edits, narrow }: { vm: DocVM; edits: DocE
   const d = vm.display;
   const off = d.off ?? {};
   const setD = (patch: Partial<ProposalDisplay>) => edits?.display({ ...d, ...patch });
-  const flip = (key: "groupsOff" | "linesOff" | "pricesOff", id: string) => {
+  const flip = (key: "groupsOff" | "linesOff" | "pricesOff" | "picsOff", id: string) => {
     const cur = { ...(d[key] ?? {}) };
     if (cur[id]) delete cur[id]; else cur[id] = true;
     setD({ [key]: cur });
@@ -198,6 +201,36 @@ export function ProposalDocument({ vm, edits, narrow }: { vm: DocVM; edits: DocE
                 </li>
               ))}
             </ol>
+          )}
+          {!d.hide_area_pics && vm.areas.some((a) => vm.visuals?.[a.id]) && (
+            <div className="mt-4 flex flex-col gap-3">
+              {vm.areas.map((a, i) => {
+                const v = vm.visuals?.[a.id];
+                if (!v) return null;
+                const hidden = !!d.picsOff?.[a.id];
+                if (hidden && !edits) return null;
+                return (
+                  <div key={a.id} style={{ breakInside: "avoid", opacity: hidden ? 0.45 : 1 }} className={hidden ? "sc-no-print" : undefined}>
+                    <div className="flex items-center gap-2" style={{ fontSize: 12 }}>
+                      <span style={{ fontFamily: strong, fontWeight: 600, fontSize: 11, color: "#B85A3C" }}>{String(i + 1).padStart(2, "0")}</span>
+                      <b style={{ fontWeight: 600 }}>{a.name || a.work_type || "Area"}</b>
+                      <span style={{ color: "#8C8578" }}>{[v.map ? "where it is" : null, v.photos.length ? `${v.photos.length} photo${v.photos.length === 1 ? "" : "s"}` : null].filter(Boolean).join(" · ")}{hidden ? " · hidden from the proposal" : ""}</span>
+                      <span className="flex-1" />
+                      <Eye off={hidden} label={hidden ? "Show this area's map and photos" : "Hide this area's map and photos"} onClick={edits ? () => flip("picsOff", a.id) : undefined} />
+                    </div>
+                    {!hidden && (
+                      <div className="mt-1.5 flex gap-2 flex-wrap items-start">
+                        {v.map && <AreaMap map={v.map} height={narrow ? 150 : 190} />}
+                        {v.photos.slice(0, 4).map((ph) => (
+                          // eslint-disable-next-line @next/next/no-img-element -- signed link, printed
+                          <img key={ph.id} src={ph.url} alt={ph.name} style={{ height: narrow ? 110 : 190, maxWidth: "100%", objectFit: "cover", borderRadius: 3, aspectRatio: "4 / 3" }} />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           )}
         </div>
       </Section>

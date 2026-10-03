@@ -4,7 +4,7 @@ Ground truth for every agent working this repo. If code disagrees with this
 document, the code is wrong or this document is stale — resolve it, don't
 guess. Update this file in the same PR that changes the behavior it describes.
 
-Last updated: 2026-10-03 (archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
+Last updated: 2026-10-03 (sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
 
 ---
 
@@ -1378,6 +1378,26 @@ percentage of labour — all three contradict this section and §4.
   later steps put items on by its key; and `add` with `takeoff: <group ref>`,
   a line counted from a Plan Room group (the aerial or a sheet) that moves
   when Coy re-measures. The context lists takeoff groups by ref.
+  **And the Price book and its assemblies (Coy, 2026-10-03: "it would be
+  good if dusty could edit my cost book (add, remove, edit cost items/groups
+  and build out cost assemblies for specific jobs … pull in an Assembly for
+  a driveway breakout and pourback and build an assembly if there isn't
+  one").** New steps: `retire_item` ("remove" is retire — budgets that used
+  it keep their lines; Show retired brings it back), `rename_group`,
+  `remove_group` (only an empty group; otherwise kept, saying how many items
+  are in it), `new_assembly` (a key — asm1 — name, job type, kind of area,
+  `auto` only when Coy asks and only with a kind of area, and its items with
+  a quantity only for items counted by hand), `add_to_assembly`,
+  `remove_from_assembly` and `load_assembly` (onto an area, through
+  `/api/jobs/[id]/budget/assembly`). A `new_item` may take a key (item1) so
+  a later step can put it in an assembly. His context lists every assembly
+  by ref with what it applies to and its items, and he is told to load one
+  that fits before building another. **Price book steps need no job:** on
+  the Price book page Dusty is HOT on "Price book & money" (the `cash`
+  context, which now carries the whole book and its assemblies — no new
+  context kind, so `dusty_conversations` needed no migration), and a plan's
+  budget steps there are skipped by name ("needs the job open"). Tested in
+  `tests/dusty-plan.test.mjs`. Still Coy's tap; Dusty changes nothing.
 - **Base, vapor barrier and day-rate equipment** are cards like anything
   else (by the sq ft, by the day); nothing is priced that has no card.
 - **Dictating a section (2026-09-28).** Dictate on a section card records up
@@ -2188,9 +2208,52 @@ expected start date per quoted job before it means anything. Add the field.
   photo's date (Esri's metadata service), and Dusty outlining the
   driveway himself — when he does, it is a dashed suggestion Coy accepts.
   **Budget** — each group and the line that counts it, priced by the
-  engine's `budget()`, each shape's share as a child row; **Send to budget**
-  picks a Price book card (matching units first) and adds a `from_takeoff`
-  line. Checked in the harness on a generated sheet: a 30×40 ft rectangle at
+  engine's `budget()`, each shape's share as a child row. (Until 069,
+  **Send to budget** picked a Price book card and added a `from_takeoff`
+  line; that line rule still works and Dusty's plans use it.)
+  **Sections follow the Plan Room (migration 069, applied 2026-10-03 on
+  Coy's "Apply 069").** Coy: *"Pushing to budget should push the area
+  measured under the group. And I should be able to select the individual
+  measurements … Section should follow any edit in the plan room … if I
+  delete the measurement, it should delete it in the budget without deleting
+  the whole section because i wouldn't want to lose all the cost items … I
+  should be able to pull measurement into the budget from the budget page
+  also."* `takeoff_measurements.section_id` (on delete set null) puts a shape
+  in a budget section; `job_sections.takeoff_sync` (default on) says the
+  section's size follows its shapes; `job_files.takeoff_measurement_id` (on
+  delete set null) files a photo on a shape. Triggers keep all three on one
+  job. **The size is the sum of the section's shapes** in the first shape's
+  unit — area → `sqft_override` (and the groups' depth when they agree),
+  linear → `count_qty` LF, count → `count_qty` EA; a shape of another kind
+  is kept but not added, and a shape on a sheet with no scale leaves the size
+  blank with the reason (`sectionTakeoff()` / `sectionPatch()`,
+  `src/lib/takeoff-sections.ts`, tested). It is **written on the server**
+  after every takeoff change — a shape drawn, re-shaped or deleted, a group's
+  depth, a sheet's scale (`syncTakeoffSections()`) — so the engine, the
+  Dashboard, Dusty and the proposal read the section as before. A shape
+  deleted takes its share out; a section left with none has its size
+  cleared and **keeps its cost items**. A size typed on the section turns
+  the following off (✎ "size typed here" · **↺ follow the takeoff**).
+  **Send to budget** now opens the group's shapes with a tick each (those not
+  in a section yet ticked) and makes **each its own section**, **all in one
+  section**, or adds them **into a section** already there, with a kind of
+  area guessed from the group's name (`/api/jobs/[id]/takeoff/send`); the
+  group row says "N of M in the budget" and a shape in one shows **$✓**. On
+  the job page each section has a **Takeoff** strip — its shapes and total,
+  ƒ follows / ✎ typed, and **Pick takeoffs** (every shape on the job by
+  group; ticking one in another section moves it here; one kind per section;
+  `PUT …/sections/[sid]/takeoff`) — and sections sit under their takeoff
+  group's name, as in the Plan Room. Cost items go on afterwards, as before.
+  **Editing a shape:** with Select, a picked shape shows its corners — drag
+  one to move it, the dot mid-edge adds one, double-click removes one; the
+  section follows. **Shape photos** on the toolbar (with a shape picked) ticks
+  the job's photos of that area or takes new ones; they show under the
+  shape's section and on the proposal. Checked in the harness: Send made one
+  section per shape, a dragged corner saved the moved point (800 → 1,148 SF),
+  a ticked photo was filed on the shape. Rehearsed (rolled back) before
+  applying: a shape or photo on another job's section refused, the following
+  on by default, a stranger sees nothing.
+  Checked in the harness on a generated sheet: a 30×40 ft rectangle at
   1/8" = 1'-0" is exactly 1,200 SF (14.8 CY at 4"), $2,467 on a $1.43 card at
   15% O.H. and 20% margin; a 10×20 apron moved the line to 1,400 SF / $2,878;
   taps ~16 ms. Dusty's job context includes each sheet's scale and each
@@ -2213,7 +2276,16 @@ expected start date per quoted job before it means anything. Add the field.
   job's files), Header, Scope (intro + each area's size and spec), Pricing,
   Payments, Warranty, Terms, Sign — each with an on/off pill; quick toggles
   Item prices · Qty · unit · Tax line; groups and lines shown/hidden, prices
-  hidden, lines made optional. Warranty and terms are edited in place;
+  hidden, lines made optional. **Maps & photos per area (2026-10-03, Coy:
+  "the customer can easily understand what this section is covering. They
+  will have the map view + photos for that map area"):** under the Scope's
+  list, each area with takeoff shapes shows the part of their sheet — the
+  aerial or a plan page — with the shapes drawn on it (drawn in the browser
+  from the plan with pdf.js, `area-visuals.tsx`), beside up to four of its
+  photos (filed on the area or on one of its shapes); an eye hides one area's,
+  the **Maps & photos** quick toggle hides all (`display.picsOff`,
+  `hide_area_pics`). Read live from the Plan Room, like the cover photo — a
+  final shows today's shapes for its areas. Warranty and terms are edited in place;
   **Save as template** writes them back (same name updates it, a new name
   makes one). **Edit with Dusty** opens him with a starter question, and
   **Use this** under his answer (`setDustyUse()` in `dusty-live.ts`) puts it

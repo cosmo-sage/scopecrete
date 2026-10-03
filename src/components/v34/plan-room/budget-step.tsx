@@ -118,50 +118,104 @@ export function BudgetStep({ jobId, data, b, onSend }: { jobId: string; data: Pl
 }
 
 /** Pick the card a takeoff group is counted as. Cards whose unit matches the group's come first. */
-export function SendSheet({ jobId, p, total, b, onClose, onSent }: {
-  jobId: string; p: Param | null; total: TakeoffTotal | undefined; b: Budget | null; onClose: () => void; onSent: () => void;
+/**
+ * Send takeoffs to the budget as sections (migration 069; Coy, 2026-10-03:
+ * "Pushing to budget should push the area measured under the group. And I
+ * should be able to select the individual measurements to push"). The group's
+ * shapes with ticks; each its own section (grouped under this group on the
+ * budget), all in one section, or into a section already there. Cost items are
+ * added to the sections after — this prices nothing.
+ */
+export function SendSheet({ jobId, p, data, onClose, onSent }: {
+  jobId: string; p: Param | null; data: PlansData | null; onClose: () => void; onSent: () => void;
 }) {
-  const [q, setQ] = useState("");
-  const [err, setErr] = useState<string | null>(null);
+  const shapes = useMemo(() => (p && data ? data.measurements.filter((m) => m.parameter_id === p.id) : []), [p, data]);
+  const [pickState, setPick] = useState<{ k: string; ids: Set<string> } | null>(null);
+  const key = p?.id ?? "";
+  const pick = pickState?.k === key ? pickState.ids : new Set(shapes.filter((m) => !m.section_id).map((m) => m.id));
+  const [mode, setMode] = useState<"each" | "one" | "into">("each");
+  const [name, setName] = useState("");
+  const [work, setWork] = useState("");
+  const [into, setInto] = useState("");
+  const [sections, setSections] = useState<Array<{ id: string; name: string | null }>>([]);
   const [busy, setBusy] = useState(false);
-  const want = p ? KIND_UNIT[p.kind] : null;
-  const groupName = new Map((b?.groups ?? []).map((g) => [g.id, g.name]));
-  const fits = (c: Card) => { const u = takeoffUnit(c.unit); return u === want || ((u === "CY" || u === "SY") && p?.kind === "area"); };
-  const words = q.toLowerCase().split(/\s+/).filter(Boolean);
-  const list = (b?.cards ?? []).filter((c) => words.every((w) => `${c.name} ${groupName.get(c.cost_group_id ?? "") ?? ""}`.toLowerCase().includes(w)))
-    .sort((a, z) => Number(fits(z)) - Number(fits(a))).slice(0, 40);
-  const send = async (c: Card) => {
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => {
     if (!p) return;
+    let off = false;
+    call(`/api/jobs/${jobId}/sections`, "GET").then((b) => { if (!off) setSections(b.sections ?? []); }).catch(() => {});
+    return () => { off = true; };
+  }, [jobId, p]);
+  const secName = new Map(sections.map((x, i) => [x.id, x.name || `Section ${i + 1}`]));
+  const toggle = (id: string) => { const n = new Set(pick); if (n.has(id)) n.delete(id); else n.add(id); setPick({ k: key, ids: n }); };
+  const parts = p && data ? data.totals[p.id]?.parts ?? [] : [];
+  const unit = p ? KIND_UNIT[p.kind] : "SF";
+  const sum = [...pick].reduce((a, id) => { const q = parts.find((x) => x.id === id)?.qty; return a === null || q === null || q === undefined ? null : a + q; }, 0 as number | null);
+  const send = async () => {
+    if (!p || !pick.size) return;
     setBusy(true); setErr(null);
-    try { await call(`/api/jobs/${jobId}/budget/lines`, "POST", { cost_item_id: c.id, takeoff_parameter_id: p.id }); onSent(); onClose(); }
-    catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
+    try {
+      await call(`/api/jobs/${jobId}/takeoff/send`, "POST", { measurement_ids: [...pick], mode, ...(mode === "one" && name.trim() ? { name: name.trim() } : {}),
+        ...(mode === "into" ? { section_id: into } : {}), ...(work && mode !== "into" ? { work_type: work } : {}) });
+      onSent(); onClose();
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
   };
+  const seg = (on: boolean): React.CSSProperties => ({ flex: 1, height: 32, borderRadius: 3, border: `1px solid ${on ? T.hiviz : T.hair}`, background: on ? T.hivizDim : T.card, color: on ? T.hivizText : T.ink, fontSize: F.xs, fontWeight: 600, cursor: "pointer" });
   return (
-    <Drawer open={!!p} onClose={onClose} title={p ? `Send ${p.name} to the budget` : ""} sub={total?.qty !== null && total?.qty !== undefined ? `${fmtQty(total.qty, total.unit)} measured${total.cy !== null ? ` · ${total.cy.toFixed(1)} CY` : ""}` : total?.blocked ?? undefined}>
+    <Drawer open={!!p} onClose={onClose} title={p ? `Send ${p.name} to the budget` : ""} sub="Each shape you tick becomes the size of a budget section — and follows it when you re-draw it here.">
       <div className="p-3">
-        <div style={{ fontSize: F.xs, color: T.ink2, lineHeight: 1.45 }}>
-          Pick the Price book card it is priced as. The line counts this group&apos;s total in the card&apos;s unit ({want}{p?.kind === "area" ? `, or CY with a depth` : ""}); re-measuring moves it.
+        <div className="flex items-center gap-2">
+          <span style={{ ...eyebrow, flex: 1 }}>Takeoffs · {shapes.length}</span>
+          <button onClick={() => setPick({ k: key, ids: new Set(shapes.map((m) => m.id)) })} style={{ fontSize: F.xs, color: T.chalk, cursor: "pointer" }}>All</button>
+          <button onClick={() => setPick({ k: key, ids: new Set() })} style={{ fontSize: F.xs, color: T.chalk, cursor: "pointer" }}>None</button>
         </div>
-        <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find a card — form & finish, 4000 psi…" aria-label="Find a card"
-          className="w-full mt-2" style={{ height: 36, border: `1px solid ${T.hairStrong}`, borderRadius: 3, padding: "0 8px", background: T.card, color: T.ink, fontSize: F.sm }} />
+        {shapes.map((m, i) => {
+          const q = parts.find((x) => x.id === m.id);
+          const s = data?.sheets.find((x) => x.id === m.sheet_id);
+          return (
+            <label key={m.id} className="flex items-center gap-2 py-1.5" style={{ borderBottom: `1px solid ${T.hairSoft}`, cursor: "pointer" }}>
+              <input type="checkbox" checked={pick.has(m.id)} onChange={() => toggle(m.id)} />
+              <span style={{ width: 4, alignSelf: "stretch", background: p?.color, borderRadius: 2 }} />
+              <span style={{ flex: 1, minWidth: 0, fontSize: F.sm, ...clip }}>{m.name ?? `${p?.name} ${i + 1}`}
+                <span style={{ color: T.ink3, fontSize: F.xs }}> · {s ? sheetLabel(s) : "?"}{m.section_id ? ` · in ${secName.get(m.section_id) ?? "a section"}` : ""}</span></span>
+              <span style={{ fontSize: F.sm, ...nums, color: q?.qty === null ? T.hivizText : T.ink }}>{q?.qty !== null && q?.qty !== undefined ? fmtQty(q.qty, unit) : "scale not set"}</span>
+            </label>
+          );
+        })}
+        {!shapes.length && <div style={{ fontSize: F.sm, color: T.ink3 }}>Nothing measured in this group yet.</div>}
+
+        <div className="flex gap-1 mt-3">
+          <button onClick={() => setMode("each")} style={seg(mode === "each")}>Each its own section</button>
+          <button onClick={() => setMode("one")} style={seg(mode === "one")}>All in one section</button>
+          <button onClick={() => setMode("into")} disabled={!sections.length} style={{ ...seg(mode === "into"), opacity: sections.length ? 1 : 0.45 }}>Into a section</button>
+        </div>
+        <div style={{ fontSize: F.xs, color: T.ink3, marginTop: 4, lineHeight: 1.4 }}>
+          {mode === "each" ? `A section per shape, named for it, under ${p?.name ?? "this group"} on the budget.`
+            : mode === "one" ? "One section whose size is all of them added up." : "Added to a section already on the budget; its size becomes its takeoffs' sum."}
+          {[...pick].some((id) => shapes.find((m) => m.id === id)?.section_id) ? " A ticked shape already in a section moves." : ""}
+        </div>
+        {mode === "one" && <input value={name} onChange={(e) => setName(e.target.value)} placeholder={p?.name ?? "Section name"} aria-label="Section name"
+          className="w-full mt-2" style={{ height: 34, border: `1px solid ${T.hairStrong}`, borderRadius: 3, padding: "0 8px", background: T.card, color: T.ink, fontSize: F.sm }} />}
+        {mode === "into" && (
+          <select value={into} onChange={(e) => setInto(e.target.value)} aria-label="Into which section" className="w-full mt-2"
+            style={{ height: 34, border: `1px solid ${T.hairStrong}`, borderRadius: 3, padding: "0 6px", background: T.card, color: T.ink, fontSize: F.sm }}>
+            <option value="">Pick a section…</option>
+            {sections.map((x, i) => <option key={x.id} value={x.id}>{x.name || `Section ${i + 1}`}</option>)}
+          </select>
+        )}
+        {mode !== "into" && (
+          <select value={work} onChange={(e) => setWork(e.target.value)} aria-label="Kind of area" className="w-full mt-2"
+            style={{ height: 34, border: `1px solid ${T.hairStrong}`, borderRadius: 3, padding: "0 6px", background: T.card, color: T.ink, fontSize: F.sm }}>
+            <option value="">Kind of area — guess it from the name</option>
+            {["driveway", "patio", "sidewalk", "slab", "footing", "curb", "demo", "prep", "other"].map((k) => <option key={k} value={k}>{k[0].toUpperCase() + k.slice(1)}</option>)}
+          </select>
+        )}
         {err && <div className="mt-2" style={{ fontSize: F.xs, color: T.red }}>{err}</div>}
-        <div className="mt-2 flex flex-col">
-          {!b && <div style={{ fontSize: F.sm, color: T.ink3 }}>Loading the Price book…</div>}
-          {b && !list.length && <div style={{ fontSize: F.sm, color: T.ink3 }}>No card matches.</div>}
-          {list.map((c) => {
-            const ok = fits(c);
-            return (
-              <button key={c.id} disabled={busy} onClick={() => void send(c)} className="flex items-center gap-2 py-2 text-left" style={{ borderBottom: `1px solid ${T.hairSoft}`, cursor: "pointer", opacity: ok ? 1 : 0.55 }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: F.sm, fontWeight: 600, ...clip }}>{c.name}</div>
-                  <div style={{ fontSize: 11, color: T.ink3 }}>{groupName.get(c.cost_group_id ?? "") ?? "No group"}{ok ? "" : ` · counted in ${c.unit} — won't match ${want}`}</div>
-                </div>
-                <span style={{ fontSize: F.sm, ...nums }}>{c.unit_cost !== null ? `$${c.unit_cost}/${c.unit}` : <span style={{ color: T.hivizText }}>no price</span>}</span>
-              </button>
-            );
-          })}
-        </div>
-        <div className="mt-3" style={{ fontFamily: light, fontWeight: 300, fontSize: F.xs, color: T.ink3 }}>New cards are made in the Price book.</div>
+        <button onClick={() => void send()} disabled={busy || !pick.size || (mode === "into" && !into)} className="w-full rounded mt-3"
+          style={{ height: 40, background: T.hiviz, color: T.onHiviz, fontFamily: disp, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", cursor: "pointer", opacity: busy || !pick.size || (mode === "into" && !into) ? 0.5 : 1 }}>
+          {busy ? "Sending…" : `Send ${pick.size} to the budget${sum !== null && pick.size ? ` · ${fmtQty(sum, unit)}` : ""}`}
+        </button>
+        <div className="mt-2" style={{ fontFamily: light, fontWeight: 300, fontSize: F.xs, color: T.ink3 }}>Then add cost items to the sections on the budget.</div>
       </div>
     </Drawer>
   );

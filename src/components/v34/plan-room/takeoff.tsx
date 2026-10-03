@@ -16,6 +16,7 @@ import { openPdf, drawPage } from "@/lib/pdf";
 import { dist, fmtQty, parseFeet, rectPoints, scaleFromPoints, scaleLabel, KIND_UNIT, type Pt, type TakeoffKind } from "@/lib/takeoff";
 import { call, KIND_LABEL, sheetLabel, type Meas, type Param, type PlanFile, type PlansData, type Sheet } from "./shared";
 import { ScaleBadge } from "./files-sheets";
+import { ShapePhotos } from "./shape-photos";
 
 type Tool = "select" | "area" | "rect" | "linear" | "count" | "cutout" | "scale";
 const TOOL_KIND: Partial<Record<Tool, TakeoffKind>> = { area: "area", rect: "area", linear: "linear", count: "count" };
@@ -71,6 +72,10 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
   const setScaleAsk = useCallback((v: { a: Pt; b: Pt } | null) => setScaleAskState(v ? { ...v, k: draftKey } : null), [draftKey]);
   const group = data.params.find((p) => p.id === groupId) ?? null;
   const sel = data.measurements.find((m) => m.id === selId) ?? null;
+  const [shapePhotos, setShapePhotos] = useState(false);
+  const selGroup = sel ? data.params.find((p) => p.id === sel.parameter_id) ?? null : null;
+  const selName = sel ? sel.name ?? `${selGroup?.name ?? "Shape"} ${data.measurements.filter((m) => m.parameter_id === sel.parameter_id).findIndex((m) => m.id === sel.id) + 1}` : "";
+  const selPhotos = sel ? files.filter((f) => f.takeoff_measurement_id === sel.id).length : 0;
 
   const act = useCallback(async (fn: () => Promise<unknown>) => {
     setBusy(true); setMsg(null);
@@ -151,6 +156,7 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
           <button disabled title="Not yet — Dusty doesn't read drawings" style={{ ...tb(false), opacity: 0.45, cursor: "not-allowed" }}>Auto</button>
           <span className="flex-1" />
           {sheet && <span className="hidden md:inline" style={{ fontSize: F.xs, color: T.ink2, whiteSpace: "nowrap" }}>{sheetLabel(sheet)} · <ScaleBadge s={sheet} small /></span>}
+          {sel && <button onClick={() => setShapePhotos(true)} title={`Photos of ${selName} — they show on its budget section and the proposal`} style={tb(false)}>Shape photos{selPhotos ? ` (${selPhotos})` : ""}</button>}
           {onPhotos && <button onClick={onPhotos} aria-pressed={!!photosOpen} title="The job's photos beside this sheet" style={tb(!!photosOpen)}>Photos</button>}
           <button onClick={() => setZoom((z) => Math.max(0.5, z / 1.25))} aria-label="Zoom out" style={tb(false)}>−</button>
           <span style={{ fontFamily: strong, fontSize: 11, width: 38, textAlign: "center", ...nums }}>{Math.round(zoom * 100)}%</span>
@@ -186,7 +192,8 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
         {sheet && file?.url ? (
           <Drawing key={sheet.id} sheet={sheet} fileUrl={file.url} zoom={zoom} setZoom={setZoom} tool={tool}
             data={data} groupId={groupId} selId={selId} setSelId={(id) => { setSelId(id); const m = data.measurements.find((x) => x.id === id); if (m) setGroupId(m.parameter_id); }}
-            draft={draft} setDraft={setDraft} hover={hover} setHover={setHover} save={save} busy={busy} />
+            draft={draft} setDraft={setDraft} hover={hover} setHover={setHover} save={save} busy={busy}
+            saveShape={(mid, pts) => act(() => call(`/api/jobs/${jobId}/takeoff/measurements/${mid}`, "PATCH", { geometry: pts }))} />
         ) : (
           <div className="flex-1 flex items-center justify-center p-6" style={{ fontSize: F.sm, color: T.ink3 }}>
             {sheet ? "This sheet's file can't be opened right now." : "No sheets yet — add a plan PDF on the Files step."}
@@ -194,6 +201,7 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
         )}
         </div>
 
+        {sel && shapePhotos && <ShapePhotos jobId={jobId} shapeId={sel.id} shapeName={selName} files={files} open onClose={() => setShapePhotos(false)} onChanged={reload} />}
         {sheets.length > 1 && (
           <div className="flex gap-1 px-2 py-1 overflow-x-auto" style={{ flex: "0 0 auto", background: T.card, borderTop: `1px solid ${T.hair}` }}>
             {sheets.map((s) => (
@@ -253,12 +261,16 @@ function ScaleAsk({ a, b, onSet, onCancel }: { a: Pt; b: Pt; onSet: (k: number) 
 
 /* --------------------------------------------------------------- drawing */
 
-function Drawing({ sheet, fileUrl, zoom, setZoom, tool, data, groupId, selId, setSelId, draft, setDraft, hover, setHover, save, busy }: {
+function Drawing({ sheet, fileUrl, zoom, setZoom, tool, data, groupId, selId, setSelId, draft, setDraft, hover, setHover, save, busy, saveShape }: {
   sheet: Sheet; fileUrl: string; zoom: number; setZoom: (f: (z: number) => number) => void; tool: Tool;
   data: PlansData; groupId: string | null; selId: string | null; setSelId: (id: string | null) => void;
   draft: Pt[]; setDraft: React.Dispatch<React.SetStateAction<Pt[]>>; hover: Pt | null; setHover: (p: Pt | null) => void;
   save: (pts: Pt[]) => Promise<void>; busy: boolean;
+  /** A selected shape re-drawn by dragging its corners (Coy, 2026-10-03: "ideally i would be able to edit an area"). */
+  saveShape: (id: string, pts: Pt[]) => Promise<void>;
 }) {
+  // The corner being dragged on the selected shape, and the shape's points while it moves.
+  const [edit, setEdit] = useState<{ id: string; pts: Pt[]; i: number; moved: boolean } | null>(null);
   const box = useRef<HTMLDivElement | null>(null);
   const canvas = useRef<HTMLCanvasElement | null>(null);
   const [fitW, setFitW] = useState(0);
@@ -298,7 +310,14 @@ function Drawing({ sheet, fileUrl, zoom, setZoom, tool, data, groupId, selId, se
   const px = scale || 1; // CSS px per point
   const near = (a: Pt, b: Pt) => dist(a, b) * px < 10;
 
+  const endEdit = () => {
+    if (!edit) return;
+    const done = edit;
+    setEdit(null);
+    if (done.moved) void saveShape(done.id, done.pts);
+  };
   const click = (e: React.PointerEvent<SVGSVGElement>) => {
+    if (edit) { endEdit(); return; }
     if (busy || tool === "select") return;
     const p = toPage(e);
     if (tool === "rect") {
@@ -340,8 +359,12 @@ function Drawing({ sheet, fileUrl, zoom, setZoom, tool, data, groupId, selId, se
           <svg viewBox={`0 0 ${sheet.page_w} ${sheet.page_h}`} preserveAspectRatio="none" width={w} height={h}
             style={{ position: "absolute", inset: 0, cursor: tool === "select" ? "default" : "crosshair", touchAction: draft.length ? "none" : "pan-x pan-y" }}
             onPointerUp={click} onDoubleClick={dbl}
-            onPointerMove={(e) => { if (tool !== "select") setHover(toPage(e)); }} onPointerLeave={() => setHover(null)}>
-            {mine.map((m) => {
+            onPointerMove={(e) => {
+              if (edit) { const p = toPage(e); setEdit({ ...edit, moved: true, pts: edit.pts.map((q, i) => (i === edit.i ? p : q)) }); return; }
+              if (tool !== "select") setHover(toPage(e));
+            }} onPointerLeave={() => setHover(null)} onPointerCancel={() => setEdit(null)}>
+            {mine.map((m0) => {
+              const m = edit && edit.id === m0.id ? { ...m0, geometry: edit.pts } : m0;
               const p = params.get(m.parameter_id);
               if (!p) return null;
               const isSel = m.id === selId;
@@ -362,6 +385,36 @@ function Drawing({ sheet, fileUrl, zoom, setZoom, tool, data, groupId, selId, se
                   onPointerUp={pick} style={{ cursor: tool === "select" ? "pointer" : undefined }} />
               );
             })}
+            {/* Corners of the selected shape: drag to move, a mid-edge dot adds one, double-click removes one. */}
+            {tool === "select" && selM && selGroup && !busy && (() => {
+              const pts = edit && edit.id === selM.id ? edit.pts : selM.geometry;
+              const closed = selGroup.kind === "area";
+              const min = selGroup.kind === "area" ? 3 : selGroup.kind === "linear" ? 2 : 1;
+              const grab = (i: number, list: Pt[]) => (e: React.PointerEvent) => {
+                e.stopPropagation();
+                (e.currentTarget as SVGGraphicsElement).ownerSVGElement?.setPointerCapture?.(e.pointerId);
+                setEdit({ id: selM.id, pts: list, i, moved: list.length !== pts.length });
+              };
+              const mids = selGroup.kind === "count" ? [] : pts.slice(0, closed ? pts.length : pts.length - 1).map((a, i) => {
+                const b = pts[(i + 1) % pts.length];
+                return { i, at: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2] as Pt };
+              });
+              return (
+                <g>
+                  {mids.map(({ i, at }) => (
+                    <circle key={`m${i}`} cx={at[0]} cy={at[1]} r={r * 0.7} fill={selGroup.color} fillOpacity={0.55} stroke="#fff" strokeWidth={sw / 2}
+                      style={{ cursor: "copy", touchAction: "none" }} onPointerDown={grab(i + 1, [...pts.slice(0, i + 1), at, ...pts.slice(i + 1)])} />
+                  ))}
+                  {pts.map((pt, i) => (
+                    <circle key={`v${i}`} cx={pt[0]} cy={pt[1]} r={r * 1.1} fill="#fff" stroke={selGroup.color} strokeWidth={sw}
+                      style={{ cursor: "move", touchAction: "none" }} onPointerDown={grab(i, pts)}
+                      onDoubleClick={(e) => { e.stopPropagation(); if (pts.length > min) { setEdit(null); void saveShape(selM.id, pts.filter((_, j) => j !== i)); } }}>
+                      <title>Drag to move · double-click to remove</title>
+                    </circle>
+                  ))}
+                </g>
+              );
+            })()}
             {draft.length > 0 && (
               <g pointerEvents="none">
                 {tool === "count" ? draft.map((pt, i) => <circle key={i} cx={pt[0]} cy={pt[1]} r={r} fill={draftColor} />)
@@ -403,6 +456,8 @@ function ParamPanel({ jobId, data, groupId, setGroupId, selId, onSelect, act, on
   const [editing, setEditing] = useState<string | null>(null);
   const sheetsById = useMemo(() => new Map(data.sheets.map((s) => [s.id, s])), [data.sheets]);
   const linked = (p: Param) => data.lines.find((l) => l.takeoff_parameter_id === p.id);
+  // How many of a group's shapes are counted in budget sections (migration 069).
+  const inBudget = (p: Param) => { const ms = data.measurements.filter((m) => m.parameter_id === p.id); return [ms.filter((m) => m.section_id).length, ms.length] as const; };
   const nShapes = data.measurements.length;
   return (
     <div className="sc-param-panel flex flex-col" style={{ width: "100%", maxHeight: 260, flex: "0 0 auto", background: T.card, borderRight: `1px solid ${T.hair}`, borderBottom: `1px solid ${T.hair}`, minHeight: 0 }}>
@@ -421,6 +476,7 @@ function ParamPanel({ jobId, data, groupId, setGroupId, selId, onSelect, act, on
             const t = data.totals[p.id];
             const isOpen = open[p.id] !== false;
             const line = linked(p);
+            const [inB, ofB] = inBudget(p);
             const shapes = data.measurements.filter((m) => m.parameter_id === p.id);
             return (
               <div key={p.id} style={{ borderBottom: `1px solid ${T.hairSoft}` }}>
@@ -430,8 +486,8 @@ function ParamPanel({ jobId, data, groupId, setGroupId, selId, onSelect, act, on
                     style={{ width: 16, transform: isOpen ? "rotate(90deg)" : "none", transition: "transform .15s", color: T.ink3, cursor: "pointer" }}>›</button>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 13.5, fontWeight: 600, ...clip }}>{p.name}</div>
-                    <div style={{ fontFamily: disp, fontSize: 10.5, letterSpacing: ".1em", textTransform: "uppercase", color: line ? T.ink3 : T.hivizText, ...clip }}>
-                      {KIND_LABEL[p.kind]}{p.depth_in ? ` · ${p.depth_in}"` : ""} · {line ? line.name : "no budget line"}
+                    <div style={{ fontFamily: disp, fontSize: 10.5, letterSpacing: ".1em", textTransform: "uppercase", color: inB || line ? T.ink3 : T.hivizText, ...clip }}>
+                      {KIND_LABEL[p.kind]}{p.depth_in ? ` · ${p.depth_in}"` : ""} · {ofB ? (inB === ofB ? "all in the budget" : inB ? `${inB} of ${ofB} in the budget` : "not in the budget") : line ? line.name : "nothing measured"}
                     </div>
                   </div>
                   <div style={{ textAlign: "right" }}>
@@ -456,6 +512,7 @@ function ParamPanel({ jobId, data, groupId, setGroupId, selId, onSelect, act, on
                             <MeasName jobId={jobId} m={m} fallback={`${p.name} ${i + 1}`} act={act} />
                             <div style={{ fontSize: 11, color: T.ink3 }}>{s ? sheetLabel(s) : "sheet removed"} · {m.method}{(m.cutouts?.length ?? 0) > 0 ? ` · ${m.cutouts.length} cutout${m.cutouts.length === 1 ? "" : "s"}` : ""}</div>
                           </div>
+                          {m.section_id && <span title="Counted in a budget section" style={{ fontSize: 10.5, color: T.green, fontWeight: 700 }}>$✓</span>}
                           <span style={{ fontSize: 12.5, ...nums, color: q?.qty === null ? T.hivizText : T.ink }}>{q?.qty !== null && q?.qty !== undefined ? fmtQty(q.qty, KIND_UNIT[p.kind]) : "scale not set"}</span>
                           <button onClick={(e) => { e.stopPropagation(); void act(() => call(`/api/jobs/${jobId}/takeoff/measurements/${m.id}`, "DELETE")); }}
                             aria-label="Remove this takeoff" style={{ color: T.ink3, width: 18, cursor: "pointer" }}>×</button>
@@ -474,11 +531,12 @@ function ParamPanel({ jobId, data, groupId, setGroupId, selId, onSelect, act, on
           <button onClick={() => setAdding(true)} className="flex-1 rounded" style={{ height: 34, background: T.dark, color: "#fff", fontFamily: disp, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase", fontSize: 13, cursor: "pointer" }}>+ Group</button>
           {(() => {
             const g = data.params.find((p) => p.id === groupId);
-            const on = g ? linked(g) : null;
+            const [inB, ofB] = g ? inBudget(g) : [0, 0];
+            const all = ofB > 0 && inB === ofB;
             return (
-              <button disabled={!g || !!on} onClick={() => g && onSend(g)} className="flex-1 rounded"
-                style={{ height: 34, background: on ? T.greenDim : T.hiviz, color: on ? T.green : T.onHiviz, opacity: g ? 1 : 0.5, fontFamily: disp, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase", fontSize: 13, cursor: g && !on ? "pointer" : "default" }}>
-                {on ? "On budget ✓" : "Send to budget"}
+              <button disabled={!g || !ofB} onClick={() => g && onSend(g)} className="flex-1 rounded" title={all ? "Every shape is in the budget — send again to re-arrange" : undefined}
+                style={{ height: 34, background: all ? T.greenDim : T.hiviz, color: all ? T.green : T.onHiviz, opacity: g && ofB ? 1 : 0.5, fontFamily: disp, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase", fontSize: 13, cursor: g && ofB ? "pointer" : "default" }}>
+                {all ? "In budget ✓" : "Send to budget"}
               </button>
             );
           })()}

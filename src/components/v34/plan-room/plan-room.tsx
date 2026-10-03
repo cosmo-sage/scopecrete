@@ -215,8 +215,7 @@ export function PlanRoom({ jobId }: { jobId: string }) {
       {data && <PhotosPanel jobId={jobId} files={data.files} open={photos} onClose={() => setPhotos(false)} onAdded={load} over={fullscreen && current === "takeoff"} />}
       <AerialPicker jobId={jobId} open={aerial} onClose={() => setAerial(false)}
         onSaved={(sheetId) => { setAerial(false); void load().then(() => go("takeoff", sheetId)); }} />
-      <SendSheet jobId={jobId} p={sending} total={sending && data ? data.totals[sending.id] : undefined} b={b}
-        onClose={() => setSending(null)} onSent={() => void reload()} />
+      <SendSheet jobId={jobId} p={sending} data={data} onClose={() => setSending(null)} onSent={() => void reload()} />
     </div>
   );
 }

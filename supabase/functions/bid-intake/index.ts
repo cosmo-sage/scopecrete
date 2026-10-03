@@ -27,7 +27,7 @@ import { getDocumentProxy } from 'unpdf'
 import { unzipSync } from 'fflate'
 import { itemQuantity,
   BID_PROMPT_VERSION, SYSTEM_PROMPT, boxLinks, bidPage, categoryGuess, concretePage, docRole, fileKind,
-  matchableDomain, parseReply, projectKey, safeName, sanitizeBid, skipBoxFile, type BidFacts,
+  matchableDomain, parseReply, projectKey, safeName, sanitizeBid, skipBoxFile, titleWithPrefix, titleWithoutPrefix, type BidFacts,
 } from './rules.ts'
 import { readSheet, type TextItem } from './sheets.ts'
 
@@ -374,11 +374,11 @@ async function file(sb: Sb, pkg: Pkg, email: Email, files: PFile[]) {
 
   // The job: an addendum joins the open job for the same Box folder or project; else a new one.
   let jobId: string | null = null
-  const { data: open } = await sb.from('jobs').select('id, title, customer_id, box_url, status').eq('org_id', org).is('archived_at', null)
+  const { data: open } = await sb.from('jobs').select('id, title, name_prefix, customer_id, box_url, status').eq('org_id', org).is('archived_at', null)
     .not('status', 'in', '(lost,closed,complete)').limit(500)
   const key = projectKey(f.project_name)
-  const match = (open ?? []).find((j: { box_url: string | null; customer_id: string | null; title: string | null }) =>
-    (pkg.box_url && j.box_url === pkg.box_url) || (key && j.customer_id === customerId && projectKey(j.title) === key))
+  const match = (open ?? []).find((j: { box_url: string | null; customer_id: string | null; title: string | null; name_prefix: string | null }) =>
+    (pkg.box_url && j.box_url === pkg.box_url) || (key && j.customer_id === customerId && projectKey(titleWithoutPrefix(j.title, j.name_prefix)) === key))
   if (match) {
     jobId = match.id
     // Re-reading this package's OWN job (a retry, not an addendum): it takes the new reading.
@@ -386,7 +386,7 @@ async function file(sb: Sb, pkg: Pkg, email: Email, files: PFile[]) {
       const addr = f.address
       await sb.from('jobs').update({
         customer_id: customerId, contact_id: contactId,
-        title: (f.job_title ?? f.project_name ?? match.title ?? 'Bid').slice(0, 120),
+        title: titleWithPrefix((f.job_title ?? f.project_name ?? titleWithoutPrefix(match.title, match.name_prefix) ?? 'Bid').slice(0, 120), match.name_prefix),
         address: addr.line, city: addr.city, state: addr.state, zip: addr.zip,
         description: f.scope_summary?.slice(0, 900) ?? null, bid_due_at: f.bid_due_at,
         notes: [f.project_name && `Project: ${f.project_name}`, f.bid_due_text && `Bids due: ${f.bid_due_text}`, f.prebid_text && `Pre-bid: ${f.prebid_text}`].filter(Boolean).join('\n') || null,

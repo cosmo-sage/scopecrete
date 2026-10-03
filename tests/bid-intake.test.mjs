@@ -150,3 +150,15 @@ test("a bid item's own quantity comes off its written line", async () => {
   assert.equal(itemQuantity("Concrete walk, 4 inch")?.unit, undefined);
   assert.equal(itemQuantity("4000 psi slab"), null);
 });
+
+test("an addendum still matches its job once the customer's name leads the title (migration 067)", async () => {
+  const { titleWithoutPrefix, titleWithPrefix, projectKey } = await import("../supabase/functions/bid-intake/rules.ts");
+  const stored = "Example Paving Co Oak Street Sidewalk – Phase 2";
+  assert.equal(titleWithoutPrefix(stored, "Example Paving Co"), "Oak Street Sidewalk – Phase 2");
+  assert.equal(projectKey(titleWithoutPrefix(stored, "Example Paving Co")), projectKey("Oak Street Sidewalk - Phase 2 Addendum #1"));
+  assert.equal(titleWithoutPrefix("Oak Street Sidewalk", null), "Oak Street Sidewalk");
+  assert.equal(titleWithoutPrefix("Oak Street Sidewalk", "Example Paving Co"), "Oak Street Sidewalk"); // Coy took it out
+  assert.equal(titleWithPrefix("Oak Street Sidewalk", "Example Paving Co"), "Example Paving Co Oak Street Sidewalk");
+  assert.equal(titleWithPrefix("Example Paving Co Oak Street", "Example Paving Co"), "Example Paving Co Oak Street");
+  assert.equal(titleWithPrefix("Oak Street", null), "Oak Street");
+});

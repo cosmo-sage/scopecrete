@@ -53,6 +53,21 @@ export function projectKey(name: string | null | undefined): string | null {
   return words.length ? words.join(' ') : null
 }
 
+/**
+ * Migration 067 puts the customer's name in front of a job's title and
+ * remembers it in jobs.name_prefix ("LA Contracting Enterprise Burgess Ave
+ * Sidewalk"). An addendum is matched on the title WITHOUT it, and a re-read
+ * keeps it in front.
+ */
+export function titleWithoutPrefix(title: string | null | undefined, prefix: string | null | undefined): string | null {
+  if (!title) return null
+  return prefix && title.startsWith(`${prefix} `) ? title.slice(prefix.length + 1) : title
+}
+export function titleWithPrefix(title: string, prefix: string | null | undefined): string {
+  if (!prefix || title.toLowerCase().includes(prefix.toLowerCase())) return title
+  return `${prefix} ${title}`
+}
+
 // ── which page text is worth the model's time ────────────────────────────────
 
 const CONCRETE = /\bconcrete\b|\bpsi\b|\brebar\b|\breinforc|\bslab\b|\bfooting|\bfoundation|\bpaving\b|\bpavement\b|\bcurb\b|\bgutter\b|\bsidewalk|\bdriveway|\bapron\b|\bpier\b|\bgrade beam|\bwwf\b|\bwelded wire|\bvapor (barrier|retarder)|\b03\s?\d{2}\s?\d{2}\b|\b32\s?13\s?13\b|\b31\s?\d{2}\s?\d{2}\b|\bsaw ?cut|\bcontrol joint|\bexpansion joint/i

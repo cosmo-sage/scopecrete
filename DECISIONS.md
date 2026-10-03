@@ -4,7 +4,7 @@ Ground truth for every agent working this repo. If code disagrees with this
 document, the code is wrong or this document is stale — resolve it, don't
 guess. Update this file in the same PR that changes the behavior it describes.
 
-Last updated: 2026-10-03 (archive & delete; call notes → Dusty's quote; aerial sheets)
+Last updated: 2026-10-03 (archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
 
 ---
 
@@ -929,6 +929,25 @@ them out. Trigger `contacts_bucket_jobs` → `sc_customer_job_for()`:
   line, the company he heard, and the quoted line. The job page shows it as
   **Why this job** with a link to their page. The trigger's fallback title
   ("New job") is not a name: the page shows the box empty, asking for one.
+- **The customer's name leads the job's name (migration 067, applied
+  2026-10-03 on Coy's "Apply 067").** Coy: *"it is best if the last name of
+  the customer (or company name) precedes the job description … Wilson
+  Driveway Repair that way I can find the job from the job page easier."*
+  A person's job takes their last name (Jr / Sr / II dropped); a company's —
+  a commercial or public customer, or a customer named other than its
+  person — the company's name without LLC / Inc. It is stored in the title
+  (`sc_job_name_prefix()`, triggers `jobs_name_prefix`, `contacts_name_jobs`,
+  `customers_name_jobs`), so the board, search and Dusty all read it, and
+  `jobs.name_prefix` remembers what was put in front: a title that already
+  carries the name is left alone; most automatic jobs are made before the
+  person is named, so the name is added when it arrives and swapped when it
+  changes ("Johnette …" → "Wilson …"); a name Coy takes back out is not put
+  back; "New job" waits until he names it; a phone number is no name.
+  Backfill renamed 14 open jobs. `bid-intake` v13 matches an addendum on the
+  title without the name and keeps it in front on a re-read
+  (`titleWithoutPrefix()` / `titleWithPrefix()`, tested). Rehearsed (rolled
+  back) before applying: unnamed → named → renamed → removed by Coy →
+  already named → "New job" → named by Coy.
 
 **Dusty seeds next steps (`enrich-contacts` v9+, 2026-09-28).** Each read
 may add up to three things waiting on Coy — "Send the walkway repair price" —

@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cleanUnit } from "@/lib/units";
+import { QTY_RULES } from "@/lib/cost-cards";
 import { getApiSession } from "@/lib/api-auth";
 import { LINE_COLUMNS, jobInOrg, lineSource, numLine } from "@/lib/budget-server";
 
@@ -49,6 +51,22 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   if (b.qty_source === "rule") {
     if (line.qty_rule === "manual") return bad("This line has no rule to go back to — type its quantity.");
     patch.qty_source = "rule"; patch.quantity = null;
+  }
+  // The unit and how the line is counted (Coy, 2026-10-03: "Need to change unit types. Sometimes it's
+  // days/sqft"). On this line only — the Price book item keeps its own.
+  if ("unit" in b) {
+    const u = cleanUnit(b.unit);
+    if (!u) return bad("A unit is 1 to 20 characters.");
+    patch.unit = u;
+  }
+  if ("qty_rule" in b) {
+    const r = String(b.qty_rule);
+    if (!(QTY_RULES as readonly string[]).includes(r)) return bad("Unknown way of counting.");
+    if (r !== line.qty_rule) {
+      patch.qty_rule = r;
+      if (r === "manual") patch.qty_source = "set"; // the quantity typed (or blank) stays
+      else { patch.qty_source = "rule"; patch.quantity = null; patch.takeoff_parameter_id = null; }
+    }
   }
   if ("unit_cost" in b) { const v = numOrNull(b.unit_cost, 0, 1_000_000, "Unit cost"); if (v instanceof Error) return bad(v.message); patch.unit_cost = v; }
   if ("margin_pct" in b) { const v = numOrNull(b.margin_pct, 0, 99.9, "Margin"); if (v instanceof Error) return bad(v.message); patch.margin_pct = v; }

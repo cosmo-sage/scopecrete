@@ -78,12 +78,19 @@ export async function applyPlan(jobId: string | null, actions: PlanAction[], loo
   };
   // Groups first, so items can be filed in them; then changes; then the budget.
   const order = { new_group: 0, rename_group: 1, update_item: 1, new_area: 2, new_item: 3, retire_item: 4, new_assembly: 5, add_to_assembly: 6, remove_from_assembly: 6,
-    add: 7, add_group: 8, load_assembly: 9, remove_group: 10, archive: 11, restore: 11 } as const;
+    add: 7, add_group: 8, load_assembly: 9, remove_group: 10, set_tax: 10, archive: 11, restore: 11 } as const;
   // Archive / restore steps run through applyRecords (no job needed).
   const steps = [...actions].filter((a) => !RECORD_STEPS.has(a.do)).sort((a, b) => order[a.do] - order[b.do]);
   for (const a of steps) {
     if (!jobId && needsJob(a)) { out.push({ ok: false, text: `${a.do.replace(/_/g, " ")}: needs the job open — skipped` }); continue; }
     try {
+      if (a.do === "set_tax") {
+        // Saved as Coy's rate — his Apply tap is the entry (Price book → Defaults shows and changes it).
+        await call("/api/tax-parishes", "POST", { parish: a.parish, rate_pct: a.rate_pct, note: a.source ? `From Dusty's plan: ${a.source}` : "From Dusty's plan" });
+        if (a.for_job && jobId) await call(`/api/jobs/${jobId}`, "PATCH", { tax_parish: a.parish });
+        out.push({ ok: true, text: `${a.parish} Parish sales tax set to ${a.rate_pct}%${a.for_job && jobId ? " and used on this job" : ""}` });
+        continue;
+      }
       if (a.do === "retire_item") {
         const it = byRef(look.items, a.item);
         if (!it) { out.push({ ok: false, text: `Item ${a.item} isn't in the Price book — skipped` }); continue; }

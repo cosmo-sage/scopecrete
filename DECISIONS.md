@@ -4,7 +4,7 @@ Ground truth for every agent working this repo. If code disagrees with this
 document, the code is wrong or this document is stale — resolve it, don't
 guess. Update this file in the same PR that changes the behavior it describes.
 
-Last updated: 2026-10-03 (tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
+Last updated: 2026-10-03 (units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
 
 ---
 
@@ -1398,6 +1398,33 @@ percentage of labour — all three contradict this section and §4.
   context kind, so `dusty_conversations` needed no migration), and a plan's
   budget steps there are skipped by name ("needs the job open"). Tested in
   `tests/dusty-plan.test.mjs`. Still Coy's tap; Dusty changes nothing.
+  **And a parish's sales tax (Coy, 2026-10-03: "Dusty needs to be able to
+  update the sales tax for the parish the address found").** Asked "add a tax
+  rate for East Baton Rouge", Dusty said he had no step for it. `set_tax`
+  {parish, rate_pct (under 30), for_job, source} — on Coy's Apply it is saved
+  through `POST /api/tax-parishes` (Price book → Defaults, noted "From
+  Dusty's plan: …") and, with a job open, sets the job's parish
+  (`PATCH /api/jobs/[id] {tax_parish}`). His job and Price book contexts list
+  the parish rates on file next to the job's "no rate for <parish>". The rate
+  is never assumed: Dusty says where it came from in `source` (Coy's words, or
+  "Dusty's figure — check the parish's published rate") and the card says
+  **Check the rate before you apply**; Coy's tap is the entry. Looking the
+  rate up by address (Louisiana's own lookup) still waits on API access.
+- **Units and how a line is counted (Coy, 2026-10-03: "Need to change unit
+  types. Sometimes it's days/sqft. I need to be able to add and edit unit
+  types from this panel and inside the costbook").** A budget line's sheet
+  has **How it's counted** (the card rules — by the day, by the area, once
+  per job, typed …; "Measured in the Plan Room" kept for a takeoff line) and
+  **Unit**, on that line only (`PATCH …/budget/lines/[id] {qty_rule, unit}`;
+  a rule other than typed counts from the area again). The Price book card
+  sheet's Unit is the same **unit picker** (`unit-picker.tsx`): the units
+  already on the org's items, most used first, then the common ones
+  (`src/lib/units.ts`, tested — case never doubles), **+ New unit…** to type
+  one (1–20 characters), and **Edit units…** — each unit with how many items
+  use it and **Rename**, which changes it on every item and vendor price
+  (`GET/PATCH /api/price-book/units`, session client); budgets already made
+  keep their copies. Checked in the harness: a line set to by the day, a new
+  unit "Truck", LS renamed "Lump sum" on 9 items.
 - **Base, vapor barrier and day-rate equipment** are cards like anything
   else (by the sq ft, by the day); nothing is priced that has no card.
 - **Dictating a section (2026-09-28).** Dictate on a section card records up

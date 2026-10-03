@@ -33,6 +33,9 @@ export type PlanAction =
   | { do: "add_to_assembly"; assembly: string; item: string; qty: number | null }
   | { do: "remove_from_assembly"; assembly: string; item: string }
   | { do: "load_assembly"; assembly: string; area: string }
+  // A parish's sales tax rate (Coy, 2026-10-03: "Dusty needs to be able to update the sales tax for the parish
+  // the address found") — saved to Price book → Defaults on Coy's tap; for_job also sets the open job's parish.
+  | { do: "set_tax"; parish: string; rate_pct: number; for_job: boolean; source: string | null }
   // Archive / delete / restore (migration 066) — threads, customers, vendors, jobs by their full ids.
   | { do: "archive"; kind: "contact" | "customer" | "job"; ids: string[]; delete: boolean; label: string | null }
   | { do: "restore"; kind: "contact" | "customer" | "job"; ids: string[]; label: string | null };
@@ -166,6 +169,11 @@ export function cleanAction(raw: unknown): PlanAction | null {
       const assembly = asmRef(r.assembly), a = area(r.area);
       return assembly && a ? { do: "load_assembly", assembly, area: a } : null;
     }
+    case "set_tax": {
+      const parish = str(r.parish, 60)?.replace(/\s+parish$/i, "") ?? null;
+      const rate = typeof r.rate_pct === "number" && Number.isFinite(r.rate_pct) && r.rate_pct >= 0 && r.rate_pct < 30 ? Math.round(r.rate_pct * 10000) / 10000 : null;
+      return parish && rate !== null ? { do: "set_tax", parish, rate_pct: rate, for_job: r.for_job !== false, source: str(r.source, 160) } : null;
+    }
     case "archive":
     case "restore": {
       const kind = RECORD_KINDS.find((k) => k === r.kind);
@@ -226,6 +234,7 @@ export function describe(a: PlanAction, names: { item: (r: string) => string | n
     case "add_to_assembly": return `Add ${itm(a.item)} to ${asm(a.assembly)}${a.qty !== null ? ` ×${a.qty}` : ""}`;
     case "remove_from_assembly": return `Take ${itm(a.item)} out of ${asm(a.assembly)}`;
     case "load_assembly": return `Load ${asm(a.assembly)} onto ${names.area(a.area)}`;
+    case "set_tax": return `Sales tax for ${a.parish} Parish: ${a.rate_pct}%${a.for_job ? " — and use it on this job" : ""}${a.source ? ` (from ${a.source})` : ""}. Check the rate before you apply.`;
     case "archive":
     case "restore": {
       const n = a.ids.length;
@@ -266,8 +275,10 @@ export const PLAN_RULES = `Budget plans. When Coy asks you to build, fill or fix
  {"do":"add_to_assembly","assembly":"<8-char assembly ref or asm1>","item":"<ref or item1>","qty":<number or omit>},
  {"do":"remove_from_assembly","assembly":"<assembly ref>","item":"<ref>"},
  {"do":"load_assembly","assembly":"<assembly ref or asm1>","area":"<area ref or new-area key>"},
+ {"do":"set_tax","parish":"East Baton Rouge","rate_pct":<number>,"for_job":true,"source":"<where the rate comes from>"},
  {"do":"new_area","key":"new1","name":"Driveway","work_type":"slab|driveway|patio|sidewalk|footing|curb|demo|prep|other","sqft":<number or omit>,"lf":<number or omit>,"count":<number or omit>,"unit":"EA","depth_in":<number or omit>}]
 \`\`\`
 To put items on an area this plan makes, use its key ("new1") as the area. To count an item from a Plan Room takeoff group (the aerial or a plan sheet), add it with "takeoff":"<8-char takeoff group ref>" instead of an area — the line then moves when Coy re-measures.
 Price book and assemblies: a new item that a later step uses (an assembly, an add) takes a key ("item1") and "add":false unless it also goes on the budget; a new assembly takes a key ("asm1") so a later step can load it. "Remove" an item means retire_item (it leaves the Price book; budgets that used it keep their lines). An assembly is Coy's default set of items for a kind of area; when he asks for one, first look for an existing assembly in the CONTEXT that fits and load it; build one only if none fits, from his existing items where they fit. "auto":true (fill new areas of that kind on its own) only when Coy asks for it. Steps that touch a budget (add, add_group, new_area, load_assembly, a new_item with "add":true) need a job open — on the Price book, leave them out.
+Sales tax: when Coy asks to add or change a parish's rate, or the job's tax says "no rate for <parish>" or "parish unknown", propose set_tax with the parish (from the job's address, or as Coy named it) and the combined rate (state + parish + local) as one %. If Coy gave the rate, use it and say so in "source"; if you are giving it from what you know, say that in "source" ("Dusty's figure — check the parish's published rate") and tell Coy in words to check it. "for_job": true also sets this job's parish. Never set a rate Coy didn't ask about.
 Rules for plans: use ONLY item refs, area refs, assembly refs and takeoff group refs listed in the CONTEXT (or a key made earlier in the same plan) — never make one up. Prefer an existing item over a new one. A unit_cost is a number only if Coy said it or the CONTEXT has it; otherwise null (the budget then asks for it by name). A qty, or a new area's size or depth, only when it is written in the CONTEXT (a bid line, a section, a measured takeoff total, Coy's notes, a transcript line) or Coy said it; otherwise leave it out and let the item's rule count it from the area. Counted by the area with unit SY counts square yards. Keep a plan to what was asked.`;

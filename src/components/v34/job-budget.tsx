@@ -29,7 +29,8 @@ import { T, F, disp, eyebrow, nums, clip, money, money0, formatPhone } from "@/l
 import { Sheet, Drawer } from "@/components/v34/primitives";
 import { PriceBook } from "@/components/v34/price-book";
 import { budget as priceBudget, jobMinimum, quantities, type BudgetLine, type BudgetSettings, type SectionInput, type TakeoffTotal, type TierTotal } from "@/lib/engine";
-import { COST_TYPES, COST_TYPE_LABEL, QTY_RULE_LABEL, type CostType } from "@/lib/cost-cards";
+import { COST_TYPES, COST_TYPE_LABEL, QTY_RULE_LABEL, QTY_RULES, RULE_UNIT, type CostType, type QtyRule } from "@/lib/cost-cards";
+import { UnitPicker } from "@/components/v34/unit-picker";
 import { useWide } from "@/lib/v34/use-wide";
 import { Cell } from "@/components/v34/cell";
 
@@ -754,12 +755,27 @@ function LineSheet({ line, data, sections, res, addon, onAddon, onClose, onPatch
   const field: React.CSSProperties = { height: 36, border: `1px solid ${T.hair}`, background: T.card, fontSize: F.sm, borderRadius: 4, padding: "0 8px", width: "100%", minWidth: 0 };
   const num = (v: string) => (v.trim() === "" ? null : Number(v));
   return (
-    <Sheet open onClose={onClose} title={line.name} sub={`${QTY_RULE_LABEL[line.qty_rule as keyof typeof QTY_RULE_LABEL] ?? line.qty_rule}`}>
+    <Sheet open onClose={onClose} title={line.name} sub={line.qty_rule === "from_takeoff" ? "Measured in the Plan Room" : `${QTY_RULE_LABEL[line.qty_rule as keyof typeof QTY_RULE_LABEL] ?? line.qty_rule}`}>
       <div className="px-4 py-3 flex flex-col gap-3" key={line.id + line.updated_at}>
         <div className="rounded px-3 py-2" style={{ background: T.slab, ...nums, fontSize: F.sm }}>
           {res.blocked.length ? <span style={{ color: T.hiviz }}>Needs {res.blocked.join(", ")}</span> : (
             <>{qtyFmt(res.qty)} {line.unit} × {money(line.unit_cost ?? 0)} = <b>{money(res.ext_cost ?? 0)}</b> cost · + O.H. {money(res.overhead ?? 0)} · ÷ (1 − {res.margin_pct}%) → <b>{money(res.ext_price ?? 0)}</b></>
           )}
+        </div>
+        {/* How it's counted and in what (Coy, 2026-10-03: "Sometimes it's days/sqft") — this line only. */}
+        <div className="grid grid-cols-2 gap-2">
+          <label className="block"><span style={eyebrow}>How it&apos;s counted</span>
+            <select value={line.qty_rule} aria-label="How it's counted" style={field}
+              onChange={(e) => {
+                const r = e.target.value as QtyRule;
+                // A rule that suggests a unit brings it along unless the unit was already one of its kind.
+                onPatch(r === "manual" ? { qty_rule: r } : { qty_rule: r, ...(line.unit && line.unit.toLowerCase() !== "each" && line.unit.toLowerCase() !== "ea" ? {} : { unit: RULE_UNIT[r] }) });
+              }}>
+              {line.qty_rule === "from_takeoff" && <option value="from_takeoff">Measured in the Plan Room</option>}
+              {QTY_RULES.map((r) => <option key={r} value={r}>{QTY_RULE_LABEL[r]}</option>)}
+            </select></label>
+          <label className="block"><span style={eyebrow}>Unit</span>
+            <UnitPicker value={line.unit} onChange={(u) => onPatch({ unit: u })} style={field} /></label>
         </div>
         <div className="grid grid-cols-2 gap-2">
           <label className="block"><span style={eyebrow}>Quantity {res.qty_basis === "set" ? "(typed)" : `(from the scope${res.qty_note ? ` — ${res.qty_note}` : ""})`}</span>
@@ -768,7 +784,7 @@ function LineSheet({ line, data, sections, res, addon, onAddon, onClose, onPatch
             {res.qty_basis === "set" && line.qty_rule !== "manual" && (
               <button onClick={() => onPatch({ qty_source: "rule" })} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>↺ back to the rule</button>
             )}</label>
-          <label className="block"><span style={eyebrow}>Unit cost / {line.unit}</span>
+          <label className="block"><span style={eyebrow}>Unit cost / {line.unit || "unit"}</span>
             <input defaultValue={line.unit_cost ?? ""} inputMode="decimal" placeholder="not recorded" style={{ ...field, borderColor: line.unit_cost === null ? T.hiviz : T.hair }} aria-label="Unit cost"
               onBlur={(e) => { const v = num(e.target.value); if (v !== line.unit_cost) onPatch({ unit_cost: v }); }} /></label>
           <label className="block"><span style={eyebrow}>Margin % · this line only</span>

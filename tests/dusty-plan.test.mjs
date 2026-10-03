@@ -127,3 +127,16 @@ test("Price book and assembly steps: build an assembly if there isn't one", () =
   assert.deepEqual(p.actions.map(needsJob), [false, false, false, false, true, false, false, false, false]);
   assert.equal(needsJob({ do: "new_item", add: true }), true);
 });
+
+test("set_tax: a parish and a rate, checked; the card says to check it", () => {
+  const p = parsePlan(`\`\`\`scopecrete-plan
+[{"do":"set_tax","parish":"East Baton Rouge Parish","rate_pct":9.95,"source":"Coy said it"},
+ {"do":"set_tax","parish":"Ascension","rate_pct":45},
+ {"do":"set_tax","rate_pct":9.5}]
+\`\`\``);
+  assert.equal(p.actions.length, 1);
+  assert.equal(p.dropped, 2, "a rate of 30% or more, and no parish, are dropped");
+  assert.deepEqual(p.actions[0], { do: "set_tax", parish: "East Baton Rouge", rate_pct: 9.95, for_job: true, source: "Coy said it" });
+  assert.equal(needsJob(p.actions[0]), false, "a parish's rate needs no job open");
+  assert.match(describe(p.actions[0], { item: () => null, area: () => "" }), /East Baton Rouge Parish: 9\.95% — and use it on this job \(from Coy said it\)\. Check the rate/);
+});

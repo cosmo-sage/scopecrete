@@ -402,12 +402,13 @@ async function scopeContext(sb: Sb, orgId: string, jobId: string): Promise<Assem
   const notes = ((secs ?? []) as Array<Record<string, unknown>>).flatMap((r) =>
     [["reinforcement", r.rebar], ["prep", r.prep_notes], ["notes", r.access_notes]]
       .filter(([, v]) => typeof v === "string" && v).map(([k, v]) => `- ${r.name || "section"} ${k}: ${v}`));
+  const taxLine = await taxRatesLine(sb, orgId);
   const title = (job.title as string | null) || "Untitled scope";
   return assemble(`scope: ${title}`, [
     { title: "Job", lines: [`Title: ${title}`, `Id (for an archive / delete plan): job ${jobId}${job.customer_id ? `; its customer: customer ${job.customer_id}` : ""}`, `Status: ${job.status}`, `Address: ${(job.address as string | null) || "not recorded"}`,
       `Days on this job: ${days ?? "not set"}`, `For: ${who ? who.name : "no customer attached"}`,
       `Pricing: O.H. ${jp?.settings.overhead_pct ?? "NOT SET"}%, margin ${jp?.settings.margin_pct ?? "NOT SET"}% — price = cost × (1 + O.H.) ÷ (1 − margin)`,
-      `Sales tax: ${jp?.tax.rate !== null && jp?.tax.rate !== undefined ? `${jp.tax.rate}% (${jp.tax.source === "override" ? "typed for this job" : `${jp.tax.parish} parish`})` : `unknown — ${jp?.tax.missing ?? "no rate"}`}`] },
+      `Sales tax: ${jp?.tax.rate !== null && jp?.tax.rate !== undefined ? `${jp.tax.rate}% (${jp.tax.source === "override" ? "typed for this job" : `${jp.tax.parish} parish`})` : `unknown — ${jp?.tax.missing ?? "no rate"}`}`, taxLine] },
     ...(bid ? [bid] : []),
     ...(calls ?? []),
     { title: "Sections and their quantities (exactly what the builder shows)", lines: scopeLines(t, !!bud) },
@@ -716,6 +717,13 @@ async function customerContext(sb: Sb, orgId: string, id: string): Promise<Assem
   return assemble(`${who.name} (customer page)`, [who.block, ...(files ? [files] : []), { title: "Most recent messages", lines, trimmable: true }]);
 }
 
+/** The org's parish sales tax rates (Price book → Defaults), so Dusty knows which parishes still need one. */
+async function taxRatesLine(sb: Sb, orgId: string): Promise<string> {
+  const { data } = await sb.from("tax_parishes").select("parish, rate_pct").eq("org_id", orgId).order("parish");
+  const rows = (data ?? []) as Array<{ parish: string; rate_pct: unknown }>;
+  return rows.length ? `Parish sales tax rates on file: ${rows.map((r) => `${r.parish} ${Number(r.rate_pct)}%`).join(", ")}` : "Parish sales tax rates on file: none yet";
+}
+
 async function cashContext(sb: Sb, orgId: string): Promise<Assembled> {
   const so = await settingsAndOverhead(sb, orgId);
   const m = so.money;
@@ -726,6 +734,7 @@ async function cashContext(sb: Sb, orgId: string): Promise<Assembled> {
     `Pay yourself: ${m.comp_mode === "fixed_draw" ? `fixed draw ${m.comp_monthly_draw === null ? "(amount not recorded)" : `$${m.comp_monthly_draw}/mo`}` : m.comp_mode === "pct_profit" ? `${v(m.comp_profit_pct, "%")} of profit` : "NOT RECORDED"}`,
   ];
   const oh = so.overhead.map((o) => `- ${o.label}: $${o.amount} ${o.cadence}${o.active ? "" : " (paused)"}`);
+  lines.push(await taxRatesLine(sb, orgId));
   // The Price book page shares this context, so Coy can have Dusty edit the book and its assemblies there.
   const book = await priceBookBlock(sb, orgId);
   return assemble("Price book, cash and pricing defaults", [

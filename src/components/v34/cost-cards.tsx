@@ -15,6 +15,7 @@
  * nothing is filled in for Coy (DECISIONS §3).
  */
 
+import { UnitPicker } from "@/components/v34/unit-picker";
 import React, { useEffect, useMemo, useState } from "react";
 import { T, F, disp, eyebrow, nums, clip, money, formatPhone } from "@/lib/v34/tokens";
 import { Sheet } from "@/components/v34/primitives";
@@ -305,7 +306,7 @@ export function CardSheet({ card, groups, vendors, lockVendor, onClose, onSaved,
               onChange={(e) => set({ unit_cost: e.target.value === "" ? null : Number(e.target.value) })}
               style={{ ...field, borderColor: f.unit_cost === null || f.unit_cost === undefined ? T.hiviz : T.hair }} /></label>
           <label className="block"><span style={eyebrow}>Per</span>
-            <input value={f.unit ?? ""} onChange={(e) => set({ unit: e.target.value })} placeholder={RULE_UNIT[rule]} style={field} /></label>
+            <UnitPicker value={f.unit || null} onChange={(u) => set({ unit: u })} style={field} /></label>
           <label className="flex items-center gap-2 mt-4" style={{ fontSize: F.sm }}>
             <input type="checkbox" checked={!!f.taxable} onChange={(e) => set({ taxable: e.target.checked })} style={{ width: 18, height: 18, accentColor: T.chalk }} />
             Sales tax applies</label>

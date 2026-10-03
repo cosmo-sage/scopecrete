@@ -33,7 +33,7 @@ import { ArchiveButton } from "@/components/v34/archive-actions";
 export interface Person {
   contact: {
     id: string; customer_id?: string | null; name: string | null; name_confirmed: boolean; phones: string[];
-    email: string | null; address: string | null; company: string | null;
+    email: string | null; address: string | null; address_source?: string | null; company: string | null;
     bucket: "customer" | "vendor" | "personal" | "spam" | null;
     bucket_state: "confirmed" | "auto" | null;
     subtype: string | null; subtype_label: string | null;
@@ -157,7 +157,8 @@ export function PersonView({ person, messages, onReload, onMerge }: {
         <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1" style={{ fontSize: F.xs, color: T.ink2, ...nums }}>
           {c.phones.map((p) => <a key={p} href={`tel:${p}`} style={{ color: T.ink2 }}>{formatPhone(p)}</a>)}
           {c.email && <a href={`mailto:${c.email}`} style={{ color: T.ink2 }}>{c.email}</a>}
-          {c.address && <span>{c.address}</span>}
+          {c.address && <span title={c.address_source === "call" ? "Heard on a call — the transcript's spelling; check it" : c.address_source === "text" ? "They texted it" : undefined}>
+            {c.address}{c.address_source === "call" ? " (heard on a call — check it)" : c.address_source === "text" ? " (texted)" : ""}</span>}
           <span style={{ color: T.ink3 }}>{texts} text{texts === 1 ? "" : "s"} · {calls} call{calls === 1 ? "" : "s"}</span>
         </div>
 

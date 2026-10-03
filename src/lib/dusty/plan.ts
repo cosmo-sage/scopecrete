@@ -38,10 +38,13 @@ export type PlanAction =
   | { do: "set_tax"; parish: string; rate_pct: number; for_job: boolean; source: string | null }
   // Archive / delete / restore (migration 066) — threads, customers, vendors, jobs by their full ids.
   | { do: "archive"; kind: "contact" | "customer" | "job"; ids: string[]; delete: boolean; label: string | null }
-  | { do: "restore"; kind: "contact" | "customer" | "job"; ids: string[]; label: string | null };
+  | { do: "restore"; kind: "contact" | "customer" | "job"; ids: string[]; label: string | null }
+  // An address on a customer, a person or a job (Coy, 2026-10-03: "I want dusty to be able to update an
+  // address record") — checked against Mapbox on Coy's Apply; its spelling wins when it matches for sure.
+  | { do: "set_address"; kind: "contact" | "customer" | "job"; id: string; line1: string; city: string | null; state: string | null; zip: string | null; source: string | null };
 
 /** Steps that change records rather than a budget — they need no job open. */
-export const RECORD_STEPS = new Set(["archive", "restore"]);
+export const RECORD_STEPS = new Set(["archive", "restore", "set_address"]);
 /** Steps that touch a job's budget — they need the job open. Everything else is the Price book. */
 export const needsJob = (a: PlanAction) =>
   a.do === "add" || a.do === "add_group" || a.do === "new_area" || a.do === "load_assembly" || (a.do === "new_item" && a.add);
@@ -184,6 +187,16 @@ export function cleanAction(raw: unknown): PlanAction | null {
         ? { do: "archive", kind, ids, delete: r.delete === true, label: str(r.label, 120) }
         : { do: "restore", kind, ids, label: str(r.label, 120) };
     }
+    case "set_address": {
+      const kind = RECORD_KINDS.find((k) => k === r.kind);
+      const id = typeof r.id === "string" && FULL_ID.test(r.id) ? r.id.toLowerCase() : null;
+      const line1 = str(r.line1, 160);
+      // A street address starts with its house number; a city or a "near the school" is not one.
+      if (!kind || !id || !line1 || !/^\d{1,6}[A-Za-z]?\s+\S/.test(line1)) return null;
+      const zip = str(r.zip, 10);
+      return { do: "set_address", kind, id, line1, city: str(r.city, 80), state: str(r.state, 30),
+        zip: zip && /^\d{5}(-\d{4})?$/.test(zip) ? zip : null, source: str(r.source, 160) };
+    }
     default: return null;
   }
 }
@@ -235,6 +248,11 @@ export function describe(a: PlanAction, names: { item: (r: string) => string | n
     case "remove_from_assembly": return `Take ${itm(a.item)} out of ${asm(a.assembly)}`;
     case "load_assembly": return `Load ${asm(a.assembly)} onto ${names.area(a.area)}`;
     case "set_tax": return `Sales tax for ${a.parish} Parish: ${a.rate_pct}%${a.for_job ? " — and use it on this job" : ""}${a.source ? ` (from ${a.source})` : ""}. Check the rate before you apply.`;
+    case "set_address": {
+      const whose = a.kind === "job" ? "the job's site" : a.kind === "customer" ? "the customer's address" : "their address";
+      const full = [a.line1, a.city, [a.state, a.zip].filter(Boolean).join(" ")].filter(Boolean).join(", ");
+      return `Set ${whose} to ${full}${a.source ? ` (from ${a.source})` : ""} — checked against the map when you apply`;
+    }
     case "archive":
     case "restore": {
       const n = a.ids.length;
@@ -257,7 +275,12 @@ export const RECORD_RULES = `Archiving and deleting. When Coy asks you to archiv
  {"do":"archive","kind":"job","ids":["<full job id>"],"delete":true,"label":"…"},
  {"do":"restore","kind":"contact|customer|job","ids":["<full id>"],"label":"…"}]
 \`\`\`
-Use ONLY the full ids written in the CONTEXT (lines like "contact 1b2c…", "job …", "customer …") — never make one up, and never guess which one Coy means: if two could match, ask. Archive is for threads ("archive", not "delete"); a vendor is deleted as a contact with "delete":true; a customer's delete takes its people and open jobs with it. Coy sees each step with the names it touches and taps Apply; everything can be undone and restored, and nothing is erased — calls, texts and files stay on record. An archived thread comes back on its own if that number calls or texts again. "Nothing said" threads are marked NOTHING SAID in the context. Never archive or delete what Coy didn't ask for.`;
+Use ONLY the full ids written in the CONTEXT (lines like "contact 1b2c…", "job …", "customer …") — never make one up, and never guess which one Coy means: if two could match, ask. Archive is for threads ("archive", not "delete"); a vendor is deleted as a contact with "delete":true; a customer's delete takes its people and open jobs with it. Coy sees each step with the names it touches and taps Apply; everything can be undone and restored, and nothing is erased — calls, texts and files stay on record. An archived thread comes back on its own if that number calls or texts again. "Nothing said" threads are marked NOTHING SAID in the context. Never archive or delete what Coy didn't ask for.
+Addresses. When Coy asks you to put an address on a customer, a person or a job — or one was texted or said in the CONTEXT and he asks you to record it — propose:
+\`\`\`scopecrete-plan
+[{"do":"set_address","kind":"customer|contact|job","id":"<full id from the CONTEXT>","line1":"1234 Example St","city":"Baton Rouge","state":"LA","zip":"70800","source":"their text of Oct 2"}]
+\`\`\`
+Use the address exactly as it was written or said — never invent a house number, street, city or zip; leave out what wasn't given. Say in "source" where it came from. A customer's address is where they are; a job's is the site. On Apply the app checks it against the map (Mapbox) and uses the map's spelling when the house number and street match for sure — say so if the address came from a call transcript, where streets are often misheard.`;
 
 /** The instructions Dusty is given about plans — appended to his system prompt. */
 export const PLAN_RULES = `Budget plans. When Coy asks you to build, fill or fix a job's budget, or to add, change, remove or organise items, groups or assemblies in his Price book, answer in words first, then end with ONE fenced block in this exact form, which the app shows to Coy as steps with an Apply button (you change nothing yourself — Coy's tap does):

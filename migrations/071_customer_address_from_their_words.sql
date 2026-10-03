@@ -8,7 +8,7 @@
 -- The reader (enrich-contacts) has always heard addresses — `contact_proposals.
 -- site_hint` — and sc_customer_job_for() put them on the automatic JOB. Nothing
 -- put them on the CUSTOMER, so Johnette's customer page had no address while
--- her job had "14835 General Prentiss Ave, Baton Rouge, LA 70816".
+-- her job had the address she texted.
 --
 -- An address goes onto a customer without asking ONLY when the customer has no
 -- address at all (never over one Coy typed or any other) and the reader heard

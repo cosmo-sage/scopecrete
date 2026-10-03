@@ -28,7 +28,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ contactId: 
     applyCookies(NextResponse.json({ error: `${what}: ${msg}` }, { status: 500 }));
 
   const { data: c, error: cErr } = await supabase.from("contacts")
-    .select("id, customer_id, name, name_confirmed_at, name_source, phone, email, address, company_name, contact_type, contact_subtype, classification_confirmed_at, auto_classified_at, status_summary, recent_summary, job_type_hint, status_summary_at, merged_into_contact_id")
+    .select("id, customer_id, name, name_confirmed_at, name_source, phone, email, address, address_source, company_name, contact_type, contact_subtype, classification_confirmed_at, auto_classified_at, status_summary, recent_summary, job_type_hint, status_summary_at, merged_into_contact_id")
     .eq("org_id", orgId).eq("id", contactId).maybeSingle();
   if (cErr) return fail("contacts", cErr.message);
   if (!c) return applyCookies(NextResponse.json({ error: "Contact not found." }, { status: 404 }));
@@ -106,6 +106,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ contactId: 
       phones: [...new Set([c.phone, ...((phones.data ?? []) as Array<{ phone_e164: string }>).map((p) => p.phone_e164)].filter(Boolean))],
       email: c.email?.trim() || null,
       address: c.address?.trim() || null,
+      address_source: (c.address_source as string | null) ?? null,
       company: c.company_name?.trim() || null,
       bucket,
       bucket_state: !bucket ? null : c.classification_confirmed_at ? "confirmed" : "auto",

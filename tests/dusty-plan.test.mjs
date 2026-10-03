@@ -140,3 +140,20 @@ test("set_tax: a parish and a rate, checked; the card says to check it", () => {
   assert.equal(needsJob(p.actions[0]), false, "a parish's rate needs no job open");
   assert.match(describe(p.actions[0], { item: () => null, area: () => "" }), /East Baton Rouge Parish: 9\.95% — and use it on this job \(from Coy said it\)\. Check the rate/);
 });
+
+test("set_address: a full id, a street with its number, nothing made up", () => {
+  const id = "0b2f6e4a-1c3d-4e5f-8a9b-0c1d2e3f4a5b";
+  const p = parsePlan(`\`\`\`scopecrete-plan
+[{"do":"set_address","kind":"customer","id":"${id}","line1":"1234 Example St","city":"Baton Rouge","state":"LA","zip":"70800","source":"their text of Oct 2"},
+ {"do":"set_address","kind":"contact","id":"${id}","line1":"1234 Example St","zip":"seven"},
+ {"do":"set_address","kind":"job","id":"0b2f6e4a","line1":"1234 Example St"},
+ {"do":"set_address","kind":"customer","id":"${id}","line1":"near the school"},
+ {"do":"set_address","kind":"vendor","id":"${id}","line1":"1234 Example St"}]
+\`\`\``);
+  assert.equal(p.actions.length, 2);
+  assert.equal(p.dropped, 3, "a short id, a street with no number, and an unknown kind are dropped");
+  assert.deepEqual(p.actions[0], { do: "set_address", kind: "customer", id, line1: "1234 Example St", city: "Baton Rouge", state: "LA", zip: "70800", source: "their text of Oct 2" });
+  assert.equal(p.actions[1].zip, null, "a zip that isn't five digits is left out");
+  assert.equal(needsJob(p.actions[0]), false);
+  assert.match(describe(p.actions[0], { item: () => null, area: () => "" }), /Set the customer's address to 1234 Example St, Baton Rouge, LA 70800 \(from their text of Oct 2\) — checked against the map/);
+});

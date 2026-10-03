@@ -4,7 +4,7 @@ Ground truth for every agent working this repo. If code disagrees with this
 document, the code is wrong or this document is stale — resolve it, don't
 guess. Update this file in the same PR that changes the behavior it describes.
 
-Last updated: 2026-10-03 (customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
+Last updated: 2026-10-03 (an address given is kept and asked about — migration 072; Dusty sets addresses; customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
 
 ---
 
@@ -224,8 +224,36 @@ list."* (Claude Design handoff, `design/customer-and-themes/`.)
   **The Edit form's Street finishes the address as you type** (Mapbox,
   `/api/address/suggest`, `address-input.tsx`): a pick fills street, city,
   state and zip. Coy's typed address is placed by Google if its key is set,
-  else Mapbox. Not built: an address said on a call with no customer yet,
-  and Dusty proposing an address in a plan.
+  else Mapbox.
+- **Anyone who gives an address is kept and asked about (migration 072,
+  applied 2026-10-03).** Coy: *"If an address is being given by a new
+  contact it should be recorded even if there isn't enough context yet to
+  determine if that person is a customer or vendor. Either way … it should at
+  least be marked as an important contact for dusty to ask me about."* When
+  the reader hears an address the person texted or said
+  (`sc_contact_heard_address()`, 071's rule), it is written on the
+  **contact** if they have none (`contacts.address` / city / state / zip,
+  `address_source` text | call | coy, `address_heard_at`; never over one
+  there) — the person page and Dusty say "texted" or "heard on a call —
+  check it". Unless Coy filed them himself (or they are spam), Dusty adds a
+  next step, due that day: "Gave an address — … Who are they? File them."
+  (`contact_tasks`, source dusty) — on the activity line's reminders, their
+  page and Dusty's context; once per address, so a dismissed ask is never
+  re-added. When a person is later given a customer (trigger
+  `contacts_customer_address`), 071 runs for it, so a texted address
+  follows them. Applied: 10 people's addresses kept, none overwritten; 8
+  asks. Rehearsed (rolled back, run twice: no second ask).
+- **Dusty sets addresses (Coy, 2026-10-03: "I want dusty to be able to
+  update an address record").** A plan step `set_address` {kind customer |
+  contact | job, the full id from his context, line1 — a house number and
+  street, never made up — city, state, zip, source}. On Coy's Apply it is
+  checked against Mapbox (`/api/address/check`): on a sure match the map's
+  spelling is saved, otherwise his words with "the map wasn't sure — check
+  it"; through `PATCH /api/customers/[id]`, `PATCH /api/contacts/[id]/address`
+  (Coy's, `address_source='coy'`) or `PATCH /api/jobs/[id]`. The card lists
+  the real name it touches. Tested in `tests/dusty-plan.test.mjs`.
+  Not built: Mapbox's check of an address heard on a call for a person who
+  has no customer yet (the customer page does it once they have one).
 - **Moving people is Coy's tap and undoable.** `sc_attach_contact(contact,
   customer)` / `sc_detach_contact(contact)` / `sc_undo_contact_move(move)` —
   SECURITY DEFINER with an explicit membership check, execute for

@@ -54,7 +54,7 @@ export function mapboxV6Matches(body: unknown): AddressMatch[] {
   return out;
 }
 
-/** The house number a heard address starts with ("14835 General Prentiss Ave…" → "14835"). */
+/** The house number a heard address starts with ("1234 Example Ave…" → "1234"). */
 export function houseNumber(text: string): string | null {
   return /^\s*(\d{2,6})\b/.exec(text)?.[1] ?? null;
 }

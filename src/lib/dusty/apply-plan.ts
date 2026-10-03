@@ -78,7 +78,7 @@ export async function applyPlan(jobId: string | null, actions: PlanAction[], loo
   };
   // Groups first, so items can be filed in them; then changes; then the budget.
   const order = { new_group: 0, rename_group: 1, update_item: 1, new_area: 2, new_item: 3, retire_item: 4, new_assembly: 5, add_to_assembly: 6, remove_from_assembly: 6,
-    add: 7, add_group: 8, load_assembly: 9, remove_group: 10, set_tax: 10, archive: 11, restore: 11 } as const;
+    add: 7, add_group: 8, load_assembly: 9, remove_group: 10, set_tax: 10, archive: 11, restore: 11, set_address: 11 } as const;
   // Archive / restore steps run through applyRecords (no job needed).
   const steps = [...actions].filter((a) => !RECORD_STEPS.has(a.do)).sort((a, b) => order[a.do] - order[b.do]);
   for (const a of steps) {
@@ -233,8 +233,9 @@ export async function applyPlan(jobId: string | null, actions: PlanAction[], loo
 export async function applyRecords(actions: PlanAction[]): Promise<StepResult[]> {
   const out: StepResult[] = [];
   for (const a of actions) {
-    if (a.do !== "archive" && a.do !== "restore") continue;
     try {
+      if (a.do === "set_address") { out.push(await setAddress(a)); continue; }
+      if (a.do !== "archive" && a.do !== "restore") continue;
       if (a.do === "archive") {
         const r = await archiveNow(a.kind, a.ids, a.delete ? "delete" : "archive", "dusty");
         out.push({ ok: r.count > 0, text: r.count ? r.label : "Nothing to do — already archived, or not yours" });
@@ -247,4 +248,23 @@ export async function applyRecords(actions: PlanAction[]): Promise<StepResult[]>
     }
   }
   return out;
+}
+
+/**
+ * An address on a customer, a person or a job — checked against the map first
+ * (`/api/address/check`): on a sure match of the house number and street the
+ * map's spelling is saved; otherwise Dusty's words, and the result says so.
+ */
+async function setAddress(a: Extract<PlanAction, { do: "set_address" }>): Promise<StepResult> {
+  const given = [a.line1, a.city, [a.state, a.zip].filter(Boolean).join(" ")].filter(Boolean).join(", ");
+  const chk = await call(`/api/address/check?q=${encodeURIComponent(given)}`, "GET").catch(() => null) as
+    { on?: boolean; sure?: boolean; match?: { line1: string; city: string | null; state: string | null; zip: string | null; formatted: string } | null } | null;
+  const m = chk?.sure && chk.match ? chk.match : null;
+  const parts = m ? { line1: m.line1, city: m.city, state: m.state, zip: m.zip } : { line1: a.line1, city: a.city, state: a.state, zip: a.zip };
+  if (a.kind === "customer") await call(`/api/customers/${a.id}`, "PATCH", { address_line1: parts.line1, city: parts.city ?? "", state: parts.state ?? "", zip: parts.zip ?? "" });
+  else if (a.kind === "contact") await call(`/api/contacts/${a.id}/address`, "PATCH", { address_line1: parts.line1, city: parts.city, state: parts.state, zip: parts.zip });
+  else await call(`/api/jobs/${a.id}`, "PATCH", { address: parts.line1, city: parts.city ?? "", state: parts.state ?? "", zip: parts.zip ?? "" });
+  const saved = m ? m.formatted : given;
+  const note = m ? " — matched on the map" : !chk?.on ? " — the map check isn't set up (MAPBOX_TOKEN); check it" : chk.match ? ` — the map wasn't sure (it found ${chk.match.formatted}); check it` : " — the map didn't find it; check it";
+  return { ok: true, text: `Address set to ${saved}${note}` };
 }

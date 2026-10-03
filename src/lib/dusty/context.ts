@@ -191,7 +191,7 @@ async function inboxBlock(sb: Sb, orgId: string): Promise<Block> {
 
 async function contactBlock(sb: Sb, orgId: string, contactId: string) {
   const { data: c } = await sb.from("contacts")
-    .select("id, name, name_source, name_confirmed_at, phone, address, customer_id, merged_into_contact_id, contact_type, contact_subtype, classification_confirmed_at, auto_classified_at, status_summary")
+    .select("id, name, name_source, name_confirmed_at, phone, address, address_source, customer_id, merged_into_contact_id, contact_type, contact_subtype, classification_confirmed_at, auto_classified_at, status_summary")
     .eq("org_id", orgId).eq("id", contactId).maybeSingle();
   if (!c) return null;
   const [{ data: phones }, { data: jobs }, { data: tasks }, { data: notes }, { data: musings }, { data: dreams }] = await Promise.all([
@@ -224,7 +224,7 @@ async function contactBlock(sb: Sb, orgId: string, contactId: string) {
     lines: [
       `Name: ${name ? `${name}${c.name_confirmed_at ? " (confirmed by Coy)" : c.name_source === "machine" ? " (they introduced themselves by this name; Coy hasn't confirmed it)" : " (NOT confirmed — may be wrong)"}` : "not recorded"}`,
       `Numbers: ${numbers.join(", ") || "not recorded"}`,
-      `Address: ${(c.address as string | null)?.trim() || "not recorded"}`,
+      `Address: ${(c.address as string | null)?.trim() ? `${c.address}${c.address_source === "text" ? " (they texted it)" : c.address_source === "call" ? " (heard on a call — the transcript's spelling; check it)" : c.address_source === "coy" ? " (Coy's)" : ""}` : "not recorded"}`,
       `What they are to the business: ${relation}`,
       `Jobs: ${(jobs ?? []).length ? (jobs as Array<{ title: string | null; status: string | null }>).map((j) => `${j.title || "untitled"} (${j.status})`).join("; ") : "none"}`,
       `Where it stands (Dusty's earlier read): ${(c.status_summary as string | null) ?? "not read yet"}`,
@@ -354,7 +354,7 @@ async function threadContext(sb: Sb, orgId: string, contactId: string): Promise<
 
   const files = await filesBlock(sb, orgId, { contactId });
   return assemble(`${who.name}'s thread`, [
-    { title: "Ids (for an archive / delete plan)", lines: [`This thread: contact ${contactId}`] },
+    { title: "Ids (for plans: archive, delete, set an address)", lines: [`This thread: contact ${contactId}`] },
     who.block,
     ...(files ? [files] : []),
     { title: `Messages (last ${msgs.length}, oldest first)`, lines, trimmable: true },
@@ -405,7 +405,7 @@ async function scopeContext(sb: Sb, orgId: string, jobId: string): Promise<Assem
   const taxLine = await taxRatesLine(sb, orgId);
   const title = (job.title as string | null) || "Untitled scope";
   return assemble(`scope: ${title}`, [
-    { title: "Job", lines: [`Title: ${title}`, `Id (for an archive / delete plan): job ${jobId}${job.customer_id ? `; its customer: customer ${job.customer_id}` : ""}`, `Status: ${job.status}`, `Address: ${(job.address as string | null) || "not recorded"}`,
+    { title: "Job", lines: [`Title: ${title}`, `Id (for plans: archive, delete, set an address): job ${jobId}${job.customer_id ? `; its customer: customer ${job.customer_id}` : ""}`, `Status: ${job.status}`, `Address: ${(job.address as string | null) || "not recorded"}`,
       `Days on this job: ${days ?? "not set"}`, `For: ${who ? who.name : "no customer attached"}`,
       `Pricing: O.H. ${jp?.settings.overhead_pct ?? "NOT SET"}%, margin ${jp?.settings.margin_pct ?? "NOT SET"}% — price = cost × (1 + O.H.) ÷ (1 − margin)`,
       `Sales tax: ${jp?.tax.rate !== null && jp?.tax.rate !== undefined ? `${jp.tax.rate}% (${jp.tax.source === "override" ? "typed for this job" : `${jp.tax.parish} parish`})` : `unknown — ${jp?.tax.missing ?? "no rate"}`}`, taxLine] },
@@ -700,7 +700,7 @@ async function customerContext(sb: Sb, orgId: string, id: string): Promise<Assem
       .reverse().map((m) => `${day(m.occurred_at)} ${m.direction === "outbound" ? "OUT" : `IN (${nameOf.get(m.contact_id) ?? "contact"})`} ${m.channel === "call" ? `CALL — ${m.summary?.trim() || "no summary"}` : `TEXT: ${m.body_text?.trim() || "(attachment)"}`}`);
     const mail = await emailsBlock(sb, orgId, { customerId: id });
     return assemble(`${cu.name ?? "Customer"} (customer page)`, [
-      { title: "The customer", lines: [...facts, `Ids (for an archive / delete plan): customer ${cu.id}; its people ${ids.map((x) => `contact ${x}`).join(", ") || "none"}`] },
+      { title: "The customer", lines: [...facts, `Ids (for plans: archive, delete, set an address): customer ${cu.id}; its people ${ids.map((x) => `contact ${x}`).join(", ") || "none"}`] },
       ...blocks.map((b) => b.block),
       ...(mail ? [mail] : []),
       { title: "Most recent messages, all contacts", lines, trimmable: true },

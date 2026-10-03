@@ -22,6 +22,7 @@ import { createPortal } from "react-dom";
 import { useDustyDocked } from "@/lib/v34/use-dusty-docked";
 import { Sheet } from "@/components/v34/primitives";
 import Link from "next/link";
+import { VoiceRecorder } from "@/components/v34/voice-recorder";
 import { useParams } from "next/navigation";
 import { T, F, disp, eyebrow, nums, clip, money, money0, formatPhone } from "@/lib/v34/tokens";
 import { EmptyState } from "@/components/v34/primitives";
@@ -668,14 +669,11 @@ function SectionCard({ s, index, err, onLocal, onSave, onRemove, jobType, jobId,
       </div>
       {photos}
 
-      {concrete && (
-        // No Reinforcement field (Coy, 2026-10-02: "I'm going to pull things in from the
-        // price book") — mesh and rebar are budget lines like anything else.
-        <div className="px-3 py-2 grid grid-cols-1 sm:grid-cols-2 gap-2" style={{ borderTop: `1px solid ${T.hairSoft}` }}>
-          <NoteIn label="Prep" value={s.prep_notes} onLocal={(v) => onLocal({ prep_notes: v })} onSave={(v) => onSave({ prep_notes: v })} placeholder="not noted" />
-          <NoteIn label="Access" value={s.access_notes} onLocal={(v) => onLocal({ access_notes: v })} onSave={(v) => onSave({ access_notes: v })} placeholder="not noted" />
-        </div>
-      )}
+      {/* Notes, typed or said (Coy, 2026-10-03: "Prep can be removed … Access … can be replaced by 'notes'.
+          The notes can be typed or dictated verbally"). Kept in access_notes — no migration; neither column held anything. */}
+      <div className="px-3 py-2" style={{ borderTop: `1px solid ${T.hairSoft}` }}>
+        <SectionNotes value={s.access_notes} onLocal={(v) => onLocal({ access_notes: v })} onSave={(v) => onSave({ access_notes: v })} />
+      </div>
       {err && <div className="px-3 pb-2" style={{ fontSize: F.xs, color: T.red }}>Not saved: {err}</div>}
     </div>
   );
@@ -736,7 +734,7 @@ function Dictate({ jobId, s, onApply }: { jobId: string; s: Section; onApply: (p
   };
 
   const LABEL: Record<string, string> = { length_ft: "length", width_ft: "width", depth_in: "thickness", psi: "PSI", work_type: "type",
-    name: "name", reinforcement_item_id: "reinforcement", prep_notes: "prep", access_notes: "access" };
+    name: "name", reinforcement_item_id: "reinforcement", access_notes: "notes" };
   return (
     <>
       <button onClick={() => (state === "rec" ? rec.current?.stop() : state === "idle" ? void start() : undefined)}
@@ -789,17 +787,45 @@ function NumIn({ value, onChange, onBlur, w }: { value: number | ""; onChange: (
   );
 }
 
-function NoteIn({ label, value, onLocal, onSave, placeholder }: {
-  label: string; value: string | null; placeholder: string;
-  onLocal: (v: string | null) => void; onSave: (v: string | null) => void;
-}) {
+/** A section's notes: typed, or said — the mic records, Groq writes it down, and the words are added on. */
+function SectionNotes({ value, onLocal, onSave }: { value: string | null; onLocal: (v: string | null) => void; onSave: (v: string | null) => void }) {
+  const [rec, setRec] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const said = async (blob: Blob) => {
+    setRec(false); setBusy(true); setErr(null);
+    try {
+      const fd = new FormData();
+      fd.append("audio", blob, blob.type.includes("mp4") ? "note.mp4" : "note.webm");
+      const r = await fetch("/api/dusty/transcribe", { method: "POST", body: fd });
+      const b = await r.json().catch(() => ({}));
+      if (!r.ok || !b.text) throw new Error(b.error || `HTTP ${r.status}`);
+      const next = [value?.trim(), String(b.text).trim()].filter(Boolean).join("\n").slice(0, 2000);
+      onLocal(next); onSave(next);
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
+  };
   return (
-    <label className="block" style={{ minWidth: 0 }}>
-      <span style={eyebrow}>{label}</span>
-      <input value={value ?? ""} placeholder={placeholder}
-        onChange={(e) => onLocal(e.target.value || null)} onBlur={(e) => onSave(e.target.value || null)}
-        className="w-full rounded px-2 outline-none mt-0.5" style={{ height: 32, border: `1px solid ${T.hair}`, fontSize: F.sm }} />
-    </label>
+    <div style={{ minWidth: 0 }}>
+      <div className="flex items-center gap-2">
+        <span style={eyebrow}>Notes</span>
+        <span className="flex-1" />
+        {!rec && (
+          <button onClick={() => setRec(true)} disabled={busy} aria-label="Say a note" title="Say a note — it is written down here"
+            className="inline-flex items-center gap-1 rounded px-2" style={{ height: 26, border: `1px solid ${T.hair}`, background: T.card, fontSize: F.xs, cursor: "pointer", opacity: busy ? 0.5 : 1 }}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></svg>
+            {busy ? "Writing it down…" : "Say it"}
+          </button>
+        )}
+      </div>
+      {rec ? (
+        <div className="mt-1"><VoiceRecorder onSend={(b) => void said(b)} onCancel={() => setRec(false)} /></div>
+      ) : (
+        <textarea value={value ?? ""} placeholder="Anything about this area — access, the pump, demo, what they want…" rows={2}
+          onChange={(e) => onLocal(e.target.value || null)} onBlur={(e) => onSave(e.target.value.trim() || null)}
+          className="w-full rounded px-2 py-1.5 outline-none mt-1" style={{ border: `1px solid ${T.hair}`, fontSize: F.sm, resize: "vertical", background: T.card, color: T.ink }} />
+      )}
+      {err && <div style={{ fontSize: F.xs, color: T.red }}>Didn&apos;t get that: {err}</div>}
+    </div>
   );
 }
 

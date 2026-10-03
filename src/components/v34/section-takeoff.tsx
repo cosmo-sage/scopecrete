@@ -12,7 +12,7 @@
  */
 import React, { useState } from "react";
 import Link from "next/link";
-import { T, F, eyebrow, nums, clip } from "@/lib/v34/tokens";
+import { T, F, eyebrow, nums, clip, disp } from "@/lib/v34/tokens";
 import { Sheet } from "@/components/v34/primitives";
 import { KIND_UNIT, fmtQty, type TakeoffKind } from "@/lib/takeoff";
 import type { PlansData } from "@/components/v34/plan-room/shared";
@@ -61,7 +61,8 @@ export function SectionTakeoffStrip({ jobId, sectionId, sectionName, following, 
 }) {
   const [open, setOpen] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  if (!plans || !plans.measurements.length) return null;
+  if (!plans) return null;
+  const none = !plans.measurements.length;
   const s = shapesOf(sectionId, plans);
   const follow = async () => {
     setErr(null);
@@ -69,8 +70,8 @@ export function SectionTakeoffStrip({ jobId, sectionId, sectionName, following, 
     catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
   };
   return (
-    <div className="px-3 pt-1.5 flex items-center gap-x-2 gap-y-1 flex-wrap" style={{ fontSize: F.xs }}>
-      <span style={{ ...eyebrow }}>Takeoff</span>
+    <div className="px-3 py-1.5 flex items-center gap-x-2 gap-y-1 flex-wrap" style={{ fontSize: F.xs }}>
+      <span style={{ ...eyebrow }}>Measurements</span>
       {s.ids.length ? (
         <>
           <span style={{ color: T.ink2 }}>
@@ -81,9 +82,16 @@ export function SectionTakeoffStrip({ jobId, sectionId, sectionName, following, 
             ? <span title="The size follows the Plan Room: re-draw a shape and it moves" style={{ color: T.green }}>ƒ follows the Plan Room</span>
             : <span style={{ color: T.hivizText }}>✎ size typed here · <button onClick={() => void follow()} style={{ color: T.chalk, fontWeight: 600, cursor: "pointer" }}>↺ follow the takeoff</button></span>}
         </>
-      ) : <span style={{ color: T.ink3 }}>not counted from the plans</span>}
-      <button onClick={() => setOpen(true)} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>{s.ids.length ? "Change takeoffs" : "Pick takeoffs"}</button>
-      <Link href={`/dashboard/scope/${jobId}/plans?step=takeoff`} style={{ ...eyebrow, color: T.ink3 }}>Plan Room ›</Link>
+      ) : <span style={{ color: T.ink3 }}>{none ? "nothing measured in the Plan Room yet" : "not counted from the plans"}</span>}
+      <span className="flex-1" />
+      {/* A real button (Coy, 2026-10-03: "i'm not seeing anywhere in the section to pull measurements from the planroom"). */}
+      {none
+        ? <Link href={`/dashboard/scope/${jobId}/plans?step=takeoff`} className="rounded px-2.5 inline-flex items-center"
+            style={{ height: 28, border: `1px solid ${T.hairStrong}`, color: T.ink, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", letterSpacing: ".05em" }}>Measure in the Plan Room ›</Link>
+        : <button onClick={() => setOpen(true)} className="rounded px-2.5"
+            style={{ height: 28, border: `1px solid ${T.ink}`, background: T.card, color: T.ink, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", letterSpacing: ".05em", cursor: "pointer" }}>
+            {s.ids.length ? "Change measurements" : "+ Pull measurements from the Plan Room"}
+          </button>}
       {err && <span style={{ color: T.red }}>{err}</span>}
       {open && <Picker jobId={jobId} sectionId={sectionId} sectionName={sectionName} plans={plans} chosen={s.ids} sectionNames={sectionNames}
         onClose={() => setOpen(false)} onSaved={() => { setOpen(false); onChanged(); }} />}

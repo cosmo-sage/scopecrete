@@ -4,7 +4,7 @@ Ground truth for every agent working this repo. If code disagrees with this
 document, the code is wrong or this document is stale — resolve it, don't
 guess. Update this file in the same PR that changes the behavior it describes.
 
-Last updated: 2026-10-03 (a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
+Last updated: 2026-10-03 (tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
 
 ---
 
@@ -2265,6 +2265,16 @@ expected start date per quoted job before it means anything. Add the field.
   proposal's area maps and the sheet viewer keep the group's colour.
   Rehearsed (rolled back): a hex kept, anything else refused. Checked in the
   harness: the Apron recoloured blue on its row and on the sheet.
+  **Tick to send (Coy, 2026-10-03: "a check box next to the measurement in
+  the plan room parameters so that I can select the measurement and push to
+  budget").** Each takeoff's row has a tick box; ticking any (one group at a
+  time — a section takes one kind) turns the panel's button into **Send N to
+  budget**, which opens the Send sheet with just those ticked. Checked in the
+  harness: ticking Apron sent only Apron. **On the job page** the section's
+  row is **Measurements** with a real button — **+ Pull measurements from the
+  Plan Room** (Change measurements once it has some; Measure in the Plan Room
+  › when nothing is measured yet) — Coy couldn't find the old "Pick takeoffs"
+  link.
   Checked in the harness on a generated sheet: a 30×40 ft rectangle at
   1/8" = 1'-0" is exactly 1,200 SF (14.8 CY at 4"), $2,467 on a $1.43 card at
   15% O.H. and 20% margin; a 10×20 apron moved the line to 1,400 SF / $2,878;
@@ -2421,6 +2431,16 @@ expected start date per quoted job before it means anything. Add the field.
   large, ‹ › and Full size, and below, the ones texted but not yet on the
   job with **+ Job** / **Bring all N in**. Only PDFs become sheets; a photo
   is for looking at beside the aerial, not for measuring.
+- **Section Notes replace Prep and Access (Coy, 2026-10-03, two Vercel
+  notes: "Prep can be removed from the sections" and "Access can be removed
+  … replaced by 'notes'. The notes can be typed or dictated verbally").**
+  Every section has one **Notes** box — typed, or **Say it** (records with
+  the chat's recorder, Groq writes it down through `/api/dusty/transcribe`,
+  the words are added to the box). Kept in `job_sections.access_notes`, no
+  migration: measured that day, no section had anything in `prep_notes` or
+  `access_notes`. Section dictation fills Notes with whatever was said that
+  isn't a field (`sanitizeDictation()` no longer writes `prep_notes`), and
+  Dusty reads them as the section's notes.
 - **Job header (2026-09-28)** — four tappable chips, each opening its list:
   **Status** (the seven stages, with W.I.P.'s won / scheduled / pouring),
   **Type**, **Source** and **Vendors (n)** (crew on the job, add by subtype)

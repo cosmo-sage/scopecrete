@@ -35,7 +35,8 @@ export function PlanRoom({ jobId }: { jobId: string }) {
   const [err, setErr] = useState<string | null>(null);
   const [reading, setReading] = useState<Record<string, string>>({});
   const [uploading, setUploading] = useState<string | null>(null);
-  const [sending, setSending] = useState<Param | null>(null);
+  const [sending, setSendingState] = useState<{ p: Param; ids?: string[] } | null>(null);
+  const setSending = (p: Param, ids?: string[]) => setSendingState({ p, ids });
   const [fullscreen, setFullscreen] = useState(false);
   const [aerial, setAerial] = useState(false);
   const [photos, setPhotos] = useState(false);
@@ -215,7 +216,7 @@ export function PlanRoom({ jobId }: { jobId: string }) {
       {data && <PhotosPanel jobId={jobId} files={data.files} open={photos} onClose={() => setPhotos(false)} onAdded={load} over={fullscreen && current === "takeoff"} />}
       <AerialPicker jobId={jobId} open={aerial} onClose={() => setAerial(false)}
         onSaved={(sheetId) => { setAerial(false); void load().then(() => go("takeoff", sheetId)); }} />
-      <SendSheet jobId={jobId} p={sending} data={data} onClose={() => setSending(null)} onSent={() => void reload()} />
+      <SendSheet jobId={jobId} p={sending?.p ?? null} initial={sending?.ids} data={data} onClose={() => setSendingState(null)} onSent={() => void reload()} />
     </div>
   );
 }

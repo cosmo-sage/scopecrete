@@ -126,13 +126,16 @@ export function BudgetStep({ jobId, data, b, onSend }: { jobId: string; data: Pl
  * budget), all in one section, or into a section already there. Cost items are
  * added to the sections after — this prices nothing.
  */
-export function SendSheet({ jobId, p, data, onClose, onSent }: {
+export function SendSheet({ jobId, p, initial, data, onClose, onSent }: {
   jobId: string; p: Param | null; data: PlansData | null; onClose: () => void; onSent: () => void;
+  /** Takeoffs ticked in the Parameters panel — those come ticked here instead of the ones not yet sent. */
+  initial?: string[];
 }) {
   const shapes = useMemo(() => (p && data ? data.measurements.filter((m) => m.parameter_id === p.id) : []), [p, data]);
   const [pickState, setPick] = useState<{ k: string; ids: Set<string> } | null>(null);
-  const key = p?.id ?? "";
-  const pick = pickState?.k === key ? pickState.ids : new Set(shapes.filter((m) => !m.section_id).map((m) => m.id));
+  const key = `${p?.id ?? ""}:${(initial ?? []).join(",")}`;
+  const pick = pickState?.k === key ? pickState.ids
+    : new Set(initial?.length ? initial : shapes.filter((m) => !m.section_id).map((m) => m.id));
   const [mode, setMode] = useState<"each" | "one" | "into">("each");
   const [name, setName] = useState("");
   const [work, setWork] = useState("");

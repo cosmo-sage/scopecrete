@@ -44,7 +44,7 @@ const TOOLS: Array<[Tool, string, string]> = [
 export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, onSend, fullscreen, setFullscreen, onPhotos, photosOpen }: {
   jobId: string; data: PlansData; files: PlanFile[];
   sheetId: string | null; setSheetId: (id: string) => void; reload: () => Promise<void>;
-  onSend: (p: Param) => void; fullscreen: boolean; setFullscreen: (v: boolean) => void; onPhotos?: () => void; photosOpen?: boolean;
+  onSend: (p: Param, ids?: string[]) => void; fullscreen: boolean; setFullscreen: (v: boolean) => void; onPhotos?: () => void; photosOpen?: boolean;
 }) {
   const sheets = data.sheets;
   const sheet = sheets.find((s) => s.id === sheetId) ?? sheets[0] ?? null;
@@ -449,11 +449,19 @@ function Drawing({ sheet, fileUrl, zoom, setZoom, tool, data, groupId, selId, se
 
 function ParamPanel({ jobId, data, groupId, setGroupId, selId, onSelect, act, onSend, onCollapse }: {
   jobId: string; data: PlansData; groupId: string | null; setGroupId: (id: string) => void; selId: string | null;
-  onSelect: (m: Meas) => void; act: (fn: () => Promise<unknown>) => Promise<void>; onSend: (p: Param) => void; onCollapse: () => void;
+  onSelect: (m: Meas) => void; act: (fn: () => Promise<unknown>) => Promise<void>; onSend: (p: Param, ids?: string[]) => void; onCollapse: () => void;
 }) {
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
+  // Takeoffs ticked to send to the budget (Coy, 2026-10-03: "a check box next to the measurement … select the
+  // measurement and push to budget") — one group at a time, since a section takes one kind.
+  const [ticked, setTicked] = useState<{ g: string; ids: Set<string> }>({ g: "", ids: new Set() });
+  const tick = (m: Meas) => setTicked((t) => {
+    const ids = new Set(t.g === m.parameter_id ? t.ids : []);
+    if (ids.has(m.id)) ids.delete(m.id); else ids.add(m.id);
+    return { g: m.parameter_id, ids };
+  });
   // The takeoff whose colour swatches are open under its row.
   const [painting, setPainting] = useState<string | null>(null);
   const sheetsById = useMemo(() => new Map(data.sheets.map((s) => [s.id, s])), [data.sheets]);
@@ -510,7 +518,9 @@ function ParamPanel({ jobId, data, groupId, setGroupId, selId, onSelect, act, on
                       return (
                         <React.Fragment key={m.id}>
                         <div className="flex items-center gap-2 pr-2.5" onClick={() => onSelect(m)}
-                          style={{ paddingLeft: 26, minHeight: 34, background: on ? T.slab : "transparent", borderLeft: `3px solid ${on ? col : "transparent"}`, cursor: "pointer" }}>
+                          style={{ paddingLeft: 14, minHeight: 34, background: on ? T.slab : "transparent", borderLeft: `3px solid ${on ? col : "transparent"}`, cursor: "pointer" }}>
+                          <input type="checkbox" checked={ticked.g === p.id && ticked.ids.has(m.id)} onChange={() => tick(m)} onClick={(e) => e.stopPropagation()}
+                            aria-label={`Tick ${m.name ?? `${p.name} ${i + 1}`} to send to the budget`} title="Tick to send to the budget" style={{ width: 16, height: 16, flex: "0 0 auto", cursor: "pointer", accentColor: T.hiviz }} />
                           <button onClick={(e) => { e.stopPropagation(); setPainting(painting === m.id ? null : m.id); }} aria-label="Colour of this takeoff" aria-expanded={painting === m.id}
                             title="Colour of this takeoff" style={{ width: 12, alignSelf: "stretch", margin: "5px 0", background: col, borderRadius: 3, border: `1px solid ${painting === m.id ? T.ink : "transparent"}`, cursor: "pointer", padding: 0, flex: "0 0 auto" }} />
                           <div style={{ flex: 1, minWidth: 0 }}>
@@ -540,6 +550,14 @@ function ParamPanel({ jobId, data, groupId, setGroupId, selId, onSelect, act, on
         <div className="flex gap-2 p-2" style={{ borderTop: `1px solid ${T.hair}` }}>
           <button onClick={() => setAdding(true)} className="flex-1 rounded" style={{ height: 34, background: T.dark, color: "#fff", fontFamily: disp, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase", fontSize: 13, cursor: "pointer" }}>+ Group</button>
           {(() => {
+            // Ticked takeoffs go first: "Send 2 to budget" opens the sheet with just those.
+            const tg = ticked.ids.size ? data.params.find((p) => p.id === ticked.g) : null;
+            if (tg) return (
+              <button onClick={() => { onSend(tg, [...ticked.ids]); setTicked({ g: "", ids: new Set() }); }} className="flex-1 rounded"
+                style={{ height: 34, background: T.hiviz, color: T.onHiviz, fontFamily: disp, fontWeight: 600, letterSpacing: ".04em", textTransform: "uppercase", fontSize: 12, whiteSpace: "nowrap", cursor: "pointer" }}>
+                Send {ticked.ids.size} to budget
+              </button>
+            );
             const g = data.params.find((p) => p.id === groupId);
             const [inB, ofB] = g ? inBudget(g) : [0, 0];
             const all = ofB > 0 && inB === ofB;

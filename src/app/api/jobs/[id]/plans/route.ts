@@ -24,7 +24,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
 
   const [{ data: j }, { data: rows, error }, takeoff, { data: est }] = await Promise.all([
     supabase.from("jobs").select("id, title, address, job_type, status").eq("org_id", orgId).eq("id", id).maybeSingle(),
-    supabase.from("job_files").select(FILE_COLUMNS).eq("org_id", orgId).eq("job_id", id).is("deleted_at", null).order("created_at", { ascending: false }),
+    supabase.from("files").select(FILE_COLUMNS).eq("org_id", orgId).eq("job_id", id).is("deleted_at", null).order("created_at", { ascending: false }),
     loadTakeoff(supabase, orgId, [id]),
     supabase.from("estimates").select("id").eq("org_id", orgId).eq("job_id", id).eq("status", "draft").maybeSingle(),
   ]);

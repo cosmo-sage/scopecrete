@@ -85,7 +85,7 @@ export function Proposal({ jobId }: { jobId: string }) {
   const [err, setErr] = useState<string | null>(null);
   const [p, setP] = useState<Prop | null>(null);
   const [margin, setMargin] = useState<number | null>(null);
-  // ?v=N (from Documents) opens that final version.
+  // ?v=N (from Files) opens that final version.
   const [viewFinal, setViewFinal] = useState<number | null>(() => {
     if (typeof window === "undefined") return null;
     const v = Number(new URLSearchParams(window.location.search).get("v"));

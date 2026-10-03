@@ -82,7 +82,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const { error: upErr } = await supabase.storage.from(FILES_BUCKET).upload(path, pdf, { contentType: "application/pdf", upsert: false });
   if (upErr) return bad(`Couldn't save the aerial: ${upErr.message}`, 500);
 
-  const { data: row, error } = await supabase.from("job_files").insert({
+  const { data: row, error } = await supabase.from("files").insert({
     id: fileId, org_id: orgId, job_id: id, name, kind: "pdf", category: "plan", mime_type: "application/pdf",
     byte_size: pdf.length, storage_path: path, source: "upload", fetch_state: "fetched", in_plan_room: true,
     page_count: 1, created_by: userId,

@@ -85,7 +85,7 @@ export async function POST(req: NextRequest) {
   const fileIds = Array.isArray(body.file_ids)
     ? body.file_ids.filter((x): x is string => typeof x === "string" && /^[0-9a-f-]{36}$/i.test(x)).slice(0, 8) : [];
   if (fileIds.length) {
-    const { data: fs } = await supabase.from("job_files").select("id, name, kind, read_state, summary, extracted_text, facts")
+    const { data: fs } = await supabase.from("files").select("id, name, kind, read_state, summary, extracted_text, facts")
       .eq("org_id", orgId).in("id", fileIds).is("deleted_at", null);
     const blocks = ((fs ?? []) as Array<{ name: string; kind: string; read_state: string | null; summary: string | null; extracted_text: string | null; facts: unknown }>)
       .map((f) => f.read_state === "read"

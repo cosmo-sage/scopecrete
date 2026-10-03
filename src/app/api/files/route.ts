@@ -36,10 +36,10 @@ export async function GET(req: NextRequest) {
   const jobId = req.nextUrl.searchParams.get("job_id");
   const contactId = req.nextUrl.searchParams.get("contact_id");
   if (req.nextUrl.searchParams.get("inbox") === "1") {
-    const { data: rows, error } = await supabase.from("job_files").select(FILE_COLUMNS).eq("org_id", orgId).is("deleted_at", null)
+    const { data: rows, error } = await supabase.from("files").select(FILE_COLUMNS).eq("org_id", orgId).is("deleted_at", null)
       .is("job_id", null).is("contact_id", null).in("category", ["receipt", "vendor_quote"])
       .order("created_at", { ascending: false }).limit(50);
-    if (error) return applyCookies(NextResponse.json({ error: `job_files: ${error.message}` }, { status: 500 }));
+    if (error) return applyCookies(NextResponse.json({ error: `files: ${error.message}` }, { status: 500 }));
     return applyCookies(NextResponse.json({ files: await signFiles(supabase, (rows ?? []) as Array<Record<string, unknown>>), texted: [] }));
   }
   if ((!jobId || !UUID.test(jobId)) && (!contactId || !UUID.test(contactId))) {
@@ -48,7 +48,7 @@ export async function GET(req: NextRequest) {
 
   // Whose texts count: the person, or the job's customer.
   let people: string[] = [];
-  let q = supabase.from("job_files").select(FILE_COLUMNS).eq("org_id", orgId).is("deleted_at", null)
+  let q = supabase.from("files").select(FILE_COLUMNS).eq("org_id", orgId).is("deleted_at", null)
     .order("created_at", { ascending: false }).limit(300);
   if (jobId) {
     const { data: job } = await supabase.from("jobs").select("id, contact_id, customer_id").eq("org_id", orgId).eq("id", jobId).maybeSingle();
@@ -65,7 +65,7 @@ export async function GET(req: NextRequest) {
     people = [contactId as string];
   }
   const { data: rows, error } = await q;
-  if (error) return applyCookies(NextResponse.json({ error: `job_files: ${error.message}` }, { status: 500 }));
+  if (error) return applyCookies(NextResponse.json({ error: `files: ${error.message}` }, { status: 500 }));
   const files = await signFiles(supabase, (rows ?? []) as Array<Record<string, unknown>>);
 
   // Photos they texted. Only what has been copied can be signed here; the
@@ -113,7 +113,7 @@ export async function POST(req: NextRequest) {
   let contactId = id(b.contact_id);
   const customerId = id(b.customer_id);
   const unfiled = !jobId && !contactId && !sectionId && !customerId;
-  // Attached in Dusty's chat with nothing open (2026-10-01): it waits unfiled in Documents.
+  // Attached in Dusty's chat with nothing open (2026-10-01): it waits unfiled in Files.
   if (unfiled && b.category !== "receipt" && b.category !== "vendor_quote" && b.from_dusty !== true) return bad("Say what the file belongs to: a job, an area or a person.");
   if (customerId) {
     const { data: cu } = await supabase.from("customers").select("id").eq("org_id", orgId).eq("id", customerId).maybeSingle();
@@ -140,7 +140,7 @@ export async function POST(req: NextRequest) {
   const kind = kindOf(mime, name);
   const fileId = crypto.randomUUID();
   const path = storagePath(orgId, jobId ?? contactId ?? sectionId ?? customerId ?? "inbox", fileId, name);
-  const { data: row, error } = await supabase.from("job_files").insert({
+  const { data: row, error } = await supabase.from("files").insert({
     id: fileId, org_id: orgId, job_id: jobId, section_id: sectionId, contact_id: contactId, name, kind,
     ...(customerId ? { customer_id: customerId } : {}),
     // The Price book's vendor-quote import says what it is; otherwise a first guess from the name.
@@ -153,7 +153,7 @@ export async function POST(req: NextRequest) {
 
   const { data: up, error: upErr } = await supabase.storage.from(FILES_BUCKET).createSignedUploadUrl(path);
   if (upErr || !up) {
-    await supabase.from("job_files").delete().eq("id", fileId).eq("org_id", orgId);
+    await supabase.from("files").delete().eq("id", fileId).eq("org_id", orgId);
     return bad(`Couldn't open an upload: ${upErr?.message ?? "no url"}`, 500);
   }
   return applyCookies(NextResponse.json({ file: { ...row, url: null }, upload: { path: up.path, token: up.token, signed_url: up.signedUrl } }, { status: 201 }));

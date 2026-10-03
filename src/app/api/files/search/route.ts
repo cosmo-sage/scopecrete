@@ -4,7 +4,7 @@ import { CATEGORIES } from "@/lib/files";
 import { FILE_COLUMNS, signFiles } from "@/lib/files-server";
 
 /**
- * Documents (Coy, 2026-09-30): every uploaded file in one place — photos,
+ * Files (renamed from Documents 2026-10-03; Coy, 2026-09-30): every uploaded file in one place — photos,
  * plans, bids, vendor quotes, receipts, contracts — searchable and filtered.
  *
  * GET ?q= (words in the name, note, Dusty's read or the document's own text —
@@ -17,7 +17,7 @@ import { FILE_COLUMNS, signFiles } from "@/lib/files-server";
  * → { files (signed links), jobs, people } — the names for the job and person
  *   filters, from the files returned.
  *
- * Session client; org from the session; RLS on job_files (DECISIONS §7).
+ * Session client; org from the session; RLS on files (DECISIONS §7).
  */
 
 export const dynamic = "force-dynamic";
@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
   const p = req.nextUrl.searchParams;
   const bad = (m: string) => applyCookies(NextResponse.json({ error: m }, { status: 400 }));
 
-  let q = supabase.from("job_files").select(FILE_COLUMNS).eq("org_id", orgId).is("deleted_at", null)
+  let q = supabase.from("files").select(FILE_COLUMNS).eq("org_id", orgId).is("deleted_at", null)
     .order("created_at", { ascending: false }).limit(300);
   const file = p.get("file");
   if (file) {

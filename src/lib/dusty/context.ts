@@ -173,7 +173,7 @@ async function inboxBlock(sb: Sb, orgId: string): Promise<Block> {
   const [{ data: pkgs }, { data: jobs }, { count: files }] = await Promise.all([
     sb.from("bid_packages").select("email_id, state, error").eq("org_id", orgId).in("email_id", ids),
     jobIds.length ? sb.from("jobs").select("id, title").eq("org_id", orgId).in("id", jobIds) : Promise.resolve({ data: [] }),
-    sb.from("job_files").select("id", { count: "exact", head: true }).eq("org_id", orgId).eq("email_id", rows[0].id).is("deleted_at", null),
+    sb.from("files").select("id", { count: "exact", head: true }).eq("org_id", orgId).eq("email_id", rows[0].id).is("deleted_at", null),
   ]);
   const pkg = new Map(((pkgs ?? []) as Array<{ email_id: string; state: string; error: string | null }>).map((p) => [p.email_id, p]));
   const job = new Map(((jobs ?? []) as Array<{ id: string; title: string | null }>).map((j) => [j.id, j.title]));
@@ -295,7 +295,7 @@ async function bidBlock(sb: Sb, orgId: string, jobId: string): Promise<Block | n
 }
 
 async function filesBlock(sb: Sb, orgId: string, by: { jobId?: string; contactId?: string }): Promise<Block | null> {
-  let q = sb.from("job_files").select("name, category, summary, facts, read_state, read_error, created_at")
+  let q = sb.from("files").select("name, category, summary, facts, read_state, read_error, created_at")
     .eq("org_id", orgId).is("deleted_at", null).order("created_at", { ascending: false }).limit(20);
   q = by.jobId ? q.eq("job_id", by.jobId) : q.eq("contact_id", by.contactId as string);
   const { data } = await q;

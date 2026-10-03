@@ -4,7 +4,7 @@ Ground truth for every agent working this repo. If code disagrees with this
 document, the code is wrong or this document is stale — resolve it, don't
 guess. Update this file in the same PR that changes the behavior it describes.
 
-Last updated: 2026-10-03 (Threads v2 — threads you make, channels per number, the customer page reshaped — migration 073; an address given is kept and asked about — migration 072; Dusty sets addresses; customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
+Last updated: 2026-10-03 (Documents is Files, everywhere — migration 074; Threads v2 — threads you make, channels per number, the customer page reshaped — migration 073; an address given is kept and asked about — migration 072; Dusty sets addresses; customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
 
 ---
 
@@ -1800,6 +1800,32 @@ expected start date per quoted job before it means anything. Add the field.
   columns with GIN indexes; `sc_search(q, per_kind)` is SECURITY INVOKER
   (RLS decides), execute for `authenticated` only; websearch syntax; 4+
   digits also match phone numbers. Rehearsed: a stranger gets nothing.
+- **Files — one place, one name (migration 074, applied 2026-10-03).** Coy:
+  *"documents really needs to be renamed 'files' across the board for
+  continuity even in the database. The idea is there is one place for
+  documents and files and there is a badass search filter system to get
+  anything anytime … Jobtread has documents and files. I don't think it's
+  needed to have both."* The table every upload lives in is **`files`**
+  (was `job_files` — it holds people's, customers' and emails' files too);
+  rows, policies, triggers and keys followed the rename, and
+  `sc_files_claim`, `sc_plan_sheet_same_job`, `sc_search` and `sc_undo_bid`
+  were re-pointed. **`job_files` remains as a view of `files`**
+  (security_invoker, anon none) only for the deployed `read-files`,
+  `email-intake` and `bid-intake`, whose repo source still names it; each
+  moves to `files` at its next redeploy, then the view goes. The storage
+  bucket keeps its id `job-files` (bucket ids can't be renamed; nobody sees
+  it). The page is **Files** at `/dashboard/files` (`/dashboard/documents`
+  redirects, `?file=` and all), the menu key is `files` (a saved menu's
+  `documents` maps over), its search is `/api/files/search` (was
+  `/api/documents`), and every label says Files. The customer page's
+  Documents tab was folded into its Files tab the same day. Not renamed:
+  `documents` / `document_events` (empty — a placeholder for SENDING quotes
+  and invoices to customers, with view and accept tracking — not files) and
+  `doc_templates` (the proposal's warranty and contract text). Rehearsed
+  (rolled back): 18 files before and after, through the view too; the
+  service role inserts and updates through the view; a member sees all, a
+  stranger none, anon nothing; search still finds files. The "badass" filter
+  system is next.
 - **Documents (2026-09-30)** — `/dashboard/documents`
   (`src/components/v34/documents.tsx`, `/api/documents`): every uploaded file,
   newest first, searched through the same index, filtered by category (or

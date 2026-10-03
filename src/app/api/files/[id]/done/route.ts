@@ -16,18 +16,18 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   if (!result.ok) return result.response;
   const { supabase, orgId, applyCookies } = result.session;
 
-  const { data: f } = await supabase.from("job_files").select("id, storage_path, fetch_state").eq("org_id", orgId).eq("id", id).maybeSingle();
+  const { data: f } = await supabase.from("files").select("id, storage_path, fetch_state").eq("org_id", orgId).eq("id", id).maybeSingle();
   if (!f) return applyCookies(NextResponse.json({ error: "No such file." }, { status: 404 }));
   const path = f.storage_path as string;
   const slash = path.lastIndexOf("/");
   const { data: listed } = await supabase.storage.from(FILES_BUCKET).list(path.slice(0, slash), { search: path.slice(slash + 1), limit: 1 });
   const obj = (listed ?? []).find((o: { name: string }) => o.name === path.slice(slash + 1));
   if (!obj) {
-    await supabase.from("job_files").update({ fetch_state: "failed", fetch_error: "upload never arrived" }).eq("id", id).eq("org_id", orgId);
+    await supabase.from("files").update({ fetch_state: "failed", fetch_error: "upload never arrived" }).eq("id", id).eq("org_id", orgId);
     return applyCookies(NextResponse.json({ error: "The upload never arrived — try again." }, { status: 409 }));
   }
   const size = (obj.metadata as { size?: number } | null)?.size ?? null;
-  const { data: row, error } = await supabase.from("job_files")
+  const { data: row, error } = await supabase.from("files")
     .update({ fetch_state: "fetched", captured_at: new Date().toISOString(), read_state: "waiting", ...(size ? { byte_size: size } : {}) })
     .eq("id", id).eq("org_id", orgId).select(FILE_COLUMNS).single();
   if (error || !row) return applyCookies(NextResponse.json({ error: error?.message ?? "not saved" }, { status: 500 }));

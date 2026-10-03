@@ -108,7 +108,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     if (b.cover_file_id === null) patch.cover_file_id = null;
     else {
       if (typeof b.cover_file_id !== "string" || !UUID.test(b.cover_file_id)) return bad("Bad photo.");
-      const { data } = await supabase.from("job_files").select("id").eq("org_id", orgId).eq("job_id", id).eq("id", b.cover_file_id).eq("kind", "image").is("deleted_at", null).maybeSingle();
+      const { data } = await supabase.from("files").select("id").eq("org_id", orgId).eq("job_id", id).eq("id", b.cover_file_id).eq("kind", "image").is("deleted_at", null).maybeSingle();
       if (!data) return bad("That photo isn't on this job.");
       patch.cover_file_id = data.id;
     }

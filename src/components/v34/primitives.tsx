@@ -164,7 +164,7 @@ export const NavIcon = ({ k, on, color }: { k: string; on: boolean; color?: stri
       <path {...p} d="M6.8 7V4.6h5.4V7M2.2 10.6h14.6M8.2 10.6v1.6h2.6v-1.6" />
     </svg>
   );
-  if (k === "documents") return (
+  if (k === "files" || k === "documents") return (
     <svg {...box}>
       <path {...p} d="M4.4 2.4h6.8l3.4 3.4v10.8H4.4z" />
       <path {...p} d="M11 2.4v3.6h3.6M6.8 9.4h5.4M6.8 12.2h5.4" />

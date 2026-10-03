@@ -174,7 +174,7 @@ export async function GET(req: NextRequest) {
   }
   // Files Dusty read (migration 045/046): each read is a line; one being read
   // is "running", so the emblem spins for it too.
-  const { data: fileRows } = await supabase.from("job_files")
+  const { data: fileRows } = await supabase.from("files")
     .select("id, name, contact_id, read_state, read_at, summary, read_error")
     .eq("org_id", orgId).is("deleted_at", null).in("read_state", ["reading", "read", "failed"])
     .gte("read_at", new Date(Date.now() - 24 * 3600_000).toISOString()).order("read_at", { ascending: false }).limit(10);
@@ -195,8 +195,8 @@ export async function GET(req: NextRequest) {
     items.push({
       id: `email-${m.id}-${m.status}`, at: m.created_at, kind: "email", contact_id: m.contact_id,
       summary: m.status === "filed" ? `Email from ${clipq(who, 80)}${subj}`
-        : m.status === "quarantined" ? `Email from an address that isn't yours${subj} — file it in Documents › Emails`
-          : `Email from ${clipq(who, 30)}${subj} — file it in Documents › Emails`,
+        : m.status === "quarantined" ? `Email from an address that isn't yours${subj} — file it in Files › Emails`
+          : `Email from ${clipq(who, 30)}${subj} — file it in Files › Emails`,
       detail: m.subject, tone: m.status === "filed" ? "good" : "ask",
     });
   }
@@ -207,7 +207,7 @@ export async function GET(req: NextRequest) {
   for (const b of (bidRows ?? []) as Array<{ id: string; state: string; error: string | null; job_id: string | null; facts: Record<string, unknown> | null; box_folder_name: string | null; filed_at: string | null; updated_at: string; created: Record<string, unknown> | null }>) {
     const f = (b.facts ?? {}) as { project_name?: string | null; gc_company?: string | null; bid_due_text?: string | null; items?: unknown[] };
     const name = clipq(f.project_name ?? b.box_folder_name ?? "a bid", 140);
-    const href = b.job_id ? `/dashboard/scope/${b.job_id}` : "/dashboard/documents?cat=email";
+    const href = b.job_id ? `/dashboard/scope/${b.job_id}` : "/dashboard/files?cat=email";
     if (b.state === "filed") {
       const isNew = !!(b.created ?? {}).job_id;
       items.push({ id: `bid-${b.id}-filed`, at: b.filed_at ?? b.updated_at, kind: "bid", contact_id: null, href,

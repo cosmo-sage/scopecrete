@@ -42,7 +42,7 @@ export async function loadTakeoff(sb: Sb, orgId: string, jobIds: string[]): Prom
   const [sh, pr, rf] = await Promise.all([
     sb.from("plan_sheets").select(SHEET_COLS).eq("org_id", orgId).in("job_id", jobIds).order("file_id").order("page"),
     sb.from("takeoff_parameters").select(PARAM_COLS).eq("org_id", orgId).in("job_id", jobIds).order("sort_order").order("created_at"),
-    sb.from("job_files").select("id").eq("org_id", orgId).in("job_id", jobIds).eq("in_plan_room", true).is("deleted_at", null),
+    sb.from("files").select("id").eq("org_id", orgId).in("job_id", jobIds).eq("in_plan_room", true).is("deleted_at", null),
   ]);
   const allSheets = ((sh.data ?? []) as SheetRow[]).map((s) => ({ ...s, page_w: Number(s.page_w), page_h: Number(s.page_h) }));
   const params = ((pr.data ?? []) as ParamRow[]).map((p) => ({ ...p, depth_in: p.depth_in === null ? null : Number(p.depth_in) }));

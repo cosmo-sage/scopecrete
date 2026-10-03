@@ -31,7 +31,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   const [[email], { data: atts }, { data: files }, { data: custs }, { data: jobs }] = await Promise.all([
     emailView(supabase, orgId, [row as Record<string, unknown>]),
     supabase.from("email_attachments").select("id, name, mime_type, byte_size, inline, file_id, fetch_state, fetch_error, attempts").eq("org_id", orgId).eq("email_id", id).order("created_at"),
-    supabase.from("job_files").select(FILE_COLUMNS).eq("org_id", orgId).eq("email_id", id).is("deleted_at", null),
+    supabase.from("files").select(FILE_COLUMNS).eq("org_id", orgId).eq("email_id", id).is("deleted_at", null),
     supabase.from("customers").select("id, name").eq("org_id", orgId).is("merged_into_customer_id", null).not("name", "is", null).order("name").limit(500),
     supabase.from("jobs").select("id, title, customer_id, status").eq("org_id", orgId).is("archived_at", null).order("created_at", { ascending: false }).limit(300),
   ]);
@@ -91,9 +91,9 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   if (error) return bad(error.message, 500);
 
   // The email's files follow it: onto the job (PDFs into the Plan Room), the contact and the customer.
-  const { data: files } = await supabase.from("job_files").select("id, kind").eq("org_id", orgId).eq("email_id", id).is("deleted_at", null);
+  const { data: files } = await supabase.from("files").select("id, kind").eq("org_id", orgId).eq("email_id", id).is("deleted_at", null);
   for (const f of (files ?? []) as Array<{ id: string; kind: string }>) {
-    await supabase.from("job_files").update({
+    await supabase.from("files").update({
       job_id: next.job_id, contact_id: next.contact_id, customer_id: next.customer_id,
       ...(next.job_id && f.kind === "pdf" ? { in_plan_room: true } : {}),
     }).eq("id", f.id).eq("org_id", orgId);

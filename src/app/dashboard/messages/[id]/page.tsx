@@ -356,7 +356,7 @@ export default function ChatThreadPage() {
                 ))}
               </div>
             ) : (
-              <div className="text-center py-16" style={{ fontSize: F.sm, color: T.ink3 }}>No emails filed on {name ?? "them"}. Forwarded emails land in Documents → Emails; file one on them and it shows here.</div>
+              <div className="text-center py-16" style={{ fontSize: F.sm, color: T.ink3 }}>No emails filed on {name ?? "them"}. Forwarded emails land in Files → Emails; file one on them and it shows here.</div>
             )
           ) : channel?.kind === "chat" ? (
             <div className="text-center py-16" style={{ fontSize: F.sm, color: T.ink3, maxWidth: 380, margin: "0 auto" }}>

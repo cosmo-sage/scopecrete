@@ -15,7 +15,7 @@ import { textedPhotoName, textedMarker } from "@/lib/texted-photos";
  * GET  — the photos texted by the job's person and their customer's other
  *        people (newest first), each with `file_id` once it is on the job.
  * POST { media_ids: [...] | all: true } — each one copied into the job's files
- *        (`job-files`, a job_files row with source 'text', In plan room), so the
+ *        (`job-files`, a files row with source 'text', In plan room), so the
  *        Plan Room, a section's photos and the proposal's cover can use it. A
  *        photo not yet stored is first copied in from Quo. Already on the job →
  *        skipped. The text itself is untouched.
@@ -53,7 +53,7 @@ async function texted(sb: Sb, orgId: string, who: string[]): Promise<Texted[]> {
 }
 
 async function onJob(sb: Sb, orgId: string, jobId: string): Promise<Map<string, string>> {
-  const { data } = await sb.from("job_files").select("id, source_url").eq("org_id", orgId).eq("job_id", jobId).eq("source", "text").is("deleted_at", null);
+  const { data } = await sb.from("files").select("id, source_url").eq("org_id", orgId).eq("job_id", jobId).eq("source", "text").is("deleted_at", null);
   return new Map(((data ?? []) as Array<{ id: string; source_url: string | null }>).filter((f) => f.source_url).map((f) => [f.source_url as string, f.id]));
 }
 
@@ -110,7 +110,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     const path = storagePath(orgId, id, fileId, name);
     const up = await supabase.storage.from(FILES_BUCKET).upload(path, blob, { contentType: mime, upsert: false });
     if (up.error) { failed.push({ id: m.id, reason: `couldn't store it: ${up.error.message}` }); continue; }
-    const { error } = await supabase.from("job_files").insert({
+    const { error } = await supabase.from("files").insert({
       id: fileId, org_id: orgId, job_id: id, contact_id: m.contact_id, message_id: m.message_id,
       name, kind: "image", category: "photo", mime_type: mime, byte_size: blob.size, storage_path: path,
       source: "text", source_url: textedMarker(m.id), fetch_state: "fetched", captured_at: new Date().toISOString(),
@@ -121,7 +121,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   }
   let files: Array<Record<string, unknown>> = [];
   if (made.length) {
-    const { data } = await supabase.from("job_files").select(FILE_COLUMNS).eq("org_id", orgId).in("id", made);
+    const { data } = await supabase.from("files").select(FILE_COLUMNS).eq("org_id", orgId).in("id", made);
     files = await signFiles(supabase, (data ?? []) as Array<Record<string, unknown>>);
   }
   return applyCookies(NextResponse.json({ added: made.length, files, failed }));

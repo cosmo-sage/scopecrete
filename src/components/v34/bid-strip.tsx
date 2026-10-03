@@ -96,7 +96,7 @@ export function BidStrip({ jobId, onUndone, onSummary }: { jobId: string; onUndo
           {STATE[bid.state] ?? bid.state}{bid.packages > 1 ? ` · ${bid.packages} emails` : ""}
         </span>
         <span className="flex-1" />
-        <Link href={`/dashboard/documents?email=${bid.email_id}`} style={{ ...eyebrow, color: T.chalk }}>Email</Link>
+        <Link href={`/dashboard/files?email=${bid.email_id}`} style={{ ...eyebrow, color: T.chalk }}>Email</Link>
         <button onClick={() => void undo()} disabled={busy} style={{ ...eyebrow, color: T.ink3, cursor: "pointer" }}>{busy ? "…" : "Undo bid"}</button>
       </div>
       {open && <><div className="px-3 py-2 flex flex-col gap-1">

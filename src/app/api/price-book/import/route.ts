@@ -84,7 +84,7 @@ export async function POST(req: NextRequest) {
     vendorIds.size ? supabase.from("contacts").select("id").eq("org_id", orgId).in("id", [...vendorIds]) : Promise.resolve({ data: [] }),
     cardIds.size ? supabase.from("cost_items").select("id").eq("org_id", orgId).in("id", [...cardIds]) : Promise.resolve({ data: [] }),
     supabase.from("cost_groups").select("id, name").eq("org_id", orgId),
-    fileId ? supabase.from("job_files").select("id").eq("org_id", orgId).eq("id", fileId).maybeSingle() : Promise.resolve({ data: null }),
+    fileId ? supabase.from("files").select("id").eq("org_id", orgId).eq("id", fileId).maybeSingle() : Promise.resolve({ data: null }),
   ]);
   if ((vend.data ?? []).length !== vendorIds.size) return bad("A vendor isn't one of yours.", 404);
   if ((cards.data ?? []).length !== cardIds.size) return bad("A card isn't one of yours.", 404);

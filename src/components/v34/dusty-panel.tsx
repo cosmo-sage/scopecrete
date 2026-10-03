@@ -259,7 +259,7 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
   }
 
   // Where an attachment is filed: on what the chat is about — the job, the
-  // person, the customer — else unfiled in Documents. Dusty's reader reads it.
+  // person, the customer — else unfiled in Files. Dusty's reader reads it.
   function attachTarget(): Record<string, unknown> {
     const a = convs?.find((c) => c.id === activeId);
     const kind = a ? a.context_kind : ref.kind;

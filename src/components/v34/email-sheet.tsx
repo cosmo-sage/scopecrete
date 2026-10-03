@@ -2,7 +2,7 @@
 /**
  * The email mirror on screen (migration 061): a list of mirrored emails and
  * the sheet for one — the original sender, Dusty-free text, its attachments
- * (from Documents' file viewer), and where it is filed. Coy files it on a
+ * (from the Files viewer), and where it is filed. Coy files it on a
  * customer and/or a job: a job takes its files (PDFs into the Plan Room).
  * A domain suggestion is one tap. Nothing here creates a contact.
  */
@@ -172,7 +172,7 @@ export function EmailSheet({ id, onClose, onChanged }: { id: string; onClose: ()
                 <div key={a.id} className="flex items-center gap-2 py-1.5" style={{ borderTop: `1px solid ${T.hairSoft}`, fontSize: F.sm }}>
                   <span style={{ flex: 1, minWidth: 0, ...clip }}>{a.name}</span>
                   <span style={{ fontSize: F.xs, color: T.ink3 }}>{sizeLabel(a.byte_size)}</span>
-                  {a.file ? <Link href={`/dashboard/documents?file=${a.file.id}`} style={{ fontSize: F.xs, color: T.chalk }}>Open</Link>
+                  {a.file ? <Link href={`/dashboard/files?file=${a.file.id}`} style={{ fontSize: F.xs, color: T.chalk }}>Open</Link>
                     : <span title={a.fetch_error ?? ""} style={{ fontSize: F.xs, color: a.fetch_state === "failed" ? T.red : T.ink3 }}>
                       {a.fetch_state === "held" ? "waiting until filed" : a.fetch_state === "waiting" ? "fetching…" : a.fetch_state === "skipped" ? `skipped — ${a.fetch_error ?? ""}` : `couldn't fetch${a.attempts >= 3 ? "" : " — retrying"}`}
                     </span>}

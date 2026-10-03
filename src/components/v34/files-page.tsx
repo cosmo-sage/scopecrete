@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Documents (Coy, 2026-09-30: "all the documents — quotes, proposals,
+ * Files (renamed from Documents 2026-10-03; Coy, 2026-09-30: "all the documents — quotes, proposals,
  * receipts — searchable and filterable"). Every uploaded file in one list,
  * newest first: search the words in them (the index from migration 054 —
  * name, note, Dusty's read and the document's own text), filter by what it
@@ -26,7 +26,7 @@ const CHIPS: Array<[string, string]> = [
 ];
 const SINCE: Array<[string, string]> = [["", "Any time"], ["7", "7 days"], ["30", "30 days"], ["365", "This year"]];
 
-export function Documents() {
+export function FilesPage() {
   const [q, setQ] = useState("");
   const [qDeb, setQDeb] = useState("");
   const [cat, setCat] = useState("");
@@ -68,7 +68,7 @@ export function Documents() {
     if (since) u.set("since", since);
     if (job) u.set("job", job);
     if (person) u.set("contact", person);
-    return `/api/documents?${u}`;
+    return `/api/files/search?${u}`;
   }, [fileParam, qDeb, cat, since, job, person]);
 
   useEffect(() => {
@@ -89,19 +89,19 @@ export function Documents() {
     return () => { off = true; };
   }, [url, fileParam]);
 
-  const clearFile = () => { setFileParam(null); window.history.replaceState(null, "", "/dashboard/documents"); };
+  const clearFile = () => { setFileParam(null); window.history.replaceState(null, "", "/dashboard/files"); };
   const select: React.CSSProperties = { height: 30, border: `1px solid ${T.hair}`, background: T.card, fontSize: F.xs, borderRadius: 4, padding: "0 6px", maxWidth: 200 };
 
   return (
     <div className="mx-auto" style={{ maxWidth: 1000, padding: "12px 12px 24px" }}>
-      <h1 style={{ fontFamily: disp, fontSize: F.xl, fontWeight: 700, margin: 0 }}>Documents</h1>
+      <h1 style={{ fontFamily: disp, fontSize: F.xl, fontWeight: 700, margin: 0 }}>Files</h1>
       <div style={{ fontSize: F.xs, color: T.ink3, marginBottom: 8 }}>
         Every photo, plan, bid, quote, receipt and contract uploaded — search finds words inside them too.
         Add files on a job, a person or a vendor&apos;s page.
       </div>
 
       <input type="search" value={q} onChange={(e) => { setQ(e.target.value); if (fileParam) clearFile(); }}
-        placeholder="Search names, notes and what's written in them" aria-label="Search documents"
+        placeholder="Search names, notes and what's written in them" aria-label="Search files"
         style={{ width: "100%", height: 36, border: `1px solid ${T.hair}`, borderRadius: 4, padding: "0 10px", fontSize: F.sm, background: T.card }} />
 
       <div className="flex gap-1 flex-wrap" style={{ marginTop: 8 }}>
@@ -130,7 +130,7 @@ export function Documents() {
         <span style={{ fontSize: F.xs, color: T.ink3, marginLeft: "auto" }}>{files ? `${files.length}${files.length === 300 ? "+" : ""} shown` : ""}</span>
       </div>
 
-      {err && <div role="alert" style={{ fontSize: F.sm, color: T.red, marginTop: 8 }}>Couldn&apos;t load documents: {err}</div>}
+      {err && <div role="alert" style={{ fontSize: F.sm, color: T.red, marginTop: 8 }}>Couldn&apos;t load files: {err}</div>}
 
       {cat === "email" && (
         <div className="rounded overflow-hidden" style={{ marginTop: 10, background: T.card, border: `1px solid ${T.hair}` }}>

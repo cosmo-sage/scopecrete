@@ -7,7 +7,7 @@
  *
  * The camera button opens the phone's camera (several shots on phones that
  * allow it; the library on a desktop); each photo goes straight to storage
- * filed on this section (job_files.section_id, migration 045) and Dusty reads
+ * filed on this section (files.section_id, migration 045) and Dusty reads
  * it like any other. Tap a photo for the usual viewer.
  */
 

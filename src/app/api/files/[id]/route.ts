@@ -21,7 +21,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
 
   let b: Record<string, unknown>;
   try { b = await req.json(); } catch { return bad("Body must be JSON."); }
-  const { data: f } = await supabase.from("job_files").select("id, job_id, contact_id").eq("org_id", orgId).eq("id", id).is("deleted_at", null).maybeSingle();
+  const { data: f } = await supabase.from("files").select("id, job_id, contact_id").eq("org_id", orgId).eq("id", id).is("deleted_at", null).maybeSingle();
   if (!f) return bad("No such file.", 404);
 
   const patch: Record<string, unknown> = {};
@@ -67,7 +67,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     patch.contact_id = c.id;
   }
   if (!Object.keys(patch).length) return bad("Nothing to change.");
-  const { data: row, error } = await supabase.from("job_files").update(patch).eq("id", id).eq("org_id", orgId).select(FILE_COLUMNS).single();
+  const { data: row, error } = await supabase.from("files").update(patch).eq("id", id).eq("org_id", orgId).select(FILE_COLUMNS).single();
   if (error || !row) return bad(error?.message ?? "not saved", 500);
   const [signed] = await signFiles(supabase, [row as Record<string, unknown>]);
   return applyCookies(NextResponse.json({ file: signed }));
@@ -78,10 +78,10 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: stri
   const result = await getApiSession(req);
   if (!result.ok) return result.response;
   const { supabase, orgId, applyCookies } = result.session;
-  const { data: f } = await supabase.from("job_files").select("id, storage_path").eq("org_id", orgId).eq("id", id).is("deleted_at", null).maybeSingle();
+  const { data: f } = await supabase.from("files").select("id, storage_path").eq("org_id", orgId).eq("id", id).is("deleted_at", null).maybeSingle();
   if (!f) return applyCookies(NextResponse.json({ error: "No such file." }, { status: 404 }));
   if (f.storage_path) await supabase.storage.from(FILES_BUCKET).remove([f.storage_path as string]);
-  const { error } = await supabase.from("job_files").update({ deleted_at: new Date().toISOString(), read_state: null }).eq("id", id).eq("org_id", orgId);
+  const { error } = await supabase.from("files").update({ deleted_at: new Date().toISOString(), read_state: null }).eq("id", id).eq("org_id", orgId);
   if (error) return applyCookies(NextResponse.json({ error: error.message }, { status: 500 }));
   return applyCookies(NextResponse.json({ ok: true }));
 }

@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
     supabase.from("cost_item_sources").select("vendor_contact_id, price_as_of").eq("org_id", orgId).eq("active", true).limit(5000),
     supabase.from("cost_items").select("default_source_id, cost_item_sources!cost_items_default_source_id_fkey(vendor_contact_id)")
       .eq("org_id", orgId).eq("active", true).not("default_source_id", "is", null).limit(5000),
-    supabase.from("job_files").select("contact_id").eq("org_id", orgId).is("deleted_at", null).in("category", ["receipt", "vendor_quote"]).not("contact_id", "is", null).limit(5000),
+    supabase.from("files").select("contact_id").eq("org_id", orgId).is("deleted_at", null).in("category", ["receipt", "vendor_quote"]).not("contact_id", "is", null).limit(5000),
   ]);
   if (error) return applyCookies(NextResponse.json({ error: `contacts: ${error.message}` }, { status: 500 }));
   const count = new Map<string, number>(), newest = new Map<string, string>(), def = new Map<string, number>(), fc = new Map<string, number>();

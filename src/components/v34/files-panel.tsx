@@ -8,7 +8,7 @@
  *   desktop. Bytes go straight to storage on a signed upload link, with
  *   progress; a failed one can be retried.
  * - A grid: photos as thumbnails, documents as tiles. Filters: All · Photos ·
- *   Documents · From texts (the photos that person texted — message_media).
+ *   PDFs & more · From texts (the photos that person texted — message_media).
  * - Tap one: see it, rename it, say what it is, move it to an area, put it on
  *   the proposal, delete it. Dusty's read shows here once he has read it.
  *
@@ -163,7 +163,7 @@ export function FilesPanel({ jobId, contactId, sectionId, sections, title = "Fil
 
       {!compact && (
         <div className="px-3 pt-2 flex gap-1 flex-wrap">
-          {([["all", "All"], ["photos", "Photos"], ["docs", "Documents"], ["texts", "From texts"]] as const).map(([k, l]) => {
+          {([["all", "All"], ["photos", "Photos"], ["docs", "PDFs & more"], ["texts", "From texts"]] as const).map(([k, l]) => {
             const n = count(k); const on = filter === k;
             return (
               <button key={k} onClick={() => setFilter(k)} disabled={!n && k !== "all"} className="rounded px-2"
@@ -284,7 +284,7 @@ function TextedTile({ m, onAdd, busy }: { m: Texted; onAdd?: () => void; busy?: 
 
 export function FileViewer({ f, sections, onClose, onSaved, onDeleted, links }: {
   f: FileRow | null; sections?: Array<{ id: string; name: string | null }>;
-  /** Extra doors at the top of the sheet (Documents: its job, their page). */
+  /** Extra doors at the top of the sheet (Files: its job, their page). */
   links?: React.ReactNode;
   onClose: () => void; onSaved: (f: FileRow) => void; onDeleted: (id: string) => void;
 }) {

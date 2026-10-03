@@ -16,7 +16,7 @@
  * channels) · Threads (every contact's calls and texts in one timeline, a
  * filter panel with the only Call control, call cards with summary → next
  * steps → recording → transcript → notes; a message box only when Texts is
- * picked) · Jobs · Documents · Payments · Files · Schedule. Nothing invented:
+ * picked) · Jobs · Payments · Files · Schedule (2026-09-30; reshaped 2026-10-03, below). Nothing invented:
  * an empty tab says what is missing. Email is not connected yet and says so.
  */
 
@@ -348,7 +348,7 @@ function FilesTab({ customerId, primaryId, primaryName }: { customerId: string; 
   const [tick, setTick] = useState(0);
   useEffect(() => {
     let off = false;
-    send(`/api/documents?customer=${customerId}`, "GET").then((b) => { if (!off) setFiles(b.files ?? []); }).catch(() => { if (!off) setFiles([]); });
+    send(`/api/files/search?customer=${customerId}`, "GET").then((b) => { if (!off) setFiles(b.files ?? []); }).catch(() => { if (!off) setFiles([]); });
     return () => { off = true; };
   }, [customerId, tick]);
   const of = (f: { kind: string }) => (f.kind === "image" || f.kind === "photo" ? "photo" : f.kind === "pdf" ? "pdf" : "other");
@@ -369,7 +369,7 @@ function FilesTab({ customerId, primaryId, primaryName }: { customerId: string; 
       {files === null ? <Empty text="…" /> : !shown.length ? <Empty text={files.length ? "Nothing of that kind." : "No files on this customer's people or jobs yet."} /> : (
         <div className="rounded" style={{ background: T.card, border: `1px solid ${T.hair}` }}>
           {shown.map((f, i) => (
-            <Link key={f.id} href={`/dashboard/documents?file=${f.id}`} className="flex gap-3 px-3 py-2" style={{ borderTop: i ? `1px solid ${T.hairSoft}` : "none", color: T.ink }}>
+            <Link key={f.id} href={`/dashboard/files?file=${f.id}`} className="flex gap-3 px-3 py-2" style={{ borderTop: i ? `1px solid ${T.hairSoft}` : "none", color: T.ink }}>
               <span style={{ ...lbl, fontSize: 10, width: 40, color: f.kind === "pdf" ? T.red : T.ink3 }}>{f.kind === "pdf" ? "PDF" : f.kind}</span>
               <span style={{ flex: 1, minWidth: 0 }}><span style={{ display: "block", fontSize: F.sm, fontWeight: 600, ...clip }}>{f.name}</span>
                 {f.summary && <span style={{ display: "block", fontSize: F.xs, color: T.ink3, ...clip }}>{f.summary}</span>}</span>

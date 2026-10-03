@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
   type Row = { kind: string; id: string; contact_id: string | null; job_id: string | null; title: string | null; snippet: string | null; at: string | null; rank: number };
   const href = (r: Row) =>
     r.kind === "job" ? `/dashboard/scope/${r.id}`
-    : r.kind === "file" ? `/dashboard/documents?file=${r.id}`
+    : r.kind === "file" ? `/dashboard/files?file=${r.id}`
     : r.contact_id ? `/dashboard/messages/${r.contact_id}` : r.job_id ? `/dashboard/scope/${r.job_id}` : "/dashboard/messages";
   const rows = (data ?? []) as Row[];
   const groups = ORDER.map((k) => ({

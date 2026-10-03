@@ -27,7 +27,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   let b: { file_id?: unknown; sheets?: unknown };
   try { b = await req.json(); } catch { return bad("Body must be JSON."); }
   if (typeof b.file_id !== "string" || !UUID.test(b.file_id)) return bad("Which file?");
-  const { data: f } = await supabase.from("job_files").select("id, job_id, mime_type").eq("org_id", orgId).eq("id", b.file_id).is("deleted_at", null).maybeSingle();
+  const { data: f } = await supabase.from("files").select("id, job_id, mime_type").eq("org_id", orgId).eq("id", b.file_id).is("deleted_at", null).maybeSingle();
   if (!f || f.job_id !== id) return bad("That file isn't on this job.", 404);
   if (!Array.isArray(b.sheets) || !b.sheets.length || b.sheets.length > 500) return bad("Send the pages (1 to 500).");
 

@@ -2,7 +2,7 @@
  * Texted photos brought onto a job (2026-10-03). Pure — tests/texted-photos.test.mjs.
  */
 
-/** job_files.source_url for a copy of one texted file: which message_media row it came from. */
+/** files.source_url for a copy of one texted file: which message_media row it came from. */
 export const textedMarker = (mediaId: string) => `message_media:${mediaId}`;
 
 /** "Texted by Johnette Wilson · Oct 2 3.41 PM.jpg" — who sent it and when (Central). */

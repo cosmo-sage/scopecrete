@@ -84,7 +84,7 @@ export async function proposalBundle(sb: Sb, orgId: string, jobId: string, opts:
     sb.from("doc_templates").select(TEMPLATE_COLS).eq("org_id", orgId).order("kind").order("name"),
     job.customer_id ? sb.from("customers").select("id, name, address_formatted, address_line1, city, state, zip").eq("org_id", orgId).eq("id", job.customer_id as string).maybeSingle().then((r: { data: unknown }) => r.data as Record<string, unknown> | null) : Promise.resolve(null),
     job.contact_id ? sb.from("contacts").select("id, name, phone, email").eq("org_id", orgId).eq("id", job.contact_id as string).maybeSingle().then((r: { data: unknown }) => r.data as Record<string, unknown> | null) : Promise.resolve(null),
-    sb.from("job_files").select("id, name, storage_path, fetch_state").eq("org_id", orgId).eq("job_id", jobId).eq("kind", "image").is("deleted_at", null).order("created_at", { ascending: false }).limit(40),
+    sb.from("files").select("id, name, storage_path, fetch_state").eq("org_id", orgId).eq("job_id", jobId).eq("kind", "image").is("deleted_at", null).order("created_at", { ascending: false }).limit(40),
   ]);
   const p = pricing.get(jobId);
   return {

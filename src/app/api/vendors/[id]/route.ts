@@ -30,7 +30,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     supabase.from("cost_item_sources")
       .select(`${SOURCE_COLUMNS}, item:cost_items!cost_item_sources_cost_item_id_fkey(id, name, unit, cost_type, cost_group_id, default_source_id, active)`)
       .eq("org_id", orgId).eq("vendor_contact_id", id).eq("active", true).limit(2000),
-    supabase.from("job_files").select(FILE_COLUMNS).eq("org_id", orgId).eq("contact_id", id).is("deleted_at", null)
+    supabase.from("files").select(FILE_COLUMNS).eq("org_id", orgId).eq("contact_id", id).is("deleted_at", null)
       .order("created_at", { ascending: false }).limit(100),
     supabase.from("job_vendors").select("role, job:jobs!inner(id, title, status, address, archived_at)").eq("org_id", orgId).eq("contact_id", id).limit(100),
     supabase.from("messages").select("id", { count: "exact", head: true }).eq("org_id", orgId).eq("contact_id", id),

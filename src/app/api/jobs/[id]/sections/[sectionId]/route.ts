@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
 import { loadAssembly, setReinforcement, workingEstimate } from "@/lib/budget-server";
 import { readSectionFields, SECTION_SELECT } from "../fields";
+import { syncTakeoffSections } from "@/lib/takeoff-sections-server";
+
+const SIZE_FIELDS = ["length_ft", "width_ft", "sqft_override", "count_qty", "count_unit"];
 
 /**
  * Edit or remove one section. Scoped by job, section AND org.
@@ -36,6 +39,12 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     return applyCookies(NextResponse.json({ error: "Nothing to change." }, { status: 400 }));
   }
 
+  // A size typed on a section counted from takeoffs: it stops following them until ↺ (migration 069).
+  if (fields.patch.takeoff_sync === undefined && SIZE_FIELDS.some((f) => f in fields.patch)) {
+    const { count } = await supabase.from("takeoff_measurements").select("id", { count: "exact", head: true }).eq("org_id", orgId).eq("section_id", sectionId);
+    if (count) fields.patch.takeoff_sync = false;
+  }
+
   if (Object.keys(fields.patch).length) {
     const { data, error } = await supabase
       .from("job_sections")
@@ -56,6 +65,7 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     const r = await setReinforcement(supabase, orgId, id, sectionId, fields.reinforcement, "set");
     if (!r.ok) return applyCookies(NextResponse.json({ error: r.error }, { status: 400 }));
   }
+  if (fields.patch.takeoff_sync === true) await syncTakeoffSections(supabase, orgId, id, [sectionId]);
   let assembly = null;
   if (typeof fields.patch.work_type === "string") {
     const { data: job } = await supabase.from("jobs").select("job_type").eq("id", id).eq("org_id", orgId).maybeSingle();

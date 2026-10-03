@@ -13,7 +13,7 @@ type Sb = ApiSession["supabase"];
 
 export const SHEET_COLS = "id, job_id, file_id, page, page_w, page_h, number, title, discipline, scale_text, printed_ft_per_pt, scale_ft_per_pt, scale_method, scale_set_at, number_source, updated_at, ocr_title_at, ocr_at, ocr_conf, ocr_error";
 export const PARAM_COLS = "id, job_id, name, kind, color, depth_in, sort_order, updated_at";
-export const MEAS_COLS = "id, parameter_id, sheet_id, name, geometry, cutouts, method, sort_order, updated_at";
+export const MEAS_COLS = "id, parameter_id, sheet_id, name, geometry, cutouts, method, sort_order, updated_at, section_id";
 
 export interface SheetRow {
   id: string; job_id: string; file_id: string; page: number; page_w: number; page_h: number;
@@ -24,7 +24,7 @@ export interface SheetRow {
   ocr_title_at: string | null; ocr_at: string | null; ocr_conf: number | null; ocr_error: string | null;
 }
 export interface ParamRow { id: string; job_id: string; name: string; kind: TakeoffKind; color: string; depth_in: number | null; sort_order: number; updated_at: string }
-export interface MeasRow { id: string; parameter_id: string; sheet_id: string; name: string | null; geometry: Pt[]; cutouts: Pt[][]; method: string; sort_order: number; updated_at: string }
+export interface MeasRow { id: string; parameter_id: string; sheet_id: string; name: string | null; geometry: Pt[]; cutouts: Pt[][]; method: string; sort_order: number; updated_at: string; section_id: string | null }
 
 /** A palette for new groups — the handoff's group colours, in order. */
 export const GROUP_COLORS = ["#D97757", "#2F8A5B", "#C98A12", "#6A55B0", "#0F7C86", "#1E5AA8", "#B5412C", "#5E5A52"];

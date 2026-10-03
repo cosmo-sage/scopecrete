@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
 import { MEAS_COLS, cleanPoints, paramInJob } from "@/lib/plans-server";
+import { syncTakeoffSections } from "@/lib/takeoff-sections-server";
 
 /** Rename a shape, move it to another group of the same kind, redraw it, set its cutouts, or remove it. */
 
@@ -48,6 +49,8 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   if (!Object.keys(patch).length) return bad("Nothing to change.");
   const { data, error } = await supabase.from("takeoff_measurements").update(patch).eq("id", mid).eq("org_id", orgId).select(MEAS_COLS).single();
   if (error || !data) return bad(error?.message ?? "not saved", 500);
+  // The budget section it is counted in follows it (migration 069).
+  await syncTakeoffSections(supabase, orgId, id);
   return applyCookies(NextResponse.json({ measurement: data }));
 }
 
@@ -57,7 +60,10 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: stri
   if (!result.ok) return result.response;
   const { supabase, orgId, applyCookies } = result.session;
   if (!(await mine(supabase, orgId, id, mid))) return applyCookies(NextResponse.json({ error: "No such shape." }, { status: 404 }));
+  const { data: was } = await supabase.from("takeoff_measurements").select("section_id").eq("id", mid).eq("org_id", orgId).maybeSingle();
   const { error } = await supabase.from("takeoff_measurements").delete().eq("id", mid).eq("org_id", orgId);
   if (error) return applyCookies(NextResponse.json({ error: error.message }, { status: 500 }));
+  // Its section stays, cost items and all; only the size it gave goes.
+  await syncTakeoffSections(supabase, orgId, id, [was?.section_id as string | null]);
   return applyCookies(NextResponse.json({ ok: true }));
 }

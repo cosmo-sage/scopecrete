@@ -50,6 +50,14 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       patch.section_id = s.id;
     }
   }
+  // A photo of one takeoff shape's area (migration 069) — the database checks it is on this job.
+  if ("takeoff_measurement_id" in b) {
+    if (b.takeoff_measurement_id === null) patch.takeoff_measurement_id = null;
+    else {
+      if (!f.job_id || typeof b.takeoff_measurement_id !== "string" || !UUID.test(b.takeoff_measurement_id)) return bad("Bad takeoff.");
+      patch.takeoff_measurement_id = b.takeoff_measurement_id;
+    }
+  }
   if ("contact_id" in b) {
     // Filing a receipt on its vendor (051) — only a file that isn't on anyone yet.
     if (f.contact_id || f.job_id) return bad("This file is already filed.");

@@ -27,6 +27,8 @@ export interface FileRow {
   note: string | null; show_on_proposal: boolean; page_count: number | null;
   fetch_state: string | null; read_state: string | null; read_error: string | null;
   summary: string | null; facts: Record<string, unknown> | null; created_at: string; url: string | null;
+  /** A photo of one takeoff shape's area (migration 069). */
+  takeoff_measurement_id?: string | null;
 }
 interface Texted { id: string; message_id: string; kind: string | null; mime_type: string | null; received_at: string | null; url: string | null; on_job?: boolean }
 interface Pending { key: string; file: File; pct: number; error: string | null }

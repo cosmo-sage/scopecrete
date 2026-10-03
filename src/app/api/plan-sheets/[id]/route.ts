@@ -12,6 +12,7 @@ import { SHEET_COLS } from "@/lib/plans-server";
  * A scale is only ever one Coy set; the printed one is applied by his tap.
  */
 
+import { syncTakeoffSections } from "@/lib/takeoff-sections-server";
 export const dynamic = "force-dynamic";
 
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
@@ -22,7 +23,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   const bad = (m: string, s = 400) => applyCookies(NextResponse.json({ error: m }, { status: s }));
   let b: Record<string, unknown>;
   try { b = await req.json(); } catch { return bad("Body must be JSON."); }
-  const { data: sh } = await supabase.from("plan_sheets").select("id, printed_ft_per_pt").eq("org_id", orgId).eq("id", id).maybeSingle();
+  const { data: sh } = await supabase.from("plan_sheets").select("id, job_id, printed_ft_per_pt").eq("org_id", orgId).eq("id", id).maybeSingle();
   if (!sh) return bad("No such sheet.", 404);
 
   const patch: Record<string, unknown> = {};
@@ -46,5 +47,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   if (!Object.keys(patch).length) return bad("Nothing to change.");
   const { data, error } = await supabase.from("plan_sheets").update(patch).eq("id", id).eq("org_id", orgId).select(SHEET_COLS).single();
   if (error || !data) return bad(error?.message ?? "not saved", 500);
+  // A new scale changes every size measured on it — and the sections they are counted in.
+  if ("scale_ft_per_pt" in patch) await syncTakeoffSections(supabase, orgId, sh.job_id as string);
   return applyCookies(NextResponse.json({ sheet: data }));
 }

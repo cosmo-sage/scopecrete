@@ -16,7 +16,7 @@ export interface Sheet {
   ocr_title_at?: string | null; ocr_at?: string | null; ocr_conf?: number | null; ocr_error?: string | null;
 }
 export interface Param { id: string; job_id: string; name: string; kind: TakeoffKind; color: string; depth_in: number | null; sort_order: number }
-export interface Meas { id: string; parameter_id: string; sheet_id: string; name: string | null; geometry: Pt[]; cutouts: Pt[][]; method: string; sort_order: number }
+export interface Meas { id: string; parameter_id: string; sheet_id: string; name: string | null; geometry: Pt[]; cutouts: Pt[][]; method: string; sort_order: number; section_id?: string | null }
 export interface PlansData {
   job: { id: string; title: string | null; address: string | null; job_type: string | null; status: string | null } | null;
   files: PlanFile[]; sheets: Sheet[]; params: Param[]; measurements: Meas[];

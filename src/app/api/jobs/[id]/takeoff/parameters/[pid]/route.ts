@@ -3,6 +3,7 @@ import { getApiSession } from "@/lib/api-auth";
 import { PARAM_COLS, paramInJob } from "@/lib/plans-server";
 
 /** Rename, recolour, set the depth, or remove a takeoff group (its shapes go with it; a budget line keeps its row and says the group was removed). */
+import { syncTakeoffSections } from "@/lib/takeoff-sections-server";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +36,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   if ("sort_order" in b && Number.isInteger(b.sort_order)) patch.sort_order = b.sort_order;
   const { data, error } = await supabase.from("takeoff_parameters").update(patch).eq("id", pid).eq("org_id", orgId).select(PARAM_COLS).single();
   if (error || !data) return bad(error?.message ?? "not saved", 500);
+  await syncTakeoffSections(supabase, orgId, id);
   return applyCookies(NextResponse.json({ parameter: data }));
 }
 
@@ -44,7 +46,9 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: stri
   if (!result.ok) return result.response;
   const { supabase, orgId, applyCookies } = result.session;
   if (!(await paramInJob(supabase, orgId, id, pid))) return applyCookies(NextResponse.json({ error: "No such group." }, { status: 404 }));
+  const { data: was } = await supabase.from("takeoff_measurements").select("section_id").eq("org_id", orgId).eq("parameter_id", pid);
   const { error } = await supabase.from("takeoff_parameters").delete().eq("id", pid).eq("org_id", orgId);
   if (error) return applyCookies(NextResponse.json({ error: error.message }, { status: 500 }));
+  await syncTakeoffSections(supabase, orgId, id, ((was ?? []) as Array<{ section_id: string | null }>).map((m) => m.section_id));
   return applyCookies(NextResponse.json({ ok: true }));
 }

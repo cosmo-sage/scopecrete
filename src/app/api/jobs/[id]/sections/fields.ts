@@ -17,7 +17,7 @@ const NUMERIC = ["length_ft", "width_ft", "sqft_override", "depth_in", "count_qt
 const TEXT = ["name", "rebar", "prep_notes", "access_notes"] as const;
 
 export const SECTION_SELECT =
-  "id, job_id, name, work_type, length_ft, width_ft, sqft_override, depth_in, psi, rebar, prep_notes, access_notes, sort_order, created_at, updated_at, reinforcement_item_id, reinforcement_source, origin, source_ref, count_qty, count_unit";
+  "id, job_id, name, work_type, length_ft, width_ft, sqft_override, depth_in, psi, rebar, prep_notes, access_notes, sort_order, created_at, updated_at, reinforcement_item_id, reinforcement_source, origin, source_ref, count_qty, count_unit, takeoff_sync";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -73,6 +73,12 @@ export function readSectionFields(body: Record<string, unknown>):
     if (v === null || v === "") reinforcement = null;
     else if (typeof v === "string" && UUID.test(v)) reinforcement = v;
     else return { ok: false, error: "reinforcement_item_id must be a card id, or null." };
+  }
+
+  // Follows its takeoff shapes (migration 069); a size typed by hand turns it off in the route.
+  if ("takeoff_sync" in body) {
+    if (typeof body.takeoff_sync !== "boolean") return { ok: false, error: "takeoff_sync must be true or false." };
+    patch.takeoff_sync = body.takeoff_sync;
   }
 
   if ("sort_order" in body) {

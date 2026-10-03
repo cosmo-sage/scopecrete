@@ -40,6 +40,8 @@ import {
 } from "@/lib/engine";
 import { isReinforcementCard } from "@/lib/cost-cards";
 import { ArchiveButton } from "@/components/v34/archive-actions";
+import { SectionTakeoffStrip, groupOf, shapesOf } from "@/components/v34/section-takeoff";
+import { fmtQty } from "@/lib/takeoff";
 
 interface Section extends SectionInput {
   id: string;
@@ -50,6 +52,8 @@ interface Section extends SectionInput {
   prep_notes: string | null;
   access_notes: string | null;
   sort_order: number;
+  /** Follows its Plan Room takeoffs (migration 069). */
+  takeoff_sync?: boolean;
   /** 'bid' when a forwarded bid made it (063); source_ref is the line it came from. */
   origin?: string | null;
   source_ref?: string | null;
@@ -124,12 +128,13 @@ export default function ScopeBuilder() {
   }, []);
   // The plan sheets each section's scope came from, to check it against (Coy, 2026-10-02).
   const [plans, setPlans] = useState<PlansData | null>(null);
+  const [plansTick, setPlansTick] = useState(0);
   const [viewer, setViewer] = useState<{ title: string; groups: SheetGroup[]; start: string | null } | null>(null);
   useEffect(() => {
     let off = false;
     send(`/api/jobs/${jobId}/plans`, "GET").then((b) => { if (!off) setPlans(b as PlansData); }).catch(() => {});
     return () => { off = true; };
-  }, [jobId]);
+  }, [jobId, plansTick]);
   // The budget's own totals (migration 048). Since step 3b it is the ONLY price.
   const [budget, setBudget] = useState<BudgetSummary | null>(null);
   // Bumped when a section change may have changed the budget on the server
@@ -156,6 +161,8 @@ export default function ScopeBuilder() {
   }, [jobId]);
 
   useEffect(() => { void load(); }, [load]);
+  // A section's takeoffs changed (migration 069): its size, the plans' links and the budget move together.
+  const takeoffChanged = useCallback(() => { void load(); setPlansTick((n) => n + 1); setBudgetTick((n) => n + 1); }, [load]);
 
   const t = useMemo(() => takeoffOf(sections ?? [], null), [sections]);
 
@@ -314,15 +321,49 @@ export default function ScopeBuilder() {
             detail="A driveway, a patio and a tear-out at one address are one job with three sections. Add the first one and give it the dimensions you were told." />
         )}
 
-        {sections.map((s, i) => (
-          <SectionCard key={s.id} s={s} index={i} err={saveErr[s.id]} rcards={rcards} jobType={job.job_type} jobId={jobId}
-            sheets={sheetsOf(s)} hasPlans={planSheets.length > 0} onSheets={(start) => openSheets(s, start)}
-            photos={<SectionPhotos jobId={jobId} sectionId={s.id} sectionName={s.name ?? null}
-              photos={jobFiles.filter((f) => f.section_id === s.id && (f.kind === "image" || f.kind === "video"))}
-              sections={sections.map((x) => ({ id: x.id, name: x.name ?? null }))} onChange={fileChanged} />}
-            onLocal={(p) => patchLocal(s.id, p)} onSave={(p) => void save(s.id, p)}
-            onRemove={() => void removeSection(s.id)} />
-        ))}
+        {/* Sections counted from one takeoff group sit under it, as in the Plan Room (Coy, 2026-10-03). */}
+        {(() => {
+          const names = new Map(sections.map((x, i) => [x.id, x.name || `Section ${i + 1}`]));
+          const order: Array<string | null> = [];
+          const byKey = new Map<string | null, Section[]>();
+          for (const x of sections) {
+            const g = groupOf(x.id, plans);
+            if (!byKey.has(g)) { byKey.set(g, []); order.push(g); }
+            byKey.get(g)!.push(x);
+          }
+          return order.map((g) => {
+            const p = g ? plans?.params.find((x) => x.id === g) : null;
+            const list = byKey.get(g)!;
+            const tot = list.reduce((a, x) => { const t = shapesOf(x.id, plans); return t.total !== null && a !== null ? a + t.total : null; }, 0 as number | null);
+            return (
+              <div key={g ?? "none"}>
+                {p && (
+                  <div className="px-3 pt-3 pb-1 flex items-center gap-2" style={{ fontSize: F.sm }}>
+                    <span style={{ width: 10, height: 10, borderRadius: 2, background: p.color }} />
+                    <span style={{ fontFamily: disp, fontWeight: 700, letterSpacing: ".04em", textTransform: "uppercase" }}>{p.name}</span>
+                    <span style={{ color: T.ink3, fontSize: F.xs }}>takeoff group · {list.length} section{list.length === 1 ? "" : "s"}{tot !== null ? ` · ${fmtQty(tot, { area: "SF", linear: "LF", count: "EA" }[p.kind])}` : ""}</span>
+                  </div>
+                )}
+                {list.map((s) => {
+                  const shapeIds = new Set(shapesOf(s.id, plans).ids);
+                  const sh = shapesOf(s.id, plans);
+                  return (
+                    <SectionCard key={s.id} s={s} index={sections.indexOf(s)} err={saveErr[s.id]} rcards={rcards} jobType={job.job_type} jobId={jobId}
+                      sheets={sheetsOf(s)} hasPlans={planSheets.length > 0} onSheets={(start) => openSheets(s, start)}
+                      takeoffUnit={s.takeoff_sync !== false && sh.unit ? sh.unit : null}
+                      takeoff={<SectionTakeoffStrip jobId={jobId} sectionId={s.id} sectionName={s.name ?? null} following={s.takeoff_sync !== false}
+                        plans={plans} sectionNames={names} onChanged={takeoffChanged} />}
+                      photos={<SectionPhotos jobId={jobId} sectionId={s.id} sectionName={s.name ?? null}
+                        photos={jobFiles.filter((f) => (f.section_id === s.id || (f.takeoff_measurement_id && shapeIds.has(f.takeoff_measurement_id))) && (f.kind === "image" || f.kind === "video"))}
+                        sections={sections.map((x) => ({ id: x.id, name: x.name ?? null }))} onChange={fileChanged} />}
+                      onLocal={(p) => patchLocal(s.id, p)} onSave={(p) => void save(s.id, p)}
+                      onRemove={() => void removeSection(s.id)} />
+                  );
+                })}
+              </div>
+            );
+          });
+        })()}
 
         <div className="px-3 py-3">
           <button onClick={() => void addSection()} disabled={adding} className="w-full rounded"
@@ -380,12 +421,14 @@ function splitFt(v: number | null): [number | "", number | ""] {
   return [ft, inch === 0 ? "" : inch];
 }
 
-function SectionCard({ s, index, err, onLocal, onSave, onRemove, jobType, jobId, photos, sheets, hasPlans, onSheets }: {
+function SectionCard({ s, index, err, onLocal, onSave, onRemove, jobType, jobId, photos, sheets, hasPlans, onSheets, takeoff, takeoffUnit }: {
   s: Section; index: number; err?: string; rcards: RCard[]; jobType: string | null; jobId: string;
   /** The plan sheets its bid line names (Coy, 2026-10-02: "verify the scopes on the sheets"). */
   sheets: Array<{ id: string; number: string | null; title: string | null }>; hasPlans: boolean; onSheets: (start: string | null) => void;
   /** The area's photos, under its dimensions. */
   photos?: React.ReactNode;
+  /** Its Plan Room takeoffs (migration 069), and their unit while the size follows them. */
+  takeoff?: React.ReactNode; takeoffUnit?: string | null;
   onLocal: (p: Partial<Section>) => void; onSave: (p: Partial<Section>) => void; onRemove: () => void;
 }) {
   const q = quantities(s);
@@ -401,12 +444,14 @@ function SectionCard({ s, index, err, onLocal, onSave, onRemove, jobType, jobId,
   // Or in linear feet (Coy, 2026-10-02): grade beams, saw cuts, joints — "430 LF". The length
   // is the count in LF; a beam's width (in) and depth give its yards.
   const bidLF = /\b\d[\d,.]*\s*(LF|LIN\.?\s*FT)\b/i.test(s.source_ref ?? "");
-  const [mode, setMode] = useState<"dims" | "area" | "count" | "linear">(() =>
+  const [modeState, setMode] = useState<"dims" | "area" | "count" | "linear">(() =>
     (s.count_unit ?? "").toUpperCase() === "LF" && s.length_ft === null && s.sqft_override === null ? "linear"
       : s.count_qty != null && s.sqft_override === null && s.length_ft === null && s.width_ft === null ? "count"
       : s.length_ft === null && s.width_ft === null && s.sqft_override === null && bidLF ? "linear"
       : s.length_ft === null && s.width_ft === null && s.sqft_override === null && bidEA ? "count"
       : s.length_ft === null && s.width_ft === null && (s.sqft_override !== null || bidSY || jobType === "public") ? "area" : "dims");
+  // While it follows its takeoffs, the shapes decide how it is measured.
+  const mode = takeoffUnit === "SF" ? "area" : takeoffUnit === "LF" ? "linear" : takeoffUnit === "EA" ? "count" : modeState;
   const unitKey = `sc:area-unit:${s.id}`;
   const [unit, setUnitState] = useState<"sf" | "sy">(() => {
     try { const v = localStorage.getItem(unitKey); if (v === "sf" || v === "sy") return v; } catch { /* no storage */ }
@@ -513,6 +558,7 @@ function SectionCard({ s, index, err, onLocal, onSave, onRemove, jobType, jobId,
           </button>
         </div>
       )}
+      {takeoff}
       <div className="px-3 pt-1.5 flex items-center gap-x-2 gap-y-1 flex-wrap">
         <span style={{ ...eyebrow }}>Measured by</span>
         <span className="inline-flex rounded overflow-hidden" role="group" aria-label="Measured by" style={{ border: `1px solid ${T.hair}` }}>

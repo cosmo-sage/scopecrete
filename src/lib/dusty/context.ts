@@ -56,14 +56,49 @@ export async function buildContext(sb: Sb, orgId: string, ref: ContextRef): Prom
   if (ref.kind === "customer") return customerContext(sb, orgId, ref.id);
   if (ref.kind === "cash") return cashContext(sb, orgId);
   if (ref.kind === "activity") return activityContext(sb, orgId, ref.since);
-  const [{ data: org }, inbox, records] = await Promise.all([
+  const [{ data: org }, inbox, records, recent] = await Promise.all([
     sb.from("orgs").select("name").eq("id", orgId).maybeSingle(),
     inboxBlock(sb, orgId),
     recordsBlock(sb, orgId),
+    recentBlock(sb, orgId),
   ]);
   const cold = coldContext((org?.name as string | null) ?? null, today);
   // Even with nothing open, "did you get the email I just forwarded?" has an answer (Coy, 2026-10-02).
-  return { ...cold, text: `${cold.text}\n\n## ${inbox.title}\n${inbox.lines.join("\n")}\n\n## ${records.title}\n${records.lines.join("\n")}` };
+  return { ...cold, text: `${cold.text}\n\n## ${recent.title}\n${recent.lines.join("\n")}\n\n## ${inbox.title}\n${inbox.lines.join("\n")}\n\n## ${records.title}\n${records.lines.join("\n")}` };
+}
+
+/**
+ * The last three days of calls and texts, newest first, with who each person is
+ * and Dusty's line on where they stand — so a chat with nothing open can answer
+ * "what happened with the woman who called yesterday about a driveway?" (Coy,
+ * 2026-10-03: Dusty said he had no record of Johnette Wilson's call).
+ */
+async function recentBlock(sb: Sb, orgId: string): Promise<Block> {
+  const since = new Date(Date.now() - 3 * 86400_000).toISOString();
+  const { data: rows } = await sb.from("messages").select("contact_id, channel, direction, occurred_at, body_text, summary")
+    .eq("org_id", orgId).not("contact_id", "is", null).gte("occurred_at", since).order("occurred_at", { ascending: false }).limit(120);
+  const msgs = (rows ?? []) as Array<{ contact_id: string; channel: string; direction: string; occurred_at: string | null; body_text: string | null; summary: string | null }>;
+  const ids = [...new Set(msgs.map((m) => m.contact_id))];
+  const { data: people } = ids.length
+    ? await sb.from("contacts").select("id, name, phone, contact_type, classification_confirmed_at, auto_classified_at, status_summary").eq("org_id", orgId).in("id", ids)
+    : { data: [] };
+  const who = new Map(((people ?? []) as Array<{ id: string; name: string | null; phone: string | null; contact_type: string | null; classification_confirmed_at: string | null; auto_classified_at: string | null; status_summary: string | null }>)
+    .map((c) => [c.id, c]));
+  const central = (iso: string | null) => (iso ? new Date(iso).toLocaleString("en-US", { timeZone: "America/Chicago", weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "?");
+  const lines = msgs.map((m) => {
+    const c = who.get(m.contact_id);
+    if (c?.contact_type === "spam" && (c.classification_confirmed_at || c.auto_classified_at)) return null;
+    const bucket = c && (c.classification_confirmed_at || c.auto_classified_at) ? c.contact_type : "unsorted";
+    const name = c?.name?.trim() || c?.phone || "unknown number";
+    const what = m.channel === "call" ? `CALL — ${m.summary?.trim() || "nothing said on record"}` : `TEXT: ${m.body_text?.trim() || "(photo or attachment)"}`;
+    return `- ${central(m.occurred_at)} Central · ${m.direction === "outbound" ? `Coy → ${name}` : `${name} →`} (${bucket}; contact ${m.contact_id}) · ${what}`.slice(0, 600);
+  }).filter((x): x is string => !!x);
+  const standing = ids.map((id) => who.get(id)).filter((c) => c?.status_summary).slice(0, 25)
+    .map((c) => `- ${c!.name?.trim() || c!.phone}: ${c!.status_summary}`);
+  return {
+    title: "Calls and texts in the last three days (newest first, times in Central)",
+    lines: lines.length ? [...lines, "", "Where each of them stands (your earlier read):", ...standing] : ["None in the last three days."],
+  };
 }
 
 /**
@@ -89,21 +124,23 @@ async function recordsBlock(sb: Sb, orgId: string): Promise<Block> {
     if (!e.lastIn && m.direction === "inbound") e.lastIn = m.occurred_at;
     per.set(m.contact_id, e);
   }
-  const live: string[] = [], gone: string[] = [];
+  const live: Array<[string, string]> = [], gone: string[] = [];
   for (const c of (people ?? []) as Array<{ id: string; name: string | null; phone: string | null; contact_type: string | null; classification_confirmed_at: string | null; auto_classified_at: string | null; archived_at: string | null }>) {
     const e = per.get(c.id);
     if (!e) continue;
     const bucket = c.classification_confirmed_at || c.auto_classified_at ? c.contact_type ?? "unsorted" : "unsorted";
     const line = `- contact ${c.id} · ${c.name?.trim() || c.phone || "unknown"} · ${bucket} · ${e.n} message${e.n === 1 ? "" : "s"}, last ${day(e.last)}${e.said ? "" : " · NOTHING SAID"}`;
-    if (isArchivedNow(c.archived_at, e.lastIn)) gone.push(line); else live.push(line);
+    if (isArchivedNow(c.archived_at, e.lastIn)) gone.push(line); else live.push([e.last ?? "", line]);
   }
+  // Newest first, so "the top of the list" means the same here as on Coy's screen.
+  live.sort((a, b) => b[0].localeCompare(a[0]));
   const jobRows = (jobs ?? []) as Array<{ id: string; title: string | null; status: string | null; archived_at: string | null }>;
   const custRows = (custs ?? []) as Array<{ id: string; name: string | null; archived_at: string | null }>;
   return {
     title: "Threads, customers and jobs — ids for archive / delete plans",
     trimmable: true,
     lines: [
-      `Threads in the lists (${live.length}):`, ...live.slice(0, 250),
+      `Threads in the lists (${live.length}, newest first):`, ...live.slice(0, 250).map(([, l]) => l),
       `Archived threads (${gone.length}):`, ...gone.slice(0, 60),
       "Jobs:", ...jobRows.filter((j) => !j.archived_at).slice(0, 100).map((j) => `- job ${j.id} · ${j.title || "untitled"} · ${j.status}`),
       "Deleted or archived jobs:", ...jobRows.filter((j) => j.archived_at).slice(0, 40).map((j) => `- job ${j.id} · ${j.title || "untitled"}`),

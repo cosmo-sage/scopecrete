@@ -499,6 +499,13 @@ that, and it replaces his Hermes agent. The §2a shape, for email:
   subject, where filed, what the bid reader made of it, or that its text
   didn't come through) and the newest one's text when it is under two days
   old (`inboxBlock()` in `src/lib/dusty/context.ts`, under RLS).
+  **And the last three days of calls and texts (2026-10-03):** asked "what
+  happened to my new customer that called in yesterday?", Dusty said he had
+  no record of Johnette Wilson's call — the cold chat carried no messages.
+  It now opens with every call and text since three days ago, newest
+  first, in Central time, with each person's bucket, contact id and his
+  status line (`recentBlock()`), and the id list he plans archives from is
+  newest first too, so "the top" means what it means on Coy's screen.
 - **Whose mail counts.** `org_inbound_addresses` maps the inbox to the org;
   `org_inbound_senders` (admin@saccobuilt.com, coysacco@gmail.com) are the
   forwarders. Anything else is kept as **quarantined**, its files **held**
@@ -1426,8 +1433,10 @@ expected start date per quoted job before it means anything. Add the field.
 - **Threads on a desktop (2026-10-01, Coy):** the five buckets are a second
   icon rail beside the main one (`SubRail`, with counts), **Customer**
   first and the default; the list follows `?f=` and says its bucket.
-  Customer, Vendor and Personal list **A–Z by name** (a bare number last);
-  Unsorted and Spam stay newest first. The phone keeps the chips.
+  Every bucket lists **newest first** (Coy, 2026-10-03: "it should be latest
+  at the top" — Johnette Wilson had sunk to J under the old A–Z order);
+  Customer, Vendor and Personal have an **A–Z ⇅** toggle (a bare number
+  last), remembered on the device. The phone keeps the chips.
 - **Threads is people, Jobs is work (2026-09-27; reshaped 2026-09-28).**
   Five chips, all on screen, no funnel: **Unsorted · Customer · Vendor ·
   Personal · Spam**. Unsorted is the inbox and opens first; filing someone

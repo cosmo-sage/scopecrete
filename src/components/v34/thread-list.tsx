@@ -598,6 +598,14 @@ export function ThreadList() {
   const [archived, setArchived] = useState<Thread[] | null>(null);
   const [archToast, setArchToast] = useState<{ label: string; logId: string | null } | null>(null);
   const [archBusy, setArchBusy] = useState(false);
+  // Newest first by default (Coy, 2026-10-03: "it should be latest at the top"); A–Z is a tap away
+  // in the directory buckets, remembered on this device.
+  const [byName, setByName] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => { try { setByName(localStorage.getItem("sc:threads-sort") === "az"); } catch { /* no storage */ } }, 0);
+    return () => clearTimeout(t);
+  }, []);
+  const flipSort = () => setByName((v) => { try { localStorage.setItem("sc:threads-sort", v ? "newest" : "az"); } catch { /* no storage */ } return !v; });
 
   // Bumped after a confirm, so the list and the chip counts both refetch: the
   // row's display_name becomes the real name and Unsorted drops by one. A
@@ -779,12 +787,12 @@ export function ThreadList() {
     }
     // Customer, Vendor and Personal are directories: A–Z by name (Coy,
     // 2026-10-01: "organized by customer names"), a bare number last.
-    if (!q && BY_NAME.has(filter)) {
+    if (!q && byName && BY_NAME.has(filter)) {
       const bare = (t: Thread) => /^[+\d\s().-]+$/.test(t.display_name);
       rows = [...rows].sort((a, b) => Number(bare(a)) - Number(bare(b)) || a.display_name.localeCompare(b.display_name, undefined, { sensitivity: "base" }));
     }
     return rows;
-  }, [threads, filter, q, archived]);
+  }, [threads, filter, q, archived, byName]);
   const silentHere = visible.filter((t) => t.silent).length;
   const pick = (id: string) => setPicked((p) => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
@@ -875,7 +883,9 @@ export function ThreadList() {
           </span>
           <span style={{ ...nums, fontSize: F.xs, color: T.ink3 }}>{chipCount(filter) ?? ""}</span>
           <span className="flex-1" />
-          <span style={{ ...eyebrow, color: T.ink3 }}>{BY_NAME.has(filter) ? "A–Z" : "Newest first"}</span>
+          {BY_NAME.has(filter)
+            ? <button onClick={flipSort} title="Change the order" style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>{byName ? "A–Z ⇅" : "Newest first ⇅"}</button>
+            : <span style={{ ...eyebrow, color: T.ink3 }}>Newest first</span>}
         </div>
       )}
 
@@ -890,6 +900,9 @@ export function ThreadList() {
                     <Link href="/dashboard/archive" style={{ ...eyebrow, color: T.ink3, marginLeft: 10 }}>Deleted customers &amp; jobs ›</Link></>
                 : <button onClick={() => setFilter("archived")} style={{ ...eyebrow, color: T.ink3, cursor: "pointer" }}>Archived{counts && typeof counts.archived === "number" ? ` · ${counts.archived}` : ""}</button>}
               <span className="flex-1" />
+              {BY_NAME.has(filter) && (
+                <button onClick={flipSort} className="lg:hidden" style={{ ...eyebrow, color: T.chalk, cursor: "pointer", marginRight: 8 }}>{byName ? "A–Z ⇅" : "Newest ⇅"}</button>
+              )}
               {visible.length > 0 && (
                 <button onClick={() => { setSelecting(true); setPicked(new Set()); setOpenRow(null); setTrayRow(null); }}
                   className="rounded px-2.5" style={{ ...eyebrow, height: 28, border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink, cursor: "pointer" }}>Select</button>

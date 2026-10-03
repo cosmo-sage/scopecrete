@@ -19,6 +19,7 @@ import { mayAutoRead, ocrPending, pausePlanOcr, resumePlanOcrAllowed, startPlanO
 import { call, isDrawing, isPlanFile, type Param, type PlanFile, type PlansData, type Sheet } from "./shared";
 import { FilesStep, SheetsStep } from "./files-sheets";
 import { TakeoffStep } from "./takeoff";
+import { AerialPicker } from "./aerial-picker";
 import { BudgetStep, SendSheet, useBudget } from "./budget-step";
 
 type Step = "files" | "sheets" | "takeoff" | "budget";
@@ -35,6 +36,7 @@ export function PlanRoom({ jobId }: { jobId: string }) {
   const [uploading, setUploading] = useState<string | null>(null);
   const [sending, setSending] = useState<Param | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
+  const [aerial, setAerial] = useState(false);
   const [budgetTick, setBudgetTick] = useState(0);
   const { b } = useBudget(jobId, budgetTick);
 
@@ -169,6 +171,10 @@ export function PlanRoom({ jobId }: { jobId: string }) {
               {scaled === sheets.length ? "✓ " : ""}{scaled} of {sheets.length} sheets scaled
             </span>
           )}
+          <button onClick={() => setAerial(true)} className="rounded flex items-center" title="An overhead photo of the site to measure on"
+            style={{ height: 32, padding: "0 12px", background: T.card, color: T.ink, border: `1px solid ${T.hairStrong}`, fontFamily: disp, fontSize: 13, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase", cursor: "pointer" }}>
+            Aerial
+          </button>
           <label className="rounded flex items-center" style={{ height: 32, padding: "0 12px", background: T.hiviz, color: T.onHiviz, fontFamily: disp, fontSize: 13, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase", cursor: "pointer" }}>
             <input type="file" multiple accept="application/pdf,image/jpeg,image/png,.pdf" className="hidden" onChange={(e) => { if (e.target.files?.length) void upload(e.target.files); e.target.value = ""; }} />
             ↑ Add plans
@@ -199,6 +205,8 @@ export function PlanRoom({ jobId }: { jobId: string }) {
           {current === "budget" && <BudgetStep jobId={jobId} data={scoped} b={b} onSend={setSending} />}
         </div>
       )}
+      <AerialPicker jobId={jobId} open={aerial} onClose={() => setAerial(false)}
+        onSaved={(sheetId) => { setAerial(false); void load().then(() => go("takeoff", sheetId)); }} />
       <SendSheet jobId={jobId} p={sending} total={sending && data ? data.totals[sending.id] : undefined} b={b}
         onClose={() => setSending(null)} onSent={() => void reload()} />
     </div>

@@ -221,10 +221,11 @@ function ScaleBar({ sheet, act, startScale }: { sheet: Sheet; act: (fn: () => Pr
     <div className="flex items-center gap-2 px-3 py-1.5 flex-wrap" style={{ background: T.sunDim, color: T.sun, borderBottom: `1px solid ${T.hair}`, fontSize: F.xs }}>
       <span>
         {sheet.scale_method === "none" ? "Marked not to scale — areas and lengths here aren't counted."
+          : sheet.printed_ft_per_pt && sheet.number === "AERIAL" ? `Scale from the map — ${sheet.scale_text}. Check it against the 50 ft bar or something you know the size of (a garage door is about 16 ft) before you use it.`
           : sheet.printed_ft_per_pt ? `This sheet prints ${sheet.scale_text}. Nothing is counted here until you apply it or measure a known dimension.`
           : "No scale on this sheet yet. Measure a known dimension to set it — nothing is counted here until then."}
       </span>
-      {sheet.printed_ft_per_pt && sheet.scale_method !== "none" && <button onClick={() => void patch({ scale_method: "title_block" })} style={tb(true)}>Use {scaleLabel(sheet.printed_ft_per_pt)}</button>}
+      {sheet.printed_ft_per_pt && sheet.scale_method !== "none" && <button onClick={() => void patch({ scale_method: "title_block" })} style={tb(true)}>{sheet.number === "AERIAL" ? "Use the map's scale" : `Use ${scaleLabel(sheet.printed_ft_per_pt)}`}</button>}
       <button onClick={startScale} style={tb(false)}>Measure a dimension</button>
       {sheet.scale_method !== "none" ? <button onClick={() => void patch({ scale_method: "none" })} style={tb(false)}>Not to scale</button>
         : <button onClick={() => void patch({ scale_method: null })} style={tb(false)}>Undo</button>}

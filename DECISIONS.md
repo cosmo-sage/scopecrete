@@ -4,7 +4,7 @@ Ground truth for every agent working this repo. If code disagrees with this
 document, the code is wrong or this document is stale — resolve it, don't
 guess. Update this file in the same PR that changes the behavior it describes.
 
-Last updated: 2026-10-02 (unit-price areas, square yards)
+Last updated: 2026-10-03 (aerial sheets)
 
 ---
 
@@ -2057,6 +2057,32 @@ expected start date per quoted job before it means anything. Add the field.
   group row with total (and CY with a depth), a row per shape; the selected
   shape carries a floating label. Full screen; the hint bar floats over the
   drawing so starting a shape never moves the sheet under the next click.
+  **Aerial of the site (Coy, 2026-10-03: "take a screenshot of the address
+  on Google maps and measure the driveway area" — "mapbox and esri and
+  Google if possible").** The Plan Room header's **Aerial** finds the job's
+  address (else its customer's; Google's geocoder if its key is set, else
+  Mapbox's, else Esri's public one — the result is not stored), shows it
+  on **Esri**, **Mapbox** or **Google**, Coy drags to frame it and zooms
+  (16–21; Mapbox 22), and **Put it in the Plan Room** saves the frame as a
+  one-page PDF on the job, In plan room, with its sheet (`AERIAL`).
+  The PDF is the tiles themselves (JPEG, nothing re-encoded), 1,280 ×
+  1,024 points = tile pixels at that zoom, with a 50 ft bar, the provider's
+  attribution and "imagery date not known" printed on it
+  (`src/lib/aerial.ts`, tested: projection, scale against ground distance,
+  tile cover, the PDF opening in pdf.js). **The scale is the map's
+  arithmetic** — 156,543.03392 m · cos(lat) ÷ 2^zoom per point, 0.422 ft
+  at zoom 20 in Baton Rouge — stored as the sheet's *printed* scale and,
+  like any printed scale, used only on Coy's tap ("Use the map's scale",
+  with a nudge to check it against the bar or a garage door). Checked in
+  the harness: a 20 × 40 ft driveway drawn into fake tiles measures
+  800 SF. **Google is a look only** — its terms don't allow keeping or
+  tracing its imagery, so it is proxied with no caching and never saved.
+  Keys stay on the server (`/api/aerial/tile`, `/api/aerial/google`,
+  `/api/jobs/[id]/aerial`, session client): `MAPBOX_TOKEN`, optional
+  `ESRI_API_KEY` (without it the public World Imagery tiles), and
+  `GOOGLE_MAPS_GEOCODE_KEY` with the Maps Static API on. Not built: the
+  photo's date (Esri's metadata service), and Dusty outlining the
+  driveway himself — when he does, it is a dashed suggestion Coy accepts.
   **Budget** — each group and the line that counts it, priced by the
   engine's `budget()`, each shape's share as a child row; **Send to budget**
   picks a Price book card (matching units first) and adds a `from_takeoff`
@@ -2284,6 +2310,8 @@ genuinely required.
   browser bundle IS a valid JWT, so anyone could invoke it and get contacts'
   phone numbers back (`dry_run` returned whole proposal rows). v3 checks a
   vault token and returns counts only. `verify_jwt` alone is not auth.
+- **Map keys for aerials (2026-10-03):** `MAPBOX_TOKEN` and `ESRI_API_KEY` are
+  server-side only; the browser loads tiles through `/api/aerial/tile`.
 - **Google Maps keys (2026-09-30):** `NEXT_PUBLIC_GOOGLE_MAPS_EMBED_KEY` is
   public by design — restrict it to the app's domains in Google Cloud.
   `GOOGLE_MAPS_GEOCODE_KEY` is server-side only (geocoding on address save).

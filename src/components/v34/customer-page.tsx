@@ -23,15 +23,15 @@
 import { EmailList } from "@/components/v34/email-sheet";
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { T, F, disp, eyebrow, nums, clip, money0, formatPhone, relTime, strong, light } from "@/lib/v34/tokens";
+import { useRouter, useSearchParams } from "next/navigation";
+import { T, F, disp, eyebrow, nums, clip, money0, formatPhone, relTime, strong, light, BUCKET } from "@/lib/v34/tokens";
+import { RoleTag, InitialsBox } from "@/components/v34/thread-list";
 import { Sheet } from "@/components/v34/primitives";
 import { useWide } from "@/lib/v34/use-wide";
 import { PlayAudio, MessageMedia } from "@/components/v34/conversation";
 import { Composer } from "@/components/v34/composer";
 import { FilesPanel } from "@/components/v34/files-panel";
 import { STATUS_NAME } from "@/lib/jobs/stages";
-import { SubRail, type SubIcon } from "@/components/v34/sub-rail";
 import { CallNotesPad, DraftQuoteButton } from "@/components/v34/call-notes-pad";
 import { ArchiveButton } from "@/components/v34/archive-actions";
 import { AddressInput } from "@/components/v34/address-input";
@@ -54,8 +54,9 @@ interface Item {
   has_transcript: boolean; has_recording: boolean; has_voicemail: boolean; notes: Array<{ id: string; body: string; created_at: string }>;
 }
 
-type Tab = "details" | "threads" | "jobs" | "documents" | "payments" | "files" | "schedule";
-const TABS: Array<[Tab, string]> = [["details", "Details"], ["threads", "Threads"], ["jobs", "Jobs"], ["documents", "Documents"], ["payments", "Payments"], ["files", "Files"], ["schedule", "Schedule"]];
+// Threads v2 handoff §4: Overview · Contacts · Jobs · Threads (the threads they're in) · Files, then
+// Timeline (every call and text, with call notes), Payments, Schedule. Documents is gone — Files is the one place (Coy, 2026-10-03).
+type Tab = "overview" | "contacts" | "jobs" | "threads" | "files" | "timeline" | "payments" | "schedule";
 const TYPE_LABEL: Record<string, string> = { residential: "Residential", commercial: "Commercial", public: "Government" };
 const lbl: React.CSSProperties = { fontFamily: disp, fontSize: 12, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase" };
 const panelTitle: React.CSSProperties = { fontFamily: light, fontWeight: 300, fontSize: 20, margin: 0, color: T.ink };
@@ -80,13 +81,17 @@ function btn(primary?: boolean): React.CSSProperties {
 
 export function CustomerPage({ customerId, focusContact }: { customerId: string; focusContact?: string | null }) {
   const router = useRouter();
+  const search = useSearchParams();
+  const fromThread = search.get("from") === "threads" && focusContact ? `/dashboard/messages/${focusContact}${search.get("t") ? `?t=${encodeURIComponent(search.get("t") as string)}` : ""}` : null;
   const [data, setData] = useState<Data | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
-  const [tab, setTab] = useState<Tab>(focusContact ? "threads" : "details");
+  const [tab, setTab] = useState<Tab>("overview");
   const [editing, setEditing] = useState(false);
   const [callNotes, setCallNotes] = useState(false);
+  const [more, setMore] = useState(false);
   const [note, setNote] = useState<{ text: string; undo?: string } | null>(null);
+  const [custom, setCustom] = useState<Array<{ id: string; name: string; contact_ids: string[]; count: number }>>([]);
   const [measure, wide] = useWide<HTMLDivElement>(1000);
   const reload = () => setTick((n) => n + 1);
 
@@ -97,22 +102,30 @@ export function CustomerPage({ customerId, focusContact }: { customerId: string;
       .catch((e) => { if (!off) setErr(e instanceof Error ? e.message : String(e)); });
     return () => { off = true; };
   }, [customerId, tick, router]);
+  // The threads Coy made (migration 073) — the chips say which of them hold these people.
+  useEffect(() => {
+    let off = false;
+    send("/api/threads/custom", "GET").then((b) => { if (!off) setCustom(b.threads ?? []); }).catch(() => {});
+    return () => { off = true; };
+  }, [tick]);
 
   if (err) return <div ref={measure} className="p-4" style={{ color: T.red, fontSize: F.sm }}>Couldn&apos;t load this customer: {err}</div>;
   if (!data) return <div ref={measure} className="p-4"><div className="rounded animate-pulse" style={{ height: 140, background: T.hairSoft }} /></div>;
 
   const { customer: cu, contacts, jobs } = data;
   const primary = contacts.find((c) => c.primary) ?? contacts[0];
-  const phone = firstPhone(primary);
-  const email = firstEmail(primary);
-  const meta = [cu.address_formatted,
-    cu.since ? `customer since ${new Date(cu.since).toLocaleDateString("en-US", { month: "short", year: "numeric" })}` : null].filter(Boolean).join(" · ");
-  // "1 contact" opens Details at the contacts; "1 job" opens Jobs (Coy, 2026-09-30).
-  const toContacts = () => {
-    setTab("details");
-    requestAnimationFrame(() => document.getElementById("sc-customer-contacts")?.scrollIntoView({ behavior: "smooth", block: "start" }));
-  };
-  const countLink: React.CSSProperties = { fontSize: F.sm, color: T.chalk, cursor: "pointer", background: "none", border: "none", padding: 0, textDecoration: "underline", textUnderlineOffset: 2, textDecorationColor: T.hairStrong };
+  const ids = new Set(contacts.map((c) => c.id));
+  const theirThreads = custom.filter((t) => t.contact_ids.some((id) => ids.has(id)));
+  const quoted = jobs.reduce((n, j) => n + (j.quote ?? 0), 0);
+  const meta = [
+    cu.customer_type ? TYPE_LABEL[cu.customer_type] ?? cu.customer_type : null,
+    cu.since ? `since ${new Date(cu.since).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : null,
+    `${contacts.length} contact${contacts.length === 1 ? "" : "s"}`,
+    `${jobs.length} job${jobs.length === 1 ? "" : "s"}`,
+    quoted ? `${money0(quoted)} quoted` : null,
+  ].filter(Boolean).join(" · ");
+  const tabs: Array<[Tab, string]> = [["overview", "Overview"], ["contacts", `Contacts ${contacts.length}`], ["jobs", `Jobs ${jobs.length}`], ["threads", `Threads ${theirThreads.length + 1}`],
+    ["files", "Files"], ["timeline", "Timeline"], ["payments", "Payments"], ["schedule", "Schedule"]];
 
   const newScope = async () => {
     try {
@@ -120,14 +133,7 @@ export function CustomerPage({ customerId, focusContact }: { customerId: string;
       router.push(`/dashboard/scope/${b.job.id}`);
     } catch (e) { setNote({ text: e instanceof Error ? e.message : String(e) }); }
   };
-
-  const panel = (
-    <>
-      <LocationCard cu={cu} maps={data.maps} heard={data.heard_address ?? null} onEdit={() => setEditing(true)} onSaved={reload} />
-      <Facts cu={cu} onEdit={() => setEditing(true)} />
-      <Contacts cu={cu} contacts={contacts} onChanged={reload} onNote={setNote} />
-    </>
-  );
+  const pill: React.CSSProperties = { ...btn(), height: 30 };
 
   return (
     <div ref={measure} style={{ minHeight: "calc(100dvh - var(--sc-head))", background: T.slab }}>
@@ -138,35 +144,35 @@ export function CustomerPage({ customerId, focusContact }: { customerId: string;
             className="rounded px-2.5" style={{ height: 28, border: `1px solid ${T.chalk}`, color: T.chalk, background: T.card, fontWeight: 600, cursor: "pointer" }}>Restore</button>
         </div>
       )}
-      {/* ---- header ---- */}
-      <div className="px-4 pt-3 pb-2" style={{ borderBottom: `1px solid ${T.hair}` }}>
-        <div className="flex items-start gap-3 flex-wrap">
-          <div style={{ flex: 1, minWidth: 220 }}>
-            {/* Coy, 2026-09-30: one row, smaller — "Customer | Maurice Watkins", then the counts. */}
-            <div className="flex items-baseline gap-2 flex-wrap">
-              <Link href="/dashboard/customers" style={{ ...eyebrow, color: T.ink3 }}>Customer</Link>
-              <span aria-hidden="true" style={{ color: T.hairStrong }}>|</span>
-              <h1 style={{ fontFamily: strong, fontWeight: 600, fontSize: 18, lineHeight: 1.2, margin: 0, color: T.ink }}>{cu.name || "Unnamed customer"}</h1>
-              <span className="flex items-baseline gap-2" style={{ marginLeft: 4 }}>
-                <button onClick={toContacts} style={countLink}>{contacts.length} contact{contacts.length === 1 ? "" : "s"}</button>
-                <span style={{ color: T.ink3 }}>·</span>
-                <button onClick={() => setTab("jobs")} style={countLink}>{jobs.length} job{jobs.length === 1 ? "" : "s"}</button>
-              </span>
-            </div>
-            {meta && <div style={{ fontSize: F.sm, color: T.ink2, marginTop: 2 }}>{meta}</div>}
+      {/* ---- header (Threads v2 handoff §4) ---- */}
+      <div className="px-4 pt-3" style={{ background: T.card, borderBottom: `1px solid ${T.hair}` }}>
+        <Link href={fromThread ?? "/dashboard/customers"} style={{ ...eyebrow, color: T.chalk }}>‹ {fromThread ? "Back to the thread" : "Customers"}</Link>
+        <div className="flex items-center gap-2 mt-0.5">
+          <div className="flex items-center gap-2 flex-1 min-w-0 flex-wrap">
+            <h1 style={{ fontFamily: strong, fontWeight: 700, fontSize: wide ? 24 : 20, lineHeight: 1.2, margin: 0, color: T.ink }}>{cu.name || "Unnamed customer"}</h1>
+            <RoleTag role="customer" />
           </div>
-          <div className="flex gap-1.5 flex-wrap items-center">
-            {phone ? <a href={`tel:${phone}`} style={btn()}>Call</a> : <span style={{ ...btn(), opacity: 0.45 }} title="No number on file">Call</span>}
-            <button onClick={() => setTab("threads")} style={btn()}>Text</button>
-            {email ? <a href={`mailto:${email}`} style={btn()}>Email</a> : <span style={{ ...btn(), opacity: 0.45 }} title="No email on file">Email</span>}
-            <button onClick={() => setCallNotes(true)} disabled={!primary} style={btn()} title="Notes while you're on the phone — they land on the call">Call notes</button>
-            <button onClick={() => setEditing(true)} style={btn()}>Edit</button>
-            <button onClick={() => void newScope()} disabled={!primary} style={btn(true)}>+ New scope</button>
-            <ArchiveButton kind="customer" id={cu.id} action="delete" what={cu.name || "this customer"} then="/dashboard/customers"
-              style={{ ...btn(), color: T.red, borderColor: T.red }}>Delete</ArchiveButton>
+          <div className="flex gap-1.5 items-center shrink-0">
+            {wide && <button onClick={() => setEditing(true)} style={pill}>Edit</button>}
+            {wide && <button onClick={() => void newScope()} disabled={!primary} style={{ ...btn(true), height: 30 }}>New job</button>}
+            {wide && <button onClick={() => window.dispatchEvent(new Event("sc:dusty-open"))} style={{ ...pill, border: `1px solid ${T.hiviz}`, color: T.hiviz }}>Ask Dusty</button>}
+            <div className="relative">
+              <button onClick={() => setMore((v) => !v)} aria-label="More" aria-expanded={more} style={{ ...pill, padding: "0 9px" }}>⋯</button>
+              {more && (
+                <div className="absolute right-0 z-20 flex flex-col rounded" style={{ top: 34, minWidth: 190, background: T.card, border: `1px solid ${T.hairStrong}`, boxShadow: "0 6px 18px rgba(0,0,0,.12)" }}>
+                  {!wide && <button onClick={() => { setMore(false); setEditing(true); }} className="px-3 py-2 text-left" style={{ fontSize: F.sm }}>Edit</button>}
+                  {!wide && <button onClick={() => { setMore(false); void newScope(); }} className="px-3 py-2 text-left" style={{ fontSize: F.sm }}>New job</button>}
+                  {!wide && <button onClick={() => { setMore(false); window.dispatchEvent(new Event("sc:dusty-open")); }} className="px-3 py-2 text-left" style={{ fontSize: F.sm }}>Ask Dusty</button>}
+                  <button onClick={() => { setMore(false); setCallNotes(true); }} disabled={!primary} className="px-3 py-2 text-left" style={{ fontSize: F.sm }}>Call notes</button>
+                  <ArchiveButton kind="customer" id={cu.id} action="delete" what={cu.name || "this customer"} then="/dashboard/customers"
+                    style={{ padding: "8px 12px", textAlign: "left", fontSize: F.sm, color: T.red, background: "transparent", border: "none" }}>Delete customer</ArchiveButton>
+                </div>
+              )}
+            </div>
           </div>
           {primary && <CallNotesPad contactId={primary.id} who={primary.name || cu.name || "this customer"} open={callNotes} onClose={() => { setCallNotes(false); setTick((n) => n + 1); }} />}
         </div>
+        <div style={{ fontSize: 11.5, color: T.ink3, marginTop: 2, ...nums }}>{meta}</div>
         {note && (
           <div className="mt-2 rounded px-3 py-1.5 flex items-center gap-2" style={{ background: T.hivizDim, fontSize: F.sm }}>
             <span className="flex-1">{note.text}</span>
@@ -175,40 +181,208 @@ export function CustomerPage({ customerId, focusContact }: { customerId: string;
             <button onClick={() => setNote(null)} aria-label="Dismiss" style={{ color: T.ink3, cursor: "pointer" }}>×</button>
           </div>
         )}
-        {!wide && <div role="tablist" className="flex gap-4 mt-3 overflow-x-auto" style={{ marginBottom: -9 }}>
-          {TABS.map(([k, l]) => (
+        <div role="tablist" className="flex gap-4 mt-2 overflow-x-auto">
+          {tabs.map(([k, l]) => (
             <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)}
-              style={{ ...lbl, fontSize: 13, padding: "6px 0", whiteSpace: "nowrap", cursor: "pointer", color: tab === k ? T.ink : T.ink3,
-                       borderBottom: `2px solid ${tab === k ? T.hiviz : "transparent"}` }}>{l}</button>
+              style={{ fontFamily: disp, fontSize: 12, letterSpacing: ".1em", textTransform: "uppercase", padding: "6px 0 7px", whiteSpace: "nowrap", cursor: "pointer",
+                color: tab === k ? T.ink : T.ink3, borderBottom: `2px solid ${tab === k ? T.hiviz : "transparent"}` }}>{l}</button>
           ))}
-        </div>}
+        </div>
       </div>
 
-      <div className={wide ? "flex items-start" : ""}>
-        {/* Desktop: the sub-pages as a second rail beside the main one (Coy, 2026-09-30). */}
-        {wide && <SubRail label="Customer pages" value={tab} onChange={setTab}
-          items={TABS.map(([k, l]) => ({ k, label: l, icon: k as SubIcon }))} />}
-        <div style={{ flex: 1, minWidth: 0 }}>
-          {!wide && tab === "details" && <div style={{ borderBottom: `1px solid ${T.hair}` }}>{panel}</div>}
-          {tab === "details" && <Details cu={cu} contacts={contacts} jobs={jobs} onThreads={() => setTab("threads")} />}
-          {tab === "threads" && <Threads customerId={customerId} contacts={contacts} focusContact={focusContact ?? null} wide={wide} />}
-          {tab === "jobs" && <JobsTab jobs={jobs} onNew={() => void newScope()} />}
-          {tab === "documents" && <DocsTab customerId={customerId} />}
-          {tab === "payments" && <Payments jobs={jobs} />}
-          {tab === "files" && (primary
-            ? <div className="p-4"><FilesPanel contactId={primary.id} title={`Files · filed on ${primary.name ?? "the primary contact"}`} /></div>
-            : <Empty text="No contact to file uploads under yet." />)}
-          {tab === "schedule" && <Schedule jobs={jobs} />}
+      {tab === "overview" && (
+        <div className="grid" style={{ gridTemplateColumns: wide ? "minmax(0,1fr) 400px" : "minmax(0,1fr)", gap: 14, padding: "14px 16px" }}>
+          {!wide && <OverviewSide cu={cu} data={data} contacts={contacts} onEdit={() => setEditing(true)} onSaved={reload} compact />}
+          <div className="flex flex-col gap-4" style={{ minWidth: 0 }}>
+            <section>
+              <div className="flex items-center mb-1.5"><span style={{ ...eyebrow, flex: 1 }}>Contacts on this customer</span>
+                <button onClick={() => setTab("contacts")} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>+ Add contact</button></div>
+              <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))" }}>
+                {contacts.map((c) => <ContactCard key={c.id} c={c} compact={!wide} />)}
+                {!contacts.length && <Empty text="No contacts on this customer." />}
+              </div>
+            </section>
+            <section>
+              <div style={{ ...eyebrow, marginBottom: 6 }}>Jobs</div>
+              <div className="flex flex-col gap-2">
+                {jobs.map((j) => (
+                  <Link key={j.id} href={`/dashboard/scope/${j.id}`} className="flex items-center gap-3 rounded" style={{ background: T.card, border: `1px solid ${T.hair}`, padding: "10px 12px", color: T.ink }}>
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      <span style={{ display: "block", fontFamily: strong, fontSize: 13.5, fontWeight: 600, ...clip }}>{j.title || "Untitled job"}</span>
+                      <span style={{ display: "block", fontSize: 11.5, color: T.ink3, ...clip }}>{[j.status ? STATUS_NAME[j.status] ?? j.status : null, j.address].filter(Boolean).join(" · ")}</span>
+                    </span>
+                    <span style={{ fontFamily: disp, fontSize: 16, fontWeight: 600, ...nums }}>{j.quote != null ? money0(j.quote) : <span style={{ fontSize: 12, color: T.ink3 }}>no price yet</span>}</span>
+                  </Link>
+                ))}
+                {!jobs.length && <button onClick={() => void newScope()} className="rounded text-left" style={{ padding: "10px 12px", border: `1px dashed ${T.hairStrong}`, color: T.hivizText, fontSize: F.sm, cursor: "pointer" }}>No jobs yet — start one</button>}
+              </div>
+            </section>
+            <section>
+              <div style={{ ...eyebrow, marginBottom: 6 }}>Threads these contacts are in</div>
+              <ThreadChips threads={theirThreads} contacts={contacts} />
+            </section>
+          </div>
+          {wide && <OverviewSide cu={cu} data={data} contacts={contacts} onEdit={() => setEditing(true)} onSaved={reload} />}
         </div>
-        {wide && (
-          <aside className="overflow-y-auto" style={{ width: 440, flexShrink: 0, borderLeft: `1px solid ${T.hair}`, background: T.card,
-            position: "sticky", top: "var(--sc-head)", maxHeight: "calc(100dvh - var(--sc-head))" }}>
-            {panel}
-          </aside>
-        )}
-      </div>
+      )}
+      {tab === "contacts" && (
+        <div className={wide ? "grid" : ""} style={wide ? { gridTemplateColumns: "minmax(0,1fr) 400px", gap: 14, padding: "14px 16px" } : undefined}>
+          <div style={{ background: T.card, border: wide ? `1px solid ${T.hair}` : "none", borderRadius: 4 }}><Contacts cu={cu} contacts={contacts} onChanged={reload} onNote={setNote} /></div>
+          <div style={{ background: T.card, border: wide ? `1px solid ${T.hair}` : "none", borderRadius: 4 }}><Facts cu={cu} onEdit={() => setEditing(true)} /></div>
+        </div>
+      )}
+      {tab === "jobs" && <JobsTab jobs={jobs} onNew={() => void newScope()} />}
+      {tab === "threads" && <div className="p-4"><ThreadChips threads={theirThreads} contacts={contacts} big /></div>}
+      {tab === "files" && <FilesTab customerId={customerId} primaryId={primary?.id ?? null} primaryName={primary?.name ?? null} />}
+      {tab === "timeline" && <Threads customerId={customerId} contacts={contacts} focusContact={focusContact ?? null} wide={wide} />}
+      {tab === "payments" && <Payments jobs={jobs} />}
+      {tab === "schedule" && <Schedule jobs={jobs} />}
 
       <EditSheet open={editing} cu={cu} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); reload(); }} />
+    </div>
+  );
+}
+
+/** The right column: the map and address, then the latest from every contact on every channel. */
+function OverviewSide({ cu, data, contacts, onEdit, onSaved, compact }: { cu: Customer; data: Data; contacts: Contact[]; onEdit: () => void; onSaved: () => void; compact?: boolean }) {
+  const [latest, setLatest] = useState<Item[] | null>(null);
+  useEffect(() => {
+    if (compact) return;
+    let off = false;
+    send(`/api/customers/${cu.id}/timeline?limit=20`, "GET").then((b) => { if (!off) setLatest((b.items as Item[]).slice(-4).reverse()); }).catch(() => { if (!off) setLatest([]); });
+    return () => { off = true; };
+  }, [cu.id, compact]);
+  const who = new Map(contacts.map((c) => [c.id, c]));
+  return (
+    <div className="flex flex-col gap-3" style={{ minWidth: 0 }}>
+      <div className="rounded overflow-hidden" style={{ background: T.card, border: `1px solid ${T.hair}` }}>
+        <LocationCard cu={cu} maps={data.maps} heard={data.heard_address ?? null} onEdit={onEdit} onSaved={onSaved} />
+      </div>
+      {!compact && (
+        <div>
+          <div style={{ ...eyebrow, marginBottom: 6 }}>Recent, across every contact and channel</div>
+          <div className="flex flex-col gap-2">
+            {latest === null && <div style={{ fontSize: F.sm, color: T.ink3 }}>…</div>}
+            {latest?.length === 0 && <div style={{ fontSize: F.sm, color: T.ink3 }}>Nothing yet.</div>}
+            {latest?.map((m) => {
+              const c = who.get(m.contact_id);
+              const num = c?.methods.find((x) => x.kind !== "email")?.value ?? null;
+              return (
+                <Link key={m.id} href={`/dashboard/messages/${m.contact_id}?t=customers`} className="block rounded" style={{ background: T.card, border: `1px solid ${T.hair}`, padding: "8px 10px", color: T.ink }}>
+                  <div className="flex items-baseline gap-2">
+                    <span style={{ fontFamily: disp, fontSize: 11, fontWeight: 700, letterSpacing: ".12em", textTransform: "uppercase" }}>{m.channel === "call" ? (m.has_voicemail ? "Voicemail" : "Call") : m.media_count && !m.body ? "Photo" : "Text"} · {m.direction}</span>
+                    <span style={{ fontSize: 11, color: T.ink3, flex: 1, ...clip }}>{[c?.name, num ? formatPhone(num) : null].filter(Boolean).join(" · ")}</span>
+                    <span style={{ fontSize: 11, color: T.ink3, ...nums }}>{new Date(m.at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
+                  </div>
+                  <div style={{ fontSize: 12.5, color: T.ink2, marginTop: 2, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                    {m.channel === "call" ? m.summary ?? `${m.direction === "out" ? "Outbound" : "Inbound"} call ${dur(m.duration_s)}` : m.body ?? (m.media_count ? "Photo" : "")}
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const METHOD_LABEL: Record<Method["kind"], string> = { mobile: "Mobile", office: "Work", home: "Home", phone: "Phone", email: "Email" };
+
+/** A person on the customer: who, their role, ★ Primary, a line per number and email, and into Threads. */
+function ContactCard({ c, compact }: { c: Contact; compact?: boolean }) {
+  const phones = c.methods.filter((m) => m.kind !== "email").length;
+  const sub = [c.role, phones > 1 ? `${phones} numbers` : null, c.methods.some((m) => m.kind === "email") ? "email" : null].filter(Boolean).join(" · ");
+  return (
+    <div className="rounded" style={{ background: T.card, border: `1px solid ${T.hair}`, padding: compact ? "8px 10px" : "10px 12px" }}>
+      <div className="flex items-center gap-2.5">
+        <InitialsBox name={c.name} size={compact ? 34 : 28} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="flex items-center gap-1.5">
+            <span style={{ fontFamily: strong, fontSize: 13.5, fontWeight: 600, ...clip }}>{c.name || formatPhone(firstPhone(c))}</span>
+            {c.primary && <span className="rounded" style={{ fontFamily: disp, fontSize: 9.5, letterSpacing: ".08em", textTransform: "uppercase", padding: "0 4px", border: `1px solid ${T.hiviz}`, color: T.hiviz }}>Primary</span>}
+          </div>
+          {sub && <div style={{ fontSize: 11, color: T.ink3, ...clip }}>{sub}</div>}
+        </div>
+        {compact && <Link href={`/dashboard/messages/${c.id}?t=customers`} style={{ ...eyebrow, color: T.chalk }}>Threads ›</Link>}
+      </div>
+      {!compact && (
+        <>
+          <div className="mt-1.5 flex flex-col gap-0.5">
+            {c.methods.map((m) => (
+              <div key={m.kind + m.value} className="flex items-baseline gap-2" style={{ fontSize: 12.5 }}>
+                <span style={{ ...eyebrow, fontSize: 9.5, width: 52, color: T.ink3 }}>{METHOD_LABEL[m.kind]}</span>
+                {m.kind === "email" ? <a href={`mailto:${m.value}`} style={{ color: T.ink, ...clip }}>{m.value}</a> : <a href={`tel:${m.value}`} style={{ color: T.ink, ...nums }}>{formatPhone(m.value)}</a>}
+              </div>
+            ))}
+            {!c.methods.length && <div style={{ fontSize: 12, color: T.ink3 }}>No number or email on file.</div>}
+          </div>
+          <Link href={`/dashboard/messages/${c.id}?t=customers`} className="inline-block mt-1.5" style={{ ...eyebrow, color: T.chalk }}>Open in Threads ›</Link>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** The threads these people are in: their bucket (Customer) and each thread Coy made that holds one of them. */
+function ThreadChips({ threads, contacts, big }: { threads: Array<{ id: string; name: string; count: number }>; contacts: Contact[]; big?: boolean }) {
+  const first = contacts[0]?.id;
+  const chip = (c: string): React.CSSProperties => ({ height: big ? 34 : 28, padding: "0 10px", display: "inline-flex", alignItems: "center", gap: 6, borderRadius: 3,
+    border: `1px solid ${c}`, color: c, fontFamily: disp, fontSize: 12, letterSpacing: ".06em", textTransform: "uppercase", textDecoration: "none" });
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      <Link href={first ? `/dashboard/messages/${first}?t=customers` : "/dashboard/messages?t=customers"} style={chip(BUCKET.customer)}>Customer</Link>
+      {threads.map((t) => (
+        <Link key={t.id} href={`/dashboard/messages?t=${t.id}`} style={chip(T.hiviz)}>{t.name} <span style={nums}>{t.count}</span></Link>
+      ))}
+      {big && !threads.length && <span style={{ fontSize: F.sm, color: T.ink3, alignSelf: "center" }}>Not in any thread you made. In Threads, + New makes one from this customer or one of its jobs.</span>}
+    </div>
+  );
+}
+
+/** Files (Coy, 2026-10-03: one place — Documents is gone): everything on their people and jobs, filtered, and Add files. */
+function FilesTab({ customerId, primaryId, primaryName }: { customerId: string; primaryId: string | null; primaryName: string | null }) {
+  const [files, setFiles] = useState<Array<{ id: string; name: string; category: string | null; created_at: string; summary: string | null; kind: string }> | null>(null);
+  const [kind, setKind] = useState<"all" | "photo" | "pdf" | "other">("all");
+  const [adding, setAdding] = useState(false);
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    let off = false;
+    send(`/api/documents?customer=${customerId}`, "GET").then((b) => { if (!off) setFiles(b.files ?? []); }).catch(() => { if (!off) setFiles([]); });
+    return () => { off = true; };
+  }, [customerId, tick]);
+  const of = (f: { kind: string }) => (f.kind === "image" || f.kind === "photo" ? "photo" : f.kind === "pdf" ? "pdf" : "other");
+  const shown = (files ?? []).filter((f) => kind === "all" || of(f) === kind);
+  const count = (k: typeof kind) => (files ?? []).filter((f) => k === "all" || of(f) === k).length;
+  return (
+    <div className="p-4 flex flex-col gap-3">
+      <div className="flex items-center gap-1.5 flex-wrap">
+        {(["all", "photo", "pdf", "other"] as const).map((k) => (
+          <button key={k} onClick={() => setKind(k)} className="rounded px-2.5" style={{ height: 28, border: `1px solid ${kind === k ? T.ink : T.hairStrong}`, background: kind === k ? T.ink : T.card, color: kind === k ? T.card : T.ink2,
+            fontFamily: disp, fontSize: 11.5, letterSpacing: ".06em", textTransform: "uppercase", cursor: "pointer" }}>
+            {k === "all" ? "All" : k === "photo" ? "Photos" : k === "pdf" ? "PDFs" : "Other"} <span style={nums}>{count(k)}</span>
+          </button>
+        ))}
+        <span className="flex-1" />
+        {primaryId && <button onClick={() => setAdding(true)} style={btn(true)}>+ Add files</button>}
+      </div>
+      {files === null ? <Empty text="…" /> : !shown.length ? <Empty text={files.length ? "Nothing of that kind." : "No files on this customer's people or jobs yet."} /> : (
+        <div className="rounded" style={{ background: T.card, border: `1px solid ${T.hair}` }}>
+          {shown.map((f, i) => (
+            <Link key={f.id} href={`/dashboard/documents?file=${f.id}`} className="flex gap-3 px-3 py-2" style={{ borderTop: i ? `1px solid ${T.hairSoft}` : "none", color: T.ink }}>
+              <span style={{ ...lbl, fontSize: 10, width: 40, color: f.kind === "pdf" ? T.red : T.ink3 }}>{f.kind === "pdf" ? "PDF" : f.kind}</span>
+              <span style={{ flex: 1, minWidth: 0 }}><span style={{ display: "block", fontSize: F.sm, fontWeight: 600, ...clip }}>{f.name}</span>
+                {f.summary && <span style={{ display: "block", fontSize: F.xs, color: T.ink3, ...clip }}>{f.summary}</span>}</span>
+              <span style={{ fontSize: F.xs, color: T.ink3 }}>{relTime(f.created_at)}</span>
+            </Link>
+          ))}
+        </div>
+      )}
+      {adding && primaryId && (
+        <Sheet open onClose={() => { setAdding(false); setTick((n) => n + 1); }} title="Add files" sub={`Filed on ${primaryName ?? "the primary contact"}; Dusty reads them in the background.`}>
+          <div className="p-4"><FilesPanel contactId={primaryId} title="Files" /></div>
+        </Sheet>
+      )}
     </div>
   );
 }
@@ -493,46 +667,6 @@ function EditSheet({ open, cu, onClose, onSaved }: { open: boolean; cu: Customer
 
 /* ------------------------------------------------------------------ tabs */
 
-function Details({ cu, contacts, jobs, onThreads }: { cu: Customer; contacts: Contact[]; jobs: Job[]; onThreads: () => void }) {
-  const [latest, setLatest] = useState<Item[] | null>(null);
-  useEffect(() => {
-    let off = false;
-    send(`/api/customers/${cu.id}/timeline?limit=20`, "GET").then((b) => { if (!off) setLatest((b.items as Item[]).slice(-4).reverse()); }).catch(() => { if (!off) setLatest([]); });
-    return () => { off = true; };
-  }, [cu.id]);
-  const summaries = contacts.map((c) => c.recent_summary ?? c.status_summary).filter(Boolean) as string[];
-  const name = new Map(contacts.map((c) => [c.id, c.name ?? formatPhone(firstPhone(c))]));
-  return (
-    <div className="p-4 flex flex-col gap-4">
-      {summaries.length > 0
-        ? <div className="rounded" style={{ background: T.dustyTint, borderLeft: `3px solid ${T.dustyEdge}`, padding: "10px 14px", fontFamily: light, fontWeight: 300, fontSize: 15, lineHeight: 1.65, letterSpacing: ".005em", color: T.ink }}>
-            {summaries.slice(0, 2).join(" ")}
-          </div>
-        : <div style={{ fontSize: F.sm, color: T.ink3 }}>Dusty hasn&apos;t read this customer&apos;s conversations yet.</div>}
-      <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))" }}>
-        {jobs.length === 0 && <span style={{ fontSize: F.sm, color: T.ink3 }}>No jobs yet — + New scope starts one.</span>}
-        {jobs.map((j) => <JobCard key={j.id} j={j} />)}
-      </div>
-      <div>
-        <div className="flex items-center"><span style={{ ...lbl, flex: 1, color: T.ink2 }}>Latest across calls, texts and email</span>
-          <button onClick={onThreads} style={{ ...lbl, fontSize: 11, color: T.chalk, cursor: "pointer" }}>All threads ›</button></div>
-        <div className="mt-1.5 rounded" style={{ border: `1px solid ${T.hair}`, background: T.card }}>
-          {latest === null && <div className="p-3" style={{ fontSize: F.sm, color: T.ink3 }}>…</div>}
-          {latest?.length === 0 && <div className="p-3" style={{ fontSize: F.sm, color: T.ink3 }}>Nothing yet.</div>}
-          {latest?.map((m, i) => (
-            <div key={m.id} className="flex gap-2 px-3 py-2" style={{ borderTop: i ? `1px solid ${T.hairSoft}` : "none", fontSize: F.sm }}>
-              <span style={{ ...lbl, fontSize: 10, width: 44, color: m.channel === "call" ? T.chalk : T.green }}>{m.channel === "call" ? "Call" : "Text"}</span>
-              <span style={{ flex: 1, minWidth: 0, ...clip, color: T.ink }}>
-                <b style={{ fontWeight: 600 }}>{m.direction === "out" ? "You" : name.get(m.contact_id) ?? "Them"}</b> · {m.channel === "call" ? (m.summary ?? `${m.direction === "out" ? "Outbound" : "Inbound"} call ${dur(m.duration_s)}`) : (m.body ?? (m.media_count ? "Photo" : ""))}
-              </span>
-              <span style={{ fontSize: F.xs, color: T.ink3, ...nums }}>{relTime(m.at)}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function JobCard({ j }: { j: Job }) {
   const won = ["won", "scheduled", "in_progress", "complete", "closed"].includes(j.status ?? "");
@@ -566,28 +700,6 @@ function JobsTab({ jobs, onNew }: { jobs: Job[]; onNew: () => void }) {
   );
 }
 
-function DocsTab({ customerId }: { customerId: string }) {
-  const [files, setFiles] = useState<Array<{ id: string; name: string; category: string | null; created_at: string; summary: string | null; kind: string }> | null>(null);
-  useEffect(() => {
-    let off = false;
-    send(`/api/documents?customer=${customerId}`, "GET").then((b) => { if (!off) setFiles(b.files); }).catch(() => { if (!off) setFiles([]); });
-    return () => { off = true; };
-  }, [customerId]);
-  if (files === null) return <Empty text="…" />;
-  if (!files.length) return <Empty text="No documents on this customer's people or jobs yet." />;
-  return (
-    <div className="p-4 flex flex-col">
-      {files.map((f, i) => (
-        <Link key={f.id} href={`/dashboard/documents?file=${f.id}`} className="flex gap-3 py-2" style={{ borderTop: i ? `1px solid ${T.hairSoft}` : "none", color: T.ink }}>
-          <span style={{ ...lbl, fontSize: 10, width: 40, color: f.kind === "pdf" ? T.red : T.ink3 }}>{f.kind === "pdf" ? "PDF" : f.kind}</span>
-          <span style={{ flex: 1, minWidth: 0 }}><span style={{ display: "block", fontSize: F.sm, fontWeight: 600, ...clip }}>{f.name}</span>
-            {f.summary && <span style={{ display: "block", fontSize: F.xs, color: T.ink3, ...clip }}>{f.summary}</span>}</span>
-          <span style={{ fontSize: F.xs, color: T.ink3 }}>{relTime(f.created_at)}</span>
-        </Link>
-      ))}
-    </div>
-  );
-}
 
 function Payments({ jobs }: { jobs: Job[] }) {
   const rows = jobs.filter((j) => j.paid || j.invoiced);

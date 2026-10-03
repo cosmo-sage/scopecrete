@@ -4,7 +4,7 @@ Ground truth for every agent working this repo. If code disagrees with this
 document, the code is wrong or this document is stale — resolve it, don't
 guess. Update this file in the same PR that changes the behavior it describes.
 
-Last updated: 2026-10-03 (an address given is kept and asked about — migration 072; Dusty sets addresses; customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
+Last updated: 2026-10-03 (Threads v2 — threads you make, channels per number, the customer page reshaped — migration 073; an address given is kept and asked about — migration 072; Dusty sets addresses; customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
 
 ---
 
@@ -1566,6 +1566,58 @@ expected start date per quoted job before it means anything. Add the field.
 ## 6. Interface rules
 
 - ScopeCrete header is sticky on every page.
+- **Threads v2 — contacts → threads → channels (migration 073, applied
+  2026-10-03 on Coy's "Apply 073"; Claude Design handoff
+  `design_handoff_threads_v2`).** A **thread** is a saved set of contacts;
+  the five role buckets are the system threads (worked out from
+  `contact_type`, never stored), and Coy makes his own (`threads`,
+  `thread_contacts`, RLS by `get_user_org_ids()`, anon nothing; retired with
+  `archived_at`). **+ New thread**: a name, then pull its people from **a
+  job** (its contact, its customer's people, its crew & suppliers —
+  `sc_job_people()`), **a customer** (its people), or **hand-picked**; a job
+  or customer thread **follows them** — anyone added later joins
+  (`added_by` job-sync / customer-sync, triggers on `job_vendors`, `jobs`,
+  `contacts`, `threads`); it never takes anyone out. Being in a thread never
+  moves anyone out of Customer or Vendor. APIs `/api/threads/custom`
+  (GET; `?job=` / `?customer=` previews who it starts with; POST),
+  `…/custom/[id]` (rename, retire), `…/custom/[id]/contacts` (add, take one
+  out); `/api/threads?thread=<id>` lists its members, including people with
+  no calls or texts yet; `/api/threads/counts` adds `custom`. Rehearsed
+  (rolled back): a job thread filled from its job, a supplier put on the job
+  joined it, a stranger sees none, anon refused.
+  **Level 1** — a 72px rail on a desktop (Customer · Unsorted · Vendor ·
+  Personal · Spam, a rule, **Yours** with initials and counts, **+ New**);
+  a drawer behind ☰ on a phone (the bucket chips are gone). `?t=` picks the
+  thread (`?f=` still works); `threads-ctx.tsx` holds it, the threads Coy
+  made and the counts. **Level 2** — the thread's name in its colour, its
+  count, **Sort ▾** (Recent → A–Z → By role, remembered per thread on the
+  device), a job thread's job line and **+ Add contact** (a floating + on a
+  phone). Rows: initials (a dashed # for no name), name, **role tag**
+  (Customer · Cust. contact — anyone on a customer other than its primary —
+  · Vendor · Sub · Personal · Spam · Unsorted; not repeated in its own
+  bucket), age; "Homeowner · 2 numbers · email"; Dusty's line or the last
+  message. A tap opens them; **▾** (only while something about who they are
+  is undecided) drops down the filing tools as before; swipe, Select and
+  Archive are unchanged. **Opening a contact folds the list to 56px of
+  initials** (› brings it back; another thread un-folds it).
+  **Level 3** — every contact opens here, customers included (no more jump
+  to the customer page): name and role, **Customer page ›** / **Vendor page
+  ›** / **Contact ›** (their own page, `?person=1`: next steps, jobs, About),
+  **Ask Dusty**, ⋯ (File as, Same person as, New scope / the job, Archive);
+  "Homeowner · 2 numbers · email · in Example Driveway Repair · last heard 2h
+  ago"; then the **channels** — **each phone number its own**, calls,
+  voicemails and texts on it in one timeline (`messages.counterparty`
+  decides; `buildChannels()` / `inChannel()`, `src/lib/v34/threads.ts`,
+  tested), then **Email** (the mirrored emails filed on them) and **Chat**
+  (not built — "Not joined · invite"). **All · Calls · Texts** filter a phone
+  channel; **Call** dials that number; the composer texts or emails it.
+  **Search** (the glass) is a panel at the right (the whole screen on a
+  phone): words, by **this number · the person · the whole thread**, with
+  type chips and counts — Messages, Photos, Files, Links, Calls, Voicemail
+  (`messageType()`, from `message_media.kind`) — `/api/threads/search`;
+  a result opens its channel at the message.
+  Not built: Dusty reading a whole custom thread (his context is still one
+  contact), and "Jump to date".
 - **Threads on a desktop (2026-10-01, Coy):** the five buckets are a second
   icon rail beside the main one (`SubRail`, with counts), **Customer**
   first and the default; the list follows `?f=` and says its bucket.
@@ -1800,6 +1852,24 @@ expected start date per quoted job before it means anything. Add the field.
   Night Shift), SVG icons draw in `currentColor`. The rail, paper header,
   wordmark (`--sc-hatch`, `--sc-guide`, `--sc-crete`) and chat bubbles
   (`T.sunk` / `T.outBg`) follow the theme.
+- **The customer page, reshaped (Threads v2 handoff §4, 2026-10-03).** "‹
+  Back to the thread" when opened from Threads (else "‹ Customers"); name
+  and role tag; **Edit · New job · Ask Dusty** (Call notes and Delete under
+  ⋯); "Residential · since Sep 22 · 2 contacts · 1 job · $11,240 quoted".
+  Tabs **Overview · Contacts · Jobs · Threads · Files**, then **Timeline**
+  (the merged calls and texts with call notes, as before), **Payments**,
+  **Schedule**. **Documents is gone** — Coy: *"documents and files are
+  redundantly copying the same things over in each spot … a 'files' tab is
+  the best one to keep"*; Files lists everything on the customer's people
+  and jobs with All · Photos · PDFs · Other and **+ Add files** (a fuller
+  filter system for files is to come). Overview: contact cards (initials,
+  Primary, a line per number and email, **Open in Threads ›**), the jobs with
+  their price, **Threads these contacts are in** (their bucket and every
+  thread Coy made that holds one of them), and on the right the location and
+  **Recent, across every contact and channel**. On a phone: the map, then
+  contacts as rows with Threads ›, jobs, the thread chips. The second icon
+  rail for the tabs is gone; one row of tabs on every size. What follows
+  below about the old tabs is history.
 - **The customer page (2026-09-30, migration 055)** —
   `/dashboard/customers/[customerId]` (`src/components/v34/customer-page.tsx`)
   and the **Customers list** `/dashboard/customers` (one row per customer,

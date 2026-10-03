@@ -9,7 +9,7 @@
  *
  * A section takes one or more shapes (takeoff_measurements.section_id); its
  * size is their sum, in the unit of the first shape's group:
- *   area   → sqft_override = Σ SF       (and the groups' depth, when they agree)
+ *   area   → sqft_override = Σ SF       (and the groups' depth, when they agree, into a blank thickness)
  *   linear → count_qty = Σ LF, count_unit 'LF'
  *   count  → count_qty = Σ EA, count_unit 'EA'
  * A shape that can't be counted (its sheet has no scale) leaves the size blank
@@ -75,7 +75,8 @@ export function sectionPatch(s: SectionLink, t: SectionTakeoff, touched: boolean
     if (!touched) return null;
     want = { sqft_override: null, count_qty: null, count_unit: null };
   } else if (t.unit === "SF") {
-    want = { sqft_override: t.total, count_qty: null, count_unit: null, length_ft: null, width_ft: null, ...(t.depth_in !== null ? { depth_in: t.depth_in } : {}) };
+    // The groups' depth fills a blank thickness; one typed on the section is Coy's and stays.
+    want = { sqft_override: t.total, count_qty: null, count_unit: null, length_ft: null, width_ft: null, ...(t.depth_in !== null && s.depth_in === null ? { depth_in: t.depth_in } : {}) };
   } else if (t.unit === "LF") {
     want = { count_qty: t.total, count_unit: "LF", sqft_override: null, length_ft: null };
   } else {

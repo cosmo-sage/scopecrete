@@ -58,3 +58,9 @@ test("a first guess at the kind of area from the group's name", () => {
   assert.equal(workTypeFor("Curb & gutter", "linear"), "curb");
   assert.equal(workTypeFor("Thing", "count"), "other");
 });
+
+test("a thickness typed on the section stays; the group's depth only fills a blank one", () => {
+  const t = sectionTakeoff("S1", shapes, params, sheets);
+  assert.deepEqual(sectionPatch(link({ sqft_override: 900, depth_in: 5 }), t, false), null, "5 in typed — nothing to change");
+  assert.equal(sectionPatch(link({ depth_in: 5 }), t, false).depth_in, undefined);
+});

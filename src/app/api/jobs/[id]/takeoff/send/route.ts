@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
 import { WORK_TYPES } from "../../sections/fields";
 import { syncTakeoffSections } from "@/lib/takeoff-sections-server";
+import { loadAssembly } from "@/lib/budget-server";
 import { workTypeFor } from "@/lib/takeoff-sections";
 import type { TakeoffKind } from "@/lib/takeoff";
 
@@ -16,7 +17,8 @@ import type { TakeoffKind } from "@/lib/takeoff";
  *   one  — one section for all of them (named `name`, else the group's)
  *   into — added to an existing section of this job
  * Each section follows its shapes (size written by syncTakeoffSections). A shape
- * already in a section moves. Nothing is priced here — cost items are added to
+ * already in a section moves. A new section fills from Coy's auto-loading
+ * assembly for that kind of area, as one added by hand does. Nothing is priced here — cost items are added to
  * the sections after, as ever.
  *
  * Session client; every id checked against the job.
@@ -95,5 +97,14 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     return bad(e instanceof Error ? e.message : String(e), 500);
   }
   await syncTakeoffSections(supabase, orgId, id, [...was, ...made]);
+  if (made.length) {
+    const [{ data: job }, { data: secs }] = await Promise.all([
+      supabase.from("jobs").select("job_type").eq("org_id", orgId).eq("id", id).maybeSingle(),
+      supabase.from("job_sections").select("id, work_type").eq("org_id", orgId).eq("job_id", id).in("id", made),
+    ]);
+    for (const s of (secs ?? []) as Array<{ id: string; work_type: string | null }>) {
+      await loadAssembly(supabase, orgId, id, s.id, { auto: true, jobType: (job?.job_type as string | null) ?? null, workType: s.work_type });
+    }
+  }
   return applyCookies(NextResponse.json({ ok: true, sections: made }));
 }

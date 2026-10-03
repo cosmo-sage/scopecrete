@@ -2277,7 +2277,11 @@ expected start date per quoted job before it means anything. Add the field.
   the job's photos of that area or takes new ones; they show under the
   shape's section and on the proposal. Checked in the harness: Send made one
   section per shape, a dragged corner saved the moved point (800 → 1,148 SF),
-  a ticked photo was filed on the shape. Rehearsed (rolled back) before
+  a ticked photo was filed on the shape. **Checked again (2026-10-03):** a
+  section made by Send now fills from Coy's auto-loading assembly for that kind
+  of area, like one added by hand (it didn't); and a group's depth only fills a
+  blank thickness — one typed on the section stays (a re-measure used to write
+  the group's over it). Rehearsed (rolled back) before
   applying: a shape or photo on another job's section refused, the following
   on by default, a stranger sees nothing.
   **A colour per takeoff (migration 070, applied 2026-10-03 on Coy's "Apply

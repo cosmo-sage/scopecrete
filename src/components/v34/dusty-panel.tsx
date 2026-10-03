@@ -39,21 +39,22 @@ interface Conv { id: string; title: string; context_kind: string; context_id: st
 export function refFor(pathname: string): Ref {
   const m = pathname.match(/^\/dashboard\/(messages|scope|customers)\/([^/?#]+)/);
   if (m) return { kind: m[1] === "messages" ? "thread" : m[1] === "scope" ? "scope" : "customer", id: m[2] };
-  if (pathname.startsWith("/dashboard/cash")) return { kind: "cash" };
+  // The Price book shares the "cash" context (money settings + the Price book and its assemblies).
+  if (pathname.startsWith("/dashboard/cash") || pathname.startsWith("/dashboard/price-book")) return { kind: "cash" };
   return { kind: "cold" };
 }
 
 const GUESS: Record<Ref["kind"], string> = {
-  thread: "this person", scope: "this job", customer: "this customer", cash: "your cost settings", cold: "your business",
+  thread: "this person", scope: "this job", customer: "this customer", cash: "your Price book and money", cold: "your business",
 };
 const PAGE: Record<Ref["kind"], string> = {
-  thread: "this person", scope: "this job", customer: "this customer", cash: "cost settings", cold: "",
+  thread: "this person", scope: "this job", customer: "this customer", cash: "Price book & money", cold: "",
 };
 const STARTERS: Record<Ref["kind"], string[]> = {
   thread: ["What does this person want?", "What do I owe them?", "Draft a reply I can send"],
   scope: ["Check these numbers", "What's stopping a price?", "What should I still ask them?"],
   customer: ["Summarise who this is", "What's open with them?"],
-  cash: ["What is my monthly burn?", "How long is my runway?"],
+  cash: ["Build me a driveway breakout & pourback assembly", "Which items have no price?", "What is my monthly burn?"],
   cold: ["What's waiting on me today?", "Price a 24×30 driveway", "Who haven't I called back?"],
 };
 

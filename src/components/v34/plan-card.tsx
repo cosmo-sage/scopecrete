@@ -3,12 +3,13 @@
  * A plan under one of Dusty's answers (src/lib/dusty/plan.ts): the steps in plain
  * words, and Apply — Coy's tap, run through the ordinary APIs
  * (src/lib/dusty/apply-plan.ts). Dusty changes nothing himself. Budget steps need
- * the job open; archive / delete / restore steps (migration 066) don't, and list
+ * the job open; Price book and assembly steps and archive / delete / restore
+ * steps (migration 066) don't — the last list
  * the real names they touch, read from the database — not Dusty's label.
  */
 import { useEffect, useState } from "react";
 import { T, F, disp, eyebrow } from "@/lib/v34/tokens";
-import { describe, RECORD_STEPS, type PlanAction } from "@/lib/dusty/plan";
+import { describe, needsJob as stepNeedsJob, RECORD_STEPS, type PlanAction } from "@/lib/dusty/plan";
 import { applyPlan, applyRecords, byRef, loadLookup, type PlanLookup, type StepResult } from "@/lib/dusty/apply-plan";
 
 export function PlanCard({ jobId, actions, dropped, done }: { jobId: string | null; actions: PlanAction[]; dropped: number; done: boolean }) {
@@ -20,7 +21,7 @@ export function PlanCard({ jobId, actions, dropped, done }: { jobId: string | nu
   const budgetSteps = actions.filter((a) => !RECORD_STEPS.has(a.do));
   const recordSteps = actions.filter((a) => RECORD_STEPS.has(a.do));
   useEffect(() => {
-    if (!jobId || !done || !budgetSteps.length) return;
+    if (!done || !budgetSteps.length) return;
     let off = false;
     loadLookup(jobId).then((l) => { if (!off) setLook(l); }).catch((e) => { if (!off) setErr(String(e?.message ?? e)); });
     return () => { off = true; };
@@ -36,10 +37,9 @@ export function PlanCard({ jobId, actions, dropped, done }: { jobId: string | nu
     return () => { off = true; };
   }, [done, recKey]);
   if (!actions.length && !dropped) return null;
-  const needsJob = budgetSteps.length > 0;
-  const ready = needsJob ? !!(jobId && look) : done;
+  const needsJob = budgetSteps.some(stepNeedsJob);
+  const ready = budgetSteps.length ? !!look : done;
   const nm = {
-    item: (r: string) => (look ? byRef(look.items, r)?.name ?? null : r),
     area: (r: string | null) => {
       if (r === null) return "the whole job";
       const made = actions.find((x) => x.do === "new_area" && x.key === r);
@@ -47,12 +47,22 @@ export function PlanCard({ jobId, actions, dropped, done }: { jobId: string | nu
       return look ? byRef(look.sections, r)?.name ?? `area ${r} (not on this job)` : `area ${r}`;
     },
     takeoff: (r: string) => (look ? byRef(look.takeoff, r)?.name ?? null : null),
+    item: (r: string) => {
+      const made = actions.find((x) => x.do === "new_item" && x.key === r);
+      if (made && made.do === "new_item") return `the new item “${made.name}”`;
+      return look ? byRef(look.items, r)?.name ?? null : r;
+    },
+    assembly: (r: string) => {
+      const made = actions.find((x) => x.do === "new_assembly" && x.key === r);
+      if (made && made.do === "new_assembly") return `the new assembly “${made.name}”`;
+      return look ? byRef(look.assemblies, r)?.name ?? null : r;
+    },
   };
   const run = async () => {
     if (!ready) return;
     setState("running"); setErr(null);
     try {
-      const a = needsJob && jobId && look ? await applyPlan(jobId, budgetSteps, look) : [];
+      const a = budgetSteps.length && look ? await applyPlan(jobId, budgetSteps, look) : [];
       const b = recordSteps.length ? await applyRecords(recordSteps) : [];
       setResults([...a, ...b]); setState("done");
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)); setState("idle"); }
@@ -83,7 +93,7 @@ export function PlanCard({ jobId, actions, dropped, done }: { jobId: string | nu
         ))}
       </ol>
       {dropped > 0 && <div className="px-3 pb-2" style={{ fontSize: F.xs, color: T.ink3 }}>{dropped} step{dropped === 1 ? "" : "s"} didn&apos;t make sense and were left out.</div>}
-      {needsJob && !jobId && <div className="px-3 pb-2" style={{ fontSize: F.xs, color: T.ink3 }}>Open the job and ask there to apply its budget steps.</div>}
+      {needsJob && !jobId && <div className="px-3 pb-2" style={{ fontSize: F.xs, color: T.ink3 }}>Steps that touch a budget need the job open — they&apos;ll be skipped here. Open the job and ask there.</div>}
       {recordSteps.length > 0 && state !== "done" && <div className="px-3 pb-2" style={{ fontSize: F.xs, color: T.ink3 }}>Archived threads come back if they call or text again; deleted things can be restored. Nothing is erased.</div>}
       {state === "done" && (
         <div className="px-3 py-2" style={{ borderTop: `1px solid ${T.hair}`, fontSize: F.xs }}>

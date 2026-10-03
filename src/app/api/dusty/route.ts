@@ -132,7 +132,7 @@ export async function POST(req: NextRequest) {
         // On a job he may end with a budget plan (src/lib/dusty/plan.ts) — room for it.
         // A plan (a budget, or a list of threads to archive) rides at the end — room for it.
         max_tokens: 4000,
-        messages: [{ role: "system", content: `${DUSTY_SYSTEM}${ref.kind === "scope" ? `\n\n${PLAN_RULES}` : ""}\n\n${RECORD_RULES}\n\n${ctx.text}` }, ...history],
+        messages: [{ role: "system", content: `${DUSTY_SYSTEM}${ref.kind === "scope" || ref.kind === "cash" ? `\n\n${PLAN_RULES}` : ""}\n\n${RECORD_RULES}\n\n${ctx.text}` }, ...history],
       }),
     });
   } catch (e) {

@@ -478,7 +478,7 @@ async function priceBookBlock(sb: Sb, orgId: string): Promise<Block | null> {
   const [{ data: items }, { data: groups }, { data: asm }] = await Promise.all([
     sb.from("cost_items").select("id, name, unit, unit_cost, cost_type, qty_rule, cost_group_id").eq("org_id", orgId).eq("active", true).order("name").limit(1500),
     sb.from("cost_groups").select("id, name, cost_type").eq("org_id", orgId).order("sort_order").order("name"),
-    sb.from("cost_assemblies").select("name").eq("org_id", orgId),
+    sb.from("cost_assemblies").select("id, name, job_type, work_type, auto_load, cost_assembly_items(cost_item_id, quantity, sort_order)").eq("org_id", orgId).order("sort_order").order("name"),
   ]);
   if (!items?.length && !groups?.length) return { title: "Price book", lines: ["Empty — no items yet. Propose new_item steps if Coy asks."] };
   const gName = new Map(((groups ?? []) as Array<{ id: string; name: string }>).map((g) => [g.id, g.name]));
@@ -492,8 +492,19 @@ async function priceBookBlock(sb: Sb, orgId: string): Promise<Block | null> {
   const out = [`${items?.length ?? 0} items in ${groups?.length ?? 0} groups. Each line: ref | name | unit | unit cost | how counted | type.`];
   for (const g of (groups ?? []) as Array<{ name: string }>) if (!byGroup.has(g.name)) out.push(`GROUP ${g.name}: (empty)`);
   for (const [g, ls] of byGroup) out.push(`GROUP ${g}:`, ...ls);
-  if (asm?.length) out.push(`Assemblies (Coy loads these himself from the budget): ${(asm as Array<{ name: string }>).map((a) => a.name).join(", ")}`);
-  return { title: "Price book (items you can plan with, by ref)", lines: out };
+  // Assemblies by ref, with their items by ref — to load onto an area, add to, or to see one is missing.
+  type Asm = { id: string; name: string; job_type: string | null; work_type: string | null; auto_load: boolean; cost_assembly_items: Array<{ cost_item_id: string; quantity: number | null; sort_order: number }> | null };
+  const iName = new Map(((items ?? []) as Array<{ id: string; name: string }>).map((i) => [i.id, i.name]));
+  if (asm?.length) {
+    out.push("ASSEMBLIES (ref | name | applies to | items):");
+    for (const a of asm as Asm[]) {
+      const applies = a.work_type ? `${a.job_type ?? "any job"} · ${a.work_type}${a.auto_load ? " · fills new areas on its own" : ""}` : "loaded by hand";
+      const list = [...(a.cost_assembly_items ?? [])].sort((x, y) => x.sort_order - y.sort_order)
+        .map((x) => `${x.cost_item_id.slice(0, 8)} ${iName.get(x.cost_item_id) ?? "(retired item)"}${x.quantity !== null ? ` ×${Number(x.quantity)}` : ""}`).join("; ");
+      out.push(`  ${a.id.slice(0, 8)} | ${a.name} | ${applies} | ${list || "no items"}`);
+    }
+  } else out.push("ASSEMBLIES: none yet.");
+  return { title: "Price book (items and assemblies you can plan with, by ref)", lines: out };
 }
 
 /**
@@ -715,9 +726,12 @@ async function cashContext(sb: Sb, orgId: string): Promise<Assembled> {
     `Pay yourself: ${m.comp_mode === "fixed_draw" ? `fixed draw ${m.comp_monthly_draw === null ? "(amount not recorded)" : `$${m.comp_monthly_draw}/mo`}` : m.comp_mode === "pct_profit" ? `${v(m.comp_profit_pct, "%")} of profit` : "NOT RECORDED"}`,
   ];
   const oh = so.overhead.map((o) => `- ${o.label}: $${o.amount} ${o.cadence}${o.active ? "" : " (paused)"}`);
-  return assemble("Cash and pricing defaults", [
+  // The Price book page shares this context, so Coy can have Dusty edit the book and its assemblies there.
+  const book = await priceBookBlock(sb, orgId);
+  return assemble("Price book, cash and pricing defaults", [
     { title: "Pricing defaults", lines },
     { title: "Monthly overhead items (the burn rate)", lines: oh },
+    ...(book ? [book] : []),
   ]);
 }
 

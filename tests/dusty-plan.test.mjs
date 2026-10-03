@@ -1,7 +1,7 @@
 // Dusty's budget plans (src/lib/dusty/plan.ts) — `npm test`.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parsePlan, cleanAction, describe } from "../src/lib/dusty/plan.ts";
+import { parsePlan, cleanAction, describe, needsJob } from "../src/lib/dusty/plan.ts";
 
 const answer = `Here's the walk and the drive.
 
@@ -92,4 +92,38 @@ test("archive, delete and restore steps take full ids only", () => {
   assert.equal(describe(p.actions[0], names), "Archive 2 threads — 2 calls where nothing was said");
   assert.equal(describe(p.actions[1], names), "Delete 1 job");
   assert.equal(describe(p.actions[2], names), "Restore 1 customer");
+});
+
+test("Price book and assembly steps: build an assembly if there isn't one", () => {
+  const p = parsePlan(`No breakout assembly yet — here's one.
+\`\`\`scopecrete-plan
+[{"do":"new_item","key":"item1","name":"Saw cut","unit":"LF","cost_type":"labor","unit_cost":null,"qty_rule":"manual","add":false},
+ {"do":"new_assembly","key":"asm1","name":"Driveway breakout & pourback","job_type":"residential","work_type":"driveway","items":[{"item":"3f2a91c0"},{"item":"item1","qty":40}]},
+ {"do":"add_to_assembly","assembly":"ab12cd34","item":"3f2a91c0","qty":2},
+ {"do":"remove_from_assembly","assembly":"asm1","item":"item1"},
+ {"do":"load_assembly","assembly":"asm1","area":"bc237d33"},
+ {"do":"load_assembly","assembly":"asm1","area":"job"},
+ {"do":"retire_item","item":"aaaaaaaa"},
+ {"do":"rename_group","group":"Flatwork","name":"03 Flatwork"},
+ {"do":"remove_group","group":"Old"},
+ {"do":"new_assembly","key":"asm2","name":"Bad","work_type":"rocket","items":[]},
+ {"do":"new_assembly","key":"asm3","name":"By hand","auto":true,"items":["3f2a91c0"]},
+ {"do":"new_assembly","key":"asm4","name":"Made up","items":[{"item":"nope"}]}]
+\`\`\``);
+  assert.equal(p.dropped, 3, "load onto the whole job, an unknown kind of area, and a made-up item are dropped");
+  assert.equal(p.actions.length, 9);
+  assert.equal(p.actions[0].key, "item1");
+  assert.deepEqual(p.actions[1], { do: "new_assembly", key: "asm1", name: "Driveway breakout & pourback", job_type: "residential", work_type: "driveway", auto: false,
+    items: [{ item: "3f2a91c0", qty: null }, { item: "item1", qty: 40 }] });
+  assert.equal(p.actions[8].auto, false, "no kind of area → loaded by hand, never on its own");
+  assert.deepEqual(p.actions[8].items, [{ item: "3f2a91c0", qty: null }]);
+  const names = { item: (r) => ({ "3f2a91c0": "4000 psi", aaaaaaaa: "Old mesh" })[r] ?? null, area: (r) => (r ? "Driveway" : "the whole job"), assembly: (r) => (r === "ab12cd34" ? "Patio" : null) };
+  assert.equal(describe(p.actions[1], names), "New assembly “Driveway breakout & pourback” (residential · driveway): 4000 psi, item item1 (not found) ×40");
+  assert.equal(describe(p.actions[2], names), "Add 4000 psi to Patio ×2");
+  assert.equal(describe(p.actions[4], names), "Load assembly asm1 (not found) onto Driveway");
+  assert.match(describe(p.actions[5], names), /^Remove Old mesh from the Price book/);
+  assert.equal(describe(p.actions[6], names), "Rename group “Flatwork” to “03 Flatwork”");
+  // Only budget steps need a job open; the Price book can be edited from anywhere.
+  assert.deepEqual(p.actions.map(needsJob), [false, false, false, false, true, false, false, false, false]);
+  assert.equal(needsJob({ do: "new_item", add: true }), true);
 });

@@ -20,15 +20,28 @@ export type PlanAction =
   | { do: "add"; item: string; area: string | null; qty: number | null; takeoff?: string }
   | { do: "new_area"; key: string; name: string; work_type: string; sqft: number | null; lf: number | null; count: number | null; unit: string | null; depth_in: number | null }
   | { do: "add_group"; group: string; area: string | null }
-  | { do: "new_item"; name: string; unit: string; cost_type: string; unit_cost: number | null; qty_rule: string; group: string | null; area: string | null; add: boolean; qty: number | null }
+  | { do: "new_item"; name: string; unit: string; cost_type: string; unit_cost: number | null; qty_rule: string; group: string | null; area: string | null; add: boolean; qty: number | null; key?: string }
   | { do: "update_item"; item: string; unit_cost?: number | null; unit?: string; name?: string; group?: string }
   | { do: "new_group"; name: string; cost_type: string }
+  // The Price book and assemblies (Coy, 2026-10-03: "dusty could edit my cost book (add, remove, edit cost
+  // items/groups and build out cost assemblies … pull in an Assembly for a driveway breakout and pourback and
+  // build an assembly if there isn't one").
+  | { do: "retire_item"; item: string }
+  | { do: "rename_group"; group: string; name: string }
+  | { do: "remove_group"; group: string }
+  | { do: "new_assembly"; key: string; name: string; job_type: string | null; work_type: string | null; auto: boolean; items: Array<{ item: string; qty: number | null }> }
+  | { do: "add_to_assembly"; assembly: string; item: string; qty: number | null }
+  | { do: "remove_from_assembly"; assembly: string; item: string }
+  | { do: "load_assembly"; assembly: string; area: string }
   // Archive / delete / restore (migration 066) — threads, customers, vendors, jobs by their full ids.
   | { do: "archive"; kind: "contact" | "customer" | "job"; ids: string[]; delete: boolean; label: string | null }
   | { do: "restore"; kind: "contact" | "customer" | "job"; ids: string[]; label: string | null };
 
 /** Steps that change records rather than a budget — they need no job open. */
 export const RECORD_STEPS = new Set(["archive", "restore"]);
+/** Steps that touch a job's budget — they need the job open. Everything else is the Price book. */
+export const needsJob = (a: PlanAction) =>
+  a.do === "add" || a.do === "add_group" || a.do === "new_area" || a.do === "load_assembly" || (a.do === "new_item" && a.add);
 const FULL_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const RECORD_KINDS = ["contact", "customer", "job"] as const;
 
@@ -36,6 +49,10 @@ const FENCE = /```scopecrete-plan\s*\n([\s\S]*?)```/;
 const REF = /^[0-9a-f]{8}$/i;
 /** An area made by this same plan (new_area), named by its key: new1, new2 … */
 const NEW_KEY = /^new\d{1,2}$/i;
+/** An item (item1 …) or an assembly (asm1 …) made by this same plan. */
+const ITEM_KEY = /^item\d{1,2}$/i;
+const ASM_KEY = /^asm\d{1,2}$/i;
+const JOB_TYPES = ["residential", "commercial", "public"];
 export const WORK_TYPES = ["slab", "driveway", "patio", "sidewalk", "footing", "curb", "demo", "prep", "other"];
 const COST_TYPES = ["material", "labor", "equipment", "subcontract", "other"];
 const RULES = ["per_cy", "per_sqft", "per_lf_perimeter", "per_sheet", "per_stick", "per_day", "per_job", "manual"];
@@ -48,6 +65,8 @@ const ref = (v: unknown) => (typeof v === "string" && REF.test(v.trim()) ? v.tri
 const newKey = (v: unknown) => (typeof v === "string" && NEW_KEY.test(v.trim()) ? v.trim().toLowerCase() : null);
 const area = (v: unknown) => (v === "job" || v === null || v === undefined ? null : ref(v) ?? newKey(v));
 const areaOk = (v: unknown) => v === undefined || v === null || v === "job" || !!ref(v) || !!newKey(v);
+const itemRef = (v: unknown) => ref(v) ?? (typeof v === "string" && ITEM_KEY.test(v.trim()) ? v.trim().toLowerCase() : null);
+const asmRef = (v: unknown) => ref(v) ?? (typeof v === "string" && ASM_KEY.test(v.trim()) ? v.trim().toLowerCase() : null);
 const pos = (v: unknown) => (typeof v === "number" && Number.isFinite(v) && v > 0 && v < 1e6 ? v : null);
 
 /** One action from the model, checked; null when it doesn't make sense (it is then listed as dropped). */
@@ -88,8 +107,9 @@ export function cleanAction(raw: unknown): PlanAction | null {
       if (!name || !unit || !COST_TYPES.includes(t) || !RULES.includes(rule) || !areaOk(r.area)) return null;
       const cost = numOr(r.unit_cost);
       const qty = numOr(r.qty);
+      const key = typeof r.key === "string" && ITEM_KEY.test(r.key.trim()) ? r.key.trim().toLowerCase() : undefined;
       return { do: "new_item", name, unit, cost_type: t, unit_cost: cost === undefined ? null : cost, qty_rule: rule,
-        group: str(r.group, 80), area: area(r.area), add: r.add !== false, qty: qty === undefined ? null : qty };
+        group: str(r.group, 80), area: area(r.area), add: r.add !== false, qty: qty === undefined ? null : qty, ...(key ? { key } : {}) };
     }
     case "update_item": {
       const item = ref(r.item);
@@ -105,6 +125,46 @@ export function cleanAction(raw: unknown): PlanAction | null {
     case "new_group": {
       const name = str(r.name, 80), t = String(r.cost_type ?? "other");
       return name && COST_TYPES.includes(t) ? { do: "new_group", name, cost_type: t } : null;
+    }
+    case "retire_item": {
+      const item = ref(r.item);
+      return item ? { do: "retire_item", item } : null;
+    }
+    case "rename_group": {
+      const group = str(r.group, 80), name = str(r.name, 80);
+      return group && name ? { do: "rename_group", group, name } : null;
+    }
+    case "remove_group": {
+      const group = str(r.group, 80);
+      return group ? { do: "remove_group", group } : null;
+    }
+    case "new_assembly": {
+      const key = typeof r.key === "string" && ASM_KEY.test(r.key.trim()) ? r.key.trim().toLowerCase() : null;
+      const name = str(r.name, 80);
+      const jt = r.job_type === undefined || r.job_type === null || r.job_type === "any" ? null : String(r.job_type);
+      const wt = r.work_type === undefined || r.work_type === null ? null : String(r.work_type);
+      if (!key || !name || (jt !== null && !JOB_TYPES.includes(jt)) || (wt !== null && !WORK_TYPES.includes(wt))) return null;
+      const raw = Array.isArray(r.items) ? r.items.slice(0, 40) : [];
+      const items: Array<{ item: string; qty: number | null }> = [];
+      for (const x of raw) {
+        const o = (typeof x === "string" ? { item: x } : x) as Record<string, unknown> | null;
+        const it = o ? itemRef(o.item) : null;
+        if (!it) return null;
+        const q = o ? pos(o.qty) : null;
+        items.push({ item: it, qty: q });
+      }
+      // Filling new areas on its own needs a kind of area; without one it is loaded by hand.
+      return { do: "new_assembly", key, name, job_type: jt, work_type: wt, auto: r.auto === true && wt !== null, items };
+    }
+    case "add_to_assembly":
+    case "remove_from_assembly": {
+      const assembly = asmRef(r.assembly), item = itemRef(r.item);
+      if (!assembly || !item) return null;
+      return r.do === "add_to_assembly" ? { do: "add_to_assembly", assembly, item, qty: pos(r.qty) } : { do: "remove_from_assembly", assembly, item };
+    }
+    case "load_assembly": {
+      const assembly = asmRef(r.assembly), a = area(r.area);
+      return assembly && a ? { do: "load_assembly", assembly, area: a } : null;
     }
     case "archive":
     case "restore": {
@@ -136,7 +196,9 @@ export function parsePlan(text: string): { shown: string; actions: PlanAction[];
 }
 
 /** A step said the way Coy reads it, with the names the caller knows. */
-export function describe(a: PlanAction, names: { item: (r: string) => string | null; area: (r: string | null) => string; takeoff?: (r: string) => string | null }): string {
+export function describe(a: PlanAction, names: { item: (r: string) => string | null; area: (r: string | null) => string; takeoff?: (r: string) => string | null; assembly?: (r: string) => string | null }): string {
+  const asm = (r: string) => names.assembly?.(r) ?? `assembly ${r} (not found)`;
+  const itm = (r: string) => names.item(r) ?? `item ${r} (not found)`;
   const money = (n: number | null | undefined) => (n === null || n === undefined ? "no cost yet" : `$${n.toLocaleString("en-US", { maximumFractionDigits: 2 })}`);
   switch (a.do) {
     case "add": return a.takeoff
@@ -153,6 +215,17 @@ export function describe(a: PlanAction, names: { item: (r: string) => string | n
       return `Change ${names.item(a.item) ?? `item ${a.item} (not found)`}: ${what}`;
     }
     case "new_group": return `New group “${a.name}” (${a.cost_type})`;
+    case "retire_item": return `Remove ${itm(a.item)} from the Price book (retired — budgets that used it keep their lines)`;
+    case "rename_group": return `Rename group “${a.group}” to “${a.name}”`;
+    case "remove_group": return `Remove the group “${a.group}” (only if nothing is in it)`;
+    case "new_assembly": {
+      const applies = a.work_type ? `${a.job_type ?? "any job"} · ${a.work_type}` : "loaded by hand";
+      const list = a.items.map((x) => `${itm(x.item)}${x.qty !== null ? ` ×${x.qty}` : ""}`).join(", ");
+      return `New assembly “${a.name}” (${applies}${a.auto ? ", fills new areas on its own" : ""})${list ? `: ${list}` : " — no items yet"}`;
+    }
+    case "add_to_assembly": return `Add ${itm(a.item)} to ${asm(a.assembly)}${a.qty !== null ? ` ×${a.qty}` : ""}`;
+    case "remove_from_assembly": return `Take ${itm(a.item)} out of ${asm(a.assembly)}`;
+    case "load_assembly": return `Load ${asm(a.assembly)} onto ${names.area(a.area)}`;
     case "archive":
     case "restore": {
       const n = a.ids.length;
@@ -178,15 +251,23 @@ export const RECORD_RULES = `Archiving and deleting. When Coy asks you to archiv
 Use ONLY the full ids written in the CONTEXT (lines like "contact 1b2c…", "job …", "customer …") — never make one up, and never guess which one Coy means: if two could match, ask. Archive is for threads ("archive", not "delete"); a vendor is deleted as a contact with "delete":true; a customer's delete takes its people and open jobs with it. Coy sees each step with the names it touches and taps Apply; everything can be undone and restored, and nothing is erased — calls, texts and files stay on record. An archived thread comes back on its own if that number calls or texts again. "Nothing said" threads are marked NOTHING SAID in the context. Never archive or delete what Coy didn't ask for.`;
 
 /** The instructions Dusty is given about plans — appended to his system prompt. */
-export const PLAN_RULES = `Budget plans. When Coy asks you to build, fill or fix a job's budget, or to add, change or organise items in his Price book, answer in words first, then end with ONE fenced block in this exact form, which the app shows to Coy as steps with an Apply button (you change nothing yourself — Coy's tap does):
+export const PLAN_RULES = `Budget plans. When Coy asks you to build, fill or fix a job's budget, or to add, change, remove or organise items, groups or assemblies in his Price book, answer in words first, then end with ONE fenced block in this exact form, which the app shows to Coy as steps with an Apply button (you change nothing yourself — Coy's tap does):
 \`\`\`scopecrete-plan
 [{"do":"add","item":"<8-char item ref>","area":"<8-char area ref, new-area key, or job>","qty":<number or omit>},
  {"do":"add","item":"<8-char item ref>","takeoff":"<8-char takeoff group ref>"},
  {"do":"add_group","group":"<group name>","area":"<area ref or job>"},
- {"do":"new_item","name":"…","unit":"SY","cost_type":"material|labor|equipment|subcontract|other","unit_cost":<number or null>,"qty_rule":"per_sqft|per_cy|per_lf_perimeter|per_day|per_job|manual","group":"<group name or omit>","area":"<area ref or job>","add":true,"qty":<number or omit>},
+ {"do":"new_item","key":"item1","name":"…","unit":"SY","cost_type":"material|labor|equipment|subcontract|other","unit_cost":<number or null>,"qty_rule":"per_sqft|per_cy|per_lf_perimeter|per_day|per_job|manual","group":"<group name or omit>","area":"<area ref or job>","add":true,"qty":<number or omit>},
  {"do":"update_item","item":"<ref>","unit_cost":<number>,"unit":"…","name":"…","group":"<group name>"},
  {"do":"new_group","name":"…","cost_type":"…"},
+ {"do":"rename_group","group":"<group name>","name":"<new name>"},
+ {"do":"remove_group","group":"<group name>"},
+ {"do":"retire_item","item":"<ref>"},
+ {"do":"new_assembly","key":"asm1","name":"Driveway breakout & pourback","job_type":"residential|commercial|public|any","work_type":"driveway|slab|patio|sidewalk|footing|curb|demo|prep|other or omit","auto":false,"items":[{"item":"<ref or item1>","qty":<number, only for items counted by hand>}]},
+ {"do":"add_to_assembly","assembly":"<8-char assembly ref or asm1>","item":"<ref or item1>","qty":<number or omit>},
+ {"do":"remove_from_assembly","assembly":"<assembly ref>","item":"<ref>"},
+ {"do":"load_assembly","assembly":"<assembly ref or asm1>","area":"<area ref or new-area key>"},
  {"do":"new_area","key":"new1","name":"Driveway","work_type":"slab|driveway|patio|sidewalk|footing|curb|demo|prep|other","sqft":<number or omit>,"lf":<number or omit>,"count":<number or omit>,"unit":"EA","depth_in":<number or omit>}]
 \`\`\`
 To put items on an area this plan makes, use its key ("new1") as the area. To count an item from a Plan Room takeoff group (the aerial or a plan sheet), add it with "takeoff":"<8-char takeoff group ref>" instead of an area — the line then moves when Coy re-measures.
-Rules for plans: use ONLY item refs, area refs and takeoff group refs listed in the CONTEXT — never make one up. Prefer an existing item over a new one. A unit_cost is a number only if Coy said it or the CONTEXT has it; otherwise null (the budget then asks for it by name). A qty, or a new area's size or depth, only when it is written in the CONTEXT (a bid line, a section, a measured takeoff total, Coy's notes, a transcript line) or Coy said it; otherwise leave it out and let the item's rule count it from the area. Counted by the area with unit SY counts square yards. Keep a plan to what was asked.`;
+Price book and assemblies: a new item that a later step uses (an assembly, an add) takes a key ("item1") and "add":false unless it also goes on the budget; a new assembly takes a key ("asm1") so a later step can load it. "Remove" an item means retire_item (it leaves the Price book; budgets that used it keep their lines). An assembly is Coy's default set of items for a kind of area; when he asks for one, first look for an existing assembly in the CONTEXT that fits and load it; build one only if none fits, from his existing items where they fit. "auto":true (fill new areas of that kind on its own) only when Coy asks for it. Steps that touch a budget (add, add_group, new_area, load_assembly, a new_item with "add":true) need a job open — on the Price book, leave them out.
+Rules for plans: use ONLY item refs, area refs, assembly refs and takeoff group refs listed in the CONTEXT (or a key made earlier in the same plan) — never make one up. Prefer an existing item over a new one. A unit_cost is a number only if Coy said it or the CONTEXT has it; otherwise null (the budget then asks for it by name). A qty, or a new area's size or depth, only when it is written in the CONTEXT (a bid line, a section, a measured takeoff total, Coy's notes, a transcript line) or Coy said it; otherwise leave it out and let the item's rule count it from the area. Counted by the area with unit SY counts square yards. Keep a plan to what was asked.`;

@@ -5,7 +5,7 @@
  * by the server against his org and the job. Nothing here is new authority:
  * it is exactly the taps Coy would make by hand, made for him once he says so.
  */
-import { RECORD_STEPS, type PlanAction } from "@/lib/dusty/plan";
+import { RECORD_STEPS, needsJob, type PlanAction } from "@/lib/dusty/plan";
 import { archiveNow } from "@/components/v34/archive-actions";
 
 export interface PlanLookup {
@@ -13,6 +13,7 @@ export interface PlanLookup {
   groups: Array<{ id: string; name: string }>;
   sections: Array<{ id: string; name: string | null }>;
   takeoff: Array<{ id: string; name: string }>;
+  assemblies: Array<{ id: string; name: string; items: Array<{ id: string; cost_item_id: string }> }>;
 }
 export interface StepResult { ok: boolean; text: string }
 
@@ -23,10 +24,14 @@ async function call(url: string, method: string, body?: unknown) {
   return b;
 }
 
-export async function loadLookup(jobId: string): Promise<PlanLookup> {
-  const [c, s, t] = await Promise.all([call("/api/cost-items?all=1", "GET"), call(`/api/jobs/${jobId}/sections`, "GET"),
-    call(`/api/jobs/${jobId}/takeoff/parameters`, "GET").catch(() => ({ parameters: [] }))]);
+/** The Price book, its assemblies, and — with a job open — the job's areas and takeoff groups. */
+export async function loadLookup(jobId: string | null): Promise<PlanLookup> {
+  const [c, s, t, a] = await Promise.all([call("/api/cost-items?all=1", "GET"),
+    jobId ? call(`/api/jobs/${jobId}/sections`, "GET") : Promise.resolve({ sections: [] }),
+    jobId ? call(`/api/jobs/${jobId}/takeoff/parameters`, "GET").catch(() => ({ parameters: [] })) : Promise.resolve({ parameters: [] }),
+    call("/api/assemblies", "GET").catch(() => ({ assemblies: [] }))]);
   return {
+    assemblies: (a.assemblies ?? []) as PlanLookup["assemblies"],
     items: ((c.items ?? []) as Array<{ id: string; name: string; cost_group_id: string | null; active?: boolean }>).filter((i) => i.active !== false),
     groups: (c.groups ?? []) as PlanLookup["groups"],
     sections: (s.sections ?? []) as PlanLookup["sections"],
@@ -41,7 +46,7 @@ export const byRef = <T extends { id: string }>(list: T[], ref: string | null): 
   return hits.length === 1 ? hits[0] : null;
 };
 
-export async function applyPlan(jobId: string, actions: PlanAction[], look: PlanLookup, optionId: string | null = null): Promise<StepResult[]> {
+export async function applyPlan(jobId: string | null, actions: PlanAction[], look: PlanLookup, optionId: string | null = null): Promise<StepResult[]> {
   const out: StepResult[] = [];
   const groups = [...look.groups];
   const groupId = (name: string | null | undefined) => (name ? groups.find((g) => g.name.trim().toLowerCase() === name.trim().toLowerCase())?.id ?? null : null);
@@ -53,18 +58,92 @@ export async function applyPlan(jobId: string, actions: PlanAction[], look: Plan
     const s = byRef(look.sections, ref);
     return s ? { ok: true, id: s.id } : { ok: false };
   };
+  // Items and assemblies this plan makes, by their key: item1 / asm1 → the id once made.
+  const madeItem = new Map<string, string>(), madeAsm = new Map<string, string>();
+  const itemOf = (r: string) => (/^item\d/i.test(r) ? (madeItem.has(r) ? { id: madeItem.get(r)!, name: look.items.find((i) => i.id === madeItem.get(r))?.name ?? r } : null) : byRef(look.items, r));
+  const asmOf = (r: string) => (/^asm\d/i.test(r) ? look.assemblies.find((x) => x.id === madeAsm.get(r)) ?? null : byRef(look.assemblies, r));
+  const putInAssembly = async (asmId: string, itemId: string, qty: number | null) => {
+    await call(`/api/assemblies/${asmId}/items`, "POST", { cost_item_ids: [itemId] });
+    if (qty === null) return;
+    const all = await call("/api/assemblies", "GET");
+    const row = ((all.assemblies ?? []) as PlanLookup["assemblies"]).find((x) => x.id === asmId)?.items.find((i) => i.cost_item_id === itemId);
+    if (row) await call(`/api/assemblies/${asmId}/items/${row.id}`, "PATCH", { quantity: qty });
+  };
   const addLine = async (body: Record<string, unknown>, qty: number | null) => {
+    if (!jobId) throw new Error("needs the job open");
     const b = await call(`/api/jobs/${jobId}/budget/lines`, "POST", { option_id: optionId, ...body });
     const line = (b.lines ?? [])[0] as { id: string } | undefined;
     if (qty !== null && line) await call(`/api/jobs/${jobId}/budget/lines/${line.id}`, "PATCH", { quantity: qty });
     return (b.lines ?? []).length as number;
   };
   // Groups first, so items can be filed in them; then changes; then the budget.
-  const order = { new_group: 0, update_item: 1, new_area: 2, new_item: 3, add: 4, add_group: 5, archive: 6, restore: 6 } as const;
+  const order = { new_group: 0, rename_group: 1, update_item: 1, new_area: 2, new_item: 3, retire_item: 4, new_assembly: 5, add_to_assembly: 6, remove_from_assembly: 6,
+    add: 7, add_group: 8, load_assembly: 9, remove_group: 10, archive: 11, restore: 11 } as const;
   // Archive / restore steps run through applyRecords (no job needed).
   const steps = [...actions].filter((a) => !RECORD_STEPS.has(a.do)).sort((a, b) => order[a.do] - order[b.do]);
   for (const a of steps) {
+    if (!jobId && needsJob(a)) { out.push({ ok: false, text: `${a.do.replace(/_/g, " ")}: needs the job open — skipped` }); continue; }
     try {
+      if (a.do === "retire_item") {
+        const it = byRef(look.items, a.item);
+        if (!it) { out.push({ ok: false, text: `Item ${a.item} isn't in the Price book — skipped` }); continue; }
+        await call(`/api/cost-items/${it.id}`, "DELETE");
+        out.push({ ok: true, text: `Retired ${it.name} (Show retired brings it back)` });
+        continue;
+      }
+      if (a.do === "rename_group" || a.do === "remove_group") {
+        const g = groupId(a.group);
+        if (!g) { out.push({ ok: false, text: `No group “${a.group}” — skipped` }); continue; }
+        if (a.do === "rename_group") {
+          await call(`/api/cost-groups/${g}`, "PATCH", { name: a.name });
+          const row = groups.find((x) => x.id === g); if (row) row.name = a.name;
+          out.push({ ok: true, text: `Renamed “${a.group}” to “${a.name}”` });
+        } else {
+          const n = look.items.filter((i) => i.cost_group_id === g).length;
+          if (n) { out.push({ ok: false, text: `“${a.group}” still has ${n} item${n === 1 ? "" : "s"} — move them first; kept` }); continue; }
+          await call(`/api/cost-groups/${g}`, "DELETE");
+          out.push({ ok: true, text: `Removed the empty group “${a.group}”` });
+        }
+        continue;
+      }
+      if (a.do === "new_assembly") {
+        const b = await call("/api/assemblies", "POST", { name: a.name, job_type: a.job_type, work_type: a.work_type, auto_load: a.auto });
+        madeAsm.set(a.key, b.assembly.id);
+        look.assemblies.push({ id: b.assembly.id, name: a.name, items: [] });
+        const missing: string[] = [];
+        let n = 0;
+        for (const x of a.items) {
+          const it = itemOf(x.item);
+          if (!it) { missing.push(x.item); continue; }
+          await putInAssembly(b.assembly.id, it.id, x.qty); n++;
+        }
+        out.push({ ok: !missing.length, text: `Made assembly “${a.name}” with ${n} item${n === 1 ? "" : "s"}${missing.length ? ` — not found: ${missing.join(", ")}` : ""}` });
+        continue;
+      }
+      if (a.do === "add_to_assembly" || a.do === "remove_from_assembly") {
+        const asm = asmOf(a.assembly), it = itemOf(a.item);
+        if (!asm) { out.push({ ok: false, text: `Assembly ${a.assembly} not found — skipped` }); continue; }
+        if (!it) { out.push({ ok: false, text: `Item ${a.item} isn't in the Price book — skipped` }); continue; }
+        if (a.do === "add_to_assembly") {
+          await putInAssembly(asm.id, it.id, a.qty);
+          out.push({ ok: true, text: `Added ${it.name} to ${asm.name}` });
+        } else {
+          const row = asm.items.find((i) => i.cost_item_id === it.id);
+          if (!row) { out.push({ ok: false, text: `${it.name} isn't in ${asm.name}` }); continue; }
+          await call(`/api/assemblies/${asm.id}/items/${row.id}`, "DELETE");
+          out.push({ ok: true, text: `Took ${it.name} out of ${asm.name}` });
+        }
+        continue;
+      }
+      if (a.do === "load_assembly") {
+        const asm = asmOf(a.assembly), ar = areaId(a.area);
+        if (!asm) { out.push({ ok: false, text: `Assembly ${a.assembly} not found — skipped` }); continue; }
+        if (!ar.ok || !ar.id) { out.push({ ok: false, text: `Area ${a.area} isn't on this job — ${asm.name} not loaded` }); continue; }
+        const b = await call(`/api/jobs/${jobId}/budget/assembly`, "POST", { assembly_id: asm.id, section_id: ar.id });
+        const n = Number(b.lines ?? 0);
+        out.push({ ok: true, text: `Loaded ${asm.name}${n ? ` (${n} line${n === 1 ? "" : "s"})` : ""}` });
+        continue;
+      }
       if (a.do === "new_area") {
         const body: Record<string, unknown> = { name: a.name, work_type: a.work_type };
         if (a.sqft !== null) body.sqft_override = a.sqft;
@@ -105,13 +184,14 @@ export async function applyPlan(jobId: string, actions: PlanAction[], look: Plan
         const b = await call("/api/cost-items", "POST", { name: a.name, unit: a.unit, cost_type: a.cost_type, unit_cost: a.unit_cost,
           qty_rule: a.qty_rule, rule_params: {}, cost_group_id: groupId(a.group) });
         look.items.push({ id: b.item.id, name: a.name, cost_group_id: b.item.cost_group_id ?? null });
+        if (a.key) madeItem.set(a.key, b.item.id);
         if (a.add) {
           if (!ar.ok) { out.push({ ok: false, text: `Made “${a.name}” in the Price book; its area wasn't found, so it isn't on the budget` }); continue; }
           await addLine({ cost_item_id: b.item.id, section_id: ar.id }, a.qty);
         }
         out.push({ ok: true, text: `Made “${a.name}”${a.add ? " and put it on the budget" : ""}` });
       } else if (a.do === "add") {
-        const it = byRef(look.items, a.item), ar = areaId(a.area);
+        const it = itemOf(a.item), ar = areaId(a.area);
         if (!it) { out.push({ ok: false, text: `Item ${a.item} isn't in the Price book — skipped` }); continue; }
         if (a.takeoff) {
           const g = byRef(look.takeoff, a.takeoff);
@@ -131,7 +211,7 @@ export async function applyPlan(jobId: string, actions: PlanAction[], look: Plan
         out.push({ ok: true, text: `Added ${n} item${n === 1 ? "" : "s"} from ${a.group}` });
       }
     } catch (e) {
-      out.push({ ok: false, text: `${a.do.replace("_", " ")}: ${e instanceof Error ? e.message : String(e)}` });
+      out.push({ ok: false, text: `${a.do.replace(/_/g, " ")}: ${e instanceof Error ? e.message : String(e)}` });
     }
   }
   // The budget on the page reloads itself.

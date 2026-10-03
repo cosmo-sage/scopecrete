@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
 import { isArchivedNow } from "@/lib/archive";
+import { roleOf, type ContactRole } from "@/lib/v34/threads";
 
 /**
  * Thread list. Reads `messages` ONLY.
@@ -126,6 +127,13 @@ export interface Thread {
   silent: boolean;
   /** Set on the Archived view: when it was archived, and why (archived, or deleted). */
   archived: { at: string; reason: string | null } | null;
+  /** Threads v2 (migration 073): their role, and what the row's second line says. */
+  role: ContactRole;
+  customer_id: string | null;
+  /** contacts.role — "Homeowner", "Dispatcher" — when someone wrote one. */
+  person_role: string | null;
+  numbers: number;
+  has_email: boolean;
 }
 
 export interface ThreadProposal {
@@ -218,19 +226,29 @@ export async function GET(req: NextRequest) {
   }
   // Archived (migration 066): out of the lists until they call or text again.
   const view = req.nextUrl.searchParams.get("view") === "archived" ? "archived" : "live";
+  // A thread Coy made (migration 073): only its members — and members with no
+  // calls or texts yet are listed too, so a job thread shows the permit office.
+  const threadId = req.nextUrl.searchParams.get("thread");
+  let members: Set<string> | null = null;
+  if (threadId && /^[0-9a-f-]{36}$/i.test(threadId)) {
+    const { data: mem } = await supabase.from("thread_contacts").select("contact_id").eq("org_id", orgId).eq("thread_id", threadId);
+    members = new Set(((mem ?? []) as Array<{ contact_id: string }>).map((m) => m.contact_id));
+  }
 
   // Opportunistic names. Expected to return nothing today — see the header.
   // Failure here is not an error: the list is fully usable without it.
-  const contactIds = [...byContact.keys()];
-  const names = new Map<string, { archived_at: string | null; archived_reason: string | null; name: string | null; phone: string | null; contact_type: string | null; contact_subtype: string | null; customer_id: string | null; name_source: string | null; name_claim_id: string | null; confirmed: boolean; auto_at: string | null; auto_reason: string | null; status_summary: string | null; recent_summary: string | null; job_type_hint: string | null }>();
+  const contactIds = members ? [...members] : [...byContact.keys()];
+  const names = new Map<string, { person_role: string | null; archived_at: string | null; archived_reason: string | null; name: string | null; phone: string | null; contact_type: string | null; contact_subtype: string | null; customer_id: string | null; name_source: string | null; name_claim_id: string | null; confirmed: boolean; auto_at: string | null; auto_reason: string | null; status_summary: string | null; recent_summary: string | null; job_type_hint: string | null }>();
   let contactsReadable = false;
   if (contactIds.length > 0) {
     const { data: contacts } = await supabase
       .from("contacts")
-      .select("id, name, phone, contact_type, contact_subtype, customer_id, name_source, name_claim_id, classification_confirmed_at, auto_classified_at, auto_classified_reason, status_summary, recent_summary, job_type_hint, archived_at, archived_reason")
+      .select("id, name, phone, role, merged_into_contact_id, contact_type, contact_subtype, customer_id, name_source, name_claim_id, classification_confirmed_at, auto_classified_at, auto_classified_reason, status_summary, recent_summary, job_type_hint, archived_at, archived_reason")
       .in("id", contactIds.slice(0, 1000));
     for (const c of (contacts ?? []) as Array<Record<string, string | null>>) {
+      if (c.merged_into_contact_id) continue;
       names.set(c.id as string, {
+        person_role: c.role,
         archived_at: c.archived_at, archived_reason: c.archived_reason,
         name: c.name, phone: c.phone,
         contact_type: c.contact_type, contact_subtype: c.contact_subtype,
@@ -241,6 +259,25 @@ export async function GET(req: NextRequest) {
       });
     }
     contactsReadable = (contacts ?? []).length > 0;
+  }
+
+  // Their numbers and emails, and each customer's primary person and size —
+  // the row's role ("Customer" vs "Cust. contact") and its second line.
+  const numbers = new Map<string, number>(), emails = new Set<string>();
+  const custPrimary = new Map<string, string | null>(), custPeople = new Map<string, number>();
+  if (contactIds.length > 0) {
+    const ids = contactIds.slice(0, 1000);
+    const custIds = [...new Set([...names.values()].map((c) => c.customer_id).filter(Boolean))] as string[];
+    const [{ data: ph }, { data: em }, { data: cu }, { data: people }] = await Promise.all([
+      supabase.from("contact_phones").select("contact_id").eq("org_id", orgId).in("contact_id", ids),
+      supabase.from("contact_emails").select("contact_id").eq("org_id", orgId).in("contact_id", ids),
+      custIds.length ? supabase.from("customers").select("id, primary_contact_id").eq("org_id", orgId).in("id", custIds) : Promise.resolve({ data: [] }),
+      custIds.length ? supabase.from("contacts").select("customer_id").eq("org_id", orgId).in("customer_id", custIds).is("merged_into_contact_id", null).is("archived_at", null) : Promise.resolve({ data: [] }),
+    ]);
+    for (const r of (ph ?? []) as Array<{ contact_id: string }>) numbers.set(r.contact_id, (numbers.get(r.contact_id) ?? 0) + 1);
+    for (const r of (em ?? []) as Array<{ contact_id: string }>) emails.add(r.contact_id);
+    for (const r of (cu ?? []) as Array<{ id: string; primary_contact_id: string | null }>) custPrimary.set(r.id, r.primary_contact_id);
+    for (const r of (people ?? []) as Array<{ customer_id: string }>) custPeople.set(r.customer_id, (custPeople.get(r.customer_id) ?? 0) + 1);
   }
 
   // Job state per contact, so the status chips filter and not merely count.
@@ -334,6 +371,7 @@ export async function GET(req: NextRequest) {
   }
 
   const entries = [...byContact.entries()].filter(([contactId, e]) => {
+    if (members && !members.has(contactId)) return false;
     const c = names.get(contactId);
     const gone = isArchivedNow(c?.archived_at, e.lastIn);
     return view === "archived" ? gone : !gone;
@@ -395,8 +433,42 @@ export async function GET(req: NextRequest) {
         : null,
       silent: !said,
       archived: view === "archived" && c?.archived_at ? { at: c.archived_at, reason: c.archived_reason } : null,
+      ...extra(contactId, bucket, phone),
     };
   });
+  // A thread's members with no calls or texts yet (a permit office, a new sub).
+  if (members && view === "live") {
+    for (const id of members) {
+      if (byContact.has(id)) continue;
+      const c = names.get(id);
+      if (!c) continue;
+      const bucket = (c.confirmed || c.auto_at) && ["customer", "vendor", "personal", "spam"].includes(c.contact_type ?? "")
+        ? (c.contact_type as Thread["bucket"]) : null;
+      const realName = c.name?.trim() || null;
+      threads.push({
+        contact_id: id, display_name: realName ?? formatPhone(c.phone), name_is_phone: !realName, phone: c.phone,
+        contact_type: bucket, contact_subtype: bucket ? c.contact_subtype : null, channel: null, direction: null, occurred_at: null,
+        preview: "No calls or texts yet", preview_source: "synthesised", summary_source: null, msg_count: 0,
+        job_status: jobByContact.get(id)?.status ?? null, job_unscoped: false, job_type: jobByContact.get(id)?.type ?? null,
+        status_summary: c.status_summary, recent_summary: c.recent_summary, job_type_hint: c.job_type_hint,
+        bucket, subtype: bucket ? c.contact_subtype : null, bucket_auto: bucket && !c.confirmed && c.auto_at ? { reason: c.auto_reason } : null,
+        proposal: proposalByContact.get(id) ?? null, auto_name: null, silent: false, archived: null,
+        ...extra(id, bucket, c.phone),
+      });
+    }
+  }
+  function extra(id: string, bucket: Thread["bucket"], phone: string | null) {
+    const c = names.get(id);
+    const cust = c?.customer_id ?? null;
+    return {
+      role: roleOf({ bucket, subtype: c?.contact_subtype ?? null, customer_id: cust,
+        is_primary_on_customer: !!cust && custPrimary.get(cust) === id, customer_people: cust ? custPeople.get(cust) ?? 1 : 0 }),
+      customer_id: cust,
+      person_role: c?.person_role?.trim() || null,
+      numbers: Math.max(numbers.get(id) ?? 0, phone ? 1 : 0),
+      has_email: emails.has(id),
+    };
+  }
 
   threads.sort((a, b) => (b.occurred_at ?? "").localeCompare(a.occurred_at ?? ""));
 

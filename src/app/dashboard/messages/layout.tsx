@@ -20,76 +20,58 @@
  * behaviour and must stay exactly that: the phone is the primary device.
  */
 
-import React, { Suspense, useEffect, useState } from "react";
-import { usePathname, useSearchParams } from "next/navigation";
+import React, { Suspense } from "react";
+import { usePathname } from "next/navigation";
 import { T } from "@/lib/v34/tokens";
-import { ThreadList, THREAD_BUCKETS, DESKTOP_DEFAULT_BUCKET } from "@/components/v34/thread-list";
-import { SubRail } from "@/components/v34/sub-rail";
+import { ThreadList } from "@/components/v34/thread-list";
+import { ThreadsProvider, useThreads } from "@/components/v34/threads-ctx";
+import { ThreadRail, ThreadDrawer, NewThreadSheet } from "@/components/v34/thread-rail";
 
 /**
- * Desktop (Coy, 2026-10-01): the five buckets as a second icon rail beside the
- * main one — the main rail picks Threads, this one the bucket, Customer first.
- * The list follows ?f=; the phone keeps its row of chips.
+ * Threads v2 (Claude Design handoff, 2026-10-03): level 1 is the threads —
+ * the five role buckets and the ones Coy makes — as a rail on a desktop and a
+ * drawer on a phone; level 2 the contacts in the picked thread; level 3 the
+ * open contact. Opening a contact folds the list to initials (56px) so the
+ * conversation gets the room; › brings it back, and picking another thread
+ * un-folds it.
  */
-function BucketRail() {
-  const params = useSearchParams();
+function Panes({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const value = params.get("f") ?? DESKTOP_DEFAULT_BUCKET;
-  const [counts, setCounts] = useState<Record<string, number> | null>(null);
-  useEffect(() => {
-    const on = (e: Event) => setCounts((e as CustomEvent<Record<string, number>>).detail);
-    window.addEventListener("sc:thread-counts", on);
-    return () => window.removeEventListener("sc:thread-counts", on);
-  }, []);
+  const ctx = useThreads();
+  // A conversation is open when the path goes deeper than /dashboard/messages.
+  const conversationOpen = /^\/dashboard\/messages\/[^/]+/.test(pathname);
+  const folded = conversationOpen && !!ctx?.folded;
   return (
-    <div className="hidden lg:block shrink-0">
-      <SubRail label="Buckets" value={value}
-        items={THREAD_BUCKETS.map((b) => ({ ...b, count: counts ? counts[b.k] ?? null : null }))}
-        // history, not the router: Next keeps useSearchParams in step with it,
-        // and the open conversation stays open (see thread-list's search note).
-        onChange={(k) => window.history.replaceState(null, "", `${pathname}?f=${k}`)} />
+    <div className={`lg:flex lg:items-stretch ${conversationOpen ? "" : "min-h-[calc(100dvh-var(--sc-head)-var(--sc-foot))]"} lg:h-[calc(100dvh-var(--sc-head))] lg:min-h-0`}>
+      <ThreadRail />
+      {/* The width lives on THIS element and as a class, never an inline
+          width: an inline width beats every Tailwind class, and once handed the
+          whole row it left the conversation zero width (2026-09-27). */}
+      <div
+        className={`${conversationOpen ? "hidden lg:block" : "block"} w-full ${folded ? "lg:w-[56px]" : "lg:w-[380px] xl:w-[420px]"} lg:shrink-0 lg:overflow-y-auto`}
+        style={{ borderRight: `1px solid ${T.hair}`, background: T.card }}
+      >
+        <ThreadList folded={folded} />
+      </div>
+      <div className={`${conversationOpen ? "block" : "hidden lg:block"} lg:flex-1 lg:min-w-0 lg:overflow-y-auto`}>
+        {children}
+      </div>
+      <ThreadDrawer />
+      <NewThreadSheet />
     </div>
   );
 }
 
 export default function MessagesLayout({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
-  // A conversation is open when the path goes deeper than /dashboard/messages.
-  const conversationOpen = /^\/dashboard\/messages\/[^/]+/.test(pathname);
-
   return (
-    <div className={`lg:flex lg:items-stretch ${conversationOpen ? "" : "min-h-[calc(100dvh-var(--sc-head)-var(--sc-foot))]"} lg:h-[calc(100dvh-var(--sc-head))] lg:min-h-0`}>
-      <Suspense fallback={null}><BucketRail /></Suspense>
-      {/* A fixed rail on desktop: the list is the constant, the conversation is
-          what changes, so the list must not resize as threads come and go.
-
-          The width lives on THIS element and as a class, not as an inline
-          `width: 100%` on a wrapper. The first version did the latter, and an
-          inline width beats every Tailwind class: combined with `lg:shrink-0`
-          the list claimed the whole flex row, the conversation pane was handed
-          zero width, and it rendered off the right edge. Everything worked and
-          nothing was visible — including "Open thread", which navigated
-          correctly into a pane nobody could see. */}
-      <div
-        className={`${conversationOpen ? "hidden lg:block" : "block"} w-full lg:w-[380px] xl:w-[420px] lg:shrink-0 lg:overflow-y-auto`}
-        style={{ borderRight: `1px solid ${T.hair}` }}
-      >
-        {/* ThreadList reads ?q= through useSearchParams, which needs a
-            boundary or the whole subtree opts out of static rendering. */}
-        <Suspense fallback={
-          <div className="p-3 space-y-2">
-            {[1, 2, 3, 4, 5, 6].map((i) => (
-              <div key={i} className="rounded animate-pulse" style={{ height: 52, background: T.hairSoft }} />
-            ))}
-          </div>
-        }>
-          <ThreadList />
-        </Suspense>
+    <Suspense fallback={
+      <div className="p-3 space-y-2">
+        {[1, 2, 3, 4, 5, 6].map((i) => (
+          <div key={i} className="rounded animate-pulse" style={{ height: 52, background: T.hairSoft }} />
+        ))}
       </div>
-
-      <div className={`${conversationOpen ? "block" : "hidden lg:block"} lg:flex-1 lg:min-w-0 lg:overflow-y-auto`}>
-        {children}
-      </div>
-    </div>
+    }>
+      <ThreadsProvider><Panes>{children}</Panes></ThreadsProvider>
+    </Suspense>
   );
 }

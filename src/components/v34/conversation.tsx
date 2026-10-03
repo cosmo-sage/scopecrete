@@ -68,6 +68,10 @@ export interface ThreadMessage {
   media_count: number;
   /** Our line, by name — only when this thread used more than one (migration 035). */
   line?: string | null;
+  /** The other end's number — which phone channel it is on (Threads v2). */
+  counterparty?: string | null;
+  /** message_media.kind of each file on it. */
+  media_kinds?: string[];
 }
 
 interface Artifact {
@@ -701,7 +705,7 @@ export function Timeline({ messages, phone, notes = [] }: { messages: ThreadMess
                 <span className="flex-1" style={{ height: 1, background: DA.border }} />
               </div>
             )}
-            {it.n ? <NoteRow n={it.n} /> : it.m!.channel === "call" ? <CallRow m={it.m!} /> : <SmsRow m={it.m!} />}
+            {it.n ? <NoteRow n={it.n} /> : <div id={`m-${it.m!.id}`}>{it.m!.channel === "call" ? <CallRow m={it.m!} /> : <SmsRow m={it.m!} />}</div>}
           </React.Fragment>
         );
       })}

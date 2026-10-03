@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
 import { isArchivedNow } from "@/lib/archive";
+import { loadCustomThreads } from "@/lib/threads-server";
 
 /**
  * Counts behind the Threads filter chips, and the footer's "replies owed" badge.
@@ -110,5 +111,7 @@ export async function GET(req: NextRequest) {
     if (latestDir.get(c.id) === "inbound") counts.needs++;
   }
 
-  return applyCookies(NextResponse.json({ counts }));
+  // The threads Coy made (migration 073): everyone in each, by its id.
+  const custom = Object.fromEntries((await loadCustomThreads(supabase, orgId)).map((t) => [t.id, t.count]));
+  return applyCookies(NextResponse.json({ counts, custom }));
 }

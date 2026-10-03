@@ -34,6 +34,8 @@ import { STATUS_NAME } from "@/lib/jobs/stages";
 import { SubRail, type SubIcon } from "@/components/v34/sub-rail";
 import { CallNotesPad, DraftQuoteButton } from "@/components/v34/call-notes-pad";
 import { ArchiveButton } from "@/components/v34/archive-actions";
+import { AddressInput } from "@/components/v34/address-input";
+import type { AddressMatch } from "@/lib/address-check";
 
 interface Method { kind: "mobile" | "office" | "home" | "phone" | "email"; value: string; can_text: boolean | null; primary: boolean }
 interface Contact { id: string; name: string | null; role: string | null; primary: boolean; bucket: string | null; status_summary: string | null; recent_summary: string | null; last_contacted: string | null; methods: Method[] }
@@ -45,7 +47,7 @@ interface Customer {
   lat: number | null; lng: number | null; address_source: string | null; created_at: string;
   archived_at?: string | null;
 }
-interface Data { customer: Customer; contacts: Contact[]; jobs: Job[]; maps: { embed: boolean; geocode: boolean } }
+interface Data { customer: Customer; contacts: Contact[]; jobs: Job[]; maps: { embed: boolean; geocode: boolean }; heard_address?: { hint: string; match: AddressMatch | null } | null }
 interface Item {
   id: string; contact_id: string; channel: "call" | "text"; direction: "in" | "out"; at: string; body: string | null;
   duration_s: number | null; status: string | null; media_count: number; summary: string | null; next_steps: string | null;
@@ -121,7 +123,7 @@ export function CustomerPage({ customerId, focusContact }: { customerId: string;
 
   const panel = (
     <>
-      <LocationCard cu={cu} maps={data.maps} onEdit={() => setEditing(true)} />
+      <LocationCard cu={cu} maps={data.maps} heard={data.heard_address ?? null} onEdit={() => setEditing(true)} onSaved={reload} />
       <Facts cu={cu} onEdit={() => setEditing(true)} />
       <Contacts cu={cu} contacts={contacts} onChanged={reload} onNote={setNote} />
     </>
@@ -217,7 +219,7 @@ function Empty({ text }: { text: string }) {
 
 /* ------------------------------------------------------------ right panel */
 
-function LocationCard({ cu, maps, onEdit }: { cu: Customer; maps: Data["maps"]; onEdit: () => void }) {
+function LocationCard({ cu, maps, heard, onEdit, onSaved }: { cu: Customer; maps: Data["maps"]; heard: Data["heard_address"]; onEdit: () => void; onSaved: () => void }) {
   const [view, setView] = useState<"map" | "street">("map");
   const [copied, setCopied] = useState(false);
   const key = process.env.NEXT_PUBLIC_GOOGLE_MAPS_EMBED_KEY ?? "";
@@ -265,17 +267,46 @@ function LocationCard({ cu, maps, onEdit }: { cu: Customer; maps: Data["maps"]; 
             Open in Maps ↗
           </a>
         </div>
+      ) : heard ? (
+        <HeardAddress cu={cu} heard={heard} onEdit={onEdit} onSaved={onSaved} />
       ) : (
         <button onClick={onEdit} className="text-left" style={{ padding: "8px 10px", border: `1px dashed ${T.hairStrong}`, borderRadius: 3, color: T.hivizText, fontSize: F.sm, cursor: "pointer", background: "transparent" }}>
           No address on file — add one
         </button>
       )}
       <span style={{ fontSize: 11, color: T.ink3 }}>
-        {addr && cu.address_source === "contact" ? "Copied from the contact's details — check it. " : ""}
+        {addr && cu.address_source === "contact" ? "From their own text or contact details — check it. " : ""}
+        {addr && cu.address_source === "geocode" ? "Heard on a call and matched by Mapbox — check it. " : ""}
         {!showMap && addr ? "The map shows once the Google Maps key is set. " : ""}
         The customer&apos;s address. Each job can have its own site address.
       </span>
     </section>
+  );
+}
+
+/** An address said on a call that Mapbox couldn't match for sure (071): shown, never saved without Coy's tap. */
+function HeardAddress({ cu, heard, onEdit, onSaved }: { cu: Customer; heard: NonNullable<Data["heard_address"]>; onEdit: () => void; onSaved: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const m = heard.match;
+  const use = async () => {
+    if (!m) return;
+    setBusy(true); setErr(null);
+    try { await send(`/api/customers/${cu.id}`, "PATCH", { address_line1: m.line1, city: m.city, state: m.state, zip: m.zip }); onSaved(); }
+    catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
+  };
+  return (
+    <div style={{ padding: "8px 10px", border: `1px dashed ${T.hivizText}`, borderRadius: 3, fontSize: F.sm, color: T.ink, display: "flex", flexDirection: "column", gap: 6 }}>
+      <div><span style={{ color: T.ink3 }}>Heard on a call:</span> “{heard.hint}”</div>
+      {m
+        ? <div><span style={{ color: T.ink3 }}>Mapbox finds:</span> <b>{m.formatted}</b>{m.confidence ? <span style={{ color: T.ink3, fontSize: 11 }}> · {m.confidence} match</span> : null}</div>
+        : <div style={{ color: T.ink3 }}>Mapbox didn&apos;t find that address — a transcript can mishear a street.</div>}
+      <div className="flex gap-2">
+        {m && <button onClick={() => void use()} disabled={busy} style={{ ...btn(true), height: 30 }}>{busy ? "Saving…" : "Use it"}</button>}
+        <button onClick={onEdit} style={{ ...btn(false), height: 30 }}>Type it</button>
+      </div>
+      {err && <div style={{ color: T.red, fontSize: 11 }}>{err}</div>}
+    </div>
   );
 }
 
@@ -444,7 +475,9 @@ function EditSheet({ open, cu, onClose, onSaved }: { open: boolean; cu: Customer
           <L k="Lead source"><input value={f.lead_source ?? ""} onChange={set("lead_source")} placeholder="Website, referral…" style={field} /></L>
           <L k="Status"><input value={f.status ?? ""} onChange={set("status")} placeholder="Active customer…" style={field} /></L>
         </div>
-        <L k="Street"><input value={f.address_line1 ?? ""} onChange={set("address_line1")} style={field} /></L>
+        <L k="Street"><AddressInput value={f.address_line1 ?? ""} onChange={(v) => setF((x) => ({ ...x, address_line1: v }))} style={field}
+          near={cu.lat != null && cu.lng != null ? { lat: cu.lat, lng: cu.lng } : null}
+          onPick={(m) => setF((x) => ({ ...x, address_line1: m.line1, city: m.city ?? "", state: m.state ?? "", zip: m.zip ?? "" }))} /></L>
         <div className="grid gap-2" style={{ gridTemplateColumns: "2fr 1fr 1fr" }}>
           <L k="City"><input value={f.city ?? ""} onChange={set("city")} style={field} /></L>
           <L k="State"><input value={f.state ?? ""} onChange={set("state")} style={field} /></L>

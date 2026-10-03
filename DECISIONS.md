@@ -4,7 +4,7 @@ Ground truth for every agent working this repo. If code disagrees with this
 document, the code is wrong or this document is stale — resolve it, don't
 guess. Update this file in the same PR that changes the behavior it describes.
 
-Last updated: 2026-10-03 (units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
+Last updated: 2026-10-03 (customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
 
 ---
 
@@ -200,6 +200,32 @@ list."* (Claude Design handoff, `design/customer-and-themes/`.)
   primary; the 9 contacts with an address gave it to their customer
   (`address_source='contact'`, the page says "check it"); jobs got the
   customer of their contact (20 linked).
+- **The address from their own words (migration 071, applied 2026-10-03 on
+  Coy's yes).** Coy: *"why didn't the system catch the address for Johnette
+  … it was clearly in the text message"* — the reader had put it on her JOB
+  (`site_hint`) and nothing ever put it on the customer. Now a customer with
+  **no address at all** gets the one their person gave, and never over any
+  other: **texted** (house number and street word in an inbound text from
+  them — *"I often ask people to text me their address"*) → written by the
+  database as typed (`sc_customer_address_from_words`, trigger
+  `contact_proposals_address`; `address_source='contact'`, "check it");
+  **said on a call** (only in a transcript, where *"it's easier to misspell
+  addresses"*) → checked against **Mapbox Geocoding v6** first
+  (`src/lib/address-server.ts`, `MAPBOX_TOKEN` in Vercel): only an exact or
+  high match of the same house number AND the street is written, in
+  Mapbox's spelling with its point (`address_source='geocode'`, "heard on a
+  call and matched by Mapbox — check it"); anything less shows on the
+  customer page as "Heard on a call … Mapbox finds … **Use it** / Type it"
+  (`sureMatch()`, tested in `tests/address-check.test.mjs`). The check runs
+  when the customer is opened (`GET /api/customers/[id]`,
+  `sc_customer_heard_address()` — invoker, members only; rehearsed rolled
+  back: a stranger sees none, anon can't run it). Applied: Johnette
+  and one other texted address filled; 6 heard on calls wait for the check.
+  **The Edit form's Street finishes the address as you type** (Mapbox,
+  `/api/address/suggest`, `address-input.tsx`): a pick fills street, city,
+  state and zip. Coy's typed address is placed by Google if its key is set,
+  else Mapbox. Not built: an address said on a call with no customer yet,
+  and Dusty proposing an address in a plan.
 - **Moving people is Coy's tap and undoable.** `sc_attach_contact(contact,
   customer)` / `sc_detach_contact(contact)` / `sc_undo_contact_move(move)` —
   SECURITY DEFINER with an explicit membership check, execute for

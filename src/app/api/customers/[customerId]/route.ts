@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
 import { customerRow, customerContacts, customerJobs, formatAddress, geocode } from "@/lib/customers-server";
+import { settleHeardAddress } from "@/lib/address-server";
 
 /**
  * One customer (migration 055): the customer's own facts and address, its
@@ -8,7 +9,10 @@ import { customerRow, customerContacts, customerJobs, formatAddress, geocode } f
  * counts the header shows. The map shows only when the browser key is set; the
  * page is told whether it is, never the key itself beyond the public embed key.
  *
- * GET   → { customer, contacts, jobs, maps: { embed: boolean } }
+ * GET   → { customer, contacts, jobs, maps: { embed: boolean }, heard_address }
+ *   — a customer with no address whose person said one on a call (071) has it
+ *   checked against Mapbox: a sure match is saved (`address_source='geocode'`),
+ *   anything less comes back as `heard_address` for Coy's one tap.
  * PATCH { name?, customer_type?, subtype?, lead_source?, status?, notes?,
  *         address_line1?, city?, state?, zip?, primary_contact_id? }
  *   — the address is Coy's (`address_source='coy'`), re-geocoded when a server
@@ -28,9 +32,14 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ customerId:
   if (!result.ok) return result.response;
   const { supabase: sb, orgId, applyCookies } = result.session;
 
-  const cu = await customerRow(sb, orgId, customerId);
+  let cu = await customerRow(sb, orgId, customerId);
   if (!cu) return applyCookies(NextResponse.json({ error: "Customer not found." }, { status: 404 }));
   if (cu.merged_into_customer_id) return applyCookies(NextResponse.json({ redirect_to: cu.merged_into_customer_id }));
+  let heard: Awaited<ReturnType<typeof settleHeardAddress>> = null;
+  if (!cu.address_line1 && !cu.address_formatted && !cu.address_source) {
+    heard = await settleHeardAddress(sb, orgId, customerId);
+    if (heard?.sure) { cu = (await customerRow(sb, orgId, customerId)) ?? cu; heard = null; }
+  }
   const contacts = await customerContacts(sb, orgId, customerId, (cu.primary_contact_id as string | null) ?? null);
   const jobs = await customerJobs(sb, orgId, customerId, contacts.map((c) => c.id));
   // Type: Coy's, else what its jobs say (all the same kind), else unknown.
@@ -40,6 +49,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ customerId:
     customer: { ...cu, customer_type: type, customer_type_source: cu.customer_type ? "coy" : type ? "jobs" : null },
     contacts, jobs,
     maps: { embed: !!process.env.NEXT_PUBLIC_GOOGLE_MAPS_EMBED_KEY, geocode: !!process.env.GOOGLE_MAPS_GEOCODE_KEY },
+    heard_address: heard ? { hint: heard.hint, match: heard.match } : null,
   }));
 }
 

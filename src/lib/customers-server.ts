@@ -1,4 +1,5 @@
 import type { ApiSession } from "@/lib/api-auth";
+import { matchAddress } from "@/lib/address-server";
 import { jobValues } from "@/lib/job-totals";
 
 /**
@@ -99,16 +100,20 @@ export function formatAddress(line1: string | null, city: string | null, state: 
 }
 
 /**
- * Lat/lng for street view — only when a server key is set (GOOGLE_MAPS_GEOCODE_KEY,
- * never sent to the browser). No key, or no match: null, and the page says so.
+ * Lat/lng for street view and the map — Google if its server key is set
+ * (GOOGLE_MAPS_GEOCODE_KEY), else Mapbox (MAPBOX_TOKEN); neither is ever sent to
+ * the browser. No key, or no match: null, and the page says so.
  */
 export async function geocode(address: string): Promise<{ lat: number; lng: number } | null> {
   const key = process.env.GOOGLE_MAPS_GEOCODE_KEY;
-  if (!key) return null;
-  try {
-    const r = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${key}`, { cache: "no-store" });
-    const b = await r.json();
-    const loc = b?.results?.[0]?.geometry?.location;
-    return typeof loc?.lat === "number" && typeof loc?.lng === "number" ? { lat: loc.lat, lng: loc.lng } : null;
-  } catch { return null; }
+  if (key) {
+    try {
+      const r = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${key}`, { cache: "no-store" });
+      const b = await r.json();
+      const loc = b?.results?.[0]?.geometry?.location;
+      if (typeof loc?.lat === "number" && typeof loc?.lng === "number") return { lat: loc.lat, lng: loc.lng };
+    } catch { /* try Mapbox */ }
+  }
+  const m = await matchAddress(address);
+  return m ? { lat: m.lat, lng: m.lng } : null;
 }

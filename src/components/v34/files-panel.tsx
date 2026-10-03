@@ -28,7 +28,7 @@ export interface FileRow {
   fetch_state: string | null; read_state: string | null; read_error: string | null;
   summary: string | null; facts: Record<string, unknown> | null; created_at: string; url: string | null;
 }
-interface Texted { id: string; message_id: string; kind: string | null; mime_type: string | null; received_at: string | null; url: string | null }
+interface Texted { id: string; message_id: string; kind: string | null; mime_type: string | null; received_at: string | null; url: string | null; on_job?: boolean }
 interface Pending { key: string; file: File; pct: number; error: string | null }
 type Filter = "all" | "photos" | "docs" | "texts";
 
@@ -74,6 +74,19 @@ export function FilesPanel({ jobId, contactId, sectionId, sections, title = "Fil
   const [drag, setDrag] = useState(false);
   const [tick, setTick] = useState(0);
   const input = useRef<HTMLInputElement | null>(null);
+
+  const [bringing, setBringing] = useState<string | null>(null);
+  const bringTexted = async (ids: string[] | "all") => {
+    if (!jobId) return;
+    setBringing(ids === "all" ? "all" : ids[0]); setErr(null);
+    try {
+      const r = await call(`/api/jobs/${jobId}/texted-photos`, "POST", ids === "all" ? { all: true } : { media_ids: ids });
+      const failed = (r.failed ?? []) as Array<{ reason: string }>;
+      if (failed.length) setErr(`${failed.length} couldn't be added: ${failed[0].reason}`);
+      setTick((n) => n + 1);
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+    finally { setBringing(null); }
+  };
 
   const query = jobId ? `job_id=${jobId}` : `contact_id=${contactId}`;
   useEffect(() => {
@@ -191,7 +204,17 @@ export function FilesPanel({ jobId, contactId, sectionId, sections, title = "Fil
           </div>
         )}
         {filter !== "texts" && shown.map((f) => <FileTile key={f.id} f={f} onOpen={() => setOpen(f)} />)}
-        {filter === "texts" && texted.map((m) => <TextedTile key={m.id} m={m} />)}
+        {filter === "texts" && jobId && texted.some((m) => !m.on_job) && (
+          <div className="flex items-center gap-2" style={{ gridColumn: "1 / -1", fontSize: F.xs, color: T.ink2 }}>
+            <span style={{ flex: 1 }}>Bring a texted photo onto the job to use it in the Plan Room, under an area, or as the proposal&apos;s cover.</span>
+            <button onClick={() => void bringTexted("all")} disabled={!!bringing}
+              style={{ height: 28, padding: "0 10px", borderRadius: 3, background: T.ink, color: T.card, fontSize: F.xs, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap", opacity: bringing ? 0.5 : 1 }}>
+              {bringing === "all" ? "Bringing…" : `Add all ${texted.filter((m) => !m.on_job).length} to the job`}
+            </button>
+          </div>
+        )}
+        {filter === "texts" && texted.map((m) => <TextedTile key={m.id} m={m}
+          onAdd={jobId && !m.on_job ? () => void bringTexted([m.id]) : undefined} busy={bringing === m.id || bringing === "all"} />)}
       </div>
 
       <FileViewer f={open} sections={sections} onClose={() => setOpen(null)}
@@ -222,7 +245,7 @@ export function FileTile({ f, onOpen }: { f: FileRow; onOpen: () => void }) {
   );
 }
 
-function TextedTile({ m }: { m: Texted }) {
+function TextedTile({ m, onAdd, busy }: { m: Texted; onAdd?: () => void; busy?: boolean }) {
   const [url, setUrl] = useState(m.url);
   const [why, setWhy] = useState<string | null>(null);
   // Not copied yet: the thread's media route fetches it from Quo and stores it.
@@ -245,8 +268,14 @@ function TextedTile({ m }: { m: Texted }) {
         <span className="flex h-full items-center justify-center px-1.5 text-center" style={{ fontSize: 10, color: T.ink3 }}>{why ?? (url ? "Open" : "…")}</span>
       )}
       <span className="absolute left-0 right-0 bottom-0 px-1.5 py-0.5" style={{ background: "rgba(18,22,26,.62)", color: "#fff", fontSize: 9.5 }}>
-        Texted{m.received_at ? ` · ${relTime(m.received_at)}` : ""}
+        {m.on_job ? "On the job ✓" : `Texted${m.received_at ? ` · ${relTime(m.received_at)}` : ""}`}
       </span>
+      {onAdd && (
+        <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); onAdd(); }} disabled={busy} aria-label="Add to the job"
+          className="absolute rounded" style={{ top: 4, right: 4, padding: "2px 6px", background: T.hiviz, color: T.onHiviz, fontSize: 10.5, fontWeight: 700, cursor: "pointer", opacity: busy ? 0.5 : 1 }}>
+          {busy ? "…" : "+ Job"}
+        </button>
+      )}
     </a>
   );
 }

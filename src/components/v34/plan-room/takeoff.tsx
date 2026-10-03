@@ -40,10 +40,10 @@ const TOOLS: Array<[Tool, string, string]> = [
   ["scale", "Scale", "Click both ends of a dimension you know, then type it"],
 ];
 
-export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, onSend, fullscreen, setFullscreen }: {
+export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, onSend, fullscreen, setFullscreen, onPhotos, photosOpen }: {
   jobId: string; data: PlansData; files: PlanFile[];
   sheetId: string | null; setSheetId: (id: string) => void; reload: () => Promise<void>;
-  onSend: (p: Param) => void; fullscreen: boolean; setFullscreen: (v: boolean) => void;
+  onSend: (p: Param) => void; fullscreen: boolean; setFullscreen: (v: boolean) => void; onPhotos?: () => void; photosOpen?: boolean;
 }) {
   const sheets = data.sheets;
   const sheet = sheets.find((s) => s.id === sheetId) ?? sheets[0] ?? null;
@@ -151,6 +151,7 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
           <button disabled title="Not yet — Dusty doesn't read drawings" style={{ ...tb(false), opacity: 0.45, cursor: "not-allowed" }}>Auto</button>
           <span className="flex-1" />
           {sheet && <span className="hidden md:inline" style={{ fontSize: F.xs, color: T.ink2, whiteSpace: "nowrap" }}>{sheetLabel(sheet)} · <ScaleBadge s={sheet} small /></span>}
+          {onPhotos && <button onClick={onPhotos} aria-pressed={!!photosOpen} title="The job's photos beside this sheet" style={tb(!!photosOpen)}>Photos</button>}
           <button onClick={() => setZoom((z) => Math.max(0.5, z / 1.25))} aria-label="Zoom out" style={tb(false)}>−</button>
           <span style={{ fontFamily: strong, fontSize: 11, width: 38, textAlign: "center", ...nums }}>{Math.round(zoom * 100)}%</span>
           <button onClick={() => setZoom((z) => Math.min(8, z * 1.25))} aria-label="Zoom in" style={tb(false)}>+</button>

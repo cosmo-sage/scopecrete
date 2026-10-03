@@ -57,7 +57,7 @@ export function FilesStep({ files, sheets, reading, onToggle, onAdd, uploading }
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: F.sm, fontWeight: 600, ...clip }}>{f.name}</div>
                 <div style={{ fontSize: F.xs, color: T.ink3, ...clip }}>
-                  {f.source === "email" ? "Email" : "Uploaded"} · {reading[f.id] ?? (f.kind === "pdf" ? (n ? `${n} sheet${n === 1 ? "" : "s"}${n ? ` · ${scaled} scaled` : ""}` : on ? "not opened yet" : "") : "photo or sketch — no scale")}
+                  {f.source === "email" ? "Email" : f.source === "text" ? "Texted" : "Uploaded"} · {reading[f.id] ?? (f.kind === "pdf" ? (n ? `${n} sheet${n === 1 ? "" : "s"}${n ? ` · ${scaled} scaled` : ""}` : on ? "not opened yet" : "") : "photo or sketch — no scale")}
                   {f.read_state ? ` · ${READ[f.read_state] ?? f.read_state}` : ""}
                 </div>
               </div>

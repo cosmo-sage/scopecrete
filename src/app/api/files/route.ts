@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
 import { CATEGORIES, MAX_FILE_BYTES, FILES_BUCKET, categoryGuess, kindOf, storagePath } from "@/lib/files";
 import { FILE_COLUMNS, signFiles } from "@/lib/files-server";
+import { textedMarker } from "@/lib/texted-photos";
 
 /**
  * Files on a job or a person (migration 045). Coy, 2026-09-29: "I need to be
@@ -50,10 +51,15 @@ export async function GET(req: NextRequest) {
   let q = supabase.from("job_files").select(FILE_COLUMNS).eq("org_id", orgId).is("deleted_at", null)
     .order("created_at", { ascending: false }).limit(300);
   if (jobId) {
-    const { data: job } = await supabase.from("jobs").select("id, contact_id").eq("org_id", orgId).eq("id", jobId).maybeSingle();
+    const { data: job } = await supabase.from("jobs").select("id, contact_id, customer_id").eq("org_id", orgId).eq("id", jobId).maybeSingle();
     if (!job) return applyCookies(NextResponse.json({ error: "No such job." }, { status: 404 }));
     q = q.eq("job_id", jobId);
     if (job.contact_id) people = [job.contact_id as string];
+    // The customer's other people text photos of the same job too.
+    if (job.customer_id) {
+      const { data: cs } = await supabase.from("contacts").select("id").eq("org_id", orgId).eq("customer_id", job.customer_id as string).is("merged_into_contact_id", null);
+      people = [...new Set([...people, ...((cs ?? []) as Array<{ id: string }>).map((c) => c.id)])];
+    }
   } else {
     q = q.eq("contact_id", contactId as string);
     people = [contactId as string];
@@ -78,8 +84,11 @@ export async function GET(req: NextRequest) {
       const { data } = await supabase.storage.from("message-media").createSignedUrls(paths, SIGN_SECONDS);
       for (const s of data ?? []) if (s.path && s.signedUrl) signed.set(s.path, s.signedUrl);
     }
+    // On a job: which of them were brought onto it (/api/jobs/[id]/texted-photos).
+    const onJob = new Set(((rows ?? []) as Array<{ source_url?: string | null }>).map((r) => r.source_url).filter(Boolean));
     texted = list.map((m) => ({ id: m.id, message_id: m.message_id, kind: m.kind, mime_type: m.mime_type,
-      received_at: m.received_at, url: m.storage_path ? signed.get(m.storage_path) ?? null : null }));
+      received_at: m.received_at, url: m.storage_path ? signed.get(m.storage_path) ?? null : null,
+      on_job: jobId ? onJob.has(textedMarker(m.id)) : false }));
   }
   return applyCookies(NextResponse.json({ files, texted }));
 }

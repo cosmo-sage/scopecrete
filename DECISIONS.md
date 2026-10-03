@@ -948,6 +948,22 @@ them out. Trigger `contacts_bucket_jobs` → `sc_customer_job_for()`:
   (`titleWithoutPrefix()` / `titleWithPrefix()`, tested). Rehearsed (rolled
   back) before applying: unnamed → named → renamed → removed by Coy →
   already named → "New job" → named by Coy.
+- **No name, no job (migration 068, applied 2026-10-03 on Coy's "Apply
+  068").** Coy: *"A job should not be created if the person doesn't have a
+  name … I would rather not create a job if I don't at least have the
+  person identified as a customer with a name."* `sc_customer_job_for()`
+  makes — and restores — nothing while neither the person nor their
+  customer has a name (`sc_contact_has_name()`: letters, not a phone
+  number). When the person is named later (their own introduction, Coy's
+  pencil, a bid), trigger `contacts_named_jobs` makes the job then (and
+  067 puts their name in front). Backfill: the 15 open automatic jobs of
+  unnamed people nobody had worked (New lead, no sections, budget lines or
+  files) were archived `archived_reason='waiting for a name'` — listed on
+  Archived & deleted with Restore, and brought back on their own when the
+  person is named. Worked jobs (two with a section) and a Lost one were left.
+  Rehearsed (rolled back): 15 waiting; naming one brought it back; an
+  unnamed person filed customer got no job; named, they got "Verdi
+  Driveway".
 
 **Dusty seeds next steps (`enrich-contacts` v9+, 2026-09-28).** Each read
 may add up to three things waiting on Coy — "Send the walkway repair price" —
@@ -2298,6 +2314,29 @@ expected start date per quoted job before it means anything. Add the field.
   machine-heard, Coy's notes winning) beside the Plan Room's measured
   aerial, and he answers with a budget plan (§3) Coy applies. A "Call
   starting" banner needs Quo's ringing event switched on — not built.
+- **Texted photos onto the job (Coy, 2026-10-03: "she texted pictures. I
+  would like to be able to pull those pictures into the plan room so that I
+  can compare them to the aerial … into the budget and plan room and
+  proposal").** A texted photo stays in `message_media` (the text is never
+  changed); **+ Job** copies it into the job's files —
+  `/api/jobs/[id]/texted-photos` (GET the photos texted by the job's person
+  and their customer's other people, each with `file_id` once on the job;
+  POST `{media_ids}` or `{all:true}`), session client, only those people's
+  inbound photos. The copy is a `job_files` row (`source='text'`,
+  `message_id`, `source_url='message_media:<id>'` so it is copied once,
+  category photo, **In plan room**, Dusty reads it), named "Texted by
+  Johnette Wilson · Oct 2 3.41 PM.jpg" (`src/lib/texted-photos.ts`, tested).
+  A photo not yet stored is first copied in from Quo (`captureMedia()`,
+  `src/lib/message-media-server.ts`, shared with the thread's media route).
+  As a job file it can be set to an area (shows under that section's
+  Photos) and picked as the proposal's cover. **Where:** the job page's
+  Files → From texts (**+ Job** on each, **Add all N to the job**, "On the
+  job ✓"), and the Plan Room's **Photos** panel (`photos-panel.tsx`) — a
+  column down the right, open over any step and over full-screen takeoff
+  (a Photos button on its toolbar too), with the job's photos one at a time,
+  large, ‹ › and Full size, and below, the ones texted but not yet on the
+  job with **+ Job** / **Bring all N in**. Only PDFs become sheets; a photo
+  is for looking at beside the aerial, not for measuring.
 - **Job header (2026-09-28)** — four tappable chips, each opening its list:
   **Status** (the seven stages, with W.I.P.'s won / scheduled / pouring),
   **Type**, **Source** and **Vendors (n)** (crew on the job, add by subtype)

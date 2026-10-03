@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
-import { fetchFromProvider } from "@/lib/quo";
+import { MEDIA_BUCKET as BUCKET, captureMedia, type MediaRow } from "@/lib/message-media-server";
 
 /**
  * The photos, videos, PDFs and contact cards on one text message — each as a
@@ -33,22 +33,7 @@ import { fetchFromProvider } from "@/lib/quo";
 
 export const dynamic = "force-dynamic";
 
-const BUCKET = "message-media";
 const EXPIRES_SECONDS = 60 * 30;
-
-const EXT: Record<string, string> = {
-  "image/jpeg": "jpg", "image/png": "png", "image/gif": "gif", "image/webp": "webp",
-  "image/heic": "heic", "video/3gpp": "3gp", "video/mp4": "mp4",
-  "application/pdf": "pdf", "text/vcard": "vcf", "text/x-vcard": "vcf",
-};
-
-interface MediaRow {
-  id: string;
-  url: string | null;
-  storage_path: string | null;
-  mime_type: string | null;
-  kind: string | null;
-}
 
 export interface MediaItem {
   id: string;
@@ -81,45 +66,12 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ messageId: 
 
   for (const row of (data ?? []) as MediaRow[]) {
     const kind = row.kind ?? "other";
-    let path = row.storage_path;
-
-    if (!path) {
-      if (!row.url) {
-        items.push({ id: row.id, kind, mime_type: row.mime_type, state: "unavailable", url: null, reason: "no source link on record" });
-        continue;
-      }
-      const got = await fetchFromProvider(row.url);
-      if ("error" in got) {
-        items.push({ id: row.id, kind, mime_type: row.mime_type, state: "unavailable", url: null, reason: got.error });
-        continue;
-      }
-
-      const mime = row.mime_type ?? got.type ?? "application/octet-stream";
-      // {org}/{message}/{media id}.{ext} — the org segment is what the storage
-      // policy checks; the media id makes the path unique per file.
-      const candidate = `${orgId}/${messageId}/${row.id}.${EXT[mime] ?? "bin"}`;
-      const { error: upErr } = await supabase.storage.from(BUCKET)
-        .upload(candidate, got.bytes, { contentType: mime, upsert: false });
-
-      // Two people opening the same thread at once both try to store it. The
-      // second upload finds the object already there, which is success, not
-      // failure — so "already exists" falls through to stamping the path.
-      if (upErr && !/exists|duplicate/i.test(upErr.message)) {
-        items.push({ id: row.id, kind, mime_type: row.mime_type, state: "unavailable", url: null, reason: `store failed: ${upErr.message}` });
-        continue;
-      }
-
-      const { error: stampErr } = await supabase
-        .from("message_media")
-        .update({ storage_path: candidate, byte_size: got.bytes.byteLength, mime_type: mime })
-        .eq("id", row.id)
-        .eq("org_id", orgId);
-      if (stampErr) {
-        // Stored but not recorded: still servable now, just re-captured next time.
-        console.error(`[media] stored ${candidate} but could not stamp: ${stampErr.message}`);
-      }
-      path = candidate;
+    const got = await captureMedia(supabase, orgId, messageId, row);
+    if ("error" in got) {
+      items.push({ id: row.id, kind, mime_type: row.mime_type, state: "unavailable", url: null, reason: got.error });
+      continue;
     }
+    const path = got.path;
 
     const { data: signed, error: signErr } = await supabase.storage.from(BUCKET)
       .createSignedUrl(path, EXPIRES_SECONDS);

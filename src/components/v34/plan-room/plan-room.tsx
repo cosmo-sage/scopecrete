@@ -20,6 +20,7 @@ import { call, isDrawing, isPlanFile, type Param, type PlanFile, type PlansData,
 import { FilesStep, SheetsStep } from "./files-sheets";
 import { TakeoffStep } from "./takeoff";
 import { AerialPicker } from "./aerial-picker";
+import { PhotosPanel } from "./photos-panel";
 import { BudgetStep, SendSheet, useBudget } from "./budget-step";
 
 type Step = "files" | "sheets" | "takeoff" | "budget";
@@ -37,6 +38,7 @@ export function PlanRoom({ jobId }: { jobId: string }) {
   const [sending, setSending] = useState<Param | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const [aerial, setAerial] = useState(false);
+  const [photos, setPhotos] = useState(false);
   const [budgetTick, setBudgetTick] = useState(0);
   const { b } = useBudget(jobId, budgetTick);
 
@@ -140,6 +142,7 @@ export function PlanRoom({ jobId }: { jobId: string }) {
   const current = step ?? (roomSheets.length ? (data?.params.length && sheets.length ? "takeoff" : "sheets") : "files");
   const scaled = sheets.filter((s) => s.scale_ft_per_pt).length;
   const planFiles = (data?.files ?? []).filter(isPlanFile);
+  const photoCount = (data?.files ?? []).filter((f) => f.kind === "image").length;
   const sent = data ? data.params.filter((p) => data.lines.some((l) => l.takeoff_parameter_id === p.id)).length : 0;
   const counts: Record<Step, string | null> = {
     files: planFiles.length ? String(planFiles.filter((f) => f.in_plan_room).length) : null,
@@ -171,6 +174,10 @@ export function PlanRoom({ jobId }: { jobId: string }) {
               {scaled === sheets.length ? "✓ " : ""}{scaled} of {sheets.length} sheets scaled
             </span>
           )}
+          <button onClick={() => setPhotos((v) => !v)} className="rounded flex items-center" title="The job's photos, and the ones the customer texted, beside the plans" aria-pressed={photos}
+            style={{ height: 32, padding: "0 12px", background: photos ? T.ink : T.card, color: photos ? T.card : T.ink, border: `1px solid ${photos ? T.ink : T.hairStrong}`, fontFamily: disp, fontSize: 13, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase", cursor: "pointer" }}>
+            Photos{photoCount ? ` · ${photoCount}` : ""}
+          </button>
           <button onClick={() => setAerial(true)} className="rounded flex items-center" title="An overhead photo of the site to measure on"
             style={{ height: 32, padding: "0 12px", background: T.card, color: T.ink, border: `1px solid ${T.hairStrong}`, fontFamily: disp, fontSize: 13, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase", cursor: "pointer" }}>
             Aerial
@@ -200,11 +207,12 @@ export function PlanRoom({ jobId }: { jobId: string }) {
           {current === "sheets" && <SheetsStep sheets={sheets} docPages={docPages} files={data.files} onOpen={(s) => go("takeoff", s.id)} />}
           {current === "takeoff" && (
             <TakeoffStep jobId={jobId} data={scoped} files={data.files} sheetId={sheetParam} setSheetId={(id) => go("takeoff", id)}
-              reload={reload} onSend={setSending} fullscreen={fullscreen} setFullscreen={setFullscreen} />
+              reload={reload} onSend={setSending} fullscreen={fullscreen} setFullscreen={setFullscreen} onPhotos={() => setPhotos((v) => !v)} photosOpen={photos} />
           )}
           {current === "budget" && <BudgetStep jobId={jobId} data={scoped} b={b} onSend={setSending} />}
         </div>
       )}
+      {data && <PhotosPanel jobId={jobId} files={data.files} open={photos} onClose={() => setPhotos(false)} onAdded={load} over={fullscreen && current === "takeoff"} />}
       <AerialPicker jobId={jobId} open={aerial} onClose={() => setAerial(false)}
         onSaved={(sheetId) => { setAerial(false); void load().then(() => go("takeoff", sheetId)); }} />
       <SendSheet jobId={jobId} p={sending} total={sending && data ? data.totals[sending.id] : undefined} b={b}

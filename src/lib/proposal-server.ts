@@ -110,12 +110,13 @@ export type Bundle = NonNullable<Awaited<ReturnType<typeof proposalBundle>>>;
 /** Prices the draft exactly as the page does — for Final, so the snapshot is the server's arithmetic, not the browser's. */
 export function priceBundle(b: Bundle) {
   const prop = b.proposal as Record<string, unknown>;
-  return priceDraft({
+  const input: DraftInput = {
     lines: b.lines as unknown as BudgetLine[], optionIds: (b.options as Array<{ id: string }>).map((o) => o.id),
     settings: b.settings, sections: b.sections as unknown as DraftInput["sections"], days: num(b.job.duration_days),
     tax_on: (b.estimate?.tax_on as boolean | undefined) ?? true, discount: (b.estimate?.discount_amount as number | undefined) ?? 0, takeoff: b.takeoff,
     option_id: (prop.option_id as string | null) ?? null, display: (prop.display ?? {}) as ProposalDisplay, draws: (prop.draws ?? []) as Draw[],
-  });
+  };
+  return { ...priceDraft(input), input };
 }
 
 export { fillOrg };

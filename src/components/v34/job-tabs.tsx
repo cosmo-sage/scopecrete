@@ -2,15 +2,16 @@
 /**
  * The job's three views, one switch (Coy, 2026-10-02: "one job budget page,
  * and I can toggle between that budget and the proposal"): Budget (the job
- * page — sections, budget, files) · Plan room · Proposal. The same strip sits
+ * page — sections, budget, files) · Plan room · Proposal. In the order of
+ * the work (Coy, 2026-10-03): Plan room, Budget, Proposal. The same strip sits
  * on all three, so each is one tap from the others and never a dead end.
  */
 import Link from "next/link";
 import { T, disp } from "@/lib/v34/tokens";
 
 const TABS = [
-  { k: "job", label: "Budget", href: (id: string) => `/dashboard/scope/${id}` },
   { k: "plans", label: "Plan room", href: (id: string) => `/dashboard/scope/${id}/plans` },
+  { k: "job", label: "Budget", href: (id: string) => `/dashboard/scope/${id}` },
   { k: "proposal", label: "Proposal", href: (id: string) => `/dashboard/scope/${id}/proposal` },
 ] as const;
 

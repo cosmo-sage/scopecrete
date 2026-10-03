@@ -4,7 +4,7 @@ Ground truth for every agent working this repo. If code disagrees with this
 document, the code is wrong or this document is stale — resolve it, don't
 guess. Update this file in the same PR that changes the behavior it describes.
 
-Last updated: 2026-10-03 (Documents is Files, everywhere — migration 074; Threads v2 — threads you make, channels per number, the customer page reshaped — migration 073; an address given is kept and asked about — migration 072; Dusty sets addresses; customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
+Last updated: 2026-10-03 (proposals sent by link, every opening tracked; every option side by side for the customer — migration 075; Documents is Files, everywhere — migration 074; Threads v2 — threads you make, channels per number, the customer page reshaped — migration 073; an address given is kept and asked about — migration 072; Dusty sets addresses; customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
 
 ---
 
@@ -1313,7 +1313,15 @@ percentage of labour — all three contradict this section and §4.
   **Good / better / best** — `estimate_options`: a line with no option is in
   every option; a line with one is in that option only; each option's total
   = shared + its own. `estimates.selected_option_id` is the one the customer
-  accepts (step 5). Once a budget has lines it IS the price: the takeoff
+  accepts (step 5). **Options only differ when lines are tagged** (Coy,
+  2026-10-03: "I don't see what the 'good', 'better', 'best' options actually
+  do") — the budget now says so in words when every line is in every option,
+  and how to make Better differ. On the proposal, **Option → Every option —
+  the customer picks** (`display.all_options`) prices each option as its own
+  proposal would be (`priceChoices()`, `src/lib/proposal.ts`, tested) and
+  shows them side by side: what every option includes, then each option's
+  own lines and total. Its draws are percentages that add up to 100% — a $
+  draw can't fit two totals — and the final refuses otherwise. Once a budget has lines it IS the price: the takeoff
   rail and phone strip show each option's total, cost, O.H., margin and
   whether it is under the **job minimum** (§4); Dusty's scope context
   quotes each option, area by area, from the same `budget()`
@@ -1819,8 +1827,8 @@ expected start date per quoted job before it means anything. Add the field.
   `documents` maps over), its search is `/api/files/search` (was
   `/api/documents`), and every label says Files. The customer page's
   Documents tab was folded into its Files tab the same day. Not renamed:
-  `documents` / `document_events` (empty — a placeholder for SENDING quotes
-  and invoices to customers, with view and accept tracking — not files) and
+  `documents` / `document_events` (sent proposals and their openings since
+  migration 075 — not files) and
   `doc_templates` (the proposal's warranty and contract text). Rehearsed
   (rolled back): 18 files before and after, through the view too; the
   service role inserts and updates through the view; a member sees all, a
@@ -2494,8 +2502,8 @@ expected start date per quoted job before it means anything. Add the field.
   **Use this** under his answer (`setDustyUse()` in `dusty-live.ts`) puts it
   in the section — Coy's tap; Dusty writes nothing. **Print / PDF** is the
   browser's print (`@media print` shows the pages only); a PDF filed on the
-  job needs a server renderer — later. **Mark final** freezes the document
-  in `job_proposals.snapshot` (the priced document and the warranty and
+  job needs a server renderer — later. **Preview** (it was Mark final —
+  below) freezes the document when it is sent, in `job_proposals.snapshot` (the priced document and the warranty and
   terms as worded), refused while draws don't add up; the database refuses
   any change to a final (`sc_job_proposal_guard`); **New version** starts
   the next draft. One draft per job. `doc_templates` were seeded from the
@@ -2508,6 +2516,55 @@ expected start date per quoted job before it means anything. Add the field.
   from the session, every id checked. Rehearsed: one draft per job; a final
   with no snapshot, or an edit to a final, refused; a stranger sees 0 rows
   and can't write; anon refused.
+- **Preview and send — the proposal by link (migration 075, Coy
+  2026-10-03: "Mark final should be changed to: 'Preview' … the preview of
+  the proposal that the customer would see when I send it … send the proposal
+  via text and email … track every time the customer views the proposal …
+  hosted on the cloud").** The proposal toolbar's **Preview** (Mark final is
+  gone, and so is the "Fix the budget first" button — Coy: "doesn't even
+  work"; why it can't be sent is said in words on the Preview) opens the
+  document exactly as the customer gets it — read-only, hidden sections,
+  groups and lines gone, no empty cover, no draw checks — as a **Phone** or
+  **Desktop**, with **Text it · Email it · Copy link** (`preview.tsx`).
+  Sending a draft freezes it as a final version first (the same server check
+  as before); then its **link** is made: a `documents` row (the old empty
+  placeholder for sending quotes) with `proposal_id`, a 32-character random
+  `token`, `shown` — the customer's copy, built by `publicSnapshot()`
+  (`src/lib/proposal-links.ts`, tested) WITHOUT cost, O.H., profit, margin,
+  hidden lines or groups (not even their names), hidden prices (zeroed) or
+  the areas' notes — and `assets`, the storage paths of the logo, cover and
+  each area's photos and map (the map drawn with its shapes into a JPEG by
+  the browser, `mapPicture()`, and uploaded to
+  `job-files/{org}/proposal/{doc}/`). Text and Email open **Coy's own**
+  Messages or mail app with the words and the link (`sms:` / `mailto:`) —
+  ScopeCrete sends nothing (§10); `sent_via` records which. A new version's
+  link retires the old ones (the customer sees "replaced — ask for the
+  latest"); **Turn this link off** revokes one. The customer opens
+  **`/p/<token>`** (Vercel, public, no sign-in, `noindex`): `/api/p/[token]`
+  calls `sc_shared_proposal()` — SECURITY DEFINER, the ONE thing anon may
+  execute here — which returns `shown` for a live link only and logs a
+  `viewed` event (a hashed IP, the browser) with `view_count`,
+  `first_viewed_at` / `last_viewed_at`, unless the reader is in the org (Coy
+  checking his own link isn't a view). Pictures are signed by the same
+  request's client; storage policy `shared_proposal_assets` lets anon read
+  an object only while a live link lists its path (`sc_shared_asset()`).
+  Anon has no grant on `documents` or `document_events`; members read and
+  write them under `get_user_org_ids()`; a link must point at a FINAL
+  proposal on its own job (`documents_guard`). **Tracking:** the toolbar's
+  line ("v1 sent · opened 3 times · last 2h ago"), the Preview's list of
+  every opening with the device, and the activity line ("Proposal opened:
+  Wilson Driveway Replacement"). APIs: `/api/jobs/[id]/proposal/link` (GET
+  the job's links with their openings; POST the link for the newest final),
+  `/api/proposal-links/[id]` (PATCH `{sent}` / `{revoke}`) — session client,
+  org from the session, every file id checked against the job; `/api/p/[token]`
+  — no service role. Rehearsed (rolled back): a member makes a link; one on a
+  draft refused; anon reads the frozen copy and the view is logged once; a
+  member's own opening not logged; a bad token null; a listed path readable
+  by anon, an unlisted one not; anon can't read either table; a stranger sees
+  no links and can't make one; a revoked link is gone and its pictures with
+  it. A preview deployment may sit behind Vercel's own login — send links
+  from scopecrete.ai. Not built: the customer accepting or picking an option
+  on the page (e-sign), and a PDF filed on the job.
 - **The job's Bid strip (2026-10-01, §2i)** — full width like the section
   cards (2026-10-02, Coy: "needs to be the same width as everything else");
   folded by default since
@@ -2524,7 +2581,9 @@ expected start date per quoted job before it means anything. Add the field.
   switch above the money strip.
 - **One job, three views (Coy, 2026-10-02: "no way … to get back from the
   proposal page" and "one job budget page, and I can toggle between that
-  budget and the proposal").** **Budget · Plan room · Proposal** — the same
+  budget and the proposal").** **Plan room · Budget · Proposal** — in the
+  order of the work (Coy, 2026-10-03: "Plan Room, Budget, Proposal. That is
+  the work flow"); the same
   segmented switch (`job-tabs.tsx`) on the job page, the Plan Room header
   and the proposal toolbar, so each is one tap from the others. The
   proposal's slide-over **Job panel is gone**: the money moved to the

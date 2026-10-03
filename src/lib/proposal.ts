@@ -36,6 +36,8 @@ export interface ProposalDisplay {
   picsOff?: Record<string, boolean>;
   /** Every area's map and photos off at once. */
   hide_area_pics?: boolean;
+  /** Offer every good / better / best option and let the customer pick (Coy, 2026-10-03: "send option and multiple quotes to the customer"). */
+  all_options?: boolean;
 }
 
 export interface ProposalArea { id: string; name: string | null; sqft: number | null }
@@ -208,6 +210,38 @@ export function priceDraft(i: DraftInput) {
   const priced = priceProposal(i.lines, res, tier, areas, i.display ?? {});
   const check = priced.ok ? drawsCheck(i.draws ?? [], priced.total) : null;
   return { res, tier, priced, check, areas };
+}
+
+// --- the customer picks: every option priced, side by side -------------------
+
+export interface ProposalChoice {
+  id: string; label: string;
+  /** The option's proposal total (rounded, as priceProposal makes it), or why it can't be priced. */
+  total: number | null; blocked: string | null;
+  /** The lines only this option has, by name. */
+  own: string[];
+}
+
+/**
+ * "Let the customer choose" (display.all_options): each option priced the way
+ * its own proposal would be, what each one adds, and the lines every option
+ * shares. With more than one total the draws can only be percentages — a $
+ * draw can't fit two totals — and must come to 100%.
+ */
+export function priceChoices(i: DraftInput, options: Array<{ id: string; label: string }>): {
+  choices: ProposalChoice[]; shared: string[]; check: { sum: number; gap: number; ok: boolean; pct: number };
+} {
+  const hidden = (id: string) => i.display.linesOff?.[id] === true || (i.display.addons ?? []).includes(id);
+  const choices = options.map((o) => {
+    const { priced } = priceDraft({ ...i, option_id: o.id });
+    const own = i.lines.filter((l) => l.option_id === o.id && !hidden(l.id)).map((l) => l.name);
+    return { id: o.id, label: o.label, total: priced.ok ? priced.total : null, blocked: priced.ok ? null : priced.blocked[0] ?? "Not priced", own };
+  });
+  const shared = i.lines.filter((l) => l.option_id === null && !hidden(l.id)).map((l) => l.name);
+  const draws = i.draws ?? [];
+  const pct = Math.round(draws.reduce((a, d) => a + (d.pct ?? 0), 0) * 100) / 100;
+  const dollars = draws.some((d) => d.amt !== null && d.amt !== undefined);
+  return { choices, shared, check: { sum: pct, gap: pct - 100, ok: !dollars && Math.abs(pct - 100) < 0.05, pct } };
 }
 
 // --- warranty and terms: the template, or the proposal's own edit -------------

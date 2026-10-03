@@ -146,3 +146,28 @@ test("every line an add-on: no price, and each add-on named so it can be put bac
   assert.match(p.blocked[0], /optional add-on/);
   assert.deepEqual(p.addons.map((a) => a.name), lines.map((l) => l.name));
 });
+
+import { priceChoices, priceDraft } from "../src/lib/proposal.ts";
+
+test("the customer picks: each option priced as its own proposal, its own lines named, the shared ones once", () => {
+  const ls = [
+    L({ id: "base", name: "Form & finish", unit_cost: 1000 }),
+    L({ id: "broom", name: "Broom finish", unit_cost: 200, option_id: "good" }),
+    L({ id: "stamp", name: "Stamped finish", unit_cost: 900, option_id: "best" }),
+  ];
+  const opts = [{ id: "good", label: "Good" }, { id: "best", label: "Best" }];
+  const input = { lines: ls, optionIds: ["good", "best"], settings: S, sections: [], days: null, tax_on: false, discount: 0, option_id: null, display: {}, draws: [{ pct: 50, when: "Start" }, { pct: 50, when: "Done" }] };
+  const r = priceChoices(input, opts);
+  assert.deepEqual(r.shared, ["Form & finish"]);
+  assert.deepEqual(r.choices.map((c) => c.own), [["Broom finish"], ["Stamped finish"]]);
+  // Each total is the same number its own proposal would show.
+  assert.equal(r.choices[0].total, priceDraft({ ...input, option_id: "good" }).priced.total);
+  assert.equal(r.choices[1].total, priceDraft({ ...input, option_id: "best" }).priced.total);
+  assert.ok(r.choices[1].total > r.choices[0].total);
+  assert.equal(r.check.ok, true);
+  // A $ draw can't fit two totals; percentages must reach 100.
+  assert.equal(priceChoices({ ...input, draws: [{ amt: 500, when: "Deposit" }, { pct: 50, when: "Done" }] }, opts).check.ok, false);
+  assert.equal(priceChoices({ ...input, draws: [{ pct: 40, when: "Start" }] }, opts).check.ok, false);
+  // A hidden line is named nowhere.
+  assert.deepEqual(priceChoices({ ...input, display: { linesOff: { stamp: true } } }, opts).choices[1].own, []);
+});

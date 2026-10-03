@@ -21,6 +21,8 @@ export interface AreaVisual {
     shapes: Array<{ kind: "area" | "linear" | "count"; color: string; geometry: Pt[]; cutouts: Pt[][] }>;
   } | null;
   photos: Array<{ id: string; url: string; name: string }>;
+  /** The map frozen as a picture when the proposal was sent (the customer's page has no Plan Room to draw from). */
+  mapImage?: string | null;
 }
 
 /** What each area has to show, from the Plan Room's data. */
@@ -96,4 +98,34 @@ export function AreaMap({ map, height }: { map: NonNullable<AreaVisual["map"]>; 
       </svg>
     </div>
   );
+}
+
+/**
+ * The area's map as one picture — the sheet's part with its shapes drawn on —
+ * frozen when the proposal is sent, so the customer's page needs no Plan Room.
+ */
+export async function mapPicture(map: NonNullable<AreaVisual["map"]>): Promise<Blob> {
+  const scale = Math.min(4, 1200 / map.box.w);
+  const doc = await openPdf(map.fileId, map.url);
+  const c = await renderRegion(doc, map.page, map.box, scale);
+  const ctx = c.getContext("2d");
+  if (!ctx) throw new Error("no canvas");
+  const k = c.width / map.box.w;
+  ctx.save();
+  ctx.setTransform(k, 0, 0, k, -map.box.x * k, -map.box.y * k);
+  const sw = map.box.w / 300;
+  const trace = (pts: Pt[], close: boolean) => { pts.forEach((p, i) => (i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]))); if (close) ctx.closePath(); };
+  for (const s of map.shapes) {
+    ctx.strokeStyle = s.color; ctx.fillStyle = s.color; ctx.lineJoin = "round"; ctx.lineCap = "round";
+    if (s.kind === "count") {
+      for (const p of s.geometry) { ctx.beginPath(); ctx.arc(p[0], p[1], sw * 4, 0, Math.PI * 2); ctx.globalAlpha = 1; ctx.fill(); ctx.lineWidth = sw; ctx.strokeStyle = "#fff"; ctx.stroke(); ctx.strokeStyle = s.color; }
+    } else if (s.kind === "linear") {
+      ctx.beginPath(); trace(s.geometry, false); ctx.lineWidth = sw * 3; ctx.globalAlpha = 1; ctx.stroke();
+    } else {
+      ctx.beginPath(); trace(s.geometry, true); for (const h of s.cutouts) trace(h, true);
+      ctx.globalAlpha = 0.3; ctx.fill("evenodd"); ctx.globalAlpha = 1; ctx.lineWidth = sw * 2; ctx.stroke();
+    }
+  }
+  ctx.restore();
+  return new Promise((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error("couldn't make the picture"))), "image/jpeg", 0.85));
 }

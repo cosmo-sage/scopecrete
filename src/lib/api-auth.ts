@@ -102,3 +102,22 @@ export async function getUserSession(req: NextRequest): Promise<
   if (error || !user) return { ok: false, response: applyCookies(NextResponse.json({ error: "Not authenticated" }, { status: 401 })) };
   return { ok: true, session: { supabase, userId: user.id, email: user.email ?? null, applyCookies } };
 }
+
+/**
+ * Whoever is asking, signed in or not — for the ONE public door: a customer
+ * opening a proposal link (migration 075). Anon when there is no session, so
+ * RLS gives a stranger nothing; the route only calls the SECURITY DEFINER
+ * function made for it (sc_shared_proposal) and signs the storage paths a live
+ * link lists (the anon storage policy checks each one). Never the service role.
+ */
+export function getReaderClient(req: NextRequest) {
+  const cookiesToSet: { name: string; value: string; options: Record<string, unknown> }[] = [];
+  const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+    cookies: { getAll: () => req.cookies.getAll(), setAll: (toSet) => { cookiesToSet.push(...toSet); } },
+  });
+  const applyCookies = (res: NextResponse) => {
+    cookiesToSet.forEach(({ name, value, options }) => res.cookies.set(name, value, options as Parameters<typeof res.cookies.set>[2]));
+    return res;
+  };
+  return { supabase, applyCookies };
+}

@@ -8,7 +8,9 @@
  * warranty and contract load), the document in the middle. The budget is the
  * only pricer — priceDraft() runs the engine's budget() and rounds the
  * customer's price up to the next $50 (the proposal only). Every change is
- * saved to the draft; Mark final freezes what the customer was shown.
+ * saved to the draft. Preview shows the document as the customer gets it and
+ * sends it (migration 075): sending freezes the draft as a final version and
+ * makes its link; every opening of the link is listed.
  */
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -17,13 +19,15 @@ import { useWide } from "@/lib/v34/use-wide";
 import { JobTabs } from "@/components/v34/job-tabs";
 import { setDustyUse } from "@/lib/v34/dusty-live";
 import {
-  drawsCheck, parseClauses, plainText, priceDraft, termsText, warrantyText,
+  drawsCheck, parseClauses, plainText, priceChoices, priceDraft, termsText, warrantyText,
   type Clause, type DocTemplate, type Draw, type DraftInput, type ProposalDisplay, type ProposalPrice,
 } from "@/lib/proposal";
 import type { BudgetSettings, TakeoffTotal } from "@/lib/engine";
 import { ProposalDocument, SECTIONS, usd, usd0, type DocArea, type DocVM } from "./document";
 import { areaVisuals } from "./area-visuals";
 import type { PlansData } from "@/components/v34/plan-room/shared";
+import { ProposalPreview, type PropLink } from "./preview";
+import { viewLine } from "@/lib/proposal-links";
 
 interface ProjectType {
   id: string; key: string; label: string; overhead_pct: number | null; margin_pct: number | null;
@@ -43,6 +47,7 @@ interface Snapshot {
   warranty_text: { title: string; body: string; template: { name: string } | null; starter: boolean; edited: boolean };
   terms_text: { title: string; clauses: Clause[]; template: { name: string } | null; starter: boolean; edited: boolean };
   sections: Rec[]; price: ProposalPrice;
+  choices?: DocVM["choices"];
 }
 type Rec = Record<string, unknown>;
 interface Bundle {
@@ -92,6 +97,16 @@ export function Proposal({ jobId }: { jobId: string }) {
     return Number.isInteger(v) && v > 0 ? v : null;
   });
   const [panel, setPanel] = useState(false);
+  const [preview, setPreview] = useState(false);
+  const [links, setLinks] = useState<PropLink[]>([]);
+  const loadLinks = useCallback(() => {
+    call(`/api/jobs/${jobId}/proposal/link`, "GET").then((d) => setLinks((d.links ?? []) as PropLink[])).catch(() => {});
+  }, [jobId]);
+  useEffect(() => {
+    let off = false;
+    call(`/api/jobs/${jobId}/proposal/link`, "GET").then((d) => { if (!off) setLinks((d.links ?? []) as PropLink[]); }).catch(() => {});
+    return () => { off = true; };
+  }, [jobId]);
   const [coverPick, setCoverPick] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [wideRef, wide] = useWide<HTMLDivElement>(1000);
@@ -148,6 +163,17 @@ export function Proposal({ jobId }: { jobId: string }) {
     });
   }, [b, p, margin]);
 
+  // "Every option — the customer picks": each option priced as its own proposal would be.
+  const picks = useMemo(() => {
+    if (!b || !p || !p.display?.all_options || b.options.length < 2) return null;
+    return priceChoices({
+      lines: b.lines, optionIds: b.options.map((o) => o.id),
+      settings: { ...b.settings, margin_pct: margin }, sections: b.sections as unknown as DraftInput["sections"],
+      days: n(b.job.duration_days), tax_on: b.estimate?.tax_on ?? true, discount: b.estimate?.discount_amount ?? 0, takeoff: b.takeoff,
+      option_id: p.option_id, display: p.display ?? {}, draws: p.draws ?? [],
+    }, b.options);
+  }, [b, p, margin]);
+
   const logo = (v: "light" | "dark") => (b?.org?.[v === "light" ? "logo_light" : "logo_dark"] ? `/api/org/logo/${v}${b.org.logo_stamp ? `?v=${encodeURIComponent(b.org.logo_stamp)}` : ""}` : null);
 
   const vm: DocVM | null = useMemo(() => {
@@ -166,7 +192,8 @@ export function Proposal({ jobId }: { jobId: string }) {
         number: snap.number, date: snap.made_at, readOnly: true, typeKey: p.project_type, typeLabel: type?.label ?? "",
         org, customer, job: { title: snap.job.title, address: snap.job.address, description: null }, coverUrl,
         scopeIntro: snap.scope_intro, areas: areasOf(snap.sections), visuals: areaVisuals(plans, snap.sections.map((x) => String(x.id))), priced: snap.price, display: snap.display, draws: snap.draws,
-        check: snap.price.ok ? drawsCheck(snap.draws, snap.price.total) : null,
+        choices: snap.choices ?? null,
+        check: snap.choices ? { sum: 100, gap: 0, ok: true, pct: 100 } : snap.price.ok ? drawsCheck(snap.draws, snap.price.total) : null,
         warranty: { ...snap.warranty_text, template: snap.warranty_text.template?.name ?? null },
         terms: { ...snap.terms_text, template: snap.terms_text.template?.name ?? null }, typeDraws: [],
       };
@@ -179,11 +206,12 @@ export function Proposal({ jobId }: { jobId: string }) {
       job: { title: b.job.title, address: b.job.address, description: b.job.description },
       coverUrl: b.photos.find((f) => f.id === p.cover_file_id)?.url ?? null,
       scopeIntro: p.scope_intro, areas: areasOf(b.sections), visuals: areaVisuals(plans, b.sections.map((x) => x.id)), priced: priced!.priced, display: p.display ?? {}, draws: p.draws ?? [],
-      check: priced!.check, warranty: { ...w, template: w.template?.name ?? null }, terms: { ...t, template: t.template?.name ?? null },
+      choices: picks ? { list: picks.choices, shared: picks.shared } : null,
+      check: picks ? picks.check : priced!.check, warranty: { ...w, template: w.template?.name ?? null }, terms: { ...t, template: t.template?.name ?? null },
       typeDraws: type?.draws ?? [],
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps -- logo() reads b.org only
-  }, [b, p, priced, finalShown, isFinal, type, orgName, plans]);
+  }, [b, p, priced, picks, finalShown, isFinal, type, orgName, plans]);
 
   // "Edit with Dusty": open him with a starter question; "Use this" brings his answer back here.
   const dusty = useCallback((kind: "warranty" | "terms" | "scope") => {
@@ -231,18 +259,14 @@ export function Proposal({ jobId }: { jobId: string }) {
     catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(null); }
   }, [b, p, jobId, load]);
 
-  const markFinal = useCallback(async () => {
-    if (!window.confirm("Mark this proposal final? It is frozen as the customer will see it; changes after this start a new version.")) return;
+  // Freeze the draft as a final version — what the customer is sent (Preview → Send). Throws so the panel can say why.
+  const finalize = useCallback(async () => {
     for (const x of timers.values()) clearTimeout(x.t);
     timers.clear();
-    try {
-      setBusy("Saving…");
-      if (p) await call(`/api/jobs/${jobId}/proposal`, "PATCH", { display: p.display, draws: p.draws, warranty: p.warranty, terms: p.terms, scope_intro: p.scope_intro ?? "" });
-      if (margin !== null) await call(`/api/jobs/${jobId}/proposal`, "PATCH", { margin_pct: margin });
-      setBusy("Marking final…");
-      await call(`/api/jobs/${jobId}/proposal/final`, "POST");
-      setViewFinal(null); await load();
-    } catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(null); }
+    if (p) await call(`/api/jobs/${jobId}/proposal`, "PATCH", { display: p.display, draws: p.draws, warranty: p.warranty, terms: p.terms, scope_intro: p.scope_intro ?? "" });
+    if (margin !== null) await call(`/api/jobs/${jobId}/proposal`, "PATCH", { margin_pct: margin });
+    await call(`/api/jobs/${jobId}/proposal/final`, "POST");
+    setViewFinal(null); await load();
   }, [jobId, p, load, margin]);
 
   const newVersion = useCallback(async () => {
@@ -254,7 +278,12 @@ export function Proposal({ jobId }: { jobId: string }) {
   if (!b || !p || !vm || !priced) return <div style={{ padding: 20, color: T.ink3 }}>Opening the proposal…</div>;
 
   const editable = !isFinal && !finalShown;
-  const blocked = !vm.priced.ok ? "Fix the budget first" : vm.check && !vm.check.ok ? "Fix draws first" : null;
+  // Why it can't be sent yet, in words (the old "Fix the budget first" button is gone — Coy, 2026-10-03).
+  const stuckChoice = vm.choices?.list.find((c) => c.total === null);
+  const blocked = vm.choices
+    ? stuckChoice ? `${stuckChoice.label} has no price yet: ${stuckChoice.blocked}` : vm.check && !vm.check.ok ? "with every option offered, the draws must be percentages that add up to 100%" : null
+    : !vm.priced.ok ? `the budget has no price yet: ${vm.priced.blocked[0] ?? ""}` : vm.check && !vm.check.ok ? "the draws don't add up to the total" : null;
+  const live = links.find((l) => !l.revoked_at && l.status !== "void") ?? null;
   const sectionsOn = SECTIONS.filter(([k]) => !(vm.display.off ?? {})[k]).length;
   const d = vm.display;
   const edits = editable ? {
@@ -279,7 +308,13 @@ export function Proposal({ jobId }: { jobId: string }) {
   // What used to be the slide-over "Job panel" (Coy, 2026-10-02): the money — margin, cost by type, the
   // sub split — lives on the job's Budget now; what shapes the DOCUMENT stays here, as one strip.
   const settings = (
-    <ProposalSettings b={b} p={p} editable={editable} onType={setType} onOption={(id) => change("option_id", id, 0)}
+    <ProposalSettings b={b} p={p} editable={editable} onType={setType}
+      onOption={(id) => {
+        // "Every option" is a display switch; a single option is the proposal's option.
+        if (id === "__all") { change("display", { ...(p.display ?? {}), all_options: true }, 0); return; }
+        if (p.display?.all_options) change("display", { ...(p.display ?? {}), all_options: false }, 0);
+        change("option_id", id, 0);
+      }}
       onWarrantyTpl={(id) => change("warranty", { template_id: id }, 0)} onTermsTpl={(id) => change("terms", { template_id: id }, 0)} />
   );
   const ok = vm.priced.ok ? vm.priced : null;
@@ -292,7 +327,9 @@ export function Proposal({ jobId }: { jobId: string }) {
           <div className="flex-1" style={{ minWidth: 120 }}>
             <div style={{ fontFamily: strong, fontWeight: 600, fontSize: 14, color: T.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b.job.title || "Proposal"} · {vm.number}{isFinal || finalShown ? " · final" : " · draft"}</div>
             <div style={{ fontSize: 11, color: T.ink3, overflowWrap: "anywhere" }}>
-              {ok ? `${usd(ok.total)}${ok.rounded !== ok.calc ? ` · ${usd(ok.calc)} rounded up to ${usd0(ok.rounded)}` : ""}` : `no price yet${!vm.priced.ok ? ` — ${vm.priced.blocked[0]}` : ""}`} · {sectionsOn}/8 sections
+              {vm.choices ? `${vm.choices.list.length} options · ${vm.choices.list.map((c) => `${c.label} ${c.total !== null ? usd0(c.total) : "—"}`).join(" · ")}`
+                : ok ? `${usd(ok.total)}${ok.rounded !== ok.calc ? ` · ${usd(ok.calc)} rounded up to ${usd0(ok.rounded)}` : ""}` : `no price yet${!vm.priced.ok ? ` — ${vm.priced.blocked[0]}` : ""}`} · {sectionsOn}/8 sections
+              {live && <> · <b style={{ color: live.view_count ? "#1F5C3A" : T.ink2 }}>v{live.version?.version} {live.sent_at ? "sent" : "link made"} · {viewLine(live)}</b></>}
             </div>
           </div>
           {b.finals.length > 0 && (
@@ -303,16 +340,19 @@ export function Proposal({ jobId }: { jobId: string }) {
             </select>
           )}
           {editable && wide && chips}
-          <button onClick={() => window.print()} disabled={!!blocked && editable} title={blocked && editable ? blocked : "Print, or Save as PDF from the print dialog"} className="rounded"
-            style={{ height: 30, padding: "0 12px", border: `1px solid ${T.hairStrong}`, background: T.card, color: blocked && editable ? T.ink3 : T.ink, fontFamily: disp, fontSize: 12, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase" }}>
-            {blocked && editable ? (wide ? blocked : "Fix first") : wide ? "Print / PDF" : "PDF"}
-          </button>
-          {editable ? (
-            <button onClick={() => void markFinal()} disabled={!!blocked || !!busy} className="rounded"
-              style={{ height: 30, padding: "0 12px", background: blocked ? "#B3AA9A" : "#B85A3C", color: "#fff", fontFamily: disp, fontSize: 12, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase" }}>{wide ? "Mark final" : "Final"}</button>
-          ) : !finalShown && (
+          {(!blocked || !editable) && (
+            <button onClick={() => window.print()} title="Print, or Save as PDF from the print dialog" className="rounded"
+              style={{ height: 30, padding: "0 12px", border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink, fontFamily: disp, fontSize: 12, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase" }}>
+              {wide ? "Print / PDF" : "PDF"}
+            </button>
+          )}
+          {!finalShown && (
+            <button onClick={() => { flushSaves(); setPreview(true); }} disabled={!!busy} className="rounded"
+              style={{ height: 30, padding: "0 12px", background: "#B85A3C", color: "#fff", fontFamily: disp, fontSize: 12, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase" }}>Preview</button>
+          )}
+          {!editable && !finalShown && (
             <button onClick={() => void newVersion()} disabled={!!busy} className="rounded"
-              style={{ height: 30, padding: "0 12px", background: "#B85A3C", color: "#fff", fontFamily: disp, fontSize: 12, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase" }}>{wide ? "New version" : "New ver."}</button>
+              style={{ height: 30, padding: "0 12px", border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink, fontFamily: disp, fontSize: 12, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase" }}>{wide ? "New version" : "New ver."}</button>
           )}
         </div>
         <div className="sc-no-print" style={{ background: T.card, borderBottom: `1px solid ${T.hair}` }}>
@@ -335,6 +375,10 @@ export function Proposal({ jobId }: { jobId: string }) {
         </div>
       </div>
 
+      {preview && (
+        <ProposalPreview jobId={jobId} vm={vm} draft={editable} version={p.version} blocked={editable ? blocked : null} coverFileId={p.cover_file_id}
+          onFinalize={finalize} onClose={() => setPreview(false)} links={links} onLinks={loadLinks} />
+      )}
       {coverPick && (
         <div className="sc-no-print fixed inset-0 z-50 flex items-center justify-center" style={{ background: "rgba(0,0,0,.4)" }} onClick={() => setCoverPick(false)}>
           <div onClick={(e) => e.stopPropagation()} className="rounded" style={{ background: T.card, width: "min(560px, 94vw)", maxHeight: "80vh", overflowY: "auto", padding: 14 }}>
@@ -377,9 +421,10 @@ function ProposalSettings({ b, p, editable, onType, onOption, onWarrantyTpl, onT
       </div>
       {b.options.length > 0 && (
         <label className="block"><span style={lbl}>Option</span><br />
-          <select disabled={!editable} value={p.option_id ?? ""} onChange={(e) => onOption(e.target.value || null)} className="mt-1" style={sel}>
+          <select disabled={!editable} value={p.display?.all_options && b.options.length > 1 ? "__all" : p.option_id ?? ""} onChange={(e) => onOption(e.target.value || null)} className="mt-1" style={sel}>
             <option value="">{b.options[0]?.label ?? "First"} (first)</option>
             {b.options.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+            {b.options.length > 1 && <option value="__all">Every option — the customer picks</option>}
           </select>
         </label>
       )}
@@ -396,6 +441,7 @@ function ProposalSettings({ b, p, editable, onType, onOption, onWarrantyTpl, onT
         </select>
       </label>
       <div style={{ fontSize: 11, color: T.ink3, flexBasis: "100%" }}>
+        {b.options.length > 1 ? <>An option is a set of budget lines: lines tagged with it are only in it; untagged lines are in every option. &ldquo;Every option&rdquo; prices each one and shows them side by side for the customer to pick.<br /></> : null}
         Margin, O.H., tax and the sub split are on the job&apos;s <Link href={`/dashboard/scope/${b.job.id}`} style={{ color: T.chalk }}>Budget</Link>. Defaults per type are in{" "}
         <Link href="/dashboard/price-book?tab=defaults" style={{ color: T.chalk }}>Price book → Defaults</Link>. Picking a template replaces this proposal&apos;s edits to that section.
       </div>

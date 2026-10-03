@@ -275,8 +275,11 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0 }: {
       </div>
       {opts.length > 0 && (
         <div className="px-3 pb-2" style={{ fontSize: F.xs, color: T.ink3 }}>
-          {tier === "all" ? "Showing every line. A line tagged with an option is only in that option; untagged lines are in all of them."
+          {!data.lines.some((l) => l.option_id)
+            ? <b style={{ color: T.hivizText, fontWeight: 600 }}>The options are all the same price: every line is in all of them. </b> : null}
+          {tier === "all" ? "Showing every line. A line tagged with an option is only in that option; untagged lines are in all of them. To make Better differ from Good, pick Better above and add its lines — they go into Better only — or open a line and set its Option."
             : `Showing the lines in ${optLabel(tier)}: the shared ones and its own. New lines go into ${optLabel(tier)}.`}
+          {opts.length > 1 && <> On the proposal, <b style={{ fontWeight: 600 }}>Option → Every option</b> shows them side by side for the customer to pick.</>}
         </div>
       )}
 

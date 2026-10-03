@@ -221,6 +221,16 @@ export async function GET(req: NextRequest) {
         summary: `Reading a bid: ${name}…`, detail: b.error, tone: "live" });
     }
   }
+  // Proposal links (migration 075): each time a customer opened one in the last two days.
+  const { data: openRows } = await supabase.from("document_events")
+    .select("id, occurred_at, document:documents(job_id, job:jobs(title))")
+    .eq("org_id", orgId).eq("event", "viewed").gte("occurred_at", new Date(Date.now() - 48 * 3600_000).toISOString())
+    .order("occurred_at", { ascending: false }).limit(6);
+  for (const e of (openRows ?? []) as unknown as Array<{ id: string; occurred_at: string; document: { job_id: string | null; job: { title: string | null } | null } | null }>) {
+    const job = e.document?.job_id ?? null;
+    items.push({ id: `opened-${e.id}`, at: e.occurred_at, kind: "proposal", contact_id: null, href: job ? `/dashboard/scope/${job}/proposal` : undefined,
+      summary: `Proposal opened: ${clipq(e.document?.job?.title ?? "a job", 140)}`, detail: "The customer opened the link you sent.", tone: "good" });
+  }
   items.sort((a, b) => b.at.localeCompare(a.at));
   if (waiting > 0) {
     items.push({ id: "waiting", at: new Date().toISOString(), kind: "waiting", contact_id: null,

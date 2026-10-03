@@ -12,7 +12,7 @@
 import React from "react";
 import { disp, strong, light, hand, nums } from "@/lib/v34/tokens";
 import { AreaMap, type AreaVisual } from "./area-visuals";
-import { drawAmount, fixLastDraw, type Clause, type Draw, type ProposalDisplay, type ProposalPrice, type ProposalGroup } from "@/lib/proposal";
+import { drawAmount, fixLastDraw, type Clause, type Draw, type ProposalChoice, type ProposalDisplay, type ProposalPrice, type ProposalGroup } from "@/lib/proposal";
 
 export const SECTIONS: Array<[string, string]> = [
   ["cover", "Cover"], ["header", "Header"], ["scope", "Scope"], ["pricing", "Pricing"],
@@ -32,6 +32,8 @@ export interface DocVM {
   /** Each area's map and photos, from the Plan Room (read live, like the cover). */
   visuals?: Record<string, AreaVisual>;
   priced: ProposalPrice;
+  /** Every option side by side, when the customer picks (display.all_options). */
+  choices?: { list: ProposalChoice[]; shared: string[] } | null;
   display: ProposalDisplay;
   draws: Draw[];
   check: { sum: number; gap: number; ok: boolean; pct: number } | null;
@@ -135,7 +137,7 @@ export function ProposalDocument({ vm, edits, narrow }: { vm: DocVM; edits: DocE
   return (
     <div className="sc-doc" style={{ width: "100%", maxWidth: 720, margin: "0 auto", background: "#fff", color: "#2A2A2A", boxShadow: "0 2px 10px rgba(42,32,20,.1)", fontSize: 13, lineHeight: 1.5 }}>
       <Section k="cover" label="Cover" off={!!off.cover} onToggle={sectionToggle("cover")} narrow={narrow}>
-        <div className={vm.coverUrl ? undefined : "sc-no-print"} style={{ position: "relative", height: narrow ? 150 : 420, background: vm.coverUrl ? `#2A2A2A url("${vm.coverUrl}") center/cover no-repeat` : "#E9E4DA" }}>
+        {(vm.coverUrl || edits) && <div className={vm.coverUrl ? undefined : "sc-no-print"} style={{ position: "relative", height: narrow ? 150 : 420, background: vm.coverUrl ? `#2A2A2A url("${vm.coverUrl}") center/cover no-repeat` : "#E9E4DA" }}>
           {!vm.coverUrl && (
             <button type="button" onClick={edits ? edits.pickCover : undefined} className="sc-no-print absolute inset-0 flex items-center justify-center" disabled={!edits}
               style={{ color: "#8C8578", fontFamily: disp, fontSize: 13, letterSpacing: ".1em", textTransform: "uppercase", border: 0, background: "transparent", cursor: edits ? "pointer" : "default" }}>
@@ -145,7 +147,7 @@ export function ProposalDocument({ vm, edits, narrow }: { vm: DocVM; edits: DocE
           {vm.coverUrl && edits && (
             <button type="button" onClick={edits.pickCover} className="sc-no-print absolute" style={{ left: 10, top: 10, background: "rgba(251,246,236,.94)", border: "1px solid #E6DCC8", borderRadius: 999, padding: "2px 10px", fontFamily: disp, fontSize: 10.5, letterSpacing: ".1em", textTransform: "uppercase", cursor: "pointer" }}>Change photo</button>
           )}
-        </div>
+        </div>}
         <div style={{ background: "#2A2A2A", color: "#FBF6EC", padding: narrow ? "14px 16px" : "20px 34px" }}>
           {/* eslint-disable-next-line @next/next/no-img-element -- signed redirect, printed */}
           {vm.org.logoOnDark && <img src={vm.org.logoOnDark} alt={vm.org.name} style={{ height: 28, marginBottom: 10 }} />}
@@ -214,13 +216,15 @@ export function ProposalDocument({ vm, edits, narrow }: { vm: DocVM; edits: DocE
                     <div className="flex items-center gap-2" style={{ fontSize: 12 }}>
                       <span style={{ fontFamily: strong, fontWeight: 600, fontSize: 11, color: "#B85A3C" }}>{String(i + 1).padStart(2, "0")}</span>
                       <b style={{ fontWeight: 600 }}>{a.name || a.work_type || "Area"}</b>
-                      <span style={{ color: "#8C8578" }}>{[v.map ? "where it is" : null, v.photos.length ? `${v.photos.length} photo${v.photos.length === 1 ? "" : "s"}` : null].filter(Boolean).join(" · ")}{hidden ? " · hidden from the proposal" : ""}</span>
+                      <span style={{ color: "#8C8578" }}>{[v.map || v.mapImage ? "where it is" : null, v.photos.length ? `${v.photos.length} photo${v.photos.length === 1 ? "" : "s"}` : null].filter(Boolean).join(" · ")}{hidden ? " · hidden from the proposal" : ""}</span>
                       <span className="flex-1" />
                       <Eye off={hidden} label={hidden ? "Show this area's map and photos" : "Hide this area's map and photos"} onClick={edits ? () => flip("picsOff", a.id) : undefined} />
                     </div>
                     {!hidden && (
                       <div className="mt-1.5 flex gap-2 flex-wrap items-start">
                         {v.map && <AreaMap map={v.map} height={narrow ? 150 : 190} />}
+                        {/* eslint-disable-next-line @next/next/no-img-element -- frozen when sent, printed */}
+                        {!v.map && v.mapImage && <img src={v.mapImage} alt={`Where ${a.name || "this area"} is`} style={{ height: narrow ? 150 : 190, maxWidth: "100%", border: "1px solid #E6DCC8", borderRadius: 3 }} />}
                         {v.photos.slice(0, 4).map((ph) => (
                           // eslint-disable-next-line @next/next/no-img-element -- signed link, printed
                           <img key={ph.id} src={ph.url} alt={ph.name} style={{ height: narrow ? 110 : 190, maxWidth: "100%", objectFit: "cover", borderRadius: 3, aspectRatio: "4 / 3" }} />
@@ -241,7 +245,9 @@ export function ProposalDocument({ vm, edits, narrow }: { vm: DocVM; edits: DocE
             <div style={kicker}>Pricing</div>
             <span className="flex-1" />
           </div>
-          {!vm.priced.ok ? (
+          {vm.choices ? (
+            <Choices vm={vm} narrow={narrow} />
+          ) : !vm.priced.ok ? (
             <div className="mt-2" style={{ background: "#F7EBC9", color: "#6B4E12", borderRadius: 4, padding: "10px 12px", fontSize: 12.5 }}>
               <b>No price yet.</b> The budget can&apos;t be priced until these are set:
               <ul style={{ margin: "6px 0 0 18px" }}>{vm.priced.blocked.slice(0, 8).map((b) => <li key={b}>{b}</li>)}</ul>
@@ -398,6 +404,36 @@ function Pricing({ vm, narrow, edits, flip, setD }: { vm: DocVM; narrow: boolean
   );
 }
 
+/** Every option side by side: what all of them include, then each option's own lines and its total. */
+function Choices({ vm, narrow }: { vm: DocVM; narrow: boolean }) {
+  const c = vm.choices!;
+  return (
+    <div className="mt-2">
+      <p style={{ fontSize: 12.5, margin: "0 0 10px", color: "#2A2A2A" }}>
+        {c.list.length === 2 ? "Two ways to do the work" : `${c.list.length} ways to do the work`} — pick the one you want.
+      </p>
+      {c.shared.length > 0 && (
+        <div style={{ fontSize: 12, color: "#5E5A52", marginBottom: 10 }}>
+          <span style={{ ...kicker, color: "#8C8578" }}>In every option</span>
+          <div>{c.shared.join(" · ")}</div>
+        </div>
+      )}
+      <div className="grid gap-2" style={{ gridTemplateColumns: narrow ? "1fr" : `repeat(${Math.min(c.list.length, 3)}, minmax(0, 1fr))` }}>
+        {c.list.map((o) => (
+          <div key={o.id} style={{ border: "1px solid #E6DCC8", borderTop: "3px solid #B85A3C", borderRadius: 4, padding: "10px 12px", breakInside: "avoid" }}>
+            <div style={{ fontFamily: disp, fontSize: 13, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase" }}>{o.label}</div>
+            <div style={{ fontFamily: strong, fontWeight: 700, fontSize: 20, margin: "2px 0 6px", ...nums }}>{o.total !== null ? usd(o.total) : "—"}</div>
+            {o.blocked && <div className="sc-no-print" style={{ fontSize: 11.5, color: "#8E2B1C" }}>Not priced: {o.blocked}</div>}
+            {o.own.length > 0
+              ? <ul style={{ margin: 0, padding: "0 0 0 16px", fontSize: 12 }}>{o.own.map((n, i) => <li key={i}>{n}</li>)}</ul>
+              : <div style={{ fontSize: 12, color: "#8C8578" }}>{c.shared.length ? "What every option includes." : "—"}</div>}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function Row({ k, v }: { k: string; v: string }) {
   return <div className="flex justify-between"><span style={{ color: "#5E5A52" }}>{k}</span><span style={nums}>{v}</span></div>;
 }
@@ -452,7 +488,8 @@ function GroupRows({ g, cols, showQty, showItems, edits, flip, toggleAddon, mone
 }
 
 function Payments({ vm, edits, narrow }: { vm: DocVM; edits: DocEdits | null; narrow: boolean }) {
-  const total = vm.priced.ok ? vm.priced.total : 0;
+  // With every option offered there is no one total: draws are percentages of the option chosen.
+  const total = vm.choices ? 0 : vm.priced.ok ? vm.priced.total : 0;
   const draws = vm.draws;
   const c = vm.check;
   const set = (i: number, patch: Partial<Draw>) => edits?.draws(draws.map((d, j) => (j === i ? { ...d, ...patch } : d)));
@@ -461,7 +498,10 @@ function Payments({ vm, edits, narrow }: { vm: DocVM; edits: DocEdits | null; na
     <>
       <div className="flex items-center gap-2 flex-wrap" style={{ paddingRight: edits ? 100 : 0 }}>
         <div style={kicker}>Payment schedule</div>
-        {c && (c.ok
+        {edits && c && vm.choices && (c.ok
+          ? <span className="sc-no-print" style={{ fontSize: 11.5, color: "#1F5C3A", background: "#DDEEE3", borderRadius: 999, padding: "0 8px" }}>✓ draws total 100%</span>
+          : <span className="sc-no-print" style={{ fontSize: 11.5, color: "#8E2B1C", background: "#F7DCD6", borderRadius: 999, padding: "0 8px" }}>⚠ with every option offered, draws are percentages that add up to 100% — now {c.pct}%</span>)}
+        {edits && c && !vm.choices && (c.ok
           ? <span className="sc-no-print" style={{ fontSize: 11.5, color: "#1F5C3A", background: "#DDEEE3", borderRadius: 999, padding: "0 8px" }}>✓ draws total {usd(c.sum)}</span>
           : <span className="sc-no-print" style={{ fontSize: 11.5, color: "#8E2B1C", background: "#F7DCD6", borderRadius: 999, padding: "0 8px" }}>⚠ draws total {usd(c.sum)} of {usd(total)}</span>)}
       </div>
@@ -472,7 +512,7 @@ function Payments({ vm, edits, narrow }: { vm: DocVM; edits: DocEdits | null; na
             <div key={i} className="flex items-center" style={{ fontSize: 12.5, gap: narrow ? 4 : 8 }}>
               {edits ? (
                 <>
-                  <span className="sc-print-only" style={{ width: 52, textAlign: "right", ...nums }}>{total && amt !== null ? `${((amt / total) * 100).toFixed(d.amt !== null && d.amt !== undefined ? 1 : 0)}%` : ""}</span>
+                  <span className="sc-print-only" style={{ width: 52, textAlign: "right", ...nums }}>{total && amt !== null ? `${((amt / total) * 100).toFixed(d.amt !== null && d.amt !== undefined ? 1 : 0)}%` : !total && d.pct !== null && d.pct !== undefined ? `${d.pct}%` : ""}</span>
                   <span className="sc-print-only flex-1">{d.when}</span>
                   <span className="sc-print-only" style={{ ...nums, fontWeight: 600 }}>{amt !== null ? usd(amt) : ""}</span>
                   <input aria-label={`Draw ${i + 1} percent`} className="sc-no-print" inputMode="decimal" value={d.amt !== null && d.amt !== undefined ? (total ? ((d.amt / total) * 100).toFixed(1) : "") : d.pct ?? ""}
@@ -490,7 +530,7 @@ function Payments({ vm, edits, narrow }: { vm: DocVM; edits: DocEdits | null; na
                 </>
               ) : (
                 <>
-                  <span style={{ width: 52, textAlign: "right", ...nums }}>{total && amt !== null ? `${((amt / total) * 100).toFixed(d.amt !== null && d.amt !== undefined ? 1 : 0)}%` : ""}</span>
+                  <span style={{ width: 52, textAlign: "right", ...nums }}>{total && amt !== null ? `${((amt / total) * 100).toFixed(d.amt !== null && d.amt !== undefined ? 1 : 0)}%` : !total && d.pct !== null && d.pct !== undefined ? `${d.pct}%` : ""}</span>
                   <span className="flex-1">{d.when}</span>
                   <span style={{ ...nums, fontWeight: 600 }}>{amt !== null ? usd(amt) : ""}</span>
                 </>
@@ -499,6 +539,7 @@ function Payments({ vm, edits, narrow }: { vm: DocVM; edits: DocEdits | null; na
           );
         })}
         {!draws.length && <div style={{ color: "#8C8578", fontSize: 12.5 }}>No payment schedule.</div>}
+        {vm.choices && draws.length > 0 && <div style={{ color: "#5E5A52", fontSize: 11.5 }}>Percentages of the option you choose.</div>}
       </div>
       {edits && (
         <div className="sc-no-print flex gap-2 mt-2 flex-wrap">
@@ -506,7 +547,7 @@ function Payments({ vm, edits, narrow }: { vm: DocVM; edits: DocEdits | null; na
           {vm.typeDraws.length > 0 && <button type="button" style={plainChip} onClick={() => edits.draws(vm.typeDraws)}>Reset to {vm.typeLabel.toLowerCase()} default</button>}
         </div>
       )}
-      {c && !c.ok && vm.priced.ok && (
+      {c && !c.ok && vm.priced.ok && !vm.choices && (
         <div className="sc-no-print mt-3" role="alert" style={{ background: "#F7DCD6", border: "1px solid #E7B4A8", color: "#8E2B1C", borderRadius: 4, padding: "10px 12px", fontSize: 12.5 }}>
           <b>Draws don&apos;t add up.</b> {usd0(Math.abs(c.gap))} {c.gap > 0 ? "over" : "short"} · {c.pct.toFixed(1)}% of the proposal. Print and Final are off until they do.
           {edits && (

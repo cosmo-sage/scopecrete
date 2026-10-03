@@ -65,6 +65,10 @@ interface Thread {
   proposal: Proposal | null;
   /** Applied because they introduced themselves; Keep or Undo in the row. */
   auto_name: { claim_id: string; quote: string | null; channel: string | null } | null;
+  /** Nothing was ever said on it — calls with no words (migration 066). */
+  silent?: boolean;
+  /** On the Archived view: when, and whether archived or deleted. */
+  archived?: { at: string; reason: string | null } | null;
 }
 
 /**
@@ -138,6 +142,7 @@ function matches(t: Thread, k: string): boolean {
 
 /** What an empty filtered list should say — the reason, not just "nothing". */
 const WHY_EMPTY: Record<string, string> = {
+  archived: "Nothing is archived. Select threads and tap Archive — they come back on their own if that number calls or texts again.",
   unsorted: "Everyone who has called or texted is in a bucket.",
   customers: "Nobody is filed as a customer yet. In Unsorted, swipe a row right and tap Customer.",
   vendors: "Nobody is filed as a vendor yet — subs, suppliers, rental yards and people looking for work go here.",
@@ -523,6 +528,34 @@ function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, onName, onB
 
 /* ----------------------------------------------------------------- screen */
 
+/** A row while choosing what to archive (or in the Archived view): a tick, the name, what's there. */
+function SelectRow({ t, selecting, on, onPick, onOpen, onRestore }: {
+  t: Thread; selecting: boolean; on: boolean; onPick: () => void; onOpen: () => void; onRestore?: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-2.5 px-3" style={{ minHeight: 56, borderBottom: `1px solid ${T.hairSoft}`, background: on ? T.hivizDim : T.card }}>
+      {selecting && (
+        <button role="checkbox" aria-checked={on} aria-label={`Select ${t.display_name}`} onClick={onPick}
+          className="shrink-0 rounded flex items-center justify-center"
+          style={{ width: 24, height: 24, border: `2px solid ${on ? T.hiviz : T.hairStrong}`, background: on ? T.hiviz : T.card, color: T.onHiviz, cursor: "pointer", fontWeight: 700 }}>
+          {on ? "✓" : ""}
+        </button>
+      )}
+      <button onClick={selecting ? onPick : onOpen} className="text-left" style={{ flex: 1, minWidth: 0, cursor: "pointer", padding: "8px 0" }}>
+        <div style={{ fontSize: F.md, fontWeight: 600, color: T.ink, ...clip }}>{t.display_name}</div>
+        <div style={{ fontSize: F.xs, color: T.ink3, ...clip }}>
+          {t.silent ? `Nothing said · ${t.msg_count} call${t.msg_count === 1 ? "" : "s"}` : t.status_summary ?? t.preview}
+          {t.archived ? ` · ${t.archived.reason?.startsWith("deleted") ? "deleted" : "archived"} ${relTime(t.archived.at)}` : ""}
+        </div>
+      </button>
+      <span style={{ fontSize: F.xs, color: T.ink3, ...nums }}>{relTime(t.occurred_at)}</span>
+      {onRestore && !selecting && (
+        <button onClick={onRestore} className="rounded px-2" style={{ ...eyebrow, height: 28, border: `1px solid ${T.chalk}`, color: T.chalk, background: T.card, cursor: "pointer" }}>Unarchive</button>
+      )}
+    </div>
+  );
+}
+
 export function ThreadList() {
   const router = useRouter();
   const params = useSearchParams();
@@ -559,6 +592,12 @@ export function ThreadList() {
   const [trayRow, setTrayRow] = useState<string | null>(null);
   const [toast, setToast] = useState<{ contactId: string; label: string } | null>(null);
   const [deciding, setDeciding] = useState(false);
+  // Archive (migration 066): pick rows, archive them with Undo; the Archived view brings them back.
+  const [selecting, setSelecting] = useState(false);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [archived, setArchived] = useState<Thread[] | null>(null);
+  const [archToast, setArchToast] = useState<{ label: string; logId: string | null } | null>(null);
+  const [archBusy, setArchBusy] = useState(false);
 
   // Bumped after a confirm, so the list and the chip counts both refetch: the
   // row's display_name becomes the real name and Unsorted drops by one. A
@@ -687,6 +726,42 @@ export function ThreadList() {
     return () => { off = true; };
   }, [reload]);
 
+  useEffect(() => {
+    if (filter !== "archived") return;
+    let off = false;
+    fetch("/api/threads?view=archived").then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (!off) setArchived(Array.isArray(d?.threads) ? d.threads : []); })
+      .catch(() => { if (!off) setArchived([]); });
+    return () => { off = true; };
+  }, [filter, reload]);
+
+  const archive = useCallback(async (ids: string[], restore: boolean) => {
+    if (!ids.length) return;
+    setArchBusy(true);
+    // Out of the list at once; the refetch brings the server's word and the counts.
+    if (restore) setArchived((a) => (a ?? []).filter((t) => !ids.includes(t.contact_id)));
+    else setThreads((ts) => ts.filter((t) => !ids.includes(t.contact_id)));
+    try {
+      const r = await fetch(restore ? "/api/archive/restore" : "/api/archive", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(restore ? { kind: "contact", ids } : { kind: "contact", ids, action: "archive" }),
+      });
+      const b = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(b?.error || `HTTP ${r.status}`);
+      setArchToast({ label: restore ? `Unarchived ${b.restored ?? ids.length}` : b.label ?? `Archived ${ids.length}`, logId: restore ? null : b.log_id ?? null });
+      setTimeout(() => setArchToast((cur) => (cur?.logId === (restore ? null : b.log_id ?? null) ? null : cur)), 8000);
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    finally { setPicked(new Set()); setSelecting(false); setArchBusy(false); setReload((n) => n + 1); }
+  }, []);
+  const undoArchive = useCallback(async (logId: string) => {
+    setArchToast(null);
+    try {
+      const r = await fetch(`/api/archive/${logId}/undo`, { method: "POST" });
+      if (!r.ok) throw new Error((await r.json().catch(() => ({})))?.error || `HTTP ${r.status}`);
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    setReload((n) => n + 1);
+  }, []);
+
   const chipCount = useCallback((k: string): number | null => {
     if (!counts) return null;
     return typeof counts[k] === "number" ? counts[k] : null;
@@ -695,7 +770,7 @@ export function ThreadList() {
 
   const visible = useMemo(() => {
     // A search looks in every bucket; otherwise the chip decides.
-    let rows = q ? threads : threads.filter((t) => matches(t, filter));
+    let rows = filter === "archived" && !q ? (archived ?? []) : q ? threads : threads.filter((t) => matches(t, filter));
     if (q) {
       rows = rows.filter((t) =>
         t.display_name.toLowerCase().includes(q)
@@ -709,7 +784,9 @@ export function ThreadList() {
       rows = [...rows].sort((a, b) => Number(bare(a)) - Number(bare(b)) || a.display_name.localeCompare(b.display_name, undefined, { sensitivity: "base" }));
     }
     return rows;
-  }, [threads, filter, q]);
+  }, [threads, filter, q, archived]);
+  const silentHere = visible.filter((t) => t.silent).length;
+  const pick = (id: string) => setPicked((p) => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
   return (
     <div>
@@ -719,6 +796,15 @@ export function ThreadList() {
           <span style={{ fontSize: F.sm, flex: 1 }}>Filed as {toast.label}</span>
           <button onClick={() => { const c = toast.contactId; setToast(null); void bucketDecide(c, null); }}
             style={{ ...eyebrow, color: T.hiviz, fontSize: F.sm, cursor: "pointer" }}>Undo</button>
+        </div>
+      )}
+
+      {archToast && (
+        <div className="fixed left-3 right-3 lg:left-auto lg:right-6 lg:w-[360px] bottom-[84px] lg:bottom-6 z-40 rounded-lg px-3 flex items-center gap-2"
+          role="status" style={{ height: 44, background: T.ink, color: T.card, boxShadow: "0 6px 20px rgba(0,0,0,.25)" }}>
+          <span style={{ fontSize: F.sm, flex: 1 }}>{archToast.label}</span>
+          {archToast.logId && <button onClick={() => void undoArchive(archToast.logId as string)}
+            style={{ ...eyebrow, color: T.hiviz, fontSize: F.sm, cursor: "pointer" }}>Undo</button>}
         </div>
       )}
 
@@ -793,6 +879,46 @@ export function ThreadList() {
         </div>
       )}
 
+      {/* Select and archive (Coy, 2026-10-03: calls where nothing was said — not spam, not anyone).
+          Archived threads come back on their own when that number calls or texts again. */}
+      {!q && !loading && !error && (
+        <div className="flex items-center gap-1.5 px-2.5 py-1.5 flex-wrap" style={{ borderBottom: `1px solid ${T.hairSoft}`, background: selecting ? T.hivizDim : "transparent" }}>
+          {!selecting ? (
+            <>
+              {filter === "archived"
+                ? <><button onClick={() => setFilter("unsorted")} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>‹ Back to Unsorted</button>
+                    <Link href="/dashboard/archive" style={{ ...eyebrow, color: T.ink3, marginLeft: 10 }}>Deleted customers &amp; jobs ›</Link></>
+                : <button onClick={() => setFilter("archived")} style={{ ...eyebrow, color: T.ink3, cursor: "pointer" }}>Archived{counts && typeof counts.archived === "number" ? ` · ${counts.archived}` : ""}</button>}
+              <span className="flex-1" />
+              {visible.length > 0 && (
+                <button onClick={() => { setSelecting(true); setPicked(new Set()); setOpenRow(null); setTrayRow(null); }}
+                  className="rounded px-2.5" style={{ ...eyebrow, height: 28, border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink, cursor: "pointer" }}>Select</button>
+              )}
+            </>
+          ) : (
+            <>
+              <span style={{ fontSize: F.sm, fontWeight: 600 }}>{picked.size} selected</span>
+              {filter !== "archived" && silentHere > 0 && (
+                <button onClick={() => setPicked(new Set(visible.filter((t) => t.silent).map((t) => t.contact_id)))}
+                  className="rounded px-2" style={{ ...eyebrow, height: 28, border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink, cursor: "pointer" }}>
+                  Nothing said · {silentHere}
+                </button>
+              )}
+              <button onClick={() => setPicked(picked.size === visible.length ? new Set() : new Set(visible.map((t) => t.contact_id)))}
+                className="rounded px-2" style={{ ...eyebrow, height: 28, border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink, cursor: "pointer" }}>
+                {picked.size === visible.length ? "None" : "All"}
+              </button>
+              <span className="flex-1" />
+              <button onClick={() => { setSelecting(false); setPicked(new Set()); }} style={{ ...eyebrow, color: T.ink3, cursor: "pointer" }}>Cancel</button>
+              <button disabled={!picked.size || archBusy} onClick={() => void archive([...picked], filter === "archived")}
+                className="rounded px-3" style={{ ...eyebrow, height: 30, background: T.hiviz, color: T.onHiviz, cursor: "pointer", opacity: !picked.size || archBusy ? 0.5 : 1 }}>
+                {filter === "archived" ? `Unarchive ${picked.size || ""}` : `Archive ${picked.size || ""}`}
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
       {loading ? (
         <div className="p-3 space-y-2">
           {[1, 2, 3, 4, 5, 6].map((i) => (
@@ -805,17 +931,22 @@ export function ThreadList() {
           detail="You are signed in, but nothing is shared with this account yet. Ask for an invitation to your organisation." />
       ) : error ? (
         <EmptyState tone="warn" title="Couldn't load threads" detail={error} />
-      ) : threads.length === 0 ? (
+      ) : threads.length === 0 && filter !== "archived" ? (
         <EmptyState title="No threads yet" detail="Calls and texts appear here as they arrive." />
       ) : visible.length === 0 ? (
         <EmptyState
-          title={q ? `Nothing matches “${q}”` : `Nothing under ${CHIPS.find((c) => c.k === filter)?.l ?? filter}`}
+          title={q ? `Nothing matches “${q}”` : filter === "archived" ? "Nothing archived" : `Nothing under ${CHIPS.find((c) => c.k === filter)?.l ?? filter}`}
           detail={q
             ? "This searches names, numbers and each thread's latest message. Full text over every message isn't wired yet, so a word said mid-conversation won't be found here."
             : WHY_EMPTY[filter] ?? "Nothing under this filter."} />
       ) : (
         <div>
-          {visible.map((t, i) => (
+          {(selecting || filter === "archived") && visible.map((t) => (
+            <SelectRow key={t.contact_id} t={t} selecting={selecting} on={picked.has(t.contact_id)} onPick={() => pick(t.contact_id)}
+              onOpen={() => router.push(`/dashboard/messages/${t.contact_id}`)}
+              onRestore={filter === "archived" ? () => void archive([t.contact_id], true) : undefined} />
+          ))}
+          {!selecting && filter !== "archived" && visible.map((t, i) => (
             <ThreadRow key={t.contact_id} t={t} first={i === 0}
               expanded={openRow === t.contact_id}
               onToggle={() => setOpenRow(openRow === t.contact_id ? null : t.contact_id)}

@@ -22,7 +22,15 @@ export type PlanAction =
   | { do: "add_group"; group: string; area: string | null }
   | { do: "new_item"; name: string; unit: string; cost_type: string; unit_cost: number | null; qty_rule: string; group: string | null; area: string | null; add: boolean; qty: number | null }
   | { do: "update_item"; item: string; unit_cost?: number | null; unit?: string; name?: string; group?: string }
-  | { do: "new_group"; name: string; cost_type: string };
+  | { do: "new_group"; name: string; cost_type: string }
+  // Archive / delete / restore (migration 066) — threads, customers, vendors, jobs by their full ids.
+  | { do: "archive"; kind: "contact" | "customer" | "job"; ids: string[]; delete: boolean; label: string | null }
+  | { do: "restore"; kind: "contact" | "customer" | "job"; ids: string[]; label: string | null };
+
+/** Steps that change records rather than a budget — they need no job open. */
+export const RECORD_STEPS = new Set(["archive", "restore"]);
+const FULL_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const RECORD_KINDS = ["contact", "customer", "job"] as const;
 
 const FENCE = /```scopecrete-plan\s*\n([\s\S]*?)```/;
 const REF = /^[0-9a-f]{8}$/i;
@@ -98,6 +106,16 @@ export function cleanAction(raw: unknown): PlanAction | null {
       const name = str(r.name, 80), t = String(r.cost_type ?? "other");
       return name && COST_TYPES.includes(t) ? { do: "new_group", name, cost_type: t } : null;
     }
+    case "archive":
+    case "restore": {
+      const kind = RECORD_KINDS.find((k) => k === r.kind);
+      const list = Array.isArray(r.ids) ? r.ids : typeof r.id === "string" ? [r.id] : [];
+      if (!kind || !list.length || list.length > 500 || !list.every((x) => typeof x === "string" && FULL_ID.test(x))) return null;
+      const ids = [...new Set((list as string[]).map((x) => x.toLowerCase()))];
+      return r.do === "archive"
+        ? { do: "archive", kind, ids, delete: r.delete === true, label: str(r.label, 120) }
+        : { do: "restore", kind, ids, label: str(r.label, 120) };
+    }
     default: return null;
   }
 }
@@ -135,8 +153,29 @@ export function describe(a: PlanAction, names: { item: (r: string) => string | n
       return `Change ${names.item(a.item) ?? `item ${a.item} (not found)`}: ${what}`;
     }
     case "new_group": return `New group “${a.name}” (${a.cost_type})`;
+    case "archive":
+    case "restore": {
+      const n = a.ids.length;
+      const noun = a.kind === "job" ? (n === 1 ? "job" : "jobs") : a.kind === "customer" ? (n === 1 ? "customer" : "customers") : (n === 1 ? "thread" : "threads");
+      const verb = a.do === "restore" ? "Restore" : a.delete ? "Delete" : "Archive";
+      return `${verb} ${n} ${noun}${a.label ? ` — ${a.label}` : ""}`;
+    }
   }
 }
+
+/**
+ * Archiving and deleting (Coy, 2026-10-03: "Dusty needs the ability to do all of
+ * it for me if I ask") — given in every context, since Coy may ask from anywhere.
+ */
+export const RECORD_RULES = `Archiving and deleting. When Coy asks you to archive threads (a thread is a person's calls and texts) or to delete a customer, vendor or job — or to bring one back — answer in words, then end with ONE fenced block:
+\`\`\`scopecrete-plan
+[{"do":"archive","kind":"contact","ids":["<full contact id>", …],"label":"18 calls where nothing was said"},
+ {"do":"archive","kind":"contact","ids":["<full contact id>"],"delete":true,"label":"Angelle Materials (vendor)"},
+ {"do":"archive","kind":"customer","ids":["<full customer id>"],"delete":true,"label":"…"},
+ {"do":"archive","kind":"job","ids":["<full job id>"],"delete":true,"label":"…"},
+ {"do":"restore","kind":"contact|customer|job","ids":["<full id>"],"label":"…"}]
+\`\`\`
+Use ONLY the full ids written in the CONTEXT (lines like "contact 1b2c…", "job …", "customer …") — never make one up, and never guess which one Coy means: if two could match, ask. Archive is for threads ("archive", not "delete"); a vendor is deleted as a contact with "delete":true; a customer's delete takes its people and open jobs with it. Coy sees each step with the names it touches and taps Apply; everything can be undone and restored, and nothing is erased — calls, texts and files stay on record. An archived thread comes back on its own if that number calls or texts again. "Nothing said" threads are marked NOTHING SAID in the context. Never archive or delete what Coy didn't ask for.`;
 
 /** The instructions Dusty is given about plans — appended to his system prompt. */
 export const PLAN_RULES = `Budget plans. When Coy asks you to build, fill or fix a job's budget, or to add, change or organise items in his Price book, answer in words first, then end with ONE fenced block in this exact form, which the app shows to Coy as steps with an Apply button (you change nothing yourself — Coy's tap does):

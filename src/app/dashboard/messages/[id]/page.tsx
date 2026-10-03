@@ -10,6 +10,7 @@ import { DA, MergeSheet, Timeline, formatPhone, type MergeInfo, type ThreadMessa
 import { PersonView, SamePerson, type Person } from "@/components/v34/person-view";
 import { NameEditor, FileAsSheet } from "@/components/v34/contact-edit";
 import { useWide } from "@/lib/v34/use-wide";
+import { ArchiveButton } from "@/components/v34/archive-actions";
 
 /**
  * One person. A customer or a vendor gets their page (person-view.tsx) — Coy,
@@ -246,6 +247,9 @@ export default function ChatThreadPage() {
               <button onClick={() => setMerging({ preselect: null })} className="rounded px-2 inline-flex" style={pill}>
                 Same as…
               </button>
+              {/* Coy, 2026-10-03: calls where nothing was said — not spam, not anyone. Comes back if they call again. */}
+              <ArchiveButton kind="contact" id={contactId} action="archive" what="this thread" then="/dashboard/messages"
+                style={{ ...pill, borderRadius: 4, padding: "0 8px", display: "inline-flex", alignItems: "center" }}>Archive</ArchiveButton>
               {openJob ? (
                 <Link href={`/dashboard/scope/${openJob.id}`} className="rounded px-2 inline-flex"
                   style={{ ...pill, background: DA.accent, color: T.onHiviz, border: "none" }}>Open scope</Link>

@@ -4,7 +4,7 @@ Ground truth for every agent working this repo. If code disagrees with this
 document, the code is wrong or this document is stale — resolve it, don't
 guess. Update this file in the same PR that changes the behavior it describes.
 
-Last updated: 2026-10-03 (call notes → Dusty's quote; aerial sheets)
+Last updated: 2026-10-03 (archive & delete; call notes → Dusty's quote; aerial sheets)
 
 ---
 
@@ -1452,6 +1452,48 @@ expected start date per quoted job before it means anything. Add the field.
   only for a number with no name, and ONE button through to their page. No
   call / text / email / composer in the row (Coy, 2026-09-28) — engaging on
   every channel belongs on the person's page.
+- **Archive and delete, restorable (migration 066, applied 2026-10-03 on
+  Coy's "Apply 066").** Coy: *"I have a lot of these calls where nothing was
+  said … I need to be able to archive these threads … in bulk on the threads
+  home page and inside the thread itself. Also there needs to be a way to
+  delete customers and vendors and jobs. Also Dusty needs the ability to do
+  all of it for me if I ask."* His answers: **Delete removes and is
+  restorable** (calls, texts and files stay on record — §2's never-wiped
+  rule); **an archived number comes back when it calls or texts again**,
+  like email. `contacts.archived_at/_by/_reason`, `customers.archived_*`,
+  `jobs.archived_by`, and `archive_log` (one row per tap: kind, action,
+  `via` coy | dusty, and the **stamp** given to every row touched, so Undo
+  puts back only rows still carrying it). RLS by `get_user_org_ids()`;
+  members insert the log and may set only `undone_at` (Supabase's default
+  table grants were revoked first — the rehearsal caught them); anon
+  nothing. **Threads:** **Select** → tick rows, **Nothing said · N** ticks
+  every thread that is only calls with no summary, voicemail or words
+  (`isSilent()`; checked 2026-10-03: none of them has a transcript or
+  summary artifact either), **Archive N** with Undo; **Archived · N** lists
+  them with **Unarchive**. A thread is out of the lists and counts while
+  `archived_at` is later than their last inbound message
+  (`isArchivedNow()`, worked out on read — nothing re-writes it). Inside a
+  thread: **Archive** by Call · File as · Same as. **Delete** on a vendor's
+  page (the contact), a customer's page (the customer, its people and its
+  open jobs, `archived_reason='deleted with their customer'`) and a job's
+  header (`jobs.archived_at`, which every list already leaves out); each
+  confirms, says it is restorable, and shows Undo in a toast that survives
+  leaving the page (`ArchiveToast` in the layout). A deleted job or customer
+  opened by link shows **Restore**; **Archived & deleted**
+  (`/dashboard/archive`) lists every deleted customer and job. The Customers,
+  Vendors and person lists leave archived rows out. **Dusty** proposes it
+  (`RECORD_RULES`, in every context): his context lists every thread,
+  customer and job by full id, threads with nothing said marked NOTHING
+  SAID; his plan's `archive` / `restore` steps take full ids only, and the
+  card lists the REAL names they touch, read from the database
+  (`/api/archive/names`), before Coy taps Apply — Dusty still changes
+  nothing himself. APIs: `/api/archive` (GET lists, POST archive/delete),
+  `/api/archive/[logId]/undo`, `/api/archive/restore`,
+  `/api/threads?view=archived` — session client, org from the session,
+  every id checked against it. Tested: `tests/archive.test.mjs`,
+  `tests/dusty-plan.test.mjs`. Rehearsed (rolled back): a member archives
+  and undoes; can't rewrite the log; a stranger sees no log and can't
+  un-archive; anon refused.
 - **Customer page and Vendor page (2026-09-28)** — `/dashboard/messages/[id]`
   renders `src/components/v34/person-view.tsx` for anyone filed vendor (and a
   customer's person with `?person=1`; since 2026-09-30 a customer's person

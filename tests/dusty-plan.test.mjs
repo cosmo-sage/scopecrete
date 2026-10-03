@@ -71,3 +71,25 @@ test("a quote from a call: new areas by key, items on them, and a line counted f
   assert.equal(describe(p.actions[0], names), "New area “Driveway” (driveway, 800 sf, 4\")");
   assert.equal(describe(p.actions[4], names), "Add Form & finish, counted from the measured “Driveway (aerial)”");
 });
+
+test("archive, delete and restore steps take full ids only", () => {
+  const a = "1b2c3d4e-0000-4000-8000-000000000001", b = "1b2c3d4e-0000-4000-8000-000000000002";
+  const p = parsePlan(`Here are the silent ones.
+\`\`\`scopecrete-plan
+[{"do":"archive","kind":"contact","ids":["${a}","${b}"],"label":"2 calls where nothing was said"},
+ {"do":"archive","kind":"job","ids":["${a}"],"delete":true},
+ {"do":"restore","kind":"customer","id":"${b}"},
+ {"do":"archive","kind":"contact","ids":["1b2c3d4e"]},
+ {"do":"archive","kind":"orgs","ids":["${a}"]},
+ {"do":"archive","kind":"contact","ids":[]}]
+\`\`\``);
+  assert.equal(p.actions.length, 3);
+  assert.equal(p.dropped, 3, "a short ref, an unknown kind and an empty list are dropped");
+  assert.deepEqual(p.actions[0], { do: "archive", kind: "contact", ids: [a, b], delete: false, label: "2 calls where nothing was said" });
+  assert.equal(p.actions[1].delete, true);
+  assert.deepEqual(p.actions[2], { do: "restore", kind: "customer", ids: [b], label: null });
+  const names = { item: () => null, area: () => "" };
+  assert.equal(describe(p.actions[0], names), "Archive 2 threads — 2 calls where nothing was said");
+  assert.equal(describe(p.actions[1], names), "Delete 1 job");
+  assert.equal(describe(p.actions[2], names), "Restore 1 customer");
+});

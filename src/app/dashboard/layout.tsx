@@ -35,6 +35,7 @@ import { NavIcon, Sheet } from "@/components/v34/primitives";
 import { DustyPanel } from "@/components/v34/dusty-panel";
 import { DustyAvatar } from "@/components/v34/dusty-avatar";
 import { ActivityLine } from "@/components/v34/activity-line";
+import { ArchiveToast } from "@/components/v34/archive-actions";
 import { SearchPanel } from "@/components/v34/search-panel";
 import { OrgLockup } from "@/components/v34/org-lockup";
 import { YouSection, OrgSection } from "@/components/v34/org-settings";
@@ -235,6 +236,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </nav>
 
       <main className={["flex-1 min-w-0 overflow-x-clip pb-[var(--sc-foot)] lg:pb-0 lg:pl-[84px]", dustyOpen ? "sc-with-dusty" : ""].join(" ")}>{children}</main>
+      <ArchiveToast />
 
       <Toolbox open={toolOpen} onClose={() => setToolOpen(false)} keys={toolKeys} active={active} badge={badge} />
 

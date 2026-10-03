@@ -33,6 +33,7 @@ import { FilesPanel } from "@/components/v34/files-panel";
 import { STATUS_NAME } from "@/lib/jobs/stages";
 import { SubRail, type SubIcon } from "@/components/v34/sub-rail";
 import { CallNotesPad, DraftQuoteButton } from "@/components/v34/call-notes-pad";
+import { ArchiveButton } from "@/components/v34/archive-actions";
 
 interface Method { kind: "mobile" | "office" | "home" | "phone" | "email"; value: string; can_text: boolean | null; primary: boolean }
 interface Contact { id: string; name: string | null; role: string | null; primary: boolean; bucket: string | null; status_summary: string | null; recent_summary: string | null; last_contacted: string | null; methods: Method[] }
@@ -42,6 +43,7 @@ interface Customer {
   lead_source: string | null; status: string | null; notes: string | null; since: string | null; primary_contact_id: string | null;
   address_line1: string | null; city: string | null; state: string | null; zip: string | null; address_formatted: string | null;
   lat: number | null; lng: number | null; address_source: string | null; created_at: string;
+  archived_at?: string | null;
 }
 interface Data { customer: Customer; contacts: Contact[]; jobs: Job[]; maps: { embed: boolean; geocode: boolean } }
 interface Item {
@@ -127,6 +129,13 @@ export function CustomerPage({ customerId, focusContact }: { customerId: string;
 
   return (
     <div ref={measure} style={{ minHeight: "calc(100dvh - var(--sc-head))", background: T.slab }}>
+      {cu.archived_at && (
+        <div className="px-4 py-2 flex items-center gap-2" style={{ background: T.redDim, fontSize: F.sm }}>
+          <span style={{ flex: 1 }}>This customer is deleted — out of every list, with their people and the jobs deleted with them.</span>
+          <button onClick={() => void fetch("/api/archive/restore", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: "customer", ids: [cu.id] }) }).then(() => setTick((n) => n + 1))}
+            className="rounded px-2.5" style={{ height: 28, border: `1px solid ${T.chalk}`, color: T.chalk, background: T.card, fontWeight: 600, cursor: "pointer" }}>Restore</button>
+        </div>
+      )}
       {/* ---- header ---- */}
       <div className="px-4 pt-3 pb-2" style={{ borderBottom: `1px solid ${T.hair}` }}>
         <div className="flex items-start gap-3 flex-wrap">
@@ -151,6 +160,8 @@ export function CustomerPage({ customerId, focusContact }: { customerId: string;
             <button onClick={() => setCallNotes(true)} disabled={!primary} style={btn()} title="Notes while you're on the phone — they land on the call">Call notes</button>
             <button onClick={() => setEditing(true)} style={btn()}>Edit</button>
             <button onClick={() => void newScope()} disabled={!primary} style={btn(true)}>+ New scope</button>
+            <ArchiveButton kind="customer" id={cu.id} action="delete" what={cu.name || "this customer"} then="/dashboard/customers"
+              style={{ ...btn(), color: T.red, borderColor: T.red }}>Delete</ArchiveButton>
           </div>
           {primary && <CallNotesPad contactId={primary.id} who={primary.name || cu.name || "this customer"} open={callNotes} onClose={() => { setCallNotes(false); setTick((n) => n + 1); }} />}
         </div>

@@ -39,6 +39,7 @@ import {
   type SectionInput,
 } from "@/lib/engine";
 import { isReinforcementCard } from "@/lib/cost-cards";
+import { ArchiveButton } from "@/components/v34/archive-actions";
 
 interface Section extends SectionInput {
   id: string;
@@ -57,6 +58,7 @@ interface Job {
   id: string; title: string | null; status: string | null; address: string | null;
   contact_id: string | null; duration_days: number | null; created_from_message_id: string | null;
   job_type: string | null; lead_source: string | null; description?: string | null; origin?: string | null;
+  archived_at?: string | null; archived_reason?: string | null;
 }
 interface Contact { id: string; name: string | null; phone: string | null }
 interface Why {
@@ -266,9 +268,19 @@ export default function ScopeBuilder() {
                 Plan sheets ({planSheets.length})
               </button>
             )}
+            <ArchiveButton kind="job" id={jobId} action="delete" what={realTitle ? `the job “${realTitle}”` : "this job"} then="/dashboard/scope"
+              style={{ height: 28, padding: "0 10px", borderRadius: 4, border: `1px solid ${T.red}`, background: T.card, color: T.red, fontFamily: disp, fontSize: F.xs, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".05em" }}>Delete</ArchiveButton>
             <JobTabs jobId={jobId} active="job" />
           </div>
         </div>
+
+        {job.archived_at && (
+          <div className="px-3 py-2 flex items-center gap-2" style={{ background: T.redDim, color: T.ink, fontSize: F.sm }}>
+            <span style={{ flex: 1 }}>This job is {job.archived_reason?.startsWith("deleted") ? "deleted" : "archived"} — it isn&apos;t on the board, the Dashboard or Dusty&apos;s lists.</span>
+            <button onClick={() => void send(`/api/archive/restore`, "POST", { kind: "job", ids: [jobId] }).then(() => setJob((j) => j && { ...j, archived_at: null, archived_reason: null }))}
+              className="rounded px-2.5" style={{ height: 28, border: `1px solid ${T.chalk}`, color: T.chalk, background: T.card, fontWeight: 600, cursor: "pointer" }}>Restore</button>
+          </div>
+        )}
 
         {why && (
           <Sheet open={whyOpen} onClose={() => setWhyOpen(false)} title="Why this job" sub="How it was made">

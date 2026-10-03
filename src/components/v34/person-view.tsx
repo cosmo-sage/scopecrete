@@ -28,6 +28,7 @@ import { useWide } from "@/lib/v34/use-wide";
 import { FilesPanel } from "@/components/v34/files-panel";
 import { CostCards } from "@/components/v34/cost-cards";
 import { CallNotesPad } from "@/components/v34/call-notes-pad";
+import { ArchiveButton } from "@/components/v34/archive-actions";
 
 export interface Person {
   contact: {
@@ -177,6 +178,9 @@ export function PersonView({ person, messages, onReload, onMerge }: {
             : <span style={{ ...act, opacity: 0.4, cursor: "default" }} title="No email on file for them">Email</span>}
           <button onClick={() => setCallNotes(true)} style={act} title="Notes while you're on the phone — they land on the call">Call notes</button>
           <button onClick={() => window.dispatchEvent(new Event("sc:dusty-open"))} style={{ ...act, color: T.hiviz, borderColor: T.hiviz }}>Ask Dusty</button>
+          {c.bucket === "vendor"
+            ? <ArchiveButton kind="contact" id={c.id} action="delete" what={title} then="/dashboard/vendors" style={{ ...act, color: T.red, borderColor: T.red }}>Delete</ArchiveButton>
+            : <ArchiveButton kind="contact" id={c.id} action="archive" what={title} then="/dashboard/messages" style={act}>Archive</ArchiveButton>}
         </div>
         <CallNotesPad contactId={c.id} who={title} open={callNotes} onClose={() => { setCallNotes(false); onReload(); }} />
       </div>

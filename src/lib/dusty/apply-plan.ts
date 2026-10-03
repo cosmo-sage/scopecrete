@@ -5,7 +5,8 @@
  * by the server against his org and the job. Nothing here is new authority:
  * it is exactly the taps Coy would make by hand, made for him once he says so.
  */
-import type { PlanAction } from "@/lib/dusty/plan";
+import { RECORD_STEPS, type PlanAction } from "@/lib/dusty/plan";
+import { archiveNow } from "@/components/v34/archive-actions";
 
 export interface PlanLookup {
   items: Array<{ id: string; name: string; cost_group_id: string | null }>;
@@ -59,8 +60,9 @@ export async function applyPlan(jobId: string, actions: PlanAction[], look: Plan
     return (b.lines ?? []).length as number;
   };
   // Groups first, so items can be filed in them; then changes; then the budget.
-  const order = { new_group: 0, update_item: 1, new_area: 2, new_item: 3, add: 4, add_group: 5 } as const;
-  const steps = [...actions].sort((a, b) => order[a.do] - order[b.do]);
+  const order = { new_group: 0, update_item: 1, new_area: 2, new_item: 3, add: 4, add_group: 5, archive: 6, restore: 6 } as const;
+  // Archive / restore steps run through applyRecords (no job needed).
+  const steps = [...actions].filter((a) => !RECORD_STEPS.has(a.do)).sort((a, b) => order[a.do] - order[b.do]);
   for (const a of steps) {
     try {
       if (a.do === "new_area") {
@@ -134,5 +136,28 @@ export async function applyPlan(jobId: string, actions: PlanAction[], look: Plan
   }
   // The budget on the page reloads itself.
   if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("sc:budget-changed"));
+  return out;
+}
+
+/**
+ * Archive / delete / restore steps (migration 066) — the same calls Coy's own
+ * taps make, marked as from Dusty's plan; each archive is one Undo in the toast.
+ */
+export async function applyRecords(actions: PlanAction[]): Promise<StepResult[]> {
+  const out: StepResult[] = [];
+  for (const a of actions) {
+    if (a.do !== "archive" && a.do !== "restore") continue;
+    try {
+      if (a.do === "archive") {
+        const r = await archiveNow(a.kind, a.ids, a.delete ? "delete" : "archive", "dusty");
+        out.push({ ok: r.count > 0, text: r.count ? r.label : "Nothing to do — already archived, or not yours" });
+      } else {
+        const r = await call("/api/archive/restore", "POST", { kind: a.kind, ids: a.ids });
+        out.push({ ok: true, text: `Restored ${r.restored}` });
+      }
+    } catch (e) {
+      out.push({ ok: false, text: e instanceof Error ? e.message : String(e) });
+    }
+  }
   return out;
 }

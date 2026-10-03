@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
 import { buildContext, parseRef } from "@/lib/dusty/context";
 import { DUSTY_SYSTEM } from "@/lib/dusty/prompt";
-import { PLAN_RULES } from "@/lib/dusty/plan";
+import { PLAN_RULES, RECORD_RULES } from "@/lib/dusty/plan";
 
 /**
  * Dusty — read-only, and it knows what Coy has open.
@@ -130,8 +130,9 @@ export async function POST(req: NextRequest) {
         model,
         stream: true,
         // On a job he may end with a budget plan (src/lib/dusty/plan.ts) — room for it.
-        max_tokens: ref.kind === "scope" ? 4000 : 2000,
-        messages: [{ role: "system", content: `${DUSTY_SYSTEM}${ref.kind === "scope" ? `\n\n${PLAN_RULES}` : ""}\n\n${ctx.text}` }, ...history],
+        // A plan (a budget, or a list of threads to archive) rides at the end — room for it.
+        max_tokens: 4000,
+        messages: [{ role: "system", content: `${DUSTY_SYSTEM}${ref.kind === "scope" ? `\n\n${PLAN_RULES}` : ""}\n\n${RECORD_RULES}\n\n${ctx.text}` }, ...history],
       }),
     });
   } catch (e) {

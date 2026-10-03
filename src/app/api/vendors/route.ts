@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
   if (!result.ok) return result.response;
   const { supabase, orgId, applyCookies } = result.session;
   const [{ data: people, error }, { data: sources }, { data: defaults }, { data: files }] = await Promise.all([
-    supabase.from("contacts").select(COLS).eq("org_id", orgId).eq("contact_type", "vendor").is("merged_into_contact_id", null)
+    supabase.from("contacts").select(COLS).eq("org_id", orgId).eq("contact_type", "vendor").is("merged_into_contact_id", null).is("archived_at", null)
       .or("classification_confirmed_at.not.is.null,auto_classified_at.not.is.null").order("name", { ascending: true, nullsFirst: false }).limit(500),
     supabase.from("cost_item_sources").select("vendor_contact_id, price_as_of").eq("org_id", orgId).eq("active", true).limit(5000),
     supabase.from("cost_items").select("default_source_id, cost_item_sources!cost_items_default_source_id_fkey(vendor_contact_id)")

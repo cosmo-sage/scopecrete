@@ -10,7 +10,7 @@ import { jobValues } from "@/lib/job-totals";
 
 type Sb = ApiSession["supabase"];
 
-export const CUSTOMER_COLS = "id, name, kind, customer_type, subtype, lead_source, status, notes, since, primary_contact_id, address_line1, city, state, zip, address_formatted, lat, lng, geocoded_at, address_source, relation, relation_confirmed_at, created_at, merged_into_customer_id";
+export const CUSTOMER_COLS = "id, name, kind, customer_type, subtype, lead_source, status, notes, since, primary_contact_id, address_line1, city, state, zip, address_formatted, lat, lng, geocoded_at, address_source, relation, relation_confirmed_at, created_at, merged_into_customer_id, archived_at, archived_reason";
 
 export interface Method { kind: "mobile" | "office" | "home" | "phone" | "email"; value: string; can_text: boolean | null; primary: boolean }
 export interface CustomerContact {

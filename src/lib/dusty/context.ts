@@ -14,6 +14,7 @@ import { moneySettings, pricingFor, type JobPricing } from "@/lib/pricing-server
 import { loadTakeoff, takeoffTotalsFor } from "@/lib/plans-server";
 import { fmtQty, scaleLabel } from "@/lib/takeoff";
 import { settleCallNotes } from "@/lib/call-notes-server";
+import { isArchivedNow } from "@/lib/archive";
 import { assemble, coldContext, scopeLines, type Assembled, type Block } from "./prompt";
 
 export type ContextRef =
@@ -55,13 +56,61 @@ export async function buildContext(sb: Sb, orgId: string, ref: ContextRef): Prom
   if (ref.kind === "customer") return customerContext(sb, orgId, ref.id);
   if (ref.kind === "cash") return cashContext(sb, orgId);
   if (ref.kind === "activity") return activityContext(sb, orgId, ref.since);
-  const [{ data: org }, inbox] = await Promise.all([
+  const [{ data: org }, inbox, records] = await Promise.all([
     sb.from("orgs").select("name").eq("id", orgId).maybeSingle(),
     inboxBlock(sb, orgId),
+    recordsBlock(sb, orgId),
   ]);
   const cold = coldContext((org?.name as string | null) ?? null, today);
   // Even with nothing open, "did you get the email I just forwarded?" has an answer (Coy, 2026-10-02).
-  return { ...cold, text: `${cold.text}\n\n## ${inbox.title}\n${inbox.lines.join("\n")}` };
+  return { ...cold, text: `${cold.text}\n\n## ${inbox.title}\n${inbox.lines.join("\n")}\n\n## ${records.title}\n${records.lines.join("\n")}` };
+}
+
+/**
+ * Every thread, customer and job by id — what Dusty needs to propose archiving or
+ * deleting (Coy, 2026-10-03: "Dusty needs the ability to do all of it for me if I
+ * ask"). He proposes; Coy's tap applies it (src/lib/dusty/plan.ts RECORD_RULES).
+ * A thread where nothing was ever said is marked NOTHING SAID.
+ */
+async function recordsBlock(sb: Sb, orgId: string): Promise<Block> {
+  const [{ data: msgs }, { data: people }, { data: jobs }, { data: custs }] = await Promise.all([
+    sb.from("messages").select("contact_id, channel, direction, occurred_at, body_text, summary").eq("org_id", orgId)
+      .not("contact_id", "is", null).order("occurred_at", { ascending: false }).limit(4000),
+    sb.from("contacts").select("id, name, phone, contact_type, classification_confirmed_at, auto_classified_at, archived_at")
+      .eq("org_id", orgId).is("merged_into_contact_id", null).limit(1500),
+    sb.from("jobs").select("id, title, status, archived_at, customer_id").eq("org_id", orgId).order("created_at", { ascending: false }).limit(200),
+    sb.from("customers").select("id, name, archived_at").eq("org_id", orgId).is("merged_into_customer_id", null).limit(500),
+  ]);
+  const per = new Map<string, { last: string | null; lastIn: string | null; n: number; said: boolean }>();
+  for (const m of (msgs ?? []) as Array<{ contact_id: string; channel: string | null; direction: string | null; occurred_at: string | null; body_text: string | null; summary: string | null }>) {
+    const e = per.get(m.contact_id) ?? { last: m.occurred_at, lastIn: null, n: 0, said: false };
+    e.n++;
+    e.said ||= m.channel !== "call" || !!(m.body_text ?? "").trim() || !!(m.summary ?? "").trim();
+    if (!e.lastIn && m.direction === "inbound") e.lastIn = m.occurred_at;
+    per.set(m.contact_id, e);
+  }
+  const live: string[] = [], gone: string[] = [];
+  for (const c of (people ?? []) as Array<{ id: string; name: string | null; phone: string | null; contact_type: string | null; classification_confirmed_at: string | null; auto_classified_at: string | null; archived_at: string | null }>) {
+    const e = per.get(c.id);
+    if (!e) continue;
+    const bucket = c.classification_confirmed_at || c.auto_classified_at ? c.contact_type ?? "unsorted" : "unsorted";
+    const line = `- contact ${c.id} · ${c.name?.trim() || c.phone || "unknown"} · ${bucket} · ${e.n} message${e.n === 1 ? "" : "s"}, last ${day(e.last)}${e.said ? "" : " · NOTHING SAID"}`;
+    if (isArchivedNow(c.archived_at, e.lastIn)) gone.push(line); else live.push(line);
+  }
+  const jobRows = (jobs ?? []) as Array<{ id: string; title: string | null; status: string | null; archived_at: string | null }>;
+  const custRows = (custs ?? []) as Array<{ id: string; name: string | null; archived_at: string | null }>;
+  return {
+    title: "Threads, customers and jobs — ids for archive / delete plans",
+    trimmable: true,
+    lines: [
+      `Threads in the lists (${live.length}):`, ...live.slice(0, 250),
+      `Archived threads (${gone.length}):`, ...gone.slice(0, 60),
+      "Jobs:", ...jobRows.filter((j) => !j.archived_at).slice(0, 100).map((j) => `- job ${j.id} · ${j.title || "untitled"} · ${j.status}`),
+      "Deleted or archived jobs:", ...jobRows.filter((j) => j.archived_at).slice(0, 40).map((j) => `- job ${j.id} · ${j.title || "untitled"}`),
+      "Customers:", ...custRows.filter((c) => !c.archived_at && c.name).slice(0, 150).map((c) => `- customer ${c.id} · ${c.name}`),
+      "Deleted customers:", ...custRows.filter((c) => c.archived_at).slice(0, 40).map((c) => `- customer ${c.id} · ${c.name || "unnamed"}`),
+    ],
+  };
 }
 
 const BID_STATE: Record<string, string> = {
@@ -268,6 +317,7 @@ async function threadContext(sb: Sb, orgId: string, contactId: string): Promise<
 
   const files = await filesBlock(sb, orgId, { contactId });
   return assemble(`${who.name}'s thread`, [
+    { title: "Ids (for an archive / delete plan)", lines: [`This thread: contact ${contactId}`] },
     who.block,
     ...(files ? [files] : []),
     { title: `Messages (last ${msgs.length}, oldest first)`, lines, trimmable: true },
@@ -317,7 +367,7 @@ async function scopeContext(sb: Sb, orgId: string, jobId: string): Promise<Assem
       .filter(([, v]) => typeof v === "string" && v).map(([k, v]) => `- ${r.name || "section"} ${k}: ${v}`));
   const title = (job.title as string | null) || "Untitled scope";
   return assemble(`scope: ${title}`, [
-    { title: "Job", lines: [`Title: ${title}`, `Status: ${job.status}`, `Address: ${(job.address as string | null) || "not recorded"}`,
+    { title: "Job", lines: [`Title: ${title}`, `Id (for an archive / delete plan): job ${jobId}${job.customer_id ? `; its customer: customer ${job.customer_id}` : ""}`, `Status: ${job.status}`, `Address: ${(job.address as string | null) || "not recorded"}`,
       `Days on this job: ${days ?? "not set"}`, `For: ${who ? who.name : "no customer attached"}`,
       `Pricing: O.H. ${jp?.settings.overhead_pct ?? "NOT SET"}%, margin ${jp?.settings.margin_pct ?? "NOT SET"}% — price = cost × (1 + O.H.) ÷ (1 − margin)`,
       `Sales tax: ${jp?.tax.rate !== null && jp?.tax.rate !== undefined ? `${jp.tax.rate}% (${jp.tax.source === "override" ? "typed for this job" : `${jp.tax.parish} parish`})` : `unknown — ${jp?.tax.missing ?? "no rate"}`}`] },
@@ -601,7 +651,7 @@ async function customerContext(sb: Sb, orgId: string, id: string): Promise<Assem
       .reverse().map((m) => `${day(m.occurred_at)} ${m.direction === "outbound" ? "OUT" : `IN (${nameOf.get(m.contact_id) ?? "contact"})`} ${m.channel === "call" ? `CALL — ${m.summary?.trim() || "no summary"}` : `TEXT: ${m.body_text?.trim() || "(attachment)"}`}`);
     const mail = await emailsBlock(sb, orgId, { customerId: id });
     return assemble(`${cu.name ?? "Customer"} (customer page)`, [
-      { title: "The customer", lines: facts },
+      { title: "The customer", lines: [...facts, `Ids (for an archive / delete plan): customer ${cu.id}; its people ${ids.map((x) => `contact ${x}`).join(", ") || "none"}`] },
       ...blocks.map((b) => b.block),
       ...(mail ? [mail] : []),
       { title: "Most recent messages, all contacts", lines, trimmable: true },
@@ -709,5 +759,6 @@ async function activityContext(sb: Sb, orgId: string, since: string): Promise<As
     await inboxBlock(sb, orgId),
     { title: "What Dusty's background reader did", lines: readLines },
     { title: "Unsorted", lines: [`${unsorted ?? "unknown"} contacts nobody has sorted yet.`] },
+    await recordsBlock(sb, orgId),
   ]);
 }

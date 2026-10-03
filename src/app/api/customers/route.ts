@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
 
   const [{ data: cs, error: cErr }, { data: js, error: jErr }] = await Promise.all([
     sb.from("contacts").select("id, name, phone, email, customer_id, contact_type, classification_confirmed_at, auto_classified_at, created_at, last_contacted, status_summary, recent_summary, is_primary")
-      .eq("org_id", orgId).is("merged_into_contact_id", null).not("customer_id", "is", null),
+      .eq("org_id", orgId).is("merged_into_contact_id", null).is("archived_at", null).not("customer_id", "is", null),
     sb.from("jobs").select("id, customer_id, contact_id, job_type, status, lead_source").eq("org_id", orgId).is("archived_at", null),
   ]);
   if (cErr || jErr) return applyCookies(NextResponse.json({ error: (cErr ?? jErr)!.message }, { status: 500 }));
@@ -70,7 +70,7 @@ export async function GET(req: NextRequest) {
   if (!ids.length) return applyCookies(NextResponse.json({ customers: [], unnamed: [] }));
   const { data: rows, error } = await sb.from("customers")
     .select("id, name, customer_type, status, address_formatted, address_line1, city, state, zip, lead_source, since, primary_contact_id")
-    .eq("org_id", orgId).in("id", ids).is("merged_into_customer_id", null);
+    .eq("org_id", orgId).in("id", ids).is("merged_into_customer_id", null).is("archived_at", null);
   if (error) return applyCookies(NextResponse.json({ error: error.message }, { status: 500 }));
 
   type R = { id: string; name: string | null; customer_type: string | null; status: string | null; address_formatted: string | null; address_line1: string | null;

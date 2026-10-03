@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
+import { isArchivedNow } from "@/lib/archive";
 
 /**
  * Thread list. Reads `messages` ONLY.
@@ -121,6 +122,10 @@ export interface Thread {
    * Undo. Null for every name Coy typed or confirmed.
    */
   auto_name: { claim_id: string; quote: string | null; channel: string | null } | null;
+  /** Nothing was ever said: only calls, none with a summary, voicemail or words (src/lib/archive.ts). */
+  silent: boolean;
+  /** Set on the Archived view: when it was archived, and why (archived, or deleted). */
+  archived: { at: string; reason: string | null } | null;
 }
 
 export interface ThreadProposal {
@@ -202,26 +207,31 @@ export async function GET(req: NextRequest) {
   // Fold newest-first rows into one entry per contact. The first row seen for a
   // contact is its latest message, which is the distinct-on in the work order's
   // query expressed against a client that has no distinct-on.
-  const byContact = new Map<string, { latest: MessageRow; count: number }>();
+  const byContact = new Map<string, { latest: MessageRow; count: number; lastIn: string | null; said: boolean }>();
   for (const r of (rows ?? []) as MessageRow[]) {
     const key = r.contact_id as string;
+    const said = r.channel !== "call" || !!(r.body_text ?? "").trim() || !!(r.summary ?? "").trim();
+    const inbound = r.direction === "inbound" ? r.occurred_at : null;
     const seen = byContact.get(key);
-    if (seen) seen.count += 1;
-    else byContact.set(key, { latest: r, count: 1 });
+    if (seen) { seen.count += 1; seen.said ||= said; if (!seen.lastIn && inbound) seen.lastIn = inbound; }
+    else byContact.set(key, { latest: r, count: 1, lastIn: inbound, said });
   }
+  // Archived (migration 066): out of the lists until they call or text again.
+  const view = req.nextUrl.searchParams.get("view") === "archived" ? "archived" : "live";
 
   // Opportunistic names. Expected to return nothing today — see the header.
   // Failure here is not an error: the list is fully usable without it.
   const contactIds = [...byContact.keys()];
-  const names = new Map<string, { name: string | null; phone: string | null; contact_type: string | null; contact_subtype: string | null; customer_id: string | null; name_source: string | null; name_claim_id: string | null; confirmed: boolean; auto_at: string | null; auto_reason: string | null; status_summary: string | null; recent_summary: string | null; job_type_hint: string | null }>();
+  const names = new Map<string, { archived_at: string | null; archived_reason: string | null; name: string | null; phone: string | null; contact_type: string | null; contact_subtype: string | null; customer_id: string | null; name_source: string | null; name_claim_id: string | null; confirmed: boolean; auto_at: string | null; auto_reason: string | null; status_summary: string | null; recent_summary: string | null; job_type_hint: string | null }>();
   let contactsReadable = false;
   if (contactIds.length > 0) {
     const { data: contacts } = await supabase
       .from("contacts")
-      .select("id, name, phone, contact_type, contact_subtype, customer_id, name_source, name_claim_id, classification_confirmed_at, auto_classified_at, auto_classified_reason, status_summary, recent_summary, job_type_hint")
+      .select("id, name, phone, contact_type, contact_subtype, customer_id, name_source, name_claim_id, classification_confirmed_at, auto_classified_at, auto_classified_reason, status_summary, recent_summary, job_type_hint, archived_at, archived_reason")
       .in("id", contactIds.slice(0, 1000));
     for (const c of (contacts ?? []) as Array<Record<string, string | null>>) {
       names.set(c.id as string, {
+        archived_at: c.archived_at, archived_reason: c.archived_reason,
         name: c.name, phone: c.phone,
         contact_type: c.contact_type, contact_subtype: c.contact_subtype,
         confirmed: !!c.classification_confirmed_at, auto_at: c.auto_classified_at, auto_reason: c.auto_classified_reason,
@@ -323,7 +333,12 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  const threads: Thread[] = [...byContact.entries()].map(([contactId, { latest, count }]) => {
+  const entries = [...byContact.entries()].filter(([contactId, e]) => {
+    const c = names.get(contactId);
+    const gone = isArchivedNow(c?.archived_at, e.lastIn);
+    return view === "archived" ? gone : !gone;
+  });
+  const threads: Thread[] = entries.map(([contactId, { latest, count, said }]) => {
     // The counterparty is whichever address is not one of ours.
     const from = latest.from_address;
     const to = latest.to_address;
@@ -378,6 +393,8 @@ export async function GET(req: NextRequest) {
       auto_name: realName && c?.name_source === "machine" && c.name_claim_id && autoByClaim.has(c.name_claim_id)
         ? { claim_id: c.name_claim_id, ...autoByClaim.get(c.name_claim_id)! }
         : null,
+      silent: !said,
+      archived: view === "archived" && c?.archived_at ? { at: c.archived_at, reason: c.archived_reason } : null,
     };
   });
 

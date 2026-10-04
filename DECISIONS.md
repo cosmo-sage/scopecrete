@@ -4,7 +4,7 @@ Ground truth for every agent working this repo. If code disagrees with this
 document, the code is wrong or this document is stale — resolve it, don't
 guess. Update this file in the same PR that changes the behavior it describes.
 
-Last updated: 2026-10-04 (sales tax by address via TaxLocus — migration 078, not applied; archive reasons; Lines, providers and logs — migration 077; internal notes with @-tags; Jobs board sort and filter; jobs by hand — migration 076; done and lost customers in Threads; proposals sent by link, every opening tracked; every option side by side for the customer — migration 075; Documents is Files, everywhere — migration 074; Threads v2 — threads you make, channels per number, the customer page reshaped — migration 073; an address given is kept and asked about — migration 072; Dusty sets addresses; customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
+Last updated: 2026-10-04 (sales tax by address via TaxLocus — migration 078; archive reasons; Lines, providers and logs — migration 077; internal notes with @-tags; Jobs board sort and filter; jobs by hand — migration 076; done and lost customers in Threads; proposals sent by link, every opening tracked; every option side by side for the customer — migration 075; Documents is Files, everywhere — migration 074; Threads v2 — threads you make, channels per number, the customer page reshaped — migration 073; an address given is kept and asked about — migration 072; Dusty sets addresses; customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
 
 ---
 
@@ -1192,8 +1192,8 @@ else the customer's), or a rate typed on the job (`jobs.tax_rate_source =
 ("parish unknown — set it on the job"). Coy: *"Sales tax should be
 calculated from the job location."*
 
-**Tax by the job's address — TaxLocus (migration 078, Coy 2026-10-04: a
-TaxLocus key).** `TAXLOCUS_API_KEY` is in Vercel (production, preview,
+**Tax by the job's address — TaxLocus (migration 078, applied 2026-10-04 on
+Coy's "apply 078"; Coy's TaxLocus key).** `TAXLOCUS_API_KEY` is in Vercel (production, preview,
 development); only the server reads it (`src/lib/tax-lookup-server.ts`).
 `POST https://api.taxlocus.com/v1/rate/lookup` (Bearer key) with the job's
 address — its own fields or line, else its customer's (`addressParts()`; a
@@ -1209,8 +1209,7 @@ the one looked up**; the parish read from the address and the org's table.
 Looked up once per address when the budget opens; the tax sheet shows the
 rate, its parts and its date with **Look up again** (`POST
 /api/jobs/[id]/tax`, which replaces a picked parish). Free tier: 1,000
-lookups a month. Before 078 is applied the reads fall back and nothing looks
-up.
+lookups a month. (Before 078 the reads fell back and nothing looked up.)
 
 Equipment rental bills by the day.
 

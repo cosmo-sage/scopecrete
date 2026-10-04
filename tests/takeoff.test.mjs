@@ -2,8 +2,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  polygonArea, polylineLength, rectPoints, parseFeet, parsePrintedScale, scaleFromPoints, scaleLabel,
-  measurementQty, groupTotals,
+  polygonArea, polygonPerimeter, polylineLength, rectPoints, parseFeet, parsePrintedScale, scaleFromPoints, scaleLabel,
+  measurementQty, measurementPerimeter, groupTotals,
 } from "../src/lib/takeoff.ts";
 import { readSheet, disciplineOf, textLines } from "../src/lib/plan-sheets.ts";
 import { budget, ruleQty, takeoffUnit } from "../src/lib/engine/index.ts";
@@ -56,6 +56,17 @@ test("a cutout comes off the area", () => {
   near(q.qty, 1184);
 });
 
+test("an area's perimeter: its outline closed, plus every cutout's edge", () => {
+  const r = rectPoints([0, 0], [270, 360]);             // 30×40 → 140 LF round it
+  near(polygonPerimeter(r), 1260);
+  const S = { ft_per_pt: EIGHTH, method: "manual", label: "C-5" };
+  near(measurementPerimeter("area", { geometry: r }, S), 140);
+  const hole = rectPoints([72, 72], [108, 108]);         // 4×4 ft → 16 LF more
+  near(measurementPerimeter("area", { geometry: r, cutouts: [hole] }, S), 156);
+  assert.equal(measurementPerimeter("linear", { geometry: r }, S), null);
+  assert.equal(measurementPerimeter("area", { geometry: r }, { ft_per_pt: null, method: null, label: "A-1" }), null);
+});
+
 test("linear is the polyline length; count needs no scale", () => {
   const pl = [[0, 0], [270, 0], [270, 360]]; // 30 + 40 ft
   near(polylineLength(pl), 630);
@@ -90,6 +101,10 @@ test("group totals: sum, depth → yards, one unscaled shape blocks the group", 
   const t = groupTotals(params, ms, sheets);
   near(t.p1.qty, 1360);
   near(t.p1.cy, 1360 * 0.5 / 27);
+  near(t.p1.perim_lf, 140 + 88);                        // 30×40 and 4×40
+  near(t.p1.parts.find((x) => x.id === "m2").perim_lf, 88);
+  assert.equal(t.p2.perim_lf, null);
+  assert.equal(t.p3.perim_lf, null);
   assert.equal(t.p2.qty, null);
   assert.match(t.p2.blocked, /C-6 scale not set/);
   assert.equal(t.p3.qty, 2);
@@ -102,7 +117,7 @@ test("from_takeoff in the budget: the group's total in the card's unit", () => {
   assert.equal(takeoffUnit("cy"), "CY");
   assert.equal(takeoffUnit("bag"), null);
   const takeoff = {
-    p1: { name: "Slab on grade", unit: "SF", qty: 1360, cy: 1360 * 0.5 / 27, blocked: null },
+    p1: { name: "Slab on grade", unit: "SF", qty: 1360, cy: 1360 * 0.5 / 27, perim_lf: 228, blocked: null },
     p2: { name: "Curb", unit: "LF", qty: null, cy: null, blocked: "sheet C-6 scale not set" },
     p4: { name: "Walk", unit: "SF", qty: 200, cy: null, blocked: null },
   };
@@ -116,7 +131,12 @@ test("from_takeoff in the budget: the group's total in the card's unit", () => {
   assert.equal(blocked.ok, false); assert.match(blocked.missing[0], /Curb — sheet C-6 scale not set/);
   const noDepth = ruleQty(L({ takeoff_parameter_id: "p4", unit: "cy" }), [], null, takeoff);
   assert.match(noDepth.missing[0], /depth/);
-  const wrong = ruleQty(L({ takeoff_parameter_id: "p1", unit: "lf" }), [], null, takeoff);
+  // An LF card on an area group counts the edge round it (form & finish by the foot).
+  const edge = ruleQty(L({ takeoff_parameter_id: "p1", unit: "lf" }), [], null, takeoff);
+  assert.ok(edge.ok); assert.equal(edge.qty, 228); assert.match(edge.note, /perimeter/);
+  const noEdge = ruleQty(L({ takeoff_parameter_id: "p4", unit: "lf" }), [], null, takeoff);
+  assert.match(noEdge.missing[0], /perimeter/);
+  const wrong = ruleQty(L({ takeoff_parameter_id: "p1", unit: "ea" }), [], null, takeoff);
   assert.match(wrong.missing[0], /measured in SF/);
   const gone = ruleQty(L({ takeoff_parameter_id: "zzz" }), [], null, takeoff);
   assert.match(gone.missing[0], /removed/);

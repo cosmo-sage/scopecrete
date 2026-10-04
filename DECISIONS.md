@@ -2737,6 +2737,16 @@ expected start date per quoted job before it means anything. Add the field.
   Plan Room** (Change measurements once it has some; Measure in the Plan Room
   › when nothing is measured yet) — Coy couldn't find the old "Pick takeoffs"
   link.
+  **Perimeter of an area (Coy, 2026-10-04: "calculate the linear footage
+  around the perimeter of that area").** Every area shape also gives its
+  edge in LF — its outline closed, plus each cutout's outline (a hole is
+  edge to form too) × the sheet's scale, never stored, none while the scale
+  isn't set (`measurementPerimeter()`, `src/lib/takeoff.ts`, tested). Shown
+  as "N LF edge" under the group's SF / CY and each takeoff's SF, and on the
+  shape's floating label ("971 SF · 180 LF perimeter"). A budget line counted
+  from an area group whose card is in LF takes the group's perimeter
+  (`ruleQty()`, `perim_lf` on the takeoff total) — form & finish by the foot
+  from the same outline. Dusty's job context carries it per group.
   Checked in the harness on a generated sheet: a 30×40 ft rectangle at
   1/8" = 1'-0" is exactly 1,200 SF (14.8 CY at 4"), $2,467 on a $1.43 card at
   15% O.H. and 20% margin; a 10×20 apron moved the line to 1,400 SF / $2,878;

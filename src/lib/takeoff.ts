@@ -48,6 +48,12 @@ export function polylineLength(pts: Pt[]): number {
   return l;
 }
 
+/** Length round a closed polygon in points — the last point joins the first. */
+export function polygonPerimeter(pts: Pt[]): number {
+  if (pts.length < 2) return 0;
+  return polylineLength(pts) + (pts.length > 2 ? dist(pts[pts.length - 1], pts[0]) : 0);
+}
+
 export const dist = (a: Pt, b: Pt) => Math.hypot(a[0] - b[0], a[1] - b[1]);
 
 /** The four corners of a rectangle drawn corner to corner. */
@@ -161,15 +167,29 @@ export function measurementQty(kind: TakeoffKind, m: Pick<MeasurementIn, "geomet
   return { ok: true, qty: Math.max(0, polygonArea(m.geometry) - holes) * k * k };
 }
 
+/**
+ * The edge of an area shape in feet (Coy, 2026-10-04: "the linear footage
+ * around the perimeter of that area"): its outline plus the outline of every
+ * cutout, since a hole in a slab is edge to form too. null for a linear or
+ * count shape, or when the sheet's scale isn't set.
+ */
+export function measurementPerimeter(kind: TakeoffKind, m: Pick<MeasurementIn, "geometry" | "cutouts">, sheet: SheetScale | undefined): number | null {
+  if (kind !== "area" || !sheet?.ft_per_pt || sheet.ft_per_pt <= 0) return null;
+  const pts = polygonPerimeter(m.geometry) + (m.cutouts ?? []).reduce((a, c) => a + polygonPerimeter(c), 0);
+  return pts * sheet.ft_per_pt;
+}
+
 export interface GroupTotal {
   name: string;
   unit: "SF" | "LF" | "EA";
   /** null when any shape can't be counted — a total that leaves one out would be wrong. */
   qty: number | null;
   cy: number | null;
+  /** Area groups: feet of edge round every shape (cutouts included), null otherwise or when blocked. */
+  perim_lf: number | null;
   blocked: string | null;
   /** Each shape's own quantity (null + reason when it can't be counted), for the section rows. */
-  parts: Array<{ id: string; qty: number | null; reason: string | null }>;
+  parts: Array<{ id: string; qty: number | null; perim_lf: number | null; reason: string | null }>;
 }
 
 /** Every group's total — the engine's `TakeoffTotal`, plus the shapes behind it. */
@@ -179,16 +199,18 @@ export function groupTotals(params: ParameterIn[], ms: MeasurementIn[], sheets: 
     const mine = ms.filter((m) => m.parameter_id === p.id);
     const parts = mine.map((m) => {
       const q = measurementQty(p.kind, m, sheets[m.sheet_id]);
-      return q.ok ? { id: m.id, qty: q.qty, reason: null } : { id: m.id, qty: null, reason: q.reason };
+      const perim_lf = measurementPerimeter(p.kind, m, sheets[m.sheet_id]);
+      return q.ok ? { id: m.id, qty: q.qty, perim_lf, reason: null } : { id: m.id, qty: null, perim_lf: null, reason: q.reason };
     });
     const bad = parts.find((x) => x.qty === null);
     const unit = KIND_UNIT[p.kind];
-    if (!mine.length) { out[p.id] = { name: p.name, unit, qty: null, cy: null, blocked: "nothing measured yet", parts }; continue; }
-    if (bad) { out[p.id] = { name: p.name, unit, qty: null, cy: null, blocked: bad.reason, parts }; continue; }
+    if (!mine.length) { out[p.id] = { name: p.name, unit, qty: null, cy: null, perim_lf: null, blocked: "nothing measured yet", parts }; continue; }
+    if (bad) { out[p.id] = { name: p.name, unit, qty: null, cy: null, perim_lf: null, blocked: bad.reason, parts }; continue; }
     const raw = parts.reduce((a, x) => a + (x.qty as number), 0);
     const qty = unit === "EA" ? raw : Math.round(raw * 100) / 100;
     const cy = p.kind === "area" && p.depth_in && p.depth_in > 0 ? raw * (p.depth_in / 12) / 27 : null;
-    out[p.id] = { name: p.name, unit, qty, cy, blocked: null, parts };
+    const perim_lf = p.kind === "area" ? Math.round(parts.reduce((a, x) => a + (x.perim_lf ?? 0), 0) * 100) / 100 : null;
+    out[p.id] = { name: p.name, unit, qty, cy, perim_lf, blocked: null, parts };
   }
   return out;
 }

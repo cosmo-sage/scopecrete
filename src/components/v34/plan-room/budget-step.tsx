@@ -77,7 +77,7 @@ export function BudgetStep({ jobId, data, b, onSend }: { jobId: string; data: Pl
                       <div style={{ fontSize: 11, color: l ? T.ink3 : T.hivizText, fontWeight: 400 }}>{KIND_LABEL[p.kind]} · {shapes.length} section{shapes.length === 1 ? "" : "s"}{l ? "" : " · no budget line"}</div>
                     </div>
                     <div style={{ fontSize: F.xs, color: T.ink3, fontWeight: 400 }}>{r?.blocked.length ? <span style={{ color: T.hivizText }}>{r.blocked[0]}</span> : ""}</div>
-                    <div style={{ textAlign: "right", fontSize: F.sm, ...nums }}>{t?.qty !== null && t?.qty !== undefined ? (l && (takeoffUnit(l.unit) === "CY" || takeoffUnit(l.unit) === "SY") ? `${(r?.qty ?? 0).toFixed(2)}` : fmtQty(t.qty, t.unit).replace(/ \w+$/, "")) : "—"}</div>
+                    <div style={{ textAlign: "right", fontSize: F.sm, ...nums }}>{t?.qty !== null && t?.qty !== undefined ? (l && (takeoffUnit(l.unit) === "CY" || takeoffUnit(l.unit) === "SY" || (takeoffUnit(l.unit) === "LF" && t.unit === "SF")) ? `${(r?.qty ?? 0).toFixed(2)}` : fmtQty(t.qty, t.unit).replace(/ \w+$/, "")) : "—"}</div>
                     <div style={{ fontSize: F.sm }}>{l ? l.unit : t?.unit}</div>
                     <div style={{ textAlign: "right", fontSize: F.sm, ...nums, color: l ? T.ink : T.hivizText }}>{l && l.unit_cost !== null ? `$${l.unit_cost}` : "no rate"}</div>
                     <div style={{ textAlign: "right", fontFamily: strong, fontSize: 13, ...nums }}>

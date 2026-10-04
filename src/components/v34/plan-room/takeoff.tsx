@@ -491,7 +491,8 @@ function Drawing({ sheet, fileUrl, zoom, setZoom, tool, data, groupId, selId, se
           const tot = data.totals[selGroup.id];
           return (
             <div style={{ position: "absolute", left, top: Math.max(0, top - 30), background: T.dark, color: "#fff", borderRadius: 3, padding: "3px 8px", fontSize: 11.5, whiteSpace: "nowrap", pointerEvents: "none", ...nums }}>
-              <b>{q?.qty !== null && q?.qty !== undefined ? fmtQty(q.qty, KIND_UNIT[selGroup.kind]) : q?.reason ?? "—"}</b> · {selM.name ?? selGroup.name}
+              <b>{q?.qty !== null && q?.qty !== undefined ? fmtQty(q.qty, KIND_UNIT[selGroup.kind]) : q?.reason ?? "—"}</b>
+              {q?.perim_lf != null && <b> · {fmtQty(q.perim_lf, "LF")} perimeter</b>} · {selM.name ?? selGroup.name}
               {tot?.qty !== null && tot?.qty !== undefined && <span style={{ opacity: 0.7 }}> · {selGroup.name} {fmtQty(tot.qty, tot.unit)} total</span>}
             </div>
           );
@@ -558,7 +559,11 @@ function ParamPanel({ jobId, data, groupId, setGroupId, selId, onSelect, act, on
                   </div>
                   <div style={{ textAlign: "right" }}>
                     <div style={{ fontFamily: strong, fontWeight: 700, fontSize: 14, ...nums }}>{t?.qty !== null && t?.qty !== undefined ? fmtQty(t.qty, t.unit) : "—"}</div>
-                    {t?.cy !== null && t?.cy !== undefined && <div style={{ fontSize: 10.5, color: T.ink3, ...nums }}>{t.cy.toFixed(1)} CY</div>}
+                    {(t?.cy != null || t?.perim_lf != null) && (
+                      <div style={{ fontSize: 10.5, color: T.ink3, ...nums }} title={t?.perim_lf != null ? "Perimeter: feet of edge round every shape, cutouts included" : undefined}>
+                        {[t?.cy != null ? `${t.cy.toFixed(1)} CY` : null, t?.perim_lf != null ? `${fmtQty(t.perim_lf, "LF")} edge` : null].filter(Boolean).join(" · ")}
+                      </div>
+                    )}
                   </div>
                   <button onClick={(e) => { e.stopPropagation(); setEditing(editing === p.id ? null : p.id); }} aria-label={`Edit ${p.name}`} style={{ width: 22, color: T.ink3, cursor: "pointer" }}>⋯</button>
                 </div>
@@ -584,7 +589,10 @@ function ParamPanel({ jobId, data, groupId, setGroupId, selId, onSelect, act, on
                             <div style={{ fontSize: 11, color: T.ink3 }}>{s ? sheetLabel(s) : "sheet removed"} · {m.method}{(m.cutouts?.length ?? 0) > 0 ? ` · ${m.cutouts.length} cutout${m.cutouts.length === 1 ? "" : "s"}` : ""}</div>
                           </div>
                           {m.section_id && <span title="Counted in a budget section" style={{ fontSize: 10.5, color: T.green, fontWeight: 700 }}>$✓</span>}
-                          <span style={{ fontSize: 12.5, ...nums, color: q?.qty === null ? T.hivizText : T.ink }}>{q?.qty !== null && q?.qty !== undefined ? fmtQty(q.qty, KIND_UNIT[p.kind]) : "scale not set"}</span>
+                          <span style={{ fontSize: 12.5, ...nums, color: q?.qty === null ? T.hivizText : T.ink, textAlign: "right" }}>
+                            {q?.qty !== null && q?.qty !== undefined ? fmtQty(q.qty, KIND_UNIT[p.kind]) : "scale not set"}
+                            {q?.perim_lf != null && <span title="Perimeter: feet of edge round this shape, cutouts included" style={{ display: "block", fontSize: 10.5, color: T.ink3 }}>{fmtQty(q.perim_lf, "LF")} edge</span>}
+                          </span>
                           <button onClick={(e) => { e.stopPropagation(); void act(() => call(`/api/jobs/${jobId}/takeoff/measurements/${m.id}`, "DELETE")); }}
                             aria-label="Remove this takeoff" style={{ color: T.ink3, width: 18, cursor: "pointer" }}>×</button>
                         </div>

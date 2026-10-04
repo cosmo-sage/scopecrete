@@ -237,6 +237,8 @@ export interface TakeoffTotal {
   qty: number | null;
   /** Area groups with a depth: cubic yards (no waste). */
   cy: number | null;
+  /** Area groups: feet of edge round their shapes (cutouts included) — an LF card counted from an area group takes it. */
+  perim_lf?: number | null;
   blocked: string | null;
 }
 
@@ -343,6 +345,10 @@ export function ruleQty(
     if (want === "CY" && t.unit === "SF") {
       return t.cy !== null ? { ok: true, qty: Math.round(t.cy * 100) / 100, basis: "rule", note: `takeoff · ${t.name}, yards` }
         : { ok: false, missing: [`Takeoff: ${t.name} — a depth (to count yards)`] };
+    }
+    if (want === "LF" && t.unit === "SF") {
+      return t.perim_lf !== null && t.perim_lf !== undefined ? { ok: true, qty: t.perim_lf, basis: "rule", note: `takeoff · ${t.name}, perimeter` }
+        : { ok: false, missing: [`Takeoff: ${t.name} — its perimeter`] };
     }
     return { ok: false, missing: [`${line.name}: counted in ${line.unit || "no unit"}, but ${t.name} is measured in ${t.unit}`] };
   }

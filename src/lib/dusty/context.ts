@@ -582,7 +582,7 @@ async function plansBlock(sb: Sb, orgId: string, jobId: string): Promise<Block |
   for (const p of params) {
     const t = totals[p.id];
     const n = measurements.filter((m) => m.parameter_id === p.id).length;
-    lines.push(`Takeoff group ${p.id.slice(0, 8)} "${p.name}" (${p.kind}${p.depth_in ? `, ${p.depth_in}" deep` : ""}): ${t?.qty !== null && t?.qty !== undefined ? `${fmtQty(t.qty, t.unit)}${t.cy !== null ? ` = ${t.cy.toFixed(1)} CY neat` : ""}` : `no total — ${t?.blocked ?? "nothing measured"}`} from ${n} shape${n === 1 ? "" : "s"}`);
+    lines.push(`Takeoff group ${p.id.slice(0, 8)} "${p.name}" (${p.kind}${p.depth_in ? `, ${p.depth_in}" deep` : ""}): ${t?.qty !== null && t?.qty !== undefined ? `${fmtQty(t.qty, t.unit)}${t.cy !== null ? ` = ${t.cy.toFixed(1)} CY neat` : ""}${t.perim_lf != null ? `, ${fmtQty(t.perim_lf, "LF")} of edge round it` : ""}` : `no total — ${t?.blocked ?? "nothing measured"}`} from ${n} shape${n === 1 ? "" : "s"}`);
   }
   return { title: "Plan Room takeoff (measured by Coy on the plans or the aerial; a group's 8-character ref lets a plan count an item from it)", lines };
 }

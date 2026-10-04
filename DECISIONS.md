@@ -1743,6 +1743,17 @@ expected start date per quoted job before it means anything. Add the field.
   <reason>" for a week, and Dusty's context on them carries "Archived by Coy
   on … : <reason>". Checked in the harness: the reason posted with the
   archive; the banner on a returning person.
+  **The archive note stands out (Coy, 2026-10-04).** A note "Archived — …"
+  or "Deleted — …" (`archiveNote()`, `src/lib/archive.ts`, tested) is drawn as
+  a grey card with a box icon and ARCHIVED (DELETED in red), the date, by
+  whom ("Dusty's plan, your tap" when Dusty proposed it) and "Why: …" — in
+  Internal notes and in the timeline (`ArchiveNoteCard`).
+  **Asking Dusty to archive (Coy: "I want to be able to prompt dusty to
+  archive a thread").** His archive step takes a `reason` — Coy's words when
+  he gave one, else the plain fact from the context, never a guess — shown on
+  the plan card ("Why (saved as an internal note): …") and saved as the
+  archive note on Apply. "This thread" on a person's page is the contact in
+  his Ids block. Still Coy's tap.
   **Internal notes (Coy, 2026-10-04: "I need to be able to create internal
   notes. The internal notes tab can also allow me to tag other internal
   members in the Org").** A tab after the person's numbers — **Internal

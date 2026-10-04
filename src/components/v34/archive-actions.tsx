@@ -8,7 +8,7 @@
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { T, F, eyebrow } from "@/lib/v34/tokens";
-import type { ArchiveAction, ArchiveKind } from "@/lib/archive";
+import { archiveNote, type ArchiveAction, type ArchiveKind } from "@/lib/archive";
 
 export async function archiveNow(kind: ArchiveKind, ids: string[], action: ArchiveAction, via: "coy" | "dusty" = "coy", note: string | null = null) {
   const r = await fetch("/api/archive", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind, ids, action, via, note }) });
@@ -118,6 +118,31 @@ export function ArchiveToast() {
       role="status" style={{ height: 44, background: T.ink, color: T.card, boxShadow: "0 6px 20px rgba(0,0,0,.25)" }}>
       <span style={{ fontSize: F.sm, flex: 1 }}>{t.label}</span>
       {t.logId && <button onClick={() => void undo()} style={{ ...eyebrow, color: T.hiviz, fontSize: F.sm, cursor: "pointer" }}>Undo</button>}
+    </div>
+  );
+}
+
+/**
+ * An archive note, marked as one (Coy, 2026-10-04: "make the archive note stand
+ * out") — a grey card with a box icon and ARCHIVED (DELETED in red), when and by
+ * whom, and the reason big enough to read at a glance. Used in Internal notes
+ * and in the timeline. Returns null for any other note.
+ */
+export function ArchiveNoteCard({ body, at, who }: { body: string; at: string; who?: string | null }) {
+  const n = archiveNote(body);
+  if (!n) return null;
+  const c = n.verb === "Deleted" ? T.red : T.ink2;
+  return (
+    <div className="rounded" style={{ maxWidth: 640, background: T.slab, border: `1px solid ${T.hair}`, borderLeft: `3px solid ${c}`, padding: "8px 12px" }}>
+      <div className="flex items-center gap-1.5" style={{ fontSize: 11.5, color: T.ink3 }}>
+        <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke={c} strokeWidth="1.6" strokeLinejoin="round" aria-hidden="true"><path d="M3 4h14v4H3z" /><path d="M4 8v8h12V8" /><path d="M8 11h4" /></svg>
+        <span style={{ ...eyebrow, color: c, fontWeight: 700 }}>{n.verb}</span>
+        <span>· {new Date(at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
+        <span>· {n.byDusty ? "Dusty's plan, your tap" : who ?? "by you"}</span>
+      </div>
+      <div style={{ fontSize: 14, lineHeight: 1.45, color: T.ink, marginTop: 3 }}>
+        <span style={{ color: T.ink3 }}>Why: </span>{n.reason}
+      </div>
     </div>
   );
 }

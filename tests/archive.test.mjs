@@ -33,3 +33,11 @@ test("what the toast says", () => {
   assert.equal(archiveLabel("customer", "delete", 1), "Deleted 1 customer");
   assert.equal(archiveLabel("job", "delete", 2), "Deleted 2 jobs");
 });
+
+test("an archive note is recognised, with who made it", async () => {
+  const { archiveNote } = await import("../src/lib/archive.ts");
+  assert.deepEqual(archiveNote("Archived — wrong number, wanted a landscaper"), { verb: "Archived", reason: "wrong number, wanted a landscaper", byDusty: false });
+  assert.deepEqual(archiveNote("Deleted — duplicate (Dusty's plan)"), { verb: "Deleted", reason: "duplicate", byDusty: true });
+  assert.equal(archiveNote("Archived the old plans in the file"), null, "an ordinary note that starts with the word isn't one");
+  assert.equal(archiveNote(null), null);
+});

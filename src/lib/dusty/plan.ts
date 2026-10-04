@@ -37,7 +37,7 @@ export type PlanAction =
   // the address found") — saved to Price book → Defaults on Coy's tap; for_job also sets the open job's parish.
   | { do: "set_tax"; parish: string; rate_pct: number; for_job: boolean; source: string | null }
   // Archive / delete / restore (migration 066) — threads, customers, vendors, jobs by their full ids.
-  | { do: "archive"; kind: "contact" | "customer" | "job"; ids: string[]; delete: boolean; label: string | null }
+  | { do: "archive"; kind: "contact" | "customer" | "job"; ids: string[]; delete: boolean; label: string | null; reason: string | null }
   | { do: "restore"; kind: "contact" | "customer" | "job"; ids: string[]; label: string | null }
   // An address on a customer, a person or a job (Coy, 2026-10-03: "I want dusty to be able to update an
   // address record") — checked against Mapbox on Coy's Apply; its spelling wins when it matches for sure.
@@ -187,7 +187,7 @@ export function cleanAction(raw: unknown): PlanAction | null {
       if (!kind || !list.length || list.length > 500 || !list.every((x) => typeof x === "string" && FULL_ID.test(x))) return null;
       const ids = [...new Set((list as string[]).map((x) => x.toLowerCase()))];
       return r.do === "archive"
-        ? { do: "archive", kind, ids, delete: r.delete === true, label: str(r.label, 120) }
+        ? { do: "archive", kind, ids, delete: r.delete === true, label: str(r.label, 120), reason: str(r.reason, 300) }
         : { do: "restore", kind, ids, label: str(r.label, 120) };
     }
     case "set_address": {
@@ -269,7 +269,7 @@ export function describe(a: PlanAction, names: { item: (r: string) => string | n
       const n = a.ids.length;
       const noun = a.kind === "job" ? (n === 1 ? "job" : "jobs") : a.kind === "customer" ? (n === 1 ? "customer" : "customers") : (n === 1 ? "thread" : "threads");
       const verb = a.do === "restore" ? "Restore" : a.delete ? "Delete" : "Archive";
-      return `${verb} ${n} ${noun}${a.label ? ` — ${a.label}` : ""}`;
+      return `${verb} ${n} ${noun}${a.label ? ` — ${a.label}` : ""}${a.do === "archive" && a.reason ? `. Why (saved as an internal note): ${a.reason}` : ""}`;
     }
   }
 }
@@ -280,13 +280,13 @@ export function describe(a: PlanAction, names: { item: (r: string) => string | n
  */
 export const RECORD_RULES = `Archiving and deleting. When Coy asks you to archive threads (a thread is a person's calls and texts) or to delete a customer, vendor or job — or to bring one back — answer in words, then end with ONE fenced block:
 \`\`\`scopecrete-plan
-[{"do":"archive","kind":"contact","ids":["<full contact id>", …],"label":"18 calls where nothing was said"},
+[{"do":"archive","kind":"contact","ids":["<full contact id>", …],"label":"18 calls where nothing was said","reason":"only calls, nothing said"},
  {"do":"archive","kind":"contact","ids":["<full contact id>"],"delete":true,"label":"Angelle Materials (vendor)"},
  {"do":"archive","kind":"customer","ids":["<full customer id>"],"delete":true,"label":"…"},
  {"do":"archive","kind":"job","ids":["<full job id>"],"delete":true,"label":"…"},
  {"do":"restore","kind":"contact|customer|job","ids":["<full id>"],"label":"…"}]
 \`\`\`
-Use ONLY the full ids written in the CONTEXT (lines like "contact 1b2c…", "job …", "customer …") — never make one up, and never guess which one Coy means: if two could match, ask. Archive is for threads ("archive", not "delete"); a vendor is deleted as a contact with "delete":true; a customer's delete takes its people and open jobs with it. Coy sees each step with the names it touches and taps Apply; everything can be undone and restored, and nothing is erased — calls, texts and files stay on record. An archived thread comes back on its own if that number calls or texts again. "Nothing said" threads are marked NOTHING SAID in the context. Never archive or delete what Coy didn't ask for.
+Give every archive or delete a "reason": why, in Coy's words when he said why ("reason":"wrong number — wanted a landscaper"); if he didn't, the plain fact from the CONTEXT ("only calls, nothing said"; "went with another contractor, said in their text of Sep 30"), never a guess. It is saved as an internal note on each person and shown when they get in touch again. "This thread", "this one", "them" on a person's page means the contact under "This thread: contact …" in the Ids block. Use ONLY the full ids written in the CONTEXT (lines like "contact 1b2c…", "job …", "customer …") — never make one up, and never guess which one Coy means: if two could match, ask. Archive is for threads ("archive", not "delete"); a vendor is deleted as a contact with "delete":true; a customer's delete takes its people and open jobs with it. Coy sees each step with the names it touches and taps Apply; everything can be undone and restored, and nothing is erased — calls, texts and files stay on record. An archived thread comes back on its own if that number calls or texts again. "Nothing said" threads are marked NOTHING SAID in the context. Never archive or delete what Coy didn't ask for.
 Addresses. When Coy asks you to put an address on a customer, a person or a job — or one was texted or said in the CONTEXT and he asks you to record it — propose:
 \`\`\`scopecrete-plan
 [{"do":"set_address","kind":"customer|contact|job","id":"<full id from the CONTEXT>","line1":"1234 Example St","city":"Baton Rouge","state":"LA","zip":"70800","source":"their text of Oct 2"}]

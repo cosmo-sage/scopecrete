@@ -76,7 +76,7 @@ test("archive, delete and restore steps take full ids only", () => {
   const a = "1b2c3d4e-0000-4000-8000-000000000001", b = "1b2c3d4e-0000-4000-8000-000000000002";
   const p = parsePlan(`Here are the silent ones.
 \`\`\`scopecrete-plan
-[{"do":"archive","kind":"contact","ids":["${a}","${b}"],"label":"2 calls where nothing was said"},
+[{"do":"archive","kind":"contact","ids":["${a}","${b}"],"label":"2 calls where nothing was said","reason":"only calls, nothing said"},
  {"do":"archive","kind":"job","ids":["${a}"],"delete":true},
  {"do":"restore","kind":"customer","id":"${b}"},
  {"do":"archive","kind":"contact","ids":["1b2c3d4e"]},
@@ -85,11 +85,12 @@ test("archive, delete and restore steps take full ids only", () => {
 \`\`\``);
   assert.equal(p.actions.length, 3);
   assert.equal(p.dropped, 3, "a short ref, an unknown kind and an empty list are dropped");
-  assert.deepEqual(p.actions[0], { do: "archive", kind: "contact", ids: [a, b], delete: false, label: "2 calls where nothing was said" });
+  assert.deepEqual(p.actions[0], { do: "archive", kind: "contact", ids: [a, b], delete: false, label: "2 calls where nothing was said", reason: "only calls, nothing said" });
+  assert.equal(p.actions[1].reason, null, "no reason given → none made up");
   assert.equal(p.actions[1].delete, true);
   assert.deepEqual(p.actions[2], { do: "restore", kind: "customer", ids: [b], label: null });
   const names = { item: () => null, area: () => "" };
-  assert.equal(describe(p.actions[0], names), "Archive 2 threads — 2 calls where nothing was said");
+  assert.equal(describe(p.actions[0], names), "Archive 2 threads — 2 calls where nothing was said. Why (saved as an internal note): only calls, nothing said");
   assert.equal(describe(p.actions[1], names), "Delete 1 job");
   assert.equal(describe(p.actions[2], names), "Restore 1 customer");
 });

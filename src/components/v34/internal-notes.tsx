@@ -14,6 +14,8 @@
 import React, { useEffect, useRef, useState } from "react";
 import { T, F, eyebrow, disp, relTime } from "@/lib/v34/tokens";
 import { insertTag, matchMembers, memberName, noteParts, typingTag, type Member } from "@/lib/mentions";
+import { archiveNote } from "@/lib/archive";
+import { ArchiveNoteCard } from "@/components/v34/archive-actions";
 
 export interface InternalNote { id: string; body: string; created_at: string; created_by?: string | null; message_id?: string | null }
 
@@ -70,7 +72,9 @@ export function InternalNotes({ contactId, name, notes, onSaved }: {
           </div>
         ) : (
           <div className="flex flex-col gap-2.5">
-            {ordered.map((n) => (
+            {ordered.map((n) => archiveNote(n.body) ? (
+              <ArchiveNoteCard key={n.id} body={n.body} at={n.created_at} who={who(n.created_by) === "You" ? "by you" : who(n.created_by) ? `by ${who(n.created_by)}` : null} />
+            ) : (
               <div key={n.id} className="rounded" style={{ maxWidth: 640, background: T.hivizDim, border: `1px solid ${T.hair}`, padding: "8px 12px" }}>
                 <div className="flex items-baseline gap-2" style={{ fontSize: 11.5, color: T.ink3 }}>
                   <span style={{ fontFamily: disp, letterSpacing: ".1em", textTransform: "uppercase", fontWeight: 600, color: T.ink2 }}>{who(n.created_by) ?? "Note"}</span>

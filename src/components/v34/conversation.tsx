@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { plainNote } from "@/lib/mentions";
+import { archiveNote } from "@/lib/archive";
+import { ArchiveNoteCard } from "@/components/v34/archive-actions";
 import { Phone, CaretDown, CaretRight } from "@phosphor-icons/react";
 import { T, F, disp, eyebrow } from "@/lib/v34/tokens";
 import { DraftQuoteButton } from "@/components/v34/call-notes-pad";
@@ -679,6 +681,7 @@ export interface Note { id: string; body: string; created_at: string }
 
 /** One of Coy's notes (migration 041), in the timeline where he wrote it. */
 function NoteRow({ n }: { n: Note }) {
+  if (archiveNote(n.body)) return <div className="my-1.5"><ArchiveNoteCard body={n.body} at={n.created_at} /></div>;
   return (
     <div className="my-1.5 rounded px-2.5 py-2" style={{ background: "#FFF8E1", border: `1px solid #F0DDA0` }}>
       <div style={{ ...eyebrow, color: "#8A6D1A" }}>

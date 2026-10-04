@@ -47,3 +47,16 @@ export function archiveLabel(kind: ArchiveKind, action: ArchiveAction, n: number
     : action === "delete" ? (n === 1 ? "vendor" : "vendors") : (n === 1 ? "thread" : "threads");
   return `${action === "delete" ? "Deleted" : "Archived"} ${n} ${what}`;
 }
+
+/**
+ * An internal note written when something was archived or deleted with a
+ * reason ("Archived — wrong number"; archiveRecords()), so it can stand out
+ * among the other notes (Coy, 2026-10-04: "make the archive note stand out").
+ * Null for any other note.
+ */
+export function archiveNote(body: string | null | undefined): { verb: "Archived" | "Deleted"; reason: string; byDusty: boolean } | null {
+  const m = /^(Archived|Deleted) — ([\s\S]+)$/.exec((body ?? "").trim());
+  if (!m) return null;
+  const byDusty = /\(Dusty's plan\)\s*$/.test(m[2]);
+  return { verb: m[1] as "Archived" | "Deleted", reason: m[2].replace(/\s*\(Dusty's plan\)\s*$/, "").trim(), byDusty };
+}

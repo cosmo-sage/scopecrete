@@ -100,3 +100,8 @@ grant execute on function public.sc_shared_asset(text) to anon, authenticated;
 
 create policy shared_proposal_assets on storage.objects for select to anon
   using (bucket_id in ('job-files', 'org-branding') and public.sc_shared_asset(name));
+
+-- Found while naming a person's numbers (2026-10-03): anon still held every
+-- grant on contact_phones. RLS (get_user_org_ids()) already gave it nothing;
+-- this takes the grants away too (§9: anon must not regain contact data).
+revoke all on public.contact_phones from anon;

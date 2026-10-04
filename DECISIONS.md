@@ -1624,6 +1624,12 @@ expected start date per quoted job before it means anything. Add the field.
   type chips and counts — Messages, Photos, Files, Links, Calls, Voicemail
   (`messageType()`, from `message_media.kind`) — `/api/threads/search`;
   a result opens its channel at the message.
+  **Name a number (Coy, 2026-10-03: "instead of 'phone 2' it can say
+  'office'")**: ✎ beside the open phone channel's name saves its label on
+  `contact_phones` (`PATCH /api/contacts/[id]/phones`, 30 characters, blank
+  = the default; a number they used that isn't listed is added with it).
+  **Sort** is a drop-down (Recent · A–Z · By role), and a system thread
+  shows no description line under its name (Coy: "remove this line").
   Not built: Dusty reading a whole custom thread (his context is still one
   contact), and "Jump to date".
 - **Threads on a desktop (2026-10-01, Coy):** the five buckets are a second

@@ -36,7 +36,7 @@ import { BucketPicker, BUCKETS, SUGGESTS, type Bucket, type Subtype } from "@/co
 import { BUCKET } from "@/lib/v34/tokens";
 import { useThreads } from "@/components/v34/threads-ctx";
 import { threadLabel } from "@/components/v34/thread-rail";
-import { ROLE_LABEL, SYSTEM_DESCRIPTION, initials, isSystemKey, nextSort, sortRows, THREAD_SORTS, type ContactRole, type ThreadSort } from "@/lib/v34/threads";
+import { ROLE_LABEL, initials, isSystemKey, sortRows, THREAD_SORTS, type ContactRole, type ThreadSort } from "@/lib/v34/threads";
 
 interface Thread {
   contact_id: string;
@@ -658,7 +658,7 @@ export function ThreadList({ folded = false }: { folded?: boolean }) {
     return () => clearTimeout(t);
   }, []);
   const sort: ThreadSort = sorts[filter] ?? "recent";
-  const flipSort = () => setSorts((m) => { const n = { ...m, [filter]: nextSort(sort) }; try { localStorage.setItem("sc:threads-sorts", JSON.stringify(n)); } catch { /* no storage */ } return n; });
+  const pickSort = (k: ThreadSort) => setSorts((m) => { const n = { ...m, [filter]: k }; try { localStorage.setItem("sc:threads-sorts", JSON.stringify(n)); } catch { /* no storage */ } return n; });
 
   // Bumped after a confirm, so the list and the chip counts both refetch: the
   // row's display_name becomes the real name and Unsorted drops by one. A
@@ -952,36 +952,30 @@ export function ThreadList({ folded = false }: { folded?: boolean }) {
                 <span style={{ fontFamily: disp, fontSize: 20, fontWeight: 700, textTransform: "uppercase", color: label.color, lineHeight: 1.1, ...clip }}>{label.name}</span>
                 <span style={{ ...nums, fontSize: 13, color: T.ink3 }}>{chipCount(filter) ?? ""}</span>
               </div>
-              <div className="lg:hidden" style={{ fontSize: 11.5, color: T.ink3, ...clip }}>
-                {customThread?.job_line ?? (isSystemKey(filter) ? SYSTEM_DESCRIPTION[filter] : "")}
-              </div>
+              {customThread?.job_line && <div className="lg:hidden" style={{ fontSize: 11.5, color: T.ink3, ...clip }}>{customThread.job_line}</div>}
             </div>
             {filter !== "archived" && (
-              <button onClick={flipSort} title="Change the order" className="shrink-0 rounded"
-                style={{ fontFamily: disp, fontSize: 12, fontWeight: 600, letterSpacing: ".06em", textTransform: "uppercase", padding: "3px 8px", border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink, cursor: "pointer" }}>
-                {THREAD_SORTS.find((x) => x.k === sort)?.label} ▾
-              </button>
+              <select value={sort} onChange={(e) => pickSort(e.target.value as ThreadSort)} aria-label="Sort" title="Sort the list" className="shrink-0 rounded"
+                style={{ fontFamily: disp, fontSize: 12, fontWeight: 600, letterSpacing: ".06em", textTransform: "uppercase", height: 26, padding: "0 4px", border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink, cursor: "pointer" }}>
+                {THREAD_SORTS.map((x) => <option key={x.k} value={x.k}>{x.label}</option>)}
+              </select>
             )}
             {openId && (
               <button onClick={() => ctx?.setFolded(true)} aria-label="Fold the list" title="Fold the list to initials" className="hidden lg:flex shrink-0 items-center justify-center rounded"
                 style={{ width: 24, height: 24, border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink2, cursor: "pointer" }}>‹</button>
             )}
           </div>
-          <div className="hidden lg:flex items-center gap-2 mt-1" style={{ fontSize: 11.5, color: T.ink3, minWidth: 0 }}>
+          {customThread && <div className="hidden lg:flex items-center gap-2 mt-1" style={{ fontSize: 11.5, color: T.ink3, minWidth: 0 }}>
             {customThread?.job_id && (
               <span className="shrink-0 rounded" style={{ fontFamily: disp, fontSize: 10, fontWeight: 600, letterSpacing: ".06em", textTransform: "uppercase", padding: "0 4px", lineHeight: "15px", border: `1px solid ${T.hiviz}`, color: T.hiviz }}>Job</span>
             )}
             <span style={{ ...clip, flex: 1 }}>
-              {customThread
-                ? customThread.job_id
+              {customThread.job_id
                   ? <Link href={`/dashboard/scope/${customThread.job_id}`} style={{ color: T.ink3 }}>{customThread.job_line}</Link>
-                  : customThread.source === "customer" ? "Everyone on this customer" : "Hand-picked"
-                : isSystemKey(filter) ? SYSTEM_DESCRIPTION[filter] : ""}
+                  : customThread.source === "customer" ? "Everyone on this customer" : "Hand-picked"}
             </span>
-            {customThread && (
-              <button onClick={() => setAdding(true)} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>+ Add contact</button>
-            )}
-          </div>
+            <button onClick={() => setAdding(true)} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>+ Add contact</button>
+          </div>}
         </div>
       )}
 

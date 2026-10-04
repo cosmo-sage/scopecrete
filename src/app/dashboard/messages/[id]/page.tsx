@@ -223,6 +223,14 @@ export default function ChatThreadPage() {
   const threadIds = threads && !["customers", "unsorted", "vendors", "personal", "spam", "archived"].includes(threads.thread)
     ? threads.custom?.find((t) => t.id === threads.thread)?.contact_ids ?? [] : [];
   const pickChannel = (k: string) => { setChannelKey(k); setFilter("all"); };
+  const renameChannel = async (ch: Channel) => {
+    const next = window.prompt(`Name for ${formatPhone(ch.value)} — e.g. Office, Work, Cell. Leave it blank for the default.`, ch.label);
+    if (next === null || !ch.value) return;
+    const r = await fetch(`/api/contacts/${encodeURIComponent(contactId)}/phones`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone: ch.value, label: next }) });
+    if (!r.ok) { const b = await r.json().catch(() => ({})); window.alert(b?.error ?? "Couldn't rename it."); return; }
+    const label = next.trim().slice(0, 30);
+    setChannels((cs) => cs.map((c) => (c.key === ch.key ? { ...c, label: label || c.label } : c)));
+  };
   const pill: React.CSSProperties = { height: 28, padding: "0 10px", borderRadius: 4, display: "inline-flex", alignItems: "center", gap: 6,
     border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink2, fontFamily: disp, fontSize: 12, letterSpacing: ".06em", textTransform: "uppercase", cursor: "pointer", textDecoration: "none", whiteSpace: "nowrap" };
   const seg = (on: boolean): React.CSSProperties => ({ height: "100%", padding: "0 10px", border: "none", background: on ? T.ink : T.card, color: on ? T.card : T.ink2,
@@ -281,7 +289,16 @@ export default function ChatThreadPage() {
                 <button key={ch.key} role="tab" aria-selected={on} onClick={() => pickChannel(ch.key)} className="text-left flex-1 lg:flex-none shrink-0"
                   style={{ minWidth: 0, padding: "7px 12px 8px", borderBottom: `2px solid ${on ? T.hiviz : "transparent"}`, opacity: ch.reachable || on ? 1 : 0.5, cursor: "pointer" }}>
                   <span style={{ display: "block", fontFamily: disp, fontSize: 9.5, letterSpacing: ".1em", textTransform: "uppercase", color: T.ink3 }}>{ch.kind === "chat" ? "ScopeCrete" : ch.kind}</span>
-                  <span style={{ display: "block", fontFamily: "var(--sc-font-strong)", fontSize: 13, fontWeight: 600, color: T.ink }}>{ch.label}</span>
+                  <span style={{ display: "flex", alignItems: "center", gap: 4, fontFamily: "var(--sc-font-strong)", fontSize: 13, fontWeight: 600, color: T.ink }}>
+                    {ch.label}
+                    {ch.kind === "phone" && on && (
+                      // Name the number (Coy: "instead of 'phone 2' it can say 'office'").
+                      <span role="button" tabIndex={0} aria-label={`Rename ${ch.label}`} title="Rename this number"
+                        onClick={(e) => { e.stopPropagation(); void renameChannel(ch); }}
+                        onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); void renameChannel(ch); } }}
+                        style={{ fontSize: 11, color: T.ink3, cursor: "pointer", padding: "0 2px" }}>✎</span>
+                    )}
+                  </span>
                   <span className="hidden lg:block" style={{ fontSize: 11, color: T.ink3, ...nums, whiteSpace: "nowrap" }}>{sub}</span>
                 </button>
               );

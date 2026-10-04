@@ -15,7 +15,8 @@ import { T, F, disp, eyebrow, clip, strong, light, nums } from "@/lib/v34/tokens
 import { openPdf, drawPage } from "@/lib/pdf";
 import { dist, fmtQty, parseFeet, rectPoints, scaleFromPoints, scaleLabel, KIND_UNIT, type Pt, type TakeoffKind } from "@/lib/takeoff";
 import { call, KIND_LABEL, SHAPE_COLORS, shapeColor, sheetLabel, type Meas, type Param, type PlanFile, type PlansData, type Sheet } from "./shared";
-import { ScaleBadge } from "./files-sheets";
+import { ScaleBadge, Thumb } from "./files-sheets";
+import { SlideDrawer } from "@/components/v34/primitives";
 import { ShapePhotos } from "./shape-photos";
 
 type Tool = "select" | "area" | "rect" | "linear" | "count" | "cutout" | "scale";
@@ -47,6 +48,18 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
   onSend: (p: Param, ids?: string[]) => void; fullscreen: boolean; setFullscreen: (v: boolean) => void; onPhotos?: () => void; photosOpen?: boolean;
 }) {
   const sheets = data.sheets;
+  // The phone's sheets drawer: open on the first visit to this job's Plan Room, closed afterwards (remembered per job).
+  const sheetsKey = `sc:plan-sheets-open:${jobId}`;
+  const [sheetsOpen, setSheetsOpen] = useState(false);
+  useEffect(() => {
+    let off = false;
+    Promise.resolve().then(() => {
+      if (off || window.matchMedia("(min-width: 1024px)").matches) return;
+      try { if (localStorage.getItem(sheetsKey) === null) { setSheetsOpen(true); localStorage.setItem(sheetsKey, "1"); } } catch { /* no storage */ }
+    });
+    return () => { off = true; };
+  }, [sheetsKey]);
+  const openSheets = (v: boolean) => setSheetsOpen(v);
   const sheet = sheets.find((s) => s.id === sheetId) ?? sheets[0] ?? null;
   const file = sheet ? files.find((f) => f.id === sheet.file_id) ?? null : null;
   const [tool, setTool] = useState<Tool>("select");
@@ -147,7 +160,48 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
       )}
 
       {/* ---- canvas ---- */}
-      <div className="flex-1 flex flex-col" style={{ minWidth: 0, minHeight: 320 }}>
+      <div className="flex-1 flex flex-col" style={{ minWidth: 0, minHeight: 320, position: "relative", overflow: "hidden" }}>
+        {/* Phone: the drawing gets the screen and the sheets slide over it (Claude Design, phone drawers §1). */}
+        <div className="flex lg:hidden items-center gap-2 px-2" style={{ height: 52, flex: "0 0 auto", background: T.card, borderBottom: `1px solid ${T.hair}` }}>
+          <button onClick={() => openSheets(true)} aria-label={`Sheets, ${sheets.length}`} className="flex items-center gap-1.5 rounded shrink-0"
+            style={{ height: 40, padding: "0 10px", border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink, fontFamily: disp, fontSize: 12, letterSpacing: ".08em", textTransform: "uppercase", cursor: "pointer" }}>
+            <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true"><path d="M3 5h14M3 10h14M3 15h14" /></svg>
+            Sheets · {sheets.length}
+          </button>
+          {sheet && (
+            <span style={{ minWidth: 0 }}>
+              <span style={{ display: "block", fontSize: 13, fontWeight: 600, color: T.ink, ...clipTxt }}>{sheetLabel(sheet)}</span>
+              <span style={{ display: "block", fontSize: 11, color: sheet.scale_ft_per_pt ? T.green : T.ink3 }}>{sheet.scale_ft_per_pt ? "✓ scale set" : sheet.scale_method === "none" ? "not to scale" : "scale not set"}</span>
+            </span>
+          )}
+        </div>
+        <SlideDrawer open={sheetsOpen} onOpen={() => openSheets(true)} onClose={() => openSheets(false)} width={300} label="Sheets" tab>
+          <div className="flex items-baseline gap-2" style={{ padding: "12px 12px 8px", borderBottom: `1px solid ${T.hairSoft}` }}>
+            <span style={{ fontFamily: "var(--sc-font-light)", fontWeight: 300, fontSize: 20, color: T.ink, flex: 1 }}>Sheets · {sheets.length}</span>
+            <span style={{ fontSize: 12, color: T.ink2 }}>{sheets.filter((x) => x.scale_ft_per_pt).length} of {sheets.length} scaled</span>
+          </div>
+          <div className="flex flex-col" style={{ padding: 8, gap: 6 }}>
+            {sheets.map((s) => {
+              const on = s.id === sheet?.id;
+              const f = files.find((x) => x.id === s.file_id);
+              const concrete = s.discipline === "civil" || s.discipline === "structural";
+              return (
+                <button key={s.id} onClick={() => { setSheetId(s.id); openSheets(false); }} aria-current={on ? "true" : undefined} className="flex items-center gap-2 text-left rounded"
+                  style={{ padding: 6, border: `1px solid ${on ? T.hiviz : T.hair}`, background: on ? T.hivizDim : T.card, cursor: "pointer" }}>
+                  <span style={{ position: "relative", width: 72, flex: "0 0 auto", border: `1px solid ${T.hair}`, background: "#fff", borderRadius: 2, overflow: "hidden" }}>
+                    <Thumb fileId={s.file_id} url={f?.url ?? null} page={s.page} height={54} />
+                    {concrete && <span style={{ position: "absolute", left: 2, top: 2, fontFamily: disp, fontSize: 8, fontWeight: 700, letterSpacing: ".06em", background: T.hiviz, color: T.onHiviz, padding: "0 3px", borderRadius: 2 }}>CONCRETE</span>}
+                  </span>
+                  <span style={{ minWidth: 0 }}>
+                    <span style={{ display: "block", fontSize: 13, fontWeight: 600, color: T.ink, ...clipTxt }}>{sheetLabel(s)}</span>
+                    <span style={{ display: "block", fontSize: 11, color: s.scale_ft_per_pt ? T.green : T.ink3 }}>{s.scale_ft_per_pt ? "✓ scale set" : s.scale_method === "none" ? "not to scale" : s.scale_text ? `prints ${s.scale_text}` : "no scale yet"}</span>
+                  </span>
+                </button>
+              );
+            })}
+            {!sheets.length && <div style={{ fontSize: F.xs, color: T.ink3, padding: 6 }}>No sheets yet — add a plan PDF on the Files step.</div>}
+          </div>
+        </SlideDrawer>
         <div className="flex items-center gap-1 px-2 overflow-x-auto" style={{ height: 42, flex: "0 0 auto", background: T.card, borderBottom: `1px solid ${T.hair}` }}>
           {!panel && <button onClick={() => setPanel(true)} className="lg:hidden" style={tb(false)}>Groups</button>}
           {TOOLS.map(([k, label, hint]) => (
@@ -203,7 +257,7 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
 
         {sel && shapePhotos && <ShapePhotos jobId={jobId} shapeId={sel.id} shapeName={selName} files={files} open onClose={() => setShapePhotos(false)} onChanged={reload} />}
         {sheets.length > 1 && (
-          <div className="flex gap-1 px-2 py-1 overflow-x-auto" style={{ flex: "0 0 auto", background: T.card, borderTop: `1px solid ${T.hair}` }}>
+          <div className="hidden lg:flex gap-1 px-2 py-1 overflow-x-auto" style={{ flex: "0 0 auto", background: T.card, borderTop: `1px solid ${T.hair}` }}>
             {sheets.map((s) => (
               <button key={s.id} onClick={() => setSheetId(s.id)} style={{ ...tb(s.id === sheet?.id), height: 26, fontFamily: strong, fontSize: 11 }}>
                 {sheetLabel(s)}{s.scale_ft_per_pt ? "" : " ·?"}
@@ -215,6 +269,8 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
     </div>
   );
 }
+
+const clipTxt: React.CSSProperties = { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
 
 const tb = (on: boolean): React.CSSProperties => ({
   height: 30, padding: "0 10px", borderRadius: 3, flex: "0 0 auto", cursor: "pointer",

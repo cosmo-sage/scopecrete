@@ -92,7 +92,7 @@ export function ScaleBadge({ s, small }: { s: Sheet; small?: boolean }) {
   return <span style={{ ...st, background: T.sunk, color: T.ink3 }}>{s.scale_text ? `prints ${s.scale_text}` : "no scale found"}</span>;
 }
 
-function Thumb({ fileId, url, page }: { fileId: string; url: string | null; page: number }) {
+export function Thumb({ fileId, url, page, height = 104 }: { fileId: string; url: string | null; page: number; height?: number }) {
   const [src, setSrc] = useState<string | null>(null);
   const [fail, setFail] = useState<string | null>(null);
   useEffect(() => {
@@ -102,7 +102,7 @@ function Thumb({ fileId, url, page }: { fileId: string; url: string | null; page
     return () => { off = true; };
   }, [fileId, url, page]);
   return (
-    <div style={{ height: 104, background: T.sunk, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+    <div style={{ height, background: T.sunk, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
       {src ? <img src={src} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "top left" }} />
         : <span title={fail ?? undefined} style={{ fontSize: F.xs, color: T.ink3 }}>{fail ? "couldn't draw" : "…"}</span>}
     </div>

@@ -403,3 +403,5 @@ html[data-theme="night-shift"] .sc-proposal { --sc-doc-ground: #15171A; }
 @keyframes scRecDot { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .35; transform: scale(.8); } }
 .sc-rec-dot { animation: scRecDot 1s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) { .sc-rec-dot { animation: none; } }
+/* SlideDrawer (phone drawers handoff): no slide under reduced motion. */
+@media (prefers-reduced-motion: reduce) { .sc-slide-panel, .sc-slide-scrim { transition: none !important; } }

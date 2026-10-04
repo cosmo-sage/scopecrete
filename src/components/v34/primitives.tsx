@@ -280,3 +280,61 @@ export function EmptyState({ title, detail, tone = "quiet" }: {
     </div>
   );
 }
+
+/* ------------------------------------------------------------ SlideDrawer */
+
+/**
+ * A panel that slides over the page from the left, phone only (Claude Design,
+ * phone_drawers handoff, 2026-10-03). It lives inside the page body: the parent
+ * must be `position: relative; overflow: hidden`. Scrim and Esc close it; a
+ * drag left on the panel closes it, a drag right from the left 16px opens it;
+ * the optional pull tab sticks out of the right edge so a closed drawer can be
+ * grabbed. Reduced motion: no slide.
+ */
+export function SlideDrawer({ open, onOpen, onClose, width, label, tab, children }: {
+  open: boolean; onOpen?: () => void; onClose: () => void; width: number; label: string; tab?: boolean; children: React.ReactNode;
+}) {
+  const panel = React.useRef<HTMLDivElement>(null);
+  const drag = React.useRef<{ x: number; t: number; dx: number } | null>(null);
+  const [dx, setDx] = React.useState(0);
+  useEffect(() => {
+    if (!open) return;
+    const k = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", k);
+    panel.current?.focus();
+    return () => window.removeEventListener("keydown", k);
+  }, [open, onClose]);
+  const ease = "transform .28s cubic-bezier(.2,.8,.2,1)";
+  const start = (e: React.TouchEvent) => { drag.current = { x: e.touches[0].clientX, t: Date.now(), dx: 0 }; };
+  const move = (e: React.TouchEvent) => {
+    if (!drag.current) return;
+    const d = e.touches[0].clientX - drag.current.x;
+    drag.current.dx = d;
+    if (open) setDx(Math.min(0, d)); else setDx(Math.max(0, Math.min(width, d)));
+  };
+  const end = () => {
+    const g = drag.current; drag.current = null; setDx(0);
+    if (!g) return;
+    const v = Math.abs(g.dx) / Math.max(1, Date.now() - g.t);
+    if (open && (g.dx < -width * 0.3 || (g.dx < 0 && v > 0.4))) onClose();
+    if (!open && (g.dx > width * 0.3 || (g.dx > 0 && v > 0.4))) onOpen?.();
+  };
+  const x = open ? dx : -width + dx;
+  return (
+    <>
+      {!open && onOpen && <div aria-hidden="true" onTouchStart={start} onTouchMove={move} onTouchEnd={end} style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 16, zIndex: 6 }} />}
+      <div aria-hidden="true" onClick={onClose} className="sc-slide-scrim"
+        style={{ position: "absolute", inset: 0, zIndex: 7, background: "rgba(20,20,20,.36)", opacity: open ? 1 : 0, pointerEvents: open ? "auto" : "none", transition: "opacity .28s" }} />
+      <div ref={panel} role="dialog" aria-label={label} aria-hidden={!open} tabIndex={-1} onTouchStart={start} onTouchMove={move} onTouchEnd={end} className="sc-slide-panel"
+        style={{ position: "absolute", left: 0, top: 0, bottom: 0, width, zIndex: 8, background: T.card, borderRight: `1px solid ${T.hair}`,
+          boxShadow: open ? "8px 0 24px rgba(0,0,0,.14)" : "none", transform: `translateX(${x}px)`, transition: dx ? "none" : ease, outline: "none" }}>
+        <div style={{ height: "100%", overflowY: "auto", visibility: open || dx ? "visible" : "hidden" }}>{children}</div>
+        {tab && (
+          <button type="button" onClick={open ? onClose : onOpen} aria-label={open ? `Close ${label}` : `Open ${label}`}
+            style={{ position: "absolute", right: -28, top: "42%", width: 28, height: 72, background: T.card, border: `1px solid ${T.hair}`, borderLeft: "none",
+              borderRadius: "0 6px 6px 0", boxShadow: "6px 0 12px rgba(0,0,0,.08)", color: T.ink2, fontSize: 16, cursor: "pointer" }}>{open ? "‹" : "›"}</button>
+        )}
+      </div>
+    </>
+  );
+}

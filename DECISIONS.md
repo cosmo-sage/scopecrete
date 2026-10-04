@@ -2362,6 +2362,15 @@ expected start date per quoted job before it means anything. Add the field.
   numbers on DOTD sets are plain digits ("3"), which the reader does not
   take for a sheet number — they show as p.3. `findDimensions()` finds
   12'-6", 5'-0", 6" in what was read (not the 2 of 1/2") for later use. Discipline filter, "Concrete scope" = civil + structural.
+  **The sheets slide in on a phone (Claude Design master package
+  2026-10-03, phone drawers §1).** In Takeoff on a phone the drawing gets the
+  screen: a row with **☰ Sheets · N** and the current sheet (scale set /
+  not), and the sheet list is a drawer that slides over the drawing from the
+  left (`SlideDrawer` in `primitives.tsx`: scrim, Esc, a pull tab, swipe to
+  open or close, still under reduced motion) — thumbnail with a CONCRETE chip
+  for civil and structural, number · title, scale line; a tap picks the sheet
+  and closes it. Open on the first visit to a job's Plan Room, closed after
+  (`sc:plan-sheets-open:<job>` on the device). The desktop keeps its strip.
   **Takeoff** — the page on a canvas with an SVG layer in PDF points; tools
   Area, Rect, Linear, Count, Cutout, Scale (Auto is shown off: Dusty doesn't
   read drawings). **A sheet's scale is only ever one Coy set** — "Use 1/8" =

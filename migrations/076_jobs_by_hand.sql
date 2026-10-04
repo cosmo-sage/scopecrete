@@ -10,8 +10,9 @@
 -- when Coy filed the customer himself (classification_confirmed_at). A
 -- customer Dusty filed gets none; Coy makes it with + New job, or asks Dusty,
 -- whose plan step `new_job` goes through the same POST /api/jobs on Coy's tap.
--- Coy's own filing still makes one, as before, and Keep on an auto-filed
--- customer is Coy's filing.
+-- Coy's own filing still makes one (Keep on an auto-filed customer is Coy's
+-- filing) — but only with a proper name (Coy, same day: "as long as the job is
+-- named properly"): Dusty's job title or the kind of work, never "New job".
 --
 -- The suggestions already on the board that nobody worked (New lead, no
 -- sections, budget lines or files — 7 on 2026-10-04) are archived with
@@ -70,6 +71,12 @@ begin
                    and p.sqft_stated is null and p.length_ft is null) then
     return null;
   end if;
+  -- Named properly or not at all (Coy, 2026-10-04: "you can still create a job for a customer that I
+  -- create as long as the job is named properly"): Dusty's job title, else the kind of work — never
+  -- "New job". The customer's name goes in front (migration 067).
+  if nullif(btrim(p.job_title), '') is null and (p.project_type is null or p.project_type = 'other') then
+    return null;
+  end if;
 
   select l.default_lead_source into v_source
   from messages m join org_phone_numbers l on l.id = m.phone_number_id
@@ -79,8 +86,7 @@ begin
   insert into jobs (org_id, contact_id, customer_id, title, address, description, job_type, status, origin,
                     created_from_message_id, lead_source, stage_changed_at, confirmed_at, confirmed_by)
   values (c.org_id, c.id, c.customer_id,
-          coalesce(nullif(btrim(p.job_title), ''),
-                   case when p.project_type is null or p.project_type = 'other' then 'New job' else initcap(p.project_type) end),
+          coalesce(nullif(btrim(p.job_title), ''), initcap(p.project_type)),
           p.site_hint, left(p.scope_summary, 200), c.job_type_hint, 'lead', 'classification',
           p.evidence_message_id, v_source, now(), now(), c.classification_confirmed_by)
   returning id into v_id;

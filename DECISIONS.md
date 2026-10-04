@@ -4,7 +4,7 @@ Ground truth for every agent working this repo. If code disagrees with this
 document, the code is wrong or this document is stale — resolve it, don't
 guess. Update this file in the same PR that changes the behavior it describes.
 
-Last updated: 2026-10-04 (internal notes with @-tags; Jobs board sort and filter; jobs by hand — migration 076, not applied; done and lost customers in Threads; proposals sent by link, every opening tracked; every option side by side for the customer — migration 075; Documents is Files, everywhere — migration 074; Threads v2 — threads you make, channels per number, the customer page reshaped — migration 073; an address given is kept and asked about — migration 072; Dusty sets addresses; customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
+Last updated: 2026-10-04 (internal notes with @-tags; Jobs board sort and filter; jobs by hand — migration 076; done and lost customers in Threads; proposals sent by link, every opening tracked; every option side by side for the customer — migration 075; Documents is Files, everywhere — migration 074; Threads v2 — threads you make, channels per number, the customer page reshaped — migration 073; an address given is kept and asked about — migration 072; Dusty sets addresses; customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
 
 ---
 
@@ -1018,8 +1018,8 @@ them out. Trigger `contacts_bucket_jobs` → `sc_customer_job_for()`:
   Rehearsed (rolled back): 15 waiting; naming one brought it back; an
   unnamed person filed customer got no job; named, they got "Verdi
   Driveway".
-- **Jobs by hand — migration 076 (written and rehearsed 2026-10-04; NOT
-  applied until Coy says so).** Coy, on the Jobs board: *"if the job is
+- **Jobs by hand — migration 076 (applied 2026-10-04 on Coy's "apply
+  076").** Coy, on the Jobs board: *"if the job is
   suggested but not counted. I don't want to automatically create the job.
   Later, once the system is working correctly we can automatically create
   jobs, but for now i'll create it manually. Or I can ask dusty to create it;
@@ -1032,6 +1032,12 @@ them out. Trigger `contacts_bucket_jobs` → `sc_customer_job_for()`:
   `archived_reason='suggested — make jobs by hand'`, with Restore on Archived
   & deleted. Rehearsed (rolled back): 7 archived, none uncounted left, a named
   customer Dusty filed got no job. Bid intake (§2i) still makes its jobs.
+  **Coy's own filing still makes one — named properly** (Coy: *"you can still
+  create a job for a customer that I create as long as the job is named
+  properly"*): Dusty's job title, else the kind of work, with the customer's
+  name in front (067); with neither, no job — never "New job". Checked after
+  applying: 7 archived, 0 uncounted left. Four older counted jobs still
+  titled "New job" were left for Coy to name.
 
 **Dusty seeds next steps (`enrich-contacts` v9+, 2026-09-28).** Each read
 may add up to three things waiting on Coy — "Send the walkway repair price" —

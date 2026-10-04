@@ -482,7 +482,7 @@ export default function ChatThreadPage() {
           <div className="h-full lg:w-[340px]">
             <ThreadSearch contactId={contactId} firstName={(name ?? "").split(/\s+/)[0] || "This person"} number={channel?.kind === "phone" ? channel.value : null}
               threadName={threadName} threadContacts={threadIds}
-              threadBucket={threads ? ({ customers: "customer", vendors: "vendor", personal: "personal", spam: "spam", unsorted: "unsorted" } as Record<string, string>)[threads.thread] ?? null : null} onClose={() => setSearching(false)}
+              threadBucket={threads ? ({ all: "all", customers: "customer", vendors: "vendor", personal: "personal", spam: "spam", unsorted: "unsorted" } as Record<string, string>)[threads.thread] ?? null : null} onClose={() => setSearching(false)}
               onOpen={(r) => {
                 setSearching(false);
                 if (r.contact_id !== contactId) { router.push(`/dashboard/messages/${r.contact_id}${tq}`); return; }

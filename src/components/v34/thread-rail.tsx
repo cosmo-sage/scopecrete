@@ -16,6 +16,7 @@ import { initials, SYSTEM_KEYS, type SystemThreadKey } from "@/lib/v34/threads";
 import { STATUS_NAME } from "@/lib/jobs/stages";
 
 export const SYSTEM_THREADS: Record<SystemThreadKey, { label: string; color: string; icon: React.ReactNode }> = {
+  all: { label: "All", color: T.ink, icon: <><path d="M3 5h14M3 10h14M3 15h14" /></> },
   customers: { label: "Customer", color: BUCKET.customer, icon: <><circle cx="10" cy="7" r="3.2" /><path d="M3.5 17c.8-3.4 3.4-5 6.5-5s5.7 1.6 6.5 5" /></> },
   unsorted: { label: "Unsorted", color: BUCKET.unsorted, icon: <><path d="M2 11l3-7h10l3 7v5H2z" /><path d="M2 11h5l1 2h4l1-2h5" /></> },
   vendors: { label: "Vendor", color: BUCKET.vendor, icon: <><path d="M2 5h10v9H2zM12 8h3.5l2.5 3v3h-6" /><circle cx="5.5" cy="15" r="1.6" /><circle cx="14.5" cy="15" r="1.6" /></> },
@@ -24,7 +25,8 @@ export const SYSTEM_THREADS: Record<SystemThreadKey, { label: string; color: str
 };
 // Archived sits under Vendor (Coy, 2026-10-04: "The archived threads needs it's own tab in the tab menu below Vendor, that is filterable").
 const ARCHIVED = { label: "Archived", icon: <><path d="M3 4h14v4H3z" /><path d="M4 8v8h12V8" /><path d="M8 11h4" /></> };
-const RAIL_ORDER: Array<SystemThreadKey | "archived"> = ["customers", "unsorted", "vendors", "archived", "personal", "spam"];
+// All first: the catch-all (Coy, 2026-10-04).
+const RAIL_ORDER: Array<SystemThreadKey | "archived"> = ["all", "customers", "unsorted", "vendors", "archived", "personal", "spam"];
 
 /** The thread's name and colour, for headers and back links. */
 export function threadLabel(thread: string, custom: Array<{ id: string; name: string }> | null): { name: string; color: string; custom: boolean } {

@@ -40,7 +40,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const snapshot = {
     number, made_at: new Date().toISOString(), option_id: tier.option_id,
     job: { title: b.job.title, address: b.job.address, job_type: b.job.job_type },
-    customer: b.customer, contact: b.contact, org: b.org,
+    customer: b.customer, contact: b.contact, org: b.org, prepared_by: b.preparer,
     display: p.display, draws: p.draws, warranty: p.warranty, terms: p.terms, scope_intro: p.scope_intro, cover_file_id: p.cover_file_id,
     // The words as shown, not a pointer to a template that may change later.
     warranty_text: warrantyText(p.warranty as never, b.templates as DocTemplate[], orgName),

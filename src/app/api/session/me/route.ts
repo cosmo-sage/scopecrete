@@ -46,6 +46,7 @@ export async function GET(req: NextRequest) {
     : typeof meta.name === "string" && meta.name.trim()
       ? meta.name.trim()
       : null;
+  const phone = typeof meta.phone === "string" && meta.phone.trim() ? meta.phone.trim() : null;
 
   const { data: membership } = await supabase
     .from("org_members")
@@ -72,6 +73,7 @@ export async function GET(req: NextRequest) {
     user_id: userId,
     email,
     name,
+    phone,
     org_id: orgId,
     org_name: org?.name ?? null,
     // The header's lockup (migration 056): which logos exist, served by

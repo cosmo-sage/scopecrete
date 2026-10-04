@@ -13,7 +13,7 @@ import type { AreaVisual } from "./area-visuals";
 type Rec = Record<string, unknown>;
 interface Shown {
   number: string | null; made_at: string | null; project_type: string | null; type_label: string;
-  job: Rec | null; customer: Rec | null; contact: Rec | null; org: { name: string | null };
+  job: Rec | null; customer: Rec | null; contact: Rec | null; prepared_by?: Rec | null; org: { name: string | null };
   display: DocVM["display"]; draws: DocVM["draws"]; scope_intro: string | null;
   warranty_text: { title?: string; body?: string } | null; terms_text: { title: string | null; clauses: Array<{ h: string; b: string }> };
   sections: Rec[]; price: ProposalPrice; choices: DocVM["choices"];
@@ -39,6 +39,7 @@ export function vmFromShown(sh: Shown, urls: Urls): DocVM {
     number: sh.number ?? "", date: sh.made_at ?? new Date().toISOString(), readOnly: true,
     typeKey: sh.project_type, typeLabel: sh.type_label,
     org: { name: sh.org.name ?? "", logo: urls.logo ?? urls.logo_dark, logoOnDark: urls.logo_dark ?? urls.logo },
+    preparedBy: sh.prepared_by ? { name: s(sh.prepared_by.name), phone: s(sh.prepared_by.phone), email: s(sh.prepared_by.email) } : null,
     customer: {
       name: s(c?.name) ?? s(k?.name),
       address: s(c?.address_formatted) ?? ([s(c?.address_line1), s(c?.city), s(c?.state)].filter(Boolean).join(", ") || null),

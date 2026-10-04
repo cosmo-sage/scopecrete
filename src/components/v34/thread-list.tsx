@@ -125,12 +125,14 @@ function matches(t: Thread, k: string): boolean {
     case "vendors": return t.bucket === "vendor";
     case "personal": return t.bucket === "personal";
     case "spam": return t.bucket === "spam";
+    case "all": return t.bucket !== "spam";
     default: return true;
   }
 }
 
 /** What an empty filtered list should say — the reason, not just "nothing". */
 const WHY_EMPTY: Record<string, string> = {
+  all: "Nobody has called or texted yet — or everyone is archived or spam.",
   archived: "Nothing is archived. Select threads and tap Archive — they come back on their own if that number calls or texts again.",
   unsorted: "Everyone who has called or texted is in a bucket.",
   customers: "Nobody is filed as a customer yet. In Unsorted, swipe a row right and tap Customer.",
@@ -1118,7 +1120,7 @@ export function ThreadList({ folded = false }: { folded?: boolean }) {
               selected={openId === t.contact_id}
               onDecide={decide} onName={nameDecide} onBucket={(id, bucket, sub) => fileAndToast(id, bucket, sub)}
               subtypes={subtypes} deciding={deciding}
-              chipShown={!q && isSystemKey(filter)}
+              chipShown={!q && isSystemKey(filter) && filter !== "all"}
               trayOpen={trayRow === t.contact_id}
               onTray={(open) => setTrayRow(open ? t.contact_id : null)}
               onAccept={(bucket) => fileAndToast(t.contact_id, bucket, bucket === "vendor" && t.proposal?.classification === "sub" ? "subcontractor" : null)} />

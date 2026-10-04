@@ -5,7 +5,8 @@
  * Coy on Vercel, 2026-09-30: "it should show User: Coy Sacco · Email ·
  * Organization", and rename the org and upload its logo).
  *
- *   - You: your name (✎ — PATCH /api/me), your email, the org and your role.
+ *   - You: your name and phone (✎ — PATCH /api/me; both go on the proposals
+ *     you prepare), your email, the org and your role.
  *   - Organisation (owners edit; everyone else read-only, "Owners only"):
  *       Name → PATCH /api/org (sc_rename_org — the name lives once, orgs.name).
  *       Logo → two slots, light backgrounds (dark lettering) and dark
@@ -42,23 +43,49 @@ async function prepare(file: File): Promise<File> {
   } finally { URL.revokeObjectURL(url); }
 }
 
-export function YouSection({ name, email, orgName, role, onSaved }: {
-  name: string | null; email: string | null; orgName: string | null; role: string | null; onSaved: () => void;
+/** One of your own details, edited in place (✎) and saved to your account through PATCH /api/me. */
+function MineField({ field, value, label, placeholder, empty, inputMode, onSaved }: {
+  field: "name" | "phone"; value: string | null; label: string; placeholder: string; empty: string;
+  inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"]; onSaved: () => void;
 }) {
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(name ?? "");
+  const [draft, setDraft] = useState(value ?? "");
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const optional = field === "phone";
   async function save() {
     const v = draft.trim();
-    if (!v) return;
+    if (!v && !optional) return;
     setBusy(true); setErr(null);
-    const r = await fetch("/api/me", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: v }) });
+    const r = await fetch("/api/me", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ [field]: v }) });
     const b = await r.json().catch(() => ({}));
     setBusy(false);
     if (!r.ok) { setErr(b?.error ?? `HTTP ${r.status}`); return; }
     setEditing(false); onSaved();
   }
+  if (editing) return (
+    <>
+      <span className="flex gap-1.5">
+        <input value={draft} autoFocus maxLength={80} inputMode={inputMode} onChange={(e) => setDraft(e.target.value)} placeholder={placeholder}
+          onKeyDown={(e) => { if (e.key === "Enter") void save(); if (e.key === "Escape") setEditing(false); }}
+          className="flex-1 min-w-0" style={{ height: 30, padding: "0 8px", border: `1px solid ${T.hairStrong}`, borderRadius: 3, background: T.card, color: T.ink, fontSize: F.sm }} />
+        <button onClick={() => void save()} disabled={busy || (!optional && !draft.trim())} style={{ ...btn, border: "none", background: T.hiviz, color: T.onHiviz }}>{busy ? "…" : "Save"}</button>
+      </span>
+      {err && <div style={{ fontSize: F.xs, color: T.red }}>{err}</div>}
+    </>
+  );
+  return (
+    <span className="flex items-baseline gap-2">
+      {value ? <span style={field === "name" ? { fontFamily: strong, fontWeight: 600, fontSize: F.md, ...clip } : { ...clip }}>{value}</span>
+        : <span style={{ color: T.ink3 }}>{empty}</span>}
+      <button onClick={() => { setDraft(value ?? ""); setEditing(true); }} aria-label={`Edit your ${label}`} style={{ color: T.chalk, fontSize: F.sm, cursor: "pointer" }}>{value ? "✎" : `Add your ${label}`}</button>
+    </span>
+  );
+}
+
+export function YouSection({ name, phone, email, orgName, role, onSaved }: {
+  name: string | null; phone: string | null; email: string | null; orgName: string | null; role: string | null; onSaved: () => void;
+}) {
   const row = (label: string, value: React.ReactNode) => (
     <div className="flex items-baseline gap-2" style={{ padding: "3px 0" }}>
       <span style={{ ...eyebrow, width: 92, flex: "none" }}>{label}</span>
@@ -69,24 +96,12 @@ export function YouSection({ name, email, orgName, role, onSaved }: {
     <section>
       <div style={eyebrow}>You</div>
       <div className="mt-1">
-        {row("User", editing ? (
-          <span className="flex gap-1.5">
-            <input value={draft} autoFocus maxLength={80} onChange={(e) => setDraft(e.target.value)} placeholder="Your name"
-              onKeyDown={(e) => { if (e.key === "Enter") void save(); if (e.key === "Escape") setEditing(false); }}
-              className="flex-1 min-w-0" style={{ height: 30, padding: "0 8px", border: `1px solid ${T.hairStrong}`, borderRadius: 3, background: T.card, color: T.ink, fontSize: F.sm }} />
-            <button onClick={() => void save()} disabled={busy || !draft.trim()} style={{ ...btn, border: "none", background: T.hiviz, color: T.onHiviz }}>{busy ? "…" : "Save"}</button>
-          </span>
-        ) : (
-          <span className="flex items-baseline gap-2">
-            {name ? <span style={{ fontFamily: strong, fontWeight: 600, fontSize: F.md, ...clip }}>{name}</span>
-              : <span style={{ color: T.ink3 }}>No name yet</span>}
-            <button onClick={() => { setDraft(name ?? ""); setEditing(true); }} aria-label="Edit your name" style={{ color: T.chalk, fontSize: F.sm, cursor: "pointer" }}>{name ? "✎" : "Add your name"}</button>
-          </span>
-        ))}
-        {err && <div style={{ fontSize: F.xs, color: T.red }}>{err}</div>}
+        {row("User", <MineField field="name" value={name} label="name" placeholder="Your name" empty="No name yet" onSaved={onSaved} />)}
+        {row("Phone", <MineField field="phone" value={phone} label="phone" placeholder="(225) 555-0123" empty="No phone yet" inputMode="tel" onSaved={onSaved} />)}
         {row("Email", <span style={{ color: T.ink2, ...clip, display: "block" }}>{email ?? "—"}</span>)}
         {row("Organization", <span style={{ color: T.ink2 }}>{orgName ?? "—"}{role ? <span style={{ color: T.ink3 }}> · {role}</span> : null}</span>)}
       </div>
+      <div style={{ fontSize: F.xs, color: T.ink3, marginTop: 4 }}>Your name and phone go on the proposals you prepare.</div>
     </section>
   );
 }

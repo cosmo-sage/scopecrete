@@ -6,7 +6,7 @@ import { messageType, type SearchType } from "@/lib/v34/threads";
  * Search inside Threads (Threads v2): words, photos, files, links, calls and
  * voicemails, across one number, one person, or every person in a thread.
  *
- * GET ?contacts=<id,id,…> (or bucket=customer|vendor|personal|spam|unsorted)&q=&number=<e164>&type=all|msg|photo|file|link|call|vm
+ * GET ?contacts=<id,id,…> (or bucket=all|customer|vendor|personal|spam|unsorted)&q=&number=<e164>&type=all|msg|photo|file|link|call|vm
  *   → { results: [...newest first, ≤ 80], counts: { all, msg, photo, … } }
  * The counts are for the current words and scope, whatever type is picked, so
  * the chips show what each filter would find. No words: everything, newest first.
@@ -26,11 +26,14 @@ export async function GET(req: NextRequest) {
   // A system thread (Customer, Vendor, …) has no saved list: its people are worked
   // out here the way Threads files them — Coy confirmed the bucket, or Dusty filed it.
   const bucket = sp.get("bucket");
-  if (!ids.length && bucket && ["customer", "vendor", "personal", "spam", "unsorted"].includes(bucket)) {
+  if (!ids.length && bucket && ["all", "customer", "vendor", "personal", "spam", "unsorted"].includes(bucket)) {
     let cq = sb.from("contacts").select("id").eq("org_id", orgId).is("merged_into_contact_id", null).order("updated_at", { ascending: false }).limit(400);
-    cq = bucket === "unsorted"
-      ? cq.is("classification_confirmed_at", null).is("auto_classified_at", null)
-      : cq.eq("contact_type", bucket).or("classification_confirmed_at.not.is.null,auto_classified_at.not.is.null");
+    // All: everyone but those filed as spam (Coy put them there, or Dusty did).
+    cq = bucket === "all"
+      ? cq.or("contact_type.is.null,contact_type.neq.spam,and(classification_confirmed_at.is.null,auto_classified_at.is.null)")
+      : bucket === "unsorted"
+        ? cq.is("classification_confirmed_at", null).is("auto_classified_at", null)
+        : cq.eq("contact_type", bucket).or("classification_confirmed_at.not.is.null,auto_classified_at.not.is.null");
     const { data: people } = await cq;
     ids = ((people ?? []) as Array<{ id: string }>).map((c) => c.id);
   }

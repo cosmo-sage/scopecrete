@@ -13,11 +13,13 @@
  */
 
 /** The system threads, by the keys the list and /api/threads/counts already use. */
-export type SystemThreadKey = "customers" | "unsorted" | "vendors" | "personal" | "spam";
-export const SYSTEM_KEYS: SystemThreadKey[] = ["customers", "unsorted", "vendors", "personal", "spam"];
+// "all" is everyone not archived and not spam (Coy, 2026-10-04: "an 'ALL' thread as a catchall").
+export type SystemThreadKey = "all" | "customers" | "unsorted" | "vendors" | "personal" | "spam";
+export const SYSTEM_KEYS: SystemThreadKey[] = ["all", "customers", "unsorted", "vendors", "personal", "spam"];
 export const isSystemKey = (k: string | null | undefined): k is SystemThreadKey => !!k && (SYSTEM_KEYS as string[]).includes(k);
 
 export const SYSTEM_DESCRIPTION: Record<SystemThreadKey, string> = {
+  all: "Everyone — every bucket, unsorted too — except spam and the archived.",
   customers: "Everyone filed as a customer — the people who pay you.",
   unsorted: "The inbox: everyone nobody has filed yet.",
   vendors: "Suppliers, subs and anyone you pay.",

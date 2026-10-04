@@ -115,6 +115,7 @@ export function publicSnapshot(snap: Rec, extra: { project_type: string | null; 
     job: pick(snap.job, ["title", "address"]),
     customer: pick(snap.customer, ["name", "address_formatted", "address_line1", "city", "state", "zip"]),
     contact: pick(snap.contact, ["name", "phone", "email"]),
+    prepared_by: pick(snap.prepared_by, ["name", "phone", "email"]),
     org: { name: s((snap.org as Rec | null)?.name) },
     display: {
       off: display.off ?? {}, show_item_prices: !!display.show_item_prices, show_qty: !!display.show_qty, show_tax_line: !!display.show_tax_line,

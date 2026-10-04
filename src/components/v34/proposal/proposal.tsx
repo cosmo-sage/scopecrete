@@ -42,7 +42,7 @@ interface Prop {
 }
 interface Snapshot {
   number: string; made_at: string; job: { title: string | null; address: string | null; job_type: string | null };
-  customer: Rec | null; contact: Rec | null; org: { name: string } | null;
+  customer: Rec | null; contact: Rec | null; org: { name: string } | null; prepared_by?: Rec | null;
   display: ProposalDisplay; draws: Draw[]; scope_intro: string | null; cover_file_id: string | null;
   warranty_text: { title: string; body: string; template: { name: string } | null; starter: boolean; edited: boolean };
   terms_text: { title: string; clauses: Clause[]; template: { name: string } | null; starter: boolean; edited: boolean };
@@ -59,7 +59,7 @@ interface Bundle {
   settings: BudgetSettings; takeoff: Record<string, TakeoffTotal>;
   org: { id: string; name: string; logo_light: boolean; logo_dark: boolean; logo_stamp: string | null } | null;
   types: ProjectType[]; templates: DocTemplate[];
-  customer: Rec | null; contact: Rec | null;
+  customer: Rec | null; contact: Rec | null; preparer?: Rec | null;
   photos: Array<{ id: string; name: string | null; url: string | null }>;
 }
 
@@ -186,11 +186,14 @@ export function Proposal({ jobId }: { jobId: string }) {
       phone: str(cont?.phone), email: str(cont?.email),
     };
     const org = { name: snap?.org?.name ?? orgName, logo: logo("light"), logoOnDark: logo("dark") ?? logo("light") };
+    // A final keeps who prepared it; one finalised before this was kept shows the org alone.
+    const by = snap ? snap.prepared_by ?? null : b.preparer ?? null;
+    const preparedBy = by ? { name: str(by.name), phone: str(by.phone), email: str(by.email) } : null;
     if (snap) {
       const coverUrl = b.photos.find((f) => f.id === snap.cover_file_id)?.url ?? null;
       return {
         number: snap.number, date: snap.made_at, readOnly: true, typeKey: p.project_type, typeLabel: type?.label ?? "",
-        org, customer, job: { title: snap.job.title, address: snap.job.address, description: null }, coverUrl,
+        org, preparedBy, customer, job: { title: snap.job.title, address: snap.job.address, description: null }, coverUrl,
         scopeIntro: snap.scope_intro, areas: areasOf(snap.sections), visuals: areaVisuals(plans, snap.sections.map((x) => String(x.id))), priced: snap.price, display: snap.display, draws: snap.draws,
         choices: snap.choices ?? null,
         check: snap.choices ? { sum: 100, gap: 0, ok: true, pct: 100 } : snap.price.ok ? drawsCheck(snap.draws, snap.price.total) : null,
@@ -202,7 +205,7 @@ export function Proposal({ jobId }: { jobId: string }) {
     const t = termsText(p.terms, b.templates, orgName);
     return {
       number: `${b.job.job_number ?? "P"}-${p.version}`, date: new Date().toISOString(), readOnly: false,
-      typeKey: p.project_type, typeLabel: type?.label ?? "", org, customer,
+      typeKey: p.project_type, typeLabel: type?.label ?? "", org, preparedBy, customer,
       job: { title: b.job.title, address: b.job.address, description: b.job.description },
       coverUrl: b.photos.find((f) => f.id === p.cover_file_id)?.url ?? null,
       scopeIntro: p.scope_intro, areas: areasOf(b.sections), visuals: areaVisuals(plans, b.sections.map((x) => x.id)), priced: priced!.priced, display: p.display ?? {}, draws: p.draws ?? [],

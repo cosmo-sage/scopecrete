@@ -10,7 +10,7 @@
  * (src/lib/proposal.ts) on top of the engine's budget().
  */
 import React from "react";
-import { disp, strong, light, hand, nums } from "@/lib/v34/tokens";
+import { disp, strong, light, hand, nums, formatPhone } from "@/lib/v34/tokens";
 import { AreaMap, type AreaVisual } from "./area-visuals";
 import { drawAmount, fixLastDraw, type Clause, type Draw, type ProposalChoice, type ProposalDisplay, type ProposalPrice, type ProposalGroup } from "@/lib/proposal";
 
@@ -24,6 +24,8 @@ export interface DocVM {
   number: string; date: string; readOnly: boolean;
   typeKey: string | null; typeLabel: string;
   org: { name: string; logo: string | null; logoOnDark: string | null };
+  /** The member who prepared it — their name and phone from Settings → You. */
+  preparedBy?: { name: string | null; phone: string | null; email: string | null } | null;
   customer: { name: string | null; address: string | null; phone: string | null; email: string | null };
   job: { title: string | null; address: string | null; description: string | null };
   coverUrl: string | null;
@@ -148,21 +150,26 @@ export function ProposalDocument({ vm, edits, narrow }: { vm: DocVM; edits: DocE
             <button type="button" onClick={edits.pickCover} className="sc-no-print absolute" style={{ left: 10, top: 10, background: "rgba(251,246,236,.94)", border: "1px solid #E6DCC8", borderRadius: 999, padding: "2px 10px", fontFamily: disp, fontSize: 10.5, letterSpacing: ".1em", textTransform: "uppercase", cursor: "pointer" }}>Change photo</button>
           )}
         </div>}
-        <div style={{ background: "#2A2A2A", color: "#FBF6EC", padding: narrow ? "14px 16px" : "20px 34px" }}>
+        {/* The dark band: the logo on the left, what it is on the right (Coy on Vercel, 2026-10-04 — the
+            "Prepared for …" line is gone from here; the Header below carries it). */}
+        <div className="flex items-center justify-between gap-4" style={{ background: "#2A2A2A", color: "#FBF6EC", padding: narrow ? "12px 16px" : "14px 34px", flexWrap: narrow ? "wrap" : "nowrap" }}>
           {/* eslint-disable-next-line @next/next/no-img-element -- signed redirect, printed */}
-          {vm.org.logoOnDark && <img src={vm.org.logoOnDark} alt={vm.org.name} style={{ height: 28, marginBottom: 10 }} />}
-          <div style={{ ...kicker, color: "#D97757" }}>{kind}</div>
-          <div style={{ fontFamily: strong, fontWeight: 700, fontSize: narrow ? 20 : 26, lineHeight: 1.15 }}>{vm.job.title || "Concrete work"}</div>
-          <div style={{ fontSize: 12, opacity: 0.85, marginTop: 6 }}>Prepared for {custName}{where ? ` · ${where}` : ""} · {dateStr}</div>
+          {vm.org.logoOnDark ? <img src={vm.org.logoOnDark} alt={vm.org.name} style={{ height: 28, flex: "none" }} />
+            : <div style={{ fontFamily: strong, fontWeight: 700, fontSize: 16 }}>{vm.org.name}</div>}
+          <div style={{ textAlign: "right", minWidth: 0, marginLeft: "auto" }}>
+            <div style={{ ...kicker, color: "#D97757" }}>{kind}</div>
+            <div style={{ fontFamily: strong, fontWeight: 700, fontSize: narrow ? 20 : 26, lineHeight: 1.15 }}>{vm.job.title || "Concrete work"}</div>
+          </div>
         </div>
       </Section>
 
       <Section k="header" label="Header" off={!!off.header} onToggle={sectionToggle("header")} narrow={narrow}>
         <div style={pad ? { padding: pad } : undefined}>
           <div className={narrow ? "flex flex-col gap-2" : "flex items-start gap-3"}>
+            {/* The logo is here only when the cover (which carries it) is hidden — Coy: "redundant". */}
             <div className="flex-1" style={{ minWidth: 0, paddingRight: narrow && edits ? 90 : 0 }}>
               {/* eslint-disable-next-line @next/next/no-img-element -- signed redirect, printed */}
-              {vm.org.logo ? <img src={vm.org.logo} alt={vm.org.name} style={{ height: 32 }} /> : <div style={{ fontFamily: strong, fontWeight: 700, fontSize: 18 }}>{vm.org.name}</div>}
+              {off.cover && (vm.org.logo ? <img src={vm.org.logo} alt={vm.org.name} style={{ height: 32 }} /> : <div style={{ fontFamily: strong, fontWeight: 700, fontSize: 18 }}>{vm.org.name}</div>)}
             </div>
             <div style={{ textAlign: narrow ? "left" : "right", paddingRight: edits && !narrow ? 90 : 0 }}>
               <div style={{ fontFamily: strong, fontWeight: 700, fontSize: 18 }}>{vm.typeKey === "public" ? "Bid" : vm.typeKey === "commercial" ? "Proposal" : "Quote"} {vm.number}</div>
@@ -170,12 +177,18 @@ export function ProposalDocument({ vm, edits, narrow }: { vm: DocVM; edits: DocE
             </div>
           </div>
           <div className="grid gap-4 mt-4" style={{ gridTemplateColumns: narrow ? "1fr" : "1fr 1fr", fontSize: 11.5 }}>
-            <div><div style={{ ...kicker, color: "#8C8578" }}>Prepared by</div><div style={{ fontWeight: 600 }}>{vm.org.name}</div></div>
+            <div>
+              <div style={{ ...kicker, color: "#8C8578" }}>Prepared by</div>
+              <div style={{ fontWeight: 600 }}>{vm.preparedBy?.name ?? vm.org.name}</div>
+              {vm.preparedBy?.name && vm.org.name && <div>{vm.org.name}</div>}
+              {vm.preparedBy?.phone && <div>{formatPhone(vm.preparedBy.phone)}</div>}
+              {vm.preparedBy?.email && <div>{vm.preparedBy.email}</div>}
+            </div>
             <div>
               <div style={{ ...kicker, color: "#8C8578" }}>Prepared for</div>
               <div style={{ fontWeight: 600 }}>{custName}</div>
               {where && <div>{where}</div>}
-              {vm.customer.phone && <div>{vm.customer.phone}</div>}
+              {vm.customer.phone && <div>{formatPhone(vm.customer.phone)}</div>}
               {vm.customer.email && <div>{vm.customer.email}</div>}
             </div>
           </div>

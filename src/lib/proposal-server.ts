@@ -64,6 +64,28 @@ export async function draftFor(sb: Sb, orgId: string, jobId: string, jobType: st
   return made as Record<string, unknown>;
 }
 
+/** The job's person, with an email from their list when the contact row has none. */
+async function contactWithEmail(sb: Sb, orgId: string, contactId: string): Promise<Record<string, unknown> | null> {
+  const { data } = await sb.from("contacts").select("id, name, phone, email").eq("org_id", orgId).eq("id", contactId).maybeSingle();
+  if (!data) return null;
+  const c = data as Record<string, unknown>;
+  if (typeof c.email === "string" && c.email.trim()) return c;
+  const { data: em } = await sb.from("contact_emails").select("email").eq("org_id", orgId).eq("contact_id", contactId)
+    .order("is_primary", { ascending: false }).limit(1).maybeSingle();
+  return { ...c, email: (em as { email?: string } | null)?.email ?? null };
+}
+
+/** Who is preparing the quote — the signed-in member (Coy on Vercel,
+ *  2026-10-04: "the prepared for section should include the name of the
+ *  internal user who prepared the quote … And include my phone number").
+ *  Name and phone are their own, from Settings → You. */
+export async function preparerOf(sb: Sb): Promise<{ name: string | null; phone: string | null; email: string | null }> {
+  const { data } = await sb.auth.getUser();
+  const meta = (data?.user?.user_metadata ?? {}) as Record<string, unknown>;
+  const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
+  return { name: str(meta.full_name) ?? str(meta.name), phone: str(meta.phone), email: data?.user?.email ?? null };
+}
+
 /** Everything the proposal page reads, in one go. */
 /** `create: false` (Dusty) never makes a draft — he only reads. */
 export async function proposalBundle(sb: Sb, orgId: string, jobId: string, opts: { create?: boolean } = {}) {
@@ -83,10 +105,11 @@ export async function proposalBundle(sb: Sb, orgId: string, jobId: string, opts:
     sb.from("org_project_types").select(TYPE_COLS).eq("org_id", orgId).order("sort_order"),
     sb.from("doc_templates").select(TEMPLATE_COLS).eq("org_id", orgId).order("kind").order("name"),
     job.customer_id ? sb.from("customers").select("id, name, address_formatted, address_line1, city, state, zip").eq("org_id", orgId).eq("id", job.customer_id as string).maybeSingle().then((r: { data: unknown }) => r.data as Record<string, unknown> | null) : Promise.resolve(null),
-    job.contact_id ? sb.from("contacts").select("id, name, phone, email").eq("org_id", orgId).eq("id", job.contact_id as string).maybeSingle().then((r: { data: unknown }) => r.data as Record<string, unknown> | null) : Promise.resolve(null),
+    job.contact_id ? contactWithEmail(sb, orgId, job.contact_id as string) : Promise.resolve(null),
     sb.from("files").select("id, name, storage_path, fetch_state").eq("org_id", orgId).eq("job_id", jobId).eq("kind", "image").is("deleted_at", null).order("created_at", { ascending: false }).limit(40),
   ]);
   const p = pricing.get(jobId);
+  const preparer = await preparerOf(sb);
   return {
     job, estimate: est ? { ...est, tax_on: est.tax_on !== false, discount_amount: Number(est.discount_amount ?? 0), margin_pct: num(est.margin_pct), overhead_pct: num(est.overhead_pct) } : null,
     proposal: draft, finals: finals ?? [],
@@ -99,7 +122,7 @@ export async function proposalBundle(sb: Sb, orgId: string, jobId: string, opts:
     org: org ? orgView(org) : null,
     types: ((types ?? []) as Array<Record<string, unknown>>).map(typeRow),
     templates: templates ?? [],
-    customer, contact,
+    customer, contact, preparer,
     photos: ((await signFiles(sb, (photos ?? []) as Array<Record<string, unknown>>)) as Array<Record<string, unknown>>)
       .map((f) => ({ id: f.id as string, name: (f.name as string | null) ?? null, url: (f.url as string | null) ?? null })),
   };

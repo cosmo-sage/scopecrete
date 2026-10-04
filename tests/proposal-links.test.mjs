@@ -31,7 +31,7 @@ test("the customer's copy carries no cost, profit, hidden lines or notes", () =>
   const snap = {
     number: "J-1", made_at: "2026-10-03T00:00:00Z", job: { title: "Drive", address: "1 Example St", job_type: "residential" },
     customer: { id: "c", name: "Jane", address_formatted: "1 Example St", status_summary: "secret" }, contact: { id: "p", name: "Jane", phone: "1", email: "e", notes: "x" },
-    org: { name: "Example Concrete", logo_light_path: "x" },
+    org: { name: "Example Concrete", logo_light_path: "x" }, prepared_by: { name: "Pat Example", phone: "(225) 555-0100", email: "pat@example.com", user_id: "u-secret" },
     display: { linesOff: { l2: true }, groupsOff: { g2: true }, show_item_prices: true }, draws: [{ pct: 100, when: "Done" }],
     sections: [{ id: "a1", name: "Drive", prep_notes: "gate code 1234", length_ft: 20, width_ft: 30 }],
     price: { ok: true, cost: 5000, overhead: 750, calc: 7187, rounded: 7200, profit: 1450, margin: 0.2, by_type: { material: 5000 },
@@ -48,5 +48,8 @@ test("the customer's copy carries no cost, profit, hidden lines or notes", () =>
   const text = JSON.stringify(out);
   for (const bad of ["Secret line", "Hidden group", "gate code", "secret", "logo_light_path", "notes", "linesOff", "groupsOff", "5000", "1450", "7187"]) assert.ok(!text.includes(bad), `leaked ${bad}`);
   assert.equal(out.price.total, 7200);
+  assert.deepEqual(out.prepared_by, { name: "Pat Example", phone: "(225) 555-0100", email: "pat@example.com" });
+  assert.ok(!text.includes("u-secret"));
+  assert.equal(publicSnapshot({ ...snap, prepared_by: undefined }, { project_type: null, type_label: "" }).prepared_by, null);
   assert.equal(out.price.groups[0].items.find((i) => i.id === "l3").sell, 0);
 });

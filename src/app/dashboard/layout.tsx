@@ -47,7 +47,7 @@ import { signOut } from "@/lib/auth";
 import "@/styles/v34-shell.css";
 
 interface Me {
-  email: string | null; name: string | null; org_name: string | null; role: string | null; line: string | null;
+  email: string | null; name: string | null; phone?: string | null; org_name: string | null; role: string | null; line: string | null;
   logo_light?: boolean; logo_dark?: boolean; logo_stamp?: string | null;
 }
 
@@ -291,7 +291,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="px-4 py-3">
           {me ? (
             <>
-              <YouSection key={me.name ?? ""} name={me.name} email={me.email} orgName={me.org_name} role={me.role} onSaved={reloadMe} />
+              <YouSection key={`${me.name ?? ""}|${me.phone ?? ""}`} name={me.name} phone={me.phone ?? null} email={me.email} orgName={me.org_name} role={me.role} onSaved={reloadMe} />
               <div className="mt-3" style={{ borderTop: `1px solid ${T.hair}` }}>
                 <OrgSection key={me.name ?? ""} onChanged={reloadMe} />
               </div>

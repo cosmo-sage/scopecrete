@@ -4,7 +4,7 @@ Ground truth for every agent working this repo. If code disagrees with this
 document, the code is wrong or this document is stale — resolve it, don't
 guess. Update this file in the same PR that changes the behavior it describes.
 
-Last updated: 2026-10-04 (sign-in at app.scopecrete.ai/login, each org at <slug>.app.scopecrete.ai; Dusty's chat keeps its files and files them on a customer or job — migration 079; vendor Delete; Dusty on a vendor's page and looking at attached photos; sales tax by address via TaxLocus — migration 078; archive reasons; Lines, providers and logs — migration 077; internal notes with @-tags; Jobs board sort and filter; jobs by hand — migration 076; done and lost customers in Threads; proposals sent by link, every opening tracked; every option side by side for the customer — migration 075; Documents is Files, everywhere — migration 074; Threads v2 — threads you make, channels per number, the customer page reshaped — migration 073; an address given is kept and asked about — migration 072; Dusty sets addresses; customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
+Last updated: 2026-10-04 (an All thread; proposal cover band and Prepared by; sign-in at app.scopecrete.ai/login, each org at <slug>.app.scopecrete.ai; Dusty's chat keeps its files and files them on a customer or job — migration 079; vendor Delete; Dusty on a vendor's page and looking at attached photos; sales tax by address via TaxLocus — migration 078; archive reasons; Lines, providers and logs — migration 077; internal notes with @-tags; Jobs board sort and filter; jobs by hand — migration 076; done and lost customers in Threads; proposals sent by link, every opening tracked; every option side by side for the customer — migration 075; Documents is Files, everywhere — migration 074; Threads v2 — threads you make, channels per number, the customer page reshaped — migration 073; an address given is kept and asked about — migration 072; Dusty sets addresses; customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
 
 ---
 
@@ -1759,6 +1759,11 @@ expected start date per quoted job before it means anything. Add the field.
   chips by bucket (All · Customer · Unsorted · Vendor · Personal · Spam, each
   with its count), the search box searches the archive, and Sort applies.
   The old "Archived · N" link above the list is gone.
+  **All is the first tab (Coy, 2026-10-04: "an 'ALL' thread as a catchall
+  for anything that isn't archived or labeled spam").** Everyone in every
+  bucket, Unsorted included, newest first, each row with its bucket tag;
+  spam and the archived are left out (the count is `/api/threads/counts`'s
+  `all`); Whole thread search covers the same people (`bucket=all`).
   **Why it was archived (Coy, 2026-10-04: "When i select to archive a
   thread, i would like to make a note as to why … so that dusty or any
   internal user can see the reason … if the customer contacts me again we
@@ -2770,7 +2775,16 @@ expected start date per quoted job before it means anything. Add the field.
   job's files), Header, Scope (intro + each area's size and spec), Pricing,
   Payments, Warranty, Terms, Sign — each with an on/off pill; quick toggles
   Item prices · Qty · unit · Tax line; groups and lines shown/hidden, prices
-  hidden, lines made optional. **Maps & photos per area (2026-10-03, Coy:
+  hidden, lines made optional. **The cover's dark band (Coy, 2026-10-04):**
+  the logo on the left, the kind and title on the right, nothing else — the
+  "Prepared for …" line was repeated below; the Header shows the logo only
+  when the cover is hidden. **Prepared by** is the member preparing it — their
+  name and phone from Settings → You (`PATCH /api/me {phone}`, kept on their
+  own account), then the org; a final freezes them as
+  `snapshot.prepared_by`, and the customer's copy carries name, phone and
+  email only. **Prepared for** shows the phone as (225) 555-0100 and the
+  email (the contact's, else their first listed one) when there is one.
+  **Maps & photos per area (2026-10-03, Coy:
   "the customer can easily understand what this section is covering. They
   will have the map view + photos for that map area"):** under the Scope's
   list, each area with takeoff shapes shows the part of their sheet — the

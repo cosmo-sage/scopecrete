@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { LOGIN_URL, hostKind } from "@/lib/hosts";
 
 const getRedirectUrl = () => `${window.location.origin}/auth/callback`;
 
@@ -28,10 +29,10 @@ export async function signInWithEmail(email: string) {
 export async function signOut() {
   const { error } = await supabase.auth.signOut();
   if (!error) {
-    // "/" is the only sign-in surface now. The Google-only /login page was
-    // deleted in work order 10; sending a signed-out user there would have
-    // landed them on a 404.
-    window.location.href = "/";
+    // Signed out on scopecrete.ai's app or an org's address → the one sign-in
+    // page, app.scopecrete.ai/login. Elsewhere (previews) "/" is sign-in.
+    const k = hostKind(window.location.hostname).kind;
+    window.location.href = k === "app" || k === "org" ? LOGIN_URL : "/";
   }
   return { error };
 }

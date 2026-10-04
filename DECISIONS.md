@@ -2519,6 +2519,23 @@ expected start date per quoted job before it means anything. Add the field.
   its room hid its last columns behind Dusty's docked panel (Coy); when it
   would overflow, the budget shows the cards until it has more room than
   that.
+  **Each section holds its own cost items (Coy, 2026-10-04: "the sections
+  that are in the budget [should] have the budget line items in the sections
+  themselves … The budget below can be an additional costs panel that
+  includes the OH and shows a spreadsheet of how the labor, equipment and
+  materials add up for all the sections and how the Over Head and profit all
+  math out").** A section's card shows its lines — its Price book groups as
+  sub-groups, then the items, then the section's total and $/SF — with **+ Add
+  items from the Price book** (drawn there by `JobBudget` through a portal
+  into the card's slot; no data change, one set of numbers). The panel under
+  the sections is **Job totals**: options, **Additional costs · whole job**
+  (lines on no section — mobilization, a permit, a pump day; **+ Whole-job
+  cost**), tax / O.H. / margin / discount, each option's total, then **How it
+  adds up** — a row per cost type (Materials, Labor, Equipment, Subcontract,
+  Other) with each section's cost, then cost, O.H., profit and price — and the
+  steps Cost → + O.H. → + Profit → Price → + tax − discount → Total (`Rollup`;
+  for the option picked, else the first). The profit split and job minimum stay
+  under it.
 - **The Plan Room (migration 059, 2026-09-30; Claude Design,
   `design/plan-room`).** Coy: *"scopecrete.ai will be a tool for me to do
   takeoffs manually."* (His own Hermes agent reads the bid emails he forwards

@@ -248,7 +248,7 @@ only on **More → Logs** (`/api/logs`), with Dusty's reads and same-person
 merges. Coy: drift belongs on a logs page, not in the inbox. The one open
 defect on 2026-09-28 is that Cell-line text; nothing is missing.
 
-**Intake writes the raw log before anything that can fail (quo-intake v10,
+**Intake writes the raw log before anything that can fail (quo-intake v10, deployed as version 69,
 2026-10-04).** Coy texted the Quo line from his Google Voice line, which is one
 of the org's own lines. Migration 019's `contacts_not_org_line` guard refused to
 make a contact of it, and that exception 500'd the webhook BEFORE `quo_events`

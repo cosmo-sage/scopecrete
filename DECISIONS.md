@@ -4,7 +4,7 @@ Ground truth for every agent working this repo. If code disagrees with this
 document, the code is wrong or this document is stale — resolve it, don't
 guess. Update this file in the same PR that changes the behavior it describes.
 
-Last updated: 2026-10-04 (an All thread; proposal cover band and Prepared by; sign-in at app.scopecrete.ai/login, each org at <slug>.app.scopecrete.ai; Dusty's chat keeps its files and files them on a customer or job — migration 079; vendor Delete; Dusty on a vendor's page and looking at attached photos; sales tax by address via TaxLocus — migration 078; archive reasons; Lines, providers and logs — migration 077; internal notes with @-tags; Jobs board sort and filter; jobs by hand — migration 076; done and lost customers in Threads; proposals sent by link, every opening tracked; every option side by side for the customer — migration 075; Documents is Files, everywhere — migration 074; Threads v2 — threads you make, channels per number, the customer page reshaped — migration 073; an address given is kept and asked about — migration 072; Dusty sets addresses; customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
+Last updated: 2026-10-04 (Dusty is the Scopecrete Lander; an All thread; proposal cover band and Prepared by; sign-in at app.scopecrete.ai/login, each org at <slug>.app.scopecrete.ai; Dusty's chat keeps its files and files them on a customer or job — migration 079; vendor Delete; Dusty on a vendor's page and looking at attached photos; sales tax by address via TaxLocus — migration 078; archive reasons; Lines, providers and logs — migration 077; internal notes with @-tags; Jobs board sort and filter; jobs by hand — migration 076; done and lost customers in Threads; proposals sent by link, every opening tracked; every option side by side for the customer — migration 075; Documents is Files, everywhere — migration 074; Threads v2 — threads you make, channels per number, the customer page reshaped — migration 073; an address given is kept and asked about — migration 072; Dusty sets addresses; customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
 
 ---
 
@@ -2190,20 +2190,24 @@ expected start date per quoted job before it means anything. Add the field.
   (before this, Barlow and Plex were named but never loaded on the
   dashboard). Type roles beyond the header and activity line (Lexend names
   and numbers, Inter panel titles) wait for Coy's feedback.
-- **Dusty is a pixel foreman (2026-09-30, `design/dusty/`, pixel v5).** The
-  old diamond emblem is gone everywhere — header, rail, landing page,
-  favicon. Dusty lives in two places only: the **centre of the phone footer**
-  (the header button on a desktop, 2026-09-30) and the **chat**.
-  `src/components/v34/dusty-avatar.tsx`, served from `public/dusty/`, to the
-  pack's rules: `image-rendering: pixelated`; nothing animates at 16–24px;
-  `prefers-reduced-motion` makes every sprite static. States come from real
-  events only: **idle** (the 6 s loop at 32px+), **loading** (hard hat, a
-  chat loading), **calculating** (the mixer truck replaces him, 200 ms
-  crossfade, while a reply streams or the reader is reading), **done** (the
-  pour, then thumbs up 2 s) and **error** (head scratch). In the chat: 96px
-  when empty; once a chat is going, **32px in the message bar**, in his real
-  state (Coy, 2026-09-30 — not in the chat's header, not beside each
-  answer). The favicon is his 24px sprite.
+- **Dusty is the Scopecrete Lander (2026-10-04, Claude Design package,
+  `design/dusty-lander/`; was the pixel foreman of 2026-09-30).** A hatched
+  concrete block on steel legs, green-light eyes, a dish antenna and an
+  orange ring. He lives in two places only: the **centre of the phone
+  footer** (the header button on a desktop) and the **chat**.
+  `src/components/v34/dusty-avatar.tsx` draws him inline from `dustySvg()`
+  (`src/lib/v34/dusty-svg.ts`, a typed port of the package's `dusty.js`;
+  ids from `useId()` so server and browser agree; its reduced-motion rule
+  scoped to `svg[data-dusty]`); the drawings are also in
+  `public/dusty/lander/` (240px, `-24` with heavier strokes, a 512px PNG).
+  States come from real events only: **idle** (still at 24px and under),
+  **loading** → listen (a chat loading, a voice note), **calculating** →
+  sort (a reply streaming, the reader reading), **thinking** → scan,
+  **done** → celebrate once then idle, **error** → alert (amber eyes) for a
+  moment then idle; the package's own land and sleep exist, unused yet.
+  `prefers-reduced-motion` stills him. In the chat: 96px when empty, 32px in
+  the message bar once a chat is going. The favicon and app icon are his
+  still drawing. The pixel sprites stay in `public/dusty/` unused.
 - **Dusty answers in Markdown (2026-09-30).** Coy: *"showing the
   calculations in .md format in the chat panel."* His prompt asks for
   lists, bold and, for a job, a table per area (area · qty · cost · O.H. ·

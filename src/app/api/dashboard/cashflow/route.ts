@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
+import { cookieOptionsFor } from "@/lib/api-auth";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
@@ -15,6 +16,7 @@ export async function GET(req: NextRequest) {
   // so a caller can only ever see their own org's financials.
   const cookiesToSet: { name: string; value: string; options: Record<string, unknown> }[] = [];
   const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+    cookieOptions: cookieOptionsFor(req),
     cookies: {
       getAll: () => req.cookies.getAll(),
       setAll: (toSet) => { cookiesToSet.push(...toSet); },

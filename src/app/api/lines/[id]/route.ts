@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
 import { LEAD_SOURCES } from "@/lib/jobs/stages";
-import { PROVIDERS } from "@/lib/lines";
+import { LINE_COLORS, PROVIDERS } from "@/lib/lines";
 
-/** Edit a line's label, provider, provider id and default lead source. */
+/**
+ * Edit a line: label, provider, provider id, default lead source, its colour
+ * (migration 077) and { is_primary: true } — the one primary, the others off.
+ */
 
 export const dynamic = "force-dynamic";
 
@@ -26,12 +29,24 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   }
   if (patch.provider && !PROVIDERS.some((p) => p.k === patch.provider)) return fail(`provider must be one of ${PROVIDERS.map((p) => p.k).join(", ")}.`);
   if (patch.default_lead_source && !LEAD_SOURCES.some((l) => l.k === patch.default_lead_source)) return fail("Unknown lead source.");
+  if ("color_token" in body) {
+    const c = body.color_token;
+    if (c !== null && !(typeof c === "string" && (LINE_COLORS as readonly string[]).includes(c))) return fail(`color must be one of ${LINE_COLORS.join(", ")}.`);
+    patch.color_token = (c as string | null) ?? null;
+  }
+  if (body.is_primary === true) {
+    const { data: me } = await supabase.from("org_phone_numbers").select("id").eq("org_id", orgId).eq("id", id).maybeSingle();
+    if (!me) return fail("No such line in your organisation.", 404);
+    const { error: e1 } = await supabase.from("org_phone_numbers").update({ is_primary: false }).eq("org_id", orgId).neq("id", id);
+    if (e1) return fail(e1.message, 500);
+    (patch as Record<string, unknown>).is_primary = true;
+  }
   if (!Object.keys(patch).length) return fail("Nothing to change.");
 
   const { data, error } = await supabase.from("org_phone_numbers").update(patch)
     .eq("org_id", orgId).eq("id", id)
-    .select("id, phone_e164, label, provider, provider_number_id, default_lead_source").maybeSingle();
-  if (error) return fail(error.message, 500);
+    .select("*").maybeSingle();
+  if (error) return fail(/color_token/.test(error.message) ? "Line colours need migration 077 applied." : error.message, 500);
   if (!data) return fail("No such line in your organisation.", 404);
   return applyCookies(NextResponse.json({ line: data }));
 }

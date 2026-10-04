@@ -67,8 +67,14 @@ export interface ThreadMessage {
   artifact_kinds: string[];
   /** Files on this message (message_media). Fetched lazily by MessageMedia. */
   media_count: number;
-  /** Our line, by name — only when this thread used more than one (migration 035). */
+  /** Our line, by name — whenever the org has two or more (Lines, Claude Design package 9). */
   line?: string | null;
+  /** That line's id (Logs, the channel's line filter). */
+  line_id?: string | null;
+  /** That line's colour as a CSS value, for its dot. */
+  line_color?: string | null;
+  /** That line's provider's name, on call cards ("via Website · Quo"). */
+  line_provider?: string | null;
   /** The other end's number — which phone channel it is on (Threads v2). */
   counterparty?: string | null;
   /** message_media.kind of each file on it. */
@@ -236,7 +242,10 @@ export function CallRow({ m }: { m: ThreadMessage }) {
           {isOut ? "Outbound call" : "Inbound call"}
         </span>
         {m.line && (
-          <span className="text-[10px]" style={{ color: DA.textMuted }}>{m.line}</span>
+          <span className="flex items-center gap-1" style={{ order: 9, marginLeft: "auto", fontFamily: disp, fontSize: 10, letterSpacing: ".08em", textTransform: "uppercase", color: DA.textMuted }}>
+            <span style={{ width: 7, height: 7, borderRadius: 7, background: m.line_color ?? DA.textMuted, display: "inline-block" }} />
+            via {m.line}{m.line_provider ? ` · ${m.line_provider}` : ""}
+          </span>
         )}
         {duration && (
           <span className="text-[10px] tabular-nums" style={{ color: DA.textMuted }}>{duration}</span>
@@ -497,7 +506,8 @@ export function SmsRow({ m }: { m: ThreadMessage }) {
         )}
         {m.media_count > 0 && <MessageMedia messageId={m.id} count={m.media_count} isOut={isOut} />}
         <div className="text-[9px] mt-1" style={{ color: "inherit", opacity: 0.7, letterSpacing: ".06em" }}>
-          {isOut ? "OUT" : "IN"} · {formatTime(m.occurred_at)}{m.line ? ` · ${m.line}` : ""}
+          {isOut ? "OUT" : "IN"} · {formatTime(m.occurred_at)}
+          {m.line && <> · <span style={{ display: "inline-block", width: 6, height: 6, borderRadius: 6, background: m.line_color ?? "currentColor", verticalAlign: "middle" }} /> via {m.line}</>}
         </div>
       </div>
     </div>

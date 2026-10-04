@@ -300,7 +300,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
           <div className="flex flex-col" style={{ borderTop: `1px solid ${T.hair}` }}>
             {[
-              { href: "/dashboard/more/lines", label: "Phone lines", note: "Your numbers, their provider, and the lead source each one means" },
+              { href: "/dashboard/more/lines", label: "Lines", note: "Your numbers, what runs them, and whether each is talking to the app" },
             ].map((l) => (
               <Link key={l.href} href={l.href} onClick={() => setMenuOpen(false)} className="block py-2.5 no-underline" style={{ borderBottom: `1px solid ${T.hairSoft}`, color: T.ink }}>
                 <div style={{ fontSize: F.md, fontWeight: 600 }}>{l.label}</div>

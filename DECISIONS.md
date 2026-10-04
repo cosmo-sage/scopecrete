@@ -4,7 +4,7 @@ Ground truth for every agent working this repo. If code disagrees with this
 document, the code is wrong or this document is stale — resolve it, don't
 guess. Update this file in the same PR that changes the behavior it describes.
 
-Last updated: 2026-10-04 (internal notes with @-tags; Jobs board sort and filter; jobs by hand — migration 076; done and lost customers in Threads; proposals sent by link, every opening tracked; every option side by side for the customer — migration 075; Documents is Files, everywhere — migration 074; Threads v2 — threads you make, channels per number, the customer page reshaped — migration 073; an address given is kept and asked about — migration 072; Dusty sets addresses; customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
+Last updated: 2026-10-04 (Lines, providers and logs — migration 077, not applied; internal notes with @-tags; Jobs board sort and filter; jobs by hand — migration 076; done and lost customers in Threads; proposals sent by link, every opening tracked; every option side by side for the customer — migration 075; Documents is Files, everywhere — migration 074; Threads v2 — threads you make, channels per number, the customer page reshaped — migration 073; an address given is kept and asked about — migration 072; Dusty sets addresses; customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
 
 ---
 
@@ -454,6 +454,59 @@ each message.** One person calling two of Coy's lines is one thread.
 - Seen in the data: (225) 529-9098 is a relay that texts "New call from:
   Baton Rouge Concreters, Number: +1…" for every website call (~150). Each of
   those numbers is a website lead — the first real input for lead sources.
+- **Lines, providers and logs (Claude Design package 9, `Lines.dc.html`;
+  Coy, 2026-10-04: "go ahead with the lines/providers/logs").** The design's
+  `providers` / `lines` / `line_events` tables are **not** made: a line is
+  this `org_phone_numbers` row, the event log is `quo_events` (§2a — every
+  event saved as it arrived, before it is filed), the stamp is
+  `messages.phone_number_id`. **Migration 077** (written and rehearsed;
+  applied only on Coy's word) adds only `org_phone_numbers.color_token`
+  (hiviz · chalk · violet · green · teal; null = assigned in order) and
+  `sc_replay_raw_event(event)` — Replay: runs the projection again for one
+  raw event of the caller's org (SECURITY DEFINER, membership checked,
+  authenticated only; the dedupe index makes a second message impossible).
+  Rehearsed (rolled back): a member replayed a text and a call summary, 1,565
+  messages and 380 artifacts before and after; a stranger "event not found";
+  anon refused; a colour off the list refused. One reader,
+  `src/lib/lines-server.ts`, serves both pages: an event's line is whichever
+  of its two numbers is ours (`quo_events.phone_number_id` is never filled);
+  its status (`eventStatus()`, `src/lib/lines.ts`, tested) is **failed**
+  (projecting threw, or unfiled 2+ minutes), **pending**, **late** (a
+  recording / summary / transcript more than 10 minutes after its call
+  ended) or **OK**; latency = filed − received. Measured 2026-10-04: 94
+  events in 7 days, none failed, filed in the same instant.
+  **Lines** (`/dashboard/more/lines`, was "Phone lines"): a card per line —
+  number, name, Primary (Make primary), health (Healthy / N failed / no
+  events), Provider, "A new caller here is a…" (the lead source, §2d), Today
+  (calls · texts since Central midnight), Last event, the webhook (Quo's is
+  the deployed `quo-intake`) with Copy, Threads › / Logs ›, the colour, and a
+  red strip when an event failed. Providers on the right: Quo (connected,
+  lines, whether `QUO_API_KEY` is set) and Twilio / Telnyx / your own stack
+  shown **Not built** — only Quo's intake exists, and the page says so rather
+  than offering a webhook that goes nowhere. **+ Add a line** (a drawer; the
+  + on a phone): who runs it, the number (typed — reading Quo's numbers
+  needs the API key), name, lead source, the webhook to point Quo at, then
+  "Waiting for the first event…" until one arrives (`POST /api/lines`;
+  members may write `org_phone_numbers` under its RLS). The design's
+  per-line *bucket* for a new caller is not built: the lead source is what
+  §2d defines, and filing callers by line would be a classification rule.
+  **Logs** (`/dashboard/more/logs`): the event table on top — chips for Line
+  (with counts), Provider and Event (All · Calls · Texts · Webhooks · Needs
+  you = not OK), kept in the address (`?line=&provider=&event=`), "N of M
+  events · last 7 days"; a red alarm with **Replay event** when anything in
+  view failed; a row opens a drawer with the payload as it arrived, the
+  trace (received, filed, error, defects) and links to the contact and
+  message (`/api/logs/events[/id[/replay]]`). Data checks, Dusty's reads and
+  merges stay below unchanged.
+  **A thread, stamped by line** — when the org has two or more lines: every
+  call card says "● via Website · Quo" and every text "● via Main"; a line
+  filter (only lines this person reached) beside All · Calls · Texts; **Call
+  from ▾** (your phone dials — choose the same line in Quo); the composer's
+  line chip and "Text (225) … from Main — copy it into Quo" (nothing sends,
+  §10); the header adds "first reached you on the Website line, Oct 3"
+  (`/api/threads/[id]` returns `lines`, `first_line`, each message's
+  `line_id`). On a phone the toolbar wraps, the line filter its own row. Not
+  built: a thread made from a line, and Send (Quo stays Copy until 10DLC).
 
 ## 2e. Files — uploads Dusty reads (migrations 045–046, 2026-09-29)
 

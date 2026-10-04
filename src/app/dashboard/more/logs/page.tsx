@@ -7,12 +7,16 @@
  * August outage, DECISIONS §2a); a note on a message that did arrive is only
  * something to know. Then Dusty's reads, and "Same person" merges. This is
  * what the database already records — there is no log of every tap yet.
+ *
+ * Above them (Claude Design package 9, `Lines.dc.html` C): every provider
+ * event of the last week, by line, provider and kind (line-events.tsx).
  */
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { T, F, disp, eyebrow, nums, relTime } from "@/lib/v34/tokens";
+import { T, F, eyebrow, nums, relTime } from "@/lib/v34/tokens";
 import { EmptyState } from "@/components/v34/primitives";
+import { LineEvents } from "@/components/v34/line-events";
 
 interface Logs {
   checks: Array<{ at: string; severity: "alarm" | "note"; title: string; detail: string }>;
@@ -50,16 +54,14 @@ export default function LogsScreen() {
   );
   const when = (iso: string) => new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
-  if (error) return <EmptyState tone="warn" title="Couldn't load the logs" detail={error} />;
-  if (!logs) return <div className="p-3"><div className="rounded animate-pulse" style={{ height: 120, background: T.hairSoft }} /></div>;
-  const alarms = logs.checks.filter((c) => c.severity === "alarm").length;
+  const alarms = logs ? logs.checks.filter((c) => c.severity === "alarm").length : 0;
 
   return (
-    <div style={{ paddingBottom: 24, maxWidth: 760 }} className="mx-auto">
-      <div className="px-3 pt-3">
-        <h1 style={{ fontFamily: disp, fontSize: F.xl, fontWeight: 700, margin: 0 }}>Logs</h1>
-        <div style={{ fontSize: F.xs, color: T.ink3 }}>What happened behind the scenes. Nothing here needs you unless it is red.</div>
-      </div>
+    <div style={{ paddingBottom: 24 }}>
+    <LineEvents />
+    {error ? <EmptyState tone="warn" title="Couldn't load the rest of the logs" detail={error} />
+    : !logs ? <div className="p-3"><div className="rounded animate-pulse" style={{ height: 120, background: T.hairSoft }} /></div> : (
+    <div style={{ maxWidth: 760 }} className="mx-auto">
 
       {/* The drift alarm (DECISIONS §2a) — out of the header since 2026-09-30,
           so it is loud here: a red banner while anything is missing, and
@@ -114,6 +116,8 @@ export default function LogsScreen() {
               <span style={{ fontSize: F.xs, color: T.ink3 }}> · {when(m.at)}{m.undone_at ? " · undone" : ""}</span>
             </Link>
           )))}
+    </div>
+    )}
     </div>
   );
 }

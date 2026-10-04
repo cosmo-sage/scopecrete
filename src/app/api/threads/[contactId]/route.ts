@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
+import { loadLines } from "@/lib/lines-server";
 import { buildChannels } from "@/lib/v34/threads";
 
 /**
@@ -40,10 +41,13 @@ export interface ThreadMessage {
   /** message_media.kind of each file on it (photo, video, pdf, vcard…) — the search panel's Photos / Files. */
   media_kinds: string[];
   /**
-   * Which of our lines it used (migration 035), by name — set only when this
-   * thread spans more than one line, so a one-line thread stays uncluttered.
+   * Which of our lines it used (migration 035), by name — set whenever the
+   * org has two or more lines (Lines, Claude Design package 9), so a one-line
+   * org stays uncluttered.
    */
   line: string | null;
+  /** That line's id, for the channel's line filter and its colour. */
+  line_id: string | null;
   /** The other end's number on this message — which phone channel it belongs to (Threads v2). */
   counterparty: string | null;
 }
@@ -139,12 +143,16 @@ export async function GET(
     if (cand) { counterpartyPhone = cand; break; }
   }
 
-  const linesUsed = new Set(raw.map((r) => r.phone_number_id).filter(Boolean));
+  // Stamped with its line whenever the org has more than one (Lines, package 9).
+  const manyLines = (orgLines ?? []).length > 1;
   const messages = raw.map((r) => {
     const { from_address, to_address, phone_number_id, ...rest } = r;
     const counterparty = from_address && !ours.has(from_address) ? from_address : to_address && !ours.has(to_address) ? to_address : null;
-    return { ...rest, counterparty, line: linesUsed.size > 1 && phone_number_id ? lineName.get(phone_number_id) ?? null : null };
+    return { ...rest, counterparty, line: manyLines && phone_number_id ? lineName.get(phone_number_id) ?? null : null, line_id: manyLines ? phone_number_id : null };
   });
+  // The lines, with their colours, and which one they first reached you on.
+  const lineRows = manyLines ? await loadLines(supabase, orgId) : [];
+  const firstMsg = [...raw].reverse().find((r) => r.phone_number_id);
 
   // Their channels (Threads v2): a tab per number, then email, then chat. Emails
   // are the mirrored inbox filed on this person (migration 061), newest 50.
@@ -211,6 +219,10 @@ export async function GET(
     /** Merges into this contact that are still in force — each can be undone. */
     merges,
     messages: withKinds,
+    /** The org's lines (only when there are two or more): id, name, colour, provider. */
+    lines: lineRows.map((l) => ({ id: l.id, name: l.label?.trim() || formatLine(l.phone_e164), phone: l.phone_e164, color: l.color, provider: l.provider, is_primary: l.is_primary })),
+    /** "first reached you on the Website line, Sep 22". */
+    first_line: manyLines && firstMsg?.phone_number_id ? { id: firstMsg.phone_number_id, name: lineName.get(firstMsg.phone_number_id) ?? null, at: firstMsg.occurred_at } : null,
     channels,
     emails: emailList,
   }));

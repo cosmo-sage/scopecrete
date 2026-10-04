@@ -41,6 +41,11 @@ export default function ChatThreadPage() {
   const [emails, setEmails] = useState<Array<{ id: string; subject: string | null; from: string | null; at: string | null; body: string }>>([]);
   const [channelKey, setChannelKey] = useState<string | null>(search.get("channel"));
   const [filter, setFilter] = useState<ChannelFilter>("all");
+  // Lines (Claude Design package 9): the org's numbers, when it has two or more.
+  const [orgLines, setOrgLines] = useState<Array<{ id: string; name: string; phone: string; color: string; provider: string | null; is_primary: boolean }>>([]);
+  const [firstLine, setFirstLine] = useState<{ id: string; name: string | null; at: string } | null>(null);
+  const [lineFilter, setLineFilter] = useState<string | null>(null);
+  const [fromLine, setFromLine] = useState<string | null>(null);
   const [searching, setSearching] = useState(false);
   const [more, setMore] = useState(false);
 
@@ -95,7 +100,15 @@ export default function ChatThreadPage() {
         // The API returns newest first. A conversation reads top to bottom
         // with the composer under the latest message — v34 and the desktop
         // design both — so it is turned round here and scrolled to the end.
-        setMessages(Array.isArray(data.messages) ? [...data.messages].reverse() : []);
+        const ls = (Array.isArray(data.lines) ? data.lines : []) as Array<{ id: string; name: string; phone: string; color: string; provider: string | null; is_primary: boolean }>;
+        const lineCss = (c: string) => (T as unknown as Record<string, string>)[c] ?? T.ink3;
+        setOrgLines(ls.map((l) => ({ ...l, color: lineCss(l.color) })));
+        setFirstLine(data.first_line ?? null);
+        const provName: Record<string, string> = { quo: "Quo", twilio: "Twilio", telnyx: "Telnyx", own_stack: "Own stack" };
+        setMessages(Array.isArray(data.messages) ? [...data.messages].reverse().map((m: ThreadMessage) => {
+          const l = ls.find((x) => x.id === m.line_id);
+          return l ? { ...m, line_color: lineCss(l.color), line_provider: l.provider ? provName[l.provider] ?? l.provider : null } : m;
+        }) : []);
         setPhone(data.counterparty_phone ?? null);
         setName(typeof data.name === "string" ? data.name : null);
         setNameConfirmed(data.name_confirmed === true);
@@ -215,6 +228,7 @@ export default function ChatThreadPage() {
     channels.some((x) => x.kind === "email" && x.reachable) ? "email" : null,
     inThreads.length ? `in ${inThreads.map((t) => t.name).join(", ")}` : null,
     lastAt ? `last heard ${relTime(lastAt)}` : null,
+    firstLine?.name ? `first reached you on the ${firstLine.name} line, ${new Date(firstLine.at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : null,
   ].filter(Boolean).join(" · ");
   // Internal notes are a tab of their own, after the numbers (Coy, 2026-10-04).
   const nNotes = person?.notes?.length ?? 0;
@@ -222,13 +236,19 @@ export default function ChatThreadPage() {
   const lastPhone = channels.reduce((at, c, i) => (c.kind === "phone" ? i : at), -1);
   const tabs = channels.length ? [...channels.slice(0, lastPhone + 1), notesTab, ...channels.slice(lastPhone + 1)] : [];
   const channel = tabs.find((x) => x.key === channelKey) ?? tabs[0] ?? null;
-  const shown = channel?.kind === "phone" ? messages.filter((m) => inChannel({ channel: m.channel, counterparty: m.counterparty ?? null }, channel, filter)) : [];
+  const shown = channel?.kind === "phone" ? messages.filter((m) => inChannel({ channel: m.channel, counterparty: m.counterparty ?? null }, channel, filter) && (!lineFilter || m.line_id === lineFilter)) : [];
   const n = channel?.kind === "phone" ? messages.filter((m) => inChannel({ channel: m.channel, counterparty: m.counterparty ?? null }, channel, "all")) : [];
   const nCalls = n.filter((m) => m.channel === "call" || m.channel === "voicemail").length;
   const threadName = threads ? threadLabel(threads.thread, threads.custom).name : "Threads";
   const threadIds = threads && !["customers", "unsorted", "vendors", "personal", "spam", "archived"].includes(threads.thread)
     ? threads.custom?.find((t) => t.id === threads.thread)?.contact_ids ?? [] : [];
-  const pickChannel = (k: string) => { setChannelKey(k); setFilter("all"); };
+  const pickChannel = (k: string) => { setChannelKey(k); setFilter("all"); setLineFilter(null); };
+  // The lines this person actually reached on this number, and the one a text or call goes from:
+  // the line they last used, else the primary.
+  const usedLines = orgLines.filter((l) => n.some((m) => m.line_id === l.id));
+  const lastLine = [...n].reverse().find((m) => m.line_id)?.line_id ?? null;
+  const defaultLine = lastLine ?? orgLines.find((l) => l.is_primary)?.id ?? orgLines[0]?.id ?? null;
+  const outLine = orgLines.find((l) => l.id === (fromLine ?? defaultLine)) ?? null;
   const renameChannel = async (ch: Channel) => {
     const next = window.prompt(`Name for ${formatPhone(ch.value)} — e.g. Office, Work, Cell. Leave it blank for the default.`, ch.label);
     if (next === null || !ch.value) return;
@@ -316,25 +336,51 @@ export default function ChatThreadPage() {
         </div>
 
         {/* Toolbar: the filter (phone channels), what you're looking at, Call, search. */}
-        <div className="flex items-center gap-2 flex-shrink-0" style={{ padding: "8px 16px", background: T.card, borderBottom: `1px solid ${T.hairSoft}` }}>
+        <div className="flex items-center gap-2 flex-shrink-0 flex-wrap lg:flex-nowrap" style={{ padding: "8px 16px", background: T.card, borderBottom: `1px solid ${T.hairSoft}` }}>
           {channel?.kind === "phone" ? (
             <div className="flex overflow-hidden shrink-0" style={{ height: 28, border: `1px solid ${T.hairStrong}`, borderRadius: 4 }}>
               <button onClick={() => setFilter("all")} style={seg(filter === "all")}>All {n.length}</button>
               <button onClick={() => setFilter("call")} style={{ ...seg(filter === "call"), borderLeft: `1px solid ${T.hairStrong}` }}>Calls {nCalls}</button>
               <button onClick={() => setFilter("text")} style={{ ...seg(filter === "text"), borderLeft: `1px solid ${T.hairStrong}` }}>Texts {n.length - nCalls}</button>
             </div>
-          ) : (
+          ) : null}
+          {channel?.kind === "phone" && usedLines.length > 1 ? (
+            <div className="flex overflow-hidden shrink-0" style={{ height: 28, border: `1px solid ${T.hairStrong}`, borderRadius: 4 }} title="One channel — their number. The dot is which of yours they reached.">
+              <button onClick={() => setLineFilter(null)} style={seg(!lineFilter)}>All lines</button>
+              {usedLines.map((l) => (
+                <button key={l.id} onClick={() => setLineFilter(l.id)} style={{ ...seg(lineFilter === l.id), borderLeft: `1px solid ${T.hairStrong}`, display: "inline-flex", alignItems: "center", gap: 5 }}>
+                  <span style={{ width: 7, height: 7, borderRadius: 7, background: l.color, display: "inline-block" }} />{l.name}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          {channel?.kind !== "phone" && (
             <div className="flex overflow-hidden shrink-0" style={{ height: 28, border: `1px solid ${T.hairStrong}`, borderRadius: 4 }}>
               <button style={seg(true)}>All {channel?.kind === "email" ? emails.length : channel?.kind === "notes" ? nNotes : 0}</button>
             </div>
           )}
           <span className="hidden lg:inline" style={{ fontSize: 11.5, color: T.ink3, ...clip, flex: 1 }}>
-            {channel?.kind === "phone" ? "Everything on this number, oldest first" : channel?.kind === "notes" ? "Notes for your team — never sent, and Dusty reads them" : channel?.kind === "email" ? "Emails forwarded to your intake inbox and filed on them" : "ScopeCrete chat isn't built yet"}
+            {channel?.kind === "phone" ? (lineFilter ? `Only what came through ${orgLines.find((l) => l.id === lineFilter)?.name ?? "that line"} ${formatPhone(orgLines.find((l) => l.id === lineFilter)?.phone ?? "")}` : usedLines.length > 1 ? "One channel — their number. The dot is which of yours they reached." : "Everything on this number, oldest first") : channel?.kind === "notes" ? "Notes for your team — never sent, and Dusty reads them" : channel?.kind === "email" ? "Emails forwarded to your intake inbox and filed on them" : "ScopeCrete chat isn't built yet"}
           </span>
           <span className="flex-1 lg:hidden" />
-          {channel?.kind === "phone" && channel.value && (
+          {channel?.kind === "phone" && channel.value && orgLines.length > 1 && outLine ? (
+            // Call from ▾ (Lines, package 9): your phone places the call — pick the same line in Quo.
+            <span className="inline-flex items-center shrink-0" style={{ ...pill, padding: 0, overflow: "hidden" }}>
+              <a href={`tel:${channel.value}`} className="inline-flex items-center gap-1.5 no-underline" style={{ padding: "0 8px", color: "inherit", height: "100%" }}
+                aria-label={`Call ${formatPhone(channel.value)} from ${outLine.name}`} title={`Your phone dials — choose ${outLine.name} in Quo`}>
+                <Phone size={12} weight="fill" /> <span className="hidden lg:inline">Call from</span>
+              </a>
+              <label className="inline-flex items-center gap-1" style={{ borderLeft: `1px solid ${T.hair}`, padding: "0 4px 0 6px", height: "100%" }}>
+                <span style={{ width: 7, height: 7, borderRadius: 7, background: outLine.color, display: "inline-block" }} />
+                <select value={outLine.id} onChange={(e) => setFromLine(e.target.value)} aria-label="Call or text from line"
+                  style={{ border: "none", background: "transparent", fontWeight: 600, fontSize: 12, color: T.ink, maxWidth: 90 }}>
+                  {orgLines.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+                </select>
+              </label>
+            </span>
+          ) : channel?.kind === "phone" && channel.value ? (
             <a href={`tel:${channel.value}`} style={pill} aria-label={`Call ${formatPhone(channel.value)}`}><Phone size={12} weight="fill" /> <span className="hidden lg:inline">Call</span></a>
-          )}
+          ) : null}
           <button onClick={() => setSearching((v) => !v)} aria-label="Search this thread" aria-pressed={searching}
             className="flex items-center justify-center shrink-0 rounded" style={{ width: 28, height: 28, border: `1px solid ${searching ? T.hiviz : T.hairStrong}`, background: searching ? T.hivizDim : T.card, cursor: "pointer" }}>
             <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke={searching ? T.hiviz : T.ink2} strokeWidth="1.8" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5" /><path d="M13 13l4.5 4.5" /></svg>
@@ -400,7 +446,8 @@ export default function ChatThreadPage() {
 
         {!loading && !error && channel?.kind !== "chat" && channel?.kind !== "notes" && (
           <Composer contactId={contactId} phone={channel?.kind === "phone" ? channel.value : phone} name={name}
-            only={channel?.kind === "email" ? "email" : "text"} onNoteSaved={() => setReload((n) => n + 1)} />
+            only={channel?.kind === "email" ? "email" : "text"} onNoteSaved={() => setReload((n) => n + 1)}
+            fromLine={orgLines.length > 1 ? { lines: orgLines, value: outLine?.id ?? null, onPick: setFromLine } : null} />
         )}
       </div>
 

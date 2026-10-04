@@ -4,7 +4,7 @@ Ground truth for every agent working this repo. If code disagrees with this
 document, the code is wrong or this document is stale — resolve it, don't
 guess. Update this file in the same PR that changes the behavior it describes.
 
-Last updated: 2026-10-04 (sales tax by address via TaxLocus — migration 078; archive reasons; Lines, providers and logs — migration 077; internal notes with @-tags; Jobs board sort and filter; jobs by hand — migration 076; done and lost customers in Threads; proposals sent by link, every opening tracked; every option side by side for the customer — migration 075; Documents is Files, everywhere — migration 074; Threads v2 — threads you make, channels per number, the customer page reshaped — migration 073; an address given is kept and asked about — migration 072; Dusty sets addresses; customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
+Last updated: 2026-10-04 (vendor Delete; Dusty on a vendor's page and looking at attached photos; sales tax by address via TaxLocus — migration 078; archive reasons; Lines, providers and logs — migration 077; internal notes with @-tags; Jobs board sort and filter; jobs by hand — migration 076; done and lost customers in Threads; proposals sent by link, every opening tracked; every option side by side for the customer — migration 075; Documents is Files, everywhere — migration 074; Threads v2 — threads you make, channels per number, the customer page reshaped — migration 073; an address given is kept and asked about — migration 072; Dusty sets addresses; customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
 
 ---
 
@@ -2233,6 +2233,14 @@ expected start date per quoted job before it means anything. Add the field.
   `job_files.customer_id`), else unfiled in Documents (`from_dusty`); the
   question carries their ids and Dusty is given each one's read, or told it
   isn't read yet (the background reader reads it within minutes).
+  **A photo he looks at himself (Coy, 2026-10-04: "I shared a screenshot …
+  he said it will take a couple of minutes to read the screenshot and never
+  responded").** An attached JPEG, PNG, WebP or GIF of 5 MB or less that the
+  reader hasn't read yet is sent to the model as an image with that question
+  (up to four; `seeableMime()`, `src/lib/dusty/see.ts`, tested), so he
+  answers about it in the same reply — a screenshot of ScopeCrete is read as
+  the screen. Only the question's words are kept in the history; HEIC, PDFs
+  and anything larger still wait for the reader.
 - **Dusty v1 (2026-09-27)** is wired: `src/components/v34/dusty-panel.tsx`
   rises from the footer on a phone and slides in from the right on desktop.
   It is HOT on whatever screen is open — a thread, a scope, a customer, or
@@ -2416,7 +2424,12 @@ expected start date per quoted job before it means anything. Add the field.
   Suppliers · Subs · Equipment, each vendor's kind, where they deliver,
   phone, prices, how many items they are default on, newest price,
   receipts; **+ Vendor** (no phone needed) and **+ Add a receipt or quote**
-  (the main button). A vendor's page (`/dashboard/vendors/[id]`) is
+  (the main button). **Delete** on a vendor's page (Coy, 2026-10-04: "Why
+  can't I delete a vendor?") — the same restorable delete as their Threads
+  page (§6 Archive and delete), with the Why? box. **Dusty is HOT on a
+  vendor's page** (it was cold): `/dashboard/vendors/<id>` is that person's
+  context, plus a **Vendor** block — their kind, where they deliver, every
+  price of theirs in the Price book and the jobs they're on. A vendor's page (`/dashboard/vendors/[id]`) is
   business first: name, kind, area, phone, email, address (Edit), Call,
   Conversation (if they have messages); **Prices** — each item they price
   with their price, date, source, the cheaper/next vendor, and a **★**

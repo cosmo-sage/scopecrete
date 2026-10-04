@@ -358,14 +358,34 @@ async function threadContext(sb: Sb, orgId: string, contactId: string): Promise<
   const recentTranscripts = msgs.filter((m) => transcripts.has(m.id)).slice(-3)
     .map((m) => `[${day(m.occurred_at)} call]\n${transcripts.get(m.id)!.slice(0, 12000)}`);
 
-  const files = await filesBlock(sb, orgId, { contactId });
+  const [files, vendor] = await Promise.all([filesBlock(sb, orgId, { contactId }), vendorBlock(sb, orgId, contactId)]);
   return assemble(`${who.name}'s thread`, [
     { title: "Ids (for plans: archive, delete, set an address)", lines: [`This thread: contact ${contactId}`] },
     who.block,
+    ...(vendor ? [vendor] : []),
     ...(files ? [files] : []),
     { title: `Messages (last ${msgs.length}, oldest first)`, lines, trimmable: true },
     { title: "Full transcripts of the most recent calls", lines: recentTranscripts, trimmable: true },
   ]);
+}
+
+/** A vendor's page (Coy, 2026-10-04: Dusty "should be able to" see the vendor open): their prices and jobs. */
+async function vendorBlock(sb: Sb, orgId: string, contactId: string): Promise<Block | null> {
+  const { data: c } = await sb.from("contacts").select("contact_type, contact_subtype, service_area").eq("org_id", orgId).eq("id", contactId).maybeSingle();
+  if (!c || c.contact_type !== "vendor") return null;
+  const [{ data: prices }, { data: jobs }] = await Promise.all([
+    sb.from("cost_item_sources").select("unit_cost, unit, vendor_sku, price_as_of, price_source, item:cost_items!cost_item_sources_cost_item_id_fkey(id, name, unit, default_source_id, active)")
+      .eq("org_id", orgId).eq("vendor_contact_id", contactId).eq("active", true).limit(150),
+    sb.from("job_vendors").select("role, job:jobs!inner(title, status, archived_at)").eq("org_id", orgId).eq("contact_id", contactId).limit(50),
+  ]);
+  type P = { unit_cost: unknown; unit: string | null; vendor_sku: string | null; price_as_of: string | null; price_source: string | null; item: { name: string; unit: string | null; active: boolean } | null };
+  const lines = [`Kind: ${(c.contact_subtype as string | null) ?? "vendor"}${c.service_area ? ` · delivers ${c.service_area}` : ""}`];
+  const ps = ((prices ?? []) as unknown as P[]).filter((p) => p.item?.active !== false);
+  lines.push(ps.length ? `Their prices in the Price book (${ps.length}):` : "No prices in the Price book yet.");
+  for (const p of ps) lines.push(`- ${p.item?.name ?? "item"}: ${p.unit_cost === null ? "no price" : `$${Number(p.unit_cost)}`}/${p.unit ?? p.item?.unit ?? "unit"}${p.vendor_sku ? ` · #${p.vendor_sku}` : ""}${p.price_as_of ? ` · ${p.price_as_of}` : ""}${p.price_source ? ` (${p.price_source})` : ""}`);
+  const js = ((jobs ?? []) as unknown as Array<{ role: string | null; job: { title: string | null; status: string; archived_at: string | null } | null }>).filter((j) => j.job && !j.job.archived_at);
+  if (js.length) lines.push(`On jobs: ${js.map((j) => `${j.job!.title || "Untitled"} (${j.job!.status}${j.role ? `, ${j.role}` : ""})`).join("; ")}`);
+  return { title: "Vendor (their page is open)", lines, trimmable: true };
 }
 
 async function settingsAndOverhead(sb: Sb, orgId: string) {

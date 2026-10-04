@@ -19,6 +19,7 @@ import { T, F, disp, eyebrow, nums, clip, money, formatPhone } from "@/lib/v34/t
 import { useWide } from "@/lib/v34/use-wide";
 import { call, dateLabel } from "@/components/v34/cost-cards";
 import { ReceiptImport } from "@/components/v34/receipt-import";
+import { ArchiveButton } from "@/components/v34/archive-actions";
 
 interface VRow {
   id: string; name: string | null; company_name: string | null; subtype: string | null; phone: string | null; email: string | null;
@@ -234,6 +235,7 @@ export function VendorPage({ id }: { id: string }) {
           {p.messages > 0 && <Link href={`/dashboard/messages/${id}`} style={{ ...btn(false), display: "inline-flex", alignItems: "center" }}>Conversation</Link>}
           <button onClick={() => setEditing(true)} style={btn(false)}>Edit</button>
           <button onClick={() => setReceipt(true)} style={btn(true)}>+ Receipt or quote</button>
+          <ArchiveButton kind="contact" id={id} action="delete" what={label(v)} then="/dashboard/vendors" style={{ ...btn(false), color: T.red, borderColor: T.red }}>Delete</ArchiveButton>
         </div>
       </div>
       {err && <div className="mt-2 rounded px-3 py-2" style={{ fontSize: F.sm, color: T.red, background: T.redDim }}>{err}</div>}

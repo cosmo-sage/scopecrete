@@ -39,6 +39,9 @@ interface Conv { id: string; title: string; context_kind: string; context_id: st
 export function refFor(pathname: string): Ref {
   const m = pathname.match(/^\/dashboard\/(messages|scope|customers)\/([^/?#]+)/);
   if (m) return { kind: m[1] === "messages" ? "thread" : m[1] === "scope" ? "scope" : "customer", id: m[2] };
+  // A vendor's page is a person (its id is the contact's): Dusty reads them as on their thread.
+  const v = pathname.match(/^\/dashboard\/vendors\/([^/?#]+)/);
+  if (v) return { kind: "thread", id: v[1] };
   // The Price book shares the "cash" context (money settings + the Price book and its assemblies).
   if (pathname.startsWith("/dashboard/cash") || pathname.startsWith("/dashboard/price-book")) return { kind: "cash" };
   return { kind: "cold" };

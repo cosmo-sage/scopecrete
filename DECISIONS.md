@@ -2609,7 +2609,11 @@ expected start date per quoted job before it means anything. Add the field.
   member's own opening not logged; a bad token null; a listed path readable
   by anon, an unlisted one not; anon can't read either table; a stranger sees
   no links and can't make one; a revoked link is gone and its pictures with
-  it. A preview deployment may sit behind Vercel's own login — send links
+  it. **Applied 2026-10-04 on Coy's "apply 075"** (with anon's leftover
+  grants on `contact_phones` revoked; checked after: the columns, the guard
+  trigger, the storage policy, anon may execute only the two functions and
+  holds no grant on `documents`, `document_events` or `contact_phones`, a bad
+  token returns nothing). A preview deployment may sit behind Vercel's own login — send links
   from scopecrete.ai. Not built: the customer accepting or picking an option
   on the page (e-sign), and a PDF filed on the job.
 - **The job's Bid strip (2026-10-01, §2i)** — full width like the section

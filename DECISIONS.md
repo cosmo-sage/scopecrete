@@ -2240,7 +2240,8 @@ expected start date per quoted job before it means anything. Add the field.
   (up to four; `seeableMime()`, `src/lib/dusty/see.ts`, tested), so he
   answers about it in the same reply — a screenshot of ScopeCrete is read as
   the screen. HEIC, PDFs and anything larger still wait for the reader.
-  **The chat keeps its files (migration 079, Coy 2026-10-04: "the chat
+  **The chat keeps its files (migration 079, applied 2026-10-04 on Coy's
+  "apply 079"; checked after: the column, its ≤ 8 check, RLS unchanged — Coy 2026-10-04: "the chat
   history should at least keep the summary of the image that he read. We'll
   need to have a place for the photos uploaded to dusty to be saved in the
   database").** The uploads were already `files` rows (on what the chat is

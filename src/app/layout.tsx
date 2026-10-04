@@ -33,12 +33,12 @@ export const metadata: Metadata = {
     "Describe your project, get an accurate concrete bid powered by real market data, and a contractor texts you within the hour. No phone calls, no guesswork.",
   keywords: ["concrete estimate", "concrete calculator", "concrete contractor", "Baton Rouge", "Louisiana"],
   icons: {
-    // Dusty, the pixel foreman (2026-09-30) — the old diamond emblem is gone.
+    // Dusty, the Scopecrete Lander (2026-10-04) — his still drawing.
     icon: [
-      { url: "/dusty/dusty_v1_at_16px.png", sizes: "24x24", type: "image/png" },
-      { url: "/dusty/dusty_v1_at_48px.png", sizes: "48x48", type: "image/png" },
+      { url: "/dusty/lander/dusty-static-24.svg", type: "image/svg+xml" },
+      { url: "/dusty/lander/dusty-static-512.png", sizes: "512x512", type: "image/png" },
     ],
-    apple: "/dusty/dusty_v1_at_128px.png",
+    apple: "/dusty/lander/dusty-static-512.png",
   },
 };
 

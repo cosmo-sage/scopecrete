@@ -1,42 +1,40 @@
 "use client";
 
 /**
- * Dusty — the pixel foreman (design/dusty/CLAUDE.md, pixel v5, 2026-09-29).
- * Replaces the old diamond emblem everywhere. He lives in two places only
- * (Coy, 2026-09-30): the centre of the phone footer and the chat window.
+ * Dusty — the Scopecrete Lander (Claude Design package 2026-10-04,
+ * `design/dusty-lander/`): a hatched concrete block on steel legs with
+ * green-light eyes, a dish antenna and an orange ring. Replaces the pixel
+ * foreman. He lives in two places only (Coy, 2026-09-30): the centre of the
+ * phone footer (the header button on a desktop) and the chat window.
  *
- * Rules from the pack, kept:
- *   - `image-rendering: pixelated` on every render; outlines are the pack's.
- *   - Nothing animates at 16 or 24 px — the static idle sprite (or a static
- *     mixer frame while working) is shown.
- *   - `prefers-reduced-motion` stops every animation: static sprites only.
+ * Drawn inline from `dustySvg()` (src/lib/v34/dusty-svg.ts), so a state swaps
+ * without reloading an image. `prefers-reduced-motion` stills him.
  *
  * States are driven only by real events, never by a timer pretending to work:
- *   idle        — default (32 px and up: the 6 s breathing / blink / flutter loop)
- *   loading     — hard hat, while a chat loads
- *   calculating — the mixer truck replaces Dusty (200 ms crossfade) while a
- *                 reply streams or the background reader is reading
- *   done        — the concrete pour plays once, then thumbs up for 2 s, then idle
- *   error       — the head scratch plays once, then idle
+ *   idle        — default (at 24 px and under he stands still)
+ *   loading     — listening: the dish wobbles (a chat loading, a voice note)
+ *   calculating — sorting: the ring spins (a reply streams, the reader reads)
+ *   thinking    — scanning
+ *   done        — celebrates once, then idle
+ *   error       — alert (amber eyes) for a moment, then idle
+ * Any of the package's own modes (listen, sort, scan, land, celebrate, alert,
+ * sleep, static) may be passed directly too.
  */
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useId, useMemo, useState } from "react";
+import { dustySvg, type DustyMode } from "@/lib/v34/dusty-svg";
 
-export type DustyState = "idle" | "loading" | "calculating" | "done" | "error" | "thinking";
+export type DustyState = "idle" | "loading" | "calculating" | "done" | "error" | "thinking" | DustyMode;
 
-const SHEET = "/dusty/dusty_state_sheet_6states.png";
-const SLOT: Record<string, number> = { idle: 0, thinking: 1, measuring: 2, thumbs: 3, error: 4, loading: 5 };
-const GIF = {
-  idle: "/dusty/anim_idle_FULL_LOOP_6s.gif",
-  mixer: "/dusty/anim_concrete_mixer_FINAL.gif",
-  pour: "/dusty/anim_concrete_pour_v2.gif",
-  scratch: "/dusty/anim_head_scratch_FINAL.gif",
-};
-const LABEL: Record<DustyState, string> = {
+const MODE: Record<string, DustyMode> = { loading: "listen", calculating: "sort", thinking: "scan", done: "celebrate", error: "alert" };
+const LABEL: Record<string, string> = {
   idle: "Dusty", loading: "Dusty is loading", calculating: "Dusty is working", done: "Dusty finished",
-  error: "Dusty hit a snag", thinking: "Dusty is thinking",
+  error: "Dusty hit a snag", thinking: "Dusty is thinking", listen: "Dusty is listening", sort: "Dusty is sorting",
+  scan: "Dusty is scanning", land: "A new job landed", celebrate: "Dusty is celebrating", alert: "Dusty needs you",
+  sleep: "Dusty is asleep", static: "Dusty",
 };
-const pixel: React.CSSProperties = { imageRendering: "pixelated", display: "block", flexShrink: 0 };
+/** How long a one-shot plays before he goes back to idle. */
+const SHOT_MS: Record<string, number> = { done: 3200, error: 2400, land: 2800 };
 
 export function useReducedMotion(): boolean {
   const [reduced, setReduced] = useState(false);
@@ -50,71 +48,35 @@ export function useReducedMotion(): boolean {
   return reduced;
 }
 
-/** One frame of the state sheet, scaled to `size`. */
-function Sprite({ slot, size, label, hidden }: { slot: number; size: number; label: string; hidden?: boolean }) {
-  return (
-    <span role={hidden ? undefined : "img"} aria-label={hidden ? undefined : label} aria-hidden={hidden || undefined}
-      style={{ ...pixel, width: size, height: size, backgroundImage: `url(${SHEET})`, backgroundRepeat: "no-repeat",
-        backgroundSize: `${size * 6}px ${size}px`, backgroundPosition: `${-slot * size}px 0` }} />
-  );
-}
-
-function Img({ src, size, label, hidden }: { src: string; size: number; label: string; hidden?: boolean }) {
-  // eslint-disable-next-line @next/next/no-img-element
-  return <img src={src} width={size} height={size} alt={hidden ? "" : label} aria-hidden={hidden || undefined} style={pixel} draggable={false} />;
-}
-
 export function DustyAvatar({ state = "idle", size = 48, hidden, className, still: stillProp }: {
   state?: DustyState; size?: number;
-  /** Never animate (e.g. the small mark beside each answer). */
+  /** Never animate. */
   still?: boolean;
   /** Decorative (inside a button that carries its own label). */
   hidden?: boolean; className?: string;
 }) {
   const reduced = useReducedMotion();
-  const small = size <= 24;
-  const still = reduced || small || !!stillProp;
-  // One-shots: "done" plays the pour then holds thumbs up; "error" plays the scratch.
-  const [phase, setPhase] = useState<"shot" | "hold" | "rest">("rest");
+  const uid = useId();
+  // One-shots play, then he rests.
+  const [resting, setResting] = useState(false);
   const [seen, setSeen] = useState(state);
-  if (state !== seen) {
-    setSeen(state);
-    setPhase(state === "done" || state === "error" ? "shot" : "rest");
-  }
+  if (state !== seen) { setSeen(state); setResting(false); }
   useEffect(() => {
-    if (phase === "shot") {
-      const t = setTimeout(() => setPhase(state === "done" ? "hold" : "rest"), state === "done" ? 1600 : 1400);
-      return () => clearTimeout(t);
-    }
-    if (phase === "hold") {
-      const t = setTimeout(() => setPhase("rest"), 2000);
-      return () => clearTimeout(t);
-    }
-  }, [phase, state]);
+    const ms = SHOT_MS[state];
+    if (!ms || resting) return;
+    const t = setTimeout(() => setResting(true), ms);
+    return () => clearTimeout(t);
+  }, [state, resting]);
 
-  const label = LABEL[state];
-  let body: React.ReactNode;
-  if (state === "calculating") {
-    body = still ? <Img src="/dusty/concrete_mixer_static.png" size={size} label={label} hidden={hidden} />
-      : <Img src={GIF.mixer} size={size} label={label} hidden={hidden} />;
-  } else if (state === "done" && phase === "shot" && !still) {
-    body = <Img src={GIF.pour} size={size} label={label} hidden={hidden} />;
-  } else if (state === "done" && phase !== "rest") {
-    body = <Sprite slot={SLOT.thumbs} size={size} label={label} hidden={hidden} />;
-  } else if (state === "error" && phase === "shot" && !still) {
-    body = <Img src={GIF.scratch} size={size} label={label} hidden={hidden} />;
-  } else if (state === "loading") {
-    body = <Sprite slot={SLOT.loading} size={size} label={label} hidden={hidden} />;
-  } else if (state === "thinking") {
-    body = <Sprite slot={SLOT.thinking} size={size} label={label} hidden={hidden} />;
-  } else {
-    body = still ? <Sprite slot={SLOT.idle} size={size} label={label} hidden={hidden} />
-      : <Img src={GIF.idle} size={size} label={label} hidden={hidden} />;
-  }
-  // Crossfade on every change of what is shown (the pack's 200 ms).
+  let mode: DustyMode = resting ? "idle" : MODE[state] ?? (state as DustyMode);
+  // Small and idle, or asked to hold still: no animation at all.
+  if (reduced || stillProp || (size <= 24 && mode === "idle")) mode = "static";
+  const label = LABEL[state] ?? "Dusty";
+  const html = useMemo(() => dustySvg(mode, { size, id: uid, title: hidden ? false : label }), [mode, size, uid, hidden, label]);
+  // Crossfade on every change of what is shown (200 ms, .sc-dusty).
   return (
-    <span className={`sc-dusty ${className ?? ""}`} key={`${state}-${phase}`} style={{ display: "inline-flex", width: size, height: size }}>
-      {body}
-    </span>
+    <span className={`sc-dusty ${className ?? ""}`} key={mode} role={hidden ? undefined : "img"} aria-label={hidden ? undefined : label}
+      aria-hidden={hidden || undefined} style={{ display: "inline-flex", width: size, height: size, flexShrink: 0 }}
+      dangerouslySetInnerHTML={{ __html: html }} />
   );
 }

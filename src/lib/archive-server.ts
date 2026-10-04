@@ -14,9 +14,12 @@ type Sb = ApiSession["supabase"];
  *   job      — the job (jobs.archived_at, which every list already leaves out).
  */
 export async function archiveRecords(sb: Sb, orgId: string, userId: string,
-  o: { kind: ArchiveKind; ids: string[]; action: ArchiveAction; via?: "coy" | "dusty" }) {
+  o: { kind: ArchiveKind; ids: string[]; action: ArchiveAction; via?: "coy" | "dusty"; note?: string | null }) {
   const stamp = new Date().toISOString();
-  const reason = o.action === "delete" ? `deleted${o.via === "dusty" ? " (Dusty's plan, Coy's tap)" : ""}` : "archived";
+  // Why it was archived, in Coy's words (2026-10-04: "make a note as to why i'm archiving it so that dusty
+  // or any internal user can see the reason") — kept on the row and as an internal note on each person.
+  const note = (o.note ?? "").replace(/\s+/g, " ").trim().slice(0, 300) || null;
+  const reason = note ?? (o.action === "delete" ? `deleted${o.via === "dusty" ? " (Dusty's plan, Coy's tap)" : ""}` : "archived");
   const touched: { contacts: string[]; customers: string[]; jobs: string[] } = { contacts: [], customers: [], jobs: [] };
   const mark = { archived_at: stamp, archived_by: userId };
 
@@ -45,12 +48,18 @@ export async function archiveRecords(sb: Sb, orgId: string, userId: string,
     touched.jobs = ((data ?? []) as Array<{ id: string }>).map((r) => r.id);
   }
 
+  // The reason as an internal note on each person archived, so it stays in their story — the Internal
+  // notes tab, Dusty's context — and is there when they call or text again.
+  if (note && touched.contacts.length) {
+    const verb = o.action === "delete" ? "Deleted" : "Archived";
+    await sb.from("contact_notes").insert(touched.contacts.map((id) => ({ org_id: orgId, contact_id: id, body: `${verb} — ${note}`, created_by: userId })));
+  }
   const n = o.kind === "contact" ? touched.contacts.length : o.kind === "customer" ? touched.customers.length : touched.jobs.length;
   const label = archiveLabel(o.kind, o.action, n);
   if (!n) return { log_id: null, count: 0, label };
   const { data: log, error } = await sb.from("archive_log").insert({
     org_id: orgId, user_id: userId, kind: o.kind, action: o.action, via: o.via ?? "coy", label,
-    undo: { stamp, ...touched },
+    undo: { stamp, ...touched, ...(note ? { note } : {}) },
   }).select("id").single();
   if (error) throw new Error(`archive_log: ${error.message}`);
   return { log_id: log.id as string, count: n, label };

@@ -132,7 +132,12 @@ export interface Thread {
   /** Nothing was ever said: only calls, none with a summary, voicemail or words (src/lib/archive.ts). */
   silent: boolean;
   /** Set on the Archived view: when it was archived, and why (archived, or deleted). */
-  archived: { at: string; reason: string | null } | null;
+  /**
+   * When they were archived and why. On the Archived tab, still archived; in a
+   * bucket, `back` — they called or texted since, and the reason comes back
+   * with them (Coy, 2026-10-04).
+   */
+  archived: { at: string; reason: string | null; back: boolean } | null;
   /** Threads v2 (migration 073): their role, and what the row's second line says. */
   role: ContactRole;
   customer_id: string | null;
@@ -443,7 +448,7 @@ export async function GET(req: NextRequest) {
         ? { claim_id: c.name_claim_id, ...autoByClaim.get(c.name_claim_id)! }
         : null,
       silent: !said,
-      archived: view === "archived" && c?.archived_at ? { at: c.archived_at, reason: c.archived_reason } : null,
+      archived: c?.archived_at ? { at: c.archived_at, reason: c.archived_reason, back: view !== "archived" } : null,
       ...extra(contactId, bucket, phone),
     };
   });

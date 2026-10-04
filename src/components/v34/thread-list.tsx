@@ -26,6 +26,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { ArchiveDialog } from "@/components/v34/archive-actions";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { T, F, disp, eyebrow, nums, clip, relTime } from "@/lib/v34/tokens";
@@ -74,7 +75,7 @@ interface Thread {
   /** Nothing was ever said on it — calls with no words (migration 066). */
   silent?: boolean;
   /** On the Archived view: when, and whether archived or deleted. */
-  archived?: { at: string; reason: string | null } | null;
+  archived?: { at: string; reason: string | null; back?: boolean } | null;
   /** Threads v2: their role, and what the second line says. */
   role?: ContactRole;
   customer_id?: string | null;
@@ -113,6 +114,9 @@ interface Proposal {
 }
 
 type Counts = Record<string, number>;
+
+/** Coy's reason for archiving, or null when it is only the default word ("archived", "deleted …"). */
+const reasonText = (r: string | null | undefined) => (r && !/^(archived|deleted\b)/.test(r) ? r : null);
 
 function matches(t: Thread, k: string): boolean {
   switch (k) {
@@ -469,6 +473,12 @@ function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, onName, onB
             {when && <span className="shrink-0" style={{ fontSize: 12, color: T.ink3, ...nums }}>{when}</span>}
           </span>
           {sub && <span style={{ display: "block", fontSize: 11.5, color: T.ink3, marginTop: 1, ...clip }}>{sub}</span>}
+          {t.archived?.back && (
+            // Back after being archived — and why it was (Coy, 2026-10-04).
+            <span style={{ display: "block", fontSize: 11.5, color: T.hivizText, marginTop: 1, ...clip }} title={t.archived.reason ?? undefined}>
+              ↩ Back · archived {new Date(t.archived.at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}{reasonText(t.archived.reason) ? `: ${reasonText(t.archived.reason)}` : ""}
+            </span>
+          )}
           {isVoicemail && !t.status_summary && (
             <span style={{ ...eyebrow, color: T.hiviz, display: "block", marginTop: 2 }}>Voicemail</span>
           )}
@@ -562,7 +572,7 @@ function SelectRow({ t, selecting, on, onPick, onOpen, onRestore }: {
         <div style={{ fontSize: F.md, fontWeight: 600, color: T.ink, ...clip }}>{t.display_name}</div>
         <div style={{ fontSize: F.xs, color: T.ink3, ...clip }}>
           {t.silent ? `Nothing said · ${t.msg_count} call${t.msg_count === 1 ? "" : "s"}` : t.status_summary ?? t.preview}
-          {t.archived ? ` · ${t.archived.reason?.startsWith("deleted") ? "deleted" : "archived"} ${relTime(t.archived.at)}` : ""}
+          {t.archived ? ` · ${t.archived.reason?.startsWith("deleted") ? "deleted" : "archived"} ${relTime(t.archived.at)}${reasonText(t.archived.reason) ? ` — ${reasonText(t.archived.reason)}` : ""}` : ""}
         </div>
       </button>
       <span style={{ fontSize: F.xs, color: T.ink3, ...nums }}>{relTime(t.occurred_at)}</span>
@@ -799,7 +809,9 @@ export function ThreadList({ folded = false }: { folded?: boolean }) {
     return () => { off = true; };
   }, [filter, reload]);
 
-  const archive = useCallback(async (ids: string[], restore: boolean) => {
+  // Archiving asks why first (Coy, 2026-10-04); restoring doesn't.
+  const [asking, setAsking] = useState<string[] | null>(null);
+  const archive = useCallback(async (ids: string[], restore: boolean, note: string | null = null) => {
     if (!ids.length) return;
     setArchBusy(true);
     // Out of the list at once; the refetch brings the server's word and the counts.
@@ -808,7 +820,7 @@ export function ThreadList({ folded = false }: { folded?: boolean }) {
     try {
       const r = await fetch(restore ? "/api/archive/restore" : "/api/archive", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(restore ? { kind: "contact", ids } : { kind: "contact", ids, action: "archive" }),
+        body: JSON.stringify(restore ? { kind: "contact", ids } : { kind: "contact", ids, action: "archive", note }),
       });
       const b = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(b?.error || `HTTP ${r.status}`);
@@ -1012,6 +1024,9 @@ export function ThreadList({ folded = false }: { folded?: boolean }) {
         </div>
       )}
 
+      <ArchiveDialog open={!!asking} kind="contact" action="archive" count={asking?.length ?? 1}
+        what={asking && asking.length > 1 ? `${asking.length} threads` : "this thread"}
+        onCancel={() => setAsking(null)} onConfirm={(note) => { const ids = asking ?? []; setAsking(null); void archive(ids, false, note); }} />
       {/* Select and archive (Coy, 2026-10-03: calls where nothing was said — not spam, not anyone).
           Archived threads come back on their own when that number calls or texts again. */}
       {!q && !loading && !error && (
@@ -1027,7 +1042,7 @@ export function ThreadList({ folded = false }: { folded?: boolean }) {
                 </button>
               )}
               {lostIds.length > 0 && (
-                <button disabled={archBusy} onClick={() => void archive(lostIds, false)} style={{ ...eyebrow, color: T.chalk, cursor: "pointer", marginLeft: 10 }}
+                <button disabled={archBusy} onClick={() => setAsking(lostIds)} style={{ ...eyebrow, color: T.chalk, cursor: "pointer", marginLeft: 10 }}
                   title="Archive every customer whose jobs are all lost — they come back if they call or text again">
                   Archive lost · {lostIds.length}
                 </button>
@@ -1059,7 +1074,7 @@ export function ThreadList({ folded = false }: { folded?: boolean }) {
               </button>
               <span className="flex-1" />
               <button onClick={() => { setSelecting(false); setPicked(new Set()); }} style={{ ...eyebrow, color: T.ink3, cursor: "pointer" }}>Cancel</button>
-              <button disabled={!picked.size || archBusy} onClick={() => void archive([...picked], filter === "archived")}
+              <button disabled={!picked.size || archBusy} onClick={() => (filter === "archived" ? void archive([...picked], true) : setAsking([...picked]))}
                 className="rounded px-3" style={{ ...eyebrow, height: 30, background: T.hiviz, color: T.onHiviz, cursor: "pointer", opacity: !picked.size || archBusy ? 0.5 : 1 }}>
                 {filter === "archived" ? `Unarchive ${picked.size || ""}` : `Archive ${picked.size || ""}`}
               </button>

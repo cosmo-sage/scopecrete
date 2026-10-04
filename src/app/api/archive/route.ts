@@ -37,13 +37,13 @@ export async function POST(req: NextRequest) {
   if (!result.ok) return result.response;
   const { supabase: sb, orgId, userId, applyCookies } = result.session;
   const bad = (m: string, s = 400) => applyCookies(NextResponse.json({ error: m }, { status: s }));
-  const b = (await req.json().catch(() => ({}))) as { kind?: unknown; ids?: unknown; action?: unknown; via?: unknown };
+  const b = (await req.json().catch(() => ({}))) as { kind?: unknown; ids?: unknown; action?: unknown; via?: unknown; note?: unknown };
   if (!KINDS.includes(b.kind as ArchiveKind)) return bad("Archive what — contact, customer or job?");
   const ids = cleanIds(b.ids);
   if (!ids) return bad("Which ones? (1 to 500 ids)");
   const action = b.action === "delete" ? "delete" : "archive";
   try {
-    const r = await archiveRecords(sb, orgId, userId, { kind: b.kind as ArchiveKind, ids, action, via: b.via === "dusty" ? "dusty" : "coy" });
+    const r = await archiveRecords(sb, orgId, userId, { kind: b.kind as ArchiveKind, ids, action, via: b.via === "dusty" ? "dusty" : "coy", note: typeof b.note === "string" ? b.note : null });
     return applyCookies(NextResponse.json(r));
   } catch (e) { return bad(e instanceof Error ? e.message : String(e), 500); }
 }

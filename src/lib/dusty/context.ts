@@ -194,7 +194,7 @@ async function inboxBlock(sb: Sb, orgId: string): Promise<Block> {
 
 async function contactBlock(sb: Sb, orgId: string, contactId: string) {
   const { data: c } = await sb.from("contacts")
-    .select("id, name, name_source, name_confirmed_at, phone, address, address_source, customer_id, merged_into_contact_id, contact_type, contact_subtype, classification_confirmed_at, auto_classified_at, status_summary")
+    .select("id, name, name_source, name_confirmed_at, phone, address, address_source, customer_id, merged_into_contact_id, contact_type, contact_subtype, classification_confirmed_at, auto_classified_at, status_summary, archived_at, archived_reason")
     .eq("org_id", orgId).eq("id", contactId).maybeSingle();
   if (!c) return null;
   const [{ data: phones }, { data: jobs }, { data: tasks }, { data: notes }, { data: musings }, { data: dreams }] = await Promise.all([
@@ -231,6 +231,8 @@ async function contactBlock(sb: Sb, orgId: string, contactId: string) {
       `What they are to the business: ${relation}`,
       `Jobs: ${(jobs ?? []).length ? (jobs as Array<{ title: string | null; status: string | null }>).map((j) => `${j.title || "untitled"} (${j.status})`).join("; ") : "none"}`,
       `Where it stands (Dusty's earlier read): ${(c.status_summary as string | null) ?? "not read yet"}`,
+      // Why Coy archived them, so a returning caller comes with that context (Coy, 2026-10-04).
+      ...(c.archived_at ? [`Archived by Coy on ${day(c.archived_at as string)}: ${(c.archived_reason as string | null) && !/^(archived|deleted\b)/.test(c.archived_reason as string) ? `"${c.archived_reason}"` : "no reason given"}. If they have called or texted since, they are back — bring that reason up when Coy asks about them.`] : []),
       `Open next steps: ${todo.length ? todo.map((t) => `${t.title}${t.due_on ? ` (due ${t.due_on})` : ""}${t.source === "coy" ? " [Coy's own]" : " [suggested]"}`).join("; ") : "none"}`,
       `Coy's notes on them (newest first): ${((notes ?? []) as Array<{ body: string; created_at: string }>).length
         ? ((notes ?? []) as Array<{ body: string; created_at: string }>).map((n) => `[${day(n.created_at)}] ${plainNote(n.body).replace(/\s+/g, " ").slice(0, 600)}`).join(" | ")

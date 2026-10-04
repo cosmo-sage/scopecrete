@@ -10,8 +10,8 @@ import { useRouter } from "next/navigation";
 import { T, F, eyebrow } from "@/lib/v34/tokens";
 import type { ArchiveAction, ArchiveKind } from "@/lib/archive";
 
-export async function archiveNow(kind: ArchiveKind, ids: string[], action: ArchiveAction, via: "coy" | "dusty" = "coy") {
-  const r = await fetch("/api/archive", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind, ids, action, via }) });
+export async function archiveNow(kind: ArchiveKind, ids: string[], action: ArchiveAction, via: "coy" | "dusty" = "coy", note: string | null = null) {
+  const r = await fetch("/api/archive", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind, ids, action, via, note }) });
   const b = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(b?.error || `HTTP ${r.status}`);
   if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("sc:archived", { detail: { label: b.label, logId: b.log_id } }));
@@ -19,25 +19,75 @@ export async function archiveNow(kind: ArchiveKind, ids: string[], action: Archi
 }
 
 /**
- * One button: confirm, archive or delete, then go back to the list. `what` is
- * how the confirm names it ("Delete Angelle Materials?").
+ * The question before archiving or deleting, with a box for why (Coy, 2026-10-04:
+ * "make a note as to why i'm archiving it so that dusty or any internal user can
+ * see the reason … if the customer contacts me again we will have all of that
+ * context"). The reason is optional; it is saved on the record and, for a
+ * person, as an internal note.
+ */
+export function ArchiveDialog({ open, kind, action, what, count = 1, onCancel, onConfirm }: {
+  open: boolean; kind: ArchiveKind; action: ArchiveAction; what: string; count?: number;
+  onCancel: () => void; onConfirm: (note: string | null) => void;
+}) {
+  const [note, setNote] = useState("");
+  useEffect(() => { if (!open) return; const t = setTimeout(() => setNote(""), 0); return () => clearTimeout(t); }, [open]);
+  useEffect(() => {
+    if (!open) return;
+    const k = (e: KeyboardEvent) => { if (e.key === "Escape") onCancel(); };
+    window.addEventListener("keydown", k);
+    return () => window.removeEventListener("keydown", k);
+  }, [open, onCancel]);
+  if (!open) return null;
+  const extra = kind === "customer" ? " Their people and open jobs go with them." : "";
+  const q = action === "delete"
+    ? `Delete ${what}?${extra} It leaves every list; the calls, texts and files stay on record, and you can restore it.`
+    : `Archive ${what}? ${count > 1 ? "Each comes" : "It comes"} back on its own if they call or text again.`;
+  const go = () => onConfirm(note.trim() || null);
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label={action === "delete" ? "Delete" : "Archive"}>
+      <button aria-label="Cancel" onClick={onCancel} className="absolute inset-0" style={{ background: "rgba(0,0,0,.4)", border: "none" }} />
+      <div className="relative rounded-lg w-full" style={{ maxWidth: 440, background: T.card, color: T.ink, boxShadow: "0 12px 36px rgba(0,0,0,.3)", padding: "16px 16px 12px" }}>
+        <div style={{ fontSize: F.md, fontWeight: 600, lineHeight: 1.35 }}>{q}</div>
+        <label className="block" style={{ marginTop: 12 }}>
+          <span style={{ ...eyebrow, color: T.ink3 }}>Why? · optional — your team and Dusty will see it</span>
+          <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} maxLength={300} autoFocus
+            placeholder={action === "delete" ? "e.g. Duplicate — the real one is under their company" : "e.g. Wrong number · Only wanted a price for later · Went with someone else"}
+            onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); go(); } }}
+            style={{ width: "100%", marginTop: 4, border: `1px solid ${T.hair}`, borderRadius: 6, padding: "8px 10px", fontSize: F.sm, resize: "none", background: T.card, color: T.ink }} />
+        </label>
+        {count > 1 && <div style={{ fontSize: F.xs, color: T.ink3, marginTop: 2 }}>The same reason goes on all {count}.</div>}
+        <div className="flex justify-end gap-2" style={{ marginTop: 10 }}>
+          <button onClick={onCancel} className="rounded px-3" style={{ height: 34, border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink, fontSize: F.sm, cursor: "pointer" }}>Cancel</button>
+          <button onClick={go} className="rounded px-3" style={{ height: 34, background: action === "delete" ? T.red : T.ink, color: T.card, fontSize: F.sm, fontWeight: 600, cursor: "pointer" }}>
+            {action === "delete" ? "Delete" : count > 1 ? `Archive ${count}` : "Archive"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * One button: ask (with why), archive or delete, then go back to the list.
+ * `what` is how the question names it ("Delete Angelle Materials?").
  */
 export function ArchiveButton({ kind, id, action, what, then, style, children }: {
   kind: ArchiveKind; id: string; action: ArchiveAction; what: string; then: string; style?: React.CSSProperties; children: React.ReactNode;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
-  const go = async () => {
-    const extra = kind === "customer" ? " Their people and open jobs go with them." : "";
-    const q = action === "delete"
-      ? `Delete ${what}?${extra} It leaves every list; the calls, texts and files stay on record, and you can restore it.`
-      : `Archive ${what}? It comes back on its own if they call or text again.`;
-    if (!window.confirm(q)) return;
-    setBusy(true);
-    try { await archiveNow(kind, [id], action); router.push(then); }
+  const [asking, setAsking] = useState(false);
+  const go = async (note: string | null) => {
+    setAsking(false); setBusy(true);
+    try { await archiveNow(kind, [id], action, "coy", note); router.push(then); }
     catch (e) { window.alert(e instanceof Error ? e.message : String(e)); setBusy(false); }
   };
-  return <button onClick={() => void go()} disabled={busy} style={{ cursor: "pointer", opacity: busy ? 0.5 : 1, ...style }}>{busy ? "…" : children}</button>;
+  return (
+    <>
+      <button onClick={() => setAsking(true)} disabled={busy} style={{ cursor: "pointer", opacity: busy ? 0.5 : 1, ...style }}>{busy ? "…" : children}</button>
+      <ArchiveDialog open={asking} kind={kind} action={action} what={what} onCancel={() => setAsking(false)} onConfirm={(n) => void go(n)} />
+    </>
+  );
 }
 
 /** The toast with Undo, for any archive or delete in the app (mounted once, in the dashboard layout). */

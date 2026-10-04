@@ -242,7 +242,7 @@ export async function applyRecords(actions: PlanAction[]): Promise<StepResult[]>
       }
       if (a.do !== "archive" && a.do !== "restore") continue;
       if (a.do === "archive") {
-        const r = await archiveNow(a.kind, a.ids, a.delete ? "delete" : "archive", "dusty");
+        const r = await archiveNow(a.kind, a.ids, a.delete ? "delete" : "archive", "dusty", a.label ? `${a.label} (Dusty's plan)` : null);
         out.push({ ok: r.count > 0, text: r.count ? r.label : "Nothing to do — already archived, or not yours" });
       } else {
         const r = await call("/api/archive/restore", "POST", { kind: a.kind, ids: a.ids });

@@ -45,6 +45,7 @@ export default function ChatThreadPage() {
   const [orgLines, setOrgLines] = useState<Array<{ id: string; name: string; phone: string; color: string; provider: string | null; is_primary: boolean }>>([]);
   const [firstLine, setFirstLine] = useState<{ id: string; name: string | null; at: string } | null>(null);
   const [lineFilter, setLineFilter] = useState<string | null>(null);
+  const [archivedInfo, setArchivedInfo] = useState<{ at: string; reason: string | null; back: boolean } | null>(null);
   const [fromLine, setFromLine] = useState<string | null>(null);
   const [searching, setSearching] = useState(false);
   const [more, setMore] = useState(false);
@@ -104,6 +105,7 @@ export default function ChatThreadPage() {
         const lineCss = (c: string) => (T as unknown as Record<string, string>)[c] ?? T.ink3;
         setOrgLines(ls.map((l) => ({ ...l, color: lineCss(l.color) })));
         setFirstLine(data.first_line ?? null);
+        setArchivedInfo(data.archived ?? null);
         const provName: Record<string, string> = { quo: "Quo", twilio: "Twilio", telnyx: "Telnyx", own_stack: "Own stack" };
         setMessages(Array.isArray(data.messages) ? [...data.messages].reverse().map((m: ThreadMessage) => {
           const l = ls.find((x) => x.id === m.line_id);
@@ -387,6 +389,24 @@ export default function ChatThreadPage() {
           </button>
         </div>
 
+        {/* Why they were archived — and that they're back (Coy, 2026-10-04). */}
+        {!loading && archivedInfo && (() => {
+          const why = archivedInfo.reason && !/^(archived|deleted\b)/.test(archivedInfo.reason) ? archivedInfo.reason : null;
+          const day = new Date(archivedInfo.at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+          return (
+            <div className="px-4 py-1.5 flex items-center gap-2 flex-shrink-0" style={{ background: archivedInfo.back ? T.hivizDim : T.slab, borderBottom: `1px solid ${T.hairSoft}`, fontSize: 12.5, color: T.ink }}>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                {archivedInfo.back ? <><b>Back</b> — they got in touch after you archived them on {day}</> : <>Archived on {day}</>}
+                {why ? <>. Why: <i>{why}</i></> : archivedInfo.back ? "." : " — no reason given."}
+              </span>
+              {!archivedInfo.back && (
+                <button onClick={() => void fetch("/api/archive/restore", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: "contact", ids: [contactId] }) })
+                  .then(() => { setArchivedInfo(null); threads?.refresh(); })}
+                  style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>Unarchive</button>
+              )}
+            </div>
+          );
+        })()}
         {!loading && merges.map((m) => (
           <div key={m.id} className="px-4 py-1.5 flex items-center gap-2 text-[11px] flex-shrink-0"
             style={{ background: DA.elevated, borderBottom: `1px solid ${DA.border}`, color: DA.textSecondary }}>

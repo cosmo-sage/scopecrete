@@ -232,6 +232,30 @@ export async function GET(req: NextRequest) {
     items.push({ id: `opened-${e.id}`, at: e.occurred_at, kind: "proposal", contact_id: null, href: job ? `/dashboard/scope/${job}/proposal` : undefined,
       summary: `Proposal opened: ${clipq(e.document?.job?.title ?? "a job", 140)}`, detail: "The customer opened the link you sent.", tone: "good" });
   }
+  // Back after being archived (Coy, 2026-10-04): someone archived who called or texted since, this week,
+  // with the reason Coy gave — the context comes back with them.
+  const { data: archRows } = await supabase.from("contacts").select("id, name, phone, archived_at, archived_reason")
+    .eq("org_id", orgId).not("archived_at", "is", null).is("merged_into_contact_id", null).limit(300);
+  const archived = (archRows ?? []) as Array<{ id: string; name: string | null; phone: string | null; archived_at: string; archived_reason: string | null }>;
+  if (archived.length) {
+    const { data: backRows } = await supabase.from("messages").select("contact_id, occurred_at")
+      .eq("org_id", orgId).eq("direction", "inbound").in("contact_id", archived.map((c) => c.id))
+      .gte("occurred_at", new Date(Date.now() - 7 * 86400_000).toISOString()).order("occurred_at", { ascending: true }).limit(500);
+    const firstBack = new Map<string, string>();
+    for (const m of (backRows ?? []) as Array<{ contact_id: string; occurred_at: string }>) {
+      const c = archived.find((x) => x.id === m.contact_id);
+      if (c && m.occurred_at > c.archived_at && !firstBack.has(c.id)) firstBack.set(c.id, m.occurred_at);
+    }
+    for (const c of archived) {
+      const at = firstBack.get(c.id);
+      if (!at) continue;
+      const why = c.archived_reason && !/^(archived|deleted\b)/.test(c.archived_reason) ? c.archived_reason : null;
+      const day = new Date(c.archived_at).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/Chicago" });
+      items.push({ id: `back-${c.id}-${at}`, at, kind: "reminder", contact_id: c.id, href: `/dashboard/messages/${c.id}`,
+        summary: `${clipq(c.name?.trim() || c.phone || "Someone", 60)} is back — archived ${day}${why ? `: ${clipq(why, 160)}` : ""}`,
+        detail: why ? `You archived them on ${day} because: ${why}` : `You archived them on ${day} (no reason given).`, tone: "good" });
+    }
+  }
   // Internal notes that tag this member (Coy, 2026-10-04), the last week, not their own.
   const { data: tagRows } = await supabase.from("contact_notes")
     .select("id, body, created_at, created_by, contact_id, contact:contacts(name)")

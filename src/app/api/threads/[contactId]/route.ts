@@ -67,7 +67,7 @@ export async function GET(
   // empty thread that reads as "this number never said anything".
   const { data: self } = await supabase
     .from("contacts")
-    .select("id, merged_into_contact_id, name, name_source, name_confirmed_at, address")
+    .select("id, merged_into_contact_id, name, name_source, name_confirmed_at, address, archived_at, archived_reason")
     .eq("org_id", orgId)
     .eq("id", contactId)
     .maybeSingle();
@@ -221,6 +221,14 @@ export async function GET(
     messages: withKinds,
     /** The org's lines (only when there are two or more): id, name, colour, provider. */
     lines: lineRows.map((l) => ({ id: l.id, name: l.label?.trim() || formatLine(l.phone_e164), phone: l.phone_e164, color: l.color, provider: l.provider, is_primary: l.is_primary })),
+    /**
+     * When they were archived and why (Coy, 2026-10-04); `back` once they have
+     * called or texted since — the thread shows it with the reason.
+     */
+    archived: self?.archived_at ? {
+      at: self.archived_at as string, reason: (self.archived_reason as string | null) ?? null,
+      back: raw.some((r) => r.direction === "inbound" && !!r.occurred_at && r.occurred_at > (self.archived_at as string)),
+    } : null,
     /** "first reached you on the Website line, Sep 22". */
     first_line: manyLines && firstMsg?.phone_number_id ? { id: firstMsg.phone_number_id, name: lineName.get(firstMsg.phone_number_id) ?? null, at: firstMsg.occurred_at } : null,
     channels,

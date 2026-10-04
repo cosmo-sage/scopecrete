@@ -1724,6 +1724,25 @@ expected start date per quoted job before it means anything. Add the field.
   chips by bucket (All · Customer · Unsorted · Vendor · Personal · Spam, each
   with its count), the search box searches the archive, and Sort applies.
   The old "Archived · N" link above the list is gone.
+  **Why it was archived (Coy, 2026-10-04: "When i select to archive a
+  thread, i would like to make a note as to why … so that dusty or any
+  internal user can see the reason … if the customer contacts me again we
+  will have all of that context").** Archive and Delete ask in a small dialog
+  (`ArchiveDialog`, `archive-actions.tsx`; it replaced the browser's
+  confirm) with an optional **Why?** box — on a thread's ⋯ Archive, bulk
+  Archive N, Archive lost · N, and Delete on a vendor, customer or job. The
+  reason is saved as the row's `archived_reason` (no migration — nothing reads
+  a contact's reason as a fixed word) and, for each person, as an internal
+  note "Archived — <reason>" (`archiveRecords()`), so it is in their Internal
+  notes tab and Dusty's context for good, even after Undo. Dusty's own archive
+  steps give their label as the reason. **When they come back** (a call or
+  text after the archive): their row in Threads says "↩ Back · archived
+  Oct 3: <reason>", their thread opens with a banner "Back — they got in touch
+  after you archived them on … Why: …" (still archived: the same banner with
+  Unarchive), the activity line says "<name> is back — archived Oct 3:
+  <reason>" for a week, and Dusty's context on them carries "Archived by Coy
+  on … : <reason>". Checked in the harness: the reason posted with the
+  archive; the banner on a returning person.
   **Internal notes (Coy, 2026-10-04: "I need to be able to create internal
   notes. The internal notes tab can also allow me to tag other internal
   members in the Org").** A tab after the person's numbers — **Internal

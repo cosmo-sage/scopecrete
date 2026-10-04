@@ -33,7 +33,7 @@ import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { T, F, disp, eyebrow, nums, clip } from "@/lib/v34/tokens";
 
-const HAIR = "1px solid rgba(255,255,255,.09)";
+const HAIR = `1px solid ${T.hairSoft}`;
 
 /** Shared chrome: a glass panel hanging off the bottom edge of the header. */
 function Drop({ onClose, children }: { onClose: () => void; children: React.ReactNode }) {
@@ -45,8 +45,8 @@ function Drop({ onClose, children }: { onClose: () => void; children: React.Reac
 
   return (
     <div className="fixed inset-0 z-[45]" onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} className="absolute sc-glass sc-drop"
-        style={{ top: "var(--sc-head)", left: 8, right: 8, borderRadius: "0 0 12px 12px", overflow: "hidden" }}>
+      <div onClick={(e) => e.stopPropagation()} className="absolute sc-activity-drop sc-drop"
+        style={{ top: "var(--sc-head)", left: 8, right: 8, borderRadius: "0 0 6px 6px", overflow: "hidden" }}>
         {children}
       </div>
     </div>
@@ -104,7 +104,7 @@ export function PipelineDrop({ onClose }: { onClose: () => void }) {
   return (
     <Drop onClose={onClose}>
       {err ? (
-        <div className="px-3 py-3" style={{ fontSize: F.sm, color: "rgba(255,255,255,.75)" }}>
+        <div className="px-3 py-3" style={{ fontSize: F.sm, color: T.ink2 }}>
           Couldn&apos;t read the pipeline — {err}
         </div>
       ) : (
@@ -112,14 +112,14 @@ export function PipelineDrop({ onClose }: { onClose: () => void }) {
           {cells.map((c, i) => (
             <div key={c.l} className="px-3 py-2.5"
               style={{ borderBottom: HAIR, borderRight: i % 2 === 0 ? HAIR : "none" }}>
-              <div style={{ ...eyebrow, color: "rgba(255,255,255,.55)" }}>{c.l}</div>
+              <div style={{ ...eyebrow, color: T.ink3 }}>{c.l}</div>
               <div style={{
                 fontFamily: disp, fontSize: F.xl, fontWeight: 600, lineHeight: 1.05,
-                color: c.v === null ? "rgba(255,255,255,.4)" : "#fff", ...nums,
+                color: c.v === null ? T.ink3 : T.ink, ...nums,
               }}>
                 {body === null && !err ? "·" : (c.v ?? "—")}
               </div>
-              <div style={{ fontSize: 10, color: "rgba(255,255,255,.42)", ...clip }}>{c.s}</div>
+              <div style={{ fontSize: 10, color: T.ink3, ...clip }}>{c.s}</div>
             </div>
           ))}
         </div>
@@ -128,78 +128,11 @@ export function PipelineDrop({ onClose }: { onClose: () => void }) {
           the Jobs board (Coy, 2026-09-28). Jobs until a home dashboard exists. */}
       <Link href="/dashboard/scope" onClick={onClose}
         className="w-full px-3 flex items-center justify-between no-underline"
-        style={{ height: 42, color: "#fff", fontFamily: disp, fontSize: F.md,
+        style={{ height: 42, color: T.ink, fontFamily: disp, fontSize: F.md,
                  letterSpacing: ".06em", textTransform: "uppercase" }}>
         <span>Jobs board</span>
         <span style={{ color: T.hiviz }}>›</span>
       </Link>
-    </Drop>
-  );
-}
-
-/* -------------------------------------------------------------------- create */
-
-/**
- * Every entry names what it is waiting for rather than being hidden, so the
- * shape of the product stays legible without any of them pretending to work.
- *
- * NOTHING IS LIVE HERE YET. On the branch this was written, "New job" was
- * waiting on `POST /api/jobs`, which existed only in PR #10. That PR has since
- * merged, so the writer is live — but there is still no form to drive it, and
- * a row that opens nothing is the same dead control either way. The sub-text
- * says which of the two is actually missing, because "needs a writer" and
- * "needs a form" are a database problem and a UI problem and they do not get
- * fixed by the same work.
- */
-const CREATE_ROWS: Array<{ label: string; sub: string; href?: string }> = [
-  { label: "New job", sub: "Needs a create form — POST /api/jobs is live" },
-  { label: "New scope", sub: "Needs the scope builder — work order 15" },
-  { label: "New invoice", sub: "Needs a job to invoice against" },
-  { label: "Log a receipt", sub: "Camera-first; needs the capture path" },
-];
-
-export function CreateDrop({ onClose }: { onClose: () => void }) {
-  const anyLive = CREATE_ROWS.some((r) => r.href);
-  return (
-    <Drop onClose={onClose}>
-      {!anyLive && (
-        <div className="px-3 pt-2.5 pb-1"
-          style={{ ...eyebrow, color: "rgba(255,255,255,.55)" }}>
-          Nothing is creatable yet — each row says what it needs
-        </div>
-      )}
-      {CREATE_ROWS.map((r, i) => {
-        const inner = (
-          <>
-            <span className="min-w-0">
-              <span style={{
-                display: "block", fontFamily: disp, fontSize: F.md, fontWeight: 600,
-                color: r.href ? "#fff" : "rgba(255,255,255,.45)", ...clip,
-              }}>{r.label}</span>
-              <span style={{ display: "block", fontSize: 10, color: "rgba(255,255,255,.45)", ...clip }}>
-                {r.sub}
-              </span>
-            </span>
-            {r.href && <span style={{ color: T.hiviz, flexShrink: 0 }}>›</span>}
-          </>
-        );
-        const style: React.CSSProperties = {
-          borderTop: i || !anyLive ? HAIR : "none", minHeight: 52,
-        };
-        return r.href ? (
-          <Link key={r.label} href={r.href} onClick={onClose}
-            className="w-full text-left px-3 py-2.5 flex items-center justify-between gap-2 no-underline"
-            style={style}>
-            {inner}
-          </Link>
-        ) : (
-          <div key={r.label} aria-disabled="true"
-            className="w-full text-left px-3 py-2.5 flex items-center justify-between gap-2"
-            style={style}>
-            {inner}
-          </div>
-        );
-      })}
     </Drop>
   );
 }

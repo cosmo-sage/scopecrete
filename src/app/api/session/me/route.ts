@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
+import { orgView } from "@/lib/org-server";
 
 /**
  * Who is signed in, and which org they belong to.
@@ -27,7 +28,7 @@ export async function GET(req: NextRequest) {
 
   const { data: org, error } = await supabase
     .from("orgs")
-    .select("id, name")
+    .select("id, name, logo_light_path, logo_dark_path")
     .eq("id", orgId)
     .maybeSingle();
 
@@ -65,6 +66,7 @@ export async function GET(req: NextRequest) {
     .limit(1)
     .maybeSingle();
 
+  const brand = org ? orgView(org) : null;
   return applyCookies(NextResponse.json({
     line: line?.phone_e164 ?? null,
     user_id: userId,
@@ -72,6 +74,11 @@ export async function GET(req: NextRequest) {
     name,
     org_id: orgId,
     org_name: org?.name ?? null,
+    // The header's lockup (migration 056): which logos exist, served by
+    // /api/org/logo/[variant]; the stamp changes when one is replaced.
+    logo_light: brand?.logo_light ?? false,
+    logo_dark: brand?.logo_dark ?? false,
+    logo_stamp: brand?.logo_stamp ?? null,
     role: membership?.role ?? null,
   }));
 }

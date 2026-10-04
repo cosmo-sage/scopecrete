@@ -1,0 +1,37 @@
+/* ScopeCrete — Site Office (1a) palette as CSS variables. Mirrors tokens.ts. */
+@import url("https://fonts.googleapis.com/css2?family=Lexend:wght@600;700&family=Inter:wght@300&family=Kalam:wght@400;700&family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap");
+
+:root {
+  --sc-slab: #FBF6EC;   --sc-card: #FFFFFF;
+  --sc-ink: #2A2A2A;    --sc-ink2: #5E5A52;   --sc-ink3: #8C8578;
+  --sc-hair: #E6DCC8;   --sc-hair-soft: #F1E9DA; --sc-hair-strong: #D9CDB6;
+
+  --sc-accent: #B85A3C;      --sc-accent-dim: #F6E2D8;
+  --sc-accent-soft: #D97757; --sc-accent-text: #9A4527;
+  --sc-chalk: #1E5AA8;  --sc-chalk-dim: #DCE6F4;
+  --sc-green: #2F8A5B;  --sc-green-dim: #DDEEE3;
+  --sc-violet: #6A55B0; --sc-violet-dim: #ECE8F6;
+  --sc-red: #B5412C;    --sc-red-dim: #F7DCD6;
+  --sc-sun: #6B4E12;    --sc-sun-dim: #F7EBC9;
+  --sc-dusty-tint: #FBEDE6;
+
+  --sc-rail: #F3ECDD;   --sc-rail-ink: #6E685D;
+
+  --sc-paper: #FAF8F3;  --sc-paper-grid: rgba(89,128,166,.08);
+  --sc-pencil: #3A3E43; --sc-pencil-muted: #5A5F66; --sc-pencil-line: rgba(58,62,68,.30);
+  --sc-logo-orange: #D9550A;
+
+  --sc-font-strong: 'Lexend', system-ui, sans-serif;
+  --sc-font-light: 'Inter', system-ui, sans-serif;
+  --sc-font-hand: 'Kalam', cursive;
+  --sc-font-label: 'Barlow Condensed', system-ui, sans-serif;
+  --sc-font-body: 'IBM Plex Sans', system-ui, sans-serif;
+
+  --sc-radius-btn: 3px; --sc-radius-card: 4px; --sc-radius-panel: 6px;
+}
+
+/* Logo-orange accent variant: add class="sc-logo-accent" on <html>. */
+.sc-logo-accent {
+  --sc-accent: #C24E0C; --sc-accent-dim: #FBE3D3; --sc-accent-soft: #D9550A;
+  --sc-accent-text: #9A3F08; --sc-dusty-tint: #FDEEE4;
+}

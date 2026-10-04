@@ -37,7 +37,7 @@
  */
 
 import { createClient } from '@supabase/supabase-js'
-import { hermesAsk, loadLearning, pingHermes, readContact, type Ask, type HermesConfig, type Learning, type Outcome } from './pipeline.ts'
+import { hermesAsk, loadLearning, pingHermes, readContact, recheckBuckets, recheckNames, type Ask, type HermesConfig, type Learning, type Outcome } from './pipeline.ts'
 import { renderCorrections } from './rules.ts'
 
 const WORKER = 'enrich-contacts'
@@ -120,6 +120,12 @@ async function runBatch(sb: any, cfg: HermesConfig, maxReads: number) {
     }
   }
   await Promise.all(Array.from({ length: CONCURRENCY }, worker))
+  // Names a rule now finds but no new message has asked about (pipeline.ts recheckNames).
+  let renamed = 0
+  try { renamed = (await recheckNames(sb, model)).named } catch (e) { console.log('recheck names failed', (e as Error).message) }
+  if (renamed) console.log('named on recheck', renamed)
+  // Unsorted people filed from the suggestion they already have (pipeline.ts recheckBuckets).
+  try { const f = await recheckBuckets(sb); if (f.filed) console.log('filed on recheck', f.filed) } catch (e) { console.log('recheck buckets failed', (e as Error).message) }
 
   if (claimError) await beat(sb, 'error', `claim failed: ${claimError}`)
   // Every read hitting a model error is a configuration problem (wrong key,

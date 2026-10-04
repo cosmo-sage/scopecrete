@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
+import { isArchivedNow } from "@/lib/archive";
+import { loadCustomThreads } from "@/lib/threads-server";
 
 /**
  * Counts behind the Threads filter chips, and the footer's "replies owed" badge.
@@ -49,11 +51,13 @@ export interface ThreadCounts {
   spam: number;
   unsorted: number;
   unnamed: number;
+  /** Archived threads that haven't come back (migration 066). */
+  archived: number;
 }
 
 interface DirRow { contact_id: string | null; direction: string | null; occurred_at: string | null }
 interface ContactRow {
-  id: string; name: string | null; contact_type: string | null;
+  id: string; name: string | null; contact_type: string | null; archived_at: string | null;
   classification_confirmed_at: string | null; auto_classified_at: string | null;
 }
 
@@ -74,26 +78,29 @@ export async function GET(req: NextRequest) {
     return applyCookies(NextResponse.json({ error: `messages: ${msgErr.message}` }, { status: 500 }));
   }
   const latestDir = new Map<string, string | null>();
+  const lastIn = new Map<string, string | null>();
   for (const m of (msgs ?? []) as DirRow[]) {
     const k = m.contact_id as string;
     if (!latestDir.has(k)) latestDir.set(k, m.direction);
+    if (m.direction === "inbound" && !lastIn.has(k)) lastIn.set(k, m.occurred_at);
   }
 
   // Merged-away contacts keep their rows so a merge can be undone; they are
   // not separate people and never count (migration 028).
   const { data: contacts, error: cErr } = await supabase
     .from("contacts")
-    .select("id, name, contact_type, classification_confirmed_at, auto_classified_at")
+    .select("id, name, contact_type, classification_confirmed_at, auto_classified_at, archived_at")
     .eq("org_id", orgId)
     .is("merged_into_contact_id", null);
   if (cErr) {
     return applyCookies(NextResponse.json({ error: `contacts: ${cErr.message}` }, { status: 500 }));
   }
 
-  const counts: ThreadCounts = { all: 0, needs: 0, customers: 0, vendors: 0, personal: 0, spam: 0, unsorted: 0, unnamed: 0 };
+  const counts: ThreadCounts = { all: 0, needs: 0, customers: 0, vendors: 0, personal: 0, spam: 0, unsorted: 0, unnamed: 0, archived: 0 };
   const KEY: Record<string, keyof ThreadCounts> = { customer: "customers", vendor: "vendors", personal: "personal", spam: "spam" };
   for (const c of (contacts ?? []) as ContactRow[]) {
     if (!latestDir.has(c.id)) continue; // a thread is a contact with messages
+    if (isArchivedNow(c.archived_at, lastIn.get(c.id))) { counts.archived++; continue; }
     if (!c.name?.trim()) counts.unnamed++;
     const counted = (c.classification_confirmed_at || c.auto_classified_at) && KEY[c.contact_type ?? ""];
     if (counted) counts[counted]++;
@@ -104,5 +111,7 @@ export async function GET(req: NextRequest) {
     if (latestDir.get(c.id) === "inbound") counts.needs++;
   }
 
-  return applyCookies(NextResponse.json({ counts }));
+  // The threads Coy made (migration 073): everyone in each, by its id.
+  const custom = Object.fromEntries((await loadCustomThreads(supabase, orgId)).map((t) => [t.id, t.count]));
+  return applyCookies(NextResponse.json({ counts, custom }));
 }

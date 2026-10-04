@@ -15,7 +15,10 @@ export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
   const type = searchParams.get("type");
-  const next = type === "recovery" ? "/auth/reset-password" : "/dashboard";
+  // An invitee signing in from their invite link comes back to it (062).
+  const asked = searchParams.get("next");
+  const next = type === "recovery" ? "/auth/reset-password"
+    : asked && /^\/invite\/[0-9a-f]{48}$/.test(asked) ? asked : "/dashboard";
 
   if (code) {
     const cookiesToSet: { name: string; value: string; options: Record<string, unknown> }[] = [];

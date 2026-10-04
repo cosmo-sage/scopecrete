@@ -1,0 +1,47 @@
+/* Static fallbacks: same values as themes.ts, so SSR / first paint is right
+   before applyTheme() runs. Select with <html data-theme="…">. */
+
+:root, [data-theme="site-office"] {
+  --sc-slab:#FBF6EC; --sc-card:#FFFFFF; --sc-sunk:#F3ECDD; --sc-ink:#2A2A2A; --sc-ink2:#5E5A52; --sc-ink3:#8C8578;
+  --sc-hair:#E6DCC8; --sc-hair-soft:#F1E9DA; --sc-hair-strong:#D9CDB6;
+  --sc-hiviz:#B85A3C; --sc-on-hiviz:#FFFFFF; --sc-hiviz-dim:#F6E2D8; --sc-hiviz-soft:#D97757; --sc-hiviz-text:#9A4527;
+  --sc-chalk:#1E5AA8; --sc-chalk-dim:#DCE6F4; --sc-green:#2F8A5B; --sc-violet:#6A55B0; --sc-red:#B5412C;
+  --sc-dusty-tint:#FBEDE6; --sc-dusty-text:#9A4527; --sc-dusty-edge:#D97757;
+  --sc-rail:#F3ECDD; --sc-rail-active:#FFFFFF; --sc-rail-ink:#6E685D; --sc-rail-ink-on:#2A2A2A;
+  --sc-paper:#FAF8F3; --sc-paper-grid:rgba(89,128,166,.08); --sc-pencil:#3A3E43; --sc-pencil-muted:#5A5F66; --sc-pencil-line:rgba(58,62,68,.30);
+  --sc-hatch:rgba(52,56,61,.95); --sc-guide:rgba(58,62,68,.35); --sc-crete:#D9550A;
+  color-scheme: light;
+}
+[data-theme="blueprint"] {
+  --sc-slab:#F2F4F3; --sc-card:#FFFFFF; --sc-sunk:#E6EBEC; --sc-ink:#1F2A33; --sc-ink2:#51606B; --sc-ink3:#7A8791;
+  --sc-hair:#D6DDE0; --sc-hair-soft:#E8EDEF; --sc-hair-strong:#C3CDD2;
+  --sc-hiviz:#2E5E8C; --sc-on-hiviz:#FFFFFF; --sc-hiviz-dim:#E1EAF3; --sc-hiviz-soft:#5980A6; --sc-hiviz-text:#234A70;
+  --sc-chalk:#2E5E8C; --sc-chalk-dim:#E1EAF3; --sc-green:#2F8A5B; --sc-violet:#7A5AA8; --sc-red:#B5412C;
+  --sc-dusty-tint:#FBEDE3; --sc-dusty-text:#9A4527; --sc-dusty-edge:#D97757;
+  --sc-rail:#E6EBEC; --sc-rail-active:#FFFFFF; --sc-rail-ink:#5A6772; --sc-rail-ink-on:#1F2A33;
+  --sc-paper:#F7F9F9; --sc-paper-grid:rgba(89,128,166,.13); --sc-pencil:#2F3B46; --sc-pencil-muted:#5A6772; --sc-pencil-line:rgba(47,59,70,.28);
+  --sc-hatch:rgba(40,52,64,.95); --sc-guide:rgba(47,59,70,.34); --sc-crete:#E0590F;
+  color-scheme: light;
+}
+[data-theme="kraft-yard"] {
+  --sc-slab:#EFE7D8; --sc-card:#FBF7EE; --sc-sunk:#E6DCC7; --sc-ink:#26231E; --sc-ink2:#574F42; --sc-ink3:#7E7361;
+  --sc-hair:#D8CBB0; --sc-hair-soft:#E9DFCB; --sc-hair-strong:#C9B996;
+  --sc-hiviz:#C74B08; --sc-on-hiviz:#FFFFFF; --sc-hiviz-dim:#F6DEC8; --sc-hiviz-soft:#E0590F; --sc-hiviz-text:#9A3F08;
+  --sc-chalk:#1F3A4D; --sc-chalk-dim:#DCE3E8; --sc-green:#3E7B4F; --sc-violet:#7A5AA8; --sc-red:#A93A26;
+  --sc-dusty-tint:#F6E3CF; --sc-dusty-text:#9A3F08; --sc-dusty-edge:#E0590F;
+  --sc-rail:#1F3A4D; --sc-rail-active:#2B4C63; --sc-rail-ink:#B9C7D1; --sc-rail-ink-on:#FFFFFF;
+  --sc-paper:#F4ECDC; --sc-paper-grid:rgba(120,96,60,.11); --sc-pencil:#3A342B; --sc-pencil-muted:#62584A; --sc-pencil-line:rgba(58,52,43,.30);
+  --sc-hatch:rgba(40,36,30,.95); --sc-guide:rgba(58,52,43,.34); --sc-crete:#E0590F;
+  color-scheme: light;
+}
+[data-theme="night-shift"] {
+  --sc-slab:#1B1D1F; --sc-card:#232629; --sc-sunk:#2D3135; --sc-ink:#ECE7DD; --sc-ink2:#B5AEA2; --sc-ink3:#8E887E;
+  --sc-hair:#363B40; --sc-hair-soft:#2C3034; --sc-hair-strong:#474D53;
+  --sc-hiviz:#F07A3A; --sc-on-hiviz:#1B1D1F; --sc-hiviz-dim:#3A2A20; --sc-hiviz-soft:#F07A3A; --sc-hiviz-text:#F4A071;
+  --sc-chalk:#8DB2EA; --sc-chalk-dim:#22324A; --sc-green:#5FBF8A; --sc-violet:#A995E6; --sc-red:#F08A76;
+  --sc-dusty-tint:#2F2621; --sc-dusty-text:#F4A071; --sc-dusty-edge:#F07A3A;
+  --sc-rail:#16181A; --sc-rail-active:#232629; --sc-rail-ink:#8E887E; --sc-rail-ink-on:#ECE7DD;
+  --sc-paper:#202326; --sc-paper-grid:rgba(140,170,200,.09); --sc-pencil:#DDD8CE; --sc-pencil-muted:#A39D93; --sc-pencil-line:rgba(221,216,206,.22);
+  --sc-hatch:rgba(236,231,221,.92); --sc-guide:rgba(221,216,206,.26); --sc-crete:#F07A3A;
+  color-scheme: dark;
+}

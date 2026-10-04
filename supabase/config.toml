@@ -73,3 +73,26 @@ verify_jwt = false
 # Delete this function and this block once the API question is settled.
 [functions.quo-diagnose]
 verify_jwt = true
+
+# Dusty's file reader (migration 046). Same shape as enrich-contacts: pg_cron
+# every minute with the vault bearer token, checked in the function via
+# sc_enrich_worker_authorized(). Not a JWT, so the gateway check is OFF.
+[functions.read-files]
+verify_jwt = false
+
+# Dusty's dreaming (migration 058): every two hours, the enricher's vault
+# bearer token checked in the function via sc_enrich_worker_authorized().
+# Not a JWT, so the gateway check is OFF.
+[functions.dusty-dream]
+verify_jwt = false
+
+# The email mirror (migration 061). AgentMail sends no Supabase JWT; the
+# function checks the webhook's own signature (AGENTMAIL_WEBHOOK_SECRET), and
+# worker calls carry the vault token (sc_enrich_worker_authorized).
+[functions.email-intake]
+verify_jwt = false
+
+# The bid reader (migration 063): pg_cron calls it with the enricher's vault
+# token, which is not a JWT — the function checks it itself.
+[functions.bid-intake]
+verify_jwt = false

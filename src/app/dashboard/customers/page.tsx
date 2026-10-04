@@ -1,10 +1,9 @@
-import { redirect } from "next/navigation";
+"use client";
 
-/**
- * Customers are a Threads bucket now (DECISIONS §6, 2026-09-28): the list is
- * Threads → Customer, and one person opens their Customer page. The old
- * relation-based list (and its Unclassified tab) is superseded by the buckets.
- */
-export default function CustomersPage() {
-  redirect("/dashboard/messages?f=customers");
+/** Customers — one row per customer, not per person (migration 055; src/components/v34/customers.tsx). */
+
+import { Customers } from "@/components/v34/customers";
+
+export default function CustomersScreen() {
+  return <Customers />;
 }

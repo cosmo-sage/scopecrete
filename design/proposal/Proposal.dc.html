@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@600;700&family=Inter:wght@300;400&family=Kalam:wght@400;700&family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400&display=swap" rel="stylesheet">
+<style>body{margin:0;background:#E4DED2;font-family:'IBM Plex Sans',system-ui,sans-serif;color:#2A2A2A}a{color:#1E5AA8;text-decoration:none}a:hover{color:#163C78}img.px{image-rendering:pixelated}[contenteditable]:hover{outline:1px dashed #C9BDA6;outline-offset:2px;border-radius:2px}[contenteditable]:focus{outline:2px solid #D97757;outline-offset:2px;border-radius:2px}input.inl{font:inherit;color:inherit;border:none;border-bottom:1px dashed #C9BDA6;background:transparent;padding:0 2px;outline:none}input.inl:focus{border-bottom-color:#D97757}@keyframes dustyPulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.35);opacity:.55}}</style>
+<script src="./image-slot.js"></script>
+</helmet>
+<div data-screen-label="Job · Proposal" style="padding:32px;display:flex;justify-content:safe center;gap:32px;align-items:flex-start;flex-wrap:wrap">
+
+
+
+<div style="width:1440px;flex:none;height:900px;display:flex;flex-direction:column;background:#FBF6EC;color:#2A2A2A;overflow:hidden;border-radius:6px;box-shadow:0 14px 44px rgba(42,32,20,.18);position:relative">
+
+  <div style="flex:none;height:54px;padding:0 16px 0 18px;display:flex;align-items:center;gap:14px;background-color:#FAF8F3;background-image:linear-gradient(rgba(89,128,166,.08) 1px,transparent 1px),linear-gradient(90deg,rgba(89,128,166,.08) 1px,transparent 1px);background-size:10px 10px;border-bottom:1px solid rgba(58,62,68,.28);box-shadow:0 3px 0 -2px rgba(58,62,68,.14);position:relative;z-index:3">
+    <div style="display:flex;align-items:center;gap:10px;flex:none">
+      <img src="assets/org/sacco-light.png" alt="Sacco Enterprises" style="height:28px;width:auto;display:block">
+      <div style="display:flex;flex-direction:column;gap:1px;padding-left:10px;border-left:1px solid rgba(58,62,68,.28)">
+        <span style="font-family:'Inter',sans-serif;font-weight:300;font-size:8.5px;letter-spacing:.06em;color:#7A7367">powered by</span>
+        <span style="display:flex;align-items:baseline"><span style="font-family:'Lexend',sans-serif;font-weight:700;font-size:10.5px;line-height:1;color:#34383D">scope</span><span style="font-family:'Inter',sans-serif;font-weight:300;font-size:10.5px;line-height:1;color:#D9550A">crete</span><span style="font-family:'Kalam',cursive;font-size:7px;color:#5A5F66">.ai</span></span>
+      </div>
+    </div>
+    <span style="width:1px;height:22px;background:rgba(58,62,68,.28);flex:none"></span>
+    <div style="flex:1;min-width:0;max-width:720px;display:flex;align-items:center;gap:9px"><span onClick="{{ cycleWork }}" title="{{ workTitle }}" style="width:8px;height:8px;border-radius:999px;background:{{ dot }};flex:none;box-shadow:0 0 0 3px {{ dotHalo }};animation:{{ dotAnim }};cursor:pointer"></span><span style="font-family:'Inter',sans-serif;font-weight:300;font-size:13.5px;color:#3F4348;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ activity }}</span></div>
+    <span style="flex:1"></span>
+    <div style="display:flex;gap:6px">
+      <span style="width:32px;height:32px;border:1px solid rgba(58,62,68,.3);border-radius:3px;background:rgba(255,255,255,.55);display:flex;align-items:center;justify-content:center"><svg width="15" height="15" viewBox="0 0 15 15"><circle cx="6.4" cy="6.4" r="4.5" fill="none" stroke="#3A3E43" stroke-width="1.5"></circle><path d="M9.8 9.8 L13.4 13.4" stroke="#3A3E43" stroke-width="1.5" stroke-linecap="round"></path></svg></span>
+      <span style="width:32px;height:32px;border:1px solid rgba(58,62,68,.3);border-radius:3px;background:rgba(255,255,255,.55);display:flex;align-items:center;justify-content:center"><svg width="17" height="17" viewBox="0 0 17 17" stroke="#3A3E43" stroke-width="1.6" stroke-linecap="round"><path d="M8.5 1.5v14M1.5 8.5h14"></path></svg></span>
+      <span style="width:32px;height:32px;border:1px solid rgba(58,62,68,.3);border-radius:3px;background:rgba(255,255,255,.55);display:flex;align-items:center;justify-content:center"><svg width="18" height="14" viewBox="0 0 18 14" stroke="#3A3E43" stroke-width="1.6" stroke-linecap="round"><path d="M1 1h16M1 7h16M1 13h16"></path></svg></span>
+    </div>
+  </div>
+
+  <div style="flex:1;min-height:0;display:flex">
+    <nav style="width:84px;flex:none;background:#F3ECDD;border-right:1px solid #E6DCC8;display:flex;flex-direction:column">
+      <sc-for list="{{ rail }}" as="n" hint-placeholder-count="11">
+        <div style="height:58px;flex:none;border-left:3px solid {{ n.edge }};background:{{ n.bg }};color:{{ n.fg }};display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px">
+          <sc-if value="{{ n.dusty }}" hint-placeholder-val="{{ false }}"><img class="px" src="assets/dusty/idle.png" width="24" height="24"></sc-if>
+          <sc-if value="{{ n.icon }}" hint-placeholder-val="{{ true }}"><svg width="19" height="19" viewBox="0 0 19 19" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="{{ n.icon }}"></path></svg></sc-if>
+          <span style="font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:500;letter-spacing:.1em;text-transform:uppercase;line-height:1.1">{{ n.label }}</span>
+        </div>
+      </sc-for>
+    </nav>
+
+    <aside style="width:300px;flex:none;background:#FFFFFF;border-right:1px solid #E6DCC8;display:flex;flex-direction:column;overflow-y:auto">
+      <div style="padding:14px 14px 10px;border-bottom:1px solid #F1E9DA;display:flex;flex-direction:column;gap:6px">
+        <div style="display:flex;align-items:center;gap:6px"><span style="font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#8C8578">Job 24-372</span><span style="flex:1"></span><span style="font-family:'Barlow Condensed',sans-serif;font-size:10.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;padding:1px 6px;border-radius:2px;background:#F7EBC9;color:#6B4E12">Proposal draft</span></div>
+        <span style="font-family:'Lexend',sans-serif;font-weight:700;font-size:18px;line-height:1.15">Driveway repairs · 7743 Bles Ave</span>
+        <span style="font-size:12.5px;color:#5E5A52">Maurice Watkins · (760) 207-8719<br>Baton Rouge, LA 70810</span>
+        <div style="display:flex;gap:2px;margin-top:4px;border:1px solid #D9CDB6;border-radius:3px;padding:2px">
+          <sc-for list="{{ types }}" as="t" hint-placeholder-count="3"><span onClick="{{ t.go }}" style="flex:1;height:26px;border-radius:2px;background:{{ t.bg }};color:{{ t.fg }};display:flex;align-items:center;justify-content:center;font-family:'Barlow Condensed',sans-serif;font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;cursor:pointer">{{ t.label }}</span></sc-for>
+          <span title="Add a project type in Cash › Project types" style="width:26px;height:26px;border-radius:2px;display:flex;align-items:center;justify-content:center;color:#8C8578;font-size:15px;cursor:pointer" style-hover="background:#FBF6EC;color:#2A2A2A">+</span>
+        </div>
+        <span style="font-size:11.5px;color:#8C8578">{{ typeNote }}</span>
+        <span style="font-size:11px;color:#5E5A52;line-height:1.45">Each type's defaults — OH %, margin, tax, pricing columns, draw schedule, which templates load — are set in <a href="#">Cash › Project types</a>. Add your own there (e.g. HOA, Industrial, Insurance) and it shows up here.</span>
+      </div>
+      <div style="display:flex;border-bottom:1px solid #E6DCC8">
+        <sc-for list="{{ jobTabs }}" as="jt" hint-placeholder-count="5"><span style="flex:1;height:34px;display:flex;align-items:center;justify-content:center;font-family:'Barlow Condensed',sans-serif;font-size:12px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:{{ jt.fg }};border-bottom:2px solid {{ jt.edge }}">{{ jt.label }}</span></sc-for>
+      </div>
+      <div style="padding:12px 14px;display:flex;flex-direction:column;gap:8px;border-bottom:1px solid #F1E9DA">
+        <div style="display:flex;align-items:baseline"><span style="font-family:'Inter',sans-serif;font-weight:300;font-size:18px;flex:1">Cost → price</span><span style="font-family:'Barlow Condensed',sans-serif;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#1E5AA8">From budget</span></div>
+        <sc-for list="{{ costs }}" as="c" hint-placeholder-count="4">
+          <div style="display:flex;align-items:center;gap:8px;font-size:12.5px"><span style="width:8px;height:8px;border-radius:2px;background:{{ c.c }}"></span><span style="flex:1">{{ c.k }}</span><span style="font-family:'Lexend',sans-serif;font-weight:600;font-variant-numeric:tabular-nums">{{ c.v }}</span></div>
+        </sc-for>
+        <div style="height:8px;border-radius:2px;overflow:hidden;display:flex"><sc-for list="{{ costs }}" as="c" hint-placeholder-count="4"><span style="width:{{ c.pct }};background:{{ c.c }}"></span></sc-for></div>
+        <div style="display:flex;align-items:center;gap:8px;font-size:12.5px;padding-top:4px;border-top:1px solid #F1E9DA"><span style="flex:1">Direct cost</span><span style="font-family:'Lexend',sans-serif;font-weight:600;font-variant-numeric:tabular-nums">{{ direct }}</span></div>
+        <div style="display:flex;align-items:center;gap:8px;font-size:12.5px"><span style="flex:1">Overhead <span style="color:#8C8578">{{ ohPct }} · Cash settings</span></span><span style="font-family:'Lexend',sans-serif;font-weight:600;font-variant-numeric:tabular-nums">{{ oh }}</span></div>
+        <div style="display:flex;align-items:center;gap:8px;font-size:12.5px"><span style="flex:1;display:flex;align-items:baseline;gap:4px">Profit <span style="color:#8C8578;display:flex;align-items:baseline">margin&nbsp;<input class="inl" value="{{ marginVal }}" onChange="{{ setMargin }}" style="width:26px;text-align:right;color:#2A2A2A;font-weight:600">%</span><span style="color:#8C8578;font-size:11px">{{ marginNote }}</span></span><span style="font-family:'Lexend',sans-serif;font-weight:600;font-variant-numeric:tabular-nums;color:#1F5C3A">{{ profit }}</span></div>
+        <input type="range" min="5" max="45" step="1" value="{{ marginNum }}" onChange="{{ setMarginNum }}" style="width:100%;accent-color:#B85A3C;margin:0">
+        <div style="display:flex;align-items:center;gap:8px;font-size:12.5px;padding-top:6px;border-top:1px solid #E6DCC8"><span style="flex:1;font-weight:600">Price</span><span style="font-family:'Lexend',sans-serif;font-weight:700;font-size:18px;font-variant-numeric:tabular-nums">{{ price }}</span></div>
+        <span style="font-size:11px;color:#8C8578">{{ priceNote }}</span>
+      </div>
+      <div style="padding:12px 14px;display:flex;flex-direction:column;gap:8px;border-bottom:1px solid #F1E9DA">
+        <span style="font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#8C8578">Profit split with sub</span>
+        <div style="display:flex;gap:4px"><sc-for list="{{ splits }}" as="sp" hint-placeholder-count="3"><span onClick="{{ sp.go }}" style="flex:1;height:26px;border-radius:3px;border:1px solid {{ sp.line }};background:{{ sp.bg }};color:{{ sp.fg }};display:flex;align-items:center;justify-content:center;font-family:'Barlow Condensed',sans-serif;font-size:11.5px;font-weight:600;letter-spacing:.06em;cursor:pointer">{{ sp.label }}</span></sc-for></div>
+        <sc-if value="{{ splitOn }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;gap:8px;font-size:12px"><div style="flex:1;padding:6px 8px;border-radius:3px;background:#FBF6EC;display:flex;flex-direction:column"><span style="color:#8C8578;font-size:11px">Sacco keeps</span><b style="font-family:'Lexend',sans-serif">{{ splitUs }}</b></div><div style="flex:1;padding:6px 8px;border-radius:3px;background:#FBF6EC;display:flex;flex-direction:column"><span style="color:#8C8578;font-size:11px">Sub · {{ subName }}</span><b style="font-family:'Lexend',sans-serif">{{ splitSub }}</b></div></div>
+        </sc-if>
+      </div>
+      <div style="padding:12px 14px;display:flex;flex-direction:column;gap:6px">
+        <span style="font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#8C8578">Templates pulled in</span>
+        <sc-for list="{{ tplRows }}" as="tr" hint-placeholder-count="3">
+          <div style="display:flex;flex-direction:column;gap:3px;padding:6px 0;border-top:1px solid #F1E9DA"><span style="font-size:11px;color:#8C8578">{{ tr.k }}</span><div style="display:flex;gap:4px;flex-wrap:wrap"><sc-for list="{{ tr.opts }}" as="o" hint-placeholder-count="3"><span onClick="{{ o.go }}" style="height:24px;padding:0 8px;border-radius:3px;border:1px solid {{ o.line }};background:{{ o.bg }};color:{{ o.fg }};display:flex;align-items:center;font-size:11.5px;cursor:pointer">{{ o.label }}</span></sc-for></div></div>
+        </sc-for>
+        <div style="margin-top:4px;padding:8px 10px;border-radius:3px;background:#FBF6EC;display:flex;flex-direction:column;gap:3px;font-size:11px;line-height:1.45;color:#5E5A52"><b style="color:#2A2A2A">Where these live</b><span>Warranty, contract and cover templates are in <a href="#">Documents › Templates</a>, filed by project type. Edit one there and every new proposal of that type picks it up; edits made on this page stay on this proposal unless you "Save as template".</span></div>
+      </div>
+    </aside>
+
+    <div style="flex:1;min-width:0;display:flex;flex-direction:column;background:#E9E4DA">
+      <div style="flex:none;height:44px;padding:0 14px;display:flex;align-items:center;gap:8px;background:#FFFFFF;border-bottom:1px solid #E6DCC8">
+        <div style="display:flex;flex-direction:column;flex:none"><span style="font-family:'Lexend',sans-serif;font-weight:600;font-size:13.5px;white-space:nowrap;line-height:1.1">Proposal 24-372-1</span><span style="font-size:10.5px;color:#8C8578;white-space:nowrap">{{ pageCount }} pages · {{ onCount }}/{{ secCount }} sections</span></div>
+        <span style="flex:1"></span>
+        <sc-for list="{{ quick }}" as="q" hint-placeholder-count="3"><span onClick="{{ q.go }}" style="height:26px;padding:0 7px;border-radius:3px;border:1px solid {{ q.line }};background:{{ q.bg }};color:{{ q.fg }};display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer;white-space:nowrap;flex:none">{{ q.mark }} {{ q.label }}</span></sc-for>
+        <span style="width:1px;height:22px;background:#E6DCC8;flex:none"></span>
+        <span title="Send signing link" style="width:30px;height:30px;border-radius:3px;border:1px solid #D9CDB6;background:#FFFFFF;display:flex;align-items:center;justify-content:center;flex:none"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="#3F4348" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 9.5l3-3M7 11.5l-1.5 1.5a2.5 2.5 0 0 1-3.5-3.5L3.5 8M9 4.5l1.5-1.5a2.5 2.5 0 0 1 3.5 3.5L12.5 8"></path></svg></span>
+        <span onClick="{{ exportPdf }}" style="height:30px;padding:0 10px;border-radius:3px;background:{{ exportBg }};color:#FFFFFF;display:flex;align-items:center;gap:6px;font-family:'Barlow Condensed',sans-serif;font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;white-space:nowrap;flex:none">{{ exportLabel }}</span>
+      </div>
+
+      <div style="flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:16px 16px 40px;display:flex;flex-direction:column;align-items:center;gap:12px">
+        <sc-for list="{{ sections }}" as="sec" hint-placeholder-count="6">
+          <div style="width:100%;max-width:720px;display:flex;flex-direction:column">
+            <sc-if value="{{ sec.off }}" hint-placeholder-val="{{ false }}">
+              <div onClick="{{ sec.toggle }}" style="height:44px;border:1px dashed #C9BDA6;border-radius:3px;display:flex;align-items:center;padding:0 14px;gap:10px;font-size:12px;color:#8C8578;cursor:pointer;background:rgba(255,255,255,.4)"><span style="width:26px;height:16px;border-radius:999px;background:#D9CDB6;position:relative;flex:none"><span style="position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:999px;background:#FFFFFF"></span></span><span style="font-family:'Barlow Condensed',sans-serif;font-weight:600;letter-spacing:.1em;text-transform:uppercase">{{ sec.label }}</span>· hidden from the proposal · tap to include</div>
+            </sc-if>
+            <sc-if value="{{ sec.on }}" hint-placeholder-val="{{ true }}">
+            <div style="min-width:0;background:#FFFFFF;box-shadow:0 2px 10px rgba(42,32,20,.1);display:flex;flex-direction:column;position:relative">
+              <div style="position:absolute;right:10px;top:10px;z-index:2;display:flex;align-items:center;gap:6px;padding:3px 4px 3px 8px;border-radius:999px;background:rgba(251,246,236,.94);border:1px solid #E6DCC8"><span style="font-family:'Barlow Condensed',sans-serif;font-size:9.5px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:#5E5A52">{{ sec.label }}</span><span onClick="{{ sec.toggle }}" title="{{ sec.hint }}" style="width:26px;height:16px;border-radius:999px;background:{{ sec.swBg }};position:relative;cursor:pointer;flex:none"><span style="position:absolute;top:2px;left:{{ sec.swX }};width:12px;height:12px;border-radius:999px;background:#FFFFFF;box-shadow:0 1px 2px rgba(0,0,0,.25)"></span></span></div>
+
+              <sc-if value="{{ sec.isCover }}" hint-placeholder-val="{{ false }}">
+                <div style="height:420px;display:flex;flex-direction:column;position:relative;overflow:hidden">
+                  <div style="flex:1;position:relative;min-height:0">
+                    <image-slot id="cover-desktop" shape="rect" placeholder="{{ coverHint }}"></image-slot>
+                    <span style="position:absolute;left:10px;bottom:10px;height:24px;padding:0 9px;border-radius:3px;background:rgba(42,42,42,.85);color:#FBF6EC;display:flex;align-items:center;font-family:'Barlow Condensed',sans-serif;font-size:10.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;pointer-events:none">Drop a photo · or pick from job Files</span>
+                  </div>
+                  <div style="flex:none;padding:22px 28px 24px;background:#2A2A2A;color:#FBF6EC;display:flex;flex-direction:column;gap:8px">
+                    <div style="display:flex;align-items:center;gap:10px"><img src="assets/org/sacco-dark.png" alt="Sacco" style="height:22px;width:auto"><span style="flex:1"></span><span style="font-family:'Barlow Condensed',sans-serif;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#C9BDA6">{{ coverKicker }}</span></div>
+                    <span style="font-family:'Lexend',sans-serif;font-weight:700;font-size:26px;line-height:1.1">{{ coverTitle }}</span>
+                    <div style="display:flex;gap:24px;font-size:12px;color:#C9BDA6;margin-top:4px"><span>Prepared for <b style="color:#FBF6EC;font-weight:600">{{ coverFor }}</b></span><span>{{ coverAddr }}</span><span style="flex:1"></span><span>June 29, 2026</span></div>
+                  </div>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ sec.isHeader }}" hint-placeholder-val="{{ false }}">
+                <div style="padding:24px 28px 18px;display:flex;flex-direction:column;gap:14px">
+                  <div style="display:flex;align-items:flex-start;gap:14px;padding-right:110px"><img src="assets/org/sacco-light.png" alt="Sacco" style="height:30px;width:auto"><span style="flex:1"></span><div style="text-align:right;display:flex;flex-direction:column;gap:2px"><span style="font-family:'Lexend',sans-serif;font-weight:700;font-size:16px">{{ docTitle }} 24-372-1</span><span style="font-size:11px;color:#8C8578">Issued June 29, 2026 · valid 30 days</span></div></div>
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;font-size:11.5px;line-height:1.5">
+                    <div style="display:flex;flex-direction:column"><span style="font-family:'Barlow Condensed',sans-serif;font-size:10.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#8C8578;margin-bottom:3px">Prepared by</span><b style="font-weight:600">Coy Sacco · Sacco Builders &amp; Co</b><span>(225) 378-2458 · admin@saccobuilt.com</span><span>9618 Jefferson Hwy, STE D174, Baton Rouge, LA 70809</span></div>
+                    <div style="display:flex;flex-direction:column"><span style="font-family:'Barlow Condensed',sans-serif;font-size:10.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#8C8578;margin-bottom:3px">Prepared for</span><b style="font-weight:600">{{ coverFor }}</b><span>{{ forContact }}</span><span>{{ coverAddr }}</span></div>
+                  </div>
+                  <sc-if value="{{ isGov }}" hint-placeholder-val="{{ false }}"><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:8px 10px;border:1px solid #E6DCC8;font-size:11px"><span><span style="color:#8C8578">Solicitation</span><br><b>IFB 26-0412-CON</b></span><span><span style="color:#8C8578">LA contractor lic.</span><br><b>#72118 · Building</b></span><span><span style="color:#8C8578">Bid bond</span><br><b>5% enclosed</b></span></div></sc-if>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ sec.isScope }}" hint-placeholder-val="{{ false }}">
+                <div style="padding:18px 28px;display:flex;flex-direction:column;gap:10px;font-size:12px;line-height:1.55">
+                  <span style="font-family:'Barlow Condensed',sans-serif;font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#9A4527">Scope of work</span>
+                  <span>{{ scopeIntro }}</span>
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 18px">
+                    <sc-for list="{{ scopeSteps }}" as="st" hint-placeholder-count="8"><div style="display:flex;gap:8px"><span style="font-family:'Lexend',sans-serif;font-weight:600;font-size:11px;color:#B85A3C;width:16px;flex:none">{{ st.n }}</span><span>{{ st.t }}</span></div></sc-for>
+                  </div>
+                  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:4px">
+                    <sc-for list="{{ specs }}" as="sp" hint-placeholder-count="3"><div style="padding:8px 10px;border:1px solid #E6DCC8;display:flex;flex-direction:column;gap:1px"><span style="font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:#8C8578">{{ sp.k }}</span><span style="font-weight:500">{{ sp.v }}</span></div></sc-for>
+                  </div>
+                  <span style="font-size:11px;color:#8C8578;font-style:italic">Drawn from the Plan room takeoff and the job budget. Edit here — the budget stays the source for quantities.</span>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ sec.isPricing }}" hint-placeholder-val="{{ false }}">
+                <div style="padding:18px 28px 12px;display:flex;flex-direction:column;gap:10px">
+                  <div style="display:flex;align-items:center;gap:8px"><span style="font-family:'Barlow Condensed',sans-serif;font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#9A4527;flex:1">Pricing</span><sc-for list="{{ priceToggles }}" as="pt" hint-placeholder-count="3"><span onClick="{{ pt.go }}" style="height:22px;padding:0 7px;border-radius:3px;border:1px solid {{ pt.line }};background:{{ pt.bg }};color:{{ pt.fg }};display:flex;align-items:center;font-size:10.5px;cursor:pointer">{{ pt.mark }} {{ pt.label }}</span></sc-for></div>
+                  <div style="display:grid;grid-template-columns:{{ cols }};gap:8px;padding:6px 0;border-bottom:1.5px solid #2A2A2A;font-family:'Barlow Condensed',sans-serif;font-size:10.5px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:#5E5A52"><span>Description</span><sc-if value="{{ showQty }}" hint-placeholder-val="{{ true }}"><span style="text-align:right">Qty</span><span style="text-align:right">Unit price</span></sc-if><span style="text-align:right">Total</span></div>
+                  <sc-for list="{{ groups }}" as="g" hint-placeholder-count="3">
+                    <div style="display:flex;flex-direction:column;opacity:{{ g.op }}">
+                      <div style="display:grid;grid-template-columns:{{ cols }};gap:8px;padding:8px 0 4px;align-items:baseline">
+                        <div style="display:flex;align-items:baseline;gap:8px"><span onClick="{{ g.toggle }}" title="Show or hide this group" style="width:22px;height:13px;border-radius:999px;background:{{ g.swBg }};position:relative;cursor:pointer;flex:none;top:1px"><span style="position:absolute;top:1.5px;left:{{ g.swX }};width:10px;height:10px;border-radius:999px;background:#FFFFFF"></span></span><div style="display:flex;flex-direction:column"><b style="font-size:13px;font-weight:600">{{ g.name }}<sc-if value="{{ g.optional }}" hint-placeholder-val="{{ false }}"><span style="margin-left:6px;font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;padding:1px 5px;border:1px solid #1E5AA8;color:#1E5AA8">Optional add-on</span></sc-if></b><span style="font-size:11px;color:#5E5A52">{{ g.desc }}</span></div></div>
+                        <sc-if value="{{ showQty }}" hint-placeholder-val="{{ true }}"><span style="text-align:right;font-size:12px">{{ g.qty }}</span><span style="text-align:right;font-size:12px">{{ g.unitPrice }}</span></sc-if>
+                        <span style="display:flex;justify-content:flex-end;align-items:center;gap:6px;position:relative"><span style="font-family:'Lexend',sans-serif;font-weight:600;font-size:13px;font-variant-numeric:tabular-nums;color:{{ g.priceInk }}">{{ g.total }}</span><span onClick="{{ g.togglePrice }}" title="{{ g.priceHint }}" style="position:absolute;right:-22px;width:16px;height:16px;border-radius:999px;border:1px solid {{ g.priceLine }};background:#FFFFFF;display:flex;align-items:center;justify-content:center;cursor:pointer"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="{{ g.priceLine }}" stroke-width="1.6" stroke-linecap="round"><path d="M1.5 8s2.5-4.5 6.5-4.5S14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8z"></path><circle cx="8" cy="8" r="2"></circle><path d="{{ g.priceSlash }}"></path></svg></span></span>
+                      </div>
+                      <sc-if value="{{ g.showItems }}" hint-placeholder-val="{{ true }}">
+                        <sc-for list="{{ g.items }}" as="it" hint-placeholder-count="4">
+                          <div style="display:grid;grid-template-columns:{{ cols }};gap:8px;padding:3px 0 3px 30px;font-size:11.5px;color:#3F4348;border-top:1px dotted #EDE6D8;opacity:{{ it.op }}">
+                            <div style="display:flex;gap:6px;align-items:baseline"><span onClick="{{ it.toggle }}" title="Show or hide this line" style="font-size:10px;color:{{ it.eyeInk }};cursor:pointer;width:12px;flex:none">{{ it.eye }}</span><span>{{ it.name }}<span style="color:#8C8578"> {{ it.note }}</span></span></div>
+                            <sc-if value="{{ showQty }}" hint-placeholder-val="{{ true }}"><span style="text-align:right">{{ it.qty }}</span><span style="text-align:right">{{ it.unitPrice }}</span></sc-if>
+                            <span style="display:flex;justify-content:flex-end;align-items:center;position:relative"><span style="font-variant-numeric:tabular-nums;color:{{ it.priceInk }}">{{ it.price }}</span><span onClick="{{ it.togglePrice }}" title="{{ it.priceHint }}" style="position:absolute;right:-22px;width:16px;height:16px;border-radius:999px;border:1px solid {{ it.priceLine }};background:#FFFFFF;display:flex;align-items:center;justify-content:center;cursor:pointer"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="{{ it.priceLine }}" stroke-width="1.6" stroke-linecap="round"><path d="M1.5 8s2.5-4.5 6.5-4.5S14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8z"></path><circle cx="8" cy="8" r="2"></circle><path d="{{ it.priceSlash }}"></path></svg></span></span>
+                          </div>
+                        </sc-for>
+                      </sc-if>
+                    </div>
+                  </sc-for>
+                  <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;padding-top:8px;border-top:1.5px solid #2A2A2A;font-size:12px">
+                    <sc-if value="{{ showTax }}" hint-placeholder-val="{{ true }}"><div style="display:flex;gap:24px;width:260px"><span style="flex:1;color:#5E5A52">Subtotal</span><span style="font-variant-numeric:tabular-nums">{{ subtotal }}</span></div><div style="display:flex;gap:24px;width:260px"><span style="flex:1;color:#5E5A52">Sales tax · materials · 9.95%</span><span style="font-variant-numeric:tabular-nums">{{ tax }}</span></div></sc-if>
+                    <div style="display:flex;gap:24px;width:260px;padding-top:4px"><span style="flex:1;font-weight:600">Total</span><span style="font-family:'Lexend',sans-serif;font-weight:700;font-size:17px;font-variant-numeric:tabular-nums">{{ total }}</span></div>
+                    <sc-if value="{{ hasOptional }}" hint-placeholder-val="{{ true }}"><span style="font-size:11px;color:#8C8578">Optional add-ons not included: {{ optionalSum }}</span></sc-if>
+                  </div>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ sec.isPay }}" hint-placeholder-val="{{ false }}">
+                <div style="padding:16px 28px;display:flex;flex-direction:column;gap:8px;font-size:12px">
+                  <div style="display:flex;align-items:baseline;gap:8px;padding-right:110px"><span style="font-family:'Barlow Condensed',sans-serif;font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#9A4527;flex:1">Payment schedule</span><span style="font-size:10.5px;color:{{ payInk }}">{{ payCheck }}</span></div>
+                  <sc-for list="{{ payments }}" as="p" hint-placeholder-count="3"><div style="display:flex;gap:10px;padding:5px 0;border-bottom:1px dotted #EDE6D8;align-items:center;position:relative"><span style="display:flex;align-items:baseline;width:48px;flex:none"><input class="inl" value="{{ p.pctVal }}" onChange="{{ p.setPct }}" style="width:28px;font-family:'Lexend',sans-serif;font-weight:600;color:#B85A3C;text-align:right"><span style="font-family:'Lexend',sans-serif;font-weight:600;color:#B85A3C">%</span></span><input class="inl" value="{{ p.when }}" onChange="{{ p.setWhen }}" style="flex:1;min-width:0"><span style="display:flex;align-items:baseline;flex:none"><span style="font-family:'Lexend',sans-serif;font-weight:600">$</span><input class="inl" value="{{ p.amtVal }}" onChange="{{ p.setAmt }}" style="width:72px;font-family:'Lexend',sans-serif;font-weight:600;text-align:right;font-variant-numeric:tabular-nums"></span><span onClick="{{ p.remove }}" title="Remove draw" style="position:absolute;right:-18px;width:16px;height:16px;border-radius:999px;border:1px solid #D9CDB6;color:#8C8578;display:flex;align-items:center;justify-content:center;font-size:10px;cursor:pointer;background:#FFFFFF">×</span></div></sc-for>
+                  <sc-if value="{{ payBad }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:3px;background:#F7DCD6;border:1px solid #E7B4A8;font-size:11.5px;color:#8E2B1C"><span style="flex:1"><b>Draws don't add up.</b> {{ payGap }} Export is blocked until the schedule equals the proposal total.</span><span onClick="{{ fixDraws }}" style="height:26px;padding:0 9px;border-radius:3px;background:#8E2B1C;color:#FFFFFF;display:flex;align-items:center;font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;cursor:pointer;white-space:nowrap">Put the difference on the last draw</span></div></sc-if>
+                  <div style="display:flex;gap:10px;align-items:center"><span onClick="{{ addDraw }}" style="font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:#1E5AA8;cursor:pointer">+ Draw</span><span style="font-size:10.5px;color:#8C8578">Type a % or a $ amount — the other follows. Tie a draw to scope in the description.</span><span style="flex:1"></span><span onClick="{{ resetDraws }}" style="font-size:10.5px;color:#8C8578;cursor:pointer">Reset to {{ typeLabel }} default</span></div>
+                  <sc-if value="{{ isRes }}" hint-placeholder-val="{{ true }}"><span style="font-size:11px;color:#8C8578">Financing available from ~{{ monthly }}/month through Wisetack.</span></sc-if>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ sec.isWarranty }}" hint-placeholder-val="{{ false }}">
+                <div style="padding:16px 28px;display:flex;flex-direction:column;gap:6px;font-size:11.5px;line-height:1.5">
+                  <div style="display:flex;align-items:baseline;gap:8px;padding-right:96px"><span contentEditable="{{ true }}" suppressContentEditableWarning="{{ true }}" style="font-family:'Barlow Condensed',sans-serif;font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#9A4527;flex:1">{{ warrantyTitle }}</span><span style="font-family:'Barlow Condensed',sans-serif;font-size:10px;letter-spacing:.1em;text-transform:uppercase;padding:1px 6px;border:1px solid #D9CDB6;color:#5E5A52">Template · {{ warrantyTpl }}</span><span onClick="{{ dustyEditWarranty }}" style="font-family:'Barlow Condensed',sans-serif;font-size:10px;letter-spacing:.1em;text-transform:uppercase;padding:1px 6px;border:1px solid #D97757;color:#9A4527;cursor:pointer;display:flex;align-items:center;gap:4px"><img class="px" src="assets/dusty/idle.png" width="12" height="12">Edit with Dusty</span></div>
+                  <span contentEditable="{{ true }}" suppressContentEditableWarning="{{ true }}">{{ warrantyBody }}</span>
+                  <span style="font-size:10.5px;color:#8C8578;font-style:italic">Click any text to edit it here. Changes stay on this proposal; save to the template from Documents.</span>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ sec.isTerms }}" hint-placeholder-val="{{ false }}">
+                <div style="padding:16px 28px;display:flex;flex-direction:column;gap:8px;font-size:11.5px;line-height:1.5">
+                  <div style="display:flex;align-items:baseline;gap:8px;padding-right:96px"><span contentEditable="{{ true }}" suppressContentEditableWarning="{{ true }}" style="font-family:'Barlow Condensed',sans-serif;font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#9A4527;flex:1">{{ termsTitle }}</span><span style="font-family:'Barlow Condensed',sans-serif;font-size:10px;letter-spacing:.1em;text-transform:uppercase;padding:1px 6px;border:1px solid #D9CDB6;color:#5E5A52">Template · {{ termsTpl }}</span><span onClick="{{ dustyEditTerms }}" style="font-family:'Barlow Condensed',sans-serif;font-size:10px;letter-spacing:.1em;text-transform:uppercase;padding:1px 6px;border:1px solid #D97757;color:#9A4527;cursor:pointer;display:flex;align-items:center;gap:4px"><img class="px" src="assets/dusty/idle.png" width="12" height="12">Edit with Dusty</span></div>
+                  <sc-for list="{{ terms }}" as="t" hint-placeholder-count="5"><div style="display:flex;flex-direction:column;position:relative" style-hover="background:#FDFBF6"><b contentEditable="{{ true }}" suppressContentEditableWarning="{{ true }}" style="font-weight:600">{{ t.h }}</b><span contentEditable="{{ true }}" suppressContentEditableWarning="{{ true }}" style="color:#3F4348">{{ t.b }}</span><span onClick="{{ t.remove }}" title="Remove clause" style="position:absolute;right:-18px;top:0;width:16px;height:16px;border-radius:999px;border:1px solid #D9CDB6;color:#8C8578;display:flex;align-items:center;justify-content:center;font-size:10px;cursor:pointer;background:#FFFFFF">×</span></div></sc-for>
+                  <span onClick="{{ addClause }}" style="font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:#1E5AA8;cursor:pointer">+ Clause</span>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ sec.isSign }}" hint-placeholder-val="{{ false }}">
+                <div style="padding:16px 28px 22px;display:flex;flex-direction:column;gap:12px;font-size:11.5px">
+                  <span>The above specifications, scope, price and terms are hereby accepted.</span>
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px">
+                    <div style="display:flex;flex-direction:column;gap:4px"><span style="height:40px;border-bottom:1px solid #2A2A2A;display:flex;align-items:flex-end;font-family:'Kalam',cursive;font-size:18px;color:#8C8578">sign on phone or in the link</span><span style="font-family:'Barlow Condensed',sans-serif;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#8C8578">{{ signerLabel }} · date</span></div>
+                    <div style="display:flex;flex-direction:column;gap:4px"><span style="height:40px;border-bottom:1px solid #2A2A2A;display:flex;align-items:flex-end;font-family:'Kalam',cursive;font-size:18px">Coy Sacco</span><span style="font-family:'Barlow Condensed',sans-serif;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#8C8578">Sacco Builders &amp; Co · date</span></div>
+                  </div>
+                </div>
+              </sc-if>
+            </div>
+            </sc-if>
+          </div>
+        </sc-for>
+        <span style="font-size:11.5px;color:#8C8578;width:100%;max-width:720px">+ Add a section: photos & plan pages · options comparison · references · custom text</span>
+      </div>
+    </div>
+
+    <section style="width:360px;flex:none;background:#FBF6EC;border-left:1px solid #E6DCC8;box-shadow:-10px 0 30px rgba(42,32,20,.08);display:flex;flex-direction:column">
+      <div style="padding:8px 10px;display:flex;align-items:center;gap:8px;background:#FFFFFF;border-bottom:1px solid #E6DCC8">
+        <img class="px" src="assets/dusty/idle.png" width="32" height="32">
+        <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:1px"><span style="font-family:'Kalam',cursive;font-weight:700;font-size:17px;line-height:1.1">Dusty</span><span style="font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#9A4527">Looking at this proposal · {{ typeLabel }}</span></div>
+        <span style="width:32px;height:32px;border:1px solid #E6DCC8;border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:18px;color:#5E5A52">+</span>
+        <span style="width:32px;height:32px;border:1px solid #E6DCC8;border-radius:3px;display:flex;align-items:center;justify-content:center"><svg width="11" height="11" viewBox="0 0 13 13"><path d="M1 1 L12 12 M12 1 L1 12" stroke="#2A2A2A" stroke-width="1.6"></path></svg></span>
+      </div>
+      <div style="flex:1;min-height:0;overflow-y:auto;padding:14px 12px;display:flex;flex-direction:column;gap:10px">
+        <sc-for list="{{ msgs }}" as="m" hint-placeholder-count="3">
+          <div style="display:flex;gap:8px;align-items:flex-start;flex-direction:{{ m.dir }}">
+            <sc-if value="{{ m.dusty }}" hint-placeholder-val="{{ true }}"><img class="px" src="assets/dusty/idle.png" width="26" height="26" style="flex:none;margin-top:2px"></sc-if>
+            <div style="max-width:290px;padding:9px 11px;border-radius:5px;background:{{ m.bg }};color:{{ m.fg }};font-size:13px;line-height:1.5;display:flex;flex-direction:column;gap:8px">
+              <span>{{ m.text }}</span>
+              <sc-if value="{{ m.facts }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-direction:column;border-top:1px solid rgba(0,0,0,.08)"><sc-for list="{{ m.facts }}" as="f" hint-placeholder-count="3"><div style="display:flex;gap:8px;padding:4px 0;border-bottom:1px solid rgba(0,0,0,.06);font-size:12px"><span style="flex:1;color:#5E5A52">{{ f.k }}</span><span style="font-family:'Lexend',sans-serif;font-weight:600;font-variant-numeric:tabular-nums">{{ f.v }}</span></div></sc-for></div></sc-if>
+              <sc-if value="{{ m.opts }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:5px;flex-wrap:wrap"><sc-for list="{{ m.opts }}" as="o" hint-placeholder-count="2"><span onClick="{{ o.go }}" style="height:28px;padding:0 10px;border-radius:3px;border:1px solid #D9CDB6;background:#FFFFFF;color:#2A2A2A;display:flex;align-items:center;font-family:'Barlow Condensed',sans-serif;font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;cursor:pointer">{{ o.label }}</span></sc-for></div></sc-if>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+      <div style="padding:10px 12px;border-top:1px solid #E6DCC8;background:#FFFFFF;display:flex;gap:8px;align-items:center">
+        <div style="flex:1;height:38px;border-radius:4px;border:1px solid #E6DCC8;display:flex;align-items:center;padding:0 12px;font-size:13px;color:#8C8578">Ask Dusty… "rewrite the scope for a homeowner"</div>
+        <div style="height:38px;padding:0 14px;border-radius:4px;background:#B85A3C;color:#FFFFFF;display:flex;align-items:center;font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:600;letter-spacing:.08em;text-transform:uppercase">Ask</div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<div data-screen-label="Job · Proposal · mobile" style="width:390px;height:844px;flex:none;border-radius:44px;background:#14181C;padding:10px;box-shadow:0 14px 44px rgba(42,32,20,.22);position:relative">
+  <div style="width:100%;height:100%;border-radius:36px;background:#FBF6EC;overflow:hidden;position:relative;display:flex;flex-direction:column">
+    <div style="flex:none;height:54px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 26px 4px;font-family:'Lexend',sans-serif;font-weight:600;font-size:14px"><span>9:41</span><span style="width:110px;height:30px;border-radius:999px;background:#14181C;position:absolute;left:50%;top:10px;transform:translateX(-50%)"></span><span style="display:flex;gap:4px;align-items:center"><span style="width:16px;height:9px;border:1px solid #2A2A2A;border-radius:2px;position:relative"><span style="position:absolute;inset:1px;right:4px;background:#2A2A2A;border-radius:1px"></span></span></span></div>
+    <div style="flex:none;height:48px;padding:0 12px;display:flex;align-items:center;gap:8px;background:#FFFFFF;border-bottom:1px solid #E6DCC8">
+      <span onClick="{{ mToggleJob }}" style="height:32px;padding:0 10px;border:1px solid {{ mJobLine }};background:{{ mJobBg }};color:{{ mJobFg }};border-radius:3px;display:flex;align-items:center;gap:6px;font-family:'Barlow Condensed',sans-serif;font-size:12px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;cursor:pointer;flex:none"><sc-if value="{{ mJob }}" hint-placeholder-val="{{ false }}"><svg width="12" height="12" viewBox="0 0 13 13"><path d="M1 1 L12 12 M12 1 L1 12" stroke="currentColor" stroke-width="1.6"></path></svg></sc-if><sc-if value="{{ mJobClosed }}" hint-placeholder-val="{{ true }}"><svg width="14" height="12" viewBox="0 0 18 14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M1 1h16M1 7h16M1 13h16"></path></svg></sc-if>{{ mJobLabel }}</span>
+      <div style="flex:1;min-width:0;display:flex;flex-direction:column"><span style="font-family:'Lexend',sans-serif;font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Proposal 24-372-1</span><span style="font-size:10.5px;color:#8C8578;white-space:nowrap">{{ typeLabel }} · {{ total }} · {{ onCount }}/{{ secCount }} sections</span></div>
+      <span onClick="{{ exportPdf }}" style="width:32px;height:32px;border-radius:3px;background:{{ exportBg }};color:#FFFFFF;display:flex;align-items:center;justify-content:center;cursor:pointer"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v8M5 7l3 3 3-3M3 13h10"></path></svg></span>
+    </div>
+    <div style="flex:1;min-height:0;overflow-y:auto;padding:12px 12px 90px;display:flex;flex-direction:column;gap:10px;background:#E9E4DA">
+      <div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;flex:none;min-height:30px"><sc-for list="{{ quick }}" as="q" hint-placeholder-count="3"><span onClick="{{ q.go }}" style="height:28px;padding:0 9px;border-radius:3px;border:1px solid {{ q.line }};background:{{ q.bg }};color:{{ q.fg }};display:flex;align-items:center;gap:4px;font-size:11.5px;cursor:pointer;white-space:nowrap;flex:none">{{ q.mark }} {{ q.label }}</span></sc-for></div>
+      <sc-for list="{{ sections }}" as="sec" hint-placeholder-count="6">
+        <div style="display:flex;flex-direction:column">
+          <sc-if value="{{ sec.off }}" hint-placeholder-val="{{ false }}"><div onClick="{{ sec.toggle }}" style="height:44px;border:1px dashed #C9BDA6;border-radius:3px;display:flex;align-items:center;padding:0 12px;gap:8px;font-size:12px;color:#8C8578;cursor:pointer"><span style="width:26px;height:16px;border-radius:999px;background:#D9CDB6;position:relative;flex:none"><span style="position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:999px;background:#FFFFFF"></span></span><span style="font-family:'Barlow Condensed',sans-serif;font-weight:600;letter-spacing:.1em;text-transform:uppercase">{{ sec.label }}</span>· hidden</div></sc-if>
+          <sc-if value="{{ sec.on }}" hint-placeholder-val="{{ true }}">
+          <div style="background:#FFFFFF;box-shadow:0 2px 10px rgba(42,32,20,.1);position:relative">
+            <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid #F1E9DA"><span style="font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#5E5A52;flex:1">{{ sec.label }}</span><span onClick="{{ sec.toggle }}" style="width:30px;height:18px;border-radius:999px;background:{{ sec.swBg }};position:relative;cursor:pointer"><span style="position:absolute;top:2px;left:{{ sec.swXm }};width:14px;height:14px;border-radius:999px;background:#FFFFFF;box-shadow:0 1px 2px rgba(0,0,0,.25)"></span></span></div>
+            <sc-if value="{{ sec.isCover }}" hint-placeholder-val="{{ false }}"><div style="height:150px;position:relative"><image-slot id="cover-mobile" shape="rect" placeholder="Cover photo · tap to add from camera or job Files"></image-slot></div><div style="padding:14px;background:#2A2A2A;color:#FBF6EC;display:flex;flex-direction:column;gap:4px"><span style="font-family:'Barlow Condensed',sans-serif;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#C9BDA6">{{ coverKicker }}</span><span style="font-family:'Lexend',sans-serif;font-weight:700;font-size:19px;line-height:1.1">{{ coverTitle }}</span><span style="font-size:11px;color:#C9BDA6">Prepared for {{ coverFor }}</span></div></sc-if>
+            <sc-if value="{{ sec.isHeader }}" hint-placeholder-val="{{ false }}"><div style="padding:12px;display:flex;flex-direction:column;gap:8px;font-size:11.5px;line-height:1.45"><div style="display:flex;align-items:center"><img src="assets/org/sacco-light.png" alt="Sacco" style="height:22px;width:auto"><span style="flex:1"></span><b style="font-family:'Lexend',sans-serif">{{ docTitle }} 24-372-1</b></div><div><span style="color:#8C8578">Prepared for</span><br><b style="font-weight:600">{{ coverFor }}</b><br>{{ coverAddr }}</div></div></sc-if>
+            <sc-if value="{{ sec.isScope }}" hint-placeholder-val="{{ false }}"><div style="padding:12px;display:flex;flex-direction:column;gap:8px;font-size:12px;line-height:1.5"><span>{{ scopeIntro }}</span><sc-for list="{{ scopeSteps }}" as="st" hint-placeholder-count="8"><div style="display:flex;gap:8px"><span style="font-family:'Lexend',sans-serif;font-weight:600;font-size:11px;color:#B85A3C;width:14px;flex:none">{{ st.n }}</span><span>{{ st.t }}</span></div></sc-for></div></sc-if>
+            <sc-if value="{{ sec.isPricing }}" hint-placeholder-val="{{ false }}"><div style="padding:12px;display:flex;flex-direction:column;gap:6px">
+              <sc-for list="{{ groups }}" as="g" hint-placeholder-count="3"><div style="display:flex;flex-direction:column;gap:3px;padding:8px 0;border-bottom:1px dotted #EDE6D8;opacity:{{ g.op }}"><div style="display:flex;align-items:center;gap:8px"><span onClick="{{ g.toggle }}" style="width:26px;height:16px;border-radius:999px;background:{{ g.swBg }};position:relative;cursor:pointer;flex:none"><span style="position:absolute;top:2px;left:{{ g.swXm }};width:12px;height:12px;border-radius:999px;background:#FFFFFF"></span></span><b style="flex:1;font-size:13px;font-weight:600">{{ g.name }}</b><span style="font-family:'Lexend',sans-serif;font-weight:600;font-size:13px">{{ g.total }}</span></div><span style="font-size:11px;color:#5E5A52;padding-left:34px">{{ g.desc }}</span><sc-if value="{{ showQty }}" hint-placeholder-val="{{ false }}"><span style="font-size:11px;color:#8C8578;padding-left:34px">{{ g.qty }} @ {{ g.unitPrice }}</span></sc-if></div></sc-for>
+              <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;padding-top:8px;font-size:12px"><sc-if value="{{ showTax }}" hint-placeholder-val="{{ false }}"><span style="color:#5E5A52">Subtotal {{ subtotal }} · Tax {{ tax }}</span></sc-if><span style="display:flex;gap:10px;align-items:baseline"><span style="font-weight:600">Total</span><span style="font-family:'Lexend',sans-serif;font-weight:700;font-size:18px">{{ total }}</span></span></div>
+            </div></sc-if>
+            <sc-if value="{{ sec.isPay }}" hint-placeholder-val="{{ false }}"><div style="padding:12px;display:flex;flex-direction:column;font-size:12px"><sc-for list="{{ payments }}" as="p" hint-placeholder-count="3"><div style="display:flex;gap:8px;padding:5px 0;border-bottom:1px dotted #EDE6D8"><span style="font-family:'Lexend',sans-serif;font-weight:600;color:#B85A3C;width:36px">{{ p.pct }}</span><span style="flex:1">{{ p.when }}</span><span style="font-family:'Lexend',sans-serif;font-weight:600">{{ p.amt }}</span></div></sc-for></div></sc-if>
+            <sc-if value="{{ sec.isWarranty }}" hint-placeholder-val="{{ false }}"><div style="padding:12px;font-size:11.5px;line-height:1.5;display:flex;flex-direction:column;gap:4px"><b style="font-weight:600">{{ warrantyTitle }}</b><span style="display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;color:#3F4348">{{ warrantyBody }}</span><span style="color:#1E5AA8">Read all · template {{ warrantyTpl }}</span></div></sc-if>
+            <sc-if value="{{ sec.isTerms }}" hint-placeholder-val="{{ false }}"><div style="padding:12px;font-size:11.5px;line-height:1.5;display:flex;flex-direction:column;gap:4px"><b style="font-weight:600">{{ termsTitle }}</b><span style="color:#3F4348">{{ termsCount }} clauses from template “{{ termsTpl }}”.</span><span style="color:#1E5AA8">Read all ›</span></div></sc-if>
+            <sc-if value="{{ sec.isSign }}" hint-placeholder-val="{{ false }}"><div style="padding:12px 12px 16px;display:flex;flex-direction:column;gap:8px;font-size:11.5px"><span>The above specifications, scope, price and terms are hereby accepted.</span><span style="height:44px;border:1px dashed #C9BDA6;border-radius:3px;display:flex;align-items:center;justify-content:center;font-family:'Kalam',cursive;font-size:16px;color:#8C8578">Customer signs here with a finger</span></div></sc-if>
+          </div>
+          </sc-if>
+        </div>
+      </sc-for>
+    </div>
+    <div style="position:absolute;left:0;right:0;bottom:0;padding:10px 12px 22px;background:#FFFFFF;border-top:1px solid #E6DCC8;display:flex;gap:8px;align-items:center">
+      <img class="px" src="assets/dusty/idle.png" width="30" height="30">
+      <div onClick="{{ mOpenDusty }}" style="flex:1;height:38px;border-radius:4px;border:1px solid #E6DCC8;display:flex;align-items:center;padding:0 12px;font-size:12.5px;color:#8C8578;cursor:pointer">{{ mDustyLine }}</div>
+    </div>
+
+    <sc-if value="{{ mJob }}" hint-placeholder-val="{{ false }}">
+      <div style="position:absolute;left:0;right:0;top:102px;bottom:0;background:#FFFFFF;z-index:6;display:flex;flex-direction:column">
+        <div style="display:flex;border-bottom:1px solid #E6DCC8;flex:none"><sc-for list="{{ mTabs }}" as="jt" hint-placeholder-count="3"><span onClick="{{ jt.go }}" style="flex:1;height:42px;display:flex;align-items:center;justify-content:center;font-family:'Barlow Condensed',sans-serif;font-size:12px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:{{ jt.fg }};border-bottom:2px solid {{ jt.edge }};cursor:pointer">{{ jt.label }}</span></sc-for></div>
+        <div style="flex:1;min-height:0;overflow-y:auto;padding:14px 14px 90px;display:flex;flex-direction:column;gap:12px">
+          <sc-if value="{{ mSummary }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex;flex-direction:column;gap:4px"><span style="font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#8C8578">Job 24-372</span><span style="font-family:'Lexend',sans-serif;font-weight:700;font-size:17px;line-height:1.15">Driveway repairs · 7743 Bles Ave</span><span style="font-size:12px;color:#5E5A52">Maurice Watkins · Baton Rouge</span></div>
+            <div style="display:flex;gap:2px;border:1px solid #D9CDB6;border-radius:3px;padding:2px"><sc-for list="{{ types }}" as="t" hint-placeholder-count="3"><span onClick="{{ t.go }}" style="flex:1;height:32px;border-radius:2px;background:{{ t.bg }};color:{{ t.fg }};display:flex;align-items:center;justify-content:center;font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;cursor:pointer">{{ t.label }}</span></sc-for></div>
+            <div style="display:flex;flex-direction:column;gap:6px;padding-top:8px;border-top:1px solid #F1E9DA"><span style="font-family:'Inter',sans-serif;font-weight:300;font-size:17px">Cost → price</span>
+              <sc-for list="{{ costs }}" as="c" hint-placeholder-count="4"><div style="display:flex;align-items:center;gap:8px;font-size:12.5px"><span style="width:8px;height:8px;border-radius:2px;background:{{ c.c }}"></span><span style="flex:1">{{ c.k }}</span><span style="font-family:'Lexend',sans-serif;font-weight:600">{{ c.v }}</span></div></sc-for>
+              <div style="display:flex;font-size:12.5px;padding-top:4px;border-top:1px solid #F1E9DA"><span style="flex:1">Overhead 15%</span><b style="font-family:'Lexend',sans-serif">{{ oh }}</b></div>
+              <div style="display:flex;font-size:12.5px;align-items:center"><span style="flex:1">Profit · margin <b>{{ marginPct }}</b></span><b style="font-family:'Lexend',sans-serif;color:#1F5C3A">{{ profit }}</b></div>
+              <input type="range" min="5" max="45" step="1" value="{{ marginNum }}" onChange="{{ setMarginNum }}" style="width:100%;accent-color:#B85A3C;margin:2px 0;height:28px">
+              <div style="display:flex;align-items:baseline;font-size:12.5px;padding-top:6px;border-top:1px solid #E6DCC8"><span style="flex:1;font-weight:600">Price</span><b style="font-family:'Lexend',sans-serif;font-size:18px">{{ price }}</b></div>
+              <span style="font-size:11px;color:#8C8578">{{ priceNote }}</span>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:6px;padding-top:8px;border-top:1px solid #F1E9DA"><span style="font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#8C8578">Profit split with sub</span><div style="display:flex;gap:4px"><sc-for list="{{ splits }}" as="sp" hint-placeholder-count="3"><span onClick="{{ sp.go }}" style="flex:1;height:32px;border-radius:3px;border:1px solid {{ sp.line }};background:{{ sp.bg }};color:{{ sp.fg }};display:flex;align-items:center;justify-content:center;font-family:'Barlow Condensed',sans-serif;font-size:11.5px;font-weight:600;cursor:pointer">{{ sp.label }}</span></sc-for></div></div>
+            <sc-for list="{{ tplRows }}" as="tr" hint-placeholder-count="3"><div style="display:flex;flex-direction:column;gap:4px;padding-top:8px;border-top:1px solid #F1E9DA"><span style="font-size:11px;color:#8C8578">{{ tr.k }}</span><div style="display:flex;gap:4px;flex-wrap:wrap"><sc-for list="{{ tr.opts }}" as="o" hint-placeholder-count="2"><span onClick="{{ o.go }}" style="height:30px;padding:0 9px;border-radius:3px;border:1px solid {{ o.line }};background:{{ o.bg }};color:{{ o.fg }};display:flex;align-items:center;font-size:11.5px;cursor:pointer">{{ o.label }}</span></sc-for></div></div></sc-for>
+            <span style="font-size:11px;color:#8C8578">Cover photo: add it on the cover page itself — drop or tap the image area at the top of the proposal.</span>
+          </sc-if>
+          <sc-if value="{{ mBudget }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;align-items:baseline"><span style="font-family:'Inter',sans-serif;font-weight:300;font-size:17px;flex:1">Budget</span><span style="font-size:11.5px;color:#8C8578">cost · sell</span></div>
+            <sc-for list="{{ budgetSections }}" as="bs" hint-placeholder-count="4">
+              <div style="display:flex;flex-direction:column;border:1px solid #E6DCC8;border-radius:3px;overflow:hidden">
+                <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:#FBF6EC"><span style="width:8px;height:8px;border-radius:2px;background:{{ bs.c }}"></span><b style="flex:1;font-size:13px;font-weight:600">{{ bs.k }}</b><span style="font-family:'Lexend',sans-serif;font-weight:600;font-size:12.5px">{{ bs.v }}</span></div>
+                <sc-for list="{{ bs.items }}" as="bi" hint-placeholder-count="3"><div style="display:flex;gap:8px;padding:6px 10px;border-top:1px solid #F1E9DA;font-size:12px"><span style="flex:1;color:#3F4348">{{ bi.n }}</span><span style="color:#8C8578">{{ bi.q }}</span><span style="font-family:'Lexend',sans-serif;font-weight:600;width:60px;text-align:right">{{ bi.v }}</span></div></sc-for>
+              </div>
+            </sc-for>
+            <div style="display:flex;font-size:12.5px;padding-top:6px;border-top:1px solid #E6DCC8"><span style="flex:1;font-weight:600">Direct cost</span><b style="font-family:'Lexend',sans-serif">{{ direct }}</b></div>
+            <span style="font-size:11px;color:#8C8578">Quantities come from the Plan room takeoff. Change a line here and the proposal price recalculates.</span>
+          </sc-if>
+          <sc-if value="{{ mFiles }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;align-items:baseline"><span style="font-family:'Inter',sans-serif;font-weight:300;font-size:17px;flex:1">Files</span><span style="height:28px;padding:0 9px;border:1px solid #D9CDB6;border-radius:3px;display:flex;align-items:center;font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase">+ Photo</span></div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px"><sc-for list="{{ photos }}" as="ph" hint-placeholder-count="6"><div style="aspect-ratio:1;border-radius:3px;background-color:{{ ph.bg }};background-image:linear-gradient(rgba(89,128,166,.12) 1px,transparent 1px),linear-gradient(90deg,rgba(89,128,166,.12) 1px,transparent 1px);background-size:10px 10px;position:relative;display:flex;align-items:flex-end;padding:5px;box-sizing:border-box"><span style="font-family:'Barlow Condensed',sans-serif;font-size:9.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#FBF6EC;background:rgba(42,42,42,.75);padding:1px 5px;border-radius:2px">{{ ph.k }}</span><sc-if value="{{ ph.cover }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;top:5px;right:5px;font-family:'Barlow Condensed',sans-serif;font-size:9px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;background:#B85A3C;color:#FFFFFF;padding:1px 5px;border-radius:2px">Cover</span></sc-if></div></sc-for></div>
+            <sc-for list="{{ files }}" as="f" hint-placeholder-count="4"><div style="display:flex;gap:10px;align-items:center;padding:8px 0;border-top:1px solid #F1E9DA"><div style="width:36px;height:30px;flex:none;border:1px solid #E6DCC8;border-radius:2px;background:#FAF8F3;display:flex;align-items:flex-end;justify-content:flex-end;padding:2px;box-sizing:border-box"><span style="font-family:'Barlow Condensed',sans-serif;font-size:8.5px;font-weight:600;letter-spacing:.08em;color:#5E5A52">{{ f.ext }}</span></div><div style="flex:1;min-width:0;display:flex;flex-direction:column"><span style="font-size:12.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ f.name }}</span><span style="font-size:11px;color:#8C8578">{{ f.meta }}</span></div><span style="font-size:14px;color:#8C8578">›</span></div></sc-for>
+            <span style="font-size:11px;color:#8C8578">Tap a photo and choose "Use as cover" to put it on the proposal.</span>
+          </sc-if>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ mDusty }}" hint-placeholder-val="{{ false }}">
+      <div onClick="{{ mClose }}" style="position:absolute;inset:0;background:rgba(42,32,20,.35);z-index:5"></div>
+      <div style="position:absolute;left:0;right:0;bottom:0;height:70%;background:#FBF6EC;z-index:6;border-radius:20px 20px 0 0;box-shadow:0 -10px 30px rgba(42,32,20,.2);display:flex;flex-direction:column;overflow:hidden">
+        <div style="padding:8px 12px;display:flex;align-items:center;gap:8px;background:#FFFFFF;border-bottom:1px solid #E6DCC8"><span style="position:absolute;left:50%;top:6px;transform:translateX(-50%);width:36px;height:4px;border-radius:2px;background:#D9CDB6"></span><img class="px" src="assets/dusty/idle.png" width="30" height="30" style="margin-top:6px"><div style="flex:1;display:flex;flex-direction:column;margin-top:6px"><span style="font-family:'Kalam',cursive;font-weight:700;font-size:16px;line-height:1.1">Dusty</span><span style="font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#9A4527">This proposal · {{ typeLabel }}</span></div><span onClick="{{ mClose }}" style="width:30px;height:30px;border:1px solid #E6DCC8;border-radius:3px;display:flex;align-items:center;justify-content:center;margin-top:6px;cursor:pointer"><svg width="10" height="10" viewBox="0 0 13 13"><path d="M1 1 L12 12 M12 1 L1 12" stroke="#2A2A2A" stroke-width="1.6"></path></svg></span></div>
+        <div style="flex:1;min-height:0;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px">
+          <sc-for list="{{ msgs }}" as="m" hint-placeholder-count="3"><div style="display:flex;gap:8px;align-items:flex-start"><img class="px" src="assets/dusty/idle.png" width="22" height="22" style="flex:none;margin-top:2px"><div style="padding:8px 10px;border-radius:5px;background:#FFFFFF;font-size:12.5px;line-height:1.45;display:flex;flex-direction:column;gap:6px"><span>{{ m.text }}</span><sc-if value="{{ m.opts }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:5px;flex-wrap:wrap"><sc-for list="{{ m.opts }}" as="o" hint-placeholder-count="2"><span onClick="{{ o.go }}" style="height:30px;padding:0 10px;border-radius:3px;border:1px solid #D9CDB6;background:#FFFFFF;display:flex;align-items:center;font-family:'Barlow Condensed',sans-serif;font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;cursor:pointer">{{ o.label }}</span></sc-for></div></sc-if></div></div></sc-for>
+        </div>
+        <div style="padding:10px 12px 22px;border-top:1px solid #E6DCC8;background:#FFFFFF;display:flex;gap:8px"><div style="flex:1;height:40px;border-radius:4px;border:1px solid #E6DCC8;display:flex;align-items:center;padding:0 12px;font-size:13px;color:#8C8578">Ask Dusty…</div><div style="height:40px;padding:0 14px;border-radius:4px;background:#B85A3C;color:#FFFFFF;display:flex;align-items:center;font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:600;letter-spacing:.08em;text-transform:uppercase">Ask</div></div>
+      </div>
+    </sc-if>
+  </div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;jobType&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;res&quot;,&quot;com&quot;,&quot;gov&quot;],&quot;default&quot;:&quot;res&quot;,&quot;tsType&quot;:&quot;'res'|'com'|'gov'&quot;,&quot;section&quot;:&quot;Proposal&quot;}}">
+class Component extends DCLogic {
+  state = { type: 'res', off: {}, groupsOff: {}, itemsOff: {}, showItems: true, showItemPrices: false, showQty: false, showTax: false, split: 'none', warranty: '', terms: '', exported: false, margin: 0.20, pay: null, termsEdit: null, dustyEdit: '', mSheet: '', mTab: 'summary', priceOff: {}, work: 'idle' };
+  renderVals() {
+    const s = this.state;
+    const type = s.typeTouched ? s.type : (this.props.jobType ?? s.type);
+    const isRes = type === 'res', isCom = type === 'com', isGov = type === 'gov';
+    const icons = {
+      dashboard: 'M2.5 2.5h6v6h-6zM10.5 2.5h6v4h-6zM10.5 8.5h6v8h-6zM2.5 10.5h6v6h-6z', threads: 'M2.6 4.4h13.8v8.4H8.9l-4 3v-3H2.6z',
+      scope: 'M2.4 5.4h14.2v8.2H2.4zM2.4 3.1h14.2', plans: 'M2.5 3.5l4.5-1.5 5 1.5 4.5-1.5v13l-4.5 1.5-5-1.5-4.5 1.5zM7 2v13M12 3.5v13',
+      cash: 'M2.4 5.1h14.2v8.8H2.4zM7.2 9.5a2.3 2.3 0 1 0 4.6 0a2.3 2.3 0 1 0-4.6 0', customers: 'M6.5 6.4a3 3 0 1 0 6 0a3 3 0 1 0-6 0M3.6 16.2c.6-3.2 3-5 5.9-5s5.3 1.8 5.9 5',
+      pricebook: 'M4 2.5h10v14H4zM7 6h4M7 9h4M7 12h2', vendors: 'M2.5 8.5l7-5 7 5M4 7.5v8h11v-8M8 15.5v-4h3v4', documents: 'M5 2.5h6l3.5 3.5v10.5H5zM11 2.5V6h3.5', logs: 'M3 4.5h13M3 9.5h13M3 14.5h8'
+    };
+    const on = k => k === 'scope' || k === 'dusty';
+    const rail = [['dashboard', 'Dashboard'], ['threads', 'Threads'], ['dusty', 'Dusty'], ['scope', 'Jobs'], ['plans', 'Plan room'], ['cash', 'Cash'], ['customers', 'Customers'], ['pricebook', 'Price book'], ['vendors', 'Vendors'], ['documents', 'Documents'], ['logs', 'Logs']]
+      .map(([k, l]) => ({ label: l, dusty: k === 'dusty', icon: k === 'dusty' ? '' : icons[k], edge: on(k) ? '#D97757' : 'transparent', bg: on(k) ? '#FFFFFF' : 'transparent', fg: on(k) ? '#2A2A2A' : '#6E685D' }));
+    const money = n => '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const money0 = n => '$' + Math.round(n).toLocaleString('en-US');
+
+    // Budget (cost side) — from the job's budget sections
+    const cost = { Materials: 2184, Labor: 1960, Equipment: 640, Misc: 206 };
+    const direct = Object.values(cost).reduce((a, b) => a + b, 0);
+    const ohPct = 0.15, marginPct = s.margin;
+    const oh = direct * ohPct;
+    const base = direct + oh;
+    const calc = base / (1 - marginPct);
+    const price = Math.ceil(calc / 50) * 50;
+    const profit = price - base;
+    const splitDef = { none: [1, 'No sub'], '2080': [0.2, '20 / 80'], '3070': [0.3, '30 / 70'] };
+    const share = splitDef[s.split][0];
+
+    // Sell side — pricing groups; item prices distribute the sell price
+    const G = [
+      { k: 'a1', name: 'Area 1 — Apron entrance', desc: '528 SF · 4.5–5" at the street, 4" where it meets old concrete', qty: 528, unit: 'SF', items: [['Forming lumber', 'as needed', 168], ['Steel', '#4 dowels 24" O.C. at existing · 6×6 10ga mesh throughout', 412], ['Ready mix — Angelle', '7 CY · 3,000 PSI · Fiber Force 350', 1190], ['Labor', 'demolition · excavation · form · pour · finish', 1520], ['Equipment', 'dump trailer · mini skid · Georgia buggy', 480], ['Fuel surcharge', '', 90]] },
+      { k: 'a2', name: 'Area 2 — Sidewalk panel', desc: '140 SF · 4" · saw-cut tie-in', qty: 140, unit: 'SF', items: [['Saw cutting', 'as needed', 60], ['Steel', '#4 dowels · mesh', 118], ['Ready mix — Angelle', '3 CY · 3,000 PSI', 480], ['Labor', 'demolition · form · pour · finish', 440], ['Equipment', 'dump trailer · mini skid', 160], ['Fuel surcharge', '', 42]] },
+      { k: 'opt', name: 'Option — Seal new concrete', desc: 'Penetrating silane sealer, 668 SF, applied after 28-day cure', qty: 668, unit: 'SF', optional: true, items: [['Sealer', 'Prosoco Siloxane PD', 190], ['Labor', 'wash · apply', 220]] }
+    ];
+    const baseCost = G.filter(g => !g.optional).reduce((a, g) => a + g.items.reduce((x, it) => x + it[2], 0), 0);
+    const markup = price / baseCost;
+    const gSum = g => g.items.reduce((a, it, i) => a + (s.itemsOff[g.k + i] ? 0 : it[2] * markup), 0);
+    const included = G.filter(g => !g.optional && !s.groupsOff[g.k]);
+    const subtotal = included.reduce((a, g) => a + gSum(g), 0);
+    const matShare = cost.Materials / direct;
+    const tax = s.showTax ? subtotal * matShare * 0.0995 : 0;
+    const total = subtotal + tax;
+    const optionalSum = G.filter(g => g.optional && !s.groupsOff[g.k]).reduce((a, g) => a + gSum(g), 0);
+
+    const TPL = {
+      warranty: { res: ['1-yr limited concrete', '5-yr general (legacy)'], com: ['1-yr limited concrete', 'Owner spec warranty'], gov: ['Per contract documents', '1-yr limited concrete'] },
+      terms: { res: ['Residential home-improvement (LA)', 'Simple T&C'], com: ['Commercial subcontract', 'Owner-direct commercial'], gov: ['Public works · LA R.S. 38', 'Federal · FAR 52 clauses'] }
+    };
+    const warrantyTpl = s.warranty || TPL.warranty[type][0];
+    const termsTpl = s.terms || TPL.terms[type][0];
+    const WARR = {
+      '1-yr limited concrete': ['Limited warranty — concrete work', 'Sacco Builders & Co warrants its workmanship and Contractor-supplied materials to be free from defects for 1 year from Substantial Completion. Covered: major scaling, spalling or pop-outs affecting structural integrity; settlement or heaving over ¾" across 10 ft from improper subgrade by Contractor; reinforcement failing to stay in position. Not covered: cracking of any kind, surface conditions (crazing, discoloration, efflorescence), weather and ground movement, owner or third-party actions, tie-ins to existing concrete, and manufacturer products. Remedy at Contractor\'s option: repair, replace or pro-rata credit. Written notice within 30 days of discovery.'],
+      '5-yr general (legacy)': ['General warranty', 'We, Sacco Builders (Contractor), guarantee that all labor and materials furnished and work performed for the above project are in accordance with Code standards and the Contract Documents, and will be free from defects due to defective materials or workmanship for 5 years from Substantial Completion. Should Contractor fail to correct defective work within 60 days of written notice, Owner may correct and charge Contractor.'],
+      'Owner spec warranty': ['Warranty per owner specification', 'Contractor provides the warranty required by Division 01 of the project specifications, not less than one (1) year from Substantial Completion, and passes through all manufacturer warranties for ready-mix, admixtures, sealers and curing compounds.'],
+      'Per contract documents': ['Warranty', 'Warranty term, coverage and notice provisions are as set out in the Contract Documents and the General Conditions of the awarding authority. Nothing in this proposal reduces those obligations.']
+    };
+    const TERMS = {
+      'Residential home-improvement (LA)': [['Payment', 'A 10% deposit is due before scheduling. Balance per the payment schedule; final payment before the crew leaves the site. Returned checks $35. Accounts 10 days past due accrue 1.5% per month.'], ['Scope', 'This proposal covers only the work described. Unforeseen conditions — buried debris, unstable subgrade, unmarked utilities — are quoted separately before work proceeds.'], ['Site access & 811', 'Owner provides clear access. Contractor is not responsible for unmarked irrigation, cable or private utilities; Owner calls 811 where required.'], ['Weather', 'Concrete placement is weather dependent. Contractor may reschedule for rain, freeze or heat with notice.'], ['Right to cancel', 'Owner may cancel in writing within three business days of signing (LA R.S. 9:3538).']],
+      'Simple T&C': [['Payment', 'Per the schedule above.'], ['Changes', 'Written change orders only.'], ['Weather', 'Delays due to weather are possible.']],
+      'Commercial subcontract': [['Agreement', 'Work is performed under the Subcontract Agreement between General Contractor and Sacco Builders & Co; this proposal becomes Exhibit A (scope and price) on execution.'], ['Payment', 'Progress billing monthly on AIA G702/G703; net 30 from GC receipt of Owner payment; retainage not to exceed 10%, released at substantial completion of Contractor\'s work.'], ['Schedule', 'Mobilization within 5 working days of notice to proceed and a released, graded pad. Delay by others extends time, not price, except standby at $185/hr per crew.'], ['Exclusions', 'Layout beyond control points, testing and inspections, permits, dewatering, rock excavation, winter protection, bonds unless listed.'], ['Insurance', 'GL $1M/$2M, auto $1M, WC statutory, umbrella $2M; GC named additional insured.']],
+      'Owner-direct commercial': [['Payment', 'Net 30 from invoice, progress billed monthly.'], ['Changes', 'Written change orders priced at cost plus 15% overhead and 10% profit.'], ['Exclusions', 'Permits, testing, dewatering, rock, bonds unless listed.']],
+      'Public works · LA R.S. 38': [['Bid form', 'This proposal is submitted on the awarding authority\'s bid form and incorporates the Instructions to Bidders, General Conditions and Addenda 1–2 acknowledged herein.'], ['Bonds', 'Bid bond 5% enclosed. Performance and payment bonds at 100% of contract price furnished on award (LA R.S. 38:2219).'], ['Wages', 'Prevailing wage rates per the wage decision in the contract documents; certified payroll submitted weekly.'], ['Retainage & payment', 'Retainage per LA R.S. 38:2248; payment within 45 days of approved estimate; final payment 45 days after acceptance and clear lien period.'], ['Contractor license', 'Louisiana State Licensing Board for Contractors #72118, Building Construction.']],
+      'Federal · FAR 52 clauses': [['Clauses', 'FAR 52.222-6 Davis-Bacon, 52.236-5 Material and Workmanship, 52.243-4 Changes, 52.249-10 Default incorporated by reference.'], ['Payment', 'Per FAR 52.232-5 progress payments; retainage at CO discretion.']]
+    };
+    const wr = WARR[warrantyTpl] || WARR['1-yr limited concrete'];
+
+    const secDef = [['cover', 'Cover', 'Cover page with photo, job name and who it\'s for', true], ['header', 'Header', 'Prepared by / for and the quote number', true], ['scope', 'Scope', 'Detailed scope of work and specs', true], ['pricing', 'Pricing', 'Pricing groups and totals', true], ['pay', 'Payments', 'Payment schedule and financing', true], ['warranty', 'Warranty', 'Warranty template', true], ['terms', 'Terms', 'Contract agreement template', true], ['sign', 'Sign', 'Acceptance and signatures', true]];
+    const isOff = k => k in s.off ? s.off[k] : (k === 'cover' && isGov);
+    const sections = secDef.map(([k, label, hint]) => { const off = isOff(k); return { label, hint, off, on: !off, swBg: off ? '#D9CDB6' : '#2F8A5B', swX: off ? '2px' : '12px', swXm: off ? '2px' : '14px', toggle: () => this.setState(st => ({ off: { ...st.off, [k]: !isOff(k) } })), isCover: k === 'cover', isHeader: k === 'header', isScope: k === 'scope', isPricing: k === 'pricing', isPay: k === 'pay', isWarranty: k === 'warranty', isTerms: k === 'terms', isSign: k === 'sign' }; });
+    const onCount = sections.filter(x => x.on).length;
+
+    const payDefault = isRes ? [{ pct: 10, when: 'Deposit — on signing, holds your date' }, { pct: 50, when: 'Materials on site and old concrete removed' }, { pct: 40, when: 'Completion per the scope above' }] : isCom ? [{ pct: 90, when: 'Progress billing monthly, AIA G702/G703, net 30' }, { pct: 10, when: 'Retainage released at substantial completion' }] : [{ pct: 95, when: 'Monthly estimates per General Conditions, less retainage' }, { pct: 5, when: 'Retainage per LA R.S. 38:2248, on acceptance' }];
+    const pay = s.pay || payDefault;
+    const setPay = fn => this.setState(st => ({ pay: fn((st.pay || payDefault).map(r => ({ ...r }))) }));
+    const termsList = s.termsEdit || (TERMS[termsTpl] || []).map(([h, b]) => ({ h, b }));
+    const tog = (label, key) => ({ label, mark: s[key] ? '✓' : '○', line: s[key] ? '#B85A3C' : '#D9CDB6', bg: s[key] ? '#F6E2D8' : '#FFFFFF', fg: s[key] ? '#9A4527' : '#5E5A52', go: () => this.setState({ [key]: !s[key] }) });
+    const pick = (key, cur) => v => ({ label: v, line: v === cur ? '#2A2A2A' : '#D9CDB6', bg: v === cur ? '#2A2A2A' : '#FFFFFF', fg: v === cur ? '#FBF6EC' : '#2A2A2A', go: () => this.setState({ [key]: v }) });
+
+    const D = (text, extra) => ({ dusty: true, dir: 'row', bg: '#FFFFFF', fg: '#2A2A2A', text, ...extra });
+    const marginNow = profit / price;
+    const msgs = [];
+    if (s.dustyEdit) msgs.push(D(s.dustyEdit === 'warranty' ? 'Editing the warranty with you. Tell me the change — "make the term 2 years", "add a clause excluding tree-root damage", "plain English for a homeowner" — and I\'ll rewrite it in place. You can still click any line to fix it by hand.' : 'Editing the contract terms with you. Say what to change — "net 15 instead of net 30", "add a clause about 811 utility marking", "tighten the weather clause" — and I\'ll rewrite that clause in place.', { opts: s.dustyEdit === 'warranty' ? [{ label: '2-year term', go: () => this.setState({ dustyEdit: '' }) }, { label: 'Plain English', go: () => this.setState({ dustyEdit: '' }) }, { label: 'Save as template', go: () => this.setState({ dustyEdit: '' }) }] : [{ label: 'Add 811 clause', go: () => setPay(p => p) || this.setState({ termsEdit: [...termsList, { h: 'Utility marking', b: 'Owner will request an 811 locate before mobilization. Contractor is not responsible for unmarked private lines.' }], dustyEdit: '' }) }, { label: 'Save as template', go: () => this.setState({ dustyEdit: '' }) }] }));
+    msgs.push(
+      D('Built this from the budget: ' + money0(direct) + ' direct cost, 15% overhead from your Cash settings, and a ' + Math.round(marginPct * 100) + '% margin puts it at ' + money0(calc) + ', rounded up to ' + money0(price) + ' — actual margin ' + Math.round(marginNow * 100) + '%. Drag the margin on the left to reprice.', { facts: [{ k: 'Materials', v: money0(cost.Materials) }, { k: 'Labor', v: money0(cost.Labor) }, { k: 'Equipment', v: money0(cost.Equipment) }, { k: 'Misc', v: money0(cost.Misc) }, { k: 'Overhead 15%', v: money0(oh) }, { k: 'Profit', v: money0(profit) }] }),
+      isRes ? D('For homeowners I hid unit prices and item prices — the two driveway jobs you won this spring (24-315, 24-367) both showed group totals only. Tax is off since you price it in.', { opts: [{ label: 'Show item prices', go: () => this.setState({ showItemPrices: true }) }, { label: 'Add options A/B', go: () => this.setState(st => ({ groupsOff: { ...st.groupsOff, opt: false } })) }] })
+        : isCom ? D('Commercial layout: qty and unit price columns on, tax shown separately, and the Commercial subcontract terms pulled in — same as the Costco curb job. Want retainage at 5% instead of 10%?', { opts: [{ label: 'Retainage 5%', go: () => {} }, { label: 'Keep 10%', go: () => {} }] })
+        : D('Government layout: no photo cover, bid-form header with solicitation and license numbers, public-works terms under LA R.S. 38 and warranty deferred to the contract documents. Check the bid form number before you export.'),
+      s.split !== 'none' ? D('With a ' + splitDef[s.split][1] + ' split, Sacco keeps ' + money0(profit * share) + ' of the ' + money0(profit) + ' profit and the sub takes ' + money0(profit * (1 - share)) + '. The price to the customer doesn\'t change — this only shows on your side.') : D('If a sub is doing the pour, set the profit split on the left. It only changes what you see, never the proposal.'),
+      s.exported ? D('Exported Proposal 24-372-1.pdf (' + (onCount + 1) + ' pages) and filed it under the job\'s Documents. Want me to text Maurice the signing link?', { opts: [{ label: 'Text the link', go: () => {} }, { label: 'Not yet', go: () => {} }] }) : D('Ready to export when you are. The PDF matches what\'s on the page — hidden sections and groups stay out.')
+    );
+    const paySum = pay.reduce((a, r) => a + (r.amt != null ? r.amt : total * (r.pct || 0) / 100), 0);
+    const payOk = Math.abs(paySum - total) < 1;
+    const payPct = total ? paySum / total * 100 : 0;
+    if (!payOk) msgs.unshift(D('Heads up — the draw schedule totals ' + money(paySum) + ' (' + Math.round(payPct) + '%) against a ' + money(total) + ' proposal. I won\'t export or send until they match.', { opts: [{ label: 'Fix the last draw', go: () => setPay(p => { if (!p.length) return p; const rest = p.slice(0, -1).reduce((a, r) => a + (r.amt != null ? r.amt : total * (r.pct || 0) / 100), 0); p[p.length - 1] = { ...p[p.length - 1], amt: Math.max(0, total - rest) }; return p; }) }, { label: 'Reset draws', go: () => this.setState({ pay: null }) }] }));
+    // Dusty activity light: what he's doing → color + pulse rate
+    const WORK = { idle: ['#B3AA9A', 'transparent', 'none', 'Idle · caught up'], read: ['#3F74C9', 'rgba(63,116,201,.18)', 'dustyPulse 2.4s ease-in-out infinite', 'Reading — email, plans, files'], think: ['#C98A12', 'rgba(201,138,18,.2)', 'dustyPulse 1.2s ease-in-out infinite', 'Working — pricing, drafting, measuring'], done: ['#2F8A5B', 'rgba(47,138,91,.18)', 'dustyPulse 3.5s ease-in-out infinite', 'Done — filed, exported, sent'], alert: ['#B5412C', 'rgba(181,65,44,.22)', 'dustyPulse .7s ease-in-out infinite', 'Needs you — a check failed or a question is waiting'] };
+    const work = !payOk ? 'alert' : s.exported ? 'done' : s.dustyEdit ? 'think' : s.work;
+    const W = WORK[work];
+
+    const cols = s.showQty ? '1fr 70px 90px 100px' : '1fr 110px';
+    return {
+      dot: W[0], dotHalo: W[1], dotAnim: W[2], workTitle: 'Dusty · ' + W[3] + ' — click to preview the other states', cycleWork: () => this.setState(st => ({ work: ['idle', 'read', 'think', 'done'][(['idle', 'read', 'think', 'done'].indexOf(st.work) + 1) % 4] })),
+      payBad: !payOk, payGap: (paySum > total ? money(paySum - total) + ' over' : money(total - paySum) + ' short') + ' · ' + Math.round(payPct) + '% of the proposal.',
+      fixDraws: () => setPay(p => { if (!p.length) return p; const rest = p.slice(0, -1).reduce((a, r) => a + (r.amt != null ? r.amt : total * (r.pct || 0) / 100), 0); p[p.length - 1] = { ...p[p.length - 1], amt: Math.max(0, total - rest) }; return p; }),
+      rail, activity: !payOk ? 'Draw schedule is ' + Math.round(payPct) + '% of the proposal — fix before export' : s.exported ? 'Exported Proposal 24-372-1.pdf · filed under Documents' : 'Proposal priced from the 24-372 budget · ' + Math.round(marginNow * 100) + '% margin after 15% OH',
+      types: [['res', 'Residential'], ['com', 'Commercial'], ['gov', 'Government']].map(([k, l]) => ({ label: l, bg: type === k ? '#2A2A2A' : 'transparent', fg: type === k ? '#FBF6EC' : '#5E5A52', go: () => this.setState({ type: k, typeTouched: true, warranty: '', terms: '', pay: null, termsEdit: null, showQty: k !== 'res', showTax: k !== 'res', showItemPrices: k !== 'res' }) })),
+      typeLabel: { res: 'Residential', com: 'Commercial', gov: 'Government' }[type],
+      typeNote: isRes ? 'Photo cover, lump-sum groups, home-improvement terms, 10/50/40 payments.' : isCom ? 'Qty & unit pricing, tax shown, subcontract terms, progress billing with retainage.' : 'Bid-form header, no photo cover, public-works terms, prevailing wage, bonds.',
+      jobTabs: ['Summary', 'Budget', 'Proposal', 'Files'].map(l => ({ label: l, fg: l === 'Proposal' ? '#2A2A2A' : '#8C8578', edge: l === 'Proposal' ? '#B85A3C' : 'transparent' })),
+      costs: [['Materials', '#1E5AA8'], ['Labor', '#D97757'], ['Equipment', '#6A55B0'], ['Misc', '#8C8578']].map(([k, c]) => ({ k, c, v: money0(cost[k]), pct: (cost[k] / direct * 100) + '%' })),
+      direct: money0(direct), ohPct: '15%', oh: money0(oh), marginPct: Math.round(marginPct * 100) + '%', profit: money0(profit), price: money0(price),
+      priceNote: 'Calculated ' + money(calc) + ' → rounded to ' + money0(price) + ' (+' + money(price - calc) + '). Rounds up to the nearest $50. OH and the default margin live in Cash › Settings.',
+      splits: Object.entries(splitDef).map(([k, [v, l]]) => ({ label: l, line: s.split === k ? '#2A2A2A' : '#D9CDB6', bg: s.split === k ? '#2A2A2A' : '#FFFFFF', fg: s.split === k ? '#FBF6EC' : '#5E5A52', go: () => this.setState({ split: k }) })),
+      splitOn: s.split !== 'none', splitUs: money0(profit * share), splitSub: money0(profit * (1 - share)), subName: 'Marcus · finishing',
+      tplRows: [{ k: 'Warranty', opts: TPL.warranty[type].map(pick('warranty', warrantyTpl)) }, { k: 'Contract agreement', opts: TPL.terms[type].map(pick('terms', termsTpl)) }, { k: 'Cover style', opts: [isRes ? 'Photo' : isCom ? 'Spec sheet' : 'Bid form', 'None'].map((v, i) => ({ label: v, line: i === 0 ? '#2A2A2A' : '#D9CDB6', bg: i === 0 ? '#2A2A2A' : '#FFFFFF', fg: i === 0 ? '#FBF6EC' : '#2A2A2A', go: () => this.setState(st => ({ off: { ...st.off, cover: i === 1 } })) })) }],
+      pageCount: onCount + 1, onCount, secCount: secDef.length,
+      quick: [tog('Item prices', 'showItemPrices'), tog('Qty · unit', 'showQty'), tog('Tax line', 'showTax')],
+      exportPdf: () => { if (payOk) this.setState({ exported: true, mSheet: '' }); else this.setState({ mSheet: 'dusty' }); }, exportLabel: !payOk ? 'Fix draws to export' : s.exported ? 'PDF exported ✓' : '↓ Export PDF', exportBg: !payOk ? '#B3AA9A' : s.exported ? '#2F8A5B' : '#B85A3C',
+      sections,
+      coverHint: isRes ? 'Cover photo · the finished driveway from 24-315 sells this' : 'Cover image · site photo or plan excerpt', coverKicker: isRes ? 'Proposal' : isCom ? 'Bid proposal' : 'Bid submission',
+      coverTitle: isRes ? 'Your new driveway' : 'Concrete driveway & sidewalk repairs', coverFor: isRes ? 'Maurice Watkins' : isCom ? 'Costco Wholesale · Store 1172' : 'City of Baton Rouge · DPW', coverAddr: '7743 Bles Ave, Baton Rouge, LA 70810', forContact: isRes ? '(760) 207-8719 · maurice2watkins@gmail.com' : 'Attn: Facilities · purchasing@example.com',
+      docTitle: isGov ? 'Bid' : isCom ? 'Proposal' : 'Quote', isGov, isRes,
+      scopeIntro: isRes ? 'Turn-key removal and replacement of two driveway areas (668 SF total) with new 3,000 PSI concrete, wire mesh throughout and #4 rebar dowels wherever new concrete meets old. Broom finish unless you tell us otherwise.' : 'Remove and replace 668 SF of concrete driveway and sidewalk in two areas per the attached exhibit. 3,000 PSI at 28 days, 6×6 W1.4 WWF, #4 dowels at 24" O.C. into existing, medium broom finish, sawcut control joints at 10\' max.',
+      scopeSteps: ['Mobilization — equipment delivery', 'Demolition and haul-off', 'Excavation and grading', 'Forming', 'Steel — dowels and mesh', 'Concrete placement and finishing', 'Wreck forms and clean up', 'Cure · 7 days before vehicle traffic'].map((t, i) => ({ n: i + 1, t })),
+      specs: [{ k: 'Concrete', v: '3,000 PSI · Fiber Force 350' }, { k: 'Thickness', v: '4" · 5" at apron' }, { k: 'Reinforcing', v: '6×6 10ga mesh · #4 dowels' }],
+      cols, showQty: s.showQty, showTax: s.showTax,
+      groups: G.map(g => { const off = !!s.groupsOff[g.k] || (g.optional && !('opt' in s.groupsOff)); const sum = gSum(g); const pOff = !!s.priceOff[g.k];
+        const priceBtn = (key, hidden) => ({ togglePrice: () => this.setState(st => ({ priceOff: { ...st.priceOff, [key]: !hidden } })), priceHint: hidden ? 'Price hidden on the proposal — click to show' : 'Click to hide this price on the proposal', priceLine: hidden ? '#B5412C' : '#C9BDA6', priceSlash: hidden ? 'M2.5 2.5l11 11' : '', priceInk: hidden ? '#B3AA9A' : 'inherit' });
+        return { name: g.name, desc: g.desc, optional: !!g.optional, op: off ? 0.35 : 1, swBg: off ? '#D9CDB6' : '#2F8A5B', swX: off ? '1.5px' : '10.5px', swXm: off ? '2px' : '12px', toggle: () => this.setState(st => ({ groupsOff: { ...st.groupsOff, [g.k]: !off } })), qty: g.qty + ' ' + g.unit, unitPrice: pOff ? '—' : money(sum / g.qty), total: pOff ? '—' : money(sum), showItems: s.showItems, ...priceBtn(g.k, pOff),
+        items: g.items.map((it, i) => { const ioff = !!s.itemsOff[g.k + i]; const ipOff = !!s.priceOff[g.k + i]; return { name: it[0], note: it[1], op: ioff ? 0.35 : 1, eye: ioff ? '○' : '●', eyeInk: ioff ? '#B3AA9A' : '#2F8A5B', toggle: () => this.setState(st => ({ itemsOff: { ...st.itemsOff, [g.k + i]: !ioff } })), qty: '', unitPrice: '', price: ipOff ? '—' : s.showItemPrices ? money(it[2] * markup) : 'included', ...priceBtn(g.k + i, ipOff) }; }) }; }),
+      subtotal: money(subtotal), tax: money(tax), total: money(total), hasOptional: optionalSum > 0, optionalSum: money(optionalSum),
+      payments: pay.map((r, i) => { const amt = r.amt != null ? r.amt : total * (r.pct || 0) / 100; const pct = r.amt != null ? amt / total * 100 : (r.pct || 0); return { pct: Math.round(pct) + '%', pctVal: String(Math.round(pct)), when: r.when, amt: money(amt), amtVal: amt.toFixed(2),
+        setPct: e => { const v = parseFloat(e.target.value) || 0; setPay(p => { p[i] = { ...p[i], pct: v, amt: undefined }; return p; }); },
+        setAmt: e => { const v = parseFloat(String(e.target.value).replace(/[^0-9.]/g, '')) || 0; setPay(p => { p[i] = { ...p[i], amt: v }; return p; }); },
+        setWhen: e => { const v = e.target.value; setPay(p => { p[i] = { ...p[i], when: v }; return p; }); },
+        remove: () => setPay(p => p.filter((_, j) => j !== i)) }; }),
+      addDraw: () => setPay(p => [...p, { pct: Math.max(0, Math.round(100 - p.reduce((a, r) => a + (r.amt != null ? r.amt / total * 100 : (r.pct || 0)), 0))), when: 'Describe the milestone or scope for this draw' }]),
+      resetDraws: () => this.setState({ pay: null }),
+      payCheck: payOk ? '✓ draws total ' + money(paySum) : '⚠ draws total ' + money(paySum) + ' vs ' + money(total), payInk: payOk ? '#1F5C3A' : '#9A4527',
+      monthly: money0(total / 84),
+      warrantyTitle: wr[0], warrantyBody: wr[1], warrantyTpl, termsTitle: isGov ? 'Contract terms — public works' : isCom ? 'Terms & conditions — subcontract' : 'Terms & conditions', termsTpl,
+      terms: termsList.map((t, i) => ({ h: t.h, b: t.b, remove: () => this.setState({ termsEdit: termsList.filter((_, j) => j !== i) }) })),
+      addClause: () => this.setState({ termsEdit: [...termsList, { h: 'New clause', b: 'Click to write the clause, or ask Dusty.' }] }),
+      dustyEditWarranty: () => this.setState({ dustyEdit: 'warranty', mSheet: 'dusty' }), dustyEditTerms: () => this.setState({ dustyEdit: 'terms', mSheet: 'dusty' }),
+      marginVal: String(Math.round(marginPct * 100)), marginNum: Math.round(marginPct * 100), marginNote: marginPct === 0.2 ? '· Cash default' : '· default 20%',
+      setMargin: e => { const v = parseFloat(e.target.value); if (!isNaN(v)) this.setState({ margin: Math.min(0.6, Math.max(0, v / 100)) }); },
+      setMarginNum: e => this.setState({ margin: (parseFloat(e.target.value) || 0) / 100 }),
+      mTabs: [['summary', 'Summary'], ['budget', 'Budget'], ['files', 'Files']].map(([k, l]) => ({ label: l, fg: s.mTab === k ? '#2A2A2A' : '#8C8578', edge: s.mTab === k ? '#B85A3C' : 'transparent', go: () => this.setState({ mTab: k }) })),
+      mSummary: s.mTab === 'summary', mBudget: s.mTab === 'budget', mFiles: s.mTab === 'files',
+      mJobClosed: s.mSheet !== 'job', mJobLabel: s.mSheet === 'job' ? 'Close' : 'Job', mJobLine: s.mSheet === 'job' ? '#2A2A2A' : '#D9CDB6', mJobBg: s.mSheet === 'job' ? '#2A2A2A' : 'transparent', mJobFg: s.mSheet === 'job' ? '#FBF6EC' : '#2A2A2A',
+      mToggleJob: () => this.setState(st => ({ mSheet: st.mSheet === 'job' ? '' : 'job' })),
+      budgetSections: [['Materials', '#1E5AA8', [['Ready mix 3,000 PSI · Angelle', '10 CY', 1430], ['#4 rebar · dowels', '35 EA', 210], ['6×6 10ga mesh', '2 rolls', 236], ['Forming lumber 2×4×16', '24 EA', 168], ['Fiber Force 350', '10 bags', 140]]], ['Labor', '#D97757', [['Demolition & haul-off', '16 hr', 640], ['Excavation · grading · forming', '18 hr', 720], ['Pour & finish', '3 finishers · 1 day', 600]]], ['Equipment', '#6A55B0', [['Mini skid steer · Vermeer', '2 days', 340], ['Dump trailer', '2 days', 180], ['Georgia buggy', '1 day', 120]]], ['Misc', '#8C8578', [['Fuel surcharge', '2', 132], ['Dump fees', '2 loads', 74]]]].map(([k, c, items]) => ({ k, c, v: money0(cost[k]), items: items.map(([n, q, v]) => ({ n, q, v: money0(v) })) })),
+      photos: [['Site · apron', '#B8AE9C', true], ['Site · walk', '#A9A08E'], ['Cracks · area 2', '#C2B8A5'], ['Sketch', '#DED6C6'], ['Won job 24-315', '#9C9484'], ['Won job 24-367', '#ADA493']].map(([k, bg, cover]) => ({ k, bg, cover: !!cover })),
+      files: [['Proposal 24-372-1.pdf', 'PDF', s.exported ? 'Exported just now · 9 pages' : 'Not exported yet'], ['Bles_Ave_site_sketch.jpg', 'JPG', 'From Dusty email · Jun 22'], ['Takeoff 24-372.csv', 'CSV', 'Plan room · 2 groups'], ['Signed_24-315.pdf', 'PDF', 'Reference · won Mar 31']].map(([name, ext, meta]) => ({ name, ext, meta })),
+      signerLabel: isRes ? 'Owner' : isCom ? 'Authorized representative' : 'Awarding authority',
+      termsCount: (TERMS[termsTpl] || []).length,
+      mJob: s.mSheet === 'job', mDusty: s.mSheet === 'dusty', mOpenJob: () => this.setState({ mSheet: 'job' }), mOpenDusty: () => this.setState({ mSheet: 'dusty' }), mClose: () => this.setState({ mSheet: '' }),
+      mDustyLine: s.exported ? 'Dusty: exported — text Maurice the link?' : 'Dusty: ' + Math.round(marginNow * 100) + '% margin after OH · ask me anything',
+      msgs
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -25,11 +25,15 @@ import { Timeline, formatPhone, type Note, type ThreadMessage } from "@/componen
 import { JOB_TYPE_LABEL, stageOf } from "@/lib/jobs/stages";
 import { NameEditor, FileAsSheet } from "@/components/v34/contact-edit";
 import { useWide } from "@/lib/v34/use-wide";
+import { FilesPanel } from "@/components/v34/files-panel";
+import { CostCards } from "@/components/v34/cost-cards";
+import { CallNotesPad } from "@/components/v34/call-notes-pad";
+import { ArchiveButton } from "@/components/v34/archive-actions";
 
 export interface Person {
   contact: {
-    id: string; name: string | null; name_confirmed: boolean; phones: string[];
-    email: string | null; address: string | null; company: string | null;
+    id: string; customer_id?: string | null; name: string | null; name_confirmed: boolean; phones: string[];
+    email: string | null; address: string | null; address_source?: string | null; company: string | null;
     bucket: "customer" | "vendor" | "personal" | "spam" | null;
     bucket_state: "confirmed" | "auto" | null;
     subtype: string | null; subtype_label: string | null;
@@ -60,7 +64,6 @@ interface Task {
 }
 
 const COLOUR: Record<string, string> = { customer: T.green, vendor: T.chalk, personal: T.violet, spam: T.red };
-const LABEL: Record<string, string> = { customer: "Customer", vendor: "Vendor", personal: "Personal", spam: "Spam" };
 
 async function send(url: string, method: string, body?: unknown) {
   const r = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
@@ -94,9 +97,10 @@ export function PersonView({ person, messages, onReload, onMerge }: {
   const phone = c.phones[0] ?? null;
   const title = c.name ?? formatPhone(phone);
   const colour = c.bucket ? COLOUR[c.bucket] : T.ink3;
-  const [tab, setTab] = useState<"activity" | "jobs" | "about">("activity");
+  const [tab, setTab] = useState<"activity" | "jobs" | "prices" | "files" | "about">("activity");
   const [error, setError] = useState<string | null>(null);
   const [filing, setFiling] = useState(false);
+  const [callNotes, setCallNotes] = useState(false);
   // Room for two columns (Coy, 2026-09-29: no dead space either side on a
   // desktop). The conversation fills the left; next steps, jobs and about
   // stand in a column on the right, as in the desktop design's 1d. Narrow —
@@ -130,11 +134,11 @@ export function PersonView({ person, messages, onReload, onMerge }: {
             style={{ background: "none", border: "none", color: T.ink3, padding: 0, cursor: "pointer" }}>
             <ArrowLeft size={18} />
           </button>
-          <span className="rounded" style={{ ...eyebrow, lineHeight: "16px", padding: "0 5px", color: c.bucket_state === "confirmed" ? "#fff" : colour,
-            background: c.bucket_state === "confirmed" ? colour : "transparent", border: `1px solid ${colour}` }}
-            title={c.bucket_state === "confirmed" ? "Confirmed by you" : "Filed by Dusty — keep or undo it on Threads"}>
-            {c.bucket ? LABEL[c.bucket] : "Unsorted"}{c.bucket_state === "confirmed" ? " ✓" : c.bucket_state === "auto" ? " · auto" : ""}
-          </span>
+          {/* No bucket tag: the page (and the chip it was opened from) already says
+              customer or vendor (Coy, 2026-09-28). Dusty's own filing keeps a small mark. */}
+          {c.bucket_state === "auto" && (
+            <span style={{ ...eyebrow, color: colour }} title="Filed by Dusty — keep or undo it on Threads">auto</span>
+          )}
           {c.subtype_label && <span style={{ ...eyebrow, color: T.ink2 }}>{c.subtype_label}</span>}
           {jobType && <span style={{ ...eyebrow, color: jobType.sure ? T.ink2 : T.ink3 }}>{jobType.l}{jobType.sure ? "" : "?"}</span>}
           <span className="flex-1" />
@@ -153,7 +157,8 @@ export function PersonView({ person, messages, onReload, onMerge }: {
         <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1" style={{ fontSize: F.xs, color: T.ink2, ...nums }}>
           {c.phones.map((p) => <a key={p} href={`tel:${p}`} style={{ color: T.ink2 }}>{formatPhone(p)}</a>)}
           {c.email && <a href={`mailto:${c.email}`} style={{ color: T.ink2 }}>{c.email}</a>}
-          {c.address && <span>{c.address}</span>}
+          {c.address && <span title={c.address_source === "call" ? "Heard on a call — the transcript's spelling; check it" : c.address_source === "text" ? "They texted it" : undefined}>
+            {c.address}{c.address_source === "call" ? " (heard on a call — check it)" : c.address_source === "text" ? " (texted)" : ""}</span>}
           <span style={{ color: T.ink3 }}>{texts} text{texts === 1 ? "" : "s"} · {calls} call{calls === 1 ? "" : "s"}</span>
         </div>
 
@@ -166,14 +171,19 @@ export function PersonView({ person, messages, onReload, onMerge }: {
 
         {/* Every channel, one row. Nothing here sends on its own. */}
         <div className="flex gap-1.5 mt-2.5">
-          {phone ? <a href={`tel:${phone}`} style={{ ...act, background: T.ink, color: "#fff", borderColor: T.ink }}>Call</a>
+          {phone ? <a href={`tel:${phone}`} style={{ ...act, background: T.ink, color: T.card, borderColor: T.ink }}>Call</a>
             : <span style={{ ...act, opacity: 0.4 }}>Call</span>}
           <button onClick={() => { setTab("activity"); setTimeout(() => document.getElementById("person-composer")?.scrollIntoView({ behavior: "smooth", block: "center" }), 50); }}
             style={act} title="Write it here, copy it into Quo — sending waits on 10DLC">Text</button>
           {c.email ? <a href={`mailto:${c.email}`} style={act}>Email</a>
             : <span style={{ ...act, opacity: 0.4, cursor: "default" }} title="No email on file for them">Email</span>}
+          <button onClick={() => setCallNotes(true)} style={act} title="Notes while you're on the phone — they land on the call">Call notes</button>
           <button onClick={() => window.dispatchEvent(new Event("sc:dusty-open"))} style={{ ...act, color: T.hiviz, borderColor: T.hiviz }}>Ask Dusty</button>
+          {c.bucket === "vendor"
+            ? <ArchiveButton kind="contact" id={c.id} action="delete" what={title} then="/dashboard/vendors" style={{ ...act, color: T.red, borderColor: T.red }}>Delete</ArchiveButton>
+            : <ArchiveButton kind="contact" id={c.id} action="archive" what={title} then="/dashboard/messages" style={act}>Archive</ArchiveButton>}
         </div>
+        <CallNotesPad contactId={c.id} who={title} open={callNotes} onClose={() => { setCallNotes(false); onReload(); }} />
       </div>
 
       {error && <div className="mx-3 mt-2" style={{ fontSize: F.xs, color: T.red }}>{error}</div>}
@@ -183,7 +193,7 @@ export function PersonView({ person, messages, onReload, onMerge }: {
 
       {/* ---------------- tabs (narrow only) ---------------- */}
       {!wide && <div className="flex mt-3 px-3" style={{ gap: 2 }}>
-        {([["activity", "Activity"], ["jobs", `${isVendor ? "On jobs" : "Jobs"} (${jobCount})`], ["about", "About"]] as const).map(([k, l]) => (
+        {([["activity", "Activity"], ["jobs", `Jobs (${jobCount})`], ...(isVendor ? [["prices", "Prices"] as const] : []), ["files", "Files"], ["about", "About"]] as const).map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)} className="flex-1"
             style={{ height: 34, background: tab === k ? T.card : "transparent", cursor: "pointer",
                      borderBottom: tab === k ? `2px solid ${T.hiviz}` : `1px solid ${T.hair}`,
@@ -197,6 +207,8 @@ export function PersonView({ person, messages, onReload, onMerge }: {
       {!wide && tab === "jobs" && (isVendor
         ? <VendorJobs person={person} onChanged={onReload} onError={setError} />
         : <CustomerJobs person={person} onChanged={onReload} onError={setError} />)}
+      {!wide && tab === "files" && <div className="mx-3 mt-2"><FilesPanel contactId={c.id} /></div>}
+      {!wide && tab === "prices" && isVendor && <div className="mx-0 mt-1"><CostCards vendorId={c.id} vendorName={c.name} /></div>}
       {!wide && tab === "about" && <About person={person} />}
       </div>
 
@@ -209,6 +221,8 @@ export function PersonView({ person, messages, onReload, onMerge }: {
           {isVendor
             ? <VendorJobs person={person} onChanged={onReload} onError={setError} />
             : <CustomerJobs person={person} onChanged={onReload} onError={setError} />}
+          {isVendor && <CostCards vendorId={c.id} vendorName={c.name} />}
+          <div className="mx-3 mt-4"><FilesPanel contactId={c.id} compact /></div>
           <div className="mx-3 mt-4" style={{ ...eyebrow, color: T.ink }}>About</div>
           <About person={person} />
         </aside>
@@ -242,7 +256,7 @@ export function SamePerson({ person, onMerge }: { person: Pick<Person, "possible
             <span style={{ color: T.ink2 }}> — same {d.same}. Same person?</span>
           </span>
           <button onClick={() => onMerge(d.id)} className="rounded px-2.5 shrink-0"
-            style={{ height: 30, background: T.chalk, color: "#fff", border: "none", fontFamily: disp, fontSize: F.xs,
+            style={{ height: 30, background: T.chalk, color: T.card, border: "none", fontFamily: disp, fontSize: F.xs,
                      letterSpacing: ".04em", textTransform: "uppercase", cursor: "pointer" }}>Review</button>
         </div>
       ))}
@@ -325,7 +339,7 @@ function NextSteps({ contactId, tasks, onChanged, onError }: {
         <input type="date" value={due} onChange={(e) => setDue(e.target.value)} aria-label="Due date"
           className="rounded px-1.5 outline-none" style={{ height: 34, fontSize: F.xs, width: 128, border: `1px solid ${T.hair}`, background: T.card, color: T.ink2 }} />
         <button type="submit" disabled={busy || !draft.trim()} className="rounded px-3"
-          style={{ height: 34, background: T.ink, color: "#fff", fontFamily: disp, fontSize: F.sm, textTransform: "uppercase",
+          style={{ height: 34, background: T.ink, color: T.card, fontFamily: disp, fontSize: F.sm, textTransform: "uppercase",
                    opacity: busy || !draft.trim() ? 0.5 : 1, cursor: "pointer", border: "none" }}>Add</button>
       </form>
       {done.length > 0 && (
@@ -371,7 +385,7 @@ function Activity({ messages, notes, phone, contactId, name, onMerge, onNoteSave
           const count = k === "all" ? messages.length + notes.length : k === "notes" ? notes.length : n(k);
           return (
             <button key={k} onClick={() => setChan(k)} disabled={!count} className="rounded px-2"
-              style={{ height: 28, whiteSpace: "nowrap", flexShrink: 0, background: on ? T.ink : T.card, color: on ? "#fff" : count ? T.ink2 : T.ink3,
+              style={{ height: 28, whiteSpace: "nowrap", flexShrink: 0, background: on ? T.ink : T.card, color: on ? T.card : count ? T.ink2 : T.ink3,
                        border: `1px solid ${on ? T.ink : T.hair}`, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase",
                        opacity: count ? 1 : 0.45, cursor: "pointer" }}>
               {l}{k !== "all" && count ? ` · ${count}` : ""}

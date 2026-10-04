@@ -1,0 +1,364 @@
+/**
+ * Dusty's budget plans (Coy, 2026-10-02: "chat with Dusty to analyze the list of
+ * items in my cost book and apply the items that I might need or create new
+ * items or modify cost items and organize by groups").
+ *
+ * Dusty still changes nothing himself (§6). When asked to build or fix a budget
+ * he may end his answer with one fenced block:
+ *
+ *   ```scopecrete-plan
+ *   [{"do":"add","item":"3f2a91c0","area":"bc237d33"}, …]
+ *   ```
+ *
+ * The panel shows it as a list of plain steps with Apply; Coy's tap runs them
+ * through the ordinary APIs (src/lib/dusty/apply-plan.ts), under his session.
+ * Items and areas are named by the first 8 characters of their id, exactly as
+ * the CONTEXT lists them. Pure — tests/dusty-plan.test.mjs runs it.
+ */
+
+export type PlanAction =
+  | { do: "add"; item: string; area: string | null; qty: number | null; takeoff?: string }
+  | { do: "new_area"; key: string; name: string; work_type: string; sqft: number | null; lf: number | null; count: number | null; unit: string | null; depth_in: number | null }
+  | { do: "add_group"; group: string; area: string | null }
+  | { do: "new_item"; name: string; unit: string; cost_type: string; unit_cost: number | null; qty_rule: string; group: string | null; area: string | null; add: boolean; qty: number | null; key?: string }
+  | { do: "update_item"; item: string; unit_cost?: number | null; unit?: string; name?: string; group?: string }
+  | { do: "new_group"; name: string; cost_type: string }
+  // The Price book and assemblies (Coy, 2026-10-03: "dusty could edit my cost book (add, remove, edit cost
+  // items/groups and build out cost assemblies … pull in an Assembly for a driveway breakout and pourback and
+  // build an assembly if there isn't one").
+  | { do: "retire_item"; item: string }
+  | { do: "rename_group"; group: string; name: string }
+  | { do: "remove_group"; group: string }
+  | { do: "new_assembly"; key: string; name: string; job_type: string | null; work_type: string | null; auto: boolean; items: Array<{ item: string; qty: number | null }> }
+  | { do: "add_to_assembly"; assembly: string; item: string; qty: number | null }
+  | { do: "remove_from_assembly"; assembly: string; item: string }
+  | { do: "load_assembly"; assembly: string; area: string }
+  // A parish's sales tax rate (Coy, 2026-10-03: "Dusty needs to be able to update the sales tax for the parish
+  // the address found") — saved to Price book → Defaults on Coy's tap; for_job also sets the open job's parish.
+  | { do: "set_tax"; parish: string; rate_pct: number; for_job: boolean; source: string | null }
+  // Archive / delete / restore (migration 066) — threads, customers, vendors, jobs by their full ids.
+  | { do: "archive"; kind: "contact" | "customer" | "job"; ids: string[]; delete: boolean; label: string | null; reason: string | null }
+  | { do: "restore"; kind: "contact" | "customer" | "job"; ids: string[]; label: string | null }
+  // An address on a customer, a person or a job (Coy, 2026-10-03: "I want dusty to be able to update an
+  // address record") — checked against Mapbox on Coy's Apply; its spelling wins when it matches for sure.
+  | { do: "set_address"; kind: "contact" | "customer" | "job"; id: string; line1: string; city: string | null; state: string | null; zip: string | null; source: string | null }
+  // A job for a person (Coy, 2026-10-04: "I'll create it manually. Or I can ask dusty to create it; he
+  // should have that ability") — made through the New job form's own call on Coy's Apply, counted like his.
+  // contact: a full contact id, or the key of a customer this plan makes (cust1); key: job1, for a later "file".
+  | { do: "new_job"; key: string | null; contact: string; title: string; job_type: "residential" | "commercial" | "public" | null; address: string | null; description: string | null }
+  // A customer (Coy, 2026-10-04: "ask dusty to attach to a new customer or job") — through + New customer's own call.
+  | { do: "new_customer"; key: string | null; name: string; customer_type: "residential" | "commercial" | "public" | null; person: string | null;
+      phone: string | null; email: string | null; address: string | null; city: string | null; state: string | null; zip: string | null }
+  // Files (photos attached in the chat, or any in the CONTEXT) put on a customer, a person or a job — a move.
+  | { do: "file"; files: string[]; kind: "contact" | "customer" | "job"; id: string };
+
+/** Steps that change records rather than a budget — they need no job open. */
+export const RECORD_STEPS = new Set(["archive", "restore", "set_address", "new_job", "new_customer", "file"]);
+/** A customer (cust1) or job (job1) made earlier in the same plan. */
+export const CUST_KEY = /^cust\d{1,2}$/i;
+export const JOB_KEY = /^job\d{1,2}$/i;
+/** Steps that touch a job's budget — they need the job open. Everything else is the Price book. */
+export const needsJob = (a: PlanAction) =>
+  a.do === "add" || a.do === "add_group" || a.do === "new_area" || a.do === "load_assembly" || (a.do === "new_item" && a.add);
+const FULL_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const RECORD_KINDS = ["contact", "customer", "job"] as const;
+
+const FENCE = /```scopecrete-plan\s*\n([\s\S]*?)```/;
+const REF = /^[0-9a-f]{8}$/i;
+/** An area made by this same plan (new_area), named by its key: new1, new2 … */
+const NEW_KEY = /^new\d{1,2}$/i;
+/** An item (item1 …) or an assembly (asm1 …) made by this same plan. */
+const ITEM_KEY = /^item\d{1,2}$/i;
+const ASM_KEY = /^asm\d{1,2}$/i;
+const JOB_TYPES = ["residential", "commercial", "public"];
+export const WORK_TYPES = ["slab", "driveway", "patio", "sidewalk", "footing", "curb", "demo", "prep", "other"];
+const COST_TYPES = ["material", "labor", "equipment", "subcontract", "other"];
+const RULES = ["per_cy", "per_sqft", "per_lf_perimeter", "per_sheet", "per_stick", "per_day", "per_job", "manual"];
+const MAX_ACTIONS = 60;
+
+const str = (v: unknown, max: number) => (typeof v === "string" && v.trim() ? v.replace(/\s+/g, " ").trim().slice(0, max) : null);
+const numOr = (v: unknown): number | null | undefined =>
+  v === null ? null : typeof v === "number" && Number.isFinite(v) && v >= 0 && v < 1e7 ? v : undefined;
+const ref = (v: unknown) => (typeof v === "string" && REF.test(v.trim()) ? v.trim().toLowerCase() : null);
+const newKey = (v: unknown) => (typeof v === "string" && NEW_KEY.test(v.trim()) ? v.trim().toLowerCase() : null);
+const area = (v: unknown) => (v === "job" || v === null || v === undefined ? null : ref(v) ?? newKey(v));
+const areaOk = (v: unknown) => v === undefined || v === null || v === "job" || !!ref(v) || !!newKey(v);
+const itemRef = (v: unknown) => ref(v) ?? (typeof v === "string" && ITEM_KEY.test(v.trim()) ? v.trim().toLowerCase() : null);
+const asmRef = (v: unknown) => ref(v) ?? (typeof v === "string" && ASM_KEY.test(v.trim()) ? v.trim().toLowerCase() : null);
+const pos = (v: unknown) => (typeof v === "number" && Number.isFinite(v) && v > 0 && v < 1e6 ? v : null);
+
+/** One action from the model, checked; null when it doesn't make sense (it is then listed as dropped). */
+export function cleanAction(raw: unknown): PlanAction | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  switch (r.do) {
+    case "add": {
+      const item = ref(r.item);
+      if (!item || !areaOk(r.area)) return null;
+      const qty = numOr(r.qty);
+      // Counted from a Plan Room takeoff group (the aerial, a plan sheet): the line moves when it is re-measured.
+      if (r.takeoff !== undefined && r.takeoff !== null) {
+        const t = ref(r.takeoff);
+        if (!t) return null;
+        return { do: "add", item, area: null, qty: null, takeoff: t };
+      }
+      return { do: "add", item, area: area(r.area), qty: qty === undefined ? null : qty };
+    }
+    case "new_area": {
+      const key = newKey(r.key), name = str(r.name, 80);
+      const wt = String(r.work_type ?? "other");
+      if (!key || !name || !WORK_TYPES.includes(wt)) return null;
+      const sqft = pos(r.sqft), lf = pos(r.lf), count = pos(r.count);
+      if ([sqft, lf, count].filter((x) => x !== null).length > 1) return null;
+      const depth = pos(r.depth_in);
+      return { do: "new_area", key, name, work_type: wt, sqft, lf, count, unit: count !== null ? (str(r.unit, 12) ?? "EA").toUpperCase() : null,
+        depth_in: depth !== null && depth <= 120 ? depth : null };
+    }
+    case "add_group": {
+      const group = str(r.group, 80);
+      return group && areaOk(r.area) ? { do: "add_group", group, area: area(r.area) } : null;
+    }
+    case "new_item": {
+      const name = str(r.name, 120), unit = str(r.unit, 20);
+      const t = String(r.cost_type ?? "");
+      const rule = String(r.qty_rule ?? "manual");
+      if (!name || !unit || !COST_TYPES.includes(t) || !RULES.includes(rule) || !areaOk(r.area)) return null;
+      const cost = numOr(r.unit_cost);
+      const qty = numOr(r.qty);
+      const key = typeof r.key === "string" && ITEM_KEY.test(r.key.trim()) ? r.key.trim().toLowerCase() : undefined;
+      return { do: "new_item", name, unit, cost_type: t, unit_cost: cost === undefined ? null : cost, qty_rule: rule,
+        group: str(r.group, 80), area: area(r.area), add: r.add !== false, qty: qty === undefined ? null : qty, ...(key ? { key } : {}) };
+    }
+    case "update_item": {
+      const item = ref(r.item);
+      if (!item) return null;
+      const out: Extract<PlanAction, { do: "update_item" }> = { do: "update_item", item };
+      if ("unit_cost" in r) { const c = numOr(r.unit_cost); if (c === undefined) return null; out.unit_cost = c; }
+      const unit = str(r.unit, 20), name = str(r.name, 120), group = str(r.group, 80);
+      if (unit) out.unit = unit;
+      if (name) out.name = name;
+      if (group) out.group = group;
+      return Object.keys(out).length > 2 ? out : null;
+    }
+    case "new_group": {
+      const name = str(r.name, 80), t = String(r.cost_type ?? "other");
+      return name && COST_TYPES.includes(t) ? { do: "new_group", name, cost_type: t } : null;
+    }
+    case "retire_item": {
+      const item = ref(r.item);
+      return item ? { do: "retire_item", item } : null;
+    }
+    case "rename_group": {
+      const group = str(r.group, 80), name = str(r.name, 80);
+      return group && name ? { do: "rename_group", group, name } : null;
+    }
+    case "remove_group": {
+      const group = str(r.group, 80);
+      return group ? { do: "remove_group", group } : null;
+    }
+    case "new_assembly": {
+      const key = typeof r.key === "string" && ASM_KEY.test(r.key.trim()) ? r.key.trim().toLowerCase() : null;
+      const name = str(r.name, 80);
+      const jt = r.job_type === undefined || r.job_type === null || r.job_type === "any" ? null : String(r.job_type);
+      const wt = r.work_type === undefined || r.work_type === null ? null : String(r.work_type);
+      if (!key || !name || (jt !== null && !JOB_TYPES.includes(jt)) || (wt !== null && !WORK_TYPES.includes(wt))) return null;
+      const raw = Array.isArray(r.items) ? r.items.slice(0, 40) : [];
+      const items: Array<{ item: string; qty: number | null }> = [];
+      for (const x of raw) {
+        const o = (typeof x === "string" ? { item: x } : x) as Record<string, unknown> | null;
+        const it = o ? itemRef(o.item) : null;
+        if (!it) return null;
+        const q = o ? pos(o.qty) : null;
+        items.push({ item: it, qty: q });
+      }
+      // Filling new areas on its own needs a kind of area; without one it is loaded by hand.
+      return { do: "new_assembly", key, name, job_type: jt, work_type: wt, auto: r.auto === true && wt !== null, items };
+    }
+    case "add_to_assembly":
+    case "remove_from_assembly": {
+      const assembly = asmRef(r.assembly), item = itemRef(r.item);
+      if (!assembly || !item) return null;
+      return r.do === "add_to_assembly" ? { do: "add_to_assembly", assembly, item, qty: pos(r.qty) } : { do: "remove_from_assembly", assembly, item };
+    }
+    case "load_assembly": {
+      const assembly = asmRef(r.assembly), a = area(r.area);
+      return assembly && a ? { do: "load_assembly", assembly, area: a } : null;
+    }
+    case "set_tax": {
+      const parish = str(r.parish, 60)?.replace(/\s+parish$/i, "") ?? null;
+      const rate = typeof r.rate_pct === "number" && Number.isFinite(r.rate_pct) && r.rate_pct >= 0 && r.rate_pct < 30 ? Math.round(r.rate_pct * 10000) / 10000 : null;
+      return parish && rate !== null ? { do: "set_tax", parish, rate_pct: rate, for_job: r.for_job !== false, source: str(r.source, 160) } : null;
+    }
+    case "archive":
+    case "restore": {
+      const kind = RECORD_KINDS.find((k) => k === r.kind);
+      const list = Array.isArray(r.ids) ? r.ids : typeof r.id === "string" ? [r.id] : [];
+      if (!kind || !list.length || list.length > 500 || !list.every((x) => typeof x === "string" && FULL_ID.test(x))) return null;
+      const ids = [...new Set((list as string[]).map((x) => x.toLowerCase()))];
+      return r.do === "archive"
+        ? { do: "archive", kind, ids, delete: r.delete === true, label: str(r.label, 120), reason: str(r.reason, 300) }
+        : { do: "restore", kind, ids, label: str(r.label, 120) };
+    }
+    case "set_address": {
+      const kind = RECORD_KINDS.find((k) => k === r.kind);
+      const id = typeof r.id === "string" && FULL_ID.test(r.id) ? r.id.toLowerCase() : null;
+      const line1 = str(r.line1, 160);
+      // A street address starts with its house number; a city or a "near the school" is not one.
+      if (!kind || !id || !line1 || !/^\d{1,6}[A-Za-z]?\s+\S/.test(line1)) return null;
+      const zip = str(r.zip, 10);
+      return { do: "set_address", kind, id, line1, city: str(r.city, 80), state: str(r.state, 30),
+        zip: zip && /^\d{5}(-\d{4})?$/.test(zip) ? zip : null, source: str(r.source, 160) };
+    }
+    case "new_job": {
+      const contact = typeof r.contact === "string" && (FULL_ID.test(r.contact) || CUST_KEY.test(r.contact.trim())) ? r.contact.trim().toLowerCase() : null;
+      const title = str(r.title, 80);
+      if (!contact || !title) return null;
+      const jt = ["residential", "commercial", "public"].find((t) => t === r.job_type) as "residential" | "commercial" | "public" | undefined;
+      const key = typeof r.key === "string" && JOB_KEY.test(r.key.trim()) ? r.key.trim().toLowerCase() : null;
+      return { do: "new_job", key, contact, title, job_type: jt ?? null, address: str(r.address, 160), description: str(r.description, 500) };
+    }
+    case "new_customer": {
+      const name = str(r.name, 120);
+      if (!name || /^[\d\s()+.-]+$/.test(name)) return null; // a phone number is no name
+      const ct = ["residential", "commercial", "public"].find((t) => t === r.customer_type) as "residential" | "commercial" | "public" | undefined;
+      const key = typeof r.key === "string" && CUST_KEY.test(r.key.trim()) ? r.key.trim().toLowerCase() : null;
+      const zip = str(r.zip, 10);
+      return { do: "new_customer", key, name, customer_type: ct ?? null, person: str(r.person, 120), phone: str(r.phone, 30), email: str(r.email, 160),
+        address: str(r.address, 160), city: str(r.city, 80), state: str(r.state, 30), zip: zip && /^\d{5}(-\d{4})?$/.test(zip) ? zip : null };
+    }
+    case "file": {
+      const kind = RECORD_KINDS.find((k) => k === r.kind);
+      const list = Array.isArray(r.files) ? r.files : typeof r.file === "string" ? [r.file] : [];
+      if (!kind || !list.length || list.length > 50 || !list.every((x) => typeof x === "string" && FULL_ID.test(x))) return null;
+      const id = typeof r.id === "string" ? r.id.trim().toLowerCase() : "";
+      const ok = FULL_ID.test(id) || (kind === "customer" && CUST_KEY.test(id)) || (kind === "job" && JOB_KEY.test(id));
+      return ok ? { do: "file", files: [...new Set((list as string[]).map((x) => x.toLowerCase()))], kind, id } : null;
+    }
+    default: return null;
+  }
+}
+
+/** Split an answer into what is shown and the plan it carries. */
+export function parsePlan(text: string): { shown: string; actions: PlanAction[]; dropped: number } {
+  const m = FENCE.exec(text);
+  if (!m) return { shown: text, actions: [], dropped: 0 };
+  const shown = (text.slice(0, m.index) + text.slice(m.index + m[0].length)).trim();
+  let raw: unknown;
+  try { raw = JSON.parse(m[1]); } catch { return { shown, actions: [], dropped: 1 }; }
+  const list = Array.isArray(raw) ? raw : raw && typeof raw === "object" && Array.isArray((raw as { actions?: unknown }).actions) ? (raw as { actions: unknown[] }).actions : [];
+  const actions: PlanAction[] = [];
+  let dropped = 0;
+  for (const a of list.slice(0, MAX_ACTIONS)) { const c = cleanAction(a); if (c) actions.push(c); else dropped++; }
+  dropped += Math.max(0, list.length - MAX_ACTIONS);
+  return { shown, actions, dropped };
+}
+
+/** A step said the way Coy reads it, with the names the caller knows. */
+export function describe(a: PlanAction, names: { item: (r: string) => string | null; area: (r: string | null) => string; takeoff?: (r: string) => string | null; assembly?: (r: string) => string | null }): string {
+  const asm = (r: string) => names.assembly?.(r) ?? `assembly ${r} (not found)`;
+  const itm = (r: string) => names.item(r) ?? `item ${r} (not found)`;
+  const money = (n: number | null | undefined) => (n === null || n === undefined ? "no cost yet" : `$${n.toLocaleString("en-US", { maximumFractionDigits: 2 })}`);
+  switch (a.do) {
+    case "add": return a.takeoff
+      ? `Add ${names.item(a.item) ?? `item ${a.item} (not found)`}, counted from the measured “${names.takeoff?.(a.takeoff) ?? a.takeoff}”`
+      : `Add ${names.item(a.item) ?? `item ${a.item} (not found)`} to ${names.area(a.area)}${a.qty !== null ? ` — qty ${a.qty}` : ""}`;
+    case "new_area": {
+      const size = a.sqft !== null ? `${a.sqft.toLocaleString("en-US")} sf` : a.lf !== null ? `${a.lf} LF` : a.count !== null ? `${a.count} ${a.unit}` : "size not set";
+      return `New area “${a.name}” (${a.work_type}, ${size}${a.depth_in !== null ? `, ${a.depth_in}"` : ""})`;
+    }
+    case "add_group": return `Add every item in ${a.group} to ${names.area(a.area)}`;
+    case "new_item": return `New Price book item “${a.name}” — ${a.unit}, ${a.cost_type}, ${money(a.unit_cost)}${a.group ? `, in ${a.group}` : ""}${a.add ? ` → on ${names.area(a.area)}${a.qty !== null ? `, qty ${a.qty}` : ""}` : ""}`;
+    case "update_item": {
+      const what = [a.name ? `rename to “${a.name}”` : null, a.unit ? `unit ${a.unit}` : null, "unit_cost" in a ? `unit cost ${money(a.unit_cost)}` : null, a.group ? `move to ${a.group}` : null].filter(Boolean).join(", ");
+      return `Change ${names.item(a.item) ?? `item ${a.item} (not found)`}: ${what}`;
+    }
+    case "new_group": return `New group “${a.name}” (${a.cost_type})`;
+    case "retire_item": return `Remove ${itm(a.item)} from the Price book (retired — budgets that used it keep their lines)`;
+    case "rename_group": return `Rename group “${a.group}” to “${a.name}”`;
+    case "remove_group": return `Remove the group “${a.group}” (only if nothing is in it)`;
+    case "new_assembly": {
+      const applies = a.work_type ? `${a.job_type ?? "any job"} · ${a.work_type}` : "loaded by hand";
+      const list = a.items.map((x) => `${itm(x.item)}${x.qty !== null ? ` ×${x.qty}` : ""}`).join(", ");
+      return `New assembly “${a.name}” (${applies}${a.auto ? ", fills new areas on its own" : ""})${list ? `: ${list}` : " — no items yet"}`;
+    }
+    case "add_to_assembly": return `Add ${itm(a.item)} to ${asm(a.assembly)}${a.qty !== null ? ` ×${a.qty}` : ""}`;
+    case "remove_from_assembly": return `Take ${itm(a.item)} out of ${asm(a.assembly)}`;
+    case "load_assembly": return `Load ${asm(a.assembly)} onto ${names.area(a.area)}`;
+    case "set_tax": return `Sales tax for ${a.parish} Parish: ${a.rate_pct}%${a.for_job ? " — and use it on this job" : ""}${a.source ? ` (from ${a.source})` : ""}. Check the rate before you apply.`;
+    case "set_address": {
+      const whose = a.kind === "job" ? "the job's site" : a.kind === "customer" ? "the customer's address" : "their address";
+      const full = [a.line1, a.city, [a.state, a.zip].filter(Boolean).join(" ")].filter(Boolean).join(", ");
+      return `Set ${whose} to ${full}${a.source ? ` (from ${a.source})` : ""} — checked against the map when you apply`;
+    }
+    case "new_job": return `New job “${a.title}”${a.job_type ? ` (${a.job_type === "public" ? "government" : a.job_type})` : ""}${a.address ? ` at ${a.address}` : ""} — in New lead, counted`;
+    case "new_customer": return `New customer “${a.name}”${a.customer_type ? ` (${a.customer_type === "public" ? "government" : a.customer_type})` : ""}${a.person && a.person !== a.name ? ` — ${a.person}` : ""}${[a.phone, a.email].filter(Boolean).length ? `, ${[a.phone, a.email].filter(Boolean).join(", ")}` : ""}${a.address ? `, ${[a.address, a.city].filter(Boolean).join(", ")}` : ""}`;
+    case "file": {
+      const n = a.files.length;
+      const where = a.kind === "job" ? "the job" : a.kind === "customer" ? "the customer" : "the person";
+      return `File ${n} ${n === 1 ? "file" : "files"} on ${/^(cust|job)\d/.test(a.id) ? `the new ${a.kind === "job" ? "job" : "customer"} above` : where} (moved there from where they are now)`;
+    }
+    case "archive":
+    case "restore": {
+      const n = a.ids.length;
+      const noun = a.kind === "job" ? (n === 1 ? "job" : "jobs") : a.kind === "customer" ? (n === 1 ? "customer" : "customers") : (n === 1 ? "thread" : "threads");
+      const verb = a.do === "restore" ? "Restore" : a.delete ? "Delete" : "Archive";
+      return `${verb} ${n} ${noun}${a.label ? ` — ${a.label}` : ""}${a.do === "archive" && a.reason ? `. Why (saved as an internal note): ${a.reason}` : ""}`;
+    }
+  }
+}
+
+/**
+ * Archiving and deleting (Coy, 2026-10-03: "Dusty needs the ability to do all of
+ * it for me if I ask") — given in every context, since Coy may ask from anywhere.
+ */
+export const RECORD_RULES = `Archiving and deleting. When Coy asks you to archive threads (a thread is a person's calls and texts) or to delete a customer, vendor or job — or to bring one back — answer in words, then end with ONE fenced block:
+\`\`\`scopecrete-plan
+[{"do":"archive","kind":"contact","ids":["<full contact id>", …],"label":"18 calls where nothing was said","reason":"only calls, nothing said"},
+ {"do":"archive","kind":"contact","ids":["<full contact id>"],"delete":true,"label":"Angelle Materials (vendor)"},
+ {"do":"archive","kind":"customer","ids":["<full customer id>"],"delete":true,"label":"…"},
+ {"do":"archive","kind":"job","ids":["<full job id>"],"delete":true,"label":"…"},
+ {"do":"restore","kind":"contact|customer|job","ids":["<full id>"],"label":"…"}]
+\`\`\`
+Give every archive or delete a "reason": why, in Coy's words when he said why ("reason":"wrong number — wanted a landscaper"); if he didn't, the plain fact from the CONTEXT ("only calls, nothing said"; "went with another contractor, said in their text of Sep 30"), never a guess. It is saved as an internal note on each person and shown when they get in touch again. "This thread", "this one", "them" on a person's page means the contact under "This thread: contact …" in the Ids block. Use ONLY the full ids written in the CONTEXT (lines like "contact 1b2c…", "job …", "customer …") — never make one up, and never guess which one Coy means: if two could match, ask. Archive is for threads ("archive", not "delete"); a vendor is deleted as a contact with "delete":true; a customer's delete takes its people and open jobs with it. Coy sees each step with the names it touches and taps Apply; everything can be undone and restored, and nothing is erased — calls, texts and files stay on record. An archived thread comes back on its own if that number calls or texts again. "Nothing said" threads are marked NOTHING SAID in the context. Never archive or delete what Coy didn't ask for.
+Addresses. When Coy asks you to put an address on a customer, a person or a job — or one was texted or said in the CONTEXT and he asks you to record it — propose:
+\`\`\`scopecrete-plan
+[{"do":"set_address","kind":"customer|contact|job","id":"<full id from the CONTEXT>","line1":"1234 Example St","city":"Baton Rouge","state":"LA","zip":"70800","source":"their text of Oct 2"}]
+\`\`\`
+Use the address exactly as it was written or said — never invent a house number, street, city or zip; leave out what wasn't given. Say in "source" where it came from. A customer's address is where they are; a job's is the site. On Apply the app checks it against the map (Mapbox) and uses the map's spelling when the house number and street match for sure — say so if the address came from a call transcript, where streets are often misheard.
+New jobs. The app does not make jobs on its own — Coy makes them, or asks you to. When he asks you to start a job for someone, propose:
+\`\`\`scopecrete-plan
+[{"do":"new_job","contact":"<full contact id from the CONTEXT>","title":"Driveway Replacement","job_type":"residential|commercial|public","address":"<the site, only as written or said>","description":"<one line on the work, from what they said>"}]
+\`\`\`
+A title is 1–4 words of the work (the customer's name is put in front by the app). Leave out job_type, address or description when you don't know them. Coy sees it and taps Apply; it lands in New lead and counts.
+New customers and filing files. Photos and files Coy attaches in this chat are saved in Files; each is listed in the CONTEXT as "(file <full id>)". When he asks you to put them on a customer, a person or a job — including one this same plan makes — propose:
+\`\`\`scopecrete-plan
+[{"do":"new_customer","key":"cust1","name":"Wilson","customer_type":"residential|commercial|public","person":"Johnette Wilson","phone":"…","email":"…","address":"1234 Example St","city":"…","state":"LA","zip":"…"},
+ {"do":"new_job","key":"job1","contact":"cust1","title":"Driveway Replacement","job_type":"residential"},
+ {"do":"file","files":["<full file id>", …],"kind":"job","id":"job1"},
+ {"do":"file","files":["<full file id>"],"kind":"customer|contact|job","id":"<full id from the CONTEXT>"}]
+\`\`\`
+Make a new customer only when Coy asks for one, and never for someone already in the CONTEXT (use their id). Its name is the person's or company's name as Coy said it or as written; phone, email and address only as said or written — leave out what you don't have. "contact":"cust1" starts the job for the person of the customer this plan makes. "file" moves the files: they leave the job or person they were on. Use only file ids written in the CONTEXT.`;
+
+/** The instructions Dusty is given about plans — appended to his system prompt. */
+export const PLAN_RULES = `Budget plans. When Coy asks you to build, fill or fix a job's budget, or to add, change, remove or organise items, groups or assemblies in his Price book, answer in words first, then end with ONE fenced block in this exact form, which the app shows to Coy as steps with an Apply button (you change nothing yourself — Coy's tap does):
+\`\`\`scopecrete-plan
+[{"do":"add","item":"<8-char item ref>","area":"<8-char area ref, new-area key, or job>","qty":<number or omit>},
+ {"do":"add","item":"<8-char item ref>","takeoff":"<8-char takeoff group ref>"},
+ {"do":"add_group","group":"<group name>","area":"<area ref or job>"},
+ {"do":"new_item","key":"item1","name":"…","unit":"SY","cost_type":"material|labor|equipment|subcontract|other","unit_cost":<number or null>,"qty_rule":"per_sqft|per_cy|per_lf_perimeter|per_day|per_job|manual","group":"<group name or omit>","area":"<area ref or job>","add":true,"qty":<number or omit>},
+ {"do":"update_item","item":"<ref>","unit_cost":<number>,"unit":"…","name":"…","group":"<group name>"},
+ {"do":"new_group","name":"…","cost_type":"…"},
+ {"do":"rename_group","group":"<group name>","name":"<new name>"},
+ {"do":"remove_group","group":"<group name>"},
+ {"do":"retire_item","item":"<ref>"},
+ {"do":"new_assembly","key":"asm1","name":"Driveway breakout & pourback","job_type":"residential|commercial|public|any","work_type":"driveway|slab|patio|sidewalk|footing|curb|demo|prep|other or omit","auto":false,"items":[{"item":"<ref or item1>","qty":<number, only for items counted by hand>}]},
+ {"do":"add_to_assembly","assembly":"<8-char assembly ref or asm1>","item":"<ref or item1>","qty":<number or omit>},
+ {"do":"remove_from_assembly","assembly":"<assembly ref>","item":"<ref>"},
+ {"do":"load_assembly","assembly":"<assembly ref or asm1>","area":"<area ref or new-area key>"},
+ {"do":"set_tax","parish":"East Baton Rouge","rate_pct":<number>,"for_job":true,"source":"<where the rate comes from>"},
+ {"do":"new_area","key":"new1","name":"Driveway","work_type":"slab|driveway|patio|sidewalk|footing|curb|demo|prep|other","sqft":<number or omit>,"lf":<number or omit>,"count":<number or omit>,"unit":"EA","depth_in":<number or omit>}]
+\`\`\`
+To put items on an area this plan makes, use its key ("new1") as the area. To count an item from a Plan Room takeoff group (the aerial or a plan sheet), add it with "takeoff":"<8-char takeoff group ref>" instead of an area — the line then moves when Coy re-measures.
+Price book and assemblies: a new item that a later step uses (an assembly, an add) takes a key ("item1") and "add":false unless it also goes on the budget; a new assembly takes a key ("asm1") so a later step can load it. "Remove" an item means retire_item (it leaves the Price book; budgets that used it keep their lines). An assembly is Coy's default set of items for a kind of area; when he asks for one, first look for an existing assembly in the CONTEXT that fits and load it; build one only if none fits, from his existing items where they fit. "auto":true (fill new areas of that kind on its own) only when Coy asks for it. Steps that touch a budget (add, add_group, new_area, load_assembly, a new_item with "add":true) need a job open — on the Price book, leave them out.
+Sales tax: when Coy asks to add or change a parish's rate, or the job's tax says "no rate for <parish>" or "parish unknown", propose set_tax with the parish (from the job's address, or as Coy named it) and the combined rate (state + parish + local) as one %. If Coy gave the rate, use it and say so in "source"; if you are giving it from what you know, say that in "source" ("Dusty's figure — check the parish's published rate") and tell Coy in words to check it. "for_job": true also sets this job's parish. Never set a rate Coy didn't ask about.
+Rules for plans: use ONLY item refs, area refs, assembly refs and takeoff group refs listed in the CONTEXT (or a key made earlier in the same plan) — never make one up. Prefer an existing item over a new one. A unit_cost is a number only if Coy said it or the CONTEXT has it; otherwise null (the budget then asks for it by name). A qty, or a new area's size or depth, only when it is written in the CONTEXT (a bid line, a section, a measured takeoff total, Coy's notes, a transcript line) or Coy said it; otherwise leave it out and let the item's rule count it from the area. Counted by the area with unit SY counts square yards. Keep a plan to what was asked.`;

@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
   }
   const { data, error } = await supabase.from("contacts")
     .select("id, name, phone, contact_subtype, classification_confirmed_at, auto_classified_at")
-    .eq("org_id", orgId).eq("contact_type", bucket).is("merged_into_contact_id", null)
+    .eq("org_id", orgId).eq("contact_type", bucket).is("merged_into_contact_id", null).is("archived_at", null)
     .or("classification_confirmed_at.not.is.null,auto_classified_at.not.is.null")
     .order("name", { ascending: true, nullsFirst: false }).limit(500);
   if (error) return applyCookies(NextResponse.json({ error: `contacts: ${error.message}` }, { status: 500 }));

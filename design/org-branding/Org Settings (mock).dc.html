@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@600;700&family=Inter:wght@300;400&family=Kalam:wght@400&family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>body{margin:0;background:#E4DED2;font-family:'IBM Plex Sans',system-ui,sans-serif;color:#2A2A2A}a{color:#1E5AA8}a:hover{color:#163C78}img.px{image-rendering:pixelated}</style>
+</helmet>
+<section data-screen-label="Org settings" style="padding:48px;display:flex;flex-direction:column;gap:28px">
+  <div style="display:flex;flex-direction:column;gap:8px">
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:500;font-size:13px;letter-spacing:.16em;text-transform:uppercase;color:#9A4527">Settings · Organisation</div>
+    <div style="display:flex;align-items:baseline;gap:14px"><span style="font-family:'Lexend',sans-serif;font-weight:700;font-size:40px;line-height:1">Your name, your logo</span><span style="font-family:'Inter',sans-serif;font-weight:300;font-size:40px;line-height:1;color:#B85A3C">powered by scopecrete</span></div>
+    <div style="font-size:14px;color:#5E5A52;max-width:900px;text-wrap:pretty">Rename the organisation or swap its logo in Settings; the header on <a href="#1a">1a</a> updates as soon as you save. Each theme uses the matching logo: the dark-lettering one on light themes and the light-lettering one on Night Shift. With no logo, the header falls back to the scopecrete.ai wordmark.</div>
+  </div>
+
+  <div id="1a" style="display:flex;flex-direction:column;gap:12px;width:1440px">
+    <div style="display:flex;align-items:baseline;gap:12px"><a href="#1a" style="font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:14px;letter-spacing:.1em;padding:2px 8px;background:#2A2A2A;color:#FBF6EC;text-decoration:none">1a</a><span style="font-family:'Lexend',sans-serif;font-weight:700;font-size:22px">Settings open · Site Office</span><span style="font-size:14px;color:#5E5A52">Try renaming it, or replace a logo with a file of your own.</span></div>
+    <div style="width:1440px;height:860px;display:flex;flex-direction:column;background:#FBF6EC;overflow:hidden;border-radius:6px;box-shadow:0 14px 44px rgba(42,32,20,.18);position:relative">
+      <div style="flex:none;height:54px;padding:0 16px 0 18px;display:flex;align-items:center;gap:14px;background-color:#FAF8F3;background-image:linear-gradient(rgba(89,128,166,.08) 1px,transparent 1px),linear-gradient(90deg,rgba(89,128,166,.08) 1px,transparent 1px);background-size:10px 10px;border-bottom:1px solid rgba(58,62,68,.28);box-shadow:0 3px 0 -2px rgba(58,62,68,.14);position:relative;z-index:3">
+        <sc-if value="{{ hasLight }}" hint-placeholder-val="{{ true }}">
+          <div style="display:flex;flex-direction:{{ lk.dir }};align-items:{{ lk.align }};gap:{{ lk.gap }};flex:none">
+            <img src="{{ lightSrc }}" alt="{{ savedName }}" style="height:28px;width:auto;display:block">
+            <div style="display:flex;flex-direction:{{ lk.subDir }};align-items:{{ lk.subAlign }};gap:{{ lk.subGap }};padding-left:{{ lk.subPad }};border-left:{{ lk.rule }} rgba(58,62,68,.28)">
+              <span style="font-family:'Inter',sans-serif;font-weight:300;font-size:8.5px;letter-spacing:.06em;color:#7A7367">powered by</span>
+              <span style="display:flex;align-items:baseline"><span style="font-family:'Lexend',sans-serif;font-weight:700;font-size:10.5px;line-height:1;letter-spacing:.02em;color:transparent;background-image:repeating-linear-gradient(118deg,rgba(52,56,61,.95) 0 .6px,transparent .6px 1.4px);-webkit-background-clip:text;background-clip:text;-webkit-text-stroke:.35px rgba(52,56,61,.8);padding-bottom:.28em;margin-bottom:-.28em">scope</span><span style="font-family:'Inter',sans-serif;font-weight:300;font-size:10.5px;line-height:1;color:#D9550A">crete</span><span style="font-family:'Kalam',cursive;font-size:7px;color:#5A5F66">.ai</span></span>
+            </div>
+          </div>
+        </sc-if>
+        <sc-if value="{{ noLight }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;align-items:baseline;flex:none"><span style="font-family:'Lexend',sans-serif;font-weight:700;font-size:26px;line-height:1;letter-spacing:.02em;color:transparent;background-image:repeating-linear-gradient(118deg,rgba(52,56,61,.95) 0 .9px,transparent .9px 2.1px);-webkit-background-clip:text;background-clip:text;-webkit-text-stroke:.5px rgba(52,56,61,.7);padding-bottom:.28em;margin-bottom:-.28em;margin-right:1px">scope</span><span style="font-family:'Inter',sans-serif;font-weight:300;font-size:26px;line-height:1;color:#D9550A">crete</span><span style="font-family:'Kalam',cursive;font-size:16px;color:#5A5F66">.ai</span></div>
+        </sc-if>
+        <span style="width:1px;height:22px;background:rgba(58,62,68,.28);flex:none"></span>
+        <div style="flex:1;min-width:0;max-width:720px;display:flex;align-items:center;gap:9px"><span style="width:8px;height:8px;border-radius:999px;background:#B3AA9A;flex:none"></span><span style="font-family:'Inter',sans-serif;font-weight:300;font-size:13.5px;color:#3F4348">All caught up · last read 19h ago</span></div>
+        <span style="flex:1"></span>
+        <div style="display:flex;gap:6px">
+          <span style="width:32px;height:32px;border:1px solid rgba(58,62,68,.3);border-radius:3px;background:rgba(255,255,255,.55);display:flex;align-items:center;justify-content:center"><svg width="15" height="15" viewBox="0 0 15 15"><circle cx="6.4" cy="6.4" r="4.5" fill="none" stroke="#3A3E43" stroke-width="1.5"></circle><path d="M9.8 9.8 L13.4 13.4" stroke="#3A3E43" stroke-width="1.5" stroke-linecap="round"></path></svg></span>
+          <span style="width:32px;height:32px;border:1px solid rgba(58,62,68,.3);border-radius:3px;background:rgba(255,255,255,.55);display:flex;align-items:flex-end;justify-content:center;gap:2.5px;padding-bottom:9px;box-sizing:border-box"><span style="width:3px;height:5px;background:#5A5F66"></span><span style="width:3px;height:8px;background:#5A5F66"></span><span style="width:3px;height:11px;background:#5A5F66"></span><span style="width:3px;height:14px;background:#D9550A"></span></span>
+          <span style="width:32px;height:32px;border:1px solid rgba(58,62,68,.3);border-radius:3px;background:rgba(255,255,255,.55);display:flex;align-items:center;justify-content:center"><svg width="17" height="17" viewBox="0 0 17 17" stroke="#3A3E43" stroke-width="1.6" stroke-linecap="round"><path d="M8.5 1.5v14M1.5 8.5h14"></path></svg></span>
+          <span style="width:32px;height:32px;border:1px solid #D97757;border-radius:3px;background:#F6E2D8;display:flex;align-items:center;justify-content:center"><svg width="14" height="14" viewBox="0 0 14 14" stroke="#2A2A2A" stroke-width="1.6" stroke-linecap="round"><path d="M1.5 1.5l11 11M12.5 1.5l-11 11"></path></svg></span>
+        </div>
+      </div>
+
+      <div style="flex:1;min-height:0;display:flex;position:relative">
+        <nav style="width:84px;flex:none;background:#F3ECDD;border-right:1px solid #E6DCC8"></nav>
+        <div style="flex:1;padding:22px 26px;display:flex;flex-direction:column;gap:6px">
+          <span style="font-family:'Lexend',sans-serif;font-weight:700;font-size:26px">Phone lines</span>
+          <span style="font-size:13px;color:#8C8578">Every number of yours, what runs it, and what a call to it means.</span>
+        </div>
+        <div style="position:absolute;inset:0;background:rgba(42,42,42,.28)"></div>
+
+        <aside style="position:absolute;top:0;right:0;bottom:0;width:440px;background:#FFFFFF;border-left:1px solid #E6DCC8;box-shadow:-12px 0 32px rgba(42,32,20,.16);display:flex;flex-direction:column;overflow-y:auto">
+          <div style="padding:16px 20px 12px;border-bottom:1px solid #E6DCC8;display:flex;align-items:flex-start;gap:10px">
+            <div style="flex:1;display:flex;flex-direction:column;gap:2px"><span style="font-family:'Lexend',sans-serif;font-weight:700;font-size:26px;line-height:1.1">Settings</span><span style="font-family:'Barlow Condensed',sans-serif;font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:#8C8578">{{ savedName }}</span></div>
+          </div>
+          <div style="padding:14px 20px;border-bottom:1px solid #F1E9DA;display:flex;flex-direction:column;gap:2px">
+            <span style="font-family:'Barlow Condensed',sans-serif;font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:#8C8578">Signed in as</span>
+            <span style="font-family:'Lexend',sans-serif;font-weight:600;font-size:17px">admin@saccobuilt.com</span>
+            <span style="font-size:12px;color:#8C8578">Owner</span>
+          </div>
+
+          <div style="padding:14px 20px 18px;border-bottom:1px solid #E6DCC8;display:flex;flex-direction:column;gap:14px;background:#FFFCF7">
+            <div style="display:flex;align-items:baseline"><span style="flex:1;font-family:'Lexend',sans-serif;font-weight:600;font-size:16px">Organisation</span><span style="font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:#8C8578">Owners only</span></div>
+
+            <div style="display:flex;flex-direction:column;gap:5px">
+              <label style="font-family:'Barlow Condensed',sans-serif;font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#5E5A52">Name</label>
+              <div style="display:flex;gap:6px">
+                <input value="{{ draft }}" onChange="{{ onName }}" style="flex:1;min-width:0;height:38px;box-sizing:border-box;padding:0 12px;border:1px solid {{ inputLine }};border-radius:4px;background:#FFFFFF;font-family:'IBM Plex Sans',sans-serif;font-size:14.5px;color:#2A2A2A;outline:none">
+                <button onClick="{{ save }}" style="height:38px;padding:0 14px;border:none;border-radius:4px;background:{{ saveBg }};color:#FFFFFF;font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;cursor:{{ saveCursor }}">{{ saveLabel }}</button>
+              </div>
+              <span style="font-size:11.5px;line-height:1.4;color:{{ helpInk }}">{{ help }}</span>
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:6px">
+              <span style="font-family:'Barlow Condensed',sans-serif;font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#5E5A52">Logo</span>
+              <sc-for list="{{ slots }}" as="sl" hint-placeholder-count="2">
+                <div style="border:1px solid #E6DCC8;border-radius:4px;overflow:hidden">
+                  <div style="height:84px;display:flex;align-items:center;justify-content:center;background:{{ sl.bg }};background-image:{{ sl.grid }};background-size:10px 10px">
+                    <sc-if value="{{ sl.has }}" hint-placeholder-val="{{ true }}"><img src="{{ sl.src }}" alt="" style="max-height:46px;max-width:78%;display:block"></sc-if>
+                    <sc-if value="{{ sl.none }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;color:{{ sl.emptyInk }}">No logo yet — the header shows scopecrete.ai</span></sc-if>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-top:1px solid #E6DCC8;background:#FFFFFF">
+                    <div style="flex:1;display:flex;flex-direction:column"><span style="font-size:12.5px;font-weight:600">{{ sl.title }}</span><span style="font-size:11px;color:#8C8578">{{ sl.use }}</span></div>
+                    <label style="height:28px;padding:0 10px;border:1px solid #D9CDB6;border-radius:3px;display:flex;align-items:center;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-size:12px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:#2A2A2A" style-hover="background:#FBF6EC">{{ sl.pickLabel }}<input type="file" accept="image/png,image/svg+xml,image/webp" onChange="{{ sl.pick }}" style="display:none"></label>
+                    <sc-if value="{{ sl.has }}" hint-placeholder-val="{{ true }}"><span onClick="{{ sl.remove }}" style="font-family:'Barlow Condensed',sans-serif;font-size:12px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:#B5412C;cursor:pointer;padding:0 4px">Remove</span></sc-if>
+                  </div>
+                </div>
+              </sc-for>
+              <span style="font-size:11.5px;line-height:1.4;color:#8C8578">Transparent PNG or SVG, at least 600px wide. It's shown 28px tall in the header, with "powered by scopecrete.ai" underneath.</span>
+            </div>
+          </div>
+
+          <sc-for list="{{ rows }}" as="r" hint-placeholder-count="4">
+            <div style="padding:13px 20px;border-bottom:1px solid #F1E9DA;display:flex;flex-direction:column;gap:2px"><span style="font-family:'Lexend',sans-serif;font-weight:600;font-size:15px">{{ r.t }}</span><span style="font-size:12px;color:#8C8578">{{ r.d }}</span></div>
+          </sc-for>
+          <div style="padding:16px 20px"><div style="height:42px;border:1px solid #E6DCC8;border-radius:4px;display:flex;align-items:center;justify-content:center;font-family:'Barlow Condensed',sans-serif;font-size:15px;letter-spacing:.12em;text-transform:uppercase">Sign out</div></div>
+        </aside>
+      </div>
+    </div>
+  </div>
+
+  <div id="1b" style="display:flex;flex-direction:column;gap:12px;width:1440px">
+    <div style="display:flex;align-items:baseline;gap:12px"><a href="#1b" style="font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:14px;letter-spacing:.1em;padding:2px 8px;background:#2A2A2A;color:#FBF6EC;text-decoration:none">1b</a><span style="font-family:'Lexend',sans-serif;font-weight:700;font-size:22px">The header lockup in each theme</span></div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <sc-for list="{{ strips }}" as="h" hint-placeholder-count="4">
+        <div style="display:flex;align-items:center;gap:16px">
+          <span style="width:110px;font-family:'Barlow Condensed',sans-serif;font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#5E5A52">{{ h.label }}</span>
+          <div style="flex:1;height:54px;padding:0 18px;display:flex;align-items:center;gap:14px;border-radius:4px;background-color:{{ h.paper }};background-image:linear-gradient({{ h.grid }} 1px,transparent 1px),linear-gradient(90deg,{{ h.grid }} 1px,transparent 1px);background-size:10px 10px;border:1px solid {{ h.line }}">
+            <div style="display:flex;flex-direction:{{ lk.dir }};align-items:{{ lk.align }};gap:{{ lk.gap }}">
+              <img src="{{ h.logo }}" alt="" style="height:28px;width:auto;display:block">
+              <div style="display:flex;flex-direction:{{ lk.subDir }};align-items:{{ lk.subAlign }};gap:{{ lk.subGap }};padding-left:{{ lk.subPad }};border-left:{{ lk.rule }} {{ h.line }}">
+                <span style="font-family:'Inter',sans-serif;font-weight:300;font-size:8.5px;letter-spacing:.06em;color:{{ h.muted }}">powered by</span>
+                <span style="display:flex;align-items:baseline"><span style="font-family:'Lexend',sans-serif;font-weight:700;font-size:10.5px;line-height:1;letter-spacing:.02em;color:transparent;background-image:repeating-linear-gradient(118deg,{{ h.hatch }} 0 .6px,transparent .6px 1.4px);-webkit-background-clip:text;background-clip:text;-webkit-text-stroke:.35px {{ h.hatch }};padding-bottom:.28em;margin-bottom:-.28em">scope</span><span style="font-family:'Inter',sans-serif;font-weight:300;font-size:10.5px;line-height:1;color:{{ h.crete }}">crete</span><span style="font-family:'Kalam',cursive;font-size:7px;color:{{ h.muted }}">.ai</span></span>
+              </div>
+            </div>
+            <span style="width:1px;height:22px;background:{{ h.line }}"></span>
+            <span style="font-family:'Inter',sans-serif;font-weight:300;font-size:13.5px;color:{{ h.ink }}">All caught up · last read 19h ago</span>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;lockup&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;right&quot;,&quot;below&quot;],&quot;default&quot;:&quot;right&quot;,&quot;tsType&quot;:&quot;'right'|'below'&quot;}}">
+class Component extends DCLogic {
+  state = { draft: 'Sacco Builders', saved: 'Sacco Builders', justSaved: false, light: 'assets/org/sacco-light.png', dark: 'assets/org/sacco-dark.png' };
+  pick = (which) => (e) => {
+    const f = e.target.files && e.target.files[0]; if (!f) return;
+    const r = new FileReader(); r.onload = () => this.setState({ [which]: r.result }); r.readAsDataURL(f);
+    e.target.value = '';
+  };
+  componentWillUnmount() { clearTimeout(this._t); }
+  renderVals() {
+    const s = this.state;
+    const trimmed = s.draft.trim(), dirty = trimmed && trimmed !== s.saved;
+    const light = s.light || '', dark = s.dark || '';
+    const slot = (k, title, use, bg, grid, emptyInk) => ({ title, use, bg, grid, emptyInk, src: s[k] || '', has: !!s[k], none: !s[k],
+      pickLabel: s[k] ? 'Replace' : 'Upload', pick: this.pick(k), remove: () => this.setState({ [k]: '' }) });
+    const strip = (label, t, logo) => ({ label, logo, ...t });
+    const lightFallback = light || dark, darkFallback = dark || light;
+    return {
+      lk: (this.props.lockup ?? 'right') === 'right'
+        ? { dir: 'row', align: 'center', gap: '10px', subDir: 'column', subAlign: 'flex-start', subGap: '1px', subPad: '10px', rule: '1px solid' }
+        : { dir: 'column', align: 'flex-start', gap: '2px', subDir: 'row', subAlign: 'baseline', subGap: '4px', subPad: '1px', rule: '0 solid' },
+      draft: s.draft, savedName: s.saved,
+      onName: (e) => this.setState({ draft: e.target.value, justSaved: false }),
+      save: () => { if (!dirty) return; this.setState({ saved: trimmed, justSaved: true }); clearTimeout(this._t); this._t = setTimeout(() => this.setState({ justSaved: false }), 2400); },
+      saveBg: dirty ? '#B85A3C' : '#D9CDB6', saveCursor: dirty ? 'pointer' : 'default', saveLabel: s.justSaved ? 'Saved ✓' : 'Save',
+      inputLine: dirty ? '#D97757' : '#D9CDB6',
+      help: s.justSaved ? 'Renamed everywhere — header, quotes, invoices, email signatures and Dusty.' : dirty ? 'Saving renames the organisation everywhere it appears.' : 'Shown on quotes, invoices, email signatures, and to your team.',
+      helpInk: s.justSaved ? '#2F8A5B' : '#8C8578',
+      hasLight: !!lightFallback, noLight: !lightFallback, lightSrc: lightFallback,
+      slots: [
+        slot('light', 'For light backgrounds', 'Dark lettering · Site Office, Blueprint, Kraft Yard', '#FAF8F3', 'linear-gradient(rgba(89,128,166,.08) 1px,transparent 1px),linear-gradient(90deg,rgba(89,128,166,.08) 1px,transparent 1px)', '#8C8578'),
+        slot('dark', 'For dark backgrounds', 'Light lettering · Night Shift', '#202326', 'linear-gradient(rgba(140,170,200,.09) 1px,transparent 1px),linear-gradient(90deg,rgba(140,170,200,.09) 1px,transparent 1px)', '#A39D93')
+      ],
+      rows: [{ t: 'Phone lines', d: 'Your numbers, their provider, and the lead source each one means' }, { t: 'Markups & overhead', d: 'Markups, tax, waste, overhead and the bid floor' }, { t: 'Appearance +', d: 'Site Office · Blueprint · Kraft Yard · Night Shift' }, { t: 'Menus +', d: 'The order of your pages, and which ones sit in the phone footer' }],
+      strips: [
+        strip('Site Office', { paper: '#FAF8F3', grid: 'rgba(89,128,166,.08)', line: 'rgba(58,62,68,.28)', ink: '#3F4348', muted: '#7A7367', hatch: 'rgba(52,56,61,.9)', crete: '#D9550A' }, lightFallback),
+        strip('Blueprint', { paper: '#F7F9F9', grid: 'rgba(89,128,166,.13)', line: 'rgba(47,59,70,.28)', ink: '#2F3B46', muted: '#5A6772', hatch: 'rgba(40,52,64,.9)', crete: '#E0590F' }, lightFallback),
+        strip('Kraft Yard', { paper: '#F4ECDC', grid: 'rgba(120,96,60,.11)', line: 'rgba(58,52,43,.3)', ink: '#3A342B', muted: '#62584A', hatch: 'rgba(40,36,30,.9)', crete: '#E0590F' }, lightFallback),
+        strip('Night Shift', { paper: '#202326', grid: 'rgba(140,170,200,.09)', line: 'rgba(221,216,206,.22)', ink: '#DDD8CE', muted: '#A39D93', hatch: 'rgba(236,231,221,.9)', crete: '#F07A3A' }, darkFallback)
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

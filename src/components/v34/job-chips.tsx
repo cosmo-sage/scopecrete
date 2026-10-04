@@ -72,15 +72,16 @@ export function JobChips({ job, onSet }: {
   const type = job.job_type ? JOB_TYPE_LABEL[job.job_type] ?? job.job_type : null;
 
   const chip = (set: boolean, colour: string = T.ink): React.CSSProperties => ({
-    height: 28, padding: "0 9px", borderRadius: 3, cursor: "pointer", whiteSpace: "nowrap",
-    display: "inline-flex", alignItems: "center", gap: 5,
-    fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", letterSpacing: ".04em",
+    // Small, one row (Coy, 2026-10-02: "much smaller so they can fit on one row").
+    height: 22, padding: "0 6px", borderRadius: 3, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0,
+    display: "inline-flex", alignItems: "center", gap: 3,
+    fontFamily: disp, fontSize: 10.5, textTransform: "uppercase", letterSpacing: ".02em",
     border: `1px ${set ? "solid" : "dashed"} ${set ? colour : T.ink3}`, background: T.card, color: set ? colour : T.ink3,
   });
   const caret = <span aria-hidden="true" style={{ fontSize: 9, opacity: 0.7 }}>▾</span>;
   const row = (on: boolean): React.CSSProperties => ({
     width: "100%", textAlign: "left", padding: "10px 12px", borderRadius: 4, cursor: busy ? "default" : "pointer",
-    border: `1px solid ${on ? T.ink : T.hair}`, background: on ? T.ink : T.card, color: on ? "#fff" : T.ink,
+    border: `1px solid ${on ? T.ink : T.hair}`, background: on ? T.ink : T.card, color: on ? T.card : T.ink,
     fontSize: F.sm, opacity: busy ? 0.6 : 1,
   });
   const free = vendors.filter((v) => !(crew ?? []).some((c) => c.contact_id === v.id));
@@ -92,9 +93,9 @@ export function JobChips({ job, onSet }: {
 
   return (
     <>
-      <div className="flex flex-wrap items-center gap-1.5" style={{ marginTop: 8 }}>
+      <div className="flex items-center gap-1 overflow-x-auto" style={{ marginTop: 4, scrollbarWidth: "none" }}>
         <button style={chip(true, T.hiviz)} onClick={() => setOpen("status")} aria-label="Job status">
-          <span style={{ color: T.ink3 }}>Status</span> {stage.label}
+          {stage.label}
           {stage.statuses.length > 1 && job.status && STATUS_NAME[job.status] !== stage.label ? ` · ${STATUS_NAME[job.status]}` : ""} {caret}
         </button>
         <button style={chip(!!type)} onClick={() => setOpen("type")} aria-label="Job type">
@@ -122,7 +123,7 @@ export function JobChips({ job, onSet }: {
                   {s.statuses.map((st) => (
                     <button key={st} disabled={busy} onClick={() => void pick("status", st)} className="rounded-full px-2.5"
                       style={{ height: 26, fontSize: F.xs, cursor: "pointer", border: `1px solid ${job.status === st ? T.ink : T.hair}`,
-                               background: job.status === st ? T.ink : T.card, color: job.status === st ? "#fff" : T.ink2 }}>
+                               background: job.status === st ? T.ink : T.card, color: job.status === st ? T.card : T.ink2 }}>
                       {STATUS_NAME[st] ?? st}
                     </button>
                   ))}

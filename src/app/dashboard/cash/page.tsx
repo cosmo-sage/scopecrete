@@ -8,8 +8,8 @@
  * and it renders as one.
  *
  * Three figures here failed that test and were reported as LIVE:
- *  - off the top printed 11% from a `: 11` fallback with no org_cost_settings
- *    row. It is the number the bid floor divides by.
+ *  - off the top printed 11% from a `: 11` fallback with no settings row.
+ *    (Off the top is gone since migration 057.)
  *  - cash position printed "$0" from an anchor default, asserting an empty
  *    account when nobody had recorded a balance.
  *  - pay yourself printed the "fixed draw" explanation from a defaulted mode.
@@ -20,7 +20,8 @@
 import React, { useEffect, useState } from "react";
 import { T, F, disp, eyebrow, nums, money0 } from "@/lib/v34/tokens";
 import { EmptyState } from "@/components/v34/primitives";
-import { CostSettingsEditor } from "@/components/v34/cost-settings";
+import { CashSettings } from "@/components/v34/money-settings";
+import { monthlyNut as nutOf } from "@/lib/engine";
 
 interface Overhead { id: string; label: string; amount: number; cadence: string | null; active: boolean }
 interface CashFlow {
@@ -32,7 +33,6 @@ interface CashFlow {
   receipts: { amount: number }[];
   overhead: Overhead[];
   comp: { mode: string; monthly_draw: number; profit_pct: number } | null;
-  offTopPct: number | null;
   close: { rate: number; sample: number };
 }
 
@@ -93,9 +93,10 @@ export default function CashScreen() {
   }
 
   const activeOverhead = (d.overhead ?? []).filter((o) => o.active);
-  const monthlyNut = activeOverhead
-    .filter((o) => (o.cadence ?? "monthly") === "monthly")
-    .reduce((s, o) => s + o.amount, 0);
+  // Burn = recurring overhead as monthly (quarterly ÷3, annual ÷12) + a fixed draw.
+  const overheadMonthly = nutOf(activeOverhead.map((o) => ({ label: o.label, amount: Number(o.amount), cadence: o.cadence ?? "monthly", active: true })));
+  const draw = d.comp?.mode === "fixed_draw" ? d.comp.monthly_draw : 0;
+  const monthlyNut = overheadMonthly + draw;
   const collected = (d.payments ?? []).reduce((s, p) => s + Number(p.amount || 0), 0);
   const spent = (d.receipts ?? []).reduce((s, r) => s + Number(r.amount || 0), 0);
 
@@ -126,15 +127,9 @@ export default function CashScreen() {
           ? (!d.anchor ? "Needs a balance checkpoint and a monthly burn rate." : "No monthly overhead recorded, so there is no burn rate to divide by.")
           : undefined} />
 
-      <Row label="Monthly nut"
+      <Row label="Monthly burn"
         value={monthlyNut > 0 ? money0(monthlyNut) : null}
-        sub={monthlyNut > 0 ? `${activeOverhead.length} active item(s)` : "No overhead items recorded."} />
-
-      <Row label="Off the top"
-        value={d.offTopPct === null ? null : `${d.offTopPct}%`}
-        sub={d.offTopPct === null
-          ? "No cost settings recorded. The bid floor divides by what is left after this, so it is not guessed."
-          : "Owner fee + estimator fee + tax reserve."} />
+        sub={monthlyNut > 0 ? `${activeOverhead.length} overhead item(s)${draw > 0 ? ` + your ${money0(draw)} draw` : ""}` : "No overhead items recorded below."} />
 
       <Row label="Pay yourself"
         value={
@@ -144,10 +139,10 @@ export default function CashScreen() {
               : `${d.comp.profit_pct}%`
         }
         sub={
-          d.comp === null ? "No cost settings recorded, so no pay-yourself mode has been chosen."
+          d.comp === null ? "No pay-yourself mode chosen yet (below)."
             : d.comp.mode === "fixed_draw"
-              ? "Fixed draw — the bid floor must cover this."
-              : "Percent of profit — taken after a job clears, does not raise the floor."
+              ? "Fixed draw — counted in the monthly burn."
+              : "Percent of profit — taken after a job clears."
         } />
 
       <Row label="Collected" value={collected > 0 ? money0(collected) : null}
@@ -167,10 +162,10 @@ export default function CashScreen() {
           detail="The month ribbon and the weekly band plot money against jobs. Once a job is won and invoiced they will have something to show." />
       )}
 
-      {/* The settings every price and the bid floor stand on. One editor;
-          DECISIONS §6 wants it reachable from Settings too — that door comes
-          with the Settings sheet. */}
-      <CostSettingsEditor onSaved={() => setRev((r) => r + 1)} />
+      {/* Pay-yourself and the recurring overhead — the burn rate (Coy,
+          2026-09-30: "Our monthly burn rate can be calculated in the 'cash'
+          page"). Margin, O.H. and tax are in Price book → Defaults. */}
+      <CashSettings onSaved={() => setRev((r) => r + 1)} />
     </div>
   );
 }

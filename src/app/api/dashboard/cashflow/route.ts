@@ -60,7 +60,7 @@ export async function GET(req: NextRequest) {
       supabase.from("payments").select("id, invoice_id, job_id, amount, received_on").eq("org_id", orgId),
       supabase.from("receipts").select("id, job_id, vendor_name, amount, purchased_on, cost_type").eq("org_id", orgId),
       supabase.from("overhead_items").select("id, label, category, amount, cadence, due_day, due_month, active").eq("org_id", orgId),
-      supabase.from("org_cost_settings").select("comp_mode, comp_monthly_draw, comp_profit_pct, owner_fee_pct, estimator_fee_pct, tax_reserve_pct").eq("org_id", orgId).maybeSingle(),
+      supabase.from("org_money_settings").select("comp_mode, comp_monthly_draw, comp_profit_pct").eq("org_id", orgId).maybeSingle(),
       supabase.from("balance_checkpoints").select("as_of_date, balance, expected_balance").eq("org_id", orgId).order("as_of_date", { ascending: false }).limit(1),
       supabase.from("estimates").select("job_id, quote_amount, created_at").eq("org_id", orgId).not("job_id", "is", null),
       supabase.rpc("sc_close_rate", { p_org_id: orgId, p_months: 12 }),
@@ -126,17 +126,6 @@ export async function GET(req: NextRequest) {
       active: o.active,
     }));
 
-    // NULL, not 11, when there is no org_cost_settings row.
-    //
-    // This used to fall back to 11 — v34's OFF_TOP_PCT constant with a database
-    // label on it. It rendered as a live figure beside six fields correctly
-    // showing "—", and it is the number the bid floor divides by. A hardcoded
-    // fallback is not a live value: if the code can produce the number with the
-    // database empty, it is a placeholder and has to render as one.
-    const offTopPct = costSettings
-      ? Number(costSettings.owner_fee_pct || 0) + Number(costSettings.estimator_fee_pct || 0) + Number(costSettings.tax_reserve_pct || 0)
-      : null;
-
     const anchorRow = anchorRows?.[0];
     const today = new Date().toISOString().slice(0, 10);
     // NULL when no balance checkpoint has been recorded. The old shape returned
@@ -165,16 +154,15 @@ export async function GET(req: NextRequest) {
       // the UI assert a pay-yourself mode nobody had chosen — the value showed
       // "—" while the label underneath still claimed "the bid floor must cover
       // this". The value was honest and the sentence beside it was not.
-      comp: costSettings
+      comp: costSettings?.comp_mode
         ? {
             mode: costSettings.comp_mode,
             monthly_draw: Number(costSettings.comp_monthly_draw || 0),
-            // draw_day isn't in org_cost_settings yet — see DECISIONS.md open items.
+            // draw_day isn't recorded yet — see DECISIONS.md open items.
             draw_day: 28,
             profit_pct: Number(costSettings.comp_profit_pct || 0),
           }
         : null,
-      offTopPct,
       close: {
         rate: Number(closeRateRow?.close_rate_pct || 0),
         sample: Number(closeRateRow?.sample_size || 0),

@@ -17,7 +17,6 @@ export interface DictatedSection {
   depth_in?: number | null;
   psi?: number | null;
   reinforcement?: string | null;
-  prep_notes?: string | null;
   access_notes?: string | null;
 }
 
@@ -108,10 +107,9 @@ export function sanitizeDictation(p: DictatedSection, transcript: string, reinfo
   }
   const name = text(p.name, 80);
   if (name) patch.name = name;
-  const prep = text(p.prep_notes, 500);
-  if (prep) patch.prep_notes = prep;
-  const access = text(p.access_notes, 500);
-  if (access) patch.access_notes = access;
+  // The section's Notes (kept in access_notes; Coy, 2026-10-03: Prep and Access gave way to Notes).
+  const notes = text(p.access_notes, 500);
+  if (notes) patch.access_notes = notes;
 
   if (p.reinforcement) {
     const want = String(p.reinforcement).toLowerCase().replace(/[^a-z0-9]+/g, "");
@@ -119,18 +117,18 @@ export function sanitizeDictation(p: DictatedSection, transcript: string, reinfo
       const n = r.name.toLowerCase().replace(/[^a-z0-9]+/g, "");
       return n === want || n.includes(want) || want.includes(n);
     });
-    if (hit) patch.reinforcement_type_id = hit.id;
-    else dropped.push(`reinforcement: "${p.reinforcement}" is not in your settings`);
+    if (hit) patch.reinforcement_item_id = hit.id;
+    else dropped.push(`reinforcement: "${p.reinforcement}" is not one of your reinforcement cards`);
   }
   return { patch, dropped };
 }
 
 export const DICTATE_SYSTEM = `You turn a concrete contractor's dictated note about ONE section of a job into fields. Return ONLY a JSON object, no prose:
-{"name": string|null, "work_type": "slab|driveway|patio|sidewalk|footing|curb|demo|prep|other"|null, "length_ft": number|null, "width_ft": number|null, "depth_in": number|null, "psi": number|null, "reinforcement": string|null, "prep_notes": string|null, "access_notes": string|null}
+{"name": string|null, "work_type": "slab|driveway|patio|sidewalk|footing|curb|demo|prep|other"|null, "length_ft": number|null, "width_ft": number|null, "depth_in": number|null, "psi": number|null, "reinforcement": string|null, "access_notes": string|null}
 Rules:
 - Only what was said. Anything not said is null. Never estimate, never fill a typical value.
 - "24 by 30" = length_ft 24, width_ft 30. Feet and inches become decimal feet: "24 feet 6" = 24.5.
 - depth_in is the slab thickness in inches ("four inch", "6 inches thick"). psi is concrete strength ("3000", "four thousand PSI").
 - reinforcement: copy the words used for it ("6x6 10 gauge mesh", "#4 rebar at 18", "fiber"), or null.
-- prep_notes: base, grading, forming, demo notes. access_notes: how trucks or crews get in, pump needed, gates, distances.
+- access_notes: the section's notes — anything else said about this area that isn't a field above (access, pump, gates, base, grading, demo, what the customer wants), in the words used.
 - name: a short name if one was said ("front drive", "back patio"), else null.`;

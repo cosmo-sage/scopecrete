@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
+import { plainSpeakers } from "@/lib/speakers";
+import { plainNote } from "@/lib/mentions";
 import { formatPhone } from "@/lib/v34/tokens";
 
 /**
@@ -34,6 +36,8 @@ export interface ActivityItem {
   at: string;
   kind: string;
   contact_id: string | null;
+  /** Where the line goes when it isn't a person (a bid → its job). */
+  href?: string | null;
   summary: string;
   detail: string | null;
   tone: Tone;
@@ -58,6 +62,8 @@ const BUCKET_OF: Record<string, string> = {
 const AUTO_STREAK = 20;
 const PLURAL: Record<string, string> = { customer: "customers", vendor: "vendors", personal: "personal contacts" };
 
+// Summaries are long enough for a desktop header; the line itself trims to the room it has
+// (Coy, 2026-10-02: "Reading 2635 Walker High Dugouts Specs 2026 08 ……" was cut here, not on screen).
 const clipq = (s: string | null | undefined, n = 90) => {
   const t = (s ?? "").replace(/\s+/g, " ").trim();
   return t.length > n ? `${t.slice(0, n - 1)}…` : t;
@@ -66,13 +72,13 @@ const clipq = (s: string | null | undefined, n = 90) => {
 export async function GET(req: NextRequest) {
   const result = await getApiSession(req);
   if (!result.ok) return result.response;
-  const { supabase, orgId, applyCookies } = result.session;
+  const { supabase, orgId, userId, applyCookies } = result.session;
 
   const since = new Date(Date.now() - 7 * 86400_000).toISOString();
   // Reminders: open next steps due today or overdue (contact_tasks, migration
   // 038). Central time is Coy's; the server has no timezone of its own.
   const todayLocal = new Date().toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
-  const [{ data: runRows, error }, { data: statusRows }, { data: beat }, { data: agreeRows }, { data: dueRows }, { data: museRows }] = await Promise.all([
+  const [{ data: runRows, error }, { data: statusRows }, { data: beat }, { data: agreeRows }, { data: dueRows }, { data: museRows }, { data: dreamRows }] = await Promise.all([
     supabase.from("contact_enrich_runs")
       .select("id, started_at, finished_at, outcome, note, contact_id, contacts(name, phone), contact_name_claims(claimed_name, evidence_quote), contact_proposals(proposed_name, classification, evidence_quote)")
       .eq("org_id", orgId).gte("started_at", since)
@@ -84,9 +90,14 @@ export async function GET(req: NextRequest) {
       .eq("org_id", orgId).eq("status", "open").lte("due_on", todayLocal).order("due_on", { ascending: true }).limit(6),
     // Dusty's musings: a light line about a conversation he read (migration
     // 039). About something that happened, never something happening now.
-    supabase.from("contact_enrich_runs").select("id, finished_at, musing, contact_id")
+    supabase.from("contact_enrich_runs").select("id, finished_at, musing, contact_id, contacts(name, phone)")
       .eq("org_id", orgId).not("musing", "is", null).gte("started_at", new Date(Date.now() - 3 * 86400_000).toISOString())
       .order("started_at", { ascending: false }).limit(12),
+    // Dusty's dreams (migration 058): light lines about a stretch of calls and
+    // texts — today, or a day weeks back — written in the background.
+    supabase.from("dusty_dreams").select("id, created_at, dream, contact_ids, span, window_start")
+      .eq("org_id", orgId).gte("created_at", new Date(Date.now() - 3 * 86400_000).toISOString())
+      .order("created_at", { ascending: false }).limit(12),
   ]);
   if (error) return applyCookies(NextResponse.json({ error: `contact_enrich_runs: ${error.message}` }, { status: 500 }));
 
@@ -118,7 +129,7 @@ export async function GET(req: NextRequest) {
         break;
       case "named": {
         const q = r.contact_name_claims?.evidence_quote;
-        items.push({ ...base, summary: `Named ${r.contact_name_claims?.claimed_name ?? who}${q ? ` — “${clipq(q, 60)}”` : ""}`,
+        items.push({ ...base, summary: `Named ${r.contact_name_claims?.claimed_name ?? who}${q ? ` — “${clipq(q, 180)}”` : ""}`,
           detail: q ? `They said: “${clipq(q, 400)}”. Keep or Undo it in the thread row.` : null, tone: "good" });
         break;
       }
@@ -128,7 +139,7 @@ export async function GET(req: NextRequest) {
         const bits = [p?.proposed_name ? `might be ${p.proposed_name}` : null, cls ? `looks like ${cls}` : null].filter(Boolean);
         items.push({ ...base,
           summary: bits.length ? `${who} ${bits.join(", ")} — your call` : `Read ${who} — no name or read on them yet`,
-          detail: p?.evidence_quote ? `Going on: “${clipq(p.evidence_quote, 400)}”` : null,
+          detail: p?.evidence_quote ? `Going on: “${clipq(plainSpeakers(p.evidence_quote), 400)}”` : null,
           tone: bits.length ? "ask" : "quiet" });
         break;
       }
@@ -136,7 +147,7 @@ export async function GET(req: NextRequest) {
         // The bucket Dusty filed into is his suggestion's; the contact's own
         // column may since have been undone.
         const b = BUCKET_OF[r.contact_proposals?.classification ?? ""] ?? "spam";
-        items.push({ ...base, summary: `Filed ${who} as ${b}${r.note ? ` — “${clipq(r.note, 50)}”` : ""}`,
+        items.push({ ...base, summary: `Filed ${who} as ${b}${r.note ? ` — “${clipq(r.note, 160)}”` : ""}`,
           detail: r.note ? `Going on: “${clipq(r.note, 400)}”. Wrong? Open the row and tap Not ${b}.` : null, tone: "quiet" });
         break;
       }
@@ -146,7 +157,7 @@ export async function GET(req: NextRequest) {
         if (!summarizedAt) summarizedAt = at;
         break;
       case "model_error": case "failed": case "abandoned":
-        items.push({ ...base, summary: `Couldn't read ${who}${r.note ? ` — ${clipq(r.note, 50)}` : ""}`, detail: r.note, tone: "warn" });
+        items.push({ ...base, summary: `Couldn't read ${who}${r.note ? ` — ${clipq(r.note, 160)}` : ""}`, detail: r.note, tone: "warn" });
         break;
       default:
         // no_words / unchanged / skipped: real, but one line each would be noise.
@@ -163,7 +174,100 @@ export async function GET(req: NextRequest) {
     items.push({ id: "quiet", at: quietAt!, kind: "quiet", contact_id: null,
       summary: `Checked ${quietCount} with nothing new to say`, detail: "Threads with no words from them on record, or nothing new since the last read.", tone: "quiet" });
   }
-  if (quietCount || summarized) items.sort((a, b) => b.at.localeCompare(a.at));
+  // Files Dusty read (migration 045/046): each read is a line; one being read
+  // is "running", so the emblem spins for it too.
+  const { data: fileRows } = await supabase.from("files")
+    .select("id, name, contact_id, read_state, read_at, summary, read_error")
+    .eq("org_id", orgId).is("deleted_at", null).in("read_state", ["reading", "read", "failed"])
+    .gte("read_at", new Date(Date.now() - 24 * 3600_000).toISOString()).order("read_at", { ascending: false }).limit(10);
+  for (const f of (fileRows ?? []) as Array<{ id: string; name: string; contact_id: string | null; read_state: string; read_at: string; summary: string | null; read_error: string | null }>) {
+    const base = { id: `file-${f.id}-${f.read_state}`, at: f.read_at, contact_id: f.contact_id };
+    if (f.read_state === "reading") items.push({ ...base, kind: "running", summary: `Reading ${clipq(f.name, 140)}…`, detail: null, tone: "live" });
+    else if (f.read_state === "read") items.push({ ...base, kind: "file", summary: `Read ${clipq(f.name, 120)}${f.summary ? ` — ${clipq(f.summary, 220)}` : ""}`, detail: f.summary, tone: "good" });
+    else items.push({ ...base, kind: "file", summary: `Couldn't read ${clipq(f.name, 140)}`, detail: f.read_error, tone: "warn" });
+  }
+  // The email mirror (migration 061): each forwarded email is a line — filed,
+  // a suggestion to confirm, or one to file. Its files then show as reads above.
+  const { data: mailRows } = await supabase.from("emails")
+    .select("id, created_at, subject, original_from_name, original_from_address, from_address, contact_id, status, suggested_customer_id, customer_id")
+    .eq("org_id", orgId).gte("created_at", new Date(Date.now() - 24 * 3600_000).toISOString()).order("created_at", { ascending: false }).limit(8);
+  for (const m of (mailRows ?? []) as Array<{ id: string; created_at: string; subject: string | null; original_from_name: string | null; original_from_address: string | null; from_address: string | null; contact_id: string | null; status: string; suggested_customer_id: string | null; customer_id: string | null }>) {
+    const who = m.original_from_name || m.original_from_address || m.from_address || "someone";
+    const subj = m.subject ? ` — ${clipq(m.subject, 160)}` : "";
+    items.push({
+      id: `email-${m.id}-${m.status}`, at: m.created_at, kind: "email", contact_id: m.contact_id,
+      summary: m.status === "filed" ? `Email from ${clipq(who, 80)}${subj}`
+        : m.status === "quarantined" ? `Email from an address that isn't yours${subj} — file it in Files › Emails`
+          : `Email from ${clipq(who, 30)}${subj} — file it in Files › Emails`,
+      detail: m.subject, tone: m.status === "filed" ? "good" : "ask",
+    });
+  }
+  // The bid reader (migration 063): each bid it filed, or the step it's stuck on.
+  const { data: bidRows } = await supabase.from("bid_packages")
+    .select("id, state, error, job_id, facts, box_folder_name, filed_at, updated_at, created")
+    .eq("org_id", orgId).gte("updated_at", new Date(Date.now() - 24 * 3600_000).toISOString()).order("updated_at", { ascending: false }).limit(6);
+  for (const b of (bidRows ?? []) as Array<{ id: string; state: string; error: string | null; job_id: string | null; facts: Record<string, unknown> | null; box_folder_name: string | null; filed_at: string | null; updated_at: string; created: Record<string, unknown> | null }>) {
+    const f = (b.facts ?? {}) as { project_name?: string | null; gc_company?: string | null; bid_due_text?: string | null; items?: unknown[] };
+    const name = clipq(f.project_name ?? b.box_folder_name ?? "a bid", 140);
+    const href = b.job_id ? `/dashboard/scope/${b.job_id}` : "/dashboard/files?cat=email";
+    if (b.state === "filed") {
+      const isNew = !!(b.created ?? {}).job_id;
+      items.push({ id: `bid-${b.id}-filed`, at: b.filed_at ?? b.updated_at, kind: "bid", contact_id: null, href,
+        summary: `${isNew ? "New bid" : "Bid updated"}: ${name}${f.gc_company ? ` — ${clipq(f.gc_company, 80)}` : ""}${f.bid_due_text ? ` · due ${clipq(f.bid_due_text, 80)}` : ""}`,
+        detail: `${(f.items ?? []).length} concrete item(s) read into the job's scope. Undo bid on the job takes it all back.`, tone: "good" });
+    } else if (["needs_setup", "failed"].includes(b.state)) {
+      items.push({ id: `bid-${b.id}-${b.state}`, at: b.updated_at, kind: "bid", contact_id: null, href,
+        summary: `Bid stuck: ${name} — ${clipq(b.error ?? b.state, 180)}`, detail: b.error, tone: "warn" });
+    } else if (!["undone", "not_a_bid"].includes(b.state)) {
+      items.push({ id: `bid-${b.id}-${b.state}`, at: b.updated_at, kind: "running", contact_id: null, href,
+        summary: `Reading a bid: ${name}…`, detail: b.error, tone: "live" });
+    }
+  }
+  // Proposal links (migration 075): each time a customer opened one in the last two days.
+  const { data: openRows } = await supabase.from("document_events")
+    .select("id, occurred_at, document:documents(job_id, job:jobs(title))")
+    .eq("org_id", orgId).eq("event", "viewed").gte("occurred_at", new Date(Date.now() - 48 * 3600_000).toISOString())
+    .order("occurred_at", { ascending: false }).limit(6);
+  for (const e of (openRows ?? []) as unknown as Array<{ id: string; occurred_at: string; document: { job_id: string | null; job: { title: string | null } | null } | null }>) {
+    const job = e.document?.job_id ?? null;
+    items.push({ id: `opened-${e.id}`, at: e.occurred_at, kind: "proposal", contact_id: null, href: job ? `/dashboard/scope/${job}/proposal` : undefined,
+      summary: `Proposal opened: ${clipq(e.document?.job?.title ?? "a job", 140)}`, detail: "The customer opened the link you sent.", tone: "good" });
+  }
+  // Back after being archived (Coy, 2026-10-04): someone archived who called or texted since, this week,
+  // with the reason Coy gave — the context comes back with them.
+  const { data: archRows } = await supabase.from("contacts").select("id, name, phone, archived_at, archived_reason")
+    .eq("org_id", orgId).not("archived_at", "is", null).is("merged_into_contact_id", null).limit(300);
+  const archived = (archRows ?? []) as Array<{ id: string; name: string | null; phone: string | null; archived_at: string; archived_reason: string | null }>;
+  if (archived.length) {
+    const { data: backRows } = await supabase.from("messages").select("contact_id, occurred_at")
+      .eq("org_id", orgId).eq("direction", "inbound").in("contact_id", archived.map((c) => c.id))
+      .gte("occurred_at", new Date(Date.now() - 7 * 86400_000).toISOString()).order("occurred_at", { ascending: true }).limit(500);
+    const firstBack = new Map<string, string>();
+    for (const m of (backRows ?? []) as Array<{ contact_id: string; occurred_at: string }>) {
+      const c = archived.find((x) => x.id === m.contact_id);
+      if (c && m.occurred_at > c.archived_at && !firstBack.has(c.id)) firstBack.set(c.id, m.occurred_at);
+    }
+    for (const c of archived) {
+      const at = firstBack.get(c.id);
+      if (!at) continue;
+      const why = c.archived_reason && !/^(archived|deleted\b)/.test(c.archived_reason) ? c.archived_reason : null;
+      const day = new Date(c.archived_at).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/Chicago" });
+      items.push({ id: `back-${c.id}-${at}`, at, kind: "reminder", contact_id: c.id, href: `/dashboard/messages/${c.id}`,
+        summary: `${clipq(c.name?.trim() || c.phone || "Someone", 60)} is back — archived ${day}${why ? `: ${clipq(why, 160)}` : ""}`,
+        detail: why ? `You archived them on ${day} because: ${why}` : `You archived them on ${day} (no reason given).`, tone: "good" });
+    }
+  }
+  // Internal notes that tag this member (Coy, 2026-10-04), the last week, not their own.
+  const { data: tagRows } = await supabase.from("contact_notes")
+    .select("id, body, created_at, created_by, contact_id, contact:contacts(name)")
+    .eq("org_id", orgId).like("body", `%(u:${userId})%`).gte("created_at", new Date(Date.now() - 7 * 86400_000).toISOString())
+    .order("created_at", { ascending: false }).limit(6);
+  for (const n of (tagRows ?? []) as unknown as Array<{ id: string; body: string; created_at: string; created_by: string | null; contact_id: string; contact: { name: string | null } | null }>) {
+    if (n.created_by === userId) continue;
+    items.push({ id: `tag-${n.id}`, at: n.created_at, kind: "reminder", contact_id: n.contact_id, href: `/dashboard/messages/${n.contact_id}?channel=notes`,
+      summary: `Tagged you on ${clipq(n.contact?.name ?? "a thread", 60)}: ${clipq(plainNote(n.body).replace(/\s+/g, " "), 180)}`, detail: plainNote(n.body), tone: "good" });
+  }
+  items.sort((a, b) => b.at.localeCompare(a.at));
   if (waiting > 0) {
     items.push({ id: "waiting", at: new Date().toISOString(), kind: "waiting", contact_id: null,
       summary: `${waiting} thread${waiting === 1 ? "" : "s"} waiting to be read`, detail: "Read four at a time, every minute, until none are left.", tone: "quiet" });
@@ -179,7 +283,7 @@ export async function GET(req: NextRequest) {
     const who = c?.name?.trim() || formatPhone(c?.phone ?? null);
     const late = t.due_on < todayLocal;
     standing.push({ id: `due-${t.id}`, at: new Date().toISOString(), kind: "reminder", contact_id: t.contact_id,
-      summary: `${late ? "Overdue" : "Due today"}: ${clipq(t.title, 60)} — ${who}`,
+      summary: `${late ? "Overdue" : "Due today"}: ${clipq(t.title, 180)} — ${who}`,
       detail: `On ${who}'s next steps${late ? `, due ${t.due_on}` : ""}. Tick it off there when it's done.`,
       tone: late ? "warn" : "ask" });
   }
@@ -197,10 +301,32 @@ export async function GET(req: NextRequest) {
       tone: earned ? "good" : "quiet" });
   }
 
+  // Each thought says where it came from (Coy, 2026-10-02: "it would be more interesting if I knew
+  // what the thought was being processed from"): the thread he read, or the day a dream was about.
+  type Who = { name: string | null; phone: string | null };
+  const one = (c: Who | Who[] | null | undefined) => (Array.isArray(c) ? c[0] : c) ?? null;
+  const whoOf = (c: Who | null) => c?.name?.trim() || (c?.phone ? formatPhone(c.phone) : null);
+  const dreams = (dreamRows ?? []) as Array<{ id: string; created_at: string; dream: string; contact_ids: string[] | null; span: string; window_start: string }>;
+  const dreamIds = [...new Set(dreams.flatMap((d) => (d.contact_ids ?? []).slice(0, 3)))];
+  const { data: dreamPeople } = dreamIds.length
+    ? await supabase.from("contacts").select("id, name, phone").eq("org_id", orgId).in("id", dreamIds)
+    : { data: [] as Array<{ id: string } & Who> };
+  const people = new Map(((dreamPeople ?? []) as Array<{ id: string } & Who>).map((c) => [c.id, whoOf(c)]));
+  const dayName = (iso: string) => new Date(iso).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "America/Chicago" });
+
   return applyCookies(NextResponse.json({
     pinned, waiting, last_read_at: status?.last_read_at ?? null, items: [...items.slice(0, 20 - standing.length), ...standing],
-    musings: ((museRows ?? []) as Array<{ id: string; finished_at: string | null; musing: string; contact_id: string }>).map((m) => ({
-      id: `muse-${m.id}`, at: m.finished_at ?? new Date().toISOString(), kind: "musing", contact_id: m.contact_id,
-      summary: m.musing, detail: null, tone: "quiet" as const })),
+    musings: ((museRows ?? []) as Array<{ id: string; finished_at: string | null; musing: string; contact_id: string | null; contacts: Who | Who[] | null }>).map((m) => {
+      const who = whoOf(one(m.contacts));
+      return { id: `muse-${m.id}`, at: m.finished_at ?? new Date().toISOString(), kind: "musing", contact_id: m.contact_id,
+        summary: m.musing, detail: `From reading ${who ? `${who}'s` : "a"} calls and texts`, tone: "quiet" as const };
+    }).concat(dreams.map((d) => {
+      const names = (d.contact_ids ?? []).slice(0, 3).map((id) => people.get(id)).filter(Boolean);
+      const extra = (d.contact_ids ?? []).length - names.length;
+      return { id: `dream-${d.id}`, at: d.created_at, kind: "musing", contact_id: d.contact_ids?.[0] ?? null,
+        summary: d.dream,
+        detail: `A dream about ${d.span === "today" ? "today's" : `${dayName(d.window_start)}'s`} calls and texts${names.length ? ` — ${names.join(", ")}${extra > 0 ? ` +${extra}` : ""}` : ""}`,
+        tone: "quiet" as const };
+    })).sort((a, b) => b.at.localeCompare(a.at)),
   }));
 }

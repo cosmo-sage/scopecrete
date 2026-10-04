@@ -26,13 +26,18 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { ArchiveDialog } from "@/components/v34/archive-actions";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { T, F, disp, eyebrow, nums, clip, relTime } from "@/lib/v34/tokens";
-import { Avatar, EmptyState } from "@/components/v34/primitives";
+import { EmptyState, Sheet } from "@/components/v34/primitives";
 import { JOB_TYPE_LABEL } from "@/lib/jobs/stages";
 import { TRAY_PX, decideSwipe, isHorizontal, clampDrag } from "@/lib/swipe";
 import { BucketPicker, BUCKETS, SUGGESTS, type Bucket, type Subtype } from "@/components/v34/bucket-picker";
+import { BUCKET } from "@/lib/v34/tokens";
+import { useThreads } from "@/components/v34/threads-ctx";
+import { threadLabel } from "@/components/v34/thread-rail";
+import { ROLE_LABEL, initials, isSystemKey, sortRows, THREAD_SORTS, type ContactRole, type ThreadSort } from "@/lib/v34/threads";
 
 interface Thread {
   contact_id: string;
@@ -52,6 +57,8 @@ interface Thread {
   job_unscoped: boolean;
   /** From the contact's most advanced job: residential | commercial | public. */
   job_type: string | null;
+  /** open | done (every job complete) | lost (every job lost) | null (no job) — Coy, 2026-10-04. */
+  job_state?: "open" | "done" | "lost" | null;
   /** Dusty's words (migration 037): where things stand, and the latest conversations. */
   status_summary: string | null;
   recent_summary: string | null;
@@ -65,6 +72,16 @@ interface Thread {
   proposal: Proposal | null;
   /** Applied because they introduced themselves; Keep or Undo in the row. */
   auto_name: { claim_id: string; quote: string | null; channel: string | null } | null;
+  /** Nothing was ever said on it — calls with no words (migration 066). */
+  silent?: boolean;
+  /** On the Archived view: when, and whether archived or deleted. */
+  archived?: { at: string; reason: string | null; back?: boolean } | null;
+  /** Threads v2: their role, and what the second line says. */
+  role?: ContactRole;
+  customer_id?: string | null;
+  person_role?: string | null;
+  numbers?: number;
+  has_email?: boolean;
 }
 
 /**
@@ -98,19 +115,8 @@ interface Proposal {
 
 type Counts = Record<string, number>;
 
-/**
- * Threads sorts PEOPLE (DECISIONS §6): Unsorted first — the inbox — then the
- * four buckets. Filing someone moves them out of Unsorted into their bucket.
- * Every chip is on screen, no funnel. Each carries its bucket's colour, the
- * same colour as that bucket's tag on the row. Job stages are the Jobs board.
- */
-const CHIPS: Array<{ k: string; l: string; c: string }> = [
-  { k: "unsorted", l: "Unsorted", c: T.hiviz },
-  { k: "customers", l: "Customer", c: T.green },
-  { k: "vendors", l: "Vendor", c: T.chalk },
-  { k: "personal", l: "Personal", c: T.violet },
-  { k: "spam", l: "Spam", c: T.red },
-];
+/** Coy's reason for archiving, or null when it is only the default word ("archived", "deleted …"). */
+const reasonText = (r: string | null | undefined) => (r && !/^(archived|deleted\b)/.test(r) ? r : null);
 
 function matches(t: Thread, k: string): boolean {
   switch (k) {
@@ -125,6 +131,7 @@ function matches(t: Thread, k: string): boolean {
 
 /** What an empty filtered list should say — the reason, not just "nothing". */
 const WHY_EMPTY: Record<string, string> = {
+  archived: "Nothing is archived. Select threads and tap Archive — they come back on their own if that number calls or texts again.",
   unsorted: "Everyone who has called or texted is in a bucket.",
   customers: "Nobody is filed as a customer yet. In Unsorted, swipe a row right and tap Customer.",
   vendors: "Nobody is filed as a vendor yet — subs, suppliers, rental yards and people looking for work go here.",
@@ -177,7 +184,7 @@ function ProposalReview({ p, onDecide, busy, nameOn }: {
   const btn = (primary?: boolean): React.CSSProperties => ({
     height: 28, padding: "0 10px", borderRadius: 3,
     border: `1px solid ${primary ? T.ink : T.hair}`,
-    background: primary ? T.ink : T.card, color: primary ? "#fff" : T.ink2,
+    background: primary ? T.ink : T.card, color: primary ? T.card : T.ink2,
     fontFamily: disp, fontSize: F.xs, letterSpacing: ".06em",
     textTransform: "uppercase", cursor: busy ? "default" : "pointer",
     opacity: busy ? 0.5 : 1,
@@ -267,7 +274,7 @@ function AutoNameStrip({ a, name, busy, onName }: {
   const btn = (primary?: boolean): React.CSSProperties => ({
     height: 28, padding: "0 10px", borderRadius: 3,
     border: `1px solid ${primary ? T.ink : T.hair}`,
-    background: primary ? T.ink : T.card, color: primary ? "#fff" : T.ink2,
+    background: primary ? T.ink : T.card, color: primary ? T.card : T.ink2,
     fontFamily: disp, fontSize: F.xs, letterSpacing: ".06em",
     textTransform: "uppercase", cursor: busy ? "default" : "pointer", opacity: busy ? 0.5 : 1,
   });
@@ -303,15 +310,54 @@ function BucketTag({ label, c, state }: { label: string; c: string; state: "conf
   return (
     <span className="shrink-0 rounded" title={title}
       style={{ ...eyebrow, lineHeight: "15px", padding: "0 4px", letterSpacing: ".06em",
-               color: state === "confirmed" ? "#fff" : c, background: state === "confirmed" ? c : "transparent",
+               color: state === "confirmed" ? T.card : c, background: state === "confirmed" ? c : "transparent",
                border: `1px ${state === "suggested" ? "dashed" : "solid"} ${c}` }}>
       {label}{state === "confirmed" ? " ✓" : state === "auto" ? " · auto" : "?"}
     </span>
   );
 }
 
-function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, onName, onBucket, subtypes, deciding, trayOpen, onTray, onAccept }: {
+/** The role a bucket's own people have — its tag isn't repeated there. */
+const NATURAL: Record<string, ContactRole> = { customer: "customer", vendor: "vendor", personal: "personal", spam: "spam", unsorted: "unsorted" };
+const ROLE_COLOR: Record<ContactRole, string> = {
+  customer: BUCKET.customer, contact: BUCKET.customer, vendor: BUCKET.vendor, sub: BUCKET.vendor,
+  personal: BUCKET.personal, spam: BUCKET.spam, unsorted: BUCKET.unsorted, other: T.ink2,
+};
+
+/** A contact's role, in its colour (Threads v2). Dusty's filing says "· auto". */
+export function RoleTag({ role, auto }: { role: ContactRole; auto?: boolean }) {
+  const c = ROLE_COLOR[role];
+  return (
+    <span className="shrink-0 rounded" title={auto ? "Filed by Dusty — keep or change it" : undefined}
+      style={{ fontFamily: disp, fontSize: 10, fontWeight: 600, letterSpacing: ".06em", textTransform: "uppercase", lineHeight: "15px",
+        padding: "0 4px", border: `1px solid ${c}`, color: c, whiteSpace: "nowrap", borderRadius: 2 }}>
+      {ROLE_LABEL[role]}{auto ? " · auto" : ""}
+    </span>
+  );
+}
+
+/** Initials in a square; a dashed "#" for a number with no name. Filled when selected. */
+export function InitialsBox({ name, on, size = 30 }: { name: string | null; on?: boolean; size?: number }) {
+  return (
+    <span className="shrink-0 flex items-center justify-center" aria-hidden="true"
+      style={{ width: size, height: size, borderRadius: 3, background: on ? T.hiviz : T.slab, color: on ? T.onHiviz : T.ink3,
+        border: `1px ${name ? "solid" : "dashed"} ${on ? T.hiviz : T.hairStrong}`, fontFamily: "var(--sc-font-strong)", fontWeight: 600, fontSize: size >= 32 ? 12.5 : 12 }}>
+      {name ? initials(name) : "#"}
+    </span>
+  );
+}
+
+/** "Homeowner · 2 numbers · email" — only what is known. */
+function subLine(t: Thread): string {
+  return [t.person_role, (t.numbers ?? 0) > 1 ? `${t.numbers} numbers` : null, t.has_email ? "email" : null].filter(Boolean).join(" · ");
+}
+
+function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, onName, onBucket, subtypes, deciding, trayOpen, onTray, onAccept, chipShown, selected }: {
   t: Thread; first: boolean; expanded: boolean; onToggle: () => void; onOpen: () => void;
+  /** This contact is the one open beside the list. */
+  selected: boolean;
+  /** The open chip already says the bucket (Coy, 2026-09-28: the tag is redundant there). */
+  chipShown: boolean;
   /** Swipe right: this row's four-bucket tray is open. One row at a time. */
   trayOpen: boolean;
   onTray: (open: boolean) => void;
@@ -366,6 +412,12 @@ function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, onName, onB
   };
   const isVoicemail = t.summary_source === "quo_voicemail";
   const synthesised = t.preview_source === "synthesised";
+  // The role tag says what the thread doesn't already: a customer's other
+  // person or a sub in Customer / Vendor, everyone in a thread Coy made.
+  const roleShown = !chipShown || (t.role !== undefined && t.role !== NATURAL[t.bucket ?? "unsorted"]);
+  const sub = subLine(t);
+  const decidable = !t.bucket || !!t.bucket_auto || !!t.auto_name || !!(t.proposal && t.name_is_phone && t.proposal.proposed_name);
+  void badge;
 
   return (
     <div className="relative overflow-hidden" style={{ borderTop: first ? "none" : `1px solid ${T.hair}` }}>
@@ -375,7 +427,7 @@ function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, onName, onB
           {BUCKETS.map((b) => (
             <button key={b.k} disabled={deciding} onClick={() => { onTray(false); onBucket(t.contact_id, b.k, guess === b.k && t.proposal?.classification === "sub" ? "subcontractor" : null); }}
               className="flex-1 flex flex-col items-center justify-center gap-0.5"
-              style={{ background: b.c, color: "#fff", fontFamily: disp, fontSize: F.micro, fontWeight: 700, textTransform: "uppercase",
+              style={{ background: b.c, color: T.card, fontFamily: disp, fontSize: F.micro, fontWeight: 700, textTransform: "uppercase",
                        letterSpacing: 0, boxShadow: guess === b.k ? "inset 0 0 0 3px rgba(255,255,255,.85)" : undefined }}>
               {b.l}
               {guess === b.k && <span style={{ fontSize: F.micro, opacity: 0.9 }}>Dusty</span>}
@@ -386,7 +438,7 @@ function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, onName, onB
       {/* Behind the row, right: accept Dusty's guess (swipe left). */}
       {offset < 0 && guessB && (
         <div className="absolute inset-0 flex items-center justify-end pr-4"
-          style={{ background: guessB.c, color: "#fff", fontFamily: disp, fontSize: F.md, fontWeight: 600, textTransform: "uppercase" }}>
+          style={{ background: guessB.c, color: T.card, fontFamily: disp, fontSize: F.md, fontWeight: 600, textTransform: "uppercase" }}>
           {offset < -120 ? `✓ ${guessB.l}` : guessB.l}
         </div>
       )}
@@ -394,25 +446,22 @@ function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, onName, onB
         style={{ background: T.card, position: "relative", touchAction: "pan-y",
                  transform: offset ? `translateX(${offset}px)` : undefined,
                  transition: drag === null ? "transform .18s ease-out" : "none" }}>
-      <button onClick={() => (trayOpen ? onTray(false) : onToggle())} aria-expanded={expanded}
-        className="w-full px-2.5 py-2 flex gap-2.5 items-start text-left">
-        <Avatar label={t.display_name} kind={t.contact_type} dim={t.name_is_phone} />
+      {/* Threads v2 row: initials, name, role tag, age · who they are · the latest.
+          A tap opens them; ▾ (only while there is something to decide about
+          who they are) drops down the filing tools. */}
+      <div className="flex items-stretch" style={{ borderLeft: `3px solid ${selected ? T.hiviz : "transparent"}`, background: selected ? T.hivizDim : "transparent" }}>
+      <button onClick={() => (trayOpen ? onTray(false) : onOpen())} aria-current={selected ? "true" : undefined}
+        className="flex-1 min-w-0 flex gap-2.5 items-start text-left" style={{ padding: "9px 4px 9px 7px", cursor: "pointer" }}>
+        <InitialsBox name={t.name_is_phone ? null : t.display_name} on={selected} size={30} />
         <span style={{ minWidth: 0, flex: 1, display: "block" }}>
-          <span className="flex items-baseline gap-1.5" style={{ minWidth: 0 }}>
-            <span style={{
-              fontFamily: disp, fontSize: F.md, fontWeight: 600, lineHeight: 1.2, ...clip,
-              // A phone number is a weaker identity than a name and is coloured
-              // as such — but it is still the real one. Nothing is invented to
-              // fill the gap.
-              color: t.name_is_phone ? T.ink2 : T.ink,
-            }}>{t.display_name}</span>
+          <span className="flex items-center gap-1.5" style={{ minWidth: 0 }}>
+            <span style={{ fontFamily: "var(--sc-font-strong)", fontSize: 13.5, fontWeight: 600, lineHeight: 1.25, ...clip,
+              color: t.name_is_phone ? T.ink2 : T.ink }}>{t.display_name}</span>
             {t.auto_name && (
               <span className="shrink-0" title="Named from their own words — not yet kept by you"
                 style={{ ...eyebrow, color: T.chalk }}>Auto</span>
             )}
-            {badge && (
-              <BucketTag label={badge.l} c={badge.c} state={t.bucket_auto ? "auto" : "confirmed"} />
-            )}
+            {roleShown && t.role && <RoleTag role={t.role} auto={!!t.bucket_auto} />}
             {guessB && <BucketTag label={guessB.l} c={guessB.c} state="suggested" />}
             {jobType && (
               <span className="shrink-0" title={jobType.sure ? "From the job" : "Dusty's guess — set when the job is made"}
@@ -421,33 +470,31 @@ function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, onName, onB
               </span>
             )}
             <span className="flex-1" />
-            {t.msg_count > 1 && <span style={{ fontSize: F.micro, color: T.ink3, ...nums }}>{t.msg_count}</span>}
-            {when && <span className="shrink-0" style={{ fontSize: F.xs, color: T.ink3, ...nums }}>{when}</span>}
+            {when && <span className="shrink-0" style={{ fontSize: 12, color: T.ink3, ...nums }}>{when}</span>}
           </span>
-
-          {/* Dusty's one line on where things stand. Until he has read them,
-              their latest message — labelled when it is a voicemail. */}
-          {t.status_summary ? (
-            <span style={{
-              display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden",
-              fontSize: F.sm, marginTop: 2, color: T.ink2, lineHeight: "1.15rem",
-            }}>{t.status_summary}</span>
-          ) : (
-            <>
-              {isVoicemail && (
-                <span style={{ ...eyebrow, color: T.hiviz, display: "block", marginTop: 2 }}>Voicemail</span>
-              )}
-              <span style={{
-                display: "block", fontSize: F.sm, marginTop: 2,
-                color: synthesised ? T.ink3 : T.ink2,
-                fontStyle: synthesised ? "italic" : "normal",
-                minHeight: "1.1rem", lineHeight: "1.15rem",
-                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-              }}>{t.preview}</span>
-            </>
+          {sub && <span style={{ display: "block", fontSize: 11.5, color: T.ink3, marginTop: 1, ...clip }}>{sub}</span>}
+          {t.archived?.back && (
+            // Back after being archived — and why it was (Coy, 2026-10-04).
+            <span style={{ display: "block", fontSize: 11.5, color: T.hivizText, marginTop: 1, ...clip }} title={t.archived.reason ?? undefined}>
+              ↩ Back · archived {new Date(t.archived.at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}{reasonText(t.archived.reason) ? `: ${reasonText(t.archived.reason)}` : ""}
+            </span>
           )}
+          {isVoicemail && !t.status_summary && (
+            <span style={{ ...eyebrow, color: T.hiviz, display: "block", marginTop: 2 }}>Voicemail</span>
+          )}
+          <span style={{
+            display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden",
+            fontSize: 12.5, marginTop: 2, lineHeight: 1.4,
+            color: !t.status_summary && synthesised ? T.ink3 : T.ink2, fontStyle: !t.status_summary && synthesised ? "italic" : "normal",
+          }}>{t.status_summary ?? t.preview}</span>
         </span>
       </button>
+      {decidable && (
+        <button onClick={onToggle} aria-expanded={expanded} aria-label={expanded ? "Close the filing tools" : "Who are they? File them"}
+          title="Who are they? File them" className="shrink-0 flex items-start justify-center"
+          style={{ width: 28, paddingTop: 10, color: expanded ? T.hiviz : T.ink3, cursor: "pointer", fontSize: 12 }}>{expanded ? "▴" : "▾"}</button>
+      )}
+      </div>
 
       {/* Expanded: what has been going on, anything still to decide about
           who they are, and one way through to their page (Coy, 2026-09-28).
@@ -488,7 +535,7 @@ function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, onName, onB
 
           <div className="mt-2.5 flex items-center gap-3">
             <button onClick={onOpen} className="rounded px-4 flex items-center gap-2"
-              style={{ height: 36, border: "none", background: T.ink, color: "#fff",
+              style={{ height: 36, border: "none", background: T.ink, color: T.card,
                        fontFamily: disp, fontSize: F.sm, letterSpacing: ".06em",
                        textTransform: "uppercase", cursor: "pointer" }}>
               Open {badge ? badge.l.toLowerCase() : "thread"} <span style={{ color: T.hiviz }}>›</span>
@@ -508,34 +555,121 @@ function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, onName, onB
 
 /* ----------------------------------------------------------------- screen */
 
-export function ThreadList() {
+/** A row while choosing what to archive (or in the Archived view): a tick, the name, what's there. */
+function SelectRow({ t, selecting, on, onPick, onOpen, onRestore }: {
+  t: Thread; selecting: boolean; on: boolean; onPick: () => void; onOpen: () => void; onRestore?: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-2.5 px-3" style={{ minHeight: 56, borderBottom: `1px solid ${T.hairSoft}`, background: on ? T.hivizDim : T.card }}>
+      {selecting && (
+        <button role="checkbox" aria-checked={on} aria-label={`Select ${t.display_name}`} onClick={onPick}
+          className="shrink-0 rounded flex items-center justify-center"
+          style={{ width: 24, height: 24, border: `2px solid ${on ? T.hiviz : T.hairStrong}`, background: on ? T.hiviz : T.card, color: T.onHiviz, cursor: "pointer", fontWeight: 700 }}>
+          {on ? "✓" : ""}
+        </button>
+      )}
+      <button onClick={selecting ? onPick : onOpen} className="text-left" style={{ flex: 1, minWidth: 0, cursor: "pointer", padding: "8px 0" }}>
+        <div style={{ fontSize: F.md, fontWeight: 600, color: T.ink, ...clip }}>{t.display_name}</div>
+        <div style={{ fontSize: F.xs, color: T.ink3, ...clip }}>
+          {t.silent ? `Nothing said · ${t.msg_count} call${t.msg_count === 1 ? "" : "s"}` : t.status_summary ?? t.preview}
+          {t.archived ? ` · ${t.archived.reason?.startsWith("deleted") ? "deleted" : "archived"} ${relTime(t.archived.at)}${reasonText(t.archived.reason) ? ` — ${reasonText(t.archived.reason)}` : ""}` : ""}
+        </div>
+      </button>
+      <span style={{ fontSize: F.xs, color: T.ink3, ...nums }}>{relTime(t.occurred_at)}</span>
+      {onRestore && !selecting && (
+        <button onClick={onRestore} className="rounded px-2" style={{ ...eyebrow, height: 28, border: `1px solid ${T.chalk}`, color: T.chalk, background: T.card, cursor: "pointer" }}>Unarchive</button>
+      )}
+    </div>
+  );
+}
+
+/** Add people to a thread Coy made — by name or number, from everyone who has called or texted. */
+function AddToThread({ thread, people, onClose, onAdded }: {
+  thread: { id: string; name: string; contact_ids: string[] }; people: Thread[]; onClose: () => void; onAdded: () => void;
+}) {
+  const [find, setFind] = useState("");
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const already = new Set(thread.contact_ids);
+  const f = find.trim().toLowerCase();
+  const list = people.filter((p) => !already.has(p.contact_id) && (!f || p.display_name.toLowerCase().includes(f) || (p.phone ?? "").includes(f))).slice(0, 40);
+  const add = async () => {
+    setBusy(true); setErr(null);
+    try {
+      const r = await fetch(`/api/threads/custom/${thread.id}/contacts`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contact_ids: [...picked] }) });
+      const b = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(b.error || `HTTP ${r.status}`);
+      onAdded();
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
+  };
+  return (
+    <Sheet open onClose={onClose} title={`Add to ${thread.name}`} sub="Being in a thread never moves anyone out of Customer or Vendor.">
+      <div className="px-4 py-3 flex flex-col gap-2">
+        <input autoFocus value={find} onChange={(e) => setFind(e.target.value)} placeholder="Find by name or number" aria-label="Find a contact"
+          style={{ height: 38, border: `1px solid ${T.hairStrong}`, borderRadius: 4, padding: "0 10px", background: T.card, color: T.ink, fontSize: F.sm }} />
+        <div style={{ maxHeight: 360, overflowY: "auto", border: `1px solid ${T.hairSoft}`, borderRadius: 4 }}>
+          {list.map((p) => {
+            const on = picked.has(p.contact_id);
+            return (
+              <button key={p.contact_id} onClick={() => setPicked((s) => { const n = new Set(s); if (on) n.delete(p.contact_id); else n.add(p.contact_id); return n; })}
+                className="w-full flex items-center gap-2 px-3 text-left" style={{ minHeight: 40, background: on ? T.hivizDim : T.card, borderBottom: `1px solid ${T.hairSoft}`, cursor: "pointer" }}>
+                <InitialsBox name={p.name_is_phone ? null : p.display_name} on={on} size={26} />
+                <span style={{ flex: 1, fontSize: F.sm, ...clip }}>{p.display_name}</span>
+                {p.role && <RoleTag role={p.role} />}
+              </button>
+            );
+          })}
+          {!list.length && <div className="px-3 py-3" style={{ fontSize: F.sm, color: T.ink3 }}>Nobody else matches.</div>}
+        </div>
+        {err && <div style={{ color: T.red, fontSize: F.sm }}>{err}</div>}
+        <button onClick={() => void add()} disabled={!picked.size || busy} className="rounded" style={{ height: 38, background: T.hiviz, color: T.onHiviz, fontFamily: disp, fontSize: F.xs, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", cursor: "pointer", opacity: !picked.size || busy ? 0.5 : 1 }}>
+          {busy ? "Adding…" : `Add ${picked.size || ""}`}
+        </button>
+      </div>
+    </Sheet>
+  );
+}
+
+export function ThreadList({ folded = false }: { folded?: boolean }) {
   const router = useRouter();
   const params = useSearchParams();
+  const pathname = usePathname();
   const q = (params.get("q") ?? "").trim().toLowerCase();
+  const ctx = useThreads();
+  const openId = /^\/dashboard\/messages\/([^/?]+)/.exec(pathname)?.[1] ?? null;
 
   const [threads, setThreads] = useState<Thread[]>([]);
-  const [counts, setCounts] = useState<Counts | null>(null);
+  const counts: Counts | null = ctx?.counts ?? null;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [noOrg, setNoOrg] = useState(false);
   const [drift, setDrift] = useState<{ count: number | null; error?: string } | null>(null);
 
-  // ?f= opens the list on a chip — the desktop top bar's "unnamed" counter
-  // links to ?f=unsorted. Adjusted during render (not in an effect) when the
-  // param changes while the list stays mounted in the messages layout.
-  const fParam = params.get("f");
-  // Unsorted is the inbox: filing someone moves them out of it.
-  const [filter, setFilter] = useState(fParam ?? "unsorted");
-  const [seenF, setSeenF] = useState(fParam);
-  if (fParam !== seenF) {
-    setSeenF(fParam);
-    if (fParam) setFilter(fParam);
-  }
+  // The thread picked in the rail / drawer (Threads v2): a bucket, "archived", or one Coy made.
+  const filter = ctx?.thread ?? "unsorted";
+  const isCustom = !isSystemKey(filter) && filter !== "archived";
+  const label = threadLabel(filter, ctx?.custom ?? null);
+  const customThread = isCustom ? ctx?.custom?.find((t) => t.id === filter) ?? null : null;
   const [openRow, setOpenRow] = useState<string | null>(null);
   // Swipe tray: one row at a time. Toast: what was just filed, with Undo.
   const [trayRow, setTrayRow] = useState<string | null>(null);
   const [toast, setToast] = useState<{ contactId: string; label: string } | null>(null);
   const [deciding, setDeciding] = useState(false);
+  // Archive (migration 066): pick rows, archive them with Undo; the Archived view brings them back.
+  const [selecting, setSelecting] = useState(false);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [archived, setArchived] = useState<Thread[] | null>(null);
+  const [archToast, setArchToast] = useState<{ label: string; logId: string | null } | null>(null);
+  const [archBusy, setArchBusy] = useState(false);
+  // Recent → A–Z → By role, remembered per thread on this device (Threads v2).
+  const [sorts, setSorts] = useState<Record<string, ThreadSort>>({});
+  useEffect(() => {
+    const t = setTimeout(() => { try { setSorts(JSON.parse(localStorage.getItem("sc:threads-sorts") ?? "{}")); } catch { /* no storage */ } }, 0);
+    return () => clearTimeout(t);
+  }, []);
+  const sort: ThreadSort = sorts[filter] ?? "recent";
+  const pickSort = (k: ThreadSort) => setSorts((m) => { const n = { ...m, [filter]: k }; try { localStorage.setItem("sc:threads-sorts", JSON.stringify(n)); } catch { /* no storage */ } return n; });
 
   // Bumped after a confirm, so the list and the chip counts both refetch: the
   // row's display_name becomes the real name and Unsorted drops by one. A
@@ -641,14 +775,6 @@ export function ThreadList() {
       })
       .catch((e) => { if (!off) { setError(e instanceof Error ? e.message : String(e)); setLoading(false); } });
 
-    // Counts for everything the thread list cannot see on its own. A failure
-    // here leaves `counts` null and the affected chips simply do not render —
-    // it never falls back to zero.
-    fetch("/api/threads/counts")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => { if (!off && d?.counts) setCounts(d.counts as Counts); })
-      .catch(() => {});
-
     // v34 has a mock constant also called DRIFT. It is not imported anywhere
     // and must never be. A drift figure that did not come from here is a bug.
     fetch("/api/dashboard/drift")
@@ -658,33 +784,148 @@ export function ThreadList() {
 
     return () => { off = true; };
   }, [reload]);
+  // The rail's counts follow every change here.
+  const refreshCounts = ctx?.refresh;
+  const [seenReload, setSeenReload] = useState(0);
+  if (reload !== seenReload) { setSeenReload(reload); if (reload > 0) refreshCounts?.(); }
+
+  // A thread Coy made: its members, including those with no calls or texts yet.
+  const [customRows, setCustomRows] = useState<Thread[] | null>(null);
+  useEffect(() => {
+    if (!isCustom) return;
+    let off = false;
+    fetch(`/api/threads?thread=${encodeURIComponent(filter)}`).then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (!off) setCustomRows(Array.isArray(d?.threads) ? d.threads : []); })
+      .catch(() => { if (!off) setCustomRows([]); });
+    return () => { off = true; };
+  }, [filter, isCustom, reload]);
+
+  useEffect(() => {
+    if (filter !== "archived") return;
+    let off = false;
+    fetch("/api/threads?view=archived").then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (!off) setArchived(Array.isArray(d?.threads) ? d.threads : []); })
+      .catch(() => { if (!off) setArchived([]); });
+    return () => { off = true; };
+  }, [filter, reload]);
+
+  // Archiving asks why first (Coy, 2026-10-04); restoring doesn't.
+  const [asking, setAsking] = useState<string[] | null>(null);
+  const archive = useCallback(async (ids: string[], restore: boolean, note: string | null = null) => {
+    if (!ids.length) return;
+    setArchBusy(true);
+    // Out of the list at once; the refetch brings the server's word and the counts.
+    if (restore) setArchived((a) => (a ?? []).filter((t) => !ids.includes(t.contact_id)));
+    else setThreads((ts) => ts.filter((t) => !ids.includes(t.contact_id)));
+    try {
+      const r = await fetch(restore ? "/api/archive/restore" : "/api/archive", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(restore ? { kind: "contact", ids } : { kind: "contact", ids, action: "archive", note }),
+      });
+      const b = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(b?.error || `HTTP ${r.status}`);
+      setArchToast({ label: restore ? `Unarchived ${b.restored ?? ids.length}` : b.label ?? `Archived ${ids.length}`, logId: restore ? null : b.log_id ?? null });
+      setTimeout(() => setArchToast((cur) => (cur?.logId === (restore ? null : b.log_id ?? null) ? null : cur)), 8000);
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    finally { setPicked(new Set()); setSelecting(false); setArchBusy(false); setReload((n) => n + 1); }
+  }, []);
+  const undoArchive = useCallback(async (logId: string) => {
+    setArchToast(null);
+    try {
+      const r = await fetch(`/api/archive/${logId}/undo`, { method: "POST" });
+      if (!r.ok) throw new Error((await r.json().catch(() => ({})))?.error || `HTTP ${r.status}`);
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    setReload((n) => n + 1);
+  }, []);
 
   const chipCount = useCallback((k: string): number | null => {
+    if (!isSystemKey(k) && k !== "archived") return ctx?.customCounts[k] ?? customThread?.count ?? null;
     if (!counts) return null;
     return typeof counts[k] === "number" ? counts[k] : null;
-  }, [counts]);
+  }, [counts, ctx, customThread]);
 
 
+  // Customers whose work is finished are tucked away until asked for (Coy, 2026-10-04:
+  // "hide completed customer threads and archive lost thread"), remembered on the device.
+  const [showDone, setShowDoneState] = useState(false);
+  useEffect(() => {
+    let off = false;
+    Promise.resolve().then(() => { try { if (!off && localStorage.getItem("sc:threads-show-done") === "1") setShowDoneState(true); } catch { /* none */ } });
+    return () => { off = true; };
+  }, []);
+  const setShowDone = (v: boolean) => { setShowDoneState(v); try { localStorage.setItem("sc:threads-show-done", v ? "1" : "0"); } catch { /* private window */ } };
+  const finishing = filter === "customers" && !q;
+  const [archBucket, setArchBucket] = useState<string>("all");
+  const doneHere = finishing ? threads.filter((t) => matches(t, filter) && t.job_state === "done").length : 0;
+  const lostIds = finishing ? threads.filter((t) => matches(t, filter) && t.job_state === "lost").map((t) => t.contact_id) : [];
   const visible = useMemo(() => {
     // A search looks in every bucket; otherwise the chip decides.
-    let rows = q ? threads : threads.filter((t) => matches(t, filter));
+    // Archived is its own tab (Coy, 2026-10-04), filtered by bucket and searched on its own.
+    let rows = filter === "archived" ? (archived ?? []).filter((t) => archBucket === "all" || matches(t, archBucket))
+      : q ? threads : isCustom ? (customRows ?? []) : threads.filter((t) => matches(t, filter));
+    if (filter === "customers" && !q && !showDone) rows = rows.filter((t) => t.job_state !== "done");
     if (q) {
       rows = rows.filter((t) =>
         t.display_name.toLowerCase().includes(q)
         || (t.phone ?? "").toLowerCase().includes(q)
         || t.preview.toLowerCase().includes(q));
     }
+    // Recent, A–Z (a bare number last) or by role (Threads v2).
+    if (!q) rows = sortRows(rows, sort);
     return rows;
-  }, [threads, filter, q]);
+  }, [threads, filter, q, archived, sort, isCustom, customRows, showDone, archBucket]);
+  const silentHere = visible.filter((t) => t.silent).length;
+  // Opening a contact keeps the thread in the address and folds the list on a desktop.
+  const openContact = (id: string) => {
+    router.push(`/dashboard/messages/${id}?t=${encodeURIComponent(filter)}`);
+    if (window.matchMedia("(min-width: 1024px)").matches) ctx?.setFolded(true);
+  };
+  const [adding, setAdding] = useState(false);
+
+  // Folded (Threads v2): a 56px column of initials, the open one filled; › brings the list back.
+  if (folded) {
+    return (
+      <div className="flex flex-col items-center">
+        <button onClick={() => ctx?.setFolded(false)} aria-label="Show the list" title="Show the list"
+          className="flex items-center justify-center" style={{ width: "100%", height: 46, color: T.ink2, cursor: "pointer", borderBottom: `1px solid ${T.hairSoft}` }}>›</button>
+        <div style={{ ...eyebrow, fontSize: 9, color: label.color, padding: "4px 0" }}>{chipCount(filter) ?? ""}</div>
+        {visible.map((t) => (
+          <button key={t.contact_id} onClick={() => openContact(t.contact_id)} title={t.display_name} aria-label={t.display_name}
+            className="flex items-center justify-center" style={{ width: "100%", height: 46, cursor: "pointer",
+              borderLeft: `3px solid ${openId === t.contact_id ? T.hiviz : "transparent"}`, background: openId === t.contact_id ? T.hivizDim : "transparent" }}>
+            <InitialsBox name={t.name_is_phone ? null : t.display_name} on={openId === t.contact_id} size={32} />
+          </button>
+        ))}
+      </div>
+    );
+  }
+  const pick = (id: string) => setPicked((p) => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
   return (
     <div>
+      {adding && customThread && (
+        <AddToThread thread={customThread} people={threads} onClose={() => setAdding(false)} onAdded={() => { setAdding(false); setReload((n) => n + 1); }} />
+      )}
+      {/* Phone: + adds someone to the thread Coy made. */}
+      {customThread && !selecting && (
+        <button onClick={() => setAdding(true)} aria-label="Add a contact to this thread" className="lg:hidden fixed z-30 flex items-center justify-center rounded"
+          style={{ right: 16, bottom: "calc(var(--sc-foot) + 16px)", width: 48, height: 48, background: T.hiviz, color: T.onHiviz, fontSize: 24, boxShadow: "0 6px 16px rgba(0,0,0,.25)", cursor: "pointer" }}>+</button>
+      )}
       {toast && (
         <div className="fixed left-3 right-3 lg:left-auto lg:right-6 lg:w-[360px] bottom-[84px] lg:bottom-6 z-40 rounded-lg px-3 flex items-center gap-2"
-          role="status" style={{ height: 44, background: T.ink, color: "#fff", boxShadow: "0 6px 20px rgba(0,0,0,.25)" }}>
+          role="status" style={{ height: 44, background: T.ink, color: T.card, boxShadow: "0 6px 20px rgba(0,0,0,.25)" }}>
           <span style={{ fontSize: F.sm, flex: 1 }}>Filed as {toast.label}</span>
           <button onClick={() => { const c = toast.contactId; setToast(null); void bucketDecide(c, null); }}
             style={{ ...eyebrow, color: T.hiviz, fontSize: F.sm, cursor: "pointer" }}>Undo</button>
+        </div>
+      )}
+
+      {archToast && (
+        <div className="fixed left-3 right-3 lg:left-auto lg:right-6 lg:w-[360px] bottom-[84px] lg:bottom-6 z-40 rounded-lg px-3 flex items-center gap-2"
+          role="status" style={{ height: 44, background: T.ink, color: T.card, boxShadow: "0 6px 20px rgba(0,0,0,.25)" }}>
+          <span style={{ fontSize: F.sm, flex: 1 }}>{archToast.label}</span>
+          {archToast.logId && <button onClick={() => void undoArchive(archToast.logId as string)}
+            style={{ ...eyebrow, color: T.hiviz, fontSize: F.sm, cursor: "pointer" }}>Undo</button>}
         </div>
       )}
 
@@ -725,25 +966,120 @@ export function ThreadList() {
         </div>
       )}
 
-      {/* All five on screen, one row, no funnel. Each chip wears its bucket's
-          colour — the same colour as that bucket's tag on the rows. */}
+      {/* Threads v2 header: the thread's name in its colour, how many, the
+          sort, and — with a contact open — the fold. On a phone ☰ opens the
+          threads drawer (the five buckets, yours, + New). */}
       {!q && (
-        <div className="grid gap-1 px-2.5 pt-2.5 pb-1.5" style={{ gridTemplateColumns: `repeat(${CHIPS.length}, minmax(0, 1fr))` }}
-          role="tablist" aria-label="Buckets">
-          {CHIPS.map(({ k, l, c }) => {
-            const on = filter === k;
-            const n = chipCount(k);
+        <div style={{ padding: "12px 12px 10px 14px", borderBottom: `1px solid ${T.hairSoft}` }}>
+          <div className="flex items-center gap-2">
+            <button onClick={() => ctx?.setDrawer(true)} aria-label="Threads" className="lg:hidden shrink-0 flex items-center justify-center rounded"
+              style={{ width: 40, height: 40, border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink, cursor: "pointer" }}>
+              <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true"><path d="M3 5h14M3 10h14M3 15h14" /></svg>
+            </button>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div className="flex items-baseline gap-2" style={{ minWidth: 0 }}>
+                <span style={{ fontFamily: disp, fontSize: 20, fontWeight: 700, textTransform: "uppercase", color: label.color, lineHeight: 1.1, ...clip }}>{label.name}</span>
+                <span style={{ ...nums, fontSize: 13, color: T.ink3 }}>{chipCount(filter) ?? ""}</span>
+              </div>
+              {customThread?.job_line && <div className="lg:hidden" style={{ fontSize: 11.5, color: T.ink3, ...clip }}>{customThread.job_line}</div>}
+            </div>
+            {filter !== "archived" && (
+              <select value={sort} onChange={(e) => pickSort(e.target.value as ThreadSort)} aria-label="Sort" title="Sort the list" className="shrink-0 rounded"
+                style={{ fontFamily: disp, fontSize: 12, fontWeight: 600, letterSpacing: ".06em", textTransform: "uppercase", height: 26, padding: "0 4px", border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink, cursor: "pointer" }}>
+                {THREAD_SORTS.map((x) => <option key={x.k} value={x.k}>{x.label}</option>)}
+              </select>
+            )}
+            {openId && (
+              <button onClick={() => ctx?.setFolded(true)} aria-label="Fold the list" title="Fold the list to initials" className="hidden lg:flex shrink-0 items-center justify-center rounded"
+                style={{ width: 24, height: 24, border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink2, cursor: "pointer" }}>‹</button>
+            )}
+          </div>
+          {customThread && <div className="hidden lg:flex items-center gap-2 mt-1" style={{ fontSize: 11.5, color: T.ink3, minWidth: 0 }}>
+            {customThread?.job_id && (
+              <span className="shrink-0 rounded" style={{ fontFamily: disp, fontSize: 10, fontWeight: 600, letterSpacing: ".06em", textTransform: "uppercase", padding: "0 4px", lineHeight: "15px", border: `1px solid ${T.hiviz}`, color: T.hiviz }}>Job</span>
+            )}
+            <span style={{ ...clip, flex: 1 }}>
+              {customThread.job_id
+                  ? <Link href={`/dashboard/scope/${customThread.job_id}`} style={{ color: T.ink3 }}>{customThread.job_line}</Link>
+                  : customThread.source === "customer" ? "Everyone on this customer" : "Hand-picked"}
+            </span>
+            <button onClick={() => setAdding(true)} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>+ Add contact</button>
+          </div>}
+        </div>
+      )}
+
+      {filter === "archived" && !loading && (archived?.length ?? 0) > 0 && (
+        <div className="flex items-center gap-1.5 px-2.5 py-1.5 overflow-x-auto" style={{ borderBottom: `1px solid ${T.hairSoft}`, scrollbarWidth: "none" }} aria-label="Filter archived threads">
+          {([["all", "All"], ["customers", "Customer"], ["unsorted", "Unsorted"], ["vendors", "Vendor"], ["personal", "Personal"], ["spam", "Spam"]] as const).map(([k, l]) => {
+            const n = k === "all" ? archived!.length : archived!.filter((t) => matches(t, k)).length;
+            if (k !== "all" && n === 0) return null;
+            const on = archBucket === k;
             return (
-              <button key={k} role="tab" aria-selected={on} onClick={() => { setFilter(k); setOpenRow(null); setTrayRow(null); }}
-                className="rounded flex flex-col items-center justify-center"
-                style={{ height: 42, minWidth: 0, padding: "0 2px", cursor: "pointer",
-                         border: `1.5px solid ${c}`, background: on ? c : T.card, color: on ? "#fff" : c }}>
-                <span style={{ fontFamily: disp, fontSize: F.md, fontWeight: 700, lineHeight: 1, ...nums }}>{n ?? "·"}</span>
-                <span style={{ fontFamily: disp, fontSize: F.micro, fontWeight: 600, letterSpacing: 0,
-                               textTransform: "uppercase", marginTop: 2, maxWidth: "100%", ...clip }}>{l}</span>
+              <button key={k} onClick={() => setArchBucket(k)} className="shrink-0 rounded px-2.5"
+                style={{ height: 28, border: `1px solid ${on ? T.ink : T.hair}`, background: on ? T.ink : T.card, color: on ? T.card : T.ink2, fontSize: 12, cursor: "pointer" }}>
+                {l} <span style={{ opacity: 0.7 }}>{n}</span>
               </button>
             );
           })}
+        </div>
+      )}
+
+      <ArchiveDialog open={!!asking} kind="contact" action="archive" count={asking?.length ?? 1}
+        what={asking && asking.length > 1 ? `${asking.length} threads` : "this thread"}
+        onCancel={() => setAsking(null)} onConfirm={(note) => { const ids = asking ?? []; setAsking(null); void archive(ids, false, note); }} />
+      {/* Select and archive (Coy, 2026-10-03: calls where nothing was said — not spam, not anyone).
+          Archived threads come back on their own when that number calls or texts again. */}
+      {!q && !loading && !error && (
+        <div className="flex items-center gap-1.5 px-2.5 py-1.5 flex-wrap" style={{ borderBottom: `1px solid ${T.hairSoft}`, background: selecting ? T.hivizDim : "transparent" }}>
+          {!selecting ? (
+            <>
+              {/* Archived is its own tab in the rail now, under Vendor (Coy, 2026-10-04). */}
+              {filter === "archived" && <Link href="/dashboard/archive" style={{ ...eyebrow, color: T.ink3 }}>Deleted customers &amp; jobs ›</Link>}
+              {doneHere > 0 && (
+                <button onClick={() => setShowDone(!showDone)} style={{ ...eyebrow, color: showDone ? T.ink : T.ink3, cursor: "pointer", marginLeft: 10 }}
+                  title="Customers whose every job is complete">
+                  {showDone ? `Hide done · ${doneHere}` : `Done · ${doneHere} hidden — show`}
+                </button>
+              )}
+              {lostIds.length > 0 && (
+                <button disabled={archBusy} onClick={() => setAsking(lostIds)} style={{ ...eyebrow, color: T.chalk, cursor: "pointer", marginLeft: 10 }}
+                  title="Archive every customer whose jobs are all lost — they come back if they call or text again">
+                  Archive lost · {lostIds.length}
+                </button>
+              )}
+              <span className="flex-1" />
+              {visible.length > 0 && (
+                <button onClick={() => { setSelecting(true); setPicked(new Set()); setOpenRow(null); setTrayRow(null); }}
+                  className="rounded px-2.5" style={{ ...eyebrow, height: 28, border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink, cursor: "pointer" }}>Select</button>
+              )}
+            </>
+          ) : (
+            <>
+              <span style={{ fontSize: F.sm, fontWeight: 600 }}>{picked.size} selected</span>
+              {lostIds.length > 0 && (
+                <button onClick={() => setPicked(new Set(lostIds))}
+                  className="rounded px-2" style={{ ...eyebrow, height: 28, border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink, cursor: "pointer" }}>
+                  Lost · {lostIds.length}
+                </button>
+              )}
+              {filter !== "archived" && silentHere > 0 && (
+                <button onClick={() => setPicked(new Set(visible.filter((t) => t.silent).map((t) => t.contact_id)))}
+                  className="rounded px-2" style={{ ...eyebrow, height: 28, border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink, cursor: "pointer" }}>
+                  Nothing said · {silentHere}
+                </button>
+              )}
+              <button onClick={() => setPicked(picked.size === visible.length ? new Set() : new Set(visible.map((t) => t.contact_id)))}
+                className="rounded px-2" style={{ ...eyebrow, height: 28, border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink, cursor: "pointer" }}>
+                {picked.size === visible.length ? "None" : "All"}
+              </button>
+              <span className="flex-1" />
+              <button onClick={() => { setSelecting(false); setPicked(new Set()); }} style={{ ...eyebrow, color: T.ink3, cursor: "pointer" }}>Cancel</button>
+              <button disabled={!picked.size || archBusy} onClick={() => (filter === "archived" ? void archive([...picked], true) : setAsking([...picked]))}
+                className="rounded px-3" style={{ ...eyebrow, height: 30, background: T.hiviz, color: T.onHiviz, cursor: "pointer", opacity: !picked.size || archBusy ? 0.5 : 1 }}>
+                {filter === "archived" ? `Unarchive ${picked.size || ""}` : `Archive ${picked.size || ""}`}
+              </button>
+            </>
+          )}
         </div>
       )}
 
@@ -759,23 +1095,30 @@ export function ThreadList() {
           detail="You are signed in, but nothing is shared with this account yet. Ask for an invitation to your organisation." />
       ) : error ? (
         <EmptyState tone="warn" title="Couldn't load threads" detail={error} />
-      ) : threads.length === 0 ? (
+      ) : threads.length === 0 && filter !== "archived" && !isCustom ? (
         <EmptyState title="No threads yet" detail="Calls and texts appear here as they arrive." />
       ) : visible.length === 0 ? (
         <EmptyState
-          title={q ? `Nothing matches “${q}”` : `Nothing under ${CHIPS.find((c) => c.k === filter)?.l ?? filter}`}
+          title={q ? `Nothing matches “${q}”` : filter === "archived" ? "Nothing archived" : isCustom ? "Nobody in this thread yet" : `Nothing under ${label.name}`}
           detail={q
             ? "This searches names, numbers and each thread's latest message. Full text over every message isn't wired yet, so a word said mid-conversation won't be found here."
-            : WHY_EMPTY[filter] ?? "Nothing under this filter."} />
+            : isCustom ? "Tap + Add contact to put people in it. A job thread fills itself as people join the job." : WHY_EMPTY[filter] ?? "Nothing under this filter."} />
       ) : (
         <div>
-          {visible.map((t, i) => (
+          {(selecting || filter === "archived") && visible.map((t) => (
+            <SelectRow key={t.contact_id} t={t} selecting={selecting} on={picked.has(t.contact_id)} onPick={() => pick(t.contact_id)}
+              onOpen={() => openContact(t.contact_id)}
+              onRestore={filter === "archived" ? () => void archive([t.contact_id], true) : undefined} />
+          ))}
+          {!selecting && filter !== "archived" && visible.map((t, i) => (
             <ThreadRow key={t.contact_id} t={t} first={i === 0}
               expanded={openRow === t.contact_id}
               onToggle={() => setOpenRow(openRow === t.contact_id ? null : t.contact_id)}
-              onOpen={() => router.push(`/dashboard/messages/${t.contact_id}`)}
+              onOpen={() => openContact(t.contact_id)}
+              selected={openId === t.contact_id}
               onDecide={decide} onName={nameDecide} onBucket={(id, bucket, sub) => fileAndToast(id, bucket, sub)}
               subtypes={subtypes} deciding={deciding}
+              chipShown={!q && isSystemKey(filter)}
               trayOpen={trayRow === t.contact_id}
               onTray={(open) => setTrayRow(open ? t.contact_id : null)}
               onAccept={(bucket) => fileAndToast(t.contact_id, bucket, bucket === "vendor" && t.proposal?.classification === "sub" ? "subcontractor" : null)} />

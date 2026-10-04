@@ -39,7 +39,7 @@
  */
 
 import React, { useEffect, useRef, useState } from "react";
-import { T, F, disp, body, eyebrow, clip } from "@/lib/v34/tokens";
+import { T, F, disp, body, eyebrow, clip, formatPhone } from "@/lib/v34/tokens";
 
 type Channel = "text" | "email" | "note";
 
@@ -85,7 +85,7 @@ function recognitionCtor(): (new () => Recognition) | null {
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
 }
 
-export function Composer({ contactId, phone, name, compact = false, onNoteSaved }: {
+export function Composer({ contactId, phone, name, compact = false, onNoteSaved, only, fromLine }: {
   contactId: string;
   /** E.164, for the Call link. */
   phone: string | null;
@@ -95,11 +95,20 @@ export function Composer({ contactId, phone, name, compact = false, onNoteSaved 
   compact?: boolean;
   /** A note was saved — the page reloads its timeline. */
   onNoteSaved?: () => void;
+  /** The customer page picks the channel from its filter: no tabs, this one only. */
+  only?: "text" | "email";
+  /**
+   * Which of your lines a text goes from (Lines, Claude Design package 9) — the
+   * line they last used, else the primary; picked from `lines`. Only when the
+   * org has two or more. Still copied into Quo: nothing sends (§10, 10DLC).
+   */
+  fromLine?: { lines: Array<{ id: string; name: string; color: string; provider: string | null }>; value: string | null; onPick: (id: string) => void } | null;
 }) {
   // Lazy init reads the saved draft once, on mount. No effect needed, so no
   // setState inside one.
-  const [channel, setChannel] = useState<Channel>(() =>
+  const [chosen, setChannel] = useState<Channel>(() =>
     typeof window === "undefined" ? "text" : readDraft(contactId).channel);
+  const channel: Channel = only ?? chosen;
   const [text, setText] = useState(() =>
     typeof window === "undefined" ? "" : readDraft(contactId).text);
   const [copied, setCopied] = useState<"ok" | "failed" | null>(null);
@@ -180,11 +189,11 @@ export function Composer({ contactId, phone, name, compact = false, onNoteSaved 
       {/* Which surface am I speaking on. */}
       {!compact && (
         <div className="flex items-center gap-1 pb-2">
-          {([["text", "Text"], ["email", "Email"], ["note", "Note"]] as const).map(([k, label]) => (
+          {!only && ([["text", "Text"], ["email", "Email"], ["note", "Note"]] as const).map(([k, label]) => (
             <button key={k} onClick={() => setChannel(k)} aria-pressed={channel === k}
               className="rounded px-2.5"
               style={{ height: 26, background: channel === k ? T.ink : T.card,
-                       color: channel === k ? "#fff" : T.ink2,
+                       color: channel === k ? T.card : T.ink2,
                        border: `1px solid ${channel === k ? T.ink : T.hair}`,
                        fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", cursor: "pointer" }}>
               {label}
@@ -197,9 +206,24 @@ export function Composer({ contactId, phone, name, compact = false, onNoteSaved 
       )}
 
       <div className="flex items-end gap-1.5">
+        {channel === "text" && fromLine && fromLine.lines.length > 1 && (() => {
+          const cur = fromLine.lines.find((l) => l.id === fromLine.value) ?? fromLine.lines[0];
+          return (
+            <label className="flex items-center gap-1 rounded-full px-2 shrink-0" style={{ height: 30, border: `1px solid ${T.hair}`, background: T.card, fontSize: 11.5 }} title="The line this text goes from">
+              <span style={{ width: 7, height: 7, borderRadius: 7, background: cur.color, display: "inline-block" }} />
+              <select value={cur.id} onChange={(e) => fromLine.onPick(e.target.value)} aria-label="Text from line"
+                style={{ border: "none", background: "transparent", fontSize: 11.5, color: T.ink, maxWidth: 90 }}>
+                {fromLine.lines.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+              </select>
+            </label>
+          );
+        })()}
         <textarea value={text} onChange={(e) => setText(e.target.value)} rows={compact ? 2 : 1}
           placeholder={channel === "note" ? "A note about them — stays internal"
-            : channel === "email" ? "Write the email" : `Text ${first ?? "them"} back…`}
+            : channel === "email" ? "Write the email"
+            : fromLine && fromLine.lines.length > 1 ? (() => { const cur = fromLine.lines.find((l) => l.id === fromLine.value) ?? fromLine.lines[0];
+                return `Text ${phone ? formatPhone(phone) : first ?? "them"} from ${cur.name}${cur.provider === "quo" ? " — copy it into Quo" : ""}`; })()
+            : `Text ${first ?? "them"} back…`}
           className="flex-1 px-2.5 py-2 rounded-lg outline-none resize-none"
           style={{ border: `1px solid ${T.hair}`, background: T.card, fontSize: F.sm,
                    maxHeight: 120, lineHeight: 1.4, fontFamily: body, minWidth: 0 }} />
@@ -212,10 +236,10 @@ export function Composer({ contactId, phone, name, compact = false, onNoteSaved 
             className={listening ? "sc-rec" : undefined}
             style={{ ...iconBtn, opacity: canDictate ? 1 : 0.45, cursor: canDictate ? "pointer" : "not-allowed",
                      background: listening ? T.red : T.card, borderColor: listening ? T.red : T.hair }}>
-            <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true">
-              <rect x="5.4" y="1.6" width="4.2" height="7.6" rx="2.1" fill="none" stroke={listening ? "#fff" : T.ink2} strokeWidth="1.5" />
-              <path d="M3 7.4a4.5 4.5 0 0 0 9 0" fill="none" stroke={listening ? "#fff" : T.ink2} strokeWidth="1.5" strokeLinecap="round" />
-              <path d="M7.5 11.9v1.6" stroke={listening ? "#fff" : T.ink2} strokeWidth="1.5" strokeLinecap="round" />
+            <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true" style={{ color: listening ? T.card : T.ink2 }}>
+              <rect x="5.4" y="1.6" width="4.2" height="7.6" rx="2.1" fill="none" stroke="currentColor" strokeWidth="1.5" />
+              <path d="M3 7.4a4.5 4.5 0 0 0 9 0" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+              <path d="M7.5 11.9v1.6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
             </svg>
           </button>
         )}
@@ -235,7 +259,7 @@ export function Composer({ contactId, phone, name, compact = false, onNoteSaved 
           <button disabled aria-label="Send — not connected" title={NOT_CONNECTED[channel]}
             style={{ ...iconBtn, background: T.hairSoft, border: `1px dashed ${T.ink3}`, cursor: "not-allowed" }}>
             <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true">
-              <path d="M7.5 12.4V2.8M3.4 6.9 7.5 2.6l4.1 4.3" fill="none" stroke={T.ink3}
+              <path d="M7.5 12.4V2.8M3.4 6.9 7.5 2.6l4.1 4.3" fill="none" stroke="currentColor" style={{ color: T.ink3 }}
                 strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </button>
@@ -260,3 +284,4 @@ export function Composer({ contactId, phone, name, compact = false, onNoteSaved 
     </div>
   );
 }
+

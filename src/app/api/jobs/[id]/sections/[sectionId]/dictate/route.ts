@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
+import { isReinforcementCard } from "@/lib/cost-cards";
 import { hermesJson } from "@/lib/hermes";
 import { DICTATE_SYSTEM, sanitizeDictation, type DictatedSection } from "@/lib/dictate";
 
@@ -51,8 +52,11 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   if (!audio || audio.size === 0) return fail("No audio came through.", 400);
   if (audio.size > MAX_AUDIO) return fail("That recording is too long — keep it under a minute.", 400);
 
-  const { data: types } = await supabase.from("org_reinforcement_types").select("id, name").eq("org_id", orgId).eq("active", true);
-  const rtypes = (types ?? []) as Array<{ id: string; name: string }>;
+  // Reinforcement is a card (step 3b): the mesh / rebar / fiber cards in the Price book.
+  const { data: cards } = await supabase.from("cost_items").select("id, name, qty_rule, rule_params").eq("org_id", orgId).eq("active", true)
+    .in("qty_rule", ["per_sheet", "per_stick", "per_cy"]);
+  const rtypes = ((cards ?? []) as Array<{ id: string; name: string; qty_rule: string; rule_params: Record<string, number> | null }>)
+    .filter(isReinforcementCard).map((c) => ({ id: c.id, name: c.name }));
 
   // 1. Words. The prompt primes Whisper with the trade's vocabulary.
   const up = new FormData();

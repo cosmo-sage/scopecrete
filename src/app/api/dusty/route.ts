@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
-import { buildContext, parseRef } from "@/lib/dusty/context";
+import { buildContext, parseRef, reachBlocks, renderReach } from "@/lib/dusty/context";
 import { DUSTY_SYSTEM } from "@/lib/dusty/prompt";
 import { PLAN_RULES, RECORD_RULES } from "@/lib/dusty/plan";
 
@@ -79,6 +79,20 @@ export async function POST(req: NextRequest) {
   }
 
   const ctx = await buildContext(supabase, orgId, ref);
+
+  // Beyond the open page (Coy, 2026-10-04: "He needs to be aware of all phone calls, texts,
+  // emails"): the recent traffic, everyone and everything the question names, and a search of
+  // it all. "The question" includes Coy's last few messages, so a follow-up ("and her email?") still finds her.
+  let asked = question;
+  if (typeof body.conversation_id === "string" && convId) {
+    const { data: prior } = await supabase.from("dusty_messages").select("content").eq("conversation_id", convId).eq("role", "user")
+      .order("created_at", { ascending: false }).limit(3);
+    asked = [question, ...((prior ?? []) as Array<{ content: string }>).map((m) => m.content)].join("\n").slice(0, 4000);
+  }
+  try {
+    const reach = renderReach(await reachBlocks(supabase, orgId, ref, asked));
+    if (reach) ctx.text += `\n\n${reach}`;
+  } catch { /* the page's own context still answers */ }
 
   // Files attached in the chat (the + beside the box, 2026-10-01): Dusty sees
   // each one's read — or that it isn't read yet. Org-checked under RLS.

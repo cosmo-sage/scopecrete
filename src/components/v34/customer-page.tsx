@@ -30,6 +30,7 @@ import { Sheet } from "@/components/v34/primitives";
 import { useWide } from "@/lib/v34/use-wide";
 import { PlayAudio, MessageMedia } from "@/components/v34/conversation";
 import { Composer } from "@/components/v34/composer";
+import { FilesPage } from "@/components/v34/files-page";
 import { FilesPanel } from "@/components/v34/files-panel";
 import { STATUS_NAME } from "@/lib/jobs/stages";
 import { CallNotesPad, DraftQuoteButton } from "@/components/v34/call-notes-pad";
@@ -342,42 +343,13 @@ function ThreadChips({ threads, contacts, big }: { threads: Array<{ id: string; 
 
 /** Files (Coy, 2026-10-03: one place — Documents is gone): everything on their people and jobs, filtered, and Add files. */
 function FilesTab({ customerId, primaryId, primaryName }: { customerId: string; primaryId: string | null; primaryName: string | null }) {
-  const [files, setFiles] = useState<Array<{ id: string; name: string; category: string | null; created_at: string; summary: string | null; kind: string }> | null>(null);
-  const [kind, setKind] = useState<"all" | "photo" | "pdf" | "other">("all");
+  // The Files page's own search and filters, pinned to this customer (its people's and jobs' files).
   const [adding, setAdding] = useState(false);
   const [tick, setTick] = useState(0);
-  useEffect(() => {
-    let off = false;
-    send(`/api/files/search?customer=${customerId}`, "GET").then((b) => { if (!off) setFiles(b.files ?? []); }).catch(() => { if (!off) setFiles([]); });
-    return () => { off = true; };
-  }, [customerId, tick]);
-  const of = (f: { kind: string }) => (f.kind === "image" || f.kind === "photo" ? "photo" : f.kind === "pdf" ? "pdf" : "other");
-  const shown = (files ?? []).filter((f) => kind === "all" || of(f) === kind);
-  const count = (k: typeof kind) => (files ?? []).filter((f) => k === "all" || of(f) === k).length;
+  const fixed = useMemo(() => ({ customer: customerId }), [customerId]);
   return (
     <div className="p-4 flex flex-col gap-3">
-      <div className="flex items-center gap-1.5 flex-wrap">
-        {(["all", "photo", "pdf", "other"] as const).map((k) => (
-          <button key={k} onClick={() => setKind(k)} className="rounded px-2.5" style={{ height: 28, border: `1px solid ${kind === k ? T.ink : T.hairStrong}`, background: kind === k ? T.ink : T.card, color: kind === k ? T.card : T.ink2,
-            fontFamily: disp, fontSize: 11.5, letterSpacing: ".06em", textTransform: "uppercase", cursor: "pointer" }}>
-            {k === "all" ? "All" : k === "photo" ? "Photos" : k === "pdf" ? "PDFs" : "Other"} <span style={nums}>{count(k)}</span>
-          </button>
-        ))}
-        <span className="flex-1" />
-        {primaryId && <button onClick={() => setAdding(true)} style={btn(true)}>+ Add files</button>}
-      </div>
-      {files === null ? <Empty text="…" /> : !shown.length ? <Empty text={files.length ? "Nothing of that kind." : "No files on this customer's people or jobs yet."} /> : (
-        <div className="rounded" style={{ background: T.card, border: `1px solid ${T.hair}` }}>
-          {shown.map((f, i) => (
-            <Link key={f.id} href={`/dashboard/files?file=${f.id}`} className="flex gap-3 px-3 py-2" style={{ borderTop: i ? `1px solid ${T.hairSoft}` : "none", color: T.ink }}>
-              <span style={{ ...lbl, fontSize: 10, width: 40, color: f.kind === "pdf" ? T.red : T.ink3 }}>{f.kind === "pdf" ? "PDF" : f.kind}</span>
-              <span style={{ flex: 1, minWidth: 0 }}><span style={{ display: "block", fontSize: F.sm, fontWeight: 600, ...clip }}>{f.name}</span>
-                {f.summary && <span style={{ display: "block", fontSize: F.xs, color: T.ink3, ...clip }}>{f.summary}</span>}</span>
-              <span style={{ fontSize: F.xs, color: T.ink3 }}>{relTime(f.created_at)}</span>
-            </Link>
-          ))}
-        </div>
-      )}
+      <FilesPage key={tick} embedded fixed={fixed} extra={primaryId ? <button onClick={() => setAdding(true)} style={btn(true)}>+ Add files</button> : null} />
       {adding && primaryId && (
         <Sheet open onClose={() => { setAdding(false); setTick((n) => n + 1); }} title="Add files" sub={`Filed on ${primaryName ?? "the primary contact"}; Dusty reads them in the background.`}>
           <div className="p-4"><FilesPanel contactId={primaryId} title="Files" /></div>

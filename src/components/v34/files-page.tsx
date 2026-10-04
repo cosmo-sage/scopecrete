@@ -29,8 +29,13 @@ const CHIPS: Array<[string, string]> = [
   ["vendor_quote", "Vendor quotes"], ["receipt", "Receipts"], ["contract", "Contracts"], ["proposal", "Proposals"], ["email", "Emails"], ["other", "Other"], ["unfiled", "Unfiled"],
 ];
 
-export function FilesPage() {
-  const [flt, setFlt] = useState<FileFilter>(EMPTY_FILTER);
+/**
+ * `fixed` pins filters (the customer page's Files tab pins its customer); `embedded`
+ * drops the page title and leaves the address alone; `extra` sits beside the search.
+ */
+export function FilesPage({ fixed, embedded, extra }: { fixed?: Partial<FileFilter>; embedded?: boolean; extra?: React.ReactNode } = {}) {
+  const base = useMemo(() => ({ ...EMPTY_FILTER, ...(fixed ?? {}) }), [fixed]);
+  const [flt, setFlt] = useState<FileFilter>(base);
   const [q, setQ] = useState("");
   const [custom, setCustom] = useState(false);
   const [facets, setFacets] = useState<Facets | null>(null);
@@ -38,9 +43,8 @@ export function FilesPage() {
   const cat = flt.cat, qDeb = flt.q;
   /** Change the filter; the address follows, so the view can be linked or bookmarked. */
   const set = (patch: Partial<FileFilter>) => setFlt((f) => {
-    const n = { ...f, ...patch };
-    const qs = filterQuery(n);
-    window.history.replaceState(null, "", `/dashboard/files${qs ? `?${qs}` : ""}`);
+    const n = { ...f, ...patch, ...(fixed ?? {}) };
+    if (!embedded) { const qs = filterQuery(n); window.history.replaceState(null, "", `/dashboard/files${qs ? `?${qs}` : ""}`); }
     return n;
   });
   const [files, setFiles] = useState<FileRow[] | null>(null);
@@ -60,7 +64,7 @@ export function FilesPage() {
   useEffect(() => {
     let off = false;
     Promise.resolve().then(() => {
-      if (off) return;
+      if (off || embedded) return;
       const sp = new URLSearchParams(window.location.search);
       setFileParam(sp.get("file"));
       const f = readFilter(sp);
@@ -70,7 +74,7 @@ export function FilesPage() {
       setFlt(f); setQ(f.q); setCustom(!!(f.from || f.to));
     });
     return () => { off = true; };
-  }, []);
+  }, [embedded]);
 
   const url = useMemo(() => {
     const u = new URLSearchParams(filterQuery({ ...flt, cat: flt.cat === "email" ? "" : flt.cat, q: flt.q.length >= 2 ? flt.q : "" }));
@@ -102,7 +106,7 @@ export function FilesPage() {
   const clearFile = () => { setFileParam(null); const qs = filterQuery(flt); window.history.replaceState(null, "", `/dashboard/files${qs ? `?${qs}` : ""}`); };
   const names: Record<string, string> = { ...jobNames, ...peopleNames };
   for (const k of ["jobs", "customers", "vendors", "people"] as const) for (const x of facets?.[k] ?? []) names[x.id] = x.name;
-  const chips = activeChips(flt, names, (c) => CHIPS.find(([k]) => k === c)?.[1] ?? c);
+  const chips = activeChips(flt, names, (c) => CHIPS.find(([k]) => k === c)?.[1] ?? c).filter((c) => !(fixed && c.key in fixed));
   const clearChip = (k: keyof FileFilter | "date") => {
     if (k === "q") setQ("");
     if (k === "date") { setCustom(false); set({ from: "", to: "" }); } else set({ [k]: "" } as Partial<FileFilter>);
@@ -116,19 +120,22 @@ export function FilesPage() {
   const select: React.CSSProperties = { height: 30, border: `1px solid ${T.hair}`, background: T.card, fontSize: F.xs, borderRadius: 4, padding: "0 6px", maxWidth: 200 };
 
   return (
-    <div className="mx-auto" style={{ maxWidth: 1000, padding: "12px 12px 24px" }}>
-      <h1 style={{ fontFamily: disp, fontSize: F.xl, fontWeight: 700, margin: 0 }}>Files</h1>
-      <div style={{ fontSize: F.xs, color: T.ink3, marginBottom: 8 }}>
+    <div className="mx-auto" style={{ maxWidth: 1000, padding: embedded ? 0 : "12px 12px 24px" }}>
+      {!embedded && <h1 style={{ fontFamily: disp, fontSize: F.xl, fontWeight: 700, margin: 0 }}>Files</h1>}
+      {!embedded && <div style={{ fontSize: F.xs, color: T.ink3, marginBottom: 8 }}>
         Every photo, plan, bid, quote, receipt and contract — uploaded, emailed or texted. Search finds the words inside them,
         or type any name: a person, vendor, customer or job brings up everything filed on them.
-      </div>
+      </div>}
 
+      <div className="flex gap-2 items-center">
       <input type="search" value={q} onChange={(e) => { setQ(e.target.value); if (fileParam) clearFile(); }}
         placeholder="Words in a file, or a name — Wilson, Angelle, Burgess Ave…" aria-label="Search files"
-        style={{ width: "100%", height: 36, border: `1px solid ${T.hair}`, borderRadius: 4, padding: "0 10px", fontSize: F.sm, background: T.card }} />
+        style={{ flex: 1, minWidth: 0, height: 36, border: `1px solid ${T.hair}`, borderRadius: 4, padding: "0 10px", fontSize: F.sm, background: T.card }} />
+      {extra}
+      </div>
 
       <div className="flex gap-1 flex-wrap" style={{ marginTop: 8 }}>
-        {CHIPS.map(([k, l]) => {
+        {CHIPS.filter(([k]) => !embedded || k !== "email").map(([k, l]) => {
           const on = cat === k;
           return (
             <button key={k || "all"} onClick={() => { set({ cat: k }); if (fileParam) clearFile(); }} aria-pressed={on} className="rounded px-2"
@@ -147,7 +154,7 @@ export function FilesPage() {
           {FILE_SOURCES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
         </select>
         {facetSelect("job", facets?.jobs, "Any job")}
-        {facetSelect("customer", facets?.customers, "Any customer")}
+        {!fixed?.customer && facetSelect("customer", facets?.customers, "Any customer")}
         {facetSelect("vendor", facets?.vendors, "Any vendor")}
         {facetSelect("contact", facets?.people, "Anyone")}
         <select value={custom ? "custom" : flt.since} aria-label="When" style={select}
@@ -174,7 +181,7 @@ export function FilesPage() {
               {c.label} <span aria-hidden="true" style={{ marginLeft: 2 }}>×</span>
             </button>
           ))}
-          <button onClick={() => { setQ(""); setCustom(false); set({ ...EMPTY_FILTER }); }} style={{ ...eyebrow, color: T.chalk, cursor: "pointer", marginLeft: 4 }}>Clear all</button>
+          <button onClick={() => { setQ(""); setCustom(false); set({ ...base }); }} style={{ ...eyebrow, color: T.chalk, cursor: "pointer", marginLeft: 4 }}>Clear all</button>
         </div>
       )}
 

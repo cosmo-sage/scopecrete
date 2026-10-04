@@ -1914,9 +1914,10 @@ expected start date per quoted job before it means anything. Add the field.
   (the merged calls and texts with call notes, as before), **Payments**,
   **Schedule**. **Documents is gone** — Coy: *"documents and files are
   redundantly copying the same things over in each spot … a 'files' tab is
-  the best one to keep"*; Files lists everything on the customer's people
-  and jobs with All · Photos · PDFs · Other and **+ Add files** (a fuller
-  filter system for files is to come). Overview: contact cards (initials,
+  the best one to keep"*; Files is the Files page itself pinned to the
+  customer (its people's and jobs' files, `FilesPage` with `fixed` /
+  `embedded`) — the same search, any name typed, chips and filters (2026-10-04)
+  — and **+ Add files**. Overview: contact cards (initials,
   Primary, a line per number and email, **Open in Threads ›**), the jobs with
   their price, **Threads these contacts are in** (their bucket and every
   thread Coy made that holds one of them), and on the right the location and
@@ -2058,6 +2059,23 @@ expected start date per quoted job before it means anything. Add the field.
   whole and usable. He stays HOT on the page that is open; a continued chat
   about something else offers "Ask about this page instead". History is behind
   ☰ in his header on every size. On a phone he is still the full page below.
+  **Beyond the open page (Coy, 2026-10-04: "Dusty has trouble seeing other
+  contexts outside of what page is open … He needs to be aware of all phone
+  calls, texts, emails, ect").** Every chat, whatever page it started on, now
+  also carries BEYOND THE PAGE (`reachBlocks()` / `renderReach()` in
+  `src/lib/dusty/context.ts`, ~45k characters, oldest lines trimmed first):
+  everyone, every customer (with its people) and every job **named in the
+  question** or Coy's last three messages (`mentioned()`,
+  `src/lib/dusty/mentions.ts`, tested: a whole name, or a surname /
+  distinctive first name of 4+ letters that isn't an everyday or trade word;
+  a shared first name brings all who have it) — who they are, their last 40
+  calls (Quo's summaries and next steps) and texts, Coy's notes, emails filed
+  on them, their files' reads; **a search of everything** for the question's
+  words (`sc_search` over people, texts, call summaries and transcripts,
+  notes, jobs and files, OR'd, plus email subjects and text); and the last
+  five days of calls and texts with the intake inbox (a cold chat already
+  had three days of them). Under the session, like the rest; the prompt
+  tells him never to say he can only see the open page.
   **The catch-up (2026-09-29; since 2026-09-30 the chat's "What's new?"
   button, the header emblem being gone)** asks "What's new since I last looked?" with context kind
   `activity` (migration 044): `activityContext()` reads, under RLS, who got in

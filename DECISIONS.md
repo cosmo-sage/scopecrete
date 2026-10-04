@@ -1838,8 +1838,22 @@ expected start date per quoted job before it means anything. Add the field.
   `doc_templates` (the proposal's warranty and contract text). Rehearsed
   (rolled back): 18 files before and after, through the view too; the
   service role inserts and updates through the view; a member sees all, a
-  stranger none, anon nothing; search still finds files. The "badass" filter
-  system is next.
+  stranger none, anon nothing; search still finds files.
+  **The filters (2026-10-03, Coy: "start with the search items you
+  mentioned, including just whatever name I type in").** The search box finds
+  the words in a file (name, note, Dusty's read, its text) **and any name
+  typed** — a person, vendor, customer (with its people and jobs) or job
+  whose name holds it brings every file filed on them, each row saying
+  "Matched: filed on Angelle Concrete Group". Then **Type** (photos · PDFs ·
+  other), **Way in** (uploaded · email · texted), **Job**, **Customer**,
+  **Vendor**, **Person** (each listing only those with files, with counts),
+  **When** (last 7 / 30 days, this year, or between two dates), and the
+  category chips as before. Every filter in use is a chip with ×, plus Clear
+  all; the whole filter lives in the page's address (`src/lib/files-filter.ts`,
+  tested), so a filtered view can be linked. `/api/files/search` takes
+  `q kind source job customer contact vendor since from to` and `facets=1`
+  for the lists — session client, a typed name stripped of wildcards before
+  it reaches a pattern.
 - **Documents (2026-09-30)** — `/dashboard/documents`
   (`src/components/v34/documents.tsx`, `/api/documents`): every uploaded file,
   newest first, searched through the same index, filtered by category (or

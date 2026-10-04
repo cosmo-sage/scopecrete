@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
+import { plainSpeakers } from "@/lib/speakers";
 import { plainNote } from "@/lib/mentions";
 import { formatPhone } from "@/lib/v34/tokens";
 
@@ -138,7 +139,7 @@ export async function GET(req: NextRequest) {
         const bits = [p?.proposed_name ? `might be ${p.proposed_name}` : null, cls ? `looks like ${cls}` : null].filter(Boolean);
         items.push({ ...base,
           summary: bits.length ? `${who} ${bits.join(", ")} — your call` : `Read ${who} — no name or read on them yet`,
-          detail: p?.evidence_quote ? `Going on: “${clipq(p.evidence_quote, 400)}”` : null,
+          detail: p?.evidence_quote ? `Going on: “${clipq(plainSpeakers(p.evidence_quote), 400)}”` : null,
           tone: bits.length ? "ask" : "quiet" });
         break;
       }

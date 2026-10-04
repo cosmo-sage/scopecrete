@@ -6,6 +6,7 @@
  */
 
 import type { ApiSession } from "@/lib/api-auth";
+import { plainSpeakers } from "@/lib/speakers";
 import { plainNote } from "@/lib/mentions";
 import { findDimensions } from "@/lib/plan-ocr";
 import { priceBundle, proposalBundle } from "@/lib/proposal-server";
@@ -96,7 +97,7 @@ async function recentBlock(sb: Sb, orgId: string, days = 3): Promise<Block> {
     return `- ${central(m.occurred_at)} Central · ${m.direction === "outbound" ? `Coy → ${name}` : `${name} →`} (${bucket}; contact ${m.contact_id}) · ${what}`.slice(0, 600);
   }).filter((x): x is string => !!x);
   const standing = ids.map((id) => who.get(id)).filter((c) => c?.status_summary).slice(0, 25)
-    .map((c) => `- ${c!.name?.trim() || c!.phone}: ${c!.status_summary}`);
+    .map((c) => `- ${c!.name?.trim() || c!.phone}: ${plainSpeakers(c!.status_summary, c!.contact_type)}`);
   return {
     title: `Calls and texts in the last ${days === 3 ? "three" : days} days (newest first, times in Central)`,
     trimmable: true,
@@ -230,7 +231,7 @@ async function contactBlock(sb: Sb, orgId: string, contactId: string) {
       `Address: ${(c.address as string | null)?.trim() ? `${c.address}${c.address_source === "text" ? " (they texted it)" : c.address_source === "call" ? " (heard on a call — the transcript's spelling; check it)" : c.address_source === "coy" ? " (Coy's)" : ""}` : "not recorded"}`,
       `What they are to the business: ${relation}`,
       `Jobs: ${(jobs ?? []).length ? (jobs as Array<{ title: string | null; status: string | null }>).map((j) => `${j.title || "untitled"} (${j.status})`).join("; ") : "none"}`,
-      `Where it stands (Dusty's earlier read): ${(c.status_summary as string | null) ?? "not read yet"}`,
+      `Where it stands (Dusty's earlier read): ${plainSpeakers(c.status_summary as string | null, c.contact_type as string | null) ?? "not read yet"}`,
       // Why Coy archived them, so a returning caller comes with that context (Coy, 2026-10-04).
       ...(c.archived_at ? [`Archived by Coy on ${day(c.archived_at as string)}: ${(c.archived_reason as string | null) && !/^(archived|deleted\b)/.test(c.archived_reason as string) ? `"${c.archived_reason}"` : "no reason given"}. If they have called or texted since, they are back — bring that reason up when Coy asks about them.`] : []),
       `Open next steps: ${todo.length ? todo.map((t) => `${t.title}${t.due_on ? ` (due ${t.due_on})` : ""}${t.source === "coy" ? " [Coy's own]" : " [suggested]"}`).join("; ") : "none"}`,

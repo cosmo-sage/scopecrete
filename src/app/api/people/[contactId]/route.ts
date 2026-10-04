@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
+import { plainSpeakers } from "@/lib/speakers";
 import { settleCallNotes } from "@/lib/call-notes-server";
 
 /**
@@ -113,7 +114,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ contactId: 
       subtype: bucket ? c.contact_subtype : null,
       subtype_label: bucket && c.contact_subtype ? label.get(`${bucket}:${c.contact_subtype}`) ?? c.contact_subtype : null,
       // Dusty's words (migration 037) — a display cache, shown as his.
-      status_summary: c.status_summary, recent_summary: c.recent_summary,
+      status_summary: plainSpeakers(c.status_summary as string | null, c.contact_type as string | null), recent_summary: plainSpeakers(c.recent_summary as string | null, c.contact_type as string | null),
       job_type_hint: c.job_type_hint, status_summary_at: c.status_summary_at,
       // Dusty's latest guess, for the bucket picker's dashed outline.
       guess: (((prop.data ?? []) as Array<{ classification: string | null }>)[0]?.classification) ?? null,
@@ -130,8 +131,8 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ contactId: 
         const who = one(j.contacts);
         return { id: j.id, title: j.title, status: j.status, job_type: j.job_type, role: roleByJob.get(j.id) ?? null, customer: who?.name ?? who?.phone ?? null };
       }),
-    tasks: tasks.data ?? [],
-    scope: ((prop.data ?? []) as unknown[])[0] ?? null,
+    tasks: ((tasks.data ?? []) as Array<Record<string, unknown>>).map((t) => ({ ...t, evidence_quote: plainSpeakers(t.evidence_quote as string | null) })),
+    scope: (() => { const sc = ((prop.data ?? []) as Array<Record<string, unknown>>)[0]; return sc ? { ...sc, scope_summary: plainSpeakers(sc.scope_summary as string | null) } : null; })(),
     possible_duplicates: ((dups.data ?? []) as Array<{ id: string; name: string | null; phone: string | null; email: string | null }>)
       .map((d) => ({ id: d.id, name: d.name?.trim() || null, phone: d.phone, same: d.email && em && d.email.trim().toLowerCase() === em.toLowerCase() ? "email" : "name" })),
   }));

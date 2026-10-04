@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
+import { plainSpeakers } from "@/lib/speakers";
 import { e164 } from "@/lib/sources-server";
 import { stageOf } from "@/lib/jobs/stages";
 
@@ -94,8 +95,8 @@ export async function GET(req: NextRequest) {
       // The Jobs board's stage of each live job — the list's stage filter.
       stages: [...new Set(jobs.map((j) => stageOf(j.status).k))],
       first_at: a.first_at, last_at: a.last_at,
-      summary: a.latest?.status_summary ?? primary?.status_summary ?? null,
-      recent: a.latest?.recent_summary ?? primary?.recent_summary ?? null,
+      summary: plainSpeakers(a.latest?.status_summary ?? primary?.status_summary ?? null),
+      recent: plainSpeakers(a.latest?.recent_summary ?? primary?.recent_summary ?? null),
       person: person && person !== name ? person : null,
       phone: primary?.phone ?? a.people.find((p) => p.phone)?.phone ?? null,
       email: primary?.email ?? a.people.find((p) => p.email)?.email ?? null,

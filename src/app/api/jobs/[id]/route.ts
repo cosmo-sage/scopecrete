@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
+import { plainSpeakers } from "@/lib/speakers";
 import { ALL_STATUSES, LEAD_SOURCES } from "@/lib/jobs/stages";
 
 /**
@@ -215,9 +216,9 @@ export async function GET(
     why = {
       filed_at: (c?.classification_confirmed_at ?? c?.auto_classified_at ?? null) as string | null,
       filed_by: c?.classification_confirmed_at ? "coy" : c?.auto_classified_at ? "dusty" : null,
-      status_summary: (c?.status_summary as string | null) ?? null,
-      recent_summary: (c?.recent_summary as string | null) ?? null,
-      evidence_quote: (p?.evidence_quote as string | null) ?? null,
+      status_summary: plainSpeakers((c?.status_summary as string | null) ?? null),
+      recent_summary: plainSpeakers((c?.recent_summary as string | null) ?? null),
+      evidence_quote: plainSpeakers((p?.evidence_quote as string | null) ?? null),
       evidence_at: (p?.created_at as string | null) ?? null,
       company: (p?.proposed_company as string | null) ?? null,
       scope_summary: (p?.scope_summary as string | null) ?? null,

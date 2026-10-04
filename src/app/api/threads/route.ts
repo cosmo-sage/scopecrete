@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
+import { plainSpeakers } from "@/lib/speakers";
 import { isArchivedNow } from "@/lib/archive";
 import { roleOf, type ContactRole } from "@/lib/v34/threads";
 
@@ -266,7 +267,7 @@ export async function GET(req: NextRequest) {
         confirmed: !!c.classification_confirmed_at, auto_at: c.auto_classified_at, auto_reason: c.auto_classified_reason,
         customer_id: c.customer_id,
         name_source: c.name_source, name_claim_id: c.name_claim_id,
-        status_summary: c.status_summary, recent_summary: c.recent_summary, job_type_hint: c.job_type_hint,
+        status_summary: plainSpeakers(c.status_summary, c.contact_type), recent_summary: plainSpeakers(c.recent_summary, c.contact_type), job_type_hint: c.job_type_hint,
       });
     }
     contactsReadable = (contacts ?? []).length > 0;
@@ -353,7 +354,7 @@ export async function GET(req: NextRequest) {
         proposed_role: (p.proposed_role as string) ?? null,
         classification: (p.classification as string) ?? "unknown",
         confidence: Number(p.confidence ?? 0),
-        evidence_quote: (p.evidence_quote as string) ?? null,
+        evidence_quote: plainSpeakers((p.evidence_quote as string) ?? null),
         evidence_message_id: (p.evidence_message_id as string) ?? null,
         project_type: (p.project_type as string) ?? null,
         scope_summary: (p.scope_summary as string) ?? null,
@@ -380,7 +381,7 @@ export async function GET(req: NextRequest) {
         .select("id, evidence_quote, channel")
         .eq("org_id", orgId).eq("status", "accepted").in("id", claimIds);
       for (const k of (claims ?? []) as Array<{ id: string; evidence_quote: string | null; channel: string | null }>) {
-        autoByClaim.set(k.id, { quote: k.evidence_quote, channel: k.channel });
+        autoByClaim.set(k.id, { quote: plainSpeakers(k.evidence_quote), channel: k.channel });
       }
     }
   }
@@ -466,7 +467,7 @@ export async function GET(req: NextRequest) {
         contact_type: bucket, contact_subtype: bucket ? c.contact_subtype : null, channel: null, direction: null, occurred_at: null,
         preview: "No calls or texts yet", preview_source: "synthesised", summary_source: null, msg_count: 0,
         job_status: jobByContact.get(id)?.status ?? null, job_unscoped: false, job_type: jobByContact.get(id)?.type ?? null, job_state: jobState.get(id) ?? null,
-        status_summary: c.status_summary, recent_summary: c.recent_summary, job_type_hint: c.job_type_hint,
+        status_summary: plainSpeakers(c.status_summary, c.contact_type), recent_summary: plainSpeakers(c.recent_summary, c.contact_type), job_type_hint: c.job_type_hint,
         bucket, subtype: bucket ? c.contact_subtype : null, bucket_auto: bucket && !c.confirmed && c.auto_at ? { reason: c.auto_reason } : null,
         proposal: proposalByContact.get(id) ?? null, auto_name: null, silent: false, archived: null,
         ...extra(id, bucket, c.phone),

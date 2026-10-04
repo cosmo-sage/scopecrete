@@ -45,6 +45,7 @@ export default function ChatThreadPage() {
   const [orgLines, setOrgLines] = useState<Array<{ id: string; name: string; phone: string; color: string; provider: string | null; is_primary: boolean }>>([]);
   const [firstLine, setFirstLine] = useState<{ id: string; name: string | null; at: string } | null>(null);
   const [lineFilter, setLineFilter] = useState<string | null>(null);
+  const [addingNumber, setAddingNumber] = useState(false);
   const [archivedInfo, setArchivedInfo] = useState<{ at: string; reason: string | null; back: boolean } | null>(null);
   const [fromLine, setFromLine] = useState<string | null>(null);
   const [searching, setSearching] = useState(false);
@@ -232,12 +233,12 @@ export default function ChatThreadPage() {
     lastAt ? `last heard ${relTime(lastAt)}` : null,
     firstLine?.name ? `first reached you on the ${firstLine.name} line, ${new Date(firstLine.at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : null,
   ].filter(Boolean).join(" · ");
-  // Internal notes are a tab of their own, after the numbers (Coy, 2026-10-04).
+  // Internal notes are a tab of their own, first on the left (Coy, 2026-10-04) — but a person
+  // still opens on their conversation, not on the notes.
   const nNotes = person?.notes?.length ?? 0;
   const notesTab: Channel = { key: "notes", kind: "notes", label: "Internal notes", value: null, calls: 0, texts: 0, emails: nNotes, reachable: true };
-  const lastPhone = channels.reduce((at, c, i) => (c.kind === "phone" ? i : at), -1);
-  const tabs = channels.length ? [...channels.slice(0, lastPhone + 1), notesTab, ...channels.slice(lastPhone + 1)] : [];
-  const channel = tabs.find((x) => x.key === channelKey) ?? tabs[0] ?? null;
+  const tabs = channels.length ? [notesTab, ...channels] : [];
+  const channel = tabs.find((x) => x.key === channelKey) ?? channels[0] ?? null;
   const shown = channel?.kind === "phone" ? messages.filter((m) => inChannel({ channel: m.channel, counterparty: m.counterparty ?? null }, channel, filter) && (!lineFilter || m.line_id === lineFilter)) : [];
   const n = channel?.kind === "phone" ? messages.filter((m) => inChannel({ channel: m.channel, counterparty: m.counterparty ?? null }, channel, "all")) : [];
   const nCalls = n.filter((m) => m.channel === "call" || m.channel === "voicemail").length;
@@ -311,7 +312,7 @@ export default function ChatThreadPage() {
             {tabs.map((ch) => {
               const on = channel?.key === ch.key;
               const sub = ch.kind === "phone" ? `${formatPhone(ch.value)} · ${ch.calls} call${ch.calls === 1 ? "" : "s"} · ${ch.texts} text${ch.texts === 1 ? "" : "s"}`
-                : ch.kind === "notes" ? `${nNotes} note${nNotes === 1 ? "" : "s"} · @ to tag a teammate`
+                : ch.kind === "notes" ? `${nNotes} note${nNotes === 1 ? "" : "s"}`
                 : ch.kind === "email" ? (ch.value ? `${ch.value}${ch.emails ? ` · ${ch.emails}` : ""}` : ch.emails ? `${ch.emails} filed here` : "No email on file")
                 : "Not joined · invite";
               return (
@@ -332,8 +333,8 @@ export default function ChatThreadPage() {
                 </button>
               );
             })}
-            <button onClick={() => setMerging({ preselect: null })} className="hidden lg:block shrink-0 self-center" title="Another number of theirs is a separate thread — join them"
-              style={{ fontFamily: disp, fontSize: 11, letterSpacing: ".08em", textTransform: "uppercase", color: T.ink3, padding: "0 12px", cursor: "pointer" }}>+ Number</button>
+            <button onClick={() => setAddingNumber(true)} className="shrink-0 self-center" title="Add a number of theirs, or join another thread that is them"
+              style={{ fontFamily: disp, fontSize: 11, letterSpacing: ".08em", textTransform: "uppercase", color: T.ink3, padding: "0 12px", cursor: "pointer", whiteSpace: "nowrap" }}>+ Number</button>
           </div>
         </div>
 
@@ -471,6 +472,11 @@ export default function ChatThreadPage() {
         )}
       </div>
 
+      {addingNumber && (
+        <AddNumberDialog contactId={contactId} name={name} onClose={() => setAddingNumber(false)}
+          onAdded={(phone) => { setAddingNumber(false); setChannelKey(`phone:${phone}`); setReload((n) => n + 1); }}
+          onJoin={(otherId) => { setAddingNumber(false); setMerging({ preselect: otherId }); }} />
+      )}
       {searching && (
         <div className="fixed inset-0 z-40 lg:static lg:z-auto lg:shrink-0 lg:h-full" style={{ top: "var(--sc-head)" }}>
           <div className="h-full lg:w-[340px]">
@@ -504,3 +510,52 @@ export default function ChatThreadPage() {
   );
 }
 
+/**
+ * + Number (Coy, 2026-10-04): type a number of theirs and what it is (Office,
+ * Work, Cell…) and it becomes its own channel on them; or, when that number is
+ * already a thread, join the two — the same "Same person as…" merge.
+ */
+function AddNumberDialog({ contactId, name, onClose, onAdded, onJoin }: {
+  contactId: string; name: string | null; onClose: () => void; onAdded: (phone: string) => void; onJoin: (otherId: string | null) => void;
+}) {
+  const [num, setNum] = useState("");
+  const [label, setLabel] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<{ text: string; other: { id: string; name: string | null } | null } | null>(null);
+  const e164 = (() => { const d = num.replace(/\D/g, ""); return d.length === 10 ? `+1${d}` : d.length === 11 && d.startsWith("1") ? `+${d}` : null; })();
+  const save = async () => {
+    if (!e164) return;
+    setBusy(true); setErr(null);
+    const r = await fetch(`/api/contacts/${encodeURIComponent(contactId)}/phones`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone: e164, label }) });
+    const b = await r.json().catch(() => ({}));
+    setBusy(false);
+    if (r.ok) onAdded(e164); else setErr({ text: b?.error ?? `HTTP ${r.status}`, other: b?.other ?? null });
+  };
+  const field: React.CSSProperties = { height: 36, border: `1px solid ${T.hair}`, borderRadius: 6, padding: "0 10px", fontSize: F.sm, background: T.card, color: T.ink, width: "100%" };
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Add a number">
+      <button aria-label="Close" onClick={onClose} className="absolute inset-0" style={{ background: "rgba(0,0,0,.4)", border: "none" }} />
+      <div className="relative rounded-lg w-full" style={{ maxWidth: 400, background: T.card, color: T.ink, padding: 16, boxShadow: "0 12px 36px rgba(0,0,0,.3)" }}>
+        <div style={{ fontSize: F.md, fontWeight: 600 }}>Add a number for {name ?? "them"}</div>
+        <div className="grid gap-2 mt-3" style={{ gridTemplateColumns: "1fr 130px" }}>
+          <input value={num} onChange={(e) => setNum(e.target.value)} inputMode="tel" placeholder="(225) 555-0100" aria-label="Number" style={field} autoFocus
+            onKeyDown={(e) => { if (e.key === "Enter") void save(); }} />
+          <input value={label} onChange={(e) => setLabel(e.target.value)} maxLength={30} placeholder="Office, Work…" aria-label="What it is" style={field} />
+        </div>
+        {err && (
+          <div style={{ fontSize: F.xs, color: T.red, marginTop: 6 }}>
+            {err.text}
+            {err.other && <> <button onClick={() => onJoin(err.other!.id)} style={{ color: T.chalk, fontWeight: 600, cursor: "pointer" }}>Join their thread to this one ›</button></>}
+          </div>
+        )}
+        <div className="flex items-center gap-2 mt-3">
+          <button onClick={() => onJoin(null)} style={{ ...eyebrow, color: T.chalk, cursor: "pointer", textAlign: "left" }}>Or join another<br />thread of theirs…</button>
+          <span className="flex-1" />
+          <button onClick={onClose} className="rounded px-3" style={{ height: 34, border: `1px solid ${T.hairStrong}`, background: T.card, fontSize: F.sm, cursor: "pointer" }}>Cancel</button>
+          <button onClick={() => void save()} disabled={!e164 || busy} className="rounded px-3"
+            style={{ height: 34, background: T.ink, color: T.card, fontSize: F.sm, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap", opacity: !e164 || busy ? 0.5 : 1 }}>{busy ? "Saving…" : "Save number"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}

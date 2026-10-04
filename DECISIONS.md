@@ -1732,6 +1732,22 @@ expected start date per quoted job before it means anything. Add the field.
   type chips and counts — Messages, Photos, Files, Links, Calls, Voicemail
   (`messageType()`, from `message_media.kind`) — `/api/threads/search`;
   a result opens its channel at the message.
+  **Internal notes is the first tab on the left (Coy, 2026-10-04)** — a
+  person still opens on their conversation; the tab's "@ to tag" line is gone
+  (the box below says it). **+ Number adds a number (Coy: "should also allow
+  me create a new phone number and save it and label it")** — a dialog for
+  the number and what it is (Office, Work …), saved on `contact_phones`
+  (`PATCH /api/contacts/[id]/phones`) as its own channel; a number that is
+  already someone else's thread answers 409 with who, and offers "Join their
+  thread to this one" (the Same person as… merge); "Or join another thread of
+  theirs…" opens that merge directly. **"US" and "THEM" are "We" and
+  "Customer" (Coy: "'US' is confusing … 'Them' … should be replaced by
+  'Customer'")** — the background reader is shown transcripts labelled
+  US/THEM and its summaries and quotes kept the words; `plainSpeakers()`
+  (`src/lib/speakers.ts`, tested; "Vendor" for someone filed vendor) turns them
+  round wherever Dusty's status lines, recent summaries, quotes and next-step
+  lines are sent out — Threads, the person and customer pages, the activity
+  line, Why this job — and in Dusty's own context. Stored text is unchanged.
   **Name a number (Coy, 2026-10-03: "instead of 'phone 2' it can say
   'office'")**: ✎ beside the open phone channel's name saves its label on
   `contact_phones` (`PATCH /api/contacts/[id]/phones`, 30 characters, blank

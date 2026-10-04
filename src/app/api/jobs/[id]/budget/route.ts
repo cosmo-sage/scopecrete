@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
+import { refreshJobTax } from "@/lib/tax-lookup-server";
 import { ESTIMATE_COLUMNS, LINE_COLUMNS, jobInOrg, numLine, syncLineGroups, workingEstimate } from "@/lib/budget-server";
 import { sourcesFor } from "@/lib/sources-server";
 import { pricingFor } from "@/lib/pricing-server";
@@ -28,6 +29,8 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   const { supabase, orgId, applyCookies } = result.session;
   if (!(await jobInOrg(supabase, orgId, id))) return applyCookies(NextResponse.json({ error: "No such job." }, { status: 404 }));
 
+  // Sales tax by the job's address (TaxLocus): looked up once per address, before pricing reads it.
+  await refreshJobTax(supabase, orgId, id).catch(() => null);
   const est = await workingEstimate(supabase, orgId, id, false);
   const [opts, lines, groups, cards, pricing, assemblies, takeoff] = await Promise.all([
     est ? supabase.from("estimate_options").select("id, label, description, sort_order").eq("org_id", orgId).eq("estimate_id", est.id as string).order("sort_order")

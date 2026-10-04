@@ -56,7 +56,7 @@ interface Data {
   sources?: Source[];
   settings: BudgetSettings;
   pricing: {
-    tax: { rate: number | null; parish: string | null; source: "override" | "parish" | null; missing: string | null };
+    tax: { rate: number | null; parish: string | null; source: "override" | "parish" | "lookup" | null; missing: string | null; lookup?: { rate_pct: number; parts: Array<{ name: string; level: string; rate_pct: number }>; as_of: string | null; resolution: string | null; address: string; at: string } | null };
     days: number | null; day_minimum: number | null; margin_from: "budget" | "default" | null; overhead_from: "budget" | "default" | null;
   } | null;
   /** Plan Room group totals (059), keyed by group id. */
@@ -428,7 +428,7 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0 }: {
                 }}
                 style={{ width: 16, height: 16, accentColor: T.chalk }} />
               Sales tax {data.pricing?.tax.rate !== null && data.pricing?.tax.rate !== undefined
-                ? `${data.pricing.tax.rate}% ${data.pricing.tax.source === "override" ? "(typed for this job)" : `(${data.pricing.tax.parish} parish)`} on taxed lines, at cost`
+                ? `${data.pricing.tax.rate}% ${data.pricing.tax.source === "override" ? "(typed for this job)" : data.pricing.tax.source === "lookup" ? "(for the job's address, TaxLocus)" : `(${data.pricing.tax.parish} parish)`} on taxed lines, at cost`
                 : <span style={{ color: T.hiviz }}>— {data.pricing?.tax.missing ?? "no rate"}</span>}
             </label>
             <button onClick={() => setTaxOpen(true)} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>Change</button>
@@ -476,7 +476,13 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0 }: {
       )}
 
       <TaxSheet open={taxOpen} onClose={() => setTaxOpen(false)} tax={data.pricing?.tax ?? null}
-        onSave={(body) => run(() => call(`/api/jobs/${jobId}`, "PATCH", body)).then(() => setTaxOpen(false))} />
+        onSave={(body) => run(() => call(`/api/jobs/${jobId}`, "PATCH", body)).then(() => setTaxOpen(false))}
+        onLookup={async () => {
+          const r = await fetch(`/api/jobs/${jobId}/tax`, { method: "POST" });
+          const b = await r.json().catch(() => ({}));
+          if (!r.ok || !b.ok) return b?.error ?? `HTTP ${r.status}`;
+          reload(); return null;
+        }} />
       {book && (
         <Drawer open wide onClose={() => { setBook(null); reload(); }} title="Add from the Price book"
           sub={`${areaName(book.area || null)}${optLabel(tier === "all" ? null : tier) ? ` · into ${optLabel(tier)}` : " · into every option"}`}>
@@ -860,11 +866,14 @@ function VendorPick({ line, sources, name, onPick, full }: {
 }
 
 /** The job's sales tax (migration 057): its parish's rate, or one typed for this job. */
-function TaxSheet({ open, onClose, tax, onSave }: {
+function TaxSheet({ open, onClose, tax, onSave, onLookup }: {
   open: boolean; onClose: () => void;
-  tax: { rate: number | null; parish: string | null; source: "override" | "parish" | null; missing: string | null } | null;
+  tax: { rate: number | null; parish: string | null; source: "override" | "parish" | "lookup" | null; missing: string | null; lookup?: { rate_pct: number; parts: Array<{ name: string; level: string; rate_pct: number }>; as_of: string | null; resolution: string | null; address: string; at: string } | null } | null;
   onSave: (body: Record<string, unknown>) => Promise<void>;
+  onLookup: () => Promise<string | null>;
 }) {
+  const [looking, setLooking] = useState(false);
+  const [lookErr, setLookErr] = useState<string | null>(null);
   const [parishes, setParishes] = useState<Array<{ parish: string; rate_pct: number }> | null>(null);
   const [rate, setRate] = useState("");
   useEffect(() => {
@@ -876,8 +885,24 @@ function TaxSheet({ open, onClose, tax, onSave }: {
   const row: React.CSSProperties = { borderTop: `1px solid ${T.hairSoft}`, minHeight: 44, cursor: "pointer" };
   return (
     <Sheet open={open} onClose={onClose} title="Sales tax on this job"
-      sub={tax?.rate != null ? `${tax.rate}% — ${tax.source === "override" ? "typed for this job" : `${tax.parish} parish`}` : tax?.missing ?? ""}>
+      sub={tax?.rate != null ? `${tax.rate}% — ${tax.source === "override" ? "typed for this job" : tax.source === "lookup" ? "for the job's address" : `${tax.parish} parish`}` : tax?.missing ?? ""}>
       <div className="px-4 py-3">
+        {/* By the address (TaxLocus, Coy 2026-10-04): the exact rate where the job is, city and district included. */}
+        <div style={{ ...eyebrow, marginBottom: 4 }}>By the job&apos;s address</div>
+        {tax?.lookup ? (
+          <div className="rounded mb-2" style={{ background: tax.source === "lookup" ? T.hivizDim : T.slab, padding: "8px 10px", fontSize: F.sm }}>
+            <div><b style={nums}>{tax.lookup.rate_pct}%</b> at {tax.lookup.address}{tax.source !== "lookup" ? <span style={{ color: T.ink3 }}> — not in use (a rate or parish is set)</span> : null}</div>
+            <div style={{ fontSize: F.xs, color: T.ink3, marginTop: 2 }}>
+              {tax.lookup.parts.map((p) => `${p.name} ${p.rate_pct}%`).join(" + ")}
+              {` · TaxLocus${tax.lookup.as_of ? `, rates as of ${tax.lookup.as_of}` : ""}${tax.lookup.resolution ? `, placed by ${tax.lookup.resolution}` : ""}`}
+            </div>
+          </div>
+        ) : <div style={{ fontSize: F.xs, color: T.ink3, marginBottom: 6 }}>Not looked up yet.</div>}
+        <button disabled={looking} onClick={() => { setLooking(true); setLookErr(null); void onLookup().then((e) => { setLookErr(e); setLooking(false); }); }}
+          className="rounded px-3 mb-3" style={{ height: 34, background: T.ink, color: T.card, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", cursor: "pointer", opacity: looking ? 0.5 : 1 }}>
+          {looking ? "Looking up…" : tax?.lookup ? "Look up again — use the address's rate" : "Look up by address"}
+        </button>
+        {lookErr && <div style={{ fontSize: F.xs, color: T.red, marginTop: -6, marginBottom: 8 }}>{lookErr}</div>}
         <div style={{ ...eyebrow, marginBottom: 4 }}>The job is in</div>
         {parishes === null ? <div style={{ fontSize: F.sm, color: T.ink3 }}>Loading…</div> : parishes.length === 0 ? (
           <div style={{ fontSize: F.sm, color: T.ink3 }}>No parish rates yet — add them in Price book → Defaults.</div>

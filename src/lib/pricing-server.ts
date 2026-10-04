@@ -1,6 +1,6 @@
 import type { ApiSession } from "@/lib/api-auth";
 import type { BudgetSettings } from "@/lib/engine";
-import { jobTax, type JobTax } from "@/lib/tax";
+import { addressParts, jobTax, type JobTax, type TaxLookup } from "@/lib/tax";
 
 /**
  * What each job is priced with (migration 057, Coy 2026-09-30): its budget's
@@ -31,28 +31,48 @@ export async function moneySettings(sb: Sb, orgId: string): Promise<MoneySetting
 export interface JobPricing { settings: BudgetSettings; tax: JobTax; days: number | null; day_minimum: number | null;
   margin_from: "budget" | "default" | null; overhead_from: "budget" | "default" | null }
 
+/**
+ * The jobs' pricing fields, with tax_lookup (migration 078) when the column is
+ * there — before it is applied the read falls back, so nothing breaks.
+ */
+async function jobsWithTax(sb: Sb, orgId: string, jobIds: string[]) {
+  const base = "id, address, city, state, zip, customer_id, duration_days, tax_parish, tax_rate_pct, tax_rate_source";
+  const r = await sb.from("jobs").select(`${base}, tax_lookup`).eq("org_id", orgId).in("id", jobIds);
+  if (!r.error) return r;
+  return sb.from("jobs").select(base).eq("org_id", orgId).in("id", jobIds);
+}
+
+/** Where a job's sales tax is looked up: its own address, else its customer's. */
+export function taxAddress(job: Record<string, unknown>, cust: { address_formatted?: string | null; address_line1?: string | null; city?: string | null; state?: string | null; zip?: string | null } | null) {
+  return addressParts({ line1: job.address as string | null, city: job.city as string | null, state: job.state as string | null, zip: job.zip as string | null })
+    ?? (cust ? addressParts({ line1: cust.address_line1 ?? null, city: cust.city ?? null, state: cust.state ?? null, zip: cust.zip ?? null }) ?? addressParts(cust.address_formatted ?? null) : null);
+}
+
 export async function pricingFor(sb: Sb, orgId: string, jobIds: string[]): Promise<Map<string, JobPricing>> {
   const out = new Map<string, JobPricing>();
   if (!jobIds.length) return out;
   const [money, { data: rates }, { data: jobs }, { data: ests }] = await Promise.all([
     moneySettings(sb, orgId),
     sb.from("tax_parishes").select("parish, rate_pct").eq("org_id", orgId),
-    sb.from("jobs").select("id, address, customer_id, duration_days, tax_parish, tax_rate_pct, tax_rate_source").eq("org_id", orgId).in("id", jobIds),
+    jobsWithTax(sb, orgId, jobIds),
     sb.from("estimates").select("job_id, margin_pct, overhead_pct").eq("org_id", orgId).eq("status", "draft").in("job_id", jobIds),
   ]);
   const jobRows = (jobs ?? []) as Array<Record<string, unknown>>;
   const custIds = [...new Set(jobRows.map((j) => j.customer_id as string | null).filter(Boolean))] as string[];
   const { data: custs } = custIds.length
-    ? await sb.from("customers").select("id, address_formatted").eq("org_id", orgId).in("id", custIds)
+    ? await sb.from("customers").select("id, address_formatted, address_line1, city, state, zip").eq("org_id", orgId).in("id", custIds)
     : { data: [] };
-  const custAddr = new Map(((custs ?? []) as Array<{ id: string; address_formatted: string | null }>).map((c) => [c.id, c.address_formatted]));
+  type Cust = { id: string; address_formatted: string | null; address_line1: string | null; city: string | null; state: string | null; zip: string | null };
+  const custRow = new Map(((custs ?? []) as Cust[]).map((c) => [c.id, c]));
+  const custAddr = new Map(((custs ?? []) as Cust[]).map((c) => [c.id, c.address_formatted]));
   const rateRows = ((rates ?? []) as Array<{ parish: string; rate_pct: unknown }>).map((r) => ({ parish: r.parish, rate_pct: Number(r.rate_pct) }));
   for (const j of jobRows) {
     const est = ((ests ?? []) as Array<Record<string, unknown>>).find((e) => e.job_id === j.id);
     const em = num(est?.margin_pct), eo = num(est?.overhead_pct);
+    const where = taxAddress(j, j.customer_id ? custRow.get(j.customer_id as string) ?? null : null);
     const tax = jobTax({ tax_rate_pct: num(j.tax_rate_pct), tax_rate_source: j.tax_rate_source as string | null,
-      tax_parish: j.tax_parish as string | null, address: j.address as string | null },
-      j.customer_id ? custAddr.get(j.customer_id as string) ?? null : null, rateRows);
+      tax_parish: j.tax_parish as string | null, address: j.address as string | null, tax_lookup: (j.tax_lookup as TaxLookup | null | undefined) ?? null },
+      j.customer_id ? custAddr.get(j.customer_id as string) ?? null : null, rateRows, where?.text ?? null);
     out.set(j.id as string, {
       settings: {
         margin_pct: em ?? money.default_margin_pct, overhead_pct: eo ?? money.default_overhead_pct,

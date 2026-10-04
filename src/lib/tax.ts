@@ -51,15 +51,80 @@ export function parishFromAddress(address: string | null | undefined): string | 
   return parishes.size === 1 ? [...parishes][0] : null;
 }
 
-export interface JobTax { rate: number | null; parish: string | null; source: "override" | "parish" | null; missing: string | null }
+export interface TaxLookup {
+  /** Combined rate for the address, in % (10.5 for 0.105). */
+  rate_pct: number;
+  /** Each jurisdiction's part, in %. */
+  parts: Array<{ name: string; level: string; rate_pct: number }>;
+  /** The provider's data date, and how exactly it placed the address (rooftop, zip …). */
+  as_of: string | null; resolution: string | null;
+  /** The address it was asked about — a different address now means look again. */
+  address: string; at: string; source: "TaxLocus";
+}
 
-/** The job's rate: Coy's override, else its parish's rate from the org's table. */
-export function jobTax(job: { tax_rate_pct?: number | null; tax_rate_source?: string | null; tax_parish?: string | null; address?: string | null },
-  fallbackAddress: string | null, rates: Array<{ parish: string; rate_pct: number }>): JobTax {
+export interface JobTax { rate: number | null; parish: string | null; source: "override" | "parish" | "lookup" | null; missing: string | null; lookup?: TaxLookup | null }
+
+const pct = (r: unknown) => (typeof r === "number" && Number.isFinite(r) ? Math.round(r * 100 * 1000) / 1000 : null);
+
+/**
+ * TaxLocus's rate lookup reply (POST /v1/rate/lookup) → the rate in %, its
+ * parts and its date (Coy, 2026-10-04: TaxLocus key). Null when it carries no
+ * combined rate — never a guess.
+ */
+export function readTaxLocus(json: unknown, address: string, at = new Date().toISOString()): TaxLookup | null {
+  const j = (json ?? {}) as { combined_rate?: unknown; breakdown?: unknown; as_of?: unknown; resolution?: unknown };
+  const rate = pct(j.combined_rate);
+  if (rate === null || rate < 0 || rate >= 30) return null;
+  const parts = (Array.isArray(j.breakdown) ? j.breakdown : []).map((b) => {
+    const x = b as { name?: unknown; level?: unknown; rate?: unknown };
+    return { name: typeof x.name === "string" ? x.name : "", level: typeof x.level === "string" ? x.level : "", rate_pct: pct(x.rate) ?? 0 };
+  }).filter((x) => x.name);
+  return { rate_pct: rate, parts, as_of: typeof j.as_of === "string" ? j.as_of : null, resolution: typeof j.resolution === "string" ? j.resolution : null, address, at, source: "TaxLocus" };
+}
+
+/**
+ * An address in the pieces the lookup wants: the job's own fields when it has
+ * them, else read from "14835 Example Ave, Baton Rouge, LA 70816". Null when
+ * there's no street with a number — nothing is looked up for a guess.
+ */
+export function addressParts(a: { line1?: string | null; city?: string | null; state?: string | null; zip?: string | null } | string | null | undefined):
+  { line1: string; city: string | null; state: string; postal_code: string | null; text: string } | null {
+  if (!a) return null;
+  let line1: string | null, city: string | null = null, state: string | null = null, zip: string | null = null;
+  if (typeof a === "string") {
+    const parts = a.split(",").map((x) => x.trim()).filter(Boolean);
+    line1 = parts[0] ?? null;
+    const tail = parts.slice(1).join(" ");
+    const m = /\b([A-Za-z]{2})\s*(\d{5})?(?:-\d{4})?\s*(?:usa|united states)?$/i.exec(tail);
+    if (m) { state = m[1].toUpperCase(); zip = m[2] ?? null; }
+    city = parts.length > 2 ? parts[1] : parts[1]?.replace(/\s+[A-Za-z]{2}(\s+\d{5}(-\d{4})?)?$/, "").trim() || null;
+    if (city && /^[A-Za-z]{2}(\s+\d{5})?$/.test(city)) city = null;
+  } else {
+    line1 = a.line1?.trim() || null; city = a.city?.trim() || null; state = a.state?.trim().toUpperCase() || null; zip = a.zip?.trim() || null;
+    if (line1 && line1.includes(",") && !city) return addressParts(line1);
+  }
+  if (!line1 || !/^\d{1,6}[A-Za-z]?\s+\S/.test(line1)) return null;
+  const st = state ?? "LA"; // Coy works in Louisiana; a typed state wins.
+  if (!city && !zip) return null;
+  return { line1, city, state: st, postal_code: zip, text: [line1, city, [st, zip].filter(Boolean).join(" ")].filter(Boolean).join(", ") };
+}
+
+/**
+ * The job's rate. Coy's typed rate wins; then a parish he picked; then the
+ * looked-up rate for the job's current address (TaxLocus); then the parish
+ * read from the address and the org's own rate for it.
+ */
+export function jobTax(job: { tax_rate_pct?: number | null; tax_rate_source?: string | null; tax_parish?: string | null; address?: string | null; tax_lookup?: TaxLookup | null },
+  fallbackAddress: string | null, rates: Array<{ parish: string; rate_pct: number }>, currentAddress?: string | null): JobTax {
   if (job.tax_rate_source === "override" && typeof job.tax_rate_pct === "number") {
     return { rate: job.tax_rate_pct, parish: job.tax_parish ?? null, source: "override", missing: null };
   }
-  const parish = job.tax_parish || parishFromAddress(job.address) || parishFromAddress(fallbackAddress);
+  const parishFromAddr = parishFromAddress(job.address) || parishFromAddress(fallbackAddress);
+  const lk = job.tax_lookup;
+  if (!job.tax_parish && lk && typeof lk.rate_pct === "number" && (currentAddress == null || lk.address === currentAddress)) {
+    return { rate: lk.rate_pct, parish: parishFromAddr, source: "lookup", missing: null, lookup: lk };
+  }
+  const parish = job.tax_parish || parishFromAddr;
   if (!parish) return { rate: null, parish: null, source: null, missing: "parish unknown — set it on the job" };
   const r = rates.find((x) => x.parish.toLowerCase() === parish.toLowerCase());
   if (!r) return { rate: null, parish, source: null, missing: `no rate for ${parish} — add it in Price book → Defaults` };

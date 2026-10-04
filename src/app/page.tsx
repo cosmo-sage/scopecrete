@@ -14,9 +14,9 @@
    ============================================================ */
 
 import { useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import { Barlow_Condensed, IBM_Plex_Sans } from "next/font/google";
 import { supabase } from "@/lib/supabase";
+import { safeNext } from "@/lib/hosts";
 
 const barlowCondensed = Barlow_Condensed({ subsets: ["latin"], weight: ["400", "600", "700"], display: "swap" });
 const ibmPlexSans = IBM_Plex_Sans({ subsets: ["latin"], weight: ["400", "500", "600"], display: "swap" });
@@ -50,7 +50,6 @@ const EyeIcon = ({ off }: { off: boolean }) => (
 );
 
 export default function SignIn() {
-  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -127,7 +126,10 @@ export default function SignIn() {
       setError(describeAuthError(signInError));
       return;
     }
-    router.push("/dashboard");
+    // A full page load, not router.push: on app.scopecrete.ai the proxy sends
+    // /dashboard on to the org's own address, another origin.
+    const next = safeNext(new URLSearchParams(window.location.search).get("next"));
+    window.location.assign(next ?? "/dashboard");
   }
 
   async function handleForgotPassword() {

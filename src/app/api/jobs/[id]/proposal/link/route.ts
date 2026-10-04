@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomBytes } from "node:crypto";
 import { getApiSession } from "@/lib/api-auth";
+import { publicOrigin } from "@/lib/hosts";
 import { FILES_BUCKET } from "@/lib/files";
 import { linkAssets, newToken, publicSnapshot } from "@/lib/proposal-links";
 
@@ -37,7 +38,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   const { data: ev } = ids.length
     ? await supabase.from("document_events").select("document_id, event, occurred_at, user_agent").eq("org_id", orgId).in("document_id", ids).order("occurred_at", { ascending: false }).limit(60)
     : { data: [] };
-  const origin = req.nextUrl.origin;
+  const origin = publicOrigin(req.headers.get("host"), req.nextUrl.origin);
   return applyCookies(NextResponse.json({
     links: rows.map((d) => ({ ...d, url: `${origin}/p/${d.token}`, events: ((ev ?? []) as Array<{ document_id: string }>).filter((e) => e.document_id === d.id).slice(0, 20) })),
   }));
@@ -58,7 +59,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     .eq("status", "final").order("version", { ascending: false }).limit(1).maybeSingle();
   if (!prop) return bad("Make the proposal final first — the link shows a frozen version.", 409);
 
-  const origin = req.nextUrl.origin;
+  const origin = publicOrigin(req.headers.get("host"), req.nextUrl.origin);
   // Already a live link for this version: send that one again.
   const { data: live } = await supabase.from("documents").select(LINK_COLS).eq("org_id", orgId).eq("proposal_id", prop.id)
     .is("revoked_at", null).neq("status", "void").order("created_at", { ascending: false }).limit(1).maybeSingle();

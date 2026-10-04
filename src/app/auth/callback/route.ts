@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
+import { cookieOptionsFor } from "@/lib/api-auth";
 
 // PKCE callback for every Supabase Auth flow that lands here: Google
 // OAuth, email OTP, and password recovery. All of them arrive as
@@ -26,6 +27,7 @@ export async function GET(request: NextRequest) {
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
+        cookieOptions: cookieOptionsFor(request),
         cookies: {
           getAll: () => request.cookies.getAll(),
           setAll: (toSet) => { cookiesToSet.push(...toSet); },

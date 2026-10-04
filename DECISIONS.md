@@ -4,7 +4,7 @@ Ground truth for every agent working this repo. If code disagrees with this
 document, the code is wrong or this document is stale — resolve it, don't
 guess. Update this file in the same PR that changes the behavior it describes.
 
-Last updated: 2026-10-04 (Dusty's chat keeps its files and files them on a customer or job — migration 079; vendor Delete; Dusty on a vendor's page and looking at attached photos; sales tax by address via TaxLocus — migration 078; archive reasons; Lines, providers and logs — migration 077; internal notes with @-tags; Jobs board sort and filter; jobs by hand — migration 076; done and lost customers in Threads; proposals sent by link, every opening tracked; every option side by side for the customer — migration 075; Documents is Files, everywhere — migration 074; Threads v2 — threads you make, channels per number, the customer page reshaped — migration 073; an address given is kept and asked about — migration 072; Dusty sets addresses; customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
+Last updated: 2026-10-04 (sign-in at app.scopecrete.ai/login, each org at <slug>.app.scopecrete.ai; Dusty's chat keeps its files and files them on a customer or job — migration 079; vendor Delete; Dusty on a vendor's page and looking at attached photos; sales tax by address via TaxLocus — migration 078; archive reasons; Lines, providers and logs — migration 077; internal notes with @-tags; Jobs board sort and filter; jobs by hand — migration 076; done and lost customers in Threads; proposals sent by link, every opening tracked; every option side by side for the customer — migration 075; Documents is Files, everywhere — migration 074; Threads v2 — threads you make, channels per number, the customer page reshaped — migration 073; an address given is kept and asked about — migration 072; Dusty sets addresses; customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
 
 ---
 
@@ -3068,6 +3068,29 @@ additive changes only, with confirmation.
 - Do not run two production paths for the web app.
 - `scopecrete.ai` points at the Vercel project; Cloudflare DNS-only for that
   record.
+- **Doors (Coy, 2026-10-04: "the dashboard login page to land on
+  app.scopecrete.ai/login and … the Sacco Enterprises dashboard … at a
+  subdomain of app.scopecrete.ai … each organization will have its own").**
+  `src/lib/hosts.ts` (tested) names the host; `src/proxy.ts` routes on it:
+  **scopecrete.ai / www** — the public site: `/`, `/login` and `/dashboard…`
+  go to app; `/p/…` (proposal links), `/calculator`, `/auth`, `/invite`
+  stay. **app.scopecrete.ai** — `/login` is the sign-in page (`/` sends
+  there); signed in, `/login` and `/dashboard…` go on to the org's own
+  address. **`<orgs.slug>.app.scopecrete.ai`** — that org's dashboard
+  (Sacco Enterprises is `sbuild`, its existing slug); `/` → `/dashboard`;
+  signed out → app's `/login?next=`; a non-member is sent to their own org;
+  `getApiSession()` takes the org the address names, and only if the caller
+  is a member (RLS shows no other). **Any other host** (*.vercel.app,
+  previews, localhost) works as before. The auth cookie is written for
+  `.app.scopecrete.ai` on app and org hosts (`cookieDomain()`, passed to
+  every Supabase client), so one sign-in covers both. Customer links
+  (`/p/…`) made on app or an org's address point at `https://scopecrete.ai`.
+  Each org's address needs a DNS record (Cloudflare: CNAME `<slug>.app` →
+  `cname.vercel-dns.com`, DNS only) and the domain added to the Vercel
+  project — Vercel issues a wildcard (`*.app`) certificate only with its
+  own nameservers, so for now it is one record per org. Supabase Auth's
+  redirect list must carry `https://app.scopecrete.ai/**` and
+  `https://*.app.scopecrete.ai/**` for Google and emailed sign-in links.
 
 **Per-org Hermes containers are under review.** Clean isolation, but N
 long-running processes per N contractors does not survive growth and is the

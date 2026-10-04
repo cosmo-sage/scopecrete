@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import { plainNote } from "@/lib/mentions";
 import { Phone, CaretDown, CaretRight } from "@phosphor-icons/react";
 import { T, F, disp, eyebrow } from "@/lib/v34/tokens";
 import { DraftQuoteButton } from "@/components/v34/call-notes-pad";
@@ -673,7 +674,7 @@ function NoteRow({ n }: { n: Note }) {
       <div style={{ ...eyebrow, color: "#8A6D1A" }}>
         Your note · {new Date(n.created_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
       </div>
-      <div style={{ fontSize: F.sm, color: DA.textPrimary, lineHeight: 1.4, whiteSpace: "pre-wrap", marginTop: 2 }}>{n.body}</div>
+      <div style={{ fontSize: F.sm, color: DA.textPrimary, lineHeight: 1.4, whiteSpace: "pre-wrap", marginTop: 2 }}>{plainNote(n.body)}</div>
     </div>
   );
 }

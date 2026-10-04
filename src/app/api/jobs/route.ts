@@ -53,7 +53,7 @@ export interface JobRow {
  * never what he is shown.
  */
 const CREATABLE = ["contact_id", "title", "address", "city", "state", "zip", "job_number",
-  "job_type", "lead_source", "referred_by_contact_id", "status"] as const;
+  "job_type", "lead_source", "referred_by_contact_id", "status", "description"] as const;
 const JOB_TYPES = ["residential", "commercial", "public"];
 const FORBIDDEN = ["origin", "confirmed_at", "confirmed_by", "org_id", "created_from_message_id"] as const;
 
@@ -164,6 +164,7 @@ export async function POST(req: NextRequest) {
     const v = body[f];
     if (typeof v === "string" && v.trim()) insert[f] = v.trim();
   }
+  if (typeof insert.description === "string") insert.description = (insert.description as string).slice(0, 500);
 
   if (insert.job_type !== undefined && !JOB_TYPES.includes(insert.job_type as string)) {
     return applyCookies(NextResponse.json({ error: `job_type must be one of ${JOB_TYPES.join(", ")}.` }, { status: 400 }));

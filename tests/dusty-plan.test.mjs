@@ -157,3 +157,19 @@ test("set_address: a full id, a street with its number, nothing made up", () => 
   assert.equal(needsJob(p.actions[0]), false);
   assert.match(describe(p.actions[0], { item: () => null, area: () => "" }), /Set the customer's address to 1234 Example St, Baton Rouge, LA 70800 \(from their text of Oct 2\) — checked against the map/);
 });
+
+test("new_job: a full contact id and a title; the type only if it's a real one", () => {
+  const id = "0b2f6e4a-1c3d-4e5f-8a9b-0c1d2e3f4a5b";
+  const p = parsePlan(`\`\`\`scopecrete-plan
+[{"do":"new_job","contact":"${id}","title":"Driveway Replacement","job_type":"residential","address":"1234 Example St","description":"Tear out and re-pour the drive"},
+ {"do":"new_job","contact":"${id}","title":"Patio","job_type":"industrial"},
+ {"do":"new_job","contact":"0b2f6e4a","title":"Patio"},
+ {"do":"new_job","contact":"${id}"}]
+\`\`\``);
+  assert.equal(p.actions.length, 2);
+  assert.equal(p.dropped, 2, "a short id and a job with no title are dropped");
+  assert.deepEqual(p.actions[0], { do: "new_job", contact: id, title: "Driveway Replacement", job_type: "residential", address: "1234 Example St", description: "Tear out and re-pour the drive" });
+  assert.equal(p.actions[1].job_type, null, "an unknown type is left out");
+  assert.equal(needsJob(p.actions[0]), false);
+  assert.match(describe(p.actions[0], { item: () => null, area: () => "" }), /New job “Driveway Replacement” \(residential\) at 1234 Example St/);
+});

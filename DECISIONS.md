@@ -4,7 +4,7 @@ Ground truth for every agent working this repo. If code disagrees with this
 document, the code is wrong or this document is stale — resolve it, don't
 guess. Update this file in the same PR that changes the behavior it describes.
 
-Last updated: 2026-10-03 (proposals sent by link, every opening tracked; every option side by side for the customer — migration 075; Documents is Files, everywhere — migration 074; Threads v2 — threads you make, channels per number, the customer page reshaped — migration 073; an address given is kept and asked about — migration 072; Dusty sets addresses; customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
+Last updated: 2026-10-04 (internal notes with @-tags; Jobs board sort and filter; jobs by hand — migration 076, not applied; done and lost customers in Threads; proposals sent by link, every opening tracked; every option side by side for the customer — migration 075; Documents is Files, everywhere — migration 074; Threads v2 — threads you make, channels per number, the customer page reshaped — migration 073; an address given is kept and asked about — migration 072; Dusty sets addresses; customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
 
 ---
 
@@ -1018,6 +1018,20 @@ them out. Trigger `contacts_bucket_jobs` → `sc_customer_job_for()`:
   Rehearsed (rolled back): 15 waiting; naming one brought it back; an
   unnamed person filed customer got no job; named, they got "Verdi
   Driveway".
+- **Jobs by hand — migration 076 (written and rehearsed 2026-10-04; NOT
+  applied until Coy says so).** Coy, on the Jobs board: *"if the job is
+  suggested but not counted. I don't want to automatically create the job.
+  Later, once the system is working correctly we can automatically create
+  jobs, but for now i'll create it manually. Or I can ask dusty to create it;
+  he should have that ability."* `sc_customer_job_for()` makes (and restores)
+  a job only when Coy filed the customer himself; a customer Dusty filed gets
+  none. Coy makes it with **+ New job**, or asks Dusty, whose plan step
+  `new_job` (§3) goes through the same `POST /api/jobs` on Coy's Apply and
+  counts like his own. The unworked suggestions already on the board (New
+  lead, no sections, budget lines or files — 7 on 2026-10-04) are archived
+  `archived_reason='suggested — make jobs by hand'`, with Restore on Archived
+  & deleted. Rehearsed (rolled back): 7 archived, none uncounted left, a named
+  customer Dusty filed got no job. Bid intake (§2i) still makes its jobs.
 
 **Dusty seeds next steps (`enrich-contacts` v9+, 2026-09-28).** Each read
 may add up to three things waiting on Coy — "Send the walkway repair price" —
@@ -1460,6 +1474,12 @@ percentage of labour — all three contradict this section and §4.
   context kind, so `dusty_conversations` needed no migration), and a plan's
   budget steps there are skipped by name ("needs the job open"). Tested in
   `tests/dusty-plan.test.mjs`. Still Coy's tap; Dusty changes nothing.
+  **And a job (Coy, 2026-10-04: "Or I can ask dusty to create it; he should
+  have that ability").** `new_job` {contact (full id from his context),
+  title, job_type, address, description — only as written or said} → `POST
+  /api/jobs` on Coy's Apply (which now also takes `description`); the card
+  names the person. In every context (`RECORD_RULES`); tested in
+  `tests/dusty-plan.test.mjs`.
   **And a parish's sales tax (Coy, 2026-10-03: "Dusty needs to be able to
   update the sales tax for the parish the address found").** Asked "add a tax
   rate for East Baton Rouge", Dusty said he had no step for it. `set_tax`
@@ -1639,6 +1659,28 @@ expected start date per quoted job before it means anything. Add the field.
   = the default; a number they used that isn't listed is added with it).
   **Sort** is a drop-down (Recent · A–Z · By role), and a system thread
   shows no description line under its name (Coy: "remove this line").
+  **Internal notes (Coy, 2026-10-04: "I need to be able to create internal
+  notes. The internal notes tab can also allow me to tag other internal
+  members in the Org").** A tab after the person's numbers — **Internal
+  notes** (`internal-notes.tsx`): their `contact_notes` with who wrote each,
+  and a box where **@** offers the org's members (`sc_org_people` via
+  `/api/org`). A tag is written into the note itself as `@[Name](u:<user
+  id>)` (`src/lib/mentions.ts`, tested) — no migration; shown as a chip, and
+  as plain "@Name" in the timeline and Dusty's context. A tagged member sees
+  **"Tagged you on …"** on their activity line for a week, opening the tab
+  (`?channel=notes`). Notes are never sent.
+  **Whole thread search works in the buckets (Coy: "whole thread button isn't
+  clickable").** A system thread has no saved list, so the button was off;
+  `/api/threads/search?bucket=customer|vendor|personal|spam|unsorted` now
+  works out its people the way Threads files them (400 most recent).
+  **Done and lost customers (Coy: "a way to hide completed customer threads
+  and archive lost thread").** `/api/threads` gives each person `job_state`
+  — open while any job is open, done when every job is complete (or some
+  lost), lost when every job is lost. In Customer, done ones are hidden
+  behind **Done · N hidden — show** (remembered on the device), and **Archive
+  lost · N** archives every all-lost customer in one tap with Undo (Select
+  also has a **Lost · N** pick); like any archive, they come back if they
+  call or text again.
   Not built: Dusty reading a whole custom thread (his context is still one
   contact), and "Jump to date".
 - **Threads on a desktop (2026-10-01, Coy):** the five buckets are a second
@@ -1747,7 +1789,14 @@ expected start date per quoted job before it means anything. Add the field.
   how it reached us — Jeremy's referral: homeowner is customer, Jeremy the
   referrer; LA Contracting's bid invite: LA Contracting is customer.
   `jobs.job_type` is nullable since 038 (Coy, 2026-09-28): the New job sheet
-  still requires a type; an automatic job with no hint shows **Type?**. The header is 54px + the 38px activity line = `--sc-head` (92px);
+  still requires a type; an automatic job with no hint shows **Type?**.
+  **Sort and filter (Coy, 2026-10-04: "a sort button that sorts by date and
+  name. And also a filter button that filters for job types and city").**
+  **Sort** (Newest · Oldest · Last moved · Name A–Z) and **Filter** — job type
+  (with Type?) and city, each with counts, any of each — with the filters in
+  use as chips (×, Clear) and "N of M jobs"; remembered on the device
+  (`src/lib/jobs/board-view.ts`, tested: a job's city is its own, else read
+  from its address after the street). The header is 54px + the 38px activity line = `--sc-head` (92px);
   everything under or beside it measures from that variable. The phone footer
   is 58px = `--sc-foot`. A conversation or person page is `.sc-pinned` —
   fixed between the two on a phone — so only its list scrolls and its name bar

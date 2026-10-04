@@ -14,6 +14,7 @@ import { useThreads } from "@/components/v34/threads-ctx";
 import { threadLabel } from "@/components/v34/thread-rail";
 import { RoleTag } from "@/components/v34/thread-list";
 import { ThreadSearch } from "@/components/v34/thread-search";
+import { InternalNotes } from "@/components/v34/internal-notes";
 import { inChannel, roleOf, type Channel, type ChannelFilter } from "@/lib/v34/threads";
 
 /**
@@ -215,7 +216,12 @@ export default function ChatThreadPage() {
     inThreads.length ? `in ${inThreads.map((t) => t.name).join(", ")}` : null,
     lastAt ? `last heard ${relTime(lastAt)}` : null,
   ].filter(Boolean).join(" · ");
-  const channel = channels.find((x) => x.key === channelKey) ?? channels[0] ?? null;
+  // Internal notes are a tab of their own, after the numbers (Coy, 2026-10-04).
+  const nNotes = person?.notes?.length ?? 0;
+  const notesTab: Channel = { key: "notes", kind: "notes", label: "Internal notes", value: null, calls: 0, texts: 0, emails: nNotes, reachable: true };
+  const lastPhone = channels.reduce((at, c, i) => (c.kind === "phone" ? i : at), -1);
+  const tabs = channels.length ? [...channels.slice(0, lastPhone + 1), notesTab, ...channels.slice(lastPhone + 1)] : [];
+  const channel = tabs.find((x) => x.key === channelKey) ?? tabs[0] ?? null;
   const shown = channel?.kind === "phone" ? messages.filter((m) => inChannel({ channel: m.channel, counterparty: m.counterparty ?? null }, channel, filter)) : [];
   const n = channel?.kind === "phone" ? messages.filter((m) => inChannel({ channel: m.channel, counterparty: m.counterparty ?? null }, channel, "all")) : [];
   const nCalls = n.filter((m) => m.channel === "call" || m.channel === "voicemail").length;
@@ -280,15 +286,16 @@ export default function ChatThreadPage() {
           <div style={{ fontSize: 11.5, color: T.ink3, marginTop: 2, ...nums, ...clip }}>{loading ? "Loading…" : meta || (phone ? formatPhone(phone) : "")}</div>
           {/* The third row: the channels. Each number is its own (calls, voicemails and texts together), then email, then chat. */}
           <div className="flex items-end mt-1.5 overflow-x-auto" role="tablist" aria-label="Channels">
-            {channels.map((ch) => {
+            {tabs.map((ch) => {
               const on = channel?.key === ch.key;
               const sub = ch.kind === "phone" ? `${formatPhone(ch.value)} · ${ch.calls} call${ch.calls === 1 ? "" : "s"} · ${ch.texts} text${ch.texts === 1 ? "" : "s"}`
+                : ch.kind === "notes" ? `${nNotes} note${nNotes === 1 ? "" : "s"} · @ to tag a teammate`
                 : ch.kind === "email" ? (ch.value ? `${ch.value}${ch.emails ? ` · ${ch.emails}` : ""}` : ch.emails ? `${ch.emails} filed here` : "No email on file")
                 : "Not joined · invite";
               return (
                 <button key={ch.key} role="tab" aria-selected={on} onClick={() => pickChannel(ch.key)} className="text-left flex-1 lg:flex-none shrink-0"
                   style={{ minWidth: 0, padding: "7px 12px 8px", borderBottom: `2px solid ${on ? T.hiviz : "transparent"}`, opacity: ch.reachable || on ? 1 : 0.5, cursor: "pointer" }}>
-                  <span style={{ display: "block", fontFamily: disp, fontSize: 9.5, letterSpacing: ".1em", textTransform: "uppercase", color: T.ink3 }}>{ch.kind === "chat" ? "ScopeCrete" : ch.kind}</span>
+                  <span style={{ display: "block", fontFamily: disp, fontSize: 9.5, letterSpacing: ".1em", textTransform: "uppercase", color: T.ink3 }}>{ch.kind === "chat" ? "ScopeCrete" : ch.kind === "notes" ? "Team only" : ch.kind}</span>
                   <span style={{ display: "flex", alignItems: "center", gap: 4, fontFamily: "var(--sc-font-strong)", fontSize: 13, fontWeight: 600, color: T.ink }}>
                     {ch.label}
                     {ch.kind === "phone" && on && (
@@ -318,11 +325,11 @@ export default function ChatThreadPage() {
             </div>
           ) : (
             <div className="flex overflow-hidden shrink-0" style={{ height: 28, border: `1px solid ${T.hairStrong}`, borderRadius: 4 }}>
-              <button style={seg(true)}>All {channel?.kind === "email" ? emails.length : 0}</button>
+              <button style={seg(true)}>All {channel?.kind === "email" ? emails.length : channel?.kind === "notes" ? nNotes : 0}</button>
             </div>
           )}
           <span className="hidden lg:inline" style={{ fontSize: 11.5, color: T.ink3, ...clip, flex: 1 }}>
-            {channel?.kind === "phone" ? "Everything on this number, oldest first" : channel?.kind === "email" ? "Emails forwarded to your intake inbox and filed on them" : "ScopeCrete chat isn't built yet"}
+            {channel?.kind === "phone" ? "Everything on this number, oldest first" : channel?.kind === "notes" ? "Notes for your team — never sent, and Dusty reads them" : channel?.kind === "email" ? "Emails forwarded to your intake inbox and filed on them" : "ScopeCrete chat isn't built yet"}
           </span>
           <span className="flex-1 lg:hidden" />
           {channel?.kind === "phone" && channel.value && (
@@ -346,6 +353,11 @@ export default function ChatThreadPage() {
         ))}
         {person && <SamePerson person={person} onMerge={(id) => setMerging({ preselect: id ?? null })} />}
 
+        {!loading && !error && channel?.kind === "notes" ? (
+          <div className="flex-1 min-h-0">
+            <InternalNotes contactId={contactId} name={name} notes={person?.notes ?? []} onSaved={() => setReload((n) => n + 1)} />
+          </div>
+        ) : (
         <div ref={scrollRef} className="flex-1 overflow-y-auto" style={{ padding: "12px 18px" }}>
           {loading ? (
             <div className="space-y-2">
@@ -384,7 +396,9 @@ export default function ChatThreadPage() {
           )}
         </div>
 
-        {!loading && !error && channel?.kind !== "chat" && (
+        )}
+
+        {!loading && !error && channel?.kind !== "chat" && channel?.kind !== "notes" && (
           <Composer contactId={contactId} phone={channel?.kind === "phone" ? channel.value : phone} name={name}
             only={channel?.kind === "email" ? "email" : "text"} onNoteSaved={() => setReload((n) => n + 1)} />
         )}
@@ -394,7 +408,8 @@ export default function ChatThreadPage() {
         <div className="fixed inset-0 z-40 lg:static lg:z-auto lg:shrink-0 lg:h-full" style={{ top: "var(--sc-head)" }}>
           <div className="h-full lg:w-[340px]">
             <ThreadSearch contactId={contactId} firstName={(name ?? "").split(/\s+/)[0] || "This person"} number={channel?.kind === "phone" ? channel.value : null}
-              threadName={threadName} threadContacts={threadIds} onClose={() => setSearching(false)}
+              threadName={threadName} threadContacts={threadIds}
+              threadBucket={threads ? ({ customers: "customer", vendors: "vendor", personal: "personal", spam: "spam", unsorted: "unsorted" } as Record<string, string>)[threads.thread] ?? null : null} onClose={() => setSearching(false)}
               onOpen={(r) => {
                 setSearching(false);
                 if (r.contact_id !== contactId) { router.push(`/dashboard/messages/${r.contact_id}${tq}`); return; }

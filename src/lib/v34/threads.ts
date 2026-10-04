@@ -86,7 +86,8 @@ export function sortRows<T extends Sortable>(rows: T[], s: ThreadSort): T[] {
   return out;
 }
 
-export type ChannelKind = "phone" | "email" | "chat";
+/** "notes" is the person's internal notes (Coy, 2026-10-04) — added by the page, never by buildChannels(). */
+export type ChannelKind = "phone" | "email" | "chat" | "notes";
 export interface Channel {
   key: string;                      // "phone:+12255550211" | "email:mark@…" | "chat"
   kind: ChannelKind;

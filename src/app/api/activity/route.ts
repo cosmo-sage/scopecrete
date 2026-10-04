@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
+import { plainNote } from "@/lib/mentions";
 import { formatPhone } from "@/lib/v34/tokens";
 
 /**
@@ -70,7 +71,7 @@ const clipq = (s: string | null | undefined, n = 90) => {
 export async function GET(req: NextRequest) {
   const result = await getApiSession(req);
   if (!result.ok) return result.response;
-  const { supabase, orgId, applyCookies } = result.session;
+  const { supabase, orgId, userId, applyCookies } = result.session;
 
   const since = new Date(Date.now() - 7 * 86400_000).toISOString();
   // Reminders: open next steps due today or overdue (contact_tasks, migration
@@ -230,6 +231,16 @@ export async function GET(req: NextRequest) {
     const job = e.document?.job_id ?? null;
     items.push({ id: `opened-${e.id}`, at: e.occurred_at, kind: "proposal", contact_id: null, href: job ? `/dashboard/scope/${job}/proposal` : undefined,
       summary: `Proposal opened: ${clipq(e.document?.job?.title ?? "a job", 140)}`, detail: "The customer opened the link you sent.", tone: "good" });
+  }
+  // Internal notes that tag this member (Coy, 2026-10-04), the last week, not their own.
+  const { data: tagRows } = await supabase.from("contact_notes")
+    .select("id, body, created_at, created_by, contact_id, contact:contacts(name)")
+    .eq("org_id", orgId).like("body", `%(u:${userId})%`).gte("created_at", new Date(Date.now() - 7 * 86400_000).toISOString())
+    .order("created_at", { ascending: false }).limit(6);
+  for (const n of (tagRows ?? []) as unknown as Array<{ id: string; body: string; created_at: string; created_by: string | null; contact_id: string; contact: { name: string | null } | null }>) {
+    if (n.created_by === userId) continue;
+    items.push({ id: `tag-${n.id}`, at: n.created_at, kind: "reminder", contact_id: n.contact_id, href: `/dashboard/messages/${n.contact_id}?channel=notes`,
+      summary: `Tagged you on ${clipq(n.contact?.name ?? "a thread", 60)}: ${clipq(plainNote(n.body).replace(/\s+/g, " "), 180)}`, detail: plainNote(n.body), tone: "good" });
   }
   items.sort((a, b) => b.at.localeCompare(a.at));
   if (waiting > 0) {

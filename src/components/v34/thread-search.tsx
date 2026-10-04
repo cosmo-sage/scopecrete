@@ -16,8 +16,10 @@ const TILE: Record<SearchType, { l: string; bg: string; fg: string }> = {
   link: { l: "URL", bg: T.chalkDim, fg: T.chalk }, call: { l: "CALL", bg: T.slab, fg: T.ink2 }, vm: { l: "VM", bg: T.hivizDim, fg: T.hivizText },
 };
 
-export function ThreadSearch({ contactId, firstName, number, threadName, threadContacts, onClose, onOpen }: {
+export function ThreadSearch({ contactId, firstName, number, threadName, threadContacts, threadBucket, onClose, onOpen }: {
   contactId: string; firstName: string; number: string | null; threadName: string; threadContacts: string[];
+  /** A system thread (Customer, Vendor, …): the server works out its people. */
+  threadBucket?: string | null;
   onClose: () => void; onOpen: (r: { contact_id: string; channel: string | null; id: string }) => void;
 }) {
   const [q, setQ] = useState("");
@@ -25,15 +27,17 @@ export function ThreadSearch({ contactId, firstName, number, threadName, threadC
   const [type, setType] = useState<"all" | SearchType>("all");
   const [data, setData] = useState<{ results: Result[]; counts: Record<string, number> } | null>(null);
   useEffect(() => {
-    const ids = scope === "thread" && threadContacts.length ? threadContacts : [contactId];
+    const whole = scope === "thread" && !threadContacts.length && threadBucket;
+    const ids = scope === "thread" && threadContacts.length ? threadContacts : whole ? [] : [contactId];
     const p = new URLSearchParams({ contacts: ids.slice(0, 400).join(","), q, type });
+    if (whole) p.set("bucket", threadBucket);
     if (scope === "channel" && number) p.set("number", number);
     const ctl = new AbortController();
     const t = setTimeout(() => {
       fetch(`/api/threads/search?${p}`, { signal: ctl.signal }).then((r) => (r.ok ? r.json() : null)).then((b) => { if (b) setData(b); }).catch(() => {});
     }, q ? 250 : 0);
     return () => { clearTimeout(t); ctl.abort(); };
-  }, [q, scope, type, contactId, number, threadContacts]);
+  }, [q, scope, type, contactId, number, threadContacts, threadBucket]);
   const seg = (on: boolean): React.CSSProperties => ({ flex: 1, height: 26, border: "none", background: on ? T.ink : T.card, color: on ? T.card : T.ink2, fontFamily: disp, fontSize: 11, letterSpacing: ".06em", textTransform: "uppercase", cursor: "pointer", ...clip });
   const scopeLabel = scope === "channel" ? "this number" : scope === "contact" ? firstName : threadName;
   const total = data?.counts.all ?? 0, shown = type === "all" ? total : data?.counts[type] ?? 0;
@@ -51,7 +55,7 @@ export function ThreadSearch({ contactId, firstName, number, threadName, threadC
         <div className="flex overflow-hidden" style={{ border: `1px solid ${T.hairStrong}`, borderRadius: 4 }}>
           {number && <button onClick={() => setScope("channel")} style={seg(scope === "channel")}>This number</button>}
           <button onClick={() => setScope("contact")} style={seg(scope === "contact")}>{firstName}</button>
-          <button onClick={() => setScope("thread")} style={seg(scope === "thread")} disabled={!threadContacts.length}>Whole thread</button>
+          <button onClick={() => setScope("thread")} style={seg(scope === "thread")} disabled={!threadContacts.length && !threadBucket}>Whole thread</button>
         </div>
         <div className="flex flex-wrap gap-1">
           {SEARCH_TYPES.map((t) => {

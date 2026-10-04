@@ -21,6 +21,7 @@
  */
 
 import { EmailList } from "@/components/v34/email-sheet";
+import { plainNote } from "@/lib/mentions";
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -880,7 +881,7 @@ function CallCard({ m, who, onAddNote }: { m: Item; who: string; onAddNote: (id:
         <div style={{ ...row, borderBottom: "none", alignItems: "flex-start", paddingTop: 8 }}>
           <span style={{ ...lbl, width: 80, color: T.ink2 }}>Notes</span>
           <div className="flex flex-col gap-1" style={{ flex: 1 }}>
-            {m.notes.map((n) => <span key={n.id} style={{ fontSize: 13, color: T.ink }}>{n.body} <span style={{ fontSize: 10, color: T.ink3 }}>{relTime(n.created_at)}</span></span>)}
+            {m.notes.map((n) => <span key={n.id} style={{ fontSize: 13, color: T.ink }}>{plainNote(n.body)} <span style={{ fontSize: 10, color: T.ink3 }}>{relTime(n.created_at)}</span></span>)}
             {adding ? (
               <form onSubmit={async (e) => { e.preventDefault(); if (!draft.trim()) return; await onAddNote(m.id, draft.trim()); setDraft(""); setAdding(false); }} className="flex gap-1.5">
                 <input autoFocus value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Note on this call"

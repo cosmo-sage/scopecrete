@@ -41,10 +41,13 @@ export type PlanAction =
   | { do: "restore"; kind: "contact" | "customer" | "job"; ids: string[]; label: string | null }
   // An address on a customer, a person or a job (Coy, 2026-10-03: "I want dusty to be able to update an
   // address record") — checked against Mapbox on Coy's Apply; its spelling wins when it matches for sure.
-  | { do: "set_address"; kind: "contact" | "customer" | "job"; id: string; line1: string; city: string | null; state: string | null; zip: string | null; source: string | null };
+  | { do: "set_address"; kind: "contact" | "customer" | "job"; id: string; line1: string; city: string | null; state: string | null; zip: string | null; source: string | null }
+  // A job for a person (Coy, 2026-10-04: "I'll create it manually. Or I can ask dusty to create it; he
+  // should have that ability") — made through the New job form's own call on Coy's Apply, counted like his.
+  | { do: "new_job"; contact: string; title: string; job_type: "residential" | "commercial" | "public" | null; address: string | null; description: string | null };
 
 /** Steps that change records rather than a budget — they need no job open. */
-export const RECORD_STEPS = new Set(["archive", "restore", "set_address"]);
+export const RECORD_STEPS = new Set(["archive", "restore", "set_address", "new_job"]);
 /** Steps that touch a job's budget — they need the job open. Everything else is the Price book. */
 export const needsJob = (a: PlanAction) =>
   a.do === "add" || a.do === "add_group" || a.do === "new_area" || a.do === "load_assembly" || (a.do === "new_item" && a.add);
@@ -197,6 +200,13 @@ export function cleanAction(raw: unknown): PlanAction | null {
       return { do: "set_address", kind, id, line1, city: str(r.city, 80), state: str(r.state, 30),
         zip: zip && /^\d{5}(-\d{4})?$/.test(zip) ? zip : null, source: str(r.source, 160) };
     }
+    case "new_job": {
+      const contact = typeof r.contact === "string" && FULL_ID.test(r.contact) ? r.contact.toLowerCase() : null;
+      const title = str(r.title, 80);
+      if (!contact || !title) return null;
+      const jt = ["residential", "commercial", "public"].find((t) => t === r.job_type) as "residential" | "commercial" | "public" | undefined;
+      return { do: "new_job", contact, title, job_type: jt ?? null, address: str(r.address, 160), description: str(r.description, 500) };
+    }
     default: return null;
   }
 }
@@ -253,6 +263,7 @@ export function describe(a: PlanAction, names: { item: (r: string) => string | n
       const full = [a.line1, a.city, [a.state, a.zip].filter(Boolean).join(" ")].filter(Boolean).join(", ");
       return `Set ${whose} to ${full}${a.source ? ` (from ${a.source})` : ""} — checked against the map when you apply`;
     }
+    case "new_job": return `New job “${a.title}”${a.job_type ? ` (${a.job_type === "public" ? "government" : a.job_type})` : ""}${a.address ? ` at ${a.address}` : ""} — in New lead, counted`;
     case "archive":
     case "restore": {
       const n = a.ids.length;
@@ -280,7 +291,12 @@ Addresses. When Coy asks you to put an address on a customer, a person or a job 
 \`\`\`scopecrete-plan
 [{"do":"set_address","kind":"customer|contact|job","id":"<full id from the CONTEXT>","line1":"1234 Example St","city":"Baton Rouge","state":"LA","zip":"70800","source":"their text of Oct 2"}]
 \`\`\`
-Use the address exactly as it was written or said — never invent a house number, street, city or zip; leave out what wasn't given. Say in "source" where it came from. A customer's address is where they are; a job's is the site. On Apply the app checks it against the map (Mapbox) and uses the map's spelling when the house number and street match for sure — say so if the address came from a call transcript, where streets are often misheard.`;
+Use the address exactly as it was written or said — never invent a house number, street, city or zip; leave out what wasn't given. Say in "source" where it came from. A customer's address is where they are; a job's is the site. On Apply the app checks it against the map (Mapbox) and uses the map's spelling when the house number and street match for sure — say so if the address came from a call transcript, where streets are often misheard.
+New jobs. The app does not make jobs on its own — Coy makes them, or asks you to. When he asks you to start a job for someone, propose:
+\`\`\`scopecrete-plan
+[{"do":"new_job","contact":"<full contact id from the CONTEXT>","title":"Driveway Replacement","job_type":"residential|commercial|public","address":"<the site, only as written or said>","description":"<one line on the work, from what they said>"}]
+\`\`\`
+A title is 1–4 words of the work (the customer's name is put in front by the app). Leave out job_type, address or description when you don't know them. Coy sees it and taps Apply; it lands in New lead and counts.`;
 
 /** The instructions Dusty is given about plans — appended to his system prompt. */
 export const PLAN_RULES = `Budget plans. When Coy asks you to build, fill or fix a job's budget, or to add, change, remove or organise items, groups or assemblies in his Price book, answer in words first, then end with ONE fenced block in this exact form, which the app shows to Coy as steps with an Apply button (you change nothing yourself — Coy's tap does):

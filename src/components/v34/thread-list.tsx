@@ -56,6 +56,8 @@ interface Thread {
   job_unscoped: boolean;
   /** From the contact's most advanced job: residential | commercial | public. */
   job_type: string | null;
+  /** open | done (every job complete) | lost (every job lost) | null (no job) — Coy, 2026-10-04. */
+  job_state?: "open" | "done" | "lost" | null;
   /** Dusty's words (migration 037): where things stand, and the latest conversations. */
   status_summary: string | null;
   recent_summary: string | null;
@@ -832,9 +834,22 @@ export function ThreadList({ folded = false }: { folded?: boolean }) {
   }, [counts, ctx, customThread]);
 
 
+  // Customers whose work is finished are tucked away until asked for (Coy, 2026-10-04:
+  // "hide completed customer threads and archive lost thread"), remembered on the device.
+  const [showDone, setShowDoneState] = useState(false);
+  useEffect(() => {
+    let off = false;
+    Promise.resolve().then(() => { try { if (!off && localStorage.getItem("sc:threads-show-done") === "1") setShowDoneState(true); } catch { /* none */ } });
+    return () => { off = true; };
+  }, []);
+  const setShowDone = (v: boolean) => { setShowDoneState(v); try { localStorage.setItem("sc:threads-show-done", v ? "1" : "0"); } catch { /* private window */ } };
+  const finishing = filter === "customers" && !q;
+  const doneHere = finishing ? threads.filter((t) => matches(t, filter) && t.job_state === "done").length : 0;
+  const lostIds = finishing ? threads.filter((t) => matches(t, filter) && t.job_state === "lost").map((t) => t.contact_id) : [];
   const visible = useMemo(() => {
     // A search looks in every bucket; otherwise the chip decides.
     let rows = filter === "archived" && !q ? (archived ?? []) : q ? threads : isCustom ? (customRows ?? []) : threads.filter((t) => matches(t, filter));
+    if (filter === "customers" && !q && !showDone) rows = rows.filter((t) => t.job_state !== "done");
     if (q) {
       rows = rows.filter((t) =>
         t.display_name.toLowerCase().includes(q)
@@ -844,7 +859,7 @@ export function ThreadList({ folded = false }: { folded?: boolean }) {
     // Recent, A–Z (a bare number last) or by role (Threads v2).
     if (!q && filter !== "archived") rows = sortRows(rows, sort);
     return rows;
-  }, [threads, filter, q, archived, sort, isCustom, customRows]);
+  }, [threads, filter, q, archived, sort, isCustom, customRows, showDone]);
   const silentHere = visible.filter((t) => t.silent).length;
   // Opening a contact keeps the thread in the address and folds the list on a desktop.
   const openContact = (id: string) => {
@@ -989,6 +1004,18 @@ export function ThreadList({ folded = false }: { folded?: boolean }) {
                 ? <><button onClick={() => setFilter("unsorted")} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>‹ Back to Unsorted</button>
                     <Link href="/dashboard/archive" style={{ ...eyebrow, color: T.ink3, marginLeft: 10 }}>Deleted customers &amp; jobs ›</Link></>
                 : <button onClick={() => setFilter("archived")} style={{ ...eyebrow, color: T.ink3, cursor: "pointer" }}>Archived{counts && typeof counts.archived === "number" ? ` · ${counts.archived}` : ""}</button>}
+              {doneHere > 0 && (
+                <button onClick={() => setShowDone(!showDone)} style={{ ...eyebrow, color: showDone ? T.ink : T.ink3, cursor: "pointer", marginLeft: 10 }}
+                  title="Customers whose every job is complete">
+                  {showDone ? `Hide done · ${doneHere}` : `Done · ${doneHere} hidden — show`}
+                </button>
+              )}
+              {lostIds.length > 0 && (
+                <button disabled={archBusy} onClick={() => void archive(lostIds, false)} style={{ ...eyebrow, color: T.chalk, cursor: "pointer", marginLeft: 10 }}
+                  title="Archive every customer whose jobs are all lost — they come back if they call or text again">
+                  Archive lost · {lostIds.length}
+                </button>
+              )}
               <span className="flex-1" />
               {visible.length > 0 && (
                 <button onClick={() => { setSelecting(true); setPicked(new Set()); setOpenRow(null); setTrayRow(null); }}
@@ -998,6 +1025,12 @@ export function ThreadList({ folded = false }: { folded?: boolean }) {
           ) : (
             <>
               <span style={{ fontSize: F.sm, fontWeight: 600 }}>{picked.size} selected</span>
+              {lostIds.length > 0 && (
+                <button onClick={() => setPicked(new Set(lostIds))}
+                  className="rounded px-2" style={{ ...eyebrow, height: 28, border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink, cursor: "pointer" }}>
+                  Lost · {lostIds.length}
+                </button>
+              )}
               {filter !== "archived" && silentHere > 0 && (
                 <button onClick={() => setPicked(new Set(visible.filter((t) => t.silent).map((t) => t.contact_id)))}
                   className="rounded px-2" style={{ ...eyebrow, height: 28, border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink, cursor: "pointer" }}>

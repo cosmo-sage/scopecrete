@@ -6,6 +6,7 @@
  */
 
 import type { ApiSession } from "@/lib/api-auth";
+import { plainNote } from "@/lib/mentions";
 import { findDimensions } from "@/lib/plan-ocr";
 import { priceBundle, proposalBundle } from "@/lib/proposal-server";
 import { termsText, warrantyText, type DocTemplate, type Draw, type ProposalDisplay } from "@/lib/proposal";
@@ -232,7 +233,7 @@ async function contactBlock(sb: Sb, orgId: string, contactId: string) {
       `Where it stands (Dusty's earlier read): ${(c.status_summary as string | null) ?? "not read yet"}`,
       `Open next steps: ${todo.length ? todo.map((t) => `${t.title}${t.due_on ? ` (due ${t.due_on})` : ""}${t.source === "coy" ? " [Coy's own]" : " [suggested]"}`).join("; ") : "none"}`,
       `Coy's notes on them (newest first): ${((notes ?? []) as Array<{ body: string; created_at: string }>).length
-        ? ((notes ?? []) as Array<{ body: string; created_at: string }>).map((n) => `[${day(n.created_at)}] ${n.body.replace(/\s+/g, " ").slice(0, 600)}`).join(" | ")
+        ? ((notes ?? []) as Array<{ body: string; created_at: string }>).map((n) => `[${day(n.created_at)}] ${plainNote(n.body).replace(/\s+/g, " ").slice(0, 600)}`).join(" | ")
         : "none"}`,
       `Your own passing thoughts about them, as the activity line showed them (if Coy asks about one, it is one of these; say what in the conversation it came from): ${
         [...((musings ?? []) as Array<{ musing: string; finished_at: string | null }>).map((m) => `[${day(m.finished_at)}] "${m.musing}"`),
@@ -454,7 +455,7 @@ async function callsBlock(sb: Sb, orgId: string, contactId: string | null, custo
   const art = new Map<string, string>();
   for (const a of (arts ?? []) as Array<{ message_id: string; kind: string; content: string | null }>) if (a.content) art.set(`${a.kind}:${a.message_id}`, a.content.trim());
   const noteBy = new Map<string, string[]>();
-  for (const n of (notes ?? []) as Array<{ message_id: string; body: string }>) noteBy.set(n.message_id, [...(noteBy.get(n.message_id) ?? []), n.body.replace(/\s+/g, " ").slice(0, 2000)]);
+  for (const n of (notes ?? []) as Array<{ message_id: string; body: string }>) noteBy.set(n.message_id, [...(noteBy.get(n.message_id) ?? []), plainNote(n.body).replace(/\s+/g, " ").slice(0, 2000)]);
   const lines = calls.map((c) => [
     `[${day(c.occurred_at)} ${c.direction === "outbound" ? "Coy called" : "they called"}]`,
     `summary: ${c.summary?.trim() || "none"}`,

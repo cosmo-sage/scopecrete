@@ -60,7 +60,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ contactId: 
     supabase.from("org_contact_subtypes").select("bucket, slug, label").eq("org_id", orgId),
     dupQuery,
     // Coy's notes (migration 041) — newest first; the timeline merges them in.
-    supabase.from("contact_notes").select("id, body, created_at").eq("org_id", orgId).eq("contact_id", contactId)
+    supabase.from("contact_notes").select("id, body, created_at, created_by").eq("org_id", orgId).eq("contact_id", contactId)
       .order("created_at", { ascending: false }).limit(200),
   ]);
   for (const [what, r] of [["contact_phones", phones], ["jobs", jobs], ["job_vendors", links], ["contact_tasks", tasks], ["contact_proposals", prop], ["contact_notes", notes]] as const) {

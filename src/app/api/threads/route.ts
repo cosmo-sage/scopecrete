@@ -83,6 +83,12 @@ export interface Thread {
   /** residential | commercial | public, from the contact's most advanced job. */
   job_type: string | null;
   /**
+   * Where their work stands (Coy, 2026-10-04: "hide completed customer threads
+   * and archive lost thread"): open while any job is open; done when every job
+   * is complete or closed (or some lost); lost when every job is lost; null with no job.
+   */
+  job_state: "open" | "done" | "lost" | null;
+  /**
    * Dusty's status lines (migration 037, enrich-contacts v8). A display cache
    * of his summary — shown as his words, never as a fact about the contact.
    * `job_type_hint` is his guess at the job type, shown only when there is no
@@ -285,6 +291,7 @@ export async function GET(req: NextRequest) {
   // customer with a won job and a fresh lead belongs under Won.
   const STATUS_RANK = ["invited", "lead", "scoping", "quoted", "scheduled", "in_progress", "complete", "closed", "lost", "won"];
   const jobByContact = new Map<string, { status: string | null; unscoped: boolean; type: string | null }>();
+  const jobState = new Map<string, "open" | "done" | "lost">();
   {
     const { data: jobs } = await supabase
       .from("jobs")
@@ -304,6 +311,9 @@ export async function GET(req: NextRequest) {
 
     for (const j of jobRows) {
       if (!j.contact_id) continue;
+      const st = ["complete", "closed"].includes(j.status ?? "") ? "done" : j.status === "lost" ? "lost" : "open";
+      const was = jobState.get(j.contact_id);
+      jobState.set(j.contact_id, was === "open" || st === "open" ? "open" : was === "done" || st === "done" ? "done" : "lost");
       const prev = jobByContact.get(j.contact_id);
       const better = !prev || STATUS_RANK.indexOf(j.status ?? "") > STATUS_RANK.indexOf(prev.status ?? "");
       jobByContact.set(j.contact_id, {
@@ -420,6 +430,7 @@ export async function GET(req: NextRequest) {
       job_status: jobByContact.get(contactId)?.status ?? null,
       job_unscoped: jobByContact.get(contactId)?.unscoped ?? false,
       job_type: jobByContact.get(contactId)?.type ?? null,
+      job_state: jobState.get(contactId) ?? null,
       status_summary: c?.status_summary ?? null,
       recent_summary: c?.recent_summary ?? null,
       job_type_hint: c?.job_type_hint ?? null,
@@ -449,7 +460,7 @@ export async function GET(req: NextRequest) {
         contact_id: id, display_name: realName ?? formatPhone(c.phone), name_is_phone: !realName, phone: c.phone,
         contact_type: bucket, contact_subtype: bucket ? c.contact_subtype : null, channel: null, direction: null, occurred_at: null,
         preview: "No calls or texts yet", preview_source: "synthesised", summary_source: null, msg_count: 0,
-        job_status: jobByContact.get(id)?.status ?? null, job_unscoped: false, job_type: jobByContact.get(id)?.type ?? null,
+        job_status: jobByContact.get(id)?.status ?? null, job_unscoped: false, job_type: jobByContact.get(id)?.type ?? null, job_state: jobState.get(id) ?? null,
         status_summary: c.status_summary, recent_summary: c.recent_summary, job_type_hint: c.job_type_hint,
         bucket, subtype: bucket ? c.contact_subtype : null, bucket_auto: bucket && !c.confirmed && c.auto_at ? { reason: c.auto_reason } : null,
         proposal: proposalByContact.get(id) ?? null, auto_name: null, silent: false, archived: null,

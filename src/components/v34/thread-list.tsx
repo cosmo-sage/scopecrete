@@ -638,7 +638,6 @@ export function ThreadList({ folded = false }: { folded?: boolean }) {
 
   // The thread picked in the rail / drawer (Threads v2): a bucket, "archived", or one Coy made.
   const filter = ctx?.thread ?? "unsorted";
-  const setFilter = useCallback((k: string) => ctx?.setThread(k), [ctx]);
   const isCustom = !isSystemKey(filter) && filter !== "archived";
   const label = threadLabel(filter, ctx?.custom ?? null);
   const customThread = isCustom ? ctx?.custom?.find((t) => t.id === filter) ?? null : null;
@@ -844,11 +843,14 @@ export function ThreadList({ folded = false }: { folded?: boolean }) {
   }, []);
   const setShowDone = (v: boolean) => { setShowDoneState(v); try { localStorage.setItem("sc:threads-show-done", v ? "1" : "0"); } catch { /* private window */ } };
   const finishing = filter === "customers" && !q;
+  const [archBucket, setArchBucket] = useState<string>("all");
   const doneHere = finishing ? threads.filter((t) => matches(t, filter) && t.job_state === "done").length : 0;
   const lostIds = finishing ? threads.filter((t) => matches(t, filter) && t.job_state === "lost").map((t) => t.contact_id) : [];
   const visible = useMemo(() => {
     // A search looks in every bucket; otherwise the chip decides.
-    let rows = filter === "archived" && !q ? (archived ?? []) : q ? threads : isCustom ? (customRows ?? []) : threads.filter((t) => matches(t, filter));
+    // Archived is its own tab (Coy, 2026-10-04), filtered by bucket and searched on its own.
+    let rows = filter === "archived" ? (archived ?? []).filter((t) => archBucket === "all" || matches(t, archBucket))
+      : q ? threads : isCustom ? (customRows ?? []) : threads.filter((t) => matches(t, filter));
     if (filter === "customers" && !q && !showDone) rows = rows.filter((t) => t.job_state !== "done");
     if (q) {
       rows = rows.filter((t) =>
@@ -857,9 +859,9 @@ export function ThreadList({ folded = false }: { folded?: boolean }) {
         || t.preview.toLowerCase().includes(q));
     }
     // Recent, A–Z (a bare number last) or by role (Threads v2).
-    if (!q && filter !== "archived") rows = sortRows(rows, sort);
+    if (!q) rows = sortRows(rows, sort);
     return rows;
-  }, [threads, filter, q, archived, sort, isCustom, customRows, showDone]);
+  }, [threads, filter, q, archived, sort, isCustom, customRows, showDone, archBucket]);
   const silentHere = visible.filter((t) => t.silent).length;
   // Opening a contact keeps the thread in the address and folds the list on a desktop.
   const openContact = (id: string) => {
@@ -994,16 +996,30 @@ export function ThreadList({ folded = false }: { folded?: boolean }) {
         </div>
       )}
 
+      {filter === "archived" && !loading && (archived?.length ?? 0) > 0 && (
+        <div className="flex items-center gap-1.5 px-2.5 py-1.5 overflow-x-auto" style={{ borderBottom: `1px solid ${T.hairSoft}`, scrollbarWidth: "none" }} aria-label="Filter archived threads">
+          {([["all", "All"], ["customers", "Customer"], ["unsorted", "Unsorted"], ["vendors", "Vendor"], ["personal", "Personal"], ["spam", "Spam"]] as const).map(([k, l]) => {
+            const n = k === "all" ? archived!.length : archived!.filter((t) => matches(t, k)).length;
+            if (k !== "all" && n === 0) return null;
+            const on = archBucket === k;
+            return (
+              <button key={k} onClick={() => setArchBucket(k)} className="shrink-0 rounded px-2.5"
+                style={{ height: 28, border: `1px solid ${on ? T.ink : T.hair}`, background: on ? T.ink : T.card, color: on ? T.card : T.ink2, fontSize: 12, cursor: "pointer" }}>
+                {l} <span style={{ opacity: 0.7 }}>{n}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {/* Select and archive (Coy, 2026-10-03: calls where nothing was said — not spam, not anyone).
           Archived threads come back on their own when that number calls or texts again. */}
       {!q && !loading && !error && (
         <div className="flex items-center gap-1.5 px-2.5 py-1.5 flex-wrap" style={{ borderBottom: `1px solid ${T.hairSoft}`, background: selecting ? T.hivizDim : "transparent" }}>
           {!selecting ? (
             <>
-              {filter === "archived"
-                ? <><button onClick={() => setFilter("unsorted")} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>‹ Back to Unsorted</button>
-                    <Link href="/dashboard/archive" style={{ ...eyebrow, color: T.ink3, marginLeft: 10 }}>Deleted customers &amp; jobs ›</Link></>
-                : <button onClick={() => setFilter("archived")} style={{ ...eyebrow, color: T.ink3, cursor: "pointer" }}>Archived{counts && typeof counts.archived === "number" ? ` · ${counts.archived}` : ""}</button>}
+              {/* Archived is its own tab in the rail now, under Vendor (Coy, 2026-10-04). */}
+              {filter === "archived" && <Link href="/dashboard/archive" style={{ ...eyebrow, color: T.ink3 }}>Deleted customers &amp; jobs ›</Link>}
               {doneHere > 0 && (
                 <button onClick={() => setShowDone(!showDone)} style={{ ...eyebrow, color: showDone ? T.ink : T.ink3, cursor: "pointer", marginLeft: 10 }}
                   title="Customers whose every job is complete">

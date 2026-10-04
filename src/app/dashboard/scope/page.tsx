@@ -288,7 +288,7 @@ function JobCard({ j, busy, next, onNext, onMove, onAccept, onFlag }: {
           style={{ fontFamily: disp, fontSize: F.md, fontWeight: 600, color: T.ink, ...clip, flex: 1, minWidth: 0 }}>
           {j.title || "Untitled job"} ›
         </Link>
-        {since && <span style={{ fontSize: F.xs, color: T.ink3, ...nums }}>{since}</span>}
+        {since && <span style={{ fontSize: F.xs, color: T.ink3, ...nums }} title={j.stage_changed_at ? "Since it moved to this stage" : undefined}>{since}</span>}
       </div>
       {/* Coy, 2026-09-28: a 1–3 word title; the customer, the address and a
           short description under it — never the whole description as the title. */}
@@ -308,6 +308,11 @@ function JobCard({ j, busy, next, onNext, onMove, onAccept, onFlag }: {
         <span style={small(j.section_count ? T.ink3 : T.hiviz)}>
           {j.section_count ? `${j.section_count} section${j.section_count === 1 ? "" : "s"}` : "Not scoped"}
         </span>
+        {j.created_at && (
+          <span style={small(T.ink3)} title="When the job was made">
+            Created {new Date(j.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/Chicago" })}
+          </span>
+        )}
       </div>
       {j.flag_reason && (
         <div className="rounded px-2 py-1.5 mt-2" style={{ background: T.hivizDim, border: `1px solid ${T.hiviz}` }}>

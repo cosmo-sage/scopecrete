@@ -22,7 +22,9 @@ export const SYSTEM_THREADS: Record<SystemThreadKey, { label: string; color: str
   personal: { label: "Personal", color: BUCKET.personal, icon: <path d="M10 16.5s-6-3.6-6-8A3.4 3.4 0 0 1 10 6a3.4 3.4 0 0 1 6 2.5c0 4.4-6 8-6 8z" /> },
   spam: { label: "Spam", color: BUCKET.spam, icon: <path d="M5 5l10 10M15 5L5 15" /> },
 };
-const RAIL_ORDER: SystemThreadKey[] = ["customers", "unsorted", "vendors", "personal", "spam"];
+// Archived sits under Vendor (Coy, 2026-10-04: "The archived threads needs it's own tab in the tab menu below Vendor, that is filterable").
+const ARCHIVED = { label: "Archived", icon: <><path d="M3 4h14v4H3z" /><path d="M4 8v8h12V8" /><path d="M8 11h4" /></> };
+const RAIL_ORDER: Array<SystemThreadKey | "archived"> = ["customers", "unsorted", "vendors", "archived", "personal", "spam"];
 
 /** The thread's name and colour, for headers and back links. */
 export function threadLabel(thread: string, custom: Array<{ id: string; name: string }> | null): { name: string; color: string; custom: boolean } {
@@ -51,7 +53,7 @@ function ThreadCells({ onPick, wide }: { onPick?: () => void; wide?: boolean }) 
   return (
     <>
       {RAIL_ORDER.map((k) => {
-        const s = SYSTEM_THREADS[k], on = thread === k, n = counts?.[k];
+        const s = k === "archived" ? { ...ARCHIVED, color: T.ink2 } : SYSTEM_THREADS[k], on = thread === k, n = counts?.[k];
         return wide ? (
           <button key={k} onClick={() => go(k)} className="flex items-center gap-2.5 px-3 text-left" style={{ ...cell(on, s.color), height: 44 }}>
             <Icon color={s.color}>{s.icon}</Icon>

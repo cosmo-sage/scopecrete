@@ -63,7 +63,7 @@ interface Job {
   id: string; title: string | null; status: string | null; address: string | null;
   contact_id: string | null; duration_days: number | null; created_from_message_id: string | null;
   job_type: string | null; lead_source: string | null; description?: string | null; origin?: string | null;
-  archived_at?: string | null; archived_reason?: string | null;
+  archived_at?: string | null; archived_reason?: string | null; created_at?: string | null;
 }
 interface Contact { id: string; name: string | null; phone: string | null }
 interface Why {
@@ -264,6 +264,8 @@ export default function ScopeBuilder() {
             ) : "Not attached to a customer yet"}
             {job.address ? ` · ${job.address}` : ""}
             {` · ${sections.length} section${sections.length === 1 ? "" : "s"}`}
+            {/* When the job was made (Coy, 2026-10-04: "The job needs a created date"). */}
+            {job.created_at ? ` · created ${new Date(job.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/Chicago" })}` : ""}
             {job.origin === "classification" ? " · made when filed as a customer" : job.created_from_message_id ? " · drafted from a message" : ""}
           </div>
           {job.description && !bidSummary && <div style={{ fontSize: F.sm, color: T.ink2, lineHeight: 1.4, marginTop: 2 }}>{job.description}</div>}

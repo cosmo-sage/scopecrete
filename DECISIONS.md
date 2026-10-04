@@ -4,7 +4,7 @@ Ground truth for every agent working this repo. If code disagrees with this
 document, the code is wrong or this document is stale — resolve it, don't
 guess. Update this file in the same PR that changes the behavior it describes.
 
-Last updated: 2026-10-04 (Lines, providers and logs — migration 077, not applied; internal notes with @-tags; Jobs board sort and filter; jobs by hand — migration 076; done and lost customers in Threads; proposals sent by link, every opening tracked; every option side by side for the customer — migration 075; Documents is Files, everywhere — migration 074; Threads v2 — threads you make, channels per number, the customer page reshaped — migration 073; an address given is kept and asked about — migration 072; Dusty sets addresses; customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
+Last updated: 2026-10-04 (Lines, providers and logs — migration 077; internal notes with @-tags; Jobs board sort and filter; jobs by hand — migration 076; done and lost customers in Threads; proposals sent by link, every opening tracked; every option side by side for the customer — migration 075; Documents is Files, everywhere — migration 074; Threads v2 — threads you make, channels per number, the customer page reshaped — migration 073; an address given is kept and asked about — migration 072; Dusty sets addresses; customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
 
 ---
 
@@ -459,8 +459,8 @@ each message.** One person calling two of Coy's lines is one thread.
   `providers` / `lines` / `line_events` tables are **not** made: a line is
   this `org_phone_numbers` row, the event log is `quo_events` (§2a — every
   event saved as it arrived, before it is filed), the stamp is
-  `messages.phone_number_id`. **Migration 077** (written and rehearsed;
-  applied only on Coy's word) adds only `org_phone_numbers.color_token`
+  `messages.phone_number_id`. **Migration 077** (applied 2026-10-04 on Coy's
+  "Apply 077"; checked after: the column, anon can't run replay) adds only `org_phone_numbers.color_token`
   (hiviz · chalk · violet · green · teal; null = assigned in order) and
   `sc_replay_raw_event(event)` — Replay: runs the projection again for one
   raw event of the caller's org (SECURITY DEFINER, membership checked,
@@ -1718,6 +1718,12 @@ expected start date per quoted job before it means anything. Add the field.
   = the default; a number they used that isn't listed is added with it).
   **Sort** is a drop-down (Recent · A–Z · By role), and a system thread
   shows no description line under its name (Coy: "remove this line").
+  **Archived is a tab of its own (Coy, 2026-10-04: "The archived threads
+  needs it's own tab in the tab menu below Vendor, that is filterable").** In
+  the rail (and the phone drawer) under Vendor, with its count; the list has
+  chips by bucket (All · Customer · Unsorted · Vendor · Personal · Spam, each
+  with its count), the search box searches the archive, and Sort applies.
+  The old "Archived · N" link above the list is gone.
   **Internal notes (Coy, 2026-10-04: "I need to be able to create internal
   notes. The internal notes tab can also allow me to tag other internal
   members in the Org").** A tab after the person's numbers — **Internal
@@ -1855,7 +1861,11 @@ expected start date per quoted job before it means anything. Add the field.
   (with Type?) and city, each with counts, any of each — with the filters in
   use as chips (×, Clear) and "N of M jobs"; remembered on the device
   (`src/lib/jobs/board-view.ts`, tested: a job's city is its own, else read
-  from its address after the street). The header is 54px + the 38px activity line = `--sc-head` (92px);
+  from its address after the street).
+  **The created date (Coy, 2026-10-04: "The job needs a created date").**
+  Each card shows "Created Oct 2" (Central time) beside its tags; the job
+  page's customer line ends "· created Oct 2, 2026". The relative time at
+  the card's top right is how long it has sat in its stage. The header is 54px + the 38px activity line = `--sc-head` (92px);
   everything under or beside it measures from that variable. The phone footer
   is 58px = `--sc-foot`. A conversation or person page is `.sc-pinned` —
   fixed between the two on a phone — so only its list scrolls and its name bar

@@ -44,10 +44,19 @@ export type PlanAction =
   | { do: "set_address"; kind: "contact" | "customer" | "job"; id: string; line1: string; city: string | null; state: string | null; zip: string | null; source: string | null }
   // A job for a person (Coy, 2026-10-04: "I'll create it manually. Or I can ask dusty to create it; he
   // should have that ability") — made through the New job form's own call on Coy's Apply, counted like his.
-  | { do: "new_job"; contact: string; title: string; job_type: "residential" | "commercial" | "public" | null; address: string | null; description: string | null };
+  // contact: a full contact id, or the key of a customer this plan makes (cust1); key: job1, for a later "file".
+  | { do: "new_job"; key: string | null; contact: string; title: string; job_type: "residential" | "commercial" | "public" | null; address: string | null; description: string | null }
+  // A customer (Coy, 2026-10-04: "ask dusty to attach to a new customer or job") — through + New customer's own call.
+  | { do: "new_customer"; key: string | null; name: string; customer_type: "residential" | "commercial" | "public" | null; person: string | null;
+      phone: string | null; email: string | null; address: string | null; city: string | null; state: string | null; zip: string | null }
+  // Files (photos attached in the chat, or any in the CONTEXT) put on a customer, a person or a job — a move.
+  | { do: "file"; files: string[]; kind: "contact" | "customer" | "job"; id: string };
 
 /** Steps that change records rather than a budget — they need no job open. */
-export const RECORD_STEPS = new Set(["archive", "restore", "set_address", "new_job"]);
+export const RECORD_STEPS = new Set(["archive", "restore", "set_address", "new_job", "new_customer", "file"]);
+/** A customer (cust1) or job (job1) made earlier in the same plan. */
+export const CUST_KEY = /^cust\d{1,2}$/i;
+export const JOB_KEY = /^job\d{1,2}$/i;
 /** Steps that touch a job's budget — they need the job open. Everything else is the Price book. */
 export const needsJob = (a: PlanAction) =>
   a.do === "add" || a.do === "add_group" || a.do === "new_area" || a.do === "load_assembly" || (a.do === "new_item" && a.add);
@@ -201,11 +210,29 @@ export function cleanAction(raw: unknown): PlanAction | null {
         zip: zip && /^\d{5}(-\d{4})?$/.test(zip) ? zip : null, source: str(r.source, 160) };
     }
     case "new_job": {
-      const contact = typeof r.contact === "string" && FULL_ID.test(r.contact) ? r.contact.toLowerCase() : null;
+      const contact = typeof r.contact === "string" && (FULL_ID.test(r.contact) || CUST_KEY.test(r.contact.trim())) ? r.contact.trim().toLowerCase() : null;
       const title = str(r.title, 80);
       if (!contact || !title) return null;
       const jt = ["residential", "commercial", "public"].find((t) => t === r.job_type) as "residential" | "commercial" | "public" | undefined;
-      return { do: "new_job", contact, title, job_type: jt ?? null, address: str(r.address, 160), description: str(r.description, 500) };
+      const key = typeof r.key === "string" && JOB_KEY.test(r.key.trim()) ? r.key.trim().toLowerCase() : null;
+      return { do: "new_job", key, contact, title, job_type: jt ?? null, address: str(r.address, 160), description: str(r.description, 500) };
+    }
+    case "new_customer": {
+      const name = str(r.name, 120);
+      if (!name || /^[\d\s()+.-]+$/.test(name)) return null; // a phone number is no name
+      const ct = ["residential", "commercial", "public"].find((t) => t === r.customer_type) as "residential" | "commercial" | "public" | undefined;
+      const key = typeof r.key === "string" && CUST_KEY.test(r.key.trim()) ? r.key.trim().toLowerCase() : null;
+      const zip = str(r.zip, 10);
+      return { do: "new_customer", key, name, customer_type: ct ?? null, person: str(r.person, 120), phone: str(r.phone, 30), email: str(r.email, 160),
+        address: str(r.address, 160), city: str(r.city, 80), state: str(r.state, 30), zip: zip && /^\d{5}(-\d{4})?$/.test(zip) ? zip : null };
+    }
+    case "file": {
+      const kind = RECORD_KINDS.find((k) => k === r.kind);
+      const list = Array.isArray(r.files) ? r.files : typeof r.file === "string" ? [r.file] : [];
+      if (!kind || !list.length || list.length > 50 || !list.every((x) => typeof x === "string" && FULL_ID.test(x))) return null;
+      const id = typeof r.id === "string" ? r.id.trim().toLowerCase() : "";
+      const ok = FULL_ID.test(id) || (kind === "customer" && CUST_KEY.test(id)) || (kind === "job" && JOB_KEY.test(id));
+      return ok ? { do: "file", files: [...new Set((list as string[]).map((x) => x.toLowerCase()))], kind, id } : null;
     }
     default: return null;
   }
@@ -264,6 +291,12 @@ export function describe(a: PlanAction, names: { item: (r: string) => string | n
       return `Set ${whose} to ${full}${a.source ? ` (from ${a.source})` : ""} — checked against the map when you apply`;
     }
     case "new_job": return `New job “${a.title}”${a.job_type ? ` (${a.job_type === "public" ? "government" : a.job_type})` : ""}${a.address ? ` at ${a.address}` : ""} — in New lead, counted`;
+    case "new_customer": return `New customer “${a.name}”${a.customer_type ? ` (${a.customer_type === "public" ? "government" : a.customer_type})` : ""}${a.person && a.person !== a.name ? ` — ${a.person}` : ""}${[a.phone, a.email].filter(Boolean).length ? `, ${[a.phone, a.email].filter(Boolean).join(", ")}` : ""}${a.address ? `, ${[a.address, a.city].filter(Boolean).join(", ")}` : ""}`;
+    case "file": {
+      const n = a.files.length;
+      const where = a.kind === "job" ? "the job" : a.kind === "customer" ? "the customer" : "the person";
+      return `File ${n} ${n === 1 ? "file" : "files"} on ${/^(cust|job)\d/.test(a.id) ? `the new ${a.kind === "job" ? "job" : "customer"} above` : where} (moved there from where they are now)`;
+    }
     case "archive":
     case "restore": {
       const n = a.ids.length;
@@ -296,7 +329,15 @@ New jobs. The app does not make jobs on its own — Coy makes them, or asks you 
 \`\`\`scopecrete-plan
 [{"do":"new_job","contact":"<full contact id from the CONTEXT>","title":"Driveway Replacement","job_type":"residential|commercial|public","address":"<the site, only as written or said>","description":"<one line on the work, from what they said>"}]
 \`\`\`
-A title is 1–4 words of the work (the customer's name is put in front by the app). Leave out job_type, address or description when you don't know them. Coy sees it and taps Apply; it lands in New lead and counts.`;
+A title is 1–4 words of the work (the customer's name is put in front by the app). Leave out job_type, address or description when you don't know them. Coy sees it and taps Apply; it lands in New lead and counts.
+New customers and filing files. Photos and files Coy attaches in this chat are saved in Files; each is listed in the CONTEXT as "(file <full id>)". When he asks you to put them on a customer, a person or a job — including one this same plan makes — propose:
+\`\`\`scopecrete-plan
+[{"do":"new_customer","key":"cust1","name":"Wilson","customer_type":"residential|commercial|public","person":"Johnette Wilson","phone":"…","email":"…","address":"1234 Example St","city":"…","state":"LA","zip":"…"},
+ {"do":"new_job","key":"job1","contact":"cust1","title":"Driveway Replacement","job_type":"residential"},
+ {"do":"file","files":["<full file id>", …],"kind":"job","id":"job1"},
+ {"do":"file","files":["<full file id>"],"kind":"customer|contact|job","id":"<full id from the CONTEXT>"}]
+\`\`\`
+Make a new customer only when Coy asks for one, and never for someone already in the CONTEXT (use their id). Its name is the person's or company's name as Coy said it or as written; phone, email and address only as said or written — leave out what you don't have. "contact":"cust1" starts the job for the person of the customer this plan makes. "file" moves the files: they leave the job or person they were on. Use only file ids written in the CONTEXT.`;
 
 /** The instructions Dusty is given about plans — appended to his system prompt. */
 export const PLAN_RULES = `Budget plans. When Coy asks you to build, fill or fix a job's budget, or to add, change, remove or organise items, groups or assemblies in his Price book, answer in words first, then end with ONE fenced block in this exact form, which the app shows to Coy as steps with an Apply button (you change nothing yourself — Coy's tap does):

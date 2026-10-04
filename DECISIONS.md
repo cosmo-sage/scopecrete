@@ -4,7 +4,7 @@ Ground truth for every agent working this repo. If code disagrees with this
 document, the code is wrong or this document is stale — resolve it, don't
 guess. Update this file in the same PR that changes the behavior it describes.
 
-Last updated: 2026-10-04 (vendor Delete; Dusty on a vendor's page and looking at attached photos; sales tax by address via TaxLocus — migration 078; archive reasons; Lines, providers and logs — migration 077; internal notes with @-tags; Jobs board sort and filter; jobs by hand — migration 076; done and lost customers in Threads; proposals sent by link, every opening tracked; every option side by side for the customer — migration 075; Documents is Files, everywhere — migration 074; Threads v2 — threads you make, channels per number, the customer page reshaped — migration 073; an address given is kept and asked about — migration 072; Dusty sets addresses; customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
+Last updated: 2026-10-04 (Dusty's chat keeps its files and files them on a customer or job — migration 079; vendor Delete; Dusty on a vendor's page and looking at attached photos; sales tax by address via TaxLocus — migration 078; archive reasons; Lines, providers and logs — migration 077; internal notes with @-tags; Jobs board sort and filter; jobs by hand — migration 076; done and lost customers in Threads; proposals sent by link, every opening tracked; every option side by side for the customer — migration 075; Documents is Files, everywhere — migration 074; Threads v2 — threads you make, channels per number, the customer page reshaped — migration 073; an address given is kept and asked about — migration 072; Dusty sets addresses; customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
 
 ---
 
@@ -2239,8 +2239,28 @@ expected start date per quoted job before it means anything. Add the field.
   reader hasn't read yet is sent to the model as an image with that question
   (up to four; `seeableMime()`, `src/lib/dusty/see.ts`, tested), so he
   answers about it in the same reply — a screenshot of ScopeCrete is read as
-  the screen. Only the question's words are kept in the history; HEIC, PDFs
-  and anything larger still wait for the reader.
+  the screen. HEIC, PDFs and anything larger still wait for the reader.
+  **The chat keeps its files (migration 079, Coy 2026-10-04: "the chat
+  history should at least keep the summary of the image that he read. We'll
+  need to have a place for the photos uploaded to dusty to be saved in the
+  database").** The uploads were already `files` rows (on what the chat is
+  about, else unfiled `from_dusty`); `dusty_messages.file_ids` (≤ 8, nullable)
+  now says which question carried them. Every later turn gives Dusty FILES
+  ATTACHED EARLIER IN THIS CHAT — each by name and `file <id>` with the
+  background reader's summary, facts and text once it has read it (within
+  minutes), and the photo itself again while it hasn't (the four-image cap,
+  this question's first) — so a follow-up question still knows what was in
+  the picture. A reopened chat shows each question's photos as thumbnails
+  (`/api/dusty/conversations/[id]` signs them), each opening in Files. Before
+  079 is applied the route reads and writes without the column. **Dusty files
+  them where Coy says** — plan steps `new_customer` (key `cust1`; name,
+  type, person, phone, email, address only as said or written; through `POST
+  /api/customers`, which now returns its person), `new_job` (now with a key
+  `job1`, and `contact` may be `cust1`) and `file` {files, kind customer |
+  contact | job, a full id or a key} → `PATCH /api/files/[id] {file_to}`, a
+  move (the file leaves the job or person it was on; an old job's area and
+  takeoff go; a file on no job leaves the Plan Room). The card lists the
+  files' real names and where they go; Coy's tap applies it.
 - **Dusty v1 (2026-09-27)** is wired: `src/components/v34/dusty-panel.tsx`
   rises from the footer on a phone and slides in from the right on desktop.
   It is HOT on whatever screen is open — a thread, a scope, a customer, or

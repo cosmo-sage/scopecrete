@@ -5,7 +5,8 @@ import { FILE_COLUMNS, signFiles } from "@/lib/files-server";
 
 /**
  * One file: rename it, say what it is, move it to an area, put it on the
- * proposal, note it, file an unfiled receipt on its vendor — or delete it (the row is kept, marked deleted; the
+ * proposal, note it, file an unfiled receipt on its vendor, file it on a job / customer / person
+ * ({ file_to: { kind, id } }) — or delete it (the row is kept, marked deleted; the
  * stored bytes are removed).
  */
 
@@ -65,6 +66,28 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     const { data: c } = await supabase.from("contacts").select("id").eq("org_id", orgId).eq("id", b.contact_id).maybeSingle();
     if (!c) return bad("No such vendor.", 404);
     patch.contact_id = c.id;
+  }
+  if ("file_to" in b) {
+    // File it on a customer, a person or a job (Coy, 2026-10-04: "upload photos from a job and ask dusty to
+    // attach to a new customer or job"). A move: it leaves where it was; an area or takeoff of the old job goes.
+    const t = b.file_to as { kind?: unknown; id?: unknown } | null;
+    const tid = typeof t?.id === "string" && UUID.test(t.id) ? t.id : null;
+    if (!tid) return bad("Say where to file it.");
+    if (t?.kind === "job") {
+      const { data: j } = await supabase.from("jobs").select("id, contact_id, customer_id").eq("org_id", orgId).eq("id", tid).maybeSingle();
+      if (!j) return bad("No such job.", 404);
+      Object.assign(patch, { job_id: j.id, contact_id: j.contact_id ?? null, customer_id: j.customer_id ?? null });
+    } else if (t?.kind === "customer") {
+      const { data: c } = await supabase.from("customers").select("id, primary_contact_id").eq("org_id", orgId).eq("id", tid).maybeSingle();
+      if (!c) return bad("No such customer.", 404);
+      Object.assign(patch, { job_id: null, contact_id: c.primary_contact_id ?? null, customer_id: c.id });
+    } else if (t?.kind === "contact") {
+      const { data: c } = await supabase.from("contacts").select("id, customer_id").eq("org_id", orgId).eq("id", tid).maybeSingle();
+      if (!c) return bad("No such person.", 404);
+      Object.assign(patch, { job_id: null, contact_id: c.id, customer_id: c.customer_id ?? null });
+    } else return bad("File it on a job, a customer or a person.");
+    if (patch.job_id !== f.job_id) Object.assign(patch, { section_id: null, takeoff_measurement_id: null });
+    if (!patch.job_id) patch.in_plan_room = false; // the Plan Room is a job's
   }
   if (!Object.keys(patch).length) return bad("Nothing to change.");
   const { data: row, error } = await supabase.from("files").update(patch).eq("id", id).eq("org_id", orgId).select(FILE_COLUMNS).single();

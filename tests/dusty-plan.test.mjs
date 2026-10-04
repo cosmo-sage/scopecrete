@@ -169,8 +169,35 @@ test("new_job: a full contact id and a title; the type only if it's a real one",
 \`\`\``);
   assert.equal(p.actions.length, 2);
   assert.equal(p.dropped, 2, "a short id and a job with no title are dropped");
-  assert.deepEqual(p.actions[0], { do: "new_job", contact: id, title: "Driveway Replacement", job_type: "residential", address: "1234 Example St", description: "Tear out and re-pour the drive" });
+  assert.deepEqual(p.actions[0], { do: "new_job", key: null, contact: id, title: "Driveway Replacement", job_type: "residential", address: "1234 Example St", description: "Tear out and re-pour the drive" });
   assert.equal(p.actions[1].job_type, null, "an unknown type is left out");
   assert.equal(needsJob(p.actions[0]), false);
   assert.match(describe(p.actions[0], { item: () => null, area: () => "" }), /New job “Driveway Replacement” \(residential\) at 1234 Example St/);
+});
+
+test("new_customer → new_job → file: keys tie the steps together; ids only from the context", () => {
+  const f1 = "1a2b3c4d-1c3d-4e5f-8a9b-0c1d2e3f4a5b", f2 = "2a2b3c4d-1c3d-4e5f-8a9b-0c1d2e3f4a5b";
+  const job = "3a2b3c4d-1c3d-4e5f-8a9b-0c1d2e3f4a5b";
+  const p = parsePlan(`\`\`\`scopecrete-plan
+[{"do":"new_customer","key":"cust1","name":"Example Homes","customer_type":"commercial","person":"Pat Example","phone":"(225) 555-0100","zip":"7080"},
+ {"do":"new_job","key":"job1","contact":"cust1","title":"Slab"},
+ {"do":"file","files":["${f1}","${f2}","${f1}"],"kind":"job","id":"job1"},
+ {"do":"file","files":["${f1}"],"kind":"job","id":"${job}"},
+ {"do":"file","files":["${f1}"],"kind":"job","id":"cust1"},
+ {"do":"file","files":["1a2b3c4d"],"kind":"customer","id":"cust1"},
+ {"do":"new_customer","name":"(225) 555-0100"},
+ {"do":"new_job","contact":"vendor1","title":"Patio"}]
+\`\`\``);
+  assert.equal(p.actions.length, 4);
+  assert.equal(p.dropped, 4, "a job filed under a customer key, a short file id, a phone-number name and an unknown key are dropped");
+  assert.deepEqual(p.actions[0], { do: "new_customer", key: "cust1", name: "Example Homes", customer_type: "commercial", person: "Pat Example",
+    phone: "(225) 555-0100", email: null, address: null, city: null, state: null, zip: null });
+  assert.equal(p.actions[1].contact, "cust1");
+  assert.equal(p.actions[1].key, "job1");
+  assert.deepEqual(p.actions[2].files, [f1, f2], "the same file once");
+  assert.equal(needsJob(p.actions[2]), false);
+  const d = (a) => describe(a, { item: () => null, area: () => "" });
+  assert.match(d(p.actions[0]), /New customer “Example Homes” \(commercial\) — Pat Example, \(225\) 555-0100/);
+  assert.match(d(p.actions[2]), /File 2 files on the new job above/);
+  assert.match(d(p.actions[3]), /File 1 file on the job/);
 });

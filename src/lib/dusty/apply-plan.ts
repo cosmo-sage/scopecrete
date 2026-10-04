@@ -5,7 +5,9 @@
  * by the server against his org and the job. Nothing here is new authority:
  * it is exactly the taps Coy would make by hand, made for him once he says so.
  */
-import { RECORD_STEPS, needsJob, type PlanAction } from "@/lib/dusty/plan";
+import { CUST_KEY, JOB_KEY, RECORD_STEPS, needsJob, type PlanAction } from "@/lib/dusty/plan";
+
+const FULL_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 import { archiveNow } from "@/components/v34/archive-actions";
 
 export interface PlanLookup {
@@ -78,7 +80,7 @@ export async function applyPlan(jobId: string | null, actions: PlanAction[], loo
   };
   // Groups first, so items can be filed in them; then changes; then the budget.
   const order = { new_group: 0, rename_group: 1, update_item: 1, new_area: 2, new_item: 3, retire_item: 4, new_assembly: 5, add_to_assembly: 6, remove_from_assembly: 6,
-    add: 7, add_group: 8, load_assembly: 9, remove_group: 10, set_tax: 10, archive: 11, restore: 11, set_address: 11, new_job: 11 } as const;
+    add: 7, add_group: 8, load_assembly: 9, remove_group: 10, set_tax: 10, archive: 11, restore: 11, set_address: 11, new_job: 11, new_customer: 11, file: 11 } as const;
   // Archive / restore steps run through applyRecords (no job needed).
   const steps = [...actions].filter((a) => !RECORD_STEPS.has(a.do)).sort((a, b) => order[a.do] - order[b.do]);
   for (const a of steps) {
@@ -232,12 +234,42 @@ export async function applyPlan(jobId: string | null, actions: PlanAction[], loo
  */
 export async function applyRecords(actions: PlanAction[]): Promise<StepResult[]> {
   const out: StepResult[] = [];
+  // Customers and jobs this plan makes, by their key: cust1 → { customer, its person }, job1 → the job.
+  const madeCust = new Map<string, { id: string; contact: string; name: string }>();
+  const madeJob = new Map<string, { id: string; title: string }>();
   for (const a of actions) {
     try {
       if (a.do === "set_address") { out.push(await setAddress(a)); continue; }
+      if (a.do === "new_customer") {
+        try {
+          const r = await call("/api/customers", "POST", { name: a.name, customer_type: a.customer_type ?? undefined, person: a.person ?? undefined,
+            phone: a.phone ?? undefined, email: a.email ?? undefined, address: a.address ?? undefined, city: a.city ?? undefined, state: a.state ?? undefined, zip: a.zip ?? undefined });
+          if (a.key) madeCust.set(a.key, { id: r.customer.id, contact: r.customer.contact_id, name: r.customer.name ?? a.name });
+          out.push({ ok: true, text: `Made the customer “${r.customer?.name ?? a.name}”` });
+        } catch (e) {
+          out.push({ ok: false, text: `New customer “${a.name}”: ${e instanceof Error ? e.message : String(e)}` });
+        }
+        continue;
+      }
       if (a.do === "new_job") {
-        const r = await call("/api/jobs", "POST", { contact_id: a.contact, title: a.title, job_type: a.job_type ?? undefined, address: a.address ?? undefined, description: a.description ?? undefined });
+        const cust = CUST_KEY.test(a.contact) ? madeCust.get(a.contact) : null;
+        if (CUST_KEY.test(a.contact) && !cust?.contact) { out.push({ ok: false, text: `New job “${a.title}”: the customer it was for wasn't made — skipped` }); continue; }
+        const r = await call("/api/jobs", "POST", { contact_id: cust ? cust.contact : a.contact, title: a.title, job_type: a.job_type ?? undefined, address: a.address ?? undefined, description: a.description ?? undefined });
+        if (a.key && r.job?.id) madeJob.set(a.key, { id: r.job.id, title: r.job.title ?? a.title });
         out.push({ ok: true, text: `Made the job “${r.job?.title ?? a.title}” — it's in New lead on the Jobs board` });
+        continue;
+      }
+      if (a.do === "file") {
+        const made = a.kind === "customer" && CUST_KEY.test(a.id) ? madeCust.get(a.id) : a.kind === "job" && JOB_KEY.test(a.id) ? madeJob.get(a.id) : null;
+        const target = made ? made.id : FULL_ID.test(a.id) ? a.id : null;
+        if (!target) { out.push({ ok: false, text: `The ${a.kind} to file on wasn't made — files left where they are` }); continue; }
+        let n = 0; const fails: string[] = [];
+        for (const f of a.files) {
+          try { await call(`/api/files/${f}`, "PATCH", { file_to: { kind: a.kind, id: target } }); n++; }
+          catch (e) { fails.push(e instanceof Error ? e.message : String(e)); }
+        }
+        const where = made ? ("title" in made ? `“${made.title}”` : `“${made.name}”`) : `the ${a.kind === "contact" ? "person" : a.kind}`;
+        out.push({ ok: n > 0, text: `Filed ${n} of ${a.files.length} on ${where}${fails.length ? ` — ${fails[0]}` : ""}` });
         continue;
       }
       if (a.do !== "archive" && a.do !== "restore") continue;

@@ -32,8 +32,9 @@ import { VoiceRecorder } from "@/components/v34/voice-recorder";
 type Ref = { kind: "thread" | "scope" | "customer"; id: string } | { kind: "cash" } | { kind: "cold" };
 type Ctx = Ref | { kind: "activity"; since: string };
 const CATCHUP_KEY = "sc:dusty-catchup-at";
-type Turn = { role: "user" | "assistant"; content: string };
-type Att = { key: string; name: string; pct: number; id: string | null; error: string | null };
+type TurnFile = { id: string; name: string; kind?: string; url: string | null };
+type Turn = { role: "user" | "assistant"; content: string; files?: TurnFile[] };
+type Att = { key: string; name: string; pct: number; id: string | null; error: string | null; preview: string | null };
 interface Conv { id: string; title: string; context_kind: string; context_id: string | null; context_label: string | null; updated_at: string }
 
 export function refFor(pathname: string): Ref {
@@ -133,7 +134,7 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
     let off = false;
     fetch(`/api/dusty/conversations/${want.id}`)
       .then(async (r) => { const b = await r.json().catch(() => ({})); if (!r.ok) throw new Error(b?.error || `HTTP ${r.status}`); return b; })
-      .then((b) => { if (!off) setItems((b.messages as Turn[]).map((m) => ({ role: m.role, content: m.content }))); })
+      .then((b) => { if (!off) setItems((b.messages as Turn[]).map((m) => ({ role: m.role, content: m.content, files: m.files }))); })
       .catch((e) => { if (!off) setErr(e instanceof Error ? e.message : String(e)); })
       .finally(() => { if (!off) setLoadingConv(false); });
     return () => { off = true; };
@@ -190,7 +191,7 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
     if (!q || (busy && !opts?.fresh)) return;
     if (ready.length) setAtts([]);
     const convId = opts?.fresh ? null : activeId;
-    setItems((a) => [...a, { role: "user", content: q }, { role: "assistant", content: "" }]);
+    setItems((a) => [...a, { role: "user", content: q, files: ready.map((x) => ({ id: x.id as string, name: x.name, url: x.preview })) }, { role: "assistant", content: "" }]);
     setDraft(""); setErr(null); setBusy(true); setMood(null);
     let failed = false;
     const ctrl = new AbortController();
@@ -277,7 +278,7 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
     if (fileInput.current) fileInput.current.value = "";
     for (const file of picked) {
       const key = `${Date.now()}-${file.name}`;
-      setAtts((a) => [...a, { key, name: file.name, pct: 0, id: null, error: null }]);
+      setAtts((a) => [...a, { key, name: file.name, pct: 0, id: null, error: null, preview: file.type.startsWith("image/") ? URL.createObjectURL(file) : null }]);
       const set = (p: Partial<Att>) => setAtts((a) => a.map((x) => (x.key === key ? { ...x, ...p } : x)));
       try {
         const r = await fetch("/api/files", { method: "POST", headers: { "Content-Type": "application/json" },
@@ -468,8 +469,13 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
               </div>
             )}
             {items.map((it, i) => it.role === "user" ? (
-              <h2 key={i} style={{ fontFamily: agent, fontSize: F.md + 1, fontWeight: 700, lineHeight: 1.35, margin: i === 0 ? "0 0 8px" : "22px 0 8px",
-                paddingTop: i === 0 ? 0 : 16, borderTop: i === 0 ? "none" : `1px solid ${T.hair}` }}>{it.content}</h2>
+              <div key={i} style={{ margin: i === 0 ? "0 0 8px" : "22px 0 8px", paddingTop: i === 0 ? 0 : 16, borderTop: i === 0 ? "none" : `1px solid ${T.hair}` }}>
+                <h2 style={{ fontFamily: agent, fontSize: F.md + 1, fontWeight: 700, lineHeight: 1.35 }}>
+                  {it.files?.length ? it.content.replace(/\n\n📎 [^\n]*$/, "") : it.content}
+                </h2>
+                {/* The photos and files this question carried (079) — kept in Files, tap to open. */}
+                {!!it.files?.length && <ChatFiles files={it.files} />}
+              </div>
             ) : (
               <div key={i}>
                 <div style={{ minWidth: 0 }}>
@@ -561,5 +567,25 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
         </form>
       </div>
     </section>
+  );
+}
+
+/** The files a question carried, under it in the chat: photos as thumbnails, the rest by name. Tap opens it in Files. */
+function ChatFiles({ files }: { files: TurnFile[] }) {
+  return (
+    <div className="flex flex-wrap gap-1.5 mt-1.5">
+      {files.map((f) => {
+        const img = f.url && (f.kind ? f.kind === "photo" : true) && !/\.(pdf|docx?|xlsx?|csv|txt)$/i.test(f.name);
+        return (
+          <a key={f.id} href={`/dashboard/files?file=${f.id}`} title={f.name} className="rounded overflow-hidden flex items-center"
+            style={{ border: `1px solid ${T.hair}`, background: T.slab, height: img ? 72 : 26, maxWidth: img ? 108 : 220 }}>
+            {img
+              // eslint-disable-next-line @next/next/no-img-element
+              ? <img src={f.url as string} alt={f.name} style={{ height: 72, width: "auto", maxWidth: 108, objectFit: "cover" }} />
+              : <span className="px-2" style={{ ...clip, fontSize: F.xs, color: T.ink2 }}>📎 {f.name}</span>}
+          </a>
+        );
+      })}
+    </div>
   );
 }

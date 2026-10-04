@@ -9,7 +9,7 @@
  */
 import { useEffect, useState } from "react";
 import { T, F, disp, eyebrow } from "@/lib/v34/tokens";
-import { describe, needsJob as stepNeedsJob, RECORD_STEPS, type PlanAction } from "@/lib/dusty/plan";
+import { CUST_KEY, describe, needsJob as stepNeedsJob, RECORD_STEPS, type PlanAction } from "@/lib/dusty/plan";
 import { applyPlan, applyRecords, byRef, loadLookup, type PlanLookup, type StepResult } from "@/lib/dusty/apply-plan";
 
 export function PlanCard({ jobId, actions, dropped, done }: { jobId: string | null; actions: PlanAction[]; dropped: number; done: boolean }) {
@@ -26,7 +26,8 @@ export function PlanCard({ jobId, actions, dropped, done }: { jobId: string | nu
     loadLookup(jobId).then((l) => { if (!off) setLook(l); }).catch((e) => { if (!off) setErr(String(e?.message ?? e)); });
     return () => { off = true; };
   }, [jobId, done, budgetSteps.length]);
-  const recKey = recordSteps.map((a) => (a.do === "archive" || a.do === "restore" ? `${a.kind}:${a.ids.join(",")}` : a.do === "set_address" ? `${a.kind}:${a.id}` : a.do === "new_job" ? `contact:${a.contact}` : "")).filter(Boolean).join("|");
+  const recKey = recordSteps.map((a) => (a.do === "archive" || a.do === "restore" ? `${a.kind}:${a.ids.join(",")}` : a.do === "set_address" ? `${a.kind}:${a.id}` : a.do === "new_job" ? (CUST_KEY.test(a.contact) ? "" : `contact:${a.contact}`)
+    : a.do === "file" ? [`file:${a.files.join(",")}`, /^(cust|job)\d/.test(a.id) ? "" : `${a.kind}:${a.id}`].filter(Boolean).join("|") : "")).filter(Boolean).join("|");
   useEffect(() => {
     if (!done || !recKey) return;
     let off = false;
@@ -84,7 +85,15 @@ export function PlanCard({ jobId, actions, dropped, done }: { jobId: string | nu
           <li key={i}>
             {describe(a, nm)}
             {(a.do === "set_address" || a.do === "new_job") && (
-              <div style={{ fontSize: F.xs, color: T.ink2 }}>{(a.do === "new_job" ? "for " : "") + (names[a.do === "new_job" ? a.contact : a.id] ?? (Object.keys(names).length ? "not found — skipped" : "…"))}</div>
+              <div style={{ fontSize: F.xs, color: T.ink2 }}>{a.do === "new_job" && CUST_KEY.test(a.contact) ? "for the new customer above"
+                : (a.do === "new_job" ? "for " : "") + (names[a.do === "new_job" ? a.contact : a.id] ?? (Object.keys(names).length ? "not found — skipped" : "…"))}</div>
+            )}
+            {a.do === "file" && (
+              <div style={{ fontSize: F.xs, color: T.ink2, lineHeight: 1.45 }}>
+                {a.files.slice(0, 12).map((id) => names[id] ?? (Object.keys(names).length ? "not found — skipped" : "…")).join(" · ")}
+                {a.files.length > 12 ? ` · +${a.files.length - 12} more` : ""}
+                {!/^(cust|job)\d/.test(a.id) && <> → {names[a.id] ?? (Object.keys(names).length ? "not found — skipped" : "…")}</>}
+              </div>
             )}
             {(a.do === "archive" || a.do === "restore") && (
               <div style={{ fontSize: F.xs, color: T.ink2, lineHeight: 1.45 }}>

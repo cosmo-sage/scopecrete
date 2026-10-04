@@ -162,5 +162,5 @@ export async function POST(req: NextRequest) {
   }).eq("org_id", orgId).eq("id", customerId);
   if (uErr) return bad(`Made the customer but couldn't save its details: ${uErr.message}`, 500);
   await supabase.from("contacts").update({ is_primary: true }).eq("org_id", orgId).eq("id", made.id);
-  return applyCookies(NextResponse.json({ customer: { id: customerId, name } }, { status: 201 }));
+  return applyCookies(NextResponse.json({ customer: { id: customerId, name, contact_id: made.id } }, { status: 201 }));
 }

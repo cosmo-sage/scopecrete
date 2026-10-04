@@ -269,15 +269,13 @@ export default function ScopeBuilder() {
           {job.description && !bidSummary && <div style={{ fontSize: F.sm, color: T.ink2, lineHeight: 1.4, marginTop: 2 }}>{job.description}</div>}
           {saveErr.job && <div style={{ fontSize: F.xs, color: T.red }}>{saveErr.job}</div>}
           {/* Budget · Plan room · Proposal — one switch on all three (Coy, 2026-10-02). */}
-          <div className="flex justify-end items-center gap-2" style={{ marginTop: 6 }}>
+          <div className="flex flex-wrap justify-end items-center gap-2" style={{ marginTop: 6 }}>
             {planSheets.length > 0 && (
-              <button onClick={() => openSheets(null, null)} className="rounded px-2.5"
-                style={{ height: 28, border: `1px solid ${T.hairStrong}`, background: T.card, fontFamily: disp, fontSize: F.xs, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".05em", color: T.ink, cursor: "pointer" }}>
-                Plan sheets ({planSheets.length})
+              <button onClick={() => openSheets(null, null)} className="rounded px-2.5 shrink-0"
+                style={{ height: 28, whiteSpace: "nowrap", border: `1px solid ${T.hairStrong}`, background: T.card, fontFamily: disp, fontSize: F.xs, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".05em", color: T.ink, cursor: "pointer" }}>
+                Sheets ({planSheets.length})
               </button>
             )}
-            <ArchiveButton kind="job" id={jobId} action="delete" what={realTitle ? `the job “${realTitle}”` : "this job"} then="/dashboard/scope"
-              style={{ height: 28, padding: "0 10px", borderRadius: 4, border: `1px solid ${T.red}`, background: T.card, color: T.red, fontFamily: disp, fontSize: F.xs, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".05em" }}>Delete</ArchiveButton>
             <JobTabs jobId={jobId} active="job" />
           </div>
         </div>
@@ -383,6 +381,15 @@ export default function ScopeBuilder() {
         <div className="px-3 pb-3">
           <FilesPanel jobId={job.id} sections={sections.map((x) => ({ id: x.id, name: x.name ?? null }))} />
         </div>
+
+        {/* Delete lives at the very bottom (Coy, 2026-10-04: it pushed Proposal off a phone's header). */}
+        {!job.archived_at && (
+          <div className="px-3 pb-6 pt-2 flex items-center justify-between gap-2" style={{ borderTop: `1px solid ${T.hair}` }}>
+            <span style={{ fontSize: F.xs, color: T.ink3 }}>Delete this job — it can be restored from Archived &amp; deleted.</span>
+            <ArchiveButton kind="job" id={jobId} action="delete" what={realTitle ? `the job “${realTitle}”` : "this job"} then="/dashboard/scope"
+              style={{ height: 28, padding: "0 10px", borderRadius: 4, border: `1px solid ${T.red}`, background: T.card, color: T.red, fontFamily: disp, fontSize: F.xs, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".05em", flexShrink: 0 }}>Delete job</ArchiveButton>
+          </div>
+        )}
       </div>
 
       {viewer && plans && (

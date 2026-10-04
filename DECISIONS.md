@@ -1487,6 +1487,15 @@ percentage of labour — all three contradict this section and §4.
   (`GET/PATCH /api/price-book/units`, session client); budgets already made
   keep their copies. Checked in the harness: a line set to by the day, a new
   unit "Truck", LS renamed "Lump sum" on 9 items.
+- **A line's group follows its Price book item (Coy, 2026-10-04: "I have an
+  uncategorized cost item and I can't change it inside the budget … if I
+  update it in the price book, it doesn't update in the budget").** The group
+  is where an item sits, not a price, so it is not a frozen copy: moving an
+  item in the Price book moves every budget line of it
+  (`syncLineGroups()`, `budget-server.ts`), a line's sheet has **Group**
+  (from a Price book item it moves the item too; a one-off line moves
+  alone), and lines copied before an item was moved catch up when the budget
+  is opened. Sent proposals keep their frozen snapshot.
 - **Base, vapor barrier and day-rate equipment** are cards like anything
   else (by the sq ft, by the day); nothing is priced that has no card.
 - **Dictating a section (2026-09-28).** Dictate on a section card records up
@@ -2629,7 +2638,9 @@ expected start date per quoted job before it means anything. Add the field.
   the job name on one row (bold, smaller), the four chips small on one row
   under it, the customer line and description (left out when the Bid strip
   below shows the bid's scope summary — Coy: "redundant"), then the job's
-  switch above the money strip.
+  switch above the money strip. **Delete is at the bottom of the job page**
+  (Coy, 2026-10-04: on a phone it pushed Proposal off the screen), and the
+  header's sheets button reads **Sheets (n)** on one line.
 - **One job, three views (Coy, 2026-10-02: "no way … to get back from the
   proposal page" and "one job budget page, and I can toggle between that
   budget and the proposal").** **Plan room · Budget · Proposal** — in the

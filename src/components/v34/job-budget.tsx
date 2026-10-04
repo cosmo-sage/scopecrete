@@ -803,6 +803,13 @@ function LineSheet({ line, data, sections, res, addon, onAddon, onClose, onPatch
               name={(id) => { const v = data.sources?.find((x) => x.vendor?.id === id)?.vendor; return v ? v.name || v.company_name || formatPhone(v.phone) : null; }}
               onPick={(id) => onPatch({ source_id: id })} /></label>
         )}
+        {/* Its group (Coy, 2026-10-04: "I have an uncategorized cost item and I can't change it inside the
+            budget"). From a Price book item this moves the item there too, so the book and every budget agree. */}
+        <label className="block"><span style={eyebrow}>Group{line.cost_item_id ? " · moves it in the Price book too" : ""}</span>
+          <select value={line.cost_group_id ?? ""} onChange={(e) => onPatch({ cost_group_id: e.target.value || null })} style={field} aria-label="Group">
+            <option value="">Not in a group</option>
+            {data.groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+          </select></label>
         <label className="block"><span style={eyebrow}>Area</span>
           <select value={line.section_id ?? ""} onChange={(e) => onPatch({ section_id: e.target.value || null })} style={field}>
             <option value="">Whole job</option>

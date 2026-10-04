@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
-import { ESTIMATE_COLUMNS, LINE_COLUMNS, jobInOrg, numLine, workingEstimate } from "@/lib/budget-server";
+import { ESTIMATE_COLUMNS, LINE_COLUMNS, jobInOrg, numLine, syncLineGroups, workingEstimate } from "@/lib/budget-server";
 import { sourcesFor } from "@/lib/sources-server";
 import { pricingFor } from "@/lib/pricing-server";
 import { takeoffTotalsFor } from "@/lib/plans-server";
@@ -44,6 +44,14 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   ]);
   // The proposal's sub split lives on the budget page too (Coy, 2026-10-02: one job page) — read, never made here.
   const { data: draftP } = await supabase.from("job_proposals").select("split, display").eq("org_id", orgId).eq("job_id", id).eq("status", "draft").maybeSingle();
+  // A line sits in its Price book item's group: lines copied before the item was moved catch up here.
+  const cardGroup = new Map(((cards.data ?? []) as Array<{ id: string; cost_group_id: string | null }>).map((c) => [c.id, c.cost_group_id]));
+  const stale = new Map<string, string | null>();
+  for (const l of (lines.data ?? []) as Array<Record<string, unknown>>) {
+    const cid = l.cost_item_id as string | null;
+    if (cid && cardGroup.has(cid) && cardGroup.get(cid) !== l.cost_group_id) { l.cost_group_id = cardGroup.get(cid) ?? null; stale.set(cid, l.cost_group_id as string | null); }
+  }
+  await Promise.all([...stale].map(([cid, gid]) => syncLineGroups(supabase, orgId, cid, gid)));
   const lineItems = [...new Set(((lines.data ?? []) as Array<{ cost_item_id: string | null }>).map((l) => l.cost_item_id).filter(Boolean) as string[])];
   const sources = await sourcesFor(supabase, orgId, lineItems);
   const vendorIds = [...new Set(((lines.data ?? []) as Array<{ vendor_contact_id: string | null }>).map((l) => l.vendor_contact_id).filter(Boolean) as string[])];

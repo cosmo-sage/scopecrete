@@ -45,6 +45,16 @@ export async function workingEstimate(sb: Sb, orgId: string, jobId: string, crea
 }
 
 const num = (v: unknown) => (v === null || v === undefined ? null : Number(v));
+/**
+ * A Price book item's group is where it sits, not a price: every budget line of
+ * that item follows it (Coy, 2026-10-04: "if I update it in the price book, it
+ * doesn't update in the budget"). Sent proposals keep their own frozen copy.
+ */
+export async function syncLineGroups(sb: Sb, orgId: string, costItemId: string, groupId: string | null) {
+  await sb.from("estimate_line_items").update({ cost_group_id: groupId, updated_at: new Date().toISOString() })
+    .eq("org_id", orgId).eq("cost_item_id", costItemId);
+}
+
 export const numLine = (r: Record<string, unknown>) => ({
   ...r, unit_cost: num(r.unit_cost), markup_pct: num(r.markup_pct), margin_pct: num(r.margin_pct), quantity: num(r.quantity),
 });

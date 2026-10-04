@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cleanUnit } from "@/lib/units";
 import { QTY_RULES } from "@/lib/cost-cards";
 import { getApiSession } from "@/lib/api-auth";
-import { LINE_COLUMNS, jobInOrg, lineSource, numLine } from "@/lib/budget-server";
+import { LINE_COLUMNS, jobInOrg, lineSource, numLine, syncLineGroups } from "@/lib/budget-server";
 
 /**
  * One budget line. PATCH what Coy changes in the grid or the phone sheet:
@@ -119,6 +119,24 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     // A picked vendor who no longer prices it falls back to the card's default.
     const ok = (line.source_pinned && line.source_id && await fromSource(line.source_id, true)) || await fromCard();
     if (!ok) return bad("That card is gone.");
+  }
+  // The group. A line from a Price book item moves the item, and every budget line of it, so the
+  // book and the budgets never disagree about where it sits (Coy, 2026-10-04).
+  if ("cost_group_id" in b) {
+    let gid: string | null = null;
+    if (b.cost_group_id !== null && b.cost_group_id !== "") {
+      if (typeof b.cost_group_id !== "string" || !UUID.test(b.cost_group_id)) return bad("Bad group.");
+      const { data: g } = await supabase.from("cost_groups").select("id").eq("org_id", orgId).eq("id", b.cost_group_id).maybeSingle();
+      if (!g) return bad("No such group.", 404);
+      gid = g.id;
+    }
+    patch.cost_group_id = gid;
+    if (line.cost_item_id) {
+      const now = new Date().toISOString();
+      const { error: e1 } = await supabase.from("cost_items").update({ cost_group_id: gid, updated_at: now }).eq("org_id", orgId).eq("id", line.cost_item_id);
+      if (e1) return bad(e1.message, 500);
+      await syncLineGroups(supabase, orgId, line.cost_item_id, gid);
+    }
   }
   if (!Object.keys(patch).length) return bad("Nothing to change.");
   patch.updated_at = new Date().toISOString();

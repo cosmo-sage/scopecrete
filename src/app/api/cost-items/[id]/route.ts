@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
 import { cleanCard } from "@/lib/cost-cards";
 import { setVendorPrice } from "@/lib/sources-server";
+import { syncLineGroups } from "@/lib/budget-server";
 
 /**
  * One cost card: change any field, or retire it. A retired card is kept
@@ -72,6 +73,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   patch.updated_at = new Date().toISOString();
   const { data, error } = await supabase.from("cost_items").update(patch).eq("id", id).eq("org_id", orgId).select(COLUMNS).single();
   if (error || !data) return bad(error?.message ?? "not saved", 500);
+  if ("cost_group_id" in patch) await syncLineGroups(supabase, orgId, id, (patch.cost_group_id as string | null) ?? null);
   return applyCookies(NextResponse.json({ item: data }));
 }
 

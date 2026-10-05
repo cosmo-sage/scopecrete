@@ -2529,6 +2529,12 @@ expected start date per quoted job before it means anything. Add the field.
   The prompt now says he is Dusty only, has no tools, files or sessions of
   his own, never narrates looking things up or names his setup, and takes
   Coy's word and spelling instead of asking him to confirm it.
+  **No ids in his words (2026-10-05).** Asked whether a text from (727)
+  628-9657 came in, he answered with "contact dd08251b-…". Ids are for plans
+  only: the prompt says to name people (or give the number when there is no
+  name), and the chat takes any full id, or an 8-character ref with "…",
+  out of what is shown along with its "contact" / "(customer …)" label
+  (`hideIds()` in `plan.ts`, tested); the plan block keeps its ids.
   **Hermes ran him as an agent with tools (seen 2026-10-05).** His answer
   read Hermes's own `state.db`, hit Hermes's command guard ("an error from my
   own security layer"), narrated each step, and said "I'm Coy, not Dusty" —

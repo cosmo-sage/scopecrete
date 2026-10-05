@@ -226,3 +226,16 @@ test("a customer around a person already there, attach_contact and set_name (Coy
   assert.match(d(p.actions[2]), /the new customer above/);
   assert.match(RECORD_RULES, /never make them again/);
 });
+
+test("ids never show in Dusty's words — only in the plan (2026-10-05)", async () => {
+  const { hideIds } = await import("../src/lib/dusty/plan.ts");
+  const id = "dd08251b-57b8-45b2-bca2-c2cd6cfc2698";
+  assert.equal(hideIds(`Yes — a text from (727) 628-9657, contact ${id}, came in at 9:14.`), "Yes — a text from (727) 628-9657, came in at 9:14.");
+  assert.equal(hideIds(`John (90322d37…) is a contact.`), "John is a contact.");
+  assert.equal(hideIds(`Amber (customer ${id}) owes a price.`), "Amber owes a price.");
+  assert.equal(hideIds(`It's \`${id}\`.`), "It's.");
+  assert.equal(hideIds("Line one\ncontact list is fine"), "Line one\ncontact list is fine");
+  const p = parsePlan(`Filed. contact ${id}\n\`\`\`scopecrete-plan\n[{"do":"set_name","kind":"contact","id":"${id}","name":"Pat"}]\n\`\`\``);
+  assert.equal(p.shown, "Filed.");
+  assert.equal(p.actions[0].id, id, "the plan keeps its id");
+});

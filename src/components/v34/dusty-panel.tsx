@@ -25,7 +25,7 @@ import { T, F, disp, eyebrow, agent, clip, relTime, nums } from "@/lib/v34/token
 import { DustyAvatar, type DustyState } from "@/components/v34/dusty-avatar";
 import { Markdown } from "@/components/v34/markdown";
 import { PlanCard } from "@/components/v34/plan-card";
-import { parsePlan } from "@/lib/dusty/plan";
+import { hideIds, parsePlan } from "@/lib/dusty/plan";
 import { useDustyUse } from "@/lib/v34/dusty-live";
 import { sendBytes } from "@/components/v34/files-panel";
 import { VoiceRecorder } from "@/components/v34/voice-recorder";
@@ -497,7 +497,7 @@ export function DustyPanel({ open, onClose, onBusy, onStream }: {
                     // A budget plan rides at the end of an answer: shown as steps with Apply, not as code.
                     const p = parsePlan(it.content);
                     const streaming = busy && i === items.length - 1;
-                    const shown = streaming ? it.content.replace(/```scopecrete-plan[\s\S]*$/, "").trim() : p.shown;
+                    const shown = streaming ? hideIds(it.content.replace(/```scopecrete-plan[\s\S]*$/, "").trim()) : p.shown;
                     return (<>
                       <Markdown text={shown} size={14} />
                       {streaming && /```scopecrete-plan/.test(it.content) && <div style={{ fontSize: F.xs, color: T.ink3, marginTop: 6 }}>Writing up the plan…</div>}

@@ -272,11 +272,27 @@ export function cleanAction(raw: unknown): PlanAction | null {
   }
 }
 
+/**
+ * Ids are for plans, never for Coy's eyes (2026-10-05: "contact dd08251b-…" in an
+ * answer). Whatever the prompt says, a full id in the words is taken out — with
+ * its "contact" / "(customer …)" label — so the sentence still reads.
+ */
+export function hideIds(text: string): string {
+  const ID = "(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{8}(?:…|\\.\\.\\.))";
+  const LABEL = "(?:(?:contact|customer|job|file|thread)[ \\t]*(?:id)?[ \\t]*[:#]?[ \\t]*)";
+  return text
+    .replace(new RegExp(`[ \\t]*[([][ \\t]*${LABEL}?\`?${ID}\`?[ \\t]*[)\\]]`, "gi"), "")
+    .replace(new RegExp(`[ \\t]*[,—–-]?[ \\t]*${LABEL}\`?${ID}\`?`, "gi"), "")
+    .replace(new RegExp(`\`?${ID}\`?`, "gi"), "")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/ +([,.;:!?])/g, "$1");
+}
+
 /** Split an answer into what is shown and the plan it carries. */
 export function parsePlan(text: string): { shown: string; actions: PlanAction[]; dropped: number } {
   const m = FENCE.exec(text);
-  if (!m) return { shown: text, actions: [], dropped: 0 };
-  const shown = (text.slice(0, m.index) + text.slice(m.index + m[0].length)).trim();
+  if (!m) return { shown: hideIds(text), actions: [], dropped: 0 };
+  const shown = hideIds((text.slice(0, m.index) + text.slice(m.index + m[0].length)).trim());
   let raw: unknown;
   try { raw = JSON.parse(m[1]); } catch { return { shown, actions: [], dropped: 1 }; }
   const list = Array.isArray(raw) ? raw : raw && typeof raw === "object" && Array.isArray((raw as { actions?: unknown }).actions) ? (raw as { actions: unknown[] }).actions : [];

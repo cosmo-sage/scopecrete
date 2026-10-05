@@ -656,7 +656,7 @@ export function ThreadList({ folded = false }: { folded?: boolean }) {
   const [drift, setDrift] = useState<{ count: number | null; error?: string } | null>(null);
 
   // The thread picked in the rail / drawer (Threads v2): a bucket, "archived", or one Coy made.
-  const filter = ctx?.thread ?? "unsorted";
+  const filter = ctx?.thread ?? "all";
   const isCustom = !isSystemKey(filter) && filter !== "archived";
   const label = threadLabel(filter, ctx?.custom ?? null);
   const customThread = isCustom ? ctx?.custom?.find((t) => t.id === filter) ?? null : null;

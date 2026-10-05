@@ -12,7 +12,8 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 import { usePathname, useSearchParams } from "next/navigation";
 import { isSystemKey, type CustomThread, type SystemThreadKey } from "@/lib/v34/threads";
 
-export const DESKTOP_DEFAULT_THREAD: SystemThreadKey = "customers";
+/** Threads opens on All, on every size (Coy, 2026-10-05: "it needs to default to the all bucket"). */
+export const DEFAULT_THREAD: SystemThreadKey = "all";
 
 interface Ctx {
   /** "customers" | "unsorted" | … | "archived" | a custom thread id. */
@@ -37,10 +38,9 @@ export function ThreadsProvider({ children }: { children: React.ReactNode }) {
   const params = useSearchParams();
   const pathname = usePathname();
   const fromUrl = params.get("t") ?? params.get("f");
-  const [thread, setThreadState] = useState<string>(fromUrl ?? "unsorted");
+  const [thread, setThreadState] = useState<string>(fromUrl ?? DEFAULT_THREAD);
   const [seen, setSeen] = useState(fromUrl);
   if (fromUrl !== seen) { setSeen(fromUrl); if (fromUrl) setThreadState(fromUrl); }
-  // A desktop with no ?t= opens on Customer (Coy, 2026-10-01), or the first thread Coy made.
   const [custom, setCustom] = useState<CustomThread[] | null>(null);
   const [counts, setCounts] = useState<Record<string, number> | null>(null);
   const [customCounts, setCustomCounts] = useState<Record<string, number>>({});
@@ -59,21 +59,9 @@ export function ThreadsProvider({ children }: { children: React.ReactNode }) {
     });
     return () => { off = true; };
   }, [tick]);
-  const [defaulted, setDefaulted] = useState(false);
-  useEffect(() => {
-    if (defaulted || custom === null) return;
-    let off = false;
-    Promise.resolve().then(() => {
-      if (off) return;
-      setDefaulted(true);
-      const q = new URLSearchParams(window.location.search);
-      if (!q.get("t") && !q.get("f") && window.matchMedia("(min-width: 1024px)").matches) setThreadState(custom[0]?.id ?? DESKTOP_DEFAULT_THREAD);
-    });
-    return () => { off = true; };
-  }, [custom, defaulted]);
-  // A thread that was retired (or another org's id) falls back to the inbox.
+  // A thread that was retired (or another org's id) falls back to All.
   const valid = thread === "archived" || isSystemKey(thread) || custom === null || custom.some((t) => t.id === thread);
-  const current = valid ? thread : "unsorted";
+  const current = valid ? thread : DEFAULT_THREAD;
 
   const [folded, setFolded] = useState(false);
   const setThread = useCallback((t: string) => {

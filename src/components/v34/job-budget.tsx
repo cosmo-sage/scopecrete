@@ -25,6 +25,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { T, F, disp, eyebrow, nums, clip, money, money0, formatPhone } from "@/lib/v34/tokens";
 import { Sheet, Drawer } from "@/components/v34/primitives";
 import { PriceBook } from "@/components/v34/price-book";
@@ -90,8 +91,10 @@ function areaUnit(s: Area): "sy" | "sf" {
   return /\bSY\b/.test(s.source_ref ?? "") ? "sy" : "sf";
 }
 
-export function JobBudget({ jobId, sections, days, onSummary, refresh = 0 }: {
+export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots }: {
   jobId: string; sections: Area[]; days: number | null;
+  /** Each section card's budget slot, by section id: its cost items are drawn there (Coy, 2026-10-04). */
+  slots?: Record<string, HTMLElement>;
   onSummary?: (s: BudgetSummary) => void;
   /** Bumped by the scope page when a section change may have changed the budget on the server. */
   refresh?: number;
@@ -133,12 +136,18 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0 }: {
     sizeObs.current.observe(el);
   }, [measureWide]);
   const wide = roomy && !(tightAt !== null && width <= tightAt);
+  // One observer for every grid (each section card has its own, plus the whole-job one).
   const tableObs = useRef<ResizeObserver | null>(null);
+  useEffect(() => () => tableObs.current?.disconnect(), []);
   const tableBox = useCallback((el: HTMLDivElement | null) => {
-    tableObs.current?.disconnect();
     if (!el || typeof ResizeObserver === "undefined") return;
-    const check = () => { if (el.scrollWidth > el.clientWidth + 2) setTightAt(Math.round(el.getBoundingClientRect().width) + 2); };
-    tableObs.current = new ResizeObserver(check);
+    if (!tableObs.current) tableObs.current = new ResizeObserver((entries) => {
+      for (const e of entries) {
+        const box = (e.target as HTMLElement).dataset.grid ? e.target as HTMLElement : (e.target.parentElement as HTMLElement | null);
+        if (box && box.scrollWidth > box.clientWidth + 2) setTightAt(Math.round(box.getBoundingClientRect().width) + 2);
+      }
+    });
+    el.dataset.grid = "1";
     tableObs.current.observe(el);
     if (el.firstElementChild) tableObs.current.observe(el.firstElementChild);
   }, []);
@@ -214,7 +223,7 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0 }: {
     const inArea = visible.filter((l) => (l.section_id ?? null) === aid || (aid === null && l.section_id && !sections.some((s) => s.id === l.section_id)));
     const groups = [...new Set(inArea.map(groupName))].map((g) => ({ name: g, lines: inArea.filter((l) => groupName(l) === g) }));
     return { id: aid, name: areaName(aid), lines: inArea, groups };
-  }).filter((a) => a.lines.length || a.id !== null);
+  });
   // An area's size, and its price per unit of it — how a unit-price bid reads ("$/SY").
   const areaSize = (aid: string | null): { text: string; per: (price: number) => string } | null => {
     const s = aid ? sections.find((x) => x.id === aid) : null;
@@ -239,101 +248,8 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0 }: {
   const addons = new Set(data.proposal?.addons ?? []);
   const setAddon = (id: string, on: boolean) => run(() => call(`/api/jobs/${jobId}/proposal`, "PATCH", { addon: { line_id: id, on } }));
 
-  return (
-    <section ref={measure} aria-label="Budget" className="rounded" style={{ background: T.card, border: `1px solid ${T.hair}` }}>
-      {/* ---- header + options ---- */}
-      <div className="px-3 pt-2.5 pb-2 flex items-center gap-2 flex-wrap" style={{ borderBottom: `1px solid ${T.hair}` }}>
-        <span style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 700 }}>Budget</span>
-        <span style={{ fontSize: F.xs, color: T.ink3 }}>qty × unit cost → + O.H. → ÷ (1 − margin) → price</span>
-        <span className="flex-1" />
-        <button onClick={() => setBook({ area: "" })} className="rounded px-2.5"
-          style={{ height: 30, background: T.ink, color: T.card, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", letterSpacing: ".06em", cursor: "pointer" }}>
-          + Add from the Price book
-        </button>
-      </div>
-      <div className="px-3 py-2 flex items-center gap-1 flex-wrap" role="tablist" aria-label="Options">
-        {opts.length > 0 && (
-          <TierTab on={tier === "all"} onClick={() => setTier("all")} label="All options" />
-        )}
-        {opts.map((o) => {
-          const t = res.tiers.find((x) => x.option_id === o.id);
-          return <TierTab key={o.id} on={tier === o.id} onClick={() => setTier(o.id)} label={o.label}
-            sub={t ? (t.priced ? money0(t.total) : "not priced") : undefined} />;
-        })}
-        <button onClick={() => void run(async () => { const b = await call(`/api/jobs/${jobId}/budget/options`, "POST", {}); setTier(b.option.id); })}
-          className="rounded px-2" style={{ height: 30, border: `1px dashed ${T.chalk}`, color: T.chalk, background: T.card, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", cursor: "pointer" }}>
-          {opts.length ? "+ Option" : "+ Good / better / best"}
-        </button>
-        {tier !== "all" && opts.length > 0 && (
-          <button onClick={() => { const o = opts.find((x) => x.id === tier); const n = window.prompt("Name this option", o?.label ?? ""); if (n && n.trim()) void run(() => call(`/api/jobs/${jobId}/budget/options/${tier}`, "PATCH", { label: n })); }}
-            style={{ ...eyebrow, color: T.ink3, cursor: "pointer", marginLeft: 4 }}>Rename</button>
-        )}
-        {tier !== "all" && opts.length > 0 && (
-          <button onClick={() => { if (window.confirm("Delete this option and the lines only it has? Lines in every option stay.")) void run(async () => { await call(`/api/jobs/${jobId}/budget/options/${tier}`, "DELETE"); setTier("all"); }); }}
-            style={{ ...eyebrow, color: T.red, cursor: "pointer", marginLeft: 4 }}>Delete option</button>
-        )}
-      </div>
-      {opts.length > 0 && (
-        <div className="px-3 pb-2" style={{ fontSize: F.xs, color: T.ink3 }}>
-          {!data.lines.some((l) => l.option_id)
-            ? <b style={{ color: T.hivizText, fontWeight: 600 }}>The options are all the same price: every line is in all of them. </b> : null}
-          {tier === "all" ? "Showing every line. A line tagged with an option is only in that option; untagged lines are in all of them. To make Better differ from Good, pick Better above and add its lines — they go into Better only — or open a line and set its Option."
-            : `Showing the lines in ${optLabel(tier)}: the shared ones and its own. New lines go into ${optLabel(tier)}.`}
-          {opts.length > 1 && <> On the proposal, <b style={{ fontWeight: 600 }}>Option → Every option</b> shows them side by side for the customer to pick.</>}
-        </div>
-      )}
-
-      {err && <div className="px-3 pb-2" style={{ fontSize: F.xs, color: T.red }}>{err}</div>}
-      {data.lines.length === 0 && (
-        <div className="px-3 pb-3" style={{ fontSize: F.sm, color: T.ink3 }}>
-          {data.cards.length ? "No lines yet. Add cost cards to the areas above, or load an assembly — quantities come from the scope." : "No cost cards yet. Make or import them in the Price book, then add them here — or set up an assembly so new areas fill themselves."}
-        </div>
-      )}
-
-      {/* ---- the lines ---- */}
-      {wide ? (
-        <div ref={tableBox} className="overflow-x-auto">
-          <table className="w-full" style={{ borderCollapse: "collapse", fontSize: F.sm, ...nums }}>
-            <thead>
-              <tr style={{ background: T.slab }}>
-                {["Item", "Vendor", "Qty", "Unit", "Unit cost", "Ext cost", "O.H.", "Margin", "Unit price", "Ext price", "Tax"].map((h, i) => (
-                  <th key={h} style={{ ...eyebrow, textAlign: i < 2 || h === "Unit" ? "left" : "right", padding: "6px 8px", whiteSpace: "nowrap", borderBottom: `1px solid ${T.hair}` }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {areas.map((a) => (
-                <React.Fragment key={a.id ?? "job"}>
-                  <tr style={{ background: T.ink, color: T.card }}>
-                    <td colSpan={5} style={{ padding: "5px 8px" }}>
-                      <span style={{ fontFamily: disp, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".04em" }}>{a.name}</span>
-                      {areaSize(a.id) && <span style={{ fontSize: F.xs, opacity: 0.75, marginLeft: 8 }}>{areaSize(a.id)!.text}</span>}
-                      <button onClick={() => setBook({ area: a.id ?? "" })} style={{ ...eyebrow, color: T.card, opacity: 0.85, marginLeft: 10, cursor: "pointer", textDecoration: "underline" }}>+ Add</button>
-                    </td>
-                    <td style={{ padding: "5px 8px", textAlign: "right" }}>{a.lines.length ? money0(sum(a.lines, "ext_cost")) : ""}</td>
-                    <td style={{ padding: "5px 8px", textAlign: "right" }}>{a.lines.length ? money0(sum(a.lines, "overhead")) : ""}</td>
-                    <td style={{ padding: "5px 8px", textAlign: "right" }}>{marginOf(a.lines)}</td>
-                    <td style={{ padding: "5px 8px", textAlign: "right", whiteSpace: "nowrap" }}>{areaPriced(a.lines) && areaSize(a.id) ? areaSize(a.id)!.per(sum(a.lines, "ext_price")) : ""}</td>
-                    <td style={{ padding: "5px 8px", textAlign: "right" }}>{a.lines.length ? money0(sum(a.lines, "ext_price")) : ""}</td>
-                    <td />
-                  </tr>
-                  {a.lines.length === 0 && (
-                    <tr><td colSpan={11} style={{ padding: "6px 8px 6px 16px", fontSize: F.xs, color: T.ink3 }}>
-                      No lines on this area yet — <button onClick={() => setBook({ area: a.id ?? "" })} style={{ color: T.chalk, cursor: "pointer" }}>add cards from the Price book</button>.
-                    </td></tr>
-                  )}
-                  {a.groups.map((g) => (
-                    <React.Fragment key={g.name}>
-                      <tr style={{ background: T.hairSoft }}>
-                        <td colSpan={5} style={{ padding: "4px 8px 4px 16px", fontWeight: 600 }}>{g.name}</td>
-                        <td style={{ padding: "4px 8px", textAlign: "right", fontWeight: 600 }}>{money0(sum(g.lines, "ext_cost"))}</td>
-                        <td style={{ padding: "4px 8px", textAlign: "right", color: T.ink2 }}>{money0(sum(g.lines, "overhead"))}</td>
-                        <td style={{ padding: "4px 8px", textAlign: "right", color: T.ink3 }}>{marginOf(g.lines)}</td>
-                        <td />
-                        <td style={{ padding: "4px 8px", textAlign: "right", fontWeight: 600 }}>{money0(sum(g.lines, "ext_price"))}</td>
-                        <td />
-                      </tr>
-                      {g.lines.map((l) => {
+  // One line of the grid.
+  const lineRow = (l: Line) => {
                         const r = res.lines[l.id];
                         const blockedQty = r.qty === null;
                         return (
@@ -386,33 +302,174 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0 }: {
                             </td>
                           </tr>
                         );
-                      })}
-                    </React.Fragment>
-                  ))}
-                </React.Fragment>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <div className="px-3 pb-2 flex flex-col gap-2">
-          {areas.map((a) => (
-            <div key={a.id ?? "job"}>
-              <div className="flex items-baseline gap-2" style={{ ...eyebrow, color: T.ink, marginTop: 4 }}>
-                <span style={{ minWidth: 0, ...clip }}>{a.name}</span>
-                {areaSize(a.id) && <span style={{ color: T.ink3, textTransform: "none", letterSpacing: 0, whiteSpace: "nowrap" }}>{areaSize(a.id)!.text}</span>}
-                <span className="flex-1" />
-                {areaPriced(a.lines) && areaSize(a.id) && <span style={{ color: T.ink3, textTransform: "none", letterSpacing: 0, ...nums }}>{areaSize(a.id)!.per(sum(a.lines, "ext_price"))}</span>}
-                {a.lines.length > 0 && <span style={{ ...nums }}>{money0(sum(a.lines, "ext_price"))}</span>}
-                <button onClick={() => setBook({ area: a.id ?? "" })} style={{ color: T.chalk, cursor: "pointer" }}>+ Add</button>
-              </div>
-              {a.lines.length === 0 && <div style={{ fontSize: F.xs, color: T.ink3 }}>No lines yet.</div>}
-              {a.groups.map((g) => <GroupCard key={g.name} name={g.name} lines={g.lines} res={res} optLabel={optLabel} asmName={asmName} addons={addons} onOpen={setEditing}
-                cost={sum(g.lines, "ext_cost")} price={sum(g.lines, "ext_price")} />)}
-            </div>
+  };
+  const head = (
+    <thead>
+      <tr style={{ background: T.slab }}>
+        {["Item", "Vendor", "Qty", "Unit", "Unit cost", "Ext cost", "O.H.", "Margin", "Unit price", "Ext price", "Tax"].map((h, i) => (
+          <th key={h} style={{ ...eyebrow, textAlign: i < 2 || h === "Unit" ? "left" : "right", padding: "6px 8px", whiteSpace: "nowrap", borderBottom: `1px solid ${T.hair}` }}>{h}</th>
+        ))}
+      </tr>
+    </thead>
+  );
+  type AreaRows = (typeof areas)[number];
+  // An area's lines: sub-groups (its Price book groups) ▸ cost items. Inside a
+  // section's card the section is the top group, so it has no dark header row
+  // and its total sits at the bottom; whole-job costs keep the header row.
+  const areaBody = (a: AreaRows, inSection: boolean) => wide ? (
+    <div ref={tableBox} className="overflow-x-auto">
+      <table className="w-full" style={{ borderCollapse: "collapse", fontSize: F.sm, ...nums }}>
+        {head}
+        <tbody>
+          {!inSection && (
+            <tr style={{ background: T.ink, color: T.card }}>
+              <td colSpan={5} style={{ padding: "5px 8px" }}>
+                <span style={{ fontFamily: disp, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".04em" }}>{a.id ? a.name : "Additional costs · whole job"}</span>
+                {areaSize(a.id) && <span style={{ fontSize: F.xs, opacity: 0.75, marginLeft: 8 }}>{areaSize(a.id)!.text}</span>}
+                <button onClick={() => setBook({ area: a.id ?? "" })} style={{ ...eyebrow, color: T.card, opacity: 0.85, marginLeft: 10, cursor: "pointer", textDecoration: "underline" }}>+ Add</button>
+              </td>
+              <td style={{ padding: "5px 8px", textAlign: "right" }}>{a.lines.length ? money0(sum(a.lines, "ext_cost")) : ""}</td>
+              <td style={{ padding: "5px 8px", textAlign: "right" }}>{a.lines.length ? money0(sum(a.lines, "overhead")) : ""}</td>
+              <td style={{ padding: "5px 8px", textAlign: "right" }}>{marginOf(a.lines)}</td>
+              <td style={{ padding: "5px 8px", textAlign: "right", whiteSpace: "nowrap" }}>{areaPriced(a.lines) && areaSize(a.id) ? areaSize(a.id)!.per(sum(a.lines, "ext_price")) : ""}</td>
+              <td style={{ padding: "5px 8px", textAlign: "right" }}>{a.lines.length ? money0(sum(a.lines, "ext_price")) : ""}</td>
+              <td />
+            </tr>
+          )}
+          {!inSection && a.lines.length === 0 && (
+            <tr><td colSpan={11} style={{ padding: "6px 8px 6px 16px", fontSize: F.xs, color: T.ink3 }}>
+              {a.id ? "No cost items on this section yet — " : "Costs for the whole job, not one section (mobilization, a permit, a pump day) — "}
+              <button onClick={() => setBook({ area: a.id ?? "" })} style={{ color: T.chalk, cursor: "pointer" }}>add them from the Price book</button>.
+            </td></tr>
+          )}
+          {a.groups.map((g) => (
+            <React.Fragment key={g.name}>
+              <tr style={{ background: T.hairSoft }}>
+                <td colSpan={5} style={{ padding: "4px 8px 4px 16px", fontWeight: 600 }}>{g.name}</td>
+                <td style={{ padding: "4px 8px", textAlign: "right", fontWeight: 600 }}>{money0(sum(g.lines, "ext_cost"))}</td>
+                <td style={{ padding: "4px 8px", textAlign: "right", color: T.ink2 }}>{money0(sum(g.lines, "overhead"))}</td>
+                <td style={{ padding: "4px 8px", textAlign: "right", color: T.ink3 }}>{marginOf(g.lines)}</td>
+                <td />
+                <td style={{ padding: "4px 8px", textAlign: "right", fontWeight: 600 }}>{money0(sum(g.lines, "ext_price"))}</td>
+                <td />
+              </tr>
+              {g.lines.map(lineRow)}
+            </React.Fragment>
           ))}
+          {inSection && a.lines.length > 0 && (
+            <tr style={{ borderTop: `1px solid ${T.hair}`, background: T.slab }}>
+              <td colSpan={5} style={{ padding: "5px 8px", fontFamily: disp, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".04em" }}>
+                {a.name} total{areaSize(a.id) && <span style={{ fontFamily: "inherit", fontWeight: 400, textTransform: "none", fontSize: F.xs, color: T.ink3, marginLeft: 8 }}>{areaSize(a.id)!.text}</span>}
+              </td>
+              <td style={{ padding: "5px 8px", textAlign: "right", fontWeight: 600 }}>{money0(sum(a.lines, "ext_cost"))}</td>
+              <td style={{ padding: "5px 8px", textAlign: "right", color: T.ink2 }}>{money0(sum(a.lines, "overhead"))}</td>
+              <td style={{ padding: "5px 8px", textAlign: "right", color: T.ink3 }}>{marginOf(a.lines)}</td>
+              <td style={{ padding: "5px 8px", textAlign: "right", whiteSpace: "nowrap", color: T.ink2 }}>{areaPriced(a.lines) && areaSize(a.id) ? areaSize(a.id)!.per(sum(a.lines, "ext_price")) : ""}</td>
+              <td style={{ padding: "5px 8px", textAlign: "right", fontWeight: 700 }}>{money0(sum(a.lines, "ext_price"))}</td>
+              <td />
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  ) : (
+    <div>
+      {!inSection && (
+        <div className="flex items-baseline gap-2" style={{ ...eyebrow, color: T.ink, marginTop: 4 }}>
+          <span style={{ minWidth: 0, ...clip }}>{a.id ? a.name : "Additional costs · whole job"}</span>
+          {areaSize(a.id) && <span style={{ color: T.ink3, textTransform: "none", letterSpacing: 0, whiteSpace: "nowrap" }}>{areaSize(a.id)!.text}</span>}
+          <span className="flex-1" />
+          {a.lines.length > 0 && <span style={{ ...nums }}>{money0(sum(a.lines, "ext_price"))}</span>}
+          <button onClick={() => setBook({ area: a.id ?? "" })} style={{ color: T.chalk, cursor: "pointer" }}>+ Add</button>
         </div>
       )}
+      {!inSection && a.lines.length === 0 && <div style={{ fontSize: F.xs, color: T.ink3 }}>{a.id ? "No cost items yet." : "Costs for the whole job, not one section — mobilization, a permit, a pump day."}</div>}
+      {a.groups.map((g) => <GroupCard key={g.name} name={g.name} lines={g.lines} res={res} optLabel={optLabel} asmName={asmName} addons={addons} onOpen={setEditing}
+                cost={sum(g.lines, "ext_cost")} price={sum(g.lines, "ext_price")} />)}
+    </div>
+  );
+
+  return (
+    <section ref={measure} aria-label="Budget" className="rounded" style={{ background: T.card, border: `1px solid ${T.hair}` }}>
+      {/* ---- header + options ---- */}
+      <div className="px-3 pt-2.5 pb-2 flex items-center gap-2 flex-wrap" style={{ borderBottom: `1px solid ${T.hair}` }}>
+        <span style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 700 }}>Job totals</span>
+        <span style={{ fontSize: F.xs, color: T.ink3 }}>each section&apos;s cost items are in its card above · qty × unit cost → + O.H. → ÷ (1 − margin) → price</span>
+        <span className="flex-1" />
+        <button onClick={() => setBook({ area: "" })} className="rounded px-2.5"
+          style={{ height: 30, background: T.ink, color: T.card, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", letterSpacing: ".06em", cursor: "pointer" }}>
+          + Whole-job cost
+        </button>
+      </div>
+      <div className="px-3 py-2 flex items-center gap-1 flex-wrap" role="tablist" aria-label="Options">
+        {opts.length > 0 && (
+          <TierTab on={tier === "all"} onClick={() => setTier("all")} label="All options" />
+        )}
+        {opts.map((o) => {
+          const t = res.tiers.find((x) => x.option_id === o.id);
+          return <TierTab key={o.id} on={tier === o.id} onClick={() => setTier(o.id)} label={o.label}
+            sub={t ? (t.priced ? money0(t.total) : "not priced") : undefined} />;
+        })}
+        <button onClick={() => void run(async () => { const b = await call(`/api/jobs/${jobId}/budget/options`, "POST", {}); setTier(b.option.id); })}
+          className="rounded px-2" style={{ height: 30, border: `1px dashed ${T.chalk}`, color: T.chalk, background: T.card, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", cursor: "pointer" }}>
+          {opts.length ? "+ Option" : "+ Good / better / best"}
+        </button>
+        {tier !== "all" && opts.length > 0 && (
+          <button onClick={() => { const o = opts.find((x) => x.id === tier); const n = window.prompt("Name this option", o?.label ?? ""); if (n && n.trim()) void run(() => call(`/api/jobs/${jobId}/budget/options/${tier}`, "PATCH", { label: n })); }}
+            style={{ ...eyebrow, color: T.ink3, cursor: "pointer", marginLeft: 4 }}>Rename</button>
+        )}
+        {tier !== "all" && opts.length > 0 && (
+          <button onClick={() => { if (window.confirm("Delete this option and the lines only it has? Lines in every option stay.")) void run(async () => { await call(`/api/jobs/${jobId}/budget/options/${tier}`, "DELETE"); setTier("all"); }); }}
+            style={{ ...eyebrow, color: T.red, cursor: "pointer", marginLeft: 4 }}>Delete option</button>
+        )}
+      </div>
+      {opts.length > 0 && (
+        <div className="px-3 pb-2" style={{ fontSize: F.xs, color: T.ink3 }}>
+          {!data.lines.some((l) => l.option_id)
+            ? <b style={{ color: T.hivizText, fontWeight: 600 }}>The options are all the same price: every line is in all of them. </b> : null}
+          {tier === "all" ? "Showing every line. A line tagged with an option is only in that option; untagged lines are in all of them. To make Better differ from Good, pick Better above and add its lines — they go into Better only — or open a line and set its Option."
+            : `Showing the lines in ${optLabel(tier)}: the shared ones and its own. New lines go into ${optLabel(tier)}.`}
+          {opts.length > 1 && <> On the proposal, <b style={{ fontWeight: 600 }}>Option → Every option</b> shows them side by side for the customer to pick.</>}
+        </div>
+      )}
+
+      {err && <div className="px-3 pb-2" style={{ fontSize: F.xs, color: T.red }}>{err}</div>}
+      {data.lines.length === 0 && (
+        <div className="px-3 pb-3" style={{ fontSize: F.sm, color: T.ink3 }}>
+          {data.cards.length ? "No cost items yet. Add them inside each section above (+ Add items from the Price book), or load an assembly — quantities come from the section." : "No cost cards yet. Make or import them in the Price book, then add them here — or set up an assembly so new areas fill themselves."}
+        </div>
+      )}
+
+      {/* ---- whole-job costs, and any section whose card isn't on screen ---- */}
+      {areas.filter((a) => !(a.id && slots?.[a.id])).map((a) => (
+        <div key={a.id ?? "job"} className={wide ? "" : "px-3 pb-2"}>{areaBody(a, false)}</div>
+      ))}
+      {/* ---- each section's own cost items, drawn inside its card (Coy, 2026-10-04) ---- */}
+      {areas.filter((a) => a.id && slots?.[a.id]).map((a) => createPortal(
+        <div style={{ borderTop: `1px solid ${T.hairSoft}` }}>
+          <div className="px-3 py-1.5 flex items-center gap-2 flex-wrap">
+            <span style={{ ...eyebrow }}>Budget</span>
+            {a.lines.length > 0 && (
+              <span style={{ fontSize: F.xs, color: T.ink3, ...nums }}>
+                {a.lines.length} item{a.lines.length === 1 ? "" : "s"} · cost {money0(sum(a.lines, "ext_cost"))} · price {money0(sum(a.lines, "ext_price"))}
+                {areaPriced(a.lines) && areaSize(a.id) ? ` · ${areaSize(a.id)!.per(sum(a.lines, "ext_price"))}` : ""}
+              </span>
+            )}
+            {tier !== "all" && optLabel(tier) && <span style={{ fontSize: F.xs, color: T.chalk }}>showing {optLabel(tier)}</span>}
+            <span className="flex-1" />
+            <button onClick={() => setBook({ area: a.id ?? "" })}
+              className="rounded px-2.5" style={{ height: 28, background: T.ink, color: T.card, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", letterSpacing: ".05em", cursor: "pointer" }}>
+              + Add items from the Price book
+            </button>
+          </div>
+          {err && <div className="px-3 pb-1" style={{ fontSize: F.xs, color: T.red }}>{err}</div>}
+          {a.lines.length === 0
+            ? <div className="px-3 pb-2" style={{ fontSize: F.xs, color: T.ink3 }}>No cost items yet. Add them from the Price book — quantities come from this section.</div>
+            : <div className={wide ? "" : "px-3 pb-2"}>{areaBody(a, true)}</div>}
+        </div>,
+        slots![a.id as string],
+        a.id as string,
+      ))}
 
       {/* ---- totals ---- */}
       {data.lines.length > 0 && (
@@ -468,6 +525,14 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0 }: {
               </div>
             ))}
           </div>
+          {(() => {
+            // The roll-up reads one option: the one picked, else the first.
+            const t = shownTiers[0];
+            if (!t) return null;
+            const ids = new Set(t.line_ids);
+            return <Rollup lines={data.lines.filter((l) => ids.has(l.id))} res={res} tier={t} tierLabel={opts.length ? optLabel(t.option_id) : null}
+              sections={sections} wide={wide} overheadPct={data.settings.overhead_pct} marginPct={data.settings.margin_pct} />;
+          })()}
           <PriceSummary jobId={jobId} lines={visible} res={res} tiers={shownTiers} proposal={data.proposal} onChanged={reload} />
           <div style={{ fontSize: F.xs, color: T.ink3, marginTop: 4 }}>
             Job minimum: {minimum.ok ? `${money0(minimum.minimum)} (${minimum.days} days × ${money0(minimum.day_minimum)} a day)` : `needs ${minimum.blocked.join(" and ")}`}
@@ -615,16 +680,7 @@ function PriceSummary({ jobId, lines, res, tiers, proposal, onChanged }: {
   if (!total) return null;
   return (
     <div className="mt-2.5 pt-2" style={{ borderTop: `1px solid ${T.hair}` }}>
-      <div style={{ ...eyebrow }}>Cost by type{t?.option_id ? "" : ""}</div>
-      <div className="flex mt-1 rounded overflow-hidden" style={{ height: 8, background: T.hairSoft }}>
-        {Object.entries(byType).map(([k, v]) => <span key={k} title={`${COST_TYPE_LABEL[k as CostType] ?? k} ${money0(v)}`} style={{ width: `${(v / total) * 100}%`, background: TYPE_COLORS[k] ?? TYPE_COLORS.other }} />)}
-      </div>
-      <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1" style={{ fontSize: F.xs, color: T.ink2, ...nums }}>
-        {Object.entries(byType).map(([k, v]) => (
-          <span key={k} className="flex items-center gap-1"><span style={{ width: 8, height: 8, borderRadius: 2, background: TYPE_COLORS[k] ?? TYPE_COLORS.other }} />{COST_TYPE_LABEL[k as CostType] ?? k} {money0(v)}</span>
-        ))}
-      </div>
-      <div className="flex items-center gap-2 mt-2 flex-wrap">
+      <div className="flex items-center gap-2 flex-wrap">
         <span style={{ ...eyebrow }}>Profit split with a sub</span>
         <span className="inline-flex rounded overflow-hidden" style={{ border: `1px solid ${T.hair}` }}>
           {([["none", "No sub"], ["20_80", "20 / 80"], ["30_70", "30 / 70"]] as const).map(([k, l], i) => (
@@ -638,6 +694,92 @@ function PriceSummary({ jobId, lines, res, tiers, proposal, onChanged }: {
       </div>
       <div style={{ fontSize: 10, color: T.ink3, marginTop: 2 }}>Yours only — never on the proposal, never changes the price.</div>
       {err && <div style={{ fontSize: F.xs, color: T.red }}>{err}</div>}
+    </div>
+  );
+}
+
+/**
+ * The roll-up (Coy, 2026-10-04: "shows a spreadsheet of how the labor,
+ * equipment and materials add up for all the sections and how the Over Head
+ * and profit all math out"). Rows are cost types; columns each section's cost,
+ * then the job's cost, O.H., profit and price for that type; then the math from
+ * cost to the total. Every number is the engine's own line result, summed.
+ */
+function Rollup({ lines, res, tier, tierLabel, sections, wide, overheadPct, marginPct }: {
+  lines: Line[]; res: ReturnType<typeof priceBudget>; tier: TierTotal; tierLabel: string | null;
+  sections: Area[]; wide: boolean; overheadPct: number | null; marginPct: number | null;
+}) {
+  if (!lines.length) return null;
+  const known = new Set(sections.map((s) => s.id));
+  const areaOf = (l: Line) => (l.section_id && known.has(l.section_id) ? l.section_id : "");
+  const cols = [...sections.filter((s) => lines.some((l) => areaOf(l) === s.id)).map((s) => ({ id: s.id, name: s.name || "Unnamed area" })),
+    ...(lines.some((l) => areaOf(l) === "") ? [{ id: "", name: "Whole job" }] : [])];
+  const typeOf = (l: Line): CostType => ((COST_TYPES as readonly string[]).includes(String(l.cost_type)) ? l.cost_type as CostType : "other");
+  const types = COST_TYPES.filter((k) => lines.some((l) => typeOf(l) === k));
+  const of = (ls: Line[], k: "ext_cost" | "overhead" | "ext_price") => ls.reduce((a, l) => a + (res.lines[l.id]?.[k] ?? 0), 0);
+  const rows = types.map((k) => {
+    const ls = lines.filter((l) => typeOf(l) === k);
+    const cost = of(ls, "ext_cost"), oh = of(ls, "overhead"), price = of(ls, "ext_price");
+    return { k, label: COST_TYPE_LABEL[k], ls, cost, oh, price, profit: price - cost - oh };
+  });
+  const cell: React.CSSProperties = { padding: "4px 8px", textAlign: "right", whiteSpace: "nowrap" };
+  const th: React.CSSProperties = { ...eyebrow, padding: "5px 8px", textAlign: "right", whiteSpace: "nowrap", borderBottom: `1px solid ${T.hair}` };
+  const cost = rows.reduce((a, r) => a + r.cost, 0), oh = rows.reduce((a, r) => a + r.oh, 0), price = rows.reduce((a, r) => a + r.price, 0);
+  const steps: Array<[string, string, number | null, boolean?]> = [
+    ["Cost", "every section's labor, materials, equipment …", cost],
+    [`+ O.H.`, overheadPct !== null ? `${overheadPct}% of cost` : "the job's O.H.", oh],
+    ["= Cost + O.H.", "", cost + oh, true],
+    ["+ Profit", marginPct !== null ? `${marginPct}% margin: (cost + O.H.) ÷ (1 − ${marginPct}%), less cost + O.H.` : "the margin", price - cost - oh],
+    ["= Price", "before tax", price, true],
+    ...(tier.tax > 0 ? [["+ Sales tax", "at cost, on taxed lines", tier.tax] as [string, string, number]] : []),
+    ...(tier.discount > 0 ? [["− Discount", "price only", -tier.discount] as [string, string, number]] : []),
+    ["= Total", tier.priced ? `profit ${money0(tier.profit)} · margin ${pct(tier.margin)}` : "not priced yet — see what each line needs", tier.priced ? tier.total : null, true],
+  ];
+  return (
+    <div className="mt-2.5 pt-2" style={{ borderTop: `1px solid ${T.hair}` }}>
+      <div style={{ ...eyebrow }}>How it adds up{tierLabel ? ` · ${tierLabel}` : ""}</div>
+      <div className="overflow-x-auto mt-1">
+        <table style={{ borderCollapse: "collapse", fontSize: F.sm, minWidth: "100%", ...nums }}>
+          <thead>
+            <tr style={{ background: T.card }}>
+              <th style={{ ...th, textAlign: "left" }}>Type</th>
+              {wide && cols.map((c) => <th key={c.id || "job"} style={{ ...th, maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis" }} title={c.name}>{c.name}</th>)}
+              <th style={th}>Cost</th><th style={th}>O.H.</th><th style={th}>Profit</th><th style={th}>Price</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.k} style={{ borderTop: `1px solid ${T.hairSoft}` }}>
+                <td style={{ ...cell, textAlign: "left" }}>
+                  <span className="inline-flex items-center gap-1.5"><span style={{ width: 8, height: 8, borderRadius: 2, background: TYPE_COLORS[r.k] ?? TYPE_COLORS.other }} />{r.label}</span>
+                </td>
+                {wide && cols.map((c) => { const v = of(r.ls.filter((l) => areaOf(l) === c.id), "ext_cost"); return <td key={c.id || "job"} style={{ ...cell, color: v ? T.ink2 : T.ink3 }}>{v ? money0(v) : "—"}</td>; })}
+                <td style={{ ...cell, fontWeight: 600 }}>{money0(r.cost)}</td>
+                <td style={{ ...cell, color: T.ink2 }}>{money0(r.oh)}</td>
+                <td style={{ ...cell, color: T.ink2 }}>{money0(r.profit)}</td>
+                <td style={{ ...cell, fontWeight: 600 }}>{money0(r.price)}</td>
+              </tr>
+            ))}
+            <tr style={{ borderTop: `1px solid ${T.hair}`, background: T.card }}>
+              <td style={{ ...cell, textAlign: "left", fontFamily: disp, fontWeight: 700, textTransform: "uppercase" }}>All</td>
+              {wide && cols.map((c) => <td key={c.id || "job"} style={{ ...cell, fontWeight: 600 }}>{money0(of(lines.filter((l) => areaOf(l) === c.id), "ext_cost"))}</td>)}
+              <td style={{ ...cell, fontWeight: 700 }}>{money0(cost)}</td>
+              <td style={{ ...cell, fontWeight: 600 }}>{money0(oh)}</td>
+              <td style={{ ...cell, fontWeight: 600 }}>{money0(price - cost - oh)}</td>
+              <td style={{ ...cell, fontWeight: 700 }}>{money0(price)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div className="mt-2 rounded" style={{ border: `1px solid ${T.hair}`, background: T.card, maxWidth: 560 }}>
+        {steps.map(([label, note, v, strong], i) => (
+          <div key={label} className="flex items-baseline gap-2 px-2.5 py-1" style={{ borderTop: i ? `1px solid ${T.hairSoft}` : "none", ...nums }}>
+            <span style={{ fontFamily: disp, fontWeight: strong ? 700 : 500, textTransform: "uppercase", letterSpacing: ".03em", minWidth: 118, fontSize: F.sm }}>{label}</span>
+            <span style={{ fontSize: F.xs, color: T.ink3, flex: 1, minWidth: 0, whiteSpace: "normal", overflowWrap: "anywhere" }}>{note}</span>
+            <span style={{ fontWeight: strong ? 700 : 500, fontSize: strong ? F.md : F.sm, whiteSpace: "nowrap" }}>{v === null ? "—" : money0(v)}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

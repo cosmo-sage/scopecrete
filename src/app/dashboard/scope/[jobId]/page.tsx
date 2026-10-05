@@ -141,6 +141,14 @@ export default function ScopeBuilder() {
   // Bumped when a section change may have changed the budget on the server
   // (an assembly loaded, a reinforcement line swapped, an area removed).
   const [budgetTick, setBudgetTick] = useState(0);
+  // Each section card's budget slot (its cost items are drawn there by JobBudget).
+  const [slots, setSlots] = useState<Record<string, HTMLElement>>({});
+  const onSlot = useCallback((id: string, el: HTMLElement | null) => setSlots((prev) => {
+    if (el ? prev[id] === el : !(id in prev)) return prev;
+    const next = { ...prev };
+    if (el) next[id] = el; else delete next[id];
+    return next;
+  }), []);
 
   const load = useCallback(async () => {
     try {
@@ -349,7 +357,7 @@ export default function ScopeBuilder() {
                   const shapeIds = new Set(shapesOf(s.id, plans).ids);
                   const sh = shapesOf(s.id, plans);
                   return (
-                    <SectionCard key={s.id} s={s} index={sections.indexOf(s)} err={saveErr[s.id]} rcards={rcards} jobType={job.job_type} jobId={jobId}
+                    <SectionCard key={s.id} s={s} index={sections.indexOf(s)} err={saveErr[s.id]} rcards={rcards} jobType={job.job_type} jobId={jobId} onSlot={onSlot}
                       sheets={sheetsOf(s)} hasPlans={planSheets.length > 0} onSheets={(start) => openSheets(s, start)}
                       takeoffUnit={s.takeoff_sync !== false && sh.unit ? sh.unit : null}
                       takeoff={<SectionTakeoffStrip jobId={jobId} sectionId={s.id} sectionName={s.name ?? null} following={s.takeoff_sync !== false}
@@ -376,7 +384,7 @@ export default function ScopeBuilder() {
 
         {/* The budget: lines from cost cards, good / better / best (migration 048). */}
         <div className="px-3 pb-3">
-          <JobBudget jobId={job.id} sections={sections} days={job.duration_days} onSummary={setBudget} refresh={budgetTick} />
+          <JobBudget jobId={job.id} sections={sections} days={job.duration_days} onSummary={setBudget} refresh={budgetTick} slots={slots} />
         </div>
 
         {/* Photos, plans, specs, receipts — Dusty reads them (migration 045). */}
@@ -431,8 +439,10 @@ function splitFt(v: number | null): [number | "", number | ""] {
   return [ft, inch === 0 ? "" : inch];
 }
 
-function SectionCard({ s, index, err, onLocal, onSave, onRemove, jobType, jobId, photos, sheets, hasPlans, onSheets, takeoff, takeoffUnit }: {
+function SectionCard({ s, index, err, onLocal, onSave, onRemove, jobType, jobId, photos, sheets, hasPlans, onSheets, takeoff, takeoffUnit, onSlot }: {
   s: Section; index: number; err?: string; rcards: RCard[]; jobType: string | null; jobId: string;
+  /** Where the budget draws this section's cost items. */
+  onSlot: (id: string, el: HTMLElement | null) => void;
   /** The plan sheets its bid line names (Coy, 2026-10-02: "verify the scopes on the sheets"). */
   sheets: Array<{ id: string; number: string | null; title: string | null }>; hasPlans: boolean; onSheets: (start: string | null) => void;
   /** The area's photos, under its dimensions. */
@@ -443,6 +453,8 @@ function SectionCard({ s, index, err, onLocal, onSave, onRemove, jobType, jobId,
 }) {
   const q = quantities(s);
   const concrete = q.concrete;
+  const sid = s.id;
+  const budgetSlot = useCallback((el: HTMLDivElement | null) => onSlot(sid, el), [onSlot, sid]);
 
   // Measured by length × width, or by its area alone (Coy, 2026-10-02: government
   // work gives a bid item's area — "Concrete Walk … 1,769.80 SY" — not its sides).
@@ -667,15 +679,9 @@ function SectionCard({ s, index, err, onLocal, onSave, onRemove, jobType, jobId,
         )}
       </div>
 
-      {/* The area's budget: straight to the Price book (Coy, 2026-10-02). */}
-      <div className="px-3 py-1.5 flex items-center gap-2" style={{ borderTop: `1px solid ${T.hairSoft}` }}>
-        <span style={{ ...eyebrow }}>Budget</span>
-        <span className="flex-1" />
-        <button onClick={() => window.dispatchEvent(new CustomEvent("sc:budget-add", { detail: { area: s.id } }))}
-          className="rounded px-2.5" style={{ height: 28, background: T.ink, color: T.card, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", letterSpacing: ".05em", cursor: "pointer" }}>
-          + Add items from the Price book
-        </button>
-      </div>
+      {/* The section's own cost items (Coy, 2026-10-04: "the sections … have the budget line items in
+          the sections themselves"). JobBudget draws them here; the panel below the sections is the job's totals. */}
+      <div ref={budgetSlot} />
       {photos}
 
       {/* Notes, typed or said (Coy, 2026-10-03: "Prep can be removed … Access … can be replaced by 'notes'.

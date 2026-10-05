@@ -227,6 +227,25 @@ test("a customer around a person already there, attach_contact and set_name (Coy
   assert.match(RECORD_RULES, /never make them again/);
 });
 
+test("a company's office number is a contact on the customer, never looked up (Coy, 2026-10-05: Icon Technologies)", () => {
+  const cust = "51bc6a56-cfa7-4a60-9a16-d02ecd890630";
+  const p = parsePlan(`\`\`\`scopecrete-plan
+[{"do":"new_contact","customer":"${cust}","name":"Icon Technologies office","phone":"(225) 555-0100","label":"Office"},
+ {"do":"new_contact","customer":"cust1","name":"Front desk","email":"info@example.com"},
+ {"do":"new_contact","customer":"${cust}","name":"No number"},
+ {"do":"new_contact","customer":"51bc6a56","name":"Short id","phone":"2255550100"}]
+\`\`\``);
+  assert.equal(p.actions.length, 2);
+  assert.equal(p.dropped, 2, "no number or email, and a short id, are dropped");
+  assert.deepEqual(p.actions[0], { do: "new_contact", customer: cust, name: "Icon Technologies office", phone: "(225) 555-0100", email: null, label: "Office" });
+  assert.equal(needsJob(p.actions[1]), false);
+  assert.ok(RECORD_STEPS.has("new_contact"));
+  const d = (a) => describe(a, { item: () => null, area: () => "" });
+  assert.match(d(p.actions[0]), /Add “Icon Technologies office” \(Office\) to the customer — \(225\) 555-0100/);
+  assert.match(d(p.actions[1]), /the new customer above/);
+  assert.match(RECORD_RULES, /Never offer to look one up or search the web/);
+});
+
 test("ids never show in Dusty's words — only in the plan (2026-10-05)", async () => {
   const { hideIds } = await import("../src/lib/dusty/plan.ts");
   const id = "dd08251b-57b8-45b2-bca2-c2cd6cfc2698";

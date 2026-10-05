@@ -144,6 +144,9 @@ export interface Thread {
   customer_id: string | null;
   /** contacts.role — "Homeowner", "Dispatcher" — when someone wrote one. */
   person_role: string | null;
+  /** The company they speak for (Coy, 2026-10-05: John's thread should say Icon Technologies) —
+   *  their customer's name when it is a business and isn't the person's own name. */
+  company: string | null;
   numbers: number;
   has_email: boolean;
   /** Addresses and job titles, searched by the list (Coy, 2026-10-05), never shown. */
@@ -284,20 +287,22 @@ export async function GET(req: NextRequest) {
   // Their numbers and emails, and each customer's primary person and size —
   // the row's role ("Customer" vs "Cust. contact") and its second line.
   const numbers = new Map<string, number>(), emails = new Set<string>();
-  const custPrimary = new Map<string, string | null>(), custPeople = new Map<string, number>();
+  const custPrimary = new Map<string, string | null>(), custPeople = new Map<string, number>(), custCompany = new Map<string, string>();
   if (contactIds.length > 0) {
     const ids = contactIds.slice(0, 1000);
     const custIds = [...new Set([...names.values()].map((c) => c.customer_id).filter(Boolean))] as string[];
     const [{ data: ph }, { data: em }, { data: cu }, { data: people }] = await Promise.all([
       supabase.from("contact_phones").select("contact_id").eq("org_id", orgId).in("contact_id", ids),
       supabase.from("contact_emails").select("contact_id").eq("org_id", orgId).in("contact_id", ids),
-      custIds.length ? supabase.from("customers").select("id, primary_contact_id, address_formatted, address_line1, city").eq("org_id", orgId).in("id", custIds) : Promise.resolve({ data: [] }),
+      custIds.length ? supabase.from("customers").select("id, name, kind, customer_type, primary_contact_id, address_formatted, address_line1, city").eq("org_id", orgId).in("id", custIds) : Promise.resolve({ data: [] }),
       custIds.length ? supabase.from("contacts").select("customer_id").eq("org_id", orgId).in("customer_id", custIds).is("merged_into_contact_id", null).is("archived_at", null) : Promise.resolve({ data: [] }),
     ]);
     for (const r of (ph ?? []) as Array<{ contact_id: string }>) numbers.set(r.contact_id, (numbers.get(r.contact_id) ?? 0) + 1);
     for (const r of (em ?? []) as Array<{ contact_id: string }>) emails.add(r.contact_id);
-    for (const r of (cu ?? []) as Array<{ id: string; primary_contact_id: string | null; address_formatted: string | null; address_line1: string | null; city: string | null }>) {
+    for (const r of (cu ?? []) as Array<{ id: string; name: string | null; kind: string | null; customer_type: string | null; primary_contact_id: string | null; address_formatted: string | null; address_line1: string | null; city: string | null }>) {
       custPrimary.set(r.id, r.primary_contact_id);
+      const nm = r.name?.trim();
+      if (nm && !/^[\d\s()+.-]+$/.test(nm) && (r.kind === "company" || r.customer_type === "commercial" || r.customer_type === "public")) custCompany.set(r.id, nm);
       const where = r.address_formatted || [r.address_line1, r.city].filter(Boolean).join(", ");
       for (const [cid, c] of names) if (c.customer_id === r.id) addPlace(cid, where);
     }
@@ -495,6 +500,7 @@ export async function GET(req: NextRequest) {
         is_primary_on_customer: !!cust && custPrimary.get(cust) === id, customer_people: cust ? custPeople.get(cust) ?? 1 : 0 }),
       customer_id: cust,
       person_role: c?.person_role?.trim() || null,
+      company: cust && custCompany.get(cust) && custCompany.get(cust)!.toLowerCase() !== (c?.name ?? "").trim().toLowerCase() ? custCompany.get(cust)! : null,
       numbers: Math.max(numbers.get(id) ?? 0, phone ? 1 : 0),
       has_email: emails.has(id),
       places: places.get(id) ?? [],

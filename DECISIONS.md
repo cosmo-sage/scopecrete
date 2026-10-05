@@ -4,7 +4,7 @@ Ground truth for every agent working this repo. If code disagrees with this
 document, the code is wrong or this document is stale — resolve it, don't
 guess. Update this file in the same PR that changes the behavior it describes.
 
-Last updated: 2026-10-05 (proposals sent from Threads, the Preview and Dusty, his words learned from Coy's; Threads update on their own as texts land — migration 082; Dusty puts people on customers and fixes names, and says nothing of his own setup — Hermes's tools must be off on the VPS; fonts self-hosted, so a build downloads nothing; the landing page's phone demo is the real app — Design 10; texts send through Quo — the thread's Send and Dusty's text step, Coy's tap either way; a Summary view on every job, the job name and switch centred on the phone; Dusty full screen on the phone, chat text size, his thought line can be hidden; onsite estimators — jobs and pages by person, vendor first, tags notify — migration 081; a name we greet a caller by becomes a suggestion — enrich-contacts v28; contact, customer and vendor pages on one layout; the customer page's Threads tab sums up each person; the Files page laid out like OneDrive, with storage left; the Plan Room's Files and Sheets one tab; thread search a drop-down over the chat; the Threads list header sticky with its own search; the header lockup on one line; one top row on the job's three views; the proposal's dark band off the cover; Good / Better / Best removed — one price per job; search across the header; six dots for the activity line; job switch on the name's row; budget line notes; quo-intake stores every Quo event, own lines included — v10; one Unit type picker; a section's Camera; Dusty writes in Figtree; Dusty is the Scopecrete Lander; an All thread; proposal cover band and Prepared by; sign-in at app.scopecrete.ai/login, each org at <slug>.app.scopecrete.ai; Dusty's chat keeps its files and files them on a customer or job — migration 079; vendor Delete; Dusty on a vendor's page and looking at attached photos; sales tax by address via TaxLocus — migration 078; archive reasons; Lines, providers and logs — migration 077; internal notes with @-tags; Jobs board sort and filter; jobs by hand — migration 076; done and lost customers in Threads; proposals sent by link, every opening tracked; every option side by side for the customer — migration 075; Documents is Files, everywhere — migration 074; Threads v2 — threads you make, channels per number, the customer page reshaped — migration 073; an address given is kept and asked about — migration 072; Dusty sets addresses; customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
+Last updated: 2026-10-05 (swipe left for Spam · Archive, Select an icon beside Sort; proposals sent from Threads, the Preview and Dusty, his words learned from Coy's; Threads update on their own as texts land — migration 082; Dusty puts people on customers and fixes names, and says nothing of his own setup — Hermes's tools must be off on the VPS; fonts self-hosted, so a build downloads nothing; the landing page's phone demo is the real app — Design 10; texts send through Quo — the thread's Send and Dusty's text step, Coy's tap either way; a Summary view on every job, the job name and switch centred on the phone; Dusty full screen on the phone, chat text size, his thought line can be hidden; onsite estimators — jobs and pages by person, vendor first, tags notify — migration 081; a name we greet a caller by becomes a suggestion — enrich-contacts v28; contact, customer and vendor pages on one layout; the customer page's Threads tab sums up each person; the Files page laid out like OneDrive, with storage left; the Plan Room's Files and Sheets one tab; thread search a drop-down over the chat; the Threads list header sticky with its own search; the header lockup on one line; one top row on the job's three views; the proposal's dark band off the cover; Good / Better / Best removed — one price per job; search across the header; six dots for the activity line; job switch on the name's row; budget line notes; quo-intake stores every Quo event, own lines included — v10; one Unit type picker; a section's Camera; Dusty writes in Figtree; Dusty is the Scopecrete Lander; an All thread; proposal cover band and Prepared by; sign-in at app.scopecrete.ai/login, each org at <slug>.app.scopecrete.ai; Dusty's chat keeps its files and files them on a customer or job — migration 079; vendor Delete; Dusty on a vendor's page and looking at attached photos; sales tax by address via TaxLocus — migration 078; archive reasons; Lines, providers and logs — migration 077; internal notes with @-tags; Jobs board sort and filter; jobs by hand — migration 076; done and lost customers in Threads; proposals sent by link, every opening tracked; every option side by side for the customer — migration 075; Documents is Files, everywhere — migration 074; Threads v2 — threads you make, channels per number, the customer page reshaped — migration 073; an address given is kept and asked about — migration 072; Dusty sets addresses; customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
 
 ---
 
@@ -1892,7 +1892,7 @@ expected start date per quoted job before it means anything. Add the field.
   on screen waited for a reload. Now one watcher per tab
   (`src/lib/v34/live-threads.ts`, `useLiveThreads()`) tells them something
   changed and they refetch their own reads (counts included): Supabase
-  Realtime on `messages` INSERT — instant, once **migration 082** puts
+  Realtime on `messages` INSERT — instant since **migration 082** (applied 2026-10-05 on Coy's "Apply 082") put
   `messages` in the `supabase_realtime` publication (RLS decides who hears;
   the payload is never drawn) — and, working without it, a poll of
   `/api/threads/latest` (the newest message id and Dusty's newest filing,
@@ -2016,9 +2016,11 @@ expected start date per quoted job before it means anything. Add the field.
   on the row. The tag says how sure: **solid with ✓** Coy confirmed it,
   **outlined · auto** Dusty filed it, **dashed ?** Dusty's guess. A customer
   also shows the job type: the job's own when there is one, otherwise Dusty's
-  `job_type_hint` with a "?". **Swipe on a phone:** left most of the way (60%
-  of the row) accepts the guess; right opens the four buckets behind the row.
-  Either shows "Filed as X · Undo" for 5 s (`src/lib/swipe.ts`).
+  `job_type_hint` with a "?". **Swipe on a phone:** right opens the four buckets behind the row (Dusty's
+  guess marked); left opens **Spam · Archive** (Coy, 2026-10-05 — it used to
+  accept the guess). Filing shows "Filed as X · Undo" for 5 s; Archive asks
+  Why? first (`src/lib/swipe.ts`). **Select** is an icon beside Sort and the
+  search in the list's header (Coy, 2026-10-05), not a word on a row of its own.
   **The tag is not repeated (Coy, 2026-09-28):** a row in a bucket's own
   chip shows no bucket tag, and the customer / vendor page shows none (only
   a small "auto" when Dusty filed them); Dusty's guesses on Unsorted rows and
@@ -2581,7 +2583,14 @@ expected start date per quoted job before it means anything. Add the field.
   on a customer with other people) — `attach_contact` {contact, customer
   full id or cust1} goes through the customer page's + Add contact
   (`sc_attach_contact`), and `set_name` {contact | customer} through the
-  pencil and the customer's Edit. Tested in `tests/dusty-plan.test.mjs`.
+  pencil and the customer's Edit. A customer has no phone column, so a
+  company's office number is a contact on it: `new_contact` {customer, name,
+  phone or email, label} — only one Coy gave or the context shows (he is told
+  he can't look numbers up or search the web, and to ask) — through `POST
+  /api/contacts` (filed customer) then + Add contact. Threads and the person
+  page now show a business customer's name beside its person ("Icon
+  Technologies" on John Freeling's row; `company` on `/api/threads` and
+  `/api/people/[id]`). Tested in `tests/dusty-plan.test.mjs`.
   The prompt now says he is Dusty only, has no tools, files or sessions of
   his own, never narrates looking things up or names his setup, and takes
   Coy's word and spelling instead of asking him to confirm it.

@@ -4,7 +4,7 @@ Ground truth for every agent working this repo. If code disagrees with this
 document, the code is wrong or this document is stale — resolve it, don't
 guess. Update this file in the same PR that changes the behavior it describes.
 
-Last updated: 2026-10-05 (onsite estimators — jobs and pages by person, vendor first, tags notify — migration 081 written; a name we greet a caller by becomes a suggestion — enrich-contacts v28; contact, customer and vendor pages on one layout; the customer page's Threads tab sums up each person; the Files page laid out like OneDrive, with storage left; the Plan Room's Files and Sheets one tab; thread search a drop-down over the chat; the Threads list header sticky with its own search; the header lockup on one line; one top row on the job's three views; the proposal's dark band off the cover; Good / Better / Best removed — one price per job; search across the header; six dots for the activity line; job switch on the name's row; budget line notes; quo-intake stores every Quo event, own lines included — v10; one Unit type picker; a section's Camera; Dusty writes in Figtree; Dusty is the Scopecrete Lander; an All thread; proposal cover band and Prepared by; sign-in at app.scopecrete.ai/login, each org at <slug>.app.scopecrete.ai; Dusty's chat keeps its files and files them on a customer or job — migration 079; vendor Delete; Dusty on a vendor's page and looking at attached photos; sales tax by address via TaxLocus — migration 078; archive reasons; Lines, providers and logs — migration 077; internal notes with @-tags; Jobs board sort and filter; jobs by hand — migration 076; done and lost customers in Threads; proposals sent by link, every opening tracked; every option side by side for the customer — migration 075; Documents is Files, everywhere — migration 074; Threads v2 — threads you make, channels per number, the customer page reshaped — migration 073; an address given is kept and asked about — migration 072; Dusty sets addresses; customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
+Last updated: 2026-10-05 (Dusty full screen on the phone, chat text size, his thought line can be hidden; onsite estimators — jobs and pages by person, vendor first, tags notify — migration 081 written; a name we greet a caller by becomes a suggestion — enrich-contacts v28; contact, customer and vendor pages on one layout; the customer page's Threads tab sums up each person; the Files page laid out like OneDrive, with storage left; the Plan Room's Files and Sheets one tab; thread search a drop-down over the chat; the Threads list header sticky with its own search; the header lockup on one line; one top row on the job's three views; the proposal's dark band off the cover; Good / Better / Best removed — one price per job; search across the header; six dots for the activity line; job switch on the name's row; budget line notes; quo-intake stores every Quo event, own lines included — v10; one Unit type picker; a section's Camera; Dusty writes in Figtree; Dusty is the Scopecrete Lander; an All thread; proposal cover band and Prepared by; sign-in at app.scopecrete.ai/login, each org at <slug>.app.scopecrete.ai; Dusty's chat keeps its files and files them on a customer or job — migration 079; vendor Delete; Dusty on a vendor's page and looking at attached photos; sales tax by address via TaxLocus — migration 078; archive reasons; Lines, providers and logs — migration 077; internal notes with @-tags; Jobs board sort and filter; jobs by hand — migration 076; done and lost customers in Threads; proposals sent by link, every opening tracked; every option side by side for the customer — migration 075; Documents is Files, everywhere — migration 074; Threads v2 — threads you make, channels per number, the customer page reshaped — migration 073; an address given is kept and asked about — migration 072; Dusty sets addresses; customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
 
 ---
 
@@ -2370,6 +2370,25 @@ expected start date per quoted job before it means anything. Add the field.
   emblem pack: `public/favicon.ico` / `favicon.svg` / `apple-touch-icon.png`
   / `icon-192`·`512.png` and `site.webmanifest`, set once in
   `app/layout.tsx`. The pixel sprites stay in `public/dusty/` unused.
+- **Dusty on the phone (Coy, 2026-10-05, notes from his phone).** The
+  footer's centre Dusty is 40px in a 54px disc that rises above the 58px bar
+  (`.sc-tab-dusty`), larger than the page icons beside him. On a phone the
+  chat covers the whole screen, the header included (`.sc-dusty-sheet` top 0,
+  safe-area padded); × closes it. The desktop dock is unchanged. The chat
+  header has no "What's new?" button (the catch-up code is gone; saved
+  catch-ups still open from history); "Looking at:" is 👀, and a chat's label
+  drops its "scope:" prefix. **Text size:** "Aa" in the chat header (Small ·
+  Normal · Large · Extra large, 0.88–1.3× via CSS `zoom` on the conversation),
+  saved per account (`dusty_font`). Dusty sits at the bottom left of the
+  message bar (36px), always there while the chat is open, in his live state;
+  the 96px empty-state and 32px sprites are gone.
+- **Hide the thought line (Coy, 2026-10-05: "it can be distracting").**
+  Settings → **Dusty (AI)** → **Show Dusty's thought line** (`activity_line`,
+  default on). Off, the activity line isn't drawn on any size and
+  `html[data-activity="off"]` makes `--sc-head` 54px, set before first paint
+  by `app/layout.tsx` from the `sc:prefs` copy. Reminders, "is back", tags,
+  proposal openings, bid notices and the reader-down warning only show on
+  that line, so they go with it.
 - **Dusty answers in Markdown (2026-09-30).** Coy: *"showing the
   calculations in .md format in the chat panel."* His prompt asks for
   lists, bold and, for a job, a table per area (area · qty · cost · O.H. ·

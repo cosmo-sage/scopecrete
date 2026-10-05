@@ -897,11 +897,10 @@ function LineSheet({ line, data, sections, res, addon, onAddon, onClose, onPatch
   return (
     <Sheet open onClose={onClose} title={line.name} sub={line.qty_rule === "from_takeoff" ? "Measured in the Plan Room" : line.cost_item_id ? "From the Price book" : "This budget only"}>
       <div className="px-4 py-3 flex flex-col gap-3" key={line.id + line.updated_at}>
-        <div className="rounded px-3 py-2" style={{ background: T.slab, ...nums, fontSize: F.sm }}>
-          {res.blocked.length ? <span style={{ color: T.hiviz }}>Needs {res.blocked.join(", ")}</span> : (
-            <>{qtyFmt(res.qty)} {line.unit} × {money(line.unit_cost ?? 0)} = <b>{money(res.ext_cost ?? 0)}</b> cost · + O.H. {money(res.overhead ?? 0)} · ÷ (1 − {res.margin_pct}%) → <b>{money(res.ext_price ?? 0)}</b></>
-          )}
-        </div>
+        {/* The worked-out line ("2 days × $250 = … → $821.43") is gone (Coy, 2026-10-05); only what blocks it shows. */}
+        {res.blocked.length > 0 && (
+          <div className="rounded px-3 py-2" style={{ background: T.slab, fontSize: F.sm, color: T.hiviz }}>Needs {res.blocked.join(", ")}</div>
+        )}
         {/* Unit type (Coy, 2026-10-05: "if it's just the unit type then it needs to be renamed 'unit type'").
             One picker; the unit decides how the quantity is worked out (ruleForUnit). This line only. */}
         <div>

@@ -1504,7 +1504,7 @@ percentage of labour — all three contradict this section and §4.
   onto the line** (name, unit, unit cost, type, taxed, markup, rule, vendor,
   price date), so a later card change never reprices a sent quote — the line
   says so with **↻** beside the unit cost (tap to take the new price;
-  since 2026-10-05 the line under the name is gone — Coy). Under each line's
+  since 2026-10-05 the line under the name is gone — Coy; and the line's sheet no longer opens with the worked-out sum "2 days × $250.00 = … → $821.43", only what blocks it — its own margin is the sheet's **Margin % · this line only**). Under each line's
   name is its **note** ("+ note", typed in place, saved on blur as the
   line's `description`; on the phone cards too). Per line (`budget()` /
   `ruleQty()` in `src/lib/engine`, tested in `tests/budget.test.mjs`):
@@ -1900,8 +1900,13 @@ expected start date per quoted job before it means anything. Add the field.
   comes back into view. Don't poll `/api/threads` itself: it reads up to
   4,000 messages.
   **On a phone (Coy, 2026-10-05)** the thread's name and the person share one
-  row ("‹ Unsorted  (225) 446-2212"), the role tag only when it says more than
-  the thread's name, and the notes tab has no "Team only" over it.
+  row ("‹ Unsorted  (225) 446-2212"), with no role tag (the thread's name says
+  it). The channel tabs are one line each, an icon and a short name — ☎ Cell
+  (a first number's default name, was Mobile; ✎ renames it Office …), an
+  envelope alone for Email, ✦ **AI Chat**, **Notes** (was Internal notes) —
+  and + adds a number (was "+ Number"). A ▴ beside ⋯ folds the whole header
+  to the name's row (facts, tabs and toolbar hidden; ▾ brings them back),
+  remembered on the device (`sc:thread-head-folded`).
   **Internal notes is the first tab on the left (Coy, 2026-10-04)** — a
   person still opens on their conversation; the tab's "@ to tag" line is gone
   (the box below says it). **+ Number adds a number (Coy: "should also allow
@@ -2709,7 +2714,7 @@ expected start date per quoted job before it means anything. Add the field.
   what it is, area, note, Show on proposal, delete, and Dusty's read.
 - **Price book (2026-09-29)** — `src/components/v34/price-book.tsx`. On the
   desktop rail after Customers, and in the Toolbox on a phone; Cost settings
-  links to it (one editor), and a vendor's page keeps its Prices door.
+  links to it (one editor), and a vendor's page keeps its Prices door. No line of explanation under the title (Coy, 2026-10-05).
   Find, **By group · By vendor** (remembered per device), Show retired.
   **Wide (≥900px measured): a spreadsheet** — Item · Vendor (or Group) ·
   Item # · Type · Unit · Unit cost · Markup · Taxed · Counted on a job ·
@@ -3215,7 +3220,7 @@ expected start date per quoted job before it means anything. Add the field.
   be moved down below"): ‹ Jobs, the job's name (and the ⓘ, or the
   proposal's number and draft / final, with its price line under it) on
   the left, the switch alone on the right. Each view's own buttons sit
-  below: the Budget's Sheets (n) beside its chips; the Plan Room's
+  below: the Budget's Sheets (n) on the first takeoff group's row ("Driveway Area · takeoff group · 1 section · 894 SF"), else under the name; the Plan Room's
   reading chips, Photos, Aerial and Add plans on the row under the name;
   the Proposal's version, Item prices · Qty · unit · Tax · Maps & photos,
   Print / PDF and Preview on the settings row beside Project type,

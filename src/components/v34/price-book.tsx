@@ -286,9 +286,6 @@ export function PriceBook({ pick }: { pick?: PricePick } = {}) {
         <div style={{ flex: 1, minWidth: 200 }}>
           <div style={{ ...eyebrow }}>Costs</div>
           <h1 style={{ fontFamily: disp, fontSize: 26, fontWeight: 700, lineHeight: 1 }}>Price book</h1>
-          <div style={{ fontSize: F.xs, color: T.ink3, marginTop: 2 }}>
-            What you buy and charge for, each with its vendor. A job&apos;s budget copies a card when you add it, so changing a price here never changes a quote you&apos;ve sent.
-          </div>
         </div>
         )}
         <button onClick={() => setAddingGroup(true)} style={btn(false)}>+ Group</button>

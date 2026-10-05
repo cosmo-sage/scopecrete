@@ -93,7 +93,7 @@ export type ChannelKind = "phone" | "email" | "chat" | "notes";
 export interface Channel {
   key: string;                      // "phone:+12255550211" | "email:mark@…" | "chat"
   kind: ChannelKind;
-  label: string;                    // "Mobile" | "Work" | "Phone 2" | "Email" | "Chat"
+  label: string;                    // "Cell" | "Office" | "Phone 2" | "Email" | "AI Chat"
   value: string | null;             // the number / address
   calls: number; texts: number; emails: number;
   reachable: boolean;               // false → shown at half strength (no address, chat not joined)
@@ -124,13 +124,13 @@ export function buildChannels(input: {
   if (!phones.some((p) => p.is_primary)) phones.sort((a, b) => total(per.get(b.phone)) - total(per.get(a.phone)));
   const out: Channel[] = phones.map((p, i) => {
     const c = per.get(p.phone) ?? { calls: 0, texts: 0 };
-    return { key: `phone:${p.phone}`, kind: "phone", label: p.label?.trim() || (i === 0 ? "Mobile" : `Phone ${i + 1}`), value: p.phone,
+    return { key: `phone:${p.phone}`, kind: "phone", label: p.label?.trim() || (i === 0 ? "Cell" : `Phone ${i + 1}`), value: p.phone,
       calls: c.calls, texts: c.texts, emails: 0, reachable: true };
   });
   const email = input.emails[0];
   out.push({ key: email ? `email:${email.email}` : "email", kind: "email", label: "Email", value: email?.email ?? null,
     calls: 0, texts: 0, emails: input.emailCount, reachable: !!email || input.emailCount > 0 });
-  out.push({ key: "chat", kind: "chat", label: "Chat", value: null, calls: 0, texts: 0, emails: 0, reachable: false });
+  out.push({ key: "chat", kind: "chat", label: "AI Chat", value: null, calls: 0, texts: 0, emails: 0, reachable: false });
   return out;
 }
 const total = (c: { calls: number; texts: number } | undefined) => (c ? c.calls + c.texts : 0);

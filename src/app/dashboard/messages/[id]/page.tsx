@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { Phone, WarningCircle } from "@phosphor-icons/react";
+import { Phone, WarningCircle, Envelope, Sparkle, NotePencil, CaretDown, CaretUp } from "@phosphor-icons/react";
 import Link from "next/link";
 import { T, F, disp, eyebrow, nums, clip, relTime } from "@/lib/v34/tokens";
 import { Composer } from "@/components/v34/composer";
@@ -42,6 +42,9 @@ export default function ChatThreadPage() {
   const [emails, setEmails] = useState<Array<{ id: string; subject: string | null; from: string | null; at: string | null; body: string }>>([]);
   const [channelKey, setChannelKey] = useState<string | null>(search.get("channel"));
   const [filter, setFilter] = useState<ChannelFilter>("all");
+  // On a phone the whole header folds to the name's row (Coy, 2026-10-05: "takes up too much space"), remembered on the device.
+  const [folded, setFolded] = useState(() => { try { return typeof window !== "undefined" && localStorage.getItem("sc:thread-head-folded") === "1"; } catch { return false; } });
+  const fold = (v: boolean) => { setFolded(v); try { localStorage.setItem("sc:thread-head-folded", v ? "1" : "0"); } catch { /* none */ } };
   // Lines (Claude Design package 9): the org's numbers, when it has two or more.
   const [orgLines, setOrgLines] = useState<Array<{ id: string; name: string; phone: string; color: string; provider: string | null; is_primary: boolean }>>([]);
   const [firstLine, setFirstLine] = useState<{ id: string; name: string | null; at: string } | null>(null);
@@ -233,14 +236,13 @@ export default function ChatThreadPage() {
   // Internal notes are a tab of their own, first on the left (Coy, 2026-10-04) — but a person
   // still opens on their conversation, not on the notes.
   const nNotes = person?.notes?.length ?? 0;
-  const notesTab: Channel = { key: "notes", kind: "notes", label: "Internal notes", value: null, calls: 0, texts: 0, emails: nNotes, reachable: true };
+  const notesTab: Channel = { key: "notes", kind: "notes", label: "Notes", value: null, calls: 0, texts: 0, emails: nNotes, reachable: true };
   const tabs = channels.length ? [notesTab, ...channels] : [];
   const channel = tabs.find((x) => x.key === channelKey) ?? channels[0] ?? null;
   const shown = channel?.kind === "phone" ? messages.filter((m) => inChannel({ channel: m.channel, counterparty: m.counterparty ?? null }, channel, filter) && (!lineFilter || m.line_id === lineFilter)) : [];
   const n = channel?.kind === "phone" ? messages.filter((m) => inChannel({ channel: m.channel, counterparty: m.counterparty ?? null }, channel, "all")) : [];
   const nCalls = n.filter((m) => m.channel === "call" || m.channel === "voicemail").length;
   const threadName = threads ? threadLabel(threads.thread, threads.custom).name : "Threads";
-  const tagOnPhone = !threadKey || threadKey !== role && threadKey !== (c?.bucket ?? "unsorted");
   const threadIds = threads && !["customers", "unsorted", "vendors", "personal", "spam", "archived"].includes(threads.thread)
     ? threads.custom?.find((t) => t.id === threads.thread)?.contact_ids ?? [] : [];
   const pickChannel = (k: string) => { setChannelKey(k); setFilter("all"); setLineFilter(null); };
@@ -279,13 +281,15 @@ export default function ChatThreadPage() {
                   onSaved={(v) => { setName(v); setNameConfirmed(true); setNameSource("human"); }}
                   style={{ fontFamily: "var(--sc-font-strong)", fontSize: 19, fontWeight: 700, lineHeight: 1.15, color: T.ink }} />
               )}
-              {/* On a phone the tag only when it says more than the thread's own name does ("Unsorted" twice — Coy). */}
-              {c && <span className={tagOnPhone ? "inline-flex" : "hidden lg:inline-flex"}><RoleTag role={role} auto={c.bucket_state === "auto"} /></span>}
+              {/* No tag on a phone: the thread's name at the left already says it (Coy, 2026-10-05). */}
+              {c && <span className="hidden lg:inline-flex"><RoleTag role={role} auto={c.bucket_state === "auto"} /></span>}
             </div>
             <span className="hidden lg:flex items-center gap-2">
               <Link href={pageLink.href} style={pill}>{pageLink.label} ›</Link>
               <button onClick={() => window.dispatchEvent(new Event("sc:dusty-open"))} style={{ ...pill, border: `1px solid ${T.hiviz}`, color: T.hiviz }}>Ask Dusty</button>
             </span>
+            <button onClick={() => fold(!folded)} className="lg:hidden shrink-0" aria-expanded={!folded} aria-label={folded ? "Show the channels" : "Fold the header"}
+              style={{ ...pill, padding: "0 8px" }}>{folded ? <CaretDown size={13} /> : <CaretUp size={13} />}</button>
             <div className="relative">
               <button onClick={() => setMore((v) => !v)} aria-expanded={more} aria-label="More" style={{ ...pill, padding: "0 8px" }}>⋯</button>
               {more && (
@@ -303,9 +307,9 @@ export default function ChatThreadPage() {
               )}
             </div>
           </div>
-          <div style={{ fontSize: 11.5, color: T.ink3, marginTop: 2, ...nums, ...clip }}>{loading ? "Loading…" : meta || (phone ? formatPhone(phone) : "")}</div>
+          <div className={folded ? "hidden lg:block" : undefined} style={{ fontSize: 11.5, color: T.ink3, marginTop: 2, ...nums, ...clip }}>{loading ? "Loading…" : meta || (phone ? formatPhone(phone) : "")}</div>
           {/* The third row: the channels. Each number is its own (calls, voicemails and texts together), then email, then chat. */}
-          <div className="flex items-end mt-1.5 overflow-x-auto" role="tablist" aria-label="Channels">
+          <div className={`${folded ? "hidden lg:flex" : "flex"} items-end mt-1.5 overflow-x-auto`} role="tablist" aria-label="Channels">
             {tabs.map((ch) => {
               const on = channel?.key === ch.key;
               const sub = ch.kind === "phone" ? `${formatPhone(ch.value)} · ${ch.calls} call${ch.calls === 1 ? "" : "s"} · ${ch.texts} text${ch.texts === 1 ? "" : "s"}`
@@ -315,9 +319,13 @@ export default function ChatThreadPage() {
               return (
                 <button key={ch.key} role="tab" aria-selected={on} onClick={() => pickChannel(ch.key)} className="text-left flex-1 lg:flex-none shrink-0"
                   style={{ minWidth: 0, padding: "7px 12px 8px", borderBottom: `2px solid ${on ? T.hiviz : "transparent"}`, opacity: ch.reachable || on ? 1 : 0.5, cursor: "pointer" }}>
-                  <span style={{ display: "block", fontFamily: disp, fontSize: 9.5, letterSpacing: ".1em", textTransform: "uppercase", color: T.ink3 }}>{ch.kind === "chat" ? "ScopeCrete" : ch.kind === "notes" ? "\u00a0" : ch.kind}</span>
-                  <span style={{ display: "flex", alignItems: "center", gap: 4, fontFamily: "var(--sc-font-strong)", fontSize: 13, fontWeight: 600, color: T.ink }}>
-                    {ch.label}
+                  {/* An icon and a short name, one line (Coy, 2026-10-05): ☎ Cell, ✉, ✦ AI Chat, Notes. */}
+                  <span aria-label={ch.kind === "email" ? "Email" : undefined} style={{ display: "flex", alignItems: "center", gap: 5, fontFamily: "var(--sc-font-strong)", fontSize: 13, fontWeight: 600, color: T.ink, whiteSpace: "nowrap" }}>
+                    {ch.kind === "phone" ? <Phone size={13} weight="fill" color={T.ink3} />
+                      : ch.kind === "email" ? <Envelope size={16} color={T.ink2} />
+                      : ch.kind === "chat" ? <Sparkle size={13} color={T.ink3} />
+                      : <NotePencil size={13} color={T.ink3} />}
+                    {ch.kind === "email" ? null : ch.label}
                     {ch.kind === "phone" && on && (
                       // Name the number (Coy: "instead of 'phone 2' it can say 'office'").
                       <span role="button" tabIndex={0} aria-label={`Rename ${ch.label}`} title="Rename this number"
@@ -331,12 +339,12 @@ export default function ChatThreadPage() {
               );
             })}
             <button onClick={() => setAddingNumber(true)} className="shrink-0 self-center" title="Add a number of theirs, or join another thread that is them"
-              style={{ fontFamily: disp, fontSize: 11, letterSpacing: ".08em", textTransform: "uppercase", color: T.ink3, padding: "0 12px", cursor: "pointer", whiteSpace: "nowrap" }}>+ Number</button>
+              style={{ fontFamily: disp, color: T.ink3, padding: "0 12px", cursor: "pointer", whiteSpace: "nowrap", fontSize: 18, fontWeight: 600 }} aria-label="Add a number">+</button>
           </div>
         </div>
 
         {/* Toolbar: the filter (phone channels), what you're looking at, Call, search. */}
-        <div className="flex items-center gap-2 flex-shrink-0 flex-wrap lg:flex-nowrap" style={{ padding: "8px 16px", background: T.card, borderBottom: `1px solid ${T.hairSoft}` }}>
+        <div className={`${folded ? "hidden lg:flex" : "flex"} items-center gap-2 flex-shrink-0 flex-wrap lg:flex-nowrap`} style={{ padding: "8px 16px", background: T.card, borderBottom: `1px solid ${T.hairSoft}` }}>
           {channel?.kind === "phone" ? (
             <div className="flex overflow-hidden shrink-0" style={{ height: 28, border: `1px solid ${T.hairStrong}`, borderRadius: 4 }}>
               <button onClick={() => setFilter("all")} style={seg(filter === "all")}>All {n.length}</button>

@@ -9,7 +9,7 @@ import { siteFonts } from "@/components/site/fonts";
 export const metadata: Metadata = {
   title: "ScopeCrete — the office manager for concrete contractors",
   description:
-    "Calls and texts land in one place. Dusty reads them, sorts the people and opens the job. You price the scope on real concrete math, and the bid never goes under what the job costs to run.",
+    "Calls, texts and emails land in one place. Dusty reads them, sorts the people and opens the job. You price the scope on real concrete math.",
 };
 
 export default function WelcomePage() {

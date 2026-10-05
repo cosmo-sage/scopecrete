@@ -44,7 +44,8 @@ test("what Dusty can read", () => {
   assert.deepEqual(readable("image", "image/jpeg", 1000), { ok: true, as: "image" });
   assert.equal(readable("image", "image/heic", 1000).ok, false);
   assert.equal(readable("image", "image/png", 6 * 1024 * 1024).ok, false);
-  assert.deepEqual(readable("pdf", "application/pdf", 9e7), { ok: true, as: "pdf" });
+  assert.deepEqual(readable("pdf", "application/pdf", 4e6), { ok: true, as: "pdf" });
+  assert.equal(readable("pdf", "application/pdf", 25007953).ok, false);
   assert.equal(readable("sheet", null, 1).ok, false);
 });
 

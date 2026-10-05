@@ -3287,6 +3287,17 @@ additive changes only, with confirmation.
   own nameservers, so for now it is one record per org. Supabase Auth's
   redirect list must carry `https://app.scopecrete.ai/**` and
   `https://*.app.scopecrete.ai/**` for Google and emailed sign-in links.
+- **Installing the app (Coy, 2026-10-05: "prompts me to install it from the
+  master branch and it doesn't prompt me to install it on any sandbox
+  branches").** `/site.webmanifest` is a route (`src/lib/install.ts`,
+  tested): only an org's own address on the production build
+  (`VERCEL_ENV=production`, `<slug>.app.scopecrete.ai`) gets the manifest
+  (opens on `/dashboard`); previews, the feedback sandbox, the landing page,
+  app.scopecrete.ai and localhost get 404, so Chrome never offers to install
+  them. Chrome's own banner shows when Chrome decides, so Settings (☰) has
+  **Install the app** whenever the browser says it can be installed there.
+  There is no service worker (next-pwa is a webpack plugin; the Turbopack
+  build never ran it).
 
 **Per-org Hermes containers are under review.** Clean isolation, but N
 long-running processes per N contractors does not survive growth and is the

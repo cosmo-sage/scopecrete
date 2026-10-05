@@ -38,6 +38,7 @@ import { ActivityLine } from "@/components/v34/activity-line";
 import { ArchiveToast } from "@/components/v34/archive-actions";
 import { SearchPanel } from "@/components/v34/search-panel";
 import { OrgLockup } from "@/components/v34/org-lockup";
+import { InstallApp } from "@/components/v34/install-app";
 import { YouSection, OrgSection } from "@/components/v34/org-settings";
 import { ThemePicker, useTheme } from "@/components/v34/theme-picker";
 import { Toolbox, MenuEditor } from "@/components/v34/toolbox";
@@ -307,6 +308,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 <div style={{ fontSize: F.xs, color: T.ink3 }}>{l.note}</div>
               </Link>
             ))}
+            <InstallApp />
             <button onClick={() => setLooksOpen((o) => !o)} aria-expanded={looksOpen} className="text-left py-2.5" style={{ borderBottom: `1px solid ${T.hairSoft}`, cursor: "pointer" }}>
               <div style={{ fontSize: F.md, fontWeight: 600 }}>Appearance {looksOpen ? "−" : "+"}</div>
               <div style={{ fontSize: F.xs, color: T.ink3 }}>Eight colour schemes, one dark — some change the typeface too</div>

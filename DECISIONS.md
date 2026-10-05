@@ -3107,10 +3107,22 @@ additive changes only, with confirmation.
   app.scopecrete.ai/login and … the Sacco Enterprises dashboard … at a
   subdomain of app.scopecrete.ai … each organization will have its own").**
   `src/lib/hosts.ts` (tested) names the host; `src/proxy.ts` routes on it:
-  **scopecrete.ai / www** — the public site: `/`, `/login` and `/dashboard…`
-  go to app; `/p/…` (proposal links), `/calculator`, `/auth`, `/invite`
+  **scopecrete.ai / www** — the public site: `/` is the landing page
+  (`src/app/welcome`, from Coy's Claude Design package, 2026-10-04; also at
+  `/welcome` on any host for previews), its Log in buttons go to
+  `app.scopecrete.ai/login` and Request access is an email to
+  admin@scopecrete.ai (no form until one really sends); `/login` and
+  `/dashboard…` go to app; `/p/…` (proposal links), `/calculator`, `/auth`, `/invite`
   stay. **app.scopecrete.ai** — `/login` is the sign-in page (`/` sends
-  there); signed in, `/login` and `/dashboard…` go on to the org's own
+  there; the design's Login screen, `src/components/site/sign-in.tsx`:
+  email and password, Forgot password, Continue with Google, and a Request
+  access tab that is an email — the design's phone sign-in is left out, no
+  texting until 10DLC; the invite page `/invite/<token>` wears the same
+  frame, `auth-shell.tsx`). **On a preview deployment the sign-in page
+  says so** in a yellow strip — "Feedback sandbox · not the live site" on
+  `claude/feedback`, "Preview · <branch>" on others, nothing in production
+  (`src/lib/sandbox.ts`, from Vercel's `VERCEL_ENV` / `VERCEL_GIT_COMMIT_REF`,
+  tested); signed in, `/login` and `/dashboard…` go on to the org's own
   address. **`<orgs.slug>.app.scopecrete.ai`** — that org's dashboard
   (Sacco Enterprises is `sbuild`, its existing slug); `/` → `/dashboard`;
   signed out → app's `/login?next=`; a non-member is sent to their own org;

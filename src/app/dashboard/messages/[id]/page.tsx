@@ -266,7 +266,7 @@ export default function ChatThreadPage() {
     fontFamily: disp, fontSize: 12, letterSpacing: ".06em", textTransform: "uppercase", cursor: "pointer", whiteSpace: "nowrap" });
 
   return (
-    <div className="flex sc-pinned">
+    <div className="flex sc-pinned sc-pinned-full">
       <div className="flex flex-col flex-1 min-w-0 h-full" style={{ background: DA.bg }}>
         <div className="flex-shrink-0" style={{ background: T.card, borderBottom: `1px solid ${T.hair}`, padding: "10px 16px 0" }}>
           {/* Phone: back to the thread, by name. */}
@@ -320,7 +320,7 @@ export default function ChatThreadPage() {
                 <button key={ch.key} role="tab" aria-selected={on} onClick={() => pickChannel(ch.key)} className="text-left flex-1 lg:flex-none shrink-0"
                   style={{ minWidth: 0, padding: "7px 12px 8px", borderBottom: `2px solid ${on ? T.hiviz : "transparent"}`, opacity: ch.reachable || on ? 1 : 0.5, cursor: "pointer" }}>
                   {/* An icon and a short name, one line (Coy, 2026-10-05): ☎ Cell, ✉, ✦ AI Chat, Notes. */}
-                  <span aria-label={ch.kind === "email" ? "Email" : undefined} style={{ display: "flex", alignItems: "center", gap: 5, fontFamily: "var(--sc-font-strong)", fontSize: 13, fontWeight: 600, color: T.ink, whiteSpace: "nowrap" }}>
+                  <span aria-label={ch.kind === "email" ? "Email" : undefined} className="justify-center lg:justify-start" style={{ display: "flex", alignItems: "center", gap: 5, fontFamily: "var(--sc-font-strong)", fontSize: 13, fontWeight: 600, color: T.ink, whiteSpace: "nowrap" }}>
                     {ch.kind === "phone" ? <Phone size={13} weight="fill" color={T.ink3} />
                       : ch.kind === "email" ? <Envelope size={16} color={T.ink2} />
                       : ch.kind === "chat" ? <Sparkle size={13} color={T.ink3} />
@@ -344,23 +344,23 @@ export default function ChatThreadPage() {
         </div>
 
         {/* Toolbar: the filter (phone channels), what you're looking at, Call, search. */}
-        <div className={`${folded ? "hidden lg:flex" : "flex"} items-center gap-2 flex-shrink-0 flex-wrap lg:flex-nowrap`} style={{ padding: "8px 16px", background: T.card, borderBottom: `1px solid ${T.hairSoft}` }}>
+        <div className={`${folded ? "hidden lg:flex" : "flex"} items-center gap-2 flex-shrink-0 flex-nowrap`} style={{ padding: "8px 16px", background: T.card, borderBottom: `1px solid ${T.hairSoft}` }}>
+          {/* All · Calls · Texts and the line filter are drop-downs, so the row fits a phone with Call and search
+              (Coy, 2026-10-05: "make this a drop down" — "on the same row as the calls/text buttons"). */}
           {channel?.kind === "phone" ? (
-            <div className="flex overflow-hidden shrink-0" style={{ height: 28, border: `1px solid ${T.hairStrong}`, borderRadius: 4 }}>
-              <button onClick={() => setFilter("all")} style={seg(filter === "all")}>All {n.length}</button>
-              <button onClick={() => setFilter("call")} style={{ ...seg(filter === "call"), borderLeft: `1px solid ${T.hairStrong}` }}>Calls {nCalls}</button>
-              <button onClick={() => setFilter("text")} style={{ ...seg(filter === "text"), borderLeft: `1px solid ${T.hairStrong}` }}>Texts {n.length - nCalls}</button>
-            </div>
+            <select value={filter} onChange={(e) => setFilter(e.target.value as ChannelFilter)} aria-label="Show"
+              style={{ ...pill, padding: "0 6px", minWidth: 0, flex: "0 1 auto" }}>
+              <option value="all">All {n.length}</option>
+              <option value="call">Calls {nCalls}</option>
+              <option value="text">Texts {n.length - nCalls}</option>
+            </select>
           ) : null}
           {channel?.kind === "phone" && usedLines.length > 1 ? (
-            <div className="flex overflow-hidden shrink-0" style={{ height: 28, border: `1px solid ${T.hairStrong}`, borderRadius: 4 }} title="One channel — their number. The dot is which of yours they reached.">
-              <button onClick={() => setLineFilter(null)} style={seg(!lineFilter)}>All lines</button>
-              {usedLines.map((l) => (
-                <button key={l.id} onClick={() => setLineFilter(l.id)} style={{ ...seg(lineFilter === l.id), borderLeft: `1px solid ${T.hairStrong}`, display: "inline-flex", alignItems: "center", gap: 5 }}>
-                  <span style={{ width: 7, height: 7, borderRadius: 7, background: l.color, display: "inline-block" }} />{l.name}
-                </button>
-              ))}
-            </div>
+            <select value={lineFilter ?? ""} onChange={(e) => setLineFilter(e.target.value || null)} aria-label="Which of your lines"
+              title="One channel — their number. The dot is which of yours they reached." style={{ ...pill, padding: "0 6px", minWidth: 0, flex: "0 1 auto", maxWidth: 110 }}>
+              <option value="">All lines</option>
+              {usedLines.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+            </select>
           ) : null}
           {channel?.kind !== "phone" && (
             <div className="flex overflow-hidden shrink-0" style={{ height: 28, border: `1px solid ${T.hairStrong}`, borderRadius: 4 }}>
@@ -378,7 +378,7 @@ export default function ChatThreadPage() {
               <label className="inline-flex items-center gap-1" style={{ borderLeft: `1px solid ${T.hair}`, padding: "0 4px 0 6px", height: "100%" }}>
                 <span style={{ width: 7, height: 7, borderRadius: 7, background: outLine.color, display: "inline-block" }} />
                 <select value={outLine.id} onChange={(e) => setFromLine(e.target.value)} aria-label="Call or text from line"
-                  style={{ border: "none", background: "transparent", fontWeight: 600, fontSize: 12, color: T.ink, maxWidth: 90 }}>
+                  style={{ border: "none", background: "transparent", fontWeight: 600, fontSize: 12, color: T.ink, maxWidth: 76 }}>
                   {orgLines.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
                 </select>
               </label>

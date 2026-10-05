@@ -1906,7 +1906,13 @@ expected start date per quoted job before it means anything. Add the field.
   envelope alone for Email, ✦ **AI Chat**, **Notes** (was Internal notes) —
   and + adds a number (was "+ Number"). A ▴ beside ⋯ folds the whole header
   to the name's row (facts, tabs and toolbar hidden; ▾ brings them back),
-  remembered on the device (`sc:thread-head-folded`).
+  remembered on the device (`sc:thread-head-folded`). An open thread covers
+  the dashboard header (`.sc-pinned-full`; the footer stays), its tabs'
+  icons centred; the toolbar is one row — **All · Calls · Texts** and the
+  line filter as drop-downs, Call from ▾ and search beside them — and the
+  line a text goes from is picked there only (the composer's own line chip
+  is gone). A call card says "● via Quo" (the provider; the line's name on
+  hover — "batonrougeconcreters.com" pushed it out of the card).
   **Internal notes is the first tab on the left (Coy, 2026-10-04)** — a
   person still opens on their conversation; the tab's "@ to tag" line is gone
   (the box below says it). **+ Number adds a number (Coy: "should also allow
@@ -2449,10 +2455,12 @@ expected start date per quoted job before it means anything. Add the field.
   message bar (36px), always there while the chat is open, in his live state;
   the 96px empty-state and 32px sprites are gone.
 - **Hide the thought line (Coy, 2026-10-05: "it can be distracting").**
-  Settings → **Dusty (AI)** → **Show Dusty's thought line** (`activity_line`,
-  default on). Off, the activity line isn't drawn on any size and
-  `html[data-activity="off"]` makes `--sc-head` 54px, set before first paint
-  by `app/layout.tsx` from the `sc:prefs` copy. Reminders, "is back", tags,
+  Settings → **Dusty (AI)** → **Show Dusty's thought line**, **On a phone**
+  and **On a desktop** apart (Coy, same day: "off on mobile and on on
+  desktop") — `activity_line_phone` and `activity_line`, default on; the
+  phone's follows the desktop's until it is set. Off on a phone,
+  `html[data-activity-phone="off"]` makes `--sc-head` 54px, set before first
+  paint by `app/layout.tsx` from the `sc:prefs` copy. Reminders, "is back", tags,
   proposal openings, bid notices and the reader-down warning only show on
   that line, so they go with it.
 - **Dusty answers in Markdown (2026-09-30).** Coy: *"showing the

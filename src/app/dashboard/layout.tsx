@@ -111,14 +111,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const [savedMenus, setSavedMenus] = usePref<Menus>("menus", DEFAULT_MENUS);
   // Dusty's thought line can be switched off (Settings → Dusty (AI), Coy 2026-10-05).
-  // <html data-activity="off"> makes --sc-head the 54px bar alone; app/layout.tsx
+  // <html data-activity-phone="off"> makes --sc-head the 54px bar alone; app/layout.tsx
   // sets it before first paint from the browser's copy of this setting.
+  // A phone and a desktop are set apart (Coy, 2026-10-05: "off on mobile and on on desktop");
+  // the phone's follows the desktop's until it is set itself.
   const [showLine, setShowLine] = usePref<boolean>("activity_line", true);
-  const lineOn = showLine !== false;
+  const [showLinePhone, setShowLinePhone] = usePref<boolean | null>("activity_line_phone", null);
+  const deskLineOn = showLine !== false;
+  const phoneLineOn = (showLinePhone ?? showLine) !== false;
   useEffect(() => {
-    if (lineOn) delete document.documentElement.dataset.activity;
-    else document.documentElement.dataset.activity = "off";
-  }, [lineOn]);
+    if (phoneLineOn) delete document.documentElement.dataset.activityPhone;
+    else document.documentElement.dataset.activityPhone = "off";
+  }, [phoneLineOn]);
   const menus = cleanMenus(savedMenus);
 
   // Who is signed in, the org's name and logos. Reloaded after Settings
@@ -198,7 +202,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </Link>
 
           {/* Desktop: the activity line in the header row, after a divider. */}
-          {desktop && lineOn ? (
+          {desktop && deskLineOn ? (
             <>
               <span aria-hidden="true" className="sc-paper-divider" />
               {/* All the room up to the buttons (Coy, 2026-10-02: "there is enough room … don't cut it off"). */}
@@ -245,7 +249,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </header>
 
         {/* Phone: what Dusty is doing, a row under the header. */}
-        {!desktop && lineOn && <ActivityLine busy={dustyBusy} onWorking={setReaderWorking} />}
+        {!desktop && phoneLineOn && <ActivityLine busy={dustyBusy} onWorking={setReaderWorking} />}
       </div>
 
       {/* ---- desktop left rail: every page, in Coy's order ---- */}
@@ -354,18 +358,23 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             {!limited && (
               <div className="py-2.5" style={{ borderBottom: `1px solid ${T.hairSoft}` }}>
                 <div style={{ fontSize: F.md, fontWeight: 600 }}>Dusty (AI)</div>
-                <div className="flex items-center gap-3 mt-1.5">
-                  <div className="flex-1 min-w-0">
-                    <div style={{ fontSize: F.sm, color: T.ink }}>Show Dusty&apos;s thought line</div>
-                    <div style={{ fontSize: F.xs, color: T.ink3 }}>
-                      The line beside the logo (under it on a phone): what he&apos;s reading, reminders due, people who came back. Off hides it everywhere.
-                    </div>
-                  </div>
-                  <button type="button" role="switch" aria-checked={lineOn} aria-label="Show Dusty's thought line" onClick={() => setShowLine(!lineOn)}
-                    style={{ width: 38, height: 22, borderRadius: 999, background: lineOn ? T.green : T.hairStrong, position: "relative", cursor: "pointer", flex: "0 0 auto" }}>
-                    <span style={{ position: "absolute", top: 3, left: lineOn ? 19 : 3, width: 16, height: 16, borderRadius: 999, background: "#fff", transition: "left .15s", boxShadow: "0 1px 2px rgba(0,0,0,.2)" }} />
-                  </button>
+                <div style={{ fontSize: F.sm, color: T.ink, marginTop: 6 }}>Show Dusty&apos;s thought line</div>
+                <div style={{ fontSize: F.xs, color: T.ink3 }}>
+                  The line beside the logo (under it on a phone): what he&apos;s reading, reminders due, people who came back. A phone and a desktop are set apart.
                 </div>
+                {([["On a phone", phoneLineOn, (v: boolean) => setShowLinePhone(v)], ["On a desktop", deskLineOn, (v: boolean) => {
+                  // The phone keeps what it showed: it followed the desktop's switch until now.
+                  if (showLinePhone === null) setShowLinePhone(deskLineOn);
+                  setShowLine(v);
+                }]] as Array<[string, boolean, (v: boolean) => void]>).map(([label, on, set]) => (
+                  <div key={label} className="flex items-center gap-3 mt-1.5">
+                    <div className="flex-1 min-w-0" style={{ fontSize: F.sm, color: T.ink2 }}>{label}</div>
+                    <button type="button" role="switch" aria-checked={on} aria-label={`Show Dusty's thought line ${label.toLowerCase()}`} onClick={() => set(!on)}
+                      style={{ width: 38, height: 22, borderRadius: 999, background: on ? T.green : T.hairStrong, position: "relative", cursor: "pointer", flex: "0 0 auto" }}>
+                      <span style={{ position: "absolute", top: 3, left: on ? 19 : 3, width: 16, height: 16, borderRadius: 999, background: "#fff", transition: "left .15s", boxShadow: "0 1px 2px rgba(0,0,0,.2)" }} />
+                    </button>
+                  </div>
+                ))}
               </div>
             )}
             {!limited && <button onClick={() => setMenusOpen((o) => !o)} aria-expanded={menusOpen} className="text-left py-2.5" style={{ borderBottom: `1px solid ${T.hairSoft}`, cursor: "pointer" }}>

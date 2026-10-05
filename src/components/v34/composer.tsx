@@ -241,18 +241,7 @@ export function Composer({ contactId, phone, name, compact = false, onNoteSaved,
       )}
 
       <div className="flex items-end gap-1.5">
-        {channel === "text" && fromLine && fromLine.lines.length > 1 && (() => {
-          const cur = fromLine.lines.find((l) => l.id === fromLine.value) ?? fromLine.lines[0];
-          return (
-            <label className="flex items-center gap-1 rounded-full px-2 shrink-0" style={{ height: 30, border: `1px solid ${T.hair}`, background: T.card, fontSize: 11.5 }} title="The line this text goes from">
-              <span style={{ width: 7, height: 7, borderRadius: 7, background: cur.color, display: "inline-block" }} />
-              <select value={cur.id} onChange={(e) => fromLine.onPick(e.target.value)} aria-label="Text from line"
-                style={{ border: "none", background: "transparent", fontSize: 11.5, color: T.ink, maxWidth: 90 }}>
-                {fromLine.lines.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-              </select>
-            </label>
-          );
-        })()}
+        {/* The line it goes from is picked once, in the thread's toolbar (Coy, 2026-10-05: "it exists already at the top"). */}
         <textarea value={text} onChange={(e) => setText(e.target.value)} rows={compact ? 2 : 1}
           placeholder={channel === "note" ? "A note about them — stays internal"
             : channel === "email" ? "Write the email"

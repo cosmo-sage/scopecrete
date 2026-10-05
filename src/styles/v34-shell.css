@@ -16,10 +16,10 @@
 /* Desktop (Coy, 2026-09-30): the activity line moved up into the 54px header
    beside the logo, so the header is one row. */
 @media (min-width: 1024px) { :root { --sc-head: 54px; } }
-/* Dusty's thought line switched off (Settings → Dusty (AI), Coy 2026-10-05):
-   no activity row on a phone, so the header is the 54px bar alone. Set on
+/* Dusty's thought line switched off on a phone (Settings → Dusty (AI), Coy
+   2026-10-05 — a phone and a desktop are set apart): no activity row, so the header is the 54px bar alone. Set on
    <html> before first paint (app/layout.tsx) and kept in step by the shell. */
-html[data-activity="off"] { --sc-head: 54px; }
+html[data-activity-phone="off"] { --sc-head: 54px; }
 
 /* The footer's height on a phone (layout.tsx, border-box, safe area inside it).
    A page that must not scroll as a whole — a conversation, a person — is
@@ -28,6 +28,12 @@ html[data-activity="off"] { --sc-head: 54px; }
    this the page subtracted 72px for a 58px footer: a 14px grey gap, and a body
    that scrolled on Android. Desktop has no footer and sizes by height. */
 .sc-pinned { position: fixed; top: var(--sc-head); bottom: var(--sc-foot); left: 0; right: 0; }
+/* An open thread on a phone covers the dashboard header and has the screen
+   down to the footer (Coy, 2026-10-05: "so that the page is full screen on
+   mobile"); its own header carries ‹ back. The desktop is unchanged. */
+@media (max-width: 1023.98px) {
+  .sc-pinned-full { top: 0; z-index: 45; padding-top: env(safe-area-inset-top); }
+}
 @media (min-width: 1024px) {
   .sc-pinned { position: static; height: calc(100dvh - var(--sc-head)); }
 }

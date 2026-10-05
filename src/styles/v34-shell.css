@@ -405,3 +405,8 @@ html[data-theme="night-shift"] .sc-proposal { --sc-doc-ground: #15171A; }
 @media (prefers-reduced-motion: reduce) { .sc-rec-dot { animation: none; } }
 /* SlideDrawer (phone drawers handoff): no slide under reduced motion. */
 @media (prefers-reduced-motion: reduce) { .sc-slide-panel, .sc-slide-scrim { transition: none !important; } }
+/* The ScopeCrete emblem in the header turns as on the landing page
+   (site/marks.tsx Emblem spin); still under reduced motion. */
+@keyframes scSpin { to { transform: rotate(360deg); } }
+@keyframes scSpinR { to { transform: rotate(-360deg); } }
+@media (prefers-reduced-motion: reduce) { .sc-emblem g { animation: none !important; } }

@@ -2581,7 +2581,14 @@ expected start date per quoted job before it means anything. Add the field.
   on a customer with other people) — `attach_contact` {contact, customer
   full id or cust1} goes through the customer page's + Add contact
   (`sc_attach_contact`), and `set_name` {contact | customer} through the
-  pencil and the customer's Edit. Tested in `tests/dusty-plan.test.mjs`.
+  pencil and the customer's Edit. A customer has no phone column, so a
+  company's office number is a contact on it: `new_contact` {customer, name,
+  phone or email, label} — only one Coy gave or the context shows (he is told
+  he can't look numbers up or search the web, and to ask) — through `POST
+  /api/contacts` (filed customer) then + Add contact. Threads and the person
+  page now show a business customer's name beside its person ("Icon
+  Technologies" on John Freeling's row; `company` on `/api/threads` and
+  `/api/people/[id]`). Tested in `tests/dusty-plan.test.mjs`.
   The prompt now says he is Dusty only, has no tools, files or sessions of
   his own, never narrates looking things up or names his setup, and takes
   Coy's word and spelling instead of asking him to confirm it.

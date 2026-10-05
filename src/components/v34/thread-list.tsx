@@ -83,6 +83,7 @@ interface Thread {
   role?: ContactRole;
   customer_id?: string | null;
   person_role?: string | null;
+  company?: string | null;
   numbers?: number;
   has_email?: boolean;
   /** Addresses and job titles — searched, never shown. */
@@ -356,7 +357,7 @@ export function InitialsBox({ name, on, size = 30 }: { name: string | null; on?:
 
 /** "Homeowner · 2 numbers · email" — only what is known. */
 function subLine(t: Thread): string {
-  return [t.person_role, (t.numbers ?? 0) > 1 ? `${t.numbers} numbers` : null, t.has_email ? "email" : null].filter(Boolean).join(" · ");
+  return [t.company, t.person_role, (t.numbers ?? 0) > 1 ? `${t.numbers} numbers` : null, t.has_email ? "email" : null].filter(Boolean).join(" · ");
 }
 
 function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, onName, onBucket, subtypes, deciding, trayOpen, onTray, onAccept, chipShown, selected }: {
@@ -880,7 +881,7 @@ export function ThreadList({ folded = false }: { folded?: boolean }) {
     if (findQ) {
       const digits = findQ.replace(/\D/g, "");
       rows = rows.filter((t) => {
-        const hay = [t.display_name, t.preview, t.status_summary, t.recent_summary, t.person_role, t.job_type, t.job_type_hint, ...(t.places ?? [])].filter(Boolean).join(" \n ").toLowerCase();
+        const hay = [t.display_name, t.preview, t.status_summary, t.recent_summary, t.company, t.person_role, t.job_type, t.job_type_hint, ...(t.places ?? [])].filter(Boolean).join(" \n ").toLowerCase();
         const said = saidBy?.q === findQ && saidBy.ids.has(t.contact_id);
         return said || findQ.split(/\s+/).every((w) => hay.includes(w)) || (digits.length >= 4 && (t.phone ?? "").replace(/\D/g, "").includes(digits));
       });

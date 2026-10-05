@@ -82,7 +82,7 @@ export async function applyPlan(jobId: string | null, actions: PlanAction[], loo
   };
   // Groups first, so items can be filed in them; then changes; then the budget.
   const order = { new_group: 0, rename_group: 1, update_item: 1, new_area: 2, new_item: 3, retire_item: 4, new_assembly: 5, add_to_assembly: 6, remove_from_assembly: 6,
-    add: 7, add_group: 8, load_assembly: 9, remove_group: 10, set_tax: 10, archive: 11, restore: 11, set_address: 11, new_job: 11, new_customer: 11, attach_contact: 11, set_name: 11, file: 11, text: 11, send_proposal: 11 } as const;
+    add: 7, add_group: 8, load_assembly: 9, remove_group: 10, set_tax: 10, archive: 11, restore: 11, set_address: 11, new_job: 11, new_customer: 11, attach_contact: 11, new_contact: 11, set_name: 11, file: 11, text: 11, send_proposal: 11 } as const;
   // Archive / restore steps run through applyRecords (no job needed).
   const steps = [...actions].filter((a) => !RECORD_STEPS.has(a.do)).sort((a, b) => order[a.do] - order[b.do]);
   for (const a of steps) {
@@ -260,6 +260,20 @@ export async function applyRecords(actions: PlanAction[]): Promise<StepResult[]>
         if (made?.contact === a.contact) { out.push({ ok: true, text: `Already on “${made.name}”` }); continue; }
         await call(`/api/customers/${target}/contacts`, "POST", { contact_id: a.contact });
         out.push({ ok: true, text: `Put them on ${made ? `“${made.name}”` : "the customer"}` });
+        continue;
+      }
+      if (a.do === "new_contact") {
+        const made = CUST_KEY.test(a.customer) ? madeCust.get(a.customer) : null;
+        const target = made ? made.id : FULL_ID.test(a.customer) ? a.customer : null;
+        if (!target) { out.push({ ok: false, text: `“${a.name}”: the customer to put them on wasn't made — skipped` }); continue; }
+        try {
+          const r = await call("/api/contacts", "POST", { name: a.name, bucket: "customer",
+            phones: a.phone ? [{ number: a.phone, label: a.label }] : [], emails: a.email ? [{ address: a.email, label: a.label }] : [] });
+          await call(`/api/customers/${target}/contacts`, "POST", { contact_id: r.contact.id });
+          out.push({ ok: true, text: `Added “${a.name}” to ${made ? `“${made.name}”` : "the customer"}` });
+        } catch (e) {
+          out.push({ ok: false, text: `“${a.name}”: ${e instanceof Error ? e.message : String(e)}` });
+        }
         continue;
       }
       if (a.do === "set_name") {

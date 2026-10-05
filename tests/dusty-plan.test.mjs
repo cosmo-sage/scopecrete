@@ -239,3 +239,18 @@ test("ids never show in Dusty's words — only in the plan (2026-10-05)", async 
   assert.equal(p.shown, "Filed.");
   assert.equal(p.actions[0].id, id, "the plan keeps its id");
 });
+
+test("send_proposal: a job by full id, text or email, words with {link}; nothing else", () => {
+  const J = "0d1c2b3a-4f5e-4d6c-8b7a-1234567890ab";
+  const t = cleanAction({ do: "send_proposal", job: J, body: "Hi {first}, here it is: {link}" });
+  assert.deepEqual(t, { do: "send_proposal", job: J, via: "text", contact: null, body: "Hi {first}, here it is: {link}", subject: null });
+  const e = cleanAction({ do: "send_proposal", job: J, via: "email", subject: "Driveway proposal", body: "{link}" });
+  assert.equal(e.via, "email"); assert.equal(e.subject, "Driveway proposal");
+  assert.equal(cleanAction({ do: "send_proposal", job: "0d1c2b3a", body: "x" }), null);
+  assert.equal(cleanAction({ do: "send_proposal", job: J, via: "fax", body: "x" }), null);
+  assert.equal(cleanAction({ do: "send_proposal", job: J, body: "" }), null);
+  assert.ok(RECORD_STEPS.has("send_proposal"));
+  assert.match(describe(t, { item: () => null, area: () => "" }), /^Text the proposal through Quo/);
+  assert.ok(RECORD_RULES.includes('"do":"send_proposal"'));
+  assert.ok(!RECORD_RULES.includes("Baton Rouge Concreters"));
+});

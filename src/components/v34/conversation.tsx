@@ -1,5 +1,6 @@
 "use client";
 
+import { ProposalChip } from "@/components/v34/proposal-send";
 import React, { useState, useEffect, useCallback } from "react";
 import { plainNote } from "@/lib/mentions";
 import { archiveNote } from "@/lib/archive";
@@ -506,6 +507,7 @@ export function SmsRow({ m }: { m: ThreadMessage }) {
             {text || <span style={{ fontStyle: "italic", opacity: 0.7 }}>(no text)</span>}
           </div>
         )}
+        {text && <ProposalChip text={text} isOut={isOut} />}
         {m.media_count > 0 && <MessageMedia messageId={m.id} count={m.media_count} isOut={isOut} />}
         <div className="text-[9px] mt-1" style={{ color: "inherit", opacity: 0.7, letterSpacing: ".06em" }}>
           {isOut ? "OUT" : "IN"} · {formatTime(m.occurred_at)}

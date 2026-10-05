@@ -59,10 +59,13 @@ export type PlanAction =
   | { do: "file"; files: string[]; kind: "contact" | "customer" | "job"; id: string }
   // A text to a person, sent through Quo when Coy taps Send (Coy, 2026-10-05: "send text messages through
   // the app through quo manually or through dusty"). to: one of their numbers, or null for the one they use.
-  | { do: "text"; contact: string; to: string | null; body: string };
+  | { do: "text"; contact: string; to: string | null; body: string }
+  // A job's proposal, by text or email, on Coy's tap (Coy, 2026-10-05: "for dusty to send them"). The body
+  // carries {link}; Apply makes (or reuses) the link, freezing a draft first as Preview does.
+  | { do: "send_proposal"; job: string; via: "text" | "email"; contact: string | null; body: string; subject: string | null; draft?: string };
 
 /** Steps that change records rather than a budget — they need no job open. */
-export const RECORD_STEPS = new Set(["archive", "restore", "set_address", "new_job", "new_customer", "attach_contact", "set_name", "file", "text"]);
+export const RECORD_STEPS = new Set(["archive", "restore", "set_address", "new_job", "new_customer", "attach_contact", "set_name", "file", "text", "send_proposal"]);
 /** A customer (cust1) or job (job1) made earlier in the same plan. */
 export const CUST_KEY = /^cust\d{1,2}$/i;
 export const JOB_KEY = /^job\d{1,2}$/i;
@@ -268,6 +271,14 @@ export function cleanAction(raw: unknown): PlanAction | null {
       }
       return { do: "text", contact, to, body };
     }
+    case "send_proposal": {
+      const job = typeof r.job === "string" && FULL_ID.test(r.job.trim()) ? r.job.trim().toLowerCase() : null;
+      const via = r.via === "email" ? "email" : r.via === "text" || r.via === undefined ? "text" : null;
+      const contact = typeof r.contact === "string" && FULL_ID.test(r.contact.trim()) ? r.contact.trim().toLowerCase() : null;
+      const body = typeof r.body === "string" ? r.body.replace(/\r\n/g, "\n").trim() : "";
+      if (!job || !via || !body || body.length > 1500) return null;
+      return { do: "send_proposal", job, via, contact, body, subject: via === "email" ? str(r.subject, 160) : null };
+    }
     default: return null;
   }
 }
@@ -356,6 +367,7 @@ export function describe(a: PlanAction, names: { item: (r: string) => string | n
       const num = d.length === 10 ? ` at (${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}` : "";
       return `Text them${num} through Quo: “${a.body}”`;
     }
+    case "send_proposal": return `${a.via === "email" ? "Email" : "Text"} the proposal${a.via === "email" ? " (opens in your mail app)" : " through Quo"}: “${a.body}”${a.subject ? ` — subject “${a.subject}”` : ""}`;
     case "archive":
     case "restore": {
       const n = a.ids.length;
@@ -398,9 +410,15 @@ New customers and filing files. Photos and files Coy attaches in this chat are s
 \`\`\`
 Texts. When Coy asks you to text someone (or to write a text and send it), write it the way he would — short, plain, in his voice, signed only if he signs — and propose:
 \`\`\`scopecrete-plan
-[{"do":"text","contact":"<full contact id from the CONTEXT>","body":"Hi Johnette, this is Coy with Baton Rouge Concreters. I can come measure the driveway Thursday at 9 — does that work?"}]
+[{"do":"text","contact":"<full contact id from the CONTEXT>","body":"Hi Johnette, this is Coy. I can come measure the driveway Thursday at 9 — does that work?"}]
 \`\`\`
 Coy sees the words and who they go to, and nothing is sent until he taps Send; it then goes through Quo from his line. Only when Coy asks for a text — never on your own, never to someone he didn't name, never a price or a date he didn't give you. Leave out "to" (the app uses the number they text from); give "to" only when Coy names one of their numbers. Use only contact ids written in the CONTEXT; if two people could match, ask. One step per person — never one text to many.
+Proposals. When Coy asks you to send (or text, or email) a job's proposal, write the words the way he sends them — the examples under "Proposals to send" are his own, newest first; follow them closely — with {link} where the link goes, and propose:
+\`\`\`scopecrete-plan
+[{"do":"send_proposal","job":"<full job id from Proposals to send>","via":"text","body":"Hi {first}, here's the proposal for the driveway: {link} Let me know if you have any questions."},
+ {"do":"send_proposal","job":"<full job id>","via":"email","subject":"Driveway proposal","body":"…{link}…"}]
+\`\`\`
+Write the customer's first name yourself (from the CONTEXT) or leave {first} for the app to fill. Leave out "contact" — it goes to the job's person — unless Coy names someone else on it (then their full contact id). One price per job: there are no options or tiers to describe; mention an optional add-on only if the proposal lists one. Never put a price, a date or a promise in the words that isn't in the CONTEXT. Coy can edit the words on the card before he taps Send; a draft is frozen as a version when it goes. If Coy asks for the link itself, give it from "Proposals to send" (a final with "no link yet" gets one when it is sent or previewed).
 Make a new customer only when Coy asks for one. When its person is already in the CONTEXT (a thread, a contact), never make them again: give their id as "contact" and leave out person, phone and email —
 \`\`\`scopecrete-plan
 [{"do":"new_customer","key":"cust1","name":"Icon Technologies","customer_type":"commercial","contact":"<full contact id>"},

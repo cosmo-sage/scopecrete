@@ -5,6 +5,8 @@ import { DUSTY_SYSTEM } from "@/lib/dusty/prompt";
 import { PLAN_RULES, RECORD_RULES } from "@/lib/dusty/plan";
 import { FILES_BUCKET } from "@/lib/files";
 import { SEE_MAX_BYTES, SEE_MAX_IMAGES, seeableMime } from "@/lib/dusty/see";
+import { publicOrigin } from "@/lib/hosts";
+import { proposalSendLines } from "@/lib/proposal-send-server";
 
 /**
  * Dusty — read-only, and it knows what Coy has open.
@@ -43,7 +45,7 @@ type Turn = { role: "user" | "assistant"; content: string };
 export async function POST(req: NextRequest) {
   const result = await getApiSession(req);
   if (!result.ok) return result.response;
-  const { supabase, orgId, applyCookies } = result.session;
+  const { supabase, orgId, userId, applyCookies } = result.session;
 
   const base = process.env.HERMES_URL?.replace(/\/+$/, "");
   const key = process.env.HERMES_API_KEY;
@@ -95,6 +97,26 @@ export async function POST(req: NextRequest) {
     const reach = renderReach(await reachBlocks(supabase, orgId, ref, asked));
     if (reach) ctx.text += `\n\n${reach}`;
   } catch { /* the page's own context still answers */ }
+
+  // Whose business this is, and its proposals to send (Coy, 2026-10-05: Dusty
+  // called the company "Baton Rouge Concreters" — a lead-gen relay's words — and
+  // couldn't see a proposal's link). The links, and how Coy sends them, so a
+  // send_proposal step writes the way he does.
+  try {
+    let where: Parameters<typeof proposalSendLines>[3] = { recent: 6 };
+    if (ref.kind === "scope") where = { jobIds: [ref.id] };
+    else if (ref.kind === "customer") where = { customerIds: [ref.id] };
+    else if (ref.kind === "thread") {
+      const { data: who } = await supabase.from("contacts").select("customer_id").eq("org_id", orgId).eq("id", ref.id).maybeSingle();
+      where = { contactIds: [ref.id], customerIds: who?.customer_id ? [who.customer_id as string] : [] };
+    }
+    const [{ data: org }, lines] = await Promise.all([
+      supabase.from("orgs").select("name").eq("id", orgId).maybeSingle(),
+      proposalSendLines(supabase, orgId, userId, where, publicOrigin(req.headers.get("host"), req.nextUrl.origin)),
+    ]);
+    if (org?.name) ctx.text += `\n\n## The business\nCoy's company is ${org.name}. When a text or email names the company, it is ${org.name} — never a name from a lead service, a relay or a job site.`;
+    ctx.text += `\n\n## Proposals to send\n${lines.join("\n")}`;
+  } catch { /* the rest of the context still answers */ }
 
   // The chat so far, with the files each question carried (079). Before 079 is
   // applied the column isn't there: read without it.

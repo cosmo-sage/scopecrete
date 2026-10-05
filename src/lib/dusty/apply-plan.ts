@@ -10,6 +10,7 @@ import { CUST_KEY, JOB_KEY, RECORD_STEPS, needsJob, type PlanAction } from "@/li
 const FULL_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 import { archiveNow } from "@/components/v34/archive-actions";
 import { expectMessage } from "@/lib/v34/live-threads";
+import { sendProposal } from "@/lib/v34/send-proposal";
 
 export interface PlanLookup {
   items: Array<{ id: string; name: string; cost_group_id: string | null }>;
@@ -81,7 +82,7 @@ export async function applyPlan(jobId: string | null, actions: PlanAction[], loo
   };
   // Groups first, so items can be filed in them; then changes; then the budget.
   const order = { new_group: 0, rename_group: 1, update_item: 1, new_area: 2, new_item: 3, retire_item: 4, new_assembly: 5, add_to_assembly: 6, remove_from_assembly: 6,
-    add: 7, add_group: 8, load_assembly: 9, remove_group: 10, set_tax: 10, archive: 11, restore: 11, set_address: 11, new_job: 11, new_customer: 11, attach_contact: 11, set_name: 11, file: 11, text: 11 } as const;
+    add: 7, add_group: 8, load_assembly: 9, remove_group: 10, set_tax: 10, archive: 11, restore: 11, set_address: 11, new_job: 11, new_customer: 11, attach_contact: 11, set_name: 11, file: 11, text: 11, send_proposal: 11 } as const;
   // Archive / restore steps run through applyRecords (no job needed).
   const steps = [...actions].filter((a) => !RECORD_STEPS.has(a.do)).sort((a, b) => order[a.do] - order[b.do]);
   for (const a of steps) {
@@ -296,6 +297,12 @@ export async function applyRecords(actions: PlanAction[]): Promise<StepResult[]>
         } catch (e) {
           out.push({ ok: false, text: `Text not sent: ${e instanceof Error ? e.message : String(e)}` });
         }
+        continue;
+      }
+      if (a.do === "send_proposal") {
+        // Coy's words if he changed them on the card; Dusty's draft kept beside them, for learning.
+        out.push(await sendProposal({ jobId: a.job, via: a.via, body: a.body, subject: a.subject, contactId: a.contact,
+          dustyDraft: a.draft !== undefined && a.draft !== a.body ? a.draft : a.body }));
         continue;
       }
       if (a.do !== "archive" && a.do !== "restore") continue;

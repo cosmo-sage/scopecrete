@@ -45,6 +45,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { T, F, disp, body, eyebrow, clip, formatPhone } from "@/lib/v34/tokens";
 import { segments } from "@/lib/texting";
+import { ProposalSendSheet } from "@/components/v34/proposal-send";
 
 type Channel = "text" | "email" | "note";
 
@@ -128,6 +129,8 @@ export function Composer({ contactId, phone, name, compact = false, onNoteSaved,
   const [micError, setMicError] = useState<string | null>(null);
   const rec = useRef<Recognition | null>(null);
   const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Send a job's proposal from here (Coy, 2026-10-05) — its own sheet: the job, the words, Preview, Send.
+  const [proposalOpen, setProposalOpen] = useState(false);
 
   useEffect(() => { writeDraft(contactId, channel, text); }, [contactId, channel, text]);
   useEffect(() => () => { if (copiedTimer.current) clearTimeout(copiedTimer.current); }, []);
@@ -311,6 +314,13 @@ export function Composer({ contactId, phone, name, compact = false, onNoteSaved,
 
       {/* Copy, and what Send does (or why it can't). */}
       <div className="flex items-center gap-2 flex-wrap" style={{ marginTop: 6 }}>
+        {!compact && channel !== "note" && (
+          <button onClick={() => setProposalOpen(true)} className="rounded px-2.5" title="Send one of their jobs' proposals — preview it first"
+            style={{ height: 28, border: `1px solid ${T.hair}`, background: T.card, color: T.ink,
+                     fontFamily: disp, fontSize: F.xs, letterSpacing: ".06em", textTransform: "uppercase", cursor: "pointer" }}>
+            Proposal
+          </button>
+        )}
         {has && channel !== "note" && (
           <button onClick={() => void copy()} className="rounded px-2.5"
             style={{ height: 28, border: `1px solid ${T.hair}`, background: T.card, color: T.ink,
@@ -327,6 +337,10 @@ export function Composer({ contactId, phone, name, compact = false, onNoteSaved,
             : channel === "note" ? "Notes stay internal. Dusty reads them." : channel === "text" ? "Drafts stay on this device until you send them." : "Drafts stay on this device until they can be sent.")}
         </span>
       </div>
+      {proposalOpen && (
+        <ProposalSendSheet contactId={contactId} name={name ?? null} phone={phone} via={channel === "email" ? "email" : "text"}
+          onClose={() => setProposalOpen(false)} onSent={() => { if (onSent) { setTimeout(onSent, 4000); setTimeout(onSent, 15000); } }} />
+      )}
     </div>
   );
 }

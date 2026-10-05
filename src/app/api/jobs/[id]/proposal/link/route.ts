@@ -4,6 +4,7 @@ import { getApiSession } from "@/lib/api-auth";
 import { publicOrigin } from "@/lib/hosts";
 import { FILES_BUCKET } from "@/lib/files";
 import { linkAssets, newToken, publicSnapshot } from "@/lib/proposal-links";
+import { POST as finalize } from "../final/route";
 
 /**
  * The customer's link to a FINAL proposal (migration 075).
@@ -15,6 +16,11 @@ import { linkAssets, newToken, publicSnapshot } from "@/lib/proposal-links";
  *        photo and each area's photos (file ids, checked against this job),
  *        and the areas whose map the browser will upload as a picture; the
  *        reply carries a signed upload link for each map.
+ *        `{auto: true}` (Threads and Dusty's send step, 2026-10-05): no browser
+ *        drawing — the cover is the proposal's own, each area's photos are the
+ *        job's photos filed on it, and no map pictures (the page shows the
+ *        areas without them). With no final yet, the draft is frozen first, as
+ *        Preview does when it sends. The reply also names who it is for.
  *
  * Session client, org from the session; every file id is checked against the
  * org and the job.
@@ -51,19 +57,52 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const { supabase, orgId, userId, applyCookies } = result.session;
   const bad = (m: string, s = 400) => applyCookies(NextResponse.json({ error: m }, { status: s }));
   if (!UUID.test(id)) return bad("No such job.", 404);
-  const body = (await req.json().catch(() => ({}))) as { cover_file_id?: unknown; photos?: unknown; maps?: unknown };
+  const body = (await req.json().catch(() => ({}))) as { cover_file_id?: unknown; photos?: unknown; maps?: unknown; auto?: unknown };
+  const auto = body.auto === true;
 
-  const { data: job } = await supabase.from("jobs").select("id, customer_id").eq("org_id", orgId).eq("id", id).maybeSingle();
+  const { data: job } = await supabase.from("jobs").select("id, customer_id, contact_id, title").eq("org_id", orgId).eq("id", id).maybeSingle();
   if (!job) return bad("No such job.", 404);
-  const { data: prop } = await supabase.from("job_proposals").select("id, version, project_type, snapshot").eq("org_id", orgId).eq("job_id", id)
+  const latestFinal = () => supabase.from("job_proposals").select("id, version, project_type, snapshot, cover_file_id").eq("org_id", orgId).eq("job_id", id)
     .eq("status", "final").order("version", { ascending: false }).limit(1).maybeSingle();
-  if (!prop) return bad("Make the proposal final first — the link shows a frozen version.", 409);
+  let { data: prop } = await latestFinal();
+  if (auto) {
+    // A draft newer than the last final is what Coy is looking at: freeze it, as Preview's send does.
+    const { data: draft } = await supabase.from("job_proposals").select("id, version").eq("org_id", orgId).eq("job_id", id).eq("status", "draft").maybeSingle();
+    if (draft && (!prop || (draft.version as number) > (prop.version as number))) {
+      const fin = await finalize(req, { params: Promise.resolve({ id }) });
+      if (!fin.ok) {
+        const e = (await fin.json().catch(() => ({}))) as { error?: string };
+        return bad(`The proposal can't be frozen to send yet — ${e.error ?? `HTTP ${fin.status}`}`, 409);
+      }
+      ({ data: prop } = await latestFinal());
+    }
+  }
+  if (!prop) return bad(auto ? "This job has no proposal yet — make one on the job's Proposal tab." : "Make the proposal final first — the link shows a frozen version.", 409);
+
+  // Who it is for: the job's person, else the customer's primary; their phone and email.
+  const recipient = await recipientOf(supabase, orgId, job.contact_id as string | null, job.customer_id as string | null);
+  const extra = { recipient, job: { id, title: (job.title as string | null) ?? null }, version: prop.version };
 
   const origin = publicOrigin(req.headers.get("host"), req.nextUrl.origin);
   // Already a live link for this version: send that one again.
   const { data: live } = await supabase.from("documents").select(LINK_COLS).eq("org_id", orgId).eq("proposal_id", prop.id)
     .is("revoked_at", null).neq("status", "void").order("created_at", { ascending: false }).limit(1).maybeSingle();
-  if (live) return applyCookies(NextResponse.json({ link: { ...live, url: `${origin}/p/${live.token}` }, uploads: [] }));
+  if (live) return applyCookies(NextResponse.json({ link: { ...live, url: `${origin}/p/${live.token}` }, uploads: [], ...extra }));
+
+  if (auto) {
+    // What Preview would pick, read on the server: the proposal's cover, and up to four photos per area.
+    const { data: pics } = await supabase.from("files").select("id, section_id, mime_type").eq("org_id", orgId).eq("job_id", id)
+      .is("deleted_at", null).not("section_id", "is", null).order("created_at", { ascending: true }).limit(400);
+    const per: Record<string, string[]> = {};
+    for (const f of (pics ?? []) as Array<{ id: string; section_id: string; mime_type: string | null }>) {
+      if (!/^image\//.test(f.mime_type ?? "")) continue;
+      const list = (per[f.section_id] ??= []);
+      if (list.length < 4) list.push(f.id);
+    }
+    body.photos = per;
+    body.cover_file_id = (prop.cover_file_id as string | null) ?? null;
+    body.maps = [];
+  }
 
   // What the page shows beside the words — only this job's files.
   const photos: Record<string, string[]> = {};
@@ -120,5 +159,24 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     const { data: up } = await supabase.storage.from(FILES_BUCKET).createSignedUploadUrl(path, { upsert: true });
     if (up) uploads.push({ area_id: area, path, token: up.token, signed_url: up.signedUrl });
   }
-  return applyCookies(NextResponse.json({ link: { ...doc, url: `${origin}/p/${token}` }, uploads }));
+  return applyCookies(NextResponse.json({ link: { ...doc, url: `${origin}/p/${token}` }, uploads, ...extra }));
+}
+
+type Sb = Extract<Awaited<ReturnType<typeof getApiSession>>, { ok: true }>["session"]["supabase"];
+
+/** The person a proposal goes to, with their phone and email (the contact's, else their first listed). */
+async function recipientOf(sb: Sb, orgId: string, contactId: string | null, customerId: string | null) {
+  let cid = contactId;
+  if (!cid && customerId) {
+    const { data: c } = await sb.from("customers").select("primary_contact_id").eq("org_id", orgId).eq("id", customerId).maybeSingle();
+    cid = (c?.primary_contact_id as string | null) ?? null;
+  }
+  if (!cid) return null;
+  const [{ data: p }, { data: em }] = await Promise.all([
+    sb.from("contacts").select("id, name, phone, email").eq("org_id", orgId).eq("id", cid).maybeSingle(),
+    sb.from("contact_emails").select("email").eq("org_id", orgId).eq("contact_id", cid).limit(1),
+  ]);
+  if (!p) return null;
+  return { contact_id: p.id as string, name: (p.name as string | null) ?? null, phone: (p.phone as string | null) ?? null,
+    email: (p.email as string | null) ?? ((em ?? [])[0]?.email as string | undefined) ?? null };
 }

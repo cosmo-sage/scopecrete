@@ -37,7 +37,7 @@
  */
 
 import { createClient } from '@supabase/supabase-js'
-import { hermesAsk, loadLearning, pingHermes, readContact, recheckBuckets, recheckNames, type Ask, type HermesConfig, type Learning, type Outcome } from './pipeline.ts'
+import { backfillGreetings, hermesAsk, loadLearning, pingHermes, readContact, recheckBuckets, recheckNames, type Ask, type HermesConfig, type Learning, type Outcome } from './pipeline.ts'
 import { renderCorrections } from './rules.ts'
 
 const WORKER = 'enrich-contacts'
@@ -144,7 +144,7 @@ Deno.serve(async (req: Request) => {
   const { data: authorized } = await sb.rpc('sc_enrich_worker_authorized', { p_token: token })
   if (authorized !== true) return json({ error: 'unauthorized' }, 401)
 
-  let body: { wait?: boolean; ping?: boolean; limit?: number } = {}
+  let body: { wait?: boolean; ping?: boolean; limit?: number; greetings?: boolean } = {}
   try { body = await req.json() } catch { /* empty body is fine */ }
 
   const cfg: HermesConfig = {
@@ -155,6 +155,8 @@ Deno.serve(async (req: Request) => {
 
   const health = await pingHermes(cfg)
   if (body.ping) return json({ hermes: health, key_set: !!cfg.key })
+  // Once, after the greeted-name rule (2026-10-05): suggestions for people already read.
+  if (body.greetings) return json(await backfillGreetings(sb))
   if (!cfg.key) {
     await beat(sb, 'not_configured', 'HERMES_API_KEY is not set in the Supabase Edge Function secrets.')
     return json({ code: 'not_configured' }, 503)

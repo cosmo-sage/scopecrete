@@ -155,8 +155,8 @@ export function FilesPage({ fixed, embedded, extra }: { fixed?: Partial<FileFilt
         </select>
         {facetSelect("job", facets?.jobs, "Any job")}
         {!fixed?.customer && facetSelect("customer", facets?.customers, "Any customer")}
-        {facetSelect("vendor", facets?.vendors, "Any vendor")}
-        {facetSelect("contact", facets?.people, "Anyone")}
+        {!fixed?.contact && facetSelect("vendor", facets?.vendors, "Any vendor")}
+        {!fixed?.contact && facetSelect("contact", facets?.people, "Anyone")}
         <select value={custom ? "custom" : flt.since} aria-label="When" style={select}
           onChange={(e) => { const v = e.target.value; if (v === "custom") { setCustom(true); set({ since: "" }); } else { setCustom(false); set({ since: v, from: "", to: "" }); } }}>
           <option value="">Any time</option>

@@ -187,24 +187,17 @@ export default function ChatThreadPage() {
   const headerTitle = name ?? formatPhone(phone);
   const openJob = jobs && jobs.length > 0 ? jobs[0] : null;
 
-  // Their own page (Contact ›): next steps, jobs, what Dusty read — as before.
+  // Their own page (Contact ›) — the customer page's layout (person-view.tsx, 2026-10-05).
+  // A vendor's own page is the vendor page: one place for them, prices and all.
   if (person && !loading && !error && personPage) {
+    if (person.contact.bucket === "vendor") {
+      return <VendorRedirect href={`/dashboard/vendors/${contactId}?from=threads${threadKey ? `&t=${encodeURIComponent(threadKey)}` : ""}`} />;
+    }
     return (
       <div className="sc-pinned overflow-y-auto flex flex-col" style={{ background: T.slab }}>
-        <div className="px-4 py-2" style={{ background: T.card, borderBottom: `1px solid ${T.hairSoft}` }}>
-          <Link href={`/dashboard/messages/${contactId}${tq}`} style={{ ...eyebrow, color: T.chalk }}>‹ Back to the conversation</Link>
-        </div>
-        {merges.map((m) => (
-          <div key={m.id} className="px-4 py-1.5 flex items-center gap-2 text-[11px]"
-            style={{ background: DA.elevated, borderBottom: `1px solid ${DA.border}`, color: DA.textSecondary }}>
-            <span className="flex-1 min-w-0 truncate">{m.phone ? formatPhone(m.phone) : "Another number"} was merged into this person</span>
-            <button onClick={() => void undo(m.id)} disabled={undoing === m.id}
-              style={{ color: DA.accent, fontWeight: 600, cursor: "pointer", background: "none", border: "none" }}>
-              {undoing === m.id ? "Undoing…" : "Undo"}
-            </button>
-          </div>
-        ))}
-        <PersonView person={person} messages={messages}
+        <PersonView person={person} messages={messages} channels={channels}
+          back={{ href: `/dashboard/messages/${contactId}${tq}`, label: "Back to the thread" }}
+          merges={merges} onUndoMerge={undo}
           onReload={() => setReload((n) => n + 1)} onMerge={(id) => setMerging({ preselect: id ?? null })} />
         {merging && (
           <MergeSheet contactId={contactId} keepLabel={headerTitle} keepCount={messages.length}
@@ -221,7 +214,7 @@ export default function ChatThreadPage() {
   const role = c ? roleOf({ bucket: c.bucket, subtype: c.subtype, customer_id: c.customer_id ?? null, is_primary_on_customer: true, customer_people: 1 }) : "unsorted";
   const pageLink = c?.bucket === "customer" && c.customer_id
     ? { href: `/dashboard/customers/${c.customer_id}?contact=${contactId}&from=threads${threadKey ? `&t=${encodeURIComponent(threadKey)}` : ""}`, label: "Customer page" }
-    : c?.bucket === "vendor" ? { href: `/dashboard/vendors/${contactId}`, label: "Vendor page" }
+    : c?.bucket === "vendor" ? { href: `/dashboard/vendors/${contactId}?from=threads${threadKey ? `&t=${encodeURIComponent(threadKey)}` : ""}`, label: "Vendor page" }
     : { href: `/dashboard/messages/${contactId}?person=1${threadKey ? `&t=${encodeURIComponent(threadKey)}` : ""}`, label: "Contact" };
   const inThreads = (threads?.custom ?? []).filter((t) => t.contact_ids.includes(contactId));
   const lastAt = messages.length ? messages[messages.length - 1].occurred_at : null;
@@ -558,4 +551,11 @@ function AddNumberDialog({ contactId, name, onClose, onAdded, onJoin }: {
       </div>
     </div>
   );
+}
+
+/** ?person=1 for someone filed vendor: their vendor page is their page. */
+function VendorRedirect({ href }: { href: string }) {
+  const router = useRouter();
+  useEffect(() => { router.replace(href); }, [router, href]);
+  return null;
 }

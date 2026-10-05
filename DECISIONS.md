@@ -1884,6 +1884,9 @@ expected start date per quoted job before it means anything. Add the field.
   customer's and their jobs' addresses and titles (`places` on
   `/api/threads`, searched, never shown), and every word said in their
   calls and texts (`/api/threads/search` on the thread's people).
+  **On a phone (Coy, 2026-10-05)** the thread's name and the person share one
+  row ("‹ Unsorted  (225) 446-2212"), the role tag only when it says more than
+  the thread's name, and the notes tab has no "Team only" over it.
   **Internal notes is the first tab on the left (Coy, 2026-10-04)** — a
   person still opens on their conversation; the tab's "@ to tag" line is gone
   (the box below says it). **+ Number adds a number (Coy: "should also allow

@@ -237,6 +237,7 @@ export default function ChatThreadPage() {
   const n = channel?.kind === "phone" ? messages.filter((m) => inChannel({ channel: m.channel, counterparty: m.counterparty ?? null }, channel, "all")) : [];
   const nCalls = n.filter((m) => m.channel === "call" || m.channel === "voicemail").length;
   const threadName = threads ? threadLabel(threads.thread, threads.custom).name : "Threads";
+  const tagOnPhone = !threadKey || threadKey !== role && threadKey !== (c?.bucket ?? "unsorted");
   const threadIds = threads && !["customers", "unsorted", "vendors", "personal", "spam", "archived"].includes(threads.thread)
     ? threads.custom?.find((t) => t.id === threads.thread)?.contact_ids ?? [] : [];
   const pickChannel = (k: string) => { setChannelKey(k); setFilter("all"); setLineFilter(null); };
@@ -264,12 +265,10 @@ export default function ChatThreadPage() {
       <div className="flex flex-col flex-1 min-w-0 h-full" style={{ background: DA.bg }}>
         <div className="flex-shrink-0" style={{ background: T.card, borderBottom: `1px solid ${T.hair}`, padding: "10px 16px 0" }}>
           {/* Phone: back to the thread, by name. */}
-          <div className="lg:hidden flex items-center gap-2 mb-1">
-            <Link href={`/dashboard/messages${threadKey ? `?t=${encodeURIComponent(threadKey)}` : ""}`} style={{ ...eyebrow, color: T.chalk, ...clip, flex: 1 }}>‹ {threadName}</Link>
-            {c && <RoleTag role={role} auto={c.bucket_state === "auto"} />}
-          </div>
           <div className="flex items-center gap-2">
             <div className="flex-1 min-w-0 flex items-center gap-2">
+              {/* On a phone the thread's name sits on the same row, the person right beside it (Coy, 2026-10-05). */}
+              <Link href={`/dashboard/messages${threadKey ? `?t=${encodeURIComponent(threadKey)}` : ""}`} className="lg:hidden shrink-0" style={{ ...eyebrow, color: T.chalk }}>‹ {threadName}</Link>
               {loading ? (
                 <div style={{ fontFamily: "var(--sc-font-strong)", fontSize: 19, fontWeight: 700, color: T.ink }}>{headerTitle}</div>
               ) : (
@@ -277,7 +276,8 @@ export default function ChatThreadPage() {
                   onSaved={(v) => { setName(v); setNameConfirmed(true); setNameSource("human"); }}
                   style={{ fontFamily: "var(--sc-font-strong)", fontSize: 19, fontWeight: 700, lineHeight: 1.15, color: T.ink }} />
               )}
-              {c && <span className="hidden lg:inline-flex"><RoleTag role={role} auto={c.bucket_state === "auto"} /></span>}
+              {/* On a phone the tag only when it says more than the thread's own name does ("Unsorted" twice — Coy). */}
+              {c && <span className={tagOnPhone ? "inline-flex" : "hidden lg:inline-flex"}><RoleTag role={role} auto={c.bucket_state === "auto"} /></span>}
             </div>
             <span className="hidden lg:flex items-center gap-2">
               <Link href={pageLink.href} style={pill}>{pageLink.label} ›</Link>
@@ -312,7 +312,7 @@ export default function ChatThreadPage() {
               return (
                 <button key={ch.key} role="tab" aria-selected={on} onClick={() => pickChannel(ch.key)} className="text-left flex-1 lg:flex-none shrink-0"
                   style={{ minWidth: 0, padding: "7px 12px 8px", borderBottom: `2px solid ${on ? T.hiviz : "transparent"}`, opacity: ch.reachable || on ? 1 : 0.5, cursor: "pointer" }}>
-                  <span style={{ display: "block", fontFamily: disp, fontSize: 9.5, letterSpacing: ".1em", textTransform: "uppercase", color: T.ink3 }}>{ch.kind === "chat" ? "ScopeCrete" : ch.kind === "notes" ? "Team only" : ch.kind}</span>
+                  <span style={{ display: "block", fontFamily: disp, fontSize: 9.5, letterSpacing: ".1em", textTransform: "uppercase", color: T.ink3 }}>{ch.kind === "chat" ? "ScopeCrete" : ch.kind === "notes" ? "\u00a0" : ch.kind}</span>
                   <span style={{ display: "flex", alignItems: "center", gap: 4, fontFamily: "var(--sc-font-strong)", fontSize: 13, fontWeight: 600, color: T.ink }}>
                     {ch.label}
                     {ch.kind === "phone" && on && (

@@ -36,7 +36,9 @@ import { DustyPanel } from "@/components/v34/dusty-panel";
 import { DustyAvatar } from "@/components/v34/dusty-avatar";
 import { ActivityLine } from "@/components/v34/activity-line";
 import { ArchiveToast } from "@/components/v34/archive-actions";
-import { SearchPanel } from "@/components/v34/search-panel";
+import dynamic from "next/dynamic";
+// Only drawn once 🔍 is tapped — kept out of the first load.
+const SearchPanel = dynamic(() => import("@/components/v34/search-panel").then((m) => m.SearchPanel));
 import { OrgLockup } from "@/components/v34/org-lockup";
 import { InstallApp } from "@/components/v34/install-app";
 import { YouSection, OrgSection } from "@/components/v34/org-settings";
@@ -47,7 +49,6 @@ import { usePref } from "@/lib/v34/prefs";
 import { AccessContext } from "@/lib/v34/access-ctx";
 import { accessFrom, menuPages, redirectFor, FULL_ACCESS, type Access } from "@/lib/access";
 import { useRouter } from "next/navigation";
-import { signOut } from "@/lib/auth";
 import "@/styles/v34-shell.css";
 
 interface Me {
@@ -158,16 +159,24 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   // Replies owed (the Threads badge) and the drift alarm (a red dot on Logs).
   // Null until known — never 0 as a placeholder.
+  // Read at most every 30 s, not on every page change (2026-10-05: each tap
+  // to another page fired both again — the counts read all messages).
+  const badgesAt = React.useRef(0);
   useEffect(() => {
     if (!me || limited) return;
-    let off = false;
+    if (Date.now() - badgesAt.current < 30_000) return;
+    badgesAt.current = Date.now();
+    // Not cancelled by the next page change: that change won't fetch again.
     fetch("/api/threads/counts").then((r) => (r.ok ? r.json() : null))
-      .then((d) => { if (!off && typeof d?.counts?.needs === "number") setNeeds(d.counts.needs); }).catch(() => {});
+      .then((d) => { if (typeof d?.counts?.needs === "number") setNeeds(d.counts.needs); }).catch(() => {});
     fetch("/api/dashboard/drift").then((r) => (r.ok ? r.json() : null))
-      .then((d) => { if (!off && typeof d?.count === "number") setDrift(d.count); }).catch(() => {});
+      .then((d) => { if (typeof d?.count === "number") setDrift(d.count); }).catch(() => {});
+  }, [pathname, me, limited]);
+  useEffect(() => {
+    let off = false;
     Promise.resolve().then(() => { if (!off) setSearch(window.location.search); });
     return () => { off = true; };
-  }, [pathname, me, limited]);
+  }, [pathname]);
   // Close the Toolbox when the page changes (a pick navigates).
   const [pathSeen, setPathSeen] = useState(pathname);
   if (pathSeen !== pathname) { setPathSeen(pathname); setToolOpen(false); }
@@ -389,7 +398,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             )}
           </div>
 
-          <button onClick={() => { void signOut(); }} className="w-full rounded mt-5"
+          <button onClick={() => { void import("@/lib/auth").then((m) => m.signOut()); }} className="w-full rounded mt-5"
             style={{ height: 44, border: `1px solid ${T.hair}`, background: T.card, fontFamily: disp, fontSize: F.md, letterSpacing: ".08em", textTransform: "uppercase" }}>
             Sign out
           </button>

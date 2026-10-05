@@ -182,13 +182,30 @@ export async function GET(req: NextRequest) {
     items.push({ id: "quiet", at: quietAt!, kind: "quiet", contact_id: null,
       summary: `Checked ${quietCount} with nothing new to say`, detail: "Threads with no words from them on record, or nothing new since the last read.", tone: "quiet" });
   }
+  // Everything below reads independently — one round trip's wait, not six
+  // (2026-10-05: they ran one after another, every 20 s, on every open tab).
+  const [{ data: fileRows }, { data: mailRows }, { data: bidRows }, { data: openRows }, { data: archRows }, tagged] = await Promise.all([
+    supabase.from("files")
+      .select("id, name, contact_id, read_state, read_at, summary, read_error")
+      .eq("org_id", orgId).is("deleted_at", null).in("read_state", ["reading", "read", "failed"])
+      .gte("read_at", new Date(Date.now() - 24 * 3600_000).toISOString()).order("read_at", { ascending: false }).limit(10),
+    supabase.from("emails")
+      .select("id, created_at, subject, original_from_name, original_from_address, from_address, contact_id, status, suggested_customer_id, customer_id")
+      .eq("org_id", orgId).gte("created_at", new Date(Date.now() - 24 * 3600_000).toISOString()).order("created_at", { ascending: false }).limit(8),
+    supabase.from("bid_packages")
+      .select("id, state, error, job_id, facts, box_folder_name, filed_at, updated_at, created")
+      .eq("org_id", orgId).gte("updated_at", new Date(Date.now() - 24 * 3600_000).toISOString()).order("updated_at", { ascending: false }).limit(6),
+    supabase.from("document_events")
+      .select("id, occurred_at, document:documents(job_id, job:jobs(title))")
+      .eq("org_id", orgId).eq("event", "viewed").gte("occurred_at", new Date(Date.now() - 48 * 3600_000).toISOString())
+      .order("occurred_at", { ascending: false }).limit(6),
+    supabase.from("contacts").select("id, name, phone, archived_at, archived_reason")
+      .eq("org_id", orgId).not("archived_at", "is", null).is("merged_into_contact_id", null).limit(300),
+    tagItems(supabase, orgId, userId, false),
+  ]);
   // Files Dusty read (migration 045/046): each read is a line; one being read
   // is "running", so the emblem spins for it too.
-  const { data: fileRows } = await supabase.from("files")
-    .select("id, name, contact_id, read_state, read_at, summary, read_error")
-    .eq("org_id", orgId).is("deleted_at", null).in("read_state", ["reading", "read", "failed"])
-    .gte("read_at", new Date(Date.now() - 24 * 3600_000).toISOString()).order("read_at", { ascending: false }).limit(10);
-  for (const f of (fileRows ?? []) as Array<{ id: string; name: string; contact_id: string | null; read_state: string; read_at: string; summary: string | null; read_error: string | null }>) {
+    for (const f of (fileRows ?? []) as Array<{ id: string; name: string; contact_id: string | null; read_state: string; read_at: string; summary: string | null; read_error: string | null }>) {
     const base = { id: `file-${f.id}-${f.read_state}`, at: f.read_at, contact_id: f.contact_id };
     if (f.read_state === "reading") items.push({ ...base, kind: "running", summary: `Reading ${clipq(f.name, 140)}…`, detail: null, tone: "live" });
     else if (f.read_state === "read") items.push({ ...base, kind: "file", summary: `Read ${clipq(f.name, 120)}${f.summary ? ` — ${clipq(f.summary, 220)}` : ""}`, detail: f.summary, tone: "good" });
@@ -196,10 +213,7 @@ export async function GET(req: NextRequest) {
   }
   // The email mirror (migration 061): each forwarded email is a line — filed,
   // a suggestion to confirm, or one to file. Its files then show as reads above.
-  const { data: mailRows } = await supabase.from("emails")
-    .select("id, created_at, subject, original_from_name, original_from_address, from_address, contact_id, status, suggested_customer_id, customer_id")
-    .eq("org_id", orgId).gte("created_at", new Date(Date.now() - 24 * 3600_000).toISOString()).order("created_at", { ascending: false }).limit(8);
-  for (const m of (mailRows ?? []) as Array<{ id: string; created_at: string; subject: string | null; original_from_name: string | null; original_from_address: string | null; from_address: string | null; contact_id: string | null; status: string; suggested_customer_id: string | null; customer_id: string | null }>) {
+    for (const m of (mailRows ?? []) as Array<{ id: string; created_at: string; subject: string | null; original_from_name: string | null; original_from_address: string | null; from_address: string | null; contact_id: string | null; status: string; suggested_customer_id: string | null; customer_id: string | null }>) {
     const who = m.original_from_name || m.original_from_address || m.from_address || "someone";
     const subj = m.subject ? ` — ${clipq(m.subject, 160)}` : "";
     items.push({
@@ -211,10 +225,7 @@ export async function GET(req: NextRequest) {
     });
   }
   // The bid reader (migration 063): each bid it filed, or the step it's stuck on.
-  const { data: bidRows } = await supabase.from("bid_packages")
-    .select("id, state, error, job_id, facts, box_folder_name, filed_at, updated_at, created")
-    .eq("org_id", orgId).gte("updated_at", new Date(Date.now() - 24 * 3600_000).toISOString()).order("updated_at", { ascending: false }).limit(6);
-  for (const b of (bidRows ?? []) as Array<{ id: string; state: string; error: string | null; job_id: string | null; facts: Record<string, unknown> | null; box_folder_name: string | null; filed_at: string | null; updated_at: string; created: Record<string, unknown> | null }>) {
+    for (const b of (bidRows ?? []) as Array<{ id: string; state: string; error: string | null; job_id: string | null; facts: Record<string, unknown> | null; box_folder_name: string | null; filed_at: string | null; updated_at: string; created: Record<string, unknown> | null }>) {
     const f = (b.facts ?? {}) as { project_name?: string | null; gc_company?: string | null; bid_due_text?: string | null; items?: unknown[] };
     const name = clipq(f.project_name ?? b.box_folder_name ?? "a bid", 140);
     const href = b.job_id ? `/dashboard/scope/${b.job_id}` : "/dashboard/files?cat=email";
@@ -232,20 +243,14 @@ export async function GET(req: NextRequest) {
     }
   }
   // Proposal links (migration 075): each time a customer opened one in the last two days.
-  const { data: openRows } = await supabase.from("document_events")
-    .select("id, occurred_at, document:documents(job_id, job:jobs(title))")
-    .eq("org_id", orgId).eq("event", "viewed").gte("occurred_at", new Date(Date.now() - 48 * 3600_000).toISOString())
-    .order("occurred_at", { ascending: false }).limit(6);
-  for (const e of (openRows ?? []) as unknown as Array<{ id: string; occurred_at: string; document: { job_id: string | null; job: { title: string | null } | null } | null }>) {
+    for (const e of (openRows ?? []) as unknown as Array<{ id: string; occurred_at: string; document: { job_id: string | null; job: { title: string | null } | null } | null }>) {
     const job = e.document?.job_id ?? null;
     items.push({ id: `opened-${e.id}`, at: e.occurred_at, kind: "proposal", contact_id: null, href: job ? `/dashboard/scope/${job}/proposal` : undefined,
       summary: `Proposal opened: ${clipq(e.document?.job?.title ?? "a job", 140)}`, detail: "The customer opened the link you sent.", tone: "good" });
   }
   // Back after being archived (Coy, 2026-10-04): someone archived who called or texted since, this week,
   // with the reason Coy gave — the context comes back with them.
-  const { data: archRows } = await supabase.from("contacts").select("id, name, phone, archived_at, archived_reason")
-    .eq("org_id", orgId).not("archived_at", "is", null).is("merged_into_contact_id", null).limit(300);
-  const archived = (archRows ?? []) as Array<{ id: string; name: string | null; phone: string | null; archived_at: string; archived_reason: string | null }>;
+    const archived = (archRows ?? []) as Array<{ id: string; name: string | null; phone: string | null; archived_at: string; archived_reason: string | null }>;
   if (archived.length) {
     const { data: backRows } = await supabase.from("messages").select("contact_id, occurred_at")
       .eq("org_id", orgId).eq("direction", "inbound").in("contact_id", archived.map((c) => c.id))
@@ -266,7 +271,7 @@ export async function GET(req: NextRequest) {
     }
   }
   // Internal notes that tag this member (Coy, 2026-10-04), the last week, not their own.
-  items.push(...await tagItems(supabase, orgId, userId, false));
+  items.push(...tagged);
   items.sort((a, b) => b.at.localeCompare(a.at));
   if (waiting > 0) {
     items.push({ id: "waiting", at: new Date().toISOString(), kind: "waiting", contact_id: null,

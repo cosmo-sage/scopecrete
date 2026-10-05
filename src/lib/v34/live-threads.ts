@@ -20,7 +20,9 @@
  */
 import { useEffect, useRef } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
-import { supabase } from "@/lib/supabase";
+// supabase-js (~55 KB gzipped) is loaded only when a screen first listens,
+// not with the dashboard's first paint.
+const client = () => import("@/lib/supabase").then((m) => m.supabase);
 
 type Listener = (contactId: string | null) => void;
 const listeners = new Set<Listener>();
@@ -69,6 +71,8 @@ function start() {
   document.addEventListener("visibilitychange", onVisible);
   window.addEventListener("focus", onVisible);
   void (async () => {
+    let supabase: Awaited<ReturnType<typeof client>>;
+    try { supabase = await client(); } catch { return; /* offline: the poll still works */ }
     try { await supabase.realtime.setAuth(); } catch { /* the poll still works */ }
     if (!listeners.size || channel) return;
     channel = supabase
@@ -86,7 +90,7 @@ function stop() {
   timer = null;
   document.removeEventListener("visibilitychange", onVisible);
   window.removeEventListener("focus", onVisible);
-  if (channel) void supabase.removeChannel(channel);
+  if (channel) { const ch = channel; void client().then((sb) => sb.removeChannel(ch)); }
   channel = null;
   stamp = null;
 }

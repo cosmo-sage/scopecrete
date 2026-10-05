@@ -27,11 +27,23 @@ export async function GET(req: NextRequest) {
   if (!result.ok) return result.response;
   const { supabase, orgId, userId, applyCookies } = result.session;
 
-  // sc_my_orgs (081): an onsite estimator reads the org's name and logos, not its row.
-  const org = (await myOrgs(supabase)).find((o) => o.id === orgId) ?? null;
-  const access = await myAccess(supabase, orgId);
+  // Five independent reads, side by side — the header waits on this route
+  // before it draws the org or asks for anything else (2026-10-05: they ran
+  // one after another). sc_my_orgs (081): an onsite estimator reads the org's
+  // name and logos, not its row.
+  const [orgs, access, { data: auth }, { data: membership }, { data: line }] = await Promise.all([
+    myOrgs(supabase),
+    myAccess(supabase, orgId),
+    supabase.auth.getUser(),
+    supabase.from("org_members").select("role").eq("user_id", userId).eq("org_id", orgId).maybeSingle(),
+    // The line the desktop top bar shows as live: the org's primary active
+    // number. Null when none is marked primary — the bar then shows nothing
+    // rather than picking one.
+    supabase.from("org_phone_numbers").select("phone_e164, label")
+      .eq("org_id", orgId).eq("is_primary", true).eq("active", true).limit(1).maybeSingle(),
+  ]);
+  const org = orgs.find((o) => o.id === orgId) ?? null;
 
-  const { data: auth } = await supabase.auth.getUser();
   const email = auth?.user?.email ?? null;
   // user_metadata is whatever the identity provider supplied; it is often
   // empty for password accounts, which is why null is a normal answer.
@@ -42,25 +54,6 @@ export async function GET(req: NextRequest) {
       ? meta.name.trim()
       : null;
   const phone = typeof meta.phone === "string" && meta.phone.trim() ? meta.phone.trim() : null;
-
-  const { data: membership } = await supabase
-    .from("org_members")
-    .select("role")
-    .eq("user_id", userId)
-    .eq("org_id", orgId)
-    .maybeSingle();
-
-  // The line the desktop top bar shows as live: the org's primary active
-  // number. Null when none is marked primary — the bar then shows nothing
-  // rather than picking one.
-  const { data: line } = await supabase
-    .from("org_phone_numbers")
-    .select("phone_e164, label")
-    .eq("org_id", orgId)
-    .eq("is_primary", true)
-    .eq("active", true)
-    .limit(1)
-    .maybeSingle();
 
   const brand = org ? orgView(org as unknown as Record<string, unknown>) : null;
   return applyCookies(NextResponse.json({

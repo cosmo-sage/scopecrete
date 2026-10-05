@@ -43,6 +43,8 @@ test("a job: only theirs; the Plan Room only with the page; never the proposal",
   assert.equal(redirectFor(a, `/dashboard/scope/${J1}/plans`), `/dashboard/scope/${J1}`);
   assert.equal(redirectFor({ ...a, pages: ["plan_room"] }, `/dashboard/scope/${J1}/plans`), null);
   assert.equal(redirectFor(a, `/dashboard/scope/${J1}/proposal`), `/dashboard/scope/${J1}`);
+  assert.equal(redirectFor({ ...a, pages: ["files", "plan_room", "budget"] }, `/dashboard/scope/${J1}/summary`), `/dashboard/scope/${J1}`);
+  assert.equal(redirectFor(FULL_ACCESS, `/dashboard/scope/${J1}/summary`), null);
   assert.equal(redirectFor({ ...a, all_jobs: true }, `/dashboard/scope/${J2}`), null);
 });
 

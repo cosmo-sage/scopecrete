@@ -23,11 +23,10 @@ import {
   type Clause, type DocTemplate, type Draw, type DraftInput, type ProposalDisplay, type ProposalPrice,
 } from "@/lib/proposal";
 import type { BudgetSettings, TakeoffTotal } from "@/lib/engine";
-import { ProposalDocument, SECTIONS, usd, usd0, type DocArea, type DocVM } from "./document";
+import { ProposalDocument, usd, usd0, type DocArea, type DocVM } from "./document";
 import { areaVisuals } from "./area-visuals";
 import type { PlansData } from "@/components/v34/plan-room/shared";
 import { ProposalPreview, type PropLink } from "./preview";
-import { viewLine } from "@/lib/proposal-links";
 
 interface ProjectType {
   id: string; key: string; label: string; overhead_pct: number | null; margin_pct: number | null;
@@ -286,8 +285,6 @@ export function Proposal({ jobId }: { jobId: string }) {
   const blocked = vm.choices
     ? stuckChoice ? `${stuckChoice.label} has no price yet: ${stuckChoice.blocked}` : vm.check && !vm.check.ok ? "with every option offered, the draws must be percentages that add up to 100%" : null
     : !vm.priced.ok ? `the budget has no price yet: ${vm.priced.blocked[0] ?? ""}` : vm.check && !vm.check.ok ? "the draws don't add up to the total" : null;
-  const live = links.find((l) => !l.revoked_at && l.status !== "void") ?? null;
-  const sectionsOn = SECTIONS.filter(([k]) => !(vm.display.off ?? {})[k]).length;
   const d = vm.display;
   const edits = editable ? {
     display: (x: ProposalDisplay) => change("display", x, 250),
@@ -362,15 +359,18 @@ export function Proposal({ jobId }: { jobId: string }) {
         {/* The job's name top left, Plan room · Budget · Proposal top right — the same row on all three
             views (Coy, 2026-10-05); the proposal's own buttons moved down beside its settings. */}
         <div className="sc-no-print" style={{ background: T.card, borderBottom: `1px solid ${T.hair}`, padding: "8px 12px 6px", position: "sticky", top: "var(--sc-head)", zIndex: 5 }}>
-          <JobHeaderRow jobId={jobId} active="proposal" title={b.job.title || "Proposal"}
-            after={<span className="shrink-0" style={{ fontSize: 12, color: T.ink3, whiteSpace: "nowrap" }}>{vm.number}{isFinal || finalShown ? " · final" : " · draft"}</span>}
-            sub={<>
-              {vm.choices ? `${vm.choices.list.length} options · ${vm.choices.list.map((c) => `${c.label} ${c.total !== null ? usd0(c.total) : "—"}`).join(" · ")}`
-                : ok ? `${usd(ok.total)}${ok.rounded !== ok.calc ? ` · ${usd(ok.calc)} rounded up to ${usd0(ok.rounded)}` : ""}` : `no price yet${!vm.priced.ok ? ` — ${vm.priced.blocked[0]}` : ""}`} · {sectionsOn}/8 sections
-              {live && <> · <b style={{ color: live.view_count ? "#1F5C3A" : T.ink2 }}>v{live.version?.version} {live.sent_at ? "sent" : "link made"} · {viewLine(live)}</b></>}
-            </>} />
+          {/* Nothing under the name (Coy, 2026-10-05: "all of the lines and words directly below the job
+              name and small font … we can add to the summary page"): the number, draft / final, the price
+              and the link's state sit on the settings row below, and on the job's Summary. */}
+          <JobHeaderRow jobId={jobId} active="proposal" title={b.job.title || "Proposal"} />
         </div>
         <div className="sc-no-print" style={{ background: T.card, borderBottom: `1px solid ${T.hair}` }}>
+          <div style={{ padding: "6px 12px 0", fontSize: 11.5, color: T.ink3, overflowWrap: "anywhere" }}>
+            <b style={{ color: T.ink2 }}>{vm.number}{isFinal || finalShown ? " · final" : " · draft"}</b>
+            {" · "}{vm.choices ? `${vm.choices.list.length} options · ${vm.choices.list.map((c) => `${c.label} ${c.total !== null ? usd0(c.total) : "—"}`).join(" · ")}`
+              : ok ? `${usd(ok.total)}${ok.rounded !== ok.calc ? ` (rounded up from ${usd(ok.calc)})` : ""}` : `no price yet${!vm.priced.ok ? ` — ${vm.priced.blocked[0]}` : ""}`}
+            {/* Sent / opened: on the Summary and in Preview. */}
+          </div>
           {!wide && <div className="flex items-center gap-2 flex-wrap" style={{ padding: "6px 12px 0" }}>{actions}</div>}
           <button onClick={() => setPanel((x) => !x)} aria-expanded={panel || wide} className="w-full flex items-center gap-2 text-left" style={{ padding: "6px 12px", display: wide ? "none" : "flex", cursor: "pointer", color: T.ink2, fontSize: 12 }}>
             <span style={{ fontFamily: disp, fontSize: 11, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase" }}>Proposal settings</span>

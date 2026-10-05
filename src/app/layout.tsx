@@ -63,6 +63,9 @@ export default function RootLayout({
         {/* The colour theme (Settings → Appearance) before first paint, so a
             dark theme never flashes cream. Saved per device by useTheme(). */}
         <script dangerouslySetInnerHTML={{ __html: "try{document.documentElement.dataset.theme=localStorage.getItem('sc-theme')||'site-office'}catch(e){}" }} />
+        {/* Dusty's thought line switched off (Settings → Dusty (AI)): the header is
+            one row from the first paint, so nothing jumps as the app loads. */}
+        <script dangerouslySetInnerHTML={{ __html: "try{if(JSON.parse(localStorage.getItem('sc:prefs')||'{}').activity_line===false)document.documentElement.dataset.activity='off'}catch(e){}" }} />
       </head>
       <body className="font-sans antialiased">
         {children}

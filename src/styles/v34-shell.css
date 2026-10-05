@@ -16,6 +16,10 @@
 /* Desktop (Coy, 2026-09-30): the activity line moved up into the 54px header
    beside the logo, so the header is one row. */
 @media (min-width: 1024px) { :root { --sc-head: 54px; } }
+/* Dusty's thought line switched off (Settings → Dusty (AI), Coy 2026-10-05):
+   no activity row on a phone, so the header is the 54px bar alone. Set on
+   <html> before first paint (app/layout.tsx) and kept in step by the shell. */
+html[data-activity="off"] { --sc-head: 54px; }
 
 /* The footer's height on a phone (layout.tsx, border-box, safe area inside it).
    A page that must not scroll as a whole — a conversation, a person — is
@@ -243,8 +247,15 @@
 /* A line too long for its row slides to its end, rests, and slides back (Coy, 2026-10-02: "it doesn't scroll so I can't read the full thought"). */
 .sc-typed[data-marq] { max-width: none; overflow: visible; text-overflow: clip; animation: scMarq var(--sc-marq-ms, 12s) ease-in-out infinite; }
 @keyframes scMarq { 0%, 12% { transform: translateX(0); } 44%, 56% { transform: translateX(var(--sc-marq-dx, 0)); } 88%, 100% { transform: translateX(0); } }
-/* On a phone Dusty's chat covers the activity row under the logo — his own sprite says what he is doing. */
-@media (max-width: 1023.98px) { .sc-dusty-sheet { top: 54px !important; } }
+/* On a phone Dusty's chat is the whole screen, the app's header included
+   (Coy, 2026-10-05) — his own header has × to close, and his sprite at the
+   bottom left says what he is doing. */
+@media (max-width: 1023.98px) { .sc-dusty-sheet { top: 0 !important; padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); } }
+/* The phone footer's Dusty: bigger than the page icons beside him, in a disc
+   that rises a little above the bar, so he reads as the centre button (Coy,
+   2026-10-05: "too small … smaller than the icons to the left and right"). */
+.sc-tab-dusty .sc-tab-ico { margin-top: -24px; width: 54px; height: 54px; border-radius: 999px; display: flex; align-items: center; justify-content: center;
+  background: var(--sc-card); border: 1px solid var(--sc-hair); box-shadow: 0 -3px 10px rgba(10,14,18,.10); }
 
 @media (prefers-reduced-motion: reduce) {
   .sc-burger-bar,

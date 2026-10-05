@@ -5,8 +5,9 @@
  * "full screen … so that I can reference older conversations in a side
  * project panel to select and continue older conversations").
  *
- * - Below the header, over everything else. The header and Dusty's activity
- *   line stay on top, so you never lose the app by opening the chat.
+ * - On a phone, the whole screen — the app's header too (Coy, 2026-10-05);
+ *   × in his own header closes it. On a desktop, docked on the right under
+ *   the header. Dusty himself sits at the bottom left in his live state.
  * - History: your saved conversations (migration 043), behind the hamburger
  *   on a phone — sliding in from the LEFT, away from the right-hand drawers —
  *   and always open on the left on a desktop. Grouped: about the screen you
@@ -28,10 +29,9 @@ import { parsePlan } from "@/lib/dusty/plan";
 import { useDustyUse } from "@/lib/v34/dusty-live";
 import { sendBytes } from "@/components/v34/files-panel";
 import { VoiceRecorder } from "@/components/v34/voice-recorder";
+import { usePref } from "@/lib/v34/prefs";
 
 type Ref = { kind: "thread" | "scope" | "customer"; id: string } | { kind: "cash" } | { kind: "cold" };
-type Ctx = Ref | { kind: "activity"; since: string };
-const CATCHUP_KEY = "sc:dusty-catchup-at";
 type TurnFile = { id: string; name: string; kind?: string; url: string | null };
 type Turn = { role: "user" | "assistant"; content: string; files?: TurnFile[] };
 type Att = { key: string; name: string; pct: number; id: string | null; error: string | null; preview: string | null };
@@ -62,12 +62,20 @@ const STARTERS: Record<Ref["kind"], string[]> = {
   cold: ["What's waiting on me today?", "Price a 24×30 driveway", "Who haven't I called back?"],
 };
 
-const sameRef = (c: Conv, r: Ref) => "id" in r ? c.context_kind === r.kind && c.context_id === r.id : c.context_kind === r.kind && r.kind === "cash";
+/** The chat's text size (Coy, 2026-10-05: "the ability to adjust the size of the font inside the chat"), per account. */
+const FONT_STEPS = [
+  { key: "s", label: "Small", z: 0.88 },
+  { key: "m", label: "Normal", z: 1 },
+  { key: "l", label: "Large", z: 1.15 },
+  { key: "xl", label: "Extra large", z: 1.3 },
+] as const;
+/** What a chat is about, without the context's kind in front ("scope: Wilson Driveway" → "Wilson Driveway"). */
+const aboutLabel = (l: string | null) => (l ?? "").replace(/^scope:\s*/i, "");
 
-export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
+const sameRef =(c: Conv, r: Ref) => "id" in r ? c.context_kind === r.kind && c.context_id === r.id : c.context_kind === r.kind && r.kind === "cash";
+
+export function DustyPanel({ open, onClose, onBusy, onStream }: {
   open: boolean; onClose: () => void; onBusy: (b: boolean) => void;
-  /** Bumped from outside to start a catch-up on the latest activity. */
-  catchUp?: number;
   /** The reply as it streams, for the activity line. "" when idle. */
   onStream?: (text: string) => void;
 }) {
@@ -89,7 +97,9 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
   const [openedFor, setOpenedFor] = useState<string | null>(null);
   // How the last answer ended — Dusty pours concrete on a good one, scratches his head on a failed one.
   const [mood, setMood] = useState<"done" | "error" | null>(null);
-  const [catchUpLocal, setCatchUpLocal] = useState(0);
+  const [fontKey, setFontKey] = usePref<string>("dusty_font", "m");
+  const font = FONT_STEPS.find((f) => f.key === fontKey) ?? FONT_STEPS[1];
+  const [fontOpen, setFontOpen] = useState(false);
   const scroller = useRef<HTMLDivElement | null>(null);
   const abort = useRef<AbortController | null>(null);
   const router = useRouter();
@@ -151,25 +161,8 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
   }
   if (!open && openedFor !== null) setOpenedFor(null);
 
-  // The emblem tap (Coy, 2026-09-29): a fresh chat that reviews what came in
-  // since this device last asked. Deferred a tick so no state is set inside
-  // the effect body; openedFor is claimed so the list arriving afterwards
-  // doesn't swap in an older chat under it.
-  const caughtUp = useRef(0);
-  const catchUpN = catchUp + catchUpLocal;
-  useEffect(() => {
-    if (!open || !catchUpN || caughtUp.current === catchUpN) return;
-    caughtUp.current = catchUpN;
-    const t = setTimeout(() => {
-      let since = "";
-      try { since = localStorage.getItem(CATCHUP_KEY) ?? ""; localStorage.setItem(CATCHUP_KEY, new Date().toISOString()); } catch { /* private mode */ }
-      setOpenedFor(refKey);
-      select(null);
-      void ask("What's new since I last looked?", { fresh: true, ctx: { kind: "activity", since } });
-    }, 0);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, catchUpN]);
+  // The "What's new?" catch-up button is gone from the header (Coy, 2026-10-05);
+  // catch-ups saved before still open from the history.
 
   // A page can hand Dusty a question to start from (the proposal's "Edit with
   // Dusty"): it lands in the message box for Coy to send or change — Dusty
@@ -183,14 +176,14 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
     return () => window.removeEventListener("sc:dusty-draft", put);
   }, []);
 
-  async function ask(text: string, opts?: { fresh?: boolean; ctx?: Ctx }) {
-    const ready = opts?.fresh ? [] : atts.filter((a) => a.id && !a.error);
-    if (!opts?.fresh && atts.some((a) => !a.id && !a.error)) return; // still uploading
+  async function ask(text: string) {
+    const ready = atts.filter((a) => a.id && !a.error);
+    if (atts.some((a) => !a.id && !a.error)) return; // still uploading
     const said0 = text.trim() || (ready.length ? "What's in this?" : "");
     const q = ready.length ? `${said0}\n\n📎 ${ready.map((a) => a.name).join(", ")}` : said0;
-    if (!q || (busy && !opts?.fresh)) return;
+    if (!q || busy) return;
     if (ready.length) setAtts([]);
-    const convId = opts?.fresh ? null : activeId;
+    const convId = activeId;
     setItems((a) => [...a, { role: "user", content: q, files: ready.map((x) => ({ id: x.id as string, name: x.name, url: x.preview })) }, { role: "assistant", content: "" }]);
     setDraft(""); setErr(null); setBusy(true); setMood(null);
     let failed = false;
@@ -220,7 +213,7 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
     try {
       const r = await fetch("/api/dusty", {
         method: "POST", headers: { "Content-Type": "application/json" }, signal: ctrl.signal,
-        body: JSON.stringify({ question: q, conversation_id: convId, context: convId ? undefined : (opts?.ctx ?? ref), file_ids: ready.map((a) => a.id) }),
+        body: JSON.stringify({ question: q, conversation_id: convId, context: convId ? undefined : ref, file_ids: ready.map((a) => a.id) }),
       });
       if (!r.ok || !r.body) {
         const b = await r.json().catch(() => ({}));
@@ -319,10 +312,8 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
   // The job a plan applies to: the chat's own job, else the job page that's open.
   const planJob = active ? (active.context_kind === "scope" ? active.context_id : null) : ref.kind === "scope" ? ref.id : null;
   const hot = active ? active.context_kind !== "cold" : ref.kind !== "cold";
-  // A catch-up just started has no row in the list yet — say what it is.
-  const catching = !active && activeId !== null && items[0]?.content === "What's new since I last looked?";
-  const lookingAt = active ? (active.context_kind === "cold" ? null : active.context_label)
-    : catching ? "the latest activity" : ref.kind === "cold" ? null : GUESS[ref.kind];
+  const lookingAt = active ? (active.context_kind === "cold" ? null : aboutLabel(active.context_label))
+    : ref.kind === "cold" ? null : GUESS[ref.kind];
 
   const groups: Array<[string, Conv[]]> = [];
   if (convs) {
@@ -362,7 +353,7 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
                 <button onClick={() => select(c.id)} className="flex-1 min-w-0 text-left px-3 py-2">
                   <span style={{ display: "block", fontSize: F.sm, fontWeight: c.id === activeId ? 600 : 400, color: T.ink, ...clip }}>{c.title}</span>
                   <span style={{ display: "block", fontSize: F.xs, color: T.ink3, ...clip }}>
-                    {c.context_kind !== "cold" && c.context_label ? `${c.context_label} · ` : ""}{relTime(c.updated_at)} ago
+                    {c.context_kind !== "cold" && c.context_label ? `${aboutLabel(c.context_label)} · ` : ""}{relTime(c.updated_at)} ago
                   </span>
                 </button>
                 <button onClick={() => void remove(c.id)} aria-label={`Delete ${c.title}`} className="px-2" style={{ color: T.ink3, fontSize: 14 }}>×</button>
@@ -399,16 +390,37 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
             {[0, 1, 2].map((i) => <span key={i} style={{ width: 13, height: 1.5, background: T.ink2, borderRadius: 1 }} />)}
           </button>
           <div className="flex-1 min-w-0">
-            {/* One line (Coy, 2026-10-02): "Looking at: <the job>" when he is on something,
-                else the chat's own title. */}
-            <div title={hot && lookingAt ? `Looking at: ${lookingAt}` : undefined}
+            {/* One line: 👀 <the job> when he is on something (Coy, 2026-10-05: the
+                eyes instead of "Looking at:"), else the chat's own title. */}
+            <div title={hot && lookingAt ? `👀 ${lookingAt}` : undefined}
               style={{ fontFamily: disp, fontSize: F.md, fontWeight: 600, lineHeight: 1.1, ...clip }}>
-              {hot && lookingAt ? <><span style={{ color: T.ink3, fontWeight: 500 }}>Looking at: </span>{lookingAt}</> : active ? active.title : "New chat"}
+              {hot && lookingAt ? <><span role="img" aria-label="Looking at" style={{ fontWeight: 400 }}>👀</span> {lookingAt}</> : active ? active.title : "New chat"}
             </div>
           </div>
-          <button onClick={() => setCatchUpLocal((n) => n + 1)} disabled={busy} title="What's new since I last looked?"
-            className="rounded px-2" style={{ height: 30, border: `1px solid ${T.hair}`, background: T.card, fontSize: F.xs, color: T.ink2, cursor: "pointer", whiteSpace: "nowrap" }}>
-            What&apos;s new?</button>
+          {/* The chat's text size, saved to the account (dusty_font). */}
+          <div className="relative">
+            <button onClick={() => setFontOpen((o) => !o)} aria-label="Text size" aria-expanded={fontOpen} title={`Text size: ${font.label}`}
+              style={{ ...iconBtn, fontFamily: disp, fontSize: 15, fontWeight: 600, color: T.ink2, background: fontOpen ? T.chalkDim : T.card }}>
+              A<span style={{ fontSize: 11 }}>a</span>
+            </button>
+            {fontOpen && (
+              <>
+                <button aria-label="Close the menu" onClick={() => setFontOpen(false)} className="fixed inset-0" style={{ zIndex: 70, cursor: "default" }} />
+                <div role="menu" aria-label="Text size" className="absolute right-0 mt-1 rounded overflow-hidden"
+                  style={{ zIndex: 71, width: 180, background: T.card, border: `1px solid ${T.hair}`, boxShadow: "0 10px 30px rgba(0,0,0,.18)" }}>
+                  <div className="px-3 pt-2 pb-1" style={{ ...eyebrow, color: T.ink3 }}>Chat text size</div>
+                  {FONT_STEPS.map((f) => (
+                    <button key={f.key} role="menuitemradio" aria-checked={f.key === font.key} onClick={() => { setFontKey(f.key); setFontOpen(false); }}
+                      className="w-full text-left px-3 py-2 flex items-center gap-2"
+                      style={{ borderTop: `1px solid ${T.hairSoft}`, cursor: "pointer", background: f.key === font.key ? T.chalkDim : "transparent" }}>
+                      <span style={{ fontFamily: agent, fontSize: Math.round(14 * f.z), color: T.ink, flex: 1 }}>{f.label}</span>
+                      {f.key === font.key && <span style={{ color: T.chalk, fontSize: 12 }}>✓</span>}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
           <div className="relative">
             <button onClick={() => setPlusOpen((o) => !o)} aria-label="New…" aria-expanded={plusOpen} style={{ ...iconBtn, fontSize: 18, color: T.ink2, background: plusOpen ? T.chalkDim : T.card }}>+</button>
             {plusOpen && (
@@ -454,7 +466,6 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
             {loadingConv && <div className="rounded animate-pulse" style={{ height: 80, background: T.hairSoft }} />}
             {!loadingConv && items.length === 0 && (
               <div className="text-center py-6">
-                <div className="flex justify-center mb-2"><DustyAvatar state={dustyState} size={96} /></div>
                 <div style={{ fontFamily: disp, fontSize: F.xl, fontWeight: 600 }}>What are we working on?</div>
                 <p style={{ fontSize: F.sm, color: T.ink3, lineHeight: 1.5, maxWidth: 360, margin: "4px auto 14px" }}>
                   {ref.kind === "cold" ? "Dusty has your jobs, costs, threads and notes." : `Dusty can see ${GUESS[ref.kind]} and everything behind it.`}
@@ -468,6 +479,8 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
                 </div>
               </div>
             )}
+            {/* The chat at Coy's text size: zoom scales the answers' tables and plans with the words. */}
+            <div style={{ zoom: font.z }}>
             {items.map((it, i) => it.role === "user" ? (
               <div key={i} style={{ margin: i === 0 ? "0 0 8px" : "22px 0 8px", paddingTop: i === 0 ? 0 : 16, borderTop: i === 0 ? "none" : `1px solid ${T.hair}` }}>
                 <h2 style={{ fontFamily: agent, fontSize: F.md + 1, fontWeight: 700, lineHeight: 1.35 }}>
@@ -507,7 +520,8 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
                 </div>
               </div>
             ))}
-            {err && <div style={{ fontSize: F.sm, color: T.red, marginTop: 8 }}>{err}</div>}
+            </div>
+            {err &&<div style={{ fontSize: F.sm, color: T.red, marginTop: 8 }}>{err}</div>}
           </div>
         </div>
 
@@ -526,6 +540,9 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
             </div>
           )}
           <div className="mx-auto flex items-end gap-2" style={{ maxWidth: 760 }}>
+            {/* Dusty at the bottom left, always there while the chat is open, in his
+                live state — listening, sorting, done, stuck (Coy, 2026-10-05). */}
+            <span className="shrink-0 flex" style={{ alignSelf: "center" }}><DustyAvatar state={recording || hearing ? "loading" : dustyState} size={36} /></span>
             {recording ? (
               <VoiceRecorder onSend={(b) => void voice(b)} onCancel={() => setRecording(false)} />
             ) : (
@@ -535,14 +552,11 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
                   accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.csv,.txt" />
                 <button type="button" onClick={() => fileInput.current?.click()} aria-label="Attach photos or files" title="Attach photos or files"
                   className="shrink-0 rounded-full flex items-center justify-center" style={{ width: 38, height: 38, border: `1px solid ${T.hair}`, background: T.card, color: T.ink2, fontSize: 20, cursor: "pointer" }}>+</button>
-                {/* Coy, 2026-09-30: once a chat is going, Dusty lives here, beside
-                    the box — his real state: fetching, working, done, or stuck. */}
-                {items.length > 0 && <span className="shrink-0 hidden sm:inline" style={{ alignSelf: "center" }}><DustyAvatar state={hearing ? "loading" : dustyState} size={32} /></span>}
                 <textarea value={draft} onChange={(e) => setDraft(e.target.value)} rows={1} maxLength={4000}
                   onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void ask(draft); } }}
                   placeholder={hearing ? "Listening back…" : active ? "Follow up…" : hot ? `Ask about ${GUESS[ref.kind]}…` : "Ask Dusty…"}
                   className="flex-1 rounded-lg px-3 py-2 outline-none resize-none"
-                  style={{ border: `1px solid ${T.hair}`, fontSize: F.sm, maxHeight: 140, fontFamily: agent, minWidth: 0, background: T.card, color: T.ink }} />
+                  style={{ border: `1px solid ${T.hair}`, fontSize: Math.round(F.sm * font.z), maxHeight: 140, fontFamily: agent, minWidth: 0, background: T.card, color: T.ink }} />
                 {/* Telegram's way: an empty box offers the mic, a typed one the send. */}
                 {!draft.trim() && !atts.length ? (
                   <button type="button" onClick={() => { setErr(null); setRecording(true); }} disabled={busy || hearing} aria-label="Record a voice message" title="Record a voice message"

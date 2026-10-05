@@ -110,6 +110,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [search, setSearch] = useState("");
 
   const [savedMenus, setSavedMenus] = usePref<Menus>("menus", DEFAULT_MENUS);
+  // Dusty's thought line can be switched off (Settings → Dusty (AI), Coy 2026-10-05).
+  // <html data-activity="off"> makes --sc-head the 54px bar alone; app/layout.tsx
+  // sets it before first paint from the browser's copy of this setting.
+  const [showLine, setShowLine] = usePref<boolean>("activity_line", true);
+  const lineOn = showLine !== false;
+  useEffect(() => {
+    if (lineOn) delete document.documentElement.dataset.activity;
+    else document.documentElement.dataset.activity = "off";
+  }, [lineOn]);
   const menus = cleanMenus(savedMenus);
 
   // Who is signed in, the org's name and logos. Reloaded after Settings
@@ -189,7 +198,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </Link>
 
           {/* Desktop: the activity line in the header row, after a divider. */}
-          {desktop ? (
+          {desktop && lineOn ? (
             <>
               <span aria-hidden="true" className="sc-paper-divider" />
               {/* All the room up to the buttons (Coy, 2026-10-02: "there is enough room … don't cut it off"). */}
@@ -236,7 +245,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </header>
 
         {/* Phone: what Dusty is doing, a row under the header. */}
-        {!desktop && <ActivityLine busy={dustyBusy} onWorking={setReaderWorking} />}
+        {!desktop && lineOn && <ActivityLine busy={dustyBusy} onWorking={setReaderWorking} />}
       </div>
 
       {/* ---- desktop left rail: every page, in Coy's order ---- */}
@@ -273,12 +282,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {markIdx >= 0 && <span className="sc-tab-mark" style={{ left: `${markIdx * slotPct}%`, width: `${slotPct}%` }} aria-hidden="true" />}
         {footerSlots.map((k) => {
           if (k === "dusty") {
-            // Dusty carries it — no word underneath. 24px: static (the pack's rule);
-            // the mixer frame while he works.
+            // Dusty carries it — no word underneath; the sorting ring while he works.
             return (
               <button key={k} onClick={() => { setToolOpen(false); setDustyOpen((o) => !o); }}
-                aria-label="Dusty" className="sc-tab flex-1 flex items-center justify-center">
-                <span className="sc-tab-ico"><DustyAvatar state={working ? "calculating" : "idle"} size={24} hidden /></span>
+                aria-label="Dusty" className="sc-tab sc-tab-dusty flex-1 flex items-center justify-center">
+                {/* Bigger than the page icons, in a disc rising above the bar (Coy, 2026-10-05). */}
+                <span className="sc-tab-ico"><DustyAvatar state={working ? "calculating" : "idle"} size={40} hidden /></span>
               </button>
             );
           }
@@ -341,6 +350,24 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <div style={{ fontSize: F.xs, color: T.ink3 }}>Eight colour schemes, one dark — some change the typeface too</div>
             </button>
             {looksOpen && <div className="py-2"><ThemePicker /></div>}
+            {/* Dusty (AI) — Coy, 2026-10-05: "if I want to declutter my visual space I can make it disappear entirely". */}
+            {!limited && (
+              <div className="py-2.5" style={{ borderBottom: `1px solid ${T.hairSoft}` }}>
+                <div style={{ fontSize: F.md, fontWeight: 600 }}>Dusty (AI)</div>
+                <div className="flex items-center gap-3 mt-1.5">
+                  <div className="flex-1 min-w-0">
+                    <div style={{ fontSize: F.sm, color: T.ink }}>Show Dusty&apos;s thought line</div>
+                    <div style={{ fontSize: F.xs, color: T.ink3 }}>
+                      The line beside the logo (under it on a phone): what he&apos;s reading, reminders due, people who came back. Off hides it everywhere.
+                    </div>
+                  </div>
+                  <button type="button" role="switch" aria-checked={lineOn} aria-label="Show Dusty's thought line" onClick={() => setShowLine(!lineOn)}
+                    style={{ width: 38, height: 22, borderRadius: 999, background: lineOn ? T.green : T.hairStrong, position: "relative", cursor: "pointer", flex: "0 0 auto" }}>
+                    <span style={{ position: "absolute", top: 3, left: lineOn ? 19 : 3, width: 16, height: 16, borderRadius: 999, background: "#fff", transition: "left .15s", boxShadow: "0 1px 2px rgba(0,0,0,.2)" }} />
+                  </button>
+                </div>
+              </div>
+            )}
             {!limited && <button onClick={() => setMenusOpen((o) => !o)} aria-expanded={menusOpen} className="text-left py-2.5" style={{ borderBottom: `1px solid ${T.hairSoft}`, cursor: "pointer" }}>
               <div style={{ fontSize: F.md, fontWeight: 600 }}>Menus {menusOpen ? "−" : "+"}</div>
               <div style={{ fontSize: F.xs, color: T.ink3 }}>The order of your pages, and which ones sit in the phone footer</div>

@@ -1,28 +1,34 @@
 import type { Metadata, Viewport } from "next";
-import { Outfit, JetBrains_Mono, Caveat, Figtree } from "next/font/google";
+// Fonts are self-hosted from src/fonts (latin, from Google Fonts) so a build
+// never downloads them — a failed fetch once failed a production deploy.
+import localFont from "next/font/local";
 import "./globals.css";
 
-const outfit = Outfit({
-  subsets: ["latin"],
+const outfit = localFont({
+  src: "../fonts/outfit-100-900.woff2",
+  weight: "100 900",
   variable: "--font-sans",
   display: "swap",
 });
 
-const jetbrainsMono = JetBrains_Mono({
-  subsets: ["latin"],
+const jetbrainsMono = localFont({
+  src: "../fonts/jetbrains-mono-100-800.woff2",
+  weight: "100 800",
   variable: "--font-mono",
   display: "swap",
 });
 
 // Dusty's voice — his chat and his thoughts in the header (Coy, 2026-10-05).
-const figtree = Figtree({
-  subsets: ["latin"],
+const figtree = localFont({
+  src: "../fonts/figtree-300-900.woff2",
+  weight: "300 900",
   variable: "--font-agent",
   display: "swap",
 });
 
-const caveat = Caveat({
-  subsets: ["latin"],
+const caveat = localFont({
+  src: "../fonts/caveat-400-700.woff2",
+  weight: "400 700",
   variable: "--font-handwritten",
   display: "swap",
 });

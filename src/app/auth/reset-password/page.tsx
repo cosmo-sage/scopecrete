@@ -2,12 +2,12 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Barlow_Condensed, IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
+import localFont from "next/font/local";
 import { supabase } from "@/lib/supabase";
 
-const barlowCondensed = Barlow_Condensed({ subsets: ["latin"], weight: ["600", "700"], display: "swap" });
-const ibmPlexMono = IBM_Plex_Mono({ subsets: ["latin"], weight: ["400"], display: "swap" });
-const ibmPlexSans = IBM_Plex_Sans({ subsets: ["latin"], weight: ["400", "500", "600"], display: "swap" });
+const barlowCondensed = localFont({ src: [{ path: "../../../fonts/barlow-condensed-600.woff2", weight: "600" }, { path: "../../../fonts/barlow-condensed-700.woff2", weight: "700" }], display: "swap" });
+const ibmPlexMono = localFont({ src: "../../../fonts/ibm-plex-mono-400.woff2", weight: "400", display: "swap" });
+const ibmPlexSans = localFont({ src: "../../../fonts/ibm-plex-sans-100-700.woff2", weight: "100 700", display: "swap" });
 
 const C = {
   slab: "#E4E7EA", ink: "#12161A", ink2: "#5D6873", ink3: "#8C959E",

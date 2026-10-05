@@ -22,10 +22,11 @@ export function OrgLockup({ name, hasLight, hasDark, stamp, dark, phone }: {
   const src = variant ? `/api/org/logo/${variant}${stamp ? `?v=${encodeURIComponent(stamp)}` : ""}` : null;
   const [broken, setBroken] = useState<string | null>(null);
   // The emblem (orbits round the green block) from the landing-page design
-  // package, 2026-10-04, sits before the wordmark as it does on the site.
+  // package, 2026-10-04, sits before the wordmark and turns as it does on the
+  // site (Coy, 2026-10-05); reduced motion stills it (v34-shell.css).
   if (!src || broken === src) return (
     <span style={{ display: "flex", alignItems: "center", gap: phone ? 6 : 8, flex: "none" }}>
-      <Emblem size={phone ? 24 : 28} spin={false} />
+      <Emblem size={phone ? 24 : 28} spin />
       <Wordmark size={phone ? 22 : 26} />
     </span>
   );
@@ -41,7 +42,7 @@ export function OrgLockup({ name, hasLight, hasDark, stamp, dark, phone }: {
         style={{ height: h, width: "auto", maxWidth: phone ? 150 : 220, objectFit: "contain", display: "block" }} />
       <span className="sc-powered" style={{ height: h, display: "flex", alignItems: "center", gap: phone ? 5 : 6,
         paddingLeft: phone ? 8 : 10, borderLeft: "1px solid var(--sc-pencil-line)" }}>
-      <Emblem size={h} spin={false} />
+      <Emblem size={h} spin />
       <span style={{ height: h, display: "flex", flexDirection: "column", justifyContent: "space-between", alignItems: "flex-start" }}>
         <span style={{ fontFamily: lightFont, fontWeight: 300, fontSize: 8.5, letterSpacing: ".06em", color: "var(--sc-pencil-muted)", lineHeight: 1 }}>powered by</span>
         <Wordmark size={phone ? 13 : 16} guides={false} />

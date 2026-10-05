@@ -32,7 +32,7 @@ export function Emblem({ size, spin }: { size: number; spin: boolean }) {
   const rot = (anim: string, dur: number): CSSProperties =>
     spin ? { transformBox: "view-box", transformOrigin: "50px 50px", animation: `${anim} ${dur}s linear infinite` } : {};
   return (
-    <svg viewBox="0 0 100 100" width={size} height={size} style={{ flex: "none", display: "block", overflow: "visible" }} aria-hidden="true">
+    <svg className="sc-emblem" viewBox="0 0 100 100" width={size} height={size} style={{ flex: "none", display: "block", overflow: "visible" }} aria-hidden="true">
       <g style={rot("scSpin", 22)}>
         <ellipse cx={46} cy={47} rx={42} ry={20} fill="none" stroke="#F2610C" strokeWidth={sw} transform="rotate(18 50 50)" />
       </g>

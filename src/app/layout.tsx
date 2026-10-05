@@ -32,14 +32,17 @@ export const metadata: Metadata = {
   description:
     "Describe your project, get an accurate concrete bid powered by real market data, and a contractor texts you within the hour. No phone calls, no guesswork.",
   keywords: ["concrete estimate", "concrete calculator", "concrete contractor", "Baton Rouge", "Louisiana"],
+  // The ScopeCrete emblem (Coy's emblem pack, 2026-10-05) on every page —
+  // the landing page, sign-in and every org's dashboard. Still, since browser
+  // tabs don't play animated icons reliably.
   icons: {
-    // Dusty, the Scopecrete Lander (2026-10-04) — his still drawing.
     icon: [
-      { url: "/dusty/lander/dusty-static-24.svg", type: "image/svg+xml" },
-      { url: "/dusty/lander/dusty-static-512.png", sizes: "512x512", type: "image/png" },
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/favicon.svg", type: "image/svg+xml" },
     ],
-    apple: "/dusty/lander/dusty-static-512.png",
+    apple: "/apple-touch-icon.png",
   },
+  manifest: "/site.webmanifest",
 };
 
 export default function RootLayout({

@@ -300,7 +300,8 @@ across the database … I also want to be able to upload a logo for my org."*
 - **The header lockup** (`org-lockup.tsx`): the theme's logo (else the other),
   28px (24 on a phone), a pencil rule, the ScopeCrete emblem (the landing
   page's orbits and green block, `Emblem` in `site/marks.tsx`, 2026-10-05)
-  beside "powered by" over the wordmark — the
+  beside "powered by" over the wordmark, its orbits turning as on the
+  landing page (still under reduced motion) — the
   block exactly the logo's height (Coy: "the same size as the Sacco
   Enterprises logo"; dropped under 340px). No logo, or one that fails to load → the
   emblem and the scopecrete.ai wordmark.
@@ -2208,8 +2209,12 @@ expected start date per quoted job before it means anything. Add the field.
   **done** → celebrate once then idle, **error** → alert (amber eyes) for a
   moment then idle; the package's own land and sleep exist, unused yet.
   `prefers-reduced-motion` stills him. In the chat: 96px when empty, 32px in
-  the message bar once a chat is going. The favicon and app icon are his
-  still drawing. The pixel sprites stay in `public/dusty/` unused.
+  the message bar once a chat is going. **The favicon and app icon are the
+  ScopeCrete emblem** (Coy, 2026-10-05: "the emblem used as the favicon for
+  the landing page, login page, and all the dashboards") — still, from his
+  emblem pack: `public/favicon.ico` / `favicon.svg` / `apple-touch-icon.png`
+  / `icon-192`·`512.png` and `site.webmanifest`, set once in
+  `app/layout.tsx`. The pixel sprites stay in `public/dusty/` unused.
 - **Dusty answers in Markdown (2026-09-30).** Coy: *"showing the
   calculations in .md format in the chat panel."* His prompt asks for
   lists, bold and, for a job, a table per area (area · qty · cost · O.H. ·

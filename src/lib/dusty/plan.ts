@@ -60,6 +60,9 @@ export type PlanAction =
   | { do: "set_name"; kind: "contact" | "customer"; id: string; name: string }
   // Files (photos attached in the chat, or any in the CONTEXT) put on a customer, a person or a job — a move.
   | { do: "file"; files: string[]; kind: "contact" | "customer" | "job"; id: string }
+  // An email from the intake inbox filed on a customer, a person or a job — its files go with it (the Emails
+  // sheet's own filing). Coy, 2026-10-05: Dusty saw the forwarded MSA but had no id to file it by.
+  | { do: "file_email"; email: string; kind: "contact" | "customer" | "job"; id: string }
   // A text to a person, sent through Quo when Coy taps Send (Coy, 2026-10-05: "send text messages through
   // the app through quo manually or through dusty"). to: one of their numbers, or null for the one they use.
   | { do: "text"; contact: string; to: string | null; body: string }
@@ -68,7 +71,7 @@ export type PlanAction =
   | { do: "send_proposal"; job: string; via: "text" | "email"; contact: string | null; body: string; subject: string | null; draft?: string };
 
 /** Steps that change records rather than a budget — they need no job open. */
-export const RECORD_STEPS = new Set(["archive", "restore", "set_address", "new_job", "new_customer", "attach_contact", "new_contact", "set_name", "file", "text", "send_proposal"]);
+export const RECORD_STEPS = new Set(["archive", "restore", "set_address", "new_job", "new_customer", "attach_contact", "new_contact", "set_name", "file", "file_email", "text", "send_proposal"]);
 /** A customer (cust1) or job (job1) made earlier in the same plan. */
 export const CUST_KEY = /^cust\d{1,2}$/i;
 export const JOB_KEY = /^job\d{1,2}$/i;
@@ -268,6 +271,13 @@ export function cleanAction(raw: unknown): PlanAction | null {
       const ok = FULL_ID.test(id) || (kind === "customer" && CUST_KEY.test(id)) || (kind === "job" && JOB_KEY.test(id));
       return ok ? { do: "file", files: [...new Set((list as string[]).map((x) => x.toLowerCase()))], kind, id } : null;
     }
+    case "file_email": {
+      const kind = RECORD_KINDS.find((k) => k === r.kind);
+      const email = typeof r.email === "string" && FULL_ID.test(r.email.trim()) ? r.email.trim().toLowerCase() : null;
+      const id = typeof r.id === "string" ? r.id.trim().toLowerCase() : "";
+      const ok = FULL_ID.test(id) || (kind === "customer" && CUST_KEY.test(id)) || (kind === "job" && JOB_KEY.test(id));
+      return kind && email && ok ? { do: "file_email", email, kind, id } : null;
+    }
     case "text": {
       const contact = typeof r.contact === "string" && FULL_ID.test(r.contact.trim()) ? r.contact.trim().toLowerCase() : null;
       const body = typeof r.body === "string" ? r.body.replace(/\r\n/g, "\n").trim() : "";
@@ -299,7 +309,7 @@ export function cleanAction(raw: unknown): PlanAction | null {
  */
 export function hideIds(text: string): string {
   const ID = "(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{8}(?:…|\\.\\.\\.))";
-  const LABEL = "(?:(?:contact|customer|job|file|thread)[ \\t]*(?:id)?[ \\t]*[:#]?[ \\t]*)";
+  const LABEL = "(?:(?:contact|customer|job|file|email|thread)[ \\t]*(?:id)?[ \\t]*[:#]?[ \\t]*)";
   return text
     .replace(new RegExp(`[ \\t]*[([][ \\t]*${LABEL}?\`?${ID}\`?[ \\t]*[)\\]]`, "gi"), "")
     .replace(new RegExp(`[ \\t]*[,—–-]?[ \\t]*${LABEL}\`?${ID}\`?`, "gi"), "")
@@ -372,6 +382,10 @@ export function describe(a: PlanAction, names: { item: (r: string) => string | n
       const where = a.kind === "job" ? "the job" : a.kind === "customer" ? "the customer" : "the person";
       return `File ${n} ${n === 1 ? "file" : "files"} on ${/^(cust|job)\d/.test(a.id) ? `the new ${a.kind === "job" ? "job" : "customer"} above` : where} (moved there from where they are now)`;
     }
+    case "file_email": {
+      const where = a.kind === "job" ? "the job" : a.kind === "customer" ? "the customer" : "the person";
+      return `File the email on ${/^(cust|job)\d/.test(a.id) ? `the new ${a.kind === "job" ? "job" : "customer"} above` : where}, with the files that came with it`;
+    }
     case "text": {
       const d = a.to ? a.to.replace(/^\+1/, "") : "";
       const num = d.length === 10 ? ` at (${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}` : "";
@@ -418,6 +432,11 @@ New customers and filing files. Photos and files Coy attaches in this chat are s
  {"do":"file","files":["<full file id>", …],"kind":"job","id":"job1"},
  {"do":"file","files":["<full file id>"],"kind":"customer|contact|job","id":"<full id from the CONTEXT>"}]
 \`\`\`
+Emails and their files. Forwarded emails are in the CONTEXT under the intake inbox as "email <full id>", each with the files that came with it as "(file <full id>)". When Coy asks you to file an email, or a document that came with one ("file the MSA on this customer"), file the EMAIL — its files go with it, and it shows on the customer's Email tab:
+\`\`\`scopecrete-plan
+[{"do":"file_email","email":"<full email id>","kind":"customer|contact|job","id":"<full id from the CONTEXT>"}]
+\`\`\`
+"This customer", "this job", "them" means the one the chat is about (its id is in the CONTEXT). When the same email was forwarded twice, file both. Never ask Coy for a file id or which message he means when the CONTEXT shows it — the subject, the sender and the file names say which; ask only when two different emails could both be the one. Use "file" (file ids) only for a single file that came without an email, like a photo attached in this chat.
 Texts. When Coy asks you to text someone (or to write a text and send it), write it the way he would — short, plain, in his voice, signed only if he signs — and propose:
 \`\`\`scopecrete-plan
 [{"do":"text","contact":"<full contact id from the CONTEXT>","body":"Hi Johnette, this is Coy. I can come measure the driveway Thursday at 9 — does that work?"}]

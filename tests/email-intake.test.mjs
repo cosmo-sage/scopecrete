@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  verifySvix, svixSign, readMessage, parseAddress, originalSender, matchableDomain, attachmentSkip, htmlToText,
+  verifySvix, svixSign, readMessage, parseAddress, originalSender, fullName, matchableDomain, attachmentSkip, htmlToText,
   fileKind, categoryGuess, safeName, bodyFrom, mimeParts,
 } from "../supabase/functions/email-intake/rules.ts";
 import * as files from "../src/lib/files.ts";
@@ -55,6 +55,21 @@ test("the original sender, from Gmail, Outlook and Apple forwards", () => {
   assert.equal(originalSender(bold).address, "ann@example.net");
   assert.equal(originalSender("Just a note from me, no forward.\nFrom: nobody in particular"), null);
   assert.equal(originalSender(null), null);
+});
+
+test("a BlueMail forward has no marker — its header block still names the writer (Coy's MSA, 2026-10-05)", () => {
+  const blue = "Get BlueMail for Mobile\n\nSubject: Site Project - MSA Redlines\nDate: Tue September 29, 2026 17:17\nFrom: \"Pat Example\" <pat@example-gc.com>\nTo: owner@example-co.com\nCc: \"Lee Two\" <lee@example-gc.com>\n\nAttached are our responses.";
+  assert.deepEqual(originalSender(blue), { name: "Pat Example", address: "pat@example-gc.com" });
+  assert.equal(originalSender("Thanks!\nFrom: the crew\n\nSee you Monday."), null, "a From: with no header beside it is no forward");
+});
+
+test("a whole name to match a contact on — two words or more, nothing else", () => {
+  assert.equal(fullName("Pat Example"), "Pat Example");
+  assert.equal(fullName(" \"Mary-Jo  O'Neil\" "), "Mary-Jo O'Neil");
+  assert.equal(fullName("Pat"), null);
+  assert.equal(fullName("pat@example.com"), null);
+  assert.equal(fullName("Estimating Dept 2"), null);
+  assert.equal(fullName(null), null);
 });
 
 test("company domains match; free mail and our own never do", () => {

@@ -32,7 +32,8 @@ export function PlanCard({ jobId, actions, dropped, done }: { jobId: string | nu
     : a.do === "set_name" ? `${a.kind}:${a.id}` : a.do === "new_customer" ? (a.contact ? `contact:${a.contact}` : "")
     : a.do === "new_contact" ? (CUST_KEY.test(a.customer) ? "" : `customer:${a.customer}`)
     : a.do === "attach_contact" ? [`contact:${a.contact}`, CUST_KEY.test(a.customer) ? "" : `customer:${a.customer}`].filter(Boolean).join("|")
-    : a.do === "file" ? [`file:${a.files.join(",")}`, /^(cust|job)\d/.test(a.id) ? "" : `${a.kind}:${a.id}`].filter(Boolean).join("|") : "")).filter(Boolean).join("|");
+    : a.do === "file" ? [`file:${a.files.join(",")}`, /^(cust|job)\d/.test(a.id) ? "" : `${a.kind}:${a.id}`].filter(Boolean).join("|")
+    : a.do === "file_email" ? [`email:${a.email}`, /^(cust|job)\d/.test(a.id) ? "" : `${a.kind}:${a.id}`].filter(Boolean).join("|") : "")).filter(Boolean).join("|");
   useEffect(() => {
     if (!done || !recKey) return;
     let off = false;
@@ -128,6 +129,12 @@ export function PlanCard({ jobId, actions, dropped, done }: { jobId: string | nu
               <div style={{ fontSize: F.xs, color: T.ink2, lineHeight: 1.45 }}>
                 {a.files.slice(0, 12).map((id) => names[id] ?? (Object.keys(names).length ? "not found — skipped" : "…")).join(" · ")}
                 {a.files.length > 12 ? ` · +${a.files.length - 12} more` : ""}
+                {!/^(cust|job)\d/.test(a.id) && <> → {names[a.id] ?? (Object.keys(names).length ? "not found — skipped" : "…")}</>}
+              </div>
+            )}
+            {a.do === "file_email" && (
+              <div style={{ fontSize: F.xs, color: T.ink2, lineHeight: 1.45 }}>
+                {names[a.email] ?? (Object.keys(names).length ? "email not found — skipped" : "…")}
                 {!/^(cust|job)\d/.test(a.id) && <> → {names[a.id] ?? (Object.keys(names).length ? "not found — skipped" : "…")}</>}
               </div>
             )}

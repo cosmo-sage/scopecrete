@@ -30,7 +30,7 @@
  */
 
 import { createClient } from '@supabase/supabase-js'
-import { attachmentSkip, bodyFrom, categoryGuess, fileKind, htmlToText, matchableDomain, originalSender, readMessage, safeName, verifySvix, type Msg } from './rules.ts'
+import { attachmentSkip, bodyFrom, categoryGuess, fileKind, fullName, htmlToText, matchableDomain, originalSender, readMessage, safeName, verifySvix, type Msg } from './rules.ts'
 
 const WORKER = 'email-intake'
 const BUCKET = 'job-files'
@@ -129,6 +129,19 @@ async function project(sb: Sb, ev: EventRow): Promise<string> {
         }
       }
     }
+    // Their whole name on exactly one person (Coy, 2026-10-05: John Freeling's MSA sat unfiled because his
+    // address wasn't on his contact yet). Filed as Auto with the reason; never against a different company
+    // the domain points at, and never between two people of the same name.
+    const whole = fullName(orig.name)
+    if (!contactId && whole) {
+      const { data: same } = await sb.from('contacts').select('id, customer_id').eq('org_id', org)
+        .ilike('name', whole.replace(/[\\%_]/g, (c) => `\\${c}`)).is('merged_into_contact_id', null).is('archived_at', null).limit(3)
+      const people = (same ?? []) as Array<{ id: string; customer_id: string | null }>
+      if (people.length === 1 && (!suggested || suggested === people[0].customer_id)) {
+        contactId = people[0].id; customerId = people[0].customer_id ?? null; suggested = null; match = 'exact'
+        note = `${whole} is the only contact by that name (${orig.address} isn't on them yet)`
+      } else if (people.length > 1) note = `${note ? `${note} · ` : ''}more than one contact is named ${whole} — not guessing`
+    }
   }
   const status = !allowed ? 'quarantined' : match === 'exact' ? 'filed' : 'unfiled'
 
@@ -146,15 +159,21 @@ async function project(sb: Sb, ev: EventRow): Promise<string> {
   let emailId: string
   if (existing) {
     emailId = existing.id
-    // Re-projected after its body arrived: fill what was blank, never overwrite Coy's filing.
-    const { data: cur } = await sb.from('emails').select('text_body, original_from_address, status').eq('id', emailId).maybeSingle()
-    if (cur && !cur.text_body && row.text_body) {
+    // Re-projected (its body arrived, or the rules got better): fill what was blank, file what nobody has
+    // filed — never overwrite Coy's filing (match 'coy').
+    const { data: cur } = await sb.from('emails').select('text_body, original_from_address, status, match, filed_by').eq('id', emailId).maybeSingle()
+    const open = cur && cur.status === 'unfiled' && cur.match !== 'coy' && !cur.filed_by
+    if (cur && ((!cur.text_body && row.text_body) || (open && (row.status === 'filed' || row.match === 'domain_suggested')) || (!cur.original_from_address && row.original_from_address))) {
       await sb.from('emails').update({
-        text_body: row.text_body,
+        ...(!cur.text_body && row.text_body ? { text_body: row.text_body } : {}),
         ...(cur.original_from_address ? {} : { original_from_address: row.original_from_address, original_from_name: row.original_from_name }),
-        ...(cur.status === 'unfiled' && row.status === 'filed' ? { contact_id: row.contact_id, customer_id: row.customer_id, match: row.match, match_note: row.match_note, status: 'filed', filed_at: row.filed_at } : {}),
-        ...(cur.status === 'unfiled' && row.match === 'domain_suggested' ? { suggested_customer_id: row.suggested_customer_id, match: row.match, match_note: row.match_note } : {}),
+        ...(open && row.status === 'filed' ? { contact_id: row.contact_id, customer_id: row.customer_id, match: row.match, match_note: row.match_note, status: 'filed', filed_at: row.filed_at } : {}),
+        ...(open && row.match === 'domain_suggested' ? { suggested_customer_id: row.suggested_customer_id, match: row.match, match_note: row.match_note } : {}),
       }).eq('id', emailId)
+      // Its files follow a filing made here (fetched before it was filed, they were on nobody).
+      if (open && row.status === 'filed') {
+        await sb.from('job_files').update({ contact_id: row.contact_id, customer_id: row.customer_id }).eq('org_id', org).eq('email_id', emailId).is('job_id', null).is('contact_id', null).is('customer_id', null)
+      }
     }
   } else {
     const { data: made, error } = await sb.from('emails').insert(row).select('id').single()

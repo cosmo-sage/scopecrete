@@ -82,7 +82,7 @@ export async function applyPlan(jobId: string | null, actions: PlanAction[], loo
   };
   // Groups first, so items can be filed in them; then changes; then the budget.
   const order = { new_group: 0, rename_group: 1, update_item: 1, new_area: 2, new_item: 3, retire_item: 4, new_assembly: 5, add_to_assembly: 6, remove_from_assembly: 6,
-    add: 7, add_group: 8, load_assembly: 9, remove_group: 10, set_tax: 10, archive: 11, restore: 11, set_address: 11, new_job: 11, new_customer: 11, attach_contact: 11, new_contact: 11, set_name: 11, file: 11, text: 11, send_proposal: 11 } as const;
+    add: 7, add_group: 8, load_assembly: 9, remove_group: 10, set_tax: 10, archive: 11, restore: 11, set_address: 11, new_job: 11, new_customer: 11, attach_contact: 11, new_contact: 11, set_name: 11, file: 11, file_email: 11, text: 11, send_proposal: 11 } as const;
   // Archive / restore steps run through applyRecords (no job needed).
   const steps = [...actions].filter((a) => !RECORD_STEPS.has(a.do)).sort((a, b) => order[a.do] - order[b.do]);
   for (const a of steps) {
@@ -301,6 +301,30 @@ export async function applyRecords(actions: PlanAction[]): Promise<StepResult[]>
         }
         const where = made ? ("title" in made ? `“${made.title}”` : `“${made.name}”`) : `the ${a.kind === "contact" ? "person" : a.kind}`;
         out.push({ ok: n > 0, text: `Filed ${n} of ${a.files.length} on ${where}${fails.length ? ` — ${fails[0]}` : ""}` });
+        continue;
+      }
+      if (a.do === "file_email") {
+        const made = a.kind === "customer" && CUST_KEY.test(a.id) ? madeCust.get(a.id) : a.kind === "job" && JOB_KEY.test(a.id) ? madeJob.get(a.id) : null;
+        const target = made ? made.id : FULL_ID.test(a.id) ? a.id : null;
+        if (!target) { out.push({ ok: false, text: `The ${a.kind} to file the email on wasn't made — it stays in the inbox` }); continue; }
+        try {
+          // The Emails sheet's own filing: its files follow it onto the customer, person or job.
+          const r = await call(`/api/emails/${a.email}`, "PATCH", { [`${a.kind}_id`]: target });
+          const where = made ? ("title" in made ? `“${made.title}”` : `“${made.name}”`) : `the ${a.kind === "contact" ? "person" : a.kind}`;
+          // Learn the sender's address on the person it's filed on, so their next email files itself (§2h exact match).
+          // Only when the person it landed on IS the writer (their own contact named, or the same name) — never
+          // a colleague's address onto the company's primary person.
+          const sender = r.email?.original_from_address as string | null | undefined, person = r.email?.contact_id as string | null | undefined;
+          const same = (x: unknown, y: unknown) => typeof x === "string" && typeof y === "string" && x.trim().toLowerCase() === y.trim().toLowerCase();
+          let learned = "";
+          if (sender && person && (a.kind === "contact" || same(r.email?.original_from_name, r.email?.contact_name))) {
+            try { await call(`/api/contacts/${person}/emails`, "POST", { email: sender }); learned = ` — ${sender} added to their contact, so the next one files itself`; }
+            catch { /* already theirs, or someone else's: leave it */ }
+          }
+          out.push({ ok: true, text: `Filed the email “${r.email?.subject ?? ""}” and its files on ${where}${learned}` });
+        } catch (e) {
+          out.push({ ok: false, text: `Email not filed: ${e instanceof Error ? e.message : String(e)}` });
+        }
         continue;
       }
       if (a.do === "text") {

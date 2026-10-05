@@ -202,6 +202,29 @@ test("new_customer → new_job → file: keys tie the steps together; ids only f
   assert.match(d(p.actions[3]), /File 1 file on the job/);
 });
 
+test("file_email files a forwarded email (and its files) by its full id — never a short one (Coy, 2026-10-05: the MSA)", () => {
+  const email = "b837368f-ee52-429d-9c2a-6821ca1a07b3", cust = "51bc6a56-cfa7-4a60-9a16-d02ecd890630";
+  const p = parsePlan(`Filing the MSA on Icon Technologies.
+\`\`\`scopecrete-plan
+[{"do":"file_email","email":"${email}","kind":"customer","id":"${cust}"},
+ {"do":"file_email","email":"${email.toUpperCase()}","kind":"job","id":"job1"},
+ {"do":"file_email","email":"b837368f","kind":"customer","id":"${cust}"},
+ {"do":"file_email","email":"${email}","kind":"vendor","id":"${cust}"},
+ {"do":"file_email","email":"${email}","kind":"contact","id":"cust1"}]
+\`\`\``);
+  assert.equal(p.actions.length, 2);
+  assert.equal(p.dropped, 3, "a short email id, an unknown kind and a contact named by a customer key are dropped");
+  assert.deepEqual(p.actions[0], { do: "file_email", email, kind: "customer", id: cust });
+  assert.equal(p.actions[1].email, email, "lower-cased");
+  assert.ok(RECORD_STEPS.has("file_email"));
+  assert.equal(needsJob(p.actions[0]), false);
+  const d = (a) => describe(a, { item: () => null, area: () => "" });
+  assert.match(d(p.actions[0]), /File the email on the customer, with the files that came with it/);
+  assert.match(d(p.actions[1]), /the new job above/);
+  assert.match(RECORD_RULES, /file_email/);
+  assert.match(RECORD_RULES, /Never ask Coy for a file id/);
+});
+
 test("a customer around a person already there, attach_contact and set_name (Coy, 2026-10-05: John is a contact in Icon Technologies)", () => {
   const john = "90322d37-f90e-4805-8a8f-7ea6c6824920", cust = "51bc6a56-cfa7-4a60-9a16-d02ecd890630";
   const p = parsePlan(`\`\`\`scopecrete-plan

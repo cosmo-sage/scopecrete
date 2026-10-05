@@ -197,6 +197,28 @@ const FORWARD_MARKERS = [
  * forward marker (or, failing a marker, an Outlook-style "From: … Sent: …"
  * header block). Null when it isn't a forward — never a guess.
  */
+/**
+ * A forward with no marker — Outlook's "From: … Sent: …", or BlueMail's "Subject: / Date: / From: / To:"
+ * block under its signature (Coy's MSA forward, 2026-10-05) — is a From: line with another header line
+ * (Subject, Date, Sent, To, Cc) right beside it. A lone "From:" in a sentence is no header.
+ */
+function headerBlock(text: string): string | null {
+  const lines = text.split(/\r?\n/);
+  const head = /^\s*[>*]*\s*\*?(Subject|Date|Sent|To|Cc):\*?\s*\S/i;
+  for (let i = 0; i < lines.length; i++) {
+    if (!/^\s*[>*]*\s*\*?From:\*?\s*\S/i.test(lines[i])) continue;
+    const near = [lines[i - 2], lines[i - 1], lines[i + 1], lines[i + 2]].filter((l): l is string => typeof l === "string" && head.test(l));
+    if (near.length) return lines.slice(i).join("\n");
+  }
+  return null;
+}
+
+/** Two or more words of letters — a whole name worth matching a contact on ("John Freeling", not "John"). */
+export function fullName(name: string | null): string | null {
+  const n = (name ?? "").replace(/"/g, "").replace(/\s+/g, " ").trim().replace(/^'+|'+$/g, "");
+  return /^[\p{L}][\p{L}.'-]*( [\p{L}][\p{L}.'-]*)+$/u.test(n) && n.length <= 80 ? n : null;
+}
+
 export function originalSender(text: string | null): Addr | null {
   if (!text) return null;
   let start = -1;
@@ -204,7 +226,7 @@ export function originalSender(text: string | null): Addr | null {
     const m = re.exec(text);
     if (m && (start < 0 || m.index < start)) start = m.index;
   }
-  const scope = start >= 0 ? text.slice(start) : (/^\s*\*?From:\*?.*\n\s*\*?(Sent|Date):/im.test(text) ? text : null);
+  const scope = start >= 0 ? text.slice(start) : headerBlock(text);
   if (!scope) return null;
   const line = /^\s*[>*]*\s*\*?From:\*?\s*(.+)$/im.exec(scope);
   return line ? parseAddress(line[1].replace(/\*+/g, "").trim()) : null;

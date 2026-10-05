@@ -167,28 +167,43 @@ const BID_STATE: Record<string, string> = {
  */
 async function inboxBlock(sb: Sb, orgId: string): Promise<Block> {
   const { data } = await sb.from("emails")
-    .select("id, subject, original_from_name, original_from_address, from_address, created_at, status, job_id, text_body")
+    .select("id, subject, original_from_name, original_from_address, from_address, created_at, status, job_id, customer_id, contact_id, text_body")
     .eq("org_id", orgId).order("created_at", { ascending: false }).limit(8);
-  const rows = (data ?? []) as Array<{ id: string; subject: string | null; original_from_name: string | null; original_from_address: string | null; from_address: string | null; created_at: string; status: string; job_id: string | null; text_body: string | null }>;
+  const rows = (data ?? []) as Array<{ id: string; subject: string | null; original_from_name: string | null; original_from_address: string | null; from_address: string | null; created_at: string; status: string; job_id: string | null; customer_id: string | null; contact_id: string | null; text_body: string | null }>;
   const title = "The intake inbox — latest forwarded emails, newest first (times UTC)";
   if (!rows.length) return { title, lines: ["No emails have come in."] };
   const ids = rows.map((r) => r.id);
   const jobIds = [...new Set(rows.map((r) => r.job_id).filter(Boolean))] as string[];
-  const [{ data: pkgs }, { data: jobs }, { count: files }] = await Promise.all([
+  const custIds = [...new Set(rows.map((r) => r.customer_id).filter(Boolean))] as string[];
+  const personIds = [...new Set(rows.map((r) => r.contact_id).filter(Boolean))] as string[];
+  // Each email's files by id, so "file the MSA on this customer" is one step — Dusty had the email but
+  // no id to file it by (Coy, 2026-10-05).
+  const [{ data: pkgs }, { data: jobs }, { data: custs }, { data: people }, { data: files }, { data: atts }] = await Promise.all([
     sb.from("bid_packages").select("email_id, state, error").eq("org_id", orgId).in("email_id", ids),
     jobIds.length ? sb.from("jobs").select("id, title").eq("org_id", orgId).in("id", jobIds) : Promise.resolve({ data: [] }),
-    sb.from("files").select("id", { count: "exact", head: true }).eq("org_id", orgId).eq("email_id", rows[0].id).is("deleted_at", null),
+    custIds.length ? sb.from("customers").select("id, name").eq("org_id", orgId).in("id", custIds) : Promise.resolve({ data: [] }),
+    personIds.length ? sb.from("contacts").select("id, name").eq("org_id", orgId).in("id", personIds) : Promise.resolve({ data: [] }),
+    sb.from("files").select("id, email_id, name").eq("org_id", orgId).in("email_id", ids).is("deleted_at", null),
+    sb.from("email_attachments").select("email_id, name, fetch_state").eq("org_id", orgId).in("email_id", ids).neq("fetch_state", "skipped").neq("fetch_state", "fetched"),
   ]);
   const pkg = new Map(((pkgs ?? []) as Array<{ email_id: string; state: string; error: string | null }>).map((p) => [p.email_id, p]));
-  const job = new Map(((jobs ?? []) as Array<{ id: string; title: string | null }>).map((j) => [j.id, j.title]));
-  const lines = rows.map((e) => {
+  const nameOf = (list: unknown, key = "name") => new Map(((list ?? []) as Array<Record<string, string | null>>).map((x) => [x.id as string, x[key]]));
+  const job = nameOf(jobs, "title"), cust = nameOf(custs), person = nameOf(people);
+  const filesOf = (id: string) => ((files ?? []) as Array<{ id: string; email_id: string; name: string }>).filter((f) => f.email_id === id);
+  const waitingOf = (id: string) => ((atts ?? []) as Array<{ email_id: string; name: string; fetch_state: string }>).filter((a) => a.email_id === id);
+  const lines = rows.flatMap((e) => {
     const p = pkg.get(e.id);
     const who = e.original_from_name || e.original_from_address || e.from_address || "unknown";
-    return `- [${day(e.created_at)}] from ${who} — "${e.subject || "(no subject)"}" · ${e.job_id ? `filed on the job "${job.get(e.job_id) ?? "untitled"}"` : e.status}${p ? ` · bid reader: ${BID_STATE[p.state] ?? p.state}${p.error ? ` (${p.error})` : ""}` : ""}${e.text_body ? "" : " · (its text didn't come through)"}`.slice(0, 400);
+    const filed = [e.customer_id ? `customer "${cust.get(e.customer_id) ?? "unnamed"}"` : "", e.contact_id ? `person "${person.get(e.contact_id) ?? "unnamed"}"` : "", e.job_id ? `job "${job.get(e.job_id) ?? "untitled"}"` : ""].filter(Boolean);
+    const head = `- [${day(e.created_at)}] email ${e.id} from ${who} — "${e.subject || "(no subject)"}" · ${filed.length ? `filed on ${filed.join(", ")}` : e.status}${p ? ` · bid reader: ${BID_STATE[p.state] ?? p.state}${p.error ? ` (${p.error})` : ""}` : ""}${e.text_body ? "" : " · (its text didn't come through)"}`.slice(0, 500);
+    return [head,
+      ...filesOf(e.id).slice(0, 12).map((f) => `    came with: ${f.name.slice(0, 140)} (file ${f.id})`),
+      ...waitingOf(e.id).slice(0, 6).map((a) => `    came with: ${a.name.slice(0, 140)} — not copied in yet (${a.fetch_state})`)];
   });
   const newest = rows[0];
   if (newest.text_body && Date.now() - Date.parse(newest.created_at) < 2 * 86400_000) {
-    lines.push("", `Newest email's text (${files ?? 0} file${files === 1 ? "" : "s"} came with it):`, newest.text_body.replace(/\n{3,}/g, "\n\n").slice(0, 8000));
+    const n = filesOf(newest.id).length;
+    lines.push("", `Newest email's text (${n} file${n === 1 ? "" : "s"} came with it):`, newest.text_body.replace(/\n{3,}/g, "\n\n").slice(0, 8000));
   }
   return { title, lines };
 }
@@ -931,15 +946,15 @@ export async function reachBlocks(sb: Sb, orgId: string, ref: ContextRef, asked:
       (async () => {
         const ws = terms.split(" or ").filter((w) => /^[a-z]+$/.test(w)).slice(0, 3);
         if (!ws.length) return [];
-        const { data } = await sb.from("emails").select("subject, original_from_name, original_from_address, created_at, text_body").eq("org_id", orgId)
+        const { data } = await sb.from("emails").select("id, subject, original_from_name, original_from_address, created_at, text_body").eq("org_id", orgId)
           .or(ws.flatMap((w) => [`subject.ilike.%${w}%`, `text_body.ilike.%${w}%`]).join(",")).order("created_at", { ascending: false }).limit(5);
-        return (data ?? []) as Array<{ subject: string | null; original_from_name: string | null; original_from_address: string | null; created_at: string; text_body: string | null }>;
+        return (data ?? []) as Array<{ id: string; subject: string | null; original_from_name: string | null; original_from_address: string | null; created_at: string; text_body: string | null }>;
       })(),
     ]);
     const rows = (hits ?? []) as Array<{ kind: string; id: string; contact_id: string | null; job_id: string | null; title: string | null; snippet: string | null; at: string | null }>;
     const lines = [
       ...rows.map((h) => `- [${h.kind}${h.at ? ` · ${day(h.at)}` : ""}] ${h.title ?? ""} — ${(h.snippet ?? "").replace(/[«»]/g, "").replace(/\s+/g, " ")}${h.contact_id ? ` (contact ${h.contact_id})` : ""}${h.job_id ? ` (job ${h.job_id})` : ""}`.slice(0, 500)),
-      ...mailHits.map((e) => `- [email · ${day(e.created_at)}] from ${e.original_from_name || e.original_from_address || "?"} — "${e.subject || "(no subject)"}": ${(e.text_body ?? "").replace(/\s+/g, " ").slice(0, 300)}`),
+      ...mailHits.map((e) => `- [email ${e.id} · ${day(e.created_at)}] from ${e.original_from_name || e.original_from_address || "?"} — "${e.subject || "(no subject)"}": ${(e.text_body ?? "").replace(/\s+/g, " ").slice(0, 300)}`),
     ];
     if (lines.length) out.push({ title: `Search of everything for: ${terms.replace(/ or /g, ", ")}`, trimmable: true, lines });
   }

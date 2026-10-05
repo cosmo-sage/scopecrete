@@ -22,11 +22,15 @@
  *     recognition the mic is shown off with that reason.
  *
  * WHAT DOES NOT, AND SAYS SO
- *   - Send for texts and email. There is no send path: outbound texting needs
- *     10DLC registration, email has no ingestion or sending at all. The old
- *     composer on this screen appended the message locally and then faked a
- *     "Dusty" reply a second later; that is the thing this must never do
- *     again. So Send is visibly off, with the reason next to it.
+ *   - Send for email. Email has no sending at all, so Send is visibly off with
+ *     the reason next to it. The old composer on this screen appended the
+ *     message locally and then faked a "Dusty" reply a second later; that is
+ *     the thing this must never do again.
+ *
+ * TEXTS SEND THROUGH QUO (Coy, 2026-10-05). Send posts to /api/texts, which
+ * asks Quo's API to send from the picked line. Nothing is shown as sent until
+ * Quo says it took it, and the text itself appears in the thread only when
+ * Quo's webhook brings it back — the same road as one sent from the Quo app.
  *
  * GONE (Coy, 2026-09-28): the Call button here — the page has one at the top —
  * and the + attach menu, which could do nothing until sending exists.
@@ -40,12 +44,13 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { T, F, disp, body, eyebrow, clip, formatPhone } from "@/lib/v34/tokens";
+import { segments } from "@/lib/texting";
 
 type Channel = "text" | "email" | "note";
 
 /** Why each channel cannot send from here yet. Shown, not hidden. */
 const NOT_CONNECTED: Record<Channel, string> = {
-  text: "Texts aren't sent from here yet — copy it into Quo.",
+  text: "Sends through Quo from your line.",
   email: "Email isn't connected yet — copy it into your mail.",
   note: "Saved to their page. Dusty reads your notes.",
 };
@@ -85,7 +90,7 @@ function recognitionCtor(): (new () => Recognition) | null {
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
 }
 
-export function Composer({ contactId, phone, name, compact = false, onNoteSaved, only, fromLine }: {
+export function Composer({ contactId, phone, name, compact = false, onNoteSaved, onSent, only, fromLine }: {
   contactId: string;
   /** E.164, for the Call link. */
   phone: string | null;
@@ -95,12 +100,14 @@ export function Composer({ contactId, phone, name, compact = false, onNoteSaved,
   compact?: boolean;
   /** A note was saved — the page reloads its timeline. */
   onNoteSaved?: () => void;
+  /** A text was taken by Quo — the page reloads once the webhook has brought it back. */
+  onSent?: () => void;
   /** The customer page picks the channel from its filter: no tabs, this one only. */
   only?: "text" | "email";
   /**
    * Which of your lines a text goes from (Lines, Claude Design package 9) — the
    * line they last used, else the primary; picked from `lines`. Only when the
-   * org has two or more. Still copied into Quo: nothing sends (§10, 10DLC).
+   * org has two or more. Send uses it; Copy is still there for the Quo app.
    */
   fromLine?: { lines: Array<{ id: string; name: string; color: string; provider: string | null }>; value: string | null; onPick: (id: string) => void } | null;
 }) {
@@ -113,6 +120,8 @@ export function Composer({ contactId, phone, name, compact = false, onNoteSaved,
     typeof window === "undefined" ? "" : readDraft(contactId).text);
   const [copied, setCopied] = useState<"ok" | "failed" | null>(null);
   const [saving, setSaving] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [sendMsg, setSendMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [noteMsg, setNoteMsg] = useState<string | null>(null);
   const [canDictate] = useState(() => recognitionCtor() !== null);
   const [listening, setListening] = useState(false);
@@ -159,6 +168,29 @@ export function Composer({ contactId, phone, name, compact = false, onNoteSaved,
       setNoteMsg(`Couldn't save: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function sendText() {
+    const msg = text.trim();
+    if (!msg || sending || !phone) return;
+    setSending(true); setSendMsg(null);
+    try {
+      const r = await fetch("/api/texts", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contact_id: contactId, body: msg, to: phone, line_id: fromLine?.value ?? undefined }),
+      });
+      const b = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(b?.error || `HTTP ${r.status}`);
+      const lineName = fromLine?.lines.find((l) => l.id === b.from_line)?.name;
+      setText("");
+      setSendMsg({ ok: true, text: `Sent to ${formatPhone(b.to)}${lineName ? ` from ${lineName}` : ""} — it shows here once Quo confirms.` });
+      // Quo's webhook usually lands within seconds; reload twice to pick it up.
+      if (onSent) { setTimeout(onSent, 4000); setTimeout(onSent, 15000); }
+    } catch (e) {
+      setSendMsg({ ok: false, text: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setSending(false);
     }
   }
 
@@ -222,7 +254,7 @@ export function Composer({ contactId, phone, name, compact = false, onNoteSaved,
           placeholder={channel === "note" ? "A note about them — stays internal"
             : channel === "email" ? "Write the email"
             : fromLine && fromLine.lines.length > 1 ? (() => { const cur = fromLine.lines.find((l) => l.id === fromLine.value) ?? fromLine.lines[0];
-                return `Text ${phone ? formatPhone(phone) : first ?? "them"} from ${cur.name}${cur.provider === "quo" ? " — copy it into Quo" : ""}`; })()
+                return `Text ${phone ? formatPhone(phone) : first ?? "them"} from ${cur.name}`; })()
             : `Text ${first ?? "them"} back…`}
           className="flex-1 px-2.5 py-2 rounded-lg outline-none resize-none"
           style={{ border: `1px solid ${T.hair}`, background: T.card, fontSize: F.sm,
@@ -253,9 +285,20 @@ export function Composer({ contactId, phone, name, compact = false, onNoteSaved,
             </svg>
           </button>
         )}
-        {has && channel !== "note" && (
-          // Send: present where v34 puts it, and visibly off. Never a button
-          // that looks like it worked.
+        {has && channel === "text" && (
+          <button onClick={() => void sendText()} disabled={sending || !phone}
+            aria-label={phone ? `Send the text to ${formatPhone(phone)}` : "No number to text"}
+            title={phone ? `Send through Quo to ${formatPhone(phone)}` : "They have no number to text"}
+            style={{ ...iconBtn, background: T.hiviz, borderColor: T.hiviz, cursor: sending || !phone ? "default" : "pointer", opacity: sending || !phone ? 0.5 : 1 }}>
+            <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true" style={{ color: T.onHiviz }}>
+              <path d="M7.5 12.4V2.8M3.4 6.9 7.5 2.6l4.1 4.3" fill="none" stroke="currentColor"
+                strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+        )}
+        {has && channel === "email" && (
+          // Email Send: present where v34 puts it, and visibly off. Never a
+          // button that looks like it worked.
           <button disabled aria-label="Send — not connected" title={NOT_CONNECTED[channel]}
             style={{ ...iconBtn, background: T.hairSoft, border: `1px dashed ${T.ink3}`, cursor: "not-allowed" }}>
             <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true">
@@ -266,7 +309,7 @@ export function Composer({ contactId, phone, name, compact = false, onNoteSaved,
         )}
       </div>
 
-      {/* The things that DO work, and the plain reason Send does not. */}
+      {/* Copy, and what Send does (or why it can't). */}
       <div className="flex items-center gap-2 flex-wrap" style={{ marginTop: 6 }}>
         {has && channel !== "note" && (
           <button onClick={() => void copy()} className="rounded px-2.5"
@@ -276,9 +319,12 @@ export function Composer({ contactId, phone, name, compact = false, onNoteSaved,
           </button>
         )}
         <span style={{ fontSize: F.xs, color: T.ink3, lineHeight: 1.3, flex: "1 1 160px" }}>
-          {micError ?? (listening ? "Listening…" : noteMsg && !has ? noteMsg
+          {micError ?? (listening ? "Listening…" : sending ? "Sending through Quo…"
+            : sendMsg && (!has || !sendMsg.ok) && channel === "text" ? <span style={{ color: sendMsg.ok ? T.green : T.red }}>{sendMsg.text}</span>
+            : noteMsg && !has ? noteMsg
+            : has && channel === "text" ? `${NOT_CONNECTED.text}${phone ? ` To ${formatPhone(phone)}.` : ""} ${segments(text.trim())} ${segments(text.trim()) === 1 ? "segment" : "segments"}.`
             : has ? NOT_CONNECTED[channel]
-            : channel === "note" ? "Notes stay internal. Dusty reads them." : "Drafts stay on this device until they can be sent.")}
+            : channel === "note" ? "Notes stay internal. Dusty reads them." : channel === "text" ? "Drafts stay on this device until you send them." : "Drafts stay on this device until they can be sent.")}
         </span>
       </div>
     </div>

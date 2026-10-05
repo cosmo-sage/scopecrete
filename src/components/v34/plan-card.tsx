@@ -26,7 +26,7 @@ export function PlanCard({ jobId, actions, dropped, done }: { jobId: string | nu
     loadLookup(jobId).then((l) => { if (!off) setLook(l); }).catch((e) => { if (!off) setErr(String(e?.message ?? e)); });
     return () => { off = true; };
   }, [jobId, done, budgetSteps.length]);
-  const recKey = recordSteps.map((a) => (a.do === "archive" || a.do === "restore" ? `${a.kind}:${a.ids.join(",")}` : a.do === "set_address" ? `${a.kind}:${a.id}` : a.do === "new_job" ? (CUST_KEY.test(a.contact) ? "" : `contact:${a.contact}`)
+  const recKey = recordSteps.map((a) => (a.do === "archive" || a.do === "restore" ? `${a.kind}:${a.ids.join(",")}` : a.do === "set_address" ? `${a.kind}:${a.id}` : a.do === "new_job" ? (CUST_KEY.test(a.contact) ? "" : `contact:${a.contact}`) : a.do === "text" ? `contact:${a.contact}`
     : a.do === "file" ? [`file:${a.files.join(",")}`, /^(cust|job)\d/.test(a.id) ? "" : `${a.kind}:${a.id}`].filter(Boolean).join("|") : "")).filter(Boolean).join("|");
   useEffect(() => {
     if (!done || !recKey) return;
@@ -39,6 +39,8 @@ export function PlanCard({ jobId, actions, dropped, done }: { jobId: string | nu
   }, [done, recKey]);
   if (!actions.length && !dropped) return null;
   const needsJob = budgetSteps.some(stepNeedsJob);
+  const texts = actions.filter((a) => a.do === "text").length;
+  const verb = texts && texts === actions.length ? (texts === 1 ? "Send" : `Send ${texts} texts`) : "Apply";
   const ready = budgetSteps.length ? !!look : done;
   const nm = {
     area: (r: string | null) => {
@@ -76,7 +78,7 @@ export function PlanCard({ jobId, actions, dropped, done }: { jobId: string | nu
         {state !== "done" && (
           <button onClick={() => void run()} disabled={!ready || state === "running" || !actions.length}
             className="rounded px-3" style={{ height: 30, background: T.hiviz, color: T.onHiviz, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", letterSpacing: ".06em", cursor: "pointer", opacity: !ready || state === "running" ? 0.5 : 1 }}>
-            {state === "running" ? "Applying…" : "Apply"}
+            {state === "running" ? (verb === "Apply" ? "Applying…" : "Sending…") : verb}
           </button>
         )}
       </div>
@@ -87,6 +89,9 @@ export function PlanCard({ jobId, actions, dropped, done }: { jobId: string | nu
             {(a.do === "set_address" || a.do === "new_job") && (
               <div style={{ fontSize: F.xs, color: T.ink2 }}>{a.do === "new_job" && CUST_KEY.test(a.contact) ? "for the new customer above"
                 : (a.do === "new_job" ? "for " : "") + (names[a.do === "new_job" ? a.contact : a.id] ?? (Object.keys(names).length ? "not found — skipped" : "…"))}</div>
+            )}
+            {a.do === "text" && (
+              <div style={{ fontSize: F.xs, color: T.ink2 }}>to {names[a.contact] ?? (Object.keys(names).length ? "not found — skipped" : "…")}</div>
             )}
             {a.do === "file" && (
               <div style={{ fontSize: F.xs, color: T.ink2, lineHeight: 1.45 }}>
@@ -107,6 +112,7 @@ export function PlanCard({ jobId, actions, dropped, done }: { jobId: string | nu
       {dropped > 0 && <div className="px-3 pb-2" style={{ fontSize: F.xs, color: T.ink3 }}>{dropped} step{dropped === 1 ? "" : "s"} didn&apos;t make sense and were left out.</div>}
       {needsJob && !jobId && <div className="px-3 pb-2" style={{ fontSize: F.xs, color: T.ink3 }}>Steps that touch a budget need the job open — they&apos;ll be skipped here. Open the job and ask there.</div>}
       {recordSteps.some((x) => x.do === "archive" || x.do === "restore") && state !== "done" && <div className="px-3 pb-2" style={{ fontSize: F.xs, color: T.ink3 }}>Archived threads come back if they call or text again; deleted things can be restored. Nothing is erased.</div>}
+      {texts > 0 && state !== "done" && <div className="px-3 pb-2" style={{ fontSize: F.xs, color: T.ink3 }}>{verb === "Apply" ? `Apply also sends ${texts === 1 ? "the text" : `the ${texts} texts`}` : texts === 1 ? "Send texts it" : "Send texts them"} through Quo from your line. Nothing goes out until you tap.</div>}
       {state === "done" && (
         <div className="px-3 py-2" style={{ borderTop: `1px solid ${T.hair}`, fontSize: F.xs }}>
           {results.map((r, i) => <div key={i} style={{ color: r.ok ? T.green : T.red }}>{r.ok ? "✓" : "✗"} {r.text}</div>)}

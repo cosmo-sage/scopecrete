@@ -51,8 +51,8 @@ export const DA = {
  * reply after a 1s timeout. Interleaving invented replies into a view of real
  * customer history is worse than having no composer, and DECISIONS.md §10 is
  * explicit that all outbound contact is the contractor himself and there is no
- * bot-initiated outreach. Outbound texting also needs 10DLC registration, which
- * has not happened. The call button remains — that is the real action available.
+ * bot-initiated outreach. Texts now go out through Quo only on Coy's own tap
+ * (the composer's Send, 2026-10-05).
  */
 
 export interface ThreadMessage {

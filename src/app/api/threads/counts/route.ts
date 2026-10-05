@@ -17,8 +17,8 @@ import { loadCustomThreads } from "@/lib/threads-server";
  *   `drafts` is ABSENT. v34 has a Drafts chip; there is no outbox table in the
  *   schema — not a table with no rows, no table at all — so the system has no
  *   opinion to report and a 0 would be invented. It returns when there is
- *   somewhere for a draft to live. DECISIONS.md §10 parks outbound texting
- *   behind 10DLC registration, so that is not soon.
+ *   somewhere for a draft to live (texts send straight through Quo since
+ *   2026-10-05; drafts stay on the device).
  *
  *   `today` is ABSENT, and is computed by the CLIENT. "Today" depends on the
  *   viewer's timezone; `orgs` carries no timezone column, so computing it here

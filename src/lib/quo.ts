@@ -78,3 +78,38 @@ export async function freshAudioUrl(callId: string, kind: "recording" | "voicema
   }
   return null;
 }
+
+/**
+ * Send one text through Quo's API (POST /v1/messages; Quo's own docs,
+ * "Send your first message"). Server only, on Coy's tap. Quo answers 202 and
+ * then sends; the text reaches the thread through the webhook like one sent
+ * from the Quo app. Never retried here: a timeout may still have sent it.
+ * QUO_API_BASE overrides the host (default Quo's documented api.quo.com).
+ */
+export async function sendQuoText(from: string, to: string, content: string):
+  Promise<{ ok: true; id: string | null } | { ok: false; status: number; message: string | null }> {
+  const key = process.env.QUO_API_KEY;
+  if (!key) return { ok: false, status: 503, message: "QUO_API_KEY isn't set on the server" };
+  const base = process.env.QUO_API_BASE || "https://api.quo.com/v1";
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${base}/messages`, {
+      method: "POST", cache: "no-store", signal: ctrl.signal,
+      headers: { Authorization: key, "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ content, from, to: [to] }),
+    });
+    const b = (await res.json().catch(() => null)) as { data?: { id?: unknown }; message?: unknown; errors?: Array<{ message?: unknown }> } | null;
+    if (!res.ok) {
+      const msg = typeof b?.message === "string" ? b.message : typeof b?.errors?.[0]?.message === "string" ? (b.errors[0].message as string) : null;
+      return { ok: false, status: res.status, message: msg };
+    }
+    return { ok: true, id: typeof b?.data?.id === "string" ? b.data.id : null };
+  } catch (e) {
+    return { ok: false, status: 0, message: e instanceof Error && e.name === "AbortError"
+      ? "Quo didn't answer in time — check the thread before sending again; it may have gone"
+      : `couldn't reach Quo: ${e instanceof Error ? e.message : String(e)}` };
+  } finally {
+    clearTimeout(t);
+  }
+}

@@ -80,7 +80,7 @@ export async function applyPlan(jobId: string | null, actions: PlanAction[], loo
   };
   // Groups first, so items can be filed in them; then changes; then the budget.
   const order = { new_group: 0, rename_group: 1, update_item: 1, new_area: 2, new_item: 3, retire_item: 4, new_assembly: 5, add_to_assembly: 6, remove_from_assembly: 6,
-    add: 7, add_group: 8, load_assembly: 9, remove_group: 10, set_tax: 10, archive: 11, restore: 11, set_address: 11, new_job: 11, new_customer: 11, file: 11 } as const;
+    add: 7, add_group: 8, load_assembly: 9, remove_group: 10, set_tax: 10, archive: 11, restore: 11, set_address: 11, new_job: 11, new_customer: 11, file: 11, text: 11 } as const;
   // Archive / restore steps run through applyRecords (no job needed).
   const steps = [...actions].filter((a) => !RECORD_STEPS.has(a.do)).sort((a, b) => order[a.do] - order[b.do]);
   for (const a of steps) {
@@ -270,6 +270,15 @@ export async function applyRecords(actions: PlanAction[]): Promise<StepResult[]>
         }
         const where = made ? ("title" in made ? `“${made.title}”` : `“${made.name}”`) : `the ${a.kind === "contact" ? "person" : a.kind}`;
         out.push({ ok: n > 0, text: `Filed ${n} of ${a.files.length} on ${where}${fails.length ? ` — ${fails[0]}` : ""}` });
+        continue;
+      }
+      if (a.do === "text") {
+        try {
+          const r = await call("/api/texts", "POST", { contact_id: a.contact, body: a.body, to: a.to ?? undefined });
+          out.push({ ok: true, text: `Sent to ${String(r.to).replace(/^\+1(\d{3})(\d{3})(\d{4})$/, "($1) $2-$3")} through Quo — it shows in their thread once Quo confirms` });
+        } catch (e) {
+          out.push({ ok: false, text: `Text not sent: ${e instanceof Error ? e.message : String(e)}` });
+        }
         continue;
       }
       if (a.do !== "archive" && a.do !== "restore") continue;

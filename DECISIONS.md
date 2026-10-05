@@ -4,7 +4,7 @@ Ground truth for every agent working this repo. If code disagrees with this
 document, the code is wrong or this document is stale — resolve it, don't
 guess. Update this file in the same PR that changes the behavior it describes.
 
-Last updated: 2026-10-05 (a Summary view on every job, the job name and switch centred on the phone; Dusty full screen on the phone, chat text size, his thought line can be hidden; onsite estimators — jobs and pages by person, vendor first, tags notify — migration 081; a name we greet a caller by becomes a suggestion — enrich-contacts v28; contact, customer and vendor pages on one layout; the customer page's Threads tab sums up each person; the Files page laid out like OneDrive, with storage left; the Plan Room's Files and Sheets one tab; thread search a drop-down over the chat; the Threads list header sticky with its own search; the header lockup on one line; one top row on the job's three views; the proposal's dark band off the cover; Good / Better / Best removed — one price per job; search across the header; six dots for the activity line; job switch on the name's row; budget line notes; quo-intake stores every Quo event, own lines included — v10; one Unit type picker; a section's Camera; Dusty writes in Figtree; Dusty is the Scopecrete Lander; an All thread; proposal cover band and Prepared by; sign-in at app.scopecrete.ai/login, each org at <slug>.app.scopecrete.ai; Dusty's chat keeps its files and files them on a customer or job — migration 079; vendor Delete; Dusty on a vendor's page and looking at attached photos; sales tax by address via TaxLocus — migration 078; archive reasons; Lines, providers and logs — migration 077; internal notes with @-tags; Jobs board sort and filter; jobs by hand — migration 076; done and lost customers in Threads; proposals sent by link, every opening tracked; every option side by side for the customer — migration 075; Documents is Files, everywhere — migration 074; Threads v2 — threads you make, channels per number, the customer page reshaped — migration 073; an address given is kept and asked about — migration 072; Dusty sets addresses; customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
+Last updated: 2026-10-05 (texts send through Quo — the thread's Send and Dusty's text step, Coy's tap either way; a Summary view on every job, the job name and switch centred on the phone; Dusty full screen on the phone, chat text size, his thought line can be hidden; onsite estimators — jobs and pages by person, vendor first, tags notify — migration 081; a name we greet a caller by becomes a suggestion — enrich-contacts v28; contact, customer and vendor pages on one layout; the customer page's Threads tab sums up each person; the Files page laid out like OneDrive, with storage left; the Plan Room's Files and Sheets one tab; thread search a drop-down over the chat; the Threads list header sticky with its own search; the header lockup on one line; one top row on the job's three views; the proposal's dark band off the cover; Good / Better / Best removed — one price per job; search across the header; six dots for the activity line; job switch on the name's row; budget line notes; quo-intake stores every Quo event, own lines included — v10; one Unit type picker; a section's Camera; Dusty writes in Figtree; Dusty is the Scopecrete Lander; an All thread; proposal cover band and Prepared by; sign-in at app.scopecrete.ai/login, each org at <slug>.app.scopecrete.ai; Dusty's chat keeps its files and files them on a customer or job — migration 079; vendor Delete; Dusty on a vendor's page and looking at attached photos; sales tax by address via TaxLocus — migration 078; archive reasons; Lines, providers and logs — migration 077; internal notes with @-tags; Jobs board sort and filter; jobs by hand — migration 076; done and lost customers in Threads; proposals sent by link, every opening tracked; every option side by side for the customer — migration 075; Documents is Files, everywhere — migration 074; Threads v2 — threads you make, channels per number, the customer page reshaped — migration 073; an address given is kept and asked about — migration 072; Dusty sets addresses; customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
 
 ---
 
@@ -584,13 +584,13 @@ each message.** One person calling two of Coy's lines is one thread.
   call card says "● via Website · Quo" and every text "● via Main"; a line
   filter (only lines this person reached) beside All · Calls · Texts; **Call
   from ▾** (your phone dials — choose the same line in Quo); the composer's
-  line chip and "Text (225) … from Main — copy it into Quo" (nothing sends,
-  §10); "first reached you on the Website line, Oct 3" — on the header until
+  line chip and "Text (225) … from Main" (the line Send uses since
+  2026-10-05, §6 Texts send through Quo); "first reached you on the Website line, Oct 3" — on the header until
   2026-10-05, now a **Lead source** line at the top of Internal notes (Coy:
   "a place in the notes for the lead source")
   (`/api/threads/[id]` returns `lines`, `first_line`, each message's
   `line_id`). On a phone the toolbar wraps, the line filter its own row. Not
-  built: a thread made from a line, and Send (Quo stays Copy until 10DLC).
+  built: a thread made from a line.
 
 ## 2e. Files — uploads Dusty reads (migrations 045–046, 2026-09-29)
 
@@ -3264,17 +3264,41 @@ expected start date per quoted job before it means anything. Add the field.
 - **Receipts are camera-first, always.** Photograph, never type. Dusty reads
   vendor, amount, date and clarifies conversationally. Invoices and payments
   stay quick structured forms.
-- **The composer never appears to send.** (2026-09-27) Text and email
-  have no send path yet — texting waits on 10DLC, and Coy has said sending is
-  not needed now. The composer (thread screen, and compact in the row expand)
+- **The composer never appears to send.** (2026-09-27; texts send since
+  2026-10-05, below) Email has no send path. The composer (thread screen, and compact in the row expand)
   writes, keeps a per-device draft and copies it for pasting into Quo; Send is
   shown switched off with its reason. **Notes save** (2026-09-28, above). The
   **mic dictates** into the box with the browser's own speech recognition —
   Chrome sends the audio to Google to transcribe; nothing of ours stores it;
   off, with the reason, where the browser has none. The composer's Call and +
   attach are gone (Coy: the Call is at the top; attach did nothing). An earlier composer appended messages locally and faked a Dusty reply
-  a second later; that must not come back. When sending lands, it replaces the
-  disabled Send in `src/components/v34/composer.tsx` — one place.
+  a second later; that must not come back. Email's Send is still off.
+- **Texts send through Quo (Coy, 2026-10-05: "send text messages through the
+  app through quo manually or through dusty"; decision card: "Build both").**
+  10DLC was not in fact waiting: 129 texts Coy sent from the Quo website line
+  since 2026-08-27 came back from Quo `delivered`, so that line is carrier
+  registered (inferred from the log; Coy confirms in Quo → US Carrier
+  Registration). Quo's API also needs **prepaid API credits** ($0.01 a
+  segment, Quo → Plans & Billing) and `QUO_API_KEY` (in Vercel). The
+  composer's **Send** (text channel; Copy stays) posts to `POST /api/texts`
+  {contact_id, body, to?, line_id?} — session client, org from the session:
+  `to` must be one of the person's own numbers (`contacts.phone` /
+  `contact_phones`), never one of the org's lines (default: the number they
+  last used); the line must be one of the org's **Quo** lines (default: the
+  Quo line they last reached, else the primary — `pickLine()`,
+  `src/lib/texting.ts`, tested); then `sendQuoText()` (`src/lib/quo.ts`,
+  `POST https://api.quo.com/v1/messages`, `QUO_API_BASE` overrides the host),
+  never retried. Nothing is shown as sent until Quo takes it, and the text
+  appears in the thread only when Quo's webhook brings it back
+  (`message.delivered` → `quo_events` → `messages`, §2a) — the app writes no
+  message itself. Quo's refusals are put in words (`quoError()`: key, credits,
+  registration). The hint shows the segment count. **Dusty** proposes a text
+  only when Coy asks: plan step `text` {contact — a full id from his context,
+  body, to only when Coy names a number} (`src/lib/dusty/plan.ts`, tested);
+  the card shows the words and who they go to, and its button reads **Send**;
+  Coy's tap sends it through the same route (`applyRecords()`). §10's rule
+  holds: every text is Coy's tap. Testing sends only to a phone of Coy's that
+  is not one of the org's lines, never a customer.
 
 ---
 
@@ -3453,5 +3477,6 @@ genuinely required.
   are priced in the ordinary budget — areas measured by area alone, cards
   counted in square yards (§3). That is the estimator, not the public-work
   engine.
-- Outbound texting needs 10DLC registration. Launch voice-first.
+- Outbound texting needed 10DLC registration — the Quo line turned out to be
+  registered; texts send through Quo on Coy's tap since 2026-10-05 (§6).
 - All outbound contact is the contractor himself. No bot-initiated outreach.

@@ -50,10 +50,13 @@ export type PlanAction =
   | { do: "new_customer"; key: string | null; name: string; customer_type: "residential" | "commercial" | "public" | null; person: string | null;
       phone: string | null; email: string | null; address: string | null; city: string | null; state: string | null; zip: string | null }
   // Files (photos attached in the chat, or any in the CONTEXT) put on a customer, a person or a job — a move.
-  | { do: "file"; files: string[]; kind: "contact" | "customer" | "job"; id: string };
+  | { do: "file"; files: string[]; kind: "contact" | "customer" | "job"; id: string }
+  // A text to a person, sent through Quo when Coy taps Send (Coy, 2026-10-05: "send text messages through
+  // the app through quo manually or through dusty"). to: one of their numbers, or null for the one they use.
+  | { do: "text"; contact: string; to: string | null; body: string };
 
 /** Steps that change records rather than a budget — they need no job open. */
-export const RECORD_STEPS = new Set(["archive", "restore", "set_address", "new_job", "new_customer", "file"]);
+export const RECORD_STEPS = new Set(["archive", "restore", "set_address", "new_job", "new_customer", "file", "text"]);
 /** A customer (cust1) or job (job1) made earlier in the same plan. */
 export const CUST_KEY = /^cust\d{1,2}$/i;
 export const JOB_KEY = /^job\d{1,2}$/i;
@@ -234,6 +237,18 @@ export function cleanAction(raw: unknown): PlanAction | null {
       const ok = FULL_ID.test(id) || (kind === "customer" && CUST_KEY.test(id)) || (kind === "job" && JOB_KEY.test(id));
       return ok ? { do: "file", files: [...new Set((list as string[]).map((x) => x.toLowerCase()))], kind, id } : null;
     }
+    case "text": {
+      const contact = typeof r.contact === "string" && FULL_ID.test(r.contact.trim()) ? r.contact.trim().toLowerCase() : null;
+      const body = typeof r.body === "string" ? r.body.replace(/\r\n/g, "\n").trim() : "";
+      if (!contact || !body || body.length > 1600) return null;
+      let to: string | null = null;
+      if (typeof r.to === "string" && r.to.trim()) {
+        const d = r.to.replace(/\D/g, "");
+        to = d.length === 10 ? `+1${d}` : d.length === 11 && d.startsWith("1") ? `+${d}` : null;
+        if (!to) return null; // a number that isn't one is no guess
+      }
+      return { do: "text", contact, to, body };
+    }
     default: return null;
   }
 }
@@ -297,6 +312,11 @@ export function describe(a: PlanAction, names: { item: (r: string) => string | n
       const where = a.kind === "job" ? "the job" : a.kind === "customer" ? "the customer" : "the person";
       return `File ${n} ${n === 1 ? "file" : "files"} on ${/^(cust|job)\d/.test(a.id) ? `the new ${a.kind === "job" ? "job" : "customer"} above` : where} (moved there from where they are now)`;
     }
+    case "text": {
+      const d = a.to ? a.to.replace(/^\+1/, "") : "";
+      const num = d.length === 10 ? ` at (${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}` : "";
+      return `Text them${num} through Quo: “${a.body}”`;
+    }
     case "archive":
     case "restore": {
       const n = a.ids.length;
@@ -337,6 +357,11 @@ New customers and filing files. Photos and files Coy attaches in this chat are s
  {"do":"file","files":["<full file id>", …],"kind":"job","id":"job1"},
  {"do":"file","files":["<full file id>"],"kind":"customer|contact|job","id":"<full id from the CONTEXT>"}]
 \`\`\`
+Texts. When Coy asks you to text someone (or to write a text and send it), write it the way he would — short, plain, in his voice, signed only if he signs — and propose:
+\`\`\`scopecrete-plan
+[{"do":"text","contact":"<full contact id from the CONTEXT>","body":"Hi Johnette, this is Coy with Baton Rouge Concreters. I can come measure the driveway Thursday at 9 — does that work?"}]
+\`\`\`
+Coy sees the words and who they go to, and nothing is sent until he taps Send; it then goes through Quo from his line. Only when Coy asks for a text — never on your own, never to someone he didn't name, never a price or a date he didn't give you. Leave out "to" (the app uses the number they text from); give "to" only when Coy names one of their numbers. Use only contact ids written in the CONTEXT; if two people could match, ask. One step per person — never one text to many.
 Make a new customer only when Coy asks for one, and never for someone already in the CONTEXT (use their id). Its name is the person's or company's name as Coy said it or as written; phone, email and address only as said or written — leave out what you don't have. "contact":"cust1" starts the job for the person of the customer this plan makes. "file" moves the files: they leave the job or person they were on. Use only file ids written in the CONTEXT.`;
 
 /** The instructions Dusty is given about plans — appended to his system prompt. */

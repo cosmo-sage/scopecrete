@@ -9,8 +9,7 @@
    Google (the invite page's sign-in, through /auth/callback) and
    a Request access tab, which is an email to admin@scopecrete.ai
    — the design's form only pretended to send. Its "Phone" sign-in
-   is left out: there is no text-code sign-in behind it (§10:
-   texting waits on 10DLC).
+   is left out: there is no text-code sign-in behind it.
    ============================================================ */
 
 import { useRef, useState } from "react";

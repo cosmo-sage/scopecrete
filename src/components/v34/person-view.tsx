@@ -15,9 +15,9 @@
  * Location, the facts and Recent. Someone not filed yet has the four buckets
  * right under the header — filing them is the point of the page.
  *
- * Nothing here sends anything. Text writes a draft to copy into Quo (10DLC is
- * not registered, DECISIONS §6); Email opens the phone's mail app; Ask Dusty
- * opens Dusty on this person, read-only.
+ * Text sends through Quo from the composer on Coy's tap (DECISIONS §6,
+ * 2026-10-05); Email opens the phone's mail app; Ask Dusty opens Dusty on this
+ * person.
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
@@ -700,7 +700,7 @@ function Activity({ messages, notes, phone, contactId, name, onMerge, onNoteSave
         <Timeline messages={shown} notes={shownNotes} phone={phone} />
       </div>
       <div id="person-composer" className="mt-1.5 rounded overflow-hidden shrink-0" style={{ border: `1px solid ${T.hair}` }}>
-        <Composer contactId={contactId} phone={phone} name={name} onNoteSaved={onNoteSaved} />
+        <Composer contactId={contactId} phone={phone} name={name} onNoteSaved={onNoteSaved} onSent={onNoteSaved} />
       </div>
     </div>
   );

@@ -473,7 +473,7 @@ export default function ChatThreadPage() {
 
         {!loading && !error && channel?.kind !== "chat" && channel?.kind !== "notes" && (
           <Composer contactId={contactId} phone={channel?.kind === "phone" ? channel.value : phone} name={name}
-            only={channel?.kind === "email" ? "email" : "text"} onNoteSaved={() => setReload((n) => n + 1)}
+            only={channel?.kind === "email" ? "email" : "text"} onNoteSaved={() => setReload((n) => n + 1)} onSent={() => setReload((n) => n + 1)}
             fromLine={orgLines.length > 1 ? { lines: orgLines, value: outLine?.id ?? null, onPick: setFromLine } : null} />
         )}
       </div>

@@ -1892,7 +1892,7 @@ expected start date per quoted job before it means anything. Add the field.
   on screen waited for a reload. Now one watcher per tab
   (`src/lib/v34/live-threads.ts`, `useLiveThreads()`) tells them something
   changed and they refetch their own reads (counts included): Supabase
-  Realtime on `messages` INSERT — instant, once **migration 082** puts
+  Realtime on `messages` INSERT — instant since **migration 082** (applied 2026-10-05 on Coy's "Apply 082") put
   `messages` in the `supabase_realtime` publication (RLS decides who hears;
   the payload is never drawn) — and, working without it, a poll of
   `/api/threads/latest` (the newest message id and Dusty's newest filing,

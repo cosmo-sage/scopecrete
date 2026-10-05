@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { APP_ORIGIN, LOGIN_URL, cookieDomain, hostKind, orgOrigin, type HostKind } from "@/lib/hosts";
+import { myOrgs } from "@/lib/access-server";
 
 // Next.js 16 renamed middleware.ts -> proxy.ts; export function proxy
 // replaces export function middleware. Same file location, same matcher
@@ -81,9 +82,8 @@ export async function proxy(request: NextRequest) {
     if (pathname !== "/login" && !isDash) return NextResponse.next();
     const s = await sessionFor(request, host);
     if (!s.signedIn) return isDash ? go(loginWithNext(pathname), s.response()) : s.response();
-    // RLS returns only the orgs this person belongs to.
-    const { data } = await s.supabase.from("orgs").select("slug").order("created_at").limit(1).maybeSingle();
-    const home = orgOrigin((data as { slug?: string } | null)?.slug);
+    // Only the orgs this person belongs to (sc_my_orgs — estimators included, 081).
+    const home = orgOrigin((await myOrgs(s.supabase))[0]?.slug);
     if (home) return go(`${home}${isDash ? pathname : "/dashboard"}${isDash ? search : ""}`, s.response());
     // Signed in but no org with an address: the dashboard here says what's missing.
     return pathname === "/login" ? go(new URL("/dashboard", request.url), s.response()) : s.response();
@@ -96,11 +96,10 @@ export async function proxy(request: NextRequest) {
     if (!isDash) return NextResponse.next();
     const s = await sessionFor(request, host);
     if (!s.signedIn) return go(loginWithNext(pathname), s.response());
-    const { data: here } = await s.supabase.from("orgs").select("id").eq("slug", kind.slug).maybeSingle();
-    if (here) return s.response();
+    const mine = await myOrgs(s.supabase);
+    if (mine.some((o) => o.slug === kind.slug)) return s.response();
     // Not a member here (or no such org): send them to their own, else to sign-in.
-    const { data: mine } = await s.supabase.from("orgs").select("slug").order("created_at").limit(1).maybeSingle();
-    const home = orgOrigin((mine as { slug?: string } | null)?.slug);
+    const home = orgOrigin(mine[0]?.slug);
     return go(home ? `${home}/dashboard` : LOGIN_URL, s.response());
   }
 

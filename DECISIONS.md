@@ -4,7 +4,7 @@ Ground truth for every agent working this repo. If code disagrees with this
 document, the code is wrong or this document is stale — resolve it, don't
 guess. Update this file in the same PR that changes the behavior it describes.
 
-Last updated: 2026-10-05 (one top row on the job's three views; the proposal's dark band off the cover; Good / Better / Best removed — one price per job; search across the header; six dots for the activity line; job switch on the name's row; budget line notes; quo-intake stores every Quo event, own lines included — v10; one Unit type picker; a section's Camera; Dusty writes in Figtree; Dusty is the Scopecrete Lander; an All thread; proposal cover band and Prepared by; sign-in at app.scopecrete.ai/login, each org at <slug>.app.scopecrete.ai; Dusty's chat keeps its files and files them on a customer or job — migration 079; vendor Delete; Dusty on a vendor's page and looking at attached photos; sales tax by address via TaxLocus — migration 078; archive reasons; Lines, providers and logs — migration 077; internal notes with @-tags; Jobs board sort and filter; jobs by hand — migration 076; done and lost customers in Threads; proposals sent by link, every opening tracked; every option side by side for the customer — migration 075; Documents is Files, everywhere — migration 074; Threads v2 — threads you make, channels per number, the customer page reshaped — migration 073; an address given is kept and asked about — migration 072; Dusty sets addresses; customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
+Last updated: 2026-10-05 (onsite estimators — jobs and pages by person, vendor first, tags notify — migration 081 written; one top row on the job's three views; the proposal's dark band off the cover; Good / Better / Best removed — one price per job; search across the header; six dots for the activity line; job switch on the name's row; budget line notes; quo-intake stores every Quo event, own lines included — v10; one Unit type picker; a section's Camera; Dusty writes in Figtree; Dusty is the Scopecrete Lander; an All thread; proposal cover band and Prepared by; sign-in at app.scopecrete.ai/login, each org at <slug>.app.scopecrete.ai; Dusty's chat keeps its files and files them on a customer or job — migration 079; vendor Delete; Dusty on a vendor's page and looking at attached photos; sales tax by address via TaxLocus — migration 078; archive reasons; Lines, providers and logs — migration 077; internal notes with @-tags; Jobs board sort and filter; jobs by hand — migration 076; done and lost customers in Threads; proposals sent by link, every opening tracked; every option side by side for the customer — migration 075; Documents is Files, everywhere — migration 074; Threads v2 — threads you make, channels per number, the customer page reshaped — migration 073; an address given is kept and asked about — migration 072; Dusty sets addresses; customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
 
 ---
 
@@ -332,13 +332,72 @@ across the database … I also want to be able to upload a logo for my org."*
   refused. **`sc_remove_member` is NOT applied:** its `delete` statement is
   held at the Supabase connector's approval gate (timed out twice); until it
   is approved and applied, the × on a person says "Removing people isn't
-  switched on yet". **Roles don't limit what a
-  member sees yet** — everyone in the org reads everything under
-  `get_user_org_ids()`; only owners manage the org.
+  switched on yet". Owners and members read everything under
+  `get_user_org_ids()`; only owners manage the org. **Onsite estimators**
+  (role `field`) see only the jobs and pages they are given — §2j.
 - Rehearsed before applying: owner renames and it is audited; blank refused;
   a path in another org's folder or with `..` refused; a direct UPDATE on
   `orgs` changes nothing; a stranger can't rename, set a logo, or see people
   or the audit; anon has no execute.
+
+## 2j. Onsite estimators — jobs and pages by person (migration 081, written 2026-10-05, NOT applied)
+
+Coy: *"I need be able to use onsite estimators and give them access to the
+app to upload photos and plans and take measurements … when I create a user
+I need to be able to set permissions. I want to be able to enable access to
+specific jobs and pages. Also they need to be setup as a vendor before I can
+enable internal access. Internal users can be mentioned with @(username) in
+the customer notes and get a notification."*
+
+- **The role `field` (062's unused "field crew") is the onsite estimator.**
+  `get_user_org_ids()` leaves `field` memberships out, so an estimator reads
+  nothing of the org by default — contacts, texts, calls, customers, cash,
+  the inbox, Dusty's chats. What they may reach is granted back table by
+  table for their jobs only (`sc_field_job_ids(page)`, `sc_field_org_ids(page)`):
+  the job and its areas always (jobs read-only; sections read and write);
+  **Photos & files** (`files` on their jobs, read, upload, file on an area);
+  **Plan room** (sheets, takeoff groups and shapes; the in-room PDFs to read);
+  **Budget** (the job's estimate and lines; the Price book, assemblies,
+  money defaults, parish rates and project types to read). Storage follows
+  the `files` rows. Jobs: `org_members.all_jobs` or `job_ids`. The proposal,
+  Threads, Customers, Cash, Vendors, Logs, Dashboard, search and Dusty are
+  not theirs; the app hides them and sends them to the Jobs board
+  (`redirectFor()`, `src/lib/access.ts`, tested), and RLS is the lock either
+  way. On the job page they see who it's for — name and phone only
+  (`sc_field_job_contact()`), so they can meet the customer.
+- **Vendor first.** `org_members.contact_id` / `org_invites.contact_id`: an
+  estimator must be a contact filed **vendor** (`sc_check_access()`), checked
+  on invite (`sc_invite_member()`) and on change (`sc_set_member_access()`,
+  owners only, never your own role, never the last owner, audited
+  `member_access`). Their name in @-lists falls back to the vendor's.
+- **Where Coy does it.** Settings → Organisation → People: **+ Invite** →
+  Owner · Member · **Onsite estimator** → the vendor (picked from Vendors; their
+  email fills in), pages, every job or the ones ticked → the link, as before.
+  ✎ on a person changes their role, vendor, pages and jobs. A vendor's page
+  has **App access**, which opens that invite with them picked.
+- **Tags notify (`member_notifications`).** A note that tags a member writes
+  one row per tagged member (trigger `contact_notes_mentions`, the last week
+  backfilled), with the job they may open; the activity line's "Tagged you on …"
+  reads it (`tagItems()` in `/api/activity`), for an estimator linking to the
+  job, since they can't open the thread. In-app only — nothing is texted or
+  emailed (§10). The call notes on the customer page take @ too
+  (`mention-field.tsx`), like Internal notes.
+- **Also in 081:** `sc_my_orgs()` / `sc_my_access()` give the header, sign-in
+  routing and `getApiSession()` the org's name, slug and logos without the
+  `orgs` row (webhook_url, api_key_hash); `sc_spine_drift` becomes
+  `security_invoker`; `leads_view`, `vendors_view`, `job_close_rates` and
+  `sc_open_name_questions` (unread by the app) lose authenticated's select
+  (§9). The app ships ahead of 081: each new function falls back to the old
+  read when it is missing, and the estimator role is off until it exists.
+- Rehearsed (rolled back) on the live data: a test estimator on one job with
+  Photos & files + Plan room saw 0 contacts, messages, customers and notes,
+  only that job, its 11 files and their storage objects, 2 sheets and its
+  takeoffs, no estimate or Price book; added an area to it, was refused one
+  on another job, could not update the job or make themselves owner; Coy's
+  counts unchanged (206 contacts, 42 jobs, drift 3 through the invoker view);
+  inviting an estimator with no vendor, or a customer, refused; Coy's tag
+  reached them linked to the job; switched to Budget on another job, they saw
+  only that job, its estimate and the 430 Price book items.
 
 ## 2a. The raw log and the spine — migration 016
 
@@ -3279,11 +3338,13 @@ genuinely required.
 - **Google Maps keys (2026-09-30):** `NEXT_PUBLIC_GOOGLE_MAPS_EMBED_KEY` is
   public by design — restrict it to the app's domains in Google Cloud.
   `GOOGLE_MAPS_GEOCODE_KEY` is server-side only (geocoding on address save).
-- **Known exposure, not yet fixed:** the views `sc_spine_drift` and
-  `sc_open_name_questions` are not `security_invoker`, so they run as their
-  owner and bypass RLS — a cross-tenant read the day a second org exists.
-  Harmless at one org today; fix before onboarding another. Views must be
-  created `with (security_invoker = true)`.
+- **Known exposure, fixed by 081 once applied:** the views `sc_spine_drift`,
+  `sc_open_name_questions`, `leads_view`, `vendors_view` and `job_close_rates`
+  are not `security_invoker`, so they run as their owner and bypass RLS — a
+  cross-tenant read the day a second org exists, and a read past an onsite
+  estimator's limits. 081 makes `sc_spine_drift` invoker and takes
+  authenticated's select off the other four. Views must be created
+  `with (security_invoker = true)`.
 
 ---
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getApiSession } from "@/lib/api-auth";
+import { getApiSession, type ApiSession } from "@/lib/api-auth";
+import { myAccess } from "@/lib/access-server";
 import { plainSpeakers } from "@/lib/speakers";
 import { plainNote } from "@/lib/mentions";
 import { formatPhone } from "@/lib/v34/tokens";
@@ -73,6 +74,13 @@ export async function GET(req: NextRequest) {
   const result = await getApiSession(req);
   if (!result.ok) return result.response;
   const { supabase, orgId, userId, applyCookies } = result.session;
+
+  // An onsite estimator (081) reads none of the org's people, calls or reader runs —
+  // their line is the notes they were tagged in, nothing else.
+  const access = await myAccess(supabase, orgId);
+  if (access.limited) {
+    return applyCookies(NextResponse.json({ pinned: null, waiting: 0, last_read_at: null, items: await tagItems(supabase, orgId, userId, true), musings: [] }));
+  }
 
   const since = new Date(Date.now() - 7 * 86400_000).toISOString();
   // Reminders: open next steps due today or overdue (contact_tasks, migration
@@ -258,15 +266,7 @@ export async function GET(req: NextRequest) {
     }
   }
   // Internal notes that tag this member (Coy, 2026-10-04), the last week, not their own.
-  const { data: tagRows } = await supabase.from("contact_notes")
-    .select("id, body, created_at, created_by, contact_id, contact:contacts(name)")
-    .eq("org_id", orgId).like("body", `%(u:${userId})%`).gte("created_at", new Date(Date.now() - 7 * 86400_000).toISOString())
-    .order("created_at", { ascending: false }).limit(6);
-  for (const n of (tagRows ?? []) as unknown as Array<{ id: string; body: string; created_at: string; created_by: string | null; contact_id: string; contact: { name: string | null } | null }>) {
-    if (n.created_by === userId) continue;
-    items.push({ id: `tag-${n.id}`, at: n.created_at, kind: "reminder", contact_id: n.contact_id, href: `/dashboard/messages/${n.contact_id}?channel=notes`,
-      summary: `Tagged you on ${clipq(n.contact?.name ?? "a thread", 60)}: ${clipq(plainNote(n.body).replace(/\s+/g, " "), 180)}`, detail: plainNote(n.body), tone: "good" });
-  }
+  items.push(...await tagItems(supabase, orgId, userId, false));
   items.sort((a, b) => b.at.localeCompare(a.at));
   if (waiting > 0) {
     items.push({ id: "waiting", at: new Date().toISOString(), kind: "waiting", contact_id: null,
@@ -329,4 +329,36 @@ export async function GET(req: NextRequest) {
         tone: "quiet" as const };
     })).sort((a, b) => b.at.localeCompare(a.at)),
   }));
+}
+
+/**
+ * Notes that tag this member, the last week, not their own (Coy, 2026-10-04 / 2026-10-05:
+ * "Internal users can be mentioned … and get a notification"). Since 081 each tag is a
+ * member_notifications row written by the database, so an onsite estimator — who can't read
+ * contact_notes — gets theirs, linked to the job they may open. Before 081, the notes themselves.
+ */
+async function tagItems(supabase: ApiSession["supabase"], orgId: string, userId: string, limited: boolean): Promise<ActivityItem[]> {
+  const weekAgo = new Date(Date.now() - 7 * 86400_000).toISOString();
+  const { data: rows, error } = await supabase.from("member_notifications")
+    .select("id, note_id, contact_id, job_id, title, body, created_at")
+    .eq("user_id", userId).eq("org_id", orgId).gte("created_at", weekAgo).order("created_at", { ascending: false }).limit(6);
+  if (!error) {
+    return ((rows ?? []) as Array<{ id: string; note_id: string | null; contact_id: string | null; job_id: string | null; title: string | null; body: string | null; created_at: string }>).map((n) => {
+      const href = limited ? (n.job_id ? `/dashboard/scope/${n.job_id}` : null)
+        : n.contact_id ? `/dashboard/messages/${n.contact_id}?channel=notes` : n.job_id ? `/dashboard/scope/${n.job_id}` : null;
+      const words = plainNote(n.body ?? "");
+      return { id: `tag-${n.note_id ?? n.id}`, at: n.created_at, kind: "reminder", contact_id: limited ? null : n.contact_id, href,
+        summary: `Tagged you on ${clipq(n.title ?? "a thread", 60)}: ${clipq(words.replace(/\s+/g, " "), 180)}`,
+        detail: limited && !n.job_id ? `${words}\n\n(Not on one of your jobs — ask whoever tagged you.)` : words, tone: "good" as const };
+    });
+  }
+  if (limited) return [];
+  const { data: tagRows } = await supabase.from("contact_notes")
+    .select("id, body, created_at, created_by, contact_id, contact:contacts(name)")
+    .eq("org_id", orgId).like("body", `%(u:${userId})%`).gte("created_at", weekAgo)
+    .order("created_at", { ascending: false }).limit(6);
+  return ((tagRows ?? []) as unknown as Array<{ id: string; body: string; created_at: string; created_by: string | null; contact_id: string; contact: { name: string | null } | null }>)
+    .filter((n) => n.created_by !== userId)
+    .map((n) => ({ id: `tag-${n.id}`, at: n.created_at, kind: "reminder", contact_id: n.contact_id, href: `/dashboard/messages/${n.contact_id}?channel=notes`,
+      summary: `Tagged you on ${clipq(n.contact?.name ?? "a thread", 60)}: ${clipq(plainNote(n.body).replace(/\s+/g, " "), 180)}`, detail: plainNote(n.body), tone: "good" as const }));
 }

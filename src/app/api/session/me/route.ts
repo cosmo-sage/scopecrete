@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
 import { orgView } from "@/lib/org-server";
+import { myOrgs, myAccess } from "@/lib/access-server";
 
 /**
  * Who is signed in, and which org they belong to.
@@ -26,15 +27,9 @@ export async function GET(req: NextRequest) {
   if (!result.ok) return result.response;
   const { supabase, orgId, userId, applyCookies } = result.session;
 
-  const { data: org, error } = await supabase
-    .from("orgs")
-    .select("id, name, logo_light_path, logo_dark_path")
-    .eq("id", orgId)
-    .maybeSingle();
-
-  if (error) {
-    return applyCookies(NextResponse.json({ error: `orgs: ${error.message}` }, { status: 500 }));
-  }
+  // sc_my_orgs (081): an onsite estimator reads the org's name and logos, not its row.
+  const org = (await myOrgs(supabase)).find((o) => o.id === orgId) ?? null;
+  const access = await myAccess(supabase, orgId);
 
   const { data: auth } = await supabase.auth.getUser();
   const email = auth?.user?.email ?? null;
@@ -67,7 +62,7 @@ export async function GET(req: NextRequest) {
     .limit(1)
     .maybeSingle();
 
-  const brand = org ? orgView(org) : null;
+  const brand = org ? orgView(org as unknown as Record<string, unknown>) : null;
   return applyCookies(NextResponse.json({
     line: line?.phone_e164 ?? null,
     user_id: userId,
@@ -81,6 +76,8 @@ export async function GET(req: NextRequest) {
     logo_light: brand?.logo_light ?? false,
     logo_dark: brand?.logo_dark ?? false,
     logo_stamp: brand?.logo_stamp ?? null,
-    role: membership?.role ?? null,
+    role: membership?.role ?? access.role ?? null,
+    // What an onsite estimator may open (081); everyone else { limited: false }.
+    access: { limited: access.limited, pages: access.pages, all_jobs: access.all_jobs, job_ids: access.job_ids },
   }));
 }

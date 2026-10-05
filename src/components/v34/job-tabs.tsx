@@ -9,6 +9,8 @@
 import type React from "react";
 import Link from "next/link";
 import { T, F, disp } from "@/lib/v34/tokens";
+import { useAccess } from "@/lib/v34/access-ctx";
+import { can } from "@/lib/access";
 
 const TABS = [
   { k: "plans", label: "Plan room", href: (id: string) => `/dashboard/scope/${id}/plans` },
@@ -17,11 +19,15 @@ const TABS = [
 ] as const;
 
 export function JobTabs({ jobId, active, back = false }: { jobId: string; active: "job" | "plans" | "proposal"; back?: boolean }) {
+  // An onsite estimator (081) sees only the views they were given; never the proposal.
+  const access = useAccess();
+  const tabs = TABS.filter((t) => t.k === "job" || (t.k === "plans" ? can(access, "plan_room") : !access.limited))
+    .map((t) => (t.k === "job" && !can(access, "budget") ? { ...t, label: "Job" } : t));
   return (
     <nav aria-label="This job" className="sc-no-print flex items-center gap-1.5 min-w-0">
       {back && <Link href="/dashboard/scope" className="no-underline shrink-0" style={{ fontFamily: disp, fontSize: 11, letterSpacing: ".1em", textTransform: "uppercase", color: T.ink3 }}>‹ Jobs</Link>}
       <span className="inline-flex rounded overflow-hidden shrink-0" style={{ border: `1px solid ${T.hairStrong}` }}>
-        {TABS.map((t, i) => {
+        {tabs.map((t, i) => {
           const on = t.k === active;
           return (
             <Link key={t.k} href={t.href(jobId)} aria-current={on ? "page" : undefined} className="no-underline flex items-center"

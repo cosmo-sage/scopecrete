@@ -20,6 +20,7 @@ import { useWide } from "@/lib/v34/use-wide";
 import { call, dateLabel } from "@/components/v34/cost-cards";
 import { ReceiptImport } from "@/components/v34/receipt-import";
 import { ArchiveButton } from "@/components/v34/archive-actions";
+import { PENDING_VENDOR_KEY } from "@/components/v34/org-settings";
 
 interface VRow {
   id: string; name: string | null; company_name: string | null; subtype: string | null; phone: string | null; email: string | null;
@@ -235,6 +236,11 @@ export function VendorPage({ id }: { id: string }) {
           {p.messages > 0 && <Link href={`/dashboard/messages/${id}`} style={{ ...btn(false), display: "inline-flex", alignItems: "center" }}>Conversation</Link>}
           <button onClick={() => setEditing(true)} style={btn(false)}>Edit</button>
           <button onClick={() => setReceipt(true)} style={btn(true)}>+ Receipt or quote</button>
+          {/* Onsite estimators are vendors first (081; Coy, 2026-10-05): from here to Settings → People with them picked. */}
+          <button onClick={() => {
+            try { sessionStorage.setItem(PENDING_VENDOR_KEY, JSON.stringify({ contact_id: id, email: v.email ?? null })); } catch { /* private mode */ }
+            window.dispatchEvent(new Event("sc:open-settings"));
+          }} title="Invite them into the app as an onsite estimator" style={btn(false)}>App access</button>
           <ArchiveButton kind="contact" id={id} action="delete" what={label(v)} then="/dashboard/vendors" style={{ ...btn(false), color: T.red, borderColor: T.red }}>Delete</ArchiveButton>
         </div>
       </div>

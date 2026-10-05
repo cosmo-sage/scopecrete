@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookieDomain, hostKind } from "./hosts";
+import { myOrgs } from "./access-server";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
@@ -69,8 +70,9 @@ export async function getApiSession(req: NextRequest): Promise<ApiSessionResult>
   let members = supabase.from("org_members").select("org_id").eq("user_id", user.id);
   const host = hostKind(req.headers.get("host"));
   if (host.kind === "org") {
-    const { data: here } = await supabase.from("orgs").select("id").eq("slug", host.slug).maybeSingle();
-    members = members.eq("org_id", (here as { id?: string } | null)?.id ?? "00000000-0000-0000-0000-000000000000");
+    // sc_my_orgs (081): an onsite estimator can't read the orgs row itself.
+    const here = (await myOrgs(supabase)).find((o) => o.slug === host.slug);
+    members = members.eq("org_id", here?.id ?? "00000000-0000-0000-0000-000000000000");
   }
   const { data: membership, error: memberErr } = await members.limit(1).maybeSingle();
 

@@ -18,6 +18,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useAccess } from "@/lib/v34/access-ctx";
 import { useRouter } from "next/navigation";
 import { T, F, disp, eyebrow, nums, clip, relTime, formatPhone } from "@/lib/v34/tokens";
 import { EmptyState, Sheet } from "@/components/v34/primitives";
@@ -52,6 +53,8 @@ interface Job {
 const SOURCE_LABEL = Object.fromEntries(LEAD_SOURCES.map((l) => [l.k, l.label]));
 
 export default function JobsBoard() {
+  // An onsite estimator (081) sees their jobs but doesn't start, move or accept them.
+  const { limited } = useAccess();
   const [jobs, setJobs] = useState<Job[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [noOrg, setNoOrg] = useState(false);
@@ -186,11 +189,11 @@ export default function JobsBoard() {
       <div className="px-3 pt-3 pb-2" style={{ background: T.card, borderBottom: `1px solid ${T.hair}` }}>
         <div className="flex items-center gap-2">
           <div style={{ fontFamily: disp, fontSize: F.xl, fontWeight: 600, lineHeight: 1.05, flex: 1 }}>Jobs</div>
-          <button onClick={() => setNewOpen(true)} className="rounded px-3"
+          {!limited && <button onClick={() => setNewOpen(true)} className="rounded px-3"
             style={{ height: 34, background: T.hiviz, color: T.onHiviz, fontFamily: disp, fontSize: F.sm, fontWeight: 600,
                      textTransform: "uppercase", letterSpacing: ".06em", cursor: "pointer" }}>
             + New job
-          </button>
+          </button>}
         </div>
         {error && <div style={{ fontSize: F.xs, color: T.red, marginTop: 4 }}>{error}</div>}
         <div className="flex items-center gap-2 flex-wrap mt-2">
@@ -247,7 +250,7 @@ export default function JobsBoard() {
                       : `Nothing in ${s.label}.`}
                   </div>
                 ) : byStage[i].map((j) => (
-                  <JobCard key={j.id} j={j} busy={busy === j.id}
+                  <JobCard key={j.id} j={j} busy={busy === j.id} readOnly={limited}
                     next={i < STAGES.length - 2 ? STAGES[i + 1] : null}
                     onNext={(status) => void patch(j.id, { status })}
                     onMove={() => setMoving(j)}
@@ -265,8 +268,8 @@ export default function JobsBoard() {
 
 /* ------------------------------------------------------------------ card */
 
-function JobCard({ j, busy, next, onNext, onMove, onAccept, onFlag }: {
-  j: Job; busy: boolean; next: (typeof STAGES)[number] | null;
+function JobCard({ j, busy, readOnly, next, onNext, onMove, onAccept, onFlag }: {
+  j: Job; busy: boolean; readOnly?: boolean; next: (typeof STAGES)[number] | null;
   onNext: (status: string) => void; onMove: () => void; onAccept: () => void;
   onFlag: (archive: boolean) => void;
 }) {
@@ -314,7 +317,7 @@ function JobCard({ j, busy, next, onNext, onMove, onAccept, onFlag }: {
           </span>
         )}
       </div>
-      {j.flag_reason && (
+      {j.flag_reason && !readOnly && (
         <div className="rounded px-2 py-1.5 mt-2" style={{ background: T.hivizDim, border: `1px solid ${T.hiviz}` }}>
           <div style={{ fontSize: F.xs, color: T.ink }}>{j.flag_reason}</div>
           <div className="flex gap-1.5 mt-1.5">
@@ -323,7 +326,7 @@ function JobCard({ j, busy, next, onNext, onMove, onAccept, onFlag }: {
           </div>
         </div>
       )}
-      <div className="flex items-center gap-1.5" style={{ marginTop: 8 }}>
+      {!readOnly && <div className="flex items-center gap-1.5" style={{ marginTop: 8 }}>
         {!j.counts_toward_value ? (
           <>
             <span style={{ ...eyebrow, color: T.hiviz, flex: 1 }}>Suggested — not counted</span>
@@ -341,7 +344,7 @@ function JobCard({ j, busy, next, onNext, onMove, onAccept, onFlag }: {
             )}
           </>
         )}
-      </div>
+      </div>}
     </div>
   );
 }

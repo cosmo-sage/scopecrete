@@ -22,6 +22,7 @@
 
 import { EmailList } from "@/components/v34/email-sheet";
 import { plainNote } from "@/lib/mentions";
+import { MentionField } from "@/components/v34/mention-field";
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -884,8 +885,9 @@ function CallCard({ m, who, onAddNote }: { m: Item; who: string; onAddNote: (id:
             {m.notes.map((n) => <span key={n.id} style={{ fontSize: 13, color: T.ink }}>{plainNote(n.body)} <span style={{ fontSize: 10, color: T.ink3 }}>{relTime(n.created_at)}</span></span>)}
             {adding ? (
               <form onSubmit={async (e) => { e.preventDefault(); if (!draft.trim()) return; await onAddNote(m.id, draft.trim()); setDraft(""); setAdding(false); }} className="flex gap-1.5">
-                <input autoFocus value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Note on this call"
-                  style={{ flex: 1, height: 28, padding: "0 8px", border: `1px solid ${T.hairStrong}`, borderRadius: 3, background: T.slab, color: T.ink }} />
+                {/* @ tags a teammate, onsite estimators included — they get a notification (081). */}
+                <MentionField autoFocus value={draft} onChange={setDraft} placeholder="Note on this call · @ to tag"
+                  style={{ height: 28, padding: "0 8px", border: `1px solid ${T.hairStrong}`, borderRadius: 3, background: T.slab, color: T.ink }} />
                 <button type="submit" style={{ ...lbl, height: 28, padding: "0 10px", borderRadius: 3, background: T.hiviz, color: T.onHiviz }}>Save</button>
               </form>
             ) : (

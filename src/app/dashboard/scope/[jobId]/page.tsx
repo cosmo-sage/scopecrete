@@ -41,6 +41,8 @@ import {
 } from "@/lib/engine";
 import { isReinforcementCard } from "@/lib/cost-cards";
 import { ArchiveButton } from "@/components/v34/archive-actions";
+import { useAccess } from "@/lib/v34/access-ctx";
+import { can } from "@/lib/access";
 import { SectionTakeoffStrip, groupOf, shapesOf } from "@/components/v34/section-takeoff";
 import { fmtQty } from "@/lib/takeoff";
 
@@ -93,6 +95,7 @@ async function send(url: string, method: string, body?: unknown) {
 
 export default function ScopeBuilder() {
   const { jobId } = useParams<{ jobId: string }>();
+  const access = useAccess();
   const [job, setJob] = useState<Job | null>(null);
   const [contact, setContact] = useState<Contact | null>(null);
   const [why, setWhy] = useState<Why | null>(null);
@@ -251,7 +254,7 @@ export default function ScopeBuilder() {
           {/* Coy, 2026-10-05: the job's name top left, Plan room · Budget · Proposal top right — the
               same row on all three views (JobHeaderRow); the ⓘ right after the name it explains. */}
           <JobHeaderRow jobId={jobId} active="job"
-            title={<input defaultValue={realTitle} placeholder={titleHint} aria-label="Job name"
+            title={access.limited ? (realTitle || titleHint || "Job") : <input defaultValue={realTitle} placeholder={titleHint} aria-label="Job name"
               size={Math.max(6, (realTitle || titleHint || "").length + 1)}
               onBlur={(e) => { const v = e.target.value; if (v !== realTitle) void send(`/api/jobs/${jobId}`, "PATCH", { title: v }).then((b) => setJob((j) => j && { ...j, title: b.job.title })).catch((er) => setSaveErr((m) => ({ ...m, job: String(er.message ?? er) }))); }}
               className="bg-transparent outline-none"
@@ -264,8 +267,8 @@ export default function ScopeBuilder() {
           {/* The page's own buttons sit below the name's row (Coy, 2026-10-05). */}
           <div className="flex items-start gap-2">
           <div style={{ flex: 1, minWidth: 0 }}>
-          <JobChips job={job} onSet={(field, value) => send(`/api/jobs/${jobId}`, "PATCH", { [field]: value })
-            .then((b) => setJob((j) => j && { ...j, status: b.job.status, job_type: b.job.job_type, lead_source: b.job.lead_source }))} />
+          {!access.limited && <JobChips job={job} onSet={(field, value) => send(`/api/jobs/${jobId}`, "PATCH", { [field]: value })
+            .then((b) => setJob((j) => j && { ...j, status: b.job.status, job_type: b.job.job_type, lead_source: b.job.lead_source }))} />}
           </div>
           {planSheets.length > 0 && (
             <button onClick={() => openSheets(null, null)} className="rounded px-2.5 shrink-0" style={{ marginTop: 6,
@@ -276,7 +279,10 @@ export default function ScopeBuilder() {
           </div>
           <div style={{ fontSize: F.xs, color: who ? T.ink3 : T.hiviz, marginTop: 4, ...clip }}>
             {who ? (
-              <Link href={`/dashboard/messages/${contact!.id}`} style={{ color: T.ink2 }}>{who}</Link>
+              access.limited
+                // An onsite estimator gets who it's for and their phone (081), not their thread.
+                ? <span style={{ color: T.ink2 }}>{contact?.name || "Customer"}{contact?.phone ? <> · <a href={`tel:${contact.phone}`} style={{ color: T.ink2 }}>{contact.phone}</a></> : null}</span>
+                : <Link href={`/dashboard/messages/${contact!.id}`} style={{ color: T.ink2 }}>{who}</Link>
             ) : "Not attached to a customer yet"}
             {job.address ? ` · ${job.address}` : ""}
             {` · ${sections.length} section${sections.length === 1 ? "" : "s"}`}
@@ -358,9 +364,9 @@ export default function ScopeBuilder() {
                     <SectionCard key={s.id} s={s} index={sections.indexOf(s)} err={saveErr[s.id]} rcards={rcards} jobType={job.job_type} jobId={jobId} onSlot={onSlot}
                       sheets={sheetsOf(s)} hasPlans={planSheets.length > 0} onSheets={(start) => openSheets(s, start)}
                       takeoffUnit={s.takeoff_sync !== false && sh.unit ? sh.unit : null}
-                      takeoff={<SectionTakeoffStrip jobId={jobId} sectionId={s.id} sectionName={s.name ?? null} following={s.takeoff_sync !== false}
+                      takeoff={!can(access, "plan_room") ? null : <SectionTakeoffStrip jobId={jobId} sectionId={s.id} sectionName={s.name ?? null} following={s.takeoff_sync !== false}
                         plans={plans} sectionNames={names} onChanged={takeoffChanged} />}
-                      photos={<SectionPhotos jobId={jobId} sectionId={s.id} sectionName={s.name ?? null}
+                      photos={!can(access, "files") ? null : <SectionPhotos jobId={jobId} sectionId={s.id} sectionName={s.name ?? null}
                         photos={jobFiles.filter((f) => (f.section_id === s.id || (f.takeoff_measurement_id && shapeIds.has(f.takeoff_measurement_id))) && (f.kind === "image" || f.kind === "video"))}
                         sections={sections.map((x) => ({ id: x.id, name: x.name ?? null }))} onChange={fileChanged} />}
                       onLocal={(p) => patchLocal(s.id, p)} onSave={(p) => void save(s.id, p)}
@@ -381,17 +387,17 @@ export default function ScopeBuilder() {
         </div>
 
         {/* The budget: lines from cost cards, good / better / best (migration 048). */}
-        <div className="px-3 pb-3">
+        {can(access, "budget") && <div className="px-3 pb-3">
           <JobBudget jobId={job.id} sections={sections} days={job.duration_days} onSummary={setBudget} refresh={budgetTick} slots={slots} />
-        </div>
+        </div>}
 
         {/* Photos, plans, specs, receipts — Dusty reads them (migration 045). */}
-        <div className="px-3 pb-3">
+        {can(access, "files") && <div className="px-3 pb-3">
           <FilesPanel jobId={job.id} sections={sections.map((x) => ({ id: x.id, name: x.name ?? null }))} />
-        </div>
+        </div>}
 
         {/* Delete lives at the very bottom (Coy, 2026-10-04: it pushed Proposal off a phone's header). */}
-        {!job.archived_at && (
+        {!job.archived_at && !access.limited && (
           <div className="px-3 pb-6 pt-2 flex items-center justify-between gap-2" style={{ borderTop: `1px solid ${T.hair}` }}>
             <span style={{ fontSize: F.xs, color: T.ink3 }}>Delete this job — it can be restored from Archived &amp; deleted.</span>
             <ArchiveButton kind="job" id={jobId} action="delete" what={realTitle ? `the job “${realTitle}”` : "this job"} then="/dashboard/scope"

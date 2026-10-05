@@ -193,6 +193,11 @@ export async function GET(
       .eq("org_id", orgId)
       .maybeSingle();
     contact = c ?? null;
+    // An onsite estimator can't read contacts; they get the name and phone of who it's for (081).
+    if (!contact) {
+      const { data: fc } = await supabase.rpc("sc_field_job_contact", { p_job: id });
+      contact = (Array.isArray(fc) ? fc[0] : null) ?? null;
+    }
   }
 
   // Why this job exists, for one made by filing someone as a customer (Coy,

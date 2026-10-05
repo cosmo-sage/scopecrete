@@ -8,7 +8,7 @@
 
 import { useSyncExternalStore, type CSSProperties, type ReactNode } from "react";
 import { ROOT_DOMAIN, hostKind } from "@/lib/hosts";
-import { DRAFT_GRID, GraphiteFilter, Wordmark, disp } from "./marks";
+import { DRAFT_GRID, Emblem, GraphiteFilter, Wordmark, disp } from "./marks";
 
 export const label: CSSProperties = {
   fontFamily: disp, fontWeight: 600, fontSize: 13, letterSpacing: ".14em",
@@ -101,7 +101,7 @@ export default function AuthShell({ sandbox, above, footer, children }: {
       )}
       <header style={{ backgroundColor: "#FAF8F3", backgroundImage: DRAFT_GRID, backgroundSize: "10px 10px", borderBottom: "1px solid rgba(58,62,68,.3)" }}>
         <div style={{ maxWidth: 1200, margin: "0 auto", height: 60, padding: "0 20px", display: "flex", alignItems: "center", gap: 12 }}>
-          <a href={home} aria-label="ScopeCrete home" style={{ textDecoration: "none" }}><Wordmark /></a>
+          <a href={home} aria-label="ScopeCrete home" style={{ textDecoration: "none", display: "flex", alignItems: "center", gap: 10 }}><Emblem size={28} spin={false} /><Wordmark /></a>
           <span style={{ flex: 1 }} />
           <a href={home} className="sc-back" style={{ fontFamily: disp, fontWeight: 600, fontSize: 15, letterSpacing: ".1em", textTransform: "uppercase" }}>‹ Back to site</a>
         </div>

@@ -11,6 +11,7 @@
 
 import React, { useState } from "react";
 import { Wordmark } from "@/components/v34/wordmark";
+import { Emblem } from "@/components/site/marks";
 import { light as lightFont } from "@/lib/v34/tokens";
 
 export function OrgLockup({ name, hasLight, hasDark, stamp, dark, phone }: {
@@ -20,7 +21,14 @@ export function OrgLockup({ name, hasLight, hasDark, stamp, dark, phone }: {
   const variant = dark ? (hasDark ? "dark" : hasLight ? "light" : null) : (hasLight ? "light" : hasDark ? "dark" : null);
   const src = variant ? `/api/org/logo/${variant}${stamp ? `?v=${encodeURIComponent(stamp)}` : ""}` : null;
   const [broken, setBroken] = useState<string | null>(null);
-  if (!src || broken === src) return <Wordmark size={phone ? 22 : 26} />;
+  // The emblem (orbits round the green block) from the landing-page design
+  // package, 2026-10-04, sits before the wordmark as it does on the site.
+  if (!src || broken === src) return (
+    <span style={{ display: "flex", alignItems: "center", gap: phone ? 6 : 8, flex: "none" }}>
+      <Emblem size={phone ? 24 : 28} spin={false} />
+      <Wordmark size={phone ? 22 : 26} />
+    </span>
+  );
 
   // Coy, 2026-09-30: "powered by scopecrete.ai" is the same size as the org's
   // logo — the block is exactly the logo's height, the wordmark filling what
@@ -31,10 +39,13 @@ export function OrgLockup({ name, hasLight, hasDark, stamp, dark, phone }: {
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src={src} alt={name ?? "Logo"} onError={() => setBroken(src)}
         style={{ height: h, width: "auto", maxWidth: phone ? 150 : 220, objectFit: "contain", display: "block" }} />
-      <span className="sc-powered" style={{ height: h, display: "flex", flexDirection: "column", justifyContent: "space-between", alignItems: "flex-start",
+      <span className="sc-powered" style={{ height: h, display: "flex", alignItems: "center", gap: phone ? 5 : 6,
         paddingLeft: phone ? 8 : 10, borderLeft: "1px solid var(--sc-pencil-line)" }}>
+      <Emblem size={h} spin={false} />
+      <span style={{ height: h, display: "flex", flexDirection: "column", justifyContent: "space-between", alignItems: "flex-start" }}>
         <span style={{ fontFamily: lightFont, fontWeight: 300, fontSize: 8.5, letterSpacing: ".06em", color: "var(--sc-pencil-muted)", lineHeight: 1 }}>powered by</span>
         <Wordmark size={phone ? 13 : 16} guides={false} />
+      </span>
       </span>
     </span>
   );

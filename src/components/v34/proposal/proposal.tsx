@@ -299,12 +299,24 @@ export function Proposal({ jobId }: { jobId: string }) {
     dusty, pickCover: () => setCoverPick(true),
   } : null;
 
-  const quick = (k: "show_item_prices" | "show_qty" | "show_tax_line" | "hide_area_pics") => edits?.display({ ...d, [k]: !d[k] });
+  // Coy, 2026-10-05: "The tax button doesn't actually work." With sales tax off on the budget there is no
+  // tax to show as a line or fold in, so the chip says so, and a tap turns tax on in the budget.
+  const taxOff = b?.estimate?.tax_on === false;
+  const taxOn = async () => {
+    if (!editable) return;
+    try { setBusy("Turning sales tax on…"); await call(`/api/jobs/${jobId}/budget`, "PATCH", { tax_on: true }); if (!d.show_tax_line) edits?.display({ ...d, show_tax_line: true }); await load(); }
+    catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(null); }
+  };
+  const quick = (k: "show_item_prices" | "show_qty" | "show_tax_line" | "hide_area_pics") =>
+    k === "show_tax_line" && taxOff ? void taxOn() : edits?.display({ ...d, [k]: !d[k] });
   // "Maps & photos" is on unless switched off (hide_area_pics), the others off unless switched on.
-  const chips = ([["show_item_prices", "Item prices"], ["show_qty", "Qty · unit"], ["show_tax_line", "Tax line"], ["hide_area_pics", "Maps & photos"]] as const).map(([k, label]) => {
-    const on = k === "hide_area_pics" ? !d[k] : !!d[k];
+  const chips = ([["show_item_prices", "Item prices"], ["show_qty", "Qty · unit"], ["show_tax_line", "Tax line"], ["hide_area_pics", "Maps & photos"]] as const).map(([k, l]) => {
+    let label: string = l;
+    const on = k === "hide_area_pics" ? !d[k] : !!d[k] && !(k === "show_tax_line" && taxOff);
+    if (k === "show_tax_line" && taxOff) label = "Tax · off in the budget";
     return (
       <button key={k} onClick={() => quick(k)} aria-pressed={on} className="rounded-full shrink-0"
+        title={k === "show_tax_line" ? (taxOff ? "Sales tax is off on this job's budget, so there is no tax to show. Tap to turn it on." : on ? "Tax shows as its own line. Tap to fold it into the prices." : "Tax is folded into the prices. Tap to show it as its own line.") : undefined}
         style={{ height: 26, padding: "0 10px", fontSize: 11.5, border: `1px solid ${on ? "#B85A3C" : T.hair}`, background: on ? "#F6E2D8" : T.card, color: on ? "#9A4527" : T.ink2 }}>{label}</button>
     );
   });

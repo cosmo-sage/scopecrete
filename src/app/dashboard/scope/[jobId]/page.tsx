@@ -566,20 +566,6 @@ function SectionCard({ s, index, err, onLocal, onSave, onRemove, jobType, jobId,
       {s.source_ref && (
         <div className="px-3" style={{ fontSize: F.xs, color: T.ink3, marginTop: 2 }}>From the bid: {s.source_ref.replace(/^"|"$/g, "")}</div>
       )}
-      {(sheets.length > 0 || hasPlans) && (
-        <div className="px-3 pt-1.5 flex items-center gap-1.5 flex-wrap">
-          <span style={{ ...eyebrow }}>{sheets.length ? "Check it on" : "Plan sheets"}</span>
-          {sheets.map((x) => (
-            <button key={x.id} onClick={() => onSheets(x.id)} title={x.title ?? undefined} className="rounded px-2"
-              style={{ height: 24, border: `1px solid ${T.chalk}`, color: T.chalk, background: T.card, fontSize: F.xs, fontWeight: 600, cursor: "pointer" }}>
-              {x.number}{x.title ? <span style={{ fontWeight: 400, color: T.ink2 }}> {x.title.length > 24 ? `${x.title.slice(0, 24)}…` : x.title}</span> : null}
-            </button>
-          ))}
-          <button onClick={() => onSheets(sheets[0]?.id ?? null)} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>
-            {sheets.length ? "Open beside the budget ›" : "Browse the set ›"}
-          </button>
-        </div>
-      )}
       {takeoff}
       <div className="px-3 pt-1.5 flex items-center gap-x-2 gap-y-1 flex-wrap">
         <span style={{ ...eyebrow }}>Measured by</span>
@@ -683,6 +669,22 @@ function SectionCard({ s, index, err, onLocal, onSave, onRemove, jobType, jobId,
           the sections themselves"). JobBudget draws them here; the panel below the sections is the job's totals. */}
       <div ref={budgetSlot} />
       {photos}
+      {/* Beside the photos (Coy, 2026-10-05: "This button to pull from the aerial photos or other plan sheets
+          should be in the same area as 'photos'"). */}
+      {(sheets.length > 0 || hasPlans) && (
+        <div className="px-3 pb-2 flex items-center gap-1.5 flex-wrap">
+          <span style={{ ...eyebrow }}>{sheets.length ? "Check it on" : "Plan sheets"}</span>
+          {sheets.map((x) => (
+            <button key={x.id} onClick={() => onSheets(x.id)} title={x.title ?? undefined} className="rounded px-2"
+              style={{ height: 24, border: `1px solid ${T.chalk}`, color: T.chalk, background: T.card, fontSize: F.xs, fontWeight: 600, cursor: "pointer" }}>
+              {x.number}{x.title ? <span style={{ fontWeight: 400, color: T.ink2 }}> {x.title.length > 24 ? `${x.title.slice(0, 24)}…` : x.title}</span> : null}
+            </button>
+          ))}
+          <button onClick={() => onSheets(sheets[0]?.id ?? null)} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>
+            {sheets.length ? "Open beside the budget ›" : "Browse the set ›"}
+          </button>
+        </div>
+      )}
 
       {/* Notes, typed or said (Coy, 2026-10-03: "Prep can be removed … Access … can be replaced by 'notes'.
           The notes can be typed or dictated verbally"). Kept in access_notes — no migration; neither column held anything. */}
@@ -825,10 +827,13 @@ function SectionNotes({ value, onLocal, onSave }: { value: string | null; onLoca
         <span style={eyebrow}>Notes</span>
         <span className="flex-1" />
         {!rec && (
-          <button onClick={() => setRec(true)} disabled={busy} aria-label="Say a note" title="Say a note — it is written down here"
-            className="inline-flex items-center gap-1 rounded px-2" style={{ height: 26, border: `1px solid ${T.hair}`, background: T.card, fontSize: F.xs, cursor: "pointer", opacity: busy ? 0.5 : 1 }}>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></svg>
-            {busy ? "Writing it down…" : "Say it"}
+          // The mic alone (Coy, 2026-10-05: "the microphone is enough"); recording shows the red dot and meter,
+          // writing it down spins.
+          <button onClick={() => setRec(true)} disabled={busy} aria-label={busy ? "Writing the note down" : "Say a note"} title={busy ? "Writing it down…" : "Say a note — it is written down here"}
+            className="inline-flex items-center justify-center rounded" style={{ width: 30, height: 26, border: `1px solid ${T.hair}`, background: T.card, cursor: "pointer" }}>
+            {busy
+              ? <span className="animate-spin" aria-hidden="true" style={{ width: 12, height: 12, borderRadius: "50%", border: `2px solid ${T.hair}`, borderTopColor: T.chalk }} />
+              : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></svg>}
           </button>
         )}
       </div>

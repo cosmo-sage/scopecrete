@@ -30,8 +30,20 @@ import { T, F, disp, eyebrow, nums, clip, money, money0, formatPhone } from "@/l
 import { Sheet, Drawer } from "@/components/v34/primitives";
 import { PriceBook } from "@/components/v34/price-book";
 import { budget as priceBudget, jobMinimum, quantities, type BudgetLine, type BudgetSettings, type SectionInput, type TakeoffTotal, type TierTotal } from "@/lib/engine";
-import { COST_TYPES, COST_TYPE_LABEL, QTY_RULE_LABEL, QTY_RULES, RULE_UNIT, type CostType, type QtyRule } from "@/lib/cost-cards";
+import { COST_TYPES, COST_TYPE_LABEL, QTY_RULE_LABEL, type CostType } from "@/lib/cost-cards";
 import { UnitPicker } from "@/components/v34/unit-picker";
+import { ruleForUnit } from "@/lib/units";
+
+/** The same, in a word or two, under a line's name on the grid. */
+const QTY_SHORT: Record<string, string> = {
+  per_sqft: "qty from the area", per_lf_perimeter: "qty from the edge", per_cy: "qty from the yards", per_day: "qty: days on the job",
+  per_job: "once", per_sheet: "qty by the sheet", per_stick: "qty by the stick", manual: "qty typed", from_takeoff: "measured in the Plan Room",
+};
+/** How a line's quantity is worked out, said under its Unit type. */
+const UNIT_RULE_SAYS: Record<string, string> = {
+  per_sqft: "the area's size", per_lf_perimeter: "the area's edge (or its length, in LF)", per_cy: "the area's yards of concrete, with the card's waste",
+  per_day: "the days on the job", per_job: "1, once for the job", per_sheet: "the sheets the area needs", per_stick: "the sticks the area needs", manual: "typed",
+};
 import { useWide } from "@/lib/v34/use-wide";
 import { Cell } from "@/components/v34/cell";
 
@@ -120,6 +132,7 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
     return () => window.removeEventListener("sc:budget-changed", bump);
   }, []);
   const [editing, setEditing] = useState<Line | null>(null);
+  const [taxInfo, setTaxInfo] = useState(false);
   const [taxOpen, setTaxOpen] = useState(false);
   const [measureWide, roomy] = useWide<HTMLDivElement>(900);
   // The grid only when it fits: a table wider than its room hid its last columns
@@ -262,7 +275,7 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
                                   style={{ color: T.chalk, cursor: "pointer", textDecoration: "underline dotted" }}>optional on the proposal ×</button> · </>}
                                 {l.section_role === "reinforcement" ? "reinforcement · " : ""}
                                 {asmName(l.assembly_id) ? `from ${asmName(l.assembly_id)} · ` : ""}
-                                {QTY_RULE_LABEL[l.qty_rule as keyof typeof QTY_RULE_LABEL] ?? l.qty_rule}
+                                {QTY_SHORT[l.qty_rule] ?? l.qty_rule}
                                 {stale(l) && <> · <button onClick={() => void patchLine(l.id, { refresh: true })} style={{ color: T.hiviz, cursor: "pointer" }}>{stale(l)}</button></>}
                               </div>
                               {r.blocked.length > 0 && <div style={{ fontSize: 9.5, color: T.hiviz, whiteSpace: "normal", overflowWrap: "anywhere" }}>needs {r.blocked.join(", ")}</div>}
@@ -485,10 +498,20 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
                 }}
                 style={{ width: 16, height: 16, accentColor: T.chalk }} />
               Sales tax {data.pricing?.tax.rate !== null && data.pricing?.tax.rate !== undefined
-                ? `${data.pricing.tax.rate}% ${data.pricing.tax.source === "override" ? "(typed for this job)" : data.pricing.tax.source === "lookup" ? "(for the job's address, TaxLocus)" : `(${data.pricing.tax.parish} parish)`} on taxed lines, at cost`
+                ? `${data.pricing.tax.rate}%`
                 : <span style={{ color: T.hiviz }}>— {data.pricing?.tax.missing ?? "no rate"}</span>}
             </label>
+            {/* Coy, 2026-10-05: "This can be reduced to an 'i' button … Less words means less clutter." */}
+            {data.pricing?.tax.rate !== null && data.pricing?.tax.rate !== undefined && (
+              <button onClick={() => setTaxInfo((x) => !x)} aria-expanded={taxInfo} aria-label="About the sales tax" title="About the sales tax"
+                className="rounded-full flex items-center justify-center" style={{ width: 18, height: 18, border: `1px solid ${T.hairStrong}`, color: T.ink2, fontSize: 11, fontStyle: "italic", fontFamily: "Georgia, serif", cursor: "pointer", marginLeft: -6 }}>i</button>
+            )}
             <button onClick={() => setTaxOpen(true)} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>Change</button>
+            {taxInfo && data.pricing?.tax.rate !== null && data.pricing?.tax.rate !== undefined && (
+              <span className="basis-full" style={{ fontSize: F.xs, color: T.ink3 }}>
+                {data.pricing.tax.source === "override" ? "Typed for this job" : data.pricing.tax.source === "lookup" ? "For the job's address (TaxLocus)" : `${data.pricing.tax.parish} parish`} · charged on taxed lines, at cost — a pass-through, no O.H. or margin on it.
+              </span>
+            )}
             <label className="flex items-center gap-1.5">
               O.H.
               <Cell value={data.estimate?.overhead_pct ?? null} placeholder={data.settings.overhead_pct !== null ? `${data.settings.overhead_pct}` : "?"} suffix="%" label="O.H. on this job"
@@ -794,7 +817,8 @@ function CardPicker({ open, initialArea, onClose, data, sections, tier, tierLabe
   const [q, setQ] = useState("");
   const [area, setArea] = useState<string>(initialArea);
   const areaSec = sections.find((x) => x.id === area);
-  const [custom, setCustom] = useState({ name: "", cost_type: "material" as CostType, unit: areaSec && quantities(areaSec).count !== null ? (areaSec.count_unit || "EA") : areaSec && areaUnit(areaSec) === "sy" ? "SY" : "each", unit_cost: "", qty_rule: "manual", save: true });
+  const firstUnit = areaSec && quantities(areaSec).count !== null ? (areaSec.count_unit || "EA") : areaSec && areaUnit(areaSec) === "sy" ? "SqYd" : "Each";
+  const [custom, setCustom] = useState({ name: "", cost_type: "material" as CostType, unit: firstUnit, unit_cost: "", qty_rule: ruleForUnit(firstUnit), save: true });
   const [saving, setSaving] = useState<string | null>(null);
   const [added, setAdded] = useState<string | null>(null);
   const match = (c: Card) => !q.trim() || c.name.toLowerCase().includes(q.trim().toLowerCase());
@@ -860,16 +884,8 @@ function CardPicker({ open, initialArea, onClose, data, sections, tier, tierLabe
             <select value={custom.cost_type} onChange={(e) => setCustom((c) => ({ ...c, cost_type: e.target.value as CostType }))} style={field} aria-label="New item type">
               {COST_TYPES.map((t) => <option key={t} value={t}>{COST_TYPE_LABEL[t]}</option>)}
             </select>
-            <input value={custom.unit} onChange={(e) => setCustom((c) => ({ ...c, unit: e.target.value }))} placeholder="unit" aria-label="New item unit" list="sc-units" style={field} />
-            <datalist id="sc-units">{["SY", "SF", "CY", "LF", "EA", "day", "LS"].map((u) => <option key={u} value={u} />)}</datalist>
-            <select value={custom.qty_rule} onChange={(e) => setCustom((c) => ({ ...c, qty_rule: e.target.value }))} style={field} aria-label="How it is counted">
-              <option value="manual">I&apos;ll type the quantity</option>
-              <option value="per_sqft">By the area (SF, or SY by its unit)</option>
-              <option value="per_cy">By the yard of concrete</option>
-              <option value="per_lf_perimeter">By the foot of edge</option>
-              <option value="per_day">By the day</option>
-              <option value="per_job">Once per job</option>
-            </select>
+            <UnitPicker value={custom.unit || null} style={field} ariaLabel="New item unit type"
+              onChange={(u) => setCustom((c) => ({ ...c, unit: u, qty_rule: ruleForUnit(u, c.qty_rule) }))} />
             <input value={custom.unit_cost} onChange={(e) => setCustom((c) => ({ ...c, unit_cost: e.target.value }))} placeholder="unit cost" inputMode="decimal" aria-label="New item unit cost" style={field} />
             <label className="flex items-center gap-1.5" style={{ fontSize: F.xs, gridColumn: "1 / -1" }}>
               <input type="checkbox" checked={custom.save} onChange={(e) => setCustom((c) => ({ ...c, save: e.target.checked }))} style={{ width: 16, height: 16, accentColor: T.chalk }} />
@@ -890,7 +906,7 @@ function CardPicker({ open, initialArea, onClose, data, sections, tier, tierLabe
             </button>
           </div>
           <div style={{ fontSize: 9.5, color: T.ink3, marginTop: 3 }}>
-            {custom.qty_rule === "manual" ? "Type its quantity on the budget." : custom.qty_rule === "per_cy" ? "Counted from the area and thickness; set its waste % on the card." : "Counted from the area it is on."}
+            Quantity: {UNIT_RULE_SAYS[custom.qty_rule] ?? "typed"}{custom.qty_rule === "manual" ? " on the budget" : ""}.
           </div>
         </div>
       </div>
@@ -907,27 +923,29 @@ function LineSheet({ line, data, sections, res, addon, onAddon, onClose, onPatch
   const field: React.CSSProperties = { height: 36, border: `1px solid ${T.hair}`, background: T.card, fontSize: F.sm, borderRadius: 4, padding: "0 8px", width: "100%", minWidth: 0 };
   const num = (v: string) => (v.trim() === "" ? null : Number(v));
   return (
-    <Sheet open onClose={onClose} title={line.name} sub={line.qty_rule === "from_takeoff" ? "Measured in the Plan Room" : `${QTY_RULE_LABEL[line.qty_rule as keyof typeof QTY_RULE_LABEL] ?? line.qty_rule}`}>
+    <Sheet open onClose={onClose} title={line.name} sub={line.qty_rule === "from_takeoff" ? "Measured in the Plan Room" : line.cost_item_id ? "From the Price book" : "This budget only"}>
       <div className="px-4 py-3 flex flex-col gap-3" key={line.id + line.updated_at}>
         <div className="rounded px-3 py-2" style={{ background: T.slab, ...nums, fontSize: F.sm }}>
           {res.blocked.length ? <span style={{ color: T.hiviz }}>Needs {res.blocked.join(", ")}</span> : (
             <>{qtyFmt(res.qty)} {line.unit} × {money(line.unit_cost ?? 0)} = <b>{money(res.ext_cost ?? 0)}</b> cost · + O.H. {money(res.overhead ?? 0)} · ÷ (1 − {res.margin_pct}%) → <b>{money(res.ext_price ?? 0)}</b></>
           )}
         </div>
-        {/* How it's counted and in what (Coy, 2026-10-03: "Sometimes it's days/sqft") — this line only. */}
-        <div className="grid grid-cols-2 gap-2">
-          <label className="block"><span style={eyebrow}>How it&apos;s counted</span>
-            <select value={line.qty_rule} aria-label="How it's counted" style={field}
-              onChange={(e) => {
-                const r = e.target.value as QtyRule;
-                // A rule that suggests a unit brings it along unless the unit was already one of its kind.
-                onPatch(r === "manual" ? { qty_rule: r } : { qty_rule: r, ...(line.unit && line.unit.toLowerCase() !== "each" && line.unit.toLowerCase() !== "ea" ? {} : { unit: RULE_UNIT[r] }) });
-              }}>
-              {line.qty_rule === "from_takeoff" && <option value="from_takeoff">Measured in the Plan Room</option>}
-              {QTY_RULES.map((r) => <option key={r} value={r}>{QTY_RULE_LABEL[r]}</option>)}
-            </select></label>
-          <label className="block"><span style={eyebrow}>Unit</span>
-            <UnitPicker value={line.unit} onChange={(u) => onPatch({ unit: u })} style={field} /></label>
+        {/* Unit type (Coy, 2026-10-05: "if it's just the unit type then it needs to be renamed 'unit type'").
+            One picker; the unit decides how the quantity is worked out (ruleForUnit). This line only. */}
+        <div>
+          <label className="block"><span style={eyebrow}>Unit type</span>
+            <UnitPicker value={line.unit} style={field}
+              onChange={(u) => { const r = ruleForUnit(u, line.qty_rule); onPatch(r !== line.qty_rule ? { unit: u, qty_rule: r } : { unit: u }); }} /></label>
+          <div style={{ fontSize: 9.5, color: T.ink3, marginTop: 3 }}>
+            {(() => {
+              const want = ruleForUnit(line.unit, line.qty_rule);
+              if (line.qty_rule === "from_takeoff") return "Quantity: measured in the Plan Room.";
+              if (want !== line.qty_rule && line.qty_rule === "manual") return (
+                <>Quantity typed. <button onClick={() => onPatch({ qty_rule: want })} style={{ color: T.chalk, cursor: "pointer", fontSize: 9.5 }}>↺ Count it from the area</button></>
+              );
+              return `Quantity: ${UNIT_RULE_SAYS[line.qty_rule] ?? "typed"}.`;
+            })()}
+          </div>
         </div>
         <div className="grid grid-cols-2 gap-2">
           <label className="block"><span style={eyebrow}>Quantity {res.qty_basis === "set" ? "(typed)" : `(from the scope${res.qty_note ? ` — ${res.qty_note}` : ""})`}</span>

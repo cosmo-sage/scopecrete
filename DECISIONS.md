@@ -4,7 +4,7 @@ Ground truth for every agent working this repo. If code disagrees with this
 document, the code is wrong or this document is stale — resolve it, don't
 guess. Update this file in the same PR that changes the behavior it describes.
 
-Last updated: 2026-10-05 (Dusty writes in Figtree; Dusty is the Scopecrete Lander; an All thread; proposal cover band and Prepared by; sign-in at app.scopecrete.ai/login, each org at <slug>.app.scopecrete.ai; Dusty's chat keeps its files and files them on a customer or job — migration 079; vendor Delete; Dusty on a vendor's page and looking at attached photos; sales tax by address via TaxLocus — migration 078; archive reasons; Lines, providers and logs — migration 077; internal notes with @-tags; Jobs board sort and filter; jobs by hand — migration 076; done and lost customers in Threads; proposals sent by link, every opening tracked; every option side by side for the customer — migration 075; Documents is Files, everywhere — migration 074; Threads v2 — threads you make, channels per number, the customer page reshaped — migration 073; an address given is kept and asked about — migration 072; Dusty sets addresses; customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
+Last updated: 2026-10-05 (one Unit type picker; a section's Camera; Dusty writes in Figtree; Dusty is the Scopecrete Lander; an All thread; proposal cover band and Prepared by; sign-in at app.scopecrete.ai/login, each org at <slug>.app.scopecrete.ai; Dusty's chat keeps its files and files them on a customer or job — migration 079; vendor Delete; Dusty on a vendor's page and looking at attached photos; sales tax by address via TaxLocus — migration 078; archive reasons; Lines, providers and logs — migration 077; internal notes with @-tags; Jobs board sort and filter; jobs by hand — migration 076; done and lost customers in Threads; proposals sent by link, every opening tracked; every option side by side for the customer — migration 075; Documents is Files, everywhere — migration 074; Threads v2 — threads you make, channels per number, the customer page reshaped — migration 073; an address given is kept and asked about — migration 072; Dusty sets addresses; customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
 
 ---
 
@@ -1588,6 +1588,22 @@ percentage of labour — all three contradict this section and §4.
   (`GET/PATCH /api/price-book/units`, session client); budgets already made
   keep their copies. Checked in the harness: a line set to by the day, a new
   unit "Truck", LS renamed "Lump sum" on 9 items.
+  **Superseded 2026-10-05 — one Unit type (Coy: "if it's just the unit type
+  then it needs to be renamed 'unit type'. And the dropdown list should be
+  simple: SqFt, SqYd, LnFt, CuYd, Each, + (to add my own)").** "How it's
+  counted" is gone from the line sheet, the new-line form and the Price book
+  card: one **Unit type** picker — SqFt · SqYd · LnFt · CuYd · Each, then Coy's
+  own units ("Your own": Days, Lump Sum …), then **+ Add my own unit type…**
+  (Rename units… only in the Price book). **The unit decides the quantity**
+  (`ruleForUnit()`, `src/lib/units.ts`, tested): SqFt / SqYd → the area (SY ÷
+  9), LnFt → the edge, or the length of an area measured in LF (`ruleQty()`
+  now takes it), CuYd → yards of concrete with the card's waste, Each and
+  anything else → typed (or an area's count); of his own, Days → days on the
+  job, Lump Sum → once; Sheet / Stick count by the sheet / stick on a card
+  (its coverage and spacing). A Plan Room line stays measured. Old names show
+  as their type ("Square Feet" is SqFt) and nothing stored was rewritten; a
+  line still typed whose unit would count itself says "Quantity typed · ↺
+  Count it from the area".
 - **A line's group follows its Price book item (Coy, 2026-10-04: "I have an
   uncategorized cost item and I can't change it inside the budget … if I
   update it in the price book, it doesn't update in the budget").** The group
@@ -2224,7 +2240,17 @@ expected start date per quoted job before it means anything. Add the field.
 - **The job page, 2026-09-30:** "Why this job" is an **ⓘ** in the header
   that opens it in a sheet. Each section has **Photos** under its
   dimensions — a camera button (several shots on a phone) filing each photo
-  on that section (`job_files.section_id`, `section-photos.tsx`). While
+  on that section (`job_files.section_id`, `section-photos.tsx`). Since
+  2026-10-05 (Coy's toolbar notes) its buttons are **Copy** (photos on the job
+  or texted, ticked onto the area), **Upload** (the device's files) and
+  **Camera** — the camera in the page (`getUserMedia`, back camera): shoot
+  several, × drops one, **Add N photos** uploads them together; no camera or
+  refused → the phone's own camera. The section's plan sheets row sits under
+  its photos; its Notes mic is the icon alone (a spinner while it writes it
+  down); the budget's sales tax is "Sales tax 10.5% ⓘ", where it came from
+  behind the ⓘ; and the proposal's Tax line chip reads "Tax · off in the
+  budget" when the budget's tax is off (there is nothing to show or fold),
+  a tap turning it on. While
   Dusty is docked on a desktop, the job's totals move **into his panel**
   (`#sc-dusty-slot`, `use-dusty-docked.ts`), folded to one line, and the
   page drops its right column.

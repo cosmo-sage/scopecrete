@@ -148,3 +148,9 @@ test("a section measured in linear feet: LF items take the length; a beam's widt
   // A saw cut in LF has no pour and nothing missing.
   assert.deepEqual(quantities({ ...gb, work_type: "demo" }).missing, []);
 });
+
+test("a LnFt line on an area measured in linear feet takes its length (Unit type, 2026-10-05)", () => {
+  const curb = { id: "c1", name: "Curb", work_type: "curb", length_ft: null, width_ft: null, sqft_override: null, depth_in: null, count_qty: 430, count_unit: "LF" };
+  const r = ruleQty(L({ qty_rule: "per_lf_perimeter", unit: "LnFt", section_id: "c1" }), [curb], null);
+  assert.equal(r.ok && r.qty, 430);
+});

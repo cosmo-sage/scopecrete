@@ -1,7 +1,7 @@
 // Dusty's budget plans (src/lib/dusty/plan.ts) — `npm test`.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parsePlan, cleanAction, describe, needsJob } from "../src/lib/dusty/plan.ts";
+import { parsePlan, cleanAction, describe, needsJob, RECORD_STEPS, RECORD_RULES } from "../src/lib/dusty/plan.ts";
 
 const answer = `Here's the walk and the drive.
 
@@ -191,7 +191,7 @@ test("new_customer → new_job → file: keys tie the steps together; ids only f
   assert.equal(p.actions.length, 4);
   assert.equal(p.dropped, 4, "a job filed under a customer key, a short file id, a phone-number name and an unknown key are dropped");
   assert.deepEqual(p.actions[0], { do: "new_customer", key: "cust1", name: "Example Homes", customer_type: "commercial", person: "Pat Example",
-    phone: "(225) 555-0100", email: null, address: null, city: null, state: null, zip: null });
+    phone: "(225) 555-0100", email: null, address: null, city: null, state: null, zip: null, contact: null });
   assert.equal(p.actions[1].contact, "cust1");
   assert.equal(p.actions[1].key, "job1");
   assert.deepEqual(p.actions[2].files, [f1, f2], "the same file once");
@@ -200,4 +200,29 @@ test("new_customer → new_job → file: keys tie the steps together; ids only f
   assert.match(d(p.actions[0]), /New customer “Example Homes” \(commercial\) — Pat Example, \(225\) 555-0100/);
   assert.match(d(p.actions[2]), /File 2 files on the new job above/);
   assert.match(d(p.actions[3]), /File 1 file on the job/);
+});
+
+test("a customer around a person already there, attach_contact and set_name (Coy, 2026-10-05: John is a contact in Icon Technologies)", () => {
+  const john = "90322d37-f90e-4805-8a8f-7ea6c6824920", cust = "51bc6a56-cfa7-4a60-9a16-d02ecd890630";
+  const p = parsePlan(`\`\`\`scopecrete-plan
+[{"do":"new_customer","key":"cust1","name":"Icon Technologies","customer_type":"commercial","contact":"${john}"},
+ {"do":"set_name","kind":"contact","id":"${john}","name":"John Freeling"},
+ {"do":"attach_contact","contact":"${john}","customer":"cust1"},
+ {"do":"attach_contact","contact":"${john}","customer":"${cust}"},
+ {"do":"attach_contact","contact":"90322d37","customer":"${cust}"},
+ {"do":"set_name","kind":"job","id":"${john}","name":"X"},
+ {"do":"set_name","kind":"contact","id":"${john}","name":"+1 406 403 6783"}]
+\`\`\``);
+  assert.equal(p.actions.length, 4);
+  assert.equal(p.dropped, 3, "a short id, a job's name and a phone number for a name are dropped");
+  assert.equal(p.actions[0].contact, john);
+  assert.deepEqual(p.actions[1], { do: "set_name", kind: "contact", id: john, name: "John Freeling" });
+  assert.equal(p.actions[2].customer, "cust1");
+  for (const a of p.actions) assert.equal(needsJob(a), false);
+  assert.ok(RECORD_STEPS.has("attach_contact") && RECORD_STEPS.has("set_name"));
+  const d = (a) => describe(a, { item: () => null, area: () => "" });
+  assert.match(d(p.actions[0]), /New customer “Icon Technologies” \(commercial\), with this person as its contact/);
+  assert.match(d(p.actions[1]), /Name them “John Freeling”/);
+  assert.match(d(p.actions[2]), /the new customer above/);
+  assert.match(RECORD_RULES, /never make them again/);
 });

@@ -25,7 +25,10 @@ import { stageOf } from "@/lib/jobs/stages";
  *        state?, zip? } → { customer } — Coy's tap ("+ New customer"). Makes
  *   the person (a contact, filed customer through sc_classify_contact, the one
  *   writer) and their customer, named. A phone or email already on a contact
- *   returns 409 naming them instead of a duplicate.
+ *   returns 409 naming them instead of a duplicate. With contact_id, the
+ *   customer is made around that existing person instead (filed customer,
+ *   primary; their own one-person customer is renamed) — 409 when they are
+ *   already on a customer with other people.
  * Session client; org from the session (DECISIONS §7).
  */
 
@@ -128,6 +131,37 @@ export async function POST(req: NextRequest) {
   const email = text(b.email, 120)?.toLowerCase() ?? null;
   if (email && !/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(email)) return bad("That email doesn't look right.");
   const line1 = text(b.address, 200), city = text(b.city, 80), state = text(b.state, 2)?.toUpperCase() ?? null, zip = text(b.zip, 10);
+
+  // A customer around someone already in his contacts (Coy, 2026-10-05: "John … is just a contact
+  // inside this customer") — that person becomes its primary; no second contact is made for them.
+  const existing = typeof b.contact_id === "string" && /^[0-9a-f-]{36}$/i.test(b.contact_id) ? b.contact_id : null;
+  if (existing) {
+    const { data: p } = await supabase.from("contacts").select("id, name, customer_id, merged_into_contact_id")
+      .eq("org_id", orgId).eq("id", existing).maybeSingle();
+    if (!p || p.merged_into_contact_id) return bad("That person isn't one of your contacts.", 404);
+    if (p.customer_id) {
+      const { data: cu } = await supabase.from("customers").select("id, name").eq("org_id", orgId).eq("id", p.customer_id).maybeSingle();
+      const { count } = await supabase.from("contacts").select("id", { count: "exact", head: true })
+        .eq("org_id", orgId).eq("customer_id", p.customer_id).neq("id", p.id).is("merged_into_contact_id", null);
+      // Their own one-person customer is renamed into this one; a customer with other people is not theirs to rename.
+      if (count) return applyCookies(NextResponse.json({ error: `${p.name ?? "They"} are already on the customer ${cu?.name ?? ""} — move them instead.`,
+        existing: { id: p.id, customer_id: p.customer_id } }, { status: 409 }));
+    }
+    const { error: cErr } = await supabase.rpc("sc_classify_contact", { p_contact: p.id, p_bucket: "customer", p_subtype: null });
+    if (cErr) return bad(`Couldn't file them as a customer: ${cErr.message}`, 500);
+    const { data: c } = await supabase.from("contacts").select("customer_id").eq("org_id", orgId).eq("id", p.id).single();
+    const customerId = c?.customer_id as string | null;
+    if (!customerId) return bad("The customer wasn't made.", 500);
+    const company = type === "commercial" || type === "public";
+    const addr = [line1, [city, [state, zip].filter(Boolean).join(" ")].filter(Boolean).join(", ")].filter(Boolean).join(", ") || null;
+    const { error: uErr } = await supabase.from("customers").update({
+      name, kind: company ? "company" : "person", customer_type: type, primary_contact_id: p.id,
+      ...(addr ? { address_line1: line1, city, state, zip, address_formatted: addr, address_source: "coy" } : {}),
+    }).eq("org_id", orgId).eq("id", customerId);
+    if (uErr) return bad(`Made the customer but couldn't save its details: ${uErr.message}`, 500);
+    await supabase.from("contacts").update({ is_primary: true, ...(company ? { company_name: name } : {}) }).eq("org_id", orgId).eq("id", p.id);
+    return applyCookies(NextResponse.json({ customer: { id: customerId, name, contact_id: p.id } }, { status: 201 }));
+  }
 
   // Already one of his contacts? Then it isn't new.
   for (const [col, val] of [["phone", phone], ["email", email]] as const) {

@@ -47,8 +47,14 @@ export type PlanAction =
   // contact: a full contact id, or the key of a customer this plan makes (cust1); key: job1, for a later "file".
   | { do: "new_job"; key: string | null; contact: string; title: string; job_type: "residential" | "commercial" | "public" | null; address: string | null; description: string | null }
   // A customer (Coy, 2026-10-04: "ask dusty to attach to a new customer or job") — through + New customer's own call.
+  // contact: someone already in the CONTEXT who becomes its person — no second contact is made for them.
   | { do: "new_customer"; key: string | null; name: string; customer_type: "residential" | "commercial" | "public" | null; person: string | null;
-      phone: string | null; email: string | null; address: string | null; city: string | null; state: string | null; zip: string | null }
+      phone: string | null; email: string | null; address: string | null; city: string | null; state: string | null; zip: string | null; contact: string | null }
+  // A person put on a customer (Coy, 2026-10-05: "He's just a contact that's inside this customer") —
+  // the customer page's + Add contact; customer is a full id or the key of one this plan makes (cust1).
+  | { do: "attach_contact"; contact: string; customer: string }
+  // A name corrected — a person (the pencil by their name, Coy's) or a customer (its Edit).
+  | { do: "set_name"; kind: "contact" | "customer"; id: string; name: string }
   // Files (photos attached in the chat, or any in the CONTEXT) put on a customer, a person or a job — a move.
   | { do: "file"; files: string[]; kind: "contact" | "customer" | "job"; id: string }
   // A text to a person, sent through Quo when Coy taps Send (Coy, 2026-10-05: "send text messages through
@@ -56,7 +62,7 @@ export type PlanAction =
   | { do: "text"; contact: string; to: string | null; body: string };
 
 /** Steps that change records rather than a budget — they need no job open. */
-export const RECORD_STEPS = new Set(["archive", "restore", "set_address", "new_job", "new_customer", "file", "text"]);
+export const RECORD_STEPS = new Set(["archive", "restore", "set_address", "new_job", "new_customer", "attach_contact", "set_name", "file", "text"]);
 /** A customer (cust1) or job (job1) made earlier in the same plan. */
 export const CUST_KEY = /^cust\d{1,2}$/i;
 export const JOB_KEY = /^job\d{1,2}$/i;
@@ -227,7 +233,20 @@ export function cleanAction(raw: unknown): PlanAction | null {
       const key = typeof r.key === "string" && CUST_KEY.test(r.key.trim()) ? r.key.trim().toLowerCase() : null;
       const zip = str(r.zip, 10);
       return { do: "new_customer", key, name, customer_type: ct ?? null, person: str(r.person, 120), phone: str(r.phone, 30), email: str(r.email, 160),
-        address: str(r.address, 160), city: str(r.city, 80), state: str(r.state, 30), zip: zip && /^\d{5}(-\d{4})?$/.test(zip) ? zip : null };
+        address: str(r.address, 160), city: str(r.city, 80), state: str(r.state, 30), zip: zip && /^\d{5}(-\d{4})?$/.test(zip) ? zip : null,
+        contact: typeof r.contact === "string" && FULL_ID.test(r.contact.trim()) ? r.contact.trim().toLowerCase() : null };
+    }
+    case "attach_contact": {
+      const contact = typeof r.contact === "string" && FULL_ID.test(r.contact.trim()) ? r.contact.trim().toLowerCase() : null;
+      const customer = typeof r.customer === "string" && (FULL_ID.test(r.customer.trim()) || CUST_KEY.test(r.customer.trim())) ? r.customer.trim().toLowerCase() : null;
+      return contact && customer ? { do: "attach_contact", contact, customer } : null;
+    }
+    case "set_name": {
+      const kind = (["contact", "customer"] as const).find((k) => k === r.kind);
+      const id = typeof r.id === "string" && FULL_ID.test(r.id.trim()) ? r.id.trim().toLowerCase() : null;
+      const name = str(r.name, 80);
+      if (!kind || !id || !name || /^[\d\s()+.-]+$/.test(name)) return null; // a phone number is no name
+      return { do: "set_name", kind, id, name };
     }
     case "file": {
       const kind = RECORD_KINDS.find((k) => k === r.kind);
@@ -306,7 +325,11 @@ export function describe(a: PlanAction, names: { item: (r: string) => string | n
       return `Set ${whose} to ${full}${a.source ? ` (from ${a.source})` : ""} — checked against the map when you apply`;
     }
     case "new_job": return `New job “${a.title}”${a.job_type ? ` (${a.job_type === "public" ? "government" : a.job_type})` : ""}${a.address ? ` at ${a.address}` : ""} — in New lead, counted`;
-    case "new_customer": return `New customer “${a.name}”${a.customer_type ? ` (${a.customer_type === "public" ? "government" : a.customer_type})` : ""}${a.person && a.person !== a.name ? ` — ${a.person}` : ""}${[a.phone, a.email].filter(Boolean).length ? `, ${[a.phone, a.email].filter(Boolean).join(", ")}` : ""}${a.address ? `, ${[a.address, a.city].filter(Boolean).join(", ")}` : ""}`;
+    case "new_customer": return a.contact
+      ? `New customer “${a.name}”${a.customer_type ? ` (${a.customer_type === "public" ? "government" : a.customer_type})` : ""}, with this person as its contact`
+      : `New customer “${a.name}”${a.customer_type ? ` (${a.customer_type === "public" ? "government" : a.customer_type})` : ""}${a.person && a.person !== a.name ? ` — ${a.person}` : ""}${[a.phone, a.email].filter(Boolean).length ? `, ${[a.phone, a.email].filter(Boolean).join(", ")}` : ""}${a.address ? `, ${[a.address, a.city].filter(Boolean).join(", ")}` : ""}`;
+    case "attach_contact": return `Put them on ${CUST_KEY.test(a.customer) ? "the new customer above" : "the customer"} as one of its contacts`;
+    case "set_name": return `Name ${a.kind === "customer" ? "the customer" : "them"} “${a.name}”`;
     case "file": {
       const n = a.files.length;
       const where = a.kind === "job" ? "the job" : a.kind === "customer" ? "the customer" : "the person";
@@ -362,7 +385,12 @@ Texts. When Coy asks you to text someone (or to write a text and send it), write
 [{"do":"text","contact":"<full contact id from the CONTEXT>","body":"Hi Johnette, this is Coy with Baton Rouge Concreters. I can come measure the driveway Thursday at 9 — does that work?"}]
 \`\`\`
 Coy sees the words and who they go to, and nothing is sent until he taps Send; it then goes through Quo from his line. Only when Coy asks for a text — never on your own, never to someone he didn't name, never a price or a date he didn't give you. Leave out "to" (the app uses the number they text from); give "to" only when Coy names one of their numbers. Use only contact ids written in the CONTEXT; if two people could match, ask. One step per person — never one text to many.
-Make a new customer only when Coy asks for one, and never for someone already in the CONTEXT (use their id). Its name is the person's or company's name as Coy said it or as written; phone, email and address only as said or written — leave out what you don't have. "contact":"cust1" starts the job for the person of the customer this plan makes. "file" moves the files: they leave the job or person they were on. Use only file ids written in the CONTEXT.`;
+Make a new customer only when Coy asks for one. When its person is already in the CONTEXT (a thread, a contact), never make them again: give their id as "contact" and leave out person, phone and email —
+\`\`\`scopecrete-plan
+[{"do":"new_customer","key":"cust1","name":"Icon Technologies","customer_type":"commercial","contact":"<full contact id>"},
+ {"do":"set_name","kind":"contact","id":"<full contact id>","name":"John Freeling"}]
+\`\`\`
+People and customers. A customer is the household or business that pays; its contacts are the people who speak for it. To put a person on a customer that already exists (in the CONTEXT as "customer <full id>"), or one this plan makes: {"do":"attach_contact","contact":"<full contact id>","customer":"<full customer id or cust1>"}. To correct a name: {"do":"set_name","kind":"contact|customer","id":"<full id>","name":"…"} — a person's name is the person ("John Freeling"), never "John w/ Icon"; the company goes on the customer. When Coy says how something should be ("the customer is Icon Technologies, John is a contact in it"), that IS the instruction: use his spelling and his words, and propose the plan in the same answer — don't ask him to confirm what he just said, and don't offer alternatives he didn't ask for. Ask only when the plan can't be made without the answer (two people could match). Its name is the person's or company's name as Coy said it or as written; phone, email and address only as said or written — leave out what you don't have. "contact":"cust1" starts the job for the person of the customer this plan makes. "file" moves the files: they leave the job or person they were on. Use only file ids written in the CONTEXT.`;
 
 /** The instructions Dusty is given about plans — appended to his system prompt. */
 export const PLAN_RULES = `Budget plans. When Coy asks you to build, fill or fix a job's budget, or to add, change, remove or organise items, groups or assemblies in his Price book, answer in words first, then end with ONE fenced block in this exact form, which the app shows to Coy as steps with an Apply button (you change nothing yourself — Coy's tap does):

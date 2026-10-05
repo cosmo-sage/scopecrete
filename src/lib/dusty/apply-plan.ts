@@ -80,7 +80,7 @@ export async function applyPlan(jobId: string | null, actions: PlanAction[], loo
   };
   // Groups first, so items can be filed in them; then changes; then the budget.
   const order = { new_group: 0, rename_group: 1, update_item: 1, new_area: 2, new_item: 3, retire_item: 4, new_assembly: 5, add_to_assembly: 6, remove_from_assembly: 6,
-    add: 7, add_group: 8, load_assembly: 9, remove_group: 10, set_tax: 10, archive: 11, restore: 11, set_address: 11, new_job: 11, new_customer: 11, file: 11, text: 11 } as const;
+    add: 7, add_group: 8, load_assembly: 9, remove_group: 10, set_tax: 10, archive: 11, restore: 11, set_address: 11, new_job: 11, new_customer: 11, attach_contact: 11, set_name: 11, file: 11, text: 11 } as const;
   // Archive / restore steps run through applyRecords (no job needed).
   const steps = [...actions].filter((a) => !RECORD_STEPS.has(a.do)).sort((a, b) => order[a.do] - order[b.do]);
   for (const a of steps) {
@@ -242,13 +242,28 @@ export async function applyRecords(actions: PlanAction[]): Promise<StepResult[]>
       if (a.do === "set_address") { out.push(await setAddress(a)); continue; }
       if (a.do === "new_customer") {
         try {
-          const r = await call("/api/customers", "POST", { name: a.name, customer_type: a.customer_type ?? undefined, person: a.person ?? undefined,
-            phone: a.phone ?? undefined, email: a.email ?? undefined, address: a.address ?? undefined, city: a.city ?? undefined, state: a.state ?? undefined, zip: a.zip ?? undefined });
+          const r = await call("/api/customers", "POST", { name: a.name, customer_type: a.customer_type ?? undefined, contact_id: a.contact ?? undefined,
+            person: a.contact ? undefined : a.person ?? undefined, phone: a.contact ? undefined : a.phone ?? undefined, email: a.contact ? undefined : a.email ?? undefined, address: a.address ?? undefined, city: a.city ?? undefined, state: a.state ?? undefined, zip: a.zip ?? undefined });
           if (a.key) madeCust.set(a.key, { id: r.customer.id, contact: r.customer.contact_id, name: r.customer.name ?? a.name });
           out.push({ ok: true, text: `Made the customer “${r.customer?.name ?? a.name}”` });
         } catch (e) {
           out.push({ ok: false, text: `New customer “${a.name}”: ${e instanceof Error ? e.message : String(e)}` });
         }
+        continue;
+      }
+      if (a.do === "attach_contact") {
+        const made = CUST_KEY.test(a.customer) ? madeCust.get(a.customer) : null;
+        const target = made ? made.id : FULL_ID.test(a.customer) ? a.customer : null;
+        if (!target) { out.push({ ok: false, text: "The customer to put them on wasn't made — skipped" }); continue; }
+        if (made?.contact === a.contact) { out.push({ ok: true, text: `Already on “${made.name}”` }); continue; }
+        await call(`/api/customers/${target}/contacts`, "POST", { contact_id: a.contact });
+        out.push({ ok: true, text: `Put them on ${made ? `“${made.name}”` : "the customer"}` });
+        continue;
+      }
+      if (a.do === "set_name") {
+        if (a.kind === "contact") await call(`/api/contacts/${a.id}/name`, "PATCH", { name: a.name });
+        else await call(`/api/customers/${a.id}`, "PATCH", { name: a.name });
+        out.push({ ok: true, text: `Named ${a.kind === "customer" ? "the customer" : "them"} “${a.name}”` });
         continue;
       }
       if (a.do === "new_job") {

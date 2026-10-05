@@ -4,7 +4,7 @@ Ground truth for every agent working this repo. If code disagrees with this
 document, the code is wrong or this document is stale — resolve it, don't
 guess. Update this file in the same PR that changes the behavior it describes.
 
-Last updated: 2026-10-05 (fonts self-hosted, so a build downloads nothing; the landing page's phone demo is the real app — Design 10; texts send through Quo — the thread's Send and Dusty's text step, Coy's tap either way; a Summary view on every job, the job name and switch centred on the phone; Dusty full screen on the phone, chat text size, his thought line can be hidden; onsite estimators — jobs and pages by person, vendor first, tags notify — migration 081; a name we greet a caller by becomes a suggestion — enrich-contacts v28; contact, customer and vendor pages on one layout; the customer page's Threads tab sums up each person; the Files page laid out like OneDrive, with storage left; the Plan Room's Files and Sheets one tab; thread search a drop-down over the chat; the Threads list header sticky with its own search; the header lockup on one line; one top row on the job's three views; the proposal's dark band off the cover; Good / Better / Best removed — one price per job; search across the header; six dots for the activity line; job switch on the name's row; budget line notes; quo-intake stores every Quo event, own lines included — v10; one Unit type picker; a section's Camera; Dusty writes in Figtree; Dusty is the Scopecrete Lander; an All thread; proposal cover band and Prepared by; sign-in at app.scopecrete.ai/login, each org at <slug>.app.scopecrete.ai; Dusty's chat keeps its files and files them on a customer or job — migration 079; vendor Delete; Dusty on a vendor's page and looking at attached photos; sales tax by address via TaxLocus — migration 078; archive reasons; Lines, providers and logs — migration 077; internal notes with @-tags; Jobs board sort and filter; jobs by hand — migration 076; done and lost customers in Threads; proposals sent by link, every opening tracked; every option side by side for the customer — migration 075; Documents is Files, everywhere — migration 074; Threads v2 — threads you make, channels per number, the customer page reshaped — migration 073; an address given is kept and asked about — migration 072; Dusty sets addresses; customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
+Last updated: 2026-10-05 (Dusty puts people on customers and fixes names, and says nothing of his own setup — Hermes's tools must be off on the VPS; fonts self-hosted, so a build downloads nothing; the landing page's phone demo is the real app — Design 10; texts send through Quo — the thread's Send and Dusty's text step, Coy's tap either way; a Summary view on every job, the job name and switch centred on the phone; Dusty full screen on the phone, chat text size, his thought line can be hidden; onsite estimators — jobs and pages by person, vendor first, tags notify — migration 081; a name we greet a caller by becomes a suggestion — enrich-contacts v28; contact, customer and vendor pages on one layout; the customer page's Threads tab sums up each person; the Files page laid out like OneDrive, with storage left; the Plan Room's Files and Sheets one tab; thread search a drop-down over the chat; the Threads list header sticky with its own search; the header lockup on one line; one top row on the job's three views; the proposal's dark band off the cover; Good / Better / Best removed — one price per job; search across the header; six dots for the activity line; job switch on the name's row; budget line notes; quo-intake stores every Quo event, own lines included — v10; one Unit type picker; a section's Camera; Dusty writes in Figtree; Dusty is the Scopecrete Lander; an All thread; proposal cover band and Prepared by; sign-in at app.scopecrete.ai/login, each org at <slug>.app.scopecrete.ai; Dusty's chat keeps its files and files them on a customer or job — migration 079; vendor Delete; Dusty on a vendor's page and looking at attached photos; sales tax by address via TaxLocus — migration 078; archive reasons; Lines, providers and logs — migration 077; internal notes with @-tags; Jobs board sort and filter; jobs by hand — migration 076; done and lost customers in Threads; proposals sent by link, every opening tracked; every option side by side for the customer — migration 075; Documents is Files, everywhere — migration 074; Threads v2 — threads you make, channels per number, the customer page reshaped — migration 073; an address given is kept and asked about — migration 072; Dusty sets addresses; customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
 
 ---
 
@@ -2500,6 +2500,30 @@ expected start date per quoted job before it means anything. Add the field.
   five days of calls and texts with the intake inbox (a cold chat already
   had three days of them). Under the session, like the rest; the prompt
   tells him never to say he can only see the open page.
+  **People on customers, and names (Coy, 2026-10-05: "The actual customer
+  name is Icon Technologies … John … is just a contact that's inside this
+  customer. Can you fix it?").** Dusty had no step for it: his plan made a
+  NEW customer with John's phone (which `POST /api/customers` refuses as a
+  duplicate) and a `move_contact` step that doesn't exist. Now `new_customer`
+  takes `contact` — someone already in the CONTEXT becomes its person (filed
+  customer, primary; their own one-person customer renamed; 409 if they are
+  on a customer with other people) — `attach_contact` {contact, customer
+  full id or cust1} goes through the customer page's + Add contact
+  (`sc_attach_contact`), and `set_name` {contact | customer} through the
+  pencil and the customer's Edit. Tested in `tests/dusty-plan.test.mjs`.
+  The prompt now says he is Dusty only, has no tools, files or sessions of
+  his own, never narrates looking things up or names his setup, and takes
+  Coy's word and spelling instead of asking him to confirm it.
+  **Hermes ran him as an agent with tools (seen 2026-10-05).** His answer
+  read Hermes's own `state.db`, hit Hermes's command guard ("an error from my
+  own security layer"), narrated each step, and said "I'm Coy, not Dusty" —
+  Hermes's own persona and memory talking. That is the VPS's Hermes serving
+  `/v1/chat/completions` with its toolsets, memory and persona on, which this
+  section already forbids: the context carries customer texts, and a text
+  can carry instructions to an agent with a terminal. Fix on the VPS: serve
+  Dusty from a Hermes with no tools, no memory and no persona files (its own
+  profile and port), or a plain pass-through to the model. Nothing in the
+  app can turn those off.
   **The catch-up (2026-09-29; since 2026-09-30 the chat's "What's new?"
   button, the header emblem being gone)** asks "What's new since I last looked?" with context kind
   `activity` (migration 044): `activityContext()` reads, under RLS, who got in

@@ -209,8 +209,6 @@ export function Composer({ contactId, phone, name, compact = false, onNoteSaved,
   }
 
   const who = name || (phone ? phone : null);
-  // First name only in the box, so the hint fits one line.
-  const first = name?.trim().split(/\s+/)[0] || null;
   const has = text.trim().length > 0;
   const iconBtn: React.CSSProperties = {
     width: 34, height: 34, border: `1px solid ${T.hair}`, background: T.card, borderRadius: 8,
@@ -243,11 +241,8 @@ export function Composer({ contactId, phone, name, compact = false, onNoteSaved,
       <div className="flex items-end gap-1.5">
         {/* The line it goes from is picked once, in the thread's toolbar (Coy, 2026-10-05: "it exists already at the top"). */}
         <textarea value={text} onChange={(e) => setText(e.target.value)} rows={compact ? 2 : 1}
-          placeholder={channel === "note" ? "A note about them — stays internal"
-            : channel === "email" ? "Write the email"
-            : fromLine && fromLine.lines.length > 1 ? (() => { const cur = fromLine.lines.find((l) => l.id === fromLine.value) ?? fromLine.lines[0];
-                return `Text ${phone ? formatPhone(phone) : first ?? "them"} from ${cur.name}`; })()
-            : `Text ${first ?? "them"} back…`}
+          // An empty box, no words in it (Coy, 2026-10-05: "I know what to do with message box").
+          aria-label={channel === "note" ? "Internal note" : channel === "email" ? "Email" : "Text message"}
           className="flex-1 px-2.5 py-2 rounded-lg outline-none resize-none"
           style={{ border: `1px solid ${T.hair}`, background: T.card, fontSize: F.sm,
                    maxHeight: 120, lineHeight: 1.4, fontFamily: body, minWidth: 0 }} />

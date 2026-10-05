@@ -4,7 +4,7 @@ Ground truth for every agent working this repo. If code disagrees with this
 document, the code is wrong or this document is stale — resolve it, don't
 guess. Update this file in the same PR that changes the behavior it describes.
 
-Last updated: 2026-10-05 (Dusty files a forwarded email and its files by its id, the intake reads BlueMail forwards and files on a whole name — email-intake v11; swipe left for Spam · Archive, Select an icon beside Sort; proposals sent from Threads, the Preview and Dusty, his words learned from Coy's; Threads update on their own as texts land — migration 082; Dusty puts people on customers and fixes names, and says nothing of his own setup — Hermes's tools must be off on the VPS; fonts self-hosted, so a build downloads nothing; the landing page's phone demo is the real app — Design 10; texts send through Quo — the thread's Send and Dusty's text step, Coy's tap either way; a Summary view on every job, the job name and switch centred on the phone; Dusty full screen on the phone, chat text size, his thought line can be hidden; onsite estimators — jobs and pages by person, vendor first, tags notify — migration 081; a name we greet a caller by becomes a suggestion — enrich-contacts v28; contact, customer and vendor pages on one layout; the customer page's Threads tab sums up each person; the Files page laid out like OneDrive, with storage left; the Plan Room's Files and Sheets one tab; thread search a drop-down over the chat; the Threads list header sticky with its own search; the header lockup on one line; one top row on the job's three views; the proposal's dark band off the cover; Good / Better / Best removed — one price per job; search across the header; six dots for the activity line; job switch on the name's row; budget line notes; quo-intake stores every Quo event, own lines included — v10; one Unit type picker; a section's Camera; Dusty writes in Figtree; Dusty is the Scopecrete Lander; an All thread; proposal cover band and Prepared by; sign-in at app.scopecrete.ai/login, each org at <slug>.app.scopecrete.ai; Dusty's chat keeps its files and files them on a customer or job — migration 079; vendor Delete; Dusty on a vendor's page and looking at attached photos; sales tax by address via TaxLocus — migration 078; archive reasons; Lines, providers and logs — migration 077; internal notes with @-tags; Jobs board sort and filter; jobs by hand — migration 076; done and lost customers in Threads; proposals sent by link, every opening tracked; every option side by side for the customer — migration 075; Documents is Files, everywhere — migration 074; Threads v2 — threads you make, channels per number, the customer page reshaped — migration 073; an address given is kept and asked about — migration 072; Dusty sets addresses; customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
+Last updated: 2026-10-05 (proposal photos as thumbnails with a Proposal switch on each section; a section's budget folds; the dashboard header slides away on the job page on a phone; an empty message box; Dusty files a forwarded email and its files by its id, the intake reads BlueMail forwards and files on a whole name — email-intake v11; swipe left for Spam · Archive, Select an icon beside Sort; proposals sent from Threads, the Preview and Dusty, his words learned from Coy's; Threads update on their own as texts land — migration 082; Dusty puts people on customers and fixes names, and says nothing of his own setup — Hermes's tools must be off on the VPS; fonts self-hosted, so a build downloads nothing; the landing page's phone demo is the real app — Design 10; texts send through Quo — the thread's Send and Dusty's text step, Coy's tap either way; a Summary view on every job, the job name and switch centred on the phone; Dusty full screen on the phone, chat text size, his thought line can be hidden; onsite estimators — jobs and pages by person, vendor first, tags notify — migration 081; a name we greet a caller by becomes a suggestion — enrich-contacts v28; contact, customer and vendor pages on one layout; the customer page's Threads tab sums up each person; the Files page laid out like OneDrive, with storage left; the Plan Room's Files and Sheets one tab; thread search a drop-down over the chat; the Threads list header sticky with its own search; the header lockup on one line; one top row on the job's three views; the proposal's dark band off the cover; Good / Better / Best removed — one price per job; search across the header; six dots for the activity line; job switch on the name's row; budget line notes; quo-intake stores every Quo event, own lines included — v10; one Unit type picker; a section's Camera; Dusty writes in Figtree; Dusty is the Scopecrete Lander; an All thread; proposal cover band and Prepared by; sign-in at app.scopecrete.ai/login, each org at <slug>.app.scopecrete.ai; Dusty's chat keeps its files and files them on a customer or job — migration 079; vendor Delete; Dusty on a vendor's page and looking at attached photos; sales tax by address via TaxLocus — migration 078; archive reasons; Lines, providers and logs — migration 077; internal notes with @-tags; Jobs board sort and filter; jobs by hand — migration 076; done and lost customers in Threads; proposals sent by link, every opening tracked; every option side by side for the customer — migration 075; Documents is Files, everywhere — migration 074; Threads v2 — threads you make, channels per number, the customer page reshaped — migration 073; an address given is kept and asked about — migration 072; Dusty sets addresses; customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
 
 ---
 
@@ -2877,7 +2877,10 @@ expected start date per quoted job before it means anything. Add the field.
   Other) with each section's cost, then cost, O.H., profit and price — and the
   steps Cost → + O.H. → + Profit → Price → + tax − discount → Total (`Rollup`;
   for the option picked, else the first). The profit split and job minimum stay
-  under it.
+  under it. **A section's Budget folds (Coy, 2026-10-05: "let the budget panel
+  be colapsable")** — ▸ / ▾ Budget on its card hides the lines and keeps the
+  section's total and + Add; folded sections are remembered on the device
+  (`sc:budget-folded`).
 - **The Plan Room (migration 059, 2026-09-30; Claude Design,
   `design/plan-room`).** Coy: *"scopecrete.ai will be a tool for me to do
   takeoffs manually."* (His own Hermes agent reads the bid emails he forwards
@@ -3165,7 +3168,14 @@ expected start date per quoted job before it means anything. Add the field.
   photos (filed on the area or on one of its shapes); an eye hides one area's,
   the **Maps & photos** quick toggle hides all (`display.picsOff`,
   `hide_area_pics`). Read live from the Plan Room, like the cover photo — a
-  final shows today's shapes for its areas. Warranty and terms are edited in place;
+  final shows today's shapes for its areas. **Since 2026-10-05 the photos are
+  thumbnails** (76px square on a phone, 92 on a desktop), each opening full
+  size, and a section's **Photos** row on the job page has a **Proposal**
+  switch that is that area's eye (`PATCH /api/jobs/[id]/proposal {pics:
+  {section_id, on}}`, read with `GET …/proposal?display=1`, which makes no
+  draft; with none, the switch opens one). A link made without the browser
+  (sent from Threads or Dusty) now takes photos filed on an area's takeoff
+  shapes too, as the Preview does. Warranty and terms are edited in place;
   **Save as template** writes them back (same name updates it, a new name
   makes one). **Edit with Dusty** opens him with a starter question, and
   **Use this** under his answer (`setDustyUse()` in `dusty-live.ts`) puts it
@@ -3289,6 +3299,12 @@ expected start date per quoted job before it means anything. Add the field.
   name is centred on its own line (‹ Jobs at its left edge; the Budget's
   editable name centred too) and the switch centred under it; the desktop
   keeps name left, switch right (`JobHeaderRow`).
+- **The job page gets the phone's whole screen (Coy, 2026-10-05: "when I
+  scroll down let the main dashboard header disappear under the job page
+  header").** On a phone, scrolling down the job page slides the dashboard
+  header away (`useHideHeadOnScroll()`, `html[data-head-hide]` sets
+  `--sc-head` to 0) and the job's own header and money strip stay pinned at
+  the top; scrolling up brings it back. Desktop unchanged.
 - **One job, three views (Coy, 2026-10-02: "no way … to get back from the
   proposal page" and "one job budget page, and I can toggle between that
   budget and the proposal").** **Plan room · Budget · Proposal** — in the
@@ -3401,7 +3417,8 @@ expected start date per quoted job before it means anything. Add the field.
 - **The composer never appears to send.** (2026-09-27; texts send since
   2026-10-05, below) Email has no send path. The composer (thread screen, and compact in the row expand)
   writes, keeps a per-device draft and copies it for pasting into Quo; Send is
-  shown switched off with its reason. **Notes save** (2026-09-28, above). The
+  shown switched off with its reason. **The box is empty** — no placeholder
+  words (Coy, 2026-10-05); it is labelled for screen readers only. **Notes save** (2026-09-28, above). The
   **mic dictates** into the box with the browser's own speech recognition —
   Chrome sends the audio to Google to transcribe; nothing of ours stores it;
   off, with the reason, where the browser has none. The composer's Call and +

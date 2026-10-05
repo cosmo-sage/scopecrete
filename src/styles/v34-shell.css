@@ -441,3 +441,13 @@ html[data-theme="night-shift"] .sc-proposal { --sc-doc-ground: #15171A; }
 @keyframes scSpin { to { transform: rotate(360deg); } }
 @keyframes scSpinR { to { transform: rotate(-360deg); } }
 @media (prefers-reduced-motion: reduce) { .sc-emblem g { animation: none !important; } }
+
+/* The job page on a phone (Coy, 2026-10-05): scrolling down slides the
+   dashboard header away so the job's own header has the top of the screen
+   (useHideHeadOnScroll). */
+.sc-head-wrap { transition: transform .2s ease-out; }
+@media (max-width: 1023px) {
+  html[data-head-hide] { --sc-head: 0px; }
+  html[data-head-hide] .sc-head-wrap { transform: translateY(-100%); }
+}
+@media (prefers-reduced-motion: reduce) { .sc-head-wrap { transition: none; } }

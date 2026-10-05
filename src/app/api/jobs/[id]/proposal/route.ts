@@ -29,6 +29,12 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   const result = await getApiSession(req);
   if (!result.ok) return result.response;
   const { supabase, orgId, applyCookies } = result.session;
+  // Just the draft's display (the job page's "On the proposal" switches) — nothing is made.
+  if (req.nextUrl.searchParams.get("display") === "1") {
+    if (!(await jobInOrg(supabase, orgId, id))) return applyCookies(NextResponse.json({ error: "No such job." }, { status: 404 }));
+    const { data } = await supabase.from("job_proposals").select("display").eq("org_id", orgId).eq("job_id", id).eq("status", "draft").maybeSingle();
+    return applyCookies(NextResponse.json({ draft: !!data, display: data?.display ?? {} }));
+  }
   const b = await proposalBundle(supabase, orgId, id);
   if (!b) return applyCookies(NextResponse.json({ error: "No such job." }, { status: 404 }));
   if (!b.proposal) return applyCookies(NextResponse.json({ error: "Couldn't open the proposal." }, { status: 500 }));
@@ -71,6 +77,15 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     const next = list.filter((x) => x !== a.line_id);
     if (a.on === true) next.push(a.line_id);
     patch.display = { ...disp, addons: next.slice(0, 400) };
+  }
+  // One area's photos on or off the proposal, from the job page's section (Coy, 2026-10-05).
+  if ("pics" in b && !("display" in b)) {
+    const a = b.pics as Record<string, unknown> | null;
+    if (!a || typeof a.section_id !== "string" || !UUID.test(a.section_id)) return bad("Bad section.");
+    const disp = ((patch.display ?? (await supabase.from("job_proposals").select("display").eq("id", draft.id).maybeSingle()).data?.display) ?? {}) as Record<string, unknown>;
+    const off = { ...((disp.picsOff ?? {}) as Record<string, boolean>) };
+    if (a.on === true) delete off[a.section_id]; else off[a.section_id] = true;
+    patch.display = { ...disp, picsOff: off };
   }
   if ("draws" in b) {
     if (!Array.isArray(b.draws) || b.draws.length > 20) return bad("Up to 20 draws.");

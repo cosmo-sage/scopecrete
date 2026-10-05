@@ -91,12 +91,21 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
 
   if (auto) {
     // What Preview would pick, read on the server: the proposal's cover, and up to four photos per area.
-    const { data: pics } = await supabase.from("files").select("id, section_id, mime_type").eq("org_id", orgId).eq("job_id", id)
-      .is("deleted_at", null).not("section_id", "is", null).order("created_at", { ascending: true }).limit(400);
+    // A photo filed on the area, or on one of its takeoff shapes (as the Preview's areaVisuals reads them).
+    const { data: pics } = await supabase.from("files").select("id, section_id, takeoff_measurement_id, mime_type").eq("org_id", orgId).eq("job_id", id)
+      .is("deleted_at", null).or("section_id.not.is.null,takeoff_measurement_id.not.is.null").order("created_at", { ascending: true }).limit(400);
+    const shapeIds = [...new Set(((pics ?? []) as Array<{ takeoff_measurement_id: string | null }>).map((f) => f.takeoff_measurement_id).filter((x): x is string => !!x))];
+    const shapeArea = new Map<string, string>();
+    if (shapeIds.length) {
+      const { data: shapes } = await supabase.from("takeoff_measurements").select("id, section_id").eq("org_id", orgId).in("id", shapeIds);
+      for (const m of (shapes ?? []) as Array<{ id: string; section_id: string | null }>) if (m.section_id) shapeArea.set(m.id, m.section_id);
+    }
     const per: Record<string, string[]> = {};
-    for (const f of (pics ?? []) as Array<{ id: string; section_id: string; mime_type: string | null }>) {
+    for (const f of (pics ?? []) as Array<{ id: string; section_id: string | null; takeoff_measurement_id: string | null; mime_type: string | null }>) {
       if (!/^image\//.test(f.mime_type ?? "")) continue;
-      const list = (per[f.section_id] ??= []);
+      const area = f.section_id ?? (f.takeoff_measurement_id ? shapeArea.get(f.takeoff_measurement_id) : undefined);
+      if (!area) continue;
+      const list = (per[area] ??= []);
       if (list.length < 4) list.push(f.id);
     }
     body.photos = per;

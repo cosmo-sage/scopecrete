@@ -33,10 +33,12 @@ async function call(url: string, method: string, body?: unknown) {
   return b;
 }
 
-export function SectionPhotos({ jobId, sectionId, sectionName, photos, sections, onChange }: {
+export function SectionPhotos({ jobId, sectionId, sectionName, photos, sections, onChange, onProposal = null, onProposalChange }: {
   jobId: string; sectionId: string; sectionName: string | null; photos: FileRow[];
   sections: Array<{ id: string; name: string | null }>;
   onChange: (f: FileRow | null, removedId?: string) => void;
+  /** Whether this area's photos (and map) show on the proposal; null = not known / not shown. */
+  onProposal?: boolean | null; onProposalChange?: (on: boolean) => void;
 }) {
   const upload = useRef<HTMLInputElement | null>(null);
   const camera = useRef<HTMLInputElement | null>(null);
@@ -67,6 +69,17 @@ export function SectionPhotos({ jobId, sectionId, sectionName, photos, sections,
     <div className="px-3 py-2" style={{ borderTop: `1px solid ${T.hairSoft}` }}>
       <div className="flex items-center gap-2">
         <span style={eyebrow}>Photos{photos.length ? ` · ${photos.length}` : ""}</span>
+        {/* On or off the proposal for this area (Coy, 2026-10-05) — the proposal's eye on this area, from here. */}
+        {onProposal !== null && photos.length > 0 && onProposalChange && (
+          <button role="switch" aria-checked={onProposal} onClick={() => onProposalChange(!onProposal)}
+            title={onProposal ? "These photos show under this area on the proposal — tap to leave them off" : "Left off the proposal — tap to show them"}
+            className="flex items-center gap-1" style={{ fontSize: F.xs, color: onProposal ? T.ink2 : T.ink3, cursor: "pointer" }}>
+            <span aria-hidden="true" style={{ width: 24, height: 14, borderRadius: 7, background: onProposal ? T.green : T.hairStrong, position: "relative", display: "inline-block", transition: "background .15s" }}>
+              <span style={{ position: "absolute", top: 2, left: onProposal ? 12 : 2, width: 10, height: 10, borderRadius: 5, background: "#fff", transition: "left .15s" }} />
+            </span>
+            Proposal
+          </button>
+        )}
         <span className="flex-1" />
         <input ref={upload} type="file" accept="image/*" multiple hidden
           onChange={(e) => { void add(e.target.files); e.target.value = ""; }} />

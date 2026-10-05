@@ -20,6 +20,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useDustyDocked } from "@/lib/v34/use-dusty-docked";
+import { useHideHeadOnScroll } from "@/lib/v34/use-hide-head";
 import { VoiceRecorder } from "@/components/v34/voice-recorder";
 import { useParams } from "next/navigation";
 import { T, F, disp, eyebrow, nums, clip, money, money0, formatPhone } from "@/lib/v34/tokens";
@@ -106,6 +107,7 @@ export default function ScopeBuilder() {
     return () => cancelAnimationFrame(raf);
   }, [docked]);
   const railSlot = docked && slot?.isConnected ? slot : null;
+  useHideHeadOnScroll();
   const [sections, setSections] = useState<Section[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saveErr, setSaveErr] = useState<Record<string, string>>({});
@@ -123,6 +125,24 @@ export default function ScopeBuilder() {
     setJobFiles((a) => (removedId ? a.filter((x) => x.id !== removedId) : f ? [f, ...a.filter((x) => x.id !== f.id)] : a));
     setFilesTick((n) => n + 1);
   }, []);
+  // Which areas' photos are off the proposal (display.picsOff on the draft) — the section's
+  // "On the proposal" switch (Coy, 2026-10-05). null = no draft yet, or not theirs to see.
+  const [picsOff, setPicsOff] = useState<Record<string, boolean> | null>(null);
+  useEffect(() => {
+    if (access.limited) return;
+    let off = false;
+    send(`/api/jobs/${jobId}/proposal?display=1`, "GET")
+      .then((b) => { if (!off) setPicsOff(b.draft ? ((b.display?.picsOff ?? {}) as Record<string, boolean>) : {}); }).catch(() => {});
+    return () => { off = true; };
+  }, [jobId, access.limited]);
+  const setPics = useCallback((sectionId: string, on: boolean) => {
+    setPicsOff((m) => { const n = { ...(m ?? {}) }; if (on) delete n[sectionId]; else n[sectionId] = true; return n; });
+    const patch = () => send(`/api/jobs/${jobId}/proposal`, "PATCH", { pics: { section_id: sectionId, on } });
+    // No draft yet: opening the proposal makes one, then the switch is saved on it.
+    void patch().catch(() => send(`/api/jobs/${jobId}/proposal`, "GET").then(patch)).catch(() => {
+      setPicsOff((m) => { const n = { ...(m ?? {}) }; if (on) n[sectionId] = true; else delete n[sectionId]; return n; });
+    });
+  }, [jobId]);
   // The plan sheets each section's scope came from, to check it against (Coy, 2026-10-02).
   const [plans, setPlans] = useState<PlansData | null>(null);
   const [plansTick, setPlansTick] = useState(0);
@@ -243,6 +263,9 @@ export default function ScopeBuilder() {
     <div className={railSlot || viewer ? "lg:min-h-[calc(100dvh-var(--sc-head))]" : "lg:grid lg:grid-cols-[minmax(0,1fr)_360px] lg:min-h-[calc(100dvh-var(--sc-head))]"} style={{ color: T.ink }}>
       {/* ================= sections ================= */}
       <div style={{ minWidth: 0 }} className="pb-24 lg:pb-6">
+        {/* On a phone the job's header and its numbers stay at the top while the page scrolls,
+            and the dashboard header slides away above them (Coy, 2026-10-05). */}
+        <div className="sticky z-20 lg:static" style={{ top: "var(--sc-head)" }}>
         <div className="px-3 pt-2.5 pb-2" style={{ background: T.card, borderBottom: `1px solid ${T.hair}` }}>
           {/* Coy, 2026-10-05: the job's name top left, Summary · Plan room · Budget · Proposal top right —
               the same row on every view (JobHeaderRow; centred on a phone). The chips, who it's for,
@@ -273,18 +296,10 @@ export default function ScopeBuilder() {
           {saveErr.job && <div style={{ fontSize: F.xs, color: T.red }}>{saveErr.job}</div>}
         </div>
 
-        {job.archived_at && (
-          <div className="px-3 py-2 flex items-center gap-2" style={{ background: T.redDim, color: T.ink, fontSize: F.sm }}>
-            <span style={{ flex: 1 }}>This job is {job.archived_reason?.startsWith("deleted") ? "deleted" : "archived"} — it isn&apos;t on the board, the Dashboard or Dusty&apos;s lists.</span>
-            <button onClick={() => void send(`/api/archive/restore`, "POST", { kind: "job", ids: [jobId] }).then(() => setJob((j) => j && { ...j, archived_at: null, archived_reason: null }))}
-              className="rounded px-2.5" style={{ height: 28, border: `1px solid ${T.chalk}`, color: T.chalk, background: T.card, fontWeight: 600, cursor: "pointer" }}>Restore</button>
-          </div>
-        )}
-
         {/* Phone: the takeoff rail sits below the sections, so the three
             numbers you read out loud ride along under the header. */}
-        <div className="lg:hidden sticky z-10 px-3 py-1.5 flex items-baseline gap-3"
-          style={{ top: "var(--sc-head)", background: T.dark, color: "#fff", ...nums }}>
+        <div className="lg:hidden px-3 py-1.5 flex items-baseline gap-3"
+          style={{ background: T.dark, color: "#fff", ...nums }}>
           <span style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 700 }}>{t.sqft > 0 ? n1(t.sqft) : "—"}<span style={{ fontSize: F.xs, color: "#8E99A5" }}> sf</span></span>
           <span style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 700, color: T.hiviz }}>
             {(t.cy_order ?? t.cy_neat) > 0 ? n2(t.cy_order ?? t.cy_neat) : "—"}<span style={{ fontSize: F.xs, color: "#8E99A5" }}> cu yd{t.cy_order === null ? " neat" : ""}</span>
@@ -298,6 +313,16 @@ export default function ScopeBuilder() {
             <span style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 700, color: "#8E99A5" }}>no price</span>
           )}
         </div>
+        </div>
+
+        {job.archived_at && (
+          <div className="px-3 py-2 flex items-center gap-2" style={{ background: T.redDim, color: T.ink, fontSize: F.sm }}>
+            <span style={{ flex: 1 }}>This job is {job.archived_reason?.startsWith("deleted") ? "deleted" : "archived"} — it isn&apos;t on the board, the Dashboard or Dusty&apos;s lists.</span>
+            <button onClick={() => void send(`/api/archive/restore`, "POST", { kind: "job", ids: [jobId] }).then(() => setJob((j) => j && { ...j, archived_at: null, archived_reason: null }))}
+              className="rounded px-2.5" style={{ height: 28, border: `1px solid ${T.chalk}`, color: T.chalk, background: T.card, fontWeight: 600, cursor: "pointer" }}>Restore</button>
+          </div>
+        )}
+
 
         {/* The bid behind it, when a forwarded bid email made or fed this job (migration 063). */}
         <BidStrip jobId={jobId} onUndone={() => { window.location.href = "/dashboard/scope"; }} />
@@ -349,7 +374,8 @@ export default function ScopeBuilder() {
                         plans={plans} sectionNames={names} onChanged={takeoffChanged} />}
                       photos={!can(access, "files") ? null : <SectionPhotos jobId={jobId} sectionId={s.id} sectionName={s.name ?? null}
                         photos={jobFiles.filter((f) => (f.section_id === s.id || (f.takeoff_measurement_id && shapeIds.has(f.takeoff_measurement_id))) && (f.kind === "image" || f.kind === "video"))}
-                        sections={sections.map((x) => ({ id: x.id, name: x.name ?? null }))} onChange={fileChanged} />}
+                        sections={sections.map((x) => ({ id: x.id, name: x.name ?? null }))} onChange={fileChanged}
+                        onProposal={picsOff === null ? null : !picsOff[s.id]} onProposalChange={(on) => setPics(s.id, on)} />}
                       onLocal={(p) => patchLocal(s.id, p)} onSave={(p) => void save(s.id, p)}
                       onRemove={() => void removeSection(s.id)} />
                   );

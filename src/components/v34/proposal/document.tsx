@@ -240,10 +240,17 @@ export function ProposalDocument({ vm, edits, narrow }: { vm: DocVM; edits: DocE
                         {v.map && <AreaMap map={v.map} height={narrow ? 150 : 190} />}
                         {/* eslint-disable-next-line @next/next/no-img-element -- frozen when sent, printed */}
                         {!v.map && v.mapImage && <img src={v.mapImage} alt={`Where ${a.name || "this area"} is`} style={{ height: narrow ? 150 : 190, maxWidth: "100%", border: "1px solid #E6DCC8", borderRadius: 3 }} />}
-                        {v.photos.slice(0, 4).map((ph) => (
-                          // eslint-disable-next-line @next/next/no-img-element -- signed link, printed
-                          <img key={ph.id} src={ph.url} alt={ph.name} style={{ height: narrow ? 110 : 190, maxWidth: "100%", objectFit: "cover", borderRadius: 3, aspectRatio: "4 / 3" }} />
-                        ))}
+                        {/* Thumbnails, a tap opens the photo full size (Coy, 2026-10-05: "the photos aren't showing as thumbnails"). */}
+                        {v.photos.length > 0 && (
+                          <div className="flex gap-1.5 flex-wrap" style={{ alignContent: "flex-start" }}>
+                            {v.photos.slice(0, 4).map((ph) => (
+                              <a key={ph.id} href={ph.url} target="_blank" rel="noreferrer" aria-label={`Open ${ph.name || "the photo"} full size`} style={{ display: "block", lineHeight: 0 }}>
+                                {/* eslint-disable-next-line @next/next/no-img-element -- signed link, printed */}
+                                <img src={ph.url} alt={ph.name} loading="lazy" style={{ width: narrow ? 76 : 92, height: narrow ? 76 : 92, objectFit: "cover", borderRadius: 3, border: "1px solid #E6DCC8", background: "#E9E4DA" }} />
+                              </a>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

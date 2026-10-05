@@ -109,6 +109,15 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
   const [data, setData] = useState<Data | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
+  // A section's Budget folds to its one summary line (Coy, 2026-10-05), remembered on the device.
+  const [folded, setFolded] = useState<Set<string>>(() => {
+    try { return new Set(JSON.parse(localStorage.getItem("sc:budget-folded") ?? "[]") as string[]); } catch { return new Set(); }
+  });
+  const toggleFold = (id: string) => setFolded((f) => {
+    const n = new Set(f); if (n.has(id)) n.delete(id); else n.add(id);
+    try { localStorage.setItem("sc:budget-folded", JSON.stringify([...n].slice(-200))); } catch { /* no storage */ }
+    return n;
+  });
   // The picker opens on an area (its own "+ Add") or on the whole job.
   const [picker, setPicker] = useState<{ area: string } | null>(null);
   // The Price book itself, opened over the job (Coy, 2026-10-02) — "+ Add" goes here.
@@ -430,7 +439,11 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
       {areas.filter((a) => a.id && slots?.[a.id]).map((a) => createPortal(
         <div style={{ borderTop: `1px solid ${T.hairSoft}` }}>
           <div className="px-3 py-1.5 flex items-center gap-2 flex-wrap">
-            <span style={{ ...eyebrow }}>Budget</span>
+            <button onClick={() => toggleFold(a.id as string)} aria-expanded={!folded.has(a.id as string)} aria-label={folded.has(a.id as string) ? "Show this section's budget" : "Fold this section's budget"}
+              className="flex items-center gap-1" style={{ ...eyebrow, cursor: "pointer" }}>
+              <span aria-hidden="true" style={{ display: "inline-block", width: 10, transform: folded.has(a.id as string) ? "none" : "rotate(90deg)", transition: "transform .15s" }}>▸</span>
+              Budget
+            </button>
             {a.lines.length > 0 && (
               <span style={{ fontSize: F.xs, color: T.ink3, ...nums }}>
                 {a.lines.length} item{a.lines.length === 1 ? "" : "s"} · cost {money0(sum(a.lines, "ext_cost"))} · price {money0(sum(a.lines, "ext_price"))}
@@ -443,10 +456,12 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
               + Add items from the Price book
             </button>
           </div>
+          {!folded.has(a.id as string) && <>
           {err && <div className="px-3 pb-1" style={{ fontSize: F.xs, color: T.red }}>{err}</div>}
           {a.lines.length === 0
             ? <div className="px-3 pb-2" style={{ fontSize: F.xs, color: T.ink3 }}>No cost items yet. Add them from the Price book — quantities come from this section.</div>
             : <div className={wide ? "" : "px-3 pb-2"}>{areaBody(a, true)}</div>}
+          </>}
         </div>,
         slots![a.id as string],
         a.id as string,

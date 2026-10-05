@@ -135,14 +135,14 @@ export function LineEvents() {
                 <span style={{ ...nums, color: T.ink2 }}>{when(e.at)}</span>
                 <span className="flex items-center gap-1.5" style={clip}>{l && dot(l.color)}{lineName(l)}</span>
                 <span style={{ color: T.ink2 }}>{providerCard(e.provider)?.name ?? "—"}</span>
-                <span style={{ fontFamily: "var(--sc-font-agent)", fontSize: 11.5, ...clip }}>{e.event_type}</span>
+                <span style={{ fontFamily: "var(--sc-font-code)", fontSize: 11.5, ...clip }}>{e.event_type}</span>
                 <span style={clip}><b>{who}</b> <span style={{ color: T.ink2 }}>{e.summary}</span></span>
                 <span style={{ ...nums, color: T.ink2 }}>{latencyText(e.latency_ms)}</span>
                 <span style={{ fontFamily: disp, fontSize: 10, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase", color: st.c }}>{st.l}</span>
               </div>
               <div className="lg:hidden" style={{ padding: "8px 12px" }}>
                 <div className="flex items-center gap-1.5" style={{ fontSize: 11.5, color: T.ink3 }}>
-                  <span style={nums}>{when(e.at)}</span>{l && dot(l.color)}<span style={{ fontFamily: "var(--sc-font-agent)", ...clip }}>{e.event_type}</span>
+                  <span style={nums}>{when(e.at)}</span>{l && dot(l.color)}<span style={{ fontFamily: "var(--sc-font-code)", ...clip }}>{e.event_type}</span>
                 </div>
                 <div className="flex items-baseline gap-2">
                   <span style={{ flex: 1, minWidth: 0, ...clip }}><b>{who}</b> <span style={{ color: T.ink2 }}>{e.summary}</span></span>
@@ -190,7 +190,7 @@ function EventDrawer({ id, onClose, onReplay, replaying }: { id: string | null; 
           )}
           <div>
             <div style={{ ...eyebrow, marginBottom: 4 }}>Payload, as it arrived</div>
-            <pre className="rounded overflow-auto" style={{ background: T.slab, border: `1px solid ${T.hairSoft}`, padding: 10, fontSize: 11, lineHeight: 1.45, maxHeight: 420, fontFamily: "var(--sc-font-agent)", whiteSpace: "pre-wrap", wordBreak: "break-word", margin: 0 }}>
+            <pre className="rounded overflow-auto" style={{ background: T.slab, border: `1px solid ${T.hairSoft}`, padding: 10, fontSize: 11, lineHeight: 1.45, maxHeight: 420, fontFamily: "var(--sc-font-code)", whiteSpace: "pre-wrap", wordBreak: "break-word", margin: 0 }}>
               {JSON.stringify(d.payload, null, 2)}
             </pre>
           </div>

@@ -8,8 +8,10 @@
    (activity-line.tsx always holds its row). Everything that sits under or
    beside the header measures from this — one number, not five. */
 :root { --sc-head: 92px; --sc-foot: 58px; --sc-dusty: 400px;
-  /* Dusty's type, the same in every theme (Coy, 2026-10-02): JetBrains Mono, loaded by next/font as --font-mono. */
-  --sc-font-agent: var(--font-mono, 'JetBrains Mono'), ui-monospace, SFMono-Regular, Menlo, monospace; }
+  /* Dusty's type, the same in every theme (Coy, 2026-10-05): Figtree, loaded by next/font as --font-agent. */
+  --sc-font-agent: var(--font-agent, 'Figtree'), system-ui, -apple-system, 'Segoe UI', sans-serif;
+  /* Machine text — event types, webhook URLs, payloads: JetBrains Mono. */
+  --sc-font-code: var(--font-mono, 'JetBrains Mono'), ui-monospace, SFMono-Regular, Menlo, monospace; }
 .sc-sheets { top: var(--sc-head); bottom: 0; right: 0; left: 0; }
 /* Desktop (Coy, 2026-09-30): the activity line moved up into the 54px header
    beside the logo, so the header is one row. */
@@ -333,7 +335,7 @@ body { background: var(--sc-slab); color: var(--sc-ink); }
 /* Activity line: the face of "crete" in the wordmark (Inter 300), graphite;
    time in Barlow Condensed. Coy, 2026-09-30: the draft paper is the logo row
    only — on a phone the line's own row is a solid colour. */
-.sc-activity-text { font-family: var(--sc-font-agent, 'JetBrains Mono', monospace); font-weight: 400; font-size: 13.5px; letter-spacing: -.01em; font-style: normal; color: var(--sc-pencil); }
+.sc-activity-text { font-family: var(--sc-font-agent, 'Figtree', sans-serif); font-weight: 400; font-size: 13.5px; letter-spacing: -.01em; font-style: normal; color: var(--sc-pencil); }
 .sc-activity-row { background: var(--sc-paper); border-bottom: 1px solid var(--sc-pencil-line); }
 .sc-activity-time { font-family: var(--sc-font-disp, 'Barlow Condensed', sans-serif); font-weight: 500; font-size: 12px; letter-spacing: .08em; color: var(--sc-pencil-muted); }
 .sc-dot-read  { color: var(--sc-work-dot-read); background: var(--sc-work-dot-read) !important; }

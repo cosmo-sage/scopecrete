@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Outfit, JetBrains_Mono, Caveat } from "next/font/google";
+import { Outfit, JetBrains_Mono, Caveat, Figtree } from "next/font/google";
 import "./globals.css";
 
 const outfit = Outfit({
@@ -11,6 +11,13 @@ const outfit = Outfit({
 const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
   variable: "--font-mono",
+  display: "swap",
+});
+
+// Dusty's voice — his chat and his thoughts in the header (Coy, 2026-10-05).
+const figtree = Figtree({
+  subsets: ["latin"],
+  variable: "--font-agent",
   display: "swap",
 });
 
@@ -51,7 +58,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${outfit.variable} ${jetbrainsMono.variable} ${caveat.variable}`} suppressHydrationWarning>
+    <html lang="en" className={`${outfit.variable} ${jetbrainsMono.variable} ${figtree.variable} ${caveat.variable}`} suppressHydrationWarning>
       <head>
         {/* The colour theme (Settings → Appearance) before first paint, so a
             dark theme never flashes cream. Saved per device by useTheme(). */}

@@ -4,7 +4,7 @@ Ground truth for every agent working this repo. If code disagrees with this
 document, the code is wrong or this document is stale — resolve it, don't
 guess. Update this file in the same PR that changes the behavior it describes.
 
-Last updated: 2026-10-04 (Dusty is the Scopecrete Lander; an All thread; proposal cover band and Prepared by; sign-in at app.scopecrete.ai/login, each org at <slug>.app.scopecrete.ai; Dusty's chat keeps its files and files them on a customer or job — migration 079; vendor Delete; Dusty on a vendor's page and looking at attached photos; sales tax by address via TaxLocus — migration 078; archive reasons; Lines, providers and logs — migration 077; internal notes with @-tags; Jobs board sort and filter; jobs by hand — migration 076; done and lost customers in Threads; proposals sent by link, every opening tracked; every option side by side for the customer — migration 075; Documents is Files, everywhere — migration 074; Threads v2 — threads you make, channels per number, the customer page reshaped — migration 073; an address given is kept and asked about — migration 072; Dusty sets addresses; customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
+Last updated: 2026-10-05 (Dusty writes in Figtree; Dusty is the Scopecrete Lander; an All thread; proposal cover band and Prepared by; sign-in at app.scopecrete.ai/login, each org at <slug>.app.scopecrete.ai; Dusty's chat keeps its files and files them on a customer or job — migration 079; vendor Delete; Dusty on a vendor's page and looking at attached photos; sales tax by address via TaxLocus — migration 078; archive reasons; Lines, providers and logs — migration 077; internal notes with @-tags; Jobs board sort and filter; jobs by hand — migration 076; done and lost customers in Threads; proposals sent by link, every opening tracked; every option side by side for the customer — migration 075; Documents is Files, everywhere — migration 074; Threads v2 — threads you make, channels per number, the customer page reshaped — migration 073; an address given is kept and asked about — migration 072; Dusty sets addresses; customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
 
 ---
 
@@ -2375,10 +2375,14 @@ expected start date per quoted job before it means anything. Add the field.
   ("Reading 2635 Walker High Dugouts Specs 2026 08……"); its one-line
   summaries now carry up to ~140–220 characters and the line trims to the
   room it has.
-  **Dusty's type is JetBrains Mono (Coy, 2026-10-02: "JetBrains Mono for the
-  AI agent font")** — the activity line, its drop-down, and the chat
-  (questions, answers at 14px, the message box), in every theme (`agent` in
-  `tokens.ts` → `--sc-font-agent`, next/font's `--font-mono`). Buttons and
+  **Dusty's type is Figtree (Coy, 2026-10-05: "change the font for
+  everything dusty write to Figtree … even the thoughts in the header";
+  JetBrains Mono since 2026-10-02 before that)** — the activity line, its
+  drop-down and thoughts, and the chat (questions, answers at 14px, his
+  plans, the message box), in every theme (`agent` in `tokens.ts` →
+  `--sc-font-agent`, next/font's `--font-agent`). Machine text on Lines and
+  Logs (event types, webhook URLs, payloads) stays JetBrains Mono
+  (`--sc-font-code`). Buttons and
   headers keep the theme's faces. **The drop-down comes down over
   everything** — the plan sheets panel, Dusty, any sheet: while it is open
   the header's layer is lifted (`html[data-head-drop] .sc-head-wrap`).

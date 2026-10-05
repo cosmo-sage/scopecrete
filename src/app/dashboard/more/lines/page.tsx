@@ -129,7 +129,7 @@ export default function LinesScreen() {
                     <div className="min-w-0">
                       <div style={{ ...eyebrow, fontSize: 9.5, color: T.ink3 }}>Last event</div>
                       <div className="flex items-center" style={{ ...field, border: `1px solid ${T.hairSoft}`, background: T.slab, ...clip }}>
-                        {l.last_event ? <>{relTime(l.last_event.at)} · <span style={{ fontFamily: "var(--sc-font-agent)", fontSize: 11.5, marginLeft: 4 }}>{l.last_event.type}</span></> : "None this week"}
+                        {l.last_event ? <>{relTime(l.last_event.at)} · <span style={{ fontFamily: "var(--sc-font-code)", fontSize: 11.5, marginLeft: 4 }}>{l.last_event.type}</span></> : "None this week"}
                       </div>
                     </div>
                   </div>
@@ -137,7 +137,7 @@ export default function LinesScreen() {
                     <span style={{ ...eyebrow, fontSize: 9.5, color: T.ink3 }}>Webhook</span>
                     {l.webhook ? (
                       <>
-                        <span className="rounded flex items-center px-2" style={{ height: 28, flex: "1 1 200px", minWidth: 0, background: T.slab, border: `1px solid ${T.hairSoft}`, fontFamily: "var(--sc-font-agent)", fontSize: 11.5, ...clip }}>{l.webhook}</span>
+                        <span className="rounded flex items-center px-2" style={{ height: 28, flex: "1 1 200px", minWidth: 0, background: T.slab, border: `1px solid ${T.hairSoft}`, fontFamily: "var(--sc-font-code)", fontSize: 11.5, ...clip }}>{l.webhook}</span>
                         <button onClick={() => copy(l.webhook!, l.id)} style={{ ...btn, height: 28, border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink }}>{copied === l.id ? "Copied" : "Copy"}</button>
                       </>
                     ) : (
@@ -281,7 +281,7 @@ function AddLine({ open, onClose, onSaved }: { open: boolean; onClose: () => voi
           {p.built ? (
             <>
               <div className="flex items-center gap-2">
-                <span className="rounded flex items-center px-2" style={{ height: 30, flex: 1, minWidth: 0, background: T.slab, border: `1px solid ${T.hairSoft}`, fontFamily: "var(--sc-font-agent)", fontSize: 11.5, ...clip }}>{webhook}</span>
+                <span className="rounded flex items-center px-2" style={{ height: 30, flex: 1, minWidth: 0, background: T.slab, border: `1px solid ${T.hairSoft}`, fontFamily: "var(--sc-font-code)", fontSize: 11.5, ...clip }}>{webhook}</span>
                 {saved?.webhook && <button onClick={() => void navigator.clipboard?.writeText(saved.webhook!).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); })}
                   className="rounded px-2.5" style={{ height: 30, border: `1px solid ${T.hairStrong}`, background: T.card, fontFamily: disp, fontSize: 11, textTransform: "uppercase", cursor: "pointer" }}>{copied ? "Copied" : "Copy"}</button>}
               </div>
@@ -291,7 +291,7 @@ function AddLine({ open, onClose, onSaved }: { open: boolean; onClose: () => voi
               {saved && (
                 <div className="flex items-center gap-2 mt-2 rounded px-2.5" style={{ height: 34, background: heard ? T.slab : T.hivizDim, fontSize: 12.5 }}>
                   <span style={{ width: 8, height: 8, borderRadius: 4, background: heard ? T.green : T.hiviz }} className={heard ? "" : "animate-pulse"} />
-                  {heard ? <>First event arrived {relTime(heard.at)} · <span style={{ fontFamily: "var(--sc-font-agent)" }}>{heard.type}</span></> : "Waiting for the first event… call or text the number to test it."}
+                  {heard ? <>First event arrived {relTime(heard.at)} · <span style={{ fontFamily: "var(--sc-font-code)" }}>{heard.type}</span></> : "Waiting for the first event… call or text the number to test it."}
                 </div>
               )}
             </>

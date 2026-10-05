@@ -557,6 +557,17 @@ Coy: *"I need to be able to upload documents and photos for Dusty to parse."*
   suggestions** (§2b) — shown on the file, never applied — and from a
   document a number is kept only if it is written in it (`sanitizeRead()`,
   the dictation rule). Failed reads retry after 30 minutes, three tries.
+  **A read that kills the reader is not retried forever (migration 080,
+  applied 2026-10-05 on Coy's "apply 080"; `read-files` v15).** Walker High's 25 MB spec book ran the
+  function out of memory mid-read; the row stayed "reading" and was claimed
+  again every 10 minutes with no limit — 340 times, "Reading 2635 Walker High
+  Dugouts Specs…" on the activity line on every open, ~8.5 GB downloaded
+  (the egress overage). Now a PDF over 12 MB is skipped with the reason
+  (`readable()`, `MAX_PDF_BYTES`; the largest read so far was 4 MB), and a
+  file still "reading" after three tries is marked skipped
+  (`sc_files_claim`, 080). Checked after: the spec book is skipped with
+  the reason. The 340 failed tries stored nothing; egress is not stored
+  data, so there was nothing to delete.
   **v3 (2026-09-29, prompt `read-files-v2-price-lines`)** also reads
   `price_lines` off a quote, price list, receipt or invoice — name, item #,
   unit, unit price, qty — keeping a line only if its unit price is written

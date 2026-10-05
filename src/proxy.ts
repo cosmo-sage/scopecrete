@@ -66,9 +66,11 @@ export async function proxy(request: NextRequest) {
   const kind: HostKind = hostKind(host);
   const isDash = pathname.startsWith("/dashboard");
 
-  // ── scopecrete.ai: the public site. Sign-in and the dashboard live on app.
+  // ── scopecrete.ai: the public site — the landing page (src/app/welcome) at /.
+  //    Sign-in and the dashboard live on app.
   if (kind.kind === "apex") {
-    if (pathname === "/" || pathname === "/login") return NextResponse.redirect(LOGIN_URL);
+    if (pathname === "/") return NextResponse.rewrite(new URL("/welcome", request.url));
+    if (pathname === "/login") return NextResponse.redirect(LOGIN_URL);
     if (isDash) return NextResponse.redirect(`${APP_ORIGIN}${pathname}${search}`);
     return NextResponse.next();
   }

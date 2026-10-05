@@ -219,6 +219,11 @@
 .sc-dia-reply { animation: scDiaGlow 0.8s ease-in-out infinite; }
 .sc-dia-done  { animation: scDiaFlare 1.4s ease-out 1 both; }
 .sc-dia-warn  { box-shadow: 0 0 6px 2px currentColor; }
+/* The activity line's six dots (Coy, 2026-10-05): each lights in turn — green, orange, blue, twice. */
+@keyframes scDotStep { 0%, 100% { opacity: .25; } 12% { opacity: 1; } 40% { opacity: .25; } }
+.sc-dots > span { animation-name: scDotStep; animation-timing-function: ease-out; animation-iteration-count: infinite; opacity: .25; }
+.sc-dots-warn > span { animation: none; opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .sc-dots > span { animation: none; opacity: .8; } }
 /* Dusty's sprite changes crossfade (the pack's 200 ms). */
 @keyframes scDustyIn { from { opacity: 0; } to { opacity: 1; } }
 .sc-dusty { animation: scDustyIn 0.2s ease-out; }

@@ -95,19 +95,25 @@ function ago(iso: string | null | undefined): string {
 }
 
 /**
- * The line's button (Coy, 2026-10-02): a diamond that always glows, its colour
- * and rhythm the kind of work — grey and slow when idle — with a small arrow
- * under it that says it opens. It replaced the dot on the left and the chevron
- * on the right, so the words get the whole width.
+ * The line's mark (Coy, 2026-10-05: "This little emblem needs to be removed. I
+ * want to replace it with 6 little square dots 3 different colors blinking in
+ * this order: green, orange, blue … at the same level of the header as the
+ * '.ai' in the logo"). Six squares — green, orange, blue, twice — lit one after
+ * another; quicker while Dusty reads or answers, steady red when the reader is
+ * broken. They sit low in the row, level with the wordmark's ".ai". (It replaced
+ * the diamond of 2026-10-02.)
  */
-function Diamond({ work, open }: { work: Work; open: boolean }) {
-  const colour = `var(--sc-work-dot-${work ?? "idle"}, ${work ? WORK_DOT[work] : "#9C9385"})`;
+function Dots({ work }: { work: Work }) {
+  const COLOURS = ["#2F8A5B", "#E0590F", "#3F74C9"];
+  const cycle = work === "reply" ? 0.6 : work === "read" ? 1.2 : 2.4;
   return (
-    <span aria-hidden="true" className="flex flex-col items-center justify-center" style={{ flex: "0 0 auto", width: 14, gap: 2 }}>
-      <span className={`sc-dia sc-dia-${work ?? "idle"}`} style={{ width: 9, height: 9, background: colour, color: colour, transform: "rotate(45deg)", borderRadius: 1.5, display: "block" }} />
-      <svg width="8" height="5" viewBox="0 0 8 5" style={{ display: "block", transform: open ? "rotate(180deg)" : "none", transition: "transform .15s" }}>
-        <path d="M1 1 L4 4 L7 1" fill="none" stroke="currentColor" strokeWidth="1.3" style={{ color: "var(--sc-pencil-muted, #8A8478)" }} />
-      </svg>
+    <span aria-hidden="true" className={`sc-dots sc-dots-${work ?? "idle"}`}
+      style={{ flex: "0 0 auto", alignSelf: "stretch", display: "flex", alignItems: "flex-end", gap: 2, paddingBottom: 6 }}>
+      {Array.from({ length: 6 }, (_, i) => (
+        <span key={i} style={{ width: 3.5, height: 3.5, borderRadius: 0.5, display: "block",
+          background: work === "warn" ? "var(--sc-work-dot-warn, #B5412C)" : COLOURS[i % 3],
+          animationDuration: `${cycle}s`, animationDelay: `${(cycle / 6) * i}s` }} />
+      ))}
     </span>
   );
 }
@@ -269,7 +275,7 @@ export function ActivityLine({ busy, onWorking, inline }: {
         className="w-full flex items-center gap-2 text-left"
         // Strict containment: a new line of text never makes the browser lay out the page around it.
         style={{ height: 30, padding: "0 4px 0 4px", background: "transparent", border: "none", cursor: "pointer", contain: "strict" }}>
-        <Diamond key={`${work}-${line.key}`} work={work} open={open} />
+        <Dots work={work} />
         <span ref={textRef} aria-live="polite" className="sc-activity-text"
           style={{ flex: 1, minWidth: 0, color: line.tone === "warn" ? T.hivizText : undefined, ...clip }}>
           {typing ? (

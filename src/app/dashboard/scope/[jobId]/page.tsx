@@ -248,21 +248,32 @@ export default function ScopeBuilder() {
       {/* ================= sections ================= */}
       <div style={{ minWidth: 0 }} className="pb-24 lg:pb-6">
         <div className="px-3 pt-2.5 pb-2" style={{ background: T.card, borderBottom: `1px solid ${T.hair}` }}>
-          {/* Coy, 2026-10-02: the name on the Jobs row, bold but smaller; the four
-              chips small on one row under it; the description; then Plan room and
-              Proposal, out of the way above the money strip. */}
-          <div className="flex items-center gap-2">
+          {/* Coy, 2026-10-05: Plan room · Budget · Proposal in the top right, on
+              the job name's row; the ⓘ right after the name it explains. */}
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+            <div className="flex items-center gap-2" style={{ flex: "1 1 220px", minWidth: 0 }}>
             <Link href="/dashboard/scope" className="no-underline shrink-0" style={{ ...eyebrow, color: T.ink2 }}>‹ Jobs</Link>
             <input defaultValue={realTitle} placeholder={titleHint} aria-label="Job name"
+              size={Math.max(6, (realTitle || titleHint || "").length + 1)}
               onBlur={(e) => { const v = e.target.value; if (v !== realTitle) void send(`/api/jobs/${jobId}`, "PATCH", { title: v }).then((b) => setJob((j) => j && { ...j, title: b.job.title })).catch((er) => setSaveErr((m) => ({ ...m, job: String(er.message ?? er) }))); }}
               className="bg-transparent outline-none"
-              style={{ flex: 1, minWidth: 0, fontFamily: disp, fontSize: F.lg, fontWeight: 700, lineHeight: 1.15, color: T.ink }} />
+              style={{ minWidth: 0, maxWidth: "100%", fieldSizing: "content", fontFamily: disp, fontSize: F.lg, fontWeight: 700, lineHeight: 1.15, color: T.ink } as React.CSSProperties} />
             {/* Coy, 2026-09-30: "Why this job" is an ⓘ in the header — tap to see it. */}
             {why && (
               <button onClick={() => setWhyOpen(true)} aria-label="Why this job was made" title="Why this job was made"
                 className="shrink-0 rounded-full flex items-center justify-center"
                 style={{ width: 22, height: 22, border: `1px solid ${T.hairStrong}`, color: T.chalk, fontFamily: "Georgia, serif", fontStyle: "italic", fontWeight: 700, fontSize: 12, background: T.card, cursor: "pointer" }}>i</button>
             )}
+            </div>
+            <div className="flex items-center gap-2 ml-auto shrink-0">
+            {planSheets.length > 0 && (
+              <button onClick={() => openSheets(null, null)} className="rounded px-2.5 shrink-0"
+                style={{ height: 28, whiteSpace: "nowrap", border: `1px solid ${T.hairStrong}`, background: T.card, fontFamily: disp, fontSize: F.xs, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".05em", color: T.ink, cursor: "pointer" }}>
+                Sheets ({planSheets.length})
+              </button>
+            )}
+              <JobTabs jobId={jobId} active="job" />
+            </div>
           </div>
           <JobChips job={job} onSet={(field, value) => send(`/api/jobs/${jobId}`, "PATCH", { [field]: value })
             .then((b) => setJob((j) => j && { ...j, status: b.job.status, job_type: b.job.job_type, lead_source: b.job.lead_source }))} />
@@ -278,16 +289,6 @@ export default function ScopeBuilder() {
           </div>
           {job.description && !bidSummary && <div style={{ fontSize: F.sm, color: T.ink2, lineHeight: 1.4, marginTop: 2 }}>{job.description}</div>}
           {saveErr.job && <div style={{ fontSize: F.xs, color: T.red }}>{saveErr.job}</div>}
-          {/* Budget · Plan room · Proposal — one switch on all three (Coy, 2026-10-02). */}
-          <div className="flex flex-wrap justify-end items-center gap-2" style={{ marginTop: 6 }}>
-            {planSheets.length > 0 && (
-              <button onClick={() => openSheets(null, null)} className="rounded px-2.5 shrink-0"
-                style={{ height: 28, whiteSpace: "nowrap", border: `1px solid ${T.hairStrong}`, background: T.card, fontFamily: disp, fontSize: F.xs, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".05em", color: T.ink, cursor: "pointer" }}>
-                Sheets ({planSheets.length})
-              </button>
-            )}
-            <JobTabs jobId={jobId} active="job" />
-          </div>
         </div>
 
         {job.archived_at && (

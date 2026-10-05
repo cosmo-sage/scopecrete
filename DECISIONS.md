@@ -4,7 +4,7 @@ Ground truth for every agent working this repo. If code disagrees with this
 document, the code is wrong or this document is stale — resolve it, don't
 guess. Update this file in the same PR that changes the behavior it describes.
 
-Last updated: 2026-10-05 (one Unit type picker; a section's Camera; Dusty writes in Figtree; Dusty is the Scopecrete Lander; an All thread; proposal cover band and Prepared by; sign-in at app.scopecrete.ai/login, each org at <slug>.app.scopecrete.ai; Dusty's chat keeps its files and files them on a customer or job — migration 079; vendor Delete; Dusty on a vendor's page and looking at attached photos; sales tax by address via TaxLocus — migration 078; archive reasons; Lines, providers and logs — migration 077; internal notes with @-tags; Jobs board sort and filter; jobs by hand — migration 076; done and lost customers in Threads; proposals sent by link, every opening tracked; every option side by side for the customer — migration 075; Documents is Files, everywhere — migration 074; Threads v2 — threads you make, channels per number, the customer page reshaped — migration 073; an address given is kept and asked about — migration 072; Dusty sets addresses; customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
+Last updated: 2026-10-05 (search across the header; six dots for the activity line; job switch on the name's row; budget line notes; one Unit type picker; a section's Camera; Dusty writes in Figtree; Dusty is the Scopecrete Lander; an All thread; proposal cover band and Prepared by; sign-in at app.scopecrete.ai/login, each org at <slug>.app.scopecrete.ai; Dusty's chat keeps its files and files them on a customer or job — migration 079; vendor Delete; Dusty on a vendor's page and looking at attached photos; sales tax by address via TaxLocus — migration 078; archive reasons; Lines, providers and logs — migration 077; internal notes with @-tags; Jobs board sort and filter; jobs by hand — migration 076; done and lost customers in Threads; proposals sent by link, every opening tracked; every option side by side for the customer — migration 075; Documents is Files, everywhere — migration 074; Threads v2 — threads you make, channels per number, the customer page reshaped — migration 073; an address given is kept and asked about — migration 072; Dusty sets addresses; customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
 
 ---
 
@@ -1393,7 +1393,10 @@ percentage of labour — all three contradict this section and §4.
   versions (next) will be frozen copies of it. Adding a card **copies it
   onto the line** (name, unit, unit cost, type, taxed, markup, rule, vendor,
   price date), so a later card change never reprices a sent quote — the line
-  says "card price changed — update" instead. Per line (`budget()` /
+  says so with **↻** beside the unit cost (tap to take the new price;
+  since 2026-10-05 the line under the name is gone — Coy). Under each line's
+  name is its **note** ("+ note", typed in place, saved on blur as the
+  line's `description`; on the phone cards too). Per line (`budget()` /
   `ruleQty()` in `src/lib/engine`, tested in `tests/budget.test.mjs`):
   **qty** from the card's rule on the line's area (whole job = every area)
   — yards with the card's waste, sq ft, perimeter (needs L and W), sheets,
@@ -2021,8 +2024,10 @@ expected start date per quoted job before it means anything. Add the field.
   **profit this month** (less the monthly overhead; blank while overhead is
   not entered, since it would overstate). A blank tile shows "—" and says
   why. **Edit** shows, hides and orders tiles (saved to the account).
-- **Search (migration 054, 2026-09-30).** The header's 🔍 opens a panel
-  (~480px on a desktop, full width on a phone; `search-panel.tsx`,
+- **Search (migration 054, 2026-09-30).** The header's 🔍 opens a bar
+  across the whole header row on every size, above everything including
+  Dusty's docked column (drawn into the page body; Coy, 2026-10-05), with
+  the results full width under it (`search-panel.tsx`,
   `/api/search`) over **everything**: people and vendors (name, company,
   email, address, service area, Dusty's status lines), messages (text, call
   summary, transcript), call artifacts, Coy's notes, jobs and files (name,
@@ -2390,7 +2395,13 @@ expected start date per quoted job before it means anything. Add the field.
   reader isn't working; grey — idle. Reduced motion stills it. **Since 2026-10-02 it
   is a diamond** that always glows (idle a slow grey breath), with a small
   arrow under it — the expand button; the chevron on the right is gone so
-  musings get the whole width (Coy). On a desktop
+  musings get the whole width (Coy). **Since 2026-10-05 it is six small
+  square dots** — green, orange, blue, twice — lighting one after another
+  (Coy: "6 little square dots 3 different colors blinking in this order"),
+  sitting low, level with the logo's ".ai"; quick while Dusty answers, slower
+  while he reads, a slow pass at idle, all lit and steady when the reader
+  isn't working (`Dots` in `activity-line.tsx`, `.sc-dots`); the whole line
+  is the expand button. On a desktop
   the line sits in the header beside the logo and its drop-down is ~560px
   wide under it; on a phone it is the row under the header. The emblem and
   the line from it are gone; while a read runs the footer Dusty shows the
@@ -2939,7 +2950,9 @@ expected start date per quoted job before it means anything. Add the field.
   below shows the bid's scope summary — Coy: "redundant"), then the job's
   switch above the money strip. **Delete is at the bottom of the job page**
   (Coy, 2026-10-04: on a phone it pushed Proposal off the screen), and the
-  header's sheets button reads **Sheets (n)** on one line.
+  header's sheets button reads **Sheets (n)** on one line. **Since
+  2026-10-05 the Plan room · Budget · Proposal switch (and Sheets) sits top
+  right on the job name's row**, and the ⓘ comes right after the name (Coy).
 - **One job, three views (Coy, 2026-10-02: "no way … to get back from the
   proposal page" and "one job budget page, and I can toggle between that
   budget and the proposal").** **Plan room · Budget · Proposal** — in the

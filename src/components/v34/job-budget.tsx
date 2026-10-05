@@ -34,11 +34,6 @@ import { COST_TYPES, COST_TYPE_LABEL, QTY_RULE_LABEL, type CostType } from "@/li
 import { UnitPicker } from "@/components/v34/unit-picker";
 import { ruleForUnit } from "@/lib/units";
 
-/** The same, in a word or two, under a line's name on the grid. */
-const QTY_SHORT: Record<string, string> = {
-  per_sqft: "qty from the area", per_lf_perimeter: "qty from the edge", per_cy: "qty from the yards", per_day: "qty: days on the job",
-  per_job: "once", per_sheet: "qty by the sheet", per_stick: "qty by the stick", manual: "qty typed", from_takeoff: "measured in the Plan Room",
-};
 /** How a line's quantity is worked out, said under its Unit type. */
 const UNIT_RULE_SAYS: Record<string, string> = {
   per_sqft: "the area's size", per_lf_perimeter: "the area's edge (or its length, in LF)", per_cy: "the area's yards of concrete, with the card's waste",
@@ -269,15 +264,17 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
                           <tr key={l.id} style={{ borderTop: `1px solid ${T.hairSoft}` }}>
                             <td style={{ padding: "4px 8px 4px 24px", maxWidth: 260 }}>
                               <button onClick={() => setEditing(l)} className="text-left" style={{ cursor: "pointer", color: T.ink, fontWeight: 500, ...clip, display: "block", maxWidth: 240 }}>{l.name}</button>
-                              <div style={{ fontSize: 9.5, color: T.ink3, ...clip }}>
-                                {optLabel(l.option_id) ? <span style={{ color: T.chalk }}>{optLabel(l.option_id)} only · </span> : opts.length ? "every option · " : ""}
-                                {addons.has(l.id) && <><button onClick={() => void setAddon(l.id, false)} title="Optional add-on on the proposal — tap to put it back in the price"
-                                  style={{ color: T.chalk, cursor: "pointer", textDecoration: "underline dotted" }}>optional on the proposal ×</button> · </>}
-                                {l.section_role === "reinforcement" ? "reinforcement · " : ""}
-                                {asmName(l.assembly_id) ? `from ${asmName(l.assembly_id)} · ` : ""}
-                                {QTY_SHORT[l.qty_rule] ?? l.qty_rule}
-                                {stale(l) && <> · <button onClick={() => void patchLine(l.id, { refresh: true })} style={{ color: T.hiviz, cursor: "pointer" }}>{stale(l)}</button></>}
-                              </div>
+                              {/* Coy, 2026-10-05: "This line needs to be removed. And I should be able to add/edit the notes under this
+                                  and any cost item." Only what changes the price stays as a tag; the note is edited in place. */}
+                              {(optLabel(l.option_id) || addons.has(l.id)) && (
+                                <div style={{ fontSize: 9.5, color: T.chalk, ...clip }}>
+                                  {optLabel(l.option_id) ? `${optLabel(l.option_id)} only` : ""}
+                                  {optLabel(l.option_id) && addons.has(l.id) ? " · " : ""}
+                                  {addons.has(l.id) && <button onClick={() => void setAddon(l.id, false)} title="Optional add-on on the proposal — tap to put it back in the price"
+                                    style={{ color: T.chalk, cursor: "pointer", textDecoration: "underline dotted" }}>optional on the proposal ×</button>}
+                                </div>
+                              )}
+                              <LineNote key={l.id + (l.description ?? "")} value={l.description} name={l.name} onSave={(v) => void patchLine(l.id, { description: v })} />
                               {r.blocked.length > 0 && <div style={{ fontSize: 9.5, color: T.hiviz, whiteSpace: "normal", overflowWrap: "anywhere" }}>needs {r.blocked.join(", ")}</div>}
                             </td>
                             <td style={{ padding: "2px 4px", color: T.ink2, maxWidth: 170, ...clip }}>
@@ -297,6 +294,10 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
                             <td style={{ padding: "4px 8px" }}>{l.unit}</td>
                             <td style={{ padding: "2px 4px", textAlign: "right" }}>
                               <Cell value={l.unit_cost} money label={`Unit cost of ${l.name}`} warn={l.unit_cost === null} onSave={(v) => void patchLine(l.id, { unit_cost: v })} />
+                              {stale(l) && (
+                                <button onClick={() => void patchLine(l.id, { refresh: true })} title={`${stale(l)} — tap to use the new price`} aria-label={`${stale(l)} for ${l.name}`}
+                                  style={{ fontSize: 11, color: T.hiviz, marginLeft: 2, cursor: "pointer" }}>↻</button>
+                              )}
                             </td>
                             <td style={{ padding: "4px 8px", textAlign: "right" }}>{r.ext_cost === null ? "—" : money(r.ext_cost)}</td>
                             <td style={{ padding: "4px 8px", textAlign: "right", color: T.ink2 }}>
@@ -630,6 +631,19 @@ function TierTab({ on, onClick, label, sub }: { on: boolean; onClick: () => void
   );
 }
 
+/** A cost item's note, edited where it sits (it is the line's description — it shows on the proposal). */
+function LineNote({ value, name, onSave }: { value: string | null; name: string; onSave: (v: string | null) => void }) {
+  const [v, setV] = useState(value ?? "");
+  return (
+    <input value={v} onChange={(e) => setV(e.target.value)} maxLength={500} placeholder="+ note" aria-label={`Note on ${name}`}
+      onBlur={() => { const t = v.trim() || null; if (t !== (value ?? null)) onSave(t); }}
+      onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); if (e.key === "Escape") { setV(value ?? ""); (e.target as HTMLInputElement).blur(); } }}
+      title={v || "Add a note — it shows on the proposal"}
+      className="w-full outline-none rounded border border-transparent bg-transparent focus:[border-color:var(--sc-hair)] focus:[background:var(--sc-card)]"
+      style={{ display: "block", fontSize: 10.5, color: v ? T.ink2 : T.ink3, padding: "1px 2px", marginLeft: -2, maxWidth: 240 }} />
+  );
+}
+
 function GroupCard({ name, lines, res, optLabel, asmName, addons, onOpen, cost, price }: {
   name: string; lines: Line[]; res: ReturnType<typeof priceBudget>; optLabel: (id: string | null) => string | null;
   asmName: (id: string | null | undefined) => string | null; addons: Set<string>;
@@ -655,6 +669,7 @@ function GroupCard({ name, lines, res, optLabel, asmName, addons, onOpen, cost, 
             style={{ borderTop: `1px solid ${i ? T.hairSoft : T.hair}`, cursor: "pointer" }}>
             <span style={{ minWidth: 0, flex: 1 }}>
               <span style={{ display: "block", fontSize: F.sm, color: T.ink, ...clip }}>{l.name}</span>
+              {l.description && <span style={{ display: "block", fontSize: 10.5, color: T.ink2, ...clip }}>{l.description}</span>}
               {/* A "needs …" note can be long (the tax one names the parish and where to fix it) — it wraps, never widens the page. */}
               <span style={{ display: "block", fontSize: 10, color: r.blocked.length ? T.hiviz : T.ink3, ...nums, ...(r.blocked.length ? { whiteSpace: "normal", overflowWrap: "anywhere" } : {}) }}>
                 {r.blocked.length ? `needs ${r.blocked.join(", ")}` : `${qtyFmt(r.qty)} ${l.unit} × ${l.unit_cost === null ? "—" : money(l.unit_cost)}${r.qty_basis === "set" ? " ✎" : " ƒ"}`}

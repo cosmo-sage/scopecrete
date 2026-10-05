@@ -248,7 +248,7 @@ export function takeoffUnit(unit: string): "SF" | "SY" | "LF" | "EA" | "CY" | nu
   if (["sf", "sqft", "sft", "ft2", "squarefeet", "squarefoot"].includes(u)) return "SF";
   // Government bid items are counted in square yards (Coy, 2026-10-02: "706-01 Concrete Walk … 1,769.80 SY").
   if (["sy", "sqyd", "syd", "yd2", "squareyard", "squareyards"].includes(u)) return "SY";
-  if (["lf", "ft", "linft", "linearfeet", "linearfoot", "feet", "foot"].includes(u)) return "LF";
+  if (["lf", "ft", "linft", "lnft", "linearfeet", "linearfoot", "feet", "foot"].includes(u)) return "LF";
   if (["ea", "each", "count", "ct", "pcs", "pc", "no"].includes(u)) return "EA";
   if (["cy", "yd", "yd3", "cuyd", "cubicyard", "cubicyards", "yards", "yard"].includes(u)) return "CY";
   return null;
@@ -377,6 +377,9 @@ export function ruleQty(
       const miss: string[] = [];
       let lf = 0;
       for (const s of scope) {
+        // An area measured in linear feet (a curb, a grade beam) is its own length.
+        const q = quantities(s);
+        if (q.count !== null && takeoffUnit(q.count_unit ?? "") === "LF") { lf += q.count; continue; }
         if (!has(s.length_ft) || !has(s.width_ft) || s.length_ft <= 0 || s.width_ft <= 0) miss.push(`${s.name || "An area"}: length and width (for the edge)`);
         else lf += 2 * (s.length_ft + s.width_ft);
       }

@@ -1,14 +1,19 @@
 "use client";
 
 /**
- * Search, from the header's magnifying glass (Coy, 2026-09-30): a box that
- * drops under the header — about 480px on a desktop, the full width on a
- * phone — over every message, call summary and transcript, person, note, job
- * and file (/api/search, migration 054). Results grouped by kind, the match
- * highlighted. Enter on an empty list does nothing; Esc closes.
+ * Search, from the header's magnifying glass (Coy, 2026-09-30): over every
+ * message, call summary and transcript, person, note, job and file
+ * (/api/search, migration 054). Results grouped by kind, the match
+ * highlighted. Esc closes.
+ *
+ * Since 2026-10-05 (Coy: "a search bar the full width of the header on any
+ * device and be on top of anything else including dusty chat") the box lies
+ * over the header's logo row, edge to edge, with the results under it full
+ * width — drawn into <body> so it sits above Dusty's docked column.
  */
 
 import React, { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { T, F, eyebrow, clip, relTime } from "@/lib/v34/tokens";
 
@@ -45,22 +50,27 @@ export function SearchPanel({ onClose }: { onClose: () => void }) {
     return () => clearTimeout(t);
   }, [q]);
 
-  return (
+  if (typeof document === "undefined") return null;
+  return createPortal(
     <>
-      <button aria-label="Close search" onClick={onClose} className="fixed inset-0" style={{ top: "var(--sc-head)", background: "rgba(10,14,18,.2)", border: "none", zIndex: 44 }} />
-      <div role="dialog" aria-label="Search" className="fixed left-0 right-0 lg:left-auto lg:right-3 sc-drop"
-        style={{ top: "calc(var(--sc-head) + 6px)", zIndex: 45, width: "auto", maxWidth: "100vw" }}>
-        <div className="mx-2 lg:mx-0 rounded-lg overflow-hidden lg:w-[480px]" style={{ background: T.card, boxShadow: "0 14px 40px rgba(10,14,18,.28)", border: `1px solid ${T.hair}` }}>
+      <button aria-label="Close search" onClick={onClose} className="fixed inset-0" style={{ background: "rgba(10,14,18,.28)", border: "none", zIndex: 300 }} />
+      <div role="dialog" aria-label="Search" className="fixed left-0 right-0 top-0 sc-drop" style={{ zIndex: 301 }}>
+        <div className="flex items-center gap-2 px-3" style={{ height: 54, background: T.card, borderBottom: `1px solid ${T.hair}`, boxShadow: "0 2px 10px rgba(10,14,18,.12)" }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden style={{ color: T.ink3, flex: "none" }}><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
           <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search everything"
             placeholder="Search messages, calls, people, vendors, jobs, files…"
-            className="w-full px-3 outline-none" style={{ height: 44, fontSize: F.md, borderBottom: `1px solid ${T.hair}` }} />
-          <div style={{ maxHeight: "min(70vh, 560px)", overflowY: "auto" }}>
+            className="flex-1 min-w-0 outline-none bg-transparent" style={{ height: 44, fontSize: F.md, color: T.ink }} />
+          {busy && <span style={{ fontSize: 10.5, color: T.ink3 }}>Searching…</span>}
+          <button onClick={onClose} aria-label="Close search" className="flex items-center justify-center rounded" style={{ width: 34, height: 34, color: T.ink2, fontSize: 18, flex: "none" }}>×</button>
+        </div>
+        {(q.trim().length < 2 || groups) && (
+          <div style={{ maxHeight: "calc(100vh - 54px - 24px)", overflowY: "auto", background: T.card, borderBottom: `1px solid ${T.hair}`, boxShadow: "0 14px 40px rgba(10,14,18,.28)" }}>
+            <div className="mx-auto" style={{ maxWidth: 960 }}>
             {q.trim().length < 2 && (
               <div className="px-3 py-3" style={{ fontSize: F.xs, color: T.ink3, lineHeight: 1.5 }}>
                 Every text, call summary and transcript, person and vendor, note, job and file Dusty has read. Use &quot;quotes&quot; for a phrase, a dash to leave a word out, or part of a phone number.
               </div>
             )}
-            {busy && !groups && <div className="px-3 py-3" style={{ fontSize: F.sm, color: T.ink3 }}>Searching…</div>}
             {groups && groups.length === 0 && !busy && <div className="px-3 py-3" style={{ fontSize: F.sm, color: T.ink3 }}>Nothing matches &ldquo;{q.trim()}&rdquo;.</div>}
             {groups?.map((g) => (
               <div key={g.kind}>
@@ -76,9 +86,11 @@ export function SearchPanel({ onClose }: { onClose: () => void }) {
                 ))}
               </div>
             ))}
+            </div>
           </div>
-        </div>
+        )}
       </div>
-    </>
+    </>,
+    document.body,
   );
 }

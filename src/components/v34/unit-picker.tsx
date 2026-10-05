@@ -11,7 +11,7 @@
 import React, { useEffect, useState } from "react";
 import { T, F, eyebrow, nums } from "@/lib/v34/tokens";
 import { Sheet } from "@/components/v34/primitives";
-import { cleanUnit, unitChoices } from "@/lib/units";
+import { cleanUnit, ownUnits, unitTypeOf, UNIT_TYPES } from "@/lib/units";
 
 type OrgUnit = { unit: string; count: number };
 let cache: Promise<OrgUnit[]> | null = null;
@@ -22,15 +22,20 @@ const loadUnits = (fresh = false) => {
 
 const NEW = "__new__", EDIT = "__edit__";
 
-export function UnitPicker({ value, onChange, style, ariaLabel = "Unit" }: {
+export function UnitPicker({ value, onChange, style, ariaLabel = "Unit type", editable = false }: {
   value: string | null; onChange: (unit: string) => void; style?: React.CSSProperties; ariaLabel?: string;
+  /** Offer "Edit units…" (the Price book); a budget line keeps the list to the five and Coy's own. */
+  editable?: boolean;
 }) {
   const [org, setOrg] = useState<OrgUnit[]>([]);
   const [typing, setTyping] = useState(false);
   const [draft, setDraft] = useState("");
   const [editing, setEditing] = useState(false);
   useEffect(() => { let off = false; void loadUnits().then((u) => { if (!off) setOrg(u); }); return () => { off = true; }; }, []);
-  const choices = unitChoices(org.map((u) => u.unit), value);
+  // Coy, 2026-10-05: "SqFt, SqYd, LnFt, CuYd, Each, + (to add my own)". "Square Feet" shows as SqFt.
+  const type = unitTypeOf(value);
+  const own = ownUnits(org.map((u) => u.unit), type ? null : value);
+  const shown = type ?? value ?? "";
   const commit = () => { const u = cleanUnit(draft); setTyping(false); setDraft(""); if (u && u !== value) onChange(u); };
 
   if (typing) return (
@@ -43,17 +48,22 @@ export function UnitPicker({ value, onChange, style, ariaLabel = "Unit" }: {
   );
   return (
     <>
-      <select value={value ?? ""} aria-label={ariaLabel} style={style}
+      <select value={shown} aria-label={ariaLabel} style={style}
         onChange={(e) => {
           const v = e.target.value;
           if (v === NEW) setTyping(true);
           else if (v === EDIT) setEditing(true);
-          else if (v && v !== value) onChange(v);
+          else if (v && v !== shown) onChange(v);
         }}>
-        {!value && <option value="">Pick a unit</option>}
-        {choices.map((u) => <option key={u} value={u}>{u}</option>)}
-        <option value={NEW}>+ New unit…</option>
-        <option value={EDIT}>Edit units…</option>
+        {!value && <option value="">Pick a unit type</option>}
+        {UNIT_TYPES.map((t) => <option key={t.unit} value={t.unit}>{t.unit}</option>)}
+        {own.length > 0 && (
+          <optgroup label="Your own">
+            {own.map((u) => <option key={u} value={u}>{u}</option>)}
+          </optgroup>
+        )}
+        <option value={NEW}>+ Add my own unit type…</option>
+        {editable && <option value={EDIT}>Rename units…</option>}
       </select>
       {editing && <UnitEditor onClose={() => setEditing(false)} onRenamed={(from, to) => { void loadUnits(true).then(setOrg); if (from === value) onChange(to); }} />}
     </>

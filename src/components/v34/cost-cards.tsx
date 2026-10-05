@@ -16,11 +16,12 @@
  */
 
 import { UnitPicker } from "@/components/v34/unit-picker";
+import { ruleForUnit } from "@/lib/units";
 import React, { useEffect, useMemo, useState } from "react";
 import { T, F, disp, eyebrow, nums, clip, money, formatPhone } from "@/lib/v34/tokens";
 import { Sheet } from "@/components/v34/primitives";
 import {
-  COST_TYPES, COST_TYPE_LABEL, QTY_RULES, QTY_RULE_LABEL, RULE_UNIT, cardGaps, defaultTaxable,
+  COST_TYPES, COST_TYPE_LABEL, QTY_RULE_LABEL, cardGaps, defaultTaxable,
   type CostType, type QtyRule,
 } from "@/lib/cost-cards";
 
@@ -283,10 +284,11 @@ export function CardSheet({ card, groups, vendors, lockVendor, onClose, onSaved,
             onChange={(e) => { const v = e.target.value as CostType; set({ cost_type: v, ...(!card.id ? { taxable: defaultTaxable(v) } : {}) }); }}>
             {COST_TYPES.map((t) => <option key={t} value={t}>{COST_TYPE_LABEL[t]}</option>)}
           </select></label>
-        <label className="block"><span style={eyebrow}>How it&apos;s counted on a job</span>
-          <select value={rule} style={field} onChange={(e) => { const r = e.target.value as QtyRule; set({ qty_rule: r, unit: f.unit || RULE_UNIT[r] }); setParams({}); }}>
-            {QTY_RULES.map((r) => <option key={r} value={r}>{QTY_RULE_LABEL[r]}</option>)}
-          </select></label>
+        {/* Unit type (Coy, 2026-10-05) — the unit decides how a job counts it (ruleForUnit). */}
+        <label className="block"><span style={eyebrow}>Unit type</span>
+          <UnitPicker value={f.unit || null} editable style={field}
+            onChange={(u) => { const r = ruleForUnit(u, rule, true) as QtyRule; set({ unit: u, qty_rule: r }); if (r !== rule) setParams({}); }} />
+          <span style={{ fontSize: 9.5, color: T.ink3 }}>On a job: {QTY_RULE_LABEL[rule]}.</span></label>
         {(RULE_FIELDS[rule] ?? []).length > 0 && (
           <div className="grid grid-cols-2 gap-2">
             {(RULE_FIELDS[rule] ?? []).map((x) => (
@@ -305,8 +307,6 @@ export function CardSheet({ card, groups, vendors, lockVendor, onClose, onSaved,
             <input type="number" inputMode="decimal" value={numField(f.unit_cost)} placeholder="not recorded"
               onChange={(e) => set({ unit_cost: e.target.value === "" ? null : Number(e.target.value) })}
               style={{ ...field, borderColor: f.unit_cost === null || f.unit_cost === undefined ? T.hiviz : T.hair }} /></label>
-          <label className="block"><span style={eyebrow}>Per</span>
-            <UnitPicker value={f.unit || null} onChange={(u) => set({ unit: u })} style={field} /></label>
           <label className="flex items-center gap-2 mt-4" style={{ fontSize: F.sm }}>
             <input type="checkbox" checked={!!f.taxable} onChange={(e) => set({ taxable: e.target.checked })} style={{ width: 18, height: 18, accentColor: T.chalk }} />
             Sales tax applies</label>

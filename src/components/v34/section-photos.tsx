@@ -5,12 +5,15 @@
  * to take multiple photos from within a section that are easily mapped to that
  * section. The photos can be listed below the section dimensions.")
  *
- * The camera button opens the phone's camera (several shots on phones that
- * allow it; the library on a desktop); each photo goes straight to storage
+ * **Upload** opens the device's files; **Camera** (Coy, 2026-10-05: "open my
+ * camera app directly from the scopecrete site … take multiple photos at once
+ * and add at the same time") opens the camera in the page — shoot as many as
+ * you like, then Add N; where the browser can't (no camera, refused) it falls
+ * back to the phone's own camera. Each photo goes straight to storage
  * filed on this section (files.section_id, migration 045) and Dusty reads
  * it like any other. Tap a photo for the usual viewer.
  *
- * **From the job** (Coy, 2026-10-03: "copy photo here from the PlanRoom or
+ * **Copy** — was "From the job" (Coy, 2026-10-03: "copy photo here from the PlanRoom or
  * customer text message/email … select the photos to add to the group to be
  * viewed on that group name on the proposal"): every photo already on the job
  * — the Plan Room's, an email's — and every photo the customer texted, ticked
@@ -35,12 +38,14 @@ export function SectionPhotos({ jobId, sectionId, sectionName, photos, sections,
   sections: Array<{ id: string; name: string | null }>;
   onChange: (f: FileRow | null, removedId?: string) => void;
 }) {
+  const upload = useRef<HTMLInputElement | null>(null);
   const camera = useRef<HTMLInputElement | null>(null);
+  const [shooting, setShooting] = useState(false);
   const [sending, setSending] = useState<Array<{ key: string; name: string; pct: number; error: string | null }>>([]);
   const [open, setOpen] = useState<FileRow | null>(null);
   const [picking, setPicking] = useState(false);
 
-  const add = async (list: FileList | null) => {
+  const add = async (list: FileList | File[] | null) => {
     const files = Array.from(list ?? []);
     const jobs = files.map((file, i) => ({ key: `${Date.now()}-${i}`, file }));
     setSending((a) => [...a, ...jobs.map((j) => ({ key: j.key, name: j.file.name, pct: 0, error: null }))]);
@@ -63,18 +68,23 @@ export function SectionPhotos({ jobId, sectionId, sectionName, photos, sections,
       <div className="flex items-center gap-2">
         <span style={eyebrow}>Photos{photos.length ? ` · ${photos.length}` : ""}</span>
         <span className="flex-1" />
+        <input ref={upload} type="file" accept="image/*" multiple hidden
+          onChange={(e) => { void add(e.target.files); e.target.value = ""; }} />
         <input ref={camera} type="file" accept="image/*" capture="environment" multiple hidden
           onChange={(e) => { void add(e.target.files); e.target.value = ""; }} />
-        <button onClick={() => setPicking(true)} className="rounded px-2.5" style={{ height: 30, border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink, cursor: "pointer", ...eyebrow }}>
-          From the job
+        <button onClick={() => setPicking(true)} title="Copy photos already on the job, or texted by the customer, onto this area" className="rounded px-2.5" style={{ height: 30, border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink, cursor: "pointer", ...eyebrow }}>
+          Copy
         </button>
-        <button onClick={() => camera.current?.click()} aria-label={`Take photos of ${sectionName || "this area"}`}
+        <button onClick={() => upload.current?.click()} title="Upload photos from this device" className="rounded px-2.5" style={{ height: 30, border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink, cursor: "pointer", ...eyebrow }}>
+          Upload
+        </button>
+        <button onClick={() => (canShoot() ? setShooting(true) : camera.current?.click())} aria-label={`Take photos of ${sectionName || "this area"}`}
           className="rounded flex items-center gap-1.5 px-2.5" style={{ height: 30, border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink, cursor: "pointer", ...eyebrow }}>
           <svg width="15" height="13" viewBox="0 0 15 13" aria-hidden="true">
             <path d="M1.5 3.5h2.3l1.2-2h5l1.2 2h2.3v8h-12z" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
             <circle cx="7.5" cy="7.3" r="2.4" fill="none" stroke="currentColor" strokeWidth="1.3" />
           </svg>
-          Add photos
+          Camera
         </button>
       </div>
       {(photos.length > 0 || sending.length > 0) && (
@@ -88,10 +98,93 @@ export function SectionPhotos({ jobId, sectionId, sectionName, photos, sections,
           ))}
         </div>
       )}
+      {shooting && <CameraSheet title={`Photos of ${sectionName || "this area"}`} onClose={() => setShooting(false)}
+        onFallback={() => { setShooting(false); camera.current?.click(); }}
+        onAdd={(files) => { setShooting(false); void add(files); }} />}
       {picking && <PickPhotos jobId={jobId} sectionId={sectionId} sectionName={sectionName} onClose={() => setPicking(false)} onChange={onChange} />}
       <FileViewer f={open} sections={sections} onClose={() => setOpen(null)}
         onSaved={(f) => { setOpen(f); onChange(f); }}
         onDeleted={(id) => { setOpen(null); onChange(null, id); }} />
+    </div>
+  );
+}
+
+const canShoot = () => typeof navigator !== "undefined" && !!navigator.mediaDevices?.getUserMedia;
+
+/**
+ * The camera in the page: the back camera live, a shutter, every shot kept in a strip
+ * (× to drop one), then Add N. Nothing leaves the phone until Add. If the camera can't
+ * be opened, the phone's own camera app is used instead.
+ */
+function CameraSheet({ title, onClose, onAdd, onFallback }: { title: string; onClose: () => void; onAdd: (files: File[]) => void; onFallback: () => void }) {
+  const video = useRef<HTMLVideoElement | null>(null);
+  const [shots, setShots] = useState<Array<{ file: File; url: string }>>([]);
+  const [ready, setReady] = useState(false);
+  const [flash, setFlash] = useState(false);
+  const shotsRef = useRef(shots);
+  const fallback = useRef(onFallback);
+  React.useEffect(() => { shotsRef.current = shots; fallback.current = onFallback; }, [shots, onFallback]);
+  React.useEffect(() => {
+    let stream: MediaStream | null = null, off = false;
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 2560 }, height: { ideal: 1920 } }, audio: false })
+      .then((s) => {
+        if (off) { s.getTracks().forEach((t) => t.stop()); return; }
+        stream = s;
+        if (video.current) { video.current.srcObject = s; void video.current.play().catch(() => {}); }
+        setReady(true);
+      })
+      .catch(() => { if (!off) fallback.current(); });
+    return () => {
+      off = true;
+      stream?.getTracks().forEach((t) => t.stop());
+      shotsRef.current.forEach((x) => URL.revokeObjectURL(x.url));
+    };
+  }, []);
+  const snap = () => {
+    const v = video.current;
+    if (!v || !v.videoWidth) return;
+    const c = document.createElement("canvas");
+    c.width = v.videoWidth; c.height = v.videoHeight;
+    c.getContext("2d")?.drawImage(v, 0, 0);
+    setFlash(true); setTimeout(() => setFlash(false), 120);
+    c.toBlob((b) => {
+      if (!b) return;
+      const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+      const file = new File([b], `photo-${stamp}-${shotsRef.current.length + 1}.jpg`, { type: "image/jpeg" });
+      setShots((a) => [...a, { file, url: URL.createObjectURL(b) }]);
+    }, "image/jpeg", 0.9);
+  };
+  return (
+    <div role="dialog" aria-label={title} className="fixed inset-0 flex flex-col" style={{ zIndex: 80, background: "#000" }}>
+      <div className="flex items-center gap-2 px-3" style={{ height: 48, color: "#fff" }}>
+        <button onClick={onClose} style={{ ...eyebrow, color: "#fff", cursor: "pointer" }}>Cancel</button>
+        <span className="flex-1 text-center" style={{ fontSize: F.sm, ...clip }}>{title}</span>
+        <button onClick={() => onAdd(shots.map((x) => x.file))} disabled={!shots.length} className="rounded px-3"
+          style={{ height: 32, background: shots.length ? T.hiviz : "#444", color: shots.length ? T.onHiviz : "#999", fontWeight: 700, fontSize: F.xs, cursor: shots.length ? "pointer" : "default" }}>
+          Add {shots.length || ""} photo{shots.length === 1 ? "" : "s"}
+        </button>
+      </div>
+      <div className="flex-1 relative" style={{ minHeight: 0 }}>
+        <video ref={video} playsInline muted style={{ width: "100%", height: "100%", objectFit: "contain", background: "#000" }} />
+        {!ready && <div className="absolute inset-0 flex items-center justify-center" style={{ color: "#bbb", fontSize: F.sm }}>Opening the camera…</div>}
+        {flash && <div className="absolute inset-0" style={{ background: "#fff", opacity: 0.6 }} />}
+      </div>
+      {shots.length > 0 && (
+        <div className="flex gap-1.5 px-3 py-2 overflow-x-auto" style={{ background: "#111" }}>
+          {shots.map((x, i) => (
+            <div key={x.url} className="relative shrink-0" style={{ width: 56, height: 56 }}>
+              {/* eslint-disable-next-line @next/next/no-img-element -- a local shot */}
+              <img src={x.url} alt={`Shot ${i + 1}`} style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 4 }} />
+              <button onClick={() => { URL.revokeObjectURL(x.url); setShots((a) => a.filter((y) => y.url !== x.url)); }} aria-label={`Drop shot ${i + 1}`}
+                className="absolute flex items-center justify-center" style={{ top: -4, right: -4, width: 20, height: 20, borderRadius: 10, background: "#000", color: "#fff", border: "1px solid #666", fontSize: 12, cursor: "pointer" }}>×</button>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="flex items-center justify-center" style={{ height: 96, paddingBottom: "env(safe-area-inset-bottom)" }}>
+        <button onClick={snap} disabled={!ready} aria-label="Take a photo"
+          style={{ width: 68, height: 68, borderRadius: 34, border: "4px solid #fff", background: ready ? "rgba(255,255,255,.25)" : "transparent", cursor: "pointer" }} />
+      </div>
     </div>
   );
 }

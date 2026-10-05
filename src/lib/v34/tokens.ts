@@ -77,8 +77,8 @@ export const body = "var(--sc-font-body, 'IBM Plex Sans', system-ui, sans-serif)
 export const strong = "var(--sc-font-strong, 'Lexend', system-ui, sans-serif)";
 /** Panel titles (300). */
 export const light = "var(--sc-font-light, 'Inter', system-ui, sans-serif)";
-/** The AI agent's type — Dusty's chat and the activity line, in every theme (Coy, 2026-10-02: JetBrains Mono). */
-export const agent = "var(--sc-font-agent, 'JetBrains Mono', ui-monospace, monospace)";
+/** The AI agent's type — Dusty's chat and the activity line, in every theme (Coy, 2026-10-05: Figtree). */
+export const agent = "var(--sc-font-agent, 'Figtree', system-ui, sans-serif)";
 /** Dusty's voice — the activity line, his cards, chat titles. */
 export const hand = "var(--sc-font-hand, 'Kalam', cursive)";
 

@@ -248,21 +248,32 @@ export default function ScopeBuilder() {
       {/* ================= sections ================= */}
       <div style={{ minWidth: 0 }} className="pb-24 lg:pb-6">
         <div className="px-3 pt-2.5 pb-2" style={{ background: T.card, borderBottom: `1px solid ${T.hair}` }}>
-          {/* Coy, 2026-10-02: the name on the Jobs row, bold but smaller; the four
-              chips small on one row under it; the description; then Plan room and
-              Proposal, out of the way above the money strip. */}
-          <div className="flex items-center gap-2">
+          {/* Coy, 2026-10-05: Plan room · Budget · Proposal in the top right, on
+              the job name's row; the ⓘ right after the name it explains. */}
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+            <div className="flex items-center gap-2" style={{ flex: "1 1 220px", minWidth: 0 }}>
             <Link href="/dashboard/scope" className="no-underline shrink-0" style={{ ...eyebrow, color: T.ink2 }}>‹ Jobs</Link>
             <input defaultValue={realTitle} placeholder={titleHint} aria-label="Job name"
+              size={Math.max(6, (realTitle || titleHint || "").length + 1)}
               onBlur={(e) => { const v = e.target.value; if (v !== realTitle) void send(`/api/jobs/${jobId}`, "PATCH", { title: v }).then((b) => setJob((j) => j && { ...j, title: b.job.title })).catch((er) => setSaveErr((m) => ({ ...m, job: String(er.message ?? er) }))); }}
               className="bg-transparent outline-none"
-              style={{ flex: 1, minWidth: 0, fontFamily: disp, fontSize: F.lg, fontWeight: 700, lineHeight: 1.15, color: T.ink }} />
+              style={{ minWidth: 0, maxWidth: "100%", fieldSizing: "content", fontFamily: disp, fontSize: F.lg, fontWeight: 700, lineHeight: 1.15, color: T.ink } as React.CSSProperties} />
             {/* Coy, 2026-09-30: "Why this job" is an ⓘ in the header — tap to see it. */}
             {why && (
               <button onClick={() => setWhyOpen(true)} aria-label="Why this job was made" title="Why this job was made"
                 className="shrink-0 rounded-full flex items-center justify-center"
                 style={{ width: 22, height: 22, border: `1px solid ${T.hairStrong}`, color: T.chalk, fontFamily: "Georgia, serif", fontStyle: "italic", fontWeight: 700, fontSize: 12, background: T.card, cursor: "pointer" }}>i</button>
             )}
+            </div>
+            <div className="flex items-center gap-2 ml-auto shrink-0">
+            {planSheets.length > 0 && (
+              <button onClick={() => openSheets(null, null)} className="rounded px-2.5 shrink-0"
+                style={{ height: 28, whiteSpace: "nowrap", border: `1px solid ${T.hairStrong}`, background: T.card, fontFamily: disp, fontSize: F.xs, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".05em", color: T.ink, cursor: "pointer" }}>
+                Sheets ({planSheets.length})
+              </button>
+            )}
+              <JobTabs jobId={jobId} active="job" />
+            </div>
           </div>
           <JobChips job={job} onSet={(field, value) => send(`/api/jobs/${jobId}`, "PATCH", { [field]: value })
             .then((b) => setJob((j) => j && { ...j, status: b.job.status, job_type: b.job.job_type, lead_source: b.job.lead_source }))} />
@@ -278,16 +289,6 @@ export default function ScopeBuilder() {
           </div>
           {job.description && !bidSummary && <div style={{ fontSize: F.sm, color: T.ink2, lineHeight: 1.4, marginTop: 2 }}>{job.description}</div>}
           {saveErr.job && <div style={{ fontSize: F.xs, color: T.red }}>{saveErr.job}</div>}
-          {/* Budget · Plan room · Proposal — one switch on all three (Coy, 2026-10-02). */}
-          <div className="flex flex-wrap justify-end items-center gap-2" style={{ marginTop: 6 }}>
-            {planSheets.length > 0 && (
-              <button onClick={() => openSheets(null, null)} className="rounded px-2.5 shrink-0"
-                style={{ height: 28, whiteSpace: "nowrap", border: `1px solid ${T.hairStrong}`, background: T.card, fontFamily: disp, fontSize: F.xs, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".05em", color: T.ink, cursor: "pointer" }}>
-                Sheets ({planSheets.length})
-              </button>
-            )}
-            <JobTabs jobId={jobId} active="job" />
-          </div>
         </div>
 
         {job.archived_at && (
@@ -566,20 +567,6 @@ function SectionCard({ s, index, err, onLocal, onSave, onRemove, jobType, jobId,
       {s.source_ref && (
         <div className="px-3" style={{ fontSize: F.xs, color: T.ink3, marginTop: 2 }}>From the bid: {s.source_ref.replace(/^"|"$/g, "")}</div>
       )}
-      {(sheets.length > 0 || hasPlans) && (
-        <div className="px-3 pt-1.5 flex items-center gap-1.5 flex-wrap">
-          <span style={{ ...eyebrow }}>{sheets.length ? "Check it on" : "Plan sheets"}</span>
-          {sheets.map((x) => (
-            <button key={x.id} onClick={() => onSheets(x.id)} title={x.title ?? undefined} className="rounded px-2"
-              style={{ height: 24, border: `1px solid ${T.chalk}`, color: T.chalk, background: T.card, fontSize: F.xs, fontWeight: 600, cursor: "pointer" }}>
-              {x.number}{x.title ? <span style={{ fontWeight: 400, color: T.ink2 }}> {x.title.length > 24 ? `${x.title.slice(0, 24)}…` : x.title}</span> : null}
-            </button>
-          ))}
-          <button onClick={() => onSheets(sheets[0]?.id ?? null)} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>
-            {sheets.length ? "Open beside the budget ›" : "Browse the set ›"}
-          </button>
-        </div>
-      )}
       {takeoff}
       <div className="px-3 pt-1.5 flex items-center gap-x-2 gap-y-1 flex-wrap">
         <span style={{ ...eyebrow }}>Measured by</span>
@@ -683,6 +670,22 @@ function SectionCard({ s, index, err, onLocal, onSave, onRemove, jobType, jobId,
           the sections themselves"). JobBudget draws them here; the panel below the sections is the job's totals. */}
       <div ref={budgetSlot} />
       {photos}
+      {/* Beside the photos (Coy, 2026-10-05: "This button to pull from the aerial photos or other plan sheets
+          should be in the same area as 'photos'"). */}
+      {(sheets.length > 0 || hasPlans) && (
+        <div className="px-3 pb-2 flex items-center gap-1.5 flex-wrap">
+          <span style={{ ...eyebrow }}>{sheets.length ? "Check it on" : "Plan sheets"}</span>
+          {sheets.map((x) => (
+            <button key={x.id} onClick={() => onSheets(x.id)} title={x.title ?? undefined} className="rounded px-2"
+              style={{ height: 24, border: `1px solid ${T.chalk}`, color: T.chalk, background: T.card, fontSize: F.xs, fontWeight: 600, cursor: "pointer" }}>
+              {x.number}{x.title ? <span style={{ fontWeight: 400, color: T.ink2 }}> {x.title.length > 24 ? `${x.title.slice(0, 24)}…` : x.title}</span> : null}
+            </button>
+          ))}
+          <button onClick={() => onSheets(sheets[0]?.id ?? null)} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>
+            {sheets.length ? "Open beside the budget ›" : "Browse the set ›"}
+          </button>
+        </div>
+      )}
 
       {/* Notes, typed or said (Coy, 2026-10-03: "Prep can be removed … Access … can be replaced by 'notes'.
           The notes can be typed or dictated verbally"). Kept in access_notes — no migration; neither column held anything. */}
@@ -825,10 +828,13 @@ function SectionNotes({ value, onLocal, onSave }: { value: string | null; onLoca
         <span style={eyebrow}>Notes</span>
         <span className="flex-1" />
         {!rec && (
-          <button onClick={() => setRec(true)} disabled={busy} aria-label="Say a note" title="Say a note — it is written down here"
-            className="inline-flex items-center gap-1 rounded px-2" style={{ height: 26, border: `1px solid ${T.hair}`, background: T.card, fontSize: F.xs, cursor: "pointer", opacity: busy ? 0.5 : 1 }}>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></svg>
-            {busy ? "Writing it down…" : "Say it"}
+          // The mic alone (Coy, 2026-10-05: "the microphone is enough"); recording shows the red dot and meter,
+          // writing it down spins.
+          <button onClick={() => setRec(true)} disabled={busy} aria-label={busy ? "Writing the note down" : "Say a note"} title={busy ? "Writing it down…" : "Say a note — it is written down here"}
+            className="inline-flex items-center justify-center rounded" style={{ width: 30, height: 26, border: `1px solid ${T.hair}`, background: T.card, cursor: "pointer" }}>
+            {busy
+              ? <span className="animate-spin" aria-hidden="true" style={{ width: 12, height: 12, borderRadius: "50%", border: `2px solid ${T.hair}`, borderTopColor: T.chalk }} />
+              : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></svg>}
           </button>
         )}
       </div>

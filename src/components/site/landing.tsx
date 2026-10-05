@@ -16,11 +16,16 @@
      request), and nothing on this site may look like it sent
      something it didn't.
    - Tappable spans are buttons, so they work from a keyboard.
+
+   Design 10 (2026-10-05): the hero's copy names email too, and
+   the phone demo is the real app, call to final proposal
+   (field-demo.tsx).
    ============================================================ */
 
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useRef, type CSSProperties, type ReactNode } from "react";
 import { LOGIN_URL } from "@/lib/hosts";
 import { DustySVG, type DustyMode } from "./dusty-svg";
+import FieldDemo from "./field-demo";
 import { DRAFT_GRID, Emblem, GraphiteFilter, Wordmark, disp } from "./marks";
 
 const REQUEST_ACCESS = "mailto:admin@scopecrete.ai?subject=ScopeCrete%20access";
@@ -29,17 +34,6 @@ const eyebrow: CSSProperties = {
   margin: 0, fontFamily: disp, fontWeight: 600, fontSize: 15, letterSpacing: ".2em",
   textTransform: "uppercase", color: "#616B77",
 };
-const tag: CSSProperties = {
-  fontFamily: disp, fontSize: 10, fontWeight: 600, letterSpacing: ".08em",
-  textTransform: "uppercase", lineHeight: "15px", padding: "0 4px",
-};
-const demoBtn: CSSProperties = {
-  height: 44, display: "flex", alignItems: "center", justifyContent: "center", border: 0,
-  background: "#F2610C", color: "#FFFFFF", fontFamily: disp, fontWeight: 700, fontSize: 15,
-  letterSpacing: ".1em", textTransform: "uppercase", cursor: "pointer",
-  boxShadow: "0 0 0 4px rgba(242,97,12,.22)", borderRadius: 2, width: "100%",
-};
-
 /* ---------- marks ---------- */
 
 function Dusty({ mode, size }: { mode: DustyMode; size: number }) {
@@ -56,32 +50,6 @@ function Dusty({ mode, size }: { mode: DustyMode; size: number }) {
 /* ---------- content ---------- */
 
 const HEADLINE = "Every call becomes a priced job.";
-
-const NAV = ["Intake", "Sort", "Job", "Scope", "Proposal"];
-const TITLES: [string, string][] = [
-  ["Inbox", "All lines"], ["Thread", "New caller"], ["Jobs", "Board"],
-  ["Scope", "Stamped patio"], ["Proposal", "Draft"], ["Proposal", "Sent"],
-];
-
-const MOCK_ROWS = [
-  { who: "Sample Customer A", tag: "Customer", c: "#1FA971", t: "2h", line: "Driveway quote sent. Waiting on the deposit." },
-  { who: "Ready-mix dispatch", tag: "Vendor", c: "#3E6489", t: "5h", line: "Confirmed Tuesday 7:30, 21 yards." },
-  { who: "Sample Customer B", tag: "Customer", c: "#1FA971", t: "1d", line: "Sidewalk punch list. Walk is Friday at 2." },
-];
-
-const SCOPE_FIELDS = [
-  { k: "Length", v: "16 ft", note: "you said", bg: "#FFFFFF", c: "#12161A", nc: "#1FA971" },
-  { k: "Width", v: "12 ft", note: "you said", bg: "#FFFFFF", c: "#12161A", nc: "#1FA971" },
-  { k: "Depth", v: "4 in", note: "you said", bg: "#FFFFFF", c: "#12161A", nc: "#1FA971" },
-  { k: "Reinforcement", v: "Mesh", note: "you said", bg: "#FFFFFF", c: "#12161A", nc: "#1FA971" },
-  { k: "Area", v: "192 sq ft", note: "worked out", bg: "#FFFFFF", c: "#12161A", nc: "#8A95A1" },
-  { k: "Finish", v: "—", note: "not said · pick one", bg: "#FFF6F0", c: "#C94F08", nc: "#C94F08" },
-];
-
-const PROP_LINES = [
-  { k: "Concrete", q: "2.4 yd", v: "$420" }, { k: "Labor", q: "192 sq ft", v: "$1,540" }, { k: "Mesh", q: "4 sheets", v: "$96" },
-  { k: "Stamping", q: "192 sq ft", v: "$1,690" }, { k: "Tax · materials only", q: "", v: "$94" },
-];
 
 const STEPS = [
   { n: "01", c: "#F2610C", t: "A call comes in", d: "Any line, any hour. It lands with that person’s other calls and texts, recorded and summed up." },
@@ -120,19 +88,8 @@ const COMING: { t: string; note?: string }[] = [
 /* ---------- page ---------- */
 
 export default function Landing() {
-  const [step, setStep] = useState(0);
-  const hold = useRef(0);
   const featEl = useRef<HTMLDivElement>(null);
   const feat = useRef({ x: null as number | null, hold: false, until: 0 });
-
-  // Phone demo: advance every 3.2 s unless someone tapped in the last 12 s.
-  useEffect(() => {
-    const t = setInterval(() => {
-      if (Date.now() < hold.current) return;
-      setStep((s) => (s + 1) % 6);
-    }, 3200);
-    return () => clearInterval(t);
-  }, []);
 
   // Feature strip: a slow endless drift (the list is doubled), paused while
   // touched or hovered, and for a while after the arrows. Off for reduced motion.
@@ -151,8 +108,6 @@ export default function Landing() {
     return () => clearInterval(t);
   }, []);
 
-  const go = (n: number) => () => { hold.current = Date.now() + 12000; setStep(n); };
-  const next = go(Math.min(step + 1, 5));
   const featStep = (dir: number) => {
     const el = featEl.current; if (!el) return;
     feat.current.until = Date.now() + 8000;
@@ -206,33 +161,16 @@ export default function Landing() {
                 <span style={{ fontFamily: disp, fontWeight: 600, fontSize: 14, letterSpacing: ".18em", textTransform: "uppercase", color: "#616B77" }}>The office manager for concrete contractors</span>
               </div>
               <h1 style={{ margin: 0, fontFamily: disp, fontWeight: 700, fontSize: "clamp(46px,8vw,92px)", lineHeight: 0.92, letterSpacing: "-.005em", textTransform: "uppercase", textWrap: "balance" }}>{HEADLINE}</h1>
-              <p style={{ margin: 0, maxWidth: 560, fontSize: "clamp(16px,1.6vw,19px)", lineHeight: 1.5, color: "#3A4249", textWrap: "pretty" }}>Calls and texts land in one place. Dusty reads them, sorts the people and opens the job. You price the scope on real concrete math, and the bid never goes under what the job costs to run.</p>
+              <p style={{ margin: 0, maxWidth: 560, fontSize: "clamp(16px,1.6vw,19px)", lineHeight: 1.5, color: "#3A4249", textWrap: "pretty" }}>Calls, texts and emails land in one place. Dusty reads them, sorts the people and opens the job. You price the scope on real concrete math.</p>
               <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "12px 20px", marginTop: 4 }}>
                 <a href={LOGIN_URL} className="sc-cta" style={{ height: 52, padding: "0 26px", display: "flex", alignItems: "center", background: "#F2610C", textDecoration: "none", borderRadius: 2, fontFamily: disp, fontWeight: 700, fontSize: 19, letterSpacing: ".1em", textTransform: "uppercase" }}>Log in</a>
                 <a href={REQUEST_ACCESS} className="sc-ghost" style={{ height: 52, padding: "0 20px", display: "flex", alignItems: "center", border: "1px solid #12161A", textDecoration: "none", borderRadius: 2, fontFamily: disp, fontWeight: 600, fontSize: 17, letterSpacing: ".1em", textTransform: "uppercase" }}>Request access</a>
               </div>
             </div>
 
-            {/* phone demo */}
-            <div style={{ flex: "0 1 260px", minWidth: 230, margin: "0 auto", display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
-              <div style={{ width: "100%", maxWidth: 260, aspectRatio: "9/16.5", border: "8px solid #14181C", borderRadius: 26, background: "#E9EBEE", overflow: "hidden", display: "flex", flexDirection: "column", boxShadow: "0 24px 50px -18px rgba(18,22,26,.45)" }}>
-                <div style={{ height: 44, flex: "none", background: "#FAF8F3", borderBottom: "1px solid #DCE0E5", display: "flex", alignItems: "center", gap: 8, padding: "0 12px" }}>
-                  <Emblem size={20} spin={false} />
-                  <span style={{ fontFamily: disp, fontWeight: 700, fontSize: 16, letterSpacing: ".06em", textTransform: "uppercase" }}>{TITLES[step][0]}</span>
-                  <span style={{ flex: 1 }} />
-                  <span style={{ fontFamily: disp, fontSize: 11, letterSpacing: ".12em", color: "#8A95A1", textTransform: "uppercase" }}>{TITLES[step][1]}</span>
-                </div>
-                <Screen step={step} next={next} restart={go(0)} />
-              </div>
-              <div style={{ width: "100%", maxWidth: 260, display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 4 }}>
-                {NAV.map((label, i) => (
-                  <button key={label} onClick={go(i)} style={{ display: "flex", flexDirection: "column", gap: 4, cursor: "pointer", border: 0, padding: 0, background: "transparent" }}>
-                    <span style={{ height: 3, background: i <= step ? "#F2610C" : "#C9CFD6" }} />
-                    <span style={{ fontFamily: disp, fontSize: 11, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase", color: i === Math.min(step, 4) ? "#12161A" : "#8A95A1", textAlign: "center" }}>{label}</span>
-                  </button>
-                ))}
-              </div>
-              <span style={{ fontFamily: disp, fontSize: 12, letterSpacing: ".14em", textTransform: "uppercase", color: "#8A95A1" }}>Tap through · sample content</span>
+            {/* phone demo: the real app, call to final proposal */}
+            <div style={{ flex: "0 1 300px", minWidth: 300, margin: "0 auto", display: "flex", justifyContent: "center" }}>
+              <FieldDemo />
             </div>
           </div>
         </section>
@@ -362,155 +300,5 @@ function ArrowBtn({ label, onClick, children }: { label: string; onClick: () => 
     <button aria-label={label} onClick={onClick} className="sc-arrow" style={{ width: 40, height: 40, border: "1px solid #B9C0C8", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 18, color: "#12161A", background: "#FFFFFF", padding: 0 }}>
       {children}
     </button>
-  );
-}
-
-/* ---------- the phone demo's screens (sample content) ---------- */
-
-function Screen({ step, next, restart }: { step: number; next: () => void; restart: () => void }) {
-  if (step === 0) return (
-    <>
-      <div style={{ flex: "none", padding: "8px 12px", background: "#FFFFFF", borderBottom: "1px solid #DCE0E5", display: "flex", alignItems: "center", gap: 8 }}>
-        <Dusty mode="sort" size={18} />
-        <span style={{ fontSize: 11.5, color: "#3A4249", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>Dusty · reading a new call about a patio</span>
-      </div>
-      <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", gap: 1, background: "#DCE0E5" }}>
-        <button onClick={next} style={{ textAlign: "left", font: "inherit", color: "inherit", border: 0, background: "#FFF6F0", borderLeft: "3px solid #F2610C", padding: "10px 12px 10px 9px", display: "flex", flexDirection: "column", gap: 3, cursor: "pointer" }}>
-          <span style={{ display: "flex", alignItems: "baseline", gap: 6, width: "100%" }}>
-            <span style={{ fontWeight: 600, fontSize: 13 }}>(555) 010-0142</span>
-            <span style={{ ...tag, border: "1px solid #F2610C", color: "#C94F08" }}>New</span>
-            <span style={{ flex: 1 }} />
-            <span style={{ fontFamily: disp, fontSize: 11, color: "#8A95A1" }}>now</span>
-          </span>
-          <span style={{ fontSize: 12, lineHeight: 1.4, color: "#616B77" }}>Call · 3:41 · wants a price on a stamped patio, about 12 by 16.</span>
-          <span style={{ alignSelf: "flex-end", fontFamily: disp, fontSize: 11, fontWeight: 700, letterSpacing: ".12em", color: "#C94F08" }}>TAP TO OPEN ›</span>
-        </button>
-        {MOCK_ROWS.map((r) => (
-          <div key={r.who} style={{ background: "#FFFFFF", padding: "10px 12px", display: "flex", flexDirection: "column", gap: 3, opacity: 0.75 }}>
-            <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
-              <span style={{ fontWeight: 600, fontSize: 13, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.who}</span>
-              <span style={{ ...tag, flex: "none", border: `1px solid ${r.c}`, color: r.c }}>{r.tag}</span>
-              <span style={{ flex: 1 }} />
-              <span style={{ fontFamily: disp, fontSize: 11, color: "#8A95A1" }}>{r.t}</span>
-            </div>
-            <span style={{ fontSize: 12, lineHeight: 1.4, color: "#616B77" }}>{r.line}</span>
-          </div>
-        ))}
-        <div style={{ flex: 1, background: "#FFFFFF" }} />
-      </div>
-    </>
-  );
-
-  if (step === 1) return (
-    <div style={{ flex: 1, minHeight: 0, background: "#FFFFFF", padding: 12, display: "flex", flexDirection: "column", gap: 10 }}>
-      <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-        <span style={{ fontWeight: 600, fontSize: 15 }}>(555) 010-0142</span>
-        <span style={{ fontSize: 11.5, color: "#8A95A1" }}>Mobile · first contact</span>
-      </div>
-      <div style={{ border: "1px solid #DCE0E5", background: "#F4F5F7", padding: "9px 11px", display: "flex", flexDirection: "column", gap: 5 }}>
-        <span style={{ fontFamily: disp, fontSize: 11, fontWeight: 700, letterSpacing: ".12em", color: "#3A4249" }}>CALL · IN · 3:41</span>
-        <span style={{ fontSize: 12.5, lineHeight: 1.45 }}>Wants a stamped patio behind the house, about 12 by 16. Asked for a price this week.</span>
-        <span style={{ fontSize: 11.5, lineHeight: 1.4, color: "#616B77", fontStyle: "italic" }}>“Hi, this is Sam, I&apos;m looking for a price on a patio…”</span>
-        <span style={{ display: "flex", alignItems: "center", gap: 6, fontFamily: disp, fontSize: 11, fontWeight: 600, letterSpacing: ".1em", color: "#3E6489" }}>▶ PLAY · TRANSCRIPT</span>
-      </div>
-      <div style={{ border: "1px dashed #F2610C", background: "#FFF6F0", padding: "10px 11px", display: "flex", flexDirection: "column", gap: 6 }}>
-        <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <Dusty mode="idle" size={22} />
-          <span style={{ fontFamily: disp, fontSize: 11, fontWeight: 700, letterSpacing: ".12em", color: "#9A3E05" }}>DUSTY</span>
-        </span>
-        <span style={{ fontSize: 12.5, lineHeight: 1.45 }}>Sounds like a <b>customer</b>. He said his name is <b>Sam</b>. Next step: send the patio price.</span>
-      </div>
-      <span style={{ flex: 1 }} />
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1.6fr", gap: 8 }}>
-        <span style={{ height: 44, display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid #B9C0C8", fontFamily: disp, fontWeight: 600, fontSize: 14, letterSpacing: ".08em", textTransform: "uppercase", color: "#616B77" }}>Not yet</span>
-        <button onClick={next} style={demoBtn}>Yes · open a job</button>
-      </div>
-    </div>
-  );
-
-  if (step === 2) return (
-    <div style={{ flex: 1, minHeight: 0, padding: 12, display: "flex", flexDirection: "column", gap: 10 }}>
-      <div style={{ display: "flex", gap: 6, overflow: "hidden" }}>
-        <span style={{ flex: "none", fontFamily: disp, fontSize: 12, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", padding: "4px 8px", background: "#12161A", color: "#FFFFFF" }}>New lead · 1</span>
-        <span style={{ flex: "none", fontFamily: disp, fontSize: 12, letterSpacing: ".1em", textTransform: "uppercase", padding: "4px 8px", border: "1px solid #B9C0C8", color: "#8A95A1" }}>Consultation</span>
-        <span style={{ flex: "none", fontFamily: disp, fontSize: 12, letterSpacing: ".1em", textTransform: "uppercase", padding: "4px 8px", border: "1px solid #B9C0C8", color: "#8A95A1" }}>Estimating</span>
-      </div>
-      <div style={{ background: "#FFFFFF", border: "1px solid #DCE0E5", borderTop: "3px solid #1FA971", padding: "11px 12px", display: "flex", flexDirection: "column", gap: 7 }}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
-          <span style={{ fontFamily: disp, fontWeight: 700, fontSize: 19, textTransform: "uppercase" }}>Stamped patio</span>
-          <span style={{ flex: 1 }} />
-          <span style={{ fontFamily: disp, fontSize: 11, color: "#8A95A1" }}>just now</span>
-        </div>
-        <span style={{ fontSize: 12.5, color: "#3A4249" }}>Sam · (555) 010-0142</span>
-        <div style={{ borderLeft: "2px solid #1FA971", paddingLeft: 8, display: "flex", flexDirection: "column", gap: 2 }}>
-          <span style={{ fontFamily: disp, fontSize: 10.5, fontWeight: 600, letterSpacing: ".12em", textTransform: "uppercase", color: "#8A95A1" }}>Why this job opened</span>
-          <span style={{ fontSize: 12, lineHeight: 1.4, color: "#3A4249" }}>Asked for a price on a 12 by 16 stamped patio on today&apos;s call.</span>
-        </div>
-        <span style={{ alignSelf: "flex-start", fontFamily: disp, fontSize: 10.5, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase", padding: "2px 6px", background: "#FDE9DC", color: "#9A3E05" }}>You owe: patio price · Fri</span>
-      </div>
-      <span style={{ flex: 1 }} />
-      <button onClick={next} style={demoBtn}>Build the scope</button>
-    </div>
-  );
-
-  if (step === 3) return (
-    <div style={{ flex: 1, minHeight: 0, background: "#FFFFFF", padding: 12, display: "flex", flexDirection: "column", gap: 9 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", background: "#F4F5F7", border: "1px solid #DCE0E5" }}>
-        <svg width="16" height="16" viewBox="0 0 19 19" fill="none" stroke="#F2610C" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true"><path d="M9.5 2.5A2.5 2.5 0 0112 5v4a2.5 2.5 0 01-5 0V5a2.5 2.5 0 012.5-2.5zM4.5 9a5 5 0 0010 0M9.5 14v3" /></svg>
-        <span style={{ fontSize: 12.5, fontStyle: "italic", color: "#3A4249" }}>“Twelve by sixteen, four inches, mesh.”</span>
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1, background: "#DCE0E5", border: "1px solid #DCE0E5" }}>
-        {SCOPE_FIELDS.map((f) => (
-          <div key={f.k} style={{ background: f.bg, padding: "7px 9px", display: "flex", flexDirection: "column", gap: 1 }}>
-            <span style={{ fontFamily: disp, fontSize: 10.5, fontWeight: 600, letterSpacing: ".12em", textTransform: "uppercase", color: "#8A95A1" }}>{f.k}</span>
-            <span style={{ fontFamily: disp, fontWeight: 700, fontSize: 18, color: f.c, fontVariantNumeric: "tabular-nums" }}>{f.v}</span>
-            <span style={{ fontSize: 10.5, color: f.nc }}>{f.note}</span>
-          </div>
-        ))}
-      </div>
-      <span style={{ fontSize: 11.5, lineHeight: 1.4, color: "#616B77" }}>Only numbers you said are kept. Finish wasn&apos;t said, so it&apos;s left open instead of guessed.</span>
-      <span style={{ flex: 1 }} />
-      <button onClick={next} style={demoBtn}>Price it</button>
-    </div>
-  );
-
-  if (step === 4) return (
-    <div style={{ flex: 1, minHeight: 0, background: "#FFFFFF", padding: 12, display: "flex", flexDirection: "column", gap: 8 }}>
-      <span style={{ fontFamily: disp, fontWeight: 700, fontSize: 18, textTransform: "uppercase" }}>Proposal · Stamped patio</span>
-      <div style={{ display: "flex", flexDirection: "column" }}>
-        {PROP_LINES.map((p) => (
-          <div key={p.k} style={{ display: "flex", alignItems: "baseline", gap: 8, padding: "6px 0", borderBottom: "1px solid #EEF0F2", fontSize: 12.5 }}>
-            <span style={{ flex: 1 }}>{p.k}</span>
-            <span style={{ color: "#8A95A1", fontSize: 11.5 }}>{p.q}</span>
-            <span style={{ width: 62, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{p.v}</span>
-          </div>
-        ))}
-      </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 5, marginTop: 4 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", fontFamily: disp, fontWeight: 700, fontSize: 18, textTransform: "uppercase" }}>
-          <span>Bid</span><span style={{ fontVariantNumeric: "tabular-nums" }}>$3,840</span>
-        </div>
-        <div style={{ position: "relative", height: 10, background: "#EEF0F2" }}>
-          <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: "100%", background: "#1FA971" }} />
-          <span style={{ position: "absolute", top: -4, bottom: -4, left: "81%", width: 2, background: "#12161A" }} />
-        </div>
-        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11.5, color: "#616B77" }}>
-          <span>Floor $3,120 · cost + overhead + your pay</span><span>Tap ›</span>
-        </div>
-      </div>
-      <span style={{ flex: 1 }} />
-      <button onClick={next} style={demoBtn}>Send proposal</button>
-    </div>
-  );
-
-  return (
-    <div style={{ flex: 1, minHeight: 0, background: "#FFFFFF", padding: "22px 16px 12px", display: "flex", flexDirection: "column", gap: 12 }}>
-      <span style={{ display: "flex" }}><Dusty mode="celebrate" size={64} /></span>
-      <span style={{ fontFamily: disp, fontWeight: 700, fontSize: 26, lineHeight: 1, textTransform: "uppercase" }}>Proposal sent to Sam</span>
-      <span style={{ fontSize: 13, lineHeight: 1.5, color: "#3A4249" }}>The job moved to Follow up. If Sam hasn&apos;t answered by Friday, Dusty reminds you.</span>
-      <span style={{ fontSize: 12, color: "#8A95A1" }}>Call to proposal, in one thread.</span>
-      <span style={{ flex: 1 }} />
-      <button onClick={restart} style={{ ...demoBtn, background: "transparent", color: "#12161A", border: "1px solid #12161A", boxShadow: "none", fontWeight: 600, fontSize: 14 }}>Start over</button>
-    </div>
   );
 }

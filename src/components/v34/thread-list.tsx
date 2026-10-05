@@ -26,6 +26,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useLiveThreads } from "@/lib/v34/live-threads";
 import { ArchiveDialog } from "@/components/v34/archive-actions";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -686,6 +687,8 @@ export function ThreadList({ folded = false }: { folded?: boolean }) {
   // row's display_name becomes the real name and Unsorted drops by one. A
   // client-side patch of the row would leave the counts lying.
   const [reload, setReload] = useState(0);
+  // A text or call that lands while the list is open shows up on its own (live-threads.ts).
+  useLiveThreads(() => setReload((n) => n + 1));
 
   /**
    * Confirm or reject half a proposal.

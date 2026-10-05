@@ -16,6 +16,7 @@ import { RoleTag } from "@/components/v34/thread-list";
 import { ThreadSearch } from "@/components/v34/thread-search";
 import { InternalNotes } from "@/components/v34/internal-notes";
 import { inChannel, roleOf, type Channel, type ChannelFilter } from "@/lib/v34/threads";
+import { useLiveThreads } from "@/lib/v34/live-threads";
 
 /**
  * One person, opened in Threads (Threads v2, Claude Design 2026-10-03): their
@@ -63,6 +64,8 @@ export default function ChatThreadPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
+  // Their next text or call appears here as it lands (live-threads.ts).
+  useLiveThreads(() => setReload((n) => n + 1), contactId);
   // Open, and optionally on a suggested match ("Also Amber").
   const [merging, setMerging] = useState<false | { preselect: string | null }>(false);
   const [undoing, setUndoing] = useState<string | null>(null);

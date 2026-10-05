@@ -298,10 +298,12 @@ across the database … I also want to be able to upload a logo for my org."*
   /api/org/logo/[variant]` redirects to a signed link, so `<img>` works and
   the bucket stays private. `DELETE /api/org/logo?variant=` removes one.
 - **The header lockup** (`org-lockup.tsx`): the theme's logo (else the other),
-  28px (24 on a phone), a pencil rule, "powered by" over the wordmark — the
+  28px (24 on a phone), a pencil rule, the ScopeCrete emblem (the landing
+  page's orbits and green block, `Emblem` in `site/marks.tsx`, 2026-10-05)
+  beside "powered by" over the wordmark — the
   block exactly the logo's height (Coy: "the same size as the Sacco
   Enterprises logo"; dropped under 340px). No logo, or one that fails to load → the
-  scopecrete.ai wordmark as before.
+  emblem and the scopecrete.ai wordmark.
 - **`org_audit`** records `org_renamed` and `logo_set` / `logo_removed`, old →
   new, who and when; members read it, only the functions write it.
 - **People:** `sc_org_people(org)` (SECURITY DEFINER, members only) returns

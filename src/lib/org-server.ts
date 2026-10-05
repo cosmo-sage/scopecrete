@@ -1,4 +1,5 @@
 import type { ApiSession } from "@/lib/api-auth";
+import { myOrgs } from "@/lib/access-server";
 
 /**
  * The org itself (migration 056): its name, lives once in orgs.name; its logo,
@@ -25,8 +26,9 @@ export function orgView(row: Record<string, unknown>): OrgView {
 }
 
 export async function orgRow(sb: Sb, orgId: string) {
-  const { data } = await sb.from("orgs").select("id, name, logo_light_path, logo_dark_path").eq("id", orgId).maybeSingle();
-  return data as Record<string, unknown> | null;
+  // sc_my_orgs (081), so an onsite estimator gets the name and logos too.
+  const o = (await myOrgs(sb)).find((x) => x.id === orgId);
+  return (o ?? null) as Record<string, unknown> | null;
 }
 
 export async function isOwner(sb: Sb, orgId: string, userId: string) {

@@ -146,6 +146,8 @@ export interface Thread {
   person_role: string | null;
   numbers: number;
   has_email: boolean;
+  /** Addresses and job titles, searched by the list (Coy, 2026-10-05), never shown. */
+  places: string[];
 }
 
 export interface ThreadProposal {
@@ -251,14 +253,20 @@ export async function GET(req: NextRequest) {
   // Failure here is not an error: the list is fully usable without it.
   const contactIds = members ? [...members] : [...byContact.keys()];
   const names = new Map<string, { person_role: string | null; archived_at: string | null; archived_reason: string | null; name: string | null; phone: string | null; contact_type: string | null; contact_subtype: string | null; customer_id: string | null; name_source: string | null; name_claim_id: string | null; confirmed: boolean; auto_at: string | null; auto_reason: string | null; status_summary: string | null; recent_summary: string | null; job_type_hint: string | null }>();
+  // Where each person's work is — their address, their customer's, their jobs' — so the list's
+  // search finds them by place (Coy, 2026-10-05). Only searched, never shown.
+  const places = new Map<string, string[]>();
+  const addPlace = (id: string, p: string | null | undefined) => { if (p?.trim()) places.set(id, [...(places.get(id) ?? []), p.trim()]); };
   let contactsReadable = false;
   if (contactIds.length > 0) {
     const { data: contacts } = await supabase
       .from("contacts")
-      .select("id, name, phone, role, merged_into_contact_id, contact_type, contact_subtype, customer_id, name_source, name_claim_id, classification_confirmed_at, auto_classified_at, auto_classified_reason, status_summary, recent_summary, job_type_hint, archived_at, archived_reason")
+      .select("id, name, phone, role, merged_into_contact_id, contact_type, contact_subtype, customer_id, name_source, name_claim_id, classification_confirmed_at, auto_classified_at, auto_classified_reason, status_summary, recent_summary, job_type_hint, archived_at, archived_reason, address, city")
       .in("id", contactIds.slice(0, 1000));
     for (const c of (contacts ?? []) as Array<Record<string, string | null>>) {
       if (c.merged_into_contact_id) continue;
+      const where = [c.address, c.city].filter(Boolean).join(", ");
+      if (where) places.set(c.id as string, [where]);
       names.set(c.id as string, {
         person_role: c.role,
         archived_at: c.archived_at, archived_reason: c.archived_reason,
@@ -283,12 +291,16 @@ export async function GET(req: NextRequest) {
     const [{ data: ph }, { data: em }, { data: cu }, { data: people }] = await Promise.all([
       supabase.from("contact_phones").select("contact_id").eq("org_id", orgId).in("contact_id", ids),
       supabase.from("contact_emails").select("contact_id").eq("org_id", orgId).in("contact_id", ids),
-      custIds.length ? supabase.from("customers").select("id, primary_contact_id").eq("org_id", orgId).in("id", custIds) : Promise.resolve({ data: [] }),
+      custIds.length ? supabase.from("customers").select("id, primary_contact_id, address_formatted, address_line1, city").eq("org_id", orgId).in("id", custIds) : Promise.resolve({ data: [] }),
       custIds.length ? supabase.from("contacts").select("customer_id").eq("org_id", orgId).in("customer_id", custIds).is("merged_into_contact_id", null).is("archived_at", null) : Promise.resolve({ data: [] }),
     ]);
     for (const r of (ph ?? []) as Array<{ contact_id: string }>) numbers.set(r.contact_id, (numbers.get(r.contact_id) ?? 0) + 1);
     for (const r of (em ?? []) as Array<{ contact_id: string }>) emails.add(r.contact_id);
-    for (const r of (cu ?? []) as Array<{ id: string; primary_contact_id: string | null }>) custPrimary.set(r.id, r.primary_contact_id);
+    for (const r of (cu ?? []) as Array<{ id: string; primary_contact_id: string | null; address_formatted: string | null; address_line1: string | null; city: string | null }>) {
+      custPrimary.set(r.id, r.primary_contact_id);
+      const where = r.address_formatted || [r.address_line1, r.city].filter(Boolean).join(", ");
+      for (const [cid, c] of names) if (c.customer_id === r.id) addPlace(cid, where);
+    }
     for (const r of (people ?? []) as Array<{ customer_id: string }>) custPeople.set(r.customer_id, (custPeople.get(r.customer_id) ?? 0) + 1);
   }
 
@@ -301,10 +313,11 @@ export async function GET(req: NextRequest) {
   {
     const { data: jobs } = await supabase
       .from("jobs")
-      .select("id, contact_id, status, job_type")
+      .select("id, contact_id, status, job_type, address, title")
       .eq("org_id", orgId)
       .is("archived_at", null);
-    const jobRows = (jobs ?? []) as Array<{ id: string; contact_id: string | null; status: string | null; job_type: string | null }>;
+    const jobRows = (jobs ?? []) as Array<{ id: string; contact_id: string | null; status: string | null; job_type: string | null; address: string | null; title: string | null }>;
+    for (const j of jobRows) if (j.contact_id) { addPlace(j.contact_id, j.address); addPlace(j.contact_id, j.title); }
 
     let scopedIds = new Set<string>();
     if (jobRows.length > 0) {
@@ -484,6 +497,7 @@ export async function GET(req: NextRequest) {
       person_role: c?.person_role?.trim() || null,
       numbers: Math.max(numbers.get(id) ?? 0, phone ? 1 : 0),
       has_email: emails.has(id),
+      places: places.get(id) ?? [],
     };
   }
 

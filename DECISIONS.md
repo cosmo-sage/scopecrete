@@ -4,7 +4,7 @@ Ground truth for every agent working this repo. If code disagrees with this
 document, the code is wrong or this document is stale — resolve it, don't
 guess. Update this file in the same PR that changes the behavior it describes.
 
-Last updated: 2026-10-05 (Good / Better / Best removed — one price per job; search across the header; six dots for the activity line; job switch on the name's row; budget line notes; quo-intake stores every Quo event, own lines included — v10; one Unit type picker; a section's Camera; Dusty writes in Figtree; Dusty is the Scopecrete Lander; an All thread; proposal cover band and Prepared by; sign-in at app.scopecrete.ai/login, each org at <slug>.app.scopecrete.ai; Dusty's chat keeps its files and files them on a customer or job — migration 079; vendor Delete; Dusty on a vendor's page and looking at attached photos; sales tax by address via TaxLocus — migration 078; archive reasons; Lines, providers and logs — migration 077; internal notes with @-tags; Jobs board sort and filter; jobs by hand — migration 076; done and lost customers in Threads; proposals sent by link, every opening tracked; every option side by side for the customer — migration 075; Documents is Files, everywhere — migration 074; Threads v2 — threads you make, channels per number, the customer page reshaped — migration 073; an address given is kept and asked about — migration 072; Dusty sets addresses; customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
+Last updated: 2026-10-05 (a Summary view on every job, the job name and switch centred on the phone; Dusty full screen on the phone, chat text size, his thought line can be hidden; onsite estimators — jobs and pages by person, vendor first, tags notify — migration 081; a name we greet a caller by becomes a suggestion — enrich-contacts v28; contact, customer and vendor pages on one layout; the customer page's Threads tab sums up each person; the Files page laid out like OneDrive, with storage left; the Plan Room's Files and Sheets one tab; thread search a drop-down over the chat; the Threads list header sticky with its own search; the header lockup on one line; one top row on the job's three views; the proposal's dark band off the cover; Good / Better / Best removed — one price per job; search across the header; six dots for the activity line; job switch on the name's row; budget line notes; quo-intake stores every Quo event, own lines included — v10; one Unit type picker; a section's Camera; Dusty writes in Figtree; Dusty is the Scopecrete Lander; an All thread; proposal cover band and Prepared by; sign-in at app.scopecrete.ai/login, each org at <slug>.app.scopecrete.ai; Dusty's chat keeps its files and files them on a customer or job — migration 079; vendor Delete; Dusty on a vendor's page and looking at attached photos; sales tax by address via TaxLocus — migration 078; archive reasons; Lines, providers and logs — migration 077; internal notes with @-tags; Jobs board sort and filter; jobs by hand — migration 076; done and lost customers in Threads; proposals sent by link, every opening tracked; every option side by side for the customer — migration 075; Documents is Files, everywhere — migration 074; Threads v2 — threads you make, channels per number, the customer page reshaped — migration 073; an address given is kept and asked about — migration 072; Dusty sets addresses; customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
 
 ---
 
@@ -300,7 +300,9 @@ across the database … I also want to be able to upload a logo for my org."*
 - **The header lockup** (`org-lockup.tsx`): the theme's logo (else the other),
   28px (24 on a phone), a pencil rule, the ScopeCrete emblem (the landing
   page's orbits and green block, `Emblem` in `site/marks.tsx`, 2026-10-05)
-  beside "powered by" over the wordmark, its orbits turning as on the
+  beside "powered by" over the wordmark (on a desktop one line since
+  2026-10-05 — "powered by", the emblem, scopecrete.ai — and the header's
+  dividing rules darker, `--sc-pencil-rule`; Coy), its orbits turning as on the
   landing page (still under reduced motion) — the
   block exactly the logo's height (Coy: "the same size as the Sacco
   Enterprises logo"; dropped under 340px). No logo, or one that fails to load → the
@@ -332,13 +334,72 @@ across the database … I also want to be able to upload a logo for my org."*
   refused. **`sc_remove_member` is NOT applied:** its `delete` statement is
   held at the Supabase connector's approval gate (timed out twice); until it
   is approved and applied, the × on a person says "Removing people isn't
-  switched on yet". **Roles don't limit what a
-  member sees yet** — everyone in the org reads everything under
-  `get_user_org_ids()`; only owners manage the org.
+  switched on yet". Owners and members read everything under
+  `get_user_org_ids()`; only owners manage the org. **Onsite estimators**
+  (role `field`) see only the jobs and pages they are given — §2j.
 - Rehearsed before applying: owner renames and it is audited; blank refused;
   a path in another org's folder or with `..` refused; a direct UPDATE on
   `orgs` changes nothing; a stranger can't rename, set a logo, or see people
   or the audit; anon has no execute.
+
+## 2j. Onsite estimators — jobs and pages by person (migration 081, applied 2026-10-05 on Coy's "apply 081")
+
+Coy: *"I need be able to use onsite estimators and give them access to the
+app to upload photos and plans and take measurements … when I create a user
+I need to be able to set permissions. I want to be able to enable access to
+specific jobs and pages. Also they need to be setup as a vendor before I can
+enable internal access. Internal users can be mentioned with @(username) in
+the customer notes and get a notification."*
+
+- **The role `field` (062's unused "field crew") is the onsite estimator.**
+  `get_user_org_ids()` leaves `field` memberships out, so an estimator reads
+  nothing of the org by default — contacts, texts, calls, customers, cash,
+  the inbox, Dusty's chats. What they may reach is granted back table by
+  table for their jobs only (`sc_field_job_ids(page)`, `sc_field_org_ids(page)`):
+  the job and its areas always (jobs read-only; sections read and write);
+  **Photos & files** (`files` on their jobs, read, upload, file on an area);
+  **Plan room** (sheets, takeoff groups and shapes; the in-room PDFs to read);
+  **Budget** (the job's estimate and lines; the Price book, assemblies,
+  money defaults, parish rates and project types to read). Storage follows
+  the `files` rows. Jobs: `org_members.all_jobs` or `job_ids`. The proposal,
+  Threads, Customers, Cash, Vendors, Logs, Dashboard, search and Dusty are
+  not theirs; the app hides them and sends them to the Jobs board
+  (`redirectFor()`, `src/lib/access.ts`, tested), and RLS is the lock either
+  way. On the job page they see who it's for — name and phone only
+  (`sc_field_job_contact()`), so they can meet the customer.
+- **Vendor first.** `org_members.contact_id` / `org_invites.contact_id`: an
+  estimator must be a contact filed **vendor** (`sc_check_access()`), checked
+  on invite (`sc_invite_member()`) and on change (`sc_set_member_access()`,
+  owners only, never your own role, never the last owner, audited
+  `member_access`). Their name in @-lists falls back to the vendor's.
+- **Where Coy does it.** Settings → Organisation → People: **+ Invite** →
+  Owner · Member · **Onsite estimator** → the vendor (picked from Vendors; their
+  email fills in), pages, every job or the ones ticked → the link, as before.
+  ✎ on a person changes their role, vendor, pages and jobs. A vendor's page
+  has **App access**, which opens that invite with them picked.
+- **Tags notify (`member_notifications`).** A note that tags a member writes
+  one row per tagged member (trigger `contact_notes_mentions`, the last week
+  backfilled), with the job they may open; the activity line's "Tagged you on …"
+  reads it (`tagItems()` in `/api/activity`), for an estimator linking to the
+  job, since they can't open the thread. In-app only — nothing is texted or
+  emailed (§10). The call notes on the customer page take @ too
+  (`mention-field.tsx`), like Internal notes.
+- **Also in 081:** `sc_my_orgs()` / `sc_my_access()` give the header, sign-in
+  routing and `getApiSession()` the org's name, slug and logos without the
+  `orgs` row (webhook_url, api_key_hash); `sc_spine_drift` becomes
+  `security_invoker`; `leads_view`, `vendors_view`, `job_close_rates` and
+  `sc_open_name_questions` (unread by the app) lose authenticated's select
+  (§9). The app ships ahead of 081: each new function falls back to the old
+  read when it is missing, and the estimator role is off until it exists. **Applied 2026-10-05** (`apply_migration`); checked after: the four columns on members and invites, 24 policies, RLS on `member_notifications`, the tag trigger, `sc_spine_drift` invoker, authenticated has no select on `leads_view`, anon can't run `sc_my_orgs`, nobody but the functions runs `sc_check_access`; Coy still sees 206 contacts, 42 jobs, drift 3, and is owner.
+- Rehearsed (rolled back) on the live data: a test estimator on one job with
+  Photos & files + Plan room saw 0 contacts, messages, customers and notes,
+  only that job, its 11 files and their storage objects, 2 sheets and its
+  takeoffs, no estimate or Price book; added an area to it, was refused one
+  on another job, could not update the job or make themselves owner; Coy's
+  counts unchanged (206 contacts, 42 jobs, drift 3 through the invoker view);
+  inviting an estimator with no vendor, or a customer, refused; Coy's tag
+  reached them linked to the job; switched to Budget on another job, they saw
+  only that job, its estimate and the 430 Price book items.
 
 ## 2a. The raw log and the spine — migration 016
 
@@ -524,7 +585,9 @@ each message.** One person calling two of Coy's lines is one thread.
   filter (only lines this person reached) beside All · Calls · Texts; **Call
   from ▾** (your phone dials — choose the same line in Quo); the composer's
   line chip and "Text (225) … from Main — copy it into Quo" (nothing sends,
-  §10); the header adds "first reached you on the Website line, Oct 3"
+  §10); "first reached you on the Website line, Oct 3" — on the header until
+  2026-10-05, now a **Lead source** line at the top of Internal notes (Coy:
+  "a place in the notes for the lead source")
   (`/api/threads/[id]` returns `lines`, `first_line`, each message's
   `line_id`). On a phone the toolbar wraps, the line filter its own row. Not
   built: a thread made from a line, and Send (Quo stays Copy until 10DLC).
@@ -557,6 +620,17 @@ Coy: *"I need to be able to upload documents and photos for Dusty to parse."*
   suggestions** (§2b) — shown on the file, never applied — and from a
   document a number is kept only if it is written in it (`sanitizeRead()`,
   the dictation rule). Failed reads retry after 30 minutes, three tries.
+  **A read that kills the reader is not retried forever (migration 080,
+  applied 2026-10-05 on Coy's "apply 080"; `read-files` v15).** Walker High's 25 MB spec book ran the
+  function out of memory mid-read; the row stayed "reading" and was claimed
+  again every 10 minutes with no limit — 340 times, "Reading 2635 Walker High
+  Dugouts Specs…" on the activity line on every open, ~8.5 GB downloaded
+  (the egress overage). Now a PDF over 12 MB is skipped with the reason
+  (`readable()`, `MAX_PDF_BYTES`; the largest read so far was 4 MB), and a
+  file still "reading" after three tries is marked skipped
+  (`sc_files_claim`, 080). Checked after: the spec book is skipped with
+  the reason. The 340 failed tries stored nothing; egress is not stored
+  data, so there was nothing to delete.
   **v3 (2026-09-29, prompt `read-files-v2-price-lines`)** also reads
   `price_lines` off a quote, price list, receipt or invoice — name, item #,
   unit, unit price, qty — keeping a line only if its unit price is written
@@ -947,6 +1021,24 @@ It is written with `name_source='machine'`, a `contact_name_claims` row
 (→ `name_source='human'`) and **Undo** (name off, claim `rejected`, never
 re-applied) — `PATCH /api/name-claims/[id]`. Dry run against the live data on
 2026-09-27: 29 of the 176 unnamed contacts qualify.
+
+**A name we greet them by is a suggestion (Coy, 2026-10-05, decision card:
+"Suggest it"; `enrich-contacts` v28).** John (Icon Technology) never said his
+own name on his call — only Coy did, "Hey, mister John." — so the number stayed
+unnamed and nothing was even suggested. Now, when the person has no name of
+their own introduction, the name OUR side opens a line with ("Hey, mister
+John", "Hi Sarah", "Good morning Mr. Davis") is put on the suggestion
+(`greetedName()` / `ourLines()` in `rules.ts`, tested: a Capitalised name
+only, never one of ours, a greeting that ends its sentence ("Good morning. Are
+you …") names nobody, two different names on one number is no
+suggestion), with the greeting added to its evidence ("you greeted them: …").
+It is never written by itself — `findSelfIdentification()` still only counts
+their own words — so the row asks "is this John?" and Coy's tap names them.
+People already read were given theirs once (`{"greetings": true}` on the
+worker, `backfillGreetings()`); a standing suggestion with no name picks one
+up the next time they are read. The first fill (2026-10-05) suggested Chad,
+Michael and Carlos; a fourth ("Are", from "Good morning. Are you …") was
+taken back and the rule fixed.
 
 Everything else is unchanged. A customer / sub / vendor call is NEVER applied
 automatically — it can hide a real lead — and a name from anywhere other than
@@ -1776,11 +1868,25 @@ expected start date per quoted job before it means anything. Add the field.
   tested), then **Email** (the mirrored emails filed on them) and **Chat**
   (not built — "Not joined · invite"). **All · Calls · Texts** filter a phone
   channel; **Call** dials that number; the composer texts or emails it.
-  **Search** (the glass) is a panel at the right (the whole screen on a
-  phone): words, by **this number · the person · the whole thread**, with
-  type chips and counts — Messages, Photos, Files, Links, Calls, Voicemail
-  (`messageType()`, from `message_media.kind`) — `/api/threads/search`;
-  a result opens its channel at the message.
+  **Search** (the glass) drops down at the top of the chat, its full width
+  (Coy, 2026-10-05: "a simple search bubble … I don't need the 'this
+  number, john, whole thread' buttons or the other buttons if the search
+  features have intelligence built in") — one box, no scope or type
+  buttons: it searches everything with the person (every number and
+  channel), and when nothing of theirs matches, the whole thread, saying
+  so; a word like "photos", "voicemail" or "pdf" picks the kind
+  (`readThreadQuery()`, `src/lib/v34/threads.ts`, tested; types from
+  `message_media.kind`) — `/api/threads/search`; a result opens its
+  channel at the message. The line under the channel tabs ("Everything on
+  this number, oldest first" …) is gone (Coy). **The list's header stays
+  put** while the list scrolls, and its own 🔍 searches that list by a word,
+  a name or a place — names, numbers, Dusty's lines, their address, their
+  customer's and their jobs' addresses and titles (`places` on
+  `/api/threads`, searched, never shown), and every word said in their
+  calls and texts (`/api/threads/search` on the thread's people).
+  **On a phone (Coy, 2026-10-05)** the thread's name and the person share one
+  row ("‹ Unsorted  (225) 446-2212"), the role tag only when it says more than
+  the thread's name, and the notes tab has no "Team only" over it.
   **Internal notes is the first tab on the left (Coy, 2026-10-04)** — a
   person still opens on their conversation; the tab's "@ to tag" line is gone
   (the box below says it). **+ Number adds a number (Coy: "should also allow
@@ -2103,6 +2209,7 @@ expected start date per quoted job before it means anything. Add the field.
   `q kind source job customer contact vendor since from to` and `facets=1`
   for the lists — session client, a typed name stripped of wildcards before
   it reaches a pattern.
+  **Laid out like OneDrive (Coy, 2026-10-05: "toggle between photos and files … a left column as a type of file menu for folders … a search bar inside the file page … a filter bar … show the amount of remaining storage").** **Photos | Files** at the top: Photos is the filter's `kind=image`, drawn as a grid of thumbnails by month (Central time); Files is everything, photos included, as a list (a table — Name · Filed on · Size · Added — when there is room). The **folder column** on the left (≥ 900px measured; a drawer behind ☰ on a phone): All files, Recent (last 30 days), each kind (Plans, Specs, Bid invites, Vendor quotes, Receipts, Contracts, Photos, Proposals, Emails, Other, Unfiled), then Jobs · Customers · Vendors · People, each opening to every one with files and its count. Folders aren't stored: each sets the one filter's where to look (category, job, customer, vendor, person or since) and clears the other places, keeping the words, type, way in and dates (`folderPatch()` / `activeFolder()`, `src/lib/files-view.ts`, tested), so the address still carries the view. The search bar sits at the top of the content; the filters are one bar of drop-downs with the ones in use as chips (×, Clear all). **Storage** under the folders: "37.4 MB used of 1 GB · 987 MB left" with a bar, amber from 80%, red when full. `GET /api/files/storage` (session client) adds up `files.byte_size` for files not deleted and `message_media.byte_size` for texted files once stored, against `STORAGE_LIMIT_GB` (server side, default 1, Supabase's free plan). Call recordings, logos and proposal pictures aren't counted: nothing records their size. On a customer's Files tab the column stays, its customer stays pinned, and the folder lists are that customer's alone.
 - **Documents (2026-09-30)** — `/dashboard/documents`
   (`src/components/v34/documents.tsx`, `/api/documents`): every uploaded file,
   newest first, searched through the same index, filtered by category (or
@@ -2155,6 +2262,8 @@ expected start date per quoted job before it means anything. Add the field.
   Night Shift), SVG icons draw in `currentColor`. The rail, paper header,
   wordmark (`--sc-hatch`, `--sc-guide`, `--sc-crete`) and chat bubbles
   (`T.sunk` / `T.outBg`) follow the theme.
+- **Contact, customer and vendor pages look the same (Coy, 2026-10-05: "This 'contact' page is a mess … I would rather have consistent formatting across contact, customer and vendor … Really a contact needs to become a customer or vendor or spam anyway").** The customer page's parts moved into one module, `record-page.tsx`: ‹ back · name and role tag · the button row (folded into ⋯ on a phone) · the facts line · one row of tabs, then the Overview with a 400px right column (Location, the facts, Recent), contact cards with a line per number and email and Open in Threads ›, thread chips, panel titles and empty states. The customer page, a contact's own page (`?person=1`, `person-view.tsx`) and the vendor page (`/dashboard/vendors/[id]`) all use it. **A contact:** ‹ Back to the thread, the name with its pencil, the role tag (tap to change the bucket), Customer page › when they have one, Edit (name and address), New job, Ask Dusty; under ⋯ Call notes, File as… / Change bucket, Same person as…, Archive. Tabs Overview · Next steps · Jobs · Threads · Timeline · Files. While they are unsorted or filed by Dusty, the four buckets sit right under the header (Dusty's guess dashed, or Keep / Not X), since filing them is what the page is for. The Overview has Dusty's read, their card, next steps, jobs and the threads they're in. Files is the Files page pinned to them, with + Add files. **A vendor:** the same page, with Prices (★ = the price budgets use; their cards under it) and Receipts & quotes after Overview, + Receipt or quote as the main button, Edit as the vendor form, and Delete vendor under ⋯. `?person=1` for a vendor goes to their vendor page, which is their one page now; the vendor page's back link returns to the thread when opened from one. No API or data change.
+  **The customer page's Threads tab (Coy, 2026-10-05: "supposed to be more useful … pull information from the thread into here. maybe a summary").** A card per person on the customer: Dusty's line on where it stands and on the latest conversations, their last three calls and texts (summary or words), last heard, Open in Threads › and "Every call and text in Timeline ›"; then the threads they're in. The "Not in any thread you made…" line is gone.
 - **The customer page, reshaped (Threads v2 handoff §4, 2026-10-03).** "‹
   Back to the thread" when opened from Threads (else "‹ Customers"); name
   and role tag; **Edit · New job · Ask Dusty** (Call notes and Delete under
@@ -2264,6 +2373,25 @@ expected start date per quoted job before it means anything. Add the field.
   emblem pack: `public/favicon.ico` / `favicon.svg` / `apple-touch-icon.png`
   / `icon-192`·`512.png` and `site.webmanifest`, set once in
   `app/layout.tsx`. The pixel sprites stay in `public/dusty/` unused.
+- **Dusty on the phone (Coy, 2026-10-05, notes from his phone).** The
+  footer's centre Dusty is 40px in a 54px disc that rises above the 58px bar
+  (`.sc-tab-dusty`), larger than the page icons beside him. On a phone the
+  chat covers the whole screen, the header included (`.sc-dusty-sheet` top 0,
+  safe-area padded); × closes it. The desktop dock is unchanged. The chat
+  header has no "What's new?" button (the catch-up code is gone; saved
+  catch-ups still open from history); "Looking at:" is 👀, and a chat's label
+  drops its "scope:" prefix. **Text size:** "Aa" in the chat header (Small ·
+  Normal · Large · Extra large, 0.88–1.3× via CSS `zoom` on the conversation),
+  saved per account (`dusty_font`). Dusty sits at the bottom left of the
+  message bar (36px), always there while the chat is open, in his live state;
+  the 96px empty-state and 32px sprites are gone.
+- **Hide the thought line (Coy, 2026-10-05: "it can be distracting").**
+  Settings → **Dusty (AI)** → **Show Dusty's thought line** (`activity_line`,
+  default on). Off, the activity line isn't drawn on any size and
+  `html[data-activity="off"]` makes `--sc-head` 54px, set before first paint
+  by `app/layout.tsx` from the `sc:prefs` copy. Reminders, "is back", tags,
+  proposal openings, bid notices and the reader-down warning only show on
+  that line, so they go with it.
 - **Dusty answers in Markdown (2026-09-30).** Coy: *"showing the
   calculations in .md format in the chat panel."* His prompt asks for
   lists, bold and, for a job, a table per area (area · qty · cost · O.H. ·
@@ -2622,8 +2750,14 @@ expected start date per quoted job before it means anything. Add the field.
   to intake-concrete@agentmail.to; ScopeCrete will only mirror that inbox —
   next.) `/dashboard/scope/[jobId]/plans`, opened from the job header's
   **Plan room** button; the rail's Jobs stays lit and Dusty is HOT on the job.
-  Four steps:
-  **Files** — the job's PDFs and images, each with **In plan room**
+  Four steps — three since 2026-10-05, when Files and Sheets became one
+  **Files** tab (Coy: "one place where planset pdf, photos, images and any
+  other file can live"): a folder column (All files · Photos, then the
+  sheets by Concrete scope · All drawings · each discipline · Pages to
+  read) beside what the folder holds; `?step=sheets` still opens it on the
+  sheets. Photos, Aerial and Add plans sit at the far right of the steps'
+  row (Coy).
+  **Files** — every file on the job; PDFs and images carry **In plan room**
   (`job_files.in_plan_room`); drop plan sets to add them.
   **Sheets** — each in-room PDF is opened in the browser with **pdf.js**
   (`pdfjs-dist` legacy build — the modern one needs JavaScript most browsers
@@ -2874,8 +3008,15 @@ expected start date per quoted job before it means anything. Add the field.
   Item prices · Qty · unit · Tax line; groups and lines shown/hidden, prices
   hidden, lines made optional. **The cover's dark band (Coy, 2026-10-04):**
   the logo on the left, the kind and title on the right, nothing else — the
-  "Prepared for …" line was repeated below; the Header shows the logo only
-  when the cover is hidden. **Prepared by** is the member preparing it — their
+  "Prepared for …" line was repeated below. **Since 2026-10-05 the band is
+  its own strip** between the Cover and the Header (Coy: "The cover should
+  not include this dark header. I don't want to lose this when I turn the
+  header off"): the Cover switch hides only the photo, the Header switch
+  only the quote number and Prepared by / for, and the band always carries
+  the logo. In print the cover photo is an `<img>` (3.4 in tall), the band
+  keeps its colour (`print-color-adjust: exact`) and nothing forces a page
+  break after the cover, so photo, band and header open page 1 together
+  with a photo or without one. **Prepared by** is the member preparing it — their
   name and phone from Settings → You (`PATCH /api/me {phone}`, kept on their
   own account), then the org; a final freezes them as
   `snapshot.prepared_by`, and the customer's copy carries name, phone and
@@ -2979,8 +3120,41 @@ expected start date per quoted job before it means anything. Add the field.
   switch above the money strip. **Delete is at the bottom of the job page**
   (Coy, 2026-10-04: on a phone it pushed Proposal off the screen), and the
   header's sheets button reads **Sheets (n)** on one line. **Since
-  2026-10-05 the Plan room · Budget · Proposal switch (and Sheets) sits top
-  right on the job name's row**, and the ⓘ comes right after the name (Coy).
+  2026-10-05 all three views share one top row** (`JobHeaderRow`,
+  `job-tabs.tsx`; Coy: "I like the layout of the budget page the best with
+  the job name on the top left and the 'plan room, budget, proposal'
+  buttons on the top right … Any buttons currently in the top right need to
+  be moved down below"): ‹ Jobs, the job's name (and the ⓘ, or the
+  proposal's number and draft / final, with its price line under it) on
+  the left, the switch alone on the right. Each view's own buttons sit
+  below: the Budget's Sheets (n) beside its chips; the Plan Room's
+  reading chips, Photos, Aerial and Add plans on the row under the name;
+  the Proposal's version, Item prices · Qty · unit · Tax · Maps & photos,
+  Print / PDF and Preview on the settings row beside Project type,
+  Warranty and Contract (on a phone, the buttons on their own row and the
+  settings folded).
+- **Summary, a fourth view (Coy, 2026-10-05: "a summary page to the left
+  of the plan room … including all the chips" and "all of the lines and
+  words directly below the job name … we can add to the summary page").**
+  Summary · Plan room · Budget · Proposal, at `/dashboard/scope/[jobId]/summary`
+  (`job-summary.tsx`): the four chips, customer · address · created date, the
+  description, Why this job (no longer an ⓘ sheet), the Bid strip, the price
+  at a glance from the engine's `budget()` over `/api/jobs/[id]/budget`
+  (total, cost, O.H., profit, margin, tax, job minimum, or what blocks it),
+  the proposal's link (version, sent, opened —
+  `/api/jobs/[id]/proposal/link`), and Delete job at the bottom (a deleted
+  job opened there shows Restore — `GET /api/jobs/[id]` now returns
+  `archived_at`). No new API. Dusty is HOT on the job there. An onsite
+  estimator gets no Summary tab, and `redirectFor()` sends /summary to the
+  job page. The Budget's chip row, customer and description lines, ⓘ and
+  Delete moved to Summary (the Bid strip stays on both); the Proposal's
+  number, draft / final and price left the name's row for one line above
+  its settings. The Jobs board still opens a job on its Budget.
+  **On a phone** (Coy: "the job name in the center of the page … plan room,
+  budget, and proposal button … center of the page below the job name") the
+  name is centred on its own line (‹ Jobs at its left edge; the Budget's
+  editable name centred too) and the switch centred under it; the desktop
+  keeps name left, switch right (`JobHeaderRow`).
 - **One job, three views (Coy, 2026-10-02: "no way … to get back from the
   proposal page" and "one job budget page, and I can toggle between that
   budget and the proposal").** **Plan room · Budget · Proposal** — in the
@@ -3216,6 +3390,17 @@ additive changes only, with confirmation.
   own nameservers, so for now it is one record per org. Supabase Auth's
   redirect list must carry `https://app.scopecrete.ai/**` and
   `https://*.app.scopecrete.ai/**` for Google and emailed sign-in links.
+- **Installing the app (Coy, 2026-10-05: "prompts me to install it from the
+  master branch and it doesn't prompt me to install it on any sandbox
+  branches").** `/site.webmanifest` is a route (`src/lib/install.ts`,
+  tested): only an org's own address on the production build
+  (`VERCEL_ENV=production`, `<slug>.app.scopecrete.ai`) gets the manifest
+  (opens on `/dashboard`); previews, the feedback sandbox, the landing page,
+  app.scopecrete.ai and localhost get 404, so Chrome never offers to install
+  them. Chrome's own banner shows when Chrome decides, so Settings (☰) has
+  **Install the app** whenever the browser says it can be installed there.
+  There is no service worker (next-pwa is a webpack plugin; the Turbopack
+  build never ran it).
 
 **Per-org Hermes containers are under review.** Clean isolation, but N
 long-running processes per N contractors does not survive growth and is the
@@ -3250,11 +3435,13 @@ genuinely required.
 - **Google Maps keys (2026-09-30):** `NEXT_PUBLIC_GOOGLE_MAPS_EMBED_KEY` is
   public by design — restrict it to the app's domains in Google Cloud.
   `GOOGLE_MAPS_GEOCODE_KEY` is server-side only (geocoding on address save).
-- **Known exposure, not yet fixed:** the views `sc_spine_drift` and
-  `sc_open_name_questions` are not `security_invoker`, so they run as their
-  owner and bypass RLS — a cross-tenant read the day a second org exists.
-  Harmless at one org today; fix before onboarding another. Views must be
-  created `with (security_invoker = true)`.
+- **Known exposure, fixed by 081 (applied 2026-10-05):** the views `sc_spine_drift`,
+  `sc_open_name_questions`, `leads_view`, `vendors_view` and `job_close_rates`
+  are not `security_invoker`, so they run as their owner and bypass RLS — a
+  cross-tenant read the day a second org exists, and a read past an onsite
+  estimator's limits. 081 makes `sc_spine_drift` invoker and takes
+  authenticated's select off the other four. Views must be created
+  `with (security_invoker = true)`.
 
 ---
 

@@ -4,32 +4,33 @@
  * plan set, its sheets, the takeoff, and its lines on the budget. Coy,
  * 2026-09-30: "scopecrete.ai will be a tool for me to do takeoffs manually."
  *
- * Files → Sheets → Takeoff → Budget. A plan PDF put in the room is opened in
+ * Files → Takeoff → Budget (Files and Sheets one step since 2026-10-05). A plan PDF put in the room is opened in
  * the browser with pdf.js; each page's title block is read
  * (src/lib/plan-sheets.ts) and stored as a sheet — a first reading, Coy's to
  * correct. Dusty stays docked and sees the takeoff (src/lib/dusty/context.ts).
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { T, F, disp, strong, clip } from "@/lib/v34/tokens";
+import { T, F, disp, strong } from "@/lib/v34/tokens";
 import { sendBytes } from "@/components/v34/files-panel";
 import { openPdf, readPlanPages } from "@/lib/pdf";
-import { JobTabs } from "@/components/v34/job-tabs";
+import { JobHeaderRow } from "@/components/v34/job-tabs";
 import { mayAutoRead, ocrPending, pausePlanOcr, resumePlanOcrAllowed, startPlanOcr, usePlanOcr } from "@/lib/v34/plan-ocr-runner";
-import { call, isDrawing, isPlanFile, type Param, type PlanFile, type PlansData, type Sheet } from "./shared";
-import { FilesStep, SheetsStep } from "./files-sheets";
+import { call, isDrawing, type Param, type PlanFile, type PlansData, type Sheet } from "./shared";
+import { FilesStep } from "./files-sheets";
 import { TakeoffStep } from "./takeoff";
 import { AerialPicker } from "./aerial-picker";
 import { PhotosPanel } from "./photos-panel";
 import { BudgetStep, SendSheet, useBudget } from "./budget-step";
 
-type Step = "files" | "sheets" | "takeoff" | "budget";
-const STEPS: Array<[Step, string]> = [["files", "Files"], ["sheets", "Sheets"], ["takeoff", "Takeoff"], ["budget", "Budget"]];
+type Step = "files" | "takeoff" | "budget";
+const STEPS: Array<[Step, string]> = [["files", "Files"], ["takeoff", "Takeoff"], ["budget", "Budget"]];
 
 export function PlanRoom({ jobId }: { jobId: string }) {
   const router = useRouter();
   const sp = useSearchParams();
-  const step = (STEPS.find(([k]) => k === sp.get("step"))?.[0] ?? null) as Step | null;
+  // ?step=sheets (old links) opens Files on its sheets.
+  const step = (sp.get("step") === "sheets" ? "files" : STEPS.find(([k]) => k === sp.get("step"))?.[0] ?? null) as Step | null;
   const sheetParam = sp.get("sheet");
   const [data, setData] = useState<PlansData | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -140,14 +141,12 @@ export function PlanRoom({ jobId }: { jobId: string }) {
   const sheets = useMemo(() => roomSheets.filter((s) => isDrawing(s) || measured.has(s.id)), [roomSheets, measured]);
   const docPages = useMemo(() => roomSheets.filter((s) => !isDrawing(s) && !measured.has(s.id)), [roomSheets, measured]);
   const scoped = data ? { ...data, sheets } : null;
-  const current = step ?? (roomSheets.length ? (data?.params.length && sheets.length ? "takeoff" : "sheets") : "files");
+  const current = step ?? (roomSheets.length && data?.params.length && sheets.length ? "takeoff" : "files");
   const scaled = sheets.filter((s) => s.scale_ft_per_pt).length;
-  const planFiles = (data?.files ?? []).filter(isPlanFile);
   const photoCount = (data?.files ?? []).filter((f) => f.kind === "image").length;
   const sent = data ? data.params.filter((p) => data.lines.some((l) => l.takeoff_parameter_id === p.id)).length : 0;
   const counts: Record<Step, string | null> = {
-    files: planFiles.length ? String(planFiles.filter((f) => f.in_plan_room).length) : null,
-    sheets: roomSheets.length ? String(sheets.length || roomSheets.length) : null,
+    files: (data?.files.length ?? 0) ? String(data?.files.length) : null,
     takeoff: data?.params.length ? String(data.params.length) : null,
     budget: data?.params.length ? `${sent}/${data.params.length}` : null,
   };
@@ -155,10 +154,21 @@ export function PlanRoom({ jobId }: { jobId: string }) {
   return (
     <div className="flex flex-col" style={{ minHeight: "calc(100dvh - var(--sc-head))" }}>
       <div style={{ background: T.card, borderBottom: `1px solid ${T.hair}`, padding: "10px 16px 0" }}>
-        <div className="flex items-center gap-2 flex-wrap">
-          <JobTabs jobId={jobId} active="plans" />
-          <span style={{ fontSize: F.sm, fontWeight: 600, color: T.ink, ...clip, minWidth: 0, maxWidth: "40vw" }}>{data?.job?.title || ""}</span>
-          <span className="flex-1" />
+        <JobHeaderRow jobId={jobId} active="plans" title={data?.job?.title || "Plan room"} />
+        {/* The steps on the left and the Plan Room's own tools at the far right, on one row
+            under the name's row (Coy, 2026-10-05). */}
+        <div className="flex items-end gap-x-4 gap-y-2 flex-wrap mt-2">
+          <div className="flex gap-4 overflow-x-auto" role="tablist">
+            {STEPS.map(([k, label], i) => (
+              <button key={k} role="tab" aria-selected={current === k} onClick={() => go(k)} className="flex items-center gap-1.5 shrink-0"
+                style={{ height: 38, borderBottom: `2px solid ${current === k ? T.hiviz : "transparent"}`, color: current === k ? T.ink : T.ink3, fontFamily: disp, fontSize: 14, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase", cursor: "pointer" }}>
+                <span style={{ width: 17, height: 17, borderRadius: 999, border: `1px solid currentColor`, fontSize: 10, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>{i + 1}</span>
+                {label}
+                {counts[k] && <span style={{ fontFamily: strong, fontSize: 10.5, background: T.sunk, borderRadius: 999, padding: "0 6px", letterSpacing: 0 }}>{counts[k]}</span>}
+              </button>
+            ))}
+          </div>
+          <div className="ml-auto flex items-center gap-2 flex-wrap justify-end" style={{ paddingBottom: 4 }}>
           {ocr.running && ocr.jobId === jobId ? (
             <span className="flex items-center gap-1.5" title={ocr.label} style={{ fontSize: 11.5, borderRadius: 3, padding: "3px 8px", background: T.dustyTint, color: T.ink2, fontWeight: 600 }}>
               Reading {ocr.phase === "title" ? "sheet titles" : "the plans"} · {ocr.done + 1} of {ocr.total}
@@ -187,16 +197,7 @@ export function PlanRoom({ jobId }: { jobId: string }) {
             <input type="file" multiple accept="application/pdf,image/jpeg,image/png,.pdf" className="hidden" onChange={(e) => { if (e.target.files?.length) void upload(e.target.files); e.target.value = ""; }} />
             ↑ Add plans
           </label>
-        </div>
-        <div className="flex gap-4 mt-2 overflow-x-auto" role="tablist">
-          {STEPS.map(([k, label], i) => (
-            <button key={k} role="tab" aria-selected={current === k} onClick={() => go(k)} className="flex items-center gap-1.5 shrink-0"
-              style={{ height: 38, borderBottom: `2px solid ${current === k ? T.hiviz : "transparent"}`, color: current === k ? T.ink : T.ink3, fontFamily: disp, fontSize: 14, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase", cursor: "pointer" }}>
-              <span style={{ width: 17, height: 17, borderRadius: 999, border: `1px solid currentColor`, fontSize: 10, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>{i + 1}</span>
-              {label}
-              {counts[k] && <span style={{ fontFamily: strong, fontSize: 10.5, background: T.sunk, borderRadius: 999, padding: "0 6px", letterSpacing: 0 }}>{counts[k]}</span>}
-            </button>
-          ))}
+          </div>
         </div>
       </div>
 
@@ -204,8 +205,8 @@ export function PlanRoom({ jobId }: { jobId: string }) {
       {!data && !err && <div className="p-5" style={{ fontSize: F.sm, color: T.ink3 }}>Opening the plan room…</div>}
       {data && scoped && (
         <div className="flex-1 flex flex-col" style={{ minHeight: 0 }}>
-          {current === "files" && <FilesStep files={data.files} sheets={data.sheets} reading={reading} onToggle={(f, on) => void toggle(f, on)} onAdd={(l) => void upload(l)} uploading={uploading} />}
-          {current === "sheets" && <SheetsStep sheets={sheets} docPages={docPages} files={data.files} onOpen={(s) => go("takeoff", s.id)} />}
+          {current === "files" && <FilesStep files={data.files} sheets={sheets} docPages={docPages} reading={reading} onToggle={(f, on) => void toggle(f, on)}
+            onAdd={(l) => void upload(l)} uploading={uploading} onOpen={(s) => go("takeoff", s.id)} initial={sp.get("step") === "sheets" || (!step && roomSheets.length) ? "sheets" : "files"} />}
           {current === "takeoff" && (
             <TakeoffStep jobId={jobId} data={scoped} files={data.files} sheetId={sheetParam} setSheetId={(id) => go("takeoff", id)}
               reload={reload} onSend={setSending} fullscreen={fullscreen} setFullscreen={setFullscreen} onPhotos={() => setPhotos((v) => !v)} photosOpen={photos} />

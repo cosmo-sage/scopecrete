@@ -19,8 +19,10 @@ import { ArchiveNoteCard } from "@/components/v34/archive-actions";
 
 export interface InternalNote { id: string; body: string; created_at: string; created_by?: string | null; message_id?: string | null }
 
-export function InternalNotes({ contactId, name, notes, onSaved }: {
+export function InternalNotes({ contactId, name, notes, onSaved, leadSource }: {
   contactId: string; name: string | null; notes: InternalNote[]; onSaved: () => void;
+  /** Where the lead came from — moved here off the thread's header (Coy, 2026-10-05). */
+  leadSource?: string | null;
 }) {
   const [members, setMembers] = useState<Array<Member & { you?: boolean }>>([]);
   const [text, setText] = useState("");
@@ -66,6 +68,11 @@ export function InternalNotes({ contactId, name, notes, onSaved }: {
   return (
     <div className="flex flex-col h-full min-h-0">
       <div className="flex-1 overflow-y-auto" style={{ padding: "12px 18px" }}>
+        {leadSource && (
+          <div className="rounded mb-2.5" style={{ maxWidth: 640, background: T.card, border: `1px solid ${T.hair}`, padding: "6px 12px", fontSize: 12.5, color: T.ink2 }}>
+            <span style={{ fontFamily: disp, letterSpacing: ".1em", textTransform: "uppercase", fontWeight: 600, fontSize: 11.5, marginRight: 6 }}>Lead source</span>{leadSource}
+          </div>
+        )}
         {ordered.length === 0 ? (
           <div className="text-center py-16" style={{ fontSize: F.sm, color: T.ink3, maxWidth: 400, margin: "0 auto" }}>
             No internal notes on {name ?? "them"} yet. Notes stay inside your organisation — nothing is sent — and Dusty reads them. Type @ to tag a teammate.

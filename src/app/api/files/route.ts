@@ -127,12 +127,15 @@ export async function POST(req: NextRequest) {
     if (jobId && jobId !== s.job_id) return bad("That area is on another job.");
     jobId = s.job_id as string;
   }
+  let contactFromJob = false;
   if (jobId) {
     const { data: j } = await supabase.from("jobs").select("id, contact_id").eq("org_id", orgId).eq("id", jobId).maybeSingle();
     if (!j) return bad("No such job.", 404);
-    if (!contactId && j.contact_id) contactId = j.contact_id as string;
+    if (!contactId && j.contact_id) { contactId = j.contact_id as string; contactFromJob = true; }
   }
-  if (contactId) {
+  // A contact that came with the job needs no second look — and an onsite estimator (081) can't
+  // read contacts, so looking would turn their photo away.
+  if (contactId && !contactFromJob) {
     const { data: c } = await supabase.from("contacts").select("id").eq("org_id", orgId).eq("id", contactId).maybeSingle();
     if (!c) return bad("No such person.", 404);
   }

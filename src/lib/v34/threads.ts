@@ -162,3 +162,27 @@ export function messageType(m: { channel: string | null; summary_source?: string
   if (LINK.test(m.body_text ?? "")) return "link";
   return "msg";
 }
+
+/**
+ * One search box, no scope or type buttons (Coy, 2026-10-05: "I don't need the 'this number,
+ * john, whole thread' buttons … if the search features have intelligence built in"). A word that
+ * names a kind of thing — photos, pictures, files, PDFs, links, calls, voicemail — picks the type
+ * and is taken out of the words; whatever is left is searched for.
+ */
+const TYPE_WORDS: Array<[RegExp, SearchType]> = [
+  [/^(photos?|pics?|pictures?|images?|videos?)$/i, "photo"],
+  [/^(files?|pdfs?|docs?|documents?|attachments?)$/i, "file"],
+  [/^(links?|urls?|websites?)$/i, "link"],
+  [/^(voicemails?|vms?)$/i, "vm"],
+  [/^(calls?|phonecalls?)$/i, "call"],
+  [/^(texts?|messages?|sms)$/i, "msg"],
+];
+export function readThreadQuery(q: string): { words: string; type: "all" | SearchType } {
+  let type: "all" | SearchType = "all";
+  const keep: string[] = [];
+  for (const w of q.trim().split(/\s+/).filter(Boolean)) {
+    const hit: [RegExp, SearchType] | undefined = type === "all" ? TYPE_WORDS.find(([re]) => re.test(w.replace(/[.,!?]$/, ""))) : undefined;
+    if (hit) type = hit[1]; else keep.push(w);
+  }
+  return { words: keep.join(" "), type };
+}

@@ -134,3 +134,24 @@ test("a text and a spelled call that agree are one introduction", async () => {
   assert.equal(introducedOver(null, turns, [THEM]), "Raynette Holloway");
   assert.ok(findSelfIdentification("Raynette Holloway", turns, [THEM]));
 });
+
+test("a name we greet them by is a suggestion, never their introduction", async () => {
+  const { greetedName } = await import("../supabase/functions/enrich-contacts/rules.ts");
+  // John's call (2026-10-05): only our side says his name.
+  const john = call("US", `${US}: Hey, mister John.\n${THEM}: How you doing, sir?\n${US}: I'm alright.`);
+  assert.deepEqual(greetedName([john], [THEM]), { name: "John", quote: "Hey, mister John." });
+  assert.equal(findSelfIdentification("John", [john], [THEM]), null, "never applied on its own");
+  assert.equal(greetedName([sms("US", "Hi Sarah, the price is $4,200")], [THEM]).name, "Sarah");
+  assert.equal(greetedName([sms("US", "Good morning Mr. Davis")], [THEM]).name, "Davis");
+  assert.equal(greetedName([sms("THEM", "Hi John")], [THEM]), null, "their greeting names us, not them");
+  assert.equal(greetedName([sms("US", "Hey there, running late")], [THEM]), null);
+  assert.equal(greetedName([sms("US", "Hey Coy")], [THEM]), null, "our own names never");
+  assert.equal(greetedName([sms("US", "Hi Sarah"), sms("US", "Hi Mike")], [THEM]), null, "two names on one number is a question");
+});
+
+test("a greeting that ends its sentence names nobody", async () => {
+  const { greetedName } = await import("../supabase/functions/enrich-contacts/rules.ts");
+  assert.equal(greetedName([sms("US", "Good morning. Are you still wanting the tractor this morning?")], [THEM]), null);
+  assert.equal(greetedName([sms("US", "Hey! Can you send the address")], [THEM]), null);
+  assert.equal(greetedName([sms("US", "Thank you, mister Chad.")], [THEM]).name, "Chad");
+});

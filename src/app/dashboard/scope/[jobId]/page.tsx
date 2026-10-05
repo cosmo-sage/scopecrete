@@ -20,17 +20,14 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useDustyDocked } from "@/lib/v34/use-dusty-docked";
-import { Sheet } from "@/components/v34/primitives";
-import Link from "next/link";
 import { VoiceRecorder } from "@/components/v34/voice-recorder";
 import { useParams } from "next/navigation";
 import { T, F, disp, eyebrow, nums, clip, money, money0, formatPhone } from "@/lib/v34/tokens";
 import { EmptyState } from "@/components/v34/primitives";
-import { JobChips } from "@/components/v34/job-chips";
 import { FilesPanel, type FileRow } from "@/components/v34/files-panel";
 import { SectionPhotos } from "@/components/v34/section-photos";
 import { BidStrip } from "@/components/v34/bid-strip";
-import { JobTabs } from "@/components/v34/job-tabs";
+import { JobHeaderRow } from "@/components/v34/job-tabs";
 import { JobBudget, type BudgetSummary } from "@/components/v34/job-budget";
 import { SheetViewer, type SheetGroup } from "@/components/v34/sheet-viewer";
 import type { PlansData } from "@/components/v34/plan-room/shared";
@@ -40,7 +37,8 @@ import {
   type SectionInput,
 } from "@/lib/engine";
 import { isReinforcementCard } from "@/lib/cost-cards";
-import { ArchiveButton } from "@/components/v34/archive-actions";
+import { useAccess } from "@/lib/v34/access-ctx";
+import { can } from "@/lib/access";
 import { SectionTakeoffStrip, groupOf, shapesOf } from "@/components/v34/section-takeoff";
 import { fmtQty } from "@/lib/takeoff";
 
@@ -93,12 +91,10 @@ async function send(url: string, method: string, body?: unknown) {
 
 export default function ScopeBuilder() {
   const { jobId } = useParams<{ jobId: string }>();
+  const access = useAccess();
   const [job, setJob] = useState<Job | null>(null);
   const [contact, setContact] = useState<Contact | null>(null);
   const [why, setWhy] = useState<Why | null>(null);
-  const [whyOpen, setWhyOpen] = useState(false);
-  // The bid strip shows the bid's scope summary; the header doesn't repeat it (Coy, 2026-10-02).
-  const [bidSummary, setBidSummary] = useState<string | null>(null);
   // Dusty docked on a desktop: the totals move into his panel (Coy, 2026-09-30).
   const docked = useDustyDocked();
   const [slot, setSlot] = useState<HTMLElement | null>(null);
@@ -248,46 +244,32 @@ export default function ScopeBuilder() {
       {/* ================= sections ================= */}
       <div style={{ minWidth: 0 }} className="pb-24 lg:pb-6">
         <div className="px-3 pt-2.5 pb-2" style={{ background: T.card, borderBottom: `1px solid ${T.hair}` }}>
-          {/* Coy, 2026-10-05: Plan room · Budget · Proposal in the top right, on
-              the job name's row; the ⓘ right after the name it explains. */}
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
-            <div className="flex items-center gap-2" style={{ flex: "1 1 220px", minWidth: 0 }}>
-            <Link href="/dashboard/scope" className="no-underline shrink-0" style={{ ...eyebrow, color: T.ink2 }}>‹ Jobs</Link>
-            <input defaultValue={realTitle} placeholder={titleHint} aria-label="Job name"
+          {/* Coy, 2026-10-05: the job's name top left, Summary · Plan room · Budget · Proposal top right —
+              the same row on every view (JobHeaderRow; centred on a phone). The chips, who it's for,
+              the description and "Why this job" moved to the Summary to clear the clutter here. */}
+          <JobHeaderRow jobId={jobId} active="job"
+            title={access.limited ? (realTitle || titleHint || "Job") : <input defaultValue={realTitle} placeholder={titleHint} aria-label="Job name"
               size={Math.max(6, (realTitle || titleHint || "").length + 1)}
               onBlur={(e) => { const v = e.target.value; if (v !== realTitle) void send(`/api/jobs/${jobId}`, "PATCH", { title: v }).then((b) => setJob((j) => j && { ...j, title: b.job.title })).catch((er) => setSaveErr((m) => ({ ...m, job: String(er.message ?? er) }))); }}
-              className="bg-transparent outline-none"
-              style={{ minWidth: 0, maxWidth: "100%", fieldSizing: "content", fontFamily: disp, fontSize: F.lg, fontWeight: 700, lineHeight: 1.15, color: T.ink } as React.CSSProperties} />
-            {/* Coy, 2026-09-30: "Why this job" is an ⓘ in the header — tap to see it. */}
-            {why && (
-              <button onClick={() => setWhyOpen(true)} aria-label="Why this job was made" title="Why this job was made"
-                className="shrink-0 rounded-full flex items-center justify-center"
-                style={{ width: 22, height: 22, border: `1px solid ${T.hairStrong}`, color: T.chalk, fontFamily: "Georgia, serif", fontStyle: "italic", fontWeight: 700, fontSize: 12, background: T.card, cursor: "pointer" }}>i</button>
-            )}
-            </div>
-            <div className="flex items-center gap-2 ml-auto shrink-0">
-            {planSheets.length > 0 && (
-              <button onClick={() => openSheets(null, null)} className="rounded px-2.5 shrink-0"
-                style={{ height: 28, whiteSpace: "nowrap", border: `1px solid ${T.hairStrong}`, background: T.card, fontFamily: disp, fontSize: F.xs, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".05em", color: T.ink, cursor: "pointer" }}>
+              className="bg-transparent outline-none text-center lg:text-left"
+              style={{ minWidth: 0, maxWidth: "100%", fieldSizing: "content", fontFamily: disp, fontSize: F.lg, fontWeight: 700, lineHeight: 1.15, color: T.ink } as React.CSSProperties} />} />
+          {/* The page's own buttons sit below the name's row (Coy, 2026-10-05). */}
+          {planSheets.length > 0 && (
+            <div className="flex justify-center lg:justify-start" style={{ marginTop: 6 }}>
+              <button onClick={() => openSheets(null, null)} className="rounded px-2.5 shrink-0" style={{
+                height: 28, whiteSpace: "nowrap", border: `1px solid ${T.hairStrong}`, background: T.card, fontFamily: disp, fontSize: F.xs, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".05em", color: T.ink, cursor: "pointer" }}>
                 Sheets ({planSheets.length})
               </button>
-            )}
-              <JobTabs jobId={jobId} active="job" />
             </div>
-          </div>
-          <JobChips job={job} onSet={(field, value) => send(`/api/jobs/${jobId}`, "PATCH", { [field]: value })
-            .then((b) => setJob((j) => j && { ...j, status: b.job.status, job_type: b.job.job_type, lead_source: b.job.lead_source }))} />
-          <div style={{ fontSize: F.xs, color: who ? T.ink3 : T.hiviz, marginTop: 4, ...clip }}>
-            {who ? (
-              <Link href={`/dashboard/messages/${contact!.id}`} style={{ color: T.ink2 }}>{who}</Link>
-            ) : "Not attached to a customer yet"}
-            {job.address ? ` · ${job.address}` : ""}
-            {` · ${sections.length} section${sections.length === 1 ? "" : "s"}`}
-            {/* When the job was made (Coy, 2026-10-04: "The job needs a created date"). */}
-            {job.created_at ? ` · created ${new Date(job.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/Chicago" })}` : ""}
-            {job.origin === "classification" ? " · made when filed as a customer" : job.created_from_message_id ? " · drafted from a message" : ""}
-          </div>
-          {job.description && !bidSummary && <div style={{ fontSize: F.sm, color: T.ink2, lineHeight: 1.4, marginTop: 2 }}>{job.description}</div>}
+          )}
+          {/* An onsite estimator has no Summary (081): they keep who it's for and their phone here. */}
+          {access.limited && (
+            <div style={{ fontSize: F.xs, color: who ? T.ink3 : T.hiviz, marginTop: 4, ...clip }}>
+              {who ? <span style={{ color: T.ink2 }}>{contact?.name || "Customer"}{contact?.phone ? <> · <a href={`tel:${contact.phone}`} style={{ color: T.ink2 }}>{contact.phone}</a></> : null}</span>
+                : "Not attached to a customer yet"}
+              {job.address ? ` · ${job.address}` : ""}
+            </div>
+          )}
           {saveErr.job && <div style={{ fontSize: F.xs, color: T.red }}>{saveErr.job}</div>}
         </div>
 
@@ -297,12 +279,6 @@ export default function ScopeBuilder() {
             <button onClick={() => void send(`/api/archive/restore`, "POST", { kind: "job", ids: [jobId] }).then(() => setJob((j) => j && { ...j, archived_at: null, archived_reason: null }))}
               className="rounded px-2.5" style={{ height: 28, border: `1px solid ${T.chalk}`, color: T.chalk, background: T.card, fontWeight: 600, cursor: "pointer" }}>Restore</button>
           </div>
-        )}
-
-        {why && (
-          <Sheet open={whyOpen} onClose={() => setWhyOpen(false)} title="Why this job" sub="How it was made">
-            <WhyThisJob why={why} contact={contact} description={job.description ?? null} onHide={() => setWhyOpen(false)} />
-          </Sheet>
         )}
 
         {/* Phone: the takeoff rail sits below the sections, so the three
@@ -324,7 +300,7 @@ export default function ScopeBuilder() {
         </div>
 
         {/* The bid behind it, when a forwarded bid email made or fed this job (migration 063). */}
-        <BidStrip jobId={jobId} onSummary={setBidSummary} onUndone={() => { window.location.href = "/dashboard/scope"; }} />
+        <BidStrip jobId={jobId} onUndone={() => { window.location.href = "/dashboard/scope"; }} />
 
         {sections.length === 0 && (
           <EmptyState title="No sections yet"
@@ -361,9 +337,9 @@ export default function ScopeBuilder() {
                     <SectionCard key={s.id} s={s} index={sections.indexOf(s)} err={saveErr[s.id]} rcards={rcards} jobType={job.job_type} jobId={jobId} onSlot={onSlot}
                       sheets={sheetsOf(s)} hasPlans={planSheets.length > 0} onSheets={(start) => openSheets(s, start)}
                       takeoffUnit={s.takeoff_sync !== false && sh.unit ? sh.unit : null}
-                      takeoff={<SectionTakeoffStrip jobId={jobId} sectionId={s.id} sectionName={s.name ?? null} following={s.takeoff_sync !== false}
+                      takeoff={!can(access, "plan_room") ? null : <SectionTakeoffStrip jobId={jobId} sectionId={s.id} sectionName={s.name ?? null} following={s.takeoff_sync !== false}
                         plans={plans} sectionNames={names} onChanged={takeoffChanged} />}
-                      photos={<SectionPhotos jobId={jobId} sectionId={s.id} sectionName={s.name ?? null}
+                      photos={!can(access, "files") ? null : <SectionPhotos jobId={jobId} sectionId={s.id} sectionName={s.name ?? null}
                         photos={jobFiles.filter((f) => (f.section_id === s.id || (f.takeoff_measurement_id && shapeIds.has(f.takeoff_measurement_id))) && (f.kind === "image" || f.kind === "video"))}
                         sections={sections.map((x) => ({ id: x.id, name: x.name ?? null }))} onChange={fileChanged} />}
                       onLocal={(p) => patchLocal(s.id, p)} onSave={(p) => void save(s.id, p)}
@@ -384,23 +360,16 @@ export default function ScopeBuilder() {
         </div>
 
         {/* The budget: lines from cost cards, good / better / best (migration 048). */}
-        <div className="px-3 pb-3">
+        {can(access, "budget") && <div className="px-3 pb-3">
           <JobBudget jobId={job.id} sections={sections} days={job.duration_days} onSummary={setBudget} refresh={budgetTick} slots={slots} />
-        </div>
+        </div>}
 
         {/* Photos, plans, specs, receipts — Dusty reads them (migration 045). */}
-        <div className="px-3 pb-3">
+        {can(access, "files") && <div className="px-3 pb-3">
           <FilesPanel jobId={job.id} sections={sections.map((x) => ({ id: x.id, name: x.name ?? null }))} />
-        </div>
+        </div>}
 
-        {/* Delete lives at the very bottom (Coy, 2026-10-04: it pushed Proposal off a phone's header). */}
-        {!job.archived_at && (
-          <div className="px-3 pb-6 pt-2 flex items-center justify-between gap-2" style={{ borderTop: `1px solid ${T.hair}` }}>
-            <span style={{ fontSize: F.xs, color: T.ink3 }}>Delete this job — it can be restored from Archived &amp; deleted.</span>
-            <ArchiveButton kind="job" id={jobId} action="delete" what={realTitle ? `the job “${realTitle}”` : "this job"} then="/dashboard/scope"
-              style={{ height: 28, padding: "0 10px", borderRadius: 4, border: `1px solid ${T.red}`, background: T.card, color: T.red, fontFamily: disp, fontSize: F.xs, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".05em", flexShrink: 0 }}>Delete job</ArchiveButton>
-          </div>
-        )}
+        {/* Delete job lives at the bottom of the Summary (2026-10-05). */}
       </div>
 
       {viewer && plans && (
@@ -983,49 +952,5 @@ function BudgetRail({ budget, sqft, crew, setCrew, onCrewDays }: {
         </div>
       </div>
     </>
-  );
-}
-
-/**
- * Why this job exists — for one made when a contact was filed as a customer
- * (migration 038). Coy, 2026-09-29: "I have no reference for why this job was
- * created… No idea what the job is or why it was classified as a customer."
- */
-function WhyThisJob({ why, contact, description, onHide }: { why: Why; contact: Contact | null; description: string | null; onHide: () => void }) {
-  const when = why.filed_at ? new Date(why.filed_at).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/Chicago" }) : null;
-  const whom = contact ? (contact.name || formatPhone(contact.phone)) : "this contact";
-  return (
-    <section className="mx-3 mt-2.5 rounded px-3 py-2.5" aria-label="Why this job"
-      style={{ background: T.chalkDim, border: `1px solid ${T.hair}` }}>
-      <div className="flex items-baseline gap-2">
-        <span style={{ ...eyebrow, color: T.chalk }}>Why this job</span>
-        <span className="flex-1" />
-        <button onClick={onHide} aria-label="Hide" style={{ color: T.ink3, fontSize: F.md, lineHeight: 1, background: "none", border: "none", cursor: "pointer" }}>×</button>
-      </div>
-      <div style={{ fontSize: F.sm, color: T.ink, lineHeight: 1.45, marginTop: 2 }}>
-        Made{when ? ` ${when}` : ""} when {why.filed_by === "dusty" ? "Dusty filed" : "you filed"} {whom} as a customer
-        {why.company ? <> — Dusty thinks it&apos;s <b>{why.company}</b></> : null}.
-      </div>
-      {why.status_summary && (
-        <div style={{ fontSize: F.sm, color: T.ink2, lineHeight: 1.45, marginTop: 4 }}>
-          <span style={{ ...eyebrow, color: T.ink3 }}>Dusty · </span>{why.status_summary}
-        </div>
-      )}
-      {why.scope_summary && why.scope_summary !== description && (
-        <div style={{ fontSize: F.sm, color: T.ink2, lineHeight: 1.45, marginTop: 4 }}>
-          <span style={{ ...eyebrow, color: T.ink3 }}>The work · </span>{why.scope_summary}
-        </div>
-      )}
-      {why.evidence_quote && (
-        <div style={{ fontSize: F.sm, color: T.ink2, fontStyle: "italic", lineHeight: 1.45, marginTop: 5, paddingLeft: 7, borderLeft: `2px solid ${T.chalk}` }}>
-          “{why.evidence_quote}”
-        </div>
-      )}
-      {contact && (
-        <Link href={`/dashboard/messages/${contact.id}`} className="inline-block mt-1.5 no-underline" style={{ ...eyebrow, color: T.chalk }}>
-          Open their page →
-        </Link>
-      )}
-    </section>
   );
 }

@@ -82,6 +82,8 @@ interface Thread {
   person_role?: string | null;
   numbers?: number;
   has_email?: boolean;
+  /** Addresses and job titles — searched, never shown. */
+  places?: string[];
 }
 
 /**
@@ -653,6 +655,13 @@ export function ThreadList({ folded = false }: { folded?: boolean }) {
   const isCustom = !isSystemKey(filter) && filter !== "archived";
   const label = threadLabel(filter, ctx?.custom ?? null);
   const customThread = isCustom ? ctx?.custom?.find((t) => t.id === filter) ?? null : null;
+  // Search in this list (Coy, 2026-10-05: "a search icon here to search by word, phrase, name or
+  // location"): names, numbers, Dusty's lines, where their work is, and — from the server — every
+  // word they or you said, in this thread only.
+  const [finding, setFinding] = useState(false);
+  const [find, setFind] = useState("");
+  const [saidBy, setSaidBy] = useState<{ q: string; ids: Set<string> } | null>(null);
+  const findQ = find.trim().toLowerCase();
   const [openRow, setOpenRow] = useState<string | null>(null);
   // Swipe tray: one row at a time. Toast: what was just filed, with Undo.
   const [trayRow, setTrayRow] = useState<string | null>(null);
@@ -872,10 +881,33 @@ export function ThreadList({ folded = false }: { folded?: boolean }) {
         || (t.phone ?? "").toLowerCase().includes(q)
         || t.preview.toLowerCase().includes(q));
     }
+    if (findQ) {
+      const digits = findQ.replace(/\D/g, "");
+      rows = rows.filter((t) => {
+        const hay = [t.display_name, t.preview, t.status_summary, t.recent_summary, t.person_role, t.job_type, t.job_type_hint, ...(t.places ?? [])].filter(Boolean).join(" \n ").toLowerCase();
+        const said = saidBy?.q === findQ && saidBy.ids.has(t.contact_id);
+        return said || findQ.split(/\s+/).every((w) => hay.includes(w)) || (digits.length >= 4 && (t.phone ?? "").replace(/\D/g, "").includes(digits));
+      });
+    }
     // Recent, A–Z (a bare number last) or by role (Threads v2).
     if (!q) rows = sortRows(rows, sort);
     return rows;
-  }, [threads, filter, q, archived, sort, isCustom, customRows, showDone, archBucket]);
+  }, [threads, filter, q, archived, sort, isCustom, customRows, showDone, archBucket, findQ, saidBy]);
+  // Words said in calls and texts, searched on the server for this thread's people.
+  useEffect(() => {
+    if (findQ.length < 3) return;
+    const bucket = ({ all: "all", customers: "customer", vendors: "vendor", personal: "personal", spam: "spam", unsorted: "unsorted" } as Record<string, string>)[filter];
+    const p = new URLSearchParams({ q: findQ, type: "all" });
+    if (bucket) { p.set("bucket", bucket); p.set("contacts", ""); }
+    else p.set("contacts", (customRows ?? archived ?? []).map((t) => t.contact_id).slice(0, 400).join(","));
+    const ctl = new AbortController();
+    const t = setTimeout(() => {
+      fetch(`/api/threads/search?${p}`, { signal: ctl.signal }).then((r) => (r.ok ? r.json() : null))
+        .then((b: { results?: Array<{ contact_id: string }> } | null) => { if (b) setSaidBy({ q: findQ, ids: new Set((b.results ?? []).map((r) => r.contact_id)) }); })
+        .catch(() => {});
+    }, 300);
+    return () => { clearTimeout(t); ctl.abort(); };
+  }, [findQ, filter, customRows, archived]);
   const silentHere = visible.filter((t) => t.silent).length;
   // Opening a contact keeps the thread in the address and folds the list on a desktop.
   const openContact = (id: string) => {
@@ -949,6 +981,8 @@ export function ThreadList({ folded = false }: { folded?: boolean }) {
         </div>
       )}
 
+      {/* The name, sort and search stay put while the list scrolls (Coy, 2026-10-05). */}
+      <div className="sticky top-[var(--sc-head)] lg:top-0" style={{ zIndex: 6, background: T.card }}>
       {q && (
         <div className="px-3 py-1.5 flex items-center gap-2"
           style={{ background: T.card, borderBottom: `1px solid ${T.hair}` }}>
@@ -991,6 +1025,10 @@ export function ThreadList({ folded = false }: { folded?: boolean }) {
                 {THREAD_SORTS.map((x) => <option key={x.k} value={x.k}>{x.label}</option>)}
               </select>
             )}
+            <button onClick={() => { setFinding((v) => !v); if (finding) setFind(""); }} aria-label="Search this list" aria-pressed={finding} title="Search by word, name or place"
+              className="shrink-0 flex items-center justify-center rounded" style={{ width: 26, height: 26, border: `1px solid ${finding ? T.hiviz : T.hairStrong}`, background: finding ? T.hivizDim : T.card, cursor: "pointer" }}>
+              <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke={finding ? T.hiviz : T.ink2} strokeWidth="1.8" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5" /><path d="M13 13l4.5 4.5" /></svg>
+            </button>
             {openId && (
               <button onClick={() => ctx?.setFolded(true)} aria-label="Fold the list" title="Fold the list to initials" className="hidden lg:flex shrink-0 items-center justify-center rounded"
                 style={{ width: 24, height: 24, border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink2, cursor: "pointer" }}>‹</button>
@@ -1009,6 +1047,18 @@ export function ThreadList({ folded = false }: { folded?: boolean }) {
           </div>}
         </div>
       )}
+
+      {finding && !q && (
+        <div className="px-3 pb-2" style={{ borderBottom: `1px solid ${T.hairSoft}` }}>
+          <label className="flex items-center gap-2 rounded-full" style={{ height: 34, border: `1px solid ${T.hairStrong}`, padding: "0 6px 0 12px", background: T.slab }}>
+            <input autoFocus value={find} onChange={(e) => setFind(e.target.value)} onKeyDown={(e) => { if (e.key === "Escape") { setFind(""); setFinding(false); } }}
+              placeholder={`Search ${label.name} — a word, a name, a street…`} aria-label="Search this list"
+              style={{ flex: 1, minWidth: 0, border: "none", outline: "none", background: "transparent", color: T.ink, fontSize: F.sm }} />
+            {find && <button onClick={() => setFind("")} aria-label="Clear" className="rounded-full" style={{ width: 24, height: 24, color: T.ink2, cursor: "pointer" }}>×</button>}
+          </label>
+        </div>
+      )}
+      </div>
 
       {filter === "archived" && !loading && (archived?.length ?? 0) > 0 && (
         <div className="flex items-center gap-1.5 px-2.5 py-1.5 overflow-x-auto" style={{ borderBottom: `1px solid ${T.hairSoft}`, scrollbarWidth: "none" }} aria-label="Filter archived threads">
@@ -1101,8 +1151,8 @@ export function ThreadList({ folded = false }: { folded?: boolean }) {
         <EmptyState title="No threads yet" detail="Calls and texts appear here as they arrive." />
       ) : visible.length === 0 ? (
         <EmptyState
-          title={q ? `Nothing matches “${q}”` : filter === "archived" ? "Nothing archived" : isCustom ? "Nobody in this thread yet" : `Nothing under ${label.name}`}
-          detail={q
+          title={q || findQ ? `Nothing matches “${q || find.trim()}”` : filter === "archived" ? "Nothing archived" : isCustom ? "Nobody in this thread yet" : `Nothing under ${label.name}`}
+          detail={findQ ? `Nothing in ${label.name} by that name, place or word. The search in the header looks everywhere.` : q
             ? "This searches names, numbers and each thread's latest message. Full text over every message isn't wired yet, so a word said mid-conversation won't be found here."
             : isCustom ? "Tap + Add contact to put people in it. A job thread fills itself as people join the job." : WHY_EMPTY[filter] ?? "Nothing under this filter."} />
       ) : (

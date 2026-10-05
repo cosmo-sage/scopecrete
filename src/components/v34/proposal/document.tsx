@@ -139,7 +139,10 @@ export function ProposalDocument({ vm, edits, narrow }: { vm: DocVM; edits: DocE
   return (
     <div className="sc-doc" style={{ width: "100%", maxWidth: 720, margin: "0 auto", background: "#fff", color: "#2A2A2A", boxShadow: "0 2px 10px rgba(42,32,20,.1)", fontSize: 13, lineHeight: 1.5 }}>
       <Section k="cover" label="Cover" off={!!off.cover} onToggle={sectionToggle("cover")} narrow={narrow}>
-        {(vm.coverUrl || edits) && <div className={vm.coverUrl ? undefined : "sc-no-print"} style={{ position: "relative", height: narrow ? 150 : 420, background: vm.coverUrl ? `#2A2A2A url("${vm.coverUrl}") center/cover no-repeat` : "#E9E4DA" }}>
+        {(vm.coverUrl || edits) && <div className={vm.coverUrl ? "sc-doc-cover" : "sc-no-print"} style={{ position: "relative", height: narrow ? 150 : 420, background: vm.coverUrl ? "#2A2A2A" : "#E9E4DA", overflow: "hidden" }}>
+          {/* An <img>, not a CSS background: browsers leave backgrounds out of a print unless asked. */}
+          {/* eslint-disable-next-line @next/next/no-img-element -- signed link, printed */}
+          {vm.coverUrl && <img src={vm.coverUrl} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />}
           {!vm.coverUrl && (
             <button type="button" onClick={edits ? edits.pickCover : undefined} className="sc-no-print absolute inset-0 flex items-center justify-center" disabled={!edits}
               style={{ color: "#8C8578", fontFamily: disp, fontSize: 13, letterSpacing: ".1em", textTransform: "uppercase", border: 0, background: "transparent", cursor: edits ? "pointer" : "default" }}>
@@ -150,27 +153,26 @@ export function ProposalDocument({ vm, edits, narrow }: { vm: DocVM; edits: DocE
             <button type="button" onClick={edits.pickCover} className="sc-no-print absolute" style={{ left: 10, top: 10, background: "rgba(251,246,236,.94)", border: "1px solid #E6DCC8", borderRadius: 999, padding: "2px 10px", fontFamily: disp, fontSize: 10.5, letterSpacing: ".1em", textTransform: "uppercase", cursor: "pointer" }}>Change photo</button>
           )}
         </div>}
-        {/* The dark band: the logo on the left, what it is on the right (Coy on Vercel, 2026-10-04 — the
-            "Prepared for …" line is gone from here; the Header below carries it). */}
-        <div className="flex items-center justify-between gap-4" style={{ background: "#2A2A2A", color: "#FBF6EC", padding: narrow ? "12px 16px" : "14px 34px", flexWrap: narrow ? "wrap" : "nowrap" }}>
-          {/* eslint-disable-next-line @next/next/no-img-element -- signed redirect, printed */}
-          {vm.org.logoOnDark ? <img src={vm.org.logoOnDark} alt={vm.org.name} style={{ height: 28, flex: "none" }} />
-            : <div style={{ fontFamily: strong, fontWeight: 700, fontSize: 16 }}>{vm.org.name}</div>}
-          <div style={{ textAlign: "right", minWidth: 0, marginLeft: "auto" }}>
-            <div style={{ ...kicker, color: "#D97757" }}>{kind}</div>
-            <div style={{ fontFamily: strong, fontWeight: 700, fontSize: narrow ? 20 : 26, lineHeight: 1.15 }}>{vm.job.title || "Concrete work"}</div>
-          </div>
-        </div>
       </Section>
+
+      {/* The dark band: the logo on the left, what it is on the right. Its own strip since 2026-10-05
+          (Coy: "The cover should not include this dark header. I don't want to lose this when I turn the
+          header off") — the Cover switch hides only the photo, the Header switch only what is below. */}
+      <div data-band className="flex items-center justify-between gap-4" style={{ background: "#2A2A2A", color: "#FBF6EC", padding: narrow ? "12px 16px" : "14px 34px", flexWrap: narrow ? "wrap" : "nowrap" }}>
+        {/* eslint-disable-next-line @next/next/no-img-element -- signed redirect, printed */}
+        {vm.org.logoOnDark ? <img src={vm.org.logoOnDark} alt={vm.org.name} style={{ height: 28, flex: "none" }} />
+          : <div style={{ fontFamily: strong, fontWeight: 700, fontSize: 16 }}>{vm.org.name}</div>}
+        <div style={{ textAlign: "right", minWidth: 0, marginLeft: "auto" }}>
+          <div style={{ ...kicker, color: "#D97757" }}>{kind}</div>
+          <div style={{ fontFamily: strong, fontWeight: 700, fontSize: narrow ? 20 : 26, lineHeight: 1.15 }}>{vm.job.title || "Concrete work"}</div>
+        </div>
+      </div>
 
       <Section k="header" label="Header" off={!!off.header} onToggle={sectionToggle("header")} narrow={narrow}>
         <div style={pad ? { padding: pad } : undefined}>
           <div className={narrow ? "flex flex-col gap-2" : "flex items-start gap-3"}>
-            {/* The logo is here only when the cover (which carries it) is hidden — Coy: "redundant". */}
-            <div className="flex-1" style={{ minWidth: 0, paddingRight: narrow && edits ? 90 : 0 }}>
-              {/* eslint-disable-next-line @next/next/no-img-element -- signed redirect, printed */}
-              {off.cover && (vm.org.logo ? <img src={vm.org.logo} alt={vm.org.name} style={{ height: 32 }} /> : <div style={{ fontFamily: strong, fontWeight: 700, fontSize: 18 }}>{vm.org.name}</div>)}
-            </div>
+            {/* The logo is on the dark band above, always — Coy: "redundant" here. */}
+            <div className="flex-1" style={{ minWidth: 0, paddingRight: narrow && edits ? 90 : 0 }} />
             <div style={{ textAlign: narrow ? "left" : "right", paddingRight: edits && !narrow ? 90 : 0 }}>
               <div style={{ fontFamily: strong, fontWeight: 700, fontSize: 18 }}>{vm.typeKey === "public" ? "Bid" : vm.typeKey === "commercial" ? "Proposal" : "Quote"} {vm.number}</div>
               <div style={{ fontSize: 11.5, color: "#5E5A52" }}>Issued {dateStr} · valid 30 days</div>

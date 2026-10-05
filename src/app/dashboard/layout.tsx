@@ -26,7 +26,7 @@
  *     (OrgLockup); with no logo, the scopecrete.ai wordmark as before.
  */
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { setDustyLive } from "@/lib/v34/dusty-live";
 import { usePathname } from "next/navigation";
@@ -38,17 +38,22 @@ import { ActivityLine } from "@/components/v34/activity-line";
 import { ArchiveToast } from "@/components/v34/archive-actions";
 import { SearchPanel } from "@/components/v34/search-panel";
 import { OrgLockup } from "@/components/v34/org-lockup";
+import { InstallApp } from "@/components/v34/install-app";
 import { YouSection, OrgSection } from "@/components/v34/org-settings";
 import { ThemePicker, useTheme } from "@/components/v34/theme-picker";
 import { Toolbox, MenuEditor } from "@/components/v34/toolbox";
 import { PAGE, DEFAULT_MENUS, cleanMenus, activePage, type Menus } from "@/lib/v34/pages";
 import { usePref } from "@/lib/v34/prefs";
+import { AccessContext } from "@/lib/v34/access-ctx";
+import { accessFrom, menuPages, redirectFor, FULL_ACCESS, type Access } from "@/lib/access";
+import { useRouter } from "next/navigation";
 import { signOut } from "@/lib/auth";
 import "@/styles/v34-shell.css";
 
 interface Me {
   email: string | null; name: string | null; phone?: string | null; org_name: string | null; role: string | null; line: string | null;
   logo_light?: boolean; logo_dark?: boolean; logo_stamp?: string | null;
+  access?: Access;
 }
 
 /** Desktop or not — decided after mount; the phone layout is the first paint. */
@@ -66,6 +71,7 @@ function useDesktop(): boolean {
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const desktop = useDesktop();
 
   const [menuOpen, setMenuOpen] = useState(false);
@@ -80,6 +86,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     const open = () => setDustyOpen(true);
     window.addEventListener("sc:dusty-open", open);
     return () => window.removeEventListener("sc:dusty-open", open);
+  }, []);
+  // A vendor's "App access" (081) opens Settings → People with them picked.
+  useEffect(() => {
+    const open = () => setMenuOpen(true);
+    window.addEventListener("sc:open-settings", open);
+    return () => window.removeEventListener("sc:open-settings", open);
   }, []);
   // Pages that change shape while Dusty is docked (the job page moves its
   // totals into his panel) read this from <html data-dusty>.
@@ -98,6 +110,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [search, setSearch] = useState("");
 
   const [savedMenus, setSavedMenus] = usePref<Menus>("menus", DEFAULT_MENUS);
+  // Dusty's thought line can be switched off (Settings → Dusty (AI), Coy 2026-10-05).
+  // <html data-activity="off"> makes --sc-head the 54px bar alone; app/layout.tsx
+  // sets it before first paint from the browser's copy of this setting.
+  const [showLine, setShowLine] = usePref<boolean>("activity_line", true);
+  const lineOn = showLine !== false;
+  useEffect(() => {
+    if (lineOn) delete document.documentElement.dataset.activity;
+    else document.documentElement.dataset.activity = "off";
+  }, [lineOn]);
   const menus = cleanMenus(savedMenus);
 
   // Who is signed in, the org's name and logos. Reloaded after Settings
@@ -119,9 +140,22 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }, [meRev]);
   const reloadMe = () => setMeRev((n) => n + 1);
 
+  // An onsite estimator (081) sees Jobs (and Files when given) and nothing else; any other
+  // page sends them to the board. The database keeps them out regardless — this keeps them
+  // from landing on pages that would come back empty.
+  const meAccess = me?.access;
+  const access: Access = useMemo(() => (meAccess?.limited ? accessFrom({ role: "field", ...meAccess }) : FULL_ACCESS), [meAccess]);
+  const limited = access.limited;
+  const allowed = menuPages(access);
+  useEffect(() => {
+    const to = redirectFor(access, pathname);
+    if (to) router.replace(to);
+  }, [access, pathname, router]);
+
   // Replies owed (the Threads badge) and the drift alarm (a red dot on Logs).
   // Null until known — never 0 as a placeholder.
   useEffect(() => {
+    if (!me || limited) return;
     let off = false;
     fetch("/api/threads/counts").then((r) => (r.ok ? r.json() : null))
       .then((d) => { if (!off && typeof d?.counts?.needs === "number") setNeeds(d.counts.needs); }).catch(() => {});
@@ -129,13 +163,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       .then((d) => { if (!off && typeof d?.count === "number") setDrift(d.count); }).catch(() => {});
     Promise.resolve().then(() => { if (!off) setSearch(window.location.search); });
     return () => { off = true; };
-  }, [pathname]);
+  }, [pathname, me, limited]);
   // Close the Toolbox when the page changes (a pick navigates).
   const [pathSeen, setPathSeen] = useState(pathname);
   if (pathSeen !== pathname) { setPathSeen(pathname); setToolOpen(false); }
 
   const active = activePage(pathname, search);
-  const toolKeys = menus.rail.filter((k) => k !== "dusty" && !menus.footer.includes(k));
+  const toolKeys = allowed ? [] : menus.rail.filter((k) => k !== "dusty" && !menus.footer.includes(k));
   const toolActive = toolKeys.includes(active);
   const badge = { logs: (drift ?? 0) > 0 };
   const working = dustyBusy || readerWorking;
@@ -144,7 +178,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   // Footer: page · page · Dusty · page · Toolbox.
   const f = menus.footer;
-  const footerSlots = [f[0], f[1], "dusty", f[2], "toolbox"].filter(Boolean) as string[];
+  const footerSlots = allowed ?? [f[0], f[1], "dusty", f[2], "toolbox"].filter(Boolean) as string[];
+  const slotPct = 100 / Math.max(1, footerSlots.length);
   const markIdx = footerSlots.findIndex((k) => k === active || (k === "toolbox" && toolActive));
 
   const Badge = ({ n, style }: { n: number; style: React.CSSProperties }) => (
@@ -163,7 +198,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </Link>
 
           {/* Desktop: the activity line in the header row, after a divider. */}
-          {desktop ? (
+          {desktop && lineOn ? (
             <>
               <span aria-hidden="true" className="sc-paper-divider" />
               {/* All the room up to the buttons (Coy, 2026-10-02: "there is enough room … don't cut it off"). */}
@@ -174,7 +209,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           ) : <span className="flex-1" />}
 
           <div className="flex items-center gap-1.5 shrink-0 relative">
-            <button onClick={() => { const o = !searchOpen; closeDrops(); setSearchOpen(o); }}
+            {!limited && <button onClick={() => { const o = !searchOpen; closeDrops(); setSearchOpen(o); }}
               aria-label="Search" aria-expanded={searchOpen}
               className="flex items-center justify-center sc-paper-btn"
               style={glassBtn}>
@@ -182,13 +217,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 <circle cx="6.4" cy="6.4" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
                 <path d="M9.8 9.8 L13.4 13.4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
               </svg>
-            </button>
+            </button>}
 
             {/* Dusty (Coy, 2026-09-30): on a desktop he opens down from the
                 header on the right, so his button lives here, where the
                 pipeline button was (the Dashboard carries the pipeline now).
                 On a phone he rises from the centre of the footer. */}
-            {desktop && (
+            {desktop && !limited && (
               <button onClick={() => { closeDrops(); setDustyOpen((o) => !o); }} aria-label="Dusty" aria-pressed={dustyOpen}
                 className="flex items-center justify-center sc-paper-btn"
                 style={{ ...glassBtn, background: dustyOpen ? "var(--sc-hiviz-dim)" : undefined, borderColor: dustyOpen ? "var(--sc-hiviz-soft)" : undefined }}>
@@ -210,13 +245,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </header>
 
         {/* Phone: what Dusty is doing, a row under the header. */}
-        {!desktop && <ActivityLine busy={dustyBusy} onWorking={setReaderWorking} />}
+        {!desktop && lineOn && <ActivityLine busy={dustyBusy} onWorking={setReaderWorking} />}
       </div>
 
       {/* ---- desktop left rail: every page, in Coy's order ---- */}
       <nav aria-label="Main" className="hidden lg:flex fixed left-0 bottom-0 z-30 flex-col items-stretch overflow-y-auto sc-rail"
         style={{ top: "var(--sc-head)", width: 84 }}>
-        {menus.rail.map((k) => {
+        {(allowed ?? menus.rail).map((k) => {
           // Dusty's desktop door is the header button (Coy, 2026-09-30).
           if (k === "dusty") return null;
           const p = PAGE.get(k);
@@ -235,22 +270,24 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         })}
       </nav>
 
-      <main className={["flex-1 min-w-0 overflow-x-clip pb-[var(--sc-foot)] lg:pb-0 lg:pl-[84px]", dustyOpen ? "sc-with-dusty" : ""].join(" ")}>{children}</main>
+      <main className={["flex-1 min-w-0 overflow-x-clip pb-[var(--sc-foot)] lg:pb-0 lg:pl-[84px]", dustyOpen ? "sc-with-dusty" : ""].join(" ")}>
+        <AccessContext.Provider value={access}>{children}</AccessContext.Provider>
+      </main>
       <ArchiveToast />
 
       <Toolbox open={toolOpen} onClose={() => setToolOpen(false)} keys={toolKeys} active={active} badge={badge} />
 
       <footer className="fixed bottom-0 left-0 right-0 z-40 flex items-stretch lg:hidden"
         style={{ background: T.card, borderTop: `1px solid ${T.hair}`, height: 58, paddingBottom: "env(safe-area-inset-bottom)" }}>
-        {markIdx >= 0 && <span className="sc-tab-mark" style={{ left: `${markIdx * 20}%`, width: "20%" }} aria-hidden="true" />}
+        {markIdx >= 0 && <span className="sc-tab-mark" style={{ left: `${markIdx * slotPct}%`, width: `${slotPct}%` }} aria-hidden="true" />}
         {footerSlots.map((k) => {
           if (k === "dusty") {
-            // Dusty carries it — no word underneath. 24px: static (the pack's rule);
-            // the mixer frame while he works.
+            // Dusty carries it — no word underneath; the sorting ring while he works.
             return (
               <button key={k} onClick={() => { setToolOpen(false); setDustyOpen((o) => !o); }}
-                aria-label="Dusty" className="sc-tab flex-1 flex items-center justify-center">
-                <span className="sc-tab-ico"><DustyAvatar state={working ? "calculating" : "idle"} size={24} hidden /></span>
+                aria-label="Dusty" className="sc-tab sc-tab-dusty flex-1 flex items-center justify-center">
+                {/* Bigger than the page icons, in a disc rising above the bar (Coy, 2026-10-05). */}
+                <span className="sc-tab-ico"><DustyAvatar state={working ? "calculating" : "idle"} size={40} hidden /></span>
               </button>
             );
           }
@@ -284,7 +321,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </footer>
 
       {/* Dusty — full screen on a phone, docked right on a desktop; read-only toward the business. */}
-      <DustyPanel open={dustyOpen} onClose={() => setDustyOpen(false)} onBusy={setDustyBusy} onStream={setDustyLive} />
+      {!limited && <DustyPanel open={dustyOpen} onClose={() => setDustyOpen(false)} onBusy={setDustyBusy} onStream={setDustyLive} />}
 
       {/* Settings: starts under the header (--sc-head) so the ☰ stays tappable to close it. */}
       <Sheet open={menuOpen} onClose={() => { setMenuOpen(false); setMenusOpen(false); }} title="Settings" sub={me?.org_name ?? undefined} below>
@@ -292,31 +329,50 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           {me ? (
             <>
               <YouSection key={`${me.name ?? ""}|${me.phone ?? ""}`} name={me.name} phone={me.phone ?? null} email={me.email} orgName={me.org_name} role={me.role} onSaved={reloadMe} />
-              <div className="mt-3" style={{ borderTop: `1px solid ${T.hair}` }}>
+              {!limited && <div className="mt-3" style={{ borderTop: `1px solid ${T.hair}` }}>
                 <OrgSection key={me.name ?? ""} onChanged={reloadMe} />
-              </div>
+              </div>}
             </>
           ) : <div style={{ fontSize: F.sm, color: T.ink3 }}>Loading your account…</div>}
 
           <div className="flex flex-col" style={{ borderTop: `1px solid ${T.hair}` }}>
-            {[
+            {(limited ? [] : [
               { href: "/dashboard/more/lines", label: "Lines", note: "Your numbers, what runs them, and whether each is talking to the app" },
-            ].map((l) => (
+            ]).map((l) => (
               <Link key={l.href} href={l.href} onClick={() => setMenuOpen(false)} className="block py-2.5 no-underline" style={{ borderBottom: `1px solid ${T.hairSoft}`, color: T.ink }}>
                 <div style={{ fontSize: F.md, fontWeight: 600 }}>{l.label}</div>
                 <div style={{ fontSize: F.xs, color: T.ink3 }}>{l.note}</div>
               </Link>
             ))}
+            <InstallApp />
             <button onClick={() => setLooksOpen((o) => !o)} aria-expanded={looksOpen} className="text-left py-2.5" style={{ borderBottom: `1px solid ${T.hairSoft}`, cursor: "pointer" }}>
               <div style={{ fontSize: F.md, fontWeight: 600 }}>Appearance {looksOpen ? "−" : "+"}</div>
               <div style={{ fontSize: F.xs, color: T.ink3 }}>Eight colour schemes, one dark — some change the typeface too</div>
             </button>
             {looksOpen && <div className="py-2"><ThemePicker /></div>}
-            <button onClick={() => setMenusOpen((o) => !o)} aria-expanded={menusOpen} className="text-left py-2.5" style={{ borderBottom: `1px solid ${T.hairSoft}`, cursor: "pointer" }}>
+            {/* Dusty (AI) — Coy, 2026-10-05: "if I want to declutter my visual space I can make it disappear entirely". */}
+            {!limited && (
+              <div className="py-2.5" style={{ borderBottom: `1px solid ${T.hairSoft}` }}>
+                <div style={{ fontSize: F.md, fontWeight: 600 }}>Dusty (AI)</div>
+                <div className="flex items-center gap-3 mt-1.5">
+                  <div className="flex-1 min-w-0">
+                    <div style={{ fontSize: F.sm, color: T.ink }}>Show Dusty&apos;s thought line</div>
+                    <div style={{ fontSize: F.xs, color: T.ink3 }}>
+                      The line beside the logo (under it on a phone): what he&apos;s reading, reminders due, people who came back. Off hides it everywhere.
+                    </div>
+                  </div>
+                  <button type="button" role="switch" aria-checked={lineOn} aria-label="Show Dusty's thought line" onClick={() => setShowLine(!lineOn)}
+                    style={{ width: 38, height: 22, borderRadius: 999, background: lineOn ? T.green : T.hairStrong, position: "relative", cursor: "pointer", flex: "0 0 auto" }}>
+                    <span style={{ position: "absolute", top: 3, left: lineOn ? 19 : 3, width: 16, height: 16, borderRadius: 999, background: "#fff", transition: "left .15s", boxShadow: "0 1px 2px rgba(0,0,0,.2)" }} />
+                  </button>
+                </div>
+              </div>
+            )}
+            {!limited && <button onClick={() => setMenusOpen((o) => !o)} aria-expanded={menusOpen} className="text-left py-2.5" style={{ borderBottom: `1px solid ${T.hairSoft}`, cursor: "pointer" }}>
               <div style={{ fontSize: F.md, fontWeight: 600 }}>Menus {menusOpen ? "−" : "+"}</div>
               <div style={{ fontSize: F.xs, color: T.ink3 }}>The order of your pages, and which ones sit in the phone footer</div>
-            </button>
-            {menusOpen && (
+            </button>}
+            {menusOpen && !limited && (
               <div className="py-2">
                 <MenuEditor menus={menus} onChange={(m) => setSavedMenus(m)} />
                 <button onClick={() => setSavedMenus(DEFAULT_MENUS)} className="mt-2" style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>Back to the default</button>

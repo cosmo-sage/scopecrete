@@ -170,7 +170,7 @@ export async function GET(
 
   const { data, error } = await supabase
     .from("jobs")
-    .select("id, job_number, title, status, origin, confirmed_at, confirmed_by, created_from_message_id, contact_id, address, city, state, zip, notes, duration_days, created_at, job_type, lead_source, referred_by_contact_id, description")
+    .select("id, job_number, title, status, origin, confirmed_at, confirmed_by, created_from_message_id, contact_id, address, city, state, zip, notes, duration_days, created_at, job_type, lead_source, referred_by_contact_id, description, archived_at, archived_reason")
     .eq("id", id)
     .eq("org_id", orgId)
     .maybeSingle();
@@ -193,6 +193,11 @@ export async function GET(
       .eq("org_id", orgId)
       .maybeSingle();
     contact = c ?? null;
+    // An onsite estimator can't read contacts; they get the name and phone of who it's for (081).
+    if (!contact) {
+      const { data: fc } = await supabase.rpc("sc_field_job_contact", { p_job: id });
+      contact = (Array.isArray(fc) ? fc[0] : null) ?? null;
+    }
   }
 
   // Why this job exists, for one made by filing someone as a customer (Coy,

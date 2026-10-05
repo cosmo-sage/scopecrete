@@ -190,6 +190,8 @@ export function parseReply(raw: string): unknown {
   try { return JSON.parse(m[0]) } catch { return null }
 }
 
+export const MAX_PDF_BYTES = 12 * 1024 * 1024
+
 /** What Dusty can read today, and why not when he can't. */
 export function readable(kind: string, mime: string | null, bytes: number | null): { ok: true; as: 'image' | 'pdf' } | { ok: false; why: string } {
   const m = (mime ?? '').toLowerCase()
@@ -199,7 +201,14 @@ export function readable(kind: string, mime: string | null, bytes: number | null
     if ((bytes ?? 0) > 5 * 1024 * 1024) return { ok: false, why: 'photo over 5 MB — too big for Dusty to look at' }
     return { ok: true, as: 'image' }
   }
-  if (kind === 'pdf') return { ok: true, as: 'pdf' }
+  // A big PDF runs the edge function out of memory / CPU before it can say so,
+  // so the row stayed "reading" and was claimed again every 10 minutes —
+  // Walker High's 25 MB spec book 340 times (2026-10-05). The largest PDF read
+  // so far was 4 MB.
+  if (kind === 'pdf') {
+    if ((bytes ?? 0) > MAX_PDF_BYTES) return { ok: false, why: `PDF over ${MAX_PDF_BYTES / 1024 / 1024} MB — too big to read on the server; the bid reader and the Plan Room still read it` }
+    return { ok: true, as: 'pdf' }
+  }
   return { ok: false, why: `Dusty can't read ${kind === 'video' ? 'video' : kind === 'sheet' ? 'spreadsheets' : 'this kind of file'} yet` }
 }
 

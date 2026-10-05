@@ -2020,6 +2020,49 @@ expected start date per quoted job before it means anything. Add the field.
   only for a number with no name, and ONE button through to their page. No
   call / text / email / composer in the row (Coy, 2026-09-28) — engaging on
   every channel belongs on the person's page.
+- **Contacts — the book (Coy, 2026-10-05: "a Rolodex or contacts book of
+  some kind for pure contact info that can be pulled into any thread and any
+  channel and any vendor contact and any customer contact" — "Call it
+  contacts").** No second table: the book IS `contacts` (one row per person,
+  §2c), their extra numbers `contact_phones` and emails `contact_emails`;
+  customer, vendor, personal and spam stay how a person is filed. A copy
+  elsewhere would drift (§2b's `relation` vs `contact_type`) and Threads, Quo
+  intake and email filing would not see it. No migration.
+  **The page** `/dashboard/contacts` (rail after Cash, Toolbox on a phone):
+  everyone not merged or archived, spam left out, each with every number and
+  email, company, address, their customer and role (Customer · Cust. contact ·
+  Vendor · Sub · Personal · Unsorted — `bookRole()`, only a bucket Coy or Dusty
+  filed counts), last in touch; search by any word, and 3+ digits find a
+  number however typed (`matchesBook()`); role chips with counts; A–Z or
+  Recent (kept on the device); a table when wide, rows on a phone; a row opens
+  their page (a vendor's vendor page). `src/lib/contacts-book.ts` (tested,
+  `tests/contacts-book.test.mjs`), `src/lib/contacts-server.ts`,
+  `src/components/v34/contacts.tsx`.
+  **+ Contact** (on the page, and Dusty's + menu → New contact): someone who
+  hasn't called — name, company, any numbers and emails with labels (Mobile,
+  Office…), address, and optionally what they are (Unsorted by default;
+  customer / vendor / personal filed by `sc_classify_contact`, Coy's tap).
+  `POST /api/contacts` writes every number and email into the lists Threads
+  and email-intake read (the first is primary and also on the contact row),
+  `address_source='coy'`. A number or email already on someone (their row or
+  their lists, merges followed — `ownerOf()`) is 409 naming them, never a
+  second person. Rehearsed (rolled back) on the live data: the insert and its
+  lists pass the checks and no job is made.
+  **One contact picker** (`ContactPicker`): search the book, + New contact at
+  its foot (seeded with what was typed, made inline, then picked; a duplicate
+  offers "Use them"). Used by the customer page's + Add contact, + Add contact
+  on a thread Coy made (pick several), a job's Crew & suppliers ("Someone else
+  from Contacts", made as a vendor) and an email's filing.
+  **An email's person (the email-drafts design asks for it).** The email sheet
+  has **Person** — Pick from Contacts / Change / Take off — beside Customer and
+  Job, and an email filed on a customer with no person goes on its primary
+  person (`PATCH /api/emails/[id]`), so it reaches their Email channel. When
+  the sender's address isn't on that person: "… isn't on Amber yet. **Add
+  it**" → `POST /api/contacts/[id]/emails` (onto `contact_emails`, and the row
+  when it has none; someone else's → 409), so the next email from it files
+  itself (§2h exact match). Onsite estimators (§2j) read no contacts, so the
+  page is not theirs (`redirectFor()`). Not built: importing a phone's or
+  Google's address book (later, Coy).
 - **Archive and delete, restorable (migration 066, applied 2026-10-03 on
   Coy's "Apply 066").** Coy: *"I have a lot of these calls where nothing was
   said … I need to be able to archive these threads … in bulk on the threads
@@ -2144,7 +2187,7 @@ expected start date per quoted job before it means anything. Add the field.
   Dusty's button**: he opens down from the header on the right, and the
   rail has no Dusty item. On a phone he stays in the centre of the footer.
 - **Navigation (2026-09-30, Coy).** Pages are listed once in
-  `src/lib/v34/pages.ts`: Dashboard · Threads · Jobs · Cash · Customers ·
+  `src/lib/v34/pages.ts`: Dashboard · Threads · Jobs · Cash · Contacts · Customers ·
   Price book · Vendors · Documents · Logs. **Phone footer:** three pages Coy
   picks (default Dashboard · Threads · Jobs) around **Dusty in the centre**,
   and **Toolbox** last. The Toolbox is a drawer that rises just above the

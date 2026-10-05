@@ -39,6 +39,8 @@ import { BUCKET } from "@/lib/v34/tokens";
 import { useThreads } from "@/components/v34/threads-ctx";
 import { threadLabel } from "@/components/v34/thread-rail";
 import { ROLE_LABEL, initials, isSystemKey, sortRows, THREAD_SORTS, type ContactRole, type ThreadSort } from "@/lib/v34/threads";
+import { ContactPicker, bookName } from "@/components/v34/contacts";
+import type { BookEntry } from "@/lib/contacts-book";
 
 interface Thread {
   contact_id: string;
@@ -588,21 +590,17 @@ function SelectRow({ t, selecting, on, onPick, onOpen, onRestore }: {
   );
 }
 
-/** Add people to a thread Coy made — by name or number, from everyone who has called or texted. */
-function AddToThread({ thread, people, onClose, onAdded }: {
-  thread: { id: string; name: string; contact_ids: string[] }; people: Thread[]; onClose: () => void; onAdded: () => void;
+/** Add people to a thread Coy made — anyone in Contacts, or someone new (2026-10-05). */
+function AddToThread({ thread, onClose, onAdded }: {
+  thread: { id: string; name: string; contact_ids: string[] }; onClose: () => void; onAdded: () => void;
 }) {
-  const [find, setFind] = useState("");
-  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [picked, setPicked] = useState<BookEntry[]>([]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const already = new Set(thread.contact_ids);
-  const f = find.trim().toLowerCase();
-  const list = people.filter((p) => !already.has(p.contact_id) && (!f || p.display_name.toLowerCase().includes(f) || (p.phone ?? "").includes(f))).slice(0, 40);
   const add = async () => {
     setBusy(true); setErr(null);
     try {
-      const r = await fetch(`/api/threads/custom/${thread.id}/contacts`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contact_ids: [...picked] }) });
+      const r = await fetch(`/api/threads/custom/${thread.id}/contacts`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contact_ids: picked.map((p) => p.id) }) });
       const b = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(b.error || `HTTP ${r.status}`);
       onAdded();
@@ -611,25 +609,20 @@ function AddToThread({ thread, people, onClose, onAdded }: {
   return (
     <Sheet open onClose={onClose} title={`Add to ${thread.name}`} sub="Being in a thread never moves anyone out of Customer or Vendor.">
       <div className="px-4 py-3 flex flex-col gap-2">
-        <input autoFocus value={find} onChange={(e) => setFind(e.target.value)} placeholder="Find by name or number" aria-label="Find a contact"
-          style={{ height: 38, border: `1px solid ${T.hairStrong}`, borderRadius: 4, padding: "0 10px", background: T.card, color: T.ink, fontSize: F.sm }} />
-        <div style={{ maxHeight: 360, overflowY: "auto", border: `1px solid ${T.hairSoft}`, borderRadius: 4 }}>
-          {list.map((p) => {
-            const on = picked.has(p.contact_id);
-            return (
-              <button key={p.contact_id} onClick={() => setPicked((s) => { const n = new Set(s); if (on) n.delete(p.contact_id); else n.add(p.contact_id); return n; })}
-                className="w-full flex items-center gap-2 px-3 text-left" style={{ minHeight: 40, background: on ? T.hivizDim : T.card, borderBottom: `1px solid ${T.hairSoft}`, cursor: "pointer" }}>
-                <InitialsBox name={p.name_is_phone ? null : p.display_name} on={on} size={26} />
-                <span style={{ flex: 1, fontSize: F.sm, ...clip }}>{p.display_name}</span>
-                {p.role && <RoleTag role={p.role} />}
-              </button>
-            );
-          })}
-          {!list.length && <div className="px-3 py-3" style={{ fontSize: F.sm, color: T.ink3 }}>Nobody else matches.</div>}
-        </div>
+        {picked.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {picked.map((p) => (
+              <span key={p.id} className="inline-flex items-center gap-1 rounded" style={{ height: 26, padding: "0 4px 0 8px", background: T.hivizDim, color: T.hivizText, fontSize: F.xs, fontWeight: 600 }}>
+                {bookName(p)}
+                <button onClick={() => setPicked((l) => l.filter((x) => x.id !== p.id))} aria-label={`Take ${bookName(p)} off`} style={{ width: 18, color: T.hivizText }}>×</button>
+              </span>
+            ))}
+          </div>
+        )}
+        <ContactPicker exclude={[...thread.contact_ids, ...picked.map((p) => p.id)]} onPick={(c) => setPicked((l) => [...l, c])} />
         {err && <div style={{ color: T.red, fontSize: F.sm }}>{err}</div>}
-        <button onClick={() => void add()} disabled={!picked.size || busy} className="rounded" style={{ height: 38, background: T.hiviz, color: T.onHiviz, fontFamily: disp, fontSize: F.xs, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", cursor: "pointer", opacity: !picked.size || busy ? 0.5 : 1 }}>
-          {busy ? "Adding…" : `Add ${picked.size || ""}`}
+        <button onClick={() => void add()} disabled={!picked.length || busy} className="rounded" style={{ height: 38, background: T.hiviz, color: T.onHiviz, fontFamily: disp, fontSize: F.xs, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", cursor: "pointer", opacity: !picked.length || busy ? 0.5 : 1 }}>
+          {busy ? "Adding…" : `Add ${picked.length || ""}`}
         </button>
       </div>
     </Sheet>
@@ -941,7 +934,7 @@ export function ThreadList({ folded = false }: { folded?: boolean }) {
   return (
     <div>
       {adding && customThread && (
-        <AddToThread thread={customThread} people={threads} onClose={() => setAdding(false)} onAdded={() => { setAdding(false); setReload((n) => n + 1); }} />
+        <AddToThread thread={customThread} onClose={() => setAdding(false)} onAdded={() => { setAdding(false); setReload((n) => n + 1); }} />
       )}
       {/* Phone: + adds someone to the thread Coy made. */}
       {customThread && !selecting && (

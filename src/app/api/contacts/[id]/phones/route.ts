@@ -24,13 +24,16 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   const { supabase, orgId, applyCookies } = result.session;
   const bad = (m: string, s = 400) => applyCookies(NextResponse.json({ error: m }, { status: s }));
   if (!UUID.test(id)) return bad("No such person.", 404);
-  const b = (await req.json().catch(() => ({}))) as { phone?: unknown; label?: unknown };
+  const b = (await req.json().catch(() => ({}))) as { phone?: unknown; label?: unknown; add?: unknown };
   const phone = typeof b.phone === "string" ? b.phone.trim() : "";
   if (!E164.test(phone)) return bad("Which number?");
   const label = typeof b.label === "string" ? b.label.trim().slice(0, 30) || null : null;
-  const { data: who } = await supabase.from("contacts").select("id").eq("org_id", orgId).eq("id", id).maybeSingle();
+  const { data: who } = await supabase.from("contacts").select("id, phone").eq("org_id", orgId).eq("id", id).maybeSingle();
   if (!who) return bad("No such person.", 404);
   const { data: row } = await supabase.from("contact_phones").select("id").eq("org_id", orgId).eq("contact_id", id).eq("phone_e164", phone).maybeSingle();
+  // + Number adds; it never quietly renames a number they already have.
+  if (row && b.add === true) return applyCookies(NextResponse.json({ error: "That number is already on them — ✎ beside its tab renames it.", same: true }, { status: 409 }));
+  if (!row && b.add === true && who.phone === phone) return applyCookies(NextResponse.json({ error: "That number is already on them — ✎ beside its tab renames it.", same: true }, { status: 409 }));
   if (!row) {
     // Someone else's number? Their thread, not a second copy of it.
     const [{ data: c1 }, { data: c2 }] = await Promise.all([
@@ -45,5 +48,13 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     ? await supabase.from("contact_phones").update({ label }).eq("org_id", orgId).eq("id", row.id as string)
     : await supabase.from("contact_phones").insert({ org_id: orgId, contact_id: id, phone_e164: phone, label, source: "manual" });
   if (error) return bad(error.message, 500);
+  // Adding a second number lists the first one too, so it stays their main number.
+  const main = who.phone as string | null;
+  if (!row && main && main !== phone) {
+    const { data: rows } = await supabase.from("contact_phones").select("phone_e164, is_primary").eq("org_id", orgId).eq("contact_id", id);
+    const list = (rows ?? []) as Array<{ phone_e164: string; is_primary: boolean }>;
+    if (!list.some((r) => r.phone_e164 === main))
+      await supabase.from("contact_phones").insert({ org_id: orgId, contact_id: id, phone_e164: main, label: null, is_primary: !list.some((r) => r.is_primary), source: "manual" });
+  }
   return applyCookies(NextResponse.json({ phone, label }));
 }

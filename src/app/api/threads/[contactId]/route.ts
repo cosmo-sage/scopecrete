@@ -67,7 +67,7 @@ export async function GET(
   // empty thread that reads as "this number never said anything".
   const { data: self } = await supabase
     .from("contacts")
-    .select("id, merged_into_contact_id, name, name_source, name_confirmed_at, address, archived_at, archived_reason")
+    .select("id, phone, merged_into_contact_id, name, name_source, name_confirmed_at, address, archived_at, archived_reason")
     .eq("org_id", orgId)
     .eq("id", contactId)
     .maybeSingle();
@@ -163,8 +163,13 @@ export async function GET(
   ]);
   const emailList = ((emailRows ?? []) as Array<{ id: string; subject: string | null; original_from_name: string | null; original_from_address: string | null; from_address: string | null; sent_at: string | null; created_at: string; text_body: string | null }>)
     .map((e) => ({ id: e.id, subject: e.subject, from: e.original_from_name || e.original_from_address || e.from_address, at: e.sent_at ?? e.created_at, body: (e.text_body ?? "").slice(0, 1200) }));
+  // The number on the contact row is theirs too, even before it is listed —
+  // otherwise adding a second number made it look replaced (Coy, 2026-10-05).
+  const listed = ((phoneRows ?? []) as Array<{ phone_e164: string; is_primary: boolean; label: string | null }>).map((p) => ({ phone: p.phone_e164, label: p.label, is_primary: p.is_primary }));
+  const rowPhone = (self?.phone as string | null) ?? null;
+  if (rowPhone && !listed.some((p) => p.phone === rowPhone)) listed.unshift({ phone: rowPhone, label: null, is_primary: !listed.some((p) => p.is_primary) });
   const channels = buildChannels({
-    phones: ((phoneRows ?? []) as Array<{ phone_e164: string; is_primary: boolean; label: string | null }>).map((p) => ({ phone: p.phone_e164, label: p.label, is_primary: p.is_primary })),
+    phones: listed,
     emails: ((addrRows ?? []) as Array<{ email: string; label: string | null }>).map((e) => ({ email: String(e.email), label: e.label })),
     messages, emailCount: emailList.length,
   });

@@ -125,7 +125,8 @@ export default function ChatThreadPage() {
         setAddress(typeof data.address === "string" ? data.address : null);
         setPhones(Array.isArray(data.phones) ? data.phones : []);
         setMerges(Array.isArray(data.merges) ? data.merges : []);
-        setChannels(Array.isArray(data.channels) ? data.channels : []);
+        // AI Chat is coming soon: kept in the API, not shown (Coy, 2026-10-05).
+        setChannels(Array.isArray(data.channels) ? (data.channels as Channel[]).filter((c) => c.kind !== "chat") : []);
         setEmails(Array.isArray(data.emails) ? data.emails : []);
         setLoading(false);
       })
@@ -528,7 +529,7 @@ function AddNumberDialog({ contactId, name, onClose, onAdded, onJoin }: {
   const save = async () => {
     if (!e164) return;
     setBusy(true); setErr(null);
-    const r = await fetch(`/api/contacts/${encodeURIComponent(contactId)}/phones`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone: e164, label }) });
+    const r = await fetch(`/api/contacts/${encodeURIComponent(contactId)}/phones`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone: e164, label, add: true }) });
     const b = await r.json().catch(() => ({}));
     setBusy(false);
     if (r.ok) onAdded(e164); else setErr({ text: b?.error ?? `HTTP ${r.status}`, other: b?.other ?? null });

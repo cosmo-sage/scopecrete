@@ -4,7 +4,7 @@ Ground truth for every agent working this repo. If code disagrees with this
 document, the code is wrong or this document is stale — resolve it, don't
 guess. Update this file in the same PR that changes the behavior it describes.
 
-Last updated: 2026-10-05 (Good / Better / Best removed — one price per job; search across the header; six dots for the activity line; job switch on the name's row; budget line notes; quo-intake stores every Quo event, own lines included — v10; one Unit type picker; a section's Camera; Dusty writes in Figtree; Dusty is the Scopecrete Lander; an All thread; proposal cover band and Prepared by; sign-in at app.scopecrete.ai/login, each org at <slug>.app.scopecrete.ai; Dusty's chat keeps its files and files them on a customer or job — migration 079; vendor Delete; Dusty on a vendor's page and looking at attached photos; sales tax by address via TaxLocus — migration 078; archive reasons; Lines, providers and logs — migration 077; internal notes with @-tags; Jobs board sort and filter; jobs by hand — migration 076; done and lost customers in Threads; proposals sent by link, every opening tracked; every option side by side for the customer — migration 075; Documents is Files, everywhere — migration 074; Threads v2 — threads you make, channels per number, the customer page reshaped — migration 073; an address given is kept and asked about — migration 072; Dusty sets addresses; customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
+Last updated: 2026-10-05 (one top row on the job's three views; the proposal's dark band off the cover; Good / Better / Best removed — one price per job; search across the header; six dots for the activity line; job switch on the name's row; budget line notes; quo-intake stores every Quo event, own lines included — v10; one Unit type picker; a section's Camera; Dusty writes in Figtree; Dusty is the Scopecrete Lander; an All thread; proposal cover band and Prepared by; sign-in at app.scopecrete.ai/login, each org at <slug>.app.scopecrete.ai; Dusty's chat keeps its files and files them on a customer or job — migration 079; vendor Delete; Dusty on a vendor's page and looking at attached photos; sales tax by address via TaxLocus — migration 078; archive reasons; Lines, providers and logs — migration 077; internal notes with @-tags; Jobs board sort and filter; jobs by hand — migration 076; done and lost customers in Threads; proposals sent by link, every opening tracked; every option side by side for the customer — migration 075; Documents is Files, everywhere — migration 074; Threads v2 — threads you make, channels per number, the customer page reshaped — migration 073; an address given is kept and asked about — migration 072; Dusty sets addresses; customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
 
 ---
 
@@ -2874,8 +2874,15 @@ expected start date per quoted job before it means anything. Add the field.
   Item prices · Qty · unit · Tax line; groups and lines shown/hidden, prices
   hidden, lines made optional. **The cover's dark band (Coy, 2026-10-04):**
   the logo on the left, the kind and title on the right, nothing else — the
-  "Prepared for …" line was repeated below; the Header shows the logo only
-  when the cover is hidden. **Prepared by** is the member preparing it — their
+  "Prepared for …" line was repeated below. **Since 2026-10-05 the band is
+  its own strip** between the Cover and the Header (Coy: "The cover should
+  not include this dark header. I don't want to lose this when I turn the
+  header off"): the Cover switch hides only the photo, the Header switch
+  only the quote number and Prepared by / for, and the band always carries
+  the logo. In print the cover photo is an `<img>` (3.4 in tall), the band
+  keeps its colour (`print-color-adjust: exact`) and nothing forces a page
+  break after the cover, so photo, band and header open page 1 together
+  with a photo or without one. **Prepared by** is the member preparing it — their
   name and phone from Settings → You (`PATCH /api/me {phone}`, kept on their
   own account), then the org; a final freezes them as
   `snapshot.prepared_by`, and the customer's copy carries name, phone and
@@ -2979,8 +2986,19 @@ expected start date per quoted job before it means anything. Add the field.
   switch above the money strip. **Delete is at the bottom of the job page**
   (Coy, 2026-10-04: on a phone it pushed Proposal off the screen), and the
   header's sheets button reads **Sheets (n)** on one line. **Since
-  2026-10-05 the Plan room · Budget · Proposal switch (and Sheets) sits top
-  right on the job name's row**, and the ⓘ comes right after the name (Coy).
+  2026-10-05 all three views share one top row** (`JobHeaderRow`,
+  `job-tabs.tsx`; Coy: "I like the layout of the budget page the best with
+  the job name on the top left and the 'plan room, budget, proposal'
+  buttons on the top right … Any buttons currently in the top right need to
+  be moved down below"): ‹ Jobs, the job's name (and the ⓘ, or the
+  proposal's number and draft / final, with its price line under it) on
+  the left, the switch alone on the right. Each view's own buttons sit
+  below: the Budget's Sheets (n) beside its chips; the Plan Room's
+  reading chips, Photos, Aerial and Add plans on the row under the name;
+  the Proposal's version, Item prices · Qty · unit · Tax · Maps & photos,
+  Print / PDF and Preview on the settings row beside Project type,
+  Warranty and Contract (on a phone, the buttons on their own row and the
+  settings folded).
 - **One job, three views (Coy, 2026-10-02: "no way … to get back from the
   proposal page" and "one job budget page, and I can toggle between that
   budget and the proposal").** **Plan room · Budget · Proposal** — in the

@@ -400,7 +400,12 @@ html[data-theme="night-shift"] .sc-proposal { --sc-doc-ground: #15171A; }
   .sc-doc, .sc-doc * { visibility: visible !important; }
   .sc-doc { position: absolute !important; left: 0; top: 0; width: 100% !important; max-width: none !important; box-shadow: none !important; }
   .sc-no-print { display: none !important; }
-  .sc-doc section[data-section="cover"] { break-after: page; }
+  /* Cover photo, band and header open page 1 together, with a photo or without one (Coy, 2026-10-05:
+     "fit in the pdf/print version … both with the cover photo and without"). Exact colours keep the
+     dark band dark when "Background graphics" is off. */
+  .sc-doc { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .sc-doc .sc-doc-cover { height: 3.4in !important; }
+  .sc-doc section[data-section="cover"], .sc-doc [data-band] { break-after: avoid; }
   .sc-doc section[data-section="warranty"], .sc-doc section[data-section="terms"] { break-before: auto; }
   .sc-doc section[data-section="sign"] { break-inside: avoid; }
   .sc-doc-edit { border: 0 !important; }

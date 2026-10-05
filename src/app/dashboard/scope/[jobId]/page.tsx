@@ -30,7 +30,7 @@ import { JobChips } from "@/components/v34/job-chips";
 import { FilesPanel, type FileRow } from "@/components/v34/files-panel";
 import { SectionPhotos } from "@/components/v34/section-photos";
 import { BidStrip } from "@/components/v34/bid-strip";
-import { JobTabs } from "@/components/v34/job-tabs";
+import { JobHeaderRow } from "@/components/v34/job-tabs";
 import { JobBudget, type BudgetSummary } from "@/components/v34/job-budget";
 import { SheetViewer, type SheetGroup } from "@/components/v34/sheet-viewer";
 import type { PlansData } from "@/components/v34/plan-room/shared";
@@ -248,35 +248,32 @@ export default function ScopeBuilder() {
       {/* ================= sections ================= */}
       <div style={{ minWidth: 0 }} className="pb-24 lg:pb-6">
         <div className="px-3 pt-2.5 pb-2" style={{ background: T.card, borderBottom: `1px solid ${T.hair}` }}>
-          {/* Coy, 2026-10-05: Plan room · Budget · Proposal in the top right, on
-              the job name's row; the ⓘ right after the name it explains. */}
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
-            <div className="flex items-center gap-2" style={{ flex: "1 1 220px", minWidth: 0 }}>
-            <Link href="/dashboard/scope" className="no-underline shrink-0" style={{ ...eyebrow, color: T.ink2 }}>‹ Jobs</Link>
-            <input defaultValue={realTitle} placeholder={titleHint} aria-label="Job name"
+          {/* Coy, 2026-10-05: the job's name top left, Plan room · Budget · Proposal top right — the
+              same row on all three views (JobHeaderRow); the ⓘ right after the name it explains. */}
+          <JobHeaderRow jobId={jobId} active="job"
+            title={<input defaultValue={realTitle} placeholder={titleHint} aria-label="Job name"
               size={Math.max(6, (realTitle || titleHint || "").length + 1)}
               onBlur={(e) => { const v = e.target.value; if (v !== realTitle) void send(`/api/jobs/${jobId}`, "PATCH", { title: v }).then((b) => setJob((j) => j && { ...j, title: b.job.title })).catch((er) => setSaveErr((m) => ({ ...m, job: String(er.message ?? er) }))); }}
               className="bg-transparent outline-none"
-              style={{ minWidth: 0, maxWidth: "100%", fieldSizing: "content", fontFamily: disp, fontSize: F.lg, fontWeight: 700, lineHeight: 1.15, color: T.ink } as React.CSSProperties} />
-            {/* Coy, 2026-09-30: "Why this job" is an ⓘ in the header — tap to see it. */}
-            {why && (
+              style={{ minWidth: 0, maxWidth: "100%", fieldSizing: "content", fontFamily: disp, fontSize: F.lg, fontWeight: 700, lineHeight: 1.15, color: T.ink } as React.CSSProperties} />}
+            after={why ? (
               <button onClick={() => setWhyOpen(true)} aria-label="Why this job was made" title="Why this job was made"
                 className="shrink-0 rounded-full flex items-center justify-center"
                 style={{ width: 22, height: 22, border: `1px solid ${T.hairStrong}`, color: T.chalk, fontFamily: "Georgia, serif", fontStyle: "italic", fontWeight: 700, fontSize: 12, background: T.card, cursor: "pointer" }}>i</button>
-            )}
-            </div>
-            <div className="flex items-center gap-2 ml-auto shrink-0">
-            {planSheets.length > 0 && (
-              <button onClick={() => openSheets(null, null)} className="rounded px-2.5 shrink-0"
-                style={{ height: 28, whiteSpace: "nowrap", border: `1px solid ${T.hairStrong}`, background: T.card, fontFamily: disp, fontSize: F.xs, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".05em", color: T.ink, cursor: "pointer" }}>
-                Sheets ({planSheets.length})
-              </button>
-            )}
-              <JobTabs jobId={jobId} active="job" />
-            </div>
-          </div>
+            ) : null} />
+          {/* The page's own buttons sit below the name's row (Coy, 2026-10-05). */}
+          <div className="flex items-start gap-2">
+          <div style={{ flex: 1, minWidth: 0 }}>
           <JobChips job={job} onSet={(field, value) => send(`/api/jobs/${jobId}`, "PATCH", { [field]: value })
             .then((b) => setJob((j) => j && { ...j, status: b.job.status, job_type: b.job.job_type, lead_source: b.job.lead_source }))} />
+          </div>
+          {planSheets.length > 0 && (
+            <button onClick={() => openSheets(null, null)} className="rounded px-2.5 shrink-0" style={{ marginTop: 6,
+              height: 28, whiteSpace: "nowrap", border: `1px solid ${T.hairStrong}`, background: T.card, fontFamily: disp, fontSize: F.xs, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".05em", color: T.ink, cursor: "pointer" }}>
+              Sheets ({planSheets.length})
+            </button>
+          )}
+          </div>
           <div style={{ fontSize: F.xs, color: who ? T.ink3 : T.hiviz, marginTop: 4, ...clip }}>
             {who ? (
               <Link href={`/dashboard/messages/${contact!.id}`} style={{ color: T.ink2 }}>{who}</Link>

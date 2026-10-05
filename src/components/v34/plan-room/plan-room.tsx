@@ -11,10 +11,10 @@
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { T, F, disp, strong, clip } from "@/lib/v34/tokens";
+import { T, F, disp, strong } from "@/lib/v34/tokens";
 import { sendBytes } from "@/components/v34/files-panel";
 import { openPdf, readPlanPages } from "@/lib/pdf";
-import { JobTabs } from "@/components/v34/job-tabs";
+import { JobHeaderRow } from "@/components/v34/job-tabs";
 import { mayAutoRead, ocrPending, pausePlanOcr, resumePlanOcrAllowed, startPlanOcr, usePlanOcr } from "@/lib/v34/plan-ocr-runner";
 import { call, isDrawing, isPlanFile, type Param, type PlanFile, type PlansData, type Sheet } from "./shared";
 import { FilesStep, SheetsStep } from "./files-sheets";
@@ -155,10 +155,9 @@ export function PlanRoom({ jobId }: { jobId: string }) {
   return (
     <div className="flex flex-col" style={{ minHeight: "calc(100dvh - var(--sc-head))" }}>
       <div style={{ background: T.card, borderBottom: `1px solid ${T.hair}`, padding: "10px 16px 0" }}>
-        <div className="flex items-center gap-2 flex-wrap">
-          <JobTabs jobId={jobId} active="plans" />
-          <span style={{ fontSize: F.sm, fontWeight: 600, color: T.ink, ...clip, minWidth: 0, maxWidth: "40vw" }}>{data?.job?.title || ""}</span>
-          <span className="flex-1" />
+        <JobHeaderRow jobId={jobId} active="plans" title={data?.job?.title || "Plan room"} />
+        {/* The Plan Room's own tools sit below the name's row (Coy, 2026-10-05). */}
+        <div className="flex items-center gap-2 flex-wrap" style={{ marginTop: 8 }}>
           {ocr.running && ocr.jobId === jobId ? (
             <span className="flex items-center gap-1.5" title={ocr.label} style={{ fontSize: 11.5, borderRadius: 3, padding: "3px 8px", background: T.dustyTint, color: T.ink2, fontWeight: 600 }}>
               Reading {ocr.phase === "title" ? "sheet titles" : "the plans"} · {ocr.done + 1} of {ocr.total}

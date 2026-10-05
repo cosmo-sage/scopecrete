@@ -14,9 +14,9 @@
  */
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { T, disp, strong } from "@/lib/v34/tokens";
+import { T, disp } from "@/lib/v34/tokens";
 import { useWide } from "@/lib/v34/use-wide";
-import { JobTabs } from "@/components/v34/job-tabs";
+import { JobHeaderRow } from "@/components/v34/job-tabs";
 import { setDustyUse } from "@/lib/v34/dusty-live";
 import {
   drawsCheck, parseClauses, plainText, priceChoices, priceDraft, termsText, warrantyText,
@@ -320,27 +320,10 @@ export function Proposal({ jobId }: { jobId: string }) {
         style={{ height: 26, padding: "0 10px", fontSize: 11.5, border: `1px solid ${on ? "#B85A3C" : T.hair}`, background: on ? "#F6E2D8" : T.card, color: on ? "#9A4527" : T.ink2 }}>{label}</button>
     );
   });
-  // What used to be the slide-over "Job panel" (Coy, 2026-10-02): the money — margin, cost by type, the
-  // sub split — lives on the job's Budget now; what shapes the DOCUMENT stays here, as one strip.
-  const settings = (
-    <ProposalSettings b={b} p={p} editable={editable} onType={setType}
-      onWarrantyTpl={(id) => change("warranty", { template_id: id }, 0)} onTermsTpl={(id) => change("terms", { template_id: id }, 0)} />
-  );
-  const ok = vm.priced.ok ? vm.priced : null;
-
-  return (
-    <div ref={wideRef} className="sc-proposal flex" style={{ minHeight: "calc(100dvh - var(--sc-head))", background: "var(--sc-doc-ground, #E9E4DA)" }}>
-      <div className="flex-1 flex flex-col" style={{ minWidth: 0 }}>
-        <div className="sc-no-print flex items-center gap-2 flex-wrap" style={{ background: T.card, borderBottom: `1px solid ${T.hair}`, padding: "6px 12px", minHeight: 44, position: "sticky", top: "var(--sc-head)", zIndex: 5 }}>
-          <JobTabs jobId={jobId} active="proposal" />
-          <div className="flex-1" style={{ minWidth: 120 }}>
-            <div style={{ fontFamily: strong, fontWeight: 600, fontSize: 14, color: T.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b.job.title || "Proposal"} · {vm.number}{isFinal || finalShown ? " · final" : " · draft"}</div>
-            <div style={{ fontSize: 11, color: T.ink3, overflowWrap: "anywhere" }}>
-              {vm.choices ? `${vm.choices.list.length} options · ${vm.choices.list.map((c) => `${c.label} ${c.total !== null ? usd0(c.total) : "—"}`).join(" · ")}`
-                : ok ? `${usd(ok.total)}${ok.rounded !== ok.calc ? ` · ${usd(ok.calc)} rounded up to ${usd0(ok.rounded)}` : ""}` : `no price yet${!vm.priced.ok ? ` — ${vm.priced.blocked[0]}` : ""}`} · {sectionsOn}/8 sections
-              {live && <> · <b style={{ color: live.view_count ? "#1F5C3A" : T.ink2 }}>v{live.version?.version} {live.sent_at ? "sent" : "link made"} · {viewLine(live)}</b></>}
-            </div>
-          </div>
+  // The proposal's own buttons (Coy, 2026-10-05): beside Project type, Warranty and Contract on a
+  // desktop; their own row under the header on a phone.
+  const actions = (
+    <>
           {b.finals.length > 0 && (
             <select aria-label="Version" value={viewFinal ?? ""} onChange={(e) => setViewFinal(e.target.value ? Number(e.target.value) : null)}
               style={{ height: 28, border: `1px solid ${T.hair}`, borderRadius: 3, background: T.card, color: T.ink, fontSize: 12 }}>
@@ -348,7 +331,6 @@ export function Proposal({ jobId }: { jobId: string }) {
               {b.finals.filter((f) => f.version !== p.version).map((f) => <option key={f.id} value={f.version}>v{f.version} final · {new Date(f.finalized_at).toLocaleDateString()}</option>)}
             </select>
           )}
-          {editable && wide && chips}
           {(!blocked || !editable) && (
             <button onClick={() => window.print()} title="Print, or Save as PDF from the print dialog" className="rounded"
               style={{ height: 30, padding: "0 12px", border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink, fontFamily: disp, fontSize: 12, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase" }}>
@@ -363,8 +345,33 @@ export function Proposal({ jobId }: { jobId: string }) {
             <button onClick={() => void newVersion()} disabled={!!busy} className="rounded"
               style={{ height: 30, padding: "0 12px", border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink, fontFamily: disp, fontSize: 12, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase" }}>{wide ? "New version" : "New ver."}</button>
           )}
+    </>
+  );
+  // What used to be the slide-over "Job panel" (Coy, 2026-10-02): the money — margin, cost by type, the
+  // sub split — lives on the job's Budget now; what shapes the DOCUMENT stays here, as one strip.
+  const settings = (
+    <ProposalSettings b={b} p={p} editable={editable} onType={setType}
+      extra={wide ? <>{editable && chips}{actions}</> : null}
+      onWarrantyTpl={(id) => change("warranty", { template_id: id }, 0)} onTermsTpl={(id) => change("terms", { template_id: id }, 0)} />
+  );
+  const ok = vm.priced.ok ? vm.priced : null;
+
+  return (
+    <div ref={wideRef} className="sc-proposal flex" style={{ minHeight: "calc(100dvh - var(--sc-head))", background: "var(--sc-doc-ground, #E9E4DA)" }}>
+      <div className="flex-1 flex flex-col" style={{ minWidth: 0 }}>
+        {/* The job's name top left, Plan room · Budget · Proposal top right — the same row on all three
+            views (Coy, 2026-10-05); the proposal's own buttons moved down beside its settings. */}
+        <div className="sc-no-print" style={{ background: T.card, borderBottom: `1px solid ${T.hair}`, padding: "8px 12px 6px", position: "sticky", top: "var(--sc-head)", zIndex: 5 }}>
+          <JobHeaderRow jobId={jobId} active="proposal" title={b.job.title || "Proposal"}
+            after={<span className="shrink-0" style={{ fontSize: 12, color: T.ink3, whiteSpace: "nowrap" }}>{vm.number}{isFinal || finalShown ? " · final" : " · draft"}</span>}
+            sub={<>
+              {vm.choices ? `${vm.choices.list.length} options · ${vm.choices.list.map((c) => `${c.label} ${c.total !== null ? usd0(c.total) : "—"}`).join(" · ")}`
+                : ok ? `${usd(ok.total)}${ok.rounded !== ok.calc ? ` · ${usd(ok.calc)} rounded up to ${usd0(ok.rounded)}` : ""}` : `no price yet${!vm.priced.ok ? ` — ${vm.priced.blocked[0]}` : ""}`} · {sectionsOn}/8 sections
+              {live && <> · <b style={{ color: live.view_count ? "#1F5C3A" : T.ink2 }}>v{live.version?.version} {live.sent_at ? "sent" : "link made"} · {viewLine(live)}</b></>}
+            </>} />
         </div>
         <div className="sc-no-print" style={{ background: T.card, borderBottom: `1px solid ${T.hair}` }}>
+          {!wide && <div className="flex items-center gap-2 flex-wrap" style={{ padding: "6px 12px 0" }}>{actions}</div>}
           <button onClick={() => setPanel((x) => !x)} aria-expanded={panel || wide} className="w-full flex items-center gap-2 text-left" style={{ padding: "6px 12px", display: wide ? "none" : "flex", cursor: "pointer", color: T.ink2, fontSize: 12 }}>
             <span style={{ fontFamily: disp, fontSize: 11, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase" }}>Proposal settings</span>
             <span style={{ color: T.ink3 }}>{[type?.label, p.warranty?.template_id ? "warranty" : null, p.terms?.template_id ? "contract" : null].filter(Boolean).join(" · ")}</span>
@@ -410,8 +417,8 @@ export function Proposal({ jobId }: { jobId: string }) {
 const lbl: React.CSSProperties = { fontFamily: disp, fontSize: 11, fontWeight: 600, letterSpacing: ".14em", textTransform: "uppercase", color: T.ink3 };
 
 /** What shapes the document: the project type (loads its defaults) and the warranty and contract. */
-function ProposalSettings({ b, p, editable, onType, onWarrantyTpl, onTermsTpl }: {
-  b: Bundle; p: Prop; editable: boolean;
+function ProposalSettings({ b, p, editable, onType, onWarrantyTpl, onTermsTpl, extra }: {
+  b: Bundle; p: Prop; editable: boolean; extra?: React.ReactNode;
   onType: (k: string) => void;
   onWarrantyTpl: (id: string | null) => void; onTermsTpl: (id: string | null) => void;
 }) {
@@ -440,6 +447,7 @@ function ProposalSettings({ b, p, editable, onType, onWarrantyTpl, onTermsTpl }:
           {forType("terms").map((t) => <option key={t.id} value={t.id}>{t.name}{t.starter ? " (starter)" : ""}</option>)}
         </select>
       </label>
+      {extra && <div className="ml-auto flex items-center gap-2 flex-wrap justify-end">{extra}</div>}
       <div style={{ fontSize: 11, color: T.ink3, flexBasis: "100%" }}>
         One price per job: to offer an alternative, make its line an optional add-on (on the budget line, or in the price list below) — priced, not in the total.<br />
         Margin, O.H., tax and the sub split are on the job&apos;s <Link href={`/dashboard/scope/${b.job.id}`} style={{ color: T.chalk }}>Budget</Link>. Defaults per type are in{" "}

@@ -92,6 +92,17 @@ function stop() {
 }
 
 /**
+ * A text was just sent from this tab (the composer or Dusty's plan). Quo's
+ * webhook brings it back a few seconds later; check soon rather than waiting
+ * for the next 15 s poll, and tell the person's screens to re-read even if no
+ * poll has set a stamp yet.
+ */
+export function expectMessage(contactId: string | null) {
+  if (typeof window === "undefined") return;
+  for (const ms of [3_000, 8_000, 16_000]) setTimeout(() => notify(contactId), ms);
+}
+
+/**
  * Call `onChange` when a message lands (or Dusty files someone). With
  * `contactId`, only for news about that person — or news nobody could place.
  */

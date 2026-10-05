@@ -3336,7 +3336,9 @@ expected start date per quoted job before it means anything. Add the field.
   never retried. Nothing is shown as sent until Quo takes it, and the text
   appears in the thread only when Quo's webhook brings it back
   (`message.delivered` → `quo_events` → `messages`, §2a) — the app writes no
-  message itself. Quo's refusals are put in words (`quoError()`: key, credits,
+  message itself. After a send (the composer or Dusty's card) the open
+  thread checks again at 3, 8 and 16 s (`expectMessage()`, `live-threads.ts`)
+  rather than waiting for the 15 s poll. Quo's refusals are put in words (`quoError()`: key, credits,
   registration). The hint shows the segment count. **Dusty** proposes a text
   only when Coy asks: plan step `text` {contact — a full id from his context,
   body, to only when Coy names a number} (`src/lib/dusty/plan.ts`, tested);

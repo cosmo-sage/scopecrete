@@ -9,6 +9,7 @@ import { CUST_KEY, JOB_KEY, RECORD_STEPS, needsJob, type PlanAction } from "@/li
 
 const FULL_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 import { archiveNow } from "@/components/v34/archive-actions";
+import { expectMessage } from "@/lib/v34/live-threads";
 
 export interface PlanLookup {
   items: Array<{ id: string; name: string; cost_group_id: string | null }>;
@@ -290,6 +291,7 @@ export async function applyRecords(actions: PlanAction[]): Promise<StepResult[]>
       if (a.do === "text") {
         try {
           const r = await call("/api/texts", "POST", { contact_id: a.contact, body: a.body, to: a.to ?? undefined });
+          expectMessage(a.contact);
           out.push({ ok: true, text: `Sent to ${String(r.to).replace(/^\+1(\d{3})(\d{3})(\d{4})$/, "($1) $2-$3")} through Quo — it shows in their thread once Quo confirms` });
         } catch (e) {
           out.push({ ok: false, text: `Text not sent: ${e instanceof Error ? e.message : String(e)}` });

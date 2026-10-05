@@ -1,5 +1,6 @@
 "use client";
 
+import { ProposalChip } from "@/components/v34/proposal-send";
 import React, { useState, useEffect, useCallback } from "react";
 import { plainNote } from "@/lib/mentions";
 import { archiveNote } from "@/lib/archive";
@@ -246,7 +247,8 @@ export function CallRow({ m }: { m: ThreadMessage }) {
         {m.line && (
           <span className="flex items-center gap-1" style={{ order: 9, marginLeft: "auto", fontFamily: disp, fontSize: 10, letterSpacing: ".08em", textTransform: "uppercase", color: DA.textMuted }}>
             <span style={{ width: 7, height: 7, borderRadius: 7, background: m.line_color ?? DA.textMuted, display: "inline-block" }} />
-            via {m.line}{m.line_provider ? ` · ${m.line_provider}` : ""}
+            {/* "via Quo" — a long line name (batonrougeconcreters.com) pushed it out of the card (Coy, 2026-10-05); the dot is the line. */}
+            <span title={m.line}>via {m.line_provider ?? m.line}</span>
           </span>
         )}
         {duration && (
@@ -506,6 +508,7 @@ export function SmsRow({ m }: { m: ThreadMessage }) {
             {text || <span style={{ fontStyle: "italic", opacity: 0.7 }}>(no text)</span>}
           </div>
         )}
+        {text && <ProposalChip text={text} isOut={isOut} />}
         {m.media_count > 0 && <MessageMedia messageId={m.id} count={m.media_count} isOut={isOut} />}
         <div className="text-[9px] mt-1" style={{ color: "inherit", opacity: 0.7, letterSpacing: ".06em" }}>
           {isOut ? "OUT" : "IN"} · {formatTime(m.occurred_at)}

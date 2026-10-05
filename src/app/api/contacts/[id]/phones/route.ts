@@ -4,7 +4,7 @@ import { getApiSession } from "@/lib/api-auth";
 /**
  * Name one of a person's numbers (Coy, 2026-10-03: "instead of 'phone 2' it
  * can say 'office'"). PATCH `{phone, label}` — the label on that number in
- * `contact_phones` (1–30 characters; blank clears it, back to Mobile / Phone 2).
+ * `contact_phones` (1–30 characters; blank clears it, back to Cell / Phone 2).
  * A number they called or texted from that isn't listed yet is added to them
  * with its name — and + Number adds a new one by hand (Coy, 2026-10-04: "the
  * + number button should also allow me create a new phone number and save it

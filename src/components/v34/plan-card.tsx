@@ -18,6 +18,8 @@ export function PlanCard({ jobId, actions, dropped, done }: { jobId: string | nu
   const [results, setResults] = useState<StepResult[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [names, setNames] = useState<Record<string, string>>({});
+  // Coy may change the words of a text or a proposal before he sends it; what he changed is kept for Dusty to learn from.
+  const [edits, setEdits] = useState<Record<number, string>>({});
   const budgetSteps = actions.filter((a) => !RECORD_STEPS.has(a.do));
   const recordSteps = actions.filter((a) => RECORD_STEPS.has(a.do));
   useEffect(() => {
@@ -26,7 +28,7 @@ export function PlanCard({ jobId, actions, dropped, done }: { jobId: string | nu
     loadLookup(jobId).then((l) => { if (!off) setLook(l); }).catch((e) => { if (!off) setErr(String(e?.message ?? e)); });
     return () => { off = true; };
   }, [jobId, done, budgetSteps.length]);
-  const recKey = recordSteps.map((a) => (a.do === "archive" || a.do === "restore" ? `${a.kind}:${a.ids.join(",")}` : a.do === "set_address" ? `${a.kind}:${a.id}` : a.do === "new_job" ? (CUST_KEY.test(a.contact) ? "" : `contact:${a.contact}`) : a.do === "text" ? `contact:${a.contact}`
+  const recKey = recordSteps.map((a) => (a.do === "archive" || a.do === "restore" ? `${a.kind}:${a.ids.join(",")}` : a.do === "set_address" ? `${a.kind}:${a.id}` : a.do === "new_job" ? (CUST_KEY.test(a.contact) ? "" : `contact:${a.contact}`) : a.do === "text" ? `contact:${a.contact}` : a.do === "send_proposal" ? [`job:${a.job}`, a.contact ? `contact:${a.contact}` : ""].filter(Boolean).join("|")
     : a.do === "set_name" ? `${a.kind}:${a.id}` : a.do === "new_customer" ? (a.contact ? `contact:${a.contact}` : "")
     : a.do === "attach_contact" ? [`contact:${a.contact}`, CUST_KEY.test(a.customer) ? "" : `customer:${a.customer}`].filter(Boolean).join("|")
     : a.do === "file" ? [`file:${a.files.join(",")}`, /^(cust|job)\d/.test(a.id) ? "" : `${a.kind}:${a.id}`].filter(Boolean).join("|") : "")).filter(Boolean).join("|");
@@ -41,8 +43,9 @@ export function PlanCard({ jobId, actions, dropped, done }: { jobId: string | nu
   }, [done, recKey]);
   if (!actions.length && !dropped) return null;
   const needsJob = budgetSteps.some(stepNeedsJob);
-  const texts = actions.filter((a) => a.do === "text").length;
-  const verb = texts && texts === actions.length ? (texts === 1 ? "Send" : `Send ${texts} texts`) : "Apply";
+  const texts = actions.filter((a) => a.do === "text" || (a.do === "send_proposal" && a.via === "text")).length;
+  const sends = actions.filter((a) => a.do === "text" || a.do === "send_proposal").length;
+  const verb = sends && sends === actions.length ? (sends === 1 ? "Send" : `Send ${sends}`) : "Apply";
   const ready = budgetSteps.length ? !!look : done;
   const nm = {
     area: (r: string | null) => {
@@ -68,7 +71,14 @@ export function PlanCard({ jobId, actions, dropped, done }: { jobId: string | nu
     setState("running"); setErr(null);
     try {
       const a = budgetSteps.length && look ? await applyPlan(jobId, budgetSteps, look) : [];
-      const b = recordSteps.length ? await applyRecords(recordSteps) : [];
+      const edited = recordSteps.map((a) => {
+        const i = actions.indexOf(a);
+        const words = edits[i];
+        if (a.do === "send_proposal") return { ...a, body: words?.trim() ? words.trim() : a.body, draft: a.body };
+        if (a.do === "text" && words?.trim()) return { ...a, body: words.trim() };
+        return a;
+      });
+      const b = recordSteps.length ? await applyRecords(edited) : [];
       setResults([...a, ...b]); setState("done");
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)); setState("idle"); }
   };
@@ -87,7 +97,16 @@ export function PlanCard({ jobId, actions, dropped, done }: { jobId: string | nu
       <ol className="px-3 py-2 flex flex-col gap-1" style={{ fontSize: F.sm, listStyle: "decimal", paddingLeft: 28 }}>
         {actions.map((a, i) => (
           <li key={i}>
-            {describe(a, nm)}
+            {(a.do === "text" || a.do === "send_proposal") && state !== "done"
+              ? <>
+                  <div>{a.do === "text" ? "Text them through Quo:" : a.via === "email" ? "Email the proposal (opens in your mail app):" : "Text the proposal through Quo:"}</div>
+                  {a.do === "send_proposal" && a.subject && <div style={{ fontSize: F.xs, color: T.ink2 }}>Subject: {a.subject}</div>}
+                  <textarea value={edits[i] ?? a.body} onChange={(e) => setEdits((m) => ({ ...m, [i]: e.target.value }))} rows={Math.min(6, Math.max(2, Math.ceil((edits[i] ?? a.body).length / 48)))}
+                    aria-label="The words — change them before you send" className="w-full rounded mt-1 px-2 py-1"
+                    style={{ border: `1px solid ${T.hair}`, background: T.card, color: T.ink, fontSize: F.sm, lineHeight: 1.4, resize: "vertical", fontFamily: "inherit" }} />
+                  {a.do === "send_proposal" && <div style={{ fontSize: F.xs, color: T.ink3 }}>{"{link}"} becomes the proposal&apos;s link{/\{first\}/.test(edits[i] ?? a.body) ? ", {first} their first name" : ""}.</div>}
+                </>
+              : describe(a, nm)}
             {(a.do === "set_address" || a.do === "new_job") && (
               <div style={{ fontSize: F.xs, color: T.ink2 }}>{a.do === "new_job" && CUST_KEY.test(a.contact) ? "for the new customer above"
                 : (a.do === "new_job" ? "for " : "") + (names[a.do === "new_job" ? a.contact : a.id] ?? (Object.keys(names).length ? "not found — skipped" : "…"))}</div>
@@ -100,6 +119,9 @@ export function PlanCard({ jobId, actions, dropped, done }: { jobId: string | nu
             )}
             {a.do === "text" && (
               <div style={{ fontSize: F.xs, color: T.ink2 }}>to {names[a.contact] ?? (Object.keys(names).length ? "not found — skipped" : "…")}</div>
+            )}
+            {a.do === "send_proposal" && (
+              <div style={{ fontSize: F.xs, color: T.ink2 }}>{names[a.job] ?? (Object.keys(names).length ? "job not found — skipped" : "…")} · to {a.contact ? names[a.contact] ?? "…" : "the job's person"}</div>
             )}
             {a.do === "file" && (
               <div style={{ fontSize: F.xs, color: T.ink2, lineHeight: 1.45 }}>
@@ -120,7 +142,7 @@ export function PlanCard({ jobId, actions, dropped, done }: { jobId: string | nu
       {dropped > 0 && <div className="px-3 pb-2" style={{ fontSize: F.xs, color: T.ink3 }}>{dropped} step{dropped === 1 ? "" : "s"} didn&apos;t make sense and were left out.</div>}
       {needsJob && !jobId && <div className="px-3 pb-2" style={{ fontSize: F.xs, color: T.ink3 }}>Steps that touch a budget need the job open — they&apos;ll be skipped here. Open the job and ask there.</div>}
       {recordSteps.some((x) => x.do === "archive" || x.do === "restore") && state !== "done" && <div className="px-3 pb-2" style={{ fontSize: F.xs, color: T.ink3 }}>Archived threads come back if they call or text again; deleted things can be restored. Nothing is erased.</div>}
-      {texts > 0 && state !== "done" && <div className="px-3 pb-2" style={{ fontSize: F.xs, color: T.ink3 }}>{verb === "Apply" ? `Apply also sends ${texts === 1 ? "the text" : `the ${texts} texts`}` : texts === 1 ? "Send texts it" : "Send texts them"} through Quo from your line. Nothing goes out until you tap.</div>}
+      {sends > 0 && state !== "done" && <div className="px-3 pb-2" style={{ fontSize: F.xs, color: T.ink3 }}>{texts ? "Texts go through Quo from your line; " : ""}{sends > texts ? "an email opens in your mail app for you to send; " : ""}nothing goes out until you tap {verb}. Change the words first if you like — Dusty learns from what you change.</div>}
       {state === "done" && (
         <div className="px-3 py-2" style={{ borderTop: `1px solid ${T.hair}`, fontSize: F.xs }}>
           {results.map((r, i) => <div key={i} style={{ color: r.ok ? T.green : T.red }}>{r.ok ? "✓" : "✗"} {r.text}</div>)}

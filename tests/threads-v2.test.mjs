@@ -45,10 +45,10 @@ test("channels: one per number (from the contact or their messages), then email,
     emailCount: 0,
   });
   assert.deepEqual(ch.map((c) => [c.key, c.label, c.calls, c.texts, c.reachable]), [
-    ["phone:+12255550100", "Mobile", 1, 1, true],
+    ["phone:+12255550100", "Cell", 1, 1, true],
     ["phone:+12255550101", "Phone 2", 1, 0, true],
     ["email", "Email", 0, 0, false],
-    ["chat", "Chat", 0, 0, false],
+    ["chat", "AI Chat", 0, 0, false],
   ]);
   const m = (channel, counterparty) => ({ channel, counterparty });
   assert.equal(inChannel(m("sms", "+12255550100"), ch[0], "all"), true);

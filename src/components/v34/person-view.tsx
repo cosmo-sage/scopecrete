@@ -38,6 +38,7 @@ import { CallNotesPad } from "@/components/v34/call-notes-pad";
 import { ArchiveButton } from "@/components/v34/archive-actions";
 import { AddressInput } from "@/components/v34/address-input";
 import { roleOf, type Channel } from "@/lib/v34/threads";
+import { useLiveThreads } from "@/lib/v34/live-threads";
 import {
   RecordHeader, HeaderNote, OverviewGrid, PanelCard, SectionHead, Facts, LocationPanel, ContactCard, ThreadChips, RecentCard, JobRow, Field,
   ASK_DUSTY, menuItem, btn, fieldStyle, send, type RecordAction, type CardMethod,
@@ -394,6 +395,8 @@ export function PersonScreen({ contactId, back, extra, onPerson, reloadKey }: {
   const [thread, setThread] = useState<{ messages: ThreadMessage[]; channels: Channel[]; merges: MergeInfo[] }>({ messages: [], channels: [], merges: [] });
   const [err, setErr] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
+  // Their next text or call appears here as it lands (live-threads.ts).
+  useLiveThreads(() => setTick((n) => n + 1), contactId);
   const [merging, setMerging] = useState<false | { preselect: string | null }>(false);
   useEffect(() => {
     let off = false;

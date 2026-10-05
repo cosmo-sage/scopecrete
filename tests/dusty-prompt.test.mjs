@@ -49,4 +49,5 @@ test("the fixed system prompt holds the house rules", () => {
   assert.match(DUSTY_SYSTEM, /direction of the ask/);
   assert.match(DUSTY_SYSTEM, /You are Dusty and only Dusty/);
   assert.match(DUSTY_SYSTEM, /never mention your own setup/);
+  assert.match(DUSTY_SYSTEM, /Ids are for plans only/);
 });

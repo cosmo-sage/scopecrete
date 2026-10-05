@@ -4,12 +4,15 @@
  * the sheet for one — the original sender, Dusty-free text, its attachments
  * (from the Files viewer), and where it is filed. Coy files it on a
  * customer and/or a job: a job takes its files (PDFs into the Plan Room).
- * A domain suggestion is one tap. Nothing here creates a contact.
+ * A domain suggestion is one tap. The person it's on is picked from Contacts
+ * (2026-10-05), and the sender's address can be added to them in one tap, so
+ * the next email from it files itself.
  */
 import React, { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { T, F, disp, eyebrow, clip, relTime } from "@/lib/v34/tokens";
 import { sizeLabel } from "@/lib/files";
+import { ContactPicker } from "@/components/v34/contacts";
 
 export interface EmailRow {
   id: string; subject: string | null; from_address: string | null; from_name: string | null;
@@ -20,7 +23,7 @@ export interface EmailRow {
   attachments: { total: number; fetched: number; held: number; failed: number };
 }
 interface Att { id: string; name: string; mime_type: string | null; byte_size: number | null; fetch_state: string; fetch_error: string | null; attempts: number; file: { id: string; url: string | null; kind: string } | null }
-interface Detail { email: EmailRow & { text_body: string | null }; attachments: Att[]; options: { customers: Array<{ id: string; name: string }>; jobs: Array<{ id: string; title: string | null; customer_id: string | null; status: string }> } }
+interface Detail { email: EmailRow & { text_body: string | null }; person_emails?: string[]; attachments: Att[]; options: { customers: Array<{ id: string; name: string }>; jobs: Array<{ id: string; title: string | null; customer_id: string | null; status: string }> } }
 
 async function call(url: string, method: string, body?: unknown) {
   const r = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
@@ -94,6 +97,8 @@ export function EmailSheet({ id, onClose, onChanged }: { id: string; onClose: ()
   const [busy, setBusy] = useState(false);
   const [all, setAll] = useState(false);
   const [undo, setUndo] = useState<Pick<EmailRow, "customer_id" | "contact_id" | "job_id"> | null>(null);
+  const [picking, setPicking] = useState(false);
+  const [added, setAdded] = useState<string | null>(null);
   const load = useCallback(() => call(`/api/emails/${id}`, "GET").then((b) => { setD(b); setErr(null); }).catch((e) => setErr(e instanceof Error ? e.message : String(e))), [id]);
   useEffect(() => {
     let off = false;
@@ -110,6 +115,12 @@ export function EmailSheet({ id, onClose, onChanged }: { id: string; onClose: ()
       await load(); onChanged?.();
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
   }, [d, id, load, onChanged]);
+
+  const addAddress = useCallback(async (contactId: string, address: string) => {
+    setBusy(true);
+    try { await call(`/api/contacts/${contactId}/emails`, "POST", { email: address }); setAdded(address); await load(); }
+    catch (x) { setErr(x instanceof Error ? x.message : String(x)); } finally { setBusy(false); }
+  }, [load]);
 
   const e = d?.email;
   const body = e?.text_body ?? "";
@@ -157,6 +168,30 @@ export function EmailSheet({ id, onClose, onChanged }: { id: string; onClose: ()
                   </select>
                 </label>
               </div>
+              <div className="mt-2" style={{ fontSize: F.xs, color: T.ink2 }}>
+                <div className="flex items-center gap-2">
+                  <span>Person</span>
+                  <span style={{ flex: 1, minWidth: 0, color: e.contact_id ? T.ink : T.ink3, fontSize: F.sm, ...clip }}>
+                    {e.contact_id ? <Link href={`/dashboard/messages/${e.contact_id}?person=1`} style={{ color: T.ink }}>{e.contact_name ?? "Someone"}</Link> : "Nobody yet"}
+                  </span>
+                  <button disabled={busy} onClick={() => setPicking((x) => !x)} style={{ color: T.chalk, cursor: "pointer" }}>{picking ? "Close" : e.contact_id ? "Change" : "Pick from Contacts"}</button>
+                  {e.contact_id && !picking && <button disabled={busy} onClick={() => void file({ contact_id: null })} style={{ color: T.ink3, cursor: "pointer" }}>Take off</button>}
+                </div>
+                {picking && (
+                  <div className="mt-1.5">
+                    <ContactPicker busy={busy} exclude={e.contact_id ? [e.contact_id] : []} placeholder="Who is it for? Name, number, email…"
+                      onPick={(c) => { setPicking(false); setAdded(null); void file({ contact_id: c.id, ...(c.customer_id && c.customer_id !== e.customer_id ? { customer_id: c.customer_id } : {}) }); }} />
+                  </div>
+                )}
+                {e.contact_id && e.original_from_address && d.person_emails && !d.person_emails.includes(e.original_from_address.toLowerCase()) && added !== e.original_from_address && (
+                  <div className="flex items-center gap-2 mt-1.5 rounded px-2 py-1.5" style={{ background: T.card, border: `1px solid ${T.hair}` }}>
+                    <span style={{ flex: 1, minWidth: 0 }}>{e.original_from_address} isn&apos;t on {e.contact_name ?? "them"} yet. Add it and their next email files itself.</span>
+                    <button disabled={busy} onClick={() => void addAddress(e.contact_id as string, e.original_from_address as string)} style={{ color: T.chalk, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>Add it</button>
+                  </div>
+                )}
+                {added && <div style={{ color: T.green, marginTop: 4 }}>Added {added} to {e.contact_name ?? "them"}.</div>}
+              </div>
+              <div style={{ fontSize: 11, color: T.ink3, marginTop: 6 }}>Filing it on someone adds it to their Email channel.</div>
               <div className="flex items-center gap-3 mt-2" style={{ fontSize: F.xs }}>
                 {e.job_id && <Link href={`/dashboard/scope/${e.job_id}/plans`} style={{ color: T.chalk }}>Open the Plan room ›</Link>}
                 {e.customer_id && <Link href={`/dashboard/customers/${e.customer_id}`} style={{ color: T.chalk }}>Open the customer ›</Link>}

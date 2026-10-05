@@ -12,6 +12,7 @@ import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { T, F, disp, eyebrow, formatPhone } from "@/lib/v34/tokens";
 import { Sheet } from "@/components/v34/primitives";
+import { ContactPicker } from "@/components/v34/contacts";
 import { JOB_TYPE_LABEL, LEAD_SOURCES, STAGES, STATUS_NAME, stageOf } from "@/lib/jobs/stages";
 
 export interface ChipJob { id: string; status: string | null; job_type: string | null; lead_source: string | null }
@@ -169,7 +170,7 @@ export function JobChips({ job, onSet }: {
             </div>
           ))}
           <div style={{ ...eyebrow, color: T.ink3, margin: "12px 0 4px" }}>Add</div>
-          {!free.length && <div style={{ fontSize: F.sm, color: T.ink3 }}>No other vendors filed yet. File someone as a vendor on Threads.</div>}
+          {!free.length && <div style={{ fontSize: F.sm, color: T.ink3, marginBottom: 6 }}>No other vendors filed yet.</div>}
           {Object.entries(bySubtype).map(([g, vs]) => (
             <div key={g} style={{ marginBottom: 8 }}>
               <div style={{ fontSize: F.xs, color: T.ink2, textTransform: "capitalize", marginBottom: 3 }}>{g}</div>
@@ -183,6 +184,10 @@ export function JobChips({ job, onSet }: {
               </div>
             </div>
           ))}
+          <div style={{ ...eyebrow, color: T.ink3, margin: "12px 0 4px" }}>Someone else from Contacts</div>
+          {open === "vendors" && <ContactPicker autoFocus={false} busy={busy} bucket="vendor" exclude={[...(crew ?? []).map((c) => c.contact_id), ...free.map((v) => v.id)]}
+            placeholder="Find a sub, supplier or rental: name, number…"
+            onPick={(c) => void crewRun(send(`/api/jobs/${job.id}/vendors`, "POST", { contact_id: c.id }))} />}
           {err && <div style={{ fontSize: F.xs, color: T.red }}>{err}</div>}
         </div>
       </Sheet>

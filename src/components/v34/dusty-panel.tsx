@@ -25,7 +25,7 @@ import { T, F, disp, eyebrow, agent, clip, relTime, nums } from "@/lib/v34/token
 import { DustyAvatar, type DustyState } from "@/components/v34/dusty-avatar";
 import { Markdown } from "@/components/v34/markdown";
 import { PlanCard } from "@/components/v34/plan-card";
-import { parsePlan } from "@/lib/dusty/plan";
+import { hideIds, parsePlan } from "@/lib/dusty/plan";
 import { useDustyUse } from "@/lib/v34/dusty-live";
 import { sendBytes } from "@/components/v34/files-panel";
 import { VoiceRecorder } from "@/components/v34/voice-recorder";
@@ -297,9 +297,9 @@ export function DustyPanel({ open, onClose, onBusy, onStream }: {
     } catch (e) { setErr(`Voice message: ${e instanceof Error ? e.message : String(e)}`); }
     finally { setHearing(false); }
   }
-  function create(what: "customer" | "job" | "receipt") {
+  function create(what: "contact" | "customer" | "job" | "receipt") {
     setPlusOpen(false);
-    const href = what === "customer" ? "/dashboard/customers?new=1" : what === "job" ? "/dashboard/scope?new=1" : "/dashboard/vendors?receipt=1";
+    const href = what === "contact" ? "/dashboard/contacts?new=1" : what === "customer" ? "/dashboard/customers?new=1" : what === "job" ? "/dashboard/scope?new=1" : "/dashboard/vendors?receipt=1";
     // On a phone Dusty covers the page, so he steps aside for the form.
     if (!window.matchMedia("(min-width: 1024px)").matches) onClose();
     router.push(href);
@@ -429,6 +429,7 @@ export function DustyPanel({ open, onClose, onBusy, onStream }: {
                 <div role="menu" className="absolute right-0 mt-1 rounded overflow-hidden" style={{ zIndex: 71, width: 230, background: T.card, border: `1px solid ${T.hair}`, boxShadow: "0 10px 30px rgba(0,0,0,.18)" }}>
                   {([
                     ["chat", "New chat", "Start fresh with Dusty"],
+                    ["contact", "New contact", "A person to keep — a number, an email, an address"],
                     ["customer", "New customer", "A household, business or school"],
                     ["job", "New job", "For a customer — on the Jobs board"],
                     ["receipt", "Add a receipt or quote", "Photo or file — Dusty reads the vendor and prices"],
@@ -497,7 +498,7 @@ export function DustyPanel({ open, onClose, onBusy, onStream }: {
                     // A budget plan rides at the end of an answer: shown as steps with Apply, not as code.
                     const p = parsePlan(it.content);
                     const streaming = busy && i === items.length - 1;
-                    const shown = streaming ? it.content.replace(/```scopecrete-plan[\s\S]*$/, "").trim() : p.shown;
+                    const shown = streaming ? hideIds(it.content.replace(/```scopecrete-plan[\s\S]*$/, "").trim()) : p.shown;
                     return (<>
                       <Markdown text={shown} size={14} />
                       {streaming && /```scopecrete-plan/.test(it.content) && <div style={{ fontSize: F.xs, color: T.ink3, marginTop: 6 }}>Writing up the plan…</div>}

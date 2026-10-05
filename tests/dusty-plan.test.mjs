@@ -226,3 +226,31 @@ test("a customer around a person already there, attach_contact and set_name (Coy
   assert.match(d(p.actions[2]), /the new customer above/);
   assert.match(RECORD_RULES, /never make them again/);
 });
+
+test("ids never show in Dusty's words — only in the plan (2026-10-05)", async () => {
+  const { hideIds } = await import("../src/lib/dusty/plan.ts");
+  const id = "dd08251b-57b8-45b2-bca2-c2cd6cfc2698";
+  assert.equal(hideIds(`Yes — a text from (727) 628-9657, contact ${id}, came in at 9:14.`), "Yes — a text from (727) 628-9657, came in at 9:14.");
+  assert.equal(hideIds(`John (90322d37…) is a contact.`), "John is a contact.");
+  assert.equal(hideIds(`Amber (customer ${id}) owes a price.`), "Amber owes a price.");
+  assert.equal(hideIds(`It's \`${id}\`.`), "It's.");
+  assert.equal(hideIds("Line one\ncontact list is fine"), "Line one\ncontact list is fine");
+  const p = parsePlan(`Filed. contact ${id}\n\`\`\`scopecrete-plan\n[{"do":"set_name","kind":"contact","id":"${id}","name":"Pat"}]\n\`\`\``);
+  assert.equal(p.shown, "Filed.");
+  assert.equal(p.actions[0].id, id, "the plan keeps its id");
+});
+
+test("send_proposal: a job by full id, text or email, words with {link}; nothing else", () => {
+  const J = "0d1c2b3a-4f5e-4d6c-8b7a-1234567890ab";
+  const t = cleanAction({ do: "send_proposal", job: J, body: "Hi {first}, here it is: {link}" });
+  assert.deepEqual(t, { do: "send_proposal", job: J, via: "text", contact: null, body: "Hi {first}, here it is: {link}", subject: null });
+  const e = cleanAction({ do: "send_proposal", job: J, via: "email", subject: "Driveway proposal", body: "{link}" });
+  assert.equal(e.via, "email"); assert.equal(e.subject, "Driveway proposal");
+  assert.equal(cleanAction({ do: "send_proposal", job: "0d1c2b3a", body: "x" }), null);
+  assert.equal(cleanAction({ do: "send_proposal", job: J, via: "fax", body: "x" }), null);
+  assert.equal(cleanAction({ do: "send_proposal", job: J, body: "" }), null);
+  assert.ok(RECORD_STEPS.has("send_proposal"));
+  assert.match(describe(t, { item: () => null, area: () => "" }), /^Text the proposal through Quo/);
+  assert.ok(RECORD_RULES.includes('"do":"send_proposal"'));
+  assert.ok(!RECORD_RULES.includes("Baton Rouge Concreters"));
+});

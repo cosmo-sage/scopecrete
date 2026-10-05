@@ -4,7 +4,7 @@ Ground truth for every agent working this repo. If code disagrees with this
 document, the code is wrong or this document is stale — resolve it, don't
 guess. Update this file in the same PR that changes the behavior it describes.
 
-Last updated: 2026-10-05 (Dusty puts people on customers and fixes names, and says nothing of his own setup — Hermes's tools must be off on the VPS; fonts self-hosted, so a build downloads nothing; the landing page's phone demo is the real app — Design 10; texts send through Quo — the thread's Send and Dusty's text step, Coy's tap either way; a Summary view on every job, the job name and switch centred on the phone; Dusty full screen on the phone, chat text size, his thought line can be hidden; onsite estimators — jobs and pages by person, vendor first, tags notify — migration 081; a name we greet a caller by becomes a suggestion — enrich-contacts v28; contact, customer and vendor pages on one layout; the customer page's Threads tab sums up each person; the Files page laid out like OneDrive, with storage left; the Plan Room's Files and Sheets one tab; thread search a drop-down over the chat; the Threads list header sticky with its own search; the header lockup on one line; one top row on the job's three views; the proposal's dark band off the cover; Good / Better / Best removed — one price per job; search across the header; six dots for the activity line; job switch on the name's row; budget line notes; quo-intake stores every Quo event, own lines included — v10; one Unit type picker; a section's Camera; Dusty writes in Figtree; Dusty is the Scopecrete Lander; an All thread; proposal cover band and Prepared by; sign-in at app.scopecrete.ai/login, each org at <slug>.app.scopecrete.ai; Dusty's chat keeps its files and files them on a customer or job — migration 079; vendor Delete; Dusty on a vendor's page and looking at attached photos; sales tax by address via TaxLocus — migration 078; archive reasons; Lines, providers and logs — migration 077; internal notes with @-tags; Jobs board sort and filter; jobs by hand — migration 076; done and lost customers in Threads; proposals sent by link, every opening tracked; every option side by side for the customer — migration 075; Documents is Files, everywhere — migration 074; Threads v2 — threads you make, channels per number, the customer page reshaped — migration 073; an address given is kept and asked about — migration 072; Dusty sets addresses; customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
+Last updated: 2026-10-05 (proposals sent from Threads, the Preview and Dusty, his words learned from Coy's; Threads update on their own as texts land — migration 082; Dusty puts people on customers and fixes names, and says nothing of his own setup — Hermes's tools must be off on the VPS; fonts self-hosted, so a build downloads nothing; the landing page's phone demo is the real app — Design 10; texts send through Quo — the thread's Send and Dusty's text step, Coy's tap either way; a Summary view on every job, the job name and switch centred on the phone; Dusty full screen on the phone, chat text size, his thought line can be hidden; onsite estimators — jobs and pages by person, vendor first, tags notify — migration 081; a name we greet a caller by becomes a suggestion — enrich-contacts v28; contact, customer and vendor pages on one layout; the customer page's Threads tab sums up each person; the Files page laid out like OneDrive, with storage left; the Plan Room's Files and Sheets one tab; thread search a drop-down over the chat; the Threads list header sticky with its own search; the header lockup on one line; one top row on the job's three views; the proposal's dark band off the cover; Good / Better / Best removed — one price per job; search across the header; six dots for the activity line; job switch on the name's row; budget line notes; quo-intake stores every Quo event, own lines included — v10; one Unit type picker; a section's Camera; Dusty writes in Figtree; Dusty is the Scopecrete Lander; an All thread; proposal cover band and Prepared by; sign-in at app.scopecrete.ai/login, each org at <slug>.app.scopecrete.ai; Dusty's chat keeps its files and files them on a customer or job — migration 079; vendor Delete; Dusty on a vendor's page and looking at attached photos; sales tax by address via TaxLocus — migration 078; archive reasons; Lines, providers and logs — migration 077; internal notes with @-tags; Jobs board sort and filter; jobs by hand — migration 076; done and lost customers in Threads; proposals sent by link, every opening tracked; every option side by side for the customer — migration 075; Documents is Files, everywhere — migration 074; Threads v2 — threads you make, channels per number, the customer page reshaped — migration 073; an address given is kept and asked about — migration 072; Dusty sets addresses; customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
 
 ---
 
@@ -1504,7 +1504,7 @@ percentage of labour — all three contradict this section and §4.
   onto the line** (name, unit, unit cost, type, taxed, markup, rule, vendor,
   price date), so a later card change never reprices a sent quote — the line
   says so with **↻** beside the unit cost (tap to take the new price;
-  since 2026-10-05 the line under the name is gone — Coy). Under each line's
+  since 2026-10-05 the line under the name is gone — Coy; and the line's sheet no longer opens with the worked-out sum "2 days × $250.00 = … → $821.43", only what blocks it — its own margin is the sheet's **Margin % · this line only**). Under each line's
   name is its **note** ("+ note", typed in place, saved on blur as the
   line's `description`; on the phone cards too). Per line (`budget()` /
   `ruleQty()` in `src/lib/engine`, tested in `tests/budget.test.mjs`):
@@ -1884,9 +1884,35 @@ expected start date per quoted job before it means anything. Add the field.
   customer's and their jobs' addresses and titles (`places` on
   `/api/threads`, searched, never shown), and every word said in their
   calls and texts (`/api/threads/search` on the thread's people).
+  **Live (Coy, 2026-10-05: "I sent a test text message … it's not showing up
+  in threads … I would like the webhooks to be near instant from quo").**
+  Quo was never the delay: Bubba's text reached `quo_events` and `messages`
+  2.1 s after Quo stamped it. The Threads list, the open conversation and a
+  person's page read once when opened, so a text that landed while they were
+  on screen waited for a reload. Now one watcher per tab
+  (`src/lib/v34/live-threads.ts`, `useLiveThreads()`) tells them something
+  changed and they refetch their own reads (counts included): Supabase
+  Realtime on `messages` INSERT — instant, once **migration 082** puts
+  `messages` in the `supabase_realtime` publication (RLS decides who hears;
+  the payload is never drawn) — and, working without it, a poll of
+  `/api/threads/latest` (the newest message id and Dusty's newest filing,
+  two one-row reads) every 15 s while the tab is visible and at once when it
+  comes back into view. Don't poll `/api/threads` itself: it reads up to
+  4,000 messages.
   **On a phone (Coy, 2026-10-05)** the thread's name and the person share one
-  row ("‹ Unsorted  (225) 446-2212"), the role tag only when it says more than
-  the thread's name, and the notes tab has no "Team only" over it.
+  row ("‹ Unsorted  (225) 446-2212"), with no role tag (the thread's name says
+  it). The channel tabs are one line each, an icon and a short name — ☎ Cell
+  (a first number's default name, was Mobile; ✎ renames it Office …), an
+  envelope alone for Email, ✦ **AI Chat**, **Notes** (was Internal notes) —
+  and + adds a number (was "+ Number"). A ▴ beside ⋯ folds the whole header
+  to the name's row (facts, tabs and toolbar hidden; ▾ brings them back),
+  remembered on the device (`sc:thread-head-folded`). An open thread covers
+  the dashboard header (`.sc-pinned-full`; the footer stays), its tabs'
+  icons centred; the toolbar is one row — **All · Calls · Texts** and the
+  line filter as drop-downs, Call from ▾ and search beside them — and the
+  line a text goes from is picked there only (the composer's own line chip
+  is gone). A call card says "● via Quo" (the provider; the line's name on
+  hover — "batonrougeconcreters.com" pushed it out of the card).
   **Internal notes is the first tab on the left (Coy, 2026-10-04)** — a
   person still opens on their conversation; the tab's "@ to tag" line is gone
   (the box below says it). **+ Number adds a number (Coy: "should also allow
@@ -2005,6 +2031,49 @@ expected start date per quoted job before it means anything. Add the field.
   only for a number with no name, and ONE button through to their page. No
   call / text / email / composer in the row (Coy, 2026-09-28) — engaging on
   every channel belongs on the person's page.
+- **Contacts — the book (Coy, 2026-10-05: "a Rolodex or contacts book of
+  some kind for pure contact info that can be pulled into any thread and any
+  channel and any vendor contact and any customer contact" — "Call it
+  contacts").** No second table: the book IS `contacts` (one row per person,
+  §2c), their extra numbers `contact_phones` and emails `contact_emails`;
+  customer, vendor, personal and spam stay how a person is filed. A copy
+  elsewhere would drift (§2b's `relation` vs `contact_type`) and Threads, Quo
+  intake and email filing would not see it. No migration.
+  **The page** `/dashboard/contacts` (rail after Cash, Toolbox on a phone):
+  everyone not merged or archived, spam left out, each with every number and
+  email, company, address, their customer and role (Customer · Cust. contact ·
+  Vendor · Sub · Personal · Unsorted — `bookRole()`, only a bucket Coy or Dusty
+  filed counts), last in touch; search by any word, and 3+ digits find a
+  number however typed (`matchesBook()`); role chips with counts; A–Z or
+  Recent (kept on the device); a table when wide, rows on a phone; a row opens
+  their page (a vendor's vendor page). `src/lib/contacts-book.ts` (tested,
+  `tests/contacts-book.test.mjs`), `src/lib/contacts-server.ts`,
+  `src/components/v34/contacts.tsx`.
+  **+ Contact** (on the page, and Dusty's + menu → New contact): someone who
+  hasn't called — name, company, any numbers and emails with labels (Mobile,
+  Office…), address, and optionally what they are (Unsorted by default;
+  customer / vendor / personal filed by `sc_classify_contact`, Coy's tap).
+  `POST /api/contacts` writes every number and email into the lists Threads
+  and email-intake read (the first is primary and also on the contact row),
+  `address_source='coy'`. A number or email already on someone (their row or
+  their lists, merges followed — `ownerOf()`) is 409 naming them, never a
+  second person. Rehearsed (rolled back) on the live data: the insert and its
+  lists pass the checks and no job is made.
+  **One contact picker** (`ContactPicker`): search the book, + New contact at
+  its foot (seeded with what was typed, made inline, then picked; a duplicate
+  offers "Use them"). Used by the customer page's + Add contact, + Add contact
+  on a thread Coy made (pick several), a job's Crew & suppliers ("Someone else
+  from Contacts", made as a vendor) and an email's filing.
+  **An email's person (the email-drafts design asks for it).** The email sheet
+  has **Person** — Pick from Contacts / Change / Take off — beside Customer and
+  Job, and an email filed on a customer with no person goes on its primary
+  person (`PATCH /api/emails/[id]`), so it reaches their Email channel. When
+  the sender's address isn't on that person: "… isn't on Amber yet. **Add
+  it**" → `POST /api/contacts/[id]/emails` (onto `contact_emails`, and the row
+  when it has none; someone else's → 409), so the next email from it files
+  itself (§2h exact match). Onsite estimators (§2j) read no contacts, so the
+  page is not theirs (`redirectFor()`). Not built: importing a phone's or
+  Google's address book (later, Coy).
 - **Archive and delete, restorable (migration 066, applied 2026-10-03 on
   Coy's "Apply 066").** Coy: *"I have a lot of these calls where nothing was
   said … I need to be able to archive these threads … in bulk on the threads
@@ -2129,7 +2198,7 @@ expected start date per quoted job before it means anything. Add the field.
   Dusty's button**: he opens down from the header on the right, and the
   rail has no Dusty item. On a phone he stays in the centre of the footer.
 - **Navigation (2026-09-30, Coy).** Pages are listed once in
-  `src/lib/v34/pages.ts`: Dashboard · Threads · Jobs · Cash · Customers ·
+  `src/lib/v34/pages.ts`: Dashboard · Threads · Jobs · Cash · Contacts · Customers ·
   Price book · Vendors · Documents · Logs. **Phone footer:** three pages Coy
   picks (default Dashboard · Threads · Jobs) around **Dusty in the centre**,
   and **Toolbox** last. The Toolbox is a drawer that rises just above the
@@ -2386,10 +2455,12 @@ expected start date per quoted job before it means anything. Add the field.
   message bar (36px), always there while the chat is open, in his live state;
   the 96px empty-state and 32px sprites are gone.
 - **Hide the thought line (Coy, 2026-10-05: "it can be distracting").**
-  Settings → **Dusty (AI)** → **Show Dusty's thought line** (`activity_line`,
-  default on). Off, the activity line isn't drawn on any size and
-  `html[data-activity="off"]` makes `--sc-head` 54px, set before first paint
-  by `app/layout.tsx` from the `sc:prefs` copy. Reminders, "is back", tags,
+  Settings → **Dusty (AI)** → **Show Dusty's thought line**, **On a phone**
+  and **On a desktop** apart (Coy, same day: "off on mobile and on on
+  desktop") — `activity_line_phone` and `activity_line`, default on; the
+  phone's follows the desktop's until it is set. Off on a phone,
+  `html[data-activity-phone="off"]` makes `--sc-head` 54px, set before first
+  paint by `app/layout.tsx` from the `sc:prefs` copy. Reminders, "is back", tags,
   proposal openings, bid notices and the reader-down warning only show on
   that line, so they go with it.
 - **Dusty answers in Markdown (2026-09-30).** Coy: *"showing the
@@ -2514,6 +2585,12 @@ expected start date per quoted job before it means anything. Add the field.
   The prompt now says he is Dusty only, has no tools, files or sessions of
   his own, never narrates looking things up or names his setup, and takes
   Coy's word and spelling instead of asking him to confirm it.
+  **No ids in his words (2026-10-05).** Asked whether a text from (727)
+  628-9657 came in, he answered with "contact dd08251b-…". Ids are for plans
+  only: the prompt says to name people (or give the number when there is no
+  name), and the chat takes any full id, or an 8-character ref with "…",
+  out of what is shown along with its "contact" / "(customer …)" label
+  (`hideIds()` in `plan.ts`, tested); the plan block keeps its ids.
   **Hermes ran him as an agent with tools (seen 2026-10-05).** His answer
   read Hermes's own `state.db`, hit Hermes's command guard ("an error from my
   own security layer"), narrated each step, and said "I'm Coy, not Dusty" —
@@ -2645,7 +2722,7 @@ expected start date per quoted job before it means anything. Add the field.
   what it is, area, note, Show on proposal, delete, and Dusty's read.
 - **Price book (2026-09-29)** — `src/components/v34/price-book.tsx`. On the
   desktop rail after Customers, and in the Toolbox on a phone; Cost settings
-  links to it (one editor), and a vendor's page keeps its Prices door.
+  links to it (one editor), and a vendor's page keeps its Prices door. No line of explanation under the title (Coy, 2026-10-05).
   Find, **By group · By vendor** (remembered per device), Show retired.
   **Wide (≥900px measured): a spreadsheet** — Item · Vendor (or Group) ·
   Item # · Type · Unit · Unit cost · Markup · Taxed · Counted on a job ·
@@ -3151,7 +3228,7 @@ expected start date per quoted job before it means anything. Add the field.
   be moved down below"): ‹ Jobs, the job's name (and the ⓘ, or the
   proposal's number and draft / final, with its price line under it) on
   the left, the switch alone on the right. Each view's own buttons sit
-  below: the Budget's Sheets (n) beside its chips; the Plan Room's
+  below: the Budget's Sheets (n) on the first takeoff group's row ("Driveway Area · takeoff group · 1 section · 894 SF"), else under the name; the Plan Room's
   reading chips, Photos, Aerial and Add plans on the row under the name;
   the Proposal's version, Item prices · Qty · unit · Tax · Maps & photos,
   Print / PDF and Preview on the settings row beside Project type,
@@ -3297,6 +3374,37 @@ expected start date per quoted job before it means anything. Add the field.
   off, with the reason, where the browser has none. The composer's Call and +
   attach are gone (Coy: the Call is at the top; attach did nothing). An earlier composer appended messages locally and faked a Dusty reply
   a second later; that must not come back. Email's Send is still off.
+- **Sending proposals — Threads, the Preview and Dusty (Coy, 2026-10-05: "a
+  clean way to actually send proposals via text and email manually and for
+  dusty to send them. And I want him to watch how i do it and learn and
+  improve").** One road, `sendProposal()` (`src/lib/v34/send-proposal.ts`),
+  always Coy's tap: the link (`POST /api/jobs/[id]/proposal/link {auto:true}`
+  — the live one for the newest final, else a new one; a draft newer than the
+  last final is frozen first, as Preview does; with no browser the cover is
+  the proposal's own, each area's photos are its job photos, and no map
+  pictures), the words with `{link}` / `{first}` / `{title}` filled
+  (`src/lib/proposal-send.ts`, tested), a text through Quo (`POST /api/texts`,
+  §6 Texts) or an email in Coy's own mail app (mailto: — **ScopeCrete has no
+  outbound email yet**), then the link marked sent. **Threads:** the
+  composer's **Proposal** opens a sheet — the person's and their customer's
+  jobs with a proposal (`GET /api/proposals?contact=`), Text · Email, the
+  words, **Preview** (the customer's page `/p/<token>` in a sheet; Coy signed
+  in isn't counted as a view), Send. A text with a proposal link shows
+  "Proposal P-2 · opened 3 times · Preview" under it (`?token=`). **The
+  Preview's** Text it now sends through Quo with words Coy can change ("Or
+  open it in your Messages app" keeps the old sms:). **Dusty:** every chat
+  carries **The business** (orgs.name — he had called it "Baton Rouge
+  Concreters", the lead-gen relay's name, also in his text example) and
+  **Proposals to send** — each job's proposal, its full job id, version,
+  draft/final, total, link URL, sent and opened — and the plan step
+  `send_proposal` {job, via text | email, body with {link}, subject, contact?};
+  the card shows the words in a box Coy can change before Send.
+  **Learning:** each send is kept in Coy's own `user_preferences.prefs.proposal_sends`
+  (newest 12; his words as a pattern, and Dusty's draft beside them when
+  Coy changed it — `POST /api/proposal-sends`, no migration). The next send
+  starts from his last words for that channel, and Dusty is shown them, where
+  Coy changed his draft, and the last texts with a /p/ link in them (sent
+  from the Quo app too), and told to write that way.
 - **Texts send through Quo (Coy, 2026-10-05: "send text messages through the
   app through quo manually or through dusty"; decision card: "Build both").**
   10DLC was not in fact waiting: 129 texts Coy sent from the Quo website line
@@ -3315,7 +3423,9 @@ expected start date per quoted job before it means anything. Add the field.
   never retried. Nothing is shown as sent until Quo takes it, and the text
   appears in the thread only when Quo's webhook brings it back
   (`message.delivered` → `quo_events` → `messages`, §2a) — the app writes no
-  message itself. Quo's refusals are put in words (`quoError()`: key, credits,
+  message itself. After a send (the composer or Dusty's card) the open
+  thread checks again at 3, 8 and 16 s (`expectMessage()`, `live-threads.ts`)
+  rather than waiting for the 15 s poll. Quo's refusals are put in words (`quoError()`: key, credits,
   registration). The hint shows the segment count. **Dusty** proposes a text
   only when Coy asks: plan step `text` {contact — a full id from his context,
   body, to only when Coy names a number} (`src/lib/dusty/plan.ts`, tested);

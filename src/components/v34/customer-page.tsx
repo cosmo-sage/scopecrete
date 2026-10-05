@@ -41,6 +41,7 @@ import { CallNotesPad, DraftQuoteButton } from "@/components/v34/call-notes-pad"
 import { ArchiveButton } from "@/components/v34/archive-actions";
 import { AddressInput } from "@/components/v34/address-input";
 import type { AddressMatch } from "@/lib/address-check";
+import { ContactPicker } from "@/components/v34/contacts";
 
 interface Method { kind: "mobile" | "office" | "home" | "phone" | "email"; value: string; can_text: boolean | null; primary: boolean }
 interface Contact { id: string; name: string | null; role: string | null; primary: boolean; bucket: string | null; status_summary: string | null; recent_summary: string | null; last_contacted: string | null; methods: Method[] }
@@ -406,21 +407,9 @@ function CustomerFacts({ cu, onEdit }: { cu: Customer; onEdit: () => void }) {
 
 function Contacts({ cu, contacts, onChanged, onNote }: { cu: Customer; contacts: Contact[]; onChanged: () => void; onNote: (n: { text: string; undo?: string }) => void }) {
   const [adding, setAdding] = useState(false);
-  const [q, setQ] = useState("");
-  const [found, setFound] = useState<Array<{ id: string; name: string | null; phone: string | null; email: string | null; contact_type: string | null }>>([]);
   const [busy, setBusy] = useState(false);
   const [roleFor, setRoleFor] = useState<string | null>(null);
   const [role, setRole] = useState("");
-
-  useEffect(() => {
-    if (!adding || q.trim().length < 2) return;
-    let off = false;
-    const t = setTimeout(() => {
-      send(`/api/customers/${cu.id}/contacts?q=${encodeURIComponent(q.trim())}`, "GET")
-        .then((b) => { if (!off) setFound(b.people ?? []); }).catch(() => {});
-    }, 220);
-    return () => { off = true; clearTimeout(t); };
-  }, [adding, q, cu.id]);
 
   const run = async (fn: () => Promise<unknown>) => {
     setBusy(true);
@@ -429,7 +418,7 @@ function Contacts({ cu, contacts, onChanged, onNote }: { cu: Customer; contacts:
   const attach = (id: string, name: string | null) => void run(async () => {
     const b = await send(`/api/customers/${cu.id}/contacts`, "POST", { contact_id: id });
     onNote({ text: `${name ?? "They"} now ${name ? "is" : "are"} a contact of ${cu.name ?? "this customer"}.`, undo: b.move_id ?? undefined });
-    setAdding(false); setQ(""); setFound([]);
+    setAdding(false);
   });
   const detach = (c: Contact) => {
     if (!window.confirm(`Take ${c.name ?? "this person"} off ${cu.name ?? "this customer"}? They keep their own history and jobs.`)) return;
@@ -448,17 +437,8 @@ function Contacts({ cu, contacts, onChanged, onNote }: { cu: Customer; contacts:
       </div>
       {adding && (
         <div className="mt-2 rounded p-2" style={{ border: `1px solid ${T.hair}`, background: T.slab }}>
-          <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find a person: name, number or email"
-            style={{ width: "100%", height: 32, padding: "0 8px", border: `1px solid ${T.hairStrong}`, borderRadius: 3, background: T.card, color: T.ink, fontSize: F.sm }} />
-          <div className="mt-1 flex flex-col">
-            {q.trim().length >= 2 && found.length === 0 && <span style={{ fontSize: F.xs, color: T.ink3, padding: "4px 2px" }}>Nobody matches.</span>}
-            {found.map((p) => (
-              <button key={p.id} disabled={busy} onClick={() => attach(p.id, p.name)} className="text-left py-1.5 px-1" style={{ borderTop: `1px solid ${T.hairSoft}`, cursor: "pointer" }}>
-                <span style={{ fontSize: F.sm, fontWeight: 600, color: T.ink }}>{p.name ?? formatPhone(p.phone)}</span>
-                <span style={{ fontSize: F.xs, color: T.ink3 }}> · {[p.name ? formatPhone(p.phone) : null, p.email, p.contact_type ?? "unsorted"].filter(Boolean).join(" · ")}</span>
-              </button>
-            ))}
-          </div>
+          <ContactPicker busy={busy} exclude={contacts.map((c) => c.id)} placeholder="Find a person in Contacts: name, number or email"
+            onPick={(p) => attach(p.id, p.name)} />
           <div style={{ fontSize: 11, color: T.ink3, marginTop: 4 }}>Their calls and texts join this customer&apos;s threads; their own jobs come with them. Undo is offered after.</div>
         </div>
       )}

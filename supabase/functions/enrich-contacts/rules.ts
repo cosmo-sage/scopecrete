@@ -783,8 +783,8 @@ ${lines.join('\n')}`
  * findSelfIdentification() only ever finds their own words. Two different
  * names greeted on one number (a shared line) is no suggestion.
  */
-const GREETING = /^\s*(?:hey|hi|hello|howdy|yo|morning|good (?:morning|afternoon|evening)|evening|afternoon|thanks|thank you)[\s,!.]+(?:(?:mr|mister|mrs|ms|miss|mz)\.?\s+)?([A-Za-z][A-Za-z'’]{1,})(?:\s+([A-Za-z][A-Za-z'’]{1,}))?\b/i
-const NOT_GREETED = new Set(['there', 'sir', 'maam', 'ma’am', "ma'am", 'man', 'buddy', 'bud', 'brother', 'bro', 'boss', 'guys', 'all', 'everyone', 'again', 'yes', 'yeah', 'ok', 'okay', 'how', 'this', 'it', 'is', 'i', 'good', 'great'])
+const GREETING = /^\s*(?:hey|hi|hello|howdy|yo|morning|good (?:morning|afternoon|evening)|evening|afternoon|thanks|thank you)(?:\s*,\s*|\s+)(?:(?:mr|mister|mrs|ms|miss|mz)\.?\s+)?([A-Za-z][A-Za-z'’]{1,})(?:\s+([A-Za-z][A-Za-z'’]{1,}))?\b/i
+const NOT_GREETED = new Set(['there', 'sir', 'maam', 'ma’am', "ma'am", 'man', 'buddy', 'bud', 'brother', 'bro', 'boss', 'guys', 'all', 'everyone', 'again', 'yes', 'yeah', 'ok', 'okay', 'how', 'this', 'it', 'is', 'i', 'good', 'great', 'are', 'can', 'could', 'did', 'do', 'does', 'just', 'when', 'what', 'where', 'who', 'why', 'we', 'you', 'your', 'so', 'and', 'but', 'please', 'again', 'for'])
 
 /** The lines of a turn spoken by US: our texts, or the transcript lines not from their numbers. */
 export function ourLines(t: Turn, ownNumbers: string[]): string[] {

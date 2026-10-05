@@ -148,3 +148,10 @@ test("a name we greet them by is a suggestion, never their introduction", async 
   assert.equal(greetedName([sms("US", "Hey Coy")], [THEM]), null, "our own names never");
   assert.equal(greetedName([sms("US", "Hi Sarah"), sms("US", "Hi Mike")], [THEM]), null, "two names on one number is a question");
 });
+
+test("a greeting that ends its sentence names nobody", async () => {
+  const { greetedName } = await import("../supabase/functions/enrich-contacts/rules.ts");
+  assert.equal(greetedName([sms("US", "Good morning. Are you still wanting the tractor this morning?")], [THEM]), null);
+  assert.equal(greetedName([sms("US", "Hey! Can you send the address")], [THEM]), null);
+  assert.equal(greetedName([sms("US", "Thank you, mister Chad.")], [THEM]).name, "Chad");
+});

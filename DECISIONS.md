@@ -4,7 +4,7 @@ Ground truth for every agent working this repo. If code disagrees with this
 document, the code is wrong or this document is stale — resolve it, don't
 guess. Update this file in the same PR that changes the behavior it describes.
 
-Last updated: 2026-10-04 (Dusty is the Scopecrete Lander; an All thread; proposal cover band and Prepared by; sign-in at app.scopecrete.ai/login, each org at <slug>.app.scopecrete.ai; Dusty's chat keeps its files and files them on a customer or job — migration 079; vendor Delete; Dusty on a vendor's page and looking at attached photos; sales tax by address via TaxLocus — migration 078; archive reasons; Lines, providers and logs — migration 077; internal notes with @-tags; Jobs board sort and filter; jobs by hand — migration 076; done and lost customers in Threads; proposals sent by link, every opening tracked; every option side by side for the customer — migration 075; Documents is Files, everywhere — migration 074; Threads v2 — threads you make, channels per number, the customer page reshaped — migration 073; an address given is kept and asked about — migration 072; Dusty sets addresses; customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
+Last updated: 2026-10-04 (quo-intake stores every Quo event, own lines included — v10; Dusty is the Scopecrete Lander; an All thread; proposal cover band and Prepared by; sign-in at app.scopecrete.ai/login, each org at <slug>.app.scopecrete.ai; Dusty's chat keeps its files and files them on a customer or job — migration 079; vendor Delete; Dusty on a vendor's page and looking at attached photos; sales tax by address via TaxLocus — migration 078; archive reasons; Lines, providers and logs — migration 077; internal notes with @-tags; Jobs board sort and filter; jobs by hand — migration 076; done and lost customers in Threads; proposals sent by link, every opening tracked; every option side by side for the customer — migration 075; Documents is Files, everywhere — migration 074; Threads v2 — threads you make, channels per number, the customer page reshaped — migration 073; an address given is kept and asked about — migration 072; Dusty sets addresses; customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
 
 ---
 
@@ -408,6 +408,24 @@ from Coy's own Cell line "inbound"; the projection filed it outbound) — shown
 only on **Logs** (`/api/logs`), with Dusty's reads and same-person
 merges. Coy: drift belongs on a logs page, not in the inbox. The one open
 defect on 2026-09-28 is that Cell-line text; nothing is missing.
+
+**Intake writes the raw log before anything that can fail (quo-intake v10, deployed as version 69,
+2026-10-04).** Coy texted the Quo line from his Google Voice line, which is one
+of the org's own lines. Migration 019's `contacts_not_org_line` guard refused to
+make a contact of it, and that exception 500'd the webhook BEFORE `quo_events`
+was written, so the text was lost without a trace. Now:
+
+- an event whose counterparty is one of our own lines is stored with no
+  contact, skips leads and the legacy tables, and gets an
+  `own_line_counterparty` defect. Logs shows it as a note: "A text between two
+  of your own lines". It never appears in Threads, because nobody else is in it.
+  Testing intake needs a phone that is not one of the org's lines.
+- any other error stores the event first (no contact) with an `intake_error`
+  defect, which shows red on Logs, and the webhook answers 200. Only when that
+  write fails too does Quo get a 500 and retry.
+- a call follow-up whose call has no `voip_calls` row is stored as well
+  (before v10 it was dropped). The projection attaches it by `callId`, or records
+  `artifact_without_call`.
 
 **Attachments — migration 027 (applied 2026-09-27).** Photos, videos, PDFs and
 contact cards sent by text live in `message_media`, one row per file, written by

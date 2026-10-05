@@ -58,10 +58,27 @@
  *   lets two contacts that are the same person be merged; the merged-away row
  *   keeps its phone, so a lookup by phone must hop to the person it now
  *   belongs to. Nothing else in this file changed.
+ *
+ * v10 changes — every event reaches the raw log:
+ * - A text or call between two of the org's OWN lines (Coy texting the Quo
+ *   number from Google Voice, 2026-10-04) has no counterparty to file. The
+ *   contacts_not_org_line guard (migration 019) rightly refuses to make a
+ *   contact of our own number, but that exception 500'd the whole webhook
+ *   BEFORE quo_events was written, so the event was lost. Such an event is
+ *   now stored with no contact, gets an `own_line_counterparty` note in
+ *   projection_defects (More -> Logs shows it) and skips leads and the legacy
+ *   tables.
+ * - Any other error now rescues the event first: it is written to quo_events
+ *   (no contact) with an `intake_error` note, and the webhook answers 200. Only
+ *   if that write also fails does it return 500 so Quo retries.
+ * - A call follow-up whose call has no voip_calls row was dropped with only a
+ *   function log. It is now stored too; the projection attaches it to the
+ *   call's message when there is one, or records artifact_without_call.
  */
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { eventIdFor, rescueDirection } from './rules.ts'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? ''
 // SUPABASE_SECRET_KEY (sb_secret_…) first, legacy service_role JWT second.
@@ -390,12 +407,12 @@ async function insertQuoEvent(
   supabase: ReturnType<typeof createClient>,
   opts: {
     orgId: string
-    contactId: string
+    contactId: string | null
     eventType: string
     eventId: string
-    direction: 'inbound' | 'outbound'
-    fromPhone: string
-    toPhone: string
+    direction: 'inbound' | 'outbound' | null
+    fromPhone: string | null
+    toPhone: string | null
     body: string | null
     mediaUrls: unknown
     rawPayload: unknown
@@ -416,6 +433,72 @@ async function insertQuoEvent(
     business: 'sacco_builders',
   })
   return !dbFailed(`quo_events insert (${opts.eventType}/${opts.eventId})`, error)
+}
+
+/** The quo_events row for (org, event_id), or null. */
+async function findQuoEventId(
+  supabase: ReturnType<typeof createClient>,
+  orgId: string,
+  eventId: string
+): Promise<string | null> {
+  const { data, error } = await supabase.from('quo_events').select('id')
+    .eq('org_id', orgId).eq('event_id', eventId).limit(1).maybeSingle()
+  if (dbFailed(`quo_events lookup (${eventId})`, error)) return null
+  return (data as { id: string } | null)?.id ?? null
+}
+
+/**
+ * A note on a stored event, shown on More -> Logs (via sc_spine_drift's
+ * open_defect rows). Never throws: a note that fails to write must not cost
+ * the event.
+ */
+async function noteDefect(
+  supabase: ReturnType<typeof createClient>,
+  orgId: string,
+  eventId: string,
+  defect: 'own_line_counterparty' | 'intake_error',
+  detail: Record<string, unknown>
+) {
+  try {
+    const rawEventId = await findQuoEventId(supabase, orgId, eventId)
+    if (!rawEventId) return
+    const { error } = await supabase.from('projection_defects')
+      .insert({ org_id: orgId, raw_event_id: rawEventId, defect, detail })
+    dbFailed(`projection_defects insert (${defect}/${eventId})`, error)
+  } catch (e) {
+    console.error(`[defect] ${defect} note failed:`, e instanceof Error ? e.message : String(e))
+  }
+}
+
+/** Is this number one of the org's own lines (org_phone_numbers)? */
+async function isOrgLine(
+  supabase: ReturnType<typeof createClient>,
+  orgId: string,
+  phone: string
+): Promise<boolean> {
+  const { data, error } = await supabase.from('org_phone_numbers').select('id')
+    .eq('org_id', orgId).eq('phone_e164', phone).limit(1).maybeSingle()
+  // On a lookup error carry on as normal; the contacts guard still holds and
+  // the rescue path below still stores the event.
+  if (dbFailed(`org line lookup (${phone})`, error)) return false
+  return !!data
+}
+
+/**
+ * Stores an event between two of our own lines: raw log only, no contact, no
+ * lead, no sms_threads / voip_calls row, plus a note for More -> Logs.
+ */
+async function storeOwnLineEvent(
+  supabase: ReturnType<typeof createClient>,
+  opts: { orgId: string; eventType: string; eventId: string; direction: 'inbound' | 'outbound'
+          fromPhone: string | null; toPhone: string | null; body: string | null; mediaUrls: unknown; rawPayload: unknown }
+): Promise<Response> {
+  console.log(`[own-line] ${opts.eventType} ${opts.fromPhone} -> ${opts.toPhone}: stored without a contact`)
+  await insertQuoEvent(supabase, { ...opts, contactId: null, leadId: null })
+  await noteDefect(supabase, opts.orgId, opts.eventId, 'own_line_counterparty', {
+    from: opts.fromPhone, to: opts.toPhone, event_type: opts.eventType,
+  })
+  return new Response(JSON.stringify({ status: 'own_line' }), { status: 200, headers: { 'Content-Type': 'application/json' } })
 }
 
 // ---------------------------------------------------------------------------
@@ -651,10 +734,10 @@ serve(async (req: Request) => {
     return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400 })
   }
 
-  try {
-    const eventType = payload.type as string
-    const data = (payload.data as Record<string, unknown>)?.object as Record<string, unknown> ?? {}
+  const eventType = payload.type as string
+  const data = (payload.data as Record<string, unknown>)?.object as Record<string, unknown> ?? {}
 
+  try {
     // -------------------- call.completed --------------------
     if (eventType === 'call.completed') {
       const fromRaw = (data.from as string) ?? ''
@@ -674,6 +757,12 @@ serve(async (req: Request) => {
         return new Response(JSON.stringify({ error: 'No counterparty phone' }), { status: 400 })
       }
       const { orgId } = await resolveOrg(supabase, toPhone)
+      if (await isOrgLine(supabase, orgId, contactPhone)) {
+        return await storeOwnLineEvent(supabase, {
+          orgId, eventType, eventId: quoCallId, direction, fromPhone, toPhone: toPhone ?? fromPhone,
+          body: null, mediaUrls: null, rawPayload: data,
+        })
+      }
       const contactId = await upsertContact(supabase, orgId, contactPhone)
 
       const rawStatus = (data.status as string) ?? 'missed'
@@ -736,6 +825,12 @@ serve(async (req: Request) => {
         return new Response(JSON.stringify({ error: 'No counterparty phone' }), { status: 400 })
       }
       const { orgId } = await resolveOrg(supabase, toPhone)
+      if (await isOrgLine(supabase, orgId, contactPhone)) {
+        return await storeOwnLineEvent(supabase, {
+          orgId, eventType, eventId: quoMessageId, direction, fromPhone, toPhone: toPhone ?? fromPhone,
+          body, mediaUrls, rawPayload: data,
+        })
+      }
       const contactId = await upsertContact(supabase, orgId, contactPhone)
 
       // Insert quo_event
@@ -813,7 +908,16 @@ serve(async (req: Request) => {
 
       const call = await updateCallByQuoId(supabase, quoCallId, patch)
       if (!call) {
-        // Raw payload is preserved in the function logs above so nothing is lost.
+        // v10: store it anyway. No voip_calls row usually means the call was
+        // between two of our own lines (stored raw-only above) or arrived out
+        // of order; either way the projection attaches it to the call's
+        // message by callId, or records artifact_without_call.
+        const { orgId } = await resolveOrg(supabase, null)
+        const eventId = eventIdFor(eventType, payload, data) ?? `${quoCallId}:${eventType}`
+        await insertQuoEvent(supabase, {
+          orgId, contactId: null, eventType, eventId, direction: null, fromPhone: null, toPhone: null,
+          body: bodyForEvent, mediaUrls: mediaForEvent, rawPayload: data, leadId: null,
+        })
         return new Response(JSON.stringify({ status: 'unmatched', call_id: quoCallId }), { status: 200, headers: { 'Content-Type': 'application/json' } })
       }
 
@@ -876,6 +980,13 @@ serve(async (req: Request) => {
       }
 
       const { orgId } = await resolveOrg(supabase, fromPhone)
+      if (await isOrgLine(supabase, orgId, contactPhone)) {
+        return await storeOwnLineEvent(supabase, {
+          orgId, eventType, eventId: quoMessageId, direction: 'outbound',
+          fromPhone: fromPhone ?? QUO_PHONE, toPhone: toPhone ?? contactPhone,
+          body, mediaUrls, rawPayload: data,
+        })
+      }
       const contactId = await upsertContact(supabase, orgId, contactPhone)
 
       await insertQuoEvent(supabase, {
@@ -903,9 +1014,48 @@ serve(async (req: Request) => {
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err)
     console.error('Function error:', message)
+    // v10: the raw log comes first. Save the event with no contact and a note
+    // for More -> Logs, and answer 200 — it is on disk. Only when that write
+    // fails too does Quo get a 500 and retry.
+    if (await rescueEvent(supabase, eventType, payload, data, message)) {
+      return new Response(JSON.stringify({ status: 'saved_after_error', detail: message }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    }
     return new Response(JSON.stringify({ error: 'Internal error', detail: message }), { status: 500 })
   }
 })
+
+/** Stores an event the handler failed on. True when it is in quo_events. */
+async function rescueEvent(
+  supabase: ReturnType<typeof createClient>,
+  eventType: string,
+  payload: Record<string, unknown>,
+  data: Record<string, unknown>,
+  message: string
+): Promise<boolean> {
+  try {
+    const eventId = eventIdFor(eventType, payload, data)
+    if (!eventType || !eventId) return false
+    const fromPhone = normalizePhone((data.from as string) ?? '')
+    const toPhone = normalizePhone((data.to as string) ?? '')
+    // message.delivered is ours, so its org is keyed on the sender.
+    const { orgId } = await resolveOrg(supabase, eventType === 'message.delivered' ? fromPhone : toPhone)
+    if (!(await findQuoEventId(supabase, orgId, eventId))) {
+      const stored = await insertQuoEvent(supabase, {
+        orgId, contactId: null, eventType, eventId,
+        direction: rescueDirection(eventType, data, fromPhone, QUO_PHONE),
+        fromPhone, toPhone,
+        body: eventType.startsWith('message.') ? messageTextFromPayload(data) : null,
+        mediaUrls: (data.media as unknown[] | null) ?? null, rawPayload: data, leadId: null,
+      })
+      if (!stored) return false
+    }
+    await noteDefect(supabase, orgId, eventId, 'intake_error', { message: message.substring(0, 500), event_type: eventType })
+    return true
+  } catch (e) {
+    console.error('[rescue] failed:', e instanceof Error ? e.message : String(e))
+    return false
+  }
+}
 // redeploy trigger
 // 2026-06-22T06:13:54+00:00
 // 2026-06-22T06:14:47+00:00 - redeploy v2

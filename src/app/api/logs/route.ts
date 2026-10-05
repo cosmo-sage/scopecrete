@@ -55,6 +55,16 @@ export async function GET(req: NextRequest) {
       return { at: r.created_at, severity: "note", title: "A text's direction was corrected",
         detail: `Quo called a text ${d.detail.provider_said ?? "?"}, but it came from ${ours ? `your ${ours} line` : from ?? "one of your lines"}, so it was filed as ${d.detail.ownership_says ?? "yours"}. The message is in the app; nothing is missing.` };
     }
+    if (r.detail === "own_line_counterparty") {
+      const name = (p?: string) => (p ? lineName.get(p) ?? p : "?");
+      const kind = d?.detail?.event_type?.startsWith("call") ? "call" : "text";
+      return { at: r.created_at, severity: "note", title: `A ${kind} between two of your own lines`,
+        detail: `${name(d?.detail?.from)} → ${name(d?.detail?.to)}. It is saved, but both numbers are yours, so it isn't filed under anyone in Threads. To test intake, use a phone that isn't one of your lines.` };
+    }
+    if (r.detail === "intake_error") {
+      return { at: r.created_at, severity: "alarm", title: "Intake hit an error on a Quo event",
+        detail: `The ${d?.detail?.event_type ?? "event"} is saved, but it was not filed under a contact: ${d?.detail?.message ?? "unknown error"}. Tell Claude Code.` };
+    }
     return { at: r.created_at, severity: "note", title: `Note on a message: ${r.detail.replace(/_/g, " ")}`,
       detail: "The message reached the app; this is a detail recorded while filing it." };
   });

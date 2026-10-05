@@ -33,7 +33,7 @@ import Link from "next/link";
 import { T, F, disp, eyebrow, nums, clip, relTime } from "@/lib/v34/tokens";
 import { EmptyState, Sheet } from "@/components/v34/primitives";
 import { JOB_TYPE_LABEL } from "@/lib/jobs/stages";
-import { TRAY_PX, decideSwipe, isHorizontal, clampDrag } from "@/lib/swipe";
+import { TRAY_PX, ACTIONS_PX, decideSwipe, isHorizontal, clampDrag } from "@/lib/swipe";
 import { BucketPicker, BUCKETS, SUGGESTS, type Bucket, type Subtype } from "@/components/v34/bucket-picker";
 import { BUCKET } from "@/lib/v34/tokens";
 import { useThreads } from "@/components/v34/threads-ctx";
@@ -360,17 +360,17 @@ function subLine(t: Thread): string {
   return [t.company, t.person_role, (t.numbers ?? 0) > 1 ? `${t.numbers} numbers` : null, t.has_email ? "email" : null].filter(Boolean).join(" · ");
 }
 
-function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, onName, onBucket, subtypes, deciding, trayOpen, onTray, onAccept, chipShown, selected }: {
+function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, onName, onBucket, subtypes, deciding, tray, onTray, onArchive, chipShown, selected }: {
   t: Thread; first: boolean; expanded: boolean; onToggle: () => void; onOpen: () => void;
   /** This contact is the one open beside the list. */
   selected: boolean;
   /** The open chip already says the bucket (Coy, 2026-09-28: the tag is redundant there). */
   chipShown: boolean;
-  /** Swipe right: this row's four-bucket tray is open. One row at a time. */
-  trayOpen: boolean;
-  onTray: (open: boolean) => void;
-  /** Swipe left all the way: file Dusty's guess. */
-  onAccept: (bucket: Bucket) => void;
+  /** Swipe right: the four buckets; swipe left: Spam · Archive. One row at a time. */
+  tray: "buckets" | "actions" | null;
+  onTray: (side: "buckets" | "actions" | null) => void;
+  /** Archive this thread (asks why first). */
+  onArchive: () => void;
   onDecide: (proposalId: string, body: Record<string, unknown>) => void;
   onName: (claimId: string, action: "keep" | "undo") => void;
   onBucket: (contactId: string, bucket: Bucket | null, subtype?: string | null) => void;
@@ -378,8 +378,8 @@ function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, onName, onB
   deciding: boolean;
 }) {
   const badge = t.bucket ? BUCKETS.find((b) => b.k === t.bucket) : null;
-  // Dusty's guess, shown on the collapsed row so the list can be read — and
-  // accepted with a left swipe — without opening anything.
+  // Dusty's guess, shown on the collapsed row so the list can be read without
+  // opening anything, and marked in the buckets a right swipe opens.
   const guess = !t.bucket && t.proposal ? SUGGESTS[t.proposal.classification] ?? null : null;
   const guessB = guess ? BUCKETS.find((b) => b.k === guess)! : null;
   const when = relTime(t.occurred_at);
@@ -391,13 +391,14 @@ function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, onName, onB
     : t.job_type_hint ? { l: JOB_TYPE_LABEL[t.job_type_hint] ?? t.job_type_hint, sure: false }
     : null;
 
-  // Swipe: right opens the buckets, left all the way accepts the guess.
+  // Swipe: right opens the buckets, left opens Spam · Archive (Coy, 2026-10-05).
   // touch-action: pan-y leaves vertical scrolling to the browser.
   const [drag, setDrag] = useState<number | null>(null);
   const [rebucket, setRebucket] = useState(false);
   const start = React.useRef<{ x: number; y: number; w: number; on: boolean } | null>(null);
   const swipeable = !expanded;
-  const offset = drag ?? (trayOpen ? TRAY_PX : 0);
+  const rest = tray === "buckets" ? TRAY_PX : tray === "actions" ? -ACTIONS_PX : 0;
+  const offset = drag ?? rest;
   const onTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
     if (!swipeable) return;
     const p = e.touches[0];
@@ -406,17 +407,16 @@ function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, onName, onB
   const onTouchMove = (e: React.TouchEvent) => {
     const st = start.current; if (!st) return;
     const p = e.touches[0];
-    const dx = p.clientX - st.x + (trayOpen ? TRAY_PX : 0), dy = p.clientY - st.y;
+    const dx = p.clientX - st.x + rest, dy = p.clientY - st.y;
     if (!st.on) { if (!isHorizontal(p.clientX - st.x, dy)) return; st.on = true; }
-    setDrag(clampDrag(dx, st.w, !!guess));
+    setDrag(clampDrag(dx));
   };
   const onTouchEnd = () => {
     const st = start.current; start.current = null;
     if (!st?.on || drag === null) { setDrag(null); return; }
-    const r = decideSwipe(drag, st.w, !!guess);
+    const r = decideSwipe(drag);
     setDrag(null);
-    if (r === "open") onTray(true);
-    else { onTray(false); if (r === "accept" && guess) onAccept(guess); }
+    onTray(r === "open" ? "buckets" : r === "actions" ? "actions" : null);
   };
   const isVoicemail = t.summary_source === "quo_voicemail";
   const synthesised = t.preview_source === "synthesised";
@@ -433,7 +433,7 @@ function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, onName, onB
       {offset > 0 && (
         <div className="absolute inset-y-0 left-0 flex" style={{ width: TRAY_PX }} aria-label="File as">
           {BUCKETS.map((b) => (
-            <button key={b.k} disabled={deciding} onClick={() => { onTray(false); onBucket(t.contact_id, b.k, guess === b.k && t.proposal?.classification === "sub" ? "subcontractor" : null); }}
+            <button key={b.k} disabled={deciding} onClick={() => { onTray(null); onBucket(t.contact_id, b.k, guess === b.k && t.proposal?.classification === "sub" ? "subcontractor" : null); }}
               className="flex-1 flex flex-col items-center justify-center gap-0.5"
               style={{ background: b.c, color: T.card, fontFamily: disp, fontSize: F.micro, fontWeight: 700, textTransform: "uppercase",
                        letterSpacing: 0, boxShadow: guess === b.k ? "inset 0 0 0 3px rgba(255,255,255,.85)" : undefined }}>
@@ -443,11 +443,21 @@ function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, onName, onB
           ))}
         </div>
       )}
-      {/* Behind the row, right: accept Dusty's guess (swipe left). */}
-      {offset < 0 && guessB && (
-        <div className="absolute inset-0 flex items-center justify-end pr-4"
-          style={{ background: guessB.c, color: T.card, fontFamily: disp, fontSize: F.md, fontWeight: 600, textTransform: "uppercase" }}>
-          {offset < -120 ? `✓ ${guessB.l}` : guessB.l}
+      {/* Behind the row, right: Spam and Archive (swipe left; Coy, 2026-10-05). */}
+      {offset < 0 && (
+        <div className="absolute inset-y-0 right-0 flex" style={{ width: ACTIONS_PX }} aria-label="Spam or archive">
+          <button disabled={deciding || t.bucket === "spam"} onClick={() => { onTray(null); onBucket(t.contact_id, "spam", null); }}
+            className="flex-1 flex flex-col items-center justify-center gap-1"
+            style={{ background: BUCKET.spam, color: T.card, fontFamily: disp, fontSize: F.micro, fontWeight: 700, textTransform: "uppercase", opacity: t.bucket === "spam" ? 0.5 : 1 }}>
+            <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" aria-hidden="true"><circle cx="10" cy="10" r="7" /><path d="M5 15L15 5" /></svg>
+            Spam
+          </button>
+          <button onClick={() => { onTray(null); onArchive(); }}
+            className="flex-1 flex flex-col items-center justify-center gap-1"
+            style={{ background: T.ink2, color: T.card, fontFamily: disp, fontSize: F.micro, fontWeight: 700, textTransform: "uppercase" }}>
+            <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" aria-hidden="true"><rect x="2.5" y="3.5" width="15" height="4" /><path d="M4 7.5v9h12v-9M8 11h4" /></svg>
+            Archive
+          </button>
         </div>
       )}
       <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} onTouchCancel={onTouchEnd}
@@ -458,7 +468,7 @@ function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, onName, onB
           A tap opens them; ▾ (only while there is something to decide about
           who they are) drops down the filing tools. */}
       <div className="flex items-stretch" style={{ borderLeft: `3px solid ${selected ? T.hiviz : "transparent"}`, background: selected ? T.hivizDim : "transparent" }}>
-      <button onClick={() => (trayOpen ? onTray(false) : onOpen())} aria-current={selected ? "true" : undefined}
+      <button onClick={() => (tray ? onTray(null) : onOpen())} aria-current={selected ? "true" : undefined}
         className="flex-1 min-w-0 flex gap-2.5 items-start text-left" style={{ padding: "9px 4px 9px 7px", cursor: "pointer" }}>
         <InitialsBox name={t.name_is_phone ? null : t.display_name} on={selected} size={30} />
         <span style={{ minWidth: 0, flex: 1, display: "block" }}>
@@ -659,7 +669,7 @@ export function ThreadList({ folded = false }: { folded?: boolean }) {
   const findQ = find.trim().toLowerCase();
   const [openRow, setOpenRow] = useState<string | null>(null);
   // Swipe tray: one row at a time. Toast: what was just filed, with Undo.
-  const [trayRow, setTrayRow] = useState<string | null>(null);
+  const [trayRow, setTrayRow] = useState<{ id: string; side: "buckets" | "actions" } | null>(null);
   const [toast, setToast] = useState<{ contactId: string; label: string } | null>(null);
   const [deciding, setDeciding] = useState(false);
   // Archive (migration 066): pick rows, archive them with Undo; the Archived view brings them back.
@@ -1022,6 +1032,16 @@ export function ThreadList({ folded = false }: { folded?: boolean }) {
                 {THREAD_SORTS.map((x) => <option key={x.k} value={x.k}>{x.label}</option>)}
               </select>
             )}
+            {/* Select, as an icon beside sort and search (Coy, 2026-10-05). */}
+            {!loading && !error && visible.length > 0 && (
+              <button onClick={() => { if (selecting) { setSelecting(false); setPicked(new Set()); } else { setSelecting(true); setPicked(new Set()); setOpenRow(null); setTrayRow(null); } }}
+                aria-label="Select threads" aria-pressed={selecting} title="Select threads to archive"
+                className="shrink-0 flex items-center justify-center rounded" style={{ width: 26, height: 26, border: `1px solid ${selecting ? T.hiviz : T.hairStrong}`, background: selecting ? T.hivizDim : T.card, cursor: "pointer" }}>
+                <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke={selecting ? T.hiviz : T.ink2} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <rect x="2.5" y="2.5" width="6" height="6" rx="1" /><path d="M4 5.5l1.3 1.3L7.5 4.2" /><rect x="2.5" y="11.5" width="6" height="6" rx="1" /><path d="M11.5 5.5h6M11.5 14.5h6" />
+                </svg>
+              </button>
+            )}
             <button onClick={() => { setFinding((v) => !v); if (finding) setFind(""); }} aria-label="Search this list" aria-pressed={finding} title="Search by word, name or place"
               className="shrink-0 flex items-center justify-center rounded" style={{ width: 26, height: 26, border: `1px solid ${finding ? T.hiviz : T.hairStrong}`, background: finding ? T.hivizDim : T.card, cursor: "pointer" }}>
               <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke={finding ? T.hiviz : T.ink2} strokeWidth="1.8" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5" /><path d="M13 13l4.5 4.5" /></svg>
@@ -1078,7 +1098,7 @@ export function ThreadList({ folded = false }: { folded?: boolean }) {
         onCancel={() => setAsking(null)} onConfirm={(note) => { const ids = asking ?? []; setAsking(null); void archive(ids, false, note); }} />
       {/* Select and archive (Coy, 2026-10-03: calls where nothing was said — not spam, not anyone).
           Archived threads come back on their own when that number calls or texts again. */}
-      {!q && !loading && !error && (
+      {!q && !loading && !error && (selecting || filter === "archived" || doneHere > 0 || lostIds.length > 0) && (
         <div className="flex items-center gap-1.5 px-2.5 py-1.5 flex-wrap" style={{ borderBottom: `1px solid ${T.hairSoft}`, background: selecting ? T.hivizDim : "transparent" }}>
           {!selecting ? (
             <>
@@ -1095,11 +1115,6 @@ export function ThreadList({ folded = false }: { folded?: boolean }) {
                   title="Archive every customer whose jobs are all lost — they come back if they call or text again">
                   Archive lost · {lostIds.length}
                 </button>
-              )}
-              <span className="flex-1" />
-              {visible.length > 0 && (
-                <button onClick={() => { setSelecting(true); setPicked(new Set()); setOpenRow(null); setTrayRow(null); }}
-                  className="rounded px-2.5" style={{ ...eyebrow, height: 28, border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink, cursor: "pointer" }}>Select</button>
               )}
             </>
           ) : (
@@ -1168,9 +1183,9 @@ export function ThreadList({ folded = false }: { folded?: boolean }) {
               onDecide={decide} onName={nameDecide} onBucket={(id, bucket, sub) => fileAndToast(id, bucket, sub)}
               subtypes={subtypes} deciding={deciding}
               chipShown={!q && isSystemKey(filter) && filter !== "all"}
-              trayOpen={trayRow === t.contact_id}
-              onTray={(open) => setTrayRow(open ? t.contact_id : null)}
-              onAccept={(bucket) => fileAndToast(t.contact_id, bucket, bucket === "vendor" && t.proposal?.classification === "sub" ? "subcontractor" : null)} />
+              tray={trayRow?.id === t.contact_id ? trayRow.side : null}
+              onTray={(side) => setTrayRow(side ? { id: t.contact_id, side } : null)}
+              onArchive={() => setAsking([t.contact_id])} />
           ))}
         </div>
       )}

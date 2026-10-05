@@ -2491,6 +2491,19 @@ expected start date per quoted job before it means anything. Add the field.
   saved per account (`dusty_font`). Dusty sits at the bottom left of the
   message bar (36px), always there while the chat is open, in his live state;
   the 96px empty-state and 32px sprites are gone.
+- **Dusty says hello (Coy, 2026-10-05: "a personalized message from Dusty
+  … Hey Coy … something subtle to greet and to maybe make me smile").** An
+  empty chat no longer says "What are we working on?", what he can and can't
+  do, or offers starter buttons. It shows the ScopeCrete emblem (orbits
+  turning), "Hey <first name>." (the account's name; with none, Morning /
+  Afternoon / Evening in Central) and one of his own recent thoughts — a
+  musing or dream as `/api/activity` serves it, about the person on screen
+  when there is one, else one of the newest five — with where it came from
+  ("— reading Dylan Ordoyne's calls and texts", a tap opens their thread).
+  No model call on opening. Nothing from the last three days → a quiet line
+  of his. Shown whatever the thought-line switches say: those hide the
+  header line, not the chat. `DustyHello` in `dusty-panel.tsx`,
+  `src/lib/dusty/hello.ts` (tested).
 - **Hide the thought line (Coy, 2026-10-05: "it can be distracting").**
   Settings → **Dusty (AI)** → **Show Dusty's thought line**, **On a phone**
   and **On a desktop** apart (Coy, same day: "off on mobile and on on

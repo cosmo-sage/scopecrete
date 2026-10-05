@@ -30,6 +30,8 @@ import { useDustyUse } from "@/lib/v34/dusty-live";
 import { sendBytes } from "@/components/v34/files-panel";
 import { VoiceRecorder } from "@/components/v34/voice-recorder";
 import { usePref } from "@/lib/v34/prefs";
+import { Emblem } from "@/components/site/marks";
+import { greeting, pickThought, thoughtSource, QUIET_LINES, type Thought } from "@/lib/dusty/hello";
 
 type Ref = { kind: "thread" | "scope" | "customer"; id: string } | { kind: "cash" } | { kind: "cold" };
 type TurnFile = { id: string; name: string; kind?: string; url: string | null };
@@ -53,13 +55,6 @@ const GUESS: Record<Ref["kind"], string> = {
 };
 const PAGE: Record<Ref["kind"], string> = {
   thread: "this person", scope: "this job", customer: "this customer", cash: "Price book & money", cold: "",
-};
-const STARTERS: Record<Ref["kind"], string[]> = {
-  thread: ["What does this person want?", "What do I owe them?", "Draft a reply I can send"],
-  scope: ["Check these numbers", "What's stopping a price?", "What should I still ask them?"],
-  customer: ["Summarise who this is", "What's open with them?"],
-  cash: ["Build me a driveway breakout & pourback assembly", "Which items have no price?", "What is my monthly burn?"],
-  cold: ["What's waiting on me today?", "Price a 24×30 driveway", "Who haven't I called back?"],
 };
 
 /** The chat's text size (Coy, 2026-10-05: "the ability to adjust the size of the font inside the chat"), per account. */
@@ -466,19 +461,7 @@ export function DustyPanel({ open, onClose, onBusy, onStream }: {
           <div className="mx-auto w-full px-4 py-4" style={{ maxWidth: 760 }}>
             {loadingConv && <div className="rounded animate-pulse" style={{ height: 80, background: T.hairSoft }} />}
             {!loadingConv && items.length === 0 && (
-              <div className="text-center py-6">
-                <div style={{ fontFamily: disp, fontSize: F.xl, fontWeight: 600 }}>What are we working on?</div>
-                <p style={{ fontSize: F.sm, color: T.ink3, lineHeight: 1.5, maxWidth: 360, margin: "4px auto 14px" }}>
-                  {ref.kind === "cold" ? "Dusty has your jobs, costs, threads and notes." : `Dusty can see ${GUESS[ref.kind]} and everything behind it.`}
-                  {" "}He reads and answers; nothing is sent or changed.
-                </p>
-                <div className="flex flex-wrap gap-1.5 justify-center">
-                  {STARTERS[ref.kind].map((s) => (
-                    <button key={s} onClick={() => void ask(s)} className="rounded px-3 py-1.5"
-                      style={{ background: T.card, border: `1px solid ${T.hair}`, fontSize: F.xs, color: T.ink2 }}>{s}</button>
-                  ))}
-                </div>
-              </div>
+              <DustyHello contactId={ref.kind === "thread" ? ref.id : null} onGo={onClose} />
             )}
             {/* The chat at Coy's text size: zoom scales the answers' tables and plans with the words. */}
             <div style={{ zoom: font.z }}>
@@ -601,6 +584,52 @@ function ChatFiles({ files }: { files: TurnFile[] }) {
           </a>
         );
       })}
+    </div>
+  );
+}
+
+/**
+ * The empty chat (Coy, 2026-10-05): the ScopeCrete emblem, "Hey Coy." and one
+ * of Dusty's own recent thoughts — what the background reader already wrote
+ * about real calls, texts and emails (/api/activity's musings and dreams), so
+ * opening the panel costs no model call. Nothing to mention → a quiet line.
+ * No "what I can and can't do", no starter buttons.
+ */
+function DustyHello({ contactId, onGo }: { contactId: string | null; onGo: () => void }) {
+  const [name, setName] = useState<string | null | undefined>(undefined);
+  const [thought, setThought] = useState<Thought | null | undefined>(undefined);
+  const [roll] = useState(() => Math.random());
+  const router = useRouter();
+  useEffect(() => {
+    let off = false;
+    fetch("/api/session/me").then((r) => (r.ok ? r.json() : null))
+      .then((b) => { if (!off) setName(typeof b?.name === "string" ? b.name : null); })
+      .catch(() => { if (!off) setName(null); });
+    fetch("/api/activity").then((r) => (r.ok ? r.json() : null))
+      .then((b) => { if (!off) setThought(pickThought(Array.isArray(b?.musings) ? (b.musings as Thought[]) : [], roll, contactId)); })
+      .catch(() => { if (!off) setThought(null); });
+    return () => { off = true; };
+  }, [contactId, roll]);
+
+  const ready = name !== undefined && thought !== undefined;
+  const source = thought ? thoughtSource(thought.detail) : null;
+  return (
+    <div className="text-center" style={{ padding: "28px 8px 12px" }}>
+      <div style={{ display: "flex", justifyContent: "center", marginBottom: 14 }}><Emblem size={44} spin /></div>
+      <div style={{ opacity: ready ? 1 : 0, transition: "opacity .35s ease", maxWidth: 380, margin: "0 auto" }}>
+        <div style={{ fontFamily: agent, fontSize: F.lg, fontWeight: 600, color: T.ink }}>{greeting(name ?? null, new Date())}</div>
+        <p style={{ fontFamily: agent, fontSize: F.md, color: T.ink2, lineHeight: 1.5, margin: "6px 0 0" }}>
+          {thought ? thought.summary : QUIET_LINES[Math.floor(roll * QUIET_LINES.length)]}
+        </p>
+        {thought && source && (
+          thought.contact_id ? (
+            <button onClick={() => { onGo(); router.push(`/dashboard/messages/${thought.contact_id}`); }}
+              style={{ fontFamily: agent, fontSize: F.xs, color: T.ink3, marginTop: 6, cursor: "pointer", background: "none", border: "none" }}>
+              — {source}
+            </button>
+          ) : <div style={{ fontFamily: agent, fontSize: F.xs, color: T.ink3, marginTop: 6 }}>— {source}</div>
+        )}
+      </div>
     </div>
   );
 }

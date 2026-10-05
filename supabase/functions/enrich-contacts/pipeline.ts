@@ -9,7 +9,7 @@
  */
 
 import {
-  AUTO_STREAK, PROMPT_VERSION, SYSTEM_PROMPT, bucketOf, findSelfIdentification, introducedName, relabelTranscript, renderConversation,
+  AUTO_STREAK, PROMPT_VERSION, SYSTEM_PROMPT, bucketOf, findSelfIdentification, greetedName, introducedName, relabelTranscript, renderConversation,
   renderNotes, sanitize, spamSignal, titleKey, worthEnriching, type CoyNote, type Correction, type Proposal, type Turn,
 } from './rules.ts'
 
@@ -263,6 +263,44 @@ export async function recheckNames(sb: Db, model: string, limit = 25): Promise<{
 }
 
 /**
+ * The name we greet them by, put on a standing suggestion that has none (Coy, 2026-10-05:
+ * "Suggest it"). Only a suggestion — Coy confirms it; nothing is written on the contact.
+ */
+async function suggestGreeted(sb: Db, orgId: string, proposalId: string, turns: Turn[], numbers: string[]): Promise<boolean> {
+  const g = greetedName(turns, numbers)
+  if (!g) return false
+  const { data: cur } = await sb.from('contact_proposals').select('evidence_quote').eq('org_id', orgId).eq('id', proposalId).maybeSingle()
+  const q = ((cur as { evidence_quote: string | null } | null)?.evidence_quote ?? '')
+  await sb.from('contact_proposals').update({
+    proposed_name: g.name, evidence_quote: `${q ? `${q} … ` : ""}(you greeted them: "${g.quote}")`.slice(0, 2000),
+  }).eq('org_id', orgId).eq('id', proposalId).is('proposed_name', null)
+  return true
+}
+
+/**
+ * Once, for people read before the rule (the worker's `{"greetings": true}`): each unnamed
+ * contact whose standing suggestion has no name gets the one we greet them by, if any.
+ */
+export async function backfillGreetings(sb: Db, limit = 300): Promise<{ checked: number; suggested: number }> {
+  const { data: props } = await sb.from('contact_proposals').select('id, org_id, contact_id')
+    .eq('status', 'pending').is('proposed_name', null).order('created_at', { ascending: false }).limit(limit)
+  const list = (props ?? []) as Array<{ id: string; org_id: string; contact_id: string }>
+  if (!list.length) return { checked: 0, suggested: 0 }
+  const { data: open } = await sb.from('contacts').select('id, org_id')
+    .in('id', [...new Set(list.map((r) => r.contact_id))])
+    .is('merged_into_contact_id', null).neq('name_source', 'human').or('name.is.null,name.eq.')
+  const unnamed = new Set(((open ?? []) as Array<{ id: string; org_id: string }>).map((c) => `${c.org_id}:${c.id}`))
+  let checked = 0, suggested = 0
+  for (const r of list) {
+    if (!unnamed.has(`${r.org_id}:${r.contact_id}`)) continue
+    checked++
+    const [turns, numbers] = await Promise.all([loadTurns(sb, r.org_id, r.contact_id), contactNumbers(sb, r.org_id, r.contact_id)])
+    if (await suggestGreeted(sb, r.org_id, r.id, turns, numbers)) suggested++
+  }
+  return { checked, suggested }
+}
+
+/**
  * Dusty files everyone (Coy, 2026-10-03: "Just let Dusty work on filing
  * everything. I can always change it to a different bucket."). A suggestion
  * he is this sure of is filed, marked auto, with Keep / Not X — the earned
@@ -490,6 +528,7 @@ export async function readContact(sb: Db, orgId: string, contactId: string, ask:
   // chance to name them — it may predate the self-introduction rule. Not when
   // they have no status line yet: that read is what writes it.
   if (pending && pending.source_fingerprint === fp && state.status_summary_at) {
+    if (!named && !pending.proposed_name) await suggestGreeted(sb, orgId, pending.id, turns, numbers)
     const auto = await applySelfIdentified(sb, orgId, contactId, { ...pending, proposed_name: introducedOver(pending.proposed_name, turns, numbers) }, turns, model)
     return auto.claim_id
       ? { outcome: 'named', proposal_id: pending.id, claim_id: auto.claim_id, note: auto.note }
@@ -512,6 +551,9 @@ export async function readContact(sb: Db, orgId: string, contactId: string, ask:
   // The model's pick loses to a name they introduced themselves with (Coy, 2026-10-02:
   // "Charlie", a misheard hello, over "My name is Jonette, j o h n e t t e, Wilson").
   else p.proposed_name = introducedOver(p.proposed_name, turns, numbers)
+  // No name of their own: the one we greet them by, as a suggestion only (Coy, 2026-10-05).
+  const greeted = !named && !p.proposed_name ? greetedName(turns, numbers) : null
+  if (greeted) p.proposed_name = greeted.name
 
   if (pending?.id) {
     await sb.from('contact_proposals').update({ status: 'superseded' }).eq('org_id', orgId).eq('id', pending.id)
@@ -522,7 +564,7 @@ export async function readContact(sb: Db, orgId: string, contactId: string, ask:
     project_type: p.project_type, scope_summary: p.scope_summary, start_timing: p.start_timing,
     length_ft: p.length_ft, width_ft: p.width_ft, sqft_stated: p.sqft_stated, site_hint: p.site_hint,
     has_media: !!p.has_media, classification: p.classification, confidence: p.confidence,
-    evidence_message_id: p.evidence_message_id, evidence_quote: p.evidence_quote.slice(0, 2000),
+    evidence_message_id: p.evidence_message_id, evidence_quote: (greeted ? `${p.evidence_quote} … (you greeted them: "${greeted.quote}")` : p.evidence_quote).slice(0, 2000),
     model, prompt_version: PROMPT_VERSION, source_fingerprint: fp, status: 'pending', job_title: p.job_title ?? null,
   }).select('id').single()
   if (insErr || !ins) return { outcome: 'failed', note: `proposal: ${insErr?.message ?? 'not written'}` }

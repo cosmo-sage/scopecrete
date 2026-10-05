@@ -17,19 +17,23 @@
 
 import React from "react";
 import { T, F, disp, eyebrow } from "@/lib/v34/tokens";
+import { useThreads } from "@/components/v34/threads-ctx";
+import { threadLabel } from "@/components/v34/thread-rail";
 
 export default function ThreadsIndexPane() {
+  const ctx = useThreads();
+  const label = ctx ? threadLabel(ctx.thread, ctx.custom) : { name: "Threads", color: T.ink3 };
   return (
     <div className="hidden lg:flex items-center justify-center h-full px-8"
       style={{ minHeight: "calc(100vh - var(--sc-head) - 58px)" }}>
       <div style={{ maxWidth: 380, textAlign: "center" }}>
-        <div style={eyebrow}>Threads</div>
+        <div style={{ ...eyebrow, color: label.color }}>{label.name}</div>
         <div style={{ fontFamily: disp, fontSize: F.xl, fontWeight: 600, lineHeight: 1.1, marginTop: 2 }}>
-          Pick a thread
+          Pick a contact
         </div>
         <p style={{ fontSize: F.sm, color: T.ink3, marginTop: 8, lineHeight: 1.5 }}>
-          It opens here, beside the list, so you can work down the list without
-          losing your place in it.
+          Their channels open here. The list folds to initials so the conversation
+          gets the room; the › at the top brings it back.
         </p>
       </div>
     </div>

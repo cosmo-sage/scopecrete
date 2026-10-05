@@ -7,19 +7,26 @@
  *
  * WHAT IT DELIBERATELY IS NOT
  *
- * It is not v34's computeJob(). That one prices labour by crew-hours, applies
- * one global markup, and adds overhead as a percentage of labour. DECISIONS §3
- * says labour is priced by the SQUARE FOOT and markup is PER COST TYPE; §4 says
- * overhead enters in exactly one place, the floor, spread by crew-days. All
- * three would be double-counts or mispricings here.
+ * It is not v34's computeJob(), which prices labour by crew-hours. Since Coy's
+ * pricing notes (2026-09-30, migration 057) a line's price is
+ *   cost × (1 + O.H.) ÷ (1 − margin)
+ * with the job's O.H. % and margin % (copied from the org's defaults onto
+ * each budget), a line's own margin overriding the job's. Card and group
+ * markups, markup per cost type, the off-the-top divisor and the crew-day
+ * floor are gone; a job has a MINIMUM instead: the day minimum × its days.
  *
  * THE RULE THAT SHAPES EVERY RETURN VALUE
  *
  * Nothing is assumed. A missing dimension is `missing`, never 4 inches. A
- * missing setting blocks the price and is NAMED, never replaced by a Gulfline
- * reference rate. `price()` returns `{ priced: false, blocked }` rather than a
- * number whenever any input it needs is absent, because a price computed from
- * a guess looks exactly like a real one and gets sent.
+ * missing setting or card price blocks the price and is NAMED, never replaced
+ * by a reference rate. `budget()` marks a line and its option unpriced, with
+ * the reasons, whenever any input it needs is absent, because a price computed
+ * from a guess looks exactly like a real one and gets sent.
+ *
+ * Since step 3b (migration 050) a job is priced ONLY by its budget: lines
+ * copied from Coy's cost cards (the Price book). The old rate path — a price
+ * per yard, form & finish per sq ft, mobilization and reinforcement types in
+ * Cost settings — is gone; those are cards now.
  *
  * Note the database's generated column `job_sections.cubic_yards` does
  * `COALESCE(depth_in, 4)` — it assumes four inches. Do not display it; use
@@ -38,84 +45,18 @@ export interface SectionInput {
   sqft_override: number | null;
   depth_in: number | null;
   psi?: number | null;
-  /** One of the org's reinforcement types (migration 042), or none chosen. */
-  reinforcement_type_id?: string | null;
+  /** Measured by count (migration 065): 8 detectable warning panels. */
+  count_qty?: number | null;
+  count_unit?: string | null;
 }
 
-/**
- * A reinforcement Coy prices by its own unit (DECISIONS §3, 2026-09-28): mesh
- * by the sheet, rebar by the stick or the foot, fiber by the pound or bag per
- * yard. Every quantity rule needs its own number; a missing one blocks the
- * price and is named, never filled in.
- */
-export interface ReinforcementType {
-  id: string;
-  name: string;
-  kind: "mesh" | "rebar" | "fiber" | "other" | string;
-  unit: "sheet" | "stick" | "lf" | "lb" | "bag" | "sqft" | string;
-  unit_cost: number | null;
-  /** Mesh: area one sheet covers after lap. */
-  sheet_sqft?: number | null;
-  /** Rebar: spacing on centre, both ways. */
-  spacing_in?: number | null;
-  /** Rebar sold by the stick: its length. */
-  stick_ft?: number | null;
-  /** Rebar: extra for laps and ends. null = no allowance. */
-  lap_pct?: number | null;
-  /** Fiber: pounds or bags per cubic yard. */
-  per_cy?: number | null;
-}
-
-/** The subset of `org_cost_settings` the engine reads. null = not recorded. */
-export interface CostSettings {
-  concrete_price_per_cy: number | null;
-  concrete_overage_pct: number | null;
-  shortload_threshold_cy: number | null;
-  shortload_pct: number | null;
-  form_finish_per_sqft: number | null;
-  demo_per_sqft: number | null;
-  mobilization_fee: number | null;
-  sales_tax_pct: number | null;
-  tax_applies_to: "materials" | "full_bid" | "none" | string | null;
-  markup_material_pct: number | null;
-  markup_labor_pct: number | null;
-  markup_equipment_pct: number | null;
-  owner_fee_pct: number | null;
-  estimator_fee_pct: number | null;
-  tax_reserve_pct: number | null;
-  assumed_billable_days: number | null;
-  comp_mode: "fixed_draw" | "pct_profit" | string | null;
-  comp_monthly_draw: number | null;
-}
-
+/** One line of recurring overhead — the Cash page's burn rate. */
 export interface OverheadItem {
   label: string;
   amount: number;
   cadence: "monthly" | "quarterly" | "annual" | "one_time" | string;
   active: boolean;
 }
-
-/** Plain-English names for every input, used in `blocked` lists. */
-export const SETTING_LABEL: Record<keyof CostSettings, string> = {
-  concrete_price_per_cy: "Concrete price per yard",
-  concrete_overage_pct: "Concrete waste %",
-  shortload_threshold_cy: "Short-load threshold",
-  shortload_pct: "Short-load charge %",
-  form_finish_per_sqft: "Form & finish per sq ft",
-  demo_per_sqft: "Demo per sq ft",
-  mobilization_fee: "Mobilization",
-  sales_tax_pct: "Sales tax %",
-  tax_applies_to: "What sales tax applies to",
-  markup_material_pct: "Materials markup %",
-  markup_labor_pct: "Labor markup %",
-  markup_equipment_pct: "Equipment markup %",
-  owner_fee_pct: "Owner fee %",
-  estimator_fee_pct: "Estimator fee %",
-  tax_reserve_pct: "Tax reserve %",
-  assumed_billable_days: "Crew-days per month",
-  comp_mode: "Pay-yourself mode",
-  comp_monthly_draw: "Monthly draw",
-};
 
 const has = (n: number | null | undefined): n is number =>
   typeof n === "number" && Number.isFinite(n);
@@ -143,9 +84,33 @@ export interface SectionQuantities {
   cy_neat: number | null;
   /** What gets missing to reach a price: 'length', 'width', 'depth'. */
   missing: string[];
+  /** Measured by count instead of size (065): how many, and of what. */
+  count: number | null;
+  count_unit: string | null;
 }
 
 export function quantities(s: SectionInput): SectionQuantities {
+  const countUnit = (s.count_unit || "EA").toUpperCase();
+  // Measured in linear feet (Coy, 2026-10-02: "in addition to length/width, area and
+  // counts, I need linear ft"): the length is the count, in LF, so lines priced per LF
+  // take it. A grade beam's width (width_ft) and depth make its plan area and yards;
+  // without them a pour names what it needs, and nothing per LF is held up.
+  if (countUnit === "LF" && has(s.count_qty) && s.count_qty > 0 && !(has(s.sqft_override) && s.sqft_override > 0) && !has(s.length_ft)) {
+    const concrete = isConcrete(s.work_type);
+    const width = has(s.width_ft) && s.width_ft > 0 ? s.width_ft : null;
+    const depth = has(s.depth_in) && s.depth_in > 0 ? s.depth_in : null;
+    const sqft = width !== null ? s.count_qty * width : null;
+    const missing = concrete ? [...(width === null ? ["width"] : []), ...(depth === null ? ["depth"] : [])] : [];
+    return { id: s.id, name: s.name ?? null, work_type: s.work_type, concrete, sqft, sqft_source: sqft === null ? null : "dimensions",
+      depth_in: depth, cy_neat: concrete && sqft !== null && depth !== null ? (sqft * depth) / 12 / 27 : null,
+      missing, count: s.count_qty, count_unit: "LF" };
+  }
+  // Counted, not measured (Coy, 2026-10-02: "it's not an area, it's a quantity"):
+  // no area, no pour, nothing missing — its lines take the count.
+  if (has(s.count_qty) && s.count_qty > 0 && !(has(s.sqft_override) && s.sqft_override > 0) && !has(s.length_ft) && !has(s.width_ft)) {
+    return { id: s.id, name: s.name ?? null, work_type: s.work_type, concrete: false, sqft: null, sqft_source: null,
+      depth_in: null, cy_neat: null, missing: [], count: s.count_qty, count_unit: (s.count_unit || "EA").toUpperCase() };
+  }
   const concrete = isConcrete(s.work_type);
   const missing: string[] = [];
 
@@ -172,7 +137,7 @@ export function quantities(s: SectionInput): SectionQuantities {
 
   return {
     id: s.id, name: s.name ?? null, work_type: s.work_type, concrete,
-    sqft, sqft_source, depth_in: depth, cy_neat, missing,
+    sqft, sqft_source, depth_in: depth, cy_neat, missing, count: null, count_unit: null,
   };
 }
 
@@ -200,278 +165,336 @@ export function takeoff(sections: SectionInput[], overage_pct: number | null): T
   };
 }
 
-// ---------------------------------------------------------------------------
-// Reinforcement — by its own unit
-// ---------------------------------------------------------------------------
-
-export type ReinforcementQty =
-  | { ok: true; qty: number; unit: string; note: string }
-  | { ok: false; missing: string[] };
-
-/** How much of a reinforcement a section needs, in the unit it is bought by. */
-export function reinforcementQty(q: SectionQuantities, t: ReinforcementType): ReinforcementQty {
-  const missing: string[] = [];
-  const pos = (v: number | null | undefined): v is number => has(v) && v > 0;
-  // Round away float dust first: 1,760.0000000002 ft is 88 sticks, not 89.
-  const up = (x: number) => Math.ceil(Math.round(x * 1e6) / 1e6);
-  if (!has(t.unit_cost) || t.unit_cost < 0) missing.push(`${t.name}: cost per ${t.unit}`);
-  if (q.sqft === null) return { ok: false, missing: [...missing, `${q.name || "A section"}: area`] };
-  const sqft = q.sqft;
-
-  if (t.kind === "mesh") {
-    if (t.unit === "sqft") return missing.length ? { ok: false, missing } : { ok: true, qty: sqft, unit: "sq ft", note: "by area" };
-    if (t.unit !== "sheet") return { ok: false, missing: [...missing, `${t.name}: mesh is bought by the sheet or the sq ft`] };
-    if (!pos(t.sheet_sqft)) missing.push(`${t.name}: sq ft one sheet covers`);
-    if (missing.length) return { ok: false, missing };
-    return { ok: true, qty: up(sqft / (t.sheet_sqft as number)), unit: "sheet", note: `${t.sheet_sqft} sq ft a sheet` };
-  }
-  if (t.kind === "rebar") {
-    if (!pos(t.spacing_in)) missing.push(`${t.name}: spacing`);
-    if (t.unit === "stick" && !pos(t.stick_ft)) missing.push(`${t.name}: stick length`);
-    if (t.unit !== "stick" && t.unit !== "lf") missing.push(`${t.name}: rebar is bought by the stick or the foot`);
-    if (missing.length) return { ok: false, missing };
-    const lap = has(t.lap_pct) ? t.lap_pct : 0;
-    // A grid both ways: 12 ÷ spacing bars per foot, each way.
-    const lf = sqft * 2 * (12 / (t.spacing_in as number)) * (1 + lap / 100);
-    const note = `${t.spacing_in}" o.c. both ways${lap ? `, +${lap}% lap` : ", no lap allowance"}`;
-    return t.unit === "stick"
-      ? { ok: true, qty: up(lf / (t.stick_ft as number)), unit: "stick", note: `${note}, ${Math.round(lf)} ft` }
-      : { ok: true, qty: up(lf), unit: "ft", note };
-  }
-  if (t.kind === "fiber") {
-    if (!pos(t.per_cy)) missing.push(`${t.name}: amount per yard`);
-    if (q.cy_neat === null) missing.push(`${q.name || "A section"}: depth`);
-    if (missing.length) return { ok: false, missing };
-    return { ok: true, qty: up((q.cy_neat as number) * (t.per_cy as number) * 10) / 10, unit: t.unit, note: `${t.per_cy} ${t.unit} a yard` };
-  }
-  if (t.unit === "sqft") return missing.length ? { ok: false, missing } : { ok: true, qty: sqft, unit: "sq ft", note: "by area" };
-  return { ok: false, missing: [...missing, `${t.name}: set it as mesh, rebar or fiber, or price it by the sq ft`] };
-}
-
-// ---------------------------------------------------------------------------
-// Price — needs settings. Blocks, by name, on anything missing.
-// ---------------------------------------------------------------------------
-
-export interface CostLine {
-  type: "materials" | "labor" | "equipment";
-  label: string;
-  qty: number;
-  unit: string;
-  rate: number;
-  cost: number;
-}
-
-export interface Priced {
-  priced: true;
-  takeoff: Takeoff;
-  lines: CostLine[];
-  cost: { materials: number; labor: number; equipment: number; tax: number; total: number };
-  price: { materials: number; labor: number; equipment: number; tax: number; subtotal: number; discount: number; total: number };
-  /** (price − cost) ÷ price, after discount. */
-  margin: number;
-  /** Things the price does NOT include, said out loud. */
-  excluded: string[];
-}
-
-export interface Blocked {
-  priced: false;
-  takeoff: Takeoff;
-  /** Human-readable names of every missing input. */
-  blocked: string[];
-}
-
+/** Recurring overhead as a monthly figure — the Cash page's burn rate. */
 export function monthlyNut(items: OverheadItem[]): number {
   return items.filter((i) => i.active).reduce((a, i) => {
     if (i.cadence === "monthly") return a + i.amount;
     if (i.cadence === "quarterly") return a + i.amount / 3;
     if (i.cadence === "annual") return a + i.amount / 12;
-    return a; // one_time is a dated cash event, not part of the recurring nut
+    return a; // one_time is a dated cash event, not part of the recurring burn
   }, 0);
 }
 
-/**
- * Discount touches the PRICE column only (DECISIONS §3). This is the function
- * the Gulfline test holds to: entering a discount as a negative line in both
- * columns inflated a true 27.7% margin to a reported 39.4%.
- */
-export function applyDiscount(cost: number, price: number, discount: number) {
-  if (!has(discount) || discount < 0) throw new Error("discount must be a number >= 0");
-  const net = price - discount;
-  return { cost, price: net, margin: net > 0 ? (net - cost) / net : 0 };
-}
-
-export function price(
-  sections: SectionInput[],
-  s: CostSettings,
-  opts: { discount?: number; reinforcement?: ReinforcementType[] } = {},
-): Priced | Blocked {
-  const t = takeoff(sections, s.concrete_overage_pct);
-  const blocked: string[] = [];
-  const need = (k: keyof CostSettings) => {
-    const v = s[k];
-    if (v === null || v === undefined || (typeof v === "number" && !Number.isFinite(v))) {
-      blocked.push(SETTING_LABEL[k]);
-    }
-  };
-
-  for (const q of t.sections) {
-    if (q.missing.length) blocked.push(`${q.name || "A section"}: ${q.missing.join(", ")} not set`);
-    if (q.work_type === "prep") blocked.push(`${q.name || "Prep section"}: there is no prep rate in cost settings`);
-  }
-  if (sections.length === 0) blocked.push("No sections yet");
-
-  // Reinforcement chosen on a section is priced by its own unit; a missing
-  // number on its type blocks the price, like any other missing setting.
-  const types = new Map((opts.reinforcement ?? []).map((r) => [r.id, r]));
-  const reinf: Array<{ q: SectionQuantities; t: ReinforcementType; qty: number; unit: string; note: string }> = [];
-  const unreinforced: string[] = [];
-  sections.forEach((sec, i) => {
-    const q = t.sections[i];
-    if (!q.concrete) return;
-    if (!sec.reinforcement_type_id) { unreinforced.push(q.name || q.work_type); return; }
-    const ty = types.get(sec.reinforcement_type_id);
-    if (!ty) { blocked.push(`${q.name || "A section"}: its reinforcement type no longer exists`); return; }
-    if (q.sqft === null) return; // already blocked on its dimensions
-    const r = reinforcementQty(q, ty);
-    if (!r.ok) blocked.push(...r.missing);
-    else reinf.push({ q, t: ty, qty: r.qty, unit: r.unit, note: r.note });
-  });
-
-  const anyConcrete = t.sections.some((q) => q.concrete);
-  const anyDemo = t.sections.some((q) => q.work_type === "demo");
-  if (anyConcrete) {
-    need("concrete_price_per_cy"); need("concrete_overage_pct");
-    need("shortload_threshold_cy"); need("shortload_pct");
-    need("form_finish_per_sqft"); need("markup_material_pct");
-  }
-  if (anyDemo) need("demo_per_sqft");
-  need("markup_labor_pct");
-  need("mobilization_fee"); need("markup_equipment_pct");
-  need("tax_applies_to");
-  if (s.tax_applies_to !== "none") need("sales_tax_pct");
-
-  const discount = opts.discount ?? 0;
-  if (!has(discount) || discount < 0) blocked.push("Discount must be zero or more");
-
-  if (blocked.length) return { priced: false, takeoff: t, blocked: [...new Set(blocked)] };
-
-  const lines: CostLine[] = [];
-  const n = (v: number | null) => v as number;
-
-  // Materials: ordered yards (neat + waste) at the plant price, plus the
-  // short-load charge when the whole pour is under the threshold.
-  if (anyConcrete && t.cy_order !== null && t.cy_order > 0) {
-    lines.push({ type: "materials", label: "Ready mix", qty: t.cy_order, unit: "cu yd",
-      rate: n(s.concrete_price_per_cy), cost: t.cy_order * n(s.concrete_price_per_cy) });
-    if (t.cy_order < n(s.shortload_threshold_cy)) {
-      const base = t.cy_order * n(s.concrete_price_per_cy);
-      lines.push({ type: "materials", label: `Short load (under ${n(s.shortload_threshold_cy)} cu yd)`,
-        qty: 1, unit: "load", rate: base * n(s.shortload_pct) / 100, cost: base * n(s.shortload_pct) / 100 });
-    }
-  }
-
-  for (const r of reinf) {
-    lines.push({ type: "materials", label: `${r.t.name} — ${r.q.name || r.q.work_type}`, qty: r.qty, unit: r.unit,
-      rate: n(r.t.unit_cost), cost: r.qty * n(r.t.unit_cost) });
-  }
-
-  // Labor by the square foot, per section (DECISIONS §3).
-  for (const q of t.sections) {
-    if (q.sqft === null) continue;
-    if (q.concrete) {
-      lines.push({ type: "labor", label: `Form & finish — ${q.name || q.work_type}`, qty: q.sqft,
-        unit: "sq ft", rate: n(s.form_finish_per_sqft), cost: q.sqft * n(s.form_finish_per_sqft) });
-    } else if (q.work_type === "demo") {
-      lines.push({ type: "labor", label: `Demo — ${q.name || "demo"}`, qty: q.sqft,
-        unit: "sq ft", rate: n(s.demo_per_sqft), cost: q.sqft * n(s.demo_per_sqft) });
-    }
-  }
-
-  if (n(s.mobilization_fee) > 0) {
-    lines.push({ type: "equipment", label: "Mobilization", qty: 1, unit: "job",
-      rate: n(s.mobilization_fee), cost: n(s.mobilization_fee) });
-  }
-
-  const sum = (type: CostLine["type"]) => lines.filter((l) => l.type === type).reduce((a, l) => a + l.cost, 0);
-  const mat = sum("materials"), lab = sum("labor"), eq = sum("equipment");
-
-  const pMat = mat * (1 + (anyConcrete ? n(s.markup_material_pct) : 0) / 100);
-  const pLab = lab * (1 + n(s.markup_labor_pct) / 100);
-  const pEq = eq * (1 + n(s.markup_equipment_pct) / 100);
-
-  // Tax on the materials subtotal only, in-market (DECISIONS §3). It is a
-  // pass-through: charged at cost, carried in both columns, never marked up.
-  const taxPct = s.tax_applies_to === "none" ? 0 : n(s.sales_tax_pct);
-  const taxCost = s.tax_applies_to === "materials" ? mat * taxPct / 100 : 0;
-  const subtotal = pMat + pLab + pEq + taxCost;
-  const taxOnBid = s.tax_applies_to === "full_bid" ? subtotal * taxPct / 100 : 0;
-  const tax = taxCost + taxOnBid;
-  const costTotal = mat + lab + eq + tax;
-
-  const d = applyDiscount(costTotal, subtotal + taxOnBid, discount);
-
-  return {
-    priced: true, takeoff: t, lines,
-    cost: { materials: mat, labor: lab, equipment: eq, tax, total: costTotal },
-    price: { materials: pMat, labor: pLab, equipment: pEq, tax, subtotal: subtotal + taxOnBid, discount, total: d.price },
-    margin: d.margin,
-    excluded: [
-      ...(unreinforced.length ? [`Reinforcement — none chosen for ${unreinforced.join(", ")}`] : []),
-      "Base and vapor barrier — no rates for them in cost settings yet",
-      "Equipment rental by the day — not modelled yet"],
-  };
-}
-
 // ---------------------------------------------------------------------------
-// Floor — DECISIONS §4. floor = (hard_cost + job's share of the nut) / (1 − off-the-top)
+// The job minimum (Coy, 2026-09-30): "There are no default crew days … only a
+// minimum of $ per day that people require to show up and work. And
+// therefore there is a minimum for a job."  minimum = day minimum × days.
 // ---------------------------------------------------------------------------
 
-export interface Floor {
-  ok: true;
-  floor: number;
-  hard_cost: number;
-  nut_monthly: number;
-  nut_per_crew_day: number;
-  crew_days: number;
-  nut_share: number;
-  off_top_pct: number;
-  /** Whether crew days on this job were entered by a person or measured. */
-  crew_days_basis: "estimated";
-  draw_included: number;
-}
-
-export function floor(
-  hardCost: number,
-  s: CostSettings,
-  overhead: OverheadItem[],
-  crewDays: number | null,
-): Floor | { ok: false; blocked: string[] } {
+export function jobMinimum(dayMinimum: number | null, days: number | null):
+  { ok: true; minimum: number; day_minimum: number; days: number } | { ok: false; blocked: string[] } {
   const blocked: string[] = [];
-  if (!has(s.owner_fee_pct)) blocked.push(SETTING_LABEL.owner_fee_pct);
-  if (!has(s.estimator_fee_pct)) blocked.push(SETTING_LABEL.estimator_fee_pct);
-  if (!has(s.tax_reserve_pct)) blocked.push(SETTING_LABEL.tax_reserve_pct);
-  if (!has(s.assumed_billable_days) || s.assumed_billable_days <= 0) blocked.push(SETTING_LABEL.assumed_billable_days);
-  if (!s.comp_mode) blocked.push(SETTING_LABEL.comp_mode);
-  if (s.comp_mode === "fixed_draw" && !has(s.comp_monthly_draw)) blocked.push(SETTING_LABEL.comp_monthly_draw);
-  if (overhead.filter((o) => o.active).length === 0) blocked.push("Monthly overhead (no items recorded)");
-  if (!has(crewDays) || crewDays <= 0) blocked.push("Crew days on this job");
-
-  const offTop = (s.owner_fee_pct ?? 0) + (s.estimator_fee_pct ?? 0) + (s.tax_reserve_pct ?? 0);
-  if (offTop >= 100) blocked.push("Off-the-top adds to 100% or more");
+  if (!has(dayMinimum) || dayMinimum <= 0) blocked.push("Day minimum (Price book → Defaults)");
+  if (!has(days) || days <= 0) blocked.push("Days on this job");
   if (blocked.length) return { ok: false, blocked };
+  return { ok: true, minimum: (dayMinimum as number) * (days as number), day_minimum: dayMinimum as number, days: days as number };
+}
 
-  // fixed_draw behaves like an overhead line the floor MUST cover; pct_profit
-  // comes out after a job clears and does NOT raise the floor (§4).
-  const draw = s.comp_mode === "fixed_draw" ? (s.comp_monthly_draw as number) : 0;
-  const nut = monthlyNut(overhead) + draw;
-  const perDay = nut / (s.assumed_billable_days as number);
-  const share = perDay * (crewDays as number);
-  return {
-    ok: true,
-    // A divisor, not a subtraction: 11% off the top means ÷ 0.89.
-    floor: (hardCost + share) / (1 - offTop / 100),
-    hard_cost: hardCost, nut_monthly: nut, nut_per_crew_day: perDay,
-    crew_days: crewDays as number, nut_share: share, off_top_pct: offTop,
-    crew_days_basis: "estimated", draw_included: draw,
+// ---------------------------------------------------------------------------
+// The job budget (migration 048; priced Coy's way since migration 057):
+//   ext cost  = qty × unit cost
+//   O.H.      = ext cost × the job's O.H. %
+//   ext price = (ext cost + O.H.) ÷ (1 − margin)      unit price = ext price ÷ qty
+//   margin    = the line's own, else the job's — never assumed
+// Quantities come from the scope by each line's rule, or are typed (✎).
+// Tax is a pass-through on taxable lines, at cost, at the JOB's rate (from its
+// parish), only while the budget's tax switch is on. Discount touches price
+// only (§3). Good / better / best: a line with no option is in every tier.
+// ---------------------------------------------------------------------------
+
+export type QtyRule = "per_cy" | "per_sqft" | "per_lf_perimeter" | "per_sheet" | "per_stick" | "per_day" | "per_job" | "manual" | "from_takeoff";
+export type BudgetCostType = "material" | "labor" | "equipment" | "subcontract" | "other";
+
+export interface BudgetLine {
+  id: string;
+  name: string;
+  cost_type: BudgetCostType | string;
+  unit: string;
+  unit_cost: number | null;
+  /** This line's own margin %, overriding the job's. */
+  margin_pct?: number | null;
+  taxable: boolean;
+  qty_rule: QtyRule | string;
+  rule_params: Record<string, number>;
+  qty_source: "rule" | "set" | string;
+  /** Typed quantity (qty_source 'set' or rule 'manual'). */
+  quantity: number | null;
+  section_id: string | null;
+  option_id: string | null;
+  cost_group_id: string | null;
+  /** Rule 'from_takeoff': the Plan Room group whose measured total is this line's quantity. */
+  takeoff_parameter_id?: string | null;
+}
+
+/**
+ * A Plan Room group's measured total (migration 059), worked out from the
+ * drawings by src/lib/takeoff.ts — never stored. `qty` is null and `blocked`
+ * says why when any of its shapes sits on a sheet whose scale isn't set.
+ */
+export interface TakeoffTotal {
+  name: string;
+  unit: "SF" | "LF" | "EA";
+  qty: number | null;
+  /** Area groups with a depth: cubic yards (no waste). */
+  cy: number | null;
+  /** Area groups: feet of edge round their shapes (cutouts included) — an LF card counted from an area group takes it. */
+  perim_lf?: number | null;
+  blocked: string | null;
+}
+
+/** A card's unit said as SF / SY / LF / EA / CY, or null when it is none of them. */
+export function takeoffUnit(unit: string): "SF" | "SY" | "LF" | "EA" | "CY" | null {
+  const u = unit.trim().toLowerCase().replace(/[.\s]/g, "");
+  if (["sf", "sqft", "sft", "ft2", "squarefeet", "squarefoot"].includes(u)) return "SF";
+  // Government bid items are counted in square yards (Coy, 2026-10-02: "706-01 Concrete Walk … 1,769.80 SY").
+  if (["sy", "sqyd", "syd", "yd2", "squareyard", "squareyards"].includes(u)) return "SY";
+  if (["lf", "ft", "linft", "linearfeet", "linearfoot", "feet", "foot"].includes(u)) return "LF";
+  if (["ea", "each", "count", "ct", "pcs", "pc", "no"].includes(u)) return "EA";
+  if (["cy", "yd", "yd3", "cuyd", "cubicyard", "cubicyards", "yards", "yard"].includes(u)) return "CY";
+  return null;
+}
+
+/** Does a line's unit count the same thing as an area's count? EA ≈ each / ea / count, LF ≈ lin ft; otherwise the same word. */
+export function countUnitMatches(lineUnit: string, countUnit: string): boolean {
+  const a = takeoffUnit(lineUnit), b = takeoffUnit(countUnit);
+  if (a && a === b) return true;
+  return lineUnit.trim().toLowerCase().replace(/[.\s]/g, "") === countUnit.trim().toLowerCase().replace(/[.\s]/g, "");
+}
+
+/** The job's pricing: its own O.H. and margin (else the org's defaults), and its tax rate. */
+export interface BudgetSettings {
+  overhead_pct: number | null;
+  margin_pct: number | null;
+  /** The job's sales tax %, from its parish or typed. null = not known. */
+  tax_rate_pct: number | null;
+  /** Why the rate is missing, said plainly ("parish unknown"). */
+  tax_missing?: string;
+}
+
+export interface LineResult {
+  id: string;
+  qty: number | null;
+  /** Where the quantity came from, said the way the grid shows it. */
+  qty_basis: "rule" | "set";
+  qty_note: string | null;
+  margin_pct: number | null;
+  margin_from: "line" | "job" | null;
+  ext_cost: number | null;
+  overhead: number | null;
+  unit_price: number | null;
+  ext_price: number | null;
+  /** (price − cost − O.H.) ÷ price — equals the margin used. */
+  margin: number | null;
+  tax: number;
+  /** Everything missing for this line, by name. Empty = priced. */
+  blocked: string[];
+}
+
+export interface TierTotal {
+  option_id: string | null;
+  cost: number;
+  overhead: number;
+  price: number;
+  tax: number;
+  discount: number;
+  /** price + tax − discount */
+  total: number;
+  /** (total − tax − cost − O.H.) ÷ (total − tax): what is left after cost and O.H. */
+  margin: number;
+  profit: number;
+  priced: boolean;
+  blocked: string[];
+  line_ids: string[];
+}
+
+export interface BudgetResult {
+  lines: Record<string, LineResult>;
+  /** One per option; one with option_id null when there are no options. */
+  tiers: TierTotal[];
+  hints: string[];
+}
+
+/** How many of something a line needs, from the scope. Whole-job lines (no section) sum every section. */
+export function ruleQty(
+  line: Pick<BudgetLine, "name" | "qty_rule" | "rule_params" | "qty_source" | "quantity" | "section_id"> & { unit?: string; takeoff_parameter_id?: string | null },
+  sections: SectionInput[],
+  days: number | null,
+  takeoff?: Record<string, TakeoffTotal>,
+): { ok: true; qty: number; basis: "rule" | "set"; note: string } | { ok: false; missing: string[] } {
+  // A line priced per each on a counted area takes the count (065): 8 EA → qty 8.
+  // (A card counted by hand lands as qty_source 'set' with no quantity yet — that still takes the count.)
+  if (line.section_id && line.qty_rule === "manual" && !(line.qty_source === "set" && has(line.quantity))) {
+    const area = sections.find((s) => s.id === line.section_id);
+    const q = area ? quantities(area) : null;
+    if (q && q.count !== null && countUnitMatches(line.unit ?? "", q.count_unit ?? "EA")) {
+      return { ok: true, qty: q.count, basis: "rule", note: `${q.count} ${q.count_unit} on the area` };
+    }
+  }
+  if (line.qty_source === "set" || line.qty_rule === "manual") {
+    if (has(line.quantity) && line.quantity >= 0) return { ok: true, qty: line.quantity, basis: "set", note: "typed" };
+    return { ok: false, missing: [`${line.name}: quantity`] };
+  }
+  // Measured on the plans (migration 059): the group's total, in the card's unit.
+  if (line.qty_rule === "from_takeoff") {
+    const t = line.takeoff_parameter_id ? takeoff?.[line.takeoff_parameter_id] : undefined;
+    if (!t) return { ok: false, missing: [`${line.name}: its takeoff group was removed`] };
+    if (t.blocked || t.qty === null) return { ok: false, missing: [`Takeoff: ${t.name} — ${t.blocked ?? "nothing measured"}`] };
+    const want = takeoffUnit(line.unit ?? "");
+    if (want === t.unit) return { ok: true, qty: t.qty, basis: "rule", note: `takeoff · ${t.name}` };
+    if (want === "SY" && t.unit === "SF") return { ok: true, qty: Math.round((t.qty / 9) * 100) / 100, basis: "rule", note: `takeoff · ${t.name}, sq yd` };
+    if (want === "CY" && t.unit === "SF") {
+      return t.cy !== null ? { ok: true, qty: Math.round(t.cy * 100) / 100, basis: "rule", note: `takeoff · ${t.name}, yards` }
+        : { ok: false, missing: [`Takeoff: ${t.name} — a depth (to count yards)`] };
+    }
+    if (want === "LF" && t.unit === "SF") {
+      return t.perim_lf !== null && t.perim_lf !== undefined ? { ok: true, qty: t.perim_lf, basis: "rule", note: `takeoff · ${t.name}, perimeter` }
+        : { ok: false, missing: [`Takeoff: ${t.name} — its perimeter`] };
+    }
+    return { ok: false, missing: [`${line.name}: counted in ${line.unit || "no unit"}, but ${t.name} is measured in ${t.unit}`] };
+  }
+  const up = (x: number) => Math.ceil(Math.round(x * 1e6) / 1e6);
+  const scope = line.section_id ? sections.filter((s) => s.id === line.section_id) : sections;
+  if (line.section_id && !scope.length) return { ok: false, missing: [`${line.name}: its area was removed`] };
+  if (!scope.length) return { ok: false, missing: [`${line.name}: no areas on this job yet`] };
+  const qs = scope.map(quantities);
+  const label = (q: SectionQuantities) => q.name || "An area";
+  const p = line.rule_params ?? {};
+  const pos = (v: unknown): v is number => has(v as number) && (v as number) > 0;
+
+  switch (line.qty_rule) {
+    case "per_job": return { ok: true, qty: 1, basis: "rule", note: "once" };
+    case "per_day":
+      return has(days) && days > 0 ? { ok: true, qty: days, basis: "rule", note: "days" } : { ok: false, missing: ["Days on this job"] };
+    case "per_sqft": {
+      const miss = qs.filter((q) => q.sqft === null).map((q) => `${label(q)}: area`);
+      if (miss.length) return { ok: false, missing: miss };
+      const sf = qs.reduce((a, q) => a + (q.sqft as number), 0);
+      // The card's unit decides: a card sold by the square yard counts yards (sq ft ÷ 9).
+      if (takeoffUnit(line.unit ?? "") === "SY") return { ok: true, qty: Math.round((sf / 9) * 100) / 100, basis: "rule", note: "sq yd" };
+      return { ok: true, qty: sf, basis: "rule", note: "sq ft" };
+    }
+    case "per_lf_perimeter": {
+      const miss: string[] = [];
+      let lf = 0;
+      for (const s of scope) {
+        if (!has(s.length_ft) || !has(s.width_ft) || s.length_ft <= 0 || s.width_ft <= 0) miss.push(`${s.name || "An area"}: length and width (for the edge)`);
+        else lf += 2 * (s.length_ft + s.width_ft);
+      }
+      return miss.length ? { ok: false, missing: miss } : { ok: true, qty: lf, basis: "rule", note: "ft of edge" };
+    }
+    case "per_cy": {
+      const conc = qs.filter((q) => q.concrete);
+      if (!conc.length) return { ok: false, missing: [`${line.name}: no concrete areas`] };
+      const miss = conc.filter((q) => q.cy_neat === null).map((q) => `${label(q)}: ${q.missing.join(" and ") || "size"}`);
+      if (miss.length) return { ok: false, missing: miss };
+      const neat = conc.reduce((a, q) => a + (q.cy_neat as number), 0);
+      if (pos(p.per_cy)) return { ok: true, qty: up(neat * p.per_cy * 10) / 10, basis: "rule", note: `${p.per_cy} a yard` };
+      // Waste is the card's (Coy: concrete is set in the cost book) — 0 is a
+      // real answer, blank is not.
+      if (!has(p.waste_pct) || p.waste_pct < 0) return { ok: false, missing: [`${line.name}: waste % (on the card)`] };
+      return { ok: true, qty: Math.round(neat * (1 + p.waste_pct / 100) * 100) / 100, basis: "rule", note: p.waste_pct ? `yards + ${p.waste_pct}% waste` : "yards, no waste" };
+    }
+    case "per_sheet": {
+      if (!pos(p.sheet_sqft)) return { ok: false, missing: [`${line.name}: what one sheet covers`] };
+      const miss = qs.filter((q) => q.sqft === null).map((q) => `${label(q)}: area`);
+      if (miss.length) return { ok: false, missing: miss };
+      const sqft = qs.reduce((a, q) => a + (q.sqft as number), 0);
+      return { ok: true, qty: up(sqft / p.sheet_sqft), basis: "rule", note: `${p.sheet_sqft} sq ft a sheet` };
+    }
+    case "per_stick": {
+      const miss: string[] = [];
+      if (!pos(p.spacing_in)) miss.push(`${line.name}: bar spacing`);
+      if (!pos(p.stick_ft)) miss.push(`${line.name}: stick length`);
+      miss.push(...qs.filter((q) => q.sqft === null).map((q) => `${label(q)}: area`));
+      if (miss.length) return { ok: false, missing: miss };
+      const sqft = qs.reduce((a, q) => a + (q.sqft as number), 0);
+      const lf = sqft * 2 * (12 / p.spacing_in) * (1 + (pos(p.lap_pct) ? p.lap_pct : 0) / 100);
+      return { ok: true, qty: up(lf / p.stick_ft), basis: "rule", note: `${p.spacing_in}" grid, ${p.stick_ft}' sticks` };
+    }
+    default:
+      return { ok: false, missing: [`${line.name}: unknown quantity rule`] };
+  }
+}
+
+export function budget(
+  lines: BudgetLine[],
+  optionIds: string[],
+  s: BudgetSettings,
+  sections: SectionInput[],
+  days: number | null,
+  opts: { tax_on: boolean; discount: number; takeoff?: Record<string, TakeoffTotal> },
+): BudgetResult {
+  const out: Record<string, LineResult> = {};
+  const taxRate = has(s.tax_rate_pct) ? s.tax_rate_pct : null;
+  const oh = has(s.overhead_pct) ? s.overhead_pct : null;
+
+  for (const l of lines) {
+    const blocked: string[] = [];
+    const q = ruleQty(l, sections, days, opts.takeoff);
+    const qty = q.ok ? q.qty : null;
+    if (!q.ok) blocked.push(...q.missing);
+    if (!has(l.unit_cost)) blocked.push(`${l.name}: unit cost`);
+    if (oh === null) blocked.push("O.H. % (Price book → Defaults, or this budget)");
+
+    let m: number | null = null;
+    let from: LineResult["margin_from"] = null;
+    if (has(l.margin_pct)) { m = l.margin_pct; from = "line"; }
+    else if (has(s.margin_pct)) { m = s.margin_pct; from = "job"; }
+    else blocked.push("Margin % (Price book → Defaults, or this budget)");
+    if (m !== null && m >= 100) { blocked.push(`${l.name}: margin must be under 100%`); m = null; }
+    if (opts.tax_on && l.taxable && taxRate === null) blocked.push(`Sales tax for this job${s.tax_missing ? ` (${s.tax_missing})` : ""}`);
+
+    const ext_cost = qty !== null && has(l.unit_cost) ? qty * l.unit_cost : null;
+    const overhead = ext_cost !== null && oh !== null ? ext_cost * oh / 100 : null;
+    const ext_price = ext_cost !== null && overhead !== null && m !== null ? (ext_cost + overhead) / (1 - m / 100) : null;
+    const unit_price = ext_price !== null && qty ? ext_price / qty
+      : has(l.unit_cost) && oh !== null && m !== null ? l.unit_cost * (1 + oh / 100) / (1 - m / 100) : null;
+    const tax = opts.tax_on && l.taxable && ext_cost !== null && taxRate !== null ? ext_cost * taxRate / 100 : 0;
+    out[l.id] = {
+      id: l.id, qty, qty_basis: q.ok ? q.basis : (l.qty_source === "set" ? "set" : "rule"), qty_note: q.ok ? q.note : null,
+      margin_pct: m, margin_from: from, ext_cost, overhead, unit_price, ext_price,
+      margin: ext_price && ext_cost !== null && overhead !== null ? (ext_price - ext_cost - overhead) / ext_price : null,
+      tax, blocked,
+    };
+  }
+
+  const tierOf = (optionId: string | null): TierTotal => {
+    const inTier = lines.filter((l) => l.option_id === null || (optionId !== null && l.option_id === optionId)
+      || (optionId === null && optionIds.length === 0));
+    const rs = inTier.map((l) => out[l.id]);
+    const cost = rs.reduce((a, r) => a + (r.ext_cost ?? 0), 0);
+    const overhead = rs.reduce((a, r) => a + (r.overhead ?? 0), 0);
+    const price = rs.reduce((a, r) => a + (r.ext_price ?? 0), 0);
+    const tax = rs.reduce((a, r) => a + r.tax, 0);
+    const discount = has(opts.discount) && opts.discount > 0 ? opts.discount : 0;
+    const total = price + tax - discount;
+    const net = total - tax;
+    const profit = net - cost - overhead;
+    const blocked = [...new Set(rs.flatMap((r) => r.blocked))];
+    return {
+      option_id: optionId, cost, overhead, price, tax, discount, total, profit,
+      margin: net > 0 ? profit / net : 0,
+      priced: blocked.length === 0 && inTier.length > 0, blocked, line_ids: inTier.map((l) => l.id),
+    };
   };
+  const tiers = optionIds.length ? optionIds.map(tierOf) : [tierOf(null)];
+  return { lines: out, tiers, hints: [] };
+}
+
+// ---------------------------------------------------------------------------
+// Assemblies — Coy's default set of cards for a kind of area (migration 050)
+// ---------------------------------------------------------------------------
+
+export interface AssemblyRef { id: string; job_type: string | null; work_type: string | null; auto_load: boolean }
+
+/**
+ * Which assembly fills a new area on its own: the one for this job type and
+ * work type; else the one for this work type on any job; else none. Only
+ * auto-loading assemblies count. An assembly for "any work type" never fills
+ * an area by itself — it is loaded by hand.
+ */
+export function pickAssembly<T extends AssemblyRef>(assemblies: T[], jobType: string | null, workType: string | null): T | null {
+  if (!workType) return null;
+  const auto = assemblies.filter((a) => a.auto_load && a.work_type === workType);
+  return (jobType ? auto.find((a) => a.job_type === jobType) : undefined) ?? auto.find((a) => a.job_type === null) ?? null;
 }

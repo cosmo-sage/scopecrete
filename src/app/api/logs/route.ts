@@ -65,7 +65,7 @@ export async function GET(req: NextRequest) {
       return { at: r.created_at, severity: "alarm", title: "Intake hit an error on a Quo event",
         detail: `The ${d?.detail?.event_type ?? "event"} is saved, but it was not filed under a contact: ${d?.detail?.message ?? "unknown error"}. Tell Claude Code.` };
     }
-    return { at: r.created_at, severity: "note", title: `Note on a message:${r.detail.replace(/_/g, " ")}`,
+    return { at: r.created_at, severity: "note", title: `Note on a message: ${r.detail.replace(/_/g, " ")}`,
       detail: "The message reached the app; this is a detail recorded while filing it." };
   });
 

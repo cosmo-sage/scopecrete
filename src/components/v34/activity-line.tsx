@@ -22,19 +22,27 @@
  *   Dusty reply streaming in this tab. Otherwise it is still.
  * - No bubble (Coy, 2026-09-28): the words sit on the grey glass row, typed in
  *   letter by letter as each thought arrives; a live Dusty reply shows its
- *   real tokens as they stream. A thin line drops from the header emblem to
- *   the dot, so the mark, the thinking and the words read as one thing — a
- *   pulse runs down it while Dusty is working, in step with the emblem.
+ *   real tokens as they stream.
+ * - Desktop (Coy, 2026-09-30): `inline` puts it in the header row beside the
+ *   logo, after a divider, with its drop-down anchored under it at a fixed
+ *   width. The phone keeps it as a row under the header. The old emblem and
+ *   the line from it to the dot are gone.
+ * - The dot's colour and rhythm say what kind of work it is: reading someone
+ *   (slow blue), Dusty answering (quick amber), just filed or named (one
+ *   green blink), the reader broken (steady red); still when idle.
  * - Nothing in the last day: says when something last happened. Never invents
  *   something happening now.
  */
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { T, F, eyebrow, clip, nums, relTime } from "@/lib/v34/tokens";
+import { useRouter } from "next/navigation";
+import { T, F, eyebrow, agent, clip, nums, relTime } from "@/lib/v34/tokens";
+import { useDustyLive } from "@/lib/v34/dusty-live";
+import { usePlanOcr } from "@/lib/v34/plan-ocr-runner";
 
 type Tone = "live" | "good" | "ask" | "warn" | "quiet";
-interface Item { id: string; at: string; kind: string; contact_id: string | null; summary: string; detail: string | null; tone: Tone }
+interface Item { id: string; at: string; kind: string; contact_id: string | null; href?: string | null; summary: string; detail: string | null; tone: Tone }
 interface Activity {
   pinned: { summary: string; detail: string | null } | null;
   /** Dusty's light lines about conversations he read (migration 039). */
@@ -46,6 +54,16 @@ interface Activity {
 
 const POLL_MS = 20_000;
 const CYCLE_MS = 4_000;
+/** Musings and dreams linger (Coy, 2026-10-01: "every 15-30 seconds"); news moves on quicker. */
+const MUSE_MS = 20_000;
+/** A line wider than its room slides along so all of it is read (Coy, 2026-10-02), at this speed. */
+const SCROLL_PX_S = 40;
+/** How long a line stays: long enough to type in and slide through twice (Coy: "stay a little longer"). */
+function lingerMs(it: Item, room: number): number {
+  const typed = Math.min(it.summary.length, 160) * 18;
+  const slide = Math.max(0, it.summary.length * 8.2 - room) / SCROLL_PX_S * 1000; // ~8px a character in the mono face
+  return it.kind === "musing" ? Math.max(MUSE_MS, typed + 2 * (2 * slide + 4000) + 3000) : Math.max(CYCLE_MS, typed + slide + 3500);
+}
 const DAY_MS = 86_400_000;
 const SEEN_KEY = "sc-activity-seen";
 
@@ -62,38 +80,56 @@ const seenKey = (it: Item) => it.kind === "reminder" ? `${it.id}@${new Date().to
 const ON_LINE = (it: Item) => !["waiting", "agreement", "quiet"].includes(it.kind);
 
 const DOT: Record<Tone, string> = {
-  live: T.pulse, good: T.pulse, ask: "#6FA0FF", warn: "#FFB547", quiet: "rgba(255,255,255,.35)",
+  live: T.pulse, good: T.pulse, ask: "#3F74C9", warn: "#C98A12", quiet: "#B3AA9A",
 };
 
-function Dot({ tone, live }: { tone: Tone; live: boolean }) {
+type Work = "read" | "reply" | "done" | "warn" | null;
+const WORK_DOT: Record<Exclude<Work, null>, string> = { read: "#3F74C9", reply: "#C98A12", done: "#2F8A5B", warn: "#B5412C" };
+
+/** "just now", "5m ago", or "on 3 Sep" — relTime alone reads "now ago". */
+function ago(iso: string | null | undefined): string {
+  const r = relTime(iso);
+  if (!r) return "—";
+  if (r === "now") return "just now";
+  return /^\d+[mhd]$/.test(r) ? `${r} ago` : `on ${r}`;
+}
+
+/**
+ * The line's button (Coy, 2026-10-02): a diamond that always glows, its colour
+ * and rhythm the kind of work — grey and slow when idle — with a small arrow
+ * under it that says it opens. It replaced the dot on the left and the chevron
+ * on the right, so the words get the whole width.
+ */
+function Diamond({ work, open }: { work: Work; open: boolean }) {
+  const colour = `var(--sc-work-dot-${work ?? "idle"}, ${work ? WORK_DOT[work] : "#9C9385"})`;
   return (
-    <span aria-hidden="true" className={live ? "sc-dot-live" : undefined}
-      style={{ width: 7, height: 7, borderRadius: 999, background: DOT[tone], flex: "0 0 auto", display: "inline-block" }} />
+    <span aria-hidden="true" className="flex flex-col items-center justify-center" style={{ flex: "0 0 auto", width: 14, gap: 2 }}>
+      <span className={`sc-dia sc-dia-${work ?? "idle"}`} style={{ width: 9, height: 9, background: colour, color: colour, transform: "rotate(45deg)", borderRadius: 1.5, display: "block" }} />
+      <svg width="8" height="5" viewBox="0 0 8 5" style={{ display: "block", transform: open ? "rotate(180deg)" : "none", transition: "transform .15s" }}>
+        <path d="M1 1 L4 4 L7 1" fill="none" stroke="currentColor" strokeWidth="1.3" style={{ color: "var(--sc-pencil-muted, #8A8478)" }} />
+      </svg>
+    </span>
   );
 }
 
-/** Types `text` in, a letter at a time, whenever `k` changes. Reduced motion: whole. */
-function useTyped(text: string, k: string): string {
-  const [shown, setShown] = useState({ k, n: text.length });
-  useEffect(() => {
-    const still = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    if (still) return;
-    let n = 0;
-    const t = setInterval(() => {
-      n += 1;
-      setShown({ k, n });
-      if (n >= text.length) clearInterval(t);
-    }, 18);
-    return () => clearInterval(t);
-  }, [k, text]);
-  return shown.k === k ? text.slice(0, shown.n) : "";
+function Dot({ tone, live, work }: { tone: Tone; live: boolean; work?: Work }) {
+  const cls = work ? `sc-dot-${work}` : live ? "sc-dot-live" : undefined;
+  return (
+    <span aria-hidden="true" className={cls}
+      style={{ width: work ? 8 : 7, height: work ? 8 : 7, borderRadius: 999, background: work ? WORK_DOT[work] : DOT[tone], flex: "0 0 auto", display: "inline-block" }} />
+  );
 }
 
-export function ActivityLine({ busy, live, onWorking }: {
-  busy: boolean; live?: string;
+export function ActivityLine({ busy, onWorking, inline }: {
+  busy: boolean;
+  /** Desktop: sit in the header row beside the logo (no row of its own). */
+  inline?: boolean;
   /** True while the background reader has a read running — the header emblem spins for it. */
   onWorking?: (working: boolean) => void;
 }) {
+  const live = useDustyLive();
+  // Reading scanned plans in this tab (migration 064): where it is, sheet by sheet.
+  const ocr = usePlanOcr();
   const [data, setData] = useState<Activity | null>(null);
   // Items from the last day — decided when the data arrives, not in render.
   const [recent, setRecent] = useState<Item[]>([]);
@@ -103,6 +139,16 @@ export function ActivityLine({ busy, live, onWorking }: {
   const [idx, setIdx] = useState(0);
   const [open, setOpen] = useState(false);
   const [hover, setHover] = useState(false);
+  const router = useRouter();
+  // The line's words: when they don't fit, they slide along (CSS, measured once per line, no state).
+  const textRef = useRef<HTMLSpanElement>(null);
+  // Open, the drop-down sits over everything — the plan sheets, Dusty, any sheet (Coy, 2026-10-02):
+  // the header's own layer is lifted while it is down (v34-shell.css, html[data-head-drop]).
+  useEffect(() => {
+    if (!open) return;
+    document.documentElement.setAttribute("data-head-drop", "open");
+    return () => document.documentElement.removeAttribute("data-head-drop");
+  }, [open]);
 
   const apply = useCallback((d: Activity) => {
     setData(d);
@@ -135,10 +181,10 @@ export function ActivityLine({ busy, live, onWorking }: {
   const current = queue.length ? queue[Math.min(idx, queue.length - 1)] : null;
   const cycling = !busy && !data?.pinned && idx < queue.length - 1 && !open && !hover;
   useEffect(() => {
-    if (!cycling) return;
-    const t = setInterval(() => setIdx((i) => i + 1), CYCLE_MS);
-    return () => clearInterval(t);
-  }, [cycling]);
+    if (!cycling || !current) return;
+    const t = setTimeout(() => setIdx((i) => i + 1), lingerMs(current, textRef.current?.clientWidth ?? 260));
+    return () => clearTimeout(t);
+  }, [cycling, idx, current]);
   // Shown means seen — it will not come round again on this device.
   useEffect(() => {
     if (!current || current.kind === "running" || busy || data?.pinned) return;
@@ -162,6 +208,7 @@ export function ActivityLine({ busy, live, onWorking }: {
     const said = (live ?? "").replace(/\s+/g, " ").trim();
     line = { key: "busy", summary: said ? (said.length > 90 ? `…${said.slice(-90)}` : said) : "Dusty is thinking…", tone: "live", at: null };
   }
+  else if (ocr.running) line = { key: `ocr-${ocr.phase}-${ocr.done}`, summary: ocr.label, tone: "live", at: null };
   else if (data?.pinned) line = { key: "pinned", summary: data.pinned.summary, tone: "warn", at: null };
   else if (current) {
     line = { key: current.id, summary: current.summary, tone: current.tone,
@@ -173,70 +220,115 @@ export function ActivityLine({ busy, live, onWorking }: {
     line = {
       key: "idle",
       summary: data?.last_read_at
-        ? `All caught up · last read ${relTime(data.last_read_at)} ago${data.waiting ? ` · ${data.waiting} waiting` : ""}`
+        ? `All caught up · last read ${ago(data.last_read_at)}${data.waiting ? ` · ${data.waiting} waiting` : ""}`
         : "Nothing read yet",
       tone: "quiet", at: null,
     };
   }
-  const working = busy || running;
-  // The streamed reply already arrives a token at a time; everything else types in.
-  const typed = useTyped(line.summary, line.key);
-  const text = busy ? line.summary : typed;
-  const lineColour = line.tone === "warn" ? "#FFB547" : "rgba(255,255,255,.28)";
+  // The streamed reply already arrives a token at a time; everything else types
+  // in — drawn by CSS (a stepped clip on one element), never a render per letter.
+  const typing = !busy && line.summary.length > 0;
+  // The kind of work, for the dot: broken > answering > reading > just done.
+  const work: Work = line.tone === "warn" ? "warn" : busy ? "reply" : running || ocr.running ? "read"
+    : line.key !== "idle" && line.key !== "loading" && line.tone === "good" ? "done" : null;
+
+  // Too long for the row: once typed, slide to the end, rest, slide back — over and over while it is up.
+  useEffect(() => {
+    const el = textRef.current;
+    const inner = el?.firstElementChild as HTMLElement | null;
+    if (!el || !inner) return;
+    inner.removeAttribute("data-marq");
+    if (busy) return;
+    const t = setTimeout(() => {
+      const dx = inner.scrollWidth - el.clientWidth;
+      if (dx <= 8) return;
+      const slide = Math.round((dx / SCROLL_PX_S) * 1000);
+      inner.style.setProperty("--sc-marq-dx", `-${dx}px`);
+      inner.style.setProperty("--sc-marq-ms", `${2 * slide + 5000}ms`);
+      inner.setAttribute("data-marq", "1");
+    }, Math.min(line.summary.length, 160) * 18 + 1200);
+    return () => clearTimeout(t);
+  }, [line.key, line.summary, busy]);
+
+  // Tapping a thought takes Coy to what it came from, with Dusty open and the thought in his message box.
+  const talkAbout = (it: Item) => {
+    setOpen(false);
+    if (it.contact_id) router.push(`/dashboard/messages/${it.contact_id}`);
+    setTimeout(() => {
+      window.dispatchEvent(new Event("sc:dusty-open"));
+      setTimeout(() => window.dispatchEvent(new CustomEvent("sc:dusty-draft", { detail: { text: `About your thought — "${it.summary}" — ` } })), 300);
+    }, it.contact_id ? 700 : 0);
+  };
+  const thoughts = data?.musings ?? [];
 
   return (
-    <div className="relative px-2.5 pb-2 sc-glass" onPointerEnter={(e) => { if (e.pointerType === "mouse") setHover(true); }} onPointerLeave={() => setHover(false)}>
-      {/* From the emblem (centre 22px from the edge, bottom ~15px above this
-          row) down to the dot. */}
-      <span aria-hidden="true" className={working ? "sc-thread-live" : undefined}
-        style={{ position: "absolute", left: 21.25, top: -15, height: 30, width: 1.5, borderRadius: 1,
-                 background: working ? undefined : lineColour }} />
+    <div className={inline ? "relative flex-1 min-w-0 sc-own-layer" : "relative px-2.5 pb-2 sc-activity-row sc-own-layer"}
+      onPointerEnter={(e) => { if (e.pointerType === "mouse") setHover(true); }} onPointerLeave={() => setHover(false)}>
       <button onClick={() => setOpen((o) => !o)} aria-expanded={open}
         aria-label={open ? "Hide Dusty's activity" : "Show Dusty's activity"}
         className="w-full flex items-center gap-2 text-left"
-        style={{ height: 30, padding: "0 4px 0 8px", background: "transparent", border: "none", cursor: "pointer" }}>
-        <Dot tone={line.tone} live={working} />
-        <span aria-live="polite"
-          style={{ flex: 1, minWidth: 0, fontSize: F.sm, fontStyle: "italic",
-                   color: line.tone === "warn" ? "#FFD08A" : "rgba(255,255,255,.86)", ...clip }}>
-          {text}
-          {!busy && text.length < line.summary.length && <span className="sc-caret" aria-hidden="true">▍</span>}
+        // Strict containment: a new line of text never makes the browser lay out the page around it.
+        style={{ height: 30, padding: "0 4px 0 4px", background: "transparent", border: "none", cursor: "pointer", contain: "strict" }}>
+        <Diamond key={`${work}-${line.key}`} work={work} open={open} />
+        <span ref={textRef} aria-live="polite" className="sc-activity-text"
+          style={{ flex: 1, minWidth: 0, color: line.tone === "warn" ? T.hivizText : undefined, ...clip }}>
+          {typing ? (
+            <span key={line.key} className="sc-typed" title={line.summary}
+              style={{ "--sc-type-steps": Math.min(line.summary.length, 160), "--sc-type-ms": `${Math.min(line.summary.length, 160) * 18}ms` } as React.CSSProperties}>
+              {line.summary}
+            </span>
+          ) : line.summary}
         </span>
-        {line.at && <span style={{ fontSize: F.xs, color: "rgba(255,255,255,.45)", ...nums }}>{relTime(line.at)}</span>}
-        <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"
-          style={{ flex: "0 0 auto", transform: open ? "rotate(180deg)" : "none", transition: "transform .15s" }}>
-          <path d="M1.5 3.5 L5 7 L8.5 3.5" fill="none" stroke="rgba(255,255,255,.6)" strokeWidth="1.5" />
-        </svg>
+        {line.at && <span className="sc-activity-time" style={nums}>{relTime(line.at)}</span>}
       </button>
 
       {open && (
-        <div className="mt-1.5 rounded-lg overflow-y-auto sc-drop lg:max-w-[760px]"
-          style={{ maxHeight: "min(60vh, 420px)", background: "rgba(0,0,0,.32)", border: "1px solid rgba(255,255,255,.08)" }}>
+        <div className={inline ? "absolute left-0 overflow-y-auto sc-drop sc-activity-drop" : "mt-1.5 overflow-y-auto sc-drop sc-activity-drop"}
+          style={inline
+            ? { top: "calc(100% + 8px)", width: 560, maxWidth: "calc(100vw - 120px)", maxHeight: "min(60vh, 460px)", zIndex: 60, fontFamily: agent }
+            : { maxHeight: "min(60vh, 420px)", fontFamily: agent }}>
           {data?.pinned && (
-            <div className="px-3 py-2" style={{ borderBottom: "1px solid rgba(255,255,255,.08)" }}>
-              <div style={{ fontSize: F.sm, color: "#FFD08A" }}>{data.pinned.summary}</div>
-              {data.pinned.detail && <div style={{ fontSize: F.xs, color: "rgba(255,255,255,.6)", marginTop: 2 }}>{data.pinned.detail}</div>}
+            <div className="px-3 py-2" style={{ borderBottom: `1px solid ${T.hairSoft}` }}>
+              <div style={{ fontSize: F.sm, color: T.hivizText }}>{data.pinned.summary}</div>
+              {data.pinned.detail && <div style={{ fontSize: F.xs, color: T.ink2, marginTop: 2 }}>{data.pinned.detail}</div>}
+            </div>
+          )}
+          {thoughts.length > 0 && (
+            <div style={{ borderBottom: `1px solid ${T.hair}` }}>
+              <div className="px-3 pt-2 pb-1" style={{ ...eyebrow, fontSize: F.micro, color: T.ink3 }}>Dusty&apos;s thoughts · tap one to talk about it</div>
+              {thoughts.map((it) => (
+                <button key={it.id} onClick={() => talkAbout(it)} className="w-full text-left px-3 py-2 flex gap-2.5 items-start"
+                  style={{ borderTop: `1px solid ${T.hairSoft}`, background: current?.id === it.id ? T.sunk : "transparent", cursor: "pointer" }}>
+                  <span aria-hidden="true" style={{ paddingTop: 4, color: T.ink3, fontSize: 11 }}>◆</span>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ display: "block", fontSize: F.sm, color: T.ink, lineHeight: 1.4 }}>{it.summary}</span>
+                    {it.detail && <span style={{ display: "block", fontSize: F.xs, color: T.ink2, lineHeight: 1.4, marginTop: 2 }}>{it.detail}{it.contact_id ? " ›" : ""}</span>}
+                  </span>
+                  <span style={{ fontSize: F.xs, color: T.ink3, ...nums }}>{relTime(it.at)}</span>
+                </button>
+              ))}
             </div>
           )}
           {(data?.items ?? []).map((it) => {
             const body = (
-              <div className="px-3 py-2 flex gap-2.5 items-start" style={{ borderBottom: "1px solid rgba(255,255,255,.06)" }}>
+              <div className="px-3 py-2 flex gap-2.5 items-start" style={{ borderBottom: `1px solid ${T.hairSoft}` }}>
                 <span style={{ paddingTop: 5 }}><Dot tone={it.tone} live={it.kind === "running"} /></span>
                 <span style={{ flex: 1, minWidth: 0 }}>
-                  <span style={{ display: "block", fontSize: F.sm, color: "rgba(255,255,255,.9)", lineHeight: 1.35 }}>{it.summary}</span>
-                  {it.detail && <span style={{ display: "block", fontSize: F.xs, color: "rgba(255,255,255,.55)", lineHeight: 1.4, marginTop: 2 }}>{it.detail}</span>}
+                  <span style={{ display: "block", fontSize: F.sm, color: T.ink, lineHeight: 1.35 }}>{it.summary}</span>
+                  {it.detail && <span style={{ display: "block", fontSize: F.xs, color: T.ink2, lineHeight: 1.4, marginTop: 2 }}>{it.detail}</span>}
                 </span>
-                {it.kind !== "waiting" && it.kind !== "agreement" && it.kind !== "reminder" && <span style={{ fontSize: F.xs, color: "rgba(255,255,255,.45)", ...nums }}>{relTime(it.at)}</span>}
+                {it.kind !== "waiting" && it.kind !== "agreement" && it.kind !== "reminder" && <span style={{ fontSize: F.xs, color: T.ink3, ...nums }}>{relTime(it.at)}</span>}
               </div>
             );
-            return it.contact_id
-              ? <Link key={it.id} href={`/dashboard/messages/${it.contact_id}`} onClick={() => setOpen(false)} className="block no-underline">{body}</Link>
+            const to = it.href ?? (it.contact_id ? `/dashboard/messages/${it.contact_id}` : null);
+            return to
+              ? <Link key={it.id} href={to} onClick={() => setOpen(false)} className="block no-underline">{body}</Link>
               : <div key={it.id}>{body}</div>;
           })}
           {!data?.items.length && !data?.pinned && (
-            <div className="px-3 py-2" style={{ fontSize: F.sm, color: "rgba(255,255,255,.6)" }}>Nothing read in the last week.</div>
+            <div className="px-3 py-2" style={{ fontSize: F.sm, color: T.ink2 }}>Nothing read in the last week.</div>
           )}
-          <div className="px-3 py-2" style={{ ...eyebrow, fontSize: F.micro, color: "rgba(255,255,255,.4)" }}>
+          <div className="px-3 py-2" style={{ ...eyebrow, fontSize: F.micro, color: T.ink3 }}>
             Dusty reads new threads every minute, app open or not
           </div>
         </div>

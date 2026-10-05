@@ -11,17 +11,49 @@
  * layout.
  */
 
+/**
+ * Colour tokens read the theme (Settings → Appearance; src/lib/v34/themes.ts,
+ * variables in v34-shell.css): Site Office (default), Blueprint, Kraft Yard,
+ * Night Shift. Every `T.x` is a CSS variable, so every screen follows the
+ * chosen theme with no branching. The *Dim fills the themes don't name are
+ * mixed from their colour and the card. `dark` / `darkHair` stay fixed: the
+ * job page's money strip and takeoff rail are dark with white text in every
+ * theme. Where JS must do maths on a colour, use THEMES[..] hex values.
+ */
+const v = (name: string) => `var(--sc-${name})`;
+const dim = (name: string) => `color-mix(in srgb, var(--sc-${name}) 14%, var(--sc-card))`;
 export const T = {
-  slab: "#E9EBEE", card: "#FFFFFF", ink: "#12161A", ink2: "#616B77", ink3: "#8A95A1",
-  hair: "#DCE0E5", hairSoft: "#F0F2F4",
-  chalk: "#1B5FD9", chalkDim: "#EAF0FC",
-  hiviz: "#F2610C", hivizDim: "#FFF1E7",
-  green: "#0F8A4F", greenDim: "#E6F5ED",
-  violet: "#6B4BD6", violetDim: "#F1EFFB",
-  red: "#C0341D", redDim: "#FBECE9",
-  dark: "#14181C", darkHair: "#262C33",
-  pulse: "#1FA971",
+  // ground + surfaces
+  slab: v("slab"), card: v("card"), sunk: v("sunk"), ink: v("ink"), ink2: v("ink2"), ink3: v("ink3"),
+  hair: v("hair"), hairSoft: v("hair-soft"), hairStrong: v("hair-strong"),
+  // roles
+  chalk: v("chalk"), chalkDim: v("chalk-dim"),          // links, info
+  hiviz: v("hiviz"), hivizDim: v("hiviz-dim"),          // primary action, badges
+  onHiviz: v("on-hiviz"),                               // text on the accent (dark in Night Shift)
+  hivizSoft: v("hiviz-soft"), hivizText: v("hiviz-text"),
+  green: v("green"), greenDim: dim("green"),
+  violet: v("violet"), violetDim: dim("violet"),
+  red: v("red"), redDim: dim("red"),
+  teal: v("teal"),
+  // dark panels (job money strip, takeoff rail) — white text on these, every theme
+  dark: "#2A2A2A", darkHair: "#3D3A34",
+  pulse: v("green"),
+  rail: v("rail"), railInk: v("rail-ink"), railActive: v("rail-active"), railInkOn: v("rail-ink-on"),
+  sun: "#6B4E12", sunDim: "#F7EBC9",
+  dustyTint: v("dusty-tint"), dustyText: v("dusty-text"), dustyEdge: v("dusty-edge"),
+  outBg: v("out-bg"), outInk: v("out-ink"),
+  paper: v("paper"), paperGrid: v("paper-grid"),
+  pencil: v("pencil"), pencilMuted: v("pencil-muted"), pencilLine: v("pencil-line"),
+  logoOrange: v("crete"),  // "crete" in the wordmark ONLY
 } as const;
+
+/** The "logo orange" alternate accent — swap these keys into T to pull the UI toward the wordmark's orange. */
+export const LOGO_ACCENT = {
+  hiviz: "#C24E0C", hivizDim: "#FBE3D3", hivizSoft: "#D9550A", hivizText: "#9A3F08", dustyTint: "#FDEEE4",
+} as const;
+
+/** Bucket colours — unchanged mapping, new values. */
+export const BUCKET = { unsorted: v("bucket-unsorted"), customer: v("bucket-customer"), vendor: v("bucket-vendor"), personal: v("bucket-personal"), spam: v("bucket-spam") } as const;
 
 /* ---- money palette ----
    Softer than the UI tokens: teal for cash already in, indigo for
@@ -39,8 +71,16 @@ export const M = {
 
 export const F = { xxl: 34, xl: 26, lg: 19, md: 15, sm: 13, xs: 11, micro: 9.5 } as const;
 
-export const disp = "'Barlow Condensed', system-ui, sans-serif";
-export const body = "'IBM Plex Sans', system-ui, sans-serif";
+export const disp = "var(--sc-font-disp, 'Barlow Condensed', system-ui, sans-serif)";
+export const body = "var(--sc-font-body, 'IBM Plex Sans', system-ui, sans-serif)";
+/** Names, numbers, counts, tile values (600/700). */
+export const strong = "var(--sc-font-strong, 'Lexend', system-ui, sans-serif)";
+/** Panel titles (300). */
+export const light = "var(--sc-font-light, 'Inter', system-ui, sans-serif)";
+/** The AI agent's type — Dusty's chat and the activity line, in every theme (Coy, 2026-10-02: JetBrains Mono). */
+export const agent = "var(--sc-font-agent, 'JetBrains Mono', ui-monospace, monospace)";
+/** Dusty's voice — the activity line, his cards, chat titles. */
+export const hand = "var(--sc-font-hand, 'Kalam', cursive)";
 
 export const eyebrow: React.CSSProperties = {
   fontFamily: disp, fontSize: F.micro, letterSpacing: ".14em",

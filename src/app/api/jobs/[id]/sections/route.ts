@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
-import { defaultReinforcement, readSectionFields, SECTION_SELECT } from "./fields";
+import { readSectionFields, SECTION_SELECT } from "./fields";
+import { loadAssembly, setReinforcement } from "@/lib/budget-server";
 
 /**
  * A job's sections — read and create. Session client, org from the session
@@ -45,13 +46,6 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const fields = readSectionFields(body);
   if (!fields.ok) return applyCookies(NextResponse.json({ error: fields.error }, { status: 400 }));
 
-  // The FK alone would accept another org's type; the org filter here does not.
-  if (typeof fields.patch.reinforcement_type_id === "string") {
-    const { data: rt } = await supabase.from("org_reinforcement_types").select("id")
-      .eq("org_id", orgId).eq("id", fields.patch.reinforcement_type_id).maybeSingle();
-    if (!rt) return applyCookies(NextResponse.json({ error: "That reinforcement is not in your settings." }, { status: 400 }));
-  }
-
   const { data: job, error: jobErr } = await supabase
     .from("jobs").select("id, job_type").eq("id", id).eq("org_id", orgId).maybeSingle();
   if (jobErr) return applyCookies(NextResponse.json({ error: `jobs: ${jobErr.message}` }, { status: 500 }));
@@ -66,13 +60,17 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     org_id: orgId,
     job_id: id,
   };
-  // Coy's default for this kind of job and work (migration 042), labelled as a default.
-  if (!("reinforcement_type_id" in fields.patch)) {
-    const d = await defaultReinforcement(supabase, orgId, job.job_type as string | null, (fields.patch.work_type as string | undefined) ?? "slab");
-    if (d) Object.assign(insert, { reinforcement_type_id: d, reinforcement_source: "default" });
-  }
-
-  const { data, error } = await supabase.from("job_sections").insert(insert).select(SECTION_SELECT).single();
+  const { data: made, error } = await supabase.from("job_sections").insert(insert).select(SECTION_SELECT).single();
   if (error) return applyCookies(NextResponse.json({ error: `job_sections insert: ${error.message}` }, { status: 500 }));
-  return applyCookies(NextResponse.json({ section: data }, { status: 201 }));
+
+  // Coy's reinforcement pick, then his assembly for this kind of job and
+  // area (step 3b) — a default he set up, labelled as one, never a guess.
+  if (fields.reinforcement !== undefined) {
+    const r = await setReinforcement(supabase, orgId, id, made.id as string, fields.reinforcement, "set");
+    if (!r.ok) return applyCookies(NextResponse.json({ error: r.error }, { status: 400 }));
+  }
+  const assembly = await loadAssembly(supabase, orgId, id, made.id as string,
+    { auto: true, jobType: (job.job_type as string | null) ?? null, workType: (made.work_type as string | null) ?? null });
+  const { data } = await supabase.from("job_sections").select(SECTION_SELECT).eq("id", made.id as string).eq("org_id", orgId).single();
+  return applyCookies(NextResponse.json({ section: data ?? made, assembly }, { status: 201 }));
 }

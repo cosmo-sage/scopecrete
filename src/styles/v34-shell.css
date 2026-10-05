@@ -1,7 +1,19 @@
+/* Fonts for the Site Office palette (design/palette-logo): Lexend (names,
+   numbers), Inter 300 (panel titles), Kalam (Dusty's voice), Barlow
+   Condensed (labels) and IBM Plex Sans (body). Before this the dashboard
+   named Barlow and Plex but never loaded them. */
+@import url("https://fonts.googleapis.com/css2?family=Lexend:wght@600;700&family=Inter:wght@300&family=Kalam:wght@400;700&family=Barlow+Condensed:wght@500;600;700&family=Barlow:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Sans+Condensed:wght@500;600&family=Archivo:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap");
+
 /* The sticky header's height: 54px glass bar + 38px activity line
    (activity-line.tsx always holds its row). Everything that sits under or
    beside the header measures from this — one number, not five. */
-:root { --sc-head: 92px; --sc-foot: 58px; --sc-dusty: 400px; }
+:root { --sc-head: 92px; --sc-foot: 58px; --sc-dusty: 400px;
+  /* Dusty's type, the same in every theme (Coy, 2026-10-02): JetBrains Mono, loaded by next/font as --font-mono. */
+  --sc-font-agent: var(--font-mono, 'JetBrains Mono'), ui-monospace, SFMono-Regular, Menlo, monospace; }
+.sc-sheets { top: var(--sc-head); bottom: 0; right: 0; left: 0; }
+/* Desktop (Coy, 2026-09-30): the activity line moved up into the 54px header
+   beside the logo, so the header is one row. */
+@media (min-width: 1024px) { :root { --sc-head: 54px; } }
 
 /* The footer's height on a phone (layout.tsx, border-box, safe area inside it).
    A page that must not scroll as a whole — a conversation, a person — is
@@ -24,10 +36,8 @@
  * Animation names are kept byte-identical to v34 (scEmTurn, scTabPop, …) so a
  * future diff against the mockup is a real diff rather than a rename hunt.
  *
- * The emblem animations target .sc-em-diamond / .sc-em-square / .sc-em-core.
- * Those class names live on the shapes inside <Emblem> in
- * src/components/v34/primitives.tsx — the first port dropped them, which meant
- * every emblem state was inert. Do not remove them again.
+ * The diamond emblem and its dream / think / tap animations are gone
+ * (2026-09-30) — Dusty the pixel foreman replaced it (dusty-avatar.tsx).
  */
 
 /* ---------------------------------------------------------------- the glass */
@@ -100,56 +110,7 @@
 /* open, it sits on the panel rather than the glass, so it inks up */
 .sc-burger[data-status="open"] { background: transparent; border-color: transparent; }
 .sc-burger[data-status="open"] .sc-burger-bar::before,
-.sc-burger[data-status="open"] .sc-burger-bar::after { background: #12161a; }
-
-/* ------------------------------------------------------------- the emblem */
-
-.sc-em-diamond,
-.sc-em-square,
-.sc-em-core {
-  transform-box: fill-box;
-  transform-origin: center;
-}
-
-/* DREAMING — the core alone, slow and organic. No rotation: rotation means
-   real work, and the two must never read alike. This is the resting state. */
-@keyframes scDream {
-  0%, 100% { transform: scale(0.82); opacity: 0.55; }
-  50%      { transform: scale(1.1);  opacity: 1; }
-}
-.sc-em-dream .sc-em-core { animation: scDream 3.4s ease-in-out infinite; }
-
-/* WORKING — diamond and square counter-rotate, core pulses faster than it
-   breathes. Fires only while a real request is in flight. Stills when done. */
-.sc-em-think .sc-em-diamond { animation: scThinkTurn 1.4s linear infinite; }
-.sc-em-think .sc-em-square  { animation: scThinkBack 1.4s linear infinite; }
-.sc-em-think .sc-em-core    { animation: scThinkCore 1.1s cubic-bezier(0.42, 0, 0.32, 1) infinite; }
-@keyframes scThinkTurn { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-@keyframes scThinkBack { from { transform: rotate(0deg); } to { transform: rotate(-360deg); } }
-@keyframes scThinkCore {
-  0%   { transform: scale(0.72); opacity: 0.5; }
-  45%  { transform: scale(1.18); opacity: 1; }
-  100% { transform: scale(0.72); opacity: 0.5; }
-}
-
-/* TAPPED — the mark turns a quarter and lands on itself. Both shapes have
-   four-fold symmetry, so a 90° counter-rotation is a full return. */
-.sc-em-tap .sc-em-diamond { animation: scEmTurn     620ms cubic-bezier(0.22, 0.9, 0.24, 1); }
-.sc-em-tap .sc-em-square  { animation: scEmTurnBack 620ms cubic-bezier(0.22, 0.9, 0.24, 1); }
-.sc-em-tap .sc-em-core    { animation: scEmCore     620ms cubic-bezier(0.22, 0.9, 0.24, 1); }
-@keyframes scEmTurn     { from { transform: rotate(0deg); } to { transform: rotate(90deg); } }
-@keyframes scEmTurnBack { from { transform: rotate(0deg); } to { transform: rotate(-90deg); } }
-@keyframes scEmCore {
-  0%   { transform: scale(1); }
-  34%  { transform: scale(0.55); }
-  72%  { transform: scale(1.18); }
-  100% { transform: scale(1); }
-}
-
-/* v34 also defines .sc-em-breathe / .sc-em-asking for "Dusty has questions".
-   Deliberately not ported: nothing computes a real question count, and an
-   animation that says there is something waiting when there is not is a
-   fabricated status. It comes back when there is a number behind it. */
+.sc-burger[data-status="open"] .sc-burger-bar::after { background: var(--sc-ink); }
 
 /* ------------------------------------------------------------- the footer */
 
@@ -227,8 +188,56 @@
 /* The page beside Dusty keeps its width minus his column. */
 @media (min-width: 1024px) {
   .sc-with-dusty { padding-right: var(--sc-dusty); }
+  /* A sheet opened while Dusty is docked lands in the page beside him. */
+  html[data-dusty="open"] .sc-drawer { right: var(--sc-dusty) !important; left: 84px !important; top: var(--sc-head) !important; }
+  /* The plan sheets beside the budget (2026-10-02): the right part of the page, the budget left of it, Dusty right of it. */
+  .sc-sheets { left: calc(84px + (100vw - 84px) * .42) !important; }
+  html[data-dusty="open"] .sc-sheets { right: var(--sc-dusty) !important; left: calc(84px + (100vw - 84px - var(--sc-dusty)) * .38) !important; }
+  /* …and the page itself narrows to the room left of it, so nothing is hidden underneath. */
+  html[data-sheets="open"] main { padding-right: calc((100vw - 84px) * .58) !important; }
+  html[data-sheets="open"][data-dusty="open"] main { padding-right: calc(var(--sc-dusty) + (100vw - 84px - var(--sc-dusty)) * .62) !important; }
 }
+/* The activity dot's colour and rhythm say what kind of work it is
+   (Coy, 2026-09-30): reading someone — slow blue breath; Dusty answering —
+   quick amber; just filed or named — one green blink; the reader broken —
+   steady red. Idle is still. */
+@keyframes scDotGlow { 0%, 100% { opacity: 1; box-shadow: 0 0 6px 1px currentColor; } 50% { opacity: .45; box-shadow: 0 0 0 0 currentColor; } }
+.sc-dot-read  { color: #3F74C9; animation: scDotGlow 2.2s ease-in-out infinite; }
+.sc-dot-reply { color: #C98A12; animation: scDotGlow 0.8s ease-in-out infinite; }
+@keyframes scDotBlink { 0% { box-shadow: 0 0 0 0 currentColor; } 30% { box-shadow: 0 0 8px 2px currentColor; } 100% { box-shadow: 0 0 0 0 currentColor; } }
+.sc-dot-done  { color: #2F8A5B; animation: scDotBlink 1.2s ease-out 1; }
+.sc-dot-warn  { color: #B5412C; box-shadow: 0 0 0 3px rgba(181,65,44,.18); }
+/* The activity diamond (Coy, 2026-10-02): always a glow — idle a slow grey
+   breath, reading blue, answering quick amber, just done one green flare,
+   broken steady red. The glow stays inside the line's button. */
+@keyframes scDiaGlow { 0%, 100% { box-shadow: 0 0 5px 1px currentColor; opacity: 1; } 50% { box-shadow: 0 0 1px 0 currentColor; opacity: .55; } }
+@keyframes scDiaFlare { 0% { box-shadow: 0 0 0 0 currentColor; } 30% { box-shadow: 0 0 9px 3px currentColor; } 100% { box-shadow: 0 0 4px 1px currentColor; } }
+.sc-dia-idle  { animation: scDiaGlow 3.6s ease-in-out infinite; }
+.sc-dia-read  { animation: scDiaGlow 2.2s ease-in-out infinite; }
+.sc-dia-reply { animation: scDiaGlow 0.8s ease-in-out infinite; }
+.sc-dia-done  { animation: scDiaFlare 1.4s ease-out 1 both; }
+.sc-dia-warn  { box-shadow: 0 0 6px 2px currentColor; }
+/* Dusty's sprite changes crossfade (the pack's 200 ms). */
+@keyframes scDustyIn { from { opacity: 0; } to { opacity: 1; } }
+.sc-dusty { animation: scDustyIn 0.2s ease-out; }
+/* The Toolbox drawer: rises from just above the phone footer. */
+@keyframes scToolUp { from { transform: translateY(100%); opacity: 0; } to { transform: none; opacity: 1; } }
+.sc-tool-up { animation: scToolUp 0.2s cubic-bezier(0.22, 0.85, 0.3, 1); }
 .sc-caret { opacity: .6; animation: scDotPulse 0.9s ease-in-out infinite; margin-left: 1px; }
+/* The activity line types in with one stepped clip — no render per letter. */
+.sc-typed {
+  display: inline-block; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; vertical-align: bottom;
+  animation: scType var(--sc-type-ms, 1s) steps(var(--sc-type-steps, 40), end) both;
+}
+/* Its own compositor layer: the line's typing and pulsing dot repaint the line,
+   not the page under it (a 427-row Price book repainted every step before). */
+.sc-own-layer { will-change: transform; }
+@keyframes scType { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+/* A line too long for its row slides to its end, rests, and slides back (Coy, 2026-10-02: "it doesn't scroll so I can't read the full thought"). */
+.sc-typed[data-marq] { max-width: none; overflow: visible; text-overflow: clip; animation: scMarq var(--sc-marq-ms, 12s) ease-in-out infinite; }
+@keyframes scMarq { 0%, 12% { transform: translateX(0); } 44%, 56% { transform: translateX(var(--sc-marq-dx, 0)); } 88%, 100% { transform: translateX(0); } }
+/* On a phone Dusty's chat covers the activity row under the logo — his own sprite says what he is doing. */
+@media (max-width: 1023.98px) { .sc-dusty-sheet { top: 54px !important; } }
 
 @media (prefers-reduced-motion: reduce) {
   .sc-burger-bar,
@@ -237,13 +246,6 @@
   .sc-plus-bar,
   .sc-plus-bar::before { transition: none; }
   .sc-menu-item { animation: none; opacity: 1; transform: none; }
-  .sc-em-tap .sc-em-diamond,
-  .sc-em-tap .sc-em-square,
-  .sc-em-tap .sc-em-core,
-  .sc-em-think .sc-em-diamond,
-  .sc-em-think .sc-em-square,
-  .sc-em-think .sc-em-core,
-  .sc-em-dream .sc-em-core { animation: none; }
   .sc-tab-ico,
   .sc-tab-pop { transition: none; animation: none; }
   .sc-tab-mark { transition: none; }
@@ -254,5 +256,157 @@
   .sc-rail-in,
   .sc-dock-in,
   .sc-rec,
-  .sc-caret { animation: none; }
+  .sc-caret,
+  .sc-typed,
+  .sc-typed[data-marq],
+  .sc-dot-read,
+  .sc-dot-reply,
+  .sc-dot-done,
+  .sc-dia-idle,
+  .sc-dia-read,
+  .sc-dia-reply,
+  .sc-dia-done,
+  .sc-dusty,
+  .sc-tool-up { animation: none; }
 }
+
+/* Price book: a column divider shows where it can be dragged. */
+.sc-col-grip::after { content: ""; position: absolute; top: 20%; bottom: 20%; left: 3px; width: 1px; background: var(--sc-hair); }
+.sc-col-grip:hover::after, .sc-col-grip:active::after { background: var(--sc-chalk); width: 2px; left: 2px; top: 0; bottom: 0; }
+
+/* ------------------------------------------------ Themes (2026-09-30; v2 2026-10-02: eight, with typefaces)
+   Generated from src/lib/v34/themes.ts (Claude Design handoffs,
+   design/customer-and-themes/themes and themes v2). Each theme also sets
+   --sc-font-disp/body/strong/light/hand. <html data-theme> picks one; the inline
+   script in app/layout.tsx sets it before first paint. T in tokens.ts reads
+   these variables, so every screen follows the theme. */
+:root, [data-theme="site-office"] {
+  --sc-slab:#FBF6EC; --sc-card:#FFFFFF; --sc-sunk:#F3ECDD; --sc-ink:#2A2A2A; --sc-ink2:#5E5A52; --sc-ink3:#8C8578; --sc-hair:#E6DCC8; --sc-hair-soft:#F1E9DA; --sc-hair-strong:#D9CDB6; --sc-hiviz:#B85A3C; --sc-on-hiviz:#FFFFFF; --sc-hiviz-dim:#F6E2D8; --sc-hiviz-soft:#D97757; --sc-hiviz-text:#9A4527; --sc-chalk:#1E5AA8; --sc-chalk-dim:#DCE6F4; --sc-green:#2F8A5B; --sc-violet:#6A55B0; --sc-red:#B5412C; --sc-teal:#0F7C86; --sc-bucket-unsorted:#D97757; --sc-bucket-customer:#2F8A5B; --sc-bucket-vendor:#1E5AA8; --sc-bucket-personal:#6A55B0; --sc-bucket-spam:#B5412C; --sc-out-bg:#F6E2D8; --sc-out-ink:#2A2A2A; --sc-dusty-tint:#FBEDE6; --sc-dusty-text:#9A4527; --sc-dusty-edge:#D97757; --sc-rail:#F3ECDD; --sc-rail-active:#FFFFFF; --sc-rail-ink:#6E685D; --sc-rail-ink-on:#2A2A2A; --sc-paper:#FAF8F3; --sc-paper-grid:rgba(89,128,166,.08); --sc-pencil:#3A3E43; --sc-pencil-muted:#5A5F66; --sc-pencil-line:rgba(58,62,68,.30); --sc-paper-btn:rgba(255,255,255,.55); --sc-hatch:rgba(52,56,61,.95); --sc-hatch-edge:rgba(52,56,61,.7); --sc-guide:rgba(58,62,68,.35); --sc-crete:#D9550A; --sc-work-dot-read:#3F74C9; --sc-work-dot-reply:#C98A12; --sc-work-dot-done:#2F8A5B; --sc-work-dot-warn:#B5412C; --sc-work-dot-idle:#B3AA9A; --sc-font-disp:'Barlow Condensed', system-ui, sans-serif; --sc-font-body:'IBM Plex Sans', system-ui, sans-serif; --sc-font-strong:'Lexend', system-ui, sans-serif; --sc-font-light:'Inter', system-ui, sans-serif; --sc-font-hand:'Kalam', cursive;
+  color-scheme: light;
+}
+[data-theme="blueprint"] {
+  --sc-slab:#F2F4F3; --sc-card:#FFFFFF; --sc-sunk:#E6EBEC; --sc-ink:#1F2A33; --sc-ink2:#51606B; --sc-ink3:#7A8791; --sc-hair:#D6DDE0; --sc-hair-soft:#E8EDEF; --sc-hair-strong:#C3CDD2; --sc-hiviz:#2E5E8C; --sc-on-hiviz:#FFFFFF; --sc-hiviz-dim:#E1EAF3; --sc-hiviz-soft:#5980A6; --sc-hiviz-text:#234A70; --sc-chalk:#2E5E8C; --sc-chalk-dim:#E1EAF3; --sc-green:#2F8A5B; --sc-violet:#7A5AA8; --sc-red:#B5412C; --sc-teal:#0F7C86; --sc-bucket-unsorted:#2E5E8C; --sc-bucket-customer:#2F8A5B; --sc-bucket-vendor:#0F7C86; --sc-bucket-personal:#7A5AA8; --sc-bucket-spam:#B5412C; --sc-out-bg:#E1EAF3; --sc-out-ink:#1F2A33; --sc-dusty-tint:#FBEDE3; --sc-dusty-text:#9A4527; --sc-dusty-edge:#D97757; --sc-rail:#E6EBEC; --sc-rail-active:#FFFFFF; --sc-rail-ink:#5A6772; --sc-rail-ink-on:#1F2A33; --sc-paper:#F7F9F9; --sc-paper-grid:rgba(89,128,166,.13); --sc-pencil:#2F3B46; --sc-pencil-muted:#5A6772; --sc-pencil-line:rgba(47,59,70,.28); --sc-paper-btn:rgba(255,255,255,.6); --sc-hatch:rgba(40,52,64,.95); --sc-hatch-edge:rgba(40,52,64,.7); --sc-guide:rgba(47,59,70,.34); --sc-crete:#E0590F; --sc-work-dot-read:#2E5E8C; --sc-work-dot-reply:#C98A12; --sc-work-dot-done:#2F8A5B; --sc-work-dot-warn:#B5412C; --sc-work-dot-idle:#A8B2B8; --sc-font-disp:'Barlow Condensed', system-ui, sans-serif; --sc-font-body:'IBM Plex Sans', system-ui, sans-serif; --sc-font-strong:'Lexend', system-ui, sans-serif; --sc-font-light:'Inter', system-ui, sans-serif; --sc-font-hand:'Kalam', cursive;
+  color-scheme: light;
+}
+[data-theme="kraft-yard"] {
+  --sc-slab:#EFE7D8; --sc-card:#FBF7EE; --sc-sunk:#E6DCC7; --sc-ink:#26231E; --sc-ink2:#574F42; --sc-ink3:#7E7361; --sc-hair:#D8CBB0; --sc-hair-soft:#E9DFCB; --sc-hair-strong:#C9B996; --sc-hiviz:#C74B08; --sc-on-hiviz:#FFFFFF; --sc-hiviz-dim:#F6DEC8; --sc-hiviz-soft:#E0590F; --sc-hiviz-text:#9A3F08; --sc-chalk:#1F3A4D; --sc-chalk-dim:#DCE3E8; --sc-green:#3E7B4F; --sc-violet:#7A5AA8; --sc-red:#A93A26; --sc-teal:#1F6F73; --sc-bucket-unsorted:#C74B08; --sc-bucket-customer:#3E7B4F; --sc-bucket-vendor:#1F3A4D; --sc-bucket-personal:#7A5AA8; --sc-bucket-spam:#A93A26; --sc-out-bg:#1F3A4D; --sc-out-ink:#F4ECDC; --sc-dusty-tint:#F6E3CF; --sc-dusty-text:#9A3F08; --sc-dusty-edge:#E0590F; --sc-rail:#1F3A4D; --sc-rail-active:#2B4C63; --sc-rail-ink:#B9C7D1; --sc-rail-ink-on:#FFFFFF; --sc-paper:#F4ECDC; --sc-paper-grid:rgba(120,96,60,.11); --sc-pencil:#3A342B; --sc-pencil-muted:#62584A; --sc-pencil-line:rgba(58,52,43,.30); --sc-paper-btn:rgba(255,252,245,.6); --sc-hatch:rgba(40,36,30,.95); --sc-hatch-edge:rgba(40,36,30,.7); --sc-guide:rgba(58,52,43,.34); --sc-crete:#E0590F; --sc-work-dot-read:#1F3A4D; --sc-work-dot-reply:#C98A12; --sc-work-dot-done:#3E7B4F; --sc-work-dot-warn:#A93A26; --sc-work-dot-idle:#B3A58A; --sc-font-disp:'Barlow Condensed', system-ui, sans-serif; --sc-font-body:'IBM Plex Sans', system-ui, sans-serif; --sc-font-strong:'Lexend', system-ui, sans-serif; --sc-font-light:'Inter', system-ui, sans-serif; --sc-font-hand:'Kalam', cursive;
+  color-scheme: light;
+}
+[data-theme="night-shift"] {
+  --sc-slab:#1B1D1F; --sc-card:#232629; --sc-sunk:#2D3135; --sc-ink:#ECE7DD; --sc-ink2:#B5AEA2; --sc-ink3:#8E887E; --sc-hair:#363B40; --sc-hair-soft:#2C3034; --sc-hair-strong:#474D53; --sc-hiviz:#F07A3A; --sc-on-hiviz:#1B1D1F; --sc-hiviz-dim:#3A2A20; --sc-hiviz-soft:#F07A3A; --sc-hiviz-text:#F4A071; --sc-chalk:#8DB2EA; --sc-chalk-dim:#22324A; --sc-green:#5FBF8A; --sc-violet:#A995E6; --sc-red:#F08A76; --sc-teal:#5EC2C8; --sc-bucket-unsorted:#F07A3A; --sc-bucket-customer:#5FBF8A; --sc-bucket-vendor:#7FA8E0; --sc-bucket-personal:#A995E6; --sc-bucket-spam:#F08A76; --sc-out-bg:#3A2A20; --sc-out-ink:#ECE7DD; --sc-dusty-tint:#2F2621; --sc-dusty-text:#F4A071; --sc-dusty-edge:#F07A3A; --sc-rail:#16181A; --sc-rail-active:#232629; --sc-rail-ink:#8E887E; --sc-rail-ink-on:#ECE7DD; --sc-paper:#202326; --sc-paper-grid:rgba(140,170,200,.09); --sc-pencil:#DDD8CE; --sc-pencil-muted:#A39D93; --sc-pencil-line:rgba(221,216,206,.22); --sc-paper-btn:rgba(255,255,255,.04); --sc-hatch:rgba(236,231,221,.92); --sc-hatch-edge:rgba(236,231,221,.6); --sc-guide:rgba(221,216,206,.26); --sc-crete:#F07A3A; --sc-work-dot-read:#7FA8E0; --sc-work-dot-reply:#F0B35A; --sc-work-dot-done:#5FBF8A; --sc-work-dot-warn:#F08A76; --sc-work-dot-idle:#5E5A54; --sc-font-disp:'Barlow Condensed', system-ui, sans-serif; --sc-font-body:'IBM Plex Sans', system-ui, sans-serif; --sc-font-strong:'Lexend', system-ui, sans-serif; --sc-font-light:'Inter', system-ui, sans-serif; --sc-font-hand:'Kalam', cursive;
+  color-scheme: dark;
+}
+[data-theme="steel"] {
+  --sc-slab:#F2F2F3; --sc-card:#FFFFFF; --sc-sunk:#E4E6E9; --sc-ink:#1D1F20; --sc-ink2:#4A5056; --sc-ink3:#6E757C; --sc-hair:#DADDE1; --sc-hair-soft:#ECEEF0; --sc-hair-strong:#C4C9CF; --sc-hiviz:#3F6890; --sc-on-hiviz:#FFFFFF; --sc-hiviz-dim:#E7EEF5; --sc-hiviz-soft:#5980A6; --sc-hiviz-text:#2F5276; --sc-chalk:#3F6890; --sc-chalk-dim:#E7EEF5; --sc-green:#2F7A50; --sc-violet:#6B4E9A; --sc-red:#B03A26; --sc-teal:#0F6E78; --sc-bucket-unsorted:#3F6890; --sc-bucket-customer:#2F7A50; --sc-bucket-vendor:#0F6E78; --sc-bucket-personal:#6B4E9A; --sc-bucket-spam:#B03A26; --sc-out-bg:#3F6890; --sc-out-ink:#FFFFFF; --sc-dusty-tint:#FBEFE6; --sc-dusty-text:#9A4527; --sc-dusty-edge:#D97757; --sc-rail:#1D2733; --sc-rail-active:#2B3846; --sc-rail-ink:#AEB8C2; --sc-rail-ink-on:#FFFFFF; --sc-paper:#FFFFFF; --sc-paper-grid:rgba(89,128,166,.08); --sc-pencil:#2A2E32; --sc-pencil-muted:#5C636A; --sc-pencil-line:rgba(29,31,32,.18); --sc-paper-btn:#FFFFFF; --sc-hatch:rgba(29,31,32,.95); --sc-hatch-edge:rgba(29,31,32,.7); --sc-guide:rgba(29,31,32,.28); --sc-crete:#E0590F; --sc-work-dot-read:#3F6890; --sc-work-dot-reply:#C98A12; --sc-work-dot-done:#2F7A50; --sc-work-dot-warn:#B03A26; --sc-work-dot-idle:#A9B0B7; --sc-font-disp:'Barlow Condensed', system-ui, sans-serif; --sc-font-body:'Barlow', system-ui, sans-serif; --sc-font-strong:'Barlow Condensed', system-ui, sans-serif; --sc-font-light:'Barlow', system-ui, sans-serif; --sc-font-hand:'Barlow', system-ui, sans-serif;
+  color-scheme: light;
+}
+[data-theme="signal"] {
+  --sc-slab:#F3F2F2; --sc-card:#FFFFFF; --sc-sunk:#E7E5E4; --sc-ink:#201E1D; --sc-ink2:#4C4846; --sc-ink3:#716C69; --sc-hair:#DEDBD9; --sc-hair-soft:#EEECEB; --sc-hair-strong:#C9C5C2; --sc-hiviz:#C42A10; --sc-on-hiviz:#FFFFFF; --sc-hiviz-dim:#FBE9E5; --sc-hiviz-soft:#E04A2E; --sc-hiviz-text:#9E220D; --sc-chalk:#9E220D; --sc-chalk-dim:#F0EEED; --sc-green:#2E7049; --sc-violet:#6A4C8E; --sc-red:#A3200C; --sc-teal:#355A7A; --sc-bucket-unsorted:#C42A10; --sc-bucket-customer:#2E7049; --sc-bucket-vendor:#355A7A; --sc-bucket-personal:#6A4C8E; --sc-bucket-spam:#7A3020; --sc-out-bg:#201E1D; --sc-out-ink:#FFFFFF; --sc-dusty-tint:#F6F1EE; --sc-dusty-text:#9E220D; --sc-dusty-edge:#C42A10; --sc-rail:#201E1D; --sc-rail-active:#34302E; --sc-rail-ink:#B3ADA9; --sc-rail-ink-on:#FFFFFF; --sc-paper:#FFFFFF; --sc-paper-grid:rgba(32,30,29,.05); --sc-pencil:#201E1D; --sc-pencil-muted:#5E5956; --sc-pencil-line:rgba(32,30,29,.2); --sc-paper-btn:#FFFFFF; --sc-hatch:rgba(32,30,29,.95); --sc-hatch-edge:rgba(32,30,29,.7); --sc-guide:rgba(32,30,29,.26); --sc-crete:#E0590F; --sc-work-dot-read:#355A7A; --sc-work-dot-reply:#C98A12; --sc-work-dot-done:#2E7049; --sc-work-dot-warn:#C42A10; --sc-work-dot-idle:#B3ADA9; --sc-font-disp:'Archivo', system-ui, sans-serif; --sc-font-body:'Archivo', system-ui, sans-serif; --sc-font-strong:'Archivo', system-ui, sans-serif; --sc-font-light:'Archivo', system-ui, sans-serif; --sc-font-hand:'Archivo', system-ui, sans-serif;
+  color-scheme: light;
+}
+[data-theme="plex-office"] {
+  --sc-slab:#F4F5F7; --sc-card:#FFFFFF; --sc-sunk:#E6E9EE; --sc-ink:#18202A; --sc-ink2:#47515E; --sc-ink3:#6B7581; --sc-hair:#DCE0E6; --sc-hair-soft:#EDEFF3; --sc-hair-strong:#C6CCD5; --sc-hiviz:#1F4E79; --sc-on-hiviz:#FFFFFF; --sc-hiviz-dim:#E4ECF5; --sc-hiviz-soft:#3A6EA0; --sc-hiviz-text:#1F4E79; --sc-chalk:#1F4E79; --sc-chalk-dim:#E4ECF5; --sc-green:#2B7A4B; --sc-violet:#6A4E99; --sc-red:#AE3824; --sc-teal:#0E6B75; --sc-bucket-unsorted:#1F4E79; --sc-bucket-customer:#2B7A4B; --sc-bucket-vendor:#0E6B75; --sc-bucket-personal:#6A4E99; --sc-bucket-spam:#AE3824; --sc-out-bg:#1F4E79; --sc-out-ink:#FFFFFF; --sc-dusty-tint:#FCF0E7; --sc-dusty-text:#9A4527; --sc-dusty-edge:#D97757; --sc-rail:#E6E9EE; --sc-rail-active:#FFFFFF; --sc-rail-ink:#47515E; --sc-rail-ink-on:#18202A; --sc-paper:#FFFFFF; --sc-paper-grid:rgba(31,78,121,.06); --sc-pencil:#18202A; --sc-pencil-muted:#56606C; --sc-pencil-line:rgba(24,32,42,.18); --sc-paper-btn:#FFFFFF; --sc-hatch:rgba(24,32,42,.95); --sc-hatch-edge:rgba(24,32,42,.7); --sc-guide:rgba(24,32,42,.26); --sc-crete:#E0590F; --sc-work-dot-read:#1F4E79; --sc-work-dot-reply:#C98A12; --sc-work-dot-done:#2B7A4B; --sc-work-dot-warn:#AE3824; --sc-work-dot-idle:#AEB5BF; --sc-font-disp:'IBM Plex Sans Condensed', system-ui, sans-serif; --sc-font-body:'IBM Plex Sans', system-ui, sans-serif; --sc-font-strong:'IBM Plex Sans', system-ui, sans-serif; --sc-font-light:'IBM Plex Sans', system-ui, sans-serif; --sc-font-hand:'IBM Plex Sans', system-ui, sans-serif;
+  color-scheme: light;
+}
+[data-theme="kraft-clean"] {
+  --sc-slab:#F6F3EE; --sc-card:#FFFFFF; --sc-sunk:#EBE6DD; --sc-ink:#221F1B; --sc-ink2:#4F4840; --sc-ink3:#736A5F; --sc-hair:#E2DCD1; --sc-hair-soft:#F0ECE5; --sc-hair-strong:#CEC6B8; --sc-hiviz:#B84406; --sc-on-hiviz:#FFFFFF; --sc-hiviz-dim:#FBEADB; --sc-hiviz-soft:#E0590F; --sc-hiviz-text:#963805; --sc-chalk:#1F3A4D; --sc-chalk-dim:#E3E9ED; --sc-green:#3A744B; --sc-violet:#6E5099; --sc-red:#A33624; --sc-teal:#1F6F73; --sc-bucket-unsorted:#B84406; --sc-bucket-customer:#3A744B; --sc-bucket-vendor:#1F3A4D; --sc-bucket-personal:#6E5099; --sc-bucket-spam:#A33624; --sc-out-bg:#1F3A4D; --sc-out-ink:#FFFFFF; --sc-dusty-tint:#FBEEE2; --sc-dusty-text:#963805; --sc-dusty-edge:#E0590F; --sc-rail:#1F3A4D; --sc-rail-active:#2B4C63; --sc-rail-ink:#BCC8D1; --sc-rail-ink-on:#FFFFFF; --sc-paper:#FDFBF7; --sc-paper-grid:rgba(120,96,60,.06); --sc-pencil:#2E2924; --sc-pencil-muted:#5E564C; --sc-pencil-line:rgba(46,41,36,.2); --sc-paper-btn:#FFFFFF; --sc-hatch:rgba(40,36,30,.95); --sc-hatch-edge:rgba(40,36,30,.7); --sc-guide:rgba(58,52,43,.28); --sc-crete:#E0590F; --sc-work-dot-read:#1F3A4D; --sc-work-dot-reply:#C98A12; --sc-work-dot-done:#3A744B; --sc-work-dot-warn:#A33624; --sc-work-dot-idle:#B8AFA2; --sc-font-disp:'Atkinson Hyperlegible', system-ui, sans-serif; --sc-font-body:'Atkinson Hyperlegible', system-ui, sans-serif; --sc-font-strong:'Atkinson Hyperlegible', system-ui, sans-serif; --sc-font-light:'Atkinson Hyperlegible', system-ui, sans-serif; --sc-font-hand:'Atkinson Hyperlegible', system-ui, sans-serif;
+  color-scheme: light;
+}
+
+/* Page ground and text follow the theme everywhere under the dashboard. */
+body { background: var(--sc-slab); color: var(--sc-ink); }
+
+/* ------------------------------------------------ Draft-paper header, rail
+   (palette handoff, design/palette-logo), reading the theme variables. */
+.sc-paper {
+  background-color: var(--sc-paper);
+  background-image:
+    linear-gradient(var(--sc-paper-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--sc-paper-grid) 1px, transparent 1px);
+  background-size: 10px 10px;
+  border-bottom: 1px solid var(--sc-pencil-line);
+  box-shadow: 0 3px 0 -2px var(--sc-pencil-line); /* doubled pencil rule */
+  color: var(--sc-pencil);
+}
+.sc-paper-divider { width: 1px; height: 22px; background: var(--sc-pencil-line); flex: none; }
+
+/* Activity line: the face of "crete" in the wordmark (Inter 300), graphite;
+   time in Barlow Condensed. Coy, 2026-09-30: the draft paper is the logo row
+   only — on a phone the line's own row is a solid colour. */
+.sc-activity-text { font-family: var(--sc-font-agent, 'JetBrains Mono', monospace); font-weight: 400; font-size: 13.5px; letter-spacing: -.01em; font-style: normal; color: var(--sc-pencil); }
+.sc-activity-row { background: var(--sc-paper); border-bottom: 1px solid var(--sc-pencil-line); }
+.sc-activity-time { font-family: var(--sc-font-disp, 'Barlow Condensed', sans-serif); font-weight: 500; font-size: 12px; letter-spacing: .08em; color: var(--sc-pencil-muted); }
+.sc-dot-read  { color: var(--sc-work-dot-read); background: var(--sc-work-dot-read) !important; }
+.sc-dot-reply { color: var(--sc-work-dot-reply); background: var(--sc-work-dot-reply) !important; }
+.sc-dot-done  { color: var(--sc-work-dot-done); background: var(--sc-work-dot-done) !important; }
+.sc-dot-warn  { color: var(--sc-work-dot-warn); background: var(--sc-work-dot-warn) !important; }
+
+/* Search · pipeline · + · settings — pencil-outlined squares */
+.sc-paper-btn {
+  border-radius: 3px; color: var(--sc-pencil);
+  border: 1px solid var(--sc-pencil-line); background: var(--sc-paper-btn);
+  transition: background .15s;
+}
+.sc-paper-btn:hover { background: var(--sc-card); }
+.sc-paper-btn:active, .sc-paper-btn[aria-expanded="true"] { background: var(--sc-hiviz-dim); border-color: var(--sc-hiviz-soft); }
+.sc-paper-btn:focus-visible { outline: 2px solid var(--sc-hiviz); outline-offset: 2px; }
+.sc-paper .sc-plus-bar, .sc-paper .sc-plus-bar::before,
+.sc-paper .sc-burger-bar, .sc-paper .sc-burger-bar::before, .sc-paper .sc-burger-bar::after { background: var(--sc-pencil); }
+.sc-paper .sc-burger[data-status="open"] .sc-burger-bar { background: transparent; }
+
+/* Drop-downs under the paper header: a card, not dark glass. */
+.sc-activity-drop {
+  background: var(--sc-card); border: 1px solid var(--sc-hair); border-radius: 6px;
+  box-shadow: 0 12px 32px rgba(0,0,0,.16); color: var(--sc-ink);
+}
+[data-theme="night-shift"] .sc-activity-drop { box-shadow: none; }
+/* The activity drop-down comes down over everything: the header's layer is lifted while it is open. */
+html[data-head-drop] .sc-head-wrap { z-index: 200 !important; }
+
+/* The rail follows the theme: light in Site Office and Blueprint, navy in
+   Kraft Yard, near-black in Night Shift. Icons are currentColor. */
+.sc-rail { background: var(--sc-rail); border-right: 1px solid var(--sc-hair); color: var(--sc-rail-ink); }
+.sc-rail a, .sc-rail button { color: var(--sc-rail-ink); }
+.sc-rail a[aria-current="page"], .sc-rail button[aria-pressed="true"] { background: var(--sc-rail-active); border-left-color: var(--sc-hiviz-soft) !important; color: var(--sc-rail-ink-on); }
+.sc-rail-label { font-family: var(--sc-font-disp, 'Barlow Condensed', sans-serif); font-weight: 500; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: inherit; text-align: center; line-height: 1.1; }
+
+/* Header lockup (design/org-branding): on a narrow phone the org's logo stands alone. */
+@media (max-width: 339px) { .sc-powered { display: none !important; } }
+
+/* ── The proposal (migration 060) ────────────────────────────────────────────
+   The desk under the pages: warm grey by day, near-black in Night Shift. */
+.sc-proposal { --sc-doc-ground: color-mix(in srgb, var(--sc-slab) 70%, #9C907C 30%); }
+html[data-theme="night-shift"] .sc-proposal { --sc-doc-ground: #15171A; }
+/*
+   The document is paper: white, ink, whatever the theme. Its editors show a
+   dashed outline on hover and the accent on focus. Printing shows the pages
+   only — Print / PDF uses the browser's own "Save as PDF". */
+.sc-doc-edit:hover { border-color: #C9BDA6 !important; }
+.sc-doc-edit:focus { outline: 2px solid #D97757; outline-offset: 1px; border-color: transparent !important; }
+.sc-doc-edit::placeholder { color: #B3AA9A; }
+.sc-print-only { display: none; }
+@media print {
+  .sc-print-only { display: inline; }
+  .sc-doc-edit::placeholder { color: transparent; }
+  @page { margin: 12mm; }
+  body * { visibility: hidden !important; }
+  .sc-doc, .sc-doc * { visibility: visible !important; }
+  .sc-doc { position: absolute !important; left: 0; top: 0; width: 100% !important; max-width: none !important; box-shadow: none !important; }
+  .sc-no-print { display: none !important; }
+  .sc-doc section[data-section="cover"] { break-after: page; }
+  .sc-doc section[data-section="warranty"], .sc-doc section[data-section="terms"] { break-before: auto; }
+  .sc-doc section[data-section="sign"] { break-inside: avoid; }
+  .sc-doc-edit { border: 0 !important; }
+  html, body { background: #fff !important; }
+}
+/* Recording a voice message to Dusty: the red dot breathes (2026-10-01). */
+@keyframes scRecDot { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .35; transform: scale(.8); } }
+.sc-rec-dot { animation: scRecDot 1s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .sc-rec-dot { animation: none; } }
+/* SlideDrawer (phone drawers handoff): no slide under reduced motion. */
+@media (prefers-reduced-motion: reduce) { .sc-slide-panel, .sc-slide-scrim { transition: none !important; } }
+/* The ScopeCrete emblem in the header turns as on the landing page
+   (site/marks.tsx Emblem spin); still under reduced motion. */
+@keyframes scSpin { to { transform: rotate(360deg); } }
+@keyframes scSpinR { to { transform: rotate(-360deg); } }
+@media (prefers-reduced-motion: reduce) { .sc-emblem g { animation: none !important; } }

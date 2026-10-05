@@ -1,0 +1,45 @@
+# CI — the checks every change must pass before it can reach master.
+# Runs on every pull request and on every push to master. Make this job a
+# required status check in Settings → Branches → master (branch protection)
+# so a red run cannot be merged. The same checks run locally in the Claude
+# Code Stop hook (.claude/hooks/verify.sh).
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: typecheck · lint · test · build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: npx tsc --noEmit -p .
+      - name: Lint
+        run: npm run lint
+      - name: Tests
+        run: npm test
+      - name: Build
+        # Placeholders only: the build needs the variables to exist, not real
+        # values. No secret is used or needed here.
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder
+          NEXT_TELEMETRY_DISABLED: "1"
+        run: npm run build

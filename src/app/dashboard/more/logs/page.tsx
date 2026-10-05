@@ -7,12 +7,16 @@
  * August outage, DECISIONS §2a); a note on a message that did arrive is only
  * something to know. Then Dusty's reads, and "Same person" merges. This is
  * what the database already records — there is no log of every tap yet.
+ *
+ * Above them (Claude Design package 9, `Lines.dc.html` C): every provider
+ * event of the last week, by line, provider and kind (line-events.tsx).
  */
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { T, F, disp, eyebrow, nums, relTime } from "@/lib/v34/tokens";
+import { T, F, eyebrow, nums, relTime } from "@/lib/v34/tokens";
 import { EmptyState } from "@/components/v34/primitives";
+import { LineEvents } from "@/components/v34/line-events";
 
 interface Logs {
   checks: Array<{ at: string; severity: "alarm" | "note"; title: string; detail: string }>;
@@ -28,8 +32,13 @@ const OUTCOME: Record<string, string> = {
 export default function LogsScreen() {
   const [logs, setLogs] = useState<Logs | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // undefined = not asked yet; null = couldn't read (shown as unknown).
+  const [drift, setDrift] = useState<number | null | undefined>(undefined);
   useEffect(() => {
     let off = false;
+    fetch("/api/dashboard/drift").then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (!off) setDrift(typeof d?.count === "number" ? d.count : null); })
+      .catch(() => { if (!off) setDrift(null); });
     fetch("/api/logs")
       .then(async (r) => { const b = await r.json().catch(() => ({})); if (!r.ok) throw new Error(b?.error || `HTTP ${r.status}`); return b; })
       .then((b) => { if (!off) setLogs(b as Logs); })
@@ -45,17 +54,26 @@ export default function LogsScreen() {
   );
   const when = (iso: string) => new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
-  if (error) return <EmptyState tone="warn" title="Couldn't load the logs" detail={error} />;
-  if (!logs) return <div className="p-3"><div className="rounded animate-pulse" style={{ height: 120, background: T.hairSoft }} /></div>;
-  const alarms = logs.checks.filter((c) => c.severity === "alarm").length;
+  const alarms = logs ? logs.checks.filter((c) => c.severity === "alarm").length : 0;
 
   return (
-    <div style={{ paddingBottom: 24, maxWidth: 760 }} className="mx-auto">
-      <div className="px-3 pt-3">
-        <Link href="/dashboard/more" style={{ ...eyebrow, color: T.chalk }}>‹ More</Link>
-        <h1 style={{ fontFamily: disp, fontSize: F.xl, fontWeight: 700, margin: "2px 0 0" }}>Logs</h1>
-        <div style={{ fontSize: F.xs, color: T.ink3 }}>What happened behind the scenes. Nothing here needs you unless it is red.</div>
-      </div>
+    <div style={{ paddingBottom: 24 }}>
+    <LineEvents />
+    {error ? <EmptyState tone="warn" title="Couldn't load the rest of the logs" detail={error} />
+    : !logs ? <div className="p-3"><div className="rounded animate-pulse" style={{ height: 120, background: T.hairSoft }} /></div> : (
+    <div style={{ maxWidth: 760 }} className="mx-auto">
+
+      {/* The drift alarm (DECISIONS §2a) — out of the header since 2026-09-30,
+          so it is loud here: a red banner while anything is missing, and
+          "unknown" (never "clear") when the count can't be read. */}
+      {drift !== undefined && drift !== 0 && (
+        <div role="alert" className="mx-3 mt-3 rounded px-3 py-2"
+          style={{ background: drift === null ? T.hairSoft : T.red, color: drift === null ? T.ink : T.card, fontSize: F.sm, lineHeight: 1.4 }}>
+          {drift === null
+            ? "Couldn't check whether every call and text reached the app. This is unknown, not clear."
+            : `${drift} ${drift === 1 ? "event" : "events"} reached your lines but never reached the app. Listed under Data checks below.`}
+        </div>
+      )}
 
       {section(`Data checks · ${alarms ? `${alarms} missing` : "nothing missing"}`,
         logs.checks.length === 0
@@ -98,6 +116,8 @@ export default function LogsScreen() {
               <span style={{ fontSize: F.xs, color: T.ink3 }}> · {when(m.at)}{m.undone_at ? " · undone" : ""}</span>
             </Link>
           )))}
+    </div>
+    )}
     </div>
   );
 }

@@ -43,3 +43,7 @@ next-env.d.ts
 # supabase cli scratch (version cache, local stack state) — not source
 supabase/.temp/
 supabase/.branches/
+
+# pdf.js and tesseract.js assets, copied by scripts/copy-static-assets.mjs
+/public/pdfjs/
+/public/tesseract/

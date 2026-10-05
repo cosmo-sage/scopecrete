@@ -285,7 +285,7 @@ export default function DustyChatPage() {
       <header className="flex items-center justify-between px-6 py-4 shrink-0" style={{ borderBottom: `1px solid ${IQ.border}` }}>
         <div className="flex items-center gap-3">
           <div className="relative w-9 h-9 rounded-full overflow-hidden">
-            <Image src="/dusty/dusty-character-v1.png" alt="Dusty" fill className="object-cover object-bottom" />
+            <Image src="/dusty/lander/dusty-static.svg" alt="Dusty" fill unoptimized className="object-contain" />
           </div>
           <div>
             <div style={{ color: IQ.textPrimary, fontWeight: 700, fontSize: 15 }}>Dusty</div>

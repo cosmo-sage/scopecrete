@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
+import { loadLines } from "@/lib/lines-server";
+import { buildChannels } from "@/lib/v34/threads";
 
 /**
  * One thread's messages, oldest first. Reads `messages` ONLY.
@@ -36,11 +38,18 @@ export interface ThreadMessage {
    * thread with fifty photos does not fetch fifty files just to render.
    */
   media_count: number;
+  /** message_media.kind of each file on it (photo, video, pdf, vcard…) — the search panel's Photos / Files. */
+  media_kinds: string[];
   /**
-   * Which of our lines it used (migration 035), by name — set only when this
-   * thread spans more than one line, so a one-line thread stays uncluttered.
+   * Which of our lines it used (migration 035), by name — set whenever the
+   * org has two or more lines (Lines, Claude Design package 9), so a one-line
+   * org stays uncluttered.
    */
   line: string | null;
+  /** That line's id, for the channel's line filter and its colour. */
+  line_id: string | null;
+  /** The other end's number on this message — which phone channel it belongs to (Threads v2). */
+  counterparty: string | null;
 }
 
 export async function GET(
@@ -58,7 +67,7 @@ export async function GET(
   // empty thread that reads as "this number never said anything".
   const { data: self } = await supabase
     .from("contacts")
-    .select("id, merged_into_contact_id, name, name_source, name_confirmed_at, address")
+    .select("id, merged_into_contact_id, name, name_source, name_confirmed_at, address, archived_at, archived_reason")
     .eq("org_id", orgId)
     .eq("id", contactId)
     .maybeSingle();
@@ -71,7 +80,7 @@ export async function GET(
   // force.
   const [{ data: phoneRows }, { data: mergeRows }] = await Promise.all([
     supabase.from("contact_phones")
-      .select("phone_e164, is_primary")
+      .select("phone_e164, is_primary, label")
       .eq("org_id", orgId).eq("contact_id", contactId)
       .order("is_primary", { ascending: false }),
     supabase.from("contact_merges")
@@ -134,11 +143,30 @@ export async function GET(
     if (cand) { counterpartyPhone = cand; break; }
   }
 
-  const linesUsed = new Set(raw.map((r) => r.phone_number_id).filter(Boolean));
+  // Stamped with its line whenever the org has more than one (Lines, package 9).
+  const manyLines = (orgLines ?? []).length > 1;
   const messages = raw.map((r) => {
     const { from_address, to_address, phone_number_id, ...rest } = r;
-    void from_address; void to_address;
-    return { ...rest, line: linesUsed.size > 1 && phone_number_id ? lineName.get(phone_number_id) ?? null : null };
+    const counterparty = from_address && !ours.has(from_address) ? from_address : to_address && !ours.has(to_address) ? to_address : null;
+    return { ...rest, counterparty, line: manyLines && phone_number_id ? lineName.get(phone_number_id) ?? null : null, line_id: manyLines ? phone_number_id : null };
+  });
+  // The lines, with their colours, and which one they first reached you on.
+  const lineRows = manyLines ? await loadLines(supabase, orgId) : [];
+  const firstMsg = [...raw].reverse().find((r) => r.phone_number_id);
+
+  // Their channels (Threads v2): a tab per number, then email, then chat. Emails
+  // are the mirrored inbox filed on this person (migration 061), newest 50.
+  const [{ data: emailRows }, { data: addrRows }] = await Promise.all([
+    supabase.from("emails").select("id, subject, original_from_name, original_from_address, from_address, sent_at, created_at, text_body")
+      .eq("org_id", orgId).eq("contact_id", contactId).order("created_at", { ascending: false }).limit(50),
+    supabase.from("contact_emails").select("email, label, is_primary").eq("org_id", orgId).eq("contact_id", contactId).order("is_primary", { ascending: false }),
+  ]);
+  const emailList = ((emailRows ?? []) as Array<{ id: string; subject: string | null; original_from_name: string | null; original_from_address: string | null; from_address: string | null; sent_at: string | null; created_at: string; text_body: string | null }>)
+    .map((e) => ({ id: e.id, subject: e.subject, from: e.original_from_name || e.original_from_address || e.from_address, at: e.sent_at ?? e.created_at, body: (e.text_body ?? "").slice(0, 1200) }));
+  const channels = buildChannels({
+    phones: ((phoneRows ?? []) as Array<{ phone_e164: string; is_primary: boolean; label: string | null }>).map((p) => ({ phone: p.phone_e164, label: p.label, is_primary: p.is_primary })),
+    emails: ((addrRows ?? []) as Array<{ email: string; label: string | null }>).map((e) => ({ email: String(e.email), label: e.label })),
+    messages, emailCount: emailList.length,
   });
 
   // Which messages have artifacts, without pulling any content.
@@ -157,14 +185,16 @@ export async function GET(
   }
 
   const mediaByMessage = new Map<string, number>();
+  const kindsOfMedia = new Map<string, string[]>();
   if (messages.length > 0) {
     const { data: media } = await supabase
       .from("message_media")
-      .select("message_id")
+      .select("message_id, kind")
       .eq("org_id", orgId)
       .in("message_id", messages.map((m) => m.id).slice(0, 1000));
-    for (const r of (media ?? []) as Array<{ message_id: string }>) {
+    for (const r of (media ?? []) as Array<{ message_id: string; kind: string | null }>) {
       mediaByMessage.set(r.message_id, (mediaByMessage.get(r.message_id) ?? 0) + 1);
+      kindsOfMedia.set(r.message_id, [...(kindsOfMedia.get(r.message_id) ?? []), r.kind ?? "file"]);
     }
   }
 
@@ -172,6 +202,7 @@ export async function GET(
     ...m,
     artifact_kinds: (kindsByMessage.get(m.id) ?? []).sort(),
     media_count: mediaByMessage.get(m.id) ?? 0,
+    media_kinds: kindsOfMedia.get(m.id) ?? [],
   }));
 
   return applyCookies(NextResponse.json({
@@ -188,6 +219,20 @@ export async function GET(
     /** Merges into this contact that are still in force — each can be undone. */
     merges,
     messages: withKinds,
+    /** The org's lines (only when there are two or more): id, name, colour, provider. */
+    lines: lineRows.map((l) => ({ id: l.id, name: l.label?.trim() || formatLine(l.phone_e164), phone: l.phone_e164, color: l.color, provider: l.provider, is_primary: l.is_primary })),
+    /**
+     * When they were archived and why (Coy, 2026-10-04); `back` once they have
+     * called or texted since — the thread shows it with the reason.
+     */
+    archived: self?.archived_at ? {
+      at: self.archived_at as string, reason: (self.archived_reason as string | null) ?? null,
+      back: raw.some((r) => r.direction === "inbound" && !!r.occurred_at && r.occurred_at > (self.archived_at as string)),
+    } : null,
+    /** "first reached you on the Website line, Sep 22". */
+    first_line: manyLines && firstMsg?.phone_number_id ? { id: firstMsg.phone_number_id, name: lineName.get(firstMsg.phone_number_id) ?? null, at: firstMsg.occurred_at } : null,
+    channels,
+    emails: emailList,
   }));
 }
 

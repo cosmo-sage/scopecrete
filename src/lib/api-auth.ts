@@ -1,8 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
+import { cookieDomain, hostKind } from "./hosts";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+
+/** The auth cookie's domain for this request's host — .app.scopecrete.ai on
+ *  app and org subdomains, so a refresh written here is the same cookie the
+ *  browser holds (src/lib/hosts.ts). Every server client passes it. */
+export function cookieOptionsFor(req: NextRequest) {
+  const domain = cookieDomain(req.headers.get("host"));
+  return domain ? { domain } : undefined;
+}
 
 /**
  * Session-scoped Supabase client plus the caller's org, for browser-reachable
@@ -36,6 +45,7 @@ export async function getApiSession(req: NextRequest): Promise<ApiSessionResult>
   const cookiesToSet: { name: string; value: string; options: Record<string, unknown> }[] = [];
 
   const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+    cookieOptions: cookieOptionsFor(req),
     cookies: {
       getAll: () => req.cookies.getAll(),
       setAll: (toSet) => { cookiesToSet.push(...toSet); },
@@ -53,12 +63,16 @@ export async function getApiSession(req: NextRequest): Promise<ApiSessionResult>
     return { ok: false, response: applyCookies(NextResponse.json({ error: "Not authenticated" }, { status: 401 })) };
   }
 
-  const { data: membership, error: memberErr } = await supabase
-    .from("org_members")
-    .select("org_id")
-    .eq("user_id", user.id)
-    .limit(1)
-    .maybeSingle();
+  // On an org's own address (<slug>.app.scopecrete.ai) the org is the one the
+  // address names — and only if this person is a member of it; RLS shows them
+  // no other org. Elsewhere, their membership as before.
+  let members = supabase.from("org_members").select("org_id").eq("user_id", user.id);
+  const host = hostKind(req.headers.get("host"));
+  if (host.kind === "org") {
+    const { data: here } = await supabase.from("orgs").select("id").eq("slug", host.slug).maybeSingle();
+    members = members.eq("org_id", (here as { id?: string } | null)?.id ?? "00000000-0000-0000-0000-000000000000");
+  }
+  const { data: membership, error: memberErr } = await members.limit(1).maybeSingle();
 
   // A signed-in user with no org row is NOT the same as a user with an empty
   // inbox, and the UI must never render them identically — an authenticated
@@ -79,4 +93,47 @@ export async function getApiSession(req: NextRequest): Promise<ApiSessionResult>
     ok: true,
     session: { supabase, orgId: membership.org_id as string, userId: user.id, applyCookies },
   };
+}
+
+/**
+ * Signed in, org or not — for the one place a person without an org may act:
+ * accepting an invite (migration 062). Everything it can do goes through
+ * SECURITY DEFINER functions that check the caller's own email; no table is
+ * read by org here.
+ */
+export async function getUserSession(req: NextRequest): Promise<
+  | { ok: true; session: { supabase: ReturnType<typeof createServerClient>; userId: string; email: string | null; applyCookies: (res: NextResponse) => NextResponse } }
+  | { ok: false; response: NextResponse }> {
+  const cookiesToSet: { name: string; value: string; options: Record<string, unknown> }[] = [];
+  const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+    cookieOptions: cookieOptionsFor(req),
+    cookies: { getAll: () => req.cookies.getAll(), setAll: (toSet) => { cookiesToSet.push(...toSet); } },
+  });
+  const applyCookies = (res: NextResponse) => {
+    cookiesToSet.forEach(({ name, value, options }) => res.cookies.set(name, value, options as Parameters<typeof res.cookies.set>[2]));
+    return res;
+  };
+  const { data: { user }, error } = await supabase.auth.getUser();
+  if (error || !user) return { ok: false, response: applyCookies(NextResponse.json({ error: "Not authenticated" }, { status: 401 })) };
+  return { ok: true, session: { supabase, userId: user.id, email: user.email ?? null, applyCookies } };
+}
+
+/**
+ * Whoever is asking, signed in or not — for the ONE public door: a customer
+ * opening a proposal link (migration 075). Anon when there is no session, so
+ * RLS gives a stranger nothing; the route only calls the SECURITY DEFINER
+ * function made for it (sc_shared_proposal) and signs the storage paths a live
+ * link lists (the anon storage policy checks each one). Never the service role.
+ */
+export function getReaderClient(req: NextRequest) {
+  const cookiesToSet: { name: string; value: string; options: Record<string, unknown> }[] = [];
+  const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+    cookieOptions: cookieOptionsFor(req),
+    cookies: { getAll: () => req.cookies.getAll(), setAll: (toSet) => { cookiesToSet.push(...toSet); } },
+  });
+  const applyCookies = (res: NextResponse) => {
+    cookiesToSet.forEach(({ name, value, options }) => res.cookies.set(name, value, options as Parameters<typeof res.cookies.set>[2]));
+    return res;
+  };
+  return { supabase, applyCookies };
 }

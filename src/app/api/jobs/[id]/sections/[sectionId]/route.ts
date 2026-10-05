@@ -1,8 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
-import { defaultReinforcement, readSectionFields, SECTION_SELECT } from "../fields";
+import { loadAssembly, setReinforcement, workingEstimate } from "@/lib/budget-server";
+import { readSectionFields, SECTION_SELECT } from "../fields";
+import { syncTakeoffSections } from "@/lib/takeoff-sections-server";
 
-/** Edit or remove one section. Scoped by job, section AND org. */
+const SIZE_FIELDS = ["length_ft", "width_ft", "sqft_override", "count_qty", "count_unit"];
+
+/**
+ * Edit or remove one section. Scoped by job, section AND org.
+ *
+ * Step 3b (migration 050): a reinforcement pick is a card — recorded on the
+ * section and carried as the area's one reinforcement line on the budget. A
+ * new work type loads Coy's assembly for it, but only onto an area with no
+ * budget lines yet. Removing a section removes its lines from the working
+ * budget too, so an area that is gone is not still in the price.
+ */
 
 export const dynamic = "force-dynamic";
 
@@ -23,43 +35,48 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
 
   const fields = readSectionFields(body);
   if (!fields.ok) return applyCookies(NextResponse.json({ error: fields.error }, { status: 400 }));
-  if (Object.keys(fields.patch).length === 0) {
+  if (Object.keys(fields.patch).length === 0 && fields.reinforcement === undefined) {
     return applyCookies(NextResponse.json({ error: "Nothing to change." }, { status: 400 }));
   }
 
-  // The FK alone would accept another org's type; the org filter here does not.
-  if (typeof fields.patch.reinforcement_type_id === "string") {
-    const { data: rt } = await supabase.from("org_reinforcement_types").select("id")
-      .eq("org_id", orgId).eq("id", fields.patch.reinforcement_type_id).maybeSingle();
-    if (!rt) return applyCookies(NextResponse.json({ error: "That reinforcement is not in your settings." }, { status: 400 }));
+  // A size typed on a section counted from takeoffs: it stops following them until ↺ (migration 069).
+  if (fields.patch.takeoff_sync === undefined && SIZE_FIELDS.some((f) => f in fields.patch)) {
+    const { count } = await supabase.from("takeoff_measurements").select("id", { count: "exact", head: true }).eq("org_id", orgId).eq("section_id", sectionId);
+    if (count) fields.patch.takeoff_sync = false;
   }
 
-  // A new work type brings its own default — unless Coy picked the
-  // reinforcement himself (source 'set'), which is never swapped.
-  if (typeof fields.patch.work_type === "string" && !("reinforcement_type_id" in fields.patch)) {
-    const [{ data: cur }, { data: job }] = await Promise.all([
-      supabase.from("job_sections").select("reinforcement_source").eq("id", sectionId).eq("job_id", id).eq("org_id", orgId).maybeSingle(),
-      supabase.from("jobs").select("job_type").eq("id", id).eq("org_id", orgId).maybeSingle(),
-    ]);
-    if (cur && cur.reinforcement_source !== "set") {
-      const d = await defaultReinforcement(supabase, orgId, (job?.job_type as string | null) ?? null, fields.patch.work_type);
-      fields.patch.reinforcement_type_id = d;
-      fields.patch.reinforcement_source = d ? "default" : null;
-    }
+  if (Object.keys(fields.patch).length) {
+    const { data, error } = await supabase
+      .from("job_sections")
+      .update({ ...fields.patch, updated_at: new Date().toISOString() })
+      .eq("id", sectionId)
+      .eq("job_id", id)
+      .eq("org_id", orgId)
+      .select("id")
+      .maybeSingle();
+    if (error) return applyCookies(NextResponse.json({ error: `job_sections update: ${error.message}` }, { status: 500 }));
+    if (!data) return applyCookies(NextResponse.json({ error: "No such section.", code: "not_found" }, { status: 404 }));
+  } else {
+    const { data } = await supabase.from("job_sections").select("id").eq("id", sectionId).eq("job_id", id).eq("org_id", orgId).maybeSingle();
+    if (!data) return applyCookies(NextResponse.json({ error: "No such section.", code: "not_found" }, { status: 404 }));
   }
 
-  const { data, error } = await supabase
-    .from("job_sections")
-    .update({ ...fields.patch, updated_at: new Date().toISOString() })
-    .eq("id", sectionId)
-    .eq("job_id", id)
-    .eq("org_id", orgId)
-    .select(SECTION_SELECT)
-    .maybeSingle();
+  if (fields.reinforcement !== undefined) {
+    const r = await setReinforcement(supabase, orgId, id, sectionId, fields.reinforcement, "set");
+    if (!r.ok) return applyCookies(NextResponse.json({ error: r.error }, { status: 400 }));
+  }
+  if (fields.patch.takeoff_sync === true) await syncTakeoffSections(supabase, orgId, id, [sectionId]);
+  let assembly = null;
+  if (typeof fields.patch.work_type === "string") {
+    const { data: job } = await supabase.from("jobs").select("job_type").eq("id", id).eq("org_id", orgId).maybeSingle();
+    assembly = await loadAssembly(supabase, orgId, id, sectionId,
+      { auto: true, jobType: (job?.job_type as string | null) ?? null, workType: fields.patch.work_type });
+  }
 
-  if (error) return applyCookies(NextResponse.json({ error: `job_sections update: ${error.message}` }, { status: 500 }));
-  if (!data) return applyCookies(NextResponse.json({ error: "No such section.", code: "not_found" }, { status: 404 }));
-  return applyCookies(NextResponse.json({ section: data }));
+  const { data, error } = await supabase.from("job_sections").select(SECTION_SELECT)
+    .eq("id", sectionId).eq("job_id", id).eq("org_id", orgId).maybeSingle();
+  if (error || !data) return applyCookies(NextResponse.json({ error: error?.message ?? "No such section." }, { status: 500 }));
+  return applyCookies(NextResponse.json({ section: data, assembly }));
 }
 
 export async function DELETE(req: NextRequest, ctx: Ctx) {
@@ -67,6 +84,11 @@ export async function DELETE(req: NextRequest, ctx: Ctx) {
   const result = await getApiSession(req);
   if (!result.ok) return result.response;
   const { supabase, orgId, applyCookies } = result.session;
+
+  // The area's lines go with it — otherwise they would fall back to "whole
+  // job" and stay in the price.
+  const est = await workingEstimate(supabase, orgId, id, false);
+  if (est) await supabase.from("estimate_line_items").delete().eq("estimate_id", est.id as string).eq("section_id", sectionId);
 
   const { data, error } = await supabase
     .from("job_sections")

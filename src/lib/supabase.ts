@@ -1,4 +1,5 @@
 import { createBrowserClient } from "@supabase/ssr";
+import { cookieDomain } from "./hosts";
 
 /**
  * PUBLIC client — respects RLS. Safe to import from client components.
@@ -19,5 +20,8 @@ if (!supabaseAnonKey) {
 }
 
 // Cookie-backed (not localStorage) so proxy.ts and server route handlers can
-// read the session too.
-export const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey);
+// read the session too. On app.scopecrete.ai and an org's subdomain the cookie
+// belongs to .app.scopecrete.ai, so one sign-in covers both (src/lib/hosts.ts).
+const domain = typeof window === "undefined" ? undefined : cookieDomain(window.location.hostname);
+export const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey,
+  domain ? { cookieOptions: { domain } } : undefined);

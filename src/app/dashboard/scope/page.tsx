@@ -22,6 +22,7 @@ import { useRouter } from "next/navigation";
 import { T, F, disp, eyebrow, nums, clip, relTime, formatPhone } from "@/lib/v34/tokens";
 import { EmptyState, Sheet } from "@/components/v34/primitives";
 import { STAGES, STATUS_TAG, STATUS_NAME, JOB_TYPE_LABEL, LEAD_SOURCES, stageOf } from "@/lib/jobs/stages";
+import { BOARD_SORTS, cityCounts, filterJobs, sortJobs, type BoardFilter, type BoardSort } from "@/lib/jobs/board-view";
 
 interface Job {
   id: string;
@@ -34,6 +35,7 @@ interface Job {
   contact_name: string | null;
   contact_phone: string | null;
   address: string | null;
+  city: string | null;
   created_at: string | null;
   stage_changed_at: string | null;
   job_type: string | null;
@@ -59,6 +61,36 @@ export default function JobsBoard() {
   const [moving, setMoving] = useState<Job | null>(null);
   const [col, setCol] = useState(0);
   const lane = useRef<HTMLDivElement | null>(null);
+  // Sort and filters (Coy, 2026-10-04), remembered on this device.
+  const [sort, setSortState] = useState<BoardSort>("newest");
+  const [filter, setFilterState] = useState<BoardFilter>({ types: [], cities: [] });
+  const [filterOpen, setFilterOpen] = useState(false);
+  useEffect(() => {
+    let off = false;
+    Promise.resolve().then(() => {
+      if (off) return;
+      try {
+        const v = JSON.parse(localStorage.getItem("sc:jobs-board-view") ?? "null");
+        if (v && BOARD_SORTS.some((x) => x.k === v.sort)) setSortState(v.sort);
+        if (v && Array.isArray(v.types) && Array.isArray(v.cities)) setFilterState({ types: v.types, cities: v.cities });
+      } catch { /* no saved view */ }
+    });
+    return () => { off = true; };
+  }, []);
+  const saveView = (next: { sort: BoardSort; filter: BoardFilter }) => {
+    try { localStorage.setItem("sc:jobs-board-view", JSON.stringify({ sort: next.sort, ...next.filter })); } catch { /* private window */ }
+  };
+  const setSort = (v: BoardSort) => { setSortState(v); saveView({ sort: v, filter }); };
+  const setFilter = (v: BoardFilter) => { setFilterState(v); saveView({ sort, filter: v }); };
+  // ?new=1 — Dusty's + menu → New job (2026-10-01).
+  useEffect(() => {
+    let off = false;
+    Promise.resolve().then(() => { if (!off && new URLSearchParams(window.location.search).get("new") === "1") setNewOpen(true); });
+    // Already on this page: the menu says so with an event.
+    const on = (e: Event) => { if ((e as CustomEvent<string>).detail === "job") setNewOpen(true); };
+    window.addEventListener("sc:create", on);
+    return () => { off = true; window.removeEventListener("sc:create", on); };
+  }, []);
 
   useEffect(() => {
     let off = false;
@@ -111,11 +143,43 @@ export default function JobsBoard() {
   }
   if (error && jobs === null) return <EmptyState tone="warn" title="Couldn't load jobs" detail={error} />;
 
-  const byStage = STAGES.map((s) => (jobs ?? []).filter((j) => stageOf(j.status).k === s.k));
+  const visible = sortJobs(filterJobs(jobs ?? [], filter), sort);
+  const byStage = STAGES.map((s) => visible.filter((j) => stageOf(j.status).k === s.k));
+  const nFilters = filter.types.length + filter.cities.length;
+  const ctl: React.CSSProperties = { height: 30, border: `1px solid ${T.hair}`, background: T.card, borderRadius: 4, fontFamily: disp, fontSize: F.xs,
+    textTransform: "uppercase", letterSpacing: ".05em", color: T.ink2, cursor: "pointer", padding: "0 8px" };
 
   return (
     <div className="flex flex-col" style={{ minHeight: "calc(100dvh - 140px)" }}>
       <NewJobSheet open={newOpen} onClose={() => setNewOpen(false)} />
+      <Sheet open={filterOpen} onClose={() => setFilterOpen(false)} title="Filter jobs" sub="Pick any — a job shows when it matches one of each">
+        <div className="px-4 py-3 flex flex-col gap-4">
+          {([
+            { k: "types" as const, title: "Job type", opts: [...Object.keys(JOB_TYPE_LABEL), "none"].map((t) => ({ v: t, l: t === "none" ? "Type?" : JOB_TYPE_LABEL[t], n: (jobs ?? []).filter((j) => (j.job_type ?? "none") === t).length })) },
+            { k: "cities" as const, title: "City", opts: cityCounts(jobs ?? []).map((c) => ({ v: c.city, l: c.city === "none" ? "No city" : c.city, n: c.n })) },
+          ]).map((g) => (
+            <div key={g.k}>
+              <div style={{ ...eyebrow, marginBottom: 6 }}>{g.title}</div>
+              <div className="flex flex-wrap gap-1.5">
+                {g.opts.filter((o) => o.n > 0 || filter[g.k].includes(o.v)).map((o) => {
+                  const on = filter[g.k].includes(o.v);
+                  return (
+                    <button key={o.v} onClick={() => setFilter({ ...filter, [g.k]: on ? filter[g.k].filter((x) => x !== o.v) : [...filter[g.k], o.v] })}
+                      className="rounded-full px-3" style={{ height: 30, border: `1px solid ${on ? T.ink : T.hair}`, background: on ? T.ink : T.card, color: on ? T.card : T.ink2, fontSize: F.sm, cursor: "pointer" }}>
+                      {o.l} <span style={{ ...nums, opacity: 0.7 }}>{o.n}</span>
+                    </button>
+                  );
+                })}
+                {g.opts.every((o) => o.n === 0) && <span style={{ fontSize: F.sm, color: T.ink3 }}>None on the board yet.</span>}
+              </div>
+            </div>
+          ))}
+          <div className="flex gap-2">
+            <button onClick={() => setFilter({ types: [], cities: [] })} style={ctl}>Clear all</button>
+            <button onClick={() => setFilterOpen(false)} style={{ ...ctl, background: T.ink, color: T.card, borderColor: T.ink }}>Show {visible.length} jobs</button>
+          </div>
+        </div>
+      </Sheet>
       <MoveSheet job={moving} onClose={() => setMoving(null)}
         onMove={(status) => { const j = moving; setMoving(null); if (j) void patch(j.id, { status }); }} />
 
@@ -123,19 +187,36 @@ export default function JobsBoard() {
         <div className="flex items-center gap-2">
           <div style={{ fontFamily: disp, fontSize: F.xl, fontWeight: 600, lineHeight: 1.05, flex: 1 }}>Jobs</div>
           <button onClick={() => setNewOpen(true)} className="rounded px-3"
-            style={{ height: 34, background: T.hiviz, color: "#fff", fontFamily: disp, fontSize: F.sm, fontWeight: 600,
+            style={{ height: 34, background: T.hiviz, color: T.onHiviz, fontFamily: disp, fontSize: F.sm, fontWeight: 600,
                      textTransform: "uppercase", letterSpacing: ".06em", cursor: "pointer" }}>
             + New job
           </button>
         </div>
         {error && <div style={{ fontSize: F.xs, color: T.red, marginTop: 4 }}>{error}</div>}
+        <div className="flex items-center gap-2 flex-wrap mt-2">
+          <select value={sort} onChange={(e) => setSort(e.target.value as BoardSort)} aria-label="Sort jobs" style={ctl}>
+            {BOARD_SORTS.map((o) => <option key={o.k} value={o.k}>Sort · {o.label}</option>)}
+          </select>
+          <button onClick={() => setFilterOpen(true)} style={{ ...ctl, borderColor: nFilters ? T.ink : T.hair, color: nFilters ? T.ink : T.ink2 }}>
+            Filter{nFilters ? ` · ${nFilters}` : ""}
+          </button>
+          {[...filter.types.map((t) => ({ k: "types" as const, v: t, l: t === "none" ? "Type?" : JOB_TYPE_LABEL[t] ?? t })),
+            ...filter.cities.map((c) => ({ k: "cities" as const, v: c, l: c === "none" ? "No city" : c }))].map((chip) => (
+            <button key={chip.k + chip.v} onClick={() => setFilter({ ...filter, [chip.k]: filter[chip.k].filter((x) => x !== chip.v) })}
+              className="rounded-full px-2.5" style={{ height: 26, border: `1px solid ${T.ink}`, background: T.slab, fontSize: F.xs, color: T.ink, cursor: "pointer" }}>
+              {chip.l} ×
+            </button>
+          ))}
+          {nFilters > 0 && <button onClick={() => setFilter({ types: [], cities: [] })} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>Clear</button>}
+          {jobs && nFilters > 0 && <span style={{ fontSize: F.xs, color: T.ink3 }}>{visible.length} of {jobs.length} jobs</span>}
+        </div>
 
         {/* Stage strip — phone only; desktop shows every column's header. */}
         <div className="flex gap-1.5 overflow-x-auto mt-2 lg:hidden" style={{ scrollbarWidth: "none" }}>
           {STAGES.map((s, i) => (
             <button key={s.k} onClick={() => goTo(i)} className="shrink-0 rounded px-2.5 flex items-center gap-1.5"
               style={{ height: 30, border: `1px solid ${col === i ? T.ink : T.hair}`, background: col === i ? T.ink : T.card,
-                       color: col === i ? "#fff" : T.ink2, fontFamily: disp, fontSize: F.sm, textTransform: "uppercase", cursor: "pointer" }}>
+                       color: col === i ? T.card : T.ink2, fontFamily: disp, fontSize: F.sm, textTransform: "uppercase", cursor: "pointer" }}>
               {s.label}
               <span style={{ ...nums, fontSize: F.xs, opacity: 0.8 }}>{jobs ? byStage[i].length : "·"}</span>
             </button>
@@ -161,7 +242,7 @@ export default function JobsBoard() {
               <div className="flex-1 px-2.5 py-2 lg:px-0 lg:py-0 space-y-2">
                 {byStage[i].length === 0 ? (
                   <div className="rounded px-3 py-4 text-center" style={{ fontSize: F.xs, color: T.ink3, border: `1px dashed ${T.hair}` }}>
-                    {jobs.length === 0 && i === 0
+                    {jobs.length > 0 && nFilters > 0 ? `Nothing in ${s.label} matches the filter.` : jobs.length === 0 && i === 0
                       ? "No jobs yet. + New job starts one — a job is the container from first contact onward."
                       : `Nothing in ${s.label}.`}
                   </div>
@@ -207,7 +288,7 @@ function JobCard({ j, busy, next, onNext, onMove, onAccept, onFlag }: {
           style={{ fontFamily: disp, fontSize: F.md, fontWeight: 600, color: T.ink, ...clip, flex: 1, minWidth: 0 }}>
           {j.title || "Untitled job"} ›
         </Link>
-        {since && <span style={{ fontSize: F.xs, color: T.ink3, ...nums }}>{since}</span>}
+        {since && <span style={{ fontSize: F.xs, color: T.ink3, ...nums }} title={j.stage_changed_at ? "Since it moved to this stage" : undefined}>{since}</span>}
       </div>
       {/* Coy, 2026-09-28: a 1–3 word title; the customer, the address and a
           short description under it — never the whole description as the title. */}
@@ -227,12 +308,17 @@ function JobCard({ j, busy, next, onNext, onMove, onAccept, onFlag }: {
         <span style={small(j.section_count ? T.ink3 : T.hiviz)}>
           {j.section_count ? `${j.section_count} section${j.section_count === 1 ? "" : "s"}` : "Not scoped"}
         </span>
+        {j.created_at && (
+          <span style={small(T.ink3)} title="When the job was made">
+            Created {new Date(j.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/Chicago" })}
+          </span>
+        )}
       </div>
       {j.flag_reason && (
         <div className="rounded px-2 py-1.5 mt-2" style={{ background: T.hivizDim, border: `1px solid ${T.hiviz}` }}>
           <div style={{ fontSize: F.xs, color: T.ink }}>{j.flag_reason}</div>
           <div className="flex gap-1.5 mt-1.5">
-            <button disabled={busy} onClick={() => onFlag(true)} style={{ ...btn, background: T.ink, color: "#fff", borderColor: T.ink }}>Archive</button>
+            <button disabled={busy} onClick={() => onFlag(true)} style={{ ...btn, background: T.ink, color: T.card, borderColor: T.ink }}>Archive</button>
             <button disabled={busy} onClick={() => onFlag(false)} style={btn}>Keep</button>
           </div>
         </div>
@@ -241,7 +327,7 @@ function JobCard({ j, busy, next, onNext, onMove, onAccept, onFlag }: {
         {!j.counts_toward_value ? (
           <>
             <span style={{ ...eyebrow, color: T.hiviz, flex: 1 }}>Suggested — not counted</span>
-            <button disabled={busy} onClick={onAccept} style={{ ...btn, background: T.ink, color: "#fff", borderColor: T.ink }}>Accept</button>
+            <button disabled={busy} onClick={onAccept} style={{ ...btn, background: T.ink, color: T.card, borderColor: T.ink }}>Accept</button>
           </>
         ) : (
           <>
@@ -282,7 +368,7 @@ function MoveSheet({ job, onClose, onMove }: { job: Job | null; onClose: () => v
                   <button key={st} onClick={() => onMove(st)} disabled={job?.status === st}
                     className="rounded-full px-2.5"
                     style={{ height: 26, fontSize: F.xs, border: `1px solid ${job?.status === st ? T.ink : T.hair}`,
-                             background: job?.status === st ? T.ink : T.card, color: job?.status === st ? "#fff" : T.ink2, cursor: "pointer" }}>
+                             background: job?.status === st ? T.ink : T.card, color: job?.status === st ? T.card : T.ink2, cursor: "pointer" }}>
                     {STATUS_NAME[st] ?? st}
                   </button>
                 ))}
@@ -359,7 +445,7 @@ function NewJobSheet({ open, onClose }: { open: boolean; onClose: () => void }) 
   const chip = (on: boolean): React.CSSProperties => ({
     height: 30, padding: "0 10px", borderRadius: 3, fontSize: F.xs, cursor: "pointer",
     fontFamily: disp, textTransform: "uppercase", letterSpacing: ".04em",
-    border: `1px solid ${on ? T.ink : T.hair}`, background: on ? T.ink : T.card, color: on ? "#fff" : T.ink2,
+    border: `1px solid ${on ? T.ink : T.hair}`, background: on ? T.ink : T.card, color: on ? T.card : T.ink2,
   });
 
   const choosing = customer === null || (picking === "referrer" && !referrer && source === "referral");
@@ -367,7 +453,7 @@ function NewJobSheet({ open, onClose }: { open: boolean; onClose: () => void }) 
 
   return (
     <Sheet open={open} onClose={close} title="New job"
-      sub={choosing ? (picking === "referrer" ? "Who sent it?" : "Who is it for? (who pays)") : "What kind of job?"}>
+      sub={choosing ? (picking === "referrer" ? "Who sent it?" : undefined) : "What kind of job?"}>
       {choosing ? (
         <>
           <div className="p-3">
@@ -434,7 +520,7 @@ function NewJobSheet({ open, onClose }: { open: boolean; onClose: () => void }) 
           </div>
           {err && <div style={{ fontSize: F.xs, color: T.red }}>{err}</div>}
           <button disabled={busy || !jobType} onClick={() => void create()} className="w-full rounded"
-            style={{ height: 40, background: jobType ? T.hiviz : T.hair, color: "#fff", fontFamily: disp, fontSize: F.md, fontWeight: 600,
+            style={{ height: 40, background: jobType ? T.hiviz : T.hair, color: T.onHiviz, fontFamily: disp, fontSize: F.md, fontWeight: 600,
                      textTransform: "uppercase", letterSpacing: ".06em", cursor: "pointer" }}>
             {busy ? "Creating…" : jobType ? "Create and open the scope" : "Pick a type first"}
           </button>

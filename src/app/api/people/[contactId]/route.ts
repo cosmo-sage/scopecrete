@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
+import { plainSpeakers } from "@/lib/speakers";
+import { settleCallNotes } from "@/lib/call-notes-server";
 
 /**
  * Everything about one person for their Customer or Vendor page (Coy,
@@ -27,11 +29,13 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ contactId: 
     applyCookies(NextResponse.json({ error: `${what}: ${msg}` }, { status: 500 }));
 
   const { data: c, error: cErr } = await supabase.from("contacts")
-    .select("id, name, name_confirmed_at, name_source, phone, email, address, company_name, contact_type, contact_subtype, classification_confirmed_at, auto_classified_at, status_summary, recent_summary, job_type_hint, status_summary_at, merged_into_contact_id")
+    .select("id, customer_id, name, name_confirmed_at, name_source, phone, email, address, address_source, company_name, contact_type, contact_subtype, classification_confirmed_at, auto_classified_at, status_summary, recent_summary, job_type_hint, status_summary_at, merged_into_contact_id")
     .eq("org_id", orgId).eq("id", contactId).maybeSingle();
   if (cErr) return fail("contacts", cErr.message);
   if (!c) return applyCookies(NextResponse.json({ error: "Contact not found." }, { status: 404 }));
   if (c.merged_into_contact_id) return applyCookies(NextResponse.json({ redirect_to: c.merged_into_contact_id }));
+  // Notes Coy took during a call land on it once Quo has sent the call (src/lib/call-notes.ts).
+  await settleCallNotes(supabase, orgId, [contactId]);
 
   // Maybe the same person under another number (Coy, 2026-09-28: two Ambers).
   // Same name or same email on another live contact. A suggestion only — a
@@ -57,7 +61,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ contactId: 
     supabase.from("org_contact_subtypes").select("bucket, slug, label").eq("org_id", orgId),
     dupQuery,
     // Coy's notes (migration 041) — newest first; the timeline merges them in.
-    supabase.from("contact_notes").select("id, body, created_at").eq("org_id", orgId).eq("contact_id", contactId)
+    supabase.from("contact_notes").select("id, body, created_at, created_by").eq("org_id", orgId).eq("contact_id", contactId)
       .order("created_at", { ascending: false }).limit(200),
   ]);
   for (const [what, r] of [["contact_phones", phones], ["jobs", jobs], ["job_vendors", links], ["contact_tasks", tasks], ["contact_proposals", prop], ["contact_notes", notes]] as const) {
@@ -97,18 +101,20 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ contactId: 
   return applyCookies(NextResponse.json({
     contact: {
       id: c.id,
+      customer_id: c.customer_id ?? null,
       name: c.name?.trim() || null,
       name_confirmed: !!c.name_confirmed_at || c.name_source === "human",
       phones: [...new Set([c.phone, ...((phones.data ?? []) as Array<{ phone_e164: string }>).map((p) => p.phone_e164)].filter(Boolean))],
       email: c.email?.trim() || null,
       address: c.address?.trim() || null,
+      address_source: (c.address_source as string | null) ?? null,
       company: c.company_name?.trim() || null,
       bucket,
       bucket_state: !bucket ? null : c.classification_confirmed_at ? "confirmed" : "auto",
       subtype: bucket ? c.contact_subtype : null,
       subtype_label: bucket && c.contact_subtype ? label.get(`${bucket}:${c.contact_subtype}`) ?? c.contact_subtype : null,
       // Dusty's words (migration 037) — a display cache, shown as his.
-      status_summary: c.status_summary, recent_summary: c.recent_summary,
+      status_summary: plainSpeakers(c.status_summary as string | null, c.contact_type as string | null), recent_summary: plainSpeakers(c.recent_summary as string | null, c.contact_type as string | null),
       job_type_hint: c.job_type_hint, status_summary_at: c.status_summary_at,
       // Dusty's latest guess, for the bucket picker's dashed outline.
       guess: (((prop.data ?? []) as Array<{ classification: string | null }>)[0]?.classification) ?? null,
@@ -125,8 +131,8 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ contactId: 
         const who = one(j.contacts);
         return { id: j.id, title: j.title, status: j.status, job_type: j.job_type, role: roleByJob.get(j.id) ?? null, customer: who?.name ?? who?.phone ?? null };
       }),
-    tasks: tasks.data ?? [],
-    scope: ((prop.data ?? []) as unknown[])[0] ?? null,
+    tasks: ((tasks.data ?? []) as Array<Record<string, unknown>>).map((t) => ({ ...t, evidence_quote: plainSpeakers(t.evidence_quote as string | null) })),
+    scope: (() => { const sc = ((prop.data ?? []) as Array<Record<string, unknown>>)[0]; return sc ? { ...sc, scope_summary: plainSpeakers(sc.scope_summary as string | null) } : null; })(),
     possible_duplicates: ((dups.data ?? []) as Array<{ id: string; name: string | null; phone: string | null; email: string | null }>)
       .map((d) => ({ id: d.id, name: d.name?.trim() || null, phone: d.phone, same: d.email && em && d.email.trim().toLowerCase() === em.toLowerCase() ? "email" : "name" })),
   }));

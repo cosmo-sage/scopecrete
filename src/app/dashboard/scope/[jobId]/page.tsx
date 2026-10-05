@@ -1,8 +1,8 @@
 "use client";
 
 /**
- * The Scope builder — one job, its sections, the takeoff and (when the
- * settings exist) the price and the floor.
+ * The Scope builder — one job, its sections, the takeoff, the budget's price
+ * and the job minimum (day minimum × days, migration 057).
  *
  * Structure from v34's ScopeScreen (sections as cards with L × W, thickness,
  * a dark money panel) and, at lg+, the desktop design's scope builder
@@ -18,28 +18,52 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
+import { useDustyDocked } from "@/lib/v34/use-dusty-docked";
+import { Sheet } from "@/components/v34/primitives";
 import Link from "next/link";
+import { VoiceRecorder } from "@/components/v34/voice-recorder";
 import { useParams } from "next/navigation";
 import { T, F, disp, eyebrow, nums, clip, money, money0, formatPhone } from "@/lib/v34/tokens";
 import { EmptyState } from "@/components/v34/primitives";
 import { JobChips } from "@/components/v34/job-chips";
+import { FilesPanel, type FileRow } from "@/components/v34/files-panel";
+import { SectionPhotos } from "@/components/v34/section-photos";
+import { BidStrip } from "@/components/v34/bid-strip";
+import { JobTabs } from "@/components/v34/job-tabs";
+import { JobBudget, type BudgetSummary } from "@/components/v34/job-budget";
+import { SheetViewer, type SheetGroup } from "@/components/v34/sheet-viewer";
+import type { PlansData } from "@/components/v34/plan-room/shared";
+import { sheetsFor } from "@/lib/section-sheets";
 import {
-  price as priceJob, floor as floorOf, takeoff as takeoffOf, quantities, reinforcementQty,
-  type CostSettings, type OverheadItem, type ReinforcementType, type SectionInput,
+  takeoff as takeoffOf, quantities, ruleQty,
+  type SectionInput,
 } from "@/lib/engine";
+import { isReinforcementCard } from "@/lib/cost-cards";
+import { ArchiveButton } from "@/components/v34/archive-actions";
+import { SectionTakeoffStrip, groupOf, shapesOf } from "@/components/v34/section-takeoff";
+import { fmtQty } from "@/lib/takeoff";
 
 interface Section extends SectionInput {
   id: string;
   rebar: string | null;
+  /** The reinforcement card (step 3b): carried as the area's reinforcement line on the budget. */
+  reinforcement_item_id?: string | null;
   reinforcement_source?: "set" | "default" | null;
   prep_notes: string | null;
   access_notes: string | null;
   sort_order: number;
+  /** Follows its Plan Room takeoffs (migration 069). */
+  takeoff_sync?: boolean;
+  /** 'bid' when a forwarded bid made it (063); source_ref is the line it came from. */
+  origin?: string | null;
+  source_ref?: string | null;
 }
 interface Job {
   id: string; title: string | null; status: string | null; address: string | null;
   contact_id: string | null; duration_days: number | null; created_from_message_id: string | null;
   job_type: string | null; lead_source: string | null; description?: string | null; origin?: string | null;
+  archived_at?: string | null; archived_reason?: string | null; created_at?: string | null;
 }
 interface Contact { id: string; name: string | null; phone: string | null }
 interface Why {
@@ -72,45 +96,84 @@ export default function ScopeBuilder() {
   const [job, setJob] = useState<Job | null>(null);
   const [contact, setContact] = useState<Contact | null>(null);
   const [why, setWhy] = useState<Why | null>(null);
-  const [whyHidden, setWhyHidden] = useState(false);
+  const [whyOpen, setWhyOpen] = useState(false);
+  // The bid strip shows the bid's scope summary; the header doesn't repeat it (Coy, 2026-10-02).
+  const [bidSummary, setBidSummary] = useState<string | null>(null);
+  // Dusty docked on a desktop: the totals move into his panel (Coy, 2026-09-30).
+  const docked = useDustyDocked();
+  const [slot, setSlot] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    if (!docked) return;
+    let raf = 0;
+    const find = () => { const el = document.getElementById("sc-dusty-slot"); if (el) setSlot(el); else raf = requestAnimationFrame(find); };
+    raf = requestAnimationFrame(find);
+    return () => cancelAnimationFrame(raf);
+  }, [docked]);
+  const railSlot = docked && slot?.isConnected ? slot : null;
   const [sections, setSections] = useState<Section[] | null>(null);
-  const [settings, setSettings] = useState<CostSettings | null>(null);
-  const [overhead, setOverhead] = useState<OverheadItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [saveErr, setSaveErr] = useState<Record<string, string>>({});
   const [adding, setAdding] = useState(false);
-  const [discount, setDiscount] = useState(0);
-  const [rtypes, setRtypes] = useState<ReinforcementType[]>([]);
+  const [rcards, setRcards] = useState<RCard[]>([]);
+  // The job's files, for each section's Photos strip (Coy, 2026-09-30).
+  const [jobFiles, setJobFiles] = useState<FileRow[]>([]);
+  const [filesTick, setFilesTick] = useState(0);
+  useEffect(() => {
+    let off = false;
+    send(`/api/files?job_id=${jobId}`, "GET").then((b) => { if (!off) setJobFiles(b.files as FileRow[]); }).catch(() => {});
+    return () => { off = true; };
+  }, [jobId, filesTick]);
+  const fileChanged = useCallback((f: FileRow | null, removedId?: string) => {
+    setJobFiles((a) => (removedId ? a.filter((x) => x.id !== removedId) : f ? [f, ...a.filter((x) => x.id !== f.id)] : a));
+    setFilesTick((n) => n + 1);
+  }, []);
+  // The plan sheets each section's scope came from, to check it against (Coy, 2026-10-02).
+  const [plans, setPlans] = useState<PlansData | null>(null);
+  const [plansTick, setPlansTick] = useState(0);
+  const [viewer, setViewer] = useState<{ title: string; groups: SheetGroup[]; start: string | null } | null>(null);
+  useEffect(() => {
+    let off = false;
+    send(`/api/jobs/${jobId}/plans`, "GET").then((b) => { if (!off) setPlans(b as PlansData); }).catch(() => {});
+    return () => { off = true; };
+  }, [jobId, plansTick]);
+  // The budget's own totals (migration 048). Since step 3b it is the ONLY price.
+  const [budget, setBudget] = useState<BudgetSummary | null>(null);
+  // Bumped when a section change may have changed the budget on the server
+  // (an assembly loaded, a reinforcement line swapped, an area removed).
+  const [budgetTick, setBudgetTick] = useState(0);
+  // Each section card's budget slot (its cost items are drawn there by JobBudget).
+  const [slots, setSlots] = useState<Record<string, HTMLElement>>({});
+  const onSlot = useCallback((id: string, el: HTMLElement | null) => setSlots((prev) => {
+    if (el ? prev[id] === el : !(id in prev)) return prev;
+    const next = { ...prev };
+    if (el) next[id] = el; else delete next[id];
+    return next;
+  }), []);
 
   const load = useCallback(async () => {
     try {
-      const [j, s, c, r] = await Promise.all([
+      const [j, s, r] = await Promise.all([
         send(`/api/jobs/${jobId}`, "GET"),
         send(`/api/jobs/${jobId}/sections`, "GET"),
-        send("/api/settings/cost", "GET"),
-        // Reinforcement types (migration 042). A failure leaves none to pick, not a broken page.
-        send("/api/settings/reinforcement", "GET").catch(() => ({ types: [] })),
+        // Reinforcement is a card (step 3b). A failure leaves none to pick, not a broken page.
+        send("/api/cost-items", "GET").catch(() => ({ items: [] })),
       ]);
-      setRtypes(((r.types ?? []) as Array<Record<string, unknown>>).map((x) => ({
-        ...(x as unknown as ReinforcementType),
-        unit_cost: num(x.unit_cost), sheet_sqft: num(x.sheet_sqft), spacing_in: num(x.spacing_in),
-        stick_ft: num(x.stick_ft), lap_pct: num(x.lap_pct), per_cy: num(x.per_cy),
-      })));
+      setRcards(((r.items ?? []) as Array<Record<string, unknown>>)
+        .map((x) => ({ id: x.id as string, name: x.name as string, unit: x.unit as string, unit_cost: num(x.unit_cost),
+          qty_rule: x.qty_rule as string, rule_params: (x.rule_params ?? {}) as Record<string, number> }))
+        .filter(isReinforcementCard));
       setJob(j.job); setContact(j.contact ?? null); setWhy(j.why ?? null);
       setSections((s.sections as Section[]).map(numify));
-      setSettings(c.settings ? numifySettings(c.settings) : null);
-      setOverhead((c.overhead ?? []).map((o: OverheadItem) => ({ ...o, amount: Number(o.amount) })));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
   }, [jobId]);
 
   useEffect(() => { void load(); }, [load]);
+  // A section's takeoffs changed (migration 069): its size, the plans' links and the budget move together.
+  const takeoffChanged = useCallback(() => { void load(); setPlansTick((n) => n + 1); setBudgetTick((n) => n + 1); }, [load]);
 
-  const t = useMemo(() => takeoffOf(sections ?? [], settings?.concrete_overage_pct ?? null), [sections, settings]);
-  const priced = useMemo(() => priceJob(sections ?? [], settings ?? EMPTY, { discount, reinforcement: rtypes }), [sections, settings, discount, rtypes]);
-  const fl = useMemo(() => (priced.priced ? floorOf(priced.cost.total, settings ?? EMPTY, overhead, job?.duration_days ?? null) : null),
-    [priced, settings, overhead, job]);
+  const t = useMemo(() => takeoffOf(sections ?? [], null), [sections]);
 
   const patchLocal = (id: string, patch: Partial<Section>) =>
     setSections((a) => (a ?? []).map((s) => (s.id === id ? { ...s, ...patch } : s)));
@@ -119,6 +182,7 @@ export default function ScopeBuilder() {
     try {
       const b = await send(`/api/jobs/${jobId}/sections/${id}`, "PATCH", patch);
       patchLocal(id, numify(b.section));
+      if ("work_type" in patch || "reinforcement_item_id" in patch) setBudgetTick((n) => n + 1);
       setSaveErr((m) => Object.fromEntries(Object.entries(m).filter(([k]) => k !== id)));
     } catch (e) {
       setSaveErr((m) => ({ ...m, [id]: e instanceof Error ? e.message : String(e) }));
@@ -132,6 +196,7 @@ export default function ScopeBuilder() {
         name: `Section ${(sections?.length ?? 0) + 1}`, work_type: "slab", sort_order: sections?.length ?? 0,
       });
       setSections((a) => [...(a ?? []), numify(b.section)]);
+      setBudgetTick((n) => n + 1);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -143,6 +208,7 @@ export default function ScopeBuilder() {
     try {
       await send(`/api/jobs/${jobId}/sections/${id}`, "DELETE");
       setSections((a) => (a ?? []).filter((s) => s.id !== id));
+      setBudgetTick((n) => n + 1);
     } catch (e) {
       setSaveErr((m) => ({ ...m, [id]: e instanceof Error ? e.message : String(e) }));
     }
@@ -165,36 +231,78 @@ export default function ScopeBuilder() {
   const who = contact ? (contact.name || formatPhone(contact.phone)) : null;
   const realTitle = job.title && !PLACEHOLDER_TITLES.has(job.title.trim()) ? job.title : "";
   const titleHint = `Name this job${why?.company || contact?.name ? ` (e.g. ${why?.company || contact?.name} slab)` : ""}`;
+  // Each section's sheets: the ones its bid line names, read off the plans (src/lib/section-sheets.ts).
+  const planSheets = plans?.sheets ?? [];
+  const sheetsOf = (x: Section) => sheetsFor(x.source_ref, planSheets);
+  const openSheets = (focus: Section | null, start: string | null) => {
+    const label = (x: Section) => x.name || `Section ${sections.indexOf(x) + 1}`;
+    const others = sections.filter((x) => x !== focus);
+    const groups: SheetGroup[] = focus
+      ? [{ label: label(focus), ids: sheetsOf(focus).map((x) => x.id) }, { label: "Other sections' sheets", ids: others.flatMap((x) => sheetsOf(x).map((y) => y.id)) }]
+      : sections.map((x) => ({ label: label(x), ids: sheetsOf(x).map((y) => y.id) }));
+    setViewer({ title: focus ? `Sheets for ${label(focus)}` : "Plan sheets for this job's scope", groups, start });
+  };
 
   return (
-    <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_360px] lg:min-h-[calc(100dvh-var(--sc-head))]" style={{ color: T.ink }}>
+    <div className={railSlot || viewer ? "lg:min-h-[calc(100dvh-var(--sc-head))]" : "lg:grid lg:grid-cols-[minmax(0,1fr)_360px] lg:min-h-[calc(100dvh-var(--sc-head))]"} style={{ color: T.ink }}>
       {/* ================= sections ================= */}
       <div style={{ minWidth: 0 }} className="pb-24 lg:pb-6">
         <div className="px-3 pt-2.5 pb-2" style={{ background: T.card, borderBottom: `1px solid ${T.hair}` }}>
-          <Link href="/dashboard/scope" className="no-underline" style={{ ...eyebrow, color: T.ink2 }}>‹ Jobs</Link>
-          <div className="flex items-start gap-2 mt-1">
-            <div style={{ minWidth: 0, flex: 1 }}>
-              <input defaultValue={realTitle} placeholder={titleHint} aria-label="Job name"
-                onBlur={(e) => { const v = e.target.value; if (v !== realTitle) void send(`/api/jobs/${jobId}`, "PATCH", { title: v }).then((b) => setJob((j) => j && { ...j, title: b.job.title })).catch((er) => setSaveErr((m) => ({ ...m, job: String(er.message ?? er) }))); }}
-                className="w-full bg-transparent outline-none"
-                style={{ fontFamily: disp, fontSize: F.xl, fontWeight: 600, lineHeight: 1.1, color: T.ink }} />
-              <div style={{ fontSize: F.xs, color: who ? T.ink3 : T.hiviz, ...clip }}>
-                {who ? (
-                  <Link href={`/dashboard/messages/${contact!.id}`} style={{ color: T.ink2 }}>{who}</Link>
-                ) : "Not attached to a customer yet"}
-                {job.address ? ` · ${job.address}` : ""}
-                {` · ${sections.length} section${sections.length === 1 ? "" : "s"}`}
-                {job.origin === "classification" ? " · made when filed as a customer" : job.created_from_message_id ? " · drafted from a message" : " · entered by hand"}
-              </div>
-            </div>
+          {/* Coy, 2026-10-02: the name on the Jobs row, bold but smaller; the four
+              chips small on one row under it; the description; then Plan room and
+              Proposal, out of the way above the money strip. */}
+          <div className="flex items-center gap-2">
+            <Link href="/dashboard/scope" className="no-underline shrink-0" style={{ ...eyebrow, color: T.ink2 }}>‹ Jobs</Link>
+            <input defaultValue={realTitle} placeholder={titleHint} aria-label="Job name"
+              onBlur={(e) => { const v = e.target.value; if (v !== realTitle) void send(`/api/jobs/${jobId}`, "PATCH", { title: v }).then((b) => setJob((j) => j && { ...j, title: b.job.title })).catch((er) => setSaveErr((m) => ({ ...m, job: String(er.message ?? er) }))); }}
+              className="bg-transparent outline-none"
+              style={{ flex: 1, minWidth: 0, fontFamily: disp, fontSize: F.lg, fontWeight: 700, lineHeight: 1.15, color: T.ink }} />
+            {/* Coy, 2026-09-30: "Why this job" is an ⓘ in the header — tap to see it. */}
+            {why && (
+              <button onClick={() => setWhyOpen(true)} aria-label="Why this job was made" title="Why this job was made"
+                className="shrink-0 rounded-full flex items-center justify-center"
+                style={{ width: 22, height: 22, border: `1px solid ${T.hairStrong}`, color: T.chalk, fontFamily: "Georgia, serif", fontStyle: "italic", fontWeight: 700, fontSize: 12, background: T.card, cursor: "pointer" }}>i</button>
+            )}
           </div>
-          {job.description && <div style={{ fontSize: F.sm, color: T.ink2, lineHeight: 1.4, marginTop: 2 }}>{job.description}</div>}
-          {saveErr.job && <div style={{ fontSize: F.xs, color: T.red }}>{saveErr.job}</div>}
           <JobChips job={job} onSet={(field, value) => send(`/api/jobs/${jobId}`, "PATCH", { [field]: value })
             .then((b) => setJob((j) => j && { ...j, status: b.job.status, job_type: b.job.job_type, lead_source: b.job.lead_source }))} />
+          <div style={{ fontSize: F.xs, color: who ? T.ink3 : T.hiviz, marginTop: 4, ...clip }}>
+            {who ? (
+              <Link href={`/dashboard/messages/${contact!.id}`} style={{ color: T.ink2 }}>{who}</Link>
+            ) : "Not attached to a customer yet"}
+            {job.address ? ` · ${job.address}` : ""}
+            {` · ${sections.length} section${sections.length === 1 ? "" : "s"}`}
+            {/* When the job was made (Coy, 2026-10-04: "The job needs a created date"). */}
+            {job.created_at ? ` · created ${new Date(job.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/Chicago" })}` : ""}
+            {job.origin === "classification" ? " · made when filed as a customer" : job.created_from_message_id ? " · drafted from a message" : ""}
+          </div>
+          {job.description && !bidSummary && <div style={{ fontSize: F.sm, color: T.ink2, lineHeight: 1.4, marginTop: 2 }}>{job.description}</div>}
+          {saveErr.job && <div style={{ fontSize: F.xs, color: T.red }}>{saveErr.job}</div>}
+          {/* Budget · Plan room · Proposal — one switch on all three (Coy, 2026-10-02). */}
+          <div className="flex flex-wrap justify-end items-center gap-2" style={{ marginTop: 6 }}>
+            {planSheets.length > 0 && (
+              <button onClick={() => openSheets(null, null)} className="rounded px-2.5 shrink-0"
+                style={{ height: 28, whiteSpace: "nowrap", border: `1px solid ${T.hairStrong}`, background: T.card, fontFamily: disp, fontSize: F.xs, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".05em", color: T.ink, cursor: "pointer" }}>
+                Sheets ({planSheets.length})
+              </button>
+            )}
+            <JobTabs jobId={jobId} active="job" />
+          </div>
         </div>
 
-        {why && !whyHidden && <WhyThisJob why={why} contact={contact} description={job.description ?? null} onHide={() => setWhyHidden(true)} />}
+        {job.archived_at && (
+          <div className="px-3 py-2 flex items-center gap-2" style={{ background: T.redDim, color: T.ink, fontSize: F.sm }}>
+            <span style={{ flex: 1 }}>This job is {job.archived_reason?.startsWith("deleted") ? "deleted" : "archived"} — it isn&apos;t on the board, the Dashboard or Dusty&apos;s lists.</span>
+            <button onClick={() => void send(`/api/archive/restore`, "POST", { kind: "job", ids: [jobId] }).then(() => setJob((j) => j && { ...j, archived_at: null, archived_reason: null }))}
+              className="rounded px-2.5" style={{ height: 28, border: `1px solid ${T.chalk}`, color: T.chalk, background: T.card, fontWeight: 600, cursor: "pointer" }}>Restore</button>
+          </div>
+        )}
+
+        {why && (
+          <Sheet open={whyOpen} onClose={() => setWhyOpen(false)} title="Why this job" sub="How it was made">
+            <WhyThisJob why={why} contact={contact} description={job.description ?? null} onHide={() => setWhyOpen(false)} />
+          </Sheet>
+        )}
 
         {/* Phone: the takeoff rail sits below the sections, so the three
             numbers you read out loud ride along under the header. */}
@@ -205,21 +313,66 @@ export default function ScopeBuilder() {
             {(t.cy_order ?? t.cy_neat) > 0 ? n2(t.cy_order ?? t.cy_neat) : "—"}<span style={{ fontSize: F.xs, color: "#8E99A5" }}> cu yd{t.cy_order === null ? " neat" : ""}</span>
           </span>
           <span className="flex-1" />
-          <span style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 700, color: priced.priced ? "#fff" : "#8E99A5" }}>
-            {priced.priced ? money0(priced.price.total) : "no price"}
-          </span>
+          {budget?.has_lines ? (
+            <span style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 700, ...nums }}>
+              {budget.tiers.map((b) => b.priced ? money0(b.total) : "blocked").join(" · ")}
+            </span>
+          ) : (
+            <span style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 700, color: "#8E99A5" }}>no price</span>
+          )}
         </div>
+
+        {/* The bid behind it, when a forwarded bid email made or fed this job (migration 063). */}
+        <BidStrip jobId={jobId} onSummary={setBidSummary} onUndone={() => { window.location.href = "/dashboard/scope"; }} />
 
         {sections.length === 0 && (
           <EmptyState title="No sections yet"
             detail="A driveway, a patio and a tear-out at one address are one job with three sections. Add the first one and give it the dimensions you were told." />
         )}
 
-        {sections.map((s, i) => (
-          <SectionCard key={s.id} s={s} index={i} err={saveErr[s.id]} rtypes={rtypes} jobType={job.job_type} jobId={jobId}
-            onLocal={(p) => patchLocal(s.id, p)} onSave={(p) => void save(s.id, p)}
-            onRemove={() => void removeSection(s.id)} overage={settings?.concrete_overage_pct ?? null} />
-        ))}
+        {/* Sections counted from one takeoff group sit under it, as in the Plan Room (Coy, 2026-10-03). */}
+        {(() => {
+          const names = new Map(sections.map((x, i) => [x.id, x.name || `Section ${i + 1}`]));
+          const order: Array<string | null> = [];
+          const byKey = new Map<string | null, Section[]>();
+          for (const x of sections) {
+            const g = groupOf(x.id, plans);
+            if (!byKey.has(g)) { byKey.set(g, []); order.push(g); }
+            byKey.get(g)!.push(x);
+          }
+          return order.map((g) => {
+            const p = g ? plans?.params.find((x) => x.id === g) : null;
+            const list = byKey.get(g)!;
+            const tot = list.reduce((a, x) => { const t = shapesOf(x.id, plans); return t.total !== null && a !== null ? a + t.total : null; }, 0 as number | null);
+            return (
+              <div key={g ?? "none"}>
+                {p && (
+                  <div className="px-3 pt-3 pb-1 flex items-center gap-2" style={{ fontSize: F.sm }}>
+                    <span style={{ width: 10, height: 10, borderRadius: 2, background: p.color }} />
+                    <span style={{ fontFamily: disp, fontWeight: 700, letterSpacing: ".04em", textTransform: "uppercase" }}>{p.name}</span>
+                    <span style={{ color: T.ink3, fontSize: F.xs }}>takeoff group · {list.length} section{list.length === 1 ? "" : "s"}{tot !== null ? ` · ${fmtQty(tot, { area: "SF", linear: "LF", count: "EA" }[p.kind])}` : ""}</span>
+                  </div>
+                )}
+                {list.map((s) => {
+                  const shapeIds = new Set(shapesOf(s.id, plans).ids);
+                  const sh = shapesOf(s.id, plans);
+                  return (
+                    <SectionCard key={s.id} s={s} index={sections.indexOf(s)} err={saveErr[s.id]} rcards={rcards} jobType={job.job_type} jobId={jobId} onSlot={onSlot}
+                      sheets={sheetsOf(s)} hasPlans={planSheets.length > 0} onSheets={(start) => openSheets(s, start)}
+                      takeoffUnit={s.takeoff_sync !== false && sh.unit ? sh.unit : null}
+                      takeoff={<SectionTakeoffStrip jobId={jobId} sectionId={s.id} sectionName={s.name ?? null} following={s.takeoff_sync !== false}
+                        plans={plans} sectionNames={names} onChanged={takeoffChanged} />}
+                      photos={<SectionPhotos jobId={jobId} sectionId={s.id} sectionName={s.name ?? null}
+                        photos={jobFiles.filter((f) => (f.section_id === s.id || (f.takeoff_measurement_id && shapeIds.has(f.takeoff_measurement_id))) && (f.kind === "image" || f.kind === "video"))}
+                        sections={sections.map((x) => ({ id: x.id, name: x.name ?? null }))} onChange={fileChanged} />}
+                      onLocal={(p) => patchLocal(s.id, p)} onSave={(p) => void save(s.id, p)}
+                      onRemove={() => void removeSection(s.id)} />
+                  );
+                })}
+              </div>
+            );
+          });
+        })()}
 
         <div className="px-3 py-3">
           <button onClick={() => void addSection()} disabled={adding} className="w-full rounded"
@@ -228,22 +381,44 @@ export default function ScopeBuilder() {
             {adding ? "Adding…" : "+ Add a section"}
           </button>
         </div>
+
+        {/* The budget: lines from cost cards, good / better / best (migration 048). */}
+        <div className="px-3 pb-3">
+          <JobBudget jobId={job.id} sections={sections} days={job.duration_days} onSummary={setBudget} refresh={budgetTick} slots={slots} />
+        </div>
+
+        {/* Photos, plans, specs, receipts — Dusty reads them (migration 045). */}
+        <div className="px-3 pb-3">
+          <FilesPanel jobId={job.id} sections={sections.map((x) => ({ id: x.id, name: x.name ?? null }))} />
+        </div>
+
+        {/* Delete lives at the very bottom (Coy, 2026-10-04: it pushed Proposal off a phone's header). */}
+        {!job.archived_at && (
+          <div className="px-3 pb-6 pt-2 flex items-center justify-between gap-2" style={{ borderTop: `1px solid ${T.hair}` }}>
+            <span style={{ fontSize: F.xs, color: T.ink3 }}>Delete this job — it can be restored from Archived &amp; deleted.</span>
+            <ArchiveButton kind="job" id={jobId} action="delete" what={realTitle ? `the job “${realTitle}”` : "this job"} then="/dashboard/scope"
+              style={{ height: 28, padding: "0 10px", borderRadius: 4, border: `1px solid ${T.red}`, background: T.card, color: T.red, fontFamily: disp, fontSize: F.xs, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".05em", flexShrink: 0 }}>Delete job</ArchiveButton>
+          </div>
+        )}
       </div>
 
-      {/* ================= takeoff rail ================= */}
-      <TakeoffRail t={t} priced={priced} fl={fl} job={job} discount={discount} setDiscount={setDiscount}
-        onCrewDays={(v) => void saveCrewDays(v)} hasSettings={!!settings} />
+      {viewer && plans && (
+        <SheetViewer jobId={jobId} title={viewer.title} sheets={planSheets} files={plans.files} groups={viewer.groups} start={viewer.start}
+          onClose={() => setViewer(null)} />
+      )}
+
+      {/* ================= takeoff rail ================= (hidden while the sheets are open beside the page) */}
+      {!viewer && (() => {
+        const rail = <TakeoffRail t={t} job={job} onCrewDays={(v) => void saveCrewDays(v)} jobType={job.job_type}
+          workType={sections[0]?.work_type ?? null} budget={budget} inPanel={!!railSlot} />;
+        return railSlot ? createPortal(rail, railSlot) : rail;
+      })()}
     </div>
   );
 }
 
-const EMPTY: CostSettings = {
-  concrete_price_per_cy: null, concrete_overage_pct: null, shortload_threshold_cy: null, shortload_pct: null,
-  form_finish_per_sqft: null, demo_per_sqft: null, mobilization_fee: null, sales_tax_pct: null, tax_applies_to: null,
-  markup_material_pct: null, markup_labor_pct: null, markup_equipment_pct: null,
-  owner_fee_pct: null, estimator_fee_pct: null, tax_reserve_pct: null, assumed_billable_days: null,
-  comp_mode: null, comp_monthly_draw: null,
-};
+/** A reinforcement card from the Price book (mesh by the sheet, rebar by the stick, fiber per yard). */
+interface RCard { id: string; name: string; unit: string; unit_cost: number | null; qty_rule: string; rule_params: Record<string, number> }
 
 /** PostgREST returns numeric columns as strings or numbers; the engine wants numbers or null. */
 function num(v: unknown): number | null {
@@ -253,16 +428,8 @@ function num(v: unknown): number | null {
 }
 function numify(s: Section): Section {
   return { ...s, length_ft: num(s.length_ft), width_ft: num(s.width_ft), sqft_override: num(s.sqft_override),
-    depth_in: num(s.depth_in), psi: num(s.psi) };
+    depth_in: num(s.depth_in), psi: num(s.psi), count_qty: num(s.count_qty) };
 }
-function numifySettings(raw: Record<string, unknown>): CostSettings {
-  const out = { ...EMPTY } as Record<string, unknown>;
-  for (const k of Object.keys(EMPTY)) {
-    out[k] = k === "tax_applies_to" || k === "comp_mode" ? (raw[k] ?? null) : num(raw[k]);
-  }
-  return out as unknown as CostSettings;
-}
-
 /* ------------------------------------------------------------- a section */
 
 function splitFt(v: number | null): [number | "", number | ""] {
@@ -272,12 +439,94 @@ function splitFt(v: number | null): [number | "", number | ""] {
   return [ft, inch === 0 ? "" : inch];
 }
 
-function SectionCard({ s, index, err, onLocal, onSave, onRemove, overage, rtypes, jobType, jobId }: {
-  s: Section; index: number; err?: string; overage: number | null; rtypes: ReinforcementType[]; jobType: string | null; jobId: string;
+function SectionCard({ s, index, err, onLocal, onSave, onRemove, jobType, jobId, photos, sheets, hasPlans, onSheets, takeoff, takeoffUnit, onSlot }: {
+  s: Section; index: number; err?: string; rcards: RCard[]; jobType: string | null; jobId: string;
+  /** Where the budget draws this section's cost items. */
+  onSlot: (id: string, el: HTMLElement | null) => void;
+  /** The plan sheets its bid line names (Coy, 2026-10-02: "verify the scopes on the sheets"). */
+  sheets: Array<{ id: string; number: string | null; title: string | null }>; hasPlans: boolean; onSheets: (start: string | null) => void;
+  /** The area's photos, under its dimensions. */
+  photos?: React.ReactNode;
+  /** Its Plan Room takeoffs (migration 069), and their unit while the size follows them. */
+  takeoff?: React.ReactNode; takeoffUnit?: string | null;
   onLocal: (p: Partial<Section>) => void; onSave: (p: Partial<Section>) => void; onRemove: () => void;
 }) {
   const q = quantities(s);
   const concrete = q.concrete;
+  const sid = s.id;
+  const budgetSlot = useCallback((el: HTMLDivElement | null) => onSlot(sid, el), [onSlot, sid]);
+
+  // Measured by length × width, or by its area alone (Coy, 2026-10-02: government
+  // work gives a bid item's area — "Concrete Walk … 1,769.80 SY" — not its sides).
+  // Area mode keeps only the area (and the depth); the area is typed in sq ft or
+  // sq yd and stored as sq ft (sqft_override), so the engine is unchanged.
+  const bidSY = /\bSY\b/.test(s.source_ref ?? "");
+  // Or by count (migration 065): "it's not an area, it's a quantity" — 8 EA.
+  const bidEA = /\b\d[\d,.]*\s*(EA|EACH|LS)\b/i.test(s.source_ref ?? "");
+  // Or in linear feet (Coy, 2026-10-02): grade beams, saw cuts, joints — "430 LF". The length
+  // is the count in LF; a beam's width (in) and depth give its yards.
+  const bidLF = /\b\d[\d,.]*\s*(LF|LIN\.?\s*FT)\b/i.test(s.source_ref ?? "");
+  const [modeState, setMode] = useState<"dims" | "area" | "count" | "linear">(() =>
+    (s.count_unit ?? "").toUpperCase() === "LF" && s.length_ft === null && s.sqft_override === null ? "linear"
+      : s.count_qty != null && s.sqft_override === null && s.length_ft === null && s.width_ft === null ? "count"
+      : s.length_ft === null && s.width_ft === null && s.sqft_override === null && bidLF ? "linear"
+      : s.length_ft === null && s.width_ft === null && s.sqft_override === null && bidEA ? "count"
+      : s.length_ft === null && s.width_ft === null && (s.sqft_override !== null || bidSY || jobType === "public") ? "area" : "dims");
+  // While it follows its takeoffs, the shapes decide how it is measured.
+  const mode = takeoffUnit === "SF" ? "area" : takeoffUnit === "LF" ? "linear" : takeoffUnit === "EA" ? "count" : modeState;
+  const unitKey = `sc:area-unit:${s.id}`;
+  const [unit, setUnitState] = useState<"sf" | "sy">(() => {
+    try { const v = localStorage.getItem(unitKey); if (v === "sf" || v === "sy") return v; } catch { /* no storage */ }
+    return bidSY || jobType === "public" ? "sy" : "sf";
+  });
+  const setUnit = (u: "sf" | "sy") => { setUnitState(u); try { localStorage.setItem(unitKey, u); } catch { /* no storage */ } };
+  const toMode = (m: "dims" | "area" | "count" | "linear") => {
+    if (m === mode) return;
+    const wasLinear = mode === "linear";
+    setMode(m);
+    if (m === "count" || m === "linear") {
+      // A linear count keeps its LF; the beam width belongs to linear only.
+      const p = { length_ft: null, width_ft: null, sqft_override: null,
+        count_unit: m === "linear" ? "LF" : (s.count_unit ?? "").toUpperCase() === "LF" ? "EA" : s.count_unit ?? "EA",
+        count_qty: (m === "linear") === wasLinear ? s.count_qty ?? null : null };
+      onLocal(p); onSave(p);
+      return;
+    } else if (s.count_qty != null || wasLinear) {
+      const p = { count_qty: null, ...(wasLinear ? { width_ft: null, count_unit: null } : {}) };
+      onLocal(p); onSave(p);
+    }
+    if (m === "area") {
+      // Keep what L × W gave as the area, then drop the sides.
+      const p = { length_ft: null, width_ft: null, sqft_override: q.sqft_source === "dimensions" ? q.sqft : s.sqft_override };
+      onLocal(p); onSave(p);
+    } else if (s.sqft_override !== null) {
+      onLocal({ sqft_override: null }); onSave({ sqft_override: null });
+    }
+  };
+  // The bid's own quantity ("… – 1,769.80 SY"), offered as one tap — never filled in by itself.
+  const bidQty = (() => {
+    const m = /([\d,]+(?:\.\d+)?)\s*(SY|SF|EA|EACH|LS|LF|LIN\.?\s*FT)\b/i.exec(s.source_ref ?? "");
+    if (!m) return null;
+    const raw = m[2].toUpperCase();
+    return { n: Number(m[1].replace(/,/g, "")), u: (raw === "EACH" ? "EA" : raw.startsWith("LIN") ? "LF" : raw) as "SY" | "SF" | "EA" | "LS" | "LF" };
+  })();
+  const useBidQty = () => {
+    if (!bidQty || !(bidQty.n > 0)) return;
+    if (bidQty.u === "LF") {
+      const p = { length_ft: null, sqft_override: null, count_qty: bidQty.n, count_unit: "LF", ...(mode === "linear" ? {} : { width_ft: null }) };
+      setMode("linear"); onLocal(p); onSave(p);
+      return;
+    }
+    if (bidQty.u === "EA" || bidQty.u === "LS") {
+      const p = { length_ft: null, width_ft: null, sqft_override: null, count_qty: bidQty.n, count_unit: bidQty.u };
+      setMode("count"); onLocal(p); onSave(p);
+      return;
+    }
+    const p = { length_ft: null, width_ft: null, sqft_override: bidQty.u === "SY" ? Math.round(bidQty.n * 9 * 100) / 100 : bidQty.n, count_qty: null };
+    setMode("area"); setUnit(bidQty.u === "SY" ? "sy" : "sf"); onLocal(p); onSave(p);
+  };
+  const bidQtyUsed = bidQty && (bidQty.u === "EA" || bidQty.u === "LS" || bidQty.u === "LF" ? q.count !== null : q.sqft !== null);
+  const areaShown = s.sqft_override === null ? "" : unit === "sy" ? Math.round((s.sqft_override / 9) * 100) / 100 : s.sqft_override;
 
   const dimCell = (label: string, key: "length_ft" | "width_ft") => {
     const [ft, inch] = splitFt(s[key]);
@@ -286,8 +535,8 @@ function SectionCard({ s, index, err, onLocal, onSave, onRemove, overage, rtypes
       onLocal({ [key]: v } as Partial<Section>);
     };
     return (
-      <Cell label={label} missing={s[key] === null && s.sqft_override === null}
-        source={s[key] === null ? (s.sqft_override !== null ? "using area" : "not set") : "you set it"}>
+      <Cell label={label} missing={s[key] === null}
+        source={s[key] === null ? "not set" : "you set it"}>
         <div className="flex items-baseline gap-1">
           <NumIn value={ft} onChange={(v) => set(v, inch)} onBlur={() => onSave({ [key]: s[key] } as Partial<Section>)} w={58} />
           <span style={{ fontSize: F.xs, color: T.ink3 }}>ft</span>
@@ -297,6 +546,8 @@ function SectionCard({ s, index, err, onLocal, onSave, onRemove, overage, rtypes
       </Cell>
     );
   };
+  const seg = (on: boolean): React.CSSProperties => ({ height: 22, padding: "0 7px", fontSize: 10, fontFamily: disp, fontWeight: 600, letterSpacing: ".05em",
+    textTransform: "uppercase", whiteSpace: "nowrap", background: on ? T.ink : T.card, color: on ? T.card : T.ink2, cursor: "pointer" });
 
   return (
     <div style={{ background: T.card, borderBottom: `1px solid ${T.hair}`, marginTop: index === 0 ? 0 : 8 }}>
@@ -306,31 +557,109 @@ function SectionCard({ s, index, err, onLocal, onSave, onRemove, overage, rtypes
           onChange={(e) => onLocal({ name: e.target.value })} onBlur={(e) => onSave({ name: e.target.value })}
           className="bg-transparent outline-none" style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 600, minWidth: 0, flex: "1 1 140px" }} />
         <select value={s.work_type} onChange={(e) => { onLocal({ work_type: e.target.value }); onSave({ work_type: e.target.value }); }}
-          className="rounded px-1.5 outline-none" style={{ height: 28, border: `1px solid ${T.hair}`, background: "#fff", fontSize: F.xs }}>
+          className="rounded px-1.5 outline-none" style={{ height: 28, border: `1px solid ${T.hair}`, background: T.card, fontSize: F.xs }}>
           {WORK_TYPES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
         </select>
         <Dictate jobId={jobId} s={s} onApply={(p) => { onLocal(p as Partial<Section>); onSave(p as Partial<Section>); }} />
         <button onClick={onRemove} aria-label="Remove section" style={{ ...eyebrow, color: T.red, cursor: "pointer" }}>Remove</button>
       </div>
+      {s.source_ref && (
+        <div className="px-3" style={{ fontSize: F.xs, color: T.ink3, marginTop: 2 }}>From the bid: {s.source_ref.replace(/^"|"$/g, "")}</div>
+      )}
+      {(sheets.length > 0 || hasPlans) && (
+        <div className="px-3 pt-1.5 flex items-center gap-1.5 flex-wrap">
+          <span style={{ ...eyebrow }}>{sheets.length ? "Check it on" : "Plan sheets"}</span>
+          {sheets.map((x) => (
+            <button key={x.id} onClick={() => onSheets(x.id)} title={x.title ?? undefined} className="rounded px-2"
+              style={{ height: 24, border: `1px solid ${T.chalk}`, color: T.chalk, background: T.card, fontSize: F.xs, fontWeight: 600, cursor: "pointer" }}>
+              {x.number}{x.title ? <span style={{ fontWeight: 400, color: T.ink2 }}> {x.title.length > 24 ? `${x.title.slice(0, 24)}…` : x.title}</span> : null}
+            </button>
+          ))}
+          <button onClick={() => onSheets(sheets[0]?.id ?? null)} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>
+            {sheets.length ? "Open beside the budget ›" : "Browse the set ›"}
+          </button>
+        </div>
+      )}
+      {takeoff}
+      <div className="px-3 pt-1.5 flex items-center gap-x-2 gap-y-1 flex-wrap">
+        <span style={{ ...eyebrow }}>Measured by</span>
+        <span className="inline-flex rounded overflow-hidden" role="group" aria-label="Measured by" style={{ border: `1px solid ${T.hair}` }}>
+          <button onClick={() => toMode("dims")} aria-pressed={mode === "dims"} style={seg(mode === "dims")}>Length × width</button>
+          <button onClick={() => toMode("area")} aria-pressed={mode === "area"} style={seg(mode === "area")}>Area only</button>
+          <button onClick={() => toMode("linear")} aria-pressed={mode === "linear"} style={seg(mode === "linear")}>Linear ft</button>
+          <button onClick={() => toMode("count")} aria-pressed={mode === "count"} style={seg(mode === "count")}>Count</button>
+        </span>
+        {bidQty && !bidQtyUsed && (
+          <button onClick={useBidQty} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>
+            Use the bid&apos;s {bidQty.n.toLocaleString("en-US")} {bidQty.u}
+          </button>
+        )}
+      </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 mt-2" style={{ borderTop: `1px solid ${T.hairSoft}` }}>
-        {dimCell("Length", "length_ft")}
-        {dimCell("Width", "width_ft")}
-        <Cell label="Area" missing={q.sqft === null}
-          source={q.sqft_source === "override" ? "you set the area" : q.sqft_source === "dimensions" ? "length × width" : "needs L × W or an area"}>
-          <div className="flex items-baseline gap-1">
-            {q.sqft_source === "override" || (s.length_ft === null && s.width_ft === null) ? (
-              <NumIn value={s.sqft_override ?? ""} w={70}
-                onChange={(v) => onLocal({ sqft_override: v === "" ? null : Number(v) })}
-                onBlur={() => onSave({ sqft_override: s.sqft_override })} />
+        {mode === "dims" && dimCell("Length", "length_ft")}
+        {mode === "dims" && dimCell("Width", "width_ft")}
+        {mode === "count" && (
+          <Cell label="How many" missing={q.count === null}
+            source={q.count === null ? "type how many" : "items priced per each on this area take this number"}>
+            <div className="flex items-baseline gap-1 flex-wrap">
+              <NumIn value={s.count_qty ?? ""} w={80}
+                onChange={(v) => onLocal({ count_qty: v === "" ? null : Number(v) })}
+                onBlur={() => onSave({ count_qty: s.count_qty ?? null, count_unit: s.count_unit ?? "EA" })} />
+              <input defaultValue={s.count_unit ?? "EA"} aria-label="Unit counted" maxLength={12}
+                onBlur={(e) => { const u = e.target.value.trim().toUpperCase() || "EA"; onLocal({ count_unit: u }); onSave({ count_unit: u }); }}
+                className="bg-transparent outline-none rounded px-1"
+                style={{ width: 52, height: 28, border: `1px solid ${T.hair}`, background: T.card, fontSize: F.sm, textTransform: "uppercase" }} />
+            </div>
+          </Cell>
+        )}
+        {mode === "linear" && (
+          <Cell label="Length" missing={q.count === null}
+            source={q.count === null ? "type the linear feet" : "items priced per LF on this area take this length"}>
+            <div className="flex items-baseline gap-1">
+              <NumIn value={s.count_qty ?? ""} w={70}
+                onChange={(v) => onLocal({ count_qty: v === "" ? null : Number(v) })}
+                onBlur={() => onSave({ count_qty: s.count_qty ?? null, count_unit: "LF" })} />
+              <span style={{ fontSize: F.xs, color: T.ink3 }}>LF</span>
+            </div>
+          </Cell>
+        )}
+        {mode === "linear" && concrete && (
+          <Cell label="Width" missing={s.width_ft === null}
+            source={s.width_ft === null ? "a beam or curb's width — for yards" : `${n1(q.sqft ?? 0)} sq ft in plan`}>
+            <div className="flex items-baseline gap-1">
+              <NumIn value={s.width_ft === null ? "" : Math.round(s.width_ft * 12 * 100) / 100} w={52}
+                onChange={(v) => onLocal({ width_ft: v === "" ? null : Number(v) / 12 })}
+                onBlur={() => onSave({ width_ft: s.width_ft })} />
+              <span style={{ fontSize: F.xs, color: T.ink3 }}>in</span>
+            </div>
+          </Cell>
+        )}
+        {mode !== "count" && mode !== "linear" && <Cell label="Area" missing={q.sqft === null}
+          source={mode === "area"
+            ? (q.sqft === null ? "type the area" : unit === "sy" ? `= ${n1(q.sqft)} sq ft` : `= ${n2(q.sqft / 9)} sq yd`)
+            : q.sqft_source === "dimensions" ? `length × width · ${n2(q.sqft! / 9)} sq yd` : "needs length and width"}>
+          <div className="flex items-baseline gap-1 flex-wrap">
+            {mode === "area" ? (
+              <>
+                <NumIn value={areaShown} w={100}
+                  onChange={(v) => onLocal({ sqft_override: v === "" ? null : unit === "sy" ? Number(v) * 9 : Number(v) })}
+                  onBlur={() => onSave({ sqft_override: s.sqft_override })} />
+                <span className="inline-flex rounded overflow-hidden" role="group" aria-label="Area unit" style={{ border: `1px solid ${T.hair}` }}>
+                  <button onClick={() => setUnit("sf")} aria-pressed={unit === "sf"} style={seg(unit === "sf")}>sq ft</button>
+                  <button onClick={() => setUnit("sy")} aria-pressed={unit === "sy"} style={seg(unit === "sy")}>sq yd</button>
+                </span>
+              </>
             ) : (
-              <span style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 600, ...nums }}>{q.sqft === null ? "—" : n1(q.sqft)}</span>
+              <>
+                <span style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 600, ...nums }}>{q.sqft === null ? "—" : n1(q.sqft)}</span>
+                <span style={{ fontSize: F.xs, color: T.ink3 }}>sq ft</span>
+              </>
             )}
-            <span style={{ fontSize: F.xs, color: T.ink3 }}>sq ft</span>
           </div>
-        </Cell>
-        {concrete && (
-          <Cell label="Thickness" missing={s.depth_in === null} source={s.depth_in === null ? "not set — never assumed" : "you set it"}>
+        </Cell>}
+        {concrete && mode !== "count" && (
+          <Cell label={mode === "linear" ? "Depth" : "Thickness"} missing={s.depth_in === null} source={s.depth_in === null ? "not set — never assumed" : "you set it"}>
             <div className="flex items-baseline gap-1">
               <NumIn value={s.depth_in ?? ""} w={52}
                 onChange={(v) => onLocal({ depth_in: v === "" ? null : Number(v) })}
@@ -339,9 +668,9 @@ function SectionCard({ s, index, err, onLocal, onSave, onRemove, overage, rtypes
             </div>
           </Cell>
         )}
-        {concrete && (
+        {concrete && mode !== "count" && (
           <Cell label="Concrete" missing={q.cy_neat === null}
-            source={q.cy_neat === null ? "needs area and thickness" : overage === null ? "neat · no waste set" : `neat · +${overage}% waste to order`}>
+            source={q.cy_neat === null ? (mode === "linear" ? "needs width and depth" : "needs area and thickness") : "neat · waste is on the concrete card"}>
             <span style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 600, ...nums }}>
               {q.cy_neat === null ? "—" : `${n2(q.cy_neat)}`}
             </span>
@@ -350,14 +679,16 @@ function SectionCard({ s, index, err, onLocal, onSave, onRemove, overage, rtypes
         )}
       </div>
 
-      {concrete && (
-        <div className="px-3 py-2 grid grid-cols-1 sm:grid-cols-3 gap-2" style={{ borderTop: `1px solid ${T.hairSoft}` }}>
-          <ReinforcementPick s={s} q={q} rtypes={rtypes} jobType={jobType}
-            onPick={(id) => { onLocal({ reinforcement_type_id: id, reinforcement_source: id ? "set" : null }); onSave({ reinforcement_type_id: id }); }} />
-          <NoteIn label="Prep" value={s.prep_notes} onLocal={(v) => onLocal({ prep_notes: v })} onSave={(v) => onSave({ prep_notes: v })} placeholder="not noted" />
-          <NoteIn label="Access" value={s.access_notes} onLocal={(v) => onLocal({ access_notes: v })} onSave={(v) => onSave({ access_notes: v })} placeholder="not noted" />
-        </div>
-      )}
+      {/* The section's own cost items (Coy, 2026-10-04: "the sections … have the budget line items in
+          the sections themselves"). JobBudget draws them here; the panel below the sections is the job's totals. */}
+      <div ref={budgetSlot} />
+      {photos}
+
+      {/* Notes, typed or said (Coy, 2026-10-03: "Prep can be removed … Access … can be replaced by 'notes'.
+          The notes can be typed or dictated verbally"). Kept in access_notes — no migration; neither column held anything. */}
+      <div className="px-3 py-2" style={{ borderTop: `1px solid ${T.hairSoft}` }}>
+        <SectionNotes value={s.access_notes} onLocal={(v) => onLocal({ access_notes: v })} onSave={(v) => onSave({ access_notes: v })} />
+      </div>
       {err && <div className="px-3 pb-2" style={{ fontSize: F.xs, color: T.red }}>Not saved: {err}</div>}
     </div>
   );
@@ -418,14 +749,14 @@ function Dictate({ jobId, s, onApply }: { jobId: string; s: Section; onApply: (p
   };
 
   const LABEL: Record<string, string> = { length_ft: "length", width_ft: "width", depth_in: "thickness", psi: "PSI", work_type: "type",
-    name: "name", reinforcement_type_id: "reinforcement", prep_notes: "prep", access_notes: "access" };
+    name: "name", reinforcement_item_id: "reinforcement", access_notes: "notes" };
   return (
     <>
       <button onClick={() => (state === "rec" ? rec.current?.stop() : state === "idle" ? void start() : undefined)}
         disabled={state === "busy"} aria-label={state === "rec" ? "Stop and fill the section" : "Dictate this section"}
         className={state === "rec" ? "sc-rec inline-flex items-center gap-1 rounded px-2" : "inline-flex items-center gap-1 rounded px-2"}
-        style={{ height: 28, border: `1px solid ${state === "rec" ? T.red : T.hair}`, background: state === "rec" ? T.red : "#fff",
-                 color: state === "rec" ? "#fff" : T.ink2, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", cursor: "pointer" }}>
+        style={{ height: 28, border: `1px solid ${state === "rec" ? T.red : T.hair}`, background: state === "rec" ? T.red : T.card,
+                 color: state === "rec" ? T.card : T.ink2, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", cursor: "pointer" }}>
         <svg width="12" height="12" viewBox="0 0 15 15" aria-hidden="true">
           <rect x="5.4" y="1.6" width="4.2" height="7.6" rx="2.1" fill="none" stroke="currentColor" strokeWidth="1.5" />
           <path d="M3 7.4a4.5 4.5 0 0 0 9 0 M7.5 11.9v1.6" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
@@ -450,39 +781,6 @@ function Dictate({ jobId, s, onApply }: { jobId: string; s: Section; onApply: (p
   );
 }
 
-/**
- * Reinforcement from Coy's list (migration 042), priced by its own unit. A
- * default is labelled as one; the quantity shows in the unit he buys.
- */
-function ReinforcementPick({ s, q, rtypes, jobType, onPick }: {
-  s: Section; q: ReturnType<typeof quantities>; rtypes: ReinforcementType[]; jobType: string | null;
-  onPick: (id: string | null) => void;
-}) {
-  const t = rtypes.find((r) => r.id === s.reinforcement_type_id) ?? null;
-  const qty = t ? reinforcementQty(q, t) : null;
-  const plural = (w: string) => (w.endsWith("s") ? w : `${w}s`);
-  const source = !t ? (s.reinforcement_type_id ? "removed from settings" : "none chosen — not in the price")
-    : s.reinforcement_source === "default" ? `default for ${jobType ? `${JOB_WORD[jobType] ?? jobType} ` : ""}${plural(s.work_type)}` : "you set it";
-  return (
-    <label className="block" style={{ minWidth: 0 }}>
-      <span style={eyebrow}>Reinforcement</span>
-      <select value={s.reinforcement_type_id ?? ""} onChange={(e) => onPick(e.target.value || null)}
-        className="w-full rounded px-2 outline-none mt-0.5"
-        style={{ height: 32, border: `1px solid ${t ? T.hair : T.hiviz}`, background: "#fff", fontSize: F.sm }}>
-        <option value="">{rtypes.length ? "None" : "None — add types in cost settings"}</option>
-        {rtypes.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
-      </select>
-      <span style={{ display: "block", fontSize: 9.5, color: T.ink3 }}>
-        {source}{qty && qty.ok ? ` · ${qty.qty.toLocaleString("en-US")} ${qty.unit}${qty.qty !== 1 && ["sheet", "stick", "bag"].includes(qty.unit) ? "s" : ""}` : ""}
-        {qty && !qty.ok ? ` · needs ${qty.missing.join(", ")}` : ""}
-      </span>
-      {s.rebar && <span style={{ display: "block", fontSize: 9.5, color: T.ink2 }}>Note: {s.rebar}</span>}
-    </label>
-  );
-}
-
-const JOB_WORD: Record<string, string> = { residential: "residential", commercial: "commercial", public: "government" };
-
 function Cell({ label, missing, source, children }: { label: string; missing: boolean; source: string; children: React.ReactNode }) {
   return (
     <div className="px-3 py-2" style={{ borderRight: `1px solid ${T.hairSoft}`, borderBottom: `1px solid ${T.hairSoft}`, minWidth: 0,
@@ -499,48 +797,85 @@ function NumIn({ value, onChange, onBlur, w }: { value: number | ""; onChange: (
     <input type="number" inputMode="decimal" value={value} onBlur={onBlur}
       onChange={(e) => onChange(e.target.value === "" ? "" : Number(e.target.value))}
       className="bg-transparent outline-none rounded px-1"
-      style={{ width: w, border: `1px solid ${T.hair}`, background: "#fff", height: 28,
+      style={{ width: w, border: `1px solid ${T.hair}`, background: T.card, height: 28,
                fontFamily: disp, fontSize: F.lg, fontWeight: 600, ...nums }} />
   );
 }
 
-function NoteIn({ label, value, onLocal, onSave, placeholder }: {
-  label: string; value: string | null; placeholder: string;
-  onLocal: (v: string | null) => void; onSave: (v: string | null) => void;
-}) {
+/** A section's notes: typed, or said — the mic records, Groq writes it down, and the words are added on. */
+function SectionNotes({ value, onLocal, onSave }: { value: string | null; onLocal: (v: string | null) => void; onSave: (v: string | null) => void }) {
+  const [rec, setRec] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const said = async (blob: Blob) => {
+    setRec(false); setBusy(true); setErr(null);
+    try {
+      const fd = new FormData();
+      fd.append("audio", blob, blob.type.includes("mp4") ? "note.mp4" : "note.webm");
+      const r = await fetch("/api/dusty/transcribe", { method: "POST", body: fd });
+      const b = await r.json().catch(() => ({}));
+      if (!r.ok || !b.text) throw new Error(b.error || `HTTP ${r.status}`);
+      const next = [value?.trim(), String(b.text).trim()].filter(Boolean).join("\n").slice(0, 2000);
+      onLocal(next); onSave(next);
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
+  };
   return (
-    <label className="block" style={{ minWidth: 0 }}>
-      <span style={eyebrow}>{label}</span>
-      <input value={value ?? ""} placeholder={placeholder}
-        onChange={(e) => onLocal(e.target.value || null)} onBlur={(e) => onSave(e.target.value || null)}
-        className="w-full rounded px-2 outline-none mt-0.5" style={{ height: 32, border: `1px solid ${T.hair}`, fontSize: F.sm }} />
-    </label>
+    <div style={{ minWidth: 0 }}>
+      <div className="flex items-center gap-2">
+        <span style={eyebrow}>Notes</span>
+        <span className="flex-1" />
+        {!rec && (
+          <button onClick={() => setRec(true)} disabled={busy} aria-label="Say a note" title="Say a note — it is written down here"
+            className="inline-flex items-center gap-1 rounded px-2" style={{ height: 26, border: `1px solid ${T.hair}`, background: T.card, fontSize: F.xs, cursor: "pointer", opacity: busy ? 0.5 : 1 }}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></svg>
+            {busy ? "Writing it down…" : "Say it"}
+          </button>
+        )}
+      </div>
+      {rec ? (
+        <div className="mt-1"><VoiceRecorder onSend={(b) => void said(b)} onCancel={() => setRec(false)} /></div>
+      ) : (
+        <textarea value={value ?? ""} placeholder="Anything about this area — access, the pump, demo, what they want…" rows={2}
+          onChange={(e) => onLocal(e.target.value || null)} onBlur={(e) => onSave(e.target.value.trim() || null)}
+          className="w-full rounded px-2 py-1.5 outline-none mt-1" style={{ border: `1px solid ${T.hair}`, fontSize: F.sm, resize: "vertical", background: T.card, color: T.ink }} />
+      )}
+      {err && <div style={{ fontSize: F.xs, color: T.red }}>Didn&apos;t get that: {err}</div>}
+    </div>
   );
 }
 
 /* ----------------------------------------------------------- takeoff rail */
 
-function TakeoffRail({ t, priced, fl, job, discount, setDiscount, onCrewDays, hasSettings }: {
+function TakeoffRail({ t, job, onCrewDays, budget, inPanel }: {
   t: ReturnType<typeof takeoffOf>;
-  priced: ReturnType<typeof priceJob>;
-  fl: ReturnType<typeof floorOf> | null;
-  job: Job; discount: number; setDiscount: (n: number) => void;
-  onCrewDays: (v: number | null) => void; hasSettings: boolean;
+  job: Job; onCrewDays: (v: number | null) => void; jobType: string | null; workType: string | null;
+  budget: BudgetSummary | null;
+  /** Shown at the top of Dusty's docked panel: folded to the totals, scrolls on its own. */
+  inPanel?: boolean;
 }) {
-  const [showFloor, setShowFloor] = useState(false);
+  const [folded, setFolded] = useState(false);
   const [crew, setCrew] = useState<number | "">(job.duration_days ?? "");
   const dim = "#8E99A5";
   const line = { borderTop: `1px solid ${T.darkHair}` };
 
   const orderCy = t.cy_order ?? t.cy_neat;
   return (
-    <aside style={{ background: T.dark, color: "#fff" }} className="lg:sticky lg:top-[var(--sc-head)] lg:self-start lg:max-h-[calc(100dvh-var(--sc-head))] lg:overflow-y-auto">
-      <div className="px-4 pt-3 pb-3">
-        <div style={{ ...eyebrow, color: dim }}>Takeoff</div>
-        <div style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 600 }}>Read this on the phone</div>
-      </div>
+    <aside style={{ background: T.dark, color: "#fff", ...(inPanel ? { maxHeight: folded ? undefined : "45vh", overflowY: "auto" as const } : {}) }}
+      className={inPanel ? "" : "lg:sticky lg:top-[var(--sc-head)] lg:self-start lg:max-h-[calc(100dvh-var(--sc-head))] lg:overflow-y-auto"}>
+      {inPanel ? (
+        <button onClick={() => setFolded((f) => !f)} aria-expanded={!folded} className="w-full flex items-baseline gap-2 px-4 py-2 text-left" style={{ color: "#fff", cursor: "pointer" }}>
+          <span style={{ ...eyebrow, color: dim }}>This job</span>
+          <span style={{ fontFamily: disp, fontSize: F.md, fontWeight: 700, ...nums }}>
+            {t.sqft > 0 ? `${n1(t.sqft)} sf` : "—"}
+            {budget?.has_lines ? ` · ${budget.tiers.map((b) => (b.priced ? money0(b.total) : "not priced")).join(" · ")}` : ""}
+          </span>
+          <span className="flex-1" />
+          <span style={{ color: dim }}>{folded ? "▾" : "▴"}</span>
+        </button>
+      ) : null /* no title line (Coy, 2026-10-02: "remove … read this on the phone") */}
+      {!(inPanel && folded) && (<>
 
-      <div className="px-4 py-3" style={line}>
+      <div className="px-4 py-3" style={inPanel ? line : undefined}>
         <div style={{ ...eyebrow, color: dim }}>Total area</div>
         <div style={{ fontFamily: disp, fontSize: 40, fontWeight: 700, lineHeight: 1, ...nums }}>{t.sqft > 0 ? n1(t.sqft) : "—"}</div>
         <div style={{ ...eyebrow, color: dim }}>sq ft · {t.sections.length} section{t.sections.length === 1 ? "" : "s"}{t.incomplete ? " · incomplete" : ""}</div>
@@ -552,98 +887,26 @@ function TakeoffRail({ t, priced, fl, job, discount, setDiscount, onCrewDays, ha
           {orderCy > 0 ? n2(orderCy) : "—"}
         </div>
         <div style={{ ...eyebrow, color: dim }}>
-          cubic yards · {t.overage_pct === null ? "neat — no waste % recorded" : `${t.overage_pct}% waste`}
+          cubic yards, neat · waste is added by the concrete card
         </div>
         {t.sections.map((q, i) => (
           <div key={q.id ?? i} className="flex justify-between py-1.5" style={{ ...line, fontSize: F.sm, marginTop: i === 0 ? 8 : 0 }}>
             <span style={{ color: "#C3CBD4", ...clip }}>{q.name || `Section ${i + 1}`}{q.sqft !== null ? ` · ${n1(q.sqft)} sf` : ""}</span>
             <span style={{ ...nums, fontWeight: 600 }}>
-              {!q.concrete ? (q.work_type === "demo" ? "demo" : "no pour") : q.cy_neat === null ? `needs ${q.missing.join(", ")}` : `${n2(q.cy_neat)} cu yd`}
+              {q.count !== null ? `${q.count} ${q.count_unit}${q.cy_neat !== null ? ` · ${n2(q.cy_neat)} cu yd` : ""}` : !q.concrete ? (q.work_type === "demo" ? "demo" : "no pour") : q.cy_neat === null ? `needs ${q.missing.join(", ")}` : `${n2(q.cy_neat)} cu yd`}
             </span>
           </div>
         ))}
       </div>
 
-      {!priced.priced ? (
-        <div className="px-4 py-3" style={{ borderTop: `2px solid ${T.hiviz}`, background: "#2A1712" }}>
-          <div style={{ ...eyebrow, color: T.hiviz }}>No price on this scope</div>
-          <div style={{ fontSize: F.sm, color: "#DCC9C2", lineHeight: 1.45, marginTop: 4 }}>
-            {hasSettings ? "The quantities above are arithmetic on the numbers you gave. A price also needs:" :
-              "The quantities above are arithmetic on the numbers you gave. No cost settings are recorded, so this scope carries yards, not dollars. It needs:"}
-          </div>
-          <ul className="mt-1.5" style={{ fontSize: F.sm, color: "#fff", lineHeight: 1.5, paddingLeft: 16, listStyle: "square" }}>
-            {priced.blocked.map((b) => <li key={b}>{b}</li>)}
-          </ul>
-          <Link href="/dashboard/cash" className="inline-flex items-center rounded px-3 mt-2.5 no-underline"
-            style={{ height: 36, background: T.hiviz, color: "#fff", fontFamily: disp, fontSize: F.md, fontWeight: 600,
-                     textTransform: "uppercase", letterSpacing: ".06em" }}>Record cost settings</Link>
-        </div>
+      {budget?.has_lines ? (
+        <BudgetRail budget={budget} sqft={t.sqft} crew={crew} setCrew={setCrew} onCrewDays={onCrewDays} />
       ) : (
         <>
+          {/* No "No price yet" box or Assemblies button (Coy, 2026-10-02): assemblies load inside the budget's areas. */}
           <div className="px-4 py-3" style={line}>
-            <div style={{ ...eyebrow, color: dim }}>Price</div>
-            <div style={{ fontFamily: disp, fontSize: 40, fontWeight: 700, lineHeight: 1, ...nums }}>{money0(priced.price.total)}</div>
-            <div style={{ ...eyebrow, color: dim, ...nums }}>
-              cost {money0(priced.cost.total)} · margin {(priced.margin * 100).toFixed(1)}%
-              {t.sqft > 0 ? ` · ${money(priced.price.total / t.sqft)}/sf` : ""}
-            </div>
-          </div>
-
-          <div className="px-4 py-2" style={line}>
-            {(["materials", "labor", "equipment"] as const).map((k) => (
-              <div key={k} className="py-1">
-                <div className="flex justify-between" style={{ fontSize: F.sm, ...nums }}>
-                  <span style={{ textTransform: "capitalize", fontWeight: 600 }}>{k}</span>
-                  <span>{money0(priced.cost[k])} → {money0(priced.price[k])}</span>
-                </div>
-                {priced.lines.filter((l) => l.type === k).map((l) => (
-                  <div key={l.label} className="flex justify-between" style={{ fontSize: F.xs, color: "#9AA5B1", ...nums }}>
-                    <span style={{ ...clip, paddingRight: 8 }}>{l.label}</span>
-                    <span>{l.unit === "load" || l.unit === "job" ? money0(l.cost) : `${n2(l.qty)} ${l.unit} × ${money(l.rate)}`}</span>
-                  </div>
-                ))}
-              </div>
-            ))}
-            {priced.price.tax > 0 && (
-              <div className="flex justify-between py-1" style={{ fontSize: F.sm, ...nums }}>
-                <span style={{ fontWeight: 600 }}>Sales tax</span><span>{money0(priced.price.tax)}</span>
-              </div>
-            )}
-          </div>
-
-          {/* The discount slider with the floor as a live red line (DECISIONS §4). */}
-          <div className="px-4 py-3" style={line}>
-            <div className="flex justify-between items-baseline">
-              <span style={{ ...eyebrow, color: dim }}>Discount</span>
-              <span style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 700, ...nums }}>{money0(discount)}</span>
-            </div>
-            <div className="relative" style={{ marginTop: 4 }}>
-              <input type="range" min={0} max={Math.max(0, Math.round(priced.price.subtotal))} step={25} value={discount}
-                onChange={(e) => setDiscount(Number(e.target.value))} className="w-full" aria-label="Discount" />
-              {fl && fl.ok && fl.floor < priced.price.subtotal && (
-                <span aria-hidden="true" className="absolute" style={{ top: -2, bottom: -2, width: 2, background: T.red,
-                  left: `${((priced.price.subtotal - fl.floor) / priced.price.subtotal) * 100}%` }} />
-              )}
-            </div>
-            <div style={{ fontSize: 9.5, color: dim }}>Touches the price only — cost stays what it is.</div>
-          </div>
-
-          <div className="px-4 py-3" style={line}>
-            <button onClick={() => setShowFloor((v) => !v)} className="w-full text-left" style={{ color: "#fff", cursor: "pointer" }}>
-              <div className="flex justify-between items-baseline">
-                <span style={{ ...eyebrow, color: dim }}>Bid floor {showFloor ? "▴" : "▾"}</span>
-                <span style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 700, ...nums,
-                               color: fl && fl.ok ? (priced.price.total < fl.floor ? T.red : "#fff") : dim }}>
-                  {fl && fl.ok ? money0(fl.floor) : "—"}
-                </span>
-              </div>
-              {fl && fl.ok && priced.price.total < fl.floor && (
-                <div style={{ fontSize: F.xs, color: "#F3A89A" }}>This price is under the floor.</div>
-              )}
-            </button>
-
-            <label className="flex items-center gap-2 mt-2" style={{ fontSize: F.xs, color: "#C3CBD4" }}>
-              Crew days on this job
+            <label className="flex items-center gap-2" style={{ fontSize: F.xs, color: "#C3CBD4" }}>
+              Days on this job
               <input type="number" inputMode="decimal" value={crew}
                 onChange={(e) => setCrew(e.target.value === "" ? "" : Number(e.target.value))}
                 onBlur={() => onCrewDays(crew === "" ? null : Number(crew))}
@@ -651,27 +914,69 @@ function TakeoffRail({ t, priced, fl, job, discount, setDiscount, onCrewDays, ha
                   border: `1px solid ${T.darkHair}`, fontFamily: disp, fontSize: F.md, ...nums }} />
               <span style={{ color: dim }}>estimated</span>
             </label>
-
-            {fl && !fl.ok && (
-              <div style={{ fontSize: F.xs, color: "#C3CBD4", marginTop: 6, lineHeight: 1.45 }}>
-                The floor needs: {fl.blocked.join(", ")}.
-              </div>
-            )}
-            {showFloor && fl && fl.ok && (
-              <div className="mt-2" style={{ fontSize: F.xs, color: "#C3CBD4", lineHeight: 1.6, ...nums }}>
-                <div>Hard cost {money0(fl.hard_cost)}</div>
-                <div>+ nut share {money0(fl.nut_share)}: {money0(fl.nut_monthly)}/mo{fl.draw_included ? ` (incl. ${money0(fl.draw_included)} draw)` : ""} is {money(fl.nut_per_crew_day)} a crew-day, × {fl.crew_days} crew days ({fl.crew_days_basis})</div>
-                <div>÷ {(1 - fl.off_top_pct / 100).toFixed(2)} ({fl.off_top_pct}% off the top)</div>
-              </div>
-            )}
-          </div>
-
-          <div className="px-4 py-3" style={{ ...line, fontSize: F.xs, color: dim, lineHeight: 1.45 }}>
-            Not in this price: {priced.excluded.join("; ")}.
           </div>
         </>
       )}
+      </>)}
     </aside>
+  );
+}
+
+/**
+ * The rail once the budget has lines: one total per tier (shared lines + the
+ * tier's own), its cost, O.H., profit and margin, what blocks it, and the job
+ * minimum (day minimum × days — Coy, 2026-09-30). The discount, O.H. and
+ * margin live in the budget's own footer — one number, never two.
+ */
+function BudgetRail({ budget, sqft, crew, setCrew, onCrewDays }: {
+  budget: BudgetSummary; sqft: number;
+  crew: number | ""; setCrew: (v: number | "") => void; onCrewDays: (v: number | null) => void;
+}) {
+  const dim = "#8E99A5";
+  const line = { borderTop: `1px solid ${T.darkHair}` };
+  const min = budget.minimum;
+  return (
+    <>
+      {budget.tiers.map((b) => {
+        const under = min.ok && b.priced && b.total < min.minimum;
+        return (
+          <div key={b.option_id ?? "all"} className="px-4 py-3" style={b.priced ? line : { borderTop: `2px solid ${T.hiviz}`, background: "#2A1712" }}>
+            <div style={{ ...eyebrow, color: b.priced ? dim : T.hiviz }}>{b.label ? `${b.label}` : "Price"} · budget</div>
+            {b.priced ? (
+              <>
+                <div style={{ fontFamily: disp, fontSize: budget.tiers.length > 1 ? 30 : 40, fontWeight: 700, lineHeight: 1, ...nums }}>{money0(b.total)}</div>
+                <div style={{ ...eyebrow, color: dim, ...nums }}>
+                  cost {money0(b.cost)} · O.H. {money0(b.overhead)} · margin {(b.margin * 100).toFixed(1)}%
+                  {b.tax > 0 ? ` · tax ${money0(b.tax)}` : budget.tax_on ? "" : " · no tax"}
+                  {sqft > 0 ? ` · ${money(b.total / sqft)}/sf` : ""}
+                </div>
+                {under && <div style={{ fontSize: F.xs, color: "#F3A89A", ...nums }}>under the job minimum of {money0(min.minimum)}</div>}
+              </>
+            ) : (
+              <ul className="mt-1" style={{ fontSize: F.sm, color: "#fff", lineHeight: 1.5, paddingLeft: 16, listStyle: "square" }}>
+                {b.blocked.map((x) => <li key={x}>{x}</li>)}
+              </ul>
+            )}
+          </div>
+        );
+      })}
+      <div className="px-4 py-3" style={line}>
+        <label className="flex items-center gap-2" style={{ fontSize: F.xs, color: "#C3CBD4" }}>
+          Days on this job
+          <input type="number" inputMode="decimal" value={crew}
+            onChange={(e) => setCrew(e.target.value === "" ? "" : Number(e.target.value))}
+            onBlur={() => onCrewDays(crew === "" ? null : Number(crew))}
+            className="rounded px-1.5 outline-none" style={{ width: 60, height: 28, background: "#20262C", color: "#fff",
+              border: `1px solid ${T.darkHair}`, fontFamily: disp, fontSize: F.md, ...nums }} />
+        </label>
+        <div style={{ fontSize: F.xs, color: "#C3CBD4", marginTop: 6, lineHeight: 1.45, ...nums }}>
+          Job minimum: {min.ok ? `${money0(min.minimum)} — ${min.days} days × ${money0(min.day_minimum)} a day` : `needs ${min.blocked.join(" and ")}`}
+        </div>
+        <div style={{ fontSize: F.xs, color: dim, marginTop: 6, lineHeight: 1.45 }}>
+          Lines, O.H., margin, tax and discount are in the budget under the sections.
+        </div>
+      </div>
+    </>
   );
 }
 

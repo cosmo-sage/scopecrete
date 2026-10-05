@@ -1,8 +1,12 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import { plainNote } from "@/lib/mentions";
+import { archiveNote } from "@/lib/archive";
+import { ArchiveNoteCard } from "@/components/v34/archive-actions";
 import { Phone, CaretDown, CaretRight } from "@phosphor-icons/react";
 import { T, F, disp, eyebrow } from "@/lib/v34/tokens";
+import { DraftQuoteButton } from "@/components/v34/call-notes-pad";
 
 /**
  * v34 palette, mapped onto the key names this screen already used.
@@ -25,8 +29,10 @@ export const DA = {
   error: T.red,
   // Bubbles (Coy, 2026-09-29: "more muted colors for both sides that are easy
   // on the eyes"): warm paper for them, soft slate for us, ink text on both.
-  bubbleIn: "#F7F6F2",
-  bubbleOut: "#D8E1E8",
+  // Themed since 2026-09-30: theirs on the sunk ground, ours on the theme's
+  // outgoing colour (terracotta-dim in Site Office).
+  bubbleIn: T.sunk,
+  bubbleOut: T.outBg,
 } as const;
 
 /**
@@ -63,8 +69,18 @@ export interface ThreadMessage {
   artifact_kinds: string[];
   /** Files on this message (message_media). Fetched lazily by MessageMedia. */
   media_count: number;
-  /** Our line, by name — only when this thread used more than one (migration 035). */
+  /** Our line, by name — whenever the org has two or more (Lines, Claude Design package 9). */
   line?: string | null;
+  /** That line's id (Logs, the channel's line filter). */
+  line_id?: string | null;
+  /** That line's colour as a CSS value, for its dot. */
+  line_color?: string | null;
+  /** That line's provider's name, on call cards ("via Website · Quo"). */
+  line_provider?: string | null;
+  /** The other end's number — which phone channel it is on (Threads v2). */
+  counterparty?: string | null;
+  /** message_media.kind of each file on it. */
+  media_kinds?: string[];
 }
 
 interface Artifact {
@@ -228,7 +244,10 @@ export function CallRow({ m }: { m: ThreadMessage }) {
           {isOut ? "Outbound call" : "Inbound call"}
         </span>
         {m.line && (
-          <span className="text-[10px]" style={{ color: DA.textMuted }}>{m.line}</span>
+          <span className="flex items-center gap-1" style={{ order: 9, marginLeft: "auto", fontFamily: disp, fontSize: 10, letterSpacing: ".08em", textTransform: "uppercase", color: DA.textMuted }}>
+            <span style={{ width: 7, height: 7, borderRadius: 7, background: m.line_color ?? DA.textMuted, display: "inline-block" }} />
+            via {m.line}{m.line_provider ? ` · ${m.line_provider}` : ""}
+          </span>
         )}
         {duration && (
           <span className="text-[10px] tabular-nums" style={{ color: DA.textMuted }}>{duration}</span>
@@ -264,6 +283,8 @@ export function CallRow({ m }: { m: ThreadMessage }) {
       {m.artifact_kinds.includes("recording") && (
         <PlayAudio messageId={m.id} kind="recording" label={`Play recording${duration ? ` · ${duration}` : ""}`} />
       )}
+
+      <DraftQuoteButton messageId={m.id} style={{ display: "block", marginTop: 6 }} />
 
       {!open && bundle?.next_steps?.content && (
         <div className="mt-2 rounded px-2.5 py-2" style={{ background: DA.elevated }}>
@@ -387,7 +408,7 @@ const KIND_LABEL: Record<string, string> = {
  * A file that cannot be fetched says why in words. It never renders as a broken
  * image, which reads as a bug in the app rather than a fact about the file.
  */
-function MessageMedia({ messageId, count, isOut }: { messageId: string; count: number; isOut: boolean }) {
+export function MessageMedia({ messageId, count, isOut }: { messageId: string; count: number; isOut: boolean }) {
   const [items, setItems] = useState<MediaItem[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
@@ -454,7 +475,7 @@ function MessageMedia({ messageId, count, isOut }: { messageId: string; count: n
       </div>
 
       {full && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4"
+        <div className="fixed inset-0 sc-drawer z-[70] flex items-center justify-center p-4"
           style={{ background: "rgba(10,12,14,0.86)", cursor: "zoom-out" }} onClick={() => setOpen(null)}>
           {/* eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL */}
           <img src={full.url as string} alt="Photo sent in this message"
@@ -474,20 +495,21 @@ export function SmsRow({ m }: { m: ThreadMessage }) {
         className="max-w-[78%] rounded-2xl px-3 py-2"
         style={{
           background: isOut ? DA.bubbleOut : DA.bubbleIn,
-          border: isOut ? "1px solid #CCD6DE" : `1px solid ${DA.border}`,
+          border: `1px solid ${DA.border}`, color: isOut ? T.outInk : DA.textPrimary,
         }}
       >
         {/* "(no text)" only when there is genuinely nothing — a photo with no
             caption is not an empty message, and labelling it one is how two of
             Amber's photos read as blank bubbles. */}
         {(text || m.media_count === 0) && (
-          <div className="text-xs whitespace-pre-wrap" style={{ color: DA.textPrimary }}>
+          <div className="text-xs whitespace-pre-wrap" style={{ color: "inherit" }}>
             {text || <span style={{ fontStyle: "italic", opacity: 0.7 }}>(no text)</span>}
           </div>
         )}
         {m.media_count > 0 && <MessageMedia messageId={m.id} count={m.media_count} isOut={isOut} />}
-        <div className="text-[9px] mt-1" style={{ color: DA.textSecondary, letterSpacing: ".06em" }}>
-          {isOut ? "OUT" : "IN"} · {formatTime(m.occurred_at)}{m.line ? ` · ${m.line}` : ""}
+        <div className="text-[9px] mt-1" style={{ color: "inherit", opacity: 0.7, letterSpacing: ".06em" }}>
+          {isOut ? "OUT" : "IN"} · {formatTime(m.occurred_at)}
+          {m.line && <> · <span style={{ display: "inline-block", width: 6, height: 6, borderRadius: 6, background: m.line_color ?? "currentColor", verticalAlign: "middle" }} /> via {m.line}</>}
         </div>
       </div>
     </div>
@@ -572,12 +594,12 @@ export function MergeSheet({ contactId, keepLabel, keepCount, onClose, onMerged,
   const btn = (primary?: boolean): React.CSSProperties => ({
     height: 34, padding: "0 14px", borderRadius: 4, cursor: busy ? "default" : "pointer",
     border: `1px solid ${primary ? DA.textPrimary : DA.border}`,
-    background: primary ? DA.textPrimary : DA.surface, color: primary ? "#fff" : DA.textPrimary,
+    background: primary ? DA.textPrimary : DA.surface, color: primary ? T.card : DA.textPrimary,
     fontFamily: disp, fontSize: F.sm, letterSpacing: ".06em", textTransform: "uppercase", opacity: busy ? 0.6 : 1,
   });
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-end lg:items-center justify-center"
+    <div className="fixed inset-0 sc-drawer z-[60] flex items-end lg:items-center justify-center"
       style={{ background: "rgba(10,12,14,0.5)" }} onClick={onClose}>
       <div className="w-full lg:max-w-lg rounded-t-xl lg:rounded-xl flex flex-col"
         style={{ background: DA.surface, maxHeight: "85dvh" }} onClick={(e) => e.stopPropagation()}>
@@ -659,12 +681,13 @@ export interface Note { id: string; body: string; created_at: string }
 
 /** One of Coy's notes (migration 041), in the timeline where he wrote it. */
 function NoteRow({ n }: { n: Note }) {
+  if (archiveNote(n.body)) return <div className="my-1.5"><ArchiveNoteCard body={n.body} at={n.created_at} /></div>;
   return (
     <div className="my-1.5 rounded px-2.5 py-2" style={{ background: "#FFF8E1", border: `1px solid #F0DDA0` }}>
       <div style={{ ...eyebrow, color: "#8A6D1A" }}>
         Your note · {new Date(n.created_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
       </div>
-      <div style={{ fontSize: F.sm, color: DA.textPrimary, lineHeight: 1.4, whiteSpace: "pre-wrap", marginTop: 2 }}>{n.body}</div>
+      <div style={{ fontSize: F.sm, color: DA.textPrimary, lineHeight: 1.4, whiteSpace: "pre-wrap", marginTop: 2 }}>{plainNote(n.body)}</div>
     </div>
   );
 }
@@ -696,7 +719,7 @@ export function Timeline({ messages, phone, notes = [] }: { messages: ThreadMess
                 <span className="flex-1" style={{ height: 1, background: DA.border }} />
               </div>
             )}
-            {it.n ? <NoteRow n={it.n} /> : it.m!.channel === "call" ? <CallRow m={it.m!} /> : <SmsRow m={it.m!} />}
+            {it.n ? <NoteRow n={it.n} /> : <div id={`m-${it.m!.id}`}>{it.m!.channel === "call" ? <CallRow m={it.m!} /> : <SmsRow m={it.m!} />}</div>}
           </React.Fragment>
         );
       })}

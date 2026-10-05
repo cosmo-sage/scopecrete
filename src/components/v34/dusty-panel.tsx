@@ -19,34 +19,46 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { usePathname } from "next/navigation";
-import { T, F, disp, eyebrow, body, clip, relTime } from "@/lib/v34/tokens";
-import { Emblem } from "@/components/v34/primitives";
+import { usePathname, useRouter } from "next/navigation";
+import { T, F, disp, eyebrow, agent, clip, relTime, nums } from "@/lib/v34/tokens";
+import { DustyAvatar, type DustyState } from "@/components/v34/dusty-avatar";
+import { Markdown } from "@/components/v34/markdown";
+import { PlanCard } from "@/components/v34/plan-card";
+import { parsePlan } from "@/lib/dusty/plan";
+import { useDustyUse } from "@/lib/v34/dusty-live";
+import { sendBytes } from "@/components/v34/files-panel";
+import { VoiceRecorder } from "@/components/v34/voice-recorder";
 
 type Ref = { kind: "thread" | "scope" | "customer"; id: string } | { kind: "cash" } | { kind: "cold" };
 type Ctx = Ref | { kind: "activity"; since: string };
 const CATCHUP_KEY = "sc:dusty-catchup-at";
-type Turn = { role: "user" | "assistant"; content: string };
+type TurnFile = { id: string; name: string; kind?: string; url: string | null };
+type Turn = { role: "user" | "assistant"; content: string; files?: TurnFile[] };
+type Att = { key: string; name: string; pct: number; id: string | null; error: string | null; preview: string | null };
 interface Conv { id: string; title: string; context_kind: string; context_id: string | null; context_label: string | null; updated_at: string }
 
 export function refFor(pathname: string): Ref {
   const m = pathname.match(/^\/dashboard\/(messages|scope|customers)\/([^/?#]+)/);
   if (m) return { kind: m[1] === "messages" ? "thread" : m[1] === "scope" ? "scope" : "customer", id: m[2] };
-  if (pathname.startsWith("/dashboard/cash")) return { kind: "cash" };
+  // A vendor's page is a person (its id is the contact's): Dusty reads them as on their thread.
+  const v = pathname.match(/^\/dashboard\/vendors\/([^/?#]+)/);
+  if (v) return { kind: "thread", id: v[1] };
+  // The Price book shares the "cash" context (money settings + the Price book and its assemblies).
+  if (pathname.startsWith("/dashboard/cash") || pathname.startsWith("/dashboard/price-book")) return { kind: "cash" };
   return { kind: "cold" };
 }
 
 const GUESS: Record<Ref["kind"], string> = {
-  thread: "this person", scope: "this job", customer: "this customer", cash: "your cost settings", cold: "your business",
+  thread: "this person", scope: "this job", customer: "this customer", cash: "your Price book and money", cold: "your business",
 };
 const PAGE: Record<Ref["kind"], string> = {
-  thread: "this person", scope: "this job", customer: "this customer", cash: "cost settings", cold: "",
+  thread: "this person", scope: "this job", customer: "this customer", cash: "Price book & money", cold: "",
 };
 const STARTERS: Record<Ref["kind"], string[]> = {
   thread: ["What does this person want?", "What do I owe them?", "Draft a reply I can send"],
   scope: ["Check these numbers", "What's stopping a price?", "What should I still ask them?"],
   customer: ["Summarise who this is", "What's open with them?"],
-  cash: ["Which settings matter most first?", "What does the floor need?"],
+  cash: ["Build me a driveway breakout & pourback assembly", "Which items have no price?", "What is my monthly burn?"],
   cold: ["What's waiting on me today?", "Price a 24×30 driveway", "Who haven't I called back?"],
 };
 
@@ -54,7 +66,7 @@ const sameRef = (c: Conv, r: Ref) => "id" in r ? c.context_kind === r.kind && c.
 
 export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
   open: boolean; onClose: () => void; onBusy: (b: boolean) => void;
-  /** Bumped by an emblem tap: start a catch-up on the latest activity. */
+  /** Bumped from outside to start a catch-up on the latest activity. */
   catchUp?: number;
   /** The reply as it streams, for the activity line. "" when idle. */
   onStream?: (text: string) => void;
@@ -71,11 +83,24 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
   const [err, setErr] = useState<string | null>(null);
   const [railOpen, setRailOpen] = useState(false);
   const [copied, setCopied] = useState<number | null>(null);
+  const useTarget = useDustyUse();
   const [loadingConv, setLoadingConv] = useState(false);
   const [listTick, setListTick] = useState(0);
   const [openedFor, setOpenedFor] = useState<string | null>(null);
+  // How the last answer ended — Dusty pours concrete on a good one, scratches his head on a failed one.
+  const [mood, setMood] = useState<"done" | "error" | null>(null);
+  const [catchUpLocal, setCatchUpLocal] = useState(0);
   const scroller = useRef<HTMLDivElement | null>(null);
   const abort = useRef<AbortController | null>(null);
+  const router = useRouter();
+  // The + menu in the header (Coy, 2026-10-01): a new chat, or a new customer,
+  // job or receipt — each opens its own form on the page beside him.
+  const [plusOpen, setPlusOpen] = useState(false);
+  // Files attached to the next message (the + left of the box).
+  const [atts, setAtts] = useState<Att[]>([]);
+  const fileInput = useRef<HTMLInputElement | null>(null);
+  const [recording, setRecording] = useState(false);
+  const [hearing, setHearing] = useState(false);
 
   useEffect(() => { onBusy(busy); }, [busy, onBusy]);
   useEffect(() => () => abort.current?.abort(), []);
@@ -109,7 +134,7 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
     let off = false;
     fetch(`/api/dusty/conversations/${want.id}`)
       .then(async (r) => { const b = await r.json().catch(() => ({})); if (!r.ok) throw new Error(b?.error || `HTTP ${r.status}`); return b; })
-      .then((b) => { if (!off) setItems((b.messages as Turn[]).map((m) => ({ role: m.role, content: m.content }))); })
+      .then((b) => { if (!off) setItems((b.messages as Turn[]).map((m) => ({ role: m.role, content: m.content, files: m.files }))); })
       .catch((e) => { if (!off) setErr(e instanceof Error ? e.message : String(e)); })
       .finally(() => { if (!off) setLoadingConv(false); });
     return () => { off = true; };
@@ -131,9 +156,10 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
   // the effect body; openedFor is claimed so the list arriving afterwards
   // doesn't swap in an older chat under it.
   const caughtUp = useRef(0);
+  const catchUpN = catchUp + catchUpLocal;
   useEffect(() => {
-    if (!open || !catchUp || caughtUp.current === catchUp) return;
-    caughtUp.current = catchUp;
+    if (!open || !catchUpN || caughtUp.current === catchUpN) return;
+    caughtUp.current = catchUpN;
     const t = setTimeout(() => {
       let since = "";
       try { since = localStorage.getItem(CATCHUP_KEY) ?? ""; localStorage.setItem(CATCHUP_KEY, new Date().toISOString()); } catch { /* private mode */ }
@@ -143,19 +169,42 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
     }, 0);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, catchUp]);
+  }, [open, catchUpN]);
+
+  // A page can hand Dusty a question to start from (the proposal's "Edit with
+  // Dusty"): it lands in the message box for Coy to send or change — Dusty
+  // never sends it on his own.
+  useEffect(() => {
+    const put = (e: Event) => {
+      const q = (e as CustomEvent<{ text?: string }>).detail?.text;
+      if (typeof q === "string" && q.trim()) setDraft(q.slice(0, 4000));
+    };
+    window.addEventListener("sc:dusty-draft", put);
+    return () => window.removeEventListener("sc:dusty-draft", put);
+  }, []);
 
   async function ask(text: string, opts?: { fresh?: boolean; ctx?: Ctx }) {
-    const q = text.trim();
+    const ready = opts?.fresh ? [] : atts.filter((a) => a.id && !a.error);
+    if (!opts?.fresh && atts.some((a) => !a.id && !a.error)) return; // still uploading
+    const said0 = text.trim() || (ready.length ? "What's in this?" : "");
+    const q = ready.length ? `${said0}\n\n📎 ${ready.map((a) => a.name).join(", ")}` : said0;
     if (!q || (busy && !opts?.fresh)) return;
+    if (ready.length) setAtts([]);
     const convId = opts?.fresh ? null : activeId;
-    setItems((a) => [...a, { role: "user", content: q }, { role: "assistant", content: "" }]);
-    setDraft(""); setErr(null); setBusy(true);
+    setItems((a) => [...a, { role: "user", content: q, files: ready.map((x) => ({ id: x.id as string, name: x.name, url: x.preview })) }, { role: "assistant", content: "" }]);
+    setDraft(""); setErr(null); setBusy(true); setMood(null);
+    let failed = false;
     const ctrl = new AbortController();
     abort.current = ctrl;
     let said = "";
-    const append = (s: string) => {
-      said += s;
+    // Tokens arrive faster than frames: gather them and draw once per frame,
+    // so a long answer never queues a render per token (interaction timing).
+    let pending = "";
+    let frame = 0;
+    const flush = () => {
+      frame = 0;
+      if (!pending) return;
+      const s = pending; pending = "";
       onStream?.(said);
       setItems((a) => {
         const copy = [...a];
@@ -164,13 +213,18 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
         return copy;
       });
     };
+    const append = (s: string) => {
+      said += s; pending += s;
+      if (!frame) frame = requestAnimationFrame(flush);
+    };
     try {
       const r = await fetch("/api/dusty", {
         method: "POST", headers: { "Content-Type": "application/json" }, signal: ctrl.signal,
-        body: JSON.stringify({ question: q, conversation_id: convId, context: convId ? undefined : (opts?.ctx ?? ref) }),
+        body: JSON.stringify({ question: q, conversation_id: convId, context: convId ? undefined : (opts?.ctx ?? ref), file_ids: ready.map((a) => a.id) }),
       });
       if (!r.ok || !r.body) {
         const b = await r.json().catch(() => ({}));
+        failed = true;
         append(b?.code === "not_connected"
           ? "I'm not connected. In Vercel, set HERMES_URL and HERMES_API_KEY (Hermes's own key from Doctor), then redeploy."
           : String(b?.error ?? `I couldn't answer (HTTP ${r.status}).`));
@@ -186,9 +240,12 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
         append(dec.decode(value, { stream: true }));
       }
     } catch (e) {
-      if ((e as Error).name !== "AbortError") append("\n\n[The connection dropped.]");
+      if ((e as Error).name !== "AbortError") { failed = true; append("\n\n[The connection dropped.]"); }
     } finally {
+      if (frame) cancelAnimationFrame(frame);
+      flush();
       setBusy(false);
+      setMood(failed ? "error" : said.trim() ? "done" : null);
       onStream?.("");
       abort.current = null;
       setListTick((n) => n + 1);
@@ -205,9 +262,62 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
     try { await navigator.clipboard.writeText(text); setCopied(i); setTimeout(() => setCopied(null), 1800); } catch { /* blocked */ }
   }
 
+  // Where an attachment is filed: on what the chat is about — the job, the
+  // person, the customer — else unfiled in Files. Dusty's reader reads it.
+  function attachTarget(): Record<string, unknown> {
+    const a = convs?.find((c) => c.id === activeId);
+    const kind = a ? a.context_kind : ref.kind;
+    const id = a ? a.context_id : "id" in ref ? ref.id : null;
+    if (id && kind === "scope") return { job_id: id };
+    if (id && kind === "thread") return { contact_id: id };
+    if (id && kind === "customer") return { customer_id: id };
+    return { from_dusty: true };
+  }
+  async function attach(list: FileList | null) {
+    const picked = Array.from(list ?? []).slice(0, 8);
+    if (fileInput.current) fileInput.current.value = "";
+    for (const file of picked) {
+      const key = `${Date.now()}-${file.name}`;
+      setAtts((a) => [...a, { key, name: file.name, pct: 0, id: null, error: null, preview: file.type.startsWith("image/") ? URL.createObjectURL(file) : null }]);
+      const set = (p: Partial<Att>) => setAtts((a) => a.map((x) => (x.key === key ? { ...x, ...p } : x)));
+      try {
+        const r = await fetch("/api/files", { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: file.name, mime: file.type, size: file.size, ...attachTarget() }) });
+        const made = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(made?.error || `HTTP ${r.status}`);
+        await sendBytes(made.upload.signed_url, file, (pct) => set({ pct }));
+        const d = await fetch(`/api/files/${made.file.id}/done`, { method: "POST" });
+        if (!d.ok) throw new Error("the upload didn't finish");
+        set({ id: made.file.id as string, pct: 100 });
+      } catch (e) { set({ error: e instanceof Error ? e.message : String(e) }); }
+    }
+  }
+  async function voice(blob: Blob) {
+    setRecording(false); setHearing(true); setErr(null);
+    try {
+      const fd = new FormData();
+      fd.append("audio", blob, blob.type.includes("mp4") ? "voice.mp4" : "voice.webm");
+      const r = await fetch("/api/dusty/transcribe", { method: "POST", body: fd });
+      const b = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(b?.error || `HTTP ${r.status}`);
+      void ask(`${draft.trim() ? `${draft.trim()} ` : ""}${String(b.text)}`);
+    } catch (e) { setErr(`Voice message: ${e instanceof Error ? e.message : String(e)}`); }
+    finally { setHearing(false); }
+  }
+  function create(what: "customer" | "job" | "receipt") {
+    setPlusOpen(false);
+    const href = what === "customer" ? "/dashboard/customers?new=1" : what === "job" ? "/dashboard/scope?new=1" : "/dashboard/vendors?receipt=1";
+    // On a phone Dusty covers the page, so he steps aside for the form.
+    if (!window.matchMedia("(min-width: 1024px)").matches) onClose();
+    router.push(href);
+    setTimeout(() => window.dispatchEvent(new CustomEvent("sc:create", { detail: what })), 0);
+  }
+
   if (!open) return null;
 
   const active = convs?.find((c) => c.id === activeId) ?? null;
+  // The job a plan applies to: the chat's own job, else the job page that's open.
+  const planJob = active ? (active.context_kind === "scope" ? active.context_id : null) : ref.kind === "scope" ? ref.id : null;
   const hot = active ? active.context_kind !== "cold" : ref.kind !== "cold";
   // A catch-up just started has no row in the list yet — say what it is.
   const catching = !active && activeId !== null && items[0]?.content === "What's new since I last looked?";
@@ -237,7 +347,7 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
       <div className="px-3 py-2.5 flex items-center gap-2 shrink-0" style={{ borderBottom: `1px solid ${T.hair}` }}>
         <span style={{ ...eyebrow, color: T.ink, flex: 1 }}>Conversations</span>
         <button onClick={() => select(null)} className="rounded px-2.5"
-          style={{ height: 28, background: T.ink, color: "#fff", fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", letterSpacing: ".06em" }}>
+          style={{ height: 28, background: T.ink, color: T.card, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", letterSpacing: ".06em" }}>
           + New
         </button>
       </div>
@@ -264,13 +374,15 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
     </nav>
   );
 
+  const dustyState: DustyState = busy ? "calculating" : loadingConv ? "loading" : mood ?? "idle";
+
   return (
     // Phone: a full page under the header. Desktop (Coy, 2026-09-29: "slide in
     // on the right… so I can see the rest of the dashboard"): a column docked
     // on the right, no backdrop; the layout pads <main> by --sc-dusty so the
     // page beside it stays whole and usable.
     <section role="dialog" aria-label="Dusty"
-      className="fixed left-0 right-0 bottom-0 z-50 flex lg:left-auto lg:w-[var(--sc-dusty)] sc-dock-in"
+      className="fixed left-0 right-0 bottom-0 z-50 flex lg:left-auto lg:w-[var(--sc-dusty)] sc-dock-in sc-dusty-sheet"
       style={{ top: "var(--sc-head)", background: T.slab, color: T.ink, borderLeft: `1px solid ${T.hair}`, boxShadow: "-10px 0 30px rgba(10,14,18,.10)" }}>
       {/* history: from the left, over the chat */}
       {railOpen && (
@@ -286,16 +398,45 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
           <button onClick={() => setRailOpen(true)} aria-label="Conversations" className="flex-col gap-[3.5px]" style={iconBtn}>
             {[0, 1, 2].map((i) => <span key={i} style={{ width: 13, height: 1.5, background: T.ink2, borderRadius: 1 }} />)}
           </button>
-          <Emblem key={activeId ?? "new"} size={22} stroke={2.6} className={busy ? "sc-em-think" : "sc-em-tap"} />
           <div className="flex-1 min-w-0">
-            <div style={{ fontFamily: disp, fontSize: F.md, fontWeight: 600, lineHeight: 1.1, ...clip }}>{active ? active.title : "New chat"}</div>
-            <div style={{ ...eyebrow, fontSize: 9, color: hot ? T.hiviz : T.ink3, ...clip }}>
-              {lookingAt ? `Looking at ${lookingAt}` : "Cold — your jobs, costs and threads"}
+            {/* One line (Coy, 2026-10-02): "Looking at: <the job>" when he is on something,
+                else the chat's own title. */}
+            <div title={hot && lookingAt ? `Looking at: ${lookingAt}` : undefined}
+              style={{ fontFamily: disp, fontSize: F.md, fontWeight: 600, lineHeight: 1.1, ...clip }}>
+              {hot && lookingAt ? <><span style={{ color: T.ink3, fontWeight: 500 }}>Looking at: </span>{lookingAt}</> : active ? active.title : "New chat"}
             </div>
           </div>
-          <button onClick={() => select(null)} aria-label="New chat" style={{ ...iconBtn, fontSize: 18, color: T.ink2 }}>+</button>
+          <button onClick={() => setCatchUpLocal((n) => n + 1)} disabled={busy} title="What's new since I last looked?"
+            className="rounded px-2" style={{ height: 30, border: `1px solid ${T.hair}`, background: T.card, fontSize: F.xs, color: T.ink2, cursor: "pointer", whiteSpace: "nowrap" }}>
+            What&apos;s new?</button>
+          <div className="relative">
+            <button onClick={() => setPlusOpen((o) => !o)} aria-label="New…" aria-expanded={plusOpen} style={{ ...iconBtn, fontSize: 18, color: T.ink2, background: plusOpen ? T.chalkDim : T.card }}>+</button>
+            {plusOpen && (
+              <>
+                <button aria-label="Close the menu" onClick={() => setPlusOpen(false)} className="fixed inset-0" style={{ zIndex: 70, cursor: "default" }} />
+                <div role="menu" className="absolute right-0 mt-1 rounded overflow-hidden" style={{ zIndex: 71, width: 230, background: T.card, border: `1px solid ${T.hair}`, boxShadow: "0 10px 30px rgba(0,0,0,.18)" }}>
+                  {([
+                    ["chat", "New chat", "Start fresh with Dusty"],
+                    ["customer", "New customer", "A household, business or school"],
+                    ["job", "New job", "For a customer — on the Jobs board"],
+                    ["receipt", "Add a receipt or quote", "Photo or file — Dusty reads the vendor and prices"],
+                  ] as const).map(([k, l, sub], i) => (
+                    <button key={k} role="menuitem" onClick={() => { if (k === "chat") { setPlusOpen(false); select(null); } else create(k); }}
+                      className="w-full text-left px-3 py-2" style={{ borderTop: i ? `1px solid ${T.hairSoft}` : "none", cursor: "pointer" }}>
+                      <span style={{ display: "block", fontFamily: disp, fontSize: F.md, fontWeight: 600, color: T.ink }}>{l}</span>
+                      <span style={{ display: "block", fontSize: 10, color: T.ink3 }}>{sub}</span>
+                    </button>
+                  ))}
+                  <div className="px-3 py-2" aria-disabled="true" style={{ borderTop: `1px solid ${T.hairSoft}` }}>
+                    <span style={{ display: "block", fontFamily: disp, fontSize: F.md, fontWeight: 600, color: T.ink3 }}>New invoice</span>
+                    <span style={{ display: "block", fontSize: 10, color: T.ink3 }}>Not built yet — invoices come after proposals</span>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
           <button onClick={onClose} aria-label="Close Dusty" style={iconBtn}>
-            <svg width="12" height="12" viewBox="0 0 13 13" aria-hidden="true"><path d="M1 1 L12 12 M12 1 L1 12" stroke={T.ink} strokeWidth="1.8" /></svg>
+            <svg width="12" height="12" viewBox="0 0 13 13" aria-hidden="true"><path d="M1 1 L12 12 M12 1 L1 12" stroke="currentColor" style={{ color: T.ink }} strokeWidth="1.8" /></svg>
           </button>
         </header>
 
@@ -305,11 +446,15 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
             This chat is about {active.context_label || "something else"}. <b style={{ color: T.ink }}>Ask about {PAGE[ref.kind]} instead →</b>
           </button>
         )}
+        {/* A page can put its own numbers here while Dusty is docked beside it
+            (the job page's totals — Coy, 2026-09-30). */}
+        <div id="sc-dusty-slot" className="shrink-0" />
         <div ref={scroller} className="flex-1 overflow-y-auto">
           <div className="mx-auto w-full px-4 py-4" style={{ maxWidth: 760 }}>
             {loadingConv && <div className="rounded animate-pulse" style={{ height: 80, background: T.hairSoft }} />}
             {!loadingConv && items.length === 0 && (
               <div className="text-center py-6">
+                <div className="flex justify-center mb-2"><DustyAvatar state={dustyState} size={96} /></div>
                 <div style={{ fontFamily: disp, fontSize: F.xl, fontWeight: 600 }}>What are we working on?</div>
                 <p style={{ fontSize: F.sm, color: T.ink3, lineHeight: 1.5, maxWidth: 360, margin: "4px auto 14px" }}>
                   {ref.kind === "cold" ? "Dusty has your jobs, costs, threads and notes." : `Dusty can see ${GUESS[ref.kind]} and everything behind it.`}
@@ -324,18 +469,42 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
               </div>
             )}
             {items.map((it, i) => it.role === "user" ? (
-              <h2 key={i} style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 600, lineHeight: 1.25, margin: i === 0 ? "0 0 8px" : "22px 0 8px",
-                paddingTop: i === 0 ? 0 : 16, borderTop: i === 0 ? "none" : `1px solid ${T.hair}` }}>{it.content}</h2>
+              <div key={i} style={{ margin: i === 0 ? "0 0 8px" : "22px 0 8px", paddingTop: i === 0 ? 0 : 16, borderTop: i === 0 ? "none" : `1px solid ${T.hair}` }}>
+                <h2 style={{ fontFamily: agent, fontSize: F.md + 1, fontWeight: 700, lineHeight: 1.35 }}>
+                  {it.files?.length ? it.content.replace(/\n\n📎 [^\n]*$/, "") : it.content}
+                </h2>
+                {/* The photos and files this question carried (079) — kept in Files, tap to open. */}
+                {!!it.files?.length && <ChatFiles files={it.files} />}
+              </div>
             ) : (
               <div key={i}>
-                <div style={{ fontSize: F.md, lineHeight: 1.6, whiteSpace: "pre-wrap", fontFamily: body, color: T.ink }}>
-                  {it.content || <span style={{ color: T.ink3 }}>Reading…</span>}
+                <div style={{ minWidth: 0 }}>
+                <div style={{ fontFamily: agent }}>
+                  {it.content ? (() => {
+                    // A budget plan rides at the end of an answer: shown as steps with Apply, not as code.
+                    const p = parsePlan(it.content);
+                    const streaming = busy && i === items.length - 1;
+                    const shown = streaming ? it.content.replace(/```scopecrete-plan[\s\S]*$/, "").trim() : p.shown;
+                    return (<>
+                      <Markdown text={shown} size={14} />
+                      {streaming && /```scopecrete-plan/.test(it.content) && <div style={{ fontSize: F.xs, color: T.ink3, marginTop: 6 }}>Writing up the plan…</div>}
+                      {!streaming && (p.actions.length > 0 || p.dropped > 0) && (
+                        <PlanCard jobId={planJob} actions={p.actions} dropped={p.dropped} done={!streaming} />
+                      )}
+                    </>);
+                  })() : <span style={{ color: T.ink3 }}>Reading…</span>}
                 </div>
                 {it.content && !(busy && i === items.length - 1) && (
                   <button onClick={() => void copy(i, it.content)} className="mt-1.5" style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>
                     {copied === i ? "Copied" : "Copy"}
                   </button>
                 )}
+                {useTarget && it.content && !(busy && i === items.length - 1) && (
+                  <button onClick={() => useTarget.apply(it.content)} className="mt-1.5 ml-4" style={{ ...eyebrow, color: T.hiviz, cursor: "pointer" }}>
+                    Use this {useTarget.label}
+                  </button>
+                )}
+                </div>
               </div>
             ))}
             {err && <div style={{ fontSize: F.sm, color: T.red, marginTop: 8 }}>{err}</div>}
@@ -344,20 +513,79 @@ export function DustyPanel({ open, onClose, onBusy, onStream, catchUp = 0 }: {
 
         <form onSubmit={(e) => { e.preventDefault(); void ask(draft); }} className="shrink-0 px-3 py-2.5"
           style={{ borderTop: `1px solid ${T.hair}`, background: T.card }}>
+          {atts.length > 0 && (
+            <div className="mx-auto flex flex-wrap gap-1.5 mb-2" style={{ maxWidth: 760 }}>
+              {atts.map((a) => (
+                <span key={a.key} className="rounded px-2 flex items-center gap-1.5" title={a.error ?? undefined}
+                  style={{ height: 26, maxWidth: 220, border: `1px solid ${a.error ? T.red : T.hair}`, background: T.slab, fontSize: F.xs, color: a.error ? T.red : T.ink2 }}>
+                  <span style={{ ...clip }}>📎 {a.name}</span>
+                  <span style={{ ...nums, color: T.ink3 }}>{a.error ? "failed" : a.id ? "" : `${a.pct}%`}</span>
+                  <button type="button" onClick={() => setAtts((x) => x.filter((y) => y.key !== a.key))} aria-label={`Remove ${a.name}`} style={{ color: T.ink3, cursor: "pointer" }}>×</button>
+                </span>
+              ))}
+            </div>
+          )}
           <div className="mx-auto flex items-end gap-2" style={{ maxWidth: 760 }}>
-            <textarea value={draft} onChange={(e) => setDraft(e.target.value)} rows={1} maxLength={4000}
-              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void ask(draft); } }}
-              placeholder={active ? "Follow up…" : hot ? `Ask about ${GUESS[ref.kind]}…` : "Ask Dusty…"}
-              className="flex-1 rounded-lg px-3 py-2 outline-none resize-none"
-              style={{ border: `1px solid ${T.hair}`, fontSize: F.sm, maxHeight: 140, fontFamily: body, minWidth: 0 }} />
-            <button type="submit" disabled={busy || !draft.trim()} className="rounded-lg px-3"
-              style={{ height: 38, background: busy || !draft.trim() ? T.hair : T.hiviz, color: "#fff", fontFamily: disp,
-                       fontSize: F.sm, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".06em" }}>
-              {busy ? "…" : "Ask"}
-            </button>
+            {recording ? (
+              <VoiceRecorder onSend={(b) => void voice(b)} onCancel={() => setRecording(false)} />
+            ) : (
+              <>
+                {/* + attach (Coy, 2026-10-01): photos and files, filed on what the chat is about. */}
+                <input ref={fileInput} type="file" multiple hidden onChange={(e) => void attach(e.target.files)}
+                  accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.csv,.txt" />
+                <button type="button" onClick={() => fileInput.current?.click()} aria-label="Attach photos or files" title="Attach photos or files"
+                  className="shrink-0 rounded-full flex items-center justify-center" style={{ width: 38, height: 38, border: `1px solid ${T.hair}`, background: T.card, color: T.ink2, fontSize: 20, cursor: "pointer" }}>+</button>
+                {/* Coy, 2026-09-30: once a chat is going, Dusty lives here, beside
+                    the box — his real state: fetching, working, done, or stuck. */}
+                {items.length > 0 && <span className="shrink-0 hidden sm:inline" style={{ alignSelf: "center" }}><DustyAvatar state={hearing ? "loading" : dustyState} size={32} /></span>}
+                <textarea value={draft} onChange={(e) => setDraft(e.target.value)} rows={1} maxLength={4000}
+                  onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void ask(draft); } }}
+                  placeholder={hearing ? "Listening back…" : active ? "Follow up…" : hot ? `Ask about ${GUESS[ref.kind]}…` : "Ask Dusty…"}
+                  className="flex-1 rounded-lg px-3 py-2 outline-none resize-none"
+                  style={{ border: `1px solid ${T.hair}`, fontSize: F.sm, maxHeight: 140, fontFamily: agent, minWidth: 0, background: T.card, color: T.ink }} />
+                {/* Telegram's way: an empty box offers the mic, a typed one the send. */}
+                {!draft.trim() && !atts.length ? (
+                  <button type="button" onClick={() => { setErr(null); setRecording(true); }} disabled={busy || hearing} aria-label="Record a voice message" title="Record a voice message"
+                    className="shrink-0 rounded-full flex items-center justify-center" style={{ width: 38, height: 38, background: busy || hearing ? T.hair : T.hiviz, color: T.onHiviz, cursor: "pointer" }}>
+                    {hearing ? "…" : (
+                      <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
+                        <rect x="5.5" y="1.5" width="5" height="8.5" rx="2.5" fill="currentColor" stroke="none" />
+                        <path d="M3 7.5a5 5 0 0 0 10 0M8 12.5v2.2" />
+                      </svg>
+                    )}
+                  </button>
+                ) : (
+                  <button type="submit" disabled={busy || atts.some((a) => !a.id && !a.error)} className="rounded-lg px-3"
+                    style={{ height: 38, background: busy ? T.hair : T.hiviz, color: T.onHiviz, fontFamily: disp,
+                             fontSize: F.sm, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".06em" }}>
+                    {busy ? "…" : "Ask"}
+                  </button>
+                )}
+              </>
+            )}
           </div>
         </form>
       </div>
     </section>
+  );
+}
+
+/** The files a question carried, under it in the chat: photos as thumbnails, the rest by name. Tap opens it in Files. */
+function ChatFiles({ files }: { files: TurnFile[] }) {
+  return (
+    <div className="flex flex-wrap gap-1.5 mt-1.5">
+      {files.map((f) => {
+        const img = f.url && (f.kind ? f.kind === "photo" : true) && !/\.(pdf|docx?|xlsx?|csv|txt)$/i.test(f.name);
+        return (
+          <a key={f.id} href={`/dashboard/files?file=${f.id}`} title={f.name} className="rounded overflow-hidden flex items-center"
+            style={{ border: `1px solid ${T.hair}`, background: T.slab, height: img ? 72 : 26, maxWidth: img ? 108 : 220 }}>
+            {img
+              // eslint-disable-next-line @next/next/no-img-element
+              ? <img src={f.url as string} alt={f.name} style={{ height: 72, width: "auto", maxWidth: 108, objectFit: "cover" }} />
+              : <span className="px-2" style={{ ...clip, fontSize: F.xs, color: T.ink2 }}>📎 {f.name}</span>}
+          </a>
+        );
+      })}
+    </div>
   );
 }

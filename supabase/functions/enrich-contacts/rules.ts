@@ -8,7 +8,7 @@
  * the guarantee; the prompt is only a request.
  */
 
-export const PROMPT_VERSION = 'enrich-v12-coys-notes-2026-09-28'
+export const PROMPT_VERSION = 'enrich-v13-spelled-names-2026-10-02'
 
 export const OUR_NAMES = ['Coy', 'Coy Sacco', 'Sacco', 'Sacco Builders', 'ScopeCrete', 'Dusty']
 
@@ -136,6 +136,19 @@ null. A wrong name is worse than no name, because a wrong name gets used.
 
 If the only name you can see is in a greeting, the answer is null.
 If you are weighing whether it counts, the answer is null.
+
+CALL TRANSCRIPTS ARE MACHINE-HEARD
+A call's transcript is written by a machine that mishears. The first line THEM
+says is usually "Hello?" or "This is …" answering the phone, and it is often
+heard as a lone word — "Charlie.", "Hello, Sharon." A lone word on its own line
+is NOT someone saying who they are; never take a name from it.
+When THEM says "my name is …" later in the call, THAT is the name — it beats
+anything heard earlier.
+When THEM spells their name out letter by letter ("Jonette, j o h n e t t e,
+Wilson"), the letters ARE the spelling: propose "Johnette Wilson", not the
+heard "Jonette".
+On US's side the transcriber writes the contractor as "Corey" or "Cory". That is
+Coy. Never call the contractor Corey in anything you write.
 
 Note: a name spoken ABOUT someone in the third person is not self-identification
 either. "Can you send Luis the payment" does not prove the sender is Luis.
@@ -525,7 +538,7 @@ export function sanitize(p: Proposal, turns: Turn[]): { p: Proposal; notes: stri
  * The Arts", "my name is Jen McLean". Everything else is still a question.
  *
  * This does NOT trust the model. The model proposes a name; this function then
- * has to find the person saying that name about themselves, independently:
+ * has to find the person saying it about themselves, independently:
  *
  * - only THEIR words count: an inbound text, or a transcript line spoken from
  *   one of the contact's own numbers. Our outbound texts and our side of a call
@@ -586,8 +599,53 @@ export function relabelTranscript(text: string, ownNumbers: string[]): string {
   const mine = new Set(ownNumbers.map(digits10).filter(d => d.length === 10))
   return text.split(/\r?\n/).map(line => {
     const m = line.match(/^\s*(\+?[\d\s().-]{10,})\s*:\s*(.*)$/)
-    return m ? `${mine.has(digits10(m[1])) ? 'THEM' : 'US'}: ${m[2]}` : line
+    if (!m) return line
+    // The transcriber hears "This is Coy" as "This is Corey" (2026-10-02); on our side it is Coy.
+    return mine.has(digits10(m[1])) ? `THEM: ${m[2]}` : `US: ${m[2].replace(/\bCor(?:e?y|ie)\b/g, 'Coy')}`
   }).join('\n')
+}
+
+/**
+ * A name spelled out after it is said: "My name is Jonette, j o h n e t t e,
+ * Wilson." The letters are the spelling (Coy, 2026-10-02: Johnette Wilson was
+ * read as "Charlie", her greeting, because "Jonette" never matched "Johnette").
+ * The heard word is replaced by the spelled one when they plainly belong
+ * together — same first letter, lengths within three — so the line reads
+ * "My name is Johnette Wilson." Three letters at least; anything else is left.
+ */
+const SPELLED = /\b([A-Z][a-z'’-]+),?\s+(?:spelled\s+|that's\s+|that’s\s+|that is\s+)?((?:[A-Za-z][\s.-]+){2,}[A-Za-z])(?![A-Za-z])[.,]?/g
+export function withSpelledNames(line: string): string {
+  return line.replace(SPELLED, (all, heard: string, letters: string) => {
+    const spelled = letters.replace(/[^A-Za-z]/g, '').toLowerCase()
+    if (spelled.length < 3 || spelled[0] !== heard[0].toLowerCase() || Math.abs(spelled.length - heard.length) > 3) return all
+    return spelled[0].toUpperCase() + spelled.slice(1)
+  })
+}
+
+/**
+ * The name the contact introduced themselves with, whole — first name and a
+ * Capitalised surname right after it ("Johnette Wilson") — when they used one
+ * name only. Null when there were none, or two (a shared line: a question).
+ * The pipeline puts this forward when the model's own pick was not said as an
+ * introduction; findSelfIdentification() still has to find it before it is
+ * written.
+ */
+export function introducedName(turns: Turn[], ownNumbers: string[]): string | null {
+  const lines = turns.flatMap(t => theirLines(t, ownNumbers)).map(withSpelledNames)
+  const firsts = introducedNames(lines)
+  if (firsts.size !== 1) return null
+  const re = new RegExp(String.raw`(?:^|[\s,.!;:(-])${INTRO}\s+([A-Za-z][A-Za-z'’-]+)(?:\s+([A-Za-z][A-Za-z'’-]+))?`, 'gi')
+  const cap = (w: string | undefined) => !!w && w[0] === w[0].toUpperCase() && w[0] !== w[0].toLowerCase()
+  let best: string | null = null
+  for (const line of lines) {
+    for (const m of line.matchAll(re)) {
+      if (!cap(m[1]) || !firsts.has(m[1].toLowerCase())) continue
+      const last = cap(m[2]) && !NOT_A_NAME.has(m[2].toLowerCase()) && !OUR_NAMES.some(n => n.toLowerCase() === m[2]!.toLowerCase()) ? m[2] : null
+      const full = last ? `${m[1]} ${last}` : m[1]
+      if (!best || full.length > best.length) best = full
+    }
+  }
+  return best
 }
 
 /** Every first name the contact introduced themselves with. Lower-cased. */
@@ -622,11 +680,13 @@ export function findSelfIdentification(name: string | null, turns: Turn[], ownNu
   const all: string[] = []
   let hit: SelfId | null = null
   for (const t of turns) {
-    const lines = theirLines(t, ownNumbers)
+    const raw = theirLines(t, ownNumbers)
+    const lines = raw.map(withSpelledNames)
     all.push(...lines)
     if (hit) continue
-    const line = lines.find(l => said.test(l) || signed.test(l))
-    if (line) hit = { turnId: t.id, channel: t.kind, quote: line.trim().slice(0, 400) }
+    const i = lines.findIndex(l => said.test(l) || signed.test(l))
+    // The evidence is the line as they said it, spelling and all.
+    if (i >= 0) hit = { turnId: t.id, channel: t.kind, quote: raw[i].trim().slice(0, 400) }
   }
   if (!hit) return null
 

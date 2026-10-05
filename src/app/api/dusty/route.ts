@@ -7,6 +7,8 @@ import { FILES_BUCKET } from "@/lib/files";
 import { SEE_MAX_BYTES, SEE_MAX_IMAGES, seeableMime } from "@/lib/dusty/see";
 import { publicOrigin } from "@/lib/hosts";
 import { proposalSendLines } from "@/lib/proposal-send-server";
+import { cityOf, renderWeb, webAsk, webQueries } from "@/lib/dusty/web";
+import { searchWeb } from "@/lib/web-search-server";
 
 /**
  * Dusty — read-only, and it knows what Coy has open.
@@ -97,6 +99,31 @@ export async function POST(req: NextRequest) {
     const reach = renderReach(await reachBlocks(supabase, orgId, ref, asked));
     if (reach) ctx.text += `\n\n${reach}`;
   } catch { /* the page's own context still answers */ }
+
+  // Vendors from the web (Coy, 2026-10-05: "search the web and find vendors for steel bollards").
+  // The app searches — Dusty has no tools — and only when this message asks; the results are data.
+  const ask = webAsk(question);
+  if (ask) {
+    try {
+      let place: string | null = null;
+      if (ref.kind === "scope") {
+        const { data: job } = await supabase.from("jobs").select("address").eq("org_id", orgId).eq("id", ref.id).maybeSingle();
+        place = cityOf(job?.address as string | null);
+      }
+      const queries = webQueries(ask, place);
+      const [found, { data: vs }] = await Promise.all([
+        queries.length ? searchWeb(queries) : Promise.resolve({ results: [], error: null, provider: null }),
+        supabase.from("contacts").select("name, company_name, phone").eq("org_id", orgId).eq("contact_type", "vendor")
+          .is("merged_into_contact_id", null).is("archived_at", null).limit(300),
+      ]);
+      const vendors = ((vs ?? []) as Array<{ name: string | null; company_name: string | null; phone: string | null }>)
+        .map((v) => [v.company_name || v.name, v.phone].filter(Boolean).join(" ")).filter(Boolean);
+      ctx.text += `\n\n${renderWeb({ queries, results: found.results, error: found.error, vendors })}`;
+      console.log("dusty web", JSON.stringify({ provider: found.provider, queries: queries.length, results: found.results.length, error: found.error }));
+    } catch (e) {
+      ctx.text += `\n\n${renderWeb({ queries: ["(failed)"], results: [], error: `the search failed (${(e as Error).message})`, vendors: [] })}`;
+    }
+  }
 
   // Whose business this is, and its proposals to send (Coy, 2026-10-05: Dusty
   // called the company "Baton Rouge Concreters" — a lead-gen relay's words — and
@@ -207,7 +234,7 @@ export async function POST(req: NextRequest) {
         // On a job he may end with a budget plan (src/lib/dusty/plan.ts) — room for it.
         // A plan (a budget, or a list of threads to archive) rides at the end — room for it.
         max_tokens: 4000,
-        messages: [{ role: "system", content: `${DUSTY_SYSTEM}${ref.kind === "scope" || ref.kind === "cash" ? `\n\n${PLAN_RULES}` : ""}\n\n${RECORD_RULES}\n\n${ctx.text}` },
+        messages: [{ role: "system", content: `${DUSTY_SYSTEM}${ref.kind === "scope" || ref.kind === "cash" || ctx.plans ? `\n\n${PLAN_RULES}` : ""}\n\n${RECORD_RULES}\n\n${ctx.text}` },
           ...history.slice(0, -1),
           // The photos he looks at ride on this question only; the history keeps the words.
           images.length

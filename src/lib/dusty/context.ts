@@ -374,14 +374,18 @@ async function threadContext(sb: Sb, orgId: string, contactId: string): Promise<
     .map((m) => `[${day(m.occurred_at)} call]\n${transcripts.get(m.id)!.slice(0, 12000)}`);
 
   const [files, vendor] = await Promise.all([filesBlock(sb, orgId, { contactId }), vendorBlock(sb, orgId, contactId)]);
-  return assemble(`${who.name}'s thread`, [
+  // A vendor's page carries the Price book, so their call or quote can become items with their price (Coy, 2026-10-05).
+  const book = vendor ? await priceBookBlock(sb, orgId) : null;
+  const out = assemble(`${who.name}'s thread`, [
     { title: "Ids (for plans: archive, delete, set an address)", lines: [`This thread: contact ${contactId}`] },
     who.block,
     ...(vendor ? [vendor] : []),
     ...(files ? [files] : []),
     { title: `Messages (last ${msgs.length}, oldest first)`, lines, trimmable: true },
     { title: "Full transcripts of the most recent calls", lines: recentTranscripts, trimmable: true },
+    ...(book ? [book] : []),
   ]);
+  return vendor ? { ...out, plans: true } : out;
 }
 
 /** A vendor's page (Coy, 2026-10-04: Dusty "should be able to" see the vendor open): their prices and jobs. */

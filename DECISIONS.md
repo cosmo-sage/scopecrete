@@ -4,7 +4,7 @@ Ground truth for every agent working this repo. If code disagrees with this
 document, the code is wrong or this document is stale — resolve it, don't
 guess. Update this file in the same PR that changes the behavior it describes.
 
-Last updated: 2026-10-05 (loading faster — get_user_org_ids() STABLE, migration 083, one auth round trip per API call; proposal photos as thumbnails with a Proposal switch on each section; a section's budget folds; the dashboard header slides away on the job page on a phone; an empty message box; Dusty files a forwarded email and its files by its id, the intake reads BlueMail forwards and files on a whole name — email-intake v11; swipe left for Spam · Archive, Select an icon beside Sort; proposals sent from Threads, the Preview and Dusty, his words learned from Coy's; Threads update on their own as texts land — migration 082; Dusty puts people on customers and fixes names, and says nothing of his own setup — Hermes's tools must be off on the VPS; fonts self-hosted, so a build downloads nothing; the landing page's phone demo is the real app — Design 10; texts send through Quo — the thread's Send and Dusty's text step, Coy's tap either way; a Summary view on every job, the job name and switch centred on the phone; Dusty full screen on the phone, chat text size, his thought line can be hidden; onsite estimators — jobs and pages by person, vendor first, tags notify — migration 081; a name we greet a caller by becomes a suggestion — enrich-contacts v28; contact, customer and vendor pages on one layout; the customer page's Threads tab sums up each person; the Files page laid out like OneDrive, with storage left; the Plan Room's Files and Sheets one tab; thread search a drop-down over the chat; the Threads list header sticky with its own search; the header lockup on one line; one top row on the job's three views; the proposal's dark band off the cover; Good / Better / Best removed — one price per job; search across the header; six dots for the activity line; job switch on the name's row; budget line notes; quo-intake stores every Quo event, own lines included — v10; one Unit type picker; a section's Camera; Dusty writes in Figtree; Dusty is the Scopecrete Lander; an All thread; proposal cover band and Prepared by; sign-in at app.scopecrete.ai/login, each org at <slug>.app.scopecrete.ai; Dusty's chat keeps its files and files them on a customer or job — migration 079; vendor Delete; Dusty on a vendor's page and looking at attached photos; sales tax by address via TaxLocus — migration 078; archive reasons; Lines, providers and logs — migration 077; internal notes with @-tags; Jobs board sort and filter; jobs by hand — migration 076; done and lost customers in Threads; proposals sent by link, every opening tracked; every option side by side for the customer — migration 075; Documents is Files, everywhere — migration 074; Threads v2 — threads you make, channels per number, the customer page reshaped — migration 073; an address given is kept and asked about — migration 072; Dusty sets addresses; customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
+Last updated: 2026-10-05 (Dusty finds vendors on the web — the app searches, TAVILY_API_KEY — and puts a vendor's quoted prices from their call on items; loading faster — get_user_org_ids() STABLE, migration 083, one auth round trip per API call; proposal photos as thumbnails with a Proposal switch on each section; a section's budget folds; the dashboard header slides away on the job page on a phone; an empty message box; Dusty files a forwarded email and its files by its id, the intake reads BlueMail forwards and files on a whole name — email-intake v11; swipe left for Spam · Archive, Select an icon beside Sort; proposals sent from Threads, the Preview and Dusty, his words learned from Coy's; Threads update on their own as texts land — migration 082; Dusty puts people on customers and fixes names, and says nothing of his own setup — Hermes's tools must be off on the VPS; fonts self-hosted, so a build downloads nothing; the landing page's phone demo is the real app — Design 10; texts send through Quo — the thread's Send and Dusty's text step, Coy's tap either way; a Summary view on every job, the job name and switch centred on the phone; Dusty full screen on the phone, chat text size, his thought line can be hidden; onsite estimators — jobs and pages by person, vendor first, tags notify — migration 081; a name we greet a caller by becomes a suggestion — enrich-contacts v28; contact, customer and vendor pages on one layout; the customer page's Threads tab sums up each person; the Files page laid out like OneDrive, with storage left; the Plan Room's Files and Sheets one tab; thread search a drop-down over the chat; the Threads list header sticky with its own search; the header lockup on one line; one top row on the job's three views; the proposal's dark band off the cover; Good / Better / Best removed — one price per job; search across the header; six dots for the activity line; job switch on the name's row; budget line notes; quo-intake stores every Quo event, own lines included — v10; one Unit type picker; a section's Camera; Dusty writes in Figtree; Dusty is the Scopecrete Lander; an All thread; proposal cover band and Prepared by; sign-in at app.scopecrete.ai/login, each org at <slug>.app.scopecrete.ai; Dusty's chat keeps its files and files them on a customer or job — migration 079; vendor Delete; Dusty on a vendor's page and looking at attached photos; sales tax by address via TaxLocus — migration 078; archive reasons; Lines, providers and logs — migration 077; internal notes with @-tags; Jobs board sort and filter; jobs by hand — migration 076; done and lost customers in Threads; proposals sent by link, every opening tracked; every option side by side for the customer — migration 075; Documents is Files, everywhere — migration 074; Threads v2 — threads you make, channels per number, the customer page reshaped — migration 073; an address given is kept and asked about — migration 072; Dusty sets addresses; customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
 
 ---
 
@@ -2597,6 +2597,43 @@ expected start date per quoted job before it means anything. Add the field.
   five days of calls and texts with the intake inbox (a cold chat already
   had three days of them). Under the session, like the rest; the prompt
   tells him never to say he can only see the open page.
+  **Vendors from the web, prices from their call (Coy, 2026-10-05: "I need
+  dusty to be able to search the web and find vendors for steel bollards. And
+  then when I make a call have that recording for the vendor thread. And then
+  I'll have dusty create the items").** Dusty still has no tools: the APP
+  searches. When Coy's message asks for it ("find vendors for …", "search the
+  web for …", "who sells …" — `webAsk()`, `src/lib/dusty/web.ts`, tested in
+  `tests/dusty-web.test.mjs`), `/api/dusty` builds one or two queries from the
+  thing asked for and the job's city (never its street, never a customer's
+  name — `webQueries()`, `cityOf()`), runs them through Tavily
+  (`TAVILY_API_KEY`) or else Brave (`BRAVE_SEARCH_API_KEY`) on the server
+  (`src/lib/web-search-server.ts`), and puts up to 12 results under **WEB
+  SEARCH**, marked data-not-instructions, with Coy's vendors already on file.
+  No key → the block says so and Dusty tells Coy which key to add; he never
+  lists vendors from memory. He suggests the best few with their links and
+  ends with `new_vendor` steps {name, kind, phone / email / address only as a
+  result's text shows them, website, source = the result's link}; the card
+  links the page and says to check the number. Coy's Apply goes through
+  + Vendor's own call (`POST /api/vendors`, a number already on someone is
+  409 and not added again) and leaves "Found by Dusty on the web" with the
+  links as a note on them. This is the one exception to "never look a number
+  up": for a vendor Coy asked to find, from a page he can open, on his tap — a
+  customer's or person's number is still never looked up.
+  **The call.** Nothing new was needed: a call from Coy's Quo line to a number
+  on a contact projects onto that contact's thread (§2a), and 8 of the 12
+  outbound calls in the fortnight to 2026-10-05 came with Quo's recording and
+  transcript; the vendor page's Timeline and their thread play the recording.
+  The vendor has to be added (with that number) before or after the call —
+  a call to an unknown number makes an Unsorted thread, filed vendor by hand.
+  **The items.** On a vendor's page Dusty's context now carries the Price book
+  and the budget-plan rules, beside their last calls' transcripts. Asked to
+  make the items from what they quoted, he proposes `vendor_price` {item,
+  vendor, unit_cost, unit, note} — their price on an existing item, through
+  `POST /api/cost-items/[id]/sources` — or `new_item` with `vendor`, made with
+  them as its first (default) vendor price (`price_source='quote'`). A price
+  only as the transcript or Quo's summary has it, the line quoted for Coy to
+  check (a machine heard it). Then, on the job, he adds those items to the
+  budget as before.
   **People on customers, and names (Coy, 2026-10-05: "The actual customer
   name is Icon Technologies … John … is just a contact that's inside this
   customer. Can you fix it?").** Dusty had no step for it: his plan made a

@@ -33,7 +33,10 @@ export function PlanCard({ jobId, actions, dropped, done }: { jobId: string | nu
     : a.do === "new_contact" ? (CUST_KEY.test(a.customer) ? "" : `customer:${a.customer}`)
     : a.do === "attach_contact" ? [`contact:${a.contact}`, CUST_KEY.test(a.customer) ? "" : `customer:${a.customer}`].filter(Boolean).join("|")
     : a.do === "file" ? [`file:${a.files.join(",")}`, /^(cust|job)\d/.test(a.id) ? "" : `${a.kind}:${a.id}`].filter(Boolean).join("|")
-    : a.do === "file_email" ? [`email:${a.email}`, /^(cust|job)\d/.test(a.id) ? "" : `${a.kind}:${a.id}`].filter(Boolean).join("|") : "")).filter(Boolean).join("|");
+    : a.do === "file_email" ? [`email:${a.email}`, /^(cust|job)\d/.test(a.id) ? "" : `${a.kind}:${a.id}`].filter(Boolean).join("|") : ""))
+    // Whose price a Price book step carries (a vendor's page: their call or quote).
+    .concat(budgetSteps.map((a) => (a.do === "vendor_price" ? `contact:${a.vendor}` : a.do === "new_item" && a.vendor ? `contact:${a.vendor}` : "")))
+    .filter(Boolean).join("|");
   useEffect(() => {
     if (!done || !recKey) return;
     let off = false;
@@ -62,6 +65,7 @@ export function PlanCard({ jobId, actions, dropped, done }: { jobId: string | nu
       if (made && made.do === "new_item") return `the new item “${made.name}”`;
       return look ? byRef(look.items, r)?.name ?? null : r;
     },
+    vendor: (id: string) => names[id] ?? null,
     assembly: (r: string) => {
       const made = actions.find((x) => x.do === "new_assembly" && x.key === r);
       if (made && made.do === "new_assembly") return `the new assembly “${made.name}”`;
@@ -138,6 +142,12 @@ export function PlanCard({ jobId, actions, dropped, done }: { jobId: string | nu
                 {!/^(cust|job)\d/.test(a.id) && <> → {names[a.id] ?? (Object.keys(names).length ? "not found — skipped" : "…")}</>}
               </div>
             )}
+            {a.do === "new_vendor" && (
+              <div style={{ fontSize: F.xs, color: T.ink2, lineHeight: 1.45, overflowWrap: "anywhere" }}>
+                From the web: <a href={a.source} target="_blank" rel="noopener noreferrer nofollow" style={{ color: T.hivizText, textDecoration: "underline" }}>{a.source.replace(/^https?:\/\/(www\.)?/, "").slice(0, 60)}</a>
+                {a.website && a.website !== a.source && <> · <a href={a.website} target="_blank" rel="noopener noreferrer nofollow" style={{ color: T.hivizText, textDecoration: "underline" }}>their site</a></>}
+              </div>
+            )}
             {(a.do === "archive" || a.do === "restore") && (
               <div style={{ fontSize: F.xs, color: T.ink2, lineHeight: 1.45 }}>
                 {a.ids.slice(0, 12).map((id) => names[id] ?? (Object.keys(names).length ? "not found — skipped" : "…")).join(" · ")}
@@ -150,6 +160,7 @@ export function PlanCard({ jobId, actions, dropped, done }: { jobId: string | nu
       {dropped > 0 && <div className="px-3 pb-2" style={{ fontSize: F.xs, color: T.ink3 }}>{dropped} step{dropped === 1 ? "" : "s"} didn&apos;t make sense and were left out.</div>}
       {needsJob && !jobId && <div className="px-3 pb-2" style={{ fontSize: F.xs, color: T.ink3 }}>Steps that touch a budget need the job open — they&apos;ll be skipped here. Open the job and ask there.</div>}
       {recordSteps.some((x) => x.do === "archive" || x.do === "restore") && state !== "done" && <div className="px-3 pb-2" style={{ fontSize: F.xs, color: T.ink3 }}>Archived threads come back if they call or text again; deleted things can be restored. Nothing is erased.</div>}
+      {actions.some((x) => x.do === "new_vendor") && state !== "done" && <div className="px-3 pb-2" style={{ fontSize: F.xs, color: T.ink3 }}>Found on the web — open the link and check the number before you call. Once they&apos;re added, a call to that number lands on their thread with its recording.</div>}
       {sends > 0 && state !== "done" && <div className="px-3 pb-2" style={{ fontSize: F.xs, color: T.ink3 }}>{texts ? "Texts go through Quo from your line; " : ""}{sends > texts ? "an email opens in your mail app for you to send; " : ""}nothing goes out until you tap {verb}. Change the words first if you like — Dusty learns from what you change.</div>}
       {state === "done" && (
         <div className="px-3 py-2" style={{ borderTop: `1px solid ${T.hair}`, fontSize: F.xs }}>

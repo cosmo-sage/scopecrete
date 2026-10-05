@@ -266,7 +266,7 @@ test("a company's office number is a contact on the customer, never looked up (C
   const d = (a) => describe(a, { item: () => null, area: () => "" });
   assert.match(d(p.actions[0]), /Add “Icon Technologies office” \(Office\) to the customer — \(225\) 555-0100/);
   assert.match(d(p.actions[1]), /the new customer above/);
-  assert.match(RECORD_RULES, /Never offer to look one up or search the web/);
+  assert.match(RECORD_RULES, /Never look up or guess a customer's or a person's number/);
 });
 
 test("ids never show in Dusty's words — only in the plan (2026-10-05)", async () => {

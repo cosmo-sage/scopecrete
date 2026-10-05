@@ -81,8 +81,8 @@ export async function applyPlan(jobId: string | null, actions: PlanAction[], loo
     return (b.lines ?? []).length as number;
   };
   // Groups first, so items can be filed in them; then changes; then the budget.
-  const order = { new_group: 0, rename_group: 1, update_item: 1, new_area: 2, new_item: 3, retire_item: 4, new_assembly: 5, add_to_assembly: 6, remove_from_assembly: 6,
-    add: 7, add_group: 8, load_assembly: 9, remove_group: 10, set_tax: 10, archive: 11, restore: 11, set_address: 11, new_job: 11, new_customer: 11, attach_contact: 11, new_contact: 11, set_name: 11, file: 11, file_email: 11, text: 11, send_proposal: 11 } as const;
+  const order = { new_group: 0, rename_group: 1, update_item: 1, new_area: 2, new_item: 3, vendor_price: 4, retire_item: 4, new_assembly: 5, add_to_assembly: 6, remove_from_assembly: 6,
+    add: 7, add_group: 8, load_assembly: 9, remove_group: 10, set_tax: 10, archive: 11, restore: 11, set_address: 11, new_job: 11, new_customer: 11, attach_contact: 11, new_contact: 11, set_name: 11, file: 11, file_email: 11, text: 11, send_proposal: 11, new_vendor: 11 } as const;
   // Archive / restore steps run through applyRecords (no job needed).
   const steps = [...actions].filter((a) => !RECORD_STEPS.has(a.do)).sort((a, b) => order[a.do] - order[b.do]);
   for (const a of steps) {
@@ -192,8 +192,10 @@ export async function applyPlan(jobId: string | null, actions: PlanAction[], loo
         out.push({ ok: true, text: `Changed ${a.name ?? it.name}` });
       } else if (a.do === "new_item") {
         const ar = areaId(a.area);
+        // With a vendor, the price is theirs (their first, default price — the vendor page's Prices tab shows it).
         const b = await call("/api/cost-items", "POST", { name: a.name, unit: a.unit, cost_type: a.cost_type, unit_cost: a.unit_cost,
-          qty_rule: a.qty_rule, rule_params: {}, cost_group_id: groupId(a.group) });
+          qty_rule: a.qty_rule, rule_params: {}, cost_group_id: groupId(a.group),
+          ...(a.vendor ? { vendor_contact_id: a.vendor, price_source: a.unit_cost === null ? undefined : "quote" } : {}) });
         look.items.push({ id: b.item.id, name: a.name, cost_group_id: b.item.cost_group_id ?? null });
         if (a.key) madeItem.set(a.key, b.item.id);
         if (a.add) {
@@ -201,6 +203,11 @@ export async function applyPlan(jobId: string | null, actions: PlanAction[], loo
           await addLine({ cost_item_id: b.item.id, section_id: ar.id }, a.qty);
         }
         out.push({ ok: true, text: `Made “${a.name}”${a.add ? " and put it on the budget" : ""}` });
+      } else if (a.do === "vendor_price") {
+        const it = itemOf(a.item);
+        if (!it) { out.push({ ok: false, text: `Item ${a.item} isn't in the Price book — skipped` }); continue; }
+        await call(`/api/cost-items/${it.id}/sources`, "POST", { vendor_contact_id: a.vendor, unit_cost: a.unit_cost, unit: a.unit, note: a.note ? `From Dusty's plan: ${a.note}` : "From Dusty's plan" });
+        out.push({ ok: true, text: `Put their price on ${it.name}${a.unit_cost !== null ? ` — $${a.unit_cost}${a.unit ? `/${a.unit}` : ""}` : ""}` });
       } else if (a.do === "add") {
         const it = itemOf(a.item), ar = areaId(a.area);
         if (!it) { out.push({ ok: false, text: `Item ${a.item} isn't in the Price book — skipped` }); continue; }
@@ -274,6 +281,18 @@ export async function applyRecords(actions: PlanAction[]): Promise<StepResult[]>
         } catch (e) {
           out.push({ ok: false, text: `“${a.name}”: ${e instanceof Error ? e.message : String(e)}` });
         }
+        continue;
+      }
+      if (a.do === "new_vendor") {
+        // Their own form's call (+ Vendor) — a phone or email already on someone answers 409 with who.
+        const r = await fetch("/api/vendors", { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: a.name, subtype: a.kind, phone: a.phone, email: a.email, address: a.address, service_area: a.service_area }) });
+        const b = await r.json().catch(() => ({}));
+        if (r.status === 409) { out.push({ ok: false, text: `${a.name}: ${b.error ?? "already one of your contacts"} — not added again` }); continue; }
+        if (!r.ok) throw new Error(b?.error || `HTTP ${r.status}`);
+        const where = [a.website ? `Website: ${a.website}` : null, a.source !== a.website ? `Found on: ${a.source}` : null].filter(Boolean).join("\n");
+        await call(`/api/people/${b.vendor.id}/notes`, "POST", { body: `Found by Dusty on the web — check the details on their site.\n${where}` }).catch(() => {});
+        out.push({ ok: true, text: `Added ${a.name} to Vendors${a.phone ? " — a call to their number now lands on their thread" : " — no number yet; add it from their site"}` });
         continue;
       }
       if (a.do === "set_name") {

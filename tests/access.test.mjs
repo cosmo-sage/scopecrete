@@ -22,8 +22,8 @@ test("an estimator keeps only the pages they were given, unknown ones dropped", 
   assert.deepEqual(a.pages, ["plan_room"]);
   assert.equal(can(a, "plan_room"), true);
   assert.equal(can(a, "budget"), false);
-  assert.deepEqual(menuPages(a), ["scope"]);
-  assert.deepEqual(menuPages({ ...a, pages: ["files"] }), ["scope", "files"]);
+  assert.deepEqual(menuPages(a), ["scope", "roadmap"]);
+  assert.deepEqual(menuPages({ ...a, pages: ["files"] }), ["scope", "files", "roadmap"]);
 });
 
 test("an estimator is sent to the board from anywhere else", () => {
@@ -32,6 +32,7 @@ test("an estimator is sent to the board from anywhere else", () => {
   assert.equal(redirectFor(a, "/dashboard/messages/abc"), "/dashboard/scope");
   assert.equal(redirectFor(a, "/dashboard/customers"), "/dashboard/scope");
   assert.equal(redirectFor(a, "/dashboard/scope"), null);
+  assert.equal(redirectFor(a, "/dashboard/roadmap"), null);
   assert.equal(redirectFor(a, "/dashboard/files"), null);
   assert.equal(redirectFor({ ...a, pages: [] }, "/dashboard/files"), "/dashboard/scope");
 });

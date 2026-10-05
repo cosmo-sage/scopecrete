@@ -357,6 +357,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 <div style={{ fontSize: F.xs, color: T.ink3 }}>{l.note}</div>
               </Link>
             ))}
+            {/* Feedback and the Roadmap (084) — every signed-in user, estimators too. */}
+            <Link href={`/dashboard/roadmap?feedback=1&from=${encodeURIComponent(pathname ?? "")}`} onClick={() => setMenuOpen(false)}
+              className="block py-2.5 no-underline" style={{ borderBottom: `1px solid ${T.hairSoft}`, color: T.ink }}>
+              <div style={{ fontSize: F.md, fontWeight: 600 }}>Give feedback</div>
+              <div style={{ fontSize: F.xs, color: T.ink3 }}>An idea or something wrong — and the Roadmap, to vote on what comes next</div>
+            </Link>
             <InstallApp />
             <button onClick={() => setLooksOpen((o) => !o)} aria-expanded={looksOpen} className="text-left py-2.5" style={{ borderBottom: `1px solid ${T.hairSoft}`, cursor: "pointer" }}>
               <div style={{ fontSize: F.md, fontWeight: 600 }}>Appearance {looksOpen ? "−" : "+"}</div>

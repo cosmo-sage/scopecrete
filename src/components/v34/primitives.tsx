@@ -183,6 +183,12 @@ export const NavIcon = ({ k, on, color }: { k: string; on: boolean; color?: stri
       <circle cx="3.6" cy="4.6" r="1" fill={c} /><circle cx="3.6" cy="9.5" r="1" fill={c} /><circle cx="3.6" cy="14.4" r="1" fill={c} />
     </svg>
   );
+  if (k === "roadmap") return (
+    <svg {...box}>
+      <path {...p} d="M3 16.4V2.6M3 3.4h9.4l-1.8 2.8 1.8 2.8H3" />
+      <path {...p} d="M8.2 13.2l2.4-2.4 2.4 2.4M10.6 10.8v5.6" />
+    </svg>
+  );
   if (k === "vendors") return (
     <svg {...box}>
       <path {...p} d="M1.8 5.6h9.4v7.6H1.8zM11.2 8h3.2l2.6 2.6v2.6h-5.8" />

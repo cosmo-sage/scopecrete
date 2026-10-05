@@ -4,7 +4,7 @@ Ground truth for every agent working this repo. If code disagrees with this
 document, the code is wrong or this document is stale — resolve it, don't
 guess. Update this file in the same PR that changes the behavior it describes.
 
-Last updated: 2026-10-05 (a thread's + adds a number beside the others, AI Chat hidden until it is built; Threads opens on All; Dusty finds vendors on the web — the app searches, TAVILY_API_KEY — and puts a vendor's quoted prices from their call on items; loading faster — get_user_org_ids() STABLE, migration 083, one auth round trip per API call; proposal photos as thumbnails with a Proposal switch on each section; a section's budget folds; the dashboard header slides away on the job page on a phone; an empty message box; Dusty files a forwarded email and its files by its id, the intake reads BlueMail forwards and files on a whole name — email-intake v11; swipe left for Spam · Archive, Select an icon beside Sort; proposals sent from Threads, the Preview and Dusty, his words learned from Coy's; Threads update on their own as texts land — migration 082; Dusty puts people on customers and fixes names, and says nothing of his own setup — Hermes's tools must be off on the VPS; fonts self-hosted, so a build downloads nothing; the landing page's phone demo is the real app — Design 10; texts send through Quo — the thread's Send and Dusty's text step, Coy's tap either way; a Summary view on every job, the job name and switch centred on the phone; Dusty full screen on the phone, chat text size, his thought line can be hidden; onsite estimators — jobs and pages by person, vendor first, tags notify — migration 081; a name we greet a caller by becomes a suggestion — enrich-contacts v28; contact, customer and vendor pages on one layout; the customer page's Threads tab sums up each person; the Files page laid out like OneDrive, with storage left; the Plan Room's Files and Sheets one tab; thread search a drop-down over the chat; the Threads list header sticky with its own search; the header lockup on one line; one top row on the job's three views; the proposal's dark band off the cover; Good / Better / Best removed — one price per job; search across the header; six dots for the activity line; job switch on the name's row; budget line notes; quo-intake stores every Quo event, own lines included — v10; one Unit type picker; a section's Camera; Dusty writes in Figtree; Dusty is the Scopecrete Lander; an All thread; proposal cover band and Prepared by; sign-in at app.scopecrete.ai/login, each org at <slug>.app.scopecrete.ai; Dusty's chat keeps its files and files them on a customer or job — migration 079; vendor Delete; Dusty on a vendor's page and looking at attached photos; sales tax by address via TaxLocus — migration 078; archive reasons; Lines, providers and logs — migration 077; internal notes with @-tags; Jobs board sort and filter; jobs by hand — migration 076; done and lost customers in Threads; proposals sent by link, every opening tracked; every option side by side for the customer — migration 075; Documents is Files, everywhere — migration 074; Threads v2 — threads you make, channels per number, the customer page reshaped — migration 073; an address given is kept and asked about — migration 072; Dusty sets addresses; customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
+Last updated: 2026-10-05 (feedback and the Roadmap — votes, comments, Coy publishes — migration 084, not applied; a thread's + adds a number beside the others, AI Chat hidden until it is built; Threads opens on All; Dusty finds vendors on the web — the app searches, TAVILY_API_KEY — and puts a vendor's quoted prices from their call on items; loading faster — get_user_org_ids() STABLE, migration 083, one auth round trip per API call; proposal photos as thumbnails with a Proposal switch on each section; a section's budget folds; the dashboard header slides away on the job page on a phone; an empty message box; Dusty files a forwarded email and its files by its id, the intake reads BlueMail forwards and files on a whole name — email-intake v11; swipe left for Spam · Archive, Select an icon beside Sort; proposals sent from Threads, the Preview and Dusty, his words learned from Coy's; Threads update on their own as texts land — migration 082; Dusty puts people on customers and fixes names, and says nothing of his own setup — Hermes's tools must be off on the VPS; fonts self-hosted, so a build downloads nothing; the landing page's phone demo is the real app — Design 10; texts send through Quo — the thread's Send and Dusty's text step, Coy's tap either way; a Summary view on every job, the job name and switch centred on the phone; Dusty full screen on the phone, chat text size, his thought line can be hidden; onsite estimators — jobs and pages by person, vendor first, tags notify — migration 081; a name we greet a caller by becomes a suggestion — enrich-contacts v28; contact, customer and vendor pages on one layout; the customer page's Threads tab sums up each person; the Files page laid out like OneDrive, with storage left; the Plan Room's Files and Sheets one tab; thread search a drop-down over the chat; the Threads list header sticky with its own search; the header lockup on one line; one top row on the job's three views; the proposal's dark band off the cover; Good / Better / Best removed — one price per job; search across the header; six dots for the activity line; job switch on the name's row; budget line notes; quo-intake stores every Quo event, own lines included — v10; one Unit type picker; a section's Camera; Dusty writes in Figtree; Dusty is the Scopecrete Lander; an All thread; proposal cover band and Prepared by; sign-in at app.scopecrete.ai/login, each org at <slug>.app.scopecrete.ai; Dusty's chat keeps its files and files them on a customer or job — migration 079; vendor Delete; Dusty on a vendor's page and looking at attached photos; sales tax by address via TaxLocus — migration 078; archive reasons; Lines, providers and logs — migration 077; internal notes with @-tags; Jobs board sort and filter; jobs by hand — migration 076; done and lost customers in Threads; proposals sent by link, every opening tracked; every option side by side for the customer — migration 075; Documents is Files, everywhere — migration 074; Threads v2 — threads you make, channels per number, the customer page reshaped — migration 073; an address given is kept and asked about — migration 072; Dusty sets addresses; customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
 
 ---
 
@@ -3549,6 +3549,58 @@ expected start date per quoted job before it means anything. Add the field.
   Coy's tap sends it through the same route (`applyRecords()`). §10's rule
   holds: every text is Coy's tap. Testing sends only to a phone of Coy's that
   is not one of the org's lines, never a customer.
+
+- **Feedback and the Roadmap (migration 084, written 2026-10-05, NOT
+  applied — waits on Coy's "apply 084").** Coy: *"I need to have a place for
+  internal users and other orgs to give feedback on the app and we need a
+  pipeline page … where people can see … what features are recommended and
+  then people can vote on those recommended features and comment on them and
+  see what's being worked on similar to how JobTread does it I like their
+  Roadmap page."* **Platform data, not an org's** — every org sees the same
+  board, so `roadmap_items`, `roadmap_votes`, `roadmap_comments` are NOT
+  under `get_user_org_ids()`: RLS on, no policies, no grants; everything goes
+  through SECURITY DEFINER `sc_roadmap_*` functions (execute for
+  authenticated only) that check the caller. **`platform_admins`** is new —
+  the people who run ScopeCrete itself, not an org's owner; seeded with Coy's
+  two accounts by email (admin@saccobuilt.com, coysacco@gmail.com);
+  `sc_is_platform_admin()`. The start of the super-user SaaS admin.
+  - **Feedback** (`sc_roadmap_submit`, any member of any org, estimators
+    too; ten a day each): one box, its first line the title, a kind (Idea ·
+    Something's wrong · Other) and the page it was sent from. It lands as
+    **new — seen only by its writer and Coy**, because feedback can name an
+    org's customers and jobs; nothing one org writes reaches another until
+    Coy publishes it, and he can reword it first (what they sent is kept in
+    `original_title` / `original_body`, shown only to him).
+  - **The board** — Under consideration · Planned · In progress · Released
+    (`considering` · `planned` · `in_progress` · `released`), published
+    items only, with vote counts and comments; `declined` ("Not planned")
+    is hidden again. One vote per person, on what isn't released yet
+    (`sc_roadmap_vote`); comments (`sc_roadmap_comment`) carry the writer's
+    name and their org's name, read when written, and only their writer or
+    Coy removes one. A writer's name and org on an item show only once
+    published.
+  - **Coy only** (`sc_roadmap_admin`, `sc_roadmap_add`): the status, the
+    words, a note shown on the item ("In the next update"), and items of his
+    own straight onto the board. The page's **Inbox** lists new feedback from
+    every org.
+  - **Where:** `/dashboard/roadmap` (`src/components/v34/roadmap.tsx`), on
+    the rail after Logs and in the Toolbox, open to estimators too
+    (`menuPages()` / `redirectFor()`); columns when the pane is 900px+, a
+    column at a time on a phone; search, Most votes / Newest. Settings (☰)
+    → **Give feedback** opens the form with the page Coy was on. APIs
+    `/api/roadmap` (GET list + `admin`, POST feedback or `{add:true}`),
+    `/api/roadmap/[id]` (PATCH `{vote}` or Coy's change),
+    `/api/roadmap/[id]/comments` (GET, POST, DELETE `?comment=`) — session
+    client; until 084 is applied the page says it is waiting for it.
+    `src/lib/roadmap.ts`, tested in `tests/roadmap.test.mjs`.
+  - Rehearsed (rolled back) on the live database: a member's feedback seen
+    by them and Coy only, no vote on it, no admin change, no direct table
+    read; Coy rewords and publishes it (original kept), adds his own; a
+    member votes once (a second vote is a no-op), comments, unvotes; a
+    declined item leaves the board; a signed-in user in no org sees nothing
+    and can't send; anon refused.
+  - Not built: telling Coy about new feedback (activity line or email), or
+    telling a writer when their item moves.
 
 ---
 

@@ -18,13 +18,14 @@ export const PAGES: PageDef[] = [
   { k: "vendors", label: "Vendors", href: "/dashboard/vendors", match: (p) => p.startsWith("/dashboard/vendors") },
   { k: "files", label: "Files", href: "/dashboard/files", match: (p) => p.startsWith("/dashboard/files") },
   { k: "logs", label: "Logs", href: "/dashboard/more/logs", match: (p) => p.startsWith("/dashboard/more/logs") },
+  { k: "roadmap", label: "Roadmap", href: "/dashboard/roadmap", match: (p) => p.startsWith("/dashboard/roadmap") },
 ];
 export const PAGE = new Map(PAGES.map((p) => [p.k, p]));
 
 export interface Menus { rail: string[]; footer: string[] }
 /** Rail order includes "dusty"; the footer holds 4 pages around Dusty (2 · Dusty · 2 — the last slot is the Toolbox). */
 export const DEFAULT_MENUS: Menus = {
-  rail: ["dashboard", "threads", "dusty", "scope", "cash", "contacts", "customers", "pricebook", "vendors", "files", "logs"],
+  rail: ["dashboard", "threads", "dusty", "scope", "cash", "contacts", "customers", "pricebook", "vendors", "files", "logs", "roadmap"],
   footer: ["dashboard", "threads", "scope"],
 };
 

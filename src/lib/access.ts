@@ -43,7 +43,7 @@ export const can = (a: Access, page: FieldPage) => !a.limited || a.pages.include
 /** Menu pages (src/lib/v34/pages.ts keys) an estimator sees: Jobs, and Files when given. */
 export function menuPages(a: Access): string[] | null {
   if (!a.limited) return null;
-  return ["scope", ...(a.pages.includes("files") ? ["files"] : [])];
+  return ["scope", ...(a.pages.includes("files") ? ["files"] : []), "roadmap"];
 }
 
 /**
@@ -54,6 +54,8 @@ export function redirectFor(a: Access, path: string): string | null {
   if (!a.limited) return null;
   const p = path.replace(/\/+$/, "");
   if (p === "/dashboard/scope") return null;
+  // The Roadmap is the platform's, not the org's: feedback and votes from anyone signed in (084).
+  if (p === "/dashboard/roadmap") return null;
   if (p === "/dashboard/files") return a.pages.includes("files") ? null : "/dashboard/scope";
   const job = /^\/dashboard\/scope\/([0-9a-f-]{36})(?:\/(plans|proposal|summary))?$/.exec(p);
   if (job) {

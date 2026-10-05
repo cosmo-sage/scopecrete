@@ -146,6 +146,13 @@ export const NavIcon = ({ k, on, color }: { k: string; on: boolean; color?: stri
       <path {...p} d="M3.6 16.2c.6-3.2 3-5 5.9-5s5.3 1.8 5.9 5" />
     </svg>
   );
+  if (k === "contacts") return (
+    <svg {...box}>
+      <rect {...p} x="3.6" y="2.4" width="11.8" height="14.2" rx="1" />
+      <circle {...p} cx="9.5" cy="7.6" r="2" />
+      <path {...p} d="M6.3 13.2c.5-1.7 1.7-2.6 3.2-2.6s2.7.9 3.2 2.6M2.2 5.4h2.6M2.2 9.5h2.6M2.2 13.6h2.6" />
+    </svg>
+  );
   if (k === "pricebook") return (
     <svg {...box}>
       <path {...p} d="M4 2.6h9.6a1 1 0 0 1 1 1v12.8H5a1 1 0 0 1-1-1z" />

@@ -297,9 +297,9 @@ export function DustyPanel({ open, onClose, onBusy, onStream }: {
     } catch (e) { setErr(`Voice message: ${e instanceof Error ? e.message : String(e)}`); }
     finally { setHearing(false); }
   }
-  function create(what: "customer" | "job" | "receipt") {
+  function create(what: "contact" | "customer" | "job" | "receipt") {
     setPlusOpen(false);
-    const href = what === "customer" ? "/dashboard/customers?new=1" : what === "job" ? "/dashboard/scope?new=1" : "/dashboard/vendors?receipt=1";
+    const href = what === "contact" ? "/dashboard/contacts?new=1" : what === "customer" ? "/dashboard/customers?new=1" : what === "job" ? "/dashboard/scope?new=1" : "/dashboard/vendors?receipt=1";
     // On a phone Dusty covers the page, so he steps aside for the form.
     if (!window.matchMedia("(min-width: 1024px)").matches) onClose();
     router.push(href);
@@ -429,6 +429,7 @@ export function DustyPanel({ open, onClose, onBusy, onStream }: {
                 <div role="menu" className="absolute right-0 mt-1 rounded overflow-hidden" style={{ zIndex: 71, width: 230, background: T.card, border: `1px solid ${T.hair}`, boxShadow: "0 10px 30px rgba(0,0,0,.18)" }}>
                   {([
                     ["chat", "New chat", "Start fresh with Dusty"],
+                    ["contact", "New contact", "A person to keep — a number, an email, an address"],
                     ["customer", "New customer", "A household, business or school"],
                     ["job", "New job", "For a customer — on the Jobs board"],
                     ["receipt", "Add a receipt or quote", "Photo or file — Dusty reads the vendor and prices"],

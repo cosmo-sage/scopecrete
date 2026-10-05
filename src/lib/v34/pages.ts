@@ -12,6 +12,7 @@ export const PAGES: PageDef[] = [
   { k: "threads", label: "Threads", href: "/dashboard/messages", match: (p) => p.startsWith("/dashboard/messages") },
   { k: "scope", label: "Jobs", href: "/dashboard/scope", match: (p) => p.startsWith("/dashboard/scope") },
   { k: "cash", label: "Cash", href: "/dashboard/cash", match: (p) => p.startsWith("/dashboard/cash") },
+  { k: "contacts", label: "Contacts", href: "/dashboard/contacts", match: (p) => p.startsWith("/dashboard/contacts") },
   { k: "customers", label: "Customers", href: "/dashboard/customers", match: (p) => p.startsWith("/dashboard/customers") },
   { k: "pricebook", label: "Price book", href: "/dashboard/price-book", match: (p) => p.startsWith("/dashboard/price-book") },
   { k: "vendors", label: "Vendors", href: "/dashboard/vendors", match: (p) => p.startsWith("/dashboard/vendors") },
@@ -23,7 +24,7 @@ export const PAGE = new Map(PAGES.map((p) => [p.k, p]));
 export interface Menus { rail: string[]; footer: string[] }
 /** Rail order includes "dusty"; the footer holds 4 pages around Dusty (2 · Dusty · 2 — the last slot is the Toolbox). */
 export const DEFAULT_MENUS: Menus = {
-  rail: ["dashboard", "threads", "dusty", "scope", "cash", "customers", "pricebook", "vendors", "files", "logs"],
+  rail: ["dashboard", "threads", "dusty", "scope", "cash", "contacts", "customers", "pricebook", "vendors", "files", "logs"],
   footer: ["dashboard", "threads", "scope"],
 };
 

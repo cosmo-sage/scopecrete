@@ -7,9 +7,12 @@ import { EMAIL_COLS, emailView } from "@/lib/emails-server";
  * One mirrored email (migration 061).
  *
  * GET → { email (with its text), attachments (each with its file, signed),
- *         options: { customers, jobs } for filing }.
+ *         options: { customers, jobs } for filing, person_emails — the
+ *         addresses on the person it's filed on }.
  * PATCH { customer_id?, contact_id?, job_id?, accept_suggestion? } — Coy's
- *   filing (match 'coy'). Filing on a job moves the email's files onto that job
+ *   filing (match 'coy'). Filed on a customer with no person (or a person
+ *   from another customer), it goes on the customer's primary person, so it
+ *   shows in their Email channel (the email design, 2026-10-05). Filing on a job moves the email's files onto that job
  *   and turns In plan room on for its PDFs; all three null puts it back to
  *   unfiled (Undo). Filing a quarantined email releases its held files (the
  *   function fetches them within five minutes). Nothing here creates a contact.
@@ -35,9 +38,20 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     supabase.from("customers").select("id, name").eq("org_id", orgId).is("merged_into_customer_id", null).not("name", "is", null).order("name").limit(500),
     supabase.from("jobs").select("id, title, customer_id, status").eq("org_id", orgId).is("archived_at", null).order("created_at", { ascending: false }).limit(300),
   ]);
+  // The filed person's addresses, so the sheet can offer to add the sender's.
+  const filedOn = (row as Record<string, unknown>).contact_id as string | null;
+  let personEmails: string[] = [];
+  if (filedOn) {
+    const [{ data: ce }, { data: pc }] = await Promise.all([
+      supabase.from("contact_emails").select("email").eq("org_id", orgId).eq("contact_id", filedOn),
+      supabase.from("contacts").select("email").eq("org_id", orgId).eq("id", filedOn).maybeSingle(),
+    ]);
+    personEmails = [...new Set([...((ce ?? []) as Array<{ email: string }>).map((x) => String(x.email).toLowerCase()), ...(pc?.email ? [String(pc.email).toLowerCase()] : [])])];
+  }
   const signed = await signFiles(supabase, (files ?? []) as Array<Record<string, unknown>>) as Array<Record<string, unknown>>;
   return applyCookies(NextResponse.json({
     email: { ...email, text_body: (row as Record<string, unknown>).text_body },
+    person_emails: personEmails,
     attachments: ((atts ?? []) as Array<Record<string, unknown>>).map((a) => ({ ...a, file: signed.find((f) => f.id === a.file_id) ?? null })),
     options: { customers: custs ?? [], jobs: jobs ?? [] },
   }));
@@ -70,7 +84,16 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   if (b.accept_suggestion === true && !customer) return bad("There is no suggestion to take.");
 
   // Every id in the org; a job brings its customer when none is named.
-  if (customer) { const { data } = await supabase.from("customers").select("id").eq("org_id", orgId).eq("id", customer).maybeSingle(); if (!data) return bad("No such customer."); }
+  if (customer) {
+    const { data } = await supabase.from("customers").select("id, primary_contact_id").eq("org_id", orgId).eq("id", customer).maybeSingle();
+    if (!data) return bad("No such customer.");
+    // No person named: the customer's primary person, unless the one it's on already belongs to this customer.
+    if (contact === undefined && data.primary_contact_id) {
+      let keep = false;
+      if (e.contact_id) { const { data: cur } = await supabase.from("contacts").select("customer_id").eq("org_id", orgId).eq("id", e.contact_id as string).maybeSingle(); keep = cur?.customer_id === customer; }
+      if (!keep) contact = data.primary_contact_id as string;
+    }
+  }
   if (contact) { const { data } = await supabase.from("contacts").select("id, customer_id").eq("org_id", orgId).eq("id", contact).maybeSingle(); if (!data) return bad("No such contact."); if (customer === undefined) customer = (data.customer_id as string | null) ?? null; }
   if (job) {
     const { data } = await supabase.from("jobs").select("id, customer_id, contact_id").eq("org_id", orgId).eq("id", job).maybeSingle();

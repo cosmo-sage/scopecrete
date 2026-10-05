@@ -2772,7 +2772,7 @@ expected start date per quoted job before it means anything. Add the field.
   functions, but every RLS read ran `get_user_org_ids()` once per row — it was
   plpgsql with no volatility, so VOLATILE, and no org_id index could be used
   (four list reads as Coy: 49.8 ms; STABLE: 10.9 ms). **Migration 083** marks
-  it STABLE (waits on Coy's "apply 083"). Every API call checked the session
+  it STABLE (applied 2026-10-05 on Coy's "Apply 083"; checked after: STABLE, the same reads 13.5 ms, Coy still sees 208 contacts and 42 jobs). Every API call checked the session
   with `auth.getUser()`, a round trip to Supabase Auth (p50 25 ms, p90 ~180
   ms), then `sc_my_orgs`, then `org_members`, one after another;
   `getApiSession()` now verifies the token locally with `getClaims()` (the

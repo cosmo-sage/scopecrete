@@ -187,24 +187,17 @@ export default function ChatThreadPage() {
   const headerTitle = name ?? formatPhone(phone);
   const openJob = jobs && jobs.length > 0 ? jobs[0] : null;
 
-  // Their own page (Contact ›): next steps, jobs, what Dusty read — as before.
+  // Their own page (Contact ›) — the customer page's layout (person-view.tsx, 2026-10-05).
+  // A vendor's own page is the vendor page: one place for them, prices and all.
   if (person && !loading && !error && personPage) {
+    if (person.contact.bucket === "vendor") {
+      return <VendorRedirect href={`/dashboard/vendors/${contactId}?from=threads${threadKey ? `&t=${encodeURIComponent(threadKey)}` : ""}`} />;
+    }
     return (
       <div className="sc-pinned overflow-y-auto flex flex-col" style={{ background: T.slab }}>
-        <div className="px-4 py-2" style={{ background: T.card, borderBottom: `1px solid ${T.hairSoft}` }}>
-          <Link href={`/dashboard/messages/${contactId}${tq}`} style={{ ...eyebrow, color: T.chalk }}>‹ Back to the conversation</Link>
-        </div>
-        {merges.map((m) => (
-          <div key={m.id} className="px-4 py-1.5 flex items-center gap-2 text-[11px]"
-            style={{ background: DA.elevated, borderBottom: `1px solid ${DA.border}`, color: DA.textSecondary }}>
-            <span className="flex-1 min-w-0 truncate">{m.phone ? formatPhone(m.phone) : "Another number"} was merged into this person</span>
-            <button onClick={() => void undo(m.id)} disabled={undoing === m.id}
-              style={{ color: DA.accent, fontWeight: 600, cursor: "pointer", background: "none", border: "none" }}>
-              {undoing === m.id ? "Undoing…" : "Undo"}
-            </button>
-          </div>
-        ))}
-        <PersonView person={person} messages={messages}
+        <PersonView person={person} messages={messages} channels={channels}
+          back={{ href: `/dashboard/messages/${contactId}${tq}`, label: "Back to the thread" }}
+          merges={merges} onUndoMerge={undo}
           onReload={() => setReload((n) => n + 1)} onMerge={(id) => setMerging({ preselect: id ?? null })} />
         {merging && (
           <MergeSheet contactId={contactId} keepLabel={headerTitle} keepCount={messages.length}
@@ -221,7 +214,7 @@ export default function ChatThreadPage() {
   const role = c ? roleOf({ bucket: c.bucket, subtype: c.subtype, customer_id: c.customer_id ?? null, is_primary_on_customer: true, customer_people: 1 }) : "unsorted";
   const pageLink = c?.bucket === "customer" && c.customer_id
     ? { href: `/dashboard/customers/${c.customer_id}?contact=${contactId}&from=threads${threadKey ? `&t=${encodeURIComponent(threadKey)}` : ""}`, label: "Customer page" }
-    : c?.bucket === "vendor" ? { href: `/dashboard/vendors/${contactId}`, label: "Vendor page" }
+    : c?.bucket === "vendor" ? { href: `/dashboard/vendors/${contactId}?from=threads${threadKey ? `&t=${encodeURIComponent(threadKey)}` : ""}`, label: "Vendor page" }
     : { href: `/dashboard/messages/${contactId}?person=1${threadKey ? `&t=${encodeURIComponent(threadKey)}` : ""}`, label: "Contact" };
   const inThreads = (threads?.custom ?? []).filter((t) => t.contact_ids.includes(contactId));
   const lastAt = messages.length ? messages[messages.length - 1].occurred_at : null;
@@ -231,8 +224,9 @@ export default function ChatThreadPage() {
     channels.some((x) => x.kind === "email" && x.reachable) ? "email" : null,
     inThreads.length ? `in ${inThreads.map((t) => t.name).join(", ")}` : null,
     lastAt ? `last heard ${relTime(lastAt)}` : null,
-    firstLine?.name ? `first reached you on the ${firstLine.name} line, ${new Date(firstLine.at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : null,
   ].filter(Boolean).join(" · ");
+  // Where they first reached you lives in Internal notes now, not the header (Coy, 2026-10-05).
+  const leadSource = firstLine?.name ? `First reached you on the ${firstLine.name} line, ${new Date(firstLine.at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}` : null;
   // Internal notes are a tab of their own, first on the left (Coy, 2026-10-04) — but a person
   // still opens on their conversation, not on the notes.
   const nNotes = person?.notes?.length ?? 0;
@@ -362,10 +356,7 @@ export default function ChatThreadPage() {
               <button style={seg(true)}>All {channel?.kind === "email" ? emails.length : channel?.kind === "notes" ? nNotes : 0}</button>
             </div>
           )}
-          <span className="hidden lg:inline" style={{ fontSize: 11.5, color: T.ink3, ...clip, flex: 1 }}>
-            {channel?.kind === "phone" ? (lineFilter ? `Only what came through ${orgLines.find((l) => l.id === lineFilter)?.name ?? "that line"} ${formatPhone(orgLines.find((l) => l.id === lineFilter)?.phone ?? "")}` : usedLines.length > 1 ? "One channel — their number. The dot is which of yours they reached." : "Everything on this number, oldest first") : channel?.kind === "notes" ? "Notes for your team — never sent, and Dusty reads them" : channel?.kind === "email" ? "Emails forwarded to your intake inbox and filed on them" : "ScopeCrete chat isn't built yet"}
-          </span>
-          <span className="flex-1 lg:hidden" />
+          <span className="flex-1" />
           {channel?.kind === "phone" && channel.value && orgLines.length > 1 && outLine ? (
             // Call from ▾ (Lines, package 9): your phone places the call — pick the same line in Quo.
             <span className="inline-flex items-center shrink-0" style={{ ...pill, padding: 0, overflow: "hidden" }}>
@@ -389,6 +380,21 @@ export default function ChatThreadPage() {
             <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke={searching ? T.hiviz : T.ink2} strokeWidth="1.8" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5" /><path d="M13 13l4.5 4.5" /></svg>
           </button>
         </div>
+
+        {/* Search drops down over the chat, its full width (Coy, 2026-10-05). */}
+        {searching && (
+          <div className="flex-shrink-0" style={{ position: "relative", zIndex: 20 }}>
+            <ThreadSearch contactId={contactId} firstName={(name ?? "").split(/\s+/)[0] || "this person"}
+              threadName={threadName} threadContacts={threadIds}
+              threadBucket={threads ? ({ all: "all", customers: "customer", vendors: "vendor", personal: "personal", spam: "spam", unsorted: "unsorted" } as Record<string, string>)[threads.thread] ?? null : null} onClose={() => setSearching(false)}
+              onOpen={(r) => {
+                setSearching(false);
+                if (r.contact_id !== contactId) { router.push(`/dashboard/messages/${r.contact_id}${tq}`); return; }
+                if (r.channel) pickChannel(r.channel);
+                setTimeout(() => document.getElementById(`m-${r.id}`)?.scrollIntoView({ block: "center" }), 60);
+              }} />
+          </div>
+        )}
 
         {/* Why they were archived — and that they're back (Coy, 2026-10-04). */}
         {!loading && archivedInfo && (() => {
@@ -422,7 +428,7 @@ export default function ChatThreadPage() {
 
         {!loading && !error && channel?.kind === "notes" ? (
           <div className="flex-1 min-h-0">
-            <InternalNotes contactId={contactId} name={name} notes={person?.notes ?? []} onSaved={() => setReload((n) => n + 1)} />
+            <InternalNotes contactId={contactId} name={name} notes={person?.notes ?? []} leadSource={leadSource} onSaved={() => setReload((n) => n + 1)} />
           </div>
         ) : (
         <div ref={scrollRef} className="flex-1 overflow-y-auto" style={{ padding: "12px 18px" }}>
@@ -476,21 +482,6 @@ export default function ChatThreadPage() {
         <AddNumberDialog contactId={contactId} name={name} onClose={() => setAddingNumber(false)}
           onAdded={(phone) => { setAddingNumber(false); setChannelKey(`phone:${phone}`); setReload((n) => n + 1); }}
           onJoin={(otherId) => { setAddingNumber(false); setMerging({ preselect: otherId }); }} />
-      )}
-      {searching && (
-        <div className="fixed inset-0 z-40 lg:static lg:z-auto lg:shrink-0 lg:h-full" style={{ top: "var(--sc-head)" }}>
-          <div className="h-full lg:w-[340px]">
-            <ThreadSearch contactId={contactId} firstName={(name ?? "").split(/\s+/)[0] || "This person"} number={channel?.kind === "phone" ? channel.value : null}
-              threadName={threadName} threadContacts={threadIds}
-              threadBucket={threads ? ({ all: "all", customers: "customer", vendors: "vendor", personal: "personal", spam: "spam", unsorted: "unsorted" } as Record<string, string>)[threads.thread] ?? null : null} onClose={() => setSearching(false)}
-              onOpen={(r) => {
-                setSearching(false);
-                if (r.contact_id !== contactId) { router.push(`/dashboard/messages/${r.contact_id}${tq}`); return; }
-                if (r.channel) pickChannel(r.channel);
-                setTimeout(() => document.getElementById(`m-${r.id}`)?.scrollIntoView({ block: "center" }), 60);
-              }} />
-          </div>
-        </div>
       )}
 
       {merging && (
@@ -558,4 +549,11 @@ function AddNumberDialog({ contactId, name, onClose, onAdded, onJoin }: {
       </div>
     </div>
   );
+}
+
+/** ?person=1 for someone filed vendor: their vendor page is their page. */
+function VendorRedirect({ href }: { href: string }) {
+  const router = useRouter();
+  useEffect(() => { router.replace(href); }, [router, href]);
+  return null;
 }

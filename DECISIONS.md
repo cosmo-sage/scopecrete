@@ -4,7 +4,7 @@ Ground truth for every agent working this repo. If code disagrees with this
 document, the code is wrong or this document is stale — resolve it, don't
 guess. Update this file in the same PR that changes the behavior it describes.
 
-Last updated: 2026-10-05 (onsite estimators — jobs and pages by person, vendor first, tags notify — migration 081 written; one top row on the job's three views; the proposal's dark band off the cover; Good / Better / Best removed — one price per job; search across the header; six dots for the activity line; job switch on the name's row; budget line notes; quo-intake stores every Quo event, own lines included — v10; one Unit type picker; a section's Camera; Dusty writes in Figtree; Dusty is the Scopecrete Lander; an All thread; proposal cover band and Prepared by; sign-in at app.scopecrete.ai/login, each org at <slug>.app.scopecrete.ai; Dusty's chat keeps its files and files them on a customer or job — migration 079; vendor Delete; Dusty on a vendor's page and looking at attached photos; sales tax by address via TaxLocus — migration 078; archive reasons; Lines, providers and logs — migration 077; internal notes with @-tags; Jobs board sort and filter; jobs by hand — migration 076; done and lost customers in Threads; proposals sent by link, every opening tracked; every option side by side for the customer — migration 075; Documents is Files, everywhere — migration 074; Threads v2 — threads you make, channels per number, the customer page reshaped — migration 073; an address given is kept and asked about — migration 072; Dusty sets addresses; customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
+Last updated: 2026-10-05 (onsite estimators — jobs and pages by person, vendor first, tags notify — migration 081 written; contact, customer and vendor pages on one layout; the customer page's Threads tab sums up each person; the Files page laid out like OneDrive, with storage left; the Plan Room's Files and Sheets one tab; thread search a drop-down over the chat; the Threads list header sticky with its own search; the header lockup on one line; one top row on the job's three views; the proposal's dark band off the cover; Good / Better / Best removed — one price per job; search across the header; six dots for the activity line; job switch on the name's row; budget line notes; quo-intake stores every Quo event, own lines included — v10; one Unit type picker; a section's Camera; Dusty writes in Figtree; Dusty is the Scopecrete Lander; an All thread; proposal cover band and Prepared by; sign-in at app.scopecrete.ai/login, each org at <slug>.app.scopecrete.ai; Dusty's chat keeps its files and files them on a customer or job — migration 079; vendor Delete; Dusty on a vendor's page and looking at attached photos; sales tax by address via TaxLocus — migration 078; archive reasons; Lines, providers and logs — migration 077; internal notes with @-tags; Jobs board sort and filter; jobs by hand — migration 076; done and lost customers in Threads; proposals sent by link, every opening tracked; every option side by side for the customer — migration 075; Documents is Files, everywhere — migration 074; Threads v2 — threads you make, channels per number, the customer page reshaped — migration 073; an address given is kept and asked about — migration 072; Dusty sets addresses; customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
 
 ---
 
@@ -300,7 +300,9 @@ across the database … I also want to be able to upload a logo for my org."*
 - **The header lockup** (`org-lockup.tsx`): the theme's logo (else the other),
   28px (24 on a phone), a pencil rule, the ScopeCrete emblem (the landing
   page's orbits and green block, `Emblem` in `site/marks.tsx`, 2026-10-05)
-  beside "powered by" over the wordmark, its orbits turning as on the
+  beside "powered by" over the wordmark (on a desktop one line since
+  2026-10-05 — "powered by", the emblem, scopecrete.ai — and the header's
+  dividing rules darker, `--sc-pencil-rule`; Coy), its orbits turning as on the
   landing page (still under reduced motion) — the
   block exactly the logo's height (Coy: "the same size as the Sacco
   Enterprises logo"; dropped under 340px). No logo, or one that fails to load → the
@@ -583,7 +585,9 @@ each message.** One person calling two of Coy's lines is one thread.
   filter (only lines this person reached) beside All · Calls · Texts; **Call
   from ▾** (your phone dials — choose the same line in Quo); the composer's
   line chip and "Text (225) … from Main — copy it into Quo" (nothing sends,
-  §10); the header adds "first reached you on the Website line, Oct 3"
+  §10); "first reached you on the Website line, Oct 3" — on the header until
+  2026-10-05, now a **Lead source** line at the top of Internal notes (Coy:
+  "a place in the notes for the lead source")
   (`/api/threads/[id]` returns `lines`, `first_line`, each message's
   `line_id`). On a phone the toolbar wraps, the line filter its own row. Not
   built: a thread made from a line, and Send (Quo stays Copy until 10DLC).
@@ -1846,11 +1850,22 @@ expected start date per quoted job before it means anything. Add the field.
   tested), then **Email** (the mirrored emails filed on them) and **Chat**
   (not built — "Not joined · invite"). **All · Calls · Texts** filter a phone
   channel; **Call** dials that number; the composer texts or emails it.
-  **Search** (the glass) is a panel at the right (the whole screen on a
-  phone): words, by **this number · the person · the whole thread**, with
-  type chips and counts — Messages, Photos, Files, Links, Calls, Voicemail
-  (`messageType()`, from `message_media.kind`) — `/api/threads/search`;
-  a result opens its channel at the message.
+  **Search** (the glass) drops down at the top of the chat, its full width
+  (Coy, 2026-10-05: "a simple search bubble … I don't need the 'this
+  number, john, whole thread' buttons or the other buttons if the search
+  features have intelligence built in") — one box, no scope or type
+  buttons: it searches everything with the person (every number and
+  channel), and when nothing of theirs matches, the whole thread, saying
+  so; a word like "photos", "voicemail" or "pdf" picks the kind
+  (`readThreadQuery()`, `src/lib/v34/threads.ts`, tested; types from
+  `message_media.kind`) — `/api/threads/search`; a result opens its
+  channel at the message. The line under the channel tabs ("Everything on
+  this number, oldest first" …) is gone (Coy). **The list's header stays
+  put** while the list scrolls, and its own 🔍 searches that list by a word,
+  a name or a place — names, numbers, Dusty's lines, their address, their
+  customer's and their jobs' addresses and titles (`places` on
+  `/api/threads`, searched, never shown), and every word said in their
+  calls and texts (`/api/threads/search` on the thread's people).
   **Internal notes is the first tab on the left (Coy, 2026-10-04)** — a
   person still opens on their conversation; the tab's "@ to tag" line is gone
   (the box below says it). **+ Number adds a number (Coy: "should also allow
@@ -2173,6 +2188,7 @@ expected start date per quoted job before it means anything. Add the field.
   `q kind source job customer contact vendor since from to` and `facets=1`
   for the lists — session client, a typed name stripped of wildcards before
   it reaches a pattern.
+  **Laid out like OneDrive (Coy, 2026-10-05: "toggle between photos and files … a left column as a type of file menu for folders … a search bar inside the file page … a filter bar … show the amount of remaining storage").** **Photos | Files** at the top: Photos is the filter's `kind=image`, drawn as a grid of thumbnails by month (Central time); Files is everything, photos included, as a list (a table — Name · Filed on · Size · Added — when there is room). The **folder column** on the left (≥ 900px measured; a drawer behind ☰ on a phone): All files, Recent (last 30 days), each kind (Plans, Specs, Bid invites, Vendor quotes, Receipts, Contracts, Photos, Proposals, Emails, Other, Unfiled), then Jobs · Customers · Vendors · People, each opening to every one with files and its count. Folders aren't stored: each sets the one filter's where to look (category, job, customer, vendor, person or since) and clears the other places, keeping the words, type, way in and dates (`folderPatch()` / `activeFolder()`, `src/lib/files-view.ts`, tested), so the address still carries the view. The search bar sits at the top of the content; the filters are one bar of drop-downs with the ones in use as chips (×, Clear all). **Storage** under the folders: "37.4 MB used of 1 GB · 987 MB left" with a bar, amber from 80%, red when full. `GET /api/files/storage` (session client) adds up `files.byte_size` for files not deleted and `message_media.byte_size` for texted files once stored, against `STORAGE_LIMIT_GB` (server side, default 1, Supabase's free plan). Call recordings, logos and proposal pictures aren't counted: nothing records their size. On a customer's Files tab the column stays, its customer stays pinned, and the folder lists are that customer's alone.
 - **Documents (2026-09-30)** — `/dashboard/documents`
   (`src/components/v34/documents.tsx`, `/api/documents`): every uploaded file,
   newest first, searched through the same index, filtered by category (or
@@ -2225,6 +2241,8 @@ expected start date per quoted job before it means anything. Add the field.
   Night Shift), SVG icons draw in `currentColor`. The rail, paper header,
   wordmark (`--sc-hatch`, `--sc-guide`, `--sc-crete`) and chat bubbles
   (`T.sunk` / `T.outBg`) follow the theme.
+- **Contact, customer and vendor pages look the same (Coy, 2026-10-05: "This 'contact' page is a mess … I would rather have consistent formatting across contact, customer and vendor … Really a contact needs to become a customer or vendor or spam anyway").** The customer page's parts moved into one module, `record-page.tsx`: ‹ back · name and role tag · the button row (folded into ⋯ on a phone) · the facts line · one row of tabs, then the Overview with a 400px right column (Location, the facts, Recent), contact cards with a line per number and email and Open in Threads ›, thread chips, panel titles and empty states. The customer page, a contact's own page (`?person=1`, `person-view.tsx`) and the vendor page (`/dashboard/vendors/[id]`) all use it. **A contact:** ‹ Back to the thread, the name with its pencil, the role tag (tap to change the bucket), Customer page › when they have one, Edit (name and address), New job, Ask Dusty; under ⋯ Call notes, File as… / Change bucket, Same person as…, Archive. Tabs Overview · Next steps · Jobs · Threads · Timeline · Files. While they are unsorted or filed by Dusty, the four buckets sit right under the header (Dusty's guess dashed, or Keep / Not X), since filing them is what the page is for. The Overview has Dusty's read, their card, next steps, jobs and the threads they're in. Files is the Files page pinned to them, with + Add files. **A vendor:** the same page, with Prices (★ = the price budgets use; their cards under it) and Receipts & quotes after Overview, + Receipt or quote as the main button, Edit as the vendor form, and Delete vendor under ⋯. `?person=1` for a vendor goes to their vendor page, which is their one page now; the vendor page's back link returns to the thread when opened from one. No API or data change.
+  **The customer page's Threads tab (Coy, 2026-10-05: "supposed to be more useful … pull information from the thread into here. maybe a summary").** A card per person on the customer: Dusty's line on where it stands and on the latest conversations, their last three calls and texts (summary or words), last heard, Open in Threads › and "Every call and text in Timeline ›"; then the threads they're in. The "Not in any thread you made…" line is gone.
 - **The customer page, reshaped (Threads v2 handoff §4, 2026-10-03).** "‹
   Back to the thread" when opened from Threads (else "‹ Customers"); name
   and role tag; **Edit · New job · Ask Dusty** (Call notes and Delete under
@@ -2692,8 +2710,14 @@ expected start date per quoted job before it means anything. Add the field.
   to intake-concrete@agentmail.to; ScopeCrete will only mirror that inbox —
   next.) `/dashboard/scope/[jobId]/plans`, opened from the job header's
   **Plan room** button; the rail's Jobs stays lit and Dusty is HOT on the job.
-  Four steps:
-  **Files** — the job's PDFs and images, each with **In plan room**
+  Four steps — three since 2026-10-05, when Files and Sheets became one
+  **Files** tab (Coy: "one place where planset pdf, photos, images and any
+  other file can live"): a folder column (All files · Photos, then the
+  sheets by Concrete scope · All drawings · each discipline · Pages to
+  read) beside what the folder holds; `?step=sheets` still opens it on the
+  sheets. Photos, Aerial and Add plans sit at the far right of the steps'
+  row (Coy).
+  **Files** — every file on the job; PDFs and images carry **In plan room**
   (`job_files.in_plan_room`); drop plan sets to add them.
   **Sheets** — each in-room PDF is opened in the browser with **pdf.js**
   (`pdfjs-dist` legacy build — the modern one needs JavaScript most browsers
@@ -3304,6 +3328,17 @@ additive changes only, with confirmation.
   own nameservers, so for now it is one record per org. Supabase Auth's
   redirect list must carry `https://app.scopecrete.ai/**` and
   `https://*.app.scopecrete.ai/**` for Google and emailed sign-in links.
+- **Installing the app (Coy, 2026-10-05: "prompts me to install it from the
+  master branch and it doesn't prompt me to install it on any sandbox
+  branches").** `/site.webmanifest` is a route (`src/lib/install.ts`,
+  tested): only an org's own address on the production build
+  (`VERCEL_ENV=production`, `<slug>.app.scopecrete.ai`) gets the manifest
+  (opens on `/dashboard`); previews, the feedback sandbox, the landing page,
+  app.scopecrete.ai and localhost get 404, so Chrome never offers to install
+  them. Chrome's own banner shows when Chrome decides, so Settings (☰) has
+  **Install the app** whenever the browser says it can be installed there.
+  There is no service worker (next-pwa is a webpack plugin; the Turbopack
+  build never ran it).
 
 **Per-org Hermes containers are under review.** Clean isolation, but N
 long-running processes per N contractors does not survive growth and is the

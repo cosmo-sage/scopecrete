@@ -108,7 +108,7 @@ export async function GET(req: NextRequest) {
     jobIds.length ? supabase.from("jobs").select("id, title, contact_id").eq("org_id", orgId).in("id", jobIds) : Promise.resolve({ data: [] }),
     personIds.length ? supabase.from("contacts").select("id, name, company_name, phone").eq("org_id", orgId).in("id", personIds) : Promise.resolve({ data: [] }),
     signFiles(supabase, rows),
-    p.get("facets") ? facets(supabase, orgId) : Promise.resolve(undefined),
+    p.get("facets") ? facets(supabase, orgId, custOr) : Promise.resolve(undefined),
   ]);
   return applyCookies(NextResponse.json({
     files: (files as unknown as Row[]).map((r) => ({ ...r, matched: why[r.id] ?? null })), proposals, facets: fac,
@@ -151,10 +151,13 @@ async function namesLike(sb: ApiSession["supabase"], orgId: string, q: string) {
 
 /**
  * What the filters can offer: every job, customer, vendor and person that has
- * files, with how many — so a list never shrinks to the one picked.
+ * files, with how many — so a list never shrinks to the one picked. On a
+ * customer's Files tab (`custOr`), only what is filed on that customer.
  */
-async function facets(sb: ApiSession["supabase"], orgId: string) {
-  const { data } = await sb.from("files").select("job_id, contact_id, customer_id").eq("org_id", orgId).is("deleted_at", null).limit(5000);
+async function facets(sb: ApiSession["supabase"], orgId: string, custOr: string | null = null) {
+  let fq = sb.from("files").select("job_id, contact_id, customer_id").eq("org_id", orgId).is("deleted_at", null);
+  if (custOr) fq = fq.or(custOr);
+  const { data } = await fq.limit(5000);
   const rows = (data ?? []) as Array<{ job_id: string | null; contact_id: string | null; customer_id: string | null }>;
   const count = (k: "job_id" | "contact_id" | "customer_id") => {
     const m = new Map<string, number>();

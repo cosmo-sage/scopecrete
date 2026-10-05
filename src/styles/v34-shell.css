@@ -335,7 +335,9 @@ body { background: var(--sc-slab); color: var(--sc-ink); }
   box-shadow: 0 3px 0 -2px var(--sc-pencil-line); /* doubled pencil rule */
   color: var(--sc-pencil);
 }
-.sc-paper-divider { width: 1px; height: 22px; background: var(--sc-pencil-line); flex: none; }
+/* The header's dividing rules, darker than the paper's pencil line (Coy, 2026-10-05). */
+:root { --sc-pencil-rule: color-mix(in srgb, var(--sc-pencil) 55%, transparent); }
+.sc-paper-divider { width: 1px; height: 22px; background: var(--sc-pencil-rule); flex: none; }
 
 /* Activity line: the face of "crete" in the wordmark (Inter 300), graphite;
    time in Barlow Condensed. Coy, 2026-09-30: the draft paper is the logo row

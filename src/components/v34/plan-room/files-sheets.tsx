@@ -1,10 +1,13 @@
 "use client";
 /**
- * Plan Room steps 1 and 2 (design/plan-room): the job's files with In plan
- * room, and the sheets read from them.
+ * The Plan Room's Files step (design/plan-room; Files and Sheets made one
+ * place 2026-10-05 — Coy: "where planset pdf, photos, images and any other
+ * file can live. We can call it 'files'"). A folder column on the left —
+ * the job's files, its photos, then its sheets by discipline and the pages
+ * to read — and what that folder holds on the right.
  */
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { T, F, disp, eyebrow, clip, strong, light } from "@/lib/v34/tokens";
+import { T, F, disp, eyebrow, clip, strong } from "@/lib/v34/tokens";
 import { drawPage, openPdf, pageThumb } from "@/lib/pdf";
 import { scaleLabel } from "@/lib/takeoff";
 import { CONCRETE_DISC, DISC_COLOR, DISC_LABEL, isPlanFile, sheetLabel, type PlanFile, type Sheet } from "./shared";
@@ -20,66 +23,147 @@ export function Switch({ on, onChange, label }: { on: boolean; onChange: (v: boo
   );
 }
 
-export function FilesStep({ files, sheets, reading, onToggle, onAdd, uploading }: {
+/** Every file on the job: plan sets with In plan room, photos, anything else. */
+function FileList({ files, sheets, reading, onToggle, onAdd, uploading }: {
   files: PlanFile[]; sheets: Sheet[]; reading: Record<string, string>;
   onToggle: (f: PlanFile, on: boolean) => void; onAdd: (list: FileList) => void; uploading: string | null;
 }) {
   const [over, setOver] = useState(false);
-  const list = files.filter(isPlanFile);
-  const others = files.length - list.length;
+  const list = [...files].sort((a, b) => Number(isPlanFile(b)) - Number(isPlanFile(a)) || b.created_at.localeCompare(a.created_at));
   return (
-    <div className="p-3 lg:p-5" style={{ maxWidth: 1100 }}>
+    <div>
       <label onDragOver={(e) => { e.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)}
         onDrop={(e) => { e.preventDefault(); setOver(false); if (e.dataTransfer.files.length) onAdd(e.dataTransfer.files); }}
-        className="flex flex-col items-center justify-center text-center rounded-md"
-        style={{ minHeight: 120, border: `2px dashed ${over ? T.hiviz : T.hairStrong}`, background: over ? T.hivizDim : T.card, cursor: "pointer", padding: 12 }}>
+        className="flex items-center justify-center gap-2 text-center rounded-md"
+        style={{ minHeight: 56, border: `2px dashed ${over ? T.hiviz : T.hairStrong}`, background: over ? T.hivizDim : T.card, cursor: "pointer", padding: 10 }}>
         <input type="file" multiple accept="application/pdf,image/jpeg,image/png,.pdf" className="hidden"
           onChange={(e) => { if (e.target.files?.length) onAdd(e.target.files); e.target.value = ""; }} />
-        <div style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 600 }}>{uploading ?? "Drop plan sets, sketches or photos"}</div>
-        <div style={{ fontSize: F.xs, color: T.ink3 }}>PDF, JPG or PNG · or tap to choose</div>
+        <span style={{ fontFamily: disp, fontSize: F.md, fontWeight: 600 }}>{uploading ?? "Drop plan sets, sketches or photos"}</span>
+        <span style={{ fontSize: F.xs, color: T.ink3 }}>PDF, JPG or PNG · or tap to choose</span>
       </label>
-
-      <div className="mt-4 flex items-baseline gap-2">
-        <div style={{ fontFamily: light, fontWeight: 300, fontSize: 20 }}>Already on this job</div>
-        <div style={{ fontSize: F.xs, color: T.ink3 }}>{list.length} plan file{list.length === 1 ? "" : "s"}{others ? ` · ${others} other file${others === 1 ? "" : "s"} not shown` : ""}</div>
-      </div>
-      {!list.length && <div className="mt-2" style={{ fontSize: F.sm, color: T.ink3 }}>No PDFs or images on this job yet. Drop the plan set above.</div>}
-      <div className="mt-2 rounded overflow-hidden" style={{ border: `1px solid ${T.hair}`, background: T.card }}>
-        {list.map((f) => {
-          const on = f.in_plan_room === true;
-          const n = sheets.filter((s) => s.file_id === f.id).length;
-          const scaled = sheets.filter((s) => s.file_id === f.id && s.scale_ft_per_pt).length;
-          return (
-            <div key={f.id} className="flex items-center gap-3 px-3 py-2" style={{ borderTop: `1px solid ${T.hairSoft}`, opacity: on ? 1 : 0.6 }}>
-              <div className="shrink-0 rounded flex items-center justify-center" style={{ width: 36, height: 44, background: T.sunk, border: `1px solid ${T.hair}`, fontFamily: disp, fontSize: 10, color: T.ink3 }}>
-                {f.kind === "pdf" ? "PDF" : "IMG"}
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: F.sm, fontWeight: 600, ...clip }}>{f.name}</div>
-                <div style={{ fontSize: F.xs, color: T.ink3, ...clip }}>
-                  {f.source === "email" ? "Email" : f.source === "text" ? "Texted" : "Uploaded"} · {reading[f.id] ?? (f.kind === "pdf" ? (n ? `${n} sheet${n === 1 ? "" : "s"}${n ? ` · ${scaled} scaled` : ""}` : on ? "not opened yet" : "") : "photo or sketch — no scale")}
-                  {f.read_state ? ` · ${READ[f.read_state] ?? f.read_state}` : ""}
+      {!list.length && <div className="mt-3" style={{ fontSize: F.sm, color: T.ink3 }}>No files on this job yet. Drop the plan set above.</div>}
+      {list.length > 0 && (
+        <div className="mt-3 rounded overflow-hidden" style={{ border: `1px solid ${T.hair}`, background: T.card }}>
+          {list.map((f, i) => {
+            const plan = isPlanFile(f);
+            const on = f.in_plan_room === true;
+            const n = sheets.filter((s) => s.file_id === f.id).length;
+            const scaled = sheets.filter((s) => s.file_id === f.id && s.scale_ft_per_pt).length;
+            return (
+              <div key={f.id} className="flex items-center gap-3 px-3 py-2" style={{ borderTop: i ? `1px solid ${T.hairSoft}` : undefined, opacity: !plan || on ? 1 : 0.6 }}>
+                <div className="shrink-0 rounded flex items-center justify-center overflow-hidden" style={{ width: 36, height: 44, background: T.sunk, border: `1px solid ${T.hair}`, fontFamily: disp, fontSize: 10, color: T.ink3 }}>
+                  {f.kind === "image" && f.url
+                    // eslint-disable-next-line @next/next/no-img-element
+                    ? <img src={f.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    : f.kind === "pdf" ? "PDF" : (f.name.split(".").pop() ?? "FILE").slice(0, 4).toUpperCase()}
                 </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: F.sm, fontWeight: 600, ...clip }}>{f.name}</div>
+                  <div style={{ fontSize: F.xs, color: T.ink3, ...clip }}>
+                    {f.source === "email" ? "Email" : f.source === "text" ? "Texted" : "Uploaded"} · {reading[f.id] ?? (f.kind === "pdf" ? (n ? `${n} sheet${n === 1 ? "" : "s"} · ${scaled} scaled` : on ? "not opened yet" : "not in the plan room") : f.kind === "image" ? "photo or sketch — no scale" : "kept with the job — not a drawing")}
+                    {f.read_state ? ` · ${READ[f.read_state] ?? f.read_state}` : ""}
+                  </div>
+                </div>
+                {plan && <>
+                  <span className="hidden sm:inline" style={{ ...eyebrow, color: T.ink3 }}>In plan room</span>
+                  <Switch on={on} onChange={(v) => onToggle(f, v)} label={`${f.name} in the plan room`} />
+                </>}
               </div>
-              <span className="hidden sm:inline" style={{ ...eyebrow, color: T.ink3 }}>In plan room</span>
-              <Switch on={on} onChange={(v) => onToggle(f, v)} label={`${f.name} in the plan room`} />
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
-      <div className="mt-4 grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
-        {[
-          ["Scale, checked by you", "Each sheet's printed scale is read off its title block. You apply it with one tap, or measure a known dimension — nothing is counted on a sheet until you have."],
-          ["Groups you define", "Slab on grade, curb & gutter, piers… Area, linear or count. Every shape stays its own row, and the group adds them up."],
-          ["Straight to budget", "Send a group to a card from the Price book. The budget line counts the group — re-measure on the plan and it moves."],
-        ].map(([h, d], i) => (
-          <div key={h} className="rounded p-3" style={{ background: i === 2 ? T.dustyTint : T.card, border: `1px solid ${T.hair}` }}>
-            <div style={{ fontFamily: disp, fontWeight: 600, fontSize: F.md }}>{h}</div>
-            <div style={{ fontSize: F.xs, color: T.ink2, lineHeight: 1.45, marginTop: 2 }}>{d}</div>
-          </div>
+/** The job's photos, newest first. */
+function PhotoGrid({ files }: { files: PlanFile[] }) {
+  const photos = files.filter((f) => f.kind === "image").sort((a, b) => b.created_at.localeCompare(a.created_at));
+  if (!photos.length) return <div style={{ fontSize: F.sm, color: T.ink3 }}>No photos on this job yet. Drop them in All files, or bring in the ones the customer texted from Photos at the top.</div>;
+  return (
+    <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))" }}>
+      {photos.map((f) => (
+        <a key={f.id} href={f.url ?? undefined} target="_blank" rel="noreferrer" className="rounded overflow-hidden block" style={{ background: T.card, border: `1px solid ${T.hair}` }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          {f.url ? <img src={f.url} alt={f.name} style={{ width: "100%", height: 120, objectFit: "cover", display: "block" }} /> : <div style={{ height: 120, background: T.sunk }} />}
+          <div className="px-2 py-1" style={{ fontSize: F.xs, color: T.ink2, ...clip }}>{f.name}</div>
+        </a>
+      ))}
+    </div>
+  );
+}
+
+export function FilesStep({ files, sheets, docPages = [], reading, onToggle, onAdd, uploading, onOpen, initial }: {
+  files: PlanFile[]; sheets: Sheet[]; docPages?: Sheet[]; reading: Record<string, string>;
+  onToggle: (f: PlanFile, on: boolean) => void; onAdd: (list: FileList) => void; uploading: string | null;
+  onOpen: (s: Sheet) => void; initial?: "files" | "sheets";
+}) {
+  const [view, setView] = useState<string>(initial === "sheets" && (sheets.length || docPages.length) ? (sheets.length ? "concrete" : "pages") : "files");
+  const [pageAt, setPageAt] = useState<number | null>(null);
+  const url = useMemo(() => new Map(files.map((f) => [f.id, f.url])), [files]);
+  const counts = useMemo(() => {
+    const c: Record<string, number> = {};
+    for (const s of sheets) { const d = s.discipline ?? "other"; c[d] = (c[d] ?? 0) + 1; }
+    return c;
+  }, [sheets]);
+  const concrete = sheets.filter((s) => CONCRETE_DISC.has(s.discipline ?? ""));
+  const photos = files.filter((f) => f.kind === "image").length;
+  const folders: Array<{ head?: string; k: string; label: string; n: number; dot: string; square?: boolean }> = [
+    { head: "Files", k: "files", label: "All files", n: files.length, dot: T.ink3, square: true },
+    { k: "photos", label: "Photos", n: photos, dot: T.chalk, square: true },
+    ...(sheets.length || docPages.length ? [
+      { head: "Sheets", k: "concrete", label: "Concrete scope", n: concrete.length, dot: T.hiviz },
+      { k: "all", label: "All drawings", n: sheets.length, dot: T.ink3 },
+      ...Object.keys(counts).sort().map((d) => ({ k: d, label: DISC_LABEL[d] ?? d, n: counts[d], dot: DISC_COLOR[d] ?? T.ink3 })),
+      ...(docPages.length ? [{ k: "pages", label: "Pages to read", n: docPages.length, dot: T.hairStrong, square: true }] : []),
+    ] : []),
+  ];
+  const isSheets = !["files", "photos"].includes(view);
+  const isPages = view === "pages";
+  const shown = isPages ? docPages : view === "all" ? sheets : view === "concrete" ? (concrete.length ? concrete : sheets) : sheets.filter((s) => (s.discipline ?? "other") === view);
+  return (
+    <div className="lg:flex" style={{ minHeight: 0 }}>
+      <nav aria-label="Folders" className="flex lg:flex-col gap-1 p-2 lg:p-3 overflow-x-auto lg:overflow-visible" style={{ flex: "0 0 auto", minWidth: 0, borderRight: `1px solid ${T.hairSoft}` }}>
+        {folders.map((f) => (
+          <React.Fragment key={f.k}>
+            {f.head && <div className="hidden lg:block px-2 pt-2 pb-1" style={{ ...eyebrow, color: T.ink3 }}>{f.head}</div>}
+            <button onClick={() => setView(f.k)} className="flex items-center gap-2 rounded px-2 text-left shrink-0"
+              style={{ height: 30, background: view === f.k ? T.hivizDim : "transparent", fontSize: F.sm, cursor: "pointer", minWidth: 160 }}>
+              <span style={{ width: 9, height: 9, borderRadius: f.square ? 0 : 2, background: f.dot }} />
+              <span style={{ flex: 1 }}>{f.label}</span>
+              <span style={{ fontFamily: strong, fontSize: 10.5, color: T.ink3 }}>{f.n}</span>
+            </button>
+          </React.Fragment>
         ))}
+        {view === "concrete" && !concrete.length && <div className="hidden lg:block px-2" style={{ fontSize: F.xs, color: T.ink3, maxWidth: 170 }}>No civil or structural sheets found — showing all.</div>}
+      </nav>
+      <div className="flex-1 p-3 lg:p-4" style={{ minWidth: 0 }}>
+        {view === "files" && <FileList files={files} sheets={sheets} reading={reading} onToggle={onToggle} onAdd={onAdd} uploading={uploading} />}
+        {view === "photos" && <PhotoGrid files={files} />}
+        {isSheets && (
+          <div className="grid gap-2.5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", alignContent: "start" }}>
+            {isPages && <div style={{ gridColumn: "1 / -1", fontSize: F.xs, color: T.ink3 }}>Letter- and legal-size pages in the plan file — specs, notes, forms. Tap one to read it; drawings are the measured sheets.</div>}
+            {shown.map((s, idx) => (
+              <button key={s.id} onClick={() => (isPages ? setPageAt(idx) : onOpen(s))} className="text-left rounded overflow-hidden" style={{ background: T.card, border: `1px solid ${T.hair}`, cursor: "pointer" }}>
+                <div style={{ position: "relative" }}>
+                  <Thumb fileId={s.file_id} url={url.get(s.file_id) ?? null} page={s.page} />
+                  {CONCRETE_DISC.has(s.discipline ?? "") && <span style={{ position: "absolute", top: 5, left: 5, ...eyebrow, fontSize: 9, background: T.hiviz, color: T.onHiviz, borderRadius: 2, padding: "1px 4px" }}>Concrete</span>}
+                  {!isPages && <span style={{ position: "absolute", bottom: 5, right: 5 }}><ScaleBadge s={s} small /></span>}
+                </div>
+                <div className="px-2 py-1.5">
+                  <div className="flex items-baseline gap-1.5">
+                    <span style={{ fontFamily: strong, fontWeight: 600, fontSize: 13 }}>{sheetLabel(s)}</span>
+                    <span style={{ fontSize: 10.5, color: T.ink3 }}>p.{s.page}</span>
+                  </div>
+                  <div style={{ fontSize: F.xs, color: T.ink2, ...clip }}>{s.title ?? "No title read"}</div>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
+      {pageAt !== null && <PageReader pages={docPages} files={files} start={pageAt} onClose={() => setPageAt(null)} />}
     </div>
   );
 }
@@ -161,59 +245,6 @@ export function PageReader({ pages, files, start, onClose }: { pages: Sheet[]; f
         {fail ? <div style={{ fontSize: F.sm, color: T.red }}>Couldn&apos;t open this page: {fail}</div>
           : <canvas ref={canvas} style={{ display: "block", margin: "0 auto", background: "#fff", boxShadow: "0 1px 4px rgba(0,0,0,.15)" }} />}
       </div>
-    </div>
-  );
-}
-
-export function SheetsStep({ sheets, docPages = [], files, onOpen }: { sheets: Sheet[]; docPages?: Sheet[]; files: PlanFile[]; onOpen: (s: Sheet) => void }) {
-  const [disc, setDisc] = useState<string>(sheets.length ? "concrete" : "pages");
-  const [reading, setReading] = useState<number | null>(null);
-  const url = useMemo(() => new Map(files.map((f) => [f.id, f.url])), [files]);
-  const counts = useMemo(() => {
-    const c: Record<string, number> = {};
-    for (const s of sheets) { const d = s.discipline ?? "other"; c[d] = (c[d] ?? 0) + 1; }
-    return c;
-  }, [sheets]);
-  const concrete = sheets.filter((s) => CONCRETE_DISC.has(s.discipline ?? ""));
-  const filters = [["concrete", "Concrete scope", concrete.length], ["all", "All drawings", sheets.length],
-    ...Object.keys(counts).sort().map((d) => [d, DISC_LABEL[d] ?? d, counts[d]] as const),
-    ...(docPages.length ? [["pages", "Pages to read", docPages.length] as const] : [])] as Array<readonly [string, string, number]>;
-  const isPages = disc === "pages";
-  const shown = isPages ? docPages : disc === "all" ? sheets : disc === "concrete" ? (concrete.length ? concrete : sheets) : sheets.filter((s) => (s.discipline ?? "other") === disc);
-  if (!sheets.length && !docPages.length) return <div className="p-5" style={{ fontSize: F.sm, color: T.ink3 }}>No sheets yet. Put a PDF in the plan room on the Files step and its pages are read here.</div>;
-  return (
-    <div className="lg:flex" style={{ minHeight: 0 }}>
-      <div className="flex lg:flex-col gap-1 p-2 lg:p-3 overflow-x-auto lg:overflow-visible" style={{ flex: "0 0 auto", width: undefined, minWidth: 0 }}>
-        {filters.map(([k, label, n]) => (
-          <button key={k} onClick={() => setDisc(k)} className="flex items-center gap-2 rounded px-2 text-left shrink-0"
-            style={{ height: 30, background: disc === k ? T.hivizDim : "transparent", fontSize: F.sm, cursor: "pointer", minWidth: 150 }}>
-            <span style={{ width: 9, height: 9, borderRadius: k === "pages" ? 0 : 2, background: k === "concrete" ? T.hiviz : k === "all" ? T.ink3 : k === "pages" ? T.hairStrong : DISC_COLOR[k] ?? T.ink3 }} />
-            <span style={{ flex: 1 }}>{label}</span>
-            <span style={{ fontFamily: strong, fontSize: 10.5, color: T.ink3 }}>{n}</span>
-          </button>
-        ))}
-        {disc === "concrete" && !concrete.length && <div className="hidden lg:block px-2" style={{ fontSize: F.xs, color: T.ink3, maxWidth: 170 }}>No civil or structural sheets found — showing all.</div>}
-      </div>
-      <div className="flex-1 p-3 grid gap-2.5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", alignContent: "start" }}>
-        {isPages && <div style={{ gridColumn: "1 / -1", fontSize: F.xs, color: T.ink3 }}>Letter- and legal-size pages in the plan file — specs, notes, forms. Tap one to read it; drawings are the measured sheets.</div>}
-        {shown.map((s, idx) => (
-          <button key={s.id} onClick={() => (isPages ? setReading(idx) : onOpen(s))} className="text-left rounded overflow-hidden" style={{ background: T.card, border: `1px solid ${T.hair}`, cursor: "pointer" }}>
-            <div style={{ position: "relative" }}>
-              <Thumb fileId={s.file_id} url={url.get(s.file_id) ?? null} page={s.page} />
-              {CONCRETE_DISC.has(s.discipline ?? "") && <span style={{ position: "absolute", top: 5, left: 5, ...eyebrow, fontSize: 9, background: T.hiviz, color: T.onHiviz, borderRadius: 2, padding: "1px 4px" }}>Concrete</span>}
-              {!isPages && <span style={{ position: "absolute", bottom: 5, right: 5 }}><ScaleBadge s={s} small /></span>}
-            </div>
-            <div className="px-2 py-1.5">
-              <div className="flex items-baseline gap-1.5">
-                <span style={{ fontFamily: strong, fontWeight: 600, fontSize: 13 }}>{sheetLabel(s)}</span>
-                <span style={{ fontSize: 10.5, color: T.ink3 }}>p.{s.page}</span>
-              </div>
-              <div style={{ fontSize: F.xs, color: T.ink2, ...clip }}>{s.title ?? "No title read"}</div>
-            </div>
-          </button>
-        ))}
-      </div>
-      {reading !== null && <PageReader pages={docPages} files={files} start={reading} onClose={() => setReading(null)} />}
     </div>
   );
 }

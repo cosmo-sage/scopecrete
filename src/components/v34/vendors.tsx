@@ -8,18 +8,21 @@
  * VendorList: everyone filed as vendor — suppliers, subs, rentals — with what
  * they price, their receipts and where they deliver. "+ Add a receipt or
  * quote" is the main button (Dusty reads who it's from and the prices).
- * VendorPage: one vendor, business first — their prices with a Default star
- * (the price budgets use; tap to make them the default), receipts and quotes,
- * jobs they're on, and the conversation if there is one.
+ * VendorPage: one vendor, in the customer page's layout (record-page.tsx) —
+ * Overview, their prices with a Default star (the price budgets use; tap to
+ * make them the default), receipts and quotes, next steps, jobs they're on,
+ * the threads they're in, the conversation and their files.
  */
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { T, F, disp, eyebrow, nums, clip, money, formatPhone } from "@/lib/v34/tokens";
 import { useWide } from "@/lib/v34/use-wide";
-import { call, dateLabel } from "@/components/v34/cost-cards";
+import { call, dateLabel, CostCards } from "@/components/v34/cost-cards";
+import { PersonScreen, type Person, type RecordExtras } from "@/components/v34/person-view";
+import { Empty, panelTitle } from "@/components/v34/record-page";
 import { ReceiptImport } from "@/components/v34/receipt-import";
-import { ArchiveButton } from "@/components/v34/archive-actions";
 import { PENDING_VENDOR_KEY } from "@/components/v34/org-settings";
 
 interface VRow {
@@ -189,15 +192,22 @@ interface VPage {
   prices: Price[]; files: VFile[]; jobs: Array<{ id: string; title: string | null; status: string; address: string | null; role: string | null }>; messages: number;
 }
 
+/**
+ * One vendor (2026-10-05: the customer page's layout — Coy: "consistent
+ * formatting across contact, customer and vendor"). The person's page
+ * (person-view.tsx) with the vendor's own tabs: Overview · Prices (★ = the
+ * price budgets use; their cards below) · Receipts & quotes · Next steps · Jobs
+ * · Threads · Timeline · Files.
+ */
 export function VendorPage({ id }: { id: string }) {
+  const router = useRouter();
+  const search = useSearchParams();
   const [p, setP] = useState<VPage | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
   const [editing, setEditing] = useState(false);
   const [receipt, setReceipt] = useState(false);
-  const [q, setQ] = useState("");
-  const [measure, wide] = useWide<HTMLDivElement>(900);
 
   useEffect(() => {
     let off = false;
@@ -205,6 +215,10 @@ export function VendorPage({ id }: { id: string }) {
       .catch((e) => { if (!off) setErr(String(e?.message ?? e)); });
     return () => { off = true; };
   }, [id, tick]);
+  // Filed somewhere else from here (⋯ → Change bucket): their own page is the contact page.
+  const onPerson = useCallback((x: Person) => {
+    if (x.contact.bucket && x.contact.bucket !== "vendor") router.replace(`/dashboard/messages/${id}?person=1`);
+  }, [id, router]);
 
   const makeDefault = async (pr: Price) => {
     setErr(null);
@@ -213,108 +227,123 @@ export function VendorPage({ id }: { id: string }) {
     catch (e) { setErr(String((e as Error).message)); } finally { setTick((n) => n + 1); }
   };
 
-  if (err && !p) return <div className="p-4" style={{ fontSize: F.sm, color: T.red }}>{err}</div>;
-  if (!p) return <div className="p-4" style={{ fontSize: F.sm, color: T.ink3 }}>Loading…</div>;
-  const v = p.vendor;
-  const prices = p.prices.filter((x) => !q.trim() || x.item.name.toLowerCase().includes(q.trim().toLowerCase()) || (x.vendor_sku ?? "").toLowerCase().includes(q.trim().toLowerCase()));
+  const t = search.get("t");
+  const back = search.get("from") === "threads"
+    ? { href: `/dashboard/messages/${id}${t ? `?t=${encodeURIComponent(t)}` : ""}`, label: "Back to the thread" }
+    : { href: "/dashboard/vendors", label: "Vendors" };
+  const v = p?.vendor;
+  const receipts = p ? p.files.filter((f) => f.category === "receipt" || f.category === "vendor_quote").length : 0;
+  const extra: RecordExtras = {
+    tabs: [
+      { key: "prices", label: `Prices ${p?.prices.length ?? ""}`.trim(), render: () => p ? <VendorPrices p={p} onDefault={(pr) => void makeDefault(pr)} /> : <Empty text={err ?? "Loading…"} /> },
+      { key: "receipts", label: `Receipts & quotes ${p ? receipts : ""}`.trim(), render: () => p ? <VendorReceipts p={p} onImport={() => setReceipt(true)} /> : <Empty text={err ?? "Loading…"} /> },
+    ],
+    actions: [
+      { label: "+ Receipt or quote", primary: true, onClick: () => setReceipt(true) },
+      { label: "App access", onClick: () => {
+        // Settings → People opens with this vendor picked for an invite (081).
+        try { sessionStorage.setItem(PENDING_VENDOR_KEY, JSON.stringify({ contact_id: id, email: v?.email ?? null })); } catch {}
+        window.dispatchEvent(new Event("sc:open-settings"));
+      } },
+    ],
+    onEdit: () => setEditing(true),
+    ...(v && p ? {
+      address: v.address,
+      meta: [v.subtype ? SUB_LABEL[v.subtype] ?? v.subtype : "Vendor", v.service_area ? `delivers ${v.service_area}` : null,
+        `${p.prices.length} price${p.prices.length === 1 ? "" : "s"}`],
+      facts: { title: "Vendor", rows: [
+        ["Kind", v.subtype ? SUB_LABEL[v.subtype] ?? v.subtype : null],
+        ["Delivers", v.service_area, v.service_area ? undefined : "— say where, in Edit"],
+        ["Prices", p.prices.length ? String(p.prices.length) : null],
+        ["Default on", String(p.prices.filter((x) => x.is_default).length), "items budgets price from them"],
+        ["Receipts", receipts ? String(receipts) : null],
+      ] as Array<[string, string | null, string?]> },
+    } : {}),
+    note: note ? { text: note, onDismiss: () => setNote(null) } : err && p ? { text: err, onDismiss: () => setErr(null) } : null,
+  };
 
   return (
-    <div ref={measure} className="px-3 py-3 mx-auto" style={{ maxWidth: 1180 }}>
-      <Link href="/dashboard/vendors" style={{ ...eyebrow, color: T.chalk }}>← Vendors</Link>
-      <div className="flex items-start gap-2 flex-wrap mt-1">
-        <div style={{ flex: 1, minWidth: 200 }}>
-          <h1 style={{ fontFamily: disp, fontSize: F.xl, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".02em", lineHeight: 1.05 }}>{label(v)}</h1>
-          <div style={{ fontSize: F.xs, color: T.ink2 }}>
-            {[v.subtype ? SUB_LABEL[v.subtype] ?? v.subtype : "Vendor", v.service_area ? `delivers ${v.service_area}` : null].filter(Boolean).join(" · ")}
-          </div>
-          <div style={{ fontSize: F.xs, color: T.ink3, lineHeight: 1.5 }}>
-            {[v.phone ? formatPhone(v.phone) : null, v.email, v.address].filter(Boolean).join(" · ") || "No phone, email or address yet"}
-          </div>
-        </div>
-        <div className="flex gap-2 flex-wrap">
-          {v.phone && <a href={`tel:${v.phone}`} style={{ ...btn(false), display: "inline-flex", alignItems: "center" }}>Call</a>}
-          {p.messages > 0 && <Link href={`/dashboard/messages/${id}`} style={{ ...btn(false), display: "inline-flex", alignItems: "center" }}>Conversation</Link>}
-          <button onClick={() => setEditing(true)} style={btn(false)}>Edit</button>
-          <button onClick={() => setReceipt(true)} style={btn(true)}>+ Receipt or quote</button>
-          {/* Onsite estimators are vendors first (081; Coy, 2026-10-05): from here to Settings → People with them picked. */}
-          <button onClick={() => {
-            try { sessionStorage.setItem(PENDING_VENDOR_KEY, JSON.stringify({ contact_id: id, email: v.email ?? null })); } catch { /* private mode */ }
-            window.dispatchEvent(new Event("sc:open-settings"));
-          }} title="Invite them into the app as an onsite estimator" style={btn(false)}>App access</button>
-          <ArchiveButton kind="contact" id={id} action="delete" what={label(v)} then="/dashboard/vendors" style={{ ...btn(false), color: T.red, borderColor: T.red }}>Delete</ArchiveButton>
-        </div>
-      </div>
-      {err && <div className="mt-2 rounded px-3 py-2" style={{ fontSize: F.sm, color: T.red, background: T.redDim }}>{err}</div>}
-      {note && <div className="mt-2 rounded px-3 py-2 flex gap-2" style={{ fontSize: F.sm, background: T.greenDim }}><span style={{ flex: 1 }}>{note}</span><button onClick={() => setNote(null)} aria-label="Dismiss">×</button></div>}
-
-      <div className="grid gap-3 mt-3" style={{ gridTemplateColumns: wide ? "minmax(0, 1fr) 340px" : "minmax(0, 1fr)" }}>
-        <section style={{ background: T.card }} className="rounded">
-          <div className="flex items-center gap-2 px-3 py-2" style={{ borderBottom: `1px solid ${T.hairSoft}` }}>
-            <span style={{ ...eyebrow, color: T.ink, flex: 1 }}>Prices · {p.prices.length}</span>
-            {p.prices.length > 8 && <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find" aria-label="Find a price" style={{ ...field, width: 160, height: 28 }} />}
-          </div>
-          {prices.length === 0 ? (
-            <div className="px-3 py-3" style={{ fontSize: F.sm, color: T.ink2, lineHeight: 1.5 }}>
-              {p.prices.length ? "Nothing matches." : "No prices yet. Add a receipt or quote and Dusty reads their prices; or add them to an item in the Price book."}
-            </div>
-          ) : prices.map((pr) => (
-            <div key={pr.id} className="flex items-center gap-2 px-3 py-1.5" style={{ borderTop: `1px solid ${T.hairSoft}` }}>
-              <button onClick={() => { if (!pr.is_default) void makeDefault(pr); }} aria-label={pr.is_default ? `Default for ${pr.item.name}` : `Make default for ${pr.item.name}`}
-                title={pr.is_default ? "Their price is the one budgets use" : "Make theirs the price budgets use"}
-                style={{ fontSize: 18, lineHeight: 1, color: pr.is_default ? T.hiviz : T.hair, cursor: pr.is_default ? "default" : "pointer", width: 22 }}>★</button>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: F.sm, fontWeight: 600, ...clip }}>{pr.item.name}</div>
-                <div style={{ fontSize: 10, color: T.ink3, ...clip }}>
-                  {[pr.vendor_sku ? `#${pr.vendor_sku}` : null, pr.price_as_of ? dateLabel(pr.price_as_of) : null, pr.price_source,
-                    pr.cheapest_other ? `${pr.cheapest_other.unit_cost < (pr.unit_cost ?? Infinity) ? "cheaper" : "next"}: ${money(pr.cheapest_other.unit_cost)} ${pr.cheapest_other.vendor ?? ""}` : null].filter(Boolean).join(" · ")}
-                </div>
-              </div>
-              <span style={{ ...nums, fontSize: F.sm }}>{pr.unit_cost === null ? <span style={{ color: T.hiviz }}>blank</span> : money(pr.unit_cost)}<span style={{ fontSize: 10, color: T.ink3 }}>/{pr.unit ?? pr.item.unit ?? "?"}</span></span>
-            </div>
-          ))}
-          <div className="px-3 py-2" style={{ fontSize: 10, color: T.ink3, borderTop: `1px solid ${T.hairSoft}` }}>
-            ★ = their price is the one budgets use for that item. <Link href="/dashboard/price-book" style={{ color: T.chalk }}>Price book →</Link>
-          </div>
-        </section>
-
-        <div className="flex flex-col gap-3">
-          <section style={{ background: T.card }} className="rounded">
-            <div className="px-3 py-2" style={{ ...eyebrow, color: T.ink, borderBottom: `1px solid ${T.hairSoft}` }}>Receipts & quotes · {p.files.filter((f) => f.category === "receipt" || f.category === "vendor_quote").length}</div>
-            {p.files.length === 0 ? <div className="px-3 py-3" style={{ fontSize: F.sm, color: T.ink3 }}>None yet.</div>
-              : p.files.slice(0, 20).map((f) => {
-                const n = Array.isArray(f.facts?.price_lines) ? (f.facts?.price_lines as unknown[]).length : 0;
-                return (
-                  <div key={f.id} className="px-3 py-1.5" style={{ borderTop: `1px solid ${T.hairSoft}` }}>
-                    <div className="flex items-baseline gap-2">
-                      {f.url ? <a href={f.url} target="_blank" rel="noreferrer" style={{ fontSize: F.sm, color: T.ink, flex: 1, minWidth: 0, ...clip }}>{f.name}</a>
-                        : <span style={{ fontSize: F.sm, flex: 1, minWidth: 0, ...clip }}>{f.name}</span>}
-                      <span style={{ fontSize: 10, color: T.ink3 }}>{new Date(f.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
-                    </div>
-                    <div style={{ fontSize: 10, color: T.ink3, ...clip }}>{f.read_state === "read" ? (n ? `${n} price line${n === 1 ? "" : "s"}` : f.summary ?? "read") : f.read_state === "failed" ? "couldn't read" : f.read_state === "skipped" ? "not readable" : "reading…"}</div>
-                  </div>
-                );
-              })}
-            {p.files.some((f) => Array.isArray(f.facts?.price_lines)) && (
-              <div className="px-3 py-2" style={{ borderTop: `1px solid ${T.hairSoft}` }}>
-                <button onClick={() => setReceipt(true)} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>Import prices from one →</button>
-              </div>
-            )}
-          </section>
-          <section style={{ background: T.card }} className="rounded">
-            <div className="px-3 py-2" style={{ ...eyebrow, color: T.ink, borderBottom: `1px solid ${T.hairSoft}` }}>Jobs · {p.jobs.length}</div>
-            {p.jobs.length === 0 ? <div className="px-3 py-3" style={{ fontSize: F.sm, color: T.ink3 }}>Not on a job yet. Add them from a job&apos;s Vendors chip.</div>
-              : p.jobs.map((j) => (
-                <Link key={j.id} href={`/dashboard/scope/${j.id}`} className="block px-3 py-1.5" style={{ borderTop: `1px solid ${T.hairSoft}`, color: T.ink }}>
-                  <span style={{ fontSize: F.sm, ...clip, display: "block" }}>{j.title ?? "Job"}</span>
-                  <span style={{ fontSize: 10, color: T.ink3, ...clip, display: "block" }}>{[j.role, j.address, j.status].filter(Boolean).join(" · ")}</span>
-                </Link>
-              ))}
-          </section>
-        </div>
-      </div>
-
-      {editing && <EditVendor v={v} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); setTick((n) => n + 1); }} />}
+    <>
+      <PersonScreen contactId={id} back={back} extra={extra} onPerson={onPerson} reloadKey={tick} />
+      {editing && v && <EditVendor v={v} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); setTick((n) => n + 1); }} />}
       <ReceiptImport open={receipt} vendorId={id} onClose={() => setReceipt(false)} onDone={(m) => { setNote(m); setTick((n) => n + 1); }} />
+    </>
+  );
+}
+
+/** Prices: theirs on each item, ★ the one budgets use (tap to make it so); their cards under it. */
+function VendorPrices({ p, onDefault }: { p: VPage; onDefault: (pr: Price) => void }) {
+  const [q, setQ] = useState("");
+  const [cards, setCards] = useState(false);
+  const s = q.trim().toLowerCase();
+  const prices = p.prices.filter((x) => !s || x.item.name.toLowerCase().includes(s) || (x.vendor_sku ?? "").toLowerCase().includes(s));
+  return (
+    <div className="p-4 flex flex-col gap-3" style={{ maxWidth: 900 }}>
+      <section className="rounded" style={{ background: T.card, border: `1px solid ${T.hair}` }}>
+        <div className="flex items-center gap-2 px-3 py-2" style={{ borderBottom: `1px solid ${T.hairSoft}` }}>
+          <h3 style={{ ...panelTitle, flex: 1 }}>Prices</h3>
+          {p.prices.length > 8 && <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find" aria-label="Find a price" style={{ ...field, width: 160, height: 28 }} />}
+        </div>
+        {prices.length === 0 ? (
+          <div className="px-3 py-3" style={{ fontSize: F.sm, color: T.ink3, lineHeight: 1.5 }}>
+            {p.prices.length ? "Nothing matches." : "No prices yet. Add a receipt or quote and Dusty reads their prices; or add them to an item in the Price book."}
+          </div>
+        ) : prices.map((pr) => (
+          <div key={pr.id} className="flex items-center gap-2 px-3 py-1.5" style={{ borderTop: `1px solid ${T.hairSoft}` }}>
+            <button onClick={() => { if (!pr.is_default) onDefault(pr); }} aria-label={pr.is_default ? `Default for ${pr.item.name}` : `Make default for ${pr.item.name}`}
+              title={pr.is_default ? "Their price is the one budgets use" : "Make theirs the price budgets use"}
+              style={{ fontSize: 18, lineHeight: 1, color: pr.is_default ? T.hiviz : T.hair, cursor: pr.is_default ? "default" : "pointer", width: 22 }}>★</button>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: F.sm, fontWeight: 600, ...clip }}>{pr.item.name}</div>
+              <div style={{ fontSize: 10, color: T.ink3, ...clip }}>
+                {[pr.vendor_sku ? `#${pr.vendor_sku}` : null, pr.price_as_of ? dateLabel(pr.price_as_of) : null, pr.price_source,
+                  pr.cheapest_other ? `${pr.cheapest_other.unit_cost < (pr.unit_cost ?? Infinity) ? "cheaper" : "next"}: ${money(pr.cheapest_other.unit_cost)} ${pr.cheapest_other.vendor ?? ""}` : null].filter(Boolean).join(" · ")}
+              </div>
+            </div>
+            <span style={{ ...nums, fontSize: F.sm }}>{pr.unit_cost === null ? <span style={{ color: T.hiviz }}>blank</span> : money(pr.unit_cost)}<span style={{ fontSize: 10, color: T.ink3 }}>/{pr.unit ?? pr.item.unit ?? "?"}</span></span>
+          </div>
+        ))}
+        <div className="px-3 py-2" style={{ fontSize: 10, color: T.ink3, borderTop: `1px solid ${T.hairSoft}` }}>
+          ★ = their price is the one budgets use for that item. <Link href="/dashboard/price-book" style={{ color: T.chalk }}>Price book →</Link>
+        </div>
+      </section>
+      <div>
+        <button onClick={() => setCards((x) => !x)} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>{cards ? "▾" : "▸"} Cards with them as vendor — edit or add</button>
+        {cards && <div className="mt-2"><CostCards vendorId={p.vendor.id} vendorName={label(p.vendor)} /></div>}
+      </div>
+    </div>
+  );
+}
+
+/** Receipts & quotes filed on them, what Dusty read off each, and Import prices from one. */
+function VendorReceipts({ p, onImport }: { p: VPage; onImport: () => void }) {
+  return (
+    <div className="p-4" style={{ maxWidth: 900 }}>
+      <section className="rounded" style={{ background: T.card, border: `1px solid ${T.hair}` }}>
+        <div className="flex items-center gap-2 px-3 py-2" style={{ borderBottom: `1px solid ${T.hairSoft}` }}>
+          <h3 style={{ ...panelTitle, flex: 1 }}>Receipts &amp; quotes</h3>
+          <button onClick={onImport} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>+ Receipt or quote</button>
+        </div>
+        {p.files.length === 0 ? <div className="px-3 py-3" style={{ fontSize: F.sm, color: T.ink3 }}>None yet. Add a receipt or quote and Dusty reads who it&apos;s from and the prices.</div>
+          : p.files.slice(0, 20).map((f) => {
+            const n = Array.isArray(f.facts?.price_lines) ? (f.facts?.price_lines as unknown[]).length : 0;
+            return (
+              <div key={f.id} className="px-3 py-1.5" style={{ borderTop: `1px solid ${T.hairSoft}` }}>
+                <div className="flex items-baseline gap-2">
+                  {f.url ? <a href={f.url} target="_blank" rel="noreferrer" style={{ fontSize: F.sm, color: T.ink, flex: 1, minWidth: 0, ...clip }}>{f.name}</a>
+                    : <span style={{ fontSize: F.sm, flex: 1, minWidth: 0, ...clip }}>{f.name}</span>}
+                  <span style={{ fontSize: 10, color: T.ink3 }}>{new Date(f.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
+                </div>
+                <div style={{ fontSize: 10, color: T.ink3, ...clip }}>{f.read_state === "read" ? (n ? `${n} price line${n === 1 ? "" : "s"}` : f.summary ?? "read") : f.read_state === "failed" ? "couldn't read" : f.read_state === "skipped" ? "not readable" : "reading…"}</div>
+              </div>
+            );
+          })}
+        {p.files.some((f) => Array.isArray(f.facts?.price_lines)) && (
+          <div className="px-3 py-2" style={{ borderTop: `1px solid ${T.hairSoft}` }}>
+            <button onClick={onImport} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>Import prices from one →</button>
+          </div>
+        )}
+      </section>
     </div>
   );
 }

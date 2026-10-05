@@ -13,8 +13,9 @@
 import React, { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import { T, F, disp, eyebrow } from "@/lib/v34/tokens";
-import "@/styles/v34-shell.css";
+import AuthShell, { GoogleG, OrRule, Spinner, cta, ghost, h1, input, label, lede } from "@/components/site/auth-shell";
+import { siteFonts } from "@/components/site/fonts";
+import { disp } from "@/components/site/marks";
 
 type Peek = { org_name: string | null; role: string | null; email: string | null; invited_by_name: string | null; state: string; email_matches: boolean };
 const PENDING_INVITE_KEY = "sc:pending-invite";
@@ -66,70 +67,98 @@ export default function InvitePage() {
   }
   async function signOut() { await supabase.auth.signOut(); window.location.reload(); }
 
-  const btn = (primary: boolean): React.CSSProperties => ({ height: 44, width: "100%", borderRadius: 4, fontFamily: disp, fontSize: F.md, fontWeight: 600,
-    textTransform: "uppercase", letterSpacing: ".06em", background: primary ? T.hiviz : T.card, color: primary ? T.onHiviz : T.ink, border: primary ? "none" : `1px solid ${T.hair}`, cursor: "pointer" });
   const roleWord = (r: string | null) => (r === "owner" ? "an owner" : r === "field" ? "field crew" : "a member");
+  const roleTag = (r: string | null) => (r === "owner" ? "Owner" : r === "field" ? "Field crew" : "Member");
+  const step = joined ? 2 : peek && !signedOut ? 1 : 0;
+  const initials = (peek?.org_name ?? "").split(/\s+/).filter(Boolean).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
+  const pad: React.CSSProperties = { padding: "26px 28px 30px", display: "flex", flexDirection: "column", gap: 18 };
 
   return (
-    <main className="min-h-screen flex items-center justify-center p-4" style={{ background: T.slab, color: T.ink }}>
-      <div className="w-full rounded p-5 flex flex-col gap-3" style={{ maxWidth: 420, background: T.card, border: `1px solid ${T.hair}` }}>
-        <div style={{ ...eyebrow, color: T.ink3 }}>scopecrete.ai</div>
+    <div className={siteFonts}>
+      <AuthShell
+        above={
+          <div style={{ width: "100%", maxWidth: 440, display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: 6 }}>
+            {["Sign in", "Join", "Done"].map((l, i) => (
+              <div key={l} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <span style={{ height: 3, background: i <= step ? "#F2610C" : "#C8CDD3" }} />
+                <span style={{ ...label, color: i <= step ? "#12161A" : "#8A95A1" }}>0{i + 1} · {l}</span>
+              </div>
+            ))}
+          </div>
+        }
+        footer={<>Wrong person? Let whoever invited you know, or write <a href="mailto:admin@scopecrete.ai" style={{ color: "#3A4249" }}>admin@scopecrete.ai</a></>}
+      >
+        {peek && (
+          <div style={{ padding: "18px 28px", borderBottom: "1px solid #DCE0E5", background: "#F4F5F7", display: "flex", alignItems: "center", gap: 14 }}>
+            <span style={{ width: 44, height: 44, flex: "none", background: "#3A4249", color: "#FFFFFF", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: disp, fontWeight: 700, fontSize: 20, letterSpacing: ".04em" }}>{initials || "·"}</span>
+            <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
+              <span style={{ fontSize: 14, color: "#5A646F" }}>{peek.invited_by_name ?? "An owner"} invited you to</span>
+              <span style={{ fontFamily: disp, fontWeight: 700, fontSize: 22, lineHeight: 1.05, textTransform: "uppercase" }}>{peek.org_name ?? "their team"}</span>
+            </div>
+            <span style={{ flex: 1 }} />
+            <span style={{ flex: "none", padding: "4px 8px", border: "1px solid #B9C0C8", ...label }}>{roleTag(peek.role)}</span>
+          </div>
+        )}
         {joined ? (
-          <>
-            <h1 style={{ fontFamily: disp, fontSize: F.xl, fontWeight: 700, margin: 0 }}>You&apos;re in.</h1>
-            <p style={{ fontSize: F.sm, color: T.ink2, margin: 0 }}>Welcome to {peek?.org_name ?? "the team"}.</p>
-            <a href="/dashboard" style={{ ...btn(true), display: "flex", alignItems: "center", justifyContent: "center" }}>Open the dashboard</a>
-            <a href="/auth/reset-password" style={{ fontSize: F.xs, color: T.chalk, textAlign: "center" }}>Set a password too (optional) — then you can sign in without a link</a>
-          </>
+          <div style={pad}>
+            <span style={{ width: 52, height: 52, borderRadius: "50%", background: "#1FA971", boxShadow: "0 0 0 6px rgba(31,169,113,.16)", display: "flex", alignItems: "center", justifyContent: "center", color: "#FFFFFF", fontSize: 26, fontWeight: 600 }}>✓</span>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <h1 style={h1}>You&apos;re in</h1>
+              <p style={lede}>Welcome to {peek?.org_name ?? "the team"}.</p>
+            </div>
+            <a href="/dashboard" className="sc-cta" style={cta()}>Open ScopeCrete</a>
+            <a href="/auth/reset-password" style={{ fontSize: 13, color: "#3A4249", textAlign: "center" }}>Set a password too (optional) — then you can sign in without a link</a>
+          </div>
         ) : signedOut ? (
-          <>
-            <h1 style={{ fontFamily: disp, fontSize: F.xl, fontWeight: 700, margin: 0 }}>You&apos;ve been invited</h1>
-            <p style={{ fontSize: F.sm, color: T.ink2, margin: 0, lineHeight: 1.5 }}>
-              Sign in with the email address the invite was sent to. If you don&apos;t have an account yet, this makes one.
-            </p>
-            <button onClick={() => void google()} style={btn(false)}>Continue with Google</button>
+          <div style={pad}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <h1 style={h1}>You&apos;ve been invited</h1>
+              <p style={lede}>Sign in with the email address the invite was sent to. If you don&apos;t have an account yet, this makes one.</p>
+            </div>
+            <button className="sc-ghost" onClick={() => void google()} style={ghost}><GoogleG /><span>Continue with Google</span></button>
+            <OrRule>or by email</OrRule>
             {sent ? (
-              <div style={{ fontSize: F.sm, color: T.green }}>Check {email} for a sign-in link. It brings you back here.</div>
+              <div role="status" style={{ fontSize: 15, lineHeight: 1.45, color: "#0F8A4F" }}>Check {email} for a sign-in link. It brings you back here.</div>
             ) : (
-              <form onSubmit={(e) => { e.preventDefault(); void emailLink(); }} className="flex flex-col gap-2">
-                <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com" aria-label="Your email"
-                  style={{ height: 40, border: `1px solid ${T.hair}`, borderRadius: 4, padding: "0 10px", fontSize: F.md, background: T.card, color: T.ink }} />
-                <button type="submit" disabled={busy || !email.trim()} style={{ ...btn(true), opacity: busy ? 0.6 : 1 }}>{busy ? "Sending…" : "Email me a sign-in link"}</button>
+              <form onSubmit={(e) => { e.preventDefault(); void emailLink(); }} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  <span style={label}>Your email</span>
+                  <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com" autoComplete="email" style={input} />
+                </label>
+                <button type="submit" className="sc-cta" disabled={busy || !email.trim()} style={{ ...cta(busy), opacity: !email.trim() ? 0.45 : 1 }}>{busy ? <><Spinner /> Sending</> : "Email me a sign-in link"}</button>
               </form>
             )}
-          </>
+          </div>
         ) : !peek ? (
-          <div style={{ fontSize: F.sm, color: T.ink3 }}>{err ?? "Checking your invite…"}</div>
+          <div style={{ ...pad, fontSize: 15, color: "#5A646F" }}>{err ?? "Checking your invite…"}</div>
         ) : peek.state !== "open" ? (
-          <>
-            <h1 style={{ fontFamily: disp, fontSize: F.xl, fontWeight: 700, margin: 0 }}>
+          <div style={pad}>
+            <h1 style={h1}>
               {peek.state === "accepted" ? "Already used" : peek.state === "revoked" ? "Withdrawn" : peek.state === "expired" ? "Expired" : "Not a valid invite"}
             </h1>
-            <p style={{ fontSize: F.sm, color: T.ink2, margin: 0 }}>
-              {peek.state === "accepted" ? "This invite has been accepted. " : ""}Ask whoever sent it for a new link.
-            </p>
-            <a href="/dashboard" style={{ fontSize: F.sm, color: T.chalk }}>Go to the dashboard</a>
-          </>
+            <p style={lede}>{peek.state === "accepted" ? "This invite has been accepted. " : ""}Ask whoever sent it for a new link.</p>
+            <a href="/dashboard" style={{ fontSize: 15 }}>Go to the dashboard</a>
+          </div>
         ) : (
-          <>
-            <h1 style={{ fontFamily: disp, fontSize: F.xl, fontWeight: 700, margin: 0, lineHeight: 1.1 }}>Join {peek.org_name}</h1>
-            <p style={{ fontSize: F.sm, color: T.ink2, margin: 0, lineHeight: 1.5 }}>
-              {peek.invited_by_name ?? "An owner"} invited {peek.email} as {roleWord(peek.role)}.
-            </p>
+          <div style={pad}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <h1 style={h1}>Join {peek.org_name}</h1>
+              <p style={lede}>Your invite is for <strong style={{ color: "#12161A" }}>{peek.email}</strong>, as {roleWord(peek.role)}.</p>
+            </div>
             {peek.email_matches ? (
-              <button onClick={() => void join()} disabled={busy} style={{ ...btn(true), opacity: busy ? 0.6 : 1 }}>{busy ? "Joining…" : `Join ${peek.org_name}`}</button>
+              <button className="sc-cta" onClick={() => void join()} disabled={busy} style={cta(busy)}>{busy ? <><Spinner /> Joining</> : `Join ${peek.org_name}`}</button>
             ) : (
               <>
-                <div className="rounded px-3 py-2" style={{ background: T.hivizDim, fontSize: F.sm, color: T.ink }}>
+                <div style={{ background: "#FFF1E7", border: "1px solid #F2C9AE", padding: "10px 12px", fontSize: 14, lineHeight: 1.45 }}>
                   You&apos;re signed in as {you ?? "another account"}. This invite is for {peek.email}.
                 </div>
-                <button onClick={() => void signOut()} style={btn(false)}>Sign out and use {peek.email}</button>
+                <button className="sc-ghost" onClick={() => void signOut()} style={ghost}>Sign out and use {peek.email}</button>
               </>
             )}
-          </>
+          </div>
         )}
-        {err && (peek || signedOut) && <div role="alert" style={{ fontSize: F.sm, color: T.red }}>{err}</div>}
-      </div>
-    </main>
+        {err && (peek || signedOut) && <div role="alert" style={{ padding: "0 28px 24px", fontSize: 14, color: "#C0341D" }}>{err}</div>}
+      </AuthShell>
+    </div>
   );
 }

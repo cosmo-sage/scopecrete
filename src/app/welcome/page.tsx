@@ -3,14 +3,8 @@
 // host (previews, vercel.app, localhost) it is here at /welcome, and / stays
 // the sign-in page. Log in goes to app.scopecrete.ai/login (DECISIONS §8).
 import type { Metadata } from "next";
-import { Barlow_Condensed, IBM_Plex_Sans, Inter, Kalam, Lexend } from "next/font/google";
 import Landing from "@/components/site/landing";
-
-const barlow = Barlow_Condensed({ subsets: ["latin"], weight: ["500", "600", "700"], display: "swap", variable: "--site-disp" });
-const plex = IBM_Plex_Sans({ subsets: ["latin"], weight: ["400", "500", "600"], display: "swap", variable: "--site-body" });
-const lexend = Lexend({ subsets: ["latin"], weight: ["700"], display: "swap", variable: "--site-lexend" });
-const inter = Inter({ subsets: ["latin"], weight: ["300"], display: "swap", variable: "--site-inter" });
-const kalam = Kalam({ subsets: ["latin"], weight: ["400"], display: "swap", variable: "--site-kalam" });
+import { siteFonts } from "@/components/site/fonts";
 
 export const metadata: Metadata = {
   title: "ScopeCrete — the office manager for concrete contractors",
@@ -20,7 +14,7 @@ export const metadata: Metadata = {
 
 export default function WelcomePage() {
   return (
-    <div className={`${barlow.variable} ${plex.variable} ${lexend.variable} ${inter.variable} ${kalam.variable}`}>
+    <div className={siteFonts}>
       <Landing />
     </div>
   );

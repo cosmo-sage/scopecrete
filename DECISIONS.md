@@ -3069,7 +3069,15 @@ additive changes only, with confirmation.
   admin@scopecrete.ai (no form until one really sends); `/login` and
   `/dashboard…` go to app; `/p/…` (proposal links), `/calculator`, `/auth`, `/invite`
   stay. **app.scopecrete.ai** — `/login` is the sign-in page (`/` sends
-  there); signed in, `/login` and `/dashboard…` go on to the org's own
+  there; the design's Login screen, `src/components/site/sign-in.tsx`:
+  email and password, Forgot password, Continue with Google, and a Request
+  access tab that is an email — the design's phone sign-in is left out, no
+  texting until 10DLC; the invite page `/invite/<token>` wears the same
+  frame, `auth-shell.tsx`). **On a preview deployment the sign-in page
+  says so** in a yellow strip — "Feedback sandbox · not the live site" on
+  `claude/feedback`, "Preview · <branch>" on others, nothing in production
+  (`src/lib/sandbox.ts`, from Vercel's `VERCEL_ENV` / `VERCEL_GIT_COMMIT_REF`,
+  tested); signed in, `/login` and `/dashboard…` go on to the org's own
   address. **`<orgs.slug>.app.scopecrete.ai`** — that org's dashboard
   (Sacco Enterprises is `sbuild`, its existing slug); `/` → `/dashboard`;
   signed out → app's `/login?next=`; a non-member is sent to their own org;

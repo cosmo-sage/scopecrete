@@ -324,12 +324,6 @@ export function Proposal({ jobId }: { jobId: string }) {
   // sub split — lives on the job's Budget now; what shapes the DOCUMENT stays here, as one strip.
   const settings = (
     <ProposalSettings b={b} p={p} editable={editable} onType={setType}
-      onOption={(id) => {
-        // "Every option" is a display switch; a single option is the proposal's option.
-        if (id === "__all") { change("display", { ...(p.display ?? {}), all_options: true }, 0); return; }
-        if (p.display?.all_options) change("display", { ...(p.display ?? {}), all_options: false }, 0);
-        change("option_id", id, 0);
-      }}
       onWarrantyTpl={(id) => change("warranty", { template_id: id }, 0)} onTermsTpl={(id) => change("terms", { template_id: id }, 0)} />
   );
   const ok = vm.priced.ok ? vm.priced : null;
@@ -415,10 +409,10 @@ export function Proposal({ jobId }: { jobId: string }) {
 
 const lbl: React.CSSProperties = { fontFamily: disp, fontSize: 11, fontWeight: 600, letterSpacing: ".14em", textTransform: "uppercase", color: T.ink3 };
 
-/** What shapes the document: the project type (loads its defaults), the option, and the warranty and contract. */
-function ProposalSettings({ b, p, editable, onType, onOption, onWarrantyTpl, onTermsTpl }: {
+/** What shapes the document: the project type (loads its defaults) and the warranty and contract. */
+function ProposalSettings({ b, p, editable, onType, onWarrantyTpl, onTermsTpl }: {
   b: Bundle; p: Prop; editable: boolean;
-  onType: (k: string) => void; onOption: (id: string | null) => void;
+  onType: (k: string) => void;
   onWarrantyTpl: (id: string | null) => void; onTermsTpl: (id: string | null) => void;
 }) {
   const forType = (kind: "warranty" | "terms") => b.templates.filter((t) => t.kind === kind && (!p.project_type || !t.project_types.length || t.project_types.includes(p.project_type)));
@@ -434,15 +428,6 @@ function ProposalSettings({ b, p, editable, onType, onOption, onWarrantyTpl, onT
           ))}
         </div>
       </div>
-      {b.options.length > 0 && (
-        <label className="block"><span style={lbl}>Option</span><br />
-          <select disabled={!editable} value={p.display?.all_options && b.options.length > 1 ? "__all" : p.option_id ?? ""} onChange={(e) => onOption(e.target.value || null)} className="mt-1" style={sel}>
-            <option value="">{b.options[0]?.label ?? "First"} (first)</option>
-            {b.options.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
-            {b.options.length > 1 && <option value="__all">Every option — the customer picks</option>}
-          </select>
-        </label>
-      )}
       <label className="block"><span style={lbl}>Warranty</span><br />
         <select disabled={!editable} value={p.warranty?.template_id ?? ""} onChange={(e) => onWarrantyTpl(e.target.value || null)} className="mt-1" style={sel}>
           <option value="">None</option>
@@ -456,7 +441,7 @@ function ProposalSettings({ b, p, editable, onType, onOption, onWarrantyTpl, onT
         </select>
       </label>
       <div style={{ fontSize: 11, color: T.ink3, flexBasis: "100%" }}>
-        {b.options.length > 1 ? <>An option is a set of budget lines: lines tagged with it are only in it; untagged lines are in every option. &ldquo;Every option&rdquo; prices each one and shows them side by side for the customer to pick.<br /></> : null}
+        One price per job: to offer an alternative, make its line an optional add-on (on the budget line, or in the price list below) — priced, not in the total.<br />
         Margin, O.H., tax and the sub split are on the job&apos;s <Link href={`/dashboard/scope/${b.job.id}`} style={{ color: T.chalk }}>Budget</Link>. Defaults per type are in{" "}
         <Link href="/dashboard/price-book?tab=defaults" style={{ color: T.chalk }}>Price book → Defaults</Link>. Picking a template replaces this proposal&apos;s edits to that section.
       </div>

@@ -28,7 +28,7 @@ export async function jobValues(sb: Sb, orgId: string, jobs: Array<{ id: string;
   const estRows = (ests ?? []) as Array<{ id: string; job_id: string; tax_on: boolean | null; discount_amount: unknown; selected_option_id: string | null }>;
   const estIds = estRows.map((e) => e.id);
   const [{ data: opts }, { data: rows }, pricing, { data: secs }, takeoff] = await Promise.all([
-    estIds.length ? sb.from("estimate_options").select("id, estimate_id").eq("org_id", orgId).in("estimate_id", estIds) : Promise.resolve({ data: [] }),
+    Promise.resolve({ data: [] as Array<{ id: string; estimate_id: string }> }), /* one price per job — options not read (2026-10-05) */
     estIds.length ? sb.from("estimate_line_items").select("id, estimate_id, name, cost_type, unit, unit_cost, margin_pct, taxable, qty_rule, rule_params, qty_source, quantity, section_id, option_id, cost_group_id, takeoff_parameter_id")
       .in("estimate_id", estIds) : Promise.resolve({ data: [] }),
     pricingFor(sb, orgId, ids),

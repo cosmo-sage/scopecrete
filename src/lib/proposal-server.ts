@@ -96,7 +96,7 @@ export async function proposalBundle(sb: Sb, orgId: string, jobId: string, opts:
   const [draft, { data: finals }, { data: optRows }, { data: lines }, { data: secs }, pricing, takeoff, org, { data: types }, { data: templates }, customer, contact, { data: photos }] = await Promise.all([
     draftFor(sb, orgId, jobId, (job.job_type as string | null) ?? null, opts.create !== false),
     sb.from("job_proposals").select("id, version, finalized_at, snapshot").eq("org_id", orgId).eq("job_id", jobId).eq("status", "final").order("version", { ascending: false }),
-    est ? sb.from("estimate_options").select("id, label, sort_order").eq("org_id", orgId).eq("estimate_id", est.id as string).order("sort_order") : Promise.resolve({ data: [] }),
+    Promise.resolve({ data: [] as Array<{ id: string; label: string }> }), /* one price per job — options not read (2026-10-05) */
     est ? sb.from("estimate_line_items").select(LINE_COLUMNS).eq("estimate_id", est.id as string).order("sort_order").order("name") : Promise.resolve({ data: [] }),
     sb.from("job_sections").select("id, name, work_type, length_ft, width_ft, sqft_override, depth_in, psi, rebar, prep_notes, sort_order, count_qty, count_unit").eq("org_id", orgId).eq("job_id", jobId).order("sort_order"),
     pricingFor(sb, orgId, [jobId]),

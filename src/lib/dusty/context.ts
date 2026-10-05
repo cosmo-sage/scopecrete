@@ -658,7 +658,7 @@ async function budgetBlock(sb: Sb, orgId: string, jobId: string, sections: Secti
     .eq("org_id", orgId).eq("job_id", jobId).eq("status", "draft").maybeSingle();
   if (!est) return null;
   const [{ data: opts }, { data: rows }] = await Promise.all([
-    sb.from("estimate_options").select("id, label").eq("org_id", orgId).eq("estimate_id", est.id).order("sort_order"),
+    Promise.resolve({ data: [] as Array<{ id: string; label: string }> }), /* one price per job — options not read (2026-10-05) */
     sb.from("estimate_line_items").select("id, name, cost_type, unit, unit_cost, margin_pct, taxable, qty_rule, rule_params, qty_source, quantity, section_id, option_id, cost_group_id, takeoff_parameter_id")
       .eq("estimate_id", est.id).order("sort_order"),
   ]);
@@ -675,7 +675,7 @@ async function budgetBlock(sb: Sb, orgId: string, jobId: string, sections: Secti
     ? `; job minimum $${min.minimum.toFixed(0)} (${min.days} days × $${min.day_minimum.toFixed(0)})${total < min.minimum ? " — UNDER THE MINIMUM" : ""}`
     : `; job minimum unknown (${min.blocked.join(", ")})`;
   const secName = (id: string | null) => (id ? sections.find((x) => x.id === id)?.name || "section" : "whole job");
-  const optName = (id: string | null) => (id ? options.find((o) => o.id === id)?.label ?? "option" : "all options");
+  const optName = (id: string | null) => (id ? options.find((o) => o.id === id)?.label ?? "option" : "Budget");
   const out: string[] = [];
   for (const tr of res.tiers) {
     const head = tr.option_id ? `Option ${optName(tr.option_id)}` : "Budget";
@@ -693,11 +693,11 @@ async function budgetBlock(sb: Sb, orgId: string, jobId: string, sections: Secti
     out.push(`AREA ${secName(a)}: cost $${sum("ext_cost").toFixed(2)}, O.H. $${sum("overhead").toFixed(2)}, price $${sum("ext_price").toFixed(2)}${rs.some((r) => r.blocked.length) ? " (partial — some lines blocked)" : ""}`);
     for (const l of ls) {
       const r = res.lines[l.id];
-      out.push(`  - ${l.name} [${optName(l.option_id)}]: ${r.blocked.length ? `blocked — ${r.blocked.join(", ")}` :
+      out.push(`  - ${l.name}: ${r.blocked.length ? `blocked — ${r.blocked.join(", ")}` :
         `${r.qty} ${l.unit ?? ""} (${r.qty_note ?? ""}) × $${l.unit_cost} = cost $${(r.ext_cost ?? 0).toFixed(2)}; O.H. $${(r.overhead ?? 0).toFixed(2)}; margin ${r.margin_pct}% (${r.margin_from}) → price $${(r.ext_price ?? 0).toFixed(2)}`}`);
     }
   }
-  return { title: "The job budget (THE price — quote these numbers, each option separately)", lines: out };
+  return { title: "The job budget (THE price — one price per job; alternatives are optional add-ons on the proposal)", lines: out };
 }
 
 async function customerContext(sb: Sb, orgId: string, id: string): Promise<Assembled> {

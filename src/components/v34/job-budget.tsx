@@ -18,7 +18,7 @@
  * - Desktop (wide): the grid — Item · Area · Vendor · Qty · Unit · Unit cost ·
  *   Ext cost · O.H. · Margin · Unit price · Ext price · Tax, grouped area ▸
  *   cost group ▸ line. Phone: v34's cost cards, one per group.
- * - Options: a line with no option is in every tier; each tier's total shows.
+ * - One price per job; alternatives are optional add-ons on the proposal.
  *
  * The maths is the engine's budget() — the same function Dusty's context and
  * the proposal read — so there is one set of numbers.
@@ -109,7 +109,6 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
   const [data, setData] = useState<Data | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
-  const [tier, setTier] = useState<string>("all");
   // The picker opens on an area (its own "+ Add") or on the whole job.
   const [picker, setPicker] = useState<{ area: string } | null>(null);
   // The Price book itself, opened over the job (Coy, 2026-10-02) — "+ Add" goes here.
@@ -176,7 +175,7 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
 
   const res = useMemo(() => {
     if (!data) return null;
-    return priceBudget(data.lines, data.options.map((o) => o.id), data.settings, sections, days,
+    return priceBudget(data.lines, [], data.settings, sections, days,
       { tax_on: data.estimate?.tax_on ?? true, discount: data.estimate?.discount_amount ?? 0, takeoff: data.takeoff });
   }, [data, sections, days]);
   const minimum = useMemo(() => jobMinimum(data?.pricing?.day_minimum ?? null, days), [data, days]);
@@ -185,7 +184,7 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
     if (!onSummary || !data || !res) return;
     onSummary({
       has_lines: data.lines.length > 0, tax_on: data.estimate?.tax_on ?? true,
-      tiers: res.tiers.map((t) => ({ ...t, label: data.options.find((o) => o.id === t.option_id)?.label ?? null })),
+      tiers: res.tiers.map((t) => ({ ...t, label: null })),
       minimum, overhead_pct: data.settings.overhead_pct, margin_pct: data.settings.margin_pct,
     });
   }, [data, res, onSummary, minimum]);
@@ -198,11 +197,12 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
     );
   }
 
-  const opts = data.options;
-  const visible = data.lines.filter((l) => tier === "all" || l.option_id === null || l.option_id === tier);
+  // One price per job (Coy, 2026-10-05: Good / Better / Best removed) — alternatives are optional
+  // add-ons on the proposal. Option rows and tags left in the database are not read.
+  const visible = data.lines;
   const areaName = (id: string | null) => (id ? sections.find((s) => s.id === id)?.name || "Unnamed area" : "Whole job");
   const groupName = (l: Line) => (l.cost_group_id ? data.groups.find((g) => g.id === l.cost_group_id)?.name : null) ?? COST_TYPE_LABEL[l.cost_type as CostType] ?? "Other";
-  const optLabel = (id: string | null) => (id ? opts.find((o) => o.id === id)?.label ?? "?" : null);
+  const optLabel = (id: string | null): string | null => { void id; return null; };
   const asmName = (id: string | null | undefined) => (id ? data.assemblies?.find((a) => a.id === id)?.name ?? null : null);
   const vendorName = (id: string | null): string | null => {
     if (!id) return null;
@@ -249,7 +249,7 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
   // What is left after cost and O.H. — the same margin the lines and totals show.
   const marginOf = (ls: Line[]) => { const p = sum(ls, "ext_price"); return p > 0 ? pct((p - sum(ls, "ext_cost") - sum(ls, "overhead")) / p) : ""; };
 
-  const shownTiers = tier === "all" ? res.tiers : res.tiers.filter((t) => t.option_id === tier);
+  const shownTiers = res.tiers;
   const patchLine = (id: string, body: Record<string, unknown>) => run(() => call(`/api/jobs/${jobId}/budget/lines/${id}`, "PATCH", body));
   // A line offered as an optional add-on on the proposal (priced, not in its total) — marked here
   // too, and switched off here, so it never vanishes from sight (Coy, 2026-10-02).
@@ -405,7 +405,7 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
 
   return (
     <section ref={measure} aria-label="Budget" className="rounded" style={{ background: T.card, border: `1px solid ${T.hair}` }}>
-      {/* ---- header + options ---- */}
+      {/* ---- header ---- */}
       <div className="px-3 pt-2.5 pb-2 flex items-center gap-2 flex-wrap" style={{ borderBottom: `1px solid ${T.hair}` }}>
         <span style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 700 }}>Job totals</span>
         <span style={{ fontSize: F.xs, color: T.ink3 }}>each section&apos;s cost items are in its card above · qty × unit cost → + O.H. → ÷ (1 − margin) → price</span>
@@ -415,38 +415,6 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
           + Whole-job cost
         </button>
       </div>
-      <div className="px-3 py-2 flex items-center gap-1 flex-wrap" role="tablist" aria-label="Options">
-        {opts.length > 0 && (
-          <TierTab on={tier === "all"} onClick={() => setTier("all")} label="All options" />
-        )}
-        {opts.map((o) => {
-          const t = res.tiers.find((x) => x.option_id === o.id);
-          return <TierTab key={o.id} on={tier === o.id} onClick={() => setTier(o.id)} label={o.label}
-            sub={t ? (t.priced ? money0(t.total) : "not priced") : undefined} />;
-        })}
-        <button onClick={() => void run(async () => { const b = await call(`/api/jobs/${jobId}/budget/options`, "POST", {}); setTier(b.option.id); })}
-          className="rounded px-2" style={{ height: 30, border: `1px dashed ${T.chalk}`, color: T.chalk, background: T.card, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", cursor: "pointer" }}>
-          {opts.length ? "+ Option" : "+ Good / better / best"}
-        </button>
-        {tier !== "all" && opts.length > 0 && (
-          <button onClick={() => { const o = opts.find((x) => x.id === tier); const n = window.prompt("Name this option", o?.label ?? ""); if (n && n.trim()) void run(() => call(`/api/jobs/${jobId}/budget/options/${tier}`, "PATCH", { label: n })); }}
-            style={{ ...eyebrow, color: T.ink3, cursor: "pointer", marginLeft: 4 }}>Rename</button>
-        )}
-        {tier !== "all" && opts.length > 0 && (
-          <button onClick={() => { if (window.confirm("Delete this option and the lines only it has? Lines in every option stay.")) void run(async () => { await call(`/api/jobs/${jobId}/budget/options/${tier}`, "DELETE"); setTier("all"); }); }}
-            style={{ ...eyebrow, color: T.red, cursor: "pointer", marginLeft: 4 }}>Delete option</button>
-        )}
-      </div>
-      {opts.length > 0 && (
-        <div className="px-3 pb-2" style={{ fontSize: F.xs, color: T.ink3 }}>
-          {!data.lines.some((l) => l.option_id)
-            ? <b style={{ color: T.hivizText, fontWeight: 600 }}>The options are all the same price: every line is in all of them. </b> : null}
-          {tier === "all" ? "Showing every line. A line tagged with an option is only in that option; untagged lines are in all of them. To make Better differ from Good, pick Better above and add its lines — they go into Better only — or open a line and set its Option."
-            : `Showing the lines in ${optLabel(tier)}: the shared ones and its own. New lines go into ${optLabel(tier)}.`}
-          {opts.length > 1 && <> On the proposal, <b style={{ fontWeight: 600 }}>Option → Every option</b> shows them side by side for the customer to pick.</>}
-        </div>
-      )}
-
       {err && <div className="px-3 pb-2" style={{ fontSize: F.xs, color: T.red }}>{err}</div>}
       {data.lines.length === 0 && (
         <div className="px-3 pb-3" style={{ fontSize: F.sm, color: T.ink3 }}>
@@ -469,7 +437,6 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
                 {areaPriced(a.lines) && areaSize(a.id) ? ` · ${areaSize(a.id)!.per(sum(a.lines, "ext_price"))}` : ""}
               </span>
             )}
-            {tier !== "all" && optLabel(tier) && <span style={{ fontSize: F.xs, color: T.chalk }}>showing {optLabel(tier)}</span>}
             <span className="flex-1" />
             <button onClick={() => setBook({ area: a.id ?? "" })}
               className="rounded px-2.5" style={{ height: 28, background: T.ink, color: T.card, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", letterSpacing: ".05em", cursor: "pointer" }}>
@@ -550,11 +517,10 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
             ))}
           </div>
           {(() => {
-            // The roll-up reads one option: the one picked, else the first.
-            const t = shownTiers[0];
+                        const t = shownTiers[0];
             if (!t) return null;
             const ids = new Set(t.line_ids);
-            return <Rollup lines={data.lines.filter((l) => ids.has(l.id))} res={res} tier={t} tierLabel={opts.length ? optLabel(t.option_id) : null}
+            return <Rollup lines={data.lines.filter((l) => ids.has(l.id))} res={res} tier={t} tierLabel={null}
               sections={sections} wide={wide} overheadPct={data.settings.overhead_pct} marginPct={data.settings.margin_pct} />;
           })()}
           <PriceSummary jobId={jobId} lines={visible} res={res} tiers={shownTiers} proposal={data.proposal} onChanged={reload} />
@@ -574,7 +540,7 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
         }} />
       {book && (
         <Drawer open wide onClose={() => { setBook(null); reload(); }} title="Add from the Price book"
-          sub={`${areaName(book.area || null)}${optLabel(tier === "all" ? null : tier) ? ` · into ${optLabel(tier)}` : " · into every option"}`}>
+          sub={areaName(book.area || null)}>
           <PriceBook pick={{
             // Coy, 2026-10-03: "Full Drive Replacement - Add Cost Items".
             title: `${areaName(book.area || null).replace(/\b\w/g, (c) => c.toUpperCase())} - Add Cost Items`,
@@ -594,8 +560,8 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
                 </button>
               </div>
             ),
-            onCard: (c) => call(`/api/jobs/${jobId}/budget/lines`, "POST", { section_id: book.area || null, option_id: tier === "all" ? null : tier, cost_item_id: c.id }).then(() => undefined),
-            onGroup: (g) => call(`/api/jobs/${jobId}/budget/lines`, "POST", { section_id: book.area || null, option_id: tier === "all" ? null : tier, cost_group_id: g }).then(() => undefined),
+            onCard: (c) => call(`/api/jobs/${jobId}/budget/lines`, "POST", { section_id: book.area || null, cost_item_id: c.id }).then(() => undefined),
+            onGroup: (g) => call(`/api/jobs/${jobId}/budget/lines`, "POST", { section_id: book.area || null, cost_group_id: g }).then(() => undefined),
             onAssembly: (id) => {
               if (!book.area) return Promise.reject(new Error("Pick an area first — an assembly fills one area."));
               return call(`/api/jobs/${jobId}/budget/assembly`, "POST", { assembly_id: id, section_id: book.area }).then(() => undefined);
@@ -603,8 +569,8 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
           }} />
         </Drawer>
       )}
-      <CardPicker key={picker ? `p-${picker.area}` : "closed"} open={!!picker} initialArea={picker?.area ?? ""} onClose={() => setPicker(null)} data={data} sections={sections} tier={tier === "all" ? null : tier}
-        tierLabel={optLabel(tier === "all" ? null : tier)}
+      <CardPicker key={picker ? `p-${picker.area}` : "closed"} open={!!picker} initialArea={picker?.area ?? ""} onClose={() => setPicker(null)} data={data} sections={sections} tier={null}
+        tierLabel={null}
         onAdd={(body) => run(() => call(`/api/jobs/${jobId}/budget/lines`, "POST", body))}
         onNewCard={async (card, line) => {
           // A new Price book card, then onto this budget — one connection, not a one-off.
@@ -621,15 +587,6 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
   );
 }
 
-function TierTab({ on, onClick, label, sub }: { on: boolean; onClick: () => void; label: string; sub?: string }) {
-  return (
-    <button role="tab" aria-selected={on} onClick={onClick} className="rounded px-2.5 text-left"
-      style={{ minHeight: 30, background: on ? T.ink : T.card, color: on ? T.card : T.ink2, border: `1px solid ${on ? T.ink : T.hair}`, cursor: "pointer" }}>
-      <span style={{ fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", letterSpacing: ".06em" }}>{label}</span>
-      {sub && <span style={{ fontSize: 10, marginLeft: 6, opacity: 0.75, ...nums }}>{sub}</span>}
-    </button>
-  );
-}
 
 /** A cost item's note, edited where it sits (it is the line's description — it shows on the proposal). */
 function LineNote({ value, name, onSave }: { value: string | null; name: string; onSave: (v: string | null) => void }) {
@@ -844,7 +801,7 @@ function CardPicker({ open, initialArea, onClose, data, sections, tier, tierLabe
   const add = async (body: Record<string, unknown>, what: string) => { await onAdd({ ...base, ...body }); setAdded(what); setTimeout(() => setAdded(null), 1600); };
   const field: React.CSSProperties = { height: 34, border: `1px solid ${T.hair}`, background: T.card, fontSize: F.sm, borderRadius: 4, padding: "0 8px", width: "100%", minWidth: 0 };
   return (
-    <Sheet open={open} onClose={onClose} title="Add to the budget" sub={tierLabel ? `Into ${tierLabel}` : "Into every option"}>
+    <Sheet open={open} onClose={onClose} title="Add to the budget" sub={tierLabel ? `Into ${tierLabel}` : undefined}>
       <div className="px-4 py-3 flex flex-col gap-2.5">
         <div className="grid grid-cols-2 gap-2">
           <label className="block"><span style={eyebrow}>Area</span>
@@ -996,13 +953,6 @@ function LineSheet({ line, data, sections, res, addon, onAddon, onClose, onPatch
             <option value="">Whole job</option>
             {sections.map((s) => <option key={s.id} value={s.id}>{s.name || "Unnamed area"}</option>)}
           </select></label>
-        {data.options.length > 0 && (
-          <label className="block"><span style={eyebrow}>Option</span>
-            <select value={line.option_id ?? ""} onChange={(e) => onPatch({ option_id: e.target.value || null })} style={field}>
-              <option value="">Every option</option>
-              {data.options.map((o) => <option key={o.id} value={o.id}>{o.label} only</option>)}
-            </select></label>
-        )}
         <label className="block"><span style={eyebrow}>Description (shows on the proposal)</span>
           <textarea defaultValue={line.description ?? ""} rows={2} maxLength={500} style={{ ...field, height: "auto", padding: "6px 8px", resize: "none" }}
             onBlur={(e) => { if ((e.target.value.trim() || null) !== (line.description ?? null)) onPatch({ description: e.target.value }); }} /></label>

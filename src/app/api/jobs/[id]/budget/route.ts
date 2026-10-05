@@ -33,8 +33,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   await refreshJobTax(supabase, orgId, id).catch(() => null);
   const est = await workingEstimate(supabase, orgId, id, false);
   const [opts, lines, groups, cards, pricing, assemblies, takeoff] = await Promise.all([
-    est ? supabase.from("estimate_options").select("id, label, description, sort_order").eq("org_id", orgId).eq("estimate_id", est.id as string).order("sort_order")
-      : Promise.resolve({ data: [] }),
+    Promise.resolve({ data: [] }), /* one price per job — options not read (2026-10-05) */
     est ? supabase.from("estimate_line_items").select(LINE_COLUMNS).eq("estimate_id", est.id as string).order("sort_order").order("name")
       : Promise.resolve({ data: [] }),
     supabase.from("cost_groups").select("id, name, cost_type, default_markup_pct, sort_order").eq("org_id", orgId).order("sort_order").order("name"),

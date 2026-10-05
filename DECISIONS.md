@@ -4,7 +4,7 @@ Ground truth for every agent working this repo. If code disagrees with this
 document, the code is wrong or this document is stale — resolve it, don't
 guess. Update this file in the same PR that changes the behavior it describes.
 
-Last updated: 2026-10-05 (search across the header; six dots for the activity line; job switch on the name's row; budget line notes; quo-intake stores every Quo event, own lines included — v10; one Unit type picker; a section's Camera; Dusty writes in Figtree; Dusty is the Scopecrete Lander; an All thread; proposal cover band and Prepared by; sign-in at app.scopecrete.ai/login, each org at <slug>.app.scopecrete.ai; Dusty's chat keeps its files and files them on a customer or job — migration 079; vendor Delete; Dusty on a vendor's page and looking at attached photos; sales tax by address via TaxLocus — migration 078; archive reasons; Lines, providers and logs — migration 077; internal notes with @-tags; Jobs board sort and filter; jobs by hand — migration 076; done and lost customers in Threads; proposals sent by link, every opening tracked; every option side by side for the customer — migration 075; Documents is Files, everywhere — migration 074; Threads v2 — threads you make, channels per number, the customer page reshaped — migration 073; an address given is kept and asked about — migration 072; Dusty sets addresses; customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
+Last updated: 2026-10-05 (Good / Better / Best removed — one price per job; search across the header; six dots for the activity line; job switch on the name's row; budget line notes; quo-intake stores every Quo event, own lines included — v10; one Unit type picker; a section's Camera; Dusty writes in Figtree; Dusty is the Scopecrete Lander; an All thread; proposal cover band and Prepared by; sign-in at app.scopecrete.ai/login, each org at <slug>.app.scopecrete.ai; Dusty's chat keeps its files and files them on a customer or job — migration 079; vendor Delete; Dusty on a vendor's page and looking at attached photos; sales tax by address via TaxLocus — migration 078; archive reasons; Lines, providers and logs — migration 077; internal notes with @-tags; Jobs board sort and filter; jobs by hand — migration 076; done and lost customers in Threads; proposals sent by link, every opening tracked; every option side by side for the customer — migration 075; Documents is Files, everywhere — migration 074; Threads v2 — threads you make, channels per number, the customer page reshaped — migration 073; an address given is kept and asked about — migration 072; Dusty sets addresses; customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
 
 ---
 
@@ -1437,7 +1437,17 @@ percentage of labour — all three contradict this section and §4.
   proposal would be (`priceChoices()`, `src/lib/proposal.ts`, tested) and
   shows them side by side: what every option includes, then each option's
   own lines and total. Its draws are percentages that add up to 100% — a $
-  draw can't fit two totals — and the final refuses otherwise. Once a budget has lines it IS the price: the takeoff
+  draw can't fit two totals — and the final refuses otherwise.
+  **Removed 2026-10-05 (Coy, on a decision card: "Remove it") — one price
+  per job.** Alternatives are optional add-ons on the proposal (priced, not
+  in the total). The budget has no option bar and a line no Option picker;
+  the proposal has no Option picker or "Every option" mode. Nothing reads
+  `estimate_options` any more (budget API, proposal, Dashboard totals,
+  Dusty), so every line is in the one price. Tables and columns stay (4
+  option rows, 0 tagged lines, 0 selected, 0 proposals showing every
+  option — measured that day, so no price moved); the options API and the
+  document's side-by-side view for an old frozen copy are left dormant.
+  Once a budget has lines it IS the price: the takeoff
   rail and phone strip show each option's total, cost, O.H., margin and
   whether it is under the **job minimum** (§4); Dusty's scope context
   quotes each option, area by area, from the same `budget()`
@@ -2576,8 +2586,8 @@ expected start date per quoted job before it means anything. Add the field.
   vendor's price), **Same item as…** (merge, with Undo), and price history
   naming each price's vendor.
 - **Budget (2026-09-29)** — `src/components/v34/job-budget.tsx` under the
-  sections on the job page. Option bar (All options · Good · Better · Best ·
-  + Option, each with its total; rename / delete an option). **Wide (≥900px
+  sections on the job page. (Its option bar is gone since 2026-10-05 — one
+  price per job, §3.) **Wide (≥900px
   measured): a spreadsheet** — Item · Vendor · Qty · Unit · Unit cost · Ext
   cost · Markup · Unit price · Ext price · Margin · Tax, rows area ▸ cost
   group ▸ line with subtotals, qty / unit cost / markup edited in the cell,

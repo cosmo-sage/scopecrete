@@ -120,6 +120,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   // A phone and a desktop are set apart (Coy, 2026-10-05: "off on mobile and on on desktop");
   // the phone's follows the desktop's until it is set itself.
   const [showLine, setShowLine] = usePref<boolean>("activity_line", true);
+  const [headerLogo] = usePref<boolean>("header_logo", true);
   const [showLinePhone, setShowLinePhone] = usePref<boolean | null>("activity_line_phone", null);
   const deskLineOn = showLine !== false;
   const phoneLineOn = (showLinePhone ?? showLine) !== false;
@@ -210,7 +211,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <header className="px-2.5 lg:px-4 flex items-center gap-3 sc-paper" style={{ height: 54 }}>
           <Link href="/dashboard" className="no-underline shrink-0" aria-label="Dashboard">
             <OrgLockup name={me?.org_name ?? null} hasLight={!!me?.logo_light} hasDark={!!me?.logo_dark} stamp={me?.logo_stamp ?? null}
-              dark={theme.dark} phone={!desktop} />
+              dark={theme.dark} phone={!desktop} showLogo={headerLogo !== false} />
           </Link>
 
           {/* Desktop: the activity line in the header row, after a divider. */}

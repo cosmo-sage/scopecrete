@@ -3640,7 +3640,8 @@ expected start date per quoted job before it means anything. Add the field.
   holds: every text is Coy's tap. Testing sends only to a phone of Coy's that
   is not one of the org's lines, never a customer.
 
-- **Incoming alerts and live calls (migration 086, quo-intake v11, Coy
+- **Incoming alerts and live calls (migration 086, applied 2026-10-06 on
+  Coy's "apply 086"; quo-intake v11, Coy
   2026-10-06: "There needs to be a way for me to be notified inside the
   scopecrete app for incoming emails, text messages and phone calls. And if
   there is an active phone call I would like that thread channel to show it's
@@ -3675,7 +3676,10 @@ expected start date per quoted job before it means anything. Add the field.
     calls newer than the last read. `src/lib/alerts.ts` shapes them (tested,
     `tests/alerts.test.mjs`); `incoming-alerts.tsx` draws the bell, the
     pop-ups and the live badge.
-  - **What Coy turns on:** apply 086, deploy quo-intake v11, and in Quo's
+  - **086 applied 2026-10-06**; checked after: RLS on `live_calls`, one
+    select policy, authenticated may only select, anon nothing, and
+    `live_calls` and `emails` in `supabase_realtime` beside `messages`.
+  - **What Coy turns on:** deploy quo-intake v11, and in Quo's
     webhook settings tick **call.ringing** (no ring has ever reached
     quo_events — Quo wasn't sending it). Until then the bell and pop-ups work
     for texts, calls (when they end) and emails; live calls don't show.

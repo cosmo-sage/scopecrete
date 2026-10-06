@@ -17,16 +17,25 @@ export function useHideHeadOnScroll(resetKey?: string): void {
     const root = document.documentElement;
     let last = window.scrollY;
     let hidden = false;
+    let settle = 0;
     const set = (h: boolean) => {
       if (h === hidden) return;
       hidden = h;
+      // Moving the header resizes what measures from --sc-head, and the
+      // browser's own scroll correction would read as Coy scrolling; let the
+      // page settle before a scroll counts again.
+      settle = performance.now() + 350;
       if (h) root.setAttribute("data-head-hide", "");
       else root.removeAttribute("data-head-hide");
     };
     const onScroll = () => {
       const y = window.scrollY;
       const dy = y - last;
-      if (!phone.matches || y < 40) set(false);
+      // A page with little to scroll keeps its header: hiding it there made
+      // the page jump back and forth (Coy, 2026-10-06, a customer's Files tab).
+      const room = document.documentElement.scrollHeight - window.innerHeight;
+      if (!phone.matches || y < 40 || room < 240) set(false);
+      else if (performance.now() < settle) { last = y; return; }
       else if (dy > 6) set(true);
       else if (dy < -10) set(false);
       if (Math.abs(dy) > 6 || y < 40) last = y;

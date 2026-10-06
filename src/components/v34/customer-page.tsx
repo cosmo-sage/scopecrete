@@ -706,14 +706,13 @@ function TextBubble({ m, who, showWho }: { m: Item; who: string; showWho: boolea
   );
 }
 
-/** A call, per the handoff: summary first → next steps → recording → transcript → notes. Nothing here places a call. */
+/** A call, per the handoff: summary first → recording (next steps are Dusty's, 2026-10-06) → transcript → notes. Nothing here places a call. */
 function CallCard({ m, who, onAddNote }: { m: Item; who: string; onAddNote: (id: string, body: string) => Promise<void> }) {
   const [tx, setTx] = useState<string | null>(null);
   const [txOpen, setTxOpen] = useState(false);
   const [txErr, setTxErr] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState("");
-  const steps = (m.next_steps ?? "").split(/\n+|(?<=\.)\s+(?=[A-Z])/).map((s) => s.replace(/^[-•*\d.)\s]+/, "").trim()).filter(Boolean);
   const openTx = async () => {
     const next = !txOpen;
     setTxOpen(next);
@@ -736,12 +735,6 @@ function CallCard({ m, who, onAddNote }: { m: Item; who: string; onAddNote: (id:
       </header>
       <DraftQuoteButton messageId={m.id} style={{ alignSelf: "flex-start" }} />
       {m.summary && <div><div style={{ ...lbl, fontSize: 11, color: T.hivizText }}>Summary · Dusty</div><p style={{ margin: "3px 0 0", fontSize: 13.5, lineHeight: 1.5, color: T.ink }}>{m.summary}</p></div>}
-      {steps.length > 0 && (
-        <div style={{ background: T.dustyTint, borderRadius: 3, padding: "7px 11px" }}>
-          <div style={{ ...lbl, fontSize: 11, color: T.dustyText }}>Next steps</div>
-          {steps.map((s) => <div key={s} className="flex gap-2 items-center mt-1" style={{ fontSize: 13, color: T.ink }}><span style={{ width: 12, height: 12, borderRadius: 2, border: `1.5px solid ${T.dustyEdge}`, flexShrink: 0 }} />{s}</div>)}
-        </div>
-      )}
       <div style={{ borderTop: `1px solid ${T.hairSoft}` }}>
         <div style={row}>
           <span style={{ ...lbl, width: 80, color: T.ink2 }}>Recording</span>

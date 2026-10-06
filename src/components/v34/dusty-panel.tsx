@@ -161,15 +161,27 @@ export function DustyPanel({ open, onClose, onBusy, onStream }: {
 
   // A page can hand Dusty a question to start from (the proposal's "Edit with
   // Dusty"): it lands in the message box for Coy to send or change — Dusty
-  // never sends it on his own.
+  // never sends it on his own. `send` is a button Coy tapped to ask it (the
+  // thread's emblem, dusty-brief.ts): asked once the chat about the page is in.
+  const autoAsk = useRef<string | null>(null);
+  const [autoTick, setAutoTick] = useState(0);
   useEffect(() => {
     const put = (e: Event) => {
-      const q = (e as CustomEvent<{ text?: string }>).detail?.text;
-      if (typeof q === "string" && q.trim()) setDraft(q.slice(0, 4000));
+      const d = (e as CustomEvent<{ text?: string; send?: boolean }>).detail;
+      const q = d?.text;
+      if (typeof q !== "string" || !q.trim()) return;
+      if (d?.send) { autoAsk.current = q.slice(0, 4000); setAutoTick((n) => n + 1); } else setDraft(q.slice(0, 4000));
     };
     window.addEventListener("sc:dusty-draft", put);
     return () => window.removeEventListener("sc:dusty-draft", put);
   }, []);
+  useEffect(() => {
+    const q = autoAsk.current;
+    if (!q || !open || !convs || openedFor !== openKey || loadingConv || busy) return;
+    autoAsk.current = null;
+    void ask(q);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- ask() reads this render's chat; it runs once per tap
+  }, [autoTick, open, convs, openedFor, openKey, loadingConv, busy]);
 
   async function ask(text: string) {
     const ready = atts.filter((a) => a.id && !a.error);

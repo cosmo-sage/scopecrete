@@ -1,5 +1,7 @@
 "use client";
 
+import { Emblem } from "@/components/site/marks";
+import { askDustyBrief } from "@/lib/v34/dusty-brief";
 import React, { useState, useEffect } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Phone, WarningCircle, Envelope, Sparkle, NotePencil, CaretDown, CaretUp } from "@phosphor-icons/react";
@@ -298,7 +300,9 @@ export default function ChatThreadPage() {
             </div>
             <span className="hidden lg:flex items-center gap-2">
               <Link href={pageLink.href} style={pill}>{pageLink.label} ›</Link>
-              <button onClick={() => window.dispatchEvent(new Event("sc:dusty-open"))} style={{ ...pill, border: `1px solid ${T.hiviz}`, color: T.hiviz }}>Ask Dusty</button>
+              {/* The ScopeCrete emblem is the AI (Coy, 2026-10-06): Dusty opens with where this thread stands and the next steps. */}
+              <button onClick={askDustyBrief} aria-label="Ask Dusty where this stands and the next steps" title="Dusty: where this stands and the next steps"
+                className="flex items-center justify-center" style={{ ...pill, padding: "0 6px", border: `1px solid ${T.hiviz}` }}><Emblem size={22} spin /></button>
             </span>
             <button onClick={() => fold(!folded)} className="lg:hidden shrink-0" aria-expanded={!folded} aria-label={folded ? "Show the channels" : "Fold the header"}
               style={{ ...pill, padding: "0 8px" }}>{folded ? <CaretDown size={13} /> : <CaretUp size={13} />}</button>
@@ -307,7 +311,7 @@ export default function ChatThreadPage() {
               {more && (
                 <div className="absolute right-0 z-20 flex flex-col rounded" style={{ top: 32, minWidth: 180, background: T.card, border: `1px solid ${T.hairStrong}`, boxShadow: "0 6px 18px rgba(0,0,0,.12)" }}>
                   <Link href={pageLink.href} className="lg:hidden px-3 py-2" style={{ fontSize: F.sm, color: T.ink }}>{pageLink.label} ›</Link>
-                  <button onClick={() => { setMore(false); window.dispatchEvent(new Event("sc:dusty-open")); }} className="lg:hidden px-3 py-2 text-left" style={{ fontSize: F.sm, color: T.ink }}>Ask Dusty</button>
+                  <button onClick={() => { setMore(false); askDustyBrief(); }} className="lg:hidden px-3 py-2 text-left flex items-center gap-2" style={{ fontSize: F.sm, color: T.ink }}><Emblem size={16} spin /> Where it stands</button>
                   <button onClick={() => { setMore(false); pickChannel("notes"); }} className="px-3 py-2 text-left flex items-center gap-2" style={{ fontSize: F.sm, color: T.ink, fontWeight: channel?.kind === "notes" ? 700 : 400 }}>
                     <NotePencil size={14} /> Notes{nNotes ? ` (${nNotes})` : ""}
                   </button>

@@ -17,7 +17,7 @@
  *  - SectionHead, Empty, RecentCard, JobRow — the Overview's parts.
  */
 
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import Link from "next/link";
 import { T, F, disp, eyebrow, nums, clip, formatPhone, strong, light } from "@/lib/v34/tokens";
 import { InitialsBox } from "@/components/v34/thread-list";
@@ -76,6 +76,17 @@ export function RecordHeader({ back, title, tag, wide, actions, menu, meta, chil
 }) {
   const [more, setMore] = useState(false);
   const [tabMenu, setTabMenu] = useState(false);
+  // The ☰ panel opens under this header (Coy, 2026-10-06: "let this slide out
+  // panel sit below the … page header"), or under the dashboard header when
+  // this one has scrolled away.
+  const box = useRef<HTMLDivElement>(null);
+  const [drawerTop, setDrawerTop] = useState<number | null>(null);
+  const openTabs = () => {
+    const head = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--sc-head")) || 0;
+    const bottom = box.current?.getBoundingClientRect().bottom ?? head;
+    setDrawerTop(Math.max(head, Math.round(bottom)));
+    setTabMenu(true);
+  };
   const pill: React.CSSProperties = { ...btn(), height: 30 };
   const style = (a: RecordAction): React.CSSProperties => a.primary ? { ...btn(true), height: 30, opacity: a.disabled ? 0.5 : 1 }
     : a.accent ? { ...pill, border: `1px solid ${T.hiviz}`, color: T.hiviz } : { ...pill, opacity: a.disabled ? 0.5 : 1 };
@@ -88,13 +99,13 @@ export function RecordHeader({ back, title, tag, wide, actions, menu, meta, chil
       : <button key={x.label} disabled={x.disabled} title={x.title} onClick={() => { setMore(false); x.onClick?.(); }} style={{ ...menuItem, opacity: x.disabled ? 0.5 : 1 }}>{x.label}</button>;
   };
   return (
-    <div className="px-4 pt-3" style={{ background: T.card, borderBottom: `1px solid ${T.hair}` }}>
+    <div ref={box} className="px-4 pt-3" style={{ background: T.card, borderBottom: `1px solid ${T.hair}` }}>
       <div className="flex items-center gap-2">
         <Link href={back.href} style={{ ...eyebrow, color: T.chalk, flex: 1, minWidth: 0 }}>‹ {back.label}</Link>
-        {!wide && tabs.length > 1 && <button onClick={() => setTabMenu(true)} style={{ ...eyebrow, color: T.ink2, cursor: "pointer" }}>{tabs.find(([k]) => k === tab)?.[1] ?? ""} ▾</button>}
+        {!wide && tabs.length > 1 && <button onClick={openTabs} style={{ ...eyebrow, color: T.ink2, cursor: "pointer" }}>{tabs.find(([k]) => k === tab)?.[1] ?? ""} ▾</button>}
       </div>
       <div className="flex items-center gap-2 mt-0.5">
-        {!wide && tabs.length > 1 && <MenuButton onClick={() => setTabMenu(true)} label="Sections of this page" always />}
+        {!wide && tabs.length > 1 && <MenuButton onClick={openTabs} label="Sections of this page" always />}
         <div className="flex items-center gap-2 flex-1 min-w-0 flex-wrap">
           {typeof title === "string"
             ? <h1 style={{ fontFamily: strong, fontWeight: 700, fontSize: wide ? 24 : 20, lineHeight: 1.2, margin: 0, color: T.ink }}>{title}</h1>
@@ -120,15 +131,15 @@ export function RecordHeader({ back, title, tag, wide, actions, menu, meta, chil
       {wide && meta && <div style={{ fontSize: 11.5, color: T.ink3, marginTop: 2, ...nums, whiteSpace: "normal" }}>{meta}</div>}
       {children}
       {wide ? <RecordTabs tabs={tabs} tab={tab} onTab={onTab} /> : <div style={{ height: 10 }} />}
-      {!wide && tabs.length > 1 && <TabDrawer open={tabMenu} onClose={() => setTabMenu(false)} tabs={tabs} tab={tab} onTab={onTab} />}
+      {!wide && tabs.length > 1 && <TabDrawer open={tabMenu} top={drawerTop} onClose={() => setTabMenu(false)} tabs={tabs} tab={tab} onTab={onTab} />}
     </div>
   );
 }
 
 /** On a phone, the page's tabs as a list that slides in from the left (Coy, 2026-10-06: "a hamburger menu … right to the left of the customer name"). */
-function TabDrawer({ open, onClose, tabs, tab, onTab }: { open: boolean; onClose: () => void; tabs: Array<[string, string]>; tab: string; onTab: (k: string) => void }) {
+function TabDrawer({ open, top, onClose, tabs, tab, onTab }: { open: boolean; top: number | null; onClose: () => void; tabs: Array<[string, string]>; tab: string; onTab: (k: string) => void }) {
   return (
-    <div style={{ position: "fixed", left: 0, right: 0, top: "var(--sc-head)", bottom: "var(--sc-foot)", zIndex: 45, pointerEvents: open ? "auto" : "none" }}>
+    <div style={{ position: "fixed", left: 0, right: 0, top: top ?? "var(--sc-head)", bottom: "var(--sc-foot)", zIndex: 45, pointerEvents: open ? "auto" : "none" }}>
       <SlideDrawer open={open} onClose={onClose} width={260} label="Sections of this page">
         <div style={{ ...eyebrow, padding: "14px 16px 8px" }}>On this page</div>
         <div role="tablist" aria-orientation="vertical" className="flex flex-col">

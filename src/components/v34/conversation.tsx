@@ -13,7 +13,7 @@ import { DraftQuoteButton } from "@/components/v34/call-notes-pad";
  * v34 palette, mapped onto the key names this screen already used.
  *
  * The screen's logic is the part worth keeping — voicemail rendered distinctly
- * from a summary, next_steps surfaced, transcripts fetched only on expand
+ * from a summary, next_steps left to Dusty, transcripts fetched only on expand
  * (they reach ~10,600 characters). Only the colours change, so that rewrite
  * risk stays at zero while the screen stops looking like a different app from
  * the shell around it.
@@ -109,11 +109,6 @@ export function formatPhone(raw: string | null): string {
   return `(${ten.slice(0, 3)}) ${ten.slice(3, 6)}-${ten.slice(6)}`;
 }
 
-/** Quo writes next steps as bullet or numbered lines; show them as a list. */
-function splitSteps(text: string): string[] {
-  return text.split(/\n+/).map((l) => l.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, "").trim()).filter(Boolean);
-}
-
 function formatDuration(s: number | null): string | null {
   if (typeof s !== "number" || s <= 0) return null;
   return s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`;
@@ -195,24 +190,12 @@ export function CallRow({ m }: { m: ThreadMessage }) {
   const [err, setErr] = useState<string | null>(null);
 
   // The recording plays from its own button; "details" are the words.
-  const detailKinds = m.artifact_kinds.filter((k) => k !== "recording");
+  // Next steps stay off the card (Coy, 2026-10-06: "it clutters the information card") — Dusty gives them.
+  const detailKinds = m.artifact_kinds.filter((k) => k !== "recording" && k !== "next_steps");
   const hasArtifacts = detailKinds.length > 0;
-  const hasNext = m.artifact_kinds.includes("next_steps");
   const duration = formatDuration(m.duration_seconds);
   const isOut = m.direction === "outbound";
 
-  // Next steps are what the caller wanted — the receptionist's whole job — so
-  // a call that has them shows them without a tap (desktop design, 1d). Only
-  // those calls fetch up front; transcripts stay behind the expand.
-  useEffect(() => {
-    if (!hasNext) return;
-    let off = false;
-    fetch(`/api/messages/${m.id}/artifacts`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((b) => { if (!off && b) setBundle(b as ArtifactBundle); })
-      .catch(() => {});
-    return () => { off = true; };
-  }, [hasNext, m.id]);
 
   const expand = useCallback(async () => {
     const next = !open;
@@ -288,14 +271,6 @@ export function CallRow({ m }: { m: ThreadMessage }) {
 
       <DraftQuoteButton messageId={m.id} style={{ display: "block", marginTop: 6 }} />
 
-      {!open && bundle?.next_steps?.content && (
-        <div className="mt-2 rounded px-2.5 py-2" style={{ background: DA.elevated }}>
-          <div style={{ ...eyebrow, color: DA.accent, marginBottom: 3 }}>Next steps — extracted from the call</div>
-          <ul style={{ fontSize: F.xs, color: DA.textPrimary, lineHeight: 1.45, paddingLeft: 14, listStyle: "square" }}>
-            {splitSteps(bundle.next_steps.content).map((line, i) => <li key={i}>{line}</li>)}
-          </ul>
-        </div>
-      )}
 
       {hasArtifacts && (
         <button
@@ -332,18 +307,6 @@ export function CallRow({ m }: { m: ThreadMessage }) {
             </div>
           )}
 
-          {/* next_steps — the closest thing the system has to what
-              this person actually wanted, which is the whole receptionist goal. */}
-          {bundle?.next_steps?.content && (
-            <div className="mb-2 rounded-lg px-2.5 py-2" style={{ background: DA.elevated }}>
-              <div className="text-[9px] uppercase tracking-wide mb-1" style={{ color: DA.accent }}>
-                Next steps
-              </div>
-              <div className="text-xs whitespace-pre-wrap" style={{ color: DA.textPrimary }}>
-                {bundle.next_steps.content}
-              </div>
-            </div>
-          )}
 
           {/* call_artifacts is authoritative; messages.summary is a cache. When
               both exist and disagree, the artifact is what gets shown. */}
@@ -376,7 +339,7 @@ export function CallRow({ m }: { m: ThreadMessage }) {
             </div>
           )}
 
-          {bundle && !bundle.transcript && !bundle.next_steps && !bundle.summary
+          {bundle && !bundle.transcript && !bundle.summary
             && !bundle.voicemail && !loading && (
             <div className="text-[11px]" style={{ color: DA.textMuted }}>
               No transcript, voicemail or summary stored for this call.

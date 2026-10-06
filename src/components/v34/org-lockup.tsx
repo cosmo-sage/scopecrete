@@ -8,6 +8,11 @@
  * the theme — the light-lettering one in Night Shift, the dark-lettering one
  * elsewhere — falls back to the other, and with none (or one that fails to
  * load) the full scopecrete.ai Wordmark stands alone, as before.
+ *
+ * Coy, 2026-10-06: the org's logo can be switched off in the header
+ * (Settings → Organisation → Logo, `header_logo` on the account); off shows
+ * the emblem and scopecrete.ai alone, no "powered by". The proposal keeps
+ * the org's logo either way.
  */
 
 import React, { useState } from "react";
@@ -17,11 +22,12 @@ import { light as lightFont } from "@/lib/v34/tokens";
 
 const poweredBy: React.CSSProperties = { fontFamily: lightFont, fontWeight: 300, fontSize: 8.5, letterSpacing: ".06em", color: "var(--sc-pencil-muted)", lineHeight: 1, whiteSpace: "nowrap" };
 
-export function OrgLockup({ name, hasLight, hasDark, stamp, dark, phone }: {
+export function OrgLockup({ name, hasLight, hasDark, stamp, dark, phone, showLogo = true }: {
   name: string | null; hasLight: boolean; hasDark: boolean; stamp: string | null;
+  /** false: Coy switched the org's logo off in the header */ showLogo?: boolean;
   /** true in Night Shift */ dark: boolean; phone: boolean;
 }) {
-  const variant = dark ? (hasDark ? "dark" : hasLight ? "light" : null) : (hasLight ? "light" : hasDark ? "dark" : null);
+  const variant = !showLogo ? null : dark ? (hasDark ? "dark" : hasLight ? "light" : null) : (hasLight ? "light" : hasDark ? "dark" : null);
   const src = variant ? `/api/org/logo/${variant}${stamp ? `?v=${encodeURIComponent(stamp)}` : ""}` : null;
   const [broken, setBroken] = useState<string | null>(null);
   // The emblem (orbits round the green block) from the landing-page design

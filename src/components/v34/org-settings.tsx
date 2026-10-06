@@ -20,6 +20,7 @@ import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { T, F, disp, eyebrow, clip, strong } from "@/lib/v34/tokens";
 import { sendBytes } from "@/components/v34/files-panel";
+import { usePref } from "@/lib/v34/prefs";
 import { ROLES, FIELD_PAGES, roleLabel, accessSummary } from "@/lib/access";
 
 export interface OrgInfo { id: string; name: string; logo_light: boolean; logo_dark: boolean; logo_stamp: string | null }
@@ -28,6 +29,30 @@ interface Person { user_id: string; name: string | null; email: string | null; r
 type Variant = "light" | "dark";
 
 const btn: React.CSSProperties = { ...eyebrow, fontSize: 12, height: 30, padding: "0 10px", borderRadius: 3, cursor: "pointer" };
+
+/**
+ * Coy, 2026-10-06: the org's logo on or off in the header. Off, the header
+ * shows the scopecrete.ai emblem and wordmark alone; proposals keep the logo.
+ * Saved on the account (user_preferences, migration 053), like the theme.
+ */
+function HeaderLogoSwitch() {
+  const [on, setOn] = usePref<boolean>("header_logo", true);
+  const shown = on !== false;
+  return (
+    <div className="flex items-center gap-3" style={{ marginTop: 10 }}>
+      <div className="flex-1 min-w-0">
+        <div style={{ fontSize: F.sm, color: T.ink2 }}>Show the logo in the header</div>
+        <div style={{ fontSize: F.xs, color: T.ink3 }}>
+          {shown ? "Your logo, with \u201cpowered by scopecrete.ai\u201d beside it." : "The header shows scopecrete.ai. Proposals still carry your logo."}
+        </div>
+      </div>
+      <button type="button" role="switch" aria-checked={shown} aria-label="Show the logo in the header" onClick={() => setOn(!shown)}
+        style={{ width: 38, height: 22, borderRadius: 999, background: shown ? T.green : T.hairStrong, position: "relative", cursor: "pointer", flex: "0 0 auto" }}>
+        <span style={{ position: "absolute", top: 3, left: shown ? 19 : 3, width: 16, height: 16, borderRadius: 999, background: "#fff", transition: "left .15s", boxShadow: "0 1px 2px rgba(0,0,0,.2)" }} />
+      </button>
+    </div>
+  );
+}
 
 /** Shrink a raster logo so its longest side is at most 1200px (PNG out). SVGs pass through. */
 async function prepare(file: File): Promise<File> {
@@ -206,6 +231,7 @@ export function OrgSection({ onChanged }: { onChanged: () => void }) {
       <div style={{ fontSize: F.xs, color: T.ink3, marginTop: 5 }}>
         Transparent PNG, SVG or WebP, at least 600px wide. Shown 28px tall in the header with &ldquo;powered by scopecrete.ai&rdquo; beside it.
       </div>
+      <HeaderLogoSwitch />
 
       <People people={people} canEdit={canEdit} accessReady={accessReady} onChanged={() => setRev((n) => n + 1)} />
     </section>

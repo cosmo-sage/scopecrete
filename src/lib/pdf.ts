@@ -27,21 +27,54 @@ function pdfjs(): Promise<PdfJs> {
 export const MAX_CANVAS_PX = typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches ? 2 ** 24 : 2 ** 25;
 
 const docs = new Map<string, Promise<Doc>>();
-/** Open a plan PDF by its file id and (signed) link — once per visit. */
+
+// Plan sets are 10–30 MB and a file id's bytes never change (a new upload is a
+// new id), but its signed link does on every visit, so the browser's own cache
+// never hits and each visit downloaded the set again — Supabase egress, the
+// free plan's tightest limit (2026-10-06). The bytes are kept on the device in
+// the Cache API by file id; a first open still streams from the link (first
+// page shows early) and stores what pdf.js already downloaded.
+const CACHE = "sc-plan-pdfs-v1";
+const cacheKey = (fileId: string) => `/__sc-pdf/${fileId}`;
+async function cachedBytes(fileId: string): Promise<Uint8Array | null> {
+  try {
+    if (typeof caches === "undefined") return null;
+    const r = await (await caches.open(CACHE)).match(cacheKey(fileId));
+    return r ? new Uint8Array(await r.arrayBuffer()) : null;
+  } catch { return null; }
+}
+async function keepBytes(fileId: string, doc: Doc) {
+  try {
+    if (typeof caches === "undefined") return;
+    const bytes = await doc.getData();
+    await (await caches.open(CACHE)).put(cacheKey(fileId), new Response(new Blob([bytes as BlobPart]), { headers: { "content-type": "application/pdf" } }));
+  } catch { /* storage full or refused — the link still works next time */ }
+}
+
+/** Open a plan PDF by its file id and (signed) link — once per visit, downloaded once per device. */
 export function openPdf(fileId: string, url: string): Promise<Doc> {
   let d = docs.get(fileId);
   if (!d) {
     // Scanned plan sets store their drawings as JBIG2 / JPEG 2000 images: without the
     // decoders (public/pdfjs, copied at build) every page renders white.
     const base = `${window.location.origin}/pdfjs/`;
-    d = pdfjs().then((m) => m.getDocument({
-      url, wasmUrl: `${base}wasm/`, standardFontDataUrl: `${base}standard_fonts/`,
+    const opts = {
+      wasmUrl: `${base}wasm/`, standardFontDataUrl: `${base}standard_fonts/`,
       cMapUrl: `${base}cmaps/`, cMapPacked: true, iccUrl: `${base}iccs/`,
       // A scanned D-size sheet is one ~67-megapixel image (Burgess Ave: 10,191 × 6,603, CCITT G4).
       // pdf.js guesses the canvas limit by probing, and a phone says yes to a size it then can't
       // draw — a white page. Told the limit, it shrinks the image in the worker first.
       canvasMaxAreaInBytes: MAX_CANVAS_PX * 4,
-    }).promise);
+    };
+    d = Promise.all([pdfjs(), cachedBytes(fileId)]).then(async ([m, data]) => {
+      if (data) {
+        try { return await m.getDocument({ ...opts, data }).promise; }
+        catch { try { await (await caches.open(CACHE)).delete(cacheKey(fileId)); } catch { /* ignore */ } }
+      }
+      const doc = await m.getDocument({ ...opts, url }).promise;
+      void keepBytes(fileId, doc);
+      return doc;
+    });
     d.catch(() => docs.delete(fileId));
     docs.set(fileId, d);
   }

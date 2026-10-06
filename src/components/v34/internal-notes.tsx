@@ -19,10 +19,14 @@ import { ArchiveNoteCard } from "@/components/v34/archive-actions";
 
 export interface InternalNote { id: string; body: string; created_at: string; created_by?: string | null; message_id?: string | null }
 
-export function InternalNotes({ contactId, name, notes, onSaved, leadSource }: {
+export function InternalNotes({ contactId, name, notes, onSaved, leadSource, merges, onUndoMerge, undoing }: {
   contactId: string; name: string | null; notes: InternalNote[]; onSaved: () => void;
   /** Where the lead came from — moved here off the thread's header (Coy, 2026-10-05). */
   leadSource?: string | null;
+  /** Numbers merged into this thread, with Undo — moved here off the conversation (Coy, 2026-10-06). */
+  merges?: Array<{ id: string; label: string; at: string | null }>;
+  onUndoMerge?: (id: string) => void;
+  undoing?: string | null;
 }) {
   const [members, setMembers] = useState<Array<Member & { you?: boolean }>>([]);
   const [text, setText] = useState("");
@@ -73,6 +77,17 @@ export function InternalNotes({ contactId, name, notes, onSaved, leadSource }: {
             <span style={{ fontFamily: disp, letterSpacing: ".1em", textTransform: "uppercase", fontWeight: 600, fontSize: 11.5, marginRight: 6 }}>Lead source</span>{leadSource}
           </div>
         )}
+        {(merges ?? []).map((m) => (
+          <div key={m.id} className="rounded mb-2.5 flex items-center gap-2" style={{ maxWidth: 640, background: T.card, border: `1px solid ${T.hair}`, padding: "6px 12px", fontSize: 12.5, color: T.ink2 }}>
+            <span style={{ fontFamily: disp, letterSpacing: ".1em", textTransform: "uppercase", fontWeight: 600, fontSize: 11.5 }}>Merged</span>
+            <span className="flex-1 min-w-0">{m.label}{m.at ? ` · ${relTime(m.at)}` : ""}</span>
+            {onUndoMerge && (
+              <button onClick={() => onUndoMerge(m.id)} disabled={undoing === m.id} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>
+                {undoing === m.id ? "Undoing…" : "Undo"}
+              </button>
+            )}
+          </div>
+        ))}
         {ordered.length === 0 ? (
           <div className="text-center py-16" style={{ fontSize: F.sm, color: T.ink3, maxWidth: 400, margin: "0 auto" }}>
             No internal notes on {name ?? "them"} yet. Notes stay inside your organisation — nothing is sent — and Dusty reads them. Type @ to tag a teammate.

@@ -7,7 +7,8 @@ import Link from "next/link";
 import { T, F, disp, eyebrow, nums, clip, relTime } from "@/lib/v34/tokens";
 import { Composer } from "@/components/v34/composer";
 import { DA, MergeSheet, Timeline, formatPhone, type MergeInfo, type ThreadMessage } from "@/components/v34/conversation";
-import { PersonView, SamePerson, type Person } from "@/components/v34/person-view";
+import { SamePerson, type Person } from "@/components/v34/person-view";
+import { ContactCard } from "@/components/v34/contact-card";
 import { NameEditor, FileAsSheet } from "@/components/v34/contact-edit";
 import { ArchiveButton } from "@/components/v34/archive-actions";
 import { useThreads } from "@/components/v34/threads-ctx";
@@ -49,7 +50,6 @@ export default function ChatThreadPage() {
   const [orgLines, setOrgLines] = useState<Array<{ id: string; name: string; phone: string; color: string; provider: string | null; is_primary: boolean }>>([]);
   const [firstLine, setFirstLine] = useState<{ id: string; name: string | null; at: string } | null>(null);
   const [lineFilter, setLineFilter] = useState<string | null>(null);
-  const [addingNumber, setAddingNumber] = useState(false);
   const [archivedInfo, setArchivedInfo] = useState<{ at: string; reason: string | null; back: boolean } | null>(null);
   const [fromLine, setFromLine] = useState<string | null>(null);
   const [searching, setSearching] = useState(false);
@@ -200,12 +200,14 @@ export default function ChatThreadPage() {
     if (person.contact.bucket === "vendor") {
       return <VendorRedirect href={`/dashboard/vendors/${contactId}?from=threads${threadKey ? `&t=${encodeURIComponent(threadKey)}` : ""}`} />;
     }
+    const custHref = person.contact.bucket === "customer" && person.contact.customer_id
+      ? `/dashboard/customers/${person.contact.customer_id}?contact=${contactId}&from=threads${threadKey ? `&t=${encodeURIComponent(threadKey)}` : ""}` : null;
     return (
       <div className="sc-pinned overflow-y-auto flex flex-col" style={{ background: T.slab }}>
-        <PersonView person={person} messages={messages} channels={channels}
-          back={{ href: `/dashboard/messages/${contactId}${tq}`, label: "Back to the thread" }}
-          merges={merges} onUndoMerge={undo}
-          onReload={() => setReload((n) => n + 1)} onMerge={(id) => setMerging({ preselect: id ?? null })} />
+        {/* A simple contact page — the numbers, emails and address, and where they're changed (Coy, 2026-10-06). */}
+        <ContactCard person={person} back={{ href: `/dashboard/messages/${contactId}${tq}`, label: "Back to the thread" }}
+          textHref={`/dashboard/messages/${contactId}${tq}`} customerHref={custHref}
+          onReload={() => setReload((n) => n + 1)} onJoin={(id) => setMerging({ preselect: id ?? null })} />
         {merging && (
           <MergeSheet contactId={contactId} keepLabel={headerTitle} keepCount={messages.length}
             preselectId={merging ? merging.preselect : null}
@@ -238,8 +240,9 @@ export default function ChatThreadPage() {
   // still opens on their conversation, not on the notes.
   const nNotes = person?.notes?.length ?? 0;
   const notesTab: Channel = { key: "notes", kind: "notes", label: "Notes", value: null, calls: 0, texts: 0, emails: nNotes, reachable: true };
-  const tabs = channels.length ? [notesTab, ...channels] : [];
-  const channel = tabs.find((x) => x.key === channelKey) ?? channels[0] ?? null;
+  // Notes open from the ⋯ menu on the name's row, not a tab (Coy, 2026-10-06).
+  const tabs = channels;
+  const channel = channelKey === "notes" ? notesTab : tabs.find((x) => x.key === channelKey) ?? channels[0] ?? null;
   const shown = channel?.kind === "phone" ? messages.filter((m) => inChannel({ channel: m.channel, counterparty: m.counterparty ?? null }, channel, filter) && (!lineFilter || m.line_id === lineFilter)) : [];
   const n = channel?.kind === "phone" ? messages.filter((m) => inChannel({ channel: m.channel, counterparty: m.counterparty ?? null }, channel, "all")) : [];
   const nCalls = n.filter((m) => m.channel === "call" || m.channel === "voicemail").length;
@@ -297,6 +300,9 @@ export default function ChatThreadPage() {
                 <div className="absolute right-0 z-20 flex flex-col rounded" style={{ top: 32, minWidth: 180, background: T.card, border: `1px solid ${T.hairStrong}`, boxShadow: "0 6px 18px rgba(0,0,0,.12)" }}>
                   <Link href={pageLink.href} className="lg:hidden px-3 py-2" style={{ fontSize: F.sm, color: T.ink }}>{pageLink.label} ›</Link>
                   <button onClick={() => { setMore(false); window.dispatchEvent(new Event("sc:dusty-open")); }} className="lg:hidden px-3 py-2 text-left" style={{ fontSize: F.sm, color: T.ink }}>Ask Dusty</button>
+                  <button onClick={() => { setMore(false); pickChannel("notes"); }} className="px-3 py-2 text-left flex items-center gap-2" style={{ fontSize: F.sm, color: T.ink, fontWeight: channel?.kind === "notes" ? 700 : 400 }}>
+                    <NotePencil size={14} /> Notes{nNotes ? ` (${nNotes})` : ""}
+                  </button>
                   <button onClick={() => { setMore(false); setFiling(true); }} className="px-3 py-2 text-left" style={{ fontSize: F.sm, color: T.ink }}>{c?.bucket ? "Change bucket" : "File as…"}</button>
                   <button onClick={() => { setMore(false); setMerging({ preselect: null }); }} className="px-3 py-2 text-left" style={{ fontSize: F.sm, color: T.ink }}>Same person as…</button>
                   {openJob
@@ -339,8 +345,6 @@ export default function ChatThreadPage() {
                 </button>
               );
             })}
-            <button onClick={() => setAddingNumber(true)} className="shrink-0 self-center" title="Add a number of theirs, or join another thread that is them"
-              style={{ fontFamily: disp, color: T.ink3, padding: "0 12px", cursor: "pointer", whiteSpace: "nowrap", fontSize: 18, fontWeight: 600 }} aria-label="Add a number">+</button>
           </div>
         </div>
 
@@ -426,21 +430,13 @@ export default function ChatThreadPage() {
             </div>
           );
         })()}
-        {!loading && merges.map((m) => (
-          <div key={m.id} className="px-4 py-1.5 flex items-center gap-2 text-[11px] flex-shrink-0"
-            style={{ background: DA.elevated, borderBottom: `1px solid ${DA.border}`, color: DA.textSecondary }}>
-            <span className="flex-1 min-w-0 truncate">{m.phone ? formatPhone(m.phone) : "Another number"} was merged into this thread</span>
-            <button onClick={() => void undo(m.id)} disabled={undoing === m.id}
-              style={{ color: DA.accent, fontWeight: 600, cursor: "pointer", background: "none", border: "none" }}>
-              {undoing === m.id ? "Undoing…" : "Undo"}
-            </button>
-          </div>
-        ))}
         {person && <SamePerson person={person} onMerge={(id) => setMerging({ preselect: id ?? null })} />}
 
         {!loading && !error && channel?.kind === "notes" ? (
           <div className="flex-1 min-h-0">
-            <InternalNotes contactId={contactId} name={name} notes={person?.notes ?? []} leadSource={leadSource} onSaved={() => setReload((n) => n + 1)} />
+            <InternalNotes contactId={contactId} name={name} notes={person?.notes ?? []} leadSource={leadSource} onSaved={() => setReload((n) => n + 1)}
+              merges={merges.map((m) => ({ id: m.id, label: `${m.phone ? formatPhone(m.phone) : "Another number"} was merged into this thread`, at: m.merged_at }))}
+              onUndoMerge={(id) => void undo(id)} undoing={undoing} />
           </div>
         ) : (
         <div ref={scrollRef} className="flex-1 overflow-y-auto" style={{ padding: "12px 18px" }}>
@@ -490,11 +486,6 @@ export default function ChatThreadPage() {
         )}
       </div>
 
-      {addingNumber && (
-        <AddNumberDialog contactId={contactId} name={name} onClose={() => setAddingNumber(false)}
-          onAdded={(phone) => { setAddingNumber(false); setChannelKey(`phone:${phone}`); setReload((n) => n + 1); }}
-          onJoin={(otherId) => { setAddingNumber(false); setMerging({ preselect: otherId }); }} />
-      )}
 
       {merging && (
         <MergeSheet contactId={contactId} keepLabel={headerTitle} keepCount={messages.length}
@@ -509,56 +500,6 @@ export default function ChatThreadPage() {
                   proposal: person?.contact.guess ? { classification: person.contact.guess } : null }}
         subtypes={person?.subtypes}
         onFiled={() => { setFiling(false); setReload((n) => n + 1); threads?.refresh(); }} />
-    </div>
-  );
-}
-
-/**
- * + Number (Coy, 2026-10-04): type a number of theirs and what it is (Office,
- * Work, Cell…) and it becomes its own channel on them; or, when that number is
- * already a thread, join the two — the same "Same person as…" merge.
- */
-function AddNumberDialog({ contactId, name, onClose, onAdded, onJoin }: {
-  contactId: string; name: string | null; onClose: () => void; onAdded: (phone: string) => void; onJoin: (otherId: string | null) => void;
-}) {
-  const [num, setNum] = useState("");
-  const [label, setLabel] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<{ text: string; other: { id: string; name: string | null } | null } | null>(null);
-  const e164 = (() => { const d = num.replace(/\D/g, ""); return d.length === 10 ? `+1${d}` : d.length === 11 && d.startsWith("1") ? `+${d}` : null; })();
-  const save = async () => {
-    if (!e164) return;
-    setBusy(true); setErr(null);
-    const r = await fetch(`/api/contacts/${encodeURIComponent(contactId)}/phones`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone: e164, label, add: true }) });
-    const b = await r.json().catch(() => ({}));
-    setBusy(false);
-    if (r.ok) onAdded(e164); else setErr({ text: b?.error ?? `HTTP ${r.status}`, other: b?.other ?? null });
-  };
-  const field: React.CSSProperties = { height: 36, border: `1px solid ${T.hair}`, borderRadius: 6, padding: "0 10px", fontSize: F.sm, background: T.card, color: T.ink, width: "100%" };
-  return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Add a number">
-      <button aria-label="Close" onClick={onClose} className="absolute inset-0" style={{ background: "rgba(0,0,0,.4)", border: "none" }} />
-      <div className="relative rounded-lg w-full" style={{ maxWidth: 400, background: T.card, color: T.ink, padding: 16, boxShadow: "0 12px 36px rgba(0,0,0,.3)" }}>
-        <div style={{ fontSize: F.md, fontWeight: 600 }}>Add a number for {name ?? "them"}</div>
-        <div className="grid gap-2 mt-3" style={{ gridTemplateColumns: "1fr 130px" }}>
-          <input value={num} onChange={(e) => setNum(e.target.value)} inputMode="tel" placeholder="(225) 555-0100" aria-label="Number" style={field} autoFocus
-            onKeyDown={(e) => { if (e.key === "Enter") void save(); }} />
-          <input value={label} onChange={(e) => setLabel(e.target.value)} maxLength={30} placeholder="Office, Work…" aria-label="What it is" style={field} />
-        </div>
-        {err && (
-          <div style={{ fontSize: F.xs, color: T.red, marginTop: 6 }}>
-            {err.text}
-            {err.other && <> <button onClick={() => onJoin(err.other!.id)} style={{ color: T.chalk, fontWeight: 600, cursor: "pointer" }}>Join their thread to this one ›</button></>}
-          </div>
-        )}
-        <div className="flex items-center gap-2 mt-3">
-          <button onClick={() => onJoin(null)} style={{ ...eyebrow, color: T.chalk, cursor: "pointer", textAlign: "left" }}>Or join another<br />thread of theirs…</button>
-          <span className="flex-1" />
-          <button onClick={onClose} className="rounded px-3" style={{ height: 34, border: `1px solid ${T.hairStrong}`, background: T.card, fontSize: F.sm, cursor: "pointer" }}>Cancel</button>
-          <button onClick={() => void save()} disabled={!e164 || busy} className="rounded px-3"
-            style={{ height: 34, background: T.ink, color: T.card, fontSize: F.sm, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap", opacity: !e164 || busy ? 0.5 : 1 }}>{busy ? "Saving…" : "Save number"}</button>
-        </div>
-      </div>
     </div>
   );
 }

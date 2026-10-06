@@ -48,8 +48,8 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ contactId: 
         .limit(5)
     : Promise.resolve({ data: [], error: null });
 
-  const [phones, jobs, links, tasks, prop, subtypes, dups, notes] = await Promise.all([
-    supabase.from("contact_phones").select("phone_e164").eq("org_id", orgId).eq("contact_id", contactId),
+  const [phones, jobs, links, tasks, prop, subtypes, dups, notes, emailRows] = await Promise.all([
+    supabase.from("contact_phones").select("phone_e164, label, is_primary").eq("org_id", orgId).eq("contact_id", contactId),
     supabase.from("jobs").select("id, title, status, job_type, flag_reason, origin, confirmed_at, address, created_at")
       .eq("org_id", orgId).eq("contact_id", contactId).is("archived_at", null).order("created_at", { ascending: false }),
     supabase.from("job_vendors").select("job_id, role, note").eq("org_id", orgId).eq("contact_id", contactId),
@@ -63,6 +63,8 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ contactId: 
     // Coy's notes (migration 041) — newest first; the timeline merges them in.
     supabase.from("contact_notes").select("id, body, created_at, created_by").eq("org_id", orgId).eq("contact_id", contactId)
       .order("created_at", { ascending: false }).limit(200),
+    // Every email of theirs, for the contact card (Coy, 2026-10-06).
+    supabase.from("contact_emails").select("email, label, is_primary").eq("org_id", orgId).eq("contact_id", contactId),
   ]);
   for (const [what, r] of [["contact_phones", phones], ["jobs", jobs], ["job_vendors", links], ["contact_tasks", tasks], ["contact_proposals", prop], ["contact_notes", notes]] as const) {
     if (r.error) return fail(what, r.error.message);
@@ -114,6 +116,19 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ contactId: 
       name_confirmed: !!c.name_confirmed_at || c.name_source === "human",
       phones: [...new Set([c.phone, ...((phones.data ?? []) as Array<{ phone_e164: string }>).map((p) => p.phone_e164)].filter(Boolean))],
       email: c.email?.trim() || null,
+      // The contact card (2026-10-06): each number and email with its label, the main one first.
+      phone_list: (() => {
+        const rows = (phones.data ?? []) as Array<{ phone_e164: string; label: string | null; is_primary: boolean }>;
+        const list = rows.map((r) => ({ phone: r.phone_e164, label: r.label ?? null, is_primary: !!r.is_primary }));
+        if (c.phone && !list.some((r) => r.phone === c.phone)) list.unshift({ phone: c.phone as string, label: null, is_primary: !list.some((r) => r.is_primary) });
+        return list.sort((a, b) => Number(b.is_primary) - Number(a.is_primary) || Number(b.phone === c.phone) - Number(a.phone === c.phone));
+      })(),
+      email_list: (() => {
+        const rows = ((emailRows.data ?? []) as Array<{ email: string; label: string | null; is_primary: boolean }>).map((r) => ({ email: r.email, label: r.label ?? null, is_primary: !!r.is_primary }));
+        const own = c.email?.trim();
+        if (own && !rows.some((r) => r.email.toLowerCase() === own.toLowerCase())) rows.unshift({ email: own, label: null, is_primary: !rows.some((r) => r.is_primary) });
+        return rows.sort((a, b) => Number(b.is_primary) - Number(a.is_primary));
+      })(),
       address: c.address?.trim() || null,
       address_source: (c.address_source as string | null) ?? null,
       company,

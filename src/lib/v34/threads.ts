@@ -71,6 +71,21 @@ export function initials(name: string | null | undefined): string {
   return (w[0][0] + (w[1]?.[0] ?? w[0][1] ?? "")).toUpperCase();
 }
 
+/** The colours an initials square can take (Coy, 2026-10-06: "a variety of
+ *  colors and we can go from there"). Mixed with the theme's card for the fill
+ *  and with its ink for the letters, so dark themes stay readable. */
+export const INITIALS_HUES = ["#C2603F", "#C98A1B", "#6E8B3D", "#2F8A5B", "#2A8C8C", "#1E5AA8", "#4B5BB5", "#6A55B0", "#9B4F8C", "#5B6B7A"] as const;
+
+/** One person always gets the same colour: a hash of their name (case and
+ *  spacing ignored). No name → null (the dashed "#" square stays grey). */
+export function initialsHue(name: string | null | undefined): string | null {
+  const k = (name ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+  if (!k) return null;
+  let h = 0;
+  for (let i = 0; i < k.length; i++) h = (h * 31 + k.charCodeAt(i)) >>> 0;
+  return INITIALS_HUES[h % INITIALS_HUES.length];
+}
+
 export type ThreadSort = "recent" | "az" | "role";
 export const THREAD_SORTS: Array<{ k: ThreadSort; label: string }> = [
   { k: "recent", label: "Recent" }, { k: "az", label: "A–Z" }, { k: "role", label: "By role" },

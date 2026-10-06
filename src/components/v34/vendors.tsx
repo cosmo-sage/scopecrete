@@ -19,6 +19,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { T, F, disp, eyebrow, nums, clip, money, formatPhone } from "@/lib/v34/tokens";
 import { useWide } from "@/lib/v34/use-wide";
+import { SearchBubble, SearchToggle } from "@/components/v34/primitives";
 import { call, dateLabel, CostCards } from "@/components/v34/cost-cards";
 import { PersonScreen, type Person, type RecordExtras } from "@/components/v34/person-view";
 import { Empty, panelTitle } from "@/components/v34/record-page";
@@ -42,6 +43,7 @@ export function VendorList() {
   const [err, setErr] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [q, setQ] = useState("");
+  const [finding, setFinding] = useState(false);
   const [sub, setSub] = useState("all");
   const [adding, setAdding] = useState(false);
   const [receipt, setReceipt] = useState(false);
@@ -72,15 +74,18 @@ export function VendorList() {
 
   return (
     <div ref={measure} className="px-3 py-3 mx-auto" style={{ maxWidth: 1180 }}>
-      <div className="flex items-center gap-2 flex-wrap mb-2">
-        <h1 className="sc-page-title" style={{ fontFamily: disp, fontSize: F.xl, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".02em", flex: 1, minWidth: 140 }}>Vendors</h1>
-        <button onClick={() => setAdding(true)} className="sc-new-btn" style={btn(false)}>+ Vendor</button>
-        <button onClick={() => setReceipt(true)} className="sc-new-btn" style={btn(true)}>+ Add a receipt or quote</button>
+      <div className="sc-page-head">
+        <div className="flex items-center gap-2 flex-wrap">
+          <h1 className="sc-page-title" style={{ fontFamily: disp, fontSize: F.xl, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".02em", flex: 1, minWidth: 90 }}>Vendors</h1>
+          <SearchToggle open={finding || !!q} onToggle={() => { if (finding || q) { setQ(""); setFinding(false); } else setFinding(true); }} label="Find a vendor" />
+          <button onClick={() => setAdding(true)} className="sc-new-btn" style={btn(false)}>+ Vendor</button>
+          <button onClick={() => setReceipt(true)} className="sc-new-btn" style={btn(true)}>+ Add a receipt or quote</button>
+        </div>
+        {(finding || q) && <div className="mt-2"><SearchBubble value={q} onChange={setQ} onClose={() => setFinding(false)} placeholder="Find a vendor, area, email…" /></div>}
       </div>
       {err && <div className="mb-2 rounded px-3 py-2" style={{ fontSize: F.sm, color: T.red, background: T.redDim }}>{err}</div>}
       {note && <div className="mb-2 rounded px-3 py-2 flex gap-2" style={{ fontSize: F.sm, background: T.greenDim }}><span style={{ flex: 1 }}>{note}</span><button onClick={() => setNote(null)} aria-label="Dismiss">×</button></div>}
       <div className="flex gap-2 flex-wrap items-center mb-2">
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find a vendor, area, email…" aria-label="Find a vendor" style={{ ...field, maxWidth: 320 }} />
         <div className="flex gap-1" role="tablist" aria-label="Kind">
           {SUBTYPES.map(([k, l]) => (
             <button key={k} role="tab" aria-selected={sub === k} onClick={() => setSub(k)} className="rounded px-2.5"

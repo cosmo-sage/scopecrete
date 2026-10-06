@@ -31,14 +31,14 @@ import { ArchiveDialog } from "@/components/v34/archive-actions";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { T, F, disp, eyebrow, nums, clip, relTime } from "@/lib/v34/tokens";
-import { EmptyState, Sheet } from "@/components/v34/primitives";
+import { EmptyState, MenuButton, SearchBubble, SearchToggle, Sheet } from "@/components/v34/primitives";
 import { JOB_TYPE_LABEL } from "@/lib/jobs/stages";
 import { TRAY_PX, ACTIONS_PX, decideSwipe, isHorizontal, clampDrag } from "@/lib/swipe";
 import { BucketPicker, BUCKETS, SUGGESTS, type Bucket, type Subtype } from "@/components/v34/bucket-picker";
 import { BUCKET } from "@/lib/v34/tokens";
 import { useThreads } from "@/components/v34/threads-ctx";
 import { threadLabel } from "@/components/v34/thread-rail";
-import { ROLE_LABEL, initials, isSystemKey, sortRows, THREAD_SORTS, type ContactRole, type ThreadSort } from "@/lib/v34/threads";
+import { ROLE_LABEL, initials, initialsHue, isSystemKey, sortRows, THREAD_SORTS, type ContactRole, type ThreadSort } from "@/lib/v34/threads";
 import { ContactPicker, bookName } from "@/components/v34/contacts";
 import type { BookEntry } from "@/lib/contacts-book";
 
@@ -346,10 +346,15 @@ export function RoleTag({ role, auto }: { role: ContactRole; auto?: boolean }) {
 
 /** Initials in a square; a dashed "#" for a number with no name. Filled when selected. */
 export function InitialsBox({ name, on, size = 30 }: { name: string | null; on?: boolean; size?: number }) {
+  // A colour per person (Coy, 2026-10-06), mixed with the theme's card and ink.
+  const hue = name ? initialsHue(name) : null;
+  const bg = on ? T.hiviz : hue ? `color-mix(in srgb, ${hue} 20%, ${T.card})` : T.slab;
+  const fg = on ? T.onHiviz : hue ? `color-mix(in srgb, ${hue} 78%, ${T.ink})` : T.ink3;
+  const edge = on ? T.hiviz : hue ? `color-mix(in srgb, ${hue} 45%, ${T.card})` : T.hairStrong;
   return (
     <span className="shrink-0 flex items-center justify-center" aria-hidden="true"
-      style={{ width: size, height: size, borderRadius: 3, background: on ? T.hiviz : T.slab, color: on ? T.onHiviz : T.ink3,
-        border: `1px ${name ? "solid" : "dashed"} ${on ? T.hiviz : T.hairStrong}`, fontFamily: "var(--sc-font-strong)", fontWeight: 600, fontSize: size >= 32 ? 12.5 : 12 }}>
+      style={{ width: size, height: size, borderRadius: 3, background: bg, color: fg,
+        border: `1px ${name ? "solid" : "dashed"} ${edge}`, fontFamily: "var(--sc-font-strong)", fontWeight: 600, fontSize: size >= 32 ? 12.5 : 12 }}>
       {name ? initials(name) : "#"}
     </span>
   );
@@ -1015,14 +1020,11 @@ export function ThreadList({ folded = false }: { folded?: boolean }) {
       {!q && (
         <div style={{ padding: "12px 12px 10px 14px", borderBottom: `1px solid ${T.hairSoft}` }}>
           <div className="flex items-center gap-2">
-            <button onClick={() => ctx?.setDrawer(true)} aria-label="Threads" className="lg:hidden shrink-0 flex items-center justify-center rounded"
-              style={{ width: 40, height: 40, border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink, cursor: "pointer" }}>
-              <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true"><path d="M3 5h14M3 10h14M3 15h14" /></svg>
-            </button>
+            <MenuButton onClick={() => ctx?.setDrawer(true)} label="Threads" />
             <div style={{ minWidth: 0, flex: 1 }}>
               <div className="flex items-baseline gap-2" style={{ minWidth: 0 }}>
-                <span style={{ fontFamily: disp, fontSize: 20, fontWeight: 700, textTransform: "uppercase", color: label.color, lineHeight: 1.1, ...clip }}>{label.name}</span>
-                <span style={{ ...nums, fontSize: 13, color: T.ink3 }}>{chipCount(filter) ?? ""}</span>
+                <span className="sc-page-title" style={{ fontFamily: disp, fontSize: 20, fontWeight: 700, textTransform: "uppercase", color: label.color, lineHeight: 1.1, ...clip }}>{label.name}</span>
+                <span className="sc-page-count" style={{ ...nums, fontSize: 13, color: T.ink3 }}>{chipCount(filter) ?? ""}</span>
               </div>
               {customThread?.job_line && <div className="lg:hidden" style={{ fontSize: 11.5, color: T.ink3, ...clip }}>{customThread.job_line}</div>}
             </div>
@@ -1042,10 +1044,7 @@ export function ThreadList({ folded = false }: { folded?: boolean }) {
                 </svg>
               </button>
             )}
-            <button onClick={() => { setFinding((v) => !v); if (finding) setFind(""); }} aria-label="Search this list" aria-pressed={finding} title="Search by word, name or place"
-              className="shrink-0 flex items-center justify-center rounded" style={{ width: 26, height: 26, border: `1px solid ${finding ? T.hiviz : T.hairStrong}`, background: finding ? T.hivizDim : T.card, cursor: "pointer" }}>
-              <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke={finding ? T.hiviz : T.ink2} strokeWidth="1.8" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5" /><path d="M13 13l4.5 4.5" /></svg>
-            </button>
+            <SearchToggle open={finding} onToggle={() => { setFinding((v) => !v); if (finding) setFind(""); }} label="Search this list" />
             {openId && (
               <button onClick={() => ctx?.setFolded(true)} aria-label="Fold the list" title="Fold the list to initials" className="hidden lg:flex shrink-0 items-center justify-center rounded"
                 style={{ width: 24, height: 24, border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink2, cursor: "pointer" }}>‹</button>
@@ -1067,12 +1066,7 @@ export function ThreadList({ folded = false }: { folded?: boolean }) {
 
       {finding && !q && (
         <div className="px-3 pb-2" style={{ borderBottom: `1px solid ${T.hairSoft}` }}>
-          <label className="flex items-center gap-2 rounded-full" style={{ height: 34, border: `1px solid ${T.hairStrong}`, padding: "0 6px 0 12px", background: T.slab }}>
-            <input autoFocus value={find} onChange={(e) => setFind(e.target.value)} onKeyDown={(e) => { if (e.key === "Escape") { setFind(""); setFinding(false); } }}
-              placeholder={`Search ${label.name} — a word, a name, a street…`} aria-label="Search this list"
-              style={{ flex: 1, minWidth: 0, border: "none", outline: "none", background: "transparent", color: T.ink, fontSize: F.sm }} />
-            {find && <button onClick={() => setFind("")} aria-label="Clear" className="rounded-full" style={{ width: 24, height: 24, color: T.ink2, cursor: "pointer" }}>×</button>}
-          </label>
+          <SearchBubble value={find} onChange={setFind} onClose={() => setFinding(false)} placeholder={`Search ${label.name} — a word, a name, a street…`} />
         </div>
       )}
       </div>

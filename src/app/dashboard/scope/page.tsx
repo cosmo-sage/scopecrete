@@ -10,7 +10,8 @@
  *
  * A card is a job: who it is for, where, residential / commercial /
  * government, how it reached us ("via Jeremy"), how many sections are scoped.
- * Tap the title for the scope builder; Move sends it to another stage.
+ * Tap the title for the scope builder; the four-way arrow sends it to another
+ * stage, "Consultation »" to the next one.
  *
  * An unreviewed machine job is shown but marked "Suggested" with Accept — it
  * never counts until a person accepts it (DECISIONS §2b).
@@ -21,7 +22,7 @@ import Link from "next/link";
 import { useAccess } from "@/lib/v34/access-ctx";
 import { useRouter } from "next/navigation";
 import { T, F, disp, eyebrow, nums, clip, relTime, formatPhone } from "@/lib/v34/tokens";
-import { EmptyState, Sheet } from "@/components/v34/primitives";
+import { EmptyState, MenuButton, Sheet } from "@/components/v34/primitives";
 import { STAGES, STATUS_TAG, STATUS_NAME, JOB_TYPE_LABEL, LEAD_SOURCES, stageOf } from "@/lib/jobs/stages";
 import { BOARD_SORTS, cityCounts, filterJobs, sortJobs, type BoardFilter, type BoardSort } from "@/lib/jobs/board-view";
 
@@ -68,6 +69,10 @@ export default function JobsBoard() {
   const [sort, setSortState] = useState<BoardSort>("newest");
   const [filter, setFilterState] = useState<BoardFilter>({ types: [], cities: [] });
   const [filterOpen, setFilterOpen] = useState(false);
+  // On a phone: the swiping board, or one stage at a time as a list picked
+  // from the ☰ panel (Coy, 2026-10-06). Remembered on this device.
+  const [phoneView, setPhoneView] = useState<"board" | "list">("board");
+  const [stagesOpen, setStagesOpen] = useState(false);
   useEffect(() => {
     let off = false;
     Promise.resolve().then(() => {
@@ -76,6 +81,7 @@ export default function JobsBoard() {
         const v = JSON.parse(localStorage.getItem("sc:jobs-board-view") ?? "null");
         if (v && BOARD_SORTS.some((x) => x.k === v.sort)) setSortState(v.sort);
         if (v && Array.isArray(v.types) && Array.isArray(v.cities)) setFilterState({ types: v.types, cities: v.cities });
+        if (localStorage.getItem("sc:jobs-phone-view") === "list") setPhoneView("list");
       } catch { /* no saved view */ }
     });
     return () => { off = true; };
@@ -85,6 +91,12 @@ export default function JobsBoard() {
   };
   const setSort = (v: BoardSort) => { setSortState(v); saveView({ sort: v, filter }); };
   const setFilter = (v: BoardFilter) => { setFilterState(v); saveView({ sort, filter: v }); };
+  const flipView = () => {
+    const v = phoneView === "board" ? "list" : "board";
+    setPhoneView(v);
+    try { localStorage.setItem("sc:jobs-phone-view", v); } catch { /* private window */ }
+    if (v === "board") requestAnimationFrame(() => goTo(col));
+  };
   // ?new=1 — Dusty's + menu → New job (2026-10-01).
   useEffect(() => {
     let off = false;
@@ -186,23 +198,38 @@ export default function JobsBoard() {
       <MoveSheet job={moving} onClose={() => setMoving(null)}
         onMove={(status) => { const j = moving; setMoving(null); if (j) void patch(j.id, { status }); }} />
 
-      <div className="px-3 pt-3 pb-2" style={{ background: T.card, borderBottom: `1px solid ${T.hair}` }}>
-        <div className="flex items-center gap-2">
-          <div className="sc-page-title" style={{ fontFamily: disp, fontSize: F.xl, fontWeight: 600, lineHeight: 1.05, flex: 1 }}>Jobs</div>
-          {!limited && <button onClick={() => setNewOpen(true)} className="rounded px-3 sc-new-btn"
+      {/* The page's header stays at the top while the dashboard header slides
+          away on a phone (Coy, 2026-10-06). One row: ☰ · Jobs · Sort · Filter ·
+          the view · + New job. */}
+      <div className="px-3 pt-3 pb-2" style={{ background: T.card, borderBottom: `1px solid ${T.hair}`, position: "sticky", top: "var(--sc-head)", zIndex: 6, transition: "top .2s ease-out" }}>
+        <div className="flex items-center gap-2" style={{ minWidth: 0 }}>
+          <MenuButton onClick={() => setStagesOpen(true)} label="Job stages" />
+          <div className="sc-page-title" style={{ fontFamily: disp, fontSize: F.xl, fontWeight: 600, lineHeight: 1.05, flexShrink: 0 }}>Jobs</div>
+          <select value={sort} onChange={(e) => setSort(e.target.value as BoardSort)} aria-label="Sort jobs" title="Sort jobs" style={{ ...ctl, minWidth: 0, maxWidth: 140, flexShrink: 1 }}>
+            {BOARD_SORTS.map((o) => <option key={o.k} value={o.k}>↕ {o.label}</option>)}
+          </select>
+          <button onClick={() => setFilterOpen(true)} aria-label={nFilters ? `Filter · ${nFilters} in use` : "Filter"} title="Filter by job type and city"
+            className="shrink-0 flex items-center justify-center rounded"
+            style={{ width: 30, height: 30, border: `1px solid ${nFilters ? T.hiviz : T.hair}`, background: nFilters ? T.hivizDim : T.card, cursor: "pointer", position: "relative" }}>
+            <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke={nFilters ? T.hiviz : T.ink2} strokeWidth="1.8" strokeLinejoin="round" aria-hidden="true"><path d="M2.5 3.5h15l-6 7v5.5l-3 1.5v-7z" /></svg>
+            {nFilters > 0 && <span style={{ position: "absolute", top: -6, right: -6, minWidth: 14, height: 14, borderRadius: 7, background: T.hiviz, color: T.onHiviz, fontSize: 9, fontWeight: 700, lineHeight: "14px", textAlign: "center", padding: "0 3px" }}>{nFilters}</span>}
+          </button>
+          <span style={{ flex: 1 }} />
+          <button onClick={flipView} className="lg:hidden shrink-0 flex items-center justify-center rounded"
+            aria-label={phoneView === "board" ? "Show as a list" : "Show as a board"} title={phoneView === "board" ? "Show as a list" : "Show as a board"}
+            style={{ width: 30, height: 30, border: `1px solid ${T.hair}`, background: T.card, color: T.ink2, cursor: "pointer" }}>
+            {phoneView === "board"
+              ? <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" aria-hidden="true"><path d="M7 5h10M7 10h10M7 15h10" /><circle cx="3.5" cy="5" r=".9" fill="currentColor" /><circle cx="3.5" cy="10" r=".9" fill="currentColor" /><circle cx="3.5" cy="15" r=".9" fill="currentColor" /></svg>
+              : <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" aria-hidden="true"><rect x="2.5" y="3" width="4" height="14" rx=".8" /><rect x="8" y="3" width="4" height="9" rx=".8" /><rect x="13.5" y="3" width="4" height="11" rx=".8" /></svg>}
+          </button>
+          {!limited && <button onClick={() => setNewOpen(true)} className="rounded px-3 sc-new-btn shrink-0"
             style={{ height: 34, background: T.hiviz, color: T.onHiviz, fontFamily: disp, fontSize: F.sm, fontWeight: 600,
-                     textTransform: "uppercase", letterSpacing: ".06em", cursor: "pointer" }}>
+                     textTransform: "uppercase", letterSpacing: ".06em", cursor: "pointer", whiteSpace: "nowrap" }}>
             + New job
           </button>}
         </div>
         {error && <div style={{ fontSize: F.xs, color: T.red, marginTop: 4 }}>{error}</div>}
-        <div className="flex items-center gap-2 flex-wrap mt-2">
-          <select value={sort} onChange={(e) => setSort(e.target.value as BoardSort)} aria-label="Sort jobs" style={ctl}>
-            {BOARD_SORTS.map((o) => <option key={o.k} value={o.k}>Sort · {o.label}</option>)}
-          </select>
-          <button onClick={() => setFilterOpen(true)} style={{ ...ctl, borderColor: nFilters ? T.ink : T.hair, color: nFilters ? T.ink : T.ink2 }}>
-            Filter{nFilters ? ` · ${nFilters}` : ""}
-          </button>
+        {nFilters > 0 && <div className="flex items-center gap-2 flex-wrap mt-2">
           {[...filter.types.map((t) => ({ k: "types" as const, v: t, l: t === "none" ? "Type?" : JOB_TYPE_LABEL[t] ?? t })),
             ...filter.cities.map((c) => ({ k: "cities" as const, v: c, l: c === "none" ? "No city" : c }))].map((chip) => (
             <button key={chip.k + chip.v} onClick={() => setFilter({ ...filter, [chip.k]: filter[chip.k].filter((x) => x !== chip.v) })}
@@ -211,11 +238,11 @@ export default function JobsBoard() {
             </button>
           ))}
           {nFilters > 0 && <button onClick={() => setFilter({ types: [], cities: [] })} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>Clear</button>}
-          {jobs && nFilters > 0 && <span style={{ fontSize: F.xs, color: T.ink3 }}>{visible.length} of {jobs.length} jobs</span>}
-        </div>
+          {jobs && <span style={{ fontSize: F.xs, color: T.ink3 }}>{visible.length} of {jobs.length} jobs</span>}
+        </div>}
 
         {/* Stage strip — phone only; desktop shows every column's header. */}
-        <div className="flex gap-1.5 overflow-x-auto mt-2 lg:hidden" style={{ scrollbarWidth: "none" }}>
+        <div className={`${phoneView === "list" ? "hidden" : "flex"} gap-1.5 overflow-x-auto mt-2 lg:hidden`} style={{ scrollbarWidth: "none" }}>
           {STAGES.map((s, i) => (
             <button key={s.k} onClick={() => goTo(i)} className="shrink-0 rounded px-2.5 flex items-center gap-1.5"
               style={{ height: 30, border: `1px solid ${col === i ? T.ink : T.hair}`, background: col === i ? T.ink : T.card,
@@ -232,8 +259,30 @@ export default function JobsBoard() {
           {[1, 2, 3].map((i) => <div key={i} className="rounded animate-pulse" style={{ height: 70, background: T.hairSoft }} />)}
         </div>
       ) : (
+        <>
+        {phoneView === "list" && (
+          <div className="lg:hidden px-2.5 py-2 space-y-2">
+            <button onClick={() => setStagesOpen(true)} className="flex items-baseline gap-2" style={{ padding: "2px 2px 4px", background: "transparent", border: "none", cursor: "pointer", color: T.ink }}>
+              <span style={{ fontFamily: disp, fontSize: F.md, fontWeight: 600, textTransform: "uppercase" }}>{STAGES[col].label}</span>
+              <span style={{ ...nums, fontSize: F.xs, color: T.ink3 }}>{byStage[col].length}</span>
+              <span aria-hidden="true" style={{ fontSize: F.xs, color: T.ink3 }}>▾</span>
+            </button>
+            {byStage[col].length === 0
+              ? <div className="rounded px-3 py-4 text-center" style={{ fontSize: F.xs, color: T.ink3, border: `1px dashed ${T.hair}` }}>
+                  {nFilters > 0 ? `Nothing in ${STAGES[col].label} matches the filter.` : `Nothing in ${STAGES[col].label}.`}
+                </div>
+              : byStage[col].map((j) => (
+                <JobCard key={j.id} j={j} busy={busy === j.id} readOnly={limited}
+                  next={col < STAGES.length - 2 ? STAGES[col + 1] : null}
+                  onNext={(status) => void patch(j.id, { status })}
+                  onMove={() => setMoving(j)}
+                  onAccept={() => void patch(j.id, { accept: true })}
+                  onFlag={(archive) => void patch(j.id, archive ? { archive: true } : { keep: true })} />
+              ))}
+          </div>
+        )}
         <div ref={lane} onScroll={onScroll}
-          className="flex-1 flex overflow-x-auto snap-x snap-mandatory lg:snap-none lg:gap-2 lg:p-2"
+          className={`flex-1 ${phoneView === "list" ? "hidden lg:flex" : "flex"} overflow-x-auto snap-x snap-mandatory lg:snap-none lg:gap-2 lg:p-2`}
           style={{ scrollbarWidth: "none" }}>
           {STAGES.map((s, i) => (
             <section key={s.k} className="snap-start shrink-0 w-full lg:w-auto lg:flex-1 lg:min-w-[200px] flex flex-col"
@@ -260,6 +309,26 @@ export default function JobsBoard() {
               </div>
             </section>
           ))}
+        </div>
+        </>
+      )}
+
+      {/* ☰ — every stage with its count; a tap shows it (Coy, 2026-10-06). */}
+      {stagesOpen && (
+        <div className="lg:hidden fixed inset-0 z-50" style={{ top: "var(--sc-head)", bottom: "var(--sc-foot)" }}>
+          <button aria-label="Close" onClick={() => setStagesOpen(false)} className="absolute inset-0" style={{ background: "rgba(0,0,0,.36)", border: "none" }} />
+          <nav aria-label="Job stages" className="absolute left-0 top-0 bottom-0 flex flex-col overflow-y-auto" style={{ width: 220, background: T.card, padding: "6px 4px" }}>
+            <div style={{ ...eyebrow, padding: "6px 8px" }}>Stages</div>
+            {STAGES.map((s, i) => (
+              <button key={s.k} onClick={() => { setStagesOpen(false); if (phoneView === "board") goTo(i); else { setCol(i); window.scrollTo({ top: 0 }); } }}
+                aria-current={col === i ? "true" : undefined} className="w-full text-left flex items-center gap-2"
+                style={{ minHeight: 40, padding: "0 10px", borderRadius: 4, border: "none", background: col === i ? T.hivizDim : "transparent",
+                         color: col === i ? T.hivizText : T.ink, fontFamily: disp, fontSize: F.md, fontWeight: 600, textTransform: "uppercase", cursor: "pointer" }}>
+                <span style={{ flex: 1 }}>{s.label}</span>
+                <span style={{ ...nums, fontSize: F.xs, color: T.ink3 }}>{jobs ? byStage[i].length : "·"}</span>
+              </button>
+            ))}
+          </nav>
         </div>
       )}
     </div>
@@ -335,11 +404,16 @@ function JobCard({ j, busy, readOnly, next, onNext, onMove, onAccept, onFlag }: 
         ) : (
           <>
             <span className="flex-1" style={{ minWidth: 0 }} />
-            <button disabled={busy} onClick={onMove} style={{ ...btn, flexShrink: 0 }}>Move</button>
+            <button disabled={busy} onClick={onMove} aria-label="Move to another stage" title="Move to another stage"
+              style={{ ...btn, flexShrink: 0, width: 32, padding: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M10 2.5v15M2.5 10h15M10 2.5l-2.2 2.2M10 2.5l2.2 2.2M10 17.5l-2.2-2.2M10 17.5l2.2-2.2M2.5 10l2.2-2.2M2.5 10l2.2 2.2M17.5 10l-2.2-2.2M17.5 10l-2.2 2.2" />
+              </svg>
+            </button>
             {next && (
               <button disabled={busy} onClick={() => onNext(next.enter)} title={`Move to ${next.label}`}
                 style={{ ...btn, color: T.ink, borderColor: T.ink3, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>
-                {next.label} ›
+                {next.label} »
               </button>
             )}
           </>

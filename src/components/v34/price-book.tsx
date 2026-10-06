@@ -21,6 +21,7 @@ import Link from "next/link";
 import { T, F, disp, eyebrow, nums, clip, money, formatPhone } from "@/lib/v34/tokens";
 import { useWide } from "@/lib/v34/use-wide";
 import { Cell } from "@/components/v34/cell";
+import { SearchBubble } from "@/components/v34/primitives";
 import { COST_TYPE_LABEL, QTY_RULE_LABEL, cardGaps, defaultTaxable, type CostType } from "@/lib/cost-cards";
 import { CardSheet, GroupSheet, call, numify, dateLabel, type Card, type Group, type Vendor } from "@/components/v34/cost-cards";
 import { ReceiptImport } from "@/components/v34/receipt-import";
@@ -328,8 +329,7 @@ export function PriceBook({ pick }: { pick?: PricePick } = {}) {
           onPick={pick?.onAssembly ? (id, name) => void took(id, name, () => pick.onAssembly!(id, name)) : undefined} /> : (<>
       {/* ---- find, view ---- */}
       <div className="flex items-center gap-2 flex-wrap mt-3">
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find: 3000, rebar, Angelle, item #…" aria-label="Find a card"
-          className="rounded px-2 outline-none" style={{ height: 32, border: `1px solid ${T.hair}`, background: T.card, fontSize: F.sm, flex: 1, minWidth: 180, maxWidth: 360 }} />
+        <div style={{ flex: 1, minWidth: 180, maxWidth: 360 }}><SearchBubble value={q} onChange={setQ} autoFocus={false} placeholder="Find: 3000, rebar, Angelle, item #…" /></div>
         <div className="flex rounded overflow-hidden" role="tablist" aria-label="View" style={{ border: `1px solid ${T.hair}` }}>
           {(["group", "vendor"] as const).map((v) => (
             <button key={v} role="tab" aria-selected={view === v} onClick={() => setView(v)} className="px-2.5"

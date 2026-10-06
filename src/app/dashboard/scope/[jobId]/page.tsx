@@ -20,7 +20,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useDustyDocked } from "@/lib/v34/use-dusty-docked";
-import { useHideHeadOnScroll } from "@/lib/v34/use-hide-head";
 import { VoiceRecorder } from "@/components/v34/voice-recorder";
 import { useParams } from "next/navigation";
 import { T, F, disp, eyebrow, nums, clip, money, money0, formatPhone } from "@/lib/v34/tokens";
@@ -107,7 +106,6 @@ export default function ScopeBuilder() {
     return () => cancelAnimationFrame(raf);
   }, [docked]);
   const railSlot = docked && slot?.isConnected ? slot : null;
-  useHideHeadOnScroll();
   const [sections, setSections] = useState<Section[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saveErr, setSaveErr] = useState<Record<string, string>>({});

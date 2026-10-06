@@ -65,3 +65,13 @@ test("thread search reads a kind of thing out of the words", async () => {
   assert.deepEqual(readThreadQuery("price for the patio"), { words: "price for the patio", type: "all" });
   assert.deepEqual(readThreadQuery("pdf quote, calls"), { words: "quote, calls", type: "file" }, "only the first kind word picks the type");
 });
+
+test("initialsHue: one colour per person, none without a name", async () => {
+  const { initialsHue, INITIALS_HUES } = await import("../src/lib/v34/threads.ts");
+  assert.equal(initialsHue(null), null);
+  assert.equal(initialsHue("  "), null);
+  assert.equal(initialsHue("Jeremy Wright"), initialsHue("jeremy  wright"));
+  assert.ok(INITIALS_HUES.includes(initialsHue("Amber")));
+  const names = ["Amber", "Luis", "Jeremy Wright", "Johnette Wilson", "Dylan Ordoyne", "John Freeling", "Gary Davis", "Maurice Watkins"];
+  assert.ok(new Set(names.map(initialsHue)).size >= 4, "a variety of colours");
+});

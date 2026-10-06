@@ -442,9 +442,11 @@ html[data-theme="night-shift"] .sc-proposal { --sc-doc-ground: #15171A; }
 @keyframes scSpinR { to { transform: rotate(-360deg); } }
 @media (prefers-reduced-motion: reduce) { .sc-emblem g { animation: none !important; } }
 
-/* The job page on a phone (Coy, 2026-10-05): scrolling down slides the
-   dashboard header away so the job's own header has the top of the screen
-   (useHideHeadOnScroll). */
+/* On a phone scrolling down slides the dashboard header away so the page's
+   own header has the top of the screen (useHideHeadOnScroll; the job page
+   2026-10-05, every page 2026-10-06). .sc-page-head is a list page's title
+   row, kept at the top while the list scrolls under it. */
+.sc-page-head { position: sticky; top: var(--sc-head); z-index: 6; background: var(--sc-slab); padding: 4px 0 8px; transition: top .2s ease-out; }
 .sc-head-wrap { transition: transform .2s ease-out; }
 @media (max-width: 1023px) {
   html[data-head-hide] { --sc-head: 0px; }
@@ -457,6 +459,6 @@ html[data-theme="night-shift"] .sc-proposal { --sc-doc-ground: #15171A; }
    new something buttons"). The inline styles are the desktop's. */
 @media (max-width: 1023px) {
   .sc-page-title { font-size: 15px !important; letter-spacing: .03em !important; }
-  .sc-page-title .sc-page-count { font-size: 11px !important; }
+  .sc-page-count { font-size: 11px !important; }
   .sc-new-btn { height: 28px !important; padding: 0 9px !important; font-size: 11px !important; letter-spacing: .05em !important; }
 }

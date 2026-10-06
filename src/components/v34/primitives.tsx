@@ -351,3 +351,48 @@ export function SlideDrawer({ open, onOpen, onClose, width, label, tab, children
     </>
   );
 }
+
+/* ------------------------------------------------- page header: ☰ and 🔍 */
+
+/** The ☰ that opens a page's side panel, on the left of its title row — the
+ *  same button everywhere (Coy, 2026-10-06: "use the same left slide panel
+ *  hamburger menu button … consistent on the left … in line with the page
+ *  header"). Phone only unless `always`. */
+export function MenuButton({ onClick, label, always }: { onClick: () => void; label: string; always?: boolean }) {
+  return (
+    <button type="button" onClick={onClick} aria-label={label} title={label}
+      className={`${always ? "flex" : "lg:hidden flex"} shrink-0 items-center justify-center rounded`}
+      style={{ width: 40, height: 40, border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink, cursor: "pointer" }}>
+      <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true"><path d="M3 5h14M3 10h14M3 15h14" /></svg>
+    </button>
+  );
+}
+
+/** The search icon in a page's title row; it opens SearchBubble under the row
+ *  (Coy, 2026-10-06: "the same search icon and search bubble consistently
+ *  across every page where search is present"). Threads' list set the look. */
+export function SearchToggle({ open, onToggle, label = "Search" }: { open: boolean; onToggle: () => void; label?: string }) {
+  return (
+    <button type="button" onClick={onToggle} aria-label={label} aria-pressed={open} title={label}
+      className="shrink-0 flex items-center justify-center rounded"
+      style={{ width: 26, height: 26, border: `1px solid ${open ? T.hiviz : T.hairStrong}`, background: open ? T.hivizDim : T.card, cursor: "pointer" }}>
+      <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke={open ? T.hiviz : T.ink2} strokeWidth="1.8" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5" /><path d="M13 13l4.5 4.5" /></svg>
+    </button>
+  );
+}
+
+/** The search bubble: a full-width pill with × to clear; Esc clears and closes. */
+export function SearchBubble({ value, onChange, onClose, placeholder, autoFocus = true }: {
+  value: string; onChange: (v: string) => void; onClose?: () => void; placeholder: string; autoFocus?: boolean;
+}) {
+  return (
+    <label className="flex items-center gap-2 rounded-full" style={{ height: 34, border: `1px solid ${T.hairStrong}`, padding: "0 6px 0 12px", background: T.slab, width: "100%" }}>
+      <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke={T.ink3} strokeWidth="1.8" aria-hidden="true" style={{ flexShrink: 0 }}><circle cx="8.5" cy="8.5" r="5.5" /><path d="M13 13l4.5 4.5" /></svg>
+      <input autoFocus={autoFocus} value={value} onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Escape") { onChange(""); onClose?.(); } }}
+        placeholder={placeholder} aria-label={placeholder}
+        style={{ flex: 1, minWidth: 0, border: "none", outline: "none", background: "transparent", color: T.ink, fontSize: F.sm }} />
+      {value && <button type="button" onClick={() => onChange("")} aria-label="Clear" className="rounded-full" style={{ width: 24, height: 24, color: T.ink2, cursor: "pointer" }}>×</button>}
+    </label>
+  );
+}

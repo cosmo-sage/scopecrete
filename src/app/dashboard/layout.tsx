@@ -46,6 +46,7 @@ import { ThemePicker, useTheme } from "@/components/v34/theme-picker";
 import { Toolbox, MenuEditor } from "@/components/v34/toolbox";
 import { PAGE, DEFAULT_MENUS, cleanMenus, activePage, type Menus } from "@/lib/v34/pages";
 import { usePref } from "@/lib/v34/prefs";
+import { useHideHeadOnScroll } from "@/lib/v34/use-hide-head";
 import { AccessContext } from "@/lib/v34/access-ctx";
 import { accessFrom, menuPages, redirectFor, FULL_ACCESS, type Access } from "@/lib/access";
 import { useRouter } from "next/navigation";
@@ -72,6 +73,8 @@ function useDesktop(): boolean {
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  // On a phone the header slides away as any page scrolls down (Coy, 2026-10-06).
+  useHideHeadOnScroll(pathname);
   const router = useRouter();
   const desktop = useDesktop();
 

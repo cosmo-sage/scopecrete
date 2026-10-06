@@ -18,7 +18,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { T, F, BUCKET, disp, eyebrow, clip, nums, relTime } from "@/lib/v34/tokens";
-import { Sheet } from "@/components/v34/primitives";
+import { SearchBubble, SearchToggle, Sheet } from "@/components/v34/primitives";
 import { useWide } from "@/lib/v34/use-wide";
 import { initials, ROLE_LABEL, type ContactRole } from "@/lib/v34/threads";
 import { BOOK_ROLES, formatNumber, matchesBook, sortBook, type BookEntry, type BookSort } from "@/lib/contacts-book";
@@ -71,6 +71,7 @@ export function ContactsPage() {
   const [rows, setRows] = useState<BookEntry[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [q, setQ] = useState("");
+  const [finding, setFinding] = useState(false);
   const [role, setRole] = useState<"all" | ContactRole>("all");
   const [sort, setSort] = useState<BookSort>("az");
   const [adding, setAdding] = useState(false);
@@ -106,17 +107,18 @@ export function ContactsPage() {
 
   return (
     <div ref={measure} className="px-3 py-3 mx-auto" style={{ maxWidth: 1180 }}>
-      <div className="flex items-center gap-2 flex-wrap mb-2">
-        <h1 className="sc-page-title" style={{ fontFamily: disp, fontSize: F.xl, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".02em", flex: 1, minWidth: 140 }}>
+      <div className="sc-page-head">
+      <div className="flex items-center gap-2 flex-wrap">
+        <h1 className="sc-page-title" style={{ fontFamily: disp, fontSize: F.xl, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".02em", flex: 1, minWidth: 100 }}>
           Contacts {rows && <span className="sc-page-count" style={{ fontSize: F.sm, color: T.ink3, letterSpacing: ".08em" }}>{rows.length}</span>}
         </h1>
-        <button onClick={() => setAdding(true)} className="sc-new-btn" style={btn(true)}>+ Contact</button>
-      </div>
-      <div className="flex gap-2 flex-wrap items-center mb-2">
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find a name, company, number, email, address…" aria-label="Find a contact" style={{ ...field, maxWidth: 360 }} />
-        <select value={sort} onChange={(e) => setSortSaved(e.target.value as BookSort)} aria-label="Sort" style={{ ...field, width: "auto" }}>
+        <select value={sort} onChange={(e) => setSortSaved(e.target.value as BookSort)} aria-label="Sort" style={{ ...field, width: "auto", height: 30 }}>
           <option value="az">A–Z</option><option value="recent">Recent</option>
         </select>
+        <SearchToggle open={finding || !!q} onToggle={() => { if (finding || q) { setQ(""); setFinding(false); } else setFinding(true); }} label="Find a contact" />
+        <button onClick={() => setAdding(true)} className="sc-new-btn" style={btn(true)}>+ Contact</button>
+      </div>
+      {(finding || q) && <div className="mt-2"><SearchBubble value={q} onChange={setQ} onClose={() => setFinding(false)} placeholder="Find a name, company, number, email, address…" /></div>}
       </div>
       <div className="flex gap-1 flex-wrap mb-2" role="tablist" aria-label="What they are">
         {FILTERS.map((f) => {

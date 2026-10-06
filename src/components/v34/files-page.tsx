@@ -23,7 +23,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { T, F, disp, eyebrow, clip, relTime, nums } from "@/lib/v34/tokens";
-import { Drawer, Segmented } from "@/components/v34/primitives";
+import { Drawer, MenuButton, SearchBubble, SearchToggle, Segmented } from "@/components/v34/primitives";
 import { FileViewer, type FileRow } from "@/components/v34/files-panel";
 import { EmailList } from "@/components/v34/email-sheet";
 import { useWide } from "@/lib/v34/use-wide";
@@ -52,6 +52,8 @@ export function FilesPage({ fixed, embedded, extra }: { fixed?: Partial<FileFilt
   const [fileParam, setFileParam] = useState<string | null>(null);
   const [wrapRef, wide] = useWide<HTMLDivElement>(900);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [info, setInfo] = useState(false);
+  const [searching, setSearching] = useState(false);
   const [groupsOpen, setGroupsOpen] = useState<Record<string, boolean>>({});
   const [storage, setStorage] = useState<{ used_bytes: number; limit_bytes: number; texted_bytes: number } | null>(null);
   const cat = flt.cat, qDeb = flt.q;
@@ -85,7 +87,7 @@ export function FilesPage({ fixed, embedded, extra }: { fixed?: Partial<FileFilt
       // ?email= opens one mirrored email (the job's Bid strip links here).
       const em = sp.get("email");
       if (em) { setEmailParam(em); f.cat = "email"; }
-      setFlt(f); setQ(f.q); setCustom(!!(f.from || f.to));
+      setFlt(f); setQ(f.q); setCustom(!!(f.from || f.to)); if (f.q) setSearching(true);
     });
     return () => { off = true; };
   }, [embedded]);
@@ -146,13 +148,28 @@ export function FilesPage({ fixed, embedded, extra }: { fixed?: Partial<FileFilt
   const folderName = here.kind === "all" ? (photos ? "All photos" : "All files") : here.kind === "recent" ? "Recent · last 30 days"
     : here.kind === "cat" ? CAT_LABEL(here.cat) : names[here.id] ?? "…";
 
-  const facetSelect = (k: "job" | "customer" | "vendor" | "contact", list: Facet[] | undefined, any: string) => (
-    <select value={flt[k]} onChange={(e) => set({ [k]: e.target.value } as Partial<FileFilter>)} aria-label={any} style={{ ...select, color: flt[k] ? T.ink : T.ink2 }}>
-      <option value="">{any}</option>
-      {(list ?? []).map((x) => <option key={x.id} value={x.id}>{x.name} ({x.n})</option>)}
-    </select>
-  );
-  const select: React.CSSProperties = { height: 30, border: `1px solid ${T.hair}`, background: T.card, color: T.ink, fontSize: F.xs, borderRadius: 4, padding: "0 6px", maxWidth: 170, minWidth: 0 };
+  /* The filter menu's groups: a column of these, each opening its choices. */
+  const facetOpts = (list: Facet[] | undefined) => (list ?? []).map((x) => ({ v: x.id, l: x.name, n: x.n }));
+  const pick = (k: keyof FileFilter) => (v: string) => set({ [k]: v } as Partial<FileFilter>);
+  const filterGroups: FilterGroup[] = [
+    ...(!photos ? [{ key: "kind", label: "Type", any: "Any type", value: flt.kind, options: FILE_KINDS.map(([v, l]) => ({ v, l })), onPick: pick("kind") }] : []),
+    { key: "source", label: "Way in", any: "Any way in", value: flt.source, options: FILE_SOURCES.map(([v, l]) => ({ v, l })), onPick: pick("source") },
+    { key: "job", label: "Job", any: "Any job", value: flt.job, options: facetOpts(facets?.jobs), onPick: pick("job") },
+    ...(!fixed?.customer ? [{ key: "customer", label: "Customer", any: "Any customer", value: flt.customer, options: facetOpts(facets?.customers), onPick: pick("customer") }] : []),
+    ...(!fixed?.contact ? [
+      { key: "vendor", label: "Vendor", any: "Any vendor", value: flt.vendor, options: facetOpts(facets?.vendors), onPick: pick("vendor") },
+      { key: "contact", label: "Person", any: "Anyone", value: flt.contact, options: facetOpts(facets?.people), onPick: pick("contact") },
+    ] : []),
+    { key: "when", label: "When", any: "Any time", value: custom ? "custom" : flt.since,
+      options: [...SINCE_DAYS.map(([v, l]) => ({ v, l })), { v: "custom", l: "Between dates…" }],
+      onPick: (v) => { if (v === "custom") { setCustom(true); set({ since: "" }); } else { setCustom(false); set({ since: v, from: "", to: "" }); } },
+      extra: custom ? (
+        <div className="flex flex-col gap-1" style={{ padding: "6px 8px", fontSize: F.xs, color: T.ink3 }}>
+          <label>From <input type="date" value={flt.from} onChange={(e) => set({ from: e.target.value, since: "" })} style={dateInput} /></label>
+          <label>To <input type="date" value={flt.to} onChange={(e) => set({ to: e.target.value, since: "" })} style={dateInput} /></label>
+        </div>
+      ) : null },
+  ];
 
   /* ---------------------------------------------------------- folder column */
   const folderBtn = (f: Folder, label: string, n?: number, indent = false) => {
@@ -249,11 +266,36 @@ export function FilesPage({ fixed, embedded, extra }: { fixed?: Partial<FileFilt
 
   return (
     <div ref={wrapRef} className="mx-auto" style={{ maxWidth: embedded ? undefined : 1320, padding: embedded ? 0 : "12px 12px 24px" }}>
-      {!embedded && <h1 style={{ fontFamily: disp, fontSize: F.xl, fontWeight: 700, margin: 0 }}>Files</h1>}
-      {!embedded && <div style={{ fontSize: F.xs, color: T.ink3, marginBottom: 8 }}>
-        Every photo, plan, bid, quote, receipt and contract — uploaded, emailed or texted. Search finds the words inside them,
-        or type any name: a person, vendor, customer or job brings up everything filed on them.
-      </div>}
+      {/* One title row (Coy, 2026-10-06): ☰ on a phone, FILES with its ⓘ, then
+          the filter and search icons — the same search bubble as every page. */}
+      <div className="flex items-center gap-2" style={{ marginBottom: 8, position: "relative" }}>
+        {!wide && <MenuButton onClick={() => setMenuOpen(true)} label="Folders" always />}
+        {!embedded && (
+          <h1 className="sc-page-title" style={{ fontFamily: disp, fontSize: F.xl, fontWeight: 700, margin: 0, lineHeight: 1.05, display: "flex", alignItems: "flex-start", gap: 3 }}>
+            Files
+            <button type="button" onClick={() => setInfo((v) => !v)} aria-label="What Files holds" aria-expanded={info}
+              style={{ width: 16, height: 16, marginTop: -2, borderRadius: 8, border: `1px solid ${info ? T.hiviz : T.hairStrong}`, background: info ? T.hivizDim : T.card,
+                       color: info ? T.hivizText : T.ink3, fontFamily: "var(--sc-font-body)", fontSize: 10, fontWeight: 700, lineHeight: "14px", textTransform: "none", cursor: "pointer", padding: 0 }}>i</button>
+          </h1>
+        )}
+        <span style={{ flex: 1 }} />
+        <FilterMenu groups={filterGroups} used={chips.filter((c) => c.key !== "q").length} />
+        <SearchToggle open={searching} onToggle={() => { if (searching) { setQ(""); setSearching(false); } else setSearching(true); }} label="Search files" />
+        {extra}
+        {info && !embedded && (
+          <div role="note" className="rounded" style={{ position: "absolute", top: "100%", left: wide ? 0 : 48, right: 0, maxWidth: 420, zIndex: 20, marginTop: 4, padding: "8px 10px",
+            background: T.card, border: `1px solid ${T.hair}`, boxShadow: "0 6px 18px rgba(0,0,0,.12)", fontSize: F.xs, color: T.ink2, lineHeight: 1.4 }}>
+            Every photo, plan, bid, quote, receipt and contract — uploaded, emailed or texted. Search finds the words inside them,
+            or type any name: a person, vendor, customer or job brings up everything filed on them.
+          </div>
+        )}
+      </div>
+      {searching && (
+        <div style={{ marginBottom: 8 }}>
+          <SearchBubble value={q} onChange={(v) => { setQ(v); if (fileParam) clearFile(); }} onClose={() => setSearching(false)}
+            placeholder={photos ? "Search photos — words, or a name" : "Search files — words in a file, or a name: Wilson, Angelle…"} />
+        </div>
+      )}
 
       <div className="flex items-start" style={{ gap: 16 }}>
         {wide && (
@@ -265,25 +307,8 @@ export function FilesPage({ fixed, embedded, extra }: { fixed?: Partial<FileFilt
         )}
 
         <div style={{ flex: 1, minWidth: 0 }}>
-          {/* The search bar, at the top of the content as OneDrive has it. */}
-          <div className="flex gap-2 items-center">
-            {!wide && (
-              <button onClick={() => setMenuOpen(true)} aria-label="Folders" className="rounded flex items-center justify-center shrink-0"
-                style={{ width: 40, height: 40, border: `1px solid ${T.hair}`, background: T.card, color: T.ink, cursor: "pointer" }}>
-                <svg width="18" height="14" viewBox="0 0 18 14" aria-hidden="true"><path d="M1 2h16M1 7h16M1 12h16" stroke="currentColor" strokeWidth="1.8" /></svg>
-              </button>
-            )}
-            <label className="flex items-center gap-2 rounded" style={{ flex: 1, minWidth: 0, height: 40, border: `1px solid ${T.hairStrong}`, padding: "0 10px", background: T.card }}>
-              <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true" style={{ color: T.ink3, flexShrink: 0 }}><circle cx="7" cy="7" r="5.2" fill="none" stroke="currentColor" strokeWidth="1.7" /><path d="M11 11l4 4" stroke="currentColor" strokeWidth="1.7" /></svg>
-              <input type="search" value={q} onChange={(e) => { setQ(e.target.value); if (fileParam) clearFile(); }}
-                placeholder={photos ? "Search photos — words, or a name" : "Search files — words in a file, or a name: Wilson, Angelle…"} aria-label="Search files"
-                style={{ flex: 1, minWidth: 0, height: "100%", border: "none", outline: "none", fontSize: F.sm, background: "transparent", color: T.ink }} />
-            </label>
-            {extra}
-          </div>
-
           {/* Photos | Files, and which folder is open. */}
-          <div className="flex items-center gap-3 flex-wrap" style={{ marginTop: 10 }}>
+          <div className="flex items-center gap-3 flex-wrap">
             <div style={{ width: 190 }}>
               <Segmented small options={[["photos", "Photos"], ["files", "Files"]]} value={photos ? "photos" : "files"} onChange={view} />
             </div>
@@ -292,38 +317,6 @@ export function FilesPage({ fixed, embedded, extra }: { fixed?: Partial<FileFilt
             <span style={{ fontSize: F.xs, color: T.ink3, ...nums }}>{files && cat !== "email" ? `${files.length}${files.length === 300 ? "+" : ""} ${photos ? "photos" : "shown"}` : ""}</span>
           </div>
 
-          {/* The filter bar: one row of drop-downs, the ones in use as chips under it. */}
-          <div className="flex gap-2 items-center" role="group" aria-label="Filters"
-            style={{ marginTop: 8, padding: "6px 8px", background: T.sunk, border: `1px solid ${T.hairSoft}`, borderRadius: 4, overflowX: "auto", flexWrap: wide ? "wrap" : "nowrap" }}>
-            <span style={{ ...eyebrow, flexShrink: 0 }}>Filter</span>
-            {!photos && (
-              <select value={flt.kind} onChange={(e) => set({ kind: e.target.value })} aria-label="Type of file" style={select}>
-                <option value="">Any type</option>
-                {FILE_KINDS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-              </select>
-            )}
-            <select value={flt.source} onChange={(e) => set({ source: e.target.value })} aria-label="How it came" style={select}>
-              <option value="">Any way in</option>
-              {FILE_SOURCES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-            </select>
-            {facetSelect("job", facets?.jobs, "Any job")}
-            {!fixed?.customer && facetSelect("customer", facets?.customers, "Any customer")}
-            {!fixed?.contact && facetSelect("vendor", facets?.vendors, "Any vendor")}
-            {!fixed?.contact && facetSelect("contact", facets?.people, "Anyone")}
-            <select value={custom ? "custom" : flt.since} aria-label="When" style={select}
-              onChange={(e) => { const v = e.target.value; if (v === "custom") { setCustom(true); set({ since: "" }); } else { setCustom(false); set({ since: v, from: "", to: "" }); } }}>
-              <option value="">Any time</option>
-              {SINCE_DAYS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-              <option value="custom">Between dates…</option>
-            </select>
-            {custom && (
-              <span className="flex items-center gap-1 shrink-0" style={{ fontSize: F.xs, color: T.ink3 }}>
-                <input type="date" value={flt.from} onChange={(e) => set({ from: e.target.value, since: "" })} aria-label="From" style={{ ...select, maxWidth: 150 }} />
-                to
-                <input type="date" value={flt.to} onChange={(e) => set({ to: e.target.value, since: "" })} aria-label="To" style={{ ...select, maxWidth: 150 }} />
-              </span>
-            )}
-          </div>
           {chips.length > 0 && (
             <div className="flex gap-1 flex-wrap items-center" style={{ marginTop: 8 }} aria-label="Filters in use">
               {chips.map((c) => (
@@ -447,6 +440,78 @@ function StorageMeter({ s }: { s: { used_bytes: number; limit_bytes: number; tex
       </div>
       <div style={{ fontSize: F.xs, color: T.ink2, ...nums }}>{l.used}</div>
       <div style={{ fontSize: F.xs, color: l.tone === "ok" ? T.ink3 : T.red, ...nums }}>{l.left}</div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------ filter menu */
+
+type FilterGroup = {
+  key: string; label: string; any: string; value: string;
+  options: Array<{ v: string; l: string; n?: number }>;
+  onPick: (v: string) => void; extra?: React.ReactNode;
+};
+const dateInput: React.CSSProperties = { display: "block", width: "100%", height: 30, border: `1px solid ${T.hair}`, background: T.card, color: T.ink, fontSize: F.xs, borderRadius: 4, padding: "0 6px", marginTop: 2 };
+
+/** The filter as one icon (Coy, 2026-10-06: "an icon that opens a column list
+ *  that opens sub options to the right of that column"): Type, Way in, Job …
+ *  down the left, the one tapped lists its choices on the right. */
+function FilterMenu({ groups, used }: { groups: FilterGroup[]; used: number }) {
+  const [open, setOpen] = useState(false);
+  const [at, setAt] = useState<string>(groups[0]?.key ?? "");
+  const box = React.useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: PointerEvent) => { if (box.current && !box.current.contains(e.target as Node)) setOpen(false); };
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("pointerdown", away); window.addEventListener("keydown", esc);
+    return () => { document.removeEventListener("pointerdown", away); window.removeEventListener("keydown", esc); };
+  }, [open]);
+  const g = groups.find((x) => x.key === at) ?? groups[0];
+  const row = (on: boolean): React.CSSProperties => ({ width: "100%", textAlign: "left", display: "flex", alignItems: "center", gap: 6, minHeight: 34, padding: "4px 8px",
+    background: on ? T.hivizDim : "transparent", color: on ? T.hivizText : T.ink, border: "none", borderRadius: 4, fontSize: F.sm, cursor: "pointer" });
+  return (
+    <div ref={box} style={{ position: "relative" }}>
+      <button type="button" onClick={() => setOpen((v) => !v)} aria-label="Filter" aria-expanded={open} title="Filter"
+        className="shrink-0 flex items-center justify-center rounded"
+        style={{ width: 26, height: 26, border: `1px solid ${open || used ? T.hiviz : T.hairStrong}`, background: open || used ? T.hivizDim : T.card, cursor: "pointer", position: "relative" }}>
+        <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke={open || used ? T.hiviz : T.ink2} strokeWidth="1.8" strokeLinejoin="round" aria-hidden="true"><path d="M2.5 3.5h15l-6 7v5.5l-3 1.5v-7z" /></svg>
+        {used > 0 && <span style={{ position: "absolute", top: -6, right: -6, minWidth: 14, height: 14, borderRadius: 7, background: T.hiviz, color: T.onHiviz, fontSize: 9, fontWeight: 700, lineHeight: "14px", textAlign: "center", padding: "0 3px" }}>{used}</span>}
+      </button>
+      {open && g && (
+        <div role="dialog" aria-label="Filter files" className="rounded flex"
+          style={{ position: "absolute", right: 0, top: 32, zIndex: 30, width: "min(380px, calc(100vw - 24px))", maxHeight: "min(60vh, 440px)",
+                   background: T.card, border: `1px solid ${T.hair}`, boxShadow: "0 10px 28px rgba(0,0,0,.16)", overflow: "hidden" }}>
+          <div style={{ width: 128, flexShrink: 0, borderRight: `1px solid ${T.hairSoft}`, padding: 4, overflowY: "auto", background: T.sunk }}>
+            {groups.map((x) => {
+              const chosen = x.value ? x.options.find((o) => o.v === x.value)?.l ?? "" : "";
+              return (
+                <button key={x.key} type="button" onClick={() => setAt(x.key)} aria-current={x.key === g.key ? "true" : undefined}
+                  style={{ ...row(x.key === g.key), flexDirection: "column", alignItems: "flex-start", gap: 0, background: x.key === g.key ? T.card : "transparent", color: T.ink }}>
+                  <span className="flex items-center gap-1" style={{ width: "100%", fontWeight: 600 }}>
+                    <span style={{ flex: 1 }}>{x.label}</span><span aria-hidden="true" style={{ color: T.ink3 }}>›</span>
+                  </span>
+                  {chosen && <span style={{ fontSize: F.xs, color: T.hivizText, ...clip, maxWidth: "100%" }}>{chosen}</span>}
+                </button>
+              );
+            })}
+          </div>
+          <div style={{ flex: 1, minWidth: 0, padding: 4, overflowY: "auto" }}>
+            <button type="button" onClick={() => g.onPick("")} style={row(!g.value)}>
+              <span style={{ flex: 1 }}>{g.any}</span>{!g.value && <span aria-hidden="true">✓</span>}
+            </button>
+            {g.options.length === 0 && <div style={{ fontSize: F.xs, color: T.ink3, padding: "6px 8px" }}>None with files</div>}
+            {g.options.map((o) => (
+              <button key={o.v} type="button" onClick={() => g.onPick(o.v)} style={row(g.value === o.v)}>
+                <span style={{ flex: 1, minWidth: 0, ...clip }}>{o.l}</span>
+                {o.n !== undefined && <span style={{ fontSize: F.xs, color: T.ink3, ...nums }}>{o.n}</span>}
+                {g.value === o.v && <span aria-hidden="true">✓</span>}
+              </button>
+            ))}
+            {g.extra}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

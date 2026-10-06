@@ -27,6 +27,9 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useLiveThreads } from "@/lib/v34/live-threads";
+import { useLiveCalls } from "@/lib/v34/alerts-live";
+import { liveCallFor } from "@/lib/alerts";
+import { LiveCallBadge } from "@/components/v34/incoming-alerts";
 import { ArchiveDialog } from "@/components/v34/archive-actions";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -382,6 +385,9 @@ function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, onName, onB
   subtypes: Subtype[];
   deciding: boolean;
 }) {
+  // On a call right now (2026-10-06) — in place of the age, in green.
+  const calls = useLiveCalls();
+  const live = calls.length ? liveCallFor(calls, t.contact_id) ?? liveCallFor(calls, null, t.phone) : null;
   const badge = t.bucket ? BUCKETS.find((b) => b.k === t.bucket) : null;
   // Dusty's guess, shown on the collapsed row so the list can be read without
   // opening anything, and marked in the buckets a right swipe opens.
@@ -493,7 +499,8 @@ function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, onName, onB
               </span>
             )}
             <span className="flex-1" />
-            {when && <span className="shrink-0" style={{ fontSize: 12, color: T.ink3, ...nums }}>{when}</span>}
+            {live ? <span className="shrink-0"><LiveCallBadge call={live} compact /></span>
+              : when && <span className="shrink-0" style={{ fontSize: 12, color: T.ink3, ...nums }}>{when}</span>}
           </span>
           {sub && <span style={{ display: "block", fontSize: 11.5, color: T.ink3, marginTop: 1, ...clip }}>{sub}</span>}
           {t.archived?.back && (

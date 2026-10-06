@@ -36,6 +36,8 @@ import { DustyPanel } from "@/components/v34/dusty-panel";
 import { DustyAvatar } from "@/components/v34/dusty-avatar";
 import { ActivityLine } from "@/components/v34/activity-line";
 import { ArchiveToast } from "@/components/v34/archive-actions";
+import { AlertsBell, AlertPopups } from "@/components/v34/incoming-alerts";
+import { useAlertsWatcher } from "@/lib/v34/alerts-live";
 import dynamic from "next/dynamic";
 // Only drawn once 🔍 is tapped — kept out of the first load.
 const SearchPanel = dynamic(() => import("@/components/v34/search-panel").then((m) => m.SearchPanel));
@@ -155,6 +157,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const access: Access = useMemo(() => (meAccess?.limited ? accessFrom({ role: "field", ...meAccess }) : FULL_ACCESS), [meAccess]);
   const limited = access.limited;
   const allowed = menuPages(access);
+  // Incoming texts, calls and emails (2026-10-06): one watcher for the bell,
+  // the pop-ups and the live-call marker on threads. Not for an onsite
+  // estimator, who reads no messages.
+  useAlertsWatcher(!!me && !limited);
   useEffect(() => {
     const to = redirectFor(access, pathname);
     if (to) router.replace(to);
@@ -235,6 +241,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               </svg>
             </button>}
 
+            {/* Incoming texts, calls and emails, and a call happening now (Coy, 2026-10-06). */}
+            {me && !limited && <AlertsBell glassBtn={glassBtn} />}
+
             {/* Dusty (Coy, 2026-09-30): on a desktop he opens down from the
                 header on the right, so his button lives here, where the
                 pipeline button was (the Dashboard carries the pipeline now).
@@ -290,6 +299,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <AccessContext.Provider value={access}>{children}</AccessContext.Provider>
       </main>
       <ArchiveToast />
+      {me && !limited && <AlertPopups />}
 
       <Toolbox open={toolOpen} onClose={() => setToolOpen(false)} keys={toolKeys} active={active} badge={badge} />
 

@@ -74,6 +74,14 @@
  * - A call follow-up whose call has no voip_calls row was dropped with only a
  *   function log. It is now stored too; the projection attaches it to the
  *   call's message when there is one, or records artifact_without_call.
+ *
+ * v11 changes — a call that is happening now (migration 085, Coy 2026-10-06):
+ * - call.ringing (and call.answered, if Quo sends it) upsert one row per call
+ *   in live_calls — the app shows the thread's channel as on a call. Not in
+ *   quo_events: those rows are projected into messages, and the call's message
+ *   still comes from call.completed alone. No contact is made on a ring.
+ * - call.completed ends that row. A ring arriving after its completion is
+ *   stored already ended. A failure here is logged and never costs the event.
  */
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
@@ -705,6 +713,74 @@ async function storeOutboundMessage(supabase: ReturnType<typeof createClient>, r
 }
 
 // ---------------------------------------------------------------------------
+// Live calls (v11, migration 085)
+// ---------------------------------------------------------------------------
+
+/**
+ * Records a ring (or an answer) in live_calls. Never throws: a live-call
+ * marker is a convenience, and Quo must still get its 200. A ring that comes
+ * after its call.completed (out of order) is stored already ended.
+ */
+async function noteLiveCall(
+  supabase: ReturnType<typeof createClient>,
+  o: { orgId: string; eventType: string; quoCallId: string; direction: 'inbound' | 'outbound'
+       fromPhone: string | null; toPhone: string | null; counterparty: string | null; ours: string | null; rawPayload: unknown }
+) {
+  try {
+    let contactId: string | null = null
+    if (o.counterparty) {
+      const { data } = await supabase.from('contacts').select('id, merged_into_contact_id')
+        .eq('org_id', o.orgId).eq('phone', o.counterparty).limit(1).maybeSingle()
+      contactId = (data?.merged_into_contact_id as string | null) ?? (data?.id as string | null) ?? null
+    }
+    let lineId: string | null = null
+    if (o.ours) {
+      const { data } = await supabase.from('org_phone_numbers').select('id')
+        .eq('org_id', o.orgId).eq('phone_e164', o.ours).limit(1).maybeSingle()
+      lineId = (data?.id as string | null) ?? null
+    }
+    const done = await findQuoEventId(supabase, o.orgId, o.quoCallId)
+    const now = new Date().toISOString()
+    const row: Record<string, unknown> = {
+      org_id: o.orgId, provider: 'quo', call_id: o.quoCallId, contact_id: contactId, phone_number_id: lineId,
+      direction: o.direction, from_phone: o.fromPhone, to_phone: o.toPhone, counterparty: o.counterparty,
+      updated_at: now,
+    }
+    if (o.eventType === 'call.ringing') {
+      row.raw_payload = o.rawPayload
+      row.started_at = ((o.rawPayload as Record<string, unknown>)?.createdAt as string) ?? now
+      if (!done) row.status = 'ringing'
+    } else {
+      row.answered_at = ((o.rawPayload as Record<string, unknown>)?.answeredAt as string) ?? now
+      if (!done) row.status = 'answered'
+    }
+    if (done) { row.status = 'ended'; row.ended_at = now }
+    // A ring after an answer must not set it back to ringing.
+    if (o.eventType === 'call.ringing') {
+      const { data: had } = await supabase.from('live_calls').select('status').eq('provider', 'quo').eq('call_id', o.quoCallId).maybeSingle()
+      if (had?.status && had.status !== 'ringing') delete row.status
+    }
+    const { error } = await supabase.from('live_calls').upsert(row, { onConflict: 'provider,call_id' })
+    dbFailed(`live_calls upsert (${o.eventType}/${o.quoCallId})`, error)
+  } catch (e) {
+    console.error('[live] failed:', e instanceof Error ? e.message : String(e))
+  }
+}
+
+/** The call is over: its live marker ends. Never throws. */
+async function endLiveCall(supabase: ReturnType<typeof createClient>, quoCallId: string, contactId: string | null) {
+  if (!quoCallId) return
+  try {
+    const patch: Record<string, unknown> = { status: 'ended', ended_at: new Date().toISOString(), updated_at: new Date().toISOString() }
+    if (contactId) patch.contact_id = contactId
+    const { error } = await supabase.from('live_calls').update(patch).eq('provider', 'quo').eq('call_id', quoCallId).is('ended_at', null)
+    dbFailed(`live_calls end (${quoCallId})`, error)
+  } catch (e) {
+    console.error('[live] end failed:', e instanceof Error ? e.message : String(e))
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Main handler
 // ---------------------------------------------------------------------------
 
@@ -738,6 +814,24 @@ serve(async (req: Request) => {
   const data = (payload.data as Record<string, unknown>)?.object as Record<string, unknown> ?? {}
 
   try {
+    // -------------------- call.ringing / call.answered (v11) --------------------
+    // A call that is happening now (migration 085). Kept in live_calls, NOT
+    // quo_events: every quo_events row is projected into messages, and the
+    // call's message comes from call.completed. No contact is made here — an
+    // unknown caller becomes a contact when the call completes, as before.
+    if (eventType === 'call.ringing' || eventType === 'call.answered') {
+      const fromPhone = normalizePhone((data.from as string) ?? '')
+      const toPhone = normalizePhone((data.to as string) ?? '')
+      const quoCallId = (data.id as string) ?? ''
+      if (!quoCallId) return new Response(JSON.stringify({ status: 'no_call_id' }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      const direction = callDirection(data.direction)
+      const counterparty = counterpartyPhone(direction, fromPhone, toPhone)
+      const ours = direction === 'outbound' ? fromPhone : toPhone
+      const { orgId } = await resolveOrg(supabase, toPhone)
+      await noteLiveCall(supabase, { orgId, eventType, quoCallId, direction, fromPhone, toPhone, counterparty, ours, rawPayload: data })
+      return new Response(JSON.stringify({ status: 'ok', live: eventType }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    }
+
     // -------------------- call.completed --------------------
     if (eventType === 'call.completed') {
       const fromRaw = (data.from as string) ?? ''
@@ -758,12 +852,14 @@ serve(async (req: Request) => {
       }
       const { orgId } = await resolveOrg(supabase, toPhone)
       if (await isOrgLine(supabase, orgId, contactPhone)) {
+        await endLiveCall(supabase, quoCallId, null)
         return await storeOwnLineEvent(supabase, {
           orgId, eventType, eventId: quoCallId, direction, fromPhone, toPhone: toPhone ?? fromPhone,
           body: null, mediaUrls: null, rawPayload: data,
         })
       }
       const contactId = await upsertContact(supabase, orgId, contactPhone)
+      await endLiveCall(supabase, quoCallId, contactId)
 
       const rawStatus = (data.status as string) ?? 'missed'
       const status = rawStatus === 'completed' ? 'completed' : rawStatus === 'voicemail' ? 'voicemail' : 'missed'

@@ -18,6 +18,9 @@ import { ThreadSearch } from "@/components/v34/thread-search";
 import { InternalNotes } from "@/components/v34/internal-notes";
 import { inChannel, roleOf, type Channel, type ChannelFilter } from "@/lib/v34/threads";
 import { useLiveThreads } from "@/lib/v34/live-threads";
+import { useLiveCalls } from "@/lib/v34/alerts-live";
+import { liveCallFor } from "@/lib/alerts";
+import { LiveCallBadge, LiveDot } from "@/components/v34/incoming-alerts";
 
 /**
  * One person, opened in Threads (Threads v2, Claude Design 2026-10-03): their
@@ -54,6 +57,7 @@ export default function ChatThreadPage() {
   const [fromLine, setFromLine] = useState<string | null>(null);
   const [searching, setSearching] = useState(false);
   const [more, setMore] = useState(false);
+  const liveCalls = useLiveCalls();
 
   const [messages, setMessages] = useState<ThreadMessage[]>([]);
   const [phone, setPhone] = useState<string | null>(null);
@@ -249,6 +253,10 @@ export default function ChatThreadPage() {
   const threadName = threads ? threadLabel(threads.thread, threads.custom).name : "Threads";
   const threadIds = threads && !["customers", "unsorted", "vendors", "personal", "spam", "archived"].includes(threads.thread)
     ? threads.custom?.find((t) => t.id === threads.thread)?.contact_ids ?? [] : [];
+  // A call happening now on one of their numbers (Coy, 2026-10-06: "if there is an active phone
+  // call I would like that thread channel to show it's active") — from Quo's ring (migration 085).
+  const liveHere = channel?.kind === "phone" ? liveCallFor(liveCalls, contactId, channel.value) : null;
+  const liveAny = liveHere ?? liveCallFor(liveCalls, contactId) ?? channels.map((x) => x.kind === "phone" ? liveCallFor(liveCalls, contactId, x.value) : null).find(Boolean) ?? null;
   const pickChannel = (k: string) => { setChannelKey(k); setFilter("all"); setLineFilter(null); };
   // The lines this person actually reached on this number, and the one a text or call goes from:
   // the line they last used, else the primary.
@@ -319,13 +327,14 @@ export default function ChatThreadPage() {
           <div className={`${folded ? "hidden lg:flex" : "flex"} items-end mt-1.5 overflow-x-auto`} role="tablist" aria-label="Channels">
             {tabs.map((ch) => {
               const on = channel?.key === ch.key;
+              const chLive = ch.kind === "phone" ? liveCallFor(liveCalls, contactId, ch.value) : null;
               const sub = ch.kind === "phone" ? `${formatPhone(ch.value)} · ${ch.calls} call${ch.calls === 1 ? "" : "s"} · ${ch.texts} text${ch.texts === 1 ? "" : "s"}`
                 : ch.kind === "notes" ? `${nNotes} note${nNotes === 1 ? "" : "s"}`
                 : ch.kind === "email" ? (ch.value ? `${ch.value}${ch.emails ? ` · ${ch.emails}` : ""}` : ch.emails ? `${ch.emails} filed here` : "No email on file")
                 : "Not joined · invite";
               return (
                 <button key={ch.key} role="tab" aria-selected={on} onClick={() => pickChannel(ch.key)} className="text-left flex-1 lg:flex-none shrink-0"
-                  style={{ minWidth: 0, padding: "7px 12px 8px", borderBottom: `2px solid ${on ? T.hiviz : "transparent"}`, opacity: ch.reachable || on ? 1 : 0.5, cursor: "pointer" }}>
+                  style={{ minWidth: 0, padding: "7px 12px 8px", borderBottom: `2px solid ${on ? (chLive ? T.green : T.hiviz) : chLive ? T.green : "transparent"}`, opacity: ch.reachable || on ? 1 : 0.5, cursor: "pointer" }}>
                   {/* An icon and a short name, one line (Coy, 2026-10-05): ☎ Cell, ✉, ✦ AI Chat, Notes. */}
                   <span aria-label={ch.kind === "email" ? "Email" : undefined} className="justify-center lg:justify-start" style={{ display: "flex", alignItems: "center", gap: 5, fontFamily: "var(--sc-font-strong)", fontSize: 13, fontWeight: 600, color: T.ink, whiteSpace: "nowrap" }}>
                     {ch.kind === "phone" ? <Phone size={13} weight="fill" color={T.ink3} />
@@ -333,6 +342,7 @@ export default function ChatThreadPage() {
                       : ch.kind === "chat" ? <Sparkle size={13} color={T.ink3} />
                       : <NotePencil size={13} color={T.ink3} />}
                     {ch.kind === "email" ? null : ch.label}
+                    {chLive && <LiveDot size={8} />}
                     {ch.kind === "phone" && on && (
                       // Name the number (Coy: "instead of 'phone 2' it can say 'office'").
                       <span role="button" tabIndex={0} aria-label={`Rename ${ch.label}`} title="Rename this number"
@@ -341,7 +351,8 @@ export default function ChatThreadPage() {
                         style={{ fontSize: 11, color: T.ink3, cursor: "pointer", padding: "0 2px" }}>✎</span>
                     )}
                   </span>
-                  <span className="hidden lg:block" style={{ fontSize: 11, color: T.ink3, ...nums, whiteSpace: "nowrap" }}>{sub}</span>
+                  {chLive ? <span className="hidden lg:block"><LiveCallBadge call={chLive} compact /></span>
+                    : <span className="hidden lg:block" style={{ fontSize: 11, color: T.ink3, ...nums, whiteSpace: "nowrap" }}>{sub}</span>}
                 </button>
               );
             })}
@@ -396,6 +407,18 @@ export default function ChatThreadPage() {
             <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke={searching ? T.hiviz : T.ink2} strokeWidth="1.8" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5" /><path d="M13 13l4.5 4.5" /></svg>
           </button>
         </div>
+
+        {/* The call happening now — shown even with the header folded. */}
+        {liveAny && (
+          <div className="flex items-center gap-2 flex-shrink-0" role="status"
+            style={{ padding: "7px 16px", background: T.greenDim, borderBottom: `1px solid ${T.hairSoft}` }}>
+            <LiveCallBadge call={liveAny} />
+            <span className="min-w-0" style={{ fontSize: 12, color: T.ink2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {liveAny.direction === "outbound" ? "to" : "from"} {formatPhone(liveAny.phone)}{liveAny.line ? ` · via ${liveAny.line}` : ""}
+              {liveHere ? "" : channel?.kind === "phone" ? " · on their other number" : ""}
+            </span>
+          </div>
+        )}
 
         {/* Search drops down over the chat, its full width (Coy, 2026-10-05). */}
         {searching && (

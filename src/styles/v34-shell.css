@@ -467,3 +467,18 @@ html[data-theme="night-shift"] .sc-proposal { --sc-doc-ground: #15171A; }
    (Coy, 2026-10-06). */
 .sc-job-name { font-size: 19px; }
 @media (max-width: 1023px) { .sc-job-name { font-size: 14px; } }
+
+/* Incoming alerts (2026-10-06): the bell's panel, the pop-ups, the live-call dot. */
+.sc-alerts-panel { position: absolute; top: calc(100% + 8px); right: -40px; width: min(380px, calc(100vw - 16px)); z-index: 80; }
+@media (max-width: 1023px) { .sc-alerts-panel { position: fixed; top: 58px; left: 8px; right: 8px; width: auto; } }
+.sc-pops { position: fixed; z-index: 75; top: calc(var(--sc-head) + 8px); right: 12px; width: min(360px, calc(100vw - 16px)); display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+.sc-pops > * { pointer-events: auto; }
+@media (max-width: 1023px) { .sc-pops { left: 8px; right: 8px; width: auto; top: calc(var(--sc-head) + 6px); } }
+.sc-pop { animation: sc-pop-in .22s ease-out; }
+@keyframes sc-pop-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+.sc-live-dot { display: inline-block; flex: 0 0 auto; border-radius: 999px; background: var(--sc-green); box-shadow: 0 0 0 0 color-mix(in srgb, var(--sc-green) 55%, transparent); animation: sc-live 1.4s ease-out infinite; }
+@keyframes sc-live { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--sc-green) 55%, transparent); } 100% { box-shadow: 0 0 0 7px transparent; } }
+.sc-live-ring { display: inline-flex; animation: sc-ring 1.2s ease-in-out infinite; }
+@keyframes sc-ring { 0%, 60%, 100% { transform: rotate(0); } 10%, 30%, 50% { transform: rotate(-12deg); } 20%, 40% { transform: rotate(12deg); } }
+@media (prefers-reduced-motion: reduce) { .sc-pop, .sc-live-dot, .sc-live-ring { animation: none; } }
+html[data-alerts-open="1"] .sc-pops { display: none; }

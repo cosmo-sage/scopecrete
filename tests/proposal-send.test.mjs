@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { findProposalToken, fillLink, toTemplate, fromTemplate, addExample, startingWords, exampleLines, firstName } from "../src/lib/proposal-send.ts";
+import { findProposalToken, fillLink, toTemplate, fromTemplate, addExample, startingWords, exampleLines, firstName, greetingSlot } from "../src/lib/proposal-send.ts";
 
 const TOK = "AbCdEfGhIjKlMnOpQrStUvWxYz012345";
 const URL = `https://scopecrete.ai/p/${TOK}`;
@@ -57,7 +57,26 @@ test("a send starts from Coy's last words for that channel", () => {
 test("Dusty is shown where Coy changed his draft", () => {
   const lines = exampleLines([{ via: "text", template: "Hey {first}: {link}", dusty: "Hello {first}, please review: {link}", edited: true, at: "2026-10-05T00:00:00Z", job: "Patio" }],
     [{ body: `Here you go ${URL}`, at: "2026-10-04T00:00:00Z", to: "Amber" }]);
-  assert.match(lines[0], /2026-10-05 by text \(Patio\): "Hey \{first\}: \{link\}"/);
+  assert.match(lines[0], /2026-10-05 by text: "Hey \{first\}: \{link\}"/);
   assert.match(lines[1], /You drafted: "Hello/);
-  assert.match(lines[2], /texted to Amber/);
+  assert.match(lines[2], /texted: "Here you go \{link\}"/);
+});
+
+test("one customer's name never rides into the next one's words (Coy, 2026-10-06)", () => {
+  // The Preview greeted by the customer's name; the send knew only the person's.
+  const tpl = toTemplate(`Hi Gulfline, here is the proposal for Gulfline Paving Bollard Installation: ${URL}`, { first: "Dylan", title: "Gulfline Paving Bollard Installation", url: URL, names: ["Gulfline Paving"] });
+  assert.equal(tpl, "Hi {first}, here is the proposal for {title}: {link}");
+  // A greeting with no names known is still a slot.
+  assert.equal(greetingSlot("Hi Gulfline, here it is"), "Hi {first}, here it is");
+  assert.equal(greetingSlot("Hey Ms Johnette. I did put"), "Hey Ms {first}. I did put");
+  assert.equal(greetingSlot("Good morning John Freeling,\nthe MSA"), "Good morning {first},\nthe MSA");
+  assert.equal(greetingSlot("Hi there, here it is"), "Hi there, here it is");
+  assert.equal(greetingSlot("Hi Team, here it is"), "Hi Team, here it is");
+  assert.equal(greetingSlot("Here is the proposal"), "Here is the proposal");
+  // A pattern saved before the fix heals when it is used.
+  const old = [{ via: "text", template: "Hi Gulfline, here is the proposal for {title}: {link}\nTake a look.", at: "2026-10-05" }];
+  const w = startingWords(old, "text", { first: "Johnette", title: "Wilson Driveway repair", url: URL, org: null });
+  assert.equal(w.body, `Hi Johnette, here is the proposal for Wilson Driveway repair: ${URL}\nTake a look.`);
+  const lines = exampleLines(old, [{ body: `Hey Amber, the proposal: ${URL}`, at: "2026-10-04", to: "Amber Smith" }]).join("\n");
+  assert.ok(!lines.includes("Gulfline") && !lines.includes("Amber"), lines);
 });

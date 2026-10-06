@@ -37,7 +37,7 @@ export const firstName = (name: string | null | undefined) => {
   return /^[\d(+]/.test(f) ? "" : f;
 };
 
-export interface Fill { first: string; title: string | null; url: string }
+export interface Fill { first: string; title: string | null; url: string; /** Other names the words may carry (the customer's, the person's) — each becomes {first} too. */ names?: Array<string | null | undefined> }
 
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -47,8 +47,30 @@ export function toTemplate(sent: string, f: Fill): string {
   if (f.url) t = t.split(f.url).join("{link}");
   t = t.replace(/https?:\/\/\S*\/p\/[A-Za-z0-9_-]{32}/g, "{link}");
   if (f.title && f.title.trim().length > 2) t = t.replace(new RegExp(esc(f.title.trim()), "gi"), "{title}");
-  if (f.first && f.first.length > 1) t = t.replace(new RegExp(`\\b${esc(f.first)}\\b`, "g"), "{first}");
-  return t;
+  const names = new Set<string>();
+  for (const n of [f.first, ...(f.names ?? [])]) {
+    const full = (n ?? "").trim();
+    if (full.length > 1 && !/^[\d(+]/.test(full)) { names.add(full); names.add(firstName(full)); }
+  }
+  // Longest first, so "Johnette Wilson" goes before "Johnette".
+  for (const n of [...names].filter((x) => x.length > 1).sort((a, b) => b.length - a.length)) t = t.replace(new RegExp(`\\b${esc(n)}\\b`, "g"), "{first}");
+  return greetingSlot(t);
+}
+
+const NOT_NAMES = new Set(["All", "Team", "Everyone", "There", "Folks", "Again", "Sir", "Ma'am"]);
+
+/**
+ * Whoever the words open by greeting is the name slot, whatever it was: "Hi
+ * Gulfline," → "Hi {first},", "Hey Ms Johnette." → "Hey Ms {first}." — so a
+ * pattern never carries one customer's name to the next (Coy, 2026-10-06: the
+ * Preview greeted by the customer's name and the send kept the person's, so
+ * "Hi Gulfline" was saved as his words and offered to Johnette Wilson).
+ */
+export function greetingSlot(text: string): string {
+  return text.replace(
+    /^(\s*(?:[Hh]i|[Hh]ey|[Hh]ello|[Dd]ear|[Gg]ood (?:morning|afternoon|evening))[ \t]+(?:(?:Mr|Mrs|Ms|Miss|Mister)\.?[ \t]+)?)([A-Z][A-Za-z'’-]*(?:[ \t]+[A-Z][A-Za-z'’-]*)?)(?=[ \t]*(?:[,.!:;—–-]|\n|$))/,
+    (m, lead: string, name: string) => (NOT_NAMES.has(name.split(/\s+/)[0]) ? m : `${lead}{first}`),
+  );
 }
 
 /** A pattern filled in for this customer. With no name, "Hi {first}," reads "Hi,". */
@@ -88,7 +110,7 @@ export function startingWords(examples: SendExample[] | null | undefined, via: V
   const last = (examples ?? []).find((x) => x.via === via) ?? (via === "email" ? (examples ?? []).find((x) => x.via === "text") : undefined);
   const subject = (examples ?? []).find((x) => x.via === "email" && x.subject)?.subject;
   const subj = subject ? fromTemplate(subject, { ...f, url: "" }).replace(/\n?$/, "").trim() : `${f.title ? `${f.title} — ` : ""}proposal${f.org ? ` from ${f.org}` : ""}`;
-  if (last) return { body: fromTemplate(last.template, f), subject: subj, learned: true };
+  if (last) return { body: fromTemplate(greetingSlot(last.template), f), subject: subj, learned: true };
   const hi = f.first ? `Hi ${f.first}, ` : "Hi, ";
   const what = f.title ? `the proposal for ${f.title}` : "your proposal";
   return { body: `${hi}here is ${what}: ${f.url}\nTake a look and let me know if you have any questions.`, subject: subj, learned: false };
@@ -98,14 +120,15 @@ export function startingWords(examples: SendExample[] | null | undefined, via: V
 export function exampleLines(examples: SendExample[], sentTexts: Array<{ body: string; at: string; to: string | null }>): string[] {
   const out: string[] = [];
   for (const x of examples.slice(0, 6)) {
-    out.push(`- ${x.at.slice(0, 10)} by ${x.via}${x.job ? ` (${x.job})` : ""}: "${x.template.replace(/\n/g, " / ")}"${x.subject ? ` — subject "${x.subject}"` : ""}`);
-    if (x.dusty && x.edited) out.push(`  You drafted: "${x.dusty.replace(/\n/g, " / ")}" — Coy changed it to the line above before sending.`);
+    out.push(`- ${x.at.slice(0, 10)} by ${x.via}: "${greetingSlot(x.template).replace(/\n/g, " / ")}"${x.subject ? ` — subject "${x.subject}"` : ""}`);
+    if (x.dusty && x.edited) out.push(`  You drafted: "${greetingSlot(x.dusty).replace(/\n/g, " / ")}" — Coy changed it to the line above before sending.`);
   }
-  const known = new Set(examples.map((x) => x.template));
+  const known = new Set(examples.map((x) => greetingSlot(x.template)));
   for (const t of sentTexts.slice(0, 5)) {
-    const tpl = toTemplate(t.body, { first: "", title: null, url: "" });
+    // As a pattern — their name and the link as slots — so no customer's name rides into the next one.
+    const tpl = toTemplate(t.body, { first: "", title: null, url: "", names: [t.to] });
     if (known.has(tpl)) continue;
-    out.push(`- ${t.at.slice(0, 10)} texted${t.to ? ` to ${t.to}` : ""}: "${t.body.replace(/\n/g, " / ").slice(0, 400)}"`);
+    out.push(`- ${t.at.slice(0, 10)} texted: "${tpl.replace(/\n/g, " / ").slice(0, 400)}"`);
   }
   return out;
 }

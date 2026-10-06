@@ -42,6 +42,8 @@ export async function sendProposal(o: {
   dustyDraft?: string | null;
   /** Already made (the send sheet made it to show the preview). */
   link?: LinkReply;
+  /** Other names the words may greet them by (the Preview greets by the customer's name) — kept as {first}, never as words. */
+  names?: Array<string | null | undefined>;
 }): Promise<{ ok: boolean; text: string; url?: string }> {
   try {
     const r = o.link ?? await proposalLink(o.jobId);
@@ -54,6 +56,7 @@ export async function sendProposal(o: {
       await call("/api/proposal-sends", "POST", {
         via: o.via, sent: words, subject: o.via === "email" ? subject : null, dusty: o.dustyDraft ? wordsFor(o.dustyDraft, r, name) : null,
         first: firstName(name), title: r.job.title, url: r.link.url,
+        names: [name, r.recipient?.name, o.contactName, ...(o.names ?? [])].filter((n): n is string => !!n && !!n.trim()),
       }).catch(() => {});
     };
     let said: string;

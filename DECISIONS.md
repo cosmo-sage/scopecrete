@@ -3625,6 +3625,15 @@ expected start date per quoted job before it means anything. Add the field.
   starts from his last words for that channel, and Dusty is shown them, where
   Coy changed his draft, and the last texts with a /p/ link in them (sent
   from the Quo app too), and told to write that way.
+  **A name never carries over (Coy, 2026-10-06: Johnette Wilson's send sheet
+  offered "Hi Gulfline, …").** The Preview greeted by the customer's name
+  and the send kept only the person's, so "Gulfline" was saved as his
+  words. Now every name the words could use (the person's, the customer's)
+  becomes {first}, and whoever the words open by greeting ("Hi …", "Hey Ms
+  …", "Good morning …") is the slot whatever their name (`greetingSlot()`,
+  tested) — applied to saved patterns as they are used, so the old one
+  heals. Dusty is shown the patterns without the job they were for, and
+  texts with a link as patterns too.
 - **Texts send through Quo (Coy, 2026-10-05: "send text messages through the
   app through quo manually or through dusty"; decision card: "Build both").**
   10DLC was not in fact waiting: 129 texts Coy sent from the Quo website line

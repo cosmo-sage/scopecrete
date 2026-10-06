@@ -118,7 +118,7 @@ export function ProposalPreview({ jobId, vm, draft, version, blocked, coverFileI
       } else {
         setBusy(how === "quo" ? "Sending through Quo…" : "Opening your mail…");
         const r = await proposalLink(jobId); // the link just made (or the live one), with who it is for
-        const out = await sendProposal({ jobId, via: how === "quo" ? "text" : "email", body: shownWords, subject: subject || start?.subject || null, email: vm.customer.email, link: r });
+        const out = await sendProposal({ jobId, via: how === "quo" ? "text" : "email", body: shownWords, subject: subject || start?.subject || null, email: vm.customer.email, link: r, names: [vm.customer.name] });
         setSentMsg(out);
       }
       onLinks();

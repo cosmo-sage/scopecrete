@@ -10,7 +10,7 @@ import { readExamples } from "@/lib/proposal-send-server";
  * from a thread, or on a Dusty plan.
  *
  * GET  → { examples } — Coy's own, newest first.
- * POST { via: "text"|"email", sent, subject?, dusty?, first?, title?, url? }
+ * POST { via: "text"|"email", sent, subject?, dusty?, first?, names?, title?, url? }
  *   sent   the words that went out (with the link in them)
  *   dusty  Dusty's draft, when the send came from his plan
  * Kept in Coy's own user_preferences (`proposal_sends`, migration 053: RLS
@@ -36,7 +36,8 @@ export async function POST(req: NextRequest) {
   const via = b.via === "text" || b.via === "email" ? b.via : null;
   const sent = str(b.sent, 4000).trim();
   if (!via || !sent) return bad("Say how it went and the words.");
-  const fill = { first: str(b.first, 60), title: str(b.title, 200) || null, url: str(b.url, 300) };
+  const names = Array.isArray(b.names) ? b.names.slice(0, 6).map((n) => str(n, 120)).filter(Boolean) : [];
+  const fill = { first: str(b.first, 60), title: str(b.title, 200) || null, url: str(b.url, 300), names };
   const template = toTemplate(sent, fill);
   const dusty = str(b.dusty, 4000).trim() ? toTemplate(str(b.dusty, 4000), fill) : null;
   const ex: SendExample = {

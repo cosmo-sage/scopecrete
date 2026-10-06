@@ -3693,8 +3693,11 @@ expected start date per quoted job before it means anything. Add the field.
   - **086 applied 2026-10-06**; checked after: RLS on `live_calls`, one
     select policy, authenticated may only select, anon nothing, and
     `live_calls` and `emails` in `supabase_realtime` beside `messages`.
-  - **What Coy turns on:** deploy quo-intake v11, and in Quo's
-    webhook settings tick **call.ringing** (no ring has ever reached
+  - **quo-intake v11 deployed 2026-10-06 on Coy's "Deploy quo-intake"**
+    (version 70, built on the deployed v69 read back first; the deployed copy's
+    long history comments are shortened, the code is the repo's). Checked
+    after: it boots, an unsigned call.ringing gets 401 and stores nothing.
+  - **What Coy turns on:** in Quo's webhook settings tick **call.ringing** (no ring has ever reached
     quo_events — Quo wasn't sending it). Until then the bell and pop-ups work
     for texts, calls (when they end) and emails; live calls don't show.
 - **Feedback and the Roadmap (migration 084, applied 2026-10-05 on Coy's

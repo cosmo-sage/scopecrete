@@ -16,7 +16,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { T, F, disp, eyebrow, relTime } from "@/lib/v34/tokens";
-import { Sheet } from "@/components/v34/primitives";
+import { PageHeader, Sheet } from "@/components/v34/primitives";
 import { useWide } from "@/lib/v34/use-wide";
 import {
   BOARD, KINDS, STATUSES, canVote, matchesItem, sortItems, statusLabel,
@@ -165,16 +165,14 @@ export function RoadmapPage() {
   ];
 
   return (
-    <div ref={measure} className="px-3 py-3 mx-auto" style={{ maxWidth: 1280 }}>
-      <div className="flex items-center gap-2 flex-wrap mb-1">
-        <h1 style={{ fontFamily: disp, fontSize: F.xl, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".02em", flex: 1, minWidth: 140 }}>Roadmap</h1>
+    <>
+    <PageHeader title="Roadmap" width={1256}
+      sub="What's coming to ScopeCrete. Vote for what you want most; your feedback is seen only by you and the ScopeCrete team until it's put on the board."
+      actions={<>
         {admin && <button onClick={() => setAdding(true)} style={btn(false)}>+ Add to the board</button>}
         <button onClick={() => setGiving(true)} style={btn(true)} disabled={missing}>Give feedback</button>
-      </div>
-      <p style={{ fontSize: F.sm, color: T.ink2, marginBottom: 10, maxWidth: 720 }}>
-        What&apos;s coming to ScopeCrete, from every company using it. Vote for what you want most and say why in the comments.
-        Your feedback goes to the ScopeCrete team first; only you see it until it&apos;s put on the board.
-      </p>
+      </>} />
+    <div ref={measure} className="px-3 pb-3 mx-auto" style={{ maxWidth: 1280 }}>
 
       {missing && (
         <div className="p-3 mb-3" style={{ background: T.hivizDim, border: `1px solid ${T.hiviz}`, borderRadius: 4, fontSize: F.sm, color: T.ink }}>
@@ -223,6 +221,7 @@ export function RoadmapPage() {
       <FeedbackSheet open={giving} onClose={() => setGiving(false)} onSent={() => { reload(); setCol(admin ? "inbox" : "mine"); }} />
       <FeedbackSheet open={adding} admin onClose={() => setAdding(false)} onSent={reload} />
     </div>
+    </>
   );
 }
 

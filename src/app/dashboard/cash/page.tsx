@@ -19,7 +19,7 @@
 
 import React, { useEffect, useState } from "react";
 import { T, F, disp, eyebrow, nums, money0 } from "@/lib/v34/tokens";
-import { EmptyState } from "@/components/v34/primitives";
+import { EmptyState, PageHeader } from "@/components/v34/primitives";
 import { CashSettings } from "@/components/v34/money-settings";
 import { monthlyNut as nutOf } from "@/lib/engine";
 
@@ -54,7 +54,17 @@ function Row({ label, value, sub }: { label: string; value: string | null; sub?:
   );
 }
 
+/** Cash, under the same subheader as every main-menu page (Coy, 2026-10-06). */
 export default function CashScreen() {
+  return (
+    <>
+      <PageHeader title="Cash" sub="Money in, money out and how long it lasts — the big rocks, not the bookkeeping." />
+      <CashBody />
+    </>
+  );
+}
+
+function CashBody() {
   const [d, setD] = useState<CashFlow | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [noOrg, setNoOrg] = useState(false);

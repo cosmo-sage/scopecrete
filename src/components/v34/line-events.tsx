@@ -12,7 +12,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { T, F, disp, eyebrow, nums, clip, formatPhone } from "@/lib/v34/tokens";
-import { Sheet } from "@/components/v34/primitives";
+import { PageHeader, Sheet } from "@/components/v34/primitives";
 import { latencyText, logFilterQuery, matchesLog, providerCard, readLogFilter, type EventStatus, type LogFilter } from "@/lib/lines";
 
 interface Ev {
@@ -74,13 +74,8 @@ export function LineEvents() {
 
   return (
     <div>
-      <div style={{ background: T.card, borderBottom: `1px solid ${T.hair}`, padding: "12px 16px 10px" }}>
-        <div className="flex items-baseline gap-2 flex-wrap">
-          <h1 style={{ fontFamily: disp, fontSize: 26, fontWeight: 600, margin: 0, lineHeight: 1.05 }}>Logs</h1>
-          <span className="flex-1" />
-          <Link href="/dashboard/more/lines" style={{ fontFamily: disp, fontSize: 11, letterSpacing: ".06em", textTransform: "uppercase", color: T.chalk }}>Lines ›</Link>
-        </div>
-        <div style={{ fontSize: 11, color: T.ink3, marginTop: 2 }}>What happened behind the scenes. Nothing here needs you unless it is red.</div>
+      <PageHeader title="Logs" sub="What happened behind the scenes. Nothing here needs you unless it is red."
+        actions={<Link href="/dashboard/more/lines" style={{ fontFamily: disp, fontSize: 11, letterSpacing: ".06em", textTransform: "uppercase", color: T.chalk }}>Lines ›</Link>}>
         <div className="flex flex-col lg:flex-row lg:items-center gap-2 mt-2.5">
           {([
             { k: "Line", items: [{ v: null as string | null, l: "All lines", n: all.length, c: null as string | null }, ...lines.map((l) => ({ v: l.id, l: lineName(l), n: all.filter((e) => e.line_id === l.id).length, c: l.color }))],
@@ -102,7 +97,7 @@ export function LineEvents() {
           <span className="flex-1" />
           <span style={{ fontSize: 11.5, color: T.ink3, ...nums, whiteSpace: "nowrap" }}>{data ? `${shown.length} of ${all.length} events · last 7 days` : "Loading…"}</span>
         </div>
-      </div>
+      </PageHeader>
 
       {err && <div className="px-4 py-2" style={{ fontSize: F.sm, color: T.red }}>{err}</div>}
       {note && <div className="px-4 py-2" style={{ fontSize: F.sm, color: T.ink2 }}>{note}</div>}

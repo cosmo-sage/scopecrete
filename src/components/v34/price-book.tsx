@@ -21,7 +21,7 @@ import Link from "next/link";
 import { T, F, disp, eyebrow, nums, clip, money, formatPhone } from "@/lib/v34/tokens";
 import { useWide } from "@/lib/v34/use-wide";
 import { Cell } from "@/components/v34/cell";
-import { SearchBubble } from "@/components/v34/primitives";
+import { PageHeader, SearchBubble } from "@/components/v34/primitives";
 import { COST_TYPE_LABEL, QTY_RULE_LABEL, cardGaps, defaultTaxable, type CostType } from "@/lib/cost-cards";
 import { CardSheet, GroupSheet, call, numify, dateLabel, type Card, type Group, type Vendor } from "@/components/v34/cost-cards";
 import { ReceiptImport } from "@/components/v34/receipt-import";
@@ -266,29 +266,8 @@ export function PriceBook({ pick }: { pick?: PricePick } = {}) {
   const btn = (primary: boolean): React.CSSProperties => ({ height: 32, padding: "0 10px", borderRadius: 4, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase",
     letterSpacing: ".06em", background: primary ? T.ink : T.card, color: primary ? T.card : T.ink, border: primary ? "none" : `1px solid ${T.hair}`, cursor: "pointer", whiteSpace: "nowrap" });
 
-  return (
-    <div ref={measure} className="px-3 py-3 lg:px-5">
-      {/* ---- title + actions ---- */}
-      <div className="flex items-end gap-2 flex-wrap">
-        {pick ? (
-          <div style={{ flex: 1, minWidth: 200 }}>
-            <div style={{ ...eyebrow }}>Price book → budget</div>
-            {/* The how-to sits behind ⓘ beside the title (Coy, 2026-10-03). */}
-            <div className="flex items-center gap-2">
-              <div style={{ fontFamily: disp, fontSize: 20, fontWeight: 700, lineHeight: 1.1 }}>{pick.title}</div>
-              {pick.sub && (
-                <button onClick={() => setPickHelp((v) => !v)} aria-expanded={pickHelp} aria-label="How this works" title="How this works"
-                  className="shrink-0 flex items-center justify-center rounded-full" style={{ width: 22, height: 22, border: `1px solid ${pickHelp ? T.chalk : T.hairStrong}`, color: T.chalk, fontSize: 12, fontWeight: 700, cursor: "pointer", background: T.card }}>i</button>
-              )}
-            </div>
-            {pick.sub && pickHelp && <div style={{ fontSize: F.xs, color: T.ink2, marginTop: 4, maxWidth: 560, lineHeight: 1.45 }}>{pick.sub}</div>}
-          </div>
-        ) : (
-        <div style={{ flex: 1, minWidth: 200 }}>
-          <div style={{ ...eyebrow }}>Costs</div>
-          <h1 style={{ fontFamily: disp, fontSize: 26, fontWeight: 700, lineHeight: 1 }}>Price book</h1>
-        </div>
-        )}
+  const pbActions = (
+    <>
         <button onClick={() => setAddingGroup(true)} style={btn(false)}>+ Group</button>
         <button onClick={() => newCard()} style={btn(false)}>+ Card</button>
         {!pick && <div className="relative">
@@ -304,7 +283,31 @@ export function PriceBook({ pick }: { pick?: PricePick } = {}) {
             </div>
           )}
         </div>}
-      </div>
+    </>
+  );
+
+  return (
+    <>
+    {!pick && <PageHeader title="Price book" count={items ? active.length : null}
+      sub="What you buy and charge for, with each vendor's price. A job's budget takes its prices from here."
+      actions={pbActions} />}
+    <div ref={measure} className={pick ? "px-3 py-3 lg:px-5" : "px-3 pb-3 lg:px-5"}>
+      {/* ---- title + actions, while picking for a budget ---- */}
+      {pick && <div className="flex items-end gap-2 flex-wrap">
+          <div style={{ flex: 1, minWidth: 200 }}>
+            <div style={{ ...eyebrow }}>Price book → budget</div>
+            {/* The how-to sits behind ⓘ beside the title (Coy, 2026-10-03). */}
+            <div className="flex items-center gap-2">
+              <div style={{ fontFamily: disp, fontSize: 20, fontWeight: 700, lineHeight: 1.1 }}>{pick.title}</div>
+              {pick.sub && (
+                <button onClick={() => setPickHelp((v) => !v)} aria-expanded={pickHelp} aria-label="How this works" title="How this works"
+                  className="shrink-0 flex items-center justify-center rounded-full" style={{ width: 22, height: 22, border: `1px solid ${pickHelp ? T.chalk : T.hairStrong}`, color: T.chalk, fontSize: 12, fontWeight: 700, cursor: "pointer", background: T.card }}>i</button>
+              )}
+            </div>
+            {pick.sub && pickHelp && <div style={{ fontSize: F.xs, color: T.ink2, marginTop: 4, maxWidth: 560, lineHeight: 1.45 }}>{pick.sub}</div>}
+          </div>
+        {pbActions}
+      </div>}
       {pick?.top && <div className="mt-2">{pick.top}</div>}
       {flash && (
         <div role="status" aria-live="polite" className={pick ? "sticky z-20 rounded px-3 py-2 flex items-center gap-2" : "mt-2 rounded px-3 py-1.5"}
@@ -565,5 +568,6 @@ export function PriceBook({ pick }: { pick?: PricePick } = {}) {
           onDone={(m) => { setImporting(null); setNote(m); reload(); }} />
       )}
     </div>
+    </>
   );
 }

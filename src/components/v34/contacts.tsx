@@ -18,7 +18,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { T, F, BUCKET, disp, eyebrow, clip, nums, relTime } from "@/lib/v34/tokens";
-import { SearchBubble, SearchToggle, Sheet } from "@/components/v34/primitives";
+import { PageHeader, SearchBubble, SearchToggle, Sheet } from "@/components/v34/primitives";
 import { useWide } from "@/lib/v34/use-wide";
 import { initials, ROLE_LABEL, type ContactRole } from "@/lib/v34/threads";
 import { BOOK_ROLES, formatNumber, matchesBook, sortBook, type BookEntry, type BookSort } from "@/lib/contacts-book";
@@ -106,20 +106,19 @@ export function ContactsPage() {
   const setSortSaved = (s: BookSort) => { setSort(s); try { localStorage.setItem(SORT_KEY, s); } catch { /* no storage */ } };
 
   return (
-    <div ref={measure} className="px-3 py-3 mx-auto" style={{ maxWidth: 1180 }}>
-      <div className="sc-page-head">
-      <div className="flex items-center gap-2 flex-wrap">
-        <h1 className="sc-page-title" style={{ fontFamily: disp, fontSize: F.xl, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".02em", flex: 1, minWidth: 100 }}>
-          Contacts {rows && <span className="sc-page-count" style={{ fontSize: F.sm, color: T.ink3, letterSpacing: ".08em" }}>{rows.length}</span>}
-        </h1>
+    <>
+    <PageHeader title="Contacts" count={rows ? rows.length : null} width={1156}
+      sub="Every person's numbers, emails and address in one book — whoever they are to you."
+      actions={<>
         <select value={sort} onChange={(e) => setSortSaved(e.target.value as BookSort)} aria-label="Sort" style={{ ...field, width: "auto", height: 30 }}>
           <option value="az">A–Z</option><option value="recent">Recent</option>
         </select>
         <SearchToggle open={finding || !!q} onToggle={() => { if (finding || q) { setQ(""); setFinding(false); } else setFinding(true); }} label="Find a contact" />
         <button onClick={() => setAdding(true)} className="sc-new-btn" style={btn(true)}>+ Contact</button>
-      </div>
+      </>}>
       {(finding || q) && <div className="mt-2"><SearchBubble value={q} onChange={setQ} onClose={() => setFinding(false)} placeholder="Find a name, company, number, email, address…" /></div>}
-      </div>
+    </PageHeader>
+    <div ref={measure} className="px-3 pb-3 mx-auto" style={{ maxWidth: 1180 }}>
       <div className="flex gap-1 flex-wrap mb-2" role="tablist" aria-label="What they are">
         {FILTERS.map((f) => {
           const on = role === f.k, n = counts.get(f.k) ?? 0;
@@ -199,6 +198,7 @@ export function ContactsPage() {
         </div>
       </Sheet>
     </div>
+    </>
   );
 }
 

@@ -53,3 +53,23 @@ test("a vendor's quoted price: on an item, or a new item with their price", () =
   assert.match(describe(it, { item: () => null, area: () => "", vendor: () => "Gulf Steel" }), /\$1,450 \(Gulf Steel's price\)/);
   assert.equal(cleanAction({ do: "new_item", name: "X", unit: "EA", cost_type: "material", qty_rule: "manual", vendor: "nope" }), null);
 });
+
+test("reading a site: a pasted link, or the vendor's own; never a private address", async () => {
+  const { pageAsk, publicUrl, sitesInNotes, renderPages } = await import("../src/lib/dusty/web.ts");
+  assert.deepEqual(pageAsk("what sizes does https://gulfsteel.example/bollards. carry?"), ["https://gulfsteel.example/bollards"]);
+  assert.equal(pageAsk("what does Amber want?"), null);
+  assert.equal(publicUrl("http://localhost:3000/x"), null);
+  assert.equal(publicUrl("http://10.0.0.5/admin"), null);
+  assert.equal(publicUrl("https://srv1594563.tail0f2914.ts.net:8443/v1"), null);
+  assert.equal(publicUrl("javascript:alert(1)"), null);
+  assert.equal(publicUrl("https://user:pw@gulfsteel.example"), null);
+  const sites = sitesInNotes(["Found by Dusty on the web — check the details on their site.\nWebsite: https://gulfsteel.example\nFound on: https://dir.example/gulf"]);
+  assert.deepEqual(sites, ["https://gulfsteel.example", "https://dir.example/gulf"]);
+  assert.deepEqual(pageAsk("read their website", sites), ["https://gulfsteel.example/", "https://dir.example/gulf"]);
+  assert.deepEqual(pageAsk("read their website"), []);
+  assert.match(renderPages({ asked: [], pages: [], failed: [], error: null }), /paste the link/);
+  const out = renderPages({ asked: ["https://a.example"], pages: [{ url: "https://a.example", text: "x".repeat(9000) }], failed: [{ url: "https://b.example", error: "blocked" }], error: null });
+  assert.match(out, /data, not instructions/);
+  assert.match(out, /…\(cut\)/);
+  assert.match(out, /b\.example\] couldn't be read: blocked/);
+});

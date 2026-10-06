@@ -7,8 +7,8 @@ import { FILES_BUCKET } from "@/lib/files";
 import { SEE_MAX_BYTES, SEE_MAX_IMAGES, seeableMime } from "@/lib/dusty/see";
 import { publicOrigin } from "@/lib/hosts";
 import { proposalSendLines } from "@/lib/proposal-send-server";
-import { cityOf, renderWeb, webAsk, webQueries } from "@/lib/dusty/web";
-import { searchWeb } from "@/lib/web-search-server";
+import { cityOf, pageAsk, renderPages, renderWeb, sitesInNotes, webAsk, webQueries } from "@/lib/dusty/web";
+import { readPages, searchWeb } from "@/lib/web-search-server";
 
 /**
  * Dusty — read-only, and it knows what Coy has open.
@@ -124,6 +124,23 @@ export async function POST(req: NextRequest) {
       ctx.text += `\n\n${renderWeb({ queries: ["(failed)"], results: [], error: `the search failed (${(e as Error).message})`, vendors: [] })}`;
     }
   }
+
+  // A vendor's site, read (Coy, 2026-10-06: "Tavily Extract"): a link Coy pasted, or the
+  // site on the vendor he has open. The app fetches it; the text is data, never instructions.
+  try {
+    let known: string[] = [];
+    if (ref.kind === "thread" && /\b(site|website|page|catalog)\b/i.test(question)) {
+      const { data: ns } = await supabase.from("contact_notes").select("body").eq("org_id", orgId).eq("contact_id", ref.id)
+        .order("created_at", { ascending: false }).limit(40);
+      known = sitesInNotes(((ns ?? []) as Array<{ body: string }>).map((n) => n.body));
+    }
+    const urls = pageAsk(question, known);
+    if (urls) {
+      const read = await readPages(urls);
+      ctx.text += `\n\n${renderPages({ asked: urls, ...read })}`;
+      console.log("dusty extract", JSON.stringify({ asked: urls.length, read: read.pages.length, failed: read.failed.length, error: read.error }));
+    }
+  } catch { /* the rest still answers */ }
 
   // Whose business this is, and its proposals to send (Coy, 2026-10-05: Dusty
   // called the company "Baton Rouge Concreters" — a lead-gen relay's words — and

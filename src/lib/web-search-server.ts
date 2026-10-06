@@ -58,3 +58,32 @@ export async function searchWeb(queries: string[]): Promise<{ results: WebResult
   }
   return { results: mergeResults(lists, 12), provider: tk ? "tavily" : "brave", error: null };
 }
+
+/** Reads pages with Tavily Extract (the same TAVILY_API_KEY). Only the links leave the app. */
+export async function readPages(urls: string[]): Promise<{ pages: Array<{ url: string; text: string }>; failed: Array<{ url: string; error: string }>; error: string | null }> {
+  const key = process.env.TAVILY_API_KEY;
+  if (!key) return { pages: [], failed: [], error: "reading websites needs TAVILY_API_KEY in Vercel (free at tavily.com)." };
+  if (!urls.length) return { pages: [], failed: [], error: null };
+  try {
+    const r = await fetch("https://api.tavily.com/extract", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+      body: JSON.stringify({ urls, extract_depth: "basic", format: "markdown", include_images: false }),
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (!r.ok) {
+      const why = r.status === 401 || r.status === 403 ? "Tavily refused the key" : r.status === 429 || r.status === 432 ? "Tavily's monthly credits are used up" : `Tavily answered ${r.status}`;
+      return { pages: [], failed: [], error: why };
+    }
+    const b = (await r.json()) as { results?: Array<{ url?: string; raw_content?: string }>; failed_results?: Array<{ url?: string; error?: string }> };
+    return {
+      pages: (b.results ?? []).filter((x) => x.url).map((x) => ({ url: x.url!, text: x.raw_content ?? "" })),
+      failed: (b.failed_results ?? []).filter((x) => x.url).map((x) => ({ url: x.url!, error: (x.error ?? "no text").slice(0, 120) })),
+      error: null,
+    };
+  } catch (e) {
+    const why = e instanceof Error && e.name === "TimeoutError" ? "the site took too long" : "reading the site failed";
+    console.error("web extract", why);
+    return { pages: [], failed: [], error: why };
+  }
+}

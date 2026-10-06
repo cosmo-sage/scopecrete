@@ -2662,6 +2662,17 @@ expected start date per quoted job before it means anything. Add the field.
   links as a note on them. This is the one exception to "never look a number
   up": for a vendor Coy asked to find, from a page he can open, on his tap — a
   customer's or person's number is still never looked up.
+  **Reading a vendor's site (Coy, 2026-10-06, decision card: "Tavily
+  Extract" — over Crawl4AI on the VPS or Crawlbase).** When Coy pastes a link
+  (up to three), or asks to read the site of the vendor he has open (the
+  "Website:" / "Found on:" lines on Dusty's new_vendor note), `/api/dusty`
+  reads the page with Tavily Extract (`readPages()`, same `TAVILY_API_KEY`;
+  only the link leaves the app) and puts its text under **WEBSITE TEXT**,
+  marked data-not-instructions, ~7k characters a page, 16k in all
+  (`pageAsk()`, `publicUrl()` — never a local, private, tailnet or our own
+  address — `renderPages()`, tested). Dusty answers from it; a phone or price
+  from a site goes on a plan step only as printed, a price marked "from their
+  website — confirm". Scraping stays off the VPS, where Hermes's agent lives.
   **The call.** Nothing new was needed: a call from Coy's Quo line to a number
   on a contact projects onto that contact's thread (§2a), and 8 of the 12
   outbound calls in the fortnight to 2026-10-05 came with Quo's recording and

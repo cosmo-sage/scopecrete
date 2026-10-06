@@ -28,9 +28,10 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { T, F, eyebrow, nums, clip, money0, formatPhone, relTime, strong, BUCKET } from "@/lib/v34/tokens";
 import { RoleTag } from "@/components/v34/thread-list";
-import { RecordHeader, HeaderNote, OverviewGrid, PanelCard, SectionHead, Empty, Facts, AddressRow, ContactCard, ThreadChips, RecentCard, JobRow, Field,
+import { RecordHeader, HeaderNote, OverviewGrid, PanelCard, SectionHead, Empty, Facts, ContactCard, ThreadChips, RecentCard, JobRow, Field,
   ASK_DUSTY, menuItem, btn, lbl, panelTitle, send, type CardPerson } from "@/components/v34/record-page";
 import { Sheet } from "@/components/v34/primitives";
+import { SiteViews, CopyAddress } from "@/components/v34/site-views";
 import { useWide } from "@/lib/v34/use-wide";
 import { PlayAudio, MessageMedia } from "@/components/v34/conversation";
 import { Composer } from "@/components/v34/composer";
@@ -317,39 +318,17 @@ function FilesTab({ customerId, primaryId, primaryName }: { customerId: string; 
 
 /* ------------------------------------------------------------ right panel */
 
-function LocationCard({ cu, maps, heard, onEdit, onSaved }: { cu: Customer; maps: Data["maps"]; heard: Data["heard_address"]; onEdit: () => void; onSaved: () => void }) {
-  const [view, setView] = useState<"map" | "street">("map");
-  const key = process.env.NEXT_PUBLIC_GOOGLE_MAPS_EMBED_KEY ?? "";
+function LocationCard({ cu, heard, onEdit, onSaved }: { cu: Customer; maps: Data["maps"]; heard: Data["heard_address"]; onEdit: () => void; onSaved: () => void }) {
   const addr = cu.address_formatted;
-  const hasLatLng = cu.lat != null && cu.lng != null;
-  const q = addr ? encodeURIComponent(addr) : "";
-  const src = view === "map"
-    ? `https://www.google.com/maps/embed/v1/place?key=${key}&q=${q}&zoom=16`
-    : `https://www.google.com/maps/embed/v1/streetview?key=${key}&location=${cu.lat},${cu.lng}&fov=80`;
-  const seg = (on: boolean): React.CSSProperties => ({ ...lbl, fontSize: 11, padding: "4px 10px", cursor: "pointer", border: "none",
-    background: on ? T.ink : "transparent", color: on ? T.slab : T.ink2 });
-  const showMap = !!(key && maps.embed && addr);
+  const stored = cu.lat != null && cu.lng != null ? { lat: cu.lat, lng: cu.lng } : null;
   return (
     <section style={{ padding: "14px 16px 12px", borderBottom: `1px solid ${T.hair}`, display: "flex", flexDirection: "column", gap: 8 }}>
-      <div className="flex items-center gap-2">
-        <h3 style={{ ...panelTitle, flex: 1 }}>Location</h3>
-        {showMap && (
-          <div role="tablist" className="flex overflow-hidden" style={{ border: `1px solid ${T.hairStrong}`, borderRadius: 3 }}>
-            <button role="tab" aria-selected={view === "map"} onClick={() => setView("map")} style={seg(view === "map")}>Map</button>
-            <button role="tab" aria-selected={view === "street"} disabled={!hasLatLng} onClick={() => setView("street")}
-              title={hasLatLng ? undefined : maps.geocode ? "Save the address again to place it" : "Street view needs the map key"}
-              style={{ ...seg(view === "street"), borderLeft: `1px solid ${T.hairStrong}`, opacity: hasLatLng ? 1 : 0.45 }}>Street view</button>
-          </div>
-        )}
-      </div>
-      {showMap && (
-        <div style={{ height: 190, border: `1px solid ${T.hair}`, borderRadius: 4, overflow: "hidden", background: T.sunk }}>
-          <iframe key={view} title={view === "map" ? "Map" : "Street view"} src={src} width="100%" height="100%" style={{ border: 0, display: "block" }}
-            loading="lazy" referrerPolicy="no-referrer-when-downgrade" allowFullScreen />
-        </div>
-      )}
+      <h3 style={panelTitle}>Location</h3>
       {addr ? (
-        <AddressRow addr={addr} />
+        <>
+          <SiteViews addr={addr} stored={stored} />
+          <CopyAddress addr={addr} />
+        </>
       ) : heard ? (
         <HeardAddress cu={cu} heard={heard} onEdit={onEdit} onSaved={onSaved} />
       ) : (
@@ -360,7 +339,6 @@ function LocationCard({ cu, maps, heard, onEdit, onSaved }: { cu: Customer; maps
       <span style={{ fontSize: 11, color: T.ink3 }}>
         {addr && cu.address_source === "contact" ? "From their own text or contact details — check it. " : ""}
         {addr && cu.address_source === "geocode" ? "Heard on a call and matched by Mapbox — check it. " : ""}
-        {!showMap && addr ? "The map shows once the Google Maps key is set. " : ""}
         The customer&apos;s address. Each job can have its own site address.
       </span>
     </section>

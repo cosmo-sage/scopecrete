@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
-import { resolveSuggestion, suggestAddresses } from "@/lib/aerial-server";
+import { aerialProviders, findAddress, resolveSuggestion, suggestAddresses } from "@/lib/aerial-server";
 
 /**
  * Address suggestions while Coy types in the aerial picker (src/lib/aerial.ts).
  *
  * GET ?q=&lat=&lng=   — up to six suggestions, nearest the map first.
  * GET ?text=&key=     — the point of an Esri suggestion he picked.
+ * GET ?find=           — the point of an address (a customer page's Satellite),
+ *                        and the satellite provider to draw it with.
  *
  * Signed-in members only; keys stay on the server; nothing stored.
  */
@@ -18,6 +20,11 @@ export async function GET(req: NextRequest) {
   if (!result.ok) return result.response;
   const { applyCookies } = result.session;
   const s = req.nextUrl.searchParams;
+  const find = s.get("find");
+  if (find) {
+    const found = await findAddress(find);
+    return applyCookies(NextResponse.json({ found, provider: aerialProviders().mapbox.on ? "mapbox" : "esri" }));
+  }
   const key = s.get("key");
   if (key) {
     const found = await resolveSuggestion(s.get("text") ?? "", key);

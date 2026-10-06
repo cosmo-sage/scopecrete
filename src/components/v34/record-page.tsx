@@ -21,6 +21,7 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { T, F, disp, eyebrow, nums, clip, formatPhone, strong, light } from "@/lib/v34/tokens";
 import { InitialsBox } from "@/components/v34/thread-list";
+import { MenuButton, SlideDrawer } from "@/components/v34/primitives";
 
 export const lbl: React.CSSProperties = { fontFamily: disp, fontSize: 12, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase" };
 export const panelTitle: React.CSSProperties = { fontFamily: light, fontWeight: 300, fontSize: 20, margin: 0, color: T.ink };
@@ -74,6 +75,7 @@ export function RecordHeader({ back, title, tag, wide, actions, menu, meta, chil
   onTab: (k: string) => void;
 }) {
   const [more, setMore] = useState(false);
+  const [tabMenu, setTabMenu] = useState(false);
   const pill: React.CSSProperties = { ...btn(), height: 30 };
   const style = (a: RecordAction): React.CSSProperties => a.primary ? { ...btn(true), height: 30, opacity: a.disabled ? 0.5 : 1 }
     : a.accent ? { ...pill, border: `1px solid ${T.hiviz}`, color: T.hiviz } : { ...pill, opacity: a.disabled ? 0.5 : 1 };
@@ -89,6 +91,7 @@ export function RecordHeader({ back, title, tag, wide, actions, menu, meta, chil
     <div className="px-4 pt-3" style={{ background: T.card, borderBottom: `1px solid ${T.hair}` }}>
       <Link href={back.href} style={{ ...eyebrow, color: T.chalk }}>‹ {back.label}</Link>
       <div className="flex items-center gap-2 mt-0.5">
+        {!wide && tabs.length > 1 && <MenuButton onClick={() => setTabMenu(true)} label="Sections of this page" always />}
         <div className="flex items-center gap-2 flex-1 min-w-0 flex-wrap">
           {typeof title === "string"
             ? <h1 style={{ fontFamily: strong, fontWeight: 700, fontSize: wide ? 24 : 20, lineHeight: 1.2, margin: 0, color: T.ink }}>{title}</h1>
@@ -114,6 +117,25 @@ export function RecordHeader({ back, title, tag, wide, actions, menu, meta, chil
       {meta && <div style={{ fontSize: 11.5, color: T.ink3, marginTop: 2, ...nums, whiteSpace: "normal" }}>{meta}</div>}
       {children}
       <RecordTabs tabs={tabs} tab={tab} onTab={onTab} />
+      {!wide && tabs.length > 1 && <TabDrawer open={tabMenu} onClose={() => setTabMenu(false)} tabs={tabs} tab={tab} onTab={onTab} />}
+    </div>
+  );
+}
+
+/** On a phone, the page's tabs as a list that slides in from the left (Coy, 2026-10-06: "a hamburger menu … right to the left of the customer name"). */
+function TabDrawer({ open, onClose, tabs, tab, onTab }: { open: boolean; onClose: () => void; tabs: Array<[string, string]>; tab: string; onTab: (k: string) => void }) {
+  return (
+    <div style={{ position: "fixed", left: 0, right: 0, top: "var(--sc-head)", bottom: "var(--sc-foot)", zIndex: 45, pointerEvents: open ? "auto" : "none" }}>
+      <SlideDrawer open={open} onClose={onClose} width={260} label="Sections of this page">
+        <div style={{ ...eyebrow, padding: "14px 16px 8px" }}>On this page</div>
+        <div role="tablist" aria-orientation="vertical" className="flex flex-col">
+          {tabs.map(([k, l]) => (
+            <button key={k} role="tab" aria-selected={tab === k} onClick={() => { onTab(k); onClose(); }} className="text-left"
+              style={{ fontFamily: disp, fontSize: 14, letterSpacing: ".08em", textTransform: "uppercase", padding: "12px 16px", cursor: "pointer",
+                color: tab === k ? T.ink : T.ink2, background: tab === k ? T.hivizDim : "transparent", borderLeft: `3px solid ${tab === k ? T.hiviz : "transparent"}` }}>{l}</button>
+          ))}
+        </div>
+      </SlideDrawer>
     </div>
   );
 }

@@ -8,7 +8,8 @@
  * Coy, 2026-10-01: filters like the Vendors page, a New customer button, a
  * table sorted by any column with columns he can turn on and off, other
  * views — and no unnamed customers (a number with no name is not a customer;
- * the list says how many are waiting for a name and where to name them).
+ * since 2026-10-06 the list doesn't count them — Coy: "this informational row
+ * can be removed completely"; they are named from Threads).
  *
  * Views: Table (wide), Cards (the phone's), Board (by the Jobs board's stage).
  * The view, sort and columns are saved to the account (`customers_view`).
@@ -64,14 +65,12 @@ const field: React.CSSProperties = { height: 34, border: `1px solid ${T.hair}`, 
 
 export function Customers() {
   const [rows, setRows] = useState<Row[] | null>(null);
-  const [unnamed, setUnnamed] = useState<Array<{ customer_id: string; contact_id: string; phone: string | null }>>([]);
   const [err, setErr] = useState<string | null>(null);
   const [q, setQ] = useState("");
   const [type, setType] = useState("all");
   const [stage, setStage] = useState("any");
   const [adding, setAdding] = useState(false);
   const [colsOpen, setColsOpen] = useState(false);
-  const [showUnnamed, setShowUnnamed] = useState(false);
   const [saved, setSaved] = usePref<View>("customers_view", DEFAULT_VIEW);
   const v: View = { ...DEFAULT_VIEW, ...saved, cols: (saved?.cols ?? DEFAULT_VIEW.cols).filter((k) => COL.has(k)) };
   const [measure, wide] = useWide<HTMLDivElement>(900);
@@ -90,7 +89,7 @@ export function Customers() {
   useEffect(() => {
     let off = false;
     fetch("/api/customers").then(async (r) => { const b = await r.json().catch(() => ({})); if (!r.ok) throw new Error(b?.error || `HTTP ${r.status}`); return b; })
-      .then((b) => { if (!off) { setRows(b.customers as Row[]); setUnnamed(b.unnamed ?? []); } })
+      .then((b) => { if (!off) { setRows(b.customers as Row[]); } })
       .catch((e) => { if (!off) setErr(e instanceof Error ? e.message : String(e)); });
     return () => { off = true; };
   }, []);
@@ -115,36 +114,65 @@ export function Customers() {
   const sortBy = (k: string) => set(v.sort === k ? { dir: v.dir === 1 ? -1 : 1 } : { sort: k, dir: k === "last" || k === "first" || k === "since" || k === "jobs" ? -1 : 1 });
   const arrow = (k: string) => (v.sort === k ? (v.dir === 1 ? " ▲" : " ▼") : "");
   const counts = (k: string) => (rows ?? []).filter((r) => (k === "none" ? !r.customer_type : r.customer_type === k)).length;
-  const nUnnamed = new Set(unnamed.map((u) => u.customer_id)).size;
+
+  // On a phone the type chips and the stage are drop-downs on the sort's row (Coy, 2026-10-06:
+  // "a more symmetrical user interface" — "put this drop down menu on the same row as the sort").
+  const sel: React.CSSProperties = { ...field, width: "auto", height: 26, fontSize: F.xs, flex: wide ? undefined : "1 1 0" };
+  const stageSelect = (
+    <select value={stage} onChange={(e) => setStage(e.target.value)} aria-label="Job stage" style={wide ? { ...field, width: "auto", height: 28, fontSize: F.xs } : sel}>
+      {STAGE_CHIPS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+    </select>
+  );
+  const typeSelect = (
+    <select value={type} onChange={(e) => setType(e.target.value)} aria-label="Type" style={sel}>
+      {TYPES.map(([k, l]) => (k === "all" || counts(k) > 0) && <option key={k} value={k}>{k === "all" ? "All types" : `${l}${rows ? ` ${counts(k)}` : ""}`}</option>)}
+    </select>
+  );
+  const viewTabs = (
+    <div className="flex gap-1" role="tablist" aria-label="View">
+      {([["table", "Table"], ["cards", "Cards"], ["board", "Board"]] as const).filter(([k]) => wide || k !== "table").map(([k, l]) => (
+        <button key={k} role="tab" aria-selected={view === k} onClick={() => set({ view: k })} style={chip(view === k)}>{l}</button>
+      ))}
+    </div>
+  );
+  const sortControls = (
+    <>
+      <select value={v.sort} onChange={(e) => set({ sort: e.target.value })} aria-label="Sort by" style={sel}>
+        <option value="name">Name</option>
+        {COLS.filter((c) => ["last", "first", "type", "jobs", "city", "since"].includes(c.k)).map((c) => <option key={c.k} value={c.k}>{c.label}</option>)}
+      </select>
+      <button onClick={() => set({ dir: v.dir === 1 ? -1 : 1 })} aria-label="Reverse the order" style={{ ...chip(false), height: 26, flex: "none" }}>{v.dir === 1 ? "▲" : "▼"}</button>
+    </>
+  );
 
   return (
     <div ref={measure} className="mx-auto" style={{ maxWidth: view === "table" ? 1400 : 1000, padding: "12px 12px 24px" }}>
       <div className="flex items-center gap-2 flex-wrap mb-2">
-        <h1 style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".04em", margin: 0, color: T.ink, flex: 1, minWidth: 120 }}>
-          Customers{rows ? <span style={{ color: T.ink3, fontWeight: 500 }}> · {rows.length}</span> : null}
+        <h1 className="sc-page-title" style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".04em", margin: 0, color: T.ink, flex: 1, minWidth: 100 }}>
+          Customers{rows ? <span className="sc-page-count" style={{ color: T.ink3, fontWeight: 500 }}> · {rows.length}</span> : null}
         </h1>
-        <button onClick={() => setAdding(true)} style={btn(true)}>+ New customer</button>
+        {!wide && viewTabs}
+        <button onClick={() => setAdding(true)} className="sc-new-btn" style={btn(true)}>+ New customer</button>
       </div>
 
       <div className="flex gap-2 flex-wrap items-center mb-2">
+        {/* Full width on a phone (Coy, 2026-10-06). */}
         <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find a name, address, phone, what was said…" aria-label="Find a customer"
-          style={{ ...field, maxWidth: 320 }} />
-        <div className="flex gap-1 flex-wrap" role="tablist" aria-label="Type">
-          {TYPES.map(([k, l]) => (k === "all" || counts(k) > 0) && (
-            <button key={k} role="tab" aria-selected={type === k} onClick={() => setType(k)} style={chip(type === k)}>
-              {l}{k !== "all" && rows ? ` ${counts(k)}` : ""}
-            </button>
-          ))}
-        </div>
-        <select value={stage} onChange={(e) => setStage(e.target.value)} aria-label="Job stage" style={{ ...field, width: "auto", height: 28, fontSize: F.xs }}>
-          {STAGE_CHIPS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-        </select>
-        <span className="flex-1" />
-        <div className="flex gap-1" role="tablist" aria-label="View">
-          {([["table", "Table"], ["cards", "Cards"], ["board", "Board"]] as const).filter(([k]) => wide || k !== "table").map(([k, l]) => (
-            <button key={k} role="tab" aria-selected={view === k} onClick={() => set({ view: k })} style={chip(view === k)}>{l}</button>
-          ))}
-        </div>
+          style={{ ...field, maxWidth: wide ? 320 : undefined }} />
+        {wide ? (
+          <>
+            <div className="flex gap-1 flex-wrap" role="tablist" aria-label="Type">
+              {TYPES.map(([k, l]) => (k === "all" || counts(k) > 0) && (
+                <button key={k} role="tab" aria-selected={type === k} onClick={() => setType(k)} style={chip(type === k)}>
+                  {l}{k !== "all" && rows ? ` ${counts(k)}` : ""}
+                </button>
+              ))}
+            </div>
+            {stageSelect}
+          </>
+        ) : null}
+        {wide && <span className="flex-1" />}
+        {wide && viewTabs}
         {view === "table" && (
           <div className="relative">
             <button onClick={() => setColsOpen((o) => !o)} aria-expanded={colsOpen} style={chip(colsOpen)}>Columns ▾</button>
@@ -165,20 +193,11 @@ export function Customers() {
         )}
       </div>
 
-      {nUnnamed > 0 && (
-        <div className="rounded px-3 py-2 mb-2" style={{ background: T.card, border: `1px dashed ${T.hair}`, fontSize: F.xs, color: T.ink2 }}>
-          <button onClick={() => setShowUnnamed((o) => !o)} style={{ cursor: "pointer", color: T.ink2 }} aria-expanded={showUnnamed}>
-            {nUnnamed} filed as customer {nUnnamed === 1 ? "has" : "have"} no name, so {nUnnamed === 1 ? "isn't" : "aren't"} listed. <b style={{ color: T.chalk }}>{showUnnamed ? "Hide" : "Name them"}</b>
-          </button>
-          {showUnnamed && (
-            <div className="flex flex-wrap gap-1.5 mt-1.5">
-              {unnamed.map((u) => (
-                <Link key={u.contact_id} href={`/dashboard/messages/${u.contact_id}?person=1`} className="rounded px-2 py-1" style={{ border: `1px solid ${T.hair}`, color: T.ink, ...nums }}>
-                  {u.phone ? formatPhone(u.phone) : "No number"} →
-                </Link>
-              ))}
-            </div>
-          )}
+      {!wide && (
+        <div className="flex gap-1 items-center mb-2">
+          {typeSelect}
+          {stageSelect}
+          {view === "cards" && sortControls}
         </div>
       )}
 
@@ -221,14 +240,12 @@ export function Customers() {
 
       {shown.length > 0 && view === "cards" && (
         <div className="rounded overflow-hidden" style={{ background: T.card, border: `1px solid ${T.hair}` }}>
-          <div className="flex gap-1 px-3 py-1.5 items-center" style={{ background: T.slab, fontSize: F.xs }}>
-            <span style={{ ...eyebrow }}>Sort</span>
-            <select value={v.sort} onChange={(e) => set({ sort: e.target.value })} aria-label="Sort by" style={{ ...field, width: "auto", height: 26, fontSize: F.xs }}>
-              <option value="name">Name</option>
-              {COLS.filter((c) => ["last", "first", "type", "jobs", "city", "since"].includes(c.k)).map((c) => <option key={c.k} value={c.k}>{c.label}</option>)}
-            </select>
-            <button onClick={() => set({ dir: v.dir === 1 ? -1 : 1 })} aria-label="Reverse the order" style={{ ...chip(false), height: 26 }}>{v.dir === 1 ? "▲" : "▼"}</button>
-          </div>
+          {wide && (
+            <div className="flex gap-1 px-3 py-1.5 items-center" style={{ background: T.slab, fontSize: F.xs }}>
+              <span style={{ ...eyebrow }}>Sort</span>
+              {sortControls}
+            </div>
+          )}
           {shown.map((r) => <Card key={r.id} r={r} />)}
         </div>
       )}

@@ -107,10 +107,10 @@ export function ContactsPage() {
   return (
     <div ref={measure} className="px-3 py-3 mx-auto" style={{ maxWidth: 1180 }}>
       <div className="flex items-center gap-2 flex-wrap mb-2">
-        <h1 style={{ fontFamily: disp, fontSize: F.xl, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".02em", flex: 1, minWidth: 140 }}>
-          Contacts {rows && <span style={{ fontSize: F.sm, color: T.ink3, letterSpacing: ".08em" }}>{rows.length}</span>}
+        <h1 className="sc-page-title" style={{ fontFamily: disp, fontSize: F.xl, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".02em", flex: 1, minWidth: 140 }}>
+          Contacts {rows && <span className="sc-page-count" style={{ fontSize: F.sm, color: T.ink3, letterSpacing: ".08em" }}>{rows.length}</span>}
         </h1>
-        <button onClick={() => setAdding(true)} style={btn(true)}>+ Contact</button>
+        <button onClick={() => setAdding(true)} className="sc-new-btn" style={btn(true)}>+ Contact</button>
       </div>
       <div className="flex gap-2 flex-wrap items-center mb-2">
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find a name, company, number, email, address…" aria-label="Find a contact" style={{ ...field, maxWidth: 360 }} />

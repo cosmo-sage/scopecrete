@@ -2405,8 +2405,15 @@ expected start date per quoted job before it means anything. Add the field.
   contact is a 409 naming them). **No unnamed customers:** a customer's name
   is its own, else its people's — a name that is only a phone number (how
   `sc_classify_contact` names one made for an unnamed number) is no name;
-  with none it is not listed, and the list says how many are waiting with
-  a link to name each. A contact filed customer,
+  with none it is not listed (the row counting them, with a link to name
+  each, is gone — Coy, 2026-10-06: "can be removed completely"; they are
+  named from Threads). **On a phone (Coy, 2026-10-06):** the title and its
+  count are smaller, Cards · Board sit beside + New customer, the search is
+  the full width, and Type, Job stage and Sort ▲▼ are drop-downs on one row
+  under it (the type chips stay on a desktop). Every list page's title and
+  + New button are smaller on a phone the same way (`.sc-page-title`,
+  `.sc-new-btn` in `v34-shell.css`: Customers, Vendors, Contacts, Jobs). A
+  contact filed customer,
   opened from Threads, lands on its customer's page, Threads tab, filtered to
   them (`?person=1` keeps the person page). **Header:** CUSTOMER · name
   (Lexend) · address · contacts · jobs · since; Call · Text · Email · Edit ·

@@ -188,8 +188,8 @@ export default function JobsBoard() {
 
       <div className="px-3 pt-3 pb-2" style={{ background: T.card, borderBottom: `1px solid ${T.hair}` }}>
         <div className="flex items-center gap-2">
-          <div style={{ fontFamily: disp, fontSize: F.xl, fontWeight: 600, lineHeight: 1.05, flex: 1 }}>Jobs</div>
-          {!limited && <button onClick={() => setNewOpen(true)} className="rounded px-3"
+          <div className="sc-page-title" style={{ fontFamily: disp, fontSize: F.xl, fontWeight: 600, lineHeight: 1.05, flex: 1 }}>Jobs</div>
+          {!limited && <button onClick={() => setNewOpen(true)} className="rounded px-3 sc-new-btn"
             style={{ height: 34, background: T.hiviz, color: T.onHiviz, fontFamily: disp, fontSize: F.sm, fontWeight: 600,
                      textTransform: "uppercase", letterSpacing: ".06em", cursor: "pointer" }}>
             + New job

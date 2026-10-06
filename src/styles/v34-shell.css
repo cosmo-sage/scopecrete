@@ -451,3 +451,12 @@ html[data-theme="night-shift"] .sc-proposal { --sc-doc-ground: #15171A; }
   html[data-head-hide] .sc-head-wrap { transform: translateY(-100%); }
 }
 @media (prefers-reduced-motion: reduce) { .sc-head-wrap { transition: none; } }
+
+/* A page's title and its + New buttons, smaller on a phone (Coy, 2026-10-06:
+   "a little bit smaller … consistently across any new customer, new vendor,
+   new something buttons"). The inline styles are the desktop's. */
+@media (max-width: 1023px) {
+  .sc-page-title { font-size: 15px !important; letter-spacing: .03em !important; }
+  .sc-page-title .sc-page-count { font-size: 11px !important; }
+  .sc-new-btn { height: 28px !important; padding: 0 9px !important; font-size: 11px !important; letter-spacing: .05em !important; }
+}

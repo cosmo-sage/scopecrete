@@ -73,9 +73,9 @@ export function VendorList() {
   return (
     <div ref={measure} className="px-3 py-3 mx-auto" style={{ maxWidth: 1180 }}>
       <div className="flex items-center gap-2 flex-wrap mb-2">
-        <h1 style={{ fontFamily: disp, fontSize: F.xl, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".02em", flex: 1, minWidth: 140 }}>Vendors</h1>
-        <button onClick={() => setAdding(true)} style={btn(false)}>+ Vendor</button>
-        <button onClick={() => setReceipt(true)} style={btn(true)}>+ Add a receipt or quote</button>
+        <h1 className="sc-page-title" style={{ fontFamily: disp, fontSize: F.xl, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".02em", flex: 1, minWidth: 140 }}>Vendors</h1>
+        <button onClick={() => setAdding(true)} className="sc-new-btn" style={btn(false)}>+ Vendor</button>
+        <button onClick={() => setReceipt(true)} className="sc-new-btn" style={btn(true)}>+ Add a receipt or quote</button>
       </div>
       {err && <div className="mb-2 rounded px-3 py-2" style={{ fontSize: F.sm, color: T.red, background: T.redDim }}>{err}</div>}
       {note && <div className="mb-2 rounded px-3 py-2 flex gap-2" style={{ fontSize: F.sm, background: T.greenDim }}><span style={{ flex: 1 }}>{note}</span><button onClick={() => setNote(null)} aria-label="Dismiss">×</button></div>}

@@ -4,7 +4,7 @@
  * plan set, its sheets, the takeoff, and its lines on the budget. Coy,
  * 2026-09-30: "scopecrete.ai will be a tool for me to do takeoffs manually."
  *
- * Files → Takeoff → Budget (Files and Sheets one step since 2026-10-05). A plan PDF put in the room is opened in
+ * Files → Takeoff (Files and Sheets one step since 2026-10-05; the Budget step moved to the job's Summary 2026-10-06). A plan PDF put in the room is opened in
  * the browser with pdf.js; each page's title block is read
  * (src/lib/plan-sheets.ts) and stored as a sheet — a first reading, Coy's to
  * correct. Dusty stays docked and sees the takeoff (src/lib/dusty/context.ts).
@@ -21,10 +21,11 @@ import { FilesStep } from "./files-sheets";
 import { TakeoffStep } from "./takeoff";
 import { AerialPicker } from "./aerial-picker";
 import { PhotosPanel } from "./photos-panel";
-import { BudgetStep, SendSheet, useBudget } from "./budget-step";
+import { SendSheet } from "./budget-step";
 
-type Step = "files" | "takeoff" | "budget";
-const STEPS: Array<[Step, string]> = [["files", "Files"], ["takeoff", "Takeoff"], ["budget", "Budget"]];
+// The Budget step moved to the job's Summary (Coy, 2026-10-06); an old ?step=budget link opens the room as usual.
+type Step = "files" | "takeoff";
+const STEPS: Array<[Step, string]> = [["files", "Files"], ["takeoff", "Takeoff"]];
 
 export function PlanRoom({ jobId }: { jobId: string }) {
   const router = useRouter();
@@ -41,8 +42,6 @@ export function PlanRoom({ jobId }: { jobId: string }) {
   const [fullscreen, setFullscreen] = useState(false);
   const [aerial, setAerial] = useState(false);
   const [photos, setPhotos] = useState(false);
-  const [budgetTick, setBudgetTick] = useState(0);
-  const { b } = useBudget(jobId, budgetTick);
 
   const load = useCallback(() => call(`/api/jobs/${jobId}/plans`, "GET")
     .then((d) => { setData(d as PlansData); setErr(null); })
@@ -52,7 +51,7 @@ export function PlanRoom({ jobId }: { jobId: string }) {
     call(`/api/jobs/${jobId}/plans`, "GET").then((d) => { if (!off) setData(d as PlansData); }).catch((e) => { if (!off) setErr(String(e.message ?? e)); });
     return () => { off = true; };
   }, [jobId]);
-  const reload = useCallback(async () => { await load(); setBudgetTick((n) => n + 1); }, [load]);
+  const reload = useCallback(async () => { await load(); }, [load]);
 
   const go = useCallback((s: Step, sheet?: string | null) => {
     const q = new URLSearchParams(sp.toString());
@@ -144,11 +143,9 @@ export function PlanRoom({ jobId }: { jobId: string }) {
   const current = step ?? (roomSheets.length && data?.params.length && sheets.length ? "takeoff" : "files");
   const scaled = sheets.filter((s) => s.scale_ft_per_pt).length;
   const photoCount = (data?.files ?? []).filter((f) => f.kind === "image").length;
-  const sent = data ? data.params.filter((p) => data.lines.some((l) => l.takeoff_parameter_id === p.id)).length : 0;
   const counts: Record<Step, string | null> = {
     files: (data?.files.length ?? 0) ? String(data?.files.length) : null,
     takeoff: data?.params.length ? String(data.params.length) : null,
-    budget: data?.params.length ? `${sent}/${data.params.length}` : null,
   };
 
   return (
@@ -211,7 +208,6 @@ export function PlanRoom({ jobId }: { jobId: string }) {
             <TakeoffStep jobId={jobId} data={scoped} files={data.files} sheetId={sheetParam} setSheetId={(id) => go("takeoff", id)}
               reload={reload} onSend={setSending} fullscreen={fullscreen} setFullscreen={setFullscreen} onPhotos={() => setPhotos((v) => !v)} photosOpen={photos} />
           )}
-          {current === "budget" && <BudgetStep jobId={jobId} data={scoped} b={b} onSend={setSending} />}
         </div>
       )}
       {data && <PhotosPanel jobId={jobId} files={data.files} open={photos} onClose={() => setPhotos(false)} onAdded={load} over={fullscreen && current === "takeoff"} />}

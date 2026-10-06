@@ -68,110 +68,54 @@ function Satellite({ point, z, provider, height }: { point: Point; z: number; pr
   );
 }
 
-const panoUrl = (p: Point | null, addr: string) => p
-  ? `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${p.lat},${p.lng}`
-  : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addr)}`;
-
-/** The satellite preview in the Location box, and the buttons that open the pop-up. */
+/** The satellite preview in the Location box; a tap opens it full size. */
 export function SiteViews({ addr, stored }: { addr: string; stored: Point | null }) {
   const { point, provider, state } = usePoint(addr, stored);
-  const [open, setOpen] = useState<null | "sat" | "street">(null);
-  const pill: React.CSSProperties = { ...lbl, fontSize: 11, height: 30, padding: "0 10px", borderRadius: 3, border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 };
+  const [open, setOpen] = useState(false);
   return (
     <>
-      <button onClick={() => setOpen("sat")} disabled={!point} aria-label="Open the satellite view" className="text-left"
-        style={{ display: "block", width: "100%", padding: 0, border: `1px solid ${T.hair}`, borderRadius: 4, overflow: "hidden", cursor: point ? "zoom-in" : "default", background: T.sunk }}>
+      <button onClick={() => setOpen(true)} disabled={!point} aria-label="Open the satellite view" className="text-left"
+        style={{ position: "relative", display: "block", width: "100%", padding: 0, border: `1px solid ${T.hair}`, borderRadius: 4, overflow: "hidden", cursor: point ? "zoom-in" : "default", background: T.sunk }}>
         {point
           ? <Satellite point={point} z={19} provider={provider} height={170} />
           : <div style={{ height: 70, display: "flex", alignItems: "center", justifyContent: "center", fontSize: F.sm, color: T.ink3 }}>
               {state === "finding" ? "Finding it on the map…" : "The map couldn't place this address."}
             </div>}
+        {point && <span style={{ ...lbl, position: "absolute", left: 6, top: 6, fontSize: 10, padding: "3px 7px", borderRadius: 3, background: "rgba(0,0,0,.55)", color: "#fff" }}>🛰 Satellite ⤢</span>}
       </button>
-      <div className="flex gap-1.5">
-        <button onClick={() => setOpen("sat")} disabled={!point} style={{ ...pill, opacity: point ? 1 : 0.5 }}>🛰 Satellite</button>
-        <button onClick={() => setOpen("street")} style={pill}>🚶 Street view</button>
-      </div>
-      {open && <SitePopup addr={addr} point={point} provider={provider} view={open} onView={setOpen} onClose={() => setOpen(null)} />}
+      {open && point && <SitePopup point={point} provider={provider} onClose={() => setOpen(false)} />}
     </>
   );
 }
 
-function SitePopup({ addr, point, provider, view, onView, onClose }: {
-  addr: string; point: Point | null; provider: Provider; view: "sat" | "street"; onView: (v: "sat" | "street") => void; onClose: () => void;
-}) {
+function SitePopup({ point, provider, onClose }: { point: Point; provider: Provider; onClose: () => void }) {
   const [z, setZ] = useState(19);
-  const key = process.env.NEXT_PUBLIC_GOOGLE_MAPS_EMBED_KEY ?? "";
   useEffect(() => {
     const k = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", k);
     return () => window.removeEventListener("keydown", k);
   }, [onClose]);
-  const seg = (on: boolean): React.CSSProperties => ({ ...lbl, fontSize: 11, padding: "6px 12px", cursor: "pointer", border: "none", background: on ? T.ink : "transparent", color: on ? T.slab : T.ink2 });
   const zb: React.CSSProperties = { width: 36, height: 36, borderRadius: 4, border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink, fontSize: 20, cursor: "pointer" };
   return (
-    <div role="dialog" aria-modal="true" aria-label="Location" onClick={onClose}
+    <div role="dialog" aria-modal="true" aria-label="Satellite view" onClick={onClose}
       style={{ position: "fixed", inset: 0, zIndex: 90, background: "rgba(10,10,10,.6)", display: "flex", alignItems: "center", justifyContent: "center", padding: "max(12px, env(safe-area-inset-top)) 12px 12px" }}>
-      <div onClick={(e) => e.stopPropagation()} className="flex flex-col"
-        style={{ width: "min(920px, 100%)", height: "min(720px, 100%)", background: T.card, borderRadius: 6, overflow: "hidden", boxShadow: "0 12px 40px rgba(0,0,0,.35)" }}>
-        <div className="flex items-center gap-2 px-3 py-2" style={{ borderBottom: `1px solid ${T.hair}` }}>
-          <div role="tablist" className="flex overflow-hidden" style={{ border: `1px solid ${T.hairStrong}`, borderRadius: 3 }}>
-            <button role="tab" aria-selected={view === "sat"} onClick={() => onView("sat")} style={seg(view === "sat")}>Satellite</button>
-            <button role="tab" aria-selected={view === "street"} onClick={() => onView("street")} style={{ ...seg(view === "street"), borderLeft: `1px solid ${T.hairStrong}` }}>Street view</button>
-          </div>
-          <span className="flex-1" />
-          <button onClick={onClose} aria-label="Close" style={{ ...zb, width: 32, height: 32, fontSize: 18 }}>×</button>
+      <div onClick={(e) => e.stopPropagation()}
+        style={{ position: "relative", width: "min(920px, 100%)", height: "min(720px, 100%)", background: T.card, borderRadius: 6, overflow: "hidden", boxShadow: "0 12px 40px rgba(0,0,0,.35)" }}>
+        <Satellite point={point} z={z} provider={provider} height="100%" />
+        <div className="flex flex-col gap-1.5" style={{ position: "absolute", right: 10, top: 10 }}>
+          <button onClick={onClose} aria-label="Close" style={zb}>×</button>
+          <button onClick={() => setZ((v) => Math.min(MAX_Z, v + 1))} disabled={z >= MAX_Z} aria-label="Zoom in" style={zb}>+</button>
+          <button onClick={() => setZ((v) => Math.max(MIN_Z, v - 1))} disabled={z <= MIN_Z} aria-label="Zoom out" style={zb}>−</button>
         </div>
-        <div className="flex-1 min-h-0" style={{ position: "relative" }}>
-          {view === "sat" ? (
-            point ? (
-              <>
-                <Satellite point={point} z={z} provider={provider} height="100%" />
-                <div className="flex flex-col gap-1.5" style={{ position: "absolute", right: 10, top: 10 }}>
-                  <button onClick={() => setZ((v) => Math.min(MAX_Z, v + 1))} disabled={z >= MAX_Z} aria-label="Zoom in" style={zb}>+</button>
-                  <button onClick={() => setZ((v) => Math.max(MIN_Z, v - 1))} disabled={z <= MIN_Z} aria-label="Zoom out" style={zb}>−</button>
-                </div>
-              </>
-            ) : <Note text="The map couldn't place this address." />
-          ) : key && point ? (
-            <iframe title="Street view" src={`https://www.google.com/maps/embed/v1/streetview?key=${key}&location=${point.lat},${point.lng}&fov=80`}
-              width="100%" height="100%" style={{ border: 0, display: "block" }} loading="lazy" referrerPolicy="no-referrer-when-downgrade" allowFullScreen />
-          ) : (
-            <Note text="Street view inside ScopeCrete needs a Google Maps embed key (NEXT_PUBLIC_GOOGLE_MAPS_EMBED_KEY in Vercel). Until then it opens in Google Maps.">
-              <a href={panoUrl(point, addr)} target="_blank" rel="noopener noreferrer"
-                style={{ ...lbl, fontSize: 12, height: 36, padding: "0 14px", borderRadius: 3, background: T.hiviz, color: T.onHiviz, display: "inline-flex", alignItems: "center" }}>
-                Open street view in Google Maps ↗
-              </a>
-            </Note>
-          )}
-        </div>
-        <div className="px-3 py-2" style={{ borderTop: `1px solid ${T.hair}` }}><CopyAddress addr={addr} /></div>
       </div>
     </div>
   );
 }
 
-function Note({ text, children }: { text: string; children?: React.ReactNode }) {
+/** The address as a Google Maps link. */
+export function AddressLink({ addr }: { addr: string }) {
   return (
-    <div className="h-full flex flex-col items-center justify-center gap-3 p-6 text-center" style={{ background: T.sunk, color: T.ink2, fontSize: F.sm }}>
-      <div style={{ maxWidth: 420 }}>{text}</div>
-      {children}
-    </div>
-  );
-}
-
-/** The address as a Google Maps link, with Copy beside it. */
-export function CopyAddress({ addr }: { addr: string }) {
-  const [copied, setCopied] = useState(false);
-  const copy = async () => {
-    try { await navigator.clipboard.writeText(addr); setCopied(true); setTimeout(() => setCopied(false), 1600); } catch { /* blocked */ }
-  };
-  return (
-    <div className="flex items-center gap-2">
-      <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addr)}`} target="_blank" rel="noopener noreferrer"
-        style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: 500, color: T.chalk, textDecoration: "underline", textUnderlineOffset: 3, overflowWrap: "anywhere" }}>{addr}</a>
-      <button onClick={() => void copy()} style={{ ...lbl, fontSize: 11, height: 30, padding: "0 10px", borderRadius: 3, border: `1px solid ${T.hairStrong}`, background: T.card, color: copied ? T.green : T.ink, cursor: "pointer", flexShrink: 0 }}>
-        {copied ? "Copied ✓" : "Copy"}
-      </button>
-    </div>
+    <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addr)}`} target="_blank" rel="noopener noreferrer"
+      style={{ fontSize: 13.5, fontWeight: 500, color: T.chalk, textDecoration: "underline", textUnderlineOffset: 3, overflowWrap: "anywhere" }}>{addr}</a>
   );
 }

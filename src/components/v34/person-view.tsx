@@ -330,7 +330,7 @@ export function PersonView({ person, messages, channels, onReload, onMerge, back
       <CallNotesPad contactId={c.id} who={title} open={callNotes} onClose={() => { setCallNotes(false); onReload(); }} />
 
       {tab === "overview" && (
-        <OverviewGrid wide={wide} side={side()} sideCompact={side(true)}>
+        <OverviewGrid wide={wide} meta={meta} side={side()} sideCompact={side(true)}>
           {(person.possible_duplicates?.length ?? 0) > 0 && <SamePerson person={person} onMerge={onMerge} className="" />}
           <DustyRead person={person} />
           <section>

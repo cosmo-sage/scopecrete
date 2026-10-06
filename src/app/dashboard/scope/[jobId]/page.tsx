@@ -272,17 +272,8 @@ export default function ScopeBuilder() {
             title={access.limited ? (realTitle || titleHint || "Job") : <input defaultValue={realTitle} placeholder={titleHint} aria-label="Job name"
               size={Math.max(6, (realTitle || titleHint || "").length + 1)}
               onBlur={(e) => { const v = e.target.value; if (v !== realTitle) void send(`/api/jobs/${jobId}`, "PATCH", { title: v }).then((b) => setJob((j) => j && { ...j, title: b.job.title })).catch((er) => setSaveErr((m) => ({ ...m, job: String(er.message ?? er) }))); }}
-              className="bg-transparent outline-none text-center lg:text-left"
-              style={{ minWidth: 0, maxWidth: "100%", fieldSizing: "content", fontFamily: disp, fontSize: F.lg, fontWeight: 700, lineHeight: 1.15, color: T.ink } as React.CSSProperties} />} />
-          {/* The page's own buttons sit below the name's row (Coy, 2026-10-05). */}
-          {planSheets.length > 0 && !sections.some((x) => groupOf(x.id, plans)) && (
-            <div className="flex justify-center lg:justify-start" style={{ marginTop: 6 }}>
-              <button onClick={() => openSheets(null, null)} className="rounded px-2.5 shrink-0" style={{
-                height: 28, whiteSpace: "nowrap", border: `1px solid ${T.hairStrong}`, background: T.card, fontFamily: disp, fontSize: F.xs, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".05em", color: T.ink, cursor: "pointer" }}>
-                Sheets ({planSheets.length})
-              </button>
-            </div>
-          )}
+              className="sc-job-name bg-transparent outline-none text-center lg:text-left"
+              style={{ minWidth: 0, maxWidth: "100%", fieldSizing: "content", fontFamily: disp, fontWeight: 700, lineHeight: 1.15, color: T.ink } as React.CSSProperties} />} />
           {/* An onsite estimator has no Summary (081): they keep who it's for and their phone here. */}
           {access.limited && (
             <div style={{ fontSize: F.xs, color: who ? T.ink3 : T.hiviz, marginTop: 4, ...clip }}>
@@ -340,7 +331,6 @@ export default function ScopeBuilder() {
             if (!byKey.has(g)) { byKey.set(g, []); order.push(g); }
             byKey.get(g)!.push(x);
           }
-          const firstGroup = order.find((g) => g && plans?.params.some((x) => x.id === g)) ?? null;
           return order.map((g) => {
             const p = g ? plans?.params.find((x) => x.id === g) : null;
             const list = byKey.get(g)!;
@@ -352,13 +342,6 @@ export default function ScopeBuilder() {
                     <span style={{ width: 10, height: 10, borderRadius: 2, background: p.color }} />
                     <span style={{ fontFamily: disp, fontWeight: 700, letterSpacing: ".04em", textTransform: "uppercase" }}>{p.name}</span>
                     <span style={{ color: T.ink3, fontSize: F.xs }}>takeoff group · {list.length} section{list.length === 1 ? "" : "s"}{tot !== null ? ` · ${fmtQty(tot, { area: "SF", linear: "LF", count: "EA" }[p.kind])}` : ""}</span>
-                    {/* Sheets rides on the first takeoff group's row (Coy, 2026-10-05). */}
-                    {g === firstGroup && planSheets.length > 0 && (
-                      <button onClick={() => openSheets(null, null)} className="rounded px-2.5 shrink-0 ml-auto" style={{
-                        height: 26, whiteSpace: "nowrap", border: `1px solid ${T.hairStrong}`, background: T.card, fontFamily: disp, fontSize: F.xs, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".05em", color: T.ink, cursor: "pointer" }}>
-                        Sheets ({planSheets.length})
-                      </button>
-                    )}
                   </div>
                 )}
                 {list.map((s) => {

@@ -31,7 +31,7 @@ import { RoleTag } from "@/components/v34/thread-list";
 import { RecordHeader, HeaderNote, OverviewGrid, PanelCard, SectionHead, Empty, Facts, ContactCard, ThreadChips, RecentCard, JobRow, Field,
   ASK_DUSTY, menuItem, btn, lbl, panelTitle, send, type CardPerson } from "@/components/v34/record-page";
 import { Sheet } from "@/components/v34/primitives";
-import { SiteViews, CopyAddress } from "@/components/v34/site-views";
+import { SiteViews, AddressLink } from "@/components/v34/site-views";
 import { useWide } from "@/lib/v34/use-wide";
 import { PlayAudio, MessageMedia } from "@/components/v34/conversation";
 import { Composer } from "@/components/v34/composer";
@@ -155,7 +155,7 @@ export function CustomerPage({ customerId, focusContact }: { customerId: string;
       {primary && <CallNotesPad contactId={primary.id} who={primary.name || cu.name || "this customer"} open={callNotes} onClose={() => { setCallNotes(false); setTick((n) => n + 1); }} />}
 
       {tab === "overview" && (
-        <OverviewGrid wide={wide}
+        <OverviewGrid wide={wide} meta={meta}
           sideCompact={<OverviewSide cu={cu} data={data} contacts={contacts} onEdit={() => setEditing(true)} onSaved={reload} compact />}
           side={<OverviewSide cu={cu} data={data} contacts={contacts} onEdit={() => setEditing(true)} onSaved={reload} />}>
           <section>
@@ -323,11 +323,10 @@ function LocationCard({ cu, heard, onEdit, onSaved }: { cu: Customer; maps: Data
   const stored = cu.lat != null && cu.lng != null ? { lat: cu.lat, lng: cu.lng } : null;
   return (
     <section style={{ padding: "14px 16px 12px", borderBottom: `1px solid ${T.hair}`, display: "flex", flexDirection: "column", gap: 8 }}>
-      <h3 style={panelTitle}>Location</h3>
       {addr ? (
         <>
+          <AddressLink addr={addr} />
           <SiteViews addr={addr} stored={stored} />
-          <CopyAddress addr={addr} />
         </>
       ) : heard ? (
         <HeardAddress cu={cu} heard={heard} onEdit={onEdit} onSaved={onSaved} />
@@ -336,11 +335,11 @@ function LocationCard({ cu, heard, onEdit, onSaved }: { cu: Customer; maps: Data
           No address on file — add one
         </button>
       )}
-      <span style={{ fontSize: 11, color: T.ink3 }}>
-        {addr && cu.address_source === "contact" ? "From their own text or contact details — check it. " : ""}
-        {addr && cu.address_source === "geocode" ? "Heard on a call and matched by Mapbox — check it. " : ""}
-        The customer&apos;s address. Each job can have its own site address.
-      </span>
+      {addr && (cu.address_source === "contact" || cu.address_source === "geocode") && (
+        <span style={{ fontSize: 11, color: T.ink3 }}>
+          {cu.address_source === "contact" ? "From their own text or contact details — check it." : "Heard on a call and matched by Mapbox — check it."}
+        </span>
+      )}
     </section>
   );
 }

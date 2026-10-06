@@ -435,10 +435,6 @@ export function DustyPanel({ open, onClose, onBusy, onStream }: {
                       <span style={{ display: "block", fontSize: 10, color: T.ink3 }}>{sub}</span>
                     </button>
                   ))}
-                  <div className="px-3 py-2" aria-disabled="true" style={{ borderTop: `1px solid ${T.hairSoft}` }}>
-                    <span style={{ display: "block", fontFamily: disp, fontSize: F.md, fontWeight: 600, color: T.ink3 }}>New invoice</span>
-                    <span style={{ display: "block", fontSize: 10, color: T.ink3 }}>Not built yet — invoices come after proposals</span>
-                  </div>
                 </div>
               </>
             )}

@@ -462,3 +462,8 @@ html[data-theme="night-shift"] .sc-proposal { --sc-doc-ground: #15171A; }
   .sc-page-count { font-size: 11px !important; }
   .sc-new-btn { height: 28px !important; padding: 0 9px !important; font-size: 11px !important; letter-spacing: .05em !important; }
 }
+
+/* The job's name: 19px on a desktop, 15px on a phone so it fits the width
+   (Coy, 2026-10-06). */
+.sc-job-name { font-size: 19px; }
+@media (max-width: 1023px) { .sc-job-name { font-size: 15px; } }

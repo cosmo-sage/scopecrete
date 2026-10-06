@@ -89,7 +89,10 @@ export function RecordHeader({ back, title, tag, wide, actions, menu, meta, chil
   };
   return (
     <div className="px-4 pt-3" style={{ background: T.card, borderBottom: `1px solid ${T.hair}` }}>
-      <Link href={back.href} style={{ ...eyebrow, color: T.chalk }}>‹ {back.label}</Link>
+      <div className="flex items-center gap-2">
+        <Link href={back.href} style={{ ...eyebrow, color: T.chalk, flex: 1, minWidth: 0 }}>‹ {back.label}</Link>
+        {!wide && tabs.length > 1 && <button onClick={() => setTabMenu(true)} style={{ ...eyebrow, color: T.ink2, cursor: "pointer" }}>{tabs.find(([k]) => k === tab)?.[1] ?? ""} ▾</button>}
+      </div>
       <div className="flex items-center gap-2 mt-0.5">
         {!wide && tabs.length > 1 && <MenuButton onClick={() => setTabMenu(true)} label="Sections of this page" always />}
         <div className="flex items-center gap-2 flex-1 min-w-0 flex-wrap">
@@ -114,9 +117,9 @@ export function RecordHeader({ back, title, tag, wide, actions, menu, meta, chil
           )}
         </div>
       </div>
-      {meta && <div style={{ fontSize: 11.5, color: T.ink3, marginTop: 2, ...nums, whiteSpace: "normal" }}>{meta}</div>}
+      {wide && meta && <div style={{ fontSize: 11.5, color: T.ink3, marginTop: 2, ...nums, whiteSpace: "normal" }}>{meta}</div>}
       {children}
-      <RecordTabs tabs={tabs} tab={tab} onTab={onTab} />
+      {wide ? <RecordTabs tabs={tabs} tab={tab} onTab={onTab} /> : <div style={{ height: 10 }} />}
       {!wide && tabs.length > 1 && <TabDrawer open={tabMenu} onClose={() => setTabMenu(false)} tabs={tabs} tab={tab} onTab={onTab} />}
     </div>
   );
@@ -165,9 +168,11 @@ export function HeaderNote({ text, action, onDismiss }: { text: React.ReactNode;
 }
 
 /** The Overview's grid: the main column, and a 400px right column when wide (its cards above the main column when narrow). */
-export function OverviewGrid({ wide, side, sideCompact, children }: { wide: boolean; side: React.ReactNode; sideCompact?: React.ReactNode; children: React.ReactNode }) {
+export function OverviewGrid({ wide, side, sideCompact, meta, children }: { wide: boolean; side: React.ReactNode; sideCompact?: React.ReactNode; meta?: string; children: React.ReactNode }) {
   return (
     <div className="grid" style={{ gridTemplateColumns: wide ? "minmax(0,1fr) 400px" : "minmax(0,1fr)", gap: 14, padding: "14px 16px" }}>
+      {/* On a phone the header's facts line lives here (Coy, 2026-10-06). */}
+      {!wide && meta && <div style={{ fontSize: 12, color: T.ink2, ...nums }}>{meta}</div>}
       {!wide && (sideCompact ?? null)}
       <div className="flex flex-col gap-4" style={{ minWidth: 0 }}>{children}</div>
       {wide && side}

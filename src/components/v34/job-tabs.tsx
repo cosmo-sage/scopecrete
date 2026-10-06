@@ -73,7 +73,7 @@ export function JobHeaderRow({ jobId, active, title, after, sub }: {
           <Link href="/dashboard/scope" className="no-underline shrink-0 absolute left-0 inset-y-0 flex items-center lg:static"
             style={{ fontFamily: disp, fontSize: 11, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase", color: T.ink2 }}>‹ Jobs</Link>
           {typeof title === "string"
-            ? <span style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 700, lineHeight: 1.15, color: T.ink, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</span>
+            ? <span className="sc-job-name" style={{ fontFamily: disp, fontWeight: 700, lineHeight: 1.15, color: T.ink, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</span>
             : title}
           {after}
         </div>

@@ -8,9 +8,9 @@
  *
  * What it listens to — kept light (the Supabase plan is over its limits):
  *  - Supabase Realtime: inbound `messages` (082), `emails` and `live_calls`
- *    (085) — a nudge only; the payload is never drawn;
+ *    (086) — a nudge only; the payload is never drawn;
  *  - a poll of /api/alerts every 30 s while the tab is visible, and at once
- *    when it comes back — the fallback, and how a ring shows before 085.
+ *    when it comes back — the fallback, and how a ring shows before 086.
  * Each nudge reads only what is newer than the last read. The bell, the
  * pop-ups and every thread read this one store (useAlerts / useLiveCalls).
  */

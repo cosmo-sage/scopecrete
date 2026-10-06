@@ -8,7 +8,7 @@ import {
 /**
  * Incoming alerts (Coy, 2026-10-06) — what came in since `since`: texts and
  * calls from people (spam left out), forwarded emails, and any call happening
- * now (live_calls, migration 085). The bell and the pop-ups read this
+ * now (live_calls, migration 086). The bell and the pop-ups read this
  * (src/components/v34/incoming-alerts.tsx).
  *
  * Small on purpose: at most 30 messages and 15 emails newer than `since`
@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
     supabase.from("emails").select("id, created_at, original_from_name, original_from_address, from_name, from_address, subject, contact_id, status")
       .eq("org_id", orgId).gt("created_at", since).neq("status", "quarantined")
       .order("created_at", { ascending: false }).limit(15),
-    // Missing before 085 is applied: then there are simply no live calls.
+    // Missing before 086 is applied: then there are simply no live calls.
     supabase.from("live_calls").select("id, call_id, contact_id, counterparty, direction, status, started_at, answered_at, phone_number_id")
       .eq("org_id", orgId).is("ended_at", null).gt("started_at", liveFrom)
       .order("started_at", { ascending: false }).limit(5),

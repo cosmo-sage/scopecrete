@@ -75,7 +75,7 @@
  *   function log. It is now stored too; the projection attaches it to the
  *   call's message when there is one, or records artifact_without_call.
  *
- * v11 changes — a call that is happening now (migration 085, Coy 2026-10-06):
+ * v11 changes — a call that is happening now (migration 086, Coy 2026-10-06):
  * - call.ringing (and call.answered, if Quo sends it) upsert one row per call
  *   in live_calls — the app shows the thread's channel as on a call. Not in
  *   quo_events: those rows are projected into messages, and the call's message
@@ -713,7 +713,7 @@ async function storeOutboundMessage(supabase: ReturnType<typeof createClient>, r
 }
 
 // ---------------------------------------------------------------------------
-// Live calls (v11, migration 085)
+// Live calls (v11, migration 086)
 // ---------------------------------------------------------------------------
 
 /**
@@ -815,7 +815,7 @@ serve(async (req: Request) => {
 
   try {
     // -------------------- call.ringing / call.answered (v11) --------------------
-    // A call that is happening now (migration 085). Kept in live_calls, NOT
+    // A call that is happening now (migration 086). Kept in live_calls, NOT
     // quo_events: every quo_events row is projected into messages, and the
     // call's message comes from call.completed. No contact is made here — an
     // unknown caller becomes a contact when the call completes, as before.

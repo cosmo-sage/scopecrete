@@ -254,7 +254,7 @@ export default function ChatThreadPage() {
   const threadIds = threads && !["customers", "unsorted", "vendors", "personal", "spam", "archived"].includes(threads.thread)
     ? threads.custom?.find((t) => t.id === threads.thread)?.contact_ids ?? [] : [];
   // A call happening now on one of their numbers (Coy, 2026-10-06: "if there is an active phone
-  // call I would like that thread channel to show it's active") — from Quo's ring (migration 085).
+  // call I would like that thread channel to show it's active") — from Quo's ring (migration 086).
   const liveHere = channel?.kind === "phone" ? liveCallFor(liveCalls, contactId, channel.value) : null;
   const liveAny = liveHere ?? liveCallFor(liveCalls, contactId) ?? channels.map((x) => x.kind === "phone" ? liveCallFor(liveCalls, contactId, x.value) : null).find(Boolean) ?? null;
   const pickChannel = (k: string) => { setChannelKey(k); setFilter("all"); setLineFilter(null); };

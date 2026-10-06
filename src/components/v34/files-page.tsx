@@ -23,7 +23,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { T, F, disp, eyebrow, clip, relTime, nums } from "@/lib/v34/tokens";
-import { Drawer, MenuButton, SearchBubble, SearchToggle, Segmented } from "@/components/v34/primitives";
+import { Drawer, MenuButton, PageHeader, SearchBubble, SearchToggle, Segmented } from "@/components/v34/primitives";
 import { FileViewer, type FileRow } from "@/components/v34/files-panel";
 import { EmailList } from "@/components/v34/email-sheet";
 import { useWide } from "@/lib/v34/use-wide";
@@ -52,7 +52,6 @@ export function FilesPage({ fixed, embedded, extra }: { fixed?: Partial<FileFilt
   const [fileParam, setFileParam] = useState<string | null>(null);
   const [wrapRef, wide] = useWide<HTMLDivElement>(900);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [info, setInfo] = useState(false);
   const [searching, setSearching] = useState(false);
   const [groupsOpen, setGroupsOpen] = useState<Record<string, boolean>>({});
   const [storage, setStorage] = useState<{ used_bytes: number; limit_bytes: number; texted_bytes: number } | null>(null);
@@ -263,44 +262,43 @@ export function FilesPage({ fixed, embedded, extra }: { fixed?: Partial<FileFilt
   };
   const skeleton = (h: number) => [1, 2, 3].map((i) => <div key={i} className="animate-pulse" style={{ height: h, borderTop: i > 1 ? `1px solid ${T.hairSoft}` : "none", background: T.hairSoft }} />);
   const panel: React.CSSProperties = { marginTop: 10, background: T.card, border: `1px solid ${T.hair}` };
+  const search = (
+    <SearchBubble value={q} onChange={(v) => { setQ(v); if (fileParam) clearFile(); }} onClose={() => setSearching(false)}
+      placeholder={photos ? "Search photos — words, or a name" : "Search files — words in a file, or a name: Wilson, Angelle…"} />
+  );
 
   return (
-    <div ref={wrapRef} className="mx-auto" style={{ maxWidth: embedded ? undefined : 1320, padding: embedded ? 0 : "12px 12px 24px" }}>
-      {/* One title row (Coy, 2026-10-06): ☰ on a phone, FILES with its ⓘ, then
-          the filter and search icons — the same search bubble as every page. */}
-      <div className="flex items-center gap-2" style={{ marginBottom: 8, position: "relative" }}>
-        {!wide && <MenuButton onClick={() => setMenuOpen(true)} label="Folders" always />}
-        {!embedded && (
-          <h1 className="sc-page-title" style={{ fontFamily: disp, fontSize: F.xl, fontWeight: 700, margin: 0, lineHeight: 1.05, display: "flex", alignItems: "flex-start", gap: 3 }}>
-            Files
-            <button type="button" onClick={() => setInfo((v) => !v)} aria-label="What Files holds" aria-expanded={info}
-              style={{ width: 16, height: 16, marginTop: -2, borderRadius: 8, border: `1px solid ${info ? T.hiviz : T.hairStrong}`, background: info ? T.hivizDim : T.card,
-                       color: info ? T.hivizText : T.ink3, fontFamily: "var(--sc-font-body)", fontSize: 10, fontWeight: 700, lineHeight: "14px", textTransform: "none", cursor: "pointer", padding: 0 }}>i</button>
-          </h1>
-        )}
-        <span style={{ flex: 1 }} />
-        <FilterMenu groups={filterGroups} used={chips.filter((c) => c.key !== "q").length} />
-        <SearchToggle open={searching} onToggle={() => { if (searching) { setQ(""); setSearching(false); } else setSearching(true); }} label="Search files" />
-        {extra}
-        {info && !embedded && (
-          <div role="note" className="rounded" style={{ position: "absolute", top: "100%", left: wide ? 0 : 48, right: 0, maxWidth: 420, zIndex: 20, marginTop: 4, padding: "8px 10px",
-            background: T.card, border: `1px solid ${T.hair}`, boxShadow: "0 6px 18px rgba(0,0,0,.12)", fontSize: F.xs, color: T.ink2, lineHeight: 1.4 }}>
-            Every photo, plan, bid, quote, receipt and contract — uploaded, emailed or texted. Search finds the words inside them,
-            or type any name: a person, vendor, customer or job brings up everything filed on them.
-          </div>
-        )}
-      </div>
-      {searching && (
-        <div style={{ marginBottom: 8 }}>
-          <SearchBubble value={q} onChange={(v) => { setQ(v); if (fileParam) clearFile(); }} onClose={() => setSearching(false)}
-            placeholder={photos ? "Search photos — words, or a name" : "Search files — words in a file, or a name: Wilson, Angelle…"} />
+    <>
+    {/* The page's subheader like every main-menu page (Coy, 2026-10-06): ☰ on
+        a phone, Files, the filter and search icons, one line on what it holds.
+        Embedded on a customer's tab it is just the icons' row. */}
+    {!embedded && (
+      <PageHeader title="Files" width={1296} menu={!wide ? <MenuButton onClick={() => setMenuOpen(true)} label="Folders" always /> : undefined}
+        sub="Every photo, plan, bid, quote, receipt and contract — uploaded, emailed or texted. Search the words in them, or any name."
+        actions={<>
+          <FilterMenu groups={filterGroups} used={chips.filter((c) => c.key !== "q").length} />
+          <SearchToggle open={searching} onToggle={() => { if (searching) { setQ(""); setSearching(false); } else setSearching(true); }} label="Search files" />
+          {extra}
+        </>}>
+        {searching && <div className="mt-2">{search}</div>}
+      </PageHeader>
+    )}
+    <div ref={wrapRef} className="mx-auto" style={{ maxWidth: embedded ? undefined : 1320, padding: embedded ? 0 : "0 12px 24px" }}>
+      {embedded && (
+        <div className="flex items-center gap-2" style={{ marginBottom: 8 }}>
+          {!wide && <MenuButton onClick={() => setMenuOpen(true)} label="Folders" always />}
+          <span style={{ flex: 1 }} />
+          <FilterMenu groups={filterGroups} used={chips.filter((c) => c.key !== "q").length} />
+          <SearchToggle open={searching} onToggle={() => { if (searching) { setQ(""); setSearching(false); } else setSearching(true); }} label="Search files" />
+          {extra}
         </div>
       )}
+      {embedded && searching && <div style={{ marginBottom: 8 }}>{search}</div>}
 
       <div className="flex items-start" style={{ gap: 16 }}>
         {wide && (
           <aside aria-label="Folders and storage" className="rounded"
-            style={{ width: 232, flexShrink: 0, position: "sticky", top: "calc(var(--sc-head) + 8px)", height: "calc(100dvh - var(--sc-head) - 24px)",
+            style={{ width: 232, flexShrink: 0, position: "sticky", top: "calc(var(--sc-head) + var(--sc-subhead, 0px) + 8px)", height: "calc(100dvh - var(--sc-head) - var(--sc-subhead, 0px) - 24px)",
                      maxHeight: 760, background: T.card, border: `1px solid ${T.hair}`, overflow: "hidden" }}>
             {menu}
           </aside>
@@ -416,6 +414,7 @@ export function FilesPage({ fixed, embedded, extra }: { fixed?: Partial<FileFilt
         onSaved={(nf) => { setFiles((a) => (a ?? []).map((x) => (x.id === nf.id ? nf : x))); setOpen(nf); }}
         onDeleted={(id) => { setFiles((a) => (a ?? []).filter((x) => x.id !== id)); setOpen(null); }} />
     </div>
+    </>
   );
 }
 

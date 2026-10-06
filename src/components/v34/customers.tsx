@@ -19,7 +19,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { T, F, disp, eyebrow, clip, relTime, nums, formatPhone } from "@/lib/v34/tokens";
 import { useWide } from "@/lib/v34/use-wide";
-import { SearchBubble, SearchToggle } from "@/components/v34/primitives";
+import { PageHeader, SearchBubble, SearchToggle } from "@/components/v34/primitives";
 import { usePref } from "@/lib/v34/prefs";
 import { STAGES } from "@/lib/jobs/stages";
 
@@ -148,18 +148,17 @@ export function Customers() {
   );
 
   return (
-    <div ref={measure} className="mx-auto" style={{ maxWidth: view === "table" ? 1400 : 1000, padding: "12px 12px 24px" }}>
-      <div className="sc-page-head">
-      <div className="flex items-center gap-2 flex-wrap">
-        <h1 className="sc-page-title" style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".04em", margin: 0, color: T.ink, flex: 1, minWidth: 100 }}>
-          Customers{rows ? <span className="sc-page-count" style={{ color: T.ink3, fontWeight: 500 }}> · {rows.length}</span> : null}
-        </h1>
+    <>
+    <PageHeader title="Customers" count={rows ? rows.length : null} width={view === "table" ? 1376 : 976}
+      sub="Everyone you do the work for — homeowners, companies and public bodies — with their people and their jobs."
+      actions={<>
         {!wide && viewTabs}
         <SearchToggle open={finding || !!q} onToggle={() => { if (finding || q) { setQ(""); setFinding(false); } else setFinding(true); }} label="Find a customer" />
         <button onClick={() => setAdding(true)} className="sc-new-btn" style={btn(true)}>+ New customer</button>
-      </div>
+      </>}>
       {(finding || q) && <div className="mt-2"><SearchBubble value={q} onChange={setQ} onClose={() => setFinding(false)} placeholder="Find a name, address, phone, what was said…" /></div>}
-      </div>
+    </PageHeader>
+    <div ref={measure} className="mx-auto" style={{ maxWidth: view === "table" ? 1400 : 1000, padding: "0 12px 24px" }}>
 
       <div className="flex gap-2 flex-wrap items-center mb-2">
         {wide ? (
@@ -272,6 +271,7 @@ export function Customers() {
 
       {adding && <NewCustomer onClose={() => setAdding(false)} onMade={(id) => { setAdding(false); window.location.href = `/dashboard/customers/${id}`; }} />}
     </div>
+    </>
   );
 }
 

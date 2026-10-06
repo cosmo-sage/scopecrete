@@ -22,7 +22,7 @@ import Link from "next/link";
 import { useAccess } from "@/lib/v34/access-ctx";
 import { useRouter } from "next/navigation";
 import { T, F, disp, eyebrow, nums, clip, relTime, formatPhone } from "@/lib/v34/tokens";
-import { EmptyState, MenuButton, Sheet } from "@/components/v34/primitives";
+import { EmptyState, MenuButton, PageHeader, Sheet } from "@/components/v34/primitives";
 import { STAGES, STATUS_TAG, STATUS_NAME, JOB_TYPE_LABEL, LEAD_SOURCES, stageOf } from "@/lib/jobs/stages";
 import { BOARD_SORTS, cityCounts, filterJobs, sortJobs, type BoardFilter, type BoardSort } from "@/lib/jobs/board-view";
 
@@ -201,10 +201,9 @@ export default function JobsBoard() {
       {/* The page's header stays at the top while the dashboard header slides
           away on a phone (Coy, 2026-10-06). One row: ☰ · Jobs · Sort · Filter ·
           the view · + New job. */}
-      <div className="px-3 pt-3 pb-2" style={{ background: T.card, borderBottom: `1px solid ${T.hair}`, position: "sticky", top: "var(--sc-head)", zIndex: 6, transition: "top .2s ease-out" }}>
-        <div className="flex items-center gap-2" style={{ minWidth: 0 }}>
-          <MenuButton onClick={() => setStagesOpen(true)} label="Job stages" />
-          <div className="sc-page-title" style={{ fontFamily: disp, fontSize: F.xl, fontWeight: 600, lineHeight: 1.05, flexShrink: 0 }}>Jobs</div>
+      <PageHeader title="Jobs" menu={<MenuButton onClick={() => setStagesOpen(true)} label="Job stages" />}
+        sub="Every job from first call to done, by stage. Move a card along as the work moves."
+        actions={<>
           <select value={sort} onChange={(e) => setSort(e.target.value as BoardSort)} aria-label="Sort jobs" title="Sort jobs" style={{ ...ctl, minWidth: 0, maxWidth: 140, flexShrink: 1 }}>
             {BOARD_SORTS.map((o) => <option key={o.k} value={o.k}>↕ {o.label}</option>)}
           </select>
@@ -214,7 +213,6 @@ export default function JobsBoard() {
             <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke={nFilters ? T.hiviz : T.ink2} strokeWidth="1.8" strokeLinejoin="round" aria-hidden="true"><path d="M2.5 3.5h15l-6 7v5.5l-3 1.5v-7z" /></svg>
             {nFilters > 0 && <span style={{ position: "absolute", top: -6, right: -6, minWidth: 14, height: 14, borderRadius: 7, background: T.hiviz, color: T.onHiviz, fontSize: 9, fontWeight: 700, lineHeight: "14px", textAlign: "center", padding: "0 3px" }}>{nFilters}</span>}
           </button>
-          <span style={{ flex: 1 }} />
           <button onClick={flipView} className="lg:hidden shrink-0 flex items-center justify-center rounded"
             aria-label={phoneView === "board" ? "Show as a list" : "Show as a board"} title={phoneView === "board" ? "Show as a list" : "Show as a board"}
             style={{ width: 30, height: 30, border: `1px solid ${T.hair}`, background: T.card, color: T.ink2, cursor: "pointer" }}>
@@ -227,7 +225,7 @@ export default function JobsBoard() {
                      textTransform: "uppercase", letterSpacing: ".06em", cursor: "pointer", whiteSpace: "nowrap" }}>
             + New job
           </button>}
-        </div>
+        </>}>
         {error && <div style={{ fontSize: F.xs, color: T.red, marginTop: 4 }}>{error}</div>}
         {nFilters > 0 && <div className="flex items-center gap-2 flex-wrap mt-2">
           {[...filter.types.map((t) => ({ k: "types" as const, v: t, l: t === "none" ? "Type?" : JOB_TYPE_LABEL[t] ?? t })),
@@ -252,7 +250,7 @@ export default function JobsBoard() {
             </button>
           ))}
         </div>
-      </div>
+      </PageHeader>
 
       {jobs === null ? (
         <div className="p-3 space-y-2">

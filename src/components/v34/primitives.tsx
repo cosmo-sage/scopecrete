@@ -396,3 +396,46 @@ export function SearchBubble({ value, onChange, onClose, placeholder, autoFocus 
     </label>
   );
 }
+
+/* ------------------------------------------------- the page's subheader */
+
+/** Every main-menu page opens with the same band under the dashboard header
+ *  (Coy, 2026-10-06: "the logs page has a defined sub header. Each of the
+ *  different pages on the main menu need a consistent subheader"): a white
+ *  band the full width of the page, the title (with ☰ before it on a phone
+ *  and a count after it), the page's buttons on the right, one line saying
+ *  what the page is for, then the page's own search or filter rows. It stays
+ *  at the top while the page scrolls under it (.sc-subhead). `width` lines it
+ *  up with the page's centred content. */
+export function PageHeader({ title, count, sub, menu, actions, children, width }: {
+  title: React.ReactNode; count?: React.ReactNode; sub?: React.ReactNode; menu?: React.ReactNode;
+  actions?: React.ReactNode; children?: React.ReactNode; width?: number;
+}) {
+  // Its height, for anything else on the page that sticks below it (Files'
+  // folder column): --sc-subhead.
+  const ref = React.useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = ref.current, root = document.documentElement;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => root.style.setProperty("--sc-subhead", `${el.offsetHeight}px`));
+    ro.observe(el);
+    return () => { ro.disconnect(); root.style.removeProperty("--sc-subhead"); };
+  }, []);
+  return (
+    <div ref={ref} className="sc-subhead">
+      <div className="mx-auto" style={{ maxWidth: width }}>
+        <div className="flex items-center gap-2" style={{ minWidth: 0 }}>
+          {menu}
+          <h1 className="sc-subhead-title" style={{ fontFamily: disp, fontWeight: 600, margin: 0, lineHeight: 1.05, color: T.ink, minWidth: 0, flexShrink: 0 }}>
+            {title}
+            {count != null && count !== "" && <span className="sc-subhead-count" style={{ ...nums, fontWeight: 500, color: T.ink3, marginLeft: 8 }}>{count}</span>}
+          </h1>
+          <span style={{ flex: 1 }} />
+          {actions}
+        </div>
+        {sub && <div className="sc-subhead-sub" style={{ color: T.ink3, marginTop: 2, lineHeight: 1.35 }}>{sub}</div>}
+        {children}
+      </div>
+    </div>
+  );
+}

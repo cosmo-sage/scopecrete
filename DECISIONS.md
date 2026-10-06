@@ -3385,7 +3385,7 @@ expected start date per quoted job before it means anything. Add the field.
   be moved down below"): ‹ Jobs, the job's name (and the ⓘ, or the
   proposal's number and draft / final, with its price line under it) on
   the left, the switch alone on the right. Each view's own buttons sit
-  below (the Budget's Sheets (n) button is gone since 2026-10-06 — Coy: "accessible from within the plan room"; a section's own sheet links stay, and on a phone the job's name is 15px, `.sc-job-name`, so it fits the width); the Plan Room's
+  below (the Budget's Sheets (n) button is gone since 2026-10-06 — Coy: "accessible from within the plan room"; a section's own sheet links stay, and on a phone the job's name is 14px (`.sc-job-name`) and ‹ Jobs just ‹, so a long name fits the width); the Plan Room's
   reading chips, Photos, Aerial and Add plans on the row under the name;
   the Proposal's version, Item prices · Qty · unit · Tax · Maps & photos,
   Print / PDF and Preview on the settings row beside Project type,

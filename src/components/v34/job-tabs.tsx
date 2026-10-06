@@ -68,10 +68,12 @@ export function JobHeaderRow({ jobId, active, title, after, sub }: {
   return (
     <div className="sc-no-print flex flex-col gap-y-1.5 lg:flex-row lg:flex-wrap lg:items-center lg:gap-x-2">
       <div className="relative lg:flex-[1_1_220px]" style={{ minWidth: 0 }}>
-        {/* px-14 keeps the centred name clear of ‹ Jobs on both sides, so it is truly centred. */}
-        <div className="flex items-center justify-center gap-2 px-14 lg:justify-start lg:px-0" style={{ minWidth: 0, minHeight: 26 }}>
-          <Link href="/dashboard/scope" className="no-underline shrink-0 absolute left-0 inset-y-0 flex items-center lg:static"
-            style={{ fontFamily: disp, fontSize: 11, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase", color: T.ink2 }}>‹ Jobs</Link>
+        {/* On a phone ‹ Jobs is just ‹ so a long name has the width (Coy, 2026-10-06). */}
+        <div className="flex items-center justify-center gap-2 px-6 lg:justify-start lg:px-0" style={{ minWidth: 0, minHeight: 26 }}>
+          <Link href="/dashboard/scope" aria-label="Jobs" className="no-underline shrink-0 absolute left-0 inset-y-0 flex items-center lg:static"
+            style={{ fontFamily: disp, fontSize: 11, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase", color: T.ink2 }}>
+            <span className="lg:hidden" style={{ fontSize: 20, lineHeight: 1 }}>‹</span><span className="hidden lg:inline">‹ Jobs</span>
+          </Link>
           {typeof title === "string"
             ? <span className="sc-job-name" style={{ fontFamily: disp, fontWeight: 700, lineHeight: 1.15, color: T.ink, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</span>
             : title}

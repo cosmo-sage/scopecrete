@@ -3221,6 +3221,22 @@ expected start date per quoted job before it means anything. Add the field.
   sizes only) is how the file was diagnosed. The Plan Room lists only the
   sheets of files that are **In plan room** (and any sheet with a shape on
   it); taking a file out takes its pages with it.
+  **A big scanned set without crashing the tab (Coy, 2026-10-07: "The LA
+  Contracting plan sets … are crashing the browser when it tries to read them
+  all").** pdf.js keeps a page's decoded picture until the page is cleaned
+  up, and a scanned sheet is one ~67 MP image. Nothing cleaned up: the Sheets
+  grid drew every thumbnail at once, and the OCR reader kept every sheet it
+  had read. Burgess Ave had grown to 154 drawings (an addendum email copied
+  PLANS.pdf in a second time — the same bytes, its own 74 sheets — plus
+  ADD02). Measured on a 30-sheet scan of the same shape in headless
+  Chromium: thumbnails all at once peaked at 2.9 GB; the reader held 1.8 GB
+  after 30 sheets and kept climbing. Now `releasePage()` (`src/lib/pdf.ts`)
+  lets go of each sheet once read; `renderRegion()` and thumbnails clean up
+  after themselves; `drawPage()` lets go of the sheet it drew last when
+  another is drawn; thumbnails are drawn two at a time (one on a phone) and
+  only once they scroll near the screen. Same test: 1.4 GB and 1.1 GB peaks,
+  flat however many sheets. Still open: bid-intake copies a file again when
+  an addendum re-sends it.
   **Drawings vs pages to read (Coy, 2026-10-02).** A page bigger than legal
   (longest side ≥ 1,150 pt, so 11×17 half-size sets count) is a drawing:
   measured, scaled, in Takeoff. A letter or legal page bound into a plan

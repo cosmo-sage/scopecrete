@@ -179,14 +179,24 @@ export function ScaleBadge({ s, small }: { s: Sheet; small?: boolean }) {
 export function Thumb({ fileId, url, page, height = 104 }: { fileId: string; url: string | null; page: number; height?: number }) {
   const [src, setSrc] = useState<string | null>(null);
   const [fail, setFail] = useState<string | null>(null);
+  // Drawn only once it scrolls near the screen: a set of 150 scanned sheets drawn all at
+  // once ran the tab out of memory (2026-10-07).
+  const el = useRef<HTMLDivElement>(null);
+  const [seen, setSeen] = useState(() => typeof IntersectionObserver === "undefined");
   useEffect(() => {
-    if (!url) return;
+    if (seen || !el.current) return;
+    const io = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) setSeen(true); }, { rootMargin: "300px" });
+    io.observe(el.current);
+    return () => io.disconnect();
+  }, [seen]);
+  useEffect(() => {
+    if (!url || !seen) return;
     let off = false;
     pageThumb(fileId, url, page).then((d) => { if (!off) setSrc(d); }).catch((e) => { if (!off) setFail(e instanceof Error ? e.message : String(e)); });
     return () => { off = true; };
-  }, [fileId, url, page]);
+  }, [fileId, url, page, seen]);
   return (
-    <div style={{ height, background: T.sunk, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+    <div ref={el} style={{ height, background: T.sunk, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
       {src ? <img src={src} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "top left" }} />
         : <span title={fail ?? undefined} style={{ fontSize: F.xs, color: T.ink3 }}>{fail ? "couldn't draw" : "…"}</span>}
     </div>

@@ -19,7 +19,7 @@
  * Each sheet is saved the moment it is read (/api/plan-sheets/[id]/ocr).
  */
 import { useSyncExternalStore } from "react";
-import { MAX_CANVAS_PX, openPdf, renderRegion } from "@/lib/pdf";
+import { MAX_CANVAS_PX, openPdf, releasePage, renderRegion } from "@/lib/pdf";
 import { readSheet } from "@/lib/plan-sheets";
 import { chooseTitles, compactWords, inTitleCorner, meanConf, mergeItems, ocrText, scaleFor, titleCandidates, tilesFor, titleRegions, toItems, type OcrItem, type OcrWord, type Rect } from "@/lib/plan-ocr";
 
@@ -91,7 +91,7 @@ function within<T>(p: Promise<T>, ms: number): Promise<T> {
 }
 
 async function read(sch: Sched, doc: Awaited<ReturnType<typeof openPdf>>, page: number, r: Rect, scale: number): Promise<OcrItem[]> {
-  const c = await renderRegion(doc, page, r, scale);
+  const c = await renderRegion(doc, page, r, scale, true);
   try {
     const res = await within(sch.addJob("recognize", c, {}, { blocks: true, text: false }), partMs());
     const words = (res.data.blocks ?? []).flatMap((b) => b.paragraphs.flatMap((p) => p.lines.flatMap((l) => l.words)));
@@ -105,7 +105,7 @@ async function read(sch: Sched, doc: Awaited<ReturnType<typeof openPdf>>, page: 
  * turned frame (their sizes are what matter for picking the title), not page points.
  */
 async function readTurned(sch: Sched, doc: Awaited<ReturnType<typeof openPdf>>, page: number, r: Rect, scale: number): Promise<OcrItem[]> {
-  const c = await renderRegion(doc, page, r, scale);
+  const c = await renderRegion(doc, page, r, scale, true);
   const t = document.createElement("canvas");
   t.width = c.height; t.height = c.width;
   const ctx = t.getContext("2d");
@@ -206,6 +206,7 @@ async function run(job: { id: string; title: string | null }, titles: OcrSheet[]
         const cands = [...flat, ...titleCandidates(turned).map((c) => ({ ...c, turned: true }))]
           .filter((c, i, a) => a.findIndex((x) => x.text.toUpperCase() === c.text.toUpperCase()) === i)
           .sort((a, b) => b.h - a.h).slice(0, 6);
+        releasePage(doc, s.page);
         candidates.push({ id: s.id, cands });
         const title = cands[0]?.text ?? null;
         const got = await save(s.id, {
@@ -264,6 +265,7 @@ async function run(job: { id: string; title: string | null }, titles: OcrSheet[]
           if (stuck) { void sch.terminate(); sch = await scheduler(); }
           await breathe();
         }
+        releasePage(doc, s.page);
         if (stop) break;
         const m = mergeItems(items);
         await save(s.id, { phase: "full", text: ocrText(m).slice(0, 200_000), words: compactWords(m), conf: meanConf(m),

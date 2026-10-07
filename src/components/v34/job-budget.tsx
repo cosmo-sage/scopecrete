@@ -182,6 +182,8 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
     try { await fn(); } catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { reload(); }
   }, [reload]);
 
+  // The open line as the latest load has it, so its sheet shows what a change saved.
+  const editingNow = editing ? data?.lines.find((l) => l.id === editing.id) ?? editing : null;
   const res = useMemo(() => {
     if (!data) return null;
     return priceBudget(data.lines, [], data.settings, sections, days,
@@ -593,7 +595,23 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
           await run(() => call(`/api/jobs/${jobId}/budget/lines`, "POST", { ...line, cost_item_id: b.item.id }));
         }}
         onLoadAssembly={(assemblyId, sectionId) => run(() => call(`/api/jobs/${jobId}/budget/assembly`, "POST", { assembly_id: assemblyId, section_id: sectionId }))} />
-      <LineSheet line={editing} data={data} sections={sections} res={editing ? res.lines[editing.id] : null}
+      <LineSheet line={editingNow} data={data} sections={sections} res={editingNow ? res.lines[editingNow.id] : null}
+        onPickVendor={async (v) => {
+          // A vendor who doesn't price this item yet: made (if typed new), given this line's price on the item, then pinned here.
+          if (!editingNow?.cost_item_id) return "This line isn't a Price book item.";
+          try {
+            let vendorId = "id" in v ? v.id : null;
+            if (!vendorId) {
+              const r = await fetch("/api/vendors", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: (v as { name: string }).name }) });
+              const b = await r.json().catch(() => ({}));
+              if (!r.ok) return b?.error || `HTTP ${r.status}`;
+              vendorId = b.vendor.id as string;
+            }
+            const s = await call(`/api/cost-items/${editingNow.cost_item_id}/sources`, "POST", { vendor_contact_id: vendorId, unit_cost: editingNow.unit_cost, unit: editingNow.unit || undefined });
+            await run(() => call(`/api/jobs/${jobId}/budget/lines/${editingNow.id}`, "PATCH", { source_id: s.source.id }));
+            return null;
+          } catch (e) { return e instanceof Error ? e.message : String(e); }
+        }}
         addon={editing ? addons.has(editing.id) : false} onAddon={(on) => editing && void setAddon(editing.id, on)}
         onClose={() => setEditing(null)}
         onPatch={(body) => editing && run(() => call(`/api/jobs/${jobId}/budget/lines/${editing.id}`, "PATCH", body))}
@@ -901,85 +919,182 @@ function CardPicker({ open, initialArea, onClose, data, sections, tier, tierLabe
   );
 }
 
-function LineSheet({ line, data, sections, res, addon, onAddon, onClose, onPatch, onDelete }: {
+function LineSheet({ line, data, sections, res, addon, onAddon, onClose, onPatch, onDelete, onPickVendor }: {
   line: Line | null; data: Data; sections: Array<SectionInput & { id: string }>; res: ReturnType<typeof priceBudget>["lines"][string] | null;
   addon: boolean; onAddon: (on: boolean) => void;
   onClose: () => void; onPatch: (body: Record<string, unknown>) => void; onDelete: () => void;
+  onPickVendor: (vendor: { id: string } | { name: string }) => Promise<string | null>;
 }) {
   if (!line || !res) return <Sheet open={false} onClose={onClose} title="">{null}</Sheet>;
   const field: React.CSSProperties = { height: 36, border: `1px solid ${T.hair}`, background: T.card, fontSize: F.sm, borderRadius: 4, padding: "0 8px", width: "100%", minWidth: 0 };
+  const shown: React.CSSProperties = { ...field, background: T.slab, display: "flex", alignItems: "center", justifyContent: "flex-end", ...nums, color: T.ink };
   const num = (v: string) => (v.trim() === "" ? null : Number(v));
+  const box: React.CSSProperties = { border: `1px solid ${T.hairSoft}`, borderRadius: 6, padding: 10 };
+  const head: React.CSSProperties = { ...eyebrow, color: T.ink, marginBottom: 6 };
+  const want = ruleForUnit(line.unit, line.qty_rule);
+  const m = (n: number | null) => (n === null ? "—" : money(n));
   return (
     <Sheet open onClose={onClose} title={line.name} sub={line.qty_rule === "from_takeoff" ? "Measured in the Plan Room" : line.cost_item_id ? "From the Price book" : "This budget only"}>
+      {/* Laid out like JobTread's cost item (Coy, 2026-10-06): the item, then quantity → cost → price
+          in one grid with the worked-out columns shown, then its vendor, then where it sits and the switches. */}
       <div className="px-4 py-3 flex flex-col gap-3" key={line.id + line.updated_at}>
-        {/* The worked-out line ("2 days × $250 = … → $821.43") is gone (Coy, 2026-10-05); only what blocks it shows. */}
         {res.blocked.length > 0 && (
           <div className="rounded px-3 py-2" style={{ background: T.slab, fontSize: F.sm, color: T.hiviz }}>Needs {res.blocked.join(", ")}</div>
         )}
-        {/* Unit type (Coy, 2026-10-05: "if it's just the unit type then it needs to be renamed 'unit type'").
-            One picker; the unit decides how the quantity is worked out (ruleForUnit). This line only. */}
-        <div>
-          <label className="block"><span style={eyebrow}>Unit type</span>
-            <UnitPicker value={line.unit} style={field}
-              onChange={(u) => { const r = ruleForUnit(u, line.qty_rule); onPatch(r !== line.qty_rule ? { unit: u, qty_rule: r } : { unit: u }); }} /></label>
-          <div style={{ fontSize: 9.5, color: T.ink3, marginTop: 3 }}>
-            {(() => {
-              const want = ruleForUnit(line.unit, line.qty_rule);
-              if (line.qty_rule === "from_takeoff") return "Quantity: measured in the Plan Room.";
-              if (want !== line.qty_rule && line.qty_rule === "manual") return (
-                <>Quantity typed. <button onClick={() => onPatch({ qty_rule: want })} style={{ color: T.chalk, cursor: "pointer", fontSize: 9.5 }}>↺ Count it from the area</button></>
-              );
-              return `Quantity: ${UNIT_RULE_SAYS[line.qty_rule] ?? "typed"}.`;
-            })()}
+        <div style={box}>
+          <div style={head}>Item</div>
+          <label className="block"><span style={eyebrow}>Name</span>
+            <input defaultValue={line.name} maxLength={120} style={field} aria-label="Name"
+              onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== line.name) onPatch({ name: v }); }} /></label>
+          <div className="grid grid-cols-2 gap-2 mt-2">
+            {/* Its group (Coy, 2026-10-04): from a Price book item this moves the item there too. */}
+            <label className="block"><span style={eyebrow}>Group{line.cost_item_id ? " · Price book too" : ""}</span>
+              <select value={line.cost_group_id ?? ""} onChange={(e) => onPatch({ cost_group_id: e.target.value || null })} style={field} aria-label="Group">
+                <option value="">Not in a group</option>
+                {data.groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+              </select></label>
+            <label className="block"><span style={eyebrow}>Cost type</span>
+              <div style={{ ...shown, justifyContent: "flex-start" }}>{COST_TYPE_LABEL[line.cost_type as CostType] ?? line.cost_type}</div></label>
           </div>
+          <label className="block mt-2"><span style={eyebrow}>Area</span>
+            <select value={line.section_id ?? ""} onChange={(e) => onPatch({ section_id: e.target.value || null })} style={field} aria-label="Area">
+              <option value="">Whole job</option>
+              {sections.map((s) => <option key={s.id} value={s.id}>{s.name || "Unnamed area"}</option>)}
+            </select></label>
+          <label className="block mt-2"><span style={eyebrow}>Description · shows on the proposal</span>
+            <textarea defaultValue={line.description ?? ""} rows={2} maxLength={500} style={{ ...field, height: "auto", padding: "6px 8px", resize: "none" }}
+              onBlur={(e) => { if ((e.target.value.trim() || null) !== (line.description ?? null)) onPatch({ description: e.target.value }); }} /></label>
         </div>
-        <div className="grid grid-cols-2 gap-2">
-          <label className="block"><span style={eyebrow}>Quantity {res.qty_basis === "set" ? "(typed)" : `(from the scope${res.qty_note ? ` — ${res.qty_note}` : ""})`}</span>
-            <input defaultValue={res.qty ?? ""} inputMode="decimal" style={field} aria-label="Quantity"
-              onBlur={(e) => { const v = num(e.target.value); if (v !== res.qty) onPatch({ quantity: v }); }} />
-            {res.qty_basis === "set" && line.qty_rule !== "manual" && (
-              <button onClick={() => onPatch({ qty_source: "rule" })} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>↺ back to the rule</button>
-            )}</label>
-          <label className="block"><span style={eyebrow}>Unit cost / {line.unit || "unit"}</span>
-            <input defaultValue={line.unit_cost ?? ""} inputMode="decimal" placeholder="not recorded" style={{ ...field, borderColor: line.unit_cost === null ? T.hiviz : T.hair }} aria-label="Unit cost"
-              onBlur={(e) => { const v = num(e.target.value); if (v !== line.unit_cost) onPatch({ unit_cost: v }); }} /></label>
-          <label className="block"><span style={eyebrow}>Margin % · this line only</span>
-            <input defaultValue={line.margin_pct ?? ""} inputMode="decimal" placeholder={res.margin_pct !== null ? `${res.margin_pct} (the job's)` : "not recorded"} style={field} aria-label="Margin"
-              onBlur={(e) => { const v = num(e.target.value); if (v !== (line.margin_pct ?? null)) onPatch({ margin_pct: v }); }} /></label>
-          <label className="flex items-center gap-2 mt-5" style={{ fontSize: F.sm }}>
+
+        <div style={box}>
+          <div style={head}>Cost and price</div>
+          <div className="grid grid-cols-3 gap-2">
+            <label className="block"><span style={eyebrow}>Quantity{res.qty_basis === "set" ? " ✎" : " ƒ"}</span>
+              <input defaultValue={res.qty ?? ""} inputMode="decimal" style={{ ...field, textAlign: "right" }} aria-label="Quantity"
+                title={res.qty_basis === "set" ? "Typed" : `From the scope${res.qty_note ? ` — ${res.qty_note}` : ""}`}
+                onBlur={(e) => { const v = num(e.target.value); if (v !== res.qty) onPatch({ quantity: v }); }} /></label>
+            {/* Unit type (Coy, 2026-10-05): the unit decides how the quantity is worked out (ruleForUnit). */}
+            <label className="block"><span style={eyebrow}>Unit type</span>
+              <UnitPicker value={line.unit} style={field}
+                onChange={(u) => { const r = ruleForUnit(u, line.qty_rule); onPatch(r !== line.qty_rule ? { unit: u, qty_rule: r } : { unit: u }); }} /></label>
+            <label className="block"><span style={eyebrow}>Unit cost</span>
+              <input defaultValue={line.unit_cost ?? ""} inputMode="decimal" placeholder="not recorded" style={{ ...field, textAlign: "right", borderColor: line.unit_cost === null ? T.hiviz : T.hair }} aria-label="Unit cost"
+                onBlur={(e) => { const v = num(e.target.value); if (v !== line.unit_cost) onPatch({ unit_cost: v }); }} /></label>
+            <label className="block"><span style={eyebrow}>Ext. cost</span><div style={shown}>{m(res.ext_cost)}</div></label>
+            <label className="block"><span style={eyebrow}>O.H.</span><div style={shown}>{m(res.overhead)}</div></label>
+            <label className="block"><span style={eyebrow}>Margin %</span>
+              <input defaultValue={line.margin_pct ?? ""} inputMode="decimal" placeholder={res.margin_pct !== null ? `${res.margin_pct} job` : "—"} style={{ ...field, textAlign: "right" }} aria-label="Margin % · this line only"
+                onBlur={(e) => { const v = num(e.target.value); if (v !== (line.margin_pct ?? null)) onPatch({ margin_pct: v }); }} /></label>
+            <label className="block"><span style={eyebrow}>Unit price</span><div style={shown}>{m(res.unit_price)}</div></label>
+            <label className="block" style={{ gridColumn: "span 2" }}><span style={eyebrow}>Ext. price</span><div style={{ ...shown, fontWeight: 600 }}>{m(res.ext_price)}</div></label>
+          </div>
+          {/* The "Quantity: the days on the job." line is gone (Coy, 2026-10-06); only the way back when it was typed. */}
+          {line.qty_rule === "manual" && want !== "manual" && (
+            <button onClick={() => onPatch({ qty_rule: want })} style={{ fontSize: F.xs, color: T.chalk, cursor: "pointer", marginTop: 6 }}>Quantity typed · ↺ Count it from the area</button>
+          )}
+          {res.qty_basis === "set" && line.qty_rule !== "manual" && (
+            <button onClick={() => onPatch({ qty_source: "rule" })} style={{ fontSize: F.xs, color: T.chalk, cursor: "pointer", marginTop: 6 }}>↺ Quantity back to the rule</button>
+          )}
+          <label className="flex items-center gap-2 mt-2" style={{ fontSize: F.sm }}>
             <input type="checkbox" checked={line.taxable} onChange={(e) => onPatch({ taxable: e.target.checked })} style={{ width: 18, height: 18, accentColor: T.chalk }} /> Sales tax applies</label>
         </div>
-        {(data.sources ?? []).some((x) => x.cost_item_id === line.cost_item_id) && (
-          <label className="block"><span style={eyebrow}>Vendor · whose price this line uses</span>
-            <VendorPick line={line} sources={data.sources ?? []} full
-              name={(id) => { const v = data.sources?.find((x) => x.vendor?.id === id)?.vendor; return v ? v.name || v.company_name || formatPhone(v.phone) : null; }}
-              onPick={(id) => onPatch({ source_id: id })} /></label>
-        )}
-        {/* Its group (Coy, 2026-10-04: "I have an uncategorized cost item and I can't change it inside the
-            budget"). From a Price book item this moves the item there too, so the book and every budget agree. */}
-        <label className="block"><span style={eyebrow}>Group{line.cost_item_id ? " · moves it in the Price book too" : ""}</span>
-          <select value={line.cost_group_id ?? ""} onChange={(e) => onPatch({ cost_group_id: e.target.value || null })} style={field} aria-label="Group">
-            <option value="">Not in a group</option>
-            {data.groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
-          </select></label>
-        <label className="block"><span style={eyebrow}>Area</span>
-          <select value={line.section_id ?? ""} onChange={(e) => onPatch({ section_id: e.target.value || null })} style={field}>
-            <option value="">Whole job</option>
-            {sections.map((s) => <option key={s.id} value={s.id}>{s.name || "Unnamed area"}</option>)}
-          </select></label>
-        <label className="block"><span style={eyebrow}>Description (shows on the proposal)</span>
-          <textarea defaultValue={line.description ?? ""} rows={2} maxLength={500} style={{ ...field, height: "auto", padding: "6px 8px", resize: "none" }}
-            onBlur={(e) => { if ((e.target.value.trim() || null) !== (line.description ?? null)) onPatch({ description: e.target.value }); }} /></label>
-        <label className="flex items-center gap-2" style={{ fontSize: F.sm }}>
-          <input type="checkbox" checked={line.show_on_doc} onChange={(e) => onPatch({ show_on_doc: e.target.checked })} style={{ width: 18, height: 18, accentColor: T.chalk }} /> Show on the proposal</label>
-        {data.proposal?.has_draft && (
+
+        <div style={box}>
+          <div style={head}>Vendor</div>
+          {line.cost_item_id
+            ? <VendorField line={line} sources={(data.sources ?? []).filter((x) => x.cost_item_id === line.cost_item_id)} onPin={(id) => onPatch({ source_id: id })} onPick={onPickVendor} />
+            : <div style={{ fontSize: F.xs, color: T.ink3 }}>A vendor goes on a Price book item; this line is on this budget only.</div>}
+        </div>
+
+        <div className="flex flex-col gap-2">
           <label className="flex items-center gap-2" style={{ fontSize: F.sm }}>
-            <input type="checkbox" checked={addon} onChange={(e) => onAddon(e.target.checked)} style={{ width: 18, height: 18, accentColor: T.chalk }} />
-            Optional add-on on the proposal <span style={{ color: T.ink3, fontSize: F.xs }}>(priced, not in the total)</span></label>
-        )}
+            <input type="checkbox" checked={line.show_on_doc} onChange={(e) => onPatch({ show_on_doc: e.target.checked })} style={{ width: 18, height: 18, accentColor: T.chalk }} /> Show on the proposal</label>
+          {data.proposal?.has_draft && (
+            <label className="flex items-center gap-2" style={{ fontSize: F.sm }}>
+              <input type="checkbox" checked={addon} onChange={(e) => onAddon(e.target.checked)} style={{ width: 18, height: 18, accentColor: T.chalk }} />
+              Optional add-on on the proposal <span style={{ color: T.ink3, fontSize: F.xs }}>(priced, not in the total)</span></label>
+          )}
+        </div>
         <button onClick={onDelete} className="self-start" style={{ ...eyebrow, color: T.red, cursor: "pointer" }}>Take off the budget</button>
       </div>
     </Sheet>
+  );
+}
+
+type VendorRow = { id: string; name: string | null; company_name: string | null; phone: string | null };
+const vendorName = (v: VendorRow | null | undefined) => (v ? v.name || v.company_name || formatPhone(v.phone) || "Unnamed vendor" : null);
+
+/**
+ * The line's vendor, searched (Coy, 2026-10-06: "I need to be able to search and add a vendor").
+ * Every vendor in the org is listed: one who already prices the item pins this line to their price;
+ * one who doesn't gets a price on the item (this line's) first; a name typed that isn't a vendor
+ * becomes one, on Coy's tap.
+ */
+function VendorField({ line, sources, onPin, onPick }: {
+  line: Line; sources: Source[]; onPin: (sourceId: string | null) => void;
+  onPick: (vendor: { id: string } | { name: string }) => Promise<string | null>;
+}) {
+  const [q, setQ] = useState("");
+  const [open, setOpen] = useState(false);
+  const [all, setAll] = useState<VendorRow[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => {
+    if (!open || all) return;
+    let off = false;
+    call("/api/vendors", "GET").then((b) => { if (!off) setAll(b.vendors as VendorRow[]); }).catch(() => { if (!off) setAll([]); });
+    return () => { off = true; };
+  }, [open, all]);
+  const current = sources.find((s) => s.id === line.source_id)?.vendor ?? sources.find((s) => s.vendor?.id === line.vendor_contact_id)?.vendor ?? null;
+  const priced = new Map(sources.filter((s) => s.vendor).map((s) => [s.vendor!.id, s]));
+  const words = q.trim().toLowerCase();
+  const list = (all ?? []).filter((v) => !words || [v.name, v.company_name, v.phone].some((x) => x?.toLowerCase().includes(words)))
+    .sort((a, b) => Number(priced.has(b.id)) - Number(priced.has(a.id)) || (vendorName(a) ?? "").localeCompare(vendorName(b) ?? ""))
+    .slice(0, 30);
+  const exact = (all ?? []).some((v) => (vendorName(v) ?? "").toLowerCase() === words);
+  const pick = async (v: { id: string } | { name: string }) => {
+    setBusy(true); setErr(null);
+    const e = await onPick(v);
+    setBusy(false);
+    if (e) setErr(e); else { setOpen(false); setQ(""); if ("name" in v) setAll(null); }
+  };
+  const row: React.CSSProperties = { minHeight: 38, padding: "6px 10px", borderTop: `1px solid ${T.hairSoft}`, cursor: "pointer", width: "100%", textAlign: "left", display: "flex", alignItems: "center", gap: 8, fontSize: F.sm };
+  return (
+    <div>
+      <div className="flex items-center gap-2" style={{ fontSize: F.sm }}>
+        <span style={{ flex: 1, minWidth: 0, ...clip }}>
+          <b>{vendorName(current) ?? "No vendor"}</b>
+          {line.source_pinned ? <span style={{ color: T.ink3 }}> · this line only</span> : current ? <span style={{ color: T.ink3 }}> · the item&apos;s default</span> : null}
+        </span>
+        {line.source_pinned && <button onClick={() => onPin(null)} style={{ fontSize: F.xs, color: T.chalk, cursor: "pointer" }}>↺ Default</button>}
+        <button onClick={() => setOpen((o) => !o)} style={{ fontSize: F.xs, color: T.chalk, cursor: "pointer" }}>{open ? "Close" : "Change"}</button>
+      </div>
+      {open && (
+        <div className="mt-2 rounded" style={{ border: `1px solid ${T.hair}`, overflow: "hidden" }}>
+          <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search vendors or type a new one" aria-label="Search vendors"
+            style={{ height: 36, width: "100%", border: 0, borderBottom: `1px solid ${T.hairSoft}`, background: T.card, padding: "0 10px", fontSize: F.sm }} />
+          <div style={{ maxHeight: 260, overflowY: "auto", opacity: busy ? 0.5 : 1 }}>
+            {all === null && <div style={{ padding: 10, fontSize: F.xs, color: T.ink3 }}>Loading vendors…</div>}
+            {list.map((v) => {
+              const s = priced.get(v.id);
+              return (
+                <button key={v.id} disabled={busy} style={row} onClick={() => void (s ? (onPin(s.id), setOpen(false), setQ("")) : pick({ id: v.id }))}>
+                  <span style={{ flex: 1, minWidth: 0, ...clip }}>{vendorName(v)}{v.name && v.company_name ? <span style={{ color: T.ink3 }}> · {v.company_name}</span> : null}</span>
+                  <span style={{ fontSize: F.xs, color: s ? T.ink : T.ink3, ...nums }}>{s ? (s.unit_cost === null ? "no price" : `${money(s.unit_cost)}/${line.unit || "unit"}`) : "add at this line's price"}</span>
+                </button>
+              );
+            })}
+            {all !== null && list.length === 0 && !words && <div style={{ padding: 10, fontSize: F.xs, color: T.ink3 }}>No vendors yet.</div>}
+            {words && !exact && (
+              <button disabled={busy} style={{ ...row, color: T.chalk, fontWeight: 600 }} onClick={() => void pick({ name: q.trim() })}>
+                + Add vendor &ldquo;{q.trim()}&rdquo;
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+      {err && <div style={{ fontSize: F.xs, color: T.red, marginTop: 4 }}>{err}</div>}
+    </div>
   );
 }
 

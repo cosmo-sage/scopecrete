@@ -317,7 +317,10 @@ export function PriceBook({ pick }: { pick?: PricePick } = {}) {
         </div>
       )}
 
-      <div className="flex gap-1 mt-3" role="tablist" aria-label="Price book">
+      {/* The tabs and, on Cards, the find / view / columns row beside them
+          (Coy, 2026-10-06: "put this whole row up on the same row"). */}
+      <div className="flex items-center gap-2 flex-wrap mt-3">
+      <div className="flex gap-1" role="tablist" aria-label="Price book">
         {(pick ? (["cards", "assemblies"] as const) : (["cards", "assemblies", "defaults"] as const)).map((k) => (
           <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)} className="rounded px-3"
             style={{ height: 32, background: tab === k ? T.ink : T.card, color: tab === k ? T.card : T.ink2, border: `1px solid ${tab === k ? T.ink : T.hair}`,
@@ -326,12 +329,7 @@ export function PriceBook({ pick }: { pick?: PricePick } = {}) {
           </button>
         ))}
       </div>
-
-      {tab === "defaults" ? <div className="mt-3 rounded" style={{ background: T.card, border: `1px solid ${T.hair}` }}><PricingDefaults /><ProjectTypes /></div>
-        : tab === "assemblies" ? <Assemblies cards={items ?? []}
-          onPick={pick?.onAssembly ? (id, name) => void took(id, name, () => pick.onAssembly!(id, name)) : undefined} /> : (<>
-      {/* ---- find, view ---- */}
-      <div className="flex items-center gap-2 flex-wrap mt-3">
+      {tab === "cards" && <>
         <div style={{ flex: 1, minWidth: 180, maxWidth: 360 }}><SearchBubble value={q} onChange={setQ} autoFocus={false} placeholder="Find: 3000, rebar, Angelle, item #…" /></div>
         <div className="flex rounded overflow-hidden" role="tablist" aria-label="View" style={{ border: `1px solid ${T.hair}` }}>
           {(["group", "vendor"] as const).map((v) => (
@@ -368,7 +366,12 @@ export function PriceBook({ pick }: { pick?: PricePick } = {}) {
           </div>
         )}
         <span style={{ fontSize: F.xs, color: T.ink3 }}>{active.length} card{active.length === 1 ? "" : "s"} · {active.filter((c) => c.unit_cost === null).length} without a cost</span>
+      </>}
       </div>
+
+      {tab === "defaults" ? <div className="mt-3 rounded" style={{ background: T.card, border: `1px solid ${T.hair}` }}><PricingDefaults /><ProjectTypes /></div>
+        : tab === "assemblies" ? <Assemblies cards={items ?? []}
+          onPick={pick?.onAssembly ? (id, name) => void took(id, name, () => pick.onAssembly!(id, name)) : undefined} /> : (<>
 
       {note && <div className="mt-2 rounded px-3 py-2 flex items-center gap-2" style={{ fontSize: F.sm, background: T.greenDim, color: T.ink }}>
         <span className="flex-1">{note}</span><button onClick={() => setNote(null)} aria-label="Dismiss" style={{ color: T.ink3, cursor: "pointer" }}>×</button></div>}

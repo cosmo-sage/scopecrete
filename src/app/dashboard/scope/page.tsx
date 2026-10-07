@@ -73,6 +73,9 @@ export default function JobsBoard() {
   // from the ☰ panel (Coy, 2026-10-06). Remembered on this device.
   const [phoneView, setPhoneView] = useState<"board" | "list">("board");
   const [stagesOpen, setStagesOpen] = useState(false);
+  // On a desktop: the board, or every job in one table (Coy, 2026-10-06:
+  // "Can I have a list (table) view as well?"). Remembered on this device.
+  const [deskView, setDeskView] = useState<"board" | "table">("board");
   useEffect(() => {
     let off = false;
     Promise.resolve().then(() => {
@@ -82,6 +85,7 @@ export default function JobsBoard() {
         if (v && BOARD_SORTS.some((x) => x.k === v.sort)) setSortState(v.sort);
         if (v && Array.isArray(v.types) && Array.isArray(v.cities)) setFilterState({ types: v.types, cities: v.cities });
         if (localStorage.getItem("sc:jobs-phone-view") === "list") setPhoneView("list");
+        if (localStorage.getItem("sc:jobs-desk-view") === "table") setDeskView("table");
       } catch { /* no saved view */ }
     });
     return () => { off = true; };
@@ -96,6 +100,11 @@ export default function JobsBoard() {
     setPhoneView(v);
     try { localStorage.setItem("sc:jobs-phone-view", v); } catch { /* private window */ }
     if (v === "board") requestAnimationFrame(() => goTo(col));
+  };
+  const flipDesk = () => {
+    const v = deskView === "board" ? "table" : "board";
+    setDeskView(v);
+    try { localStorage.setItem("sc:jobs-desk-view", v); } catch { /* private window */ }
   };
   // ?new=1 — Dusty's + menu → New job (2026-10-01).
   useEffect(() => {
@@ -220,6 +229,19 @@ export default function JobsBoard() {
               ? <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" aria-hidden="true"><path d="M7 5h10M7 10h10M7 15h10" /><circle cx="3.5" cy="5" r=".9" fill="currentColor" /><circle cx="3.5" cy="10" r=".9" fill="currentColor" /><circle cx="3.5" cy="15" r=".9" fill="currentColor" /></svg>
               : <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" aria-hidden="true"><rect x="2.5" y="3" width="4" height="14" rx=".8" /><rect x="8" y="3" width="4" height="9" rx=".8" /><rect x="13.5" y="3" width="4" height="11" rx=".8" /></svg>}
           </button>
+          <div className="hidden lg:flex rounded overflow-hidden shrink-0" role="tablist" aria-label="View" style={{ border: `1px solid ${T.hair}` }}>
+            {(["board", "table"] as const).map((v) => (
+              <button key={v} role="tab" aria-selected={deskView === v} onClick={() => { if (deskView !== v) flipDesk(); }}
+                className="flex items-center gap-1.5 px-2.5" title={v === "board" ? "Board by stage" : "Every job in a table"}
+                style={{ height: 30, background: deskView === v ? T.ink : T.card, color: deskView === v ? T.card : T.ink2, border: "none",
+                         fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", letterSpacing: ".05em", cursor: "pointer" }}>
+                {v === "board"
+                  ? <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" aria-hidden="true"><rect x="2.5" y="3" width="4" height="14" rx=".8" /><rect x="8" y="3" width="4" height="9" rx=".8" /><rect x="13.5" y="3" width="4" height="11" rx=".8" /></svg>
+                  : <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" aria-hidden="true"><rect x="2.5" y="3.5" width="15" height="13" rx="1" /><path d="M2.5 8h15M2.5 12.3h15M8 8v8.5" /></svg>}
+                {v === "board" ? "Board" : "Table"}
+              </button>
+            ))}
+          </div>
           {!limited && <button onClick={() => setNewOpen(true)} className="rounded px-3 sc-new-btn shrink-0"
             style={{ height: 34, background: T.hiviz, color: T.onHiviz, fontFamily: disp, fontSize: F.sm, fontWeight: 600,
                      textTransform: "uppercase", letterSpacing: ".06em", cursor: "pointer", whiteSpace: "nowrap" }}>
@@ -279,8 +301,14 @@ export default function JobsBoard() {
               ))}
           </div>
         )}
+        {deskView === "table" && (
+          <div className="hidden lg:block px-5 pb-6">
+            <JobsTable jobs={visible} busy={busy} readOnly={limited} sort={sort} onSort={setSort}
+              onMove={(j) => setMoving(j)} onAccept={(j) => void patch(j.id, { accept: true })} />
+          </div>
+        )}
         <div ref={lane} onScroll={onScroll}
-          className={`flex-1 ${phoneView === "list" ? "hidden lg:flex" : "flex"} overflow-x-auto snap-x snap-mandatory lg:snap-none lg:gap-2 lg:p-2`}
+          className={`flex-1 ${phoneView === "list" ? "hidden" : "flex"} ${deskView === "table" ? "lg:hidden" : "lg:flex"} overflow-x-auto snap-x snap-mandatory lg:snap-none lg:gap-2 lg:p-2`}
           style={{ scrollbarWidth: "none" }}>
           {STAGES.map((s, i) => (
             <section key={s.k} className="snap-start shrink-0 w-full lg:w-auto lg:flex-1 lg:min-w-[200px] flex flex-col"
@@ -329,6 +357,106 @@ export default function JobsBoard() {
           </nav>
         </div>
       )}
+    </div>
+  );
+}
+
+/* ----------------------------------------------------------------- table */
+
+// Every job in one table on a desktop (Coy, 2026-10-06): the job and what it
+// is, who for, where, its stage, how it came in, and how long it has sat.
+const STAGE_HUE: Record<string, string> = {
+  new: T.hiviz, consult: T.violet, estimating: T.chalk, follow: T.hivizText, wip: T.green, complete: T.ink3, lost: T.red,
+};
+
+function JobsTable({ jobs, busy, readOnly, sort, onSort, onMove, onAccept }: {
+  jobs: Job[]; busy: string | null; readOnly?: boolean; sort: BoardSort; onSort: (s: BoardSort) => void;
+  onMove: (j: Job) => void; onAccept: (j: Job) => void;
+}) {
+  const router = useRouter();
+  const th = (label: string, k?: BoardSort, alt?: BoardSort, align: "left" | "right" = "left"): React.ReactNode => {
+    const on = k && (sort === k || sort === alt);
+    return (
+      <th scope="col" style={{ ...eyebrow, textAlign: align, padding: "10px 12px", color: on ? T.ink : T.ink3, whiteSpace: "nowrap",
+                                position: "sticky", top: "calc(var(--sc-head) + var(--sc-subhead, 0px))", background: T.slab, zIndex: 1, borderBottom: `1px solid ${T.hair}` }}>
+        {k ? (
+          <button onClick={() => onSort(sort === k && alt ? alt : k)} style={{ all: "unset", cursor: "pointer" }}
+            title={`Sort by ${label.toLowerCase()}`}>
+            {label}{on ? (sort === "oldest" ? " ↑" : " ↓") : ""}
+          </button>
+        ) : label}
+      </th>
+    );
+  };
+  if (!jobs.length) {
+    return <div className="rounded px-3 py-6 text-center" style={{ fontSize: F.sm, color: T.ink3, border: `1px dashed ${T.hair}` }}>No jobs match.</div>;
+  }
+  return (
+    <div className="rounded" style={{ background: T.card, border: `1px solid ${T.hair}`, boxShadow: "0 1px 2px rgba(0,0,0,.04)" }}>
+      <table className="w-full" style={{ borderCollapse: "separate", borderSpacing: 0, fontSize: F.sm }}>
+        <thead>
+          <tr>
+            {th("Job", "az")}
+            {th("Customer")}
+            {th("Stage")}
+            {th("Type")}
+            {th("Source")}
+            {th("Sections", undefined, undefined, "right")}
+            {th("Created", "newest", "oldest")}
+            {th("In stage", "moved")}
+            {!readOnly && <th style={{ position: "sticky", top: "calc(var(--sc-head) + var(--sc-subhead, 0px))", background: T.slab, borderBottom: `1px solid ${T.hair}` }} />}
+          </tr>
+        </thead>
+        <tbody>
+          {jobs.map((j, i) => {
+            const st = stageOf(j.status);
+            const hue = STAGE_HUE[st.k] ?? T.ink3;
+            const tag = j.status ? STATUS_TAG[j.status] : null;
+            const who = j.contact_name?.trim() || (j.contact_phone ? formatPhone(j.contact_phone) : null);
+            const source = j.referred_by_name ? `via ${j.referred_by_name}` : j.lead_source ? SOURCE_LABEL[j.lead_source] : null;
+            const td: React.CSSProperties = { padding: "9px 12px", borderTop: i ? `1px solid ${T.hairSoft}` : "none", verticalAlign: "top" };
+            return (
+              <tr key={j.id} className="sc-job-row" onClick={(e) => { if (!(e.target as HTMLElement).closest("button,a")) router.push(`/dashboard/scope/${j.id}`); }}
+                style={{ cursor: "pointer", opacity: busy === j.id ? 0.5 : 1 }}>
+                <td style={{ ...td, maxWidth: 360 }}>
+                  <Link href={`/dashboard/scope/${j.id}`} className="no-underline" style={{ fontFamily: disp, fontSize: F.md, fontWeight: 600, color: T.ink }}>
+                    {j.title || "Untitled job"}
+                  </Link>
+                  {j.description && <div style={{ fontSize: F.xs, color: T.ink3, marginTop: 2, ...clip }}>{j.description}</div>}
+                  {j.flag_reason && <div style={{ fontSize: F.xs, color: T.hivizText, marginTop: 2, ...clip }}>⚑ {j.flag_reason}</div>}
+                </td>
+                <td style={{ ...td, maxWidth: 260 }}>
+                  <div style={{ color: who ? T.ink : T.ink3, ...clip }}>{who ?? "No customer yet"}</div>
+                  {(j.city || j.address) && <div style={{ fontSize: F.xs, color: T.ink3, ...clip }}>{j.city ?? j.address}</div>}
+                </td>
+                <td style={td}>
+                  <span className="inline-flex items-center gap-1.5 rounded-full px-2" style={{ height: 22, background: `color-mix(in srgb, ${hue} 14%, ${T.card})`, color: T.ink, fontSize: F.xs, whiteSpace: "nowrap" }}>
+                    <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: 4, background: hue }} />
+                    {st.label}{tag ? <span style={{ color: T.ink3 }}>· {tag}</span> : null}
+                  </span>
+                  {!j.counts_toward_value && <div style={{ ...eyebrow, fontSize: F.micro, color: T.hiviz, marginTop: 3 }}>Suggested</div>}
+                </td>
+                <td style={{ ...td, whiteSpace: "nowrap", color: j.job_type ? T.ink2 : T.hiviz }}>{j.job_type ? JOB_TYPE_LABEL[j.job_type] ?? j.job_type : "Type?"}</td>
+                <td style={{ ...td, color: source ? T.ink2 : T.ink3, maxWidth: 180, ...clip }}>{source ?? "—"}</td>
+                <td style={{ ...td, ...nums, textAlign: "right", color: j.section_count ? T.ink2 : T.hiviz }}>{j.section_count || "—"}</td>
+                <td style={{ ...td, ...nums, whiteSpace: "nowrap", color: T.ink2 }}>
+                  {j.created_at ? new Date(j.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/Chicago" }) : "—"}
+                </td>
+                <td style={{ ...td, ...nums, whiteSpace: "nowrap", color: T.ink3 }}>{relTime(j.stage_changed_at ?? j.created_at) ?? "—"}</td>
+                {!readOnly && (
+                  <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }}>
+                    {!j.counts_toward_value
+                      ? <button disabled={busy === j.id} onClick={() => onAccept(j)} className="rounded px-2.5"
+                          style={{ height: 26, background: T.ink, color: T.card, border: `1px solid ${T.ink}`, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", letterSpacing: ".05em", cursor: "pointer" }}>Accept</button>
+                      : <button disabled={busy === j.id} onClick={() => onMove(j)} className="rounded px-2.5"
+                          style={{ height: 26, background: T.card, color: T.ink2, border: `1px solid ${T.hair}`, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", letterSpacing: ".05em", cursor: "pointer" }}>Move</button>}
+                  </td>
+                )}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }

@@ -31,7 +31,7 @@ import Link from "next/link";
 import { setDustyLive } from "@/lib/v34/dusty-live";
 import { usePathname } from "next/navigation";
 import { T, F, disp, body, eyebrow, nums } from "@/lib/v34/tokens";
-import { NavIcon, Sheet } from "@/components/v34/primitives";
+import { NavIcon, OrgNameContext, Sheet } from "@/components/v34/primitives";
 import { DustyPanel } from "@/components/v34/dusty-panel";
 import { DustyAvatar } from "@/components/v34/dusty-avatar";
 import { ActivityLine } from "@/components/v34/activity-line";
@@ -297,7 +297,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </nav>
 
       <main className={["flex-1 min-w-0 overflow-x-clip pb-[var(--sc-foot)] lg:pb-0 lg:pl-[84px]", dustyOpen ? "sc-with-dusty" : ""].join(" ")}>
-        <AccessContext.Provider value={access}>{children}</AccessContext.Provider>
+        <AccessContext.Provider value={access}><OrgNameContext.Provider value={me?.org_name ?? null}>{children}</OrgNameContext.Provider></AccessContext.Provider>
       </main>
       <ArchiveToast />
       {me && !limited && <AlertPopups />}

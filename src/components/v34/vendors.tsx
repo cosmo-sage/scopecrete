@@ -74,7 +74,7 @@ export function VendorList() {
 
   return (
     <>
-    <PageHeader title="Vendors" count={rows ? rows.length : null} width={1156}
+    <PageHeader title="Vendors" count={rows ? rows.length : null}
       sub="Who you buy from and who you hire — suppliers, subs and equipment — with their prices and receipts."
       actions={<>
         <SearchToggle open={finding || !!q} onToggle={() => { if (finding || q) { setQ(""); setFinding(false); } else setFinding(true); }} label="Find a vendor" />
@@ -83,7 +83,7 @@ export function VendorList() {
       </>}>
       {(finding || q) && <div className="mt-2"><SearchBubble value={q} onChange={setQ} onClose={() => setFinding(false)} placeholder="Find a vendor, area, email…" /></div>}
     </PageHeader>
-    <div ref={measure} className="px-3 pb-3 mx-auto" style={{ maxWidth: 1180 }}>
+    <div ref={measure} className="px-3 pb-3 lg:px-5">
       {err && <div className="mb-2 rounded px-3 py-2" style={{ fontSize: F.sm, color: T.red, background: T.redDim }}>{err}</div>}
       {note && <div className="mb-2 rounded px-3 py-2 flex gap-2" style={{ fontSize: F.sm, background: T.greenDim }}><span style={{ flex: 1 }}>{note}</span><button onClick={() => setNote(null)} aria-label="Dismiss">×</button></div>}
       <div className="flex gap-2 flex-wrap items-center mb-2">

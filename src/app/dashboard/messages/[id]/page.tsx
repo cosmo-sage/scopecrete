@@ -49,7 +49,19 @@ export default function ChatThreadPage() {
   const [channelKey, setChannelKey] = useState<string | null>(search.get("channel"));
   const [filter, setFilter] = useState<ChannelFilter>("all");
   // On a phone the whole header folds to the name's row (Coy, 2026-10-05: "takes up too much space"), remembered on the device.
-  const [folded, setFolded] = useState(() => { try { return typeof window !== "undefined" && localStorage.getItem("sc:thread-head-folded") === "1"; } catch { return false; } });
+  // Only on a touch screen: a desktop with a mouse never folds or shows the
+  // button, whatever the window's width (Coy, 2026-10-06).
+  const [foldPref, setFolded] = useState(() => { try { return typeof window !== "undefined" && localStorage.getItem("sc:thread-head-folded") === "1"; } catch { return false; } });
+  const [touch, setTouch] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia?.("(pointer: coarse)");
+    if (!mq) return;
+    const on = () => setTouch(mq.matches);
+    void Promise.resolve().then(on);
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, []);
+  const folded = foldPref && touch;
   const fold = (v: boolean) => { setFolded(v); try { localStorage.setItem("sc:thread-head-folded", v ? "1" : "0"); } catch { /* none */ } };
   // Lines (Claude Design package 9): the org's numbers, when it has two or more.
   const [orgLines, setOrgLines] = useState<Array<{ id: string; name: string; phone: string; color: string; provider: string | null; is_primary: boolean }>>([]);
@@ -304,8 +316,8 @@ export default function ChatThreadPage() {
               <button onClick={askDustyBrief} aria-label="Ask Dusty where this stands and the next steps" title="Dusty: where this stands and the next steps"
                 className="flex items-center justify-center" style={{ ...pill, padding: "0 6px", border: `1px solid ${T.hiviz}` }}><Emblem size={22} spin /></button>
             </span>
-            <button onClick={() => fold(!folded)} className="lg:hidden shrink-0" aria-expanded={!folded} aria-label={folded ? "Show the channels" : "Fold the header"}
-              style={{ ...pill, padding: "0 8px" }}>{folded ? <CaretDown size={13} /> : <CaretUp size={13} />}</button>
+            {touch && <button onClick={() => fold(!folded)} className="lg:hidden shrink-0" aria-expanded={!folded} aria-label={folded ? "Show the channels" : "Fold the header"}
+              style={{ ...pill, padding: "0 8px" }}>{folded ? <CaretDown size={13} /> : <CaretUp size={13} />}</button>}
             <div className="relative">
               <button onClick={() => setMore((v) => !v)} aria-expanded={more} aria-label="More" style={{ ...pill, padding: "0 8px" }}>⋯</button>
               {more && (

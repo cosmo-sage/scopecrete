@@ -149,7 +149,7 @@ export function Customers() {
 
   return (
     <>
-    <PageHeader title="Customers" count={rows ? rows.length : null} width={view === "table" ? 1376 : 976}
+    <PageHeader title="Customers" count={rows ? rows.length : null}
       sub="Everyone you do the work for — homeowners, companies and public bodies — with their people and their jobs."
       actions={<>
         {!wide && viewTabs}
@@ -158,7 +158,7 @@ export function Customers() {
       </>}>
       {(finding || q) && <div className="mt-2"><SearchBubble value={q} onChange={setQ} onClose={() => setFinding(false)} placeholder="Find a name, address, phone, what was said…" /></div>}
     </PageHeader>
-    <div ref={measure} className="mx-auto" style={{ maxWidth: view === "table" ? 1400 : 1000, padding: "0 12px 24px" }}>
+    <div ref={measure} className="px-3 pb-6 lg:px-5">
 
       <div className="flex gap-2 flex-wrap items-center mb-2">
         {wide ? (

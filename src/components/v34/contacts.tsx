@@ -107,7 +107,7 @@ export function ContactsPage() {
 
   return (
     <>
-    <PageHeader title="Contacts" count={rows ? rows.length : null} width={1156}
+    <PageHeader title="Contacts" count={rows ? rows.length : null}
       sub="Every person's numbers, emails and address in one book — whoever they are to you."
       actions={<>
         <select value={sort} onChange={(e) => setSortSaved(e.target.value as BookSort)} aria-label="Sort" style={{ ...field, width: "auto", height: 30 }}>
@@ -118,7 +118,7 @@ export function ContactsPage() {
       </>}>
       {(finding || q) && <div className="mt-2"><SearchBubble value={q} onChange={setQ} onClose={() => setFinding(false)} placeholder="Find a name, company, number, email, address…" /></div>}
     </PageHeader>
-    <div ref={measure} className="px-3 pb-3 mx-auto" style={{ maxWidth: 1180 }}>
+    <div ref={measure} className="px-3 pb-3 lg:px-5">
       <div className="flex gap-1 flex-wrap mb-2" role="tablist" aria-label="What they are">
         {FILTERS.map((f) => {
           const on = role === f.k, n = counts.get(f.k) ?? 0;

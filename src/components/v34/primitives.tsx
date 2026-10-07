@@ -407,6 +407,40 @@ export function SearchBubble({ value, onChange, onClose, placeholder, autoFocus 
  *  what the page is for, then the page's own search or filter rows. It stays
  *  at the top while the page scrolls under it (.sc-subhead). `width` lines it
  *  up with the page's centred content. */
+// The org's name, set once by the dashboard layout, for the page headers.
+export const OrgNameContext = React.createContext<string | null>(null);
+
+// The page's one-line description behind an ⓘ beside its title (Coy,
+// 2026-10-06: "this line … can be an 'i' icon next to jobs").
+export function InfoTip({ text, label = "About this page" }: { text: React.ReactNode; label?: string }) {
+  const [open, setOpen] = React.useState(false);
+  const box = React.useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: Event) => { if (box.current && !box.current.contains(e.target as Node)) setOpen(false); };
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("pointerdown", away);
+    document.addEventListener("keydown", esc);
+    return () => { document.removeEventListener("pointerdown", away); document.removeEventListener("keydown", esc); };
+  }, [open]);
+  return (
+    <span ref={box} className="relative inline-flex" style={{ verticalAlign: "middle" }}>
+      <button type="button" aria-label={label} aria-expanded={open} onClick={() => setOpen(o => !o)}
+        title={typeof text === "string" ? text : undefined}
+        className="inline-flex items-center justify-center rounded-full"
+        style={{ width: 16, height: 16, border: `1px solid ${T.ink3}`, color: T.ink3, fontFamily: body, fontSize: 10, fontWeight: 700, lineHeight: 1, background: "transparent", cursor: "pointer", fontStyle: "italic" }}>
+        i
+      </button>
+      {open && (
+        <span role="note" className="absolute z-30 rounded"
+          style={{ top: "calc(100% + 6px)", left: -8, width: 260, maxWidth: "80vw", padding: "8px 10px", background: T.card, border: `1px solid ${T.hair}`, boxShadow: "0 6px 18px rgba(0,0,0,.12)", color: T.ink2, fontFamily: body, fontSize: 12, fontWeight: 400, lineHeight: 1.4, textTransform: "none", letterSpacing: 0 }}>
+          {text}
+        </span>
+      )}
+    </span>
+  );
+}
+
 export function PageHeader({ title, count, sub, menu, actions, children, width }: {
   title: React.ReactNode; count?: React.ReactNode; sub?: React.ReactNode; menu?: React.ReactNode;
   actions?: React.ReactNode; children?: React.ReactNode; width?: number;
@@ -414,6 +448,7 @@ export function PageHeader({ title, count, sub, menu, actions, children, width }
   // Its height, for anything else on the page that sticks below it (Files'
   // folder column): --sc-subhead.
   const ref = React.useRef<HTMLDivElement>(null);
+  const org = React.useContext(OrgNameContext);
   useEffect(() => {
     const el = ref.current, root = document.documentElement;
     if (!el || typeof ResizeObserver === "undefined") return;
@@ -421,19 +456,24 @@ export function PageHeader({ title, count, sub, menu, actions, children, width }
     ro.observe(el);
     return () => { ro.disconnect(); root.style.removeProperty("--sc-subhead"); };
   }, []);
+  // The org's name on top, a little bigger; the page's name small under it,
+  // its description behind ⓘ (Coy, 2026-10-06).
   return (
     <div ref={ref} className="sc-subhead">
       <div className="mx-auto" style={{ maxWidth: width }}>
         <div className="flex items-center gap-2" style={{ minWidth: 0 }}>
           {menu}
-          <h1 className="sc-subhead-title" style={{ fontFamily: disp, fontWeight: 600, margin: 0, lineHeight: 1.05, color: T.ink, minWidth: 0, flexShrink: 0 }}>
-            {title}
-            {count != null && count !== "" && <span className="sc-subhead-count" style={{ ...nums, fontWeight: 500, color: T.ink3, marginLeft: 8 }}>{count}</span>}
-          </h1>
+          <div style={{ minWidth: 0, flexShrink: 1 }}>
+            {org && <div className="sc-subhead-org" style={{ fontFamily: disp, fontWeight: 600, lineHeight: 1.1, color: T.ink, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{org}</div>}
+            <h1 className="sc-subhead-title flex items-center gap-1.5" style={{ fontFamily: disp, fontWeight: 600, margin: 0, lineHeight: 1.15, color: org ? T.ink2 : T.ink, textTransform: "uppercase", letterSpacing: ".06em", whiteSpace: "nowrap" }}>
+              <span>{title}</span>
+              {count != null && count !== "" && <span className="sc-subhead-count" style={{ ...nums, fontWeight: 500, color: T.ink3, letterSpacing: 0 }}>{count}</span>}
+              {sub && <InfoTip text={sub} />}
+            </h1>
+          </div>
           <span style={{ flex: 1 }} />
           {actions}
         </div>
-        {sub && <div className="sc-subhead-sub" style={{ color: T.ink3, marginTop: 2, lineHeight: 1.35 }}>{sub}</div>}
         {children}
       </div>
     </div>

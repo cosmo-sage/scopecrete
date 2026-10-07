@@ -45,5 +45,6 @@ test("after sign-in, only a dashboard or invite path is followed", () => {
 test("a customer's link points at scopecrete.ai, never an org's dashboard", () => {
   assert.equal(publicOrigin("sbuild.app.scopecrete.ai", "https://sbuild.app.scopecrete.ai"), "https://scopecrete.ai");
   assert.equal(publicOrigin("app.scopecrete.ai", "https://app.scopecrete.ai"), "https://scopecrete.ai");
-  assert.equal(publicOrigin("x-coy2.vercel.app", "https://x-coy2.vercel.app"), "https://x-coy2.vercel.app");
+  assert.equal(publicOrigin("x-coy2.vercel.app", "https://x-coy2.vercel.app"), "https://scopecrete.ai");
+  assert.equal(publicOrigin("localhost:3000", "http://localhost:3000"), "http://localhost:3000");
 });

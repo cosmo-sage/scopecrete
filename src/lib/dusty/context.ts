@@ -17,6 +17,7 @@ import { loadTakeoff, takeoffTotalsFor } from "@/lib/plans-server";
 import { fmtQty, scaleLabel } from "@/lib/takeoff";
 import { settleCallNotes } from "@/lib/call-notes-server";
 import { isArchivedNow } from "@/lib/archive";
+import { jobValues } from "@/lib/job-totals";
 import { assemble, coldContext, scopeLines, type Assembled, type Block } from "./prompt";
 import { mentioned, searchTerms } from "./mentions";
 
@@ -925,6 +926,28 @@ export async function reachBlocks(sb: Sb, orgId: string, ref: ContextRef, asked:
     if (em.length) out.push({ title: `Emails filed on ${who.name}`, trimmable: true, lines: em.map((e) => `- [${day(e.created_at)}] "${e.subject || "(no subject)"}" — ${(e.text_body ?? "").replace(/\s+/g, " ").slice(0, 700)}`) });
     if (files) out.push({ ...files, title: `${who.name}'s files — ${files.title}` });
   }
+  // Whether each named job has a budget, and its price, by the job page's own
+  // numbers — so "does it have a budget?" is answered here, not by sending Dusty
+  // to open the job (2026-10-07: told to, he tried and hit Vercel's login).
+  const values = hitJobs.length
+    ? await jobValues(sb, orgId, hitJobs.map((j) => ({ id: j.id, duration_days: null }))).catch(() => null)
+    : null;
+  const lineCounts = new Map<string, number>();
+  if (hitJobs.length) {
+    const { data: ests } = await sb.from("estimates").select("job_id, status, estimate_line_items(count)")
+      .eq("org_id", orgId).in("job_id", hitJobs.map((j) => j.id));
+    for (const e of (ests ?? []) as Array<{ job_id: string; status: string; estimate_line_items: Array<{ count: number }> | null }>) {
+      if (e.status === "draft") lineCounts.set(e.job_id, e.estimate_line_items?.[0]?.count ?? 0);
+    }
+  }
+  const budgetLine = (id: string) => {
+    if (!lineCounts.has(id)) return "Budget: none — no budget has been started on this job.";
+    const n = lineCounts.get(id) ?? 0;
+    if (!n) return "Budget: started, but it has no items yet.";
+    const v = values?.get(id);
+    const price = v?.total != null ? `$${Math.round(v.total).toLocaleString("en-US")}` : v?.why === "blocked" ? "no price yet — something on it is blocked (open the job's Budget to see what)" : "no price yet";
+    return `Budget: ${n} item${n === 1 ? "" : "s"} · price ${price}. The line-by-line budget is on the job's Budget view.`;
+  };
   for (const j of hitJobs) {
     const [{ data: secs }, cust] = await Promise.all([
       sb.from("job_sections").select("name, work_type, sqft_override, length_ft, width_ft, count_qty, count_unit").eq("org_id", orgId).eq("job_id", j.id).order("sort_order"),
@@ -937,7 +960,7 @@ export async function reachBlocks(sb: Sb, orgId: string, ref: ContextRef, asked:
         j.description ? `Scope summary: ${j.description}` : "No scope summary.",
         `Areas: ${((secs ?? []) as Array<{ name: string | null; work_type: string | null; sqft_override: number | null; length_ft: number | null; width_ft: number | null; count_qty: number | null; count_unit: string | null }>)
           .map((x) => `${x.name || x.work_type || "area"}${x.sqft_override ? ` ${Math.round(Number(x.sqft_override))} sf` : x.length_ft && x.width_ft ? ` ${x.length_ft}×${x.width_ft} ft` : x.count_qty ? ` ${x.count_qty} ${x.count_unit ?? "EA"}` : ""}`).join("; ") || "none yet"}`,
-        "Open the job for its budget and price — they are not in this chat.",
+        budgetLine(j.id),
       ],
     });
   }

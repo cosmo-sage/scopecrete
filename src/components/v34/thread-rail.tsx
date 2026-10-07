@@ -7,6 +7,8 @@
  *   ThreadDrawer   — phone, the same list in a 220px drawer behind ☰.
  *   NewThreadSheet — name it, then pull its people from a job, a customer, or
  *                    pick them by hand. A job or customer thread follows them.
+ *                    Or make it from a rule (migration 089): calls, texts and
+ *                    emails that fit a filter, no people (rule-feed.tsx).
  */
 import React, { useEffect, useMemo, useState } from "react";
 import { T, F, disp, eyebrow, nums, clip, BUCKET } from "@/lib/v34/tokens";
@@ -14,6 +16,8 @@ import { Sheet } from "@/components/v34/primitives";
 import { useThreads } from "@/components/v34/threads-ctx";
 import { initials, SYSTEM_KEYS, type SystemThreadKey } from "@/lib/v34/threads";
 import { STATUS_NAME } from "@/lib/jobs/stages";
+import { RuleForm, EMPTY_RULE } from "@/components/v34/rule-feed";
+import type { ThreadRule } from "@/lib/rule-threads";
 
 export const SYSTEM_THREADS: Record<SystemThreadKey, { label: string; color: string; icon: React.ReactNode }> = {
   all: { label: "All", color: T.ink, icon: <><path d="M3 5h14M3 10h14M3 15h14" /></> },
@@ -73,7 +77,8 @@ function ThreadCells({ onPick, wide }: { onPick?: () => void; wide?: boolean }) 
       <div style={{ height: 1, background: T.hairStrong, margin: "8px 10px 4px" }} />
       <div style={{ ...eyebrow, fontSize: 9, textAlign: wide ? "left" : "center", padding: wide ? "2px 12px" : 0, color: T.ink3 }}>Yours</div>
       {(custom ?? []).map((t) => {
-        const on = thread === t.id, n = customCounts[t.id] ?? t.count;
+        // A rule thread holds no people, so it shows no count here.
+        const on = thread === t.id, n = t.source === "rule" ? "" : customCounts[t.id] ?? t.count;
         return wide ? (
           <button key={t.id} onClick={() => go(t.id)} className="flex items-center gap-2.5 px-3 text-left" style={{ ...cell(on, T.hiviz), minHeight: 44 }}>
             <span className="shrink-0 flex items-center justify-center rounded" style={{ width: 26, height: 26, border: `1px solid ${T.hiviz}`, color: T.hiviz, fontFamily: disp, fontSize: 11, fontWeight: 700 }}>{initials(t.name)}</span>
@@ -121,7 +126,7 @@ export function ThreadDrawer() {
   );
 }
 
-type Pull = "job" | "customer" | "manual";
+type Pull = "job" | "customer" | "manual" | "rule";
 interface Person { id: string; name: string; bucket: string | null }
 const bucketColor = (b: string | null) => (b === "customer" ? BUCKET.customer : b === "vendor" ? BUCKET.vendor : b === "personal" ? BUCKET.personal : b === "spam" ? BUCKET.spam : T.ink2);
 
@@ -134,6 +139,7 @@ export function NewThreadSheet() {
   const [customers, setCustomers] = useState<Array<{ id: string; name: string }>>([]);
   const [people, setPeople] = useState<Array<{ contact_id: string; display_name: string; bucket: string | null }>>([]);
   const [pick, setPick] = useState("");
+  const [rule, setRule] = useState<ThreadRule>(EMPTY_RULE);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [find, setFind] = useState("");
   const [preview, setPreview] = useState<Person[] | null>(null);
@@ -155,7 +161,7 @@ export function NewThreadSheet() {
     return () => { off = true; };
   }, [open]);
   // Who it would start with.
-  const previewKey = pull === "manual" ? null : pick ? `${pull}=${pick}` : null;
+  const previewKey = pull === "manual" || pull === "rule" ? null : pick ? `${pull}=${pick}` : null;
   useEffect(() => {
     if (!previewKey) return;
     let off = false;
@@ -165,19 +171,19 @@ export function NewThreadSheet() {
   }, [previewKey]);
   const shownPreview: Person[] | null = pull === "manual"
     ? people.filter((p) => picked.has(p.contact_id)).map((p) => ({ id: p.contact_id, name: p.display_name, bucket: p.bucket }))
-    : previewKey ? preview : null;
+    : pull === "rule" ? null : previewKey ? preview : null;
   const matches = useMemo(() => {
     const q = find.trim().toLowerCase();
     return q ? people.filter((p) => p.display_name.toLowerCase().includes(q)).slice(0, 8) : [];
   }, [find, people]);
   if (!ctx) return null;
-  const close = () => { ctx.setNewThread(false); setName(""); setPick(""); setPicked(new Set()); setPreview(null); setErr(null); setFind(""); };
+  const close = () => { ctx.setNewThread(false); setName(""); setPick(""); setRule(EMPTY_RULE); setPicked(new Set()); setPreview(null); setErr(null); setFind(""); };
   const create = async () => {
     setBusy(true); setErr(null);
     try {
       const r = await fetch("/api/threads/custom", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
         name, source: pull, job_id: pull === "job" ? pick : undefined, customer_id: pull === "customer" ? pick : undefined,
-        contact_ids: pull === "manual" ? [...picked] : undefined }) });
+        contact_ids: pull === "manual" ? [...picked] : undefined, rule: pull === "rule" ? rule : undefined }) });
       const b = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(b.error || `HTTP ${r.status}`);
       ctx.refresh();
@@ -187,19 +193,27 @@ export function NewThreadSheet() {
   };
   const field: React.CSSProperties = { height: 38, width: "100%", border: `1px solid ${T.hairStrong}`, borderRadius: 4, padding: "0 10px", background: T.card, color: T.ink, fontSize: F.sm };
   const seg = (on: boolean): React.CSSProperties => ({ flex: 1, height: 32, border: "none", background: on ? T.ink : T.card, color: on ? T.card : T.ink2, fontFamily: disp, fontSize: F.xs, letterSpacing: ".08em", textTransform: "uppercase", cursor: "pointer" });
-  const ready = !!name.trim() && (pull === "manual" ? picked.size > 0 : !!pick);
+  const ready = !!name.trim() && (pull === "manual" ? picked.size > 0 : pull === "rule" ? rule.channels.length > 0 : !!pick);
   return (
     <Sheet open={open} onClose={close} title="New thread" sub="A thread is a set of people you want to see together.">
       <div className="px-4 py-3 flex flex-col gap-3">
         <label className="flex flex-col gap-1"><span style={eyebrow}>Name</span>
           <input value={name} onChange={(e) => setName(e.target.value)} maxLength={80} placeholder="Wilson Driveway Repair" style={field} /></label>
         <div className="flex flex-col gap-1">
-          <span style={eyebrow}>Pull contacts from</span>
+          <span style={eyebrow}>Make it from</span>
           <div className="flex overflow-hidden" style={{ border: `1px solid ${T.hairStrong}`, borderRadius: 4 }}>
-            {(["job", "customer", "manual"] as Pull[]).map((p) => (
-              <button key={p} onClick={() => { setPull(p); setPick(""); setPreview(null); }} style={seg(pull === p)}>{p === "job" ? "A job" : p === "customer" ? "A customer" : "Hand-picked"}</button>
+            {(["job", "customer", "manual", "rule"] as Pull[]).map((p) => (
+              <button key={p} onClick={() => { setPull(p); setPick(""); setPreview(null); }} style={seg(pull === p)}>{p === "job" ? "A job" : p === "customer" ? "A customer" : p === "manual" ? "Hand-picked" : "A rule"}</button>
             ))}
           </div>
+          {pull === "rule" && (
+            <div className="flex flex-col gap-2 mt-1">
+              <span style={{ fontSize: F.xs, color: T.ink3, lineHeight: 1.45 }}>
+                Every call, text or email that fits shows up here as it comes in — today&apos;s calls on a line, everything into the email inbox, texts to vendors that say &ldquo;bid&rdquo;. Nobody is moved anywhere.
+              </span>
+              <RuleForm rule={rule} onChange={setRule} />
+            </div>
+          )}
           {pull === "job" && (
             <select value={pick} onChange={(e) => { setPick(e.target.value); const j = jobs.find((x) => x.id === e.target.value); if (j && !name.trim()) setName(j.title ?? ""); }} style={field} aria-label="Job">
               <option value="">Pick a job</option>

@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
+import { sanitizeRule } from "@/lib/rule-threads";
 
 /**
  * One thread Coy made (migration 073).
- * PATCH { name }   — rename.
+ * PATCH { name }   — rename. PATCH { rule } — change a rule thread's filter (089).
  * DELETE           — retire it (archived_at); its contacts are untouched.
  * Session client; org from the session.
  */
@@ -29,6 +30,12 @@ async function change(req: NextRequest, id: string, patch: (b: Record<string, un
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
   return change(req, id, (b) => {
+    if (b.rule !== undefined) {
+      const rule = sanitizeRule(b.rule);
+      if (!rule) return "Pick at least one of calls, texts or emails.";
+      const name = typeof b.name === "string" ? b.name.replace(/\s+/g, " ").trim().slice(0, 80) : "";
+      return name ? { rule, name } : { rule };
+    }
     const name = typeof b.name === "string" ? b.name.replace(/\s+/g, " ").trim().slice(0, 80) : "";
     return name ? { name } : "A thread needs a name.";
   });

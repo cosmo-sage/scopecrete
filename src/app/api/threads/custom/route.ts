@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
 import { loadCustomThreads } from "@/lib/threads-server";
+import { sanitizeRule } from "@/lib/rule-threads";
 
 /**
  * The threads Coy makes (migration 073) — a saved set of contacts to see
@@ -10,7 +11,7 @@ import { loadCustomThreads } from "@/lib/threads-server";
  * GET  → { threads: CustomThread[] }
  * GET ?job=<id> | ?customer=<id> → { preview: [{ id, name, bucket }] } — who a
  *      thread made from that job or customer would start with.
- * POST { name, source: "job" | "customer" | "manual", job_id?, customer_id?, contact_ids? }
+ * POST { name, source: "job" | "customer" | "manual" | "rule", job_id?, customer_id?, contact_ids?, rule? }
  *      → { thread } — a job or customer thread fills itself (and follows them, in
  *        the database); a hand-picked one takes contact_ids.
  *
@@ -54,13 +55,17 @@ export async function POST(req: NextRequest) {
   try { b = await req.json(); } catch { return bad("Body must be JSON."); }
   const name = typeof b.name === "string" ? b.name.replace(/\s+/g, " ").trim().slice(0, 80) : "";
   if (!name) return bad("A thread needs a name.");
-  const source = b.source === "job" || b.source === "customer" ? b.source : "manual";
+  const source = b.source === "job" || b.source === "customer" || b.source === "rule" ? b.source : "manual";
+  // A thread made from a rule (migration 089) holds a filter, not people.
+  const rule = source === "rule" ? sanitizeRule(b.rule) : null;
+  if (source === "rule" && !rule) return bad("Pick at least one of calls, texts or emails.");
   const job_id = source === "job" && typeof b.job_id === "string" && UUID.test(b.job_id) ? b.job_id : null;
   const customer_id = source === "customer" && typeof b.customer_id === "string" && UUID.test(b.customer_id) ? b.customer_id : null;
   if (source === "job" && !job_id) return bad("Pick the job.");
   if (source === "customer" && !customer_id) return bad("Pick the customer.");
   const { data: t, error } = await supabase.from("threads")
-    .insert({ org_id: orgId, name, source, job_id, customer_id, created_by: userId }).select("id").single();
+    .insert({ org_id: orgId, name, source, job_id, customer_id, created_by: userId, ...(rule ? { rule } : {}) }).select("id").single();
+  if (error && source === "rule" && /rule|threads_source_check/.test(error.message)) return bad("Threads made from rules switch on with migration 089 — waiting for it to be applied.", 409);
   if (error || !t) return bad(error?.message.includes("not found") ? error.message : error?.message ?? "Couldn't make it.", error?.message.includes("not found") ? 404 : 500);
   const ids = Array.isArray(b.contact_ids) ? (b.contact_ids as unknown[]).filter((x): x is string => typeof x === "string" && UUID.test(x)).slice(0, 500) : [];
   if (ids.length) {

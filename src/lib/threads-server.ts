@@ -1,6 +1,7 @@
 import type { ApiSession } from "@/lib/api-auth";
 import { STATUS_NAME } from "@/lib/jobs/stages";
 import type { CustomThread } from "@/lib/v34/threads";
+import { sanitizeRule } from "@/lib/rule-threads";
 
 type Sb = ApiSession["supabase"];
 
@@ -10,9 +11,12 @@ type Sb = ApiSession["supabase"];
  * Session client: RLS decides.
  */
 export async function loadCustomThreads(sb: Sb, orgId: string): Promise<CustomThread[]> {
-  const { data: rows } = await sb.from("threads").select("id, name, job_id, customer_id, source, created_at")
+  const read = (cols: string) => sb.from("threads").select(cols)
     .eq("org_id", orgId).is("archived_at", null).order("created_at", { ascending: true });
-  const threads = (rows ?? []) as Array<{ id: string; name: string; job_id: string | null; customer_id: string | null; source: CustomThread["source"] }>;
+  // `rule` arrives with migration 089; before it, read without it.
+  const first = await read("id, name, job_id, customer_id, source, rule, created_at");
+  const rows = first.error ? (await read("id, name, job_id, customer_id, source, created_at")).data : first.data;
+  const threads = (rows ?? []) as unknown as Array<{ id: string; name: string; job_id: string | null; customer_id: string | null; source: CustomThread["source"]; rule?: unknown }>;
   if (!threads.length) return [];
   const ids = threads.map((t) => t.id);
   const jobIds = [...new Set(threads.map((t) => t.job_id).filter(Boolean))] as string[];
@@ -31,6 +35,7 @@ export async function loadCustomThreads(sb: Sb, orgId: string): Promise<CustomTh
     const contact_ids = byThread.get(t.id) ?? [];
     return {
       id: t.id, name: t.name, job_id: t.job_id, customer_id: t.customer_id, source: t.source,
+      rule: t.source === "rule" ? sanitizeRule(t.rule) : null,
       job_line: j ? [j.title || "Untitled job", j.status ? STATUS_NAME[j.status] ?? j.status : null, j.address].filter(Boolean).join(" · ") : null,
       contact_ids, count: contact_ids.length,
     };

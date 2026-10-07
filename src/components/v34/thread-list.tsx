@@ -43,6 +43,7 @@ import { useThreads } from "@/components/v34/threads-ctx";
 import { threadLabel } from "@/components/v34/thread-rail";
 import { ROLE_LABEL, initials, initialsHue, isSystemKey, sortRows, THREAD_SORTS, type ContactRole, type ThreadSort } from "@/lib/v34/threads";
 import { ContactPicker, bookName } from "@/components/v34/contacts";
+import { RuleFeed } from "@/components/v34/rule-feed";
 import type { BookEntry } from "@/lib/contacts-book";
 
 interface Thread {
@@ -822,13 +823,13 @@ export function ThreadList({ folded = false }: { folded?: boolean }) {
   // A thread Coy made: its members, including those with no calls or texts yet.
   const [customRows, setCustomRows] = useState<Thread[] | null>(null);
   useEffect(() => {
-    if (!isCustom) return;
+    if (!isCustom || customThread?.source === "rule") return;
     let off = false;
     fetch(`/api/threads?thread=${encodeURIComponent(filter)}`).then((r) => (r.ok ? r.json() : null))
       .then((d) => { if (!off) setCustomRows(Array.isArray(d?.threads) ? d.threads : []); })
       .catch(() => { if (!off) setCustomRows([]); });
     return () => { off = true; };
-  }, [filter, isCustom, reload]);
+  }, [filter, isCustom, reload, customThread?.source]);
 
   useEffect(() => {
     if (filter !== "archived") return;
@@ -934,6 +935,9 @@ export function ThreadList({ folded = false }: { folded?: boolean }) {
     if (window.matchMedia("(min-width: 1024px)").matches) ctx?.setFolded(true);
   };
   const [adding, setAdding] = useState(false);
+
+  // A thread made from a rule (migration 089) lists what its rule catches, not people.
+  if (customThread?.source === "rule") return <RuleFeed thread={customThread} folded={folded} />;
 
   // Folded (Threads v2): a 56px column of initials, the open one filled; › brings the list back.
   if (folded) {

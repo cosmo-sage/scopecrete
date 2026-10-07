@@ -12,6 +12,8 @@
  * Pure — tests/threads-v2.test.mjs runs it.
  */
 
+import type { ThreadRule } from "@/lib/rule-threads";
+
 /** The system threads, by the keys the list and /api/threads/counts already use. */
 // "all" is everyone not archived and not spam (Coy, 2026-10-04: "an 'ALL' thread as a catchall").
 export type SystemThreadKey = "all" | "customers" | "unsorted" | "vendors" | "personal" | "spam";
@@ -32,7 +34,9 @@ export interface CustomThread {
   name: string;
   job_id: string | null;
   customer_id: string | null;
-  source: "job" | "customer" | "manual";
+  source: "job" | "customer" | "manual" | "rule";
+  /** A rule thread's filter (migration 089); null for the others. */
+  rule?: ThreadRule | null;
   /** "Wilson driveway · Estimating · 4411 Perkins Rd" for a job thread. */
   job_line: string | null;
   contact_ids: string[];

@@ -56,7 +56,7 @@ const numOrNull = (v: unknown): number | null | "bad" => {
 
 /** The rule's own numbers (sheet coverage, stick length, spacing, lap, dose, waste). Only known keys, only positive — waste may be 0. */
 const RULE_KEYS: Partial<Record<QtyRule, string[]>> = {
-  per_sheet: ["sheet_sqft"], per_stick: ["stick_ft", "spacing_in", "lap_pct"], per_cy: ["per_cy", "waste_pct"],
+  per_sheet: ["sheet_sqft"], per_stick: ["stick_ft", "spacing_in", "lap_pct"], per_cy: ["per_cy", "waste_pct", "round_cy"],
 };
 /** Keys where 0 is a real answer (no waste), not a missing one. */
 const ZERO_OK = new Set(["waste_pct", "lap_pct"]);

@@ -27,6 +27,7 @@ import { EmptyState } from "@/components/v34/primitives";
 import { FilesPanel, type FileRow } from "@/components/v34/files-panel";
 import { SectionPhotos } from "@/components/v34/section-photos";
 import { BidStrip } from "@/components/v34/bid-strip";
+import { DraftStrip } from "@/components/v34/draft-strip";
 import { JobHeaderRow } from "@/components/v34/job-tabs";
 import { JobBudget, type BudgetSummary } from "@/components/v34/job-budget";
 import { SheetViewer, type SheetGroup } from "@/components/v34/sheet-viewer";
@@ -315,6 +316,9 @@ export default function ScopeBuilder() {
 
         {/* The bid behind it, when a forwarded bid email made or fed this job (migration 063). */}
         <BidStrip jobId={jobId} onUndone={() => { window.location.href = "/dashboard/scope"; }} />
+
+        {/* A draft budget from the job's own calls and texts (migration 087). */}
+        {can(access, "budget") && <DraftStrip jobId={jobId} refresh={budgetTick} onChanged={() => { void load(); setBudgetTick((n) => n + 1); }} />}
 
         {sections.length === 0 && (
           <EmptyState title="No sections yet"

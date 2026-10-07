@@ -1,9 +1,10 @@
 "use client";
 /**
  * Aerial of the site (src/lib/aerial.ts): find the job's address, look at it on
- * Esri, Mapbox or Google, frame it, and put it in the Plan Room as a sheet with
- * the map's scale. Esri and Mapbox are kept; Google is a look only — its terms
- * don't allow keeping or tracing its imagery.
+ * Mapbox or Google, frame it, and put it in the Plan Room as a sheet with the
+ * map's scale. Mapbox is kept; Google is a look only — its terms don't allow
+ * keeping or tracing its imagery. Esri is offered no more (Coy, 2026-10-07:
+ * "it doesn't work").
  */
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { T, F, disp, clip } from "@/lib/v34/tokens";
@@ -27,7 +28,7 @@ export function AerialPicker({ jobId, open, onClose, onSaved }: { jobId: string;
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [p, setP] = useState<AerialProvider>("esri");
+  const [p, setP] = useState<AerialProvider>("mapbox");
   const [c, setC] = useState<{ lat: number; lng: number } | null>(null);
   const [z, setZ] = useState(20);
   const [settled, setSettled] = useState<{ lat: number; lng: number } | null>(null);
@@ -157,7 +158,7 @@ export function AerialPicker({ jobId, open, onClose, onSaved }: { jobId: string;
         {info?.from === "customer" && <div style={{ fontSize: F.xs, color: T.ink3 }}>The job has no address of its own — this is the customer&apos;s.</div>}
 
         <div className="flex items-center gap-1.5 flex-wrap">
-          {(["esri", "mapbox", "google"] as AerialProvider[]).map((k) => (
+          {(["mapbox", "google"] as AerialProvider[]).map((k) => (
             <button key={k} disabled={!prov?.[k].on} title={prov?.[k].why} onClick={() => pick(k)}
               style={{ ...btn(p === k), opacity: prov?.[k].on ? 1 : 0.45, cursor: prov?.[k].on ? "pointer" : "not-allowed" }}>
               {PROVIDER_LABEL[k]}{k === "google" ? " · look only" : ""}
@@ -190,7 +191,7 @@ export function AerialPicker({ jobId, open, onClose, onSaved }: { jobId: string;
         </div>
         <div style={{ fontSize: F.xs, color: T.ink3 }}>
           Drag to frame the work. {feet ? `The frame is about ${feet} ft across.` : ""} What you see is what is saved.
-          {p === "google" ? " Google is shown to compare — its terms don't allow keeping it, so switch to Esri or Mapbox to save." : ""}
+          {p === "google" ? " Google is shown to compare — its terms don't allow keeping it, so switch to Mapbox to save." : ""}
         </div>
         {err && <div style={{ fontSize: F.xs, color: T.red }}>{err}</div>}
         <div className="flex items-center gap-2">

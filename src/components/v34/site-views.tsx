@@ -6,8 +6,8 @@
  * with a link of the address below it that I can copy").
  *
  * The satellite is drawn from the same tiles as the Plan Room's aerial
- * (`/api/aerial/tile`, Mapbox when its token is set, else Esri's public
- * imagery) — keys stay on the server. Street view in the page needs Google's
+ * (`/api/aerial/tile`, Mapbox — Esri's grey "no data" tiles are off since
+ * 2026-10-07, Coy: "it doesn't work") — keys stay on the server. Street view in the page needs Google's
  * embed key (`NEXT_PUBLIC_GOOGLE_MAPS_EMBED_KEY`); without it the pop-up says
  * so and opens street view in Google Maps instead (never the keyless embed).
  */
@@ -18,7 +18,7 @@ import { lbl } from "@/components/v34/record-page";
 import { ATTRIBUTION, windowTiles } from "@/lib/aerial";
 
 type Point = { lat: number; lng: number };
-type Provider = "esri" | "mapbox";
+type Provider = "mapbox";
 
 const MIN_Z = 16, MAX_Z = 20;
 
@@ -31,13 +31,13 @@ function usePoint(addr: string | null, stored: Point | null): { point: Point | n
     void fetch(`/api/aerial/suggest?find=${encodeURIComponent(addr)}`).then((r) => r.ok ? r.json() : null).then((b) => {
       if (!live) return;
       const f = b?.found;
-      setFound({ addr, provider: b?.provider === "mapbox" ? "mapbox" : "esri", point: typeof f?.lat === "number" ? { lat: f.lat, lng: f.lng } : null });
-    }).catch(() => { if (live) setFound({ addr, provider: "esri", point: null }); });
+      setFound({ addr, provider: "mapbox", point: typeof f?.lat === "number" ? { lat: f.lat, lng: f.lng } : null });
+    }).catch(() => { if (live) setFound({ addr, provider: "mapbox", point: null }); });
     return () => { live = false; };
   }, [addr]);
   const mine = found && found.addr === addr ? found : null;
   const point = stored ?? mine?.point ?? null;
-  return { point, provider: mine?.provider ?? "esri", state: point ? "idle" : !addr ? "none" : mine ? "none" : "finding" };
+  return { point, provider: "mapbox", state: point ? "idle" : !addr ? "none" : mine ? "none" : "finding" };
 }
 
 /** Satellite tiles around a point, filling the box, with a pin at the address. */

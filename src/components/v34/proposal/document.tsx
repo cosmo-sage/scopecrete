@@ -132,7 +132,8 @@ export function ProposalDocument({ vm, edits, narrow }: { vm: DocVM; edits: DocE
   const pad = narrow ? "18px 16px 14px" : undefined;
   const custName = vm.customer.name ?? "Customer";
   const where = vm.customer.address ?? vm.job.address;
-  const kind = vm.typeKey === "public" ? "Bid submission" : vm.typeKey === "commercial" ? "Bid proposal" : "Proposal";
+  const prelim = d.preliminary === true;
+  const kind = prelim ? "Preliminary estimate" : vm.typeKey === "public" ? "Bid submission" : vm.typeKey === "commercial" ? "Bid proposal" : "Proposal";
   const signer = vm.typeKey === "public" ? "Awarding authority" : vm.typeKey === "commercial" ? "Authorized representative" : vm.typeKey === "residential" ? "Owner" : "Customer";
   const dateStr = new Date(vm.date).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
 
@@ -174,7 +175,7 @@ export function ProposalDocument({ vm, edits, narrow }: { vm: DocVM; edits: DocE
             {/* The logo is on the dark band above, always — Coy: "redundant" here. */}
             <div className="flex-1" style={{ minWidth: 0, paddingRight: narrow && edits ? 90 : 0 }} />
             <div style={{ textAlign: narrow ? "left" : "right", paddingRight: edits && !narrow ? 90 : 0 }}>
-              <div style={{ fontFamily: strong, fontWeight: 700, fontSize: 18 }}>{vm.typeKey === "public" ? "Bid" : vm.typeKey === "commercial" ? "Proposal" : "Quote"} {vm.number}</div>
+              <div style={{ fontFamily: strong, fontWeight: 700, fontSize: 18 }}>{prelim ? "Preliminary estimate" : vm.typeKey === "public" ? "Bid" : vm.typeKey === "commercial" ? "Proposal" : "Quote"} {vm.number}</div>
               <div style={{ fontSize: 11.5, color: "#5E5A52" }}>Issued {dateStr} · valid 30 days</div>
             </div>
           </div>
@@ -267,6 +268,11 @@ export function ProposalDocument({ vm, edits, narrow }: { vm: DocVM; edits: DocE
             <div style={kicker}>Pricing</div>
             <span className="flex-1" />
           </div>
+          {prelim && (
+            <div className="mt-2" style={{ background: "#FBF6EC", border: "1px solid #E6DCC8", borderLeft: "3px solid #B85A3C", borderRadius: 3, padding: "8px 12px", fontSize: 12.5 }}>
+              <b>Preliminary estimate.</b> This price is based on the information we have so far. The final price is confirmed after a site visit and exact measurements, and may change if the scope, access or thickness turn out different.
+            </div>
+          )}
           {vm.choices ? (
             <Choices vm={vm} narrow={narrow} />
           ) : !vm.priced.ok ? (

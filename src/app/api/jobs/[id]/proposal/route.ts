@@ -65,6 +65,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       addons: Array.isArray(d.addons) ? (d.addons as unknown[]).filter((x): x is string => typeof x === "string" && UUID.test(x)).slice(0, 400) : [],
       show_item_prices: d.show_item_prices === true, show_qty: d.show_qty === true, show_tax_line: d.show_tax_line === true,
       picsOff: flags(d.picsOff, idKey) ?? {}, hide_area_pics: d.hide_area_pics === true, all_options: d.all_options === true,
+      preliminary: d.preliminary === true,
     };
   }
   // One line in or out of the add-ons, from the budget page (it doesn't hold the whole display).

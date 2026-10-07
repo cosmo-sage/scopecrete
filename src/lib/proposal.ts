@@ -38,6 +38,8 @@ export interface ProposalDisplay {
   hide_area_pics?: boolean;
   /** Offer every good / better / best option and let the customer pick (Coy, 2026-10-03: "send option and multiple quotes to the customer"). */
   all_options?: boolean;
+  /** Marked a preliminary estimate: the band, the quote's name and a line above the price say so (Coy, 2026-10-07). */
+  preliminary?: boolean;
 }
 
 export interface ProposalArea { id: string; name: string | null; sqft: number | null }

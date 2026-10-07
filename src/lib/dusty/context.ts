@@ -577,7 +577,7 @@ async function proposalBlock(sb: Sb, orgId: string, jobId: string): Promise<Bloc
     for (const g of priced.groups) lines.push(`- ${g.name}: ${g.hidden ? "HIDDEN from the proposal" : g.price_hidden ? "price hidden (still counted)" : g.sell.toFixed(2)}${g.items.some((i) => i.hidden) ? ` (${g.items.filter((i) => i.hidden).length} line(s) hidden)` : ""}`);
   } else lines.push(`No price yet: ${priced.blocked.slice(0, 5).join("; ")}`);
   const off = Object.keys(d.off ?? {});
-  lines.push(`Sections hidden: ${off.length ? off.join(", ") : "none"}. Shows item prices: ${d.show_item_prices ? "yes" : "no"}; qty: ${d.show_qty ? "yes" : "no"}.`);
+  lines.push(`Sections hidden: ${off.length ? off.join(", ") : "none"}. Shows item prices: ${d.show_item_prices ? "yes" : "no"}; qty: ${d.show_qty ? "yes" : "no"}. Marked a preliminary estimate (the "Preliminary" switch on the proposal): ${d.preliminary ? "yes" : "no — tell Coy to switch it on rather than writing it into the text"}.`);
   lines.push(`Draws: ${((p.draws ?? []) as Draw[]).map((x) => `${x.amt !== null && x.amt !== undefined ? `$${x.amt}` : `${x.pct ?? 0}%`} ${x.when}`).join(" · ") || "none"}${check ? (check.ok ? " — add up to the total" : ` — DO NOT add up: ${check.sum.toFixed(2)} against ${priced.ok ? priced.total.toFixed(2) : "?"}`) : ""}`);
   lines.push(`Warranty: ${w.template?.name ?? (w.edited ? "written for this job" : "none")}${w.edited ? " (edited)" : ""}${w.starter ? " — starter text, not yet checked by Coy's attorney" : ""}`);
   lines.push(`Contract: ${t.template?.name ?? (t.edited ? "written for this job" : "none")}, ${t.clauses.length} clauses${t.starter ? " — starter text" : ""}`);

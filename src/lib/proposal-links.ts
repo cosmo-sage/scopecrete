@@ -120,6 +120,7 @@ export function publicSnapshot(snap: Rec, extra: { project_type: string | null; 
     display: {
       off: display.off ?? {}, show_item_prices: !!display.show_item_prices, show_qty: !!display.show_qty, show_tax_line: !!display.show_tax_line,
       hide_area_pics: !!display.hide_area_pics, picsOff, all_options: !!display.all_options,
+      preliminary: !!display.preliminary,
     },
     draws: Array.isArray(snap.draws) ? (snap.draws as Rec[]).map((d) => ({ pct: n(d.pct), amt: n(d.amt), when: s(d.when) ?? "" })) : [],
     scope_intro: s(snap.scope_intro),

@@ -3309,6 +3309,13 @@ expected start date per quoted job before it means anything. Add the field.
   `snapshot.prepared_by`, and the customer's copy carries name, phone and
   email only. **Prepared for** shows the phone as (225) 555-0100 and the
   email (the contact's, else their first listed one) when there is one.
+  **Preliminary (Coy, 2026-10-07: "I need to make sure it's clear that this
+  is a preliminary estimate").** A **Preliminary** chip beside Item prices
+  (`display.preliminary`, no migration; a new version keeps it): the band
+  and the quote's name read "Preliminary estimate", and a line above the
+  price says the final price is confirmed after a site visit and exact
+  measurements. It reaches the customer's link (`publicSnapshot()`), and
+  Dusty's proposal context says whether it is on.
   **Maps & photos per area (2026-10-03, Coy:
   "the customer can easily understand what this section is covering. They
   will have the map view + photos for that map area"):** under the Scope's

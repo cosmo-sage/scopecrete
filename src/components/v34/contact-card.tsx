@@ -48,6 +48,13 @@ export function ContactCard({ person, back, textHref, customerHref, onReload, on
       <div className="flex items-center gap-2">
         <Link href={back.href} style={{ ...eyebrow, color: T.chalk }}>‹ {back.label}</Link>
         <span className="flex-1" />
+        {/* Merge lives here, not in the thread's menu (Coy, 2026-10-07): another contact's calls, texts and
+            numbers fold into this one's thread. */}
+        {!editing && (
+          <button onClick={() => onJoin(null)} className="inline-flex items-center gap-1.5 rounded"
+            style={{ height: 30, padding: "0 12px", border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink2,
+              fontFamily: disp, fontSize: 12, letterSpacing: ".06em", textTransform: "uppercase", cursor: "pointer" }}>Merge</button>
+        )}
         <button onClick={() => setEditing((v) => !v)} aria-pressed={editing} className="inline-flex items-center gap-1.5 rounded"
           style={{ height: 30, padding: "0 12px", border: `1px solid ${editing ? T.ink : T.hairStrong}`, background: editing ? T.ink : T.card, color: editing ? T.card : T.ink2,
             fontFamily: disp, fontSize: 12, letterSpacing: ".06em", textTransform: "uppercase", cursor: "pointer" }}>

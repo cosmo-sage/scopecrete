@@ -570,7 +570,7 @@ export function MergeSheet({ contactId, keepLabel, keepCount, onClose, onMerged,
       <div className="w-full lg:max-w-lg rounded-t-xl lg:rounded-xl flex flex-col"
         style={{ background: DA.surface, maxHeight: "85dvh" }} onClick={(e) => e.stopPropagation()}>
         <div className="px-4 pt-3 pb-2" style={{ borderBottom: `1px solid ${DA.border}` }}>
-          <div className="text-[10px] uppercase tracking-wide" style={{ color: DA.textMuted }}>Same person as…</div>
+          <div className="text-[10px] uppercase tracking-wide" style={{ color: DA.textMuted }}>Merge with another contact</div>
           <div className="text-sm font-semibold" style={{ color: DA.textPrimary }}>
             {pick ? "Confirm these are one person" : `Pick the other number ${keepLabel} uses`}
           </div>

@@ -283,7 +283,7 @@ export function FilesPage({ fixed, embedded, extra }: { fixed?: Partial<FileFilt
         {searching && <div className="mt-2">{search}</div>}
       </PageHeader>
     )}
-    <div ref={wrapRef} className="mx-auto" style={{ maxWidth: embedded ? undefined : 1320, padding: embedded ? 0 : "0 12px 24px" }}>
+    <div ref={wrapRef} className="mx-auto" style={{ padding: embedded ? 0 : "0 12px 24px" }}>
       {embedded && (
         <div className="flex items-center gap-2" style={{ marginBottom: 8 }}>
           {!wide && <MenuButton onClick={() => setMenuOpen(true)} label="Folders" always />}

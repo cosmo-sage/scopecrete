@@ -604,7 +604,7 @@ async function plansBlock(sb: Sb, orgId: string, jobId: string): Promise<Block |
     const n = measurements.filter((m) => m.parameter_id === p.id).length;
     lines.push(`Takeoff group ${p.id.slice(0, 8)} "${p.name}" (${p.kind}${p.depth_in ? `, ${p.depth_in}" deep` : ""}): ${t?.qty !== null && t?.qty !== undefined ? `${fmtQty(t.qty, t.unit)}${t.cy !== null ? ` = ${t.cy.toFixed(1)} CY neat` : ""}${t.perim_lf != null ? `, ${fmtQty(t.perim_lf, "LF")} of edge round it` : ""}` : `no total — ${t?.blocked ?? "nothing measured"}`} from ${n} shape${n === 1 ? "" : "s"}`);
   }
-  return { title: "Plan Room takeoff (measured by Coy on the plans or the aerial; a group's 8-character ref lets a plan count an item from it)", lines };
+  return { title: "Takeoffs (measured by Coy on the plans or the aerial; a group's 8-character ref lets a plan count an item from it)", lines };
 }
 
 /**
@@ -624,7 +624,7 @@ async function ocrBlock(sb: Sb, orgId: string, jobId: string): Promise<Block | n
   const name = (r: (typeof rows)[number]) => `${r.number ?? `p.${r.page}`}${r.title ? ` ${r.title}` : ""}`;
   const ranked = rows.map((r) => ({ r, hits: (r.ocr_text.match(OCR_CONCRETE) ?? []).length + findDimensions(r.ocr_text).length }))
     .filter((x) => x.hits > 0).sort((a, b) => b.hits - a.hits);
-  const lines: string[] = [`${rows.length} scanned sheet${rows.length === 1 ? "" : "s"} read by OCR in the Plan Room. These are readings off a scan: a digit or a "+" can be misread (104+55 may show as 104455). Quote the sheet, and tell Coy to check a number there before he prices it. Table rows read left to right, " | " between columns.`];
+  const lines: string[] = [`${rows.length} scanned sheet${rows.length === 1 ? "" : "s"} read by OCR in Takeoffs. These are readings off a scan: a digit or a "+" can be misread (104+55 may show as 104455). Quote the sheet, and tell Coy to check a number there before he prices it. Table rows read left to right, " | " between columns.`];
   let room = OCR_ROOM;
   const shown = new Set<string>();
   for (const { r } of ranked) {

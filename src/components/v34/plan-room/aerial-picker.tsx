@@ -200,7 +200,7 @@ export function AerialPicker({ jobId, open, onClose, onSaved }: { jobId: string;
           </span>
           <button onClick={() => void save()} disabled={!c || p === "google" || !!busy}
             style={{ height: 36, padding: "0 14px", borderRadius: 3, background: T.hiviz, color: T.onHiviz, fontFamily: disp, fontSize: 13, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase", cursor: "pointer", opacity: !c || p === "google" || busy ? 0.5 : 1 }}>
-            {busy && c ? busy : "Put it in the Plan Room"}
+            {busy && c ? busy : "Put it in Takeoffs"}
           </button>
         </div>
       </div>

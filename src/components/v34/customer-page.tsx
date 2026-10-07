@@ -82,7 +82,11 @@ export function CustomerPage({ customerId, focusContact }: { customerId: string;
   const [data, setData] = useState<Data | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
-  const [tab, setTab] = useState<Tab>("overview");
+  // ?tab=jobs opens a tab (a job's ‹ comes back to the customer's Jobs, Coy 2026-10-07).
+  const [tab, setTab] = useState<Tab>(() => {
+    const t = search.get("tab");
+    return t && (["overview", "contacts", "jobs", "threads", "files", "timeline", "payments", "schedule"] as string[]).includes(t) ? (t as Tab) : "overview";
+  });
   const [editing, setEditing] = useState(false);
   const [callNotes, setCallNotes] = useState(false);
   const [note, setNote] = useState<{ text: string; undo?: string } | null>(null);
@@ -191,7 +195,7 @@ export function CustomerPage({ customerId, focusContact }: { customerId: string;
         </div>
       )}
       {tab === "jobs" && <JobsTab jobs={jobs} onNew={() => void newScope()} />}
-      {tab === "threads" && <CustomerThreads contacts={contacts} focusContact={focusContact ?? null} wide={wide} bucket={customerBucket} threads={theirThreads} />}
+      {tab === "threads" && <CustomerThreads contacts={contacts} focusContact={focusContact ?? null} wide={wide} />}
       {tab === "files" && <FilesTab customerId={customerId} primaryId={primary?.id ?? null} primaryName={primary?.name ?? null} />}
       {tab === "timeline" && <Threads customerId={customerId} contacts={contacts} focusContact={focusContact ?? null} wide={wide} />}
       {tab === "payments" && <Payments jobs={jobs} />}
@@ -209,10 +213,8 @@ export function CustomerPage({ customerId, focusContact }: { customerId: string;
  * Their contacts down the left (chips across the top when narrow), the picked one's whole thread —
  * every number, email, notes, the composer — beside it (thread-view.tsx, the same view Threads opens).
  */
-function CustomerThreads({ contacts, focusContact, wide, bucket, threads }: {
-  contacts: Contact[]; focusContact: string | null; wide: boolean;
-  bucket: React.ComponentProps<typeof ThreadChips>["bucket"]; threads: React.ComponentProps<typeof ThreadChips>["threads"];
-}) {
+// "Threads they're in" is gone from its column (Coy, 2026-10-07: "I don't need to see this").
+function CustomerThreads({ contacts, focusContact, wide }: { contacts: Contact[]; focusContact: string | null; wide: boolean }) {
   const first = contacts.find((c) => c.id === focusContact) ?? contacts.find((c) => c.primary) ?? contacts[0] ?? null;
   const [picked, setPicked] = useState<string | null>(first?.id ?? null);
   const on = contacts.find((c) => c.id === picked) ?? first;
@@ -246,10 +248,6 @@ function CustomerThreads({ contacts, focusContact, wide, bucket, threads }: {
         <div className="flex flex-col shrink-0 overflow-y-auto" style={{ width: 240, background: T.card, borderRight: `1px solid ${T.hair}` }}>
           <div style={{ ...eyebrow, color: T.ink3, padding: "10px 12px 4px" }}>Contacts · {contacts.length}</div>
           {contacts.map(row)}
-          <div style={{ padding: "14px 12px" }}>
-            <div style={{ ...eyebrow, color: T.ink3, marginBottom: 6 }}>Threads they&apos;re in</div>
-            <ThreadChips bucket={bucket} threads={threads} />
-          </div>
         </div>
       ) : contacts.length > 1 ? (
         <div className="flex gap-2 overflow-x-auto" style={{ padding: "8px 12px", background: T.slab }}>{contacts.map(row)}</div>

@@ -60,13 +60,13 @@ function FileList({ files, sheets, reading, onToggle, onAdd, uploading }: {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: F.sm, fontWeight: 600, ...clip }}>{f.name}</div>
                   <div style={{ fontSize: F.xs, color: T.ink3, ...clip }}>
-                    {f.source === "email" ? "Email" : f.source === "text" ? "Texted" : "Uploaded"} · {reading[f.id] ?? (f.kind === "pdf" ? (n ? `${n} sheet${n === 1 ? "" : "s"} · ${scaled} scaled` : on ? "not opened yet" : "not in the plan room") : f.kind === "image" ? "photo or sketch — no scale" : "kept with the job — not a drawing")}
+                    {f.source === "email" ? "Email" : f.source === "text" ? "Texted" : "Uploaded"} · {reading[f.id] ?? (f.kind === "pdf" ? (n ? `${n} sheet${n === 1 ? "" : "s"} · ${scaled} scaled` : on ? "not opened yet" : "not in Takeoffs") : f.kind === "image" ? "photo or sketch — no scale" : "kept with the job — not a drawing")}
                     {f.read_state ? ` · ${READ[f.read_state] ?? f.read_state}` : ""}
                   </div>
                 </div>
                 {plan && <>
-                  <span className="hidden sm:inline" style={{ ...eyebrow, color: T.ink3 }}>In plan room</span>
-                  <Switch on={on} onChange={(v) => onToggle(f, v)} label={`${f.name} in the plan room`} />
+                  <span className="hidden sm:inline" style={{ ...eyebrow, color: T.ink3 }}>In Takeoffs</span>
+                  <Switch on={on} onChange={(v) => onToggle(f, v)} label={`${f.name} in Takeoffs`} />
                 </>}
               </div>
             );

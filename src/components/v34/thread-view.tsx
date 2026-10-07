@@ -2,7 +2,7 @@
 
 import { Emblem } from "@/components/site/marks";
 import { askDustyBrief } from "@/lib/v34/dusty-brief";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Phone, WarningCircle, Envelope, Sparkle, NotePencil, CaretDown, CaretUp } from "@phosphor-icons/react";
 import Link from "next/link";
@@ -43,6 +43,21 @@ export function ThreadView({ contactId, embedded = false }: {
   const router = useRouter();
   const search = useSearchParams();
   const personPage = !embedded && search.get("person") === "1";
+  // Embedded (the customer page's Threads tab) the thread fills the screen down to its bottom edge,
+  // so the text box sits at the bottom without scrolling (Coy, 2026-10-07: "fixed to the bottom of
+  // screen. Right now i have to scroll down to see it"). Measured from where the thread starts.
+  const [embedH, setEmbedH] = useState<number | null>(null);
+  const embedRef = useCallback((el: HTMLDivElement | null) => {
+    if (!el || !embedded) return;
+    const fit = () => {
+      const top = el.getBoundingClientRect().top + window.scrollY;
+      const foot = window.innerWidth >= 1024 ? 0 : parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--sc-foot")) || 0;
+      setEmbedH(Math.max(360, Math.round(window.innerHeight - top - foot)));
+    };
+    fit();
+    window.addEventListener("resize", fit);
+    return () => window.removeEventListener("resize", fit);
+  }, [embedded]);
   const threads = useThreads();
   const threadKey = search.get("t") ?? threads?.thread ?? null;
   const tq = threadKey ? `?t=${encodeURIComponent(threadKey)}` : "";
@@ -287,8 +302,8 @@ export function ThreadView({ contactId, embedded = false }: {
     fontFamily: disp, fontSize: 12, letterSpacing: ".06em", textTransform: "uppercase", cursor: "pointer", whiteSpace: "nowrap" });
 
   return (
-    <div className={embedded ? "flex" : "flex sc-pinned sc-pinned-full"}
-      style={embedded ? { height: "calc(100dvh - var(--sc-head) - 64px)", minHeight: 440 } : undefined}>
+    <div ref={embedded ? embedRef : undefined} className={embedded ? "flex" : "flex sc-pinned sc-pinned-full"}
+      style={embedded ? { height: embedH ?? "calc(100dvh - var(--sc-head) - 64px)", minHeight: 360 } : undefined}>
       <div className="flex flex-col flex-1 min-w-0 h-full" style={{ background: DA.bg }}>
         <div className="flex-shrink-0" style={{ background: T.card, borderBottom: `1px solid ${T.hair}`, padding: "10px 16px 0" }}>
           {/* Phone: back to the thread, by name. */}

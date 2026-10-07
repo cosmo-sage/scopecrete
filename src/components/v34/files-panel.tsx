@@ -208,7 +208,7 @@ export function FilesPanel({ jobId, contactId, sectionId, sections, title = "Fil
         {filter !== "texts" && shown.map((f) => <FileTile key={f.id} f={f} onOpen={() => setOpen(f)} />)}
         {filter === "texts" && jobId && texted.some((m) => !m.on_job) && (
           <div className="flex items-center gap-2" style={{ gridColumn: "1 / -1", fontSize: F.xs, color: T.ink2 }}>
-            <span style={{ flex: 1 }}>Bring a texted photo onto the job to use it in the Plan Room, under an area, or as the proposal&apos;s cover.</span>
+            <span style={{ flex: 1 }}>Bring a texted photo onto the job to use it in Takeoffs, under an area, or as the proposal&apos;s cover.</span>
             <button onClick={() => void bringTexted("all")} disabled={!!bringing}
               style={{ height: 28, padding: "0 10px", borderRadius: 3, background: T.ink, color: T.card, fontSize: F.xs, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap", opacity: bringing ? 0.5 : 1 }}>
               {bringing === "all" ? "Bringing…" : `Add all ${texted.filter((m) => !m.on_job).length} to the job`}

@@ -119,7 +119,7 @@ export function BidStrip({ jobId, onUndone, onSummary }: { jobId: string; onUndo
           <div className="flex items-baseline gap-2 mb-1">
             <span style={{ ...eyebrow, color: T.ink }}>Scope from the bid</span>
             <span className="flex-1" />
-            {bid.sheets > 0 && <Link href={`/dashboard/scope/${jobId}/plans`} style={{ ...eyebrow, color: T.chalk }}>Plan room ›</Link>}
+            {bid.sheets > 0 && <Link href={`/dashboard/scope/${jobId}/plans`} style={{ ...eyebrow, color: T.chalk }}>Takeoffs ›</Link>}
           </div>
           {f?.scope_summary && <p style={{ fontSize: F.sm, color: T.ink2, margin: "0 0 6px", lineHeight: 1.45 }}>{f.scope_summary}</p>}
           {bid.scope.map((s) => (

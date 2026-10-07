@@ -50,7 +50,7 @@ test("a job: only theirs; the Plan Room only with the page; never the proposal",
 });
 
 test("the summary line", () => {
-  assert.equal(accessSummary({ pages: ["files", "plan_room"], all_jobs: false, job_ids: [J1] }), "1 job · Photos & files, Plan room");
+  assert.equal(accessSummary({ pages: ["files", "plan_room"], all_jobs: false, job_ids: [J1] }), "1 job · Photos & files, Takeoffs");
   assert.equal(accessSummary({ pages: [], all_jobs: true, job_ids: [] }), "every job · the job page only");
   assert.equal(accessSummary({ pages: ["budget"], all_jobs: false, job_ids: [J1, J2] }), "2 jobs · Budget");
 });

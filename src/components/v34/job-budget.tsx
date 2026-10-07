@@ -934,7 +934,7 @@ function LineSheet({ line, data, sections, res, addon, onAddon, onClose, onPatch
   const want = ruleForUnit(line.unit, line.qty_rule);
   const m = (n: number | null) => (n === null ? "—" : money(n));
   return (
-    <Sheet open onClose={onClose} title={line.name} sub={line.qty_rule === "from_takeoff" ? "Measured in the Plan Room" : line.cost_item_id ? "From the Price book" : "This budget only"}>
+    <Sheet open onClose={onClose} title={line.name} sub={line.qty_rule === "from_takeoff" ? "Measured in Takeoffs" : line.cost_item_id ? "From the Price book" : "This budget only"}>
       {/* Laid out like JobTread's cost item (Coy, 2026-10-06): the item, then quantity → cost → price
           in one grid with the worked-out columns shown, then its vendor, then where it sits and the switches. */}
       <div className="px-4 py-3 flex flex-col gap-3" key={line.id + line.updated_at}>

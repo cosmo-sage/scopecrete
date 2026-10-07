@@ -60,7 +60,7 @@ interface Section extends SectionInput {
 }
 interface Job {
   id: string; title: string | null; status: string | null; address: string | null;
-  contact_id: string | null; duration_days: number | null; created_from_message_id: string | null;
+  contact_id: string | null; duration_days: number | null; created_from_message_id: string | null; customer_id?: string | null;
   job_type: string | null; lead_source: string | null; description?: string | null; origin?: string | null;
   archived_at?: string | null; archived_reason?: string | null; created_at?: string | null;
 }
@@ -269,7 +269,7 @@ export default function ScopeBuilder() {
           {/* Coy, 2026-10-05: the job's name top left, Summary · Plan room · Budget · Proposal top right —
               the same row on every view (JobHeaderRow; centred on a phone). The chips, who it's for,
               the description and "Why this job" moved to the Summary to clear the clutter here. */}
-          <JobHeaderRow jobId={jobId} active="job"
+          <JobHeaderRow jobId={jobId} active="job" customerId={job.customer_id}
             title={access.limited ? (realTitle || titleHint || "Job") : <input defaultValue={realTitle} placeholder={titleHint} aria-label="Job name"
               size={Math.max(6, (realTitle || titleHint || "").length + 1)}
               onBlur={(e) => { const v = e.target.value; if (v !== realTitle) void send(`/api/jobs/${jobId}`, "PATCH", { title: v }).then((b) => setJob((j) => j && { ...j, title: b.job.title })).catch((er) => setSaveErr((m) => ({ ...m, job: String(er.message ?? er) }))); }}

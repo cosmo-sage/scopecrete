@@ -154,7 +154,7 @@ export function SheetViewer({ jobId, title, sheets, files, groups, start, onClos
               {g.items.map(pick)}
             </React.Fragment>
           ))}
-          {!order.length && <div style={{ fontSize: F.sm, color: T.ink3, padding: 8 }}>No sheets have been read on this job yet — put the plan set in the Plan Room.</div>}
+          {!order.length && <div style={{ fontSize: F.sm, color: T.ink3, padding: 8 }}>No sheets have been read on this job yet — put the plan set in Takeoffs.</div>}
         </div>
         <div className="flex-1 flex flex-col min-w-0 min-h-0">
           <div ref={box} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={() => { drag.current = null; }}
@@ -166,9 +166,9 @@ export function SheetViewer({ jobId, title, sheets, files, groups, start, onClos
           {s && (
             <div className="shrink-0 flex items-center gap-2 px-3" style={{ height: 40, background: T.card, borderTop: `1px solid ${T.hair}` }}>
               <span style={{ fontSize: F.xs, color: T.ink3, ...clip, flex: 1, minWidth: 0 }}>
-                {s.scale_ft_per_pt ? "Scale set — measure it in the Plan Room" : s.scale_text ? `Prints ${s.scale_text} — set it in the Plan Room to measure` : "No scale set yet"}
+                {s.scale_ft_per_pt ? "Scale set — measure it in Takeoffs" : s.scale_text ? `Prints ${s.scale_text} — set it in Takeoffs to measure` : "No scale set yet"}
               </span>
-              <Link href={`/dashboard/scope/${jobId}/plans?step=takeoff&sheet=${s.id}`} style={{ ...eyebrow, color: T.chalk }}>Measure in the Plan Room ›</Link>
+              <Link href={`/dashboard/scope/${jobId}/plans?step=takeoff&sheet=${s.id}`} style={{ ...eyebrow, color: T.chalk }}>Measure in Takeoffs ›</Link>
             </div>
           )}
         </div>

@@ -42,5 +42,5 @@ test("Quo's payload gives the window; without both ends there is none", () => {
 test("the quote question names the caller and the call", () => {
   const q = quoteQuestion("Raynette Holloway", "2026-10-02T20:54:16Z");
   assert.match(q, /Raynette Holloway \(Fri, Oct 2, 3:54 PM\)/);
-  assert.match(q, /Plan Room/);
+  assert.match(q, /Takeoffs/);
 });

@@ -170,7 +170,7 @@ export async function GET(
 
   const { data, error } = await supabase
     .from("jobs")
-    .select("id, job_number, title, status, origin, confirmed_at, confirmed_by, created_from_message_id, contact_id, address, city, state, zip, notes, duration_days, created_at, job_type, lead_source, referred_by_contact_id, description, archived_at, archived_reason")
+    .select("id, job_number, title, status, origin, confirmed_at, confirmed_by, created_from_message_id, contact_id, customer_id, address, city, state, zip, notes, duration_days, created_at, job_type, lead_source, referred_by_contact_id, description, archived_at, archived_reason")
     .eq("id", id)
     .eq("org_id", orgId)
     .maybeSingle();

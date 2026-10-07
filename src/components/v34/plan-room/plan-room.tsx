@@ -151,11 +151,23 @@ export function PlanRoom({ jobId }: { jobId: string }) {
   return (
     <div className="flex flex-col" style={{ minHeight: "calc(100dvh - var(--sc-head))" }}>
       <div style={{ background: T.card, borderBottom: `1px solid ${T.hair}`, padding: "10px 16px 0" }}>
-        <JobHeaderRow jobId={jobId} active="plans" title={data?.job?.title || "Plan room"} />
+        <JobHeaderRow jobId={jobId} active="plans" title={data?.job?.title || "Takeoffs"} customerId={data?.job?.customer_id}
+          subnav={(
+            <div className="flex gap-3" role="tablist" aria-label="Takeoffs">
+              {STEPS.map(([k, label]) => (
+                <button key={k} role="tab" aria-selected={current === k} onClick={() => go(k)} className="flex items-center gap-1 shrink-0"
+                  style={{ height: 24, borderBottom: `2px solid ${current === k ? T.hiviz : "transparent"}`, color: current === k ? T.ink : T.ink3, fontFamily: disp, fontSize: 11.5, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase", cursor: "pointer" }}>
+                  {label}
+                  {counts[k] && <span style={{ fontFamily: strong, fontSize: 10, background: T.sunk, borderRadius: 999, padding: "0 5px", letterSpacing: 0 }}>{counts[k]}</span>}
+                </button>
+              ))}
+            </div>
+          )} />
         {/* The steps on the left and the Plan Room's own tools at the far right, on one row
             under the name's row (Coy, 2026-10-05). */}
         <div className="flex items-end gap-x-4 gap-y-2 flex-wrap mt-2">
-          <div className="flex gap-4 overflow-x-auto" role="tablist">
+          {/* On a phone these hang under the Takeoffs button instead (Coy, 2026-10-07). */}
+          <div className="hidden lg:flex gap-4 overflow-x-auto" role="tablist">
             {STEPS.map(([k, label], i) => (
               <button key={k} role="tab" aria-selected={current === k} onClick={() => go(k)} className="flex items-center gap-1.5 shrink-0"
                 style={{ height: 38, borderBottom: `2px solid ${current === k ? T.hiviz : "transparent"}`, color: current === k ? T.ink : T.ink3, fontFamily: disp, fontSize: 14, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase", cursor: "pointer" }}>
@@ -199,7 +211,7 @@ export function PlanRoom({ jobId }: { jobId: string }) {
       </div>
 
       {err && <div className="px-4 py-2" style={{ background: T.redDim, color: T.red, fontSize: F.xs }}>{err}</div>}
-      {!data && !err && <div className="p-5" style={{ fontSize: F.sm, color: T.ink3 }}>Opening the plan room…</div>}
+      {!data && !err && <div className="p-5" style={{ fontSize: F.sm, color: T.ink3 }}>Opening Takeoffs…</div>}
       {data && scoped && (
         <div className="flex-1 flex flex-col" style={{ minHeight: 0 }}>
           {current === "files" && <FilesStep files={data.files} sheets={sheets} docPages={docPages} reading={reading} onToggle={(f, on) => void toggle(f, on)}

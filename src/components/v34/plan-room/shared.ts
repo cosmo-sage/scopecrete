@@ -24,7 +24,7 @@ export interface Meas { id: string; parameter_id: string; sheet_id: string; name
 export const SHAPE_COLORS = ["#D97757", "#B5412C", "#C98A12", "#E0B33A", "#2F8A5B", "#7FA34A", "#0F7C86", "#1E5AA8", "#6A55B0", "#C2508A", "#5E5A52", "#2A2A2A"];
 export const shapeColor = (m: { color?: string | null }, p: { color: string } | null | undefined) => m.color ?? p?.color ?? "#D97757";
 export interface PlansData {
-  job: { id: string; title: string | null; address: string | null; job_type: string | null; status: string | null } | null;
+  job: { id: string; title: string | null; address: string | null; job_type: string | null; status: string | null; customer_id?: string | null } | null;
   files: PlanFile[]; sheets: Sheet[]; params: Param[]; measurements: Meas[];
   totals: Record<string, GroupTotal>;
   lines: Array<{ id: string; takeoff_parameter_id: string; name: string; unit: string }>;

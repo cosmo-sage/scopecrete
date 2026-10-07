@@ -50,5 +50,5 @@ export function windowFromPayload(raw: unknown): { start: string; end: string } 
 /** The question the "Draft the quote" tap puts in Dusty's box — Coy sends it. */
 export function quoteQuestion(who: string, callAt: string | null): string {
   const when = callAt ? new Date(callAt).toLocaleString("en-US", { timeZone: "America/Chicago", weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : null;
-  return `Draft the quote from my call with ${who}${when ? ` (${when})` : ""}: use the transcript, the summary and my notes on the call, and what's measured in the Plan Room (the aerial). Make the areas the work needs and put the items on them from my Price book. Tell me what you couldn't find a number for.`;
+  return `Draft the quote from my call with ${who}${when ? ` (${when})` : ""}: use the transcript, the summary and my notes on the call, and what's measured in Takeoffs (the aerial). Make the areas the work needs and put the items on them from my Price book. Tell me what you couldn't find a number for.`;
 }

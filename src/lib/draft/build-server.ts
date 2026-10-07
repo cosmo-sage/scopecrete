@@ -196,7 +196,14 @@ export async function buildDraft(sb: Sb, orgId: string, userId: string | null, j
   if (!g) return { ok: false, status: 404, error: "No such job." };
   if (g.job.archived_at) return { ok: false, status: 409, error: "This job is archived." };
   const hash = inputHash(g.job, g.evidence);
-  const idem = `${jobId}:${hash}`;
+  // The budget it builds into (migration 088: a job can keep several). The
+  // same calls and texts built into a NEW budget are a new build.
+  const est = await workingEstimate(sb, orgId, jobId, true);
+  if (!est) return { ok: false, status: 500, error: "Couldn't open the budget." };
+  const { error: no088 } = await sb.from("budget_runs").select("estimate_id").limit(0);
+  const perBudget = !no088;
+  const idem = perBudget ? `${jobId}:${est.id as string}:${hash}` : `${jobId}:${hash}`;
+  const onBudget = perBudget ? { estimate_id: est.id as string } : {};
   const now = new Date().toISOString();
 
   // Claim the run.
@@ -225,7 +232,7 @@ export async function buildDraft(sb: Sb, orgId: string, userId: string | null, j
     target = same as unknown as Row;
   }
 
-  const claim = { status: "running", started_at: now, input_hash: hash, idem_key: idem, recipe_version: RECIPE_VERSION, error: null };
+  const claim = { status: "running", started_at: now, input_hash: hash, idem_key: idem, recipe_version: RECIPE_VERSION, error: null, ...onBudget };
   let runId: string;
   if (target) {
     const { data: prev } = await sb.from("budget_runs").select("attempts").eq("id", target.id).maybeSingle();
@@ -259,7 +266,7 @@ export async function buildDraft(sb: Sb, orgId: string, userId: string | null, j
     const { data: secs } = await sb.from("job_sections").select("id, name, work_type, length_ft, width_ft, sqft_override, depth_in")
       .eq("org_id", orgId).eq("job_id", jobId);
     const sections = (secs ?? []) as Array<Record<string, unknown>>;
-    const made: { sections: Array<{ id: string; name: string; assembly: string | null; lines: number }> } = { sections: [] };
+    const made: { sections: Array<{ id: string; name: string; assembly: string | null; lines: number; existing?: boolean }> } = { sections: [] };
     let suggestions: Suggestion[] = [];
     if (!sections.length && x.kind !== "unsupported" && x.areas.length) {
       let sort = 0;
@@ -278,6 +285,17 @@ export async function buildDraft(sb: Sb, orgId: string, userId: string | null, j
       }
     } else if (sections.length) {
       suggestions = suggestionsFor(x.areas, sections);
+      // A new, empty budget on a job that already has areas: Coy's assembly
+      // fills each area, as it would a new one. Sizes are never changed —
+      // what was heard differently stays a suggestion.
+      const { count } = await sb.from("estimate_line_items").select("id", { count: "exact", head: true }).eq("estimate_id", est.id as string);
+      if ((count ?? 0) === 0 && x.kind !== "unsupported") {
+        for (const sec of sections) {
+          const asm = await loadAssembly(sb, orgId, jobId, sec.id as string,
+            { auto: true, jobType: (g.job.job_type as string | null) ?? null, workType: (sec.work_type as string | null) ?? null });
+          made.sections.push({ id: sec.id as string, name: (sec.name as string | null) ?? "Area", assembly: asm.loaded, lines: asm.lines, existing: true });
+        }
+      }
     }
     const reading = { ...x, scope: g.scope, evidence_count: g.evidence.length };
     const { data: done } = await sb.from("budget_runs").update({
@@ -307,18 +325,22 @@ export async function readExclusions(sb: Sb, orgId: string, estimateId: string):
  * the last approval.
  */
 export async function draftState(sb: Sb, orgId: string, jobId: string) {
-  const { data: runs, error } = await sb.from("budget_runs").select(RUN_COLS).eq("org_id", orgId).eq("job_id", jobId)
+  const est = await workingEstimate(sb, orgId, jobId, false);
+  // The open budget's own build (migration 088); a build from before 088 has
+  // no budget and shows on whichever is open. Without 088, the job's latest.
+  const latest = () => sb.from("budget_runs").select(RUN_COLS).eq("org_id", orgId).eq("job_id", jobId)
     .order("created_at", { ascending: false }).limit(1);
+  let { data: runs, error } = est ? await latest().or(`estimate_id.eq.${est.id as string},estimate_id.is.null`) : await latest();
+  if (error && /estimate_id/.test(error.message ?? "")) ({ data: runs, error } = await latest());
   if (missingTable(error)) return { ready: false as const, error: DRAFT_TABLE_MISSING };
   const run = ((runs ?? []) as Array<Record<string, unknown>>)[0] ?? null;
-  const est = await workingEstimate(sb, orgId, jobId, false);
   const [{ data: rows }, { data: secs }, pricing, takeoff, { data: groups }, { data: appr }, { data: job }] = await Promise.all([
     est ? sb.from("estimate_line_items").select(LINE_COLUMNS).eq("estimate_id", est.id as string) : Promise.resolve({ data: [] }),
     sb.from("job_sections").select("id, name, work_type, length_ft, width_ft, sqft_override, depth_in, psi, count_qty, count_unit").eq("org_id", orgId).eq("job_id", jobId),
     pricingFor(sb, orgId, [jobId]),
     takeoffTotalsFor(sb, orgId, jobId),
     sb.from("cost_groups").select("id, name").eq("org_id", orgId),
-    sb.from("budget_approvals").select("id, total, cost, approved_at, approved_by").eq("org_id", orgId).eq("job_id", jobId).order("approved_at", { ascending: false }).limit(1),
+    est ? sb.from("budget_approvals").select("id, total, cost, approved_at, approved_by").eq("org_id", orgId).eq("job_id", jobId).eq("estimate_id", est.id as string).order("approved_at", { ascending: false }).limit(1) : Promise.resolve({ data: [] }),
     sb.from("jobs").select("job_type, duration_days").eq("org_id", orgId).eq("id", jobId).maybeSingle(),
   ]);
   const lines = ((rows ?? []) as Array<Record<string, unknown>>).map(numLine) as unknown as Array<BudgetLine & Record<string, unknown>>;

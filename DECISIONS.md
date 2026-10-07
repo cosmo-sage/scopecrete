@@ -2774,7 +2774,16 @@ expected start date per quoted job before it means anything. Add the field.
   reader hasn't read yet is sent to the model as an image with that question
   (up to four; `seeableMime()`, `src/lib/dusty/see.ts`, tested), so he
   answers about it in the same reply — a screenshot of ScopeCrete is read as
-  the screen. HEIC, PDFs and anything larger still wait for the reader.
+  the screen. HEIC and anything larger still wait for the reader.
+  **A PDF he reads himself (Coy, 2026-10-07: icon-budget.pdf, "See attached
+  preliminary budget" — Dusty said it was "not read yet" and asked him to
+  wait; the reader read it 34 s later).** An attached PDF the reader hasn't
+  read yet has its text pulled out in the same request (unpdf, as the
+  reader does; `pdfTextNow()` in `see.ts`, tested) — at most two a question,
+  12 MB at most (the reader's own cap, §2e), 8 s at most, the first 30,000
+  characters — and he answers from it. A scan with no text, a bigger file, or
+  one that won't open in time still waits for the reader. Nothing is written
+  to the file; the reader still reads it and files its summary and facts.
   **The chat keeps its files (migration 079, applied 2026-10-04 on Coy's
   "apply 079"; checked after: the column, its ≤ 8 check, RLS unchanged — Coy 2026-10-04: "the chat
   history should at least keep the summary of the image that he read. We'll

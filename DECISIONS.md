@@ -2134,8 +2134,9 @@ expected start date per quoted job before it means anything. Add the field.
   call or text again.
   Not built: Dusty reading a whole custom thread (his context is still one
   contact), and "Jump to date".
-  **Threads made from rules (migration 089, written, waiting for Coy's
-  "apply 089"; Coy, 2026-10-07: "I want ultimate flexibility for the threads
+  **Threads made from rules (migration 089, applied 2026-10-07 on Coy's
+  "Apply 089"; checked after: `threads.rule` jsonb, the source check takes
+  'rule', the shape check in place, RLS and its policy unchanged; Coy, 2026-10-07: "I want ultimate flexibility for the threads
   channels I create … all the emails coming into intake-concrete@agentmail.to
   … todays calls from quo phone number … all my VOIP numbers … bid requests
   sent out to vendors" — "as long as it doesn't break anything else").** + New
@@ -2153,9 +2154,8 @@ expected start date per quoted job before it means anything. Add the field.
   the email in Files, refreshing as texts land. **Edit rule** changes it
   (`PATCH /api/threads/custom/[id] {rule}`). The rail shows no count for one.
   Nothing else changed: job and customer threads' sync triggers act only on
-  their own sources, the people threads read as before, and until 089 is
-  applied the threads read without the column and A rule says it is waiting
-  for it. Rehearsed (rolled back): a rule thread inserted; a rule thread with
+  their own sources, and the people threads read as before (without the
+  column they still read; A rule would say it waits for 089). Rehearsed (rolled back): a rule thread inserted; a rule thread with
   no rule, another thread with one, and a non-object rule refused.
 - **Threads on a desktop (2026-10-01, Coy):** the five buckets are a second
   icon rail beside the main one (`SubRail`, with counts), **Customer**

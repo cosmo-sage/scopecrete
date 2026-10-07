@@ -46,6 +46,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { T, F, disp, body, eyebrow, clip, formatPhone } from "@/lib/v34/tokens";
 import { segments } from "@/lib/texting";
 import { ProposalSendSheet } from "@/components/v34/proposal-send";
+import { proposalLink } from "@/lib/v34/send-proposal";
 
 type Channel = "text" | "email" | "note";
 
@@ -91,6 +92,11 @@ function recognitionCtor(): (new () => Recognition) | null {
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
 }
 
+interface SlashProposal {
+  job_id: string; job_title: string | null; number: string; version: number; status: "draft" | "final"; total: number | null;
+  link: { id: string; url: string; token: string; views: string } | null;
+}
+
 export function Composer({ contactId, phone, name, compact = false, onNoteSaved, onSent, only, fromLine }: {
   contactId: string;
   /** E.164, for the Call link. */
@@ -131,6 +137,35 @@ export function Composer({ contactId, phone, name, compact = false, onNoteSaved,
   const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Send a job's proposal from here (Coy, 2026-10-05) — its own sheet: the job, the words, Preview, Send.
   const [proposalOpen, setProposalOpen] = useState(false);
+  // "/" in the box lists their final proposals; a pick puts its link in the text (Coy, 2026-10-07).
+  const [finals, setFinals] = useState<SlashProposal[] | null>(null);
+  const [slashBusy, setSlashBusy] = useState(false);
+  const [slashOff, setSlashOff] = useState<string | null>(null);
+  const linked = useRef<Set<string>>(new Set());
+  const slash = channel !== "note" ? /(?:^|\s)\/([\w-]*)$/.exec(text) : null;
+  const slashOpen = !!slash && slashOff !== text;
+  useEffect(() => {
+    if (!slashOpen || finals) return;
+    let off = false;
+    fetch(`/api/proposals?contact=${contactId}`).then((r) => r.json()).then((b) => {
+      if (!off) setFinals(((b.proposals ?? []) as SlashProposal[]).filter((x) => x.status === "final"));
+    }).catch(() => { if (!off) setFinals([]); });
+    return () => { off = true; };
+  }, [slashOpen, finals, contactId]);
+  const slashList = (finals ?? []).filter((x) => {
+    const q = (slash?.[1] ?? "").toLowerCase();
+    return !q || "proposal".startsWith(q) || `${x.number} ${x.job_title ?? ""}`.toLowerCase().includes(q);
+  });
+  async function insertProposal(x: SlashProposal) {
+    setSlashBusy(true);
+    try {
+      const link = x.link ?? (await proposalLink(x.job_id)).link;
+      linked.current.add(link.id);
+      setText((t) => t.replace(/\/([\w-]*)$/, link.url));
+    } catch (e) {
+      setSendMsg({ ok: false, text: `No link: ${e instanceof Error ? e.message : String(e)}` });
+    } finally { setSlashBusy(false); }
+  }
 
   useEffect(() => { writeDraft(contactId, channel, text); }, [contactId, channel, text]);
   useEffect(() => () => { if (copiedTimer.current) clearTimeout(copiedTimer.current); }, []);
@@ -187,6 +222,9 @@ export function Composer({ contactId, phone, name, compact = false, onNoteSaved,
       if (!r.ok) throw new Error(b?.error || `HTTP ${r.status}`);
       const lineName = fromLine?.lines.find((l) => l.id === b.from_line)?.name;
       setText("");
+      // A proposal link put in with "/" is marked sent by text, so its openings count from here.
+      for (const id of linked.current) if (msg.includes("/p/")) void fetch(`/api/proposal-links/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sent: "text" }) }).catch(() => {});
+      linked.current.clear();
       setSendMsg({ ok: true, text: `Sent to ${formatPhone(b.to)}${lineName ? ` from ${lineName}` : ""} — it shows here once Quo confirms.` });
       // Quo's webhook usually lands within seconds; reload twice to pick it up.
       if (onSent) { setTimeout(onSent, 4000); setTimeout(onSent, 15000); }
@@ -238,6 +276,24 @@ export function Composer({ contactId, phone, name, compact = false, onNoteSaved,
         </div>
       )}
 
+      {slashOpen && (
+        <div role="listbox" aria-label="Put a proposal's link in" className="rounded-lg mb-1.5"
+          style={{ border: `1px solid ${T.hair}`, background: T.card, boxShadow: "0 6px 20px rgba(0,0,0,.12)", maxHeight: 220, overflowY: "auto" }}>
+          <div className="flex items-center px-2.5 py-1.5" style={{ ...eyebrow, fontSize: 9, color: T.ink3, borderBottom: `1px solid ${T.hairSoft}` }}>
+            <span className="flex-1">Put a proposal&apos;s link in</span>
+            <button type="button" onClick={() => setSlashOff(text)} aria-label="Close" style={{ border: 0, background: "transparent", color: T.ink3, cursor: "pointer", fontSize: 13 }}>×</button>
+          </div>
+          {finals === null ? <div className="px-2.5 py-2" style={{ fontSize: F.xs, color: T.ink3 }}>Looking…</div>
+            : slashList.length === 0 ? <div className="px-2.5 py-2" style={{ fontSize: F.xs, color: T.ink3 }}>No final proposal on their jobs yet — open the proposal and Preview it to make one.</div>
+            : slashList.map((x) => (
+              <button key={x.job_id} type="button" role="option" aria-selected={false} disabled={slashBusy} onClick={() => void insertProposal(x)}
+                className="w-full text-left px-2.5 py-1.5" style={{ border: 0, borderBottom: `1px solid ${T.hairSoft}`, background: "transparent", cursor: "pointer", display: "block" }}>
+                <div style={{ fontSize: F.sm, color: T.ink, ...clip }}>{x.number} · {x.job_title ?? "Untitled job"}</div>
+                <div style={{ fontSize: F.xs, color: T.ink3 }}>v{x.version}{x.total != null ? ` · $${Math.round(x.total).toLocaleString()}` : ""}{x.link ? ` · ${x.link.views}` : " · makes its link"}</div>
+              </button>
+            ))}
+        </div>
+      )}
       <div className="flex items-end gap-1.5">
         {/* The line it goes from is picked once, in the thread's toolbar (Coy, 2026-10-05: "it exists already at the top"). */}
         <textarea value={text} onChange={(e) => setText(e.target.value)} rows={compact ? 2 : 1}

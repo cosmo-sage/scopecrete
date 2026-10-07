@@ -473,9 +473,9 @@ export function SmsRow({ m }: { m: ThreadMessage }) {
         )}
         {text && <ProposalChip text={text} isOut={isOut} />}
         {m.media_count > 0 && <MessageMedia messageId={m.id} count={m.media_count} isOut={isOut} />}
-        <div className="text-[9px] mt-1" style={{ color: "inherit", opacity: 0.7, letterSpacing: ".06em" }}>
-          {isOut ? "OUT" : "IN"} · {formatTime(m.occurred_at)}
-          {m.line && <> · <span style={{ display: "inline-block", width: 6, height: 6, borderRadius: 6, background: m.line_color ?? "currentColor", verticalAlign: "middle" }} /> via {m.line}</>}
+        {/* Just the time, on the right — no IN / OUT, no "via" line (Coy, 2026-10-07: "it's just cluttering up the chat"). */}
+        <div className="text-[9px] mt-1 text-right" style={{ color: "inherit", opacity: 0.6 }}>
+          {formatTime(m.occurred_at)}
         </div>
       </div>
     </div>

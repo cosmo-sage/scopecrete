@@ -21,7 +21,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { T, F, disp, eyebrow, agent, clip, relTime, nums } from "@/lib/v34/tokens";
+import { T, F, disp, eyebrow, agent, clip, relTime, nums, formatPhone } from "@/lib/v34/tokens";
 import { DustyAvatar, type DustyState } from "@/components/v34/dusty-avatar";
 import { Markdown } from "@/components/v34/markdown";
 import { PlanCard } from "@/components/v34/plan-card";
@@ -65,7 +65,10 @@ const FONT_STEPS = [
   { key: "xl", label: "Extra large", z: 1.3 },
 ] as const;
 /** What a chat is about, without the context's kind in front ("scope: Wilson Driveway" → "Wilson Driveway"). */
-const aboutLabel = (l: string | null) => (l ?? "").replace(/^scope:\s*/i, "");
+const aboutLabel = (l: string | null) => {
+  const s = (l ?? "").replace(/^scope:\s*/i, "").replace(/'s thread$/, "").replace(/ \(customer page\)$/, "");
+  return /^\+?\d{10,11}$/.test(s) ? formatPhone(s) : s;
+};
 
 const sameRef =(c: Conv, r: Ref) => "id" in r ? c.context_kind === r.kind && c.context_id === r.id : c.context_kind === r.kind && r.kind === "cash";
 
@@ -85,6 +88,16 @@ export function DustyPanel({ open, onClose, onBusy, onStream }: {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [railOpen, setRailOpen] = useState(false);
+  // The page's real name for the header — the person (or their number), the job, the customer.
+  const [pageName, setPageName] = useState<{ key: string; label: string | null } | null>(null);
+  useEffect(() => {
+    if (!open || !("id" in ref)) return;
+    let gone = false;
+    fetch(`/api/dusty/label?kind=${ref.kind}&id=${encodeURIComponent(ref.id)}`).then((r) => r.ok ? r.json() : null)
+      .then((j) => { if (!gone) setPageName({ key: refKey, label: j?.label ?? null }); }).catch(() => {});
+    return () => { gone = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, refKey]);
   const [copied, setCopied] = useState<number | null>(null);
   const useTarget = useDustyUse();
   const [loadingConv, setLoadingConv] = useState(false);
@@ -320,7 +333,7 @@ export function DustyPanel({ open, onClose, onBusy, onStream }: {
   const planJob = active ? (active.context_kind === "scope" ? active.context_id : null) : ref.kind === "scope" ? ref.id : null;
   const hot = active ? active.context_kind !== "cold" : ref.kind !== "cold";
   const lookingAt = active ? (active.context_kind === "cold" ? null : aboutLabel(active.context_label))
-    : ref.kind === "cold" ? null : GUESS[ref.kind];
+    : ref.kind === "cold" ? null : (pageName?.key === refKey && pageName.label) || GUESS[ref.kind];
 
   const groups: Array<[string, Conv[]]> = [];
   if (convs) {

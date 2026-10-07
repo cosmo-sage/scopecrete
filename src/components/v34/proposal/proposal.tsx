@@ -97,6 +97,7 @@ export function Proposal({ jobId }: { jobId: string }) {
   });
   const [panel, setPanel] = useState(false);
   const [preview, setPreview] = useState(false);
+  const [copied, setCopied] = useState(false);
   const [links, setLinks] = useState<PropLink[]>([]);
   const loadLinks = useCallback(() => {
     call(`/api/jobs/${jobId}/proposal/link`, "GET").then((d) => setLinks((d.links ?? []) as PropLink[])).catch(() => {});
@@ -336,7 +337,19 @@ export function Proposal({ jobId }: { jobId: string }) {
           )}
           {!finalShown && (
             <button onClick={() => { flushSaves(); setPreview(true); }} disabled={!!busy} className="rounded"
-              style={{ height: 30, padding: "0 12px", background: "#B85A3C", color: "#fff", fontFamily: disp, fontSize: 12, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase" }}>Preview</button>
+              style={{ height: 30, padding: "0 12px", background: "#B85A3C", color: "#fff", fontFamily: disp, fontSize: 12, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase" }}>{wide ? "Preview & send" : "Send"}</button>
+          )}
+          {/* Copy the link to send it yourself (Coy, 2026-10-07). With no link for this version yet, the
+              Preview makes one — sending or copying there freezes a draft first. */}
+          {!finalShown && (
+            <button onClick={() => {
+              const live = links.find((l) => !l.revoked_at && l.status !== "void" && l.version?.version === p.version);
+              if (live && !editable) {
+                void navigator.clipboard.writeText(live.url).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2500); }).catch(() => {});
+                void call(`/api/proposal-links/${live.id}`, "PATCH", { sent: "copy" }).then(loadLinks).catch(() => {});
+              } else { flushSaves(); setPreview(true); }
+            }} disabled={!!busy} className="rounded" title="Copy the customer's link to paste anywhere"
+              style={{ height: 30, padding: "0 12px", border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink, fontFamily: disp, fontSize: 12, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase" }}>{copied ? "Copied ✓" : "Copy link"}</button>
           )}
           {!editable && !finalShown && (
             <button onClick={() => void newVersion()} disabled={!!busy} className="rounded"

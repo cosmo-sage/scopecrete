@@ -59,6 +59,7 @@ const RULE_FIELDS: Partial<Record<QtyRule, Array<{ k: string; label: string; uni
   per_cy: [
     { k: "waste_pct", label: "Waste", unit: "%", hint: "concrete itself: what you order over neat yards (0 is fine)" },
     { k: "per_cy", label: "Per yard", unit: "unit / cu yd", hint: "for fiber — blank for concrete itself" },
+    { k: "round_cy", label: "Order in steps of", unit: "cu yd", hint: "0.25 = up to the next quarter yard; blank = exact" },
   ],
 };
 

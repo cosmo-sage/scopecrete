@@ -395,7 +395,15 @@ export function ruleQty(
       // Waste is the card's (Coy: concrete is set in the cost book) — 0 is a
       // real answer, blank is not.
       if (!has(p.waste_pct) || p.waste_pct < 0) return { ok: false, missing: [`${line.name}: waste % (on the card)`] };
-      return { ok: true, qty: Math.round(neat * (1 + p.waste_pct / 100) * 100) / 100, basis: "rule", note: p.waste_pct ? `yards + ${p.waste_pct}% waste` : "yards, no waste" };
+      const withWaste = neat * (1 + p.waste_pct / 100);
+      const note = p.waste_pct ? `yards + ${p.waste_pct}% waste` : "yards, no waste";
+      // The card can say how a load is ordered (rule_params.round_cy: 0.25 = up
+      // to the next quarter yard); without it, yards to the hundredth as before.
+      if (pos(p.round_cy)) {
+        const steps = up(withWaste / p.round_cy);
+        return { ok: true, qty: Math.round(steps * p.round_cy * 1e6) / 1e6, basis: "rule", note: `${note}, ordered by ${p.round_cy} yd` };
+      }
+      return { ok: true, qty: Math.round(withWaste * 100) / 100, basis: "rule", note };
     }
     case "per_sheet": {
       if (!pos(p.sheet_sqft)) return { ok: false, missing: [`${line.name}: what one sheet covers`] };

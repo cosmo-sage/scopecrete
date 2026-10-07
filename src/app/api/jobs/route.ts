@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
 import { ALL_STATUSES, LEAD_SOURCES } from "@/lib/jobs/stages";
+import { autoDraftOn, buildDraft, queueDraft } from "@/lib/draft/build-server";
 
 /**
  * Jobs for the signed-in user's org — read and create.
@@ -231,6 +232,15 @@ export async function POST(req: NextRequest) {
 
   if (error) {
     return applyCookies(NextResponse.json({ error: `jobs insert: ${error.message}` }, { status: 500 }));
+  }
+
+  // A draft budget from their calls and texts (migration 087), behind
+  // BUDGET_DRAFT_AUTO=on. The queued row is written before the answer, so a
+  // build that dies after it is still on the job page with Retry; the job
+  // itself never waits on it or fails with it.
+  if (autoDraftOn() && data.contact_id) {
+    const runId = await queueDraft(supabase, orgId, userId, data.id as string).catch(() => null);
+    if (runId) after(() => buildDraft(supabase, orgId, userId, data.id as string, "job_created").then(() => undefined, () => undefined));
   }
 
   return applyCookies(NextResponse.json({ job: data }, { status: 201 }));

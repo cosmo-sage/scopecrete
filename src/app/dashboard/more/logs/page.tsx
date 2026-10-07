@@ -15,8 +15,9 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { T, F, eyebrow, nums, relTime } from "@/lib/v34/tokens";
-import { EmptyState } from "@/components/v34/primitives";
+import { EmptyState, PageHeader, Segmented } from "@/components/v34/primitives";
 import { LineEvents } from "@/components/v34/line-events";
+import { PriceBookLog } from "@/components/v34/price-book-log";
 
 interface Logs {
   checks: Array<{ at: string; severity: "alarm" | "note"; title: string; detail: string }>;
@@ -29,7 +30,34 @@ const OUTCOME: Record<string, string> = {
   no_words: "Nothing to read", model_error: "Couldn't read", failed: "Failed", abandoned: "Timed out", running: "Reading…", skipped: "Skipped",
 };
 
+/** Events (calls, texts, Dusty's reads, merges) · Price book (imports and
+ *  price changes, Coy 2026-10-07), kept in the address as ?tab=pricebook. */
+type Tab = "events" | "pricebook";
+
 export default function LogsScreen() {
+  const [tab, setTabState] = useState<Tab>("events");
+  useEffect(() => { if (new URLSearchParams(window.location.search).get("tab") === "pricebook") void Promise.resolve().then(() => setTabState("pricebook")); }, []);
+  const setTab = (t: Tab) => {
+    setTabState(t);
+    const u = new URL(window.location.href);
+    if (t === "pricebook") u.searchParams.set("tab", t); else u.searchParams.delete("tab");
+    window.history.replaceState(null, "", u.pathname + u.search);
+  };
+  const tabs = (
+    <div className="mt-2" style={{ width: 240 }}>
+      <Segmented small options={[["events", "Events"], ["pricebook", "Price book"]]} value={tab} onChange={(v) => setTab(v as Tab)} />
+    </div>
+  );
+  if (tab === "pricebook") return (
+    <div>
+      <PageHeader title="Logs" sub="What happened behind the scenes. The Price book tab lists every import (with Undo) and every price change.">{tabs}</PageHeader>
+      <PriceBookLog />
+    </div>
+  );
+  return <EventLogs tabs={tabs} />;
+}
+
+function EventLogs({ tabs }: { tabs: React.ReactNode }) {
   const [logs, setLogs] = useState<Logs | null>(null);
   const [error, setError] = useState<string | null>(null);
   // undefined = not asked yet; null = couldn't read (shown as unknown).
@@ -58,7 +86,7 @@ export default function LogsScreen() {
 
   return (
     <div style={{ paddingBottom: 24 }}>
-    <LineEvents />
+    <LineEvents tabs={tabs} />
     {error ? <EmptyState tone="warn" title="Couldn't load the rest of the logs" detail={error} />
     : !logs ? <div className="p-3"><div className="rounded animate-pulse" style={{ height: 120, background: T.hairSoft }} /></div> : (
     <div style={{ maxWidth: 760 }} className="mx-auto">

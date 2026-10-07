@@ -282,15 +282,33 @@ function TextedTile({ m, onAdd, busy }: { m: Texted; onAdd?: () => void; busy?: 
   );
 }
 
-export function FileViewer({ f, sections, onClose, onSaved, onDeleted, links }: {
+type ViewerProps = {
   f: FileRow | null; sections?: Array<{ id: string; name: string | null }>;
   /** Extra doors at the top of the sheet (Files: its job, their page). */
   links?: React.ReactNode;
   onClose: () => void; onSaved: (f: FileRow) => void; onDeleted: (id: string) => void;
-}) {
+};
+
+/** The one-line description under a file's name. */
+export function fileSub(f: FileRow) {
+  return `${f.category ? CATEGORY_LABEL[f.category] : "File"} · ${sizeLabel(f.byte_size)}${f.page_count ? ` · ${f.page_count} pages` : ""}`;
+}
+
+export function FileViewer(p: ViewerProps) {
+  const { f, onClose } = p;
+  if (!f) return <Sheet open={false} onClose={onClose} title="">{null}</Sheet>;
+  return (
+    <Sheet open onClose={onClose} title={f.name} sub={fileSub(f)}>
+      <FileDetails {...p} f={f} />
+    </Sheet>
+  );
+}
+
+/** A file's preview and details, drawn in a sheet (FileViewer) or in the
+ *  Files page's own preview panel (Coy, 2026-10-07). */
+export function FileDetails({ f, sections, onSaved, onDeleted, links, big }: ViewerProps & { f: FileRow; big?: boolean }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  if (!f) return <Sheet open={false} onClose={onClose} title="">{null}</Sheet>;
   const save = async (patch: Record<string, unknown>) => {
     setBusy(true); setErr(null);
     try { const b = await call(`/api/files/${f.id}`, "PATCH", patch); onSaved(b.file as FileRow); }
@@ -309,12 +327,14 @@ export function FileViewer({ f, sections, onClose, onSaved, onDeleted, links }: 
   const priceLines = Array.isArray(f.facts?.price_lines) ? (f.facts?.price_lines as unknown[]).length : 0;
 
   return (
-    <Sheet open onClose={onClose} title={f.name} sub={`${f.category ? CATEGORY_LABEL[f.category] : "File"} · ${sizeLabel(f.byte_size)}${f.page_count ? ` · ${f.page_count} pages` : ""}`}>
       <div className="px-4 py-3 flex flex-col gap-3">
         {links}
         {f.url && f.kind === "image" && (
           // eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL
-          <img src={f.url} alt={f.name} style={{ width: "100%", maxHeight: "50vh", objectFit: "contain", background: T.slab, borderRadius: 4 }} />
+          <img src={f.url} alt={f.name} style={{ width: "100%", maxHeight: big ? "70vh" : "50vh", objectFit: "contain", background: T.slab, borderRadius: 4 }} />
+        )}
+        {big && f.url && f.kind === "pdf" && (
+          <iframe src={f.url} title={f.name} style={{ width: "100%", height: "60vh", border: `1px solid ${T.hair}`, borderRadius: 4, background: T.slab }} />
         )}
         {f.url && f.kind !== "image" && (
           <a href={f.url} target="_blank" rel="noreferrer" className="rounded px-3 flex items-center justify-center"
@@ -372,6 +392,5 @@ export function FileViewer({ f, sections, onClose, onSaved, onDeleted, links }: 
         {err && <div style={{ fontSize: F.xs, color: T.red }}>{err}</div>}
         <button onClick={() => void del()} disabled={busy} className="self-start" style={{ ...eyebrow, color: T.red, cursor: "pointer" }}>Delete file</button>
       </div>
-    </Sheet>
   );
 }

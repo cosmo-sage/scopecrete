@@ -32,10 +32,6 @@ import { Assemblies } from "@/components/v34/assemblies";
 import { usePref } from "@/lib/v34/prefs";
 
 type View = "group" | "vendor";
-interface Imp {
-  id: string; kind: string; file_name: string | null; source: string | null; created_count: number; updated_count: number;
-  unchanged_count: number; skipped_count: number; created_at: string; undone_at: string | null;
-}
 const STALE_DAYS = 90;
 const VIEW_KEY = "sc:pricebook-view";
 /** One vendor's price on an item (migration 051), as the "By vendor" view needs it. */
@@ -77,7 +73,6 @@ export function PriceBook({ pick }: { pick?: PricePick } = {}) {
   const [items, setItems] = useState<Card[] | null>(null);
   const [groups, setGroups] = useState<Group[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
-  const [imports, setImports] = useState<Imp[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
@@ -130,8 +125,8 @@ export function PriceBook({ pick }: { pick?: PricePick } = {}) {
 
   useEffect(() => {
     let off = false;
-    Promise.all([call("/api/cost-items?all=1&sources=1", "GET"), call("/api/price-book/import", "GET").catch(() => ({ imports: [] }))])
-      .then(([b, i]) => {
+    call("/api/cost-items?all=1&sources=1", "GET")
+      .then((b) => {
         if (off) return;
         setNow(Date.now());
         if (tick === 0) {
@@ -143,7 +138,7 @@ export function PriceBook({ pick }: { pick?: PricePick } = {}) {
         // Hundreds of rows: draw them as a transition, which React breaks into
         // slices and pauses for a tap, so the page never locks up while it fills.
         startTransition(() => {
-          setItems((b.items as Array<Record<string, unknown>>).map(numify)); setGroups(b.groups); setVendors(b.vendors); setImports(i.imports ?? []); setSources((b.sources ?? []) as Src[]);
+          setItems((b.items as Array<Record<string, unknown>>).map(numify)); setGroups(b.groups); setVendors(b.vendors); setSources((b.sources ?? []) as Src[]);
           setErr(null);
         });
       })
@@ -219,13 +214,7 @@ export function PriceBook({ pick }: { pick?: PricePick } = {}) {
     setEditing({ cost_group_id: groupId ?? null, cost_type: t, qty_rule: "manual", unit: "", taxable: defaultTaxable(t),
       vendor_contact_id: null, rule_params: {}, unit_cost: null, markup_pct: null });
   };
-  const undo = async (i: Imp) => {
-    if (!window.confirm(`Undo the import of ${i.file_name ?? "that file"}? Cards it added are taken out of the catalog; prices it changed go back, unless you've changed them since.`)) return;
-    try {
-      const b = await call(`/api/price-book/import/${i.id}/undo`, "POST");
-      setNote(`Undone: ${b.retired} card${b.retired === 1 ? "" : "s"} taken out, ${b.restored} price${b.restored === 1 ? "" : "s"} put back${b.kept ? `, ${b.kept} kept because you changed them since` : ""}.`);
-    } catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { reload(); }
-  };
+
 
   const stale = (d: string | null) => !!d && now > 0 && now - new Date(`${d}T12:00:00`).getTime() > STALE_DAYS * 864e5;
   const active = (items ?? []).filter((c) => c.active);
@@ -262,7 +251,6 @@ export function PriceBook({ pick }: { pick?: PricePick } = {}) {
     let left = rowBudget;
     return sections.map((s) => { if (open[s.key] === false) return 0; const n = Math.min(left, s.cards.length); left -= n; return n; });
   })();
-  const recentImports = imports.filter((i) => now - new Date(i.created_at).getTime() < 30 * 864e5);
   const btn = (primary: boolean): React.CSSProperties => ({ height: 32, padding: "0 10px", borderRadius: 4, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase",
     letterSpacing: ".06em", background: primary ? T.ink : T.card, color: primary ? T.card : T.ink, border: primary ? "none" : `1px solid ${T.hair}`, cursor: "pointer", whiteSpace: "nowrap" });
 
@@ -377,19 +365,6 @@ export function PriceBook({ pick }: { pick?: PricePick } = {}) {
         <span className="flex-1">{note}</span><button onClick={() => setNote(null)} aria-label="Dismiss" style={{ color: T.ink3, cursor: "pointer" }}>×</button></div>}
       {err && <div className="mt-2" style={{ fontSize: F.sm, color: T.red }}>{err}</div>}
 
-      {recentImports.length > 0 && (
-        <div className="mt-2 flex flex-col gap-1">
-          {recentImports.slice(0, 3).map((i) => (
-            <div key={i.id} className="flex items-center gap-2 flex-wrap" style={{ fontSize: F.xs, color: T.ink2 }}>
-              <span style={{ ...eyebrow, color: T.ink3 }}>Import</span>
-              <span style={{ ...clip, maxWidth: 240 }}>{i.file_name ?? i.kind}</span>
-              <span style={{ color: T.ink3 }}>{new Date(i.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })} · {i.created_count} new · {i.updated_count} changed</span>
-              {i.undone_at ? <span style={{ color: T.ink3 }}>undone</span>
-                : <button onClick={() => void undo(i)} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>Undo</button>}
-            </div>
-          ))}
-        </div>
-      )}
 
       {items === null && !err && <div className="rounded animate-pulse mt-3" style={{ height: 120, background: T.hairSoft }} />}
       {items !== null && items.length === 0 && (

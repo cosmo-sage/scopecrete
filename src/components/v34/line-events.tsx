@@ -27,7 +27,7 @@ const STATUS: Record<EventStatus, { l: string; c: string }> = {
 };
 const when = (iso: string) => new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
-export function LineEvents() {
+export function LineEvents({ tabs }: { tabs?: React.ReactNode } = {}) {
   const [data, setData] = useState<{ lines: LineLite[]; events: Ev[] } | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [f, setF] = useState<LogFilter>({ line: null, provider: null, event: "all" });
@@ -76,6 +76,7 @@ export function LineEvents() {
     <div>
       <PageHeader title="Logs" sub="What happened behind the scenes. Nothing here needs you unless it is red."
         actions={<Link href="/dashboard/more/lines" style={{ fontFamily: disp, fontSize: 11, letterSpacing: ".06em", textTransform: "uppercase", color: T.chalk }}>Lines ›</Link>}>
+        {tabs}
         <div className="flex flex-col lg:flex-row lg:items-center gap-2 mt-2.5">
           {([
             { k: "Line", items: [{ v: null as string | null, l: "All lines", n: all.length, c: null as string | null }, ...lines.map((l) => ({ v: l.id, l: lineName(l), n: all.filter((e) => e.line_id === l.id).length, c: l.color }))],

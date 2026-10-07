@@ -24,7 +24,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { T, F, disp, eyebrow, clip, relTime, nums } from "@/lib/v34/tokens";
 import { Drawer, MenuButton, PageHeader, SearchBubble, SearchToggle, Segmented } from "@/components/v34/primitives";
-import { FileViewer, type FileRow } from "@/components/v34/files-panel";
+import { FileDetails, fileSub, type FileRow } from "@/components/v34/files-panel";
 import { EmailList } from "@/components/v34/email-sheet";
 import { useWide } from "@/lib/v34/use-wide";
 import { CATEGORY_LABEL, sizeLabel, type Category } from "@/lib/files";
@@ -66,6 +66,21 @@ export function FilesPage({ fixed, embedded, extra }: { fixed?: Partial<FileFilt
   const [proposals, setProposals] = useState<Array<{ id: string; job_id: string; version: number; finalized_at: string; number: string | null; total: number | null; title: string | null; customer: string | null }>>([]);
   const [err, setErr] = useState<string | null>(null);
   const [open, setOpen] = useState<FileRow | null>(null);
+  // The preview panel (Coy, 2026-10-07): on a desktop a column on the right of
+  // the files, its width dragged and kept on the device; on a phone the whole
+  // screen, with Files › folder › name at the top to get back.
+  const [preview, setPreviewState] = useState(false);
+  const [pw, setPw] = useState(440);
+  useEffect(() => {
+    void Promise.resolve().then(() => {
+      try {
+        if (localStorage.getItem("sc:files-preview") === "1") setPreviewState(true);
+        const w = Number(localStorage.getItem("sc:files-preview-w")); if (w >= 300 && w <= 1000) setPw(w);
+      } catch { /* storage off */ }
+    });
+  }, []);
+  const setPreview = (on: boolean) => { setPreviewState(on); try { localStorage.setItem("sc:files-preview", on ? "1" : "0"); } catch { /* storage off */ } };
+  const pickFile = (f: FileRow) => { setOpen(f); setPreview(true); };
   const [emailParam, setEmailParam] = useState<string | null>(null);
   // Names seen so far, so a filter's list doesn't shrink to the one chosen.
   const [jobNames, setJobNames] = useState<Record<string, string>>({});
@@ -118,7 +133,7 @@ export function FilesPage({ fixed, embedded, extra }: { fixed?: Partial<FileFilt
         if (b.facets) setFacets(b.facets as Facets);
         setJobNames((m) => ({ ...m, ...Object.fromEntries((b.jobs as Array<{ id: string; name: string }>).map((j) => [j.id, j.name])) }));
         setPeopleNames((m) => ({ ...m, ...Object.fromEntries((b.people as Array<{ id: string; name: string }>).map((c) => [c.id, c.name])) }));
-        if (fileParam && fs.length === 1) setOpen(fs[0]);
+        if (fileParam && fs.length === 1) { setOpen(fs[0]); setPreview(true); }
       })
       .catch((e) => { if (!off) setErr(e instanceof Error ? e.message : String(e)); });
     return () => { off = true; };
@@ -227,7 +242,7 @@ export function FilesPage({ fixed, embedded, extra }: { fixed?: Partial<FileFilt
     const kindLabel = f.category ? CATEGORY_LABEL[f.category as Category] : "File";
     const matched = f.matched && f.matched !== "words" ? f.matched : null;
     if (wide) return (
-      <button key={f.id} onClick={() => setOpen(f)} className="w-full text-left items-center gap-3 px-3 py-2"
+      <button key={f.id} onClick={() => pickFile(f)} className="w-full text-left items-center gap-3 px-3 py-2"
         style={{ display: "grid", gridTemplateColumns: grid, borderTop: i ? `1px solid ${T.hairSoft}` : "none", background: "transparent", cursor: "pointer" }}>
         {thumb(f, 40)}
         <span style={{ minWidth: 0 }}>
@@ -241,7 +256,7 @@ export function FilesPage({ fixed, embedded, extra }: { fixed?: Partial<FileFilt
       </button>
     );
     return (
-      <button key={f.id} onClick={() => setOpen(f)} className="w-full text-left flex items-center gap-3 px-3 py-2"
+      <button key={f.id} onClick={() => pickFile(f)} className="w-full text-left flex items-center gap-3 px-3 py-2"
         style={{ borderTop: i ? `1px solid ${T.hairSoft}` : "none", background: "transparent", cursor: "pointer" }}>
         {thumb(f, 40)}
         <span style={{ flex: 1, minWidth: 0 }}>
@@ -267,13 +282,25 @@ export function FilesPage({ fixed, embedded, extra }: { fixed?: Partial<FileFilt
       placeholder={photos ? "Search photos — words, or a name" : "Search files — words in a file, or a name: Wilson, Angelle…"} />
   );
 
+  const details = (f: FileRow) => (
+    <FileDetails key={f.id} f={f} big onClose={() => setPreview(false)}
+      links={f.job_id || f.contact_id ? (
+        <div className="flex gap-3">
+          {f.job_id && <Link href={`/dashboard/scope/${f.job_id}`} style={{ ...eyebrow, color: T.chalk }}>Open its job ›</Link>}
+          {f.contact_id && <Link href={`/dashboard/messages/${f.contact_id}`} style={{ ...eyebrow, color: T.chalk }}>Open their page ›</Link>}
+        </div>
+      ) : null}
+      onSaved={(nf) => { setFiles((a) => (a ?? []).map((x) => (x.id === nf.id ? nf : x))); setOpen(nf); }}
+      onDeleted={(id) => { setFiles((a) => (a ?? []).filter((x) => x.id !== id)); setOpen(null); }} />
+  );
+
   return (
     <>
     {/* The page's subheader like every main-menu page (Coy, 2026-10-06): ☰ on
         a phone, Files, the filter and search icons, one line on what it holds.
         Embedded on a customer's tab it is just the icons' row. */}
     {!embedded && (
-      <PageHeader title="Files" width={1296} menu={!wide ? <MenuButton onClick={() => setMenuOpen(true)} label="Folders" always /> : undefined}
+      <PageHeader title="Files" menu={!wide ? <MenuButton onClick={() => setMenuOpen(true)} label="Folders" always /> : undefined}
         sub="Every photo, plan, bid, quote, receipt and contract — uploaded, emailed or texted. Search the words in them, or any name."
         actions={<>
           <FilterMenu groups={filterGroups} used={chips.filter((c) => c.key !== "q").length} />
@@ -312,6 +339,13 @@ export function FilesPage({ fixed, embedded, extra }: { fixed?: Partial<FileFilt
             </div>
             <div style={{ flex: 1, minWidth: 0, fontFamily: disp, fontSize: F.lg, fontWeight: 600, ...clip }}>{folderName}</div>
             {fileParam && <button onClick={clearFile} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>Show all</button>}
+            <button onClick={() => { if (wide) setPreview(!preview); else { const f = open ?? files?.[0]; if (f) pickFile(f); } }}
+              aria-pressed={wide ? preview : undefined} disabled={!wide && !open && !files?.length} className="rounded flex items-center gap-1.5"
+              style={{ height: 28, padding: "0 10px", border: `1px solid ${wide && preview ? T.hiviz : T.hair}`, background: wide && preview ? T.hivizDim : T.card,
+                       color: wide && preview ? T.hivizText : T.ink2, fontFamily: disp, fontSize: F.xs, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".04em", cursor: "pointer" }}>
+              <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><rect x="2.5" y="3.5" width="15" height="13" rx="1.5" /><path d="M11.5 3.5v13" /></svg>
+              Preview
+            </button>
             <span style={{ fontSize: F.xs, color: T.ink3, ...nums }}>{files && cat !== "email" ? `${files.length}${files.length === 300 ? "+" : ""} ${photos ? "photos" : "shown"}` : ""}</span>
           </div>
 
@@ -352,7 +386,7 @@ export function FilesPage({ fixed, embedded, extra }: { fixed?: Partial<FileFilt
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: `repeat(auto-fill, minmax(${wide ? 132 : 96}px, 1fr))`, gap: 4 }}>
                     {m.items.map((f) => (
-                      <button key={f.id} onClick={() => setOpen(f)} title={f.name} aria-label={f.name} className="rounded overflow-hidden"
+                      <button key={f.id} onClick={() => pickFile(f)} title={f.name} aria-label={f.name} className="rounded overflow-hidden"
                         style={{ aspectRatio: "1 / 1", padding: 0, border: `1px solid ${T.hairSoft}`, background: T.slab, cursor: "pointer", position: "relative" }}>
                         {f.url
                           // eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL
@@ -400,19 +434,51 @@ export function FilesPage({ fixed, embedded, extra }: { fixed?: Partial<FileFilt
           </div>}
           {!photos && cat === "proposal" && !proposals.length && !err && <div className="px-3 py-4" style={{ fontSize: F.sm, color: T.ink3 }}>No proposal has been sent yet.</div>}
         </div>
+
+        {wide && preview && (
+          <aside aria-label="Preview" className="rounded"
+            style={{ width: pw, flexShrink: 0, position: "sticky", top: "calc(var(--sc-head) + var(--sc-subhead, 0px) + 8px)", height: "calc(100dvh - var(--sc-head) - var(--sc-subhead, 0px) - 24px)",
+                     background: T.card, border: `1px solid ${T.hair}`, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+            <div role="separator" aria-orientation="vertical" aria-label="Drag to resize the preview" title="Drag to resize"
+              onPointerDown={(e) => {
+                e.preventDefault();
+                const x0 = e.clientX, w0 = pw; let w = w0;
+                const mv = (ev: PointerEvent) => { w = Math.max(300, Math.min(1000, w0 + (x0 - ev.clientX))); setPw(w); };
+                const up = () => { window.removeEventListener("pointermove", mv); window.removeEventListener("pointerup", up); try { localStorage.setItem("sc:files-preview-w", String(Math.round(w))); } catch { /* storage off */ } };
+                window.addEventListener("pointermove", mv); window.addEventListener("pointerup", up);
+              }}
+              onDoubleClick={() => { setPw(440); try { localStorage.removeItem("sc:files-preview-w"); } catch { /* storage off */ } }}
+              style={{ position: "absolute", left: -1, top: 0, bottom: 0, width: 8, cursor: "col-resize", zIndex: 2, touchAction: "none" }} />
+            <div className="flex items-start gap-2 px-4 py-2.5" style={{ borderBottom: `1px solid ${T.hairSoft}` }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: disp, fontSize: F.md, fontWeight: 600, ...clip }}>{open ? open.name : "Preview"}</div>
+                <div style={{ fontSize: F.xs, color: T.ink3, ...clip }}>{open ? fileSub(open) : "Pick a file to see it here."}</div>
+              </div>
+              <button onClick={() => setPreview(false)} aria-label="Close the preview" style={{ fontSize: 20, lineHeight: 1, color: T.ink3, cursor: "pointer", padding: "0 4px" }}>×</button>
+            </div>
+            <div style={{ flex: 1, overflowY: "auto" }}>
+              {open ? details(open) : <div className="px-4 py-6" style={{ fontSize: F.sm, color: T.ink3 }}>Tap a file or photo and it opens here, beside the list.</div>}
+            </div>
+          </aside>
+        )}
       </div>
 
       {!wide && <Drawer open={menuOpen} onClose={() => setMenuOpen(false)} title="Folders" sub={folderName}>{menu}</Drawer>}
 
-      <FileViewer f={open} onClose={() => setOpen(null)}
-        links={open && (open.job_id || open.contact_id) ? (
-          <div className="flex gap-3">
-            {open.job_id && <Link href={`/dashboard/scope/${open.job_id}`} style={{ ...eyebrow, color: T.chalk }}>Open its job ›</Link>}
-            {open.contact_id && <Link href={`/dashboard/messages/${open.contact_id}`} style={{ ...eyebrow, color: T.chalk }}>Open their page ›</Link>}
-          </div>
-        ) : null}
-        onSaved={(nf) => { setFiles((a) => (a ?? []).map((x) => (x.id === nf.id ? nf : x))); setOpen(nf); }}
-        onDeleted={(id) => { setFiles((a) => (a ?? []).filter((x) => x.id !== id)); setOpen(null); }} />
+      {!wide && preview && open && (
+        <div role="dialog" aria-label={open.name} className="fixed inset-0 flex flex-col" style={{ zIndex: 70, background: T.card, paddingTop: "env(safe-area-inset-top)", paddingBottom: "env(safe-area-inset-bottom)" }}>
+          <nav aria-label="Where this file is" className="flex items-center gap-1 px-3" style={{ minHeight: 48, borderBottom: `1px solid ${T.hair}`, fontSize: F.sm }}>
+            <button onClick={() => setPreview(false)} style={{ color: T.chalk, fontWeight: 600, cursor: "pointer", flexShrink: 0 }}>‹ Files</button>
+            <span aria-hidden="true" style={{ color: T.ink3 }}>›</span>
+            <button onClick={() => setPreview(false)} style={{ color: T.chalk, cursor: "pointer", flexShrink: 1, minWidth: 0, ...clip }}>{folderName}</button>
+            <span aria-hidden="true" style={{ color: T.ink3 }}>›</span>
+            <span style={{ color: T.ink, fontWeight: 600, flex: 1, minWidth: 0, ...clip }}>{open.name}</span>
+            <button onClick={() => setPreview(false)} aria-label="Close" style={{ fontSize: 22, lineHeight: 1, color: T.ink3, cursor: "pointer", padding: "0 4px" }}>×</button>
+          </nav>
+          <div style={{ fontSize: F.xs, color: T.ink3, padding: "6px 16px 0" }}>{fileSub(open)}</div>
+          <div style={{ flex: 1, overflowY: "auto" }}>{details(open)}</div>
+        </div>
+      )}
     </div>
     </>
   );

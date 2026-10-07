@@ -3,6 +3,7 @@ import { getApiSession } from "@/lib/api-auth";
 import { jobInOrg, workingEstimate } from "@/lib/budget-server";
 import { buildDraft, draftState, readExclusions, DRAFT_TABLE_MISSING } from "@/lib/draft/build-server";
 import { DRIVEWAY_STEPS } from "@/lib/draft/recipe";
+import { renameBudget, startBudget } from "@/lib/budgets-server";
 
 /**
  * The job's draft budget (migration 087). Session client, org from the session.
@@ -10,6 +11,9 @@ import { DRIVEWAY_STEPS } from "@/lib/draft/recipe";
  *          isn't priced, whether the total is partial, what blocks approval.
  *   POST   build a draft from the job's calls, texts and notes (Coy's tap,
  *          or Retry). The same input returns the draft already made.
+ *          { new_budget: true, name, park_name } (migration 088): keep the
+ *          open budget (named park_name if it has no name) and build into a
+ *          new one called name — the open one is never written over.
  *   PATCH  { step, reason } — leave a recipe step off this job, and why;
  *          reason null puts it back.
  * Nothing here sends anything to anyone.
@@ -43,6 +47,16 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   if (!r.ok) return r.response;
   const { supabase, orgId, userId, applyCookies } = r.session;
   if (!(await jobInOrg(supabase, orgId, id))) return applyCookies(NextResponse.json({ error: "No such job." }, { status: 404 }));
+  const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+  if (body.new_budget === true) {
+    const cur = await workingEstimate(supabase, orgId, id, false);
+    const { count } = cur ? await supabase.from("estimate_line_items").select("id", { count: "exact", head: true }).eq("estimate_id", cur.id as string) : { count: 0 };
+    // An empty open budget is simply used (and named); one with lines is kept.
+    const s = cur && !(count ?? 0)
+      ? await renameBudget(supabase, orgId, id, cur.id as string, body.name)
+      : await startBudget(supabase, orgId, id, body.name, body.park_name);
+    if (!s.ok && !(cur && !(count ?? 0) && s.status === 400)) return applyCookies(NextResponse.json({ error: s.error }, { status: s.status }));
+  }
   const b = await buildDraft(supabase, orgId, userId, id, "manual");
   if (!b.ok) return applyCookies(NextResponse.json({ error: b.error }, { status: b.status }));
   return applyCookies(NextResponse.json({ again: b.again, ...(await view(supabase, orgId, id)) }));

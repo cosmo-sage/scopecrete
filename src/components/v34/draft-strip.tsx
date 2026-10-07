@@ -8,10 +8,18 @@
  * assembly fills them. What it couldn't tell becomes a question to ask; the
  * driveway recipe is checked against the budget as it is now; an unpriced
  * line makes the total partial; Approve saves a copy and sends nothing.
+ *
+ * Several budgets (migration 088, Coy 2026-10-07): the open one is named and
+ * kept, Build draft budget builds a NEW one beside it, and Budgets ▾ opens
+ * any of them.
  */
 
 import React, { useCallback, useEffect, useState } from "react";
 import { T, F, disp, eyebrow, clip, nums, money0 } from "@/lib/v34/tokens";
+import { Drawer } from "@/components/v34/primitives";
+
+interface BudgetRow { id: string; name: string | null; open: boolean; lines: number; total: number | null; partial: boolean; updated_at: string }
+interface Budgets { ready: boolean; error?: string; budgets?: BudgetRow[]; suggest?: { open: string; next: string } }
 
 interface Fact { key: string; value: number | string | boolean; approximate: boolean; status: string; quote: string; at: string; message_id: string | null }
 interface Area { key: string; name: string; work_type: string; length_ft: number | null; width_ft: number | null; sqft: number | null; depth_in: number | null; facts: Fact[] }
@@ -21,7 +29,7 @@ interface Reading {
 }
 interface Run {
   id: string; status: string; outcome: string | null; reader: string | null; reading: Reading | null; error: string | null
-  made: { sections: Array<{ id: string; name: string; assembly: string | null; lines: number }> } | null
+  made: { sections: Array<{ id: string; name: string; assembly: string | null; lines: number; existing?: boolean }> } | null
   suggestions: Array<{ section_id: string; section: string; field: string; current: number | null; heard: number; quote: string }> | null
   created_at: string; finished_at: string | null; trigger: string
 }
@@ -63,12 +71,22 @@ export function DraftStrip({ jobId, refresh = 0, onChanged }: { jobId: string; r
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
+  const [bs, setBs] = useState<Budgets | null>(null);
+  const [sheet, setSheet] = useState<null | "budgets" | "build">(null);
+  const [keepName, setKeepName] = useState("");
+  const [newName, setNewName] = useState("");
+  const [editing, setEditing] = useState<{ id: string; name: string } | null>(null);
   const [open, setOpenState] = useState(() => { try { return typeof window !== "undefined" && localStorage.getItem("sc:draft-open") !== "0"; } catch { return true; } });
   const setOpen = (v: boolean) => { setOpenState(v); try { localStorage.setItem("sc:draft-open", v ? "1" : "0"); } catch { /* no storage */ } };
 
   useEffect(() => {
     let off = false;
     call(`/api/jobs/${jobId}/budget/draft`, "GET").then((b) => { if (!off) setS(b as State); }).catch((e) => { if (!off) setErr((e as Error).message); });
+    return () => { off = true; };
+  }, [jobId, tick, refresh]);
+  useEffect(() => {
+    let off = false;
+    call(`/api/jobs/${jobId}/budgets`, "GET").then((b) => { if (!off) setBs(b as Budgets); }).catch(() => { if (!off) setBs(null); });
     return () => { off = true; };
   }, [jobId, tick, refresh]);
   // A build started by a new job runs on its own: look again while it is waiting or running.
@@ -98,7 +116,26 @@ export function DraftStrip({ jobId, refresh = 0, onChanged }: { jobId: string; r
   const run = s.run;
   const x = run?.reading ?? null;
   const out = run?.status === "done" && run.outcome ? OUTCOME[run.outcome] : null;
-  const build = () => act("build", () => call(`/api/jobs/${jobId}/budget/draft`, "POST"), true);
+  const rows = bs?.ready ? bs.budgets ?? [] : [];
+  const openRow = rows.find((b) => b.open) ?? null;
+  const openLabel = openRow?.name ?? (rows.length ? "Unnamed budget" : null);
+  const rebuild = () => act("build", () => call(`/api/jobs/${jobId}/budget/draft`, "POST"), true);
+  // Coy's budget is never written over: with lines on it, a build goes into a new one.
+  const build = () => {
+    if (bs?.ready && openRow && openRow.lines > 0) {
+      setKeepName(openRow.name ?? bs.suggest?.open ?? "Draft 1");
+      setNewName(bs.suggest?.next ?? "Draft 2");
+      setSheet("build");
+      return;
+    }
+    void act("build", () => call(`/api/jobs/${jobId}/budget/draft`, "POST", bs?.ready ? { new_budget: true, name: bs.suggest?.open ?? "Draft 1" } : undefined), true);
+  };
+  const buildNew = () => { setSheet(null); void act("build", () => call(`/api/jobs/${jobId}/budget/draft`, "POST", { new_budget: true, name: newName, park_name: keepName }), true); };
+  const budgetsAct = (what: string, body: Record<string, unknown>) => act(what, async () => {
+    const b = await call(`/api/jobs/${jobId}/budgets`, "POST", body) as Budgets;
+    setBs(b); setEditing(null);
+    return null;
+  }, true);
   const exclude = (step: Step) => {
     const reason = window.prompt(`Why isn't "${step.label}" on this job?`, "");
     if (reason === null) return;
@@ -122,9 +159,17 @@ export function DraftStrip({ jobId, refresh = 0, onChanged }: { jobId: string; r
           {s.totals && s.totals.total > 0 ? ` · ${money0(s.totals.total)}${s.totals.partial ? " so far (partial)" : ""}` : ""}
         </span>
         <span className="flex-1" />
+        {bs && (bs.ready ? openLabel : true) && (
+          <button onClick={() => setSheet("budgets")} className="rounded px-2 flex items-center gap-1" title="Your budgets on this job"
+            style={{ height: 28, border: `1px solid ${T.hair}`, color: T.ink, background: T.card, fontWeight: 600, fontSize: F.xs, cursor: "pointer", whiteSpace: "nowrap", maxWidth: 220 }}>
+            <span style={{ ...clip, minWidth: 0 }}>{openLabel ?? "Budgets"}</span>
+            {rows.length > 1 && <span style={{ color: T.ink3, fontWeight: 400 }}>· {rows.length}</span>}
+            <span aria-hidden="true" style={{ color: T.ink3 }}>▾</span>
+          </button>
+        )}
         <button onClick={() => void build()} disabled={!!busy || working} className="rounded px-2.5"
           style={{ height: 28, border: `1px solid ${T.chalk}`, color: T.chalk, background: T.card, fontWeight: 600, fontSize: F.xs, cursor: "pointer", whiteSpace: "nowrap" }}>
-          {busy === "build" || working ? "Building…" : run?.status === "failed" ? "Retry" : run ? "Build again" : "Build draft budget"}
+          {busy === "build" || working ? "Building…" : run?.status === "failed" ? "Retry" : "Build draft budget"}
         </button>
       </div>
 
@@ -175,7 +220,7 @@ export function DraftStrip({ jobId, refresh = 0, onChanged }: { jobId: string; r
               ))}
               {run?.made?.sections?.length ? (
                 <div style={{ fontSize: F.xs, color: T.green }}>
-                  Added {run.made.sections.map((m) => `${m.name}${m.assembly ? ` with ${m.assembly} (${m.lines} line${m.lines === 1 ? "" : "s"})` : " — no assembly matched; add items from the Price book"}`).join("; ")}.
+                  {run.made.sections.some((m) => m.existing) ? "Loaded on " : "Added "}{run.made.sections.map((m) => `${m.name}${m.assembly ? ` with ${m.assembly} (${m.lines} line${m.lines === 1 ? "" : "s"})` : " — no assembly matched; add items from the Price book"}`).join("; ")}.
                 </div>
               ) : null}
               {run?.suggestions?.length ? (
@@ -233,6 +278,76 @@ export function DraftStrip({ jobId, refresh = 0, onChanged }: { jobId: string; r
           {err && <div style={{ fontSize: F.xs, color: T.red }}>{err}</div>}
         </div>
       )}
+      {!open && err && <div className="px-3 pb-2" style={{ fontSize: F.xs, color: T.red }}>{err}</div>}
+
+      <Drawer open={sheet === "budgets"} onClose={() => { setSheet(null); setEditing(null); }} title="Budgets" sub="On this job">
+        <div className="px-4 py-3 flex flex-col gap-2" style={{ fontSize: F.sm }}>
+          {!bs?.ready ? <div style={{ color: T.ink2 }}>{bs?.error ?? "Loading…"}</div> : (
+            <>
+              <p style={{ margin: 0, color: T.ink3, fontSize: F.xs, lineHeight: 1.45 }}>
+                Every budget is saved as you work on it. The open one is what the job, the proposal, the Dashboard and Dusty use. The areas and their sizes are the job&apos;s, shared by every budget; each budget has its own items, O.H. and margin.
+              </p>
+              {rows.map((b) => (
+                <div key={b.id} className="rounded px-3 py-2" style={{ border: `1px solid ${b.open ? T.chalk : T.hair}`, background: T.card }}>
+                  {editing?.id === b.id ? (
+                    <form className="flex items-center gap-2" onSubmit={(e) => { e.preventDefault(); void budgetsAct(`n:${b.id}`, { action: "rename", id: b.id, name: editing.name }); }}>
+                      <input autoFocus value={editing.name} maxLength={60} onChange={(e) => setEditing({ id: b.id, name: e.target.value })} aria-label="Budget name"
+                        className="rounded px-2 flex-1" style={{ height: 30, border: `1px solid ${T.hair}`, background: T.card, color: T.ink, minWidth: 0 }} />
+                      <button type="submit" disabled={!!busy || !editing.name.trim()} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>Save</button>
+                      <button type="button" onClick={() => setEditing(null)} style={{ ...eyebrow, color: T.ink3, cursor: "pointer" }}>Cancel</button>
+                    </form>
+                  ) : (
+                    <div className="flex items-baseline gap-2">
+                      <span style={{ fontWeight: 600, color: T.ink, ...clip, minWidth: 0 }}>{b.name ?? "Unnamed budget"}</span>
+                      <button onClick={() => setEditing({ id: b.id, name: b.name ?? (b.open ? bs.suggest?.open ?? "" : "") })} aria-label={b.name ? "Rename" : "Name it"}
+                        style={{ ...eyebrow, color: T.chalk, cursor: "pointer", whiteSpace: "nowrap" }}>{b.name ? "✎" : "Name it"}</button>
+                      <span className="flex-1" />
+                      {b.open ? <span style={{ ...eyebrow, color: T.chalk }}>Open</span> : (
+                        <button onClick={() => void budgetsAct(`o:${b.id}`, { action: "open", id: b.id, park_name: openRow?.name ?? bs.suggest?.open })} disabled={!!busy}
+                          className="rounded px-2" style={{ height: 26, border: `1px solid ${T.chalk}`, color: T.chalk, background: T.card, fontWeight: 600, fontSize: F.xs, cursor: "pointer" }}>
+                          {busy === `o:${b.id}` ? "…" : "Open"}
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  <div style={{ fontSize: F.xs, color: T.ink3, ...nums }}>
+                    {b.lines} item{b.lines === 1 ? "" : "s"}{b.total !== null && b.lines ? ` · ${money0(b.total)}${b.partial ? " so far (partial)" : ""}` : ""} · changed {day(b.updated_at)}
+                    {b.open && !b.name ? ` · opening another keeps this one as "${bs.suggest?.open}"` : ""}
+                  </div>
+                </div>
+              ))}
+              {!rows.length && <div style={{ color: T.ink2 }}>No budget on this job yet. Add items to an area, or Build draft budget.</div>}
+              {err && <div style={{ fontSize: F.xs, color: T.red }}>{err}</div>}
+            </>
+          )}
+        </div>
+      </Drawer>
+
+      <Drawer open={sheet === "build"} onClose={() => setSheet(null)} title="Build a new draft budget" sub="Your budget is kept">
+        <form className="px-4 py-3 flex flex-col gap-3" style={{ fontSize: F.sm }} onSubmit={(e) => { e.preventDefault(); buildNew(); }}>
+          <label className="flex flex-col gap-1">
+            <span style={{ ...eyebrow, color: T.ink }}>Keep this budget as</span>
+            {openRow?.name ? <span style={{ color: T.ink }}>{openRow.name} — {openRow.lines} item{openRow.lines === 1 ? "" : "s"}{openRow.total !== null ? `, ${money0(openRow.total)}` : ""}</span> : (
+              <input value={keepName} maxLength={60} onChange={(e) => setKeepName(e.target.value)} className="rounded px-2"
+                style={{ height: 32, border: `1px solid ${T.hair}`, background: T.card, color: T.ink }} />
+            )}
+          </label>
+          <label className="flex flex-col gap-1">
+            <span style={{ ...eyebrow, color: T.ink }}>Name the new one</span>
+            <input value={newName} maxLength={60} onChange={(e) => setNewName(e.target.value)} className="rounded px-2"
+              style={{ height: 32, border: `1px solid ${T.hair}`, background: T.card, color: T.ink }} />
+          </label>
+          <p style={{ margin: 0, color: T.ink3, fontSize: F.xs, lineHeight: 1.45 }}>
+            The new budget starts empty and opens. It reads this job&apos;s calls, texts and your notes, and your assembly fills each area. Your areas&apos; sizes aren&apos;t changed: anything heard differently is shown for you to use or not. Budgets ▾ opens either one again.
+          </p>
+          <div className="flex items-center gap-3">
+            <button type="submit" disabled={!!busy || !newName.trim() || (!openRow?.name && !keepName.trim())} className="rounded px-3"
+              style={{ height: 32, border: `1px solid ${T.chalk}`, background: T.card, color: T.chalk, fontWeight: 600, fontSize: F.sm, cursor: "pointer" }}>Build new budget</button>
+            <span className="flex-1" />
+            <button type="button" onClick={() => { setSheet(null); void rebuild(); }} disabled={!!busy} style={{ ...eyebrow, color: T.ink3, cursor: "pointer" }}>Read again into this one</button>
+          </div>
+        </form>
+      </Drawer>
     </section>
   );
 }

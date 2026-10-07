@@ -22,20 +22,23 @@ interface BudgetRow { id: string; name: string | null; open: boolean; lines: num
 interface Budgets { ready: boolean; error?: string; budgets?: BudgetRow[]; suggest?: { open: string; next: string } }
 
 interface Fact { key: string; value: number | string | boolean; approximate: boolean; status: string; quote: string; at: string; message_id: string | null }
-interface Area { key: string; name: string; work_type: string; length_ft: number | null; width_ft: number | null; sqft: number | null; depth_in: number | null; facts: Fact[] }
+interface Area { key: string; name: string; work_type: string; length_ft: number | null; width_ft: number | null; sqft: number | null; depth_in: number | null; facts: Fact[]
+  on_job?: { section_id: string; section: string; sqft: number | null; depth_in: number | null } }
 interface Reading {
   kind: string; kind_reason: string; areas: Area[]; existing_depth: Fact | null; demo: Fact | null
   conflicts: Array<{ what: string; facts: Fact[] }>; questions: string[]; scope?: string; evidence_count?: number
 }
 interface Run {
   id: string; status: string; outcome: string | null; reader: string | null; reading: Reading | null; error: string | null
-  made: { sections: Array<{ id: string; name: string; assembly: string | null; lines: number; existing?: boolean }> } | null
+  made: { sections: Array<{ id: string; name: string; assembly: string | null; lines: number; existing?: boolean }>; filled?: Array<{ step: string; item: string; lines: number }> } | null
   suggestions: Array<{ section_id: string; section: string; field: string; current: number | null; heard: number; quote: string }> | null
   created_at: string; finished_at: string | null; trigger: string
 }
 interface Step { key: string; label: string; state: "covered" | "excluded" | "open"; line_ids: string[]; reason: string | null; by: string | null }
+interface ItemPick { id: string; name: string; unit: string | null; unit_cost: number | null; group_name: string | null; used: number; covers: string[] }
+interface StepPicks { key: string; verdict: "auto" | "choose" | "none"; picks: ItemPick[] }
 interface State {
-  ready: boolean; error?: string; run: Run | null; steps: Step[]; blocked_lines: Array<{ id: string; name: string; reasons: string[] }>
+  ready: boolean; error?: string; run: Run | null; steps: Step[]; picks?: Record<string, StepPicks>; blocked_lines: Array<{ id: string; name: string; reasons: string[] }>
   blocks: string[]; totals: { total: number; cost: number; partial: boolean } | null
   approval: { id: string; total: number | null; approved_at: string } | null; reader: string; line_names: Record<string, string>
 }
@@ -59,12 +62,25 @@ async function call(url: string, method: string, body?: unknown) {
 
 function size(a: Area) {
   const parts: string[] = [];
+  const j = a.on_job;
   if (a.length_ft !== null && a.width_ft !== null) parts.push(`${a.length_ft} × ${a.width_ft} ft`);
   else if (a.sqft !== null) parts.push(`${a.sqft.toLocaleString()} sq ft`);
+  else if (j?.sqft != null) parts.push(`${Math.round(j.sqft).toLocaleString()} sq ft measured on ${j.section}`);
   else parts.push("size not said");
-  parts.push(a.depth_in !== null ? `${a.depth_in}" thick` : "thickness not said");
+  if (a.depth_in !== null) parts.push(`${a.depth_in}" thick`);
+  else if (j?.depth_in != null) parts.push(`${j.depth_in}" on ${j.section}`);
+  else parts.push("thickness not said");
   return parts.join(" · ");
 }
+
+const each = (p: ItemPick) => p.unit_cost === null ? "no price yet" : `$${p.unit_cost.toLocaleString("en-US", { minimumFractionDigits: p.unit_cost < 100 ? 2 : 0, maximumFractionDigits: 2 })}/${p.unit ?? "ea"}`;
+const STEP_NEW_NAME: Record<string, string> = {
+  demo: "Concrete tear-out", haul: "Haul-off and dumping", base: "Base and grading", forming: "Forming", reinforcement: "Wire mesh",
+  concrete: "Ready mix concrete", finishing: "Place and finish labor", equipment: "Equipment rental", mobilization: "Mobilization",
+};
+const STEP_NEW_UNIT: Record<string, string> = {
+  demo: "SqFt", haul: "SqFt", base: "SqFt", forming: "LnFt", reinforcement: "SqFt", concrete: "CuYd", finishing: "SqFt", equipment: "Days", mobilization: "Lump Sum",
+};
 
 export function DraftStrip({ jobId, refresh = 0, onChanged }: { jobId: string; refresh?: number; onChanged: () => void }) {
   const [s, setS] = useState<State | null>(null);
@@ -76,6 +92,7 @@ export function DraftStrip({ jobId, refresh = 0, onChanged }: { jobId: string; r
   const [keepName, setKeepName] = useState("");
   const [newName, setNewName] = useState("");
   const [editing, setEditing] = useState<{ id: string; name: string } | null>(null);
+  const [making, setMaking] = useState<{ step: string; name: string; unit: string; cost: string } | null>(null);
   const [open, setOpenState] = useState(() => { try { return typeof window !== "undefined" && localStorage.getItem("sc:draft-open") !== "0"; } catch { return true; } });
   const setOpen = (v: boolean) => { setOpenState(v); try { localStorage.setItem("sc:draft-open", v ? "1" : "0"); } catch { /* no storage */ } };
 
@@ -144,6 +161,16 @@ export function DraftStrip({ jobId, refresh = 0, onChanged }: { jobId: string; r
   };
   const takeHeard = (g: NonNullable<Run["suggestions"]>[number]) =>
     act(`u:${g.section_id}:${g.field}`, () => call(`/api/jobs/${jobId}/sections/${g.section_id}`, "PATCH", { [g.field]: g.heard }), true);
+  const takePick = (step: string, p: ItemPick) => act(`p:${step}`, () => call(`/api/jobs/${jobId}/budget/draft`, "PATCH", { step, item_id: p.id }), true);
+  const makeItem = () => {
+    if (!making) return;
+    const m = making;
+    void act(`p:${m.step}`, async () => {
+      const b = await call(`/api/jobs/${jobId}/budget/draft`, "PATCH", { step: m.step, make: { name: m.name, unit: m.unit, unit_cost: m.cost.trim() === "" ? null : Number(m.cost.replace(/[$,]/g, "")) } });
+      setMaking(null);
+      return b;
+    }, true);
+  };
   const approve = () => act("approve", () => call(`/api/jobs/${jobId}/budget/draft/approve`, "POST"));
   const changedSince = s.approval && s.totals && Math.abs(Number(s.approval.total ?? 0) - s.totals.total) > 0.005;
 
@@ -220,7 +247,12 @@ export function DraftStrip({ jobId, refresh = 0, onChanged }: { jobId: string; r
               ))}
               {run?.made?.sections?.length ? (
                 <div style={{ fontSize: F.xs, color: T.green }}>
-                  {run.made.sections.some((m) => m.existing) ? "Loaded on " : "Added "}{run.made.sections.map((m) => `${m.name}${m.assembly ? ` with ${m.assembly} (${m.lines} line${m.lines === 1 ? "" : "s"})` : " — no assembly matched; add items from the Price book"}`).join("; ")}.
+                  {run.made.sections.some((m) => m.existing) ? "Loaded on " : "Added "}{run.made.sections.map((m) => `${m.name}${m.assembly ? ` with ${m.assembly} (${m.lines} line${m.lines === 1 ? "" : "s"})` : " — no assembly for this kind of area"}`).join("; ")}.
+                </div>
+              ) : null}
+              {run?.made?.filled?.length ? (
+                <div style={{ fontSize: F.xs, color: T.green }}>
+                  From your Price book, the item you always use: {run.made.filled.map((f) => f.item).join(", ")}.
                 </div>
               ) : null}
               {run?.suggestions?.length ? (
@@ -251,8 +283,41 @@ export function DraftStrip({ jobId, refresh = 0, onChanged }: { jobId: string; r
                   {st.state === "open" && <button onClick={() => exclude(st)} disabled={!!busy} style={{ ...eyebrow, color: T.chalk, cursor: "pointer", whiteSpace: "nowrap" }}>Not on this job</button>}
                   {st.state === "excluded" && st.by === "coy" && <button onClick={() => void act(`x:${st.key}`, () => call(`/api/jobs/${jobId}/budget/draft`, "PATCH", { step: st.key, reason: null }))} disabled={!!busy} style={{ ...eyebrow, color: T.chalk, cursor: "pointer", whiteSpace: "nowrap" }}>Put back</button>}
                 </div>
-              ))}
-              {s.steps.some((st) => st.state === "open") && <div style={{ fontSize: F.xs, color: T.ink3 }}>Add an open step from the Price book with + Add on an area below, or mark it not on this job.</div>}
+              )).flatMap((row, i) => {
+                const st = s.steps[i];
+                const pk = st.state === "open" ? s.picks?.[st.key] : undefined;
+                if (!pk) return [row];
+                return [row, (
+                  <div key={`${st.key}-picks`} className="flex flex-wrap items-center gap-1.5 pb-1" style={{ paddingLeft: 20, fontSize: F.xs }}>
+                    {pk.picks.length > 0 && <span style={{ color: T.ink3 }}>{pk.verdict === "auto" ? "You usually use:" : "Which one?"}</span>}
+                    {pk.picks.map((p) => (
+                      <button key={p.id} onClick={() => void takePick(st.key, p)} disabled={!!busy} title={`${p.group_name ?? "No group"}${p.used ? ` · on ${p.used} budget line${p.used === 1 ? "" : "s"}` : " · not used yet"}`}
+                        className="rounded px-2" style={{ height: 24, border: `1px solid ${T.hair}`, background: T.card, color: T.ink, cursor: "pointer", maxWidth: 260, ...clip }}>
+                        + {p.name} <span style={{ color: p.unit_cost === null ? T.red : T.ink3, ...nums }}>{each(p)}</span>
+                      </button>
+                    ))}
+                    {pk.picks.length === 0 && <span style={{ color: T.ink3 }}>Nothing in your Price book for this.</span>}
+                    {making?.step !== st.key && (
+                      <button onClick={() => setMaking({ step: st.key, name: STEP_NEW_NAME[st.key] ?? st.label, unit: STEP_NEW_UNIT[st.key] ?? "SqFt", cost: "" })} disabled={!!busy}
+                        style={{ ...eyebrow, color: T.chalk, cursor: "pointer", whiteSpace: "nowrap" }}>{pk.picks.length ? "Or make a new one" : "Make it"}</button>
+                    )}
+                    {busy === `p:${st.key}` && <span style={{ color: T.ink3 }}>Adding…</span>}
+                    {making?.step === st.key && (
+                      <form className="flex flex-wrap items-center gap-1.5 w-full" onSubmit={(e) => { e.preventDefault(); makeItem(); }}>
+                        <input value={making.name} maxLength={120} onChange={(e) => setMaking({ ...making, name: e.target.value })} aria-label="Item name"
+                          className="rounded px-2" style={{ height: 26, border: `1px solid ${T.hair}`, background: T.card, color: T.ink, flex: "1 1 160px", minWidth: 0 }} />
+                        <input value={making.unit} maxLength={20} onChange={(e) => setMaking({ ...making, unit: e.target.value })} aria-label="Unit"
+                          className="rounded px-2" style={{ height: 26, width: 80, border: `1px solid ${T.hair}`, background: T.card, color: T.ink }} />
+                        <input value={making.cost} inputMode="decimal" onChange={(e) => setMaking({ ...making, cost: e.target.value })} aria-label="Your cost per unit" placeholder="$ cost"
+                          className="rounded px-2" style={{ height: 26, width: 80, border: `1px solid ${T.hair}`, background: T.card, color: T.ink, ...nums }} />
+                        <button type="submit" disabled={!!busy || !making.name.trim() || !making.unit.trim()} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>Add to Price book and budget</button>
+                        <button type="button" onClick={() => setMaking(null)} style={{ ...eyebrow, color: T.ink3, cursor: "pointer" }}>Cancel</button>
+                      </form>
+                    )}
+                  </div>
+                )];
+              })}
+              {s.steps.some((st) => st.state === "open") && <div style={{ fontSize: F.xs, color: T.ink3 }}>Tap an item to put it on every area (delivery and equipment go on once for the job), make a new one, or mark the step not on this job.</div>}
             </div>
           )}
 

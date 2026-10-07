@@ -1,12 +1,13 @@
 import { createHash } from "node:crypto";
 import type { ApiSession } from "@/lib/api-auth";
 import { budget, type BudgetLine, type SectionInput } from "@/lib/engine";
-import { LINE_COLUMNS, loadAssembly, numLine, workingEstimate } from "@/lib/budget-server";
+import { CARD_COLS, LINE_COLUMNS, cardToLine, loadAssembly, nextSort, numLine, workingEstimate } from "@/lib/budget-server";
 import { pricingFor } from "@/lib/pricing-server";
 import { takeoffTotalsFor } from "@/lib/plans-server";
 import { extract, modelSeen, type AreaDraft, type Evidence, type Extraction } from "./extract";
 import { approvalBlocks, checkRecipe, outcomeOf, RECIPE_VERSION, type DraftOutcome } from "./recipe";
 import { modelConfigured, modelRead } from "./model-server";
+import { areaFor, autoFill, outcomeOnJob, picksForOpen, withJobAreas, WHOLE_JOB_STEPS, type JobArea, type PriceItem } from "./fill";
 
 /**
  * Job → draft budget, the server side (migration 087). Session client only:
@@ -266,7 +267,9 @@ export async function buildDraft(sb: Sb, orgId: string, userId: string | null, j
     const { data: secs } = await sb.from("job_sections").select("id, name, work_type, length_ft, width_ft, sqft_override, depth_in")
       .eq("org_id", orgId).eq("job_id", jobId);
     const sections = (secs ?? []) as Array<Record<string, unknown>>;
-    const made: { sections: Array<{ id: string; name: string; assembly: string | null; lines: number; existing?: boolean }> } = { sections: [] };
+    const { count: before } = await sb.from("estimate_line_items").select("id", { count: "exact", head: true }).eq("estimate_id", est.id as string);
+    const fresh = (before ?? 0) === 0;
+    const made: Made = { sections: [], filled: [] };
     let suggestions: Suggestion[] = [];
     if (!sections.length && x.kind !== "unsupported" && x.areas.length) {
       let sort = 0;
@@ -288,18 +291,25 @@ export async function buildDraft(sb: Sb, orgId: string, userId: string | null, j
       // A new, empty budget on a job that already has areas: Coy's assembly
       // fills each area, as it would a new one. Sizes are never changed —
       // what was heard differently stays a suggestion.
-      const { count } = await sb.from("estimate_line_items").select("id", { count: "exact", head: true }).eq("estimate_id", est.id as string);
-      if ((count ?? 0) === 0 && x.kind !== "unsupported") {
+      // An area drawn as a "slab" that they called a driveway takes the
+      // driveway's assembly when its own kind has none.
+      if (fresh && x.kind !== "unsupported") {
         for (const sec of sections) {
-          const asm = await loadAssembly(sb, orgId, jobId, sec.id as string,
-            { auto: true, jobType: (g.job.job_type as string | null) ?? null, workType: (sec.work_type as string | null) ?? null });
+          const jobType = (g.job.job_type as string | null) ?? null;
+          let asm = await loadAssembly(sb, orgId, jobId, sec.id as string, { auto: true, jobType, workType: (sec.work_type as string | null) ?? null });
+          const heard = x.areas.find((a) => areaFor(a, x.areas.length, [sec as unknown as JobArea]) && a.work_type !== sec.work_type);
+          if (!asm.loaded && heard) asm = await loadAssembly(sb, orgId, jobId, sec.id as string, { auto: true, jobType, workType: heard.work_type });
           made.sections.push({ id: sec.id as string, name: (sec.name as string | null) ?? "Area", assembly: asm.loaded, lines: asm.lines, existing: true });
         }
       }
     }
+    // Every step the assembly left open takes Coy's one clear item for it, on
+    // a budget this build started empty. A toss-up is left for him to pick.
+    if (fresh && x.kind !== "unsupported") made.filled = await fillOpenSteps(sb, orgId, jobId, est.id as string, x);
+    const sized = withJobAreas(x, (await areasOf(sb, orgId, jobId)));
     const reading = { ...x, scope: g.scope, evidence_count: g.evidence.length };
     const { data: done } = await sb.from("budget_runs").update({
-      status: "done", outcome, reader, reading, made, suggestions, finished_at: new Date().toISOString(),
+      status: "done", outcome: x.kind === "unsupported" ? outcome : outcomeOnJob(sized), reader, reading, made, suggestions, finished_at: new Date().toISOString(),
     }).eq("org_id", orgId).eq("id", runId).select(RUN_COLS).single();
     return { ok: true, run: done ?? { id: runId, status: "done", outcome }, again: false };
   } catch (e) {
@@ -307,6 +317,92 @@ export async function buildDraft(sb: Sb, orgId: string, userId: string | null, j
     await sb.from("budget_runs").update({ status: "failed", error: msg, finished_at: new Date().toISOString() }).eq("org_id", orgId).eq("id", runId);
     return { ok: false, status: 500, error: msg };
   }
+}
+
+type Made = {
+  sections: Array<{ id: string; name: string; assembly: string | null; lines: number; existing?: boolean }>;
+  filled: Array<{ step: string; item: string; lines: number }>;
+};
+
+const AREA_COLS = "id, name, work_type, length_ft, width_ft, sqft_override, depth_in, psi, count_qty, count_unit";
+const areasOf = async (sb: Sb, orgId: string, jobId: string) =>
+  ((await sb.from("job_sections").select(AREA_COLS).eq("org_id", orgId).eq("job_id", jobId)).data ?? []) as unknown as JobArea[];
+
+/** Coy's active Price book items, with how many budget lines each has made. */
+export async function priceItems(sb: Sb, orgId: string): Promise<PriceItem[]> {
+  const [{ data: items }, { data: groups }, { data: used }] = await Promise.all([
+    sb.from("cost_items").select("id, name, cost_type, qty_rule, unit, unit_cost, cost_group_id").eq("org_id", orgId).eq("active", true).limit(3000),
+    sb.from("cost_groups").select("id, name").eq("org_id", orgId),
+    sb.from("estimate_line_items").select("cost_item_id").eq("org_id", orgId).not("cost_item_id", "is", null).limit(10000),
+  ]);
+  const gname = new Map(((groups ?? []) as Array<{ id: string; name: string }>).map((x) => [x.id, x.name]));
+  const n = new Map<string, number>();
+  for (const r of (used ?? []) as Array<{ cost_item_id: string }>) n.set(r.cost_item_id, (n.get(r.cost_item_id) ?? 0) + 1);
+  return ((items ?? []) as Array<Record<string, unknown>>).map((i) => ({
+    id: i.id as string, name: (i.name as string) ?? "", cost_type: (i.cost_type as string) ?? "other", qty_rule: (i.qty_rule as string) ?? "manual",
+    unit: (i.unit as string | null) ?? null, unit_cost: i.unit_cost === null || i.unit_cost === undefined ? null : Number(i.unit_cost),
+    group_name: i.cost_group_id ? gname.get(i.cost_group_id as string) ?? null : null, used: n.get(i.id as string) ?? 0,
+  }));
+}
+
+async function recipeLines(sb: Sb, orgId: string, estimateId: string) {
+  const [{ data: rows }, { data: groups }] = await Promise.all([
+    sb.from("estimate_line_items").select("id, name, cost_type, qty_rule, section_role, cost_group_id").eq("estimate_id", estimateId),
+    sb.from("cost_groups").select("id, name").eq("org_id", orgId),
+  ]);
+  const gname = new Map(((groups ?? []) as Array<{ id: string; name: string }>).map((x) => [x.id, x.name]));
+  return ((rows ?? []) as Array<Record<string, unknown>>).map((l) => ({
+    id: l.id as string, name: l.name as string, cost_type: l.cost_type as string, qty_rule: l.qty_rule as string,
+    section_role: (l.section_role as string | null) ?? null, group_name: l.cost_group_id ? gname.get(l.cost_group_id as string) ?? null : null,
+  }));
+}
+
+/**
+ * The open steps' clear picks onto the budget: one line per area for an area
+ * step, one whole-job line for mobilization and equipment. Prices are Coy's
+ * own, copied from the item as any + Add would.
+ */
+async function fillOpenSteps(sb: Sb, orgId: string, jobId: string, estimateId: string, x: Extraction) {
+  const exclusions = await readExclusions(sb, orgId, estimateId);
+  const open = checkRecipe({ demo: x.demo ?? null }, await recipeLines(sb, orgId, estimateId), exclusions)
+    .filter((s) => s.state === "open").map((s) => s.key);
+  if (!open.length) return [];
+  const picks = autoFill(open, await priceItems(sb, orgId));
+  if (!picks.length) return [];
+  const areas = await areasOf(sb, orgId, jobId);
+  const { data: cards } = await sb.from("cost_items").select(CARD_COLS).eq("org_id", orgId).in("id", picks.map((p) => p.item.id));
+  const byId = new Map(((cards ?? []) as Array<Record<string, unknown>>).map((c) => [c.id as string, c]));
+  let sort = await nextSort(sb, estimateId);
+  const out: Made["filled"] = [];
+  for (const p of picks) {
+    const c = byId.get(p.item.id);
+    if (!c) continue;
+    const whole = p.item.covers.every((k) => WHOLE_JOB_STEPS.has(k)) || !areas.length;
+    const rows = (whole ? [null] : areas.map((a) => a.id)).map((sectionId) =>
+      cardToLine(c, { orgId, estimateId, sectionId, optionId: null, sortOrder: sort++ }));
+    const { error } = await sb.from("estimate_line_items").insert(rows);
+    if (!error) out.push({ step: p.step, item: p.item.name, lines: rows.length });
+  }
+  return out;
+}
+
+/**
+ * Coy's tap on a step: one of his items (or one he just made) onto the open
+ * budget — on every area for an area step, once for the whole job for
+ * mobilization and equipment.
+ */
+export async function addStepItem(sb: Sb, orgId: string, jobId: string, step: string, itemId: string) {
+  const est = await workingEstimate(sb, orgId, jobId, true);
+  if (!est) return { ok: false as const, status: 500, error: "Couldn't open the budget." };
+  const { data: c } = await sb.from("cost_items").select(CARD_COLS).eq("org_id", orgId).eq("id", itemId).maybeSingle();
+  if (!c) return { ok: false as const, status: 404, error: "No such Price book item." };
+  const areas = WHOLE_JOB_STEPS.has(step) ? [] : await areasOf(sb, orgId, jobId);
+  let sort = await nextSort(sb, est.id as string);
+  const rows = (areas.length ? areas.map((a) => a.id) : [null]).map((sectionId) =>
+    cardToLine(c as Record<string, unknown>, { orgId, estimateId: est.id as string, sectionId, optionId: null, sortOrder: sort++ }));
+  const { error } = await sb.from("estimate_line_items").insert(rows);
+  if (error) return { ok: false as const, status: 500, error: error.message };
+  return { ok: true as const, lines: rows.length };
 }
 
 // ---------------------------------------------------------------- the panel's view
@@ -347,7 +443,9 @@ export async function draftState(sb: Sb, orgId: string, jobId: string) {
   const p = pricing.get(jobId);
   const res = p ? budget(lines, [], p.settings, (secs ?? []) as SectionInput[], p.days, { tax_on: est?.tax_on === true, discount: Number(est?.discount_amount ?? 0), takeoff: takeoff as never }) : null;
   const gname = new Map(((groups ?? []) as Array<{ id: string; name: string }>).map((x) => [x.id, x.name]));
-  const reading = (run?.reading ?? null) as (Extraction & { scope?: string }) | null;
+  const rawReading = (run?.reading ?? null) as (Extraction & { scope?: string }) | null;
+  // The job's measured areas answer "how big" and "how thick" (Coy's 894 SF).
+  const reading = rawReading && rawReading.areas ? withJobAreas(rawReading, (secs ?? []) as unknown as JobArea[]) : rawReading;
   const exclusions = est ? await readExclusions(sb, orgId, est.id as string) : {};
   const steps = checkRecipe({ demo: reading?.demo ?? null }, lines.map((l) => ({
     id: l.id, name: l.name, cost_type: l.cost_type, qty_rule: l.qty_rule, section_role: (l.section_role as string | null) ?? null,
@@ -360,16 +458,21 @@ export async function draftState(sb: Sb, orgId: string, jobId: string) {
   if (!res) blocks.unshift("The job's pricing couldn't be read.");
   const unsized = ((secs ?? []) as SectionInput[]).length === 0;
   if (unsized && !lines.length) blocks.unshift("The job has no areas yet.");
+  const items = steps.some((s) => s.state === "open") ? await priceItems(sb, orgId) : [];
+  const shownRun = run && reading ? {
+    ...run, reading,
+    outcome: run.outcome && run.outcome !== "manual_review" && reading !== rawReading ? outcomeOnJob(reading as never) : run.outcome,
+  } : run;
   return {
     ready: true as const,
-    run, steps, blocked_lines: blockedLines, blocks,
+    run: shownRun, steps, picks: picksForOpen(steps, items), blocked_lines: blockedLines, blocks,
     line_names: Object.fromEntries(lines.map((l) => [l.id, l.name])),
     totals: tier ? { cost: tier.cost, overhead: tier.overhead, price: tier.price, tax: tier.tax, total: tier.total, partial: !tier.priced } : null,
     approval: ((appr ?? []) as Array<Record<string, unknown>>)[0] ?? null,
     estimate_id: (est?.id as string | undefined) ?? null,
     exclusions,
     reader: modelConfigured() ? "model" : "plain",
-    outcome: (run?.outcome as DraftOutcome | null) ?? null,
+    outcome: (shownRun?.outcome as DraftOutcome | null) ?? null,
     // For the approval snapshot.
     _lines: lines, _res: res,
   };

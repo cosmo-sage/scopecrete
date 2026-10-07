@@ -30,15 +30,17 @@ interface Reading {
 }
 interface Run {
   id: string; status: string; outcome: string | null; reader: string | null; reading: Reading | null; error: string | null
-  made: { sections: Array<{ id: string; name: string; assembly: string | null; lines: number; existing?: boolean }>; filled?: Array<{ step: string; item: string; lines: number }> } | null
+  made: { sections: Array<{ id: string; name: string; assembly: string | null; lines: number; existing?: boolean }>; filled?: Array<{ step: string; item: string; lines: number }>; rates?: RateLookup } | null
   suggestions: Array<{ section_id: string; section: string; field: string; current: number | null; heard: number; quote: string }> | null
   created_at: string; finished_at: string | null; trigger: string
 }
 interface Step { key: string; label: string; state: "covered" | "excluded" | "open"; line_ids: string[]; reason: string | null; by: string | null }
+interface Rate { step: string; what: string; low: number; high: number; unit: string; split: string; kind: "installed_price" | "cost"; url: string; site: string; quote: string }
+interface RateLookup { place: string; asked_at: string; rates: Rate[]; dropped: number; error: string | null }
 interface ItemPick { id: string; name: string; unit: string | null; unit_cost: number | null; group_name: string | null; used: number; covers: string[] }
 interface StepPicks { key: string; verdict: "auto" | "choose" | "none"; picks: ItemPick[] }
 interface State {
-  ready: boolean; error?: string; run: Run | null; steps: Step[]; picks?: Record<string, StepPicks>; blocked_lines: Array<{ id: string; name: string; reasons: string[] }>
+  ready: boolean; error?: string; run: Run | null; steps: Step[]; picks?: Record<string, StepPicks>; sqft?: number | null; blocked_lines: Array<{ id: string; name: string; reasons: string[] }>
   blocks: string[]; totals: { total: number; cost: number; partial: boolean } | null
   approval: { id: string; total: number | null; approved_at: string } | null; reader: string; line_names: Record<string, string>
 }
@@ -74,6 +76,10 @@ function size(a: Area) {
 }
 
 const each = (p: ItemPick) => p.unit_cost === null ? "no price yet" : `$${p.unit_cost.toLocaleString("en-US", { minimumFractionDigits: p.unit_cost < 100 ? 2 : 0, maximumFractionDigits: 2 })}/${p.unit ?? "ea"}`;
+const UNIT_WORD: Record<string, string> = { sf: "sq ft", sy: "sq yd", lf: "lin ft", cy: "cu yd", each: "each", day: "day", ton: "ton", job: "job" };
+const UNIT_OF: Record<string, string> = { sf: "SqFt", sy: "SqYd", lf: "LnFt", cy: "CuYd", each: "Each", day: "Days", ton: "Ton", job: "Lump Sum" };
+const usd = (n: number) => `$${n.toLocaleString("en-US", { maximumFractionDigits: n < 100 ? 2 : 0 })}`;
+const range = (r: Rate) => `${usd(r.low)}${r.high !== r.low ? `–${usd(r.high)}` : ""} / ${UNIT_WORD[r.unit] ?? r.unit}`;
 const STEP_NEW_NAME: Record<string, string> = {
   demo: "Concrete tear-out", haul: "Haul-off and dumping", base: "Base and grading", forming: "Forming", reinforcement: "Wire mesh",
   concrete: "Ready mix concrete", finishing: "Place and finish labor", equipment: "Equipment rental", mobilization: "Mobilization",
@@ -92,7 +98,7 @@ export function DraftStrip({ jobId, refresh = 0, onChanged }: { jobId: string; r
   const [keepName, setKeepName] = useState("");
   const [newName, setNewName] = useState("");
   const [editing, setEditing] = useState<{ id: string; name: string } | null>(null);
-  const [making, setMaking] = useState<{ step: string; name: string; unit: string; cost: string } | null>(null);
+  const [making, setMaking] = useState<{ step: string; name: string; unit: string; cost: string; source?: string } | null>(null);
   const [open, setOpenState] = useState(() => { try { return typeof window !== "undefined" && localStorage.getItem("sc:draft-open") !== "0"; } catch { return true; } });
   const setOpen = (v: boolean) => { setOpenState(v); try { localStorage.setItem("sc:draft-open", v ? "1" : "0"); } catch { /* no storage */ } };
 
@@ -166,11 +172,29 @@ export function DraftStrip({ jobId, refresh = 0, onChanged }: { jobId: string; r
     if (!making) return;
     const m = making;
     void act(`p:${m.step}`, async () => {
-      const b = await call(`/api/jobs/${jobId}/budget/draft`, "PATCH", { step: m.step, make: { name: m.name, unit: m.unit, unit_cost: m.cost.trim() === "" ? null : Number(m.cost.replace(/[$,]/g, "")) } });
+      const b = await call(`/api/jobs/${jobId}/budget/draft`, "PATCH", { step: m.step, make: { name: m.name, unit: m.unit, description: m.source ? `Price from the web — check it. ${m.source}`.slice(0, 500) : null, unit_cost: m.cost.trim() === "" ? null : Number(m.cost.replace(/[$,]/g, "")) } });
       setMaking(null);
       return b;
     }, true);
   };
+  const lookRates = () => act("rates", () => call(`/api/jobs/${jobId}/budget/draft/rates`, "POST"));
+  const takeRate = (r: Rate) => {
+    const step = r.step === "job" ? "finishing" : r.step;
+    const mid = Math.round(((r.low + r.high) / 2) * 100) / 100;
+    setMaking({ step, name: `${STEP_NEW_NAME[step] ?? r.what}`, unit: UNIT_OF[r.unit] ?? "SqFt", cost: String(mid), source: `${r.site}: “${r.quote}”` });
+  };
+  const makeForm = () => making && (
+<form className="flex flex-wrap items-center gap-1.5 w-full" onSubmit={(e) => { e.preventDefault(); makeItem(); }}>
+                        <input value={making.name} maxLength={120} onChange={(e) => setMaking({ ...making, name: e.target.value })} aria-label="Item name"
+                          className="rounded px-2" style={{ height: 26, border: `1px solid ${T.hair}`, background: T.card, color: T.ink, flex: "1 1 160px", minWidth: 0 }} />
+                        <input value={making.unit} maxLength={20} onChange={(e) => setMaking({ ...making, unit: e.target.value })} aria-label="Unit"
+                          className="rounded px-2" style={{ height: 26, width: 80, border: `1px solid ${T.hair}`, background: T.card, color: T.ink }} />
+                        <input value={making.cost} inputMode="decimal" onChange={(e) => setMaking({ ...making, cost: e.target.value })} aria-label="Your cost per unit" placeholder="$ cost"
+                          className="rounded px-2" style={{ height: 26, width: 80, border: `1px solid ${T.hair}`, background: T.card, color: T.ink, ...nums }} />
+                        <button type="submit" disabled={!!busy || !making.name.trim() || !making.unit.trim()} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>Add to Price book and budget</button>
+                        <button type="button" onClick={() => setMaking(null)} style={{ ...eyebrow, color: T.ink3, cursor: "pointer" }}>Cancel</button>
+                      </form>
+  );
   const approve = () => act("approve", () => call(`/api/jobs/${jobId}/budget/draft/approve`, "POST"));
   const changedSince = s.approval && s.totals && Math.abs(Number(s.approval.total ?? 0) - s.totals.total) > 0.005;
 
@@ -302,24 +326,47 @@ export function DraftStrip({ jobId, refresh = 0, onChanged }: { jobId: string; r
                         style={{ ...eyebrow, color: T.chalk, cursor: "pointer", whiteSpace: "nowrap" }}>{pk.picks.length ? "Or make a new one" : "Make it"}</button>
                     )}
                     {busy === `p:${st.key}` && <span style={{ color: T.ink3 }}>Adding…</span>}
-                    {making?.step === st.key && (
-                      <form className="flex flex-wrap items-center gap-1.5 w-full" onSubmit={(e) => { e.preventDefault(); makeItem(); }}>
-                        <input value={making.name} maxLength={120} onChange={(e) => setMaking({ ...making, name: e.target.value })} aria-label="Item name"
-                          className="rounded px-2" style={{ height: 26, border: `1px solid ${T.hair}`, background: T.card, color: T.ink, flex: "1 1 160px", minWidth: 0 }} />
-                        <input value={making.unit} maxLength={20} onChange={(e) => setMaking({ ...making, unit: e.target.value })} aria-label="Unit"
-                          className="rounded px-2" style={{ height: 26, width: 80, border: `1px solid ${T.hair}`, background: T.card, color: T.ink }} />
-                        <input value={making.cost} inputMode="decimal" onChange={(e) => setMaking({ ...making, cost: e.target.value })} aria-label="Your cost per unit" placeholder="$ cost"
-                          className="rounded px-2" style={{ height: 26, width: 80, border: `1px solid ${T.hair}`, background: T.card, color: T.ink, ...nums }} />
-                        <button type="submit" disabled={!!busy || !making.name.trim() || !making.unit.trim()} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>Add to Price book and budget</button>
-                        <button type="button" onClick={() => setMaking(null)} style={{ ...eyebrow, color: T.ink3, cursor: "pointer" }}>Cancel</button>
-                      </form>
-                    )}
+                    {making?.step === st.key && !making.source && makeForm()}
                   </div>
                 )];
               })}
               {s.steps.some((st) => st.state === "open") && <div style={{ fontSize: F.xs, color: T.ink3 }}>Tap an item to put it on every area (delivery and equipment go on once for the job), make a new one, or mark the step not on this job.</div>}
             </div>
           )}
+
+          {run && run.status === "done" && run.outcome !== "manual_review" && (() => {
+            const rl = run.made?.rates;
+            const mine = s.totals && s.sqft ? s.totals.total / s.sqft : null;
+            const order = ["job", ...s.steps.map((st) => st.key)];
+            const rates = [...(rl?.rates ?? [])].sort((a, b) => order.indexOf(a.step) - order.indexOf(b.step));
+            return (
+              <div className="rounded px-2.5 py-2" style={{ border: `1px solid ${T.hairSoft}` }}>
+                <div className="flex items-baseline gap-2">
+                  <span style={{ ...eyebrow, color: T.ink }}>Going rates</span>
+                  <span style={{ fontSize: F.xs, color: T.ink3, ...clip, minWidth: 0 }}>{rl ? `${rl.place} · looked up ${day(rl.asked_at)}` : "from the web, with where each came from"}</span>
+                  <span className="flex-1" />
+                  <button onClick={() => void lookRates()} disabled={!!busy} style={{ ...eyebrow, color: T.chalk, cursor: "pointer", whiteSpace: "nowrap" }}>
+                    {busy === "rates" ? "Looking…" : rl ? "Look again" : "Look up going rates"}
+                  </button>
+                </div>
+                {rl?.error && <div style={{ fontSize: F.xs, color: T.red }}>{rl.error}</div>}
+                {rl && !rl.error && !rates.length && <div style={{ fontSize: F.xs, color: T.ink3 }}>No price on the pages found could be checked against its words.</div>}
+                {rates.map((r) => (
+                  <div key={`${r.step}${r.url}${r.low}${r.high}`} className="flex items-baseline gap-2 py-0.5" style={{ fontSize: F.xs, borderTop: `1px solid ${T.hairSoft}` }}>
+                    <span style={{ fontWeight: 600, color: T.ink, whiteSpace: "nowrap", ...nums }}>{range(r)}</span>
+                    <span style={{ flex: 1, minWidth: 0, color: T.ink2 }} title={`“${r.quote}”`}>
+                      {r.what}{r.split !== "all" ? ` · ${r.split} only` : ""}{r.kind === "installed_price" ? " · what customers pay" : " · your cost"}
+                      {r.step === "job" && r.unit === "sf" && mine ? <span style={{ color: mine < r.low ? T.hiviz : mine > r.high ? T.red : T.green }}> · yours {usd(Math.round(mine * 100) / 100)}/sq ft</span> : null}
+                      {" · "}<a href={r.url} target="_blank" rel="noopener noreferrer nofollow" style={{ color: T.chalk }}>{r.site}</a>
+                    </span>
+                    {r.kind === "cost" && r.step !== "job" && <button onClick={() => takeRate(r)} disabled={!!busy} style={{ ...eyebrow, color: T.chalk, cursor: "pointer", whiteSpace: "nowrap" }}>Use</button>}
+                  </div>
+                ))}
+                {making?.source && <div className="pt-1">{makeForm()}</div>}
+                {rates.length > 0 && <div style={{ fontSize: F.xs, color: T.ink3, marginTop: 2 }}>Published ranges, not your prices. Use opens a new Price book item at the middle of the range for you to change before it&apos;s saved.</div>}
+              </div>
+            );
+          })()}
 
           {s.blocked_lines.length > 0 && (
             <div style={{ fontSize: F.xs }}>

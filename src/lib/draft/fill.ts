@@ -92,7 +92,7 @@ export function picksForOpen(steps: StepState[], items: PriceItem[]): Record<str
 
 export interface JobArea { id: string; name: string | null; work_type: string | null; length_ft: number | null; width_ft: number | null; sqft_override: number | null; depth_in: number | null; count_qty?: number | null }
 
-const sqftOf = (s: JobArea) => (s.sqft_override ?? null) !== null ? Number(s.sqft_override)
+export const sqftOf = (s: JobArea) => (s.sqft_override ?? null) !== null ? Number(s.sqft_override)
   : s.length_ft !== null && s.width_ft !== null ? Number(s.length_ft) * Number(s.width_ft) : null;
 
 /** The job's area a heard area stands for: the same kind, or the only one of each. */

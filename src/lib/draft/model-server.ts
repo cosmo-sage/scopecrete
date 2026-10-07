@@ -24,11 +24,16 @@ export function modelConfigured(): "anthropic" | "openrouter" | null {
   return null;
 }
 
-export async function modelRead(evidence: Evidence[], timeoutMs = 40_000):
+export async function modelRead(evidence: Evidence[], timeoutMs = 40_000) {
+  const user = evidence.slice(-200).map((e) => `[${e.id}] ${e.who === "them" ? "CUSTOMER" : "CONTRACTOR"} ${e.at.slice(0, 10)}: ${e.text.slice(0, 1200)}`).join("\n");
+  return modelJson(SYSTEM, user, 2000, timeoutMs);
+}
+
+/** One tool-less call: a system prompt, the data, JSON back. */
+export async function modelJson(system: string, user: string, maxTokens = 2000, timeoutMs = 40_000):
   Promise<{ ok: true; json: unknown; provider: string } | { ok: false; error: string }> {
   const provider = modelConfigured();
   if (!provider) return { ok: false, error: "not configured" };
-  const user = evidence.slice(-200).map((e) => `[${e.id}] ${e.who === "them" ? "CUSTOMER" : "CONTRACTOR"} ${e.at.slice(0, 10)}: ${e.text.slice(0, 1200)}`).join("\n");
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
@@ -37,8 +42,8 @@ export async function modelRead(evidence: Evidence[], timeoutMs = 40_000):
       const r = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST", signal: ctrl.signal,
         headers: { "content-type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY as string, "anthropic-version": "2023-06-01" },
-        body: JSON.stringify({ model: process.env.DRAFT_MODEL || "claude-haiku-4-5-20251001", max_tokens: 2000, temperature: 0,
-          system: SYSTEM, messages: [{ role: "user", content: user }] }),
+        body: JSON.stringify({ model: process.env.DRAFT_MODEL || "claude-haiku-4-5-20251001", max_tokens: maxTokens, temperature: 0,
+          system, messages: [{ role: "user", content: user }] }),
       });
       if (!r.ok) return { ok: false, error: `the model API answered ${r.status}` };
       const j = (await r.json()) as { content?: Array<{ type: string; text?: string }> };
@@ -47,8 +52,8 @@ export async function modelRead(evidence: Evidence[], timeoutMs = 40_000):
       const r = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST", signal: ctrl.signal,
         headers: { "content-type": "application/json", authorization: `Bearer ${process.env.OPENROUTER_API_KEY}` },
-        body: JSON.stringify({ model: process.env.DRAFT_MODEL || "anthropic/claude-haiku-4.5", max_tokens: 2000, temperature: 0,
-          messages: [{ role: "system", content: SYSTEM }, { role: "user", content: user }] }),
+        body: JSON.stringify({ model: process.env.DRAFT_MODEL || "anthropic/claude-haiku-4.5", max_tokens: maxTokens, temperature: 0,
+          messages: [{ role: "system", content: system }, { role: "user", content: user }] }),
       });
       if (!r.ok) return { ok: false, error: `the model API answered ${r.status}` };
       const j = (await r.json()) as { choices?: Array<{ message?: { content?: string } }> };

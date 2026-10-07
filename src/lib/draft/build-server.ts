@@ -6,8 +6,11 @@ import { pricingFor } from "@/lib/pricing-server";
 import { takeoffTotalsFor } from "@/lib/plans-server";
 import { extract, modelSeen, type AreaDraft, type Evidence, type Extraction } from "./extract";
 import { approvalBlocks, checkRecipe, outcomeOf, RECIPE_VERSION, type DraftOutcome } from "./recipe";
-import { modelConfigured, modelRead } from "./model-server";
-import { areaFor, autoFill, outcomeOnJob, picksForOpen, withJobAreas, WHOLE_JOB_STEPS, type JobArea, type PriceItem } from "./fill";
+import { modelConfigured, modelJson, modelRead } from "./model-server";
+import { rateQueries, RATES_SYSTEM, renderResults, sanitizeRates, type RateLookup } from "./rates";
+import { searchWeb } from "@/lib/web-search-server";
+import { cityOf } from "@/lib/dusty/web";
+import { areaFor, autoFill, sqftOf, outcomeOnJob, picksForOpen, withJobAreas, WHOLE_JOB_STEPS, type JobArea, type PriceItem } from "./fill";
 
 /**
  * Job → draft budget, the server side (migration 087). Session client only:
@@ -405,6 +408,37 @@ export async function addStepItem(sb: Sb, orgId: string, jobId: string, step: st
   return { ok: true as const, lines: rows.length };
 }
 
+/**
+ * Going rates for the open steps, from the web, kept on the open budget's
+ * latest build (made.rates). Only the work and the city leave the app.
+ */
+export async function lookupRates(sb: Sb, orgId: string, jobId: string) {
+  const state = await draftState(sb, orgId, jobId);
+  if (!state.ready) return { ok: false as const, status: 503, error: state.error ?? DRAFT_TABLE_MISSING };
+  if (!state.run?.id) return { ok: false as const, status: 409, error: "Build the draft budget first." };
+  const { data: job } = await sb.from("jobs").select("address, city, state, customer_id").eq("org_id", orgId).eq("id", jobId).maybeSingle();
+  let place: string | null = job?.city && job?.state ? `${job.city}, ${job.state}` : cityOf((job?.address as string | null) ?? null);
+  if (!place && job?.customer_id) {
+    const { data: c } = await sb.from("customers").select("city, state").eq("org_id", orgId).eq("id", job.customer_id as string).maybeSingle();
+    if (c?.city && c?.state) place = `${c.city}, ${c.state}`;
+  }
+  const open = state.steps.filter((s) => s.state === "open").map((s) => s.key);
+  const queries = rateQueries(place, open);
+  const found: RateLookup = { place: place ?? "no city on the job", asked_at: new Date().toISOString(), queries, rates: [], dropped: 0, error: null };
+  const web = await searchWeb(queries);
+  if (web.error) found.error = web.error;
+  else if (!web.results.length) found.error = "The search found nothing.";
+  else if (!modelConfigured()) found.error = "Reading the prices needs ANTHROPIC_API_KEY.";
+  else {
+    const m = await modelJson(RATES_SYSTEM, renderResults(web.results), 3000, 45_000);
+    if (!m.ok) found.error = `Couldn't read the prices: ${m.error}.`;
+    else Object.assign(found, sanitizeRates(m.json, web.results));
+  }
+  const made = { ...((state.run.made as Record<string, unknown> | null) ?? {}), rates: found };
+  await sb.from("budget_runs").update({ made }).eq("org_id", orgId).eq("id", state.run.id as string);
+  return { ok: true as const };
+}
+
 // ---------------------------------------------------------------- the panel's view
 
 export async function readExclusions(sb: Sb, orgId: string, estimateId: string): Promise<Record<string, string>> {
@@ -465,7 +499,8 @@ export async function draftState(sb: Sb, orgId: string, jobId: string) {
   } : run;
   return {
     ready: true as const,
-    run: shownRun, steps, picks: picksForOpen(steps, items), blocked_lines: blockedLines, blocks,
+    run: shownRun, steps, picks: picksForOpen(steps, items),
+    sqft: ((secs ?? []) as unknown as JobArea[]).reduce((n, a) => n + (sqftOf(a) ?? 0), 0) || null, blocked_lines: blockedLines, blocks,
     line_names: Object.fromEntries(lines.map((l) => [l.id, l.name])),
     totals: tier ? { cost: tier.cost, overhead: tier.overhead, price: tier.price, tax: tier.tax, total: tier.total, partial: !tier.priced } : null,
     approval: ((appr ?? []) as Array<Record<string, unknown>>)[0] ?? null,

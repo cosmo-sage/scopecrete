@@ -99,7 +99,7 @@ export function cardToLine(c: Record<string, unknown>, at: {
   };
 }
 
-async function nextSort(sb: Sb, estimateId: string) {
+export async function nextSort(sb: Sb, estimateId: string) {
   const { count } = await sb.from("estimate_line_items").select("id", { count: "exact", head: true }).eq("estimate_id", estimateId);
   return count ?? 0;
 }

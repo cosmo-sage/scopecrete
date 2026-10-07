@@ -3235,8 +3235,15 @@ expected start date per quoted job before it means anything. Add the field.
   after themselves; `drawPage()` lets go of the sheet it drew last when
   another is drawn; thumbnails are drawn two at a time (one on a phone) and
   only once they scroll near the screen. Same test: 1.4 GB and 1.1 GB peaks,
-  flat however many sheets. Still open: bid-intake copies a file again when
-  an addendum re-sends it.
+  flat however many sheets. **On a phone no thumbnail is drawn at all** (Coy,
+  same day: still crashing): pdf.js decodes the whole ~67 MP scan even for a
+  thumbnail, ~300 MB for a moment each whatever the canvas limit (measured),
+  so the sheet list shows its number and title and only the sheet opened is
+  drawn. **An addendum doesn't copy a file again** (`reuseCopy()` in
+  `bid-intake`): a Box file another bid of the org already copied (same Box
+  file id and size, the copy not deleted) is that copy, its reading carried
+  over. Burgess Ave's second PLANS.pdf and proposal (from the addendum) are
+  the duplicates already made.
   **Drawings vs pages to read (Coy, 2026-10-02).** A page bigger than legal
   (longest side ≥ 1,150 pt, so 11×17 half-size sets count) is a drawing:
   measured, scaled, in Takeoff. A letter or legal page bound into a plan

@@ -169,7 +169,31 @@ async function storeFile(sb: Sb, pkg: Pkg, email: Email, name: string, mime: str
   return fileId
 }
 
+// An addendum email links the same Box folder again: a file another bid of this org already
+// copied (same Box file id, same size) is that copy, not a new one. Burgess Ave's PLANS.pdf was
+// copied twice and its 74 sheets listed twice in the Plan Room (2026-10-07). Its reading is
+// carried over too, so the model still sees its text.
+async function reuseCopy(sb: Sb, pkg: Pkg, f: PFile): Promise<boolean> {
+  if (!f.box_file_id || f.byte_size == null) return false
+  const { data: prev } = await sb.from('bid_package_files').select('job_file_id, pages, text_excerpt, scan_state, scan_error')
+    .eq('org_id', pkg.org_id).eq('box_file_id', f.box_file_id).eq('byte_size', f.byte_size).eq('fetch_state', 'fetched')
+    .neq('package_id', pkg.id).not('job_file_id', 'is', null).order('created_at').limit(5)
+  for (const p of (prev ?? []) as Array<{ job_file_id: string; pages: unknown; text_excerpt: string | null; scan_state: string; scan_error: string | null }>) {
+    const { data: jf } = await sb.from('job_files').select('id').eq('id', p.job_file_id).is('deleted_at', null).maybeSingle()
+    if (!jf) continue
+    const scanned = p.scan_state === 'scanned'
+    await sb.from('bid_package_files').update({
+      fetch_state: 'fetched', job_file_id: p.job_file_id, fetch_error: null, attempts: f.attempts + 1,
+      scan_state: scanned ? 'scanned' : 'skipped', pages: scanned ? p.pages : null, text_excerpt: scanned ? p.text_excerpt : null,
+      scan_error: scanned ? p.scan_error : 'already copied by an earlier bid — read there',
+    }).eq('id', f.id)
+    return true
+  }
+  return false
+}
+
 async function fetchBoxFile(sb: Sb, pkg: Pkg, email: Email, f: PFile) {
+  if (await reuseCopy(sb, pkg, f)) return
   const tok = await boxToken()
   const r = await fetch(`${BOX}/2.0/files/${f.box_file_id}/content`, { headers: { Authorization: `Bearer ${tok}`, BoxApi: `shared_link=${pkg.box_url}` } })
   if (!r.ok || !r.body) throw new Error(`Box download HTTP ${r.status}`)

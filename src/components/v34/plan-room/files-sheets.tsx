@@ -183,22 +183,26 @@ export function Thumb({ fileId, url, page, height = 104 }: { fileId: string; url
   // once ran the tab out of memory (2026-10-07).
   const el = useRef<HTMLDivElement>(null);
   const [seen, setSeen] = useState(() => typeof IntersectionObserver === "undefined");
+  // Not on a phone at all. pdf.js decodes a scanned sheet's whole ~67 MP picture to draw even
+  // a thumbnail — ~300 MB for a moment each, measured — and a phone paging through the sheet
+  // list still crashed (Coy, 2026-10-07). The number and title say which sheet it is.
+  const [phone] = useState(() => typeof window !== "undefined" && !!window.matchMedia?.("(pointer: coarse)").matches);
   useEffect(() => {
-    if (seen || !el.current) return;
+    if (phone || seen || !el.current) return;
     const io = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) setSeen(true); }, { rootMargin: "300px" });
     io.observe(el.current);
     return () => io.disconnect();
-  }, [seen]);
+  }, [seen, phone]);
   useEffect(() => {
-    if (!url || !seen) return;
+    if (phone || !url || !seen) return;
     let off = false;
     pageThumb(fileId, url, page).then((d) => { if (!off) setSrc(d); }).catch((e) => { if (!off) setFail(e instanceof Error ? e.message : String(e)); });
     return () => { off = true; };
-  }, [fileId, url, page, seen]);
+  }, [fileId, url, page, seen, phone]);
   return (
     <div ref={el} style={{ height, background: T.sunk, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
       {src ? <img src={src} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "top left" }} />
-        : <span title={fail ?? undefined} style={{ fontSize: F.xs, color: T.ink3 }}>{fail ? "couldn't draw" : "…"}</span>}
+        : <span title={fail ?? undefined} style={{ fontSize: F.xs, color: T.ink3 }}>{fail ? "couldn't draw" : phone ? `p.${page}` : "…"}</span>}
     </div>
   );
 }

@@ -1709,8 +1709,11 @@ percentage of labour — all three contradict this section and §4.
   build never blocks the job. The concrete card's rule takes "Order in steps
   of" (`rule_params.round_cy`, e.g. 0.25 — 14.67 CY orders 14.75). Had 087 been
   missing, the strip would say to apply it.
-- **Several budgets on a job, each named (migration 088, written, waiting
-  for Coy's "apply 088"; Coy, 2026-10-07: "save and name the budget (give a
+- **Several budgets on a job, each named (migration 088, applied
+  2026-10-07 on Coy's "apply 088"; checked after: `estimates.name`, the
+  status check takes 'saved', `budget_runs.estimate_id`, `sc_open_budget`
+  invoker and not for anon, Wilson Driveway's one budget and 7 lines
+  untouched; Coy, 2026-10-07: "save and name the budget (give a
   name suggestion like draft 1 or draft 2). This way when i click on build
   draft budget, it can build a new budget for me to look at and I can open
   either one").** A job still has ONE **open** budget — the estimate with
@@ -1738,8 +1741,8 @@ percentage of labour — all three contradict this section and §4.
   /api/jobs/[id]/budgets` (rename, open, new), `POST …/budget/draft
   {new_budget, name, park_name}` — session client, org from the session.
   Rehearsed (rolled back) on Wilson Driveway as its owner: parked as Draft 1,
-  a new Draft 2 opened, Draft 1 reopened with its 7 lines. Until 088 is
-  applied, Budgets ▾ says so and Build works as before. Not built: deleting
+  a new Draft 2 opened, Draft 1 reopened with its 7 lines. Without 088
+  Budgets ▾ says so and Build works as before. Not built: deleting
   a budget.
 - **Dusty plans budgets; Coy applies them (Coy, 2026-10-02: "chat with Dusty
   to analyze the list of items in my cost book and apply the items that I

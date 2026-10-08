@@ -16,7 +16,7 @@ import { openPdf, drawPage } from "@/lib/pdf";
 import { dist, fmtQty, parseFeet, rectPoints, scaleFromPoints, scaleLabel, KIND_UNIT, type Pt, type TakeoffKind } from "@/lib/takeoff";
 import { call, KIND_LABEL, SHAPE_COLORS, shapeColor, sheetLabel, type Meas, type Param, type PlanFile, type PlansData, type Sheet } from "./shared";
 import { ScaleBadge, Thumb } from "./files-sheets";
-import { SlideDrawer } from "@/components/v34/primitives";
+import { Drawer, SlideDrawer } from "@/components/v34/primitives";
 import { ShapePhotos } from "./shape-photos";
 
 type Tool = "select" | "area" | "rect" | "linear" | "count" | "cutout" | "scale";
@@ -42,10 +42,10 @@ const TOOLS: Array<[Tool, string, string]> = [
   ["scale", "Scale", "Click both ends of a dimension you know, then type it"],
 ];
 
-export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, onSend, fullscreen, setFullscreen, onPhotos, photosOpen }: {
+export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, onSend, fullscreen, setFullscreen }: {
   jobId: string; data: PlansData; files: PlanFile[];
   sheetId: string | null; setSheetId: (id: string) => void; reload: () => Promise<void>;
-  onSend: (p: Param, ids?: string[]) => void; fullscreen: boolean; setFullscreen: (v: boolean) => void; onPhotos?: () => void; photosOpen?: boolean;
+  onSend: (p: Param, ids?: string[]) => void; fullscreen: boolean; setFullscreen: (v: boolean) => void;
 }) {
   const sheets = data.sheets;
   // The phone's sheets drawer: open on the first visit to this job's Plan Room, closed afterwards (remembered per job).
@@ -86,6 +86,9 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
   const group = data.params.find((p) => p.id === groupId) ?? null;
   const sel = data.measurements.find((m) => m.id === selId) ?? null;
   const [shapePhotos, setShapePhotos] = useState(false);
+  // One sheet's scale put on others — every sheet, or the ones ticked (Coy, 2026-10-07).
+  const [copyScale, setCopyScale] = useState<{ k: number; from: string; all?: boolean } | null>(null);
+  const scaledCount = sheets.filter((x) => x.scale_ft_per_pt).length;
   const selGroup = sel ? data.params.find((p) => p.id === sel.parameter_id) ?? null : null;
   const selName = sel ? sel.name ?? `${selGroup?.name ?? "Shape"} ${data.measurements.filter((m) => m.parameter_id === sel.parameter_id).findIndex((m) => m.id === sel.id) + 1}` : "";
   const selPhotos = sel ? files.filter((f) => f.takeoff_measurement_id === sel.id).length : 0;
@@ -175,7 +178,7 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
             </span>
           )}
         </div>
-        <SlideDrawer open={sheetsOpen} onOpen={() => openSheets(true)} onClose={() => openSheets(false)} width={300} label="Sheets" tab>
+        <SlideDrawer open={sheetsOpen} onOpen={() => openSheets(true)} onClose={() => openSheets(false)} width={300} label="Sheets">
           <div className="flex items-baseline gap-2" style={{ padding: "12px 12px 8px", borderBottom: `1px solid ${T.hairSoft}` }}>
             <span style={{ fontFamily: "var(--sc-font-light)", fontWeight: 300, fontSize: 20, color: T.ink, flex: 1 }}>Sheets · {sheets.length}</span>
             <span style={{ fontSize: 12, color: T.ink2 }}>{sheets.filter((x) => x.scale_ft_per_pt).length} of {sheets.length} scaled</span>
@@ -211,7 +214,7 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
           <span className="flex-1" />
           {sheet && <span className="hidden md:inline" style={{ fontSize: F.xs, color: T.ink2, whiteSpace: "nowrap" }}>{sheetLabel(sheet)} · <ScaleBadge s={sheet} small /></span>}
           {sel && <button onClick={() => setShapePhotos(true)} title={`Photos of ${selName} — they show on its budget section and the proposal`} style={tb(false)}>Shape photos{selPhotos ? ` (${selPhotos})` : ""}</button>}
-          {onPhotos && <button onClick={onPhotos} aria-pressed={!!photosOpen} title="The job's photos beside this sheet" style={tb(!!photosOpen)}>Photos</button>}
+          {sheet?.scale_ft_per_pt && sheets.length > 1 && <button onClick={() => setCopyScale({ k: sheet.scale_ft_per_pt as number, from: sheet.id })} title="Put this sheet's scale on every sheet, or the ones you pick" style={tb(false)}>Scale → other sheets</button>}
           <button onClick={() => setZoom((z) => Math.max(0.5, z / 1.25))} aria-label="Zoom out" style={tb(false)}>−</button>
           <span style={{ fontFamily: strong, fontSize: 11, width: 38, textAlign: "center", ...nums }}>{Math.round(zoom * 100)}%</span>
           <button onClick={() => setZoom((z) => Math.min(8, z * 1.25))} aria-label="Zoom in" style={tb(false)}>+</button>
@@ -239,7 +242,12 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
               </>
             )}
             {scaleAsk && sheet && <ScaleAsk a={scaleAsk.a} b={scaleAsk.b} onCancel={() => { setScaleAsk(null); setDraft([]); }}
-              onSet={(k) => act(async () => { await call(`/api/plan-sheets/${sheet.id}`, "PATCH", { scale_method: "manual", scale_ft_per_pt: k }); setScaleAsk(null); setDraft([]); setTool("select"); })} />}
+              others={sheets.length > 1}
+              onSet={(k, to) => act(async () => {
+                await call(`/api/plan-sheets/${sheet.id}`, "PATCH", { scale_method: "manual", scale_ft_per_pt: k });
+                setScaleAsk(null); setDraft([]); setTool("select");
+                if (to !== "this") setCopyScale({ k, from: sheet.id, all: to === "all" });
+              })} />}
           </div>
         )}
 
@@ -256,8 +264,19 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
         </div>
 
         {sel && shapePhotos && <ShapePhotos jobId={jobId} shapeId={sel.id} shapeName={selName} files={files} open onClose={() => setShapePhotos(false)} onChanged={reload} />}
+        {copyScale && <ScaleCopy k={copyScale.k} from={copyScale.from} all={!!copyScale.all} sheets={sheets} onClose={() => setCopyScale(null)}
+          apply={(ids) => act(async () => {
+            for (let i = 0; i < ids.length; i += 4) {
+              await Promise.all(ids.slice(i, i + 4).map((id) => call(`/api/plan-sheets/${id}`, "PATCH", { scale_method: "manual", scale_ft_per_pt: copyScale.k })));
+            }
+            setCopyScale(null);
+          })} />}
         {sheets.length > 1 && (
-          <div className="hidden lg:flex gap-1 px-2 py-1 overflow-x-auto" style={{ flex: "0 0 auto", background: T.card, borderTop: `1px solid ${T.hair}` }}>
+          <div className="hidden lg:flex items-center gap-1 px-2 py-1 overflow-x-auto" style={{ flex: "0 0 auto", background: T.card, borderTop: `1px solid ${T.hair}` }}>
+            {/* How many sheets have a scale — here, not in the page header (Coy, 2026-10-07). */}
+            <span style={{ flex: "0 0 auto", fontSize: 11, fontWeight: 600, borderRadius: 3, padding: "3px 8px", marginRight: 4, background: scaledCount === sheets.length ? T.greenDim : T.sunDim, color: scaledCount === sheets.length ? T.green : T.sun }}>
+              {scaledCount === sheets.length ? "✓ " : ""}{scaledCount} of {sheets.length} scaled
+            </span>
             {sheets.map((s) => (
               <button key={s.id} onClick={() => setSheetId(s.id)} style={{ ...tb(s.id === sheet?.id), height: 26, fontFamily: strong, fontSize: 11 }}>
                 {sheetLabel(s)}{s.scale_ft_per_pt ? "" : " ·?"}
@@ -298,20 +317,61 @@ function ScaleBar({ sheet, act, startScale }: { sheet: Sheet; act: (fn: () => Pr
   );
 }
 
-function ScaleAsk({ a, b, onSet, onCancel }: { a: Pt; b: Pt; onSet: (k: number) => void; onCancel: () => void }) {
+function ScaleAsk({ a, b, onSet, onCancel, others }: { a: Pt; b: Pt; onSet: (k: number, to: "this" | "all" | "pick") => void; onCancel: () => void; others: boolean }) {
   const [v, setV] = useState("");
+  const [to, setTo] = useState<"this" | "all" | "pick">("this");
   const ft = parseFeet(v);
   const k = ft !== null ? scaleFromPoints(a, b, ft) : null;
   return (
-    <form className="flex items-center gap-2 flex-wrap" onSubmit={(e) => { e.preventDefault(); if (k) onSet(k); }}>
+    <form className="flex items-center gap-2 flex-wrap" onSubmit={(e) => { e.preventDefault(); if (k) onSet(k, to); }}>
       <span style={{ color: T.ink }}>How long is that, for real?</span>
       <input autoFocus value={v} onChange={(e) => setV(e.target.value)} placeholder={"30'-6\""} aria-label="Real length"
         style={{ width: 90, height: 28, border: `1px solid ${T.hairStrong}`, borderRadius: 3, padding: "0 6px", background: T.card, color: T.ink, fontFamily: strong }} />
       {k && <span style={{ color: T.ink2 }}>→ {scaleLabel(k)}</span>}
       {v && ft === null && <span style={{ color: T.red }}>Type feet and inches, like 30&apos;-6&quot;</span>}
+      {others && (
+        <select value={to} onChange={(e) => setTo(e.target.value as "this" | "all" | "pick")} aria-label="Which sheets"
+          style={{ height: 28, border: `1px solid ${T.hairStrong}`, borderRadius: 3, padding: "0 4px", background: T.card, color: T.ink, fontSize: F.xs }}>
+          <option value="this">This sheet</option>
+          <option value="all">Every sheet</option>
+          <option value="pick">Pick sheets…</option>
+        </select>
+      )}
       <button type="submit" disabled={!k} style={{ ...tb(true), opacity: k ? 1 : 0.5 }}>Set scale</button>
       <button type="button" onClick={onCancel} style={tb(false)}>Cancel</button>
     </form>
+  );
+}
+
+/** Put one scale on other sheets: every drawing but the aerials ticked for "every sheet", none for "pick". */
+function ScaleCopy({ k, from, all, sheets, apply, onClose }: { k: number; from: string; all: boolean; sheets: Sheet[]; apply: (ids: string[]) => Promise<void>; onClose: () => void }) {
+  const others = sheets.filter((s) => s.id !== from);
+  const [on, setOn] = useState<Set<string>>(() => new Set(all ? others.filter((s) => s.number !== "AERIAL").map((s) => s.id) : []));
+  const [busy, setBusy] = useState(false);
+  const flip = (id: string) => setOn((cur) => { const n = new Set(cur); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const allOn = others.length > 0 && others.every((s) => on.has(s.id));
+  return (
+    <Drawer open onClose={onClose} title={`Use ${scaleLabel(k)} on…`} sub="Tick the sheets drawn at the same scale. A sheet's own scale is replaced.">
+      <div className="p-3 flex flex-col gap-1.5">
+        <label className="flex items-center gap-2" style={{ fontSize: F.sm, fontWeight: 600, color: T.ink, padding: "4px 2px" }}>
+          <input type="checkbox" checked={allOn} onChange={() => setOn(allOn ? new Set() : new Set(others.map((s) => s.id)))} /> Every sheet ({others.length})
+        </label>
+        {others.map((s) => (
+          <label key={s.id} className="flex items-center gap-2 rounded" style={{ padding: "6px 8px", border: `1px solid ${on.has(s.id) ? T.hiviz : T.hair}`, background: on.has(s.id) ? T.hivizDim : T.card, fontSize: F.sm, color: T.ink, cursor: "pointer" }}>
+            <input type="checkbox" checked={on.has(s.id)} onChange={() => flip(s.id)} />
+            <span style={{ flex: 1, minWidth: 0, ...clipTxt }}>{sheetLabel(s)}</span>
+            <span style={{ fontSize: 11, color: s.scale_ft_per_pt ? T.green : T.ink3, flex: "0 0 auto" }}>
+              {s.number === "AERIAL" ? "aerial — its own scale" : s.scale_ft_per_pt ? `now ${scaleLabel(s.scale_ft_per_pt)}` : s.scale_text ? `prints ${s.scale_text}` : "no scale yet"}
+            </span>
+          </label>
+        ))}
+        <div className="flex gap-2 pt-2">
+          <button disabled={!on.size || busy} onClick={() => { setBusy(true); void apply([...on]).finally(() => setBusy(false)); }}
+            style={{ ...tb(true), opacity: on.size && !busy ? 1 : 0.5 }}>{busy ? "Setting…" : `Set on ${on.size} sheet${on.size === 1 ? "" : "s"}`}</button>
+          <button onClick={onClose} style={tb(false)}>Cancel</button>
+        </div>
+      </div>
+    </Drawer>
   );
 }
 

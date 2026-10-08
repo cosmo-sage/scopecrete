@@ -11,6 +11,7 @@ import { T, F, disp, eyebrow, clip, strong } from "@/lib/v34/tokens";
 import { drawPage, openPdf, pageThumb } from "@/lib/pdf";
 import { scaleLabel } from "@/lib/takeoff";
 import { CONCRETE_DISC, DISC_COLOR, DISC_LABEL, isPlanFile, sheetLabel, type PlanFile, type Sheet } from "./shared";
+import { TextedPhotos } from "./texted-photos";
 
 const READ: Record<string, string> = { waiting: "Waiting for Dusty", reading: "Dusty is reading", read: "Read", failed: "Couldn't read", skipped: "Not read" };
 
@@ -78,10 +79,13 @@ function FileList({ files, sheets, reading, onToggle, onAdd, uploading }: {
 }
 
 /** The job's photos, newest first. */
-function PhotoGrid({ files }: { files: PlanFile[] }) {
+function PhotoGrid({ files, jobId, onAdded }: { files: PlanFile[]; jobId?: string; onAdded?: () => void | Promise<void> }) {
   const photos = files.filter((f) => f.kind === "image").sort((a, b) => b.created_at.localeCompare(a.created_at));
-  if (!photos.length) return <div style={{ fontSize: F.sm, color: T.ink3 }}>No photos on this job yet. Drop them in All files, or bring in the ones the customer texted from Photos at the top.</div>;
+  const texted = jobId ? <TextedPhotos jobId={jobId} onAdded={onAdded ?? (() => {})} /> : null;
+  if (!photos.length) return <>{texted}<div style={{ fontSize: F.sm, color: T.ink3 }}>No photos on this job yet. Drop them in All files, or bring in the ones the customer texted above.</div></>;
   return (
+    <>
+    {texted}
     <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))" }}>
       {photos.map((f) => (
         <a key={f.id} href={f.url ?? undefined} target="_blank" rel="noreferrer" className="rounded overflow-hidden block" style={{ background: T.card, border: `1px solid ${T.hair}` }}>
@@ -91,13 +95,14 @@ function PhotoGrid({ files }: { files: PlanFile[] }) {
         </a>
       ))}
     </div>
+    </>
   );
 }
 
-export function FilesStep({ files, sheets, docPages = [], reading, onToggle, onAdd, uploading, onOpen, initial }: {
+export function FilesStep({ files, sheets, docPages = [], reading, onToggle, onAdd, uploading, onOpen, initial, jobId, onAdded }: {
   files: PlanFile[]; sheets: Sheet[]; docPages?: Sheet[]; reading: Record<string, string>;
   onToggle: (f: PlanFile, on: boolean) => void; onAdd: (list: FileList) => void; uploading: string | null;
-  onOpen: (s: Sheet) => void; initial?: "files" | "sheets";
+  onOpen: (s: Sheet) => void; initial?: "files" | "sheets"; jobId?: string; onAdded?: () => void | Promise<void>;
 }) {
   const [view, setView] = useState<string>(initial === "sheets" && (sheets.length || docPages.length) ? (sheets.length ? "concrete" : "pages") : "files");
   const [pageAt, setPageAt] = useState<number | null>(null);
@@ -140,7 +145,7 @@ export function FilesStep({ files, sheets, docPages = [], reading, onToggle, onA
       </nav>
       <div className="flex-1 p-3 lg:p-4" style={{ minWidth: 0 }}>
         {view === "files" && <FileList files={files} sheets={sheets} reading={reading} onToggle={onToggle} onAdd={onAdd} uploading={uploading} />}
-        {view === "photos" && <PhotoGrid files={files} />}
+        {view === "photos" && <PhotoGrid files={files} jobId={jobId} onAdded={onAdded} />}
         {isSheets && (
           <div className="grid gap-2.5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", alignContent: "start" }}>
             {isPages && <div style={{ gridColumn: "1 / -1", fontSize: F.xs, color: T.ink3 }}>Letter- and legal-size pages in the plan file — specs, notes, forms. Tap one to read it; drawings are the measured sheets.</div>}

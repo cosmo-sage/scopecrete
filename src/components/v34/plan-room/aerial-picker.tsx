@@ -1,15 +1,17 @@
 "use client";
 /**
- * Aerial of the site (src/lib/aerial.ts): find the job's address, look at it on
- * Mapbox or Google, frame it, and put it in the Plan Room as a sheet with the
- * map's scale. Mapbox is kept; Google is a look only — its terms don't allow
- * keeping or tracing its imagery. Esri is offered no more (Coy, 2026-10-07:
- * "it doesn't work").
+ * Satellite of the site (src/lib/aerial.ts): find the job's address, frame it
+ * on Mapbox, and put it in Takeoffs as a sheet with the map's scale. Since
+ * 2026-10-07 (Coy) it is the Takeoffs page's Satellite tab, not a drawer, and
+ * Mapbox alone — Esri didn't work and Google needs a key (a Planned card on the
+ * Roadmap). Zoom goes in quarter steps, by the wheel, or by pinching; between
+ * whole zoom levels the tiles of the next level are drawn smaller, and the
+ * dashed box is the frame that is saved (at that next level, whose scale is
+ * the sheet's).
  */
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { T, F, disp, clip } from "@/lib/v34/tokens";
-import { Drawer } from "@/components/v34/primitives";
-import { MAX_ZOOM, MIN_ZOOM, PROVIDER_LABEL, WIN_H, WIN_W, ftPerPt, project, unproject, windowTiles, type AddressSuggestion, type AerialProvider } from "@/lib/aerial";
+import { MAX_ZOOM, MIN_ZOOM, WIN_H, WIN_W, ftPerPt, project, unproject, windowTiles, type AddressSuggestion, type AerialProvider } from "@/lib/aerial";
 import { call } from "./shared";
 
 interface Info {
@@ -23,15 +25,21 @@ const btn = (on: boolean): React.CSSProperties => ({
   background: on ? T.ink : T.card, color: on ? T.card : T.ink, border: `1px solid ${on ? T.ink : T.hairStrong}`,
 });
 
-export function AerialPicker({ jobId, open, onClose, onSaved }: { jobId: string; open: boolean; onClose: () => void; onSaved: (sheetId: string) => void }) {
+const P: AerialProvider = "mapbox";
+const ZMAX = MAX_ZOOM[P];
+const STEP = 0.25;
+const clampZ = (v: number) => Math.max(MIN_ZOOM, Math.min(ZMAX, v));
+
+export function AerialPicker({ jobId, onSaved }: { jobId: string; onSaved: (sheetId: string) => void }) {
   const [info, setInfo] = useState<Info | null>(null);
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [p, setP] = useState<AerialProvider>("mapbox");
   const [c, setC] = useState<{ lat: number; lng: number } | null>(null);
-  const [z, setZ] = useState(20);
-  const [settled, setSettled] = useState<{ lat: number; lng: number } | null>(null);
+  // The zoom as seen (quarter steps, the wheel or a pinch), and the whole level whose tiles are drawn and saved.
+  const [vz, setVz] = useState(20);
+  const tz = Math.min(ZMAX, Math.ceil(vz - 1e-6));
+  const s = 2 ** (tz - vz);
   // What the map is on now — the drawer's subtitle and the saved sheet's name.
   const [place, setPlace] = useState<{ label: string; by: string } | null>(null);
   const [sugg, setSugg] = useState<AddressSuggestion[]>([]);
@@ -41,7 +49,7 @@ export function AerialPicker({ jobId, open, onClose, onSaved }: { jobId: string;
   useEffect(() => { cRef.current = c; }, [c]);
 
   const goTo = (f: { lat: number; lng: number; label: string; by: string }) => {
-    setC({ lat: f.lat, lng: f.lng }); setSettled({ lat: f.lat, lng: f.lng }); setPlace({ label: f.label, by: f.by }); setErr(null);
+    setC({ lat: f.lat, lng: f.lng }); setPlace({ label: f.label, by: f.by }); setErr(null);
   };
 
   const look = useCallback(async (query?: string) => {
@@ -50,7 +58,7 @@ export function AerialPicker({ jobId, open, onClose, onSaved }: { jobId: string;
       const d = (await call(`/api/jobs/${jobId}/aerial${query ? `?q=${encodeURIComponent(query)}` : ""}`, "GET")) as Info;
       setInfo(d);
       if (!query) setQ(d.query ?? "");
-      if (d.found) { const f = d.found; setC({ lat: f.lat, lng: f.lng }); setSettled({ lat: f.lat, lng: f.lng }); setPlace({ label: f.label, by: f.by }); }
+      if (d.found) { const f = d.found; setC({ lat: f.lat, lng: f.lng }); setPlace({ label: f.label, by: f.by }); }
       else setErr(d.query ? `Couldn't find "${d.query}". Type it the way you'd put it in a map.` : "This job has no address yet — type one.");
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(null); }
@@ -84,47 +92,69 @@ export function AerialPicker({ jobId, open, onClose, onSaved }: { jobId: string;
   };
 
   useEffect(() => {
-    if (!open || info) return;
+    if (info) return;
     const t = setTimeout(() => void look(), 0);
     return () => clearTimeout(t);
-  }, [open, info, look]);
+  }, [info, look]);
 
-  // Drag to move the frame. Everything is in tile pixels at the current zoom.
+  // Drag to move the frame; two fingers pinch to zoom; the wheel zooms. Positions are tile pixels at tz.
   const box = useRef<HTMLDivElement>(null);
   const drag = useRef<{ x: number; y: number; cx: number; cy: number } | null>(null);
+  const pts = useRef(new Map<number, { x: number; y: number }>());
+  const pinch = useRef<{ d: number; vz: number } | null>(null);
+  const span = () => { const [a, b] = [...pts.current.values()]; return Math.hypot(a.x - b.x, a.y - b.y) || 1; };
   const onDown = (e: React.PointerEvent) => {
     if (!c) return;
-    const w = project(c.lat, c.lng, z);
-    drag.current = { x: e.clientX, y: e.clientY, cx: w.x, cy: w.y };
     (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+    pts.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pts.current.size === 2) { drag.current = null; pinch.current = { d: span(), vz }; return; }
+    const w = project(c.lat, c.lng, tz);
+    drag.current = { x: e.clientX, y: e.clientY, cx: w.x, cy: w.y };
   };
   const onMove = (e: React.PointerEvent) => {
+    if (pts.current.has(e.pointerId)) pts.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pinch.current && pts.current.size === 2) { const p0 = pinch.current; setVz(clampZ(p0.vz + Math.log2(span() / p0.d))); return; }
     const d = drag.current, el = box.current;
     if (!d || !el) return;
-    const k = WIN_W / el.clientWidth;
-    setC(unproject(d.cx - (e.clientX - d.x) * k, d.cy - (e.clientY - d.y) * k, z));
+    const k = (WIN_W * s) / el.clientWidth;
+    setC(unproject(d.cx - (e.clientX - d.x) * k, d.cy - (e.clientY - d.y) * k, tz));
   };
-  const onUp = () => { if (drag.current && c) setSettled(c); drag.current = null; };
-  const zoom = (dz: number) => { setZ(Math.max(MIN_ZOOM, Math.min(MAX_ZOOM[p], z + dz))); if (c) setSettled(c); };
-  const pick = (k: AerialProvider) => { setP(k); setZ(Math.min(z, MAX_ZOOM[k])); if (c) setSettled(c); };
+  const onUp = (e: React.PointerEvent) => {
+    pts.current.delete(e.pointerId);
+    if (pts.current.size < 2) pinch.current = null;
+    drag.current = null;
+  };
+  useEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const w = (e: WheelEvent) => {
+      e.preventDefault();
+      const px = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaMode === 2 ? e.deltaY * 400 : e.deltaY;
+      setVz((v) => clampZ(v - px / 400));
+    };
+    el.addEventListener("wheel", w, { passive: false });
+    return () => el.removeEventListener("wheel", w);
+  }, [c]);
+  const zoom = (dz: number) => setVz((v) => clampZ(Math.round((v + dz) / STEP) * STEP));
 
   const save = async () => {
-    if (!c || p === "google") return;
-    setBusy(`Saving the ${PROVIDER_LABEL[p]} aerial…`); setErr(null);
+    if (!c) return;
+    setBusy("Saving the satellite view…"); setErr(null);
     try {
       const label = place?.label?.split(",")[0] ?? "";
-      const r = await call(`/api/jobs/${jobId}/aerial`, "POST", { provider: p, lat: c.lat, lng: c.lng, z, label });
+      const r = await call(`/api/jobs/${jobId}/aerial`, "POST", { provider: P, lat: c.lat, lng: c.lng, z: tz, label });
       onSaved((r as { sheet: { id: string } }).sheet.id);
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(null); }
   };
 
-  const win = c ? windowTiles(c.lat, c.lng, z) : null;
-  const prov = info?.providers;
-  const feet = c ? Math.round(WIN_W * ftPerPt(c.lat, z)) : null;
+  const W = WIN_W * s, H = WIN_H * s;
+  const win = c ? windowTiles(c.lat, c.lng, tz, W, H) : null;
+  const off = info?.providers?.[P] && !info.providers[P].on ? info.providers[P].why ?? "Mapbox isn't set up." : null;
+  const feet = c ? Math.round(WIN_W * ftPerPt(c.lat, tz)) : null;
   return (
-    <Drawer open={open} onClose={onClose} wide title="Aerial of the site" sub={place ? `${place.label} · found by ${place.by}` : info?.address ?? undefined}>
-      <div className="p-3 flex flex-col gap-2">
+      <div className="p-3 flex flex-col gap-2 w-full" style={{ maxWidth: 1180, margin: "0 auto" }}>
+        <div style={{ fontSize: F.xs, color: T.ink3, ...clip }}>{place ? `${place.label} · found by ${place.by}` : info?.address ?? ""}</div>
         <form className="flex gap-2 relative" onSubmit={(e) => {
           e.preventDefault();
           if (hi >= 0 && sugg[hi]) { void choose(sugg[hi]); return; }
@@ -158,52 +188,42 @@ export function AerialPicker({ jobId, open, onClose, onSaved }: { jobId: string;
         {info?.from === "customer" && <div style={{ fontSize: F.xs, color: T.ink3 }}>The job has no address of its own — this is the customer&apos;s.</div>}
 
         <div className="flex items-center gap-1.5 flex-wrap">
-          {(["mapbox", "google"] as AerialProvider[]).map((k) => (
-            <button key={k} disabled={!prov?.[k].on} title={prov?.[k].why} onClick={() => pick(k)}
-              style={{ ...btn(p === k), opacity: prov?.[k].on ? 1 : 0.45, cursor: prov?.[k].on ? "pointer" : "not-allowed" }}>
-              {PROVIDER_LABEL[k]}{k === "google" ? " · look only" : ""}
-            </button>
-          ))}
+          <span style={{ fontSize: F.xs, fontWeight: 600, color: T.ink2 }}>Mapbox satellite</span>
           <span className="flex-1" />
-          <button onClick={() => zoom(-1)} disabled={z <= MIN_ZOOM} style={btn(false)} aria-label="Zoom out">−</button>
-          <span style={{ fontSize: F.xs, color: T.ink2, minWidth: 54, textAlign: "center" }}>zoom {z}</span>
-          <button onClick={() => zoom(1)} disabled={z >= MAX_ZOOM[p]} style={btn(false)} aria-label="Zoom in">+</button>
+          <button onClick={() => zoom(-STEP)} disabled={vz <= MIN_ZOOM} style={btn(false)} aria-label="Zoom out">−</button>
+          <span style={{ fontSize: F.xs, color: T.ink2, minWidth: 70, textAlign: "center" }}>zoom {vz.toFixed(2).replace(/\.?0+$/, "")}</span>
+          <button onClick={() => zoom(STEP)} disabled={vz >= ZMAX} style={btn(false)} aria-label="Zoom in">+</button>
         </div>
-        {prov && (["mapbox", "google"] as AerialProvider[]).filter((k) => !prov[k].on).map((k) => (
-          <div key={k} style={{ fontSize: 11, color: T.ink3 }}>{PROVIDER_LABEL[k]}: {prov[k].why}</div>
-        ))}
+        {off && <div style={{ fontSize: 11, color: T.ink3 }}>{off}</div>}
 
         <div ref={box} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}
           className="relative overflow-hidden rounded select-none"
-          style={{ width: `min(100%, calc((100dvh - 340px) * ${WIN_W / WIN_H}))`, alignSelf: "center", aspectRatio: `${WIN_W} / ${WIN_H}`, background: T.sunk, border: `1px solid ${T.hair}`, touchAction: "none", cursor: c ? "grab" : "default" }}>
-          {win && p !== "google" && win.tiles.map((t) => (
+          style={{ width: `min(100%, calc((100dvh - var(--sc-head) - 300px) * ${WIN_W / WIN_H}))`, alignSelf: "center", aspectRatio: `${WIN_W} / ${WIN_H}`, background: T.sunk, border: `1px solid ${T.hair}`, touchAction: "none", cursor: c ? "grab" : "default" }}>
+          {win && !off && win.tiles.map((t) => (
             // eslint-disable-next-line @next/next/no-img-element
-            <img key={`${p}/${z}/${t.x}/${t.y}`} src={`/api/aerial/tile?p=${p}&z=${z}&x=${t.x}&y=${t.y}`} alt="" draggable={false}
-              style={{ position: "absolute", left: `${(t.dx / WIN_W) * 100}%`, top: `${(t.dy / WIN_H) * 100}%`, width: `${(256 / WIN_W) * 100}%`, height: `${(256 / WIN_H) * 100}%`, pointerEvents: "none" }} />
+            <img key={`${P}/${tz}/${t.x}/${t.y}`} src={`/api/aerial/tile?p=${P}&z=${tz}&x=${t.x}&y=${t.y}`} alt="" draggable={false}
+              style={{ position: "absolute", left: `${(t.dx / W) * 100}%`, top: `${(t.dy / H) * 100}%`, width: `${(256 / W) * 100}%`, height: `${(256 / H) * 100}%`, pointerEvents: "none" }} />
           ))}
-          {settled && p === "google" && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={`/api/aerial/google?lat=${settled.lat}&lng=${settled.lng}&z=${z}`} alt="Google satellite view" draggable={false}
-              style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }} />
+          {c && s > 1.001 && (
+            <div aria-hidden style={{ position: "absolute", left: `${50 - 50 / s}%`, top: `${50 - 50 / s}%`, width: `${100 / s}%`, height: `${100 / s}%`, border: "2px dashed #fff", boxShadow: "0 0 0 1px rgba(0,0,0,.45)", pointerEvents: "none" }} />
           )}
           {c && <div aria-hidden style={{ position: "absolute", left: "50%", top: "50%", width: 18, height: 18, marginLeft: -9, marginTop: -9, border: "2px solid #fff", borderRadius: 999, boxShadow: "0 0 0 1px rgba(0,0,0,.5)", pointerEvents: "none" }} />}
           {!c && <div className="absolute inset-0 flex items-center justify-center" style={{ fontSize: F.sm, color: T.ink3 }}>{busy ?? "No address found yet."}</div>}
         </div>
         <div style={{ fontSize: F.xs, color: T.ink3 }}>
-          Drag to frame the work. {feet ? `The frame is about ${feet} ft across.` : ""} What you see is what is saved.
-          {p === "google" ? " Google is shown to compare — its terms don't allow keeping it, so switch to Mapbox to save." : ""}
+          Drag to frame the work; scroll or pinch to zoom. {feet ? `The saved frame is about ${feet} ft across.` : ""}
+          {s > 1.001 ? " The dashed box is what is saved." : " What you see is what is saved."}
         </div>
         {err && <div style={{ fontSize: F.xs, color: T.red }}>{err}</div>}
         <div className="flex items-center gap-2">
           <span className="flex-1" style={{ fontSize: 11, color: T.ink3, ...clip }}>
             The date of the photo isn&apos;t known — check it matches what&apos;s there now.
           </span>
-          <button onClick={() => void save()} disabled={!c || p === "google" || !!busy}
-            style={{ height: 36, padding: "0 14px", borderRadius: 3, background: T.hiviz, color: T.onHiviz, fontFamily: disp, fontSize: 13, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase", cursor: "pointer", opacity: !c || p === "google" || busy ? 0.5 : 1 }}>
+          <button onClick={() => void save()} disabled={!c || !!off || !!busy}
+            style={{ height: 36, padding: "0 14px", borderRadius: 3, background: T.hiviz, color: T.onHiviz, fontFamily: disp, fontSize: 13, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase", cursor: "pointer", opacity: !c || off || busy ? 0.5 : 1 }}>
             {busy && c ? busy : "Put it in Takeoffs"}
           </button>
         </div>
       </div>
-    </Drawer>
   );
 }

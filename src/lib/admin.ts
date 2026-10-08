@@ -1,5 +1,5 @@
 /**
- * The ScopeCrete admin (migration 091; Coy, 2026-10-08: the Claude Design
+ * The ScopeCrete admin (migration 092; Coy, 2026-10-08: the Claude Design
  * "Super Admin" package — "a new Dashboard for me to manage the scopecrete
  * Saas With"). Pure: what a company's status and health are, which setup
  * steps it has done, what raises an alarm. Tested in tests/admin.test.mjs.
@@ -233,8 +233,8 @@ export function dropPct(prev: number, cur: number): number | null {
   return Math.round((1 - cur / prev) * 100);
 }
 
-/** The error the API returns before migration 091 is applied. */
-export function missing091(e: { code?: string; message?: string } | null | undefined): boolean {
+/** The error the API returns before migration 092 is applied. */
+export function missing092(e: { code?: string; message?: string } | null | undefined): boolean {
   if (!e) return false;
   return e.code === "PGRST202" || e.code === "42883" ||
     (/sc_admin_/.test(e.message ?? "") && /not find|does not exist/i.test(e.message ?? ""));

@@ -1,6 +1,6 @@
 "use client";
 
-/** The ScopeCrete admin — every company on ScopeCrete (migration 091; src/components/v34/admin/). */
+/** The ScopeCrete admin — every company on ScopeCrete (migration 092; src/components/v34/admin/). */
 
 import { AdminApp } from "@/components/v34/admin/admin-app";
 

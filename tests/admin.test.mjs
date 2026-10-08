@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   sinceFor, readRange, setupCount, stepDone, companyStatus, companyHealth, riskLine, workerState, alarms,
-  readParts, readScreen, cleanSlug, bytes, ago, dayGap, dropPct, missing091, readReason, PARTS,
+  readParts, readScreen, cleanSlug, bytes, ago, dayGap, dropPct, missing092, readReason, PARTS,
 } from "../src/lib/admin.ts";
 
 const now = new Date("2026-10-08T15:00:00Z"); // 10 AM Central
@@ -88,8 +88,8 @@ test("small formatters", () => {
   assert.equal(dayGap(null, iso(1)), null);
   assert.equal(dropPct(100, 58), 42);
   assert.equal(dropPct(0, 0), null);
-  assert.equal(missing091({ code: "PGRST202" }), true);
-  assert.equal(missing091({ message: "permission denied" }), false);
+  assert.equal(missing092({ code: "PGRST202" }), true);
+  assert.equal(missing092({ message: "permission denied" }), false);
   assert.equal(readReason("  ok "), null);
   assert.equal(readReason("customer asked"), "customer asked");
 });

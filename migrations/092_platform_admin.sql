@@ -1,4 +1,4 @@
--- 091 — The ScopeCrete admin (Coy, 2026-10-08: the Claude Design "Super Admin"
+-- 092 — The ScopeCrete admin (Coy, 2026-10-08: the Claude Design "Super Admin"
 -- package, from the brief at /mnt/project-files/admin-dashboard/: "a new
 -- Dashboard for me to manage the scopecrete Saas With").
 --

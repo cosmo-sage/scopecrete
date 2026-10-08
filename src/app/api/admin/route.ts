@@ -1,18 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
 import { APP_ORIGIN, hostKind } from "@/lib/hosts";
-import { missing091, readParts, readRange, readReason, sinceFor, cleanSlug, PLANS } from "@/lib/admin";
+import { missing092, readParts, readRange, readReason, sinceFor, cleanSlug, PLANS } from "@/lib/admin";
 import { STATUSES } from "@/lib/roadmap";
 
 /**
- * The ScopeCrete admin (migration 091). Cross-tenant, so every read and write
+ * The ScopeCrete admin (migration 092). Cross-tenant, so every read and write
  * goes through a named sc_admin_* function that checks platform_admins itself
  * (DECISIONS §7: named functions, never raw SQL, never the service role). This
  * route asks sc_is_platform_admin (084) first only to answer 403 cleanly.
  *
  * GET ?parts=companies,pipelines,…&org=<uuid>&range=today|d7|d30
  *     → { companies?, people?, pipelines?, failures?, dusty?, usage?, platform?, log?, build }
- *     → { missing: true } before 091 is applied.
+ *     → { missing: true } before 092 is applied.
  * POST { action: "replay", event, reason }              → { ok, error }
  * POST { action: "feedback", item, status, reason }     → { ok }
  * POST { action: "create_org", name, slug, email, plan, reason } → { org_id, invite_url, expires_at }
@@ -74,7 +74,7 @@ export async function GET(req: NextRequest) {
   for (let i = 0; i < want.length; i++) {
     const { data, error } = results[i];
     if (error) {
-      if (missing091(error)) return applyCookies(NextResponse.json({ missing: true, build: build() }));
+      if (missing092(error)) return applyCookies(NextResponse.json({ missing: true, build: build() }));
       return applyCookies(NextResponse.json({ error: `${want[i]}: ${error.message}` }, { status: 500 }));
     }
     out[want[i]] = data;
@@ -92,7 +92,7 @@ export async function POST(req: NextRequest) {
   const reason = readReason(b.reason);
   if (!reason) return bad("Give a reason — it goes in the admin log.");
   const fail = (e: { code?: string; message?: string }) =>
-    missing091(e) ? bad("The admin isn't switched on yet (migration 091).", 503) : bad(e.message ?? "Failed.", e.code === "42501" ? 403 : 400);
+    missing092(e) ? bad("The admin isn't switched on yet (migration 092).", 503) : bad(e.message ?? "Failed.", e.code === "42501" ? 403 : 400);
 
   if (b.action === "replay") {
     if (typeof b.event !== "string" || !UUID.test(b.event)) return bad("Which event?");

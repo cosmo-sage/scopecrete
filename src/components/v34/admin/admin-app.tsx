@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * The ScopeCrete admin (migration 091; Coy, 2026-10-08, the Claude Design
+ * The ScopeCrete admin (migration 092; Coy, 2026-10-08, the Claude Design
  * "Super Admin" package). Ten screens over every company on ScopeCrete:
  * Pulse · Companies (and one company's eight tabs) · Pipelines · Dusty ·
  * Usage · Feedback · Releases · Costs · Admin log.
@@ -253,9 +253,9 @@ export function AdminApp() {
   let body: React.ReactNode;
   if (err) body = <Empty title="Couldn't load">{err}</Empty>;
   else if (d.missing) body = (
-    <Empty title="Waiting for migration 091">
+    <Empty title="Waiting for migration 092">
       The admin reads every company through named database functions that check you are a ScopeCrete admin. They&apos;re in
-      migrations/091_platform_admin.sql — say &ldquo;apply 091&rdquo; and this page fills in.
+      migrations/092_platform_admin.sql — say &ldquo;apply 092&rdquo; and this page fills in.
     </Empty>
   );
   else if (!data || (loading && !data.build)) body = <div className="spin">Loading…</div>;

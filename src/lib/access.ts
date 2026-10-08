@@ -11,7 +11,7 @@
 /** The pages an owner can give an estimator. The job page itself (its areas) always comes with a job. */
 export const FIELD_PAGES = [
   { k: "files", label: "Photos & files", note: "See and add photos, plans and files on their jobs" },
-  { k: "plan_room", label: "Plan room", note: "Plan sheets, scales and takeoff measurements" },
+  { k: "plan_room", label: "Takeoffs", note: "Plan sheets, scales and takeoff measurements" },
   { k: "budget", label: "Budget", note: "The job's budget, with costs and margins, and the Price book to pick from" },
 ] as const;
 export type FieldPage = (typeof FIELD_PAGES)[number]["k"];

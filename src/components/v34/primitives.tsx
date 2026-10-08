@@ -183,6 +183,12 @@ export const NavIcon = ({ k, on, color }: { k: string; on: boolean; color?: stri
       <circle cx="3.6" cy="4.6" r="1" fill={c} /><circle cx="3.6" cy="9.5" r="1" fill={c} /><circle cx="3.6" cy="14.4" r="1" fill={c} />
     </svg>
   );
+  if (k === "map") return (
+    <svg {...box}>
+      <path {...p} d="M2.4 4.6l4.4-1.8 5.4 2.2 4.4-1.8v11.6l-4.4 1.8-5.4-2.2-4.4 1.8z" />
+      <path {...p} d="M6.8 2.8v11.6M12.2 5v11.6" />
+    </svg>
+  );
   if (k === "roadmap") return (
     <svg {...box}>
       <path {...p} d="M3 16.4V2.6M3 3.4h9.4l-1.8 2.8 1.8 2.8H3" />
@@ -238,7 +244,8 @@ export function Drawer({ open, onClose, title, sub, right, children, hideClose, 
         <div className="sticky top-0 z-10 shrink-0 px-4 flex items-center gap-3"
           style={{ minHeight: 54, background: T.card, borderBottom: `1px solid ${T.hair}` }}>
           <div style={{ minWidth: 0, flex: 1 }}>
-            <div style={{ fontFamily: disp, fontSize: F.xl, fontWeight: 600, lineHeight: 1.05, ...clip }}>{title}</div>
+            {/* A long title is set smaller on a phone so it fits its line (Coy, 2026-10-07: "Build a new draft budget"). */}
+            <div className={title.length > 18 ? "sc-drawer-title-long" : undefined} style={{ fontFamily: disp, fontSize: F.xl, fontWeight: 600, lineHeight: 1.05, ...clip }}>{title}</div>
             {sub && <div style={{ ...eyebrow, marginTop: 1, ...clip }}>{sub}</div>}
           </div>
           {right}
@@ -361,7 +368,7 @@ export function SlideDrawer({ open, onOpen, onClose, width, label, tab, children
 export function MenuButton({ onClick, label, always }: { onClick: () => void; label: string; always?: boolean }) {
   return (
     <button type="button" onClick={onClick} aria-label={label} title={label}
-      className={`${always ? "flex" : "lg:hidden flex"} shrink-0 items-center justify-center rounded`}
+      className={`${always ? "flex" : "lg:hidden flex"} sc-menu-btn shrink-0 items-center justify-center rounded`}
       style={{ width: 40, height: 40, border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink, cursor: "pointer" }}>
       <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true"><path d="M3 5h14M3 10h14M3 15h14" /></svg>
     </button>
@@ -463,8 +470,9 @@ export function PageHeader({ title, count, sub, menu, actions, children, width }
       <div className="mx-auto" style={{ maxWidth: width }}>
         <div className="flex items-center gap-2" style={{ minWidth: 0 }}>
           {menu}
-          <div style={{ minWidth: 0, flexShrink: 1 }}>
+          <div className="sc-subhead-names" style={{ minWidth: 0, flexShrink: 1 }}>
             {org && <div className="sc-subhead-org" style={{ fontFamily: disp, fontWeight: 600, lineHeight: 1.1, color: T.ink, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{org}</div>}
+            {org && <span className="sc-subhead-sep" aria-hidden="true">|</span>}
             <h1 className="sc-subhead-title flex items-center gap-1.5" style={{ fontFamily: disp, fontWeight: 600, margin: 0, lineHeight: 1.15, color: org ? T.ink2 : T.ink, textTransform: "uppercase", letterSpacing: ".06em", whiteSpace: "nowrap" }}>
               <span>{title}</span>
               {count != null && count !== "" && <span className="sc-subhead-count" style={{ ...nums, fontWeight: 500, color: T.ink3, letterSpacing: 0 }}>{count}</span>}

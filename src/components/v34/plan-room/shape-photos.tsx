@@ -48,7 +48,7 @@ export function ShapePhotos({ jobId, shapeId, shapeName, files, open, onClose, o
           <input type="file" accept="image/*" multiple className="hidden" onChange={(e) => { if (e.target.files?.length) void add(e.target.files); e.target.value = ""; }} />
           {busy && busy.startsWith("Adding") ? busy : "+ Take or add photos"}
         </label>
-        {!photos.length && <div className="mt-2" style={{ fontSize: F.sm, color: T.ink3 }}>No photos on this job yet. Add some above, or bring in the ones the customer texted from the Photos panel.</div>}
+        {!photos.length && <div className="mt-2" style={{ fontSize: F.sm, color: T.ink3 }}>No photos on this job yet. Add some above, or bring in the ones the customer texted from Files → Photos.</div>}
         <div className="grid gap-2 mt-2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(104px, 1fr))" }}>
           {photos.map((f) => {
             const on = f.takeoff_measurement_id === shapeId;

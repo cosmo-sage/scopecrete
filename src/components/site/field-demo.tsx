@@ -328,7 +328,7 @@ export default function FieldDemo({ autoplay = true }: { autoplay?: boolean }) {
             <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", position: "relative" }}>
               <div style={{ padding: "10px 12px 8px", display: "flex", flexDirection: "column", gap: 8, flex: "none" }}>
                 <div style={{ display: "flex", border: "1px solid var(--sc-hair-strong)", borderRadius: 4, overflow: "hidden" }}>
-                  {["Plan room", "Budget", "Proposal"].map((label, i) => (
+                  {["Takeoffs", "Budget", "Proposal"].map((label, i) => (
                     <span key={label} style={{ flex: 1, height: 34, display: "flex", alignItems: "center", justifyContent: "center", background: i === tabOn ? "var(--sc-ink)" : "var(--sc-card)", color: i === tabOn ? "var(--sc-card)" : "var(--sc-ink2)", borderLeft: i ? "1px solid var(--sc-hair)" : "none", fontFamily: disp, fontSize: 11.5, fontWeight: 600, letterSpacing: ".06em", textTransform: "uppercase" }}>{label}</span>
                   ))}
                 </div>
@@ -411,7 +411,7 @@ export default function FieldDemo({ autoplay = true }: { autoplay?: boolean }) {
                     </div>
                     {!photos && (
                       <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 4, background: "var(--sc-sunk)", fontSize: 12, lineHeight: 1.4 }}>
-                        <span style={{ flex: 1 }}>Bring a texted photo onto the job to use it in the Plan Room, under an area, or as the proposal&apos;s cover.</span>
+                        <span style={{ flex: 1 }}>Bring a texted photo onto the job to use it in Takeoffs, under an area, or as the proposal&apos;s cover.</span>
                         <button onClick={addPhotos} style={{ ...act, flex: "none", height: 32, padding: "0 10px", fontSize: 11.5, letterSpacing: ".06em" }}>Add all 3 to the job</button>
                       </div>
                     )}

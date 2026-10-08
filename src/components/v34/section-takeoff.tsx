@@ -79,18 +79,18 @@ export function SectionTakeoffStrip({ jobId, sectionId, sectionName, following, 
             <b style={{ color: s.blocked ? T.hivizText : T.ink, ...nums }}>{s.total !== null && s.unit ? fmtQty(s.total, s.unit) : `no total — ${s.blocked}`}</b>
           </span>
           {following
-            ? <span title="The size follows the Plan Room: re-draw a shape and it moves" style={{ color: T.green }}>ƒ follows the Plan Room</span>
+            ? <span title="The size follows Takeoffs: re-draw a shape and it moves" style={{ color: T.green }}>ƒ follows Takeoffs</span>
             : <span style={{ color: T.hivizText }}>✎ size typed here · <button onClick={() => void follow()} style={{ color: T.chalk, fontWeight: 600, cursor: "pointer" }}>↺ follow the takeoff</button></span>}
         </>
-      ) : <span style={{ color: T.ink3 }}>{none ? "nothing measured in the Plan Room yet" : "not counted from the plans"}</span>}
+      ) : <span style={{ color: T.ink3 }}>{none ? "nothing measured in Takeoffs yet" : "not counted from the plans"}</span>}
       <span className="flex-1" />
       {/* A real button (Coy, 2026-10-03: "i'm not seeing anywhere in the section to pull measurements from the planroom"). */}
       {none
         ? <Link href={`/dashboard/scope/${jobId}/plans?step=takeoff`} className="rounded px-2.5 inline-flex items-center"
-            style={{ height: 28, border: `1px solid ${T.hairStrong}`, color: T.ink, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", letterSpacing: ".05em" }}>Measure in the Plan Room ›</Link>
+            style={{ height: 28, border: `1px solid ${T.hairStrong}`, color: T.ink, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", letterSpacing: ".05em" }}>Measure in Takeoffs ›</Link>
         : <button onClick={() => setOpen(true)} className="rounded px-2.5"
             style={{ height: 28, border: `1px solid ${T.ink}`, background: T.card, color: T.ink, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", letterSpacing: ".05em", cursor: "pointer" }}>
-            {s.ids.length ? "Change measurements" : "+ Pull measurements from the Plan Room"}
+            {s.ids.length ? "Change measurements" : "+ Pull measurements from Takeoffs"}
           </button>}
       {err && <span style={{ color: T.red }}>{err}</span>}
       {open && <Picker jobId={jobId} sectionId={sectionId} sectionName={sectionName} plans={plans} chosen={s.ids} sectionNames={sectionNames}
@@ -122,7 +122,7 @@ function Picker({ jobId, sectionId, sectionName, plans, chosen, sectionNames, on
     if (!part || part.qty === null) blocked = true; else total += part.qty;
   }
   return (
-    <Sheet open onClose={onClose} title={`Takeoffs for ${sectionName || "this section"}`} sub="Tick the shapes this section is counted from. Its size is their sum and follows the Plan Room.">
+    <Sheet open onClose={onClose} title={`Takeoffs for ${sectionName || "this section"}`} sub="Tick the shapes this section is counted from. Its size is their sum and follows Takeoffs.">
       <div className="px-3 pb-3">
         {plans.params.map((p) => {
           const shapes = plans.measurements.filter((m) => m.parameter_id === p.id);

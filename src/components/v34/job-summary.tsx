@@ -26,7 +26,7 @@ import { call as planCall, isDrawing, type Param, type PlansData } from "@/compo
 
 interface Job {
   id: string; title: string | null; status: string | null; address: string | null;
-  contact_id: string | null; duration_days: number | null; created_from_message_id: string | null;
+  contact_id: string | null; duration_days: number | null; created_from_message_id: string | null; customer_id?: string | null;
   job_type: string | null; lead_source: string | null; description?: string | null; origin?: string | null;
   archived_at?: string | null; archived_reason?: string | null; created_at?: string | null;
 }
@@ -106,7 +106,7 @@ export function JobSummary({ jobId }: { jobId: string }) {
   return (
     <div className="pb-24 lg:pb-8" style={{ color: T.ink, minHeight: "calc(100dvh - var(--sc-head))" }}>
       <div className="px-3 pt-2.5 pb-2" style={{ background: T.card, borderBottom: `1px solid ${T.hair}` }}>
-        <JobHeaderRow jobId={jobId} active="summary" title={realTitle || "Unnamed job"} />
+        <JobHeaderRow jobId={jobId} active="summary" title={realTitle || "Unnamed job"} customerId={job.customer_id} />
       </div>
 
       {job.archived_at && (

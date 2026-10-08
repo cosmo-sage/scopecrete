@@ -4,7 +4,7 @@ Ground truth for every agent working this repo. If code disagrees with this
 document, the code is wrong or this document is stale — resolve it, don't
 guess. Update this file in the same PR that changes the behavior it describes.
 
-Last updated: 2026-10-07 (threads made from rules — calls, texts and emails by line, inbox, when, who, direction and words, no people — migration 089; chat bubbles show only their time, on the right — no IN / OUT or "via" line; Dusty's header names the person (or their number), the job or the customer, never "this person"; the proposal's Preview & send and Copy link on its toolbar; "/" in a thread's text box puts a final proposal's link in; a file previews inside the Files page, its width dragged on a desktop, the whole screen on a phone; the Price book's imports and price changes on a Logs tab; the customer page's Threads tab is the Threads view for its own people; a thread's menu — Edit contact, Customer page, Move thread, Notes as an icon, Merge on the contact card; a draft budget from the job's own calls and texts — the driveway recipe, questions not guesses, Coy approves — migration 087; several named budgets per job, Build makes a new one — migration 088; the org's name over each page's title, its description behind ⓘ; Customers, Vendors and Contacts the full width; the Price book's controls on its tabs row; a Jobs table on a desktop; a thread's fold button only on touch; a budget line's panel laid out like JobTread's, its vendor searched or added; one subheader on every main-menu page, like Logs; Cash off the menus until it is finished — a Planned card on the Roadmap says what it will do; a call card shows no next steps — the ScopeCrete emblem on a thread asks Dusty where it stands and the next steps; a record page's ☰ panel opens under its header; the header stays put on a page with little to scroll; incoming alerts — a bell with the last three days of texts, calls and emails, a pop-up as each lands, and a live call marked on its thread and channel from Quo's call.ringing — migration 086, quo-intake v11; the org's logo can be switched off in the header — scopecrete.ai shows instead, proposals keep it; Supabase quota: plan PDFs kept on the device by file id, cron history trimmed to a week — migration 085; on a phone a record page's tabs are only in its ☰ drawer and its facts line opens the Overview; the customer's Location is the address as a link over a satellite view that pops up — street view and invoices are Planned on the Roadmap, New invoice off Dusty's +; the Plan Room's Budget step is on the job's Summary as From the plans; the Budget's Sheets button gone, the job's name smaller on a phone; a contact's own page is a simple contact card — numbers, emails, address, edited there — and a thread's + is gone; Notes open from a thread's ⋯ and carry the merged-number notes; the dashboard header slides away on every page on a phone, list pages keep their own header; one ☰ and one search icon and bubble on every page; the Jobs board one row — sort, filter, + New — a ↔ move icon and "Next »", and a phone list view by stage from ☰; Files: title smaller with ⓘ, filter as one icon with a side menu; coloured initials squares; feedback and the Roadmap — votes, comments, Coy publishes — migration 084, AI Front Desk the first Planned card; a thread's + adds a number beside the others, AI Chat hidden until it is built; Threads opens on All; Dusty finds vendors on the web — the app searches, TAVILY_API_KEY — and puts a vendor's quoted prices from their call on items; loading faster — get_user_org_ids() STABLE, migration 083, one auth round trip per API call; proposal photos as thumbnails with a Proposal switch on each section; a section's budget folds; the dashboard header slides away on the job page on a phone; an empty message box; Dusty files a forwarded email and its files by its id, the intake reads BlueMail forwards and files on a whole name — email-intake v11; swipe left for Spam · Archive, Select an icon beside Sort; proposals sent from Threads, the Preview and Dusty, his words learned from Coy's; Threads update on their own as texts land — migration 082; Dusty puts people on customers and fixes names, and says nothing of his own setup — Hermes's tools must be off on the VPS; fonts self-hosted, so a build downloads nothing; the landing page's phone demo is the real app — Design 10; texts send through Quo — the thread's Send and Dusty's text step, Coy's tap either way; a Summary view on every job, the job name and switch centred on the phone; Dusty full screen on the phone, chat text size, his thought line can be hidden; onsite estimators — jobs and pages by person, vendor first, tags notify — migration 081; a name we greet a caller by becomes a suggestion — enrich-contacts v28; contact, customer and vendor pages on one layout; the customer page's Threads tab sums up each person; the Files page laid out like OneDrive, with storage left; the Plan Room's Files and Sheets one tab; thread search a drop-down over the chat; the Threads list header sticky with its own search; the header lockup on one line; one top row on the job's three views; the proposal's dark band off the cover; Good / Better / Best removed — one price per job; search across the header; six dots for the activity line; job switch on the name's row; budget line notes; quo-intake stores every Quo event, own lines included — v10; one Unit type picker; a section's Camera; Dusty writes in Figtree; Dusty is the Scopecrete Lander; an All thread; proposal cover band and Prepared by; sign-in at app.scopecrete.ai/login, each org at <slug>.app.scopecrete.ai; Dusty's chat keeps its files and files them on a customer or job — migration 079; vendor Delete; Dusty on a vendor's page and looking at attached photos; sales tax by address via TaxLocus — migration 078; archive reasons; Lines, providers and logs — migration 077; internal notes with @-tags; Jobs board sort and filter; jobs by hand — migration 076; done and lost customers in Threads; proposals sent by link, every opening tracked; every option side by side for the customer — migration 075; Documents is Files, everywhere — migration 074; Threads v2 — threads you make, channels per number, the customer page reshaped — migration 073; an address given is kept and asked about — migration 072; Dusty sets addresses; customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
+Last updated: 2026-10-08 (a Map page — jobs by stage and vendors as pins on a map, search an address, clip a satellite frame into a job's Takeoffs; it replaces Takeoffs' Satellite tab — migration 090, applied; a file is seen inside the app — PDF pages, Word, Markdown and text — Download small under its details, "File type"; Dusty reads Word and text files, in the chat at once and in the background with read-files v16; Takeoffs is Files · Satellite · Takeoff — the aerial a tab in the page, Mapbox only, quarter-step zoom, the wheel and a pinch, Google satellite Planned on the Roadmap; a scale set on one sheet goes on every sheet or the ones ticked; the "sheets scaled" count under the drawing, not in the header; the Photos panel and the sheets' pull tab gone — texted photos come in from Files → Photos; the job's Plan room is **Takeoffs** — a Plan room page for general contractors is coming — its Files · Takeoff hanging under its button on a phone; a job's ‹ goes to its customer's Jobs tab; on a phone the subheader reads "Sacco Enterprises | JOBS" small on one line and its ☰ is 28px; the customer page's Threads tab fills the screen with its text box at the bottom and no "Threads they're in"; customer links never on a *.vercel.app preview, a named job carries its budget for Dusty; Esri off the map views — Mapbox, and Google to look; the draft fills its steps from the Price book and looks up going rates; threads made from rules — calls, texts and emails by line, inbox, when, who, direction and words, no people — migration 089; chat bubbles show only their time, on the right — no IN / OUT or "via" line; Dusty's header names the person (or their number), the job or the customer, never "this person"; the proposal's Preview & send and Copy link on its toolbar; "/" in a thread's text box puts a final proposal's link in; a file previews inside the Files page, its width dragged on a desktop, the whole screen on a phone; the Price book's imports and price changes on a Logs tab; the customer page's Threads tab is the Threads view for its own people; a thread's menu — Edit contact, Customer page, Move thread, Notes as an icon, Merge on the contact card; a draft budget from the job's own calls and texts — the driveway recipe, questions not guesses, Coy approves — migration 087; several named budgets per job, Build makes a new one — migration 088; the org's name over each page's title, its description behind ⓘ; Customers, Vendors and Contacts the full width; the Price book's controls on its tabs row; a Jobs table on a desktop; a thread's fold button only on touch; a budget line's panel laid out like JobTread's, its vendor searched or added; one subheader on every main-menu page, like Logs; Cash off the menus until it is finished — a Planned card on the Roadmap says what it will do; a call card shows no next steps — the ScopeCrete emblem on a thread asks Dusty where it stands and the next steps; a record page's ☰ panel opens under its header; the header stays put on a page with little to scroll; incoming alerts — a bell with the last three days of texts, calls and emails, a pop-up as each lands, and a live call marked on its thread and channel from Quo's call.ringing — migration 086, quo-intake v11; the org's logo can be switched off in the header — scopecrete.ai shows instead, proposals keep it; Supabase quota: plan PDFs kept on the device by file id, cron history trimmed to a week — migration 085; on a phone a record page's tabs are only in its ☰ drawer and its facts line opens the Overview; the customer's Location is the address as a link over a satellite view that pops up — street view and invoices are Planned on the Roadmap, New invoice off Dusty's +; the Plan Room's Budget step is on the job's Summary as From the plans; the Budget's Sheets button gone, the job's name smaller on a phone; a contact's own page is a simple contact card — numbers, emails, address, edited there — and a thread's + is gone; Notes open from a thread's ⋯ and carry the merged-number notes; the dashboard header slides away on every page on a phone, list pages keep their own header; one ☰ and one search icon and bubble on every page; the Jobs board one row — sort, filter, + New — a ↔ move icon and "Next »", and a phone list view by stage from ☰; Files: title smaller with ⓘ, filter as one icon with a side menu; coloured initials squares; feedback and the Roadmap — votes, comments, Coy publishes — migration 084, AI Front Desk the first Planned card; a thread's + adds a number beside the others, AI Chat hidden until it is built; Threads opens on All; Dusty finds vendors on the web — the app searches, TAVILY_API_KEY — and puts a vendor's quoted prices from their call on items; loading faster — get_user_org_ids() STABLE, migration 083, one auth round trip per API call; proposal photos as thumbnails with a Proposal switch on each section; a section's budget folds; the dashboard header slides away on the job page on a phone; an empty message box; Dusty files a forwarded email and its files by its id, the intake reads BlueMail forwards and files on a whole name — email-intake v11; swipe left for Spam · Archive, Select an icon beside Sort; proposals sent from Threads, the Preview and Dusty, his words learned from Coy's; Threads update on their own as texts land — migration 082; Dusty puts people on customers and fixes names, and says nothing of his own setup — Hermes's tools must be off on the VPS; fonts self-hosted, so a build downloads nothing; the landing page's phone demo is the real app — Design 10; texts send through Quo — the thread's Send and Dusty's text step, Coy's tap either way; a Summary view on every job, the job name and switch centred on the phone; Dusty full screen on the phone, chat text size, his thought line can be hidden; onsite estimators — jobs and pages by person, vendor first, tags notify — migration 081; a name we greet a caller by becomes a suggestion — enrich-contacts v28; contact, customer and vendor pages on one layout; the customer page's Threads tab sums up each person; the Files page laid out like OneDrive, with storage left; the Plan Room's Files and Sheets one tab; thread search a drop-down over the chat; the Threads list header sticky with its own search; the header lockup on one line; one top row on the job's three views; the proposal's dark band off the cover; Good / Better / Best removed — one price per job; search across the header; six dots for the activity line; job switch on the name's row; budget line notes; quo-intake stores every Quo event, own lines included — v10; one Unit type picker; a section's Camera; Dusty writes in Figtree; Dusty is the Scopecrete Lander; an All thread; proposal cover band and Prepared by; sign-in at app.scopecrete.ai/login, each org at <slug>.app.scopecrete.ai; Dusty's chat keeps its files and files them on a customer or job — migration 079; vendor Delete; Dusty on a vendor's page and looking at attached photos; sales tax by address via TaxLocus — migration 078; archive reasons; Lines, providers and logs — migration 077; internal notes with @-tags; Jobs board sort and filter; jobs by hand — migration 076; done and lost customers in Threads; proposals sent by link, every opening tracked; every option side by side for the customer — migration 075; Documents is Files, everywhere — migration 074; Threads v2 — threads you make, channels per number, the customer page reshaped — migration 073; an address given is kept and asked about — migration 072; Dusty sets addresses; customer address from their own words — migration 071; units and counting on a line; Dusty sets parish sales tax; tick takeoffs to send; section Notes replace Prep and Access; a colour per takeoff — migration 070; sections follow the Plan Room — migration 069; Dusty edits the Price book and assemblies; area maps on the proposal; archive & delete; call notes → Dusty's quote; aerial sheets; customer name leads the job name)
 
 ---
 
@@ -626,6 +626,14 @@ Coy: *"I need to be able to upload documents and photos for Dusty to parse."*
   suggestions** (§2b) — shown on the file, never applied — and from a
   document a number is kept only if it is written in it (`sanitizeRead()`,
   the dictation rule). Failed reads retry after 30 minutes, three tries.
+  **Word and text files (2026-10-08, Coy: "any file I upload I want the
+  agent to be able to read"; `read-files` v16 in the repo, deployed on Coy's
+  word).** A .docx, .md, .txt, .csv or .json has its words pulled out
+  (`doc-text.ts`, a copy of `src/lib/doc-text.ts`, tested equal; fflate
+  unzips the .docx) and is read like a PDF's text; an old .doc is skipped
+  with "save it as .docx". In Dusty's chat an attached Word or text file the
+  reader hasn't read yet is read in the same reply (`docTextNow()`,
+  `src/lib/dusty/see.ts`), as a PDF is.
   **A read that kills the reader is not retried forever (migration 080,
   applied 2026-10-05 on Coy's "apply 080"; `read-files` v15).** Walker High's 25 MB spec book ran the
   function out of memory mid-read; the row stayed "reading" and was claimed
@@ -1709,6 +1717,36 @@ percentage of labour — all three contradict this section and §4.
   build never blocks the job. The concrete card's rule takes "Order in steps
   of" (`rule_params.round_cy`, e.g. 0.25 — 14.67 CY orders 14.75). Had 087 been
   missing, the strip would say to apply it.
+- **The draft fills its steps from the Price book, and looks up going
+  rates (Coy, 2026-10-07: "intelligently find items … if he is unsure and/or
+  needs to create the items, he prompts me … look up the costs … and the
+  going rate per sqft or linear ft or sqyd"; no migration).** Each open
+  recipe step looks for Coy's own items (`src/lib/draft/fill.ts`, tested in
+  `tests/draft-fill.test.mjs`): by `stepsOf()`, his most used first. **The
+  one he always uses** — priced, and on more of his budget lines than any
+  other — goes onto a draft that started empty by itself (Form up and Finish
+  closes forming and finishing at once), on every area, or once for the job
+  for mobilization and equipment, copied as any + Add. A toss-up (two mesh
+  mats used once each) or an unpriced item is **Which one?** chips under the
+  step; nothing at all is **Make it** — a name the recipe recognises, a unit
+  that counts itself, and Coy's price or none, saved in the Price book and
+  put on (`PATCH …/budget/draft {step, item_id}` / `{step, make}`). The
+  job's measured areas answer "how big" and "how thick" (`withJobAreas()`:
+  same kind, or the only area of each), so a measured job is not "size not
+  said", and an area drawn as a slab that they called a driveway takes the
+  driveway's assembly when its own kind has none. **Going rates** (`POST
+  …/budget/draft/rates`, `src/lib/draft/rates.ts`, tested in
+  `tests/draft-rates.test.mjs`): up to four web searches (Tavily) with the
+  kind of work and the job's city only — never the customer — then one
+  tool-less model call (`modelJson()`) lists the prices; `sanitizeRates()`
+  keeps one only if its page is a result, its quote is in that page and its
+  numbers are in the quote. Kept on the build (`made.rates`), shown as
+  ranges per sq ft / lin ft / sq yd / cu yd, labor / material / equipment
+  when the page says so, what customers pay vs your cost, each with its
+  site, and the whole-driveway range beside the budget's own $/sq ft.
+  A rate never prices anything: **Use** on a cost opens Make it at the
+  middle of the range, its source in the description, for Coy to change and
+  save.
 - **Several budgets on a job, each named (migration 088, applied
   2026-10-07 on Coy's "apply 088"; checked after: `estimates.name`, the
   status check takes 'saved', `budget_runs.estimate_id`, `sc_open_budget`
@@ -2371,7 +2409,7 @@ expected start date per quoted job before it means anything. Add the field.
   Dusty's button**: he opens down from the header on the right, and the
   rail has no Dusty item. On a phone he stays in the centre of the footer.
 - **Navigation (2026-09-30, Coy).** Pages are listed once in
-  `src/lib/v34/pages.ts`: Dashboard · Threads · Jobs · Cash · Contacts · Customers ·
+  `src/lib/v34/pages.ts`: Dashboard · Threads · Jobs · Map · Cash · Contacts · Customers ·
   Price book · Vendors · Documents · Logs. **Cash is off every menu since
   2026-10-06** (Coy: "remove the cash page from the menu since it's not
   complete but keep what we have on the backend"): `soon: true` in
@@ -2528,17 +2566,26 @@ expected start date per quoted job before it means anything. Add the field.
   threads they're in, and the picked one's whole thread — every number, email, notes, the
   composer — beside it (`embedded`: not pinned, no link back to the list or to the customer page).
   It replaced the per-person summary cards of 2026-10-05; Dusty's lines stay on the Overview.
+  **Since 2026-10-07 (Coy)** the column lists only the contacts ("Threads they're in" is gone from
+  it; the Overview keeps its chips), and the thread is measured to fill the screen from where it
+  starts, so its text box sits at the bottom without scrolling.
   Files (the page) is full width like the other lists, its subheader too.
   **Files' preview (Coy, 2026-10-07: "open inside the files page with the actual files much like desktop explorer does").**
   A file or photo opens in a **preview panel** inside the page, not a sheet over the screen: on a desktop a column right of the
   files, under the subheader and no taller than the folder column, its width dragged by its left edge (300–1000px,
   double-click resets, kept on the device `sc:files-preview-w`); **Preview** beside Photos | Files shows or hides it
   (`sc:files-preview`). On a phone it is the whole screen with "‹ Files › folder › name" across the top, each part back to
-  the list. The panel draws a PDF inline. `FileDetails` / `fileSub()` in `files-panel.tsx`; other pages keep the sheet
+  the list. **Every file is seen in the app (Coy, 2026-10-08: "I need a way to actually view the file
+  inside the APP … PDF's, word documents, .md files")** — `FilePreview` (`file-preview.tsx`), in the
+  panel and in the sheet: a PDF's pages drawn with pdf.js as they scroll near (60 at most; the
+  browser's own viewer downloaded instead on a phone), a Word .docx as its paragraphs, headings, lists
+  and tables, Markdown rendered, other text (.txt, .csv, .json) as it is (`src/lib/doc-text.ts`,
+  tested; an old .doc, a spreadsheet or a video says it can't be shown). "Open the file" is gone:
+  a small **Download** sits beside Delete file under the details; "What it is" reads **File type**. `FileDetails` / `fileSub()` in `files-panel.tsx`; other pages keep the sheet
   (`FileViewer`).
 - **Contact, customer and vendor pages look the same (Coy, 2026-10-05: "This 'contact' page is a mess … I would rather have consistent formatting across contact, customer and vendor … Really a contact needs to become a customer or vendor or spam anyway").** The customer page's parts moved into one module, `record-page.tsx`: ‹ back · name and role tag · the button row (folded into ⋯ on a phone) · the facts line · one row of tabs, then the Overview with a 400px right column (Location, the facts, Recent), contact cards with a line per number and email and Open in Threads ›, thread chips, panel titles and empty states. The customer page, a contact's own page (`?person=1`, `person-view.tsx`) and the vendor page (`/dashboard/vendors/[id]`) all use it. **A contact:** ‹ Back to the thread, the name with its pencil, the role tag (tap to change the bucket), Customer page › when they have one, Edit (name and address), New job, Ask Dusty; under ⋯ Call notes, File as… / Change bucket, Same person as…, Archive. Tabs Overview · Next steps · Jobs · Threads · Timeline · Files. While they are unsorted or filed by Dusty, the four buckets sit right under the header (Dusty's guess dashed, or Keep / Not X), since filing them is what the page is for. The Overview has Dusty's read, their card, next steps, jobs and the threads they're in. Files is the Files page pinned to them, with + Add files. **A vendor:** the same page, with Prices (★ = the price budgets use; their cards under it) and Receipts & quotes after Overview, + Receipt or quote as the main button, Edit as the vendor form, and Delete vendor under ⋯. `?person=1` for a vendor goes to their vendor page, which is their one page now; the vendor page's back link returns to the thread when opened from one. No API or data change.
   **The customer page's Threads tab (Coy, 2026-10-05: "supposed to be more useful … pull information from the thread into here. maybe a summary").** A card per person on the customer: Dusty's line on where it stands and on the latest conversations, their last three calls and texts (summary or words), last heard, Open in Threads › and "Every call and text in Timeline ›"; then the threads they're in. The "Not in any thread you made…" line is gone.
-- **The record page's tabs on a phone, and the Location box (Coy, 2026-10-06).** *"the option to see the list of these tabs … as a hamburger menu that slides open from the left on mobile … right to the left of the customer name."* On a phone `RecordHeader` puts the ☰ (`MenuButton`) left of the name; it opens the tabs as a list in a `SlideDrawer` (`TabDrawer`, `record-page.tsx`) — customer, contact and vendor pages alike. Later that day (*"this 8 tabs row can be removed from mobile"*, *"this information below the name should be on the overview page"*): on a phone the row of tabs is gone (the current tab's name sits right of ‹ Back, ▾ opening the same drawer) and the facts line ("Residential · since … · 2 contacts …") is the first line of the Overview (`OverviewGrid`'s `meta`); a desktop keeps both in the header. The ☰ panel opens **under the page's own header** (Coy: "let this slide out panel sit below the … page header"), measured when it opens, or under the dashboard header once the page's has scrolled away. The customer's **Location** box has no title or explanation line: the address as a Google Maps link (no Copy — Coy), then a satellite picture of the address from the Plan Room's own tiles (`site-views.tsx`; `/api/aerial/tile`, Mapbox when `MAPBOX_TOKEN` is set, else Esri; the point is the customer's stored lat/lng, else looked up by `GET /api/aerial/suggest?find=`, not stored) that opens full size on a tap (zoom 16–20, Esc or × closes); "check it" shows only when the address came from their words or a call. **Street view is gone** until a Google Maps key is set up (Coy: "a feature coming soon on the roadmap") — a Planned card on the Roadmap. The old Google map embed is gone.
+- **The record page's tabs on a phone, and the Location box (Coy, 2026-10-06).** *"the option to see the list of these tabs … as a hamburger menu that slides open from the left on mobile … right to the left of the customer name."* On a phone `RecordHeader` puts the ☰ (`MenuButton`) left of the name; it opens the tabs as a list in a `SlideDrawer` (`TabDrawer`, `record-page.tsx`) — customer, contact and vendor pages alike. Later that day (*"this 8 tabs row can be removed from mobile"*, *"this information below the name should be on the overview page"*): on a phone the row of tabs is gone (the current tab's name sits right of ‹ Back, ▾ opening the same drawer) and the facts line ("Residential · since … · 2 contacts …") is the first line of the Overview (`OverviewGrid`'s `meta`); a desktop keeps both in the header. The ☰ panel opens **under the page's own header** (Coy: "let this slide out panel sit below the … page header"), measured when it opens, or under the dashboard header once the page's has scrolled away. The customer's **Location** box has no title or explanation line: the address as a Google Maps link (no Copy — Coy), then a satellite picture of the address from the Plan Room's own tiles (`site-views.tsx`; `/api/aerial/tile`, Mapbox only since 2026-10-07 — Esri's tiles came back grey; the point is the customer's stored lat/lng, else looked up by `GET /api/aerial/suggest?find=`, not stored) that opens full size on a tap (zoom 16–20, Esc or × closes); "check it" shows only when the address came from their words or a call. **Street view is gone** until a Google Maps key is set up (Coy: "a feature coming soon on the roadmap") — a Planned card on the Roadmap. The old Google map embed is gone.
 - **The customer page, reshaped (Threads v2 handoff §4, 2026-10-03).** "‹
   Back to the thread" when opened from Threads (else "‹ Customers"); name
   and role tag; **Edit · New job · Ask Dusty** (Call notes and Delete under
@@ -2744,7 +2791,16 @@ expected start date per quoted job before it means anything. Add the field.
   reader hasn't read yet is sent to the model as an image with that question
   (up to four; `seeableMime()`, `src/lib/dusty/see.ts`, tested), so he
   answers about it in the same reply — a screenshot of ScopeCrete is read as
-  the screen. HEIC, PDFs and anything larger still wait for the reader.
+  the screen. HEIC and anything larger still wait for the reader.
+  **A PDF he reads himself (Coy, 2026-10-07: icon-budget.pdf, "See attached
+  preliminary budget" — Dusty said it was "not read yet" and asked him to
+  wait; the reader read it 34 s later).** An attached PDF the reader hasn't
+  read yet has its text pulled out in the same request (unpdf, as the
+  reader does; `pdfTextNow()` in `see.ts`, tested) — at most two a question,
+  12 MB at most (the reader's own cap, §2e), 8 s at most, the first 30,000
+  characters — and he answers from it. A scan with no text, a bigger file, or
+  one that won't open in time still waits for the reader. Nothing is written
+  to the file; the reader still reads it and files its summary and facts.
   **The chat keeps its files (migration 079, applied 2026-10-04 on Coy's
   "apply 079"; checked after: the column, its ≤ 8 check, RLS unchanged — Coy 2026-10-04: "the chat
   history should at least keep the summary of the image that he read. We'll
@@ -3163,8 +3219,18 @@ expected start date per quoted job before it means anything. Add the field.
   other file can live"): a folder column (All files · Photos, then the
   sheets by Concrete scope · All drawings · each discipline · Pages to
   read) beside what the folder holds; `?step=sheets` still opens it on the
-  sheets. Photos, Aerial and Add plans sit at the far right of the steps'
-  row (Coy).
+  sheets. Add plans sits at the far right of the steps' row (Coy). Since
+  2026-10-08 the steps are **Files · Satellite · Takeoff** (Coy: the Aerial
+  button "as a tab in between 'files' and 'takeoff'", the page "nest[ed]
+  inside … under the page header"); the Photos button and panel are gone
+  (texted photos come in from Files → Photos, below), and so is the
+  "N of M sheets scaled" chip — it sits at the start of Takeoff's sheet
+  strip under the drawing. **Later that day the Satellite tab left the Plan Room for the Map
+  page** (Coy: "push the snipits from the map into the takeoffs tool … That
+  can replace the current satellite page in the plan room"): the tab opens
+  `/dashboard/map?clip=<job>`, framing that job's site on satellite, and an old
+  `?step=satellite` link goes there too (`aerial-picker.tsx` deleted). See
+  **The Map page** below.
   **Files** — every file on the job; PDFs and images carry **In plan room**
   (`job_files.in_plan_room`); drop plan sets to add them.
   **Sheets** — each in-room PDF is opened in the browser with **pdf.js**
@@ -3191,6 +3257,29 @@ expected start date per quoted job before it means anything. Add the field.
   sizes only) is how the file was diagnosed. The Plan Room lists only the
   sheets of files that are **In plan room** (and any sheet with a shape on
   it); taking a file out takes its pages with it.
+  **A big scanned set without crashing the tab (Coy, 2026-10-07: "The LA
+  Contracting plan sets … are crashing the browser when it tries to read them
+  all").** pdf.js keeps a page's decoded picture until the page is cleaned
+  up, and a scanned sheet is one ~67 MP image. Nothing cleaned up: the Sheets
+  grid drew every thumbnail at once, and the OCR reader kept every sheet it
+  had read. Burgess Ave had grown to 154 drawings (an addendum email copied
+  PLANS.pdf in a second time — the same bytes, its own 74 sheets — plus
+  ADD02). Measured on a 30-sheet scan of the same shape in headless
+  Chromium: thumbnails all at once peaked at 2.9 GB; the reader held 1.8 GB
+  after 30 sheets and kept climbing. Now `releasePage()` (`src/lib/pdf.ts`)
+  lets go of each sheet once read; `renderRegion()` and thumbnails clean up
+  after themselves; `drawPage()` lets go of the sheet it drew last when
+  another is drawn; thumbnails are drawn two at a time (one on a phone) and
+  only once they scroll near the screen. Same test: 1.4 GB and 1.1 GB peaks,
+  flat however many sheets. **On a phone no thumbnail is drawn at all** (Coy,
+  same day: still crashing): pdf.js decodes the whole ~67 MP scan even for a
+  thumbnail, ~300 MB for a moment each whatever the canvas limit (measured),
+  so the sheet list shows its number and title and only the sheet opened is
+  drawn. **An addendum doesn't copy a file again** (`reuseCopy()` in
+  `bid-intake`): a Box file another bid of the org already copied (same Box
+  file id and size, the copy not deleted) is that copy, its reading carried
+  over. Burgess Ave's second PLANS.pdf and proposal (from the addendum) are
+  the duplicates already made.
   **Drawings vs pages to read (Coy, 2026-10-02).** A page bigger than legal
   (longest side ≥ 1,150 pt, so 11×17 half-size sets count) is a drawing:
   measured, scaled, in Takeoff. A letter or legal page bound into a plan
@@ -3263,7 +3352,15 @@ expected start date per quoted job before it means anything. Add the field.
   Area, Rect, Linear, Count, Cutout, Scale (Auto is shown off: Dusty doesn't
   read drawings). **A sheet's scale is only ever one Coy set** — "Use 1/8" =
   1'-0"" (the printed one, his tap), or two clicks on a known dimension and
-  its length; until then nothing drawn there is counted. Groups
+  its length; until then nothing drawn there is counted. **One scale on
+  many sheets (Coy, 2026-10-08):** when a dimension is measured, "This
+  sheet · Every sheet · Pick sheets…" beside Set scale, and **Scale → other
+  sheets** on the toolbar of a sheet with a scale, open a list of the other
+  sheets with ticks (every one but an aerial ticked for Every sheet, none for
+  Pick) — each gets the same feet per point through its own PATCH, replacing
+  its own scale; nothing is set without the tap. The sheets drawer has no
+  pull tab sticking out of its edge any more (Coy: "remove this … tab on
+  desktop and mobile"); ☰ Sheets and the strip open sheets. Groups
   (`takeoff_parameters`: area / linear / count, colour, optional depth) total
   their shapes (`takeoff_measurements`, geometry in points); quantities are
   worked out (`src/lib/takeoff.ts`: shoelace minus cutouts, polyline length,
@@ -3273,10 +3370,16 @@ expected start date per quoted job before it means anything. Add the field.
   drawing so starting a shape never moves the sheet under the next click.
   **Aerial of the site (Coy, 2026-10-03: "take a screenshot of the address
   on Google maps and measure the driveway area" — "mapbox and esri and
-  Google if possible").** The Plan Room header's **Aerial** finds the job's
+  Google if possible"; since 2026-10-08 the **Satellite** tab of Takeoffs,
+  in the page, Mapbox only — Google's look-only button and its key line are
+  gone, a Planned card on the Roadmap (Coy: "remove the Google button … add it to the roadmap");
+  zoom in quarter steps, by the scroll wheel or a pinch: between whole
+  levels the next level's tiles are drawn smaller and a dashed box shows the
+  frame saved at that level, so the saved sheet's scale is a whole zoom's).** The Plan Room header's **Aerial** (now the tab) finds the job's
   address (else its customer's; Google's geocoder if its key is set, else
   Mapbox's, else Esri's public one — the result is not stored), shows it
-  on **Esri**, **Mapbox** or **Google**, Coy drags to frame it and zooms
+  on **Mapbox** or **Google** (Esri's button is gone — Coy, 2026-10-07: "it
+  doesn't work"; the server can still draw an aerial saved from it), Coy drags to frame it and zooms
   (16–21; Mapbox 22), and **Put it in the Plan Room** saves the frame as a
   one-page PDF on the job, In plan room, with its sheet (`AERIAL`).
   The PDF is the tiles themselves (JPEG, nothing re-encoded), 1,280 ×
@@ -3528,8 +3631,12 @@ expected start date per quoted job before it means anything. Add the field.
   grants on `contact_phones` revoked; checked after: the columns, the guard
   trigger, the storage policy, anon may execute only the two functions and
   holds no grant on `documents`, `document_events` or `contact_phones`, a bad
-  token returns nothing). A preview deployment may sit behind Vercel's own login — send links
-  from scopecrete.ai. Not built: the customer accepting or picking an option
+  token returns nothing). A preview deployment sits behind Vercel's own login, so a link made
+  anywhere but localhost points at `https://scopecrete.ai` (`publicOrigin()`,
+  2026-10-07: links made on the feedback preview were *.vercel.app, and Dusty
+  hit Vercel's login trying one). Dusty is told never to open a link, and a job
+  named in his question carries its budget (none, no items, or items and
+  price — `jobValues()`), not "open the job for its budget". Not built: the customer accepting or picking an option
   on the page (e-sign), and a PDF filed on the job.
 - **The job's Bid strip (2026-10-01, §2i)** — full width like the section
   cards (2026-10-02, Coy: "needs to be the same width as everything else");
@@ -3555,7 +3662,7 @@ expected start date per quoted job before it means anything. Add the field.
   proposal's number and draft / final, with its price line under it) on
   the left, the switch alone on the right. Each view's own buttons sit
   below (the Budget's Sheets (n) button is gone since 2026-10-06 — Coy: "accessible from within the plan room"; a section's own sheet links stay, and on a phone the job's name is 14px (`.sc-job-name`) and ‹ Jobs just ‹, so a long name fits the width); the Plan Room's
-  reading chips, Photos, Aerial and Add plans on the row under the name;
+  reading chips and Add plans on the row under the name;
   the Proposal's version, Item prices · Qty · unit · Tax · Maps & photos,
   Print / PDF and Preview on the settings row beside Project type,
   Warranty and Contract (on a phone, the buttons on their own row and the
@@ -3611,6 +3718,52 @@ expected start date per quoted job before it means anything. Add the field.
   Files. The Price book's Cards keep their search open (the budget's picker
   needs it), drawn as the same pill. Page titles on Threads and Files take
   `.sc-page-title` like the other lists.
+- **The Map page (Coy, 2026-10-08, Claude Design 11: "add the map page to
+  the main menu on desktop; toolbox on mobile … push the snipits from the map
+  into the takeoffs tool … That can replace the current satellite page in the
+  plan room").** `/dashboard/map` (`src/components/v34/map/`), after Jobs on
+  the rail; in the Toolbox on a phone (`cleanMenus()` now puts a new page after
+  its default neighbour, not at the end). **No map library**: a slippy map of
+  our own (`map-view.tsx`) drawing tiles from `/api/aerial/tile`, which now
+  takes `p=streets` (Mapbox Streets, `fetchStreetTile()`) and any zoom from 2
+  — the token stays on the server; drag, wheel and pinch zoom about the
+  pointer, double-click in. Web Mercator, scale and clip maths in
+  `src/lib/map.ts` (tested, `tests/map.test.mjs`).
+  **Pins** (`GET /api/map/pins`, session client, org from the session): every
+  job not archived at its own address, else its customer's, coloured by layer
+  — Active jobs (won, scheduled, in progress) · New leads · Estimating /
+  Follow up · Proposals sent (a sent, live link; "Opened N times") · Bid
+  invites (due, red under 48 h) · Complete and Lost (off by default) — and
+  vendors at their contact's address as squares (`layerForJob()`). Layer
+  switches with counts, job type, city and created filters (kept on the
+  device, `sc.map.filters`), the legend, clusters below zoom 11, Map ·
+  Satellite. A tap opens a card: Open job, Directions (Google Maps), Call,
+  Send to Takeoffs; a vendor's: Vendor page, Call, Directions, Email. The
+  search box finds addresses (`/api/aerial/suggest`) and the pins' own names.
+  "N customers have no address yet · Add them ›" counts named customers with
+  no address of their own and no job with one; customers have no pins of their
+  own — they show through their jobs. **Points** are looked up with
+  `findAddress()` (the satellite's geocoder), 30 a load, and kept on the row
+  by **migration 090** (applied 2026-10-08 on Coy's "apply 090"; checked after: the four columns on both tables, both range checks, RLS unchanged) (`jobs` / `contacts` `lat`, `lng`, `geocoded_at`,
+  `geocode_query` — the address looked up; a changed address is looked up
+  again; a miss is kept so it isn't asked again). Until 090 is applied
+  addresses are looked up on each visit, remembered by the server process, and
+  the page says so.
+  **Clip for takeoff** (the header's button; the phone's floating one; Send to
+  Takeoffs on a card): satellite, a frame (dimmed outside, thirds, the scale
+  "1 in ≈ 41 ft · zoom 20", a 50 ft bar, "imagery date not known"), Use this
+  frame, then **Which job?** — nearest first, search, or **+ New job here**
+  (the street from Mapbox reverse geocoding, `GET /api/aerial/suggest?at=`,
+  through `POST /api/jobs`). **Put it in Takeoffs** posts `/api/jobs/[id]/aerial`
+  as the old tab did, now with the frame's size (`w`, `h` — 1,150 to 2,560
+  pixels at the whole zoom saved, `clipPlan()` / `validClipSize()`, so a sheet
+  is always a drawing) — the same one-page PDF with the map's scale for Coy's
+  tap. A job's second aerial is "AERIAL 2", and so on (`isAerialSheet()`). Then
+  "Aerial added to X · Measure it ›" opens Takeoff on that sheet, and the
+  framed box stays on the map. Zoomed out past 16 the frame asks to zoom in.
+  **Not built:** vendors' delivery circles (their area is a line of text), a
+  frame resized by its corner, customers' own pins, live directions or
+  drive times.
 - **One subheader on every main-menu page (Coy, 2026-10-06: "notice that
   the logs page has a defined sub header. Each of the different pages on the
   main menu need a consistent subheader under the main header").**
@@ -3633,12 +3786,25 @@ expected start date per quoted job before it means anything. Add the field.
   Contacts fill the width (no 1156px cap). The Price book's find, By group /
   By vendor, Show retired, Columns and its count sit on the same row as its
   Cards · Assemblies tabs.
+  **On a phone (Coy, 2026-10-07: "there isn't enough room for Sacco Enterprises jobs … Sacco
+  Enterprises | jobs, but the font will be much, much smaller just on mobile")** the org's name and
+  the page's read on one line, "Sacco Enterprises | JOBS", at ~11px; the ☰ is 28px, the height of
+  the bar's other buttons. A sheet's title over 18 characters is set at 19px on a phone so it fits.
 - **Initials squares in colour (Coy, 2026-10-06: "a variety of colors and
   we can go from there").** `initialsHue()` (`src/lib/v34/threads.ts`,
   tested) hashes a name into ten colours (`INITIALS_HUES`), so a person keeps
   theirs everywhere `InitialsBox` draws them (Threads, the record pages);
   mixed with the theme's card and ink so dark themes read. No name → the grey
   dashed #; the open one stays hi-viz.
+- **Takeoffs, and back to the customer (Coy, 2026-10-07: "let's rename this tab page instead of
+  plan room. Let's call it takeoffs. I'm going to create a dedicated plan room page for general
+  contractors to upload plans and see quotes").** Every label that said Plan room / Plan Room says
+  **Takeoffs** (the switch, links, the estimator's page name, Dusty's prompts); the address stays
+  `/dashboard/scope/[jobId]/plans` and the code keeps its names. On a phone its **Files · Takeoff**
+  hang under the Takeoffs button (`subnav` on `JobHeaderRow` / `JobTabs`), not on a row of their
+  own. A job's **‹** goes to its customer's page on the **Jobs** tab
+  (`/dashboard/customers/[id]?tab=jobs`; "‹ Customer" on a desktop) — the Jobs board when it has
+  no customer, or for an onsite estimator.
 - **One job, three views (Coy, 2026-10-02: "no way … to get back from the
   proposal page" and "one job budget page, and I can toggle between that
   budget and the proposal").** **Plan room · Budget · Proposal** — in the
@@ -3725,11 +3891,10 @@ expected start date per quoted job before it means anything. Add the field.
   As a job file it can be set to an area (shows under that section's
   Photos) and picked as the proposal's cover. **Where:** the job page's
   Files → From texts (**+ Job** on each, **Add all N to the job**, "On the
-  job ✓"), and the Plan Room's **Photos** panel (`photos-panel.tsx`) — a
-  column down the right, open over any step and over full-screen takeoff
-  (a Photos button on its toolbar too), with the job's photos one at a time,
-  large, ‹ › and Full size, and below, the ones texted but not yet on the
-  job with **+ Job** / **Bring all N in**. Only PDFs become sheets; a photo
+  job ✓"), and Takeoffs → Files → **Photos**: the ones texted but not yet on
+  the job, "Texted by …", with **+ Job** / **Bring all N in**, above the
+  job's photos (`texted-photos.tsx`; the Photos side panel and its button
+  are gone since 2026-10-08 — Coy: "it's attached to the customer"). Only PDFs become sheets; a photo
   is for looking at beside the aerial, not for measuring.
 - **Section Notes replace Prep and Access (Coy, 2026-10-03, two Vercel
   notes: "Prep can be removed from the sections" and "Access can be removed

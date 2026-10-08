@@ -23,7 +23,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   if (!job) return applyCookies(NextResponse.json({ error: "No such job." }, { status: 404 }));
 
   const [{ data: j }, { data: rows, error }, takeoff, { data: est }] = await Promise.all([
-    supabase.from("jobs").select("id, title, address, job_type, status").eq("org_id", orgId).eq("id", id).maybeSingle(),
+    supabase.from("jobs").select("id, title, address, job_type, status, customer_id").eq("org_id", orgId).eq("id", id).maybeSingle(),
     supabase.from("files").select(FILE_COLUMNS).eq("org_id", orgId).eq("job_id", id).is("deleted_at", null).order("created_at", { ascending: false }),
     loadTakeoff(supabase, orgId, [id]),
     supabase.from("estimates").select("id").eq("org_id", orgId).eq("job_id", id).eq("status", "draft").maybeSingle(),

@@ -259,7 +259,7 @@ function PickPhotos({ jobId, sectionId, sectionName, onClose, onChange }: {
       <div className="px-4 py-3 flex flex-col gap-3">
         {err && <div style={{ color: T.red, fontSize: F.sm }}>{err}</div>}
         <div>
-          <div style={{ ...eyebrow, marginBottom: 6 }}>On the job · from the Plan Room, emails and uploads</div>
+          <div style={{ ...eyebrow, marginBottom: 6 }}>On the job · from Takeoffs, emails and uploads</div>
           {files === null ? <div style={{ fontSize: F.sm, color: T.ink3 }}>…</div> : files.length ? (
             <div className="grid gap-1.5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(96px, 1fr))" }}>
               {files.map((f) => tile(f.id, f.url, f.section_id === sectionId, f.name, () => void toggle(f)))}

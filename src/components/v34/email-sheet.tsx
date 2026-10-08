@@ -193,11 +193,11 @@ export function EmailSheet({ id, onClose, onChanged }: { id: string; onClose: ()
               </div>
               <div style={{ fontSize: 11, color: T.ink3, marginTop: 6 }}>Filing it on someone adds it to their Email channel.</div>
               <div className="flex items-center gap-3 mt-2" style={{ fontSize: F.xs }}>
-                {e.job_id && <Link href={`/dashboard/scope/${e.job_id}/plans`} style={{ color: T.chalk }}>Open the Plan room ›</Link>}
+                {e.job_id && <Link href={`/dashboard/scope/${e.job_id}/plans`} style={{ color: T.chalk }}>Open Takeoffs ›</Link>}
                 {e.customer_id && <Link href={`/dashboard/customers/${e.customer_id}`} style={{ color: T.chalk }}>Open the customer ›</Link>}
                 {undo && <button disabled={busy} onClick={() => { const u = undo; setUndo(null); void file({ ...u }).then(() => setUndo(null)); }} style={{ color: T.chalk, textDecoration: "underline" }}>Undo</button>}
               </div>
-              {e.job_id && <div style={{ fontSize: F.xs, color: T.ink3, marginTop: 4 }}>Its files are on the job; PDFs are in the Plan room.</div>}
+              {e.job_id && <div style={{ fontSize: F.xs, color: T.ink3, marginTop: 4 }}>Its files are on the job; PDFs are in Takeoffs.</div>}
             </div>
 
             <div className="px-4 py-3" style={{ borderBottom: `1px solid ${T.hairSoft}` }}>

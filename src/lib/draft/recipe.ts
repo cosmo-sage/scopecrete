@@ -47,7 +47,7 @@ export interface RecipeLine {
 export function stepsOf(l: RecipeLine): string[] {
   const t = `${l.name} ${l.group_name ?? ""}`.toLowerCase();
   const out = new Set<string>();
-  if (/\bdemo|tear ?out|remov|break ?out|bust ?out|saw ?cut/.test(t)) out.add("demo");
+  if (/\bdemo|tear[ -]?out|remov|break[ -]?out|bust[ -]?out|saw[ -]?cut/.test(t)) out.add("demo");
   if (/haul|dump|disposal|debris|load ?out|tipping|roll ?off|dumpster/.test(t)) out.add("haul");
   if (/\bbase\b|gravel|limestone|crush|\bsand\b|grad(e|ing)|compact|\bfill\b|sub ?grade|\bprep\b/.test(t)) out.add("base");
   if (/\bform/.test(t)) out.add("forming");

@@ -110,3 +110,10 @@ test("tax as printed: an amount and a subtotal, never a rate worked out", () => 
   assert.equal(r.facts.tax_pct, undefined);
   assert.match(r.dropped.join("|"), /tax_pct: 10.5 is not written/);
 });
+
+test("Word documents and text files are read; an old .doc says how", () => {
+  assert.deepEqual(readable("doc", null, 20_000, "Icon MSA redline.docx"), { ok: true, as: "doc", doc: "docx" });
+  assert.deepEqual(readable("other", "text/markdown", 900, "notes.md"), { ok: true, as: "doc", doc: "markdown" });
+  assert.match(readable("doc", "application/msword", 9_000, "old.doc").why, /save it as \.docx/);
+  assert.equal(readable("doc", null, 13 * 1024 * 1024, "big.docx").ok, false);
+});

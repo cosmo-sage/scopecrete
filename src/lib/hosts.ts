@@ -62,9 +62,13 @@ export function safeNext(next: string | null | undefined): string | null {
   return next.startsWith("/dashboard") || /^\/invite\/[0-9a-f]{48}$/.test(next) ? next : null;
 }
 
-/** Where a customer's link (/p/…) should point: the public scopecrete.ai when
- *  the app is on its own domain — never an org's dashboard address — else the
- *  host it was made on (a preview). */
+/** Where a customer's link (/p/…) should point: the public scopecrete.ai —
+ *  never an org's dashboard address, and never a *.vercel.app preview, which
+ *  sits behind Vercel's own login (a customer, or Dusty, opening one got
+ *  "log in to Vercel" — 2026-10-07). Every deployment shares one database, so
+ *  the token opens on scopecrete.ai. Only localhost keeps its own host. */
 export function publicOrigin(host: string | null | undefined, fallback: string): string {
-  return hostKind(host).kind === "other" ? fallback : `https://${ROOT_DOMAIN}`;
+  const h = bareHost(host);
+  if (hostKind(host).kind === "other" && (h === "localhost" || h === "127.0.0.1" || h === "")) return fallback;
+  return `https://${ROOT_DOMAIN}`;
 }

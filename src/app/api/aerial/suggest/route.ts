@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
-import { aerialProviders, findAddress, resolveSuggestion, suggestAddresses } from "@/lib/aerial-server";
+import { aerialProviders, findAddress, resolveSuggestion, reverseAddress, suggestAddresses } from "@/lib/aerial-server";
 
 /**
  * Address suggestions while Coy types in the aerial picker (src/lib/aerial.ts).
@@ -9,6 +9,7 @@ import { aerialProviders, findAddress, resolveSuggestion, suggestAddresses } fro
  * GET ?text=&key=     — the point of an Esri suggestion he picked.
  * GET ?find=           — the point of an address (a customer page's Satellite),
  *                        and the satellite provider to draw it with.
+ * GET ?at=lat,lng      — the street address at a point (the Map's "+ New job here").
  *
  * Signed-in members only; keys stay on the server; nothing stored.
  */
@@ -20,6 +21,10 @@ export async function GET(req: NextRequest) {
   if (!result.ok) return result.response;
   const { applyCookies } = result.session;
   const s = req.nextUrl.searchParams;
+  const at = s.get("at")?.split(",").map(Number);
+  if (at && at.length === 2 && at.every(Number.isFinite) && Math.abs(at[0]) <= 85 && Math.abs(at[1]) <= 180) {
+    return applyCookies(NextResponse.json({ address: await reverseAddress(at[0], at[1]) }));
+  }
   const find = s.get("find");
   if (find) {
     const found = await findAddress(find);

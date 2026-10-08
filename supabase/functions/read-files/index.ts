@@ -13,7 +13,9 @@
  *      minutes ago with fewer than 3 tries, or stuck "reading" 10+ minutes);
  *   4. reads each: a JPEG/PNG photo goes to Hermes as an image; a PDF's text
  *      is pulled out here (unpdf) and Hermes reads the text — a scanned PDF
- *      with no text is skipped and says so; anything else is skipped with why;
+ *      with no text is skipped and says so; a Word document (.docx) or a text
+ *      file (.md, .txt, .csv) has its words pulled out (doc-text.ts) and read
+ *      the same way (2026-10-08); anything else is skipped with why;
  *   5. writes summary, facts (suggestions — shown, never applied, §2b; from a
  *      document a number is kept only if it is written in it), extracted text
  *      and page count, and a pulse in sc_worker_heartbeats.
@@ -27,6 +29,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { extractText, getDocumentProxy } from 'unpdf'
+import { docText } from './doc-text.ts'
 import { SYSTEM_PROMPT, READ_PROMPT_VERSION, clipText, parseReply, readable, sanitizeRead } from './rules.ts'
 
 const WORKER = 'read-files'
@@ -95,7 +98,7 @@ interface Job { id: string; org_id: string; name: string; kind: string; mime_typ
 
 // deno-lint-ignore no-explicit-any
 async function readOne(sb: any, cfg: Cfg, f: Job): Promise<{ outcome: Outcome; patch: Record<string, unknown> }> {
-  const can = readable(f.kind, f.mime_type, f.byte_size)
+  const can = readable(f.kind, f.mime_type, f.byte_size, f.name)
   if (!can.ok) return { outcome: 'skipped', patch: { read_error: can.why } }
 
   const { data: blob, error } = await sb.storage.from(BUCKET).download(f.storage_path)
@@ -111,6 +114,12 @@ async function readOne(sb: any, cfg: Cfg, f: Job): Promise<{ outcome: Outcome; p
       { type: 'text', text: `FILE: ${f.name}\nA photo. Read it.` },
       { type: 'image_url', image_url: { url: `data:${mime};base64,${b64(bytes)}` } },
     ]
+  } else if (can.as === 'doc') {
+    // A Word document or a text file: its words, read like a PDF's.
+    text = docText(can.doc, bytes)
+    if (!text) return { outcome: 'skipped', patch: { read_error: can.doc === 'docx' ? "couldn't find any words in the document" : 'the file is empty' } }
+    const c = clipText(text)
+    user = `FILE: ${f.name} (${can.doc === 'docx' ? 'a Word document' : 'a text file'}${c.clipped ? ', only the start is below' : ''})\n\n${c.text}`
   } else {
     try {
       const pdf = await getDocumentProxy(bytes)

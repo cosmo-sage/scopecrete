@@ -9,7 +9,7 @@ import { readSheet, type SheetReading, type TextItem } from "@/lib/plan-sheets";
 // The legacy build: the modern one leans on JavaScript newer than most browsers
 // (and phones) have yet (Map.getOrInsertComputed).
 type PdfJs = typeof import("pdfjs-dist/legacy/build/pdf.mjs");
-type Doc = Awaited<ReturnType<PdfJs["getDocument"]>["promise"]>;
+export type Doc = Awaited<ReturnType<PdfJs["getDocument"]>["promise"]>;
 type Page = Awaited<ReturnType<Doc["getPage"]>>;
 
 let lib: Promise<PdfJs> | null = null;
@@ -81,6 +81,17 @@ export function openPdf(fileId: string, url: string): Promise<Doc> {
   return d;
 }
 
+/**
+ * Let go of a page's decoded pictures. A scanned sheet is one ~67-megapixel image;
+ * pdf.js keeps it decoded with the page until cleanup(), so reading or thumbnailing a
+ * whole set without this held every sheet at once — gigabytes on Burgess Ave's 74 +
+ * 74 + 6 sheets, and the tab crashed (LA Contracting, 2026-10-07). Safe mid-render:
+ * pdf.js waits for the page's renders to finish before it clears.
+ */
+export function releasePage(doc: Doc, pageNo: number) {
+  doc.getPage(pageNo).then((p) => p.cleanup()).catch(() => { /* gone already */ });
+}
+
 /** Page size in points as shown (rotation applied). */
 export function pageSize(p: Page) {
   const v = p.getViewport({ scale: 1 });
@@ -108,10 +119,17 @@ export async function readPlanPages(doc: Doc, onPage?: (n: number, of: number) =
   return out;
 }
 
+// The page each document last drew whole: moving to another sheet lets go of the last one
+// (a zoom redraws the same page and keeps its decoded picture).
+const lastDrawn = new WeakMap<Doc, number>();
+
 /** Draw a page onto a canvas at `scale` (points → CSS px), sharp on high-DPI screens. Returns a cancel. */
 export function drawPage(doc: Doc, pageNo: number, canvas: HTMLCanvasElement, scale: number): { done: Promise<void>; cancel: () => void } {
   let task: { cancel: () => void; promise: Promise<void> } | null = null;
   let cancelled = false;
+  const prev = lastDrawn.get(doc);
+  if (prev !== undefined && prev !== pageNo) releasePage(doc, prev);
+  lastDrawn.set(doc, pageNo);
   const done = doc.getPage(pageNo).then((p) => {
     if (cancelled) return;
     let dpr = Math.min(typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1, 2);
@@ -134,23 +152,39 @@ export function drawPage(doc: Doc, pageNo: number, canvas: HTMLCanvasElement, sc
 }
 
 const thumbs = new Map<string, Promise<string>>();
+// Thumbnails are drawn a few at a time. Each one decodes its whole sheet first; a grid of
+// 154 scanned sheets asking at once peaked near 3 GB per 30 sheets in a test and crashed
+// the tab (2026-10-07). One at a time on a phone, two on a desktop.
+const THUMB_LANES = typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches ? 1 : 2;
+let thumbBusy = 0;
+const thumbWaiting: Array<() => void> = [];
+async function thumbTurn<T>(work: () => Promise<T>): Promise<T> {
+  if (thumbBusy >= THUMB_LANES) await new Promise<void>((go) => thumbWaiting.push(go));
+  thumbBusy++;
+  try { return await work(); }
+  finally { thumbBusy--; thumbWaiting.shift()?.(); }
+}
 /** A small picture of a page, made once per visit, kept in memory only. */
 export function pageThumb(fileId: string, url: string, pageNo: number, width = 360): Promise<string> {
   const k = `${fileId}:${pageNo}`;
   let t = thumbs.get(k);
   if (!t) {
-    t = openPdf(fileId, url).then(async (doc) => {
+    t = openPdf(fileId, url).then((doc) => thumbTurn(async () => {
       const p = await doc.getPage(pageNo);
-      const v1 = p.getViewport({ scale: 1 });
-      const v = p.getViewport({ scale: width / v1.width });
       const c = document.createElement("canvas");
-      c.width = Math.floor(v.width); c.height = Math.floor(v.height);
-      const ctx = c.getContext("2d");
-      if (!ctx) return "";
-      await (p.render({ canvasContext: ctx, viewport: v, canvas: c }) as unknown as { promise: Promise<void> }).promise;
-      p.cleanup();
-      return c.toDataURL("image/jpeg", 0.7);
-    });
+      try {
+        const v1 = p.getViewport({ scale: 1 });
+        const v = p.getViewport({ scale: width / v1.width });
+        c.width = Math.floor(v.width); c.height = Math.floor(v.height);
+        const ctx = c.getContext("2d");
+        if (!ctx) return "";
+        await (p.render({ canvasContext: ctx, viewport: v, canvas: c }) as unknown as { promise: Promise<void> }).promise;
+        return c.toDataURL("image/jpeg", 0.7);
+      } finally {
+        p.cleanup();
+        c.width = 0; c.height = 0;
+      }
+    }));
     t.catch(() => thumbs.delete(k));
     thumbs.set(k, t);
   }
@@ -160,9 +194,10 @@ export function pageThumb(fileId: string, url: string, pageNo: number, width = 3
 /**
  * One region of a page (PDF points, y down) drawn at `scale` onto a fresh canvas —
  * for reading a scanned sheet with OCR (src/lib/v34/plan-ocr-runner.ts). White
- * behind, as on paper.
+ * behind, as on paper. The page is let go after, unless `keep` (the OCR reader draws
+ * many parts of one sheet and lets go of it once it is done with the sheet).
  */
-export async function renderRegion(doc: Doc, pageNo: number, r: { x: number; y: number; w: number; h: number }, scale: number): Promise<HTMLCanvasElement> {
+export async function renderRegion(doc: Doc, pageNo: number, r: { x: number; y: number; w: number; h: number }, scale: number, keep = false): Promise<HTMLCanvasElement> {
   const p = await doc.getPage(pageNo);
   const v = p.getViewport({ scale, offsetX: -r.x * scale, offsetY: -r.y * scale });
   const c = document.createElement("canvas");
@@ -172,6 +207,7 @@ export async function renderRegion(doc: Doc, pageNo: number, r: { x: number; y: 
   if (!ctx) throw new Error("no canvas");
   ctx.fillStyle = "#fff";
   ctx.fillRect(0, 0, c.width, c.height);
-  await (p.render({ canvasContext: ctx, viewport: v, canvas: c }) as unknown as { promise: Promise<void> }).promise;
+  try { await (p.render({ canvasContext: ctx, viewport: v, canvas: c }) as unknown as { promise: Promise<void> }).promise; }
+  finally { if (!keep) p.cleanup(); }
   return c;
 }

@@ -7,16 +7,20 @@ import { formatAddress } from "@/lib/customers-server";
 import { SHEET_COLS } from "@/lib/plans-server";
 import { ATTRIBUTION, PROVIDER_LABEL, aerialPdf, aerialScaleText, ftPerPt, validCenter, windowTiles } from "@/lib/aerial";
 import { aerialProviders, fetchTile, findAddress } from "@/lib/aerial-server";
+import { validClipSize } from "@/lib/map";
 
 /**
  * An aerial of the job site as a Plan Room sheet (src/lib/aerial.ts).
  *
  * GET  ?q=  — the job's address (else its customer's), where it was found, and
  *             which imagery is set up. ?q= looks up another address. Nothing stored.
- * POST { provider: esri|mapbox, lat, lng, z } — fetches the window's tiles,
- *             makes a one-page PDF, files it on the job In plan room, and adds
- *             its sheet with the map's scale as its printed scale — applied by
- *             Coy's tap, like any printed scale. Google is never saved.
+ * POST { provider: esri|mapbox, lat, lng, z, w?, h? } — fetches the window's
+ *             tiles, makes a one-page PDF, files it on the job In plan room, and
+ *             adds its sheet "Aerial N" with the map's scale as its printed
+ *             scale — applied by Coy's tap, like any printed scale. w × h is the
+ *             frame clipped on the Map page (src/lib/map.ts clipPlan, in tile
+ *             pixels at z — a drawing's size, never bigger than 2,560); without
+ *             them the old fixed 1,280 × 1,024 window. Google is never saved.
  * Session client, org from the session.
  */
 
@@ -55,7 +59,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const bad = (m: string, s = 400) => applyCookies(NextResponse.json({ error: m }, { status: s }));
   if (!(await jobInOrg(supabase, orgId, id))) return bad("No such job.", 404);
 
-  let b: { provider?: unknown; lat?: unknown; lng?: unknown; z?: unknown; label?: unknown };
+  let b: { provider?: unknown; lat?: unknown; lng?: unknown; z?: unknown; w?: unknown; h?: unknown; label?: unknown };
   try { b = await req.json(); } catch { return bad("Body must be JSON."); }
   const p = b.provider === "esri" || b.provider === "mapbox" ? b.provider : null;
   if (!p) return bad(b.provider === "google" ? "Google's imagery can't be kept — pick Esri or Mapbox." : "Which imagery?");
@@ -63,7 +67,9 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const c = validCenter(b.lat, b.lng, b.z, p);
   if (!c) return bad("Where, and how close?");
 
-  const win = windowTiles(c.lat, c.lng, c.z);
+  const size = b.w == null && b.h == null ? { w: 1280, h: 1024 } : validClipSize(b.w, b.h);
+  if (!size) return bad("That frame is too small or too big to clip — zoom in or out a step.");
+  const win = windowTiles(c.lat, c.lng, c.z, size.w, size.h);
   const got = await Promise.all(win.tiles.map(async (t) => ({ ...t, jpeg: await fetchTile(p, c.z, t.x, t.y) })));
   const tiles = got.filter((t): t is typeof t & { jpeg: Uint8Array } => !!t.jpeg && t.jpeg[0] === 0xff && t.jpeg[1] === 0xd8);
   if (tiles.length < win.tiles.length * 0.75) {
@@ -72,7 +78,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const day = new Date().toLocaleDateString("en-US", { timeZone: "America/Chicago", month: "short", day: "numeric", year: "numeric" });
   const label = typeof b.label === "string" ? b.label.replace(/\s+/g, " ").trim().slice(0, 80) : "";
   const pdf = aerialPdf({
-    tiles, ftPerPt: ftPerPt(c.lat, c.z), attribution: ATTRIBUTION[p],
+    tiles, w: size.w, h: size.h, ftPerPt: ftPerPt(c.lat, c.z), attribution: ATTRIBUTION[p],
     caption: `${label || "Aerial"} - ${PROVIDER_LABEL[p]}, saved ${day} - imagery date not known`,
   });
 
@@ -94,9 +100,12 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     await supabase.storage.from(FILES_BUCKET).remove([path]);
     return bad(`Couldn't record the aerial: ${error?.message ?? "no row"}`, 500);
   }
+  // Aerial 1, Aerial 2 … on this job.
+  const { count } = await supabase.from("plan_sheets").select("id", { count: "exact", head: true }).eq("org_id", orgId).eq("job_id", id).ilike("number", "AERIAL%");
+  const nth = (count ?? 0) + 1;
   const { data: sheet, error: sErr } = await supabase.from("plan_sheets").insert({
-    org_id: orgId, job_id: id, file_id: fileId, page: 1, page_w: 1280, page_h: 1024,
-    number: "AERIAL", title: `Aerial · ${PROVIDER_LABEL[p]} · ${day}`.slice(0, 120), discipline: "C",
+    org_id: orgId, job_id: id, file_id: fileId, page: 1, page_w: size.w, page_h: size.h,
+    number: nth === 1 ? "AERIAL" : `AERIAL ${nth}`, title: `Aerial ${nth}${label ? ` · ${label}` : ""} · ${PROVIDER_LABEL[p]} · ${day}`.slice(0, 120), discipline: "C",
     scale_text: aerialScaleText(p, c.lat, c.z), printed_ft_per_pt: ftPerPt(c.lat, c.z),
     // The name is ours, not a reading — the browser's page reader leaves it alone.
     number_source: "coy",

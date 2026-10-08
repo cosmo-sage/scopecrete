@@ -375,7 +375,7 @@ export function Proposal({ jobId }: { jobId: string }) {
           {/* Nothing under the name (Coy, 2026-10-05: "all of the lines and words directly below the job
               name and small font … we can add to the summary page"): the number, draft / final, the price
               and the link's state sit on the settings row below, and on the job's Summary. */}
-          <JobHeaderRow jobId={jobId} active="proposal" title={b.job.title || "Proposal"} />
+          <JobHeaderRow jobId={jobId} active="proposal" title={b.job.title || "Proposal"} customerId={typeof b.job.customer_id === "string" ? b.job.customer_id : null} />
         </div>
         <div className="sc-no-print" style={{ background: T.card, borderBottom: `1px solid ${T.hair}` }}>
           <div style={{ padding: "6px 12px 0", fontSize: 11.5, color: T.ink3, overflowWrap: "anywhere" }}>

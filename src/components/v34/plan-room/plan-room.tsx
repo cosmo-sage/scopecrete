@@ -19,13 +19,14 @@ import { mayAutoRead, ocrPending, pausePlanOcr, resumePlanOcrAllowed, startPlanO
 import { call, isDrawing, type Param, type PlanFile, type PlansData, type Sheet } from "./shared";
 import { FilesStep } from "./files-sheets";
 import { TakeoffStep } from "./takeoff";
-import { AerialPicker } from "./aerial-picker";
-import { PhotosPanel } from "./photos-panel";
 import { SendSheet } from "./budget-step";
 
 // The Budget step moved to the job's Summary (Coy, 2026-10-06); an old ?step=budget link opens the room as usual.
-type Step = "files" | "takeoff";
-const STEPS: Array<[Step, string]> = [["files", "Files"], ["takeoff", "Takeoff"]];
+// Satellite (was the Aerial drawer) sits between them (Coy, 2026-10-07); since 2026-10-08 it opens the
+// Map page framing this job for a clip (Coy: "push the snipits from the map into the takeoffs tool …
+// That can replace the current satellite page"), which comes back here on the new sheet.
+type Step = "files" | "satellite" | "takeoff";
+const STEPS: Array<[Step, string]> = [["files", "Files"], ["satellite", "Satellite"], ["takeoff", "Takeoff"]];
 
 export function PlanRoom({ jobId }: { jobId: string }) {
   const router = useRouter();
@@ -40,8 +41,6 @@ export function PlanRoom({ jobId }: { jobId: string }) {
   const [sending, setSendingState] = useState<{ p: Param; ids?: string[] } | null>(null);
   const setSending = (p: Param, ids?: string[]) => setSendingState({ p, ids });
   const [fullscreen, setFullscreen] = useState(false);
-  const [aerial, setAerial] = useState(false);
-  const [photos, setPhotos] = useState(false);
 
   const load = useCallback(() => call(`/api/jobs/${jobId}/plans`, "GET")
     .then((d) => { setData(d as PlansData); setErr(null); })
@@ -54,11 +53,14 @@ export function PlanRoom({ jobId }: { jobId: string }) {
   const reload = useCallback(async () => { await load(); }, [load]);
 
   const go = useCallback((s: Step, sheet?: string | null) => {
+    if (s === "satellite") { router.push(`/dashboard/map?clip=${jobId}`); return; }
     const q = new URLSearchParams(sp.toString());
     q.set("step", s);
     if (sheet) q.set("sheet", sheet); else if (sheet === null) q.delete("sheet");
     router.replace(`?${q.toString()}`, { scroll: false });
-  }, [router, sp]);
+  }, [router, sp, jobId]);
+  // An old ?step=satellite link opens the Map's clip for this job.
+  useEffect(() => { if (sp.get("step") === "satellite") router.replace(`/dashboard/map?clip=${jobId}`); }, [sp, router, jobId]);
 
   // Read each in-room PDF's pages once, the first time it is seen without sheets.
   const started = useRef(new Set<string>());
@@ -141,21 +143,32 @@ export function PlanRoom({ jobId }: { jobId: string }) {
   const docPages = useMemo(() => roomSheets.filter((s) => !isDrawing(s) && !measured.has(s.id)), [roomSheets, measured]);
   const scoped = data ? { ...data, sheets } : null;
   const current = step ?? (roomSheets.length && data?.params.length && sheets.length ? "takeoff" : "files");
-  const scaled = sheets.filter((s) => s.scale_ft_per_pt).length;
-  const photoCount = (data?.files ?? []).filter((f) => f.kind === "image").length;
   const counts: Record<Step, string | null> = {
     files: (data?.files.length ?? 0) ? String(data?.files.length) : null,
+    satellite: null,
     takeoff: data?.params.length ? String(data.params.length) : null,
   };
 
   return (
     <div className="flex flex-col" style={{ minHeight: "calc(100dvh - var(--sc-head))" }}>
       <div style={{ background: T.card, borderBottom: `1px solid ${T.hair}`, padding: "10px 16px 0" }}>
-        <JobHeaderRow jobId={jobId} active="plans" title={data?.job?.title || "Plan room"} />
+        <JobHeaderRow jobId={jobId} active="plans" title={data?.job?.title || "Takeoffs"} customerId={data?.job?.customer_id}
+          subnav={(
+            <div className="flex gap-3" role="tablist" aria-label="Takeoffs">
+              {STEPS.map(([k, label]) => (
+                <button key={k} role="tab" aria-selected={current === k} onClick={() => go(k)} className="flex items-center gap-1 shrink-0"
+                  style={{ height: 24, borderBottom: `2px solid ${current === k ? T.hiviz : "transparent"}`, color: current === k ? T.ink : T.ink3, fontFamily: disp, fontSize: 11.5, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase", cursor: "pointer" }}>
+                  {label}
+                  {counts[k] && <span style={{ fontFamily: strong, fontSize: 10, background: T.sunk, borderRadius: 999, padding: "0 5px", letterSpacing: 0 }}>{counts[k]}</span>}
+                </button>
+              ))}
+            </div>
+          )} />
         {/* The steps on the left and the Plan Room's own tools at the far right, on one row
             under the name's row (Coy, 2026-10-05). */}
         <div className="flex items-end gap-x-4 gap-y-2 flex-wrap mt-2">
-          <div className="flex gap-4 overflow-x-auto" role="tablist">
+          {/* On a phone these hang under the Takeoffs button instead (Coy, 2026-10-07). */}
+          <div className="hidden lg:flex gap-4 overflow-x-auto" role="tablist">
             {STEPS.map(([k, label], i) => (
               <button key={k} role="tab" aria-selected={current === k} onClick={() => go(k)} className="flex items-center gap-1.5 shrink-0"
                 style={{ height: 38, borderBottom: `2px solid ${current === k ? T.hiviz : "transparent"}`, color: current === k ? T.ink : T.ink3, fontFamily: disp, fontSize: 14, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase", cursor: "pointer" }}>
@@ -177,19 +190,6 @@ export function PlanRoom({ jobId }: { jobId: string }) {
               {ocrLeft > 0 && <button onClick={readPlans} style={{ color: T.chalk, cursor: "pointer", fontWeight: 600 }}>Read the rest</button>}
             </span>
           ) : null}
-          {sheets.length > 0 && (
-            <span style={{ fontSize: 11.5, borderRadius: 3, padding: "3px 8px", background: scaled === sheets.length ? T.greenDim : T.sunDim, color: scaled === sheets.length ? T.green : T.sun, fontWeight: 600 }}>
-              {scaled === sheets.length ? "✓ " : ""}{scaled} of {sheets.length} sheets scaled
-            </span>
-          )}
-          <button onClick={() => setPhotos((v) => !v)} className="rounded flex items-center" title="The job's photos, and the ones the customer texted, beside the plans" aria-pressed={photos}
-            style={{ height: 32, padding: "0 12px", background: photos ? T.ink : T.card, color: photos ? T.card : T.ink, border: `1px solid ${photos ? T.ink : T.hairStrong}`, fontFamily: disp, fontSize: 13, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase", cursor: "pointer" }}>
-            Photos{photoCount ? ` · ${photoCount}` : ""}
-          </button>
-          <button onClick={() => setAerial(true)} className="rounded flex items-center" title="An overhead photo of the site to measure on"
-            style={{ height: 32, padding: "0 12px", background: T.card, color: T.ink, border: `1px solid ${T.hairStrong}`, fontFamily: disp, fontSize: 13, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase", cursor: "pointer" }}>
-            Aerial
-          </button>
           <label className="rounded flex items-center" style={{ height: 32, padding: "0 12px", background: T.hiviz, color: T.onHiviz, fontFamily: disp, fontSize: 13, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase", cursor: "pointer" }}>
             <input type="file" multiple accept="application/pdf,image/jpeg,image/png,.pdf" className="hidden" onChange={(e) => { if (e.target.files?.length) void upload(e.target.files); e.target.value = ""; }} />
             ↑ Add plans
@@ -199,20 +199,17 @@ export function PlanRoom({ jobId }: { jobId: string }) {
       </div>
 
       {err && <div className="px-4 py-2" style={{ background: T.redDim, color: T.red, fontSize: F.xs }}>{err}</div>}
-      {!data && !err && <div className="p-5" style={{ fontSize: F.sm, color: T.ink3 }}>Opening the plan room…</div>}
+      {!data && !err && <div className="p-5" style={{ fontSize: F.sm, color: T.ink3 }}>Opening Takeoffs…</div>}
       {data && scoped && (
         <div className="flex-1 flex flex-col" style={{ minHeight: 0 }}>
           {current === "files" && <FilesStep files={data.files} sheets={sheets} docPages={docPages} reading={reading} onToggle={(f, on) => void toggle(f, on)}
-            onAdd={(l) => void upload(l)} uploading={uploading} onOpen={(s) => go("takeoff", s.id)} initial={sp.get("step") === "sheets" || (!step && roomSheets.length) ? "sheets" : "files"} />}
+            onAdd={(l) => void upload(l)} uploading={uploading} onOpen={(s) => go("takeoff", s.id)} jobId={jobId} onAdded={load} initial={sp.get("step") === "sheets" || (!step && roomSheets.length) ? "sheets" : "files"} />}
           {current === "takeoff" && (
             <TakeoffStep jobId={jobId} data={scoped} files={data.files} sheetId={sheetParam} setSheetId={(id) => go("takeoff", id)}
-              reload={reload} onSend={setSending} fullscreen={fullscreen} setFullscreen={setFullscreen} onPhotos={() => setPhotos((v) => !v)} photosOpen={photos} />
+              reload={reload} onSend={setSending} fullscreen={fullscreen} setFullscreen={setFullscreen} />
           )}
         </div>
       )}
-      {data && <PhotosPanel jobId={jobId} files={data.files} open={photos} onClose={() => setPhotos(false)} onAdded={load} over={fullscreen && current === "takeoff"} />}
-      <AerialPicker jobId={jobId} open={aerial} onClose={() => setAerial(false)}
-        onSaved={(sheetId) => { setAerial(false); void load().then(() => go("takeoff", sheetId)); }} />
       <SendSheet jobId={jobId} p={sending?.p ?? null} initial={sending?.ids} data={data} onClose={() => setSendingState(null)} onSent={() => void reload()} />
     </div>
   );

@@ -14,6 +14,7 @@ import Link from "next/link";
 import { T, F, disp } from "@/lib/v34/tokens";
 import { useAccess } from "@/lib/v34/access-ctx";
 import { can } from "@/lib/access";
+import { JobSwitcher, SwitchChevron } from "@/components/v34/job-switcher";
 
 const TABS = [
   { k: "summary", label: "Summary", href: (id: string) => `/dashboard/scope/${id}/summary` },
@@ -91,6 +92,9 @@ export function JobHeaderRow({ jobId, active, title, after, sub, customerId, sub
   const access = useAccess();
   const toCustomer = !!customerId && !access.limited;
   const back = toCustomer ? `/dashboard/customers/${customerId}?tab=jobs` : "/dashboard/scope";
+  // The job's name opens the job switcher on the right (Coy, 2026-10-08); a pick opens this same view.
+  const [switching, setSwitching] = useState(false);
+  const viewHref = (TABS.find((t) => t.k === active) ?? TABS[0]).href;
   return (
     <div className="sc-no-print flex flex-col gap-y-1.5 lg:flex-row lg:flex-wrap lg:items-center lg:gap-x-2">
       <div className="relative lg:flex-[1_1_220px]" style={{ minWidth: 0 }}>
@@ -101,13 +105,27 @@ export function JobHeaderRow({ jobId, active, title, after, sub, customerId, sub
             <span className="lg:hidden" style={{ fontSize: 20, lineHeight: 1 }}>‹</span><span className="hidden lg:inline">{toCustomer ? "‹ Customer" : "‹ Jobs"}</span>
           </Link>
           {typeof title === "string"
-            ? <span className="sc-job-name" style={{ fontFamily: disp, fontWeight: 700, lineHeight: 1.15, color: T.ink, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</span>
-            : title}
+            ? (
+              <button onClick={() => setSwitching(true)} aria-haspopup="dialog" aria-expanded={switching} title="Switch to another job"
+                className="sc-job-switch flex items-center gap-1.5" style={{ minWidth: 0, cursor: "pointer", background: "transparent", border: "none", padding: "1px 4px", margin: "0 -4px", borderRadius: 4 }}>
+                <span className="sc-job-name" style={{ fontFamily: disp, fontWeight: 700, lineHeight: 1.15, color: T.ink, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</span>
+                <SwitchChevron />
+              </button>
+            )
+            : <>
+              {title}
+              {/* The Budget's name is typed in place, so the switcher is the ▾ beside it. */}
+              <button onClick={() => setSwitching(true)} aria-haspopup="dialog" aria-expanded={switching} aria-label="Switch to another job" title="Switch to another job"
+                className="sc-job-switch shrink-0 flex items-center justify-center" style={{ width: 24, height: 24, borderRadius: 4, cursor: "pointer", background: "transparent", border: "none" }}>
+                <SwitchChevron />
+              </button>
+            </>}
           {after}
         </div>
         {sub && <div className="text-center lg:text-left" style={{ fontSize: 11, color: T.ink3, overflowWrap: "anywhere", marginTop: 1 }}>{sub}</div>}
       </div>
       <div className="flex justify-center shrink-0 lg:ml-auto"><JobTabs jobId={jobId} active={active} subnav={subnav} /></div>
+      <JobSwitcher open={switching} onClose={() => setSwitching(false)} jobId={jobId} href={viewHref} />
     </div>
   );
 }

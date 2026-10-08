@@ -319,6 +319,13 @@ export function PriceBook({ pick }: { pick?: PricePick } = {}) {
       </div>
       {tab === "cards" && <>
         <div style={{ flex: 1, minWidth: 180, maxWidth: 360 }}><SearchBubble value={q} onChange={setQ} autoFocus={false} placeholder="Find: 3000, rebar, Angelle, item #…" /></div>
+        <label className="flex items-center gap-1.5" style={{ fontSize: F.xs, color: T.ink2 }}>
+          <input type="checkbox" checked={retired} onChange={(e) => setRetired(e.target.checked)} style={{ width: 15, height: 15, accentColor: T.chalk }} />
+          Show retired
+        </label>
+        <span style={{ fontSize: F.xs, color: T.ink3 }}>{active.length} card{active.length === 1 ? "" : "s"} · {active.filter((c) => c.unit_cost === null).length} without a cost</span>
+        {/* View and Columns sit at the right on a desktop (Coy, 2026-10-08). */}
+        <div className="flex items-center gap-2" style={{ marginLeft: wide ? "auto" : undefined }}>
         <div className="flex rounded overflow-hidden" role="tablist" aria-label="View" style={{ border: `1px solid ${T.hair}` }}>
           {(["group", "vendor"] as const).map((v) => (
             <button key={v} role="tab" aria-selected={view === v} onClick={() => setView(v)} className="px-2.5"
@@ -327,10 +334,6 @@ export function PriceBook({ pick }: { pick?: PricePick } = {}) {
             </button>
           ))}
         </div>
-        <label className="flex items-center gap-1.5" style={{ fontSize: F.xs, color: T.ink2 }}>
-          <input type="checkbox" checked={retired} onChange={(e) => setRetired(e.target.checked)} style={{ width: 15, height: 15, accentColor: T.chalk }} />
-          Show retired
-        </label>
         {wide && (
           <div className="relative">
             <button onClick={() => setColMenu((m) => !m)} aria-expanded={colMenu} className="rounded px-2.5"
@@ -338,7 +341,7 @@ export function PriceBook({ pick }: { pick?: PricePick } = {}) {
               Columns{hiddenCols.length ? ` · ${hiddenCols.length} hidden` : ""} ▾
             </button>
             {colMenu && (
-              <div className="absolute left-0 z-20 mt-1 rounded py-1" style={{ background: T.card, border: `1px solid ${T.hair}`, boxShadow: "0 8px 24px rgba(10,14,18,.14)", width: 220 }}>
+              <div className="absolute right-0 z-20 mt-1 rounded py-1" style={{ background: T.card, border: `1px solid ${T.hair}`, boxShadow: "0 8px 24px rgba(10,14,18,.14)", width: 220 }}>
                 {COLS.map((col) => (
                   <label key={col.k} className="flex items-center gap-2 px-3 py-1" style={{ fontSize: F.sm, color: col.k === "item" ? T.ink3 : T.ink }}>
                     <input type="checkbox" checked={!hiddenCols.includes(col.k)} disabled={col.k === "item"}
@@ -353,7 +356,7 @@ export function PriceBook({ pick }: { pick?: PricePick } = {}) {
             )}
           </div>
         )}
-        <span style={{ fontSize: F.xs, color: T.ink3 }}>{active.length} card{active.length === 1 ? "" : "s"} · {active.filter((c) => c.unit_cost === null).length} without a cost</span>
+        </div>
       </>}
       </div>
 

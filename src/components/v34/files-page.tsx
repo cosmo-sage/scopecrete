@@ -24,10 +24,10 @@ import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { T, F, disp, eyebrow, clip, relTime, nums } from "@/lib/v34/tokens";
 import { Drawer, MenuButton, PageHeader, SearchBubble, SearchToggle, Segmented } from "@/components/v34/primitives";
-import { FileDetails, fileSub, type FileRow } from "@/components/v34/files-panel";
+import { FileDetails, fileSub, patchFile, type FileRow } from "@/components/v34/files-panel";
 import { EmailList } from "@/components/v34/email-sheet";
 import { useWide } from "@/lib/v34/use-wide";
-import { CATEGORY_LABEL, sizeLabel, type Category } from "@/lib/files";
+import { CATEGORIES, CATEGORY_LABEL, sizeLabel } from "@/lib/files";
 import { EMPTY_FILTER, FILE_KINDS, FILE_SOURCES, SINCE_DAYS, activeChips, filterQuery, readFilter, type FileFilter } from "@/lib/files-filter";
 import { CATEGORY_FOLDERS, activeFolder, byMonth, folderPatch, isPhotosView, sameFolder, storageLabel, type Folder } from "@/lib/files-view";
 
@@ -81,6 +81,16 @@ export function FilesPage({ fixed, embedded, extra }: { fixed?: Partial<FileFilt
   }, []);
   const setPreview = (on: boolean) => { setPreviewState(on); try { localStorage.setItem("sc:files-preview", on ? "1" : "0"); } catch { /* storage off */ } };
   const pickFile = (f: FileRow) => { setOpen(f); setPreview(true); };
+  const [saveErr, setSaveErr] = useState<string | null>(null);
+  /** A file changed from the list or the preview's header (its name, its kind). */
+  const saveFile = async (id: string, patch: Record<string, unknown>) => {
+    setSaveErr(null);
+    try {
+      const nf = await patchFile(id, patch);
+      setFiles((a) => (a ?? []).map((x) => (x.id === nf.id ? { ...x, ...nf } : x)));
+      setOpen((o) => (o && o.id === nf.id ? nf : o));
+    } catch (e) { setSaveErr(e instanceof Error ? e.message : String(e)); }
+  };
   const [emailParam, setEmailParam] = useState<string | null>(null);
   // Names seen so far, so a filter's list doesn't shrink to the one chosen.
   const [jobNames, setJobNames] = useState<Record<string, string>>({});
@@ -236,27 +246,40 @@ export function FilesPage({ fixed, embedded, extra }: { fixed?: Partial<FileFilt
         : <span style={{ fontFamily: disp, fontSize: F.xs, fontWeight: 700, color: f.kind === "pdf" ? T.red : T.ink2 }}>{f.kind === "pdf" ? "PDF" : f.kind.toUpperCase()}</span>}
     </span>
   );
-  const grid = "40px minmax(0,1fr) minmax(0,190px) 64px 56px";
+  const grid = "40px minmax(0,1fr) 128px minmax(0,190px) 64px 56px";
+  /** The file's kind, changed right in the list (Coy, 2026-10-08: "That should be
+   *  in the details in the file list"); it sits in a row that opens the file, so
+   *  its clicks and keys stay with the select. */
+  const typePick = (f: Row) => (
+    <select value={f.category ?? ""} aria-label={`What ${f.name} is`} title="What it is"
+      onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}
+      onChange={(e) => void saveFile(f.id, { category: e.target.value || null })}
+      style={{ height: 26, maxWidth: "100%", border: `1px solid ${T.hairSoft}`, borderRadius: 4, background: T.card, color: T.ink2, fontSize: F.xs, padding: "0 4px", cursor: "pointer" }}>
+      <option value="">File</option>
+      {CATEGORIES.map((c) => <option key={c} value={c}>{CATEGORY_LABEL[c]}</option>)}
+    </select>
+  );
+  const rowKeys = (f: Row) => (e: React.KeyboardEvent) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pickFile(f); } };
   const fileRow = (f: Row, i: number) => {
     const w = where(f);
-    const kindLabel = f.category ? CATEGORY_LABEL[f.category as Category] : "File";
     const matched = f.matched && f.matched !== "words" ? f.matched : null;
     if (wide) return (
-      <button key={f.id} onClick={() => pickFile(f)} className="w-full text-left items-center gap-3 px-3 py-2"
-        style={{ display: "grid", gridTemplateColumns: grid, borderTop: i ? `1px solid ${T.hairSoft}` : "none", background: "transparent", cursor: "pointer" }}>
+      <div key={f.id} role="button" tabIndex={0} onClick={() => pickFile(f)} onKeyDown={rowKeys(f)} className="w-full text-left items-center gap-3 px-3 py-2"
+        style={{ display: "grid", gridTemplateColumns: grid, borderTop: i ? `1px solid ${T.hairSoft}` : "none", background: open?.id === f.id && preview ? T.hivizDim : "transparent", cursor: "pointer" }}>
         {thumb(f, 40)}
         <span style={{ minWidth: 0 }}>
           <span className="block" style={{ fontSize: F.sm, fontWeight: 600, color: T.ink, ...clip }}>{f.name}</span>
-          <span className="block" style={{ fontSize: F.xs, color: T.ink3, ...clip }}>{kindLabel}{f.summary ? ` · ${f.summary}` : ""}</span>
+          {f.summary && <span className="block" style={{ fontSize: F.xs, color: T.ink3, ...clip }}>{f.summary}</span>}
           {matched && <span className="block" style={{ fontSize: F.xs, color: T.hivizText, ...clip }}>Matched: {matched}</span>}
         </span>
+        <span style={{ minWidth: 0 }}>{typePick(f)}</span>
         <span style={{ fontSize: F.xs, color: w ? T.ink2 : T.ink3, ...clip }}>{w || (!f.job_id && !f.contact_id ? "Unfiled" : "")}</span>
         <span style={{ fontSize: F.xs, color: T.ink3, textAlign: "right", ...nums }}>{f.byte_size ? sizeLabel(f.byte_size) : ""}</span>
         <span style={{ fontSize: F.xs, color: T.ink3, textAlign: "right", ...nums }}>{relTime(f.created_at)}</span>
-      </button>
+      </div>
     );
     return (
-      <button key={f.id} onClick={() => pickFile(f)} className="w-full text-left flex items-center gap-3 px-3 py-2"
+      <div key={f.id} role="button" tabIndex={0} onClick={() => pickFile(f)} onKeyDown={rowKeys(f)} className="w-full text-left flex items-center gap-3 px-3 py-2"
         style={{ borderTop: i ? `1px solid ${T.hairSoft}` : "none", background: "transparent", cursor: "pointer" }}>
         {thumb(f, 40)}
         <span style={{ flex: 1, minWidth: 0 }}>
@@ -264,15 +287,17 @@ export function FilesPage({ fixed, embedded, extra }: { fixed?: Partial<FileFilt
             <span style={{ fontSize: F.sm, fontWeight: 600, color: T.ink, ...clip, flex: 1, minWidth: 0 }}>{f.name}</span>
             <span style={{ fontSize: F.xs, color: T.ink3, flexShrink: 0 }}>{relTime(f.created_at)}</span>
           </span>
-          <span className="block" style={{ fontSize: F.xs, color: T.ink2, ...clip }}>
-            {kindLabel}
-            {w ? ` · ${w}` : !f.job_id && !f.contact_id ? " · unfiled" : ""}
-            {f.byte_size ? ` · ${sizeLabel(f.byte_size)}` : ""}
+          <span className="flex items-center gap-1.5" style={{ fontSize: F.xs, color: T.ink2, minWidth: 0 }}>
+            <span style={{ flexShrink: 0 }}>{typePick(f)}</span>
+            <span style={{ ...clip, minWidth: 0 }}>
+              {w ? w : !f.job_id && !f.contact_id ? "unfiled" : ""}
+              {f.byte_size ? `${w || (!f.job_id && !f.contact_id) ? " · " : ""}${sizeLabel(f.byte_size)}` : ""}
+            </span>
           </span>
           {f.summary && <span className="block" style={{ fontSize: F.xs, color: T.ink3, ...clip }}>{f.summary}</span>}
           {matched && <span className="block" style={{ fontSize: F.xs, color: T.hivizText, ...clip }}>Matched: {matched}</span>}
         </span>
-      </button>
+      </div>
     );
   };
   const skeleton = (h: number) => [1, 2, 3].map((i) => <div key={i} className="animate-pulse" style={{ height: h, borderTop: i > 1 ? `1px solid ${T.hairSoft}` : "none", background: T.hairSoft }} />);
@@ -280,6 +305,16 @@ export function FilesPage({ fixed, embedded, extra }: { fixed?: Partial<FileFilt
   const search = (
     <SearchBubble value={q} onChange={(v) => { setQ(v); if (fileParam) clearFile(); }} onClose={() => setSearching(false)}
       placeholder={photos ? "Search photos — words, or a name" : "Search files — words in a file, or a name: Wilson, Angelle…"} />
+  );
+
+  /** The file's name at the top of the preview is where it is renamed (Coy,
+   *  2026-10-08): it reads as the title, and a tap edits it; Enter or leaving saves. */
+  const nameEdit = (f: FileRow, look: React.CSSProperties) => (
+    <input key={`name-${f.id}-${f.name}`} defaultValue={f.name} aria-label="File name" title="Tap to rename" maxLength={200}
+      onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") { e.currentTarget.value = f.name; e.currentTarget.blur(); } }}
+      onBlur={(e) => { const v = e.target.value.trim(); if (!v) e.target.value = f.name; else if (v !== f.name) void saveFile(f.id, { name: v }); }}
+      className="sc-name-edit"
+      style={{ ...look, width: "100%", minWidth: 0, background: "transparent", border: "1px solid transparent", borderRadius: 4, padding: "1px 4px", margin: "0 -5px", textOverflow: "ellipsis" }} />
   );
 
   const details = (f: FileRow) => (
@@ -421,7 +456,7 @@ export function FilesPage({ fixed, embedded, extra }: { fixed?: Partial<FileFilt
           {!photos && cat !== "proposal" && cat !== "email" && <div className="rounded overflow-hidden" style={panel}>
             {wide && files && files.length > 0 && (
               <div className="items-center gap-3 px-3 py-1.5" style={{ display: "grid", gridTemplateColumns: grid, ...eyebrow, borderBottom: `1px solid ${T.hairSoft}` }}>
-                <span /><span>Name</span><span>Filed on</span><span style={{ textAlign: "right" }}>Size</span><span style={{ textAlign: "right" }}>Added</span>
+                <span /><span>Name</span><span>Type</span><span>Filed on</span><span style={{ textAlign: "right" }}>Size</span><span style={{ textAlign: "right" }}>Added</span>
               </div>
             )}
             {files === null && !err && skeleton(56)}
@@ -451,8 +486,9 @@ export function FilesPage({ fixed, embedded, extra }: { fixed?: Partial<FileFilt
               style={{ position: "absolute", left: -1, top: 0, bottom: 0, width: 8, cursor: "col-resize", zIndex: 2, touchAction: "none" }} />
             <div className="flex items-start gap-2 px-4 py-2.5" style={{ borderBottom: `1px solid ${T.hairSoft}` }}>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontFamily: disp, fontSize: F.md, fontWeight: 600, ...clip }}>{open ? open.name : "Preview"}</div>
-                <div style={{ fontSize: F.xs, color: T.ink3, ...clip }}>{open ? fileSub(open) : "Pick a file to see it here."}</div>
+                {open ? nameEdit(open, { fontFamily: disp, fontSize: F.md, fontWeight: 600 }) : <div style={{ fontFamily: disp, fontSize: F.md, fontWeight: 600 }}>Preview</div>}
+                <div style={{ fontSize: F.xs, color: T.ink3, ...clip }}>{open ? fileSub(open, true) : "Pick a file to see it here."}</div>
+                {saveErr && <div style={{ fontSize: F.xs, color: T.red }}>{saveErr}</div>}
               </div>
               <button onClick={() => setPreview(false)} aria-label="Close the preview" style={{ fontSize: 20, lineHeight: 1, color: T.ink3, cursor: "pointer", padding: "0 4px" }}>×</button>
             </div>
@@ -472,10 +508,10 @@ export function FilesPage({ fixed, embedded, extra }: { fixed?: Partial<FileFilt
             <span aria-hidden="true" style={{ color: T.ink3 }}>›</span>
             <button onClick={() => setPreview(false)} style={{ color: T.chalk, cursor: "pointer", flexShrink: 1, minWidth: 0, ...clip }}>{folderName}</button>
             <span aria-hidden="true" style={{ color: T.ink3 }}>›</span>
-            <span style={{ color: T.ink, fontWeight: 600, flex: 1, minWidth: 0, ...clip }}>{open.name}</span>
+            <span style={{ flex: 1, minWidth: 0 }}>{nameEdit(open, { color: T.ink, fontWeight: 600, fontSize: F.sm })}</span>
             <button onClick={() => setPreview(false)} aria-label="Close" style={{ fontSize: 22, lineHeight: 1, color: T.ink3, cursor: "pointer", padding: "0 4px" }}>×</button>
           </nav>
-          <div style={{ fontSize: F.xs, color: T.ink3, padding: "6px 16px 0" }}>{fileSub(open)}</div>
+          <div style={{ fontSize: F.xs, color: saveErr ? T.red : T.ink3, padding: "6px 16px 0" }}>{saveErr ?? fileSub(open, true)}</div>
           <div style={{ flex: 1, overflowY: "auto" }}>{details(open)}</div>
         </div>
       )}

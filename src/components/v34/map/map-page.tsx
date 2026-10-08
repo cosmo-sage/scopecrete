@@ -278,7 +278,6 @@ export function MapPage() {
   const [plain, setPlain] = useState<{ lat: number; lng: number; label: string } | null>(null);
   const [layersOpen, setLayersOpen] = useState(false);
   const [legendOpen, setLegendOpen] = useState(true);
-  const [banner, setBanner] = useState(true);
   const [clip, setClip] = useState<Clip>(null);
   const [saved, setSaved] = useState<Saved[]>([]);
   const [toast, setToast] = useState<Saved | null>(null);
@@ -343,13 +342,13 @@ export function MapPage() {
   const frame = useMemo(() => {
     if (!clip || !size.w) return null;
     if (wide) {
-      const w = Math.min(720, size.w - (clip.step === "job" ? 440 : 120)), h = Math.min(520, size.h - 150);
+      const w = Math.min(960, size.w - (clip.step === "job" ? 440 : 80)), h = Math.min(680, size.h - 110);
       const cx = clip.step === "job" ? (size.w - 400) / 2 : size.w / 2;
       return { x: cx - w / 2, y: (size.h - h) / 2, w, h };
     }
-    const w = size.w - 56;
-    const h = clip.step === "job" ? Math.min(200, size.h * 0.3) : Math.min(296, size.h - 230);
-    return { x: 28, y: clip.step === "job" ? 64 : Math.max(64, (size.h - h) / 2 - 20), w, h };
+    const w = size.w - 32;
+    const h = clip.step === "job" ? Math.min(220, size.h * 0.32) : Math.min(360, size.h - 210);
+    return { x: 16, y: clip.step === "job" ? 64 : Math.max(64, (size.h - h) / 2 - 20), w, h };
   }, [clip, size, wide]);
   // The frame's centre on the ground (the clip's centre).
   const frameCentre = useMemo(() => {
@@ -464,7 +463,6 @@ export function MapPage() {
           sub="Every job and vendor with an address. Frame any spot on satellite and send it to a job's Takeoffs to measure."
           menu={<MenuButton onClick={() => setLayersOpen(true)} label="Layers" />}
           actions={<div className="flex items-center gap-2">
-            {wide && data && data.unmapped.customers > 0 && <Link href="/dashboard/customers" style={{ ...btn(), display: "inline-flex", alignItems: "center", textDecoration: "none" }}>Add {data.unmapped.customers} missing addresses</Link>}
             {!wide && <button type="button" onClick={() => setLayersOpen(true)} style={btn()}>Layers</button>}
             <button type="button" onClick={() => startClip()} style={btn(true)}>{wide ? "Clip for takeoff" : "Clip"}</button>
           </div>} />
@@ -485,17 +483,10 @@ export function MapPage() {
         <div className="flex-1 relative" style={{ minWidth: 0 }}>
           <MapView view={view} onView={(v) => { setView(v); }} mode={clip ? "sat" : mode} overlay={overlay} onSize={setSize}
             onBackgroundTap={() => { if (!clip) setSel(null); }}>
-            {/* Search, banner (top left) */}
+            {/* Search (top left) */}
             {!clip && (
               <div className="absolute flex flex-col gap-2" style={{ left: 10, top: 10, right: wide ? undefined : 10, width: wide ? 440 : undefined, maxWidth: wide ? "calc(100% - 200px)" : undefined, zIndex: 10 }}>
                 <SearchBox pins={data?.pins ?? []} view={view} onPin={goPin} onAddress={(a) => { setSel(null); setPlain(a); setView({ lat: a.lat, lng: a.lng, zoom: 17 }); }} />
-                {banner && data && data.unmapped.customers > 0 && (
-                  <div {...stop} className="flex items-center gap-2 rounded" style={{ minHeight: 34, padding: "4px 6px 4px 10px", background: T.hivizDim, border: `1px solid ${T.hivizSoft}`, fontSize: 12.5, color: T.ink }}>
-                    <span style={{ flex: 1, minWidth: 0 }}>{data.unmapped.customers} customer{data.unmapped.customers === 1 ? " has" : "s have"} no address yet</span>
-                    <Link href="/dashboard/customers" style={{ color: T.hivizText, fontWeight: 600, whiteSpace: "nowrap" }}>Add them ›</Link>
-                    <button type="button" onClick={() => setBanner(false)} aria-label="Hide" style={{ width: 24, height: 24, color: T.ink2, cursor: "pointer" }}>×</button>
-                  </div>
-                )}
                 {err && <div {...stop} className="rounded" style={{ padding: "6px 10px", background: T.card, color: T.red, fontSize: 12.5 }}>{err} <button onClick={() => void load()} style={{ color: T.chalk, fontWeight: 600 }}>Try again</button></div>}
                 {data && !data.stored && <div {...stop} className="rounded" style={{ padding: "4px 10px", background: T.card, color: T.ink3, fontSize: 11.5 }}>Addresses are looked up on each visit until migration 090 is applied.</div>}
                 {!wide && <div {...stop} className="flex items-start justify-end gap-2" style={{ alignSelf: "flex-end" }}>{mapControls}</div>}

@@ -290,9 +290,17 @@ type ViewerProps = {
   onClose: () => void; onSaved: (f: FileRow) => void; onDeleted: (id: string) => void;
 };
 
-/** The one-line description under a file's name. */
-export function fileSub(f: FileRow) {
-  return `${f.category ? CATEGORY_LABEL[f.category] : "File"} · ${sizeLabel(f.byte_size)}${f.page_count ? ` · ${f.page_count} pages` : ""}`;
+/** The one-line description under a file's name; `noType` leaves the kind out
+ *  (the Files page's preview — its kind is in the file list, Coy 2026-10-08). */
+export function fileSub(f: FileRow, noType?: boolean) {
+  const size = `${sizeLabel(f.byte_size)}${f.page_count ? ` · ${f.page_count} pages` : ""}`;
+  return noType ? size : `${f.category ? CATEGORY_LABEL[f.category] : "File"} · ${size}`;
+}
+
+/** Save a change to one file (name, kind, area …) and get the row back. */
+export async function patchFile(id: string, patch: Record<string, unknown>): Promise<FileRow> {
+  const b = await call(`/api/files/${id}`, "PATCH", patch);
+  return b.file as FileRow;
 }
 
 export function FileViewer(p: ViewerProps) {
@@ -306,7 +314,9 @@ export function FileViewer(p: ViewerProps) {
 }
 
 /** A file's preview and details, drawn in a sheet (FileViewer) or in the
- *  Files page's own preview panel (Coy, 2026-10-07). */
+ *  Files page's own preview panel (Coy, 2026-10-07). `big` is that panel: its
+ *  name is edited in the panel's header and its kind in the file list, and it
+ *  has no Note (Coy, 2026-10-08), so those three fields are left out. */
 export function FileDetails({ f, sections, onSaved, onDeleted, links, big }: ViewerProps & { f: FileRow; big?: boolean }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -355,15 +365,17 @@ export function FileDetails({ f, sections, onSaved, onDeleted, links, big }: Vie
           )}
         </div>
 
-        <label className="block"><span style={eyebrow}>Name</span>
-          <input defaultValue={f.name} key={`n${f.id}`} style={field} onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== f.name) void save({ name: v }); }} />
-        </label>
-        <label className="block"><span style={eyebrow}>File type</span>
-          <select value={f.category ?? ""} onChange={(e) => void save({ category: e.target.value || null })} style={field} disabled={busy}>
-            <option value="">—</option>
-            {CATEGORIES.map((c) => <option key={c} value={c}>{CATEGORY_LABEL[c]}</option>)}
-          </select>
-        </label>
+        {!big && <>
+          <label className="block"><span style={eyebrow}>Name</span>
+            <input defaultValue={f.name} key={`n${f.id}`} style={field} onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== f.name) void save({ name: v }); }} />
+          </label>
+          <label className="block"><span style={eyebrow}>File type</span>
+            <select value={f.category ?? ""} onChange={(e) => void save({ category: e.target.value || null })} style={field} disabled={busy}>
+              <option value="">—</option>
+              {CATEGORIES.map((c) => <option key={c} value={c}>{CATEGORY_LABEL[c]}</option>)}
+            </select>
+          </label>
+        </>}
         {sections && sections.length > 0 && (
           <label className="block"><span style={eyebrow}>Area</span>
             <select value={f.section_id ?? ""} onChange={(e) => void save({ section_id: e.target.value || null })} style={field} disabled={busy}>
@@ -372,11 +384,11 @@ export function FileDetails({ f, sections, onSaved, onDeleted, links, big }: Vie
             </select>
           </label>
         )}
-        <label className="block"><span style={eyebrow}>Note</span>
+        {!big && <label className="block"><span style={eyebrow}>Note</span>
           <textarea defaultValue={f.note ?? ""} key={`t${f.id}`} rows={2} maxLength={2000}
             style={{ ...field, height: "auto", padding: "6px 8px", resize: "none" }}
             onBlur={(e) => { if ((e.target.value.trim() || null) !== (f.note ?? null)) void save({ note: e.target.value }); }} />
-        </label>
+        </label>}
         {f.job_id && (
           <label className="flex items-center gap-2" style={{ fontSize: F.sm }}>
             <input type="checkbox" checked={f.show_on_proposal} disabled={busy} onChange={(e) => void save({ show_on_proposal: e.target.checked })}

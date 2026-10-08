@@ -3751,8 +3751,13 @@ expected start date per quoted job before it means anything. Add the field.
   the page says so.
   **Clip for takeoff** (the header's button; the phone's floating one; Send to
   Takeoffs on a card): satellite, a frame (dimmed outside, thirds, the scale
-  "1 in ≈ 41 ft · zoom 20", a 50 ft bar, "imagery date not known"), Use this
-  frame, then **Which job?** — nearest first, search, or **+ New job here**
+  "1 in ≈ 41 ft · zoom 20", a 50 ft bar, "imagery date not known"), **Use this
+  frame** — which saves the clip there and then (its centre, zoom and size;
+  the map is held still after it, so the job list can't change what was
+  framed — Coy, 2026-10-08: on a phone the frame shrank for the list and cut
+  off the driveway) — then **Which job?** (on a phone the whole screen under
+  the clip bar, the saved frame as a thumbnail with its size in feet and
+  ‹ Change the frame) — nearest first, search, or **+ New job here**
   (the street from Mapbox reverse geocoding, `GET /api/aerial/suggest?at=`,
   through `POST /api/jobs`). **Put it in Takeoffs** posts `/api/jobs/[id]/aerial`
   as the old tab did, now with the frame's size (`w`, `h` — 1,150 to 2,560

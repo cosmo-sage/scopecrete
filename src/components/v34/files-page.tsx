@@ -27,7 +27,7 @@ import { Drawer, MenuButton, PageHeader, SearchBubble, SearchToggle, Segmented }
 import { FileDetails, fileSub, patchFile, type FileRow } from "@/components/v34/files-panel";
 import { EmailList } from "@/components/v34/email-sheet";
 import { useWide } from "@/lib/v34/use-wide";
-import { CATEGORIES, CATEGORY_LABEL, sizeLabel, type Category } from "@/lib/files";
+import { CATEGORIES, CATEGORY_LABEL, sizeLabel } from "@/lib/files";
 import { EMPTY_FILTER, FILE_KINDS, FILE_SOURCES, SINCE_DAYS, activeChips, filterQuery, readFilter, type FileFilter } from "@/lib/files-filter";
 import { CATEGORY_FOLDERS, activeFolder, byMonth, folderPatch, isPhotosView, sameFolder, storageLabel, type Folder } from "@/lib/files-view";
 

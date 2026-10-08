@@ -21,7 +21,7 @@ import { PageHeader, MenuButton, SlideDrawer } from "@/components/v34/primitives
 import { useWide } from "@/lib/v34/use-wide";
 import {
   LAYERS, LAYER, DEFAULT_FILTERS, cleanFilters, visiblePins, layerCounts, cities, clusterPins, clusterSize,
-  scaleReadout, feetPerPixel, clipPlan, nearestJobs, distanceLabel, fromWorldPx, worldPx,
+  scaleReadout, feetPerPixel, clipPlan, nearestJobs, distanceLabel, fromWorldPx, worldPx, TILE,
   type LayerId, type MapFilters, type MapPin, type MapPinsResponse, type PickJob,
 } from "@/lib/map";
 import type { AddressSuggestion } from "@/lib/aerial";
@@ -261,7 +261,9 @@ function SearchBox({ pins, view, onAddress, onPin }: {
 
 /* -------------------------------------------------------------- page */
 
-type Clip = null | { step: "frame" | "job"; jobId: string | null };
+// What "Use this frame" saved: the ground at the frame's centre, the whole zoom and pixel size the sheet is made at, and the zoom it was framed at.
+type Taken = { c: { lat: number; lng: number }; z: number; w: number; h: number; zoom: number };
+type Clip = null | { step: "frame" | "job"; jobId: string | null; taken?: Taken };
 type Saved = { jobId: string; jobTitle: string; sheetId: string; c: { lat: number; lng: number }; z: number; w: number; h: number; n: number };
 
 export function MapPage() {
@@ -282,7 +284,7 @@ export function MapPage() {
   const [saved, setSaved] = useState<Saved[]>([]);
   const [toast, setToast] = useState<Saved | null>(null);
   const fitted = useRef(false);
-  // The ground at the frame's centre when "Use this frame" is tapped, kept centred as the frame moves for the job list.
+  // Desktop: the ground at the frame's centre when "Use this frame" is tapped, kept centred as the frame moves aside for the job list.
   const pendingCentre = useRef<{ lat: number; lng: number } | null>(null);
 
   // Filters remembered on the device (the design's sc.map.filters).
@@ -341,14 +343,14 @@ export function MapPage() {
   // The clip frame: fixed on the screen, the map moves under it.
   const frame = useMemo(() => {
     if (!clip || !size.w) return null;
+    // The frame keeps its size on the job step (what was framed is what is saved); a desktop slides it left of the job list.
     if (wide) {
-      const w = Math.min(960, size.w - (clip.step === "job" ? 440 : 80)), h = Math.min(680, size.h - 110);
-      const cx = clip.step === "job" ? (size.w - 400) / 2 : size.w / 2;
+      const w = Math.min(960, size.w - 80), h = Math.min(680, size.h - 110);
+      const cx = clip.step === "job" ? Math.max(w / 2 + 16, Math.min(size.w / 2, size.w - 412 - w / 2)) : size.w / 2;
       return { x: cx - w / 2, y: (size.h - h) / 2, w, h };
     }
-    const w = size.w - 32;
-    const h = clip.step === "job" ? Math.min(220, size.h * 0.32) : Math.min(360, size.h - 210);
-    return { x: 16, y: clip.step === "job" ? 64 : Math.max(64, (size.h - h) / 2 - 20), w, h };
+    const w = size.w - 32, h = Math.min(360, size.h - 210);
+    return { x: 16, y: Math.max(64, (size.h - h) / 2 - 20), w, h };
   }, [clip, size, wide]);
   // The frame's centre on the ground (the clip's centre).
   const frameCentre = useMemo(() => {
@@ -357,10 +359,12 @@ export function MapPage() {
     return fromWorldPx(c.x + frame.x + frame.w / 2 - size.w / 2, c.y + frame.y + frame.h / 2 - size.h / 2, view.zoom);
   }, [frame, view, size]);
   const plan = frame ? clipPlan(frame.w, frame.h, view.zoom) : null;
-  // Moving to the job step shrinks the frame (phone) or shifts it (desktop): keep the same ground centred in it.
-  const toJobStep = () => {
-    if (!frame || !frameCentre) return;
-    setClip((c) => (c ? { ...c, step: "job" } : c));
+  // "Use this frame" saves the clip there and then; the job list only picks where it goes.
+  const useFrame = () => {
+    if (!frameCentre || !plan) return;
+    const taken: Taken = { c: frameCentre, z: plan.z, w: plan.w, h: plan.h, zoom: view.zoom };
+    if (wide) pendingCentre.current = frameCentre;
+    setClip((c) => (c ? { ...c, step: "job", taken } : c));
   };
   useEffect(() => {
     if (!clip || clip.step !== "job" || !frame || !pendingCentre.current) return;
@@ -481,7 +485,7 @@ export function MapPage() {
           </aside>
         )}
         <div className="flex-1 relative" style={{ minWidth: 0 }}>
-          <MapView view={view} onView={(v) => { setView(v); }} mode={clip ? "sat" : mode} overlay={overlay} onSize={setSize}
+          <MapView view={view} onView={(v) => { if (clip?.step !== "job") setView(v); }} mode={clip ? "sat" : mode} overlay={overlay} onSize={setSize}
             onBackgroundTap={() => { if (!clip) setSel(null); }}>
             {/* Search (top left) */}
             {!clip && (
@@ -523,10 +527,10 @@ export function MapPage() {
               </div>
             )}
 
-            {clip && frame && <ClipFrame frame={frame} view={view} size={size} plan={plan} centre={frameCentre} step={clip.step} wide={wide}
-              onUse={() => { pendingCentre.current = frameCentre; toJobStep(); }} />}
-            {clip && clip.step === "job" && frameCentre && plan && (
-              <JobPicker wide={wide} jobs={data?.jobs ?? []} at={frameCentre} pre={clip.jobId} plan={plan} view={view}
+            {clip && frame && (wide || clip.step === "frame") && <ClipFrame frame={frame} view={view} size={size} plan={plan} centre={frameCentre} step={clip.step} wide={wide}
+              onUse={useFrame} />}
+            {clip && clip.step === "job" && clip.taken && (
+              <JobPicker wide={wide} jobs={data?.jobs ?? []} taken={clip.taken} pre={clip.jobId} onBack={() => setClip({ ...clip, step: "frame" })}
                 onDone={(s) => {
                   setSaved((l) => [...l, s]); setToast(s); setClip(null); setMode("sat");
                   if (clipJob) router.replace("/dashboard/map", { scroll: false });
@@ -590,12 +594,34 @@ function ClipFrame({ frame, view, size, plan, centre, step, wide, onUse }: {
   );
 }
 
+/* ---------------------------------------------------- the saved frame */
+
+/** The frame "Use this frame" saved, drawn from its own tiles at the zoom the sheet is made at. */
+function ClipPreview({ taken, width }: { taken: Taken; width: number }) {
+  const { z, w, h } = taken, c = worldPx(taken.c.lat, taken.c.lng, z);
+  const left = c.x - w / 2, top = c.y - h / 2, k = width / w, n = 2 ** z;
+  const tiles: Array<{ key: string; x: number; y: number; l: number; t: number }> = [];
+  for (let ty = Math.max(0, Math.floor(top / TILE)); ty <= Math.min(n - 1, Math.floor((top + h) / TILE)); ty++)
+    for (let tx = Math.floor(left / TILE); tx <= Math.floor((left + w) / TILE); tx++)
+      tiles.push({ key: `${tx}/${ty}`, x: ((tx % n) + n) % n, y: ty, l: (tx * TILE - left) * k, t: (ty * TILE - top) * k });
+  return (
+    <div aria-label="The saved frame" role="img" style={{ position: "relative", width, height: Math.round(h * k), overflow: "hidden", flexShrink: 0, background: "#2b2e2b", borderRadius: 3, border: "2px solid #fff", boxShadow: "0 0 0 1px rgba(0,0,0,.2)" }}>
+      {tiles.map((tl) => (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img key={tl.key} src={`/api/aerial/tile?p=mapbox&z=${z}&x=${tl.x}&y=${tl.y}`} alt="" draggable={false}
+          style={{ position: "absolute", left: tl.l, top: tl.t, width: TILE * k + 0.5, height: TILE * k + 0.5 }} />
+      ))}
+    </div>
+  );
+}
+
 /* ---------------------------------------------------------- which job */
 
-function JobPicker({ wide, jobs, at, pre, plan, view, onDone }: {
-  wide: boolean; jobs: PickJob[]; at: { lat: number; lng: number }; pre: string | null; plan: { z: number; w: number; h: number }; view: View;
+function JobPicker({ wide, jobs, taken, pre, onBack, onDone }: {
+  wide: boolean; jobs: PickJob[]; taken: Taken; pre: string | null; onBack: () => void;
   onDone: (s: Saved) => void;
 }) {
+  const at = taken.c, plan = taken;
   const near = useMemo(() => nearestJobs(jobs, at), [jobs, at]);
   const [pick, setPick] = useState<string | null>(() => pre ?? (near[0]?.mi != null && near[0].mi < 0.03 ? near[0].id : null));
   const [q, setQ] = useState("");
@@ -635,13 +661,24 @@ function JobPicker({ wide, jobs, at, pre, plan, view, onDone }: {
     finally { setBusy(null); }
   };
 
-  const fpp = feetPerPixel(at.lat, view.zoom);
+  const fpp = feetPerPixel(at.lat, taken.zoom);
+  const ftW = Math.round(plan.w * feetPerPixel(at.lat, plan.z)), ftH = Math.round(plan.h * feetPerPixel(at.lat, plan.z));
   const radio = (on: boolean, dashed?: boolean): React.CSSProperties => ({ width: 18, height: 18, borderRadius: 999, flexShrink: 0, border: `2px ${dashed ? "dashed" : "solid"} ${on ? T.hiviz : T.hairStrong}`, boxShadow: on ? `inset 0 0 0 3px ${T.card}` : undefined, background: on ? T.hiviz : T.card });
   return (
     <div {...stop} className="absolute flex flex-col" style={wide
       ? { right: 16, top: 16, bottom: 16, width: 380, zIndex: 12, background: T.card, borderRadius: 6, boxShadow: "0 10px 30px rgba(0,0,0,.3)" }
-      : { left: 0, right: 0, bottom: 0, top: 290, zIndex: 12, background: T.card, borderRadius: "12px 12px 0 0", boxShadow: "0 -8px 26px rgba(0,0,0,.25)" }}>
-      <div style={{ padding: "14px 16px 8px" }}>
+      : { inset: 0, zIndex: 12, background: T.card }}>
+      {!wide && (
+        <div className="flex items-center gap-3" style={{ padding: "10px 16px", borderBottom: `1px solid ${T.hair}`, background: T.slab }}>
+          <ClipPreview taken={taken} width={112} />
+          <div style={{ flex: 1, minWidth: 0, fontSize: 12, color: T.ink2, lineHeight: 1.35 }}>
+            <div style={{ fontSize: 13.5, fontWeight: 600, color: T.ink }}>✓ Frame saved</div>
+            <div style={nums}>{ftW} × {ftH} ft · {scaleReadout(at.lat, taken.zoom)}</div>
+            <button type="button" onClick={onBack} style={{ color: T.chalk, fontWeight: 600, fontSize: 12, marginTop: 2, cursor: "pointer" }}>‹ Change the frame</button>
+          </div>
+        </div>
+      )}
+      <div style={{ padding: wide ? "14px 16px 8px" : "10px 16px 8px" }}>
         <div style={{ fontFamily: "var(--sc-font-light, 'Inter', system-ui, sans-serif)", fontWeight: 300, fontSize: 22, color: T.ink }}>Which job?</div>
         <div style={{ fontSize: 12, color: T.ink3 }}>Nearest to this spot first</div>
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find a job" aria-label="Find a job"
@@ -672,9 +709,9 @@ function JobPicker({ wide, jobs, at, pre, plan, view, onDone }: {
         </button>
       </div>
       <div style={{ padding: "10px 16px 14px", borderTop: `1px solid ${T.hair}` }}>
-        <div className="rounded" style={{ background: T.dustyTint, color: T.dustyText, padding: "8px 10px", fontSize: 12, lineHeight: 1.4, marginBottom: 10 }}>
+        {wide ? <div className="rounded" style={{ background: T.dustyTint, color: T.dustyText, padding: "8px 10px", fontSize: 12, lineHeight: 1.4, marginBottom: 10 }}>
           A sheet named <b>Aerial</b> goes into the job&apos;s Takeoffs at 1 in ≈ {Math.round(fpp * 96)} ft, with the imagery source and &ldquo;imagery date not known&rdquo; printed in its corner. You confirm the map&apos;s scale with one tap before measuring.
-        </div>
+        </div> : <div style={{ fontSize: 11.5, color: T.ink3, lineHeight: 1.35, marginBottom: 8 }}>Goes in as an <b>Aerial</b> sheet. You confirm its scale with one tap before measuring.</div>}
         {err && <div style={{ fontSize: 12, color: T.red, marginBottom: 8 }}>{err}</div>}
         <button type="button" disabled={!pick || !!busy} onClick={() => void put()} style={{ ...btn(true), width: "100%", height: 44, fontSize: 14, opacity: !pick || busy ? 0.55 : 1 }}>
           {busy ?? "Put it in Takeoffs"}

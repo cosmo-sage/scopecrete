@@ -7,9 +7,9 @@ import Landing from "@/components/site/landing";
 import { siteFonts } from "@/components/site/fonts";
 
 export const metadata: Metadata = {
-  title: "ScopeCrete — the office manager for concrete contractors",
+  title: "ScopeCrete — AI estimating & sales desk for concrete contractors",
   description:
-    "Calls, texts and emails land in one place. Dusty reads them, sorts the people and opens the job. You price the scope on real concrete math.",
+    "Calls, texts, emails and photos land in one job thread. ScopeCrete drafts the budget and the proposal from your own pricing. You check the numbers, confirm the site and send.",
 };
 
 export default function WelcomePage() {

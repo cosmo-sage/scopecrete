@@ -116,19 +116,14 @@ function PhoneHead({ activity, work }: { activity: string; work: Work }) {
   return (
     <div style={{ flex: "none", display: "flex", flexDirection: "column", position: "relative", zIndex: 2 }}>
       <div style={{ height: 54, padding: "0 10px", display: "flex", alignItems: "center", gap: 12, backgroundColor: "var(--sc-paper)", backgroundImage: "linear-gradient(var(--sc-paper-grid) 1px,transparent 1px),linear-gradient(90deg,var(--sc-paper-grid) 1px,transparent 1px)", backgroundSize: "10px 10px", borderBottom: "1px solid var(--sc-pencil-line)", boxShadow: "0 3px 0 -2px var(--sc-pencil-line)", color: "var(--sc-pencil)" }}>
+        {/* The site's demo wears ScopeCrete's own brand (New Website package,
+            2026-10-08); in the app this spot is the org's logo. */}
         <span style={{ display: "flex", alignItems: "center", gap: 8, flex: "none" }}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/site/sacco-light.png" alt="Sacco" style={{ height: 24, width: "auto", maxWidth: 150, objectFit: "contain", display: "block" }} />
-          <span style={{ height: 24, display: "flex", alignItems: "center", gap: 5, paddingLeft: 8, borderLeft: "1px solid var(--sc-pencil-line)" }}>
-            <Emblem size={24} spin />
-            <span style={{ height: 24, display: "flex", flexDirection: "column", justifyContent: "space-between", alignItems: "flex-start" }}>
-              <span style={{ fontFamily: inter, fontWeight: 300, fontSize: 8.5, letterSpacing: ".06em", color: "var(--sc-pencil-muted)", lineHeight: 1 }}>powered by</span>
-              <span style={{ display: "inline-flex", alignItems: "baseline" }}>
-                <span style={{ fontFamily: lexend, fontWeight: 700, fontSize: 13, lineHeight: 1, letterSpacing: ".02em", paddingBottom: ".28em", marginBottom: "-.28em", marginRight: 1, color: "transparent", backgroundImage: "repeating-linear-gradient(118deg,var(--sc-hatch) 0 .9px,transparent .9px 2.1px)", WebkitBackgroundClip: "text", backgroundClip: "text", WebkitTextStroke: ".5px var(--sc-hatch-edge)" }}>scope</span>
-                <span style={{ fontFamily: inter, fontWeight: 300, fontSize: 13, lineHeight: 1, letterSpacing: "-.01em", color: "var(--sc-crete)" }}>crete</span>
-                <span style={{ fontFamily: kalam, fontSize: 8, lineHeight: 1, color: "var(--sc-pencil-muted)", marginLeft: 1 }}>.ai</span>
-              </span>
-            </span>
+          <Emblem size={24} spin />
+          <span style={{ display: "inline-flex", alignItems: "baseline" }}>
+            <span style={{ fontFamily: lexend, fontWeight: 700, fontSize: 20, lineHeight: 1, letterSpacing: ".02em", paddingBottom: ".28em", marginBottom: "-.28em", marginRight: 1, color: "transparent", backgroundImage: "repeating-linear-gradient(118deg,var(--sc-hatch) 0 .9px,transparent .9px 2.1px)", WebkitBackgroundClip: "text", backgroundClip: "text", WebkitTextStroke: ".5px var(--sc-hatch-edge)" }}>scope</span>
+            <span style={{ fontFamily: inter, fontWeight: 300, fontSize: 20, lineHeight: 1, letterSpacing: "-.01em", color: "var(--sc-crete)" }}>crete</span>
+            <span style={{ fontFamily: kalam, fontSize: 12, lineHeight: 1, color: "var(--sc-pencil-muted)", marginLeft: 1 }}>.ai</span>
           </span>
         </span>
         <span style={{ flex: 1 }} />

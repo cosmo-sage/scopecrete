@@ -106,6 +106,10 @@ export function FilesStep({ files, sheets, docPages = [], reading, onToggle, onA
 }) {
   const [view, setView] = useState<string>(initial === "sheets" && (sheets.length || docPages.length) ? (sheets.length ? "concrete" : "pages") : "files");
   const [pageAt, setPageAt] = useState<number | null>(null);
+  // A drawing opens large first, to read before measuring (Coy, 2026-10-08: "view the files
+  // large so that I can inspect and read whats on the sheets before I do the measurements");
+  // Measure › on it opens Takeoff on that sheet.
+  const [drawAt, setDrawAt] = useState<{ list: Sheet[]; i: number } | null>(null);
   const url = useMemo(() => new Map(files.map((f) => [f.id, f.url])), [files]);
   const counts = useMemo(() => {
     const c: Record<string, number> = {};
@@ -150,7 +154,7 @@ export function FilesStep({ files, sheets, docPages = [], reading, onToggle, onA
           <div className="grid gap-2.5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", alignContent: "start" }}>
             {isPages && <div style={{ gridColumn: "1 / -1", fontSize: F.xs, color: T.ink3 }}>Letter- and legal-size pages in the plan file — specs, notes, forms. Tap one to read it; drawings are the measured sheets.</div>}
             {shown.map((s, idx) => (
-              <button key={s.id} onClick={() => (isPages ? setPageAt(idx) : onOpen(s))} className="text-left rounded overflow-hidden" style={{ background: T.card, border: `1px solid ${T.hair}`, cursor: "pointer" }}>
+              <button key={s.id} onClick={() => (isPages ? setPageAt(idx) : setDrawAt({ list: shown, i: idx }))} className="text-left rounded overflow-hidden" style={{ background: T.card, border: `1px solid ${T.hair}`, cursor: "pointer" }}>
                 <div style={{ position: "relative" }}>
                   <Thumb fileId={s.file_id} url={url.get(s.file_id) ?? null} page={s.page} />
                   {CONCRETE_DISC.has(s.discipline ?? "") && <span style={{ position: "absolute", top: 5, left: 5, ...eyebrow, fontSize: 9, background: T.hiviz, color: T.onHiviz, borderRadius: 2, padding: "1px 4px" }}>Concrete</span>}
@@ -169,6 +173,8 @@ export function FilesStep({ files, sheets, docPages = [], reading, onToggle, onA
         )}
       </div>
       {pageAt !== null && <PageReader pages={docPages} files={files} start={pageAt} onClose={() => setPageAt(null)} />}
+      {drawAt && <PageReader pages={drawAt.list} files={files} start={drawAt.i} onClose={() => setDrawAt(null)}
+        onMeasure={(s) => { setDrawAt(null); onOpen(s); }} />}
     </div>
   );
 }
@@ -213,10 +219,11 @@ export function Thumb({ fileId, url, page, height = 104 }: { fileId: string; url
 }
 
 /**
- * A page that isn't a drawing, read like any PDF reader: fit to width, zoom, previous / next.
- * Nothing is measured here.
+ * A page read like any PDF reader: fit to width, zoom, drag to look around, previous / next.
+ * Nothing is measured here. For a drawing (`onMeasure`) the bar has Measure ›, which opens
+ * Takeoff on the sheet shown — a page that isn't a drawing has none.
  */
-export function PageReader({ pages, files, start, onClose }: { pages: Sheet[]; files: PlanFile[]; start: number; onClose: () => void }) {
+export function PageReader({ pages, files, start, onClose, onMeasure }: { pages: Sheet[]; files: PlanFile[]; start: number; onClose: () => void; onMeasure?: (s: Sheet) => void }) {
   const [i, setI] = useState(start);
   const [zoom, setZoom] = useState(1);
   const [fail, setFail] = useState<string | null>(null);
@@ -252,15 +259,29 @@ export function PageReader({ pages, files, start, onClose }: { pages: Sheet[]; f
       <div className="flex items-center gap-2 px-3" style={{ height: 48, background: T.card, borderBottom: `1px solid ${T.hair}` }}>
         <button onClick={onClose} style={btn} aria-label="Close">✕</button>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: F.sm, fontWeight: 600, ...clip }}>{files.find((f) => f.id === s.file_id)?.name ?? "Page"} · p.{s.page}</div>
-          <div style={{ fontSize: 10.5, color: T.ink3 }}>{i + 1} of {pages.length} pages to read · not a drawing, so nothing is measured here</div>
+          {onMeasure ? <>
+            <div style={{ fontSize: F.sm, fontWeight: 600, ...clip }}>{sheetLabel(s)}{s.title ? ` · ${s.title}` : ""}</div>
+            <div style={{ fontSize: 10.5, color: T.ink3, ...clip }}>{i + 1} of {pages.length} sheets · {files.find((f) => f.id === s.file_id)?.name ?? "Plans"} p.{s.page} · drag to look around</div>
+          </> : <>
+            <div style={{ fontSize: F.sm, fontWeight: 600, ...clip }}>{files.find((f) => f.id === s.file_id)?.name ?? "Page"} · p.{s.page}</div>
+            <div style={{ fontSize: 10.5, color: T.ink3 }}>{i + 1} of {pages.length} pages to read · not a drawing, so nothing is measured here</div>
+          </>}
         </div>
         <button onClick={() => setZoom((z) => Math.max(0.5, z / 1.25))} style={btn} aria-label="Zoom out">−</button>
-        <button onClick={() => setZoom((z) => Math.min(4, z * 1.25))} style={btn} aria-label="Zoom in">+</button>
+        <button onClick={() => setZoom((z) => Math.min(onMeasure ? 6 : 4, z * 1.25))} style={btn} aria-label="Zoom in">+</button>
         <button onClick={() => setI((n) => Math.max(0, n - 1))} disabled={i === 0} style={{ ...btn, opacity: i === 0 ? 0.4 : 1 }} aria-label="Previous page">‹</button>
         <button onClick={() => setI((n) => Math.min(pages.length - 1, n + 1))} disabled={i === pages.length - 1} style={{ ...btn, opacity: i === pages.length - 1 ? 0.4 : 1 }} aria-label="Next page">›</button>
+        {onMeasure && <button onClick={() => onMeasure(s)} style={{ ...btn, background: T.hiviz, color: T.onHiviz, border: `1px solid ${T.hiviz}`, letterSpacing: ".06em", textTransform: "uppercase" }}>Measure ›</button>}
       </div>
-      <div ref={box} className="flex-1 overflow-auto p-3" style={{ minHeight: 0 }}>
+      <div ref={box} className="flex-1 overflow-auto p-3" style={{ minHeight: 0, cursor: zoom > 1 ? "grab" : undefined }}
+        onPointerDown={(e) => {
+          // Drag to pan with a mouse; a finger already scrolls the box.
+          if (e.pointerType !== "mouse" || !box.current) return;
+          const b = box.current, x0 = e.clientX, y0 = e.clientY, l0 = b.scrollLeft, t0 = b.scrollTop;
+          const mv = (ev: PointerEvent) => { b.scrollLeft = l0 - (ev.clientX - x0); b.scrollTop = t0 - (ev.clientY - y0); };
+          const up = () => { window.removeEventListener("pointermove", mv); window.removeEventListener("pointerup", up); };
+          window.addEventListener("pointermove", mv); window.addEventListener("pointerup", up);
+        }}>
         {fail ? <div style={{ fontSize: F.sm, color: T.red }}>Couldn&apos;t open this page: {fail}</div>
           : <canvas ref={canvas} style={{ display: "block", margin: "0 auto", background: "#fff", boxShadow: "0 1px 4px rgba(0,0,0,.15)" }} />}
       </div>

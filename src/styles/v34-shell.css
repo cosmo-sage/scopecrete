@@ -508,3 +508,10 @@ html[data-alerts-open="1"] .sc-pops { display: none; }
 
 /* The Jobs table's rows light up under the pointer (Coy, 2026-10-06). */
 .sc-job-row:hover td { background: var(--sc-slab); }
+
+/* A file's name at the top of its preview is renamed in place (Coy, 2026-10-08). */
+.sc-name-edit:hover { border-color: var(--sc-hair, #ddd) !important; }
+.sc-name-edit:focus { border-color: var(--sc-hiviz, #b85a3c) !important; background: var(--sc-card, #fff) !important; outline: none; }
+/* The job's name opens the job switcher (Coy, 2026-10-08: "needs to look clickable"). */
+.sc-job-switch:hover { background: var(--sc-hiviz-dim) !important; }
+.sc-job-switch:hover .sc-job-name { text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--sc-hair-strong); }

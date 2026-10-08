@@ -24,9 +24,11 @@ import { SendSheet } from "./budget-step";
 // The Budget step moved to the job's Summary (Coy, 2026-10-06); an old ?step=budget link opens the room as usual.
 // Satellite (was the Aerial drawer) sits between them (Coy, 2026-10-07); since 2026-10-08 it opens the
 // Map page framing this job for a clip (Coy: "push the snipits from the map into the takeoffs tool …
-// That can replace the current satellite page"), which comes back here on the new sheet.
-type Step = "files" | "satellite" | "takeoff";
-const STEPS: Array<[Step, string]> = [["files", "Files"], ["satellite", "Satellite"], ["takeoff", "Takeoff"]];
+// That can replace the current satellite page"), which comes back here on the new sheet. Later that
+// day the tab went (Coy: "Satellite tab can be removed completely since we have the map page"):
+// a clip comes from the Map's Clip for takeoff; an old ?step=satellite link still opens it.
+type Step = "files" | "takeoff";
+const STEPS: Array<[Step, string]> = [["files", "Files"], ["takeoff", "Takeoff"]];
 
 export function PlanRoom({ jobId }: { jobId: string }) {
   const router = useRouter();
@@ -53,12 +55,11 @@ export function PlanRoom({ jobId }: { jobId: string }) {
   const reload = useCallback(async () => { await load(); }, [load]);
 
   const go = useCallback((s: Step, sheet?: string | null) => {
-    if (s === "satellite") { router.push(`/dashboard/map?clip=${jobId}`); return; }
     const q = new URLSearchParams(sp.toString());
     q.set("step", s);
     if (sheet) q.set("sheet", sheet); else if (sheet === null) q.delete("sheet");
     router.replace(`?${q.toString()}`, { scroll: false });
-  }, [router, sp, jobId]);
+  }, [router, sp]);
   // An old ?step=satellite link opens the Map's clip for this job.
   useEffect(() => { if (sp.get("step") === "satellite") router.replace(`/dashboard/map?clip=${jobId}`); }, [sp, router, jobId]);
 
@@ -145,7 +146,6 @@ export function PlanRoom({ jobId }: { jobId: string }) {
   const current = step ?? (roomSheets.length && data?.params.length && sheets.length ? "takeoff" : "files");
   const counts: Record<Step, string | null> = {
     files: (data?.files.length ?? 0) ? String(data?.files.length) : null,
-    satellite: null,
     takeoff: data?.params.length ? String(data.params.length) : null,
   };
 

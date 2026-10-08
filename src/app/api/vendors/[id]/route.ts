@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
 import { FILE_COLUMNS, signFiles } from "@/lib/files-server";
 import { SOURCE_COLUMNS, e164, numSource } from "@/lib/sources-server";
+import { cleanTrades } from "@/lib/bids";
+import { BIDS_MISSING, missing091 } from "@/lib/bids-server";
 
 /**
  * One vendor's page (migration 051).
@@ -10,7 +12,8 @@ import { SOURCE_COLUMNS, e164, numSource } from "@/lib/sources-server";
  *   prices: every item this vendor prices — their price, date, where it came
  *   from, and whether they are that item's default (the price budgets use),
  *   with the cheapest other vendor for comparison.
- * PATCH { name?, phone?, email?, address?, service_area?, subtype? }
+ * PATCH { name?, phone?, email?, address?, service_area?, subtype?, trades?, crew_size? }
+ *   trades / crew_size need migration 091 (Vendors v2).
  *
  * Session client, org from the session (DECISIONS §7).
  */
@@ -23,7 +26,11 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   const result = await getApiSession(req);
   if (!result.ok) return result.response;
   const { supabase, orgId, applyCookies } = result.session;
-  const { data: v } = await supabase.from("contacts").select(COLS).eq("org_id", orgId).eq("id", id).is("merged_into_contact_id", null).maybeSingle();
+  const one = (cols: string) => supabase.from("contacts").select(cols).eq("org_id", orgId).eq("id", id).is("merged_into_contact_id", null).maybeSingle();
+  // Trades and crew size (091) — read without them until it is applied.
+  type One = { data: Record<string, unknown> | null; error: { message?: string; code?: string } | null };
+  const first = (await one(`${COLS}, trades, crew_size`)) as unknown as One;
+  const v = missing091(first.error) ? ((await one(COLS)) as unknown as One).data : first.data;
   if (!v) return applyCookies(NextResponse.json({ error: "No such vendor." }, { status: 404 }));
 
   const [{ data: src }, { data: files }, { data: jobs }, { count: messages }] = await Promise.all([
@@ -101,9 +108,16 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   if ("address" in b) patch.address = text(b.address, 200);
   if ("service_area" in b) patch.service_area = text(b.service_area, 120);
   if ("company_name" in b) patch.company_name = text(b.company_name, 120);
+  if ("trades" in b) patch.trades = cleanTrades(b.trades);
+  if ("crew_size" in b) {
+    const n = b.crew_size === null || b.crew_size === "" ? null : Number(b.crew_size);
+    if (n !== null && !(Number.isInteger(n) && n >= 1 && n <= 500)) return bad("Crew size is a number of people, 1 to 500.");
+    patch.crew_size = n;
+  }
   if (Object.keys(patch).length) {
     patch.updated_at = new Date().toISOString();
     const { error } = await supabase.from("contacts").update(patch).eq("org_id", orgId).eq("id", id);
+    if (missing091(error)) return bad(`Trades and crew size: ${BIDS_MISSING}`, 503);
     if (error) return bad(error.message, 500);
   }
   if ("subtype" in b && v.contact_type === "vendor") {

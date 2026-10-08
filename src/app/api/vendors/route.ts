@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
 import { e164 } from "@/lib/sources-server";
+import { bidStats, cleanTrades, type BidRow } from "@/lib/bids";
+import { missing091 } from "@/lib/bids-server";
 
 /**
  * Vendors (migration 051) — the Vendors page. A vendor is a contact filed as
@@ -8,8 +10,11 @@ import { e164 } from "@/lib/sources-server";
  * they price, their receipts, where they deliver.
  *
  * GET  → { vendors: [{ id, name, company_name, subtype, phone, email, address,
- *          service_area, items, defaults, newest_price, files }] }
- * POST { name, subtype?, phone?, email?, address?, service_area? }
+ *          service_area, items, defaults, newest_price, files, trades, crew_size,
+ *          bids: { sent, answered, median_hours, label, speed } }], bids_ready }
+ *   trades, crew size and bid stats need migration 091 (Vendors v2); until
+ *   then they are empty and bids_ready is false.
+ * POST { name, subtype?, phone?, email?, address?, service_area?, trades? }
  *      → { vendor } — Coy's tap, so the bucket is his (a human confirmation,
  *        via sc_classify_contact, the one writer). No phone is needed: a
  *        vendor can come from a receipt alone. A phone or email already on
@@ -26,14 +31,22 @@ export async function GET(req: NextRequest) {
   const result = await getApiSession(req);
   if (!result.ok) return result.response;
   const { supabase, orgId, applyCookies } = result.session;
-  const [{ data: people, error }, { data: sources }, { data: defaults }, { data: files }] = await Promise.all([
-    supabase.from("contacts").select(COLS).eq("org_id", orgId).eq("contact_type", "vendor").is("merged_into_contact_id", null).is("archived_at", null)
-      .or("classification_confirmed_at.not.is.null,auto_classified_at.not.is.null").order("name", { ascending: true, nullsFirst: false }).limit(500),
+  const list = (cols: string) => supabase.from("contacts").select(cols).eq("org_id", orgId).eq("contact_type", "vendor").is("merged_into_contact_id", null).is("archived_at", null)
+    .or("classification_confirmed_at.not.is.null,auto_classified_at.not.is.null").order("name", { ascending: true, nullsFirst: false }).limit(500);
+  type Rows = { data: Array<Record<string, unknown>> | null; error: { message?: string; code?: string } | null };
+  const [first, { data: sources }, { data: defaults }, { data: files }, bidRows] = await Promise.all([
+    list(`${COLS}, trades, crew_size`) as unknown as Promise<Rows>,
     supabase.from("cost_item_sources").select("vendor_contact_id, price_as_of").eq("org_id", orgId).eq("active", true).limit(5000),
     supabase.from("cost_items").select("default_source_id, cost_item_sources!cost_items_default_source_id_fkey(vendor_contact_id)")
       .eq("org_id", orgId).eq("active", true).not("default_source_id", "is", null).limit(5000),
     supabase.from("files").select("contact_id").eq("org_id", orgId).is("deleted_at", null).in("category", ["receipt", "vendor_quote"]).not("contact_id", "is", null).limit(5000),
+    supabase.from("bid_request_recipients").select("contact_id, sent_at, answered_at, revoked_at").eq("org_id", orgId).limit(5000),
   ]);
+  // Before 091: no trades, no bids.
+  const ready = !missing091(first.error);
+  const { data: people, error } = ready ? first : ((await list(COLS)) as unknown as Rows);
+  const bids = new Map<string, BidRow[]>();
+  for (const r of (ready ? bidRows.data ?? [] : []) as Array<BidRow & { contact_id: string }>) bids.set(r.contact_id, [...(bids.get(r.contact_id) ?? []), r]);
   if (error) return applyCookies(NextResponse.json({ error: `contacts: ${error.message}` }, { status: 500 }));
   const count = new Map<string, number>(), newest = new Map<string, string>(), def = new Map<string, number>(), fc = new Map<string, number>();
   for (const s of (sources ?? []) as Array<{ vendor_contact_id: string; price_as_of: string | null }>) {
@@ -50,8 +63,10 @@ export async function GET(req: NextRequest) {
     phone: c.phone ?? null, email: c.email ?? null, address: c.address ?? null, service_area: c.service_area ?? null,
     auto: !c.classification_confirmed_at && !!c.auto_classified_at,
     items: count.get(c.id as string) ?? 0, defaults: def.get(c.id as string) ?? 0, newest_price: newest.get(c.id as string) ?? null, files: fc.get(c.id as string) ?? 0,
+    trades: (c.trades as string[] | undefined) ?? [], crew_size: (c.crew_size as number | null | undefined) ?? null,
+    bids: bidStats(bids.get(c.id as string) ?? []),
   }));
-  return applyCookies(NextResponse.json({ vendors }));
+  return applyCookies(NextResponse.json({ vendors, bids_ready: ready }));
 }
 
 export async function POST(req: NextRequest) {
@@ -70,6 +85,7 @@ export async function POST(req: NextRequest) {
   const email = text(b.email, 120)?.toLowerCase() ?? null;
   if (email && !/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(email)) return bad("That email doesn't look right.");
   const subtype = text(b.subtype, 40);
+  const trades = cleanTrades(b.trades);
 
   // Already one of his contacts? Then it isn't new.
   for (const [col, val] of [["phone", phone], ["email", email]] as const) {
@@ -92,6 +108,8 @@ export async function POST(req: NextRequest) {
     await supabase.from("contacts").delete().eq("org_id", orgId).eq("id", made.id);
     return bad(`Couldn't file them as a vendor: ${cErr.message}`, 500);
   }
+  // Trades (091): kept when the column is there; a vendor is still made without it.
+  if (trades.length) await supabase.from("contacts").update({ trades }).eq("org_id", orgId).eq("id", made.id);
   const { data: vendor } = await supabase.from("contacts").select(COLS).eq("org_id", orgId).eq("id", made.id).single();
   return applyCookies(NextResponse.json({ vendor }, { status: 201 }));
 }

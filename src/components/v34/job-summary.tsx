@@ -21,6 +21,7 @@ import { JobHeaderRow } from "@/components/v34/job-tabs";
 import { ArchiveButton } from "@/components/v34/archive-actions";
 import { budget as priceBudget, jobMinimum, takeoff as takeoffOf, type BudgetLine, type BudgetSettings, type SectionInput, type TakeoffTotal } from "@/lib/engine";
 import { viewLine } from "@/lib/proposal-links";
+import { JobBids } from "@/components/v34/bids/job-bids";
 import { BudgetStep, SendSheet, useBudget } from "@/components/v34/plan-room/budget-step";
 import { call as planCall, isDrawing, type Param, type PlansData } from "@/components/v34/plan-room/shared";
 
@@ -140,6 +141,8 @@ export function JobSummary({ jobId }: { jobId: string }) {
           <Totals jobId={jobId} job={job} sections={sections} bd={bd} err={budgetErr} card={card} />
           <ProposalState jobId={jobId} links={links} card={card} />
         </div>
+
+        <JobBids jobId={jobId} card={card} />
 
         <FromThePlans jobId={jobId} />
       </div>

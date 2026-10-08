@@ -58,6 +58,8 @@ interface Me {
   email: string | null; name: string | null; phone?: string | null; org_name: string | null; role: string | null; line: string | null;
   logo_light?: boolean; logo_dark?: boolean; logo_stamp?: string | null;
   access?: Access;
+  /** Runs ScopeCrete itself (084's platform_admins) — sees the admin. */
+  admin?: boolean;
 }
 
 /** Desktop or not — decided after mount; the phone layout is the first paint. */
@@ -365,6 +367,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <div className="flex flex-col" style={{ borderTop: `1px solid ${T.hair}` }}>
             {(limited ? [] : [
               { href: "/dashboard/more/lines", label: "Lines", note: "Your numbers, what runs them, and whether each is talking to the app" },
+              ...(me?.admin ? [{ href: "/dashboard/admin", label: "ScopeCrete admin", note: "Every company on ScopeCrete: health, setup, pipelines, Dusty, usage, feedback" }] : []),
             ]).map((l) => (
               <Link key={l.href} href={l.href} onClick={() => setMenuOpen(false)} className="block py-2.5 no-underline" style={{ borderBottom: `1px solid ${T.hairSoft}`, color: T.ink }}>
                 <div style={{ fontSize: F.md, fontWeight: 600 }}>{l.label}</div>

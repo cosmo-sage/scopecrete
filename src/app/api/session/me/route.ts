@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
   // before it draws the org or asks for anything else (2026-10-05: they ran
   // one after another). sc_my_orgs (081): an onsite estimator reads the org's
   // name and logos, not its row.
-  const [orgs, access, { data: auth }, { data: membership }, { data: line }] = await Promise.all([
+  const [orgs, access, { data: auth }, { data: membership }, { data: line }, { data: admin }] = await Promise.all([
     myOrgs(supabase),
     myAccess(supabase, orgId),
     supabase.auth.getUser(),
@@ -41,6 +41,8 @@ export async function GET(req: NextRequest) {
     // rather than picking one.
     supabase.from("org_phone_numbers").select("phone_e164, label")
       .eq("org_id", orgId).eq("is_primary", true).eq("active", true).limit(1).maybeSingle(),
+    // Runs ScopeCrete itself (084's platform_admins): Settings shows the admin.
+    supabase.rpc("sc_is_platform_admin"),
   ]);
   const org = orgs.find((o) => o.id === orgId) ?? null;
 
@@ -71,6 +73,7 @@ export async function GET(req: NextRequest) {
     logo_stamp: brand?.logo_stamp ?? null,
     role: membership?.role ?? access.role ?? null,
     // What an onsite estimator may open (081); everyone else { limited: false }.
+    admin: admin === true,
     access: { limited: access.limited, pages: access.pages, all_jobs: access.all_jobs, job_ids: access.job_ids },
   }));
 }

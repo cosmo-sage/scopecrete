@@ -7,6 +7,8 @@
  * number is kept only if it is written in the document.
  */
 
+import { docKind, type DocKind } from './doc-text.ts'
+
 export const READ_PROMPT_VERSION = 'read-files-v3-vendor-details-2026-09-29'
 
 export const SYSTEM_PROMPT = `You read one file for a concrete contractor (driveways, slabs, sidewalks, curbs; residential, commercial and government work). The file is a photo or a document: plans, a spec, a bid invite, a vendor's quote, a receipt, a contract.
@@ -191,10 +193,19 @@ export function parseReply(raw: string): unknown {
 }
 
 export const MAX_PDF_BYTES = 12 * 1024 * 1024
+export const MAX_DOC_BYTES = 12 * 1024 * 1024
 
 /** What Dusty can read today, and why not when he can't. */
-export function readable(kind: string, mime: string | null, bytes: number | null): { ok: true; as: 'image' | 'pdf' } | { ok: false; why: string } {
+export function readable(kind: string, mime: string | null, bytes: number | null, name = ''): { ok: true; as: 'image' | 'pdf' } | { ok: true; as: 'doc'; doc: DocKind } | { ok: false; why: string } {
   const m = (mime ?? '').toLowerCase()
+  // Word documents and text files (Coy, 2026-10-08: "word documents, .md files"):
+  // their words are pulled out here (doc-text.ts) and read like a PDF's.
+  const doc = docKind(mime, name)
+  if (doc) {
+    if ((bytes ?? 0) > MAX_DOC_BYTES) return { ok: false, why: `file over ${MAX_DOC_BYTES / 1024 / 1024} MB — too big to read on the server` }
+    return { ok: true, as: 'doc', doc }
+  }
+  if (/\.doc$/i.test(name)) return { ok: false, why: 'an old Word .doc — save it as .docx and Dusty can read it' }
   if (kind === 'image') {
     if (/heic|heif/.test(m)) return { ok: false, why: 'HEIC photo — Dusty can read JPEG and PNG; set the camera to "Most Compatible"' }
     if (!/jpe?g|png|gif|webp/.test(m)) return { ok: false, why: `can't read ${m || 'this image type'} yet` }

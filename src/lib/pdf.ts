@@ -9,7 +9,7 @@ import { readSheet, type SheetReading, type TextItem } from "@/lib/plan-sheets";
 // The legacy build: the modern one leans on JavaScript newer than most browsers
 // (and phones) have yet (Map.getOrInsertComputed).
 type PdfJs = typeof import("pdfjs-dist/legacy/build/pdf.mjs");
-type Doc = Awaited<ReturnType<PdfJs["getDocument"]>["promise"]>;
+export type Doc = Awaited<ReturnType<PdfJs["getDocument"]>["promise"]>;
 type Page = Awaited<ReturnType<Doc["getPage"]>>;
 
 let lib: Promise<PdfJs> | null = null;

@@ -20,6 +20,7 @@ import Link from "next/link";
 import { T, F, disp, eyebrow, clip, relTime } from "@/lib/v34/tokens";
 import { Sheet } from "@/components/v34/primitives";
 import { CATEGORIES, CATEGORY_LABEL, sizeLabel, type Category } from "@/lib/files";
+import { FilePreview } from "@/components/v34/file-preview";
 
 export interface FileRow {
   id: string; job_id: string | null; contact_id: string | null; section_id: string | null;
@@ -333,13 +334,7 @@ export function FileDetails({ f, sections, onSaved, onDeleted, links, big }: Vie
           // eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL
           <img src={f.url} alt={f.name} style={{ width: "100%", maxHeight: big ? "70vh" : "50vh", objectFit: "contain", background: T.slab, borderRadius: 4 }} />
         )}
-        {big && f.url && f.kind === "pdf" && (
-          <iframe src={f.url} title={f.name} style={{ width: "100%", height: "60vh", border: `1px solid ${T.hair}`, borderRadius: 4, background: T.slab }} />
-        )}
-        {f.url && f.kind !== "image" && (
-          <a href={f.url} target="_blank" rel="noreferrer" className="rounded px-3 flex items-center justify-center"
-            style={{ height: 38, border: `1px solid ${T.hair}`, fontFamily: disp, fontSize: F.sm, textTransform: "uppercase", color: T.ink }}>Open {f.kind === "pdf" ? "the PDF" : "the file"}</a>
-        )}
+        {f.kind !== "image" && <FilePreview f={f} big={big} />}
 
         <div className="rounded px-3 py-2" style={{ background: T.slab }}>
           <div style={{ ...eyebrow, color: T.ink3 }}>Dusty · {READ_LABEL[f.read_state ?? ""] ?? "Not read"}</div>
@@ -363,7 +358,7 @@ export function FileDetails({ f, sections, onSaved, onDeleted, links, big }: Vie
         <label className="block"><span style={eyebrow}>Name</span>
           <input defaultValue={f.name} key={`n${f.id}`} style={field} onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== f.name) void save({ name: v }); }} />
         </label>
-        <label className="block"><span style={eyebrow}>What it is</span>
+        <label className="block"><span style={eyebrow}>File type</span>
           <select value={f.category ?? ""} onChange={(e) => void save({ category: e.target.value || null })} style={field} disabled={busy}>
             <option value="">—</option>
             {CATEGORIES.map((c) => <option key={c} value={c}>{CATEGORY_LABEL[c]}</option>)}
@@ -390,7 +385,16 @@ export function FileDetails({ f, sections, onSaved, onDeleted, links, big }: Vie
           </label>
         )}
         {err && <div style={{ fontSize: F.xs, color: T.red }}>{err}</div>}
-        <button onClick={() => void del()} disabled={busy} className="self-start" style={{ ...eyebrow, color: T.red, cursor: "pointer" }}>Delete file</button>
+        <div className="flex items-center gap-4">
+          {/* Coy, 2026-10-08: "This 'open the file' button should be renamed download … smaller and somewhere else." */}
+          {f.url && (
+            <a href={`${f.url}${f.url.includes("?") ? "&" : "?"}download=${encodeURIComponent(f.name)}`} style={{ ...eyebrow, color: T.ink2, display: "inline-flex", alignItems: "center", gap: 4 }}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M12 4v11M7 10l5 5 5-5M5 20h14" /></svg>
+              Download
+            </a>
+          )}
+          <button onClick={() => void del()} disabled={busy} style={{ ...eyebrow, color: T.red, cursor: "pointer" }}>Delete file</button>
+        </div>
       </div>
   );
 }

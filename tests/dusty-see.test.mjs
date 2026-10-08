@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { seeableMime, SEE_MAX_BYTES } from "../src/lib/dusty/see.ts";
+import { seeableMime, SEE_MAX_BYTES, docTextNow } from "../src/lib/dusty/see.ts";
+import { strToU8 } from "fflate";
 
 test("photos the model takes are sent as images", () => {
   assert.equal(seeableMime("image/png", "Screenshot.png", 300_000), "image/png");
@@ -48,4 +49,10 @@ test("a PDF attached in the chat is read on the spot", async () => {
 test("a PDF with no text (a scan) waits for the reader", async () => {
   assert.equal(await pdfTextNow(tinyPdf("")), null);
   assert.equal(await pdfTextNow(new TextEncoder().encode("not a pdf")), null);
+});
+
+test("a markdown or text file is read in the same reply; a PDF or empty file is not here", () => {
+  assert.deepEqual(docTextNow("", "notes.md", strToU8("# Scope\n4\" slab")), { text: "# Scope\n4\" slab", clipped: false, kind: "markdown" });
+  assert.equal(docTextNow("application/pdf", "a.pdf", strToU8("x")), null);
+  assert.equal(docTextNow("", "empty.txt", strToU8(" ")), null);
 });

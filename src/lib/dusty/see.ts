@@ -5,6 +5,7 @@
  * read yet goes to the model as an image in the same request, so he answers
  * about it now. Only the formats the model takes, and not too big to send.
  */
+import { docKind, docText, type DocKind } from "../doc-text.ts";
 
 export const SEE_MAX_BYTES = 5 * 1024 * 1024;
 export const SEE_MAX_IMAGES = 4;
@@ -60,4 +61,18 @@ export async function pdfTextNow(bytes: Uint8Array): Promise<{ text: string; pag
   } finally {
     clearTimeout(timer);
   }
+}
+
+/**
+ * A Word document or text file attached in the chat (Coy, 2026-10-08: "any
+ * file I upload I want the agent to be able to read") — its words pulled out
+ * now, like a PDF's, so he answers from it in the same reply.
+ */
+export function docTextNow(mime: string | null | undefined, name: string, bytes: Uint8Array): { text: string; clipped: boolean; kind: DocKind } | null {
+  const kind = docKind(mime, name);
+  if (!kind || bytes.byteLength > READ_PDF_MAX_BYTES) return null;
+  const text = docText(kind, bytes);
+  if (!text) return null;
+  const clipped = text.length > READ_PDF_MAX_CHARS;
+  return { text: clipped ? text.slice(0, READ_PDF_MAX_CHARS) : text, clipped, kind };
 }

@@ -27,7 +27,7 @@ export function kindOf(mime: string | null | undefined, name: string): FileKind 
   if (m.startsWith("image/") || ["jpg", "jpeg", "png", "gif", "webp", "heic", "heif"].includes(ext)) return "image";
   if (m.startsWith("video/") || ["mp4", "mov", "3gp", "webm"].includes(ext)) return "video";
   if (/spreadsheet|excel|csv/.test(m) || ["xlsx", "xls", "csv"].includes(ext)) return "sheet";
-  if (/word|document|rtf|text\/plain/.test(m) || ["doc", "docx", "rtf", "txt"].includes(ext)) return "doc";
+  if (/word|document|rtf|text\/plain|text\/markdown/.test(m) || ["doc", "docx", "rtf", "txt", "md", "markdown"].includes(ext)) return "doc";
   return "other";
 }
 

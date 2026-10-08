@@ -49,6 +49,8 @@ export const isDrawing = (s: Pick<Sheet, "page_w" | "page_h" | "scale_ft_per_pt"
   Math.max(s.page_w, s.page_h) >= 1150 || !!s.scale_ft_per_pt || s.scale_method === "manual";
 
 export const sheetLabel = (s: Pick<Sheet, "number" | "page">) => s.number ?? `p.${s.page}`;
+/** A satellite clip from the Map page: "AERIAL", "AERIAL 2" … (its scale is the map's, set by one tap). */
+export const isAerialSheet = (s: Pick<Sheet, "number">) => /^AERIAL( \d+)?$/.test(s.number ?? "");
 export const isPlanFile = (f: PlanFile) => f.kind === "pdf" || f.kind === "image";
 
 export const DISC_LABEL: Record<string, string> = {

@@ -19,11 +19,12 @@ import { mayAutoRead, ocrPending, pausePlanOcr, resumePlanOcrAllowed, startPlanO
 import { call, isDrawing, type Param, type PlanFile, type PlansData, type Sheet } from "./shared";
 import { FilesStep } from "./files-sheets";
 import { TakeoffStep } from "./takeoff";
-import { AerialPicker } from "./aerial-picker";
 import { SendSheet } from "./budget-step";
 
 // The Budget step moved to the job's Summary (Coy, 2026-10-06); an old ?step=budget link opens the room as usual.
-// Satellite (was the Aerial drawer) sits between them (Coy, 2026-10-07).
+// Satellite (was the Aerial drawer) sits between them (Coy, 2026-10-07); since 2026-10-08 it opens the
+// Map page framing this job for a clip (Coy: "push the snipits from the map into the takeoffs tool …
+// That can replace the current satellite page"), which comes back here on the new sheet.
 type Step = "files" | "satellite" | "takeoff";
 const STEPS: Array<[Step, string]> = [["files", "Files"], ["satellite", "Satellite"], ["takeoff", "Takeoff"]];
 
@@ -52,11 +53,14 @@ export function PlanRoom({ jobId }: { jobId: string }) {
   const reload = useCallback(async () => { await load(); }, [load]);
 
   const go = useCallback((s: Step, sheet?: string | null) => {
+    if (s === "satellite") { router.push(`/dashboard/map?clip=${jobId}`); return; }
     const q = new URLSearchParams(sp.toString());
     q.set("step", s);
     if (sheet) q.set("sheet", sheet); else if (sheet === null) q.delete("sheet");
     router.replace(`?${q.toString()}`, { scroll: false });
-  }, [router, sp]);
+  }, [router, sp, jobId]);
+  // An old ?step=satellite link opens the Map's clip for this job.
+  useEffect(() => { if (sp.get("step") === "satellite") router.replace(`/dashboard/map?clip=${jobId}`); }, [sp, router, jobId]);
 
   // Read each in-room PDF's pages once, the first time it is seen without sheets.
   const started = useRef(new Set<string>());
@@ -200,7 +204,6 @@ export function PlanRoom({ jobId }: { jobId: string }) {
         <div className="flex-1 flex flex-col" style={{ minHeight: 0 }}>
           {current === "files" && <FilesStep files={data.files} sheets={sheets} docPages={docPages} reading={reading} onToggle={(f, on) => void toggle(f, on)}
             onAdd={(l) => void upload(l)} uploading={uploading} onOpen={(s) => go("takeoff", s.id)} jobId={jobId} onAdded={load} initial={sp.get("step") === "sheets" || (!step && roomSheets.length) ? "sheets" : "files"} />}
-          {current === "satellite" && <AerialPicker jobId={jobId} onSaved={(sheetId) => { void load().then(() => go("takeoff", sheetId)); }} />}
           {current === "takeoff" && (
             <TakeoffStep jobId={jobId} data={scoped} files={data.files} sheetId={sheetParam} setSheetId={(id) => go("takeoff", id)}
               reload={reload} onSend={setSending} fullscreen={fullscreen} setFullscreen={setFullscreen} />

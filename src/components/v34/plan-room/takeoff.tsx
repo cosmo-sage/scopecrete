@@ -14,7 +14,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { T, F, disp, eyebrow, clip, strong, light, nums } from "@/lib/v34/tokens";
 import { openPdf, drawPage } from "@/lib/pdf";
 import { dist, fmtQty, parseFeet, rectPoints, scaleFromPoints, scaleLabel, KIND_UNIT, type Pt, type TakeoffKind } from "@/lib/takeoff";
-import { call, KIND_LABEL, SHAPE_COLORS, shapeColor, sheetLabel, type Meas, type Param, type PlanFile, type PlansData, type Sheet } from "./shared";
+import { call, isAerialSheet, KIND_LABEL, SHAPE_COLORS, shapeColor, sheetLabel, type Meas, type Param, type PlanFile, type PlansData, type Sheet } from "./shared";
 import { ScaleBadge, Thumb } from "./files-sheets";
 import { Drawer, SlideDrawer } from "@/components/v34/primitives";
 import { ShapePhotos } from "./shape-photos";
@@ -305,11 +305,11 @@ function ScaleBar({ sheet, act, startScale }: { sheet: Sheet; act: (fn: () => Pr
     <div className="flex items-center gap-2 px-3 py-1.5 flex-wrap" style={{ background: T.sunDim, color: T.sun, borderBottom: `1px solid ${T.hair}`, fontSize: F.xs }}>
       <span>
         {sheet.scale_method === "none" ? "Marked not to scale — areas and lengths here aren't counted."
-          : sheet.printed_ft_per_pt && sheet.number === "AERIAL" ? `Scale from the map — ${sheet.scale_text}. Check it against the 50 ft bar or something you know the size of (a garage door is about 16 ft) before you use it.`
+          : sheet.printed_ft_per_pt && isAerialSheet(sheet) ? `Scale from the map — ${sheet.scale_text}. Check it against the 50 ft bar or something you know the size of (a garage door is about 16 ft) before you use it.`
           : sheet.printed_ft_per_pt ? `This sheet prints ${sheet.scale_text}. Nothing is counted here until you apply it or measure a known dimension.`
           : "No scale on this sheet yet. Measure a known dimension to set it — nothing is counted here until then."}
       </span>
-      {sheet.printed_ft_per_pt && sheet.scale_method !== "none" && <button onClick={() => void patch({ scale_method: "title_block" })} style={tb(true)}>{sheet.number === "AERIAL" ? "Use the map's scale" : `Use ${scaleLabel(sheet.printed_ft_per_pt)}`}</button>}
+      {sheet.printed_ft_per_pt && sheet.scale_method !== "none" && <button onClick={() => void patch({ scale_method: "title_block" })} style={tb(true)}>{isAerialSheet(sheet) ? "Use the map's scale" : `Use ${scaleLabel(sheet.printed_ft_per_pt)}`}</button>}
       <button onClick={startScale} style={tb(false)}>Measure a dimension</button>
       {sheet.scale_method !== "none" ? <button onClick={() => void patch({ scale_method: "none" })} style={tb(false)}>Not to scale</button>
         : <button onClick={() => void patch({ scale_method: null })} style={tb(false)}>Undo</button>}
@@ -346,7 +346,7 @@ function ScaleAsk({ a, b, onSet, onCancel, others }: { a: Pt; b: Pt; onSet: (k: 
 /** Put one scale on other sheets: every drawing but the aerials ticked for "every sheet", none for "pick". */
 function ScaleCopy({ k, from, all, sheets, apply, onClose }: { k: number; from: string; all: boolean; sheets: Sheet[]; apply: (ids: string[]) => Promise<void>; onClose: () => void }) {
   const others = sheets.filter((s) => s.id !== from);
-  const [on, setOn] = useState<Set<string>>(() => new Set(all ? others.filter((s) => s.number !== "AERIAL").map((s) => s.id) : []));
+  const [on, setOn] = useState<Set<string>>(() => new Set(all ? others.filter((s) => !isAerialSheet(s)).map((s) => s.id) : []));
   const [busy, setBusy] = useState(false);
   const flip = (id: string) => setOn((cur) => { const n = new Set(cur); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const allOn = others.length > 0 && others.every((s) => on.has(s.id));
@@ -361,7 +361,7 @@ function ScaleCopy({ k, from, all, sheets, apply, onClose }: { k: number; from: 
             <input type="checkbox" checked={on.has(s.id)} onChange={() => flip(s.id)} />
             <span style={{ flex: 1, minWidth: 0, ...clipTxt }}>{sheetLabel(s)}</span>
             <span style={{ fontSize: 11, color: s.scale_ft_per_pt ? T.green : T.ink3, flex: "0 0 auto" }}>
-              {s.number === "AERIAL" ? "aerial — its own scale" : s.scale_ft_per_pt ? `now ${scaleLabel(s.scale_ft_per_pt)}` : s.scale_text ? `prints ${s.scale_text}` : "no scale yet"}
+              {isAerialSheet(s) ? "aerial — its own scale" : s.scale_ft_per_pt ? `now ${scaleLabel(s.scale_ft_per_pt)}` : s.scale_text ? `prints ${s.scale_text}` : "no scale yet"}
             </span>
           </label>
         ))}

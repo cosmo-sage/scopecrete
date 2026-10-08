@@ -73,6 +73,33 @@ export async function fetchTile(p: "esri" | "mapbox", z: number, x: number, y: n
   return b && isJpeg(b) ? b : e && isJpeg(e) ? e : null;
 }
 
+/**
+ * A street-map tile for the Map page's "Map" view (Mapbox Streets, raster, 256
+ * px at @2x). PNG or JPEG as Mapbox sends it, with its type. Null without the
+ * token or on any failure.
+ */
+export async function fetchStreetTile(z: number, x: number, y: number): Promise<{ bytes: Uint8Array; type: string } | null> {
+  const t = env("MAPBOX_TOKEN");
+  if (!t) return null;
+  try {
+    const r = await fetch(`https://api.mapbox.com/styles/v1/mapbox/streets-v12/tiles/256/${z}/${x}/${y}@2x?access_token=${encodeURIComponent(t)}`, { cache: "no-store", signal: AbortSignal.timeout(15_000) });
+    if (!r.ok) return null;
+    return { bytes: new Uint8Array(await r.arrayBuffer()), type: r.headers.get("content-type") || "image/png" };
+  } catch { return null; }
+}
+
+/** The street address at a point (Mapbox reverse geocoding) — "+ New job here" on the Map's clip. Null without the token. */
+export async function reverseAddress(lat: number, lng: number): Promise<string | null> {
+  const t = env("MAPBOX_TOKEN");
+  if (!t) return null;
+  try {
+    const r = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?types=address&limit=1&access_token=${encodeURIComponent(t)}`, { cache: "no-store", signal: AbortSignal.timeout(6_000) });
+    const b = r.ok ? await r.json() : null;
+    const f = b?.features?.[0];
+    return typeof f?.place_name === "string" ? f.place_name.replace(/, United States$/, "") : null;
+  } catch { return null; }
+}
+
 export interface Found { lat: number; lng: number; label: string; by: string }
 
 /** Finds an address: Google if its key is set, else Mapbox, else Esri's public geocoder. Not stored. */

@@ -14,6 +14,8 @@ export const PAGES: PageDef[] = [
   { k: "dashboard", label: "Dashboard", href: "/dashboard", match: (p) => p === "/dashboard" },
   { k: "threads", label: "Threads", href: "/dashboard/messages", match: (p) => p.startsWith("/dashboard/messages") },
   { k: "scope", label: "Jobs", href: "/dashboard/scope", match: (p) => p.startsWith("/dashboard/scope") },
+  // The Map (Claude Design 11; Coy, 2026-10-08: "add the map page to the main menu on desktop; toolbox on mobile").
+  { k: "map", label: "Map", href: "/dashboard/map", match: (p) => p.startsWith("/dashboard/map") },
   { k: "cash", label: "Cash", href: "/dashboard/cash", match: (p) => p.startsWith("/dashboard/cash"), soon: true },
   { k: "contacts", label: "Contacts", href: "/dashboard/contacts", match: (p) => p.startsWith("/dashboard/contacts") },
   { k: "customers", label: "Customers", href: "/dashboard/customers", match: (p) => p.startsWith("/dashboard/customers") },
@@ -28,7 +30,7 @@ export const PAGE = new Map(PAGES.map((p) => [p.k, p]));
 export interface Menus { rail: string[]; footer: string[] }
 /** Rail order includes "dusty"; the footer holds 4 pages around Dusty (2 · Dusty · 2 — the last slot is the Toolbox). */
 export const DEFAULT_MENUS: Menus = {
-  rail: ["dashboard", "threads", "dusty", "scope", "contacts", "customers", "pricebook", "vendors", "files", "logs", "roadmap"],
+  rail: ["dashboard", "threads", "dusty", "scope", "map", "contacts", "customers", "pricebook", "vendors", "files", "logs", "roadmap"],
   footer: ["dashboard", "threads", "scope"],
 };
 
@@ -38,7 +40,12 @@ export function cleanMenus(m: Partial<Menus> | null | undefined): Menus {
   // Documents is Files now (2026-10-03): a saved menu keeps its place for it.
   const renamed = (k: string) => (k === "documents" ? "files" : k);
   const rail = [...new Set((m?.rail ?? []).map(renamed).filter((k) => known.has(k)))];
-  for (const k of DEFAULT_MENUS.rail) if (!rail.includes(k)) rail.push(k);
+  // A page new since the menu was saved goes after the page it follows by default (Map after Jobs), else last.
+  DEFAULT_MENUS.rail.forEach((k, i) => {
+    if (rail.includes(k)) return;
+    const before = DEFAULT_MENUS.rail.slice(0, i).reverse().find((b) => rail.includes(b));
+    rail.splice(before ? rail.indexOf(before) + 1 : rail.length, 0, k);
+  });
   const footer = [...new Set((m?.footer ?? []).map(renamed).filter((k) => PAGE.has(k) && !PAGE.get(k)?.soon))].slice(0, 3);
   for (const k of DEFAULT_MENUS.footer) if (footer.length < 3 && !footer.includes(k)) footer.push(k);
   return { rail, footer };

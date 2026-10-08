@@ -440,8 +440,7 @@ export default function FieldDemo({ autoplay = true }: { autoplay?: boolean }) {
                     <div style={{ ...hatchPhoto, height: 104, position: "relative" }}><span style={{ position: "absolute", left: 8, bottom: 6, fontSize: 9.5, color: "#4A443A" }}>Cover · IMG_5102 from Mark&apos;s text</span></div>
                     <div style={{ padding: "12px 14px 14px", display: "flex", flexDirection: "column", gap: 9, fontSize: 11.5, lineHeight: 1.5 }}>
                       <div style={{ display: "flex", alignItems: "flex-end" }}>
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src="/site/sacco-light.png" alt="Sacco" style={{ height: 24, width: "auto" }} />
+                        <span style={{ height: 24, padding: "0 8px", border: "1px dashed #B9AE98", borderRadius: 3, display: "flex", alignItems: "center", fontFamily: disp, fontSize: 9.5, letterSpacing: ".14em", textTransform: "uppercase", color: "#8C8578" }}>Your logo</span>
                         <span style={{ flex: 1 }} />
                         <div style={{ textAlign: "right" }}><div style={{ fontFamily: disp, fontSize: 9.5, letterSpacing: ".16em", textTransform: "uppercase", color: "#8C8578" }}>Proposal</div><div style={{ fontFamily: lexend, fontWeight: 700, fontSize: 15 }}>P-0143</div></div>
                       </div>

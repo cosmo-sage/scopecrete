@@ -470,7 +470,7 @@ html:has(.sc-site){scroll-behavior:smooth}
             <h2 style={{ ...bigHead("clamp(34px,4.5vw,48px)"), flex: "0 1 360px" }}>Built because the office work was costing me jobs.</h2>
             <figure style={{ margin: 0, flex: "1 1 420px", display: "flex", flexDirection: "column", gap: 12 }}>
               <blockquote style={{ margin: 0, fontSize: "clamp(16px,1.6vw,19px)", lineHeight: 1.55, color: "#3A4249", textWrap: "pretty" }}>“I was pouring concrete all day and falling behind on estimates and callbacks every night. I needed software that used the details already coming through my phone, not another place to type them in again. So I built it for my own crew first.”</blockquote>
-              <figcaption style={{ fontFamily: disp, fontWeight: 600, fontSize: 14, letterSpacing: ".12em", textTransform: "uppercase", color: "#616B77" }}>Coy Sacco · Owner, Sacco Built · Founder, ScopeCrete</figcaption>
+              <figcaption style={{ fontFamily: disp, fontWeight: 600, fontSize: 14, letterSpacing: ".12em", textTransform: "uppercase", color: "#616B77" }}>Coy Sacco · Concrete contractor · Founder, ScopeCrete</figcaption>
             </figure>
           </div>
         </section>

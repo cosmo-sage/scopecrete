@@ -4397,7 +4397,9 @@ additive changes only, with confirmation.
   offer, as designed), the founder's words, a FAQ and an **Apply** form
   that opens the visitor's own email to admin@scopecrete.ai filled in
   (nothing posts anywhere). The demo's phone header wears ScopeCrete's
-  emblem and wordmark, not an org's logo. Privacy, Terms and Support scope
+  emblem and wordmark, not an org's logo, and its proposal a "Your logo"
+  box: the sales page names no company of Coy's (Coy, 2026-10-08: "I don't
+  really want that showing on the sales landing page"). Privacy, Terms and Support scope
   aren't linked until those pages exist. `/login` and
   `/dashboard…` go to app; `/p/…` (proposal links), `/calculator`, `/auth`, `/invite`
   stay. **app.scopecrete.ai** — `/login` is the sign-in page (`/` sends

@@ -14,7 +14,7 @@ export interface MapLayer { id: LayerId; label: string; sub: string; color: stri
 
 /** Colours are the theme's own (--sc-*), the bucket and stage colours already in use. */
 export const LAYERS: MapLayer[] = [
-  { id: "active", label: "Active jobs", sub: "Won, scheduled, pouring", color: "var(--sc-green)", defaultOn: true },
+  { id: "active", label: "Active jobs", sub: "Won, scheduled, in progress", color: "var(--sc-green)", defaultOn: true },
   { id: "lead", label: "New leads", sub: "New lead · Consultation", color: "var(--sc-hiviz-soft)", defaultOn: true },
   { id: "est", label: "Estimating / Follow up", sub: "Being priced, or priced and waiting", color: "var(--sc-work-dot-reply)", defaultOn: true },
   { id: "sent", label: "Proposals sent", sub: "Opened or not opened", color: "var(--sc-violet)", defaultOn: true },

@@ -4,7 +4,7 @@
  * Jobs — the board (DECISIONS §6). Threads is people; this is the work.
  *
  * One column per stage: New lead · Consultation · Estimating · Follow up ·
- * W.I.P. · Complete · Lost (src/lib/jobs/stages.ts maps them onto
+ * Won · In progress · Complete · Lost (src/lib/jobs/stages.ts maps them onto
  * jobs.status). On a phone the stage strip sits on top and the columns swipe
  * sideways, one per screen; on desktop all seven sit side by side.
  *
@@ -389,7 +389,7 @@ export default function JobsBoard() {
 // Every job in one table on a desktop (Coy, 2026-10-06): the job and what it
 // is, who for, where, its stage, how it came in, and how long it has sat.
 const STAGE_HUE: Record<string, string> = {
-  new: T.hiviz, consult: T.violet, estimating: T.chalk, follow: T.hivizText, wip: T.green, complete: T.ink3, lost: T.red,
+  new: T.hiviz, consult: T.violet, estimating: T.chalk, follow: T.hivizText, won: T.green, wip: T.green, complete: T.ink3, lost: T.red,
 };
 
 function JobsTable({ jobs, busy, readOnly, sort, onSort, onMove, onAccept }: {
@@ -587,7 +587,7 @@ function MoveSheet({ job, onClose, onMove }: { job: Job | null; onClose: () => v
                        background: here?.k === s.k ? T.hairSoft : T.card, color: T.ink, cursor: "pointer" }}>
               {s.label}{here?.k === s.k ? " · here now" : ""}
             </button>
-            {/* W.I.P. holds three statuses; a job inside it moves between them here. */}
+            {/* Won holds two statuses (not started, scheduled); a job inside it moves between them here. */}
             {s.statuses.length > 1 && here?.k === s.k && (
               <div className="flex gap-1.5 flex-wrap px-3 pb-2">
                 {s.statuses.map((st) => (

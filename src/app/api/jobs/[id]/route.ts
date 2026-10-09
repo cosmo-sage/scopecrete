@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
 import { plainSpeakers } from "@/lib/speakers";
-import { ALL_STATUSES, LEAD_SOURCES } from "@/lib/jobs/stages";
+import { ALL_STATUSES, BEFORE_WON, LEAD_SOURCES, WON_STATUSES } from "@/lib/jobs/stages";
+import { contractFor, wonAtFromDay, type Contract } from "@/lib/jobs/won";
 
 /**
  * One job — read, edit, and ACCEPT.
@@ -114,6 +115,23 @@ export async function PATCH(
   }
 
   if (patch.status) patch.stage_changed_at = new Date().toISOString();
+
+  // The win date (Coy, 2026-10-09: a quoted job needs to become won). Moving a job into a won
+  // status stamps won_at once — never over a date already there — and moving it back before the
+  // yes clears it. { won_on: "YYYY-MM-DD" } sets the day it was won by hand (null clears it).
+  if (typeof patch.status === "string" && (WON_STATUSES.includes(patch.status) || BEFORE_WON.includes(patch.status))) {
+    const { data: cur } = await supabase.from("jobs").select("won_at").eq("id", id).eq("org_id", orgId).maybeSingle();
+    if (WON_STATUSES.includes(patch.status) && !cur?.won_at) patch.won_at = new Date().toISOString();
+    if (BEFORE_WON.includes(patch.status) && cur?.won_at) patch.won_at = null;
+  }
+  if ("won_on" in body) {
+    if (body.won_on === null) patch.won_at = null;
+    else {
+      const at = typeof body.won_on === "string" ? wonAtFromDay(body.won_on, new Date()) : null;
+      if (!at) return applyCookies(NextResponse.json({ error: "The day it was won is a date, today or earlier." }, { status: 400 }));
+      patch.won_at = at;
+    }
+  }
   if (typeof patch.job_type === "string" && !JOB_TYPES.includes(patch.job_type)) {
     return applyCookies(NextResponse.json({ error: `job_type must be one of ${JOB_TYPES.join(", ")}.` }, { status: 400 }));
   }
@@ -156,7 +174,7 @@ export async function PATCH(
     .update(patch)
     .eq("id", id)
     .eq("org_id", orgId)
-    .select("id, job_number, title, status, origin, confirmed_at, confirmed_by, contact_id, address, city, state, zip, notes, duration_days, created_at, job_type, lead_source, referred_by_contact_id")
+    .select("id, job_number, title, status, won_at, origin, confirmed_at, confirmed_by, contact_id, address, city, state, zip, notes, duration_days, created_at, job_type, lead_source, referred_by_contact_id")
     .maybeSingle();
 
   if (error) {
@@ -187,7 +205,7 @@ export async function GET(
 
   const { data, error } = await supabase
     .from("jobs")
-    .select("id, job_number, title, status, origin, confirmed_at, confirmed_by, created_from_message_id, contact_id, customer_id, address, city, state, zip, notes, duration_days, created_at, job_type, lead_source, referred_by_contact_id, description, archived_at, archived_reason")
+    .select("id, job_number, title, status, won_at, origin, confirmed_at, confirmed_by, created_from_message_id, contact_id, customer_id, address, city, state, zip, notes, duration_days, created_at, job_type, lead_source, referred_by_contact_id, description, archived_at, archived_reason")
     .eq("id", id)
     .eq("org_id", orgId)
     .maybeSingle();
@@ -255,5 +273,20 @@ export async function GET(
     hours: cr?.crew_hours == null ? null : Number(cr.crew_hours),
   };
 
-  return applyCookies(NextResponse.json({ job: data, contact, why, crew }));
+  // The proposal it was won on (src/lib/jobs/won.ts): finals are frozen, so reading the newest
+  // one at or before won_at IS the locked price. Signed change orders (094) add to it.
+  let contract: Contract | null = null;
+  if (WON_STATUSES.includes(data.status ?? "")) {
+    const [{ data: props }, { data: cos }] = await Promise.all([
+      supabase.from("job_proposals").select("id, version, finalized_at, snapshot").eq("org_id", orgId).eq("job_id", id).eq("status", "final"),
+      supabase.from("change_orders").select("price, signed_at").eq("org_id", orgId).eq("job_id", id),
+    ]);
+    contract = contractFor(((props ?? []) as Array<{ id: string; version: number; finalized_at: string | null; snapshot: { number?: unknown; price?: { total?: unknown } } | null }>).map((p) => ({
+      id: p.id, version: p.version, finalized_at: p.finalized_at,
+      number: typeof p.snapshot?.number === "string" ? p.snapshot.number : null,
+      total: typeof p.snapshot?.price?.total === "number" ? p.snapshot.price.total : null,
+    })), data.won_at ?? null, (cos ?? []) as Array<{ price: number | null; signed_at: string | null }>);
+  }
+
+  return applyCookies(NextResponse.json({ job: data, contact, why, crew, contract }));
 }

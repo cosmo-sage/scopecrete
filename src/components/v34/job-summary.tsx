@@ -24,12 +24,14 @@ import { viewLine } from "@/lib/proposal-links";
 import { JobBids } from "@/components/v34/bids/job-bids";
 import { BudgetStep, SendSheet, useBudget } from "@/components/v34/plan-room/budget-step";
 import { call as planCall, isDrawing, type Param, type PlansData } from "@/components/v34/plan-room/shared";
+import { BEFORE_WON, WON_STATUSES } from "@/lib/jobs/stages";
+import type { Contract } from "@/lib/jobs/won";
 
 interface Job {
   id: string; title: string | null; status: string | null; address: string | null;
   contact_id: string | null; duration_days: number | null; created_from_message_id: string | null; customer_id?: string | null;
   job_type: string | null; lead_source: string | null; description?: string | null; origin?: string | null;
-  archived_at?: string | null; archived_reason?: string | null; created_at?: string | null;
+  archived_at?: string | null; archived_reason?: string | null; created_at?: string | null; won_at?: string | null;
 }
 interface Contact { id: string; name: string | null; phone: string | null }
 export interface Why {
@@ -71,6 +73,7 @@ export function JobSummary({ jobId }: { jobId: string }) {
   const [budgetErr, setBudgetErr] = useState<string | null>(null);
   const [links, setLinks] = useState<ProposalLink[] | null>(null);
   const [bidSummary, setBidSummary] = useState<string | null>(null);
+  const [contract, setContract] = useState<Contract | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -78,7 +81,7 @@ export function JobSummary({ jobId }: { jobId: string }) {
     Promise.all([send(`/api/jobs/${jobId}`, "GET"), send(`/api/jobs/${jobId}/sections`, "GET")])
       .then(([j, s]) => {
         if (off) return;
-        setJob(j.job); setContact(j.contact ?? null);
+        setJob(j.job); setContact(j.contact ?? null); setContract(j.contract ?? null);
         setSections(((s.sections ?? []) as Array<Record<string, unknown>>).map((x) => ({
           ...(x as unknown as SectionInput), length_ft: num(x.length_ft), width_ft: num(x.width_ft), sqft_override: num(x.sqft_override),
           depth_in: num(x.depth_in), psi: num(x.psi), count_qty: num(x.count_qty),
@@ -91,8 +94,10 @@ export function JobSummary({ jobId }: { jobId: string }) {
     return () => { off = true; };
   }, [jobId]);
 
+  // A status change can stamp or clear the win date, which moves the contract: read the job again.
+  const reload = useCallback(() => send(`/api/jobs/${jobId}`, "GET").then((j) => { setJob(j.job); setContract(j.contract ?? null); }), [jobId]);
   const setChip = useCallback((field: string, value: string) => send(`/api/jobs/${jobId}`, "PATCH", { [field]: value })
-    .then((b) => setJob((j) => j && { ...j, status: b.job.status, job_type: b.job.job_type, lead_source: b.job.lead_source })), [jobId]);
+    .then((b) => { setJob((j) => j && { ...j, status: b.job.status, job_type: b.job.job_type, lead_source: b.job.lead_source, won_at: b.job.won_at }); return field === "status" ? reload() : undefined; }), [jobId, reload]);
 
   if (error) return <EmptyState tone="warn" title="Couldn't load this job" detail={error} />;
   if (!job || !sections) {
@@ -134,6 +139,10 @@ export function JobSummary({ jobId }: { jobId: string }) {
           {job.description && !bidSummary && <div style={{ fontSize: F.sm, color: T.ink2, lineHeight: 1.45, marginTop: 4 }}>{job.description}</div>}
         </section>
 
+        {WON_STATUSES.includes(job.status ?? "") && (
+          <WonCard jobId={jobId} job={job} contract={contract} card={card} onChange={() => void reload()} />
+        )}
+
         {/* "Why this job" is gone — what it said is in the facts above (Coy, 2026-10-09: "redundant"). */}
 
         {/* The bid behind it, when a forwarded bid email made or fed this job (migration 063). */}
@@ -141,7 +150,8 @@ export function JobSummary({ jobId }: { jobId: string }) {
 
         <div className="grid gap-3 lg:grid-cols-2">
           <Totals jobId={jobId} job={job} sections={sections} bd={bd} err={budgetErr} card={card} />
-          <ProposalState jobId={jobId} links={links} card={card} />
+          <ProposalState jobId={jobId} links={links} card={card}
+            onWon={BEFORE_WON.includes(job.status ?? "") ? () => setChip("status", "won") : undefined} />
         </div>
 
         <JobBids jobId={jobId} card={card} />
@@ -247,8 +257,12 @@ function Totals({ jobId, job, sections, bd, err, card }: {
 }
 
 /** Where the proposal stands: the newest link — sent or not, opened how often — and a way there. */
-function ProposalState({ jobId, links, card }: { jobId: string; links: ProposalLink[] | null; card: React.CSSProperties }) {
+function ProposalState({ jobId, links, card, onWon }: {
+  jobId: string; links: ProposalLink[] | null; card: React.CSSProperties; onWon?: () => Promise<unknown>;
+}) {
   const live = links?.find((l) => !l.revoked_at && l.status !== "void") ?? null;
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
   return (
     <section aria-label="Proposal" className="px-3 py-2.5" style={card}>
       <div className="flex items-baseline gap-2">
@@ -270,6 +284,79 @@ function ProposalState({ jobId, links, card }: { jobId: string; links: ProposalL
       {links && links.length > 1 && (
         <div style={{ fontSize: F.xs, color: T.ink3, marginTop: 4 }}>{links.length} links made on this job</div>
       )}
+      {/* The customer said yes: one tap moves the job to Won and stamps the day (Coy, 2026-10-09). */}
+      {live && onWon && (
+        <div className="flex items-center gap-2" style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${T.hairSoft}` }}>
+          <span style={{ flex: 1, fontSize: F.xs, color: T.ink2 }}>Did they say yes?</span>
+          <button disabled={busy} onClick={() => { setBusy(true); setErr(null); onWon().catch((e) => setErr(e instanceof Error ? e.message : String(e))).finally(() => setBusy(false)); }}
+            className="rounded px-3" style={{ height: 30, border: "none", background: T.green, color: "#fff", fontFamily: disp, fontSize: F.xs, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".05em", cursor: busy ? "default" : "pointer", opacity: busy ? 0.6 : 1 }}>
+            {busy ? "Marking…" : "Mark won"}
+          </button>
+        </div>
+      )}
+      {err && <div style={{ fontSize: F.xs, color: T.red, marginTop: 4 }}>{err}</div>}
+    </section>
+  );
+}
+
+/**
+ * The win: the day it was won (stamped when the job moved to Won, changeable) and the contract —
+ * the final proposal the customer said yes to, locked, plus signed change orders (src/lib/jobs/won.ts).
+ */
+function WonCard({ jobId, job, contract, card, onChange }: {
+  jobId: string; job: Job; contract: Contract | null; card: React.CSSProperties; onChange: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const todayCentral = new Date().toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
+  const wonDay = job.won_at ? new Date(job.won_at).toLocaleDateString("en-CA", { timeZone: "America/Chicago" }) : "";
+  const setDay = (v: string) => {
+    setErr(null);
+    send(`/api/jobs/${jobId}`, "PATCH", { won_on: v || null })
+      .then(() => { setEditing(false); onChange(); })
+      .catch((e) => setErr(e instanceof Error ? e.message : String(e)));
+  };
+  const started = job.status === "in_progress" || job.status === "complete" || job.status === "closed";
+  return (
+    <section aria-label="Won" className="px-3 py-2.5" style={{ ...card, borderLeft: `3px solid ${T.green}` }}>
+      <div className="flex items-baseline gap-2 flex-wrap">
+        <span style={{ ...eyebrow, color: T.green }}>Won</span>
+        {editing ? (
+          <input type="date" defaultValue={wonDay} max={todayCentral} autoFocus aria-label="Day it was won"
+            onChange={(e) => { if (e.target.value) setDay(e.target.value); }} onBlur={() => setEditing(false)}
+            style={{ height: 28, fontSize: F.sm, border: `1px solid ${T.hair}`, borderRadius: 4, padding: "0 6px", background: T.card, color: T.ink }} />
+        ) : (
+          <button onClick={() => setEditing(true)} style={{ border: "none", background: "none", padding: 0, cursor: "pointer", fontSize: F.sm, fontWeight: 600, color: job.won_at ? T.ink : T.hiviz }}>
+            {job.won_at ? day(job.won_at, true) : "Day not set — set it"} <span aria-hidden="true" style={{ color: T.ink3, fontWeight: 400 }}>✎</span>
+          </button>
+        )}
+        <span className="flex-1" />
+        <span style={{ fontSize: F.xs, color: T.ink3 }}>{started ? "" : job.status === "scheduled" ? "Scheduled · not started" : "Not started"}</span>
+      </div>
+      {contract ? (
+        <div style={{ marginTop: 6 }}>
+          <div className="flex items-baseline gap-2">
+            <span style={{ fontFamily: disp, fontSize: 28, fontWeight: 700, lineHeight: 1.05, ...nums }}>{contract.contract_total == null ? "—" : money0(contract.contract_total)}</span>
+            <span style={{ fontSize: F.xs, color: T.ink3 }}>contract</span>
+          </div>
+          <div style={{ fontSize: F.xs, color: T.ink2, marginTop: 2, lineHeight: 1.5, ...nums }}>
+            <Link href={`/dashboard/scope/${jobId}/proposal`} style={{ color: T.chalk }}>
+              {contract.number ?? "Proposal"} v{contract.version}
+            </Link>{contract.finalized_at ? ` · final ${day(contract.finalized_at)}` : ""}{contract.total != null ? ` · ${money0(contract.total)}` : ""}
+            {contract.change_order_count > 0 && ` + ${contract.change_order_count} signed change order${contract.change_order_count === 1 ? "" : "s"} ${money0(contract.change_orders)}`}
+          </div>
+          {contract.later_version != null && (
+            <div style={{ fontSize: F.xs, color: T.ink3, marginTop: 2 }}>
+              v{contract.later_version} was made after the win and isn&apos;t the contract. Work added after the yes is a change order (Budget → Actual costs).
+            </div>
+          )}
+        </div>
+      ) : (
+        <div style={{ fontSize: F.sm, color: T.ink2, marginTop: 6, lineHeight: 1.45 }}>
+          No final proposal from before the win, so there&apos;s no contract price yet. Freeze one on the Proposal (Preview), then set the day it was won.
+        </div>
+      )}
+      {err && <div style={{ fontSize: F.xs, color: T.red, marginTop: 4 }}>{err}</div>}
     </section>
   );
 }

@@ -116,8 +116,15 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   }
   if (Object.keys(patch).length) {
     patch.updated_at = new Date().toISOString();
-    const { error } = await supabase.from("contacts").update(patch).eq("org_id", orgId).eq("id", id);
-    if (missing091(error)) return bad(`Trades and crew size: ${BIDS_MISSING}`, 503);
+    let { error } = await supabase.from("contacts").update(patch).eq("org_id", orgId).eq("id", id);
+    if (missing091(error)) {
+      // Before 091 the Edit form still sends trades and crew size: save the rest,
+      // and refuse only when a trade or crew size was actually set.
+      const asked = ((patch.trades as string[] | undefined) ?? []).length > 0 || patch.crew_size != null;
+      if (asked) return bad(`Trades and crew size: ${BIDS_MISSING}`, 503);
+      delete patch.trades; delete patch.crew_size;
+      ({ error } = await supabase.from("contacts").update(patch).eq("org_id", orgId).eq("id", id));
+    }
     if (error) return bad(error.message, 500);
   }
   if ("subtype" in b && v.contact_type === "vendor") {

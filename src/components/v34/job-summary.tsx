@@ -20,7 +20,8 @@ import { BidStrip } from "@/components/v34/bid-strip";
 import { JobHeaderRow } from "@/components/v34/job-tabs";
 import { ArchiveButton } from "@/components/v34/archive-actions";
 import { budget as priceBudget, jobMinimum, takeoff as takeoffOf, type BudgetLine, type BudgetSettings, type SectionInput, type TakeoffTotal } from "@/lib/engine";
-import { viewLine } from "@/lib/proposal-links";
+import { signedLine, viewLine } from "@/lib/proposal-links";
+import { dayLabel, todayCentral, validDay, whenLabel } from "@/lib/jobs/schedule";
 import { JobBids } from "@/components/v34/bids/job-bids";
 import { BudgetStep, SendSheet, useBudget } from "@/components/v34/plan-room/budget-step";
 import { call as planCall, isDrawing, type Param, type PlansData } from "@/components/v34/plan-room/shared";
@@ -32,6 +33,7 @@ interface Job {
   contact_id: string | null; duration_days: number | null; created_from_message_id: string | null; customer_id?: string | null;
   job_type: string | null; lead_source: string | null; description?: string | null; origin?: string | null;
   archived_at?: string | null; archived_reason?: string | null; created_at?: string | null; won_at?: string | null;
+  scheduled_start?: string | null; scheduled_end?: string | null; schedule_state?: string | null;
 }
 interface Contact { id: string; name: string | null; phone: string | null }
 export interface Why {
@@ -47,7 +49,7 @@ interface BudgetData {
   takeoff?: Record<string, TakeoffTotal>;
 }
 interface ProposalLink {
-  id: string; status: string; sent_at: string | null; sent_via: string[] | null; view_count: number;
+  id: string; status: string; decided_name?: string | null; decided_at?: string | null; sent_at: string | null; sent_via: string[] | null; view_count: number;
   last_viewed_at: string | null; revoked_at: string | null; created_at: string; version: { version: number } | null;
 }
 const PLACEHOLDER_TITLES = new Set(["New job", "Untitled scope"]);
@@ -141,6 +143,9 @@ export function JobSummary({ jobId }: { jobId: string }) {
 
         {WON_STATUSES.includes(job.status ?? "") && (
           <WonCard jobId={jobId} job={job} contract={contract} card={card} onChange={() => void reload()} />
+        )}
+        {["won", "scheduled", "in_progress"].includes(job.status ?? "") && (
+          <ScheduleCard jobId={jobId} job={job} card={card} onChange={() => void reload()} />
         )}
 
         {/* "Why this job" is gone — what it said is in the facts above (Coy, 2026-10-09: "redundant"). */}
@@ -260,7 +265,9 @@ function Totals({ jobId, job, sections, bd, err, card }: {
 function ProposalState({ jobId, links, card, onWon }: {
   jobId: string; links: ProposalLink[] | null; card: React.CSSProperties; onWon?: () => Promise<unknown>;
 }) {
-  const live = links?.find((l) => !l.revoked_at && l.status !== "void") ?? null;
+  // A link the customer signed (097) leads; else the live one.
+  const live = links?.find((l) => l.status === "accepted") ?? links?.find((l) => !l.revoked_at && l.status !== "void") ?? null;
+  const signed = live ? signedLine(live) : null;
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   return (
@@ -275,6 +282,7 @@ function ProposalState({ jobId, links, card, onWon }: {
           <div style={{ fontSize: F.sm, color: T.ink, marginTop: 6, lineHeight: 1.5 }}>
             <b>v{live.version?.version ?? "?"} final</b> · {live.sent_at ? `sent ${day(live.sent_at)}${live.sent_via?.length ? ` · ${live.sent_via.map((v) => (v === "copy" ? "link copied" : v === "text" ? "by text" : "by email")).join(", ")}` : ""}` : "link made, not sent yet"}
             <div style={{ color: live.view_count ? T.green : T.ink2 }}>{viewLine(live)}</div>
+            {signed && <div style={{ color: T.green, fontWeight: 600 }}>✓ {signed} — on the link</div>}
           </div>
         ) : (
           <div style={{ fontSize: F.sm, color: T.ink2, marginTop: 6, lineHeight: 1.5 }}>
@@ -285,13 +293,80 @@ function ProposalState({ jobId, links, card, onWon }: {
         <div style={{ fontSize: F.xs, color: T.ink3, marginTop: 4 }}>{links.length} links made on this job</div>
       )}
       {/* The customer said yes: one tap moves the job to Won and stamps the day (Coy, 2026-10-09). */}
-      {live && onWon && (
+      {live && onWon && !signed && (
         <div className="flex items-center gap-2" style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${T.hairSoft}` }}>
           <span style={{ flex: 1, fontSize: F.xs, color: T.ink2 }}>Did they say yes?</span>
           <button disabled={busy} onClick={() => { setBusy(true); setErr(null); onWon().catch((e) => setErr(e instanceof Error ? e.message : String(e))).finally(() => setBusy(false)); }}
             className="rounded px-3" style={{ height: 30, border: "none", background: T.green, color: "#fff", fontFamily: disp, fontSize: F.xs, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".05em", cursor: busy ? "default" : "pointer", opacity: busy ? 0.6 : 1 }}>
             {busy ? "Marking…" : "Mark won"}
           </button>
+        </div>
+      )}
+      {err && <div style={{ fontSize: F.xs, color: T.red, marginTop: 4 }}>{err}</div>}
+    </section>
+  );
+}
+
+/**
+ * When the work happens (Coy, 2026-10-09; src/lib/jobs/schedule.ts): the start day and the days of
+ * work give the last day in work days (Mon–Fri). A start moves Won → Scheduled, clearing it moves it
+ * back; "Told the customer" marks the date confirmed (schedule_state committed) rather than pencilled in.
+ */
+function ScheduleCard({ jobId, job, card, onChange }: {
+  jobId: string; job: Job; card: React.CSSProperties; onChange: () => void;
+}) {
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const today = todayCentral();
+  const save = (schedule: Record<string, unknown>) => {
+    setErr(null); setBusy(true);
+    send(`/api/jobs/${jobId}`, "PATCH", { schedule })
+      .then(() => onChange())
+      .catch((e) => setErr(e instanceof Error ? e.message : String(e)))
+      .finally(() => setBusy(false));
+  };
+  const start = job.scheduled_start ?? null;
+  const confirmed = job.schedule_state === "committed";
+  const input: React.CSSProperties = { height: 30, fontSize: F.sm, border: `1px solid ${T.hair}`, borderRadius: 4, padding: "0 6px", background: T.card, color: T.ink };
+  return (
+    <section aria-label="Schedule" className="px-3 py-2.5" style={card}>
+      <div className="flex items-baseline gap-2">
+        <span style={eyebrow}>Schedule</span>
+        <span className="flex-1" />
+        {start && <span style={{ fontSize: F.xs, color: confirmed ? T.green : T.ink3, fontWeight: confirmed ? 600 : 400 }}>{confirmed ? "✓ Customer told" : "Pencilled in"}</span>}
+      </div>
+      <div className="flex items-end gap-3 flex-wrap" style={{ marginTop: 6 }}>
+        <label style={{ fontSize: F.xs, color: T.ink2 }}>
+          <div>Start</div>
+          <input type="date" key={start ?? "none"} defaultValue={start ?? ""} disabled={busy} aria-label="Start day"
+            onChange={(e) => { if (validDay(e.target.value)) save({ start: e.target.value }); }} style={input} />
+        </label>
+        <label style={{ fontSize: F.xs, color: T.ink2 }}>
+          <div>Days of work</div>
+          <input type="number" min={1} step={1} key={`d${job.duration_days ?? ""}`} defaultValue={job.duration_days ?? ""} disabled={busy} aria-label="Days of work"
+            onBlur={(e) => { const v = e.target.value.trim(); const n = Number(v); if (v === "" ? job.duration_days != null : n > 0 && n !== Number(job.duration_days)) save({ days: v === "" ? null : n }); }}
+            style={{ ...input, width: 76 }} />
+        </label>
+        {start && (
+          <div style={{ fontSize: F.sm, color: T.ink, paddingBottom: 5, ...nums }}>
+            {dayLabel(start)}{job.scheduled_end && job.scheduled_end !== start ? ` → ${dayLabel(job.scheduled_end)}` : ""}
+            <span style={{ color: T.ink3 }}> · {whenLabel(start, today)}</span>
+          </div>
+        )}
+      </div>
+      {start ? (
+        <div className="flex items-center gap-3 flex-wrap" style={{ marginTop: 6, fontSize: F.xs }}>
+          <label className="flex items-center gap-1.5" style={{ color: T.ink2, cursor: "pointer" }}>
+            <input type="checkbox" checked={confirmed} disabled={busy} onChange={(e) => save({ confirmed: e.target.checked })} style={{ accentColor: T.green }} />
+            Told the customer
+          </label>
+          <span className="flex-1" />
+          {job.duration_days == null && <span style={{ color: T.ink3 }}>No days set — counted as one day.</span>}
+          <button disabled={busy} onClick={() => save({ start: null })} style={{ border: "none", background: "none", color: T.red, cursor: "pointer", fontSize: F.xs, padding: 0 }}>Clear the date</button>
+        </div>
+      ) : (
+        <div style={{ fontSize: F.xs, color: T.ink3, marginTop: 6 }}>
+          No start day yet. Pick one and the job moves to Scheduled on the board; the end is counted in work days, Mon–Fri.
         </div>
       )}
       {err && <div style={{ fontSize: F.xs, color: T.red, marginTop: 4 }}>{err}</div>}
@@ -308,7 +383,7 @@ function WonCard({ jobId, job, contract, card, onChange }: {
 }) {
   const [editing, setEditing] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const todayCentral = new Date().toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
+  const todayDay = todayCentral();
   const wonDay = job.won_at ? new Date(job.won_at).toLocaleDateString("en-CA", { timeZone: "America/Chicago" }) : "";
   const setDay = (v: string) => {
     setErr(null);
@@ -322,7 +397,7 @@ function WonCard({ jobId, job, contract, card, onChange }: {
       <div className="flex items-baseline gap-2 flex-wrap">
         <span style={{ ...eyebrow, color: T.green }}>Won</span>
         {editing ? (
-          <input type="date" defaultValue={wonDay} max={todayCentral} autoFocus aria-label="Day it was won"
+          <input type="date" defaultValue={wonDay} max={todayDay} autoFocus aria-label="Day it was won"
             onChange={(e) => { if (e.target.value) setDay(e.target.value); }} onBlur={() => setEditing(false)}
             style={{ height: 28, fontSize: F.sm, border: `1px solid ${T.hair}`, borderRadius: 4, padding: "0 6px", background: T.card, color: T.ink }} />
         ) : (
@@ -345,9 +420,14 @@ function WonCard({ jobId, job, contract, card, onChange }: {
             </Link>{contract.finalized_at ? ` · final ${day(contract.finalized_at)}` : ""}{contract.total != null ? ` · ${money0(contract.total)}` : ""}
             {contract.change_order_count > 0 && ` + ${contract.change_order_count} signed change order${contract.change_order_count === 1 ? "" : "s"} ${money0(contract.change_orders)}`}
           </div>
+          {contract.signed && (
+            <div style={{ fontSize: F.xs, color: T.green, fontWeight: 600, marginTop: 2 }}>
+              ✓ {signedLine({ status: "accepted", decided_name: contract.signed.name, decided_at: contract.signed.at })} on the link
+            </div>
+          )}
           {contract.later_version != null && (
             <div style={{ fontSize: F.xs, color: T.ink3, marginTop: 2 }}>
-              v{contract.later_version} was made after the win and isn&apos;t the contract. Work added after the yes is a change order (Budget → Actual costs).
+              v{contract.later_version} was made after {contract.signed ? "the signed version" : "the win"} and isn&apos;t the contract. Work added after the yes is a change order (Budget → Actual costs).
             </div>
           )}
         </div>

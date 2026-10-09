@@ -53,3 +53,11 @@ test("the customer's copy carries no cost, profit, hidden lines or notes", () =>
   assert.equal(publicSnapshot({ ...snap, prepared_by: undefined }, { project_type: null, type_label: "" }).prepared_by, null);
   assert.equal(out.price.groups[0].items.find((i) => i.id === "l3").sell, 0);
 });
+
+test("signedLine names who signed and when, only for a signed link", async () => {
+  const { signedLine, SIGN_CONSENT } = await import("../src/lib/proposal-links.ts");
+  assert.equal(signedLine({ status: "viewed", decided_name: "A", decided_at: null }), null);
+  assert.equal(signedLine({ status: "accepted", decided_name: " Johnette Wilson ", decided_at: "2026-10-09T23:24:00Z" }), "Signed by Johnette Wilson · Oct 9, 6:24 PM");
+  assert.equal(signedLine({ status: "accepted", decided_name: null, decided_at: null }), "Signed by the customer");
+  assert.ok(SIGN_CONSENT.length > 10);
+});

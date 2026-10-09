@@ -40,6 +40,7 @@ const UNIT_RULE_SAYS: Record<string, string> = {
   per_day: "the days on the job", per_job: "1, once for the job", per_sheet: "the sheets the area needs", per_stick: "the sticks the area needs", manual: "typed",
 };
 import { useWide } from "@/lib/v34/use-wide";
+import { CostAnalysis } from "@/components/v34/cost-analysis";
 import { Cell } from "@/components/v34/cell";
 
 interface Line extends BudgetLine {
@@ -79,6 +80,8 @@ export interface BudgetSummary {
   /** The job minimum (day minimum × days), or what it needs. */
   minimum: { ok: true; minimum: number; day_minimum: number; days: number } | { ok: false; blocked: string[] };
   overhead_pct: number | null; margin_pct: number | null;
+  /** Each section's own lines, for its folded card: price, cost and how many are not priced. */
+  areas: Record<string, { lines: number; cost: number; price: number; blocked: number }>;
 }
 
 async function call(url: string, method: string, body?: unknown) {
@@ -98,8 +101,12 @@ function areaUnit(s: Area): "sy" | "sf" {
   return /\bSY\b/.test(s.source_ref ?? "") ? "sy" : "sf";
 }
 
-export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots }: {
+export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots, crew = null, onCrew }: {
   jobId: string; sections: Area[]; days: number | null;
+  /** The crew on the job (migration 093); null = not applied yet. */
+  crew?: { size: number | null; hours: number | null } | null;
+  /** Saves the crew or days on the job; resolves to an error message or null. */
+  onCrew?: (patch: { duration_days?: number | null; crew_size?: number | null; crew_hours?: number | null }) => Promise<string | null>;
   /** Each section card's budget slot, by section id: its cost items are drawn there (Coy, 2026-10-04). */
   slots?: Record<string, HTMLElement>;
   onSummary?: (s: BudgetSummary) => void;
@@ -197,8 +204,17 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
       has_lines: data.lines.length > 0, tax_on: data.estimate?.tax_on ?? true,
       tiers: res.tiers.map((t) => ({ ...t, label: null })),
       minimum, overhead_pct: data.settings.overhead_pct, margin_pct: data.settings.margin_pct,
+      areas: Object.fromEntries(sections.map((s) => {
+        const ls = data.lines.filter((l) => l.section_id === s.id);
+        return [s.id, {
+          lines: ls.length,
+          cost: ls.reduce((a, l) => a + (res.lines[l.id]?.ext_cost ?? 0), 0),
+          price: ls.reduce((a, l) => a + (res.lines[l.id]?.ext_price ?? 0), 0),
+          blocked: ls.filter((l) => (res.lines[l.id]?.blocked.length ?? 0) > 0).length,
+        }];
+      })),
     });
-  }, [data, res, onSummary, minimum]);
+  }, [data, res, onSummary, minimum, sections]);
 
   if (!data || !res) {
     return (
@@ -419,7 +435,6 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
       {/* ---- header ---- */}
       <div className="px-3 pt-2.5 pb-2 flex items-center gap-2 flex-wrap" style={{ borderBottom: `1px solid ${T.hair}` }}>
         <span style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 700 }}>Job totals</span>
-        <span style={{ fontSize: F.xs, color: T.ink3 }}>each section&apos;s cost items are in its card above · qty × unit cost → + O.H. → ÷ (1 − margin) → price</span>
         <span className="flex-1" />
         <button onClick={() => setBook({ area: "" })} className="rounded px-2.5"
           style={{ height: 30, background: T.ink, color: T.card, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", letterSpacing: ".06em", cursor: "pointer" }}>
@@ -533,17 +548,18 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
               </div>
             ))}
           </div>
-          {(() => {
-                        const t = shownTiers[0];
-            if (!t) return null;
-            const ids = new Set(t.line_ids);
-            return <Rollup lines={data.lines.filter((l) => ids.has(l.id))} res={res} tier={t} tierLabel={null}
-              sections={sections} wide={wide} overheadPct={data.settings.overhead_pct} marginPct={data.settings.margin_pct} />;
-          })()}
+          {shownTiers[0] && (
+            <CostAnalysis wide={wide} sections={sections} overheadPct={data.settings.overhead_pct}
+              tax={shownTiers[0].tax} discount={shownTiers[0].discount} days={days} crew={crew}
+              dayMinimum={data.pricing?.day_minimum ?? null}
+              onCrew={onCrew ?? (async () => "Can't save here.")}
+              lines={data.lines.filter((l) => shownTiers[0].line_ids.includes(l.id)).map((l) => {
+                const r = res.lines[l.id];
+                return { id: l.id, name: l.name, cost_type: String(l.cost_type), section_id: l.section_id ?? null, qty: r?.qty ?? null, unit: l.unit,
+                  unit_cost: l.unit_cost, ext_cost: r?.ext_cost ?? null, overhead: r?.overhead ?? null, ext_price: r?.ext_price ?? null };
+              })} />
+          )}
           <PriceSummary jobId={jobId} lines={visible} res={res} tiers={shownTiers} proposal={data.proposal} onChanged={reload} />
-          <div style={{ fontSize: F.xs, color: T.ink3, marginTop: 4 }}>
-            Job minimum: {minimum.ok ? `${money0(minimum.minimum)} (${minimum.days} days × ${money0(minimum.day_minimum)} a day)` : `needs ${minimum.blocked.join(" and ")}`}
-          </div>
         </div>
       )}
 
@@ -677,7 +693,6 @@ function GroupCard({ name, lines, res, optLabel, asmName, addons, onOpen, cost, 
   );
 }
 
-const TYPE_COLORS: Record<string, string> = { material: "#1E5AA8", labor: "#D97757", equipment: "#6A55B0", subcontract: "#2F8A5B", other: "#8C8578" };
 
 /**
  * What used to be the proposal's job panel (Coy, 2026-10-02: "integrated into
@@ -722,92 +737,6 @@ function PriceSummary({ jobId, lines, res, tiers, proposal, onChanged }: {
       </div>
       <div style={{ fontSize: 10, color: T.ink3, marginTop: 2 }}>Yours only — never on the proposal, never changes the price.</div>
       {err && <div style={{ fontSize: F.xs, color: T.red }}>{err}</div>}
-    </div>
-  );
-}
-
-/**
- * The roll-up (Coy, 2026-10-04: "shows a spreadsheet of how the labor,
- * equipment and materials add up for all the sections and how the Over Head
- * and profit all math out"). Rows are cost types; columns each section's cost,
- * then the job's cost, O.H., profit and price for that type; then the math from
- * cost to the total. Every number is the engine's own line result, summed.
- */
-function Rollup({ lines, res, tier, tierLabel, sections, wide, overheadPct, marginPct }: {
-  lines: Line[]; res: ReturnType<typeof priceBudget>; tier: TierTotal; tierLabel: string | null;
-  sections: Area[]; wide: boolean; overheadPct: number | null; marginPct: number | null;
-}) {
-  if (!lines.length) return null;
-  const known = new Set(sections.map((s) => s.id));
-  const areaOf = (l: Line) => (l.section_id && known.has(l.section_id) ? l.section_id : "");
-  const cols = [...sections.filter((s) => lines.some((l) => areaOf(l) === s.id)).map((s) => ({ id: s.id, name: s.name || "Unnamed area" })),
-    ...(lines.some((l) => areaOf(l) === "") ? [{ id: "", name: "Whole job" }] : [])];
-  const typeOf = (l: Line): CostType => ((COST_TYPES as readonly string[]).includes(String(l.cost_type)) ? l.cost_type as CostType : "other");
-  const types = COST_TYPES.filter((k) => lines.some((l) => typeOf(l) === k));
-  const of = (ls: Line[], k: "ext_cost" | "overhead" | "ext_price") => ls.reduce((a, l) => a + (res.lines[l.id]?.[k] ?? 0), 0);
-  const rows = types.map((k) => {
-    const ls = lines.filter((l) => typeOf(l) === k);
-    const cost = of(ls, "ext_cost"), oh = of(ls, "overhead"), price = of(ls, "ext_price");
-    return { k, label: COST_TYPE_LABEL[k], ls, cost, oh, price, profit: price - cost - oh };
-  });
-  const cell: React.CSSProperties = { padding: "4px 8px", textAlign: "right", whiteSpace: "nowrap" };
-  const th: React.CSSProperties = { ...eyebrow, padding: "5px 8px", textAlign: "right", whiteSpace: "nowrap", borderBottom: `1px solid ${T.hair}` };
-  const cost = rows.reduce((a, r) => a + r.cost, 0), oh = rows.reduce((a, r) => a + r.oh, 0), price = rows.reduce((a, r) => a + r.price, 0);
-  const steps: Array<[string, string, number | null, boolean?]> = [
-    ["Cost", "every section's labor, materials, equipment …", cost],
-    [`+ O.H.`, overheadPct !== null ? `${overheadPct}% of cost` : "the job's O.H.", oh],
-    ["= Cost + O.H.", "", cost + oh, true],
-    ["+ Profit", marginPct !== null ? `${marginPct}% margin: (cost + O.H.) ÷ (1 − ${marginPct}%), less cost + O.H.` : "the margin", price - cost - oh],
-    ["= Price", "before tax", price, true],
-    ...(tier.tax > 0 ? [["+ Sales tax", "at cost, on taxed lines", tier.tax] as [string, string, number]] : []),
-    ...(tier.discount > 0 ? [["− Discount", "price only", -tier.discount] as [string, string, number]] : []),
-    ["= Total", tier.priced ? `profit ${money0(tier.profit)} · margin ${pct(tier.margin)}` : "not priced yet — see what each line needs", tier.priced ? tier.total : null, true],
-  ];
-  return (
-    <div className="mt-2.5 pt-2" style={{ borderTop: `1px solid ${T.hair}` }}>
-      <div style={{ ...eyebrow }}>How it adds up{tierLabel ? ` · ${tierLabel}` : ""}</div>
-      <div className="overflow-x-auto mt-1">
-        <table style={{ borderCollapse: "collapse", fontSize: F.sm, minWidth: "100%", ...nums }}>
-          <thead>
-            <tr style={{ background: T.card }}>
-              <th style={{ ...th, textAlign: "left" }}>Type</th>
-              {wide && cols.map((c) => <th key={c.id || "job"} style={{ ...th, maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis" }} title={c.name}>{c.name}</th>)}
-              <th style={th}>Cost</th><th style={th}>O.H.</th><th style={th}>Profit</th><th style={th}>Price</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.k} style={{ borderTop: `1px solid ${T.hairSoft}` }}>
-                <td style={{ ...cell, textAlign: "left" }}>
-                  <span className="inline-flex items-center gap-1.5"><span style={{ width: 8, height: 8, borderRadius: 2, background: TYPE_COLORS[r.k] ?? TYPE_COLORS.other }} />{r.label}</span>
-                </td>
-                {wide && cols.map((c) => { const v = of(r.ls.filter((l) => areaOf(l) === c.id), "ext_cost"); return <td key={c.id || "job"} style={{ ...cell, color: v ? T.ink2 : T.ink3 }}>{v ? money0(v) : "—"}</td>; })}
-                <td style={{ ...cell, fontWeight: 600 }}>{money0(r.cost)}</td>
-                <td style={{ ...cell, color: T.ink2 }}>{money0(r.oh)}</td>
-                <td style={{ ...cell, color: T.ink2 }}>{money0(r.profit)}</td>
-                <td style={{ ...cell, fontWeight: 600 }}>{money0(r.price)}</td>
-              </tr>
-            ))}
-            <tr style={{ borderTop: `1px solid ${T.hair}`, background: T.card }}>
-              <td style={{ ...cell, textAlign: "left", fontFamily: disp, fontWeight: 700, textTransform: "uppercase" }}>All</td>
-              {wide && cols.map((c) => <td key={c.id || "job"} style={{ ...cell, fontWeight: 600 }}>{money0(of(lines.filter((l) => areaOf(l) === c.id), "ext_cost"))}</td>)}
-              <td style={{ ...cell, fontWeight: 700 }}>{money0(cost)}</td>
-              <td style={{ ...cell, fontWeight: 600 }}>{money0(oh)}</td>
-              <td style={{ ...cell, fontWeight: 600 }}>{money0(price - cost - oh)}</td>
-              <td style={{ ...cell, fontWeight: 700 }}>{money0(price)}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <div className="mt-2 rounded" style={{ border: `1px solid ${T.hair}`, background: T.card, maxWidth: 560 }}>
-        {steps.map(([label, note, v, strong], i) => (
-          <div key={label} className="flex items-baseline gap-2 px-2.5 py-1" style={{ borderTop: i ? `1px solid ${T.hairSoft}` : "none", ...nums }}>
-            <span style={{ fontFamily: disp, fontWeight: strong ? 700 : 500, textTransform: "uppercase", letterSpacing: ".03em", minWidth: 118, fontSize: F.sm }}>{label}</span>
-            <span style={{ fontSize: F.xs, color: T.ink3, flex: 1, minWidth: 0, whiteSpace: "normal", overflowWrap: "anywhere" }}>{note}</span>
-            <span style={{ fontWeight: strong ? 700 : 500, fontSize: strong ? F.md : F.sm, whiteSpace: "nowrap" }}>{v === null ? "—" : money0(v)}</span>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }

@@ -96,6 +96,20 @@ export default function ScopeBuilder() {
   const [job, setJob] = useState<Job | null>(null);
   const [contact, setContact] = useState<Contact | null>(null);
   const [why, setWhy] = useState<Why | null>(null);
+  // The crew on the job (migration 093) — null until 093 is applied.
+  const [crew, setCrew] = useState<{ size: number | null; hours: number | null } | null>(null);
+  // Which sections are open (Coy, 2026-10-08: "less busy and easier to read") — the rest fold to one
+  // line. Remembered on the device per job; with nothing remembered a job with one section opens it.
+  const [openSecs, setOpenSecs] = useState<Set<string> | null>(null);
+  useEffect(() => {
+    try { const v = localStorage.getItem(`sc:open-sections:${jobId}`); setOpenSecs(v ? new Set(JSON.parse(v) as string[]) : null); } catch { setOpenSecs(null); }
+  }, [jobId]);
+  const toggleSec = useCallback((id: string, all: string[]) => setOpenSecs((cur) => {
+    const n = new Set(cur ?? (all.length === 1 ? all : []));
+    if (n.has(id)) n.delete(id); else n.add(id);
+    try { localStorage.setItem(`sc:open-sections:${jobId}`, JSON.stringify([...n].slice(-100))); } catch { /* no storage */ }
+    return n;
+  }), [jobId]);
   // Dusty docked on a desktop: the totals move into his panel (Coy, 2026-09-30).
   const docked = useDustyDocked();
   const [slot, setSlot] = useState<HTMLElement | null>(null);
@@ -177,7 +191,7 @@ export default function ScopeBuilder() {
         .map((x) => ({ id: x.id as string, name: x.name as string, unit: x.unit as string, unit_cost: num(x.unit_cost),
           qty_rule: x.qty_rule as string, rule_params: (x.rule_params ?? {}) as Record<string, number> }))
         .filter(isReinforcementCard));
-      setJob(j.job); setContact(j.contact ?? null); setWhy(j.why ?? null);
+      setJob(j.job); setContact(j.contact ?? null); setWhy(j.why ?? null); setCrew(j.crew ?? null);
       setSections((s.sections as Section[]).map(numify));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -211,6 +225,7 @@ export default function ScopeBuilder() {
         name: `Section ${(sections?.length ?? 0) + 1}`, work_type: "slab", sort_order: sections?.length ?? 0,
       });
       setSections((a) => [...(a ?? []), numify(b.section)]);
+      toggleSec(b.section.id as string, (sections ?? []).map((x) => x.id));
       setBudgetTick((n) => n + 1);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -228,6 +243,17 @@ export default function ScopeBuilder() {
       setSaveErr((m) => ({ ...m, [id]: e instanceof Error ? e.message : String(e) }));
     }
   }
+
+  // Crew, hours a day or days, from the Cost Analysis: an error message, or null when saved.
+  const saveCrew = useCallback(async (patch: { duration_days?: number | null; crew_size?: number | null; crew_hours?: number | null }): Promise<string | null> => {
+    try {
+      const b = await send(`/api/jobs/${jobId}`, "PATCH", patch);
+      if ("duration_days" in patch) setJob((j) => (j ? { ...j, duration_days: b.job.duration_days === null ? null : Number(b.job.duration_days) } : j));
+      if ("crew_size" in patch || "crew_hours" in patch) setCrew((c) => ({ size: c?.size ?? null, hours: c?.hours ?? null,
+        ...("crew_size" in patch ? { size: patch.crew_size ?? null } : {}), ...("crew_hours" in patch ? { hours: patch.crew_hours ?? null } : {}) }));
+      return null;
+    } catch (e) { return e instanceof Error ? e.message : String(e); }
+  }, [jobId]);
 
   async function saveCrewDays(v: number | null) {
     try {
@@ -352,7 +378,9 @@ export default function ScopeBuilder() {
                   const shapeIds = new Set(shapesOf(s.id, plans).ids);
                   const sh = shapesOf(s.id, plans);
                   return (
-                    <SectionCard key={s.id} s={s} index={sections.indexOf(s)} err={saveErr[s.id]} rcards={rcards} jobType={job.job_type} jobId={jobId} onSlot={onSlot}
+                    <SectionCard key={s.id} s={s} index={sections.indexOf(s)}
+                      open={openSecs ? openSecs.has(s.id) : sections.length === 1} onToggle={() => toggleSec(s.id, sections.map((x) => x.id))}
+                      money={budget?.areas?.[s.id] ?? null} err={saveErr[s.id]} rcards={rcards} jobType={job.job_type} jobId={jobId} onSlot={onSlot}
                       sheets={sheetsOf(s)} hasPlans={planSheets.length > 0} onSheets={(start) => openSheets(s, start)}
                       takeoffUnit={s.takeoff_sync !== false && sh.unit ? sh.unit : null}
                       takeoff={!can(access, "plan_room") ? null : <SectionTakeoffStrip jobId={jobId} sectionId={s.id} sectionName={s.name ?? null} following={s.takeoff_sync !== false}
@@ -380,7 +408,8 @@ export default function ScopeBuilder() {
 
         {/* The budget: lines from cost cards, good / better / best (migration 048). */}
         {can(access, "budget") && <div className="px-3 pb-3">
-          <JobBudget jobId={job.id} sections={sections} days={job.duration_days} onSummary={setBudget} refresh={budgetTick} slots={slots} />
+          <JobBudget jobId={job.id} sections={sections} days={job.duration_days} onSummary={setBudget} refresh={budgetTick} slots={slots}
+            crew={crew} onCrew={saveCrew} />
         </div>}
 
         {/* Photos, plans, specs, receipts — Dusty reads them (migration 045). */}
@@ -428,8 +457,12 @@ function splitFt(v: number | null): [number | "", number | ""] {
   return [ft, inch === 0 ? "" : inch];
 }
 
-function SectionCard({ s, index, err, onLocal, onSave, onRemove, jobType, jobId, photos, sheets, hasPlans, onSheets, takeoff, takeoffUnit, onSlot }: {
+function SectionCard({ s, index, err, onLocal, onSave, onRemove, jobType, jobId, photos, sheets, hasPlans, onSheets, takeoff, takeoffUnit, onSlot, open, onToggle, money: m }: {
   s: Section; index: number; err?: string; rcards: RCard[]; jobType: string | null; jobId: string;
+  /** Open, or folded to one line (Coy, 2026-10-08: "less busy and easier to read"). */
+  open: boolean; onToggle: () => void;
+  /** Its own budget lines' totals, for the folded line. */
+  money: { lines: number; cost: number; price: number; blocked: number } | null;
   /** Where the budget draws this section's cost items. */
   onSlot: (id: string, el: HTMLElement | null) => void;
   /** The plan sheets its bid line names (Coy, 2026-10-02: "verify the scopes on the sheets"). */
@@ -535,23 +568,51 @@ function SectionCard({ s, index, err, onLocal, onSave, onRemove, jobType, jobId,
       </Cell>
     );
   };
+  // The folded line: size, thickness, its price and price per unit, and a dot when something is missing.
+  const sizeText = q.count !== null ? `${n1(q.count)} ${q.count_unit}` : q.sqft !== null ? `${n1(q.sqft)} SF${s.depth_in ? ` · ${s.depth_in}"` : ""}` : "size not set";
+  const perText = m && m.lines > 0 && m.blocked === 0
+    ? q.count !== null && q.count > 0 ? `${money(m.price / q.count)}/${q.count_unit}` : q.sqft ? `${money(m.price / q.sqft)}/SF` : ""
+    : "";
+  const missingWhat = [...q.missing, ...(m && m.blocked ? [`${m.blocked} item${m.blocked === 1 ? "" : "s"} not priced`] : [])].join(", ");
+  const missingAny = missingWhat.length > 0;
   const seg = (on: boolean): React.CSSProperties => ({ height: 22, padding: "0 7px", fontSize: 10, fontFamily: disp, fontWeight: 600, letterSpacing: ".05em",
     textTransform: "uppercase", whiteSpace: "nowrap", background: on ? T.ink : T.card, color: on ? T.card : T.ink2, cursor: "pointer" });
 
   return (
-    <div style={{ background: T.card, borderBottom: `1px solid ${T.hair}`, marginTop: index === 0 ? 0 : 8 }}>
-      <div className="px-3 pt-2.5 flex items-center gap-2 flex-wrap">
-        <span style={{ ...eyebrow }}>Section {index + 1}</span>
-        <input defaultValue={s.name ?? ""} placeholder="Name it"
-          onChange={(e) => onLocal({ name: e.target.value })} onBlur={(e) => onSave({ name: e.target.value })}
-          className="bg-transparent outline-none" style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 600, minWidth: 0, flex: "1 1 140px" }} />
-        <select value={s.work_type} onChange={(e) => { onLocal({ work_type: e.target.value }); onSave({ work_type: e.target.value }); }}
-          className="rounded px-1.5 outline-none" style={{ height: 28, border: `1px solid ${T.hair}`, background: T.card, fontSize: F.xs }}>
-          {WORK_TYPES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-        </select>
-        <Dictate jobId={jobId} s={s} onApply={(p) => { onLocal(p as Partial<Section>); onSave(p as Partial<Section>); }} />
-        <button onClick={onRemove} aria-label="Remove section" style={{ ...eyebrow, color: T.red, cursor: "pointer" }}>Remove</button>
+    <div style={{ background: T.card, borderBottom: `1px solid ${T.hair}`, marginTop: index === 0 ? 0 : 6 }}>
+      <div className={`px-3 ${open ? "pt-2.5" : "py-2"} flex items-center gap-2 flex-wrap`}>
+        <button onClick={onToggle} aria-expanded={open} aria-label={open ? `Fold ${s.name || `section ${index + 1}`}` : `Open ${s.name || `section ${index + 1}`}`}
+          className="flex items-center justify-center rounded" style={{ width: 26, height: 26, flex: "none", border: `1px solid ${T.hair}`, background: T.card, cursor: "pointer" }}>
+          <span aria-hidden="true" style={{ fontSize: 11, color: T.ink2, display: "inline-block", transform: open ? "rotate(90deg)" : "none", transition: "transform .15s" }}>▸</span>
+        </button>
+        {open ? (
+          <input defaultValue={s.name ?? ""} placeholder={`Section ${index + 1} — name it`}
+            onChange={(e) => onLocal({ name: e.target.value })} onBlur={(e) => onSave({ name: e.target.value })}
+            className="bg-transparent outline-none" style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 600, minWidth: 0, flex: "1 1 140px" }} />
+        ) : (
+          <button onClick={onToggle} className="text-left flex items-center gap-1.5" style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 600, minWidth: 0, flex: "1 1 120px", cursor: "pointer", ...clip }}>
+            {missingAny && <span title={missingWhat} style={{ width: 7, height: 7, borderRadius: 4, background: T.hiviz, flex: "none" }} />}
+            <span style={clip}>{s.name || `Section ${index + 1}`}</span>
+          </button>
+        )}
+        {open ? (
+          <>
+            <select value={s.work_type} onChange={(e) => { onLocal({ work_type: e.target.value }); onSave({ work_type: e.target.value }); }} aria-label="Kind of area"
+              className="rounded px-1.5 outline-none" style={{ height: 28, border: `1px solid ${T.hair}`, background: T.card, fontSize: F.xs }}>
+              {WORK_TYPES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+            </select>
+            <Dictate jobId={jobId} s={s} onApply={(p) => { onLocal(p as Partial<Section>); onSave(p as Partial<Section>); }} />
+          </>
+        ) : (
+          <button onClick={onToggle} className="flex items-baseline gap-2 text-right" style={{ marginLeft: "auto", cursor: "pointer", fontSize: F.xs, color: T.ink2, ...nums }}>
+            <span>{sizeText}</span>
+            {m && m.lines > 0
+              ? <span style={{ fontFamily: disp, fontSize: F.md, fontWeight: 700, color: T.ink }}>{money0(m.price)}{perText ? <span style={{ fontFamily: "inherit", fontWeight: 400, fontSize: F.xs, color: T.ink3 }}> {perText}</span> : null}</span>
+              : <span style={{ color: T.ink3 }}>no items</span>}
+          </button>
+        )}
       </div>
+      <div style={open ? undefined : { display: "none" }}>
       {s.source_ref && (
         <div className="px-3" style={{ fontSize: F.xs, color: T.ink3, marginTop: 2 }}>From the bid: {s.source_ref.replace(/^"|"$/g, "")}</div>
       )}
@@ -680,7 +741,14 @@ function SectionCard({ s, index, err, onLocal, onSave, onRemove, jobType, jobId,
       <div className="px-3 py-2" style={{ borderTop: `1px solid ${T.hairSoft}` }}>
         <SectionNotes value={s.access_notes} onLocal={(v) => onLocal({ access_notes: v })} onSave={(v) => onSave({ access_notes: v })} />
       </div>
-      {err && <div className="px-3 pb-2" style={{ fontSize: F.xs, color: T.red }}>Not saved: {err}</div>}
+      <div className="px-3 pb-2 flex items-center gap-2">
+        {err && <span style={{ fontSize: F.xs, color: T.red }}>Not saved: {err}</span>}
+        <span className="flex-1" />
+        <button onClick={() => { if (window.confirm(`Remove ${s.name || "this section"}? Its cost items come off the budget.`)) onRemove(); }}
+          aria-label="Remove section" style={{ ...eyebrow, color: T.red, cursor: "pointer", opacity: 0.8 }}>Remove section</button>
+      </div>
+      </div>
+      {!open && err && <div className="px-3 pb-2" style={{ fontSize: F.xs, color: T.red }}>Not saved: {err}</div>}
     </div>
   );
 }
@@ -945,6 +1013,7 @@ function BudgetRail({ budget, sqft, crew, setCrew, onCrewDays }: {
                   {sqft > 0 ? ` · ${money(b.total / sqft)}/sf` : ""}
                 </div>
                 {under && <div style={{ fontSize: F.xs, color: "#F3A89A", ...nums }}>under the job minimum of {money0(min.minimum)}</div>}
+                {min.ok && min.days > 0 && <div style={{ fontSize: F.xs, color: "#9FD8B4", marginTop: 2, ...nums }}>net {money0(b.profit / min.days)} a day · gross {money0((b.total - b.tax - b.cost) / min.days)} a day</div>}
               </>
             ) : (
               <ul className="mt-1" style={{ fontSize: F.sm, color: "#fff", lineHeight: 1.5, paddingLeft: 16, listStyle: "square" }}>
@@ -967,7 +1036,7 @@ function BudgetRail({ budget, sqft, crew, setCrew, onCrewDays }: {
           Job minimum: {min.ok ? `${money0(min.minimum)} — ${min.days} days × ${money0(min.day_minimum)} a day` : `needs ${min.blocked.join(" and ")}`}
         </div>
         <div style={{ fontSize: F.xs, color: dim, marginTop: 6, lineHeight: 1.45 }}>
-          Lines, O.H., margin, tax and discount are in the budget under the sections.
+          Crew, profit a day and cost per SF are in the Cost analysis under the sections.
         </div>
       </div>
     </>

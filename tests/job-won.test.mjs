@@ -35,3 +35,18 @@ test("signed change orders add to the contract, unsigned don't", () => {
   assert.equal(c.change_order_count, 1);
   assert.equal(c.contract_total, 6950);
 });
+
+test("a version the customer signed on its link is the contract, whatever the dates", () => {
+  const finals = [
+    { id: "v1", version: 1, finalized_at: "2026-10-01T15:00:00Z", number: "P-1", total: 6000 },
+    { id: "v2", version: 2, finalized_at: "2026-10-03T15:00:00Z", number: "P-2", total: 6450 },
+  ];
+  const c = contractFor(finals, "2026-10-05T17:00:00Z", [], [{ proposal_id: "v1", name: "Jeremy Wright", at: "2026-10-04T18:00:00Z" }]);
+  assert.equal(c.version, 1);
+  assert.equal(c.total, 6000);
+  assert.deepEqual(c.signed, { name: "Jeremy Wright", at: "2026-10-04T18:00:00Z" });
+  assert.equal(c.later_version, 2);
+  // A signature on a version that isn't a final here is ignored; marked by hand there's none.
+  assert.equal(contractFor(finals, "2026-10-05T17:00:00Z", [], [{ proposal_id: "zz", name: "X", at: null }]).signed, null);
+  assert.equal(contractFor(finals, "2026-10-05T17:00:00Z").signed, null);
+});

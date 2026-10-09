@@ -196,9 +196,9 @@ export async function GET(req: NextRequest) {
       .select("id, state, error, job_id, facts, box_folder_name, filed_at, updated_at, created")
       .eq("org_id", orgId).gte("updated_at", new Date(Date.now() - 24 * 3600_000).toISOString()).order("updated_at", { ascending: false }).limit(6),
     supabase.from("document_events")
-      .select("id, occurred_at, document:documents(job_id, job:jobs(title))")
-      .eq("org_id", orgId).eq("event", "viewed").gte("occurred_at", new Date(Date.now() - 48 * 3600_000).toISOString())
-      .order("occurred_at", { ascending: false }).limit(6),
+      .select("id, event, occurred_at, document:documents(job_id, decided_name, job:jobs(title))")
+      .eq("org_id", orgId).in("event", ["viewed", "accepted"]).gte("occurred_at", new Date(Date.now() - 48 * 3600_000).toISOString())
+      .order("occurred_at", { ascending: false }).limit(8),
     supabase.from("contacts").select("id, name, phone, archived_at, archived_reason")
       .eq("org_id", orgId).not("archived_at", "is", null).is("merged_into_contact_id", null).limit(300),
     tagItems(supabase, orgId, userId, false),
@@ -243,10 +243,17 @@ export async function GET(req: NextRequest) {
     }
   }
   // Proposal links (migration 075): each time a customer opened one in the last two days.
-    for (const e of (openRows ?? []) as unknown as Array<{ id: string; occurred_at: string; document: { job_id: string | null; job: { title: string | null } | null } | null }>) {
+    for (const e of (openRows ?? []) as unknown as Array<{ id: string; event: string; occurred_at: string; document: { job_id: string | null; decided_name: string | null; job: { title: string | null } | null } | null }>) {
     const job = e.document?.job_id ?? null;
+    const title = clipq(e.document?.job?.title ?? "a job", 140);
+    // Signed on the link (097): the job is won.
+    if (e.event === "accepted") {
+      items.push({ id: `signed-${e.id}`, at: e.occurred_at, kind: "proposal", contact_id: null, href: job ? `/dashboard/scope/${job}/summary` : undefined,
+        summary: `Proposal signed: ${title}${e.document?.decided_name ? ` — by ${clipq(e.document.decided_name, 60)}` : ""}`, detail: "They approved and signed it on the link. The job is won.", tone: "good" });
+      continue;
+    }
     items.push({ id: `opened-${e.id}`, at: e.occurred_at, kind: "proposal", contact_id: null, href: job ? `/dashboard/scope/${job}/proposal` : undefined,
-      summary: `Proposal opened: ${clipq(e.document?.job?.title ?? "a job", 140)}`, detail: "The customer opened the link you sent.", tone: "good" });
+      summary: `Proposal opened: ${title}`, detail: "The customer opened the link you sent.", tone: "good" });
   }
   // Back after being archived (Coy, 2026-10-04): someone archived who called or texted since, this week,
   // with the reason Coy gave — the context comes back with them.

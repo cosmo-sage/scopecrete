@@ -22,6 +22,8 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   const b = (await req.json().catch(() => ({}))) as { sent?: unknown; revoke?: unknown };
   const { data: doc } = await supabase.from("documents").select("id, status, sent_at, sent_via").eq("org_id", orgId).eq("id", id).maybeSingle();
   if (!doc) return bad("No such link.", 404);
+  // Signed by the customer (097): kept as it is — it is the record of their yes.
+  if (doc.status === "accepted") return bad(b.revoke === true ? "They signed this proposal — a signed link stays on." : "They already signed this proposal.", 409);
   const patch: Record<string, unknown> = {};
   if (typeof b.sent === "string" && VIA.has(b.sent)) {
     patch.sent_at = doc.sent_at ?? new Date().toISOString();

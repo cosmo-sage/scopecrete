@@ -42,6 +42,8 @@ export interface DocVM {
   warranty: { title: string; body: string; template: string | null; starter: boolean; edited: boolean };
   terms: { title: string; clauses: Clause[]; template: string | null; starter: boolean; edited: boolean };
   typeDraws: Draw[];
+  /** The customer's signature from the link (migration 097), drawn on the Sign line. */
+  signature?: { name: string | null; at: string | null; image: string | null } | null;
 }
 export interface DocEdits {
   display: (d: ProposalDisplay) => void;
@@ -361,12 +363,23 @@ export function ProposalDocument({ vm, edits, narrow }: { vm: DocVM; edits: DocE
             The prices, scope, payment schedule and terms above are accepted. {vm.org.name} is authorized to do the work as described.
           </p>
           <div className="grid gap-6" style={{ gridTemplateColumns: narrow ? "1fr" : "1fr 1fr" }}>
-            {[signer, vm.org.name].map((who, i) => (
-              <div key={i}>
-                <div style={{ height: 34, borderBottom: "1px solid #2A2A2A", fontFamily: hand, color: "#B3AA9A", fontSize: 13, display: "flex", alignItems: "flex-end" }}>{i === 0 ? "sign here" : ""}</div>
-                <div className="flex justify-between" style={{ fontSize: 11, color: "#5E5A52", marginTop: 3 }}><span>{who}</span><span>Date</span></div>
-              </div>
-            ))}
+            {[signer, vm.org.name].map((who, i) => {
+              const sig = i === 0 ? vm.signature ?? null : null;
+              return (
+                <div key={i}>
+                  <div style={{ height: sig?.image ? 56 : 34, borderBottom: "1px solid #2A2A2A", fontFamily: hand, color: "#B3AA9A", fontSize: 13, display: "flex", alignItems: "flex-end" }}>
+                    {sig?.image
+                      // eslint-disable-next-line @next/next/no-img-element
+                      ? <img src={sig.image} alt={`Signature of ${sig.name ?? "the customer"}`} style={{ maxHeight: 54, maxWidth: "100%", objectFit: "contain" }} />
+                      : i === 0 ? "sign here" : ""}
+                  </div>
+                  <div className="flex justify-between" style={{ fontSize: 11, color: "#5E5A52", marginTop: 3 }}>
+                    <span>{sig?.name ? `${sig.name} — signed electronically` : who}</span>
+                    <span>{sig?.at ? new Date(sig.at).toLocaleDateString("en-US", { timeZone: "America/Chicago", month: "short", day: "numeric", year: "numeric" }) : "Date"}</span>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       </Section>

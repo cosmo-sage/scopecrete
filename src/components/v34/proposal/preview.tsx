@@ -18,12 +18,12 @@ import { T, disp, strong, nums } from "@/lib/v34/tokens";
 import { ProposalDocument, type DocVM } from "./document";
 import { mapPicture } from "./area-visuals";
 import { sendBytes } from "@/components/v34/files-panel";
-import { linkMessage, smsHref, viewLine } from "@/lib/proposal-links";
+import { linkMessage, signedLine, smsHref, viewLine } from "@/lib/proposal-links";
 import { firstName, startingWords, type SendExample, type Via } from "@/lib/proposal-send";
 import { proposalLink, sendProposal } from "@/lib/v34/send-proposal";
 
 export interface PropLink {
-  id: string; url: string; status: string; sent_at: string | null; sent_via: string[]; view_count: number;
+  id: string; url: string; status: string; decided_name?: string | null; decided_at?: string | null; sent_at: string | null; sent_via: string[]; view_count: number;
   first_viewed_at: string | null; last_viewed_at: string | null; revoked_at: string | null; created_at: string;
   version: { version: number } | null;
   events?: Array<{ event: string; occurred_at: string; user_agent: string | null }>;
@@ -195,14 +195,15 @@ export function ProposalPreview({ jobId, vm, draft, version, blocked, coverFileI
               <div className="mt-1" style={{ fontSize: 12.5, color: T.ink }}>
                 <div>{live.sent_at ? `Sent ${when(live.sent_at)}${live.sent_via.length ? ` · ${live.sent_via.map((v) => (v === "copy" ? "link copied" : v === "text" ? "by text" : "by email")).join(", ")}` : ""}` : "Not sent yet"}</div>
                 <b style={{ color: live.view_count ? "#1F5C3A" : T.ink2 }}>{viewLine(live)}</b>
+                {signedLine(live) && <div style={{ color: "#1F5C3A", fontWeight: 700 }}>✓ {signedLine(live)}</div>}
               </div>
               {(live.events ?? []).length > 0 && (
                 <ul className="mt-1" style={{ margin: 0, padding: 0, listStyle: "none", fontSize: 12, color: T.ink2 }}>
-                  {(live.events ?? []).map((e, i) => <li key={i} style={nums}>Opened {when(e.occurred_at)}{device(e.user_agent) ? ` · ${device(e.user_agent)}` : ""}</li>)}
+                  {(live.events ?? []).map((e, i) => <li key={i} style={nums}>{e.event === "accepted" ? "Signed" : "Opened"} {when(e.occurred_at)}{device(e.user_agent) ? ` · ${device(e.user_agent)}` : ""}</li>)}
                 </ul>
               )}
               <div className="mt-1" style={{ fontSize: 11, color: T.ink3 }}>Opening it yourself while signed in isn&apos;t counted.</div>
-              <button type="button" onClick={() => void revoke(live.id)} className="mt-2" style={{ fontSize: 11.5, color: T.red, border: 0, background: "transparent", cursor: "pointer", padding: 0 }}>Turn this link off</button>
+              {live.status !== "accepted" && <button type="button" onClick={() => void revoke(live.id)} className="mt-2" style={{ fontSize: 11.5, color: T.red, border: 0, background: "transparent", cursor: "pointer", padding: 0 }}>Turn this link off</button>}
             </div>
           )}
           {older.length > 0 && (

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
 import { jobValues } from "@/lib/job-totals";
 import { monthlyNut } from "@/lib/engine";
+import { comingUp, dayLabel, whenLabel } from "@/lib/jobs/schedule";
 
 /**
  * The Dashboard's tiles (Coy, 2026-09-30): calls today, real leads, jobs in
@@ -44,7 +45,7 @@ export async function GET(req: NextRequest) {
 
   const [calls, jobsQ, pays, recs, oh] = await Promise.all([
     sb.from("messages").select("direction").eq("org_id", orgId).eq("channel", "call").gte("occurred_at", dayStartIso),
-    sb.from("jobs").select("id, title, status, origin, confirmed_at, created_at, duration_days, scheduled_start, bid_due_at")
+    sb.from("jobs").select("id, title, status, origin, confirmed_at, created_at, duration_days, scheduled_start, scheduled_end, bid_due_at")
       .eq("org_id", orgId).is("archived_at", null),
     sb.from("payments").select("amount, received_on").eq("org_id", orgId).gte("received_on", monthStart).lte("received_on", today),
     sb.from("receipts").select("amount, purchased_on").eq("org_id", orgId).gte("purchased_on", monthStart).lte("purchased_on", today),
@@ -64,7 +65,7 @@ export async function GET(req: NextRequest) {
     href: "/dashboard/messages",
   };
 
-  const jobs = (jobsQ.data ?? []) as Array<{ id: string; title: string | null; status: string | null; origin: string | null; confirmed_at: string | null; created_at: string; duration_days: unknown; scheduled_start: string | null; bid_due_at: string | null }>;
+  const jobs = (jobsQ.data ?? []) as Array<{ id: string; title: string | null; status: string | null; origin: string | null; confirmed_at: string | null; created_at: string; duration_days: unknown; scheduled_start: string | null; scheduled_end: string | null; bid_due_at: string | null }>;
 
   // Bids due (migration 063): open bid invites with a due date still ahead, soonest first.
   const now = Date.now();
@@ -92,6 +93,20 @@ export async function GET(req: NextRequest) {
     detail: [`${thisWeek} this week`, waiting ? `${waiting} of Dusty's waiting for Accept` : null].filter(Boolean).join(" · "),
     href: "/dashboard/scope",
   };
+
+  // Coming up (Coy, 2026-10-09): won jobs by start day, soonest first; or how many wait for a date.
+  const soon = comingUp(jobs, today);
+  const unscheduled = jobs.filter((j) => j.status === "won" && !j.scheduled_start).length;
+  if (soon.length) {
+    const next = soon[0];
+    tiles.next = {
+      value: String(soon.length),
+      detail: `${next.title ?? "A job"} · ${dayLabel(next.scheduled_start!)}, ${whenLabel(next.scheduled_start!, today)}${unscheduled ? ` · ${unscheduled} won without a date` : ""}`,
+      href: `/dashboard/scope/${next.id}/summary`,
+    };
+  } else {
+    tiles.next = { value: null, detail: unscheduled ? `${plural(unscheduled, "won job")} without a start day — set it on the job's Summary` : "Nothing scheduled", href: "/dashboard/scope" };
+  }
 
   // Jobs in progress and quoted — count and what the budgets price them at.
   const wip = jobs.filter((j) => ["won", "scheduled", "in_progress"].includes(j.status ?? ""));

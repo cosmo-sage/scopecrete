@@ -7,6 +7,9 @@
  * being read this way — no copy is stored. A version frozen after the win (a revision) is named
  * but never replaces it; work added after the yes is a change order (migration 094), and signed
  * change orders add to the contract.
+ *
+ * When the customer signed a version on its link (migration 097), that version IS the contract,
+ * whatever the dates say, and the contract carries who signed and when.
  */
 
 export interface FinalProposal {
@@ -14,6 +17,8 @@ export interface FinalProposal {
   number: string | null; total: number | null;
 }
 export interface ChangeOrderRow { price: number | null; signed_at: string | null }
+/** A proposal link the customer signed (documents.status 'accepted'). */
+export interface SignedLink { proposal_id: string; name: string | null; at: string | null }
 export interface Contract {
   proposal_id: string; version: number; number: string | null; finalized_at: string | null;
   /** The proposal's total as the customer saw it (rounded, tax included). */
@@ -24,6 +29,8 @@ export interface Contract {
   contract_total: number | null;
   /** A final version made after the win — shown, never taken as the contract. */
   later_version: number | null;
+  /** Who signed it on the link, and when — null when it was marked won by hand. */
+  signed: { name: string | null; at: string | null } | null;
 }
 
 /** "2026-10-08" → noon Central that day as ISO, if it is a real day no later than `now`. */
@@ -41,11 +48,15 @@ export function wonAtFromDay(day: string, now: Date): string | null {
 }
 
 /** The proposal a job was won on, and its price with signed change orders. Null when there is none. */
-export function contractFor(finals: FinalProposal[], wonAt: string | null, changeOrders: ChangeOrderRow[] = []): Contract | null {
+export function contractFor(finals: FinalProposal[], wonAt: string | null, changeOrders: ChangeOrderRow[] = [], signedLinks: SignedLink[] = []): Contract | null {
   const ordered = finals.filter((f) => f.finalized_at).sort((a, b) => (a.finalized_at! < b.finalized_at! ? 1 : -1));
   if (!ordered.length) return null;
+  // The newest signature on one of these versions wins outright.
+  const sig = [...signedLinks].filter((l) => ordered.some((f) => f.id === l.proposal_id))
+    .sort((a, b) => ((a.at ?? "") < (b.at ?? "") ? 1 : -1))[0] ?? null;
   const won = wonAt ? Date.parse(wonAt) : null;
-  const pick = won == null ? ordered[0] : ordered.find((f) => Date.parse(f.finalized_at!) <= won) ?? null;
+  const pick = sig ? ordered.find((f) => f.id === sig.proposal_id)!
+    : won == null ? ordered[0] : ordered.find((f) => Date.parse(f.finalized_at!) <= won) ?? null;
   if (!pick) return null;
   const later = ordered.find((f) => f.version > pick.version) ?? null;
   const signed = changeOrders.filter((c) => c.signed_at && c.price != null);
@@ -55,5 +66,6 @@ export function contractFor(finals: FinalProposal[], wonAt: string | null, chang
     total: pick.total, change_orders: co, change_order_count: signed.length,
     contract_total: pick.total == null ? null : Math.round((pick.total + co) * 100) / 100,
     later_version: later?.version ?? null,
+    signed: sig ? { name: sig.name, at: sig.at } : null,
   };
 }

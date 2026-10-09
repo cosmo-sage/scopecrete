@@ -22,6 +22,7 @@ export const TILES: Array<{ k: string; label: string }> = [
   { k: "leads", label: "New leads" },
   { k: "bids", label: "Bids due" },
   { k: "wip", label: "Won & in progress" },
+  { k: "next", label: "Coming up" },
   { k: "quoted", label: "Quoted" },
   { k: "runway", label: "Work runway" },
   { k: "cash", label: "Cash this month" },

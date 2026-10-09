@@ -39,3 +39,18 @@ test("searches carry the work and the city, never more than four", () => {
   assert.ok(q.every((x) => x.includes("Baton Rouge, LA")));
   assert.equal(rateQueries(null, ["base"]).length, 2);
 });
+
+test("section searches: the section's own words and unit, the city, at most four", async () => {
+  const { sectionQueries, sanitizeRates } = await import("../src/lib/draft/rates.ts");
+  const q = sectionQueries("Gonzales, LA", [
+    { key: "s1", name: "Thickened pavement edge", unit: "lf" }, { key: "s2", name: "Parking log", unit: "each" },
+    { key: "s3", name: "x", unit: "sf" }, { key: "s4", name: "y", unit: "sf" }, { key: "s5", name: "z", unit: "sf" },
+  ]);
+  assert.equal(q.length, 4);
+  assert.equal(q[0], "Thickened pavement edge installed cost per linear foot Gonzales, LA 2026");
+  assert.equal(q[1], "Parking log concrete installed cost each Gonzales, LA 2026");
+  const results = [{ url: "https://a.com/p", title: "t", text: "Wheel stops run $45 to $90 each installed." }];
+  const got = sanitizeRates({ rates: [{ step: "s2", what: "wheel stop", low: 45, high: 90, unit: "each", split: "all", kind: "installed_price", url: "https://a.com/p", quote: "Wheel stops run $45 to $90 each installed." },
+    { step: "demo", what: "x", low: 45, high: 90, unit: "each", split: "all", kind: "installed_price", url: "https://a.com/p", quote: "Wheel stops run $45 to $90 each installed." }] }, results, new Set(["s1", "s2"]));
+  assert.equal(got.rates.length, 1); assert.equal(got.dropped, 1);
+});

@@ -14,14 +14,17 @@ import { usePinchZoom } from "@/lib/v34/use-pinch";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { T, F, disp, clip, eyebrow } from "@/lib/v34/tokens";
-import { openPdf, drawPage } from "@/lib/pdf";
+import { openPdf, drawPage, pageText } from "@/lib/pdf";
+import { findOnSheet, type Hit } from "@/lib/find-on-sheet";
 import type { PlanFile, Sheet } from "@/components/v34/plan-room/shared";
 import { useWide } from "@/lib/v34/use-wide";
 
 export interface SheetGroup { label: string; ids: string[] }
 
-export function SheetViewer({ jobId, title, sheets, files, groups, start, onClose }: {
+export function SheetViewer({ jobId, title, sheets, files, groups, start, find, onClose }: {
   jobId: string; title: string; sheets: Sheet[]; files: PlanFile[];
+  /** The line the section was read from: boxed wherever it is written on the sheet (Coy, 2026-10-09). */
+  find?: string | null;
   /** The sheets listed first, by heading (the section's, then the other sections'). */
   groups: SheetGroup[];
   start: string | null; onClose: () => void;
@@ -56,7 +59,14 @@ export function SheetViewer({ jobId, title, sheets, files, groups, start, onClos
     return () => document.documentElement.removeAttribute("data-sheets");
   }, []);
   const [zoom, setZoom] = useState(1);
-  const setId = (n: string) => { setIdState(n); setZoom(1); };
+  const setId = (n: string) => { setIdState(n); setZoom(1); setHits(null); setAt(-1); };
+  // Where the section's line is written on this sheet, in page points; null while looking.
+  const [hits, setHits] = useState<Hit[] | null>(null);
+  const [at, setAt] = useState(-1);
+  const [k, setK] = useState(0); // CSS px per page point as drawn
+  const focus = useRef<number | null>(null);
+  const hitsRef = useRef<Hit[] | null>(null);
+  useEffect(() => { hitsRef.current = hits; }, [hits]);
   const [fail, setFail] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -78,12 +88,35 @@ export function SheetViewer({ jobId, title, sheets, files, groups, start, onClos
         const fit = Math.max(200, box.current.clientWidth - 16) / Math.max(1, w);
         job = drawPage(doc, s.page, canvas.current, fit * zoom);
         await job.done;
+        if (off) return;
+        setK(fit * zoom);
+        if (find) setHits(findOnSheet(await pageText(s.file_id, doc, s.page), find));
+        const f = focus.current;
+        if (f !== null && box.current && hitsRef.current?.[f]) {
+          const h = hitsRef.current[f], kk = fit * zoom;
+          box.current.scrollLeft = Math.max(0, (h.x + h.w / 2) * kk - box.current.clientWidth / 2 + 8);
+          box.current.scrollTop = Math.max(0, (h.y + h.h / 2) * kk - box.current.clientHeight / 2 + 8);
+          focus.current = null;
+        }
         if (!off && canvas.current) drawn.current = { id: s.id, zoom, w: parseFloat(canvas.current.style.width) || 0, h: parseFloat(canvas.current.style.height) || 0 };
       }).catch((e) => { if (!off) setFail(e instanceof Error ? e.message : String(e)); })
         .finally(() => { if (!off) setBusy(false); });
     }, last ? 150 : 0);
     return () => { off = true; window.clearTimeout(t); job?.cancel(); };
-  }, [s, file?.url, zoom]);
+  }, [s, file?.url, zoom, find]);
+  /** Zoom in on one place the line is written, so it reads at a glance. */
+  const goTo = (n: number) => {
+    const h = hits?.[n];
+    if (!h || !box.current || !k) return;
+    const fit = k / zoom;
+    const z = Math.min(6, Math.max(1.5, (box.current.clientWidth * 0.35) / Math.max(1, h.w * fit)));
+    setAt(n); focus.current = n;
+    if (Math.abs(z - zoom) < 0.01) {
+      box.current.scrollLeft = Math.max(0, (h.x + h.w / 2) * k - box.current.clientWidth / 2 + 8);
+      box.current.scrollTop = Math.max(0, (h.y + h.h / 2) * k - box.current.clientHeight / 2 + 8);
+      focus.current = null;
+    } else setZoom(z);
+  };
   // Two fingers zoom on a phone (Coy, 2026-10-09).
   usePinchZoom(box, zoom, setZoom, 0.5, 6);
 
@@ -171,8 +204,29 @@ export function SheetViewer({ jobId, title, sheets, files, groups, start, onClos
             className="flex-1 overflow-auto p-2" style={{ minHeight: 0, cursor: zoom > 1 ? "grab" : "default", touchAction: "pan-x pan-y" }}>
             {fail ? <div style={{ fontSize: F.sm, color: T.red }}>Couldn&apos;t open this sheet: {fail}</div>
               : !file?.url ? <div style={{ fontSize: F.sm, color: T.ink3 }}>This sheet&apos;s file isn&apos;t available.</div>
-              : <canvas ref={canvas} style={{ display: "block", margin: "0 auto", background: "#fff", boxShadow: "0 1px 4px rgba(0,0,0,.15)", opacity: busy ? 0.6 : 1 }} />}
+              : (
+                <div style={{ position: "relative", width: "fit-content", margin: "0 auto" }}>
+                  <canvas ref={canvas} style={{ display: "block", background: "#fff", boxShadow: "0 1px 4px rgba(0,0,0,.15)", opacity: busy ? 0.6 : 1 }} />
+                  {!busy && k > 0 && hits?.map((h, n) => (
+                    <div key={n} aria-hidden="true" style={{ position: "absolute", left: h.x * k, top: h.y * k, width: h.w * k, height: h.h * k, pointerEvents: "none",
+                      border: `2px solid ${T.hiviz}`, background: "rgba(255,170,0,.18)", borderRadius: 3, boxShadow: n === at ? `0 0 0 4px rgba(255,170,0,.35)` : "none" }} />
+                  ))}
+                </div>
+              )}
           </div>
+          {s && find && (
+            <div className="shrink-0 flex items-center gap-2 px-3 py-1.5" style={{ background: T.hivizDim, borderTop: `1px solid ${T.hair}`, fontSize: F.xs }}>
+              <span style={{ flex: 1, minWidth: 0, color: T.ink2, lineHeight: 1.35 }}>
+                <b style={{ color: T.ink }}>{hits === null ? "Looking for the line on this sheet…" : hits.length ? `Boxed in ${hits.length} place${hits.length === 1 ? "" : "s"}` : "Not in this sheet's text"}</b>
+                {" "}— “{find}”{hits && !hits.length ? " (it may be drawn, scanned or on another sheet)" : ""}
+              </span>
+              {hits && hits.length > 0 && (
+                <button onClick={() => goTo((at + 1) % hits.length)} style={{ ...btn, height: 26, fontSize: 12, whiteSpace: "nowrap" }}>
+                  {at < 0 ? "Zoom to it" : hits.length > 1 ? `Next · ${at + 1} of ${hits.length}` : "Zoom to it"}
+                </button>
+              )}
+            </div>
+          )}
           {s && (
             <div className="shrink-0 flex items-center gap-2 px-3" style={{ height: 40, background: T.card, borderTop: `1px solid ${T.hair}` }}>
               <span style={{ fontSize: F.xs, color: T.ink3, ...clip, flex: 1, minWidth: 0 }}>

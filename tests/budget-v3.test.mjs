@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   tabOf, sameUnit, budgetInRateUnit, rateStatus, priceToCost, unitCostFromRate, marketRows, jobRange, scaleOf,
-  compareActuals, crewCompare, suggestLine,
+  compareActuals, crewCompare, suggestLine, sectionRows, sectionUnit,
 } from "../src/lib/budget-v3.ts";
 
 const job = { sqft: 894, lf: null };
@@ -138,4 +138,23 @@ test("a receipt's line is suggested only on real overlap", () => {
   const lines = [{ id: "d", name: "Dumpster 20 yd", cost_type: "other", section_id: null, ext_cost: 485 }, { id: "p", name: "Permit", cost_type: "other", section_id: null, ext_cost: 300 }];
   assert.equal(suggestLine({ vendor: "Gilton", words: "20 yd dumpster rental" }, lines), "d");
   assert.equal(suggestLine({ vendor: "Shell", words: "fuel" }, lines), null);
+});
+
+test("by section: each section in its own unit, against rates looked up for it", () => {
+  const secs = [
+    { id: "s1", name: "Thickened pavement edge", origin: "bid", source_ref: 'C3.0 · "THICKENED…"', sqft: null, lf: 400, count: null, count_unit: "LF" },
+    { id: "s2", name: "Parking log", origin: "bid", source_ref: null, sqft: null, lf: null, count: 40, count_unit: "EA" },
+    { id: "s3", name: "Paving", origin: null, source_ref: null, sqft: 9000, lf: null, count: null, count_unit: null },
+    { id: "s4", name: "Walk", origin: "bid", source_ref: null, sqft: null, lf: null, count: null, count_unit: null },
+  ];
+  const L = (id, sec, cost, price) => ({ id, name: id, section_id: sec, cost_type: "labor", qty: 1, unit: "LS", unit_cost: cost, ext_cost: cost, ext_price: price, unit_price: price });
+  const lines = [L("a", "s1", 4000, 6000), L("b", "s2", 1000, null), L("c", "s3", 50000, 90000), L("d", "s4", 100, 150)];
+  const R = (step, low, high, unit, kind = "installed_price") => ({ step, what: "", low, high, unit, split: "all", kind, url: "u", site: "x.com", quote: "q" });
+  const rows = sectionRows(secs, lines, [R("s1", 12, 18, "lf"), R("s3", 63, 81, "sy"), R("s3", 2, 3, "sf", "cost"), R("other", 1, 2, "sf")]);
+  assert.deepEqual(sectionUnit(secs[1]), { unit: "each", qty: 40 });
+  assert.equal(rows[0].unit, "lf"); assert.equal(rows[0].per_price, 15); assert.equal(rows[0].status, "inside");
+  assert.equal(rows[1].unpriced, 1); assert.equal(rows[1].per_price, null); assert.equal(rows[1].status, "no_data");
+  // a per-SY installed rate reads per SF ÷ 9; installed beats cost
+  assert.equal(rows[2].kind, "installed_price"); assert.equal(rows[2].low, 7); assert.equal(rows[2].high, 9); assert.equal(rows[2].status, "over");
+  assert.equal(rows[3].status, "no_size");
 });

@@ -158,3 +158,18 @@ test("by section: each section in its own unit, against rates looked up for it",
   assert.equal(rows[2].kind, "installed_price"); assert.equal(rows[2].low, 7); assert.equal(rows[2].high, 9); assert.equal(rows[2].status, "over");
   assert.equal(rows[3].status, "no_size");
 });
+
+test("the job's installed range: per SF, per SY ÷ 9, and a total over the size its quote states", async () => {
+  const { jobRange } = await import("../src/lib/budget-v3.ts");
+  const r = (o) => ({ step: "job", what: "driveway", low: 6, high: 12, unit: "sf", split: "all", kind: "installed_price", url: "u", site: "s", quote: "$6 to $12 per square foot", ...o });
+  const got = jobRange([
+    r(), r({ unit: "sy", low: 90, high: 90, quote: "$90 per square yard" }),
+    r({ unit: "job", low: 4556, high: 6165, quote: "costs $4,556 to $6,165 for a 500 sq ft concrete driveway" }),
+    r({ unit: "job", low: 3381, high: 12558, quote: "costs between $3,381 and $12,558" }),
+    r({ split: "material", low: 7.75, high: 7.75 }),
+  ]);
+  assert.equal(got.sources, 3);
+  assert.equal(got.low, 6);
+  assert.equal(got.high, 12.33);
+  assert.equal(jobRange([r({ split: "material" })]), null);
+});

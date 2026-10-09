@@ -143,7 +143,8 @@ export function MarketRates({ jobId, refresh, onChanged, onSheets }: {
           <div style={{ ...eyebrow, color: DARK_LABEL }}>Your price</div>
           <div style={{ fontFamily: strong, fontSize: 26, fontWeight: 700, lineHeight: 1.1, ...nums }}>{mineSf !== null ? `${money(mineSf)}/SF` : "—"}</div>
           <div style={{ fontSize: 12, color: DARK_2, marginTop: 2 }}>
-            Going rate · installed {range ? `${money(range.low)}–${money(range.high)}` : "not looked up"}
+            Going rate · installed {range ? `${money(range.low)}–${money(range.high)}/SF · typical ${money(range.typical)} · ${range.sources} source${range.sources === 1 ? "" : "s"}`
+              : d.rates ? `· none per SF in the ${when(d.rates.asked_at)} lookup` : "· not looked up yet"}
           </div>
         </div>
         <span className="flex-1" />

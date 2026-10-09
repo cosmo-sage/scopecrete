@@ -54,3 +54,13 @@ test("section searches: the section's own words and unit, the city, at most four
     { step: "demo", what: "x", low: 45, high: 90, unit: "each", split: "all", kind: "installed_price", url: "https://a.com/p", quote: "Wheel stops run $45 to $90 each installed." }] }, results, new Set(["s1", "s2"]));
   assert.equal(got.rates.length, 1); assert.equal(got.dropped, 1);
 });
+
+test("a whole-driveway price filed on the gravel base goes to the job", async () => {
+  const { restep } = await import("../src/lib/draft/rates.ts");
+  const r = (o) => ({ step: "base", what: "concrete driveway, 4-inch thick broom finish", low: 6, high: 12, unit: "sf", split: "all", kind: "installed_price",
+    url: "https://a.com", site: "a.com", quote: "homeowners paying $6 to $12 per square foot for a standard 4-inch thick broom finish installation", ...o });
+  assert.equal(restep(r()).step, "job");
+  assert.equal(restep(r({ what: "crushed limestone base", quote: "a gravel base runs $1 to $2 per square foot" })).step, "base");
+  assert.equal(restep(r({ step: "demo", what: "concrete removal", quote: "removal costs $2 to $8 per square foot" })).step, "demo");
+  assert.equal(restep(r({ kind: "cost" })).step, "base", "only installed prices move");
+});

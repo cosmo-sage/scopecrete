@@ -208,7 +208,17 @@ export function sectionRows(sections: MarketSection[], lines: MarketLine[], rate
 
 /** The whole job's installed range per unit, from the rates for the whole job ("job" step). */
 export function jobRange(rates: RateLite[], unit = "sf"): { low: number; high: number; typical: number; sources: number } | null {
-  const rs = rates.filter((r) => r.step === "job" && r.kind === "installed_price" && r.unit === unit);
+  // Per SY reads per SF ÷ 9; a material-only or labor-only price isn't the installed driveway.
+  const rs = rates.filter((r) => r.step === "job" && r.kind === "installed_price" && r.split === "all" && (r.unit === unit || (unit === "sf" && r.unit === "sy")))
+    .map((r) => (r.unit === unit ? r : { ...r, low: r.low / 9, high: r.high / 9 }))
+    // A whole-driveway total whose own words give its size ("$4,556 to $6,165 for a 500 sq ft
+    // driveway") reads per SF: the quote's numbers divided by the quote's size, nothing else.
+    .concat(unit !== "sf" ? [] : rates.flatMap((r) => {
+      if (r.step !== "job" || r.kind !== "installed_price" || r.split !== "all" || r.unit !== "job") return [];
+      const sizes = [...r.quote.replace(/,(?=\d{3})/g, "").matchAll(/(\d+(?:\.\d+)?)\s*(?:sq\.?\s*ft|square[- ]f(?:oo|ee)t|sf)\b/gi)].map((m) => Number(m[1]));
+      if (sizes.length !== 1 || !(sizes[0] >= 50)) return [];
+      return [{ ...r, unit: "sf", low: r.low / sizes[0], high: r.high / sizes[0] }];
+    }));
   if (!rs.length) return null;
   const mids = rs.map((r) => (r.low + r.high) / 2).sort((a, b) => a - b);
   const typical = mids.length % 2 ? mids[(mids.length - 1) / 2] : (mids[mids.length / 2 - 1] + mids[mids.length / 2]) / 2;

@@ -66,7 +66,6 @@ const day = (iso: string, year = false) => new Date(iso).toLocaleDateString("en-
 export function JobSummary({ jobId }: { jobId: string }) {
   const [job, setJob] = useState<Job | null>(null);
   const [contact, setContact] = useState<Contact | null>(null);
-  const [why, setWhy] = useState<Why | null>(null);
   const [sections, setSections] = useState<SectionInput[] | null>(null);
   const [bd, setBd] = useState<BudgetData | null>(null);
   const [budgetErr, setBudgetErr] = useState<string | null>(null);
@@ -79,7 +78,7 @@ export function JobSummary({ jobId }: { jobId: string }) {
     Promise.all([send(`/api/jobs/${jobId}`, "GET"), send(`/api/jobs/${jobId}/sections`, "GET")])
       .then(([j, s]) => {
         if (off) return;
-        setJob(j.job); setContact(j.contact ?? null); setWhy(j.why ?? null);
+        setJob(j.job); setContact(j.contact ?? null);
         setSections(((s.sections ?? []) as Array<Record<string, unknown>>).map((x) => ({
           ...(x as unknown as SectionInput), length_ft: num(x.length_ft), width_ft: num(x.width_ft), sqft_override: num(x.sqft_override),
           depth_in: num(x.depth_in), psi: num(x.psi), count_qty: num(x.count_qty),
@@ -135,7 +134,7 @@ export function JobSummary({ jobId }: { jobId: string }) {
           {job.description && !bidSummary && <div style={{ fontSize: F.sm, color: T.ink2, lineHeight: 1.45, marginTop: 4 }}>{job.description}</div>}
         </section>
 
-        {why && <WhyThisJob why={why} contact={contact} description={job.description ?? null} />}
+        {/* "Why this job" is gone — what it said is in the facts above (Coy, 2026-10-09: "redundant"). */}
 
         {/* The bid behind it, when a forwarded bid email made or fed this job (migration 063). */}
         <BidStrip jobId={jobId} onSummary={setBidSummary} onUndone={() => { window.location.href = "/dashboard/scope"; }} />
@@ -270,47 +269,6 @@ function ProposalState({ jobId, links, card }: { jobId: string; links: ProposalL
         )}
       {links && links.length > 1 && (
         <div style={{ fontSize: F.xs, color: T.ink3, marginTop: 4 }}>{links.length} links made on this job</div>
-      )}
-    </section>
-  );
-}
-
-/**
- * Why this job exists — for one made when a contact was filed as a customer
- * (migration 038). Coy, 2026-09-29: "I have no reference for why this job was
- * created… No idea what the job is or why it was classified as a customer."
- * (Was an ⓘ sheet on the Budget; on the Summary since 2026-10-05.)
- */
-export function WhyThisJob({ why, contact, description }: { why: Why; contact: Contact | null; description: string | null }) {
-  const when = why.filed_at ? day(why.filed_at) : null;
-  const whom = contact ? (contact.name || formatPhone(contact.phone)) : "this contact";
-  return (
-    <section className="rounded px-3 py-2.5" aria-label="Why this job"
-      style={{ background: T.chalkDim, border: `1px solid ${T.hair}` }}>
-      <span style={{ ...eyebrow, color: T.chalk }}>Why this job</span>
-      <div style={{ fontSize: F.sm, color: T.ink, lineHeight: 1.45, marginTop: 2 }}>
-        Made{when ? ` ${when}` : ""} when {why.filed_by === "dusty" ? "Dusty filed" : "you filed"} {whom} as a customer
-        {why.company ? <> — Dusty thinks it&apos;s <b>{why.company}</b></> : null}.
-      </div>
-      {why.status_summary && (
-        <div style={{ fontSize: F.sm, color: T.ink2, lineHeight: 1.45, marginTop: 4 }}>
-          <span style={{ ...eyebrow, color: T.ink3 }}>Dusty · </span>{why.status_summary}
-        </div>
-      )}
-      {why.scope_summary && why.scope_summary !== description && (
-        <div style={{ fontSize: F.sm, color: T.ink2, lineHeight: 1.45, marginTop: 4 }}>
-          <span style={{ ...eyebrow, color: T.ink3 }}>The work · </span>{why.scope_summary}
-        </div>
-      )}
-      {why.evidence_quote && (
-        <div style={{ fontSize: F.sm, color: T.ink2, fontStyle: "italic", lineHeight: 1.45, marginTop: 5, paddingLeft: 7, borderLeft: `2px solid ${T.chalk}` }}>
-          “{why.evidence_quote}”
-        </div>
-      )}
-      {contact && (
-        <Link href={`/dashboard/messages/${contact.id}`} className="inline-block mt-1.5 no-underline" style={{ ...eyebrow, color: T.chalk }}>
-          Open their page →
-        </Link>
       )}
     </section>
   );

@@ -22,6 +22,8 @@ import { inChannel, roleOf, type Channel, type ChannelFilter } from "@/lib/v34/t
 import { useLiveThreads } from "@/lib/v34/live-threads";
 import { useLiveCalls } from "@/lib/v34/alerts-live";
 import { liveCallFor } from "@/lib/alerts";
+import { usePref } from "@/lib/v34/prefs";
+import { TEXT_SIZES, textSize } from "@/lib/v34/text-size";
 import { LiveCallBadge, LiveDot } from "@/components/v34/incoming-alerts";
 
 /**
@@ -88,6 +90,9 @@ export function ThreadView({ contactId, embedded = false }: {
   const [fromLine, setFromLine] = useState<string | null>(null);
   const [searching, setSearching] = useState(false);
   const [more, setMore] = useState(false);
+  // The conversation's text size, like Dusty's chat (Coy, 2026-10-09), saved to the account.
+  const [sizeKey, setSizeKey] = usePref<string>("thread_font", "m");
+  const size = textSize(sizeKey);
   const liveCalls = useLiveCalls();
 
   const [messages, setMessages] = useState<ThreadMessage[]>([]);
@@ -306,10 +311,11 @@ export function ThreadView({ contactId, embedded = false }: {
           {/* Phone: back to the thread, by name. */}
           <div className="flex items-center gap-2">
             <div className="flex-1 min-w-0 flex items-center gap-2">
-              {/* Phone: the thread's back link sits top left, on the buttons' row (Coy, 2026-10-09). */}
+              {/* Phone: the thread's back link sits top left, on the buttons' row (Coy, 2026-10-09), and says
+                  Threads whichever list it returns to (Coy, 2026-10-09: "so that I know that I'm just going back to the main threads page"). */}
               {!embedded && (
                 <Link href={`/dashboard/messages${threadKey ? `?t=${encodeURIComponent(threadKey)}` : ""}`} className="lg:hidden min-w-0"
-                  style={{ ...eyebrow, fontSize: 14, color: T.ink, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>‹ {threadName}</Link>
+                  style={{ ...eyebrow, fontSize: 14, color: T.ink, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>‹ Threads</Link>
               )}
               {/* On a phone the name is in the breadcrumb rows below; this row keeps the buttons (Coy, 2026-10-09). */}
               <span className={embedded ? "contents" : "hidden lg:contents"}>
@@ -361,6 +367,17 @@ export function ThreadView({ contactId, embedded = false }: {
                       ))}
                     </div>
                   )}
+                  {/* Text size for the conversation (Coy, 2026-10-09: "similar to how the font in the dusty chat works"). */}
+                  <div className="flex flex-col" style={{ borderTop: `1px solid ${T.hairSoft}`, padding: "6px 0" }}>
+                    <span className="px-3" style={{ ...eyebrow, fontSize: 11, color: T.ink3 }}>Text size</span>
+                    <div className="flex gap-1 px-3 pt-1" role="radiogroup" aria-label="Text size">
+                      {TEXT_SIZES.map((f) => (
+                        <button key={f.key} role="radio" aria-checked={f.key === size.key} aria-label={f.label} title={f.label} onClick={() => setSizeKey(f.key)}
+                          style={{ flex: 1, height: 30, borderRadius: 6, border: `1px solid ${f.key === size.key ? T.hiviz : T.hairStrong}`, background: f.key === size.key ? T.hivizDim : T.card,
+                            color: T.ink, fontFamily: disp, fontWeight: 600, fontSize: Math.round(13 * f.z), cursor: "pointer" }}>A</button>
+                      ))}
+                    </div>
+                  </div>
                   {/* Merge is on the contact card; the job opens from the customer page (Coy, 2026-10-07). */}
                   {!openJob && <button onClick={() => void newScope()} disabled={starting || jobs === null} className="px-3 py-2 text-left" style={{ fontSize: F.sm, color: T.ink }}>{starting ? "Starting…" : "New scope"}</button>}
                   <ArchiveButton kind="contact" id={contactId} action="archive" what="this thread" then="/dashboard/messages"
@@ -371,17 +388,21 @@ export function ThreadView({ contactId, embedded = false }: {
           </div>
           {/* Phone: under the buttons, the person, then their customer or vendor, one per row (Coy, 2026-10-09: "stack them"), each saying what it opens in its own colour. */}
           {!embedded && (
-            <nav aria-label="Where you are" className="lg:hidden flex flex-col gap-0.5 mt-1.5 min-w-0" style={{ ...eyebrow, fontSize: 13, whiteSpace: "nowrap" }}>
-              <Link href={editHref} className="min-w-0" style={{ color: T.green, overflow: "hidden", textOverflow: "ellipsis" }}>
-                <span style={{ color: T.ink3 }}>Contact | </span>{loading ? headerTitle : (name || formatPhone(phone))}</Link>
-              {!loading && crumbOrg && (
-                <Link href={crumbOrg.href} className="min-w-0" style={{ color: crumbOrg.color, overflow: "hidden", textOverflow: "ellipsis" }}>
-                  <span style={{ color: T.ink3 }}>{crumbOrg.kind} | </span>{crumbOrg.label}</Link>
-              )}
+            // The labels in one column and the names lined up beside them (Coy, 2026-10-09: "better symmetry").
+            <nav aria-label="Where you are" className="lg:hidden grid mt-1.5 min-w-0 items-baseline"
+              style={{ ...eyebrow, fontSize: 13, whiteSpace: "nowrap", gridTemplateColumns: "auto auto minmax(0, 1fr)", columnGap: 8, rowGap: 3 }}>
+              <span style={{ color: T.ink3 }}>Contact</span>
+              <span aria-hidden style={{ color: T.hairStrong }}>|</span>
+              <Link href={editHref} className="min-w-0" style={{ color: T.green, overflow: "hidden", textOverflow: "ellipsis" }}>{loading ? headerTitle : (name || formatPhone(phone))}</Link>
+              {!loading && crumbOrg && (<>
+                <span style={{ color: T.ink3 }}>{crumbOrg.kind}</span>
+                <span aria-hidden style={{ color: T.hairStrong }}>|</span>
+                <Link href={crumbOrg.href} className="min-w-0" style={{ color: crumbOrg.color, overflow: "hidden", textOverflow: "ellipsis" }}>{crumbOrg.label}</Link>
+              </>)}
             </nav>
           )}
           {/* The third row: the channels. Each number is its own (calls, voicemails and texts together), then email, then chat. */}
-          <div className={`${folded ? "hidden lg:flex" : "flex"} items-end mt-1.5 overflow-x-auto`} role="tablist" aria-label="Channels">
+          <div className={`${folded ? "hidden lg:flex" : "flex"} items-stretch gap-1.5 mt-2 pb-2.5 overflow-x-auto`} role="tablist" aria-label="Channels">
             {tabs.map((ch) => {
               const on = channel?.key === ch.key;
               const chLive = ch.kind === "phone" ? liveCallFor(liveCalls, contactId, ch.value) : null;
@@ -391,7 +412,9 @@ export function ThreadView({ contactId, embedded = false }: {
                 : "Not joined · invite";
               return (
                 <button key={ch.key} role="tab" aria-selected={on} onClick={() => pickChannel(ch.key)} className="text-left flex-1 lg:flex-none shrink-0"
-                  style={{ minWidth: 0, padding: "7px 12px 8px", borderBottom: `2px solid ${on ? (chLive ? T.green : T.hiviz) : chLive ? T.green : "transparent"}`, opacity: ch.reachable || on ? 1 : 0.5, cursor: "pointer" }}>
+                  // Rounded buttons, the open one filled (Coy, 2026-10-09: "more like beautiful buttons").
+                  style={{ minWidth: 0, padding: "7px 12px", borderRadius: 999, border: `1px solid ${on ? (chLive ? T.green : T.hiviz) : chLive ? T.green : T.hairStrong}`,
+                    background: on ? T.hivizDim : T.card, boxShadow: on ? "0 1px 3px rgba(0,0,0,.10)" : "none", opacity: ch.reachable || on ? 1 : 0.5, cursor: "pointer" }}>
                   {/* An icon and a short name, one line (Coy, 2026-10-05): ☎ Cell, ✉, ✦ AI Chat, Notes. */}
                   <span aria-label={ch.kind === "email" ? "Email" : undefined} className="justify-center lg:justify-start" style={{ display: "flex", alignItems: "center", gap: 5, fontFamily: "var(--sc-font-strong)", fontSize: 13, fontWeight: 600, color: T.ink, whiteSpace: "nowrap" }}>
                     {ch.kind === "phone" ? <Phone size={13} weight="fill" color={T.ink3} />
@@ -508,13 +531,14 @@ export function ThreadView({ contactId, embedded = false }: {
         {person && <SamePerson person={person} onMerge={(id) => setMerging({ preselect: id ?? null })} />}
 
         {!loading && !error && channel?.kind === "notes" ? (
-          <div className="flex-1 min-h-0">
+          <div className="flex-1 min-h-0" style={{ zoom: size.z }}>
             <InternalNotes contactId={contactId} name={name} notes={person?.notes ?? []} leadSource={leadSource} onSaved={() => setReload((n) => n + 1)}
               merges={merges.map((m) => ({ id: m.id, label: `${m.phone ? formatPhone(m.phone) : "Another number"} was merged into this thread`, at: m.merged_at }))}
               onUndoMerge={(id) => void undo(id)} undoing={undoing} />
           </div>
         ) : (
         <div ref={scrollRef} className="flex-1 overflow-y-auto" style={{ padding: "12px 18px" }}>
+          <div style={{ zoom: size.z }}>
           {loading ? (
             <div className="space-y-2">
               {[1, 2, 3, 4].map((i) => <div key={i} className="h-12 rounded-xl animate-pulse" style={{ background: DA.surface }} />)}
@@ -550,6 +574,7 @@ export function ThreadView({ contactId, embedded = false }: {
           ) : (
             <Timeline messages={shown} notes={filter === "all" ? person?.notes ?? [] : []} phone={channel?.value ?? phone} />
           )}
+          </div>
         </div>
 
         )}

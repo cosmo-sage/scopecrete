@@ -30,6 +30,7 @@ import { useDustyUse } from "@/lib/v34/dusty-live";
 import { sendBytes } from "@/components/v34/files-panel";
 import { VoiceRecorder } from "@/components/v34/voice-recorder";
 import { usePref } from "@/lib/v34/prefs";
+import { TEXT_SIZES } from "@/lib/v34/text-size";
 import { Emblem } from "@/components/site/marks";
 import { greeting, pickThought, thoughtSource, QUIET_LINES, type Thought } from "@/lib/dusty/hello";
 
@@ -58,12 +59,7 @@ const PAGE: Record<Ref["kind"], string> = {
 };
 
 /** The chat's text size (Coy, 2026-10-05: "the ability to adjust the size of the font inside the chat"), per account. */
-const FONT_STEPS = [
-  { key: "s", label: "Small", z: 0.88 },
-  { key: "m", label: "Normal", z: 1 },
-  { key: "l", label: "Large", z: 1.15 },
-  { key: "xl", label: "Extra large", z: 1.3 },
-] as const;
+const FONT_STEPS = TEXT_SIZES;
 /** What a chat is about, without the context's kind in front ("scope: Wilson Driveway" → "Wilson Driveway"). */
 const aboutLabel = (l: string | null) => {
   const s = (l ?? "").replace(/^scope:\s*/i, "").replace(/'s thread$/, "").replace(/ \(customer page\)$/, "");

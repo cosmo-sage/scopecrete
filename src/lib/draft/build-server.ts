@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { isEstimate } from "@/lib/estimate-flag";
 import type { ApiSession } from "@/lib/api-auth";
 import { budget, type BudgetLine, type SectionInput } from "@/lib/engine";
 import { CARD_COLS, LINE_COLUMNS, cardToLine, loadAssembly, nextSort, numLine, workingEstimate } from "@/lib/budget-server";
@@ -489,6 +490,9 @@ export async function draftState(sb: Sb, orgId: string, jobId: string) {
   const tier = res?.tiers[0] ?? null;
   const manual = run?.outcome === "manual_review" || (job?.job_type && job.job_type !== "residential");
   const blocks = approvalBlocks({ steps, blockedLines, lineCount: lines.length, manualReview: !!manual });
+  // Dusty's estimates wait for Coy's Confirm on the budget (Coy, 2026-10-09).
+  const estimated = lines.filter((l) => isEstimate((l as { description?: string | null }).description));
+  if (estimated.length) blocks.push(`${estimated.length} line${estimated.length === 1 ? " is" : "s are"} Dusty's estimate — confirm ${estimated.length === 1 ? "it" : "them"} on the budget: ${estimated.slice(0, 4).map((l) => l.name).join(", ")}${estimated.length > 4 ? " …" : ""}`);
   if (!res) blocks.unshift("The job's pricing couldn't be read.");
   const unsized = ((secs ?? []) as SectionInput[]).length === 0;
   if (unsized && !lines.length) blocks.unshift("The job has no areas yet.");

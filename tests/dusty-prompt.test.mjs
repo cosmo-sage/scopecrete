@@ -44,7 +44,9 @@ test("cold context carries no customer data", () => {
 });
 
 test("the fixed system prompt holds the house rules", () => {
-  assert.match(DUSTY_SYSTEM, /Never invent a number/);
+  assert.match(DUSTY_SYSTEM, /Facts are facts/);
+  assert.match(DUSTY_SYSTEM, /Estimates are allowed for budgets and prices, labelled/);
+  assert.match(DUSTY_SYSTEM, /never say you can.t search the web/);
   assert.match(DUSTY_SYSTEM, /cannot send anything/);
   assert.match(DUSTY_SYSTEM, /direction of the ask/);
   assert.match(DUSTY_SYSTEM, /You are Dusty and only Dusty/);

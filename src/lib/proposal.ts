@@ -16,6 +16,7 @@
  *   - checks the draw schedule against the total.
  */
 
+import { unmark } from "./estimate-flag.ts";
 import { budget, quantities, type BudgetLine, type BudgetResult, type BudgetSettings, type SectionInput, type TakeoffTotal, type TierTotal } from "./engine/index.ts";
 
 export interface ProposalDisplay {
@@ -124,7 +125,7 @@ export function priceProposal(
     const area = areas.find((a) => a.id === key);
     const gHidden = d.groupsOff?.[key] === true;
     const items: ProposalItem[] = mine.map((l) => ({
-      id: l.id, name: l.name, note: l.description ?? null,
+      id: l.id, name: l.name, note: unmark(l.description), // Dusty's estimate mark is Coy's, never the customer's
       qty: r(l).qty, unit: l.unit, sell: sell.get(l.id) ?? 0,
       hidden: d.linesOff?.[l.id] === true, price_hidden: d.pricesOff?.[l.id] === true, addon: addons.has(l.id),
     }));

@@ -173,7 +173,7 @@ export function PlanRoom({ jobId }: { jobId: string }) {
           )} />
         {/* The steps on the left and the Plan Room's own tools at the far right, on one row
             under the name's row (Coy, 2026-10-05). */}
-        <div className="flex items-end gap-x-4 gap-y-2 flex-wrap mt-2">
+        <div className={`${(ocr.running && ocr.jobId === jobId) || (ocrInput && ocrInput.left.scans > 0) ? "flex" : "hidden lg:flex"} items-end gap-x-4 gap-y-2 flex-wrap mt-2`}>
           {/* On a phone these hang under the Takeoffs button instead (Coy, 2026-10-07). */}
           <div className="hidden lg:flex gap-4 overflow-x-auto" role="tablist">
             {STEPS.map(([k, label], i) => (
@@ -197,10 +197,6 @@ export function PlanRoom({ jobId }: { jobId: string }) {
               {ocrLeft > 0 && <button onClick={readPlans} style={{ color: T.chalk, cursor: "pointer", fontWeight: 600 }}>Read the rest</button>}
             </span>
           ) : null}
-          <label className="rounded flex items-center" style={{ height: 32, padding: "0 12px", background: T.hiviz, color: T.onHiviz, fontFamily: disp, fontSize: 13, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase", cursor: "pointer" }}>
-            <input type="file" multiple accept="application/pdf,image/jpeg,image/png,.pdf" className="hidden" onChange={(e) => { if (e.target.files?.length) void upload(e.target.files); e.target.value = ""; }} />
-            ↑ Add plans
-          </label>
           </div>
         </div>
       </div>

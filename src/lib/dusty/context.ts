@@ -20,6 +20,7 @@ import { isArchivedNow } from "@/lib/archive";
 import { jobValues } from "@/lib/job-totals";
 import { assemble, coldContext, scopeLines, type Assembled, type Block } from "./prompt";
 import { mentioned, searchTerms } from "./mentions";
+import { labelSpeakers } from "./transcript";
 
 export type ContextRef =
   | { kind: "thread"; id: string }
@@ -28,6 +29,14 @@ export type ContextRef =
   | { kind: "cash" }
   | { kind: "activity"; since: string }
   | { kind: "cold" };
+
+/** The org's own numbers, switched-off lines too — a transcript's speaker on one of them is Coy. */
+async function ourNumbers(sb: Sb, orgId: string): Promise<string[]> {
+  const { data } = await sb.from("org_phone_numbers").select("phone_e164").eq("org_id", orgId);
+  return ((data ?? []) as Array<{ phone_e164: string | null }>).map((r) => r.phone_e164 ?? "").filter(Boolean);
+}
+
+const TX_NOTE = "speakers: \"Coy (our line)\" is Coy on one of the org's own lines; the other label is the person called or calling. Machine-heard: a line is sometimes put on the wrong side (a caller asking \"is this Baton Rouge Concreters?\" can show as theirs) — the labels say whose number spoke";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -371,19 +380,19 @@ async function threadContext(sb: Sb, orgId: string, contactId: string): Promise<
     return `${day(m.occurred_at)} ${dir} TEXT: ${m.body_text?.trim() || "(no text — photo or attachment)"}`;
   });
 
-  const recentTranscripts = msgs.filter((m) => transcripts.has(m.id)).slice(-3)
-    .map((m) => `[${day(m.occurred_at)} call]\n${transcripts.get(m.id)!.slice(0, 12000)}`);
 
-  const [files, vendor] = await Promise.all([filesBlock(sb, orgId, { contactId }), vendorBlock(sb, orgId, contactId)]);
+  const [files, vendor, ours] = await Promise.all([filesBlock(sb, orgId, { contactId }), vendorBlock(sb, orgId, contactId), ourNumbers(sb, orgId)]);
   // A vendor's page carries the Price book, so their call or quote can become items with their price (Coy, 2026-10-05).
   const book = vendor ? await priceBookBlock(sb, orgId) : null;
+  const recentTranscripts = msgs.filter((m) => transcripts.has(m.id)).slice(-3)
+    .map((m) => `[${day(m.occurred_at)} call]\n${labelSpeakers(transcripts.get(m.id)!.slice(0, 12000), ours, vendor ? "Vendor" : "Customer")}`);
   const out = assemble(`${who.name}'s thread`, [
     { title: "Ids (for plans: archive, delete, set an address)", lines: [`This thread: contact ${contactId}`] },
     who.block,
     ...(vendor ? [vendor] : []),
     ...(files ? [files] : []),
     { title: `Messages (last ${msgs.length}, oldest first)`, lines, trimmable: true },
-    { title: "Full transcripts of the most recent calls", lines: recentTranscripts, trimmable: true },
+    { title: `Full transcripts of the most recent calls (${TX_NOTE})`, lines: recentTranscripts, trimmable: true },
     ...(book ? [book] : []),
   ]);
   return vendor ? { ...out, plans: true } : out;
@@ -505,11 +514,12 @@ async function callsBlock(sb: Sb, orgId: string, contactId: string | null, custo
     art.has(`next_steps:${c.id}`) ? `next steps: ${art.get(`next_steps:${c.id}`)!.replace(/\n+/g, " / ")}` : null,
     noteBy.has(c.id) ? `COY'S NOTES TAKEN ON THIS CALL: ${noteBy.get(c.id)!.join(" | ")}` : "Coy's notes on this call: none",
   ].filter(Boolean).join(" — "));
+  const ours = await ourNumbers(sb, orgId);
   const tx = calls.filter((c) => art.has(`transcript:${c.id}`)).slice(0, 2)
-    .map((c) => `[${day(c.occurred_at)} call]\n${art.get(`transcript:${c.id}`)!.slice(0, 10000)}`);
+    .map((c) => `[${day(c.occurred_at)} call]\n${labelSpeakers(art.get(`transcript:${c.id}`)!.slice(0, 10000), ours)}`);
   return [
     { title: "Calls about this job (newest first; Coy's notes on a call are his own words — what he heard and wants)", lines },
-    ...(tx.length ? [{ title: "Transcripts of the newest calls (machine-heard: names and numbers can be misheard; Coy's notes win where they differ)", lines: tx, trimmable: true }] : []),
+    ...(tx.length ? [{ title: `Transcripts of the newest calls (${TX_NOTE}; names and numbers can be misheard; Coy's notes win where they differ)`, lines: tx, trimmable: true }] : []),
   ];
 }
 
@@ -979,8 +989,9 @@ export async function reachBlocks(sb: Sb, orgId: string, ref: ContextRef, asked:
       })(),
     ]);
     const rows = (hits ?? []) as Array<{ kind: string; id: string; contact_id: string | null; job_id: string | null; title: string | null; snippet: string | null; at: string | null }>;
+    const ours = rows.length ? await ourNumbers(sb, orgId) : [];
     const lines = [
-      ...rows.map((h) => `- [${h.kind}${h.at ? ` · ${day(h.at)}` : ""}] ${h.title ?? ""} — ${(h.snippet ?? "").replace(/[«»]/g, "").replace(/\s+/g, " ")}${h.contact_id ? ` (contact ${h.contact_id})` : ""}${h.job_id ? ` (job ${h.job_id})` : ""}`.slice(0, 500)),
+      ...rows.map((h) => `- [${h.kind}${h.at ? ` · ${day(h.at)}` : ""}] ${h.title ?? ""} — ${labelSpeakers((h.snippet ?? "").replace(/[«»]/g, "").replace(/\s+/g, " "), ours, "Them")}${h.contact_id ? ` (contact ${h.contact_id})` : ""}${h.job_id ? ` (job ${h.job_id})` : ""}`.slice(0, 500)),
       ...mailHits.map((e) => `- [email ${e.id} · ${day(e.created_at)}] from ${e.original_from_name || e.original_from_address || "?"} — "${e.subject || "(no subject)"}": ${(e.text_body ?? "").replace(/\s+/g, " ").slice(0, 300)}`),
     ];
     if (lines.length) out.push({ title: `Search of everything for: ${terms.replace(/ or /g, ", ")}`, trimmable: true, lines });

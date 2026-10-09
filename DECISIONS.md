@@ -3104,6 +3104,16 @@ expected start date per quoted job before it means anything. Add the field.
   The prompt now says he is Dusty only, has no tools, files or sessions of
   his own, never narrates looking things up or names his setup, and takes
   Coy's word and spelling instead of asking him to confirm it.
+  **Who spoke on a call (2026-10-09).** Quo labels each transcript line with
+  the speaker's phone number, and Dusty's chat was handed them raw: on the
+  Patio caller's call he took the org's own Quo line for the customer, because
+  the caller asked "This is Baton Rouge Concreeter, right?" and Coy's "This is
+  Coy" was heard as "Corey". The background reader had relabelled for a long
+  time (`relabelTranscript()`, enrich-contacts); now Dusty's transcripts (the
+  thread's, a job's calls, search snippets) read "Coy (our line):" for any of
+  the org's lines, switched-off ones too, and "Customer:" / "Vendor:" for the
+  other side, with "Corey" on our side read as Coy (`labelSpeakers()`,
+  `src/lib/dusty/transcript.ts`, tested). Stored transcripts are unchanged.
   **No ids in his words (2026-10-05).** Asked whether a text from (727)
   628-9657 came in, he answered with "contact dd08251b-…". Ids are for plans
   only: the prompt says to name people (or give the number when there is no

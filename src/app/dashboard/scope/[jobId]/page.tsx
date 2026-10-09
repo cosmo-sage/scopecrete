@@ -305,7 +305,7 @@ export default function ScopeBuilder() {
               the same row on every view (JobHeaderRow; centred on a phone). The chips, who it's for,
               the description and "Why this job" moved to the Summary to clear the clutter here. */}
           <JobHeaderRow jobId={jobId} active="job" customerId={job.customer_id}
-            subnav={can(access, "budget") ? <BudgetSubTabs tab={tab} onTab={setTab} /> : undefined}
+            subnav={can(access, "budget") ? <BudgetSubTabs tab={tab} onTab={setTab} hang /> : undefined}
             title={access.limited ? (realTitle || titleHint || "Job") : <input defaultValue={realTitle} placeholder={titleHint} aria-label="Job name"
               size={Math.max(6, (realTitle || titleHint || "").length + 1)}
               onBlur={(e) => { const v = e.target.value; if (v !== realTitle) void send(`/api/jobs/${jobId}`, "PATCH", { title: v }).then((b) => setJob((j) => j && { ...j, title: b.job.title })).catch((er) => setSaveErr((m) => ({ ...m, job: String(er.message ?? er) }))); }}

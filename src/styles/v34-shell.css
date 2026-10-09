@@ -491,6 +491,10 @@ html[data-theme="night-shift"] .sc-proposal { --sc-doc-ground: #15171A; }
 .sc-job-name { font-size: 19px; }
 @media (max-width: 1023px) { .sc-job-name { font-size: 14px; } }
 
+/* A thread's contact name: 19px on a desktop, 15px on a phone (Coy, 2026-10-09). */
+:root { --sc-thread-name: 19px; --sc-thread-co: 14px; }
+@media (max-width: 1023px) { :root { --sc-thread-name: 15px; --sc-thread-co: 12px; } }
+
 /* Incoming alerts (2026-10-06): the bell's panel, the pop-ups, the live-call dot. */
 .sc-alerts-panel { position: absolute; top: calc(100% + 8px); right: -40px; width: min(380px, calc(100vw - 16px)); z-index: 80; }
 @media (max-width: 1023px) { .sc-alerts-panel { position: fixed; top: 58px; left: 8px; right: 8px; width: auto; } }

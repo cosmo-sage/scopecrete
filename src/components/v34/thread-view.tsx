@@ -312,15 +312,15 @@ export function ThreadView({ contactId, embedded = false }: {
               {/* On a phone the thread's name sits on the same row, the person right beside it (Coy, 2026-10-05). */}
               {!embedded && <Link href={`/dashboard/messages${threadKey ? `?t=${encodeURIComponent(threadKey)}` : ""}`} className="lg:hidden shrink-0" style={{ ...eyebrow, color: T.chalk }}>‹ {threadName}</Link>}
               {loading ? (
-                <div style={{ fontFamily: "var(--sc-font-strong)", fontSize: 19, fontWeight: 700, color: T.ink }}>{headerTitle}</div>
+                <div style={{ fontFamily: "var(--sc-font-strong)", fontSize: "var(--sc-thread-name)", fontWeight: 700, color: T.ink }}>{headerTitle}</div>
               ) : (
                 <NameEditor contactId={contactId} name={name} fallback={formatPhone(phone)}
                   onSaved={(v) => { setName(v); setNameConfirmed(true); setNameSource("human"); }}
-                  style={{ fontFamily: "var(--sc-font-strong)", fontSize: 19, fontWeight: 700, lineHeight: 1.15, color: T.ink }} />
+                  style={{ fontFamily: "var(--sc-font-strong)", fontSize: "var(--sc-thread-name)", fontWeight: 700, lineHeight: 1.15, color: T.ink }} />
               )}
               {/* The customer or vendor they speak for, beside the name (Coy, 2026-10-09: "John Freeling · Icon Technologies"). */}
               {!loading && c?.company && (
-                <span title={c.company} style={{ fontSize: 14, fontWeight: 500, color: T.ink2, minWidth: 0, flexShrink: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>· {c.company}</span>
+                <span title={c.company} style={{ fontSize: "var(--sc-thread-co)", fontWeight: 500, color: T.ink2, minWidth: 0, flexShrink: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>· {c.company}</span>
               )}
               {/* No tag on a phone: the thread's name at the left already says it (Coy, 2026-10-05). */}
               {c && <span className="hidden lg:inline-flex"><RoleTag role={role} auto={c.bucket_state === "auto"} /></span>}

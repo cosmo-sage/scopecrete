@@ -162,7 +162,7 @@ export function VendorList() {
 
   return (
     <>
-    <PageHeader title="Vendors" count={countLabel}
+    <PageHeader title="Vendors" count={wide ? countLabel : null}
       sub="Who you buy from and who you hire, by trade. Tick several and send one bid request to all of them."
       actions={<>
         <SearchToggle open={finding || !!q} onToggle={() => { if (finding || q) { setQ(""); setFinding(false); } else setFinding(true); }} label="Find a vendor" />
@@ -189,19 +189,24 @@ export function VendorList() {
           <select value={sub} onChange={(e) => setSub(e.target.value)} aria-label="Kind" style={{ ...field, width: "auto", height: 30 }}>
             {SUBTYPES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
           </select>
+          <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Sort" style={{ ...field, width: "auto", height: 30 }}>
+            {SORTS.map(([k, l]) => <option key={k} value={k}>Sort · {l}</option>)}
+          </select>
         </div>
       )}
 
       <div className="flex gap-4 items-start">
         {wide && <div className="shrink-0 sticky" style={{ top: "calc(var(--sc-head) + var(--sc-subhead, 0px) + 8px)" }}>{tradeList}</div>}
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div className="flex items-center gap-2 mb-2">
-            {wide && <Tick on={allOn} onClick={toggleAll} label={allOn ? "Clear these" : "Pick every vendor shown"} />}
-            <span style={{ fontSize: F.xs, color: T.ink3, flex: 1 }}>{rows ? `${shown.length} vendor${shown.length === 1 ? "" : "s"}${trade !== "All" ? ` in ${trade}` : ""}` : ""}</span>
-            <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Sort" style={{ ...field, width: "auto", height: 30 }}>
-              {SORTS.map(([k, l]) => <option key={k} value={k}>Sort · {l}</option>)}
-            </select>
-          </div>
+          {wide && (
+            <div className="flex items-center gap-2 mb-2">
+              <Tick on={allOn} onClick={toggleAll} label={allOn ? "Clear these" : "Pick every vendor shown"} />
+              <span style={{ fontSize: F.xs, color: T.ink3, flex: 1 }}>{rows ? `${shown.length} vendor${shown.length === 1 ? "" : "s"}${trade !== "All" ? ` in ${trade}` : ""}` : ""}</span>
+              <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Sort" style={{ ...field, width: "auto", height: 30 }}>
+                {SORTS.map(([k, l]) => <option key={k} value={k}>Sort · {l}</option>)}
+              </select>
+            </div>
+          )}
 
           {rows === null ? <div style={{ fontSize: F.sm, color: T.ink3 }}>Loading…</div>
             : shown.length === 0 ? (

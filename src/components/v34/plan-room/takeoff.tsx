@@ -59,7 +59,10 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
     });
     return () => { off = true; };
   }, [sheetsKey]);
-  const openSheets = (v: boolean) => setSheetsOpen(v);
+  // On a phone Parameters slides in from the left like Sheets (Coy, 2026-10-09); one drawer open at a time.
+  const [paramsOpen, setParamsOpen] = useState(false);
+  const openSheets = (v: boolean) => { setSheetsOpen(v); if (v) setParamsOpen(false); };
+  const openParams = (v: boolean) => { setParamsOpen(v); if (v) setSheetsOpen(false); };
   const sheet = sheets.find((s) => s.id === sheetId) ?? sheets[0] ?? null;
   const file = sheet ? files.find((f) => f.id === sheet.file_id) ?? null : null;
   const [tool, setTool] = useState<Tool>("select");
@@ -151,9 +154,11 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
     <div style={wrap} className="flex-col lg:flex-row">
       {/* ---- parameters ---- */}
       {panel ? (
-        <ParamPanel jobId={jobId} data={data} groupId={groupId} setGroupId={setGroupId} selId={selId}
-          onSelect={(m) => { setSelId(m.id); setGroupId(m.parameter_id); if (m.sheet_id !== sheet?.id) setSheetId(m.sheet_id); setTool("select"); }}
-          act={act} onSend={onSend} onCollapse={() => setPanel(false)} />
+        <div className="hidden lg:flex" style={{ flex: "0 0 auto", minHeight: 0 }}>
+          <ParamPanel jobId={jobId} data={data} groupId={groupId} setGroupId={setGroupId} selId={selId}
+            onSelect={(m) => { setSelId(m.id); setGroupId(m.parameter_id); if (m.sheet_id !== sheet?.id) setSheetId(m.sheet_id); setTool("select"); }}
+            act={act} onSend={onSend} onCollapse={() => setPanel(false)} />
+        </div>
       ) : (
         <button onClick={() => setPanel(true)} aria-label="Show parameters" className="hidden lg:flex flex-col items-center pt-3 gap-2"
           style={{ width: 44, borderRight: `1px solid ${T.hair}`, background: T.card, cursor: "pointer" }}>
@@ -172,8 +177,9 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
             Sheets · {sheets.length}
           </button>
           {/* Parameters beside Sheets on a phone, so a folded panel can always come back (Coy, 2026-10-09). */}
-          <button onClick={() => setPanel(!panel)} aria-pressed={panel} aria-label={`Parameters, ${data.params.length}`} className="flex items-center gap-1.5 rounded shrink-0"
-            style={{ height: 40, padding: "0 10px", border: `1px solid ${panel ? T.hiviz : T.hairStrong}`, background: panel ? T.hivizDim : T.card, color: T.ink, fontFamily: disp, fontSize: 12, letterSpacing: ".08em", textTransform: "uppercase", cursor: "pointer" }}>
+          <button onClick={() => openParams(!paramsOpen)} aria-pressed={paramsOpen} aria-label={`Parameters, ${data.params.length}`} className="flex items-center gap-1.5 rounded shrink-0"
+            style={{ height: 40, padding: "0 10px", border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink, fontFamily: disp, fontSize: 12, letterSpacing: ".08em", textTransform: "uppercase", cursor: "pointer" }}>
+            <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true"><path d="M3 5h14M3 10h14M3 15h14" /></svg>
             Parameters · {data.params.length}
           </button>
           {sheet && (
@@ -210,8 +216,14 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
             {!sheets.length && <div style={{ fontSize: F.xs, color: T.ink3, padding: 6 }}>No sheets yet — add a plan PDF on the Files step.</div>}
           </div>
         </SlideDrawer>
+        <div className="lg:hidden">
+          <SlideDrawer open={paramsOpen} onClose={() => openParams(false)} width={320} label="Parameters">
+            <ParamPanel jobId={jobId} data={data} groupId={groupId} setGroupId={setGroupId} selId={selId} drawer
+              onSelect={(m) => { setSelId(m.id); setGroupId(m.parameter_id); if (m.sheet_id !== sheet?.id) setSheetId(m.sheet_id); setTool("select"); openParams(false); }}
+              act={act} onSend={(p, ids) => { openParams(false); onSend(p, ids); }} onCollapse={() => openParams(false)} />
+          </SlideDrawer>
+        </div>
         <div className="flex items-center gap-1 px-2 overflow-x-auto" style={{ height: 42, flex: "0 0 auto", background: T.card, borderBottom: `1px solid ${T.hair}` }}>
-          {!panel && <button onClick={() => setPanel(true)} className="lg:hidden" style={tb(false)}>Groups</button>}
           {TOOLS.map(([k, label, hint]) => (
             <button key={k} onClick={() => pickTool(k)} title={hint} aria-pressed={tool === k} style={tb(tool === k)}>{label}</button>
           ))}
@@ -569,9 +581,11 @@ function Drawing({ sheet, fileUrl, zoom, setZoom, tool, data, groupId, selId, se
 
 /* --------------------------------------------------------- parameter tree */
 
-function ParamPanel({ jobId, data, groupId, setGroupId, selId, onSelect, act, onSend, onCollapse }: {
+function ParamPanel({ jobId, data, groupId, setGroupId, selId, onSelect, act, onSend, onCollapse, drawer }: {
   jobId: string; data: PlansData; groupId: string | null; setGroupId: (id: string) => void; selId: string | null;
   onSelect: (m: Meas) => void; act: (fn: () => Promise<unknown>) => Promise<void>; onSend: (p: Param, ids?: string[]) => void; onCollapse: () => void;
+  /** Inside the phone's slide-out: the drawer's full height, no fold-to-a-strip. */
+  drawer?: boolean;
 }) {
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [adding, setAdding] = useState(false);
@@ -592,7 +606,8 @@ function ParamPanel({ jobId, data, groupId, setGroupId, selId, onSelect, act, on
   const inBudget = (p: Param) => { const ms = data.measurements.filter((m) => m.parameter_id === p.id); return [ms.filter((m) => m.section_id).length, ms.length] as const; };
   const nShapes = data.measurements.length;
   return (
-    <div className="sc-param-panel flex flex-col" style={{ width: "100%", maxHeight: 260, flex: "0 0 auto", background: T.card, borderRight: `1px solid ${T.hair}`, borderBottom: `1px solid ${T.hair}`, minHeight: 0 }}>
+    <div className={drawer ? "flex flex-col" : "sc-param-panel flex flex-col"} style={drawer ? { width: "100%", height: "100%", background: T.card, minHeight: 0 }
+      : { width: "100%", maxHeight: 260, flex: "0 0 auto", background: T.card, borderRight: `1px solid ${T.hair}`, borderBottom: `1px solid ${T.hair}`, minHeight: 0 }}>
       <style>{`@media (min-width:1024px){.sc-param-panel{width:340px!important;flex:0 0 340px!important;max-height:none!important;border-bottom:none!important}}`}</style>
       <div className="flex flex-col" style={{ width: "100%", minHeight: 0, flex: "1 1 auto" }}>
         <div className="flex items-center gap-2 px-3 pt-2 pb-1.5" style={{ borderBottom: `1px solid ${T.hairSoft}` }}>

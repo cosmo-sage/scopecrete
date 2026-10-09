@@ -443,14 +443,19 @@ export function MapPage() {
   const layersBody = <LayerPanel data={data} f={f} setF={setF} />;
   const legend = LAYERS.filter((l) => f.layers.includes(l.id) && l.id !== "done" && l.id !== "lost");
   const ink = clip ? "#fff" : T.ink;
-  const mapControls = (
-    <>
-                <div className="flex rounded overflow-hidden" style={{ border: `1px solid ${T.hairStrong}`, boxShadow: "0 2px 8px rgba(0,0,0,.15)" }}>
-                  {([["map", "Map"], ["sat", "Satellite"]] as const).map(([k, label]) => (
-                    <button key={k} type="button" aria-pressed={mode === k} onClick={() => setMode(k)}
-                      style={{ height: 30, padding: "0 10px", fontFamily: disp, fontSize: 12, fontWeight: 600, letterSpacing: ".06em", textTransform: "uppercase", background: mode === k ? T.ink : T.card, color: mode === k ? T.card : T.ink2, cursor: "pointer" }}>{label}</button>
+  // Map · Satellite: over the map on a desktop; in the header beside Clip on a
+  // phone (Coy, 2026-10-09).
+  const modeToggle = (
+                <div className="flex rounded overflow-hidden" style={{ border: `1px solid ${T.hairStrong}`, boxShadow: wide ? "0 2px 8px rgba(0,0,0,.15)" : undefined, flexShrink: 0 }}>
+                  {([["map", "Map"], ["sat", wide ? "Satellite" : "Sat"]] as const).map(([k, label]) => (
+                    <button key={k} type="button" aria-pressed={mode === k} aria-label={k === "sat" ? "Satellite" : "Map"} onClick={() => setMode(k)}
+                      style={{ height: 30, padding: wide ? "0 10px" : "0 8px", fontFamily: disp, fontSize: 12, fontWeight: 600, letterSpacing: ".06em", textTransform: "uppercase", background: mode === k ? T.ink : T.card, color: mode === k ? T.card : T.ink2, cursor: "pointer" }}>{label}</button>
                   ))}
                 </div>
+  );
+  const mapControls = (
+    <>
+                {wide && modeToggle}
                 {!wide && (
                   <button type="button" aria-label="Where I am" title="Where I am" onClick={() => navigator.geolocation?.getCurrentPosition((p) => setView({ lat: p.coords.latitude, lng: p.coords.longitude, zoom: 16 }), () => {})}
                     className="flex items-center justify-center rounded" style={{ width: 36, height: 36, background: T.card, border: `1px solid ${T.hairStrong}`, boxShadow: "0 2px 8px rgba(0,0,0,.15)", cursor: "pointer" }}>
@@ -467,7 +472,7 @@ export function MapPage() {
           sub="Every job and vendor with an address. Frame any spot on satellite and send it to a job's Takeoffs to measure."
           menu={<MenuButton onClick={() => setLayersOpen(true)} label="Layers" />}
           actions={<div className="flex items-center gap-2">
-            {!wide && <button type="button" onClick={() => setLayersOpen(true)} style={btn()}>Layers</button>}
+            {!wide && modeToggle}
             <button type="button" onClick={() => startClip()} style={btn(true)}>{wide ? "Clip for takeoff" : "Clip"}</button>
           </div>} />
       ) : (
@@ -496,7 +501,7 @@ export function MapPage() {
                 {!wide && <div {...stop} className="flex items-start justify-end gap-2" style={{ alignSelf: "flex-end" }}>{mapControls}</div>}
               </div>
             )}
-            {/* Map · Satellite (top right on a desktop; under the search on a phone, so the banner never hides it) */}
+            {/* Map · Satellite and Where I am (top right on a desktop; on a phone the toggle is in the header, Where I am under the search) */}
             {!clip && wide && (
               <div {...stop} className="absolute flex flex-col items-end gap-2" style={{ right: 10, top: 10, zIndex: 9 }}>{mapControls}</div>
             )}

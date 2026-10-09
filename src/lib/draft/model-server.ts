@@ -26,9 +26,10 @@ async function refusal(r: Response, who: string): Promise<string> {
   let msg = "";
   try { const j = (await r.json()) as { error?: { message?: string } | string }; msg = typeof j.error === "string" ? j.error : j.error?.message ?? ""; } catch { /* no body */ }
   console.error("draft model", who, r.status, msg.slice(0, 200));
-  if (r.status === 401) return `the model API answered 401 — ${who} refused the key${msg ? ` ("${msg.slice(0, 80)}")` : ""}; make a new key and replace it in Vercel`;
+  if (r.status === 401) return `the model API answered 401 — ${who} refused the key${msg ? ` ("${msg.slice(0, 200)}")` : ""}; make a new key and replace it in Vercel`;
+  if (r.status === 400 && /workspace/i.test(msg)) return `the model API answered 400 — this ${who} key isn't in a workspace; make the key inside a workspace in the Anthropic Console (Settings → Workspaces → Default → API keys) and replace it in Vercel, or add that workspace's id as ANTHROPIC_WORKSPACE_ID`;
   if (r.status === 400 && /credit/i.test(msg)) return `the model API answered 400 — the ${who} account is out of credits`;
-  return `the model API answered ${r.status}${msg ? ` ("${msg.slice(0, 80)}")` : ""}`;
+  return `the model API answered ${r.status}${msg ? ` ("${msg.slice(0, 200)}")` : ""}`;
 }
 
 export function modelConfigured(): "anthropic" | "openrouter" | null {
@@ -54,7 +55,7 @@ export async function modelJson(system: string, user: string, maxTokens = 2000, 
     if (provider === "anthropic") {
       const r = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST", signal: ctrl.signal,
-        headers: { "content-type": "application/json", "x-api-key": key("ANTHROPIC_API_KEY"), "anthropic-version": "2023-06-01" },
+        headers: { "content-type": "application/json", "x-api-key": key("ANTHROPIC_API_KEY"), "anthropic-version": "2023-06-01", ...(key("ANTHROPIC_WORKSPACE_ID") ? { "anthropic-workspace-id": key("ANTHROPIC_WORKSPACE_ID") } : {}) },
         body: JSON.stringify({ model: process.env.DRAFT_MODEL || "claude-haiku-4-5-20251001", max_tokens: maxTokens, temperature: 0,
           system, messages: [{ role: "user", content: user }] }),
       });

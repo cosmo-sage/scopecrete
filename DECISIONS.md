@@ -1776,7 +1776,7 @@ percentage of labour — all three contradict this section and §4.
   correction beats an earlier line, otherwise two values are a **conflict**
   and neither is used — a question, never a guess or a zero. With
   `ANTHROPIC_API_KEY` (or `OPENROUTER_API_KEY`; `DRAFT_MODEL` optional) a
-  second reading comes from a direct, tool-less JSON call — never Hermes; `ANTHROPIC_API_KEY` set in Vercel 2026-10-07 on every environment — and
+  second reading comes from a direct, tool-less JSON call — never Hermes; `ANTHROPIC_API_KEY` set in Vercel 2026-10-07 on every environment; a key not made inside a workspace needs `ANTHROPIC_WORKSPACE_ID`, sent as `anthropic-workspace-id` — and
   a fact of it is kept only if its line exists, its quote is in that line and
   its number is in the quote (`modelSeen()`); where it differs from the plain
   reading it is shown as "Heard differently", Coy's tap to use. The

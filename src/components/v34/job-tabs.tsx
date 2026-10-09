@@ -37,9 +37,8 @@ export function JobTabs({ jobId, active, back = false, subnav }: { jobId: string
   const onRef = useRef<HTMLAnchorElement | null>(null);
   const subRef = useRef<HTMLDivElement | null>(null);
   const [geo, setGeo] = useState<{ left: number; stem: number; tabs: number[] } | null>(null);
-  // The row sits under the button but never runs off the screen: three tabs under Budget (the
-  // third of four) are pulled back in, and a row as wide as the screen is centred on it, so it
-  // reads even (Coy, 2026-10-09: "so that it looks more symmetrical").
+  // The row is centred on the screen, so it reads even (Coy, 2026-10-09: "so that it looks more
+  // symmetrical"); the branch reaches across from the button to it.
   useLayoutEffect(() => {
     const measure = () => {
       const b = onRef.current, box = subRef.current, room = box?.parentElement?.clientWidth ?? 0;
@@ -48,8 +47,9 @@ export function JobTabs({ jobId, active, back = false, subnav }: { jobId: string
       const tabs = Array.from(box.querySelectorAll<HTMLElement>("[role=tab]")).map((el) => el.offsetLeft + el.offsetWidth / 2);
       const width = box.scrollWidth;
       const spare = Math.max(0, room - width);
-      // Wide rows (over 80% of the screen) centre on it; narrow ones stay under their button.
-      const left = Math.round(width > room * 0.8 ? spare / 2 : Math.min(spare, Math.max(0, center - width / 2)));
+      // Every row is centred on the screen, the branch still dropping from its button (Coy,
+      // 2026-10-09: Files · Measurements "in the center of the phone screen so that it's symmetrical").
+      const left = Math.round(spare / 2);
       const next = { left, stem: Math.round(center - left), tabs: tabs.map(Math.round) };
       setGeo((g) => (g && g.left === next.left && g.stem === next.stem && g.tabs.join() === next.tabs.join() ? g : next));
     };

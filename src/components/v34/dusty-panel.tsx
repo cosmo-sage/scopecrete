@@ -113,6 +113,14 @@ export function DustyPanel({ open, onClose, onBusy, onStream }: {
   // Files attached to the next message (the + left of the box).
   const [atts, setAtts] = useState<Att[]>([]);
   const fileInput = useRef<HTMLInputElement | null>(null);
+  // The box grows with what is typed, up to about eight lines (Coy, 2026-10-09: "expandable").
+  const box = useRef<HTMLTextAreaElement | null>(null);
+  useEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
+  }, [draft]);
   const [recording, setRecording] = useState(false);
   const [hearing, setHearing] = useState(false);
 
@@ -538,6 +546,12 @@ export function DustyPanel({ open, onClose, onBusy, onStream }: {
           </div>
         </div>
 
+        {/* Dusty sits in the chat, centred just above the message bar — over where he lives in the
+            footer — in his live state (Coy, 2026-10-09: "move the dusty character into the chat
+            window … This would allow the text box to be wider"). */}
+        <div className="shrink-0 flex justify-center" style={{ paddingTop: 4, paddingBottom: 2 }}>
+          <DustyAvatar state={recording || hearing ? "loading" : dustyState} size={34} />
+        </div>
         <form onSubmit={(e) => { e.preventDefault(); void ask(draft); }} className="shrink-0 px-3 py-2.5"
           style={{ borderTop: `1px solid ${T.hair}`, background: T.card }}>
           {atts.length > 0 && (
@@ -552,10 +566,7 @@ export function DustyPanel({ open, onClose, onBusy, onStream }: {
               ))}
             </div>
           )}
-          <div className="mx-auto flex items-end gap-2" style={{ maxWidth: 760 }}>
-            {/* Dusty at the bottom left, always there while the chat is open, in his
-                live state — listening, sorting, done, stuck (Coy, 2026-10-05). */}
-            <span className="shrink-0 flex" style={{ alignSelf: "center" }}><DustyAvatar state={recording || hearing ? "loading" : dustyState} size={36} /></span>
+          <div className="mx-auto flex items-end gap-2" style={{ maxWidth: 900 }}>
             {recording ? (
               <VoiceRecorder onSend={(b) => void voice(b)} onCancel={() => setRecording(false)} />
             ) : (
@@ -565,29 +576,37 @@ export function DustyPanel({ open, onClose, onBusy, onStream }: {
                   accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.csv,.txt" />
                 <button type="button" onClick={() => fileInput.current?.click()} aria-label="Attach photos or files" title="Attach photos or files"
                   className="shrink-0 rounded-full flex items-center justify-center" style={{ width: 38, height: 38, border: `1px solid ${T.hair}`, background: T.card, color: T.ink2, fontSize: 20, cursor: "pointer" }}>+</button>
-                <textarea value={draft} onChange={(e) => setDraft(e.target.value)} rows={1} maxLength={4000}
+                <textarea ref={box} value={draft} onChange={(e) => setDraft(e.target.value)} rows={1} maxLength={4000}
                   onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void ask(draft); } }}
                   placeholder={hearing ? "Listening back…" : active ? "Follow up…" : hot ? `Ask about ${GUESS[ref.kind]}…` : "Ask Dusty…"}
-                  className="flex-1 rounded-lg px-3 py-2 outline-none resize-none"
-                  style={{ border: `1px solid ${T.hair}`, fontSize: Math.round(F.sm * font.z), maxHeight: 140, fontFamily: agent, minWidth: 0, background: T.card, color: T.ink }} />
-                {/* Telegram's way: an empty box offers the mic, a typed one the send. */}
-                {!draft.trim() && !atts.length ? (
-                  <button type="button" onClick={() => { setErr(null); setRecording(true); }} disabled={busy || hearing} aria-label="Record a voice message" title="Record a voice message"
-                    className="shrink-0 rounded-full flex items-center justify-center" style={{ width: 38, height: 38, background: busy || hearing ? T.hair : T.hiviz, color: T.onHiviz, cursor: "pointer" }}>
-                    {hearing ? "…" : (
-                      <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
-                        <rect x="5.5" y="1.5" width="5" height="8.5" rx="2.5" fill="currentColor" stroke="none" />
-                        <path d="M3 7.5a5 5 0 0 0 10 0M8 12.5v2.2" />
-                      </svg>
-                    )}
-                  </button>
-                ) : (
-                  <button type="submit" disabled={busy || atts.some((a) => !a.id && !a.error)} className="rounded-lg px-3"
-                    style={{ height: 38, background: busy ? T.hair : T.hiviz, color: T.onHiviz, fontFamily: disp,
-                             fontSize: F.sm, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".06em" }}>
-                    {busy ? "…" : "Ask"}
-                  </button>
-                )}
+                  className="flex-1 rounded-2xl px-3.5 outline-none resize-none"
+                  style={{ border: `1px solid ${T.hair}`, fontSize: Math.round(F.sm * font.z), lineHeight: 1.4, paddingTop: 9, paddingBottom: 9,
+                           minHeight: 38, maxHeight: 200, overflowY: "auto", fontFamily: agent, minWidth: 0, background: T.card, color: T.ink }} />
+                {/* The mic is always there (Coy, 2026-10-09: "what happened to my microphone button"). */}
+                <button type="button" onClick={() => { setErr(null); setRecording(true); }} disabled={busy || hearing} aria-label="Record a voice message" title="Record a voice message"
+                  className="shrink-0 rounded-full flex items-center justify-center" style={{ width: 38, height: 38, border: `1px solid ${T.hair}`, background: T.card, color: busy || hearing ? T.ink3 : T.ink2, cursor: "pointer" }}>
+                  {hearing ? "…" : (
+                    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
+                      <rect x="5.5" y="1.5" width="5" height="8.5" rx="2.5" fill="currentColor" stroke="none" />
+                      <path d="M3 7.5a5 5 0 0 0 10 0M8 12.5v2.2" />
+                    </svg>
+                  )}
+                </button>
+                {/* Send is an arrow, off until there is something to send (Coy: "a regular icon to send a message"). */}
+                {(() => {
+                  const off = busy || (!draft.trim() && !atts.some((a) => a.id)) || atts.some((a) => !a.id && !a.error);
+                  return (
+                    <button type="submit" disabled={off} aria-label="Send" title="Send"
+                      className="shrink-0 rounded-full flex items-center justify-center"
+                      style={{ width: 38, height: 38, background: off ? T.hair : T.hiviz, color: off ? T.ink3 : T.onHiviz, cursor: off ? "default" : "pointer" }}>
+                      {busy ? "…" : (
+                        <svg width="17" height="17" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M8 13.5V3M3.5 7.2 8 2.7l4.5 4.5" />
+                        </svg>
+                      )}
+                    </button>
+                  );
+                })()}
               </>
             )}
           </div>

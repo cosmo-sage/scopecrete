@@ -537,3 +537,7 @@ html[data-alerts-open="1"] .sc-pops { display: none; }
   .sc-swipe-grip { display: block; position: absolute; top: 50%; width: 3px; height: 20px; margin-top: -10px;
     border-radius: 2px; background: var(--sc-hair-strong); pointer-events: none; z-index: 1; }
 }
+
+/* Nothing widens the page sideways on a phone (Coy, 2026-10-09: the contact card's header stopped two-thirds
+   across). On the html element only, so it moves to the viewport and sticky headers keep working. */
+@media (max-width: 1023px) { html { overflow-x: hidden; } }

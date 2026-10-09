@@ -494,6 +494,21 @@ html[data-theme="night-shift"] .sc-proposal { --sc-doc-ground: #15171A; }
 .sc-job-name { font-size: 19px; }
 @media (max-width: 1023px) { .sc-job-name { font-size: 14px; } }
 
+/* The job's views — Summary · Takeoffs · Budget · Proposal. On a phone plain tabs across the full
+   width, the open one in ink with an accent underline (Coy, 2026-10-09: "not buttons but just
+   tabs"); on a desktop the segmented switch. */
+.sc-job-tabs { display: flex; width: 100%; border-bottom: 1px solid var(--sc-hair); }
+.sc-job-tab { flex: 1 1 0; height: 36px; margin-bottom: -1px; border-bottom: 2px solid transparent;
+  font-size: 13px; font-weight: 600; letter-spacing: .03em; color: var(--sc-ink3); white-space: nowrap; }
+.sc-job-tab[aria-current="page"] { color: var(--sc-ink); border-bottom-color: var(--sc-hiviz); }
+@media (min-width: 1024px) {
+  .sc-job-tabs { display: inline-flex; width: auto; border: 1px solid var(--sc-hair-strong); border-radius: 4px; overflow: hidden; flex-shrink: 0; }
+  .sc-job-tab { flex: none; height: 28px; margin: 0; padding: 0 10px; border-bottom: none; font-size: 11.5px; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--sc-ink2); background: var(--sc-card); }
+  .sc-job-tab + .sc-job-tab { border-left: 1px solid var(--sc-hair); }
+  .sc-job-tab[aria-current="page"] { background: var(--sc-ink); color: var(--sc-card); }
+}
+
 /* A thread's contact name: 19px on a desktop, 15px on a phone (Coy, 2026-10-09). */
 :root { --sc-thread-name: 19px; --sc-thread-co: 14px; }
 @media (max-width: 1023px) { :root { --sc-thread-name: 15px; --sc-thread-co: 12px; } }

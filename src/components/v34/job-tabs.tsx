@@ -47,16 +47,18 @@ export function JobTabs({ jobId, active, back = false, subnav }: { jobId: string
     const next = { left, stem: Math.round(center - left), tabs: tabs.map(Math.round) };
     setGeo((g) => (g && g.left === next.left && g.stem === next.stem && g.tabs.join() === next.tabs.join() ? g : next));
   }, [subnav, active]);
+  // On a phone the views are plain tabs across the full width, the open one underlined (Coy,
+  // 2026-10-09: "full width of the mobile screen … cleaner … not buttons but just tabs"); a desktop
+  // keeps the segmented switch. Both looks are `.sc-job-tabs` in v34-shell.css.
   const nav = (
-    <nav aria-label="This job" className="sc-no-print flex items-center gap-1.5 min-w-0">
+    <nav aria-label="This job" className="sc-no-print flex items-center gap-1.5 min-w-0 w-full lg:w-auto">
       {back && <Link href="/dashboard/scope" className="no-underline shrink-0" style={{ fontFamily: disp, fontSize: 11, letterSpacing: ".1em", textTransform: "uppercase", color: T.ink3 }}>‹ Jobs</Link>}
-      <span className="inline-flex rounded overflow-hidden shrink-0" style={{ border: `1px solid ${T.hairStrong}` }}>
-        {tabs.map((t, i) => {
+      <span className="sc-job-tabs">
+        {tabs.map((t) => {
           const on = t.k === active;
           return (
-            <Link key={t.k} ref={on ? onRef : undefined} href={t.href(jobId)} aria-current={on ? "page" : undefined} className="no-underline flex items-center"
-              style={{ height: 28, padding: "0 10px", background: on ? T.ink : T.card, color: on ? T.card : T.ink2, borderLeft: i ? `1px solid ${T.hair}` : "none",
-                fontFamily: disp, fontSize: 11.5, fontWeight: 600, letterSpacing: ".06em", textTransform: "uppercase", whiteSpace: "nowrap" }}>
+            <Link key={t.k} ref={on ? onRef : undefined} href={t.href(jobId)} aria-current={on ? "page" : undefined}
+              className="sc-job-tab no-underline flex items-center justify-center" style={{ fontFamily: disp }}>
               {t.label}
             </Link>
           );
@@ -66,7 +68,7 @@ export function JobTabs({ jobId, active, back = false, subnav }: { jobId: string
   );
   if (!subnav) return nav;
   return (
-    <div className="relative flex flex-col items-start">
+    <div className="relative flex flex-col items-start w-full lg:w-auto">
       {nav}
       <div ref={subRef} className="lg:hidden relative" style={{ marginLeft: geo?.left ?? 0, paddingTop: 12, visibility: geo ? "visible" : "hidden" }}>
         {geo && geo.tabs.length > 0 && (() => {
@@ -146,7 +148,7 @@ export function JobHeaderRow({ jobId, active, title, after, sub, customerId, sub
         </div>
         {sub && <div className="text-center lg:text-left" style={{ fontSize: 11, color: T.ink3, overflowWrap: "anywhere", marginTop: 1 }}>{sub}</div>}
       </div>
-      <div className="flex justify-center shrink-0 lg:ml-auto"><JobTabs jobId={jobId} active={active} subnav={subnav} /></div>
+      <div className="flex justify-center w-full lg:w-auto shrink-0 lg:ml-auto"><JobTabs jobId={jobId} active={active} subnav={subnav} /></div>
       <JobSwitcher open={switching} onClose={() => setSwitching(false)} jobId={jobId} href={viewHref} />
     </div>
   );

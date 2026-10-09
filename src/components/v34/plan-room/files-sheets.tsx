@@ -416,8 +416,21 @@ export function PageReader({ pages, files, start, onClose, onMeasure, jobId }: {
         <button onClick={() => go((n) => Math.min(pages.length - 1, n + 1))} disabled={i === pages.length - 1} style={{ ...btn, opacity: i === pages.length - 1 ? 0.4 : 1 }} aria-label="Next page">›</button>
         {canClip && <button onClick={() => { setClipping((c) => !c); setBox(null); setDrag(null); setClipMsg(null); }} aria-pressed={clipping}
           title="Drag a box round a section cut or detail, then file it on a budget section"
-          style={{ ...btn, ...(clipping ? { background: T.ink, color: T.card, border: `1px solid ${T.ink}` } : {}) }}>{clipping ? "Clipping…" : "Clip detail"}</button>}
-        {onMeasure && <button onClick={() => onMeasure(s)} style={{ ...btn, background: T.hiviz, color: T.onHiviz, border: `1px solid ${T.hiviz}`, letterSpacing: ".06em", textTransform: "uppercase" }}>Measure ›</button>}
+          aria-label={clipping ? "Stop clipping" : "Clip detail"} className="flex items-center justify-center"
+          style={{ ...btn, ...(clipping ? { background: T.ink, color: T.card, border: `1px solid ${T.ink}` } : {}) }}>
+          {/* On a phone the words didn't fit (Coy, 2026-10-09): an icon there, the words on a desktop. */}
+          <svg className="lg:hidden" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M6 2v14a2 2 0 0 0 2 2h14" /><path d="M18 22V8a2 2 0 0 0-2-2H2" />
+          </svg>
+          <span className="hidden lg:inline">{clipping ? "Clipping…" : "Clip detail"}</span>
+        </button>}
+        {onMeasure && <button onClick={() => onMeasure(s)} aria-label="Measure this sheet" title="Measure this sheet" className="flex items-center justify-center"
+          style={{ ...btn, background: T.hiviz, color: T.onHiviz, border: `1px solid ${T.hiviz}`, letterSpacing: ".06em", textTransform: "uppercase" }}>
+          <svg className="lg:hidden" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M3 16.5 16.5 3 21 7.5 7.5 21z" /><path d="M7 12.5l2 2M10 9.5l2 2M13 6.5l2 2" />
+          </svg>
+          <span className="hidden lg:inline">Measure ›</span>
+        </button>}
       </div>
       {clipping && !box && <div className="px-3 py-1.5" style={{ background: T.ink, color: T.card, fontSize: F.xs }}>
         Drag a box round the section cut or detail{clipMsg ? ` · ${clipMsg}` : ""}. Esc stops clipping.

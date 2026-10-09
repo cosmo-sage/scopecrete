@@ -9,7 +9,7 @@
  */
 import { useCallback } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { T, disp } from "@/lib/v34/tokens";
+import { T, disp, strong } from "@/lib/v34/tokens";
 import { Emblem } from "@/components/site/marks";
 import { BUDGET_TABS, tabOf, type BudgetTab } from "@/lib/budget-v3";
 
@@ -27,22 +27,27 @@ export function useBudgetTab(): [BudgetTab, (t: BudgetTab) => void] {
   return [tab, go];
 }
 
-export function BudgetSubTabs({ tab, onTab, counts }: { tab: BudgetTab; onTab: (t: BudgetTab) => void; counts?: Partial<Record<BudgetTab, number>> }) {
+/**
+ * The three tabs look like Takeoffs' Files · Measurements (Coy, 2026-10-09: "the three tabs on the
+ * budget page are still buttons"): words with the accent underline on the open one. `hang` is the
+ * phone's row under the Budget button (small, tight); otherwise the desktop's tools row.
+ */
+export function BudgetSubTabs({ tab, onTab, counts, hang = false }: { tab: BudgetTab; onTab: (t: BudgetTab) => void; counts?: Partial<Record<BudgetTab, number>>; hang?: boolean }) {
   return (
-    <span role="tablist" aria-label="Budget" className="inline-flex rounded overflow-hidden shrink-0" style={{ border: `1px solid ${T.hairStrong}` }}>
-      {BUDGET_TABS.map((t, i) => {
+    <div role="tablist" aria-label="Budget" className={`flex shrink-0 ${hang ? "gap-2.5" : "gap-4"}`}>
+      {BUDGET_TABS.map((t) => {
         const on = t.k === tab;
         const n = counts?.[t.k];
         return (
-          <button key={t.k} role="tab" aria-selected={on} onClick={() => onTab(t.k)} className="flex items-center gap-1"
-            style={{ height: 28, padding: "0 9px", background: on ? T.ink : T.card, color: on ? T.card : T.ink2, borderLeft: i ? `1px solid ${T.hair}` : "none",
-              fontFamily: disp, fontSize: 11.5, fontWeight: 600, letterSpacing: ".05em", textTransform: "uppercase", whiteSpace: "nowrap", cursor: "pointer" }}>
+          <button key={t.k} role="tab" aria-selected={on} onClick={() => onTab(t.k)} className="flex items-center gap-1 shrink-0"
+            style={{ height: hang ? 24 : 38, borderBottom: `2px solid ${on ? T.hiviz : "transparent"}`, color: on ? T.ink : T.ink3,
+              fontFamily: disp, fontSize: hang ? 11.5 : 14, fontWeight: 600, letterSpacing: hang ? ".05em" : ".1em", textTransform: "uppercase", whiteSpace: "nowrap", cursor: "pointer" }}>
             {t.label}
-            {n ? <span style={{ fontSize: 10, borderRadius: 999, padding: "0 5px", background: on ? T.hiviz : T.hivizSoft, color: "#fff", letterSpacing: 0 }}>{n}</span> : null}
+            {n ? <span style={{ fontFamily: strong, fontSize: 10, background: T.sunk, borderRadius: 999, padding: "0 5px", letterSpacing: 0 }}>{n}</span> : null}
           </button>
         );
       })}
-    </span>
+    </div>
   );
 }
 

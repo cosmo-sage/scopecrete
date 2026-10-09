@@ -37,15 +37,25 @@ export function JobTabs({ jobId, active, back = false, subnav }: { jobId: string
   const onRef = useRef<HTMLAnchorElement | null>(null);
   const subRef = useRef<HTMLDivElement | null>(null);
   const [geo, setGeo] = useState<{ left: number; stem: number; tabs: number[] } | null>(null);
+  // The row sits under the button but never runs off the screen: three tabs under Budget (the
+  // third of four) are pulled back in, and a row as wide as the screen is centred on it, so it
+  // reads even (Coy, 2026-10-09: "so that it looks more symmetrical").
   useLayoutEffect(() => {
-    const b = onRef.current, box = subRef.current;
-    if (!subnav || !b || !box) return;
-    const center = b.offsetLeft + b.offsetWidth / 2;
-    const tabs = Array.from(box.querySelectorAll<HTMLElement>("[role=tab]")).map((el) => el.offsetLeft + el.offsetWidth / 2);
-    const width = box.scrollWidth;
-    const left = Math.max(0, Math.round(center - width / 2));
-    const next = { left, stem: Math.round(center - left), tabs: tabs.map(Math.round) };
-    setGeo((g) => (g && g.left === next.left && g.stem === next.stem && g.tabs.join() === next.tabs.join() ? g : next));
+    const measure = () => {
+      const b = onRef.current, box = subRef.current, room = box?.parentElement?.clientWidth ?? 0;
+      if (!subnav || !b || !box || !room) return;
+      const center = b.offsetLeft + b.offsetWidth / 2;
+      const tabs = Array.from(box.querySelectorAll<HTMLElement>("[role=tab]")).map((el) => el.offsetLeft + el.offsetWidth / 2);
+      const width = box.scrollWidth;
+      const spare = Math.max(0, room - width);
+      // Wide rows (over 80% of the screen) centre on it; narrow ones stay under their button.
+      const left = Math.round(width > room * 0.8 ? spare / 2 : Math.min(spare, Math.max(0, center - width / 2)));
+      const next = { left, stem: Math.round(center - left), tabs: tabs.map(Math.round) };
+      setGeo((g) => (g && g.left === next.left && g.stem === next.stem && g.tabs.join() === next.tabs.join() ? g : next));
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
   }, [subnav, active]);
   // On a phone the views are plain tabs across the full width, the open one underlined (Coy,
   // 2026-10-09: "full width of the mobile screen … cleaner … not buttons but just tabs"); a desktop

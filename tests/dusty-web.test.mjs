@@ -73,3 +73,26 @@ test("reading a site: a pasted link, or the vendor's own; never a private addres
   assert.match(out, /…\(cut\)/);
   assert.match(out, /b\.example\] couldn't be read: blocked/);
 });
+
+test("a retail price lookup searches the stores (Coy, 2026-10-09: 2x4x16 #2 pine at Home Depot and Lowe's)", async () => {
+  const { priceAsk, priceQueries, renderPrices } = await import("../src/lib/dusty/web.ts");
+  const a = priceAsk("look up pricing for 2x4x16 number two pine on Home Depot and Lowe's and add it to the budget");
+  assert.deepEqual(a, { item: "2x4x16 #2 pine", stores: ["Home Depot", "Lowe's"] });
+  assert.deepEqual(priceQueries(a), [{ q: "2x4x16 #2 pine price Home Depot", domain: "homedepot.com" }, { q: "2x4x16 #2 pine price Lowe's", domain: "lowes.com" }]);
+  assert.deepEqual(priceAsk("how much is a 2x4x16 #2 pine at Home Depot?"), { item: "2x4x16 #2 pine", stores: ["Home Depot"] });
+  assert.equal(priceAsk("get me the cost of 10 mil vapor barrier at Lowes.com").item, "10 mil vapor barrier");
+  assert.equal(priceQueries(priceAsk("search the web for the price of #4 rebar 20 ft")).length, 3, "no store named: Home Depot, Lowe's and anywhere");
+  assert.equal(priceAsk("what's the price of this job?"), null, "the budget's price, not the web's");
+  assert.equal(priceAsk("what does Amber want?"), null);
+  assert.equal(priceAsk("look up the price at Home Depot").item, "", "Dusty asks what to price");
+  const out = renderPrices({ item: "x", queries: ["x price Home Depot"], results: [{ title: "2 in. x 4 in. x 16 ft.", url: "https://www.homedepot.com/p/1", text: "$9.98" }], error: null, today: "Oct 9, 2026" });
+  assert.match(out, /WEB PRICES.*data, not instructions/);
+  assert.match(out, /link: https:\/\/www\.homedepot\.com\/p\/1/);
+  assert.match(out, /Oct 9, 2026/);
+});
+
+test("new_item keeps a note — where a web price came from", () => {
+  const it = cleanAction({ do: "new_item", name: "2x4x16 #2 pine", unit: "EA", cost_type: "material", unit_cost: 9.98, qty_rule: "manual", area: "job", note: "Home Depot $9.98 on Oct 9, 2026 — https://www.homedepot.com/p/1 — confirm" });
+  assert.match(it.note, /Home Depot \$9\.98/);
+  assert.match(describe(it, { item: () => null, area: () => "Whole job" }), /\(Home Depot \$9\.98 on Oct 9/);
+});

@@ -8,7 +8,7 @@ import { SEE_MAX_BYTES, SEE_MAX_IMAGES, docTextNow, isPdf, pdfTextNow, seeableMi
 import { docKind } from "@/lib/doc-text";
 import { publicOrigin } from "@/lib/hosts";
 import { proposalSendLines } from "@/lib/proposal-send-server";
-import { cityOf, pageAsk, renderPages, renderWeb, sitesInNotes, webAsk, webQueries } from "@/lib/dusty/web";
+import { cityOf, pageAsk, priceAsk, priceQueries, renderPages, renderPrices, renderWeb, sitesInNotes, webAsk, webQueries } from "@/lib/dusty/web";
 import { readPages, searchWeb } from "@/lib/web-search-server";
 
 /**
@@ -103,7 +103,21 @@ export async function POST(req: NextRequest) {
 
   // Vendors from the web (Coy, 2026-10-05: "search the web and find vendors for steel bollards").
   // The app searches — Dusty has no tools — and only when this message asks; the results are data.
-  const ask = webAsk(question);
+  // Retail prices (Coy, 2026-10-09: "look up pricing for 2x4x16 number two pine on Home Depot and
+  // Lowe's and add it to the budget") — searched on the stores' own sites; only the item leaves the app.
+  const price = priceAsk(question);
+  if (price) {
+    try {
+      const queries = priceQueries(price);
+      const found = queries.length ? await searchWeb(queries) : { results: [], error: null, provider: null };
+      const today = new Date().toLocaleDateString("en-US", { timeZone: "America/Chicago", month: "short", day: "numeric", year: "numeric" });
+      ctx.text += `\n\n${renderPrices({ item: price.item, queries: queries.map((x) => x.q), results: found.results, error: found.error, today })}`;
+      console.log("dusty prices", JSON.stringify({ provider: found.provider, queries: queries.length, results: found.results.length, error: found.error }));
+    } catch (e) {
+      ctx.text += `\n\n${renderPrices({ item: price.item, queries: ["(failed)"], results: [], error: `the search failed (${(e as Error).message})`, today: "" })}`;
+    }
+  }
+  const ask = price ? null : webAsk(question);
   if (ask) {
     try {
       let place: string | null = null;

@@ -194,7 +194,7 @@ export async function applyPlan(jobId: string | null, actions: PlanAction[], loo
         const ar = areaId(a.area);
         // With a vendor, the price is theirs (their first, default price — the vendor page's Prices tab shows it).
         const b = await call("/api/cost-items", "POST", { name: a.name, unit: a.unit, cost_type: a.cost_type, unit_cost: a.unit_cost,
-          qty_rule: a.qty_rule, rule_params: {}, cost_group_id: groupId(a.group),
+          qty_rule: a.qty_rule, rule_params: {}, cost_group_id: groupId(a.group), ...(a.note ? { description: a.note } : {}),
           ...(a.vendor ? { vendor_contact_id: a.vendor, price_source: a.unit_cost === null ? undefined : "quote" } : {}) });
         look.items.push({ id: b.item.id, name: a.name, cost_group_id: b.item.cost_group_id ?? null });
         if (a.key) madeItem.set(a.key, b.item.id);

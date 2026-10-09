@@ -16,11 +16,11 @@ export function webSearchConfigured(): boolean {
   return !!(process.env.TAVILY_API_KEY || process.env.BRAVE_SEARCH_API_KEY);
 }
 
-async function tavily(q: string, key: string): Promise<WebResult[]> {
+async function tavily(q: string, key: string, domain?: string | null): Promise<WebResult[]> {
   const r = await fetch("https://api.tavily.com/search", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-    body: JSON.stringify({ query: q, search_depth: "basic", max_results: 8, include_answer: false, country: "united states" }),
+    body: JSON.stringify({ query: q, search_depth: "basic", max_results: 8, include_answer: false, country: "united states", ...(domain ? { include_domains: [domain] } : {}) }),
     signal: AbortSignal.timeout(TIMEOUT_MS),
   });
   if (!r.ok) throw new Error(r.status === 401 || r.status === 403 ? "Tavily refused the key" : r.status === 429 || r.status === 432 ? "Tavily's monthly searches are used up" : `Tavily answered ${r.status}`);
@@ -28,8 +28,8 @@ async function tavily(q: string, key: string): Promise<WebResult[]> {
   return (b.results ?? []).filter((x) => x.url).map((x) => ({ title: x.title ?? x.url!, url: x.url!, text: x.content ?? "" }));
 }
 
-async function brave(q: string, key: string): Promise<WebResult[]> {
-  const r = await fetch(`https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(q)}&count=10&country=us`, {
+async function brave(q: string, key: string, domain?: string | null): Promise<WebResult[]> {
+  const r = await fetch(`https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(domain ? `${q} site:${domain}` : q)}&count=10&country=us`, {
     headers: { Accept: "application/json", "X-Subscription-Token": key },
     signal: AbortSignal.timeout(TIMEOUT_MS),
   });
@@ -41,13 +41,16 @@ async function brave(q: string, key: string): Promise<WebResult[]> {
   }));
 }
 
-/** Runs each query; the results merged, one per page. An error names what Coy can do about it. */
-export async function searchWeb(queries: string[]): Promise<{ results: WebResult[]; error: string | null; provider: string | null }> {
+/** Runs each query (a query may be kept to one site); the results merged, one per page. An error names what Coy can do about it. */
+export async function searchWeb(queries: Array<string | { q: string; domain: string | null }>): Promise<{ results: WebResult[]; error: string | null; provider: string | null }> {
   const tk = process.env.TAVILY_API_KEY, bk = process.env.BRAVE_SEARCH_API_KEY;
   if (!tk && !bk) {
     return { results: [], provider: null, error: "web search isn't switched on yet — it needs a search key in Vercel: TAVILY_API_KEY (free at tavily.com) or BRAVE_SEARCH_API_KEY." };
   }
-  const run = tk ? (q: string) => tavily(q, tk) : (q: string) => brave(q, bk!);
+  const run = (x: string | { q: string; domain: string | null }) => {
+    const { q, domain } = typeof x === "string" ? { q: x, domain: null } : x;
+    return tk ? tavily(q, tk, domain) : brave(q, bk!, domain);
+  };
   const settled = await Promise.allSettled(queries.map(run));
   const lists = settled.flatMap((s) => (s.status === "fulfilled" ? [s.value] : []));
   const failed = settled.find((s): s is PromiseRejectedResult => s.status === "rejected");

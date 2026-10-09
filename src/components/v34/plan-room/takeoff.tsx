@@ -102,6 +102,35 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
     try { await fn(); await reload(); } catch (e) { setMsg(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
   }, [reload]);
 
+  // × on a sheet in the Sheets drawer takes it out of Takeoffs (Coy, 2026-10-09). A sheet with
+  // measurements is kept (they'd go with it); a plan file's only sheet takes the file out instead.
+  const [removed, setRemoved] = useState<Sheet | null>(null);
+  const removeSheet = async (s: Sheet) => {
+    const n = data.measurements.filter((m) => m.sheet_id === s.id).length;
+    if (n) { window.alert(`${sheetLabel(s)} has ${n} measurement${n === 1 ? "" : "s"} on it. Delete those first.`); return; }
+    const f = files.find((x) => x.id === s.file_id);
+    if (sheets.filter((x) => x.file_id === s.file_id).length <= 1) {
+      if (!window.confirm(`${sheetLabel(s)} is the only sheet of ${f?.name ?? "its file"}. Take the file out of Takeoffs? It stays in Files.`)) return;
+      setRemoved(null);
+      await act(() => call(`/api/files/${s.file_id}`, "PATCH", { in_plan_room: false }));
+      return;
+    }
+    await act(async () => { await call(`/api/plan-sheets/${s.id}`, "DELETE"); setRemoved(s); });
+  };
+  const undoRemove = async () => {
+    const s = removed; if (!s) return;
+    setRemoved(null);
+    await act(async () => {
+      const b = await call(`/api/jobs/${jobId}/plans/sheets`, "POST", { file_id: s.file_id, sheets: [{
+        page: s.page, page_w: s.page_w, page_h: s.page_h, number: s.number, title: s.title, discipline: s.discipline,
+        scale_text: s.scale_text, printed_ft_per_pt: s.printed_ft_per_pt,
+      }] });
+      const back = (b.sheets as Sheet[] | undefined)?.find((x) => x.page === s.page);
+      if (back && s.scale_method === "manual" && s.scale_ft_per_pt) await call(`/api/plan-sheets/${back.id}`, "PATCH", { scale_method: "manual", scale_ft_per_pt: s.scale_ft_per_pt });
+      else if (back && (s.scale_method === "title_block" || s.scale_method === "none")) await call(`/api/plan-sheets/${back.id}`, "PATCH", { scale_method: s.scale_method });
+    });
+  };
+
   const pickTool = (t: Tool) => {
     setMsg(null);
     const k = TOOL_KIND[t];
@@ -216,20 +245,32 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
               const on = s.id === sheet?.id;
               const f = files.find((x) => x.id === s.file_id);
               const concrete = s.discipline === "civil" || s.discipline === "structural";
+              // Labelled as Files labels them (Coy, 2026-10-09): number · title, then the page and its file.
               return (
-                <button key={s.id} onClick={() => { setSheetId(s.id); openSheets(false); }} aria-current={on ? "true" : undefined} className="flex items-center gap-2 text-left rounded"
-                  style={{ padding: 6, border: `1px solid ${on ? T.hiviz : T.hair}`, background: on ? T.hivizDim : T.card, cursor: "pointer" }}>
-                  <span style={{ position: "relative", width: 72, flex: "0 0 auto", border: `1px solid ${T.hair}`, background: "#fff", borderRadius: 2, overflow: "hidden" }}>
-                    <Thumb fileId={s.file_id} url={f?.url ?? null} page={s.page} height={54} />
-                    {concrete && <span style={{ position: "absolute", left: 2, top: 2, fontFamily: disp, fontSize: 8, fontWeight: 700, letterSpacing: ".06em", background: T.hiviz, color: T.onHiviz, padding: "0 3px", borderRadius: 2 }}>CONCRETE</span>}
-                  </span>
-                  <span style={{ minWidth: 0 }}>
-                    <span style={{ display: "block", fontSize: 13, fontWeight: 600, color: T.ink, ...clipTxt }}>{sheetLabel(s)}</span>
-                    <span style={{ display: "block", fontSize: 11, color: s.scale_ft_per_pt ? T.green : T.ink3 }}>{s.scale_ft_per_pt ? "✓ scale set" : s.scale_method === "none" ? "not to scale" : s.scale_text ? `prints ${s.scale_text}` : "no scale yet"}</span>
-                  </span>
-                </button>
+                <div key={s.id} className="flex items-stretch rounded" style={{ border: `1px solid ${on ? T.hiviz : T.hair}`, background: on ? T.hivizDim : T.card }}>
+                  <button onClick={() => { setSheetId(s.id); openSheets(false); }} aria-current={on ? "true" : undefined} className="flex items-center gap-2 text-left flex-1"
+                    style={{ padding: 6, minWidth: 0, background: "transparent", border: "none", cursor: "pointer" }}>
+                    <span style={{ position: "relative", width: 72, flex: "0 0 auto", border: `1px solid ${T.hair}`, background: "#fff", borderRadius: 2, overflow: "hidden" }}>
+                      <Thumb fileId={s.file_id} url={f?.url ?? null} page={s.page} height={54} />
+                      {concrete && <span style={{ position: "absolute", left: 2, top: 2, fontFamily: disp, fontSize: 8, fontWeight: 700, letterSpacing: ".06em", background: T.hiviz, color: T.onHiviz, padding: "0 3px", borderRadius: 2 }}>CONCRETE</span>}
+                    </span>
+                    <span style={{ minWidth: 0 }}>
+                      <span style={{ display: "block", fontSize: 13, color: T.ink, ...clipTxt }}><b style={{ fontFamily: strong, fontWeight: 600 }}>{sheetLabel(s)}</b>{" "}<span style={{ color: T.ink2 }}>{s.title ?? "No title read"}</span></span>
+                      <span style={{ display: "block", fontSize: 10.5, color: T.ink3, ...clipTxt }}>p.{s.page}{f ? ` · ${f.name}` : ""}</span>
+                      <span style={{ display: "block", fontSize: 11, color: s.scale_ft_per_pt ? T.green : T.ink3 }}>{s.scale_ft_per_pt ? "✓ scale set" : s.scale_method === "none" ? "not to scale" : s.scale_text ? `prints ${s.scale_text}` : "no scale yet"}</span>
+                    </span>
+                  </button>
+                  <button type="button" onClick={() => void removeSheet(s)} aria-label={`Remove ${sheetLabel(s)} from Takeoffs`} title="Remove from Takeoffs"
+                    className="shrink-0 flex items-center justify-center" style={{ width: 34, background: "transparent", border: "none", color: T.ink3, fontSize: 18, cursor: "pointer" }}>×</button>
+                </div>
               );
             })}
+            {removed && (
+              <div className="flex items-center gap-2 rounded" style={{ padding: "6px 8px", background: T.sunk, fontSize: 12, color: T.ink2 }}>
+                <span style={{ flex: 1, minWidth: 0, ...clipTxt }}>Removed {sheetLabel(removed)}</span>
+                <button type="button" onClick={() => void undoRemove()} style={{ background: "transparent", border: "none", color: T.hivizText, fontWeight: 600, cursor: "pointer" }}>Undo</button>
+              </div>
+            )}
             {!sheets.length && <div style={{ fontSize: F.xs, color: T.ink3, padding: 6 }}>No sheets yet — add a plan PDF on the Files step.</div>}
           </div>
         </SlideDrawer>

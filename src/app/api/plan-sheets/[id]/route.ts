@@ -51,3 +51,28 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   if ("scale_ft_per_pt" in patch) await syncTakeoffSections(supabase, orgId, sh.job_id as string);
   return applyCookies(NextResponse.json({ sheet: data }));
 }
+
+/**
+ * DELETE — take one sheet out of Takeoffs (Coy, 2026-10-09: "remove them with a simple X button
+ * from the measurements page"). Only a sheet with nothing measured on it: measurements would go
+ * with it (on delete cascade), so those are refused by name. The plan file itself stays in Files;
+ * Undo puts the page back through the sheets POST. A file's last sheet is not deleted here — the
+ * page takes the file out of Takeoffs instead, or the Takeoffs page would read it again.
+ */
+export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const { id } = await ctx.params;
+  const result = await getApiSession(req);
+  if (!result.ok) return result.response;
+  const { supabase, orgId, applyCookies } = result.session;
+  const bad = (m: string, s = 400) => applyCookies(NextResponse.json({ error: m }, { status: s }));
+  const { data: sh } = await supabase.from("plan_sheets").select(SHEET_COLS).eq("org_id", orgId).eq("id", id).maybeSingle();
+  if (!sh) return bad("No such sheet.", 404);
+  const sheet = sh as unknown as { id: string; file_id: string };
+  const { count } = await supabase.from("takeoff_measurements").select("id", { count: "exact", head: true }).eq("org_id", orgId).eq("sheet_id", id);
+  if (count) return bad(`This sheet has ${count} measurement${count === 1 ? "" : "s"} on it. Delete those first.`, 409);
+  const { count: left } = await supabase.from("plan_sheets").select("id", { count: "exact", head: true }).eq("org_id", orgId).eq("file_id", sheet.file_id);
+  if ((left ?? 0) <= 1) return bad("It's the plan file's only sheet — take the file out of Takeoffs instead.", 409);
+  const { error } = await supabase.from("plan_sheets").delete().eq("id", id).eq("org_id", orgId);
+  if (error) return bad(error.message, 500);
+  return applyCookies(NextResponse.json({ deleted: sh }));
+}

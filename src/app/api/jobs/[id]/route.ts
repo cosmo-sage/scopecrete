@@ -92,6 +92,20 @@ export async function PATCH(
     }
   }
 
+  // The crew (migration 093): people on the job and hours a day, for the budget's Cost Analysis.
+  if ("crew_size" in body) {
+    const c = body.crew_size;
+    if (c === null) patch.crew_size = null;
+    else if (typeof c === "number" && Number.isInteger(c) && c >= 1 && c <= 99) patch.crew_size = c;
+    else return applyCookies(NextResponse.json({ error: "Crew size is a whole number of people, 1 to 99." }, { status: 400 }));
+  }
+  if ("crew_hours" in body) {
+    const h = body.crew_hours;
+    if (h === null) patch.crew_hours = null;
+    else if (typeof h === "number" && Number.isFinite(h) && h > 0 && h <= 24) patch.crew_hours = Math.round(h * 10) / 10;
+    else return applyCookies(NextResponse.json({ error: "Hours a day is a number above 0, up to 24." }, { status: 400 }));
+  }
+
   if (typeof patch.status === "string" && !VALID_STATUS.includes(patch.status)) {
     return applyCookies(NextResponse.json({
       error: `Unknown status "${patch.status}". One of: ${VALID_STATUS.join(", ")}.`,
@@ -146,6 +160,9 @@ export async function PATCH(
     .maybeSingle();
 
   if (error) {
+    if (("crew_size" in patch || "crew_hours" in patch) && /crew_(size|hours)/.test(error.message)) {
+      return applyCookies(NextResponse.json({ error: "Crew size waits for migration 093.", code: "needs_093" }, { status: 409 }));
+    }
     return applyCookies(NextResponse.json({ error: `jobs update: ${error.message}` }, { status: 500 }));
   }
   if (!data) {
@@ -230,5 +247,13 @@ export async function GET(
     };
   }
 
-  return applyCookies(NextResponse.json({ job: data, contact, why }));
+  // The crew (migration 093), read on its own so the job still opens before 093 is applied:
+  // null = the columns aren't there yet.
+  const { data: cr, error: crErr } = await supabase.from("jobs").select("crew_size, crew_hours").eq("id", id).eq("org_id", orgId).maybeSingle();
+  const crew = crErr ? null : {
+    size: cr?.crew_size == null ? null : Number(cr.crew_size),
+    hours: cr?.crew_hours == null ? null : Number(cr.crew_hours),
+  };
+
+  return applyCookies(NextResponse.json({ job: data, contact, why, crew }));
 }

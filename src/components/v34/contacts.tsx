@@ -17,6 +17,8 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { IdentificationCard } from "@phosphor-icons/react";
+import type { CardRead } from "@/lib/business-card";
 import { T, F, BUCKET, disp, eyebrow, clip, nums, relTime } from "@/lib/v34/tokens";
 import { PageHeader, SearchBubble, SearchToggle, Sheet } from "@/components/v34/primitives";
 import { useWide } from "@/lib/v34/use-wide";
@@ -253,6 +255,30 @@ export function NewContactForm({ seed = "", bucket: fixedBucket, onMade, onCance
   };
   const empty = !name.trim() && !company.trim() && !phones.some((p) => p.v.trim()) && !emails.some((p) => p.v.trim());
 
+  // Scan a business card (Coy, 2026-10-09): the photo is shrunk here, read by the model, and fills the form to check.
+  const [scanning, setScanning] = useState(false);
+  const [scanNote, setScanNote] = useState<string | null>(null);
+  const scan = async (f: File | undefined) => {
+    if (!f) return;
+    setScanning(true); setErr(null); setScanNote(null);
+    try {
+      const fd = new FormData();
+      fd.append("image", await shrinkPhoto(f), "card.jpg");
+      const r = await fetch("/api/contacts/scan", { method: "POST", body: fd });
+      const b = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(b?.error || `HTTP ${r.status}`);
+      const c = b.card as CardRead;
+      if (c.name) setName(c.name);
+      if (c.company) setCompany(c.company);
+      if (c.phones.length) setPhones(c.phones.map((p) => ({ v: p.number, label: p.label })));
+      if (c.emails.length) setEmails(c.emails.map((e) => ({ v: e.address, label: e.label })));
+      if (c.address || c.city) setAddr({ address: c.address ?? "", city: c.city ?? "", state: c.state ?? "", zip: c.zip ?? "" });
+      setScanNote(c.name || c.company || c.phones.length || c.emails.length
+        ? `Read from the card${c.title ? ` (${c.title})` : ""} — check it, then Add contact.` : "Nothing readable on that photo. Try again closer, in good light.");
+    } catch (e) { setErr(`Card: ${e instanceof Error ? e.message : String(e)}`); }
+    finally { setScanning(false); }
+  };
+
   const list = (what: "phone" | "email", rows: Pair[], set: (r: Pair[]) => void) => (
     <div className="flex flex-col gap-1.5">
       <span style={eyebrow}>{what === "phone" ? "Numbers" : "Emails"}</span>
@@ -271,6 +297,12 @@ export function NewContactForm({ seed = "", bucket: fixedBucket, onMade, onCance
 
   return (
     <form onSubmit={(e) => { e.preventDefault(); if (!busy && !empty) void save(); }} className="flex flex-col gap-2.5">
+      <label className="inline-flex items-center gap-2 self-start rounded" style={{ ...btn(false), cursor: scanning ? "wait" : "pointer", opacity: scanning ? 0.6 : 1 }}>
+        <IdentificationCard size={16} /> {scanning ? "Reading the card…" : "Scan a business card"}
+        <input type="file" accept="image/*" capture="environment" className="sr-only" disabled={scanning}
+          onChange={(e) => { void scan(e.target.files?.[0]); e.target.value = ""; }} />
+      </label>
+      {scanNote && <div style={{ fontSize: F.sm, color: T.ink2 }}>{scanNote}</div>}
       <div className="grid gap-2" style={{ gridTemplateColumns: "1fr 1fr" }}>
         <label className="block"><span style={eyebrow}>Name</span><input autoFocus value={name} onChange={(e) => setName(e.target.value)} aria-label="Name" maxLength={120} style={field} /></label>
         <label className="block"><span style={eyebrow}>Company</span><input value={company} onChange={(e) => setCompany(e.target.value)} aria-label="Company" maxLength={120} style={field} /></label>
@@ -385,4 +417,17 @@ export function ContactPicker({ onPick, exclude, roles, bucket, placeholder = "F
       </div>
     </div>
   );
+}
+
+/** A camera photo made small enough to send (1,600px on its long side, JPEG) — the card's words stay readable. */
+async function shrinkPhoto(f: File): Promise<Blob> {
+  try {
+    const img = await createImageBitmap(f);
+    const k = Math.min(1, 1600 / Math.max(img.width, img.height));
+    const cv = document.createElement("canvas");
+    cv.width = Math.round(img.width * k); cv.height = Math.round(img.height * k);
+    cv.getContext("2d")!.drawImage(img, 0, 0, cv.width, cv.height);
+    img.close();
+    return await new Promise<Blob>((ok, no) => cv.toBlob((b) => (b ? ok(b) : no(new Error("couldn't read the photo"))), "image/jpeg", 0.85));
+  } catch { return f; }
 }

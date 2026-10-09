@@ -8,14 +8,16 @@
  * adds a number or an email, and sets the address — through the same routes
  * as before (/api/contacts/[id]/name, /phones, /emails, /address).
  */
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { Phone, ChatText, Envelope, MapPin, PencilSimple, Plus } from "@phosphor-icons/react";
+import { useRouter } from "next/navigation";
+import { Phone, ChatText, Envelope, MapPin, PencilSimple, Plus, Buildings } from "@phosphor-icons/react";
 import { T, F, disp, eyebrow, nums } from "@/lib/v34/tokens";
 import { initials, initialsHue } from "@/lib/v34/threads";
 import { formatPhone } from "@/components/v34/conversation";
 import { AddressInput } from "@/components/v34/address-input";
 import type { Person } from "@/components/v34/person-view";
+import { InternalNotes } from "@/components/v34/internal-notes";
 
 const BUCKET: Record<string, string> = { customer: "Customer", vendor: "Vendor", personal: "Personal", spam: "Spam" };
 
@@ -38,7 +40,10 @@ export function ContactCard({ person, back, textHref, customerHref, vendorHref, 
   const emails = c.email_list?.length ? c.email_list : c.email ? [{ email: c.email, label: null, is_primary: true }] : [];
   const main = phones[0]?.phone ?? null;
   const hue = c.name ? initialsHue(c.name) : null;
-  const who = [c.bucket ? BUCKET[c.bucket] : "Unsorted", c.subtype_label, c.company].filter(Boolean).join(" · ");
+  const router = useRouter();
+  // The customer they speak for, by its own name (Coy, 2026-10-09: "it should say customer Art Apartments").
+  const custName = c.customer_name && c.customer_name.toLowerCase() !== (c.name ?? "").toLowerCase() ? c.customer_name : null;
+  const who = [c.bucket ? BUCKET[c.bucket] : "Unsorted", c.subtype_label, c.company ?? custName].filter((x, i, a) => x && a.indexOf(x) === i).join(" · ");
 
   const action = (on: boolean): React.CSSProperties => ({ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, minWidth: 64,
     color: T.ink, textDecoration: "none", opacity: on ? 1 : 0.45, pointerEvents: on ? "auto" : "none", fontSize: 12.5 });
@@ -48,7 +53,9 @@ export function ContactCard({ person, back, textHref, customerHref, vendorHref, 
   return (
     <div className="w-full" style={{ maxWidth: 560, margin: "0 auto", padding: "10px 16px 40px" }}>
       <div className="flex items-center gap-2">
-        <Link href={back.href} style={{ ...eyebrow, color: T.chalk }}>‹ {back.label}</Link>
+        {/* Back to wherever this card was opened from (Coy, 2026-10-09); the thread when it was opened by a link. */}
+        <Link href={back.href} style={{ ...eyebrow, color: T.chalk }}
+          onClick={(e) => { if (window.history.length > 1) { e.preventDefault(); router.back(); } }}>‹ Back</Link>
         <span className="flex-1" />
         {/* Merge lives here, not in the thread's menu (Coy, 2026-10-07): another contact's calls, texts and
             numbers fold into this one's thread. */}
@@ -95,6 +102,7 @@ export function ContactCard({ person, back, textHref, customerHref, vendorHref, 
         {emails.map((e) => (
           <Row key={e.email} icon={<Envelope size={20} color={T.ink3} />} href={`mailto:${e.email}`} primary={e.email} secondary={e.label ?? "Email"} />
         ))}
+        <CustomerRow contactId={c.id} customerId={c.customer_id ?? null} name={custName ?? c.customer_name ?? null} href={customerHref} onSaved={onReload} />
         {(c.address || editing) && (editing
           ? <AddressField contactId={c.id} address={c.address} onSaved={onReload} />
           : <Row icon={<MapPin size={20} color={T.ink3} />} href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(c.address ?? "")}`}
@@ -112,10 +120,85 @@ export function ContactCard({ person, back, textHref, customerHref, vendorHref, 
         )}
       </div>
 
+      {/* Notes on the contact, typed or dictated (Coy, 2026-10-09) — the thread's Internal notes. */}
+      <div className="rounded-xl" style={{ marginTop: 16, background: T.card, border: `1px solid ${T.hair}`, padding: "6px 0 10px" }}>
+        <div style={{ ...eyebrow, color: T.ink3, padding: "8px 16px 4px" }}>Notes</div>
+        <InternalNotes contactId={c.id} name={c.name} notes={person.notes ?? []} onSaved={onReload} />
+      </div>
+
       {adding === "phone" && (
         <AddNumberDialog contactId={c.id} name={c.name} onClose={() => setAdding(null)}
           onAdded={() => { setAdding(null); onReload(); }}
           onJoin={(id) => { setAdding(null); onJoin(id); }} />
+      )}
+    </div>
+  );
+}
+
+/**
+ * The customer this person speaks for, and where it's changed (Coy, 2026-10-09: "link a contact to a
+ * customer from inside the contact page … drop down and select Art Apartments"). Picking one puts them
+ * under it through the customer page's own + Add contact (sc_attach_contact: their jobs come along), with Undo.
+ */
+function CustomerRow({ contactId, customerId, name, href, onSaved }: {
+  contactId: string; customerId: string | null; name: string | null; href: string | null; onSaved: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [list, setList] = useState<Array<{ id: string; name: string; city: string | null }> | null>(null);
+  const [q, setQ] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [undo, setUndo] = useState<{ move: string; to: string } | null>(null);
+  useEffect(() => {
+    if (!open || list) return;
+    fetch("/api/customers").then((r) => (r.ok ? r.json() : { customers: [] }))
+      .then((b) => setList(((b.customers ?? []) as Array<{ id: string; name: string; city: string | null }>).sort((a, b2) => a.name.localeCompare(b2.name))))
+      .catch(() => setList([]));
+  }, [open, list]);
+  const pick = async (to: { id: string; name: string }) => {
+    setBusy(true); setErr(null);
+    const r = await fetch(`/api/customers/${to.id}/contacts`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contact_id: contactId }) });
+    const b = await r.json().catch(() => ({}));
+    setBusy(false);
+    if (!r.ok) { setErr(b?.error ?? "Couldn't move them."); return; }
+    setOpen(false); setQ(""); setUndo(b.move_id ? { move: b.move_id, to: to.name } : null); onSaved();
+  };
+  const back = async () => {
+    if (!undo) return;
+    await fetch(`/api/customer-moves/${undo.move}/undo`, { method: "POST" }).catch(() => {});
+    setUndo(null); onSaved();
+  };
+  const shown = (list ?? []).filter((x) => x.id !== customerId && (!q.trim() || x.name.toLowerCase().includes(q.trim().toLowerCase()))).slice(0, 30);
+  return (
+    <div style={{ borderTop: `1px solid ${T.hairSoft}` }}>
+      <Row icon={<Buildings size={20} color={T.ink3} />} href={undefined} primary={name ?? "Not on a customer"}
+        secondary={href ? "Customer" : "Customer — pick one to put them under it"}
+        right={<span className="flex items-center gap-3 shrink-0">
+          {href && name && <Link href={href} style={{ ...eyebrow, color: T.chalk }}>Open ›</Link>}
+          <button onClick={() => setOpen((v) => !v)} aria-expanded={open} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>{open ? "Close" : "Change"}</button>
+        </span>} />
+      {undo && (
+        <div className="flex items-center gap-2" style={{ padding: "0 16px 8px", fontSize: F.sm, color: T.ink2 }}>
+          Now under {undo.to}. <button onClick={() => void back()} style={{ color: T.chalk, fontWeight: 600, cursor: "pointer" }}>Undo</button>
+        </div>
+      )}
+      {open && (
+        <div style={{ padding: "0 16px 10px" }}>
+          <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find a customer: Art Apartments…" aria-label="Find a customer"
+            className="rounded px-2 w-full" style={{ height: 34, border: `1px solid ${T.hair}`, fontSize: F.sm, background: T.card, color: T.ink }} />
+          <div className="flex flex-col mt-1" style={{ maxHeight: 260, overflowY: "auto" }}>
+            {list === null ? <span style={{ fontSize: F.sm, color: T.ink3, padding: "6px 0" }}>Loading…</span>
+              : shown.length === 0 ? <span style={{ fontSize: F.sm, color: T.ink3, padding: "6px 0" }}>No customer by that name. Make it on Customers → + New.</span>
+              : shown.map((x) => (
+                <button key={x.id} disabled={busy} onClick={() => void pick(x)} className="text-left flex items-baseline gap-2"
+                  style={{ padding: "8px 2px", borderBottom: `1px solid ${T.hairSoft}`, fontSize: F.sm, color: T.ink, cursor: "pointer" }}>
+                  <span className="flex-1 min-w-0" style={{ fontWeight: 600 }}>{x.name}</span>
+                  {x.city && <span style={{ color: T.ink3, fontSize: 12 }}>{x.city}</span>}
+                </button>
+              ))}
+          </div>
+          {err && <div style={{ fontSize: F.xs, color: T.red, marginTop: 4 }}>{err}</div>}
+        </div>
       )}
     </div>
   );

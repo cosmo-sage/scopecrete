@@ -4,7 +4,7 @@ import { Emblem } from "@/components/site/marks";
 import { askDustyBrief } from "@/lib/v34/dusty-brief";
 import React, { useState, useEffect, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Phone, WarningCircle, Envelope, Sparkle, NotePencil, CaretDown, CaretUp } from "@phosphor-icons/react";
+import { Phone, WarningCircle, Envelope, Sparkle, NotePencil, CaretDown } from "@phosphor-icons/react";
 import Link from "next/link";
 import { T, F, disp, eyebrow, nums } from "@/lib/v34/tokens";
 import { Composer } from "@/components/v34/composer";
@@ -67,21 +67,9 @@ export function ThreadView({ contactId, embedded = false }: {
   const [emails, setEmails] = useState<Array<{ id: string; subject: string | null; from: string | null; at: string | null; body: string }>>([]);
   const [channelKey, setChannelKey] = useState<string | null>(search.get("channel"));
   const [filter, setFilter] = useState<ChannelFilter>("all");
-  // On a phone the whole header folds to the name's row (Coy, 2026-10-05: "takes up too much space"), remembered on the device.
-  // Only on a touch screen: a desktop with a mouse never folds or shows the
-  // button, whatever the window's width (Coy, 2026-10-06).
-  const [foldPref, setFolded] = useState(() => { try { return typeof window !== "undefined" && localStorage.getItem("sc:thread-head-folded") === "1"; } catch { return false; } });
-  const [touch, setTouch] = useState(false);
-  useEffect(() => {
-    const mq = window.matchMedia?.("(pointer: coarse)");
-    if (!mq) return;
-    const on = () => setTouch(mq.matches);
-    void Promise.resolve().then(on);
-    mq.addEventListener("change", on);
-    return () => mq.removeEventListener("change", on);
-  }, []);
-  const folded = foldPref && touch;
-  const fold = (v: boolean) => { setFolded(v); try { localStorage.setItem("sc:thread-head-folded", v ? "1" : "0"); } catch { /* none */ } };
+  // The fold button is gone (Coy, 2026-10-09: "can be removed completely"); on a phone the open
+  // number's tab drops down All · Calls · Texts instead of a select in the toolbar.
+  const [tabMenu, setTabMenu] = useState<number | null>(null);
   // Lines (Claude Design package 9): the org's numbers, when it has two or more.
   const [orgLines, setOrgLines] = useState<Array<{ id: string; name: string; phone: string; color: string; provider: string | null; is_primary: boolean }>>([]);
   const [firstLine, setFirstLine] = useState<{ id: string; name: string | null; at: string } | null>(null);
@@ -245,7 +233,7 @@ export function ThreadView({ contactId, embedded = false }: {
     return (
       <div className="sc-pinned overflow-y-auto flex flex-col" style={{ background: T.slab }}>
         {/* A simple contact page — the numbers, emails and address, and where they're changed (Coy, 2026-10-06). */}
-        <ContactCard person={person} back={{ href: `/dashboard/messages/${contactId}${tq}`, label: "Back to the thread" }}
+        <ContactCard person={person} back={{ href: `/dashboard/messages/${contactId}${tq}`, label: "Back" }}
           textHref={`/dashboard/messages/${contactId}${tq}`} customerHref={custHref} vendorHref={vendHref}
           onReload={() => setReload((n) => n + 1)} onJoin={(id) => setMerging({ preselect: id ?? null })} />
         {merging && (
@@ -308,8 +296,8 @@ export function ThreadView({ contactId, embedded = false }: {
       style={embedded ? { height: embedH ?? "calc(100dvh - var(--sc-head) - 64px)", minHeight: 360 } : undefined}>
       <div className="flex flex-col flex-1 min-w-0 h-full" style={{ background: DA.bg }}>
         <div className="flex-shrink-0" style={{ background: T.card, borderBottom: `1px solid ${T.hair}`, padding: "10px 16px 0" }}>
-          {/* Phone: back to the thread, by name. */}
-          <div className="flex items-center gap-2">
+          {/* Phone: back to the thread, by name. A little more room between the buttons (Coy, 2026-10-09). */}
+          <div className="flex items-center gap-3 lg:gap-2">
             <div className="flex-1 min-w-0 flex items-center gap-2">
               {/* Phone: the thread's back link sits top left, on the buttons' row (Coy, 2026-10-09), and says
                   Threads whichever list it returns to (Coy, 2026-10-09: "so that I know that I'm just going back to the main threads page"). */}
@@ -334,15 +322,18 @@ export function ThreadView({ contactId, embedded = false }: {
               {/* No tag on a phone: the thread's name at the left already says it (Coy, 2026-10-05). */}
               {c && <span className="hidden lg:inline-flex"><RoleTag role={role} auto={c.bucket_state === "auto"} /></span>}
             </div>
-            {touch && <button onClick={() => fold(!folded)} className="lg:hidden shrink-0" aria-expanded={!folded} aria-label={folded ? "Show the channels" : "Fold the header"}
-              style={{ ...pill, padding: "0 8px" }}>{folded ? <CaretDown size={13} /> : <CaretUp size={13} />}</button>}
             {/* Notes is an icon beside the menu (Coy, 2026-10-07), its count on it. */}
             <button onClick={() => pickChannel(channel?.kind === "notes" ? (channels[0]?.key ?? "") : "notes")} aria-pressed={channel?.kind === "notes"}
               aria-label={`Internal notes${nNotes ? ` (${nNotes})` : ""}`} title="Internal notes"
               style={{ ...pill, padding: "0 7px", gap: 3, ...(channel?.kind === "notes" ? { borderColor: T.hiviz, background: T.hivizDim, color: T.ink } : {}) }}>
               <NotePencil size={15} />{nNotes ? <span style={{ fontSize: 11, ...nums }}>{nNotes}</span> : null}
             </button>
-            <span className="flex items-center gap-2 shrink-0">
+            {/* Search sits beside Notes on the top row (Coy, 2026-10-09). */}
+            <button onClick={() => setSearching((v) => !v)} aria-label="Search this thread" aria-pressed={searching} title="Search this thread"
+              className="flex items-center justify-center shrink-0" style={{ ...pill, padding: "0 8px", ...(searching ? { borderColor: T.hiviz, background: T.hivizDim } : {}) }}>
+              <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke={searching ? T.hiviz : T.ink2} strokeWidth="1.8" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5" /><path d="M13 13l4.5 4.5" /></svg>
+            </button>
+            <span className="flex items-center shrink-0">
               {/* The ScopeCrete emblem is the AI (Coy, 2026-10-06), its own button beside ⋯ on every size (2026-10-09): Dusty opens with where this thread stands and the next steps. */}
               <button onClick={askDustyBrief} aria-label="Ask Dusty where this stands and the next steps" title="Dusty: where this stands and the next steps"
                 className="flex items-center justify-center" style={{ ...pill, padding: "0 6px", border: `1px solid ${T.hiviz}` }}><Emblem size={22} spin /></button>
@@ -402,7 +393,7 @@ export function ThreadView({ contactId, embedded = false }: {
             </nav>
           )}
           {/* The third row: the channels. Each number is its own (calls, voicemails and texts together), then email, then chat. */}
-          <div className={`${folded ? "hidden lg:flex" : "flex"} items-stretch gap-1.5 mt-2 pb-2.5 overflow-x-auto`} role="tablist" aria-label="Channels">
+          <div className="flex items-stretch gap-1.5 mt-2 pb-2.5 overflow-x-auto" role="tablist" aria-label="Channels">
             {tabs.map((ch) => {
               const on = channel?.key === ch.key;
               const chLive = ch.kind === "phone" ? liveCallFor(liveCalls, contactId, ch.value) : null;
@@ -411,7 +402,16 @@ export function ThreadView({ contactId, embedded = false }: {
                 : ch.kind === "email" ? (ch.value ? `${ch.value}${ch.emails ? ` · ${ch.emails}` : ""}` : ch.emails ? `${ch.emails} filed here` : "No email on file")
                 : "Not joined · invite";
               return (
-                <button key={ch.key} role="tab" aria-selected={on} onClick={() => pickChannel(ch.key)} className="text-left flex-1 lg:flex-none shrink-0"
+                <button key={ch.key} role="tab" aria-selected={on} aria-haspopup={on && ch.kind === "phone" ? "menu" : undefined}
+                  onClick={(e) => {
+                    // On a phone a second tap on the open number drops down All · Calls · Texts (Coy, 2026-10-09).
+                    if (on && ch.kind === "phone" && !window.matchMedia("(min-width: 1024px)").matches) {
+                      const el = e.currentTarget; const bar = el.parentElement;
+                      setTabMenu((x) => (x === null ? el.offsetLeft - (bar?.scrollLeft ?? 0) : null));
+                      return;
+                    }
+                    setTabMenu(null); pickChannel(ch.key);
+                  }} className="text-left flex-1 lg:flex-none shrink-0"
                   // Rounded buttons, the open one filled (Coy, 2026-10-09: "more like beautiful buttons").
                   style={{ minWidth: 0, padding: "7px 12px", borderRadius: 999, border: `1px solid ${on ? (chLive ? T.green : T.hiviz) : chLive ? T.green : T.hairStrong}`,
                     background: on ? T.hivizDim : T.card, boxShadow: on ? "0 1px 3px rgba(0,0,0,.10)" : "none", opacity: ch.reachable || on ? 1 : 0.5, cursor: "pointer" }}>
@@ -424,6 +424,11 @@ export function ThreadView({ contactId, embedded = false }: {
                     {/* The number, then its name (Coy, 2026-10-09: "(225) 320-4143 Cell"); renamed on the contact card, not here (Coy, 2026-10-09). */}
                     {ch.kind === "email" ? null : ch.kind === "phone" && ch.value ? <>{formatPhone(ch.value)} <span style={{ color: T.ink3, fontWeight: 500 }}>{ch.label}</span></> : ch.label}
                     {chLive && <LiveDot size={8} />}
+                    {on && ch.kind === "phone" && (
+                      <span className="lg:hidden inline-flex items-center gap-0.5" style={{ color: T.ink2, fontWeight: 500 }}>
+                        {filter === "call" ? "· Calls" : filter === "text" ? "· Texts" : ""}<CaretDown size={11} />
+                      </span>
+                    )}
                   </span>
                   {chLive ? <span className="hidden lg:block"><LiveCallBadge call={chLive} compact /></span>
                     : <span className="hidden lg:block" style={{ fontSize: 11, color: T.ink3, ...nums, whiteSpace: "nowrap" }}>{sub}</span>}
@@ -431,14 +436,28 @@ export function ThreadView({ contactId, embedded = false }: {
               );
             })}
           </div>
+          {tabMenu !== null && channel?.kind === "phone" && (
+            <div className="lg:hidden relative">
+              <div role="menu" aria-label="Show" className="absolute z-30 flex flex-col rounded"
+                style={{ top: -6, left: Math.max(0, tabMenu), minWidth: 150, background: T.card, border: `1px solid ${T.hairStrong}`, boxShadow: "0 6px 18px rgba(0,0,0,.12)" }}>
+                {([["all", "All", n.length], ["call", "Calls", nCalls], ["text", "Texts", n.length - nCalls]] as const).map(([k, label, count]) => (
+                  <button key={k} role="menuitemradio" aria-checked={filter === k} onClick={() => { setFilter(k); setTabMenu(null); }}
+                    className="px-3 py-2 text-left flex items-center justify-between gap-3" style={{ fontSize: F.sm, color: T.ink, fontWeight: filter === k ? 600 : 400 }}>
+                    <span>{label}{filter === k ? " ✓" : ""}</span><span style={{ color: T.ink3, ...nums }}>{count}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Toolbar: the filter (phone channels), what you're looking at, Call, search. */}
-        <div className={`${folded ? "hidden lg:flex" : "flex"} items-center gap-2 flex-shrink-0 flex-nowrap`} style={{ padding: "8px 16px", background: T.card, borderBottom: `1px solid ${T.hairSoft}` }}>
+        <div className="flex items-center gap-2 flex-shrink-0 flex-nowrap" style={{ padding: "8px 16px", background: T.card, borderBottom: `1px solid ${T.hairSoft}` }}>
           {/* All · Calls · Texts and the line filter are drop-downs, so the row fits a phone with Call and search
               (Coy, 2026-10-05: "make this a drop down" — "on the same row as the calls/text buttons"). */}
           {channel?.kind === "phone" ? (
-            <select value={filter} onChange={(e) => setFilter(e.target.value as ChannelFilter)} aria-label="Show"
+            // On a phone the number's own tab drops this down (Coy, 2026-10-09); the desktop keeps the select.
+            <select value={filter} onChange={(e) => setFilter(e.target.value as ChannelFilter)} aria-label="Show" className="hidden lg:block"
               style={{ ...pill, padding: "0 6px", minWidth: 0, flex: "0 1 auto" }}>
               <option value="all">All {n.length}</option>
               <option value="call">Calls {nCalls}</option>
@@ -477,13 +496,9 @@ export function ThreadView({ contactId, embedded = false }: {
           ) : channel?.kind === "phone" && channel.value ? (
             <a href={`tel:${channel.value}`} style={pill} aria-label={`Call ${formatPhone(channel.value)}`}><Phone size={12} weight="fill" /> <span className="hidden lg:inline">Call</span></a>
           ) : null}
-          <button onClick={() => setSearching((v) => !v)} aria-label="Search this thread" aria-pressed={searching}
-            className="flex items-center justify-center shrink-0 rounded" style={{ width: 28, height: 28, border: `1px solid ${searching ? T.hiviz : T.hairStrong}`, background: searching ? T.hivizDim : T.card, cursor: "pointer" }}>
-            <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke={searching ? T.hiviz : T.ink2} strokeWidth="1.8" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5" /><path d="M13 13l4.5 4.5" /></svg>
-          </button>
         </div>
 
-        {/* The call happening now — shown even with the header folded. */}
+        {/* The call happening now. */}
         {liveAny && (
           <div className="flex items-center gap-2 flex-shrink-0" role="status"
             style={{ padding: "7px 16px", background: T.greenDim, borderBottom: `1px solid ${T.hairSoft}` }}>

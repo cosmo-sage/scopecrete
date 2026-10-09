@@ -147,6 +147,65 @@ export function marketRows(steps: Array<{ key: string; label: string; line_ids: 
   }).filter((r) => r.rate || r.lines.length);
 }
 
+// ─── by section (Coy, 2026-10-09: "the market rates page needs to pull in the sections … created
+// automatically from the plan sets") ──────────────────────────────────────────────────────
+
+export interface MarketSection {
+  id: string; name: string; origin: string | null; source_ref: string | null;
+  sqft: number | null; lf: number | null; count: number | null; count_unit: string | null;
+}
+export interface SectionRow {
+  section: MarketSection;
+  unit: "sf" | "lf" | "each" | null; qty: number | null;
+  lines: MarketLine[]; unpriced: number;
+  cost: number; price: number;
+  per_cost: number | null; per_price: number | null;
+  rates: RateLite[]; kind: RateLite["kind"] | null; low: number | null; high: number | null;
+  mine: number | null;
+  status: RateStatus | "no_data" | "no_line" | "no_size";
+}
+
+/** A section's unit: linear feet when measured so, a count's each, else square feet. */
+export function sectionUnit(x: MarketSection): { unit: SectionRow["unit"]; qty: number | null } {
+  if (x.lf) return { unit: "lf", qty: x.lf };
+  if (x.count && (x.count_unit ?? "").toUpperCase() !== "LF") return { unit: "each", qty: x.count };
+  if (x.sqft) return { unit: "sf", qty: x.sqft };
+  return { unit: null, qty: null };
+}
+
+/** A rate brought to the section's unit (a per-SY rate reads per SF ÷ 9); null when it can't be. */
+function inUnit(r: RateLite, unit: SectionRow["unit"]): { low: number; high: number } | null {
+  if (!unit) return null;
+  if (r.unit === unit) return { low: r.low, high: r.high };
+  if (unit === "sf" && r.unit === "sy") return { low: r.low / 9, high: r.high / 9 };
+  return null;
+}
+
+/**
+ * One row per section: its size in its own unit, its lines' cost and price and what they
+ * come to per unit, and the going rates looked up for it (installed prices against the
+ * price per unit, supply costs against the cost per unit — never both on one bar).
+ */
+export function sectionRows(sections: MarketSection[], lines: MarketLine[], rates: RateLite[]): SectionRow[] {
+  return sections.map((x) => {
+    const { unit, qty } = sectionUnit(x);
+    const ls = lines.filter((l) => l.section_id === x.id);
+    const unpriced = ls.filter((l) => l.ext_price === null || l.ext_price === undefined).length;
+    const cost = ls.reduce((a, l) => a + (l.ext_cost ?? 0), 0);
+    const price = ls.reduce((a, l) => a + (l.ext_price ?? 0), 0);
+    const per = (v: number) => (qty && ls.length && !unpriced ? v / qty : null);
+    const own = rates.filter((r) => r.step === x.id);
+    const kind: RateLite["kind"] | null = own.some((r) => r.kind === "installed_price" && inUnit(r, unit)) ? "installed_price"
+      : own.some((r) => inUnit(r, unit)) ? "cost" : null;
+    const usable = own.filter((r) => r.kind === kind).map((r) => inUnit(r, unit)).filter(Boolean) as Array<{ low: number; high: number }>;
+    const low = usable.length ? Math.min(...usable.map((r) => r.low)) : null;
+    const high = usable.length ? Math.max(...usable.map((r) => r.high)) : null;
+    const value = kind === "installed_price" ? per(price) : kind === "cost" ? per(cost) : null;
+    const status: SectionRow["status"] = !ls.length ? "no_line" : !qty ? "no_size" : low === null ? "no_data" : rateStatus(value, low, high!);
+    return { section: x, unit, qty, lines: ls, unpriced, cost, price, per_cost: per(cost), per_price: per(price), rates: own, kind, low, high, mine: value, status };
+  });
+}
+
 /** The whole job's installed range per unit, from the rates for the whole job ("job" step). */
 export function jobRange(rates: RateLite[], unit = "sf"): { low: number; high: number; typical: number; sources: number } | null {
   const rs = rates.filter((r) => r.step === "job" && r.kind === "installed_price" && r.unit === unit);

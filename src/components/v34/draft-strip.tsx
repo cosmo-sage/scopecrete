@@ -21,7 +21,9 @@ import { Drawer } from "@/components/v34/primitives";
 interface BudgetRow { id: string; name: string | null; open: boolean; lines: number; total: number | null; partial: boolean; updated_at: string }
 interface Budgets { ready: boolean; error?: string; budgets?: BudgetRow[]; suggest?: { open: string; next: string } }
 
-interface Fact { key: string; value: number | string | boolean; approximate: boolean; status: string; quote: string; at: string; message_id: string | null }
+interface Fact { key: string; value: number | string | boolean; approximate: boolean; status: string; quote: string; at: string; message_id: string | null; source_id?: string | null }
+/** A job section that came from the plan set (bid intake), for the draft's "to measure" list. */
+export interface PlanSection { id: string; name: string; size: string | null; sheets: Array<{ id: string; number: string | null }>; quote: string | null }
 interface Area { key: string; name: string; work_type: string; length_ft: number | null; width_ft: number | null; sqft: number | null; depth_in: number | null; facts: Fact[]
   on_job?: { section_id: string; section: string; sqft: number | null; depth_in: number | null } }
 interface Reading {
@@ -52,6 +54,8 @@ const OUTCOME: Record<string, { label: string; tone: string }> = {
 };
 const STATUS: Record<string, string> = { queued: "Waiting to build", running: "Building…", failed: "Stopped" };
 const FIELD: Record<string, string> = { length_ft: "length", width_ft: "width", sqft_override: "area", depth_in: "thickness" };
+/** Where a fact was read, in words: the job's description (a bid's summary) is not a sheet. */
+const whereFrom = (f: Fact) => (f.source_id?.startsWith("job:") ? "the job's description, not a plan sheet" : WHO[f.status] ?? f.status);
 const WHO: Record<string, string> = { customer_stated: "customer", contractor_stated: "you", summary_only: "call summary — check it", recipe_assumed: "recipe" };
 const day = (iso: string) => new Date(iso).toLocaleDateString("en-US", { timeZone: "America/Chicago", month: "short", day: "numeric" });
 
@@ -88,7 +92,11 @@ const STEP_NEW_UNIT: Record<string, string> = {
   demo: "SqFt", haul: "SqFt", base: "SqFt", forming: "LnFt", reinforcement: "SqFt", concrete: "CuYd", finishing: "SqFt", equipment: "Days", mobilization: "Lump Sum",
 };
 
-export function DraftStrip({ jobId, refresh = 0, onChanged }: { jobId: string; refresh?: number; onChanged: () => void }) {
+export function DraftStrip({ jobId, refresh = 0, onChanged, plan = [], onSheets }: {
+  jobId: string; refresh?: number; onChanged: () => void;
+  /** The job's sections from the plan set (Coy, 2026-10-09): what to measure, each with its sheet and line. */
+  plan?: PlanSection[]; onSheets?: (sectionId: string, sheetId: string | null) => void;
+}) {
   const [s, setS] = useState<State | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -195,6 +203,18 @@ export function DraftStrip({ jobId, refresh = 0, onChanged }: { jobId: string; r
                         <button type="button" onClick={() => setMaking(null)} style={{ ...eyebrow, color: T.ink3, cursor: "pointer" }}>Cancel</button>
                       </form>
   );
+  // What to measure from the plan set: its sections with no size yet.
+  const toMeasure = plan.filter((p) => !p.size);
+  const allFacts = x ? [...x.areas.flatMap((a) => a.facts), ...x.conflicts.flatMap((c) => c.facts)] : [];
+  const descOnly = allFacts.length > 0 && allFacts.every((f) => f.source_id?.startsWith("job:"));
+  /** The line a question came from: the conflict it names, else its area's first fact. */
+  const sourceOf = (q: string): Fact | null => {
+    if (!x) return null;
+    const a = x.areas.find((ar) => q.startsWith(`${ar.name}:`));
+    if (!a) return null;
+    const c = x.conflicts.find((cf) => cf.what.startsWith(a.name) && /thick|said .* and/.test(q));
+    return (c?.facts[0] ?? a.facts[0]) ?? null;
+  };
   const approve = () => act("approve", () => call(`/api/jobs/${jobId}/budget/draft/approve`, "POST"));
   const changedSince = s.approval && s.totals && Math.abs(Number(s.approval.total ?? 0) - s.totals.total) > 0.005;
 
@@ -228,10 +248,30 @@ export function DraftStrip({ jobId, refresh = 0, onChanged }: { jobId: string; r
         <div className="px-3 py-2 flex flex-col gap-2" style={{ fontSize: F.sm }}>
           {!run && <p style={{ margin: 0, color: T.ink2, lineHeight: 1.45 }}>Reads this job&apos;s calls, texts and your notes, adds the areas they describe with the sizes they said, and loads your assembly on each. Nothing is guessed: what they didn&apos;t say becomes a question.</p>}
           {run?.status === "failed" && <div style={{ color: T.red }}>The build stopped: {run.error ?? "no reason given"}. The job and its budget are as they were — Retry.</div>}
-          {x && (
+          {toMeasure.length > 0 && (
+            <div className="rounded px-2.5 py-2" style={{ background: T.hivizDim, border: `1px solid ${T.hairSoft}` }}>
+              <div style={{ ...eyebrow, color: T.ink, marginBottom: 2 }}>To measure — from the plans</div>
+              {toMeasure.map((p) => (
+                <div key={p.id} className="py-1" style={{ borderTop: `1px solid ${T.hairSoft}` }}>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span>• <b style={{ fontWeight: 600 }}>{p.name}</b> — how big?</span>
+                    {onSheets && p.sheets.map((sh) => (
+                      <button key={sh.id} onClick={() => onSheets(p.id, sh.id)} title={`See where on ${sh.number}`} className="rounded px-1.5"
+                        style={{ height: 20, border: `1px solid ${T.chalk}`, color: T.chalk, background: T.card, fontSize: 11, fontWeight: 600, cursor: "pointer" }}>{sh.number}</button>
+                    ))}
+                  </div>
+                  {p.quote && <div style={{ fontSize: F.xs, color: T.ink3, lineHeight: 1.4, paddingLeft: 10 }}>“{p.quote}”{p.sheets.length ? ` — sheet ${p.sheets.map((sh) => sh.number).join(", ")}` : ""}</div>}
+                </div>
+              ))}
+            </div>
+          )}
+          {x && descOnly && plan.length > 0 && (
+            <div style={{ fontSize: F.xs, color: T.ink3 }}>No calls or texts describe the work, so the draft reads the plan set&apos;s sections, not the job&apos;s description.</div>
+          )}
+          {x && !(descOnly && plan.length > 0) && (
             <>
               <div style={{ fontSize: F.xs, color: T.ink3 }}>
-                {x.scope} {x.evidence_count ? `${x.evidence_count} lines read` : "Nothing to read yet"}
+                {x.evidence_count ? `${x.evidence_count} line${x.evidence_count === 1 ? "" : "s"} read` : "Nothing to read yet"}
                 {run?.reader === "plain" || run?.reader?.startsWith("plain") ? " · plain reading (no model key set)" : run?.reader ? ` · read with ${run.reader}` : ""}
                 {run?.finished_at ? ` · ${day(run.finished_at)}` : ""}{run?.trigger === "job_created" ? " · built when the job was made" : ""}
               </div>
@@ -244,7 +284,15 @@ export function DraftStrip({ jobId, refresh = 0, onChanged }: { jobId: string; r
                     <span className="flex-1" />
                     <button onClick={() => void navigator.clipboard?.writeText(x.questions.join("\n")).catch(() => {})} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>Copy</button>
                   </div>
-                  {x.questions.map((q) => <div key={q} style={{ lineHeight: 1.45 }}>• {q}</div>)}
+                  {x.questions.map((q) => {
+                    const f = sourceOf(q);
+                    return (
+                      <div key={q} style={{ lineHeight: 1.45 }}>
+                        • {q}
+                        {f && <div style={{ fontSize: F.xs, color: T.ink3, paddingLeft: 10 }}>From {whereFrom(f)}, {day(f.at)}: “{f.quote}”</div>}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
 
@@ -256,7 +304,7 @@ export function DraftStrip({ jobId, refresh = 0, onChanged }: { jobId: string; r
                       <div className="flex items-baseline gap-2"><span style={{ fontWeight: 600 }}>{a.name}</span><span style={{ fontSize: F.xs, color: T.ink2, ...nums }}>{size(a)}</span></div>
                       {a.facts.filter((f, i, all) => all.findIndex((g) => g.quote === f.quote) === i).map((f) => (
                         <div key={`${f.key}${f.quote}`} style={{ fontSize: F.xs, color: T.ink3, lineHeight: 1.4 }}>
-                          “{f.quote}” — {WHO[f.status] ?? f.status}, {day(f.at)}{f.approximate ? " · rough" : ""}
+                          “{f.quote}” — {whereFrom(f)}, {day(f.at)}{f.approximate ? " · rough" : ""}
                         </div>
                       ))}
                     </div>
@@ -264,11 +312,20 @@ export function DraftStrip({ jobId, refresh = 0, onChanged }: { jobId: string; r
                   {x.existing_depth && <div style={{ fontSize: F.xs, color: T.ink3 }}>Old concrete: {String(x.existing_depth.value)}&quot; — “{x.existing_depth.quote}” (for the haul-off, not the new slab)</div>}
                 </div>
               )}
-              {x.conflicts.map((c) => (
-                <div key={c.what} style={{ fontSize: F.xs, color: T.red }}>
-                  {c.what}: {c.facts.map((f) => `${f.value} (“${f.quote}”, ${day(f.at)})`).join(" vs ")} — not used until you settle it.
+              {x.conflicts.length > 0 && (
+                <div style={{ fontSize: F.sm }}>
+                  <div style={{ ...eyebrow, color: T.ink, marginBottom: 2 }}>Said two ways — settle it</div>
+                  {x.conflicts.map((c) => {
+                    const quotes = c.facts.filter((f, i, all) => all.findIndex((g) => g.quote === f.quote) === i);
+                    return (
+                      <div key={c.what} className="py-0.5">
+                        • <b style={{ fontWeight: 600 }}>{c.what}</b>: {c.facts.map((f) => String(f.value)).filter((v, i, a) => a.indexOf(v) === i).join(" or ")}?
+                        {quotes.map((f) => <div key={f.quote} style={{ fontSize: F.xs, color: T.ink3, paddingLeft: 10, lineHeight: 1.4 }}>From {whereFrom(f)}, {day(f.at)}: “{f.quote}”</div>)}
+                      </div>
+                    );
+                  })}
                 </div>
-              ))}
+              )}
               {run?.made?.sections?.length ? (
                 <div style={{ fontSize: F.xs, color: T.green }}>
                   {run.made.sections.some((m) => m.existing) ? "Loaded on " : "Added "}{run.made.sections.map((m) => `${m.name}${m.assembly ? ` with ${m.assembly} (${m.lines} line${m.lines === 1 ? "" : "s"})` : " — no assembly for this kind of area"}`).join("; ")}.
@@ -379,7 +436,11 @@ export function DraftStrip({ jobId, refresh = 0, onChanged }: { jobId: string; r
             <div className="flex items-center gap-2 pt-1" style={{ borderTop: `1px solid ${T.hairSoft}` }}>
               <span style={{ flex: 1, minWidth: 0, fontSize: F.xs, color: T.ink3 }}>
                 {s.approval ? <>Approved {day(s.approval.approved_at)} at {money0(Number(s.approval.total ?? 0))}{changedSince ? " — changed since" : ""}. </> : null}
-                {s.blocks.length ? `${s.blocks.length} thing${s.blocks.length === 1 ? "" : "s"} before it can be approved.` : "Approving keeps a copy for you. It sends nothing to the customer."}
+                {s.blocks.length ? null : "Approving keeps a copy for you. It sends nothing to the customer."}
+                {s.blocks.length > 0 && <>
+                  <span style={{ display: "block", color: T.ink2, fontWeight: 600 }}>Before you can approve it:</span>
+                  {s.blocks.map((b) => <span key={b} style={{ display: "block", color: T.ink2 }}>• {b}</span>)}
+                </>}
               </span>
               <button onClick={() => void approve()} disabled={!!busy || s.blocks.length > 0} title={s.blocks.join("\n")} className="rounded px-2.5"
                 style={{ height: 28, border: `1px solid ${s.blocks.length ? T.hair : T.green}`, color: s.blocks.length ? T.ink3 : T.green, background: T.card, fontWeight: 600, fontSize: F.xs, cursor: s.blocks.length ? "default" : "pointer" }}>

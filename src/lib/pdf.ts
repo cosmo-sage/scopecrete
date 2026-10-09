@@ -119,6 +119,30 @@ export async function readPlanPages(doc: Doc, onPage?: (n: number, of: number) =
   return out;
 }
 
+/** A page's text runs in points, y down (box tops) — for finding a section's line on its sheet. */
+const texts = new Map<string, Promise<TextItem[]>>();
+export function pageText(fileId: string, doc: Doc, pageNo: number): Promise<TextItem[]> {
+  const k = `${fileId}:${pageNo}`;
+  let t = texts.get(k);
+  if (!t) {
+    t = doc.getPage(pageNo).then(async (p) => {
+      const v = p.getViewport({ scale: 1 });
+      const tc = await p.getTextContent();
+      const items: TextItem[] = [];
+      for (const raw of tc.items as Array<{ str?: string; transform?: number[]; width?: number; height?: number }>) {
+        if (!raw.str?.trim() || !raw.transform) continue;
+        const [x, y] = v.convertToViewportPoint(raw.transform[4], raw.transform[5]);
+        const h = Math.abs(raw.height || Math.hypot(raw.transform[2], raw.transform[3])) || 8;
+        items.push({ str: raw.str, x, y: y - h, w: Math.abs(raw.width ?? raw.str.length * h * 0.5), h });
+      }
+      return items;
+    });
+    t.catch(() => texts.delete(k));
+    texts.set(k, t);
+  }
+  return t;
+}
+
 // The page each document last drew whole: moving to another sheet lets go of the last one
 // (a zoom redraws the same page and keeps its decoded picture).
 const lastDrawn = new WeakMap<Doc, number>();

@@ -37,6 +37,7 @@ import { ActualCosts } from "@/components/v34/actual-costs";
 import { SheetViewer, type SheetGroup } from "@/components/v34/sheet-viewer";
 import type { PlansData } from "@/components/v34/plan-room/shared";
 import { sheetsFor } from "@/lib/section-sheets";
+import { quotedLine } from "@/lib/find-on-sheet";
 import {
   takeoff as takeoffOf, quantities, ruleQty,
   type SectionInput,
@@ -163,7 +164,7 @@ export default function ScopeBuilder() {
   // The plan sheets each section's scope came from, to check it against (Coy, 2026-10-02).
   const [plans, setPlans] = useState<PlansData | null>(null);
   const [plansTick, setPlansTick] = useState(0);
-  const [viewer, setViewer] = useState<{ title: string; groups: SheetGroup[]; start: string | null } | null>(null);
+  const [viewer, setViewer] = useState<{ title: string; groups: SheetGroup[]; start: string | null; find?: string | null } | null>(null);
   useEffect(() => {
     let off = false;
     send(`/api/jobs/${jobId}/plans`, "GET").then((b) => { if (!off) setPlans(b as PlansData); }).catch(() => {});
@@ -287,7 +288,7 @@ export default function ScopeBuilder() {
     const groups: SheetGroup[] = focus
       ? [{ label: label(focus), ids: sheetsOf(focus).map((x) => x.id) }, { label: "Other sections' sheets", ids: others.flatMap((x) => sheetsOf(x).map((y) => y.id)) }]
       : sections.map((x) => ({ label: label(x), ids: sheetsOf(x).map((y) => y.id) }));
-    setViewer({ title: focus ? `Sheets for ${label(focus)}` : "Plan sheets for this job's scope", groups, start });
+    setViewer({ title: focus ? `Sheets for ${label(focus)}` : "Plan sheets for this job's scope", groups, start, find: focus ? quotedLine(focus.source_ref) : null });
   };
 
   return (
@@ -353,7 +354,8 @@ export default function ScopeBuilder() {
         )}
 
 
-        {can(access, "budget") && tab === "market" && <MarketRates jobId={jobId} refresh={budgetTick} onChanged={() => setBudgetTick((n) => n + 1)} />}
+        {can(access, "budget") && tab === "market" && <MarketRates jobId={jobId} refresh={budgetTick} onChanged={() => setBudgetTick((n) => n + 1)}
+          onSheets={(sid, sheet) => { const x = sections.find((y) => y.id === sid); if (x) openSheets(x, sheet); }} />}
         {can(access, "budget") && tab === "actuals" && <ActualCosts jobId={jobId} refresh={budgetTick} />}
 
         {/* The proposed budget stays mounted under the other tabs, so its sections and lines keep their state. */}
@@ -362,7 +364,12 @@ export default function ScopeBuilder() {
         <BidStrip jobId={jobId} onUndone={() => { window.location.href = "/dashboard/scope"; }} />
 
         {/* A draft budget from the job's own calls and texts (migration 087). */}
-        {can(access, "budget") && <DraftStrip jobId={jobId} refresh={budgetTick} onChanged={() => { void load(); setBudgetTick((n) => n + 1); }} />}
+        {can(access, "budget") && <DraftStrip jobId={jobId} refresh={budgetTick} onChanged={() => { void load(); setBudgetTick((n) => n + 1); }}
+          plan={sections.filter((x) => x.origin === "bid").map((x) => ({
+            id: x.id, name: x.name || "Section", sheets: sheetsOf(x).map((y) => ({ id: y.id, number: y.number })), quote: quotedLine(x.source_ref),
+            size: x.sqft_override || x.count_qty || (x.length_ft && x.width_ft) ? "sized" : null,
+          }))}
+          onSheets={(sid, sheet) => { const x = sections.find((y) => y.id === sid); if (x) openSheets(x, sheet); }} />}
 
         {sections.length === 0 && (
           <EmptyState title="No sections yet"
@@ -445,7 +452,7 @@ export default function ScopeBuilder() {
 
       {viewer && plans && (
         <SheetViewer jobId={jobId} title={viewer.title} sheets={planSheets} files={plans.files} groups={viewer.groups} start={viewer.start}
-          onClose={() => setViewer(null)} />
+          find={viewer.find} onClose={() => setViewer(null)} />
       )}
 
       {/* ================= takeoff rail ================= (hidden while the sheets are open beside the page) */}
@@ -636,8 +643,25 @@ function SectionCard({ s, index, err, onLocal, onSave, onRemove, jobType, jobId,
         )}
       </div>
       <div style={open ? undefined : { display: "none" }}>
+      {/* Where the scope came from, to check on the sheet (Coy, 2026-10-09: "verify … where the sections are on
+          the plan set sheets that the job scope was pulled from"). A sheet opens with the bid's line boxed on it. */}
       {s.source_ref && (
-        <div className="px-3" style={{ fontSize: F.xs, color: T.ink3, marginTop: 2 }}>From the bid: {s.source_ref.replace(/^"|"$/g, "")}</div>
+        <div className="mx-3 mt-1.5 rounded px-2.5 py-1.5" style={{ background: T.sunk, border: `1px solid ${T.hairSoft}`, fontSize: F.xs }}>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span style={{ ...eyebrow, color: T.ink }}>{sheets.length ? "From the plans" : "From the bid"}</span>
+            {sheets.map((x) => (
+              <button key={x.id} onClick={() => onSheets(x.id)} title={x.title ?? undefined} className="rounded px-2"
+                style={{ height: 24, border: `1px solid ${T.chalk}`, color: T.chalk, background: T.card, fontSize: F.xs, fontWeight: 600, cursor: "pointer" }}>
+                {x.number}
+              </button>
+            ))}
+            {sheets.length > 0 && <button onClick={() => onSheets(sheets[0].id)} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>See where on the sheet ›</button>}
+          </div>
+          <div style={{ color: T.ink2, lineHeight: 1.4, marginTop: 3 }}>
+            {quotedLine(s.source_ref) ? <>“{quotedLine(s.source_ref)}”</> : s.source_ref.replace(/^"|"$/g, "")}
+            {!sheets.length && hasPlans ? <span style={{ color: T.ink3 }}> · none of the sheets it names was read off the plans</span> : null}
+          </div>
+        </div>
       )}
       {takeoff}
       <div className="px-3 pt-1.5 flex items-center gap-x-2 gap-y-1 flex-wrap">
@@ -744,18 +768,10 @@ function SectionCard({ s, index, err, onLocal, onSave, onRemove, jobType, jobId,
       {photos}
       {/* Beside the photos (Coy, 2026-10-05: "This button to pull from the aerial photos or other plan sheets
           should be in the same area as 'photos'"). */}
-      {(sheets.length > 0 || hasPlans) && (
+      {!sheets.length && hasPlans && (
         <div className="px-3 pb-2 flex items-center gap-1.5 flex-wrap">
-          <span style={{ ...eyebrow }}>{sheets.length ? "Check it on" : "Plan sheets"}</span>
-          {sheets.map((x) => (
-            <button key={x.id} onClick={() => onSheets(x.id)} title={x.title ?? undefined} className="rounded px-2"
-              style={{ height: 24, border: `1px solid ${T.chalk}`, color: T.chalk, background: T.card, fontSize: F.xs, fontWeight: 600, cursor: "pointer" }}>
-              {x.number}{x.title ? <span style={{ fontWeight: 400, color: T.ink2 }}> {x.title.length > 24 ? `${x.title.slice(0, 24)}…` : x.title}</span> : null}
-            </button>
-          ))}
-          <button onClick={() => onSheets(sheets[0]?.id ?? null)} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>
-            {sheets.length ? "Open beside the budget ›" : "Browse the set ›"}
-          </button>
+          <span style={{ ...eyebrow }}>Plan sheets</span>
+          <button onClick={() => onSheets(null)} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>Browse the set ›</button>
         </div>
       )}
 

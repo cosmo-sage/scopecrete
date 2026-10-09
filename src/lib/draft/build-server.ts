@@ -8,7 +8,7 @@ import { takeoffTotalsFor } from "@/lib/plans-server";
 import { extract, modelSeen, type AreaDraft, type Evidence, type Extraction } from "./extract";
 import { approvalBlocks, checkRecipe, outcomeOf, RECIPE_VERSION, type DraftOutcome } from "./recipe";
 import { modelConfigured, modelJson, modelRead } from "./model-server";
-import { rateQueries, RATES_SYSTEM, renderResults, sanitizeRates, type RateLookup } from "./rates";
+import { rateQueries, RATES_SYSTEM, renderAsks, renderResults, sanitizeRates, sectionQueries, SECTION_RATES_SYSTEM, type RateLookup, type SectionAsk } from "./rates";
 import { searchWeb } from "@/lib/web-search-server";
 import { cityOf } from "@/lib/dusty/web";
 import { areaFor, autoFill, sqftOf, outcomeOnJob, picksForOpen, withJobAreas, WHOLE_JOB_STEPS, type JobArea, type PriceItem } from "./fill";
@@ -424,13 +424,46 @@ export async function lookupRates(sb: Sb, orgId: string, jobId: string) {
 }
 
 /** The web search and the model's read of it: the job's city, the steps asked for (none = every step). */
-export async function searchRates(sb: Sb, orgId: string, jobId: string, open: string[]): Promise<RateLookup> {
+async function jobPlace(sb: Sb, orgId: string, jobId: string): Promise<string | null> {
   const { data: job } = await sb.from("jobs").select("address, city, state, customer_id").eq("org_id", orgId).eq("id", jobId).maybeSingle();
   let place: string | null = job?.city && job?.state ? `${job.city}, ${job.state}` : cityOf((job?.address as string | null) ?? null);
   if (!place && job?.customer_id) {
     const { data: c } = await sb.from("customers").select("city, state").eq("org_id", orgId).eq("id", job.customer_id as string).maybeSingle();
     if (c?.city && c?.state) place = `${c.city}, ${c.state}`;
   }
+  return place;
+}
+
+/**
+ * Going rates for the job's own sections (Coy, 2026-10-09: the sections made from the plan
+ * set, for "a cost analysis of market rates"). One search each, at most four, by the
+ * section's name and unit near the job's city; each kept rate's step is the section's id.
+ */
+export async function searchSectionRates(sb: Sb, orgId: string, jobId: string, asks: Array<SectionAsk & { id: string }>): Promise<RateLookup & { kind: "sections"; section_ids: string[] }> {
+  const place = await jobPlace(sb, orgId, jobId);
+  const list = asks.slice(0, 4);
+  const queries = sectionQueries(place, list);
+  const found: RateLookup & { kind: "sections"; section_ids: string[] } = { kind: "sections", section_ids: list.map((a) => a.id), place: place ?? "no city on the job", asked_at: new Date().toISOString(), queries, rates: [], dropped: 0, error: null };
+  if (!list.length) { found.error = "No sections to look up."; return found; }
+  const web = await searchWeb(queries);
+  if (web.error) found.error = web.error;
+  else if (!web.results.length) found.error = "The search found nothing.";
+  else if (!modelConfigured()) found.error = "Reading the prices needs ANTHROPIC_API_KEY.";
+  else {
+    const m = await modelJson(SECTION_RATES_SYSTEM, renderAsks(list) + renderResults(web.results), 3000, 45_000);
+    if (!m.ok) found.error = `Couldn't read the prices: ${m.error}.`;
+    else {
+      const got = sanitizeRates(m.json, web.results, new Set(list.map((a) => a.key)));
+      const idOf = new Map(list.map((a) => [a.key, a.id]));
+      found.rates = got.rates.map((r) => ({ ...r, step: idOf.get(r.step) ?? r.step }));
+      found.dropped = got.dropped;
+    }
+  }
+  return found;
+}
+
+export async function searchRates(sb: Sb, orgId: string, jobId: string, open: string[]): Promise<RateLookup> {
+  const place = await jobPlace(sb, orgId, jobId);
   const queries = rateQueries(place, open);
   const found: RateLookup = { place: place ?? "no city on the job", asked_at: new Date().toISOString(), queries, rates: [], dropped: 0, error: null };
   const web = await searchWeb(queries);

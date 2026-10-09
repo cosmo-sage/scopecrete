@@ -18,8 +18,9 @@ import { bucketOf } from "@/lib/cost-analysis";
 import { COLORS } from "@/components/v34/cost-analysis";
 import { markEstimate } from "@/lib/estimate-flag";
 import { askDusty } from "@/components/v34/budget-tabs";
+import { quotedLine } from "@/lib/find-on-sheet";
 import {
-  jobRange, marketRows, scaleOf, unitCostFromRate, rateStatus, RATE_UNIT_LABEL,
+  jobRange, marketRows, scaleOf, sectionRows, type MarketSection, type SectionRow, unitCostFromRate, rateStatus, RATE_UNIT_LABEL,
   type AreaSize, type MarketLine, type RateLite, type StepRow,
 } from "@/lib/budget-v3";
 
@@ -33,6 +34,9 @@ interface MarketData {
   days: number | null; crew_size: number | null;
   past: Array<{ id: string; name: string; sqft: number; days: number | null; closed_at: string; per_sf: number; margin: number | null }>;
   can_keep: boolean;
+  sections: Array<MarketSection & { sheets: Array<{ id: string; number: string | null; title: string | null }>; rates_at: string | null }>;
+  section_rates: RateLite[];
+  note?: string;
   error?: string;
 }
 type Used = { value: number; unit: string; prevCost: number | null; prevDesc: string | null; site: string };
@@ -57,7 +61,11 @@ async function send(url: string, method: string, body?: unknown) {
   return b;
 }
 
-export function MarketRates({ jobId, refresh, onChanged }: { jobId: string; refresh: number; onChanged: () => void }) {
+export function MarketRates({ jobId, refresh, onChanged, onSheets }: {
+  jobId: string; refresh: number; onChanged: () => void;
+  /** Open a sheet beside the budget with the section's line boxed on it. */
+  onSheets?: (sectionId: string, sheetId: string | null) => void;
+}) {
   const [d, setD] = useState<MarketData | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -77,6 +85,13 @@ export function MarketRates({ jobId, refresh, onChanged }: { jobId: string; refr
   const job = useMemo(() => ({ sqft: d?.sqft ?? null, lf: d?.lf ?? null }), [d]);
   const rows = useMemo(() => (d ? marketRows(d.steps, d.rates?.rates ?? [], d.lines, d.areas, job) : []), [d, job]);
   const range = useMemo(() => (d ? jobRange(d.rates?.rates ?? []) : null), [d]);
+  const secRows = useMemo(() => (d?.sections ? sectionRows(d.sections, d.lines, d.section_rates ?? []) : []), [d]);
+  const [secBusy, setSecBusy] = useState(false);
+  const lookUpSections = async (ids: string[]) => {
+    setSecBusy(true); setErr(null);
+    try { setD(await send(`/api/jobs/${jobId}/budget/market`, "POST", { sections: ids })); } catch (e) { setErr(String((e as Error).message ?? e)); }
+    setSecBusy(false);
+  };
   const mineSf = d?.totals && d.sqft ? d.totals.total / d.sqft : null;
 
   const lookUp = async () => {
@@ -235,6 +250,95 @@ export function MarketRates({ jobId, refresh, onChanged }: { jobId: string; refr
     </div>;
   };
 
+  // ── By section: the job's own sections, the plan set's first (Coy, 2026-10-09). ──
+  const secLabel = (r: SectionRow) => r.qty === null ? "no size yet" : `${Math.round(r.qty).toLocaleString()} ${fmtUnit(r.unit)}`;
+  const notLooked = secRows.filter((r) => !d.sections.find((x) => x.id === r.section.id)?.rates_at).map((r) => r.section.id);
+  const nextAsk = (notLooked.length ? notLooked : secRows.map((r) => r.section.id)).slice(0, 4);
+  const secStatus = (r: SectionRow) => {
+    const m: Record<string, { word: string; color: string }> = { ...STATUS, no_size: { word: "No size", color: T.hivizText }, no_line: { word: "No items", color: T.ink3 } };
+    const x = m[r.status];
+    return <span style={{ fontFamily: disp, fontSize: 10.5, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", color: x.color, whiteSpace: "nowrap" }}>{x.word}</span>;
+  };
+  const sheetChips = (r: SectionRow) => {
+    const sh = d.sections.find((x) => x.id === r.section.id)?.sheets ?? [];
+    if (!sh.length || !onSheets) return null;
+    return (
+      <span className="inline-flex gap-1 flex-wrap" onClick={(e) => e.stopPropagation()}>
+        {sh.map((x) => (
+          <button key={x.id} onClick={() => onSheets(r.section.id, x.id)} title={`See where on ${x.number}${x.title ? ` ${x.title}` : ""}`}
+            style={{ height: 20, padding: "0 6px", borderRadius: 3, border: `1px solid ${T.chalk}`, color: T.chalk, background: T.card, fontSize: 11, fontWeight: 600, cursor: "pointer" }}>{x.number}</button>
+        ))}
+      </span>
+    );
+  };
+  const sectionCard = (
+    <div className="rounded" style={{ background: T.card, border: `1px solid ${T.hair}` }}>
+      <div className="flex items-center gap-2 flex-wrap" style={{ padding: "8px 12px", borderBottom: `1px solid ${T.hair}` }}>
+        <span style={eyebrow}>By section</span>
+        {secRows.some((r) => r.section.origin === "bid") && <span style={{ fontSize: 11, color: T.ink3 }}>from the plan set</span>}
+        <span className="flex-1" />
+        <button onClick={() => void lookUpSections(nextAsk)} disabled={secBusy} style={{ fontSize: 12, color: T.chalk, fontWeight: 600, cursor: secBusy ? "wait" : "pointer" }}>
+          {secBusy ? "Looking up…" : notLooked.length ? `Look up going rates${notLooked.length > 4 ? ` (4 of ${notLooked.length})` : ""}` : "Look up again"}
+        </button>
+      </div>
+      {wide && (
+        <div className="grid items-center gap-2" style={{ gridTemplateColumns: "minmax(0,1.6fr) 110px 110px 150px 110px 80px", padding: "5px 12px", ...eyebrow, borderBottom: `1px solid ${T.hairSoft}` }}>
+          <span>Section · sheets</span><span>Size</span><span style={{ textAlign: "right" }}>Your price</span><span>Going rate</span><span style={{ textAlign: "right" }}>Yours per unit</span><span>Status</span>
+        </div>
+      )}
+      {secRows.map((r) => {
+        const k = `sec:${r.section.id}`;
+        const isOpen = open.has(k);
+        const rangeTxt = r.low !== null && r.high !== null ? `${money(r.low)}${r.high !== r.low ? `–${money(r.high)}` : ""}/${fmtUnit(r.unit)}` : "—";
+        const yours = r.kind === "cost" ? r.per_cost : r.per_price;
+        const bidLine = quotedLine(r.section.source_ref) ?? r.section.source_ref;
+        return (
+          <div key={k} style={{ borderTop: `1px solid ${T.hairSoft}`, background: isOpen ? T.sunk : "transparent" }}>
+            {wide ? (
+              <div className="grid items-center gap-2" onClick={() => toggle(k)} style={{ gridTemplateColumns: "minmax(0,1.6fr) 110px 110px 150px 110px 80px", padding: "7px 12px", cursor: "pointer" }}>
+                <div style={{ minWidth: 0 }}>
+                  <div className="flex items-center gap-1.5" style={{ minWidth: 0 }}><span style={{ fontSize: 13.5, ...clip }}>{r.section.name}</span>{sheetChips(r)}</div>
+                  <div style={{ fontSize: 11, color: T.ink3, ...clip }}>{r.lines.length ? `${r.lines.length} item${r.lines.length === 1 ? "" : "s"}${r.unpriced ? ` · ${r.unpriced} not priced` : ""}` : "no items yet"}</div>
+                </div>
+                <span style={{ fontSize: 12.5, color: r.qty === null ? T.hivizText : T.ink2, ...nums }}>{secLabel(r)}</span>
+                <span style={{ textAlign: "right", fontSize: 13, ...nums }}>{r.lines.length ? money(r.price) : "—"}</span>
+                <span style={{ fontSize: 12.5, ...nums }}>{rangeTxt}{r.kind === "cost" ? <span style={{ fontSize: 10.5, color: T.ink3 }}> cost</span> : null}</span>
+                <span style={{ textAlign: "right", fontFamily: strong, fontWeight: 600, fontSize: 14, ...nums }}>{per(yours, r.unit)}</span>
+                {secStatus(r)}
+              </div>
+            ) : (
+              <div className="grid items-center gap-2" onClick={() => toggle(k)} style={{ gridTemplateColumns: "minmax(0,1fr) 96px 74px", padding: "8px 12px", cursor: "pointer" }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 13.5, ...clip }}>{r.section.name}</div>
+                  <div className="flex items-center gap-1.5 flex-wrap" style={{ fontSize: 11, color: T.ink3, marginTop: 1 }}>
+                    <span style={{ color: r.qty === null ? T.hivizText : T.ink3 }}>{secLabel(r)}</span>{sheetChips(r)}
+                  </div>
+                </div>
+                <div style={{ ...nums }}><div style={{ fontSize: 12.5 }}>{rangeTxt}</div><div style={{ fontSize: 10.5, color: T.ink3 }}>going rate</div></div>
+                <div style={{ textAlign: "right" }}><div style={{ fontFamily: strong, fontWeight: 600, fontSize: 14, ...nums }}>{yours === null ? (r.lines.length ? money(r.price) : "—") : money(yours)}</div>{secStatus(r)}</div>
+              </div>
+            )}
+            {isOpen && (
+              <div className="flex flex-col gap-1.5" style={{ padding: "0 12px 10px", fontSize: 12 }}>
+                {bidLine && <div style={{ color: T.ink2 }}>From the plans: “{bidLine}”</div>}
+                {r.status === "no_size" && <div style={{ color: T.hivizText }}>Measure it in Takeoffs (or type its size on the Proposed budget) to compare it per {r.unit ? fmtUnit(r.unit) : "unit"}.</div>}
+                {r.lines.map((l) => (
+                  <div key={l.id} className="flex items-baseline gap-2" style={{ color: T.ink2 }}>
+                    <span style={{ flex: 1, minWidth: 0, ...clip }}>{l.name}</span>
+                    <span style={{ ...nums }}>{l.ext_price === null ? "not priced" : money(l.ext_price)}</span>
+                  </div>
+                ))}
+                {r.rates.length ? r.rates.map(quote) : <div style={{ color: T.ink3 }}>{d.sections.find((x) => x.id === r.section.id)?.rates_at ? "The search found no price for this kind of work." : "Not looked up yet."}</div>}
+                <button onClick={() => askDusty(`About the going rate for the section "${r.section.name}" on this job (${secLabel(r)}): is my number right, and what should it cost per ${fmtUnit(r.unit) || "unit"}?`, false)}
+                  style={{ alignSelf: "flex-start", color: T.chalk, fontWeight: 600, cursor: "pointer" }}>Ask Dusty about this section</button>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+
   const lookedUp = d.rates
     ? `${d.rates.place} · looked up ${when(d.rates.asked_at)} · ${d.rates.queries.length} searches, ${kept} price${kept === 1 ? "" : "s"} kept`
     : "Not looked up yet";
@@ -248,12 +352,15 @@ export function MarketRates({ jobId, refresh, onChanged }: { jobId: string; refr
         </button>
       </div>
       {d.rates?.error && <div style={{ fontSize: 12, color: T.red }}>{d.rates.error}</div>}
+      {d.note && <div style={{ fontSize: 12, color: T.hivizText }}>{d.note}</div>}
       {err && <div style={{ fontSize: 12, color: T.red }}>{err}</div>}
       {!d.has_budget && <div style={{ fontSize: 12.5, color: T.ink2 }}>Add items on the Proposed budget, then compare them here.</div>}
 
       {wide ? (
         <div className="grid gap-2" style={{ gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)" }}>{priceCard}{pastCard}</div>
       ) : <>{priceCard}{pastCard}</>}
+
+      {secRows.length > 0 && sectionCard}
 
       <div className="rounded" style={{ background: T.card, border: `1px solid ${T.hair}` }}>
         <div className="flex items-baseline gap-2" style={{ padding: "8px 12px", borderBottom: `1px solid ${T.hair}` }}>

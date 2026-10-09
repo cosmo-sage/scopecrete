@@ -11,6 +11,7 @@ import { pricingFor } from "@/lib/pricing-server";
 import { takeoffTotalsFor } from "@/lib/plans-server";
 import { DRIVEWAY_STEPS, stepsOf } from "@/lib/draft/recipe";
 import type { RateLookup } from "@/lib/draft/rates";
+import { sheetsFor } from "@/lib/section-sheets";
 import { compareActuals, suggestLine, type ChangeOrder, type JobCost } from "@/lib/budget-v3";
 
 type Sb = ApiSession["supabase"];
@@ -41,7 +42,11 @@ export async function jobBudget(sb: Sb, orgId: string, jobId: string) {
   const areas = sections.map((s) => {
     const q = quantities(s);
     const lf = q.count !== null && (q.count_unit ?? "").toUpperCase() === "LF" ? q.count : null;
-    return { id: s.id as string, name: (s.name as string | null) || "Section", sqft: lf ? null : q.sqft, lf };
+    return {
+      id: s.id as string, name: (s.name as string | null) || "Section", sqft: lf ? null : q.sqft, lf,
+      count: lf ? null : q.count, count_unit: q.count_unit ?? null,
+      origin: (s.origin as string | null) ?? null, source_ref: (s.source_ref as string | null) ?? null,
+    };
   });
   const sqft = areas.reduce((a, x) => a + (x.sqft ?? 0), 0) || null;
   const lf = areas.reduce((a, x) => a + (x.lf ?? 0), 0) || null;
@@ -82,14 +87,36 @@ export async function marketView(sb: Sb, orgId: string, jobId: string) {
   if (error && /estimate_id/.test(error.message ?? "")) ({ data: runs, error } = await q());
   for (const r of (runs ?? []) as Array<{ made: { rates?: RateLookup } | null }>) if (r.made?.rates) { rates = r.made.rates; break; }
   // The Market tab's own lookups (094), when newer.
-  const { data: ml, error: mle } = await sb.from("market_lookups").select("lookup, created_at").eq("org_id", orgId).eq("job_id", jobId).order("created_at", { ascending: false }).limit(1);
-  const own = !mle ? ((ml ?? []) as Array<{ lookup: RateLookup }>)[0]?.lookup ?? null : null;
+  const { data: ml, error: mle } = await sb.from("market_lookups").select("lookup, created_at").eq("org_id", orgId).eq("job_id", jobId).order("created_at", { ascending: false }).limit(10);
+  const own = !mle ? ((ml ?? []) as Array<{ lookup: RateLookup & { kind?: string } }>).find((x) => x.lookup?.kind !== "sections")?.lookup ?? null : null;
   if (own && (!rates || own.asked_at > rates.asked_at)) rates = own;
   const canKeep = !missing094(mle);
+  // Going rates for the job's own sections (kind "sections"), newest per section; before 094 on the latest build.
+  const sectionRates = new Map<string, { asked_at: string; rates: RateLookup["rates"] }>();
+  const takeSections = (l: (RateLookup & { section_ids?: string[] }) | null | undefined) => {
+    if (!l || !Array.isArray(l.section_ids)) return;
+    for (const id of l.section_ids) {
+      const had = sectionRates.get(id);
+      if (!had || had.asked_at < l.asked_at) sectionRates.set(id, { asked_at: l.asked_at, rates: l.rates.filter((r) => r.step === id) });
+    }
+  };
+  for (const r of (runs ?? []) as Array<{ made: { section_rates?: RateLookup & { section_ids?: string[] } } | null }>) takeSections(r.made?.section_rates);
+  if (!mle) {
+    const { data: sl } = await sb.from("market_lookups").select("lookup").eq("org_id", orgId).eq("job_id", jobId).eq("lookup->>kind", "sections").order("created_at", { ascending: false }).limit(20);
+    for (const x of (sl ?? []) as Array<{ lookup: RateLookup & { section_ids?: string[] } }>) takeSections(x.lookup);
+  }
+  const { data: sheetRows } = await sb.from("plan_sheets").select("id, number, title").eq("org_id", orgId).eq("job_id", jobId);
+  const sheets = (sheetRows ?? []) as Array<{ id: string; number: string | null; title: string | null }>;
+  const sections = b.areas.map((a) => ({
+    ...a, sheets: sheetsFor(a.source_ref, sheets).map((x) => ({ id: x.id, number: x.number, title: x.title })),
+    rates_at: sectionRates.get(a.id)?.asked_at ?? null,
+  }));
+  const section_rates = [...sectionRates.values()].flatMap((v) => v.rates);
   const past = await pastJobs(sb, orgId, jobId, (b.job?.job_type as string | null) ?? null);
   return {
     has_budget: !!b.est, job_type: (b.job?.job_type as string | null) ?? null, city: (b.job?.address as string | null) ?? null,
     lines, areas: b.areas, sqft: b.sqft, lf: b.lf, steps, rates, money: b.money, totals: b.totals,
+    sections, section_rates,
     days: num(b.job?.duration_days), crew_size: num(b.job?.crew_size),
     past, can_keep: canKeep,
   };

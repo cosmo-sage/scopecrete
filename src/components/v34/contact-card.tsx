@@ -19,12 +19,14 @@ import type { Person } from "@/components/v34/person-view";
 
 const BUCKET: Record<string, string> = { customer: "Customer", vendor: "Vendor", personal: "Personal", spam: "Spam" };
 
-export function ContactCard({ person, back, textHref, customerHref, onReload, onJoin }: {
+export function ContactCard({ person, back, textHref, customerHref, vendorHref, onReload, onJoin }: {
   person: Person;
   back: { href: string; label: string };
   /** Where Text goes: their thread, where a text is sent through Quo. */
   textHref: string;
   customerHref: string | null;
+  /** A vendor's page, beside their contact card (their contact card is reached from the thread too). */
+  vendorHref?: string | null;
   onReload: () => void;
   /** "Or join another thread of theirs…" — the Same person as… merge. */
   onJoin: (otherId: string | null) => void;
@@ -75,6 +77,7 @@ export function ContactCard({ person, back, textHref, customerHref, onReload, on
         <div style={{ fontSize: 13, color: T.ink3, marginTop: 4 }}>
           {who}
           {customerHref && <> · <Link href={customerHref} style={{ color: T.chalk }}>Customer page ›</Link></>}
+          {vendorHref && <> · <Link href={vendorHref} style={{ color: T.chalk }}>Vendor page ›</Link></>}
         </div>
       </div>
 

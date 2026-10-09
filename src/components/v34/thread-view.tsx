@@ -229,19 +229,19 @@ export function ThreadView({ contactId, embedded = false }: {
   const headerTitle = name ?? formatPhone(phone);
   const openJob = jobs && jobs.length > 0 ? jobs[0] : null;
 
-  // Their own page (Contact ›) — the customer page's layout (person-view.tsx, 2026-10-05).
-  // A vendor's own page is the vendor page: one place for them, prices and all.
+  // Their own page (Contact ›): a simple contact card. A vendor gets one too, with
+  // Vendor page › beside it (Coy, 2026-10-09: the breadcrumb's contact and vendor
+  // links both went to the vendor page).
   if (person && !loading && !error && personPage) {
-    if (person.contact.bucket === "vendor") {
-      return <VendorRedirect href={`/dashboard/vendors/${contactId}?from=threads${threadKey ? `&t=${encodeURIComponent(threadKey)}` : ""}`} />;
-    }
+    const vendHref = person.contact.bucket === "vendor"
+      ? `/dashboard/vendors/${contactId}?from=threads${threadKey ? `&t=${encodeURIComponent(threadKey)}` : ""}` : null;
     const custHref = person.contact.bucket === "customer" && person.contact.customer_id
       ? `/dashboard/customers/${person.contact.customer_id}?contact=${contactId}&from=threads${threadKey ? `&t=${encodeURIComponent(threadKey)}` : ""}` : null;
     return (
       <div className="sc-pinned overflow-y-auto flex flex-col" style={{ background: T.slab }}>
         {/* A simple contact page — the numbers, emails and address, and where they're changed (Coy, 2026-10-06). */}
         <ContactCard person={person} back={{ href: `/dashboard/messages/${contactId}${tq}`, label: "Back to the thread" }}
-          textHref={`/dashboard/messages/${contactId}${tq}`} customerHref={custHref}
+          textHref={`/dashboard/messages/${contactId}${tq}`} customerHref={custHref} vendorHref={vendHref}
           onReload={() => setReload((n) => n + 1)} onJoin={(id) => setMerging({ preselect: id ?? null })} />
         {merging && (
           <MergeSheet contactId={contactId} keepLabel={headerTitle} keepCount={messages.length}
@@ -264,8 +264,8 @@ export function ThreadView({ contactId, embedded = false }: {
   const editHref = `/dashboard/messages/${contactId}?person=1${threadKey ? `&t=${encodeURIComponent(threadKey)}` : ""}`;
   // The breadcrumb's last link: a vendor's page, else their customer's page — the same name again for a homeowner.
   const crumbOrg = c?.bucket === "vendor"
-    ? { href: pageLink.href, label: c.company || name || formatPhone(phone) }
-    : c?.customer_id ? { href: `/dashboard/customers/${c.customer_id}`, label: c.customer_name || c.company || name || formatPhone(phone) }
+    ? { href: pageLink.href, label: c.company || name || formatPhone(phone), kind: "Vendor", color: T.chalk }
+    : c?.customer_id ? { href: `/dashboard/customers/${c.customer_id}`, label: c.customer_name || c.company || name || formatPhone(phone), kind: "Customer", color: T.chalk }
     : null;
   // Where they first reached you lives in Internal notes now, not the header (Coy, 2026-10-05).
   const leadSource = firstLine?.name ? `First reached you on the ${firstLine.name} line, ${new Date(firstLine.at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}` : null;
@@ -362,12 +362,15 @@ export function ThreadView({ contactId, embedded = false }: {
           {/* Phone: a breadcrumb under the buttons — the thread, the person, their customer or vendor — each its own link (Coy, 2026-10-09). */}
           {!embedded && (
             <nav aria-label="Where you are" className="lg:hidden flex items-center gap-1.5 mt-1.5 min-w-0" style={{ ...eyebrow, whiteSpace: "nowrap" }}>
-              <Link href={`/dashboard/messages${threadKey ? `?t=${encodeURIComponent(threadKey)}` : ""}`} className="shrink-0" style={{ color: T.chalk }}>‹ {threadName}</Link>
+              <Link href={`/dashboard/messages${threadKey ? `?t=${encodeURIComponent(threadKey)}` : ""}`} className="shrink-0" style={{ color: T.ink2 }}>‹ {threadName}</Link>
               <span aria-hidden style={{ color: T.ink3 }}>|</span>
-              <Link href={editHref} className="min-w-0" style={{ color: T.ink, overflow: "hidden", textOverflow: "ellipsis" }}>{loading ? headerTitle : (name || formatPhone(phone))}</Link>
+              {/* Each link says what it opens, in its own colour (Coy, 2026-10-09: "Contact Joey | Vendor Joey"). */}
+              <Link href={editHref} className="min-w-0" style={{ color: T.green, overflow: "hidden", textOverflow: "ellipsis" }}>
+                <span style={{ color: T.ink3 }}>Contact </span>{loading ? headerTitle : (name || formatPhone(phone))}</Link>
               {!loading && crumbOrg && <>
                 <span aria-hidden style={{ color: T.ink3 }}>|</span>
-                <Link href={crumbOrg.href} className="min-w-0" style={{ color: T.ink2, overflow: "hidden", textOverflow: "ellipsis" }}>{crumbOrg.label}</Link>
+                <Link href={crumbOrg.href} className="min-w-0" style={{ color: crumbOrg.color, overflow: "hidden", textOverflow: "ellipsis" }}>
+                  <span style={{ color: T.ink3 }}>{crumbOrg.kind} </span>{crumbOrg.label}</Link>
               </>}
             </nav>
           )}
@@ -576,9 +579,3 @@ export function ThreadView({ contactId, embedded = false }: {
   );
 }
 
-/** ?person=1 for someone filed vendor: their vendor page is their page. */
-function VendorRedirect({ href }: { href: string }) {
-  const router = useRouter();
-  useEffect(() => { router.replace(href); }, [router, href]);
-  return null;
-}

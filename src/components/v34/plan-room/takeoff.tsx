@@ -13,15 +13,16 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { T, F, disp, eyebrow, clip, strong, light, nums } from "@/lib/v34/tokens";
 import { openPdf, drawPage } from "@/lib/pdf";
-import { dist, fmtQty, parseFeet, rectPoints, scaleFromPoints, scaleLabel, KIND_UNIT, type Pt, type TakeoffKind } from "@/lib/takeoff";
+import { dist, fmtQty, measurementQty, parseFeet, rectPoints, scaleFromPoints, scaleLabel, KIND_UNIT, type Pt, type TakeoffKind } from "@/lib/takeoff";
 import { call, isAerialSheet, KIND_LABEL, SHAPE_COLORS, shapeColor, sheetLabel, type Meas, type Param, type PlanFile, type PlansData, type Sheet } from "./shared";
 import { ScaleBadge, Thumb } from "./files-sheets";
 import { Drawer, SlideDrawer } from "@/components/v34/primitives";
 import { ShapePhotos } from "./shape-photos";
 import { usePinchZoom } from "@/lib/v34/use-pinch";
+import { traceAt, type TraceOptions } from "@/lib/v34/plan-trace";
 
-type Tool = "select" | "area" | "rect" | "linear" | "count" | "cutout" | "scale";
-const TOOL_KIND: Partial<Record<Tool, TakeoffKind>> = { area: "area", rect: "area", linear: "linear", count: "count" };
+type Tool = "select" | "area" | "rect" | "fill" | "linear" | "count" | "cutout" | "scale";
+const TOOL_KIND: Partial<Record<Tool, TakeoffKind>> = { area: "area", rect: "area", fill: "area", linear: "linear", count: "count" };
 
 function KindIcon({ kind, color }: { kind: TakeoffKind; color: string }) {
   return (
@@ -37,6 +38,7 @@ const TOOLS: Array<[Tool, string, string]> = [
   ["select", "Select", "Pick a shape"],
   ["area", "Area", "Click the corners; click the first one (or double-click) to close"],
   ["rect", "Rect", "Two opposite corners"],
+  ["fill", "Fill", "Click inside an area: its outline is traced off the drawing"],
   ["linear", "Linear", "Click along the line; double-click or Finish to end"],
   ["count", "Count", "Click each one; Finish when done"],
   ["cutout", "Cutout", "Draw a hole in the selected area"],
@@ -90,6 +92,10 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
   const group = data.params.find((p) => p.id === groupId) ?? null;
   const sel = data.measurements.find((m) => m.id === selId) ?? null;
   const [shapePhotos, setShapePhotos] = useState(false);
+  // Click-to-fill (Coy, 2026-10-09): how forgiving the trace is, and whether one is running.
+  const [fillOpt, setFillOpt] = useState<TraceOptions>({ gapPt: 0.5, thinPt: 0 });
+  const [tracing, setTracing] = useState(false);
+  const lastFill = useRef<Pt | null>(null);
   // One sheet's scale put on others — every sheet, or the ones ticked (Coy, 2026-10-07).
   const [copyScale, setCopyScale] = useState<{ k: number; from: string; all?: boolean } | null>(null);
   const scaledCount = sheets.filter((x) => x.scale_ft_per_pt).length;
@@ -122,7 +128,7 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
       if (pts.length === 2) setScaleAsk({ a: pts[0], b: pts[1] });
       return;
     } else if (group) {
-      const method = tool === "rect" ? "rect" : tool === "area" ? "area" : tool;
+      const method = tool === "rect" ? "rect" : tool === "area" || tool === "fill" ? "area" : tool;
       await act(async () => {
         const b = await call(`/api/jobs/${jobId}/takeoff/measurements`, "POST", { parameter_id: group.id, sheet_id: sheet.id, geometry: pts, method });
         setSelId(b.measurement.id);
@@ -132,9 +138,25 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
   }, [act, group, jobId, sel, sheet, tool, setDraft, setScaleAsk]);
 
   const finish = useCallback(() => {
-    const need = tool === "linear" || tool === "scale" ? 2 : tool === "count" ? 1 : 3;
+    const need = tool === "linear" || tool === "scale" ? 2 : tool === "count" ? 1 : 3; // fill: 3, like an area
     if (draft.length >= need) void save(draft);
   }, [draft, save, tool]);
+
+  // Trace the outline round a click; the result is a draft Coy keeps with Finish (or drops).
+  const fileUrl = file?.url ?? null;
+  const trace = useCallback(async (p: Pt, opt: TraceOptions = fillOpt) => {
+    if (!sheet || !fileUrl || tracing) return;
+    lastFill.current = p;
+    setTracing(true); setMsg(null); setDraft([]);
+    try {
+      const doc = await openPdf(sheet.file_id, fileUrl);
+      const r = await traceAt(doc, sheet.page, sheet.page_w, sheet.page_h, p, opt);
+      if (r.ok) setDraft(r.pts); else setMsg(r.reason);
+    } catch (e) { setMsg(e instanceof Error ? e.message : String(e)); }
+    finally { setTracing(false); }
+  }, [fileUrl, fillOpt, setDraft, sheet, tracing]);
+  // Changing how forgiving it is traces the last click again.
+  const setFill = (o: TraceOptions) => { setFillOpt(o); if (lastFill.current) void trace(lastFill.current, o); };
 
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
@@ -264,10 +286,14 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
         {sheet && <ScaleBar sheet={sheet} act={act} startScale={() => pickTool("scale")} />}
         <div style={{ position: "relative", flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
         {/* Floats over the sheet so starting a shape never moves the drawing under the next click. */}
-        {(msg || draft.length > 0 || scaleAsk) && (
+        {(msg || draft.length > 0 || scaleAsk || tool === "fill") && (
           <div className="flex items-center gap-2 px-3 py-1.5 flex-wrap" style={{ position: "absolute", bottom: 0, left: 0, right: 0, zIndex: 5, background: msg ? T.redDim : T.dustyTint, borderTop: `1px solid ${T.hair}`, fontSize: F.xs, boxShadow: "0 -2px 6px rgba(42,32,20,.08)" }}>
             {msg && <span style={{ color: T.red }}>{msg}</span>}
-            {!msg && draft.length > 0 && !scaleAsk && (
+            {tool === "fill" && sheet && (
+              <FillBar draft={draft} tracing={tracing} opt={fillOpt} setOpt={setFill} sheet={sheet}
+                finish={finish} cancel={() => { setDraft([]); lastFill.current = null; }} />
+            )}
+            {!msg && draft.length > 0 && !scaleAsk && tool !== "fill" && (
               <>
                 <span>{tool === "count" ? `${draft.length} counted` : `${draft.length} point${draft.length === 1 ? "" : "s"}`} — {TOOLS.find((t) => t[0] === tool)?.[2]}</span>
                 {(tool === "area" || tool === "linear" || tool === "count" || tool === "cutout") && <button onClick={finish} style={tb(true)}>Finish</button>}
@@ -288,7 +314,7 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
         {sheet && file?.url ? (
           <Drawing key={sheet.id} sheet={sheet} fileUrl={file.url} zoom={zoom} setZoom={setZoom} tool={tool}
             data={data} groupId={groupId} selId={selId} setSelId={(id) => { setSelId(id); const m = data.measurements.find((x) => x.id === id); if (m) setGroupId(m.parameter_id); }}
-            draft={draft} setDraft={setDraft} hover={hover} setHover={setHover} save={save} busy={busy}
+            draft={draft} setDraft={setDraft} hover={hover} setHover={setHover} save={save} busy={busy || tracing} onTrace={(p) => void trace(p)}
             saveShape={(mid, pts) => act(() => call(`/api/jobs/${jobId}/takeoff/measurements/${mid}`, "PATCH", { geometry: pts }))} />
         ) : (
           <div className="flex-1 flex items-center justify-center p-6" style={{ fontSize: F.sm, color: T.ink3 }}>
@@ -330,6 +356,33 @@ const tb = (on: boolean): React.CSSProperties => ({
   border: `1px solid ${on ? T.hiviz : T.hair}`, background: on ? T.hivizDim : T.card, color: on ? T.hivizText : T.ink,
   fontFamily: disp, fontSize: 12.5, fontWeight: 600, letterSpacing: ".06em", textTransform: "uppercase",
 });
+
+/** Fill's strip: what was traced, how big, and how forgiving the trace is. */
+function FillBar({ draft, tracing, opt, setOpt, sheet, finish, cancel }: {
+  draft: Pt[]; tracing: boolean; opt: TraceOptions; setOpt: (o: TraceOptions) => void; sheet: Sheet; finish: () => void; cancel: () => void;
+}) {
+  const q = draft.length >= 3 ? measurementQty("area", { geometry: draft, cutouts: [] }, { ft_per_pt: sheet.scale_ft_per_pt, method: sheet.scale_method, label: sheetLabel(sheet) }) : null;
+  const sel: React.CSSProperties = { height: 28, border: `1px solid ${T.hairStrong}`, borderRadius: 3, padding: "0 4px", background: T.card, color: T.ink, fontSize: F.xs };
+  return (
+    <>
+      <span style={{ color: T.ink }}>
+        {tracing ? "Tracing the outline…"
+          : draft.length ? <>Traced {draft.length} corners{q ? (q.ok ? <> · <b>≈ {fmtQty(q.qty, "SF")}</b></> : ` · ${q.reason}`) : ""}. Check it against the drawing.</>
+          : "Click inside an area. Its outline is traced off the drawing for you to check."}
+      </span>
+      {draft.length >= 3 && !tracing && <button onClick={finish} style={tb(true)}>Keep it</button>}
+      {draft.length > 0 && !tracing && <button onClick={cancel} style={tb(false)}>Drop it</button>}
+      <select value={String(opt.gapPt)} onChange={(e) => setOpt({ ...opt, gapPt: Number(e.target.value) })} aria-label="Bridge gaps" title="Close small breaks in the outline" style={sel}>
+        <option value="0.5">Gaps: tight</option>
+        <option value="2">Bridge small gaps</option>
+        <option value="6">Bridge big gaps</option>
+      </select>
+      <label className="flex items-center gap-1" title="Ignore hairlines that cross the area, like hatching and dimension lines" style={{ color: T.ink2, cursor: "pointer" }}>
+        <input type="checkbox" checked={opt.thinPt > 0} onChange={(e) => setOpt({ ...opt, thinPt: e.target.checked ? 0.4 : 0 })} /> Skip thin lines
+      </label>
+    </>
+  );
+}
 
 /** The sheet's scale and what can be done about it. */
 function ScaleBar({ sheet, act, startScale }: { sheet: Sheet; act: (fn: () => Promise<unknown>) => Promise<void>; startScale: () => void }) {
@@ -411,13 +464,15 @@ function ScaleCopy({ k, from, all, sheets, apply, onClose }: { k: number; from: 
 
 /* --------------------------------------------------------------- drawing */
 
-function Drawing({ sheet, fileUrl, zoom, setZoom, tool, data, groupId, selId, setSelId, draft, setDraft, hover, setHover, save, busy, saveShape }: {
+function Drawing({ sheet, fileUrl, zoom, setZoom, tool, data, groupId, selId, setSelId, draft, setDraft, hover, setHover, save, busy, saveShape, onTrace }: {
   sheet: Sheet; fileUrl: string; zoom: number; setZoom: (f: (z: number) => number) => void; tool: Tool;
   data: PlansData; groupId: string | null; selId: string | null; setSelId: (id: string | null) => void;
   draft: Pt[]; setDraft: React.Dispatch<React.SetStateAction<Pt[]>>; hover: Pt | null; setHover: (p: Pt | null) => void;
   save: (pts: Pt[]) => Promise<void>; busy: boolean;
   /** A selected shape re-drawn by dragging its corners (Coy, 2026-10-03: "ideally i would be able to edit an area"). */
   saveShape: (id: string, pts: Pt[]) => Promise<void>;
+  /** Fill: trace the outline round this point. */
+  onTrace: (p: Pt) => void;
 }) {
   // The corner being dragged on the selected shape, and the shape's points while it moves.
   const [edit, setEdit] = useState<{ id: string; pts: Pt[]; i: number; moved: boolean } | null>(null);
@@ -473,6 +528,7 @@ function Drawing({ sheet, fileUrl, zoom, setZoom, tool, data, groupId, selId, se
     if (edit) { endEdit(); return; }
     if (busy || tool === "select") return;
     const p = toPage(e);
+    if (tool === "fill") { onTrace(p); return; }
     if (tool === "rect") {
       if (!draft.length) setDraft([p]);
       else void save(rectPoints(draft[0], p));
@@ -514,7 +570,7 @@ function Drawing({ sheet, fileUrl, zoom, setZoom, tool, data, groupId, selId, se
             onPointerUp={click} onDoubleClick={dbl}
             onPointerMove={(e) => {
               if (edit) { const p = toPage(e); setEdit({ ...edit, moved: true, pts: edit.pts.map((q, i) => (i === edit.i ? p : q)) }); return; }
-              if (tool !== "select") setHover(toPage(e));
+              if (tool !== "select" && tool !== "fill") setHover(toPage(e));
             }} onPointerLeave={() => setHover(null)} onPointerCancel={() => setEdit(null)}>
             {mine.map((m0) => {
               const m = edit && edit.id === m0.id ? { ...m0, geometry: edit.pts } : m0;
@@ -571,6 +627,7 @@ function Drawing({ sheet, fileUrl, zoom, setZoom, tool, data, groupId, selId, se
             {draft.length > 0 && (
               <g pointerEvents="none">
                 {tool === "count" ? draft.map((pt, i) => <circle key={i} cx={pt[0]} cy={pt[1]} r={r} fill={draftColor} />)
+                  : tool === "fill" ? <path d={pathOf(draft, true)} fill={draftColor} fillOpacity={0.25} stroke={draftColor} strokeWidth={sw * 1.4} strokeDasharray={`${4 / px} ${3 / px}`} />
                   : tool === "rect" && hover ? <path d={pathOf(rectPoints(draft[0], hover), true)} fill={draftColor} fillOpacity={0.15} stroke={draftColor} strokeWidth={sw} strokeDasharray={`${4 / px} ${3 / px}`} />
                   : <>
                     <path d={pathOf(hover ? [...draft, hover] : draft, false)} fill="none" stroke={draftColor} strokeWidth={sw} strokeDasharray={`${4 / px} ${3 / px}`} />

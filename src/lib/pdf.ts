@@ -221,7 +221,9 @@ export function pageThumb(fileId: string, url: string, pageNo: number, width = 3
  * behind, as on paper. The page is let go after, unless `keep` (the OCR reader draws
  * many parts of one sheet and lets go of it once it is done with the sheet).
  */
-export async function renderRegion(doc: Doc, pageNo: number, r: { x: number; y: number; w: number; h: number }, scale: number, keep = false): Promise<HTMLCanvasElement> {
+export async function renderRegion(doc: Doc, pageNo: number, r: { x: number; y: number; w: number; h: number }, scale: number, keep = false,
+  /** Leave out lines drawn thinner than this many pixels — hatching and dimension lines, for Fill. */
+  skipStrokesUnderPx = 0): Promise<HTMLCanvasElement> {
   const p = await doc.getPage(pageNo);
   const v = p.getViewport({ scale, offsetX: -r.x * scale, offsetY: -r.y * scale });
   const c = document.createElement("canvas");
@@ -231,6 +233,15 @@ export async function renderRegion(doc: Doc, pageNo: number, r: { x: number; y: 
   if (!ctx) throw new Error("no canvas");
   ctx.fillStyle = "#fff";
   ctx.fillRect(0, 0, c.width, c.height);
+  if (skipStrokesUnderPx > 0) {
+    // pdf.js sets the line's width just before each stroke (a hairline comes in as one pixel).
+    const stroke = ctx.stroke;
+    ctx.stroke = function (this: CanvasRenderingContext2D, path?: Path2D) {
+      const t = ctx.getTransform();
+      if (ctx.lineWidth * Math.sqrt(Math.abs(t.a * t.d - t.b * t.c)) < skipStrokesUnderPx) return;
+      if (path) stroke.call(ctx, path); else (stroke as () => void).call(ctx);
+    } as CanvasRenderingContext2D["stroke"];
+  }
   try { await (p.render({ canvasContext: ctx, viewport: v, canvas: c }) as unknown as { promise: Promise<void> }).promise; }
   finally { if (!keep) p.cleanup(); }
   return c;

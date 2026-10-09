@@ -66,6 +66,8 @@ export async function GET(req: NextRequest) {
     phone,
     org_id: orgId,
     org_name: org?.name ?? null,
+    // Every org they belong to, for the switcher in Settings (2026-10-09).
+    orgs: orgs.map((o) => ({ id: o.id, name: o.name, slug: o.slug, role: o.role })),
     // The header's lockup (migration 056): which logos exist, served by
     // /api/org/logo/[variant]; the stamp changes when one is replaced.
     logo_light: brand?.logo_light ?? false,

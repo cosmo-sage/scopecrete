@@ -46,6 +46,7 @@ import { InstallApp } from "@/components/v34/install-app";
 import { YouSection, OrgSection } from "@/components/v34/org-settings";
 import { ThemePicker, useTheme } from "@/components/v34/theme-picker";
 import { Toolbox, MenuEditor } from "@/components/v34/toolbox";
+import { switchRows, type SwitchOrg } from "@/lib/org-switch";
 import { PAGE, DEFAULT_MENUS, cleanMenus, activePage, type Menus } from "@/lib/v34/pages";
 import { usePref } from "@/lib/v34/prefs";
 import { useHideHeadOnScroll } from "@/lib/v34/use-hide-head";
@@ -60,6 +61,9 @@ interface Me {
   access?: Access;
   /** Runs ScopeCrete itself (084's platform_admins) — sees the admin. */
   admin?: boolean;
+  /** Every org they belong to — the switcher (src/lib/org-switch.ts). */
+  orgs?: SwitchOrg[];
+  org_id?: string | null;
 }
 
 /** Desktop or not — decided after mount; the phone layout is the first paint. */
@@ -364,6 +368,30 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               </div>}
             </>
           ) : <div style={{ fontSize: F.sm, color: T.ink3 }}>Loading your account…</div>}
+
+          {/* The org switcher (Coy, 2026-10-09) — only for someone in two orgs or more.
+              Each org is its own address; one sign-in covers them all. */}
+          {(me?.orgs?.length ?? 0) > 1 && (
+            <div className="py-2.5" style={{ borderTop: `1px solid ${T.hair}` }}>
+              <div style={{ fontSize: F.md, fontWeight: 600 }}>Switch company</div>
+              <div style={{ fontSize: F.xs, color: T.ink3 }}>Every company you work in. Each opens its own dashboard.</div>
+              <div className="flex flex-col mt-1.5">
+                {switchRows(me?.orgs ?? [], me?.org_id ?? null).map((o) => {
+                  const inner = (
+                    <>
+                      <span className="flex-1 min-w-0" style={{ fontSize: F.sm, fontWeight: o.current ? 700 : 500, color: T.ink }}>{o.name}</span>
+                      <span style={{ fontSize: F.xs, color: T.ink3 }}>{o.role}</span>
+                      <span style={{ width: 18, textAlign: "right", color: o.current ? T.green : T.ink3 }}>{o.current ? "✓" : o.href ? "›" : ""}</span>
+                    </>
+                  );
+                  const row: React.CSSProperties = { minHeight: 36, borderBottom: `1px solid ${T.hairSoft}`, color: T.ink };
+                  return o.current || !o.href
+                    ? <div key={o.id} className="flex items-center gap-2" style={row} title={o.href ? undefined : "This company has no address yet"}>{inner}</div>
+                    : <a key={o.id} href={o.href} className="flex items-center gap-2 no-underline" style={row}>{inner}</a>;
+                })}
+              </div>
+            </div>
+          )}
 
           <div className="flex flex-col" style={{ borderTop: `1px solid ${T.hair}` }}>
             {(limited ? [] : [

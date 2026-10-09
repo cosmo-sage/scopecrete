@@ -55,6 +55,15 @@ function go(url: string | URL, from: NextResponse) {
   return res;
 }
 
+/** The org this browser last opened (the switcher, 2026-10-09): sign-in goes back
+ *  there, not to whichever membership comes first. Only a slug; membership is
+ *  still checked on every request. */
+const LAST_ORG = "sc_org";
+function homeOf(mine: Array<{ slug: string | null }>, request: NextRequest) {
+  const last = request.cookies.get(LAST_ORG)?.value;
+  return orgOrigin((mine.find((o) => o.slug && o.slug === last) ?? mine[0])?.slug);
+}
+
 function loginWithNext(path: string) {
   const u = new URL(LOGIN_URL);
   if (path.startsWith("/dashboard") && path !== "/dashboard") u.searchParams.set("next", path);
@@ -83,7 +92,7 @@ export async function proxy(request: NextRequest) {
     const s = await sessionFor(request, host);
     if (!s.signedIn) return isDash ? go(loginWithNext(pathname), s.response()) : s.response();
     // Only the orgs this person belongs to (sc_my_orgs — estimators included, 081).
-    const home = orgOrigin((await myOrgs(s.supabase))[0]?.slug);
+    const home = homeOf(await myOrgs(s.supabase), request);
     if (home) return go(`${home}${isDash ? pathname : "/dashboard"}${isDash ? search : ""}`, s.response());
     // Signed in but no org with an address: the dashboard here says what's missing.
     return pathname === "/login" ? go(new URL("/dashboard", request.url), s.response()) : s.response();
@@ -97,9 +106,16 @@ export async function proxy(request: NextRequest) {
     const s = await sessionFor(request, host);
     if (!s.signedIn) return go(loginWithNext(pathname), s.response());
     const mine = await myOrgs(s.supabase);
-    if (mine.some((o) => o.slug === kind.slug)) return s.response();
+    if (mine.some((o) => o.slug === kind.slug)) {
+      const res = s.response();
+      if (request.cookies.get(LAST_ORG)?.value !== kind.slug) {
+        const domain = cookieDomain(host);
+        res.cookies.set(LAST_ORG, kind.slug, { path: "/", maxAge: 60 * 60 * 24 * 365, sameSite: "lax", secure: true, ...(domain ? { domain } : {}) });
+      }
+      return res;
+    }
     // Not a member here (or no such org): send them to their own, else to sign-in.
-    const home = orgOrigin(mine[0]?.slug);
+    const home = homeOf(mine, request);
     return go(home ? `${home}/dashboard` : LOGIN_URL, s.response());
   }
 

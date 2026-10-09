@@ -328,6 +328,13 @@ export function ThreadView({ contactId, embedded = false }: {
               style={{ ...pill, padding: "0 7px", gap: 3, ...(channel?.kind === "notes" ? { borderColor: T.hiviz, background: T.hivizDim, color: T.ink } : {}) }}>
               <NotePencil size={15} />{nNotes ? <span style={{ fontSize: 11, ...nums }}>{nNotes}</span> : null}
             </button>
+            {/* Call on the top row on a phone (Coy, 2026-10-09); the desktop keeps Call from ▾ in the toolbar. */}
+            {channel?.kind === "phone" && channel.value && (
+              <a href={`tel:${channel.value}`} className="lg:hidden flex items-center justify-center shrink-0" style={{ ...pill, padding: "0 8px" }}
+                aria-label={`Call ${formatPhone(channel.value)}${outLine ? ` from ${outLine.name}` : ""}`} title={outLine ? `Your phone dials — choose ${outLine.name} in Quo` : undefined}>
+                <Phone size={15} weight="fill" />
+              </a>
+            )}
             {/* Search sits beside Notes on the top row (Coy, 2026-10-09). */}
             <button onClick={() => setSearching((v) => !v)} aria-label="Search this thread" aria-pressed={searching} title="Search this thread"
               className="flex items-center justify-center shrink-0" style={{ ...pill, padding: "0 8px", ...(searching ? { borderColor: T.hiviz, background: T.hivizDim } : {}) }}>
@@ -446,13 +453,25 @@ export function ThreadView({ contactId, embedded = false }: {
                     <span>{label}{filter === k ? " ✓" : ""}</span><span style={{ color: T.ink3, ...nums }}>{count}</span>
                   </button>
                 ))}
+                {usedLines.length > 1 && (
+                  <div className="flex flex-col" style={{ borderTop: `1px solid ${T.hairSoft}`, padding: "4px 0" }}>
+                    <span className="px-3" style={{ ...eyebrow, fontSize: 11, color: T.ink3 }}>Which of your lines</span>
+                    {[{ id: null as string | null, name: "All lines" }, ...usedLines].map((l) => (
+                      <button key={l.id ?? "all"} role="menuitemradio" aria-checked={lineFilter === l.id} onClick={() => { setLineFilter(l.id); setTabMenu(null); }}
+                        className="px-3 py-1.5 text-left" style={{ fontSize: F.sm, color: T.ink, fontWeight: lineFilter === l.id ? 600 : 400 }}>
+                        {l.name}{lineFilter === l.id ? " ✓" : ""}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           )}
         </div>
 
         {/* Toolbar: the filter (phone channels), what you're looking at, Call, search. */}
-        <div className="flex items-center gap-2 flex-shrink-0 flex-nowrap" style={{ padding: "8px 16px", background: T.card, borderBottom: `1px solid ${T.hairSoft}` }}>
+        {/* On a phone the toolbar is gone (Coy, 2026-10-09): Call and search are on the top row, the filters in the number's tab. */}
+        <div className="hidden lg:flex items-center gap-2 flex-shrink-0 flex-nowrap" style={{ padding: "8px 16px", background: T.card, borderBottom: `1px solid ${T.hairSoft}` }}>
           {/* All · Calls · Texts and the line filter are drop-downs, so the row fits a phone with Call and search
               (Coy, 2026-10-05: "make this a drop down" — "on the same row as the calls/text buttons"). */}
           {channel?.kind === "phone" ? (

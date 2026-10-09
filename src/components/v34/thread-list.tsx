@@ -26,6 +26,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { CaretDown, CaretUp, ChatCircleText } from "@phosphor-icons/react";
 import { useLiveThreads } from "@/lib/v34/live-threads";
 import { useLiveCalls } from "@/lib/v34/alerts-live";
 import { liveCallFor } from "@/lib/alerts";
@@ -431,7 +432,6 @@ function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, onName, onB
     onTray(r === "open" ? "buckets" : r === "actions" ? "actions" : null);
   };
   const isVoicemail = t.summary_source === "quo_voicemail";
-  const synthesised = t.preview_source === "synthesised";
   // The role tag says what the thread doesn't already: a customer's other
   // person or a sub in Customer / Vendor, everyone in a thread Coy made.
   const roleShown = !chipShown || (t.role !== undefined && t.role !== NATURAL[t.bucket ?? "unsorted"]);
@@ -513,18 +513,22 @@ function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, onName, onB
           {isVoicemail && !t.status_summary && (
             <span style={{ ...eyebrow, color: T.hiviz, display: "block", marginTop: 2 }}>Voicemail</span>
           )}
-          <span style={{
-            display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden",
-            fontSize: 12.5, marginTop: 2, lineHeight: 1.4,
-            color: !t.status_summary && synthesised ? T.ink3 : T.ink2, fontStyle: !t.status_summary && synthesised ? "italic" : "normal",
-          }}>{t.status_summary ?? t.preview}</span>
         </span>
       </button>
-      {decidable && (
-        <button onClick={onToggle} aria-expanded={expanded} aria-label={expanded ? "Close the filing tools" : "Who are they? File them"}
-          title="Who are they? File them" className="shrink-0 flex items-start justify-center"
-          style={{ width: 28, paddingTop: 10, color: expanded ? T.hiviz : T.ink3, cursor: "pointer", fontSize: 12 }}>{expanded ? "▴" : "▾"}</button>
-      )}
+      {/* The summary is behind ▾ now, with ▸ to open the thread — two icons on the
+          right (Coy, 2026-10-09: "instead of having the summary automatically always
+          shown below the contact"). The ▾ is orange while who they are is undecided. */}
+      <span className="shrink-0 flex items-start gap-0.5" style={{ paddingTop: 6, paddingRight: 4 }}>
+        <button onClick={onToggle} aria-expanded={expanded} aria-label={expanded ? "Fold the summary" : decidable ? "Summary — and who are they? File them" : "Show the summary"}
+          title={decidable ? "Summary · file them" : "Summary"} className="flex items-center justify-center rounded"
+          style={{ width: 30, height: 30, color: expanded || decidable ? T.hiviz : T.ink3, cursor: "pointer", border: `1px solid ${expanded ? T.hiviz : "transparent"}` }}>
+          {expanded ? <CaretUp size={16} weight="bold" /> : <CaretDown size={16} weight="bold" />}
+        </button>
+        <button onClick={onOpen} aria-label="Open the thread" title="Open the thread" className="flex items-center justify-center rounded"
+          style={{ width: 30, height: 30, color: T.ink2, cursor: "pointer" }}>
+          <ChatCircleText size={18} />
+        </button>
+      </span>
       </div>
 
       {/* Expanded: what has been going on, anything still to decide about
@@ -532,6 +536,12 @@ function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, onName, onB
           Calling, texting and email live on that page, not here. */}
       {expanded && (
         <div className="px-2.5 pb-2.5" style={{ paddingLeft: 46 }}>
+          {t.status_summary && (
+            <div style={{ marginBottom: 8 }}>
+              <div style={{ ...eyebrow, color: T.ink3 }}>Where it stands · Dusty</div>
+              <div style={{ fontSize: F.sm, color: T.ink, lineHeight: 1.4, marginTop: 2 }}>{t.status_summary}</div>
+            </div>
+          )}
           {t.recent_summary ? (
             <div>
               <div style={{ ...eyebrow, color: T.ink3 }}>Latest · Dusty</div>

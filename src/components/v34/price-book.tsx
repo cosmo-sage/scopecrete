@@ -16,10 +16,11 @@
  * card sheet (cost-cards.tsx), which also shows the card's price history.
  */
 
-import React, { startTransition, useEffect, useMemo, useState } from "react";
+import React, { startTransition, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { T, F, disp, eyebrow, nums, clip, money, formatPhone } from "@/lib/v34/tokens";
 import { useWide } from "@/lib/v34/use-wide";
+import { isHorizontal } from "@/lib/swipe";
 import { Cell } from "@/components/v34/cell";
 import { PageHeader, SearchBubble } from "@/components/v34/primitives";
 import { COST_TYPE_LABEL, QTY_RULE_LABEL, cardGaps, defaultTaxable, type CostType } from "@/lib/cost-cards";
@@ -195,6 +196,25 @@ export function PriceBook({ pick }: { pick?: PricePick } = {}) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, groups, view, q, vendors, sources]);
 
+  /** Swipe a card left on a phone to retire it (Coy, 2026-10-09) — the sheet's
+   *  "take it out of the catalog", with Undo. Budgets that used it keep it. */
+  const [undoRetire, setUndoRetire] = useState<Card | null>(null);
+  const retireCard = async (c: Card) => {
+    setErr(null);
+    setItems((xs) => (xs ?? []).map((x) => (x.id === c.id ? { ...x, active: false } as Card : x)));
+    try {
+      await call(`/api/cost-items/${c.id}`, "DELETE");
+      setUndoRetire(c); setTimeout(() => setUndoRetire((u) => (u?.id === c.id ? null : u)), 6000);
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+    finally { reload(); }
+  };
+  const unretireCard = async (c: Card) => {
+    setUndoRetire(null);
+    try { await call(`/api/cost-items/${c.id}`, "PATCH", { active: true }); }
+    catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+    finally { reload(); }
+  };
+
   const patch = async (c: Card, body: Record<string, unknown>) => {
     setErr(null);
     setItems((xs) => (xs ?? []).map((x) => (x.id === c.id ? { ...x, ...body } as Card : x)));
@@ -297,6 +317,13 @@ export function PriceBook({ pick }: { pick?: PricePick } = {}) {
         {pbActions}
       </div>}
       {pick?.top && <div className="mt-2">{pick.top}</div>}
+      {undoRetire && (
+        <div role="status" aria-live="polite" className="fixed left-3 right-3 rounded px-3 py-2 flex items-center gap-3"
+          style={{ bottom: "calc(var(--sc-foot, 58px) + 12px)", zIndex: 60, background: T.ink, color: T.card, fontSize: F.sm, boxShadow: "0 6px 18px rgba(0,0,0,.25)" }}>
+          <span style={{ flex: 1, minWidth: 0, ...clip }}>Retired {undoRetire.name}</span>
+          <button onClick={() => void unretireCard(undoRetire)} style={{ ...eyebrow, color: T.hiviz, cursor: "pointer" }}>Undo</button>
+        </div>
+      )}
       {flash && (
         <div role="status" aria-live="polite" className={pick ? "sticky z-20 rounded px-3 py-2 flex items-center gap-2" : "mt-2 rounded px-3 py-1.5"}
           style={pick ? { top: 4, fontSize: F.sm, background: T.green, color: "#fff", fontWeight: 600, boxShadow: "0 6px 18px rgba(0,0,0,.25)", marginTop: 8 } : { fontSize: F.sm, background: T.greenDim, color: T.ink }}>
@@ -504,7 +531,8 @@ export function PriceBook({ pick }: { pick?: PricePick } = {}) {
                       const more = (c.vendors ?? 0) - (c.vendor_contact_id ? 1 : 0);
                       const other = view === "group" ? `${vendorLabel(c.vendor_contact_id) ?? ""}${more > 0 ? ` +${more}` : ""}` || null : `${c._star ? "★ " : ""}${groupLabel(c.cost_group_id) ?? ""}` || null;
                       return (
-                        <div key={c.id} role="button" tabIndex={0} onClick={() => setEditing(c)} onKeyDown={(e) => { if (e.key === "Enter") setEditing(c); }}
+                        <SwipeRetire key={c.id} on={!pick && !!c.active && !!c.id} name={c.name ?? "this card"} onRetire={() => void retireCard(c)}>
+                        <div role="button" tabIndex={0} onClick={() => setEditing(c)} onKeyDown={(e) => { if (e.key === "Enter") setEditing(c); }}
                           className="w-full text-left flex items-start gap-2 px-2.5 py-2"
                           style={{ borderTop: i ? `1px solid ${T.hairSoft}` : "none", cursor: "pointer", opacity: c.active ? 1 : 0.5 }}>
                           {plus(c)}
@@ -521,6 +549,7 @@ export function PriceBook({ pick }: { pick?: PricePick } = {}) {
                             <span style={{ display: "block", fontSize: 9.5, color: T.ink3 }}>per {c.unit}{c.taxable ? " · taxed" : ""}</span>
                           </span>
                         </div>
+                        </SwipeRetire>
                       );
                     })}
                     {s.groupId && (
@@ -550,5 +579,37 @@ export function PriceBook({ pick }: { pick?: PricePick } = {}) {
       )}
     </div>
     </>
+  );
+}
+
+/**
+ * A card row that slides left to show Retire (Coy, 2026-10-09: "swipe left to
+ * archive a cost item"). Touch only; a tap on the slid row closes it.
+ */
+function SwipeRetire({ on, name, onRetire, children }: { on: boolean; name: string; onRetire: () => void; children: React.ReactNode }) {
+  const W = 88;
+  const [dx, setDx] = useState(0);
+  const [drag, setDrag] = useState(false);
+  const at = useRef<{ x: number; y: number; dx: number; h: boolean | null } | null>(null);
+  if (!on) return <>{children}</>;
+  return (
+    <div className="relative overflow-hidden">
+      <button type="button" onClick={() => { setDx(0); onRetire(); }} tabIndex={dx ? 0 : -1} aria-hidden={dx ? undefined : true}
+        aria-label={`Retire ${name}`} className="absolute top-0 bottom-0 right-0 flex items-center justify-center"
+        style={{ width: W, background: T.red, color: "#fff", ...eyebrow, cursor: "pointer" }}>Retire</button>
+      <div
+        onTouchStart={(e) => { const t = e.touches[0]; at.current = { x: t.clientX, y: t.clientY, dx, h: null }; }}
+        onTouchMove={(e) => {
+          const a = at.current; if (!a) return;
+          const t = e.touches[0]; const mx = t.clientX - a.x, my = t.clientY - a.y;
+          if (a.h === null) { if (Math.abs(mx) < 6 && Math.abs(my) < 6) return; a.h = isHorizontal(mx, my); if (a.h) setDrag(true); }
+          if (a.h) setDx(Math.max(-W, Math.min(0, a.dx + mx)));
+        }}
+        onTouchEnd={() => { const a = at.current; at.current = null; if (a?.h) setDx((d) => (d < -W / 2 ? -W : 0)); setDrag(false); }}
+        onClickCapture={(e) => { if (dx) { e.stopPropagation(); e.preventDefault(); setDx(0); } }}
+        style={{ position: "relative", background: T.card, transform: `translateX(${dx}px)`, transition: drag ? "none" : "transform .18s ease" }}>
+        {children}
+      </div>
+    </div>
   );
 }

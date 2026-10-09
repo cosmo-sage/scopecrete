@@ -877,7 +877,7 @@ function LineSheet({ line, data, sections, res, addon, onAddon, onClose, onPatch
               onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== line.name) onPatch({ name: v }); }} /></label>
           <div className="grid grid-cols-2 gap-2 mt-2">
             {/* Its group (Coy, 2026-10-04): from a Price book item this moves the item there too. */}
-            <label className="block"><span style={eyebrow}>Group{line.cost_item_id ? " · Price book too" : ""}</span>
+            <label className="block"><span style={eyebrow}>Group</span>
               <select value={line.cost_group_id ?? ""} onChange={(e) => onPatch({ cost_group_id: e.target.value || null })} style={field} aria-label="Group">
                 <option value="">Not in a group</option>
                 {data.groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
@@ -918,7 +918,7 @@ function LineSheet({ line, data, sections, res, addon, onAddon, onClose, onPatch
             <label className="block" style={{ gridColumn: "span 2" }}><span style={eyebrow}>Ext. price</span><div style={{ ...shown, fontWeight: 600 }}>{m(res.ext_price)}</div></label>
           </div>
           {/* The "Quantity: the days on the job." line is gone (Coy, 2026-10-06); only the way back when it was typed. */}
-          {line.qty_rule === "manual" && want !== "manual" && (
+          {line.qty_rule === "manual" && want !== "manual" && line.quantity != null && (
             <button onClick={() => onPatch({ qty_rule: want })} style={{ fontSize: F.xs, color: T.chalk, cursor: "pointer", marginTop: 6 }}>Quantity typed · ↺ Count it from the area</button>
           )}
           {res.qty_basis === "set" && line.qty_rule !== "manual" && (

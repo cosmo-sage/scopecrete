@@ -154,7 +154,7 @@ export function Customers() {
       actions={<>
         {!wide && viewTabs}
         <SearchToggle open={finding || !!q} onToggle={() => { if (finding || q) { setQ(""); setFinding(false); } else setFinding(true); }} label="Find a customer" />
-        <button onClick={() => setAdding(true)} className="sc-new-btn" style={btn(true)}>+ New customer</button>
+        <button onClick={() => setAdding(true)} className="sc-new-btn" style={btn(true)}>+ New</button>
       </>}>
       {(finding || q) && <div className="mt-2"><SearchBubble value={q} onChange={setQ} onClose={() => setFinding(false)} placeholder="Find a name, address, phone, what was said…" /></div>}
     </PageHeader>

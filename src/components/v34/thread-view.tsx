@@ -318,6 +318,10 @@ export function ThreadView({ contactId, embedded = false }: {
                   onSaved={(v) => { setName(v); setNameConfirmed(true); setNameSource("human"); }}
                   style={{ fontFamily: "var(--sc-font-strong)", fontSize: 19, fontWeight: 700, lineHeight: 1.15, color: T.ink }} />
               )}
+              {/* The customer or vendor they speak for, beside the name (Coy, 2026-10-09: "John Freeling · Icon Technologies"). */}
+              {!loading && c?.company && (
+                <span title={c.company} style={{ fontSize: 14, fontWeight: 500, color: T.ink2, minWidth: 0, flexShrink: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>· {c.company}</span>
+              )}
               {/* No tag on a phone: the thread's name at the left already says it (Coy, 2026-10-05). */}
               {c && <span className="hidden lg:inline-flex"><RoleTag role={role} auto={c.bucket_state === "auto"} /></span>}
             </div>

@@ -243,6 +243,9 @@ export interface TakeoffTotal {
 }
 
 /** A card's unit said as SF / SY / LF / EA / CY, or null when it is none of them. */
+/** The rule a unit counts by when nothing is typed (as `ruleForUnit()` in units.ts). */
+const UNIT_RULE: Record<string, QtyRule> = { SF: "per_sqft", SY: "per_sqft", LF: "per_lf_perimeter", CY: "per_cy" };
+
 export function takeoffUnit(unit: string): "SF" | "SY" | "LF" | "EA" | "CY" | null {
   const u = unit.trim().toLowerCase().replace(/[.\s]/g, "");
   if (["sf", "sqft", "sft", "ft2", "squarefeet", "squarefoot"].includes(u)) return "SF";
@@ -332,6 +335,10 @@ export function ruleQty(
   }
   if (line.qty_source === "set" || line.qty_rule === "manual") {
     if (has(line.quantity) && line.quantity >= 0) return { ok: true, qty: line.quantity, basis: "set", note: "typed" };
+    // Nothing typed, and its unit counts itself (Coy, 2026-10-09: demolition in
+    // SqFt on an area of 894 SF said "needs quantity") — count it from the area.
+    const own = UNIT_RULE[takeoffUnit(line.unit ?? "") ?? ""];
+    if (own) return ruleQty({ ...line, qty_rule: own, qty_source: "rule" }, sections, days, takeoff);
     return { ok: false, missing: [`${line.name}: quantity`] };
   }
   // Measured on the plans (migration 059): the group's total, in the card's unit.

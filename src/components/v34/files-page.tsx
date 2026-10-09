@@ -26,6 +26,7 @@ import { createPortal } from "react-dom";
 import { T, F, disp, eyebrow, clip, relTime, nums } from "@/lib/v34/tokens";
 import { Drawer, MenuButton, PageHeader, SearchBubble, SearchToggle, Segmented } from "@/components/v34/primitives";
 import { FileDetails, fileSub, patchFile, type FileRow } from "@/components/v34/files-panel";
+import { FilePreview } from "@/components/v34/file-preview";
 import { EmailList } from "@/components/v34/email-sheet";
 import { useWide } from "@/lib/v34/use-wide";
 import { CATEGORIES, CATEGORY_LABEL, sizeLabel } from "@/lib/files";
@@ -34,7 +35,7 @@ import { CATEGORY_FOLDERS, activeFolder, byMonth, folderPatch, isPhotosView, sam
 
 type Facet = { id: string; name: string; n: number };
 type Facets = { jobs: Facet[]; customers: Facet[]; vendors: Facet[]; people: Facet[] };
-type Row = FileRow & { matched?: string | null };
+type Row = FileRow & { matched?: string | null; customer_id?: string | null };
 
 const CAT_LABEL = (c: string) => CATEGORY_FOLDERS.find(([k]) => k === c)?.[1] ?? c;
 /** The expandable folder groups: [facet list, filter key, label]. */
@@ -81,7 +82,7 @@ export function FilesPage({ fixed, embedded, extra }: { fixed?: Partial<FileFilt
     });
   }, []);
   const setPreview = (on: boolean) => { setPreviewState(on); try { localStorage.setItem("sc:files-preview", on ? "1" : "0"); } catch { /* storage off */ } };
-  const pickFile = (f: FileRow) => { setOpen(f); setPreview(true); };
+  const pickFile = (f: FileRow) => { setOpen(f); setPreview(true); setFull(false); };
   const [saveErr, setSaveErr] = useState<string | null>(null);
   /** A file changed from the list or the preview's header (its name, its kind). */
   const saveFile = async (id: string, patch: Record<string, unknown>) => {
@@ -96,6 +97,10 @@ export function FilesPage({ fixed, embedded, extra }: { fixed?: Partial<FileFilt
   // Names seen so far, so a filter's list doesn't shrink to the one chosen.
   const [jobNames, setJobNames] = useState<Record<string, string>>({});
   const [peopleNames, setPeopleNames] = useState<Record<string, string>>({});
+  /** A person's customer, and each customer's name — for "Customer page: …". */
+  const [personCust, setPersonCust] = useState<Record<string, string>>({});
+  const [custNames, setCustNames] = useState<Record<string, string>>({});
+  const [full, setFull] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => { if (q.trim() !== flt.q) set({ q: q.trim() }); }, 250);
@@ -144,6 +149,8 @@ export function FilesPage({ fixed, embedded, extra }: { fixed?: Partial<FileFilt
         if (b.facets) setFacets(b.facets as Facets);
         setJobNames((m) => ({ ...m, ...Object.fromEntries((b.jobs as Array<{ id: string; name: string }>).map((j) => [j.id, j.name])) }));
         setPeopleNames((m) => ({ ...m, ...Object.fromEntries((b.people as Array<{ id: string; name: string }>).map((c) => [c.id, c.name])) }));
+        setPersonCust((m) => ({ ...m, ...Object.fromEntries((b.people as Array<{ id: string; customer_id?: string | null }>).filter((c) => c.customer_id).map((c) => [c.id, c.customer_id as string])) }));
+        setCustNames((m) => ({ ...m, ...Object.fromEntries(((b.customers ?? []) as Array<{ id: string; name: string }>).map((c) => [c.id, c.name])) }));
         if (fileParam && fs.length === 1) { setOpen(fs[0]); setPreview(true); }
       })
       .catch((e) => { if (!off) setErr(e instanceof Error ? e.message : String(e)); });
@@ -318,17 +325,26 @@ export function FilesPage({ fixed, embedded, extra }: { fixed?: Partial<FileFilt
       style={{ ...look, width: "100%", minWidth: 0, background: "transparent", border: "1px solid transparent", borderRadius: 4, padding: "1px 4px", margin: "0 -5px", textOverflow: "ellipsis" }} />
   );
 
-  const details = (f: FileRow) => (
+  /** The links under a file name what they open (Coy, 2026-10-09): "Open job:
+   *  Wilson Driveway", "Customer page: Icon Technologies". */
+  const linkLook: React.CSSProperties = { fontSize: F.xs, color: T.chalk, fontWeight: 600, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
+  const details = (f: Row) => {
+    const cust = f.customer_id ?? (f.contact_id ? personCust[f.contact_id] : undefined) ?? null;
+    const custName = cust ? custNames[cust] : undefined;
+    return (
     <FileDetails key={f.id} f={f} big onClose={() => setPreview(false)}
-      links={f.job_id || f.contact_id ? (
-        <div className="flex gap-3">
-          {f.job_id && <Link href={`/dashboard/scope/${f.job_id}`} style={{ ...eyebrow, color: T.chalk }}>Open its job ›</Link>}
-          {f.contact_id && <Link href={`/dashboard/messages/${f.contact_id}`} style={{ ...eyebrow, color: T.chalk }}>Open their page ›</Link>}
+      links={f.job_id || f.contact_id || cust ? (
+        <div className="flex flex-col gap-1" style={{ minWidth: 0 }}>
+          {f.job_id && <Link href={`/dashboard/scope/${f.job_id}`} style={linkLook}>Open job: {jobNames[f.job_id] ?? "the job"} ›</Link>}
+          {cust
+            ? <Link href={`/dashboard/customers/${cust}`} style={linkLook}>Customer page: {custName ?? (f.contact_id ? peopleNames[f.contact_id] : null) ?? "the customer"} ›</Link>
+            : f.contact_id && <Link href={`/dashboard/messages/${f.contact_id}`} style={linkLook}>Contact: {peopleNames[f.contact_id] ?? "their page"} ›</Link>}
         </div>
       ) : null}
       onSaved={(nf) => { setFiles((a) => (a ?? []).map((x) => (x.id === nf.id ? nf : x))); setOpen(nf); }}
       onDeleted={(id) => { setFiles((a) => (a ?? []).filter((x) => x.id !== id)); setOpen(null); }} />
-  );
+    );
+  };
 
   /** Preview as an icon beside the filter (Coy, 2026-10-09): on a desktop it
    *  shows or hides the panel; on a phone it opens the file picked, else the first. */
@@ -386,7 +402,7 @@ export function FilesPage({ fixed, embedded, extra }: { fixed?: Partial<FileFilt
           {/* The folder's name on the left, Photos | Files on the right (Coy, 2026-10-09). */}
           <div className="flex items-center gap-3">
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 600, ...clip }}>{folderName}</div>
+              <div style={{ fontFamily: disp, fontSize: wide ? F.lg : F.sm, fontWeight: 600, ...clip }}>{folderName}</div>
               <div className="flex items-center gap-2">
                 <span style={{ fontSize: F.xs, color: T.ink3, ...nums }}>{files && cat !== "email" ? `${files.length}${files.length === 300 ? "+" : ""} ${photos ? "photos" : "shown"}` : ""}</span>
                 {fileParam && <button onClick={clearFile} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>Show all</button>}
@@ -526,6 +542,23 @@ export function FilesPage({ fixed, embedded, extra }: { fixed?: Partial<FileFilt
           </nav>
           <div style={{ fontSize: F.xs, color: saveErr ? T.red : T.ink3, padding: "6px 16px 0" }}>{saveErr ?? fileSub(open, true)}</div>
           <div style={{ flex: 1, overflowY: "auto" }}>{details(open)}</div>
+          {/* Full screen (Coy, 2026-10-09): the document alone, a quiet × to come back. */}
+          <button type="button" onClick={() => setFull(true)} aria-label="Full screen" title="Full screen"
+            className="fixed flex items-center justify-center rounded-full"
+            style={{ right: 14, bottom: "calc(14px + env(safe-area-inset-bottom))", width: 44, height: 44, zIndex: 71, background: T.ink, color: T.card, opacity: 0.85, cursor: "pointer", boxShadow: "0 2px 8px rgba(0,0,0,.25)" }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg>
+          </button>
+        </div>
+      )}
+      {!wide && preview && open && full && (
+        <div role="dialog" aria-label={`${open.name} — full screen`} className="fixed inset-0" style={{ zIndex: 72, background: T.slab }}>
+          {open.kind === "image" && open.url
+            // eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL
+            ? <img src={open.url} alt={open.name} style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+            : <FilePreview f={open} big="full" />}
+          <button type="button" onClick={() => setFull(false)} aria-label="Leave full screen" title="Leave full screen"
+            className="fixed flex items-center justify-center rounded-full"
+            style={{ top: "calc(8px + env(safe-area-inset-top))", right: 8, width: 30, height: 30, zIndex: 73, background: "rgba(0,0,0,.35)", color: "#fff", fontSize: 18, lineHeight: 1, cursor: "pointer" }}>×</button>
         </div>
       )}
     </div>

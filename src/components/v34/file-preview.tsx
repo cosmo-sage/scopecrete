@@ -21,10 +21,11 @@ import type { FileRow } from "@/components/v34/files-panel";
 const MAX_PAGES = 60;
 const MAX_TEXT_BYTES = 12 * 1024 * 1024;
 
-const frame = (big?: boolean): React.CSSProperties => ({
-  width: "100%", maxHeight: big ? "70vh" : "55vh", overflow: "auto", border: `1px solid ${T.hair}`,
-  borderRadius: 4, background: T.slab,
-});
+/** "full" fills its box — the phone's full-screen view (Coy, 2026-10-09). */
+type Size = boolean | "full";
+const frame = (big?: Size): React.CSSProperties => big === "full"
+  ? { width: "100%", height: "100%", overflow: "auto", background: T.slab }
+  : { width: "100%", maxHeight: big ? "70vh" : "55vh", overflow: "auto", border: `1px solid ${T.hair}`, borderRadius: 4, background: T.slab };
 const note: React.CSSProperties = { fontSize: F.xs, color: T.ink3, padding: "10px 12px" };
 
 /** Whether FilePreview can show this file. */
@@ -32,7 +33,7 @@ export function canPreview(f: FileRow) {
   return f.kind === "pdf" || /\.pdf$/i.test(f.name) || !!docKind(f.mime_type, f.name);
 }
 
-export function FilePreview({ f, big }: { f: FileRow; big?: boolean }) {
+export function FilePreview({ f, big }: { f: FileRow; big?: Size }) {
   if (!f.url) return null;
   if (f.kind === "pdf" || /\.pdf$/i.test(f.name)) return <PdfPages key={f.id} id={f.id} url={f.url} big={big} />;
   const kind = docKind(f.mime_type, f.name);
@@ -41,7 +42,7 @@ export function FilePreview({ f, big }: { f: FileRow; big?: boolean }) {
   return <div style={{ ...note, background: T.slab, borderRadius: 4 }}>{ext ? `A .${ext.toLowerCase()} file` : "This file"} can&apos;t be shown here yet — Download it below.</div>;
 }
 
-function PdfPages({ id, url, big }: { id: string; url: string; big?: boolean }) {
+function PdfPages({ id, url, big }: { id: string; url: string; big?: Size }) {
   const box = useRef<HTMLDivElement>(null);
   const [doc, setDoc] = useState<import("@/lib/pdf").Doc | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -108,7 +109,7 @@ function PdfPage({ doc, n, width, root }: { doc: import("@/lib/pdf").Doc; n: num
   );
 }
 
-function DocView({ url, kind, big, size }: { url: string; kind: "docx" | "markdown" | "text"; big?: boolean; size: number | null }) {
+function DocView({ url, kind, big, size }: { url: string; kind: "docx" | "markdown" | "text"; big?: Size; size: number | null }) {
   const [got, setGot] = useState<{ blocks?: DocBlock[]; text?: string } | null>(null);
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => {

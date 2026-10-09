@@ -106,15 +106,20 @@ export async function GET(req: NextRequest) {
   const personIds = [...new Set(rows.map((r) => r.contact_id).filter(Boolean) as string[])];
   const [jobs, people, files, fac] = await Promise.all([
     jobIds.length ? supabase.from("jobs").select("id, title, contact_id").eq("org_id", orgId).in("id", jobIds) : Promise.resolve({ data: [] }),
-    personIds.length ? supabase.from("contacts").select("id, name, company_name, phone").eq("org_id", orgId).in("id", personIds) : Promise.resolve({ data: [] }),
+    personIds.length ? supabase.from("contacts").select("id, name, company_name, phone, customer_id").eq("org_id", orgId).in("id", personIds) : Promise.resolve({ data: [] }),
     signFiles(supabase, rows),
     p.get("facets") ? facets(supabase, orgId, custOr) : Promise.resolve(undefined),
   ]);
+  // The customers the files sit on, by their own customer or their person's —
+  // the preview names "Customer page: Icon Technologies" (Coy, 2026-10-09).
+  const peopleRows = (people.data ?? []) as Array<{ id: string; name: string | null; company_name: string | null; phone: string | null; customer_id: string | null }>;
+  const custIds = [...new Set([...rows.map((r) => (r as unknown as { customer_id: string | null }).customer_id), ...peopleRows.map((c) => c.customer_id)].filter(Boolean) as string[])];
+  const { data: custs } = custIds.length ? await supabase.from("customers").select("id, name").eq("org_id", orgId).in("id", custIds) : { data: [] };
   return applyCookies(NextResponse.json({
     files: (files as unknown as Row[]).map((r) => ({ ...r, matched: why[r.id] ?? null })), proposals, facets: fac,
+    customers: ((custs ?? []) as Array<{ id: string; name: string | null }>).filter((c) => c.name).map((c) => ({ id: c.id, name: c.name as string })),
     jobs: ((jobs.data ?? []) as Array<{ id: string; title: string | null }>).map((j) => ({ id: j.id, name: j.title || "Untitled job" })),
-    people: ((people.data ?? []) as Array<{ id: string; name: string | null; company_name: string | null; phone: string | null }>)
-      .map((c) => ({ id: c.id, name: c.name || c.company_name || c.phone || "Unknown" })),
+    people: peopleRows.map((c) => ({ id: c.id, name: c.name || c.company_name || c.phone || "Unknown", customer_id: c.customer_id })),
   }));
 }
 

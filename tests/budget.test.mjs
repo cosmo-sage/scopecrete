@@ -154,3 +154,15 @@ test("a LnFt line on an area measured in linear feet takes its length (Unit type
   const r = ruleQty(L({ qty_rule: "per_lf_perimeter", unit: "LnFt", section_id: "c1" }), [curb], null);
   assert.equal(r.ok && r.qty, 430);
 });
+
+test("a typed line with nothing typed and a unit that counts itself counts from its area (Coy, 2026-10-09)", () => {
+  const area = { id: "s1", name: "Front", kind: "driveway", length_ft: null, width_ft: null, depth_in: 4, sqft_override: 894.06 };
+  const demo = { id: "l1", name: "Concrete Demolition", unit: "Square Feet", qty_rule: "manual", qty_source: "set", quantity: null, rule_params: {}, section_id: "s1" };
+  const r = ruleQty(demo, [area], null);
+  assert.equal(r.ok, true);
+  assert.equal(r.qty, 894.06);
+  // An Each line still waits for its number.
+  assert.equal(ruleQty({ ...demo, unit: "Each" }, [area], null).ok, false);
+  // A number typed wins.
+  assert.equal(ruleQty({ ...demo, quantity: 500 }, [area], null).qty, 500);
+});

@@ -10,6 +10,7 @@
  * Zoom with − / + (or ctrl + wheel), drag the page to pan. Measuring is the
  * Plan Room's: "Measure in the Plan Room" opens Takeoff on this sheet.
  */
+import { usePinchZoom } from "@/lib/v34/use-pinch";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { T, F, disp, clip, eyebrow } from "@/lib/v34/tokens";
@@ -60,22 +61,31 @@ export function SheetViewer({ jobId, title, sheets, files, groups, start, onClos
   const [busy, setBusy] = useState(false);
   const canvas = useRef<HTMLCanvasElement>(null);
   const box = useRef<HTMLDivElement>(null);
+  const drawn = useRef<{ id: string; zoom: number; w: number; h: number } | null>(null);
   useEffect(() => {
     if (!s || !file?.url || !canvas.current || !box.current) return;
     let off = false;
     let job: { cancel: () => void; done: Promise<void> } | null = null;
     setFail(null); setBusy(true);
-    openPdf(s.file_id, file.url).then(async (doc) => {
-      // Fit the page's real width (rotation applied), not the stored reading of it.
-      const w = (await doc.getPage(s.page)).getViewport({ scale: 1 }).width;
-      if (off || !canvas.current || !box.current) return;
-      const fit = Math.max(200, box.current.clientWidth - 16) / Math.max(1, w);
-      job = drawPage(doc, s.page, canvas.current, fit * zoom);
-      return job.done;
-    }).catch((e) => { if (!off) setFail(e instanceof Error ? e.message : String(e)); })
-      .finally(() => { if (!off) setBusy(false); });
-    return () => { off = true; job?.cancel(); };
+    // A pinch resizes the page drawn last at once, then it is drawn sharp once the zoom settles.
+    const c = canvas.current, last = drawn.current;
+    if (last && last.id === s.id && last.w) { c.style.width = `${Math.floor(last.w * zoom / last.zoom)}px`; c.style.height = `${Math.floor(last.h * zoom / last.zoom)}px`; }
+    const t = window.setTimeout(() => {
+      openPdf(s.file_id, file.url!).then(async (doc) => {
+        // Fit the page's real width (rotation applied), not the stored reading of it.
+        const w = (await doc.getPage(s.page)).getViewport({ scale: 1 }).width;
+        if (off || !canvas.current || !box.current) return;
+        const fit = Math.max(200, box.current.clientWidth - 16) / Math.max(1, w);
+        job = drawPage(doc, s.page, canvas.current, fit * zoom);
+        await job.done;
+        if (!off && canvas.current) drawn.current = { id: s.id, zoom, w: parseFloat(canvas.current.style.width) || 0, h: parseFloat(canvas.current.style.height) || 0 };
+      }).catch((e) => { if (!off) setFail(e instanceof Error ? e.message : String(e)); })
+        .finally(() => { if (!off) setBusy(false); });
+    }, last ? 150 : 0);
+    return () => { off = true; window.clearTimeout(t); job?.cancel(); };
   }, [s, file?.url, zoom]);
+  // Two fingers zoom on a phone (Coy, 2026-10-09).
+  usePinchZoom(box, zoom, setZoom, 0.5, 6);
 
   useEffect(() => {
     const k = (e: KeyboardEvent) => {

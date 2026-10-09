@@ -1085,7 +1085,7 @@ export function ThreadList({ folded = false }: { folded?: boolean }) {
             )}
             <span style={{ ...clip, flex: 1 }}>
               {customThread.job_id
-                  ? <Link href={`/dashboard/scope/${customThread.job_id}`} style={{ color: T.ink3 }}>{customThread.job_line}</Link>
+                  ? <Link href={`/dashboard/scope/${customThread.job_id}/summary`} style={{ color: T.ink3 }}>{customThread.job_line}</Link>
                   : customThread.source === "customer" ? "Everyone on this customer" : "Hand-picked"}
             </span>
             <button onClick={() => setAdding(true)} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>+ Add contact</button>

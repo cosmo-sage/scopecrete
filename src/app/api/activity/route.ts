@@ -228,7 +228,7 @@ export async function GET(req: NextRequest) {
     for (const b of (bidRows ?? []) as Array<{ id: string; state: string; error: string | null; job_id: string | null; facts: Record<string, unknown> | null; box_folder_name: string | null; filed_at: string | null; updated_at: string; created: Record<string, unknown> | null }>) {
     const f = (b.facts ?? {}) as { project_name?: string | null; gc_company?: string | null; bid_due_text?: string | null; items?: unknown[] };
     const name = clipq(f.project_name ?? b.box_folder_name ?? "a bid", 140);
-    const href = b.job_id ? `/dashboard/scope/${b.job_id}` : "/dashboard/files?cat=email";
+    const href = b.job_id ? `/dashboard/scope/${b.job_id}/summary` : "/dashboard/files?cat=email";
     if (b.state === "filed") {
       const isNew = !!(b.created ?? {}).job_id;
       items.push({ id: `bid-${b.id}-filed`, at: b.filed_at ?? b.updated_at, kind: "bid", contact_id: null, href,
@@ -349,8 +349,8 @@ async function tagItems(supabase: ApiSession["supabase"], orgId: string, userId:
     .eq("user_id", userId).eq("org_id", orgId).gte("created_at", weekAgo).order("created_at", { ascending: false }).limit(6);
   if (!error) {
     return ((rows ?? []) as Array<{ id: string; note_id: string | null; contact_id: string | null; job_id: string | null; title: string | null; body: string | null; created_at: string }>).map((n) => {
-      const href = limited ? (n.job_id ? `/dashboard/scope/${n.job_id}` : null)
-        : n.contact_id ? `/dashboard/messages/${n.contact_id}?channel=notes` : n.job_id ? `/dashboard/scope/${n.job_id}` : null;
+      const href = limited ? (n.job_id ? `/dashboard/scope/${n.job_id}/summary` : null)
+        : n.contact_id ? `/dashboard/messages/${n.contact_id}?channel=notes` : n.job_id ? `/dashboard/scope/${n.job_id}/summary` : null;
       const words = plainNote(n.body ?? "");
       return { id: `tag-${n.note_id ?? n.id}`, at: n.created_at, kind: "reminder", contact_id: limited ? null : n.contact_id, href,
         summary: `Tagged you on ${clipq(n.title ?? "a thread", 60)}: ${clipq(words.replace(/\s+/g, " "), 180)}`,

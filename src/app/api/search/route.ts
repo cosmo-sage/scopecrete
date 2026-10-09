@@ -26,9 +26,9 @@ export async function GET(req: NextRequest) {
   if (error) return applyCookies(NextResponse.json({ error: error.message }, { status: 500 }));
   type Row = { kind: string; id: string; contact_id: string | null; job_id: string | null; title: string | null; snippet: string | null; at: string | null; rank: number };
   const href = (r: Row) =>
-    r.kind === "job" ? `/dashboard/scope/${r.id}`
+    r.kind === "job" ? `/dashboard/scope/${r.id}/summary`
     : r.kind === "file" ? `/dashboard/files?file=${r.id}`
-    : r.contact_id ? `/dashboard/messages/${r.contact_id}` : r.job_id ? `/dashboard/scope/${r.job_id}` : "/dashboard/messages";
+    : r.contact_id ? `/dashboard/messages/${r.contact_id}` : r.job_id ? `/dashboard/scope/${r.job_id}/summary` : "/dashboard/messages";
   const rows = (data ?? []) as Row[];
   const groups = ORDER.map((k) => ({
     kind: k, label: LABEL[k],

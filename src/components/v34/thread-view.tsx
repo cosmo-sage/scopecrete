@@ -314,7 +314,12 @@ export function ThreadView({ contactId, embedded = false }: {
           {/* Phone: back to the thread, by name. */}
           <div className="flex items-center gap-2">
             <div className="flex-1 min-w-0 flex items-center gap-2">
-              {/* On a phone the name is in the breadcrumb row below; this row keeps the buttons (Coy, 2026-10-09). */}
+              {/* Phone: the thread's back link sits top left, on the buttons' row (Coy, 2026-10-09). */}
+              {!embedded && (
+                <Link href={`/dashboard/messages${threadKey ? `?t=${encodeURIComponent(threadKey)}` : ""}`} className="lg:hidden min-w-0"
+                  style={{ ...eyebrow, fontSize: 14, color: T.ink, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>‹ {threadName}</Link>
+              )}
+              {/* On a phone the name is in the breadcrumb rows below; this row keeps the buttons (Coy, 2026-10-09). */}
               <span className={embedded ? "contents" : "hidden lg:contents"}>
               {loading ? (
                 <div style={{ fontFamily: "var(--sc-font-strong)", fontSize: "var(--sc-thread-name)", fontWeight: 700, color: T.ink }}>{headerTitle}</div>
@@ -359,19 +364,15 @@ export function ThreadView({ contactId, embedded = false }: {
               )}
             </div>
           </div>
-          {/* Phone: a breadcrumb under the buttons — the thread, the person, their customer or vendor — each its own link (Coy, 2026-10-09). */}
+          {/* Phone: under the buttons, the person, then their customer or vendor, one per row (Coy, 2026-10-09: "stack them"), each saying what it opens in its own colour. */}
           {!embedded && (
-            <nav aria-label="Where you are" className="lg:hidden flex items-center gap-1.5 mt-1.5 min-w-0" style={{ ...eyebrow, whiteSpace: "nowrap" }}>
-              <Link href={`/dashboard/messages${threadKey ? `?t=${encodeURIComponent(threadKey)}` : ""}`} className="shrink-0" style={{ color: T.ink2 }}>‹ {threadName}</Link>
-              <span aria-hidden style={{ color: T.ink3 }}>|</span>
-              {/* Each link says what it opens, in its own colour (Coy, 2026-10-09: "Contact Joey | Vendor Joey"). */}
+            <nav aria-label="Where you are" className="lg:hidden flex flex-col gap-0.5 mt-1.5 min-w-0" style={{ ...eyebrow, fontSize: 13, whiteSpace: "nowrap" }}>
               <Link href={editHref} className="min-w-0" style={{ color: T.green, overflow: "hidden", textOverflow: "ellipsis" }}>
                 <span style={{ color: T.ink3 }}>Contact </span>{loading ? headerTitle : (name || formatPhone(phone))}</Link>
-              {!loading && crumbOrg && <>
-                <span aria-hidden style={{ color: T.ink3 }}>|</span>
+              {!loading && crumbOrg && (
                 <Link href={crumbOrg.href} className="min-w-0" style={{ color: crumbOrg.color, overflow: "hidden", textOverflow: "ellipsis" }}>
                   <span style={{ color: T.ink3 }}>{crumbOrg.kind} </span>{crumbOrg.label}</Link>
-              </>}
+              )}
             </nav>
           )}
           {/* The third row: the channels. Each number is its own (calls, voicemails and texts together), then email, then chat. */}

@@ -155,7 +155,7 @@ function PinCard({ pin, onClose, onClip }: { pin: MapPin; onClose: () => void; o
       {!job && pin.deliverLabel && <div style={{ fontSize: 12, color: T.ink3, marginTop: 4 }}>{pin.deliverLabel}</div>}
       <div className="grid gap-1.5" style={{ gridTemplateColumns: "1fr 1fr", marginTop: 12 }}>
         {job ? <>
-          <Link href={`/dashboard/scope/${pin.id}`} style={{ ...a, background: T.ink, color: T.card, borderColor: T.ink }}>Open job ›</Link>
+          <Link href={`/dashboard/scope/${pin.id}/summary`} style={{ ...a, background: T.ink, color: T.card, borderColor: T.ink }}>Open job ›</Link>
           <a href={dirs} target="_blank" rel="noreferrer" style={a}>Directions</a>
           {pin.phone ? <a href={`tel:${pin.phone}`} style={a}>Call</a> : <span style={{ ...a, opacity: 0.45, cursor: "default" }} title="No phone on this job's person">Call</span>}
           <button type="button" onClick={() => onClip(pin)} style={{ ...a, ...btn(true), height: 40 }}>Send to Takeoffs</button>

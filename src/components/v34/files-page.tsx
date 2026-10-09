@@ -335,7 +335,7 @@ export function FilesPage({ fixed, embedded, extra }: { fixed?: Partial<FileFilt
     <FileDetails key={f.id} f={f} big onClose={() => setPreview(false)}
       links={f.job_id || f.contact_id || cust ? (
         <div className="flex flex-col gap-1" style={{ minWidth: 0 }}>
-          {f.job_id && <Link href={`/dashboard/scope/${f.job_id}`} style={linkLook}>Open job: {jobNames[f.job_id] ?? "the job"} ›</Link>}
+          {f.job_id && <Link href={`/dashboard/scope/${f.job_id}/summary`} style={linkLook}>Open job: {jobNames[f.job_id] ?? "the job"} ›</Link>}
           {cust
             ? <Link href={`/dashboard/customers/${cust}`} style={linkLook}>Customer page: {custName ?? (f.contact_id ? peopleNames[f.contact_id] : null) ?? "the customer"} ›</Link>
             : f.contact_id && <Link href={`/dashboard/messages/${f.contact_id}`} style={linkLook}>Contact: {peopleNames[f.contact_id] ?? "their page"} ›</Link>}

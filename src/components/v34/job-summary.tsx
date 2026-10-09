@@ -122,12 +122,15 @@ export function JobSummary({ jobId }: { jobId: string }) {
         {/* The job: its chips, who it's for, where, since when, and what it is. */}
         <section aria-label="The job" className="px-3 py-2.5" style={card}>
           <JobChips job={job} onSet={setChip} />
-          <div style={{ fontSize: F.sm, color: who ? T.ink2 : T.hiviz, marginTop: 8, lineHeight: 1.45 }}>
-            {who ? <Link href={`/dashboard/messages/${contact!.id}`} style={{ color: T.ink }}>{who}</Link> : "Not attached to a customer yet"}
-            {job.address ? ` · ${job.address}` : ""}
-            {` · ${sections.length} section${sections.length === 1 ? "" : "s"}`}
-            {job.created_at ? ` · created ${day(job.created_at, true)}` : ""}
-            {job.origin === "classification" ? " · made when filed as a customer" : job.created_from_message_id ? " · drafted from a message" : ""}
+          {/* One fact a row: the customer, the address, when it was created, the sections (Coy, 2026-10-09). */}
+          <div className="flex flex-col gap-0.5" style={{ fontSize: F.sm, color: T.ink2, marginTop: 8, lineHeight: 1.45 }}>
+            <div style={{ color: who ? T.ink : T.hiviz, fontWeight: 600 }}>
+              {who ? <Link href={`/dashboard/messages/${contact!.id}`} style={{ color: T.ink }}>{who}</Link> : "Not attached to a customer yet"}
+            </div>
+            {job.address && <div>{job.address}</div>}
+            {job.created_at && <div>Created {day(job.created_at, true)}
+              {job.origin === "classification" ? " · made when filed as a customer" : job.created_from_message_id ? " · drafted from a message" : ""}</div>}
+            <div>{sections.length} section{sections.length === 1 ? "" : "s"}</div>
           </div>
           {job.description && !bidSummary && <div style={{ fontSize: F.sm, color: T.ink2, lineHeight: 1.45, marginTop: 4 }}>{job.description}</div>}
         </section>

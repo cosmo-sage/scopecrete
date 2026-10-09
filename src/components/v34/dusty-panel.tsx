@@ -491,7 +491,7 @@ export function DustyPanel({ open, onClose, onBusy, onStream }: {
             {loadingConv && <div className="rounded animate-pulse" style={{ height: 80, background: T.hairSoft }} />}
             {!loadingConv && items.length === 0 && jobAsk && (
               <JobAsk onNew={() => { setJobAsk(false); create("job"); }}
-                onPick={(id) => { setJobAsk(false); router.push(`/dashboard/scope/${id}`); }} />
+                onPick={(id) => { setJobAsk(false); router.push(`/dashboard/scope/${id}/summary`); }} />
             )}
             {!loadingConv && items.length === 0 && !jobAsk && (
               <DustyHello contactId={ref.kind === "thread" ? ref.id : null} onGo={onClose} />

@@ -78,7 +78,7 @@ export async function GET(req: NextRequest) {
     tiles.bids = {
       value: String(bids.length),
       detail: `next: ${next.title ?? "a bid"} · ${when}${h < 48 ? ` (${h} h)` : ""}`,
-      href: `/dashboard/scope/${next.id}`, ...(h < 48 ? { tone: "bad" as const } : {}),
+      href: `/dashboard/scope/${next.id}/summary`, ...(h < 48 ? { tone: "bad" as const } : {}),
     };
   }
   // Real leads: New lead stage, and counted — a job Dusty made on his own is

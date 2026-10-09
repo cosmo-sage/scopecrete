@@ -271,12 +271,12 @@ export function PersonView({ person, messages, channels, onReload, onMerge, back
       <div className="flex flex-col gap-2">
         {isVendor
           ? person.vendor_jobs.map((j) => (
-              <JobRow key={j.id} href={`/dashboard/scope/${j.id}`} title={j.title || "Untitled job"}
+              <JobRow key={j.id} href={`/dashboard/scope/${j.id}/summary`} title={j.title || "Untitled job"}
                 sub={[j.customer ? `for ${j.customer}` : null, j.role ? `as ${j.role.replace(/_/g, " ")}` : null].filter(Boolean).join(" · ")}
                 right={<span style={{ ...eyebrow, color: T.hiviz }}>{stageOf(j.status).label}</span>} />
             ))
           : person.jobs.map((j) => (
-              <JobRow key={j.id} href={`/dashboard/scope/${j.id}`} title={j.title || "Untitled job"}
+              <JobRow key={j.id} href={`/dashboard/scope/${j.id}/summary`} title={j.title || "Untitled job"}
                 sub={[j.job_type ? JOB_TYPE_LABEL[j.job_type] : "Type?", j.address, !j.counts ? "suggested — accept it on Jobs" : null].filter(Boolean).join(" · ")}
                 right={<span style={{ ...eyebrow, color: T.hiviz }}>{stageOf(j.status).label}</span>} />
             ))}
@@ -743,7 +743,7 @@ function CustomerJobs({ person, onChanged, onError }: { person: Person; onChange
       {person.jobs.map((j) => (
         <div key={j.id} className="rounded px-3 py-2.5" style={{ background: T.card, border: `1px solid ${T.hair}` }}>
           <div className="flex items-baseline gap-2">
-            <Link href={`/dashboard/scope/${j.id}`} className="no-underline"
+            <Link href={`/dashboard/scope/${j.id}/summary`} className="no-underline"
               style={{ fontFamily: disp, fontSize: F.md, fontWeight: 600, color: T.ink, flex: 1, minWidth: 0, ...clip }}>
               {j.title || "Untitled job"} ›
             </Link>
@@ -815,7 +815,7 @@ function VendorJobs({ person, onChanged, onError }: { person: Person; onChanged:
       {person.vendor_jobs.map((j) => (
         <div key={j.id} className="rounded px-3 py-2.5 flex items-center gap-2" style={{ background: T.card, border: `1px solid ${T.hair}` }}>
           <div className="flex-1 min-w-0">
-            <Link href={`/dashboard/scope/${j.id}`} className="no-underline" style={{ fontFamily: disp, fontSize: F.md, fontWeight: 600, color: T.ink, ...clip, display: "block" }}>
+            <Link href={`/dashboard/scope/${j.id}/summary`} className="no-underline" style={{ fontFamily: disp, fontSize: F.md, fontWeight: 600, color: T.ink, ...clip, display: "block" }}>
               {j.title || "Untitled job"} ›
             </Link>
             <div style={{ fontSize: F.xs, color: T.ink2, ...clip }}>

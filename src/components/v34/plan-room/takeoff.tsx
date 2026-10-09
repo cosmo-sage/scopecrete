@@ -18,6 +18,7 @@ import { call, isAerialSheet, KIND_LABEL, SHAPE_COLORS, shapeColor, sheetLabel, 
 import { ScaleBadge, Thumb } from "./files-sheets";
 import { Drawer, SlideDrawer } from "@/components/v34/primitives";
 import { ShapePhotos } from "./shape-photos";
+import { usePinchZoom } from "@/lib/v34/use-pinch";
 
 type Tool = "select" | "area" | "rect" | "linear" | "count" | "cutout" | "scale";
 const TOOL_KIND: Partial<Record<Tool, TakeoffKind>> = { area: "area", rect: "area", linear: "linear", count: "count" };
@@ -146,12 +147,28 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
     return () => window.removeEventListener("keydown", k);
   }, [draft.length, finish, fullscreen, setFullscreen, setDraft]);
 
+  // The takeoff fills the screen from where it starts down to the footer, measured, so the drawers
+  // (Parameters, Sheets) end above the footer with their buttons in view (Coy, 2026-10-09).
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const [fitH, setFitH] = useState<number | null>(null);
+  useEffect(() => {
+    if (fullscreen) return;
+    const fit = () => {
+      const el = wrapRef.current; if (!el) return;
+      const foot = window.matchMedia("(min-width: 1024px)").matches ? 0 : parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--sc-foot")) || 0;
+      setFitH(Math.max(360, Math.round(window.innerHeight - el.getBoundingClientRect().top - foot)));
+    };
+    fit();
+    const t = window.setTimeout(fit, 400);
+    window.addEventListener("resize", fit);
+    return () => { window.clearTimeout(t); window.removeEventListener("resize", fit); };
+  }, [fullscreen]);
   const wrap: React.CSSProperties = fullscreen
     ? { position: "fixed", inset: 0, zIndex: 90, background: T.slab, display: "flex" }
-    : { display: "flex", minHeight: 0, height: "calc(100dvh - var(--sc-head) - 110px)" };
+    : { display: "flex", minHeight: 0, height: fitH ? `${fitH}px` : "calc(100dvh - var(--sc-head) - 110px)" };
 
   return (
-    <div style={wrap} className="flex-col lg:flex-row">
+    <div ref={wrapRef} style={wrap} className="flex-col lg:flex-row">
       {/* ---- parameters ---- */}
       {panel ? (
         <div className="hidden lg:flex" style={{ flex: "0 0 auto", minHeight: 0 }}>
@@ -419,6 +436,8 @@ function Drawing({ sheet, fileUrl, zoom, setZoom, tool, data, groupId, selId, se
   }, []);
   const scale = fitW > 0 ? (fitW / sheet.page_w) * zoom : 0;
   const w = sheet.page_w * scale, h = sheet.page_h * scale;
+  // Two fingers zoom on a phone (Coy, 2026-10-09); the fingers lifting never add a point.
+  const pinching = usePinchZoom(box, zoom, (z) => setZoom(() => z), 0.5, 8);
 
   // Draw the page — after a zoom settles, so zooming stays quick.
   useEffect(() => {
@@ -450,6 +469,7 @@ function Drawing({ sheet, fileUrl, zoom, setZoom, tool, data, groupId, selId, se
     if (done.moved) void saveShape(done.id, done.pts);
   };
   const click = (e: React.PointerEvent<SVGSVGElement>) => {
+    if (pinching.current) return;
     if (edit) { endEdit(); return; }
     if (busy || tool === "select") return;
     const p = toPage(e);

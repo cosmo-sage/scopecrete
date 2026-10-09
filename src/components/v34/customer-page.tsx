@@ -175,7 +175,7 @@ export function CustomerPage({ customerId, focusContact }: { customerId: string;
             <SectionHead title="Jobs" />
             <div className="flex flex-col gap-2">
               {jobs.map((j) => (
-                <JobRow key={j.id} href={`/dashboard/scope/${j.id}`} title={j.title || "Untitled job"}
+                <JobRow key={j.id} href={`/dashboard/scope/${j.id}/summary`} title={j.title || "Untitled job"}
                   sub={[j.status ? STATUS_NAME[j.status] ?? j.status : null, j.address].filter(Boolean).join(" · ")}
                   right={j.quote != null ? money0(j.quote) : <span style={{ fontSize: 12, color: T.ink3 }}>no price yet</span>} />
               ))}
@@ -531,7 +531,7 @@ function JobCard({ j }: { j: Job }) {
   );
   const open = j.quote != null ? Math.max(0, j.quote - j.paid) : null;
   return (
-    <Link href={`/dashboard/scope/${j.id}`} className="rounded block" style={{ border: `1px solid ${T.hair}`, background: T.card, padding: "10px 12px", color: T.ink }}>
+    <Link href={`/dashboard/scope/${j.id}/summary`} className="rounded block" style={{ border: `1px solid ${T.hair}`, background: T.card, padding: "10px 12px", color: T.ink }}>
       <div className="flex items-center gap-2">
         <span style={{ fontFamily: strong, fontWeight: 600, fontSize: 14, flex: 1, ...clip }}>{j.title || "Untitled job"}</span>
         <span style={{ ...lbl, fontSize: 10, padding: "2px 6px", borderRadius: 3, background: T.sunk, color: T.ink2 }}>{STATUS_NAME[j.status ?? ""] ?? j.status ?? "Lead"}</span>
@@ -579,7 +579,7 @@ function Schedule({ jobs }: { jobs: Job[] }) {
   return (
     <div className="p-4">
       {rows.map((j) => (
-        <Link key={j.id} href={`/dashboard/scope/${j.id}`} className="flex gap-3 py-1.5" style={{ fontSize: F.sm, color: T.ink, borderBottom: `1px solid ${T.hairSoft}` }}>
+        <Link key={j.id} href={`/dashboard/scope/${j.id}/summary`} className="flex gap-3 py-1.5" style={{ fontSize: F.sm, color: T.ink, borderBottom: `1px solid ${T.hairSoft}` }}>
           <span style={{ width: 150, ...nums }}>{new Date(`${j.scheduled_start}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" })}{j.scheduled_end && j.scheduled_end !== j.scheduled_start ? ` – ${new Date(`${j.scheduled_end}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : ""}</span>
           <span style={{ flex: 1 }}>{j.title || "Untitled job"}</span>
         </Link>

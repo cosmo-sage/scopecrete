@@ -439,10 +439,10 @@ function JobsTable({ jobs, busy, readOnly, sort, onSort, onMove, onAccept }: {
             const source = j.referred_by_name ? `via ${j.referred_by_name}` : j.lead_source ? SOURCE_LABEL[j.lead_source] : null;
             const td: React.CSSProperties = { padding: "9px 12px", borderTop: i ? `1px solid ${T.hairSoft}` : "none", verticalAlign: "top" };
             return (
-              <tr key={j.id} className="sc-job-row" onClick={(e) => { if (!(e.target as HTMLElement).closest("button,a")) router.push(`/dashboard/scope/${j.id}`); }}
+              <tr key={j.id} className="sc-job-row" onClick={(e) => { if (!(e.target as HTMLElement).closest("button,a")) router.push(`/dashboard/scope/${j.id}/summary`); }}
                 style={{ cursor: "pointer", opacity: busy === j.id ? 0.5 : 1 }}>
                 <td style={{ ...td, maxWidth: 360 }}>
-                  <Link href={`/dashboard/scope/${j.id}`} className="no-underline" style={{ fontFamily: disp, fontSize: F.md, fontWeight: 600, color: T.ink }}>
+                  <Link href={`/dashboard/scope/${j.id}/summary`} className="no-underline" style={{ fontFamily: disp, fontSize: F.md, fontWeight: 600, color: T.ink }}>
                     {j.title || "Untitled job"}
                   </Link>
                   {j.description && <div style={{ fontSize: F.xs, color: T.ink3, marginTop: 2, ...clip }}>{j.description}</div>}
@@ -505,7 +505,7 @@ function JobCard({ j, busy, readOnly, next, onNext, onMove, onAccept, onFlag }: 
   return (
     <div className="rounded px-3 py-2.5" style={{ background: T.card, border: `1px solid ${T.hair}`, color: T.ink }}>
       <div className="flex items-baseline gap-2" style={{ minWidth: 0 }}>
-        <Link href={`/dashboard/scope/${j.id}`} className="no-underline"
+        <Link href={`/dashboard/scope/${j.id}/summary`} className="no-underline"
           style={{ fontFamily: disp, fontSize: F.md, fontWeight: 600, color: T.ink, ...clip, flex: 1, minWidth: 0 }}>
           {j.title || "Untitled job"} ›
         </Link>

@@ -6,6 +6,7 @@
  * the job's files, its photos, then its sheets by discipline and the pages
  * to read — and what that folder holds on the right.
  */
+import { usePinchZoom } from "@/lib/v34/use-pinch";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { T, F, disp, eyebrow, clip, strong } from "@/lib/v34/tokens";
 import { drawPage, openPdf, pageThumb } from "@/lib/pdf";
@@ -351,13 +352,20 @@ export function PageReader({ pages, files, start, onClose, onMeasure }: { pages:
     let off = false;
     let job: { cancel: () => void } | null = null;
     setFail(null);
-    openPdf(s.file_id, url).then((doc) => {
-      if (off || !canvas.current || !box.current) return;
-      const fit = Math.max(200, box.current.clientWidth - 24) / Math.max(1, s.page_w);
-      job = drawPage(doc, s.page, canvas.current, fit * zoom);
-    }).catch((e) => { if (!off) setFail(e instanceof Error ? e.message : String(e)); });
-    return () => { off = true; job?.cancel(); };
+    // The page takes its new size at once (a pinch stays smooth) and is drawn sharp once the zoom settles.
+    const fit = Math.max(200, box.current.clientWidth - 24) / Math.max(1, s.page_w);
+    canvas.current.style.width = `${Math.floor(s.page_w * fit * zoom)}px`;
+    canvas.current.style.height = `${Math.floor(s.page_h * fit * zoom)}px`;
+    const t = window.setTimeout(() => {
+      openPdf(s.file_id, url).then((doc) => {
+        if (off || !canvas.current || !box.current) return;
+        job = drawPage(doc, s.page, canvas.current, fit * zoom);
+      }).catch((e) => { if (!off) setFail(e instanceof Error ? e.message : String(e)); });
+    }, 150);
+    return () => { off = true; window.clearTimeout(t); job?.cancel(); };
   }, [s, url, zoom]);
+  // Two fingers zoom on a phone (Coy, 2026-10-09).
+  usePinchZoom(box, zoom, setZoom, 0.5, onMeasure ? 6 : 4);
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -388,7 +396,7 @@ export function PageReader({ pages, files, start, onClose, onMeasure }: { pages:
         <button onClick={() => setI((n) => Math.min(pages.length - 1, n + 1))} disabled={i === pages.length - 1} style={{ ...btn, opacity: i === pages.length - 1 ? 0.4 : 1 }} aria-label="Next page">›</button>
         {onMeasure && <button onClick={() => onMeasure(s)} style={{ ...btn, background: T.hiviz, color: T.onHiviz, border: `1px solid ${T.hiviz}`, letterSpacing: ".06em", textTransform: "uppercase" }}>Measure ›</button>}
       </div>
-      <div ref={box} className="flex-1 overflow-auto p-3" style={{ minHeight: 0, cursor: zoom > 1 ? "grab" : undefined }}
+      <div ref={box} className="flex-1 overflow-auto p-3" style={{ minHeight: 0, cursor: zoom > 1 ? "grab" : undefined, touchAction: "pan-x pan-y" }}
         onPointerDown={(e) => {
           // Drag to pan with a mouse; a finger already scrolls the box.
           if (e.pointerType !== "mouse" || !box.current) return;

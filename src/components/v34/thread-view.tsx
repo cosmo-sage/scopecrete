@@ -293,14 +293,6 @@ export function ThreadView({ contactId, embedded = false }: {
   const lastLine = [...n].reverse().find((m) => m.line_id)?.line_id ?? null;
   const defaultLine = lastLine ?? orgLines.find((l) => l.is_primary)?.id ?? orgLines[0]?.id ?? null;
   const outLine = orgLines.find((l) => l.id === (fromLine ?? defaultLine)) ?? null;
-  const renameChannel = async (ch: Channel) => {
-    const next = window.prompt(`Name for ${formatPhone(ch.value)} — e.g. Office, Work, Cell. Leave it blank for the default.`, ch.label);
-    if (next === null || !ch.value) return;
-    const r = await fetch(`/api/contacts/${encodeURIComponent(contactId)}/phones`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone: ch.value, label: next }) });
-    if (!r.ok) { const b = await r.json().catch(() => ({})); window.alert(b?.error ?? "Couldn't rename it."); return; }
-    const label = next.trim().slice(0, 30);
-    setChannels((cs) => cs.map((c) => (c.key === ch.key ? { ...c, label: label || c.label } : c)));
-  };
   const pill: React.CSSProperties = { height: 28, padding: "0 10px", borderRadius: 4, display: "inline-flex", alignItems: "center", gap: 6,
     border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink2, fontFamily: disp, fontSize: 12, letterSpacing: ".06em", textTransform: "uppercase", cursor: "pointer", textDecoration: "none", whiteSpace: "nowrap" };
   const seg = (on: boolean): React.CSSProperties => ({ height: "100%", padding: "0 10px", border: "none", background: on ? T.ink : T.card, color: on ? T.card : T.ink2,
@@ -356,6 +348,19 @@ export function ThreadView({ contactId, embedded = false }: {
                   <Link href={editHref} className="px-3 py-2" style={{ fontSize: F.sm, color: T.ink }}>Edit contact</Link>
                   {pageLink.label !== "Contact" && !embedded && <Link href={pageLink.href} className="px-3 py-2" style={{ fontSize: F.sm, color: T.ink }}>{pageLink.label} ›</Link>}
                   <button onClick={() => { setMore(false); setFiling(true); }} className="px-3 py-2 text-left" style={{ fontSize: F.sm, color: T.ink }}>Move thread</button>
+                  {channel?.kind === "phone" && channel.value && orgLines.length > 1 && outLine && (
+                    // Which of your lines a call or text goes from — here on a phone, in the toolbar on a desktop (Coy, 2026-10-09).
+                    <div className="lg:hidden flex flex-col" style={{ borderTop: `1px solid ${T.hairSoft}`, padding: "6px 0" }}>
+                      <span className="px-3" style={{ ...eyebrow, fontSize: 11, color: T.ink3 }}>Call or text from</span>
+                      {orgLines.map((l) => (
+                        <button key={l.id} onClick={() => { setFromLine(l.id); setMore(false); }} className="px-3 py-1.5 text-left flex items-center gap-2"
+                          style={{ fontSize: F.sm, color: T.ink, fontWeight: l.id === outLine.id ? 600 : 400 }}>
+                          <span style={{ width: 7, height: 7, borderRadius: 7, background: l.color, display: "inline-block" }} />
+                          {l.name}{l.id === outLine.id ? " ✓" : ""}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   {/* Merge is on the contact card; the job opens from the customer page (Coy, 2026-10-07). */}
                   {!openJob && <button onClick={() => void newScope()} disabled={starting || jobs === null} className="px-3 py-2 text-left" style={{ fontSize: F.sm, color: T.ink }}>{starting ? "Starting…" : "New scope"}</button>}
                   <ArchiveButton kind="contact" id={contactId} action="archive" what="this thread" then="/dashboard/messages"
@@ -368,10 +373,10 @@ export function ThreadView({ contactId, embedded = false }: {
           {!embedded && (
             <nav aria-label="Where you are" className="lg:hidden flex flex-col gap-0.5 mt-1.5 min-w-0" style={{ ...eyebrow, fontSize: 13, whiteSpace: "nowrap" }}>
               <Link href={editHref} className="min-w-0" style={{ color: T.green, overflow: "hidden", textOverflow: "ellipsis" }}>
-                <span style={{ color: T.ink3 }}>Contact </span>{loading ? headerTitle : (name || formatPhone(phone))}</Link>
+                <span style={{ color: T.ink3 }}>Contact | </span>{loading ? headerTitle : (name || formatPhone(phone))}</Link>
               {!loading && crumbOrg && (
                 <Link href={crumbOrg.href} className="min-w-0" style={{ color: crumbOrg.color, overflow: "hidden", textOverflow: "ellipsis" }}>
-                  <span style={{ color: T.ink3 }}>{crumbOrg.kind} </span>{crumbOrg.label}</Link>
+                  <span style={{ color: T.ink3 }}>{crumbOrg.kind} | </span>{crumbOrg.label}</Link>
               )}
             </nav>
           )}
@@ -393,16 +398,9 @@ export function ThreadView({ contactId, embedded = false }: {
                       : ch.kind === "email" ? <Envelope size={16} color={T.ink2} />
                       : ch.kind === "chat" ? <Sparkle size={13} color={T.ink3} />
                       : <NotePencil size={13} color={T.ink3} />}
-                    {/* The number, then its name (Coy, 2026-10-09: "(225) 320-4143 Cell"); ✎ renames the word only. */}
+                    {/* The number, then its name (Coy, 2026-10-09: "(225) 320-4143 Cell"); renamed on the contact card, not here (Coy, 2026-10-09). */}
                     {ch.kind === "email" ? null : ch.kind === "phone" && ch.value ? <>{formatPhone(ch.value)} <span style={{ color: T.ink3, fontWeight: 500 }}>{ch.label}</span></> : ch.label}
                     {chLive && <LiveDot size={8} />}
-                    {ch.kind === "phone" && on && (
-                      // Name the number (Coy: "instead of 'phone 2' it can say 'office'").
-                      <span role="button" tabIndex={0} aria-label={`Rename ${ch.label}`} title="Rename this number"
-                        onClick={(e) => { e.stopPropagation(); void renameChannel(ch); }}
-                        onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); void renameChannel(ch); } }}
-                        style={{ fontSize: 11, color: T.ink3, cursor: "pointer", padding: "0 2px" }}>✎</span>
-                    )}
                   </span>
                   {chLive ? <span className="hidden lg:block"><LiveCallBadge call={chLive} compact /></span>
                     : <span className="hidden lg:block" style={{ fontSize: 11, color: T.ink3, ...nums, whiteSpace: "nowrap" }}>{sub}</span>}
@@ -444,7 +442,8 @@ export function ThreadView({ contactId, embedded = false }: {
                 aria-label={`Call ${formatPhone(channel.value)} from ${outLine.name}`} title={`Your phone dials — choose ${outLine.name} in Quo`}>
                 <Phone size={12} weight="fill" /> <span className="hidden lg:inline">Call from</span>
               </a>
-              <label className="inline-flex items-center gap-1" style={{ borderLeft: `1px solid ${T.hair}`, padding: "0 4px 0 6px", height: "100%" }}>
+              {/* On a phone the line is picked in ⋯ (Coy, 2026-10-09: "less cluttered"). */}
+              <label className="hidden lg:inline-flex items-center gap-1" style={{ borderLeft: `1px solid ${T.hair}`, padding: "0 4px 0 6px", height: "100%" }}>
                 <span style={{ width: 7, height: 7, borderRadius: 7, background: outLine.color, display: "inline-block" }} />
                 <select value={outLine.id} onChange={(e) => setFromLine(e.target.value)} aria-label="Call or text from line"
                   style={{ border: "none", background: "transparent", fontWeight: 600, fontSize: 12, color: T.ink, maxWidth: 76 }}>

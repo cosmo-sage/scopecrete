@@ -171,6 +171,11 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
             <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true"><path d="M3 5h14M3 10h14M3 15h14" /></svg>
             Sheets · {sheets.length}
           </button>
+          {/* Parameters beside Sheets on a phone, so a folded panel can always come back (Coy, 2026-10-09). */}
+          <button onClick={() => setPanel(!panel)} aria-pressed={panel} aria-label={`Parameters, ${data.params.length}`} className="flex items-center gap-1.5 rounded shrink-0"
+            style={{ height: 40, padding: "0 10px", border: `1px solid ${panel ? T.hiviz : T.hairStrong}`, background: panel ? T.hivizDim : T.card, color: T.ink, fontFamily: disp, fontSize: 12, letterSpacing: ".08em", textTransform: "uppercase", cursor: "pointer" }}>
+            Parameters · {data.params.length}
+          </button>
           {sheet && (
             <span style={{ minWidth: 0 }}>
               <span style={{ display: "block", fontSize: 13, fontWeight: 600, color: T.ink, ...clipTxt }}>{sheetLabel(sheet)}</span>

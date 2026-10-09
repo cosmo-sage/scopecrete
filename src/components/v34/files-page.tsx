@@ -22,6 +22,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { createPortal } from "react-dom";
 import { T, F, disp, eyebrow, clip, relTime, nums } from "@/lib/v34/tokens";
 import { Drawer, MenuButton, PageHeader, SearchBubble, SearchToggle, Segmented } from "@/components/v34/primitives";
 import { FileDetails, fileSub, patchFile, type FileRow } from "@/components/v34/files-panel";
@@ -329,6 +330,18 @@ export function FilesPage({ fixed, embedded, extra }: { fixed?: Partial<FileFilt
       onDeleted={(id) => { setFiles((a) => (a ?? []).filter((x) => x.id !== id)); setOpen(null); }} />
   );
 
+  /** Preview as an icon beside the filter (Coy, 2026-10-09): on a desktop it
+   *  shows or hides the panel; on a phone it opens the file picked, else the first. */
+  const previewOn = wide && preview;
+  const previewBtn = (
+    <button type="button" onClick={() => { if (wide) setPreview(!preview); else { const f = open ?? files?.[0]; if (f) pickFile(f); } }}
+      aria-label="Preview" title="Preview" aria-pressed={wide ? preview : undefined} disabled={!wide && !open && !files?.length}
+      className="shrink-0 flex items-center justify-center rounded"
+      style={{ width: 26, height: 26, border: `1px solid ${previewOn ? T.hiviz : T.hairStrong}`, background: previewOn ? T.hivizDim : T.card, color: previewOn ? T.hiviz : T.ink2, cursor: "pointer" }}>
+      <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><rect x="2.5" y="3.5" width="15" height="13" rx="1.5" /><path d="M11.5 3.5v13" /></svg>
+    </button>
+  );
+
   return (
     <>
     {/* The page's subheader like every main-menu page (Coy, 2026-10-06): ☰ on
@@ -338,7 +351,8 @@ export function FilesPage({ fixed, embedded, extra }: { fixed?: Partial<FileFilt
       <PageHeader title="Files" menu={!wide ? <MenuButton onClick={() => setMenuOpen(true)} label="Folders" always /> : undefined}
         sub="Every photo, plan, bid, quote, receipt and contract — uploaded, emailed or texted. Search the words in them, or any name."
         actions={<>
-          <FilterMenu groups={filterGroups} used={chips.filter((c) => c.key !== "q").length} />
+          <FilterMenu groups={filterGroups} used={chips.filter((c) => c.key !== "q").length} sheet={!wide} />
+          {previewBtn}
           <SearchToggle open={searching} onToggle={() => { if (searching) { setQ(""); setSearching(false); } else setSearching(true); }} label="Search files" />
           {extra}
         </>}>
@@ -350,7 +364,8 @@ export function FilesPage({ fixed, embedded, extra }: { fixed?: Partial<FileFilt
         <div className="flex items-center gap-2" style={{ marginBottom: 8 }}>
           {!wide && <MenuButton onClick={() => setMenuOpen(true)} label="Folders" always />}
           <span style={{ flex: 1 }} />
-          <FilterMenu groups={filterGroups} used={chips.filter((c) => c.key !== "q").length} />
+          <FilterMenu groups={filterGroups} used={chips.filter((c) => c.key !== "q").length} sheet={!wide} />
+          {previewBtn}
           <SearchToggle open={searching} onToggle={() => { if (searching) { setQ(""); setSearching(false); } else setSearching(true); }} label="Search files" />
           {extra}
         </div>
@@ -368,20 +383,18 @@ export function FilesPage({ fixed, embedded, extra }: { fixed?: Partial<FileFilt
 
         <div style={{ flex: 1, minWidth: 0 }}>
           {/* Photos | Files, and which folder is open. */}
-          <div className="flex items-center gap-3 flex-wrap">
-            <div style={{ width: 190 }}>
+          {/* The folder's name on the left, Photos | Files on the right (Coy, 2026-10-09). */}
+          <div className="flex items-center gap-3">
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 600, ...clip }}>{folderName}</div>
+              <div className="flex items-center gap-2">
+                <span style={{ fontSize: F.xs, color: T.ink3, ...nums }}>{files && cat !== "email" ? `${files.length}${files.length === 300 ? "+" : ""} ${photos ? "photos" : "shown"}` : ""}</span>
+                {fileParam && <button onClick={clearFile} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>Show all</button>}
+              </div>
+            </div>
+            <div style={{ width: 150, flexShrink: 0 }}>
               <Segmented small options={[["photos", "Photos"], ["files", "Files"]]} value={photos ? "photos" : "files"} onChange={view} />
             </div>
-            <div style={{ flex: 1, minWidth: 0, fontFamily: disp, fontSize: F.lg, fontWeight: 600, ...clip }}>{folderName}</div>
-            {fileParam && <button onClick={clearFile} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>Show all</button>}
-            <button onClick={() => { if (wide) setPreview(!preview); else { const f = open ?? files?.[0]; if (f) pickFile(f); } }}
-              aria-pressed={wide ? preview : undefined} disabled={!wide && !open && !files?.length} className="rounded flex items-center gap-1.5"
-              style={{ height: 28, padding: "0 10px", border: `1px solid ${wide && preview ? T.hiviz : T.hair}`, background: wide && preview ? T.hivizDim : T.card,
-                       color: wide && preview ? T.hivizText : T.ink2, fontFamily: disp, fontSize: F.xs, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".04em", cursor: "pointer" }}>
-              <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><rect x="2.5" y="3.5" width="15" height="13" rx="1.5" /><path d="M11.5 3.5v13" /></svg>
-              Preview
-            </button>
-            <span style={{ fontSize: F.xs, color: T.ink3, ...nums }}>{files && cat !== "email" ? `${files.length}${files.length === 300 ? "+" : ""} ${photos ? "photos" : "shown"}` : ""}</span>
           </div>
 
           {chips.length > 0 && (
@@ -499,7 +512,7 @@ export function FilesPage({ fixed, embedded, extra }: { fixed?: Partial<FileFilt
         )}
       </div>
 
-      {!wide && <Drawer open={menuOpen} onClose={() => setMenuOpen(false)} title="Folders" sub={folderName}>{menu}</Drawer>}
+      {!wide && <Drawer left open={menuOpen} onClose={() => setMenuOpen(false)} title="Folders" sub={folderName}>{menu}</Drawer>}
 
       {!wide && preview && open && (
         <div role="dialog" aria-label={open.name} className="fixed inset-0 flex flex-col" style={{ zIndex: 70, background: T.card, paddingTop: "env(safe-area-inset-top)", paddingBottom: "env(safe-area-inset-bottom)" }}>
@@ -557,32 +570,20 @@ const dateInput: React.CSSProperties = { display: "block", width: "100%", height
 /** The filter as one icon (Coy, 2026-10-06: "an icon that opens a column list
  *  that opens sub options to the right of that column"): Type, Way in, Job …
  *  down the left, the one tapped lists its choices on the right. */
-function FilterMenu({ groups, used }: { groups: FilterGroup[]; used: number }) {
+function FilterMenu({ groups, used, sheet }: { groups: FilterGroup[]; used: number; sheet?: boolean }) {
   const [open, setOpen] = useState(false);
   const [at, setAt] = useState<string>(groups[0]?.key ?? "");
   const box = React.useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (!open) return;
+    if (!open || sheet) return;
     const away = (e: PointerEvent) => { if (box.current && !box.current.contains(e.target as Node)) setOpen(false); };
     const esc = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
     document.addEventListener("pointerdown", away); window.addEventListener("keydown", esc);
     return () => { document.removeEventListener("pointerdown", away); window.removeEventListener("keydown", esc); };
-  }, [open]);
+  }, [open, sheet]);
   const g = groups.find((x) => x.key === at) ?? groups[0];
-  const row = (on: boolean): React.CSSProperties => ({ width: "100%", textAlign: "left", display: "flex", alignItems: "center", gap: 6, minHeight: 34, padding: "4px 8px",
-    background: on ? T.hivizDim : "transparent", color: on ? T.hivizText : T.ink, border: "none", borderRadius: 4, fontSize: F.sm, cursor: "pointer" });
-  return (
-    <div ref={box} style={{ position: "relative" }}>
-      <button type="button" onClick={() => setOpen((v) => !v)} aria-label="Filter" aria-expanded={open} title="Filter"
-        className="shrink-0 flex items-center justify-center rounded"
-        style={{ width: 26, height: 26, border: `1px solid ${open || used ? T.hiviz : T.hairStrong}`, background: open || used ? T.hivizDim : T.card, cursor: "pointer", position: "relative" }}>
-        <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke={open || used ? T.hiviz : T.ink2} strokeWidth="1.8" strokeLinejoin="round" aria-hidden="true"><path d="M2.5 3.5h15l-6 7v5.5l-3 1.5v-7z" /></svg>
-        {used > 0 && <span style={{ position: "absolute", top: -6, right: -6, minWidth: 14, height: 14, borderRadius: 7, background: T.hiviz, color: T.onHiviz, fontSize: 9, fontWeight: 700, lineHeight: "14px", textAlign: "center", padding: "0 3px" }}>{used}</span>}
-      </button>
-      {open && g && (
-        <div role="dialog" aria-label="Filter files" className="rounded flex"
-          style={{ position: "absolute", right: 0, top: 32, zIndex: 30, width: "min(380px, calc(100vw - 24px))", maxHeight: "min(60vh, 440px)",
-                   background: T.card, border: `1px solid ${T.hair}`, boxShadow: "0 10px 28px rgba(0,0,0,.16)", overflow: "hidden" }}>
+  const columns = (g: FilterGroup) => (
+    <>
           <div style={{ width: 128, flexShrink: 0, borderRight: `1px solid ${T.hairSoft}`, padding: 4, overflowY: "auto", background: T.sunk }}>
             {groups.map((x) => {
               const chosen = x.value ? x.options.find((o) => o.v === x.value)?.l ?? "" : "";
@@ -611,6 +612,30 @@ function FilterMenu({ groups, used }: { groups: FilterGroup[]; used: number }) {
             ))}
             {g.extra}
           </div>
+    </>
+  );
+  const row = (on: boolean): React.CSSProperties => ({ width: "100%", textAlign: "left", display: "flex", alignItems: "center", gap: 6, minHeight: 34, padding: "4px 8px",
+    background: on ? T.hivizDim : "transparent", color: on ? T.hivizText : T.ink, border: "none", borderRadius: 4, fontSize: F.sm, cursor: "pointer" });
+  return (
+    <div ref={box} style={{ position: "relative" }}>
+      <button type="button" onClick={() => setOpen((v) => !v)} aria-label="Filter" aria-expanded={open} title="Filter"
+        className="shrink-0 flex items-center justify-center rounded"
+        style={{ width: 26, height: 26, border: `1px solid ${open || used ? T.hiviz : T.hairStrong}`, background: open || used ? T.hivizDim : T.card, cursor: "pointer", position: "relative" }}>
+        <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke={open || used ? T.hiviz : T.ink2} strokeWidth="1.8" strokeLinejoin="round" aria-hidden="true"><path d="M2.5 3.5h15l-6 7v5.5l-3 1.5v-7z" /></svg>
+        {used > 0 && <span style={{ position: "absolute", top: -6, right: -6, minWidth: 14, height: 14, borderRadius: 7, background: T.hiviz, color: T.onHiviz, fontSize: 9, fontWeight: 700, lineHeight: "14px", textAlign: "center", padding: "0 3px" }}>{used}</span>}
+      </button>
+      {/* On a phone the filter slides in from the right and fits the screen (Coy, 2026-10-09). */}
+      {sheet && open && (
+        createPortal(
+          <Drawer open={open} onClose={() => setOpen(false)} title="Filter" sub={used ? `${used} in use` : undefined}>
+            {g && <div className="flex" style={{ minHeight: "100%" }}>{columns(g)}</div>}
+          </Drawer>, document.body)
+      )}
+      {!sheet && open && g && (
+        <div role="dialog" aria-label="Filter files" className="rounded flex"
+          style={{ position: "absolute", right: 0, top: 32, zIndex: 30, width: "min(380px, calc(100vw - 24px))", maxHeight: "min(60vh, 440px)",
+                   background: T.card, border: `1px solid ${T.hair}`, boxShadow: "0 10px 28px rgba(0,0,0,.16)", overflow: "hidden" }}>
+          {columns(g)}
         </div>
       )}
     </div>

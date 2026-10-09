@@ -28,7 +28,8 @@ import { SendSheet } from "./budget-step";
 // day the tab went (Coy: "Satellite tab can be removed completely since we have the map page"):
 // a clip comes from the Map's Clip for takeoff; an old ?step=satellite link still opens it.
 type Step = "files" | "takeoff";
-const STEPS: Array<[Step, string]> = [["files", "Files"], ["takeoff", "Takeoff"]];
+// "Takeoff" reads as Measurements under the Takeoffs button (Coy, 2026-10-09).
+const STEPS: Array<[Step, string]> = [["files", "Files"], ["takeoff", "Measurements"]];
 
 export function PlanRoom({ jobId }: { jobId: string }) {
   const router = useRouter();
@@ -135,6 +136,12 @@ export function PlanRoom({ jobId }: { jobId: string }) {
     catch (e) { setErr(e instanceof Error ? e.message : String(e)); await load(); }
   }, [load]);
 
+  // Delete a file from Takeoffs → Files (Coy, 2026-10-09). The same delete as the Files page.
+  const remove = useCallback(async (f: PlanFile) => {
+    try { await call(`/api/files/${f.id}`, "DELETE"); await load(); }
+    catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+  }, [load]);
+
   const inRoom = useMemo(() => new Set((data?.files ?? []).filter((f) => f.in_plan_room).map((f) => f.id)), [data]);
   const roomSheets: Sheet[] = useMemo(() => (data?.sheets ?? []).filter((s) => inRoom.has(s.file_id)), [data, inRoom]);
   // Drawings are measured; other pages are read (a spec page bound into a plan set). A page
@@ -202,7 +209,7 @@ export function PlanRoom({ jobId }: { jobId: string }) {
       {!data && !err && <div className="p-5" style={{ fontSize: F.sm, color: T.ink3 }}>Opening Takeoffs…</div>}
       {data && scoped && (
         <div className="flex-1 flex flex-col" style={{ minHeight: 0 }}>
-          {current === "files" && <FilesStep files={data.files} sheets={sheets} docPages={docPages} reading={reading} onToggle={(f, on) => void toggle(f, on)}
+          {current === "files" && <FilesStep files={data.files} sheets={sheets} docPages={docPages} reading={reading} onToggle={(f, on) => void toggle(f, on)} onDelete={(f) => void remove(f)} measured={measured}
             onAdd={(l) => void upload(l)} uploading={uploading} onOpen={(s) => go("takeoff", s.id)} jobId={jobId} onAdded={load} initial={sp.get("step") === "sheets" || (!step && roomSheets.length) ? "sheets" : "files"} />}
           {current === "takeoff" && (
             <TakeoffStep jobId={jobId} data={scoped} files={data.files} sheetId={sheetParam} setSheetId={(id) => go("takeoff", id)}

@@ -515,3 +515,11 @@ html[data-alerts-open="1"] .sc-pops { display: none; }
 /* The job's name opens the job switcher (Coy, 2026-10-08: "needs to look clickable"). */
 .sc-job-switch:hover { background: var(--sc-hiviz-dim) !important; }
 .sc-job-switch:hover .sc-job-name { text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--sc-hair-strong); }
+
+/* A side drawer slides in from its own side (Coy, 2026-10-09): folders from the
+   left where their ☰ is, filters and the rest from the right. */
+@keyframes sc-in-left { from { transform: translateX(-100%); } to { transform: none; } }
+@keyframes sc-in-right { from { transform: translateX(100%); } to { transform: none; } }
+.sc-drawer-in-left { animation: sc-in-left .24s cubic-bezier(.2,.8,.2,1); }
+.sc-drawer-in-right { animation: sc-in-right .24s cubic-bezier(.2,.8,.2,1); }
+@media (prefers-reduced-motion: reduce) { .sc-drawer-in-left, .sc-drawer-in-right { animation: none; } }

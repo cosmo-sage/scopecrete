@@ -32,9 +32,21 @@ export function JobTabs({ jobId, active, back = false, subnav }: { jobId: string
     .map((t) => (t.k === "job" && !can(access, "budget") ? { ...t, label: "Job" } : t));
   // On a phone a view's own tabs hang from its button (Coy, 2026-10-07: Files and Takeoff "descendant
   // from the plan room button, soon to be called the take-offs button"): the row starts under it.
+  // The branch drops from the centre of that button and splits to each tab under it (Coy,
+  // 2026-10-09: "put the line down from the center … and then split in each direction").
   const onRef = useRef<HTMLAnchorElement | null>(null);
-  const [subLeft, setSubLeft] = useState(0);
-  useLayoutEffect(() => { if (subnav && onRef.current) setSubLeft(onRef.current.offsetLeft); }, [subnav, active]);
+  const subRef = useRef<HTMLDivElement | null>(null);
+  const [geo, setGeo] = useState<{ left: number; stem: number; tabs: number[] } | null>(null);
+  useLayoutEffect(() => {
+    const b = onRef.current, box = subRef.current;
+    if (!subnav || !b || !box) return;
+    const center = b.offsetLeft + b.offsetWidth / 2;
+    const tabs = Array.from(box.querySelectorAll<HTMLElement>("[role=tab]")).map((el) => el.offsetLeft + el.offsetWidth / 2);
+    const width = box.scrollWidth;
+    const left = Math.max(0, Math.round(center - width / 2));
+    const next = { left, stem: Math.round(center - left), tabs: tabs.map(Math.round) };
+    setGeo((g) => (g && g.left === next.left && g.stem === next.stem && g.tabs.join() === next.tabs.join() ? g : next));
+  }, [subnav, active]);
   const nav = (
     <nav aria-label="This job" className="sc-no-print flex items-center gap-1.5 min-w-0">
       {back && <Link href="/dashboard/scope" className="no-underline shrink-0" style={{ fontFamily: disp, fontSize: 11, letterSpacing: ".1em", textTransform: "uppercase", color: T.ink3 }}>‹ Jobs</Link>}
@@ -56,9 +68,19 @@ export function JobTabs({ jobId, active, back = false, subnav }: { jobId: string
   return (
     <div className="relative flex flex-col items-start">
       {nav}
-      <div className="lg:hidden flex items-stretch" style={{ marginLeft: subLeft + 8, marginTop: 0 }}>
-        <span aria-hidden style={{ width: 10, height: 15, borderLeft: `1px solid ${T.hairStrong}`, borderBottom: `1px solid ${T.hairStrong}`, borderBottomLeftRadius: 3, marginRight: 4 }} />
-        <div style={{ paddingTop: 4 }}>{subnav}</div>
+      <div ref={subRef} className="lg:hidden relative" style={{ marginLeft: geo?.left ?? 0, paddingTop: 12, visibility: geo ? "visible" : "hidden" }}>
+        {geo && geo.tabs.length > 0 && (() => {
+          const line = T.hairStrong;
+          const lo = Math.min(geo.stem, ...geo.tabs), hi = Math.max(geo.stem, ...geo.tabs);
+          return (
+            <span aria-hidden="true">
+              <span style={{ position: "absolute", left: geo.stem, top: 0, height: 6, borderLeft: `1px solid ${line}` }} />
+              <span style={{ position: "absolute", left: lo, width: hi - lo, top: 6, borderTop: `1px solid ${line}` }} />
+              {geo.tabs.map((x, i) => <span key={i} style={{ position: "absolute", left: x, top: 6, height: 6, borderLeft: `1px solid ${line}` }} />)}
+            </span>
+          );
+        })()}
+        {subnav}
       </div>
     </div>
   );

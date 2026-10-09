@@ -6,6 +6,7 @@
  * it is exactly the taps Coy would make by hand, made for him once he says so.
  */
 import { CUST_KEY, JOB_KEY, RECORD_STEPS, needsJob, type PlanAction } from "@/lib/dusty/plan";
+import { markEstimate } from "@/lib/estimate-flag";
 
 const FULL_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 import { archiveNow } from "@/components/v34/archive-actions";
@@ -73,11 +74,15 @@ export async function applyPlan(jobId: string | null, actions: PlanAction[], loo
     const row = ((all.assemblies ?? []) as PlanLookup["assemblies"]).find((x) => x.id === asmId)?.items.find((i) => i.cost_item_id === itemId);
     if (row) await call(`/api/assemblies/${asmId}/items/${row.id}`, "PATCH", { quantity: qty });
   };
-  const addLine = async (body: Record<string, unknown>, qty: number | null) => {
+  // An estimated number (Coy, 2026-10-09) marks its line "Estimate — <basis>" until Coy confirms it on the budget.
+  const addLine = async (body: Record<string, unknown>, qty: number | null, estimate?: string) => {
     if (!jobId) throw new Error("needs the job open");
     const b = await call(`/api/jobs/${jobId}/budget/lines`, "POST", { option_id: optionId, ...body });
-    const line = (b.lines ?? [])[0] as { id: string } | undefined;
-    if (qty !== null && line) await call(`/api/jobs/${jobId}/budget/lines/${line.id}`, "PATCH", { quantity: qty });
+    const line = (b.lines ?? [])[0] as { id: string; description?: string | null } | undefined;
+    const patch: Record<string, unknown> = {};
+    if (qty !== null) patch.quantity = qty;
+    if (estimate) patch.description = markEstimate(line?.description ?? null, estimate);
+    if (line && Object.keys(patch).length) await call(`/api/jobs/${jobId}/budget/lines/${line.id}`, "PATCH", patch);
     return (b.lines ?? []).length as number;
   };
   // Groups first, so items can be filed in them; then changes; then the budget.
@@ -161,6 +166,7 @@ export async function applyPlan(jobId: string | null, actions: PlanAction[], loo
         if (a.lf !== null) { body.count_qty = a.lf; body.count_unit = "LF"; }
         if (a.count !== null) { body.count_qty = a.count; body.count_unit = a.unit ?? "EA"; }
         if (a.depth_in !== null) body.depth_in = a.depth_in;
+        if (a.estimate) body.access_notes = `Size is Dusty's estimate — ${a.estimate}. Measure it before you send a price.`;
         const b = await call(`/api/jobs/${jobId}/sections`, "POST", body);
         made.set(a.key, b.section.id);
         look.sections.push({ id: b.section.id, name: a.name });
@@ -188,25 +194,26 @@ export async function applyPlan(jobId: string | null, actions: PlanAction[], loo
           if (!g) { out.push({ ok: false, text: `No group “${a.group}” for ${it.name} — skipped` }); continue; }
           body.cost_group_id = g;
         }
-        await call(`/api/cost-items/${it.id}`, "PATCH", body);
-        out.push({ ok: true, text: `Changed ${a.name ?? it.name}` });
+        const b = await call(`/api/cost-items/${it.id}`, "PATCH", body);
+        if (a.estimate) await call(`/api/cost-items/${it.id}`, "PATCH", { description: markEstimate((b.item?.description as string | null) ?? null, a.estimate) });
+        out.push({ ok: true, text: `Changed ${a.name ?? it.name}${a.estimate ? " (marked an estimate)" : ""}` });
       } else if (a.do === "new_item") {
         const ar = areaId(a.area);
         // With a vendor, the price is theirs (their first, default price — the vendor page's Prices tab shows it).
         const b = await call("/api/cost-items", "POST", { name: a.name, unit: a.unit, cost_type: a.cost_type, unit_cost: a.unit_cost,
-          qty_rule: a.qty_rule, rule_params: {}, cost_group_id: groupId(a.group), ...(a.note ? { description: a.note } : {}),
+          qty_rule: a.qty_rule, rule_params: {}, cost_group_id: groupId(a.group), ...(a.estimate ? { description: markEstimate(a.note ?? null, a.estimate) } : a.note ? { description: a.note } : {}),
           ...(a.vendor ? { vendor_contact_id: a.vendor, price_source: a.unit_cost === null ? undefined : "quote" } : {}) });
         look.items.push({ id: b.item.id, name: a.name, cost_group_id: b.item.cost_group_id ?? null });
         if (a.key) madeItem.set(a.key, b.item.id);
         if (a.add) {
           if (!ar.ok) { out.push({ ok: false, text: `Made “${a.name}” in the Price book; its area wasn't found, so it isn't on the budget` }); continue; }
-          await addLine({ cost_item_id: b.item.id, section_id: ar.id }, a.qty);
+          await addLine({ cost_item_id: b.item.id, section_id: ar.id }, a.qty, a.estimate);
         }
-        out.push({ ok: true, text: `Made “${a.name}”${a.add ? " and put it on the budget" : ""}` });
+        out.push({ ok: true, text: `Made “${a.name}”${a.add ? " and put it on the budget" : ""}${a.estimate ? " — marked an estimate" : ""}` });
       } else if (a.do === "vendor_price") {
         const it = itemOf(a.item);
         if (!it) { out.push({ ok: false, text: `Item ${a.item} isn't in the Price book — skipped` }); continue; }
-        await call(`/api/cost-items/${it.id}/sources`, "POST", { vendor_contact_id: a.vendor, unit_cost: a.unit_cost, unit: a.unit, note: a.note ? `From Dusty's plan: ${a.note}` : "From Dusty's plan" });
+        await call(`/api/cost-items/${it.id}/sources`, "POST", { vendor_contact_id: a.vendor, unit_cost: a.unit_cost, unit: a.unit, note: `From Dusty's plan${a.note ? `: ${a.note}` : ""}${a.estimate ? ` · Estimate — ${a.estimate}` : ""}` });
         out.push({ ok: true, text: `Put their price on ${it.name}${a.unit_cost !== null ? ` — $${a.unit_cost}${a.unit ? `/${a.unit}` : ""}` : ""}` });
       } else if (a.do === "add") {
         const it = itemOf(a.item), ar = areaId(a.area);
@@ -219,8 +226,8 @@ export async function applyPlan(jobId: string | null, actions: PlanAction[], loo
           continue;
         }
         if (!ar.ok) { out.push({ ok: false, text: `Area ${a.area} isn't on this job — ${it.name} skipped` }); continue; }
-        await addLine({ cost_item_id: it.id, section_id: ar.id }, a.qty);
-        out.push({ ok: true, text: `Added ${it.name}` });
+        await addLine({ cost_item_id: it.id, section_id: ar.id }, a.qty, a.estimate);
+        out.push({ ok: true, text: `Added ${it.name}${a.estimate ? " — marked an estimate" : ""}` });
       } else if (a.do === "add_group") {
         const g = groupId(a.group), ar = areaId(a.area);
         if (!g) { out.push({ ok: false, text: `No group “${a.group}” — skipped` }); continue; }

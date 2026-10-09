@@ -24,6 +24,7 @@
  * the proposal read — so there is one set of numbers.
  */
 
+import { estimateBasis, isEstimate, unmark } from "@/lib/estimate-flag";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { T, F, disp, eyebrow, nums, clip, money, money0, formatPhone } from "@/lib/v34/tokens";
@@ -301,7 +302,9 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
                                     style={{ color: T.chalk, cursor: "pointer", textDecoration: "underline dotted" }}>optional on the proposal ×</button>}
                                 </div>
                               )}
-                              <LineNote key={l.id + (l.description ?? "")} value={l.description} name={l.name} onSave={(v) => void patchLine(l.id, { description: v })} />
+                              {isEstimate(l.description)
+                                ? <EstimateTag basis={estimateBasis(l.description)} onConfirm={() => void patchLine(l.id, { description: unmark(l.description) })} />
+                                : <LineNote key={l.id + (l.description ?? "")} value={l.description} name={l.name} onSave={(v) => void patchLine(l.id, { description: v })} />}
                               {r.blocked.length > 0 && <div style={{ fontSize: 9.5, color: T.hiviz, whiteSpace: "normal", overflowWrap: "anywhere" }}>needs {r.blocked.join(", ")}</div>}
                             </td>
                             <td style={{ padding: "2px 4px", color: T.ink2, maxWidth: 170, ...clip }}>
@@ -637,6 +640,21 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
 }
 
 
+/**
+ * A number Dusty estimated (Coy, 2026-10-09) — its basis, and Confirm, which takes the mark off.
+ * Until then the budget can't be approved, and the proposal never shows the mark.
+ */
+function EstimateTag({ basis, onConfirm, wide }: { basis: string | null; onConfirm: () => void; wide?: boolean }) {
+  return (
+    <span className="flex items-baseline gap-1.5" style={{ fontSize: wide ? 11.5 : 10, color: T.ink2, whiteSpace: "normal", overflowWrap: "anywhere", maxWidth: wide ? undefined : 240 }}>
+      <span style={{ flex: "none", fontWeight: 700, fontSize: wide ? 10.5 : 9, letterSpacing: 0.4, color: T.onHiviz, background: T.hiviz, borderRadius: 3, padding: "0 4px" }}>ESTIMATE</span>
+      <span title={basis ?? undefined} style={{ minWidth: 0 }}>{basis ?? "Dusty's estimate"}</span>
+      <button onClick={(e) => { e.stopPropagation(); onConfirm(); }} title="It's right — take the estimate mark off"
+        style={{ flex: "none", cursor: "pointer", color: T.hiviz, fontWeight: 600, textDecoration: "underline" }}>Confirm</button>
+    </span>
+  );
+}
+
 /** A cost item's note, edited where it sits (it is the line's description — it shows on the proposal). */
 function LineNote({ value, name, onSave }: { value: string | null; name: string; onSave: (v: string | null) => void }) {
   const [v, setV] = useState(value ?? "");
@@ -675,7 +693,9 @@ function GroupCard({ name, lines, res, optLabel, asmName, addons, onOpen, cost, 
             style={{ borderTop: `1px solid ${i ? T.hairSoft : T.hair}`, cursor: "pointer" }}>
             <span style={{ minWidth: 0, flex: 1 }}>
               <span style={{ display: "block", fontSize: F.sm, color: T.ink, ...clip }}>{l.name}</span>
-              {l.description && <span style={{ display: "block", fontSize: 10.5, color: T.ink2, ...clip }}>{l.description}</span>}
+              {isEstimate(l.description)
+                ? <span style={{ display: "block", fontSize: 10.5, color: T.hiviz, ...clip }}>ESTIMATE · {estimateBasis(l.description)} — open to confirm</span>
+                : l.description && <span style={{ display: "block", fontSize: 10.5, color: T.ink2, ...clip }}>{l.description}</span>}
               {/* A "needs …" note can be long (the tax one names the parish and where to fix it) — it wraps, never widens the page. */}
               <span style={{ display: "block", fontSize: 10, color: r.blocked.length ? T.hiviz : T.ink3, ...nums, ...(r.blocked.length ? { whiteSpace: "normal", overflowWrap: "anywhere" } : {}) }}>
                 {r.blocked.length ? `needs ${r.blocked.join(", ")}` : `${qtyFmt(r.qty)} ${l.unit} × ${l.unit_cost === null ? "—" : money(l.unit_cost)}${r.qty_basis === "set" ? " ✎" : " ƒ"}`}
@@ -890,6 +910,11 @@ function LineSheet({ line, data, sections, res, addon, onAddon, onClose, onPatch
               <option value="">Whole job</option>
               {sections.map((s) => <option key={s.id} value={s.id}>{s.name || "Unnamed area"}</option>)}
             </select></label>
+          {isEstimate(line.description) && (
+            <div className="mt-2" style={{ fontSize: 11.5 }}>
+              <EstimateTag basis={estimateBasis(line.description)} onConfirm={() => onPatch({ description: unmark(line.description) })} wide />
+            </div>
+          )}
           <label className="block mt-2"><span style={eyebrow}>Description · shows on the proposal</span>
             <textarea defaultValue={line.description ?? ""} rows={2} maxLength={500} style={{ ...field, height: "auto", padding: "6px 8px", resize: "none" }}
               onBlur={(e) => { if ((e.target.value.trim() || null) !== (line.description ?? null)) onPatch({ description: e.target.value }); }} /></label>

@@ -22,7 +22,7 @@ import { Cell } from "@/components/v34/cell";
 import { quantities, type SectionInput } from "@/lib/engine";
 import { analyse, crewMath, perUnit, type AnalysisLine, type Bucket } from "@/lib/cost-analysis";
 
-const COLORS: Record<Bucket | "overhead" | "profit", string> = {
+export const COLORS: Record<Bucket | "overhead" | "profit", string> = {
   material: "#1E5AA8", labor: "#D97757", equipment: "#6A55B0", subcontract: "#2F8A5B", other: "#8C8578",
   overhead: "#C9A227", profit: "#2F8A5B",
 };

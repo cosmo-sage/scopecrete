@@ -31,6 +31,9 @@ import { BidStrip } from "@/components/v34/bid-strip";
 import { DraftStrip } from "@/components/v34/draft-strip";
 import { JobHeaderRow } from "@/components/v34/job-tabs";
 import { JobBudget, type BudgetSummary } from "@/components/v34/job-budget";
+import { BudgetSubTabs, DustyEmblemButton, useBudgetTab } from "@/components/v34/budget-tabs";
+import { MarketRates } from "@/components/v34/market-rates";
+import { ActualCosts } from "@/components/v34/actual-costs";
 import { SheetViewer, type SheetGroup } from "@/components/v34/sheet-viewer";
 import type { PlansData } from "@/components/v34/plan-room/shared";
 import { sheetsFor } from "@/lib/section-sheets";
@@ -171,6 +174,8 @@ export default function ScopeBuilder() {
   // Bumped when a section change may have changed the budget on the server
   // (an assembly loaded, a reinforcement line swapped, an area removed).
   const [budgetTick, setBudgetTick] = useState(0);
+  // Market rate · Proposed budget · Actual costs (Budget v3, Coy 2026-10-09).
+  const [tab, setTab] = useBudgetTab();
   // Each section card's budget slot (its cost items are drawn there by JobBudget).
   const [slots, setSlots] = useState<Record<string, HTMLElement>>({});
   const onSlot = useCallback((id: string, el: HTMLElement | null) => setSlots((prev) => {
@@ -297,6 +302,7 @@ export default function ScopeBuilder() {
               the same row on every view (JobHeaderRow; centred on a phone). The chips, who it's for,
               the description and "Why this job" moved to the Summary to clear the clutter here. */}
           <JobHeaderRow jobId={jobId} active="job" customerId={job.customer_id}
+            subnav={can(access, "budget") ? <BudgetSubTabs tab={tab} onTab={setTab} /> : undefined}
             title={access.limited ? (realTitle || titleHint || "Job") : <input defaultValue={realTitle} placeholder={titleHint} aria-label="Job name"
               size={Math.max(6, (realTitle || titleHint || "").length + 1)}
               onBlur={(e) => { const v = e.target.value; if (v !== realTitle) void send(`/api/jobs/${jobId}`, "PATCH", { title: v }).then((b) => setJob((j) => j && { ...j, title: b.job.title })).catch((er) => setSaveErr((m) => ({ ...m, job: String(er.message ?? er) }))); }}
@@ -311,6 +317,12 @@ export default function ScopeBuilder() {
             </div>
           )}
           {saveErr.job && <div style={{ fontSize: F.xs, color: T.red }}>{saveErr.job}</div>}
+          {/* Desktop: the Budget's three tabs open the tools row, the emblem (Dusty) at its far right. */}
+          {can(access, "budget") && <div className="hidden lg:flex items-center gap-2 mt-2">
+            <BudgetSubTabs tab={tab} onTab={setTab} />
+            <span className="flex-1" />
+            <DustyEmblemButton />
+          </div>}
         </div>
 
         {/* Phone: the takeoff rail sits below the sections, so the three
@@ -341,6 +353,11 @@ export default function ScopeBuilder() {
         )}
 
 
+        {can(access, "budget") && tab === "market" && <MarketRates jobId={jobId} refresh={budgetTick} onChanged={() => setBudgetTick((n) => n + 1)} />}
+        {can(access, "budget") && tab === "actuals" && <ActualCosts jobId={jobId} refresh={budgetTick} />}
+
+        {/* The proposed budget stays mounted under the other tabs, so its sections and lines keep their state. */}
+        <div hidden={can(access, "budget") && tab !== "proposed"}>
         {/* The bid behind it, when a forwarded bid email made or fed this job (migration 063). */}
         <BidStrip jobId={jobId} onUndone={() => { window.location.href = "/dashboard/scope"; }} />
 
@@ -423,6 +440,7 @@ export default function ScopeBuilder() {
           <ArchiveButton kind="job" id={jobId} action="delete" what={realTitle ? `the job “${realTitle}”` : "this job"} then="/dashboard/scope"
             style={{ height: 28, padding: "0 10px", borderRadius: 4, border: `1px solid ${T.red}`, background: T.card, color: T.red, fontFamily: disp, fontSize: F.xs, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".05em" }}>Delete job</ArchiveButton>
         </div>}
+        </div>
       </div>
 
       {viewer && plans && (

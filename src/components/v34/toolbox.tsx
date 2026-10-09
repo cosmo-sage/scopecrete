@@ -27,10 +27,11 @@ export function Toolbox({ open, onClose, keys, active, badge }: {
   if (!open) return null;
   return (
     <>
-      <button aria-label="Close the Toolbox" onClick={onClose} className="fixed inset-0 lg:hidden"
-        style={{ zIndex: 34, background: "rgba(10,14,18,.18)", border: "none" }} />
+      {/* Over an open thread (z 45) too — it's a menu (Coy, 2026-10-09); the scrim stops at the footer so its tabs still work. */}
+      <button aria-label="Close the Toolbox" onClick={onClose} className="fixed left-0 right-0 top-0 lg:hidden"
+        style={{ bottom: "var(--sc-foot)", zIndex: 46, background: "rgba(10,14,18,.18)", border: "none" }} />
       <nav aria-label="Toolbox" className="fixed left-0 right-0 lg:hidden sc-tool-up"
-        style={{ bottom: "var(--sc-foot)", zIndex: 35, background: T.card, borderTop: `1px solid ${T.hair}`,
+        style={{ bottom: "var(--sc-foot)", zIndex: 47, background: T.card, borderTop: `1px solid ${T.hair}`,
                  boxShadow: "0 -8px 24px rgba(10,14,18,.12)", padding: "6px 0 4px" }}>
         <div className="grid" style={{ gridTemplateColumns: "repeat(5, 1fr)", rowGap: 2 }}>
           {keys.map((k) => {

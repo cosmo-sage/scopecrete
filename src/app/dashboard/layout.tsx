@@ -306,8 +306,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       <Toolbox open={toolOpen} onClose={() => setToolOpen(false)} keys={toolKeys} active={active} badge={badge} />
 
-      <footer className="fixed bottom-0 left-0 right-0 z-40 flex items-stretch lg:hidden"
-        style={{ background: T.card, borderTop: `1px solid ${T.hair}`, height: 58, paddingBottom: "env(safe-area-inset-bottom)" }}>
+      {/* Above the open Toolbox (z 47) so Dusty's disc rising out of the bar stays whole. */}
+      <footer className="fixed bottom-0 left-0 right-0 flex items-stretch lg:hidden"
+        style={{ zIndex: toolOpen ? 48 : 40, background: T.card, borderTop: `1px solid ${T.hair}`, height: 58, paddingBottom: "env(safe-area-inset-bottom)" }}>
         {markIdx >= 0 && <span className="sc-tab-mark" style={{ left: `${markIdx * slotPct}%`, width: `${slotPct}%` }} aria-hidden="true" />}
         {footerSlots.map((k) => {
           if (k === "dusty") {

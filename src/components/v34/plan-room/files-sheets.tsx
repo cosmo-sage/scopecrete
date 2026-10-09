@@ -6,6 +6,8 @@
  * the job's files, its photos, then its sheets by discipline and the pages
  * to read — and what that folder holds on the right.
  */
+import { ClipBar } from "./clip-detail";
+import type { DetailBox } from "@/lib/plan-details";
 import { usePinchZoom } from "@/lib/v34/use-pinch";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { T, F, disp, eyebrow, clip, strong } from "@/lib/v34/tokens";
@@ -289,7 +291,7 @@ export function FilesStep({ files, sheets, docPages = [], reading, onToggle, onA
         )}
       </div>
       {pageAt !== null && <PageReader pages={docPages} files={files} start={pageAt} onClose={() => setPageAt(null)} />}
-      {drawAt && <PageReader pages={drawAt.list} files={files} start={drawAt.i} onClose={() => setDrawAt(null)}
+      {drawAt && <PageReader pages={drawAt.list} files={files} start={drawAt.i} onClose={() => setDrawAt(null)} jobId={jobId}
         onMeasure={(s) => { setDrawAt(null); onOpen(s); }} />}
     </div>
   );
@@ -339,42 +341,60 @@ export function Thumb({ fileId, url, page, height = 104 }: { fileId: string; url
  * Nothing is measured here. For a drawing (`onMeasure`) the bar has Measure ›, which opens
  * Takeoff on the sheet shown — a page that isn't a drawing has none.
  */
-export function PageReader({ pages, files, start, onClose, onMeasure }: { pages: Sheet[]; files: PlanFile[]; start: number; onClose: () => void; onMeasure?: (s: Sheet) => void }) {
+export function PageReader({ pages, files, start, onClose, onMeasure, jobId }: { pages: Sheet[]; files: PlanFile[]; start: number; onClose: () => void; onMeasure?: (s: Sheet) => void;
+  /** With the job, a drawing can be clipped onto a budget section (Clip detail, clip-detail.tsx). */
+  jobId?: string }) {
   const [i, setI] = useState(start);
+  // Clip detail (Coy, 2026-10-09): drag a box round a section cut, then file it on a section.
+  const [clipping, setClipping] = useState(false);
+  const [drag, setDrag] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
+  const [box, setBox] = useState<DetailBox | null>(null);
+  const [clipMsg, setClipMsg] = useState<string | null>(null);
+  const canClip = !!onMeasure && !!jobId;
+  // Another sheet: a box drawn on this one doesn't carry over.
+  const go = (f: (n: number) => number) => { setBox(null); setDrag(null); setI(f); };
   const [zoom, setZoom] = useState(1);
   const [fail, setFail] = useState<string | null>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
-  const box = useRef<HTMLDivElement>(null);
+  const scroller = useRef<HTMLDivElement>(null);
   const s = pages[i];
   const url = files.find((f) => f.id === s?.file_id)?.url ?? null;
   useEffect(() => {
-    if (!s || !url || !canvas.current || !box.current) return;
+    if (!s || !url || !canvas.current || !scroller.current) return;
     let off = false;
     let job: { cancel: () => void } | null = null;
     setFail(null);
     // The page takes its new size at once (a pinch stays smooth) and is drawn sharp once the zoom settles.
-    const fit = Math.max(200, box.current.clientWidth - 24) / Math.max(1, s.page_w);
+    const fit = Math.max(200, scroller.current.clientWidth - 24) / Math.max(1, s.page_w);
     canvas.current.style.width = `${Math.floor(s.page_w * fit * zoom)}px`;
     canvas.current.style.height = `${Math.floor(s.page_h * fit * zoom)}px`;
     const t = window.setTimeout(() => {
       openPdf(s.file_id, url).then((doc) => {
-        if (off || !canvas.current || !box.current) return;
+        if (off || !canvas.current || !scroller.current) return;
         job = drawPage(doc, s.page, canvas.current, fit * zoom);
       }).catch((e) => { if (!off) setFail(e instanceof Error ? e.message : String(e)); });
     }, 150);
     return () => { off = true; window.clearTimeout(t); job?.cancel(); };
   }, [s, url, zoom]);
   // Two fingers zoom on a phone (Coy, 2026-10-09).
-  usePinchZoom(box, zoom, setZoom, 0.5, onMeasure ? 6 : 4);
+  usePinchZoom(scroller, zoom, setZoom, 0.5, onMeasure ? 6 : 4);
+  // A point on the canvas (CSS px) → page points.
+  const toPt = (clientX: number, clientY: number) => {
+    const c = canvas.current;
+    if (!c || !s) return { x: 0, y: 0 };
+    const r = c.getBoundingClientRect();
+    const k = s.page_w / Math.max(1, r.width);
+    return { x: Math.min(s.page_w, Math.max(0, (clientX - r.left) * k)), y: Math.min(s.page_h, Math.max(0, (clientY - r.top) * k)) };
+  };
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-      if (e.key === "ArrowRight") setI((n) => Math.min(pages.length - 1, n + 1));
-      if (e.key === "ArrowLeft") setI((n) => Math.max(0, n - 1));
+      if (e.key === "Escape") { if (clipping) { setClipping(false); setBox(null); setDrag(null); } else onClose(); return; }
+      if (e.key === "ArrowRight") go((n) => Math.min(pages.length - 1, n + 1));
+      if (e.key === "ArrowLeft") go((n) => Math.max(0, n - 1));
     };
     window.addEventListener("keydown", k);
     return () => window.removeEventListener("keydown", k);
-  }, [pages.length, onClose]);
+  }, [pages.length, onClose, clipping]);
   if (!s) return null;
   const btn: React.CSSProperties = { height: 32, minWidth: 32, padding: "0 10px", borderRadius: 4, border: `1px solid ${T.hairStrong}`, background: T.card, fontFamily: disp, fontSize: 13, fontWeight: 600, cursor: "pointer" };
   return (
@@ -392,22 +412,56 @@ export function PageReader({ pages, files, start, onClose, onMeasure }: { pages:
         </div>
         <button onClick={() => setZoom((z) => Math.max(0.5, z / 1.25))} style={btn} aria-label="Zoom out">−</button>
         <button onClick={() => setZoom((z) => Math.min(onMeasure ? 6 : 4, z * 1.25))} style={btn} aria-label="Zoom in">+</button>
-        <button onClick={() => setI((n) => Math.max(0, n - 1))} disabled={i === 0} style={{ ...btn, opacity: i === 0 ? 0.4 : 1 }} aria-label="Previous page">‹</button>
-        <button onClick={() => setI((n) => Math.min(pages.length - 1, n + 1))} disabled={i === pages.length - 1} style={{ ...btn, opacity: i === pages.length - 1 ? 0.4 : 1 }} aria-label="Next page">›</button>
+        <button onClick={() => go((n) => Math.max(0, n - 1))} disabled={i === 0} style={{ ...btn, opacity: i === 0 ? 0.4 : 1 }} aria-label="Previous page">‹</button>
+        <button onClick={() => go((n) => Math.min(pages.length - 1, n + 1))} disabled={i === pages.length - 1} style={{ ...btn, opacity: i === pages.length - 1 ? 0.4 : 1 }} aria-label="Next page">›</button>
+        {canClip && <button onClick={() => { setClipping((c) => !c); setBox(null); setDrag(null); setClipMsg(null); }} aria-pressed={clipping}
+          title="Drag a box round a section cut or detail, then file it on a budget section"
+          style={{ ...btn, ...(clipping ? { background: T.ink, color: T.card, border: `1px solid ${T.ink}` } : {}) }}>{clipping ? "Clipping…" : "Clip detail"}</button>}
         {onMeasure && <button onClick={() => onMeasure(s)} style={{ ...btn, background: T.hiviz, color: T.onHiviz, border: `1px solid ${T.hiviz}`, letterSpacing: ".06em", textTransform: "uppercase" }}>Measure ›</button>}
       </div>
-      <div ref={box} className="flex-1 overflow-auto p-3" style={{ minHeight: 0, cursor: zoom > 1 ? "grab" : undefined, touchAction: "pan-x pan-y" }}
+      {clipping && !box && <div className="px-3 py-1.5" style={{ background: T.ink, color: T.card, fontSize: F.xs }}>
+        Drag a box round the section cut or detail{clipMsg ? ` · ${clipMsg}` : ""}. Esc stops clipping.
+      </div>}
+      <div ref={scroller} className="flex-1 overflow-auto p-3" style={{ minHeight: 0, cursor: clipping ? "crosshair" : zoom > 1 ? "grab" : undefined, touchAction: clipping ? "none" : "pan-x pan-y" }}
         onPointerDown={(e) => {
+          if (clipping) {
+            // A box, by mouse or finger: from here to where it is let go.
+            if (!canvas.current) return;
+            e.preventDefault();
+            const a = toPt(e.clientX, e.clientY);
+            setBox(null); setDrag({ x0: a.x, y0: a.y, x1: a.x, y1: a.y });
+            const mv = (ev: PointerEvent) => { const p = toPt(ev.clientX, ev.clientY); setDrag((d) => (d ? { ...d, x1: p.x, y1: p.y } : d)); };
+            const up = (ev: PointerEvent) => {
+              window.removeEventListener("pointermove", mv); window.removeEventListener("pointerup", up);
+              const p = toPt(ev.clientX, ev.clientY);
+              const b = { x: Math.min(a.x, p.x), y: Math.min(a.y, p.y), w: Math.abs(p.x - a.x), h: Math.abs(p.y - a.y) };
+              setDrag(null);
+              setBox(b.w >= 8 && b.h >= 8 ? b : null);
+            };
+            window.addEventListener("pointermove", mv); window.addEventListener("pointerup", up);
+            return;
+          }
           // Drag to pan with a mouse; a finger already scrolls the box.
-          if (e.pointerType !== "mouse" || !box.current) return;
-          const b = box.current, x0 = e.clientX, y0 = e.clientY, l0 = b.scrollLeft, t0 = b.scrollTop;
+          if (e.pointerType !== "mouse" || !scroller.current) return;
+          const b = scroller.current, x0 = e.clientX, y0 = e.clientY, l0 = b.scrollLeft, t0 = b.scrollTop;
           const mv = (ev: PointerEvent) => { b.scrollLeft = l0 - (ev.clientX - x0); b.scrollTop = t0 - (ev.clientY - y0); };
           const up = () => { window.removeEventListener("pointermove", mv); window.removeEventListener("pointerup", up); };
           window.addEventListener("pointermove", mv); window.addEventListener("pointerup", up);
         }}>
         {fail ? <div style={{ fontSize: F.sm, color: T.red }}>Couldn&apos;t open this page: {fail}</div>
-          : <canvas ref={canvas} style={{ display: "block", margin: "0 auto", background: "#fff", boxShadow: "0 1px 4px rgba(0,0,0,.15)" }} />}
+          : <div style={{ position: "relative", width: "fit-content", margin: "0 auto" }}>
+            <canvas ref={canvas} style={{ display: "block", background: "#fff", boxShadow: "0 1px 4px rgba(0,0,0,.15)" }} />
+            {(() => {
+              const r = drag ? { x: Math.min(drag.x0, drag.x1), y: Math.min(drag.y0, drag.y1), w: Math.abs(drag.x1 - drag.x0), h: Math.abs(drag.y1 - drag.y0) } : box;
+              if (!r || !clipping) return null;
+              const pct = (v: number, of: number) => `${(v / Math.max(1, of)) * 100}%`;
+              return <div aria-hidden="true" style={{ position: "absolute", left: pct(r.x, s.page_w), top: pct(r.y, s.page_h), width: pct(r.w, s.page_w), height: pct(r.h, s.page_h),
+                border: `2px solid ${T.hiviz}`, background: "rgba(217,119,87,.10)", boxShadow: "0 0 0 9999px rgba(0,0,0,.25)", pointerEvents: "none" }} />;
+            })()}
+          </div>}
       </div>
+      {clipping && box && url && jobId && <ClipBar jobId={jobId} sheet={s} url={url} box={box}
+        onCancel={() => setBox(null)} onDone={(m) => { setBox(null); setClipMsg(m); }} />}
     </div>
   );
 }

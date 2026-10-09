@@ -93,7 +93,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     // What Preview would pick, read on the server: the proposal's cover, and up to four photos per area.
     // A photo filed on the area, or on one of its takeoff shapes (as the Preview's areaVisuals reads them).
     const { data: pics } = await supabase.from("files").select("id, section_id, takeoff_measurement_id, mime_type").eq("org_id", orgId).eq("job_id", id)
-      .is("deleted_at", null).or("section_id.not.is.null,takeoff_measurement_id.not.is.null").order("created_at", { ascending: true }).limit(400);
+      .is("deleted_at", null).or("category.is.null,category.neq.plan").or("section_id.not.is.null,takeoff_measurement_id.not.is.null").order("created_at", { ascending: true }).limit(400);
     const shapeIds = [...new Set(((pics ?? []) as Array<{ takeoff_measurement_id: string | null }>).map((f) => f.takeoff_measurement_id).filter((x): x is string => !!x))];
     const shapeArea = new Map<string, string>();
     if (shapeIds.length) {

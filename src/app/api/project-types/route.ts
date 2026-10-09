@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
 import { TEMPLATE_COLS, TYPE_COLS, typeRow } from "@/lib/proposal-server";
+import { readRisk } from "@/lib/risk";
 
 /**
  * Project types (migration 060): Residential / Commercial / Government and any
- * Coy adds — each type's O.H. and margin (a new budget copies them), what its
+ * Coy adds — each type's O.H., margin and risk (096; a new budget copies them), what its
  * proposal shows, its draws, and which warranty and contract load. Edited in
  * Price book → Defaults. GET lists types and templates; POST adds a type.
  */
@@ -20,7 +21,13 @@ export async function GET(req: NextRequest) {
     supabase.from("doc_templates").select(TEMPLATE_COLS).eq("org_id", orgId).order("kind").order("name"),
   ]);
   if (error) return applyCookies(NextResponse.json({ error: error.message }, { status: 500 }));
-  return applyCookies(NextResponse.json({ types: ((types ?? []) as Array<Record<string, unknown>>).map(typeRow), templates: templates ?? [] }));
+  // Each type's risk (096) — read apart, so the page works before 096 is applied.
+  const { data: risks, error: riskErr } = await supabase.from("org_project_types").select("id, risk").eq("org_id", orgId);
+  const riskById = new Map(((risks ?? []) as Array<{ id: string; risk: unknown }>).map((r) => [r.id, r.risk ? readRisk(r.risk) : null]));
+  return applyCookies(NextResponse.json({
+    types: ((types ?? []) as Array<Record<string, unknown>>).map((t) => ({ ...typeRow(t), risk: riskById.get(t.id as string) ?? null })),
+    templates: templates ?? [], risk_ready: !riskErr,
+  }));
 }
 
 export async function POST(req: NextRequest) {

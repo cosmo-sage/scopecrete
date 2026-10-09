@@ -1,7 +1,7 @@
 /**
  * Who may open what (migration 081; Coy, 2026-10-05: onsite estimators who
  * "upload photos and plans and take measurements" — access to specific jobs
- * and pages, set up as a vendor first). Pure — tested in tests/access.test.mjs.
+ * and pages, set up as a vendor first; since 095 a customer's contact too). Pure — tested in tests/access.test.mjs.
  *
  * The database is the lock: an estimator ('field') reads only their jobs and
  * the pages below under RLS. This module only decides what the app SHOWS, so
@@ -19,7 +19,7 @@ export type FieldPage = (typeof FIELD_PAGES)[number]["k"];
 export const ROLES = [
   { k: "owner", label: "Owner", note: "Everything, and runs the organisation" },
   { k: "member", label: "Member", note: "Sees and does everything except organisation settings" },
-  { k: "field", label: "Onsite estimator", note: "Only the jobs and pages you pick — must be a vendor first" },
+  { k: "field", label: "Onsite estimator", note: "Only the jobs and pages you pick — a vendor or a customer's contact" },
 ] as const;
 export const roleLabel = (r: string | null | undefined) => ROLES.find((x) => x.k === r)?.label ?? (r === "billing" ? "Billing" : r ?? "");
 

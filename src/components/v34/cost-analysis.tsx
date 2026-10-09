@@ -22,7 +22,8 @@ import { Cell } from "@/components/v34/cell";
 import { quantities, type SectionInput } from "@/lib/engine";
 import { analyse, crewMath, perUnit, type AnalysisLine, type Bucket } from "@/lib/cost-analysis";
 
-export const COLORS: Record<Bucket | "overhead" | "profit", string> = {
+export const COLORS: Record<Bucket | "overhead" | "risk" | "profit", string> = {
+  risk: "#B5412C",
   material: "#1E5AA8", labor: "#D97757", equipment: "#6A55B0", subcontract: "#2F8A5B", other: "#8C8578",
   overhead: "#C9A227", profit: "#2F8A5B",
 };
@@ -74,6 +75,8 @@ export function CostAnalysis({ lines, sections, tax, discount, overheadPct, days
     ...a.rows.map((r) => ({ k: r.bucket, label: r.label, v: r.cost, color: COLORS[r.bucket], lines: r.lines })),
     { k: "overhead", label: overheadPct !== null ? `Overhead ${overheadPct}%` : "Overhead", v: a.overhead, color: COLORS.overhead,
       note: `${overheadPct !== null ? `${overheadPct}% of` : "On"} ${money0(a.direct)} direct cost${section === "all" ? "" : " in this section"} — what it takes to run the business, not this job.` },
+    ...(a.risk > 0 ? [{ k: "risk", label: "Risk", v: a.risk, color: COLORS.risk,
+      note: "Contingency, the job's risk checklist and carrying cost — set aside in the price, not profit. Set on the budget's Risk." }] : []),
   ];
   const sold = a.price - a.discount;
   const bar = [...rows.map((r) => ({ c: r.color, v: r.v })), { c: COLORS.profit, v: Math.max(0, a.net) }];
@@ -90,7 +93,7 @@ export function CostAnalysis({ lines, sections, tax, discount, overheadPct, days
   const breakdown = (
     <div style={{ minWidth: 0 }}>
       <div className="flex rounded overflow-hidden" style={{ height: 8, background: T.hairSoft }} aria-hidden="true">
-        {sold > 0 && bar.filter((b) => b.v > 0).map((b, i) => <span key={i} style={{ width: `${(b.v / Math.max(sold, a.direct + a.overhead)) * 100}%`, background: b.c }} />)}
+        {sold > 0 && bar.filter((b) => b.v > 0).map((b, i) => <span key={i} style={{ width: `${(b.v / Math.max(sold, a.direct + a.overhead + a.risk)) * 100}%`, background: b.c }} />)}
       </div>
       <div className="mt-1.5 rounded" style={{ border: `1px solid ${T.hair}`, background: T.card }}>
         {rows.map((r, i) => {
@@ -205,7 +208,7 @@ export function CostAnalysis({ lines, sections, tax, discount, overheadPct, days
         {big(c.grossPerDay, "gross a day", a.gross < 0 ? T.red : undefined)}
         {big(c.netPerDay, "net a day", a.net < 0 ? T.red : T.green)}
         {big(a.gross, "gross profit · price − direct cost")}
-        {big(a.net, "net profit · gross − overhead")}
+        {big(a.net, a.risk > 0 ? "net profit · gross − overhead − risk" : "net profit · gross − overhead")}
       </div>
       {c.netPerManDay !== null && <div style={{ fontSize: F.xs, color: T.ink2, marginTop: 6, ...nums }}>{money0(c.netPerManDay)} net a man-day</div>}
       {days === null && <div style={{ fontSize: F.xs, color: T.ink3, marginTop: 4 }}>Set the days for profit a day.</div>}

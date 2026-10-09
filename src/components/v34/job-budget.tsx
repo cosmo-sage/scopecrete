@@ -43,6 +43,8 @@ const UNIT_RULE_SAYS: Record<string, string> = {
 import { useWide } from "@/lib/v34/use-wide";
 import { CostAnalysis } from "@/components/v34/cost-analysis";
 import { Cell } from "@/components/v34/cell";
+import { RiskEditor, riskSummary } from "@/components/v34/risk-editor";
+import { riskEmpty, type RiskSettings } from "@/lib/risk";
 
 interface Line extends BudgetLine {
   description: string | null; cost_item_id: string | null; vendor_contact_id: string | null;
@@ -71,6 +73,8 @@ interface Data {
   } | null;
   /** Plan Room group totals (059), keyed by group id. */
   takeoff?: Record<string, TakeoffTotal>;
+  /** The budget's risk (096); null when none is set or before 096. */
+  risk?: RiskSettings | null;
   /** The proposal draft's sub split — shown and set here too (the job page is the one place for money). */
   proposal?: { has_draft: boolean; split: string; addons?: string[] };
 }
@@ -145,6 +149,7 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
   const [editing, setEditing] = useState<Line | null>(null);
   const [taxInfo, setTaxInfo] = useState(false);
   const [taxOpen, setTaxOpen] = useState(false);
+  const [riskOpen, setRiskOpen] = useState(false);
   const [measureWide, roomy] = useWide<HTMLDivElement>(900);
   // The grid only when it fits: a table wider than its room hid its last columns
   // behind Dusty's docked panel (Coy, 2026-10-02). If it overflows at this width,
@@ -535,7 +540,19 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
                 onSave={(v) => void run(() => call(`/api/jobs/${jobId}/budget`, "PATCH", { discount_amount: v ?? 0 }))} />
               <span style={{ fontSize: 9.5, color: T.ink3 }}>price only</span>
             </label>
+            {/* Risk (096; Coy, 2026-10-09): contingency, the checklist, carrying cost — this job alone. */}
+            <button onClick={() => setRiskOpen((x) => !x)} aria-expanded={riskOpen}
+              style={{ ...eyebrow, color: riskEmpty(data.risk ?? null) ? T.chalk : T.ink, cursor: "pointer" }}>
+              {riskSummary(data.risk ?? null)} {riskOpen ? "▾" : "▸"}
+            </button>
           </div>
+          {riskOpen && (
+            <div className="mt-2 rounded" style={{ border: `1px solid ${T.hair}`, background: T.card, padding: "8px 10px" }}>
+              <RiskEditor value={data.risk ?? null} jobType={null}
+                note="This job's risk. Copied from its project type (Price book → Defaults) when the budget was made; changed here, it changes this job only."
+                onSave={(risk) => run(() => call(`/api/jobs/${jobId}/budget`, "PATCH", { risk }))} />
+            </div>
+          )}
           <div className="mt-2 flex flex-col gap-1.5">
             {shownTiers.map((t) => (
               <div key={t.option_id ?? "one"} className="flex items-baseline gap-3 flex-wrap" style={{ ...nums }}>
@@ -545,7 +562,7 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
                 {t.tax > 0 && <span style={{ fontSize: F.xs, color: T.ink2 }}>tax {money0(t.tax)}</span>}
                 {t.discount > 0 && <span style={{ fontSize: F.xs, color: T.ink2 }}>− {money0(t.discount)}</span>}
                 <span style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 700, color: t.priced ? T.ink : T.ink3 }}>{t.priced ? money0(t.total) : "not priced"}</span>
-                {t.priced && <span style={{ fontSize: F.xs, color: T.ink3 }}>O.H. {money0(t.overhead)} · profit {money0(t.profit)} · margin {pct(t.margin)}</span>}
+                {t.priced && <span style={{ fontSize: F.xs, color: T.ink3 }}>O.H. {money0(t.overhead)}{t.risk + t.carry > 0 ? ` · risk ${money0(t.risk + t.carry)}` : ""} · profit {money0(t.profit)} · margin {pct(t.margin)}</span>}
                 {t.priced && minimum.ok && t.total < minimum.minimum && <span style={{ fontSize: F.xs, color: T.red }}>under the job minimum {money0(minimum.minimum)}</span>}
                 {!t.priced && t.blocked.length > 0 && <span style={{ fontSize: F.xs, color: T.hiviz, whiteSpace: "normal", overflowWrap: "anywhere", minWidth: 0 }}>needs {t.blocked.slice(0, 4).join(", ")}{t.blocked.length > 4 ? ` +${t.blocked.length - 4}` : ""}</span>}
               </div>
@@ -559,7 +576,8 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
               lines={data.lines.filter((l) => shownTiers[0].line_ids.includes(l.id)).map((l) => {
                 const r = res.lines[l.id];
                 return { id: l.id, name: l.name, cost_type: String(l.cost_type), section_id: l.section_id ?? null, qty: r?.qty ?? null, unit: l.unit,
-                  unit_cost: l.unit_cost, ext_cost: r?.ext_cost ?? null, overhead: r?.overhead ?? null, ext_price: r?.ext_price ?? null };
+                  unit_cost: l.unit_cost, ext_cost: r?.ext_cost ?? null, overhead: r?.overhead ?? null, ext_price: r?.ext_price ?? null,
+                  risk: (r?.risk ?? 0) + (r?.carry ?? 0) };
               })} />
           )}
           <PriceSummary jobId={jobId} lines={visible} res={res} tiers={shownTiers} proposal={data.proposal} onChanged={reload} />

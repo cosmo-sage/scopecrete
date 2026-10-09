@@ -272,6 +272,12 @@ export interface BudgetSettings {
   tax_rate_pct: number | null;
   /** Why the rate is missing, said plainly ("parish unknown"). */
   tax_missing?: string;
+  /** Risk (096, src/lib/risk.ts): % on cost beside O.H. — contingency and ticked risk items. */
+  risk_pct?: number;
+  /** Risk: % of the price set aside for carrying cost, beside margin. */
+  carry_pct?: number;
+  /** Ticked risk items with no %, named — they block like a missing O.H. */
+  risk_missing?: string[];
 }
 
 export interface LineResult {
@@ -284,9 +290,13 @@ export interface LineResult {
   margin_from: "line" | "job" | null;
   ext_cost: number | null;
   overhead: number | null;
+  /** Contingency and risk items on this line's cost (096). 0 when the job has none. */
+  risk: number | null;
+  /** Carrying cost: this line's share of the price set aside for waiting to be paid (096). */
+  carry: number | null;
   unit_price: number | null;
   ext_price: number | null;
-  /** (price − cost − O.H.) ÷ price — equals the margin used. */
+  /** (price − cost − O.H. − risk − carry) ÷ price — equals the margin used. */
   margin: number | null;
   tax: number;
   /** Everything missing for this line, by name. Empty = priced. */
@@ -297,12 +307,16 @@ export interface TierTotal {
   option_id: string | null;
   cost: number;
   overhead: number;
+  /** Contingency and risk items (096). */
+  risk: number;
+  /** Carrying cost (096). */
+  carry: number;
   price: number;
   tax: number;
   discount: number;
   /** price + tax − discount */
   total: number;
-  /** (total − tax − cost − O.H.) ÷ (total − tax): what is left after cost and O.H. */
+  /** (total − tax − cost − O.H. − risk − carry) ÷ (total − tax): what is left after cost, O.H. and risk. */
   margin: number;
   profit: number;
   priced: boolean;
@@ -445,6 +459,8 @@ export function budget(
   const out: Record<string, LineResult> = {};
   const taxRate = has(s.tax_rate_pct) ? s.tax_rate_pct : null;
   const oh = has(s.overhead_pct) ? s.overhead_pct : null;
+  const rk = has(s.risk_pct) && s.risk_pct > 0 ? s.risk_pct : 0;
+  const ck = has(s.carry_pct) && s.carry_pct > 0 ? s.carry_pct : 0;
 
   for (const l of lines) {
     const blocked: string[] = [];
@@ -460,18 +476,22 @@ export function budget(
     else if (has(s.margin_pct)) { m = s.margin_pct; from = "job"; }
     else blocked.push("Margin % (Price book → Defaults, or this budget)");
     if (m !== null && m >= 100) { blocked.push(`${l.name}: margin must be under 100%`); m = null; }
+    if (m !== null && m + ck >= 100) { blocked.push(`${l.name}: margin + carrying cost must be under 100%`); m = null; }
+    for (const r of s.risk_missing ?? []) blocked.push(`Risk — ${r}`);
     if (opts.tax_on && l.taxable && taxRate === null) blocked.push(`Sales tax for this job${s.tax_missing ? ` (${s.tax_missing})` : ""}`);
 
     const ext_cost = qty !== null && has(l.unit_cost) ? qty * l.unit_cost : null;
     const overhead = ext_cost !== null && oh !== null ? ext_cost * oh / 100 : null;
-    const ext_price = ext_cost !== null && overhead !== null && m !== null ? (ext_cost + overhead) / (1 - m / 100) : null;
+    const risk = ext_cost !== null ? ext_cost * rk / 100 : null;
+    const ext_price = ext_cost !== null && overhead !== null && risk !== null && m !== null ? (ext_cost + overhead + risk) / (1 - (m + ck) / 100) : null;
+    const carry = ext_price !== null ? ext_price * ck / 100 : null;
     const unit_price = ext_price !== null && qty ? ext_price / qty
-      : has(l.unit_cost) && oh !== null && m !== null ? l.unit_cost * (1 + oh / 100) / (1 - m / 100) : null;
+      : has(l.unit_cost) && oh !== null && m !== null ? l.unit_cost * (1 + (oh + rk) / 100) / (1 - (m + ck) / 100) : null;
     const tax = opts.tax_on && l.taxable && ext_cost !== null && taxRate !== null ? ext_cost * taxRate / 100 : 0;
     out[l.id] = {
       id: l.id, qty, qty_basis: q.ok ? q.basis : (l.qty_source === "set" ? "set" : "rule"), qty_note: q.ok ? q.note : null,
-      margin_pct: m, margin_from: from, ext_cost, overhead, unit_price, ext_price,
-      margin: ext_price && ext_cost !== null && overhead !== null ? (ext_price - ext_cost - overhead) / ext_price : null,
+      margin_pct: m, margin_from: from, ext_cost, overhead, risk, carry, unit_price, ext_price,
+      margin: ext_price && ext_cost !== null && overhead !== null ? (ext_price - ext_cost - overhead - (risk ?? 0) - (carry ?? 0)) / ext_price : null,
       tax, blocked,
     };
   }
@@ -482,15 +502,17 @@ export function budget(
     const rs = inTier.map((l) => out[l.id]);
     const cost = rs.reduce((a, r) => a + (r.ext_cost ?? 0), 0);
     const overhead = rs.reduce((a, r) => a + (r.overhead ?? 0), 0);
+    const risk = rs.reduce((a, r) => a + (r.risk ?? 0), 0);
+    const carry = rs.reduce((a, r) => a + (r.carry ?? 0), 0);
     const price = rs.reduce((a, r) => a + (r.ext_price ?? 0), 0);
     const tax = rs.reduce((a, r) => a + r.tax, 0);
     const discount = has(opts.discount) && opts.discount > 0 ? opts.discount : 0;
     const total = price + tax - discount;
     const net = total - tax;
-    const profit = net - cost - overhead;
+    const profit = net - cost - overhead - risk - carry;
     const blocked = [...new Set(rs.flatMap((r) => r.blocked))];
     return {
-      option_id: optionId, cost, overhead, price, tax, discount, total, profit,
+      option_id: optionId, cost, overhead, risk, carry, price, tax, discount, total, profit,
       margin: net > 0 ? profit / net : 0,
       priced: blocked.length === 0 && inTier.length > 0, blocked, line_ids: inTier.map((l) => l.id),
     };

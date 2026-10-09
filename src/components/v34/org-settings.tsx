@@ -297,7 +297,15 @@ function People({ people, canEdit, accessReady, onChanged }: { people: Person[];
   useEffect(() => {
     if (!needLists) return;
     let off = false;
-    if (!vendors) fetch("/api/vendors").then((r) => (r.ok ? r.json() : null)).then((b) => { if (!off) setVendors((b?.vendors ?? []) as VendorOpt[]); }).catch(() => {});
+    // Vendors and customers' contacts (095: Jeremy is Gulfline's contact and Coy's estimator).
+    if (!vendors) fetch("/api/contacts").then((r) => (r.ok ? r.json() : null)).then((b) => {
+      if (off) return;
+      const book = (b?.contacts ?? []) as Array<{ id: string; name: string | null; company: string | null; emails: { address: string }[]; role: string; role_label: string; customer_name: string | null }>;
+      setVendors(book.filter((c) => ["vendor", "sub", "customer", "contact"].includes(c.role)).map((c) => ({
+        id: c.id, name: c.name, company_name: c.company ?? c.customer_name, email: c.emails[0]?.address ?? null,
+        contact_subtype: c.customer_name && c.role !== "vendor" && c.role !== "sub" ? `${c.role_label} · ${c.customer_name}` : c.role_label,
+      })));
+    }).catch(() => {});
     if (!jobs) fetch("/api/jobs").then((r) => (r.ok ? r.json() : null)).then((b) => { if (!off) setJobs((b?.jobs ?? []) as JobOpt[]); }).catch(() => {});
     return () => { off = true; };
   }, [needLists, vendors, jobs]);
@@ -357,7 +365,7 @@ function People({ people, canEdit, accessReady, onChanged }: { people: Person[];
                 <div style={{ fontSize: F.sm, fontWeight: 600, ...clip }}>{p.name ?? <span style={{ color: T.ink3, fontWeight: 400 }}>No name yet</span>}{p.you && <span style={{ color: T.ink3, fontWeight: 400 }}> · you</span>}</div>
                 <div style={{ fontSize: F.xs, color: T.ink3, ...clip }}>{p.email ?? "—"}</div>
                 {p.role === "field" && <div style={{ fontSize: F.xs, color: T.ink2, ...clip }}>
-                  {p.contact_name ? `Vendor: ${p.contact_name} · ` : ""}{accessSummary({ pages: p.pages ?? [], all_jobs: !!p.all_jobs, job_ids: p.job_ids ?? [] })}
+                  {p.contact_name ? `${p.contact_name} · ` : ""}{accessSummary({ pages: p.pages ?? [], all_jobs: !!p.all_jobs, job_ids: p.job_ids ?? [] })}
                 </div>}
               </div>
               {p.role && <span style={{ ...eyebrow, fontFamily: disp, color: T.ink2 }}>{roleLabel(p.role)}</span>}
@@ -423,7 +431,7 @@ function People({ people, canEdit, accessReady, onChanged }: { people: Person[];
   );
 }
 
-/** Role, then — for an onsite estimator — their vendor, pages and jobs. */
+/** Role, then — for an onsite estimator — who they are (a vendor or a customer's contact), pages and jobs. */
 function AccessForm({ draft, setDraft, vendors, jobs, accessReady, small, onVendor }: {
   draft: AccessDraft; setDraft: React.Dispatch<React.SetStateAction<AccessDraft>>; vendors: VendorOpt[] | null; jobs: JobOpt[] | null;
   accessReady: boolean; small: React.CSSProperties; onVendor: (v: VendorOpt | null) => void;
@@ -431,7 +439,7 @@ function AccessForm({ draft, setDraft, vendors, jobs, accessReady, small, onVend
   const [jobFind, setJobFind] = useState("");
   const set = (p: Partial<AccessDraft>) => setDraft((d) => ({ ...d, ...p }));
   const toggle = (list: string[], k: string) => (list.includes(k) ? list.filter((x) => x !== k) : [...list, k]);
-  const vName = (v: VendorOpt) => v.name?.trim() || v.company_name?.trim() || v.email || "Unnamed vendor";
+  const vName = (v: VendorOpt) => v.name?.trim() || v.company_name?.trim() || v.email || "Unnamed contact";
   const shownJobs = (jobs ?? []).filter((j) => !jobFind.trim() || `${j.title ?? ""} ${j.address ?? ""}`.toLowerCase().includes(jobFind.trim().toLowerCase()));
   const box: React.CSSProperties = { height: 32, border: `1px solid ${T.hairStrong}`, borderRadius: 4, padding: "0 8px", fontSize: F.sm, background: T.card, color: T.ink };
   return (
@@ -450,17 +458,17 @@ function AccessForm({ draft, setDraft, vendors, jobs, accessReady, small, onVend
       </div>
       {draft.role === "field" && (
         <>
-          <label style={{ ...eyebrow, color: T.ink2 }} htmlFor="sc-access-vendor">Vendor</label>
-          {vendors === null ? <div style={{ fontSize: F.xs, color: T.ink3 }}>Loading vendors…</div> : vendors.length === 0 ? (
-            <div style={{ fontSize: F.xs, color: T.ink3 }}>No vendors yet. Add them on <Link href="/dashboard/vendors" style={{ color: T.chalk }}>Vendors</Link> first, then give them access.</div>
+          <label style={{ ...eyebrow, color: T.ink2 }} htmlFor="sc-access-vendor">Who they are</label>
+          {vendors === null ? <div style={{ fontSize: F.xs, color: T.ink3 }}>Loading contacts…</div> : vendors.length === 0 ? (
+            <div style={{ fontSize: F.xs, color: T.ink3 }}>No vendors or customers yet. Add them on <Link href="/dashboard/contacts" style={{ color: T.chalk }}>Contacts</Link> first, then give them access.</div>
           ) : (
             <select id="sc-access-vendor" value={draft.contact_id ?? ""} style={box}
               onChange={(e) => { const v = vendors.find((x) => x.id === e.target.value) ?? null; set({ contact_id: v?.id ?? null }); onVendor(v); }}>
-              <option value="">Pick the vendor they work as…</option>
-              {vendors.map((v) => <option key={v.id} value={v.id}>{vName(v)}{v.contact_subtype ? ` · ${v.contact_subtype.replace(/_/g, " ")}` : ""}</option>)}
+              <option value="">Pick the vendor or customer&apos;s contact they are…</option>
+              {vendors.map((v) => <option key={v.id} value={v.id}>{vName(v)}{v.contact_subtype ? ` · ${v.contact_subtype}` : ""}</option>)}
             </select>
           )}
-          <div style={{ fontSize: F.xs, color: T.ink3 }}>Not listed? File them as a vendor (Threads or <Link href="/dashboard/vendors" style={{ color: T.chalk }}>Vendors</Link>) first.</div>
+          <div style={{ fontSize: F.xs, color: T.ink3 }}>Not listed? File them as a vendor or put them on a customer (Threads or <Link href="/dashboard/contacts" style={{ color: T.chalk }}>Contacts</Link>) first.</div>
 
           <div style={{ ...eyebrow, color: T.ink2, marginTop: 4 }}>Pages</div>
           <div style={{ fontSize: F.xs, color: T.ink3 }}>Their jobs&apos; areas always; tick what else they may open.</div>

@@ -29,13 +29,17 @@ export async function workingEstimate(sb: Sb, orgId: string, jobId: string, crea
     sb.from("org_money_settings").select("default_margin_pct, default_overhead_pct").eq("org_id", orgId).maybeSingle(),
     sb.from("jobs").select("job_type").eq("org_id", orgId).eq("id", jobId).maybeSingle(),
   ]);
-  const { data: type } = job?.job_type
-    ? await sb.from("org_project_types").select("margin_pct, overhead_pct").eq("org_id", orgId).eq("key", job.job_type as string).maybeSingle()
-    : { data: null };
-  const { data: made, error } = await sb.from("estimates")
-    .insert({ org_id: orgId, job_id: jobId, status: "draft", doc_kind: "estimate", engine_version: "budget-v2",
-      margin_pct: type?.margin_pct ?? money?.default_margin_pct ?? null, overhead_pct: type?.overhead_pct ?? money?.default_overhead_pct ?? null })
-    .select(ESTIMATE_COLUMNS).single();
+  // Its risk (096) is copied from the type too; before 096 the read and write leave it out.
+  const typeRead = async (cols: string) => job?.job_type
+    ? await sb.from("org_project_types").select(cols).eq("org_id", orgId).eq("key", job.job_type as string).maybeSingle()
+    : { data: null, error: null };
+  let typeRes = await typeRead("margin_pct, overhead_pct, risk");
+  if (typeRes.error) typeRes = await typeRead("margin_pct, overhead_pct");
+  const type = typeRes.data as { margin_pct: number | null; overhead_pct: number | null; risk?: unknown } | null;
+  const row: Record<string, unknown> = { org_id: orgId, job_id: jobId, status: "draft", doc_kind: "estimate", engine_version: "budget-v2",
+    margin_pct: type?.margin_pct ?? money?.default_margin_pct ?? null, overhead_pct: type?.overhead_pct ?? money?.default_overhead_pct ?? null };
+  if (type?.risk && typeof type.risk === "object") row.risk = type.risk;
+  const { data: made, error } = await sb.from("estimates").insert(row).select(ESTIMATE_COLUMNS).single();
   if (error) {
     // Two taps at once: the unique index let one through; read that one.
     const { data: again } = await sb.from("estimates").select(ESTIMATE_COLUMNS).eq("org_id", orgId).eq("job_id", jobId).eq("status", "draft").maybeSingle();

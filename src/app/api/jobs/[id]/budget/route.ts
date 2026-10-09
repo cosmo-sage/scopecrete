@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
+import { readRisk } from "@/lib/risk";
 import { refreshJobTax } from "@/lib/tax-lookup-server";
 import { ESTIMATE_COLUMNS, LINE_COLUMNS, jobInOrg, numLine, syncLineGroups, workingEstimate } from "@/lib/budget-server";
 import { sourcesFor } from "@/lib/sources-server";
@@ -16,7 +17,7 @@ import { takeoffTotalsFor } from "@/lib/plans-server";
  * `sources`: every vendor's price on the items the lines came from — the
  * line's vendor picker (migration 051).
  *
- * PATCH { tax_on?, discount_amount?, discount_reason?, margin_pct?, overhead_pct? }
+ * PATCH { tax_on?, discount_amount?, discount_reason?, margin_pct?, overhead_pct?, risk? }
  *   — the budget's own switches; null margin / O.H. goes back to the default.
  */
 
@@ -72,6 +73,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     assemblies: assemblies.data ?? [],
     settings: p?.settings ?? { margin_pct: null, overhead_pct: null, tax_rate_pct: null },
     pricing: p ? { tax: p.tax, days: p.days, day_minimum: p.day_minimum, margin_from: p.margin_from, overhead_from: p.overhead_from } : null,
+    risk: p?.risk ?? null,
     takeoff,
     proposal: { has_draft: !!draftP, split: (draftP?.split as string | null) ?? "none",
       addons: (((draftP?.display as { addons?: unknown } | null)?.addons ?? []) as unknown[]).filter((x): x is string => typeof x === "string") },
@@ -103,12 +105,15 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     if (!Number.isFinite(v) || v < 0 || v > max) return bad(k === "margin_pct" ? "Margin is 0 to under 100%." : "O.H. is 0 to 200%.");
     patch[k] = v;
   }
+  // Risk (096): contingency, the checklist and carrying cost — on this budget alone.
+  if ("risk" in b) patch.risk = readRisk(b.risk);
   if ("discount_reason" in b) patch.discount_reason = typeof b.discount_reason === "string" && b.discount_reason.trim() ? b.discount_reason.trim().slice(0, 200) : null;
   if (!Object.keys(patch).length) return bad("Nothing to change.");
   const est = await workingEstimate(supabase, orgId, id, true);
   if (!est) return bad("Couldn't open the budget.", 500);
   const { data, error } = await supabase.from("estimates").update({ ...patch, updated_at: new Date().toISOString() })
     .eq("id", est.id as string).eq("org_id", orgId).select(ESTIMATE_COLUMNS).single();
+  if (error && "risk" in patch && /risk/.test(error.message)) return bad("Risk settings wait for migration 096.", 409);
   if (error || !data) return bad(error?.message ?? "not saved", 500);
   return applyCookies(NextResponse.json({ estimate: { ...data, discount_amount: Number(data.discount_amount ?? 0) } }));
 }

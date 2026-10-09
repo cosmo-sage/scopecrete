@@ -9,7 +9,7 @@ import { readAccess } from "@/lib/access";
  *        a member gets none). The token is never stored, so never returned.
  * POST { email, role, contact_id?, pages?, all_jobs?, job_ids? } → { invite, link }
  *        — sc_invite_member() (081): owners only; an onsite estimator ('field')
- *        must be a vendor contact, with the pages and jobs they may open.
+ *        must be a vendor or a customer's contact (095), with the pages and jobs they may open.
  *        The link carries the token, shown this once for Coy to send himself
  *        (mail or text from his own account — nothing is sent from here).
  *

@@ -140,6 +140,12 @@ export const NavIcon = ({ k, on, color }: { k: string; on: boolean; color?: stri
       <path {...p} d="M2.4 3.1h14.2M3.6 2.1v2M15.4 2.1v2" />
     </svg>
   );
+  if (k === "scopebuilder") return (
+    <svg {...box}>
+      <path {...p} d="M2.6 15.8l3.2-1 9.4-9.4a1.6 1.6 0 0 0-2.2-2.2L3.6 12.6z" />
+      <path {...p} d="M11.6 4.6l2.2 2.2M10.4 15.8h6" />
+    </svg>
+  );
   if (k === "customers") return (
     <svg {...box}>
       <circle {...p} cx="9.5" cy="6.4" r="3" />

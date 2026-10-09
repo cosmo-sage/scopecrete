@@ -10,7 +10,9 @@
  *
  *   direct cost = materials + labor + equipment + subcontract + misc (cost type "other")
  *   gross profit = price − discount − direct cost
- *   net profit   = gross profit − overhead          (= the tier's profit)
+ *   net profit   = gross profit − overhead − risk   (= the tier's profit)
+ * Risk (096) is contingency, the ticked risk items and carrying cost — set
+ * aside, not profit.
  * Tax is a pass-through and is left out of both.
  */
 
@@ -24,6 +26,8 @@ export interface AnalysisLine {
   id: string; name: string; cost_type: string; section_id: string | null;
   qty: number | null; unit: string; unit_cost: number | null;
   ext_cost: number | null; overhead: number | null; ext_price: number | null;
+  /** Contingency, risk items and carrying cost on this line (096); 0 or absent with none. */
+  risk?: number | null;
 }
 /** An area with its size: sq ft for areas, LF for areas measured in linear feet (curb, grade beam). */
 export interface AnalysisArea { id: string; name: string; sqft: number | null; lf: number | null }
@@ -32,6 +36,8 @@ export interface AnalysisRow { bucket: Bucket; label: string; cost: number; line
 export interface Analysis {
   rows: AnalysisRow[];
   direct: number; overhead: number;
+  /** Contingency, risk items and carrying cost (096). */
+  risk: number;
   /** Sum of the lines' prices, before tax and discount. */
   price: number; tax: number; discount: number; total: number;
   gross: number; net: number;
@@ -56,7 +62,7 @@ export function analyse(lines: AnalysisLine[], areas: AnalysisArea[], opts: { se
   const mine = all ? lines : lines.filter((l) => l.section_id === opts.section && known.has(opts.section));
   const priced = mine.filter((l) => l.ext_cost !== null && l.ext_price !== null);
   const unpriced = mine.filter((l) => l.ext_cost === null || l.ext_price === null);
-  const sum = (ls: AnalysisLine[], k: "ext_cost" | "overhead" | "ext_price") => ls.reduce((a, l) => a + (l[k] ?? 0), 0);
+  const sum = (ls: AnalysisLine[], k: "ext_cost" | "overhead" | "ext_price" | "risk") => ls.reduce((a, l) => a + (l[k] ?? 0), 0);
 
   const rows: AnalysisRow[] = BUCKETS.map((b) => {
     const ls = priced.filter((l) => bucketOf(l.cost_type) === b);
@@ -66,10 +72,11 @@ export function analyse(lines: AnalysisLine[], areas: AnalysisArea[], opts: { se
   const direct = sum(priced, "ext_cost");
   const overhead = sum(priced, "overhead");
   const price = sum(priced, "ext_price");
+  const risk = sum(priced, "risk");
   const tax = all ? Math.max(0, opts.tax) : 0;
   const discount = all ? Math.max(0, opts.discount) : 0;
   const gross = price - discount - direct;
-  const net = gross - overhead;
+  const net = gross - overhead - risk;
   const sold = price - discount;
 
   const inScope = all ? areas : areas.filter((a) => a.id === opts.section);
@@ -77,7 +84,7 @@ export function analyse(lines: AnalysisLine[], areas: AnalysisArea[], opts: { se
   const lf = inScope.reduce((a, x) => a + (x.lf !== null && x.lf > 0 ? x.lf : 0), 0);
 
   return {
-    rows, direct, overhead, price, tax, discount, total: price + tax - discount,
+    rows, direct, overhead, risk, price, tax, discount, total: price + tax - discount,
     gross, net, margin: sold > 0 ? net / sold : null,
     units: { sf, sy: sf / 9, lf }, unpriced,
   };

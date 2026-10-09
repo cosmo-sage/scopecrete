@@ -1,6 +1,7 @@
 import type { ApiSession } from "@/lib/api-auth";
 import type { BudgetSettings } from "@/lib/engine";
 import { addressParts, jobTax, type JobTax, type TaxLookup } from "@/lib/tax";
+import { readRisk, riskOf, type RiskSettings } from "@/lib/risk";
 
 /**
  * What each job is priced with (migration 057, Coy 2026-09-30): its budget's
@@ -29,6 +30,8 @@ export async function moneySettings(sb: Sb, orgId: string): Promise<MoneySetting
 }
 
 export interface JobPricing { settings: BudgetSettings; tax: JobTax; days: number | null; day_minimum: number | null;
+  /** The budget's risk settings (096); empty before 096 or when none are set. */
+  risk: RiskSettings;
   margin_from: "budget" | "default" | null; overhead_from: "budget" | "default" | null }
 
 /**
@@ -48,6 +51,14 @@ export function taxAddress(job: Record<string, unknown>, cust: { address_formatt
     ?? (cust ? addressParts({ line1: cust.address_line1 ?? null, city: cust.city ?? null, state: cust.state ?? null, zip: cust.zip ?? null }) ?? addressParts(cust.address_formatted ?? null) : null);
 }
 
+/** The open budgets' O.H., margin and risk (096) — without risk until 096 is applied. */
+async function estimatesWithRisk(sb: Sb, orgId: string, jobIds: string[]) {
+  const q = (cols: string) => sb.from("estimates").select(cols).eq("org_id", orgId).eq("status", "draft").in("job_id", jobIds);
+  const r = await q("job_id, margin_pct, overhead_pct, risk");
+  if (!r.error) return r;
+  return q("job_id, margin_pct, overhead_pct");
+}
+
 export async function pricingFor(sb: Sb, orgId: string, jobIds: string[]): Promise<Map<string, JobPricing>> {
   const out = new Map<string, JobPricing>();
   if (!jobIds.length) return out;
@@ -55,7 +66,7 @@ export async function pricingFor(sb: Sb, orgId: string, jobIds: string[]): Promi
     moneySettings(sb, orgId),
     sb.from("tax_parishes").select("parish, rate_pct").eq("org_id", orgId),
     jobsWithTax(sb, orgId, jobIds),
-    sb.from("estimates").select("job_id, margin_pct, overhead_pct").eq("org_id", orgId).eq("status", "draft").in("job_id", jobIds),
+    estimatesWithRisk(sb, orgId, jobIds),
   ]);
   const jobRows = (jobs ?? []) as Array<Record<string, unknown>>;
   const custIds = [...new Set(jobRows.map((j) => j.customer_id as string | null).filter(Boolean))] as string[];
@@ -69,6 +80,7 @@ export async function pricingFor(sb: Sb, orgId: string, jobIds: string[]): Promi
   for (const j of jobRows) {
     const est = ((ests ?? []) as Array<Record<string, unknown>>).find((e) => e.job_id === j.id);
     const em = num(est?.margin_pct), eo = num(est?.overhead_pct);
+    const risk = readRisk(est?.risk), rk = riskOf(risk);
     const where = taxAddress(j, j.customer_id ? custRow.get(j.customer_id as string) ?? null : null);
     const tax = jobTax({ tax_rate_pct: num(j.tax_rate_pct), tax_rate_source: j.tax_rate_source as string | null,
       tax_parish: j.tax_parish as string | null, address: j.address as string | null, tax_lookup: (j.tax_lookup as TaxLookup | null | undefined) ?? null },
@@ -77,8 +89,9 @@ export async function pricingFor(sb: Sb, orgId: string, jobIds: string[]): Promi
       settings: {
         margin_pct: em ?? money.default_margin_pct, overhead_pct: eo ?? money.default_overhead_pct,
         tax_rate_pct: tax.rate, tax_missing: tax.missing ?? undefined,
+        risk_pct: rk.cost_pct, carry_pct: rk.carry_pct, risk_missing: rk.missing,
       },
-      tax, days: num(j.duration_days), day_minimum: money.day_minimum,
+      risk, tax, days: num(j.duration_days), day_minimum: money.day_minimum,
       margin_from: em !== null ? "budget" : money.default_margin_pct !== null ? "default" : null,
       overhead_from: eo !== null ? "budget" : money.default_overhead_pct !== null ? "default" : null,
     });

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
 import { TYPE_COLS, typeRow } from "@/lib/proposal-server";
+import { readRisk } from "@/lib/risk";
 
 /** Edit a project type's defaults, or remove one Coy added (the three built-in types stay). */
 
@@ -45,6 +46,11 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     const { data } = await supabase.from("doc_templates").select("id").eq("org_id", orgId).eq("id", b[k] as string).eq("kind", kind).maybeSingle();
     if (!data) return bad("No such template.");
     patch[k] = data.id;
+  }
+  // Risk (096) is written on its own, so the rest saves before 096 is applied.
+  if ("risk" in b) {
+    const { error: rErr } = await supabase.from("org_project_types").update({ risk: readRisk(b.risk), updated_at: patch.updated_at }).eq("id", id).eq("org_id", orgId);
+    if (rErr) return bad(/risk/.test(rErr.message) ? "Risk settings wait for migration 096." : rErr.message, /risk/.test(rErr.message) ? 409 : 500);
   }
   const { data, error } = await supabase.from("org_project_types").update(patch).eq("id", id).eq("org_id", orgId).select(TYPE_COLS).maybeSingle();
   if (error) return bad(error.message, 500);

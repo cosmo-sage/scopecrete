@@ -13,11 +13,15 @@ import React, { useCallback, useEffect, useState } from "react";
 import { T, F, disp, eyebrow, nums } from "@/lib/v34/tokens";
 import { NumField } from "@/components/v34/money-settings";
 import type { Clause, DocTemplate, Draw } from "@/lib/proposal";
+import type { RiskSettings } from "@/lib/risk";
+import { RiskEditor, riskSummary } from "@/components/v34/risk-editor";
 
 interface PType {
   id: string; key: string; label: string; overhead_pct: number | null; margin_pct: number | null;
   show_item_prices: boolean; show_qty: boolean; show_tax_line: boolean; draws: Draw[];
   warranty_template_id: string | null; terms_template_id: string | null; cover: "photo" | "none"; sort_order: number;
+  /** Risk (096): contingency, checklist, carrying cost — a new budget copies it. */
+  risk: RiskSettings | null;
 }
 const BUILT_IN = ["residential", "commercial", "public"];
 
@@ -36,9 +40,10 @@ export function ProjectTypes() {
   const [err, setErr] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
   const [open, setOpen] = useState<string | null>(null);
+  const [riskReady, setRiskReady] = useState(true);
   useEffect(() => {
     let off = false;
-    call("/api/project-types", "GET").then((b) => { if (!off) { setTypes(b.types); setTemplates(b.templates); } })
+    call("/api/project-types", "GET").then((b) => { if (!off) { setTypes(b.types); setTemplates(b.templates); setRiskReady(b.risk_ready !== false); } })
       .catch((e) => { if (!off) setErr(e instanceof Error ? e.message : String(e)); });
     return () => { off = true; };
   }, [tick]);
@@ -61,12 +66,12 @@ export function ProjectTypes() {
           }}>+ Type</button>
         </div>
         <div style={{ fontSize: F.xs, color: T.ink3, lineHeight: 1.45, margin: "2px 0 8px" }}>
-          A new budget for a job of this type copies its O.H. and margin (blank = the defaults above). Its proposals start with what is shown, the draws, and the warranty and contract below.
+          A new budget for a job of this type copies its O.H., margin and risk (blank = the defaults above, and no risk). Its proposals start with what is shown, the draws, and the warranty and contract below.
         </div>
         {err && <div style={{ fontSize: F.xs, color: T.red, marginBottom: 6 }}>{err}</div>}
         <div style={{ display: "grid", gap: 8, maxWidth: 720 }}>
           {types.map((t) => (
-            <TypeCard key={t.id} t={t} templates={templates} open={open === t.id} onOpen={() => setOpen(open === t.id ? null : t.id)} patch={(b) => void patch(t, b)}
+            <TypeCard key={t.id} t={t} templates={templates} riskReady={riskReady} open={open === t.id} onOpen={() => setOpen(open === t.id ? null : t.id)} patch={(b) => void patch(t, b)}
               onDelete={BUILT_IN.includes(t.key) ? null : () => { if (window.confirm(`Remove the ${t.label} type?`)) void call(`/api/project-types/${t.id}`, "DELETE").then(reload).catch((e) => setErr(String(e?.message ?? e))); }} />
           ))}
         </div>
@@ -76,8 +81,8 @@ export function ProjectTypes() {
   );
 }
 
-function TypeCard({ t, templates, open, onOpen, patch, onDelete }: {
-  t: PType; templates: DocTemplate[]; open: boolean; onOpen: () => void; patch: (b: Partial<PType>) => void; onDelete: (() => void) | null;
+function TypeCard({ t, templates, riskReady, open, onOpen, patch, onDelete }: {
+  t: PType; templates: DocTemplate[]; riskReady: boolean; open: boolean; onOpen: () => void; patch: (b: Partial<PType>) => void; onDelete: (() => void) | null;
 }) {
   const [draws, setDraws] = useState<Draw[]>(t.draws);
   const sum = draws.reduce((a, d) => a + (Number(d.pct) || 0), 0);
@@ -88,7 +93,7 @@ function TypeCard({ t, templates, open, onOpen, patch, onDelete }: {
       <button onClick={onOpen} className="w-full flex items-center gap-2 text-left" style={{ padding: "8px 10px", cursor: "pointer" }} aria-expanded={open}>
         <b style={{ fontSize: F.sm }}>{t.label}</b>
         <span style={{ fontSize: F.xs, color: T.ink3, ...nums }}>
-          O.H. {t.overhead_pct ?? "default"}{t.overhead_pct !== null ? "%" : ""} · margin {t.margin_pct ?? "default"}{t.margin_pct !== null ? "%" : ""} · {t.draws.map((d) => d.pct).join(" / ") || "no draws"}
+          O.H. {t.overhead_pct ?? "default"}{t.overhead_pct !== null ? "%" : ""} · margin {t.margin_pct ?? "default"}{t.margin_pct !== null ? "%" : ""} · {t.draws.map((d) => d.pct).join(" / ") || "no draws"} · {riskSummary(t.risk)}
         </span>
         <span className="flex-1" />
         <span style={{ color: T.ink3 }}>{open ? "▾" : "▸"}</span>
@@ -99,6 +104,11 @@ function TypeCard({ t, templates, open, onOpen, patch, onDelete }: {
             <NumField label="O.H." unit="%" value={t.overhead_pct} note="this type" onSave={async (v) => patch({ overhead_pct: v })} />
             <NumField label="Margin" unit="%" value={t.margin_pct} note="this type" onSave={async (v) => patch({ margin_pct: v })} />
           </div>
+          <div style={eyebrow} className="mt-3">Risk on this type of work</div>
+          {riskReady ? (
+            <div className="mt-1"><RiskEditor value={t.risk} jobType={t.key} onSave={(risk) => patch({ risk })}
+              note={t.key === "residential" ? "Surprises under the old slab, access, base, customers changing their minds." : "Scope gaps between plans and specs, bonds, testing, retainage and slow pay."} /></div>
+          ) : <div style={{ fontSize: F.xs, color: T.ink3 }}>Waits for migration 096.</div>}
           <div style={eyebrow} className="mt-3">The proposal shows</div>
           <div className="flex flex-wrap gap-3 mt-1" style={{ fontSize: F.sm }}>
             {([["show_item_prices", "Item prices"], ["show_qty", "Qty · unit"], ["show_tax_line", "Tax as its own line"]] as const).map(([k, l]) => (

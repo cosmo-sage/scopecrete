@@ -5,6 +5,7 @@
  * caller cannot put words in Dusty's context or reach another org's rows.
  */
 
+import { riskOf } from "@/lib/risk";
 import type { ApiSession } from "@/lib/api-auth";
 import { plainSpeakers } from "@/lib/speakers";
 import { plainNote } from "@/lib/mentions";
@@ -462,7 +463,8 @@ async function scopeContext(sb: Sb, orgId: string, jobId: string): Promise<Assem
   return assemble(`scope: ${title}`, [
     { title: "Job", lines: [`Title: ${title}`, `Id (for plans: archive, delete, set an address): job ${jobId}${job.customer_id ? `; its customer: customer ${job.customer_id}` : ""}`, `Status: ${job.status}`, `Address: ${(job.address as string | null) || "not recorded"}`,
       `Days on this job: ${days ?? "not set"}`, `For: ${who ? who.name : "no customer attached"}`,
-      `Pricing: O.H. ${jp?.settings.overhead_pct ?? "NOT SET"}%, margin ${jp?.settings.margin_pct ?? "NOT SET"}% — price = cost × (1 + O.H.) ÷ (1 − margin)`,
+      `Pricing: O.H. ${jp?.settings.overhead_pct ?? "NOT SET"}%, margin ${jp?.settings.margin_pct ?? "NOT SET"}% — price = (cost + O.H. + risk) ÷ (1 − margin − carrying cost)`,
+      `Risk on this job: ${(() => { const r = riskOf(jp?.risk); return r.parts.length || r.missing.length ? [...r.parts.map((p) => `${p.label} ${p.pct}% ${p.on === "cost" ? "on cost" : "of the price"}`), ...r.missing.map((m) => `ticked with no % — ${m}`)].join("; ") : "none set (Coy sets it on the budget's Risk, defaults per project type)"; })()}`,
       `Sales tax: ${jp?.tax.rate !== null && jp?.tax.rate !== undefined ? `${jp.tax.rate}% (${jp.tax.source === "override" ? "typed for this job" : `${jp.tax.parish} parish`})` : `unknown — ${jp?.tax.missing ?? "no rate"}`}`, taxLine] },
     ...(bid ? [bid] : []),
     ...(calls ?? []),

@@ -652,6 +652,14 @@ each message.** One person calling two of Coy's lines is one thread.
   needs the API key), name, lead source, the webhook to point Quo at, then
   "Waiting for the first event…" until one arrives (`POST /api/lines`;
   members may write `org_phone_numbers` under its RLS). The design's
+  **Delete a line (Coy, 2026-10-09: "I need to be able to delete lines").**
+  **Delete** on each line's card (not the primary — make another primary
+  first) asks to confirm, then `DELETE /api/lines/[id]`: a line nothing was
+  filed under is deleted; one with calls or texts is switched off
+  (`active=false`, no migration) so every message keeps its line and Threads
+  and Logs read as before. Lines leaves switched-off lines out; + Add a line
+  with the same number brings it back. A switched-off number still counts
+  as one of the org's own lines in quo-intake.
   per-line *bucket* for a new caller is not built: the lead source is what
   §2d defines, and filing callers by line would be a classification rule.
   **Logs** (`/dashboard/more/logs`): the event table on top — chips for Line

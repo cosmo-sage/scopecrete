@@ -35,6 +35,7 @@ export default function LinesScreen() {
   const [adding, setAdding] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
+  const [removing, setRemoving] = useState<Line | null>(null);
 
   useEffect(() => {
     let off = false;
@@ -155,6 +156,10 @@ export default function LinesScreen() {
                       <button key={c} aria-label={`Colour ${c}`} onClick={() => void save(l.id, { color_token: c })}
                         style={{ width: 16, height: 16, borderRadius: 8, background: colorVar(c), border: l.color === c ? `2px solid ${T.ink}` : `1px solid ${T.hair}`, cursor: "pointer" }} />
                     ))}
+                    <span className="flex-1" />
+                    {!l.is_primary && (
+                      <button onClick={() => setRemoving(l)} style={{ ...btn, height: 28, border: `1px solid ${T.hair}`, background: T.card, color: T.red }}>Delete</button>
+                    )}
                   </div>
                   {failing && (
                     <div className="rounded flex items-center gap-2" style={{ background: T.red, color: "#fff", fontSize: 12.5, padding: "8px 10px", borderRadius: 3 }}>
@@ -192,8 +197,40 @@ export default function LinesScreen() {
       <button onClick={() => setAdding(true)} className="lg:hidden fixed rounded-full flex items-center justify-center" aria-label="Add a line"
         style={{ right: 16, bottom: "calc(var(--sc-foot, 58px) + 16px)", width: 52, height: 52, background: T.hiviz, color: T.onHiviz, fontSize: 26, boxShadow: "0 4px 14px rgba(0,0,0,.25)", zIndex: 20 }}>+</button>
 
+      <DeleteLine key={removing?.id ?? "none"} line={removing} onClose={() => setRemoving(null)} onDeleted={() => { setRemoving(null); setTick((n) => n + 1); }} />
       <AddLine open={adding} onClose={() => setAdding(false)} onSaved={() => setTick((n) => n + 1)} />
     </div>
+  );
+}
+
+/* --------------------------------------------------------- Delete a line */
+
+function DeleteLine({ line, onClose, onDeleted }: { line: Line | null; onClose: () => void; onDeleted: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const go = async () => {
+    if (!line) return;
+    setBusy(true); setErr(null);
+    try {
+      const r = await fetch(`/api/lines/${line.id}`, { method: "DELETE" });
+      const b = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(b?.error || `HTTP ${r.status}`);
+      onDeleted();
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)); setBusy(false); }
+  };
+  const btn: React.CSSProperties = { height: 36, padding: "0 14px", borderRadius: 4, fontFamily: disp, fontSize: F.xs, fontWeight: 600, letterSpacing: ".06em", textTransform: "uppercase", cursor: "pointer" };
+  return (
+    <Sheet open={!!line} onClose={onClose} title="Delete this line?" sub={line ? `${formatPhone(line.phone_e164)}${line.label ? ` · ${line.label}` : ""}` : undefined}>
+      <div className="px-4 py-3 flex flex-col gap-3" style={{ fontSize: F.sm, color: T.ink2, lineHeight: 1.5 }}>
+        <div>It comes off your Lines. Calls and texts that already came in on it stay in Threads and Logs, still marked with this line. You can add the number back later with + Add a line.</div>
+        <div style={{ fontSize: 12, color: T.ink3 }}>Point the provider&apos;s webhook away from it too, or new calls and texts on it will still arrive.</div>
+        {err && <div style={{ fontSize: F.xs, color: T.red }}>{err}</div>}
+        <div className="flex justify-end gap-2" style={{ borderTop: `1px solid ${T.hair}`, paddingTop: 10 }}>
+          <button onClick={onClose} style={{ ...btn, border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink }}>Cancel</button>
+          <button onClick={() => void go()} disabled={busy} style={{ ...btn, border: "none", background: T.red, color: "#fff", opacity: busy ? 0.6 : 1 }}>{busy ? "Deleting…" : "Delete line"}</button>
+        </div>
+      </div>
+    </Sheet>
   );
 }
 

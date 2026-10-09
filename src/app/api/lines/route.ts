@@ -10,7 +10,9 @@ import { loadEvents, loadLines, webhookUrl } from "@/lib/lines-server";
  *
  * GET  → { lines: [... + today {calls, texts}, last_event, failed_7d, events_7d, webhook],
  *          providers: [{ k, name, mark, built, lines, connected, note }] }
- * POST { phone, label, provider, default_lead_source } → { line } — Coy adds a line.
+ * POST { phone, label, provider, default_lead_source } → { line } — Coy adds a line
+ *      (a removed one with the same number is brought back).
+ * A removed line (active = false, DELETE /api/lines/[id]) is left off the list.
  *
  * A contact is keyed by the other person's number, so one person calling two
  * of these lines is still one thread; each message records its line.
@@ -39,7 +41,7 @@ export async function GET(req: NextRequest) {
     t.set(m.phone_number_id, c);
   }
 
-  const out = lines.map((l) => {
+  const out = lines.filter((l) => l.active).map((l) => {
     const mine = events.filter((e) => e.line_id === l.id);
     return {
       ...l,
@@ -86,7 +88,16 @@ export async function POST(req: NextRequest) {
   const source = typeof b.default_lead_source === "string" && b.default_lead_source ? b.default_lead_source : null;
   if (source && !LEAD_SOURCES.some((l) => l.k === source)) return fail("Unknown lead source.");
   const label = typeof b.label === "string" && b.label.trim() ? b.label.trim().slice(0, 40) : null;
-  const { data: dup } = await supabase.from("org_phone_numbers").select("id, label").eq("org_id", orgId).eq("phone_e164", phone).maybeSingle();
+  const { data: dup } = await supabase.from("org_phone_numbers").select("id, label, active").eq("org_id", orgId).eq("phone_e164", phone).maybeSingle();
+  if (dup && dup.active === false) {
+    // A line Coy removed earlier: bring it back, its history already stamped on it.
+    const { data, error } = await supabase.from("org_phone_numbers")
+      .update({ active: true, label: label ?? dup.label, provider, default_lead_source: source })
+      .eq("org_id", orgId).eq("id", dup.id)
+      .select("id, phone_e164, label, provider, default_lead_source").single();
+    if (error) return fail(error.message, 500);
+    return applyCookies(NextResponse.json({ line: { ...data, webhook: webhookUrl(provider) } }, { status: 201 }));
+  }
   if (dup) return fail(`That number is already a line${dup.label ? ` (${dup.label})` : ""}.`, 409);
   const { data, error } = await supabase.from("org_phone_numbers")
     .insert({ org_id: orgId, phone_e164: phone, label, provider, default_lead_source: source, is_primary: false, active: true })

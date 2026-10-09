@@ -262,6 +262,11 @@ export function ThreadView({ contactId, embedded = false }: {
     : { href: `/dashboard/messages/${contactId}?person=1${threadKey ? `&t=${encodeURIComponent(threadKey)}` : ""}`, label: "Contact" };
   // Their own contact card, where numbers, emails and the address are changed (Coy, 2026-10-07: "Edit Contact").
   const editHref = `/dashboard/messages/${contactId}?person=1${threadKey ? `&t=${encodeURIComponent(threadKey)}` : ""}`;
+  // The breadcrumb's last link: a vendor's page, else their customer's page — the same name again for a homeowner.
+  const crumbOrg = c?.bucket === "vendor"
+    ? { href: pageLink.href, label: c.company || name || formatPhone(phone) }
+    : c?.customer_id ? { href: `/dashboard/customers/${c.customer_id}`, label: c.customer_name || c.company || name || formatPhone(phone) }
+    : null;
   // Where they first reached you lives in Internal notes now, not the header (Coy, 2026-10-05).
   const leadSource = firstLine?.name ? `First reached you on the ${firstLine.name} line, ${new Date(firstLine.at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}` : null;
   // Internal notes are a tab of their own, first on the left (Coy, 2026-10-04) — but a person
@@ -309,8 +314,8 @@ export function ThreadView({ contactId, embedded = false }: {
           {/* Phone: back to the thread, by name. */}
           <div className="flex items-center gap-2">
             <div className="flex-1 min-w-0 flex items-center gap-2">
-              {/* On a phone the thread's name sits on the same row, the person right beside it (Coy, 2026-10-05). */}
-              {!embedded && <Link href={`/dashboard/messages${threadKey ? `?t=${encodeURIComponent(threadKey)}` : ""}`} className="lg:hidden shrink-0" style={{ ...eyebrow, color: T.chalk }}>‹ {threadName}</Link>}
+              {/* On a phone the name is in the breadcrumb row below; this row keeps the buttons (Coy, 2026-10-09). */}
+              <span className={embedded ? "contents" : "hidden lg:contents"}>
               {loading ? (
                 <div style={{ fontFamily: "var(--sc-font-strong)", fontSize: "var(--sc-thread-name)", fontWeight: 700, color: T.ink }}>{headerTitle}</div>
               ) : (
@@ -322,6 +327,7 @@ export function ThreadView({ contactId, embedded = false }: {
               {!loading && c?.company && (
                 <span title={c.company} style={{ fontSize: "var(--sc-thread-co)", fontWeight: 500, color: T.ink2, minWidth: 0, flexShrink: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>· {c.company}</span>
               )}
+              </span>
               {/* No tag on a phone: the thread's name at the left already says it (Coy, 2026-10-05). */}
               {c && <span className="hidden lg:inline-flex"><RoleTag role={role} auto={c.bucket_state === "auto"} /></span>}
             </div>
@@ -353,6 +359,18 @@ export function ThreadView({ contactId, embedded = false }: {
               )}
             </div>
           </div>
+          {/* Phone: a breadcrumb under the buttons — the thread, the person, their customer or vendor — each its own link (Coy, 2026-10-09). */}
+          {!embedded && (
+            <nav aria-label="Where you are" className="lg:hidden flex items-center gap-1.5 mt-1.5 min-w-0" style={{ ...eyebrow, whiteSpace: "nowrap" }}>
+              <Link href={`/dashboard/messages${threadKey ? `?t=${encodeURIComponent(threadKey)}` : ""}`} className="shrink-0" style={{ color: T.chalk }}>‹ {threadName}</Link>
+              <span aria-hidden style={{ color: T.ink3 }}>|</span>
+              <Link href={editHref} className="min-w-0" style={{ color: T.ink, overflow: "hidden", textOverflow: "ellipsis" }}>{loading ? headerTitle : (name || formatPhone(phone))}</Link>
+              {!loading && crumbOrg && <>
+                <span aria-hidden style={{ color: T.ink3 }}>|</span>
+                <Link href={crumbOrg.href} className="min-w-0" style={{ color: T.ink2, overflow: "hidden", textOverflow: "ellipsis" }}>{crumbOrg.label}</Link>
+              </>}
+            </nav>
+          )}
           {/* The third row: the channels. Each number is its own (calls, voicemails and texts together), then email, then chat. */}
           <div className={`${folded ? "hidden lg:flex" : "flex"} items-end mt-1.5 overflow-x-auto`} role="tablist" aria-label="Channels">
             {tabs.map((ch) => {

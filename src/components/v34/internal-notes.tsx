@@ -16,6 +16,8 @@ import { T, F, eyebrow, disp, relTime } from "@/lib/v34/tokens";
 import { insertTag, matchMembers, memberName, noteParts, typingTag, type Member } from "@/lib/mentions";
 import { archiveNote } from "@/lib/archive";
 import { ArchiveNoteCard } from "@/components/v34/archive-actions";
+import { VoiceRecorder } from "@/components/v34/voice-recorder";
+import { Microphone } from "@phosphor-icons/react";
 
 export interface InternalNote { id: string; body: string; created_at: string; created_by?: string | null; message_id?: string | null }
 
@@ -30,6 +32,22 @@ export function InternalNotes({ contactId, name, notes, onSaved, leadSource, mer
 }) {
   const [members, setMembers] = useState<Array<Member & { you?: boolean }>>([]);
   const [text, setText] = useState("");
+  // Dictate into the box (Coy, 2026-10-09): the chat's recorder, Groq writes it down, the words are added.
+  const [recording, setRecording] = useState(false);
+  const [hearing, setHearing] = useState(false);
+  async function dictate(blob: Blob) {
+    setRecording(false); setHearing(true); setErr(null);
+    try {
+      const fd = new FormData();
+      fd.append("audio", blob, blob.type.includes("mp4") ? "voice.mp4" : "voice.webm");
+      const r = await fetch("/api/dusty/transcribe", { method: "POST", body: fd });
+      const b = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(b?.error || `HTTP ${r.status}`);
+      const words = String(b.text ?? "").trim();
+      if (words) setText((t) => (t.trim() ? `${t.trim()} ${words}` : words));
+    } catch (e) { setErr(`Dictation: ${e instanceof Error ? e.message : String(e)}`); }
+    finally { setHearing(false); }
+  }
   const [tag, setTag] = useState<{ start: number; query: string } | null>(null);
   const [pick, setPick] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -63,7 +81,7 @@ export function InternalNotes({ contactId, name, notes, onSaved, leadSource, mer
     try {
       const r = await fetch(`/api/people/${encodeURIComponent(contactId)}/notes`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ body }) });
       if (!r.ok) throw new Error(((await r.json().catch(() => ({}))) as { error?: string }).error ?? `HTTP ${r.status}`);
-      setText(""); onSaved();
+      setText(""); if (box.current) box.current.style.height = "36px"; onSaved();
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
   };
@@ -127,9 +145,11 @@ export function InternalNotes({ contactId, name, notes, onSaved, leadSource, mer
           </div>
         )}
         <div style={{ ...eyebrow, marginBottom: 4 }}>Internal note · only your team sees it · @ to tag</div>
+        {recording ? <VoiceRecorder onSend={(b) => void dictate(b)} onCancel={() => setRecording(false)} /> : (
         <div className="flex items-end gap-2">
-          <textarea ref={box} value={text} rows={2} maxLength={4000} placeholder={`A note about ${name ?? "them"}…`}
-            onChange={(e) => onType(e.target.value, e.target.selectionStart ?? e.target.value.length)}
+          {/* One line, the Save button's height, growing as it fills (Coy, 2026-10-09). */}
+          <textarea ref={box} value={text} rows={1} maxLength={4000} placeholder={`A note about ${name ?? "them"}…`}
+            onChange={(e) => { onType(e.target.value, e.target.selectionStart ?? e.target.value.length); const el = e.target; el.style.height = "36px"; el.style.height = `${Math.min(160, Math.max(36, el.scrollHeight + 2))}px`; }}
             onKeyDown={(e) => {
               if (options.length) {
                 if (e.key === "ArrowDown") { e.preventDefault(); setPick((p) => (p + 1) % options.length); return; }
@@ -139,12 +159,18 @@ export function InternalNotes({ contactId, name, notes, onSaved, leadSource, mer
               }
               if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void save(); }
             }}
-            style={{ flex: 1, minWidth: 0, border: `1px solid ${T.hair}`, borderRadius: 4, padding: "6px 8px", fontSize: F.sm, resize: "none", background: T.card, color: T.ink }} />
+            style={{ flex: 1, minWidth: 0, border: `1px solid ${T.hair}`, borderRadius: 4, padding: "7px 8px", height: 36, fontSize: F.sm, lineHeight: "20px", resize: "none", background: T.card, color: T.ink }} />
+          <button onClick={() => setRecording(true)} disabled={hearing || busy} aria-label="Dictate a note" title="Dictate a note"
+            className="rounded flex items-center justify-center shrink-0"
+            style={{ width: 36, height: 36, border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink2, cursor: "pointer", opacity: hearing ? 0.6 : 1 }}>
+            {hearing ? <span style={{ fontSize: 11 }}>…</span> : <Microphone size={17} />}
+          </button>
           <button onClick={() => void save()} disabled={!text.trim() || busy} className="rounded px-3"
             style={{ height: 36, background: T.hiviz, color: T.onHiviz, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", letterSpacing: ".06em", cursor: "pointer", opacity: !text.trim() || busy ? 0.5 : 1 }}>
             {busy ? "Saving…" : "Save note"}
           </button>
         </div>
+        )}
         {err && <div style={{ fontSize: F.xs, color: T.red, marginTop: 4 }}>{err}</div>}
       </div>
     </div>

@@ -47,7 +47,7 @@ import {
 export interface Person {
   contact: {
     id: string; customer_id?: string | null; name: string | null; name_confirmed: boolean; phones: string[];
-    email: string | null; address: string | null; address_source?: string | null; company: string | null;
+    email: string | null; address: string | null; address_source?: string | null; company: string | null; customer_name?: string | null;
     phone_list?: Array<{ phone: string; label: string | null; is_primary: boolean }>;
     email_list?: Array<{ email: string; label: string | null; is_primary: boolean }>;
     bucket: "customer" | "vendor" | "personal" | "spam" | null;

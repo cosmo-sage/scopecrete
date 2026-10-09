@@ -96,10 +96,13 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ contactId: 
   }
   // The company they speak for: their own, else their customer's name when it is a business (Coy, 2026-10-05).
   let company = c.company_name?.trim() || null;
-  if (!company && c.customer_id) {
+  // Their customer's own name, for the thread's breadcrumb on a phone (Coy, 2026-10-09).
+  let customerName: string | null = null;
+  if (c.customer_id) {
     const { data: cu } = await supabase.from("customers").select("name, kind, customer_type").eq("org_id", orgId).eq("id", c.customer_id).maybeSingle();
     const cn = (cu?.name as string | null)?.trim();
-    if (cn && cn.toLowerCase() !== nm.toLowerCase() && (cu?.kind === "company" || cu?.customer_type === "commercial" || cu?.customer_type === "public")) company = cn;
+    customerName = cn || null;
+    if (!company && cn && cn.toLowerCase() !== nm.toLowerCase() && (cu?.kind === "company" || cu?.customer_type === "commercial" || cu?.customer_type === "public")) company = cn;
   }
 
   const roleByJob = new Map(linkRows.map((l) => [l.job_id, l.role]));
@@ -132,6 +135,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ contactId: 
       address: c.address?.trim() || null,
       address_source: (c.address_source as string | null) ?? null,
       company,
+      customer_name: customerName,
       bucket,
       bucket_state: !bucket ? null : c.classification_confirmed_at ? "confirmed" : "auto",
       subtype: bucket ? c.contact_subtype : null,

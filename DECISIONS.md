@@ -3308,7 +3308,13 @@ expected start date per quoted job before it means anything. Add the field.
   follow-up next step for Coy ("Get Kim's price for …", `contact_tasks`,
   due the price-by date) — never a bot follow-up (§10). **Send** texts each
   one through Quo on that tap (§6 Texts send through Quo); email opens Coy's
-  own mail app; Copy link. **What a vendor sees** is a frozen copy built by
+  own mail app; Copy link. **Sent is not delivered (2026-10-09):** Coy's
+  test to himself said "Texted ✓" and never came — his vendor contact's
+  number was (225) 508-3358, one digit off his 3258, and Quo takes a text to
+  any number. Each row now says "Sent to (225) 508-3358 · waiting for Quo to
+  deliver…", then "Delivered ✓" once Quo's webhook brings it back (`GET
+  /api/texts?quo_id=`, the message by Quo's id under RLS), or after 40 s that
+  Quo hasn't delivered it — check the number. **What a vendor sees** is a frozen copy built by
   `shownScopes()` field by field — names, sizes, quantities, units, who
   supplies — never a cost, price, margin, O.H. or Coy's notes.
   `bid_requests` (job, mode, dates, `scopes`, `packet`, `assets.paths`) and

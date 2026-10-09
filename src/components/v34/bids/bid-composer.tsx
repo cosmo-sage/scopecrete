@@ -139,6 +139,17 @@ export function BidComposer({ open, onClose, vendors: start, jobId: startJob, fr
     size: shown.length === 1 ? shown[0].size : null, street: pk.address ? job?.street ?? null : null, pour: pk.dates ? pour || null : null,
     priceBy: pk.dates ? priceBy || null : null, url: "scopecrete.ai/b/…" }) : null;
 
+  // Checks at 4, 10, 20 and 40 s whether Quo's webhook brought the text back
+  // delivered (GET /api/texts?quo_id=). None → the number is likely wrong.
+  const confirmDelivery = async (rid: string, quoId: string, to: string) => {
+    for (const wait of [4000, 6000, 10000, 20000]) {
+      await new Promise((ok) => setTimeout(ok, wait));
+      const d = await call(`/api/texts?quo_id=${encodeURIComponent(quoId)}`, "GET").catch(() => null);
+      if (d?.delivered) { setStatus((s) => ({ ...s, [rid]: `Delivered to ${to} ✓` })); return; }
+    }
+    setStatus((s) => ({ ...s, [rid]: `Quo took it but hasn't delivered it to ${to} — check the number on their page` }));
+  };
+
   const send = async () => {
     if (!jobId) return;
     setBusy(true); setErr(null);
@@ -152,19 +163,24 @@ export function BidComposer({ open, onClose, vendors: start, jobId: startJob, fr
       setMade(rows);
       // Texts go now, one by one, through Quo — this tap is Coy's.
       const st: Record<string, string> = {};
+      let sentN = 0;
       for (const r of rows) {
         if (r.channel === "email") continue;
         if (!r.phone) { st[r.id] = "No phone — email it"; continue; }
         st[r.id] = "Texting…"; setStatus({ ...st });
         try {
-          await call("/api/texts", "POST", { contact_id: r.contact_id, body: r.text });
+          const t = await call("/api/texts", "POST", { contact_id: r.contact_id, body: r.text });
           await call(`/api/bid-requests/recipients/${r.id}`, "PATCH", { sent: "text" }).catch(() => null);
-          st[r.id] = "Texted ✓";
+          // Quo taking the text isn't it arriving: say the number it went to, then wait
+          // for Quo's delivery to come back before saying it was delivered.
+          const to = formatPhone((t.to as string | null) ?? r.phone);
+          st[r.id] = `Sent to ${to} · waiting for Quo to deliver…`; sentN += 1;
+          if (typeof t.quo_id === "string") void confirmDelivery(r.id, t.quo_id, to);
         } catch (e) { st[r.id] = `Text failed: ${e instanceof Error ? e.message : String(e)}`; }
         setStatus({ ...st });
       }
-      const n = Object.values(st).filter((x) => x === "Texted ✓").length;
-      onDone?.(`Bid request saved for ${rows.length} vendor${rows.length === 1 ? "" : "s"}${n ? ` · ${n} texted` : ""}. Answers land on their page and the job's Summary.`);
+      const n = sentN;
+      onDone?.(`Bid request saved for ${rows.length} vendor${rows.length === 1 ? "" : "s"}${n ? ` · ${n} text${n === 1 ? "" : "s"} sent` : ""}. Answers land on their page and the job's Summary.`);
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
   };
 

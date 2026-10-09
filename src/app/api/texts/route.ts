@@ -71,3 +71,20 @@ export async function POST(req: NextRequest) {
 
   return applyCookies(NextResponse.json({ ok: true, to, from_line: line.line.id, segments: segments(text.body), quo_id: sent.id }));
 }
+
+/**
+ * GET ?quo_id=… → { delivered } — whether Quo has sent back the text we handed
+ * it (its message.delivered webhook, projected into messages with Quo's id).
+ * Quo taking a text is not the text arriving: a mistyped or landline number is
+ * accepted and then never delivered (Coy's bid request to (225) 508-3358,
+ * 2026-10-09). Session client, RLS decides.
+ */
+export async function GET(req: NextRequest) {
+  const result = await getApiSession(req);
+  if (!result.ok) return result.response;
+  const { supabase: sb, orgId, applyCookies } = result.session;
+  const id = req.nextUrl.searchParams.get("quo_id") ?? "";
+  if (!/^[A-Za-z0-9_-]{4,80}$/.test(id)) return applyCookies(NextResponse.json({ error: "Not a Quo message id." }, { status: 400 }));
+  const { data } = await sb.from("messages").select("id").eq("org_id", orgId).eq("provider_message_id", id).limit(1).maybeSingle();
+  return applyCookies(NextResponse.json({ delivered: !!data }));
+}

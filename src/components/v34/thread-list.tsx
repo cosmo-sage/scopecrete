@@ -476,6 +476,8 @@ function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, onName, onB
         style={{ background: T.card, position: "relative", touchAction: "pan-y",
                  transform: offset ? `translateX(${offset}px)` : undefined,
                  transition: drag === null ? "transform .18s ease-out" : "none" }}>
+      {/* A grip at each end says the row swipes — touch screens only (Coy, 2026-10-09). */}
+      {swipeable && <><span className="sc-swipe-grip" style={{ left: 1 }} aria-hidden="true" /><span className="sc-swipe-grip" style={{ right: 1 }} aria-hidden="true" /></>}
       {/* Threads v2 row: initials, name, role tag, age · who they are · the latest.
           A tap opens them; ▾ (only while there is something to decide about
           who they are) drops down the filing tools. */}
@@ -490,14 +492,6 @@ function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, onName, onB
             {t.auto_name && (
               <span className="shrink-0" title="Named from their own words — not yet kept by you"
                 style={{ ...eyebrow, color: T.chalk }}>Auto</span>
-            )}
-            {roleShown && t.role && <RoleTag role={t.role} auto={!!t.bucket_auto} />}
-            {guessB && <BucketTag label={guessB.l} c={guessB.c} state="suggested" />}
-            {jobType && (
-              <span className="shrink-0" title={jobType.sure ? "From the job" : "Dusty's guess — set when the job is made"}
-                style={{ ...eyebrow, color: jobType.sure ? T.ink2 : T.ink3 }}>
-                {jobType.l}{jobType.sure ? "" : "?"}
-              </span>
             )}
             <span className="flex-1" />
             {live ? <span className="shrink-0"><LiveCallBadge call={live} compact /></span>
@@ -536,6 +530,20 @@ function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, onName, onB
           Calling, texting and email live on that page, not here. */}
       {expanded && (
         <div className="px-2.5 pb-2.5" style={{ paddingLeft: 46 }}>
+          {/* Who they are and the kind of job — behind ▾ with the summary, out of
+              the row (Coy, 2026-10-09). */}
+          {((roleShown && t.role) || guessB || jobType) && (
+            <div className="flex items-center gap-1.5 flex-wrap" style={{ marginBottom: 8 }}>
+              {roleShown && t.role && <RoleTag role={t.role} auto={!!t.bucket_auto} />}
+              {guessB && <BucketTag label={guessB.l} c={guessB.c} state="suggested" />}
+              {jobType && (
+                <span className="shrink-0" title={jobType.sure ? "From the job" : "Dusty's guess — set when the job is made"}
+                  style={{ ...eyebrow, color: jobType.sure ? T.ink2 : T.ink3 }}>
+                  {jobType.l}{jobType.sure ? "" : "?"}
+                </span>
+              )}
+            </div>
+          )}
           {t.status_summary && (
             <div style={{ marginBottom: 8 }}>
               <div style={{ ...eyebrow, color: T.ink3 }}>Where it stands · Dusty</div>

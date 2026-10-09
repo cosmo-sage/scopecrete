@@ -23,6 +23,7 @@ import { useAccess } from "@/lib/v34/access-ctx";
 import { useRouter } from "next/navigation";
 import { T, F, disp, eyebrow, nums, clip, relTime, formatPhone } from "@/lib/v34/tokens";
 import { EmptyState, MenuButton, PageHeader, Sheet } from "@/components/v34/primitives";
+import { Emblem } from "@/components/site/marks";
 import { STAGES, STATUS_TAG, STATUS_NAME, JOB_TYPE_LABEL, LEAD_SOURCES, stageOf } from "@/lib/jobs/stages";
 import { BOARD_SORTS, cityCounts, filterJobs, sortJobs, type BoardFilter, type BoardSort } from "@/lib/jobs/board-view";
 
@@ -178,6 +179,20 @@ export default function JobsBoard() {
       <NewJobSheet open={newOpen} onClose={() => setNewOpen(false)} />
       <Sheet open={filterOpen} onClose={() => setFilterOpen(false)} title="Filter jobs" sub="Pick any — a job shows when it matches one of each">
         <div className="px-4 py-3 flex flex-col gap-4">
+          <div className="lg:hidden">
+            <div style={{ ...eyebrow, marginBottom: 6 }}>Sort</div>
+            <div className="flex flex-wrap gap-1.5">
+              {BOARD_SORTS.map((o) => {
+                const on = sort === o.k;
+                return (
+                  <button key={o.k} onClick={() => setSort(o.k)} className="rounded-full px-3"
+                    style={{ height: 30, border: `1px solid ${on ? T.ink : T.hair}`, background: on ? T.ink : T.card, color: on ? T.card : T.ink2, fontSize: F.sm, cursor: "pointer" }}>
+                    {o.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
           {([
             { k: "types" as const, title: "Job type", opts: [...Object.keys(JOB_TYPE_LABEL), "none"].map((t) => ({ v: t, l: t === "none" ? "Type?" : JOB_TYPE_LABEL[t], n: (jobs ?? []).filter((j) => (j.job_type ?? "none") === t).length })) },
             { k: "cities" as const, title: "City", opts: cityCounts(jobs ?? []).map((c) => ({ v: c.city, l: c.city === "none" ? "No city" : c.city, n: c.n })) },
@@ -213,7 +228,8 @@ export default function JobsBoard() {
       <PageHeader title="Jobs" menu={<MenuButton onClick={() => setStagesOpen(true)} label="Job stages" />}
         sub="Every job from first call to done, by stage. Move a card along as the work moves."
         actions={<>
-          <select value={sort} onChange={(e) => setSort(e.target.value as BoardSort)} aria-label="Sort jobs" title="Sort jobs" style={{ ...ctl, minWidth: 0, maxWidth: 140, flexShrink: 1 }}>
+          {/* On a phone Sort is in the filter panel (Coy, 2026-10-09). */}
+          <select value={sort} onChange={(e) => setSort(e.target.value as BoardSort)} aria-label="Sort jobs" title="Sort jobs" className="hidden lg:block" style={{ ...ctl, minWidth: 0, maxWidth: 140, flexShrink: 1 }}>
             {BOARD_SORTS.map((o) => <option key={o.k} value={o.k}>↕ {o.label}</option>)}
           </select>
           <button onClick={() => setFilterOpen(true)} aria-label={nFilters ? `Filter · ${nFilters} in use` : "Filter"} title="Filter by job type and city"
@@ -242,7 +258,14 @@ export default function JobsBoard() {
               </button>
             ))}
           </div>
-          {!limited && <button onClick={() => setNewOpen(true)} className="rounded px-3 sc-new-btn shrink-0"
+          {/* On a phone the ScopeCrete emblem: Dusty asks "a new job, or edit one?"
+              (Coy, 2026-10-09). The desktop keeps + New job. */}
+          {!limited && <button onClick={() => { window.dispatchEvent(new Event("sc:dusty-open")); window.dispatchEvent(new Event("sc:dusty-jobs")); }}
+            className="lg:hidden shrink-0 flex items-center justify-center rounded" aria-label="New or existing job — ask Dusty" title="New or existing job"
+            style={{ width: 34, height: 34, border: `1px solid ${T.hiviz}`, background: T.card, cursor: "pointer" }}>
+            <Emblem size={22} spin />
+          </button>}
+          {!limited && <button onClick={() => setNewOpen(true)} className="hidden lg:block rounded px-3 sc-new-btn shrink-0"
             style={{ height: 34, background: T.hiviz, color: T.onHiviz, fontFamily: disp, fontSize: F.sm, fontWeight: 600,
                      textTransform: "uppercase", letterSpacing: ".06em", cursor: "pointer", whiteSpace: "nowrap" }}>
             + New job

@@ -323,13 +323,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           if (k === "toolbox") {
             const on = toolOpen || toolActive;
             return (
-              <button key={k} onClick={() => setToolOpen((o) => !o)} aria-expanded={toolOpen} aria-label="Toolbox"
+              <button key={k} onClick={() => setToolOpen((o) => !o)} aria-expanded={toolOpen} aria-label="Toolbox" data-on={on ? "" : undefined}
                 className="sc-tab flex-1 flex flex-col items-center justify-center gap-1" style={{ position: "relative" }}>
                 <span className="sc-tab-ico" style={{ position: "relative" }}>
                   <NavIcon k="toolbox" on={on} />
                   {badge.logs && <span className="absolute rounded-full" style={{ top: -2, right: -4, width: 7, height: 7, background: T.red }} />}
                 </span>
-                <span className="sc-tab-lbl" style={{ ...eyebrow, fontSize: 9, color: on ? T.ink : T.ink3 }}>Toolbox</span>
+                <span className="sc-tab-lbl" style={{ ...eyebrow, fontSize: 9, color: on ? T.hiviz : T.ink3, fontWeight: on ? 700 : undefined }}>Toolbox</span>
               </button>
             );
           }
@@ -343,7 +343,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 <NavIcon k={k} on={on} />
                 {k === "threads" && needs !== null && needs > 0 && <Badge n={needs} style={{ top: -4, left: "calc(50% + 4px)", minWidth: 14, height: 14 }} />}
               </span>
-              <span className="sc-tab-lbl" style={{ ...eyebrow, fontSize: 9, color: on ? T.ink : T.ink3 }}>{p.label}</span>
+              <span className="sc-tab-lbl" style={{ ...eyebrow, fontSize: 9, color: on ? T.hiviz : T.ink3, fontWeight: on ? 700 : undefined }}>{p.label}</span>
             </Link>
           );
         })}

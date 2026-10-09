@@ -130,6 +130,9 @@ html[data-activity-phone="off"] { --sc-head: 54px; }
 .sc-tab-ico { display: block; transition: transform 160ms cubic-bezier(0.22, 0.9, 0.24, 1); }
 .sc-tab:active .sc-tab-ico { transform: scale(0.84); }
 .sc-tab-lbl { transition: color 160ms linear; }
+/* The open page's tab: a tinted pill behind its icon, its word in the accent (Coy, 2026-10-09). */
+.sc-tab[aria-current="page"] .sc-tab-ico,
+.sc-tab[data-on] .sc-tab-ico { background: var(--sc-hiviz-dim); border-radius: 999px; padding: 2px 14px; }
 
 /* becoming the current tab: a single short rise, not a bounce */
 .sc-tab-pop { animation: scTabPop 320ms cubic-bezier(0.22, 0.9, 0.24, 1); }
@@ -143,7 +146,7 @@ html[data-activity-phone="off"] { --sc-head: 54px; }
 .sc-tab-mark {
   position: absolute;
   top: 0;
-  height: 2px;
+  height: 3px;
   background: #f2610c; /* T.hiviz */
   transition: left 260ms cubic-bezier(0.22, 0.9, 0.24, 1),
               width 260ms cubic-bezier(0.22, 0.9, 0.24, 1);
@@ -527,3 +530,10 @@ html[data-alerts-open="1"] .sc-pops { display: none; }
 .sc-drawer-in-left { animation: sc-in-left .24s cubic-bezier(.2,.8,.2,1); }
 .sc-drawer-in-right { animation: sc-in-right .24s cubic-bezier(.2,.8,.2,1); }
 @media (prefers-reduced-motion: reduce) { .sc-drawer-in-left, .sc-drawer-in-right { animation: none; } }
+
+/* Threads rows: a small grip at each end on a touch screen says they swipe (Coy, 2026-10-09). */
+.sc-swipe-grip { display: none; }
+@media (pointer: coarse) {
+  .sc-swipe-grip { display: block; position: absolute; top: 50%; width: 3px; height: 20px; margin-top: -10px;
+    border-radius: 2px; background: var(--sc-hair-strong); pointer-events: none; z-index: 1; }
+}

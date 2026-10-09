@@ -141,9 +141,12 @@ export function DustyPanel({ open, onClose, onBusy, onStream }: {
 
   // Which conversation to load. Set from a tap or on opening; the fetch runs in the effect below.
   const [want, setWant] = useState<{ id: string | null; n: number }>({ id: null, n: 0 });
+  // The Jobs page's emblem (Coy, 2026-10-09): a fresh chat where Dusty asks
+  // "a new job, or one you have?" — his question is fixed text, no model call.
+  const [jobAsk, setJobAsk] = useState(false);
   const select = useCallback((id: string | null) => {
     abort.current?.abort();
-    setRailOpen(false); setErr(null); setActiveId(id); setDraft("");
+    setRailOpen(false); setErr(null); setActiveId(id); setDraft(""); if (id) setJobAsk(false);
     setItems([]); setLoadingConv(!!id);
     setWant((w) => ({ id, n: w.n + 1 }));
   }, []);
@@ -188,6 +191,11 @@ export function DustyPanel({ open, onClose, onBusy, onStream }: {
     window.addEventListener("sc:dusty-draft", put);
     return () => window.removeEventListener("sc:dusty-draft", put);
   }, []);
+  useEffect(() => {
+    const on = () => { select(null); setJobAsk(true); };
+    window.addEventListener("sc:dusty-jobs", on);
+    return () => window.removeEventListener("sc:dusty-jobs", on);
+  }, [select]);
   useEffect(() => {
     const q = autoAsk.current;
     if (!q || !open || !convs || openedFor !== openKey || loadingConv || busy) return;
@@ -481,7 +489,11 @@ export function DustyPanel({ open, onClose, onBusy, onStream }: {
         <div ref={scroller} className="flex-1 overflow-y-auto">
           <div className="mx-auto w-full px-4 py-4" style={{ maxWidth: 760 }}>
             {loadingConv && <div className="rounded animate-pulse" style={{ height: 80, background: T.hairSoft }} />}
-            {!loadingConv && items.length === 0 && (
+            {!loadingConv && items.length === 0 && jobAsk && (
+              <JobAsk onNew={() => { setJobAsk(false); create("job"); }}
+                onPick={(id) => { setJobAsk(false); router.push(`/dashboard/scope/${id}`); }} />
+            )}
+            {!loadingConv && items.length === 0 && !jobAsk && (
               <DustyHello contactId={ref.kind === "thread" ? ref.id : null} onGo={onClose} />
             )}
             {/* The chat at Coy's text size: zoom scales the answers' tables and plans with the words. */}
@@ -616,6 +628,54 @@ function ChatFiles({ files }: { files: TurnFile[] }) {
  * opening the panel costs no model call. Nothing to mention → a quiet line.
  * No "what I can and can't do", no starter buttons.
  */
+/** Dusty's question from the Jobs page's emblem: a new job (the New job form)
+ *  or one of the jobs there are (opens it, Dusty then on that job). */
+function JobAsk({ onNew, onPick }: { onNew: () => void; onPick: (id: string) => void }) {
+  const [jobs, setJobs] = useState<{ id: string; title: string | null; city: string | null; contact_name: string | null }[] | null>(null);
+  const [picking, setPicking] = useState(false);
+  const [q, setQ] = useState("");
+  useEffect(() => {
+    if (!picking || jobs) return;
+    let off = false;
+    fetch("/api/jobs").then((r) => (r.ok ? r.json() : { jobs: [] })).then((b) => { if (!off) setJobs(b.jobs ?? []); }).catch(() => { if (!off) setJobs([]); });
+    return () => { off = true; };
+  }, [picking, jobs]);
+  const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const shown = (jobs ?? []).filter((j) => words.every((w) => [j.title, j.city, j.contact_name].filter(Boolean).join(" ").toLowerCase().includes(w))).slice(0, 12);
+  const btn: React.CSSProperties = { height: 36, padding: "0 14px", borderRadius: 999, border: `1px solid ${T.hiviz}`, fontFamily: agent, fontSize: F.sm, fontWeight: 600, cursor: "pointer" };
+  return (
+    <div style={{ padding: "20px 4px 12px" }}>
+      <div className="flex items-start gap-2.5">
+        <Emblem size={30} spin />
+        <div style={{ fontFamily: agent, fontSize: F.md, color: T.ink, lineHeight: 1.45, paddingTop: 4 }}>
+          Do you want to create a new job, or edit an existing one?
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-2" style={{ margin: "12px 0 0 40px" }}>
+        <button onClick={onNew} style={{ ...btn, background: T.hiviz, color: T.onHiviz }}>A new job</button>
+        <button onClick={() => setPicking(true)} style={{ ...btn, background: picking ? T.hivizDim : T.card, color: T.ink }}>Edit an existing one</button>
+      </div>
+      {picking && (
+        <div style={{ margin: "12px 0 0 40px" }}>
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Which job? Name, customer, city…" autoFocus
+            className="w-full rounded" style={{ height: 34, padding: "0 10px", border: `1px solid ${T.hair}`, background: T.card, fontFamily: agent, fontSize: F.sm, color: T.ink }} />
+          <div className="flex flex-col" style={{ marginTop: 6 }}>
+            {!jobs && <div style={{ fontFamily: agent, fontSize: F.xs, color: T.ink3, padding: "6px 0" }}>Finding your jobs…</div>}
+            {jobs && shown.length === 0 && <div style={{ fontFamily: agent, fontSize: F.xs, color: T.ink3, padding: "6px 0" }}>No job by that name.</div>}
+            {shown.map((j) => (
+              <button key={j.id} onClick={() => onPick(j.id)} className="text-left"
+                style={{ padding: "8px 2px", borderBottom: `1px solid ${T.hairSoft}`, background: "none", cursor: "pointer", fontFamily: agent }}>
+                <div style={{ fontSize: F.sm, fontWeight: 600, color: T.ink, ...clip }}>{j.title || "Untitled job"}</div>
+                {(j.contact_name || j.city) && <div style={{ fontSize: F.xs, color: T.ink3, ...clip }}>{[j.contact_name, j.city].filter(Boolean).join(" · ")}</div>}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function DustyHello({ contactId, onGo }: { contactId: string | null; onGo: () => void }) {
   const [name, setName] = useState<string | null | undefined>(undefined);
   const [thought, setThought] = useState<Thought | null | undefined>(undefined);

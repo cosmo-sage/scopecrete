@@ -18,6 +18,7 @@ import { T, F, disp, eyebrow, nums, clip, formatPhone } from "@/lib/v34/tokens";
 import { Drawer, OrgNameContext } from "@/components/v34/primitives";
 import { InitialsBox } from "@/components/v34/thread-list";
 import { call } from "@/components/v34/cost-cards";
+import { waitForDelivery } from "@/components/v34/bids/delivery";
 import { bidText, shownScopes, suppliedByDefault, type ComposeScope } from "@/lib/bids";
 
 export interface BidVendor {
@@ -55,7 +56,7 @@ const stepHead = (n: number, t: string, sub?: string) => (
     {sub && <span style={{ fontSize: F.xs, color: T.ink3 }}>{sub}</span>}
   </div>
 );
-const chip = (on: boolean, dis?: boolean): React.CSSProperties => ({
+export const chip = (on: boolean, dis?: boolean): React.CSSProperties => ({
   height: 28, padding: "0 10px", borderRadius: 3, border: `1px solid ${on ? T.ink : T.hairStrong}`, background: on ? T.ink : T.card, color: on ? T.card : T.ink2,
   fontSize: F.xs, fontWeight: 600, cursor: dis ? "not-allowed" : "pointer", opacity: dis ? 0.4 : 1, whiteSpace: "nowrap",
 });
@@ -142,12 +143,8 @@ export function BidComposer({ open, onClose, vendors: start, jobId: startJob, fr
   // Checks at 4, 10, 20 and 40 s whether Quo's webhook brought the text back
   // delivered (GET /api/texts?quo_id=). None → the number is likely wrong.
   const confirmDelivery = async (rid: string, quoId: string, to: string) => {
-    for (const wait of [4000, 6000, 10000, 20000]) {
-      await new Promise((ok) => setTimeout(ok, wait));
-      const d = await call(`/api/texts?quo_id=${encodeURIComponent(quoId)}`, "GET").catch(() => null);
-      if (d?.delivered) { setStatus((s) => ({ ...s, [rid]: `Delivered to ${to} ✓` })); return; }
-    }
-    setStatus((s) => ({ ...s, [rid]: `Quo took it but hasn't delivered it to ${to} — check the number on their page` }));
+    const ok = await waitForDelivery(quoId);
+    setStatus((s) => ({ ...s, [rid]: ok ? `Delivered to ${to} ✓` : `Quo took it but hasn't delivered it to ${to} — check the number on their page` }));
   };
 
   const send = async () => {

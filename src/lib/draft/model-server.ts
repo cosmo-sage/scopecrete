@@ -18,9 +18,22 @@ Reply with JSON only: {"facts":[{"area":"driveway"|"patio"|"sidewalk"|"slab"|nul
 Keys: length_ft, width_ft, sqft (an area said as an area), depth_in (thickness of the NEW concrete), existing_depth_in (thickness of what is there now), base_in, psi, work (value = the area word), demo (true = old concrete comes out, false = new work).
 Rules: only what a line says. quote = the exact words from that line. value = a number said in the quote (feet for lengths, inches for thickness). Never estimate, never fill a gap, never use a typical size. Leave out anything not said.`;
 
+/** A key as pasted, without the spaces, quotes or line break a copy can bring along (a 401 otherwise). */
+const key = (name: string) => (process.env[name] ?? "").trim().replace(/^["']|["']$/g, "").trim();
+
+/** What the API said, in words Coy can act on — its own message, never the key. */
+async function refusal(r: Response, who: string): Promise<string> {
+  let msg = "";
+  try { const j = (await r.json()) as { error?: { message?: string } | string }; msg = typeof j.error === "string" ? j.error : j.error?.message ?? ""; } catch { /* no body */ }
+  console.error("draft model", who, r.status, msg.slice(0, 200));
+  if (r.status === 401) return `the model API answered 401 — ${who} refused the key${msg ? ` ("${msg.slice(0, 80)}")` : ""}; make a new key and replace it in Vercel`;
+  if (r.status === 400 && /credit/i.test(msg)) return `the model API answered 400 — the ${who} account is out of credits`;
+  return `the model API answered ${r.status}${msg ? ` ("${msg.slice(0, 80)}")` : ""}`;
+}
+
 export function modelConfigured(): "anthropic" | "openrouter" | null {
-  if (process.env.ANTHROPIC_API_KEY) return "anthropic";
-  if (process.env.OPENROUTER_API_KEY) return "openrouter";
+  if (key("ANTHROPIC_API_KEY")) return "anthropic";
+  if (key("OPENROUTER_API_KEY")) return "openrouter";
   return null;
 }
 
@@ -41,21 +54,21 @@ export async function modelJson(system: string, user: string, maxTokens = 2000, 
     if (provider === "anthropic") {
       const r = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST", signal: ctrl.signal,
-        headers: { "content-type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY as string, "anthropic-version": "2023-06-01" },
+        headers: { "content-type": "application/json", "x-api-key": key("ANTHROPIC_API_KEY"), "anthropic-version": "2023-06-01" },
         body: JSON.stringify({ model: process.env.DRAFT_MODEL || "claude-haiku-4-5-20251001", max_tokens: maxTokens, temperature: 0,
           system, messages: [{ role: "user", content: user }] }),
       });
-      if (!r.ok) return { ok: false, error: `the model API answered ${r.status}` };
+      if (!r.ok) return { ok: false, error: await refusal(r, "Anthropic") };
       const j = (await r.json()) as { content?: Array<{ type: string; text?: string }> };
       text = (j.content ?? []).filter((c) => c.type === "text").map((c) => c.text ?? "").join("");
     } else {
       const r = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST", signal: ctrl.signal,
-        headers: { "content-type": "application/json", authorization: `Bearer ${process.env.OPENROUTER_API_KEY}` },
+        headers: { "content-type": "application/json", authorization: `Bearer ${key("OPENROUTER_API_KEY")}` },
         body: JSON.stringify({ model: process.env.DRAFT_MODEL || "anthropic/claude-haiku-4.5", max_tokens: maxTokens, temperature: 0,
           messages: [{ role: "system", content: system }, { role: "user", content: user }] }),
       });
-      if (!r.ok) return { ok: false, error: `the model API answered ${r.status}` };
+      if (!r.ok) return { ok: false, error: await refusal(r, "OpenRouter") };
       const j = (await r.json()) as { choices?: Array<{ message?: { content?: string } }> };
       text = j.choices?.[0]?.message?.content ?? "";
     }

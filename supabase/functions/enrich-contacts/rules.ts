@@ -568,6 +568,8 @@ const NOT_A_NAME = new Set([
   // places said after "it's" ("it's Baton Rouge, off Airline")
   'baton', 'rouge', 'louisiana', 'orleans', 'new', 'central', 'prairieville', 'gonzales', 'denham', 'zachary',
   'south', 'north', 'east', 'west',
+  // "It's Fort Polk and nothing" named a second person "Fort" and blocked Jeff Stevens (2026-10-09)
+  'fort', 'lake', 'port', 'camp', 'mount', 'saint', 'st', 'polk', 'lafayette', 'shreveport', 'houma', 'thibodaux',
   'january', 'february', 'march', 'april', 'june', 'july', 'august', 'september', 'october', 'november', 'december',
 ])
 

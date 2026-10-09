@@ -149,11 +149,19 @@ export async function POST(req: NextRequest) {
   // send_proposal step writes the way he does.
   try {
     let where: Parameters<typeof proposalSendLines>[3] = { recent: 6 };
+    // Every job of the customer's people too, filed on the customer or not (Coy, 2026-10-09: he asks
+    // Dusty to send a proposal from any of the customer's contacts' threads).
+    const peopleOf = async (customerId: string) => {
+      const { data: ps } = await supabase.from("contacts").select("id").eq("org_id", orgId).eq("customer_id", customerId)
+        .is("merged_into_contact_id", null).limit(50);
+      return ((ps ?? []) as Array<{ id: string }>).map((x) => x.id);
+    };
     if (ref.kind === "scope") where = { jobIds: [ref.id] };
-    else if (ref.kind === "customer") where = { customerIds: [ref.id] };
+    else if (ref.kind === "customer") where = { customerIds: [ref.id], contactIds: await peopleOf(ref.id) };
     else if (ref.kind === "thread") {
       const { data: who } = await supabase.from("contacts").select("customer_id").eq("org_id", orgId).eq("id", ref.id).maybeSingle();
-      where = { contactIds: [ref.id], customerIds: who?.customer_id ? [who.customer_id as string] : [] };
+      const cust = (who?.customer_id as string | null) ?? null;
+      where = { contactIds: [...new Set([ref.id, ...(cust ? await peopleOf(cust) : [])])], customerIds: cust ? [cust] : [] };
     }
     const [{ data: org }, lines] = await Promise.all([
       supabase.from("orgs").select("name").eq("id", orgId).maybeSingle(),

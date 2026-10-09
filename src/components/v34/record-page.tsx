@@ -99,7 +99,9 @@ export function RecordHeader({ back, title, tag, wide, actions, menu, meta, chil
       : <button key={x.label} disabled={x.disabled} title={x.title} onClick={() => { setMore(false); x.onClick?.(); }} style={{ ...menuItem, opacity: x.disabled ? 0.5 : 1 }}>{x.label}</button>;
   };
   return (
-    <div ref={box} className="px-4 pt-3" style={{ background: T.card, borderBottom: `1px solid ${T.hair}` }}>
+    // Fixed under the dashboard header, which stays put on a record page (Coy, 2026-10-09: "the headers here in the
+    // customer page should be fixed and not slide up"); data-head-pin tells useHideHeadOnScroll.
+    <div ref={box} data-head-pin="" className="px-4 pt-3 sticky z-20" style={{ top: "var(--sc-head)", background: T.card, borderBottom: `1px solid ${T.hair}` }}>
       <div className="flex items-center gap-2">
         <Link href={back.href} style={{ ...eyebrow, color: T.chalk, flex: 1, minWidth: 0 }}>‹ {back.label}</Link>
         {!wide && tabs.length > 1 && <button onClick={openTabs} style={{ ...eyebrow, color: T.ink2, cursor: "pointer" }}>{tabs.find(([k]) => k === tab)?.[1] ?? ""} ▾</button>}

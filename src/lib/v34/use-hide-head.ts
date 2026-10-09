@@ -34,7 +34,8 @@ export function useHideHeadOnScroll(resetKey?: string): void {
       // A page with little to scroll keeps its header: hiding it there made
       // the page jump back and forth (Coy, 2026-10-06, a customer's Files tab).
       const room = document.documentElement.scrollHeight - window.innerHeight;
-      if (!phone.matches || y < 40 || room < 240) set(false);
+      // A record page (customer, contact, vendor) pins its own header under ours, so ours stays (2026-10-09).
+      if (!phone.matches || y < 40 || room < 240 || document.querySelector("[data-head-pin]")) set(false);
       else if (performance.now() < settle) { last = y; return; }
       else if (dy > 6) set(true);
       else if (dy < -10) set(false);

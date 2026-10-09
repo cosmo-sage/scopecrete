@@ -155,3 +155,13 @@ test("a greeting that ends its sentence names nobody", async () => {
   assert.equal(greetedName([sms("US", "Hey! Can you send the address")], [THEM]), null);
   assert.equal(greetedName([sms("US", "Thank you, mister Chad.")], [THEM]).name, "Chad");
 });
+
+test("a place after \"it's\" is not a second introduction (Jeff Stevens, 2026-10-09)", async () => {
+  const { introducedName } = await import("../supabase/functions/enrich-contacts/rules.ts");
+  const t = [call("THEM", [
+    `${THEM}: This is Jeff.`, `${US}: Is it Jeff, you said?`, `${THEM}: It's Fort Polk and nothing.`,
+    `${US}: My name is Corey.`, `${THEM}: My name is Jeff Stevens.`, `${THEM}: J e s s Stevens.`,
+  ].join("\n"), "j")];
+  assert.ok(findSelfIdentification("Jeff Stevens", t, [THEM]));
+  assert.equal(introducedName(t, [THEM]), "Jeff Stevens");
+});

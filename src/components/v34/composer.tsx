@@ -45,7 +45,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { T, F, disp, body, eyebrow, clip, formatPhone } from "@/lib/v34/tokens";
 import { segments } from "@/lib/texting";
-import { ProposalSendSheet } from "@/components/v34/proposal-send";
 import { proposalLink } from "@/lib/v34/send-proposal";
 
 type Channel = "text" | "email" | "note";
@@ -136,7 +135,6 @@ export function Composer({ contactId, phone, name, compact = false, onNoteSaved,
   const rec = useRef<Recognition | null>(null);
   const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Send a job's proposal from here (Coy, 2026-10-05) — its own sheet: the job, the words, Preview, Send.
-  const [proposalOpen, setProposalOpen] = useState(false);
   // "/" in the box lists their final proposals; a pick puts its link in the text (Coy, 2026-10-07).
   const [finals, setFinals] = useState<SlashProposal[] | null>(null);
   const [slashBusy, setSlashBusy] = useState(false);
@@ -352,15 +350,10 @@ export function Composer({ contactId, phone, name, compact = false, onNoteSaved,
         )}
       </div>
 
-      {/* Copy, and what Send does (or why it can't). */}
+      {/* Copy, and what Send does (or why it can't). Only while there is something to say: the Proposal button and the
+          idle "Drafts stay on this device" line are gone (Coy, 2026-10-09: he asks Dusty to send a proposal). */}
+      {(has || micError || listening || sending || sendMsg || noteMsg) && (
       <div className="flex items-center gap-2 flex-wrap" style={{ marginTop: 6 }}>
-        {!compact && channel !== "note" && (
-          <button onClick={() => setProposalOpen(true)} className="rounded px-2.5" title="Send one of their jobs' proposals — preview it first"
-            style={{ height: 28, border: `1px solid ${T.hair}`, background: T.card, color: T.ink,
-                     fontFamily: disp, fontSize: F.xs, letterSpacing: ".06em", textTransform: "uppercase", cursor: "pointer" }}>
-            Proposal
-          </button>
-        )}
         {has && channel !== "note" && (
           <button onClick={() => void copy()} className="rounded px-2.5"
             style={{ height: 28, border: `1px solid ${T.hair}`, background: T.card, color: T.ink,
@@ -377,9 +370,6 @@ export function Composer({ contactId, phone, name, compact = false, onNoteSaved,
             : channel === "note" ? "Notes stay internal. Dusty reads them." : channel === "text" ? "Drafts stay on this device until you send them." : "Drafts stay on this device until they can be sent.")}
         </span>
       </div>
-      {proposalOpen && (
-        <ProposalSendSheet contactId={contactId} name={name ?? null} phone={phone} via={channel === "email" ? "email" : "text"}
-          onClose={() => setProposalOpen(false)} onSent={() => { if (onSent) { setTimeout(onSent, 4000); setTimeout(onSent, 15000); } }} />
       )}
     </div>
   );

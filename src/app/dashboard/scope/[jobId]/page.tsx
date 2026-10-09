@@ -24,6 +24,7 @@ import { VoiceRecorder } from "@/components/v34/voice-recorder";
 import { useParams } from "next/navigation";
 import { T, F, disp, eyebrow, nums, clip, money, money0, formatPhone } from "@/lib/v34/tokens";
 import { EmptyState } from "@/components/v34/primitives";
+import { ArchiveButton } from "@/components/v34/archive-actions";
 import { FilesPanel, type FileRow } from "@/components/v34/files-panel";
 import { SectionPhotos } from "@/components/v34/section-photos";
 import { BidStrip } from "@/components/v34/bid-strip";
@@ -417,7 +418,11 @@ export default function ScopeBuilder() {
           <FilesPanel jobId={job.id} sections={sections.map((x) => ({ id: x.id, name: x.name ?? null }))} />
         </div>}
 
-        {/* Delete job lives at the bottom of the Summary (2026-10-05). */}
+        {/* Delete job at the bottom of the Budget too (Coy, 2026-10-09: "How do I delete a job after hitting new scope?"); also on the Summary. */}
+        {!access.limited && <div className="px-3 pb-3 flex justify-end">
+          <ArchiveButton kind="job" id={jobId} action="delete" what={realTitle ? `the job “${realTitle}”` : "this job"} then="/dashboard/scope"
+            style={{ height: 28, padding: "0 10px", borderRadius: 4, border: `1px solid ${T.red}`, background: T.card, color: T.red, fontFamily: disp, fontSize: F.xs, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".05em" }}>Delete job</ArchiveButton>
+        </div>}
       </div>
 
       {viewer && plans && (

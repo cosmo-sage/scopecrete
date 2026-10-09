@@ -321,11 +321,6 @@ export function ThreadView({ contactId, embedded = false }: {
               {/* No tag on a phone: the thread's name at the left already says it (Coy, 2026-10-05). */}
               {c && <span className="hidden lg:inline-flex"><RoleTag role={role} auto={c.bucket_state === "auto"} /></span>}
             </div>
-            <span className="hidden lg:flex items-center gap-2">
-              {/* The ScopeCrete emblem is the AI (Coy, 2026-10-06): Dusty opens with where this thread stands and the next steps. */}
-              <button onClick={askDustyBrief} aria-label="Ask Dusty where this stands and the next steps" title="Dusty: where this stands and the next steps"
-                className="flex items-center justify-center" style={{ ...pill, padding: "0 6px", border: `1px solid ${T.hiviz}` }}><Emblem size={22} spin /></button>
-            </span>
             {touch && <button onClick={() => fold(!folded)} className="lg:hidden shrink-0" aria-expanded={!folded} aria-label={folded ? "Show the channels" : "Fold the header"}
               style={{ ...pill, padding: "0 8px" }}>{folded ? <CaretDown size={13} /> : <CaretUp size={13} />}</button>}
             {/* Notes is an icon beside the menu (Coy, 2026-10-07), its count on it. */}
@@ -334,13 +329,17 @@ export function ThreadView({ contactId, embedded = false }: {
               style={{ ...pill, padding: "0 7px", gap: 3, ...(channel?.kind === "notes" ? { borderColor: T.hiviz, background: T.hivizDim, color: T.ink } : {}) }}>
               <NotePencil size={15} />{nNotes ? <span style={{ fontSize: 11, ...nums }}>{nNotes}</span> : null}
             </button>
+            <span className="flex items-center gap-2 shrink-0">
+              {/* The ScopeCrete emblem is the AI (Coy, 2026-10-06), its own button beside ⋯ on every size (2026-10-09): Dusty opens with where this thread stands and the next steps. */}
+              <button onClick={askDustyBrief} aria-label="Ask Dusty where this stands and the next steps" title="Dusty: where this stands and the next steps"
+                className="flex items-center justify-center" style={{ ...pill, padding: "0 6px", border: `1px solid ${T.hiviz}` }}><Emblem size={22} spin /></button>
+            </span>
             <div className="relative">
               <button onClick={() => setMore((v) => !v)} aria-expanded={more} aria-label="More" style={{ ...pill, padding: "0 8px" }}>⋯</button>
               {more && (
                 <div className="absolute right-0 z-20 flex flex-col rounded" style={{ top: 32, minWidth: 180, background: T.card, border: `1px solid ${T.hairStrong}`, boxShadow: "0 6px 18px rgba(0,0,0,.12)" }}>
                   <Link href={editHref} className="px-3 py-2" style={{ fontSize: F.sm, color: T.ink }}>Edit contact</Link>
                   {pageLink.label !== "Contact" && !embedded && <Link href={pageLink.href} className="px-3 py-2" style={{ fontSize: F.sm, color: T.ink }}>{pageLink.label} ›</Link>}
-                  <button onClick={() => { setMore(false); askDustyBrief(); }} className="lg:hidden px-3 py-2 text-left flex items-center gap-2" style={{ fontSize: F.sm, color: T.ink }}><Emblem size={16} spin /> Where it stands</button>
                   <button onClick={() => { setMore(false); setFiling(true); }} className="px-3 py-2 text-left" style={{ fontSize: F.sm, color: T.ink }}>Move thread</button>
                   {/* Merge is on the contact card; the job opens from the customer page (Coy, 2026-10-07). */}
                   {!openJob && <button onClick={() => void newScope()} disabled={starting || jobs === null} className="px-3 py-2 text-left" style={{ fontSize: F.sm, color: T.ink }}>{starting ? "Starting…" : "New scope"}</button>}
@@ -355,7 +354,7 @@ export function ThreadView({ contactId, embedded = false }: {
             {tabs.map((ch) => {
               const on = channel?.key === ch.key;
               const chLive = ch.kind === "phone" ? liveCallFor(liveCalls, contactId, ch.value) : null;
-              const sub = ch.kind === "phone" ? `${formatPhone(ch.value)} · ${ch.calls} call${ch.calls === 1 ? "" : "s"} · ${ch.texts} text${ch.texts === 1 ? "" : "s"}`
+              const sub = ch.kind === "phone" ? `${ch.calls} call${ch.calls === 1 ? "" : "s"} · ${ch.texts} text${ch.texts === 1 ? "" : "s"}`
                 : ch.kind === "notes" ? `${nNotes} note${nNotes === 1 ? "" : "s"}`
                 : ch.kind === "email" ? (ch.value ? `${ch.value}${ch.emails ? ` · ${ch.emails}` : ""}` : ch.emails ? `${ch.emails} filed here` : "No email on file")
                 : "Not joined · invite";
@@ -368,7 +367,8 @@ export function ThreadView({ contactId, embedded = false }: {
                       : ch.kind === "email" ? <Envelope size={16} color={T.ink2} />
                       : ch.kind === "chat" ? <Sparkle size={13} color={T.ink3} />
                       : <NotePencil size={13} color={T.ink3} />}
-                    {ch.kind === "email" ? null : ch.label}
+                    {/* The number, then its name (Coy, 2026-10-09: "(225) 320-4143 Cell"); ✎ renames the word only. */}
+                    {ch.kind === "email" ? null : ch.kind === "phone" && ch.value ? <>{formatPhone(ch.value)} <span style={{ color: T.ink3, fontWeight: 500 }}>{ch.label}</span></> : ch.label}
                     {chLive && <LiveDot size={8} />}
                     {ch.kind === "phone" && on && (
                       // Name the number (Coy: "instead of 'phone 2' it can say 'office'").

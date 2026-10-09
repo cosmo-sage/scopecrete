@@ -284,6 +284,8 @@ export function ThreadView({ contactId, embedded = false }: {
   // Notes open from the ⋯ menu on the name's row, not a tab (Coy, 2026-10-06).
   const tabs = channels;
   const channel = channelKey === "notes" ? notesTab : tabs.find((x) => x.key === channelKey) ?? channels[0] ?? null;
+  const phoneTabs = tabs.filter((c) => c.kind === "phone");
+  const shownPhoneKey = channel?.kind === "phone" ? channel.key : phoneTabs[0]?.key ?? null;
   const shown = channel?.kind === "phone" ? messages.filter((m) => inChannel({ channel: m.channel, counterparty: m.counterparty ?? null }, channel, filter) && (!lineFilter || m.line_id === lineFilter)) : [];
   const n = channel?.kind === "phone" ? messages.filter((m) => inChannel({ channel: m.channel, counterparty: m.counterparty ?? null }, channel, "all")) : [];
   const nCalls = n.filter((m) => m.channel === "call" || m.channel === "voicemail").length;
@@ -418,6 +420,9 @@ export function ThreadView({ contactId, embedded = false }: {
           <div className="flex items-stretch gap-1.5 mt-2 pb-2.5 overflow-x-auto" role="tablist" aria-label="Channels">
             {tabs.map((ch) => {
               const on = channel?.key === ch.key;
+              // On a phone only one number shows — the open one, else the first; the others are in its drop-down
+              // (Coy, 2026-10-09: "not enough room on the header for two phone numbers").
+              const spare = ch.kind === "phone" && ch.key !== shownPhoneKey;
               const chLive = ch.kind === "phone" ? liveCallFor(liveCalls, contactId, ch.value) : null;
               const sub = ch.kind === "phone" ? `${ch.calls} call${ch.calls === 1 ? "" : "s"} · ${ch.texts} text${ch.texts === 1 ? "" : "s"}`
                 : ch.kind === "notes" ? `${nNotes} note${nNotes === 1 ? "" : "s"}`
@@ -433,7 +438,7 @@ export function ThreadView({ contactId, embedded = false }: {
                       return;
                     }
                     setTabMenu(null); pickChannel(ch.key);
-                  }} className="text-left flex-1 lg:flex-none shrink-0"
+                  }} className={`text-left flex-1 lg:flex-none shrink-0${spare ? " hidden lg:block" : ""}`}
                   // Rounded buttons, the open one filled (Coy, 2026-10-09: "more like beautiful buttons").
                   style={{ minWidth: 0, padding: "7px 12px", borderRadius: 999, border: `1px solid ${on ? (chLive ? T.green : T.hiviz) : chLive ? T.green : T.hairStrong}`,
                     background: on ? T.hivizDim : T.card, boxShadow: on ? "0 1px 3px rgba(0,0,0,.10)" : "none", opacity: ch.reachable || on ? 1 : 0.5, cursor: "pointer" }}>
@@ -468,6 +473,18 @@ export function ThreadView({ contactId, embedded = false }: {
                     <span>{label}{filter === k ? " ✓" : ""}</span><span style={{ color: T.ink3, ...nums }}>{count}</span>
                   </button>
                 ))}
+                {phoneTabs.length > 1 && (
+                  <div className="flex flex-col" style={{ borderTop: `1px solid ${T.hairSoft}`, padding: "4px 0" }}>
+                    <span className="px-3" style={{ ...eyebrow, fontSize: 11, color: T.ink3 }}>Their numbers</span>
+                    {phoneTabs.map((p) => (
+                      <button key={p.key} role="menuitemradio" aria-checked={channel?.key === p.key} onClick={() => { setTabMenu(null); pickChannel(p.key); }}
+                        className="px-3 py-1.5 text-left flex items-center justify-between gap-3" style={{ fontSize: F.sm, color: T.ink, fontWeight: channel?.key === p.key ? 600 : 400, whiteSpace: "nowrap" }}>
+                        <span>{p.value ? formatPhone(p.value) : p.label} <span style={{ color: T.ink3, fontWeight: 400 }}>{p.value ? p.label : ""}</span>{channel?.key === p.key ? " ✓" : ""}</span>
+                        {liveCallFor(liveCalls, contactId, p.value) ? <LiveDot size={8} /> : <span style={{ color: T.ink3, ...nums }}>{p.calls + p.texts}</span>}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 {usedLines.length > 1 && (
                   <div className="flex flex-col" style={{ borderTop: `1px solid ${T.hairSoft}`, padding: "4px 0" }}>
                     <span className="px-3" style={{ ...eyebrow, fontSize: 11, color: T.ink3 }}>Which of your lines</span>

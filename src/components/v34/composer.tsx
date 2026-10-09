@@ -46,6 +46,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { T, F, disp, body, eyebrow, clip, formatPhone } from "@/lib/v34/tokens";
 import { segments } from "@/lib/texting";
 import { proposalLink } from "@/lib/v34/send-proposal";
+import { sendBytes } from "@/components/v34/files-panel";
 
 type Channel = "text" | "email" | "note";
 
@@ -57,6 +58,13 @@ const NOT_CONNECTED: Record<Channel, string> = {
 };
 
 const draftKey = (contactId: string) => `sc:draft:${contactId}`;
+
+async function postJson(url: string, body: unknown) {
+  const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
+  const b = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(b?.error || `HTTP ${r.status}`);
+  return b;
+}
 
 function readDraft(contactId: string): { channel: Channel; text: string } {
   try {
@@ -133,6 +141,11 @@ export function Composer({ contactId, phone, name, compact = false, onNoteSaved,
   const [listening, setListening] = useState(false);
   const [micError, setMicError] = useState<string | null>(null);
   const rec = useRef<Recognition | null>(null);
+  // Files picked with + (Coy, 2026-10-09: "add attachments like any other chat"). Each is saved on
+  // their Files at once. Quo's API sends words only, so a text with files goes out through the
+  // phone's share sheet (Coy picks Quo there); the words alone still go through Quo from here.
+  const [attached, setAttached] = useState<Array<{ key: string; file: File; state: "up" | "ok" | "err"; err?: string }>>([]);
+  const pick = useRef<HTMLInputElement | null>(null);
   const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Send a job's proposal from here (Coy, 2026-10-05) — its own sheet: the job, the words, Preview, Send.
   // "/" in the box lists their final proposals; a pick puts its link in the text (Coy, 2026-10-07).
@@ -246,6 +259,43 @@ export function Composer({ contactId, phone, name, compact = false, onNoteSaved,
 
   const who = name || (phone ? phone : null);
   const has = text.trim().length > 0;
+  async function attach(list: FileList | null) {
+    const files = Array.from(list ?? []);
+    if (!files.length) return;
+    const add = files.map((file, i) => ({ key: `${Date.now()}-${i}-${file.name}`, file, state: "up" as const }));
+    setAttached((a) => [...a, ...add]);
+    for (const a of add) {
+      const set = (patch: { state: "ok" | "err"; err?: string }) => setAttached((xs) => xs.map((x) => (x.key === a.key ? { ...x, ...patch } : x)));
+      try {
+        const made = await postJson("/api/files", { name: a.file.name, mime: a.file.type, size: a.file.size, contact_id: contactId });
+        await sendBytes(made.upload.signed_url, a.file, () => {});
+        await postJson(`/api/files/${made.file.id}/done`, undefined);
+        set({ state: "ok" });
+      } catch (e) {
+        set({ state: "err", err: e instanceof Error ? e.message : String(e) });
+      }
+    }
+  }
+
+  /** Files and words together, through the phone's share sheet — Quo's API can't send pictures. */
+  async function shareOut() {
+    const files = attached.map((a) => a.file);
+    const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean };
+    const data: ShareData = { files, ...(text.trim() ? { text: text.trim() } : {}) };
+    if (!nav.share || (nav.canShare && !nav.canShare(data))) {
+      setSendMsg({ ok: false, text: "Quo can't send pictures from here, and this browser has no share sheet. They're saved on their Files; send them from the Quo app." });
+      return;
+    }
+    try {
+      await nav.share(data);
+      setAttached([]); setText("");
+      setSendMsg({ ok: true, text: "Handed to your phone's share sheet. It shows here once Quo has it." });
+    } catch (e) {
+      if (e instanceof Error && e.name === "AbortError") return;
+      setSendMsg({ ok: false, text: e instanceof Error ? e.message : String(e) });
+    }
+  }
+
   const iconBtn: React.CSSProperties = {
     width: 34, height: 34, border: `1px solid ${T.hair}`, background: T.card, borderRadius: 8,
     display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
@@ -292,14 +342,42 @@ export function Composer({ contactId, phone, name, compact = false, onNoteSaved,
             ))}
         </div>
       )}
+      {attached.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mb-1.5">
+          {attached.map((a) => (
+            <span key={a.key} className="inline-flex items-center gap-1 rounded-full pl-2.5 pr-1"
+              style={{ height: 26, maxWidth: 220, border: `1px solid ${a.state === "err" ? T.red : T.hair}`, background: T.card, fontSize: F.xs, color: a.state === "err" ? T.red : T.ink2 }}
+              title={a.err ?? (a.state === "ok" ? "Saved on their Files" : "Saving…")}>
+              <span style={clip}>{a.state === "up" ? "Saving… " : a.state === "err" ? "Didn't save · " : ""}{a.file.name}</span>
+              <button type="button" onClick={() => setAttached((xs) => xs.filter((x) => x.key !== a.key))} aria-label={`Take ${a.file.name} off`}
+                style={{ border: 0, background: "transparent", color: T.ink3, cursor: "pointer", fontSize: 14, width: 20 }}>×</button>
+            </span>
+          ))}
+        </div>
+      )}
       <div className="flex items-end gap-1.5">
         {/* The line it goes from is picked once, in the thread's toolbar (Coy, 2026-10-05: "it exists already at the top"). */}
-        <textarea value={text} onChange={(e) => setText(e.target.value)} rows={compact ? 2 : 1}
-          // An empty box, no words in it (Coy, 2026-10-05: "I know what to do with message box").
-          aria-label={channel === "note" ? "Internal note" : channel === "email" ? "Email" : "Text message"}
-          className="flex-1 px-2.5 py-2 rounded-lg outline-none resize-none"
-          style={{ border: `1px solid ${T.hair}`, background: T.card, fontSize: F.sm,
-                   maxHeight: 120, lineHeight: 1.4, fontFamily: body, minWidth: 0 }} />
+        <div className="flex-1 relative" style={{ minWidth: 0 }}>
+          <textarea value={text} onChange={(e) => setText(e.target.value)} rows={compact ? 2 : 1}
+            // An empty box, no words in it (Coy, 2026-10-05: "I know what to do with message box").
+            aria-label={channel === "note" ? "Internal note" : channel === "email" ? "Email" : "Text message"}
+            className="w-full py-2 rounded-lg outline-none resize-none block"
+            style={{ border: `1px solid ${T.hair}`, background: T.card, fontSize: F.sm, paddingLeft: compact ? 10 : 34, paddingRight: 10,
+                     maxHeight: 120, lineHeight: 1.4, fontFamily: body, minWidth: 0 }} />
+          {!compact && (
+            <>
+              <button type="button" onClick={() => pick.current?.click()} aria-label="Attach photos or files"
+                title="Attach photos or files — saved on their Files"
+                style={{ position: "absolute", left: 4, bottom: 4, width: 26, height: 26, border: 0, borderRadius: 13,
+                         background: T.hairSoft, color: T.ink2, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <svg width="13" height="13" viewBox="0 0 13 13" aria-hidden="true">
+                  <path d="M6.5 1.8v9.4M1.8 6.5h9.4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+                </svg>
+              </button>
+              <input ref={pick} type="file" multiple hidden onChange={(e) => { void attach(e.target.files); e.target.value = ""; }} />
+            </>
+          )}
+        </div>
 
         {!compact && (
           <button onClick={dictate} disabled={!canDictate}
@@ -326,17 +404,22 @@ export function Composer({ contactId, phone, name, compact = false, onNoteSaved,
             </svg>
           </button>
         )}
-        {has && channel === "text" && (
-          <button onClick={() => void sendText()} disabled={sending || !phone}
-            aria-label={phone ? `Send the text to ${formatPhone(phone)}` : "No number to text"}
-            title={phone ? `Send through Quo to ${formatPhone(phone)}` : "They have no number to text"}
-            style={{ ...iconBtn, background: T.hiviz, borderColor: T.hiviz, cursor: sending || !phone ? "default" : "pointer", opacity: sending || !phone ? 0.5 : 1 }}>
-            <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true" style={{ color: T.onHiviz }}>
+        {channel === "text" && (() => {
+          // Always there, far right (Coy, 2026-10-09: "I need a send button"); off until there is something to send.
+          const files = attached.length > 0;
+          const off = sending || !phone || (!has && !files) || attached.some((a) => a.state === "up");
+          return (
+          <button onClick={() => void (files ? shareOut() : sendText())} disabled={off}
+            aria-label={files ? "Send with the files — opens your phone's share sheet" : phone ? `Send the text to ${formatPhone(phone)}` : "No number to text"}
+            title={files ? "Quo sends words only from here — the share sheet hands the files to the Quo app" : phone ? `Send through Quo to ${formatPhone(phone)}` : "They have no number to text"}
+            style={{ ...iconBtn, background: off ? T.card : T.hiviz, borderColor: off ? T.hair : T.hiviz, cursor: off ? "default" : "pointer", opacity: sending || !phone ? 0.5 : 1 }}>
+            <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true" style={{ color: off ? T.ink3 : T.onHiviz }}>
               <path d="M7.5 12.4V2.8M3.4 6.9 7.5 2.6l4.1 4.3" fill="none" stroke="currentColor"
                 strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </button>
-        )}
+          );
+        })()}
         {has && channel === "email" && (
           // Email Send: present where v34 puts it, and visibly off. Never a
           // button that looks like it worked.
@@ -352,7 +435,7 @@ export function Composer({ contactId, phone, name, compact = false, onNoteSaved,
 
       {/* Copy, and what Send does (or why it can't). Only while there is something to say: the Proposal button and the
           idle "Drafts stay on this device" line are gone (Coy, 2026-10-09: he asks Dusty to send a proposal). */}
-      {(has || micError || listening || sending || sendMsg || noteMsg) && (
+      {(has || attached.length > 0 || micError || listening || sending || sendMsg || noteMsg) && (
       <div className="flex items-center gap-2 flex-wrap" style={{ marginTop: 6 }}>
         {has && channel !== "note" && (
           <button onClick={() => void copy()} className="rounded px-2.5"
@@ -365,6 +448,8 @@ export function Composer({ contactId, phone, name, compact = false, onNoteSaved,
           {micError ?? (listening ? "Listening…" : sending ? "Sending through Quo…"
             : sendMsg && (!has || !sendMsg.ok) && channel === "text" ? <span style={{ color: sendMsg.ok ? T.green : T.red }}>{sendMsg.text}</span>
             : noteMsg && !has ? noteMsg
+            : attached.length > 0 && channel === "text" ? "Saved on their Files. Send opens your phone's share sheet — pick Quo; its API sends words only."
+            : attached.length > 0 ? "Saved on their Files."
             : has && channel === "text" ? `${NOT_CONNECTED.text}${phone ? ` To ${formatPhone(phone)}.` : ""} ${segments(text.trim())} ${segments(text.trim()) === 1 ? "segment" : "segments"}.`
             : has ? NOT_CONNECTED[channel]
             : channel === "note" ? "Notes stay internal. Dusty reads them." : channel === "text" ? "Drafts stay on this device until you send them." : "Drafts stay on this device until they can be sent.")}

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
+import { detailMarker, validBox } from "@/lib/plan-details";
 import { CATEGORIES, MAX_FILE_BYTES, FILES_BUCKET, categoryGuess, kindOf, storagePath } from "@/lib/files";
 import { FILE_COLUMNS, signFiles } from "@/lib/files-server";
 import { textedMarker } from "@/lib/texted-photos";
@@ -99,7 +100,7 @@ export async function POST(req: NextRequest) {
   const { supabase, orgId, userId, applyCookies } = result.session;
   const bad = (m: string, s = 400) => applyCookies(NextResponse.json({ error: m }, { status: s }));
 
-  let b: { name?: unknown; mime?: unknown; size?: unknown; job_id?: unknown; section_id?: unknown; contact_id?: unknown; category?: unknown; in_plan_room?: unknown; customer_id?: unknown; from_dusty?: unknown };
+  let b: { name?: unknown; mime?: unknown; size?: unknown; job_id?: unknown; section_id?: unknown; contact_id?: unknown; category?: unknown; in_plan_room?: unknown; customer_id?: unknown; from_dusty?: unknown; detail?: unknown };
   try { b = await req.json(); } catch { return bad("Body must be JSON."); }
   const name = typeof b.name === "string" ? b.name.trim().slice(0, 200) : "";
   const mime = typeof b.mime === "string" ? b.mime.slice(0, 120) : "";
@@ -140,14 +141,30 @@ export async function POST(req: NextRequest) {
     if (!c) return bad("No such person.", 404);
   }
 
+  // A detail clipped off a plan sheet (src/lib/plan-details.ts): the sheet must be on this
+  // section's job, the box on its page. Where it came from rides on source_url.
+  let detail: string | null = null;
+  if (b.detail !== undefined) {
+    const d = (b.detail ?? {}) as Record<string, unknown>;
+    if (!sectionId || !jobId) return bad("A clip goes on a section.");
+    const sheetId = id(d.sheet_id);
+    if (!sheetId) return bad("Which sheet is the clip from?");
+    const { data: sh } = await supabase.from("plan_sheets").select("id, job_id, page_w, page_h").eq("org_id", orgId).eq("id", sheetId).maybeSingle();
+    if (!sh || sh.job_id !== jobId) return bad("That sheet isn't on this job.", 404);
+    const box = validBox(d, { w: Number(sh.page_w) || 1e6, h: Number(sh.page_h) || 1e6 });
+    if (!box) return bad("That box isn't on the sheet.");
+    detail = detailMarker({ sheet_id: sheetId, ...box });
+  }
+
   const kind = kindOf(mime, name);
   const fileId = crypto.randomUUID();
   const path = storagePath(orgId, jobId ?? contactId ?? sectionId ?? customerId ?? "inbox", fileId, name);
   const { data: row, error } = await supabase.from("files").insert({
     id: fileId, org_id: orgId, job_id: jobId, section_id: sectionId, contact_id: contactId, name, kind,
     ...(customerId ? { customer_id: customerId } : {}),
+    ...(detail ? { source_url: detail } : {}),
     // The Price book's vendor-quote import says what it is; otherwise a first guess from the name.
-    category: (CATEGORIES as readonly string[]).includes(String(b.category)) ? b.category : categoryGuess(kind, name), mime_type: mime || null, byte_size: size, storage_path: path,
+    category: detail ? "plan" : (CATEGORIES as readonly string[]).includes(String(b.category)) ? b.category : categoryGuess(kind, name), mime_type: mime || null, byte_size: size, storage_path: path,
     source: "upload", fetch_state: "pending", created_by: userId,
     // Dropped into the Plan Room (059): it is a plan from the start.
     ...(b.in_plan_room === true && jobId ? { in_plan_room: true } : {}),

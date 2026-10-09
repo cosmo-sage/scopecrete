@@ -27,6 +27,8 @@ import { EmptyState } from "@/components/v34/primitives";
 import { ArchiveButton } from "@/components/v34/archive-actions";
 import { FilesPanel, type FileRow } from "@/components/v34/files-panel";
 import { SectionPhotos } from "@/components/v34/section-photos";
+import { SectionDetails } from "@/components/v34/section-details";
+import { isDetailFile, type SectionShape } from "@/lib/plan-details";
 import { BidStrip } from "@/components/v34/bid-strip";
 import { DraftStrip } from "@/components/v34/draft-strip";
 import { JobHeaderRow } from "@/components/v34/job-tabs";
@@ -410,10 +412,18 @@ export default function ScopeBuilder() {
                       takeoffUnit={s.takeoff_sync !== false && sh.unit ? sh.unit : null}
                       takeoff={!can(access, "plan_room") ? null : <SectionTakeoffStrip jobId={jobId} sectionId={s.id} sectionName={s.name ?? null} following={s.takeoff_sync !== false}
                         plans={plans} sectionNames={names} onChanged={takeoffChanged} />}
-                      photos={!can(access, "files") ? null : <SectionPhotos jobId={jobId} sectionId={s.id} sectionName={s.name ?? null}
-                        photos={jobFiles.filter((f) => (f.section_id === s.id || (f.takeoff_measurement_id && shapeIds.has(f.takeoff_measurement_id))) && (f.kind === "image" || f.kind === "video"))}
+                      photos={!can(access, "files") ? null : <>
+                        <SectionPhotos jobId={jobId} sectionId={s.id} sectionName={s.name ?? null}
+                        photos={jobFiles.filter((f) => (f.section_id === s.id || (f.takeoff_measurement_id && shapeIds.has(f.takeoff_measurement_id))) && (f.kind === "image" || f.kind === "video") && !isDetailFile(f))}
                         sections={sections.map((x) => ({ id: x.id, name: x.name ?? null }))} onChange={fileChanged}
-                        onProposal={picsOff === null ? null : !picsOff[s.id]} onProposalChange={(on) => setPics(s.id, on)} />}
+                        onProposal={picsOff === null ? null : !picsOff[s.id]} onProposalChange={(on) => setPics(s.id, on)} />
+                        {/* Section cuts clipped off the plans (Coy, 2026-10-09), read by AI on a tap. */}
+                        {can(access, "plan_room") && <SectionDetails jobId={jobId} sectionName={s.name ?? null} shape={detailShape(s)}
+                          details={jobFiles.filter((f) => f.section_id === s.id && isDetailFile(f))}
+                          sheetName={(id) => { const x = planSheets.find((y) => y.id === id); return x ? `${x.number ?? `p.${x.page}`}${x.title ? ` · ${x.title}` : ""}` : null; }}
+                          onChange={fileChanged} onOpenSheet={(id) => setViewer({ title: `Sheet for ${s.name || "this section"}`, groups: [{ label: s.name || "This section", ids: [id] }], start: id })}
+                          onUse={(p) => { patchLocal(s.id, p); void save(s.id, p); }} />}
+                      </>}
                       onLocal={(p) => patchLocal(s.id, p)} onSave={(p) => void save(s.id, p)}
                       onRemove={() => void removeSection(s.id)} />
                   );
@@ -1080,4 +1090,12 @@ function BudgetRail({ budget, sqft, crew, setCrew, onCrewDays }: {
       </div>
     </>
   );
+}
+
+/** How a section is measured, for what a plan detail's read can fill and count (src/lib/plan-details.ts). */
+function detailShape(s: Section): SectionShape {
+  const linear = (s.count_unit ?? "").toUpperCase() === "LF";
+  const lf = linear && s.count_qty ? s.count_qty : null;
+  const sqft = linear ? null : s.sqft_override ?? (s.length_ft && s.width_ft ? s.length_ft * s.width_ft : null);
+  return { mode: linear ? "linear" : s.count_qty != null && sqft === null ? "count" : "area", lf, sqft };
 }

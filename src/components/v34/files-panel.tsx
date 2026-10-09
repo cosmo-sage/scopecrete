@@ -30,6 +30,8 @@ export interface FileRow {
   summary: string | null; facts: Record<string, unknown> | null; created_at: string; url: string | null;
   /** A photo of one takeoff shape's area (migration 069). */
   takeoff_measurement_id?: string | null;
+  /** Where it came from: a texted photo's marker, or a clip off a plan sheet (src/lib/plan-details.ts). */
+  source_url?: string | null;
 }
 interface Texted { id: string; message_id: string; kind: string | null; mime_type: string | null; received_at: string | null; url: string | null; on_job?: boolean }
 interface Pending { key: string; file: File; pct: number; error: string | null }

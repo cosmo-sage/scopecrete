@@ -56,7 +56,7 @@ export function areaVisuals(plans: PlansData | null, areaIds: string[]): Record<
     }
     const shapeIds = new Set(mine.map((m) => m.id));
     const photos = plans.files
-      .filter((f) => f.kind === "image" && f.url && (f.section_id === id || (f.takeoff_measurement_id && shapeIds.has(f.takeoff_measurement_id))))
+      .filter((f) => f.kind === "image" && f.url && f.category !== "plan" && (f.section_id === id || (f.takeoff_measurement_id && shapeIds.has(f.takeoff_measurement_id))))
       .map((f) => ({ id: f.id, url: f.url as string, name: f.name }));
     if (map || photos.length) out[id] = { map, photos };
   }

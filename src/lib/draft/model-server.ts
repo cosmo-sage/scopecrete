@@ -44,7 +44,9 @@ export async function modelRead(evidence: Evidence[], timeoutMs = 40_000) {
 }
 
 /** One tool-less call: a system prompt, the data, JSON back. `images` (base64) go with the words — a business card's photo, say. */
-export async function modelJson(system: string, user: string, maxTokens = 2000, timeoutMs = 40_000, images: Array<{ mime: string; b64: string }> = []):
+export async function modelJson(system: string, user: string, maxTokens = 2000, timeoutMs = 40_000, images: Array<{ mime: string; b64: string }> = [],
+  /** Another model for this call (reading a drawing wants a stronger one than the draft's). */
+  model?: { anthropic?: string; openrouter?: string }):
   Promise<{ ok: true; json: unknown; provider: string } | { ok: false; error: string }> {
   const provider = modelConfigured();
   if (!provider) return { ok: false, error: "not configured" };
@@ -56,19 +58,21 @@ export async function modelJson(system: string, user: string, maxTokens = 2000, 
       const r = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST", signal: ctrl.signal,
         headers: { "content-type": "application/json", "x-api-key": key("ANTHROPIC_API_KEY"), "anthropic-version": "2023-06-01", ...(key("ANTHROPIC_WORKSPACE_ID") ? { "anthropic-workspace-id": key("ANTHROPIC_WORKSPACE_ID") } : {}) },
-        body: JSON.stringify({ model: process.env.DRAFT_MODEL || "claude-haiku-4-5-20251001", max_tokens: maxTokens, temperature: 0,
+        // A newer model named here takes no sampling settings (temperature is a 400 there).
+        body: JSON.stringify({ model: model?.anthropic || process.env.DRAFT_MODEL || "claude-haiku-4-5-20251001", max_tokens: maxTokens, ...(model?.anthropic ? {} : { temperature: 0 }),
           system, messages: [{ role: "user", content: images.length
             ? [...images.map((im) => ({ type: "image", source: { type: "base64", media_type: im.mime, data: im.b64 } })), { type: "text", text: user }]
             : user }] }),
       });
       if (!r.ok) return { ok: false, error: await refusal(r, "Anthropic") };
-      const j = (await r.json()) as { content?: Array<{ type: string; text?: string }> };
+      const j = (await r.json()) as { content?: Array<{ type: string; text?: string }>; stop_reason?: string };
+      if (j.stop_reason === "refusal") return { ok: false, error: "the model declined to read this" };
       text = (j.content ?? []).filter((c) => c.type === "text").map((c) => c.text ?? "").join("");
     } else {
       const r = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST", signal: ctrl.signal,
         headers: { "content-type": "application/json", authorization: `Bearer ${key("OPENROUTER_API_KEY")}` },
-        body: JSON.stringify({ model: process.env.DRAFT_MODEL || "anthropic/claude-haiku-4.5", max_tokens: maxTokens, temperature: 0,
+        body: JSON.stringify({ model: model?.openrouter || process.env.DRAFT_MODEL || "anthropic/claude-haiku-4.5", max_tokens: maxTokens, temperature: 0,
           messages: [{ role: "system", content: system }, { role: "user", content: images.length
             ? [...images.map((im) => ({ type: "image_url", image_url: { url: `data:${im.mime};base64,${im.b64}` } })), { type: "text", text: user }]
             : user }] }),

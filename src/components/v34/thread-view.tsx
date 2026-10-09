@@ -105,14 +105,21 @@ export function ThreadView({ contactId, embedded = false }: {
   // Their page, when they are a customer or a vendor (/api/people). A failure
   // here leaves the plain conversation, which still works.
   const [person, setPerson] = useState<Person | null>(null);
+  // Why their card couldn't load — said on the card's page, never a silent fall back to the thread (2026-10-09).
+  const [personErr, setPersonErr] = useState<string | null>(null);
   useEffect(() => {
     if (!contactId) return;
     let off = false;
-    fetch(`/api/people/${contactId}`).then((r) => (r.ok ? r.json() : null))
+    fetch(`/api/people/${contactId}`).then(async (r) => {
+        const b = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(b?.error || `HTTP ${r.status}`);
+        return b;
+      })
       .then((b) => {
         if (off || !b?.contact) return;
+        setPersonErr(null);
         setPerson(b as Person);
-      }).catch(() => {});
+      }).catch((e) => { if (!off) setPersonErr(e instanceof Error ? e.message : String(e)); });
     return () => { off = true; };
   }, [contactId, reload]);
   const scrollRef = React.useRef<HTMLDivElement | null>(null);
@@ -225,6 +232,14 @@ export function ThreadView({ contactId, embedded = false }: {
   // Their own page (Contact ›): a simple contact card. A vendor gets one too, with
   // Vendor page › beside it (Coy, 2026-10-09: the breadcrumb's contact and vendor
   // links both went to the vendor page).
+  if (personPage && !person && personErr) {
+    return (
+      <div className="sc-pinned overflow-y-auto" style={{ background: T.slab, padding: 16 }}>
+        <Link href={`/dashboard/messages/${contactId}${tq}`} style={{ ...eyebrow, color: T.chalk }}>‹ Back</Link>
+        <div role="alert" style={{ marginTop: 12, fontSize: F.sm, color: T.red }}>Couldn&apos;t load their card: {personErr}</div>
+      </div>
+    );
+  }
   if (person && !loading && !error && personPage) {
     const vendHref = person.contact.bucket === "vendor"
       ? `/dashboard/vendors/${contactId}?from=threads${threadKey ? `&t=${encodeURIComponent(threadKey)}` : ""}` : null;

@@ -79,7 +79,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ contactId: 
       ? supabase.from("job_vendors").select("job_id, contact_id, role, contacts(name, phone)").eq("org_id", orgId).in("job_id", jobRows.map((j) => j.id))
       : Promise.resolve({ data: [], error: null }),
     linkRows.length
-      ? supabase.from("jobs").select("id, title, status, job_type, contacts(name, phone)").eq("org_id", orgId)
+      ? supabase.from("jobs").select("id, title, status, job_type, contacts!jobs_contact_id_fkey(name, phone)").eq("org_id", orgId)
           .in("id", linkRows.map((l) => l.job_id)).is("archived_at", null)
       : Promise.resolve({ data: [], error: null }),
   ]);

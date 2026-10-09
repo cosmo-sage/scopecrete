@@ -417,13 +417,20 @@ export async function lookupRates(sb: Sb, orgId: string, jobId: string) {
   const state = await draftState(sb, orgId, jobId);
   if (!state.ready) return { ok: false as const, status: 503, error: state.error ?? DRAFT_TABLE_MISSING };
   if (!state.run?.id) return { ok: false as const, status: 409, error: "Build the draft budget first." };
+  const found = await searchRates(sb, orgId, jobId, state.steps.filter((s) => s.state === "open").map((s) => s.key));
+  const made = { ...((state.run.made as Record<string, unknown> | null) ?? {}), rates: found };
+  await sb.from("budget_runs").update({ made }).eq("org_id", orgId).eq("id", state.run.id as string);
+  return { ok: true as const };
+}
+
+/** The web search and the model's read of it: the job's city, the steps asked for (none = every step). */
+export async function searchRates(sb: Sb, orgId: string, jobId: string, open: string[]): Promise<RateLookup> {
   const { data: job } = await sb.from("jobs").select("address, city, state, customer_id").eq("org_id", orgId).eq("id", jobId).maybeSingle();
   let place: string | null = job?.city && job?.state ? `${job.city}, ${job.state}` : cityOf((job?.address as string | null) ?? null);
   if (!place && job?.customer_id) {
     const { data: c } = await sb.from("customers").select("city, state").eq("org_id", orgId).eq("id", job.customer_id as string).maybeSingle();
     if (c?.city && c?.state) place = `${c.city}, ${c.state}`;
   }
-  const open = state.steps.filter((s) => s.state === "open").map((s) => s.key);
   const queries = rateQueries(place, open);
   const found: RateLookup = { place: place ?? "no city on the job", asked_at: new Date().toISOString(), queries, rates: [], dropped: 0, error: null };
   const web = await searchWeb(queries);
@@ -435,9 +442,7 @@ export async function lookupRates(sb: Sb, orgId: string, jobId: string) {
     if (!m.ok) found.error = `Couldn't read the prices: ${m.error}.`;
     else Object.assign(found, sanitizeRates(m.json, web.results));
   }
-  const made = { ...((state.run.made as Record<string, unknown> | null) ?? {}), rates: found };
-  await sb.from("budget_runs").update({ made }).eq("org_id", orgId).eq("id", state.run.id as string);
-  return { ok: true as const };
+  return found;
 }
 
 // ---------------------------------------------------------------- the panel's view

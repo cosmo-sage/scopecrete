@@ -21,3 +21,12 @@ test("a CAD plot stamp or drawing path is never a sheet title (Holden Pedestrian
   const r = readSheet([{ str: "Sep 22, 2026 - 12:04pm", x: 2000, y: 1550, w: 120, h: 8 }], 2448, 1584);
   assert.equal(r.title, null);
 });
+
+test("a sheet with no number takes its discipline from its title's words", async () => {
+  const { disciplineFromTitle } = await import("../src/lib/plan-sheets.ts");
+  assert.equal(disciplineFromTitle("MISCELLANEOUS RETAINING WALL DETAILS"), "S");
+  assert.equal(disciplineFromTitle("STORM WATER POLLUTION PREVENTION PLAN BEST MANAGEMENT PRACTICES"), "C");
+  assert.equal(disciplineFromTitle("GENERAL NOTES"), "G");
+  assert.equal(disciplineFromTitle("SUMMARY OF ESTIMATED QUANTITIES"), "C");
+  assert.equal(disciplineFromTitle("HEIGHT"), "other");
+});

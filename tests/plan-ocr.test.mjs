@@ -1,7 +1,7 @@
 // OCR of scanned plan sheets — the pure part (src/lib/plan-ocr.ts). `npm test`.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { tilesFor, toItems, mergeItems, titleRegions, scaleFor, ocrText, compactWords, findDimensions, pickTitle, chooseTitles } from "../src/lib/plan-ocr.ts";
+import { tilesFor, toItems, mergeItems, titleRegions, scaleFor, ocrText, compactWords, findDimensions, pickTitle, chooseTitles, titleLike } from "../src/lib/plan-ocr.ts";
 import { readSheet } from "../src/lib/plan-sheets.ts";
 
 const W = 2445.84, H = 1584.72; // Burgess Ave's 34×22 sheet
@@ -103,4 +103,35 @@ test("the review and initials boxes are not titles", () => {
   assert.equal(pickTitle([it("[Review", 0, 0, 13), it("KTB", 60, 0, 13), it("TITLE", 0, 40, 11), it("SHEET", 42, 40, 11)])?.text, "TITLE SHEET");
   for (const t of ["DESIGN JBC", "CHECK KTB", "DETAIL MLM", "SERIES OF 1"]) assert.equal(pickTitle([it(t, 0, 0, 12)]), null, t);
   assert.equal(pickTitle([it("CONCRETE", 0, 0, 12), it("DETAILS", 70, 0, 12)])?.text, "CONCRETE DETAILS", "a details sheet keeps its title");
+});
+
+test("Holden's standard-plan sheet: the stacked title above the sign-off row, not the names in it", async () => {
+  const { titleCandidates, nearSignOff, inTitleCorner } = await import("../src/lib/plan-ocr.ts");
+  // Words as OCR read them off page 18 (2448 × 1584 pt), title block at 80% across and down.
+  const w = (str, x, y, ww, h) => ({ str, x, y, w: ww, h, conf: 90 });
+  const items = [
+    w("STANDARD", 1954, 1208, 53, 9), w("a", 2010, 1208, 30, 19), w("NOC.", 2049, 1208, 17, 9), w("DATED", 2116, 1208, 31, 9),
+    w("STORM", 1983, 1269, 53, 13), w("WATER", 2049, 1269, 51, 13), w("POLLUTION", 2114, 1269, 87, 13),
+    w("PREVENTION", 2017, 1287, 98, 13), w("PLAN", 2128, 1287, 39, 13),
+    w("BEST", 1963, 1306, 40, 13), w("MANAGEMENT", 2015, 1306, 107, 13), w("PRACTICES", 2135, 1306, 86, 13),
+    w("ENGINEERING", 2033, 1354, 69, 9), w("DIVISION", 2110, 1354, 42, 9),
+    w("CITY", 1948, 1384, 20, 9), w("OF", 1974, 1384, 13, 9), w("BATON", 1993, 1384, 30, 9), w("ROUGE", 2030, 1384, 32, 9),
+    w("DESIGNED", 1953, 1397, 44, 8), w("DRAWN", 2038, 1397, 30, 8), w("CHECKED", 2112, 1397, 42, 8), w("APPROVED", 2189, 1397, 48, 8),
+    w("G.", 1947, 1410, 10, 9), w("CHENG", 1965, 1410, 35, 9), w("G.", 2021, 1410, 10, 9), w("VANNICE", 2038, 1410, 44, 9),
+  ];
+  const cands = titleCandidates(items).filter((c) => inTitleCorner(c, 2448, 1584) || nearSignOff(c, items, 1584));
+  assert.equal(cands[0]?.text, "STORM WATER POLLUTION PREVENTION PLAN BEST MANAGEMENT PRACTICES");
+  assert.ok(!cands.some((c) => /CHENG|VANNICE|STANDARD/.test(c.text)), "names and the standard-plan label are no title");
+});
+
+test("names and fragments are no title", () => {
+  for (const t of ["G. CHENG", "G. CHENG G. VANNICE G. CHENG |T. STEPHENS", "R.BROADBENT| G. VANNICE", "TYPE OF CONSTRUCTION:", "DETAILS ON THIS SHEET NOT TO SCALE", "EVISIONS", "HEIGHT)"])
+    assert.equal(titleLike(t), false, t);
+  assert.equal(titleLike("FOUNDATION DETAILS"), true);
+});
+
+test("a stacked title with a boilerplate line is boilerplate", () => {
+  const sheet = (id, own) => ({ id, cands: [{ text: `${own} CITY OF BATON ROUGE`, h: 13, lines: [own, "CITY OF BATON ROUGE"] }, { text: own, h: 13 }, { text: "CITY OF BATON ROUGE", h: 13 }] });
+  const t = chooseTitles([sheet("a", "PROFILE"), sheet("b", "GENERAL NOTES"), sheet("c", "FOUNDATION DETAILS")]);
+  assert.equal(t.get("c"), "FOUNDATION DETAILS");
 });

@@ -142,18 +142,20 @@ export function heightOf(text: string, items: TextItem[]): number {
 }
 
 /** A title is words ("SUMMARY TABLES", "TYPICAL SECTIONS"), not a logo ("DOTD"), a label or a stray mark. */
-export function titleLike(text: string): boolean {
+export function titleLike(text: string, maxLen = 60): boolean {
   const letters = text.replace(/[^A-Za-z]/g, "");
   const lead = text.replace(/^[^A-Za-z0-9]+/, "");
   return letters.length >= 6 && letters.length / Math.max(1, text.replace(/\s/g, "").length) > 0.7 && !NOT_TITLE.test(lead)
-    && !SEAL.test(text) && text.length <= 60;
+    && !SEAL.test(text) && !PERSON.test(text) && !/[:|]\s*$/.test(text) && !/not to scale/i.test(text) && text.length <= maxLen;
 }
+/** Initials and a surname — the DESIGNED / DRAWN / CHECKED row ("G. CHENG", "G. VANNICE | T. STEPHENS"), never a title. */
+const PERSON = /^\W*([A-Z]\.\s?){1,2}[A-Z][A-Za-z'-]+\b|\|\s*([A-Z]\.\s?){1,2}[A-Z]/;
 /** The engineer's seal and the agency's name are on every sheet and never its title (and OCR mangles the seal: "ENGINES,"). */
 const SEAL = /engin|regist|licens|professional|\bseal\b|department|transportation|development|louisiana|\bstate of\b|sional/i;
 
 // Labels in a title block's boxes — the review / initials box ("Review KTB", "DESIGN JBC", "CHECK KTB",
 // "DETAIL MLM", "SERIES 1 OF 1" on Burgess Ave) and the usual field names.
-const NOT_TITLE = /^(sheet no|sheet number|scale|date|drawn|check(ed)?|design(ed)?|review(ed)?|detail\b|series|plot|file|project|job|no\.?|rev(ision)?s?|by|description|approved|parish|state|control|section|route|license|registered|engineer|of)\b/i;
+const NOT_TITLE = /^(sheet no|sheet number|scale|date|drawn|check(ed)?|design(ed)?|review(ed)?|detail\b|series|plot|file|project|job|no\.?|rev(ision)?s?|evisions|standard( plan)?|height|type of|by|description|approved|parish|state|control|section|route|license|registered|engineer|of)\b/i;
 /**
  * The title from a strip of title-block words: the biggest lettering that reads as
  * words — not a label, a number, a date, a seal, a name of the firm in small type.
@@ -162,7 +164,7 @@ export function pickTitle(items: TextItem[]): { text: string; h: number } | null
   return titleCandidates(items)[0] ?? null;
 }
 
-export interface TitleCand { text: string; h: number; x: number; y: number; turned?: boolean }
+export interface TitleCand { text: string; h: number; x: number; y: number; turned?: boolean; lines?: string[] }
 /** Every title-like run in a strip of words, biggest lettering first, with where it starts. */
 export function titleCandidates(items: TextItem[]): TitleCand[] {
   const sorted = items.slice().sort((a, b) => (a.y + a.h / 2) - (b.y + b.h / 2) || a.x - b.x);
@@ -181,15 +183,61 @@ export function titleCandidates(items: TextItem[]): TitleCand[] {
       const prev = run?.[run.length - 1];
       if (prev && it.x - (prev.x + prev.w) <= Math.max(prev.h, it.h) * 1.6) run.push(it); else runs.push([it]);
     }
-    const parts = runs.map((run) => ({ text: run.map((i) => i.str).join(" "), h: Math.max(...run.map((i) => i.h)), x: run[0].x, y: run[0].y }));
+    const parts = runs.map((run) => ({ text: run.map((i) => i.str).join(" "), h: Math.max(...run.map((i) => i.h)), x: run[0].x, y: run[0].y, x1: run[run.length - 1].x + run[run.length - 1].w }));
     // Runs of the same lettering on one row are one title broken by a gap ("TITLE SHEET" … "LAYOUT MAP").
     const same = parts.filter((p) => titleLike(p.text) && Math.abs(p.h - parts[0].h) <= parts[0].h * 0.15);
     return same.length > 1 && same.length === parts.length
-      ? [{ text: same.map((p) => p.text).join(" "), h: Math.min(...same.map((p) => p.h)), x: same[0].x, y: same[0].y }, ...parts]
+      ? [{ text: same.map((p) => p.text).join(" "), h: Math.min(...same.map((p) => p.h)), x: same[0].x, y: same[0].y, x1: same[same.length - 1].x1 }, ...parts]
       : parts;
   }).flat().filter((c) => titleLike(c.text));
-  cands.sort((a, b) => b.h - a.h);
-  return cands;
+  const out: TitleCand[] = [...cands.map((c) => ({ text: c.text, h: c.h, x: c.x, y: c.y })), ...stacks(cands)];
+  // Biggest first; a title set on several lines before any one of its lines.
+  out.sort((a, b) => b.h - a.h || (b.lines?.length ?? 1) - (a.lines?.length ?? 1));
+  return out;
+}
+
+/**
+ * A title lettered over two to four lines ("STORM WATER POLLUTION / PREVENTION PLAN /
+ * BEST MANAGEMENT PRACTICES" on a city standard plan): lines of the same lettering,
+ * one under the next, overlapping side to side.
+ */
+function stacks(cands: Array<{ text: string; h: number; x: number; y: number; x1: number }>): TitleCand[] {
+  const out: TitleCand[] = [];
+  const byY = cands.slice().sort((a, b) => a.y - b.y);
+  const used = new Set<number>();
+  for (let i = 0; i < byY.length; i++) {
+    if (used.has(i)) continue;
+    const chain = [byY[i]];
+    let last = byY[i];
+    for (let j = i + 1; j < byY.length && chain.length < 4; j++) {
+      const c = byY[j];
+      if (c.y - last.y > last.h * 2.2) break;
+      if (c.y - last.y < last.h * 0.6) continue;
+      if (Math.abs(c.h - last.h) > last.h * 0.15 || c.x > last.x1 || c.x1 < last.x) continue;
+      chain.push(c); used.add(j); last = c;
+    }
+    if (chain.length < 2) continue;
+    const text = chain.map((c) => c.text).join(" ");
+    if (text.length > 110) continue;
+    out.push({ text, h: Math.min(...chain.map((c) => c.h)), x: Math.min(...chain.map((c) => c.x)), y: chain[0].y, lines: chain.map((c) => c.text) });
+  }
+  return out;
+}
+
+/** The labels of a title block's sign-off row — the title sits just above it. */
+const SIGN_OFF = /^(designed|drawn|checked|approved)$/i;
+/**
+ * A flat candidate just above a DESIGNED / DRAWN / CHECKED / APPROVED row, over the
+ * same stretch of the sheet: a title block set in from the edge (a city standard plan
+ * whose title sits at 80% across and down, where inTitleCorner doesn't reach).
+ */
+export function nearSignOff(c: { x: number; y: number }, items: TextItem[], pageH: number): boolean {
+  const row = items.filter((i) => SIGN_OFF.test(i.str.replace(/[^A-Za-z]/g, "")));
+  if (row.length < 2) return false;
+  const x0 = Math.min(...row.map((i) => i.x)), x1 = Math.max(...row.map((i) => i.x + i.w));
+  const y = Math.min(...row.map((i) => i.y));
+  const pad = (x1 - x0) * 0.15;
+  return c.x >= x0 - pad && c.x <= x1 + pad && c.y < y && c.y >= y - pageH * 0.15;
 }
 
 // Repeats are compared loosely — OCR reads the same name differently sheet to sheet
@@ -210,15 +258,17 @@ export function inTitleCorner(c: { x: number; y: number }, pageW: number, pageH:
  * name repeat on every sheet; the title is what changes (Burgess Ave: "FORTE",
  * "DOTD" on all 74, "SUMMARY TABLES" on one).
  */
-export function chooseTitles(sheets: Array<{ id: string; cands: Array<{ text: string; h: number; turned?: boolean }> }>): Map<string, string | null> {
+export function chooseTitles(sheets: Array<{ id: string; cands: Array<{ text: string; h: number; turned?: boolean; lines?: string[] }> }>): Map<string, string | null> {
   const out = new Map<string, string | null>();
   if (sheets.length < 3) { for (const s of sheets) out.set(s.id, s.cands[0]?.text ?? null); return out; }
   const seen = new Map<string, number>();
-  for (const s of sheets) for (const k of new Set(s.cands.map((c) => key(c.text)))) seen.set(k, (seen.get(k) ?? 0) + 1);
+  for (const s of sheets) for (const k of new Set(s.cands.flatMap((c) => [c.text, ...(c.lines ?? [])]).map(key))) seen.set(k, (seen.get(k) ?? 0) + 1);
   // Boilerplate is on nearly every sheet (the firm, the project, the engineer). A common title
   // — "PLAN AND PROFILE" on a third of a road set — is not.
   const limit = Math.max(3, Math.ceil(sheets.length * 0.8));
-  const own = (c: { text: string }) => (seen.get(key(c.text)) ?? 0) < limit;
+  const common = (t: string) => (seen.get(key(t)) ?? 0) >= limit;
+  // A title over several lines is the sheet's own only when none of its lines is boilerplate.
+  const own = (c: { text: string; lines?: string[] }) => !common(c.text) && !(c.lines ?? []).some(common);
   // Which way does this set print its titles? The way whose titles are lettered biggest.
   const weight = (turned: boolean) => sheets.reduce((sum, s) => sum + (s.cands.find((c) => !!c.turned === turned && own(c))?.h ?? 0), 0);
   const turned = weight(true) > weight(false);

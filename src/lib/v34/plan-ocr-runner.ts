@@ -20,8 +20,8 @@
  */
 import { useSyncExternalStore } from "react";
 import { MAX_CANVAS_PX, openPdf, releasePage, renderRegion } from "@/lib/pdf";
-import { isStampTitle, readSheet } from "@/lib/plan-sheets";
-import { chooseTitles, compactWords, inTitleCorner, meanConf, mergeItems, ocrText, scaleFor, titleCandidates, tilesFor, titleRegions, toItems, type OcrItem, type OcrWord, type Rect } from "@/lib/plan-ocr";
+import { disciplineFromTitle, isStampTitle, readSheet } from "@/lib/plan-sheets";
+import { chooseTitles, compactWords, inTitleCorner, meanConf, nearSignOff, mergeItems, ocrText, scaleFor, titleCandidates, tilesFor, titleRegions, toItems, type OcrItem, type OcrWord, type Rect } from "@/lib/plan-ocr";
 
 export interface OcrSheet {
   id: string; file_id: string; page: number; page_w: number; page_h: number;
@@ -182,7 +182,7 @@ export function startPlanOcr(job: { id: string; title: string | null }, sheets: 
 async function run(job: { id: string; title: string | null }, titles: OcrSheet[], full: OcrSheet[], urls: Map<string, string>) {
   const name = job.title || "this job";
   let sch: Sched | null = null;
-  const candidates: Array<{ id: string; cands: Array<{ text: string; h: number; turned?: boolean }> }> = [];
+  const candidates: Array<{ id: string; number: string | null; cands: Array<{ text: string; h: number; turned?: boolean; lines?: string[] }> }> = [];
   try {
     sch = await scheduler();
     // 1 · title blocks
@@ -202,17 +202,19 @@ async function run(job: { id: string; title: string | null }, titles: OcrSheet[]
           readTurned(reader, doc, s.page, edge, scaleFor(edge, 3, MAX_CANVAS_PX)),
         ]);
         const m = mergeItems(flatParts.flat());
-        const sheet = readSheet(m, s.page_w, s.page_h);
+        // The sheet number only from the title block's own corner: wider, a detail's label in the
+        // drawing ("SECTION THRU L3" on Holden's retaining wall sheet) reads as sheet L3.
+        const sheet = readSheet(m.filter((i) => inTitleCorner(i, s.page_w, s.page_h)), s.page_w, s.page_h);
         const turned = mergeItems(turnedItems);
-        const flat = titleCandidates(m).filter((c) => inTitleCorner(c, s.page_w, s.page_h));
+        const flat = titleCandidates(m).filter((c) => inTitleCorner(c, s.page_w, s.page_h) || nearSignOff(c, m, s.page_h));
         const cands = [...flat, ...titleCandidates(turned).map((c) => ({ ...c, turned: true }))]
           .filter((c, i, a) => a.findIndex((x) => x.text.toUpperCase() === c.text.toUpperCase()) === i)
-          .sort((a, b) => b.h - a.h).slice(0, 6);
+          .sort((a, b) => b.h - a.h || (b.lines?.length ?? 1) - (a.lines?.length ?? 1)).slice(0, 6);
         releasePage(doc, s.page);
-        candidates.push({ id: s.id, cands });
+        candidates.push({ id: s.id, number: sheet.number, cands });
         const title = cands[0]?.text ?? null;
         const got = await save(s.id, {
-          phase: "title", number: sheet.number, title, discipline: sheet.number ? sheet.discipline : null,
+          phase: "title", number: sheet.number, title, discipline: sheet.number ? sheet.discipline : disciplineFromTitle(title),
           scale_text: sheet.scale?.text ?? null, printed_ft_per_pt: sheet.scale?.kind === "scale" ? sheet.scale.ft_per_pt : null, conf: meanConf(m),
         });
         if (got) Object.assign(s, got);
@@ -225,9 +227,18 @@ async function run(job: { id: string; title: string | null }, titles: OcrSheet[]
     // Titles against the whole set: a candidate on most sheets is boilerplate.
     if (!stop && candidates.length >= 3) {
       const best = chooseTitles(candidates);
+      // A "sheet number" read on a good part of the set is a stamp or a standard's code, not
+      // the sheet's own (Holden: "E965" on nine sheets made them electrical).
+      const counts = new Map<string, number>();
+      for (const c of candidates) if (c.number) counts.set(c.number, (counts.get(c.number) ?? 0) + 1);
+      const repeated = (n: string | null) => !!n && (counts.get(n) ?? 0) >= Math.max(3, candidates.length * 0.2);
       for (const c of candidates) {
         const t = best.get(c.id) ?? null;
-        if (t && t !== c.cands[0]?.text) await save(c.id, { phase: "title", title: t });
+        const drop = repeated(c.number);
+        if ((t && t !== c.cands[0]?.text) || drop) {
+          const number = drop ? null : c.number;
+          await save(c.id, { phase: "title", title: t, drop_number: drop, discipline: number ? undefined : disciplineFromTitle(t) });
+        }
       }
     }
     // 2 · whole sheets, the concrete ones first

@@ -55,6 +55,24 @@ export function disciplineOf(number: string | null): Discipline {
   return (m[1] in DISCIPLINES ? m[1] : "other") as Discipline;
 }
 
+/**
+ * The discipline a title names, for a sheet with no sheet number of its own (city and
+ * DOTD sets number by page: "4 OF 11", "601-01"). Words a title uses, never a guess
+ * from the drawing; "other" when none fits.
+ */
+const TITLE_DISCIPLINE: Array<[Discipline, RegExp]> = [
+  ["G", /\b(general notes|title sheet|cover sheet|index of (sheets|drawings)|sheet index|legend and abbreviations)\b/i],
+  ["E", /\b(electrical|lighting|power plan|conduit)\b/i],
+  ["L", /\b(landscap\w*|planting|irrigation|tree (protection|removal))\b/i],
+  ["S", /\b(retaining wall|foundation|footing|structural|framing|piles?|pile cap|abutment|piers?|bents?|girder|deck|bridge|rebar|reinforc\w*|slab|column|beam|elevation view|section cuts?)\b/i],
+  ["C", /\b(storm ?water|drainage|grading|paving|pavement|sidewalks?|erosion|pollution|sediment|profiles?|typical sections?|cross sections?|summary of (estimated )?quantities|summary tables|site plan|utilit\w*|culverts?|catch basins?|curbs?|driveways?|traffic control|demolition plan|removal)\b/i],
+];
+export function disciplineFromTitle(title: string | null | undefined): Discipline {
+  if (!title) return "other";
+  for (const [d, re] of TITLE_DISCIPLINE) if (re.test(title)) return d;
+  return "other";
+}
+
 /** Items grouped into lines (same baseline), left to right. */
 export function textLines(items: TextItem[]): Array<{ text: string; x: number; y: number; h: number }> {
   const sorted = items.filter((i) => i.str.trim()).slice().sort((a, b) => a.y - b.y || a.x - b.x);

@@ -6,7 +6,7 @@ import { isStampTitle } from "@/lib/plan-sheets";
 /**
  * What the Plan Room's OCR read off one scanned sheet (migration 064), saved
  * as it finishes each sheet (src/lib/v34/plan-ocr-runner.ts). POST:
- *   { phase: 'title', number?, title?, discipline?, scale_text?, printed_ft_per_pt?, conf? }
+ *   { phase: 'title', number?, title?, discipline?, drop_number?, scale_text?, printed_ft_per_pt?, conf? }
  *   { phase: 'full', text, words, conf? }
  *   { phase, error }                      couldn't read it — stamped, so it isn't retried forever
  * A first reading like the text-layer one: it never replaces a number or title
@@ -28,7 +28,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const bad = (m: string, s = 400) => applyCookies(NextResponse.json({ error: m }, { status: s }));
   let b: Record<string, unknown>;
   try { b = await req.json(); } catch { return bad("Body must be JSON."); }
-  const { data: sh } = await supabase.from("plan_sheets").select("id, number_source, title").eq("org_id", orgId).eq("id", id).maybeSingle();
+  const { data: sh } = await supabase.from("plan_sheets").select("id, number_source, number, title").eq("org_id", orgId).eq("id", id).maybeSingle();
   if (!sh) return bad("No such sheet.", 404);
 
   const now = new Date().toISOString();
@@ -43,8 +43,10 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       const title = txt(b.title, 120);
       if (title) patch.title = title;
       else if (isStampTitle(sh.title)) patch.title = null; // a plot stamp read off the text layer is no title
+      // A number read on most of the set is not this sheet's — take it back off.
+      if (b.drop_number === true && !number) { patch.number = null; patch.discipline = "other"; }
       const disc = txt(b.discipline, 12);
-      if (disc && number) patch.discipline = disc;
+      if (disc && (number || ((!sh.number || patch.number === null) && /^(G|C|L|A|S|M|E|P|FP|T|I|D|other)$/.test(disc)))) patch.discipline = disc;
       const scaleText = txt(b.scale_text, 60);
       const k = num(b.printed_ft_per_pt);
       if (scaleText) patch.scale_text = scaleText;

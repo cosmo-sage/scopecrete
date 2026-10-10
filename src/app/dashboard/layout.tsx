@@ -151,6 +151,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         try { pending = localStorage.getItem("sc:pending-invite"); } catch { /* private mode */ }
         if (pending && /^[0-9a-f]{48}$/.test(pending)) { window.location.href = `/invite/${pending}`; return null; }
       }
+      // In an org: any invite remembered on this device is not theirs to be sent back to.
+      if (r.ok) { try { localStorage.removeItem("sc:pending-invite"); } catch { /* private mode */ } }
       return r.ok ? d : null;
     }).then((d) => { if (!off && d && !d.error) setMe(d); }).catch(() => {});
     return () => { off = true; };

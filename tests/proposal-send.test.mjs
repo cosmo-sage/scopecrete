@@ -80,3 +80,10 @@ test("one customer's name never rides into the next one's words (Coy, 2026-10-06
   const lines = exampleLines(old, [{ body: `Hey Amber, the proposal: ${URL}`, at: "2026-10-04", to: "Amber Smith" }]).join("\n");
   assert.ok(!lines.includes("Gulfline") && !lines.includes("Amber"), lines);
 });
+
+test("the Preview's words greet the person and carry the real link once it exists (Gulfline, 2026-10-10)", () => {
+  const ex = [{ via: "text", template: "Hi Gulfline, here is the proposal for {title}: {link}\nTake a look and let me know if you have any questions.", at: "2026-10-05T19:23:05Z" }];
+  const s = startingWords(ex, "text", { first: firstName("Jeremy Wright"), title: "Gulfline Paving Curb and Tree Removal", url: URL, org: "Sacco Enterprises" });
+  assert.equal(s.body, `Hi Jeremy, here is the proposal for Gulfline Paving Curb and Tree Removal: ${URL}\nTake a look and let me know if you have any questions.`);
+  assert.ok(!s.body.includes("{link}"));
+});

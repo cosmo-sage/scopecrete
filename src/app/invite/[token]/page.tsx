@@ -34,11 +34,15 @@ export default function InvitePage() {
 
   useEffect(() => {
     let off = false;
-    try { localStorage.setItem(PENDING_INVITE_KEY, token); } catch { /* private mode */ }
+    // Remembered only for the person it is for (signed out, or signed in with its email), so the
+    // dashboard can bring them back here after signing in. An owner opening someone else's invite
+    // to check it must not keep it — it sent Coy to Jeremy's invite later (2026-10-10).
+    const keep = (on: boolean) => { try { if (on) localStorage.setItem(PENDING_INVITE_KEY, token); else if (localStorage.getItem(PENDING_INVITE_KEY) === token) localStorage.removeItem(PENDING_INVITE_KEY); } catch { /* private mode */ } };
     fetch(`/api/invites/${token}`).then(async (r) => {
       const b = await r.json().catch(() => ({}));
       if (off) return;
-      if (r.status === 401) { setSignedOut(true); return; }
+      if (r.status === 401) { keep(true); setSignedOut(true); return; }
+      keep(r.ok && !!b?.invite?.email_matches);
       if (!r.ok) { setErr(b?.error ?? `HTTP ${r.status}`); return; }
       setPeek(b.invite as Peek); setYou(b.you ?? null);
     }).catch(() => { if (!off) setErr("Couldn't reach ScopeCrete."); });

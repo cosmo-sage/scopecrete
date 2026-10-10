@@ -66,7 +66,9 @@ export function ProposalPreview({ jobId, vm, draft, version, blocked, coverFileI
     fetch("/api/proposal-sends").then((r) => r.json()).then((b) => { if (!off) setExamples(b.examples ?? []); }).catch(() => { if (!off) setExamples([]); });
     return () => { off = true; };
   }, []);
-  const start = examples ? startingWords(examples, via, { first: firstName(vm.customer.name), title: vm.job.title, url: "{link}", org: vm.org.name }) : null;
+  // Greet the person, not the company ("Hi Gulfline" — Coy, 2026-10-10), and show the real link once there is one.
+  const greet = vm.customer.person ?? vm.customer.name;
+  const start = examples ? startingWords(examples, via, { first: firstName(greet), title: vm.job.title, url: live?.url ?? "{link}", org: vm.org.name, names: [vm.customer.name, vm.customer.person] }) : null;
   const shownWords = words ?? start?.body ?? "";
   useEffect(() => {
     const k = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -108,7 +110,10 @@ export function ProposalPreview({ jobId, vm, draft, version, blocked, coverFileI
     try {
       const link = await ensureLink();
       if (how === "copy") {
-        await navigator.clipboard.writeText(link.url).catch(() => {}); setCopied(true); setTimeout(() => setCopied(false), 2500);
+        // Only say Copied when it was: a failed write left whatever was on the clipboard before (Coy pasted an invite link, 2026-10-10).
+        const ok = await navigator.clipboard.writeText(link.url).then(() => true, () => false);
+        if (ok) { setCopied(true); setTimeout(() => setCopied(false), 2500); }
+        else setErr(`Couldn't copy — select the link below and copy it: ${link.url}`);
         await call(`/api/proposal-links/${link.id}`, "PATCH", { sent: "copy" }).catch(() => {});
       } else if (how === "messages") {
         // The old way: Coy's own Messages app with the words.
@@ -118,7 +123,7 @@ export function ProposalPreview({ jobId, vm, draft, version, blocked, coverFileI
       } else {
         setBusy(how === "quo" ? "Sending through Quo…" : "Opening your mail…");
         const r = await proposalLink(jobId); // the link just made (or the live one), with who it is for
-        const out = await sendProposal({ jobId, via: how === "quo" ? "text" : "email", body: shownWords, subject: subject || start?.subject || null, email: vm.customer.email, link: r, names: [vm.customer.name] });
+        const out = await sendProposal({ jobId, via: how === "quo" ? "text" : "email", body: shownWords, subject: subject || start?.subject || null, email: vm.customer.email, link: r, names: [vm.customer.name, vm.customer.person] });
         setSentMsg(out);
       }
       onLinks();
@@ -173,7 +178,7 @@ export function ProposalPreview({ jobId, vm, draft, version, blocked, coverFileI
             style={{ height: 32, border: `1px solid ${T.hair}`, borderRadius: 3, background: T.card, color: T.ink, fontSize: 12.5, padding: "0 8px" }} />}
           <textarea value={shownWords} onChange={(e) => setWords(e.target.value)} rows={4} aria-label="The words that go with the link" className="mt-2 w-full"
             style={{ border: `1px solid ${T.hair}`, borderRadius: 3, background: T.card, color: T.ink, fontSize: 12.5, lineHeight: 1.4, padding: "6px 8px", resize: "vertical", fontFamily: "inherit" }} />
-          <div style={{ fontSize: 11, color: T.ink3 }}>{"{link}"} becomes the link.{start?.learned ? " Started from how you sent the last one." : ""} Dusty learns from what you send.</div>
+          <div style={{ fontSize: 11, color: T.ink3 }}>{live ? "" : "{link} becomes the link once it's made."}{start?.learned ? " Started from how you sent the last one." : ""} Dusty learns from what you send.</div>
           <div className="mt-2 flex flex-wrap gap-2">
             {via === "text"
               ? <button type="button" disabled={!canSend || !vm.customer.phone} onClick={() => void send("quo")} style={btn(canSend && !!vm.customer.phone)} title={vm.customer.phone ? `Sends through Quo to ${vm.customer.phone}` : "No phone number on the customer"}>Send text</button>

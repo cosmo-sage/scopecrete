@@ -183,7 +183,7 @@ export function Proposal({ jobId }: { jobId: string }) {
     const cont = snap ? snap.contact : b.contact;
     const customer = {
       name: str(cust?.name) ?? str(cont?.name), address: str(cust?.address_formatted) ?? ([str(cust?.address_line1), str(cust?.city), str(cust?.state)].filter(Boolean).join(", ") || null),
-      phone: str(cont?.phone), email: str(cont?.email),
+      phone: str(cont?.phone), email: str(cont?.email), person: str(cont?.name),
     };
     const org = { name: snap?.org?.name ?? orgName, logo: logo("light"), logoOnDark: logo("dark") ?? logo("light") };
     // A final keeps who prepared it; one finalised before this was kept shows the org alone.

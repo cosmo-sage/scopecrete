@@ -4760,6 +4760,13 @@ expected start date per quoted job before it means anything. Add the field.
   tested) — applied to saved patterns as they are used, so the old one
   heals. Dusty is shown the patterns without the job they were for, and
   texts with a link as patterns too.
+  **The Preview greets the person and shows the link (Coy, 2026-10-10: "Hi Gulfline, … {link}").**
+  The Preview's words greet the job's person (Jeremy), not the customer's name, and carry the live
+  link itself once one exists — {link} only before it is made. **Copy link** says Copied only when
+  the clipboard took it, else shows the link to copy by hand: a failed copy had left Jeremy's invite
+  link on the clipboard. **An invite is remembered on the device only for the person it is for**
+  (signed out, or signed in with its email) and is forgotten once the dashboard finds an org — an
+  owner opening a teammate's invite to check it no longer gets sent back to it later.
 - **Texts send through Quo (Coy, 2026-10-05: "send text messages through the
   app through quo manually or through dusty"; decision card: "Build both").**
   10DLC was not in fact waiting: 129 texts Coy sent from the Quo website line

@@ -29,7 +29,7 @@ export interface DocVM {
   org: { name: string; logo: string | null; logoOnDark: string | null };
   /** The member who prepared it — their name and phone from Settings → You. */
   preparedBy?: { name: string | null; phone: string | null; email: string | null } | null;
-  customer: { name: string | null; address: string | null; phone: string | null; email: string | null };
+  customer: { name: string | null; address: string | null; phone: string | null; email: string | null; /** The person it goes to (the greeting), when not the customer's own name. */ person?: string | null };
   job: { title: string | null; address: string | null; description: string | null };
   coverUrl: string | null;
   scopeIntro: string | null;

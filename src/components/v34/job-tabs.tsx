@@ -11,7 +11,7 @@
 import type React from "react";
 import { useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { T, F, disp } from "@/lib/v34/tokens";
+import { T, F, disp, light } from "@/lib/v34/tokens";
 import { useAccess } from "@/lib/v34/access-ctx";
 import { can } from "@/lib/access";
 import { JobSwitcher, SwitchChevron } from "@/components/v34/job-switcher";
@@ -162,13 +162,13 @@ export function JobHeaderRow({ jobId, active, title, after, sub, customerId, sub
               <input autoFocus defaultValue={String(shownTitle)} aria-label="Job name" className="sc-job-name rounded px-1.5 outline-none"
                 onBlur={(e) => void rename(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); if (e.key === "Escape") setEditing(false); }}
-                style={{ fontFamily: disp, fontWeight: 700, color: T.ink, minWidth: 0, flex: "1 1 auto", maxWidth: 420, border: `1px solid ${T.hair}`, background: T.card }} />
+                style={{ fontFamily: light, fontWeight: 300, color: T.ink, minWidth: 0, flex: "1 1 auto", maxWidth: 420, border: `1px solid ${T.hair}`, background: T.card }} />
             )
             : typeof title === "string"
             ? (
               <button onClick={() => setSwitching(true)} aria-haspopup="dialog" aria-expanded={switching} title="Switch to another job"
                 className="sc-job-switch flex items-center gap-1.5" style={{ minWidth: 0, cursor: "pointer", background: "transparent", border: "none", padding: "1px 4px", margin: "0 -4px", borderRadius: 4 }}>
-                <span className="sc-job-name" style={{ fontFamily: disp, fontWeight: 700, lineHeight: 1.15, color: T.ink, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{shownTitle}</span>
+                <span className="sc-job-name" style={{ fontFamily: light, fontWeight: 300, lineHeight: 1.15, color: T.ink, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{shownTitle}</span>
                 <SwitchChevron />
               </button>
             )

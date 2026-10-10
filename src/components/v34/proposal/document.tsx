@@ -12,6 +12,7 @@
 import React from "react";
 import { disp, strong, light, hand, nums, formatPhone } from "@/lib/v34/tokens";
 import { AreaMap, type AreaVisual } from "./area-visuals";
+import { ScopeBullets } from "../scope-of-work";
 import { drawAmount, fixLastDraw, type Clause, type Draw, type ProposalChoice, type ProposalDisplay, type ProposalPrice, type ProposalGroup } from "@/lib/proposal";
 
 export const SECTIONS: Array<[string, string]> = [
@@ -19,7 +20,9 @@ export const SECTIONS: Array<[string, string]> = [
   ["pay", "Payments"], ["warranty", "Warranty"], ["terms", "Terms"], ["sign", "Sign"],
 ];
 
-export interface DocArea { id: string; name: string | null; work_type: string | null; length_ft: number | null; width_ft: number | null; sqft: number | null; depth_in: number | null; psi: number | null; rebar: string | null; count?: number | null; count_unit?: string | null }
+export interface DocArea { id: string; name: string | null; work_type: string | null; length_ft: number | null; width_ft: number | null; sqft: number | null; depth_in: number | null; psi: number | null; rebar: string | null; count?: number | null; count_unit?: string | null;
+  /** The area's scope of work, a bullet a line (job_sections.prep_notes, src/lib/scope-of-work.ts). */
+  scope?: string | null }
 export interface DocVM {
   number: string; date: string; readOnly: boolean;
   typeKey: string | null; typeLabel: string;
@@ -54,6 +57,8 @@ export interface DocEdits {
   saveTemplate: (kind: "warranty" | "terms") => void;
   dusty: (kind: "warranty" | "terms" | "scope") => void;
   pickCover: () => void;
+  /** Edits an area's scope of work — saved on the section, so the budget shows it too (Coy, 2026-10-10). */
+  scope?: (sectionId: string, text: string | null) => void;
 }
 
 const usd = (n: number) => n.toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -217,6 +222,9 @@ export function ProposalDocument({ vm, edits, narrow }: { vm: DocVM; edits: DocE
                   <span>
                     <b style={{ fontWeight: 600 }}>{a.name || a.work_type || "Area"}</b>
                     <span style={{ color: "#5E5A52" }}>{areaSpec(a)}</span>
+                    {/* Its scope of work — the budget's list; edited here on a draft (Coy, 2026-10-10). */}
+                    <ScopeBullets value={a.scope ?? null} readOnly={!edits?.scope} onSave={(t) => edits?.scope?.(a.id, t)}
+                      color="#2A2A2A" muted="#8C8578" border="#E6DCC8" fontSize={12.5} placeholder="Add the scope of work for this area" />
                   </span>
                 </li>
               ))}

@@ -22,12 +22,13 @@ import { createPortal } from "react-dom";
 import { useDustyDocked } from "@/lib/v34/use-dusty-docked";
 import { VoiceRecorder } from "@/components/v34/voice-recorder";
 import { useParams } from "next/navigation";
-import { T, F, disp, eyebrow, nums, clip, money, money0, formatPhone } from "@/lib/v34/tokens";
+import { T, F, disp, light, eyebrow, nums, clip, money, money0, formatPhone } from "@/lib/v34/tokens";
 import { EmptyState } from "@/components/v34/primitives";
 import { ArchiveButton } from "@/components/v34/archive-actions";
 import { FilesPanel, type FileRow } from "@/components/v34/files-panel";
 import { SectionPhotos } from "@/components/v34/section-photos";
 import { SectionDetails } from "@/components/v34/section-details";
+import { ScopeBullets } from "@/components/v34/scope-of-work";
 import { isDetailFile, type SectionShape } from "@/lib/plan-details";
 import { DraftStrip } from "@/components/v34/draft-strip";
 import { JobHeaderRow } from "@/components/v34/job-tabs";
@@ -315,7 +316,7 @@ export default function ScopeBuilder() {
               size={Math.max(6, (realTitle || titleHint || "").length + 1)}
               onBlur={(e) => { const v = e.target.value; if (v !== realTitle) void send(`/api/jobs/${jobId}`, "PATCH", { title: v }).then((b) => setJob((j) => j && { ...j, title: b.job.title })).catch((er) => setSaveErr((m) => ({ ...m, job: String(er.message ?? er) }))); }}
               className="sc-job-name bg-transparent outline-none text-center lg:text-left"
-              style={{ minWidth: 0, maxWidth: "100%", fieldSizing: "content", fontFamily: disp, fontWeight: 700, lineHeight: 1.15, color: T.ink } as React.CSSProperties} />} />
+              style={{ minWidth: 0, maxWidth: "100%", fieldSizing: "content", fontFamily: light, fontWeight: 300, lineHeight: 1.15, color: T.ink } as React.CSSProperties} />} />
           {/* An onsite estimator has no Summary (081): they keep who it's for and their phone here. */}
           {access.limited && (
             <div style={{ fontSize: F.xs, color: who ? T.ink3 : T.hiviz, marginTop: 4, ...clip }}>
@@ -420,7 +421,8 @@ export default function ScopeBuilder() {
                         <SectionPhotos jobId={jobId} sectionId={s.id} sectionName={s.name ?? null} plans={plans}
                         photos={jobFiles.filter((f) => (f.section_id === s.id || (f.takeoff_measurement_id && shapeIds.has(f.takeoff_measurement_id))) && (f.kind === "image" || f.kind === "video") && !isDetailFile(f))}
                         sections={sections.map((x) => ({ id: x.id, name: x.name ?? null }))} onChange={fileChanged}
-                        onProposal={picsOff === null ? null : !picsOff[s.id]} onProposalChange={(on) => setPics(s.id, on)} />
+                        onProposal={picsOff === null ? null : !picsOff[s.id]} onProposalChange={(on) => setPics(s.id, on)}
+                        clipHref={can(access, "plan_room") ? `/dashboard/scope/${jobId}/files` : null} />
                         {/* Section cuts clipped off the plans (Coy, 2026-10-09), read by AI on a tap. */}
                         {can(access, "plan_room") && <SectionDetails jobId={jobId} sectionName={s.name ?? null} shape={detailShape(s)}
                           details={jobFiles.filter((f) => f.section_id === s.id && isDetailFile(f))}
@@ -782,6 +784,13 @@ function SectionCard({ s, index, err, onLocal, onSave, onRemove, jobType, jobId,
 
       {/* The section's own cost items (Coy, 2026-10-04: "the sections … have the budget line items in
           the sections themselves"). JobBudget draws them here; the panel below the sections is the job's totals. */}
+      {/* The scope of work, a bullet a line (Coy, 2026-10-10) — the same list as under this area on the draft
+          proposal; edited in either place. Kept in prep_notes (src/lib/scope-of-work.ts). */}
+      <div className="px-3 py-2" style={{ borderTop: `1px solid ${T.hairSoft}` }}>
+        <div style={{ ...eyebrow, marginBottom: 2 }}>Scope of work</div>
+        <ScopeBullets value={s.prep_notes} color={T.ink} muted={T.ink3} border={T.hair} fontSize={13}
+          onSave={(v) => { onLocal({ prep_notes: v }); onSave({ prep_notes: v }); }} />
+      </div>
       <div ref={budgetSlot} />
       {photos}
       {/* Beside the photos (Coy, 2026-10-05: "This button to pull from the aerial photos or other plan sheets

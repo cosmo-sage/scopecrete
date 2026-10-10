@@ -41,7 +41,9 @@ async function call(url: string, method: string, body?: unknown) {
   return b;
 }
 
-export function SectionPhotos({ jobId, sectionId, sectionName, photos, sections, onChange, onProposal = null, onProposalChange, plans = null }: {
+export function SectionPhotos({ jobId, sectionId, sectionName, photos, sections, onChange, onProposal = null, onProposalChange, plans = null, clipHref = null }: {
+  /** Clip a section cut off the plans (Coy, 2026-10-10: the Clip button on the photos row). */
+  clipHref?: string | null;
   jobId: string; sectionId: string; sectionName: string | null; photos: FileRow[];
   /** The job's Takeoffs, for pictures of the sheets with their markups. */
   plans?: PlansData | null;
@@ -77,8 +79,8 @@ export function SectionPhotos({ jobId, sectionId, sectionName, photos, sections,
 
   return (
     <div className="px-3 py-2" style={{ borderTop: `1px solid ${T.hairSoft}` }}>
-      <div className="flex items-center gap-2">
-        <span style={eyebrow}>Photos{photos.length ? ` · ${photos.length}` : ""}</span>
+      <div className="flex items-center gap-2 flex-wrap">
+        <span style={eyebrow}>Add Images to this Section{photos.length ? ` · ${photos.length}` : ""}</span>
         {/* On or off the proposal for this area (Coy, 2026-10-05) — the proposal's eye on this area, from here. */}
         {onProposal !== null && photos.length > 0 && onProposalChange && (
           <button role="switch" aria-checked={onProposal} onClick={() => onProposalChange(!onProposal)}
@@ -109,6 +111,12 @@ export function SectionPhotos({ jobId, sectionId, sectionName, photos, sections,
           </svg>
           Camera
         </button>
+        {clipHref && (
+          <a href={clipHref} title="Open a drawing in Files, then Clip detail — a section cut or detail clipped onto this section" className="rounded px-2.5 flex items-center"
+            style={{ height: 30, border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink, textDecoration: "none", ...eyebrow }}>
+            + Clip
+          </a>
+        )}
       </div>
       {(photos.length > 0 || sending.length > 0) && (
         <div className="grid gap-1.5 mt-1.5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(72px, 1fr))" }}>

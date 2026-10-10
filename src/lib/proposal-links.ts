@@ -97,7 +97,7 @@ const pick = (r: unknown, keys: string[]): Rec | null => {
  * frozen version's words, areas and prices AS THE CUSTOMER SEES THEM — never
  * the cost, overhead, profit or margin, never a hidden group or line (not even
  * its name), never a hidden price (its number is zeroed; the page shows "—"),
- * never the areas' notes. The snapshot itself stays in the org.
+ * never the areas' notes (each area's scope of work, written for them, goes as `scope`). The snapshot itself stays in the org.
  */
 export function publicSnapshot(snap: Rec, extra: { project_type: string | null; type_label: string }): Rec {
   const price = (snap.price ?? {}) as Rec;
@@ -136,7 +136,9 @@ export function publicSnapshot(snap: Rec, extra: { project_type: string | null; 
     scope_intro: s(snap.scope_intro),
     warranty_text: pick(snap.warranty_text, ["title", "body"]),
     terms_text: { title: s((snap.terms_text as Rec | null)?.title), clauses: Array.isArray((snap.terms_text as Rec | null)?.clauses) ? ((snap.terms_text as Rec).clauses as Rec[]).map((c) => ({ h: s(c.h) ?? "", b: s(c.b) ?? "" })) : [] },
-    sections: (Array.isArray(snap.sections) ? (snap.sections as Rec[]) : []).map((x) => pick(x, ["id", "name", "work_type", "length_ft", "width_ft", "sqft_override", "depth_in", "psi", "rebar", "count_qty", "count_unit"])),
+    sections: (Array.isArray(snap.sections) ? (snap.sections as Rec[]) : []).map((x) => ({ ...pick(x, ["id", "name", "work_type", "length_ft", "width_ft", "sqft_override", "depth_in", "psi", "rebar", "count_qty", "count_unit"]),
+      // The area's scope of work is written for the customer (Coy, 2026-10-10; kept in prep_notes); the Notes are not.
+      scope: typeof x.prep_notes === "string" && x.prep_notes.trim() ? x.prep_notes : null })),
     price: shownPrice,
     choices: choices ? {
       list: (Array.isArray(choices.list) ? (choices.list as Rec[]) : []).map((c) => ({ id: c.id, label: s(c.label) ?? "", total: n(c.total), blocked: null, own: Array.isArray(c.own) ? c.own : [] })),

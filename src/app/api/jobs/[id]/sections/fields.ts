@@ -15,6 +15,8 @@ export const WORK_TYPES = ["slab", "driveway", "patio", "sidewalk", "footing", "
 
 const NUMERIC = ["length_ft", "width_ft", "sqft_override", "depth_in", "count_qty"] as const;
 const TEXT = ["name", "rebar", "prep_notes", "access_notes"] as const;
+/** prep_notes holds the scope of work, a bullet a line (src/lib/scope-of-work.ts); notes take what the card lets you type. */
+const TEXT_MAX: Record<(typeof TEXT)[number], number> = { name: 500, rebar: 500, prep_notes: 8000, access_notes: 2000 };
 
 export const SECTION_SELECT =
   "id, job_id, name, work_type, length_ft, width_ft, sqft_override, depth_in, psi, rebar, prep_notes, access_notes, sort_order, created_at, updated_at, reinforcement_item_id, reinforcement_source, origin, source_ref, count_qty, count_unit, takeoff_sync";
@@ -45,7 +47,7 @@ export function readSectionFields(body: Record<string, unknown>):
     if (!(f in body)) continue;
     const v = body[f];
     if (v === null) patch[f] = null;
-    else if (typeof v === "string") patch[f] = v.trim() === "" ? null : v.trim().slice(0, 500);
+    else if (typeof v === "string") patch[f] = v.trim() === "" ? null : v.trim().slice(0, TEXT_MAX[f]);
     else return { ok: false, error: `${f} must be text.` };
   }
 

@@ -456,7 +456,7 @@ async function scopeContext(sb: Sb, orgId: string, jobId: string): Promise<Assem
     return `- ${String(r.id).slice(0, 8)} · ${r.name || "Unnamed area"} (${r.work_type})${cnt !== null && sq === null ? ` · counted ${cnt} ${(r.count_unit as string | null) ?? "EA"} (an item priced per each with no typed qty takes this count)` : sq !== null ? ` · ${fmt0(sq)} sf = ${(sq / 9).toFixed(2)} SY` : " · area not set"}${num(r.depth_in) !== null ? ` · ${num(r.depth_in)} in` : ""}${r.source_ref ? ` · from the bid: ${String(r.source_ref).slice(0, 160)}` : ""}`;
   });
   const notes = ((secs ?? []) as Array<Record<string, unknown>>).flatMap((r) =>
-    [["reinforcement", r.rebar], ["prep", r.prep_notes], ["notes", r.access_notes]]
+    [["reinforcement", r.rebar], ["scope of work", r.prep_notes], ["notes", r.access_notes]]
       .filter(([, v]) => typeof v === "string" && v).map(([k, v]) => `- ${r.name || "section"} ${k}: ${v}`));
   const taxLine = await taxRatesLine(sb, orgId);
   const title = (job.title as string | null) || "Untitled scope";

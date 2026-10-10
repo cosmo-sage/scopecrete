@@ -380,6 +380,8 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
             {msg && <span style={{ color: T.red }}>{msg}</span>}
             {tool === "fill" && sheet && (
               <FillBar draft={draft} tracing={tracing} opt={fillOpt} setOpt={setFill} sheet={sheet}
+                groups={data.params.filter((g) => g.kind === "area")} groupId={groupId} setGroupId={setGroupId}
+                newGroup={(name) => act(async () => { const b = await call(`/api/jobs/${jobId}/takeoff/parameters`, "POST", { name, kind: "area", depth_in: null }); setGroupId(b.parameter.id); })}
                 cut={fillCut} setCut={(v) => { setFillCut(v); setDraft([]); setCutTarget(null); lastFill.current = null; setMsg(null); }}
                 finish={finish} cancel={() => { setDraft([]); lastFill.current = null; }} />
             )}
@@ -449,8 +451,9 @@ const tb = (on: boolean): React.CSSProperties => ({
 });
 
 /** Fill's strip: what was traced, how big, and how forgiving the trace is. */
-function FillBar({ draft, tracing, opt, setOpt, sheet, cut, setCut, finish, cancel }: {
+function FillBar({ draft, tracing, opt, setOpt, sheet, groups, groupId, setGroupId, newGroup, cut, setCut, finish, cancel }: {
   draft: Pt[]; tracing: boolean; opt: TraceOptions; setOpt: (o: TraceOptions) => void; sheet: Sheet;
+  groups: Param[]; groupId: string | null; setGroupId: (id: string) => void; newGroup: (name: string) => Promise<void>;
   cut: boolean; setCut: (v: boolean) => void; finish: () => void; cancel: () => void;
 }) {
   const q = draft.length >= 3 ? measurementQty("area", { geometry: draft, cutouts: [] }, { ft_per_pt: sheet.scale_ft_per_pt, method: sheet.scale_method, label: sheetLabel(sheet) }) : null;
@@ -469,6 +472,22 @@ function FillBar({ draft, tracing, opt, setOpt, sheet, cut, setCut, finish, canc
             style={{ height: 28, padding: "0 9px", fontSize: F.xs, fontWeight: 600, background: cut === v ? (v ? T.red : T.ink) : T.card, color: cut === v ? "#fff" : T.ink2 }}>{label}</button>
         ))}
       </span>
+      {/* Every fill goes into the group picked here (Coy, 2026-10-10: "add to existing measurements so i
+          can capture all the sidewalks together"): one group, one total, one budget section if sent so. */}
+      {!cut && (
+        <select value={groups.some((g) => g.id === groupId) ? groupId ?? "" : ""} aria-label="Add the fill to"
+          title="Each fill you keep goes into this group, and the group adds them up"
+          onChange={(e) => {
+            if (e.target.value !== "+") { setGroupId(e.target.value); return; }
+            const name = window.prompt("Name the new group (Sidewalks, Parking lot…)")?.replace(/\s+/g, " ").trim();
+            if (name) void newGroup(name);
+          }}
+          style={{ height: 28, border: `1px solid ${T.hairStrong}`, borderRadius: 3, padding: "0 4px", background: T.card, color: T.ink, fontSize: F.xs, fontWeight: 600, maxWidth: 190 }}>
+          {!groups.some((g) => g.id === groupId) && <option value="">Add to…</option>}
+          {groups.map((g) => <option key={g.id} value={g.id}>Add to: {g.name}</option>)}
+          <option value="+">+ New group…</option>
+        </select>
+      )}
       {draft.length >= 3 && !tracing && <button onClick={finish} style={tb(true)}>{cut ? "Cut it out" : "Keep it"}</button>}
       {draft.length > 0 && !tracing && <button onClick={cancel} style={tb(false)}>Drop it</button>}
       <select value={String(opt.gapPt)} onChange={(e) => setOpt({ ...opt, gapPt: Number(e.target.value) })} aria-label="Bridge gaps" title="Close small breaks in the outline" style={sel}>
@@ -891,11 +910,33 @@ function ParamPanel({ jobId, data, groupId, setGroupId, selId, onSelect, act, on
           {(() => {
             // Ticked takeoffs go first: "Send 2 to budget" opens the sheet with just those.
             const tg = ticked.ids.size ? data.params.find((p) => p.id === ticked.g) : null;
+            // Ticked takeoffs can also move to another group of their kind, to add up together
+            // (Coy, 2026-10-10: "capture all the sidewalks together").
+            const others = tg ? data.params.filter((p) => p.kind === tg.kind && p.id !== tg.id) : [];
             if (tg) return (
-              <button onClick={() => { onSend(tg, [...ticked.ids]); setTicked({ g: "", ids: new Set() }); }} className="flex-1 rounded"
-                style={{ height: 34, background: T.hiviz, color: T.onHiviz, fontFamily: disp, fontWeight: 600, letterSpacing: ".04em", textTransform: "uppercase", fontSize: 12, whiteSpace: "nowrap", cursor: "pointer" }}>
-                Send {ticked.ids.size} to budget
-              </button>
+              <>
+                <button onClick={() => { onSend(tg, [...ticked.ids]); setTicked({ g: "", ids: new Set() }); }} className="flex-1 rounded"
+                  style={{ height: 34, background: T.hiviz, color: T.onHiviz, fontFamily: disp, fontWeight: 600, letterSpacing: ".04em", textTransform: "uppercase", fontSize: 12, whiteSpace: "nowrap", cursor: "pointer" }}>
+                  Send {ticked.ids.size} to budget
+                </button>
+                <select value="" aria-label={`Move ${ticked.ids.size} to another group`} title="Move the ticked takeoffs into another group, which adds them up"
+                  onChange={(e) => {
+                    const v = e.target.value; if (!v) return;
+                    const ids = [...ticked.ids];
+                    const to = async (gid: string) => { for (const mid of ids) await call(`/api/jobs/${jobId}/takeoff/measurements/${mid}`, "PATCH", { parameter_id: gid }); setGroupId(gid); };
+                    if (v === "+") {
+                      const name = window.prompt("Name the new group (Sidewalks, Parking lot…)")?.replace(/\s+/g, " ").trim();
+                      if (!name) return;
+                      void act(async () => { const r = await call(`/api/jobs/${jobId}/takeoff/parameters`, "POST", { name, kind: tg.kind, depth_in: tg.depth_in }); await to(r.parameter.id); });
+                    } else void act(() => to(v));
+                    setTicked({ g: "", ids: new Set() });
+                  }}
+                  className="rounded" style={{ height: 34, flex: "0 1 auto", maxWidth: 120, border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink, fontFamily: disp, fontWeight: 600, fontSize: 12, letterSpacing: ".04em", textTransform: "uppercase" }}>
+                  <option value="">Move {ticked.ids.size} to…</option>
+                  {others.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  <option value="+">+ New group…</option>
+                </select>
+              </>
             );
             const g = data.params.find((p) => p.id === groupId);
             const [inB, ofB] = g ? inBudget(g) : [0, 0];

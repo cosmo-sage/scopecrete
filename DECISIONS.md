@@ -3813,8 +3813,9 @@ expected start date per quoted job before it means anything. Add the field.
   drawn. **An addendum doesn't copy a file again** (`reuseCopy()` in
   `bid-intake`): a Box file another bid of the org already copied (same Box
   file id and size, the copy not deleted) is that copy, its reading carried
-  over. Burgess Ave's second PLANS.pdf and proposal (from the addendum) are
-  the duplicates already made.
+  over (deployed as `bid-intake` v14, 2026-10-10, on Coy's word; read back
+  equal to the repo). Burgess Ave's second PLANS.pdf and proposal (from the
+  addendum) were soft-deleted on Coy's "remove burgess duplicates".
   **Drawings vs pages to read (Coy, 2026-10-02).** A page bigger than legal
   (longest side ≥ 1,150 pt, so 11×17 half-size sets count) is a drawing:
   measured, scaled, in Takeoff. A letter or legal page bound into a plan

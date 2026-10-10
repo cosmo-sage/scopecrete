@@ -1,28 +1,22 @@
 "use client";
 
 /**
- * Dusty — the Scopecrete Lander (Claude Design package 2026-10-04,
- * `design/dusty-lander/`): a hatched concrete block on steel legs with
- * green-light eyes, a dish antenna and an orange ring. Replaces the pixel
- * foreman. He lives in two places only (Coy, 2026-09-30): the centre of the
- * phone footer (the header button on a desktop) and the chat window.
+ * Dusty is the ScopeCrete emblem (Coy, 2026-10-10: "replace the dusty
+ * character with the new emblem") — the 4e rings round the green light,
+ * where the Lander (Claude Design 2026-10-04) stood: the centre of the phone
+ * footer, the header button on a desktop, and the chat window.
  *
- * Drawn inline from `dustySvg()` (src/lib/v34/dusty-svg.ts), so a state swaps
- * without reloading an image. `prefers-reduced-motion` stills him.
- *
- * States are driven only by real events, never by a timer pretending to work:
- *   idle        — default (at 24 px and under he stands still)
- *   loading     — listening: the dish wobbles (a chat loading, a voice note)
- *   calculating — sorting: the ring spins (a reply streams, the reader reads)
- *   thinking    — scanning
- *   done        — celebrates once, then idle
- *   error       — alert (amber eyes) for a moment, then idle
- * Any of the package's own modes (listen, sort, scan, land, celebrate, alert,
- * sleep, static) may be passed directly too.
+ * States still come only from real events, never a timer pretending to work:
+ *   idle                 — the rings turn slowly (still under reduced motion)
+ *   working (loading, calculating, thinking, listen, sort, scan) — the light glows
+ *   done                 — one green flash, then idle
+ *   error / alert        — an amber flash for a moment, then idle
+ *   static / sleep       — still
  */
 
-import React, { useEffect, useId, useMemo, useState } from "react";
-import { dustySvg, type DustyMode } from "@/lib/v34/dusty-svg";
+import { useEffect, useState } from "react";
+import { Emblem } from "@/components/site/marks";
+import type { DustyMode } from "@/lib/v34/dusty-svg";
 
 export type DustyState = "idle" | "loading" | "calculating" | "done" | "error" | "thinking" | DustyMode;
 
@@ -32,6 +26,11 @@ const LABEL: Record<string, string> = {
   error: "Dusty hit a snag", thinking: "Dusty is thinking", listen: "Dusty is listening", sort: "Dusty is sorting",
   scan: "Dusty is scanning", land: "A new job landed", celebrate: "Dusty is celebrating", alert: "Dusty needs you",
   sleep: "Dusty is asleep", static: "Dusty",
+};
+/** The glow under the emblem for each kind of work (v34-shell.css). */
+const WORK: Record<string, string> = {
+  listen: "sc-dusty-work", sort: "sc-dusty-work", scan: "sc-dusty-work",
+  celebrate: "sc-dusty-done", land: "sc-dusty-done", alert: "sc-dusty-alert",
 };
 /** How long a one-shot plays before he goes back to idle. */
 const SHOT_MS: Record<string, number> = { done: 3200, error: 2400, land: 2800 };
@@ -56,7 +55,6 @@ export function DustyAvatar({ state = "idle", size = 48, hidden, className, stil
   hidden?: boolean; className?: string;
 }) {
   const reduced = useReducedMotion();
-  const uid = useId();
   // One-shots play, then he rests.
   const [resting, setResting] = useState(false);
   const [seen, setSeen] = useState(state);
@@ -68,15 +66,14 @@ export function DustyAvatar({ state = "idle", size = 48, hidden, className, stil
     return () => clearTimeout(t);
   }, [state, resting]);
 
-  let mode: DustyMode = resting ? "idle" : MODE[state] ?? (state as DustyMode);
-  // Small and idle, or asked to hold still: no animation at all.
-  if (reduced || stillProp || (size <= 24 && mode === "idle")) mode = "static";
+  const mode: DustyMode = resting ? "idle" : MODE[state] ?? (state as DustyMode);
   const label = LABEL[state] ?? "Dusty";
-  const html = useMemo(() => dustySvg(mode, { size, id: uid, title: hidden ? false : label }), [mode, size, uid, hidden, label]);
-  // Crossfade on every change of what is shown (200 ms, .sc-dusty).
+  const still = reduced || stillProp || mode === "static" || mode === "sleep";
+  const work = still ? "" : WORK[mode] ?? "";
   return (
-    <span className={`sc-dusty ${className ?? ""}`} key={mode} role={hidden ? undefined : "img"} aria-label={hidden ? undefined : label}
-      aria-hidden={hidden || undefined} style={{ display: "inline-flex", width: size, height: size, flexShrink: 0 }}
-      dangerouslySetInnerHTML={{ __html: html }} />
+    <span className={`sc-dusty ${work} ${className ?? ""}`} key={mode} role={hidden ? undefined : "img"} aria-label={hidden ? undefined : label}
+      aria-hidden={hidden || undefined} style={{ display: "inline-flex", width: size, height: size, flexShrink: 0, borderRadius: "50%" }}>
+      <Emblem size={size} spin={!still} />
+    </span>
   );
 }

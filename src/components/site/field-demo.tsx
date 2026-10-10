@@ -11,7 +11,7 @@
 
    Changes from the design, on purpose:
    - Tappable spans are buttons, so they work from a keyboard.
-   - Dusty is drawn inline (DustySVG) rather than from files.
+   - Dusty is the ScopeCrete emblem (2026-10-10), not the lander drawing.
    - The other rows on the Threads screen use made-up names:
      the design had borrowed a real prospect's name.
    - The budget is "Budget", not "Budget · Better": a job has
@@ -19,8 +19,8 @@
    ============================================================ */
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { DustySVG, type DustyMode } from "./dusty-svg";
-import { BeaconI, Emblem, disp, inter, lexend } from "./marks";
+import type { DustyMode } from "./dusty-svg";
+import { Emblem, Wordmark, disp, lexend } from "./marks";
 
 const body = "var(--site-body), 'IBM Plex Sans', system-ui, sans-serif";
 const figtree = "var(--site-figtree), 'Figtree', system-ui, sans-serif";
@@ -88,14 +88,13 @@ const chip: CSSProperties = {
   border: "1px solid var(--sc-hair)", display: "flex", alignItems: "center", fontSize: 11.5,
 };
 
+// Dusty is the ScopeCrete emblem (Coy, 2026-10-10: "replace the dusty
+// character with the new emblem") — turning, or still where he stood still.
 function Dusty({ mode, size }: { mode: DustyMode; size: number }) {
   return (
-    <span
-      aria-label="Dusty"
-      role="img"
-      style={{ display: "inline-flex", flex: "none", width: size, height: size }}
-      dangerouslySetInnerHTML={{ __html: DustySVG(mode, { size, title: false }) }}
-    />
+    <span aria-label="Dusty" role="img" style={{ display: "inline-flex", flex: "none", width: size, height: size }}>
+      <Emblem size={size} spin={mode !== "static"} />
+    </span>
   );
 }
 
@@ -120,11 +119,7 @@ function PhoneHead({ activity, work }: { activity: string; work: Work }) {
             2026-10-08); in the app this spot is the org's logo. */}
         <span style={{ display: "flex", alignItems: "center", gap: 8, flex: "none" }}>
           <Emblem size={24} spin />
-          <span style={{ display: "inline-flex", alignItems: "baseline" }}>
-            <span style={{ fontFamily: lexend, fontWeight: 700, fontSize: 20, lineHeight: 1, letterSpacing: ".02em", paddingBottom: ".28em", marginBottom: "-.28em", marginRight: 1, color: "transparent", backgroundImage: "repeating-linear-gradient(118deg,var(--sc-hatch) 0 .9px,transparent .9px 2.1px)", WebkitBackgroundClip: "text", backgroundClip: "text", WebkitTextStroke: ".5px var(--sc-hatch-edge)" }}>scope</span>
-            <span style={{ fontFamily: inter, fontWeight: 300, fontSize: 20, lineHeight: 1, letterSpacing: "-.01em", color: "var(--sc-crete)" }}>crete</span>
-            <span style={{ fontFamily: inter, fontWeight: 300, fontSize: 12, lineHeight: 1, color: "var(--sc-pencil-muted)", marginLeft: 1 }}>.a<BeaconI /></span>
-          </span>
+          <Wordmark size={20} />
         </span>
         <span style={{ flex: 1 }} />
         <span style={{ display: "flex", alignItems: "center", gap: 6 }}>

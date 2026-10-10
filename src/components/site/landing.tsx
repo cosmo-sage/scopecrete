@@ -28,7 +28,7 @@
 
 import { useState, type CSSProperties, type FormEvent } from "react";
 import { LOGIN_URL } from "@/lib/hosts";
-import { DustySVG, type DustyMode } from "./dusty-svg";
+import type { DustyMode } from "./dusty-svg";
 import FieldDemo from "./field-demo";
 import { DRAFT_GRID, Emblem, GraphiteFilter, Wordmark, disp } from "./marks";
 
@@ -59,14 +59,13 @@ const paper20: CSSProperties = {
   backgroundSize: "20px 20px",
 };
 
+// Dusty is the ScopeCrete emblem (Coy, 2026-10-10: "replace the dusty
+// character with the new emblem") — turning, or still where he stood still.
 function Dusty({ mode, size }: { mode: DustyMode; size: number }) {
   return (
-    <span
-      aria-label="Dusty"
-      role="img"
-      style={{ display: "inline-flex", flex: "none", width: size, height: size }}
-      dangerouslySetInnerHTML={{ __html: DustySVG(mode, { size, title: false }) }}
-    />
+    <span aria-label="Dusty" role="img" style={{ display: "inline-flex", flex: "none", width: size, height: size }}>
+      <Emblem size={size} spin={mode !== "static"} />
+    </span>
   );
 }
 

@@ -118,6 +118,6 @@ export function docxFromBytes(bytes: Uint8Array): DocBlock[] | null {
 export function docText(kind: DocKind, bytes: Uint8Array): string | null {
   const text = kind === "docx"
     ? (() => { const b = docxFromBytes(bytes); return b ? blocksText(b) : null; })()
-    : strFromU8(bytes).replace(/^﻿/, "");
+    : strFromU8(bytes).replace(/^\uFEFF/, "");
   return text && text.replace(/\s/g, "").length ? text : null;
 }

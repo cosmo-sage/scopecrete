@@ -167,7 +167,7 @@ async function runBatch(sb: any, cfg: Cfg, maxReads: number) {
       try { res = await readOne(sb, cfg, f) } catch (e) { res = { outcome: 'failed', patch: { read_error: `threw: ${(e as Error).message}`.slice(0, 200) } } }
       counts[res.outcome]++
       if (res.outcome === 'failed' && !firstError) firstError = String(res.patch.read_error ?? 'failed')
-      await sb.from('job_files').update({ read_state: res.outcome, read_at: new Date().toISOString(), ...res.patch }).eq('id', f.id)
+      await sb.from('files').update({ read_state: res.outcome, read_at: new Date().toISOString(), ...res.patch }).eq('id', f.id)
     }
   }
   await Promise.all(Array.from({ length: CONCURRENCY }, worker))

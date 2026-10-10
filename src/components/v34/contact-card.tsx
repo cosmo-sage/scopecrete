@@ -138,7 +138,7 @@ export function ContactCard({ person, back, textHref, customerHref, vendorHref, 
 /**
  * The customer this person speaks for, and where it's changed (Coy, 2026-10-09: "link a contact to a
  * customer from inside the contact page … drop down and select Art Apartments"). Picking one puts them
- * under it through the customer page's own + Add contact (sc_attach_contact: their jobs come along), with Undo.
+ * under it through the customer page's own + Add contact (sc_attach_contact: their jobs come along). No Undo line (Coy, 2026-10-10: changing it again is the undo).
  */
 function CustomerRow({ contactId, customerId, name, href, onSaved }: {
   contactId: string; customerId: string | null; name: string | null; href: string | null; onSaved: () => void;
@@ -148,7 +148,6 @@ function CustomerRow({ contactId, customerId, name, href, onSaved }: {
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [undo, setUndo] = useState<{ move: string; to: string } | null>(null);
   useEffect(() => {
     if (!open || list) return;
     fetch("/api/customers").then((r) => (r.ok ? r.json() : { customers: [] }))
@@ -161,12 +160,7 @@ function CustomerRow({ contactId, customerId, name, href, onSaved }: {
     const b = await r.json().catch(() => ({}));
     setBusy(false);
     if (!r.ok) { setErr(b?.error ?? "Couldn't move them."); return; }
-    setOpen(false); setQ(""); setUndo(b.move_id ? { move: b.move_id, to: to.name } : null); onSaved();
-  };
-  const back = async () => {
-    if (!undo) return;
-    await fetch(`/api/customer-moves/${undo.move}/undo`, { method: "POST" }).catch(() => {});
-    setUndo(null); onSaved();
+    setOpen(false); setQ(""); onSaved();
   };
   const shown = (list ?? []).filter((x) => x.id !== customerId && (!q.trim() || x.name.toLowerCase().includes(q.trim().toLowerCase()))).slice(0, 30);
   return (
@@ -177,11 +171,6 @@ function CustomerRow({ contactId, customerId, name, href, onSaved }: {
           {href && name && <Link href={href} style={{ ...eyebrow, color: T.chalk }}>Open ›</Link>}
           <button onClick={() => setOpen((v) => !v)} aria-expanded={open} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>{open ? "Close" : "Change"}</button>
         </span>} />
-      {undo && (
-        <div className="flex items-center gap-2" style={{ padding: "0 16px 8px", fontSize: F.sm, color: T.ink2 }}>
-          Now under {undo.to}. <button onClick={() => void back()} style={{ color: T.chalk, fontWeight: 600, cursor: "pointer" }}>Undo</button>
-        </div>
-      )}
       {open && (
         <div style={{ padding: "0 16px 10px" }}>
           <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find a customer: Art Apartments…" aria-label="Find a customer"

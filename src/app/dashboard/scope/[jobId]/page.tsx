@@ -29,7 +29,6 @@ import { FilesPanel, type FileRow } from "@/components/v34/files-panel";
 import { SectionPhotos } from "@/components/v34/section-photos";
 import { SectionDetails } from "@/components/v34/section-details";
 import { isDetailFile, type SectionShape } from "@/lib/plan-details";
-import { BidStrip } from "@/components/v34/bid-strip";
 import { DraftStrip } from "@/components/v34/draft-strip";
 import { JobHeaderRow } from "@/components/v34/job-tabs";
 import { JobBudget, type BudgetSummary } from "@/components/v34/job-budget";
@@ -81,11 +80,6 @@ interface Why {
 // The trigger's fallback title when Dusty had no job title and no kind of
 // work (migration 040). Not a name — shown as an empty box asking for one.
 const PLACEHOLDER_TITLES = new Set(["New job", "Untitled scope"]);
-
-const WORK_TYPES: [string, string][] = [
-  ["slab", "Slab"], ["driveway", "Driveway"], ["patio", "Patio"], ["sidewalk", "Sidewalk"],
-  ["footing", "Footing"], ["curb", "Curb"], ["demo", "Demo"], ["prep", "Prep"], ["other", "Other"],
-];
 
 const n1 = (v: number) => v.toLocaleString("en-US", { maximumFractionDigits: 1 });
 const n2 = (v: number) => v.toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 2 });
@@ -362,8 +356,7 @@ export default function ScopeBuilder() {
 
         {/* The proposed budget stays mounted under the other tabs, so its sections and lines keep their state. */}
         <div hidden={can(access, "budget") && tab !== "proposed"}>
-        {/* The bid behind it, when a forwarded bid email made or fed this job (migration 063). */}
-        <BidStrip jobId={jobId} onUndone={() => { window.location.href = "/dashboard/scope"; }} />
+        {/* The bid behind it is on the job's Summary only (Coy, 2026-10-10: "it should be in the summary page"). */}
 
         {/* A draft budget from the job's own calls and texts (migration 087). */}
         {can(access, "budget") && <DraftStrip jobId={jobId} refresh={budgetTick} onChanged={() => { void load(); setBudgetTick((n) => n + 1); }}
@@ -621,28 +614,19 @@ function SectionCard({ s, index, err, onLocal, onSave, onRemove, jobType, jobId,
   return (
     <div style={{ background: T.card, borderBottom: `1px solid ${T.hair}`, marginTop: index === 0 ? 0 : 6 }}>
       <div className={`px-3 ${open ? "pt-2.5" : "py-2"} flex items-center gap-2 flex-wrap`}>
-        <button onClick={onToggle} aria-expanded={open} aria-label={open ? `Fold ${s.name || `section ${index + 1}`}` : `Open ${s.name || `section ${index + 1}`}`}
-          className="flex items-center justify-center rounded" style={{ width: 26, height: 26, flex: "none", border: `1px solid ${T.hair}`, background: T.card, cursor: "pointer" }}>
-          <span aria-hidden="true" style={{ fontSize: 11, color: T.ink2, display: "inline-block", transform: open ? "rotate(90deg)" : "none", transition: "transform .15s" }}>▸</span>
-        </button>
         {open ? (
           <input defaultValue={s.name ?? ""} placeholder={`Section ${index + 1} — name it`}
             onChange={(e) => onLocal({ name: e.target.value })} onBlur={(e) => onSave({ name: e.target.value })}
-            className="bg-transparent outline-none" style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 600, minWidth: 0, flex: "1 1 140px" }} />
+            className="bg-transparent outline-none" style={{ fontSize: F.sm, fontWeight: 600, minWidth: 0, flex: "1 1 140px" }} />
         ) : (
-          <button onClick={onToggle} className="text-left flex items-center gap-1.5" style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 600, minWidth: 0, flex: "1 1 120px", cursor: "pointer", ...clip }}>
+          <button onClick={onToggle} className="text-left flex items-center gap-1.5" style={{ fontSize: F.sm, fontWeight: 600, minWidth: 0, flex: "1 1 120px", cursor: "pointer", ...clip }}>
             {missingAny && <span title={missingWhat} style={{ width: 7, height: 7, borderRadius: 4, background: T.hiviz, flex: "none" }} />}
             <span style={clip}>{s.name || `Section ${index + 1}`}</span>
           </button>
         )}
         {open ? (
-          <>
-            <select value={s.work_type} onChange={(e) => { onLocal({ work_type: e.target.value }); onSave({ work_type: e.target.value }); }} aria-label="Kind of area"
-              className="rounded px-1.5 outline-none" style={{ height: 28, border: `1px solid ${T.hair}`, background: T.card, fontSize: F.xs }}>
-              {WORK_TYPES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-            </select>
-            <Dictate jobId={jobId} s={s} onApply={(p) => { onLocal(p as Partial<Section>); onSave(p as Partial<Section>); }} />
-          </>
+          // No kind-of-area picker here (Coy, 2026-10-10: "remove the section type completely from here").
+          <Dictate jobId={jobId} s={s} onApply={(p) => { onLocal(p as Partial<Section>); onSave(p as Partial<Section>); }} />
         ) : (
           <button onClick={onToggle} className="flex items-baseline gap-2 text-right" style={{ marginLeft: "auto", cursor: "pointer", fontSize: F.xs, color: T.ink2, ...nums }}>
             <span>{sizeText}</span>
@@ -651,6 +635,11 @@ function SectionCard({ s, index, err, onLocal, onSave, onRemove, jobType, jobId,
               : <span style={{ color: T.ink3 }}>no items</span>}
           </button>
         )}
+        {/* The fold button at the row's right end (Coy, 2026-10-10). */}
+        <button onClick={onToggle} aria-expanded={open} aria-label={open ? `Fold ${s.name || `section ${index + 1}`}` : `Open ${s.name || `section ${index + 1}`}`}
+          className="flex items-center justify-center rounded" style={{ width: 26, height: 26, flex: "none", border: `1px solid ${T.hair}`, background: T.card, cursor: "pointer" }}>
+          <span aria-hidden="true" style={{ fontSize: 11, color: T.ink2, display: "inline-block", transform: open ? "rotate(90deg)" : "none", transition: "transform .15s" }}>▸</span>
+        </button>
       </div>
       <div style={open ? undefined : { display: "none" }}>
       {/* Where the scope came from, to check on the sheet (Coy, 2026-10-09: "verify … where the sections are on
@@ -862,14 +851,15 @@ function Dictate({ jobId, s, onApply }: { jobId: string; s: Section; onApply: (p
     <>
       <button onClick={() => (state === "rec" ? rec.current?.stop() : state === "idle" ? void start() : undefined)}
         disabled={state === "busy"} aria-label={state === "rec" ? "Stop and fill the section" : "Dictate this section"}
-        className={state === "rec" ? "sc-rec inline-flex items-center gap-1 rounded px-2" : "inline-flex items-center gap-1 rounded px-2"}
-        style={{ height: 28, border: `1px solid ${state === "rec" ? T.red : T.hair}`, background: state === "rec" ? T.red : T.card,
-                 color: state === "rec" ? T.card : T.ink2, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", cursor: "pointer" }}>
-        <svg width="12" height="12" viewBox="0 0 15 15" aria-hidden="true">
+        title={state === "rec" ? "Stop" : state === "busy" ? "Listening…" : "Dictate"}
+        className={state === "rec" ? "sc-rec inline-flex items-center justify-center rounded" : "inline-flex items-center justify-center rounded"}
+        style={{ width: 28, height: 28, flex: "none", border: `1px solid ${state === "rec" ? T.red : T.hair}`, background: state === "rec" ? T.red : T.card,
+                 color: state === "rec" ? T.card : T.ink2, opacity: state === "busy" ? 0.55 : 1, cursor: "pointer" }}>
+        {/* The icon alone (Coy, 2026-10-10: "just a simple icon, no words"). */}
+        <svg width="14" height="14" viewBox="0 0 15 15" aria-hidden="true">
           <rect x="5.4" y="1.6" width="4.2" height="7.6" rx="2.1" fill="none" stroke="currentColor" strokeWidth="1.5" />
           <path d="M3 7.4a4.5 4.5 0 0 0 9 0 M7.5 11.9v1.6" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
         </svg>
-        {state === "rec" ? "Stop" : state === "busy" ? "Listening…" : "Dictate"}
       </button>
       {(heard || err) && (
         <div className="w-full rounded px-2.5 py-1.5" style={{ background: err ? "#FBECE9" : "#EAF0FC", fontSize: F.xs, lineHeight: 1.4 }}>

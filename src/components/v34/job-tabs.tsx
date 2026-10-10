@@ -129,6 +129,22 @@ export function JobHeaderRow({ jobId, active, title, after, sub, customerId, sub
   // The job's name opens the job switcher on the right (Coy, 2026-10-08); a pick opens this same view.
   const [switching, setSwitching] = useState(false);
   const viewHref = (TABS.find((t) => t.k === active) ?? TABS[0]).href;
+  // Rename the job where its name is shown (Coy, 2026-10-10: "don't see a way to change the job name
+  // from inside the job"): ✎ beside it, Enter or leaving the box saves through PATCH /api/jobs/[id].
+  const [named, setNamed] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const shownTitle = typeof title === "string" ? (named ?? title) : title;
+  const rename = async (v: string) => {
+    const t = v.trim();
+    setEditing(false);
+    if (!t || t === shownTitle) return;
+    setSaving(true);
+    const r = await fetch(`/api/jobs/${jobId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: t }) }).catch(() => null);
+    setSaving(false);
+    if (r?.ok) setNamed(t);
+  };
+  const canRename = typeof title === "string" && !access.limited;
   return (
     <div className="sc-no-print flex flex-col gap-y-1.5 lg:flex-row lg:flex-wrap lg:items-center lg:gap-x-2">
       <div className="relative lg:flex-[1_1_220px]" style={{ minWidth: 0 }}>
@@ -138,11 +154,18 @@ export function JobHeaderRow({ jobId, active, title, after, sub, customerId, sub
             style={{ fontFamily: disp, fontSize: 11, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase", color: T.ink2 }}>
             <span className="lg:hidden" style={{ fontSize: 20, lineHeight: 1 }}>‹</span><span className="hidden lg:inline">{toCustomer ? "‹ Customer" : "‹ Jobs"}</span>
           </Link>
-          {typeof title === "string"
+          {typeof title === "string" && editing
+            ? (
+              <input autoFocus defaultValue={String(shownTitle)} aria-label="Job name" className="sc-job-name rounded px-1.5 outline-none"
+                onBlur={(e) => void rename(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); if (e.key === "Escape") setEditing(false); }}
+                style={{ fontFamily: disp, fontWeight: 700, color: T.ink, minWidth: 0, flex: "1 1 auto", maxWidth: 420, border: `1px solid ${T.hair}`, background: T.card }} />
+            )
+            : typeof title === "string"
             ? (
               <button onClick={() => setSwitching(true)} aria-haspopup="dialog" aria-expanded={switching} title="Switch to another job"
                 className="sc-job-switch flex items-center gap-1.5" style={{ minWidth: 0, cursor: "pointer", background: "transparent", border: "none", padding: "1px 4px", margin: "0 -4px", borderRadius: 4 }}>
-                <span className="sc-job-name" style={{ fontFamily: disp, fontWeight: 700, lineHeight: 1.15, color: T.ink, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</span>
+                <span className="sc-job-name" style={{ fontFamily: disp, fontWeight: 700, lineHeight: 1.15, color: T.ink, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{shownTitle}</span>
                 <SwitchChevron />
               </button>
             )
@@ -154,6 +177,12 @@ export function JobHeaderRow({ jobId, active, title, after, sub, customerId, sub
                 <SwitchChevron />
               </button>
             </>}
+          {canRename && !editing && (
+            <button onClick={() => setEditing(true)} aria-label="Rename the job" title="Rename the job" disabled={saving}
+              className="shrink-0 flex items-center justify-center" style={{ width: 24, height: 24, borderRadius: 4, cursor: "pointer", background: "transparent", border: "none", color: T.ink3, fontSize: 13, opacity: saving ? 0.5 : 1 }}>
+              ✎
+            </button>
+          )}
           {after}
         </div>
         {sub && <div className="text-center lg:text-left" style={{ fontSize: 11, color: T.ink3, overflowWrap: "anywhere", marginTop: 1 }}>{sub}</div>}

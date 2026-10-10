@@ -4508,6 +4508,7 @@ expected start date per quoted job before it means anything. Add the field.
   Enterprises | jobs, but the font will be much, much smaller just on mobile")** the org's name and
   the page's read on one line, "Sacco Enterprises | JOBS", at ~11px; the ☰ is 28px, the height of
   the bar's other buttons. A sheet's title over 18 characters is set at 19px on a phone so it fits.
+- **Rail icons (Claude Design, 2026-10-10):** Dashboard is four tiles in a masonry grid and Scope Builder three steps joined into a flow (`NavIcon`, `primitives.tsx`; 1.5 stroke in `currentColor`, so every theme, the rail, the phone footer and the Toolbox follow). The landing page's phone demo footer uses the same Dashboard icon.
 - **Initials squares in colour (Coy, 2026-10-06: "a variety of colors and
   we can go from there").** `initialsHue()` (`src/lib/v34/threads.ts`,
   tested) hashes a name into ten colours (`INITIALS_HUES`), so a person keeps

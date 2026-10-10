@@ -147,7 +147,7 @@ function PhoneHead({ activity, work }: { activity: string; work: Work }) {
 }
 
 const FOOT_ICONS: Record<string, string> = {
-  dashboard: "M2.6 13.6a6.9 6.9 0 0 1 13.8 0M9.5 13.6l3.3-4.2M2.6 16.2h13.8",
+  dashboard: "M2.5 2.5h6v6h-6zM10.5 2.5h6v4h-6zM10.5 8.5h6v8h-6zM2.5 10.5h6v6h-6z",
   threads: "M2.6 4.4h13.8v8.4H8.9l-4 3v-3H2.6z",
   scope: "M3.4 5.4h12.2a1 1 0 0 1 1 1v6.2a1 1 0 0 1-1 1H3.4a1 1 0 0 1-1-1V6.4a1 1 0 0 1 1-1zM2.4 3.1h14.2M3.6 2.1v2M15.4 2.1v2",
   toolbox: "M3.2 7h12.6a1 1 0 0 1 1 1v6.6a1 1 0 0 1-1 1H3.2a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1zM6.8 7V4.6h5.4V7M2.2 10.6h14.6M8.2 10.6v1.6h2.6v-1.6",

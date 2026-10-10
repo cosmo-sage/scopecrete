@@ -141,10 +141,8 @@ export const NavIcon = ({ k, on, color }: { k: string; on: boolean; color?: stri
     </svg>
   );
   if (k === "scopebuilder") return (
-    <svg {...box}>
-      <path {...p} d="M2.6 15.8l3.2-1 9.4-9.4a1.6 1.6 0 0 0-2.2-2.2L3.6 12.6z" />
-      <path {...p} d="M11.6 4.6l2.2 2.2M10.4 15.8h6" />
-    </svg>
+    // Claude Design rail icons (2026-10-10): three steps joined into a flow.
+    <svg {...box}><path {...p} strokeWidth={1.5} d="M2.5 3.5h4.5v4H2.5zM12 3.5h4.5v4H12zM7.2 11.5h4.6v4H7.2zM7 5.5h5M4.7 7.5v6h2.5M14.3 7.5v6h-2.5" /></svg>
   );
   if (k === "customers") return (
     <svg {...box}>
@@ -166,10 +164,8 @@ export const NavIcon = ({ k, on, color }: { k: string; on: boolean; color?: stri
     </svg>
   );
   if (k === "dashboard") return (
-    <svg {...box}>
-      <path {...p} d="M2.6 13.6a6.9 6.9 0 0 1 13.8 0" />
-      <path {...p} d="M9.5 13.6l3.3-4.2M2.6 16.2h13.8" />
-    </svg>
+    // Claude Design rail icons (2026-10-10): four tiles in a masonry grid.
+    <svg {...box}><path {...p} strokeWidth={1.5} d="M2.5 2.5h6v6h-6zM10.5 2.5h6v4h-6zM10.5 8.5h6v8h-6zM2.5 10.5h6v6h-6z" /></svg>
   );
   if (k === "toolbox") return (
     <svg {...box}>

@@ -51,7 +51,7 @@ interface BudgetData {
 }
 interface ProposalLink {
   id: string; status: string; decided_name?: string | null; decided_at?: string | null; sent_at: string | null; sent_via: string[] | null; view_count: number;
-  last_viewed_at: string | null; revoked_at: string | null; created_at: string; version: { version: number } | null;
+  last_viewed_at: string | null; revoked_at: string | null; created_at: string; version: { version: number } | null; number?: string | null;
 }
 const PLACEHOLDER_TITLES = new Set(["New job", "Untitled scope"]);
 
@@ -281,7 +281,7 @@ function ProposalState({ jobId, links, card, onWon }: {
       {links === null ? <div className="rounded animate-pulse mt-2" style={{ height: 40, background: T.hairSoft }} />
         : live ? (
           <div style={{ fontSize: F.sm, color: T.ink, marginTop: 6, lineHeight: 1.5 }}>
-            <b>v{live.version?.version ?? "?"} final</b> · {live.sent_at ? `sent ${day(live.sent_at)}${live.sent_via?.length ? ` · ${live.sent_via.map((v) => (v === "copy" ? "link copied" : v === "text" ? "by text" : "by email")).join(", ")}` : ""}` : "link made, not sent yet"}
+            <b>{live.number ?? `v${live.version?.version ?? "?"}`} final</b> · {live.sent_at ? `sent ${day(live.sent_at)}${live.sent_via?.length ? ` · ${live.sent_via.map((v) => (v === "copy" ? "link copied" : v === "text" ? "by text" : "by email")).join(", ")}` : ""}` : "link made, not sent yet"}
             <div style={{ color: live.view_count ? T.green : T.ink2 }}>{viewLine(live)}</div>
             {signed && <div style={{ color: T.green, fontWeight: 600 }}>✓ {signed} — on the link</div>}
           </div>
@@ -417,7 +417,7 @@ function WonCard({ jobId, job, contract, card, onChange }: {
           </div>
           <div style={{ fontSize: F.xs, color: T.ink2, marginTop: 2, lineHeight: 1.5, ...nums }}>
             <Link href={`/dashboard/scope/${jobId}/proposal`} style={{ color: T.chalk }}>
-              {contract.number ?? "Proposal"} v{contract.version}
+              Proposal {contract.number ?? `v${contract.version}`}
             </Link>{contract.finalized_at ? ` · final ${day(contract.finalized_at)}` : ""}{contract.total != null ? ` · ${money0(contract.total)}` : ""}
             {contract.change_order_count > 0 && ` + ${contract.change_order_count} signed change order${contract.change_order_count === 1 ? "" : "s"} ${money0(contract.change_orders)}`}
           </div>

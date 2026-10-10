@@ -27,6 +27,7 @@ import { ProposalDocument, usd, usd0, type DocArea, type DocVM } from "./documen
 import { areaVisuals } from "./area-visuals";
 import type { PlansData } from "@/components/v34/plan-room/shared";
 import { ProposalPreview, type PropLink } from "./preview";
+import { formatProposalNumber, type NumberBase } from "@/lib/proposal-number";
 
 interface ProjectType {
   id: string; key: string; label: string; overhead_pct: number | null; margin_pct: number | null;
@@ -60,6 +61,7 @@ interface Bundle {
   types: ProjectType[]; templates: DocTemplate[];
   customer: Rec | null; contact: Rec | null; preparer?: Rec | null;
   photos: Array<{ id: string; name: string | null; url: string | null }>;
+  number_base?: NumberBase;
 }
 
 async function call(url: string, method: string, body?: unknown) {
@@ -204,7 +206,7 @@ export function Proposal({ jobId }: { jobId: string }) {
     const w = warrantyText(p.warranty, b.templates, orgName);
     const t = termsText(p.terms, b.templates, orgName);
     return {
-      number: `${b.job.job_number ?? "P"}-${p.version}`, date: new Date().toISOString(), readOnly: false,
+      number: b.number_base ? formatProposalNumber(b.number_base, p.version) : `v${p.version}`, date: new Date().toISOString(), readOnly: false,
       typeKey: p.project_type, typeLabel: type?.label ?? "", org, preparedBy, customer,
       job: { title: b.job.title, address: b.job.address, description: b.job.description },
       coverUrl: b.photos.find((f) => f.id === p.cover_file_id)?.url ?? null,
@@ -279,6 +281,8 @@ export function Proposal({ jobId }: { jobId: string }) {
 
   if (err && !b) return <div style={{ padding: 20, color: T.red }}>{err}</div>;
   if (!b || !p || !vm || !priced) return <div style={{ padding: 20, color: T.ink3 }}>Opening the proposal…</div>;
+  const numberOf = (v: number) => (b.number_base ? formatProposalNumber(b.number_base, v) : `v${v}`);
+  const shownNumber = b.number_base ? numberOf(finalShown?.version ?? p.version) : vm.number;
 
   const editable = !isFinal && !finalShown;
   // Why it can't be sent yet, in words (the old "Fix the budget first" button is gone — Coy, 2026-10-03).
@@ -330,8 +334,8 @@ export function Proposal({ jobId }: { jobId: string }) {
           {b.finals.length > 0 && (
             <select aria-label="Version" value={viewFinal ?? ""} onChange={(e) => setViewFinal(e.target.value ? Number(e.target.value) : null)}
               style={{ height: 28, border: `1px solid ${T.hair}`, borderRadius: 3, background: T.card, color: T.ink, fontSize: 12 }}>
-              <option value="">{isFinal ? `v${p.version} (latest, final)` : `v${p.version} draft`}</option>
-              {b.finals.filter((f) => f.version !== p.version).map((f) => <option key={f.id} value={f.version}>v{f.version} final · {new Date(f.finalized_at).toLocaleDateString()}</option>)}
+              <option value="">{isFinal ? `${numberOf(p.version)} (latest, final)` : `${numberOf(p.version)} draft`}</option>
+              {b.finals.filter((f) => f.version !== p.version).map((f) => <option key={f.id} value={f.version}>{numberOf(f.version)} final · {new Date(f.finalized_at).toLocaleDateString()}</option>)}
             </select>
           )}
           {(!blocked || !editable) && (
@@ -384,7 +388,10 @@ export function Proposal({ jobId }: { jobId: string }) {
         </div>
         <div className="sc-no-print" style={{ background: T.card, borderBottom: `1px solid ${T.hair}` }}>
           <div style={{ padding: "6px 12px 0", fontSize: 11.5, color: T.ink3, overflowWrap: "anywhere" }}>
-            <b style={{ color: T.ink2 }}>{vm.number}{isFinal || finalShown ? " · final" : " · draft"}</b>
+            {/* The number in SE-26-0001-A form (src/lib/proposal-number.ts); a final frozen under the old
+                "P-3" says what the customer was shown. */}
+            <b style={{ color: T.ink2 }}>{shownNumber}{isFinal || finalShown ? " · final" : " · draft"}</b>
+            {shownNumber !== vm.number && <>{" · "}sent as {vm.number}</>}
             {" · "}{vm.choices ? `${vm.choices.list.length} options · ${vm.choices.list.map((c) => `${c.label} ${c.total !== null ? usd0(c.total) : "—"}`).join(" · ")}`
               : ok ? `${usd(ok.total)}${ok.rounded !== ok.calc ? ` (rounded up from ${usd(ok.calc)})` : ""}` : `no price yet${!vm.priced.ok ? ` — ${vm.priced.blocked[0]}` : ""}`}
             {/* Sent / opened: on the Summary and in Preview. */}

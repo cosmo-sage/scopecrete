@@ -16,6 +16,7 @@
  */
 
 import { UnitPicker } from "@/components/v34/unit-picker";
+import { refreshQuestion } from "@/lib/dusty/price-refresh";
 import { ruleForUnit } from "@/lib/units";
 import React, { useEffect, useMemo, useState } from "react";
 import { T, F, disp, eyebrow, nums, clip, money, formatPhone } from "@/lib/v34/tokens";
@@ -411,7 +412,16 @@ function VendorPrices({ card, vendors, onChanged }: { card: Card; vendors: Vendo
   const taken = new Set((rows ?? []).map((r) => r.vendor?.id));
   return (
     <div className="mt-1" style={{ borderTop: `1px solid ${T.hairSoft}`, paddingTop: 8 }}>
-      <div style={{ ...eyebrow, color: T.ink }}>Vendors · {rows?.length ?? "…"}</div>
+      <div className="flex items-center gap-2">
+        <span style={{ ...eyebrow, color: T.ink }}>Vendors · {rows?.length ?? "…"}</span>
+        <span className="flex-1" />
+        {/* Coy, 2026-10-10: "pull updated pricing from vendors that are connected to this product". */}
+        <button onClick={() => {
+          const q = refreshQuestion([{ name: card.name ?? "", unit: card.unit, vendors: (rows ?? []).map(name).filter((v): v is string => !!v) }]);
+          window.dispatchEvent(new Event("sc:dusty-open"));
+          setTimeout(() => window.dispatchEvent(new CustomEvent("sc:dusty-draft", { detail: { text: q, send: true } })), 250);
+        }} title="Dusty looks up today's prices from these vendors" style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>↻ Today&apos;s prices</button>
+      </div>
       <div style={{ fontSize: 9.5, color: T.ink3 }}>★ = the price budgets use. Tap another vendor&apos;s star to use theirs.</div>
       {err && <div style={{ fontSize: F.xs, color: T.red }}>{err}</div>}
       {rows?.length === 0 && <div style={{ fontSize: F.xs, color: T.ink3 }}>No vendor prices yet — the card&apos;s own price is used.</div>}

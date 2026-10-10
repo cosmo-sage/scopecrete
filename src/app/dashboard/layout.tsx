@@ -33,7 +33,7 @@ import { usePathname } from "next/navigation";
 import { T, F, disp, body, eyebrow, nums } from "@/lib/v34/tokens";
 import { NavIcon, OrgNameContext, Sheet } from "@/components/v34/primitives";
 import { DustyPanel } from "@/components/v34/dusty-panel";
-import { DustyAvatar } from "@/components/v34/dusty-avatar";
+import { DustyAvatar, type EmblemState } from "@/components/v34/dusty-avatar";
 import { ActivityLine } from "@/components/v34/activity-line";
 import { ArchiveToast } from "@/components/v34/archive-actions";
 import { ThreadColorVars } from "@/components/v34/thread-colors";
@@ -115,7 +115,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   // True only while a Dusty reply is actually streaming.
   const [dustyBusy, setDustyBusy] = useState(false);
   // The background reader has a read running.
-  const [readerWorking, setReaderWorking] = useState(false);
+  const [readerState, setReaderState] = useState<"reading" | "warn" | "idle">("idle");
+  const [panelState, setPanelState] = useState<EmblemState>("idle");
 
   const [me, setMe] = useState<Me | null>(null);
   const [needs, setNeeds] = useState<number | null>(null);
@@ -204,7 +205,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const toolKeys = allowed ? [] : menus.rail.filter((k) => k !== "dusty" && !menus.footer.includes(k));
   const toolActive = toolKeys.includes(active);
   const badge = { logs: (drift ?? 0) > 0 };
-  const working = dustyBusy || readerWorking;
+  // Dusty in the footer and header: his chat's state while it is open, else the reader's
+  // (reading, broken, at rest — the activity line's); an answer streaming either way.
+  const dustyNow: EmblemState = dustyOpen ? panelState : dustyBusy ? "answering" : readerState;
   const glassBtn = { width: 32, height: 32 } as const;
   const closeDrops = () => { setSearchOpen(false); };
 
@@ -235,7 +238,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <span aria-hidden="true" className="sc-paper-divider" />
               {/* All the room up to the buttons (Coy, 2026-10-02: "there is enough room … don't cut it off"). */}
               <div className="flex-1 min-w-0 flex">
-                <ActivityLine inline busy={dustyBusy} onWorking={setReaderWorking} />
+                <ActivityLine inline busy={dustyBusy} onReader={setReaderState} />
               </div>
             </>
           ) : <span className="flex-1" />}
@@ -262,7 +265,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <button onClick={() => { closeDrops(); setDustyOpen((o) => !o); }} aria-label="Dusty" aria-pressed={dustyOpen}
                 className="flex items-center justify-center sc-paper-btn"
                 style={{ ...glassBtn, background: dustyOpen ? "var(--sc-hiviz-dim)" : undefined, borderColor: dustyOpen ? "var(--sc-hiviz-soft)" : undefined }}>
-                <DustyAvatar state={working ? "calculating" : "idle"} size={24} hidden />
+                <DustyAvatar state={dustyNow} size={24} hidden />
               </button>
             )}
 
@@ -280,7 +283,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </header>
 
         {/* Phone: what Dusty is doing, a row under the header. */}
-        {!desktop && phoneLineOn && <ActivityLine busy={dustyBusy} onWorking={setReaderWorking} />}
+        {!desktop && phoneLineOn && <ActivityLine busy={dustyBusy} onReader={setReaderState} />}
       </div>
 
       {/* ---- desktop left rail: every page, in Coy's order ---- */}
@@ -325,7 +328,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <button key={k} onClick={() => { setToolOpen(false); setDustyOpen((o) => !o); }}
                 aria-label="Dusty" className="sc-tab sc-tab-dusty flex-1 flex items-center justify-center">
                 {/* Bigger than the page icons, in a disc rising above the bar (Coy, 2026-10-05). */}
-                <span className="sc-tab-ico"><DustyAvatar state={working ? "calculating" : "idle"} size={40} hidden /></span>
+                <span className="sc-tab-ico"><DustyAvatar state={dustyNow} size={40} hidden /></span>
               </button>
             );
           }
@@ -359,7 +362,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </footer>
 
       {/* Dusty — full screen on a phone, docked right on a desktop; read-only toward the business. */}
-      {!limited && <DustyPanel open={dustyOpen} onClose={() => setDustyOpen(false)} onBusy={setDustyBusy} onStream={setDustyLive} />}
+      {!limited && <DustyPanel open={dustyOpen} onClose={() => setDustyOpen(false)} onBusy={setDustyBusy} onStream={setDustyLive} onState={setPanelState} />}
 
       {/* Settings: starts under the header (--sc-head) so the ☰ stays tappable to close it. */}
       <Sheet open={menuOpen} onClose={() => { setMenuOpen(false); setMenusOpen(false); }} title="Settings" sub={me?.org_name ?? undefined} below>

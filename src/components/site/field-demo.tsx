@@ -19,8 +19,7 @@
    ============================================================ */
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import type { DustyMode } from "./dusty-svg";
-import { Emblem, Wordmark, disp, lexend } from "./marks";
+import { Emblem, Wordmark, disp, lexend, emblemStateFor, type DustyMode } from "./marks";
 
 const body = "var(--site-body), 'IBM Plex Sans', system-ui, sans-serif";
 const figtree = "var(--site-figtree), 'Figtree', system-ui, sans-serif";
@@ -88,12 +87,13 @@ const chip: CSSProperties = {
   border: "1px solid var(--sc-hair)", display: "flex", alignItems: "center", fontSize: 11.5,
 };
 
-// Dusty is the ScopeCrete emblem (Coy, 2026-10-10: "replace the dusty
-// character with the new emblem") — turning, or still where he stood still.
+// Dusty is the ScopeCrete emblem (Coy, 2026-10-10), showing what he is doing
+// (Claude Design "Emblem States": listen → listening, sort → answering, scan →
+// reading, celebrate → done, alert → warn; still where he stood still).
 function Dusty({ mode, size }: { mode: DustyMode; size: number }) {
   return (
     <span aria-label="Dusty" role="img" style={{ display: "inline-flex", flex: "none", width: size, height: size }}>
-      <Emblem size={size} spin={mode !== "static"} />
+      <Emblem size={size} spin={mode !== "static"} state={emblemStateFor(mode)} />
     </span>
   );
 }

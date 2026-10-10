@@ -126,12 +126,14 @@ function Dot({ tone, live, work }: { tone: Tone; live: boolean; work?: Work }) {
   );
 }
 
-export function ActivityLine({ busy, onWorking, inline }: {
+export function ActivityLine({ busy, onWorking, onReader, inline }: {
   busy: boolean;
   /** Desktop: sit in the header row beside the logo (no row of its own). */
   inline?: boolean;
   /** True while the background reader has a read running — the header emblem spins for it. */
   onWorking?: (working: boolean) => void;
+  /** The reader's state for Dusty's emblem in the footer and header: reading, broken, or at rest. */
+  onReader?: (s: "reading" | "warn" | "idle") => void;
 }) {
   const live = useDustyLive();
   // Reading scanned plans in this tab (migration 064): where it is, sheet by sheet.
@@ -208,6 +210,8 @@ export function ActivityLine({ busy, onWorking, inline }: {
 
   const running = recent.some((i) => i.kind === "running");
   useEffect(() => { onWorking?.(running); }, [running, onWorking]);
+  const readerState = data?.pinned ? "warn" : running || ocr.running ? "reading" : "idle";
+  useEffect(() => { onReader?.(readerState); }, [readerState, onReader]);
   let line: { key: string; summary: string; tone: Tone; at: string | null };
   if (busy) {
     // A reply streaming in this tab: its own words, the tail that fits.

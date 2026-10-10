@@ -1,39 +1,49 @@
 "use client";
 
 /**
- * Dusty is the ScopeCrete emblem (Coy, 2026-10-10: "replace the dusty
- * character with the new emblem") — the 4e rings round the green light,
- * where the Lander (Claude Design 2026-10-04) stood: the centre of the phone
- * footer, the header button on a desktop, and the chat window.
- *
- * States still come only from real events, never a timer pretending to work:
- *   idle                 — the rings turn slowly (still under reduced motion)
- *   working (loading, calculating, thinking, listen, sort, scan) — the light glows
- *   done                 — one green flash, then idle
- *   error / alert        — an amber flash for a moment, then idle
- *   static / sleep       — still
+ * Dusty is the ScopeCrete emblem (Coy, 2026-10-10), and the emblem shows what
+ * he is doing (Claude Design "Emblem States", 2026-10-10) — the rings, the
+ * light and the dust, in the activity line's colours. Eight states
+ * (`Emblem` in site/marks.tsx draws them), driven only by real events, never a
+ * timer pretending to work:
+ *   idle       default
+ *   listening  the chat box has words in it, or a voice note is recording
+ *   thinking   a question sent, nothing streaming yet
+ *   reading    the background reader has a read claimed
+ *   answering  his reply streaming
+ *   done       a finished write — plays once (1.3 s), then idle
+ *   warn       the reader is broken, a failed call
+ *   sleeping   the reader is off
+ * The old state names still work (loading → listening, calculating →
+ * answering, error → warn …) so callers didn't all have to change.
  */
 
 import { useEffect, useState } from "react";
-import { Emblem } from "@/components/site/marks";
-import type { DustyMode } from "@/lib/v34/dusty-svg";
+import { Emblem, type EmblemState } from "@/components/site/marks";
 
-export type DustyState = "idle" | "loading" | "calculating" | "done" | "error" | "thinking" | DustyMode;
+export type { EmblemState };
+export type DustyState = EmblemState
+  | "loading" | "calculating" | "error" | "sleep" | "scan" | "listen" | "sort" | "celebrate" | "alert" | "land" | "static";
 
-const MODE: Record<string, DustyMode> = { loading: "listen", calculating: "sort", thinking: "scan", done: "celebrate", error: "alert" };
-const LABEL: Record<string, string> = {
-  idle: "Dusty", loading: "Dusty is loading", calculating: "Dusty is working", done: "Dusty finished",
-  error: "Dusty hit a snag", thinking: "Dusty is thinking", listen: "Dusty is listening", sort: "Dusty is sorting",
-  scan: "Dusty is scanning", land: "A new job landed", celebrate: "Dusty is celebrating", alert: "Dusty needs you",
-  sleep: "Dusty is asleep", static: "Dusty",
+const LEGACY: Record<string, EmblemState> = {
+  loading: "listening", calculating: "answering", error: "warn", sleep: "sleeping", scan: "reading",
+  listen: "listening", sort: "answering", celebrate: "done", alert: "warn", land: "done", static: "sleeping",
 };
-/** The glow under the emblem for each kind of work (v34-shell.css). */
-const WORK: Record<string, string> = {
-  listen: "sc-dusty-work", sort: "sc-dusty-work", scan: "sc-dusty-work",
-  celebrate: "sc-dusty-done", land: "sc-dusty-done", alert: "sc-dusty-alert",
+export const LABEL: Record<EmblemState, string> = {
+  idle: "Dusty", listening: "Dusty is listening", thinking: "Dusty is thinking", reading: "Dusty is reading",
+  answering: "Dusty is answering", done: "Dusty finished", warn: "Dusty needs you", sleeping: "The reader is off",
+};
+/** The short status beside the emblem in the chat. */
+export const DOING: Record<EmblemState, string> = {
+  idle: "Ready", listening: "Listening", thinking: "Thinking…", reading: "Reading…",
+  answering: "Answering…", done: "Done", warn: "Needs you", sleeping: "Reader off",
 };
 /** How long a one-shot plays before he goes back to idle. */
-const SHOT_MS: Record<string, number> = { done: 3200, error: 2400, land: 2800 };
+export const SHOT_MS: Partial<Record<EmblemState, number>> = { done: 1300 };
+
+export function normalizeState(s: DustyState | undefined): EmblemState {
+  return s ? LEGACY[s] ?? (s as EmblemState) : "idle";
+}
 
 export function useReducedMotion(): boolean {
   const [reduced, setReduced] = useState(false);
@@ -47,7 +57,7 @@ export function useReducedMotion(): boolean {
   return reduced;
 }
 
-export function DustyAvatar({ state = "idle", size = 48, hidden, className, still: stillProp }: {
+export function DustyEmblem({ state = "idle", size = 48, hidden, className, still: stillProp }: {
   state?: DustyState; size?: number;
   /** Never animate. */
   still?: boolean;
@@ -55,25 +65,26 @@ export function DustyAvatar({ state = "idle", size = 48, hidden, className, stil
   hidden?: boolean; className?: string;
 }) {
   const reduced = useReducedMotion();
-  // One-shots play, then he rests.
+  const want = normalizeState(state);
+  // One-shots play, then he rests; setting the state again re-arms it.
   const [resting, setResting] = useState(false);
-  const [seen, setSeen] = useState(state);
-  if (state !== seen) { setSeen(state); setResting(false); }
+  const [seen, setSeen] = useState(want);
+  if (want !== seen) { setSeen(want); setResting(false); }
   useEffect(() => {
-    const ms = SHOT_MS[state];
+    const ms = SHOT_MS[want];
     if (!ms || resting) return;
     const t = setTimeout(() => setResting(true), ms);
     return () => clearTimeout(t);
-  }, [state, resting]);
+  }, [want, resting]);
 
-  const mode: DustyMode = resting ? "idle" : MODE[state] ?? (state as DustyMode);
-  const label = LABEL[state] ?? "Dusty";
-  const still = reduced || stillProp || mode === "static" || mode === "sleep";
-  const work = still ? "" : WORK[mode] ?? "";
+  const key: EmblemState = resting ? "idle" : want;
   return (
-    <span className={`sc-dusty ${work} ${className ?? ""}`} key={mode} role={hidden ? undefined : "img"} aria-label={hidden ? undefined : label}
-      aria-hidden={hidden || undefined} style={{ display: "inline-flex", width: size, height: size, flexShrink: 0, borderRadius: "50%" }}>
-      <Emblem size={size} spin={!still} />
+    <span className={className} key={key} role={hidden ? undefined : "img"} aria-label={hidden ? undefined : LABEL[key]}
+      aria-hidden={hidden || undefined} style={{ display: "inline-flex", width: size, height: size, flexShrink: 0 }}>
+      <Emblem size={size} spin={!reduced && !stillProp} state={key} />
     </span>
   );
 }
+
+/** The name the app used before the emblem; same component. */
+export const DustyAvatar = DustyEmblem;

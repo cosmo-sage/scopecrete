@@ -237,17 +237,6 @@ html[data-activity-phone="off"] { --sc-head: 54px; }
 .sc-dots > span { animation-name: scDotStep; animation-timing-function: ease-out; animation-iteration-count: infinite; opacity: .25; }
 .sc-dots-warn > span { animation: none; opacity: 1; }
 @media (prefers-reduced-motion: reduce) { .sc-dots > span { animation: none; opacity: .8; } }
-/* Dusty's sprite changes crossfade (the pack's 200 ms). */
-@keyframes scDustyIn { from { opacity: 0; } to { opacity: 1; } }
-.sc-dusty { animation: scDustyIn 0.2s ease-out; }
-/* Dusty is the emblem (2026-10-10): a soft glow round it says what he is doing —
-   green breathing while he works, one green flash when done, amber on a snag.
-   DustyAvatar drops these classes under reduced motion. */
-@keyframes scDustyWork { 0%, 100% { box-shadow: 0 0 0 0 rgba(31,169,113,0); } 50% { box-shadow: 0 0 10px 2px rgba(31,169,113,.45); } }
-@keyframes scDustyFlash { 0% { box-shadow: 0 0 0 0 var(--sc-dusty-flash); } 30% { box-shadow: 0 0 14px 4px var(--sc-dusty-flash); } 100% { box-shadow: 0 0 0 0 transparent; } }
-.sc-dusty.sc-dusty-work { animation: scDustyWork 1.4s ease-in-out infinite; }
-.sc-dusty.sc-dusty-done { --sc-dusty-flash: rgba(31,169,113,.55); animation: scDustyFlash 1.2s ease-out 2; }
-.sc-dusty.sc-dusty-alert { --sc-dusty-flash: rgba(201,138,18,.6); animation: scDustyFlash 1s ease-out 2; }
 /* The Toolbox drawer: rises from just above the phone footer. */
 @keyframes scToolUp { from { transform: translateY(100%); opacity: 0; } to { transform: none; opacity: 1; } }
 .sc-tool-up { animation: scToolUp 0.2s cubic-bezier(0.22, 0.85, 0.3, 1); }
@@ -301,7 +290,6 @@ html[data-activity-phone="off"] { --sc-head: 54px; }
   .sc-dia-read,
   .sc-dia-reply,
   .sc-dia-done,
-  .sc-dusty,
   .sc-tool-up { animation: none; }
 }
 
@@ -466,8 +454,8 @@ html[data-theme="night-shift"] .sc-proposal { --sc-doc-ground: #15171A; }
 @media (prefers-reduced-motion: reduce) { .sc-rec-dot { animation: none; } }
 /* SlideDrawer (phone drawers handoff): no slide under reduced motion. */
 @media (prefers-reduced-motion: reduce) { .sc-slide-panel, .sc-slide-scrim { transition: none !important; } }
-/* The ScopeCrete emblem's keyframes (scOrbit, scOrbitR, scShade, scGlowAi) and their
-   reduced-motion rule are in app/globals.css. */
+/* The ScopeCrete emblem's keyframes (scOrbit, scShade, Dusty's states, scGlowAi …)
+   and their reduced-motion rule are in app/globals.css. */
 
 /* On a phone scrolling down slides the dashboard header away so the page's
    own header has the top of the screen (useHideHeadOnScroll; the job page
@@ -584,3 +572,4 @@ html[data-alerts-open="1"] .sc-pops { display: none; }
 /* Nothing widens the page sideways on a phone (Coy, 2026-10-09: the contact card's header stopped two-thirds
    across). On the html element only, so it moves to the viewport and sticky headers keep working. */
 @media (max-width: 1023px) { html { overflow-x: hidden; } }
+.sc-quick:hover, .sc-quick:focus-visible { background: var(--sc-sunk) !important; }

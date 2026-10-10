@@ -378,6 +378,13 @@ body { background: var(--sc-slab); color: var(--sc-ink); }
    time in Barlow Condensed. Coy, 2026-09-30: the draft paper is the logo row
    only — on a phone the line's own row is a solid colour. */
 .sc-activity-text { font-family: var(--sc-font-agent, 'Figtree', sans-serif); font-weight: 400; font-size: 13.5px; letter-spacing: -.01em; font-style: normal; color: var(--sc-pencil); }
+/* Dusty's words glow green like the wordmark's ".ai" (Coy, 2026-10-10), breathing on its rhythm; a warning keeps its own colour. */
+.sc-activity-text { color: #1FA971; animation: scGlowLine 3.2s ease-in-out infinite; }
+@keyframes scGlowLine {
+  0%, 100% { text-shadow: 0 0 2px rgba(31,169,113,.25) }
+  45%, 55% { text-shadow: 0 0 5px rgba(31,169,113,.7), 0 0 12px rgba(31,169,113,.35) }
+}
+@media (prefers-reduced-motion: reduce) { .sc-activity-text { animation: none; text-shadow: 0 0 4px rgba(31,169,113,.45); } }
 .sc-activity-row { background: var(--sc-paper); border-bottom: 1px solid var(--sc-pencil-line); }
 .sc-activity-time { font-family: var(--sc-font-disp, 'Barlow Condensed', sans-serif); font-weight: 500; font-size: 12px; letter-spacing: .08em; color: var(--sc-pencil-muted); }
 .sc-dot-read  { color: var(--sc-work-dot-read); background: var(--sc-work-dot-read) !important; }

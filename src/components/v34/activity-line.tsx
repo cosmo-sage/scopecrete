@@ -103,6 +103,9 @@ function ago(iso: string | null | undefined): string {
  * broken. They sit low in the row, level with the wordmark's ".ai". (It replaced
  * the diamond of 2026-10-02.)
  */
+/** How far above the button's foot the words sit — the dots' level. */
+const TEXT_DROP = 5;
+
 function Dots({ work }: { work: Work }) {
   const COLOURS = ["#2F8A5B", "#E0590F", "#3F74C9"];
   const cycle = work === "reply" ? 0.6 : work === "read" ? 1.2 : 2.4;
@@ -281,7 +284,8 @@ export function ActivityLine({ busy, onWorking, onReader, inline }: {
         style={{ height: 30, padding: "0 4px 0 4px", background: "transparent", border: "none", cursor: "pointer", contain: "strict" }}>
         <Dots work={work} />
         <span ref={textRef} aria-live="polite" className="sc-activity-text"
-          style={{ flex: 1, minWidth: 0, color: line.tone === "warn" ? T.hivizText : undefined, ...clip }}>
+          // Low, on the level of the wordmark's ".ai", like the dots (Coy, 2026-10-10).
+          style={{ flex: 1, minWidth: 0, alignSelf: "flex-end", lineHeight: "18px", paddingBottom: TEXT_DROP, color: line.tone === "warn" ? T.hivizText : undefined, animation: line.tone === "warn" ? "none" : undefined, ...clip }}>
           {typing ? (
             <span key={line.key} className="sc-typed" title={line.summary}
               style={{ "--sc-type-steps": Math.min(line.summary.length, 160), "--sc-type-ms": `${Math.min(line.summary.length, 160) * 18}ms` } as React.CSSProperties}>
@@ -289,7 +293,7 @@ export function ActivityLine({ busy, onWorking, onReader, inline }: {
             </span>
           ) : line.summary}
         </span>
-        {line.at && <span className="sc-activity-time" style={nums}>{relTime(line.at)}</span>}
+        {line.at && <span className="sc-activity-time" style={{ ...nums, alignSelf: "flex-end", lineHeight: "18px", paddingBottom: TEXT_DROP }}>{relTime(line.at)}</span>}
       </button>
 
       {open && (

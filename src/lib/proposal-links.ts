@@ -75,6 +75,19 @@ export function viewLine(v: { view_count: number; last_viewed_at: string | null 
 /** What the customer agrees to when they sign on the link (097) — shown beside the tick and stored with it. */
 export const SIGN_CONSENT = "I agree to sign this proposal electronically, and that my signature here is as binding as one on paper.";
 
+/**
+ * The add-ons a customer ticked on the link (099): only ids that are shown add-on items on that
+ * copy, once each, and what they add to the total. The database checks the same ids again.
+ */
+export function pickedAddons(price: { ok: boolean; groups?: Array<{ items: Array<{ id: string; addon?: boolean; hidden?: boolean; sell: number }> }> }, ids: Iterable<string>): { ids: string[]; total: number } {
+  if (!price.ok) return { ids: [], total: 0 };
+  const want = new Set(ids);
+  const items = (price.groups ?? []).flatMap((g) => g.items).filter((i) => i.addon && !i.hidden && want.has(i.id));
+  const seen = new Set<string>();
+  const keep = items.filter((i) => (seen.has(i.id) ? false : (seen.add(i.id), true)));
+  return { ids: keep.map((i) => i.id), total: Math.round(keep.reduce((a, i) => a + (Number(i.sell) || 0), 0) * 100) / 100 };
+}
+
 /** "Signed by Johnette Wilson · Oct 9, 6:24 PM" when the customer signed on the link (097), else null. */
 export function signedLine(v: { status: string; decided_name?: string | null; decided_at?: string | null }): string | null {
   if (v.status !== "accepted") return null;

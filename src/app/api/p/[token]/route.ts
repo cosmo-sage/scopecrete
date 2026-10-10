@@ -54,7 +54,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ token: stri
 
 /**
  * Approve and sign (migration 097): the customer's name, the signature they drew (a PNG data URL)
- * and their agreement to sign electronically, through sc_accept_proposal() — the second thing a
+ * their agreement to sign electronically and the add-ons they ticked (099), through sc_sign_proposal() — the second thing a
  * stranger may run. It checks the link, refuses a member of the org, and wins the job. No session,
  * no service role.
  */
@@ -63,7 +63,10 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ token: str
   const { supabase, applyCookies } = getReaderClient(req);
   const json = (b: unknown, s = 200) => applyCookies(NextResponse.json(b, { status: s, headers: { "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } }));
   if (!TOKEN.test(token)) return json({ error: "This link isn't right." }, 404);
-  const b = (await req.json().catch(() => ({}))) as { name?: unknown; signature?: unknown; agree?: unknown };
+  const b = (await req.json().catch(() => ({}))) as { name?: unknown; signature?: unknown; agree?: unknown; addons?: unknown };
+  // The add-ons they ticked (099) — ids from their copy; the database checks each one.
+  const addons = Array.isArray(b.addons) ? [...new Set(b.addons.filter((x): x is string => typeof x === "string" && x.length > 0 && x.length <= 80))] : [];
+  if (addons.length > 50) return json({ error: "Too many add-ons picked." }, 400);
   const name = typeof b.name === "string" ? b.name.trim().slice(0, 200) : "";
   const signature = typeof b.signature === "string" ? b.signature : "";
   if (name.length < 2) return json({ error: "Type your full name." }, 400);
@@ -71,11 +74,16 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ token: str
   if (b.agree !== true) return json({ error: "Tick the box to agree to sign electronically." }, 400);
   const ip = (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim();
   const ipHash = ip ? createHash("sha256").update(`${ip}|${token}`).digest("hex").slice(0, 16) : null;
-  const { data, error } = await supabase.rpc("sc_accept_proposal", {
-    p_token: token, p_name: name, p_signature: signature, p_consent: SIGN_CONSENT, p_ip_hash: ipHash, p_ua: req.headers.get("user-agent"),
-  });
+  const args = { p_token: token, p_name: name, p_signature: signature, p_consent: SIGN_CONSENT, p_ip_hash: ipHash, p_ua: req.headers.get("user-agent") };
+  const missing = (e: { message: string } | null, fn: string) => !!e && e.message.includes(fn) && /(does not exist|could not find|schema cache)/i.test(e.message);
+  let { data, error } = await supabase.rpc("sc_sign_proposal", { ...args, p_addons: addons });
+  if (missing(error, "sc_sign_proposal")) {
+    // Before migration 099 add-ons can't be recorded, so only a signature without them goes through.
+    if (addons.length) return json({ error: "Signing with add-ons isn't switched on yet — untick them to sign, or reply to your contractor with the ones you want." }, 503);
+    ({ data, error } = await supabase.rpc("sc_accept_proposal", args));
+  }
   if (error) {
-    if (/sc_accept_proposal/.test(error.message) && /(does not exist|could not find|schema cache)/i.test(error.message)) {
+    if (missing(error, "sc_accept_proposal")) {
       return json({ error: "Signing online isn't switched on yet — reply to your contractor to accept." }, 503);
     }
     // The function's own refusals are written for the customer (22023 / 42501).

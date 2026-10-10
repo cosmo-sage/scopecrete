@@ -62,3 +62,13 @@ test("signedLine names who signed and when, only for a signed link", async () =>
   assert.equal(signedLine({ status: "accepted", decided_name: null, decided_at: null }), "Signed by the customer");
   assert.ok(SIGN_CONSENT.length > 10);
 });
+
+test("pickedAddons keeps only shown add-ons, once each, and sums them", async () => {
+  const { pickedAddons } = await import("../src/lib/proposal-links.ts");
+  const price = { ok: true, groups: [{ items: [
+    { id: "a", addon: true, sell: 450 }, { id: "b", addon: false, sell: 900 }, { id: "c", addon: true, hidden: true, sell: 50 }, { id: "d", addon: true, sell: 120.5 },
+  ] }] };
+  assert.deepEqual(pickedAddons(price, ["a", "b", "c", "x", "a", "d"]), { ids: ["a", "d"], total: 570.5 });
+  assert.deepEqual(pickedAddons(price, []), { ids: [], total: 0 });
+  assert.deepEqual(pickedAddons({ ok: false }, ["a"]), { ids: [], total: 0 });
+});

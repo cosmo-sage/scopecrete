@@ -12,6 +12,7 @@ import { ProposalDocument, type DocArea, type DocVM } from "./document";
 import { drawsCheck, type ProposalPrice } from "@/lib/proposal";
 import type { AreaVisual } from "./area-visuals";
 import { SignSheet } from "./sign-sheet";
+import { pickedAddons } from "@/lib/proposal-links";
 
 type Rec = Record<string, unknown>;
 interface Shown {
@@ -60,11 +61,13 @@ export function vmFromShown(sh: Shown, urls: Urls): DocVM {
 }
 
 export function SharedProposal({ token }: { token: string }) {
-  type Sig = { name: string | null; at: string | null; image: string | null };
+  type Sig = { name: string | null; at: string | null; image: string | null; total?: number | null; addons?: Array<{ id: string; name: string | null; sell: number }> };
   const [state, setState] = useState<{ vm?: DocVM; gone?: boolean; org?: string | null; own?: boolean; err?: string; sig?: Sig | null; canSign?: boolean } | null>(null);
   const [narrow, setNarrow] = useState(false);
   const [signing, setSigning] = useState(false);
   const [reload, setReload] = useState(0);
+  // The add-ons they tick go with the signature (099); once signed, the ones signed for.
+  const [addons, setAddons] = useState<string[]>([]);
   useEffect(() => {
     const m = window.matchMedia("(max-width: 640px)");
     const on = () => setNarrow(m.matches);
@@ -92,6 +95,10 @@ export function SharedProposal({ token }: { token: string }) {
   if (!state) return <div style={box}>Opening the proposal…</div>;
   if (state.err) return <div style={box}>{state.err}</div>;
   if (state.gone) return <div style={box}><b>This proposal is no longer available.</b><br />{state.org ? `${state.org} may have sent you a newer one — ask them for the latest link.` : "Ask for the latest link."}</div>;
+  const signedIds = state.sig ? (state.sig.addons ?? []).map((x) => x.id) : null;
+  const vm: DocVM = { ...state.vm!, addonPick: signedIds ? { ids: signedIds } : state.canSign && !state.own ? { ids: addons, set: setAddons } : null };
+  const extra = vm.priced.ok ? pickedAddons(vm.priced, addons) : { ids: [], total: 0 };
+  const signTotal = vm.priced.ok ? vm.priced.total + extra.total : 0;
   return (
     <div className="sc-proposal" style={{ fontFamily: "var(--sc-font-body)", minHeight: "100dvh", background: "#E9E4DA", padding: narrow ? "0 0 40px" : "24px 16px 60px" }}>
       <div className="sc-no-print flex items-center gap-2" style={{ maxWidth: 720, margin: "0 auto 10px", padding: narrow ? "10px 12px" : 0, fontSize: 12.5, color: "#5E5A52" }}>
@@ -100,18 +107,18 @@ export function SharedProposal({ token }: { token: string }) {
       </div>
       {state.sig && (
         <div className="sc-no-print" role="status" style={{ maxWidth: 720, margin: "0 auto 10px", padding: "10px 12px", background: "#E6F2EA", border: "1px solid #9CC9AE", borderRadius: 4, color: "#1F5C3A", fontSize: 14 }}>
-          <b>✓ Signed by {state.sig.name ?? "you"}</b>{state.sig.at ? ` on ${new Date(state.sig.at).toLocaleString("en-US", { timeZone: "America/Chicago", month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })} (Central)` : ""}.
+          <b>✓ Signed by {state.sig.name ?? "you"}</b>{state.sig.total != null ? ` for ${money(Number(state.sig.total))}` : ""}{state.sig.addons?.length ? ` with ${state.sig.addons.length} add-on${state.sig.addons.length === 1 ? "" : "s"}` : ""}{state.sig.at ? ` on ${new Date(state.sig.at).toLocaleString("en-US", { timeZone: "America/Chicago", month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })} (Central)` : ""}.
           {" "}{state.org ?? "Your contractor"} has it — they&apos;ll be in touch to schedule the work. Save as PDF keeps a copy.
         </div>
       )}
-      <ProposalDocument vm={state.vm!} edits={null} narrow={narrow} />
+      <ProposalDocument vm={vm} edits={null} narrow={narrow} />
       {!state.sig && state.canSign && state.vm?.priced.ok && (
         <div className="sc-no-print" style={{ position: "sticky", bottom: 0, maxWidth: 720, margin: "12px auto 0", padding: "10px 12px calc(10px + env(safe-area-inset-bottom))", background: "rgba(255,255,255,.96)", borderTop: "1px solid #D9CDB6", display: "flex", alignItems: "center", gap: 10, boxShadow: "0 -4px 14px rgba(0,0,0,.06)" }}>
           {state.own ? (
             <span style={{ flex: 1, fontSize: 13, color: "#5E5A52" }}>Your customer sees <b>Approve and sign</b> here. Signing it wins the job — you can&apos;t sign it for them while signed in.</span>
           ) : (
             <>
-              <span style={{ flex: 1, fontSize: 13.5, color: "#2A2A2A" }}>Ready to go ahead? <b>{money(state.vm.priced.total)}</b></span>
+              <span style={{ flex: 1, fontSize: 13.5, color: "#2A2A2A" }}>Ready to go ahead? <b>{money(signTotal)}</b>{extra.ids.length > 0 && <span style={{ color: "#5E5A52" }}> with {extra.ids.length} add-on{extra.ids.length === 1 ? "" : "s"}</span>}</span>
               <button type="button" onClick={() => setSigning(true)}
                 style={{ height: 44, padding: "0 18px", border: 0, borderRadius: 6, background: "#2F8A5B", color: "#fff", fontSize: 15, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}>
                 Approve and sign
@@ -120,7 +127,7 @@ export function SharedProposal({ token }: { token: string }) {
           )}
         </div>
       )}
-      {signing && <SignSheet token={token} total={state.vm?.priced.ok ? money(state.vm.priced.total) : null}
+      {signing && <SignSheet token={token} total={vm.priced.ok ? money(signTotal) : null} addons={extra.ids}
         onClose={() => setSigning(false)} onSigned={() => { setSigning(false); setReload((n) => n + 1); window.scrollTo({ top: 0 }); }} />}
     </div>
   );

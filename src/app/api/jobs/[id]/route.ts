@@ -314,7 +314,7 @@ export async function GET(
       supabase.from("job_proposals").select("id, version, finalized_at, snapshot").eq("org_id", orgId).eq("job_id", id).eq("status", "final"),
       supabase.from("change_orders").select("price, signed_at").eq("org_id", orgId).eq("job_id", id),
       // A version the customer signed on its link (097) is the contract outright.
-      supabase.from("documents").select("proposal_id, decided_name, decided_at").eq("org_id", orgId).eq("job_id", id)
+      supabase.from("documents").select("proposal_id, decided_name, decided_at, signed_total").eq("org_id", orgId).eq("job_id", id)
         .eq("status", "accepted").not("proposal_id", "is", null),
       proposalNumbers(supabase, orgId),
     ]);
@@ -324,8 +324,8 @@ export async function GET(
       number: numbers.number(id, p.version),
       total: typeof p.snapshot?.price?.total === "number" ? p.snapshot.price.total : null,
     })), data.won_at ?? null, (cos ?? []) as Array<{ price: number | null; signed_at: string | null }>,
-      ((signedDocs ?? []) as Array<{ proposal_id: string; decided_name: string | null; decided_at: string | null }>)
-        .map((d) => ({ proposal_id: d.proposal_id, name: d.decided_name, at: d.decided_at })));
+      ((signedDocs ?? []) as Array<{ proposal_id: string; decided_name: string | null; decided_at: string | null; signed_total: number | null }>)
+        .map((d) => ({ proposal_id: d.proposal_id, name: d.decided_name, at: d.decided_at, total: d.signed_total == null ? null : Number(d.signed_total) })));
   }
 
   return applyCookies(NextResponse.json({ job: data, contact, why, crew, contract }));

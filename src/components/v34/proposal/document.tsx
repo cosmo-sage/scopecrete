@@ -49,6 +49,9 @@ export interface DocVM {
   typeDraws: Draw[];
   /** The customer's signature from the link (migration 097), drawn on the Sign line. */
   signature?: { name: string | null; at: string | null; image: string | null } | null;
+  /** The add-ons the customer ticked on the link (099), held by the page so they reach the
+   *  signature. Without `set` they are locked — what was signed for. */
+  addonPick?: { ids: string[]; set?: (ids: string[]) => void } | null;
 }
 export interface DocEdits {
   display: (d: ProposalDisplay) => void;
@@ -501,11 +504,18 @@ function Pricing({ vm, narrow, edits, flip, setD, photosOf, onPhoto }: {
   const visibleGroups = p.groups.filter((g) => edits || !g.hidden);
   // The customer ticks an add-on to see it in the total (Coy, 2026-10-10). Their copy only, kept on
   // the page; Coy's draft keeps its own toggles.
-  const pick = edits ? null : {
-    has: (id: string) => picked.has(id),
-    set: (ids: string[], on: boolean) => setPicked((cur) => { const n = new Set(cur); for (const id of ids) { if (on) n.add(id); else n.delete(id); } return n; }),
+  // On the link the page holds the ticks (vm.addonPick) so they go with the signature; locked once signed.
+  const ext = vm.addonPick ?? null;
+  const chosen = ext ? new Set(ext.ids) : picked;
+  const locked = !!ext && !ext.set;
+  const pick: AddonPick = edits ? null : {
+    has: (id: string) => chosen.has(id),
+    set: locked ? null : (ids: string[], on: boolean) => {
+      const n = new Set(chosen); for (const id of ids) { if (on) n.add(id); else n.delete(id); }
+      if (ext?.set) ext.set([...n]); else setPicked(n);
+    },
   };
-  const pickedSell = p.groups.flatMap((g) => g.items).filter((i) => i.addon && !i.hidden && picked.has(i.id)).reduce((a, i) => a + i.sell, 0);
+  const pickedSell = p.groups.flatMap((g) => g.items).filter((i) => i.addon && !i.hidden && chosen.has(i.id)).reduce((a, i) => a + i.sell, 0);
   const rule = "1.5px solid #2A2A2A";
   const money = (n: number, hidden: boolean) => (hidden ? "—" : usd(n));
   return (
@@ -523,10 +533,10 @@ function Pricing({ vm, narrow, edits, flip, setD, photosOf, onPhoto }: {
         {p.discount > 0 && <Row k="Discount" v={`− ${usd(p.discount)}`} />}
         <div className="flex justify-between items-baseline mt-1"><span style={{ fontWeight: 600 }}>Total</span><span style={{ fontFamily: strong, fontWeight: 700, fontSize: 17, ...nums }}>{usd(p.total)}</span></div>
         {pickedSell > 0 && <>
-          <Row k="Add-ons you picked" v={`+ ${usd(pickedSell)}`} />
-          <div className="flex justify-between items-baseline mt-1"><span style={{ fontWeight: 600 }}>Total with your add-ons</span><span style={{ fontFamily: strong, fontWeight: 700, fontSize: 17, ...nums }}>{usd(p.total + pickedSell)}</span></div>
+          <Row k={locked ? "Add-ons signed for" : "Add-ons you picked"} v={`+ ${usd(pickedSell)}`} />
+          <div className="flex justify-between items-baseline mt-1"><span style={{ fontWeight: 600 }}>{locked ? "Total signed for" : "Total with your add-ons"}</span><span style={{ fontFamily: strong, fontWeight: 700, fontSize: 17, ...nums }}>{usd(p.total + pickedSell)}</span></div>
         </>}
-        {p.addons_total > 0 && pickedSell < p.addons_total && <div style={{ fontSize: 11.5, color: "#5E5A52", marginTop: 4 }}>{pick ? "Tick an add-on to add it. " : ""}Optional add-ons not included: {usd(p.addons_total - pickedSell)}</div>}
+        {p.addons_total > 0 && pickedSell < p.addons_total && <div style={{ fontSize: 11.5, color: "#5E5A52", marginTop: 4 }}>{pick?.set ? "Tick an add-on to add it. " : ""}Optional add-ons not included: {usd(p.addons_total - pickedSell)}</div>}
         {!p.tax_shown && p.tax > 0 && <div style={{ fontSize: 11, color: "#8C8578", marginTop: 2 }}>Sales tax included.</div>}
       </div>
     </div>
@@ -567,12 +577,12 @@ function Row({ k, v }: { k: string; v: string }) {
   return <div className="flex justify-between"><span style={{ color: "#5E5A52" }}>{k}</span><span style={nums}>{v}</span></div>;
 }
 
-type AddonPick = { has: (id: string) => boolean; set: (ids: string[], on: boolean) => void } | null;
+type AddonPick = { has: (id: string) => boolean; set: ((ids: string[], on: boolean) => void) | null } | null;
 
 /** The customer's tick on an add-on. */
-function PickBox({ on, label, onChange }: { on: boolean; label: string; onChange: (on: boolean) => void }) {
-  return <input type="checkbox" checked={on} onChange={(e) => onChange(e.target.checked)} aria-label={label}
-    className="shrink-0" style={{ width: 15, height: 15, accentColor: "#1E5AA8", cursor: "pointer", margin: 0 }} />;
+function PickBox({ on, label, onChange }: { on: boolean; label: string; onChange: ((on: boolean) => void) | null }) {
+  return <input type="checkbox" checked={on} disabled={!onChange} onChange={(e) => onChange?.(e.target.checked)} aria-label={label}
+    className="shrink-0" style={{ width: 15, height: 15, accentColor: "#1E5AA8", cursor: onChange ? "pointer" : "default", margin: 0 }} />;
 }
 
 function GroupRows({ g, photos, onPhoto, cols, showQty, showItems, edits, flip, toggleAddon, money, pick }: {
@@ -588,7 +598,7 @@ function GroupRows({ g, photos, onPhoto, cols, showQty, showItems, edits, flip, 
       <div className="grid items-center" style={{ gridTemplateColumns: cols, padding: "8px 0 4px", position: "relative" }}>
         <div className="flex items-center gap-2" style={{ minWidth: 0 }}>
           {edits && <Switch size="sm" on={!g.hidden} onChange={() => flip("groupsOff", g.key)} label={`${g.hidden ? "Show" : "Hide"} ${g.name}`} />}
-          {pick && allAddon && (() => { const ids = items.map((i) => i.id); return <PickBox on={ids.every(pick.has)} label={`Add ${g.name}`} onChange={(on) => pick.set(ids, on)} />; })()}
+          {pick && allAddon && (() => { const ids = items.map((i) => i.id); return <PickBox on={ids.every(pick.has)} label={`Add ${g.name}`} onChange={pick.set ? (on) => pick.set!(ids, on) : null} />; })()}
           <span style={{ fontSize: 13, fontWeight: 600 }}>{g.name}</span>
           {allAddon && <span style={{ fontSize: 9.5, border: "1px solid #1E5AA8", color: "#1E5AA8", borderRadius: 3, padding: "0 4px", fontFamily: disp, letterSpacing: ".1em" }}>OPTIONAL ADD-ON</span>}
           {g.sqft ? <span style={{ fontSize: 11, color: "#8C8578" }}>{Math.round(g.sqft).toLocaleString("en-US")} sf</span> : null}
@@ -609,7 +619,7 @@ function GroupRows({ g, photos, onPhoto, cols, showQty, showItems, edits, flip, 
               <button type="button" onClick={() => flip("linesOff", i.id)} aria-label={`${i.hidden ? "Show" : "Hide"} ${i.name}`} title={i.hidden ? "Hidden — tap to show" : "Shown — tap to hide"} className="sc-no-print shrink-0"
                 style={{ width: 10, height: 10, borderRadius: 999, border: `1.5px solid ${i.hidden ? "#B3AA9A" : "#2F8A5B"}`, background: i.hidden ? "transparent" : "#2F8A5B", padding: 0, cursor: "pointer" }} />
             )}
-            {pick && i.addon && !allAddon && <PickBox on={pick.has(i.id)} label={`Add ${i.name}`} onChange={(on) => pick.set([i.id], on)} />}
+            {pick && i.addon && !allAddon && <PickBox on={pick.has(i.id)} label={`Add ${i.name}`} onChange={pick.set ? (on) => pick.set!([i.id], on) : null} />}
             <span style={{ minWidth: 0 }}>{i.name}{i.note ? <span style={{ color: "#8C8578" }}> — {i.note}</span> : null}</span>
             {i.addon && !allAddon && <span style={{ fontSize: 9.5, color: "#1E5AA8", fontFamily: disp, letterSpacing: ".1em" }}>ADD-ON</span>}
             {edits && (

@@ -10,8 +10,8 @@ import { SIGN_CONSENT } from "@/lib/proposal-links";
 
 const W = 720, H = 220;
 
-export function SignSheet({ token, total, onClose, onSigned }: {
-  token: string; total: string | null; onClose: () => void; onSigned: () => void;
+export function SignSheet({ token, total, addons = [], onClose, onSigned }: {
+  token: string; total: string | null; addons?: string[]; onClose: () => void; onSigned: () => void;
 }) {
   const canvas = useRef<HTMLCanvasElement | null>(null);
   const drawing = useRef(false);
@@ -63,7 +63,7 @@ export function SignSheet({ token, total, onClose, onSigned }: {
     try {
       const r = await fetch(`/api/p/${encodeURIComponent(token)}`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.trim(), signature: canvas.current.toDataURL("image/png"), agree }),
+        body: JSON.stringify({ name: name.trim(), signature: canvas.current.toDataURL("image/png"), agree, addons }),
       });
       const b = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(b?.error ?? "Couldn't save your signature. Try again.");
@@ -81,7 +81,7 @@ export function SignSheet({ token, total, onClose, onSigned }: {
           <div className="flex-1">
             <div style={{ fontSize: 19, fontWeight: 700 }}>Approve and sign</div>
             <div style={{ fontSize: 13, color: "#5E5A52" }}>
-              You&apos;re accepting the scope, prices{total ? ` (${total})` : ""}, payment schedule and terms in this proposal.
+              You&apos;re accepting the scope, prices{total ? ` (${total}${addons.length ? `, with ${addons.length} add-on${addons.length === 1 ? "" : "s"}` : ""})` : ""}, payment schedule and terms in this proposal.
             </div>
           </div>
           <button type="button" aria-label="Close" disabled={busy} onClick={onClose}

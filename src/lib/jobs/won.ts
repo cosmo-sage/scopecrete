@@ -18,7 +18,8 @@ export interface FinalProposal {
 }
 export interface ChangeOrderRow { price: number | null; signed_at: string | null }
 /** A proposal link the customer signed (documents.status 'accepted'). */
-export interface SignedLink { proposal_id: string; name: string | null; at: string | null }
+/** `total` is what they signed for — the proposal's total plus any add-ons they ticked (099). */
+export interface SignedLink { proposal_id: string; name: string | null; at: string | null; total?: number | null }
 export interface Contract {
   proposal_id: string; version: number; number: string | null; finalized_at: string | null;
   /** The proposal's total as the customer saw it (rounded, tax included). */
@@ -61,10 +62,11 @@ export function contractFor(finals: FinalProposal[], wonAt: string | null, chang
   const later = ordered.find((f) => f.version > pick.version) ?? null;
   const signed = changeOrders.filter((c) => c.signed_at && c.price != null);
   const co = Math.round(signed.reduce((s, c) => s + Number(c.price), 0) * 100) / 100;
+  const total = sig?.total != null ? Number(sig.total) : pick.total;
   return {
     proposal_id: pick.id, version: pick.version, number: pick.number, finalized_at: pick.finalized_at,
-    total: pick.total, change_orders: co, change_order_count: signed.length,
-    contract_total: pick.total == null ? null : Math.round((pick.total + co) * 100) / 100,
+    total, change_orders: co, change_order_count: signed.length,
+    contract_total: total == null ? null : Math.round((total + co) * 100) / 100,
     later_version: later?.version ?? null,
     signed: sig ? { name: sig.name, at: sig.at } : null,
   };

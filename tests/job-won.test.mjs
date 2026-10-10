@@ -50,3 +50,12 @@ test("a version the customer signed on its link is the contract, whatever the da
   assert.equal(contractFor(finals, "2026-10-05T17:00:00Z", [], [{ proposal_id: "zz", name: "X", at: null }]).signed, null);
   assert.equal(contractFor(finals, "2026-10-05T17:00:00Z").signed, null);
 });
+
+test("signed with add-ons, the contract is the total they signed for", () => {
+  const finals = [{ id: "v1", version: 1, finalized_at: "2026-10-01T15:00:00Z", number: "P-1", total: 6000 }];
+  const c = contractFor(finals, null, [{ price: 500, signed_at: "2026-10-06T00:00:00Z" }], [{ proposal_id: "v1", name: "A", at: "2026-10-02T00:00:00Z", total: 6450 }]);
+  assert.equal(c.total, 6450);
+  assert.equal(c.contract_total, 6950);
+  // A signature from before 099 carries no total of its own: the proposal's.
+  assert.equal(contractFor(finals, null, [], [{ proposal_id: "v1", name: "A", at: null, total: null }]).total, 6000);
+});

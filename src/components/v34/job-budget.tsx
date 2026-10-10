@@ -924,7 +924,10 @@ function LineSheet({ line, data, sections, res, addon, onAddon, onClose, onPatch
                 {data.groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
               </select></label>
             <label className="block"><span style={eyebrow}>Cost type</span>
-              <div style={{ ...shown, justifyContent: "flex-start" }}>{COST_TYPE_LABEL[line.cost_type as CostType] ?? line.cost_type}</div></label>
+              {/* On this line only (Coy, 2026-10-10) — the Price book item keeps its own. */}
+              <select value={line.cost_type} onChange={(e) => onPatch({ cost_type: e.target.value })} style={field} aria-label="Cost type">
+                {COST_TYPES.map((t) => <option key={t} value={t}>{COST_TYPE_LABEL[t]}</option>)}
+              </select></label>
           </div>
           <label className="block mt-2"><span style={eyebrow}>Area</span>
             <select value={line.section_id ?? ""} onChange={(e) => onPatch({ section_id: e.target.value || null })} style={field} aria-label="Area">

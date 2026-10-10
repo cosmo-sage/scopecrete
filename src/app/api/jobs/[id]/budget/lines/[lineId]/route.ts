@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cleanUnit } from "@/lib/units";
-import { QTY_RULES } from "@/lib/cost-cards";
+import { COST_TYPES, QTY_RULES } from "@/lib/cost-cards";
 import { getApiSession } from "@/lib/api-auth";
 import { LINE_COLUMNS, jobInOrg, lineSource, numLine, syncLineGroups } from "@/lib/budget-server";
 
@@ -8,7 +8,7 @@ import { LINE_COLUMNS, jobInOrg, lineSource, numLine, syncLineGroups } from "@/l
  * One budget line. PATCH what Coy changes in the grid or the phone sheet:
  *   quantity (a typed quantity → qty_source 'set'; { qty_source: 'rule' } goes
  *   back to the rule), unit_cost, margin_pct (this line's own margin), taxable, option_id, section_id,
- *   name, description, the show switches — or { refresh: true } to copy the
+ *   name, description, cost_type (this line only), the show switches — or { refresh: true } to copy the
  *   current price onto it (the vendor Coy picked for this line, else the
  *   card's default vendor). { source_id } picks a vendor for this line only
  *   and pulls their price (migration 051); { source_id: null } goes back to
@@ -67,6 +67,11 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       if (r === "manual") patch.qty_source = "set"; // the quantity typed (or blank) stays
       else { patch.qty_source = "rule"; patch.quantity = null; patch.takeoff_parameter_id = null; }
     }
+  }
+  // Its cost type, on this line only (Coy, 2026-10-10: "I had to go back to the cost book to change it").
+  if ("cost_type" in b) {
+    if (!(COST_TYPES as readonly string[]).includes(String(b.cost_type))) return bad("Pick materials, labor, equipment, subcontract or other.");
+    patch.cost_type = String(b.cost_type);
   }
   if ("unit_cost" in b) { const v = numOrNull(b.unit_cost, 0, 1_000_000, "Unit cost"); if (v instanceof Error) return bad(v.message); patch.unit_cost = v; }
   if ("margin_pct" in b) { const v = numOrNull(b.margin_pct, 0, 99.9, "Margin"); if (v instanceof Error) return bad(v.message); patch.margin_pct = v; }

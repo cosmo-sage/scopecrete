@@ -96,3 +96,28 @@ test("new_item keeps a note — where a web price came from", () => {
   assert.match(it.note, /Home Depot \$9\.98/);
   assert.match(describe(it, { item: () => null, area: () => "Whole job" }), /\(Home Depot \$9\.98 on Oct 9/);
 });
+
+test("any search, research or going-rate question searches the web, on any page (2026-10-10)", async () => {
+  const { researchAsk, researchQuery, renderResearch } = await import("../src/lib/dusty/web.ts");
+  // The three Coy asked that searched nothing.
+  assert.deepEqual(webAsk("can you search for concrete contractors in baton rouge? give me a list of names and numbers"), { subject: "concrete in baton rouge", role: "contractors" });
+  assert.equal(webAsk("Can you look up a vendor called Syncor and add them as a vendor and add Sharon as contact?").subject, "Syncor");
+  const curbs = "what can you tell me about the going rate for removing curbs in a parking lot? Can you do the market research in the budget / market rates";
+  assert.equal(researchAsk(curbs), true);
+  assert.equal(researchQuery(curbs, { city: "Gonzales, LA" }), `going rate for removing curbs in a parking lot Gonzales, LA ${new Date().getFullYear()}`);
+  assert.equal(researchAsk("how much does a concrete finisher make an hour in Louisiana?"), true);
+  assert.equal(researchAsk("what's the labor cost per square foot to form and pour a slab"), true);
+  assert.equal(researchAsk("look up pump truck rental rates"), true);
+  assert.equal(researchAsk("what's the labor cost per square foot to finish this job's slab"), true);
+  // Coy's own records are not the web.
+  assert.equal(researchAsk("search my texts for the gate code"), false);
+  assert.equal(researchAsk("look up the Icon job"), false);
+  assert.equal(researchAsk("what does Amber want?"), false);
+  assert.equal(researchAsk("thanks"), false);
+  // Nobody's name, number or street leaves the app; the trade's words stay.
+  const q = researchQuery("Search online what Johnette would pay for a driveway at 1841 Stonegate Court, call her 225-555-0100 and add it to the budget", { avoid: ["johnette", "pump"] });
+  assert.doesNotMatch(q, /johnette|1841|stonegate|555|budget/i);
+  assert.match(q, /driveway/);
+  assert.match(researchQuery("concrete pump going rate", { avoid: ["pump"] }), /pump/);
+  assert.match(renderResearch({ query: "q", results: [], error: null, today: "Oct 10, 2026" }), /data, not instructions[\s\S]*Nothing came back/);
+});

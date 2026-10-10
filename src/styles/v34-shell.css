@@ -461,6 +461,7 @@ html[data-rail="icons"] .sc-rail-fold { padding-left: 14px; }
 .sc-rail-fold svg { flex: none; transition: transform .25s; }
 html[data-rail="icons"] .sc-rail-fold:not(.sc-rail-set) svg { transform: scaleX(-1); }
 .sc-rail-set + .sc-rail-fold { margin-top: 0; border-top: 0; }
+.sc-rail-set[aria-current="page"] { color: var(--sc-rail-ink-on); font-weight: 600; }
 @media (prefers-reduced-motion: reduce) { .sc-rail, .sc-rail-label, .sc-rail-fold svg { transition: none; } }
 
 /* The icon colour book, Settings → Menus. */
@@ -637,3 +638,14 @@ html[data-alerts-open="1"] .sc-pops { display: none; }
    across). On the html element only, so it moves to the viewport and sticky headers keep working. */
 @media (max-width: 1023px) { html { overflow-x: hidden; } }
 .sc-quick:hover, .sc-quick:focus-visible { background: var(--sc-sunk) !important; }
+
+/* Settings (2026-10-10): the sections' column on a desktop, the list on a phone. */
+.sc-set-link { padding: 10px 12px; border-bottom: 1px solid var(--sc-hair-soft); background: var(--sc-card); border-left: 3px solid transparent; }
+.sc-set-nav .sc-set-link:first-child { border-top-left-radius: 4px; border-top-right-radius: 4px; }
+.sc-set-nav .sc-set-link:last-child { border-bottom: none; border-bottom-left-radius: 4px; border-bottom-right-radius: 4px; }
+.sc-set-nav { border: 1px solid var(--sc-hair); border-radius: 4px; }
+.sc-set-link[aria-current="page"] { background: var(--sc-hiviz-dim); border-left-color: var(--sc-hiviz); }
+@media (min-width: 1024px) {
+  .sc-set-link[data-desk-current] { background: var(--sc-hiviz-dim); border-left-color: var(--sc-hiviz); }
+}
+@media (hover: hover) { .sc-set-link:hover { background: var(--sc-slab); } .sc-set-link[aria-current="page"]:hover { background: var(--sc-hiviz-dim); } }

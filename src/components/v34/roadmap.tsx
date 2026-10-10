@@ -11,7 +11,7 @@
  *               each card with its vote button; "Your feedback" waiting for
  *               review; for Coy, the Inbox of new feedback to publish.
  * ItemSheet     one item: what it is, votes, comments; Coy's status and wording.
- * FeedbackSheet "Give feedback" — from here and from Settings (sc:feedback).
+ * FeedbackSheet "Give feedback" — from here (Settings no longer carries it, 2026-10-10 — the Roadmap is on the menu).
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";

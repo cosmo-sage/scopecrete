@@ -10,7 +10,7 @@
  * load) the full scopecrete.ai Wordmark stands alone, as before.
  *
  * Coy, 2026-10-06: the org's logo can be switched off in the header
- * (Settings → Organisation → Logo, `header_logo` on the account); off shows
+ * (Settings → Organization → Logo, `header_logo` on the account); off shows
  * the emblem and scopecrete.ai alone, no "powered by". The proposal keeps
  * the org's logo either way.
  */

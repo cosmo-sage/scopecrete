@@ -26,7 +26,7 @@ export function useTheme() {
 export function ThemePicker() {
   const [theme, setTheme] = useTheme();
   return (
-    <div role="radiogroup" aria-label="Color" className="grid gap-2" style={{ gridTemplateColumns: "repeat(2, minmax(0,1fr))" }}>
+    <div role="radiogroup" aria-label="Color scheme" className="grid gap-2" style={{ gridTemplateColumns: "repeat(2, minmax(0,1fr))" }}>
       {THEME_ORDER.map((k) => {
         const t = THEMES[k];
         const on = theme.key === k;

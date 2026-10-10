@@ -19,8 +19,9 @@
  *     the latest thought beside it. Search is a magnifying glass. No phone
  *     number, no "unnamed", no "drift" (drift is on Logs). Phone keeps the
  *     activity row under the header.
- *   - Settings (☰): You, Organisation (name, logo, people — design/org-branding),
- *     Phone lines, Appearance, Menus. (Markups & overhead is gone entirely —
+ *   - Settings (☰) is its own page since 2026-10-10, /dashboard/settings:
+ *     Account · Organization · Lines · Appearance · AI · Menus
+ *     (src/components/v34/settings/). (Markups & overhead is gone entirely —
  *     margin, O.H. and tax are Price book → Defaults; overhead is on Cash.)
  *   - The header shows the org's logo with "powered by scopecrete.ai"
  *     (OrgLockup); with no logo, the scopecrete.ai wordmark as before.
@@ -30,8 +31,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { setDustyLive } from "@/lib/v34/dusty-live";
 import { usePathname } from "next/navigation";
-import { T, F, disp, body, eyebrow, nums } from "@/lib/v34/tokens";
-import { NavIcon, OrgNameContext, Sheet } from "@/components/v34/primitives";
+import { T, disp, body, eyebrow, nums } from "@/lib/v34/tokens";
+import { NavIcon, OrgNameContext } from "@/components/v34/primitives";
 import { DustyPanel } from "@/components/v34/dusty-panel";
 import { DustyAvatar, type EmblemState } from "@/components/v34/dusty-avatar";
 import { ActivityLine } from "@/components/v34/activity-line";
@@ -43,12 +44,11 @@ import dynamic from "next/dynamic";
 // Only drawn once 🔍 is tapped — kept out of the first load.
 const SearchPanel = dynamic(() => import("@/components/v34/search-panel").then((m) => m.SearchPanel));
 import { OrgLockup } from "@/components/v34/org-lockup";
-import { InstallApp } from "@/components/v34/install-app";
-import { YouSection, OrgSection } from "@/components/v34/org-settings";
-import { ThemePicker, useTheme } from "@/components/v34/theme-picker";
-import { Toolbox, MenuEditor, tabLabel } from "@/components/v34/toolbox";
-import { switchRows, type SwitchOrg } from "@/lib/org-switch";
+import { useTheme } from "@/components/v34/theme-picker";
+import { Toolbox, tabLabel } from "@/components/v34/toolbox";
 import { PAGE, DEFAULT_MENUS, cleanMenus, activePage, type Menus } from "@/lib/v34/pages";
+import { MeContext, type Me } from "@/lib/v34/me-ctx";
+import { SETTINGS_HOME, settingsSectionOf } from "@/lib/v34/settings-sections";
 import { cleanMenuColors, iconVar, type MenuColors } from "@/lib/v34/menu-colors";
 import { usePref } from "@/lib/v34/prefs";
 import { useHideHeadOnScroll } from "@/lib/v34/use-hide-head";
@@ -56,17 +56,6 @@ import { AccessContext } from "@/lib/v34/access-ctx";
 import { accessFrom, menuPages, redirectFor, FULL_ACCESS, type Access } from "@/lib/access";
 import { useRouter } from "next/navigation";
 import "@/styles/v34-shell.css";
-
-interface Me {
-  email: string | null; name: string | null; phone?: string | null; org_name: string | null; role: string | null; line: string | null;
-  logo_light?: boolean; logo_dark?: boolean; logo_stamp?: string | null;
-  access?: Access;
-  /** Runs ScopeCrete itself (084's platform_admins) — sees the admin. */
-  admin?: boolean;
-  /** Every org they belong to — the switcher (src/lib/org-switch.ts). */
-  orgs?: SwitchOrg[];
-  org_id?: string | null;
-}
 
 /** Desktop or not — decided after mount; the phone layout is the first paint. */
 function useDesktop(): boolean {
@@ -88,9 +77,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const router = useRouter();
   const desktop = useDesktop();
 
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [menusOpen, setMenusOpen] = useState(false);
-  const [looksOpen, setLooksOpen] = useState(false);
+  // Settings is a page (2026-10-10). The ☰ opens it, and on it goes back to
+  // the page it was opened from (else the Dashboard).
+  const inSettings = settingsSectionOf(pathname ?? "") !== null;
+  const lastPage = React.useRef<string>("/dashboard");
+  useEffect(() => {
+    if (!inSettings && pathname) lastPage.current = `${pathname}${window.location.search}`;
+  }, [inSettings, pathname]);
   // The colour theme follows the account (Settings → Appearance).
   const [theme] = useTheme();
   const [searchOpen, setSearchOpen] = useState(false);
@@ -104,12 +97,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     window.addEventListener("sc:dusty-toggle", toggle);
     return () => { window.removeEventListener("sc:dusty-open", open); window.removeEventListener("sc:dusty-toggle", toggle); };
   }, []);
-  // A vendor's "App access" (081) opens Settings → People with them picked.
+  // A vendor's "App access" (081) opens Settings → Organization → People with them picked
+  // (the vendor waits in sessionStorage, PENDING_VENDOR_KEY). `detail` may name a section.
   useEffect(() => {
-    const open = () => setMenuOpen(true);
+    const open = (e: Event) => {
+      const k = (e as CustomEvent<string | undefined>).detail;
+      router.push(typeof k === "string" && k ? `${SETTINGS_HOME}/${k}` : `${SETTINGS_HOME}/organization`);
+    };
     window.addEventListener("sc:open-settings", open);
     return () => window.removeEventListener("sc:open-settings", open);
-  }, []);
+  }, [router]);
   // Pages that change shape while Dusty is docked (the job page moves its
   // totals into his panel) read this from <html data-dusty>.
   useEffect(() => {
@@ -127,15 +124,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [drift, setDrift] = useState<number | null>(null);
   const [search, setSearch] = useState("");
 
-  const [savedMenus, setSavedMenus] = usePref<Menus>("menus", DEFAULT_MENUS);
-  // Dusty's thought line can be switched off (Settings → Dusty (AI), Coy 2026-10-05).
+  const [savedMenus] = usePref<Menus>("menus", DEFAULT_MENUS);
+  // Dusty's thought line can be switched off (Settings → AI, Coy 2026-10-05).
   // <html data-activity-phone="off"> makes --sc-head the 54px bar alone; app/layout.tsx
   // sets it before first paint from the browser's copy of this setting.
   // A phone and a desktop are set apart (Coy, 2026-10-05: "off on mobile and on on desktop");
   // the phone's follows the desktop's until it is set itself.
-  const [showLine, setShowLine] = usePref<boolean>("activity_line", true);
+  const [showLine] = usePref<boolean>("activity_line", true);
   const [headerLogo] = usePref<boolean>("header_logo", true);
-  const [showLinePhone, setShowLinePhone] = usePref<boolean | null>("activity_line_phone", null);
+  const [showLinePhone] = usePref<boolean | null>("activity_line_phone", null);
   const deskLineOn = showLine !== false;
   const phoneLineOn = (showLinePhone ?? showLine) !== false;
   useEffect(() => {
@@ -152,7 +149,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     else delete document.documentElement.dataset.rail;
   }, [railIcons]);
   // Each icon's colour from the book (Claude Design, 2026-10-10); a role, so it follows the theme.
-  const [savedColors, setSavedColors] = usePref<MenuColors | null>("menu_colors", null);
+  const [savedColors] = usePref<MenuColors | null>("menu_colors", null);
   const menuColors = cleanMenuColors(savedColors);
 
   // Who is signed in, the org's name and logos. Reloaded after Settings
@@ -174,7 +171,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }).then((d) => { if (!off && d && !d.error) setMe(d); }).catch(() => {});
     return () => { off = true; };
   }, [meRev]);
-  const reloadMe = () => setMeRev((n) => n + 1);
+  const meCtx = useMemo(() => ({ me, reload: () => setMeRev((n) => n + 1) }), [me]);
 
   // An onsite estimator (081) sees Jobs (and Files when given) and nothing else; any other
   // page sends them to the board. The database keeps them out regardless — this keeps them
@@ -242,7 +239,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex flex-col min-h-screen" style={{ background: T.slab, color: T.ink, fontFamily: body }}>
-      <div className="sc-head-wrap" style={{ position: "sticky", top: 0, zIndex: menuOpen ? 60 : 40 }}>
+      <div className="sc-head-wrap" style={{ position: "sticky", top: 0, zIndex: 40 }}>
         <header className="px-2.5 lg:px-4 flex items-center gap-3 sc-paper" style={{ height: 54 }}>
           <Link href="/dashboard" className="no-underline shrink-0" aria-label="Dashboard">
             <OrgLockup name={me?.org_name ?? null} hasLight={!!me?.logo_light} hasDark={!!me?.logo_dark} stamp={me?.logo_stamp ?? null}
@@ -284,8 +281,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             {/* The header's + is gone (Coy, 2026-10-01): its menu opened under
                 Dusty. New customer / job / receipt live in Dusty's own + menu. */}
 
-            <button onClick={() => setMenuOpen((o) => !o)} className="sc-burger sc-paper-btn"
-              data-status={menuOpen ? "open" : "closed"} aria-expanded={menuOpen} aria-label={menuOpen ? "Close settings" : "Settings"}
+            <button onClick={() => { closeDrops(); router.push(inSettings ? lastPage.current : SETTINGS_HOME); }} className="sc-burger sc-paper-btn"
+              data-status={inSettings ? "open" : "closed"} aria-label={inSettings ? "Close settings" : "Settings"}
               style={{ ...glassBtn, position: "relative" }}>
               <span className="sc-burger-bar" aria-hidden="true" />
             </button>
@@ -327,16 +324,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         })}
         {!limited && (
           // Coy, 2026-10-10: a settings button on the rail to reorder the menu — opens Settings → Menus.
-          <button type="button" onClick={() => { setRailTip(null); setMenuOpen(true); setMenusOpen(true); }}
+          <Link href={`${SETTINGS_HOME}/menus`} onClick={() => setRailTip(null)} aria-current={pathname === `${SETTINGS_HOME}/menus` ? "page" : undefined}
             aria-label="Menu settings: order and icon colors"
             onMouseEnter={railIcons ? (e) => { const r = e.currentTarget.getBoundingClientRect(); setRailTip({ label: "Menu settings", top: r.top + r.height / 2 }); } : undefined}
             onMouseLeave={railIcons ? () => setRailTip(null) : undefined}
-            className="sc-rail-fold sc-rail-set">
+            className="sc-rail-fold sc-rail-set no-underline">
             <svg width="19" height="19" viewBox="0 0 19 19" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
               <path d="M3 5h13M3 9.5h13M3 14h13" /><circle cx="7" cy="5" r="1.6" fill="var(--sc-rail)" /><circle cx="12" cy="9.5" r="1.6" fill="var(--sc-rail)" /><circle cx="6" cy="14" r="1.6" fill="var(--sc-rail)" />
             </svg>
             <span className="sc-rail-label">Menu settings</span>
-          </button>
+          </Link>
         )}
         <button type="button" onClick={() => { setRailTip(null); setRailIcons(!railIcons); }}
           aria-expanded={!railIcons} aria-label={railIcons ? "Show the menu's words" : "Fold the menu to icons"}
@@ -356,7 +353,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       )}
 
       <main className={["flex-1 min-w-0 overflow-x-clip pb-[var(--sc-foot)] lg:pb-0 lg:pl-[var(--sc-rail-w)]", dustyOpen ? "sc-with-dusty" : ""].join(" ")}>
-        <AccessContext.Provider value={access}><OrgNameContext.Provider value={me?.org_name ?? null}>{children}</OrgNameContext.Provider></AccessContext.Provider>
+        <AccessContext.Provider value={access}><OrgNameContext.Provider value={me?.org_name ?? null}><MeContext.Provider value={meCtx}>{children}</MeContext.Provider></OrgNameContext.Provider></AccessContext.Provider>
       </main>
       <ArchiveToast />
       <ThreadColorVars />
@@ -411,104 +408,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* Dusty — full screen on a phone, docked right on a desktop; read-only toward the business. */}
       {!limited && <DustyPanel open={dustyOpen} onClose={() => setDustyOpen(false)} onBusy={setDustyBusy} onStream={setDustyLive} onState={setPanelState} />}
 
-      {/* Settings: starts under the header (--sc-head) so the ☰ stays tappable to close it. */}
-      <Sheet open={menuOpen} onClose={() => { setMenuOpen(false); setMenusOpen(false); }} title="Settings" sub={me?.org_name ?? undefined} below>
-        <div className="px-4 py-3">
-          {me ? (
-            <>
-              <YouSection key={`${me.name ?? ""}|${me.phone ?? ""}`} name={me.name} phone={me.phone ?? null} email={me.email} orgName={me.org_name} role={me.role} onSaved={reloadMe} />
-              {!limited && <div className="mt-3" style={{ borderTop: `1px solid ${T.hair}` }}>
-                <OrgSection key={me.name ?? ""} onChanged={reloadMe} />
-              </div>}
-            </>
-          ) : <div style={{ fontSize: F.sm, color: T.ink3 }}>Loading your account…</div>}
-
-          {/* The org switcher (Coy, 2026-10-09) — only for someone in two orgs or more.
-              Each org is its own address; one sign-in covers them all. */}
-          {(me?.orgs?.length ?? 0) > 1 && (
-            <div className="py-2.5" style={{ borderTop: `1px solid ${T.hair}` }}>
-              <div style={{ fontSize: F.md, fontWeight: 600 }}>Switch company</div>
-              <div style={{ fontSize: F.xs, color: T.ink3 }}>Every company you work in. Each opens its own dashboard.</div>
-              <div className="flex flex-col mt-1.5">
-                {switchRows(me?.orgs ?? [], me?.org_id ?? null).map((o) => {
-                  const inner = (
-                    <>
-                      <span className="flex-1 min-w-0" style={{ fontSize: F.sm, fontWeight: o.current ? 700 : 500, color: T.ink }}>{o.name}</span>
-                      <span style={{ fontSize: F.xs, color: T.ink3 }}>{o.role}</span>
-                      <span style={{ width: 18, textAlign: "right", color: o.current ? T.green : T.ink3 }}>{o.current ? "✓" : o.href ? "›" : ""}</span>
-                    </>
-                  );
-                  const row: React.CSSProperties = { minHeight: 36, borderBottom: `1px solid ${T.hairSoft}`, color: T.ink };
-                  return o.current || !o.href
-                    ? <div key={o.id} className="flex items-center gap-2" style={row} title={o.href ? undefined : "This company has no address yet"}>{inner}</div>
-                    : <a key={o.id} href={o.href} className="flex items-center gap-2 no-underline" style={row}>{inner}</a>;
-                })}
-              </div>
-            </div>
-          )}
-
-          <div className="flex flex-col" style={{ borderTop: `1px solid ${T.hair}` }}>
-            {(limited ? [] : [
-              { href: "/dashboard/more/lines", label: "Lines", note: "Your numbers, what runs them, and whether each is talking to the app" },
-            ]).map((l) => (
-              <Link key={l.href} href={l.href} onClick={() => setMenuOpen(false)} className="block py-2.5 no-underline" style={{ borderBottom: `1px solid ${T.hairSoft}`, color: T.ink }}>
-                <div style={{ fontSize: F.md, fontWeight: 600 }}>{l.label}</div>
-                <div style={{ fontSize: F.xs, color: T.ink3 }}>{l.note}</div>
-              </Link>
-            ))}
-            {/* Feedback and the Roadmap (084) — every signed-in user, estimators too. */}
-            <Link href={`/dashboard/roadmap?feedback=1&from=${encodeURIComponent(pathname ?? "")}`} onClick={() => setMenuOpen(false)}
-              className="block py-2.5 no-underline" style={{ borderBottom: `1px solid ${T.hairSoft}`, color: T.ink }}>
-              <div style={{ fontSize: F.md, fontWeight: 600 }}>Give feedback</div>
-              <div style={{ fontSize: F.xs, color: T.ink3 }}>An idea or something wrong — and the Roadmap, to vote on what comes next</div>
-            </Link>
-            <InstallApp />
-            <button onClick={() => setLooksOpen((o) => !o)} aria-expanded={looksOpen} className="text-left py-2.5" style={{ borderBottom: `1px solid ${T.hairSoft}`, cursor: "pointer" }}>
-              <div style={{ fontSize: F.md, fontWeight: 600 }}>Appearance {looksOpen ? "−" : "+"}</div>
-              <div style={{ fontSize: F.xs, color: T.ink3 }}>Eight colour schemes, one dark — some change the typeface too</div>
-            </button>
-            {looksOpen && <div className="py-2"><ThemePicker /></div>}
-            {/* Dusty (AI) — Coy, 2026-10-05: "if I want to declutter my visual space I can make it disappear entirely". */}
-            {!limited && (
-              <div className="py-2.5" style={{ borderBottom: `1px solid ${T.hairSoft}` }}>
-                <div style={{ fontSize: F.md, fontWeight: 600 }}>Dusty (AI)</div>
-                <div style={{ fontSize: F.sm, color: T.ink, marginTop: 6 }}>Show Dusty&apos;s thought line</div>
-                <div style={{ fontSize: F.xs, color: T.ink3 }}>
-                  The line beside the logo (under it on a phone): what he&apos;s reading, reminders due, people who came back. A phone and a desktop are set apart.
-                </div>
-                {([["On a phone", phoneLineOn, (v: boolean) => setShowLinePhone(v)], ["On a desktop", deskLineOn, (v: boolean) => {
-                  // The phone keeps what it showed: it followed the desktop's switch until now.
-                  if (showLinePhone === null) setShowLinePhone(deskLineOn);
-                  setShowLine(v);
-                }]] as Array<[string, boolean, (v: boolean) => void]>).map(([label, on, set]) => (
-                  <div key={label} className="flex items-center gap-3 mt-1.5">
-                    <div className="flex-1 min-w-0" style={{ fontSize: F.sm, color: T.ink2 }}>{label}</div>
-                    <button type="button" role="switch" aria-checked={on} aria-label={`Show Dusty's thought line ${label.toLowerCase()}`} onClick={() => set(!on)}
-                      style={{ width: 38, height: 22, borderRadius: 999, background: on ? T.green : T.hairStrong, position: "relative", cursor: "pointer", flex: "0 0 auto" }}>
-                      <span style={{ position: "absolute", top: 3, left: on ? 19 : 3, width: 16, height: 16, borderRadius: 999, background: "#fff", transition: "left .15s", boxShadow: "0 1px 2px rgba(0,0,0,.2)" }} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-            {!limited && <button onClick={() => setMenusOpen((o) => !o)} aria-expanded={menusOpen} className="text-left py-2.5" style={{ borderBottom: `1px solid ${T.hairSoft}`, cursor: "pointer" }}>
-              <div style={{ fontSize: F.md, fontWeight: 600 }}>Menus {menusOpen ? "−" : "+"}</div>
-              <div style={{ fontSize: F.xs, color: T.ink3 }}>The order of your pages, and which ones sit in the phone footer</div>
-            </button>}
-            {menusOpen && !limited && (
-              <div className="py-2">
-                <MenuEditor menus={menus} onChange={(m) => setSavedMenus(m)} colors={menuColors} onColors={setSavedColors} />
-                <button onClick={() => { setSavedMenus(DEFAULT_MENUS); setSavedColors(null); }} className="mt-2" style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>Back to the default</button>
-              </div>
-            )}
-          </div>
-
-          <button onClick={() => { void import("@/lib/auth").then((m) => m.signOut()); }} className="w-full rounded mt-5"
-            style={{ height: 44, border: `1px solid ${T.hair}`, background: T.card, fontFamily: disp, fontSize: F.md, letterSpacing: ".08em", textTransform: "uppercase" }}>
-            Sign out
-          </button>
-        </div>
-      </Sheet>
     </div>
   );
 }

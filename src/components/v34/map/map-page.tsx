@@ -301,7 +301,7 @@ export function MapPage() {
   const [saved, setSaved] = useState<Saved[]>([]);
   const [toast, setToast] = useState<Saved | null>(null);
   const fitted = useRef(false);
-  // The org's office and service radius (Settings → Organisation → Office, migration 098):
+  // The org's office and service radius (Settings → Organization → Office, migration 098):
   // undefined while loading, null when none is set.
   const [office, setOffice] = useState<Office | null | undefined>(undefined);
   useEffect(() => {

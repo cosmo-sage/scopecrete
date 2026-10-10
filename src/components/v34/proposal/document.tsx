@@ -489,6 +489,7 @@ function Pricing({ vm, narrow, edits, flip, setD, photosOf, onPhoto }: {
   vm: DocVM; narrow: boolean; edits: DocEdits | null; flip: (k: "groupsOff" | "linesOff" | "pricesOff", id: string) => void; setD: (p: Partial<ProposalDisplay>) => void;
   photosOf: (id: string) => Photo[]; onPhoto: (photos: Photo[], i: number) => void;
 }) {
+  const [picked, setPicked] = useState<Set<string>>(new Set());
   const p = vm.priced;
   if (!p.ok) return null;
   const d = vm.display;
@@ -498,6 +499,13 @@ function Pricing({ vm, narrow, edits, flip, setD, photosOf, onPhoto }: {
   const addons = new Set(d.addons ?? []);
   const toggleAddon = (id: string) => { const s = new Set(addons); if (s.has(id)) s.delete(id); else s.add(id); setD({ addons: [...s] }); };
   const visibleGroups = p.groups.filter((g) => edits || !g.hidden);
+  // The customer ticks an add-on to see it in the total (Coy, 2026-10-10). Their copy only, kept on
+  // the page; Coy's draft keeps its own toggles.
+  const pick = edits ? null : {
+    has: (id: string) => picked.has(id),
+    set: (ids: string[], on: boolean) => setPicked((cur) => { const n = new Set(cur); for (const id of ids) { if (on) n.add(id); else n.delete(id); } return n; }),
+  };
+  const pickedSell = p.groups.flatMap((g) => g.items).filter((i) => i.addon && !i.hidden && picked.has(i.id)).reduce((a, i) => a + i.sell, 0);
   const rule = "1.5px solid #2A2A2A";
   const money = (n: number, hidden: boolean) => (hidden ? "—" : usd(n));
   return (
@@ -508,13 +516,17 @@ function Pricing({ vm, narrow, edits, flip, setD, photosOf, onPhoto }: {
         {showQty && <span style={{ textAlign: "right" }}>Unit price</span>}
         <span style={{ textAlign: "right" }}>Total</span>
       </div>
-      {visibleGroups.map((g) => <GroupRows key={g.key} g={g} photos={photosOf(g.key)} onPhoto={onPhoto} cols={cols} showQty={showQty} showItems={showItems} edits={edits} flip={flip} toggleAddon={toggleAddon} money={money} />)}
+      {visibleGroups.map((g) => <GroupRows key={g.key} g={g} photos={photosOf(g.key)} onPhoto={onPhoto} cols={cols} showQty={showQty} showItems={showItems} edits={edits} flip={flip} toggleAddon={toggleAddon} money={money} pick={pick} />)}
       <div className="ml-auto mt-3" style={{ width: narrow ? "100%" : 260, borderTop: rule, paddingTop: 6, fontSize: 12.5 }}>
         <Row k="Subtotal" v={usd(p.subtotal)} />
         {p.tax_shown && p.tax > 0 && <Row k="Sales tax · materials" v={usd(p.tax)} />}
         {p.discount > 0 && <Row k="Discount" v={`− ${usd(p.discount)}`} />}
         <div className="flex justify-between items-baseline mt-1"><span style={{ fontWeight: 600 }}>Total</span><span style={{ fontFamily: strong, fontWeight: 700, fontSize: 17, ...nums }}>{usd(p.total)}</span></div>
-        {p.addons_total > 0 && <div style={{ fontSize: 11.5, color: "#5E5A52", marginTop: 4 }}>Optional add-ons not included: {usd(p.addons_total)}</div>}
+        {pickedSell > 0 && <>
+          <Row k="Add-ons you picked" v={`+ ${usd(pickedSell)}`} />
+          <div className="flex justify-between items-baseline mt-1"><span style={{ fontWeight: 600 }}>Total with your add-ons</span><span style={{ fontFamily: strong, fontWeight: 700, fontSize: 17, ...nums }}>{usd(p.total + pickedSell)}</span></div>
+        </>}
+        {p.addons_total > 0 && pickedSell < p.addons_total && <div style={{ fontSize: 11.5, color: "#5E5A52", marginTop: 4 }}>{pick ? "Tick an add-on to add it. " : ""}Optional add-ons not included: {usd(p.addons_total - pickedSell)}</div>}
         {!p.tax_shown && p.tax > 0 && <div style={{ fontSize: 11, color: "#8C8578", marginTop: 2 }}>Sales tax included.</div>}
       </div>
     </div>
@@ -555,9 +567,18 @@ function Row({ k, v }: { k: string; v: string }) {
   return <div className="flex justify-between"><span style={{ color: "#5E5A52" }}>{k}</span><span style={nums}>{v}</span></div>;
 }
 
-function GroupRows({ g, photos, onPhoto, cols, showQty, showItems, edits, flip, toggleAddon, money }: {
+type AddonPick = { has: (id: string) => boolean; set: (ids: string[], on: boolean) => void } | null;
+
+/** The customer's tick on an add-on. */
+function PickBox({ on, label, onChange }: { on: boolean; label: string; onChange: (on: boolean) => void }) {
+  return <input type="checkbox" checked={on} onChange={(e) => onChange(e.target.checked)} aria-label={label}
+    className="shrink-0" style={{ width: 15, height: 15, accentColor: "#1E5AA8", cursor: "pointer", margin: 0 }} />;
+}
+
+function GroupRows({ g, photos, onPhoto, cols, showQty, showItems, edits, flip, toggleAddon, money, pick }: {
   g: ProposalGroup; photos: Photo[]; onPhoto: (photos: Photo[], i: number) => void; cols: string; showQty: boolean; showItems: boolean; edits: DocEdits | null;
   flip: (k: "groupsOff" | "linesOff" | "pricesOff", id: string) => void; toggleAddon: (id: string) => void; money: (n: number, h: boolean) => string;
+  pick: AddonPick;
 }) {
   const allAddon = g.items.length > 0 && g.items.every((i) => i.addon);
   const addonSell = g.items.filter((i) => i.addon && !i.hidden).reduce((a, i) => a + i.sell, 0);
@@ -567,6 +588,7 @@ function GroupRows({ g, photos, onPhoto, cols, showQty, showItems, edits, flip, 
       <div className="grid items-center" style={{ gridTemplateColumns: cols, padding: "8px 0 4px", position: "relative" }}>
         <div className="flex items-center gap-2" style={{ minWidth: 0 }}>
           {edits && <Switch size="sm" on={!g.hidden} onChange={() => flip("groupsOff", g.key)} label={`${g.hidden ? "Show" : "Hide"} ${g.name}`} />}
+          {pick && allAddon && (() => { const ids = items.map((i) => i.id); return <PickBox on={ids.every(pick.has)} label={`Add ${g.name}`} onChange={(on) => pick.set(ids, on)} />; })()}
           <span style={{ fontSize: 13, fontWeight: 600 }}>{g.name}</span>
           {allAddon && <span style={{ fontSize: 9.5, border: "1px solid #1E5AA8", color: "#1E5AA8", borderRadius: 3, padding: "0 4px", fontFamily: disp, letterSpacing: ".1em" }}>OPTIONAL ADD-ON</span>}
           {g.sqft ? <span style={{ fontSize: 11, color: "#8C8578" }}>{Math.round(g.sqft).toLocaleString("en-US")} sf</span> : null}
@@ -587,6 +609,7 @@ function GroupRows({ g, photos, onPhoto, cols, showQty, showItems, edits, flip, 
               <button type="button" onClick={() => flip("linesOff", i.id)} aria-label={`${i.hidden ? "Show" : "Hide"} ${i.name}`} title={i.hidden ? "Hidden — tap to show" : "Shown — tap to hide"} className="sc-no-print shrink-0"
                 style={{ width: 10, height: 10, borderRadius: 999, border: `1.5px solid ${i.hidden ? "#B3AA9A" : "#2F8A5B"}`, background: i.hidden ? "transparent" : "#2F8A5B", padding: 0, cursor: "pointer" }} />
             )}
+            {pick && i.addon && !allAddon && <PickBox on={pick.has(i.id)} label={`Add ${i.name}`} onChange={(on) => pick.set([i.id], on)} />}
             <span style={{ minWidth: 0 }}>{i.name}{i.note ? <span style={{ color: "#8C8578" }}> — {i.note}</span> : null}</span>
             {i.addon && !allAddon && <span style={{ fontSize: 9.5, color: "#1E5AA8", fontFamily: disp, letterSpacing: ".1em" }}>ADD-ON</span>}
             {edits && (

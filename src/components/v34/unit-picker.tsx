@@ -5,8 +5,9 @@
  * inside the costbook"). Used on a budget line's sheet and a Price book card.
  *
  * Offers the units already on the Price book's items (most used first) and the
- * common ones; **+ New unit…** types one in; **Edit units…** renames a unit on
- * every item that uses it (`PATCH /api/price-book/units`).
+ * common ones; **+ New unit…** types one in; **Rename or remove units…** renames a
+ * unit on every item that uses it, or removes it by moving those items to another
+ * unit (Coy, 2026-10-10) — both `PATCH /api/price-book/units`.
  */
 import React, { useEffect, useState } from "react";
 import { T, F, eyebrow, nums } from "@/lib/v34/tokens";
@@ -63,7 +64,7 @@ export function UnitPicker({ value, onChange, style, ariaLabel = "Unit type", ed
           </optgroup>
         )}
         <option value={NEW}>+ Add my own unit type…</option>
-        {editable && <option value={EDIT}>Rename units…</option>}
+        {editable && <option value={EDIT}>Rename or remove units…</option>}
       </select>
       {editing && <UnitEditor onClose={() => setEditing(false)} onRenamed={(from, to) => { void loadUnits(true).then(setOrg); if (from === value) onChange(to); }} />}
     </>
@@ -73,7 +74,7 @@ export function UnitPicker({ value, onChange, style, ariaLabel = "Unit type", ed
 /** Rename a unit everywhere in the Price book — "sqft" and "sq ft" become "SF". */
 function UnitEditor({ onClose, onRenamed }: { onClose: () => void; onRenamed: (from: string, to: string) => void }) {
   const [units, setUnits] = useState<OrgUnit[] | null>(null);
-  const [edit, setEdit] = useState<{ from: string; to: string } | null>(null);
+  const [edit, setEdit] = useState<{ from: string; to: string; remove?: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   useEffect(() => { let off = false; void loadUnits(true).then((u) => { if (!off) setUnits(u); }); return () => { off = true; }; }, []);
@@ -86,20 +87,32 @@ function UnitEditor({ onClose, onRenamed }: { onClose: () => void; onRenamed: (f
       const r = await fetch("/api/price-book/units", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ from: edit.from, to }) });
       const b = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(b.error || `HTTP ${r.status}`);
-      setMsg(`“${edit.from}” is now “${to}” on ${b.renamed} item${b.renamed === 1 ? "" : "s"}.`);
+      setMsg(edit.remove ? `“${edit.from}” is gone — its ${b.renamed} item${b.renamed === 1 ? "" : "s"} now use “${to}”.` : `“${edit.from}” is now “${to}” on ${b.renamed} item${b.renamed === 1 ? "" : "s"}.`);
       onRenamed(edit.from, to);
       setEdit(null);
       setUnits(await loadUnits());
     } catch (e) { setMsg(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
   };
   return (
-    <Sheet open onClose={onClose} title="Units in your Price book" sub="Rename a unit and every item that uses it follows. Budgets already made keep theirs.">
+    <Sheet open onClose={onClose} title="Units in your Price book" sub="Rename a unit, or remove it by moving its items to another. Budgets already made keep theirs.">
       <div className="px-4 py-3">
         {!units && <div style={{ fontSize: F.sm, color: T.ink3 }}>Loading…</div>}
         {units && !units.length && <div style={{ fontSize: F.sm, color: T.ink3 }}>No units on any item yet — pick or add one on an item.</div>}
         {units?.map((u) => (
           <div key={u.unit} className="flex items-center gap-2 py-1.5" style={{ borderBottom: `1px solid ${T.hairSoft}`, fontSize: F.sm }}>
-            {edit?.from === u.unit ? (
+            {edit?.from === u.unit && edit.remove ? (
+              <>
+                <span style={{ fontWeight: 600 }}>Remove {u.unit}</span>
+                <span style={{ color: T.ink3, fontSize: F.xs }}>· its {u.count} item{u.count === 1 ? "" : "s"} go to</span>
+                <select value={edit.to} onChange={(e) => setEdit({ ...edit, to: e.target.value })} aria-label={`Move ${u.unit}'s items to`}
+                  style={{ flex: 1, minWidth: 0, height: 32, border: `1px solid ${T.hair}`, borderRadius: 4, padding: "0 6px", background: T.card, color: T.ink }}>
+                  <option value="">Pick a unit</option>
+                  {[...new Set([...UNIT_TYPES.map((t) => t.unit), ...units.map((x) => x.unit)])].filter((x) => x !== u.unit).map((x) => <option key={x} value={x}>{x}</option>)}
+                </select>
+                <button onClick={() => void save()} disabled={busy || !edit.to} className="rounded px-2" style={{ height: 30, background: T.red, color: "#fff", fontSize: F.xs, fontWeight: 700, cursor: "pointer" }}>{busy ? "…" : "Remove"}</button>
+                <button onClick={() => setEdit(null)} style={{ fontSize: F.xs, color: T.ink3, cursor: "pointer" }}>Cancel</button>
+              </>
+            ) : edit?.from === u.unit ? (
               <>
                 <input autoFocus value={edit.to} maxLength={20} onChange={(e) => setEdit({ ...edit, to: e.target.value })} aria-label={`Rename ${u.unit}`}
                   onKeyDown={(e) => { if (e.key === "Enter") void save(); if (e.key === "Escape") setEdit(null); }}
@@ -112,6 +125,7 @@ function UnitEditor({ onClose, onRenamed }: { onClose: () => void; onRenamed: (f
                 <span style={{ flex: 1, fontWeight: 600 }}>{u.unit}</span>
                 <span style={{ color: T.ink3, fontSize: F.xs, ...nums }}>{u.count} item{u.count === 1 ? "" : "s"}</span>
                 <button onClick={() => { setEdit({ from: u.unit, to: u.unit }); setMsg(null); }} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>Rename</button>
+                <button onClick={() => { setEdit({ from: u.unit, to: unitTypeOf(u.unit) && unitTypeOf(u.unit) !== u.unit ? unitTypeOf(u.unit)! : "", remove: true }); setMsg(null); }} style={{ ...eyebrow, color: T.red, cursor: "pointer" }}>Remove</button>
               </>
             )}
           </div>

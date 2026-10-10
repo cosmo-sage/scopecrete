@@ -31,6 +31,7 @@ import { T, F, disp, eyebrow, nums, clip, money, money0, formatPhone } from "@/l
 import { Sheet, Drawer } from "@/components/v34/primitives";
 import { PriceBook } from "@/components/v34/price-book";
 import { budget as priceBudget, jobMinimum, quantities, type BudgetLine, type BudgetSettings, type SectionInput, type TakeoffTotal, type TierTotal } from "@/lib/engine";
+import { COMMISSION_STEPS, commissionSplit } from "@/lib/commission";
 import { COST_TYPES, COST_TYPE_LABEL, QTY_RULE_LABEL, type CostType } from "@/lib/cost-cards";
 import { UnitPicker } from "@/components/v34/unit-picker";
 import { ruleForUnit } from "@/lib/units";
@@ -76,7 +77,7 @@ interface Data {
   /** The budget's risk (096); null when none is set or before 096. */
   risk?: RiskSettings | null;
   /** The proposal draft's sub split — shown and set here too (the job page is the one place for money). */
-  proposal?: { has_draft: boolean; split: string; addons?: string[] };
+  proposal?: { has_draft: boolean; split: string; commission?: number; addons?: string[] };
 }
 export interface BudgetSummary {
   has_lines: boolean;
@@ -594,7 +595,7 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
           reload(); return null;
         }} />
       {book && (
-        <Drawer open wide onClose={() => { setBook(null); reload(); }} title="Add from the Price book"
+        <Drawer open wide drop onClose={() => { setBook(null); reload(); }} title="Add from the Price book"
           sub={areaName(book.area || null)}>
           <PriceBook pick={{
             // Coy, 2026-10-03: "Full Drive Replacement - Add Cost Items".
@@ -737,15 +738,15 @@ function GroupCard({ name, lines, res, optLabel, asmName, addons, onOpen, cost, 
 
 /**
  * What used to be the proposal's job panel (Coy, 2026-10-02: "integrated into
- * the main job budget page"): cost by type as one bar, and the profit split
+ * the main job budget page"): cost by type as one bar, and the partner's commission
  * with a sub — yours only, never on the proposal, never changes the price.
- * The split is saved on the proposal draft.
+ * The commission (0–50%, Coy 2026-10-10) is saved on the proposal draft.
  */
 function PriceSummary({ jobId, lines, res, tiers, proposal, onChanged }: {
   jobId: string; lines: Line[]; res: ReturnType<typeof priceBudget>; tiers: TierTotal[];
-  proposal?: { has_draft: boolean; split: string }; onChanged: () => void;
+  proposal?: { has_draft: boolean; split: string; commission?: number }; onChanged: () => void;
 }) {
-  const [split, setSplit] = useState(proposal?.split ?? "none");
+  const [pct, setPct] = useState<number>(proposal?.commission ?? 0);
   const [err, setErr] = useState<string | null>(null);
   const t = tiers.length === 1 ? tiers[0] : null;
   const byType: Record<string, number> = {};
@@ -755,28 +756,28 @@ function PriceSummary({ jobId, lines, res, tiers, proposal, onChanged }: {
     if (c) byType[String(l.cost_type)] = (byType[String(l.cost_type)] ?? 0) + c;
   }
   const total = Object.values(byType).reduce((a, b) => a + b, 0);
-  const parts = split === "20_80" ? [20, 80] : split === "30_70" ? [30, 70] : null;
-  const pick = async (k: string) => {
-    setSplit(k); setErr(null);
-    try { await call(`/api/jobs/${jobId}/proposal`, "PATCH", { split: k }); onChanged(); }
-    catch (e) { setErr(e instanceof Error && /no draft/i.test(e.message) ? "Open the Proposal once to start its draft, then set the split." : e instanceof Error ? e.message : String(e)); }
+  const pick = async (k: number) => {
+    const was = pct;
+    setPct(k); setErr(null);
+    try { await call(`/api/jobs/${jobId}/proposal`, "PATCH", { commission: k }); onChanged(); }
+    catch (e) { setPct(was); setErr(e instanceof Error && /no draft/i.test(e.message) ? "Open the Proposal once to start its draft, then set the commission." : e instanceof Error ? e.message : String(e)); }
   };
   if (!total) return null;
   return (
     <div className="mt-2.5 pt-2" style={{ borderTop: `1px solid ${T.hair}` }}>
       <div className="flex items-center gap-2 flex-wrap">
-        <span style={{ ...eyebrow }}>Profit split with a sub</span>
+        <span style={{ ...eyebrow }}>Commission cost</span>
         <span className="inline-flex rounded overflow-hidden" style={{ border: `1px solid ${T.hair}` }}>
-          {([["none", "No sub"], ["20_80", "20 / 80"], ["30_70", "30 / 70"]] as const).map(([k, l], i) => (
-            <button key={k} onClick={() => void pick(k)} aria-pressed={split === k}
-              style={{ height: 24, padding: "0 8px", fontSize: 11, background: split === k ? T.ink : T.card, color: split === k ? T.card : T.ink2, borderLeft: i ? `1px solid ${T.hair}` : "none", cursor: "pointer" }}>{l}</button>
+          {COMMISSION_STEPS.map((k, i) => (
+            <button key={k} onClick={() => void pick(k)} aria-pressed={pct === k}
+              style={{ height: 24, padding: "0 8px", fontSize: 11, background: pct === k ? T.ink : T.card, color: pct === k ? T.card : T.ink2, borderLeft: i ? `1px solid ${T.hair}` : "none", cursor: "pointer" }}>{k}%</button>
           ))}
         </span>
-        {parts && t?.priced && (
-          <span style={{ fontSize: F.xs, color: T.ink2, ...nums }}>you keep {money0(t.profit * parts[0] / 100)} · sub {money0(t.profit * parts[1] / 100)}</span>
-        )}
+        {pct > 0 && t?.priced && (() => { const c = commissionSplit(t.profit, pct); return (
+          <span style={{ fontSize: F.xs, color: T.ink2, ...nums }}>partner {money0(c.partner)} · you keep {money0(c.kept)}</span>
+        ); })()}
       </div>
-      <div style={{ fontSize: 10, color: T.ink3, marginTop: 2 }}>Yours only — never on the proposal, never changes the price.</div>
+      <div style={{ fontSize: 10, color: T.ink3, marginTop: 2 }}>The partner&apos;s share of the profit. Yours only — never on the proposal, never changes the price.</div>
       {err && <div style={{ fontSize: F.xs, color: T.red }}>{err}</div>}
     </div>
   );

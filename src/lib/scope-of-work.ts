@@ -26,3 +26,16 @@ export function sowText(lines: string[]): string | null {
   const t = sowLines(lines.join("\n")).join("\n");
   return t || null;
 }
+
+/**
+ * Dusty's answer as bullets (Coy, 2026-10-10: the emblem on a section's Scope of work). His reply is
+ * Markdown with a line or two around the list, so only its list items are kept (every line when it has
+ * none), bold and italics taken off.
+ */
+export function sowFromAnswer(answer: string): string | null {
+  const raw = answer.split(/\r?\n/).map((l) => l.trim());
+  const listed = raw.filter((l) => /^(?:[•·\-*–]|\d{1,2}[.)])\s+/.test(l));
+  const use = (listed.length ? listed : raw.filter((l) => l && !/^#/.test(l)))
+    .map((l) => l.replace(/\*\*|__|`/g, "").replace(/(^|\s)[*_](\S[^*_]*\S|\S)[*_](?=\s|$)/g, "$1$2"));
+  return sowText(use);
+}

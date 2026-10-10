@@ -14,3 +14,9 @@ test("stored text round-trips; nothing is null", () => {
   assert.equal(sowText(["", " "]), null);
   assert.deepEqual(sowLines(sowText(["• A", "B"])), ["A", "B"]);
 });
+
+test("Dusty's answer: only its list, without bold", async () => {
+  const { sowFromAnswer } = await import("../src/lib/scope-of-work.ts");
+  assert.equal(sowFromAnswer("Here's the scope:\n\n- **Tear out** the old drive\n- Pour 4\" 3000 psi\n\nWant changes?"), "Tear out the old drive\nPour 4\" 3000 psi");
+  assert.equal(sowFromAnswer("Form and pour\nBroom finish"), "Form and pour\nBroom finish");
+});

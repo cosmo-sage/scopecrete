@@ -57,7 +57,11 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   if ("display" in b) {
     const d = b.display as Record<string, unknown> | null;
     if (!d || typeof d !== "object") return bad("Bad display.");
+    // The commission is set from the budget page; a full display from the proposal keeps it.
+    const { data: cur } = await supabase.from("job_proposals").select("display").eq("id", draft.id).maybeSingle();
+    const keep = Number((cur?.display as Record<string, unknown> | null)?.commission_pct);
     patch.display = {
+      ...(Number.isFinite(keep) ? { commission_pct: keep } : {}),
       off: flags(d.off, (k) => SECTIONS.includes(k)) ?? {},
       groupsOff: flags(d.groupsOff, idKey) ?? {},
       linesOff: flags(d.linesOff, idKey) ?? {},
@@ -116,6 +120,15 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     patch.terms = { template_id: tid, ...(clauses ? { clauses } : {}) };
   }
   if ("scope_intro" in b) patch.scope_intro = typeof b.scope_intro === "string" && b.scope_intro.trim() ? b.scope_intro.slice(0, 4000) : null;
+  // The partner's commission, a share of the profit (Coy, 2026-10-10) — kept in display, never shown
+  // on the proposal (publicSnapshot copies display field by field).
+  if ("commission" in b) {
+    const c = Number(b.commission);
+    if (!(Number.isInteger(c) && c >= 0 && c <= 100)) return bad("Commission is 0 to 100%.");
+    const disp = ((patch.display ?? (await supabase.from("job_proposals").select("display").eq("id", draft.id).maybeSingle()).data?.display) ?? {}) as Record<string, unknown>;
+    patch.display = { ...disp, commission_pct: c };
+    patch.split = "none";
+  }
   if ("split" in b) {
     if (!["none", "20_80", "30_70"].includes(String(b.split))) return bad("Bad split.");
     patch.split = b.split;

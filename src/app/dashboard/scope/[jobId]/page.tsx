@@ -29,6 +29,9 @@ import { FilesPanel, type FileRow } from "@/components/v34/files-panel";
 import { SectionPhotos } from "@/components/v34/section-photos";
 import { SectionDetails } from "@/components/v34/section-details";
 import { ScopeBullets } from "@/components/v34/scope-of-work";
+import { sowFromAnswer } from "@/lib/scope-of-work";
+import { setDustyUse } from "@/lib/v34/dusty-live";
+import { DustyEmblem } from "@/components/v34/dusty-avatar";
 import { isDetailFile, type SectionShape } from "@/lib/plan-details";
 import { DraftStrip } from "@/components/v34/draft-strip";
 import { JobHeaderRow } from "@/components/v34/job-tabs";
@@ -787,7 +790,24 @@ function SectionCard({ s, index, err, onLocal, onSave, onRemove, jobType, jobId,
       {/* The scope of work, a bullet a line (Coy, 2026-10-10) — the same list as under this area on the draft
           proposal; edited in either place. Kept in prep_notes (src/lib/scope-of-work.ts). */}
       <div className="px-3 py-2" style={{ borderTop: `1px solid ${T.hairSoft}` }}>
-        <div style={{ ...eyebrow, marginBottom: 2 }}>Scope of work</div>
+        <div className="flex items-center gap-1.5" style={{ marginBottom: 2 }}>
+          <span style={{ ...eyebrow }}>Scope of work</span>
+          {/* Dusty writes it (Coy, 2026-10-10: "the AI emblem so that Dusty can write the scope of work");
+              "Use this" under his answer puts its bullets here. */}
+          <button type="button" title="Ask Dusty to write it" aria-label="Ask Dusty to write the scope of work"
+            onClick={() => {
+              setDustyUse({ label: `as ${s.name ?? "this section"}'s scope of work`, apply: (text) => {
+                const v = sowFromAnswer(text); if (!v) return; onLocal({ prep_notes: v }); onSave({ prep_notes: v });
+              } });
+              window.dispatchEvent(new Event("sc:dusty-open"));
+              setTimeout(() => window.dispatchEvent(new CustomEvent("sc:dusty-draft", { detail: {
+                text: `Write the scope of work for the ${s.name ?? "section"} section as short bullets, one line each, for the customer — what we do, from its size, notes, items and the plans. No prices.${s.prep_notes ? `\n\nWhat it says now:\n${s.prep_notes}` : ""}`,
+                send: true } })), 250);
+            }}
+            className="inline-flex items-center justify-center" style={{ width: 22, height: 22, cursor: "pointer", background: "transparent" }}>
+            <DustyEmblem size={20} still hidden />
+          </button>
+        </div>
         <ScopeBullets value={s.prep_notes} color={T.ink} muted={T.ink3} border={T.hair} fontSize={13}
           onSave={(v) => { onLocal({ prep_notes: v }); onSave({ prep_notes: v }); }} />
       </div>

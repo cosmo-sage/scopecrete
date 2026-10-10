@@ -774,8 +774,8 @@ function ContactAsk({ onAdd }: { onAdd: () => void }) {
 }
 
 /**
- * The empty chat: "Hey Coy," over "Good afternoon." (Emblem States,
- * 2026-10-10), the quick selects for the page — a tap asks it, a › puts the
+ * The empty chat: "Good afternoon Coy." (Emblem States, 2026-10-10; one
+ * line since Coy's note the same evening), the quick selects for the page — a tap asks it, a › puts the
  * start in the box to finish — and one of Dusty's own recent thoughts, small
  * (Coy, 2026-10-05), from /api/activity, so opening costs no model call.
  */
@@ -801,9 +801,8 @@ function DustyHello({ contactId, onGo, quick, onPick }: { contactId: string | nu
   return (
     <div style={{ padding: "8px 2px 4px" }}>
       <div style={{ opacity: name === undefined ? 0 : 1, transition: "opacity .35s ease" }}>
-        {first && <div style={{ fontFamily: agent, fontSize: 15, color: T.ink2 }}>Hey {first},</div>}
         <div style={{ fontFamily: manrope, fontWeight: 800, fontSize: 26, letterSpacing: "-.02em", lineHeight: 1.15, color: "#1FA971" }}>
-          Good {partOfDay(new Date()).toLowerCase()}.
+          Good {partOfDay(new Date()).toLowerCase()}{first ? ` ${first}` : ""}.
         </div>
       </div>
       {quick.length > 0 && (

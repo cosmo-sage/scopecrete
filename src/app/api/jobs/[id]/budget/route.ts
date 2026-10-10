@@ -3,6 +3,7 @@ import { getApiSession } from "@/lib/api-auth";
 import { readRisk } from "@/lib/risk";
 import { refreshJobTax } from "@/lib/tax-lookup-server";
 import { ESTIMATE_COLUMNS, LINE_COLUMNS, jobInOrg, numLine, syncLineGroups, workingEstimate } from "@/lib/budget-server";
+import { commissionOf } from "@/lib/commission";
 import { sourcesFor } from "@/lib/sources-server";
 import { pricingFor } from "@/lib/pricing-server";
 import { takeoffTotalsFor } from "@/lib/plans-server";
@@ -76,6 +77,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     risk: p?.risk ?? null,
     takeoff,
     proposal: { has_draft: !!draftP, split: (draftP?.split as string | null) ?? "none",
+      commission: commissionOf(draftP?.display, draftP?.split),
       addons: (((draftP?.display as { addons?: unknown } | null)?.addons ?? []) as unknown[]).filter((x): x is string => typeof x === "string") },
   }));
 }

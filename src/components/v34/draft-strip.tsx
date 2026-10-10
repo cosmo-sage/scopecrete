@@ -207,14 +207,6 @@ export function DraftStrip({ jobId, refresh = 0, onChanged, plan = [], onSheets 
   const toMeasure = plan.filter((p) => !p.size);
   const allFacts = x ? [...x.areas.flatMap((a) => a.facts), ...x.conflicts.flatMap((c) => c.facts)] : [];
   const descOnly = allFacts.length > 0 && allFacts.every((f) => f.source_id?.startsWith("job:"));
-  /** The line a question came from: the conflict it names, else its area's first fact. */
-  const sourceOf = (q: string): Fact | null => {
-    if (!x) return null;
-    const a = x.areas.find((ar) => q.startsWith(`${ar.name}:`));
-    if (!a) return null;
-    const c = x.conflicts.find((cf) => cf.what.startsWith(a.name) && /thick|said .* and/.test(q));
-    return (c?.facts[0] ?? a.facts[0]) ?? null;
-  };
   const approve = () => act("approve", () => call(`/api/jobs/${jobId}/budget/draft/approve`, "POST"));
   const changedSince = s.approval && s.totals && Math.abs(Number(s.approval.total ?? 0) - s.totals.total) > 0.005;
 
@@ -275,26 +267,7 @@ export function DraftStrip({ jobId, refresh = 0, onChanged, plan = [], onSheets 
                 {run?.reader === "plain" || run?.reader?.startsWith("plain") ? " · plain reading (no model key set)" : run?.reader ? ` · read with ${run.reader}` : ""}
                 {run?.finished_at ? ` · ${day(run.finished_at)}` : ""}{run?.trigger === "job_created" ? " · built when the job was made" : ""}
               </div>
-              <div style={{ color: T.ink }}>{x.kind_reason.charAt(0).toUpperCase() + x.kind_reason.slice(1)}.</div>
-
-              {x.questions.length > 0 && (
-                <div className="rounded px-2.5 py-2" style={{ background: T.hivizDim, border: `1px solid ${T.hairSoft}` }}>
-                  <div className="flex items-baseline gap-2 mb-1">
-                    <span style={{ ...eyebrow, color: T.ink }}>To ask or measure</span>
-                    <span className="flex-1" />
-                    <button onClick={() => void navigator.clipboard?.writeText(x.questions.join("\n")).catch(() => {})} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>Copy</button>
-                  </div>
-                  {x.questions.map((q) => {
-                    const f = sourceOf(q);
-                    return (
-                      <div key={q} style={{ lineHeight: 1.45 }}>
-                        • {q}
-                        {f && <div style={{ fontSize: F.xs, color: T.ink3, paddingLeft: 10 }}>From {whereFrom(f)}, {day(f.at)}: “{f.quote}”</div>}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+              {x.kind !== "unknown" && <div style={{ color: T.ink }}>{x.kind_reason.charAt(0).toUpperCase() + x.kind_reason.slice(1)}.</div>}
 
               {x.areas.length > 0 && (
                 <div>
@@ -326,9 +299,9 @@ export function DraftStrip({ jobId, refresh = 0, onChanged, plan = [], onSheets 
                   })}
                 </div>
               )}
-              {run?.made?.sections?.length ? (
+              {run?.made?.sections?.some((m) => m.assembly) ? (
                 <div style={{ fontSize: F.xs, color: T.green }}>
-                  {run.made.sections.some((m) => m.existing) ? "Loaded on " : "Added "}{run.made.sections.map((m) => `${m.name}${m.assembly ? ` with ${m.assembly} (${m.lines} line${m.lines === 1 ? "" : "s"})` : " — no assembly for this kind of area"}`).join("; ")}.
+                  {run.made.sections.some((m) => m.existing) ? "Loaded on " : "Added "}{run.made.sections.filter((m) => m.assembly).map((m) => `${m.name} with ${m.assembly} (${m.lines} line${m.lines === 1 ? "" : "s"})`).join("; ")}.
                 </div>
               ) : null}
               {run?.made?.filled?.length ? (

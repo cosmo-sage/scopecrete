@@ -178,11 +178,11 @@ function PinCard({ pin, onClose, onClip }: { pin: MapPin; onClose: () => void; o
 
 /* ------------------------------------------------------------ search */
 
-function SearchBox({ pins, view, onAddress, onPin }: {
-  pins: MapPin[]; view: View;
+function SearchBox({ pins, view, onAddress, onPin, initial = "" }: {
+  pins: MapPin[]; view: View; initial?: string;
   onAddress: (p: { lat: number; lng: number; label: string }) => void; onPin: (p: MapPin) => void;
 }) {
-  const [q, setQ] = useState("");
+  const [q, setQ] = useState(initial);
   const [open, setOpen] = useState(false);
   const [addrs, setAddrs] = useState<AddressSuggestion[]>([]);
   const [err, setErr] = useState<string | null>(null);
@@ -328,14 +328,31 @@ export function MapPage() {
   const clipJob = sp.get("clip");
   // ?addr=<address>: a contact card's Map button (Coy, 2026-10-10) — that address, pinned.
   const addrQ = sp.get("addr");
+  // ?job=<id>: Takeoffs → Files' Pull satellite images (Coy, 2026-10-10) — the job's address typed in the
+  // search and found, on satellite; Clip for takeoff then clips for that job.
+  const pullJob = sp.get("job");
+  const [pullAddr, setPullAddr] = useState<string | null>(null);
+  const [pullNote, setPullNote] = useState<string | null>(null);
   const officeView = useCallback((o: Office, w: number, h: number): View | null =>
     o.radius_mi ? fitView(ringPoints(o, o.radius_mi), w, h, 24, 15) : { lat: o.lat, lng: o.lng, zoom: 11 }, []);
   useEffect(() => {
-    if (fitted.current || !data || !size.w || clipJob || addrQ || office === undefined) return;
+    if (fitted.current || !data || !size.w || clipJob || addrQ || pullJob || office === undefined) return;
     fitted.current = true;
     const v = office ? officeView(office, size.w, size.h) : fitView(shown, size.w, size.h, 56, 15);
     if (v) setTimeout(() => setView(v), 0);
-  }, [data, size, shown, clipJob, addrQ, office, officeView]);
+  }, [data, size, shown, clipJob, addrQ, pullJob, office, officeView]);
+
+  useEffect(() => {
+    if (!pullJob || clipJob || addrQ || fitted.current) return;
+    fitted.current = true;
+    call(`/api/jobs/${pullJob}/aerial`).then((b) => {
+      const q = typeof b?.query === "string" ? b.query : "";
+      if (q) setPullAddr(q);
+      const f = b?.found as { lat: number; lng: number; label?: string } | undefined;
+      if (!f || typeof f.lat !== "number") { setPullNote(q ? `Couldn't find "${q}" on the map. Search for it, then Clip for takeoff.` : "This job has no address yet. Search for it, then Clip for takeoff."); return; }
+      setSel(null); setMode("sat"); setPlain({ lat: f.lat, lng: f.lng, label: f.label ?? q }); setView({ lat: f.lat, lng: f.lng, zoom: 19 });
+    }).catch((e) => setPullNote(e instanceof Error ? e.message : String(e)));
+  }, [pullJob, clipJob, addrQ]);
 
   useEffect(() => {
     if (!addrQ || clipJob || fitted.current) return;
@@ -363,7 +380,7 @@ export function MapPage() {
   const goPin = (p: MapPin) => { setSel(p); setPlain(null); setView((v) => ({ lat: p.lat, lng: p.lng, zoom: Math.max(v.zoom, 15) })); };
   const startClip = (p?: MapPin) => {
     setSel(null); setMode("sat"); setLayersOpen(false);
-    setClip({ step: "frame", jobId: p && p.kind === "job" ? p.id : null });
+    setClip({ step: "frame", jobId: p && p.kind === "job" ? p.id : pullJob });
     setView((v) => (p ? { lat: p.lat, lng: p.lng, zoom: Math.max(19, v.zoom) } : { ...v, zoom: Math.max(18, v.zoom) }));
   };
   const endClip = () => {
@@ -569,7 +586,8 @@ export function MapPage() {
             {/* Search (top left) */}
             {!clip && (
               <div className="absolute flex flex-col gap-2" style={{ left: 10, top: 10, right: wide ? undefined : 10, width: wide ? 440 : undefined, maxWidth: wide ? "calc(100% - 200px)" : undefined, zIndex: 10 }}>
-                <SearchBox pins={data?.pins ?? []} view={view} onPin={goPin} onAddress={(a) => { setSel(null); setPlain(a); setView({ lat: a.lat, lng: a.lng, zoom: 17 }); }} />
+                <SearchBox key={pullAddr ?? ""} initial={pullAddr ?? ""} pins={data?.pins ?? []} view={view} onPin={goPin} onAddress={(a) => { setSel(null); setPlain(a); setView({ lat: a.lat, lng: a.lng, zoom: 17 }); }} />
+                {pullNote && <div {...stop} className="rounded" style={{ padding: "6px 10px", background: T.card, color: T.ink2, fontSize: 12.5 }}>{pullNote}</div>}
                 {err && <div {...stop} className="rounded" style={{ padding: "6px 10px", background: T.card, color: T.red, fontSize: 12.5 }}>{err} <button onClick={() => void load()} style={{ color: T.chalk, fontWeight: 600 }}>Try again</button></div>}
                 {data && !data.stored && <div {...stop} className="rounded" style={{ padding: "4px 10px", background: T.card, color: T.ink3, fontSize: 11.5 }}>Addresses are looked up on each visit until migration 090 is applied.</div>}
                 {!wide && <div {...stop} className="flex items-start justify-end gap-2" style={{ alignSelf: "flex-end" }}>{mapControls}</div>}

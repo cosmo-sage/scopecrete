@@ -3,7 +3,7 @@ import { getApiSession } from "@/lib/api-auth";
 import { readAccess } from "@/lib/access";
 
 /**
- * Settings → Organisation → People: invites (migration 062; Coy, 2026-10-01).
+ * Settings → Organization → People: invites (migration 062; Coy, 2026-10-01).
  *
  * GET  → { invites } — this org's invites, newest first (owners only, by RLS;
  *        a member gets none). The token is never stored, so never returned.

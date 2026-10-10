@@ -75,7 +75,7 @@ export function LineEvents({ tabs }: { tabs?: React.ReactNode } = {}) {
   return (
     <div>
       <PageHeader title="Logs" sub="What happened behind the scenes. Nothing here needs you unless it is red."
-        actions={<Link href="/dashboard/more/lines" style={{ fontFamily: disp, fontSize: 11, letterSpacing: ".06em", textTransform: "uppercase", color: T.chalk }}>Lines ›</Link>}>
+        actions={<Link href="/dashboard/settings/lines" style={{ fontFamily: disp, fontSize: 11, letterSpacing: ".06em", textTransform: "uppercase", color: T.chalk }}>Lines ›</Link>}>
         {tabs}
         <div className="flex flex-col lg:flex-row lg:items-center gap-2 mt-2.5">
           {([

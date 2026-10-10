@@ -3,7 +3,7 @@ import { getApiSession } from "@/lib/api-auth";
 import { isOwner, orgRow, orgView } from "@/lib/org-server";
 
 /**
- * Settings → Organisation (migration 056; Coy on Vercel, 2026-09-30).
+ * Settings → Organization (migration 056; Coy on Vercel, 2026-09-30).
  *
  * GET   → { org, can_edit, access_ready, people } — people from sc_org_people()
  *         (name, email, role), the only way a teammate's email is read; for an

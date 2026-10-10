@@ -90,11 +90,11 @@ export function MenuEditor({ menus, onChange, colors, onColors }: { menus: Menus
     <div>
       <div style={{ fontSize: F.xs, color: T.ink3, lineHeight: 1.45, marginBottom: 6 }}>
         The order here is the desktop rail and the Toolbox. Tick up to three pages for the phone footer — Dusty sits in its middle and the Toolbox holds the rest.
-        {colors && " Each icon on the desktop menu can take a colour; the colours follow the theme."}
+        {colors && " Each icon on the desktop menu can take a color; the colors follow the theme."}
       </div>
       {colors && onColors && (
         <div className="flex items-center gap-1.5 flex-wrap" style={{ marginBottom: 8 }}>
-          <span style={{ ...eyebrow, fontSize: 10, color: T.ink3, marginRight: 2 }}>Icon colours</span>
+          <span style={{ ...eyebrow, fontSize: 10, color: T.ink3, marginRight: 2 }}>Icon colors</span>
           {Object.keys(BOOK_PRESETS).map((n) => (
             <button key={n} type="button" onClick={() => onColors({ ...BOOK_PRESETS[n] })} aria-pressed={preset === n}
               style={{ height: 26, padding: "0 10px", borderRadius: 999, fontSize: F.xs, cursor: "pointer",
@@ -126,7 +126,7 @@ export function MenuEditor({ menus, onChange, colors, onColors }: { menus: Menus
             <button onClick={() => move(k, 1)} disabled={i === menus.rail.length - 1} aria-label={`Move ${isDusty ? "Dusty" : p?.label} down`} style={{ ...btn, opacity: i === menus.rail.length - 1 ? 0.35 : 1 }}>▼</button>
           </div>
           {colors && onColors && !isDusty && (
-            <div className="flex items-center gap-1.5 flex-wrap" role="group" aria-label={`${p?.label} icon colour`} style={{ padding: "4px 0 2px 30px" }}>
+            <div className="flex items-center gap-1.5 flex-wrap" role="group" aria-label={`${p?.label} icon color`} style={{ padding: "4px 0 2px 30px" }}>
               {ICON_ROLES.map((r) => {
                 const on = (colors[k] ?? "ink") === r;
                 return (

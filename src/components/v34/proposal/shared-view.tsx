@@ -31,7 +31,7 @@ export function vmFromShown(sh: Shown, urls: Urls): DocVM {
   const areas: DocArea[] = sh.sections.map((x) => {
     const L = n(x.length_ft), W = n(x.width_ft), o = n(x.sqft_override);
     return { id: String(x.id), name: s(x.name), work_type: s(x.work_type), length_ft: L, width_ft: W, sqft: o ?? (L && W ? L * W : null),
-      depth_in: n(x.depth_in), psi: n(x.psi), rebar: s(x.rebar), count: n(x.count_qty), count_unit: s(x.count_unit) };
+      depth_in: n(x.depth_in), psi: n(x.psi), rebar: s(x.rebar), count: n(x.count_qty), count_unit: s(x.count_unit), scope: s(x.scope) };
   });
   const visuals: Record<string, AreaVisual> = {};
   for (const a of areas) {

@@ -27,7 +27,7 @@ async function call(url: string, method: string, body?: unknown) {
 
 const readOf = (f: FileRow) => ((f.facts as { detail?: DetailRead } | null)?.detail ?? null);
 
-export function SectionDetails({ jobId, sectionName, shape, details, sheetName, onChange, onOpenSheet, onUse }: {
+export function SectionDetails({ sectionName, shape, details, sheetName, onChange, onOpenSheet, onUse }: {
   jobId: string; sectionName: string | null; shape: SectionShape; details: FileRow[];
   sheetName: (sheetId: string) => string | null;
   onChange: (f: FileRow | null, removedId?: string) => void;
@@ -36,15 +36,12 @@ export function SectionDetails({ jobId, sectionName, shape, details, sheetName, 
 }) {
   const [openId, setOpenId] = useState<string | null>(null);
   const open = details.find((d) => d.id === openId) ?? null;
+  // + Clip lives on the photos row now (Coy, 2026-10-10); with nothing clipped there is nothing to show.
+  if (!details.length) return null;
   return (
     <div className="px-3 py-2" style={{ borderTop: `1px solid ${T.hairSoft}` }}>
       <div className="flex items-center gap-2">
         <span style={eyebrow}>Details from the plans{details.length ? ` · ${details.length}` : ""}</span>
-        <span className="flex-1" />
-        <a href={`/dashboard/scope/${jobId}/files`} title="Open a drawing in Files, then Clip detail" className="rounded px-2.5 flex items-center"
-          style={{ height: 30, border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink, textDecoration: "none", ...eyebrow }}>
-          + Clip
-        </a>
       </div>
       {details.length > 0 && (
         <div className="grid gap-1.5 mt-1.5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))" }}>

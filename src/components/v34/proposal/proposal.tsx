@@ -80,7 +80,7 @@ function areasOf(rows: Rec[]): DocArea[] {
     const L = n(s.length_ft), W = n(s.width_ft), o = n(s.sqft_override);
     return { id: String(s.id), name: str(s.name), work_type: str(s.work_type), length_ft: L, width_ft: W,
       sqft: o ?? (L && W ? L * W : null), depth_in: n(s.depth_in), psi: n(s.psi), rebar: str(s.rebar),
-      count: n(s.count_qty), count_unit: str(s.count_unit) };
+      count: n(s.count_qty), count_unit: str(s.count_unit), scope: str(s.prep_notes) };
   });
 }
 
@@ -295,6 +295,11 @@ export function Proposal({ jobId }: { jobId: string }) {
     terms: (c: Clause[]) => change("terms", { ...p.terms, clauses: c }),
     saveTemplate: (k: "warranty" | "terms") => void saveTemplate(k),
     dusty, pickCover: () => setCoverPick(true),
+    // The area's scope of work is the section's — saved there, so the budget's list follows (Coy, 2026-10-10).
+    scope: (sid: string, text: string | null) => {
+      setB((x) => (x ? { ...x, sections: x.sections.map((y) => (String(y.id) === sid ? { ...y, prep_notes: text } : y)) } : x));
+      call(`/api/jobs/${jobId}/sections/${sid}`, "PATCH", { prep_notes: text }).catch((e) => setErr(`The scope of work wasn't saved: ${e instanceof Error ? e.message : String(e)}`));
+    },
   } : null;
 
   // Coy, 2026-10-05: "The tax button doesn't actually work." With sales tax off on the budget there is no

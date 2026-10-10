@@ -19,10 +19,12 @@ import React from "react";
 import { T, F, disp, eyebrow } from "@/lib/v34/tokens";
 import { useThreads } from "@/components/v34/threads-ctx";
 import { threadLabel } from "@/components/v34/thread-rail";
+import { useThreadColors } from "@/components/v34/thread-colors";
 
 export default function ThreadsIndexPane() {
   const ctx = useThreads();
-  const label = ctx ? threadLabel(ctx.thread, ctx.custom) : { name: "Threads", color: T.ink3 };
+  const [colors] = useThreadColors();
+  const label = ctx ? threadLabel(ctx.thread, ctx.custom, colors) : { name: "Threads", color: T.ink3 };
   return (
     <div className="hidden lg:flex items-center justify-center h-full px-8"
       style={{ minHeight: "calc(100vh - var(--sc-head) - 58px)" }}>

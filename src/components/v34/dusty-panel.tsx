@@ -7,7 +7,12 @@
  *
  * - On a phone, the whole screen — the app's header too (Coy, 2026-10-05);
  *   × in his own header closes it. On a desktop, docked on the right under
- *   the header. Dusty himself sits at the bottom left in his live state.
+ *   the header.
+ * - Claude Design "Emblem States" (2026-10-10): Dusty is the emblem, at the
+ *   bottom left above the box with a status beside it ("Thinking…" · what
+ *   about); a fresh chat opens on a greeting and quick selects for the page;
+ *   the box is the fuller kind — two lines, attach, a pill naming what the
+ *   chat is about, voice, a round send, Ctrl + Enter.
  * - History: your saved conversations (migration 043), behind the hamburger
  *   on a phone — sliding in from the LEFT, away from the right-hand drawers —
  *   and always open on the left on a desktop. Grouped: about the screen you
@@ -22,7 +27,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { T, F, disp, eyebrow, agent, clip, relTime, nums, formatPhone } from "@/lib/v34/tokens";
-import { DustyAvatar, type DustyState } from "@/components/v34/dusty-avatar";
+import { DustyEmblem, DOING, type EmblemState } from "@/components/v34/dusty-avatar";
 import { Markdown } from "@/components/v34/markdown";
 import { PlanCard } from "@/components/v34/plan-card";
 import { hideIds, parsePlan } from "@/lib/dusty/plan";
@@ -31,8 +36,9 @@ import { sendBytes } from "@/components/v34/files-panel";
 import { VoiceRecorder } from "@/components/v34/voice-recorder";
 import { usePref } from "@/lib/v34/prefs";
 import { TEXT_SIZES } from "@/lib/v34/text-size";
-import { Emblem } from "@/components/site/marks";
-import { greeting, pickThought, thoughtSource, QUIET_LINES, type Thought } from "@/lib/dusty/hello";
+import { manrope } from "@/components/site/marks";
+import { quickFor, statusDetail, type Quick } from "@/lib/dusty/quick";
+import { firstName, partOfDay, pickThought, thoughtSource, QUIET_LINES, type Thought } from "@/lib/dusty/hello";
 
 type Ref = { kind: "thread" | "scope" | "customer"; id: string } | { kind: "cash" } | { kind: "cold" };
 type TurnFile = { id: string; name: string; kind?: string; url: string | null };
@@ -68,8 +74,10 @@ const aboutLabel = (l: string | null) => {
 
 const sameRef =(c: Conv, r: Ref) => "id" in r ? c.context_kind === r.kind && c.context_id === r.id : c.context_kind === r.kind && r.kind === "cash";
 
-export function DustyPanel({ open, onClose, onBusy, onStream }: {
+export function DustyPanel({ open, onClose, onBusy, onStream, onState }: {
   open: boolean; onClose: () => void; onBusy: (b: boolean) => void;
+  /** The emblem's state, so the footer's and header's Dusty mirror him while he is open. */
+  onState?: (s: EmblemState) => void;
   /** The reply as it streams, for the activity line. "" when idle. */
   onStream?: (text: string) => void;
 }) {
@@ -123,6 +131,21 @@ export function DustyPanel({ open, onClose, onBusy, onStream }: {
   }, [draft]);
   const [recording, setRecording] = useState(false);
   const [hearing, setHearing] = useState(false);
+  const [focused, setFocused] = useState(false);
+  // A finished write (a plan applied — plan-card.tsx): the emblem plays "done" and the status says what.
+  const [doneNote, setDoneNote] = useState<{ note: string; n: number } | null>(null);
+  useEffect(() => {
+    const on = (e: Event) => {
+      const d = (e as CustomEvent<{ ok?: boolean; note?: string }>).detail;
+      if (d?.ok) { setMood(null); setDoneNote((x) => ({ note: String(d.note ?? "done"), n: (x?.n ?? 0) + 1 })); }
+      else { setMood("error"); setErr(String(d?.note ?? "the plan didn't apply")); }
+    };
+    window.addEventListener("sc:dusty-done", on);
+    return () => window.removeEventListener("sc:dusty-done", on);
+  }, []);
+  useEffect(() => { if (!doneNote) return; const t = setTimeout(() => setDoneNote(null), 4000); return () => clearTimeout(t); }, [doneNote]);
+  const [desktop, setDesktop] = useState(false);
+  useEffect(() => { const mq = window.matchMedia("(min-width: 1024px) and (pointer: fine)"); const on = () => setDesktop(mq.matches); on(); mq.addEventListener("change", on); return () => mq.removeEventListener("change", on); }, []);
 
   useEffect(() => { onBusy(busy); }, [busy, onBusy]);
   useEffect(() => () => abort.current?.abort(), []);
@@ -333,14 +356,22 @@ export function DustyPanel({ open, onClose, onBusy, onStream }: {
     } catch (e) { setErr(`Voice message: ${e instanceof Error ? e.message : String(e)}`); }
     finally { setHearing(false); }
   }
-  function create(what: "contact" | "customer" | "job" | "receipt") {
+  function create(what: "contact" | "customer" | "job" | "receipt" | "vendor" | "quote" | "bill") {
     setPlusOpen(false);
-    const href = what === "contact" ? "/dashboard/contacts?new=1" : what === "customer" ? "/dashboard/customers?new=1" : what === "job" ? "/dashboard/scope?new=1" : "/dashboard/vendors?receipt=1";
+    const href = what === "contact" ? "/dashboard/contacts?new=1" : what === "customer" ? "/dashboard/customers?new=1" : what === "job" ? "/dashboard/scope?new=1"
+      : what === "vendor" ? "/dashboard/vendors?new=1" : `/dashboard/vendors?receipt=${what === "receipt" ? 1 : what}`;
     // On a phone Dusty covers the page, so he steps aside for the form.
     if (!window.matchMedia("(min-width: 1024px)").matches) onClose();
     router.push(href);
     setTimeout(() => window.dispatchEvent(new CustomEvent("sc:create", { detail: what })), 0);
   }
+
+  // The emblem's state, from what is really happening (never a timer).
+  const lastSaid = items.length ? items[items.length - 1] : null;
+  const dustyState: EmblemState = busy ? (lastSaid?.role === "assistant" && lastSaid.content ? "answering" : "thinking")
+    : recording || hearing || draft.trim() || focused ? "listening"
+    : mood === "error" ? "warn" : doneNote ? "done" : "idle";
+  useEffect(() => { onState?.(dustyState); }, [dustyState, onState]);
 
   if (!open) return null;
 
@@ -401,7 +432,14 @@ export function DustyPanel({ open, onClose, onBusy, onStream }: {
     </nav>
   );
 
-  const dustyState: DustyState = busy ? "calculating" : loadingConv ? "loading" : mood ?? "idle";
+  const quick = !loadingConv && items.length === 0 && !jobAsk && !contactAsk ? quickFor(pathname) : [];
+  const detail = statusDetail(dustyState, { about: lookingAt, quick: quick.length > 0, desktop, hearing,
+    note: dustyState === "done" ? doneNote?.note : dustyState === "warn" ? err : null });
+  const pick = (q: Quick) => {
+    if (q.create) { create(q.create); return; }
+    if (q.more) { setDraft(q.more); setTimeout(() => { const el = box.current; if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } }, 0); return; }
+    if (q.ask) void ask(q.ask);
+  };
 
   return (
     // Phone: a full page under the header. Desktop (Coy, 2026-09-29: "slide in
@@ -411,8 +449,15 @@ export function DustyPanel({ open, onClose, onBusy, onStream }: {
     <section role="dialog" aria-label="Dusty"
       className="fixed left-0 right-0 bottom-0 z-50 flex lg:left-auto lg:w-[var(--sc-dusty)] sc-dock-in sc-dusty-sheet"
       style={{ top: "var(--sc-head)", background: T.slab, color: T.ink, borderLeft: `1px solid ${T.hair}`, boxShadow: "-10px 0 30px rgba(10,14,18,.10)" }}>
-      {/* history: from the left, over the chat */}
-      {railOpen && (
+      {/* history: on a desktop it opens out to the LEFT of his column, over the
+          page, the chat staying in view (Coy, 2026-10-10); on a phone from the
+          left, over the chat. */}
+      {railOpen && desktop && (
+        <div className="absolute top-0 bottom-0 sc-rail-in" style={{ right: "100%", width: 320, boxShadow: "-14px 0 40px rgba(10,14,18,.18)", borderRight: `1px solid ${T.hair}`, zIndex: 60 }}>
+          {rail}
+        </div>
+      )}
+      {railOpen && !desktop && (
         <div className="absolute inset-0 z-[60]" style={{ background: "rgba(18,22,26,.4)" }}
           onClick={() => setRailOpen(false)}>
           <div className="absolute top-0 left-0 bottom-0 sc-rail-in" style={{ width: "min(320px, 86vw)", boxShadow: "14px 0 40px rgba(10,14,18,.22)" }}
@@ -422,16 +467,14 @@ export function DustyPanel({ open, onClose, onBusy, onStream }: {
 
       <div className="flex-1 min-w-0 flex flex-col">
         <header className="shrink-0 px-2.5 py-2 flex items-center gap-2" style={{ borderBottom: `1px solid ${T.hair}`, background: T.card }}>
-          <button onClick={() => setRailOpen(true)} aria-label="Conversations" className="flex-col gap-[3.5px]" style={iconBtn}>
+          <button onClick={() => setRailOpen((o) => !o)} aria-label="Conversations" aria-expanded={railOpen} className="flex-col gap-[3.5px]" style={iconBtn}>
             {[0, 1, 2].map((i) => <span key={i} style={{ width: 13, height: 1.5, background: T.ink2, borderRadius: 1 }} />)}
           </button>
-          <div className="flex-1 min-w-0">
-            {/* One line: 👀 <the job> when he is on something (Coy, 2026-10-05: the
-                eyes instead of "Looking at:"), else the chat's own title. */}
-            <div title={hot && lookingAt ? `👀 ${lookingAt}` : undefined}
-              style={{ fontFamily: disp, fontSize: F.md, fontWeight: 600, lineHeight: 1.1, ...clip }}>
-              {hot && lookingAt ? <><span role="img" aria-label="Looking at" style={{ fontWeight: 400 }}>👀</span> {lookingAt}</> : active ? active.title : "New chat"}
-            </div>
+          {/* "DUSTY" alone (Emblem States, 2026-10-10): what the chat is about is the pill in the box,
+              what he is doing the status beside his emblem. */}
+          <div className="flex-1 min-w-0" title={active ? active.title : undefined}
+            style={{ fontFamily: disp, fontSize: 16, fontWeight: 700, letterSpacing: ".04em", textTransform: "uppercase", lineHeight: 1.1 }}>
+            Dusty
           </div>
           {/* The chat's text size, saved to the account (dusty_font). */}
           <div className="relative">
@@ -494,8 +537,12 @@ export function DustyPanel({ open, onClose, onBusy, onStream }: {
         {/* A page can put its own numbers here while Dusty is docked beside it
             (the job page's totals — Coy, 2026-09-30). */}
         <div id="sc-dusty-slot" className="shrink-0" />
+        {/* Dusty lives in the chat, just above the message bar at its left (Coy, 2026-10-10:
+            "live inside the actual chat window, right above where it is"); the box below
+            gets the row's whole width, and the chat leaves room under its last line for him. */}
+        <div className="flex-1 min-h-0 relative flex flex-col">
         <div ref={scroller} className="flex-1 overflow-y-auto">
-          <div className="mx-auto w-full px-4 py-4" style={{ maxWidth: 760 }}>
+          <div className="mx-auto w-full px-4 pt-4" style={{ maxWidth: 760, paddingBottom: 12 }}>
             {loadingConv && <div className="rounded animate-pulse" style={{ height: 80, background: T.hairSoft }} />}
             {!loadingConv && items.length === 0 && jobAsk && (
               <JobAsk onNew={() => { setJobAsk(false); create("job"); }}
@@ -505,7 +552,7 @@ export function DustyPanel({ open, onClose, onBusy, onStream }: {
               <ContactAsk onAdd={() => { setContactAsk(false); create("contact"); }} />
             )}
             {!loadingConv && items.length === 0 && !jobAsk && !contactAsk && (
-              <DustyHello contactId={ref.kind === "thread" ? ref.id : null} onGo={onClose} />
+              <DustyHello contactId={ref.kind === "thread" ? ref.id : null} onGo={onClose} quick={quick} onPick={pick} />
             )}
             {/* The chat at Coy's text size: zoom scales the answers' tables and plans with the words. */}
             <div style={{ zoom: font.z }}>
@@ -552,11 +599,22 @@ export function DustyPanel({ open, onClose, onBusy, onStream }: {
             {err &&<div style={{ fontSize: F.sm, color: T.red, marginTop: 8 }}>{err}</div>}
           </div>
         </div>
+        {/* Dusty, bottom left above the box, with what he is doing beside him. */}
+        <div className="shrink-0 flex items-end gap-3" style={{ height: 88, padding: "0 16px 12px" }} aria-live="polite">
+          <DustyEmblem state={dustyState} size={60} hidden />
+          <div className="min-w-0" style={{ paddingBottom: 16 }}>
+            <div style={{ fontFamily: agent, fontSize: 13.5, fontWeight: 600, lineHeight: 1.3, color: dustyState === "warn" ? T.red : T.ink2 }}>{DOING[dustyState]}</div>
+            <div style={{ fontFamily: agent, fontSize: 12, lineHeight: 1.3, color: T.ink3, maxWidth: 280, ...clip }} title={detail}>{detail}</div>
+          </div>
+        </div>
+        </div>
 
-        <form onSubmit={(e) => { e.preventDefault(); void ask(draft); }} className="shrink-0 px-3 py-2.5"
-          style={{ borderTop: `1px solid ${T.hair}`, background: T.card }}>
+        {/* The box (Emblem States, 2026-10-10): two lines, then + · what the chat is about · mic · send.
+            Enter is a new line; Ctrl (⌘) + Enter sends, as the round arrow does. */}
+        <form onSubmit={(e) => { e.preventDefault(); void ask(draft); }} className="shrink-0"
+          style={{ margin: "0 10px 10px", padding: "10px 10px 8px", background: T.card, border: `1px solid ${T.hairStrong}`, borderRadius: 8 }}>
           {atts.length > 0 && (
-            <div className="mx-auto flex flex-wrap gap-1.5 mb-2" style={{ maxWidth: 760 }}>
+            <div className="flex flex-wrap gap-1.5 mb-2">
               {atts.map((a) => (
                 <span key={a.key} className="rounded px-2 flex items-center gap-1.5" title={a.error ?? undefined}
                   style={{ height: 26, maxWidth: 220, border: `1px solid ${a.error ? T.red : T.hair}`, background: T.slab, fontSize: F.xs, color: a.error ? T.red : T.ink2 }}>
@@ -567,53 +625,63 @@ export function DustyPanel({ open, onClose, onBusy, onStream }: {
               ))}
             </div>
           )}
-          <div className="mx-auto flex items-end gap-2" style={{ maxWidth: 900 }}>
-            {/* Dusty on the message bar's row, at its left, twice his old 36px, in his live state
-                (Coy, 2026-10-09: "offset to the left at the bottom on the same row … twice as big"). */}
-            <span className="shrink-0 flex"><DustyAvatar state={recording || hearing ? "loading" : dustyState} size={68} /></span>
-            {recording ? (
-              <VoiceRecorder onSend={(b) => void voice(b)} onCancel={() => setRecording(false)} />
-            ) : (
-              <>
+          {recording ? (
+            <VoiceRecorder onSend={(b) => void voice(b)} onCancel={() => setRecording(false)} />
+          ) : (
+            <>
+              <div className="flex items-start gap-2">
+                <textarea ref={box} value={draft} onChange={(e) => setDraft(e.target.value)} rows={2} maxLength={4000} aria-label="Ask Dusty"
+                  onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
+                  onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); void ask(draft); } }}
+                  placeholder={hearing ? "Listening back…" : "Ask Dusty"}
+                  className="flex-1 outline-none resize-none"
+                  style={{ border: "none", fontSize: Math.round(14 * font.z), lineHeight: 1.4, minHeight: 40, maxHeight: 200, overflowY: "auto",
+                           fontFamily: agent, minWidth: 0, background: "transparent", color: T.ink, padding: 0 }} />
+                {desktop && <span className="shrink-0" style={{ fontFamily: agent, fontSize: 10.5, color: T.ink3, paddingTop: 3 }}>Use Ctrl + Enter to submit</span>}
+              </div>
+              <div className="flex items-center gap-2" style={{ marginTop: 6 }}>
                 {/* + attach (Coy, 2026-10-01): photos and files, filed on what the chat is about. */}
                 <input ref={fileInput} type="file" multiple hidden onChange={(e) => void attach(e.target.files)}
                   accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.csv,.txt" />
                 <button type="button" onClick={() => fileInput.current?.click()} aria-label="Attach photos or files" title="Attach photos or files"
-                  className="shrink-0 rounded-full flex items-center justify-center" style={{ width: 38, height: 38, border: `1px solid ${T.hair}`, background: T.card, color: T.ink2, fontSize: 20, cursor: "pointer" }}>+</button>
-                <textarea ref={box} value={draft} onChange={(e) => setDraft(e.target.value)} rows={1} maxLength={4000}
-                  onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void ask(draft); } }}
-                  placeholder={hearing ? "Listening back…" : active ? "Follow up…" : hot ? `Ask about ${GUESS[ref.kind]}…` : "Ask Dusty…"}
-                  className="flex-1 rounded-2xl px-3.5 outline-none resize-none"
-                  style={{ border: `1px solid ${T.hair}`, fontSize: Math.round(F.sm * font.z), lineHeight: 1.4, paddingTop: 9, paddingBottom: 9,
-                           minHeight: 38, maxHeight: 200, overflowY: "auto", fontFamily: agent, minWidth: 0, background: T.card, color: T.ink }} />
+                  className="shrink-0 rounded-full flex items-center justify-center" style={{ width: 30, height: 30, border: `1px solid ${T.hair}`, background: T.card, color: T.ink2, fontSize: 18, cursor: "pointer" }}>+</button>
+                {hot && lookingAt && (
+                  <span className="min-w-0 flex items-center gap-1.5" title={`This chat is about ${lookingAt}`}
+                    style={{ height: 30, borderRadius: 15, padding: "0 11px 0 9px", border: `1px solid ${T.hair}`, background: T.slab, color: T.ink2, fontFamily: agent, fontSize: 12, maxWidth: "60%" }}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                      <path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z" /><circle cx="12" cy="9.5" r="2.5" />
+                    </svg>
+                    <span style={{ ...clip }}>{lookingAt}</span>
+                  </span>
+                )}
+                <span className="flex-1" />
                 {/* The mic is always there (Coy, 2026-10-09: "what happened to my microphone button"). */}
                 <button type="button" onClick={() => { setErr(null); setRecording(true); }} disabled={busy || hearing} aria-label="Record a voice message" title="Record a voice message"
-                  className="shrink-0 rounded-full flex items-center justify-center" style={{ width: 38, height: 38, border: `1px solid ${T.hair}`, background: T.card, color: busy || hearing ? T.ink3 : T.ink2, cursor: "pointer" }}>
+                  className="shrink-0 rounded-full flex items-center justify-center" style={{ width: 30, height: 30, border: `1px solid ${T.hair}`, background: T.card, color: busy || hearing ? T.ink3 : T.ink2, cursor: "pointer" }}>
                   {hearing ? "…" : (
-                    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
+                    <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
                       <rect x="5.5" y="1.5" width="5" height="8.5" rx="2.5" fill="currentColor" stroke="none" />
                       <path d="M3 7.5a5 5 0 0 0 10 0M8 12.5v2.2" />
                     </svg>
                   )}
                 </button>
-                {/* Send is an arrow, off until there is something to send (Coy: "a regular icon to send a message"). */}
                 {(() => {
                   const off = busy || (!draft.trim() && !atts.some((a) => a.id)) || atts.some((a) => !a.id && !a.error);
                   return (
                     <button type="submit" disabled={off} aria-label="Send" title="Send"
                       className="shrink-0 rounded-full flex items-center justify-center"
-                      style={{ width: 38, height: 38, background: off ? T.hair : T.hiviz, color: off ? T.ink3 : T.onHiviz, cursor: off ? "default" : "pointer" }}>
+                      style={{ width: 30, height: 30, background: off ? T.hair : T.hiviz, color: off ? T.ink3 : T.onHiviz, cursor: off ? "default" : "pointer" }}>
                       {busy ? "…" : (
-                        <svg width="17" height="17" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                        <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
                           <path d="M8 13.5V3M3.5 7.2 8 2.7l4.5 4.5" />
                         </svg>
                       )}
                     </button>
                   );
                 })()}
-              </>
-            )}
-          </div>
+              </div>
+            </>
+          )}
         </form>
       </div>
     </section>
@@ -640,13 +708,6 @@ function ChatFiles({ files }: { files: TurnFile[] }) {
   );
 }
 
-/**
- * The empty chat (Coy, 2026-10-05): the ScopeCrete emblem, "Hey Coy." and one
- * of Dusty's own recent thoughts — what the background reader already wrote
- * about real calls, texts and emails (/api/activity's musings and dreams), so
- * opening the panel costs no model call. Nothing to mention → a quiet line.
- * No "what I can and can't do", no starter buttons.
- */
 /** Dusty's question from the Jobs page's emblem: a new job (the New job form)
  *  or one of the jobs there are (opens it, Dusty then on that job). */
 function JobAsk({ onNew, onPick }: { onNew: () => void; onPick: (id: string) => void }) {
@@ -665,7 +726,7 @@ function JobAsk({ onNew, onPick }: { onNew: () => void; onPick: (id: string) => 
   return (
     <div style={{ padding: "20px 4px 12px" }}>
       <div className="flex items-start gap-2.5">
-        <Emblem size={30} spin />
+        <DustyEmblem size={30} hidden />
         <div style={{ fontFamily: agent, fontSize: F.md, color: T.ink, lineHeight: 1.45, paddingTop: 4 }}>
           Do you want to create a new job, or edit an existing one?
         </div>
@@ -700,7 +761,7 @@ function ContactAsk({ onAdd }: { onAdd: () => void }) {
   return (
     <div style={{ padding: "20px 4px 12px" }}>
       <div className="flex items-start gap-2.5">
-        <Emblem size={30} spin />
+        <DustyEmblem size={30} hidden />
         <div style={{ fontFamily: agent, fontSize: F.md, color: T.ink, lineHeight: 1.45, paddingTop: 4 }}>
           Who are we adding? Tap below for the form, or ask me anything about your contacts.
         </div>
@@ -712,7 +773,13 @@ function ContactAsk({ onAdd }: { onAdd: () => void }) {
   );
 }
 
-function DustyHello({ contactId, onGo }: { contactId: string | null; onGo: () => void }) {
+/**
+ * The empty chat: "Hey Coy," over "Good afternoon." (Emblem States,
+ * 2026-10-10), the quick selects for the page — a tap asks it, a › puts the
+ * start in the box to finish — and one of Dusty's own recent thoughts, small
+ * (Coy, 2026-10-05), from /api/activity, so opening costs no model call.
+ */
+function DustyHello({ contactId, onGo, quick, onPick }: { contactId: string | null; onGo: () => void; quick: Quick[]; onPick: (q: Quick) => void }) {
   const [name, setName] = useState<string | null | undefined>(undefined);
   const [thought, setThought] = useState<Thought | null | undefined>(undefined);
   const [roll] = useState(() => Math.random());
@@ -730,23 +797,67 @@ function DustyHello({ contactId, onGo }: { contactId: string | null; onGo: () =>
 
   const ready = name !== undefined && thought !== undefined;
   const source = thought ? thoughtSource(thought.detail) : null;
+  const first = firstName(name ?? null);
   return (
-    <div className="text-center" style={{ padding: "28px 8px 12px" }}>
-      <div style={{ display: "flex", justifyContent: "center", marginBottom: 14 }}><Emblem size={44} spin /></div>
-      <div style={{ opacity: ready ? 1 : 0, transition: "opacity .35s ease", maxWidth: 380, margin: "0 auto" }}>
-        <div style={{ fontFamily: agent, fontSize: F.lg, fontWeight: 600, color: T.ink }}>{greeting(name ?? null, new Date())}</div>
-        <p style={{ fontFamily: agent, fontSize: F.md, color: T.ink2, lineHeight: 1.5, margin: "6px 0 0" }}>
+    <div style={{ padding: "8px 2px 4px" }}>
+      <div style={{ opacity: name === undefined ? 0 : 1, transition: "opacity .35s ease" }}>
+        {first && <div style={{ fontFamily: agent, fontSize: 15, color: T.ink2 }}>Hey {first},</div>}
+        <div style={{ fontFamily: manrope, fontWeight: 800, fontSize: 26, letterSpacing: "-.02em", lineHeight: 1.15, color: "#1FA971" }}>
+          Good {partOfDay(new Date()).toLowerCase()}.
+        </div>
+      </div>
+      {quick.length > 0 && (
+        <div role="list" aria-label="Quick selects" style={{ marginTop: 16 }}>
+          {quick.map((q) => (
+            <button key={q.label} role="listitem" onClick={() => onPick(q)} className="w-full text-left flex items-center gap-3 sc-quick"
+              style={{ height: 40, padding: "0 8px", borderRadius: 6, background: "none", border: "none", cursor: "pointer", color: T.ink }}>
+              <QuickIcon label={q.label} />
+              <span style={{ flex: 1, fontFamily: agent, fontSize: 14, fontWeight: 600, ...clip }}>{q.label}</span>
+              {q.more && <span aria-hidden style={{ color: T.ink3, fontSize: 16 }}>›</span>}
+            </button>
+          ))}
+        </div>
+      )}
+      {/* One of his own recent thoughts, small, under the work (Coy, 2026-10-05: "to maybe make me smile"). */}
+      <div style={{ opacity: ready ? 1 : 0, transition: "opacity .35s ease", marginTop: quick.length ? 14 : 8 }}>
+        <p style={{ fontFamily: agent, fontSize: F.sm, color: T.ink3, lineHeight: 1.5, margin: 0 }}>
           {thought ? thought.summary : QUIET_LINES[Math.floor(roll * QUIET_LINES.length)]}
-        </p>
-        {thought && source && (
-          thought.contact_id ? (
+          {thought && source && (thought.contact_id ? (
             <button onClick={() => { onGo(); router.push(`/dashboard/messages/${thought.contact_id}`); }}
-              style={{ fontFamily: agent, fontSize: F.xs, color: T.ink3, marginTop: 6, cursor: "pointer", background: "none", border: "none" }}>
+              style={{ fontFamily: agent, fontSize: F.xs, color: T.ink3, marginLeft: 6, cursor: "pointer", background: "none", border: "none", padding: 0, textDecoration: "underline" }}>
               — {source}
             </button>
-          ) : <div style={{ fontFamily: agent, fontSize: F.xs, color: T.ink3, marginTop: 6 }}>— {source}</div>
-        )}
+          ) : <span style={{ fontSize: F.xs, marginLeft: 6 }}>— {source}</span>)}
+        </p>
       </div>
     </div>
+  );
+}
+
+/** A quick select's icon (Lucide weight, 17px, ink2). */
+function QuickIcon({ label }: { label: string }) {
+  const d: Record<string, React.ReactNode> = {
+    brief: <><path d="M4 5h16M4 10h16M4 15h10M4 20h7" /></>,
+    price: <><path d="M12 2v20M17 6.5C17 4.6 14.8 3.5 12 3.5S7 4.8 7 7s2 3 5 3.5 5 1.5 5 3.8-2.2 3.7-5 3.7-5-1.2-5-3.2" /></>,
+    plans: <><rect x="3" y="3" width="18" height="18" rx="1.5" /><path d="M3 9h18M9 21V9" /></>,
+    rates: <><path d="M3 17l6-6 4 4 8-8M15 7h6v6" /></>,
+    write: <><path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z" /><path d="M14 3v5h5M8 13h8M8 17h5" /></>,
+    receipt: <><path d="M6 2h12v20l-3-2-3 2-3-2-3 2z" /><path d="M9 7h6M9 11h6M9 15h4" /></>,
+    crew: <><circle cx="9" cy="8" r="3.2" /><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6" /><circle cx="17" cy="9" r="2.5" /><path d="M16 14.2c2.8.3 5 2.6 5 5.8" /></>,
+    needs: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
+    chat: <><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z" /></>,
+    reply: <><path d="M9 14 4 9l5-5" /><path d="M4 9h10a6 6 0 0 1 6 6v5" /></>,
+    job: <><rect x="3" y="7" width="18" height="13" rx="1.5" /><path d="M8 7V4h8v3M12 11v5M9.5 13.5h5" /></>,
+    photo: <><rect x="3" y="5" width="18" height="14" rx="1.5" /><circle cx="9" cy="10" r="1.8" /><path d="m21 16-5-5-8 8" /></>,
+    person: <><circle cx="12" cy="8" r="3.5" /><path d="M5 20c0-3.9 3.1-7 7-7s7 3.1 7 7M19 4v6M16 7h6" /></>,
+    card: <><rect x="2.5" y="5" width="19" height="14" rx="1.5" /><circle cx="8.5" cy="11" r="2" /><path d="M5.5 16c.6-1.5 1.7-2.2 3-2.2s2.4.7 3 2.2M14 10h5M14 13.5h4" /></>,
+  };
+  const key = /brief/i.test(label) ? "brief" : /^price/i.test(label) ? "price" : /takeoff/i.test(label) ? "plans" : /rates/i.test(label) ? "rates"
+    : /proposal/i.test(label) ? "write" : /receipt/i.test(label) ? "receipt" : /crew/i.test(label) ? "crew" : /needs|heard/i.test(label) ? "needs"
+    : /summar/i.test(label) ? "chat" : /reply/i.test(label) ? "reply" : /job/i.test(label) ? "job" : /photo/i.test(label) ? "photo"
+    : /card/i.test(label) ? "card" : "person";
+  return (
+    <svg width="17" height="17" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
+      style={{ color: T.ink2, flexShrink: 0 }}>{d[key]}</svg>
   );
 }

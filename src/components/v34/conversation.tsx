@@ -68,6 +68,8 @@ export interface ThreadMessage {
   duration_seconds: number | null;
   recording_url: string | null;
   status: string | null;
+  /** An incoming call nobody answered (Quo: "no-answer"). */
+  missed?: boolean;
   artifact_kinds: string[];
   /** Files on this message (message_media). Fetched lazily by MessageMedia. */
   media_count: number;
@@ -218,30 +220,33 @@ export function CallRow({ m }: { m: ThreadMessage }) {
     }
   }, [open, bundle, hasArtifacts, m.id]);
 
+  // Like a phone: theirs on the left, ours on the right, each as wide as it
+  // needs (Coy, 2026-10-10) — no "Inbound call" / "Outbound call" label.
+  const vm = m.summary_source === "quo_voicemail" || m.artifact_kinds.includes("voicemail");
+  const pill = !isOut && m.missed ? (vm ? "Missed · voicemail" : "Missed call")
+    : m.status && !["completed", "received", "delivered"].includes(m.status) ? m.status : null;
   return (
+    <div className={`flex mb-2 ${isOut ? "justify-end" : "justify-start"}`}>
     <div
-      className="rounded-xl px-3 py-2.5 mb-2"
-      style={{ background: DA.surface, border: `1px solid ${DA.border}` }}
+      className="rounded-2xl px-3 py-2"
+      style={{ background: isOut ? DA.bubbleOut : DA.bubbleIn, border: `1px solid ${DA.border}`, maxWidth: "min(78%, 420px)", minWidth: 0, color: isOut ? T.outInk : DA.textPrimary }}
     >
-      <div className="flex items-center gap-2">
-        <Phone size={13} weight="fill" color={isOut ? DA.accent : DA.textMuted} className="shrink-0" />
-        <span style={{ ...eyebrow, color: DA.textPrimary }}>
-          {isOut ? "Outbound call" : "Inbound call"}
-        </span>
-        {m.line && (
-          <span className="flex items-center gap-1" style={{ order: 9, marginLeft: "auto", fontFamily: disp, fontSize: 10, letterSpacing: ".08em", textTransform: "uppercase", color: DA.textMuted }}>
-            <span style={{ width: 7, height: 7, borderRadius: 7, background: m.line_color ?? DA.textMuted, display: "inline-block" }} />
-            {/* "via Quo" — a long line name (batonrougeconcreters.com) pushed it out of the card (Coy, 2026-10-05); the dot is the line. */}
-            <span title={m.line}>via {m.line_provider ?? m.line}</span>
+      <div className="flex items-center gap-2 flex-wrap">
+        <Phone size={13} weight="fill" color={pill && m.missed ? DA.error : isOut ? DA.accent : DA.textMuted} className="shrink-0" aria-label={isOut ? "Call you made" : "Call to you"} />
+        {pill && (
+          <span className="text-[9px] px-1.5 py-0.5 rounded-full uppercase tracking-wide"
+                style={{ background: m.missed ? "color-mix(in srgb, var(--sc-red, #B5412C) 14%, transparent)" : DA.elevated, color: m.missed ? DA.error : DA.textMuted, fontWeight: 600 }}>
+            {pill}
           </span>
         )}
         {duration && (
           <span className="text-[10px] tabular-nums" style={{ color: DA.textMuted }}>{duration}</span>
         )}
-        {m.status && m.status !== "completed" && (
-          <span className="text-[9px] px-1.5 py-0.5 rounded-full uppercase tracking-wide"
-                style={{ background: DA.elevated, color: DA.textMuted }}>
-            {m.status}
+        {m.line && (
+          <span className="flex items-center gap-1" style={{ fontFamily: disp, fontSize: 10, letterSpacing: ".08em", textTransform: "uppercase", color: DA.textMuted }}>
+            <span style={{ width: 7, height: 7, borderRadius: 7, background: m.line_color ?? DA.textMuted, display: "inline-block" }} />
+            {/* "via Quo" — a long line name (batonrougeconcreters.com) pushed it out of the card (Coy, 2026-10-05); the dot is the line. */}
+            <span title={m.line}>via {m.line_provider ?? m.line}</span>
           </span>
         )}
         <span className="text-[10px] ml-auto shrink-0" style={{ color: DA.textMuted }}>
@@ -258,13 +263,13 @@ export function CallRow({ m }: { m: ThreadMessage }) {
           Voicemail
         </div>
       )}
-      <div className="text-xs mt-1" style={{
+      {(m.summary?.trim() || !m.missed) && <div className="text-xs mt-1" style={{
         color: m.summary ? DA.textSecondary : DA.textMuted,
         fontStyle: m.summary ? "normal" : "italic",
         minHeight: "1.1rem", lineHeight: "1.15rem",
       }}>
         {m.summary?.trim() || `No summary${duration ? ` · ${duration}` : ""}`}
-      </div>
+      </div>}
 
       {m.artifact_kinds.includes("recording") && (
         <PlayAudio messageId={m.id} kind="recording" label={`Play recording${duration ? ` · ${duration}` : ""}`} />
@@ -348,6 +353,7 @@ export function CallRow({ m }: { m: ThreadMessage }) {
           )}
         </div>
       )}
+    </div>
     </div>
   );
 }

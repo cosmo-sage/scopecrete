@@ -19,6 +19,7 @@ import { T, F, eyebrow } from "@/lib/v34/tokens";
 import { NavIcon } from "@/components/v34/primitives";
 import { PAGE, type Menus } from "@/lib/v34/pages";
 import { DustyAvatar } from "@/components/v34/dusty-avatar";
+import { BOOK_LABEL, BOOK_PRESETS, ICON_ROLES, iconVar, presetOf, type MenuColors } from "@/lib/v34/menu-colors";
 
 export function Toolbox({ open, onClose, keys, active, badge }: {
   open: boolean; onClose: () => void; keys: string[]; active: string;
@@ -40,12 +41,12 @@ export function Toolbox({ open, onClose, keys, active, badge }: {
             const on = active === k;
             return (
               <Link key={k} href={p.href} onClick={onClose} aria-current={on ? "page" : undefined}
-                className="flex flex-col items-center justify-center gap-1 no-underline" style={{ height: 58, position: "relative" }}>
+                className="flex flex-col items-center justify-center gap-1 no-underline" style={{ height: 58, position: "relative", minWidth: 0, padding: "0 2px" }}>
                 <span style={{ position: "relative", display: "flex" }}>
                   <NavIcon k={k} on={on} />
                   {badge?.[k] && <span aria-label="needs a look" className="absolute rounded-full" style={{ top: -2, right: -4, width: 7, height: 7, background: T.red }} />}
                 </span>
-                <span style={{ ...eyebrow, fontSize: 9, color: on ? T.ink : T.ink3 }}>{p.label}</span>
+                <span style={{ ...eyebrow, ...tabLabel(p.label), color: on ? T.ink : T.ink3 }}>{p.label}</span>
               </Link>
             );
           })}
@@ -55,7 +56,22 @@ export function Toolbox({ open, onClose, keys, active, badge }: {
   );
 }
 
-export function MenuEditor({ menus, onChange }: { menus: Menus; onChange: (m: Menus) => void }) {
+/** A footer or Toolbox label, centred in its column. Two words ("Scope Builder") are set tighter and may
+ *  wrap onto a second centred line instead of running off the column (Coy, 2026-10-10). */
+export function tabLabel(label: string): React.CSSProperties {
+  const two = label.includes(" ");
+  return { fontSize: 9, textAlign: "center", lineHeight: 1.1, maxWidth: "100%", overflowWrap: "anywhere",
+           letterSpacing: two ? ".04em" : ".1em", marginRight: two ? "-.04em" : "-.1em" };
+}
+
+export function MenuEditor({ menus, onChange, colors, onColors }: { menus: Menus; onChange: (m: Menus) => void; colors?: MenuColors; onColors?: (c: MenuColors) => void }) {
+  const preset = colors ? presetOf(colors) : null;
+  const setColor = (k: string, role: string) => {
+    if (!colors || !onColors) return;
+    const next = { ...colors };
+    if (role === "ink") delete next[k]; else next[k] = role as MenuColors[string];
+    onColors(next);
+  };
   const move = (k: string, d: -1 | 1) => {
     const r = [...menus.rail];
     const i = r.indexOf(k), j = i + d;
@@ -74,14 +90,28 @@ export function MenuEditor({ menus, onChange }: { menus: Menus; onChange: (m: Me
     <div>
       <div style={{ fontSize: F.xs, color: T.ink3, lineHeight: 1.45, marginBottom: 6 }}>
         The order here is the desktop rail and the Toolbox. Tick up to three pages for the phone footer — Dusty sits in its middle and the Toolbox holds the rest.
+        {colors && " Each icon on the desktop menu can take a color; the colors follow the theme."}
       </div>
+      {colors && onColors && (
+        <div className="flex items-center gap-1.5 flex-wrap" style={{ marginBottom: 8 }}>
+          <span style={{ ...eyebrow, fontSize: 10, color: T.ink3, marginRight: 2 }}>Icon colors</span>
+          {Object.keys(BOOK_PRESETS).map((n) => (
+            <button key={n} type="button" onClick={() => onColors({ ...BOOK_PRESETS[n] })} aria-pressed={preset === n}
+              style={{ height: 26, padding: "0 10px", borderRadius: 999, fontSize: F.xs, cursor: "pointer",
+                border: `1px solid ${preset === n ? T.ink : T.hair}`, background: preset === n ? T.ink : T.card, color: preset === n ? T.card : T.ink2 }}>
+              {n}
+            </button>
+          ))}
+        </div>
+      )}
       {menus.rail.map((k, i) => {
         const p = PAGE.get(k);
         const isDusty = k === "dusty";
         return (
-          <div key={k} className="flex items-center gap-2 py-1" style={{ borderTop: i ? `1px solid ${T.hairSoft}` : "none" }}>
+          <div key={k} className="py-1" style={{ borderTop: i ? `1px solid ${T.hairSoft}` : "none" }}>
+          <div className="flex items-center gap-2">
             <span style={{ width: 22, display: "flex", justifyContent: "center" }}>
-              {isDusty ? <DustyAvatar size={20} hidden /> : <NavIcon k={k} on />}
+              {isDusty ? <DustyAvatar size={20} hidden /> : <NavIcon k={k} on color={colors?.[k] ? iconVar(colors[k]) : undefined} />}
             </span>
             <span style={{ flex: 1, fontSize: F.sm }}>{isDusty ? "Dusty" : p?.label}</span>
             {!isDusty && (
@@ -94,6 +124,19 @@ export function MenuEditor({ menus, onChange }: { menus: Menus; onChange: (m: Me
             )}
             <button onClick={() => move(k, -1)} disabled={i === 0} aria-label={`Move ${isDusty ? "Dusty" : p?.label} up`} style={{ ...btn, opacity: i === 0 ? 0.35 : 1 }}>▲</button>
             <button onClick={() => move(k, 1)} disabled={i === menus.rail.length - 1} aria-label={`Move ${isDusty ? "Dusty" : p?.label} down`} style={{ ...btn, opacity: i === menus.rail.length - 1 ? 0.35 : 1 }}>▼</button>
+          </div>
+          {colors && onColors && !isDusty && (
+            <div className="flex items-center gap-1.5 flex-wrap" role="group" aria-label={`${p?.label} icon color`} style={{ padding: "4px 0 2px 30px" }}>
+              {ICON_ROLES.map((r) => {
+                const on = (colors[k] ?? "ink") === r;
+                return (
+                  <button key={r} type="button" className="sc-book-swatch" aria-pressed={on} onClick={() => setColor(k, r)}
+                    title={BOOK_LABEL[r]} aria-label={BOOK_LABEL[r]}
+                    style={{ width: 20, height: 20, background: iconVar(r) }} />
+                );
+              })}
+            </div>
+          )}
           </div>
         );
       })}

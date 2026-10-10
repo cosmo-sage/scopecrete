@@ -902,8 +902,8 @@ function ParamPanel({ jobId, data, groupId, setGroupId, selId, onSelect, act, on
                           style={{ paddingLeft: 14, minHeight: 34, background: on ? T.slab : "transparent", borderLeft: `3px solid ${on ? col : "transparent"}`, cursor: "pointer" }}>
                           <input type="checkbox" checked={ticked.g === p.id && ticked.ids.has(m.id)} onChange={() => tick(m)} onClick={(e) => e.stopPropagation()}
                             aria-label={`Tick ${m.name ?? `${p.name} ${i + 1}`} to send to the budget`} title="Tick to send to the budget" style={{ width: 16, height: 16, flex: "0 0 auto", cursor: "pointer", accentColor: T.hiviz }} />
-                          <button onClick={(e) => { e.stopPropagation(); setPainting(painting === m.id ? null : m.id); }} aria-label="Colour of this takeoff" aria-expanded={painting === m.id}
-                            title="Colour of this takeoff" style={{ width: 12, alignSelf: "stretch", margin: "5px 0", background: col, borderRadius: 3, border: `1px solid ${painting === m.id ? T.ink : "transparent"}`, cursor: "pointer", padding: 0, flex: "0 0 auto" }} />
+                          <button onClick={(e) => { e.stopPropagation(); setPainting(painting === m.id ? null : m.id); }} aria-label="Color of this takeoff" aria-expanded={painting === m.id}
+                            title="Color of this takeoff" style={{ width: 12, alignSelf: "stretch", margin: "5px 0", background: col, borderRadius: 3, border: `1px solid ${painting === m.id ? T.ink : "transparent"}`, cursor: "pointer", padding: 0, flex: "0 0 auto" }} />
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <MeasName jobId={jobId} m={m} fallback={`${p.name} ${i + 1}`} act={act} />
                             <div style={{ fontSize: 11, color: T.ink3 }}>{s ? sheetLabel(s) : "sheet removed"} · {m.method}{(m.cutouts?.length ?? 0) > 0 ? ` · ${m.cutouts.length} cutout${m.cutouts.length === 1 ? "" : "s"}` : ""}</div>
@@ -1042,7 +1042,7 @@ function ShapeColors({ current, group, onPick }: { current: string | null; group
   return (
     <div className="flex items-center gap-1.5 flex-wrap" style={{ padding: "6px 10px 8px 32px", background: T.slab }} onClick={(e) => e.stopPropagation()}>
       <span className="flex items-center gap-1" style={{ fontSize: 11, color: T.ink3, marginRight: 4 }}>
-        {sw(group, current === null, "The group's colour", null)} group
+        {sw(group, current === null, "The group's color", null)} group
       </span>
       {SHAPE_COLORS.filter((c) => c.toLowerCase() !== group.toLowerCase()).map((c) => sw(c, current?.toLowerCase() === c.toLowerCase(), c, c))}
     </div>

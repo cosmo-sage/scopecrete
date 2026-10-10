@@ -236,7 +236,7 @@ export function bidNote(dueIso: string | null | undefined, now = Date.now()): { 
 
 /* ---------------------------------------------------------- the office (migration 098) */
 
-/** The org's office and the radius it works in (Settings → Organisation → Office). */
+/** The org's office and the radius it works in (Settings → Organization → Office). */
 export interface Office { address: string; lat: number; lng: number; radius_mi: number | null }
 
 export const RADIUS_MAX_MI = 1000;

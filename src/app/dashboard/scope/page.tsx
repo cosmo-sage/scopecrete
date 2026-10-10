@@ -227,7 +227,7 @@ export default function JobsBoard() {
       {/* The page's header stays at the top while the dashboard header slides
           away on a phone (Coy, 2026-10-06). One row: ☰ · Jobs · Sort · Filter ·
           the view · + New job. */}
-      <PageHeader title="Jobs" menu={<MenuButton onClick={() => setStagesOpen(true)} label="Job stages" />}
+      <PageHeader dusty={false} title="Jobs" menu={<MenuButton onClick={() => setStagesOpen(true)} label="Job stages" />}
         sub="Every job from first call to done, by stage. Move a card along as the work moves."
         actions={<>
           {/* On a phone Sort is in the filter panel (Coy, 2026-10-09). */}
@@ -260,10 +260,10 @@ export default function JobsBoard() {
               </button>
             ))}
           </div>
-          {/* On a phone the ScopeCrete emblem: Dusty asks "a new job, or edit one?"
-              (Coy, 2026-10-09). The desktop keeps + New job. */}
+          {/* The ScopeCrete emblem: Dusty asks "a new job, or edit one?" (Coy,
+              2026-10-09; on a desktop too since 2026-10-10, the page header's Dusty). */}
           {!limited && <button onClick={() => { window.dispatchEvent(new Event("sc:dusty-open")); window.dispatchEvent(new Event("sc:dusty-jobs")); }}
-            className="lg:hidden shrink-0 flex items-center justify-center rounded" aria-label="New or existing job — ask Dusty" title="New or existing job"
+            className="shrink-0 flex items-center justify-center rounded" aria-label="New or existing job — ask Dusty" title="New or existing job"
             style={{ width: 34, height: 34, border: `1px solid ${T.hiviz}`, background: T.card, cursor: "pointer" }}>
             <Emblem size={22} spin />
           </button>}

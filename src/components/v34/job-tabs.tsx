@@ -11,10 +11,11 @@
 import type React from "react";
 import { useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { T, F, disp, light } from "@/lib/v34/tokens";
+import { T, disp, light } from "@/lib/v34/tokens";
 import { useAccess } from "@/lib/v34/access-ctx";
 import { can } from "@/lib/access";
 import { JobSwitcher, SwitchChevron } from "@/components/v34/job-switcher";
+import { DustyPageButton } from "@/components/v34/primitives";
 
 const TABS = [
   { k: "summary", label: "Summary", href: (id: string) => `/dashboard/scope/${id}/summary` },
@@ -157,6 +158,8 @@ export function JobHeaderRow({ jobId, active, title, after, sub, customerId, sub
             style={{ fontFamily: disp, fontSize: 11, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase", color: T.ink2 }}>
             <span className="lg:hidden" style={{ fontSize: 20, lineHeight: 1 }}>‹</span><span className="hidden lg:inline">{toCustomer ? "‹ Customer" : "‹ Jobs"}</span>
           </Link>
+          {/* A divider between the back link and the name on a desktop (Coy, 2026-10-10: "jobs | (job name)"). */}
+          <span aria-hidden="true" className="hidden lg:inline-block shrink-0" style={{ width: 1, height: 16, background: T.hairStrong }} />
           {typeof title === "string" && editing
             ? (
               <input autoFocus defaultValue={String(shownTitle)} aria-label="Job name" className="sc-job-name rounded px-1.5 outline-none"
@@ -190,7 +193,9 @@ export function JobHeaderRow({ jobId, active, title, after, sub, customerId, sub
         </div>
         {sub && <div className="text-center lg:text-left" style={{ fontSize: 11, color: T.ink3, overflowWrap: "anywhere", marginTop: 1 }}>{sub}</div>}
       </div>
-      <div className="flex justify-center w-full lg:w-auto shrink-0 lg:ml-auto"><JobTabs jobId={jobId} active={active} subnav={subnav} /></div>
+      <div className="flex justify-center items-center gap-2 w-full lg:w-auto shrink-0 lg:ml-auto"><JobTabs jobId={jobId} active={active} subnav={subnav} />
+        {/* Dusty on the desktop, since the header's button left for the pages' own (Coy, 2026-10-10); the phone has him in the footer. */}
+        {!access.limited && <span className="hidden lg:inline-flex"><DustyPageButton /></span>}</div>
       <JobSwitcher open={switching} onClose={() => setSwitching(false)} jobId={jobId} href={viewHref} />
     </div>
   );

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import Image from "next/image";
+import { Emblem } from "@/components/site/marks";
 import { X, Send, Check } from "lucide-react";
 
 // ─── Schema-based gating ────────────────────────────────────────
@@ -285,7 +285,7 @@ export default function DustyChatPage() {
       <header className="flex items-center justify-between px-6 py-4 shrink-0" style={{ borderBottom: `1px solid ${IQ.border}` }}>
         <div className="flex items-center gap-3">
           <div className="relative w-9 h-9 rounded-full overflow-hidden">
-            <Image src="/dusty/lander/dusty-static.svg" alt="Dusty" fill unoptimized className="object-contain" />
+            <Emblem size={36} spin />
           </div>
           <div>
             <div style={{ color: IQ.textPrimary, fontWeight: 700, fontSize: 15 }}>Dusty</div>

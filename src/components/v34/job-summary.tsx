@@ -15,6 +15,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { T, F, disp, eyebrow, nums, money, money0, formatPhone } from "@/lib/v34/tokens";
 import { EmptyState } from "@/components/v34/primitives";
+import { AddressInput } from "@/components/v34/address-input";
 import { JobChips } from "@/components/v34/job-chips";
 import { BidStrip } from "@/components/v34/bid-strip";
 import { JobHeaderRow } from "@/components/v34/job-tabs";
@@ -50,7 +51,7 @@ interface BudgetData {
 }
 interface ProposalLink {
   id: string; status: string; decided_name?: string | null; decided_at?: string | null; sent_at: string | null; sent_via: string[] | null; view_count: number;
-  last_viewed_at: string | null; revoked_at: string | null; created_at: string; version: { version: number } | null;
+  last_viewed_at: string | null; revoked_at: string | null; created_at: string; version: { version: number } | null; number?: string | null;
 }
 const PLACEHOLDER_TITLES = new Set(["New job", "Untitled scope"]);
 
@@ -133,7 +134,7 @@ export function JobSummary({ jobId }: { jobId: string }) {
             <div style={{ color: who ? T.ink : T.hiviz, fontWeight: 600 }}>
               {who ? <Link href={`/dashboard/messages/${contact!.id}`} style={{ color: T.ink }}>{who}</Link> : "Not attached to a customer yet"}
             </div>
-            {job.address && <div>{job.address}</div>}
+            <JobAddress jobId={jobId} address={job.address} onSaved={() => void reload()} />
             {job.created_at && <div>Created {day(job.created_at, true)}
               {job.origin === "classification" ? " · made when filed as a customer" : job.created_from_message_id ? " · drafted from a message" : ""}</div>}
             <div>{sections.length} section{sections.length === 1 ? "" : "s"}</div>
@@ -280,7 +281,7 @@ function ProposalState({ jobId, links, card, onWon }: {
       {links === null ? <div className="rounded animate-pulse mt-2" style={{ height: 40, background: T.hairSoft }} />
         : live ? (
           <div style={{ fontSize: F.sm, color: T.ink, marginTop: 6, lineHeight: 1.5 }}>
-            <b>v{live.version?.version ?? "?"} final</b> · {live.sent_at ? `sent ${day(live.sent_at)}${live.sent_via?.length ? ` · ${live.sent_via.map((v) => (v === "copy" ? "link copied" : v === "text" ? "by text" : "by email")).join(", ")}` : ""}` : "link made, not sent yet"}
+            <b>{live.number ?? `v${live.version?.version ?? "?"}`} final</b> · {live.sent_at ? `sent ${day(live.sent_at)}${live.sent_via?.length ? ` · ${live.sent_via.map((v) => (v === "copy" ? "link copied" : v === "text" ? "by text" : "by email")).join(", ")}` : ""}` : "link made, not sent yet"}
             <div style={{ color: live.view_count ? T.green : T.ink2 }}>{viewLine(live)}</div>
             {signed && <div style={{ color: T.green, fontWeight: 600 }}>✓ {signed} — on the link</div>}
           </div>
@@ -416,7 +417,7 @@ function WonCard({ jobId, job, contract, card, onChange }: {
           </div>
           <div style={{ fontSize: F.xs, color: T.ink2, marginTop: 2, lineHeight: 1.5, ...nums }}>
             <Link href={`/dashboard/scope/${jobId}/proposal`} style={{ color: T.chalk }}>
-              {contract.number ?? "Proposal"} v{contract.version}
+              Proposal {contract.number ?? `v${contract.version}`}
             </Link>{contract.finalized_at ? ` · final ${day(contract.finalized_at)}` : ""}{contract.total != null ? ` · ${money0(contract.total)}` : ""}
             {contract.change_order_count > 0 && ` + ${contract.change_order_count} signed change order${contract.change_order_count === 1 ? "" : "s"} ${money0(contract.change_orders)}`}
           </div>
@@ -438,5 +439,46 @@ function WonCard({ jobId, job, contract, card, onChange }: {
       )}
       {err && <div style={{ fontSize: F.xs, color: T.red, marginTop: 4 }}>{err}</div>}
     </section>
+  );
+}
+
+/** The job's address, added or changed here (Coy, 2026-10-10: "I currently
+ *  have no way to add or edit an address for a new or existing job"): the
+ *  Map's address finder (Mapbox) fills street, city, state and zip; saved
+ *  through the job's own PATCH. */
+function JobAddress({ jobId, address, onSaved }: { jobId: string; address: string | null; onSaved: () => void }) {
+  const [editing, setEditing] = useState(false);
+  const [v, setV] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const save = async (body: Record<string, string | null>) => {
+    setBusy(true); setErr(null);
+    try { await send(`/api/jobs/${jobId}`, "PATCH", body); setEditing(false); onSaved(); }
+    catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(false); }
+  };
+  if (!editing) return (
+    <div className="flex items-baseline gap-2">
+      <span style={{ color: address ? T.ink2 : T.ink3 }}>{address || "No address yet"}</span>
+      <button onClick={() => { setV(address ?? ""); setEditing(true); }}
+        style={{ ...eyebrow, fontSize: 10.5, color: T.chalk, cursor: "pointer", background: "none", border: "none", padding: 0 }}>
+        {address ? "✎ Change" : "+ Add address"}
+      </button>
+    </div>
+  );
+  return (
+    <div className="flex flex-col gap-1.5" style={{ maxWidth: 520, margin: "2px 0 4px" }}>
+      <AddressInput value={v} onChange={setV}
+        style={{ width: "100%", height: 34, padding: "0 10px", border: `1px solid ${T.hairStrong}`, borderRadius: 3, background: T.card, color: T.ink, fontSize: 14 }}
+        onPick={(m) => void save({ address: m.line1, city: m.city ?? null, state: m.state ?? null, zip: m.zip ?? null })} />
+      <span style={{ fontSize: 11, color: T.ink3 }}>Start typing — pick the address from the list.</span>
+      <span className="flex gap-2">
+        <button disabled={busy || !v.trim()} onClick={() => void save({ address: v.trim() })} className="rounded px-3"
+          style={{ height: 30, background: T.ink, color: T.card, fontWeight: 600, cursor: "pointer", border: "none" }}>{busy ? "Saving…" : "Save as typed"}</button>
+        <button onClick={() => setEditing(false)} className="rounded px-3"
+          style={{ height: 30, border: `1px solid ${T.hair}`, background: T.card, color: T.ink, cursor: "pointer" }}>Cancel</button>
+      </span>
+      {err && <span style={{ color: T.red, fontSize: 11 }}>{err}</span>}
+    </div>
   );
 }

@@ -110,7 +110,7 @@ export function ContactsPage() {
 
   return (
     <>
-    <PageHeader title="Contacts" count={rows ? rows.length : null}
+    <PageHeader dusty={false} title="Contacts" count={rows ? rows.length : null}
       sub="Every person's numbers, emails and address in one book — whoever they are to you."
       actions={<>
         <select value={sort} onChange={(e) => setSortSaved(e.target.value as BookSort)} aria-label="Sort" style={{ ...field, width: "auto", height: 30 }}>

@@ -13,7 +13,7 @@
  * included, as a list), a **folder column** on the left (a drawer on a phone)
  * — All files, Recent, each kind of file, and every job, customer, vendor and
  * person with files — the search bar at the top of the content, one **filter
- * bar** (type, way in, job, customer, vendor, person, when) with the filters
+ * bar** (type, input type, job, customer, vendor, person, when) with the filters
  * in use as chips, and the org's **storage** used and left under the folders.
  * Folders and the switch are settings of the one filter (`files-filter.ts`,
  * `files-view.ts`), so the address still carries the view and can be linked.
@@ -27,6 +27,8 @@ import { T, F, disp, eyebrow, clip, relTime, nums } from "@/lib/v34/tokens";
 import { Drawer, MenuButton, PageHeader, SearchBubble, SearchToggle, Segmented } from "@/components/v34/primitives";
 import { FileDetails, fileSub, patchFile, type FileRow } from "@/components/v34/files-panel";
 import { FilePreview } from "@/components/v34/file-preview";
+import dynamic from "next/dynamic";
+const FinalProposalPreview = dynamic(() => import("@/components/v34/proposal/final-preview").then((m) => m.FinalProposalPreview), { ssr: false });
 import { EmailList } from "@/components/v34/email-sheet";
 import { useWide } from "@/lib/v34/use-wide";
 import { CATEGORIES, CATEGORY_LABEL, sizeLabel } from "@/lib/files";
@@ -68,6 +70,9 @@ export function FilesPage({ fixed, embedded, extra }: { fixed?: Partial<FileFilt
   const [proposals, setProposals] = useState<Array<{ id: string; job_id: string; version: number; finalized_at: string; number: string | null; total: number | null; title: string | null; customer: string | null }>>([]);
   const [err, setErr] = useState<string | null>(null);
   const [open, setOpen] = useState<FileRow | null>(null);
+  // A final proposal opens in the same preview (Coy, 2026-10-10), the document as sent.
+  type PropRow = { id: string; job_id: string; version: number; finalized_at: string; number: string | null; total: number | null; title: string | null; customer: string | null };
+  const [openProp, setOpenProp] = useState<PropRow | null>(null);
   // The preview panel (Coy, 2026-10-07): on a desktop a column on the right of
   // the files, its width dragged and kept on the device; on a phone the whole
   // screen, with Files › folder › name at the top to get back.
@@ -82,7 +87,10 @@ export function FilesPage({ fixed, embedded, extra }: { fixed?: Partial<FileFilt
     });
   }, []);
   const setPreview = (on: boolean) => { setPreviewState(on); try { localStorage.setItem("sc:files-preview", on ? "1" : "0"); } catch { /* storage off */ } };
-  const pickFile = (f: FileRow) => { setOpen(f); setPreview(true); setFull(false); };
+  const pickFile = (f: FileRow) => { setOpen(f); setOpenProp(null); setPreview(true); setFull(false); };
+  const pickProp = (r: PropRow) => { setOpenProp(r); setOpen(null); setPreview(true); setFull(false); };
+  const propName = (r: PropRow) => `Proposal ${r.number ?? `v${r.version}`} · ${r.title || "Untitled job"}`;
+  const propSub = (r: PropRow) => [r.customer, new Date(r.finalized_at).toLocaleDateString(), r.total !== null ? r.total.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }) : null].filter(Boolean).join(" · ");
   const [saveErr, setSaveErr] = useState<string | null>(null);
   /** A file changed from the list or the preview's header (its name, its kind). */
   const saveFile = async (id: string, patch: Record<string, unknown>) => {
@@ -185,7 +193,7 @@ export function FilesPage({ fixed, embedded, extra }: { fixed?: Partial<FileFilt
   const pick = (k: keyof FileFilter) => (v: string) => set({ [k]: v } as Partial<FileFilter>);
   const filterGroups: FilterGroup[] = [
     ...(!photos ? [{ key: "kind", label: "Type", any: "Any type", value: flt.kind, options: FILE_KINDS.map(([v, l]) => ({ v, l })), onPick: pick("kind") }] : []),
-    { key: "source", label: "Way in", any: "Any way in", value: flt.source, options: FILE_SOURCES.map(([v, l]) => ({ v, l })), onPick: pick("source") },
+    { key: "source", label: "Input type", any: "Any input type", value: flt.source, options: FILE_SOURCES.map(([v, l]) => ({ v, l })), onPick: pick("source") },
     { key: "job", label: "Job", any: "Any job", value: flt.job, options: facetOpts(facets?.jobs), onPick: pick("job") },
     ...(!fixed?.customer ? [{ key: "customer", label: "Customer", any: "Any customer", value: flt.customer, options: facetOpts(facets?.customers), onPick: pick("customer") }] : []),
     ...(!fixed?.contact ? [
@@ -468,15 +476,15 @@ export function FilesPage({ fixed, embedded, extra }: { fixed?: Partial<FileFilt
             <div className="rounded overflow-hidden" style={panel}>
               <div className="px-3 py-1.5" style={{ ...eyebrow, borderBottom: `1px solid ${T.hairSoft}` }}>Proposals sent · final</div>
               {proposals.map((r, i) => (
-                <Link key={r.id} href={`/dashboard/scope/${r.job_id}/proposal?v=${r.version}`} className="flex items-center gap-3 px-3 py-2 no-underline"
-                  style={{ borderTop: i ? `1px solid ${T.hairSoft}` : "none", color: T.ink }}>
+                <button key={r.id} type="button" onClick={() => pickProp(r)} className="w-full text-left flex items-center gap-3 px-3 py-2"
+                  style={{ borderTop: i ? `1px solid ${T.hairSoft}` : "none", color: T.ink, cursor: "pointer", background: openProp?.id === r.id ? T.hivizDim : "transparent" }}>
                   <span className="shrink-0 rounded flex items-center justify-center" style={{ width: 40, height: 40, background: T.hivizDim, color: T.hivizText, fontFamily: disp, fontSize: 11, fontWeight: 700 }}>PROP</span>
                   <span className="flex-1" style={{ minWidth: 0 }}>
                     <span style={{ display: "block", fontSize: F.sm, fontWeight: 600 }}>Proposal {r.number ?? `v${r.version}`} · {r.title || "Untitled job"}</span>
                     <span style={{ display: "block", fontSize: F.xs, color: T.ink3 }}>{[r.customer, new Date(r.finalized_at).toLocaleDateString()].filter(Boolean).join(" · ")}</span>
                   </span>
                   {r.total !== null && <span style={{ fontFamily: disp, fontSize: F.md, fontWeight: 600 }}>{r.total.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 })}</span>}
-                </Link>
+                </button>
               ))}
             </div>
           )}
@@ -515,14 +523,14 @@ export function FilesPage({ fixed, embedded, extra }: { fixed?: Partial<FileFilt
               style={{ position: "absolute", left: -1, top: 0, bottom: 0, width: 8, cursor: "col-resize", zIndex: 2, touchAction: "none" }} />
             <div className="flex items-start gap-2 px-4 py-2.5" style={{ borderBottom: `1px solid ${T.hairSoft}` }}>
               <div style={{ flex: 1, minWidth: 0 }}>
-                {open ? nameEdit(open, { fontFamily: disp, fontSize: F.md, fontWeight: 600 }) : <div style={{ fontFamily: disp, fontSize: F.md, fontWeight: 600 }}>Preview</div>}
-                <div style={{ fontSize: F.xs, color: T.ink3, ...clip }}>{open ? fileSub(open, true) : "Pick a file to see it here."}</div>
+                {open ? nameEdit(open, { fontFamily: disp, fontSize: F.md, fontWeight: 600 }) : <div style={{ fontFamily: disp, fontSize: F.md, fontWeight: 600, ...clip }}>{openProp ? propName(openProp) : "Preview"}</div>}
+                <div style={{ fontSize: F.xs, color: T.ink3, ...clip }}>{open ? fileSub(open, true) : openProp ? propSub(openProp) : "Pick a file to see it here."}</div>
                 {saveErr && <div style={{ fontSize: F.xs, color: T.red }}>{saveErr}</div>}
               </div>
               <button onClick={() => setPreview(false)} aria-label="Close the preview" style={{ fontSize: 20, lineHeight: 1, color: T.ink3, cursor: "pointer", padding: "0 4px" }}>×</button>
             </div>
             <div style={{ flex: 1, overflowY: "auto" }}>
-              {open ? details(open) : <div className="px-4 py-6" style={{ fontSize: F.sm, color: T.ink3 }}>Tap a file or photo and it opens here, beside the list.</div>}
+              {open ? details(open) : openProp ? <FinalProposalPreview key={openProp.id} id={openProp.id} jobId={openProp.job_id} version={openProp.version} /> : <div className="px-4 py-6" style={{ fontSize: F.sm, color: T.ink3 }}>Tap a file or photo and it opens here, beside the list.</div>}
             </div>
           </aside>
         )}
@@ -548,6 +556,18 @@ export function FilesPage({ fixed, embedded, extra }: { fixed?: Partial<FileFilt
             style={{ right: 14, bottom: "calc(14px + env(safe-area-inset-bottom))", width: 44, height: 44, zIndex: 71, background: T.ink, color: T.card, opacity: 0.85, cursor: "pointer", boxShadow: "0 2px 8px rgba(0,0,0,.25)" }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg>
           </button>
+        </div>
+      )}
+      {!wide && preview && openProp && !open && (
+        <div role="dialog" aria-label={propName(openProp)} className="fixed inset-0 flex flex-col" style={{ zIndex: 70, background: T.card, paddingTop: "env(safe-area-inset-top)", paddingBottom: "env(safe-area-inset-bottom)" }}>
+          <nav aria-label="Where this proposal is" className="flex items-center gap-1 px-3" style={{ minHeight: 48, borderBottom: `1px solid ${T.hair}`, fontSize: F.sm }}>
+            <button onClick={() => setPreview(false)} style={{ color: T.chalk, fontWeight: 600, cursor: "pointer", flexShrink: 0 }}>‹ Files</button>
+            <span aria-hidden="true" style={{ color: T.ink3 }}>›</span>
+            <span style={{ flex: 1, minWidth: 0, color: T.ink, fontWeight: 600, ...clip }}>{propName(openProp)}</span>
+            <button onClick={() => setPreview(false)} aria-label="Close" style={{ fontSize: 22, lineHeight: 1, color: T.ink3, cursor: "pointer", padding: "0 4px" }}>×</button>
+          </nav>
+          <div style={{ fontSize: F.xs, color: T.ink3, padding: "6px 16px 0" }}>{propSub(openProp)}</div>
+          <div style={{ flex: 1, overflowY: "auto" }}><FinalProposalPreview key={openProp.id} id={openProp.id} jobId={openProp.job_id} version={openProp.version} /></div>
         </div>
       )}
       {!wide && preview && open && full && (
@@ -601,7 +621,7 @@ type FilterGroup = {
 const dateInput: React.CSSProperties = { display: "block", width: "100%", height: 30, border: `1px solid ${T.hair}`, background: T.card, color: T.ink, fontSize: F.xs, borderRadius: 4, padding: "0 6px", marginTop: 2 };
 
 /** The filter as one icon (Coy, 2026-10-06: "an icon that opens a column list
- *  that opens sub options to the right of that column"): Type, Way in, Job …
+ *  that opens sub options to the right of that column"): Type, Input type, Job …
  *  down the left, the one tapped lists its choices on the right. */
 function FilterMenu({ groups, used, sheet }: { groups: FilterGroup[]; used: number; sheet?: boolean }) {
   const [open, setOpen] = useState(false);

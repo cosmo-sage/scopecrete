@@ -5,6 +5,7 @@ import { publicOrigin } from "@/lib/hosts";
 import { FILES_BUCKET } from "@/lib/files";
 import { linkAssets, newToken, publicSnapshot } from "@/lib/proposal-links";
 import { POST as finalize } from "../final/route";
+import { proposalNumbers } from "@/lib/proposal-number-server";
 
 /**
  * The customer's link to a FINAL proposal (migration 075).
@@ -41,12 +42,20 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   if (error) return applyCookies(NextResponse.json({ error: error.message }, { status: 500 }));
   const rows = (data ?? []) as unknown as Array<Record<string, unknown> & { id: string; token: string }>;
   const ids = rows.map((d) => d.id);
-  const { data: ev } = ids.length
-    ? await supabase.from("document_events").select("document_id, event, occurred_at, user_agent").eq("org_id", orgId).in("document_id", ids).order("occurred_at", { ascending: false }).limit(60)
-    : { data: [] };
+  const [{ data: ev }, numbers] = await Promise.all([
+    ids.length
+      ? supabase.from("document_events").select("document_id, event, occurred_at, user_agent").eq("org_id", orgId).in("document_id", ids).order("occurred_at", { ascending: false }).limit(60)
+      : Promise.resolve({ data: [] }),
+    proposalNumbers(supabase, orgId),
+  ]);
   const origin = publicOrigin(req.headers.get("host"), req.nextUrl.origin);
+  // Each link's proposal number, SE-26-0001-A (src/lib/proposal-number.ts).
+  const numberOf = (d: Record<string, unknown>) => {
+    const v = (d.version as { version?: number } | null)?.version;
+    return v ? numbers.number(id, v) : null;
+  };
   return applyCookies(NextResponse.json({
-    links: rows.map((d) => ({ ...d, url: `${origin}/p/${d.token}`, events: ((ev ?? []) as Array<{ document_id: string }>).filter((e) => e.document_id === d.id).slice(0, 20) })),
+    links: rows.map((d) => ({ ...d, number: numberOf(d), url: `${origin}/p/${d.token}`, events: ((ev ?? []) as Array<{ document_id: string }>).filter((e) => e.document_id === d.id).slice(0, 20) })),
   }));
 }
 

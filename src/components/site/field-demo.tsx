@@ -11,7 +11,7 @@
 
    Changes from the design, on purpose:
    - Tappable spans are buttons, so they work from a keyboard.
-   - Dusty is drawn inline (DustySVG) rather than from files.
+   - Dusty is the ScopeCrete emblem (2026-10-10), not the lander drawing.
    - The other rows on the Threads screen use made-up names:
      the design had borrowed a real prospect's name.
    - The budget is "Budget", not "Budget · Better": a job has
@@ -19,8 +19,7 @@
    ============================================================ */
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { DustySVG, type DustyMode } from "./dusty-svg";
-import { BeaconI, Emblem, disp, inter, lexend } from "./marks";
+import { Emblem, Wordmark, disp, lexend, emblemStateFor, type DustyMode } from "./marks";
 
 const body = "var(--site-body), 'IBM Plex Sans', system-ui, sans-serif";
 const figtree = "var(--site-figtree), 'Figtree', system-ui, sans-serif";
@@ -88,14 +87,14 @@ const chip: CSSProperties = {
   border: "1px solid var(--sc-hair)", display: "flex", alignItems: "center", fontSize: 11.5,
 };
 
+// Dusty is the ScopeCrete emblem (Coy, 2026-10-10), showing what he is doing
+// (Claude Design "Emblem States": listen → listening, sort → answering, scan →
+// reading, celebrate → done, alert → warn; still where he stood still).
 function Dusty({ mode, size }: { mode: DustyMode; size: number }) {
   return (
-    <span
-      aria-label="Dusty"
-      role="img"
-      style={{ display: "inline-flex", flex: "none", width: size, height: size }}
-      dangerouslySetInnerHTML={{ __html: DustySVG(mode, { size, title: false }) }}
-    />
+    <span aria-label="Dusty" role="img" style={{ display: "inline-flex", flex: "none", width: size, height: size }}>
+      <Emblem size={size} spin={mode !== "static"} state={emblemStateFor(mode)} />
+    </span>
   );
 }
 
@@ -120,11 +119,7 @@ function PhoneHead({ activity, work }: { activity: string; work: Work }) {
             2026-10-08); in the app this spot is the org's logo. */}
         <span style={{ display: "flex", alignItems: "center", gap: 8, flex: "none" }}>
           <Emblem size={24} spin />
-          <span style={{ display: "inline-flex", alignItems: "baseline" }}>
-            <span style={{ fontFamily: lexend, fontWeight: 700, fontSize: 20, lineHeight: 1, letterSpacing: ".02em", paddingBottom: ".28em", marginBottom: "-.28em", marginRight: 1, color: "transparent", backgroundImage: "repeating-linear-gradient(118deg,var(--sc-hatch) 0 .9px,transparent .9px 2.1px)", WebkitBackgroundClip: "text", backgroundClip: "text", WebkitTextStroke: ".5px var(--sc-hatch-edge)" }}>scope</span>
-            <span style={{ fontFamily: inter, fontWeight: 300, fontSize: 20, lineHeight: 1, letterSpacing: "-.01em", color: "var(--sc-crete)" }}>crete</span>
-            <span style={{ fontFamily: inter, fontWeight: 300, fontSize: 12, lineHeight: 1, color: "var(--sc-pencil-muted)", marginLeft: 1 }}>.a<BeaconI /></span>
-          </span>
+          <Wordmark size={20} />
         </span>
         <span style={{ flex: 1 }} />
         <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -147,7 +142,7 @@ function PhoneHead({ activity, work }: { activity: string; work: Work }) {
 }
 
 const FOOT_ICONS: Record<string, string> = {
-  dashboard: "M2.6 13.6a6.9 6.9 0 0 1 13.8 0M9.5 13.6l3.3-4.2M2.6 16.2h13.8",
+  dashboard: "M2.5 2.5h6v6h-6zM10.5 2.5h6v4h-6zM10.5 8.5h6v8h-6zM2.5 10.5h6v6h-6z",
   threads: "M2.6 4.4h13.8v8.4H8.9l-4 3v-3H2.6z",
   scope: "M3.4 5.4h12.2a1 1 0 0 1 1 1v6.2a1 1 0 0 1-1 1H3.4a1 1 0 0 1-1-1V6.4a1 1 0 0 1 1-1zM2.4 3.1h14.2M3.6 2.1v2M15.4 2.1v2",
   toolbox: "M3.2 7h12.6a1 1 0 0 1 1 1v6.6a1 1 0 0 1-1 1H3.2a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1zM6.8 7V4.6h5.4V7M2.2 10.6h14.6M8.2 10.6v1.6h2.6v-1.6",

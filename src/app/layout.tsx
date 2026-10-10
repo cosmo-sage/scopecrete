@@ -26,6 +26,15 @@ const figtree = localFont({
   display: "swap",
 });
 
+// The wordmark's face (Claude Design wordmark 2c, 2026-10-10) — on <html>
+// so the site, sign-in and every dashboard read --site-manrope.
+const manrope = localFont({
+  src: "../fonts/manrope-200-800.woff2",
+  weight: "200 800",
+  variable: "--site-manrope",
+  display: "swap",
+});
+
 const caveat = localFont({
   src: "../fonts/caveat-400-700.woff2",
   weight: "400 700",
@@ -50,10 +59,10 @@ export const metadata: Metadata = {
   // tabs don't play animated icons reliably.
   icons: {
     icon: [
-      { url: "/favicon.ico?v=4a", sizes: "any" },
-      { url: "/favicon.svg?v=4a", type: "image/svg+xml" },
+      { url: "/favicon.ico?v=4e", sizes: "any" },
+      { url: "/favicon.svg?v=4e", type: "image/svg+xml" },
     ],
-    apple: "/apple-touch-icon.png?v=4a",
+    apple: "/apple-touch-icon.png?v=4e",
   },
   manifest: "/site.webmanifest",
 };
@@ -64,14 +73,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${outfit.variable} ${jetbrainsMono.variable} ${figtree.variable} ${caveat.variable}`} suppressHydrationWarning>
+    <html lang="en" className={`${outfit.variable} ${jetbrainsMono.variable} ${figtree.variable} ${caveat.variable} ${manrope.variable}`} suppressHydrationWarning>
       <head>
         {/* The colour theme (Settings → Appearance) before first paint, so a
             dark theme never flashes cream. Saved per device by useTheme(). */}
         <script dangerouslySetInnerHTML={{ __html: "try{document.documentElement.dataset.theme=localStorage.getItem('sc-theme')||'site-office'}catch(e){}" }} />
         {/* Dusty's thought line switched off (Settings → Dusty (AI)): the header is
             one row from the first paint, so nothing jumps as the app loads. */}
-        <script dangerouslySetInnerHTML={{ __html: "try{var p=JSON.parse(localStorage.getItem('sc:prefs')||'{}');if((p.activity_line_phone===undefined?p.activity_line:p.activity_line_phone)===false)document.documentElement.dataset.activityPhone='off'}catch(e){}" }} />
+        <script dangerouslySetInnerHTML={{ __html: "try{var p=JSON.parse(localStorage.getItem('sc:prefs')||'{}');if((p.activity_line_phone===undefined?p.activity_line:p.activity_line_phone)===false)document.documentElement.dataset.activityPhone='off';if(p.rail_icons===true)document.documentElement.dataset.rail='icons'}catch(e){}" }} />
       </head>
       <body className="font-sans antialiased">
         {children}

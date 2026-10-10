@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
+import { COST_TYPES } from "@/lib/cost-cards";
 
-/** Rename a cost group or set its markup; delete one (its cards stay, ungrouped). */
+/** Rename a cost group, change its cost type or markup; delete one (its cards stay, ungrouped). */
 
 export const dynamic = "force-dynamic";
 
@@ -11,7 +12,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   if (!result.ok) return result.response;
   const { supabase, orgId, applyCookies } = result.session;
   const bad = (m: string, s = 400) => applyCookies(NextResponse.json({ error: m }, { status: s }));
-  let b: { name?: unknown; default_markup_pct?: unknown; sort_order?: unknown };
+  let b: { name?: unknown; default_markup_pct?: unknown; sort_order?: unknown; cost_type?: unknown };
   try { b = await req.json(); } catch { return bad("Body must be JSON."); }
   const patch: Record<string, unknown> = {};
   if ("name" in b) {
@@ -23,6 +24,10 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     const m = b.default_markup_pct === null || b.default_markup_pct === "" ? null : Number(b.default_markup_pct);
     if (m !== null && (!Number.isFinite(m) || m < 0 || m > 500)) return bad("Markup must be 0 to 500.");
     patch.default_markup_pct = m;
+  }
+  if ("cost_type" in b) {
+    if (!(COST_TYPES as readonly string[]).includes(String(b.cost_type))) return bad("Pick a cost type.");
+    patch.cost_type = b.cost_type;
   }
   if ("sort_order" in b && Number.isInteger(b.sort_order)) patch.sort_order = b.sort_order;
   if (!Object.keys(patch).length) return bad("Nothing to change.");

@@ -304,7 +304,7 @@ export const THEMES: Record<ThemeKey, Theme> = {
     "hatch": "rgba(236,231,221,.92)",
     "hatchEdge": "rgba(236,231,221,.6)",
     "guide": "rgba(221,216,206,.26)",
-    "crete": "#A8AFB8",
+    "crete": "#B8C0C9",
     "workDot": {
       "read": "#7FA8E0",
       "reply": "#F0B35A",

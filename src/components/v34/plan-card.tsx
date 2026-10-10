@@ -85,7 +85,12 @@ export function PlanCard({ jobId, actions, dropped, done }: { jobId: string | nu
         return a;
       });
       const b = recordSteps.length ? await applyRecords(edited) : [];
-      setResults([...a, ...b]); setState("done");
+      const all = [...a, ...b];
+      setResults(all); setState("done");
+      // Dusty's emblem plays "done" for a finished write; the chat's status line says what it did.
+      const ok = all.filter((r) => r.ok);
+      window.dispatchEvent(new CustomEvent("sc:dusty-done", { detail: { ok: ok.length > 0,
+        note: ok.length === 1 ? ok[0].text : ok.length ? `applied ${ok.length} of ${all.length} steps` : all[0]?.text ?? "nothing applied" } }));
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)); setState("idle"); }
   };
   return (

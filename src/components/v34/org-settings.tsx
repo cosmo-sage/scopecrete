@@ -1,13 +1,15 @@
 "use client";
 
 /**
- * Settings → You and Organisation (Claude Design handoff design/org-branding/;
+ * Settings → Account and Organization (Claude Design handoff design/org-branding/;
  * Coy on Vercel, 2026-09-30: "it should show User: Coy Sacco · Email ·
- * Organization", and rename the org and upload its logo).
+ * Organization", and rename the org and upload its logo). Since 2026-10-10
+ * each is a page of /dashboard/settings, the organization's parts in blocks:
+ * Name · Logo · Office and radius · People and permissions.
  *
  *   - You: your name and phone (✎ — PATCH /api/me; both go on the proposals
  *     you prepare), your email, the org and your role.
- *   - Organisation (owners edit; everyone else read-only, "Owners only"):
+ *   - Organization (owners edit; everyone else read-only, "Owners only"):
  *       Name → PATCH /api/org (sc_rename_org — the name lives once, orgs.name).
  *       Logo → two slots, light backgrounds (dark lettering) and dark
  *         backgrounds (light lettering, Night Shift). PNG / WebP are shrunk to
@@ -19,6 +21,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { T, F, disp, eyebrow, clip, strong } from "@/lib/v34/tokens";
+import { SettingsBlock } from "@/components/v34/settings/parts";
 import { sendBytes } from "@/components/v34/files-panel";
 import { usePref } from "@/lib/v34/prefs";
 import { ROLES, FIELD_PAGES, roleLabel, accessSummary } from "@/lib/access";
@@ -124,12 +127,11 @@ export function YouSection({ name, phone, email, orgName, role, onSaved }: {
   );
   return (
     <section>
-      <div style={eyebrow}>You</div>
-      <div className="mt-1">
+      <div>
         {row("User", <MineField field="name" value={name} label="name" placeholder="Your name" empty="No name yet" onSaved={onSaved} />)}
         {row("Phone", <MineField field="phone" value={phone} label="phone" placeholder="(225) 555-0123" empty="No phone yet" inputMode="tel" onSaved={onSaved} />)}
         {row("Email", <span style={{ color: T.ink2, ...clip, display: "block" }}>{email ?? "—"}</span>)}
-        {row("Organization", <span style={{ color: T.ink2 }}>{orgName ?? "—"}{role ? <span style={{ color: T.ink3 }}> · {role}</span> : null}</span>)}
+        {row("Organization", <span style={{ color: T.ink2 }}>{orgName ?? "—"}{role ? <span style={{ color: T.ink3 }}> · {roleLabel(role)}</span> : null}</span>)}
       </div>
       <div style={{ fontSize: F.xs, color: T.ink3, marginTop: 4 }}>Your name and phone go on the proposals you prepare.</div>
     </section>
@@ -152,9 +154,9 @@ export function OrgSection({ onChanged }: { onChanged: () => void }) {
     let off = false;
     fetch("/api/org").then(async (r) => ({ ok: r.ok, b: await r.json().catch(() => ({})) })).then(({ ok, b }) => {
       if (off) return;
-      if (!ok) { setLoadErr(b?.error ?? "Couldn't load the organisation."); return; }
+      if (!ok) { setLoadErr(b?.error ?? "Couldn't load the organization."); return; }
       setOrg(b.org); if (rev === 0) setDraft(b.org.name); setCanEdit(!!b.can_edit); setPeople(b.people ?? []); setAccessReady(!!b.access_ready);
-    }).catch(() => { if (!off) setLoadErr("Couldn't load the organisation."); });
+    }).catch(() => { if (!off) setLoadErr("Couldn't load the organization."); });
     return () => { off = true; };
   }, [rev]);
 
@@ -194,51 +196,53 @@ export function OrgSection({ onChanged }: { onChanged: () => void }) {
     setBusy(null);
   }
 
-  if (loadErr) return <section className="py-3"><div style={eyebrow}>Organisation</div><div style={{ fontSize: F.sm, color: T.red }}>{loadErr}</div></section>;
-  if (!org) return <section className="py-3"><div style={eyebrow}>Organisation</div><div style={{ fontSize: F.sm, color: T.ink3 }}>Loading…</div></section>;
+  if (loadErr) return <div style={{ fontSize: F.sm, color: T.red }}>{loadErr}</div>;
+  if (!org) return <div style={{ fontSize: F.sm, color: T.ink3 }}>Loading…</div>;
 
   const help = state === "saved" ? "Renamed — the header, Dusty and everything that reads the name now say it."
-    : dirty ? "Saving renames the organisation everywhere it appears."
+    : dirty ? "Saving renames the organization everywhere it appears."
     : "Shown in the header, to your team, and to Dusty; quotes and invoices will carry it.";
 
+  const ownersOnly = !canEdit ? <span style={{ ...eyebrow, color: T.ink3 }}>Owners only</span> : undefined;
   return (
-    <section className="py-3">
-      <div className="flex items-baseline">
-        <span className="flex-1" style={{ fontFamily: strong, fontWeight: 600, fontSize: F.md }}>Organisation</span>
-        {!canEdit && <span style={{ ...eyebrow, color: T.ink3 }}>Owners only</span>}
-      </div>
+    <div>
+      <SettingsBlock title="Name" note="Shown in the header, to your team, and to Dusty; quotes and invoices will carry it." action={ownersOnly}>
+        <div className="flex gap-1.5">
+          <input id="sc-org-name" aria-label="Organization name" value={draft} disabled={!canEdit} maxLength={120}
+            onChange={(e) => { setDraft(e.target.value); setState("idle"); setErr(null); }}
+            onKeyDown={(e) => { if (e.key === "Enter") void saveName(); }}
+            className="flex-1 min-w-0" style={{ height: 36, padding: "0 10px", borderRadius: 4, fontSize: F.md,
+              border: `1px solid ${dirty ? T.hivizSoft : T.hairStrong}`, background: T.card, color: T.ink }} />
+          {canEdit && (
+            <button onClick={() => void saveName()} disabled={!dirty || state === "saving"}
+              style={{ ...btn, fontSize: 13, height: 36, padding: "0 14px", border: "none", borderRadius: 4,
+                background: dirty ? T.hiviz : T.hairStrong, color: T.onHiviz, cursor: dirty ? "pointer" : "default" }}>
+              {state === "saving" ? "Saving…" : state === "saved" ? "Saved ✓" : "Save"}
+            </button>
+          )}
+        </div>
+        {(err || state === "saved" || dirty) && <div style={{ fontSize: F.xs, marginTop: 4, color: err ? T.red : state === "saved" ? T.green : T.ink3 }}>{err ?? help}</div>}
+      </SettingsBlock>
 
-      <label style={{ ...eyebrow, display: "block", marginTop: 10, color: T.ink2 }} htmlFor="sc-org-name">Name</label>
-      <div className="flex gap-1.5" style={{ marginTop: 4 }}>
-        <input id="sc-org-name" value={draft} disabled={!canEdit} maxLength={120}
-          onChange={(e) => { setDraft(e.target.value); setState("idle"); setErr(null); }}
-          onKeyDown={(e) => { if (e.key === "Enter") void saveName(); }}
-          className="flex-1 min-w-0" style={{ height: 36, padding: "0 10px", borderRadius: 4, fontSize: F.md,
-            border: `1px solid ${dirty ? T.hivizSoft : T.hairStrong}`, background: T.card, color: T.ink }} />
-        {canEdit && (
-          <button onClick={() => void saveName()} disabled={!dirty || state === "saving"}
-            style={{ ...btn, fontSize: 13, height: 36, padding: "0 14px", border: "none", borderRadius: 4,
-              background: dirty ? T.hiviz : T.hairStrong, color: T.onHiviz, cursor: dirty ? "pointer" : "default" }}>
-            {state === "saving" ? "Saving…" : state === "saved" ? "Saved ✓" : "Save"}
-          </button>
-        )}
-      </div>
-      <div style={{ fontSize: F.xs, marginTop: 4, color: err ? T.red : state === "saved" ? T.green : T.ink3 }}>{err ?? help}</div>
+      <SettingsBlock title="Logo" action={ownersOnly}
+        note={<>Transparent PNG, SVG or WebP, at least 600px wide. Shown 28px tall in the header with &ldquo;powered by scopecrete.ai&rdquo; beside it.</>}>
+        {(["light", "dark"] as const).map((v) => (
+          <LogoSlot key={v} variant={v} has={v === "light" ? org.logo_light : org.logo_dark} stamp={org.logo_stamp}
+            canEdit={canEdit} busy={busy === v} onPick={(f) => void upload(v, f)} onRemove={() => void remove(v)} />
+        ))}
+        <HeaderLogoSwitch />
+      </SettingsBlock>
 
-      <div style={{ ...eyebrow, marginTop: 12, color: T.ink2 }}>Logo</div>
-      {(["light", "dark"] as const).map((v) => (
-        <LogoSlot key={v} variant={v} has={v === "light" ? org.logo_light : org.logo_dark} stamp={org.logo_stamp}
-          canEdit={canEdit} busy={busy === v} onPick={(f) => void upload(v, f)} onRemove={() => void remove(v)} />
-      ))}
-      <div style={{ fontSize: F.xs, color: T.ink3, marginTop: 5 }}>
-        Transparent PNG, SVG or WebP, at least 600px wide. Shown 28px tall in the header with &ldquo;powered by scopecrete.ai&rdquo; beside it.
-      </div>
-      <HeaderLogoSwitch />
+      <SettingsBlock title="Office and radius" action={ownersOnly}
+        note="Where you work from. The Map opens on the office, with a ring at this radius.">
+        <OfficeSettings canEdit={canEdit} />
+      </SettingsBlock>
 
-      <OfficeSettings canEdit={canEdit} />
-
-      <People people={people} canEdit={canEdit} accessReady={accessReady} onChanged={() => setRev((n) => n + 1)} />
-    </section>
+      <SettingsBlock id="people" title="People and permissions"
+        note="Everyone in the organization and their role. Owners invite people and set what an onsite estimator can open: which pages and which jobs.">
+        <People people={people} canEdit={canEdit} accessReady={accessReady} onChanged={() => setRev((n) => n + 1)} />
+      </SettingsBlock>
+    </div>
   );
 }
 
@@ -281,8 +285,7 @@ function OfficeSettings({ canEdit }: { canEdit: boolean }) {
 
   const input: React.CSSProperties = { height: 36, padding: "0 10px", borderRadius: 4, fontSize: F.md, border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink, width: "100%" };
   return (
-    <div style={{ marginTop: 14 }}>
-      <div style={{ ...eyebrow, color: T.ink2 }}>Office</div>
+    <div>
       {ready === false ? (
         <div style={{ fontSize: F.xs, color: T.ink3, marginTop: 4 }}>The office and its radius wait for migration 098.</div>
       ) : ready === null ? (
@@ -314,7 +317,7 @@ function OfficeSettings({ canEdit }: { canEdit: boolean }) {
             </button>
           </div>
           <div style={{ fontSize: F.xs, marginTop: 4, color: err ? T.red : T.ink3 }}>
-            {err ?? "The Map opens on the office, with a ring at this radius. Blank radius: just the office."}
+            {err ?? "Blank radius: just the office."}
           </div>
         </>
       )}
@@ -373,6 +376,8 @@ function People({ people, canEdit, accessReady, onChanged }: { people: Person[];
         setOpen(true); setEditing(null); setMade(null);
         setDraft((d) => ({ ...d, role: "field", contact_id: pending!.contact_id }));
         if (pending!.email) setEmail(pending!.email);
+        // Settings → Organization opens at the top; bring People into view.
+        requestAnimationFrame(() => document.getElementById("people")?.scrollIntoView({ block: "start" }));
       });
     }
   }, [canEdit, accessReady]);
@@ -416,7 +421,7 @@ function People({ people, canEdit, accessReady, onChanged }: { people: Person[];
     if (r.ok) setTick((n) => n + 1); else setErr(((await r.json().catch(() => ({}))) as { error?: string }).error ?? "Couldn't withdraw it.");
   }
   async function remove(p: Person) {
-    if (!window.confirm(`Take ${p.name ?? p.email} out of the organisation? Their account stays; they stop seeing it.`)) return;
+    if (!window.confirm(`Take ${p.name ?? p.email} out of the organization? Their account stays; they stop seeing it.`)) return;
     const r = await fetch(`/api/org/members/${p.user_id}`, { method: "DELETE" });
     if (r.ok) onChanged(); else setErr(((await r.json().catch(() => ({}))) as { error?: string }).error ?? "Couldn't remove them.");
   }
@@ -436,8 +441,8 @@ function People({ people, canEdit, accessReady, onChanged }: { people: Person[];
 
   return (
     <>
-      <div className="flex items-center" style={{ marginTop: 12 }}>
-        <span className="flex-1" style={{ ...eyebrow, color: T.ink2 }}>People</span>
+      <div className="flex items-center" style={{ marginBottom: canEdit && !open ? 6 : 0 }}>
+        <span className="flex-1" />
         {canEdit && !open && <button onClick={() => { setOpen(true); setEditing(null); setMade(null); setDraft({ role: "member", contact_id: null, pages: ["files", "plan_room"], all_jobs: false, job_ids: [] }); }} style={small}>+ Invite</button>}
       </div>
       <div className="mt-1" style={{ border: `1px solid ${T.hair}`, borderRadius: 4, background: T.card }}>
@@ -454,7 +459,7 @@ function People({ people, canEdit, accessReady, onChanged }: { people: Person[];
               </div>
               {p.role && <span style={{ ...eyebrow, fontFamily: disp, color: T.ink2 }}>{roleLabel(p.role)}</span>}
               {canEdit && accessReady && editing !== p.user_id && <button onClick={() => startEdit(p)} aria-label={`Change ${p.name ?? p.email}'s access`} title="Change access" style={{ color: T.ink3, cursor: "pointer", padding: "0 4px" }}>✎</button>}
-              {canEdit && !p.you && <button onClick={() => void remove(p)} aria-label={`Remove ${p.name ?? p.email}`} title="Remove from the organisation" style={{ color: T.ink3, cursor: "pointer", padding: "0 4px" }}>×</button>}
+              {canEdit && !p.you && <button onClick={() => void remove(p)} aria-label={`Remove ${p.name ?? p.email}`} title="Remove from the organization" style={{ color: T.ink3, cursor: "pointer", padding: "0 4px" }}>×</button>}
             </div>
             {editing === p.user_id && (
               <div className="flex flex-col gap-2" style={{ padding: "4px 10px 10px", background: T.slab }}>

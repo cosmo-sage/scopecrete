@@ -11,6 +11,7 @@
 
 import React, { useEffect } from "react";
 import { T, F, disp, body, eyebrow, nums, clip, STATUS, StatusStyle } from "@/lib/v34/tokens";
+import { Emblem } from "@/components/site/marks";
 
 /* ------------------------------------------------------------ Badge/Avatar */
 
@@ -135,16 +136,12 @@ export const NavIcon = ({ k, on, color }: { k: string; on: boolean; color?: stri
   const p = { fill: "none", stroke: c, strokeWidth: 1.6, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
   if (k === "threads") return <svg {...box}><path {...p} d="M2.6 4.4h13.8v8.4H8.9l-4 3v-3H2.6z" /></svg>;
   if (k === "scope") return (
-    <svg {...box}>
-      <rect {...p} x="2.4" y="5.4" width="14.2" height="8.2" rx="1" />
-      <path {...p} d="M2.4 3.1h14.2M3.6 2.1v2M15.4 2.1v2" />
-    </svg>
+    // Claude Design rail icons 2d (2026-10-10): the foreman's clipboard with a tick.
+    <svg {...box}><path {...p} strokeWidth={1.5} d="M6 3.5H4.5v13h10v-13H13M7 2.5h5v2.5H7zM6.5 9l1.5 1.5 3-3M6.5 13.5h6" /></svg>
   );
   if (k === "scopebuilder") return (
-    <svg {...box}>
-      <path {...p} d="M2.6 15.8l3.2-1 9.4-9.4a1.6 1.6 0 0 0-2.2-2.2L3.6 12.6z" />
-      <path {...p} d="M11.6 4.6l2.2 2.2M10.4 15.8h6" />
-    </svg>
+    // Claude Design rail icons (2026-10-10): three steps joined into a flow.
+    <svg {...box}><path {...p} strokeWidth={1.5} d="M2.5 3.5h4.5v4H2.5zM12 3.5h4.5v4H12zM7.2 11.5h4.6v4H7.2zM7 5.5h5M4.7 7.5v6h2.5M14.3 7.5v6h-2.5" /></svg>
   );
   if (k === "customers") return (
     <svg {...box}>
@@ -166,10 +163,8 @@ export const NavIcon = ({ k, on, color }: { k: string; on: boolean; color?: stri
     </svg>
   );
   if (k === "dashboard") return (
-    <svg {...box}>
-      <path {...p} d="M2.6 13.6a6.9 6.9 0 0 1 13.8 0" />
-      <path {...p} d="M9.5 13.6l3.3-4.2M2.6 16.2h13.8" />
-    </svg>
+    // Claude Design rail icons (2026-10-10): four tiles in a masonry grid.
+    <svg {...box}><path {...p} strokeWidth={1.5} d="M2.5 2.5h6v6h-6zM10.5 2.5h6v4h-6zM10.5 8.5h6v8h-6zM2.5 10.5h6v6h-6z" /></svg>
   );
   if (k === "toolbox") return (
     <svg {...box}>
@@ -195,11 +190,13 @@ export const NavIcon = ({ k, on, color }: { k: string; on: boolean; color?: stri
       <path {...p} d="M6.8 2.8v11.6M12.2 5v11.6" />
     </svg>
   );
+  if (k === "admin") return (
+    // Claude Design "Admin Icon Options" 1b Pulse (2026-10-10): a heartbeat inside a ring.
+    <svg {...box}><path {...p} strokeWidth={1.5} d="M2.5 9.5h3l1.5-4 2.5 8 2-6 1.5 2h3.5M9.5 15.5a6.5 6.5 0 1 0-6.4-7.5" /></svg>
+  );
   if (k === "roadmap") return (
-    <svg {...box}>
-      <path {...p} d="M3 16.4V2.6M3 3.4h9.4l-1.8 2.8 1.8 2.8H3" />
-      <path {...p} d="M8.2 13.2l2.4-2.4 2.4 2.4M10.6 10.8v5.6" />
-    </svg>
+    // Claude Design rail icons 2e (2026-10-10): a signpost, two boards on one post.
+    <svg {...box}><path {...p} strokeWidth={1.5} d="M9.5 3v13.5M7 16.5h5M9.5 5.5H4L2.5 7 4 8.5h5.5M9.5 10.5H15l1.5 1.5-1.5 1.5H9.5" /></svg>
   );
   if (k === "vendors") return (
     <svg {...box}>
@@ -218,7 +215,7 @@ export const NavIcon = ({ k, on, color }: { k: string; on: boolean; color?: stri
 
 /* ------------------------------------------------------------------ Drawer */
 
-export function Drawer({ open, onClose, title, sub, right, children, hideClose, full, below, wide, left, cover }: {
+export function Drawer({ open, onClose, title, sub, right, children, hideClose, full, below, wide, left, cover, drop }: {
   open: boolean; onClose: () => void; title: string; sub?: string;
   right?: React.ReactNode; children: React.ReactNode;
   hideClose?: boolean; full?: boolean; below?: boolean; wide?: boolean;
@@ -226,6 +223,9 @@ export function Drawer({ open, onClose, title, sub, right, children, hideClose, 
   cover?: boolean;
   /** Comes in from the left, where its ☰ is (Coy, 2026-10-09: folders). */
   left?: boolean;
+  /** Slides DOWN from the page's subheader, the page's own width, beside Dusty
+   *  when he is docked (Coy, 2026-10-10: the bid request and the import). */
+  drop?: boolean;
 }) {
   useEffect(() => {
     if (!open) return;
@@ -243,12 +243,12 @@ export function Drawer({ open, onClose, title, sub, right, children, hideClose, 
        wide as the work needs — a table to check before saving. */
     // sc-drawer: on a desktop with Dusty docked it opens in the page beside
     // him, between the rail and his column — never under him (Coy, 2026-10-01).
-    <div className={`fixed left-0 right-0 bottom-0 sc-drawer ${full ? "z-30" : "z-50"}`}
-      style={{ top: full || below ? "var(--sc-head)" : 0, background: full ? "transparent" : "rgba(18,22,26,.44)" }}
+    <div className={drop ? "fixed bottom-0 sc-drop-panel z-30" : `fixed left-0 right-0 bottom-0 sc-drawer ${full ? "z-30" : "z-50"}`}
+      style={drop ? { background: "rgba(18,22,26,.32)" } : { top: full || below ? "var(--sc-head)" : 0, background: full ? "transparent" : "rgba(18,22,26,.44)" }}
       onClick={full ? undefined : onClose}>
       <div onClick={(e) => e.stopPropagation()} role="dialog" aria-label={title}
-        className={`absolute top-0 bottom-0 flex flex-col ${full ? "left-0 right-0" : left ? "left-0 sc-drawer-in-left" : "right-0 sc-drawer-in-right"}`}
-        style={{ width: full ? "auto" : cover ? "100%" : wide ? "min(1180px, 100%)" : "min(408px, 90%)", background: T.card,
+        className={drop ? "absolute top-0 left-0 right-0 flex flex-col sc-drop-in" : `absolute top-0 bottom-0 flex flex-col ${full ? "left-0 right-0" : left ? "left-0 sc-drawer-in-left" : "right-0 sc-drawer-in-right"}`}
+        style={drop ? { maxHeight: "100%", background: T.card, boxShadow: "0 14px 40px rgba(10,14,18,.22)", borderBottom: `1px solid ${T.hair}` } : { width: full ? "auto" : cover ? "100%" : wide ? "min(1180px, 100%)" : "min(408px, 90%)", background: T.card,
                  boxShadow: full ? "none" : left ? "14px 0 40px rgba(10,14,18,.22)" : "-14px 0 40px rgba(10,14,18,.22)" }}>
 
         <div className="sticky top-0 z-10 shrink-0 px-4 flex items-center gap-3"
@@ -458,9 +458,25 @@ export function InfoTip({ text, label = "About this page" }: { text: React.React
   );
 }
 
-export function PageHeader({ title, count, sub, menu, actions, children, width }: {
+/** Dusty, as the ScopeCrete emblem, on the page's own header (Coy,
+ *  2026-10-10: "remove the AI emblem from the main header and move it down to
+ *  the header of every main menu page"): opens his chat on this page, with the
+ *  page's own quick selects (quickFor(), src/lib/dusty/quick.ts). */
+export function DustyPageButton({ onClick, label = "Ask Dusty" }: { onClick?: () => void; label?: string }) {
+  return (
+    <button type="button" onClick={onClick ?? (() => window.dispatchEvent(new Event("sc:dusty-toggle")))}
+      className="shrink-0 flex items-center justify-center rounded" aria-label={label} title={label}
+      style={{ width: 34, height: 34, border: `1px solid ${T.hiviz}`, background: T.card, cursor: "pointer" }}>
+      <Emblem size={22} spin />
+    </button>
+  );
+}
+
+export function PageHeader({ title, count, sub, menu, actions, children, width, dusty = true }: {
   title: React.ReactNode; count?: React.ReactNode; sub?: React.ReactNode; menu?: React.ReactNode;
   actions?: React.ReactNode; children?: React.ReactNode; width?: number;
+  /** The emblem on the right, opening Dusty — off where the page draws its own (Jobs, Contacts). */
+  dusty?: boolean;
 }) {
   // Its height, for anything else on the page that sticks below it (Files'
   // folder column): --sc-subhead.
@@ -473,24 +489,27 @@ export function PageHeader({ title, count, sub, menu, actions, children, width }
     ro.observe(el);
     return () => { ro.disconnect(); root.style.removeProperty("--sc-subhead"); };
   }, []);
-  // The org's name on top, a little bigger; the page's name small under it,
-  // its description behind ⓘ (Coy, 2026-10-06).
+  // The org's name and the page's on one line, a green dot between (Coy,
+  // 2026-10-10: "Sacco Enterprises • PRICE BOOK"): the org in the wordmark's
+  // Manrope and "crete" grey, lighter than "crete". No ⓘ (`sub` is kept for
+  // callers, not shown).
+  void sub;
   return (
     <div ref={ref} className="sc-subhead">
       <div className="mx-auto" style={{ maxWidth: width }}>
         <div className="flex items-center gap-2" style={{ minWidth: 0 }}>
           {menu}
           <div className="sc-subhead-names" style={{ minWidth: 0, flexShrink: 1 }}>
-            {org && <div className="sc-subhead-org" style={{ fontFamily: disp, fontWeight: 600, lineHeight: 1.1, color: T.ink, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{org}</div>}
-            {org && <span className="sc-subhead-sep" aria-hidden="true">|</span>}
+            {org && <div className="sc-subhead-org" style={{ fontFamily: "var(--site-manrope), 'Manrope', system-ui, sans-serif", fontWeight: 300, lineHeight: 1.1, color: "var(--sc-crete, #5A6068)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{org}</div>}
+            {org && <span className="sc-subhead-sep" aria-hidden="true" />}
             <h1 className="sc-subhead-title flex items-center gap-1.5" style={{ fontFamily: disp, fontWeight: 600, margin: 0, lineHeight: 1.15, color: org ? T.ink2 : T.ink, textTransform: "uppercase", letterSpacing: ".06em", whiteSpace: "nowrap" }}>
               <span>{title}</span>
               {count != null && count !== "" && <span className="sc-subhead-count" style={{ ...nums, fontWeight: 500, color: T.ink3, letterSpacing: 0 }}>{count}</span>}
-              {sub && <InfoTip text={sub} />}
             </h1>
           </div>
           <span style={{ flex: 1 }} />
           {actions}
+          {dusty && <DustyPageButton />}
         </div>
         {children}
       </div>

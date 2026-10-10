@@ -82,6 +82,8 @@ export function SharedProposal({ token }: { token: string }) {
       const sig = (b.signature ?? null) as Sig | null;
       vm.signature = sig;
       setState({ vm, own: !!b.own, org: b.org_name, sig, canSign: !!b.can_sign });
+      // The tab and a saved PDF carry the number the customer was sent (SE-26-0001-A, or an older frozen "P-2").
+      if (vm.number) document.title = `Proposal ${vm.number}${b.org_name ? ` · ${b.org_name}` : ""}`;
     }).catch(() => { if (!off) setState({ err: "Couldn't reach the proposal. Check your connection and try again." }); });
     return () => { off = true; };
   }, [token, reload]);

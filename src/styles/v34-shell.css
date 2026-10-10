@@ -126,7 +126,7 @@ html[data-activity-phone="off"] { --sc-head: 54px; }
 
 /* ------------------------------------------------------------- the footer */
 
-.sc-tab { -webkit-tap-highlight-color: transparent; }
+.sc-tab { -webkit-tap-highlight-color: transparent; min-width: 0; }
 .sc-tab-ico { display: block; transition: transform 160ms cubic-bezier(0.22, 0.9, 0.24, 1); }
 .sc-tab:active .sc-tab-ico { transform: scale(0.84); }
 .sc-tab-lbl { transition: color 160ms linear; }
@@ -204,13 +204,13 @@ html[data-activity-phone="off"] { --sc-head: 54px; }
 @media (min-width: 1024px) {
   .sc-with-dusty { padding-right: var(--sc-dusty); }
   /* A sheet opened while Dusty is docked lands in the page beside him. */
-  html[data-dusty="open"] .sc-drawer { right: var(--sc-dusty) !important; left: 84px !important; top: var(--sc-head) !important; }
+  html[data-dusty="open"] .sc-drawer { right: var(--sc-dusty) !important; left: var(--sc-rail-w) !important; top: var(--sc-head) !important; }
   /* The plan sheets beside the budget (2026-10-02): the right part of the page, the budget left of it, Dusty right of it. */
-  .sc-sheets { left: calc(84px + (100vw - 84px) * .42) !important; }
-  html[data-dusty="open"] .sc-sheets { right: var(--sc-dusty) !important; left: calc(84px + (100vw - 84px - var(--sc-dusty)) * .38) !important; }
+  .sc-sheets { left: calc(var(--sc-rail-w) + (100vw - var(--sc-rail-w)) * .42) !important; }
+  html[data-dusty="open"] .sc-sheets { right: var(--sc-dusty) !important; left: calc(var(--sc-rail-w) + (100vw - var(--sc-rail-w) - var(--sc-dusty)) * .38) !important; }
   /* …and the page itself narrows to the room left of it, so nothing is hidden underneath. */
-  html[data-sheets="open"] main { padding-right: calc((100vw - 84px) * .58) !important; }
-  html[data-sheets="open"][data-dusty="open"] main { padding-right: calc(var(--sc-dusty) + (100vw - 84px - var(--sc-dusty)) * .62) !important; }
+  html[data-sheets="open"] main { padding-right: calc((100vw - var(--sc-rail-w)) * .58) !important; }
+  html[data-sheets="open"][data-dusty="open"] main { padding-right: calc(var(--sc-dusty) + (100vw - var(--sc-rail-w) - var(--sc-dusty)) * .62) !important; }
 }
 /* The activity dot's colour and rhythm say what kind of work it is
    (Coy, 2026-09-30): reading someone — slow blue breath; Dusty answering —
@@ -237,9 +237,6 @@ html[data-activity-phone="off"] { --sc-head: 54px; }
 .sc-dots > span { animation-name: scDotStep; animation-timing-function: ease-out; animation-iteration-count: infinite; opacity: .25; }
 .sc-dots-warn > span { animation: none; opacity: 1; }
 @media (prefers-reduced-motion: reduce) { .sc-dots > span { animation: none; opacity: .8; } }
-/* Dusty's sprite changes crossfade (the pack's 200 ms). */
-@keyframes scDustyIn { from { opacity: 0; } to { opacity: 1; } }
-.sc-dusty { animation: scDustyIn 0.2s ease-out; }
 /* The Toolbox drawer: rises from just above the phone footer. */
 @keyframes scToolUp { from { transform: translateY(100%); opacity: 0; } to { transform: none; opacity: 1; } }
 .sc-tool-up { animation: scToolUp 0.2s cubic-bezier(0.22, 0.85, 0.3, 1); }
@@ -293,7 +290,6 @@ html[data-activity-phone="off"] { --sc-head: 54px; }
   .sc-dia-read,
   .sc-dia-reply,
   .sc-dia-done,
-  .sc-dusty,
   .sc-tool-up { animation: none; }
 }
 
@@ -339,7 +335,7 @@ html[data-activity-phone="off"] { --sc-head: 54px; }
   color-scheme: light;
 }
 [data-theme="night-shift"] {
-  --sc-slab:#1B1D1F; --sc-card:#232629; --sc-sunk:#2D3135; --sc-ink:#ECE7DD; --sc-ink2:#B5AEA2; --sc-ink3:#8E887E; --sc-hair:#363B40; --sc-hair-soft:#2C3034; --sc-hair-strong:#474D53; --sc-hiviz:#F07A3A; --sc-on-hiviz:#1B1D1F; --sc-hiviz-dim:#3A2A20; --sc-hiviz-soft:#F07A3A; --sc-hiviz-text:#F4A071; --sc-chalk:#8DB2EA; --sc-chalk-dim:#22324A; --sc-green:#5FBF8A; --sc-violet:#A995E6; --sc-red:#F08A76; --sc-teal:#5EC2C8; --sc-bucket-unsorted:#F07A3A; --sc-bucket-customer:#5FBF8A; --sc-bucket-vendor:#7FA8E0; --sc-bucket-personal:#A995E6; --sc-bucket-spam:#F08A76; --sc-out-bg:#3A2A20; --sc-out-ink:#ECE7DD; --sc-dusty-tint:#2F2621; --sc-dusty-text:#F4A071; --sc-dusty-edge:#F07A3A; --sc-rail:#16181A; --sc-rail-active:#232629; --sc-rail-ink:#8E887E; --sc-rail-ink-on:#ECE7DD; --sc-paper:#202326; --sc-paper-grid:rgba(140,170,200,.09); --sc-pencil:#DDD8CE; --sc-pencil-muted:#A39D93; --sc-pencil-line:rgba(221,216,206,.22); --sc-paper-btn:rgba(255,255,255,.04); --sc-hatch:rgba(236,231,221,.92); --sc-hatch-edge:rgba(236,231,221,.6); --sc-guide:rgba(221,216,206,.26); --sc-crete:#A8AFB8; --sc-work-dot-read:#7FA8E0; --sc-work-dot-reply:#F0B35A; --sc-work-dot-done:#5FBF8A; --sc-work-dot-warn:#F08A76; --sc-work-dot-idle:#5E5A54; --sc-font-disp:'Barlow Condensed', system-ui, sans-serif; --sc-font-body:'IBM Plex Sans', system-ui, sans-serif; --sc-font-strong:'Lexend', system-ui, sans-serif; --sc-font-light:'Inter', system-ui, sans-serif; --sc-font-hand:'Kalam', cursive;
+  --sc-slab:#1B1D1F; --sc-card:#232629; --sc-sunk:#2D3135; --sc-ink:#ECE7DD; --sc-ink2:#B5AEA2; --sc-ink3:#8E887E; --sc-hair:#363B40; --sc-hair-soft:#2C3034; --sc-hair-strong:#474D53; --sc-hiviz:#F07A3A; --sc-on-hiviz:#1B1D1F; --sc-hiviz-dim:#3A2A20; --sc-hiviz-soft:#F07A3A; --sc-hiviz-text:#F4A071; --sc-chalk:#8DB2EA; --sc-chalk-dim:#22324A; --sc-green:#5FBF8A; --sc-violet:#A995E6; --sc-red:#F08A76; --sc-teal:#5EC2C8; --sc-bucket-unsorted:#F07A3A; --sc-bucket-customer:#5FBF8A; --sc-bucket-vendor:#7FA8E0; --sc-bucket-personal:#A995E6; --sc-bucket-spam:#F08A76; --sc-out-bg:#3A2A20; --sc-out-ink:#ECE7DD; --sc-dusty-tint:#2F2621; --sc-dusty-text:#F4A071; --sc-dusty-edge:#F07A3A; --sc-rail:#16181A; --sc-rail-active:#232629; --sc-rail-ink:#8E887E; --sc-rail-ink-on:#ECE7DD; --sc-paper:#202326; --sc-paper-grid:rgba(140,170,200,.09); --sc-pencil:#DDD8CE; --sc-pencil-muted:#A39D93; --sc-pencil-line:rgba(221,216,206,.22); --sc-paper-btn:rgba(255,255,255,.04); --sc-hatch:rgba(236,231,221,.92); --sc-hatch-edge:rgba(236,231,221,.6); --sc-guide:rgba(221,216,206,.26); --sc-crete:#B8C0C9; --sc-work-dot-read:#7FA8E0; --sc-work-dot-reply:#F0B35A; --sc-work-dot-done:#5FBF8A; --sc-work-dot-warn:#F08A76; --sc-work-dot-idle:#5E5A54; --sc-font-disp:'Barlow Condensed', system-ui, sans-serif; --sc-font-body:'IBM Plex Sans', system-ui, sans-serif; --sc-font-strong:'Lexend', system-ui, sans-serif; --sc-font-light:'Inter', system-ui, sans-serif; --sc-font-hand:'Kalam', cursive;
   color-scheme: dark;
 }
 [data-theme="steel"] {
@@ -382,6 +378,14 @@ body { background: var(--sc-slab); color: var(--sc-ink); }
    time in Barlow Condensed. Coy, 2026-09-30: the draft paper is the logo row
    only — on a phone the line's own row is a solid colour. */
 .sc-activity-text { font-family: var(--sc-font-agent, 'Figtree', sans-serif); font-weight: 400; font-size: 13.5px; letter-spacing: -.01em; font-style: normal; color: var(--sc-pencil); }
+/* Dusty's words glow green like the wordmark's ".ai" (Coy, 2026-10-10), breathing on its rhythm; a warning keeps its own colour.
+   Later that day: a softer green, smaller, in the ".ai"'s Manrope. */
+.sc-activity-text { font-family: var(--site-manrope), 'Manrope', system-ui, sans-serif; font-weight: 500; font-size: 12px; letter-spacing: .01em; color: #4DB88C; animation: scGlowLine 3.2s ease-in-out infinite; }
+@keyframes scGlowLine {
+  0%, 100% { text-shadow: 0 0 2px rgba(77,184,140,.18) }
+  45%, 55% { text-shadow: 0 0 4px rgba(77,184,140,.45), 0 0 9px rgba(77,184,140,.2) }
+}
+@media (prefers-reduced-motion: reduce) { .sc-activity-text { animation: none; text-shadow: 0 0 3px rgba(77,184,140,.3); } }
 .sc-activity-row { background: var(--sc-paper); border-bottom: 1px solid var(--sc-pencil-line); }
 .sc-activity-time { font-family: var(--sc-font-disp, 'Barlow Condensed', sans-serif); font-weight: 500; font-size: 12px; letter-spacing: .08em; color: var(--sc-pencil-muted); }
 .sc-dot-read  { color: var(--sc-work-dot-read); background: var(--sc-work-dot-read) !important; }
@@ -412,11 +416,58 @@ body { background: var(--sc-slab); color: var(--sc-ink); }
 html[data-head-drop] .sc-head-wrap { z-index: 200 !important; }
 
 /* The rail follows the theme: light in Site Office and Blueprint, navy in
-   Kraft Yard, near-black in Night Shift. Icons are currentColor. */
-.sc-rail { background: var(--sc-rail); border-right: 1px solid var(--sc-hair); color: var(--sc-rail-ink); }
+   Kraft Yard, near-black in Night Shift.
+   Since 2026-10-10 (Claude Design "Rail Icon Colors") a sidebar: one 40px row
+   per page, icon and label, 232px wide; folded to icons it is 64px. */
+:root { --sc-rail-w: 232px; --sc-rail-row: 40px; --sc-icon-lift: 0%; }
+html[data-rail="icons"] { --sc-rail-w: 64px; }
+.sc-rail {
+  width: var(--sc-rail-w); background: var(--sc-rail); border-right: 1px solid var(--sc-hair); color: var(--sc-rail-ink);
+  padding: 8px 0; transition: width .25s ease; overflow-x: hidden;
+}
 .sc-rail a, .sc-rail button { color: var(--sc-rail-ink); }
-.sc-rail a[aria-current="page"], .sc-rail button[aria-pressed="true"] { background: var(--sc-rail-active); border-left-color: var(--sc-hiviz-soft) !important; color: var(--sc-rail-ink-on); }
-.sc-rail-label { font-family: var(--sc-font-disp, 'Barlow Condensed', sans-serif); font-weight: 500; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: inherit; text-align: center; line-height: 1.1; }
+.sc-rail-item {
+  position: relative; flex: none;
+  height: var(--sc-rail-row); margin: 0 8px; padding-left: 12px; border-radius: 4px;
+  display: flex; align-items: center; gap: 12px; text-decoration: none; cursor: pointer;
+}
+html[data-rail="icons"] .sc-rail-item { padding-left: 14px; }
+.sc-rail-item:hover, .sc-rail-item:focus-visible { background: var(--sc-rail-active); }
+.sc-rail .sc-rail-item[aria-current="page"] {
+  background: var(--sc-rail-active); color: var(--sc-rail-ink-on);
+  box-shadow: inset 3px 0 0 var(--sc-hiviz-soft);
+}
+/* The icon takes its colour from the book (--sc-icon on the row); the active
+   row draws it in full ink. On a dark rail a book colour is lifted toward the
+   rail's light ink so it doesn't sink into the rail (Chalk on Kraft Yard's navy). */
+.sc-rail-item > svg { flex: none; color: color-mix(in srgb, var(--sc-icon, currentColor) calc(100% - var(--sc-icon-lift)), var(--sc-rail-ink-on)) !important; }
+.sc-rail-item[data-plain] > svg, .sc-rail-item[aria-current="page"] > svg { color: currentColor !important; }
+[data-theme="kraft-yard"], [data-theme="steel"], [data-theme="signal"], [data-theme="kraft-clean"] { --sc-icon-lift: 45%; }
+.sc-rail-label {
+  font-family: var(--sc-font-disp, 'Barlow Condensed', sans-serif);
+  font-weight: 600; font-size: 13px; letter-spacing: .08em; text-transform: uppercase;
+  white-space: nowrap; color: inherit; line-height: 1; opacity: 1; transition: opacity .15s;
+}
+html[data-rail="icons"] .sc-rail-label { opacity: 0; pointer-events: none; }
+.sc-rail-badge { position: absolute !important; right: 12px; top: 12px; }
+html[data-rail="icons"] .sc-rail-badge { right: 6px; top: 4px; }
+.sc-rail-fold {
+  margin: auto 8px 0; flex: none; height: var(--sc-rail-row); padding-left: 12px;
+  border: 0; border-top: 1px solid var(--sc-hair); display: flex; align-items: center; gap: 12px;
+  background: none; cursor: pointer; text-align: left;
+}
+html[data-rail="icons"] .sc-rail-fold { padding-left: 14px; }
+.sc-rail .sc-rail-fold:hover { color: var(--sc-rail-ink-on); }
+.sc-rail-fold svg { flex: none; transition: transform .25s; }
+html[data-rail="icons"] .sc-rail-fold:not(.sc-rail-set) svg { transform: scaleX(-1); }
+.sc-rail-set + .sc-rail-fold { margin-top: 0; border-top: 0; }
+.sc-rail-set[aria-current="page"] { color: var(--sc-rail-ink-on); font-weight: 600; }
+@media (prefers-reduced-motion: reduce) { .sc-rail, .sc-rail-label, .sc-rail-fold svg { transition: none; } }
+
+/* The icon colour book, Settings → Menus. */
+.sc-book-swatch { width: 24px; height: 24px; border-radius: 50%; border: 2px solid transparent; box-shadow: 0 0 0 1px var(--sc-card) inset; cursor: pointer; padding: 0; flex: none; }
+.sc-book-swatch[aria-pressed="true"] { border-color: var(--sc-ink); }
+.sc-book-swatch:focus-visible { outline: 2px solid var(--sc-hiviz); outline-offset: 2px; }
 
 /* Header lockup (design/org-branding): on a narrow phone the org's logo stands alone. */
 @media (max-width: 339px) { .sc-powered { display: none !important; } }
@@ -458,8 +509,8 @@ html[data-theme="night-shift"] .sc-proposal { --sc-doc-ground: #15171A; }
 @media (prefers-reduced-motion: reduce) { .sc-rec-dot { animation: none; } }
 /* SlideDrawer (phone drawers handoff): no slide under reduced motion. */
 @media (prefers-reduced-motion: reduce) { .sc-slide-panel, .sc-slide-scrim { transition: none !important; } }
-/* The ScopeCrete emblem's keyframes (scOrbit, scOrbitR, scBeacon) and their
-   reduced-motion rule are in app/globals.css. */
+/* The ScopeCrete emblem's keyframes (scOrbit, scShade, Dusty's states, scGlowAi …)
+   and their reduced-motion rule are in app/globals.css. */
 
 /* On a phone scrolling down slides the dashboard header away so the page's
    own header has the top of the screen (useHideHeadOnScroll; the job page
@@ -473,22 +524,23 @@ html[data-theme="night-shift"] .sc-proposal { --sc-doc-ground: #15171A; }
    top while the page scrolls under it. */
 .sc-subhead { position: sticky; top: var(--sc-head); z-index: 6; background: var(--sc-card); border-bottom: 1px solid var(--sc-hair);
   padding: 12px 16px 10px; margin-bottom: 12px; transition: top .2s ease-out; }
-.sc-subhead-org { font-size: 19px; }
-.sc-subhead-title { font-size: 13px; }
+/* The org and the page on one line, a green dot between (Coy, 2026-10-10). */
+.sc-subhead-names { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.sc-subhead-org { font-size: 16px; min-width: 0; }
+.sc-subhead-sep { display: inline-block; flex: 0 0 auto; width: 6px; height: 6px; border-radius: 999px; background: #1FA971; }
+.sc-subhead-title { font-size: 13px; flex-shrink: 0; }
 .sc-subhead-count { font-size: 12px; }
 @media (max-width: 1023px) {
   .sc-subhead { padding: 8px 12px 8px; margin-bottom: 10px; }
-  /* On a phone the org and the page read on one line, small (Coy, 2026-10-07:
-     "Sacco Enterprises | jobs, but the font will be much, much smaller"). */
-  .sc-subhead-names { display: flex; align-items: baseline; gap: 5px; min-width: 0; }
-  .sc-subhead-org { font-size: 11.5px; min-width: 0; }
-  .sc-subhead-sep { display: inline; font-size: 11px; color: var(--sc-ink3); }
-  .sc-subhead-title { font-size: 10.5px; flex-shrink: 0; }
+  /* On a phone, small (Coy, 2026-10-07: "the font will be much, much smaller"). */
+  .sc-subhead-names { gap: 5px; }
+  .sc-subhead-org { font-size: 11.5px; }
+  .sc-subhead-sep { width: 4px; height: 4px; }
+  .sc-subhead-title { font-size: 10.5px; }
   .sc-subhead-count { font-size: 10px; }
   /* The ☰ the height of the bar's other buttons. */
   .sc-menu-btn { width: 28px !important; height: 28px !important; }
 }
-.sc-subhead-sep { display: none; }
 @media (max-width: 639px) { .sc-drawer-title-long { font-size: 19px !important; } }
 @media (max-width: 1023px) {
   html[data-head-hide] { --sc-head: 0px; }
@@ -509,7 +561,7 @@ html[data-theme="night-shift"] .sc-proposal { --sc-doc-ground: #15171A; }
 
 /* The job's name: 19px on a desktop, 14px on a phone so it fits the width
    (Coy, 2026-10-06). */
-.sc-job-name { font-size: 19px; }
+.sc-job-name { font-size: 16px; }
 @media (max-width: 1023px) { .sc-job-name { font-size: 14px; } }
 
 /* The job's views — Summary · Takeoffs · Budget · Proposal. On a phone plain tabs across the full
@@ -565,6 +617,15 @@ html[data-alerts-open="1"] .sc-pops { display: none; }
 .sc-drawer-in-left { animation: sc-in-left .24s cubic-bezier(.2,.8,.2,1); }
 .sc-drawer-in-right { animation: sc-in-right .24s cubic-bezier(.2,.8,.2,1); }
 @media (prefers-reduced-motion: reduce) { .sc-drawer-in-left, .sc-drawer-in-right { animation: none; } }
+/* A panel that slides down from the page's subheader, the page's width (Drawer drop; Coy, 2026-10-10). */
+.sc-drop-panel { top: calc(var(--sc-head) + var(--sc-subhead, 0px)); left: 0; right: 0; }
+@media (min-width: 1024px) {
+  .sc-drop-panel { left: var(--sc-rail-w); }
+  html[data-dusty="open"] .sc-drop-panel { right: var(--sc-dusty); }
+}
+.sc-drop-in { animation: sc-drop-down .26s cubic-bezier(.2,.8,.2,1); }
+@keyframes sc-drop-down { from { transform: translateY(-14px); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .sc-drop-in { animation: none; } }
 
 /* Threads rows: a small grip at each end on a touch screen says they swipe (Coy, 2026-10-09). */
 .sc-swipe-grip { display: none; }
@@ -576,3 +637,15 @@ html[data-alerts-open="1"] .sc-pops { display: none; }
 /* Nothing widens the page sideways on a phone (Coy, 2026-10-09: the contact card's header stopped two-thirds
    across). On the html element only, so it moves to the viewport and sticky headers keep working. */
 @media (max-width: 1023px) { html { overflow-x: hidden; } }
+.sc-quick:hover, .sc-quick:focus-visible { background: var(--sc-sunk) !important; }
+
+/* Settings (2026-10-10): the sections' column on a desktop, the list on a phone. */
+.sc-set-link { padding: 10px 12px; border-bottom: 1px solid var(--sc-hair-soft); background: var(--sc-card); border-left: 3px solid transparent; }
+.sc-set-nav .sc-set-link:first-child { border-top-left-radius: 4px; border-top-right-radius: 4px; }
+.sc-set-nav .sc-set-link:last-child { border-bottom: none; border-bottom-left-radius: 4px; border-bottom-right-radius: 4px; }
+.sc-set-nav { border: 1px solid var(--sc-hair); border-radius: 4px; }
+.sc-set-link[aria-current="page"] { background: var(--sc-hiviz-dim); border-left-color: var(--sc-hiviz); }
+@media (min-width: 1024px) {
+  .sc-set-link[data-desk-current] { background: var(--sc-hiviz-dim); border-left-color: var(--sc-hiviz); }
+}
+@media (hover: hover) { .sc-set-link:hover { background: var(--sc-slab); } .sc-set-link[aria-current="page"]:hover { background: var(--sc-hiviz-dim); } }

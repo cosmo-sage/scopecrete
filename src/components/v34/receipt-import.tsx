@@ -61,11 +61,13 @@ interface Details { name?: string; phone?: string; email?: string; address?: str
 
 const FEE = /\b(fee|surcharge|charge|delivery|freight|haul|standby|washout|environmental|env)\b/i;
 
-export function ReceiptImport({ open, onClose, vendorId, onDone }: {
+export function ReceiptImport({ open, onClose, vendorId, onDone, kind: startKind }: {
   open: boolean; onClose: () => void; vendorId?: string | null; onDone: (msg: string) => void;
+  /** Which kind it opens on (Dusty's Receipt · Quote · Bill on Vendors). */
+  kind?: Kind;
 }) {
   const [stage, setStage] = useState<Stage>("pick");
-  const [kind, setKind] = useState<Kind>("receipt");
+  const [kind, setKind] = useState<Kind>(startKind ?? "receipt");
   const [vendors, setVendors] = useState<VendorRow[]>([]);
   const [vendor, setVendor] = useState<string>(vendorId ?? "");
   const [file, setFile] = useState<RFile | null>(null);

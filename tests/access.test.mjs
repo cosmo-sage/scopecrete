@@ -37,6 +37,16 @@ test("an estimator is sent to the board from anywhere else", () => {
   assert.equal(redirectFor({ ...a, pages: [] }, "/dashboard/files"), "/dashboard/scope");
 });
 
+test("an estimator's Settings: their account and the colors, nothing else", () => {
+  const a = accessFrom({ role: "field", pages: ["files"], all_jobs: false, job_ids: [J1] });
+  assert.equal(redirectFor(a, "/dashboard/settings"), null);
+  assert.equal(redirectFor(a, "/dashboard/settings/"), null);
+  assert.equal(redirectFor(a, "/dashboard/settings/account"), null);
+  assert.equal(redirectFor(a, "/dashboard/settings/appearance"), null);
+  for (const s of ["organization", "lines", "ai", "menus", "nope"]) assert.equal(redirectFor(a, `/dashboard/settings/${s}`), "/dashboard/settings");
+  assert.equal(redirectFor(FULL_ACCESS, "/dashboard/settings/organization"), null);
+});
+
 test("a job: only theirs; the Plan Room only with the page; never the proposal", () => {
   const a = accessFrom({ role: "field", pages: ["files"], all_jobs: false, job_ids: [J1] });
   assert.equal(redirectFor(a, `/dashboard/scope/${J1}`), null);

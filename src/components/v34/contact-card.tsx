@@ -11,7 +11,7 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Phone, ChatText, Envelope, MapPin, PencilSimple, Plus, Buildings } from "@phosphor-icons/react";
+import { Phone, ChatText, Envelope, MapPin, MapTrifold, PencilSimple, Plus, Buildings } from "@phosphor-icons/react";
 import { T, F, disp, eyebrow, nums } from "@/lib/v34/tokens";
 import { initials, initialsHue } from "@/lib/v34/threads";
 import { formatPhone } from "@/components/v34/conversation";
@@ -92,6 +92,9 @@ export function ContactCard({ person, back, textHref, customerHref, vendorHref, 
         <a href={main ? `tel:${main}` : undefined} style={action(!!main)} aria-label="Call"><span style={disc}><Phone size={20} weight="fill" /></span>Call</a>
         <Link href={textHref} style={action(!!main)} aria-label="Text"><span style={disc}><ChatText size={20} weight="fill" /></span>Text</Link>
         <a href={emails[0] ? `mailto:${emails[0].email}` : undefined} style={action(emails.length > 0)} aria-label="Email"><span style={disc}><Envelope size={20} weight="fill" /></span>Email</a>
+        {/* Map (Coy, 2026-10-10): their address on the app's own Map page. */}
+        <Link href={c.address ? `/dashboard/map?addr=${encodeURIComponent(c.address)}` : "#"} style={action(!!c.address)} aria-label="Map"
+          aria-disabled={!c.address} onClick={(e) => { if (!c.address) e.preventDefault(); }}><span style={disc}><MapTrifold size={20} weight="fill" /></span>Map</Link>
       </div>
 
       <div className="rounded-xl" style={{ marginTop: 20, background: T.card, border: `1px solid ${T.hair}`, padding: "6px 0" }}>
@@ -292,13 +295,15 @@ function AddressField({ contactId, address, onSaved }: { contactId: string; addr
   const [rest, setRest] = useState<{ city: string; state: string; zip: string }>({ city: "", state: "", zip: "" });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // With an address on file the fields wait behind Change (Coy, 2026-10-10).
+  const [changing, setChanging] = useState(!address);
   const save = async (clear = false) => {
     setBusy(true); setErr(null);
     const r = await fetch(`/api/contacts/${encodeURIComponent(contactId)}/address`, { method: "PATCH", headers: { "Content-Type": "application/json" },
       body: JSON.stringify(clear ? { address_line1: "" } : { address_line1: line1, ...rest }) });
     setBusy(false);
     if (!r.ok) { setErr(((await r.json().catch(() => ({}))) as { error?: string }).error ?? "Couldn't save it."); return; }
-    setLine1(""); setRest({ city: "", state: "", zip: "" }); onSaved();
+    setLine1(""); setRest({ city: "", state: "", zip: "" }); setChanging(clear); onSaved();
   };
   const field: React.CSSProperties = { height: 32, border: `1px solid ${T.hair}`, borderRadius: 6, padding: "0 8px", fontSize: F.sm, background: T.card, color: T.ink, minWidth: 0 };
   return (
@@ -307,8 +312,10 @@ function AddressField({ contactId, address, onSaved }: { contactId: string; addr
       <div className="flex-1 min-w-0">
         {address && <div className="flex items-baseline gap-2" style={{ fontSize: 13.5, color: T.ink2, marginBottom: 6 }}>
           <span className="flex-1 min-w-0">{address}</span>
+          {!changing && <button onClick={() => setChanging(true)} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>Change</button>}
           <button onClick={() => void save(true)} disabled={busy} style={{ ...eyebrow, color: T.red, cursor: "pointer" }}>Remove</button>
         </div>}
+        {changing && <>
         <AddressInput value={line1} onChange={setLine1} onPick={(m) => { setLine1(m.line1); setRest({ city: m.city ?? "", state: m.state ?? "", zip: m.zip ?? "" }); }}
           style={{ ...field, width: "100%" }} />
         <div className="grid gap-2 mt-2" style={{ gridTemplateColumns: "1fr 64px 84px" }}>
@@ -324,6 +331,8 @@ function AddressField({ contactId, address, onSaved }: { contactId: string; addr
             {busy ? "Saving…" : address ? "Change address" : "Save address"}
           </button>
         </div>
+        </>}
+        {!changing && err && <span style={{ fontSize: F.xs, color: T.red }}>{err}</span>}
       </div>
     </div>
   );

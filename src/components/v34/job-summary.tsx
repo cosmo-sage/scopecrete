@@ -232,7 +232,7 @@ function Totals({ jobId, job, sections, bd, err, card }: {
       </div>
       {err ? <div style={{ fontSize: F.sm, color: T.red, marginTop: 6 }}>{err}</div>
         : !bd || !res ? <div className="rounded animate-pulse mt-2" style={{ height: 60, background: T.hairSoft }} />
-        : !bd.lines.length ? <div style={{ fontSize: F.sm, color: T.ink2, marginTop: 6 }}>No price yet — the budget has no lines. Add items from the Price book on the Budget.</div>
+        : !bd.lines.length ? <div style={{ fontSize: F.sm, color: T.ink2, marginTop: 6 }}>No price yet.</div>
         : tier && tier.priced ? (
           <>
             <div style={{ fontFamily: disp, fontSize: 34, fontWeight: 700, lineHeight: 1.05, marginTop: 4, ...nums }}>{money0(tier.total)}</div>
@@ -286,7 +286,7 @@ function ProposalState({ jobId, links, card, onWon }: {
           </div>
         ) : (
           <div style={{ fontSize: F.sm, color: T.ink2, marginTop: 6, lineHeight: 1.5 }}>
-            Nothing sent yet{links.length ? " — every earlier link is turned off or replaced" : ""}. The draft is on the Proposal; Preview there sends it.
+            Nothing sent yet{links.length ? " — every earlier link is turned off or replaced" : ""}.
           </div>
         )}
       {links && links.length > 1 && (

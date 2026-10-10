@@ -326,14 +326,26 @@ export function MapPage() {
 
   // Open (once) on the office's ring — or the office alone — else on the pins; unless a clip asked for a job.
   const clipJob = sp.get("clip");
+  // ?addr=<address>: a contact card's Map button (Coy, 2026-10-10) — that address, pinned.
+  const addrQ = sp.get("addr");
   const officeView = useCallback((o: Office, w: number, h: number): View | null =>
     o.radius_mi ? fitView(ringPoints(o, o.radius_mi), w, h, 24, 15) : { lat: o.lat, lng: o.lng, zoom: 11 }, []);
   useEffect(() => {
-    if (fitted.current || !data || !size.w || clipJob || office === undefined) return;
+    if (fitted.current || !data || !size.w || clipJob || addrQ || office === undefined) return;
     fitted.current = true;
     const v = office ? officeView(office, size.w, size.h) : fitView(shown, size.w, size.h, 56, 15);
     if (v) setTimeout(() => setView(v), 0);
-  }, [data, size, shown, clipJob, office, officeView]);
+  }, [data, size, shown, clipJob, addrQ, office, officeView]);
+
+  useEffect(() => {
+    if (!addrQ || clipJob || fitted.current) return;
+    fitted.current = true;
+    fetch(`/api/aerial/suggest?find=${encodeURIComponent(addrQ)}`).then((r) => r.json()).then((b) => {
+      const f = b?.found as { lat: number; lng: number; label?: string } | undefined;
+      if (!f || typeof f.lat !== "number") return;
+      setSel(null); setPlain({ lat: f.lat, lng: f.lng, label: f.label ?? addrQ }); setView({ lat: f.lat, lng: f.lng, zoom: 18 });
+    }).catch(() => {});
+  }, [addrQ, clipJob]);
 
   // ?clip=<job>: Takeoffs' Satellite — frame that job's site on satellite.
   useEffect(() => {

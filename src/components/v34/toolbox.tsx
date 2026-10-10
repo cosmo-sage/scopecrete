@@ -41,12 +41,12 @@ export function Toolbox({ open, onClose, keys, active, badge }: {
             const on = active === k;
             return (
               <Link key={k} href={p.href} onClick={onClose} aria-current={on ? "page" : undefined}
-                className="flex flex-col items-center justify-center gap-1 no-underline" style={{ height: 58, position: "relative" }}>
+                className="flex flex-col items-center justify-center gap-1 no-underline" style={{ height: 58, position: "relative", minWidth: 0, padding: "0 2px" }}>
                 <span style={{ position: "relative", display: "flex" }}>
                   <NavIcon k={k} on={on} />
                   {badge?.[k] && <span aria-label="needs a look" className="absolute rounded-full" style={{ top: -2, right: -4, width: 7, height: 7, background: T.red }} />}
                 </span>
-                <span style={{ ...eyebrow, fontSize: 9, color: on ? T.ink : T.ink3 }}>{p.label}</span>
+                <span style={{ ...eyebrow, ...tabLabel(p.label), color: on ? T.ink : T.ink3 }}>{p.label}</span>
               </Link>
             );
           })}
@@ -54,6 +54,14 @@ export function Toolbox({ open, onClose, keys, active, badge }: {
       </nav>
     </>
   );
+}
+
+/** A footer or Toolbox label, centred in its column. Two words ("Scope Builder") are set tighter and may
+ *  wrap onto a second centred line instead of running off the column (Coy, 2026-10-10). */
+export function tabLabel(label: string): React.CSSProperties {
+  const two = label.includes(" ");
+  return { fontSize: 9, textAlign: "center", lineHeight: 1.1, maxWidth: "100%", overflowWrap: "anywhere",
+           letterSpacing: two ? ".04em" : ".1em", marginRight: two ? "-.04em" : "-.1em" };
 }
 
 export function MenuEditor({ menus, onChange, colors, onColors }: { menus: Menus; onChange: (m: Menus) => void; colors?: MenuColors; onColors?: (c: MenuColors) => void }) {

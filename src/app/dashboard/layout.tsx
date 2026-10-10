@@ -46,7 +46,7 @@ import { OrgLockup } from "@/components/v34/org-lockup";
 import { InstallApp } from "@/components/v34/install-app";
 import { YouSection, OrgSection } from "@/components/v34/org-settings";
 import { ThemePicker, useTheme } from "@/components/v34/theme-picker";
-import { Toolbox, MenuEditor } from "@/components/v34/toolbox";
+import { Toolbox, MenuEditor, tabLabel } from "@/components/v34/toolbox";
 import { switchRows, type SwitchOrg } from "@/lib/org-switch";
 import { PAGE, DEFAULT_MENUS, cleanMenus, activePage, type Menus } from "@/lib/v34/pages";
 import { cleanMenuColors, iconVar, type MenuColors } from "@/lib/v34/menu-colors";
@@ -377,7 +377,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   <NavIcon k="toolbox" on={on} />
                   {badge.logs && <span className="absolute rounded-full" style={{ top: -2, right: -4, width: 7, height: 7, background: T.red }} />}
                 </span>
-                <span className="sc-tab-lbl" style={{ ...eyebrow, fontSize: 9, color: on ? T.hiviz : T.ink3, fontWeight: on ? 700 : undefined }}>Toolbox</span>
+                <span className="sc-tab-lbl" style={{ ...eyebrow, ...tabLabel("Toolbox"), color: on ? T.hiviz : T.ink3, fontWeight: on ? 700 : undefined }}>Toolbox</span>
               </button>
             );
           }
@@ -391,7 +391,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 <NavIcon k={k} on={on} />
                 {k === "threads" && needs !== null && needs > 0 && <Badge n={needs} style={{ top: -4, left: "calc(50% + 4px)", minWidth: 14, height: 14 }} />}
               </span>
-              <span className="sc-tab-lbl" style={{ ...eyebrow, fontSize: 9, color: on ? T.hiviz : T.ink3, fontWeight: on ? 700 : undefined }}>{p.label}</span>
+              <span className="sc-tab-lbl" style={{ ...eyebrow, ...tabLabel(p.label), color: on ? T.hiviz : T.ink3, fontWeight: on ? 700 : undefined }}>{p.label}</span>
             </Link>
           );
         })}

@@ -18,6 +18,7 @@
 
 import React, { startTransition, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { refreshQuestion } from "@/lib/dusty/price-refresh";
 import { T, F, disp, eyebrow, nums, clip, money, formatPhone } from "@/lib/v34/tokens";
 import { useWide } from "@/lib/v34/use-wide";
 import { isHorizontal } from "@/lib/swipe";
@@ -226,6 +227,17 @@ export function PriceBook({ pick }: { pick?: PricePick } = {}) {
   const toggleSel = (ids: string[], on: boolean) => setSel((cur) => { const n = new Set(cur); for (const id of ids) { if (on) n.add(id); else n.delete(id); } return n; });
   const eachOf = async (ids: string[], fn: (id: string) => Promise<unknown>) => {
     for (let i = 0; i < ids.length; i += 8) await Promise.all(ids.slice(i, i + 8).map(fn));
+  };
+  /** Ask Dusty for today's prices of the picked items from their vendors (Coy, 2026-10-10). */
+  const askPrices = (ids: string[]) => {
+    const picked = (items ?? []).filter((c) => ids.includes(c.id));
+    const q = refreshQuestion(picked.map((c) => ({
+      name: c.name ?? "", unit: c.unit,
+      vendors: [...new Set([c.vendor_contact_id, ...sources.filter((x) => x.cost_item_id === c.id).map((x) => x.vendor_contact_id)]
+        .filter((v): v is string => !!v).map((v) => vendorLabel(v)).filter((v): v is string => !!v))],
+    })));
+    window.dispatchEvent(new Event("sc:dusty-open"));
+    setTimeout(() => window.dispatchEvent(new CustomEvent("sc:dusty-draft", { detail: { text: q, send: true } })), 250);
   };
   const retireMany = async (ids: string[], label: string, group?: Group) => {
     setErr(null); setBusy("bulk");
@@ -458,6 +470,10 @@ export function PriceBook({ pick }: { pick?: PricePick } = {}) {
           <button onClick={() => void retireMany([...sel], `${sel.size} card${sel.size === 1 ? "" : "s"}`)} disabled={busy === "bulk"} className="rounded px-3"
             style={{ height: 30, background: T.red, color: "#fff", fontFamily: disp, fontSize: F.sm, textTransform: "uppercase", letterSpacing: ".04em", cursor: "pointer" }}>
             {busy === "bulk" ? "…" : `Retire ${sel.size}`}
+          </button>
+          <button onClick={() => askPrices([...sel])} className="rounded px-3" title="Dusty looks up today's prices from their vendors"
+            style={{ height: 30, background: T.card, color: T.ink, fontFamily: disp, fontSize: F.sm, textTransform: "uppercase", letterSpacing: ".04em", cursor: "pointer" }}>
+            ↻ Today&apos;s prices
           </button>
           <span className="flex-1" />
           <button onClick={() => setSel(new Set())} style={{ ...eyebrow, color: T.card, cursor: "pointer" }}>Clear</button>

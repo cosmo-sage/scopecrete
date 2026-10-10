@@ -10,7 +10,7 @@
  * kept, and its row says "scale not set" until Coy applies the printed scale
  * or measures a known dimension (src/lib/takeoff.ts).
  */
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { T, F, disp, eyebrow, clip, strong, light, nums } from "@/lib/v34/tokens";
 import { openPdf, drawPage } from "@/lib/pdf";
 import { areaShapeAt, dist, fmtQty, holeFits, measurementQty, parseFeet, rectPoints, scaleFromPoints, scaleLabel, KIND_UNIT, type Pt, type TakeoffKind } from "@/lib/takeoff";
@@ -18,7 +18,7 @@ import { call, isAerialSheet, KIND_LABEL, SHAPE_COLORS, shapeColor, sheetLabel, 
 import { ScaleBadge, Thumb } from "./files-sheets";
 import { Drawer, SlideDrawer } from "@/components/v34/primitives";
 import { ShapePhotos } from "./shape-photos";
-import { usePinchZoom } from "@/lib/v34/use-pinch";
+import { usePinchZoom, useWheelZoom } from "@/lib/v34/use-pinch";
 import { traceAt, type TraceOptions } from "@/lib/v34/plan-trace";
 
 type Tool = "select" | "area" | "rect" | "fill" | "linear" | "count" | "cutout" | "scale";
@@ -39,11 +39,30 @@ const TOOLS: Array<[Tool, string, string]> = [
   ["area", "Area", "Click the corners; click the first one (or double-click) to close"],
   ["rect", "Rect", "Two opposite corners"],
   ["fill", "Fill", "Click inside an area: its outline is traced off the drawing"],
+  ["cutout", "Cutout", "Draw a hole in the selected area"],
   ["linear", "Linear", "Click along the line; double-click or Finish to end"],
   ["count", "Count", "Click each one; Finish when done"],
-  ["cutout", "Cutout", "Draw a hole in the selected area"],
   ["scale", "Scale", "Click both ends of a dimension you know, then type it"],
 ];
+// One key per tool, like Togal (Coy, 2026-10-10: "take a lesson from Togal.ai").
+const TOOL_KEY: Record<Tool, string> = { select: "V", area: "A", rect: "R", fill: "F", cutout: "X", linear: "L", count: "C", scale: "S" };
+// A thin rule after these, so the bar reads in groups: pick · areas · lines · counts · scale.
+const TOOL_BREAK = new Set<Tool>(["select", "cutout", "linear", "count"]);
+
+function ToolIcon({ tool }: { tool: Tool }) {
+  return (
+    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flex: "0 0 auto" }}>
+      {tool === "select" && <path d="M5 3l10 6.5-4.5 1L13 16l-2 1-2.5-5.5L5 15z" fill="currentColor" fillOpacity=".15" />}
+      {tool === "area" && <><path d="M3 6l7-3 7 4-2 9H5z" fill="currentColor" fillOpacity=".15" />{[[3, 6], [10, 3], [17, 7], [15, 16], [5, 16]].map(([x, y]) => <circle key={`${x}${y}`} cx={x} cy={y} r="1.3" fill="currentColor" />)}</>}
+      {tool === "rect" && <><rect x="3.5" y="5" width="13" height="10" fill="currentColor" fillOpacity=".15" /><circle cx="3.5" cy="5" r="1.3" fill="currentColor" /><circle cx="16.5" cy="15" r="1.3" fill="currentColor" /></>}
+      {tool === "fill" && <><path d="M4 9l6-6 6 6-6 6z" fill="currentColor" fillOpacity=".25" /><path d="M16.5 12.5c1 1.4 1.5 2.3 1.5 3a1.5 1.5 0 0 1-3 0c0-.7.5-1.6 1.5-3z" fill="currentColor" /></>}
+      {tool === "cutout" && <><rect x="3" y="3" width="14" height="14" fill="currentColor" fillOpacity=".15" /><rect x="7" y="7" width="6" height="6" fill="var(--sc-card, #fff)" strokeDasharray="2 1.5" /></>}
+      {tool === "linear" && <><path d="M3 15l5-6 4 3 5-8" /><circle cx="3" cy="15" r="1.3" fill="currentColor" /><circle cx="17" cy="4" r="1.3" fill="currentColor" /></>}
+      {tool === "count" && <><circle cx="5" cy="6" r="2" fill="currentColor" /><circle cx="14" cy="5" r="2" fill="currentColor" /><circle cx="9" cy="14" r="2" fill="currentColor" /></>}
+      {tool === "scale" && <><path d="M2.5 13.5l11-11 4 4-11 11z" /><path d="M6 10l1.5 1.5M8.5 7.5l1.5 1.5M11 5l1.5 1.5" /></>}
+    </svg>
+  );
+}
 
 export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, onSend, fullscreen, setFullscreen }: {
   jobId: string; data: PlansData; files: PlanFile[];
@@ -152,6 +171,9 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
     setTool(t);
   };
 
+  const pickToolRef = useRef(pickTool);
+  useEffect(() => { pickToolRef.current = pickTool; });
+
   const save = useCallback(async (pts: Pt[]) => {
     if (!sheet) return;
     const cutInto = tool === "fill" && fillCut ? data.measurements.find((m) => m.id === cutTarget) : tool === "cutout" ? sel : undefined;
@@ -206,6 +228,11 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
       if (e.key === "Escape") { if (draft.length) setDraft([]); else if (fullscreen) setFullscreen(false); else setTool("select"); }
       if (e.key === "Backspace" && draft.length) { e.preventDefault(); setDraft((d) => d.slice(0, -1)); }
       if (e.key === "Enter") finish();
+      // A tool's key picks it, when nothing is being drawn and no modifier is held.
+      if (!e.ctrlKey && !e.metaKey && !e.altKey && !draft.length && (e.target as HTMLElement)?.tagName !== "TEXTAREA" && (e.target as HTMLElement)?.tagName !== "SELECT") {
+        const t = (Object.keys(TOOL_KEY) as Tool[]).find((x) => TOOL_KEY[x] === e.key.toUpperCase());
+        if (t) pickToolRef.current(t);
+      }
     };
     window.addEventListener("keydown", k);
     return () => window.removeEventListener("keydown", k);
@@ -318,16 +345,24 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
         </div>
         <div className="flex items-center gap-1 px-2 overflow-x-auto" style={{ height: 42, flex: "0 0 auto", background: T.card, borderBottom: `1px solid ${T.hair}` }}>
           {TOOLS.map(([k, label, hint]) => (
-            <button key={k} onClick={() => pickTool(k)} title={hint} aria-pressed={tool === k} style={tb(tool === k)}>{label}</button>
+            <Fragment key={k}>
+              <button onClick={() => pickTool(k)} title={`${label} (${TOOL_KEY[k]}) — ${hint}`} aria-label={label} aria-pressed={tool === k}
+                className="flex items-center gap-1.5" style={{ ...tb(tool === k), padding: "0 8px" }}>
+                <ToolIcon tool={k} /><span className="hidden md:inline">{label}</span>
+              </button>
+              {TOOL_BREAK.has(k) && <span aria-hidden="true" style={{ width: 1, height: 22, background: T.hair, margin: "0 3px", flex: "0 0 auto" }} />}
+            </Fragment>
           ))}
-          <button disabled title="Not yet — Dusty doesn't read drawings" style={{ ...tb(false), opacity: 0.45, cursor: "not-allowed" }}>Auto</button>
           <span className="flex-1" />
           {sheet && <span className="hidden md:inline" style={{ fontSize: F.xs, color: T.ink2, whiteSpace: "nowrap" }}>{sheetLabel(sheet)} · <ScaleBadge s={sheet} small /></span>}
           {sel && <button onClick={() => setShapePhotos(true)} title={`Photos of ${selName} — they show on its budget section and the proposal`} style={tb(false)}>Shape photos{selPhotos ? ` (${selPhotos})` : ""}</button>}
           {sheet?.scale_ft_per_pt && sheets.length > 1 && <button onClick={() => setCopyScale({ k: sheet.scale_ft_per_pt as number, from: sheet.id })} title="Put this sheet's scale on every sheet, or the ones you pick" style={tb(false)}>Scale → other sheets</button>}
-          <button onClick={() => setZoom((z) => Math.max(0.5, z / 1.25))} aria-label="Zoom out" style={tb(false)}>−</button>
-          <span style={{ fontFamily: strong, fontSize: 11, width: 38, textAlign: "center", ...nums }}>{Math.round(zoom * 100)}%</span>
-          <button onClick={() => setZoom((z) => Math.min(8, z * 1.25))} aria-label="Zoom in" style={tb(false)}>+</button>
+          <span className="inline-flex items-center" title="Zoom: the scroll wheel zooms where the pointer is" style={{ border: `1px solid ${T.hair}`, borderRadius: 3, flex: "0 0 auto" }}>
+            <button onClick={() => setZoom((z) => Math.max(0.5, z / 1.25))} aria-label="Zoom out" style={zb}>−</button>
+            <span style={{ fontFamily: strong, fontSize: 11, width: 40, textAlign: "center", ...nums }}>{Math.round(zoom * 100)}%</span>
+            <button onClick={() => setZoom((z) => Math.min(8, z * 1.25))} aria-label="Zoom in" style={zb}>+</button>
+            <button onClick={() => setZoom(() => 1)} title="Fit the sheet to the width" style={{ ...zb, width: "auto", padding: "0 8px", borderLeft: `1px solid ${T.hair}`, fontFamily: disp, fontSize: 11.5, fontWeight: 600, letterSpacing: ".06em", textTransform: "uppercase" }}>Fit</button>
+          </span>
           <button onClick={() => setFullscreen(!fullscreen)} aria-label={fullscreen ? "Exit full screen" : "Full screen"} title={fullscreen ? "Exit full screen" : "Full screen"}
             style={{ ...tb(false), width: 30, padding: 0, background: fullscreen ? T.dark : T.card, color: fullscreen ? "#fff" : T.ink }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true" style={{ margin: "auto" }}>
@@ -406,6 +441,7 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
 
 const clipTxt: React.CSSProperties = { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
 
+const zb: React.CSSProperties = { width: 28, height: 28, background: "transparent", border: "none", cursor: "pointer", fontSize: 15, color: T.ink };
 const tb = (on: boolean): React.CSSProperties => ({
   height: 30, padding: "0 10px", borderRadius: 3, flex: "0 0 auto", cursor: "pointer",
   border: `1px solid ${on ? T.hiviz : T.hair}`, background: on ? T.hivizDim : T.card, color: on ? T.hivizText : T.ink,
@@ -561,6 +597,9 @@ function Drawing({ sheet, fileUrl, zoom, setZoom, tool, data, groupId, selId, se
   const w = sheet.page_w * scale, h = sheet.page_h * scale;
   // Two fingers zoom on a phone (Coy, 2026-10-09); the fingers lifting never add a point.
   const pinching = usePinchZoom(box, zoom, (z) => setZoom(() => z), 0.5, 8);
+  // The scroll wheel zooms where the pointer is (Coy, 2026-10-10: "zoom in and out of the plans with
+  // my scroll wheel"); shift + wheel still scrolls sideways.
+  useWheelZoom(box, zoom, (z) => setZoom(() => z), 0.5, 8);
 
   // Draw the page — after a zoom settles, so zooming stays quick.
   useEffect(() => {
@@ -639,8 +678,7 @@ function Drawing({ sheet, fileUrl, zoom, setZoom, tool, data, groupId, selId, se
   const draftColor = tool === "cutout" || cutting ? T.red : tool === "scale" ? "#1E5AA8" : grp?.color ?? T.hiviz;
 
   return (
-    <div ref={box} className="flex-1 overflow-auto" style={{ background: T.sunk, padding: 12, paddingBottom: 56, position: "relative", minHeight: 0 }}
-      onWheel={(e) => { if (e.ctrlKey || e.metaKey) { e.preventDefault(); setZoom((z) => Math.min(8, Math.max(0.5, z * (e.deltaY < 0 ? 1.1 : 1 / 1.1)))); } }}>
+    <div ref={box} className="flex-1 overflow-auto" style={{ background: T.sunk, padding: 12, paddingBottom: 56, position: "relative", minHeight: 0 }}>
       {err && <div style={{ fontSize: F.sm, color: T.red }}>Couldn&apos;t open the plan: {err}</div>}
       <div style={{ position: "relative", width: w || "100%", height: h || 200, background: "#fff", boxShadow: "0 2px 10px rgba(42,32,20,.12)" }}>
         <canvas ref={canvas} style={{ position: "absolute", inset: 0, width: w, height: h, opacity: drawn ? 1 : 0.4 }} />

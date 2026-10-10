@@ -56,3 +56,34 @@ export function usePinchZoom(box: React.RefObject<HTMLElement | null>, zoom: num
   }, [box]);
   return pinching;
 }
+
+/**
+ * The scroll wheel zooms a scrolling box about the pointer (Coy, 2026-10-10: "zoom in and out of the
+ * plans with my scroll wheel on desktop"). Shift + wheel is left to scroll sideways. A trackpad's
+ * small steps zoom smoothly; a mouse notch is about 12%.
+ */
+export function useWheelZoom(box: React.RefObject<HTMLElement | null>, zoom: number, setZoom: (z: number) => void, min: number, max: number) {
+  const live = useRef({ zoom, setZoom, min, max });
+  useEffect(() => { live.current = { ...live.current, setZoom, min, max }; });
+  useEffect(() => { live.current.zoom = zoom; }, [zoom]);
+  useEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const wheel = (e: WheelEvent) => {
+      if (e.shiftKey) return;
+      e.preventDefault();
+      const { zoom: z0, min: lo, max: hi, setZoom: set } = live.current;
+      const dy = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaMode === 2 ? e.deltaY * 400 : e.deltaY;
+      const z = Math.min(hi, Math.max(lo, z0 * Math.exp(-Math.max(-120, Math.min(120, dy)) / 900)));
+      if (z === z0) return;
+      const r = el.getBoundingClientRect();
+      const cx = e.clientX - r.left, cy = e.clientY - r.top;
+      const ax = el.scrollLeft + cx, ay = el.scrollTop + cy, k = z / z0;
+      live.current.zoom = z; // a burst of wheel events builds on the last, not the last render
+      set(z);
+      requestAnimationFrame(() => { el.scrollLeft = ax * k - cx; el.scrollTop = ay * k - cy; });
+    };
+    el.addEventListener("wheel", wheel, { passive: false });
+    return () => el.removeEventListener("wheel", wheel);
+  }, [box]);
+}

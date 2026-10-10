@@ -190,7 +190,7 @@ async function thumbTurn<T>(work: () => Promise<T>): Promise<T> {
 }
 /** A small picture of a page, made once per visit, kept in memory only. */
 export function pageThumb(fileId: string, url: string, pageNo: number, width = 360): Promise<string> {
-  const k = `${fileId}:${pageNo}`;
+  const k = width === 360 ? `${fileId}:${pageNo}` : `${fileId}:${pageNo}@${width}`;
   let t = thumbs.get(k);
   if (!t) {
     t = openPdf(fileId, url).then((doc) => thumbTurn(async () => {

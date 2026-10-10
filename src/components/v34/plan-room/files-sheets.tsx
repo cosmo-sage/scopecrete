@@ -28,23 +28,23 @@ export function Switch({ on, onChange, label }: { on: boolean; onChange: (v: boo
   );
 }
 
-type Look = "list" | "large";
+type Look = "list" | "large" | "pages";
 
 /** List or large icons (Coy, 2026-10-09), kept on the device. */
 function useLook(): [Look, (l: Look) => void] {
   const [look, setLookState] = useState<Look>("list");
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- read once from the device after mount
-    try { if (localStorage.getItem("sc:takeoff-files-look") === "large") setLookState("large"); } catch { /* storage off */ }
+    try { const v = localStorage.getItem("sc:takeoff-files-look"); if (v === "large" || v === "pages") setLookState(v); } catch { /* storage off */ }
   }, []);
   const setLook = (l: Look) => { setLookState(l); try { localStorage.setItem("sc:takeoff-files-look", l); } catch { /* storage off */ } };
   return [look, setLook];
 }
 
-function LookSwitch({ look, onChange }: { look: Look; onChange: (l: Look) => void }) {
+function LookSwitch({ look, onChange, pages }: { look: Look; onChange: (l: Look) => void; pages?: boolean }) {
   const b = (k: Look, label: string, icon: React.ReactNode) => (
     <button type="button" onClick={() => onChange(k)} aria-pressed={look === k} aria-label={label} title={label}
-      className="flex items-center justify-center" style={{ width: 30, height: 26, background: look === k ? T.ink : T.card, color: look === k ? T.card : T.ink2, cursor: "pointer" }}>
+      className={k === "pages" ? "hidden lg:flex items-center justify-center" : "flex items-center justify-center"} style={{ width: 30, height: 26, background: look === k ? T.ink : T.card, color: look === k ? T.card : T.ink2, cursor: "pointer" }}>
       {icon}
     </button>
   );
@@ -52,6 +52,7 @@ function LookSwitch({ look, onChange }: { look: Look; onChange: (l: Look) => voi
     <span className="inline-flex rounded overflow-hidden shrink-0" style={{ border: `1px solid ${T.hairStrong}` }}>
       {b("list", "List", <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M3 5h14M3 10h14M3 15h14" /></svg>)}
       {b("large", "Large icons", <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><rect x="3" y="3" width="6" height="6" rx="1" /><rect x="11" y="3" width="6" height="6" rx="1" /><rect x="3" y="11" width="6" height="6" rx="1" /><rect x="11" y="11" width="6" height="6" rx="1" /></svg>)}
+      {pages && b("pages", "Sheets to read — big enough to read, scroll through them", <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><rect x="2.5" y="4" width="7" height="12" rx="1" /><rect x="10.5" y="4" width="7" height="12" rx="1" /></svg>)}
     </span>
   );
 }
@@ -212,7 +213,23 @@ export function FilesStep({ files, sheets, docPages = [], reading, onToggle, onA
   onOpen: (s: Sheet) => void; initial?: "files" | "sheets"; jobId?: string; onAdded?: () => void | Promise<void>;
   onDelete?: (f: PlanFile) => void; measured?: Set<string>;
 }) {
-  const [look, setLook] = useLook();
+  const [look0, setLook] = useLook();
+  // Sheets to read (Coy, 2026-10-10: "the sheets taking up half of the page on desktop … big
+  // enough to read") is a desktop look; a phone draws no sheet pictures (see Thumb).
+  const [wide, setWide] = useState(false);
+  useEffect(() => {
+    const m = window.matchMedia("(min-width: 1024px)");
+    const on = () => setWide(m.matches);
+    on(); m.addEventListener("change", on);
+    return () => m.removeEventListener("change", on);
+  }, []);
+  // The folder column folds to a strip on a desktop (Coy, 2026-10-10), kept on the device.
+  const [folded, setFolded] = useState(false);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- read once from the device after mount
+    try { if (localStorage.getItem("sc:takeoff-folders-folded") === "1") setFolded(true); } catch { /* storage off */ }
+  }, []);
+  const fold = (v: boolean) => { setFolded(v); try { localStorage.setItem("sc:takeoff-folders-folded", v ? "1" : "0"); } catch { /* storage off */ } };
   const [view, setView] = useState<string>(initial === "sheets" && (sheets.length || docPages.length) ? (sheets.length ? "concrete" : "pages") : "files");
   const [pageAt, setPageAt] = useState<number | null>(null);
   // A drawing opens large first, to read before measuring (Coy, 2026-10-08: "view the files
@@ -239,10 +256,18 @@ export function FilesStep({ files, sheets, docPages = [], reading, onToggle, onA
   ];
   const isSheets = !["files", "photos"].includes(view);
   const isPages = view === "pages";
+  const look: Look = look0 === "pages" && !(wide && isSheets && !isPages) ? "large" : look0;
   const shown = isPages ? docPages : view === "all" ? sheets : view === "concrete" ? (concrete.length ? concrete : sheets) : sheets.filter((s) => (s.discipline ?? "other") === view);
   return (
     <div className="lg:flex" style={{ minHeight: 0 }}>
-      <nav aria-label="Folders" className="flex lg:flex-col gap-1 p-2 lg:p-3 overflow-x-auto lg:overflow-visible" style={{ flex: "0 0 auto", minWidth: 0, borderRight: `1px solid ${T.hairSoft}` }}>
+      {folded && wide && (
+        <div className="flex flex-col items-center" style={{ flex: "0 0 auto", width: 36, paddingTop: 10, borderRight: `1px solid ${T.hairSoft}` }}>
+          <button type="button" onClick={() => fold(false)} aria-label="Show the folders" title="Show the folders" style={{ width: 28, height: 28, borderRadius: 3, border: `1px solid ${T.hair}`, background: T.card, cursor: "pointer", color: T.ink2 }}>»</button>
+        </div>
+      )}
+      <nav aria-label="Folders" className={`${folded && wide ? "hidden" : "flex"} lg:flex-col gap-1 p-2 lg:p-3 overflow-x-auto lg:overflow-visible`} style={{ flex: "0 0 auto", minWidth: 0, borderRight: `1px solid ${T.hairSoft}` }}>
+        <button type="button" onClick={() => fold(true)} aria-label="Hide the folders" title="Hide the folders" className="hidden lg:block self-end"
+          style={{ width: 28, height: 28, borderRadius: 3, border: `1px solid ${T.hair}`, background: T.card, cursor: "pointer", color: T.ink2, marginBottom: -4 }}>«</button>
         {folders.map((f) => (
           <React.Fragment key={f.k}>
             {f.head && <div className="hidden lg:block px-2 pt-2 pb-1" style={{ ...eyebrow, color: T.ink3 }}>{f.head}</div>}
@@ -259,7 +284,7 @@ export function FilesStep({ files, sheets, docPages = [], reading, onToggle, onA
       <div className="flex-1 p-3 lg:p-4" style={{ minWidth: 0 }}>
         <div className="flex items-center gap-2" style={{ marginBottom: 10 }}>
           <span style={{ flex: 1, minWidth: 0, fontFamily: disp, fontSize: F.md, fontWeight: 600, ...clip }}>{folders.find((f) => f.k === view)?.label ?? ""}</span>
-          <LookSwitch look={look} onChange={setLook} />
+          <LookSwitch look={look} onChange={setLook} pages={isSheets && !isPages} />
         </div>
         {view === "files" && <FileList files={files} sheets={sheets} reading={reading} onToggle={onToggle} onAdd={onAdd} uploading={uploading} look={look} onDelete={onDelete} measured={measured} jobId={jobId} />}
         {view === "photos" && <PhotoGrid files={files} jobId={jobId} onAdded={onAdded} look={look} onDelete={onDelete} />}
@@ -274,6 +299,24 @@ export function FilesStep({ files, sheets, docPages = [], reading, onToggle, onA
                 <span style={{ flex: 1, minWidth: 0, fontSize: F.xs, color: T.ink2, ...clip }}>{s.title ?? "No title read"} <span style={{ color: T.ink3 }}>· p.{s.page}</span></span>
                 {!isPages && <ScaleBadge s={s} small />}
               </button>
+            ))}
+          </div>
+        )}
+        {isSheets && look === "pages" && (
+          <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(520px, 1fr))", alignContent: "start" }}>
+            {shown.map((s, idx) => (
+              <div key={s.id} className="rounded overflow-hidden" style={{ background: T.card, border: `1px solid ${T.hair}` }}>
+                <div className="flex items-center gap-2 px-3 py-2" style={{ borderBottom: `1px solid ${T.hairSoft}` }}>
+                  <span style={{ width: 9, height: 9, borderRadius: 2, background: DISC_COLOR[s.discipline ?? ""] ?? T.ink3, flex: "0 0 auto" }} />
+                  <span style={{ fontFamily: strong, fontWeight: 600, fontSize: 14 }}>{sheetLabel(s)}</span>
+                  <span style={{ flex: 1, minWidth: 0, fontSize: F.xs, color: T.ink2, ...clip }}>{s.title ?? "No title read"} <span style={{ color: T.ink3 }}>· p.{s.page}</span></span>
+                  <ScaleBadge s={s} small />
+                  <button type="button" onClick={() => onOpen(s)} style={{ height: 26, padding: "0 9px", borderRadius: 3, border: `1px solid ${T.hiviz}`, background: T.hivizDim, color: T.hivizText, fontFamily: disp, fontSize: 11.5, fontWeight: 600, letterSpacing: ".06em", textTransform: "uppercase", cursor: "pointer" }}>Measure ›</button>
+                </div>
+                <button type="button" onClick={() => setDrawAt({ list: shown, i: idx })} title="Open it large" className="block w-full" style={{ cursor: "zoom-in", background: "transparent" }}>
+                  <Thumb fileId={s.file_id} url={url.get(s.file_id) ?? null} page={s.page} width={1400} aspect={s.page_w && s.page_h ? s.page_h / s.page_w : 0.667} />
+                </button>
+              </div>
             ))}
           </div>
         )}
@@ -314,7 +357,9 @@ export function ScaleBadge({ s, small }: { s: Sheet; small?: boolean }) {
   return <span style={{ ...st, background: T.sunk, color: T.ink3 }}>{s.scale_text ? `prints ${s.scale_text}` : "no scale found"}</span>;
 }
 
-export function Thumb({ fileId, url, page, height = 104 }: { fileId: string; url: string | null; page: number; height?: number }) {
+export function Thumb({ fileId, url, page, height = 104, width, aspect }: { fileId: string; url: string | null; page: number; height?: number;
+  /** Drawn this many pixels wide (default the small thumbnail). */ width?: number;
+  /** Height ÷ width: the whole sheet shown at the card's width instead of a cropped strip. */ aspect?: number }) {
   const [src, setSrc] = useState<string | null>(null);
   const [fail, setFail] = useState<string | null>(null);
   // Drawn only once it scrolls near the screen: a set of 150 scanned sheets drawn all at
@@ -334,12 +379,12 @@ export function Thumb({ fileId, url, page, height = 104 }: { fileId: string; url
   useEffect(() => {
     if (phone || !url || !seen) return;
     let off = false;
-    pageThumb(fileId, url, page).then((d) => { if (!off) setSrc(d); }).catch((e) => { if (!off) setFail(e instanceof Error ? e.message : String(e)); });
+    pageThumb(fileId, url, page, width).then((d) => { if (!off) setSrc(d); }).catch((e) => { if (!off) setFail(e instanceof Error ? e.message : String(e)); });
     return () => { off = true; };
-  }, [fileId, url, page, seen, phone]);
+  }, [fileId, url, page, seen, phone, width]);
   return (
-    <div ref={el} style={{ height, background: T.sunk, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
-      {src ? <img src={src} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "top left" }} />
+    <div ref={el} style={{ ...(aspect ? { aspectRatio: `${1 / aspect}` } : { height }), background: T.sunk, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+      {src ? <img src={src} alt="" style={{ width: "100%", height: "100%", objectFit: aspect ? "contain" : "cover", objectPosition: "top left" }} />
         : <span title={fail ?? undefined} style={{ fontSize: F.xs, color: T.ink3 }}>{fail ? "couldn't draw" : phone ? `p.${page}` : "…"}</span>}
     </div>
   );

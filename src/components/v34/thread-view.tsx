@@ -249,7 +249,7 @@ export function ThreadView({ contactId, embedded = false }: {
       <div className="sc-pinned overflow-y-auto flex flex-col" style={{ background: T.slab }}>
         {/* A simple contact page — the numbers, emails and address, and where they're changed (Coy, 2026-10-06). */}
         <ContactCard person={person} back={{ href: `/dashboard/messages/${contactId}${tq}`, label: "Back" }}
-          textHref={`/dashboard/messages/${contactId}${tq}`} customerHref={custHref} vendorHref={vendHref}
+          textHref={`/dashboard/messages/${contactId}${tq}`} customerHref={custHref} vendorHref={vendHref} startEditing={search.get("edit") === "1"}
           onReload={() => setReload((n) => n + 1)} onJoin={(id) => setMerging({ preselect: id ?? null })} />
         {merging && (
           <MergeSheet contactId={contactId} keepLabel={headerTitle} keepCount={messages.length}
@@ -269,7 +269,9 @@ export function ThreadView({ contactId, embedded = false }: {
     : c?.bucket === "vendor" ? { href: `/dashboard/vendors/${contactId}?from=threads${threadKey ? `&t=${encodeURIComponent(threadKey)}` : ""}`, label: "Vendor page" }
     : { href: `/dashboard/messages/${contactId}?person=1${threadKey ? `&t=${encodeURIComponent(threadKey)}` : ""}`, label: "Contact" };
   // Their own contact card, where numbers, emails and the address are changed (Coy, 2026-10-07: "Edit Contact").
-  const editHref = `/dashboard/messages/${contactId}?person=1${threadKey ? `&t=${encodeURIComponent(threadKey)}` : ""}`;
+  const cardHref = `/dashboard/messages/${contactId}?person=1${threadKey ? `&t=${encodeURIComponent(threadKey)}` : ""}`;
+  // ⋯ Edit contact opens the card with its editor already open (Coy, 2026-10-10).
+  const editHref = `${cardHref}&edit=1`;
   // The breadcrumb's last link: a vendor's page, else their customer's page — the same name again for a homeowner.
   const crumbOrg = c?.bucket === "vendor"
     ? { href: pageLink.href, label: c.company || name || formatPhone(phone), kind: "Vendor", color: T.chalk }
@@ -408,7 +410,7 @@ export function ThreadView({ contactId, embedded = false }: {
               style={{ ...eyebrow, fontSize: 13, whiteSpace: "nowrap", gridTemplateColumns: "auto auto minmax(0, 1fr)", columnGap: 8, rowGap: 3 }}>
               <span style={{ color: T.ink3 }}>Contact</span>
               <span aria-hidden style={{ color: T.hairStrong }}>|</span>
-              <Link href={editHref} className="min-w-0" style={{ color: T.green, overflow: "hidden", textOverflow: "ellipsis" }}>{loading ? headerTitle : (name || formatPhone(phone))}</Link>
+              <Link href={cardHref} className="min-w-0" style={{ color: T.green, overflow: "hidden", textOverflow: "ellipsis" }}>{loading ? headerTitle : (name || formatPhone(phone))}</Link>
               {!loading && crumbOrg && (<>
                 <span style={{ color: T.ink3 }}>{crumbOrg.kind}</span>
                 <span aria-hidden style={{ color: T.hairStrong }}>|</span>

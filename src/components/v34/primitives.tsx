@@ -191,6 +191,10 @@ export const NavIcon = ({ k, on, color }: { k: string; on: boolean; color?: stri
       <path {...p} d="M6.8 2.8v11.6M12.2 5v11.6" />
     </svg>
   );
+  if (k === "admin") return (
+    // Claude Design "Admin Icon Options" 1b Pulse (2026-10-10): a heartbeat inside a ring.
+    <svg {...box}><path {...p} strokeWidth={1.5} d="M2.5 9.5h3l1.5-4 2.5 8 2-6 1.5 2h3.5M9.5 15.5a6.5 6.5 0 1 0-6.4-7.5" /></svg>
+  );
   if (k === "roadmap") return (
     <svg {...box}>
       <path {...p} d="M3 16.4V2.6M3 3.4h9.4l-1.8 2.8 1.8 2.8H3" />

@@ -408,16 +408,56 @@ body { background: var(--sc-slab); color: var(--sc-ink); }
 html[data-head-drop] .sc-head-wrap { z-index: 200 !important; }
 
 /* The rail follows the theme: light in Site Office and Blueprint, navy in
-   Kraft Yard, near-black in Night Shift. Icons are currentColor. */
-.sc-rail { background: var(--sc-rail); border-right: 1px solid var(--sc-hair); color: var(--sc-rail-ink); }
+   Kraft Yard, near-black in Night Shift.
+   Since 2026-10-10 (Claude Design "Rail Icon Colors") a sidebar: one 40px row
+   per page, icon and label, 232px wide; folded to icons it is 64px. */
+:root { --sc-rail-w: 232px; --sc-rail-row: 40px; --sc-icon-lift: 0%; }
+html[data-rail="icons"] { --sc-rail-w: 64px; }
+.sc-rail {
+  width: var(--sc-rail-w); background: var(--sc-rail); border-right: 1px solid var(--sc-hair); color: var(--sc-rail-ink);
+  padding: 8px 0; transition: width .25s ease; overflow-x: hidden;
+}
 .sc-rail a, .sc-rail button { color: var(--sc-rail-ink); }
-.sc-rail a[aria-current="page"], .sc-rail button[aria-pressed="true"] { background: var(--sc-rail-active); border-left-color: var(--sc-hiviz-soft) !important; color: var(--sc-rail-ink-on); }
-/* The desktop rail's width; folded to its icons (Coy, 2026-10-10) it is 56px. */
-:root { --sc-rail-w: 84px; }
-html[data-rail="icons"] { --sc-rail-w: 56px; }
-.sc-rail-item { height: 60px; }
-html[data-rail="icons"] .sc-rail-item { height: 48px; }
-.sc-rail-label { font-family: var(--sc-font-disp, 'Barlow Condensed', sans-serif); font-weight: 500; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: inherit; text-align: center; line-height: 1.1; }
+.sc-rail-item {
+  position: relative; flex: none;
+  height: var(--sc-rail-row); margin: 0 8px; padding-left: 12px; border-radius: 4px;
+  display: flex; align-items: center; gap: 12px; text-decoration: none; cursor: pointer;
+}
+html[data-rail="icons"] .sc-rail-item { padding-left: 14px; }
+.sc-rail-item:hover, .sc-rail-item:focus-visible { background: var(--sc-rail-active); }
+.sc-rail .sc-rail-item[aria-current="page"] {
+  background: var(--sc-rail-active); color: var(--sc-rail-ink-on);
+  box-shadow: inset 3px 0 0 var(--sc-hiviz-soft);
+}
+/* The icon takes its colour from the book (--sc-icon on the row); the active
+   row draws it in full ink. On a dark rail a book colour is lifted toward the
+   rail's light ink so it doesn't sink into the rail (Chalk on Kraft Yard's navy). */
+.sc-rail-item > svg { flex: none; color: color-mix(in srgb, var(--sc-icon, currentColor) calc(100% - var(--sc-icon-lift)), var(--sc-rail-ink-on)) !important; }
+.sc-rail-item[data-plain] > svg, .sc-rail-item[aria-current="page"] > svg { color: currentColor !important; }
+[data-theme="kraft-yard"], [data-theme="steel"], [data-theme="signal"], [data-theme="kraft-clean"] { --sc-icon-lift: 45%; }
+.sc-rail-label {
+  font-family: var(--sc-font-disp, 'Barlow Condensed', sans-serif);
+  font-weight: 600; font-size: 13px; letter-spacing: .08em; text-transform: uppercase;
+  white-space: nowrap; color: inherit; line-height: 1; opacity: 1; transition: opacity .15s;
+}
+html[data-rail="icons"] .sc-rail-label { opacity: 0; pointer-events: none; }
+.sc-rail-badge { position: absolute !important; right: 12px; top: 12px; }
+html[data-rail="icons"] .sc-rail-badge { right: 6px; top: 4px; }
+.sc-rail-fold {
+  margin: auto 8px 0; flex: none; height: var(--sc-rail-row); padding-left: 12px;
+  border: 0; border-top: 1px solid var(--sc-hair); display: flex; align-items: center; gap: 12px;
+  background: none; cursor: pointer; text-align: left;
+}
+html[data-rail="icons"] .sc-rail-fold { padding-left: 14px; }
+.sc-rail .sc-rail-fold:hover { color: var(--sc-rail-ink-on); }
+.sc-rail-fold svg { flex: none; transition: transform .25s; }
+html[data-rail="icons"] .sc-rail-fold svg { transform: scaleX(-1); }
+@media (prefers-reduced-motion: reduce) { .sc-rail, .sc-rail-label, .sc-rail-fold svg { transition: none; } }
+
+/* The icon colour book, Settings → Menus. */
+.sc-book-swatch { width: 24px; height: 24px; border-radius: 50%; border: 2px solid transparent; box-shadow: 0 0 0 1px var(--sc-card) inset; cursor: pointer; padding: 0; flex: none; }
+.sc-book-swatch[aria-pressed="true"] { border-color: var(--sc-ink); }
+.sc-book-swatch:focus-visible { outline: 2px solid var(--sc-hiviz); outline-offset: 2px; }
 
 /* Header lockup (design/org-branding): on a narrow phone the org's logo stands alone. */
 @media (max-width: 339px) { .sc-powered { display: none !important; } }

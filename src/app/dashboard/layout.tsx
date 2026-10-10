@@ -49,6 +49,7 @@ import { ThemePicker, useTheme } from "@/components/v34/theme-picker";
 import { Toolbox, MenuEditor } from "@/components/v34/toolbox";
 import { switchRows, type SwitchOrg } from "@/lib/org-switch";
 import { PAGE, DEFAULT_MENUS, cleanMenus, activePage, type Menus } from "@/lib/v34/pages";
+import { cleanMenuColors, iconVar, type MenuColors } from "@/lib/v34/menu-colors";
 import { usePref } from "@/lib/v34/prefs";
 import { useHideHeadOnScroll } from "@/lib/v34/use-hide-head";
 import { AccessContext } from "@/lib/v34/access-ctx";
@@ -140,14 +141,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }, [phoneLineOn]);
   // The desktop rail folds to its icons (Coy, 2026-10-10: "reduce the menu panel to just the
   // icons … if i hover over the icons it will show the word"). <html data-rail="icons"> makes
-  // --sc-rail-w 56px; app/layout.tsx sets it before first paint from the browser's copy.
+  // --sc-rail-w 64px (232px open, Claude Design's sidebar); app/layout.tsx sets it before first paint from the browser's copy.
   const [railIcons, setRailIcons] = usePref<boolean>("rail_icons", false);
   const [railTip, setRailTip] = useState<{ label: string; top: number } | null>(null);
   useEffect(() => {
     if (railIcons) document.documentElement.dataset.rail = "icons";
     else delete document.documentElement.dataset.rail;
   }, [railIcons]);
-  const menus = cleanMenus(savedMenus);
+  // Each icon's colour from the book (Claude Design, 2026-10-10); a role, so it follows the theme.
+  const [savedColors, setSavedColors] = usePref<MenuColors | null>("menu_colors", null);
+  const menuColors = cleanMenuColors(savedColors);
 
   // Who is signed in, the org's name and logos. Reloaded after Settings
   // changes a name or a logo, so the header follows without a page reload.
@@ -173,6 +176,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   // An onsite estimator (081) sees Jobs (and Files when given) and nothing else; any other
   // page sends them to the board. The database keeps them out regardless — this keeps them
   // from landing on pages that would come back empty.
+  // Admin is on the menu only for a platform admin (Coy, 2026-10-10).
+  const menus = cleanMenus(savedMenus, { admin: !!me?.admin });
   const meAccess = me?.access;
   const access: Access = useMemo(() => (meAccess?.limited ? accessFrom({ role: "field", ...meAccess }) : FULL_ACCESS), [meAccess]);
   const limited = access.limited;
@@ -226,8 +231,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const slotPct = 100 / Math.max(1, footerSlots.length);
   const markIdx = footerSlots.findIndex((k) => k === active || (k === "toolbox" && toolActive));
 
-  const Badge = ({ n, style }: { n: number; style: React.CSSProperties }) => (
-    <span className="absolute rounded-full flex items-center justify-center"
+  const Badge = ({ n, style, className }: { n: number; style?: React.CSSProperties; className?: string }) => (
+    <span className={`absolute rounded-full flex items-center justify-center${className ? ` ${className}` : ""}`}
       style={{ minWidth: 15, height: 15, padding: "0 3px", background: T.hiviz, color: T.onHiviz, fontFamily: disp,
                fontSize: 9.5, fontWeight: 700, lineHeight: 1, ...nums, ...style }}>{n}</span>
   );
@@ -295,40 +300,40 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {!desktop && phoneLineOn && <ActivityLine busy={dustyBusy} onReader={setReaderState} />}
       </div>
 
-      {/* ---- desktop left rail: every page, in Coy's order ---- */}
+      {/* ---- desktop left rail: every page, in Coy's order ----
+          A sidebar since 2026-10-10 (Claude Design "Rail Icon Colors"): icon and label on
+          one row, each icon in its colour from the book; folds to icons at the foot. */}
       <nav aria-label="Main" className="hidden lg:flex fixed left-0 bottom-0 z-30 flex-col items-stretch overflow-y-auto sc-rail"
-        style={{ top: "var(--sc-head)", width: "var(--sc-rail-w)" }} onMouseLeave={() => setRailTip(null)}>
+        style={{ top: "var(--sc-head)" }} onMouseLeave={() => setRailTip(null)}>
         {(allowed ?? menus.rail).map((k) => {
           // Dusty's desktop door is the header button (Coy, 2026-09-30).
           if (k === "dusty") return null;
           const p = PAGE.get(k);
           if (!p) return null;
           const on = active === k;
+          const role = menuColors[k];
+          const tip = (e: React.SyntheticEvent<HTMLElement>) => { const r = e.currentTarget.getBoundingClientRect(); setRailTip({ label: p.label, top: r.top + r.height / 2 }); };
           return (
             <Link key={k} href={p.href} aria-current={on ? "page" : undefined}
               aria-label={railIcons ? p.label : undefined}
-              onMouseEnter={railIcons ? (e) => { const r = e.currentTarget.getBoundingClientRect(); setRailTip({ label: p.label, top: r.top + r.height / 2 }); } : undefined}
-              onMouseLeave={railIcons ? () => setRailTip(null) : undefined}
-              onFocus={railIcons ? (e) => { const r = e.currentTarget.getBoundingClientRect(); setRailTip({ label: p.label, top: r.top + r.height / 2 }); } : undefined}
-              onBlur={railIcons ? () => setRailTip(null) : undefined}
-              className="sc-rail-item flex flex-col items-center justify-center gap-1 no-underline shrink-0"
-              style={{ borderLeft: "3px solid transparent", position: "relative" }}>
-              <span style={{ opacity: on ? 1 : 0.8, display: "flex" }}><NavIcon k={k} on={on} color="currentColor" /></span>
-              {!railIcons && <span className="sc-rail-label">{p.label}</span>}
-              {k === "threads" && needs !== null && needs > 0 && <Badge n={needs} style={railIcons ? { top: 4, right: 4 } : { top: 8, right: 16 }} />}
-              {k === "logs" && badge.logs && <span className="absolute rounded-full" style={{ top: railIcons ? 8 : 12, right: railIcons ? 10 : 24, width: 8, height: 8, background: T.red }} />}
+              onMouseEnter={railIcons ? tip : undefined} onMouseLeave={railIcons ? () => setRailTip(null) : undefined}
+              onFocus={railIcons ? tip : undefined} onBlur={railIcons ? () => setRailTip(null) : undefined}
+              className="sc-rail-item no-underline" data-plain={role ? undefined : ""}
+              style={role ? ({ "--sc-icon": iconVar(role) } as React.CSSProperties) : undefined}>
+              <NavIcon k={k} on={on} color="currentColor" />
+              <span className="sc-rail-label">{p.label}</span>
+              {k === "threads" && needs !== null && needs > 0 && <Badge n={needs} className="sc-rail-badge" />}
+              {k === "logs" && badge.logs && <span className="sc-rail-badge rounded-full" style={{ width: 8, height: 8, marginTop: 4, marginRight: 4, background: T.red }} />}
             </Link>
           );
         })}
         <button type="button" onClick={() => { setRailTip(null); setRailIcons(!railIcons); }}
-          aria-label={railIcons ? "Show the menu's words" : "Fold the menu to icons"}
-          title={railIcons ? "Show the menu's words" : "Fold the menu to icons"}
-          className="mt-auto shrink-0 flex items-center justify-center"
-          style={{ height: 44, borderTop: `1px solid ${T.hair}` }}>
-          <svg width="18" height="18" viewBox="0 0 19 19" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
-            <rect x="2.5" y="3" width="14" height="13" rx="1.5" /><path d="M7 3v13" />
-            <path d={railIcons ? "M10.5 7.5l2 2-2 2" : "M12.5 7.5l-2 2 2 2"} />
+          aria-expanded={!railIcons} aria-label={railIcons ? "Show the menu's words" : "Fold the menu to icons"}
+          title={railIcons ? "Expand" : undefined} className="sc-rail-fold">
+          <svg width="19" height="19" viewBox="0 0 19 19" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M3 3.5h13v12H3zM7 3.5v12M12.5 7.5l-2 2 2 2" />
           </svg>
+          <span className="sc-rail-label">Collapse</span>
         </button>
       </nav>
       {railIcons && railTip && (
@@ -434,7 +439,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <div className="flex flex-col" style={{ borderTop: `1px solid ${T.hair}` }}>
             {(limited ? [] : [
               { href: "/dashboard/more/lines", label: "Lines", note: "Your numbers, what runs them, and whether each is talking to the app" },
-              ...(me?.admin ? [{ href: "/dashboard/admin", label: "ScopeCrete admin", note: "Every company on ScopeCrete: health, setup, pipelines, Dusty, usage, feedback" }] : []),
             ]).map((l) => (
               <Link key={l.href} href={l.href} onClick={() => setMenuOpen(false)} className="block py-2.5 no-underline" style={{ borderBottom: `1px solid ${T.hairSoft}`, color: T.ink }}>
                 <div style={{ fontSize: F.md, fontWeight: 600 }}>{l.label}</div>
@@ -482,8 +486,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </button>}
             {menusOpen && !limited && (
               <div className="py-2">
-                <MenuEditor menus={menus} onChange={(m) => setSavedMenus(m)} />
-                <button onClick={() => setSavedMenus(DEFAULT_MENUS)} className="mt-2" style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>Back to the default</button>
+                <MenuEditor menus={menus} onChange={(m) => setSavedMenus(m)} colors={menuColors} onColors={setSavedColors} />
+                <button onClick={() => { setSavedMenus(DEFAULT_MENUS); setSavedColors(null); }} className="mt-2" style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>Back to the default</button>
               </div>
             )}
           </div>

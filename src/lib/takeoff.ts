@@ -220,3 +220,34 @@ export function fmtQty(q: number, unit: string): string {
   const n = unit === "EA" ? Math.round(q) : q >= 100 ? Math.round(q) : Math.round(q * 10) / 10;
   return `${n.toLocaleString("en-US")} ${unit}`;
 }
+
+/** Ray casting: is the point inside the closed outline? */
+export function pointInPolygon(p: Pt, poly: Pt[]): boolean {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i], [xj, yj] = poly[j];
+    if ((yi > p[1]) !== (yj > p[1]) && p[0] < ((xj - xi) * (p[1] - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+/**
+ * Fill's Cut out (Coy, 2026-10-10: "click inside of curbs to remove the fill"): the area shape a
+ * click lands in — the selected one first, else the smallest on that sheet that holds it — and
+ * not inside a hole it already has. Null when the click is on no fill.
+ */
+export function areaShapeAt<M extends { id: string; geometry: Pt[]; cutouts?: Pt[][] | null }>(p: Pt, shapes: M[], selId?: string | null): M | null {
+  const holds = (m: M) => m.geometry.length >= 3 && pointInPolygon(p, m.geometry) && !(m.cutouts ?? []).some((c) => c.length >= 3 && pointInPolygon(p, c));
+  const sel = selId ? shapes.find((m) => m.id === selId) : undefined;
+  if (sel && holds(sel)) return sel;
+  let best: M | null = null;
+  for (const m of shapes) if (holds(m) && (!best || polygonArea(m.geometry) < polygonArea(best.geometry))) best = m;
+  return best;
+}
+
+/** A hole is kept only when it sits inside the shape: most of its corners inside the outline. */
+export function holeFits(hole: Pt[], shape: Pt[]): boolean {
+  if (hole.length < 3 || shape.length < 3) return false;
+  const inside = hole.filter((q) => pointInPolygon(q, shape)).length;
+  return inside / hole.length >= 0.9 && polygonArea(hole) < polygonArea(shape);
+}

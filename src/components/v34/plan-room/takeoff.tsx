@@ -13,7 +13,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { T, F, disp, eyebrow, clip, strong, light, nums } from "@/lib/v34/tokens";
 import { openPdf, drawPage } from "@/lib/pdf";
-import { dist, fmtQty, measurementQty, parseFeet, rectPoints, scaleFromPoints, scaleLabel, KIND_UNIT, type Pt, type TakeoffKind } from "@/lib/takeoff";
+import { areaShapeAt, dist, fmtQty, holeFits, measurementQty, parseFeet, rectPoints, scaleFromPoints, scaleLabel, KIND_UNIT, type Pt, type TakeoffKind } from "@/lib/takeoff";
 import { call, isAerialSheet, KIND_LABEL, SHAPE_COLORS, shapeColor, sheetLabel, type Meas, type Param, type PlanFile, type PlansData, type Sheet } from "./shared";
 import { ScaleBadge, Thumb } from "./files-sheets";
 import { Drawer, SlideDrawer } from "@/components/v34/primitives";
@@ -96,6 +96,9 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
   const [fillOpt, setFillOpt] = useState<TraceOptions>({ gapPt: 0.5, thinPt: 0 });
   const [tracing, setTracing] = useState(false);
   const lastFill = useRef<Pt | null>(null);
+  // Cut out (Coy, 2026-10-10): a click inside a curbed island traces it as a hole in the fill it sits in.
+  const [fillCut, setFillCut] = useState(false);
+  const [cutTarget, setCutTarget] = useState<string | null>(null);
   // One sheet's scale put on others — every sheet, or the ones ticked (Coy, 2026-10-07).
   const [copyScale, setCopyScale] = useState<{ k: number; from: string; all?: boolean } | null>(null);
   const scaledCount = sheets.filter((x) => x.scale_ft_per_pt).length;
@@ -151,8 +154,12 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
 
   const save = useCallback(async (pts: Pt[]) => {
     if (!sheet) return;
-    if (tool === "cutout" && sel) {
-      await act(() => call(`/api/jobs/${jobId}/takeoff/measurements/${sel.id}`, "PATCH", { cutouts: [...(sel.cutouts ?? []), pts] }));
+    const cutInto = tool === "fill" && fillCut ? data.measurements.find((m) => m.id === cutTarget) : tool === "cutout" ? sel : undefined;
+    if (tool === "fill" && fillCut && !cutInto) { setMsg("Click inside a fill to cut a hole in it."); return; }
+    if (cutInto) {
+      if (tool === "fill" && !holeFits(pts, cutInto.geometry)) { setMsg("That outline runs outside the fill, so it wasn't cut. Try tighter gaps, or draw it with Cutout."); return; }
+      await act(() => call(`/api/jobs/${jobId}/takeoff/measurements/${cutInto.id}`, "PATCH", { cutouts: [...(cutInto.cutouts ?? []), pts] }));
+      setSelId(cutInto.id);
     } else if (tool === "scale") {
       if (pts.length === 2) setScaleAsk({ a: pts[0], b: pts[1] });
       return;
@@ -164,7 +171,7 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
       });
     }
     setDraft([]);
-  }, [act, group, jobId, sel, sheet, tool, setDraft, setScaleAsk]);
+  }, [act, group, jobId, sel, sheet, tool, setDraft, setScaleAsk, fillCut, cutTarget, data.measurements, setSelId]);
 
   const finish = useCallback(() => {
     const need = tool === "linear" || tool === "scale" ? 2 : tool === "count" ? 1 : 3; // fill: 3, like an area
@@ -175,6 +182,12 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
   const fileUrl = file?.url ?? null;
   const trace = useCallback(async (p: Pt, opt: TraceOptions = fillOpt) => {
     if (!sheet || !fileUrl || tracing) return;
+    if (fillCut) {
+      const areaIds = new Set(data.params.filter((g) => g.kind === "area").map((g) => g.id));
+      const into = areaShapeAt(p, data.measurements.filter((m) => m.sheet_id === sheet.id && areaIds.has(m.parameter_id)), selId);
+      if (!into) { setDraft([]); setCutTarget(null); setMsg("Click inside a fill to cut a hole in it. That spot isn't on one."); return; }
+      setCutTarget(into.id);
+    }
     lastFill.current = p;
     setTracing(true); setMsg(null); setDraft([]);
     try {
@@ -183,7 +196,7 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
       if (r.ok) setDraft(r.pts); else setMsg(r.reason);
     } catch (e) { setMsg(e instanceof Error ? e.message : String(e)); }
     finally { setTracing(false); }
-  }, [fileUrl, fillOpt, setDraft, sheet, tracing]);
+  }, [fileUrl, fillOpt, setDraft, sheet, tracing, fillCut, data.params, data.measurements, selId]);
   // Changing how forgiving it is traces the last click again.
   const setFill = (o: TraceOptions) => { setFillOpt(o); if (lastFill.current) void trace(lastFill.current, o); };
 
@@ -332,6 +345,7 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
             {msg && <span style={{ color: T.red }}>{msg}</span>}
             {tool === "fill" && sheet && (
               <FillBar draft={draft} tracing={tracing} opt={fillOpt} setOpt={setFill} sheet={sheet}
+                cut={fillCut} setCut={(v) => { setFillCut(v); setDraft([]); setCutTarget(null); lastFill.current = null; setMsg(null); }}
                 finish={finish} cancel={() => { setDraft([]); lastFill.current = null; }} />
             )}
             {!msg && draft.length > 0 && !scaleAsk && tool !== "fill" && (
@@ -355,7 +369,7 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
         {sheet && file?.url ? (
           <Drawing key={sheet.id} sheet={sheet} fileUrl={file.url} zoom={zoom} setZoom={setZoom} tool={tool}
             data={data} groupId={groupId} selId={selId} setSelId={(id) => { setSelId(id); const m = data.measurements.find((x) => x.id === id); if (m) setGroupId(m.parameter_id); }}
-            draft={draft} setDraft={setDraft} hover={hover} setHover={setHover} save={save} busy={busy || tracing} onTrace={(p) => void trace(p)}
+            draft={draft} setDraft={setDraft} hover={hover} setHover={setHover} save={save} busy={busy || tracing} onTrace={(p) => void trace(p)} cutting={tool === "fill" && fillCut}
             saveShape={(mid, pts) => act(() => call(`/api/jobs/${jobId}/takeoff/measurements/${mid}`, "PATCH", { geometry: pts }))} />
         ) : (
           <div className="flex-1 flex items-center justify-center p-6" style={{ fontSize: F.sm, color: T.ink3 }}>
@@ -399,8 +413,9 @@ const tb = (on: boolean): React.CSSProperties => ({
 });
 
 /** Fill's strip: what was traced, how big, and how forgiving the trace is. */
-function FillBar({ draft, tracing, opt, setOpt, sheet, finish, cancel }: {
-  draft: Pt[]; tracing: boolean; opt: TraceOptions; setOpt: (o: TraceOptions) => void; sheet: Sheet; finish: () => void; cancel: () => void;
+function FillBar({ draft, tracing, opt, setOpt, sheet, cut, setCut, finish, cancel }: {
+  draft: Pt[]; tracing: boolean; opt: TraceOptions; setOpt: (o: TraceOptions) => void; sheet: Sheet;
+  cut: boolean; setCut: (v: boolean) => void; finish: () => void; cancel: () => void;
 }) {
   const q = draft.length >= 3 ? measurementQty("area", { geometry: draft, cutouts: [] }, { ft_per_pt: sheet.scale_ft_per_pt, method: sheet.scale_method, label: sheetLabel(sheet) }) : null;
   const sel: React.CSSProperties = { height: 28, border: `1px solid ${T.hairStrong}`, borderRadius: 3, padding: "0 4px", background: T.card, color: T.ink, fontSize: F.xs };
@@ -408,10 +423,17 @@ function FillBar({ draft, tracing, opt, setOpt, sheet, finish, cancel }: {
     <>
       <span style={{ color: T.ink }}>
         {tracing ? "Tracing the outline…"
-          : draft.length ? <>Traced {draft.length} corners{q ? (q.ok ? <> · <b>≈ {fmtQty(q.qty, "SF")}</b></> : ` · ${q.reason}`) : ""}. Check it against the drawing.</>
+          : draft.length ? <>{cut ? "Hole traced" : `Traced ${draft.length} corners`}{q ? (q.ok ? <> · <b>{cut ? "−" : "≈"} {fmtQty(q.qty, "SF")}</b></> : ` · ${q.reason}`) : ""}. Check it against the drawing.</>
+          : cut ? "Click inside a curbed island or anything inside a fill. It's traced and cut out of that fill."
           : "Click inside an area. Its outline is traced off the drawing for you to check."}
       </span>
-      {draft.length >= 3 && !tracing && <button onClick={finish} style={tb(true)}>Keep it</button>}
+      <span className="inline-flex" role="group" aria-label="Fill or cut out" style={{ border: `1px solid ${T.hairStrong}`, borderRadius: 3, overflow: "hidden" }}>
+        {([[false, "Fill"], [true, "Cut out"]] as const).map(([v, label]) => (
+          <button key={label} onClick={() => setCut(v)} aria-pressed={cut === v}
+            style={{ height: 28, padding: "0 9px", fontSize: F.xs, fontWeight: 600, background: cut === v ? (v ? T.red : T.ink) : T.card, color: cut === v ? "#fff" : T.ink2 }}>{label}</button>
+        ))}
+      </span>
+      {draft.length >= 3 && !tracing && <button onClick={finish} style={tb(true)}>{cut ? "Cut it out" : "Keep it"}</button>}
       {draft.length > 0 && !tracing && <button onClick={cancel} style={tb(false)}>Drop it</button>}
       <select value={String(opt.gapPt)} onChange={(e) => setOpt({ ...opt, gapPt: Number(e.target.value) })} aria-label="Bridge gaps" title="Close small breaks in the outline" style={sel}>
         <option value="0.5">Gaps: tight</option>
@@ -505,7 +527,7 @@ function ScaleCopy({ k, from, all, sheets, apply, onClose }: { k: number; from: 
 
 /* --------------------------------------------------------------- drawing */
 
-function Drawing({ sheet, fileUrl, zoom, setZoom, tool, data, groupId, selId, setSelId, draft, setDraft, hover, setHover, save, busy, saveShape, onTrace }: {
+function Drawing({ sheet, fileUrl, zoom, setZoom, tool, data, groupId, selId, setSelId, draft, setDraft, hover, setHover, save, busy, saveShape, onTrace, cutting }: {
   sheet: Sheet; fileUrl: string; zoom: number; setZoom: (f: (z: number) => number) => void; tool: Tool;
   data: PlansData; groupId: string | null; selId: string | null; setSelId: (id: string | null) => void;
   draft: Pt[]; setDraft: React.Dispatch<React.SetStateAction<Pt[]>>; hover: Pt | null; setHover: (p: Pt | null) => void;
@@ -514,6 +536,8 @@ function Drawing({ sheet, fileUrl, zoom, setZoom, tool, data, groupId, selId, se
   saveShape: (id: string, pts: Pt[]) => Promise<void>;
   /** Fill: trace the outline round this point. */
   onTrace: (p: Pt) => void;
+  /** Fill is cutting a hole: the draft is drawn red. */
+  cutting?: boolean;
 }) {
   // The corner being dragged on the selected shape, and the shape's points while it moves.
   const [edit, setEdit] = useState<{ id: string; pts: Pt[]; i: number; moved: boolean; start: Pt } | null>(null);
@@ -612,7 +636,7 @@ function Drawing({ sheet, fileUrl, zoom, setZoom, tool, data, groupId, selId, se
   const sw = 2 / px, r = 5 / px;
   const pathOf = (pts: Pt[], close: boolean) => pts.map((p, i) => `${i ? "L" : "M"}${p[0]},${p[1]}`).join(" ") + (close ? " Z" : "");
   const grp = data.params.find((p) => p.id === groupId);
-  const draftColor = tool === "cutout" ? T.red : tool === "scale" ? "#1E5AA8" : grp?.color ?? T.hiviz;
+  const draftColor = tool === "cutout" || cutting ? T.red : tool === "scale" ? "#1E5AA8" : grp?.color ?? T.hiviz;
 
   return (
     <div ref={box} className="flex-1 overflow-auto" style={{ background: T.sunk, padding: 12, paddingBottom: 56, position: "relative", minHeight: 0 }}

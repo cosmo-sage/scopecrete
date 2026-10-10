@@ -36,6 +36,7 @@ import { DustyPanel } from "@/components/v34/dusty-panel";
 import { DustyAvatar } from "@/components/v34/dusty-avatar";
 import { ActivityLine } from "@/components/v34/activity-line";
 import { ArchiveToast } from "@/components/v34/archive-actions";
+import { ThreadColorVars } from "@/components/v34/thread-colors";
 import { AlertsBell, AlertPopups } from "@/components/v34/incoming-alerts";
 import { useAlertsWatcher } from "@/lib/v34/alerts-live";
 import dynamic from "next/dynamic";
@@ -308,6 +309,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <AccessContext.Provider value={access}><OrgNameContext.Provider value={me?.org_name ?? null}>{children}</OrgNameContext.Provider></AccessContext.Provider>
       </main>
       <ArchiveToast />
+      <ThreadColorVars />
       {me && !limited && <AlertPopups />}
 
       <Toolbox open={toolOpen} onClose={() => setToolOpen(false)} keys={toolKeys} active={active} badge={badge} />

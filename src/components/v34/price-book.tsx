@@ -216,6 +216,49 @@ export function PriceBook({ pick }: { pick?: PricePick } = {}) {
     finally { reload(); }
   };
 
+  /** Several at once (Coy, 2026-10-10: "select multiple cost items to delete at the same time or
+   *  select an entire cost group to edit/delete"): ticks on the desktop grid, a group's tick takes
+   *  all its cards; Retire N and Move to a group; a group's ✎ edits or deletes it. Undo puts back
+   *  what was retired — and a deleted group, made again with its cards. */
+  const [sel, setSel] = useState<Set<string>>(new Set());
+  const [editGroup, setEditGroup] = useState<Group | null>(null);
+  const [bulkUndo, setBulkUndo] = useState<{ ids: string[]; label: string; group?: { name: string; cost_type: CostType } } | null>(null);
+  const toggleSel = (ids: string[], on: boolean) => setSel((cur) => { const n = new Set(cur); for (const id of ids) { if (on) n.add(id); else n.delete(id); } return n; });
+  const eachOf = async (ids: string[], fn: (id: string) => Promise<unknown>) => {
+    for (let i = 0; i < ids.length; i += 8) await Promise.all(ids.slice(i, i + 8).map(fn));
+  };
+  const retireMany = async (ids: string[], label: string, group?: Group) => {
+    setErr(null); setBusy("bulk");
+    try {
+      await eachOf(ids, (id) => call(`/api/cost-items/${id}`, "DELETE"));
+      let gone = false;
+      if (group) {
+        try { await call(`/api/cost-groups/${group.id}`, "DELETE"); gone = true; }
+        catch { setNote(`${group.name} stays — budget lines are filed under it. Its cards are retired.`); }
+      }
+      setSel(new Set());
+      const u = { ids, label, group: gone && group ? { name: group.name, cost_type: group.cost_type } : undefined };
+      setBulkUndo(u); setTimeout(() => setBulkUndo((x) => (x === u ? null : x)), 10000);
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(null); reload(); }
+  };
+  const undoBulk = async () => {
+    const u = bulkUndo; if (!u) return;
+    setBulkUndo(null); setBusy("bulk");
+    try {
+      let gid: string | null = null;
+      if (u.group) gid = ((await call("/api/cost-groups", "POST", u.group)) as { group?: { id: string } }).group?.id ?? null;
+      await eachOf(u.ids, (id) => call(`/api/cost-items/${id}`, "PATCH", gid ? { active: true, cost_group_id: gid } : { active: true }));
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(null); reload(); }
+  };
+  const moveMany = async (ids: string[], groupId: string) => {
+    setErr(null); setBusy("bulk");
+    try { await eachOf(ids, (id) => call(`/api/cost-items/${id}`, "PATCH", { cost_group_id: groupId })); setSel(new Set()); }
+    catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(null); reload(); }
+  };
+
   const patch = async (c: Card, body: Record<string, unknown>) => {
     setErr(null);
     setItems((xs) => (xs ?? []).map((x) => (x.id === c.id ? { ...x, ...body } as Card : x)));
@@ -404,13 +447,41 @@ export function PriceBook({ pick }: { pick?: PricePick } = {}) {
       )}
 
       {/* ---- the book ---- */}
+      {wide && !pick && sel.size > 0 && (
+        <div className="mt-3 sticky z-20 rounded px-3 flex items-center gap-3 flex-wrap" style={{ top: "calc(var(--sc-head) + var(--sc-subhead, 0px) + 4px)", minHeight: 44, background: T.ink, color: T.card, fontSize: F.sm }}>
+          <span style={{ fontWeight: 600 }}>{sel.size} picked</span>
+          <select value="" onChange={(e) => { if (e.target.value) void moveMany([...sel], e.target.value); }} disabled={busy === "bulk"} aria-label="Move to a group"
+            style={{ height: 30, borderRadius: 4, background: T.card, color: T.ink, fontSize: F.sm, padding: "0 6px" }}>
+            <option value="">Move to a group…</option>
+            {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+          </select>
+          <button onClick={() => void retireMany([...sel], `${sel.size} card${sel.size === 1 ? "" : "s"}`)} disabled={busy === "bulk"} className="rounded px-3"
+            style={{ height: 30, background: T.red, color: "#fff", fontFamily: disp, fontSize: F.sm, textTransform: "uppercase", letterSpacing: ".04em", cursor: "pointer" }}>
+            {busy === "bulk" ? "…" : `Retire ${sel.size}`}
+          </button>
+          <span className="flex-1" />
+          <button onClick={() => setSel(new Set())} style={{ ...eyebrow, color: T.card, cursor: "pointer" }}>Clear</button>
+        </div>
+      )}
+      {bulkUndo && (
+        <div role="status" aria-live="polite" className="fixed left-3 right-3 lg:left-auto lg:w-[420px] rounded px-3 py-2 flex items-center gap-3"
+          style={{ bottom: "calc(var(--sc-foot, 58px) + 12px)", right: 16, zIndex: 60, background: T.ink, color: T.card, fontSize: F.sm, boxShadow: "0 6px 18px rgba(0,0,0,.25)" }}>
+          <span style={{ flex: 1, minWidth: 0, ...clip }}>Retired {bulkUndo.label}{bulkUndo.group ? ` and deleted ${bulkUndo.group.name}` : ""}</span>
+          <button onClick={() => void undoBulk()} style={{ ...eyebrow, color: T.hiviz, cursor: "pointer" }}>Undo</button>
+        </div>
+      )}
       {wide ? (
         <div className="mt-3 rounded overflow-x-auto" style={{ background: T.card, border: `1px solid ${T.hair}` }}>
           <table style={{ borderCollapse: "collapse", fontSize: F.sm, tableLayout: "fixed", width: tableW, minWidth: "100%", ...nums }}>
-            <colgroup>{pick && <col style={{ width: 44 }} />}{shownCols.map((col) => <col key={col.k} style={{ width: widthOf(col.k) }} />)}</colgroup>
+            <colgroup>{pick ? <col style={{ width: 44 }} /> : <col style={{ width: 32 }} />}{shownCols.map((col) => <col key={col.k} style={{ width: widthOf(col.k) }} />)}</colgroup>
             <thead>
               <tr style={{ background: T.slab }}>
-                {pick && <th style={{ borderBottom: `1px solid ${T.hair}` }} />}
+                {pick ? <th style={{ borderBottom: `1px solid ${T.hair}` }} /> : (
+                  <th style={{ borderBottom: `1px solid ${T.hair}`, textAlign: "center" }}>
+                    <input type="checkbox" aria-label="Tick every card" checked={sections.length > 0 && sections.every((x) => x.cards.every((c) => sel.has(c.id)))}
+                      onChange={(e) => toggleSel(sections.flatMap((x) => x.cards.map((c) => c.id)), e.target.checked)} style={{ width: 15, height: 15, accentColor: T.ink }} />
+                  </th>
+                )}
                 {shownCols.map((col) => (
                   <th key={col.k} style={{ ...eyebrow, textAlign: col.align ?? "left", padding: "6px 8px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", borderBottom: `1px solid ${T.hair}`, position: "relative" }}>
                     {col.k === "other" ? (view === "group" ? "Vendor" : "Group") : col.label}
@@ -427,8 +498,12 @@ export function PriceBook({ pick }: { pick?: PricePick } = {}) {
                 return (
                   <React.Fragment key={s.key}>
                     <tr style={{ background: T.ink, color: T.card }}>
-                      <td colSpan={shownCols.length + (pick ? 1 : 0)} style={{ padding: "5px 8px" }}>
+                      <td colSpan={shownCols.length + 1} style={{ padding: "5px 8px" }}>
                         <span className="flex items-center gap-2">
+                          {!pick && s.cards.length > 0 && (
+                            <input type="checkbox" aria-label={`Tick every card in ${s.title}`} checked={s.cards.every((c) => sel.has(c.id))}
+                              onChange={(e) => toggleSel(s.cards.map((c) => c.id), e.target.checked)} style={{ width: 15, height: 15, accentColor: T.hiviz, marginLeft: 1 }} />
+                          )}
                           <button onClick={() => setOpen((o) => ({ ...o, [s.key]: shut }))} aria-expanded={!shut} style={{ color: T.card, cursor: "pointer", fontFamily: disp, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".04em" }}>
                             {shut ? "+" : "−"} {s.title}
                           </button>
@@ -439,12 +514,15 @@ export function PriceBook({ pick }: { pick?: PricePick } = {}) {
                             <button onClick={() => void took(s.key, `all of ${s.title}`, () => pick.onGroup(s.groupId!, s.title))} disabled={busy === s.key}
                               style={{ ...eyebrow, color: T.card, cursor: "pointer", border: `1px solid ${T.card}`, borderRadius: 3, padding: "1px 6px" }}>Add all {s.cards.length}</button>
                           )}
+                          {s.groupId && !pick && (
+                            <button onClick={() => setEditGroup(groups.find((g) => g.id === s.groupId) ?? null)} title="Rename or delete this group" style={{ ...eyebrow, color: T.card, cursor: "pointer" }}>✎ Group</button>
+                          )}
                           {s.groupId && <button onClick={() => newCard(s.groupId)} style={{ ...eyebrow, color: T.card, cursor: "pointer" }}>+ Card</button>}
                         </span>
                       </td>
                     </tr>
                     {!shut && s.cards.length === 0 && (
-                      <tr><td colSpan={shownCols.length + (pick ? 1 : 0)} style={{ padding: "6px 24px", fontSize: F.xs, color: T.ink3 }}>No cards in this group yet.</td></tr>
+                      <tr><td colSpan={shownCols.length + 1} style={{ padding: "6px 24px", fontSize: F.xs, color: T.ink3 }}>No cards in this group yet.</td></tr>
                     )}
                     {!shut && s.cards.slice(0, caps[si]).map((c) => {
                       const gaps = cardGaps(c);
@@ -490,7 +568,11 @@ export function PriceBook({ pick }: { pick?: PricePick } = {}) {
                       };
                       return (
                         <tr key={c.id} style={{ borderTop: `1px solid ${T.hairSoft}`, opacity: c.active ? 1 : 0.5 }}>
-                          {pick && <td style={{ padding: "2px 4px 2px 8px" }}>{plus(c)}</td>}
+                          {pick ? <td style={{ padding: "2px 4px 2px 8px" }}>{plus(c)}</td> : (
+                            <td style={{ textAlign: "center" }}>
+                              <input type="checkbox" aria-label={`Tick ${c.name}`} checked={sel.has(c.id)} onChange={(e) => toggleSel([c.id], e.target.checked)} style={{ width: 15, height: 15, accentColor: T.ink }} />
+                            </td>
+                          )}
                           {shownCols.map((col) => cell[col.k])}
                         </tr>
                       );
@@ -567,6 +649,12 @@ export function PriceBook({ pick }: { pick?: PricePick } = {}) {
       <CardSheet card={editing ? (items ?? []).find((x) => x.id === editing.id) ?? editing : null} groups={groups} vendors={vendors} lockVendor={null} items={items ?? []}
         onClose={() => setEditing(null)} onSaved={() => { setEditing(null); reload(); }} />
       <GroupSheet open={addingGroup} onClose={() => setAddingGroup(false)} onSaved={() => { setAddingGroup(false); reload(); }} />
+      {editGroup && (
+        <GroupSheet key={editGroup.id} open group={editGroup} onClose={() => setEditGroup(null)} onSaved={() => { setEditGroup(null); reload(); }}
+          cards={(items ?? []).filter((c) => c.active && c.cost_group_id === editGroup.id).length}
+          onDelete={() => { const g = editGroup; setEditGroup(null);
+            void retireMany((items ?? []).filter((c) => c.active && c.cost_group_id === g.id).map((c) => c.id), `${g.name}'s cards`, g); }} />
+      )}
       {importing === "receipt" && (
         <ReceiptImport open onClose={() => setImporting(null)} onDone={(m) => { setImporting(null); setNote(m); reload(); }} />
       )}

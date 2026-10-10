@@ -18,6 +18,7 @@ import { initials, SYSTEM_KEYS, type SystemThreadKey } from "@/lib/v34/threads";
 import { STATUS_NAME } from "@/lib/jobs/stages";
 import { RuleForm, EMPTY_RULE } from "@/components/v34/rule-feed";
 import type { ThreadRule } from "@/lib/rule-threads";
+import { ThreadColorsPanel, useThreadColors } from "@/components/v34/thread-colors";
 
 export const SYSTEM_THREADS: Record<SystemThreadKey, { label: string; color: string; icon: React.ReactNode }> = {
   all: { label: "All", color: T.ink, icon: <><path d="M3 5h14M3 10h14M3 15h14" /></> },
@@ -33,11 +34,11 @@ const ARCHIVED = { label: "Archived", icon: <><path d="M3 4h14v4H3z" /><path d="
 const RAIL_ORDER: Array<SystemThreadKey | "archived"> = ["all", "customers", "unsorted", "vendors", "archived", "personal", "spam"];
 
 /** The thread's name and colour, for headers and back links. */
-export function threadLabel(thread: string, custom: Array<{ id: string; name: string }> | null): { name: string; color: string; custom: boolean } {
+export function threadLabel(thread: string, custom: Array<{ id: string; name: string }> | null, colors?: Record<string, string>): { name: string; color: string; custom: boolean } {
   if (thread === "archived") return { name: "Archived", color: T.ink2, custom: false };
   const s = (SYSTEM_KEYS as string[]).includes(thread) ? SYSTEM_THREADS[thread as SystemThreadKey] : null;
   if (s) return { name: s.label, color: s.color, custom: false };
-  return { name: custom?.find((t) => t.id === thread)?.name ?? "Thread", color: T.hiviz, custom: true };
+  return { name: custom?.find((t) => t.id === thread)?.name ?? "Thread", color: colors?.[thread.toLowerCase()] ?? T.hiviz, custom: true };
 }
 
 function Icon({ children, color }: { children: React.ReactNode; color: string }) {
@@ -48,8 +49,11 @@ function Icon({ children, color }: { children: React.ReactNode; color: string })
 
 function ThreadCells({ onPick, wide }: { onPick?: () => void; wide?: boolean }) {
   const ctx = useThreads();
+  const [colors] = useThreadColors();
+  const [painting, setPainting] = useState(false);
   if (!ctx) return null;
   const { thread, setThread, custom, counts, customCounts, setNewThread } = ctx;
+  const ownColor = (id: string) => colors[id.toLowerCase()] ?? T.hiviz;
   const go = (t: string) => { setThread(t); onPick?.(); };
   const cell = (on: boolean, edge: string): React.CSSProperties => ({
     cursor: "pointer", border: "none", borderLeft: `3px solid ${on ? edge : "transparent"}`,
@@ -80,17 +84,17 @@ function ThreadCells({ onPick, wide }: { onPick?: () => void; wide?: boolean }) 
         // A rule thread holds no people, so it shows no count here.
         const on = thread === t.id, n = t.source === "rule" ? "" : customCounts[t.id] ?? t.count;
         return wide ? (
-          <button key={t.id} onClick={() => go(t.id)} className="flex items-center gap-2.5 px-3 text-left" style={{ ...cell(on, T.hiviz), minHeight: 44 }}>
-            <span className="shrink-0 flex items-center justify-center rounded" style={{ width: 26, height: 26, border: `1px solid ${T.hiviz}`, color: T.hiviz, fontFamily: disp, fontSize: 11, fontWeight: 700 }}>{initials(t.name)}</span>
+          <button key={t.id} onClick={() => go(t.id)} className="flex items-center gap-2.5 px-3 text-left" style={{ ...cell(on, ownColor(t.id)), minHeight: 44 }}>
+            <span className="shrink-0 flex items-center justify-center rounded" style={{ width: 26, height: 26, border: `1px solid ${ownColor(t.id)}`, color: ownColor(t.id), fontFamily: disp, fontSize: 11, fontWeight: 700 }}>{initials(t.name)}</span>
             <span style={{ fontSize: F.sm, fontWeight: 600, flex: 1, minWidth: 0, ...clip }}>{t.name}</span>
-            <span style={{ fontSize: 11, fontWeight: 700, color: T.hiviz, ...nums }}>{n}</span>
+            <span style={{ fontSize: 11, fontWeight: 700, color: ownColor(t.id), ...nums }}>{n}</span>
           </button>
         ) : (
-          <button key={t.id} role="tab" aria-selected={on} title={t.name} onClick={() => go(t.id)} className="flex flex-col items-center justify-center gap-0.5 shrink-0 px-1" style={{ ...cell(on, T.hiviz), minHeight: 64, paddingTop: 6, paddingBottom: 6 }}>
-            <span className="flex items-center justify-center rounded" style={{ width: 26, height: 26, border: `1px solid ${T.hiviz}`, color: T.hiviz, fontFamily: disp, fontSize: 11, fontWeight: 700 }}>{initials(t.name)}</span>
+          <button key={t.id} role="tab" aria-selected={on} title={t.name} onClick={() => go(t.id)} className="flex flex-col items-center justify-center gap-0.5 shrink-0 px-1" style={{ ...cell(on, ownColor(t.id)), minHeight: 64, paddingTop: 6, paddingBottom: 6 }}>
+            <span className="flex items-center justify-center rounded" style={{ width: 26, height: 26, border: `1px solid ${ownColor(t.id)}`, color: ownColor(t.id), fontFamily: disp, fontSize: 11, fontWeight: 700 }}>{initials(t.name)}</span>
             <span style={{ fontFamily: disp, fontSize: 9.5, lineHeight: 1.1, letterSpacing: ".04em", textTransform: "uppercase", textAlign: "center", wordBreak: "break-word",
               display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{t.name}</span>
-            <span style={{ fontSize: 11, fontWeight: 700, color: T.hiviz, ...nums }}>{n}</span>
+            <span style={{ fontSize: 11, fontWeight: 700, color: ownColor(t.id), ...nums }}>{n}</span>
           </button>
         );
       })}
@@ -99,6 +103,18 @@ function ThreadCells({ onPick, wide }: { onPick?: () => void; wide?: boolean }) 
         <span className="flex items-center justify-center rounded" style={{ width: 26, height: 26, border: `1px dashed ${T.hairStrong}`, color: T.ink2, fontSize: 15 }}>+</span>
         <span style={{ fontFamily: disp, fontSize: wide ? F.sm : 9.5, letterSpacing: ".06em", textTransform: "uppercase" }}>{wide ? "New thread" : "New"}</span>
       </button>
+      {/* Colours (Coy, 2026-10-10: "a settings icon that opens a side panel … change the color of any thread"). */}
+      <button onClick={() => setPainting(true)} aria-label="Thread colours" title="Thread colours"
+        className={wide ? "flex items-center gap-2.5 px-3 text-left" : "flex flex-col items-center justify-center gap-0.5 shrink-0"}
+        style={{ ...cell(false, T.ink2), height: wide ? 44 : 52, marginTop: wide ? 0 : "auto" }}>
+        <Icon color={T.ink2}><circle cx="10" cy="10" r="2.6" /><path d="M10 2.5v2M10 15.5v2M2.5 10h2M15.5 10h2M4.7 4.7l1.4 1.4M13.9 13.9l1.4 1.4M4.7 15.3l1.4-1.4M13.9 6.1l1.4-1.4" /></Icon>
+        <span style={{ fontFamily: disp, fontSize: wide ? F.sm : 9.5, letterSpacing: ".06em", textTransform: "uppercase" }}>{wide ? "Thread colours" : "Colours"}</span>
+      </button>
+      <ThreadColorsPanel open={painting} onClose={() => setPainting(false)}
+        threads={[
+          ...(["customers", "unsorted", "vendors", "personal", "spam"] as const).map((k) => ({ key: k, label: SYSTEM_THREADS[k].label, color: SYSTEM_THREADS[k].color })),
+          ...(custom ?? []).map((t) => ({ key: t.id, label: t.name, color: ownColor(t.id) })),
+        ]} />
     </>
   );
 }

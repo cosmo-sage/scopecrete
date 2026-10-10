@@ -216,7 +216,15 @@ function PhoneRow({ contactId, phone, label, main, editing, textHref, onSaved }:
   contactId: string; phone: string; label: string | null; main: boolean; editing: boolean; textHref: string; onSaved: () => void;
 }) {
   const [draft, setDraft] = useState(label ?? "");
+  const [num, setNum] = useState(formatPhone(phone));
   const [err, setErr] = useState<string | null>(null);
+  // The number itself: a typo fixed in place (Coy, 2026-10-10).
+  const saveNum = async () => {
+    if (num.replace(/\D/g, "").replace(/^1(?=\d{10}$)/, "") === phone.replace(/\D/g, "").replace(/^1(?=\d{10}$)/, "")) return;
+    const r = await fetch(`/api/contacts/${encodeURIComponent(contactId)}/phones`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone, to: num }) });
+    if (!r.ok) { setErr(((await r.json().catch(() => ({}))) as { error?: string }).error ?? "Couldn't save it."); return; }
+    setErr(null); onSaved();
+  };
   const save = async () => {
     if ((draft.trim() || null) === (label ?? null)) return;
     const r = await fetch(`/api/contacts/${encodeURIComponent(contactId)}/phones`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone, label: draft }) });
@@ -229,7 +237,9 @@ function PhoneRow({ contactId, phone, label, main, editing, textHref, onSaved }:
       <div className="flex items-center gap-4" style={{ padding: "8px 16px" }}>
         <span className="shrink-0" style={{ width: 22, display: "flex", justifyContent: "center" }}><Phone size={20} color={T.ink3} /></span>
         <span className="flex-1 min-w-0">
-          <span className="block" style={{ fontSize: 15.5, color: T.ink, ...nums }}>{formatPhone(phone)}</span>
+          <input value={num} onChange={(e) => setNum(e.target.value)} onBlur={() => void saveNum()} onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+            inputMode="tel" maxLength={20} aria-label="Phone number"
+            className="rounded px-2 block" style={{ height: 32, width: "100%", maxWidth: 220, border: `1px solid ${T.hair}`, fontSize: 15.5, background: T.card, color: T.ink, ...nums }} />
           <input value={draft} onChange={(e) => setDraft(e.target.value)} onBlur={() => void save()} onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
             maxLength={30} placeholder={main ? "Mobile" : "Office, Work…"} aria-label={`What ${formatPhone(phone)} is`}
             className="rounded px-2 mt-1" style={{ height: 30, width: "100%", maxWidth: 220, border: `1px solid ${T.hair}`, fontSize: F.sm, background: T.card, color: T.ink }} />

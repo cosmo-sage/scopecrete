@@ -193,18 +193,30 @@ export function CostCards({ vendorId, vendorName }: { vendorId?: string; vendorN
   );
 }
 
-export function GroupSheet({ open, onClose, onSaved }: { open: boolean; onClose: () => void; onSaved: () => void }) {
-  const [name, setName] = useState("");
-  const [type, setType] = useState<CostType>("material");
+export function GroupSheet({ open, onClose, onSaved, group, cards = 0, onDelete }: {
+  open: boolean; onClose: () => void; onSaved: () => void;
+  /** Editing this group (Coy, 2026-10-10: "select an entire cost group to edit/delete"); none = a new one. */
+  group?: Group | null;
+  /** How many cards are in it, for Delete. */
+  cards?: number;
+  onDelete?: () => void;
+}) {
+  const [name, setName] = useState(group?.name ?? "");
+  const [type, setType] = useState<CostType>((group?.cost_type as CostType | null) ?? "material");
   const [err, setErr] = useState<string | null>(null);
+  const [sure, setSure] = useState(false);
   const save = async () => {
     setErr(null);
-    try { await call("/api/cost-groups", "POST", { name, cost_type: type }); setName(""); onSaved(); }
+    try {
+      if (group) await call(`/api/cost-groups/${group.id}`, "PATCH", { name, cost_type: type });
+      else { await call("/api/cost-groups", "POST", { name, cost_type: type }); setName(""); }
+      onSaved();
+    }
     catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
   };
   const field: React.CSSProperties = { height: 36, border: `1px solid ${T.hair}`, background: T.card, fontSize: F.sm, borderRadius: 4, padding: "0 8px", width: "100%" };
   return (
-    <Sheet open={open} onClose={onClose} title="New group" sub="How cards are organised on the budget and the proposal">
+    <Sheet open={open} onClose={onClose} title={group ? "Edit group" : "New group"} sub="How cards are organised on the budget and the proposal">
       <div className="px-4 py-3 flex flex-col gap-3">
         <label className="block"><span style={eyebrow}>Name</span>
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ready mix — Angelle Materials" style={field} /></label>
@@ -213,7 +225,18 @@ export function GroupSheet({ open, onClose, onSaved }: { open: boolean; onClose:
             {COST_TYPES.map((t) => <option key={t} value={t}>{COST_TYPE_LABEL[t]}</option>)}
           </select></label>
         {err && <div style={{ fontSize: F.xs, color: T.red }}>{err}</div>}
-        <button onClick={() => void save()} disabled={!name.trim()} className="rounded" style={{ height: 40, background: T.ink, color: T.card, fontFamily: disp, fontSize: F.sm, textTransform: "uppercase", opacity: name.trim() ? 1 : 0.5 }}>Add group</button>
+        <button onClick={() => void save()} disabled={!name.trim()} className="rounded" style={{ height: 40, background: T.ink, color: T.card, fontFamily: disp, fontSize: F.sm, textTransform: "uppercase", opacity: name.trim() ? 1 : 0.5 }}>{group ? "Save" : "Add group"}</button>
+        {group && onDelete && (sure ? (
+          <div className="rounded p-3" style={{ border: `1px solid ${T.red}`, fontSize: F.sm, color: T.ink, lineHeight: 1.45 }}>
+            Delete {group.name}{cards > 0 ? ` and retire its ${cards} card${cards === 1 ? "" : "s"}` : ""}? Budgets that used them keep their lines. You can undo it.
+            <div className="flex gap-2 mt-2">
+              <button onClick={onDelete} className="rounded px-3" style={{ height: 34, background: T.red, color: "#fff", fontFamily: disp, fontSize: F.sm, textTransform: "uppercase" }}>Delete</button>
+              <button onClick={() => setSure(false)} className="rounded px-3" style={{ height: 34, border: `1px solid ${T.hair}`, fontFamily: disp, fontSize: F.sm, textTransform: "uppercase" }}>Keep it</button>
+            </div>
+          </div>
+        ) : (
+          <button onClick={() => setSure(true)} className="self-start" style={{ ...eyebrow, color: T.red, cursor: "pointer" }}>Delete group{cards > 0 ? ` · retires ${cards} card${cards === 1 ? "" : "s"}` : ""}</button>
+        ))}
       </div>
     </Sheet>
   );

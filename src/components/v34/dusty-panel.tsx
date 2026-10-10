@@ -494,8 +494,12 @@ export function DustyPanel({ open, onClose, onBusy, onStream }: {
         {/* A page can put its own numbers here while Dusty is docked beside it
             (the job page's totals — Coy, 2026-09-30). */}
         <div id="sc-dusty-slot" className="shrink-0" />
+        {/* Dusty lives in the chat, just above the message bar at its left (Coy, 2026-10-10:
+            "live inside the actual chat window, right above where it is"); the box below
+            gets the row's whole width, and the chat leaves room under its last line for him. */}
+        <div className="flex-1 min-h-0 relative flex flex-col">
         <div ref={scroller} className="flex-1 overflow-y-auto">
-          <div className="mx-auto w-full px-4 py-4" style={{ maxWidth: 760 }}>
+          <div className="mx-auto w-full px-4 pt-4" style={{ maxWidth: 760, paddingBottom: 84 }}>
             {loadingConv && <div className="rounded animate-pulse" style={{ height: 80, background: T.hairSoft }} />}
             {!loadingConv && items.length === 0 && jobAsk && (
               <JobAsk onNew={() => { setJobAsk(false); create("job"); }}
@@ -552,6 +556,10 @@ export function DustyPanel({ open, onClose, onBusy, onStream }: {
             {err &&<div style={{ fontSize: F.sm, color: T.red, marginTop: 8 }}>{err}</div>}
           </div>
         </div>
+        <span className="absolute flex pointer-events-none" style={{ left: 12, bottom: 6 }}>
+          <DustyAvatar state={recording || hearing ? "loading" : dustyState} size={68} />
+        </span>
+        </div>
 
         <form onSubmit={(e) => { e.preventDefault(); void ask(draft); }} className="shrink-0 px-3 py-2.5"
           style={{ borderTop: `1px solid ${T.hair}`, background: T.card }}>
@@ -568,9 +576,6 @@ export function DustyPanel({ open, onClose, onBusy, onStream }: {
             </div>
           )}
           <div className="mx-auto flex items-end gap-2" style={{ maxWidth: 900 }}>
-            {/* Dusty on the message bar's row, at its left, twice his old 36px, in his live state
-                (Coy, 2026-10-09: "offset to the left at the bottom on the same row … twice as big"). */}
-            <span className="shrink-0 flex"><DustyAvatar state={recording || hearing ? "loading" : dustyState} size={68} /></span>
             {recording ? (
               <VoiceRecorder onSend={(b) => void voice(b)} onCancel={() => setRecording(false)} />
             ) : (

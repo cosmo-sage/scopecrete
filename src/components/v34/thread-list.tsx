@@ -42,6 +42,8 @@ import { BucketPicker, BUCKETS, SUGGESTS, type Bucket, type Subtype } from "@/co
 import { BUCKET } from "@/lib/v34/tokens";
 import { useThreads } from "@/components/v34/threads-ctx";
 import { threadLabel } from "@/components/v34/thread-rail";
+import { useThreadColors } from "@/components/v34/thread-colors";
+import { boxColor } from "@/lib/v34/thread-colors";
 import { ROLE_LABEL, initials, initialsHue, isSystemKey, sortRows, THREAD_SORTS, type ContactRole, type ThreadSort } from "@/lib/v34/threads";
 import { ContactPicker, bookName } from "@/components/v34/contacts";
 import { RuleFeed } from "@/components/v34/rule-feed";
@@ -350,16 +352,17 @@ export function RoleTag({ role, auto }: { role: ContactRole; auto?: boolean }) {
 }
 
 /** Initials in a square; a dashed "#" for a number with no name. Filled when selected. */
-export function InitialsBox({ name, on, size = 30 }: { name: string | null; on?: boolean; size?: number }) {
-  // A colour per person (Coy, 2026-10-06), mixed with the theme's card and ink.
-  const hue = name ? initialsHue(name) : null;
+export function InitialsBox({ name, on, size = 30, color }: { name: string | null; on?: boolean; size?: number; color?: string }) {
+  // A colour per person (Coy, 2026-10-06), mixed with the theme's card and ink —
+  // in Threads, their thread's colour (Coy, 2026-10-10: "personal is purple").
+  const hue = color ?? (name ? initialsHue(name) : null);
   const bg = on ? T.hiviz : hue ? `color-mix(in srgb, ${hue} 20%, ${T.card})` : T.slab;
   const fg = on ? T.onHiviz : hue ? `color-mix(in srgb, ${hue} 78%, ${T.ink})` : T.ink3;
   const edge = on ? T.hiviz : hue ? `color-mix(in srgb, ${hue} 45%, ${T.card})` : T.hairStrong;
   return (
     <span className="shrink-0 flex items-center justify-center" aria-hidden="true"
       style={{ width: size, height: size, borderRadius: 3, background: bg, color: fg,
-        border: `1px ${name ? "solid" : "dashed"} ${edge}`, fontFamily: "var(--sc-font-strong)", fontWeight: 600, fontSize: size >= 32 ? 12.5 : 12 }}>
+        border: `1px ${name || color ? "solid" : "dashed"} ${edge}`, fontFamily: "var(--sc-font-strong)", fontWeight: 600, fontSize: size >= 32 ? 12.5 : 12 }}>
       {name ? initials(name) : "#"}
     </span>
   );
@@ -370,10 +373,12 @@ function subLine(t: Thread): string {
   return [t.company, t.person_role, (t.numbers ?? 0) > 1 ? `${t.numbers} numbers` : null, t.has_email ? "email" : null].filter(Boolean).join(" · ");
 }
 
-function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, onName, onBucket, subtypes, deciding, tray, onTray, onArchive, chipShown, selected }: {
+function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, onName, onBucket, subtypes, deciding, tray, onTray, onArchive, chipShown, selected, boxTint }: {
   t: Thread; first: boolean; expanded: boolean; onToggle: () => void; onOpen: () => void;
   /** This contact is the one open beside the list. */
   selected: boolean;
+  /** Their box's colour: their thread's (thread-colors.ts). */
+  boxTint?: string;
   /** The open chip already says the bucket (Coy, 2026-09-28: the tag is redundant there). */
   chipShown: boolean;
   /** Swipe right: the four buckets; swipe left: Archive. One row at a time. */
@@ -478,7 +483,7 @@ function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, onName, onB
       <div className="flex items-stretch" style={{ borderLeft: `3px solid ${selected ? T.hiviz : "transparent"}`, background: selected ? T.hivizDim : "transparent" }}>
       <button onClick={() => (tray ? onTray(null) : onOpen())} aria-current={selected ? "true" : undefined}
         className="flex-1 min-w-0 flex gap-2.5 items-start text-left" style={{ padding: "9px 4px 9px 7px", cursor: "pointer" }}>
-        <InitialsBox name={t.name_is_phone ? null : t.display_name} on={selected} size={30} />
+        <InitialsBox name={t.name_is_phone ? null : t.display_name} on={selected} size={30} color={boxTint} />
         <span style={{ minWidth: 0, flex: 1, display: "block" }}>
           <span className="flex items-center gap-1.5" style={{ minWidth: 0 }}>
             <span style={{ fontFamily: "var(--sc-font-strong)", fontSize: 13.5, fontWeight: 600, lineHeight: 1.25, ...clip,
@@ -683,7 +688,8 @@ export function ThreadList({ folded = false }: { folded?: boolean }) {
   // The thread picked in the rail / drawer (Threads v2): a bucket, "archived", or one Coy made.
   const filter = ctx?.thread ?? "all";
   const isCustom = !isSystemKey(filter) && filter !== "archived";
-  const label = threadLabel(filter, ctx?.custom ?? null);
+  const [colors] = useThreadColors();
+  const label = threadLabel(filter, ctx?.custom ?? null, colors);
   const customThread = isCustom ? ctx?.custom?.find((t) => t.id === filter) ?? null : null;
   // Search in this list (Coy, 2026-10-05: "a search icon here to search by word, phrase, name or
   // location"): names, numbers, Dusty's lines, where their work is, and — from the server — every
@@ -962,7 +968,7 @@ export function ThreadList({ folded = false }: { folded?: boolean }) {
           <button key={t.contact_id} onClick={() => openContact(t.contact_id)} title={t.display_name} aria-label={t.display_name}
             className="flex items-center justify-center" style={{ width: "100%", height: 46, cursor: "pointer",
               borderLeft: `3px solid ${openId === t.contact_id ? T.hiviz : "transparent"}`, background: openId === t.contact_id ? T.hivizDim : "transparent" }}>
-            <InitialsBox name={t.name_is_phone ? null : t.display_name} on={openId === t.contact_id} size={32} />
+            <InitialsBox name={t.name_is_phone ? null : t.display_name} on={openId === t.contact_id} size={32} color={boxColor(filter, colors, t.bucket)} />
           </button>
         ))}
       </div>
@@ -1200,6 +1206,7 @@ export function ThreadList({ folded = false }: { folded?: boolean }) {
               onDecide={decide} onName={nameDecide} onBucket={(id, bucket, sub) => fileAndToast(id, bucket, sub)}
               subtypes={subtypes} deciding={deciding}
               chipShown={!q && isSystemKey(filter) && filter !== "all"}
+              boxTint={boxColor(filter, colors, t.bucket)}
               tray={trayRow?.id === t.contact_id ? trayRow.side : null}
               onTray={(side) => setTrayRow(side ? { id: t.contact_id, side } : null)}
               onArchive={() => setAsking([t.contact_id])} />

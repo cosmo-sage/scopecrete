@@ -500,6 +500,8 @@ html[data-theme="night-shift"] .sc-proposal { --sc-doc-ground: #15171A; }
 .sc-job-tab { flex: 1 1 0; height: 36px; margin-bottom: -1px; border-bottom: 2px solid transparent;
   font-size: 13px; font-weight: 600; letter-spacing: .03em; color: var(--sc-ink3); white-space: nowrap; }
 .sc-job-tab[aria-current="page"] { color: var(--sc-ink); border-bottom-color: var(--sc-hiviz); }
+/* Five views since Files got its own (2026-10-10): a narrow phone tightens them to fit. */
+@media (max-width: 400px) { .sc-job-tab { font-size: 12px; letter-spacing: 0; } }
 @media (min-width: 1024px) {
   .sc-job-tabs { display: inline-flex; width: auto; border: 1px solid var(--sc-hair-strong); border-radius: 4px; overflow: hidden; flex-shrink: 0; }
   .sc-job-tab { flex: none; height: 28px; margin: 0; padding: 0 10px; border-bottom: none; font-size: 11.5px; letter-spacing: .06em;

@@ -41,7 +41,7 @@ export function SectionDetails({ jobId, sectionName, shape, details, sheetName, 
       <div className="flex items-center gap-2">
         <span style={eyebrow}>Details from the plans{details.length ? ` · ${details.length}` : ""}</span>
         <span className="flex-1" />
-        <a href={`/dashboard/scope/${jobId}/plans`} title="Open a drawing in Takeoffs → Files, then Clip detail" className="rounded px-2.5 flex items-center"
+        <a href={`/dashboard/scope/${jobId}/files`} title="Open a drawing in Files, then Clip detail" className="rounded px-2.5 flex items-center"
           style={{ height: 30, border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink, textDecoration: "none", ...eyebrow }}>
           + Clip
         </a>

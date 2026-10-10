@@ -76,7 +76,7 @@ export function SectionTakeoffStrip({ jobId, sectionId, sectionName, following, 
     <>
       {/* A real button (Coy, 2026-10-03: "i'm not seeing anywhere in the section to pull measurements from the planroom"). */}
       {none
-        ? <Link href={`/dashboard/scope/${jobId}/plans?step=takeoff`} className="rounded px-2.5 inline-flex items-center"
+        ? <Link href={`/dashboard/scope/${jobId}/plans`} className="rounded px-2.5 inline-flex items-center"
             style={{ height: 28, border: `1px solid ${T.hairStrong}`, color: T.ink, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", letterSpacing: ".05em" }}>Measure in Takeoffs ›</Link>
         : <button onClick={() => setOpen(true)} className="rounded px-2.5"
             style={{ height: 28, border: `1px solid ${T.ink}`, background: T.card, color: T.ink, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", letterSpacing: ".05em", cursor: "pointer" }}>

@@ -32,8 +32,8 @@ test("budget, proposal, sent", () => {
 });
 
 test("each step opens its job view", () => {
-  assert.equal(stepHref("j", "files"), "/dashboard/scope/j/plans?step=files");
-  assert.equal(stepHref("j", "takeoffs"), "/dashboard/scope/j/plans?step=takeoff");
+  assert.equal(stepHref("j", "files"), "/dashboard/scope/j/files");
+  assert.equal(stepHref("j", "takeoffs"), "/dashboard/scope/j/plans");
   assert.equal(stepHref("j", "budget"), "/dashboard/scope/j");
   assert.equal(stepHref("j", "proposal"), "/dashboard/scope/j/proposal");
   assert.equal(stepHref("j", "sent"), "/dashboard/scope/j/summary");

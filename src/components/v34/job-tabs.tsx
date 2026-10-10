@@ -18,6 +18,9 @@ import { JobSwitcher, SwitchChevron } from "@/components/v34/job-switcher";
 
 const TABS = [
   { k: "summary", label: "Summary", href: (id: string) => `/dashboard/scope/${id}/summary` },
+  // Files is its own view between Summary and Takeoffs (Coy, 2026-10-10: "take the 'Files' tab out
+  // of the 'Takeoffs' page and make it it's own page"); Takeoffs has no sub-tabs.
+  { k: "files", label: "Files", href: (id: string) => `/dashboard/scope/${id}/files` },
   { k: "plans", label: "Takeoffs", href: (id: string) => `/dashboard/scope/${id}/plans` },
   { k: "job", label: "Budget", href: (id: string) => `/dashboard/scope/${id}` },
   { k: "proposal", label: "Proposal", href: (id: string) => `/dashboard/scope/${id}/proposal` },
@@ -28,7 +31,7 @@ export type JobView = (typeof TABS)[number]["k"];
 export function JobTabs({ jobId, active, back = false, subnav }: { jobId: string; active: JobView; back?: boolean; subnav?: React.ReactNode }) {
   // An onsite estimator (081) sees only the views they were given; never the summary or the proposal.
   const access = useAccess();
-  const tabs = TABS.filter((t) => t.k === "job" || (t.k === "plans" ? can(access, "plan_room") : !access.limited))
+  const tabs = TABS.filter((t) => t.k === "job" || (t.k === "plans" || t.k === "files" ? can(access, "plan_room") : !access.limited))
     .map((t) => (t.k === "job" && !can(access, "budget") ? { ...t, label: "Job" } : t));
   // On a phone a view's own tabs hang from its button (Coy, 2026-10-07: Files and Takeoff "descendant
   // from the plan room button, soon to be called the take-offs button"): the row starts under it.

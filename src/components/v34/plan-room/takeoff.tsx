@@ -333,7 +333,7 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
                 <button type="button" onClick={() => void undoRemove()} style={{ background: "transparent", border: "none", color: T.hivizText, fontWeight: 600, cursor: "pointer" }}>Undo</button>
               </div>
             )}
-            {!sheets.length && <div style={{ fontSize: F.xs, color: T.ink3, padding: 6 }}>No sheets yet — add a plan PDF on the Files step.</div>}
+            {!sheets.length && <div style={{ fontSize: F.xs, color: T.ink3, padding: 6 }}>No sheets yet — add a plan PDF on the job&apos;s Files page.</div>}
           </div>
         </SlideDrawer>
         <div className="lg:hidden">
@@ -410,7 +410,7 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
             saveShape={(mid, pts) => act(() => call(`/api/jobs/${jobId}/takeoff/measurements/${mid}`, "PATCH", { geometry: pts }))} />
         ) : (
           <div className="flex-1 flex items-center justify-center p-6" style={{ fontSize: F.sm, color: T.ink3 }}>
-            {sheet ? "This sheet's file can't be opened right now." : "No sheets yet — add a plan PDF on the Files step."}
+            {sheet ? "This sheet's file can't be opened right now." : "No sheets yet — add a plan PDF on the job's Files page."}
           </div>
         )}
         </div>

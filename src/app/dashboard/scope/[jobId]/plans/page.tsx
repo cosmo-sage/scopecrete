@@ -11,7 +11,7 @@ export default function PlanRoomPage() {
   const { jobId } = useParams<{ jobId: string }>();
   return (
     <Suspense fallback={null}>
-      <PlanRoom jobId={jobId} />
+      <PlanRoom jobId={jobId} view="takeoff" />
     </Suspense>
   );
 }

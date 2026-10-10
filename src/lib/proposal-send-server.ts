@@ -7,6 +7,7 @@
 import type { ApiSession } from "@/lib/api-auth";
 import { exampleLines, type SendExample } from "@/lib/proposal-send";
 import { signedLine, viewLine } from "@/lib/proposal-links";
+import { proposalNumbers } from "@/lib/proposal-number-server";
 
 type Sb = ApiSession["supabase"];
 
@@ -30,10 +31,11 @@ export async function sendableProposals(sb: Sb, orgId: string, where: { contactI
   const jobRows = (jobs ?? []) as Array<{ id: string; title: string | null; job_number: string | null; contact_id: string | null; customer_id: string | null }>;
   if (!jobRows.length) return [];
   const ids = jobRows.map((j) => j.id);
-  const [{ data: props }, { data: docs }] = await Promise.all([
+  const [{ data: props }, { data: docs }, numbers] = await Promise.all([
     sb.from("job_proposals").select("id, job_id, version, status, snapshot->price->total, finalized_at").eq("org_id", orgId).in("job_id", ids).order("version", { ascending: false }),
     sb.from("documents").select("id, job_id, proposal_id, token, sent_at, sent_via, view_count, last_viewed_at, status, decided_name, decided_at, revoked_at, created_at")
       .eq("org_id", orgId).in("job_id", ids).not("proposal_id", "is", null).is("revoked_at", null).neq("status", "void").order("created_at", { ascending: false }),
+    proposalNumbers(sb, orgId),
   ]);
   const out: Sendable[] = [];
   for (const j of jobRows) {
@@ -44,7 +46,7 @@ export async function sendableProposals(sb: Sb, orgId: string, where: { contactI
     const d = final ? ((docs ?? []) as Array<Record<string, unknown>>).find((x) => x.proposal_id === final.id) : undefined;
     out.push({
       job_id: j.id, job_title: j.title, contact_id: j.contact_id, customer_id: j.customer_id,
-      number: `${j.job_number ?? "P"}-${newest.version}`, version: newest.version as number, status: newest.status === "final" ? "final" : "draft",
+      number: numbers.number(j.id, Number(newest.version)), version: newest.version as number, status: newest.status === "final" ? "final" : "draft",
       total: typeof newest.total === "number" ? newest.total : final && typeof final.total === "number" ? final.total : null,
       link: d && final && final.version === newest.version ? {
         id: d.id as string, token: d.token as string, url: `${origin}/p/${d.token}`, sent_at: (d.sent_at as string | null) ?? null,
@@ -69,8 +71,9 @@ export async function linkByToken(sb: Sb, orgId: string, token: string) {
     .eq("org_id", orgId).eq("token", token).maybeSingle();
   if (!d) return null;
   const job = (d.job ?? null) as { title?: string | null; job_number?: string | null } | null;
+  const numbers = await proposalNumbers(sb, orgId);
   return {
-    id: d.id as string, job_id: d.job_id as string, job_title: job?.title ?? null, number: `${job?.job_number ?? "P"}-${d.version ?? "?"}`,
+    id: d.id as string, job_id: d.job_id as string, job_title: job?.title ?? null, number: d.version ? numbers.number(d.job_id as string, Number(d.version)) : "Proposal",
     live: !d.revoked_at && d.status !== "void", state: d.revoked_at ? "turned off" : d.status === "void" ? "replaced by a newer version" : "live",
     views: withSigned(d, viewLine({ view_count: (d.view_count as number | null) ?? 0, last_viewed_at: (d.last_viewed_at as string | null) ?? null })),
   };

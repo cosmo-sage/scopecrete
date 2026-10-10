@@ -5,6 +5,7 @@ import { plainSpeakers } from "@/lib/speakers";
 import { plainNote } from "@/lib/mentions";
 import { pinLink, readPin } from "@/lib/plan-pins";
 import { formatPhone } from "@/lib/v34/tokens";
+import { proposalNumbers } from "@/lib/proposal-number-server";
 
 /**
  * What Dusty has been doing in the background — the line under the header.
@@ -197,7 +198,7 @@ export async function GET(req: NextRequest) {
       .select("id, state, error, job_id, facts, box_folder_name, filed_at, updated_at, created")
       .eq("org_id", orgId).gte("updated_at", new Date(Date.now() - 24 * 3600_000).toISOString()).order("updated_at", { ascending: false }).limit(6),
     supabase.from("document_events")
-      .select("id, event, occurred_at, document:documents(job_id, decided_name, job:jobs(title))")
+      .select("id, event, occurred_at, document:documents(job_id, version, decided_name, job:jobs(title))")
       .eq("org_id", orgId).in("event", ["viewed", "accepted"]).gte("occurred_at", new Date(Date.now() - 48 * 3600_000).toISOString())
       .order("occurred_at", { ascending: false }).limit(8),
     supabase.from("contacts").select("id, name, phone, archived_at, archived_reason")
@@ -244,9 +245,12 @@ export async function GET(req: NextRequest) {
     }
   }
   // Proposal links (migration 075): each time a customer opened one in the last two days.
-    for (const e of (openRows ?? []) as unknown as Array<{ id: string; event: string; occurred_at: string; document: { job_id: string | null; decided_name: string | null; job: { title: string | null } | null } | null }>) {
+  // Each named by its proposal number, SE-26-0001-A (src/lib/proposal-number.ts) — read only when there is one to name.
+  const numbers = (openRows ?? []).length ? await proposalNumbers(supabase, orgId).catch(() => null) : null;
+    for (const e of (openRows ?? []) as unknown as Array<{ id: string; event: string; occurred_at: string; document: { job_id: string | null; version: number | null; decided_name: string | null; job: { title: string | null } | null } | null }>) {
     const job = e.document?.job_id ?? null;
-    const title = clipq(e.document?.job?.title ?? "a job", 140);
+    const no = numbers && job && e.document?.version ? `${numbers.number(job, e.document.version)} · ` : "";
+    const title = no + clipq(e.document?.job?.title ?? "a job", 140);
     // Signed on the link (097): the job is won.
     if (e.event === "accepted") {
       items.push({ id: `signed-${e.id}`, at: e.occurred_at, kind: "proposal", contact_id: null, href: job ? `/dashboard/scope/${job}/summary` : undefined,

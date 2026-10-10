@@ -6,6 +6,7 @@ import { takeoffTotalsFor } from "@/lib/plans-server";
 import { orgRow, orgView } from "@/lib/org-server";
 import { signFiles } from "@/lib/files-server";
 import { priceDraft, fillOrg, type Draw, type DraftInput, type ProposalDisplay } from "@/lib/proposal";
+import { proposalNumbers } from "@/lib/proposal-number-server";
 
 /**
  * The proposal's server side (migration 060): the job's draft proposal
@@ -109,10 +110,12 @@ export async function proposalBundle(sb: Sb, orgId: string, jobId: string, opts:
     sb.from("files").select("id, name, storage_path, fetch_state").eq("org_id", orgId).eq("job_id", jobId).eq("kind", "image").is("deleted_at", null).order("created_at", { ascending: false }).limit(40),
   ]);
   const p = pricing.get(jobId);
-  const preparer = await preparerOf(sb);
+  const [preparer, numbers] = await Promise.all([preparerOf(sb), proposalNumbers(sb, orgId)]);
   return {
     job, estimate: est ? { ...est, tax_on: est.tax_on !== false, discount_amount: Number(est.discount_amount ?? 0), margin_pct: num(est.margin_pct), overhead_pct: num(est.overhead_pct) } : null,
     proposal: draft, finals: finals ?? [],
+    /** SE-26-0001-A without its letter — the page adds the version's (src/lib/proposal-number.ts). */
+    number_base: numbers.base(jobId),
     options: optRows ?? [],
     lines: ((lines ?? []) as Array<Record<string, unknown>>).map(numLine),
     sections: ((secs ?? []) as Array<Record<string, unknown>>).map((s) => ({ ...s, length_ft: num(s.length_ft), width_ft: num(s.width_ft), sqft_override: num(s.sqft_override), depth_in: num(s.depth_in), psi: num(s.psi), count_qty: num(s.count_qty) })),

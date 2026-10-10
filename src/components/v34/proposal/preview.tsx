@@ -26,6 +26,8 @@ export interface PropLink {
   id: string; url: string; status: string; decided_name?: string | null; decided_at?: string | null; sent_at: string | null; sent_via: string[]; view_count: number;
   first_viewed_at: string | null; last_viewed_at: string | null; revoked_at: string | null; created_at: string;
   version: { version: number } | null;
+  /** SE-26-0001-A (src/lib/proposal-number.ts). */
+  number?: string | null;
   events?: Array<{ event: string; occurred_at: string; user_agent: string | null }>;
 }
 
@@ -190,7 +192,7 @@ export function ProposalPreview({ jobId, vm, draft, version, blocked, coverFileI
 
           {live && (
             <div className="mt-3" style={{ borderTop: `1px solid ${T.hairSoft}`, paddingTop: 10 }}>
-              <div style={{ fontFamily: disp, fontSize: 11, fontWeight: 600, letterSpacing: ".12em", textTransform: "uppercase", color: T.ink3 }}>The link · v{version}</div>
+              <div style={{ fontFamily: disp, fontSize: 11, fontWeight: 600, letterSpacing: ".12em", textTransform: "uppercase", color: T.ink3 }}>The link · {live.number ?? `v${version}`}</div>
               <a href={live.url} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: T.chalk, overflowWrap: "anywhere" }}>{live.url}</a>
               <div className="mt-1" style={{ fontSize: 12.5, color: T.ink }}>
                 <div>{live.sent_at ? `Sent ${when(live.sent_at)}${live.sent_via.length ? ` · ${live.sent_via.map((v) => (v === "copy" ? "link copied" : v === "text" ? "by text" : "by email")).join(", ")}` : ""}` : "Not sent yet"}</div>
@@ -210,7 +212,7 @@ export function ProposalPreview({ jobId, vm, draft, version, blocked, coverFileI
             <details className="mt-3" style={{ fontSize: 12, color: T.ink2 }}>
               <summary style={{ cursor: "pointer" }}>Earlier links ({older.length})</summary>
               {older.map((l) => (
-                <div key={l.id} style={{ marginTop: 4 }}>v{l.version?.version ?? "?"} · {l.revoked_at ? "turned off" : l.status === "void" ? "replaced" : l.status} · {viewLine(l)}</div>
+                <div key={l.id} style={{ marginTop: 4 }}>{l.number ?? `v${l.version?.version ?? "?"}`} · {l.revoked_at ? "turned off" : l.status === "void" ? "replaced" : l.status} · {viewLine(l)}</div>
               ))}
             </details>
           )}

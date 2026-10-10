@@ -23,6 +23,7 @@ import { jobValues } from "@/lib/job-totals";
 import { assemble, coldContext, scopeLines, type Assembled, type Block } from "./prompt";
 import { mentioned, searchTerms } from "./mentions";
 import { labelSpeakers } from "./transcript";
+import { formatProposalNumber } from "@/lib/proposal-number";
 
 export type ContextRef =
   | { kind: "thread"; id: string }
@@ -572,6 +573,12 @@ async function priceBookBlock(sb: Sb, orgId: string): Promise<Block | null> {
  * by the same priceDraft() the page uses: the rounded total, what is hidden,
  * and whether the draws add up. Reads only; never makes a draft.
  */
+/** " (sent to the customer as P-2)" when a final froze another number. */
+function frozenAs(p: Record<string, unknown>, now: string): string {
+  const was = (p.snapshot as { number?: unknown } | null)?.number;
+  return typeof was === "string" && was && was !== now ? ` (sent to the customer as ${was})` : "";
+}
+
 async function proposalBlock(sb: Sb, orgId: string, jobId: string): Promise<Block | null> {
   const b = await proposalBundle(sb, orgId, jobId, { create: false });
   if (!b?.proposal) return null;
@@ -583,7 +590,8 @@ async function proposalBlock(sb: Sb, orgId: string, jobId: string): Promise<Bloc
   const w = warrantyText(p.warranty as never, b.templates as DocTemplate[], orgName);
   const t = termsText(p.terms as never, b.templates as DocTemplate[], orgName);
   const lines = [
-    `Proposal ${(b.job.job_number as string | null) ?? "P"}-${p.version} · ${p.status === "final" ? `FINAL (frozen ${String(p.finalized_at).slice(0, 10)} — what the customer was shown)` : "draft"} · type ${type?.label ?? "not set"}`,
+    // SE-26-0001-A (src/lib/proposal-number.ts); an older final says the number it was sent under.
+    `Proposal ${formatProposalNumber(b.number_base, Number(p.version))}${frozenAs(p, formatProposalNumber(b.number_base, Number(p.version)))} · ${p.status === "final" ? `FINAL (frozen ${String(p.finalized_at).slice(0, 10)} — what the customer was shown)` : "draft"} · type ${type?.label ?? "not set"}`,
   ];
   if (priced.ok) {
     lines.push(`Customer's total ${priced.total.toFixed(2)} (budget price ${priced.calc.toFixed(2)} rounded UP to ${priced.rounded} — the proposal rounds to the next $50, the budget keeps the exact number; tax ${priced.tax.toFixed(2)}${priced.tax_shown ? " shown as a line" : " folded into the areas"}${priced.discount ? `; discount ${priced.discount.toFixed(2)}` : ""})`);

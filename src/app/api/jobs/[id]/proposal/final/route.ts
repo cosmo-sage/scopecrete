@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
 import { PROPOSAL_COLS, priceBundle, proposalBundle } from "@/lib/proposal-server";
+import { formatProposalNumber } from "@/lib/proposal-number";
 import { priceChoices, termsText, warrantyText, type DocTemplate, type DraftInput, type ProposalDisplay } from "@/lib/proposal";
 
 /**
@@ -36,7 +37,8 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     if (!check?.ok) return bad(`The draws come to $${check?.sum.toFixed(2)} against a $${priced.total.toFixed(2)} proposal — make them add up first.`);
   }
   const orgName = ((b.org as { name?: string } | null)?.name) ?? "";
-  const number = `${(b.job.job_number as string | null) ?? "P"}-${p.version}`;
+  // SE-26-0001-A (src/lib/proposal-number.ts), frozen with the rest of what the customer is shown.
+  const number = formatProposalNumber(b.number_base, Number(p.version));
   const snapshot = {
     number, made_at: new Date().toISOString(), option_id: tier.option_id,
     job: { title: b.job.title, address: b.job.address, job_type: b.job.job_type },

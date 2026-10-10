@@ -3,6 +3,7 @@ import { getApiSession, type ApiSession } from "@/lib/api-auth";
 import { CATEGORIES } from "@/lib/files";
 import { FILE_COLUMNS, signFiles } from "@/lib/files-server";
 import { dateWindow, namePattern, readFilter } from "@/lib/files-filter";
+import { proposalNumbers } from "@/lib/proposal-number-server";
 
 /**
  * Files (renamed from Documents 2026-10-03; Coy, 2026-09-30): every uploaded file in one place — photos,
@@ -205,11 +206,13 @@ async function finalProposals(sb: ApiSession["supabase"], orgId: string, p: URLS
   }
   const since = Number(p.get("since"));
   if ([7, 30, 365].includes(since)) q = q.gte("finalized_at", new Date(Date.now() - since * 86400_000).toISOString());
-  const { data } = await q;
+  const [{ data }, numbers] = await Promise.all([q, proposalNumbers(sb, orgId)]);
   const words = (p.get("q") ?? "").trim().toLowerCase();
+  // The number as SE-26-0001-A (src/lib/proposal-number.ts); `sent_as` is the one frozen in the snapshot when it differs (an older "P-2").
   return ((data ?? []) as Array<Record<string, unknown>>)
     .map((r) => ({ id: r.id as string, job_id: r.job_id as string, version: r.version as number, finalized_at: r.finalized_at as string,
-      number: (r.number as string | null) ?? null, total: r.total === null || r.total === undefined ? null : Number(r.total),
+      number: numbers.number(r.job_id as string, Number(r.version)),
+      sent_as: (r.number as string | null) && r.number !== numbers.number(r.job_id as string, Number(r.version)) ? r.number as string : null, total: r.total === null || r.total === undefined ? null : Number(r.total),
       title: (r.title as string | null) ?? null, customer: (r.name as string | null) ?? null }))
-    .filter((r) => words.length < 2 || [r.number, r.title, r.customer].some((x) => x?.toLowerCase().includes(words)));
+    .filter((r) => words.length < 2 || [r.number, r.sent_as, r.title, r.customer].some((x) => x?.toLowerCase().includes(words)));
 }

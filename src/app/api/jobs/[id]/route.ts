@@ -4,6 +4,7 @@ import { plainSpeakers } from "@/lib/speakers";
 import { ALL_STATUSES, BEFORE_WON, LEAD_SOURCES, WON_STATUSES } from "@/lib/jobs/stages";
 import { contractFor, wonAtFromDay, type Contract } from "@/lib/jobs/won";
 import { statusForSchedule, validDay, workEnd } from "@/lib/jobs/schedule";
+import { proposalNumbers } from "@/lib/proposal-number-server";
 
 /**
  * One job — read, edit, and ACCEPT.
@@ -309,16 +310,18 @@ export async function GET(
   // one at or before won_at IS the locked price. Signed change orders (094) add to it.
   let contract: Contract | null = null;
   if (WON_STATUSES.includes(data.status ?? "")) {
-    const [{ data: props }, { data: cos }, { data: signedDocs }] = await Promise.all([
+    const [{ data: props }, { data: cos }, { data: signedDocs }, numbers] = await Promise.all([
       supabase.from("job_proposals").select("id, version, finalized_at, snapshot").eq("org_id", orgId).eq("job_id", id).eq("status", "final"),
       supabase.from("change_orders").select("price, signed_at").eq("org_id", orgId).eq("job_id", id),
       // A version the customer signed on its link (097) is the contract outright.
       supabase.from("documents").select("proposal_id, decided_name, decided_at").eq("org_id", orgId).eq("job_id", id)
         .eq("status", "accepted").not("proposal_id", "is", null),
+      proposalNumbers(supabase, orgId),
     ]);
     contract = contractFor(((props ?? []) as Array<{ id: string; version: number; finalized_at: string | null; snapshot: { number?: unknown; price?: { total?: unknown } } | null }>).map((p) => ({
       id: p.id, version: p.version, finalized_at: p.finalized_at,
-      number: typeof p.snapshot?.number === "string" ? p.snapshot.number : null,
+      // SE-26-0001-A (src/lib/proposal-number.ts), not the "P-2" an older final froze.
+      number: numbers.number(id, p.version),
       total: typeof p.snapshot?.price?.total === "number" ? p.snapshot.price.total : null,
     })), data.won_at ?? null, (cos ?? []) as Array<{ price: number | null; signed_at: string | null }>,
       ((signedDocs ?? []) as Array<{ proposal_id: string; decided_name: string | null; decided_at: string | null }>)

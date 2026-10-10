@@ -7,6 +7,7 @@
  * same preference. src/lib/v34/thread-colors.ts holds the rules.
  */
 import React, { useEffect } from "react";
+import { createPortal } from "react-dom";
 import { T, F, disp, eyebrow, clip } from "@/lib/v34/tokens";
 import { usePref } from "@/lib/v34/prefs";
 import { Drawer } from "@/components/v34/primitives";
@@ -37,8 +38,12 @@ export function ThreadColorsPanel({ open, onClose, threads }: {
   threads: Array<{ key: string; label: string; color: string }>;
 }) {
   const [colors, setColor] = useThreadColors();
-  return (
-    <Drawer open={open} onClose={onClose} title="Thread colours" sub="Each thread's colour, and the boxes of the people in it." left>
+  // Drawn on the page's body: inside the rail's sticky, scrolling nav a fixed
+  // drawer is clipped to that 72px strip (Coy, 2026-10-10).
+  // It only opens on a tap, so the server never draws it.
+  if (!open || typeof document === "undefined") return null;
+  return createPortal(
+    <Drawer open={open} onClose={onClose} title="Thread colours" sub="Colours each thread and its people's boxes." left>
       <div className="px-4 py-3 flex flex-col gap-4">
         {threads.map((t) => {
           const mine = colors[t.key.toLowerCase()];
@@ -54,7 +59,7 @@ export function ThreadColorsPanel({ open, onClose, threads }: {
                   const on = (mine ?? "").toUpperCase() === c;
                   return (
                     <button key={c} type="button" onClick={() => setColor(t.key, c)} aria-label={`${t.label}: ${c}`} aria-pressed={on}
-                      style={{ width: 26, height: 26, borderRadius: 4, background: c, cursor: "pointer",
+                      style={{ width: 24, height: 24, borderRadius: 4, background: c, cursor: "pointer",
                         border: on ? `2px solid ${T.ink}` : "2px solid transparent", boxShadow: on ? `inset 0 0 0 2px ${T.card}` : "none" }} />
                   );
                 })}
@@ -63,6 +68,7 @@ export function ThreadColorsPanel({ open, onClose, threads }: {
           );
         })}
       </div>
-    </Drawer>
+    </Drawer>,
+    document.body,
   );
 }

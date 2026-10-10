@@ -277,12 +277,13 @@ export async function applyRecords(actions: PlanAction[]): Promise<StepResult[]>
         continue;
       }
       if (a.do === "new_contact") {
-        const made = CUST_KEY.test(a.customer) ? madeCust.get(a.customer) : null;
-        const target = made ? made.id : FULL_ID.test(a.customer) ? a.customer : null;
-        if (!target) { out.push({ ok: false, text: `“${a.name}”: the customer to put them on wasn't made — skipped` }); continue; }
+        const made = a.customer && CUST_KEY.test(a.customer) ? madeCust.get(a.customer) : null;
+        const target = !a.customer ? null : made ? made.id : FULL_ID.test(a.customer) ? a.customer : null;
+        if (a.customer && !target) { out.push({ ok: false, text: `“${a.name}”: the customer to put them on wasn't made — skipped` }); continue; }
         try {
-          const r = await call("/api/contacts", "POST", { name: a.name, bucket: "customer",
+          const r = await call("/api/contacts", "POST", { name: a.name, bucket: a.bucket ?? undefined,
             phones: a.phone ? [{ number: a.phone, label: a.label }] : [], emails: a.email ? [{ address: a.email, label: a.label }] : [] });
+          if (!target) { out.push({ ok: true, text: `Added “${a.name}” to Contacts${a.bucket ? ` as ${a.bucket}` : " (Unsorted)"}` }); continue; }
           await call(`/api/customers/${target}/contacts`, "POST", { contact_id: r.contact.id });
           out.push({ ok: true, text: `Added “${a.name}” to ${made ? `“${made.name}”` : "the customer"}` });
         } catch (e) {

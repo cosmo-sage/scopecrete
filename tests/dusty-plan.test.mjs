@@ -260,7 +260,7 @@ test("a company's office number is a contact on the customer, never looked up (C
 \`\`\``);
   assert.equal(p.actions.length, 2);
   assert.equal(p.dropped, 2, "no number or email, and a short id, are dropped");
-  assert.deepEqual(p.actions[0], { do: "new_contact", customer: cust, name: "Icon Technologies office", phone: "(225) 555-0100", email: null, label: "Office" });
+  assert.deepEqual(p.actions[0], { do: "new_contact", customer: cust, name: "Icon Technologies office", phone: "(225) 555-0100", email: null, label: "Office", bucket: "customer" });
   assert.equal(needsJob(p.actions[1]), false);
   assert.ok(RECORD_STEPS.has("new_contact"));
   const d = (a) => describe(a, { item: () => null, area: () => "" });
@@ -295,4 +295,22 @@ test("send_proposal: a job by full id, text or email, words with {link}; nothing
   assert.match(describe(t, { item: () => null, area: () => "" }), /^Text the proposal through Quo/);
   assert.ok(RECORD_RULES.includes('"do":"send_proposal"'));
   assert.ok(!RECORD_RULES.includes("Baton Rouge Concreters"));
+});
+
+test("a new contact needs no customer (Coy, 2026-10-10: Elena Sacco)", () => {
+  const p = parsePlan(`\`\`\`scopecrete-plan
+[{"do":"new_contact","customer":null,"name":"Elena Sacco","phone":"3377182494","email":null,"label":null,"bucket":null},
+ {"do":"new_contact","name":"Gus","phone":"2255550101","bucket":"personal"},
+ {"do":"new_contact","name":"Odd","phone":"2255550102","bucket":"spam"},
+ {"do":"new_contact","name":"2255550103","phone":"2255550103"}]
+\`\`\``);
+  assert.equal(p.actions.length, 3);
+  assert.equal(p.dropped, 1, "a phone number is no name");
+  assert.deepEqual(p.actions[0], { do: "new_contact", customer: null, name: "Elena Sacco", phone: "3377182494", email: null, label: null, bucket: null });
+  assert.equal(p.actions[1].bucket, "personal");
+  assert.equal(p.actions[2].bucket, null, "only personal, vendor or customer");
+  const d = (a) => describe(a, { item: () => null, area: () => "" });
+  assert.match(d(p.actions[0]), /Add “Elena Sacco” to Contacts — 3377182494/);
+  assert.match(d(p.actions[1]), /to Contacts, filed personal/);
+  assert.match(RECORD_RULES, /A contact does NOT need a customer/);
 });

@@ -22,6 +22,8 @@ import { T, F, disp, eyebrow, clip, strong } from "@/lib/v34/tokens";
 import { sendBytes } from "@/components/v34/files-panel";
 import { usePref } from "@/lib/v34/prefs";
 import { ROLES, FIELD_PAGES, roleLabel, accessSummary } from "@/lib/access";
+import { AddressInput } from "@/components/v34/address-input";
+import { radiusLabel, type Office } from "@/lib/map";
 
 export interface OrgInfo { id: string; name: string; logo_light: boolean; logo_dark: boolean; logo_stamp: string | null }
 interface Person { user_id: string; name: string | null; email: string | null; role: string | null; you: boolean;
@@ -233,8 +235,90 @@ export function OrgSection({ onChanged }: { onChanged: () => void }) {
       </div>
       <HeaderLogoSwitch />
 
+      <OfficeSettings canEdit={canEdit} />
+
       <People people={people} canEdit={canEdit} accessReady={accessReady} onChanged={() => setRev((n) => n + 1)} />
     </section>
+  );
+}
+
+/**
+ * The office and the radius the org works in (migration 098; Coy, 2026-10-10:
+ * "set my office location … When I open the map, it should be centered on the
+ * office with a radius of … 80 miles"). The Map opens on the ring. Owners
+ * edit; PATCH /api/org/office places a typed address with Mapbox.
+ */
+function OfficeSettings({ canEdit }: { canEdit: boolean }) {
+  const [ready, setReady] = useState<boolean | null>(null);
+  const [office, setOffice] = useState<Office | null>(null);
+  const [addr, setAddr] = useState("");
+  const [point, setPoint] = useState<{ lat: number; lng: number } | null>(null);
+  const [radius, setRadius] = useState("");
+  const [state, setState] = useState<"idle" | "saving" | "saved">("idle");
+  const [err, setErr] = useState<string | null>(null);
+  const took = (o: Office | null) => { setOffice(o); setAddr(o?.address ?? ""); setPoint(o ? { lat: o.lat, lng: o.lng } : null); setRadius(o?.radius_mi != null ? String(o.radius_mi) : ""); };
+  useEffect(() => {
+    let off = false;
+    fetch("/api/org/office").then((r) => r.json()).then((b) => { if (off) return; setReady(b?.ready !== false); took(b?.office ?? null); }).catch(() => { if (!off) setReady(true); });
+    return () => { off = true; };
+  }, []);
+  const dirty = addr.trim() !== (office?.address ?? "") || radius.trim() !== (office?.radius_mi != null ? String(office.radius_mi) : "");
+
+  async function save() {
+    setState("saving"); setErr(null);
+    const r = await fetch("/api/org/office", { method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ address: addr.trim(), radius_mi: radius.trim(), ...(point ?? {}) }) });
+    const b = await r.json().catch(() => ({}));
+    if (!r.ok) { setState("idle"); setErr(b?.error ?? `HTTP ${r.status}`); return; }
+    took(b.office); setState("saved");
+    setTimeout(() => setState((s) => (s === "saved" ? "idle" : s)), 2400);
+  }
+  async function remove() {
+    setErr(null);
+    const r = await fetch("/api/org/office", { method: "DELETE" });
+    if (r.ok) took(null); else setErr((await r.json().catch(() => ({})))?.error ?? `HTTP ${r.status}`);
+  }
+
+  const input: React.CSSProperties = { height: 36, padding: "0 10px", borderRadius: 4, fontSize: F.md, border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink, width: "100%" };
+  return (
+    <div style={{ marginTop: 14 }}>
+      <div style={{ ...eyebrow, color: T.ink2 }}>Office</div>
+      {ready === false ? (
+        <div style={{ fontSize: F.xs, color: T.ink3, marginTop: 4 }}>The office and its radius wait for migration 098.</div>
+      ) : ready === null ? (
+        <div style={{ fontSize: F.xs, color: T.ink3, marginTop: 4 }}>Loading…</div>
+      ) : !canEdit ? (
+        <div style={{ fontSize: F.sm, color: T.ink2, marginTop: 4 }}>
+          {office ? <>{office.address}{office.radius_mi != null && <> · {radiusLabel(office.radius_mi)} around it</>}</> : "Not set."}
+        </div>
+      ) : (
+        <>
+          <div style={{ marginTop: 4 }}>
+            <AddressInput value={addr} style={input}
+              onChange={(v) => { setAddr(v); setPoint(null); setState("idle"); setErr(null); }}
+              onPick={(m) => { setAddr(m.formatted || m.line1); setPoint({ lat: m.lat, lng: m.lng }); setState("idle"); setErr(null); }} />
+          </div>
+          <div className="flex items-center gap-1.5" style={{ marginTop: 6 }}>
+            <label htmlFor="sc-office-radius" style={{ fontSize: F.sm, color: T.ink2 }}>Radius</label>
+            <input id="sc-office-radius" inputMode="decimal" value={radius} placeholder="80"
+              onChange={(e) => { setRadius(e.target.value); setState("idle"); setErr(null); }}
+              onKeyDown={(e) => { if (e.key === "Enter" && dirty) void save(); }}
+              style={{ ...input, width: 76 }} />
+            <span style={{ fontSize: F.sm, color: T.ink2 }}>miles</span>
+            <span className="flex-1" />
+            {office && <button type="button" onClick={() => void remove()} style={{ ...btn, border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink2 }}>Remove</button>}
+            <button type="button" onClick={() => void save()} disabled={!dirty || !addr.trim() || state === "saving"}
+              style={{ ...btn, fontSize: 13, height: 36, padding: "0 14px", border: "none", borderRadius: 4,
+                background: dirty && addr.trim() ? T.hiviz : T.hairStrong, color: T.onHiviz, cursor: dirty ? "pointer" : "default" }}>
+              {state === "saving" ? "Saving…" : state === "saved" ? "Saved ✓" : "Save"}
+            </button>
+          </div>
+          <div style={{ fontSize: F.xs, marginTop: 4, color: err ? T.red : T.ink3 }}>
+            {err ?? "The Map opens on the office, with a ring at this radius. Blank radius: just the office."}
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 

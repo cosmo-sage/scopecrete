@@ -22,6 +22,7 @@ import { useWide } from "@/lib/v34/use-wide";
 import {
   LAYERS, LAYER, DEFAULT_FILTERS, cleanFilters, visiblePins, layerCounts, cities, clusterPins, clusterSize,
   scaleReadout, feetPerPixel, clipPlan, nearestJobs, distanceLabel, fromWorldPx, worldPx, TILE,
+  ringPoints, ringPx, radiusLabel, type Office,
   type LayerId, type MapFilters, type MapPin, type MapPinsResponse, type PickJob,
 } from "@/lib/map";
 import type { AddressSuggestion } from "@/lib/aerial";
@@ -71,6 +72,11 @@ function LayerPanel({ data, f, setF }: { data: MapPinsResponse | null; f: MapFil
   const filtered = f.jobTypes.length > 0 || !!f.city || f.created !== "any";
   return (
     <div className="p-3 flex flex-col gap-1" style={{ fontSize: F.sm }}>
+      {data && (
+        <div style={{ padding: "0 2px 8px", fontSize: 12.5, color: T.ink2 }}>
+          <b style={{ color: T.ink }}>{data.pins.length}</b> pinned{data.unmapped.customers ? <> · <b style={{ color: T.ink }}>{data.unmapped.customers}</b> customers with no address</> : null}
+        </div>
+      )}
       <div className="flex items-center justify-between" style={{ padding: "2px 2px 6px" }}>
         <span style={head}>Layers</span>
         <button type="button" onClick={() => setF({ ...f, layers: LAYERS.map((l) => l.id) })} style={{ fontSize: 12, color: T.chalk, fontWeight: 600, cursor: "pointer" }}>All on</button>
@@ -172,11 +178,11 @@ function PinCard({ pin, onClose, onClip }: { pin: MapPin; onClose: () => void; o
 
 /* ------------------------------------------------------------ search */
 
-function SearchBox({ pins, view, onAddress, onPin }: {
-  pins: MapPin[]; view: View;
+function SearchBox({ pins, view, onAddress, onPin, initial = "" }: {
+  pins: MapPin[]; view: View; initial?: string;
   onAddress: (p: { lat: number; lng: number; label: string }) => void; onPin: (p: MapPin) => void;
 }) {
-  const [q, setQ] = useState("");
+  const [q, setQ] = useState(initial);
   const [open, setOpen] = useState(false);
   const [addrs, setAddrs] = useState<AddressSuggestion[]>([]);
   const [err, setErr] = useState<string | null>(null);
@@ -224,7 +230,7 @@ function SearchBox({ pins, view, onAddress, onPin }: {
         <input value={q} onChange={(e) => { setQ(e.target.value); setOpen(true); setErr(null); }} onFocus={() => setOpen(true)} onBlur={() => setTimeout(() => setOpen(false), 150)}
           onKeyDown={(e) => { if (e.key === "Escape") { setQ(""); setOpen(false); } }}
           placeholder="Search an address, customer, job or vendor" aria-label="Search the map" autoComplete="off"
-          style={{ flex: 1, minWidth: 0, border: "none", outline: "none", background: "transparent", color: T.ink, fontSize: 14 }} />
+          style={{ flex: 1, minWidth: 0, border: "none", outline: "none", background: "transparent", color: T.ink, fontSize: 16 }} />
         {q && <button type="button" onClick={() => { setQ(""); setAddrs([]); }} aria-label="Clear" style={{ width: 28, height: 28, color: T.ink2, fontSize: 18, cursor: "pointer" }}>×</button>}
       </form>
       {showing && (
@@ -279,11 +285,30 @@ export function MapPage() {
   const [sel, setSel] = useState<MapPin | null>(null);
   const [plain, setPlain] = useState<{ lat: number; lng: number; label: string } | null>(null);
   const [layersOpen, setLayersOpen] = useState(false);
-  const [legendOpen, setLegendOpen] = useState(true);
+  const [legendOpen, setLegendOpen] = useState(false);
+  // On a phone, the keyboard opening for the search used to scroll the page
+  // sideways (and the map's box with it), so every pin, button and the footer
+  // sat off their places (Coy, 2026-10-10). Nothing here should ever scroll
+  // sideways: put it back whenever something does.
+  useEffect(() => {
+    const fix = () => { if (window.scrollX !== 0) window.scrollTo(0, window.scrollY); };
+    const vv = window.visualViewport;
+    window.addEventListener("scroll", fix, { passive: true });
+    vv?.addEventListener("resize", fix);
+    return () => { window.removeEventListener("scroll", fix); vv?.removeEventListener("resize", fix); };
+  }, []);
   const [clip, setClip] = useState<Clip>(null);
   const [saved, setSaved] = useState<Saved[]>([]);
   const [toast, setToast] = useState<Saved | null>(null);
   const fitted = useRef(false);
+  // The org's office and service radius (Settings → Organisation → Office, migration 098):
+  // undefined while loading, null when none is set.
+  const [office, setOffice] = useState<Office | null | undefined>(undefined);
+  useEffect(() => {
+    let off = false;
+    fetch("/api/org/office").then((r) => (r.ok ? r.json() : null)).then((b) => { if (!off) setOffice((b?.office as Office | null) ?? null); }).catch(() => { if (!off) setOffice(null); });
+    return () => { off = true; };
+  }, []);
   // Desktop: the ground at the frame's centre when "Use this frame" is tapped, kept centred as the frame moves aside for the job list.
   const pendingCentre = useRef<{ lat: number; lng: number } | null>(null);
 
@@ -299,14 +324,45 @@ export function MapPage() {
 
   const shown = useMemo(() => visiblePins(data?.pins ?? [], f), [data, f]);
 
-  // Open on the pins (once), unless a clip asked for a job.
+  // Open (once) on the office's ring — or the office alone — else on the pins; unless a clip asked for a job.
   const clipJob = sp.get("clip");
+  // ?addr=<address>: a contact card's Map button (Coy, 2026-10-10) — that address, pinned.
+  const addrQ = sp.get("addr");
+  // ?job=<id>: Takeoffs → Files' Pull satellite images (Coy, 2026-10-10) — the job's address typed in the
+  // search and found, on satellite; Clip for takeoff then clips for that job.
+  const pullJob = sp.get("job");
+  const [pullAddr, setPullAddr] = useState<string | null>(null);
+  const [pullNote, setPullNote] = useState<string | null>(null);
+  const officeView = useCallback((o: Office, w: number, h: number): View | null =>
+    o.radius_mi ? fitView(ringPoints(o, o.radius_mi), w, h, 24, 15) : { lat: o.lat, lng: o.lng, zoom: 11 }, []);
   useEffect(() => {
-    if (fitted.current || !data || !size.w || clipJob) return;
+    if (fitted.current || !data || !size.w || clipJob || addrQ || pullJob || office === undefined) return;
     fitted.current = true;
-    const v = fitView(shown, size.w, size.h, 56, 15);
+    const v = office ? officeView(office, size.w, size.h) : fitView(shown, size.w, size.h, 56, 15);
     if (v) setTimeout(() => setView(v), 0);
-  }, [data, size, shown, clipJob]);
+  }, [data, size, shown, clipJob, addrQ, pullJob, office, officeView]);
+
+  useEffect(() => {
+    if (!pullJob || clipJob || addrQ || fitted.current) return;
+    fitted.current = true;
+    call(`/api/jobs/${pullJob}/aerial`).then((b) => {
+      const q = typeof b?.query === "string" ? b.query : "";
+      if (q) setPullAddr(q);
+      const f = b?.found as { lat: number; lng: number; label?: string } | undefined;
+      if (!f || typeof f.lat !== "number") { setPullNote(q ? `Couldn't find "${q}" on the map. Search for it, then Clip for takeoff.` : "This job has no address yet. Search for it, then Clip for takeoff."); return; }
+      setSel(null); setMode("sat"); setPlain({ lat: f.lat, lng: f.lng, label: f.label ?? q }); setView({ lat: f.lat, lng: f.lng, zoom: 19 });
+    }).catch((e) => setPullNote(e instanceof Error ? e.message : String(e)));
+  }, [pullJob, clipJob, addrQ]);
+
+  useEffect(() => {
+    if (!addrQ || clipJob || fitted.current) return;
+    fitted.current = true;
+    fetch(`/api/aerial/suggest?find=${encodeURIComponent(addrQ)}`).then((r) => r.json()).then((b) => {
+      const f = b?.found as { lat: number; lng: number; label?: string } | undefined;
+      if (!f || typeof f.lat !== "number") return;
+      setSel(null); setPlain({ lat: f.lat, lng: f.lng, label: f.label ?? addrQ }); setView({ lat: f.lat, lng: f.lng, zoom: 18 });
+    }).catch(() => {});
+  }, [addrQ, clipJob]);
 
   // ?clip=<job>: Takeoffs' Satellite — frame that job's site on satellite.
   useEffect(() => {
@@ -321,11 +377,10 @@ export function MapPage() {
     call(`/api/jobs/${clipJob}/aerial`).then((b) => { if (b?.found) setView({ lat: b.found.lat, lng: b.found.lng, zoom: 19 }); }).catch(() => {});
   }, [clipJob, data]);
 
-  const counts = data ? data.pins.length : 0;
   const goPin = (p: MapPin) => { setSel(p); setPlain(null); setView((v) => ({ lat: p.lat, lng: p.lng, zoom: Math.max(v.zoom, 15) })); };
   const startClip = (p?: MapPin) => {
     setSel(null); setMode("sat"); setLayersOpen(false);
-    setClip({ step: "frame", jobId: p && p.kind === "job" ? p.id : null });
+    setClip({ step: "frame", jobId: p && p.kind === "job" ? p.id : pullJob });
     setView((v) => (p ? { lat: p.lat, lng: p.lng, zoom: Math.max(19, v.zoom) } : { ...v, zoom: Math.max(18, v.zoom) }));
   };
   const endClip = () => {
@@ -384,6 +439,34 @@ export function MapPage() {
         <div key={`clip${c.sheetId}`} style={{ position: "absolute", left: p.x - w / 2, top: p.y - h / 2, width: w, height: h, border: "2px dashed #fff", boxShadow: "0 0 0 1px rgba(0,0,0,.4)", pointerEvents: "none" }}>
           <span style={{ position: "absolute", left: 4, top: 4, background: "rgba(20,22,20,.78)", color: "#fff", fontSize: 11, padding: "2px 6px", borderRadius: 3, whiteSpace: "nowrap" }}>Aerial {c.n} · in Takeoffs</span>
         </div>,
+      );
+    }
+    if (!clip && office) {
+      // The office, and its service radius as a ring.
+      const p = place(office.lat, office.lng);
+      if (office.radius_mi) {
+        const r = ringPx(office, office.radius_mi, view.zoom);
+        items.push(
+          <svg key="ring" width={s.w} height={s.h} aria-hidden style={{ position: "absolute", left: 0, top: 0, pointerEvents: "none" }}>
+            <circle cx={p.x} cy={p.y} r={r} fill={T.hiviz} fillOpacity={0.06} stroke={T.hiviz} strokeWidth={2} strokeDasharray="8 6" />
+          </svg>,
+        );
+        // The radius written on the ring, due north, while that point is on screen.
+        if (p.y - r > 4 && p.y - r < s.h - 20 && p.x > 0 && p.x < s.w) items.push(
+          <span key="ring-l" aria-hidden style={{ position: "absolute", left: p.x, top: p.y - r, transform: "translate(-50%, -50%)", background: T.hiviz, color: T.onHiviz, fontFamily: strong, fontSize: 11, fontWeight: 600, padding: "1px 7px", borderRadius: 999, whiteSpace: "nowrap", pointerEvents: "none" }}>
+            {radiusLabel(office.radius_mi)} from the office
+          </span>,
+        );
+      }
+      items.push(
+        <div key="office" title={office.address} aria-label={`Office: ${office.address}`} role="img"
+          style={{ position: "absolute", left: p.x - 14, top: p.y - 14, width: 28, height: 28, borderRadius: 6, background: T.ink, border: "2px solid #fff", boxShadow: "0 2px 6px rgba(0,0,0,.35)", display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none", zIndex: 4 }}>
+          <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="#fff" strokeWidth="1.8" aria-hidden="true"><path d="M3 9.5 10 3.5l7 6M5 8.5V17h10V8.5M8.5 17v-4.5h3V17" /></svg>
+        </div>,
+      );
+      if (view.zoom >= 9) items.push(
+        <span key="office-l" aria-hidden style={{ position: "absolute", left: p.x + 18, top: p.y - 8, fontFamily: strong, fontSize: 11, fontWeight: 700, color: mode === "sat" ? "#fff" : T.ink, whiteSpace: "nowrap", pointerEvents: "none",
+          textShadow: mode === "sat" ? "0 0 3px #000, 0 0 2px #000" : "0 0 3px #fff, 0 0 2px #fff, 0 0 1px #fff" }}>Office</span>,
       );
     }
     if (!clip) {
@@ -453,9 +536,17 @@ export function MapPage() {
                   ))}
                 </div>
   );
+  const officeButton = office ? (
+                  <button type="button" aria-label="Back to the office" title={office.radius_mi ? `The office and ${radiusLabel(office.radius_mi)} around it` : "The office"}
+                    onClick={() => { const v = officeView(office, size.w, size.h); if (v) setView(v); }}
+                    className="flex items-center justify-center rounded" style={{ width: 36, height: 36, background: T.card, border: `1px solid ${T.hairStrong}`, boxShadow: "0 2px 8px rgba(0,0,0,.15)", cursor: "pointer" }}>
+                    <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke={T.ink} strokeWidth="1.7" aria-hidden="true"><path d="M3 9.5 10 3.5l7 6M5 8.5V17h10V8.5M8.5 17v-4.5h3V17" /></svg>
+                  </button>
+  ) : null;
   const mapControls = (
     <>
                 {wide && modeToggle}
+                {officeButton}
                 {!wide && (
                   <button type="button" aria-label="Where I am" title="Where I am" onClick={() => navigator.geolocation?.getCurrentPosition((p) => setView({ lat: p.coords.latitude, lng: p.coords.longitude, zoom: 16 }), () => {})}
                     className="flex items-center justify-center rounded" style={{ width: 36, height: 36, background: T.card, border: `1px solid ${T.hairStrong}`, boxShadow: "0 2px 8px rgba(0,0,0,.15)", cursor: "pointer" }}>
@@ -466,9 +557,9 @@ export function MapPage() {
   );
 
   return (
-    <div ref={wideRef} className="sc-pinned flex flex-col" style={{ background: T.slab }}>
+    <div ref={wideRef} className="sc-pinned flex flex-col" style={{ background: T.slab, overflow: "clip" }}>
       {!clip ? (
-        <PageHeader title="Map" count={data ? `${counts} pinned${data.unmapped.customers ? ` · ${data.unmapped.customers} unmapped` : ""}` : ""}
+        <PageHeader title="Map"
           sub="Every job and vendor with an address. Frame any spot on satellite and send it to a job's Takeoffs to measure."
           menu={<MenuButton onClick={() => setLayersOpen(true)} label="Layers" />}
           actions={<div className="flex items-center gap-2">
@@ -483,19 +574,20 @@ export function MapPage() {
         </div>
       )}
 
-      <div className="flex-1 flex" style={{ minHeight: 0, position: "relative", overflow: "hidden" }}>
+      <div className="flex-1 flex" style={{ minHeight: 0, position: "relative", overflow: "clip" }}>
         {wide && (
           <aside style={{ width: 300, flexShrink: 0, background: T.card, borderRight: `1px solid ${T.hair}`, overflowY: "auto", opacity: clip ? 0.45 : 1, pointerEvents: clip ? "none" : undefined }} aria-hidden={!!clip}>
             {layersBody}
           </aside>
         )}
-        <div className="flex-1 relative" style={{ minWidth: 0 }}>
+        <div className="flex-1 relative" style={{ minWidth: 0, isolation: "isolate", overflow: "clip" }}>
           <MapView view={view} onView={(v) => { if (clip?.step !== "job") setView(v); }} mode={clip ? "sat" : mode} overlay={overlay} onSize={setSize}
             onBackgroundTap={() => { if (!clip) setSel(null); }}>
             {/* Search (top left) */}
             {!clip && (
               <div className="absolute flex flex-col gap-2" style={{ left: 10, top: 10, right: wide ? undefined : 10, width: wide ? 440 : undefined, maxWidth: wide ? "calc(100% - 200px)" : undefined, zIndex: 10 }}>
-                <SearchBox pins={data?.pins ?? []} view={view} onPin={goPin} onAddress={(a) => { setSel(null); setPlain(a); setView({ lat: a.lat, lng: a.lng, zoom: 17 }); }} />
+                <SearchBox key={pullAddr ?? ""} initial={pullAddr ?? ""} pins={data?.pins ?? []} view={view} onPin={goPin} onAddress={(a) => { setSel(null); setPlain(a); setView({ lat: a.lat, lng: a.lng, zoom: 17 }); }} />
+                {pullNote && <div {...stop} className="rounded" style={{ padding: "6px 10px", background: T.card, color: T.ink2, fontSize: 12.5 }}>{pullNote}</div>}
                 {err && <div {...stop} className="rounded" style={{ padding: "6px 10px", background: T.card, color: T.red, fontSize: 12.5 }}>{err} <button onClick={() => void load()} style={{ color: T.chalk, fontWeight: 600 }}>Try again</button></div>}
                 {data && !data.stored && <div {...stop} className="rounded" style={{ padding: "4px 10px", background: T.card, color: T.ink3, fontSize: 11.5 }}>Addresses are looked up on each visit until migration 090 is applied.</div>}
                 {!wide && <div {...stop} className="flex items-start justify-end gap-2" style={{ alignSelf: "flex-end" }}>{mapControls}</div>}
@@ -507,23 +599,17 @@ export function MapPage() {
             )}
             {/* Legend (bottom left) */}
             {!clip && legend.length > 0 && (
-              <div {...stop} className="absolute rounded" style={{ left: 10, bottom: 16, zIndex: 6, background: T.card, border: `1px solid ${T.hair}`, boxShadow: "0 2px 8px rgba(0,0,0,.12)", minWidth: 120 }}>
-                <button type="button" onClick={() => setLegendOpen((o) => !o)} aria-expanded={legendOpen} className="flex items-center gap-1.5 w-full" style={{ height: 28, padding: "0 10px", fontFamily: disp, fontSize: 11, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase", color: T.ink2, cursor: "pointer" }}>
-                  Legend <span style={{ marginLeft: "auto" }}>{legendOpen ? "▾" : "▸"}</span>
-                </button>
-                {legendOpen && <div style={{ padding: "0 10px 8px" }}>
-                  {legend.map((l) => <div key={l.id} className="flex items-center gap-2" style={{ fontSize: 11, color: T.ink2, height: 18 }}><Dot l={l.id} />{l.label}</div>)}
+              <div {...stop} className="absolute flex flex-col items-start gap-1.5" style={{ left: 10, bottom: 16, zIndex: 6 }}>
+                {legendOpen && <div className="rounded" style={{ padding: "6px 10px", background: T.card, border: `1px solid ${T.hair}`, boxShadow: "0 2px 8px rgba(0,0,0,.12)" }}>
+                  {legend.map((l) => <div key={l.id} className="flex items-center gap-2" style={{ fontSize: 11, color: T.ink2, height: 18, whiteSpace: "nowrap" }}><Dot l={l.id} />{l.label}</div>)}
                 </div>}
+                <button type="button" onClick={() => setLegendOpen((o) => !o)} aria-expanded={legendOpen} aria-label={legendOpen ? "Hide the legend" : "Legend"} title="Legend"
+                  className="flex items-center justify-center rounded" style={{ width: 36, height: 36, background: legendOpen ? T.ink : T.card, color: legendOpen ? T.card : T.ink, border: `1px solid ${T.hairStrong}`, boxShadow: "0 2px 8px rgba(0,0,0,.15)", cursor: "pointer" }}>
+                  <svg width="17" height="17" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><circle cx="4" cy="5" r="1.6" fill="currentColor" stroke="none" /><circle cx="4" cy="10" r="1.6" fill="currentColor" stroke="none" /><rect x="2.5" y="13.5" width="3" height="3" fill="currentColor" stroke="none" /><path d="M8 5h10M8 10h10M8 15h10" /></svg>
+                </button>
               </div>
             )}
-            {!clip && <ZoomButtons view={view} onView={setView} bottom={wide ? 16 : 76} />}
-            {!clip && !wide && (
-              <button {...stop} type="button" onClick={() => startClip()} className="absolute flex items-center gap-1.5 rounded"
-                style={{ right: 12, bottom: 16, height: 44, padding: "0 14px", zIndex: 6, background: T.hiviz, color: T.onHiviz, fontFamily: disp, fontSize: 13, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase", boxShadow: "0 4px 14px rgba(0,0,0,.25)", cursor: "pointer" }}>
-                <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M2 6V2h4M14 2h4v4M18 14v4h-4M6 18H2v-4" /></svg>
-                Clip for takeoff
-              </button>
-            )}
+            {!clip && <ZoomButtons view={view} onView={setView} bottom={16} />}
             {/* The phone's pin card: a sheet from the bottom. */}
             {!clip && sel && !wide && (
               <div className="absolute left-0 right-0 bottom-0" style={{ zIndex: 12, background: T.card, borderRadius: "12px 12px 0 0", boxShadow: "0 -8px 26px rgba(0,0,0,.22)", padding: "6px 14px 14px" }}>

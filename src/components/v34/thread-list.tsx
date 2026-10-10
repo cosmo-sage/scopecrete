@@ -376,7 +376,7 @@ function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, onName, onB
   selected: boolean;
   /** The open chip already says the bucket (Coy, 2026-09-28: the tag is redundant there). */
   chipShown: boolean;
-  /** Swipe right: the four buckets; swipe left: Spam · Archive. One row at a time. */
+  /** Swipe right: the four buckets; swipe left: Archive. One row at a time. */
   tray: "buckets" | "actions" | null;
   onTray: (side: "buckets" | "actions" | null) => void;
   /** Archive this thread (asks why first). */
@@ -404,7 +404,7 @@ function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, onName, onB
     : t.job_type_hint ? { l: JOB_TYPE_LABEL[t.job_type_hint] ?? t.job_type_hint, sure: false }
     : null;
 
-  // Swipe: right opens the buckets, left opens Spam · Archive (Coy, 2026-10-05).
+  // Swipe: right opens the buckets, left opens Archive (Coy, 2026-10-05; Spam out 2026-10-10).
   // touch-action: pan-y leaves vertical scrolling to the browser.
   const [drag, setDrag] = useState<number | null>(null);
   const [rebucket, setRebucket] = useState(false);
@@ -455,15 +455,9 @@ function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, onName, onB
           ))}
         </div>
       )}
-      {/* Behind the row, right: Spam and Archive (swipe left; Coy, 2026-10-05). */}
+      {/* Behind the row, right: Archive (swipe left; Coy, 2026-10-05 — Spam left it 2026-10-10, it is in the buckets). */}
       {offset < 0 && (
-        <div className="absolute inset-y-0 right-0 flex" style={{ width: ACTIONS_PX }} aria-label="Spam or archive">
-          <button disabled={deciding || t.bucket === "spam"} onClick={() => { onTray(null); onBucket(t.contact_id, "spam", null); }}
-            className="flex-1 flex flex-col items-center justify-center gap-1"
-            style={{ background: BUCKET.spam, color: T.card, fontFamily: disp, fontSize: F.micro, fontWeight: 700, textTransform: "uppercase", opacity: t.bucket === "spam" ? 0.5 : 1 }}>
-            <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" aria-hidden="true"><circle cx="10" cy="10" r="7" /><path d="M5 15L15 5" /></svg>
-            Spam
-          </button>
+        <div className="absolute inset-y-0 right-0 flex" style={{ width: ACTIONS_PX }} aria-label="Archive">
           <button onClick={() => { onTray(null); onArchive(); }}
             className="flex-1 flex flex-col items-center justify-center gap-1"
             style={{ background: T.ink2, color: T.card, fontFamily: disp, fontSize: F.micro, fontWeight: 700, textTransform: "uppercase" }}>

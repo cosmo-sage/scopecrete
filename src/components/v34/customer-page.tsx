@@ -39,7 +39,8 @@ import { FilesPage } from "@/components/v34/files-page";
 import { FilesPanel } from "@/components/v34/files-panel";
 import { STATUS_NAME } from "@/lib/jobs/stages";
 import { CallNotesPad, DraftQuoteButton } from "@/components/v34/call-notes-pad";
-import { ArchiveButton } from "@/components/v34/archive-actions";
+import { ArchiveButton, ArchiveDialog, archiveNow } from "@/components/v34/archive-actions";
+import { isHorizontal } from "@/lib/swipe";
 import { AddressInput } from "@/components/v34/address-input";
 import type { AddressMatch } from "@/lib/address-check";
 import { ContactPicker } from "@/components/v34/contacts";
@@ -175,9 +176,11 @@ export function CustomerPage({ customerId, focusContact }: { customerId: string;
             <SectionHead title="Jobs" />
             <div className="flex flex-col gap-2">
               {jobs.map((j) => (
-                <JobRow key={j.id} href={`/dashboard/scope/${j.id}/summary`} title={j.title || "Untitled job"}
-                  sub={[j.status ? STATUS_NAME[j.status] ?? j.status : null, j.address].filter(Boolean).join(" · ")}
-                  right={j.quote != null ? money0(j.quote) : <span style={{ fontSize: 12, color: T.ink3 }}>no price yet</span>} />
+                <SwipeJob key={j.id} id={j.id} title={j.title || "Untitled job"} onDone={reload}>
+                  <JobRow href={`/dashboard/scope/${j.id}/summary`} title={j.title || "Untitled job"}
+                    sub={[j.status ? STATUS_NAME[j.status] ?? j.status : null, j.address].filter(Boolean).join(" · ")}
+                    right={j.quote != null ? money0(j.quote) : <span style={{ fontSize: 12, color: T.ink3 }}>no price yet</span>} />
+                </SwipeJob>
               ))}
               {!jobs.length && <button onClick={() => void newScope()} className="rounded text-left" style={{ padding: "10px 12px", border: `1px dashed ${T.hairStrong}`, color: T.hivizText, fontSize: F.sm, cursor: "pointer" }}>No jobs yet — start one</button>}
             </div>
@@ -772,5 +775,47 @@ function CallCard({ m, who, onAddNote }: { m: Item; who: string; onAddNote: (id:
         </div>
       </div>
     </article>
+  );
+}
+
+/**
+ * A job on the customer's Overview: swipe it left (on a touch screen) for
+ * Archive and Delete (Coy, 2026-10-10) — the same restorable archive and delete
+ * as the job's own Summary, with the Why? box and Undo in the toast.
+ */
+function SwipeJob({ id, title, onDone, children }: { id: string; title: string; onDone: () => void; children: React.ReactNode }) {
+  const W = 168;
+  const [dx, setDx] = useState(0);
+  const [drag, setDrag] = useState(false);
+  const [ask, setAsk] = useState<"archive" | "delete" | null>(null);
+  const at = useRef<{ x: number; y: number; dx: number; h: boolean | null } | null>(null);
+  const go = async (action: "archive" | "delete", note: string | null) => {
+    setAsk(null); setDx(0);
+    try { await archiveNow("job", [id], action, "coy", note); onDone(); }
+    catch (e) { window.alert(e instanceof Error ? e.message : String(e)); }
+  };
+  const btn: React.CSSProperties = { width: W / 2, color: "#fff", ...eyebrow, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" };
+  return (
+    <div className="relative overflow-hidden rounded">
+      <div className="absolute top-0 bottom-0 right-0 flex" aria-hidden={dx ? undefined : true}>
+        <button type="button" tabIndex={dx ? 0 : -1} onClick={() => setAsk("archive")} aria-label={`Archive ${title}`} style={{ ...btn, background: T.ink2 }}>Archive</button>
+        <button type="button" tabIndex={dx ? 0 : -1} onClick={() => setAsk("delete")} aria-label={`Delete ${title}`} style={{ ...btn, background: T.red }}>Delete</button>
+      </div>
+      <div
+        onTouchStart={(e) => { const t = e.touches[0]; at.current = { x: t.clientX, y: t.clientY, dx, h: null }; }}
+        onTouchMove={(e) => {
+          const a = at.current; if (!a) return;
+          const t = e.touches[0]; const mx = t.clientX - a.x, my = t.clientY - a.y;
+          if (a.h === null) { if (Math.abs(mx) < 6 && Math.abs(my) < 6) return; a.h = isHorizontal(mx, my); if (a.h) setDrag(true); }
+          if (a.h) setDx(Math.max(-W, Math.min(0, a.dx + mx)));
+        }}
+        onTouchEnd={() => { const a = at.current; at.current = null; if (a?.h) setDx((d) => (d < -W / 3 ? -W : 0)); setDrag(false); }}
+        onClickCapture={(e) => { if (dx) { e.stopPropagation(); e.preventDefault(); setDx(0); } }}
+        style={{ position: "relative", background: T.card, transform: `translateX(${dx}px)`, transition: drag ? "none" : "transform .18s ease" }}>
+        {children}
+      </div>
+      <ArchiveDialog open={ask !== null} kind="job" action={ask ?? "archive"} what={`the job “${title}”`}
+        onCancel={() => setAsk(null)} onConfirm={(n) => { if (ask) void go(ask, n); }} />
+    </div>
   );
 }

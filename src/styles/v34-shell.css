@@ -477,6 +477,8 @@ html[data-theme="night-shift"] .sc-proposal { --sc-doc-ground: #15171A; }
 @media (max-width: 1023px) {
   html[data-head-hide] { --sc-head: 0px; }
   html[data-head-hide] .sc-head-wrap { transform: translateY(-100%); }
+  /* The job page's own header goes with it; its dark numbers strip stays at the top (Coy, 2026-10-10). */
+  html[data-head-hide] .sc-job-sticky { top: calc(-1 * var(--sc-job-head-h, 0px)) !important; }
 }
 @media (prefers-reduced-motion: reduce) { .sc-head-wrap { transition: none; } }
 

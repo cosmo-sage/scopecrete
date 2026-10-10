@@ -159,7 +159,7 @@ export function MapView({ view, onView, mode, overlay, onSize, onBackgroundTap, 
   return (
     <div ref={box} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}
       onDoubleClick={(e) => { if (e.target !== e.currentTarget.querySelector("[data-tiles]")) return; const r = box.current!.getBoundingClientRect(); zoomAt(Math.round(view.zoom) + 1, e.clientX - r.left, e.clientY - r.top); }}
-      className="relative overflow-hidden select-none" style={{ width: "100%", height: "100%", background: mode === "sat" ? "#2b2e2b" : "#ECE7DC", touchAction: "none", cursor: "grab" }}>
+      className="relative overflow-hidden select-none" style={{ overflow: "clip", width: "100%", height: "100%", background: mode === "sat" ? "#2b2e2b" : "#ECE7DC", touchAction: "none", cursor: "grab" }}>
       <div data-tiles="" style={{ position: "absolute", inset: 0 }}>
         {tiles.map((tl) => (
           // eslint-disable-next-line @next/next/no-img-element

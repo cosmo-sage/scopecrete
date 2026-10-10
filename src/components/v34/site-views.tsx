@@ -81,7 +81,6 @@ export function SiteViews({ addr, stored }: { addr: string; stored: Point | null
           : <div style={{ height: 70, display: "flex", alignItems: "center", justifyContent: "center", fontSize: F.sm, color: T.ink3 }}>
               {state === "finding" ? "Finding it on the map…" : "The map couldn't place this address."}
             </div>}
-        {point && <span style={{ ...lbl, position: "absolute", left: 6, top: 6, fontSize: 10, padding: "3px 7px", borderRadius: 3, background: "rgba(0,0,0,.55)", color: "#fff" }}>🛰 Satellite ⤢</span>}
       </button>
       {open && point && <SitePopup point={point} provider={provider} onClose={() => setOpen(false)} />}
     </>

@@ -28,7 +28,7 @@ import { POST as finalize } from "../final/route";
 
 export const dynamic = "force-dynamic";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const LINK_COLS = "id, token, status, sent_at, sent_via, view_count, first_viewed_at, last_viewed_at, revoked_at, created_at, proposal_id, version:job_proposals(version)";
+const LINK_COLS = "id, token, status, decided_name, decided_at, sent_at, sent_via, view_count, first_viewed_at, last_viewed_at, revoked_at, created_at, proposal_id, version:job_proposals(version)";
 
 export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
@@ -154,9 +154,9 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     cover: cover ? paths.get(cover) ?? null : null, maps, photos,
   });
 
-  // A new version's link retires the older ones: the customer sees "replaced".
+  // A new version's link retires the older ones: the customer sees "replaced". A signed one stays (097).
   await supabase.from("documents").update({ status: "void" }).eq("org_id", orgId).eq("job_id", id)
-    .not("proposal_id", "is", null).is("revoked_at", null).neq("status", "void");
+    .not("proposal_id", "is", null).is("revoked_at", null).not("status", "in", "(void,accepted)");
   const { data: doc, error } = await supabase.from("documents").insert({
     id: docId, org_id: orgId, job_id: id, customer_id: job.customer_id, doc_type: "quote", token,
     proposal_id: prop.id, version: prop.version, status: "draft", assets, shown, created_by: userId,

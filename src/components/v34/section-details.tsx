@@ -46,9 +46,6 @@ export function SectionDetails({ jobId, sectionName, shape, details, sheetName, 
           + Clip
         </a>
       </div>
-      {!details.length && <div className="mt-1" style={{ fontSize: F.xs, color: T.ink3 }}>
-        Clip a section cut or detail off a drawing in Takeoffs (open the sheet, Clip detail) and it lands here for you and the AI to read.
-      </div>}
       {details.length > 0 && (
         <div className="grid gap-1.5 mt-1.5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))" }}>
           {details.map((f) => {

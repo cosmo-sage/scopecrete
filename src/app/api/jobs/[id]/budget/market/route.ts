@@ -10,7 +10,7 @@ import { marketView, missing094 } from "@/lib/budget-v3-server";
  *   GET   the budget's lines by recipe step, the last going-rate lookup, past jobs.
  *   POST  {sections: [ids]} — going rates for those sections (at most four a tap), by
  *         each one's name and unit near the job's city (the plan's words only).
- *   POST  look the going rates up again (Coy's tap): every step, the job's city
+ *   POST  look the going rates up again (Coy's tap): every step and up to four sections, the job's city
  *         only — never the customer. Kept in market_lookups (094); before 094,
  *         on the draft's latest build as the draft's own lookup does.
  * Nothing here changes a price: "Use" goes through the budget line's own PATCH.
@@ -75,9 +75,21 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     const l = await lookupRates(supabase, orgId, id);
     if (!l.ok) return applyCookies(NextResponse.json({ error: l.status === 409 ? "Build the draft budget first, or apply migration 094 to look rates up from here." : l.error }, { status: l.status }));
   } else {
-    const found = await searchRates(supabase, orgId, id, []);
-    const { error } = await supabase.from("market_lookups").insert({ org_id: orgId, job_id: id, lookup: found, created_by: userId });
+    // The same tap looks up the sections too (Coy, 2026-10-09: "Front of Driveway" read No rate
+    // after Look up), side by side so it fits the request's time: up to four, unlooked first.
+    const view = await marketView(supabase, orgId, id);
+    const asks = [...view.sections].sort((a, b) => Number(!!a.rates_at) - Number(!!b.rates_at)).slice(0, 4)
+      .map((x, i) => ({ id: x.id, key: `s${i + 1}`, name: x.name, unit: sectionUnit(x).unit ?? "sf" as const }));
+    const [found, secs] = await Promise.all([
+      searchRates(supabase, orgId, id, []),
+      asks.length ? searchSectionRates(supabase, orgId, id, asks) : Promise.resolve(null),
+    ]);
+    const rows = [found, ...(secs && !secs.error ? [secs] : [])].map((lookup) => ({ org_id: orgId, job_id: id, lookup, created_by: userId }));
+    const { error } = await supabase.from("market_lookups").insert(rows);
     if (error) return applyCookies(NextResponse.json({ error: error.message }, { status: 400 }));
+    const after = await marketView(supabase, orgId, id);
+    const note = found.error ?? secs?.error ?? null;
+    return applyCookies(NextResponse.json(note ? { ...after, note } : after));
   }
   return applyCookies(NextResponse.json(await marketView(supabase, orgId, id)));
 }

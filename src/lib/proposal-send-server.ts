@@ -6,7 +6,7 @@
  */
 import type { ApiSession } from "@/lib/api-auth";
 import { exampleLines, type SendExample } from "@/lib/proposal-send";
-import { viewLine } from "@/lib/proposal-links";
+import { signedLine, viewLine } from "@/lib/proposal-links";
 
 type Sb = ApiSession["supabase"];
 
@@ -32,7 +32,7 @@ export async function sendableProposals(sb: Sb, orgId: string, where: { contactI
   const ids = jobRows.map((j) => j.id);
   const [{ data: props }, { data: docs }] = await Promise.all([
     sb.from("job_proposals").select("id, job_id, version, status, snapshot->price->total, finalized_at").eq("org_id", orgId).in("job_id", ids).order("version", { ascending: false }),
-    sb.from("documents").select("id, job_id, proposal_id, token, sent_at, sent_via, view_count, last_viewed_at, status, revoked_at, created_at")
+    sb.from("documents").select("id, job_id, proposal_id, token, sent_at, sent_via, view_count, last_viewed_at, status, decided_name, decided_at, revoked_at, created_at")
       .eq("org_id", orgId).in("job_id", ids).not("proposal_id", "is", null).is("revoked_at", null).neq("status", "void").order("created_at", { ascending: false }),
   ]);
   const out: Sendable[] = [];
@@ -49,7 +49,7 @@ export async function sendableProposals(sb: Sb, orgId: string, where: { contactI
       link: d && final && final.version === newest.version ? {
         id: d.id as string, token: d.token as string, url: `${origin}/p/${d.token}`, sent_at: (d.sent_at as string | null) ?? null,
         sent_via: (d.sent_via as string[] | null) ?? [], view_count: (d.view_count as number | null) ?? 0, last_viewed_at: (d.last_viewed_at as string | null) ?? null,
-        views: viewLine({ view_count: (d.view_count as number | null) ?? 0, last_viewed_at: (d.last_viewed_at as string | null) ?? null }),
+        views: withSigned(d, viewLine({ view_count: (d.view_count as number | null) ?? 0, last_viewed_at: (d.last_viewed_at as string | null) ?? null })),
       } : null,
     });
     if (where.recent && out.length >= where.recent) break;
@@ -57,16 +57,22 @@ export async function sendableProposals(sb: Sb, orgId: string, where: { contactI
   return out;
 }
 
+/** "Signed by … · opened 3 times …" when the customer signed it on the link (097). */
+function withSigned(d: Record<string, unknown>, views: string): string {
+  const signed = signedLine({ status: String(d.status ?? ""), decided_name: (d.decided_name as string | null) ?? null, decided_at: (d.decided_at as string | null) ?? null });
+  return signed ? `${signed} · ${views}` : views;
+}
+
 /** The link behind a token seen in a thread — this org's only. */
 export async function linkByToken(sb: Sb, orgId: string, token: string) {
-  const { data: d } = await sb.from("documents").select("id, job_id, token, version, sent_at, view_count, last_viewed_at, revoked_at, status, job:jobs(title, job_number)")
+  const { data: d } = await sb.from("documents").select("id, job_id, token, version, sent_at, view_count, last_viewed_at, revoked_at, status, decided_name, decided_at, job:jobs(title, job_number)")
     .eq("org_id", orgId).eq("token", token).maybeSingle();
   if (!d) return null;
   const job = (d.job ?? null) as { title?: string | null; job_number?: string | null } | null;
   return {
     id: d.id as string, job_id: d.job_id as string, job_title: job?.title ?? null, number: `${job?.job_number ?? "P"}-${d.version ?? "?"}`,
     live: !d.revoked_at && d.status !== "void", state: d.revoked_at ? "turned off" : d.status === "void" ? "replaced by a newer version" : "live",
-    views: viewLine({ view_count: (d.view_count as number | null) ?? 0, last_viewed_at: (d.last_viewed_at as string | null) ?? null }),
+    views: withSigned(d, viewLine({ view_count: (d.view_count as number | null) ?? 0, last_viewed_at: (d.last_viewed_at as string | null) ?? null })),
   };
 }
 

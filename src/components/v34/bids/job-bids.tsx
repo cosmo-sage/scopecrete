@@ -56,7 +56,7 @@ export function JobBids({ jobId, card }: { jobId: string; card: React.CSSPropert
       {reqs === null ? <div className="rounded animate-pulse mt-2" style={{ height: 32, background: T.hairSoft }} />
         : reqs.length === 0 ? (
           <div style={{ fontSize: F.sm, color: T.ink2, marginTop: 6, lineHeight: 1.5 }}>
-            None sent. Get bids picks the areas they price (quantities, never your costs) and sends each sub their own link.
+            None sent.
           </div>
         ) : reqs.map((r) => (
           <div key={r.id} role="button" tabIndex={0} onClick={() => setOpenId(r.id)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpenId(r.id); } }}

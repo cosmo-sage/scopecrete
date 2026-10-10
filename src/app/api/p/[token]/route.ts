@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createHash } from "node:crypto";
 import { getReaderClient } from "@/lib/api-auth";
 import { FILES_BUCKET } from "@/lib/files";
-import type { LinkAssets } from "@/lib/proposal-links";
+import { SIGN_CONSENT, type LinkAssets } from "@/lib/proposal-links";
 
 /**
  * The customer's proposal, by link (migration 075) — the one route a stranger
@@ -27,7 +27,8 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ token: stri
   const ipHash = ip ? createHash("sha256").update(`${ip}|${token}`).digest("hex").slice(0, 16) : null;
   const { data, error } = await supabase.rpc("sc_shared_proposal", { p_token: token, p_ip_hash: ipHash, p_ua: req.headers.get("user-agent") });
   if (error) return json({ error: "Couldn't open the proposal." }, 500);
-  const r = data as null | { gone: boolean; own?: boolean; org_name: string | null; version?: number; shown?: unknown; assets?: LinkAssets; sent_at?: string | null };
+  const r = data as null | { gone: boolean; own?: boolean; org_name: string | null; version?: number; shown?: unknown; assets?: LinkAssets; sent_at?: string | null;
+    signature?: { name: string | null; at: string | null; image: string | null; total: number | null; number: string | null } | null };
   if (!r) return json({ error: "This link isn't right." }, 404);
   if (r.gone) return json({ gone: true, org_name: r.org_name });
 
@@ -46,5 +47,40 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ token: stri
     maps: Object.fromEntries(Object.entries(a.maps ?? {}).map(([k, p]) => [k, fileUrls.get(p) ?? null]).filter(([, u]) => u)),
     photos: Object.fromEntries(Object.entries(a.photos ?? {}).map(([k, ps]) => [k, ps.map((p) => fileUrls.get(p)).filter(Boolean)])),
   };
-  return json({ gone: false, own: !!r.own, org_name: r.org_name, version: r.version, shown: r.shown, urls });
+  // `signature` is undefined until migration 097 is applied — then signing is off on the page.
+  return json({ gone: false, own: !!r.own, org_name: r.org_name, version: r.version, shown: r.shown, urls,
+    signature: r.signature ?? null, can_sign: r.signature !== undefined });
+}
+
+/**
+ * Approve and sign (migration 097): the customer's name, the signature they drew (a PNG data URL)
+ * and their agreement to sign electronically, through sc_accept_proposal() — the second thing a
+ * stranger may run. It checks the link, refuses a member of the org, and wins the job. No session,
+ * no service role.
+ */
+export async function POST(req: NextRequest, ctx: { params: Promise<{ token: string }> }) {
+  const { token } = await ctx.params;
+  const { supabase, applyCookies } = getReaderClient(req);
+  const json = (b: unknown, s = 200) => applyCookies(NextResponse.json(b, { status: s, headers: { "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } }));
+  if (!TOKEN.test(token)) return json({ error: "This link isn't right." }, 404);
+  const b = (await req.json().catch(() => ({}))) as { name?: unknown; signature?: unknown; agree?: unknown };
+  const name = typeof b.name === "string" ? b.name.trim().slice(0, 200) : "";
+  const signature = typeof b.signature === "string" ? b.signature : "";
+  if (name.length < 2) return json({ error: "Type your full name." }, 400);
+  if (!signature.startsWith("data:image/png;base64,") || signature.length > 300_000) return json({ error: "Draw your signature in the box." }, 400);
+  if (b.agree !== true) return json({ error: "Tick the box to agree to sign electronically." }, 400);
+  const ip = (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim();
+  const ipHash = ip ? createHash("sha256").update(`${ip}|${token}`).digest("hex").slice(0, 16) : null;
+  const { data, error } = await supabase.rpc("sc_accept_proposal", {
+    p_token: token, p_name: name, p_signature: signature, p_consent: SIGN_CONSENT, p_ip_hash: ipHash, p_ua: req.headers.get("user-agent"),
+  });
+  if (error) {
+    if (/sc_accept_proposal/.test(error.message) && /(does not exist|could not find|schema cache)/i.test(error.message)) {
+      return json({ error: "Signing online isn't switched on yet — reply to your contractor to accept." }, 503);
+    }
+    // The function's own refusals are written for the customer (22023 / 42501).
+    const mine = error.code === "22023" || error.code === "42501";
+    return json({ error: mine ? error.message : "Couldn't save your signature. Try again." }, mine ? 400 : 500);
+  }
+  return json(data);
 }

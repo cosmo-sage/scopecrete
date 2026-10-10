@@ -25,10 +25,12 @@ import { T, F, disp, eyebrow, nums, clip, relTime, formatPhone } from "@/lib/v34
 import { EmptyState, MenuButton, PageHeader, Sheet } from "@/components/v34/primitives";
 import { Emblem } from "@/components/site/marks";
 import { STAGES, STATUS_TAG, STATUS_NAME, JOB_TYPE_LABEL, LEAD_SOURCES, stageOf } from "@/lib/jobs/stages";
+import { dayLabel } from "@/lib/jobs/schedule";
 import { BOARD_SORTS, cityCounts, filterJobs, sortJobs, type BoardFilter, type BoardSort } from "@/lib/jobs/board-view";
 
 interface Job {
   id: string;
+  scheduled_start?: string | null;
   job_number: string | null;
   title: string | null;
   status: string | null;
@@ -434,7 +436,7 @@ function JobsTable({ jobs, busy, readOnly, sort, onSort, onMove, onAccept }: {
           {jobs.map((j, i) => {
             const st = stageOf(j.status);
             const hue = STAGE_HUE[st.k] ?? T.ink3;
-            const tag = j.status ? STATUS_TAG[j.status] : null;
+            const tag = j.status === "scheduled" && j.scheduled_start ? `Starts ${dayLabel(j.scheduled_start)}` : j.status ? STATUS_TAG[j.status] : null;
             const who = j.contact_name?.trim() || (j.contact_phone ? formatPhone(j.contact_phone) : null);
             const source = j.referred_by_name ? `via ${j.referred_by_name}` : j.lead_source ? SOURCE_LABEL[j.lead_source] : null;
             const td: React.CSSProperties = { padding: "9px 12px", borderTop: i ? `1px solid ${T.hairSoft}` : "none", verticalAlign: "top" };
@@ -492,7 +494,7 @@ function JobCard({ j, busy, readOnly, next, onNext, onMove, onAccept, onFlag }: 
   onFlag: (archive: boolean) => void;
 }) {
   const who = j.contact_name?.trim() || (j.contact_phone ? formatPhone(j.contact_phone) : "No customer yet");
-  const tag = j.status ? STATUS_TAG[j.status] : null;
+  const tag = j.status === "scheduled" && j.scheduled_start ? `Starts ${dayLabel(j.scheduled_start)}` : j.status ? STATUS_TAG[j.status] : null;
   const since = relTime(j.stage_changed_at ?? j.created_at);
   const source = j.referred_by_name ? `via ${j.referred_by_name}` : j.lead_source ? SOURCE_LABEL[j.lead_source] : null;
   const small = (c: string): React.CSSProperties => ({ ...eyebrow, fontSize: F.micro, color: c });

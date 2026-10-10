@@ -72,6 +72,16 @@ export function viewLine(v: { view_count: number; last_viewed_at: string | null 
   return `opened ${v.view_count === 1 ? "once" : `${v.view_count} times`} · last ${ago}`;
 }
 
+/** What the customer agrees to when they sign on the link (097) — shown beside the tick and stored with it. */
+export const SIGN_CONSENT = "I agree to sign this proposal electronically, and that my signature here is as binding as one on paper.";
+
+/** "Signed by Johnette Wilson · Oct 9, 6:24 PM" when the customer signed on the link (097), else null. */
+export function signedLine(v: { status: string; decided_name?: string | null; decided_at?: string | null }): string | null {
+  if (v.status !== "accepted") return null;
+  const when = v.decided_at ? new Date(v.decided_at).toLocaleString("en-US", { timeZone: "America/Chicago", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : null;
+  return `Signed by ${v.decided_name?.trim() || "the customer"}${when ? ` · ${when}` : ""}`;
+}
+
 type Rec = Record<string, unknown>;
 const s = (v: unknown) => (typeof v === "string" && v ? v : null);
 const n = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : v === null || v === undefined || v === "" ? null : Number.isFinite(Number(v)) ? Number(v) : null);

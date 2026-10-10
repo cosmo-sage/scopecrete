@@ -9,6 +9,7 @@
 import { ClipBar } from "./clip-detail";
 import type { DetailBox } from "@/lib/plan-details";
 import { usePinchZoom } from "@/lib/v34/use-pinch";
+import Link from "next/link";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { T, F, disp, eyebrow, clip, strong } from "@/lib/v34/tokens";
 import { drawPage, openPdf, pageThumb } from "@/lib/pdf";
@@ -81,10 +82,10 @@ function FileFace({ f, height }: { f: PlanFile; height: number }) {
 }
 
 /** Every file on the job: plan sets with In plan room, photos, anything else. */
-function FileList({ files, sheets, reading, onToggle, onAdd, uploading, look, onDelete, measured }: {
+function FileList({ files, sheets, reading, onToggle, onAdd, uploading, look, onDelete, measured, jobId }: {
   files: PlanFile[]; sheets: Sheet[]; reading: Record<string, string>;
   onToggle: (f: PlanFile, on: boolean) => void; onAdd: (list: FileList) => void; uploading: string | null;
-  look: Look; onDelete?: (f: PlanFile) => void; measured?: Set<string>;
+  look: Look; onDelete?: (f: PlanFile) => void; measured?: Set<string>; jobId?: string;
 }) {
   const measuredOn = (f: PlanFile) => sheets.filter((s) => s.file_id === f.id && measured?.has(s.id)).length;
   const [over, setOver] = useState(false);
@@ -100,6 +101,14 @@ function FileList({ files, sheets, reading, onToggle, onAdd, uploading, look, on
         <span style={{ fontFamily: disp, fontSize: F.md, fontWeight: 600 }}>{uploading ?? "Drop plan sets, sketches or photos"}</span>
         <span style={{ fontSize: F.xs, color: T.ink3 }}>PDF, JPG or PNG · or tap to choose</span>
       </label>
+      {/* Pull satellite images (Coy, 2026-10-10): the Map, on satellite, with this job's address searched. */}
+      {jobId && (
+        <Link href={`/dashboard/map?job=${jobId}`} className="mt-2 flex items-center justify-center gap-2 rounded-md"
+          style={{ minHeight: 44, border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink, fontFamily: disp, fontSize: F.md, fontWeight: 600 }}>
+          <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="M10 18s6-5.6 6-10A6 6 0 0 0 4 8c0 4.4 6 10 6 10z" /><circle cx="10" cy="8" r="2" /></svg>
+          Pull satellite images
+        </Link>
+      )}
       {!list.length && <div className="mt-3" style={{ fontSize: F.sm, color: T.ink3 }}>No files on this job yet. Drop the plan set above.</div>}
       {list.length > 0 && look === "large" && (
         <div className="mt-3 grid gap-2.5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))" }}>
@@ -252,7 +261,7 @@ export function FilesStep({ files, sheets, docPages = [], reading, onToggle, onA
           <span style={{ flex: 1, minWidth: 0, fontFamily: disp, fontSize: F.md, fontWeight: 600, ...clip }}>{folders.find((f) => f.k === view)?.label ?? ""}</span>
           <LookSwitch look={look} onChange={setLook} />
         </div>
-        {view === "files" && <FileList files={files} sheets={sheets} reading={reading} onToggle={onToggle} onAdd={onAdd} uploading={uploading} look={look} onDelete={onDelete} measured={measured} />}
+        {view === "files" && <FileList files={files} sheets={sheets} reading={reading} onToggle={onToggle} onAdd={onAdd} uploading={uploading} look={look} onDelete={onDelete} measured={measured} jobId={jobId} />}
         {view === "photos" && <PhotoGrid files={files} jobId={jobId} onAdded={onAdded} look={look} onDelete={onDelete} />}
         {isSheets && look === "list" && (
           <div className="rounded overflow-hidden" style={{ border: `1px solid ${T.hair}`, background: T.card }}>

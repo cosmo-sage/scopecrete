@@ -3,6 +3,7 @@ import { getApiSession } from "@/lib/api-auth";
 import { plainSpeakers } from "@/lib/speakers";
 import { ALL_STATUSES, BEFORE_WON, LEAD_SOURCES, WON_STATUSES } from "@/lib/jobs/stages";
 import { contractFor, wonAtFromDay, type Contract } from "@/lib/jobs/won";
+import { statusForSchedule, validDay, workEnd } from "@/lib/jobs/schedule";
 
 /**
  * One job — read, edit, and ACCEPT.
@@ -107,6 +108,37 @@ export async function PATCH(
     else return applyCookies(NextResponse.json({ error: "Hours a day is a number above 0, up to 24." }, { status: 400 }));
   }
 
+  // The schedule (Coy, 2026-10-09; src/lib/jobs/schedule.ts): { schedule: { start, days?, confirmed? } }.
+  // The end is the start plus the days in work days; a start moves Won → Scheduled, clearing it moves
+  // Scheduled → Won. Changing the days alone moves the end of a job that has a start.
+  if ("schedule" in body || ("duration_days" in patch && !("schedule" in body))) {
+    const sc = (body.schedule ?? {}) as { start?: unknown; days?: unknown; confirmed?: unknown };
+    const { data: cur } = await supabase.from("jobs").select("status, scheduled_start, duration_days, schedule_state").eq("id", id).eq("org_id", orgId).maybeSingle();
+    if (!cur) return applyCookies(NextResponse.json({ error: "No such job." }, { status: 404 }));
+    if ("days" in sc) {
+      const d = sc.days;
+      if (d === null) patch.duration_days = null;
+      else if (typeof d === "number" && Number.isFinite(d) && d > 0 && d < 1000) patch.duration_days = d;
+      else return applyCookies(NextResponse.json({ error: "Days of work is a number above 0." }, { status: 400 }));
+    }
+    let start: string | null = (cur.scheduled_start as string | null) ?? null;
+    if ("start" in sc) {
+      if (sc.start === null || sc.start === "") start = null;
+      else {
+        start = validDay(sc.start);
+        if (!start) return applyCookies(NextResponse.json({ error: "The start is a date." }, { status: 400 }));
+      }
+      patch.scheduled_start = start;
+      const next = statusForSchedule((patch.status as string | undefined) ?? (cur.status as string | null), !!start);
+      if (next) patch.status = next;
+    }
+    const days = "duration_days" in patch ? (patch.duration_days as number | null) : (cur.duration_days as number | null);
+    if ("start" in sc || "duration_days" in patch) patch.scheduled_end = start ? workEnd(start, days) : null;
+    if ("start" in sc && !start) patch.schedule_state = "none";
+    else if (typeof sc.confirmed === "boolean") patch.schedule_state = sc.confirmed ? "committed" : "tentative";
+    else if ("start" in sc && start && (cur.schedule_state ?? "none") === "none") patch.schedule_state = "tentative";
+  }
+
   if (typeof patch.status === "string" && !VALID_STATUS.includes(patch.status)) {
     return applyCookies(NextResponse.json({
       error: `Unknown status "${patch.status}". One of: ${VALID_STATUS.join(", ")}.`,
@@ -174,7 +206,7 @@ export async function PATCH(
     .update(patch)
     .eq("id", id)
     .eq("org_id", orgId)
-    .select("id, job_number, title, status, won_at, origin, confirmed_at, confirmed_by, contact_id, address, city, state, zip, notes, duration_days, created_at, job_type, lead_source, referred_by_contact_id")
+    .select("id, job_number, title, status, won_at, origin, confirmed_at, confirmed_by, contact_id, address, city, state, zip, notes, duration_days, scheduled_start, scheduled_end, schedule_state, created_at, job_type, lead_source, referred_by_contact_id")
     .maybeSingle();
 
   if (error) {
@@ -205,7 +237,7 @@ export async function GET(
 
   const { data, error } = await supabase
     .from("jobs")
-    .select("id, job_number, title, status, won_at, origin, confirmed_at, confirmed_by, created_from_message_id, contact_id, customer_id, address, city, state, zip, notes, duration_days, created_at, job_type, lead_source, referred_by_contact_id, description, archived_at, archived_reason")
+    .select("id, job_number, title, status, won_at, origin, confirmed_at, confirmed_by, created_from_message_id, contact_id, customer_id, address, city, state, zip, notes, duration_days, scheduled_start, scheduled_end, schedule_state, created_at, job_type, lead_source, referred_by_contact_id, description, archived_at, archived_reason")
     .eq("id", id)
     .eq("org_id", orgId)
     .maybeSingle();
@@ -277,15 +309,20 @@ export async function GET(
   // one at or before won_at IS the locked price. Signed change orders (094) add to it.
   let contract: Contract | null = null;
   if (WON_STATUSES.includes(data.status ?? "")) {
-    const [{ data: props }, { data: cos }] = await Promise.all([
+    const [{ data: props }, { data: cos }, { data: signedDocs }] = await Promise.all([
       supabase.from("job_proposals").select("id, version, finalized_at, snapshot").eq("org_id", orgId).eq("job_id", id).eq("status", "final"),
       supabase.from("change_orders").select("price, signed_at").eq("org_id", orgId).eq("job_id", id),
+      // A version the customer signed on its link (097) is the contract outright.
+      supabase.from("documents").select("proposal_id, decided_name, decided_at").eq("org_id", orgId).eq("job_id", id)
+        .eq("status", "accepted").not("proposal_id", "is", null),
     ]);
     contract = contractFor(((props ?? []) as Array<{ id: string; version: number; finalized_at: string | null; snapshot: { number?: unknown; price?: { total?: unknown } } | null }>).map((p) => ({
       id: p.id, version: p.version, finalized_at: p.finalized_at,
       number: typeof p.snapshot?.number === "string" ? p.snapshot.number : null,
       total: typeof p.snapshot?.price?.total === "number" ? p.snapshot.price.total : null,
-    })), data.won_at ?? null, (cos ?? []) as Array<{ price: number | null; signed_at: string | null }>);
+    })), data.won_at ?? null, (cos ?? []) as Array<{ price: number | null; signed_at: string | null }>,
+      ((signedDocs ?? []) as Array<{ proposal_id: string; decided_name: string | null; decided_at: string | null }>)
+        .map((d) => ({ proposal_id: d.proposal_id, name: d.decided_name, at: d.decided_at })));
   }
 
   return applyCookies(NextResponse.json({ job: data, contact, why, crew, contract }));

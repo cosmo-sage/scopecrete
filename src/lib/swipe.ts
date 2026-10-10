@@ -1,13 +1,13 @@
 /**
  * What a finished swipe on a Threads row means:
  *   right → open the four buckets (Customer · Vendor · Personal · Spam) — Coy, 2026-09-27
- *   left  → open Spam and Archive behind the row — Coy, 2026-10-05 (it used to
- *           file Dusty's guess; the guess is still marked in the buckets)
+ *   left  → open Archive behind the row — Coy, 2026-10-05 (it used to
+ *           file Dusty's guess); Spam left it 2026-10-10 (Coy) — it is in the buckets
  * Pure, so tests/swipe.test.mjs pins the thresholds.
  */
 
 export const TRAY_PX = 256;        // four 64px bucket buttons
-export const ACTIONS_PX = 152;     // Spam · Archive, 76px each
+export const ACTIONS_PX = 88;      // Archive
 export const OPEN_AT_PX = 70;      // a swipe past this locks its tray open
 
 export type SwipeResult = "open" | "actions" | "close";
@@ -24,7 +24,7 @@ export function isHorizontal(dx: number, dy: number): boolean {
   return Math.abs(dx) > 10 && Math.abs(dx) > 1.5 * Math.abs(dy);
 }
 
-/** How far the row follows the finger: right up to the buckets, left up to Spam · Archive. */
+/** How far the row follows the finger: right up to the buckets, left up to Archive. */
 export function clampDrag(dx: number): number {
   return dx > 0 ? Math.min(dx, TRAY_PX + 24) : Math.max(dx, -(ACTIONS_PX + 24));
 }

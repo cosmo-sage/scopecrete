@@ -10,7 +10,7 @@ import { LINE_COLUMNS, numLine, workingEstimate } from "@/lib/budget-server";
 import { pricingFor } from "@/lib/pricing-server";
 import { takeoffTotalsFor } from "@/lib/plans-server";
 import { DRIVEWAY_STEPS, stepsOf } from "@/lib/draft/recipe";
-import type { RateLookup } from "@/lib/draft/rates";
+import { restep, type RateLookup } from "@/lib/draft/rates";
 import { sheetsFor } from "@/lib/section-sheets";
 import { compareActuals, suggestLine, type ChangeOrder, type JobCost } from "@/lib/budget-v3";
 
@@ -90,6 +90,8 @@ export async function marketView(sb: Sb, orgId: string, jobId: string) {
   const { data: ml, error: mle } = await sb.from("market_lookups").select("lookup, created_at").eq("org_id", orgId).eq("job_id", jobId).order("created_at", { ascending: false }).limit(10);
   const own = !mle ? ((ml ?? []) as Array<{ lookup: RateLookup & { kind?: string } }>).find((x) => x.lookup?.kind !== "sections")?.lookup ?? null : null;
   if (own && (!rates || own.asked_at > rates.asked_at)) rates = own;
+  // A lookup kept before restep() existed reads with its rates on the right steps.
+  if (rates) rates = { ...rates, rates: rates.rates.map(restep) };
   const canKeep = !missing094(mle);
   // Going rates for the job's own sections (kind "sections"), newest per section; before 094 on the latest build.
   const sectionRates = new Map<string, { asked_at: string; rates: RateLookup["rates"] }>();

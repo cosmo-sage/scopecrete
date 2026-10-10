@@ -29,7 +29,6 @@ import { FilesPanel, type FileRow } from "@/components/v34/files-panel";
 import { SectionPhotos } from "@/components/v34/section-photos";
 import { SectionDetails } from "@/components/v34/section-details";
 import { isDetailFile, type SectionShape } from "@/lib/plan-details";
-import { BidStrip } from "@/components/v34/bid-strip";
 import { DraftStrip } from "@/components/v34/draft-strip";
 import { JobHeaderRow } from "@/components/v34/job-tabs";
 import { JobBudget, type BudgetSummary } from "@/components/v34/job-budget";
@@ -82,11 +81,6 @@ interface Why {
 // work (migration 040). Not a name — shown as an empty box asking for one.
 const PLACEHOLDER_TITLES = new Set(["New job", "Untitled scope"]);
 
-const WORK_TYPES: [string, string][] = [
-  ["slab", "Slab"], ["driveway", "Driveway"], ["patio", "Patio"], ["sidewalk", "Sidewalk"],
-  ["footing", "Footing"], ["curb", "Curb"], ["demo", "Demo"], ["prep", "Prep"], ["other", "Other"],
-];
-
 const n1 = (v: number) => v.toLocaleString("en-US", { maximumFractionDigits: 1 });
 const n2 = (v: number) => v.toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 2 });
 
@@ -100,6 +94,15 @@ async function send(url: string, method: string, body?: unknown) {
 export default function ScopeBuilder() {
   const { jobId } = useParams<{ jobId: string }>();
   const access = useAccess();
+  // The job header's height, so the sticky wrapper can park it above the screen while the
+  // dashboard header is hidden (the CSS under html[data-head-hide], v34-shell.css).
+  const measureHead = useCallback((el: HTMLDivElement | null) => {
+    const box = el?.parentElement;
+    if (!el || !box) return;
+    const ro = new ResizeObserver(() => box.style.setProperty("--sc-job-head-h", `${el.offsetHeight}px`));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   const [job, setJob] = useState<Job | null>(null);
   const [contact, setContact] = useState<Contact | null>(null);
   const [why, setWhy] = useState<Why | null>(null);
@@ -299,13 +302,15 @@ export default function ScopeBuilder() {
       <div style={{ minWidth: 0 }} className="pb-24 lg:pb-6">
         {/* On a phone the job's header and its numbers stay at the top while the page scrolls,
             and the dashboard header slides away above them (Coy, 2026-10-05). */}
-        <div className="sticky z-20 lg:static" style={{ top: "var(--sc-head)" }}>
-        <div className="px-3 pt-2.5 pb-2" style={{ background: T.card, borderBottom: `1px solid ${T.hair}` }}>
+        <div className="sc-job-sticky sticky z-20 lg:static" style={{ top: "var(--sc-head)" }}>
+        {/* Scrolling down slides this header away with the dashboard's; the dark strip of numbers under it
+            stays at the top (Coy, 2026-10-10) — the wrapper sticks this header's height above the screen. */}
+        <div ref={measureHead} className="px-3 pt-2.5 pb-2" style={{ background: T.card, borderBottom: `1px solid ${T.hair}` }}>
           {/* Coy, 2026-10-05: the job's name top left, Summary · Plan room · Budget · Proposal top right —
               the same row on every view (JobHeaderRow; centred on a phone). The chips, who it's for,
               the description and "Why this job" moved to the Summary to clear the clutter here. */}
           <JobHeaderRow jobId={jobId} active="job" customerId={job.customer_id}
-            subnav={can(access, "budget") ? <BudgetSubTabs tab={tab} onTab={setTab} /> : undefined}
+            subnav={can(access, "budget") ? <BudgetSubTabs tab={tab} onTab={setTab} hang /> : undefined}
             title={access.limited ? (realTitle || titleHint || "Job") : <input defaultValue={realTitle} placeholder={titleHint} aria-label="Job name"
               size={Math.max(6, (realTitle || titleHint || "").length + 1)}
               onBlur={(e) => { const v = e.target.value; if (v !== realTitle) void send(`/api/jobs/${jobId}`, "PATCH", { title: v }).then((b) => setJob((j) => j && { ...j, title: b.job.title })).catch((er) => setSaveErr((m) => ({ ...m, job: String(er.message ?? er) }))); }}
@@ -362,8 +367,7 @@ export default function ScopeBuilder() {
 
         {/* The proposed budget stays mounted under the other tabs, so its sections and lines keep their state. */}
         <div hidden={can(access, "budget") && tab !== "proposed"}>
-        {/* The bid behind it, when a forwarded bid email made or fed this job (migration 063). */}
-        <BidStrip jobId={jobId} onUndone={() => { window.location.href = "/dashboard/scope"; }} />
+        {/* The bid behind it is on the job's Summary only (Coy, 2026-10-10: "it should be in the summary page"). */}
 
         {/* A draft budget from the job's own calls and texts (migration 087). */}
         {can(access, "budget") && <DraftStrip jobId={jobId} refresh={budgetTick} onChanged={() => { void load(); setBudgetTick((n) => n + 1); }}
@@ -497,6 +501,11 @@ function splitFt(v: number | null): [number | "", number | ""] {
   return [ft, inch === 0 ? "" : inch];
 }
 
+/** How a section is measured, each in its own colour (Coy, 2026-10-10: "color coded"). */
+const MODES: [ "dims" | "area" | "linear" | "count", string, string][] = [
+  ["dims", "Length × width", T.chalk], ["area", "Area only", T.green], ["linear", "Linear ft", T.hiviz], ["count", "Count", T.violet],
+];
+
 function SectionCard({ s, index, err, onLocal, onSave, onRemove, jobType, jobId, photos, sheets, hasPlans, onSheets, takeoff, takeoffUnit, onSlot, open, onToggle, money: m }: {
   s: Section; index: number; err?: string; rcards: RCard[]; jobType: string | null; jobId: string;
   /** Open, or folded to one line (Coy, 2026-10-08: "less busy and easier to read"). */
@@ -615,34 +624,28 @@ function SectionCard({ s, index, err, onLocal, onSave, onRemove, jobType, jobId,
     : "";
   const missingWhat = [...q.missing, ...(m && m.blocked ? [`${m.blocked} item${m.blocked === 1 ? "" : "s"} not priced`] : [])].join(", ");
   const missingAny = missingWhat.length > 0;
-  const seg = (on: boolean): React.CSSProperties => ({ height: 22, padding: "0 7px", fontSize: 10, fontFamily: disp, fontWeight: 600, letterSpacing: ".05em",
+  const unitSeg = (on: boolean): React.CSSProperties => ({ height: 22, padding: "0 7px", fontSize: 10, fontFamily: disp, fontWeight: 600, letterSpacing: ".05em",
     textTransform: "uppercase", whiteSpace: "nowrap", background: on ? T.ink : T.card, color: on ? T.card : T.ink2, cursor: "pointer" });
+  const seg = (on: boolean, c: string, divide: boolean): React.CSSProperties => ({ flex: "1 1 0", minWidth: 0, height: 30, padding: "0 4px",
+    fontSize: 11, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+    background: on ? c : T.card, color: on ? T.card : c, borderLeft: divide ? `1px solid ${T.hair}` : "none", cursor: "pointer" });
 
   return (
     <div style={{ background: T.card, borderBottom: `1px solid ${T.hair}`, marginTop: index === 0 ? 0 : 6 }}>
       <div className={`px-3 ${open ? "pt-2.5" : "py-2"} flex items-center gap-2 flex-wrap`}>
-        <button onClick={onToggle} aria-expanded={open} aria-label={open ? `Fold ${s.name || `section ${index + 1}`}` : `Open ${s.name || `section ${index + 1}`}`}
-          className="flex items-center justify-center rounded" style={{ width: 26, height: 26, flex: "none", border: `1px solid ${T.hair}`, background: T.card, cursor: "pointer" }}>
-          <span aria-hidden="true" style={{ fontSize: 11, color: T.ink2, display: "inline-block", transform: open ? "rotate(90deg)" : "none", transition: "transform .15s" }}>▸</span>
-        </button>
         {open ? (
           <input defaultValue={s.name ?? ""} placeholder={`Section ${index + 1} — name it`}
             onChange={(e) => onLocal({ name: e.target.value })} onBlur={(e) => onSave({ name: e.target.value })}
-            className="bg-transparent outline-none" style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 600, minWidth: 0, flex: "1 1 140px" }} />
+            className="bg-transparent outline-none" style={{ fontSize: F.sm, fontWeight: 600, minWidth: 0, flex: "1 1 140px" }} />
         ) : (
-          <button onClick={onToggle} className="text-left flex items-center gap-1.5" style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 600, minWidth: 0, flex: "1 1 120px", cursor: "pointer", ...clip }}>
+          <button onClick={onToggle} className="text-left flex items-center gap-1.5" style={{ fontSize: F.sm, fontWeight: 600, minWidth: 0, flex: "1 1 120px", cursor: "pointer", ...clip }}>
             {missingAny && <span title={missingWhat} style={{ width: 7, height: 7, borderRadius: 4, background: T.hiviz, flex: "none" }} />}
             <span style={clip}>{s.name || `Section ${index + 1}`}</span>
           </button>
         )}
         {open ? (
-          <>
-            <select value={s.work_type} onChange={(e) => { onLocal({ work_type: e.target.value }); onSave({ work_type: e.target.value }); }} aria-label="Kind of area"
-              className="rounded px-1.5 outline-none" style={{ height: 28, border: `1px solid ${T.hair}`, background: T.card, fontSize: F.xs }}>
-              {WORK_TYPES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-            </select>
-            <Dictate jobId={jobId} s={s} onApply={(p) => { onLocal(p as Partial<Section>); onSave(p as Partial<Section>); }} />
-          </>
+          // No kind-of-area picker here (Coy, 2026-10-10: "remove the section type completely from here").
+          <Dictate jobId={jobId} s={s} onApply={(p) => { onLocal(p as Partial<Section>); onSave(p as Partial<Section>); }} />
         ) : (
           <button onClick={onToggle} className="flex items-baseline gap-2 text-right" style={{ marginLeft: "auto", cursor: "pointer", fontSize: F.xs, color: T.ink2, ...nums }}>
             <span>{sizeText}</span>
@@ -651,6 +654,11 @@ function SectionCard({ s, index, err, onLocal, onSave, onRemove, jobType, jobId,
               : <span style={{ color: T.ink3 }}>no items</span>}
           </button>
         )}
+        {/* The fold button at the row's right end (Coy, 2026-10-10). */}
+        <button onClick={onToggle} aria-expanded={open} aria-label={open ? `Fold ${s.name || `section ${index + 1}`}` : `Open ${s.name || `section ${index + 1}`}`}
+          className="flex items-center justify-center rounded" style={{ width: 26, height: 26, flex: "none", border: `1px solid ${T.hair}`, background: T.card, cursor: "pointer" }}>
+          <span aria-hidden="true" style={{ fontSize: 11, color: T.ink2, display: "inline-block", transform: open ? "rotate(90deg)" : "none", transition: "transform .15s" }}>▸</span>
+        </button>
       </div>
       <div style={open ? undefined : { display: "none" }}>
       {/* Where the scope came from, to check on the sheet (Coy, 2026-10-09: "verify … where the sections are on
@@ -673,20 +681,20 @@ function SectionCard({ s, index, err, onLocal, onSave, onRemove, jobType, jobId,
           </div>
         </div>
       )}
-      {takeoff}
-      <div className="px-3 pt-1.5 flex items-center gap-x-2 gap-y-1 flex-wrap">
-        <span style={{ ...eyebrow }}>Measured by</span>
-        <span className="inline-flex rounded overflow-hidden" role="group" aria-label="Measured by" style={{ border: `1px solid ${T.hair}` }}>
-          <button onClick={() => toMode("dims")} aria-pressed={mode === "dims"} style={seg(mode === "dims")}>Length × width</button>
-          <button onClick={() => toMode("area")} aria-pressed={mode === "area"} style={seg(mode === "area")}>Area only</button>
-          <button onClick={() => toMode("linear")} aria-pressed={mode === "linear"} style={seg(mode === "linear")}>Linear ft</button>
-          <button onClick={() => toMode("count")} aria-pressed={mode === "count"} style={seg(mode === "count")}>Count</button>
+      {/* How the section is measured: the full width, a colour each, no "Measured by" over it, and
+          Takeoffs' button on the row under it (Coy, 2026-10-10). */}
+      <div className="px-3 pt-2 flex items-center gap-x-2 gap-y-1.5 flex-wrap">
+        <span className="flex w-full rounded overflow-hidden" role="group" aria-label="Measured by" style={{ border: `1px solid ${T.hair}` }}>
+          {MODES.map(([k, label, c], i) => (
+            <button key={k} onClick={() => toMode(k)} aria-pressed={mode === k} style={seg(mode === k, c, i > 0)}>{label}</button>
+          ))}
         </span>
         {bidQty && !bidQtyUsed && (
           <button onClick={useBidQty} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>
             Use the bid&apos;s {bidQty.n.toLocaleString("en-US")} {bidQty.u}
           </button>
         )}
+        {takeoff}
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 mt-2" style={{ borderTop: `1px solid ${T.hairSoft}` }}>
@@ -739,8 +747,8 @@ function SectionCard({ s, index, err, onLocal, onSave, onRemove, jobType, jobId,
                   onChange={(v) => onLocal({ sqft_override: v === "" ? null : unit === "sy" ? Number(v) * 9 : Number(v) })}
                   onBlur={() => onSave({ sqft_override: s.sqft_override })} />
                 <span className="inline-flex rounded overflow-hidden" role="group" aria-label="Area unit" style={{ border: `1px solid ${T.hair}` }}>
-                  <button onClick={() => setUnit("sf")} aria-pressed={unit === "sf"} style={seg(unit === "sf")}>sq ft</button>
-                  <button onClick={() => setUnit("sy")} aria-pressed={unit === "sy"} style={seg(unit === "sy")}>sq yd</button>
+                  <button onClick={() => setUnit("sf")} aria-pressed={unit === "sf"} style={unitSeg(unit === "sf")}>sq ft</button>
+                  <button onClick={() => setUnit("sy")} aria-pressed={unit === "sy"} style={unitSeg(unit === "sy")}>sq yd</button>
                 </span>
               </>
             ) : (
@@ -862,14 +870,15 @@ function Dictate({ jobId, s, onApply }: { jobId: string; s: Section; onApply: (p
     <>
       <button onClick={() => (state === "rec" ? rec.current?.stop() : state === "idle" ? void start() : undefined)}
         disabled={state === "busy"} aria-label={state === "rec" ? "Stop and fill the section" : "Dictate this section"}
-        className={state === "rec" ? "sc-rec inline-flex items-center gap-1 rounded px-2" : "inline-flex items-center gap-1 rounded px-2"}
-        style={{ height: 28, border: `1px solid ${state === "rec" ? T.red : T.hair}`, background: state === "rec" ? T.red : T.card,
-                 color: state === "rec" ? T.card : T.ink2, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", cursor: "pointer" }}>
-        <svg width="12" height="12" viewBox="0 0 15 15" aria-hidden="true">
+        title={state === "rec" ? "Stop" : state === "busy" ? "Listening…" : "Dictate"}
+        className={state === "rec" ? "sc-rec inline-flex items-center justify-center rounded" : "inline-flex items-center justify-center rounded"}
+        style={{ width: 28, height: 28, flex: "none", border: `1px solid ${state === "rec" ? T.red : T.hair}`, background: state === "rec" ? T.red : T.card,
+                 color: state === "rec" ? T.card : T.ink2, opacity: state === "busy" ? 0.55 : 1, cursor: "pointer" }}>
+        {/* The icon alone (Coy, 2026-10-10: "just a simple icon, no words"). */}
+        <svg width="14" height="14" viewBox="0 0 15 15" aria-hidden="true">
           <rect x="5.4" y="1.6" width="4.2" height="7.6" rx="2.1" fill="none" stroke="currentColor" strokeWidth="1.5" />
           <path d="M3 7.4a4.5 4.5 0 0 0 9 0 M7.5 11.9v1.6" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
         </svg>
-        {state === "rec" ? "Stop" : state === "busy" ? "Listening…" : "Dictate"}
       </button>
       {(heard || err) && (
         <div className="w-full rounded px-2.5 py-1.5" style={{ background: err ? "#FBECE9" : "#EAF0FC", fontSize: F.xs, lineHeight: 1.4 }}>

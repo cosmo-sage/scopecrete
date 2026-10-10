@@ -27,29 +27,68 @@ export function GraphiteFilter() {
   );
 }
 
-export function Emblem({ size, spin }: { size: number; spin: boolean }) {
-  const sw = size < 40 ? 5 : 2.6, s = 9.5;
-  const rot = (anim: string, dur: number): CSSProperties =>
-    spin ? { transformBox: "view-box", transformOrigin: "50px 50px", animation: `${anim} ${dur}s linear infinite` } : {};
+// The emblem, 4a "Gyroscope" (Claude Design Emblem Revisions, 2026-10-10):
+// two rings tumble round the green light in real 3D, passing in front of and
+// behind it — CSS 3D with preserve-3d, no SVG. Same colours, axes (18° /
+// −52°) and speeds (22 s / 16 s, opposite ways) as the flat ovals before it.
+// `spin={false}` is the still pose (public/favicon.svg). Spans, not divs, so
+// it can sit inside a <p> or a label. Keyframes scOrbit / scOrbitR in
+// globals.css; reduced motion stills it.
+const ORANGE = "#F2610C", STEEL = "#5980A6", GREEN = "#1FA971";
+const AXES = [18, -52], DUR = [22, 16], POSE = [58, 128];
+
+export function Emblem({ size, spin, className }: { size: number; spin: boolean; onDark?: boolean; className?: string }) {
+  const bw = Math.max(1.2, (size * (size < 40 ? 5 : 2.6)) / 100);
+  const px = (v: number) => `${(size * v) / 100}px`;
+  const box: CSSProperties = { position: "absolute", display: "block", transformStyle: "preserve-3d" };
+  const ring = (i: number) => {
+    const rev = i === 1;
+    const inner: CSSProperties = { ...box, inset: 0 };
+    if (spin) inner.animation = `${rev ? "scOrbitR" : "scOrbit"} ${DUR[i]}s linear infinite`;
+    else inner.transform = `rotateY(${rev ? -POSE[i] : POSE[i]}deg)`;
+    return (
+      <span key={i} style={{ ...box, left: "8%", top: "8%", width: "84%", height: "84%", transform: `rotateZ(${AXES[i]}deg)` }}>
+        <span style={inner}>
+          <span style={{ position: "absolute", display: "block", inset: 0, border: `${bw}px solid ${i === 0 ? ORANGE : STEEL}`, borderRadius: "50%", boxSizing: "border-box" }} />
+        </span>
+      </span>
+    );
+  };
+  const sq = (s: number, extra?: CSSProperties): CSSProperties => ({
+    position: "absolute", display: "block", left: "50%", top: "50%", width: px(s), height: px(s),
+    marginLeft: px(-s / 2), marginTop: px(-s / 2), background: GREEN, ...extra,
+  });
   return (
-    <svg className="sc-emblem" viewBox="0 0 100 100" width={size} height={size} style={{ flex: "none", display: "block", overflow: "visible" }} aria-hidden="true">
-      <g style={rot("scSpin", 22)}>
-        <ellipse cx={46} cy={47} rx={42} ry={20} fill="none" stroke="#F2610C" strokeWidth={sw} transform="rotate(18 50 50)" />
-      </g>
-      <g style={rot("scSpinR", 16)}>
-        <ellipse cx={54} cy={53} rx={40} ry={24} fill="none" stroke="#5980A6" strokeWidth={sw} transform="rotate(-52 50 50)" />
-      </g>
-      <rect x={50 - s - 2.5} y={50 - s - 2.5} width={(s + 2.5) * 2} height={(s + 2.5) * 2} fill="#1FA971" opacity={0.18} />
-      <rect x={50 - s} y={50 - s} width={s * 2} height={s * 2} fill="#1FA971" />
-    </svg>
+    <span className={className ?? "sc-emblem"} aria-hidden="true"
+      style={{ position: "relative", display: "block", width: size, height: size, flex: "none", perspective: `${size * 2.1}px`, transformStyle: "preserve-3d" }}>
+      {ring(0)}
+      {ring(1)}
+      <span style={sq(24, { opacity: 0.18 })} />
+      <span style={sq(19)} />
+    </span>
   );
 }
 
-export function Wordmark({ dark = false, size = 22 }: { dark?: boolean; size?: number }) {
+/** The ".aı" with the lighthouse dot (Emblem Revisions 4a): a dotless ı and
+ *  the green light over it, pulsing (scBeacon in globals.css). */
+export function BeaconI({ beacon = true }: { beacon?: boolean }) {
+  return (
+    <span style={{ position: "relative", display: "inline-block" }}>
+      ı
+      <span className="sc-beacon" style={{
+        position: "absolute", left: "50%", top: "0.12em", width: "0.2em", height: "0.2em", marginLeft: "-0.1em",
+        borderRadius: "50%", background: GREEN, animation: beacon ? "scBeacon 3.2s ease-in-out infinite" : "none",
+      }} />
+    </span>
+  );
+}
+
+export function Wordmark({ dark = false, size = 22, beacon = true }: { dark?: boolean; size?: number; beacon?: boolean }) {
   const ink = dark ? "rgba(230,233,237,.9)" : "rgba(52,56,61,.95)";
   return (
-    <span style={{ display: "flex", alignItems: "baseline", lineHeight: 1 }}>
+    <span style={{ display: "flex", alignItems: "baseline", lineHeight: 1 }} role="img" aria-label="scopecrete.ai">
       <span
+        aria-hidden
         style={{
           fontFamily: lexend, fontWeight: 700, fontSize: size, letterSpacing: dark ? undefined : ".02em",
           paddingBottom: ".25em", marginBottom: "-.25em", color: "transparent",
@@ -61,8 +100,8 @@ export function Wordmark({ dark = false, size = 22 }: { dark?: boolean; size?: n
       >
         scope
       </span>
-      <span style={{ fontFamily: inter, fontWeight: 300, fontSize: size, color: dark ? "#E6E9ED" : "#34383D", marginLeft: 1 }}>crete</span>
-      <span style={{ fontFamily: kalam, fontSize: dark ? 11 : 12, color: dark ? "#8A95A1" : "#5A5F66", marginLeft: 2 }}>.ai</span>
+      <span aria-hidden style={{ fontFamily: inter, fontWeight: 300, fontSize: size, color: dark ? "#A8AFB8" : "#5A6068", marginLeft: 1 }}>crete</span>
+      <span aria-hidden style={{ fontFamily: inter, fontWeight: 300, fontSize: 12, color: dark ? "#8A95A1" : "#5A5F66", marginLeft: 2 }}>.a<BeaconI beacon={beacon} /></span>
     </span>
   );
 }

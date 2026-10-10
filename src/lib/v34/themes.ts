@@ -79,7 +79,7 @@ export const THEMES: Record<ThemeKey, Theme> = {
     "hatch": "rgba(52,56,61,.95)",
     "hatchEdge": "rgba(52,56,61,.7)",
     "guide": "rgba(58,62,68,.35)",
-    "crete": "#D9550A",
+    "crete": "#5A6068",
     "workDot": {
       "read": "#3F74C9",
       "reply": "#C98A12",
@@ -145,7 +145,7 @@ export const THEMES: Record<ThemeKey, Theme> = {
     "hatch": "rgba(40,52,64,.95)",
     "hatchEdge": "rgba(40,52,64,.7)",
     "guide": "rgba(47,59,70,.34)",
-    "crete": "#E0590F",
+    "crete": "#5A6068",
     "workDot": {
       "read": "#2E5E8C",
       "reply": "#C98A12",
@@ -211,7 +211,7 @@ export const THEMES: Record<ThemeKey, Theme> = {
     "hatch": "rgba(40,36,30,.95)",
     "hatchEdge": "rgba(40,36,30,.7)",
     "guide": "rgba(58,52,43,.34)",
-    "crete": "#E0590F",
+    "crete": "#5A6068",
     "workDot": {
       "read": "#1F3A4D",
       "reply": "#C98A12",
@@ -277,7 +277,7 @@ export const THEMES: Record<ThemeKey, Theme> = {
     "hatch": "rgba(236,231,221,.92)",
     "hatchEdge": "rgba(236,231,221,.6)",
     "guide": "rgba(221,216,206,.26)",
-    "crete": "#F07A3A",
+    "crete": "#A8AFB8",
     "workDot": {
       "read": "#7FA8E0",
       "reply": "#F0B35A",
@@ -343,7 +343,7 @@ export const THEMES: Record<ThemeKey, Theme> = {
     "hatch": "rgba(29,31,32,.95)",
     "hatchEdge": "rgba(29,31,32,.7)",
     "guide": "rgba(29,31,32,.28)",
-    "crete": "#E0590F",
+    "crete": "#5A6068",
     "workDot": {
       "read": "#3F6890",
       "reply": "#C98A12",
@@ -409,7 +409,7 @@ export const THEMES: Record<ThemeKey, Theme> = {
     "hatch": "rgba(32,30,29,.95)",
     "hatchEdge": "rgba(32,30,29,.7)",
     "guide": "rgba(32,30,29,.26)",
-    "crete": "#E0590F",
+    "crete": "#5A6068",
     "workDot": {
       "read": "#355A7A",
       "reply": "#C98A12",
@@ -475,7 +475,7 @@ export const THEMES: Record<ThemeKey, Theme> = {
     "hatch": "rgba(24,32,42,.95)",
     "hatchEdge": "rgba(24,32,42,.7)",
     "guide": "rgba(24,32,42,.26)",
-    "crete": "#E0590F",
+    "crete": "#5A6068",
     "workDot": {
       "read": "#1F4E79",
       "reply": "#C98A12",
@@ -541,7 +541,7 @@ export const THEMES: Record<ThemeKey, Theme> = {
     "hatch": "rgba(40,36,30,.95)",
     "hatchEdge": "rgba(40,36,30,.7)",
     "guide": "rgba(58,52,43,.28)",
-    "crete": "#E0590F",
+    "crete": "#5A6068",
     "workDot": {
       "read": "#1F3A4D",
       "reply": "#C98A12",

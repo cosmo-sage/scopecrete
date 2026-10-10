@@ -205,7 +205,6 @@ html:has(.sc-site){scroll-behavior:smooth}
   .sc-site .sc-hero-btn.sc-cta{font-size:17px!important}.sc-site .sc-hero-btn.sc-ghost{font-size:16px!important}
 }
 @media (min-width:760px){.sc-site .sc-menu{display:none}}
-@keyframes scSpin{to{transform:rotate(360deg)}}@keyframes scSpinR{to{transform:rotate(-360deg)}}
 @media (prefers-reduced-motion:reduce){.sc-site *{animation:none!important}html:has(.sc-site){scroll-behavior:auto}}
 `}</style>
 

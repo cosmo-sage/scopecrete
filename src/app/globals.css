@@ -111,3 +111,16 @@ body {
 .animate-spin {
   animation: spin 1s linear infinite;
 }
+
+/* The ScopeCrete emblem's rings and the wordmark's lighthouse "i"
+   (Claude Design Emblem Revisions 4a, 2026-10-10; site/marks.tsx). */
+@keyframes scOrbit  { to { transform: rotateY(360deg) } }
+@keyframes scOrbitR { to { transform: rotateY(-360deg) } }
+@keyframes scBeacon {
+  0%,100% { opacity:.35; box-shadow:0 0 0 0 rgba(31,169,113,0) }
+  45%,55% { opacity:1;   box-shadow:0 0 6px 2px rgba(31,169,113,.55) }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sc-emblem * { animation: none !important }
+  .sc-beacon { animation: none !important; opacity: 1 }
+}

@@ -20,7 +20,7 @@
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { DustySVG, type DustyMode } from "./dusty-svg";
-import { Emblem, disp, inter, kalam, lexend } from "./marks";
+import { BeaconI, Emblem, disp, inter, lexend } from "./marks";
 
 const body = "var(--site-body), 'IBM Plex Sans', system-ui, sans-serif";
 const figtree = "var(--site-figtree), 'Figtree', system-ui, sans-serif";
@@ -37,7 +37,7 @@ const THEME = {
   "--sc-dusty-tint": "#FBEDE6", "--sc-dusty-text": "#9A4527", "--sc-dusty-edge": "#D97757",
   "--sc-paper": "#FAF8F3", "--sc-paper-grid": "rgba(89,128,166,.08)", "--sc-pencil": "#3A3E43",
   "--sc-pencil-muted": "#5A5F66", "--sc-pencil-line": "rgba(58,62,68,.30)", "--sc-paper-btn": "rgba(255,255,255,.55)",
-  "--sc-hatch": "rgba(52,56,61,.95)", "--sc-hatch-edge": "rgba(52,56,61,.7)", "--sc-crete": "#D9550A",
+  "--sc-hatch": "rgba(52,56,61,.95)", "--sc-hatch-edge": "rgba(52,56,61,.7)", "--sc-crete": "#5A6068",
   "--sc-work-dot-reply": "#C98A12", "--sc-work-dot-warn": "#B5412C",
 } as CSSProperties;
 
@@ -123,7 +123,7 @@ function PhoneHead({ activity, work }: { activity: string; work: Work }) {
           <span style={{ display: "inline-flex", alignItems: "baseline" }}>
             <span style={{ fontFamily: lexend, fontWeight: 700, fontSize: 20, lineHeight: 1, letterSpacing: ".02em", paddingBottom: ".28em", marginBottom: "-.28em", marginRight: 1, color: "transparent", backgroundImage: "repeating-linear-gradient(118deg,var(--sc-hatch) 0 .9px,transparent .9px 2.1px)", WebkitBackgroundClip: "text", backgroundClip: "text", WebkitTextStroke: ".5px var(--sc-hatch-edge)" }}>scope</span>
             <span style={{ fontFamily: inter, fontWeight: 300, fontSize: 20, lineHeight: 1, letterSpacing: "-.01em", color: "var(--sc-crete)" }}>crete</span>
-            <span style={{ fontFamily: kalam, fontSize: 12, lineHeight: 1, color: "var(--sc-pencil-muted)", marginLeft: 1 }}>.ai</span>
+            <span style={{ fontFamily: inter, fontWeight: 300, fontSize: 12, lineHeight: 1, color: "var(--sc-pencil-muted)", marginLeft: 1 }}>.a<BeaconI /></span>
           </span>
         </span>
         <span style={{ flex: 1 }} />

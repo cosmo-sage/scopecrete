@@ -2,12 +2,15 @@
 
 /**
  * ScopeCrete wordmark — LATEST (2026-09-30).
- * Hatched "scope" (Lexend 700, pencil hatch) + thin "crete" (Inter 300, the hatch's grey since 2026-10-10 — Coy: "the same grey as the rest of the logo"; it was orange) + ".ai" (Kalam).
+ * Hatched "scope" (Lexend 700, pencil hatch) + thin "crete" (Inter 300, lighter graphite --sc-crete) + ".ai" (Inter 300, its
+ * "i" dotted by the green light, pulsing like a lighthouse) — Claude Design
+ * Emblem Revisions 4a, 2026-10-10. "crete" was orange, then the hatch's grey.
  * Change from the previous handoff: "scope" and "crete" now sit tight (gap 0,
  * 1px optical space) so they read as one word.
  * Design ref: Dusty Dashboard 1a Draft v3.dc.html (header), ScopeCrete Logo.dc.html 2a (display).
  */
 import * as React from "react";
+import { BeaconI } from "@/components/site/marks";
 
 type Props = { size?: number; guides?: boolean; className?: string };
 
@@ -48,15 +51,15 @@ export function Wordmark({ size = 26, guides = true, className }: Props) {
         </>)}
       </span>
       <span aria-hidden style={{ position: "relative", fontFamily: "'Inter', sans-serif", fontWeight: 300, fontSize: size,
-        lineHeight: 1, letterSpacing: "-.01em", color: "var(--sc-hatch)" }}>
+        lineHeight: 1, letterSpacing: "-.01em", color: "var(--sc-crete)" }}>
         crete
         {guides && (<>
           <span style={{ ...hLine(0.35), left: "-4%", right: "-10%", top: "86%" }} />
           <span style={{ ...vLine(0.3), left: "97%", top: "-16%", bottom: "-20%" }} />
         </>)}
       </span>
-      <span aria-hidden style={{ fontFamily: "'Kalam', cursive", fontSize: size * (display ? 0.5 : 0.62), lineHeight: 1,
-        color: "var(--sc-pencil-muted)", marginLeft: 1 }}>.ai</span>
+      <span aria-hidden style={{ fontFamily: "'Inter', sans-serif", fontWeight: 300, fontSize: size * (display ? 0.5 : 0.55), lineHeight: 1,
+        color: "var(--sc-pencil-muted)", marginLeft: 1 }}>.a<BeaconI /></span>
     </span>
   );
 }

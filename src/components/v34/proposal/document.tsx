@@ -9,7 +9,8 @@
  * Nothing here prices anything: the numbers come from priceProposal()
  * (src/lib/proposal.ts) on top of the engine's budget().
  */
-import React from "react";
+import React, { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { disp, strong, light, hand, nums, formatPhone } from "@/lib/v34/tokens";
 import { AreaMap, type AreaVisual } from "./area-visuals";
 import { ScopeBullets } from "../scope-of-work";
@@ -23,6 +24,7 @@ export const SECTIONS: Array<[string, string]> = [
 export interface DocArea { id: string; name: string | null; work_type: string | null; length_ft: number | null; width_ft: number | null; sqft: number | null; depth_in: number | null; psi: number | null; rebar: string | null; count?: number | null; count_unit?: string | null;
   /** The area's scope of work, a bullet a line (job_sections.prep_notes, src/lib/scope-of-work.ts). */
   scope?: string | null }
+type Photo = AreaVisual["photos"][number];
 export interface DocVM {
   number: string; date: string; readOnly: boolean;
   typeKey: string | null; typeLabel: string;
@@ -143,6 +145,9 @@ export function ProposalDocument({ vm, edits, narrow }: { vm: DocVM; edits: DocE
   const kind = prelim ? "Preliminary estimate" : vm.typeKey === "public" ? "Bid submission" : vm.typeKey === "commercial" ? "Bid proposal" : "Proposal";
   const signer = vm.typeKey === "public" ? "Awarding authority" : vm.typeKey === "commercial" ? "Authorized representative" : vm.typeKey === "residential" ? "Owner" : "Customer";
   const dateStr = new Date(vm.date).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+  // A photo opens full screen over the page, never in a new window (Coy, 2026-10-10).
+  const [viewer, setViewer] = useState<{ photos: Photo[]; i: number } | null>(null);
+  const shownPhotos = (id: string) => (d.hide_area_pics || d.picsOff?.[id] ? [] : vm.visuals?.[id]?.photos ?? []);
 
   return (
     <div className="sc-doc" style={{ width: "100%", maxWidth: 720, margin: "0 auto", background: "#fff", color: "#2A2A2A", boxShadow: "0 2px 10px rgba(42,32,20,.1)", fontSize: 13, lineHeight: 1.5 }}>
@@ -247,21 +252,12 @@ export function ProposalDocument({ vm, edits, narrow }: { vm: DocVM; edits: DocE
                       <Eye off={hidden} label={hidden ? "Show this area's map and photos" : "Hide this area's map and photos"} onClick={edits ? () => flip("picsOff", a.id) : undefined} />
                     </div>
                     {!hidden && (
-                      <div className="mt-1.5 flex gap-2 flex-wrap items-start">
+                      <div className="mt-1.5 flex flex-col gap-2 items-start">
                         {v.map && <AreaMap map={v.map} height={narrow ? 150 : 190} />}
                         {/* eslint-disable-next-line @next/next/no-img-element -- frozen when sent, printed */}
                         {!v.map && v.mapImage && <img src={v.mapImage} alt={`Where ${a.name || "this area"} is`} style={{ height: narrow ? 150 : 190, maxWidth: "100%", border: "1px solid #E6DCC8", borderRadius: 3 }} />}
-                        {/* Thumbnails, a tap opens the photo full size (Coy, 2026-10-05: "the photos aren't showing as thumbnails"). */}
-                        {v.photos.length > 0 && (
-                          <div className="flex gap-1.5 flex-wrap" style={{ alignContent: "flex-start" }}>
-                            {v.photos.slice(0, 4).map((ph) => (
-                              <a key={ph.id} href={ph.url} target="_blank" rel="noreferrer" aria-label={`Open ${ph.name || "the photo"} full size`} style={{ display: "block", lineHeight: 0 }}>
-                                {/* eslint-disable-next-line @next/next/no-img-element -- signed link, printed */}
-                                <img src={ph.url} alt={ph.name} loading="lazy" style={{ width: narrow ? 76 : 92, height: narrow ? 76 : 92, objectFit: "cover", borderRadius: 3, border: "1px solid #E6DCC8", background: "#E9E4DA" }} />
-                              </a>
-                            ))}
-                          </div>
-                        )}
+                        {/* Thumbnails in one row (Coy, 2026-10-10), a tap opens them full screen over the page. */}
+                        {v.photos.length > 0 && <Thumbs photos={v.photos} size={narrow ? 76 : 92} onOpen={(j) => setViewer({ photos: v.photos, i: j })} />}
                       </div>
                     )}
                   </div>
@@ -302,7 +298,7 @@ export function ProposalDocument({ vm, edits, narrow }: { vm: DocVM; edits: DocE
               )}
             </div>
           ) : (
-            <Pricing vm={vm} narrow={narrow} edits={edits} flip={flip} setD={setD} />
+            <Pricing vm={vm} narrow={narrow} edits={edits} flip={flip} setD={setD} photosOf={shownPhotos} onPhoto={(photos, i) => setViewer({ photos, i })} />
           )}
         </div>
       </Section>
@@ -391,7 +387,76 @@ export function ProposalDocument({ vm, edits, narrow }: { vm: DocVM; edits: DocE
           </div>
         </div>
       </Section>
+      {viewer && <PhotoViewer photos={viewer.photos} start={viewer.i} onClose={() => setViewer(null)} />}
     </div>
+  );
+}
+
+/** A row of square thumbnails — one line, scrolling sideways when there are more than fit; a tap opens one. */
+function Thumbs({ photos, size, max, onOpen }: { photos: Photo[]; size: number; max?: number; onOpen: (i: number) => void }) {
+  const list = max ? photos.slice(0, max) : photos;
+  const more = photos.length - list.length;
+  return (
+    <div className="sc-doc-thumbs flex gap-1.5" style={{ flexWrap: "nowrap", overflowX: "auto", maxWidth: "100%", flexShrink: 1, minWidth: 0 }}>
+      {list.map((ph, j) => (
+        <button key={ph.id} type="button" onClick={() => onOpen(j)} aria-label={`Open ${ph.name || "the photo"} full screen`}
+          style={{ display: "block", lineHeight: 0, padding: 0, border: 0, background: "transparent", cursor: "zoom-in", flexShrink: 0 }}>
+          {/* eslint-disable-next-line @next/next/no-img-element -- signed link, printed */}
+          <img src={ph.url} alt={ph.name} loading="lazy" style={{ width: size, height: size, objectFit: "cover", borderRadius: size < 40 ? 2 : 3, border: "1px solid #E6DCC8", background: "#E9E4DA" }} />
+        </button>
+      ))}
+      {more > 0 && (
+        <button type="button" onClick={() => onOpen(list.length)} className="sc-no-print"
+          style={{ height: size, minWidth: size, padding: "0 4px", borderRadius: 2, border: "1px solid #E6DCC8", background: "#FBF6EC", color: "#5E5A52", fontSize: 10.5, cursor: "pointer", flexShrink: 0 }}>+{more}</button>
+      )}
+    </div>
+  );
+}
+
+/** Photos full screen: a panel that slides up over the page — ‹ › or a swipe for the next, Esc or × to close. */
+function PhotoViewer({ photos, start, onClose }: { photos: Photo[]; start: number; onClose: () => void }) {
+  const [i, setI] = useState(Math.min(start, photos.length - 1));
+  const [shown, setShown] = useState(false);
+  const downX = useRef<number | null>(null);
+  const go = (k: number) => setI((x) => (x + k + photos.length) % photos.length);
+  const close = () => { setShown(false); setTimeout(onClose, 200); };
+  useEffect(() => {
+    const t = requestAnimationFrame(() => setShown(true));
+    const key = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { setShown(false); setTimeout(onClose, 200); }
+      else if (e.key === "ArrowRight") setI((x) => (x + 1) % photos.length);
+      else if (e.key === "ArrowLeft") setI((x) => (x - 1 + photos.length) % photos.length);
+    };
+    window.addEventListener("keydown", key);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { cancelAnimationFrame(t); window.removeEventListener("keydown", key); document.body.style.overflow = prev; };
+  }, [photos.length, onClose]);
+  const ph = photos[i];
+  if (!ph || typeof document === "undefined") return null;
+  const arrow: React.CSSProperties = { position: "absolute", top: "50%", transform: "translateY(-50%)", width: 44, height: 44, borderRadius: 999, border: 0, background: "rgba(255,255,255,.14)", color: "#fff", fontSize: 26, lineHeight: "44px", cursor: "pointer" };
+  return createPortal(
+    <div role="dialog" aria-modal="true" aria-label="Photo" className="sc-no-print" onClick={close}
+      style={{ position: "fixed", inset: 0, zIndex: 300, background: `rgba(20,16,12,${shown ? 0.94 : 0})`, transition: "background .2s ease" }}>
+      <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", transform: shown ? "translateY(0)" : "translateY(100%)", transition: "transform .22s ease-out" }}
+        onPointerDown={(e) => { downX.current = e.clientX; }}
+        onPointerUp={(e) => { const dx = downX.current === null ? 0 : e.clientX - downX.current; downX.current = null; if (Math.abs(dx) > 50 && photos.length > 1) { e.stopPropagation(); go(dx < 0 ? 1 : -1); } }}>
+        <div className="flex items-center gap-2" style={{ padding: "calc(env(safe-area-inset-top) + 10px) 14px 8px", color: "#fff", fontSize: 13 }} onClick={(e) => e.stopPropagation()}>
+          <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", opacity: 0.85 }}>{ph.name || "Photo"}</span>
+          {photos.length > 1 && <span style={{ opacity: 0.7, ...nums }}>{i + 1} / {photos.length}</span>}
+          <button type="button" onClick={close} aria-label="Close" style={{ width: 36, height: 36, borderRadius: 999, border: 0, background: "rgba(255,255,255,.14)", color: "#fff", fontSize: 20, cursor: "pointer" }}>×</button>
+        </div>
+        <div style={{ flex: 1, minHeight: 0, position: "relative", display: "flex", alignItems: "center", justifyContent: "center", padding: "0 10px 16px" }}>
+          {/* eslint-disable-next-line @next/next/no-img-element -- signed link */}
+          <img src={ph.url} alt={ph.name} onClick={(e) => e.stopPropagation()} draggable={false} style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", borderRadius: 3, userSelect: "none" }} />
+          {photos.length > 1 && <>
+            <button type="button" aria-label="Previous photo" onClick={(e) => { e.stopPropagation(); go(-1); }} style={{ ...arrow, left: 10 }}>‹</button>
+            <button type="button" aria-label="Next photo" onClick={(e) => { e.stopPropagation(); go(1); }} style={{ ...arrow, right: 10 }}>›</button>
+          </>}
+        </div>
+      </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -420,7 +485,10 @@ function areaSpec(a: DocArea) {
   return bits.length ? ` — ${bits.join(" · ")}` : "";
 }
 
-function Pricing({ vm, narrow, edits, flip, setD }: { vm: DocVM; narrow: boolean; edits: DocEdits | null; flip: (k: "groupsOff" | "linesOff" | "pricesOff", id: string) => void; setD: (p: Partial<ProposalDisplay>) => void }) {
+function Pricing({ vm, narrow, edits, flip, setD, photosOf, onPhoto }: {
+  vm: DocVM; narrow: boolean; edits: DocEdits | null; flip: (k: "groupsOff" | "linesOff" | "pricesOff", id: string) => void; setD: (p: Partial<ProposalDisplay>) => void;
+  photosOf: (id: string) => Photo[]; onPhoto: (photos: Photo[], i: number) => void;
+}) {
   const p = vm.priced;
   if (!p.ok) return null;
   const d = vm.display;
@@ -440,7 +508,7 @@ function Pricing({ vm, narrow, edits, flip, setD }: { vm: DocVM; narrow: boolean
         {showQty && <span style={{ textAlign: "right" }}>Unit price</span>}
         <span style={{ textAlign: "right" }}>Total</span>
       </div>
-      {visibleGroups.map((g) => <GroupRows key={g.key} g={g} cols={cols} showQty={showQty} showItems={showItems} edits={edits} flip={flip} toggleAddon={toggleAddon} money={money} />)}
+      {visibleGroups.map((g) => <GroupRows key={g.key} g={g} photos={photosOf(g.key)} onPhoto={onPhoto} cols={cols} showQty={showQty} showItems={showItems} edits={edits} flip={flip} toggleAddon={toggleAddon} money={money} />)}
       <div className="ml-auto mt-3" style={{ width: narrow ? "100%" : 260, borderTop: rule, paddingTop: 6, fontSize: 12.5 }}>
         <Row k="Subtotal" v={usd(p.subtotal)} />
         {p.tax_shown && p.tax > 0 && <Row k="Sales tax · materials" v={usd(p.tax)} />}
@@ -487,8 +555,8 @@ function Row({ k, v }: { k: string; v: string }) {
   return <div className="flex justify-between"><span style={{ color: "#5E5A52" }}>{k}</span><span style={nums}>{v}</span></div>;
 }
 
-function GroupRows({ g, cols, showQty, showItems, edits, flip, toggleAddon, money }: {
-  g: ProposalGroup; cols: string; showQty: boolean; showItems: boolean; edits: DocEdits | null;
+function GroupRows({ g, photos, onPhoto, cols, showQty, showItems, edits, flip, toggleAddon, money }: {
+  g: ProposalGroup; photos: Photo[]; onPhoto: (photos: Photo[], i: number) => void; cols: string; showQty: boolean; showItems: boolean; edits: DocEdits | null;
   flip: (k: "groupsOff" | "linesOff" | "pricesOff", id: string) => void; toggleAddon: (id: string) => void; money: (n: number, h: boolean) => string;
 }) {
   const allAddon = g.items.length > 0 && g.items.every((i) => i.addon);
@@ -502,6 +570,8 @@ function GroupRows({ g, cols, showQty, showItems, edits, flip, toggleAddon, mone
           <span style={{ fontSize: 13, fontWeight: 600 }}>{g.name}</span>
           {allAddon && <span style={{ fontSize: 9.5, border: "1px solid #1E5AA8", color: "#1E5AA8", borderRadius: 3, padding: "0 4px", fontFamily: disp, letterSpacing: ".1em" }}>OPTIONAL ADD-ON</span>}
           {g.sqft ? <span style={{ fontSize: 11, color: "#8C8578" }}>{Math.round(g.sqft).toLocaleString("en-US")} sf</span> : null}
+          {/* The section's photos in its header (Coy, 2026-10-10). */}
+          {photos.length > 0 && <Thumbs photos={photos} size={26} max={5} onOpen={(j) => onPhoto(photos, j)} />}
         </div>
         {showQty && <span />}
         {showQty && <span />}

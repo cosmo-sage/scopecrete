@@ -29,7 +29,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { T, F, eyebrow, nums, clip, money0, formatPhone, relTime, strong, BUCKET } from "@/lib/v34/tokens";
 import { RoleTag } from "@/components/v34/thread-list";
 import { RecordHeader, HeaderNote, OverviewGrid, PanelCard, SectionHead, Empty, Facts, ContactCard, ThreadChips, RecentCard, JobRow, Field,
-  ASK_DUSTY, menuItem, btn, lbl, panelTitle, send, type CardPerson } from "@/components/v34/record-page";
+  menuItem, btn, lbl, panelTitle, send, type CardPerson } from "@/components/v34/record-page";
 import { Sheet } from "@/components/v34/primitives";
 import { SiteViews, AddressLink } from "@/components/v34/site-views";
 import { useWide } from "@/lib/v34/use-wide";
@@ -46,6 +46,7 @@ import type { AddressMatch } from "@/lib/address-check";
 import { ContactPicker, NewContactForm } from "@/components/v34/contacts";
 import { ThreadView } from "@/components/v34/thread-view";
 import { initialsHue } from "@/lib/v34/threads";
+import { JobPickList } from "@/components/v34/job-pick";
 
 interface Method { kind: "mobile" | "office" | "home" | "phone" | "email"; value: string; can_text: boolean | null; primary: boolean }
 interface Contact { id: string; name: string | null; role: string | null; primary: boolean; bucket: string | null; status_summary: string | null; recent_summary: string | null; last_contacted: string | null; methods: Method[] }
@@ -109,6 +110,29 @@ export function CustomerPage({ customerId, focusContact }: { customerId: string;
     return () => { off = true; };
   }, [tick]);
 
+  // Dusty's answers on the emblem (dusty-panel.tsx CustomerAsk) act here: Edit opens the form, New job
+  // makes one for the customer's primary person, a job picked there reloads the page.
+  useEffect(() => {
+    const ours = (e: Event) => (e as CustomEvent<{ id?: string }>).detail?.id === customerId;
+    const onEdit = (e: Event) => { if (ours(e)) setEditing(true); };
+    const onReload = (e: Event) => { if (ours(e)) setTick((n) => n + 1); };
+    const onNew = (e: Event) => {
+      if (!ours(e) || !data) return;
+      const p = data.contacts.find((c) => c.primary) ?? data.contacts[0];
+      send("/api/jobs", "POST", { contact_id: p?.id, job_type: data.customer.customer_type ?? undefined })
+        .then((b) => router.push(`/dashboard/scope/${b.job.id}`))
+        .catch((x) => setNote({ text: x instanceof Error ? x.message : String(x) }));
+    };
+    window.addEventListener("sc:customer-edit", onEdit);
+    window.addEventListener("sc:customer-reload", onReload);
+    window.addEventListener("sc:customer-new-job", onNew);
+    return () => {
+      window.removeEventListener("sc:customer-edit", onEdit);
+      window.removeEventListener("sc:customer-reload", onReload);
+      window.removeEventListener("sc:customer-new-job", onNew);
+    };
+  }, [customerId, data, router]);
+
   if (err) return <div ref={measure} className="p-4" style={{ color: T.red, fontSize: F.sm }}>Couldn&apos;t load this customer: {err}</div>;
   if (!data) return <div ref={measure} className="p-4"><div className="rounded animate-pulse" style={{ height: 140, background: T.hairSoft }} /></div>;
 
@@ -134,6 +158,12 @@ export function CustomerPage({ customerId, focusContact }: { customerId: string;
       router.push(`/dashboard/scope/${b.job.id}`);
     } catch (e) { setNote({ text: e instanceof Error ? e.message : String(e) }); }
   };
+  // The emblem (Coy, 2026-10-10: "These buttons should be inside the AI dusty chat when the AI emblem
+  // is clicked"): Dusty opens on this customer and offers Edit, New job and Add to an existing job.
+  const openDusty = () => {
+    window.dispatchEvent(new Event("sc:dusty-open"));
+    window.dispatchEvent(new CustomEvent("sc:dusty-customer", { detail: { id: cu.id, name: cu.name || "this customer", jobs: jobs.map((j) => j.id), canNew: !!primary } }));
+  };
   const toCard = (c: Contact): CardPerson => ({ id: c.id, name: c.name, role: c.role, primary: c.primary, href: `/dashboard/messages/${c.id}?t=customers`,
     methods: c.methods.map((m) => ({ kind: m.kind === "email" ? "email" as const : "phone" as const, label: METHOD_LABEL[m.kind], value: m.value, can_text: m.can_text })) });
 
@@ -149,7 +179,8 @@ export function CustomerPage({ customerId, focusContact }: { customerId: string;
       {/* ---- header (Threads v2 handoff §4; shared with the contact and vendor pages, record-page.tsx) ---- */}
       <RecordHeader back={{ href: fromThread ?? "/dashboard/customers", label: fromThread ? "Back to the thread" : "Customers" }}
         title={cu.name || "Unnamed customer"} tag={<RoleTag role="customer" />} wide={wide}
-        actions={[{ label: "Edit", onClick: () => setEditing(true) }, { label: "New job", primary: true, disabled: !primary, onClick: () => void newScope() }, ASK_DUSTY]}
+        actions={[]}
+        emblem={{ title: "Ask Dusty about this customer", onClick: openDusty }}
         menu={[
           <ArchiveButton key="del" kind="customer" id={cu.id} action="delete" what={cu.name || "this customer"} then="/dashboard/customers"
             style={{ ...menuItem, color: T.red }}>Delete customer</ArchiveButton>,
@@ -181,7 +212,7 @@ export function CustomerPage({ customerId, focusContact }: { customerId: string;
                     right={j.quote != null ? money0(j.quote) : <span style={{ fontSize: 12, color: T.ink3 }}>no price yet</span>} />
                 </SwipeJob>
               ))}
-              {!jobs.length && <button onClick={() => void newScope()} className="rounded text-left" style={{ padding: "10px 12px", border: `1px dashed ${T.hairStrong}`, color: T.hivizText, fontSize: F.sm, cursor: "pointer" }}>No jobs yet — start one</button>}
+              {!jobs.length && <NoJobs customerId={cu.id} canNew={!!primary} onNew={() => void newScope()} onAdded={reload} />}
             </div>
           </section>
           <section>
@@ -196,7 +227,7 @@ export function CustomerPage({ customerId, focusContact }: { customerId: string;
           <div style={{ background: T.card, border: wide ? `1px solid ${T.hair}` : "none", borderRadius: 4 }}><CustomerFacts cu={cu} onEdit={() => setEditing(true)} onSaved={reload} /></div>
         </div>
       )}
-      {tab === "jobs" && <JobsTab jobs={jobs} onNew={() => void newScope()} />}
+      {tab === "jobs" && <JobsTab jobs={jobs} customerId={cu.id} canNew={!!primary} onNew={() => void newScope()} onAdded={reload} />}
       {tab === "threads" && <CustomerThreads contacts={contacts} focusContact={focusContact ?? null} wide={wide} />}
       {tab === "files" && <FilesTab customerId={customerId} primaryId={primary?.id ?? null} primaryName={primary?.name ?? null} />}
       {tab === "timeline" && <Threads customerId={customerId} contacts={contacts} focusContact={focusContact ?? null} wide={wide} />}
@@ -601,12 +632,32 @@ function JobCard({ j }: { j: Job }) {
   );
 }
 
-function JobsTab({ jobs, onNew }: { jobs: Job[]; onNew: () => void }) {
+function JobsTab({ jobs, customerId, canNew, onNew, onAdded }: { jobs: Job[]; customerId: string; canNew: boolean; onNew: () => void; onAdded: () => void }) {
+  const [adding, setAdding] = useState(false);
   return (
     <div className="p-4 flex flex-col gap-2">
-      <div><button onClick={onNew} style={btn(true)}>+ New scope</button></div>
+      <div className="flex gap-2 flex-wrap">
+        <button onClick={onNew} disabled={!canNew} title={canNew ? undefined : "Add a contact to this customer first"} style={{ ...btn(true), opacity: canNew ? 1 : 0.5 }}>+ New job</button>
+        <button onClick={() => setAdding((v) => !v)} aria-expanded={adding} style={btn()}>{adding ? "Close" : "Add to an existing job"}</button>
+      </div>
+      {adding && <div style={{ maxWidth: 520 }}><JobPickList customerId={customerId} exclude={jobs.map((j) => j.id)} onDone={() => { setAdding(false); onAdded(); }} /></div>}
       {jobs.length === 0 ? <span style={{ fontSize: F.sm, color: T.ink3 }}>No jobs yet.</span>
         : <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))" }}>{jobs.map((j) => <JobCard key={j.id} j={j} />)}</div>}
+    </div>
+  );
+}
+
+/** The Overview's empty Jobs (Coy, 2026-10-10): start a job, or put this customer on one already made. */
+function NoJobs({ customerId, canNew, onNew, onAdded }: { customerId: string; canNew: boolean; onNew: () => void; onAdded: () => void }) {
+  const [adding, setAdding] = useState(false);
+  return (
+    <div className="rounded" style={{ padding: "10px 12px", border: `1px dashed ${T.hairStrong}` }}>
+      <div style={{ fontSize: F.sm, color: T.ink3, marginBottom: 8 }}>No jobs yet.</div>
+      <div className="flex gap-2 flex-wrap">
+        <button onClick={onNew} disabled={!canNew} title={canNew ? undefined : "Add a contact to this customer first"} style={{ ...btn(true), opacity: canNew ? 1 : 0.5 }}>+ New job</button>
+        <button onClick={() => setAdding((v) => !v)} aria-expanded={adding} style={btn()}>{adding ? "Close" : "Add to an existing job"}</button>
+      </div>
+      {adding && <div style={{ marginTop: 8 }}><JobPickList customerId={customerId} onDone={() => { setAdding(false); onAdded(); }} /></div>}
     </div>
   );
 }

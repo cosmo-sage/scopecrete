@@ -176,6 +176,32 @@ export async function PATCH(
     if (!ref) return applyCookies(NextResponse.json({ error: "That referrer is not a contact in your organisation." }, { status: 403 }));
   }
 
+  // Who the job is for (Coy, 2026-10-10: "no way of attaching a customer to a job … from inside the
+  // job. Or visaversa"): { customer_id } puts it on that customer; its person becomes the customer's
+  // primary unless the job's person is already one of theirs. Checked against the org.
+  if (typeof body.customer_id === "string" && body.customer_id) {
+    const { data: cu } = await supabase.from("customers").select("id, primary_contact_id, archived_at, merged_into_customer_id")
+      .eq("org_id", orgId).eq("id", body.customer_id).maybeSingle();
+    if (!cu || cu.archived_at || cu.merged_into_customer_id) return applyCookies(NextResponse.json({ error: "That customer isn't in your organization." }, { status: 404 }));
+    const { data: cur } = await supabase.from("jobs").select("contact_id").eq("org_id", orgId).eq("id", id).maybeSingle();
+    if (!cur) return applyCookies(NextResponse.json({ error: "No such job." }, { status: 404 }));
+    patch.customer_id = cu.id;
+    let keep = false;
+    if (cur.contact_id) {
+      const { data: cc } = await supabase.from("contacts").select("customer_id").eq("org_id", orgId).eq("id", cur.contact_id).maybeSingle();
+      keep = cc?.customer_id === cu.id;
+    }
+    if (!keep) {
+      let person = (cu.primary_contact_id as string | null) ?? null;
+      if (!person) {
+        const { data: first } = await supabase.from("contacts").select("id").eq("org_id", orgId).eq("customer_id", cu.id)
+          .is("merged_into_contact_id", null).order("created_at").limit(1).maybeSingle();
+        person = (first?.id as string | undefined) ?? null;
+      }
+      if (person) patch.contact_id = person;
+    }
+  }
+
   if (accept) {
     patch.confirmed_at = new Date().toISOString();
     patch.confirmed_by = userId;
@@ -328,5 +354,12 @@ export async function GET(
         .map((d) => ({ proposal_id: d.proposal_id, name: d.decided_name, at: d.decided_at, total: d.signed_total == null ? null : Number(d.signed_total) })));
   }
 
-  return applyCookies(NextResponse.json({ job: data, contact, why, crew, contract }));
+  // The customer's own name, for the Summary's Customer row (Coy, 2026-10-10).
+  let customer: { id: string; name: string | null } | null = null;
+  if (data.customer_id) {
+    const { data: cu } = await supabase.from("customers").select("id, name").eq("org_id", orgId).eq("id", data.customer_id).maybeSingle();
+    customer = cu ?? null;
+  }
+
+  return applyCookies(NextResponse.json({ job: data, contact, customer, why, crew, contract }));
 }

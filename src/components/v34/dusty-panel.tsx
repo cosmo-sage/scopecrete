@@ -38,6 +38,7 @@ import { usePref } from "@/lib/v34/prefs";
 import { TEXT_SIZES } from "@/lib/v34/text-size";
 import { manrope } from "@/components/site/marks";
 import { quickFor, statusDetail, type Quick } from "@/lib/dusty/quick";
+import { JobPickList } from "@/components/v34/job-pick";
 import { firstName, partOfDay, pickThought, thoughtSource, QUIET_LINES, type Thought } from "@/lib/dusty/hello";
 
 type Ref = { kind: "thread" | "scope" | "customer"; id: string } | { kind: "cash" } | { kind: "cold" };
@@ -173,9 +174,11 @@ export function DustyPanel({ open, onClose, onBusy, onStream, onState }: {
   const [jobAsk, setJobAsk] = useState(false);
   // The Contacts page's emblem (Coy, 2026-10-10): an "Add contact" button, no model call.
   const [contactAsk, setContactAsk] = useState(false);
+  // The customer page's emblem (Coy, 2026-10-10): Edit · New job · Add to an existing job, no model call.
+  const [customerAsk, setCustomerAsk] = useState<CustomerAskOn | null>(null);
   const select = useCallback((id: string | null) => {
     abort.current?.abort();
-    setRailOpen(false); setErr(null); setActiveId(id); setDraft(""); if (id) { setJobAsk(false); setContactAsk(false); }
+    setRailOpen(false); setErr(null); setActiveId(id); setDraft(""); if (id) { setJobAsk(false); setContactAsk(false); setCustomerAsk(null); }
     setItems([]); setLoadingConv(!!id);
     setWant((w) => ({ id, n: w.n + 1 }));
   }, []);
@@ -221,12 +224,19 @@ export function DustyPanel({ open, onClose, onBusy, onStream, onState }: {
     return () => window.removeEventListener("sc:dusty-draft", put);
   }, []);
   useEffect(() => {
-    const on = () => { select(null); setContactAsk(false); setJobAsk(true); };
-    const onContact = () => { select(null); setJobAsk(false); setContactAsk(true); };
+    const on = () => { select(null); setContactAsk(false); setCustomerAsk(null); setJobAsk(true); };
+    const onContact = () => { select(null); setJobAsk(false); setCustomerAsk(null); setContactAsk(true); };
+    const onCustomer = (e: Event) => {
+      const d = (e as CustomEvent<CustomerAskOn>).detail;
+      if (!d?.id) return;
+      select(null); setJobAsk(false); setContactAsk(false); setCustomerAsk(d);
+      setOpenedFor(refKey); // the ask stands: don't swap in the last chat about this customer
+    };
     window.addEventListener("sc:dusty-jobs", on);
     window.addEventListener("sc:dusty-contacts", onContact);
-    return () => { window.removeEventListener("sc:dusty-jobs", on); window.removeEventListener("sc:dusty-contacts", onContact); };
-  }, [select]);
+    window.addEventListener("sc:dusty-customer", onCustomer);
+    return () => { window.removeEventListener("sc:dusty-jobs", on); window.removeEventListener("sc:dusty-contacts", onContact); window.removeEventListener("sc:dusty-customer", onCustomer); };
+  }, [select, refKey]);
   useEffect(() => {
     const q = autoAsk.current;
     if (!q || !open || !convs || openedFor !== openKey || loadingConv || busy) return;
@@ -551,7 +561,17 @@ export function DustyPanel({ open, onClose, onBusy, onStream, onState }: {
             {!loadingConv && items.length === 0 && contactAsk && !jobAsk && (
               <ContactAsk onAdd={() => { setContactAsk(false); create("contact"); }} />
             )}
-            {!loadingConv && items.length === 0 && !jobAsk && !contactAsk && (
+            {!loadingConv && items.length === 0 && customerAsk && !jobAsk && !contactAsk && (
+              <CustomerAsk on={customerAsk} quick={quick} onPick={pick}
+                onAct={(what) => {
+                  const detail = { id: customerAsk.id };
+                  if (what === "reload") { window.dispatchEvent(new CustomEvent("sc:customer-reload", { detail })); return; }
+                  setCustomerAsk(null);
+                  if (!window.matchMedia("(min-width: 1024px)").matches) onClose();
+                  window.dispatchEvent(new CustomEvent(what === "edit" ? "sc:customer-edit" : "sc:customer-new-job", { detail }));
+                }} />
+            )}
+            {!loadingConv && items.length === 0 && !jobAsk && !contactAsk && !customerAsk && (
               <DustyHello contactId={ref.kind === "thread" ? ref.id : null} onGo={onClose} quick={quick} onPick={pick} />
             )}
             {/* The chat at Coy's text size: zoom scales the answers' tables and plans with the words. */}
@@ -750,6 +770,42 @@ function JobAsk({ onNew, onPick }: { onNew: () => void; onPick: (id: string) => 
               </button>
             ))}
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+type CustomerAskOn = { id: string; name: string; jobs: string[]; canNew: boolean };
+
+/** Dusty's offer from the customer page's emblem (Coy, 2026-10-10: Edit and New job "inside the AI dusty
+ *  chat", and "add this customer to an existing job"): fixed words, no model call; the page's quick
+ *  selects under it, and anything typed is asked about this customer as usual. */
+function CustomerAsk({ on, onAct, quick, onPick }: { on: CustomerAskOn; onAct: (what: "edit" | "new" | "reload") => void; quick: Quick[]; onPick: (q: Quick) => void }) {
+  const [picking, setPicking] = useState(false);
+  const [added, setAdded] = useState<number>(0);
+  const btn: React.CSSProperties = { height: 36, padding: "0 14px", borderRadius: 999, border: `1px solid ${T.hiviz}`, fontFamily: agent, fontSize: F.sm, fontWeight: 600, cursor: "pointer" };
+  return (
+    <div style={{ padding: "20px 4px 12px" }}>
+      <div className="flex items-start gap-2.5">
+        <DustyEmblem size={30} hidden />
+        <div style={{ fontFamily: agent, fontSize: F.md, color: T.ink, lineHeight: 1.45, paddingTop: 4 }}>
+          What are we doing with {on.name}? Pick one, or ask me anything about them.
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-2" style={{ margin: "12px 0 0 40px" }}>
+        <button onClick={() => onAct("new")} disabled={!on.canNew} title={on.canNew ? undefined : "Add a contact to this customer first"}
+          style={{ ...btn, background: T.hiviz, color: T.onHiviz, opacity: on.canNew ? 1 : 0.5 }}>New job</button>
+        <button onClick={() => setPicking((v) => !v)} aria-expanded={picking} style={{ ...btn, background: picking ? T.hivizDim : T.card, color: T.ink }}>Add to an existing job</button>
+        <button onClick={() => onAct("edit")} style={{ ...btn, background: T.card, color: T.ink }}>Edit customer</button>
+        {quick.slice(0, 3).map((q) => (
+          <button key={q.label} onClick={() => onPick(q)} style={{ ...btn, background: T.card, color: T.ink, borderColor: T.hairStrong }}>{q.label}{q.more ? " ›" : ""}</button>
+        ))}
+      </div>
+      {added > 0 && <div style={{ margin: "8px 0 0 40px", fontFamily: agent, fontSize: F.sm, color: T.green }}>Done — the job is on {on.name} now.</div>}
+      {picking && (
+        <div style={{ margin: "12px 0 0 40px" }}>
+          <JobPickList customerId={on.id} exclude={on.jobs} font={agent} onDone={() => { setPicking(false); setAdded((n) => n + 1); onAct("reload"); }} />
         </div>
       )}
     </div>

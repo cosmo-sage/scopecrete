@@ -22,6 +22,7 @@ import Link from "next/link";
 import { T, F, disp, eyebrow, nums, clip, formatPhone, strong, light } from "@/lib/v34/tokens";
 import { InitialsBox } from "@/components/v34/thread-list";
 import { MenuButton, SlideDrawer } from "@/components/v34/primitives";
+import { DustyEmblem } from "@/components/v34/dusty-avatar";
 
 export const lbl: React.CSSProperties = { fontFamily: disp, fontSize: 12, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase" };
 export const panelTitle: React.CSSProperties = { fontFamily: light, fontWeight: 300, fontSize: 20, margin: 0, color: T.ink };
@@ -58,7 +59,7 @@ const askDusty: RecordAction = { label: "Ask Dusty", accent: true, onClick: () =
 /** Ask Dusty opens him HOT on the page that is open. */
 export const ASK_DUSTY = askDusty;
 
-export function RecordHeader({ back, title, tag, wide, actions, menu, meta, children, tabs, tab, onTab }: {
+export function RecordHeader({ back, title, tag, wide, actions, menu, meta, children, tabs, tab, onTab, emblem }: {
   back: { href: string; label: string };
   /** The name — a heading, or the contact's NameEditor with its pencil. */
   title: React.ReactNode;
@@ -73,6 +74,8 @@ export function RecordHeader({ back, title, tag, wide, actions, menu, meta, chil
   tabs: Array<[string, string]>;
   tab: string;
   onTab: (k: string) => void;
+  /** The ScopeCrete emblem as its own button beside ⋯ on every size — opens Dusty (Coy, 2026-10-10: the customer page). */
+  emblem?: { onClick: () => void; title: string };
 }) {
   const [more, setMore] = useState(false);
   const [tabMenu, setTabMenu] = useState(false);
@@ -118,6 +121,12 @@ export function RecordHeader({ back, title, tag, wide, actions, menu, meta, chil
           {wide && actions.map((a) => a.href
             ? <Link key={a.label} href={a.href} title={a.title} style={style(a)}>{a.label}</Link>
             : <button key={a.label} onClick={a.onClick} disabled={a.disabled} title={a.title} style={style(a)}>{a.label}</button>)}
+          {emblem && (
+            <button onClick={emblem.onClick} aria-label={emblem.title} title={emblem.title}
+              style={{ ...pill, padding: "0 4px", width: 34, justifyContent: "center" }}>
+              <DustyEmblem size={24} hidden />
+            </button>
+          )}
           {inMenu.length > 0 && (
             <div className="relative">
               <button onClick={() => setMore((v) => !v)} aria-label="More" aria-expanded={more} style={{ ...pill, padding: "0 9px" }}>⋯</button>

@@ -71,6 +71,7 @@ const day = (iso: string, year = false) => new Date(iso).toLocaleDateString("en-
 export function JobSummary({ jobId }: { jobId: string }) {
   const [job, setJob] = useState<Job | null>(null);
   const [contact, setContact] = useState<Contact | null>(null);
+  const [customer, setCustomer] = useState<{ id: string; name: string | null } | null>(null);
   const [sections, setSections] = useState<SectionInput[] | null>(null);
   const [bd, setBd] = useState<BudgetData | null>(null);
   const [budgetErr, setBudgetErr] = useState<string | null>(null);
@@ -84,7 +85,7 @@ export function JobSummary({ jobId }: { jobId: string }) {
     Promise.all([send(`/api/jobs/${jobId}`, "GET"), send(`/api/jobs/${jobId}/sections`, "GET")])
       .then(([j, s]) => {
         if (off) return;
-        setJob(j.job); setContact(j.contact ?? null); setContract(j.contract ?? null);
+        setJob(j.job); setContact(j.contact ?? null); setCustomer(j.customer ?? null); setContract(j.contract ?? null);
         setSections(((s.sections ?? []) as Array<Record<string, unknown>>).map((x) => ({
           ...(x as unknown as SectionInput), length_ft: num(x.length_ft), width_ft: num(x.width_ft), sqft_override: num(x.sqft_override),
           depth_in: num(x.depth_in), psi: num(x.psi), count_qty: num(x.count_qty),
@@ -98,7 +99,7 @@ export function JobSummary({ jobId }: { jobId: string }) {
   }, [jobId]);
 
   // A status change can stamp or clear the win date, which moves the contract: read the job again.
-  const reload = useCallback(() => send(`/api/jobs/${jobId}`, "GET").then((j) => { setJob(j.job); setContract(j.contract ?? null); }), [jobId]);
+  const reload = useCallback(() => send(`/api/jobs/${jobId}`, "GET").then((j) => { setJob(j.job); setContact(j.contact ?? null); setCustomer(j.customer ?? null); setContract(j.contract ?? null); }), [jobId]);
   const setChip = useCallback((field: string, value: string) => send(`/api/jobs/${jobId}`, "PATCH", { [field]: value })
     .then((b) => { setJob((j) => j && { ...j, status: b.job.status, job_type: b.job.job_type, lead_source: b.job.lead_source, won_at: b.job.won_at }); return field === "status" ? reload() : undefined; }), [jobId, reload]);
 
@@ -131,9 +132,7 @@ export function JobSummary({ jobId }: { jobId: string }) {
           <JobChips job={job} onSet={setChip} />
           {/* One fact a row: the customer, the address, when it was created, the sections (Coy, 2026-10-09). */}
           <div className="flex flex-col gap-0.5" style={{ fontSize: F.sm, color: T.ink2, marginTop: 8, lineHeight: 1.45 }}>
-            <div style={{ color: who ? T.ink : T.hiviz, fontWeight: 600 }}>
-              {who ? <Link href={`/dashboard/messages/${contact!.id}`} style={{ color: T.ink }}>{who}</Link> : "Not attached to a customer yet"}
-            </div>
+            <JobCustomer jobId={jobId} customer={customer} who={who} contactId={contact?.id ?? null} onSaved={() => void reload()} />
             <JobAddress jobId={jobId} address={job.address} onSaved={() => void reload()} />
             {job.created_at && <div>Created {day(job.created_at, true)}
               {job.origin === "classification" ? " · made when filed as a customer" : job.created_from_message_id ? " · drafted from a message" : ""}</div>}
@@ -446,6 +445,69 @@ function WonCard({ jobId, job, contract, card, onChange }: {
  *  have no way to add or edit an address for a new or existing job"): the
  *  Map's address finder (Mapbox) fills street, city, state and zip; saved
  *  through the job's own PATCH. */
+/**
+ * Who the job is for, and Change (Coy, 2026-10-10: "I seem to have no way of attaching a customer
+ * to a job/scope from inside the job"): pick a customer and the job goes on it, its person becoming
+ * the customer's primary unless already one of theirs (PATCH /api/jobs/[id] {customer_id}).
+ */
+function JobCustomer({ jobId, customer, who, contactId, onSaved }: {
+  jobId: string; customer: { id: string; name: string | null } | null; who: string | null; contactId: string | null; onSaved: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [list, setList] = useState<Array<{ id: string; name: string; city: string | null }> | null>(null);
+  const [q, setQ] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => {
+    if (!open || list) return;
+    fetch("/api/customers").then((r) => (r.ok ? r.json() : { customers: [] }))
+      .then((b) => setList(((b.customers ?? []) as Array<{ id: string; name: string; city: string | null }>).sort((a, b2) => a.name.localeCompare(b2.name))))
+      .catch(() => setList([]));
+  }, [open, list]);
+  const pick = async (id: string) => {
+    setBusy(true); setErr(null);
+    try { await send(`/api/jobs/${jobId}`, "PATCH", { customer_id: id }); setOpen(false); setQ(""); onSaved(); }
+    catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(false); }
+  };
+  const words = q.trim().toLowerCase();
+  const shown = (list ?? []).filter((x) => x.id !== customer?.id && (!words || x.name.toLowerCase().includes(words))).slice(0, 30);
+  const name = customer?.name || null;
+  const person = who && who !== name ? who : null;
+  return (
+    <div>
+      <div className="flex items-baseline gap-2 flex-wrap">
+        {name ? <Link href={`/dashboard/customers/${customer!.id}`} style={{ color: T.ink, fontWeight: 600 }}>{name}</Link>
+          : who && contactId ? <Link href={`/dashboard/messages/${contactId}`} style={{ color: T.ink, fontWeight: 600 }}>{who}</Link>
+          : <span style={{ color: T.hiviz, fontWeight: 600 }}>Not attached to a customer yet</span>}
+        {name && person && contactId && <Link href={`/dashboard/messages/${contactId}`} style={{ color: T.ink2 }}>{person}</Link>}
+        <button onClick={() => setOpen((v) => !v)} aria-expanded={open}
+          style={{ ...eyebrow, fontSize: 10.5, color: T.chalk, cursor: "pointer", background: "none", border: "none", padding: 0 }}>
+          {open ? "Close" : customer ? "✎ Change customer" : "+ Attach a customer"}
+        </button>
+      </div>
+      {open && (
+        <div style={{ maxWidth: 520, margin: "4px 0 6px" }}>
+          <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find a customer…" aria-label="Find a customer"
+            className="rounded px-2 w-full" style={{ height: 34, border: `1px solid ${T.hairStrong}`, fontSize: 14, background: T.card, color: T.ink }} />
+          <div className="flex flex-col mt-1" style={{ maxHeight: 260, overflowY: "auto" }}>
+            {list === null ? <span style={{ fontSize: F.sm, color: T.ink3, padding: "6px 0" }}>Loading…</span>
+              : shown.length === 0 ? <span style={{ fontSize: F.sm, color: T.ink3, padding: "6px 0" }}>No customer by that name. Make it on Customers → + New.</span>
+              : shown.map((x) => (
+                <button key={x.id} disabled={busy} onClick={() => void pick(x.id)} className="text-left flex items-baseline gap-2"
+                  style={{ padding: "8px 2px", borderBottom: `1px solid ${T.hairSoft}`, fontSize: F.sm, color: T.ink, cursor: "pointer", background: "none" }}>
+                  <span className="flex-1 min-w-0" style={{ fontWeight: 600 }}>{x.name}</span>
+                  {x.city && <span style={{ color: T.ink3, fontSize: 12 }}>{x.city}</span>}
+                </button>
+              ))}
+          </div>
+          {err && <div style={{ fontSize: 11, color: T.red, marginTop: 4 }}>{err}</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function JobAddress({ jobId, address, onSaved }: { jobId: string; address: string | null; onSaved: () => void }) {
   const [editing, setEditing] = useState(false);
   const [v, setV] = useState("");

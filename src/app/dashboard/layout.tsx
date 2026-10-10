@@ -327,6 +327,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </Link>
           );
         })}
+        {!limited && (
+          // Coy, 2026-10-10: a settings button on the rail to reorder the menu — opens Settings → Menus.
+          <button type="button" onClick={() => { setRailTip(null); setMenuOpen(true); setMenusOpen(true); }}
+            aria-label="Menu settings: order and icon colours"
+            onMouseEnter={railIcons ? (e) => { const r = e.currentTarget.getBoundingClientRect(); setRailTip({ label: "Menu settings", top: r.top + r.height / 2 }); } : undefined}
+            onMouseLeave={railIcons ? () => setRailTip(null) : undefined}
+            className="sc-rail-fold sc-rail-set">
+            <svg width="19" height="19" viewBox="0 0 19 19" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 5h13M3 9.5h13M3 14h13" /><circle cx="7" cy="5" r="1.6" fill="var(--sc-rail)" /><circle cx="12" cy="9.5" r="1.6" fill="var(--sc-rail)" /><circle cx="6" cy="14" r="1.6" fill="var(--sc-rail)" />
+            </svg>
+            <span className="sc-rail-label">Menu settings</span>
+          </button>
+        )}
         <button type="button" onClick={() => { setRailTip(null); setRailIcons(!railIcons); }}
           aria-expanded={!railIcons} aria-label={railIcons ? "Show the menu's words" : "Fold the menu to icons"}
           title={railIcons ? "Expand" : undefined} className="sc-rail-fold">

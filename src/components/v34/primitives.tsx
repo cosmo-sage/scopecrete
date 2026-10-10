@@ -135,10 +135,8 @@ export const NavIcon = ({ k, on, color }: { k: string; on: boolean; color?: stri
   const p = { fill: "none", stroke: c, strokeWidth: 1.6, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
   if (k === "threads") return <svg {...box}><path {...p} d="M2.6 4.4h13.8v8.4H8.9l-4 3v-3H2.6z" /></svg>;
   if (k === "scope") return (
-    <svg {...box}>
-      <rect {...p} x="2.4" y="5.4" width="14.2" height="8.2" rx="1" />
-      <path {...p} d="M2.4 3.1h14.2M3.6 2.1v2M15.4 2.1v2" />
-    </svg>
+    // Claude Design rail icons 2d (2026-10-10): the foreman's clipboard with a tick.
+    <svg {...box}><path {...p} strokeWidth={1.5} d="M6 3.5H4.5v13h10v-13H13M7 2.5h5v2.5H7zM6.5 9l1.5 1.5 3-3M6.5 13.5h6" /></svg>
   );
   if (k === "scopebuilder") return (
     // Claude Design rail icons (2026-10-10): three steps joined into a flow.
@@ -196,10 +194,8 @@ export const NavIcon = ({ k, on, color }: { k: string; on: boolean; color?: stri
     <svg {...box}><path {...p} strokeWidth={1.5} d="M2.5 9.5h3l1.5-4 2.5 8 2-6 1.5 2h3.5M9.5 15.5a6.5 6.5 0 1 0-6.4-7.5" /></svg>
   );
   if (k === "roadmap") return (
-    <svg {...box}>
-      <path {...p} d="M3 16.4V2.6M3 3.4h9.4l-1.8 2.8 1.8 2.8H3" />
-      <path {...p} d="M8.2 13.2l2.4-2.4 2.4 2.4M10.6 10.8v5.6" />
-    </svg>
+    // Claude Design rail icons 2e (2026-10-10): a signpost, two boards on one post.
+    <svg {...box}><path {...p} strokeWidth={1.5} d="M9.5 3v13.5M7 16.5h5M9.5 5.5H4L2.5 7 4 8.5h5.5M9.5 10.5H15l1.5 1.5-1.5 1.5H9.5" /></svg>
   );
   if (k === "vendors") return (
     <svg {...box}>

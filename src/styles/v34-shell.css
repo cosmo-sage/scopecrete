@@ -451,7 +451,8 @@ html[data-rail="icons"] .sc-rail-badge { right: 6px; top: 4px; }
 html[data-rail="icons"] .sc-rail-fold { padding-left: 14px; }
 .sc-rail .sc-rail-fold:hover { color: var(--sc-rail-ink-on); }
 .sc-rail-fold svg { flex: none; transition: transform .25s; }
-html[data-rail="icons"] .sc-rail-fold svg { transform: scaleX(-1); }
+html[data-rail="icons"] .sc-rail-fold:not(.sc-rail-set) svg { transform: scaleX(-1); }
+.sc-rail-set + .sc-rail-fold { margin-top: 0; border-top: 0; }
 @media (prefers-reduced-motion: reduce) { .sc-rail, .sc-rail-label, .sc-rail-fold svg { transition: none; } }
 
 /* The icon colour book, Settings → Menus. */

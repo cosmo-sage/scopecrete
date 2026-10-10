@@ -8,7 +8,8 @@ import { SEE_MAX_BYTES, SEE_MAX_IMAGES, docTextNow, isPdf, pdfTextNow, seeableMi
 import { docKind } from "@/lib/doc-text";
 import { publicOrigin } from "@/lib/hosts";
 import { proposalSendLines } from "@/lib/proposal-send-server";
-import { budgetAsk, budgetQueries, cityOf, pageAsk, priceAsk, priceQueries, renderGoing, renderPages, renderPrices, renderWeb, sitesInNotes, webAsk, webQueries } from "@/lib/dusty/web";
+import { budgetAsk, budgetQueries, cityOf, pageAsk, priceAsk, priceQueries, renderGoing, renderPages, renderPrices, renderResearch, renderWeb, researchAsk, researchQuery, sitesInNotes, webAsk, webQueries } from "@/lib/dusty/web";
+import { nameKeys } from "@/lib/dusty/mentions";
 import { readPages, searchWeb } from "@/lib/web-search-server";
 
 /**
@@ -118,6 +119,21 @@ export async function POST(req: NextRequest) {
     }
   }
   const ask = price ? null : webAsk(question);
+  // Anything else asked of the web (Coy, 2026-10-10: "dusty still can't search the web for vendors and
+  // pricing on materials and labor") — on any page. Coy's words, without anyone's name, number or street.
+  const research = !price && !ask && researchAsk(question);
+  let researchQ = "";
+  let jobCity: string | null = null;
+  if (research) {
+    const [{ data: ps }, { data: cs }, job] = await Promise.all([
+      supabase.from("contacts").select("name").eq("org_id", orgId).not("name", "is", null).limit(3000),
+      supabase.from("customers").select("name").eq("org_id", orgId).not("name", "is", null).limit(3000),
+      ref.kind === "scope" ? supabase.from("jobs").select("address").eq("org_id", orgId).eq("id", ref.id).maybeSingle() : Promise.resolve({ data: null }),
+    ]);
+    const avoid = [...(ps ?? []), ...(cs ?? [])].flatMap((r) => nameKeys((r as { name: string | null }).name));
+    jobCity = cityOf((job.data as { address?: string | null } | null)?.address ?? null);
+    researchQ = researchQuery(question, { avoid, city: jobCity });
+  }
   // Going prices for the job's budget (Coy, 2026-10-09: "I want him to estimate based on best guesses
   // in some cases. And I want him to do research on the internet") — any budget or pricing question on
   // a job, when no store lookup or vendor search already ran. Only the kinds of work, the unpriced
@@ -132,17 +148,27 @@ export async function POST(req: NextRequest) {
       const { data: open } = est
         ? await supabase.from("estimate_line_items").select("name, unit").eq("estimate_id", est.id as string).is("unit_cost", null).limit(6)
         : { data: [] };
-      const queries = budgetQueries({
+      const queries = [...(researchQ ? [researchQ] : []), ...budgetQueries({
         work_types: ((secs ?? []) as Array<{ work_type: string | null }>).map((x) => x.work_type ?? "").filter(Boolean),
         unpriced: (open ?? []) as Array<{ name: string; unit: string | null }>,
         city: cityOf(job?.address as string | null),
-      });
+      })].slice(0, 4);
       const found = await searchWeb(queries);
       const today = new Date().toLocaleDateString("en-US", { timeZone: "America/Chicago", month: "short", day: "numeric", year: "numeric" });
       ctx.text += `\n\n${renderGoing({ queries, results: found.results, error: found.error, today })}`;
       console.log("dusty going prices", JSON.stringify({ provider: found.provider, queries: queries.length, results: found.results.length, error: found.error }));
     } catch (e) {
       ctx.text += `\n\n${renderGoing({ queries: [], results: [], error: `the search failed (${(e as Error).message})`, today: "" })}`;
+    }
+  }
+  else if (research) {
+    try {
+      const found = researchQ ? await searchWeb([researchQ]) : { results: [], error: null, provider: null };
+      const today = new Date().toLocaleDateString("en-US", { timeZone: "America/Chicago", month: "short", day: "numeric", year: "numeric" });
+      ctx.text += `\n\n${renderResearch({ query: researchQ, results: found.results, error: found.error, today })}`;
+      console.log("dusty research", JSON.stringify({ provider: found.provider, results: found.results.length, error: found.error }));
+    } catch (e) {
+      ctx.text += `\n\n${renderResearch({ query: researchQ, results: [], error: `the search failed (${(e as Error).message})`, today: "" })}`;
     }
   }
   if (ask) {

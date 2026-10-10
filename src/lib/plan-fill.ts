@@ -15,6 +15,10 @@ export interface FillOptions {
   thin: number;
   /** Corners closer to a straight line than this many pixels are dropped. */
   tol: number;
+  /** Ink pieces that fit in a square this many pixels wide (hatch dots, stipple, letters) are paper. 0 = keep all. */
+  speck?: number;
+  /** Notches and spikes in the traced edge narrower than twice this many pixels are smoothed off. 0 = none. */
+  smooth?: number;
 }
 
 export type Fill =
@@ -72,6 +76,40 @@ export function erode(m: Uint8Array, w: number, h: number, r: number): Uint8Arra
   const out = new Uint8Array(m.length);
   for (let i = 0; i < m.length; i++) out[i] = g[i] ? 0 : 1;
   // The picture's own edge isn't ink: keep it from eating in from the border.
+  return out;
+}
+
+/**
+ * Drop the small pieces of ink — stipple and hatch dots, letters, specks — whose whole piece
+ * (8-connected) fits in a `side` × `side` square, so they neither wall the flood in nor, once
+ * Bridge gaps grows the ink, weld themselves onto the edge line as notches. A line, a dash
+ * longer than `side`, or a dot touching a line is part of a bigger piece and stays.
+ */
+export function dropSpecks(ink: Uint8Array, w: number, h: number, side: number): Uint8Array {
+  if (side <= 0) return ink;
+  const out = ink.slice();
+  const seen = new Uint8Array(ink.length);
+  const stack = new Int32Array(ink.length);
+  const piece: number[] = [];
+  for (let s = 0; s < ink.length; s++) {
+    if (!ink[s] || seen[s]) continue;
+    let top = 0, x0 = w, y0 = h, x1 = -1, y1 = -1;
+    piece.length = 0;
+    stack[top++] = s; seen[s] = 1;
+    while (top) {
+      const p = stack[--top];
+      piece.push(p);
+      const x = p % w, y = (p - x) / w;
+      if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const nx = x + dx, ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+        const q = ny * w + nx;
+        if (ink[q] && !seen[q]) { seen[q] = 1; stack[top++] = q; }
+      }
+    }
+    if (x1 - x0 < side && y1 - y0 < side) for (const p of piece) out[p] = 0;
+  }
   return out;
 }
 
@@ -190,6 +228,7 @@ export function simplify(pts: Array<[number, number]>, tol: number): Array<[numb
 /** The whole trace: ink → gaps bridged → flood from the click → its outline, in pixels. */
 export function traceFill(rgba: Uint8ClampedArray | Uint8Array, w: number, h: number, sx: number, sy: number, o: FillOptions): Fill {
   let ink = inkMask(rgba, w, h, sx, sy);
+  if (o.speck) ink = dropSpecks(ink, w, h, o.speck);
   // Thin lines go first (an opening: shrink the ink, grow back what's left).
   if (o.thin > 0) ink = dilate(erode(ink, w, h, o.thin), w, h, o.thin);
   const walls = o.gap > 0 ? dilate(ink, w, h, o.gap) : ink;
@@ -208,6 +247,9 @@ export function traceFill(rgba: Uint8ClampedArray | Uint8Array, w: number, h: nu
   if (f.edge) return { ok: false, reason: "open" };
   if (f.count < 60) return { ok: false, reason: "too_small" };
   // Grow back what bridging took off, so the outline sits on the line, not inside it.
-  const region = dilate(f.region, w, h, o.gap + 1);
+  let region = dilate(f.region, w, h, o.gap + 1);
+  // A closing (grow, then shrink back) fills the notches a dot stuck to the edge line, or a
+  // tick across it, leaves in the flood, so the outline follows the line itself.
+  if (o.smooth) region = erode(dilate(region, w, h, o.smooth), w, h, o.smooth);
   return { ok: true, pts: simplify(outline(region, w, h), o.tol), pixels: f.count };
 }

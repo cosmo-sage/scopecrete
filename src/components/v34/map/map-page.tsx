@@ -71,6 +71,11 @@ function LayerPanel({ data, f, setF }: { data: MapPinsResponse | null; f: MapFil
   const filtered = f.jobTypes.length > 0 || !!f.city || f.created !== "any";
   return (
     <div className="p-3 flex flex-col gap-1" style={{ fontSize: F.sm }}>
+      {data && (
+        <div style={{ padding: "0 2px 8px", fontSize: 12.5, color: T.ink2 }}>
+          <b style={{ color: T.ink }}>{data.pins.length}</b> pinned{data.unmapped.customers ? <> · <b style={{ color: T.ink }}>{data.unmapped.customers}</b> customers with no address</> : null}
+        </div>
+      )}
       <div className="flex items-center justify-between" style={{ padding: "2px 2px 6px" }}>
         <span style={head}>Layers</span>
         <button type="button" onClick={() => setF({ ...f, layers: LAYERS.map((l) => l.id) })} style={{ fontSize: 12, color: T.chalk, fontWeight: 600, cursor: "pointer" }}>All on</button>
@@ -224,7 +229,7 @@ function SearchBox({ pins, view, onAddress, onPin }: {
         <input value={q} onChange={(e) => { setQ(e.target.value); setOpen(true); setErr(null); }} onFocus={() => setOpen(true)} onBlur={() => setTimeout(() => setOpen(false), 150)}
           onKeyDown={(e) => { if (e.key === "Escape") { setQ(""); setOpen(false); } }}
           placeholder="Search an address, customer, job or vendor" aria-label="Search the map" autoComplete="off"
-          style={{ flex: 1, minWidth: 0, border: "none", outline: "none", background: "transparent", color: T.ink, fontSize: 14 }} />
+          style={{ flex: 1, minWidth: 0, border: "none", outline: "none", background: "transparent", color: T.ink, fontSize: 16 }} />
         {q && <button type="button" onClick={() => { setQ(""); setAddrs([]); }} aria-label="Clear" style={{ width: 28, height: 28, color: T.ink2, fontSize: 18, cursor: "pointer" }}>×</button>}
       </form>
       {showing && (
@@ -279,7 +284,18 @@ export function MapPage() {
   const [sel, setSel] = useState<MapPin | null>(null);
   const [plain, setPlain] = useState<{ lat: number; lng: number; label: string } | null>(null);
   const [layersOpen, setLayersOpen] = useState(false);
-  const [legendOpen, setLegendOpen] = useState(true);
+  const [legendOpen, setLegendOpen] = useState(false);
+  // On a phone, the keyboard opening for the search used to scroll the page
+  // sideways (and the map's box with it), so every pin, button and the footer
+  // sat off their places (Coy, 2026-10-10). Nothing here should ever scroll
+  // sideways: put it back whenever something does.
+  useEffect(() => {
+    const fix = () => { if (window.scrollX !== 0) window.scrollTo(0, window.scrollY); };
+    const vv = window.visualViewport;
+    window.addEventListener("scroll", fix, { passive: true });
+    vv?.addEventListener("resize", fix);
+    return () => { window.removeEventListener("scroll", fix); vv?.removeEventListener("resize", fix); };
+  }, []);
   const [clip, setClip] = useState<Clip>(null);
   const [saved, setSaved] = useState<Saved[]>([]);
   const [toast, setToast] = useState<Saved | null>(null);
@@ -321,7 +337,6 @@ export function MapPage() {
     call(`/api/jobs/${clipJob}/aerial`).then((b) => { if (b?.found) setView({ lat: b.found.lat, lng: b.found.lng, zoom: 19 }); }).catch(() => {});
   }, [clipJob, data]);
 
-  const counts = data ? data.pins.length : 0;
   const goPin = (p: MapPin) => { setSel(p); setPlain(null); setView((v) => ({ lat: p.lat, lng: p.lng, zoom: Math.max(v.zoom, 15) })); };
   const startClip = (p?: MapPin) => {
     setSel(null); setMode("sat"); setLayersOpen(false);
@@ -466,9 +481,9 @@ export function MapPage() {
   );
 
   return (
-    <div ref={wideRef} className="sc-pinned flex flex-col" style={{ background: T.slab }}>
+    <div ref={wideRef} className="sc-pinned flex flex-col" style={{ background: T.slab, overflow: "clip" }}>
       {!clip ? (
-        <PageHeader title="Map" count={data ? `${counts} pinned${data.unmapped.customers ? ` · ${data.unmapped.customers} unmapped` : ""}` : ""}
+        <PageHeader title="Map"
           sub="Every job and vendor with an address. Frame any spot on satellite and send it to a job's Takeoffs to measure."
           menu={<MenuButton onClick={() => setLayersOpen(true)} label="Layers" />}
           actions={<div className="flex items-center gap-2">
@@ -483,13 +498,13 @@ export function MapPage() {
         </div>
       )}
 
-      <div className="flex-1 flex" style={{ minHeight: 0, position: "relative", overflow: "hidden" }}>
+      <div className="flex-1 flex" style={{ minHeight: 0, position: "relative", overflow: "clip" }}>
         {wide && (
           <aside style={{ width: 300, flexShrink: 0, background: T.card, borderRight: `1px solid ${T.hair}`, overflowY: "auto", opacity: clip ? 0.45 : 1, pointerEvents: clip ? "none" : undefined }} aria-hidden={!!clip}>
             {layersBody}
           </aside>
         )}
-        <div className="flex-1 relative" style={{ minWidth: 0 }}>
+        <div className="flex-1 relative" style={{ minWidth: 0, isolation: "isolate", overflow: "clip" }}>
           <MapView view={view} onView={(v) => { if (clip?.step !== "job") setView(v); }} mode={clip ? "sat" : mode} overlay={overlay} onSize={setSize}
             onBackgroundTap={() => { if (!clip) setSel(null); }}>
             {/* Search (top left) */}
@@ -507,23 +522,17 @@ export function MapPage() {
             )}
             {/* Legend (bottom left) */}
             {!clip && legend.length > 0 && (
-              <div {...stop} className="absolute rounded" style={{ left: 10, bottom: 16, zIndex: 6, background: T.card, border: `1px solid ${T.hair}`, boxShadow: "0 2px 8px rgba(0,0,0,.12)", minWidth: 120 }}>
-                <button type="button" onClick={() => setLegendOpen((o) => !o)} aria-expanded={legendOpen} className="flex items-center gap-1.5 w-full" style={{ height: 28, padding: "0 10px", fontFamily: disp, fontSize: 11, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase", color: T.ink2, cursor: "pointer" }}>
-                  Legend <span style={{ marginLeft: "auto" }}>{legendOpen ? "▾" : "▸"}</span>
-                </button>
-                {legendOpen && <div style={{ padding: "0 10px 8px" }}>
-                  {legend.map((l) => <div key={l.id} className="flex items-center gap-2" style={{ fontSize: 11, color: T.ink2, height: 18 }}><Dot l={l.id} />{l.label}</div>)}
+              <div {...stop} className="absolute flex flex-col items-start gap-1.5" style={{ left: 10, bottom: 16, zIndex: 6 }}>
+                {legendOpen && <div className="rounded" style={{ padding: "6px 10px", background: T.card, border: `1px solid ${T.hair}`, boxShadow: "0 2px 8px rgba(0,0,0,.12)" }}>
+                  {legend.map((l) => <div key={l.id} className="flex items-center gap-2" style={{ fontSize: 11, color: T.ink2, height: 18, whiteSpace: "nowrap" }}><Dot l={l.id} />{l.label}</div>)}
                 </div>}
+                <button type="button" onClick={() => setLegendOpen((o) => !o)} aria-expanded={legendOpen} aria-label={legendOpen ? "Hide the legend" : "Legend"} title="Legend"
+                  className="flex items-center justify-center rounded" style={{ width: 36, height: 36, background: legendOpen ? T.ink : T.card, color: legendOpen ? T.card : T.ink, border: `1px solid ${T.hairStrong}`, boxShadow: "0 2px 8px rgba(0,0,0,.15)", cursor: "pointer" }}>
+                  <svg width="17" height="17" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><circle cx="4" cy="5" r="1.6" fill="currentColor" stroke="none" /><circle cx="4" cy="10" r="1.6" fill="currentColor" stroke="none" /><rect x="2.5" y="13.5" width="3" height="3" fill="currentColor" stroke="none" /><path d="M8 5h10M8 10h10M8 15h10" /></svg>
+                </button>
               </div>
             )}
-            {!clip && <ZoomButtons view={view} onView={setView} bottom={wide ? 16 : 76} />}
-            {!clip && !wide && (
-              <button {...stop} type="button" onClick={() => startClip()} className="absolute flex items-center gap-1.5 rounded"
-                style={{ right: 12, bottom: 16, height: 44, padding: "0 14px", zIndex: 6, background: T.hiviz, color: T.onHiviz, fontFamily: disp, fontSize: 13, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase", boxShadow: "0 4px 14px rgba(0,0,0,.25)", cursor: "pointer" }}>
-                <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M2 6V2h4M14 2h4v4M18 14v4h-4M6 18H2v-4" /></svg>
-                Clip for takeoff
-              </button>
-            )}
+            {!clip && <ZoomButtons view={view} onView={setView} bottom={16} />}
             {/* The phone's pin card: a sheet from the bottom. */}
             {!clip && sel && !wide && (
               <div className="absolute left-0 right-0 bottom-0" style={{ zIndex: 12, background: T.card, borderRadius: "12px 12px 0 0", boxShadow: "0 -8px 26px rgba(0,0,0,.22)", padding: "6px 14px 14px" }}>

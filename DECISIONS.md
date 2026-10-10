@@ -4532,6 +4532,7 @@ expected start date per quoted job before it means anything. Add the field.
   Enterprises | jobs, but the font will be much, much smaller just on mobile")** the org's name and
   the page's read on one line, "Sacco Enterprises | JOBS", at ~11px; the ☰ is 28px, the height of
   the bar's other buttons. A sheet's title over 18 characters is set at 19px on a phone so it fits.
+- **The desktop rail folds to its icons (Coy, 2026-10-10: "a button … to reduce the menu panel to just the icons without the word descriptions. And if i hover over the icons it will show the word").** A button at the rail's foot folds it from 84px to 56px of icons and back; hovering (or tabbing to) an icon shows its name in a tip beside it. Saved on the account (`user_preferences.prefs.rail_icons`, no migration) and set before first paint by `app/layout.tsx` as `html[data-rail="icons"]`; everything measured from the rail reads `--sc-rail-w`. The phone footer is unchanged.
 - **Rail icons (Claude Design, 2026-10-10):** Dashboard is four tiles in a masonry grid and Scope Builder three steps joined into a flow (`NavIcon`, `primitives.tsx`; 1.5 stroke in `currentColor`, so every theme, the rail, the phone footer and the Toolbox follow). The landing page's phone demo footer uses the same Dashboard icon.
 - **Initials squares in colour (Coy, 2026-10-06: "a variety of colors and
   we can go from there").** `initialsHue()` (`src/lib/v34/threads.ts`,

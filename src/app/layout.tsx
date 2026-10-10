@@ -80,7 +80,7 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: "try{document.documentElement.dataset.theme=localStorage.getItem('sc-theme')||'site-office'}catch(e){}" }} />
         {/* Dusty's thought line switched off (Settings → Dusty (AI)): the header is
             one row from the first paint, so nothing jumps as the app loads. */}
-        <script dangerouslySetInnerHTML={{ __html: "try{var p=JSON.parse(localStorage.getItem('sc:prefs')||'{}');if((p.activity_line_phone===undefined?p.activity_line:p.activity_line_phone)===false)document.documentElement.dataset.activityPhone='off'}catch(e){}" }} />
+        <script dangerouslySetInnerHTML={{ __html: "try{var p=JSON.parse(localStorage.getItem('sc:prefs')||'{}');if((p.activity_line_phone===undefined?p.activity_line:p.activity_line_phone)===false)document.documentElement.dataset.activityPhone='off';if(p.rail_icons===true)document.documentElement.dataset.rail='icons'}catch(e){}" }} />
       </head>
       <body className="font-sans antialiased">
         {children}

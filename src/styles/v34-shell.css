@@ -204,13 +204,13 @@ html[data-activity-phone="off"] { --sc-head: 54px; }
 @media (min-width: 1024px) {
   .sc-with-dusty { padding-right: var(--sc-dusty); }
   /* A sheet opened while Dusty is docked lands in the page beside him. */
-  html[data-dusty="open"] .sc-drawer { right: var(--sc-dusty) !important; left: 84px !important; top: var(--sc-head) !important; }
+  html[data-dusty="open"] .sc-drawer { right: var(--sc-dusty) !important; left: var(--sc-rail-w) !important; top: var(--sc-head) !important; }
   /* The plan sheets beside the budget (2026-10-02): the right part of the page, the budget left of it, Dusty right of it. */
-  .sc-sheets { left: calc(84px + (100vw - 84px) * .42) !important; }
-  html[data-dusty="open"] .sc-sheets { right: var(--sc-dusty) !important; left: calc(84px + (100vw - 84px - var(--sc-dusty)) * .38) !important; }
+  .sc-sheets { left: calc(var(--sc-rail-w) + (100vw - var(--sc-rail-w)) * .42) !important; }
+  html[data-dusty="open"] .sc-sheets { right: var(--sc-dusty) !important; left: calc(var(--sc-rail-w) + (100vw - var(--sc-rail-w) - var(--sc-dusty)) * .38) !important; }
   /* …and the page itself narrows to the room left of it, so nothing is hidden underneath. */
-  html[data-sheets="open"] main { padding-right: calc((100vw - 84px) * .58) !important; }
-  html[data-sheets="open"][data-dusty="open"] main { padding-right: calc(var(--sc-dusty) + (100vw - 84px - var(--sc-dusty)) * .62) !important; }
+  html[data-sheets="open"] main { padding-right: calc((100vw - var(--sc-rail-w)) * .58) !important; }
+  html[data-sheets="open"][data-dusty="open"] main { padding-right: calc(var(--sc-dusty) + (100vw - var(--sc-rail-w) - var(--sc-dusty)) * .62) !important; }
 }
 /* The activity dot's colour and rhythm say what kind of work it is
    (Coy, 2026-09-30): reading someone — slow blue breath; Dusty answering —
@@ -412,6 +412,11 @@ html[data-head-drop] .sc-head-wrap { z-index: 200 !important; }
 .sc-rail { background: var(--sc-rail); border-right: 1px solid var(--sc-hair); color: var(--sc-rail-ink); }
 .sc-rail a, .sc-rail button { color: var(--sc-rail-ink); }
 .sc-rail a[aria-current="page"], .sc-rail button[aria-pressed="true"] { background: var(--sc-rail-active); border-left-color: var(--sc-hiviz-soft) !important; color: var(--sc-rail-ink-on); }
+/* The desktop rail's width; folded to its icons (Coy, 2026-10-10) it is 56px. */
+:root { --sc-rail-w: 84px; }
+html[data-rail="icons"] { --sc-rail-w: 56px; }
+.sc-rail-item { height: 60px; }
+html[data-rail="icons"] .sc-rail-item { height: 48px; }
 .sc-rail-label { font-family: var(--sc-font-disp, 'Barlow Condensed', sans-serif); font-weight: 500; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: inherit; text-align: center; line-height: 1.1; }
 
 /* Header lockup (design/org-branding): on a narrow phone the org's logo stands alone. */

@@ -138,6 +138,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     if (phoneLineOn) delete document.documentElement.dataset.activityPhone;
     else document.documentElement.dataset.activityPhone = "off";
   }, [phoneLineOn]);
+  // The desktop rail folds to its icons (Coy, 2026-10-10: "reduce the menu panel to just the
+  // icons … if i hover over the icons it will show the word"). <html data-rail="icons"> makes
+  // --sc-rail-w 56px; app/layout.tsx sets it before first paint from the browser's copy.
+  const [railIcons, setRailIcons] = usePref<boolean>("rail_icons", false);
+  const [railTip, setRailTip] = useState<{ label: string; top: number } | null>(null);
+  useEffect(() => {
+    if (railIcons) document.documentElement.dataset.rail = "icons";
+    else delete document.documentElement.dataset.rail;
+  }, [railIcons]);
   const menus = cleanMenus(savedMenus);
 
   // Who is signed in, the org's name and logos. Reloaded after Settings
@@ -288,7 +297,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       {/* ---- desktop left rail: every page, in Coy's order ---- */}
       <nav aria-label="Main" className="hidden lg:flex fixed left-0 bottom-0 z-30 flex-col items-stretch overflow-y-auto sc-rail"
-        style={{ top: "var(--sc-head)", width: 84 }}>
+        style={{ top: "var(--sc-head)", width: "var(--sc-rail-w)" }} onMouseLeave={() => setRailTip(null)}>
         {(allowed ?? menus.rail).map((k) => {
           // Dusty's desktop door is the header button (Coy, 2026-09-30).
           if (k === "dusty") return null;
@@ -297,18 +306,40 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           const on = active === k;
           return (
             <Link key={k} href={p.href} aria-current={on ? "page" : undefined}
-              className="flex flex-col items-center justify-center gap-1 no-underline shrink-0"
-              style={{ height: 60, borderLeft: "3px solid transparent", position: "relative" }}>
+              aria-label={railIcons ? p.label : undefined}
+              onMouseEnter={railIcons ? (e) => { const r = e.currentTarget.getBoundingClientRect(); setRailTip({ label: p.label, top: r.top + r.height / 2 }); } : undefined}
+              onMouseLeave={railIcons ? () => setRailTip(null) : undefined}
+              onFocus={railIcons ? (e) => { const r = e.currentTarget.getBoundingClientRect(); setRailTip({ label: p.label, top: r.top + r.height / 2 }); } : undefined}
+              onBlur={railIcons ? () => setRailTip(null) : undefined}
+              className="sc-rail-item flex flex-col items-center justify-center gap-1 no-underline shrink-0"
+              style={{ borderLeft: "3px solid transparent", position: "relative" }}>
               <span style={{ opacity: on ? 1 : 0.8, display: "flex" }}><NavIcon k={k} on={on} color="currentColor" /></span>
-              <span className="sc-rail-label">{p.label}</span>
-              {k === "threads" && needs !== null && needs > 0 && <Badge n={needs} style={{ top: 8, right: 16 }} />}
-              {k === "logs" && badge.logs && <span className="absolute rounded-full" style={{ top: 12, right: 24, width: 8, height: 8, background: T.red }} />}
+              {!railIcons && <span className="sc-rail-label">{p.label}</span>}
+              {k === "threads" && needs !== null && needs > 0 && <Badge n={needs} style={railIcons ? { top: 4, right: 4 } : { top: 8, right: 16 }} />}
+              {k === "logs" && badge.logs && <span className="absolute rounded-full" style={{ top: railIcons ? 8 : 12, right: railIcons ? 10 : 24, width: 8, height: 8, background: T.red }} />}
             </Link>
           );
         })}
+        <button type="button" onClick={() => { setRailTip(null); setRailIcons(!railIcons); }}
+          aria-label={railIcons ? "Show the menu's words" : "Fold the menu to icons"}
+          title={railIcons ? "Show the menu's words" : "Fold the menu to icons"}
+          className="mt-auto shrink-0 flex items-center justify-center"
+          style={{ height: 44, borderTop: `1px solid ${T.hair}` }}>
+          <svg width="18" height="18" viewBox="0 0 19 19" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+            <rect x="2.5" y="3" width="14" height="13" rx="1.5" /><path d="M7 3v13" />
+            <path d={railIcons ? "M10.5 7.5l2 2-2 2" : "M12.5 7.5l-2 2 2 2"} />
+          </svg>
+        </button>
       </nav>
+      {railIcons && railTip && (
+        <div role="tooltip" className="hidden lg:block fixed pointer-events-none"
+          style={{ left: "calc(var(--sc-rail-w) + 6px)", top: railTip.top, transform: "translateY(-50%)", zIndex: 70,
+            background: T.dark, color: "#fff", padding: "5px 9px", borderRadius: 6, fontSize: 12, fontFamily: body, whiteSpace: "nowrap", boxShadow: "0 2px 8px rgba(0,0,0,.18)" }}>
+          {railTip.label}
+        </div>
+      )}
 
-      <main className={["flex-1 min-w-0 overflow-x-clip pb-[var(--sc-foot)] lg:pb-0 lg:pl-[84px]", dustyOpen ? "sc-with-dusty" : ""].join(" ")}>
+      <main className={["flex-1 min-w-0 overflow-x-clip pb-[var(--sc-foot)] lg:pb-0 lg:pl-[var(--sc-rail-w)]", dustyOpen ? "sc-with-dusty" : ""].join(" ")}>
         <AccessContext.Provider value={access}><OrgNameContext.Provider value={me?.org_name ?? null}>{children}</OrgNameContext.Provider></AccessContext.Provider>
       </main>
       <ArchiveToast />

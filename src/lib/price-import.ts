@@ -318,3 +318,22 @@ export function quoteRows(lines: unknown): ImportRow[] {
     };
   });
 }
+
+// ---------------------------------------------------------------- a sample file
+
+/**
+ * A spreadsheet the importer reads without a column picked by hand (Coy,
+ * 2026-10-10: "give me a clickable downloadable sample"): the header words
+ * guessMapping() knows best, and three made-up rows.
+ */
+export const SAMPLE_HEADERS = ["Group", "Name", "Description", "Cost Type", "Unit", "Unit Cost", "Markup %", "Taxable", "Vendor", "Item #"];
+export const SAMPLE_ROWS: string[][] = [
+  ["Concrete", "3000 psi ready mix", "Delivered, 4\" slump", "Material", "CY", "145.00", "", "Yes", "", "RM3000"],
+  ["Labor", "Form and finish", "Set forms, place and broom finish", "Labor", "SF", "1.45", "", "No", "", ""],
+  ["Equipment", "Skid steer", "Rental with delivery", "Equipment", "Day", "250.00", "15", "No", "", ""],
+];
+/** The sample as CSV text, quoted where it must be. */
+export function sampleCsv(): string {
+  const q = (v: string) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+  return [SAMPLE_HEADERS, ...SAMPLE_ROWS].map((r) => r.map(q).join(",")).join("\r\n") + "\r\n";
+}

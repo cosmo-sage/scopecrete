@@ -219,6 +219,7 @@ export function Drawer({ open, onClose, title, sub, right, children, hideClose, 
   open: boolean; onClose: () => void; title: string; sub?: string;
   right?: React.ReactNode; children: React.ReactNode;
   hideClose?: boolean; full?: boolean; below?: boolean; wide?: boolean;
+  drop?: boolean;
   /** The whole screen, its full width (Coy, 2026-10-10: area photos, New contact). */
   cover?: boolean;
   /** Comes in from the left, where its ☰ is (Coy, 2026-10-09: folders). */

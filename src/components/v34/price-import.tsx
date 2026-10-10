@@ -18,6 +18,15 @@
  * the same preview, matched against that vendor's cards. A suggestion until
  * Coy imports it (§2b).
  *
+ * A UFGS section (.SEC, SpecsIntact — Coy, 2026-10-10) takes it too: parsed
+ * here (src/lib/ufgs-sec.ts), its PART 2 products become rows in the same
+ * preview under the section as a group, unpriced — a spec carries no prices —
+ * with a unit only where the section states one; Coy picks a unit for the
+ * rest and ticks the ones he wants.
+ *
+ * It drops down from the Price book's subheader at the page's own width
+ * (Drawer `drop`; Coy, 2026-10-10), not a sheet over the screen.
+ *
  * Nothing is assumed: a blank cost stays blank, an unknown type is flagged,
  * how a card is counted is marked "guess" until Coy picks it, and no contact
  * is ever made — a vendor is one of his or none.
@@ -29,9 +38,11 @@ import { Drawer } from "@/components/v34/primitives";
 import { useWide } from "@/lib/v34/use-wide";
 import { QTY_RULES, QTY_RULE_LABEL, COST_TYPE_LABEL } from "@/lib/cost-cards";
 import {
-  parseCsv, findHeader, guessMapping, toRows, matchRows, quoteRows, TARGETS, TARGET_LABEL,
+  parseCsv, findHeader, guessMapping, toRows, matchRows, quoteRows, sampleCsv, ruleFromUnit, GEOMETRY, TARGETS, TARGET_LABEL,
   type Target, type ImportRow, type Matched, type RowStatus, type QtyRule,
 } from "@/lib/price-import";
+import { decodeSec, looksLikeSec, parseUfgsSec, ufgsRows, type UfgsSection } from "@/lib/ufgs-sec";
+import { COMMON_UNITS } from "@/lib/units";
 import { call, type Card, type Vendor } from "@/components/v34/cost-cards";
 import { sendBytes } from "@/components/v34/files-panel";
 
@@ -39,7 +50,21 @@ type Stage = "pick" | "map" | "preview" | "quote" | "reading";
 interface QuoteFile { id: string; name: string; read_state: string | null; read_error: string | null; summary: string | null; created_at: string; facts: Record<string, unknown> | null }
 const READ_POLL_MS = 6000;
 const READ_GIVE_UP_MS = 5 * 60_000;
-const SOURCES = ["JobTread", "Another CRM", "A spreadsheet"];
+const UFGS = "A UFGS section (.sec)";
+const SOURCES = ["JobTread", "Another CRM", "A spreadsheet", UFGS];
+const SHEET_ACCEPT = ".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+const SEC_ACCEPT = ".sec,.SEC,.xml,text/xml,application/xml";
+/** A row waiting only for a unit: Coy can give it one in the preview. */
+const NEEDS_UNIT = (p: string) => p === "no unit" || p === "no unit on the quote";
+
+/** The sample spreadsheet, made here and saved by the browser — nothing is fetched. */
+function downloadSample() {
+  const url = URL.createObjectURL(new Blob([sampleCsv()], { type: "text/csv;charset=utf-8" }));
+  const a = document.createElement("a");
+  a.href = url; a.download = "price-book-sample.csv";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
 const STATUS_LABEL: Record<RowStatus, string> = { new: "New", change: "Price change", same: "Same", skip: "Skipped" };
 const STATUS_COLOR: Record<RowStatus, string> = { new: T.green, change: T.hiviz, same: T.ink3, skip: T.red };
 
@@ -56,6 +81,9 @@ export function PriceImport({ open, onClose, cards, vendors, onDone, start = "sh
   const [slow, setSlow] = useState(false);
   const [source, setSource] = useState(SOURCES[0]);
   const [file, setFile] = useState<{ name: string; kind: "csv" | "xlsx"; sheets: Array<{ name: string; data: unknown[][] }> } | null>(null);
+  const [ufgs, setUfgs] = useState<{ name: string; sec: UfgsSection } | null>(null);
+  const [units, setUnits] = useState<Record<number, string>>({});
+  const [allUnit, setAllUnit] = useState("");
   const [sheetIdx, setSheetIdx] = useState(0);
   const [headerIdx, setHeaderIdx] = useState(0);
   const [map, setMap] = useState<Record<Target, number | null> | null>(null);
@@ -69,7 +97,7 @@ export function PriceImport({ open, onClose, cards, vendors, onDone, start = "sh
   const [measure, wide] = useWide<HTMLDivElement>(760);
 
   const reset = () => {
-    setStage(start === "quote" ? "quote" : "pick"); setQuoteVendor(""); setQuoteFile(null); setEarlier(null); setPct(null); setFile(null); setSheetIdx(0); setHeaderIdx(0); setMap(null); setVendorPick({}); setDefaultVendor("");
+    setStage(start === "quote" ? "quote" : "pick"); setQuoteVendor(""); setQuoteFile(null); setEarlier(null); setPct(null); setFile(null); setUfgs(null); setUnits({}); setAllUnit(""); setSheetIdx(0); setHeaderIdx(0); setMap(null); setVendorPick({}); setDefaultVendor("");
     setRules({}); setUnticked({}); setFilter("all"); setErr(null);
   };
   const close = () => { reset(); onClose(); };
@@ -78,8 +106,19 @@ export function PriceImport({ open, onClose, cards, vendors, onDone, start = "sh
   const table = useMemo(() => data.slice(headerIdx), [data, headerIdx]);
   const headers = useMemo(() => (table[0] ?? []).map((c) => (c === null || c === undefined ? "" : String(c).trim())), [table]);
   const quote = !!quoteFile;
-  const rows: ImportRow[] = useMemo(() => (quoteFile ? quoteRows(quoteFile.facts?.price_lines)
-    : map && table.length > 1 ? toRows(table, map) : []), [quoteFile, table, map]);
+  const baseRows: ImportRow[] = useMemo(() => (quoteFile ? quoteRows(quoteFile.facts?.price_lines)
+    : ufgs ? ufgsRows(ufgs.sec)
+    : map && table.length > 1 ? toRows(table, map) : []), [quoteFile, ufgs, table, map]);
+  // A unit Coy picked in the preview for a row that had none (a UFGS product,
+  // a spreadsheet row with a blank unit) — never one the file already gave.
+  const rows: ImportRow[] = useMemo(() => baseRows.map((r) => {
+    const u = units[r.line] || (allUnit && r.problems.some(NEEDS_UNIT) ? allUnit : "");
+    if (!u || r.unit || !r.problems.some(NEEDS_UNIT)) return r;
+    const guess = ruleFromUnit(u);
+    return { ...r, unit: u, problems: r.problems.filter((p) => !NEEDS_UNIT(p)),
+      qty_rule: GEOMETRY.has(guess) && r.group && !/concrete/i.test(r.group) ? "manual" : guess };
+  }), [baseRows, units, allUnit]);
+  const waitingUnit = baseRows.filter((r) => !r.unit && r.problems.some(NEEDS_UNIT)).length;
   const vendorNames = useMemo(() => [...new Set(rows.map((r) => r.vendor).filter((v): v is string => !!v))], [rows]);
   const vendorOf = useMemo(() => (r: ImportRow) => (quoteFile ? quoteVendor || null
     : r.vendor ? vendorPick[r.vendor.toLowerCase()] || null : defaultVendor || null), [vendorPick, defaultVendor, quoteFile, quoteVendor]);
@@ -104,6 +143,20 @@ export function PriceImport({ open, onClose, cards, vendors, onDone, start = "sh
       const lower = f.name.toLowerCase();
       let sheets: Array<{ name: string; data: unknown[][] }>;
       let kind: "csv" | "xlsx";
+      if (lower.endsWith(".sec") || lower.endsWith(".xml")) {
+        const text = decodeSec(new Uint8Array(await f.arrayBuffer()));
+        if (!looksLikeSec(text)) throw new Error("That doesn't read as a UFGS / SpecsIntact section. Pick the section's .SEC file.");
+        const sec = parseUfgsSec(text);
+        if (!sec.part2) throw new Error(`${sec.group}: there's no PART 2 PRODUCTS in it, so there's nothing to make cards from.`);
+        if (!sec.items.length) throw new Error(`${sec.group}: PART 2 names no products to make cards from.`);
+        setUfgs({ name: f.name, sec });
+        setSource(UFGS);
+        // Nothing starts ticked: a spec lists everything it might call for, so Coy picks.
+        setUnticked(Object.fromEntries(sec.items.map((_, i) => [i + 1, true])));
+        setUnits({}); setAllUnit(""); setRules({}); setFilter("all");
+        setStage("preview");
+        return;
+      }
       if (lower.endsWith(".csv") || lower.endsWith(".txt") || f.type === "text/csv") {
         sheets = [{ name: f.name, data: parseCsv(await f.text()) }];
         kind = "csv";
@@ -115,7 +168,7 @@ export function PriceImport({ open, onClose, cards, vendors, onDone, start = "sh
       } else if (lower.endsWith(".xls")) {
         throw new Error("That's the old Excel format. Save it as .xlsx or CSV and try again.");
       } else {
-        throw new Error("Pick a CSV or an Excel (.xlsx) file.");
+        throw new Error("Pick a CSV, an Excel (.xlsx) or a UFGS section (.sec) file.");
       }
       if (!sheets.length || sheets.every((s) => s.data.length < 2)) throw new Error("That file has no rows under a header.");
       const first = sheets.findIndex((s) => s.data.length >= 2);
@@ -207,12 +260,14 @@ export function PriceImport({ open, onClose, cards, vendors, onDone, start = "sh
       const b = await call("/api/price-book/import", "POST", {
         ...(quoteFile
           ? { kind: "vendor_quote", file_name: quoteFile.name, source: "vendor quote", source_file_id: quoteFile.id, vendor_contact_id: quoteVendor }
+          // cost_imports.kind is csv | xlsx | vendor_quote (049): a .SEC is a text file read here, filed as csv, its source saying what it was.
+          : ufgs ? { kind: "csv", file_name: ufgs.name, source: `UFGS ${ufgs.sec.number ?? "section"}` }
           : { kind: file?.kind, file_name: file?.name, source }),
         rows: payload,
         unchanged: counts.same, skipped: matched.length - payload.length - counts.same,
       });
       const i = b.import as { created: number; updated: number; groups: number };
-      onDone(`Imported ${quoteFile?.name ?? file?.name}: ${i.created} new card${i.created === 1 ? "" : "s"}, ${i.updated} price change${i.updated === 1 ? "" : "s"}${i.groups ? `, ${i.groups} new group${i.groups === 1 ? "" : "s"}` : ""}.`);
+      onDone(`Imported ${quoteFile?.name ?? ufgs?.name ?? file?.name}: ${i.created} new card${i.created === 1 ? "" : "s"}, ${i.updated} price change${i.updated === 1 ? "" : "s"}${i.groups ? `, ${i.groups} new group${i.groups === 1 ? "" : "s"}` : ""}.`);
       reset();
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
   };
@@ -227,30 +282,49 @@ export function PriceImport({ open, onClose, cards, vendors, onDone, start = "sh
   };
   const shown = matched.filter((m) => filter === "all" || m.status === filter);
   const byLine = new Map(rows.map((r) => [r.line, r]));
+  const needsUnit = new Set(baseRows.filter((r) => !r.unit && r.problems.some(NEEDS_UNIT)).map((r) => r.line));
+  // A unit for a row the file gave none; picking one ticks the row.
+  const unitPick = (line: number) => (
+    <select value={units[line] ?? (allUnit || "")} aria-label={`Unit for row ${line}`} style={{ ...field, height: 28, width: 96 }}
+      onClick={(e) => e.stopPropagation()}
+      onChange={(e) => { const v = e.target.value; setUnits((u) => ({ ...u, [line]: v })); if (v) setUnticked((u) => ({ ...u, [line]: false })); }}>
+      <option value="">Unit?</option>
+      {COMMON_UNITS.map((u) => <option key={u}>{u}</option>)}
+    </select>
+  );
 
   return (
-    <Drawer open={open} onClose={close} wide title={start === "quote" ? "Import a vendor's quote" : "Import into the Price book"}
-      sub={stage === "pick" ? "CSV or Excel — nothing is saved until you check the preview"
+    <Drawer open={open} onClose={close} drop title={start === "quote" ? "Import a vendor's quote" : "Import into the Price book"}
+      sub={stage === "pick" ? "Nothing is saved until you check the preview"
+        : ufgs ? `${ufgs.name} · ${ufgs.sec.group}`
         : quoteFile ? `${quoteFile.name} · ${vendorName(quoteVendor) ?? "vendor"}`
         : stage === "quote" ? "A vendor's quote — Dusty reads the prices, you check them"
         : file ? `${file.name} · ${source}` : undefined}>
-      <div ref={measure} className="px-4 py-3 mx-auto" style={{ maxWidth: 1180 }}>
+      <div ref={measure} className="px-4 py-3">
         {err && <div className="mb-2 rounded px-3 py-2" style={{ fontSize: F.sm, color: T.red, background: "#FBEAEA" }}>{err}</div>}
 
         {stage === "pick" && (
           <div className="flex flex-col gap-3" style={{ maxWidth: 520 }}>
-            <p style={{ fontSize: F.sm, color: T.ink2, lineHeight: 1.5 }}>
-              Export your cost catalog from JobTread or another CRM as a CSV or Excel file, or use any spreadsheet with a name, a unit and a cost per row.
-              The file is read on this device. You&apos;ll see every row — new, a price change, the same, or skipped and why — before anything is saved.
-            </p>
+            {/* The paragraph is gone (Coy, 2026-10-10: "Just show file types supported … a clickable downloadable sample"). */}
+            <div className="flex items-baseline gap-3 flex-wrap" style={{ fontSize: F.sm, color: T.ink2 }}>
+              <span>Supported: <b>.csv</b>, <b>.xlsx</b>, <b>.sec</b> (UFGS)</span>
+              <button type="button" onClick={downloadSample} style={{ color: T.chalk, textDecoration: "underline", cursor: "pointer", fontSize: F.sm }}>
+                Download a sample spreadsheet
+              </button>
+            </div>
             <label className="block"><span style={eyebrow}>Where it&apos;s from</span>
               <select value={source} onChange={(e) => setSource(e.target.value)} style={field}>
                 {SOURCES.map((s) => <option key={s}>{s}</option>)}
               </select></label>
+            {source === UFGS && (
+              <div style={{ fontSize: F.xs, color: T.ink2, lineHeight: 1.45 }}>
+                A UFGS section is a specification and carries no prices: its PART 2 products come in as unpriced cards under the section&apos;s group, for you to price.
+              </div>
+            )}
             <label className="flex items-center justify-center rounded" style={{ ...btn(true), height: 48, opacity: busy ? 0.5 : 1 }}>
-              {busy ? "Reading…" : "Choose a file"}
-              <input type="file" accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="hidden"
-                aria-label="Spreadsheet file" disabled={busy} onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void choose(f); }} />
+              {busy ? "Reading…" : source === UFGS ? "Choose the .sec file" : "Choose a file"}
+              <input type="file" accept={source === UFGS ? SEC_ACCEPT : `${SHEET_ACCEPT},${SEC_ACCEPT}`} className="hidden"
+                aria-label="File to import" disabled={busy} onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void choose(f); }} />
             </label>
           </div>
         )}
@@ -400,6 +474,21 @@ export function PriceImport({ open, onClose, cards, vendors, onDone, start = "sh
                 Read from a photo, so there was no text to check these prices against. Check each one against the quote before importing.
               </div>
             )}
+            {ufgs && (
+              <div className="rounded px-3 py-2" style={{ fontSize: F.sm, background: T.hivizDim, color: T.ink, lineHeight: 1.45 }}>
+                {ufgs.sec.group}: {ufgs.sec.items.length} product{ufgs.sec.items.length === 1 ? "" : "s"} from PART 2. A UFGS section carries no prices, so these
+                come in unpriced — price them afterwards. A unit is filled in only where the section states one; pick one for the rest, and tick the ones you want.
+              </div>
+            )}
+            {waitingUnit > 0 && (
+              <label className="flex items-center gap-2 flex-wrap" style={{ fontSize: F.sm, color: T.ink2 }}>
+                {waitingUnit} row{waitingUnit === 1 ? " has" : "s have"} no unit. A unit for every row without one:
+                <select value={allUnit} aria-label="Unit for every row without one" style={{ ...field, height: 30, width: 110 }} onChange={(e) => setAllUnit(e.target.value)}>
+                  <option value="">None</option>
+                  {COMMON_UNITS.map((u) => <option key={u}>{u}</option>)}
+                </select>
+              </label>
+            )}
             <div style={{ fontSize: F.xs, color: T.ink3 }}>
               A price change updates the price only — your markup, group and how it&apos;s counted stay. &quot;Guess&quot; means the way it&apos;s counted on a job came from its unit; pick another if it&apos;s wrong.
             </div>
@@ -451,7 +540,7 @@ export function PriceImport({ open, onClose, cards, vendors, onDone, start = "sh
                             </span>
                           ) : <span style={{ fontSize: F.xs, color: T.ink3 }}>{m.status === "skip" ? "" : "kept"}</span>}
                         </td>
-                        <td style={{ padding: "4px 6px", fontSize: F.xs, color: T.red }}>{m.why}</td>
+                        <td style={{ padding: "4px 6px", fontSize: F.xs, color: T.red }}>{needsUnit.has(m.line) ? unitPick(m.line) : m.why}</td>
                       </tr>
                     );
                   })}
@@ -472,7 +561,8 @@ export function PriceImport({ open, onClose, cards, vendors, onDone, start = "sh
                           <span style={{ color: STATUS_COLOR[m.status], fontWeight: 600 }}>{STATUS_LABEL[m.status]}</span>
                           {" · "}{[r.group, vendorName(vendorOf(r)), m.status === "new" ? `${QTY_RULE_LABEL[rules[m.line] ?? r.qty_rule]}${!rules[m.line] && r.qty_rule !== "manual" ? " (guess)" : ""}` : null].filter(Boolean).join(" · ")}
                         </span>
-                        {m.why && <span style={{ display: "block", fontSize: 10, color: T.red }}>{m.why}</span>}
+                        {needsUnit.has(m.line) ? <span style={{ display: "block", marginTop: 3 }}>{unitPick(m.line)}</span>
+                          : m.why && <span style={{ display: "block", fontSize: 10, color: T.red }}>{m.why}</span>}
                       </span>
                       <span className="text-right shrink-0" style={{ ...nums, fontSize: F.sm }}>
                         {m.status === "change" && <span style={{ display: "block", fontSize: 10, color: T.ink3, textDecoration: "line-through" }}>{m.old_cost === null ? "blank" : money(m.old_cost)}</span>}
@@ -485,7 +575,7 @@ export function PriceImport({ open, onClose, cards, vendors, onDone, start = "sh
             )}
 
             <div className="sticky bottom-0 flex gap-2 items-center py-2 flex-wrap" style={{ background: T.card, borderTop: `1px solid ${T.hair}` }}>
-              <button onClick={() => { if (quote) { setQuoteFile(null); setStage("quote"); } else setStage("map"); }} style={btn(false)}>Back</button>
+              <button onClick={() => { if (quote) { setQuoteFile(null); setStage("quote"); } else if (ufgs) reset(); else setStage("map"); }} style={btn(false)}>Back</button>
               <button onClick={() => void submit()} disabled={busy || nNew + nChange === 0}
                 style={{ ...btn(true), opacity: busy || nNew + nChange === 0 ? 0.5 : 1 }}>
                 {busy ? "Importing…" : `Import ${nNew + nChange}`}

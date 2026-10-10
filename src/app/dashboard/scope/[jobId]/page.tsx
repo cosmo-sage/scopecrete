@@ -31,6 +31,7 @@ import { SectionDetails } from "@/components/v34/section-details";
 import { ScopeBullets } from "@/components/v34/scope-of-work";
 import { sowFromAnswer } from "@/lib/scope-of-work";
 import { setDustyUse } from "@/lib/v34/dusty-live";
+import { USE_ASK } from "@/lib/dusty/use-block";
 import { DustyEmblem } from "@/components/v34/dusty-avatar";
 import { isDetailFile, type SectionShape } from "@/lib/plan-details";
 import { DraftStrip } from "@/components/v34/draft-strip";
@@ -801,7 +802,7 @@ function SectionCard({ s, index, err, onLocal, onSave, onRemove, jobType, jobId,
               } });
               window.dispatchEvent(new Event("sc:dusty-open"));
               setTimeout(() => window.dispatchEvent(new CustomEvent("sc:dusty-draft", { detail: {
-                text: `Write the scope of work for the ${s.name ?? "section"} section as short bullets, one line each, for the customer — what we do, from its size, notes, items and the plans. No prices.${s.prep_notes ? `\n\nWhat it says now:\n${s.prep_notes}` : ""}`,
+                text: `Write the scope of work for the ${s.name ?? "section"} section as short bullets, one line each, for the customer — what we do, from its size, notes, items and the plans. No prices.${s.prep_notes ? `\n\nWhat it says now:\n${s.prep_notes}` : ""}\n\n${USE_ASK}`,
                 send: true } })), 250);
             }}
             className="inline-flex items-center justify-center" style={{ width: 22, height: 22, cursor: "pointer", background: "transparent" }}>

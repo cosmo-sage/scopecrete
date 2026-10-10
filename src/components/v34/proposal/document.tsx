@@ -14,6 +14,7 @@ import { createPortal } from "react-dom";
 import { disp, strong, light, hand, nums, formatPhone } from "@/lib/v34/tokens";
 import { AreaMap, type AreaVisual } from "./area-visuals";
 import { ScopeBullets } from "../scope-of-work";
+import { DustyEmblem } from "../dusty-avatar";
 import { drawAmount, fixLastDraw, type Clause, type Draw, type ProposalChoice, type ProposalDisplay, type ProposalPrice, type ProposalGroup } from "@/lib/proposal";
 
 export const SECTIONS: Array<[string, string]> = [
@@ -60,7 +61,7 @@ export interface DocEdits {
   warranty: (w: { title: string; body: string }) => void;
   terms: (c: Clause[]) => void;
   saveTemplate: (kind: "warranty" | "terms") => void;
-  dusty: (kind: "warranty" | "terms" | "scope") => void;
+  dusty: (kind: "warranty" | "terms" | "scope" | "area", areaId?: string) => void;
   pickCover: () => void;
   /** Edits an area's scope of work — saved on the section, so the budget shows it too (Coy, 2026-10-10). */
   scope?: (sectionId: string, text: string | null) => void;
@@ -217,11 +218,13 @@ export function ProposalDocument({ vm, edits, narrow }: { vm: DocVM; edits: DocE
         <div style={pad ? { padding: pad } : undefined}>
           <div style={kicker}>Scope of work</div>
           <h2 style={h2}>{vm.job.title || "The work"}</h2>
-          <Grow label="Scope introduction" readOnly={!edits} value={vm.scopeIntro ?? vm.job.description ?? ""} onChange={(v) => edits?.intro(v)}
-            placeholder="A sentence or two on the work, in the customer's words…" style={{ fontSize: 13, color: "#2A2A2A" }} />
-          {edits && (
-            <button type="button" onClick={() => edits.dusty("scope")} className="sc-no-print mt-1" style={dustyChip}>Edit with Dusty</button>
-          )}
+          <div className="flex items-start gap-1.5">
+            <div className="flex-1 min-w-0">
+              <Grow label="Scope introduction" readOnly={!edits} value={vm.scopeIntro ?? vm.job.description ?? ""} onChange={(v) => edits?.intro(v)}
+                placeholder="A sentence or two on the work, in the customer's words…" style={{ fontSize: 13, color: "#2A2A2A" }} />
+            </div>
+            {edits && <DustyMark label="Ask Dusty to write the scope introduction" onClick={() => edits.dusty("scope")} />}
+          </div>
           {vm.areas.length > 0 && (
             <ol className="mt-3" style={{ listStyle: "none", padding: 0, margin: "12px 0 0", display: "grid", gap: "6px 22px", gridTemplateColumns: narrow ? "1fr" : "1fr 1fr" }}>
               {vm.areas.map((a, i) => (
@@ -230,6 +233,7 @@ export function ProposalDocument({ vm, edits, narrow }: { vm: DocVM; edits: DocE
                   <span>
                     <b style={{ fontWeight: 600 }}>{a.name || a.work_type || "Area"}</b>
                     <span style={{ color: "#5E5A52" }}>{areaSpec(a)}</span>
+                    {edits?.scope && <DustyMark label={`Ask Dusty to write ${a.name || "this area"}'s scope of work`} onClick={() => edits.dusty("area", a.id)} />}
                     {/* Its scope of work — the budget's list; edited here on a draft (Coy, 2026-10-10). */}
                     <ScopeBullets value={a.scope ?? null} readOnly={!edits?.scope} onSave={(t) => edits?.scope?.(a.id, t)}
                       color="#2A2A2A" muted="#8C8578" border="#E6DCC8" fontSize={12.5} placeholder="Add the scope of work for this area" />
@@ -323,7 +327,7 @@ export function ProposalDocument({ vm, edits, narrow }: { vm: DocVM; edits: DocE
             placeholder="No warranty text — pick a template in the job panel, or write it here." />
           {edits && (
             <div className="sc-no-print flex gap-2 mt-2 flex-wrap">
-              <button type="button" onClick={() => edits.dusty("warranty")} style={dustyChip}>Edit with Dusty</button>
+              <DustyMark label="Ask Dusty to rewrite the warranty" onClick={() => edits.dusty("warranty")} />
               <button type="button" onClick={() => edits.saveTemplate("warranty")} style={plainChip}>Save as template</button>
             </div>
           )}
@@ -356,7 +360,7 @@ export function ProposalDocument({ vm, edits, narrow }: { vm: DocVM; edits: DocE
           {edits && (
             <div className="sc-no-print flex gap-2 mt-1 flex-wrap">
               <button type="button" onClick={() => edits.terms([...vm.terms.clauses, { h: "", b: "" }])} style={plainChip}>+ Clause</button>
-              <button type="button" onClick={() => edits.dusty("terms")} style={dustyChip}>Edit with Dusty</button>
+              <DustyMark label="Ask Dusty to tighten the terms" onClick={() => edits.dusty("terms")} />
               <button type="button" onClick={() => edits.saveTemplate("terms")} style={plainChip}>Save as template</button>
             </div>
           )}
@@ -463,7 +467,15 @@ function PhotoViewer({ photos, start, onClose }: { photos: Photo[]; start: numbe
   );
 }
 
-const dustyChip: React.CSSProperties = { border: "1px solid #D97757", color: "#9A4527", background: "#fff", borderRadius: 999, padding: "2px 10px", fontFamily: disp, fontSize: 11, letterSpacing: ".08em", textTransform: "uppercase", cursor: "pointer" };
+/** Dusty's emblem beside a part he can write (Coy, 2026-10-10: "let it just be the emblem next to the area that will be edited"). */
+function DustyMark({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button type="button" title={label} aria-label={label} onClick={onClick} className="sc-no-print inline-flex items-center justify-center shrink-0 align-middle"
+      style={{ width: 24, height: 24, marginLeft: 4, background: "transparent", cursor: "pointer" }}>
+      <DustyEmblem size={20} still hidden />
+    </button>
+  );
+}
 const plainChip: React.CSSProperties = { border: "1px solid #D9CDB6", color: "#5E5A52", background: "#fff", borderRadius: 999, padding: "2px 10px", fontFamily: disp, fontSize: 11, letterSpacing: ".08em", textTransform: "uppercase", cursor: "pointer" };
 
 function TemplateTag({ name, starter, edited }: { name: string | null; starter: boolean; edited: boolean }) {

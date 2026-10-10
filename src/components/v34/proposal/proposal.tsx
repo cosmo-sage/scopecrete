@@ -18,6 +18,8 @@ import { T, disp } from "@/lib/v34/tokens";
 import { useWide } from "@/lib/v34/use-wide";
 import { JobHeaderRow } from "@/components/v34/job-tabs";
 import { setDustyUse } from "@/lib/v34/dusty-live";
+import { USE_ASK } from "@/lib/dusty/use-block";
+import { sowFromAnswer } from "@/lib/scope-of-work";
 import {
   drawsCheck, parseClauses, plainText, priceChoices, priceDraft, termsText, warrantyText,
   type Clause, type DocTemplate, type Draw, type DraftInput, type ProposalDisplay, type ProposalPrice,
@@ -218,25 +220,36 @@ export function Proposal({ jobId }: { jobId: string }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- logo() reads b.org only
   }, [b, p, priced, picks, finalShown, isFinal, type, orgName, plans]);
 
-  // "Edit with Dusty": open him with a starter question; "Use this" brings his answer back here.
-  const dusty = useCallback((kind: "warranty" | "terms" | "scope") => {
+  // The emblem beside each part Dusty can edit opens him with a starter question; "Use this" under the
+  // boxed words of his answer brings only those back here (Coy, 2026-10-10; src/lib/dusty/use-block.ts).
+  const dusty = useCallback((kind: "warranty" | "terms" | "scope" | "area", areaId?: string) => {
     if (!vm) return;
+    const area = kind === "area" ? vm.areas.find((a) => a.id === areaId) : undefined;
+    if (kind === "area" && !area) return;
+    const areaName = area ? area.name || area.work_type || "this area" : "";
     const ask = kind === "warranty"
       ? `Rewrite this warranty in plain English for a ${vm.typeLabel.toLowerCase() || "residential"} customer. Keep what it covers and excludes; don't add promises.\n\n${vm.warranty.title}\n${vm.warranty.body}`
       : kind === "terms"
         ? `Tighten these terms for a ${vm.typeLabel.toLowerCase() || "residential"} job. Answer as a numbered list, each item "**Heading:** text".\n\n${vm.terms.clauses.map((c, i) => `${i + 1}. ${c.h}: ${c.b}`).join("\n")}`
-        : `Write a two-sentence scope introduction for this proposal, for the customer, from the job's areas. No prices.`;
+        : kind === "area"
+          ? `Write the scope of work for the ${areaName} section as short bullets, one line each, for the customer — what we do, from its size, notes, items and the plans. No prices.${area!.scope ? `\n\nWhat it says now:\n${area!.scope}` : ""}`
+          : `Write a two-sentence scope introduction for this proposal, for the customer, from the job's areas. No prices.${vm.scopeIntro ? `\n\nWhat it says now:\n${vm.scopeIntro}` : ""}`;
     setDustyUse({
-      label: kind === "warranty" ? "in the warranty" : kind === "terms" ? "as the terms" : "as the scope intro",
+      label: kind === "warranty" ? "in the warranty" : kind === "terms" ? "as the terms" : kind === "area" ? `as ${areaName}'s scope of work` : "as the scope intro",
       apply: (text) => {
         if (kind === "warranty") change("warranty", { ...p?.warranty, title: vm.warranty.title, body: plainText(text) });
         else if (kind === "terms") { const c = parseClauses(text); if (c.length) change("terms", { ...p?.terms, clauses: c }); }
+        else if (kind === "area") {
+          const v = sowFromAnswer(text); if (!v || !area) return;
+          setB((x) => (x ? { ...x, sections: x.sections.map((y) => (String(y.id) === area.id ? { ...y, prep_notes: v } : y)) } : x));
+          call(`/api/jobs/${jobId}/sections/${area.id}`, "PATCH", { prep_notes: v }).catch((e) => setErr(`The scope of work wasn't saved: ${e instanceof Error ? e.message : String(e)}`));
+        }
         else change("scope_intro", plainText(text));
       },
     });
     window.dispatchEvent(new Event("sc:dusty-open"));
-    setTimeout(() => window.dispatchEvent(new CustomEvent("sc:dusty-draft", { detail: { text: ask } })), 250);
-  }, [vm, p, change]);
+    setTimeout(() => window.dispatchEvent(new CustomEvent("sc:dusty-draft", { detail: { text: `${ask}\n\n${USE_ASK}`, send: true } })), 250);
+  }, [vm, p, change, jobId]);
   useEffect(() => () => setDustyUse(null), []);
 
   const saveTemplate = useCallback(async (kind: "warranty" | "terms") => {

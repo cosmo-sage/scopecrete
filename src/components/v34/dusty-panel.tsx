@@ -32,6 +32,7 @@ import { Markdown } from "@/components/v34/markdown";
 import { PlanCard } from "@/components/v34/plan-card";
 import { hideIds, parsePlan } from "@/lib/dusty/plan";
 import { useDustyUse } from "@/lib/v34/dusty-live";
+import { splitUse } from "@/lib/dusty/use-block";
 import { sendBytes } from "@/components/v34/files-panel";
 import { VoiceRecorder } from "@/components/v34/voice-recorder";
 import { usePref } from "@/lib/v34/prefs";
@@ -593,8 +594,23 @@ export function DustyPanel({ open, onClose, onBusy, onStream, onState }: {
                     const p = parsePlan(it.content);
                     const streaming = busy && i === items.length - 1;
                     const shown = streaming ? hideIds(it.content.replace(/```scopecrete-plan[\s\S]*$/, "").trim()) : p.shown;
+                    // The words for the page in a highlighted box; "Use this" copies only those (use-block.ts).
+                    const u = splitUse(shown);
                     return (<>
-                      <Markdown text={shown} size={14} />
+                      {u.box === null ? <Markdown text={shown} size={14} /> : (<>
+                        {u.before && <Markdown text={u.before} size={14} />}
+                        <div style={{ margin: "10px 0", padding: "10px 12px", background: T.hivizDim, border: `1px solid ${T.hiviz}`, borderRadius: 8 }}>
+                          <div style={{ ...eyebrow, color: T.hivizText, marginBottom: 4 }}>For the page</div>
+                          <Markdown text={u.box} size={14} />
+                          {useTarget && !streaming && (
+                            <button onClick={() => useTarget.apply(u.box!)} className="mt-2"
+                              style={{ ...eyebrow, color: T.onHiviz, background: T.hiviz, padding: "5px 10px", borderRadius: 6, cursor: "pointer" }}>
+                              Use this {useTarget.label}
+                            </button>
+                          )}
+                        </div>
+                        {u.after && <Markdown text={u.after} size={14} />}
+                      </>)}
                       {streaming && /```scopecrete-plan/.test(it.content) && <div style={{ fontSize: F.xs, color: T.ink3, marginTop: 6 }}>Writing up the plan…</div>}
                       {!streaming && (p.actions.length > 0 || p.dropped > 0) && (
                         <PlanCard jobId={planJob} actions={p.actions} dropped={p.dropped} done={!streaming} />
@@ -607,7 +623,7 @@ export function DustyPanel({ open, onClose, onBusy, onStream, onState }: {
                     {copied === i ? "Copied" : "Copy"}
                   </button>
                 )}
-                {useTarget && it.content && !(busy && i === items.length - 1) && (
+                {useTarget && it.content && !(busy && i === items.length - 1) && splitUse(it.content).box === null && (
                   <button onClick={() => useTarget.apply(it.content)} className="mt-1.5 ml-4" style={{ ...eyebrow, color: T.hiviz, cursor: "pointer" }}>
                     Use this {useTarget.label}
                   </button>

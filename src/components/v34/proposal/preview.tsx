@@ -13,13 +13,13 @@
  * Coy's own Messages or mail app with the words — ScopeCrete sends nothing
  * (DECISIONS §10). Every time the customer opens the link it is listed here.
  */
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { T, disp, strong, nums } from "@/lib/v34/tokens";
 import { ProposalDocument, type DocVM } from "./document";
 import { mapPicture } from "./area-visuals";
 import { sendBytes } from "@/components/v34/files-panel";
 import { linkMessage, signedLine, smsHref, viewLine } from "@/lib/proposal-links";
-import { firstName, startingWords, type SendExample, type Via } from "@/lib/proposal-send";
+import { firstName, greetingSlot, startingWords, type SendExample, type Via } from "@/lib/proposal-send";
 import { proposalLink, sendProposal } from "@/lib/v34/send-proposal";
 
 export interface PropLink {
@@ -43,6 +43,25 @@ const device = (ua: string | null) => {
   if (/iPhone/i.test(ua)) return "iPhone"; if (/iPad/i.test(ua)) return "iPad"; if (/Android/i.test(ua)) return "Android";
   if (/Macintosh/i.test(ua)) return "Mac"; if (/Windows/i.test(ua)) return "Windows"; return "a browser";
 };
+/** Someone the proposal can go to: one of the customer's people, or one of Coy's own (Coy, 2026-10-10). */
+interface Who { key: string; contact_id: string | null; name: string | null; phone: string | null; email: string | null; note: string | null; internal: boolean }
+const fmtPhone = (p: string) => p.replace(/^\+1(\d{3})(\d{3})(\d{4})$/, "($1) $2-$3");
+
+const openUrl = (u: string) => { window.location.href = u; };
+
+/** A text to each person ticked, one after another; what happened to each, in one line. */
+async function textEach(list: Who[], step: (i: number) => void, one: (w: Who) => Promise<{ ok: boolean; text: string }>) {
+  const said: string[] = [];
+  let ok = true;
+  for (let i = 0; i < list.length; i++) {
+    step(i);
+    const out = await one(list[i]);
+    ok = ok && out.ok;
+    said.push(list.length > 1 ? `${list[i].name ?? "?"}: ${out.text}` : out.text);
+  }
+  return { ok, text: said.join(" · ") };
+}
+
 const when = (iso: string) => new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
 export function ProposalPreview({ jobId, vm, draft, version, blocked, coverFileId, onFinalize, onClose, links, onLinks }: {
@@ -63,6 +82,28 @@ export function ProposalPreview({ jobId, vm, draft, version, blocked, coverFileI
   const [words, setWords] = useState<string | null>(null);
   const [subject, setSubject] = useState<string>("");
   const [sentMsg, setSentMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  // Who it goes to (Coy, 2026-10-10: "select which of the customer contacts I send the quote to via text …
+  // select multiple contacts inside the customer or internal users"). The job's person is ticked to start.
+  const [people, setPeople] = useState<Who[] | null>(null);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    let off = false;
+    fetch(`/api/jobs/${jobId}/proposal/recipients`).then((r) => r.json()).then((b) => {
+      if (off) return;
+      const c = ((b.contacts ?? []) as Array<{ contact_id: string; name: string | null; phone: string | null; email: string | null; role: string | null }>)
+        .map((x): Who => ({ key: `c:${x.contact_id}`, contact_id: x.contact_id, name: x.name, phone: x.phone, email: x.email, note: x.role, internal: false }));
+      const m = ((b.members ?? []) as Array<{ user_id: string; name: string | null; email: string | null; role: string; contact_id: string | null; phone: string | null }>)
+        .filter((x) => !c.some((y) => y.contact_id && y.contact_id === x.contact_id))
+        .map((x): Who => ({ key: `u:${x.user_id}`, contact_id: x.contact_id, name: x.name ?? x.email, phone: x.phone, email: x.email, note: x.role === "field" ? "Onsite estimator" : x.role === "owner" ? "Owner" : "Member", internal: true }));
+      setPeople([...c, ...m]);
+      setPicked(new Set(c.length ? [c[0].key] : []));
+    }).catch(() => { if (!off) setPeople([]); });
+    return () => { off = true; };
+  }, [jobId]);
+  const chosen = (people ?? []).filter((w) => picked.has(w.key));
+  const textable = chosen.filter((w) => w.contact_id && w.phone);
+  const mailable = chosen.filter((w) => w.email);
+  const flip = (k: string) => setPicked((s) => { const n = new Set(s); if (n.has(k)) n.delete(k); else n.add(k); return n; });
   useEffect(() => {
     let off = false;
     fetch("/api/proposal-sends").then((r) => r.json()).then((b) => { if (!off) setExamples(b.examples ?? []); }).catch(() => { if (!off) setExamples([]); });
@@ -78,7 +119,7 @@ export function ProposalPreview({ jobId, vm, draft, version, blocked, coverFileI
     return () => window.removeEventListener("keydown", k);
   }, [onClose]);
 
-  const ensureLink = useCallback(async (): Promise<PropLink> => {
+  const ensureLink = async (): Promise<PropLink> => {
     if (live) return live;
     if (draft) { setBusy("Freezing this version…"); await onFinalize(); }
     setBusy("Making the link…");
@@ -105,7 +146,7 @@ export function ProposalPreview({ jobId, vm, draft, version, blocked, coverFileI
     }
     onLinks();
     return r.link as PropLink;
-  }, [live, draft, onFinalize, vm, jobId, coverFileId, onLinks]);
+  };
 
   const send = async (how: "quo" | "messages" | "email" | "copy") => {
     setErr(null); setSentMsg(null);
@@ -120,12 +161,21 @@ export function ProposalPreview({ jobId, vm, draft, version, blocked, coverFileI
       } else if (how === "messages") {
         // The old way: Coy's own Messages app with the words.
         const m = linkMessage({ customer: vm.customer.name, org: vm.org.name, title: vm.job.title, url: link.url });
-        window.location.href = smsHref(vm.customer.phone, words ? shownWords.replace(/\{link\}/g, link.url) : m.body);
+        openUrl(smsHref(textable[0]?.phone ?? vm.customer.phone, words ? shownWords.replace(/\{link\}/g, link.url) : m.body));
         await call(`/api/proposal-links/${link.id}`, "PATCH", { sent: "text" }).catch(() => {});
-      } else {
-        setBusy(how === "quo" ? "Sending through Quo…" : "Opening your mail…");
+      } else if (how === "quo") {
+        // A text each, through Quo, greeting each by their own first name.
         const r = await proposalLink(jobId); // the link just made (or the live one), with who it is for
-        const out = await sendProposal({ jobId, via: how === "quo" ? "text" : "email", body: shownWords, subject: subject || start?.subject || null, email: vm.customer.email, link: r, names: [vm.customer.name, vm.customer.person] });
+        setSentMsg(await textEach(textable, (i) => setBusy(`Sending through Quo… ${i + 1} of ${textable.length}`),
+          (w) => sendProposal({ jobId, via: "text", body: greetingSlot(shownWords), contactId: w.contact_id, contactName: w.name, link: r, names: [vm.customer.name, vm.customer.person] })));
+      } else {
+        // One email to everyone ticked; with several the greeting carries no name.
+        setBusy("Opening your mail…");
+        const r = await proposalLink(jobId);
+        const one = mailable.length === 1 ? mailable[0] : null;
+        const body = one ? greetingSlot(shownWords) : greetingSlot(shownWords).replace(/\{first\}/g, "").replace(/[ \t]+([,.!?])/g, "$1");
+        const out = await sendProposal({ jobId, via: "email", body, subject: subject || start?.subject || null, email: mailable.map((w) => w.email).join(","),
+          contactId: one?.contact_id ?? null, contactName: one?.name ?? null, link: r, names: [vm.customer.name, vm.customer.person] });
         setSentMsg(out);
       }
       onLinks();
@@ -165,7 +215,30 @@ export function ProposalPreview({ jobId, vm, draft, version, blocked, coverFileI
         </div>
 
         <aside className="shrink-0 overflow-y-auto w-full lg:w-[340px] max-h-[45dvh] lg:max-h-none" style={{ background: T.card, borderTop: `1px solid ${T.hair}`, borderLeft: `1px solid ${T.hair}`, padding: "12px 14px" }}>
-          <div style={{ fontFamily: disp, fontSize: 12, fontWeight: 700, letterSpacing: ".12em", textTransform: "uppercase", color: T.ink }}>Send to {vm.customer.name ?? "the customer"}</div>
+          <div style={{ fontFamily: disp, fontSize: 12, fontWeight: 700, letterSpacing: ".12em", textTransform: "uppercase", color: T.ink }}>Send to</div>
+          {people === null ? <div className="mt-1" style={{ fontSize: 12, color: T.ink3 }}>Loading who it can go to…</div>
+            : people.length === 0 ? <div className="mt-1" style={{ fontSize: 12, color: T.ink3 }}>Nobody on this job or its customer yet.</div>
+            : (
+              <div className="mt-1 flex flex-col" style={{ gap: 2 }}>
+                {people.map((w, i) => {
+                  const can = via === "text" ? !!(w.contact_id && w.phone) : !!w.email;
+                  return (
+                    <React.Fragment key={w.key}>
+                      {w.internal && !people[i - 1]?.internal && <div className="mt-1.5" style={{ fontFamily: disp, fontSize: 10.5, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase", color: T.ink3 }}>Your team</div>}
+                      <label className="flex items-center gap-2" style={{ fontSize: 12.5, color: can ? T.ink : T.ink3, cursor: "pointer", padding: "3px 0" }}>
+                        <input type="checkbox" checked={picked.has(w.key)} onChange={() => flip(w.key)} />
+                        <span className="min-w-0 flex-1">
+                          <b style={{ fontWeight: 600 }}>{w.name ?? "No name"}</b>{w.note ? <span style={{ color: T.ink3 }}> · {w.note}</span> : null}
+                          <span className="block" style={{ fontSize: 11, color: T.ink3 }}>
+                            {via === "text" ? (w.phone && w.contact_id ? fmtPhone(w.phone) : "no phone to text") : (w.email ?? "no email on file")}
+                          </span>
+                        </span>
+                      </label>
+                    </React.Fragment>
+                  );
+                })}
+              </div>
+            )}
           {blocked
             ? <div className="mt-2" style={{ fontSize: 12.5, color: "#8E2B1C", background: "#F7DCD6", borderRadius: 4, padding: "8px 10px" }}>Can&apos;t send yet — {blocked}</div>
             : draft && <div className="mt-1" style={{ fontSize: 12, color: T.ink3 }}>Sending freezes this as version {version}. Changes after that start version {version + 1}, with its own link.</div>}
@@ -174,7 +247,9 @@ export function ProposalPreview({ jobId, vm, draft, version, blocked, coverFileI
               <button type="button" onClick={() => { setVia("text"); setWords(null); }} style={seg(via === "text")} aria-pressed={via === "text"}>Text</button>
               <button type="button" onClick={() => { setVia("email"); setWords(null); }} style={{ ...seg(via === "email"), borderLeft: `1px solid ${T.hair}` }} aria-pressed={via === "email"}>Email</button>
             </span>
-            <span style={{ fontSize: 11, color: T.ink3 }}>{via === "text" ? (vm.customer.phone ? `through Quo to ${vm.customer.phone}` : "no phone on file") : vm.customer.email ? `your mail, to ${vm.customer.email}` : "your mail — no email on file"}</span>
+            <span style={{ fontSize: 11, color: T.ink3 }}>{via === "text"
+              ? (textable.length ? `through Quo, a text to each of ${textable.length}` : "tick someone with a phone")
+              : mailable.length ? `your mail, one email to ${mailable.length}` : "your mail — tick someone with an email"}</span>
           </div>
           {via === "email" && <input value={subject || start?.subject || ""} onChange={(e) => setSubject(e.target.value)} aria-label="Subject" className="mt-2 w-full"
             style={{ height: 32, border: `1px solid ${T.hair}`, borderRadius: 3, background: T.card, color: T.ink, fontSize: 12.5, padding: "0 8px" }} />}
@@ -183,12 +258,12 @@ export function ProposalPreview({ jobId, vm, draft, version, blocked, coverFileI
           <div style={{ fontSize: 11, color: T.ink3 }}>{live ? "" : "{link} becomes the link once it's made."}{start?.learned ? " Started from how you sent the last one." : ""} Dusty learns from what you send.</div>
           <div className="mt-2 flex flex-wrap gap-2">
             {via === "text"
-              ? <button type="button" disabled={!canSend || !vm.customer.phone} onClick={() => void send("quo")} style={btn(canSend && !!vm.customer.phone)} title={vm.customer.phone ? `Sends through Quo to ${vm.customer.phone}` : "No phone number on the customer"}>Send text</button>
+              ? <button type="button" disabled={!canSend || !textable.length} onClick={() => void send("quo")} style={btn(canSend && !!textable.length)} title={textable.length ? `Sends through Quo to ${textable.map((w) => w.name).join(", ")}` : "Tick someone with a phone"}>{textable.length > 1 ? `Send ${textable.length} texts` : "Send text"}</button>
               : <button type="button" disabled={!canSend} onClick={() => void send("email")} style={btn(canSend)} title="Opens your mail with the words and the link">Email it</button>}
             <button type="button" disabled={!canSend} onClick={() => void send("copy")} style={{ ...btn(false), color: canSend ? T.ink : T.ink3, border: `1px solid ${T.hairStrong}`, cursor: canSend ? "pointer" : "default" }}>{copied ? "Copied ✓" : "Copy link"}</button>
           </div>
           <div className="mt-1.5" style={{ fontSize: 11, color: T.ink3 }}>
-            {via === "text" ? <>Send text goes through Quo from your line. {vm.customer.phone && <button type="button" onClick={() => void send("messages")} disabled={!canSend} style={{ border: 0, background: "transparent", padding: 0, color: T.chalk, fontSize: 11, cursor: "pointer", textDecoration: "underline" }}>Or open it in your Messages app</button>}</>
+            {via === "text" ? <>Send text goes through Quo from your line. {(textable[0]?.phone ?? vm.customer.phone) && <button type="button" onClick={() => void send("messages")} disabled={!canSend} style={{ border: 0, background: "transparent", padding: 0, color: T.chalk, fontSize: 11, cursor: "pointer", textDecoration: "underline" }}>Or open it in your Messages app</button>}</>
               : "Email opens your own mail app with everything filled in — you press send."}
           </div>
           {sentMsg && <div className="mt-2" style={{ fontSize: 12, color: sentMsg.ok ? "#1F5C3A" : T.red }}>{sentMsg.text}</div>}

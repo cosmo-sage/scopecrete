@@ -45,6 +45,9 @@ export function GraphiteFilter() {
 // onto it and plays `done` once. Keyframes in globals.css; reduced motion
 // stills it and keeps the colour.
 const ORANGE = "#F2610C", STEEL = "#5980A6", GREEN = "#1FA971";
+/** A colour darkened to pct % — mixed, not filtered: a CSS filter on a 3D layer
+ *  turning edge-on is what drew streaks across the page. */
+const shade = (c: string, pct: number) => pct >= 100 ? c : `color-mix(in srgb, ${c} ${Math.round(pct)}%, #000)`;
 const AXES = [18, -52], DUR = [22, 16], POSE = [58, 128], LAYERS = 5;
 
 export type EmblemState = "idle" | "listening" | "thinking" | "reading" | "answering" | "done" | "warn" | "sleeping";
@@ -85,7 +88,7 @@ export function Emblem({ size, spin, state = "idle", className }: { size: number
     const slab = (key: string, extra: CSSProperties, anim: CSSProperties) =>
       Array.from({ length: LAYERS }, (_, k) => {
         const z = -depth / 2 + (depth * k) / (LAYERS - 1), edge = k === 0 || k === LAYERS - 1;
-        return <span key={key + k} style={{ ...base, ...extra, ...anim, transform: `translateZ(${z}px)`, filter: edge ? "brightness(.72)" : "none" }} />;
+        return <span key={key + k} style={{ ...base, ...extra, ...anim, transform: `translateZ(${z}px)`, ...(edge ? { borderColor: shade(color, 72) } : null) }} />;
       });
     const half = (key: string, clip: string, delay: number, still: number) =>
       slab(key, { clipPath: clip }, turning ? { animation: `scShade ${dur}s linear infinite`, animationDelay: `${delay * dur}s` } : { opacity: st.dim ? 0.4 : still });
@@ -115,7 +118,7 @@ export function Emblem({ size, spin, state = "idle", className }: { size: number
     const half = px(S / 2);
     const face = (tf: string, br: number, k: number) => (
       <span key={k} style={{ position: "absolute", display: "block", inset: 0, transformStyle: "preserve-3d" }}>
-        <span style={sq(S, { filter: `brightness(${br})`, transform: tf, backfaceVisibility: "hidden" })} />
+        <span style={sq(S, { background: shade(light, br * 100), transform: tf, backfaceVisibility: "hidden" })} />
       </span>
     );
     core = (
@@ -145,14 +148,20 @@ export function Emblem({ size, spin, state = "idle", className }: { size: number
       animationDelay: st.burst ? `${(k % 4) * 0.04}s` : `${-((k * 0.37) % 1.9)}s` }} />;
   }) : null;
   return (
+    // Clipped to its own neighbourhood: when a ring turns edge-on Chrome can
+    // smear a 3D layer into a long streak across the page (Coy saw orange
+    // lines flash over the header, 2026-10-10). The clip is on a flat wrapper,
+    // so the rings inside still turn in 3D; the dust still has room.
     <span className={`sc-emblem ${className ?? ""}`} aria-hidden="true"
-      style={{ position: "relative", display: "block", width: size, height: size, flex: "none", perspective: `${size * 2.1}px`, transformStyle: "preserve-3d" }}>
-      <span style={{ position: "absolute", display: "block", inset: 0, transformStyle: "preserve-3d" }}>
-        {ring(0)}
-        {ring(1)}
-        {core}
+      style={{ position: "relative", display: "block", width: size, height: size, flex: "none", clipPath: "inset(-40%)", isolation: "isolate" }}>
+      <span style={{ position: "absolute", display: "block", inset: 0, perspective: `${size * 2.1}px`, transformStyle: "preserve-3d" }}>
+        <span style={{ position: "absolute", display: "block", inset: 0, transformStyle: "preserve-3d" }}>
+          {ring(0)}
+          {ring(1)}
+          {core}
+        </span>
+        {dust}
       </span>
-      {dust}
     </span>
   );
 }

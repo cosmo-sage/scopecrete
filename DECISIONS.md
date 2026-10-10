@@ -5130,7 +5130,10 @@ additive changes only, with confirmation.
   cached a plan PDF: `openPdf()` (`src/lib/pdf.ts`) now keeps the bytes on
   the device in the Cache API by file id (a file id's bytes never change)
   and opens from there next time. Migration 085 deletes cron run history
-  older than a week each night (it grew ~2.4 MB a day, read by nothing).
+  older than a week each night (it grew ~2.4 MB a day, read by nothing;
+  applied 2026-10-10 on Coy's "apply 085" as cron job `trim-cron-history`,
+  04:17 UTC — checked after: scheduled and active, 19,197 of 51,537 rows
+  due for the first run).
   Compressing PDFs is not done: scanned plan sets are already 1-bit CCITT,
   and anything lossy would blur what Coy measures.
 - **Fonts are self-hosted (2026-10-05).** Every typeface the app and site

@@ -86,3 +86,35 @@ test("a bid's due note is urgent under 48 hours", () => {
   assert.deepEqual(bidNote("2026-10-13T00:00:00Z", now), { note: "Due in 5 days", urgent: false });
   assert.equal(bidNote(null, now), null);
 });
+
+import { cleanRadius, readOffice, ringPoints, ringPx, radiusLabel, miles } from "../src/lib/map.ts";
+
+test("the office's radius: blank is none, miles over 0 up to 1,000, to a tenth", () => {
+  assert.deepEqual(cleanRadius(""), { ok: true, mi: null });
+  assert.deepEqual(cleanRadius(null), { ok: true, mi: null });
+  assert.deepEqual(cleanRadius("80"), { ok: true, mi: 80 });
+  assert.deepEqual(cleanRadius("80 miles"), { ok: true, mi: 80 });
+  assert.deepEqual(cleanRadius(12.55), { ok: true, mi: 12.6 });
+  assert.equal(cleanRadius("0").ok, false);
+  assert.equal(cleanRadius("-5").ok, false);
+  assert.equal(cleanRadius("1001").ok, false);
+  assert.equal(cleanRadius("far").ok, false);
+});
+
+test("an office row reads only when it has an address and a point", () => {
+  assert.deepEqual(readOffice({ address: " 1 Main St ", lat: 30.4, lng: -91.1, radius_mi: "80.0" }), { address: "1 Main St", lat: 30.4, lng: -91.1, radius_mi: 80 });
+  assert.equal(readOffice({ address: "1 Main St", lat: 30.4, lng: -91.1, radius_mi: null }).radius_mi, null);
+  assert.equal(readOffice({ address: "", lat: 30.4, lng: -91.1 }), null);
+  assert.equal(readOffice({ address: "x", lat: null, lng: -91.1 }), null);
+  assert.equal(readOffice(null), null);
+});
+
+test("the ring's points are the radius away from the office; its pixels follow the zoom", () => {
+  const o = { lat: 30.45, lng: -91.15 };
+  for (const p of ringPoints(o, 80)) assert.ok(Math.abs(miles(o, p) - 80) < 0.5, `${miles(o, p)}`);
+  const r10 = ringPx(o, 80, 10);
+  assert.ok(Math.abs(ringPx(o, 80, 11) - r10 * 2) < 1e-6);
+  assert.ok(r10 > 200 && r10 < 1000, String(r10)); // 80 mi at zoom 10 is a few hundred pixels
+  assert.equal(radiusLabel(80), "80 mi");
+  assert.equal(radiusLabel(12.5), "12.5 mi");
+});

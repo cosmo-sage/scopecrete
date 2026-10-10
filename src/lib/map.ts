@@ -233,3 +233,45 @@ export function bidNote(dueIso: string | null | undefined, now = Date.now()): { 
   if (h < 0) return { note: "Bid due date passed", urgent: false };
   return { note: h < 48 ? `Due in ${Math.max(1, Math.round(h))} h` : `Due in ${Math.round(h / 24)} days`, urgent: h < 48 };
 }
+
+/* ---------------------------------------------------------- the office (migration 098) */
+
+/** The org's office and the radius it works in (Settings → Organisation → Office). */
+export interface Office { address: string; lat: number; lng: number; radius_mi: number | null }
+
+export const RADIUS_MAX_MI = 1000;
+
+/** A radius typed in Settings: blank is none; otherwise over 0 and up to 1,000 miles, to a tenth. */
+export function cleanRadius(v: unknown): { ok: true; mi: number | null } | { ok: false; error: string } {
+  if (v == null || (typeof v === "string" && !v.trim())) return { ok: true, mi: null };
+  const n = typeof v === "number" ? v : Number(String(v).replace(/,/g, "").replace(/\s*(mi|miles?)\s*$/i, "").trim());
+  if (!Number.isFinite(n) || n <= 0) return { ok: false, error: "The radius is a number of miles over 0." };
+  if (n > RADIUS_MAX_MI) return { ok: false, error: `The radius is at most ${RADIUS_MAX_MI.toLocaleString()} miles.` };
+  return { ok: true, mi: Math.round(n * 10) / 10 };
+}
+
+/** A row from org_office as the app reads it, or null when it isn't a whole one. */
+export function readOffice(row: unknown): Office | null {
+  if (!row || typeof row !== "object") return null;
+  const r = row as Record<string, unknown>;
+  if (r.lat == null || r.lng == null) return null;
+  const lat = Number(r.lat), lng = Number(r.lng);
+  if (typeof r.address !== "string" || !r.address.trim() || !Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  const rad = r.radius_mi == null ? null : Number(r.radius_mi);
+  return { address: r.address.trim(), lat, lng, radius_mi: rad != null && Number.isFinite(rad) && rad > 0 ? rad : null };
+}
+
+/** The four points due north, south, east and west of the office at the radius — fitView() fits the ring through them. */
+export function ringPoints(o: { lat: number; lng: number }, mi: number): Array<{ lat: number; lng: number }> {
+  const dLat = mi / 69.0;
+  const dLng = mi / (69.17 * Math.max(0.01, Math.cos((o.lat * Math.PI) / 180)));
+  return [{ lat: o.lat + dLat, lng: o.lng }, { lat: o.lat - dLat, lng: o.lng }, { lat: o.lat, lng: o.lng + dLng }, { lat: o.lat, lng: o.lng - dLng }];
+}
+
+/** The ring's radius in screen pixels at this zoom (Web Mercator's scale at the office's latitude). */
+export function ringPx(o: { lat: number }, mi: number, zoom: number): number {
+  return (mi * 5280) / feetPerPixel(o.lat, zoom);
+}
+
+/** "80 mi" / "12.5 mi". */
+export const radiusLabel = (mi: number) => `${Number.isInteger(mi) ? mi.toLocaleString() : mi.toFixed(1)} mi`;

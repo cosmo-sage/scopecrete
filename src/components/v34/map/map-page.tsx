@@ -22,6 +22,7 @@ import { useWide } from "@/lib/v34/use-wide";
 import {
   LAYERS, LAYER, DEFAULT_FILTERS, cleanFilters, visiblePins, layerCounts, cities, clusterPins, clusterSize,
   scaleReadout, feetPerPixel, clipPlan, nearestJobs, distanceLabel, fromWorldPx, worldPx, TILE,
+  ringPoints, ringPx, radiusLabel, type Office,
   type LayerId, type MapFilters, type MapPin, type MapPinsResponse, type PickJob,
 } from "@/lib/map";
 import type { AddressSuggestion } from "@/lib/aerial";
@@ -300,6 +301,14 @@ export function MapPage() {
   const [saved, setSaved] = useState<Saved[]>([]);
   const [toast, setToast] = useState<Saved | null>(null);
   const fitted = useRef(false);
+  // The org's office and service radius (Settings → Organisation → Office, migration 098):
+  // undefined while loading, null when none is set.
+  const [office, setOffice] = useState<Office | null | undefined>(undefined);
+  useEffect(() => {
+    let off = false;
+    fetch("/api/org/office").then((r) => (r.ok ? r.json() : null)).then((b) => { if (!off) setOffice((b?.office as Office | null) ?? null); }).catch(() => { if (!off) setOffice(null); });
+    return () => { off = true; };
+  }, []);
   // Desktop: the ground at the frame's centre when "Use this frame" is tapped, kept centred as the frame moves aside for the job list.
   const pendingCentre = useRef<{ lat: number; lng: number } | null>(null);
 
@@ -315,14 +324,16 @@ export function MapPage() {
 
   const shown = useMemo(() => visiblePins(data?.pins ?? [], f), [data, f]);
 
-  // Open on the pins (once), unless a clip asked for a job.
+  // Open (once) on the office's ring — or the office alone — else on the pins; unless a clip asked for a job.
   const clipJob = sp.get("clip");
+  const officeView = useCallback((o: Office, w: number, h: number): View | null =>
+    o.radius_mi ? fitView(ringPoints(o, o.radius_mi), w, h, 24, 15) : { lat: o.lat, lng: o.lng, zoom: 11 }, []);
   useEffect(() => {
-    if (fitted.current || !data || !size.w || clipJob) return;
+    if (fitted.current || !data || !size.w || clipJob || office === undefined) return;
     fitted.current = true;
-    const v = fitView(shown, size.w, size.h, 56, 15);
+    const v = office ? officeView(office, size.w, size.h) : fitView(shown, size.w, size.h, 56, 15);
     if (v) setTimeout(() => setView(v), 0);
-  }, [data, size, shown, clipJob]);
+  }, [data, size, shown, clipJob, office, officeView]);
 
   // ?clip=<job>: Takeoffs' Satellite — frame that job's site on satellite.
   useEffect(() => {
@@ -401,6 +412,34 @@ export function MapPage() {
         </div>,
       );
     }
+    if (!clip && office) {
+      // The office, and its service radius as a ring.
+      const p = place(office.lat, office.lng);
+      if (office.radius_mi) {
+        const r = ringPx(office, office.radius_mi, view.zoom);
+        items.push(
+          <svg key="ring" width={s.w} height={s.h} aria-hidden style={{ position: "absolute", left: 0, top: 0, pointerEvents: "none" }}>
+            <circle cx={p.x} cy={p.y} r={r} fill={T.hiviz} fillOpacity={0.06} stroke={T.hiviz} strokeWidth={2} strokeDasharray="8 6" />
+          </svg>,
+        );
+        // The radius written on the ring, due north, while that point is on screen.
+        if (p.y - r > 4 && p.y - r < s.h - 20 && p.x > 0 && p.x < s.w) items.push(
+          <span key="ring-l" aria-hidden style={{ position: "absolute", left: p.x, top: p.y - r, transform: "translate(-50%, -50%)", background: T.hiviz, color: T.onHiviz, fontFamily: strong, fontSize: 11, fontWeight: 600, padding: "1px 7px", borderRadius: 999, whiteSpace: "nowrap", pointerEvents: "none" }}>
+            {radiusLabel(office.radius_mi)} from the office
+          </span>,
+        );
+      }
+      items.push(
+        <div key="office" title={office.address} aria-label={`Office: ${office.address}`} role="img"
+          style={{ position: "absolute", left: p.x - 14, top: p.y - 14, width: 28, height: 28, borderRadius: 6, background: T.ink, border: "2px solid #fff", boxShadow: "0 2px 6px rgba(0,0,0,.35)", display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none", zIndex: 4 }}>
+          <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="#fff" strokeWidth="1.8" aria-hidden="true"><path d="M3 9.5 10 3.5l7 6M5 8.5V17h10V8.5M8.5 17v-4.5h3V17" /></svg>
+        </div>,
+      );
+      if (view.zoom >= 9) items.push(
+        <span key="office-l" aria-hidden style={{ position: "absolute", left: p.x + 18, top: p.y - 8, fontFamily: strong, fontSize: 11, fontWeight: 700, color: mode === "sat" ? "#fff" : T.ink, whiteSpace: "nowrap", pointerEvents: "none",
+          textShadow: mode === "sat" ? "0 0 3px #000, 0 0 2px #000" : "0 0 3px #fff, 0 0 2px #fff, 0 0 1px #fff" }}>Office</span>,
+      );
+    }
     if (!clip) {
       for (const cl of clusterPins(shown, view.zoom)) {
         const c = worldPx(view.lat, view.lng, view.zoom);
@@ -468,9 +507,17 @@ export function MapPage() {
                   ))}
                 </div>
   );
+  const officeButton = office ? (
+                  <button type="button" aria-label="Back to the office" title={office.radius_mi ? `The office and ${radiusLabel(office.radius_mi)} around it` : "The office"}
+                    onClick={() => { const v = officeView(office, size.w, size.h); if (v) setView(v); }}
+                    className="flex items-center justify-center rounded" style={{ width: 36, height: 36, background: T.card, border: `1px solid ${T.hairStrong}`, boxShadow: "0 2px 8px rgba(0,0,0,.15)", cursor: "pointer" }}>
+                    <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke={T.ink} strokeWidth="1.7" aria-hidden="true"><path d="M3 9.5 10 3.5l7 6M5 8.5V17h10V8.5M8.5 17v-4.5h3V17" /></svg>
+                  </button>
+  ) : null;
   const mapControls = (
     <>
                 {wide && modeToggle}
+                {officeButton}
                 {!wide && (
                   <button type="button" aria-label="Where I am" title="Where I am" onClick={() => navigator.geolocation?.getCurrentPosition((p) => setView({ lat: p.coords.latitude, lng: p.coords.longitude, zoom: 16 }), () => {})}
                     className="flex items-center justify-center rounded" style={{ width: 36, height: 36, background: T.card, border: `1px solid ${T.hairStrong}`, boxShadow: "0 2px 8px rgba(0,0,0,.15)", cursor: "pointer" }}>

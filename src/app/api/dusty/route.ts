@@ -18,9 +18,10 @@ import { readPages, searchWeb } from "@/lib/web-search-server";
  * POST { question, conversation_id?, context?: {kind, id} }  →  streamed text,
  * with X-Dusty-Conversation naming the conversation it went into.
  *
- * The model runs in the Hermes container on the VPS (DECISIONS §8), reached
- * over Tailscale Funnel at HERMES_URL with a bearer key. Hermes routes to the
- * model through OpenRouter; no model-provider key lives in Vercel.
+ * The model is Anthropic's Messages API, called from here with
+ * ANTHROPIC_API_KEY, streamed and tool-less (DECISIONS §6). Hermes on the VPS
+ * (HERMES_URL, bearer key) is the fallback when that key is missing or
+ * DUSTY_PROVIDER=hermes.
  *
  * This route stays the only thing that touches customer data:
  * - signed-in only; org from the session (DECISIONS §7);
@@ -33,7 +34,7 @@ import { readPages, searchWeb } from "@/lib/web-search-server";
  *   history comes from the database, never from the browser, and a continued
  *   chat keeps the context it started with (a job chat stays about that job).
  *
- * HERMES_API_KEY is server-only and never logged.
+ * ANTHROPIC_API_KEY and HERMES_API_KEY are server-only and never logged.
  */
 
 export const dynamic = "force-dynamic";
@@ -43,6 +44,8 @@ const MAX_TURNS = 30;
 const MAX_USER_CHARS = 4000;
 const DEFAULT_MODEL = "anthropic/claude-haiku-4.5";
 const TIMEOUT_MS = 60_000;
+/** Dusty's chat on Anthropic's API (DUSTY_MODEL overrides). */
+const DIRECT_MODEL = "claude-sonnet-5-5";
 
 type Turn = { role: "user" | "assistant"; content: string };
 
@@ -53,10 +56,14 @@ export async function POST(req: NextRequest) {
 
   const base = process.env.HERMES_URL?.replace(/\/+$/, "");
   const key = process.env.HERMES_API_KEY;
-  if (!base || !key) {
+  // Anthropic's API, direct and tool-less, whenever its key is set; Hermes only as the fallback
+  // (DUSTY_PROVIDER=hermes switches back).
+  const anthropicKey = process.env.ANTHROPIC_API_KEY?.trim() ?? "";
+  const direct = !!anthropicKey && process.env.DUSTY_PROVIDER !== "hermes";
+  if (!direct && (!base || !key)) {
     return applyCookies(NextResponse.json({
       code: "not_connected",
-      error: "Dusty isn't connected yet: HERMES_URL and HERMES_API_KEY are not set in Vercel.",
+      error: "Dusty isn't connected yet: ANTHROPIC_API_KEY (or HERMES_URL and HERMES_API_KEY) is not set in Vercel.",
     }, { status: 503 }));
   }
 
@@ -328,23 +335,37 @@ export async function POST(req: NextRequest) {
   if (qErr) return applyCookies(NextResponse.json({ error: `Couldn't save the question: ${qErr.message}` }, { status: 500 }));
   await supabase.from("dusty_conversations").update({ updated_at: new Date().toISOString() }).eq("id", convId);
 
-  const model = process.env.HERMES_MODEL || DEFAULT_MODEL;
+  const model = direct ? (process.env.DUSTY_MODEL || DIRECT_MODEL) : (process.env.HERMES_MODEL || DEFAULT_MODEL);
+  const who = direct ? "the model API" : "Hermes";
+  const system = `${DUSTY_SYSTEM}${ref.kind === "scope" || ref.kind === "cash" || ctx.plans ? `\n\n${PLAN_RULES}` : ""}\n\n${RECORD_RULES}\n\n${ctx.text}`;
 
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
   let upstream: Response;
   try {
-    upstream = await fetch(`${base}/v1/chat/completions`, {
+    upstream = direct
+      ? await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        signal: ctrl.signal,
+        headers: {
+          "content-type": "application/json", "x-api-key": anthropicKey, "anthropic-version": "2023-06-01",
+          ...(process.env.ANTHROPIC_WORKSPACE_ID?.trim() ? { "anthropic-workspace-id": process.env.ANTHROPIC_WORKSPACE_ID.trim() } : {}),
+        },
+        body: JSON.stringify({
+          model, stream: true, max_tokens: 4000, system,
+          messages: anthropicTurns(history, images),
+        }),
+      })
+      : await fetch(`${base}/v1/chat/completions`, {
       method: "POST",
       signal: ctrl.signal,
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
       body: JSON.stringify({
         model,
         stream: true,
-        // On a job he may end with a budget plan (src/lib/dusty/plan.ts) — room for it.
         // A plan (a budget, or a list of threads to archive) rides at the end — room for it.
         max_tokens: 4000,
-        messages: [{ role: "system", content: `${DUSTY_SYSTEM}${ref.kind === "scope" || ref.kind === "cash" || ctx.plans ? `\n\n${PLAN_RULES}` : ""}\n\n${RECORD_RULES}\n\n${ctx.text}` },
+        messages: [{ role: "system", content: system },
           ...history.slice(0, -1),
           // The photos he looks at ride on this question only; the history keeps the words.
           images.length
@@ -354,7 +375,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (e) {
     clearTimeout(timer);
-    const why = (e as Error).name === "AbortError" ? "Hermes took too long to answer" : "couldn't reach Hermes on the VPS";
+    const why = (e as Error).name === "AbortError" ? `${who} took too long to answer` : `couldn't reach ${direct ? "the model API" : "Hermes on the VPS"}`;
     // The network cause (ECONNREFUSED, ENOTFOUND, a TLS code…) is what says
     // WHY. It carries the host, never the key.
     const cause = (e as { cause?: { code?: string; message?: string } }).cause;
@@ -367,7 +388,9 @@ export async function POST(req: NextRequest) {
   if (!upstream.ok || !upstream.body) {
     clearTimeout(timer);
     console.error("dusty upstream status", upstream.status, model);
-    const why = upstream.status === 401 || upstream.status === 403 ? "Hermes rejected the key" : `Hermes returned ${upstream.status}`;
+    let msg = "";
+    if (direct) { try { const j = (await upstream.json()) as { error?: { message?: string } }; msg = j.error?.message?.slice(0, 200) ?? ""; } catch { /* no body */ } }
+    const why = upstream.status === 401 || upstream.status === 403 ? `${who} rejected the key` : `${who} returned ${upstream.status}${msg ? ` ("${msg}")` : ""}`;
     return applyCookies(NextResponse.json({ code: "upstream", error: `Dusty couldn't answer: ${why}.` }, { status: 502 }));
   }
 
@@ -408,6 +431,13 @@ export async function POST(req: NextRequest) {
               const data = line.slice(5).trim();
               if (!data || data === "[DONE]") continue;
               try {
+                if (direct) {
+                  const j = JSON.parse(data) as { type?: string; delta?: { type?: string; text?: string; stop_reason?: string | null }; error?: { message?: string } };
+                  if (j.type === "content_block_delta" && j.delta?.type === "text_delta" && j.delta.text) emit(j.delta.text);
+                  else if (j.type === "message_delta" && j.delta?.stop_reason) finish = ({ max_tokens: "length", refusal: "content_filter" } as Record<string, string>)[j.delta.stop_reason] ?? j.delta.stop_reason;
+                  else if (j.type === "error") emit(`\n\n[Dusty couldn't finish: ${j.error?.message ?? "the model API sent an error"}.]`);
+                  continue;
+                }
                 const j = JSON.parse(data) as { choices?: Array<{ delta?: { content?: string }; finish_reason?: string | null }> };
                 const piece = j.choices?.[0]?.delta?.content;
                 if (piece) emit(piece);
@@ -418,9 +448,9 @@ export async function POST(req: NextRequest) {
           if (finish === "length") emit("\n\n[Cut off — ask for the rest.]");
           if (finish === "content_filter") emit("\n\n[Dusty declined to answer that one.]");
         }
-        console.log("dusty ok", JSON.stringify({ model, ctx: ctx.label.slice(0, 40), truncated: ctx.truncated }));
+        console.log("dusty ok", JSON.stringify({ model, direct, ctx: ctx.label.slice(0, 40), truncated: ctx.truncated }));
       } catch (e) {
-        const why = (e as Error).name === "AbortError" ? "Hermes took too long" : "the connection to Hermes dropped";
+        const why = (e as Error).name === "AbortError" ? `${who} took too long` : `the connection to ${who} dropped`;
         console.error("dusty stream", why);
         emit(`\n\n[Dusty couldn't finish: ${why}.]`);
       } finally {
@@ -440,4 +470,21 @@ export async function POST(req: NextRequest) {
       "X-Dusty-Conversation": convId,
     },
   }));
+}
+
+/** The chat as Anthropic's Messages API takes it: user first, roles alternating, the photos on the latest question. */
+function anthropicTurns(history: Turn[], images: string[]) {
+  const turns: Array<{ role: "user" | "assistant"; content: string }> = [];
+  for (const t of history) {
+    const last = turns[turns.length - 1];
+    if (last && last.role === t.role) last.content += `\n\n${t.content}`;
+    else if (turns.length || t.role === "user") turns.push({ ...t });
+  }
+  const q = turns[turns.length - 1];
+  if (!q || !images.length) return turns;
+  const pics = images.map((url) => {
+    const m = url.match(/^data:([^;]+);base64,([\s\S]*)$/);
+    return m ? { type: "image", source: { type: "base64", media_type: m[1], data: m[2] } } : null;
+  }).filter(Boolean);
+  return [...turns.slice(0, -1), { role: "user" as const, content: [...pics, { type: "text", text: q.content }] }];
 }

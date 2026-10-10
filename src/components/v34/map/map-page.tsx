@@ -632,7 +632,7 @@ export function MapPage() {
               <div {...stop} role="status" className="absolute flex items-center gap-2 rounded" style={{ left: "50%", transform: "translateX(-50%)", bottom: wide ? 24 : 80, zIndex: 20, background: T.ink, color: T.card, padding: "10px 12px", boxShadow: "0 8px 24px rgba(0,0,0,.3)", fontSize: 13, maxWidth: "calc(100% - 24px)" }}>
                 <span className="flex items-center justify-center rounded-full shrink-0" style={{ width: 20, height: 20, background: T.green, color: "#fff", fontSize: 12 }}>✓</span>
                 <span style={{ minWidth: 0 }}>Aerial added to <b>{toast.jobTitle}</b></span>
-                <Link href={`/dashboard/scope/${toast.jobId}/plans?step=takeoff&sheet=${toast.sheetId}`} style={{ color: T.hivizSoft, fontWeight: 600, whiteSpace: "nowrap" }}>Measure it ›</Link>
+                <Link href={`/dashboard/scope/${toast.jobId}/plans?sheet=${toast.sheetId}`} style={{ color: T.hivizSoft, fontWeight: 600, whiteSpace: "nowrap" }}>Measure it ›</Link>
               </div>
             )}
           </MapView>

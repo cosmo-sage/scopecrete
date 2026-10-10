@@ -265,7 +265,7 @@ export function SheetViewer({ jobId, title, sheets, files, groups, start, find, 
               <span style={{ fontSize: F.xs, color: T.ink3, ...clip, flex: 1, minWidth: 0 }}>
                 {s.scale_ft_per_pt ? "Scale set — measure it in Takeoffs" : s.scale_text ? `Prints ${s.scale_text} — set it in Takeoffs to measure` : "No scale set yet"}
               </span>
-              <Link href={`/dashboard/scope/${jobId}/plans?step=takeoff&sheet=${s.id}`} style={{ ...eyebrow, color: T.chalk }}>Measure in Takeoffs ›</Link>
+              <Link href={`/dashboard/scope/${jobId}/plans?sheet=${s.id}`} style={{ ...eyebrow, color: T.chalk }}>Measure in Takeoffs ›</Link>
             </div>
           )}
         </div>

@@ -11,7 +11,7 @@
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { T, F, disp, strong } from "@/lib/v34/tokens";
+import { T, F } from "@/lib/v34/tokens";
 import { sendBytes } from "@/components/v34/files-panel";
 import { openPdf, readPlanPages } from "@/lib/pdf";
 import { JobHeaderRow } from "@/components/v34/job-tabs";
@@ -27,15 +27,15 @@ import { SendSheet } from "./budget-step";
 // That can replace the current satellite page"), which comes back here on the new sheet. Later that
 // day the tab went (Coy: "Satellite tab can be removed completely since we have the map page"):
 // a clip comes from the Map's Clip for takeoff; an old ?step=satellite link still opens it.
+// Since 2026-10-10 the two are separate job views (Coy: "take the 'Files' tab out of the 'Takeoffs'
+// page and make it it's own page between Summary and Takeoffs" and "the 'measurements' tab will be
+// merged with the main 'takeoffs' page since the takeoffs page will not have sub-tabs"): /files opens
+// the files, /plans the drawing. An old ?step=files or ?step=sheets link on /plans goes to /files.
 type Step = "files" | "takeoff";
-// "Takeoff" reads as Measurements under the Takeoffs button (Coy, 2026-10-09).
-const STEPS: Array<[Step, string]> = [["files", "Files"], ["takeoff", "Measurements"]];
 
-export function PlanRoom({ jobId }: { jobId: string }) {
+export function PlanRoom({ jobId, view }: { jobId: string; view: Step }) {
   const router = useRouter();
   const sp = useSearchParams();
-  // ?step=sheets (old links) opens Files on its sheets.
-  const step = (sp.get("step") === "sheets" ? "files" : STEPS.find(([k]) => k === sp.get("step"))?.[0] ?? null) as Step | null;
   const sheetParam = sp.get("sheet");
   const [data, setData] = useState<PlansData | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -55,12 +55,20 @@ export function PlanRoom({ jobId }: { jobId: string }) {
   }, [jobId]);
   const reload = useCallback(async () => { await load(); }, [load]);
 
+  // A sheet opens on Takeoffs; from Files that is the other view.
   const go = useCallback((s: Step, sheet?: string | null) => {
-    const q = new URLSearchParams(sp.toString());
-    q.set("step", s);
+    if (s === "files") { router.push(`/dashboard/scope/${jobId}/files`); return; }
+    const q = new URLSearchParams(view === "takeoff" ? sp.toString() : "");
+    q.delete("step");
     if (sheet) q.set("sheet", sheet); else if (sheet === null) q.delete("sheet");
-    router.replace(`?${q.toString()}`, { scroll: false });
-  }, [router, sp]);
+    const qs = q.toString();
+    const url = `/dashboard/scope/${jobId}/plans${qs ? `?${qs}` : ""}`;
+    if (view === "takeoff") router.replace(url, { scroll: false }); else router.push(url);
+  }, [router, sp, jobId, view]);
+  useEffect(() => {
+    const st = sp.get("step");
+    if (view === "takeoff" && (st === "files" || st === "sheets")) router.replace(`/dashboard/scope/${jobId}/files${st === "sheets" ? "?step=sheets" : ""}`);
+  }, [sp, router, jobId, view]);
   // An old ?step=satellite link opens the Map's clip for this job.
   useEffect(() => { if (sp.get("step") === "satellite") router.replace(`/dashboard/map?clip=${jobId}`); }, [sp, router, jobId]);
 
@@ -150,41 +158,14 @@ export function PlanRoom({ jobId }: { jobId: string }) {
   const sheets = useMemo(() => roomSheets.filter((s) => isDrawing(s) || measured.has(s.id)), [roomSheets, measured]);
   const docPages = useMemo(() => roomSheets.filter((s) => !isDrawing(s) && !measured.has(s.id)), [roomSheets, measured]);
   const scoped = data ? { ...data, sheets } : null;
-  const current = step ?? (roomSheets.length && data?.params.length && sheets.length ? "takeoff" : "files");
-  const counts: Record<Step, string | null> = {
-    files: (data?.files.length ?? 0) ? String(data?.files.length) : null,
-    takeoff: data?.params.length ? String(data.params.length) : null,
-  };
+  const current: Step = view;
 
   return (
     <div className="flex flex-col" style={{ minHeight: "calc(100dvh - var(--sc-head))" }}>
       <div style={{ background: T.card, borderBottom: `1px solid ${T.hair}`, padding: "10px 16px 0" }}>
-        <JobHeaderRow jobId={jobId} active="plans" title={data?.job?.title || "Takeoffs"} customerId={data?.job?.customer_id}
-          subnav={(
-            <div className="flex gap-3" role="tablist" aria-label="Takeoffs">
-              {STEPS.map(([k, label]) => (
-                <button key={k} role="tab" aria-selected={current === k} onClick={() => go(k)} className="flex items-center gap-1 shrink-0"
-                  style={{ height: 24, borderBottom: `2px solid ${current === k ? T.hiviz : "transparent"}`, color: current === k ? T.ink : T.ink3, fontFamily: disp, fontSize: 11.5, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase", cursor: "pointer" }}>
-                  {label}
-                  {counts[k] && <span style={{ fontFamily: strong, fontSize: 10, background: T.sunk, borderRadius: 999, padding: "0 5px", letterSpacing: 0 }}>{counts[k]}</span>}
-                </button>
-              ))}
-            </div>
-          )} />
-        {/* The steps on the left and the Plan Room's own tools at the far right, on one row
-            under the name's row (Coy, 2026-10-05). */}
-        <div className={`${(ocr.running && ocr.jobId === jobId) || (ocrInput && ocrInput.left.scans > 0) ? "flex" : "hidden lg:flex"} items-end gap-x-4 gap-y-2 flex-wrap mt-2`}>
-          {/* On a phone these hang under the Takeoffs button instead (Coy, 2026-10-07). */}
-          <div className="hidden lg:flex gap-4 overflow-x-auto" role="tablist">
-            {STEPS.map(([k, label], i) => (
-              <button key={k} role="tab" aria-selected={current === k} onClick={() => go(k)} className="flex items-center gap-1.5 shrink-0"
-                style={{ height: 38, borderBottom: `2px solid ${current === k ? T.hiviz : "transparent"}`, color: current === k ? T.ink : T.ink3, fontFamily: disp, fontSize: 14, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase", cursor: "pointer" }}>
-                <span style={{ width: 17, height: 17, borderRadius: 999, border: `1px solid currentColor`, fontSize: 10, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>{i + 1}</span>
-                {label}
-                {counts[k] && <span style={{ fontFamily: strong, fontSize: 10.5, background: T.sunk, borderRadius: 999, padding: "0 6px", letterSpacing: 0 }}>{counts[k]}</span>}
-              </button>
-            ))}
-          </div>
+        <JobHeaderRow jobId={jobId} active={view === "files" ? "files" : "plans"} title={data?.job?.title || (view === "files" ? "Files" : "Takeoffs")} customerId={data?.job?.customer_id} />
+        {/* The reading chip on its own row under the name's row, only while there is one. */}
+        <div className={`${(ocr.running && ocr.jobId === jobId) || (ocrInput && ocrInput.left.scans > 0) ? "flex" : "hidden"} items-end gap-x-4 gap-y-2 flex-wrap mt-2`}>
           <div className="ml-auto flex items-center gap-2 flex-wrap justify-end" style={{ paddingBottom: 4 }}>
           {ocr.running && ocr.jobId === jobId ? (
             <span className="flex items-center gap-1.5" title={ocr.label} style={{ fontSize: 11.5, borderRadius: 3, padding: "3px 8px", background: T.dustyTint, color: T.ink2, fontWeight: 600 }}>
@@ -202,11 +183,11 @@ export function PlanRoom({ jobId }: { jobId: string }) {
       </div>
 
       {err && <div className="px-4 py-2" style={{ background: T.redDim, color: T.red, fontSize: F.xs }}>{err}</div>}
-      {!data && !err && <div className="p-5" style={{ fontSize: F.sm, color: T.ink3 }}>Opening Takeoffs…</div>}
+      {!data && !err && <div className="p-5" style={{ fontSize: F.sm, color: T.ink3 }}>Opening {view === "files" ? "Files" : "Takeoffs"}…</div>}
       {data && scoped && (
         <div className="flex-1 flex flex-col" style={{ minHeight: 0 }}>
           {current === "files" && <FilesStep files={data.files} sheets={sheets} docPages={docPages} reading={reading} onToggle={(f, on) => void toggle(f, on)} onDelete={(f) => void remove(f)} measured={measured}
-            onAdd={(l) => void upload(l)} uploading={uploading} onOpen={(s) => go("takeoff", s.id)} jobId={jobId} onAdded={load} initial={sp.get("step") === "sheets" || (!step && roomSheets.length) ? "sheets" : "files"} />}
+            onAdd={(l) => void upload(l)} uploading={uploading} onOpen={(s) => go("takeoff", s.id)} jobId={jobId} onAdded={load} initial={sp.get("step") === "sheets" || roomSheets.length ? "sheets" : "files"} />}
           {current === "takeoff" && (
             <TakeoffStep jobId={jobId} data={scoped} files={data.files} sheetId={sheetParam} setSheetId={(id) => go("takeoff", id)}
               reload={reload} onSend={setSending} fullscreen={fullscreen} setFullscreen={setFullscreen} />

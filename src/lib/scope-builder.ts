@@ -78,7 +78,7 @@ export function scopeProgress(f: ScopeFacts, market: Market): ScopeProgress {
 /** The job view a step opens on. */
 export function stepHref(jobId: string, step: ScopeStep): string {
   const s = SCOPE_STEPS.find((x) => x.k === step) ?? SCOPE_STEPS[0];
-  if (step === "files") return `/dashboard/scope/${jobId}/plans?step=files`;
-  if (step === "takeoffs") return `/dashboard/scope/${jobId}/plans?step=takeoff`;
+  if (step === "files") return `/dashboard/scope/${jobId}/files`;
+  if (step === "takeoffs") return `/dashboard/scope/${jobId}/plans`;
   return s.view === "budget" ? `/dashboard/scope/${jobId}` : `/dashboard/scope/${jobId}/${s.view}`;
 }

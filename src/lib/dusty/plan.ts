@@ -60,7 +60,10 @@ export type PlanAction =
   | { do: "attach_contact"; contact: string; customer: string }
   // A new person or number on a customer — the company's office line Coy gives (Coy, 2026-10-05: "use that phone
   // number instead of John's"). The customer table has no phone: a number is a contact. Only as Coy said or wrote it.
-  | { do: "new_contact"; customer: string; name: string; phone: string | null; email: string | null; label: string | null }
+  // customer null = a contact on their own, in the Contacts book (Coy, 2026-10-10: "It's a new contact and i can move
+  // it to a customer later if I want; or not") — Unsorted unless Coy said personal / vendor / customer.
+  | { do: "new_contact"; customer: string | null; name: string; phone: string | null; email: string | null; label: string | null;
+      bucket: "personal" | "vendor" | "customer" | null }
   // A name corrected — a person (the pencil by their name, Coy's) or a customer (its Edit).
   | { do: "set_name"; kind: "contact" | "customer"; id: string; name: string }
   // Files (photos attached in the chat, or any in the CONTEXT) put on a customer, a person or a job — a move.
@@ -286,8 +289,11 @@ function cleanActionBase(raw: unknown): PlanAction | null {
     case "new_contact": {
       const customer = typeof r.customer === "string" && (FULL_ID.test(r.customer.trim()) || CUST_KEY.test(r.customer.trim())) ? r.customer.trim().toLowerCase() : null;
       const name = str(r.name, 120), phone = str(r.phone, 30), email = str(r.email, 160);
-      if (!customer || !name || (!phone && !email)) return null;
-      return { do: "new_contact", customer, name, phone, email, label: str(r.label, 30) };
+      if (!name || /^[\d\s()+.-]+$/.test(name) || (!phone && !email)) return null; // a phone number is no name
+      // A customer named that isn't a full id or cust1 drops the step — never made on its own instead.
+      if (!customer && typeof r.customer === "string" && r.customer.trim() && r.customer.trim() !== "null") return null;
+      const bucket = customer ? "customer" : (["personal", "vendor", "customer"] as const).find((b) => b === r.bucket) ?? null;
+      return { do: "new_contact", customer, name, phone, email, label: str(r.label, 30), bucket };
     }
     case "set_name": {
       const kind = (["contact", "customer"] as const).find((k) => k === r.kind);
@@ -438,7 +444,7 @@ function describeBase(a: PlanAction, names: { item: (r: string) => string | null
       ? `New customer “${a.name}”${a.customer_type ? ` (${a.customer_type === "public" ? "government" : a.customer_type})` : ""}, with this person as its contact`
       : `New customer “${a.name}”${a.customer_type ? ` (${a.customer_type === "public" ? "government" : a.customer_type})` : ""}${a.person && a.person !== a.name ? ` — ${a.person}` : ""}${[a.phone, a.email].filter(Boolean).length ? `, ${[a.phone, a.email].filter(Boolean).join(", ")}` : ""}${a.address ? `, ${[a.address, a.city].filter(Boolean).join(", ")}` : ""}`;
     case "attach_contact": return `Put them on ${CUST_KEY.test(a.customer) ? "the new customer above" : "the customer"} as one of its contacts`;
-    case "new_contact": return `Add “${a.name}”${a.label ? ` (${a.label})` : ""} to ${CUST_KEY.test(a.customer) ? "the new customer above" : "the customer"} — ${[a.phone, a.email].filter(Boolean).join(", ")}`;
+    case "new_contact": return `Add “${a.name}”${a.label ? ` (${a.label})` : ""} ${!a.customer ? `to Contacts${a.bucket ? `, filed ${a.bucket}` : ""}` : `to ${CUST_KEY.test(a.customer) ? "the new customer above" : "the customer"}`} — ${[a.phone, a.email].filter(Boolean).join(", ")}`;
     case "set_name": return `Name ${a.kind === "customer" ? "the customer" : "them"} “${a.name}”`;
     case "file": {
       const n = a.files.length;
@@ -522,7 +528,7 @@ Make a new customer only when Coy asks for one. When its person is already in th
 [{"do":"new_customer","key":"cust1","name":"Icon Technologies","customer_type":"commercial","contact":"<full contact id>"},
  {"do":"set_name","kind":"contact","id":"<full contact id>","name":"John Freeling"}]
 \`\`\`
-People and customers. A customer is the household or business that pays; its contacts are the people who speak for it. To put a person on a customer that already exists (in the CONTEXT as "customer <full id>"), or one this plan makes: {"do":"attach_contact","contact":"<full contact id>","customer":"<full customer id or cust1>"}. A customer has no phone of its own: a company's office number or email is a contact on it — {"do":"new_contact","customer":"<full customer id or cust1>","name":"Icon Technologies office","phone":"…","email":null,"label":"Office"} — only a number or email Coy gave or that is written in the CONTEXT. Never look up or guess a customer's or a person's number — ask Coy for it (searching the web is only for finding vendors, below). To correct a name: {"do":"set_name","kind":"contact|customer","id":"<full id>","name":"…"} — a person's name is the person ("John Freeling"), never "John w/ Icon"; the company goes on the customer. When Coy says how something should be ("the customer is Icon Technologies, John is a contact in it"), that IS the instruction: use his spelling and his words, and propose the plan in the same answer — don't ask him to confirm what he just said, and don't offer alternatives he didn't ask for. Ask only when the plan can't be made without the answer (two people could match). Its name is the person's or company's name as Coy said it or as written; phone, email and address only as said or written — leave out what you don't have. "contact":"cust1" starts the job for the person of the customer this plan makes. "file" moves the files: they leave the job or person they were on. Use only file ids written in the CONTEXT.`;
+People and customers. A customer is the household or business that pays; its contacts are the people who speak for it. To put a person on a customer that already exists (in the CONTEXT as "customer <full id>"), or one this plan makes: {"do":"attach_contact","contact":"<full contact id>","customer":"<full customer id or cust1>"}. A contact does NOT need a customer: when Coy asks for a new contact, make it on its own — {"do":"new_contact","customer":null,"name":"Elena Sacco","phone":"337-718-2494","email":null,"label":null,"bucket":null} — it goes in the Contacts book (Unsorted; "bucket" personal, vendor or customer only when Coy says which) and he can put them on a customer later or never. Don't ask which customer, and never offer to make a customer just to hold a person. A customer has no phone of its own: a company's office number or email is a contact on it — {"do":"new_contact","customer":"<full customer id or cust1>","name":"Icon Technologies office","phone":"…","email":null,"label":"Office"} — only a number or email Coy gave or that is written in the CONTEXT. Never look up or guess a customer's or a person's number — ask Coy for it (searching the web is only for finding vendors, below). To correct a name: {"do":"set_name","kind":"contact|customer","id":"<full id>","name":"…"} — a person's name is the person ("John Freeling"), never "John w/ Icon"; the company goes on the customer. When Coy says how something should be ("the customer is Icon Technologies, John is a contact in it"), that IS the instruction: use his spelling and his words, and propose the plan in the same answer — don't ask him to confirm what he just said, and don't offer alternatives he didn't ask for. Ask only when the plan can't be made without the answer (two people could match). Its name is the person's or company's name as Coy said it or as written; phone, email and address only as said or written — leave out what you don't have. "contact":"cust1" starts the job for the person of the customer this plan makes. "file" moves the files: they leave the job or person they were on. Use only file ids written in the CONTEXT.`;
 
 /** The instructions Dusty is given about plans — appended to his system prompt. */
 export const PLAN_RULES = `Budget plans. When Coy asks you to build, fill or fix a job's budget, or to add, change, remove or organise items, groups or assemblies in his Price book, answer in words first, then end with ONE fenced block in this exact form, which the app shows to Coy as steps with an Apply button (you change nothing yourself — Coy's tap does):

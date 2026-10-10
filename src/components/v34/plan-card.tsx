@@ -30,7 +30,7 @@ export function PlanCard({ jobId, actions, dropped, done }: { jobId: string | nu
   }, [jobId, done, budgetSteps.length]);
   const recKey = recordSteps.map((a) => (a.do === "archive" || a.do === "restore" ? `${a.kind}:${a.ids.join(",")}` : a.do === "set_address" ? `${a.kind}:${a.id}` : a.do === "new_job" ? (CUST_KEY.test(a.contact) ? "" : `contact:${a.contact}`) : a.do === "text" ? `contact:${a.contact}` : a.do === "send_proposal" ? [`job:${a.job}`, a.contact ? `contact:${a.contact}` : ""].filter(Boolean).join("|")
     : a.do === "set_name" ? `${a.kind}:${a.id}` : a.do === "new_customer" ? (a.contact ? `contact:${a.contact}` : "")
-    : a.do === "new_contact" ? (CUST_KEY.test(a.customer) ? "" : `customer:${a.customer}`)
+    : a.do === "new_contact" ? (!a.customer || CUST_KEY.test(a.customer) ? "" : `customer:${a.customer}`)
     : a.do === "attach_contact" ? [`contact:${a.contact}`, CUST_KEY.test(a.customer) ? "" : `customer:${a.customer}`].filter(Boolean).join("|")
     : a.do === "file" ? [`file:${a.files.join(",")}`, /^(cust|job)\d/.test(a.id) ? "" : `${a.kind}:${a.id}`].filter(Boolean).join("|")
     : a.do === "file_email" ? [`email:${a.email}`, /^(cust|job)\d/.test(a.id) ? "" : `${a.kind}:${a.id}`].filter(Boolean).join("|") : ""))

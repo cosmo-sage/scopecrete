@@ -516,8 +516,11 @@ function Drawing({ sheet, fileUrl, zoom, setZoom, tool, data, groupId, selId, se
   onTrace: (p: Pt) => void;
 }) {
   // The corner being dragged on the selected shape, and the shape's points while it moves.
-  const [edit, setEdit] = useState<{ id: string; pts: Pt[]; i: number; moved: boolean } | null>(null);
+  const [edit, setEdit] = useState<{ id: string; pts: Pt[]; i: number; moved: boolean; start: Pt } | null>(null);
   const box = useRef<HTMLDivElement | null>(null);
+  // The last press on a corner: a second press on it soon after removes it. The svg holds the
+  // pointer while a corner is dragged, so the browser's dblclick lands on the svg, not the corner.
+  const [lastCorner, setLastCorner] = useState<{ id: string; i: number; at: number } | null>(null);
   const canvas = useRef<HTMLCanvasElement | null>(null);
   const [fitW, setFitW] = useState(0);
   const [err, setErr] = useState<string | null>(null);
@@ -558,6 +561,18 @@ function Drawing({ sheet, fileUrl, zoom, setZoom, tool, data, groupId, selId, se
   const px = scale || 1; // CSS px per point
   const near = (a: Pt, b: Pt) => dist(a, b) * px < 10;
 
+  // A second press on the same corner within 450 ms removes it (keeping the shape's minimum).
+  const secondPress = (e: React.PointerEvent, id: string, i: number, pts: Pt[], min: number) => {
+    const last = lastCorner;
+    if (last && last.id === id && last.i === i && e.timeStamp - last.at < 450) {
+      e.stopPropagation();
+      setLastCorner(null);
+      if (pts.length > min) { setEdit(null); void saveShape(id, pts.filter((_, j) => j !== i)); }
+      return true;
+    }
+    setLastCorner({ id, i, at: e.timeStamp });
+    return false;
+  };
   const endEdit = () => {
     if (!edit) return;
     const done = edit;
@@ -610,7 +625,7 @@ function Drawing({ sheet, fileUrl, zoom, setZoom, tool, data, groupId, selId, se
             style={{ position: "absolute", inset: 0, cursor: tool === "select" ? "default" : "crosshair", touchAction: draft.length ? "none" : "pan-x pan-y" }}
             onPointerUp={click} onDoubleClick={dbl}
             onPointerMove={(e) => {
-              if (edit) { const p = toPage(e); setEdit({ ...edit, moved: true, pts: edit.pts.map((q, i) => (i === edit.i ? p : q)) }); return; }
+              if (edit) { const p = toPage(e); setEdit({ ...edit, moved: edit.moved || dist(p, edit.start) * px > 3, pts: edit.pts.map((q, i) => (i === edit.i ? p : q)) }); return; }
               if (tool !== "select" && tool !== "fill") setHover(toPage(e));
             }} onPointerLeave={() => setHover(null)} onPointerCancel={() => setEdit(null)}>
             {mine.map((m0) => {
@@ -643,7 +658,7 @@ function Drawing({ sheet, fileUrl, zoom, setZoom, tool, data, groupId, selId, se
               const grab = (i: number, list: Pt[]) => (e: React.PointerEvent) => {
                 e.stopPropagation();
                 (e.currentTarget as SVGGraphicsElement).ownerSVGElement?.setPointerCapture?.(e.pointerId);
-                setEdit({ id: selM.id, pts: list, i, moved: list.length !== pts.length });
+                setEdit({ id: selM.id, pts: list, i, moved: list.length !== pts.length, start: list[i] });
               };
               const mids = selGroup.kind === "count" ? [] : pts.slice(0, closed ? pts.length : pts.length - 1).map((a, i) => {
                 const b = pts[(i + 1) % pts.length];
@@ -657,8 +672,8 @@ function Drawing({ sheet, fileUrl, zoom, setZoom, tool, data, groupId, selId, se
                   ))}
                   {pts.map((pt, i) => (
                     <circle key={`v${i}`} cx={pt[0]} cy={pt[1]} r={r * 1.1} fill="#fff" stroke={shapeColor(selM, selGroup)} strokeWidth={sw}
-                      style={{ cursor: "move", touchAction: "none" }} onPointerDown={grab(i, pts)}
-                      onDoubleClick={(e) => { e.stopPropagation(); if (pts.length > min) { setEdit(null); void saveShape(selM.id, pts.filter((_, j) => j !== i)); } }}>
+                      style={{ cursor: "move", touchAction: "none" }}
+                      onPointerDown={(e) => { if (!secondPress(e, selM.id, i, pts, min)) grab(i, pts)(e); }}>
                       <title>Drag to move · double-click to remove</title>
                     </circle>
                   ))}

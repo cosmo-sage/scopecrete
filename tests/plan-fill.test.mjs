@@ -1,7 +1,7 @@
 // Click-to-fill: an area's outline traced off the drawing — `npm test`.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { traceFill, outline, simplify, dilate, flood } from "../src/lib/plan-fill.ts";
+import { traceFill, outline, simplify, dilate, flood, dropSpecks } from "../src/lib/plan-fill.ts";
 
 // A white sheet with black strokes drawn on it.
 function sheet(w, h) {
@@ -104,4 +104,31 @@ test("dilate grows by r; flood stops at ink and notices the edge", () => {
   const f = flood(new Uint8Array(81), 9, 9, 4, 4);
   assert.equal(f.edge, true);
   assert.equal(f.count, 81);
+});
+
+test("a stippled sidewalk follows its edge, not the dots (Coy, 2026-10-10)", () => {
+  const s = sheet(400, 120);
+  s.rect(20, 40, 380, 80, 2);
+  let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  for (let k = 0; k < 250; k++) { const x = 21 + Math.floor(rnd() * 358), y = 41 + Math.floor(rnd() * 39); s.line(x, y, x, y, 2); }
+  // Dots right against the edge lines, as on Coy's C1.0.
+  for (let x = 30; x < 370; x += 23) { s.line(x, 42, x, 42, 2); s.line(x + 9, 77, x + 9, 77, 2); }
+  const before = traceFill(s.d, s.w, s.h, 200, 60, { gap: 2, thin: 0, tol: 1.2 });
+  assert.ok(!before.ok || before.pts.length > 6, "the old trace jogs round the dots");
+  const f = traceFill(s.d, s.w, s.h, 200, 60, { gap: 2, thin: 0, tol: 2.1, speck: 5, smooth: 3 });
+  assert.equal(f.ok, true);
+  assert.ok(f.pts.length <= 5, JSON.stringify(f.pts));
+  const [x0, y0, x1, y1] = bbox(f.pts);
+  assert.ok(Math.abs(x0 - 21) <= 2 && Math.abs(y0 - 41) <= 2 && Math.abs(x1 - 381) <= 2 && Math.abs(y1 - 81) <= 2, JSON.stringify(f.pts));
+});
+
+test("dropSpecks keeps lines and dashes, drops dots", () => {
+  const w = 30, h = 10, m = new Uint8Array(w * h);
+  for (let x = 0; x < 20; x++) m[2 * w + x] = 1;      // a line
+  m[6 * w + 3] = m[6 * w + 4] = m[7 * w + 3] = 1;      // a dot
+  for (let x = 10; x < 18; x++) m[6 * w + x] = 1;     // a dash of 8
+  const out = dropSpecks(m, w, h, 4);
+  assert.equal(out[2 * w + 5], 1);
+  assert.equal(out[6 * w + 3], 0);
+  assert.equal(out[6 * w + 12], 1);
 });

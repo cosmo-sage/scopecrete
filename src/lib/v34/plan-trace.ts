@@ -45,7 +45,10 @@ export async function traceAt(doc: Doc, page: number, pageW: number, pageH: numb
       const sx = Math.min(c.width - 1, Math.max(0, Math.round((at[0] - x) * t.scale)));
       const sy = Math.min(c.height - 1, Math.max(0, Math.round((at[1] - y) * t.scale)));
       const f = traceFill(img.data, c.width, c.height, sx, sy, {
-        gap: Math.round(o.gapPt * t.scale), thin: 0, tol: 1.2,
+        gap: Math.round(o.gapPt * t.scale), thin: 0,
+        // Hatch dots up to ~1.7 pt are paper; notches under ~2 pt along the edge are filled; a
+        // jog under ~0.7 pt off the straight line is dropped.
+        tol: Math.max(1.2, 0.7 * t.scale), speck: Math.max(2, Math.round(1.7 * t.scale)), smooth: Math.max(1, Math.round(t.scale)),
       });
       if (f.ok) return { ok: true, pts: f.pts.map(([px, py]) => [x + px / t.scale, y + py / t.scale] as Pt) };
       last = f.reason;

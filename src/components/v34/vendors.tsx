@@ -74,15 +74,29 @@ export function VendorList() {
   const [sel, setSel] = useState<string[]>([]);
   const [composing, setComposing] = useState(false);
   const [adding, setAdding] = useState(false);
-  const [receipt, setReceipt] = useState(false);
+  // The receipt sheet, open on a kind: Dusty's Receipt · Quote · Bill (a vendor's bill is an invoice; Coy, 2026-10-10).
+  const [receipt, setReceiptKind] = useState<false | "receipt" | "quote" | "invoice">(false);
+  const setReceipt = (on: boolean | "receipt" | "quote" | "invoice") => setReceiptKind(on === true ? "receipt" : on);
   const [tick, setTick] = useState(0);
   const [measure, wide] = useWide<HTMLDivElement>(900);
   // ?receipt=1 — Dusty's + menu → Add a receipt.
   useEffect(() => {
     let off = false;
-    Promise.resolve().then(() => { if (!off && new URLSearchParams(window.location.search).get("receipt") === "1") setReceipt(true); });
+    const kindOf = (w: string | null) => w === "1" || w === "receipt" ? "receipt" : w === "quote" ? "quote" : w === "bill" ? "invoice" : null;
+    Promise.resolve().then(() => {
+      if (off) return;
+      const qs = new URLSearchParams(window.location.search);
+      const k = kindOf(qs.get("receipt"));
+      if (k) setReceiptKind(k);
+      if (qs.get("new") === "1") setAdding(true);
+    });
     // Already on this page: the menu says so with an event.
-    const on = (e: Event) => { if ((e as CustomEvent<string>).detail === "receipt") setReceipt(true); };
+    const on = (e: Event) => {
+      const d = (e as CustomEvent<string>).detail;
+      if (d === "vendor") { setAdding(true); return; }
+      const k = kindOf(d);
+      if (k) setReceiptKind(k);
+    };
     window.addEventListener("sc:create", on);
     return () => { off = true; window.removeEventListener("sc:create", on); };
   }, []);
@@ -288,7 +302,7 @@ export function VendorList() {
         from={`Started from Vendors · ${picked.length} vendor${picked.length === 1 ? "" : "s"}${trade !== "All" ? ` in ${trade.toLowerCase()}` : ""}`}
         onDone={(m) => { setNote(m); setSel([]); setTick((n) => n + 1); }} />}
       {adding && <NewVendor onClose={() => setAdding(false)} onMade={(id) => { setAdding(false); window.location.href = `/dashboard/vendors/${id}`; }} />}
-      <ReceiptImport open={receipt} onClose={() => setReceipt(false)} onDone={(m) => { setNote(m); setTick((n) => n + 1); }} />
+      <ReceiptImport key={receipt || "closed"} open={!!receipt} kind={receipt || undefined} onClose={() => setReceipt(false)} onDone={(m) => { setNote(m); setTick((n) => n + 1); }} />
     </div>
     </>
   );

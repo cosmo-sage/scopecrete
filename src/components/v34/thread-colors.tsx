@@ -43,7 +43,7 @@ export function ThreadColorsPanel({ open, onClose, threads }: {
   // It only opens on a tap, so the server never draws it.
   if (!open || typeof document === "undefined") return null;
   return createPortal(
-    <Drawer open={open} onClose={onClose} title="Thread colours" sub="Colours each thread and its people's boxes." left>
+    <Drawer open={open} onClose={onClose} title="Thread colors" sub="Colors each thread and its people's boxes." left>
       <div className="px-4 py-3 flex flex-col gap-4">
         {threads.map((t) => {
           const mine = colors[t.key.toLowerCase()];

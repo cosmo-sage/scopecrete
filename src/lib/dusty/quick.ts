@@ -11,10 +11,12 @@ export interface Quick {
   /** "›" — put in the box for Coy to finish, not sent. */
   more?: string;
   /** Opens a form instead of asking (the + menu's own). */
-  create?: "contact" | "job";
+  create?: "contact" | "job" | "customer" | "vendor" | "receipt" | "quote" | "bill";
 }
 
-/** The quick selects for a page: a job's views, the Dashboard, a thread or customer, Contacts. None elsewhere. */
+/** The quick selects for a page: a job's views, the Dashboard, a thread or customer, and each main
+ *  page's own (Coy, 2026-10-10: "Dusty will have different prompt buttons depending on what menu
+ *  page it's opened inside of"). */
 export function quickFor(pathname: string): Quick[] {
   const p = pathname.replace(/[?#].*$/, "").replace(/\/+$/, "");
   if (/^\/dashboard\/scope\/[^/]+/.test(p)) return [
@@ -32,7 +34,47 @@ export function quickFor(pathname: string): Quick[] {
     { label: "Price a new job", more: "Price a new job: " },
     { label: "Who hasn't heard back", ask: "Who hasn't heard back from me — customers waiting on an answer or a price?" },
   ];
-  if (/^\/dashboard\/(messages|customers)\/[^/]+/.test(p)) return [
+  if (/^\/dashboard\/messages\/[^/]+/.test(p)) return [
+    { label: "New text", more: "Write a text to them that " },
+    { label: "New email", more: "Write an email to them that " },
+    { label: "Summarize this thread", ask: "Summarize this thread — where it stands and the next steps." },
+    { label: "Make a job from this", ask: "Make a job from this conversation." },
+  ];
+  if (p === "/dashboard/messages") return [
+    { label: "Who needs a reply", ask: "Who is waiting on a reply from me — texts, calls and emails I haven't answered?" },
+    { label: "New text", more: "Write a text to " },
+    { label: "New email", more: "Write an email to " },
+  ];
+  if (p === "/dashboard/scope-builder") return [
+    { label: "New scope", create: "job" },
+    { label: "What's next", ask: "Which scopes need me next, and what does each one wait on?" },
+  ];
+  if (p === "/dashboard/scope") return [
+    { label: "New job", create: "job" },
+    { label: "What needs moving", ask: "Which jobs have sat in their stage too long, and what's the next step on each?" },
+  ];
+  if (p === "/dashboard/map") return [
+    { label: "Where leads come from", ask: "Which cities and parishes have my latest leads come from?" },
+  ];
+  if (p === "/dashboard/customers") return [
+    { label: "New customer", create: "customer" },
+    { label: "Who to follow up", ask: "Which customers should I follow up with this week?" },
+  ];
+  if (p === "/dashboard/vendors") return [
+    { label: "Vendor", create: "vendor" },
+    { label: "Receipt", create: "receipt" },
+    { label: "Quote", create: "quote" },
+    { label: "Bill", create: "bill" },
+  ];
+  if (p === "/dashboard/price-book") return [
+    { label: "New group", more: "Make a Price book group called " },
+    { label: "New card", more: "Add a Price book item: " },
+    { label: "Build an assembly", more: "Build an assembly for " },
+  ];
+  if (p === "/dashboard/roadmap") return [
+    { label: "Funny take on feedback", ask: "Give me a funny observation about the feedback on the Roadmap." },
+  ];
+  if (/^\/dashboard\/customers\/[^/]+/.test(p)) return [
     { label: "Summarize this thread", ask: "Summarize this thread — where it stands and the next steps." },
     { label: "Draft a reply", more: "Draft a reply that " },
     { label: "Make a job from this", ask: "Make a job from this conversation." },

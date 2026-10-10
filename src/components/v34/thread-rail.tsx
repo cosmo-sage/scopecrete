@@ -104,11 +104,11 @@ function ThreadCells({ onPick, wide }: { onPick?: () => void; wide?: boolean }) 
         <span style={{ fontFamily: disp, fontSize: wide ? F.sm : 9.5, letterSpacing: ".06em", textTransform: "uppercase" }}>{wide ? "New thread" : "New"}</span>
       </button>
       {/* Colours (Coy, 2026-10-10: "a settings icon that opens a side panel … change the color of any thread"). */}
-      <button onClick={() => setPainting(true)} aria-label="Thread colours" title="Thread colours"
+      <button onClick={() => setPainting(true)} aria-label="Thread colors" title="Thread colors"
         className={wide ? "flex items-center gap-2.5 px-3 text-left" : "flex flex-col items-center justify-center gap-0.5 shrink-0"}
         style={{ ...cell(false, T.ink2), height: wide ? 44 : 52, marginTop: wide ? 0 : "auto" }}>
         <Icon color={T.ink2}><circle cx="10" cy="10" r="2.6" /><path d="M10 2.5v2M10 15.5v2M2.5 10h2M15.5 10h2M4.7 4.7l1.4 1.4M13.9 13.9l1.4 1.4M4.7 15.3l1.4-1.4M13.9 6.1l1.4-1.4" /></Icon>
-        <span style={{ fontFamily: disp, fontSize: wide ? F.sm : 9.5, letterSpacing: ".06em", textTransform: "uppercase" }}>{wide ? "Thread colours" : "Colours"}</span>
+        <span style={{ fontFamily: disp, fontSize: wide ? F.sm : 9.5, letterSpacing: ".06em", textTransform: "uppercase" }}>{wide ? "Thread colors" : "Colors"}</span>
       </button>
       <ThreadColorsPanel open={painting} onClose={() => setPainting(false)}
         threads={[

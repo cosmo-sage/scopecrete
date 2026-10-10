@@ -356,9 +356,10 @@ export function DustyPanel({ open, onClose, onBusy, onStream, onState }: {
     } catch (e) { setErr(`Voice message: ${e instanceof Error ? e.message : String(e)}`); }
     finally { setHearing(false); }
   }
-  function create(what: "contact" | "customer" | "job" | "receipt") {
+  function create(what: "contact" | "customer" | "job" | "receipt" | "vendor" | "quote" | "bill") {
     setPlusOpen(false);
-    const href = what === "contact" ? "/dashboard/contacts?new=1" : what === "customer" ? "/dashboard/customers?new=1" : what === "job" ? "/dashboard/scope?new=1" : "/dashboard/vendors?receipt=1";
+    const href = what === "contact" ? "/dashboard/contacts?new=1" : what === "customer" ? "/dashboard/customers?new=1" : what === "job" ? "/dashboard/scope?new=1"
+      : what === "vendor" ? "/dashboard/vendors?new=1" : `/dashboard/vendors?receipt=${what === "receipt" ? 1 : what}`;
     // On a phone Dusty covers the page, so he steps aside for the form.
     if (!window.matchMedia("(min-width: 1024px)").matches) onClose();
     router.push(href);
@@ -448,8 +449,15 @@ export function DustyPanel({ open, onClose, onBusy, onStream, onState }: {
     <section role="dialog" aria-label="Dusty"
       className="fixed left-0 right-0 bottom-0 z-50 flex lg:left-auto lg:w-[var(--sc-dusty)] sc-dock-in sc-dusty-sheet"
       style={{ top: "var(--sc-head)", background: T.slab, color: T.ink, borderLeft: `1px solid ${T.hair}`, boxShadow: "-10px 0 30px rgba(10,14,18,.10)" }}>
-      {/* history: from the left, over the chat */}
-      {railOpen && (
+      {/* history: on a desktop it opens out to the LEFT of his column, over the
+          page, the chat staying in view (Coy, 2026-10-10); on a phone from the
+          left, over the chat. */}
+      {railOpen && desktop && (
+        <div className="absolute top-0 bottom-0 sc-rail-in" style={{ right: "100%", width: 320, boxShadow: "-14px 0 40px rgba(10,14,18,.18)", borderRight: `1px solid ${T.hair}`, zIndex: 60 }}>
+          {rail}
+        </div>
+      )}
+      {railOpen && !desktop && (
         <div className="absolute inset-0 z-[60]" style={{ background: "rgba(18,22,26,.4)" }}
           onClick={() => setRailOpen(false)}>
           <div className="absolute top-0 left-0 bottom-0 sc-rail-in" style={{ width: "min(320px, 86vw)", boxShadow: "14px 0 40px rgba(10,14,18,.22)" }}
@@ -459,7 +467,7 @@ export function DustyPanel({ open, onClose, onBusy, onStream, onState }: {
 
       <div className="flex-1 min-w-0 flex flex-col">
         <header className="shrink-0 px-2.5 py-2 flex items-center gap-2" style={{ borderBottom: `1px solid ${T.hair}`, background: T.card }}>
-          <button onClick={() => setRailOpen(true)} aria-label="Conversations" className="flex-col gap-[3.5px]" style={iconBtn}>
+          <button onClick={() => setRailOpen((o) => !o)} aria-label="Conversations" aria-expanded={railOpen} className="flex-col gap-[3.5px]" style={iconBtn}>
             {[0, 1, 2].map((i) => <span key={i} style={{ width: 13, height: 1.5, background: T.ink2, borderRadius: 1 }} />)}
           </button>
           {/* "DUSTY" alone (Emblem States, 2026-10-10): what the chat is about is the pill in the box,

@@ -151,9 +151,9 @@ export default function LinesScreen() {
                     <Link href={`/dashboard/more/logs?line=${l.id}`} className="no-underline" style={link}>Logs ›</Link>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <span style={{ ...eyebrow, fontSize: 9.5, color: T.ink3 }}>Colour</span>
+                    <span style={{ ...eyebrow, fontSize: 9.5, color: T.ink3 }}>Color</span>
                     {LINE_COLORS.map((c) => (
-                      <button key={c} aria-label={`Colour ${c}`} onClick={() => void save(l.id, { color_token: c })}
+                      <button key={c} aria-label={`Color ${c}`} onClick={() => void save(l.id, { color_token: c })}
                         style={{ width: 16, height: 16, borderRadius: 8, background: colorVar(c), border: l.color === c ? `2px solid ${T.ink}` : `1px solid ${T.hair}`, cursor: "pointer" }} />
                     ))}
                     <span className="flex-1" />

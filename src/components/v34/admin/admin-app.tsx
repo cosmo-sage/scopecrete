@@ -277,7 +277,7 @@ export function AdminApp() {
   return (
     <OrgNameContext.Provider value="ScopeCrete">
       <div className="adm" ref={measure}>
-        <PageHeader title={meta.label} sub={meta.q || undefined}
+        <PageHeader dusty={false} title={meta.label} sub={meta.q || undefined}
           menu={wide ? undefined : <MenuButton onClick={() => setMenu(true)} label="Admin screens" />}
           actions={wide ? controls : undefined}>
           {!wide && (showPicker || showRange) && <div style={{ marginTop: 8 }}>{controls}</div>}

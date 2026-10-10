@@ -98,8 +98,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [dustyOpen, setDustyOpen] = useState(false);
   useEffect(() => {
     const open = () => setDustyOpen(true);
+    // The emblem on a page's header toggles him (Coy, 2026-10-10).
+    const toggle = () => setDustyOpen((o) => !o);
     window.addEventListener("sc:dusty-open", open);
-    return () => window.removeEventListener("sc:dusty-open", open);
+    window.addEventListener("sc:dusty-toggle", toggle);
+    return () => { window.removeEventListener("sc:dusty-open", open); window.removeEventListener("sc:dusty-toggle", toggle); };
   }, []);
   // A vendor's "App access" (081) opens Settings → People with them picked.
   useEffect(() => {
@@ -275,13 +278,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 header on the right, so his button lives here, where the
                 pipeline button was (the Dashboard carries the pipeline now).
                 On a phone he rises from the centre of the footer. */}
-            {desktop && !limited && (
-              <button onClick={() => { closeDrops(); setDustyOpen((o) => !o); }} aria-label="Dusty" aria-pressed={dustyOpen}
-                className="flex items-center justify-center sc-paper-btn"
-                style={{ ...glassBtn, background: dustyOpen ? "var(--sc-hiviz-dim)" : undefined, borderColor: dustyOpen ? "var(--sc-hiviz-soft)" : undefined }}>
-                <DustyAvatar state={dustyNow} size={24} hidden />
-              </button>
-            )}
+            {/* Since 2026-10-10 (Coy) he is on each page's own header instead
+                (PageHeader's emblem); the desktop header has no Dusty button. */}
 
             {/* The header's + is gone (Coy, 2026-10-01): its menu opened under
                 Dusty. New customer / job / receipt live in Dusty's own + menu. */}
@@ -330,7 +328,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {!limited && (
           // Coy, 2026-10-10: a settings button on the rail to reorder the menu — opens Settings → Menus.
           <button type="button" onClick={() => { setRailTip(null); setMenuOpen(true); setMenusOpen(true); }}
-            aria-label="Menu settings: order and icon colours"
+            aria-label="Menu settings: order and icon colors"
             onMouseEnter={railIcons ? (e) => { const r = e.currentTarget.getBoundingClientRect(); setRailTip({ label: "Menu settings", top: r.top + r.height / 2 }); } : undefined}
             onMouseLeave={railIcons ? () => setRailTip(null) : undefined}
             className="sc-rail-fold sc-rail-set">

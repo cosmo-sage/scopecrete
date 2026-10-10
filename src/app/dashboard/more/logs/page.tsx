@@ -18,6 +18,7 @@ import { T, F, eyebrow, nums, relTime } from "@/lib/v34/tokens";
 import { EmptyState, PageHeader, Segmented } from "@/components/v34/primitives";
 import { LineEvents } from "@/components/v34/line-events";
 import { PriceBookLog } from "@/components/v34/price-book-log";
+import { DustyLog } from "@/components/v34/activity-line";
 
 interface Logs {
   checks: Array<{ at: string; severity: "alarm" | "note"; title: string; detail: string }>;
@@ -30,28 +31,38 @@ const OUTCOME: Record<string, string> = {
   no_words: "Nothing to read", model_error: "Couldn't read", failed: "Failed", abandoned: "Timed out", running: "Reading…", skipped: "Skipped",
 };
 
-/** Events (calls, texts, Dusty's reads, merges) · Price book (imports and
- *  price changes, Coy 2026-10-07), kept in the address as ?tab=pricebook. */
-type Tab = "events" | "pricebook";
+/** Events (calls, texts, Dusty's reads, merges) · Dusty (his thoughts and
+ *  background reads — the header line's history, Coy 2026-10-10) · Price book
+ *  (imports and price changes, Coy 2026-10-07), kept in the address as ?tab=. */
+type Tab = "events" | "dusty" | "pricebook";
 
 export default function LogsScreen() {
   const [tab, setTabState] = useState<Tab>("events");
-  useEffect(() => { if (new URLSearchParams(window.location.search).get("tab") === "pricebook") void Promise.resolve().then(() => setTabState("pricebook")); }, []);
+  useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get("tab");
+    if (t === "pricebook" || t === "dusty") void Promise.resolve().then(() => setTabState(t));
+  }, []);
   const setTab = (t: Tab) => {
     setTabState(t);
     const u = new URL(window.location.href);
-    if (t === "pricebook") u.searchParams.set("tab", t); else u.searchParams.delete("tab");
+    if (t !== "events") u.searchParams.set("tab", t); else u.searchParams.delete("tab");
     window.history.replaceState(null, "", u.pathname + u.search);
   };
   const tabs = (
-    <div className="mt-2" style={{ width: 240 }}>
-      <Segmented small options={[["events", "Events"], ["pricebook", "Price book"]]} value={tab} onChange={(v) => setTab(v as Tab)} />
+    <div className="mt-2" style={{ width: 300 }}>
+      <Segmented small options={[["events", "Events"], ["dusty", "Dusty"], ["pricebook", "Price book"]]} value={tab} onChange={(v) => setTab(v as Tab)} />
     </div>
   );
   if (tab === "pricebook") return (
     <div>
       <PageHeader title="Logs" sub="What happened behind the scenes. The Price book tab lists every import (with Undo) and every price change.">{tabs}</PageHeader>
       <PriceBookLog />
+    </div>
+  );
+  if (tab === "dusty") return (
+    <div>
+      <PageHeader title="Logs">{tabs}</PageHeader>
+      <DustyLog />
     </div>
   );
   return <EventLogs tabs={tabs} />;

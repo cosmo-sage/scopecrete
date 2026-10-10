@@ -32,13 +32,17 @@
  *   green blink), the reader broken (steady red); still when idle.
  * - Nothing in the last day: says when something last happened. Never invents
  *   something happening now.
+ * - Since 2026-10-10 (Coy): background work only — calls read, transcripts,
+ *   summaries, dreams, his thoughts; never the chat's own reply. No dots in
+ *   front; the words in a softer green, in the ".ai"'s Manrope, small and low.
+ *   A tap opens Logs → Dusty, where the history lives (`DustyLog`), not a
+ *   drop-down.
  */
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { T, F, eyebrow, agent, clip, nums, relTime } from "@/lib/v34/tokens";
-import { useDustyLive } from "@/lib/v34/dusty-live";
 import { usePlanOcr } from "@/lib/v34/plan-ocr-runner";
 
 type Tone = "live" | "good" | "ask" | "warn" | "quiet";
@@ -94,32 +98,8 @@ function ago(iso: string | null | undefined): string {
   return /^\d+[mhd]$/.test(r) ? `${r} ago` : `on ${r}`;
 }
 
-/**
- * The line's mark (Coy, 2026-10-05: "This little emblem needs to be removed. I
- * want to replace it with 6 little square dots 3 different colors blinking in
- * this order: green, orange, blue … at the same level of the header as the
- * '.ai' in the logo"). Six squares — green, orange, blue, twice — lit one after
- * another; quicker while Dusty reads or answers, steady red when the reader is
- * broken. They sit low in the row, level with the wordmark's ".ai". (It replaced
- * the diamond of 2026-10-02.)
- */
-/** How far above the button's foot the words sit — the dots' level. */
-const TEXT_DROP = 5;
-
-function Dots({ work }: { work: Work }) {
-  const COLOURS = ["#2F8A5B", "#E0590F", "#3F74C9"];
-  const cycle = work === "reply" ? 0.6 : work === "read" ? 1.2 : 2.4;
-  return (
-    <span aria-hidden="true" className={`sc-dots sc-dots-${work ?? "idle"}`}
-      style={{ flex: "0 0 auto", alignSelf: "stretch", display: "flex", alignItems: "flex-end", gap: 2, paddingBottom: 6 }}>
-      {Array.from({ length: 6 }, (_, i) => (
-        <span key={i} style={{ width: 3.5, height: 3.5, borderRadius: 0.5, display: "block",
-          background: work === "warn" ? "var(--sc-work-dot-warn, #B5412C)" : COLOURS[i % 3],
-          animationDuration: `${cycle}s`, animationDelay: `${(cycle / 6) * i}s` }} />
-      ))}
-    </span>
-  );
-}
+/** How far above the button's foot the words sit — low, under the ".ai" (Coy, 2026-10-10). */
+const TEXT_DROP = 3;
 
 function Dot({ tone, live, work }: { tone: Tone; live: boolean; work?: Work }) {
   const cls = work ? `sc-dot-${work}` : live ? "sc-dot-live" : undefined;
@@ -129,8 +109,9 @@ function Dot({ tone, live, work }: { tone: Tone; live: boolean; work?: Work }) {
   );
 }
 
-export function ActivityLine({ busy, onWorking, onReader, inline }: {
-  busy: boolean;
+export function ActivityLine({ onWorking, onReader, inline }: {
+  /** Dusty's chat is answering — no longer shown here (background work only). */
+  busy?: boolean;
   /** Desktop: sit in the header row beside the logo (no row of its own). */
   inline?: boolean;
   /** True while the background reader has a read running — the header emblem spins for it. */
@@ -138,7 +119,6 @@ export function ActivityLine({ busy, onWorking, onReader, inline }: {
   /** The reader's state for Dusty's emblem in the footer and header: reading, broken, or at rest. */
   onReader?: (s: "reading" | "warn" | "idle") => void;
 }) {
-  const live = useDustyLive();
   // Reading scanned plans in this tab (migration 064): where it is, sheet by sheet.
   const ocr = usePlanOcr();
   const [data, setData] = useState<Activity | null>(null);
@@ -148,19 +128,10 @@ export function ActivityLine({ busy, onWorking, onReader, inline }: {
   // looked, then Dusty's unseen musings. Each leaves the queue once shown.
   const [queue, setQueue] = useState<Item[]>([]);
   const [idx, setIdx] = useState(0);
-  const [open, setOpen] = useState(false);
   const [hover, setHover] = useState(false);
   const router = useRouter();
   // The line's words: when they don't fit, they slide along (CSS, measured once per line, no state).
   const textRef = useRef<HTMLSpanElement>(null);
-  // Open, the drop-down sits over everything — the plan sheets, Dusty, any sheet (Coy, 2026-10-02):
-  // the header's own layer is lifted while it is down (v34-shell.css, html[data-head-drop]).
-  useEffect(() => {
-    if (!open) return;
-    document.documentElement.setAttribute("data-head-drop", "open");
-    return () => document.documentElement.removeAttribute("data-head-drop");
-  }, [open]);
-
   const apply = useCallback((d: Activity) => {
     setData(d);
     const cutoff = Date.now() - DAY_MS;
@@ -190,7 +161,7 @@ export function ActivityLine({ busy, onWorking, onReader, inline }: {
 
   // Walk the queue once; the last item stays until something new arrives.
   const current = queue.length ? queue[Math.min(idx, queue.length - 1)] : null;
-  const cycling = !busy && !data?.pinned && idx < queue.length - 1 && !open && !hover;
+  const cycling = !data?.pinned && idx < queue.length - 1 && !hover;
   useEffect(() => {
     if (!cycling || !current) return;
     const t = setTimeout(() => setIdx((i) => i + 1), lingerMs(current, textRef.current?.clientWidth ?? 260));
@@ -198,30 +169,18 @@ export function ActivityLine({ busy, onWorking, onReader, inline }: {
   }, [cycling, idx, current]);
   // Shown means seen — it will not come round again on this device.
   useEffect(() => {
-    if (!current || current.kind === "running" || busy || data?.pinned) return;
+    if (!current || current.kind === "running" || data?.pinned) return;
     const seen = loadSeen();
     const k = seenKey(current);
     if (!seen.has(k)) { seen.add(k); saveSeen(seen); }
-  }, [current, busy, data?.pinned]);
-
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open]);
+  }, [current, data?.pinned]);
 
   const running = recent.some((i) => i.kind === "running");
   useEffect(() => { onWorking?.(running); }, [running, onWorking]);
   const readerState = data?.pinned ? "warn" : running || ocr.running ? "reading" : "idle";
   useEffect(() => { onReader?.(readerState); }, [readerState, onReader]);
   let line: { key: string; summary: string; tone: Tone; at: string | null };
-  if (busy) {
-    // A reply streaming in this tab: its own words, the tail that fits.
-    const said = (live ?? "").replace(/\s+/g, " ").trim();
-    line = { key: "busy", summary: said ? (said.length > 90 ? `…${said.slice(-90)}` : said) : "Dusty is thinking…", tone: "live", at: null };
-  }
-  else if (ocr.running) line = { key: `ocr-${ocr.phase}-${ocr.done}`, summary: ocr.label, tone: "live", at: null };
+  if (ocr.running) line = { key: `ocr-${ocr.phase}-${ocr.done}`, summary: ocr.label, tone: "live", at: null };
   else if (data?.pinned) line = { key: "pinned", summary: data.pinned.summary, tone: "warn", at: null };
   else if (current) {
     line = { key: current.id, summary: current.summary, tone: current.tone,
@@ -240,10 +199,7 @@ export function ActivityLine({ busy, onWorking, onReader, inline }: {
   }
   // The streamed reply already arrives a token at a time; everything else types
   // in — drawn by CSS (a stepped clip on one element), never a render per letter.
-  const typing = !busy && line.summary.length > 0;
-  // The kind of work, for the dot: broken > answering > reading > just done.
-  const work: Work = line.tone === "warn" ? "warn" : busy ? "reply" : running || ocr.running ? "read"
-    : line.key !== "idle" && line.key !== "loading" && line.tone === "good" ? "done" : null;
+  const typing = line.summary.length > 0;
 
   // Too long for the row: once typed, slide to the end, rest, slide back — over and over while it is up.
   useEffect(() => {
@@ -251,7 +207,6 @@ export function ActivityLine({ busy, onWorking, onReader, inline }: {
     const inner = el?.firstElementChild as HTMLElement | null;
     if (!el || !inner) return;
     inner.removeAttribute("data-marq");
-    if (busy) return;
     const t = setTimeout(() => {
       const dx = inner.scrollWidth - el.clientWidth;
       if (dx <= 8) return;
@@ -261,31 +216,19 @@ export function ActivityLine({ busy, onWorking, onReader, inline }: {
       inner.setAttribute("data-marq", "1");
     }, Math.min(line.summary.length, 160) * 18 + 1200);
     return () => clearTimeout(t);
-  }, [line.key, line.summary, busy]);
-
-  // Tapping a thought takes Coy to what it came from, with Dusty open and the thought in his message box.
-  const talkAbout = (it: Item) => {
-    setOpen(false);
-    if (it.contact_id) router.push(`/dashboard/messages/${it.contact_id}`);
-    setTimeout(() => {
-      window.dispatchEvent(new Event("sc:dusty-open"));
-      setTimeout(() => window.dispatchEvent(new CustomEvent("sc:dusty-draft", { detail: { text: `About your thought — "${it.summary}" — ` } })), 300);
-    }, it.contact_id ? 700 : 0);
-  };
-  const thoughts = data?.musings ?? [];
+  }, [line.key, line.summary]);
 
   return (
     <div className={inline ? "relative flex-1 min-w-0 sc-own-layer" : "relative px-2.5 pb-2 sc-activity-row sc-own-layer"}
       onPointerEnter={(e) => { if (e.pointerType === "mouse") setHover(true); }} onPointerLeave={() => setHover(false)}>
-      <button onClick={() => setOpen((o) => !o)} aria-expanded={open}
-        aria-label={open ? "Hide Dusty's activity" : "Show Dusty's activity"}
+      <button onClick={() => router.push("/dashboard/more/logs?tab=dusty")}
+        aria-label="Dusty's activity — open the log"
         className="w-full flex items-center gap-2 text-left"
         // Strict containment: a new line of text never makes the browser lay out the page around it.
         style={{ height: 30, padding: "0 4px 0 4px", background: "transparent", border: "none", cursor: "pointer", contain: "strict" }}>
-        <Dots work={work} />
         <span ref={textRef} aria-live="polite" className="sc-activity-text"
-          // Low, on the level of the wordmark's ".ai", like the dots (Coy, 2026-10-10).
-          style={{ flex: 1, minWidth: 0, alignSelf: "flex-end", lineHeight: "18px", paddingBottom: TEXT_DROP, color: line.tone === "warn" ? T.hivizText : undefined, animation: line.tone === "warn" ? "none" : undefined, ...clip }}>
+          // Low, on the level of the wordmark's ".ai" (Coy, 2026-10-10).
+          style={{ flex: 1, minWidth: 0, alignSelf: "flex-end", lineHeight: "16px", paddingBottom: TEXT_DROP, color: line.tone === "warn" ? T.hivizText : undefined, animation: line.tone === "warn" ? "none" : undefined, ...clip }}>
           {typing ? (
             <span key={line.key} className="sc-typed" title={line.summary}
               style={{ "--sc-type-steps": Math.min(line.summary.length, 160), "--sc-type-ms": `${Math.min(line.summary.length, 160) * 18}ms` } as React.CSSProperties}>
@@ -293,60 +236,87 @@ export function ActivityLine({ busy, onWorking, onReader, inline }: {
             </span>
           ) : line.summary}
         </span>
-        {line.at && <span className="sc-activity-time" style={{ ...nums, alignSelf: "flex-end", lineHeight: "18px", paddingBottom: TEXT_DROP }}>{relTime(line.at)}</span>}
+        {line.at && <span className="sc-activity-time" style={{ ...nums, alignSelf: "flex-end", lineHeight: "16px", paddingBottom: TEXT_DROP }}>{relTime(line.at)}</span>}
       </button>
+    </div>
+  );
+}
 
-      {open && (
-        <div className={inline ? "absolute left-0 overflow-y-auto sc-drop sc-activity-drop" : "mt-1.5 overflow-y-auto sc-drop sc-activity-drop"}
-          style={inline
-            ? { top: "calc(100% + 8px)", width: 560, maxWidth: "calc(100vw - 120px)", maxHeight: "min(60vh, 460px)", zIndex: 60, fontFamily: agent }
-            : { maxHeight: "min(60vh, 420px)", fontFamily: agent }}>
-          {data?.pinned && (
-            <div className="px-3 py-2" style={{ borderBottom: `1px solid ${T.hairSoft}` }}>
-              <div style={{ fontSize: F.sm, color: T.hivizText }}>{data.pinned.summary}</div>
-              {data.pinned.detail && <div style={{ fontSize: F.xs, color: T.ink2, marginTop: 2 }}>{data.pinned.detail}</div>}
-            </div>
-          )}
-          {thoughts.length > 0 && (
-            <div style={{ borderBottom: `1px solid ${T.hair}` }}>
-              <div className="px-3 pt-2 pb-1" style={{ ...eyebrow, fontSize: F.micro, color: T.ink3 }}>Dusty&apos;s thoughts · tap one to talk about it</div>
-              {thoughts.map((it) => (
-                <button key={it.id} onClick={() => talkAbout(it)} className="w-full text-left px-3 py-2 flex gap-2.5 items-start"
-                  style={{ borderTop: `1px solid ${T.hairSoft}`, background: current?.id === it.id ? T.sunk : "transparent", cursor: "pointer" }}>
-                  <span aria-hidden="true" style={{ paddingTop: 4, color: T.ink3, fontSize: 11 }}>◆</span>
-                  <span style={{ flex: 1, minWidth: 0 }}>
-                    <span style={{ display: "block", fontSize: F.sm, color: T.ink, lineHeight: 1.4 }}>{it.summary}</span>
-                    {it.detail && <span style={{ display: "block", fontSize: F.xs, color: T.ink2, lineHeight: 1.4, marginTop: 2 }}>{it.detail}{it.contact_id ? " ›" : ""}</span>}
-                  </span>
-                  <span style={{ fontSize: F.xs, color: T.ink3, ...nums }}>{relTime(it.at)}</span>
-                </button>
-              ))}
-            </div>
-          )}
-          {(data?.items ?? []).map((it) => {
-            const body = (
-              <div className="px-3 py-2 flex gap-2.5 items-start" style={{ borderBottom: `1px solid ${T.hairSoft}` }}>
-                <span style={{ paddingTop: 5 }}><Dot tone={it.tone} live={it.kind === "running"} /></span>
-                <span style={{ flex: 1, minWidth: 0 }}>
-                  <span style={{ display: "block", fontSize: F.sm, color: T.ink, lineHeight: 1.35 }}>{it.summary}</span>
-                  {it.detail && <span style={{ display: "block", fontSize: F.xs, color: T.ink2, lineHeight: 1.4, marginTop: 2 }}>{it.detail}</span>}
-                </span>
-                {it.kind !== "waiting" && it.kind !== "agreement" && it.kind !== "reminder" && <span style={{ fontSize: F.xs, color: T.ink3, ...nums }}>{relTime(it.at)}</span>}
-              </div>
-            );
-            const to = it.href ?? (it.contact_id ? `/dashboard/messages/${it.contact_id}` : null);
-            return to
-              ? <Link key={it.id} href={to} onClick={() => setOpen(false)} className="block no-underline">{body}</Link>
-              : <div key={it.id}>{body}</div>;
-          })}
-          {!data?.items.length && !data?.pinned && (
-            <div className="px-3 py-2" style={{ fontSize: F.sm, color: T.ink2 }}>Nothing read in the last week.</div>
-          )}
-          <div className="px-3 py-2" style={{ ...eyebrow, fontSize: F.micro, color: T.ink3 }}>
-            Dusty reads new threads every minute, app open or not
-          </div>
+/** Logs → Dusty (Coy, 2026-10-10: "The history of dusty's thoughts should be
+ *  in the logs page instead of being a drop down from the header"): what was
+ *  the header's drop-down — the reader's warning, his thoughts (tap one to talk
+ *  about it) and every background read of the last week. */
+export function DustyLog() {
+  const [data, setData] = useState<Activity | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
+  useEffect(() => {
+    let off = false;
+    fetch("/api/activity")
+      .then(async (r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
+      .then((d: Activity) => { if (!off) setData(d); })
+      .catch((e) => { if (!off) setError(e instanceof Error ? e.message : String(e)); });
+    return () => { off = true; };
+  }, []);
+  // Tapping a thought takes Coy to what it came from, with Dusty open and the thought in his message box.
+  const talkAbout = (it: Item) => {
+    if (it.contact_id) router.push(`/dashboard/messages/${it.contact_id}`);
+    setTimeout(() => {
+      window.dispatchEvent(new Event("sc:dusty-open"));
+      setTimeout(() => window.dispatchEvent(new CustomEvent("sc:dusty-draft", { detail: { text: `About your thought — "${it.summary}" — ` } })), 300);
+    }, it.contact_id ? 700 : 0);
+  };
+  const section = (title: string, children: React.ReactNode) => (
+    <section className="mx-3 mt-3 rounded overflow-hidden" style={{ background: T.card, border: `1px solid ${T.hair}`, fontFamily: agent }}>
+      <div className="px-3 py-2" style={{ ...eyebrow, color: T.ink, borderBottom: `1px solid ${T.hairSoft}` }}>{title}</div>
+      {children}
+    </section>
+  );
+  if (error) return <div className="mx-3 mt-3" style={{ fontSize: F.sm, color: T.red }}>Couldn&apos;t load Dusty&apos;s log: {error}</div>;
+  if (!data) return <div className="p-3"><div className="rounded animate-pulse" style={{ height: 120, background: T.hairSoft }} /></div>;
+  const thoughts = data.musings ?? [];
+  return (
+    <div className="mx-auto" style={{ maxWidth: 760, paddingBottom: 24 }}>
+      {data.pinned && (
+        <div role="alert" className="mx-3 mt-3 rounded px-3 py-2" style={{ background: T.hivizDim, border: `1px solid ${T.hair}` }}>
+          <div style={{ fontSize: F.sm, color: T.hivizText }}>{data.pinned.summary}</div>
+          {data.pinned.detail && <div style={{ fontSize: F.xs, color: T.ink2, marginTop: 2 }}>{data.pinned.detail}</div>}
         </div>
       )}
+      {section("Dusty's thoughts · tap one to talk about it", thoughts.length === 0
+        ? <div className="px-3 py-3" style={{ fontSize: F.sm, color: T.ink3 }}>No thoughts in the last three days.</div>
+        : thoughts.map((it, i) => (
+          <button key={it.id} onClick={() => talkAbout(it)} className="w-full text-left px-3 py-2 flex gap-2.5 items-start"
+            style={{ borderTop: i ? `1px solid ${T.hairSoft}` : "none", background: "transparent", cursor: "pointer" }}>
+            <span aria-hidden="true" style={{ paddingTop: 4, color: T.ink3, fontSize: 11 }}>◆</span>
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ display: "block", fontSize: F.sm, color: T.ink, lineHeight: 1.4 }}>{it.summary}</span>
+              {it.detail && <span style={{ display: "block", fontSize: F.xs, color: T.ink2, lineHeight: 1.4, marginTop: 2 }}>{it.detail}{it.contact_id ? " ›" : ""}</span>}
+            </span>
+            <span style={{ fontSize: F.xs, color: T.ink3, ...nums }}>{relTime(it.at)}</span>
+          </button>
+        )))}
+      {section("Background work · the last week", data.items.length === 0
+        ? <div className="px-3 py-3" style={{ fontSize: F.sm, color: T.ink3 }}>Nothing read in the last week.</div>
+        : data.items.map((it, i) => {
+          const body = (
+            <div className="px-3 py-2 flex gap-2.5 items-start" style={{ borderTop: i ? `1px solid ${T.hairSoft}` : "none" }}>
+              <span style={{ paddingTop: 5 }}><Dot tone={it.tone} live={it.kind === "running"} /></span>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ display: "block", fontSize: F.sm, color: T.ink, lineHeight: 1.35 }}>{it.summary}</span>
+                {it.detail && <span style={{ display: "block", fontSize: F.xs, color: T.ink2, lineHeight: 1.4, marginTop: 2 }}>{it.detail}</span>}
+              </span>
+              {it.kind !== "waiting" && it.kind !== "agreement" && it.kind !== "reminder" && <span style={{ fontSize: F.xs, color: T.ink3, ...nums }}>{relTime(it.at)}</span>}
+            </div>
+          );
+          const to = it.href ?? (it.contact_id ? `/dashboard/messages/${it.contact_id}` : null);
+          return to
+            ? <Link key={it.id} href={to} className="block no-underline" style={{ color: T.ink }}>{body}</Link>
+            : <div key={it.id}>{body}</div>;
+        }))}
+      <div className="px-4 py-2" style={{ ...eyebrow, fontSize: F.micro, color: T.ink3 }}>
+        Dusty reads new threads every minute, app open or not
+      </div>
     </div>
   );
 }

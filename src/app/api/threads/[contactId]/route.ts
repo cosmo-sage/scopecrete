@@ -29,6 +29,8 @@ export interface ThreadMessage {
   duration_seconds: number | null;
   recording_url: string | null;
   status: string | null;
+  /** An incoming call nobody picked up (Quo's call.completed said "no-answer") — the card says "Missed call" (Coy, 2026-10-10). */
+  missed?: boolean;
   /** Artifact kinds present for this message, e.g. ["transcript","next_steps"]. */
   artifact_kinds: string[];
   /**
@@ -113,7 +115,7 @@ export async function GET(
 
   const { data: rows, error } = await supabase
     .from("messages")
-    .select("id, channel, direction, occurred_at, body_text, summary, summary_source, duration_seconds, recording_url, status, from_address, to_address, phone_number_id")
+    .select("id, channel, direction, occurred_at, body_text, summary, summary_source, duration_seconds, recording_url, status, from_address, to_address, phone_number_id, provider_message_id")
     .eq("org_id", orgId)
     .eq("contact_id", contactId)
     // Newest first. Page one is the most recent traffic, so a 350-message
@@ -128,6 +130,7 @@ export async function GET(
   }
 
   type Row = Omit<ThreadMessage, "artifact_kinds" | "line"> & {
+    provider_message_id: string | null;
     from_address: string | null;
     to_address: string | null;
     phone_number_id: string | null;
@@ -145,8 +148,21 @@ export async function GET(
 
   // Stamped with its line whenever the org has more than one (Lines, package 9).
   const manyLines = (orgLines ?? []).length > 1;
+  // Missed calls: Quo's call.completed for an incoming call says "no-answer";
+  // the message itself only says "received". Read from the raw log by call id.
+  const missedIds = new Set<string>();
+  const callIds = raw.filter((r) => r.channel === "call" && r.direction === "inbound" && r.provider_message_id).map((r) => r.provider_message_id as string).slice(0, 400);
+  if (callIds.length) {
+    const { data: ends } = await supabase.from("quo_events")
+      .select("call_id:raw_payload->>id, call_status:raw_payload->>status")
+      .eq("org_id", orgId).eq("event_type", "call.completed").in("raw_payload->>id", callIds);
+    for (const e of (ends ?? []) as Array<{ call_id: string | null; call_status: string | null }>) {
+      if (e.call_id && e.call_status === "no-answer") missedIds.add(e.call_id);
+    }
+  }
   const messages = raw.map((r) => {
-    const { from_address, to_address, phone_number_id, ...rest } = r;
+    const { from_address, to_address, phone_number_id, provider_message_id, ...rest } = r;
+    if (provider_message_id && missedIds.has(provider_message_id)) (rest as ThreadMessage).missed = true;
     const counterparty = from_address && !ours.has(from_address) ? from_address : to_address && !ours.has(to_address) ? to_address : null;
     return { ...rest, counterparty, line: manyLines && phone_number_id ? lineName.get(phone_number_id) ?? null : null, line_id: manyLines ? phone_number_id : null };
   });

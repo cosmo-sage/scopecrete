@@ -378,13 +378,14 @@ body { background: var(--sc-slab); color: var(--sc-ink); }
    time in Barlow Condensed. Coy, 2026-09-30: the draft paper is the logo row
    only — on a phone the line's own row is a solid colour. */
 .sc-activity-text { font-family: var(--sc-font-agent, 'Figtree', sans-serif); font-weight: 400; font-size: 13.5px; letter-spacing: -.01em; font-style: normal; color: var(--sc-pencil); }
-/* Dusty's words glow green like the wordmark's ".ai" (Coy, 2026-10-10), breathing on its rhythm; a warning keeps its own colour. */
-.sc-activity-text { color: #1FA971; animation: scGlowLine 3.2s ease-in-out infinite; }
+/* Dusty's words glow green like the wordmark's ".ai" (Coy, 2026-10-10), breathing on its rhythm; a warning keeps its own colour.
+   Later that day: a softer green, smaller, in the ".ai"'s Manrope. */
+.sc-activity-text { font-family: var(--site-manrope), 'Manrope', system-ui, sans-serif; font-weight: 500; font-size: 12px; letter-spacing: .01em; color: #4DB88C; animation: scGlowLine 3.2s ease-in-out infinite; }
 @keyframes scGlowLine {
-  0%, 100% { text-shadow: 0 0 2px rgba(31,169,113,.25) }
-  45%, 55% { text-shadow: 0 0 5px rgba(31,169,113,.7), 0 0 12px rgba(31,169,113,.35) }
+  0%, 100% { text-shadow: 0 0 2px rgba(77,184,140,.18) }
+  45%, 55% { text-shadow: 0 0 4px rgba(77,184,140,.45), 0 0 9px rgba(77,184,140,.2) }
 }
-@media (prefers-reduced-motion: reduce) { .sc-activity-text { animation: none; text-shadow: 0 0 4px rgba(31,169,113,.45); } }
+@media (prefers-reduced-motion: reduce) { .sc-activity-text { animation: none; text-shadow: 0 0 3px rgba(77,184,140,.3); } }
 .sc-activity-row { background: var(--sc-paper); border-bottom: 1px solid var(--sc-pencil-line); }
 .sc-activity-time { font-family: var(--sc-font-disp, 'Barlow Condensed', sans-serif); font-weight: 500; font-size: 12px; letter-spacing: .08em; color: var(--sc-pencil-muted); }
 .sc-dot-read  { color: var(--sc-work-dot-read); background: var(--sc-work-dot-read) !important; }
@@ -522,22 +523,23 @@ html[data-theme="night-shift"] .sc-proposal { --sc-doc-ground: #15171A; }
    top while the page scrolls under it. */
 .sc-subhead { position: sticky; top: var(--sc-head); z-index: 6; background: var(--sc-card); border-bottom: 1px solid var(--sc-hair);
   padding: 12px 16px 10px; margin-bottom: 12px; transition: top .2s ease-out; }
-.sc-subhead-org { font-size: 19px; }
-.sc-subhead-title { font-size: 13px; }
+/* The org and the page on one line, a green dot between (Coy, 2026-10-10). */
+.sc-subhead-names { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.sc-subhead-org { font-size: 16px; min-width: 0; }
+.sc-subhead-sep { display: inline-block; flex: 0 0 auto; width: 6px; height: 6px; border-radius: 999px; background: #1FA971; }
+.sc-subhead-title { font-size: 13px; flex-shrink: 0; }
 .sc-subhead-count { font-size: 12px; }
 @media (max-width: 1023px) {
   .sc-subhead { padding: 8px 12px 8px; margin-bottom: 10px; }
-  /* On a phone the org and the page read on one line, small (Coy, 2026-10-07:
-     "Sacco Enterprises | jobs, but the font will be much, much smaller"). */
-  .sc-subhead-names { display: flex; align-items: baseline; gap: 5px; min-width: 0; }
-  .sc-subhead-org { font-size: 11.5px; min-width: 0; }
-  .sc-subhead-sep { display: inline; font-size: 11px; color: var(--sc-ink3); }
-  .sc-subhead-title { font-size: 10.5px; flex-shrink: 0; }
+  /* On a phone, small (Coy, 2026-10-07: "the font will be much, much smaller"). */
+  .sc-subhead-names { gap: 5px; }
+  .sc-subhead-org { font-size: 11.5px; }
+  .sc-subhead-sep { width: 4px; height: 4px; }
+  .sc-subhead-title { font-size: 10.5px; }
   .sc-subhead-count { font-size: 10px; }
   /* The ☰ the height of the bar's other buttons. */
   .sc-menu-btn { width: 28px !important; height: 28px !important; }
 }
-.sc-subhead-sep { display: none; }
 @media (max-width: 639px) { .sc-drawer-title-long { font-size: 19px !important; } }
 @media (max-width: 1023px) {
   html[data-head-hide] { --sc-head: 0px; }
@@ -558,7 +560,7 @@ html[data-theme="night-shift"] .sc-proposal { --sc-doc-ground: #15171A; }
 
 /* The job's name: 19px on a desktop, 14px on a phone so it fits the width
    (Coy, 2026-10-06). */
-.sc-job-name { font-size: 19px; }
+.sc-job-name { font-size: 16px; }
 @media (max-width: 1023px) { .sc-job-name { font-size: 14px; } }
 
 /* The job's views — Summary · Takeoffs · Budget · Proposal. On a phone plain tabs across the full
@@ -614,6 +616,15 @@ html[data-alerts-open="1"] .sc-pops { display: none; }
 .sc-drawer-in-left { animation: sc-in-left .24s cubic-bezier(.2,.8,.2,1); }
 .sc-drawer-in-right { animation: sc-in-right .24s cubic-bezier(.2,.8,.2,1); }
 @media (prefers-reduced-motion: reduce) { .sc-drawer-in-left, .sc-drawer-in-right { animation: none; } }
+/* A panel that slides down from the page's subheader, the page's width (Drawer drop; Coy, 2026-10-10). */
+.sc-drop-panel { top: calc(var(--sc-head) + var(--sc-subhead, 0px)); left: 0; right: 0; }
+@media (min-width: 1024px) {
+  .sc-drop-panel { left: var(--sc-rail-w); }
+  html[data-dusty="open"] .sc-drop-panel { right: var(--sc-dusty); }
+}
+.sc-drop-in { animation: sc-drop-down .26s cubic-bezier(.2,.8,.2,1); }
+@keyframes sc-drop-down { from { transform: translateY(-14px); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .sc-drop-in { animation: none; } }
 
 /* Threads rows: a small grip at each end on a touch screen says they swipe (Coy, 2026-10-09). */
 .sc-swipe-grip { display: none; }

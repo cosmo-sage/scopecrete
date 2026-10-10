@@ -35,7 +35,7 @@ import { ArchiveDialog } from "@/components/v34/archive-actions";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { T, F, disp, eyebrow, nums, clip, relTime } from "@/lib/v34/tokens";
-import { EmptyState, MenuButton, SearchBubble, SearchToggle, Sheet } from "@/components/v34/primitives";
+import { EmptyState, MenuButton, SearchBubble, SearchToggle, Sheet, DustyPageButton } from "@/components/v34/primitives";
 import { JOB_TYPE_LABEL } from "@/lib/jobs/stages";
 import { TRAY_PX, ACTIONS_PX, decideSwipe, isHorizontal, clampDrag } from "@/lib/swipe";
 import { BucketPicker, BUCKETS, SUGGESTS, type Bucket, type Subtype } from "@/components/v34/bucket-picker";
@@ -1074,6 +1074,8 @@ export function ThreadList({ folded = false }: { folded?: boolean }) {
               </button>
             )}
             <SearchToggle open={finding} onToggle={() => { setFinding((v) => !v); if (finding) setFind(""); }} label="Search this list" />
+            {/* Dusty on the page's own header (Coy, 2026-10-10); an open thread has its own emblem. */}
+            {!openId && <span className="hidden lg:inline-flex"><DustyPageButton /></span>}
             {openId && (
               <button onClick={() => ctx?.setFolded(true)} aria-label="Fold the list" title="Fold the list to initials" className="hidden lg:flex shrink-0 items-center justify-center rounded"
                 style={{ width: 24, height: 24, border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink2, cursor: "pointer" }}>‹</button>

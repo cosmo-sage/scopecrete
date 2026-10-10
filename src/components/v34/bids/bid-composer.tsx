@@ -74,6 +74,7 @@ export function BidComposer({ open, onClose, vendors: start, jobId: startJob, fr
 }) {
   const org = useContext(OrgNameContext);
   const [jobs, setJobs] = useState<JobLite[] | null>(null);
+  const [jobQ, setJobQ] = useState("");
   const [jobId, setJobId] = useState<string | null>(startJob ?? null);
   const [job, setJob] = useState<ComposeJob | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -191,7 +192,7 @@ export function BidComposer({ open, onClose, vendors: start, jobId: startJob, fr
   const card: React.CSSProperties = { background: T.card, border: `1px solid ${T.hair}`, borderRadius: 4, padding: 12 };
 
   return (
-    <Drawer open={open} onClose={onClose} title="Bid request" sub={made ? "Sent · one link per vendor" : from ?? "Draft"} wide>
+    <Drawer open={open} onClose={onClose} title="Bid request" sub={made ? "Sent · one link per vendor" : from ?? "Draft"} drop>
       {made ? (
         <div className="p-4 flex flex-col gap-2" style={{ maxWidth: 760 }}>
           <div style={{ fontSize: F.sm, color: T.ink2 }}>Each vendor has their own link. Their answer lands in their thread (as a note), on their page and on the job&apos;s Summary.</div>
@@ -216,17 +217,29 @@ export function BidComposer({ open, onClose, vendors: start, jobId: startJob, fr
           {/* 1 · job */}
           <section style={card}>
             {stepHead(1, "Which job")}
-            {jobs === null ? <div style={{ fontSize: F.sm, color: T.ink3 }}>Loading…</div> : jobs.length === 0 ? <div style={{ fontSize: F.sm, color: T.ink3 }}>No open jobs.</div> : (
-              <div className="flex gap-2 overflow-x-auto pb-1">
-                {(jobId && !jobs.some((j) => j.id === jobId) && job ? [{ id: job.id, title: job.title, address: job.address, status: null }, ...jobs] : jobs).slice(0, 24).map((j) => (
-                  <button key={j.id} onClick={() => setJobId(j.id)} className="text-left rounded shrink-0 px-3 py-2"
-                    style={{ width: 200, border: `1.5px solid ${j.id === jobId ? T.hiviz : T.hair}`, background: j.id === jobId ? T.card : "transparent", cursor: "pointer" }}>
-                    <div style={{ fontWeight: 600, fontSize: F.sm, ...clip }}>{j.title ?? "Untitled job"}</div>
-                    <div style={{ fontSize: F.xs, color: T.ink3, ...clip }}>{j.address ?? "no address"}</div>
-                  </button>
-                ))}
-              </div>
-            )}
+            {jobs === null ? <div style={{ fontSize: F.sm, color: T.ink3 }}>Loading…</div> : jobs.length === 0 ? <div style={{ fontSize: F.sm, color: T.ink3 }}>No open jobs.</div> : (() => {
+              // Find a job by its name or address (Coy, 2026-10-10).
+              const all = jobId && !jobs.some((j) => j.id === jobId) && job ? [{ id: job.id, title: job.title, address: job.address, status: null }, ...jobs] : jobs;
+              const words = jobQ.toLowerCase().split(/\s+/).filter(Boolean);
+              const hit = words.length ? all.filter((j) => { const h = `${j.title ?? ""} ${j.address ?? ""}`.toLowerCase(); return words.every((w) => h.includes(w)); }) : all;
+              return (
+                <>
+                  <input value={jobQ} onChange={(e) => setJobQ(e.target.value)} placeholder="Search jobs by name or address" aria-label="Search jobs"
+                    className="w-full rounded mb-2" style={{ height: 34, padding: "0 10px", border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink, fontSize: 14 }} />
+                  {hit.length === 0 ? <div style={{ fontSize: F.sm, color: T.ink3 }}>No job matches “{jobQ}”.</div> : (
+                    <div className="flex gap-2 overflow-x-auto pb-1">
+                      {hit.slice(0, 24).map((j) => (
+                        <button key={j.id} onClick={() => setJobId(j.id)} className="text-left rounded shrink-0 px-3 py-2"
+                          style={{ width: 200, border: `1.5px solid ${j.id === jobId ? T.hiviz : T.hair}`, background: j.id === jobId ? T.card : "transparent", cursor: "pointer" }}>
+                          <div style={{ fontWeight: 600, fontSize: F.sm, ...clip }}>{j.title ?? "Untitled job"}</div>
+                          <div style={{ fontSize: F.xs, color: T.ink3, ...clip }}>{j.address ?? "no address"}</div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </section>
 
           {/* 2 · scopes */}

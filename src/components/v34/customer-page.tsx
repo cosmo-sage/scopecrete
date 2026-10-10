@@ -151,7 +151,6 @@ export function CustomerPage({ customerId, focusContact }: { customerId: string;
         title={cu.name || "Unnamed customer"} tag={<RoleTag role="customer" />} wide={wide}
         actions={[{ label: "Edit", onClick: () => setEditing(true) }, { label: "New job", primary: true, disabled: !primary, onClick: () => void newScope() }, ASK_DUSTY]}
         menu={[
-          { label: "Call notes", disabled: !primary, onClick: () => setCallNotes(true) },
           <ArchiveButton key="del" kind="customer" id={cu.id} action="delete" what={cu.name || "this customer"} then="/dashboard/customers"
             style={{ ...menuItem, color: T.red }}>Delete customer</ArchiveButton>,
         ]}
@@ -194,7 +193,7 @@ export function CustomerPage({ customerId, focusContact }: { customerId: string;
       {tab === "contacts" && (
         <div className={wide ? "grid" : ""} style={wide ? { gridTemplateColumns: "minmax(0,1fr) 400px", gap: 14, padding: "14px 16px" } : undefined}>
           <div style={{ background: T.card, border: wide ? `1px solid ${T.hair}` : "none", borderRadius: 4 }}><Contacts cu={cu} contacts={contacts} onChanged={reload} onNote={setNote} /></div>
-          <div style={{ background: T.card, border: wide ? `1px solid ${T.hair}` : "none", borderRadius: 4 }}><CustomerFacts cu={cu} onEdit={() => setEditing(true)} /></div>
+          <div style={{ background: T.card, border: wide ? `1px solid ${T.hair}` : "none", borderRadius: 4 }}><CustomerFacts cu={cu} onEdit={() => setEditing(true)} onSaved={reload} /></div>
         </div>
       )}
       {tab === "jobs" && <JobsTab jobs={jobs} onNew={() => void newScope()} />}
@@ -374,15 +373,59 @@ function HeardAddress({ cu, heard, onEdit, onSaved }: { cu: Customer; heard: Non
   );
 }
 
-function CustomerFacts({ cu, onEdit }: { cu: Customer; onEdit: () => void }) {
+function CustomerFacts({ cu, onEdit, onSaved }: { cu: Customer; onEdit: () => void; onSaved: () => void }) {
   return (
-    <Facts title="Customer" onEdit={onEdit} rows={[
-      ["Type", cu.customer_type ? [TYPE_LABEL[cu.customer_type] ?? cu.customer_type, cu.subtype].filter(Boolean).join(" · ") : null,
-        cu.customer_type_source === "jobs" ? "(from its jobs)" : undefined],
-      ["Lead source", cu.lead_source],
-      ["Status", cu.status],
-      ["Notes", cu.notes],
-    ]} />
+    <>
+      <Facts title="Customer" onEdit={onEdit} rows={[
+        ["Type", cu.customer_type ? [TYPE_LABEL[cu.customer_type] ?? cu.customer_type, cu.subtype].filter(Boolean).join(" · ") : null,
+          cu.customer_type_source === "jobs" ? "(from its jobs)" : undefined],
+        ["Lead source", cu.lead_source],
+        ["Status", cu.status],
+        ["Notes", cu.notes],
+      ]} />
+      <LocationField cu={cu} onSaved={onSaved} />
+    </>
+  );
+}
+
+/** The customer's Location in their facts (Coy, 2026-10-10): typed with the
+ *  Map's address finder (Mapbox) filling street, city, state and zip; a pick
+ *  saves it, through the customer's own PATCH. */
+function LocationField({ cu, onSaved }: { cu: Customer; onSaved: () => void }) {
+  const [editing, setEditing] = useState(false);
+  const [v, setV] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const save = async (body: Record<string, string | null>) => {
+    setBusy(true); setErr(null);
+    try { await send(`/api/customers/${cu.id}`, "PATCH", body); setEditing(false); onSaved(); }
+    catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(false); }
+  };
+  const field: React.CSSProperties = { width: "100%", height: 34, padding: "0 10px", border: `1px solid ${T.hairStrong}`, borderRadius: 3, background: T.card, color: T.ink, fontSize: 14 };
+  return (
+    <section style={{ padding: "8px 16px 12px", borderBottom: `1px solid ${T.hair}` }}>
+      <div className="flex gap-3 py-1 items-start" style={{ fontSize: F.sm }}>
+        <span style={{ ...lbl, fontSize: 11, width: 96, color: T.ink3, paddingTop: 2, flexShrink: 0 }}>Location</span>
+        {!editing ? (
+          <span className="flex-1 min-w-0 flex gap-2 items-baseline">
+            <span style={{ flex: 1, minWidth: 0, color: cu.address_formatted ? T.ink : T.ink3, overflowWrap: "anywhere" }}>{cu.address_formatted ?? "—"}</span>
+            <button onClick={() => { setV(cu.address_line1 ?? ""); setEditing(true); }} style={{ ...lbl, fontSize: 11, color: T.chalk, cursor: "pointer" }}>{cu.address_formatted ? "Change" : "+ Add"}</button>
+          </span>
+        ) : (
+          <span className="flex-1 min-w-0 flex flex-col gap-1.5">
+            <AddressInput value={v} onChange={setV} style={field} near={cu.lat != null && cu.lng != null ? { lat: cu.lat, lng: cu.lng } : null}
+              onPick={(m) => void save({ address_line1: m.line1, city: m.city ?? null, state: m.state ?? null, zip: m.zip ?? null })} />
+            <span style={{ fontSize: 11, color: T.ink3 }}>Start typing — pick the address from the list.</span>
+            <span className="flex gap-2">
+              <button disabled={busy || !v.trim()} onClick={() => void save({ address_line1: v.trim() })} style={{ ...btn(true), height: 30 }}>{busy ? "Saving…" : "Save as typed"}</button>
+              <button onClick={() => setEditing(false)} style={{ ...btn(false), height: 30 }}>Cancel</button>
+            </span>
+            {err && <span style={{ color: T.red, fontSize: 11 }}>{err}</span>}
+          </span>
+        )}
+      </div>
+    </section>
   );
 }
 

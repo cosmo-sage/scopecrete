@@ -11,7 +11,7 @@
 import type React from "react";
 import { useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { T, F, disp, light } from "@/lib/v34/tokens";
+import { T, disp, light } from "@/lib/v34/tokens";
 import { useAccess } from "@/lib/v34/access-ctx";
 import { can } from "@/lib/access";
 import { JobSwitcher, SwitchChevron } from "@/components/v34/job-switcher";

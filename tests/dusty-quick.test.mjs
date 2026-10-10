@@ -9,11 +9,13 @@ test("each page gets its own quick selects, 7 at most", () => {
   assert.ok(job.some((q) => q.label === "Price this job" && q.more && !q.ask), "› items go in the box, not sent");
   assert.ok(job.length <= 7);
   assert.equal(quickFor("/dashboard/")[1].label, "What needs me");
-  assert.equal(quickFor("/dashboard/messages/xyz?channel=notes")[0].label, "Summarize this thread");
+  assert.equal(quickFor("/dashboard/messages/xyz?channel=notes")[0].label, "New text");
+  assert.ok(quickFor("/dashboard/messages/xyz").some((q) => q.label === "Summarize this thread"));
   assert.equal(quickFor("/dashboard/customers/c1")[2].label, "Make a job from this");
   assert.equal(quickFor("/dashboard/contacts")[0].create, "contact");
-  assert.deepEqual(quickFor("/dashboard/price-book"), []);
-  assert.deepEqual(quickFor("/dashboard/scope"), [], "the Jobs board is not a job");
+  assert.ok(quickFor("/dashboard/price-book").length > 0, "the Price book has its own");
+  assert.ok(!quickFor("/dashboard/scope").some((q) => q.label === "Price this job"), "the Jobs board is not a job");
+  assert.equal(quickFor("/dashboard/vendors").find((q) => q.label === "Bill")?.create, "bill");
   for (const q of [...job, ...quickFor("/dashboard")]) assert.ok(q.ask || q.more || q.create, q.label);
 });
 

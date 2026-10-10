@@ -43,7 +43,7 @@ import { ArchiveButton, ArchiveDialog, archiveNow } from "@/components/v34/archi
 import { isHorizontal } from "@/lib/swipe";
 import { AddressInput } from "@/components/v34/address-input";
 import type { AddressMatch } from "@/lib/address-check";
-import { ContactPicker } from "@/components/v34/contacts";
+import { ContactPicker, NewContactForm } from "@/components/v34/contacts";
 import { ThreadView } from "@/components/v34/thread-view";
 import { initialsHue } from "@/lib/v34/threads";
 
@@ -388,6 +388,7 @@ function CustomerFacts({ cu, onEdit }: { cu: Customer; onEdit: () => void }) {
 
 function Contacts({ cu, contacts, onChanged, onNote }: { cu: Customer; contacts: Contact[]; onChanged: () => void; onNote: (n: { text: string; undo?: string }) => void }) {
   const [adding, setAdding] = useState(false);
+  const [newSeed, setNewSeed] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [roleFor, setRoleFor] = useState<string | null>(null);
   const [role, setRole] = useState("");
@@ -419,10 +420,18 @@ function Contacts({ cu, contacts, onChanged, onNote }: { cu: Customer; contacts:
       {adding && (
         <div className="mt-2 rounded p-2" style={{ border: `1px solid ${T.hair}`, background: T.slab }}>
           <ContactPicker busy={busy} exclude={contacts.map((c) => c.id)} placeholder="Find a person in Contacts: name, number or email"
-            onPick={(p) => attach(p.id, p.name)} />
+            onPick={(p) => attach(p.id, p.name)} onNew={(seed) => setNewSeed(seed)} />
           <div style={{ fontSize: 11, color: T.ink3, marginTop: 4 }}>Their calls and texts join this customer&apos;s threads; their own jobs come with them. Undo is offered after.</div>
         </div>
       )}
+      {/* + New contact (Coy, 2026-10-10): the full New contact form over the tab; what it makes joins this customer, and ‹ Back / × lands here again. */}
+      <Sheet open={newSeed !== null} cover onClose={() => setNewSeed(null)} title="New contact" sub={`Joins ${cu.name ?? "this customer"}`}>
+        <div className="p-4">
+          {newSeed !== null && <NewContactForm seed={newSeed} onCancel={() => setNewSeed(null)}
+            onMade={(c) => { setNewSeed(null); attach(c.id, c.name); }}
+            onExisting={(who) => { setNewSeed(null); attach(who.id, who.name); }} />}
+        </div>
+      </Sheet>
       <div className="mt-2 flex flex-col gap-2">
         {contacts.length === 0 && <span style={{ fontSize: F.sm, color: T.ink3 }}>No contacts yet.</span>}
         {contacts.map((c) => (

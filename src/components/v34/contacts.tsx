@@ -363,8 +363,10 @@ export function NewContactForm({ seed = "", bucket: fixedBucket, onMade, onCance
  * job's crew); `exclude` leaves out who is already there. "+ New contact"
  * opens the form inline, seeded with what was typed, and picks who it makes.
  */
-export function ContactPicker({ onPick, exclude, roles, bucket, placeholder = "Find a contact: name, number, email…", busy, autoFocus = true }: {
+export function ContactPicker({ onPick, onNew, exclude, roles, bucket, placeholder = "Find a contact: name, number, email…", busy, autoFocus = true }: {
   onPick: (c: BookEntry) => void; exclude?: string[]; roles?: ContactRole[];
+  /** Given → "+ New contact" sits first, right under the search, and opens the caller's own form (seeded with what was typed). */
+  onNew?: (seed: string) => void;
   /** What a contact made here is filed as. */
   bucket?: "customer" | "vendor" | "personal";
   placeholder?: string; busy?: boolean; autoFocus?: boolean;
@@ -386,6 +388,12 @@ export function ContactPicker({ onPick, exclude, roles, bucket, placeholder = "F
     return sortBook(rows, s ? "az" : "recent").slice(0, 30);
   }, [book, q, skip, roles]);
 
+  const newBtn = (
+    <button type="button" onClick={() => (onNew ? onNew(q.trim()) : setMaking(true))} className="w-full text-left px-3"
+      style={{ minHeight: 40, color: T.chalk, fontFamily: disp, fontSize: F.xs, fontWeight: 600, letterSpacing: ".06em", textTransform: "uppercase", cursor: "pointer", borderBottom: onNew ? `1px solid ${T.hairSoft}` : undefined }}>
+      + New contact{q.trim() ? ` "${q.trim().slice(0, 40)}"` : ""}
+    </button>
+  );
   if (making) {
     return (
       <div className="rounded p-3" style={{ border: `1px solid ${T.hair}`, background: T.slab }}>
@@ -401,6 +409,7 @@ export function ContactPicker({ onPick, exclude, roles, bucket, placeholder = "F
       <input autoFocus={autoFocus} value={q} onChange={(e) => setQ(e.target.value)} placeholder={placeholder} aria-label="Find a contact"
         style={{ ...field, height: 38, border: `1px solid ${T.hairStrong}` }} />
       <div style={{ maxHeight: 320, overflowY: "auto", border: `1px solid ${T.hairSoft}`, borderRadius: 4, background: T.card }}>
+        {onNew && newBtn}
         {err && <div className="px-3 py-2" style={{ fontSize: F.sm, color: T.red }}>Couldn&apos;t load contacts: {err}</div>}
         {!book && !err && <div className="px-3 py-2" style={{ fontSize: F.sm, color: T.ink3 }}>Loading…</div>}
         {book && hits.map((c) => (
@@ -417,9 +426,7 @@ export function ContactPicker({ onPick, exclude, roles, bucket, placeholder = "F
           </button>
         ))}
         {book && !hits.length && <div className="px-3 py-2" style={{ fontSize: F.sm, color: T.ink3 }}>{q.trim() ? "Nobody matches." : "Nobody to add."}</div>}
-        <button type="button" onClick={() => setMaking(true)} className="w-full text-left px-3" style={{ minHeight: 40, color: T.chalk, fontFamily: disp, fontSize: F.xs, fontWeight: 600, letterSpacing: ".06em", textTransform: "uppercase", cursor: "pointer" }}>
-          + New contact{q.trim() ? ` "${q.trim().slice(0, 40)}"` : ""}
-        </button>
+        {!onNew && newBtn}
       </div>
     </div>
   );

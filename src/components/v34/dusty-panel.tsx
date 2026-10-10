@@ -546,12 +546,6 @@ export function DustyPanel({ open, onClose, onBusy, onStream }: {
           </div>
         </div>
 
-        {/* Dusty sits in the chat, centred just above the message bar — over where he lives in the
-            footer — in his live state (Coy, 2026-10-09: "move the dusty character into the chat
-            window … This would allow the text box to be wider"). */}
-        <div className="shrink-0 flex justify-center" style={{ paddingTop: 4, paddingBottom: 2 }}>
-          <DustyAvatar state={recording || hearing ? "loading" : dustyState} size={34} />
-        </div>
         <form onSubmit={(e) => { e.preventDefault(); void ask(draft); }} className="shrink-0 px-3 py-2.5"
           style={{ borderTop: `1px solid ${T.hair}`, background: T.card }}>
           {atts.length > 0 && (
@@ -567,6 +561,9 @@ export function DustyPanel({ open, onClose, onBusy, onStream }: {
             </div>
           )}
           <div className="mx-auto flex items-end gap-2" style={{ maxWidth: 900 }}>
+            {/* Dusty on the message bar's row, at its left, twice his old 36px, in his live state
+                (Coy, 2026-10-09: "offset to the left at the bottom on the same row … twice as big"). */}
+            <span className="shrink-0 flex"><DustyAvatar state={recording || hearing ? "loading" : dustyState} size={68} /></span>
             {recording ? (
               <VoiceRecorder onSend={(b) => void voice(b)} onCancel={() => setRecording(false)} />
             ) : (

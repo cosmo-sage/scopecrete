@@ -307,8 +307,27 @@ html[data-activity-phone="off"] { --sc-head: 54px; }
    --sc-font-disp/body/strong/light/hand. <html data-theme> picks one; the inline
    script in app/layout.tsx sets it before first paint. T in tokens.ts reads
    these variables, so every screen follows the theme. */
+/* The header's bottom edge and second rule: the pencil line unless a theme sets them (Studio). */
+:root { --sc-paper-edge: var(--sc-pencil-line); --sc-paper-rule: var(--sc-pencil-line); }
 :root, [data-theme="site-office"] {
   --sc-slab:#FBF6EC; --sc-card:#FFFFFF; --sc-sunk:#F3ECDD; --sc-ink:#2A2A2A; --sc-ink2:#5E5A52; --sc-ink3:#8C8578; --sc-hair:#E6DCC8; --sc-hair-soft:#F1E9DA; --sc-hair-strong:#D9CDB6; --sc-hiviz:#B85A3C; --sc-on-hiviz:#FFFFFF; --sc-hiviz-dim:#F6E2D8; --sc-hiviz-soft:#D97757; --sc-hiviz-text:#9A4527; --sc-chalk:#1E5AA8; --sc-chalk-dim:#DCE6F4; --sc-green:#2F8A5B; --sc-violet:#6A55B0; --sc-red:#B5412C; --sc-teal:#0F7C86; --sc-bucket-unsorted:#D97757; --sc-bucket-customer:#2F8A5B; --sc-bucket-vendor:#1E5AA8; --sc-bucket-personal:#6A55B0; --sc-bucket-spam:#B5412C; --sc-out-bg:#F6E2D8; --sc-out-ink:#2A2A2A; --sc-dusty-tint:#FBEDE6; --sc-dusty-text:#9A4527; --sc-dusty-edge:#D97757; --sc-rail:#F3ECDD; --sc-rail-active:#FFFFFF; --sc-rail-ink:#6E685D; --sc-rail-ink-on:#2A2A2A; --sc-paper:#FAF8F3; --sc-paper-grid:rgba(89,128,166,.08); --sc-pencil:#3A3E43; --sc-pencil-muted:#5A5F66; --sc-pencil-line:rgba(58,62,68,.30); --sc-paper-btn:rgba(255,255,255,.55); --sc-hatch:rgba(52,56,61,.95); --sc-hatch-edge:rgba(52,56,61,.7); --sc-guide:rgba(58,62,68,.35); --sc-crete:#5A6068; --sc-work-dot-read:#3F74C9; --sc-work-dot-reply:#C98A12; --sc-work-dot-done:#2F8A5B; --sc-work-dot-warn:#B5412C; --sc-work-dot-idle:#B3AA9A; --sc-font-disp:'Barlow Condensed', system-ui, sans-serif; --sc-font-body:'IBM Plex Sans', system-ui, sans-serif; --sc-font-strong:'Lexend', system-ui, sans-serif; --sc-font-light:'Inter', system-ui, sans-serif; --sc-font-hand:'Kalam', cursive;
+  color-scheme: light;
+}
+/* Studio (Claude Design, 2026-10-10): white header, no grid, one hairline, steel-blue accent. */
+[data-theme="studio"] {
+  --sc-slab:#F4F5F7; --sc-card:#FFFFFF; --sc-sunk:#EEF0F3; --sc-ink:#1C2126; --sc-ink2:#4F5862; --sc-ink3:#7B8590;
+  --sc-hair:#E1E5EA; --sc-hair-soft:#ECEFF2; --sc-hair-strong:#CBD2D9;
+  --sc-hiviz:#2F6DB3; --sc-on-hiviz:#FFFFFF; --sc-hiviz-dim:#E4EDF8; --sc-hiviz-soft:#5F93D1; --sc-hiviz-text:#235187;
+  --sc-chalk:#2F6DB3; --sc-chalk-dim:#E4EDF8; --sc-green:#2E8A5C; --sc-violet:#6F5BB5; --sc-red:#B9432F; --sc-teal:#15808A;
+  --sc-bucket-unsorted:#C9803A; --sc-bucket-customer:#2E8A5C; --sc-bucket-vendor:#2F6DB3; --sc-bucket-personal:#6F5BB5; --sc-bucket-spam:#B9432F;
+  --sc-out-bg:#E4EDF8; --sc-out-ink:#1C2126; --sc-dusty-tint:#F0F4FA; --sc-dusty-text:#235187; --sc-dusty-edge:#9DB8DC;
+  --sc-rail:#FFFFFF; --sc-rail-active:#EEF0F3; --sc-rail-ink:#6A737D; --sc-rail-ink-on:#1C2126;
+  --sc-paper:#FFFFFF; --sc-paper-grid:transparent; --sc-paper-edge:#E1E5EA; --sc-paper-rule:transparent;
+  --sc-pencil:#1C2126; --sc-pencil-muted:#7B8590; --sc-pencil-line:rgba(28,33,38,.18); --sc-paper-btn:#F4F5F7;
+  --sc-hatch:#1C2126; --sc-hatch-edge:#1C2126; --sc-guide:transparent; --sc-crete:#5A6068;
+  --sc-work-dot-read:#2F6DB3; --sc-work-dot-reply:#C98A12; --sc-work-dot-done:#2E8A5C; --sc-work-dot-warn:#B9432F; --sc-work-dot-idle:#B4BCC5;
+  --sc-font-disp:'Barlow Condensed', system-ui, sans-serif; --sc-font-body:'IBM Plex Sans', system-ui, sans-serif;
+  --sc-font-strong:'Lexend', system-ui, sans-serif; --sc-font-light:'Inter', system-ui, sans-serif; --sc-font-hand:'Inter', system-ui, sans-serif;
   color-scheme: light;
 }
 [data-theme="blueprint"] {
@@ -351,8 +370,8 @@ body { background: var(--sc-slab); color: var(--sc-ink); }
     linear-gradient(var(--sc-paper-grid) 1px, transparent 1px),
     linear-gradient(90deg, var(--sc-paper-grid) 1px, transparent 1px);
   background-size: 10px 10px;
-  border-bottom: 1px solid var(--sc-pencil-line);
-  box-shadow: 0 3px 0 -2px var(--sc-pencil-line); /* doubled pencil rule */
+  border-bottom: 1px solid var(--sc-paper-edge);
+  box-shadow: 0 3px 0 -2px var(--sc-paper-rule); /* doubled pencil rule (Studio: one hairline) */
   color: var(--sc-pencil);
 }
 /* The header's dividing rules, darker than the paper's pencil line (Coy, 2026-10-05). */

@@ -6,7 +6,7 @@
  * Design ref: Claude Design · "ScopeCrete All Pages.dc.html", "Dusty Palette Options v2.dc.html" turn 4.
  */
 
-export type ThemeKey = "site-office" | "blueprint" | "kraft-yard" | "night-shift" | "steel" | "signal" | "plex-office" | "kraft-clean";
+export type ThemeKey = "site-office" | "studio" | "blueprint" | "kraft-yard" | "night-shift" | "steel" | "signal" | "plex-office" | "kraft-clean";
 
 export interface ThemeFonts { disp: string; body: string; strong: string; light: string; hand: string }
 
@@ -22,7 +22,7 @@ export interface Theme {
   outBg: string; outInk: string;
   dustyTint: string; dustyText: string; dustyEdge: string;
   rail: string; railActive: string; railInk: string; railInkOn: string;
-  paper: string; paperGrid: string; pencil: string; pencilMuted: string; pencilLine: string; paperBtn: string;
+  paper: string; paperGrid: string; paperEdge?: string; paperRule?: string; pencil: string; pencilMuted: string; pencilLine: string; paperBtn: string;
   hatch: string; hatchEdge: string; guide: string; crete: string;
   workDot: { read: string; reply: string; done: string; warn: string; idle: string };
   font: ThemeFonts;
@@ -93,6 +93,33 @@ export const THEMES: Record<ThemeKey, Theme> = {
       "strong": "'Lexend', system-ui, sans-serif",
       "light": "'Inter', system-ui, sans-serif",
       "hand": "'Kalam', cursive"
+    }
+  },
+  "studio": {
+    "key": "studio",
+    "label": "Studio",
+    "note": "Clean white and slate — no grid paper",
+    "dark": false,
+    "slab": "#F4F5F7", "card": "#FFFFFF", "sunk": "#EEF0F3",
+    "ink": "#1C2126", "ink2": "#4F5862", "ink3": "#7B8590",
+    "hair": "#E1E5EA", "hairSoft": "#ECEFF2", "hairStrong": "#CBD2D9",
+    "hiviz": "#2F6DB3", "onHiviz": "#FFFFFF", "hivizDim": "#E4EDF8", "hivizSoft": "#5F93D1", "hivizText": "#235187",
+    "chalk": "#2F6DB3", "chalkDim": "#E4EDF8",
+    "green": "#2E8A5C", "violet": "#6F5BB5", "red": "#B9432F", "teal": "#15808A",
+    "bucket": { "unsorted": "#C9803A", "customer": "#2E8A5C", "vendor": "#2F6DB3", "personal": "#6F5BB5", "spam": "#B9432F" },
+    "outBg": "#E4EDF8", "outInk": "#1C2126",
+    "dustyTint": "#F0F4FA", "dustyText": "#235187", "dustyEdge": "#9DB8DC",
+    "rail": "#FFFFFF", "railActive": "#EEF0F3", "railInk": "#6A737D", "railInkOn": "#1C2126",
+    "paper": "#FFFFFF", "paperGrid": "transparent", "paperEdge": "#E1E5EA", "paperRule": "transparent",
+    "pencil": "#1C2126", "pencilMuted": "#7B8590", "pencilLine": "rgba(28,33,38,.18)", "paperBtn": "#F4F5F7",
+    "hatch": "#1C2126", "hatchEdge": "#1C2126", "guide": "transparent", "crete": "#5A6068",
+    "workDot": { "read": "#2F6DB3", "reply": "#C98A12", "done": "#2E8A5C", "warn": "#B9432F", "idle": "#B4BCC5" },
+    "font": {
+      "disp": "'Barlow Condensed', system-ui, sans-serif",
+      "body": "'IBM Plex Sans', system-ui, sans-serif",
+      "strong": "'Lexend', system-ui, sans-serif",
+      "light": "'Inter', system-ui, sans-serif",
+      "hand": "'Inter', system-ui, sans-serif"
     }
   },
   "blueprint": {
@@ -559,7 +586,7 @@ export const THEMES: Record<ThemeKey, Theme> = {
   },
 };
 
-export const THEME_ORDER: ThemeKey[] = ["site-office","blueprint","kraft-yard","night-shift","steel","signal","plex-office","kraft-clean"];
+export const THEME_ORDER: ThemeKey[] = ["site-office","studio","blueprint","kraft-yard","night-shift","steel","signal","plex-office","kraft-clean"];
 export const DEFAULT_THEME: ThemeKey = "site-office";
 
 /** Writes a theme onto <html> as CSS variables (--sc-*) + data-theme. Unchanged except it now also writes --sc-font-*. */
@@ -574,5 +601,8 @@ export function applyTheme(key: ThemeKey) {
     else if (v && typeof v === "object") for (const [k2, v2] of Object.entries(v)) flat[`${k}-${k2}`] = v2 as string;
   }
   for (const [k, v] of Object.entries(flat)) root.style.setProperty(`--sc-${k.replace(/[A-Z]/g, (m) => "-" + m.toLowerCase())}`, v);
+  // The header's bottom edge: Studio draws one hairline; every other theme the doubled pencil rule.
+  root.style.setProperty("--sc-paper-edge", t.paperEdge ?? t.pencilLine);
+  root.style.setProperty("--sc-paper-rule", t.paperRule ?? t.pencilLine);
   document.querySelector('meta[name="theme-color"]')?.setAttribute("content", t.paper);
 }

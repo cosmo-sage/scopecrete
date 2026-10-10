@@ -471,15 +471,13 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
             className="flex-1 flex items-center gap-2 pl-2.5 text-left" style={{ minWidth: 0, minHeight: 34, cursor: "pointer" }}>
             <span style={{ minWidth: 0, flex: 1, fontSize: F.sm, fontWeight: 700, color: T.ink, ...nums }}>
               Budget
-              {a.lines.length > 0 && <>
-                {` · ${a.lines.length} item${a.lines.length === 1 ? "" : "s"} · cost ${money0(sum(a.lines, "ext_cost"))} · price ${money0(sum(a.lines, "ext_price"))}`}
-                {areaPriced(a.lines) && areaSize(a.id) ? ` · ${areaSize(a.id)!.per(sum(a.lines, "ext_price"))}` : ""}
-              </>}
+              {/* Coy, 2026-10-10 (phone): "just say budget and the number of items with an add item button". */}
+              {` · ${a.lines.length} item${a.lines.length === 1 ? "" : "s"}`}
             </span>
           </button>
           <button onClick={() => setBook({ area: a.id ?? "" })} title="Add items from the Price book"
             className="rounded px-2.5 shrink-0" style={{ height: 28, background: T.ink, color: T.card, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", letterSpacing: ".05em", cursor: "pointer", whiteSpace: "nowrap" }}>
-            + Add items
+            + Add item
           </button>
           <button onClick={() => toggleFold(a.id as string)} aria-hidden="true" tabIndex={-1}
             className="flex items-center justify-center shrink-0" style={{ width: 26, height: 26, color: T.ink2, fontSize: 12, cursor: "pointer", transform: folded.has(a.id as string) ? "none" : "rotate(90deg)", transition: "transform .15s" }}>▸</button>
@@ -710,8 +708,10 @@ function GroupCard({ name, lines, res, optLabel, asmName, addons, onOpen, cost, 
       {open && lines.map((l, i) => {
         const r = res.lines[l.id];
         return (
-          <button key={l.id} onClick={() => onOpen(l)} className="w-full flex items-baseline justify-between gap-2 px-2.5 py-1.5 text-left"
-            style={{ borderTop: `1px solid ${i ? T.hairSoft : T.hair}`, cursor: "pointer" }}>
+          // Coy, 2026-10-10 (phone): each item reads as a subcategory of its group, set in with a "-".
+          <button key={l.id} onClick={() => onOpen(l)} className="w-full flex items-baseline justify-between gap-2 py-1.5 text-left"
+            style={{ borderTop: `1px solid ${i ? T.hairSoft : T.hair}`, cursor: "pointer", paddingLeft: 22, paddingRight: 10 }}>
+            <span aria-hidden="true" style={{ fontSize: F.xs, color: T.ink3, marginLeft: -12, width: 8, flexShrink: 0 }}>-</span>
             <span style={{ minWidth: 0, flex: 1 }}>
               <span style={{ display: "block", fontSize: F.xs, color: T.ink, ...clip }}>{l.name}</span>
               {isEstimate(l.description)

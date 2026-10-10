@@ -943,7 +943,7 @@ function ParamPanel({ jobId, data, groupId, setGroupId, selId, onSelect, act, on
               <>
                 <button onClick={() => { onSend(tg, [...ticked.ids]); setTicked({ g: "", ids: new Set() }); }} className="flex-1 rounded"
                   style={{ height: 34, background: T.hiviz, color: T.onHiviz, fontFamily: disp, fontWeight: 600, letterSpacing: ".04em", textTransform: "uppercase", fontSize: 12, whiteSpace: "nowrap", cursor: "pointer" }}>
-                  Send {ticked.ids.size} to budget
+                  Send to budget
                 </button>
                 <select value="" aria-label={`Move ${ticked.ids.size} to another group`} title="Move the ticked takeoffs into another group, which adds them up"
                   onChange={(e) => {
@@ -958,7 +958,7 @@ function ParamPanel({ jobId, data, groupId, setGroupId, selId, onSelect, act, on
                     setTicked({ g: "", ids: new Set() });
                   }}
                   className="rounded" style={{ height: 34, flex: "0 1 auto", maxWidth: 120, border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink, fontFamily: disp, fontWeight: 600, fontSize: 12, letterSpacing: ".04em", textTransform: "uppercase" }}>
-                  <option value="">Move {ticked.ids.size} to…</option>
+                  <option value="">Move to group</option>
                   {others.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                   <option value="+">+ New group…</option>
                 </select>

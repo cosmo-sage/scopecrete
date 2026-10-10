@@ -4369,8 +4369,9 @@ expected start date per quoted job before it means anything. Add the field.
   **Not built:** vendors' delivery circles (their area is a line of text), a
   frame resized by its corner, customers' own pins, live directions or
   drive times.
-  **The office and its radius (migration 098, written 2026-10-10, NOT
-  applied; Coy: "set my office location in the settings of my organization …
+  **The office and its radius (migration 098, applied 2026-10-10 on
+  Coy's "apply 098"; checked after: RLS on, 2 policies, anon no grant,
+  authenticated select/insert/update/delete, 0 rows; Coy: "set my office location in the settings of my organization …
   When I open the map, it should be centered on the office with a radius of
   … 80 miles").** `org_office` (one row per org: the address as the map
   spelled it, its point, `radius_mi` 0–1,000 or blank; members read, only
@@ -4382,8 +4383,8 @@ expected start date per quoted job before it means anything. Add the field.
   radius with "80 mi from the office" on its north edge, and a ⌂ button
   beside the map's controls that goes back to it (`ringPoints()` /
   `ringPx()` / `cleanRadius()` in `src/lib/map.ts`, tested). Nothing is
-  filtered by the radius. Until 098 is applied Settings says the office
-  waits for it and the Map opens on its pins.
+  filtered by the radius. Without 098 Settings would say the office
+  waits for it and the Map would open on its pins.
 - **The Scope Builder (Coy, 2026-10-09: "Inside a job, I've got the Scope
   Builder tool … it flows from files to budgets to takeoffs. To proposal …
   a dedicated page for the scope builder tool … separate from the jobs page").**

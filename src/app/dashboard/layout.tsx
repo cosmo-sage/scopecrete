@@ -27,7 +27,7 @@
  *     (OrgLockup); with no logo, the scopecrete.ai wordmark as before.
  */
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { setDustyLive } from "@/lib/v34/dusty-live";
 import { usePathname } from "next/navigation";
@@ -49,6 +49,7 @@ import { Toolbox, tabLabel } from "@/components/v34/toolbox";
 import { PAGE, DEFAULT_MENUS, cleanMenus, activePage, type Menus } from "@/lib/v34/pages";
 import { MeContext, type Me } from "@/lib/v34/me-ctx";
 import { SETTINGS_HOME, settingsSectionOf } from "@/lib/v34/settings-sections";
+import { MenuPanel } from "@/components/v34/settings/menus-settings";
 import { cleanMenuColors, iconVar, type MenuColors } from "@/lib/v34/menu-colors";
 import { usePref } from "@/lib/v34/prefs";
 import { useHideHeadOnScroll } from "@/lib/v34/use-hide-head";
@@ -151,6 +152,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   // Each icon's colour from the book (Claude Design, 2026-10-10); a role, so it follows the theme.
   const [savedColors] = usePref<MenuColors | null>("menu_colors", null);
   const menuColors = cleanMenuColors(savedColors);
+  // The phone keeps the icons' colours too (Coy, 2026-10-10); a page with none stays ink.
+  const phoneIcon = (k: string, on: boolean) => (menuColors[k] ? iconVar(menuColors[k]) : on ? T.ink : T.ink3);
+  const [menuPanel, setMenuPanel] = useState(false);
+  const closeMenuPanel = useCallback(() => setMenuPanel(false), []);
 
   // Who is signed in, the org's name and logos. Reloaded after Settings
   // changes a name or a logo, so the header follows without a page reload.
@@ -323,17 +328,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           );
         })}
         {!limited && (
-          // Coy, 2026-10-10: a settings button on the rail to reorder the menu — opens Settings → Menus.
-          <Link href={`${SETTINGS_HOME}/menus`} onClick={() => setRailTip(null)} aria-current={pathname === `${SETTINGS_HOME}/menus` ? "page" : undefined}
-            aria-label="Menu settings: order and icon colors"
+          // Coy, 2026-10-10: a settings button on the rail; since the same day it slides
+          // a Menu settings panel out beside the rail instead of opening Settings.
+          <button type="button" onClick={() => { setRailTip(null); setMenuPanel((o) => !o); }} aria-expanded={menuPanel}
+            aria-label="Menu settings: order and icon colors" data-on={menuPanel ? "" : undefined}
             onMouseEnter={railIcons ? (e) => { const r = e.currentTarget.getBoundingClientRect(); setRailTip({ label: "Menu settings", top: r.top + r.height / 2 }); } : undefined}
             onMouseLeave={railIcons ? () => setRailTip(null) : undefined}
-            className="sc-rail-fold sc-rail-set no-underline">
+            className="sc-rail-fold sc-rail-set">
             <svg width="19" height="19" viewBox="0 0 19 19" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
               <path d="M3 5h13M3 9.5h13M3 14h13" /><circle cx="7" cy="5" r="1.6" fill="var(--sc-rail)" /><circle cx="12" cy="9.5" r="1.6" fill="var(--sc-rail)" /><circle cx="6" cy="14" r="1.6" fill="var(--sc-rail)" />
             </svg>
             <span className="sc-rail-label">Menu settings</span>
-          </Link>
+          </button>
         )}
         <button type="button" onClick={() => { setRailTip(null); setRailIcons(!railIcons); }}
           aria-expanded={!railIcons} aria-label={railIcons ? "Show the menu's words" : "Fold the menu to icons"}
@@ -359,7 +365,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <ThreadColorVars />
       {me && !limited && <AlertPopups />}
 
-      <Toolbox open={toolOpen} onClose={() => setToolOpen(false)} keys={toolKeys} active={active} badge={badge} />
+      <Toolbox open={toolOpen} onClose={() => setToolOpen(false)} keys={toolKeys} active={active} badge={badge} colors={menuColors} />
+      {!limited && <MenuPanel open={menuPanel} onClose={closeMenuPanel} />}
 
       {/* Above the open Toolbox (z 47) so Dusty's disc rising out of the bar stays whole. */}
       <footer className="fixed bottom-0 left-0 right-0 flex items-stretch lg:hidden"
@@ -382,7 +389,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <button key={k} onClick={() => setToolOpen((o) => !o)} aria-expanded={toolOpen} aria-label="Toolbox" data-on={on ? "" : undefined}
                 className="sc-tab flex-1 flex flex-col items-center justify-center gap-1" style={{ position: "relative" }}>
                 <span className="sc-tab-ico" style={{ position: "relative" }}>
-                  <NavIcon k="toolbox" on={on} />
+                  <NavIcon k="toolbox" on={on} color={phoneIcon("toolbox", on)} />
                   {badge.logs && <span className="absolute rounded-full" style={{ top: -2, right: -4, width: 7, height: 7, background: T.red }} />}
                 </span>
                 <span className="sc-tab-lbl" style={{ ...eyebrow, ...tabLabel("Toolbox"), color: on ? T.hiviz : T.ink3, fontWeight: on ? 700 : undefined }}>Toolbox</span>
@@ -396,7 +403,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <Link key={k} href={p.href} aria-current={on ? "page" : undefined} onClick={() => setToolOpen(false)}
               className="sc-tab flex-1 flex flex-col items-center justify-center gap-1 no-underline">
               <span className={`sc-tab-ico${on ? " sc-tab-pop" : ""}`} key={`${k}-${on}`} style={{ position: "relative" }}>
-                <NavIcon k={k} on={on} />
+                <NavIcon k={k} on={on} color={phoneIcon(k, on)} />
                 {k === "threads" && needs !== null && needs > 0 && <Badge n={needs} style={{ top: -4, left: "calc(50% + 4px)", minWidth: 14, height: 14 }} />}
               </span>
               <span className="sc-tab-lbl" style={{ ...eyebrow, ...tabLabel(p.label), color: on ? T.hiviz : T.ink3, fontWeight: on ? 700 : undefined }}>{p.label}</span>

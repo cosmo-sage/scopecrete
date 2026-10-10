@@ -461,8 +461,18 @@ html[data-rail="icons"] .sc-rail-fold { padding-left: 14px; }
 .sc-rail-fold svg { flex: none; transition: transform .25s; }
 html[data-rail="icons"] .sc-rail-fold:not(.sc-rail-set) svg { transform: scaleX(-1); }
 .sc-rail-set + .sc-rail-fold { margin-top: 0; border-top: 0; }
-.sc-rail-set[aria-current="page"] { color: var(--sc-rail-ink-on); font-weight: 600; }
-@media (prefers-reduced-motion: reduce) { .sc-rail, .sc-rail-label, .sc-rail-fold svg { transition: none; } }
+.sc-rail-set[data-on] { color: var(--sc-rail-ink-on); font-weight: 600; background: var(--sc-rail-active); }
+/* Menu settings slides out from behind the rail (Coy, 2026-10-10), the page dimmed beside it. */
+.sc-menu-panel {
+  position: fixed; top: var(--sc-head); bottom: 0; left: var(--sc-rail-w); z-index: 29;
+  width: 380px; max-width: calc(100vw - var(--sc-rail-w));
+  background: var(--sc-card); border-right: 1px solid var(--sc-hair); box-shadow: 8px 0 24px rgba(0,0,0,.12);
+  transform: translateX(calc(-100% - var(--sc-rail-w))); visibility: hidden;
+  transition: transform .28s cubic-bezier(.2,.8,.2,1), visibility 0s .28s;
+}
+.sc-menu-panel[data-open] { transform: none; visibility: visible; transition: transform .28s cubic-bezier(.2,.8,.2,1); }
+.sc-menu-panel-scrim { position: fixed; top: var(--sc-head); bottom: 0; left: var(--sc-rail-w); right: 0; z-index: 28; background: rgba(0,0,0,.18); }
+@media (prefers-reduced-motion: reduce) { .sc-rail, .sc-rail-label, .sc-rail-fold svg, .sc-menu-panel, .sc-menu-panel[data-open] { transition: none; } }
 
 /* The icon colour book, Settings → Menus. */
 .sc-book-swatch { width: 24px; height: 24px; border-radius: 50%; border: 2px solid transparent; box-shadow: 0 0 0 1px var(--sc-card) inset; cursor: pointer; padding: 0; flex: none; }

@@ -21,9 +21,11 @@ import { PAGE, type Menus } from "@/lib/v34/pages";
 import { DustyAvatar } from "@/components/v34/dusty-avatar";
 import { BOOK_LABEL, BOOK_PRESETS, ICON_ROLES, iconVar, presetOf, type MenuColors } from "@/lib/v34/menu-colors";
 
-export function Toolbox({ open, onClose, keys, active, badge }: {
+export function Toolbox({ open, onClose, keys, active, badge, colors }: {
   open: boolean; onClose: () => void; keys: string[]; active: string;
   badge?: Record<string, boolean>;
+  /** The icons' colours from the book (Coy, 2026-10-10: the phone keeps them too). */
+  colors?: MenuColors;
 }) {
   if (!open) return null;
   return (
@@ -43,7 +45,7 @@ export function Toolbox({ open, onClose, keys, active, badge }: {
               <Link key={k} href={p.href} onClick={onClose} aria-current={on ? "page" : undefined}
                 className="flex flex-col items-center justify-center gap-1 no-underline" style={{ height: 58, position: "relative", minWidth: 0, padding: "0 2px" }}>
                 <span style={{ position: "relative", display: "flex" }}>
-                  <NavIcon k={k} on={on} />
+                  <NavIcon k={k} on={on} color={colors?.[k] ? iconVar(colors[k]) : undefined} />
                   {badge?.[k] && <span aria-label="needs a look" className="absolute rounded-full" style={{ top: -2, right: -4, width: 7, height: 7, background: T.red }} />}
                 </span>
                 <span style={{ ...eyebrow, ...tabLabel(p.label), color: on ? T.ink : T.ink3 }}>{p.label}</span>

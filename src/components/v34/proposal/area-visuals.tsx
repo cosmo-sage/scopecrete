@@ -11,7 +11,7 @@
  */
 import React, { useEffect, useState } from "react";
 import { openPdf, renderRegion } from "@/lib/pdf";
-import type { PlansData } from "@/components/v34/plan-room/shared";
+import { shapeColor, type PlansData } from "@/components/v34/plan-room/shared";
 
 type Pt = [number, number];
 export interface AreaVisual {
@@ -43,14 +43,8 @@ export function areaVisuals(plans: PlansData | null, areaIds: string[]): Record<
     let map: AreaVisual["map"] = null;
     if (sheet && file?.url) {
       const on = mine.filter((m) => m.sheet_id === sheet.id);
-      const xs = on.flatMap((m) => m.geometry.map((p) => p[0])), ys = on.flatMap((m) => m.geometry.map((p) => p[1]));
-      const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
-      // Room around the shapes so the customer sees where they sit; never smaller than a fifth of the sheet.
-      const side = Math.max(x1 - x0, y1 - y0, Math.min(sheet.page_w, sheet.page_h) / 5);
-      const w = Math.min(sheet.page_w, Math.max(x1 - x0, side) * 1.5), h = Math.min(sheet.page_h, Math.max(y1 - y0, side * 0.6) * 1.5);
-      const x = Math.max(0, Math.min(sheet.page_w - w, (x0 + x1) / 2 - w / 2)), y = Math.max(0, Math.min(sheet.page_h - h, (y0 + y1) / 2 - h / 2));
       map = {
-        fileId: file.id, url: file.url, page: sheet.page, box: { x, y, w, h },
+        fileId: file.id, url: file.url, page: sheet.page, box: boxAround(on, sheet),
         shapes: on.map((m) => { const p = params.get(m.parameter_id)!; return { kind: p.kind, color: p.color, geometry: m.geometry as Pt[], cutouts: (m.cutouts ?? []) as Pt[][] }; }),
       };
     }
@@ -61,6 +55,35 @@ export function areaVisuals(plans: PlansData | null, areaIds: string[]): Record<
     if (map || photos.length) out[id] = { map, photos };
   }
   return out;
+}
+
+/** The part of a sheet around some shapes, with room so it reads where they sit; never smaller than a fifth of the sheet. */
+function boxAround(on: Array<{ geometry: Pt[] | number[][] }>, sheet: { page_w: number; page_h: number }) {
+  const xs = on.flatMap((m) => m.geometry.map((p) => p[0])), ys = on.flatMap((m) => m.geometry.map((p) => p[1]));
+  const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+  const side = Math.max(x1 - x0, y1 - y0, Math.min(sheet.page_w, sheet.page_h) / 5);
+  const w = Math.min(sheet.page_w, Math.max(x1 - x0, side) * 1.5), h = Math.min(sheet.page_h, Math.max(y1 - y0, side * 0.6) * 1.5);
+  const x = Math.max(0, Math.min(sheet.page_w - w, (x0 + x1) / 2 - w / 2)), y = Math.max(0, Math.min(sheet.page_h - h, (y0 + y1) / 2 - h / 2));
+  return { x, y, w, h };
+}
+
+/**
+ * Every takeoff drawn on one sheet, as a map to draw or freeze into a picture (Coy, 2026-10-10:
+ * "pull that photo into the section with the lines I've drawn for takeoffs"). Each shape in its
+ * own colour, as in Takeoffs. Null when nothing is drawn there or the file can't be read.
+ */
+export function sheetMarkup(plans: PlansData | null, sheetId: string): AreaVisual["map"] {
+  if (!plans) return null;
+  const sheet = plans.sheets.find((s) => s.id === sheetId);
+  const file = sheet ? plans.files.find((f) => f.id === sheet.file_id) : null;
+  if (!sheet || !file?.url) return null;
+  const params = new Map(plans.params.map((p) => [p.id, p]));
+  const on = plans.measurements.filter((m) => m.sheet_id === sheetId && params.has(m.parameter_id) && m.geometry.length);
+  if (!on.length) return null;
+  return {
+    fileId: file.id, url: file.url, page: sheet.page, box: boxAround(on, sheet),
+    shapes: on.map((m) => { const p = params.get(m.parameter_id)!; return { kind: p.kind, color: shapeColor(m, p), geometry: m.geometry as Pt[], cutouts: (m.cutouts ?? []) as Pt[][] }; }),
+  };
 }
 
 const cache = new Map<string, string>();

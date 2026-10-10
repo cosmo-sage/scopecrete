@@ -19,12 +19,20 @@
  * — the Plan Room's, an email's — and every photo the customer texted, ticked
  * onto this area. A texted one is brought onto the job first (as + Job does).
  * A photo on the area shows under it on the proposal.
+ *
+ * **Takeoffs with your markups** (Coy, 2026-10-10: "I have 4 measurements on one satellite
+ * photo: I would like to pull that photo into the section with the lines I've drawn"): each
+ * sheet or aerial with takeoffs drawn on it is offered at the top of Copy; Add draws the part
+ * of the sheet that holds them, every shape in its colour, into a JPEG saved as a photo on
+ * this area. It is a picture of today's lines — re-measuring doesn't change it.
  */
 
 import React, { useRef, useState } from "react";
 import { T, F, eyebrow, nums, clip } from "@/lib/v34/tokens";
 import { Sheet } from "@/components/v34/primitives";
 import { FileTile, FileViewer, sendBytes, type FileRow } from "@/components/v34/files-panel";
+import { AreaMap, mapPicture, sheetMarkup } from "@/components/v34/proposal/area-visuals";
+import { isAerialSheet, type PlansData } from "@/components/v34/plan-room/shared";
 
 async function call(url: string, method: string, body?: unknown) {
   const r = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
@@ -33,8 +41,10 @@ async function call(url: string, method: string, body?: unknown) {
   return b;
 }
 
-export function SectionPhotos({ jobId, sectionId, sectionName, photos, sections, onChange, onProposal = null, onProposalChange }: {
+export function SectionPhotos({ jobId, sectionId, sectionName, photos, sections, onChange, onProposal = null, onProposalChange, plans = null }: {
   jobId: string; sectionId: string; sectionName: string | null; photos: FileRow[];
+  /** The job's Takeoffs, for pictures of the sheets with their markups. */
+  plans?: PlansData | null;
   sections: Array<{ id: string; name: string | null }>;
   onChange: (f: FileRow | null, removedId?: string) => void;
   /** Whether this area's photos (and map) show on the proposal; null = not known / not shown. */
@@ -114,7 +124,7 @@ export function SectionPhotos({ jobId, sectionId, sectionName, photos, sections,
       {shooting && <CameraSheet title={`Photos of ${sectionName || "this area"}`} onClose={() => setShooting(false)}
         onFallback={() => { setShooting(false); camera.current?.click(); }}
         onAdd={(files) => { setShooting(false); void add(files); }} />}
-      {picking && <PickPhotos jobId={jobId} sectionId={sectionId} sectionName={sectionName} onClose={() => setPicking(false)} onChange={onChange} />}
+      {picking && <PickPhotos jobId={jobId} sectionId={sectionId} sectionName={sectionName} plans={plans} onClose={() => setPicking(false)} onChange={onChange} />}
       <FileViewer f={open} sections={sections} onClose={() => setOpen(null)}
         onSaved={(f) => { setOpen(f); onChange(f); }}
         onDeleted={(id) => { setOpen(null); onChange(null, id); }} />
@@ -205,13 +215,41 @@ function CameraSheet({ title, onClose, onAdd, onFallback }: { title: string; onC
 interface Texted { id: string; who: string | null; sent_at: string | null; url: string | null; file_id: string | null }
 
 /** Every photo on the job, and every one the customer texted, ticked onto this area. */
-function PickPhotos({ jobId, sectionId, sectionName, onClose, onChange }: {
-  jobId: string; sectionId: string; sectionName: string | null; onClose: () => void; onChange: (f: FileRow | null, removedId?: string) => void;
+function PickPhotos({ jobId, sectionId, sectionName, plans, onClose, onChange }: {
+  jobId: string; sectionId: string; sectionName: string | null; plans: PlansData | null; onClose: () => void; onChange: (f: FileRow | null, removedId?: string) => void;
 }) {
   const [files, setFiles] = useState<FileRow[] | null>(null);
   const [texted, setTexted] = useState<Texted[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  // Sheets with takeoffs drawn on them — this area's first, aerials before plan pages.
+  const marked = React.useMemo(() => {
+    if (!plans) return [];
+    return plans.sheets.map((sh) => {
+      const mine = plans.measurements.filter((m) => m.sheet_id === sh.id);
+      return { sheet: sh, count: mine.length, here: mine.some((m) => m.section_id === sectionId), map: sheetMarkup(plans, sh.id) };
+    }).filter((x) => x.map)
+      .sort((a, b) => Number(b.here) - Number(a.here) || Number(isAerialSheet(b.sheet)) - Number(isAerialSheet(a.sheet)));
+  }, [plans, sectionId]);
+  // A phone decodes a whole scanned sheet to draw any part of it, so only aerials get a preview there.
+  const coarse = typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches;
+  const [added, setAdded] = useState<Set<string>>(new Set());
+  const addMarkup = async (sheetId: string) => {
+    const x = marked.find((m) => m.sheet.id === sheetId);
+    if (!x?.map) return;
+    setBusy(sheetId); setErr(null);
+    try {
+      const blob = await mapPicture(x.map);
+      const label = `${x.sheet.number ?? `p.${x.sheet.page}`}${x.sheet.title && !isAerialSheet(x.sheet) ? ` ${x.sheet.title}` : ""}`;
+      const day = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/Chicago" });
+      const name = `Takeoffs on ${label} · ${day}.jpg`.replace(/[\\/:*?"<>|]/g, "-");
+      const made = await call("/api/files", "POST", { name, mime: "image/jpeg", size: blob.size, job_id: jobId, section_id: sectionId, category: "photo" });
+      await sendBytes(made.upload.signed_url, new File([blob], name, { type: "image/jpeg" }), () => {});
+      const done = await call(`/api/files/${made.file.id}/done`, "POST");
+      setAdded((a) => new Set(a).add(sheetId));
+      onChange(done.file as FileRow);
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(null); }
+  };
   React.useEffect(() => {
     let off = false;
     Promise.all([call(`/api/files?job_id=${jobId}`, "GET"), call(`/api/jobs/${jobId}/texted-photos`, "GET").catch(() => ({ photos: [] }))])
@@ -258,6 +296,28 @@ function PickPhotos({ jobId, sectionId, sectionName, onClose, onChange }: {
     <Sheet open cover onClose={onClose} title={`Photos for ${sectionName || "this area"}`} sub="Tick the ones that show this area — they go under it here and on the proposal.">
       <div className="px-4 py-3 flex flex-col gap-3">
         {err && <div style={{ color: T.red, fontSize: F.sm }}>{err}</div>}
+        {marked.length > 0 && (
+          <div>
+            <div style={{ ...eyebrow, marginBottom: 6 }}>Takeoffs · the sheet with your markups</div>
+            <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))" }}>
+              {marked.map((x) => (
+                <div key={x.sheet.id} className="rounded flex flex-col gap-1.5 p-1.5" style={{ border: `1px solid ${added.has(x.sheet.id) ? T.green : T.hair}`, background: T.card }}>
+                  {x.map && (!coarse || isAerialSheet(x.sheet)) ? <AreaMap map={x.map} height={120} /> : null}
+                  <div className="flex items-center gap-2">
+                    <span style={{ flex: 1, minWidth: 0, fontSize: F.xs, ...clip }}>
+                      <b>{x.sheet.number ?? `p.${x.sheet.page}`}</b>{x.sheet.title && !isAerialSheet(x.sheet) ? ` ${x.sheet.title}` : ""} · {x.count} takeoff{x.count === 1 ? "" : "s"}{x.here ? " · this area's" : ""}
+                    </span>
+                    <button onClick={() => void addMarkup(x.sheet.id)} disabled={!!busy} className="rounded px-2"
+                      style={{ height: 26, border: `1px solid ${T.hairStrong}`, background: added.has(x.sheet.id) ? T.greenDim : T.card, color: T.ink, cursor: "pointer", fontSize: F.xs, fontWeight: 600, whiteSpace: "nowrap", opacity: busy === x.sheet.id ? 0.5 : 1 }}>
+                      {busy === x.sheet.id ? "Adding…" : added.has(x.sheet.id) ? "✓ Added · again" : "+ Add"}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div style={{ fontSize: F.xs, color: T.ink3, marginTop: 4 }}>Saved as a photo on this area — a picture of today&apos;s lines.</div>
+          </div>
+        )}
         <div>
           <div style={{ ...eyebrow, marginBottom: 6 }}>On the job · from Takeoffs, emails and uploads</div>
           {files === null ? <div style={{ fontSize: F.sm, color: T.ink3 }}>…</div> : files.length ? (

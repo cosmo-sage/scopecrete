@@ -417,7 +417,7 @@ export default function ScopeBuilder() {
                       takeoff={!can(access, "plan_room") ? null : <SectionTakeoffStrip jobId={jobId} sectionId={s.id} sectionName={s.name ?? null} following={s.takeoff_sync !== false}
                         plans={plans} sectionNames={names} onChanged={takeoffChanged} />}
                       photos={!can(access, "files") ? null : <>
-                        <SectionPhotos jobId={jobId} sectionId={s.id} sectionName={s.name ?? null}
+                        <SectionPhotos jobId={jobId} sectionId={s.id} sectionName={s.name ?? null} plans={plans}
                         photos={jobFiles.filter((f) => (f.section_id === s.id || (f.takeoff_measurement_id && shapeIds.has(f.takeoff_measurement_id))) && (f.kind === "image" || f.kind === "video") && !isDetailFile(f))}
                         sections={sections.map((x) => ({ id: x.id, name: x.name ?? null }))} onChange={fileChanged}
                         onProposal={picsOff === null ? null : !picsOff[s.id]} onProposalChange={(on) => setPics(s.id, on)} />
@@ -438,7 +438,7 @@ export default function ScopeBuilder() {
         })()}
 
         <div className="px-3 py-3">
-          <button onClick={() => void addSection()} disabled={adding} className="w-full rounded"
+          <button onClick={() => void addSection()} disabled={adding} className="w-full lg:w-auto lg:px-5 rounded"
             style={{ height: 40, border: `1px dashed ${T.ink3}`, background: T.card, fontFamily: disp, fontSize: F.md,
                      fontWeight: 600, textTransform: "uppercase", letterSpacing: ".06em", color: T.ink, cursor: "pointer" }}>
             {adding ? "Adding…" : "+ Add a section"}
@@ -465,7 +465,7 @@ export default function ScopeBuilder() {
       </div>
 
       {viewer && plans && (
-        <SheetViewer jobId={jobId} title={viewer.title} sheets={planSheets} files={plans.files} groups={viewer.groups} start={viewer.start}
+        <SheetViewer jobId={jobId} title={viewer.title} sheets={planSheets} files={plans.files} params={plans.params} measurements={plans.measurements} groups={viewer.groups} start={viewer.start}
           find={viewer.find} onClose={() => setViewer(null)} />
       )}
 

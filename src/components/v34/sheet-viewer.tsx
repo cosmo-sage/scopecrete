@@ -9,6 +9,10 @@
  * the set. On a phone it is the whole screen, the sheets a row of chips.
  * Zoom with − / + (or ctrl + wheel), drag the page to pan. Measuring is the
  * Plan Room's: "Measure in the Plan Room" opens Takeoff on this sheet.
+ *
+ * The takeoffs drawn on a sheet show over it, each in its colour as in Takeoffs (Coy,
+ * 2026-10-10: "why doesn't it show me the drawings I made on the plans?"); Takeoffs ✓
+ * hides them.
  */
 import { usePinchZoom } from "@/lib/v34/use-pinch";
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -16,13 +20,15 @@ import Link from "next/link";
 import { T, F, disp, clip, eyebrow } from "@/lib/v34/tokens";
 import { openPdf, drawPage, pageText } from "@/lib/pdf";
 import { findOnSheet, type Hit } from "@/lib/find-on-sheet";
-import type { PlanFile, Sheet } from "@/components/v34/plan-room/shared";
+import { shapeColor, type Meas, type Param, type PlanFile, type Sheet } from "@/components/v34/plan-room/shared";
 import { useWide } from "@/lib/v34/use-wide";
 
 export interface SheetGroup { label: string; ids: string[] }
 
-export function SheetViewer({ jobId, title, sheets, files, groups, start, find, onClose }: {
+export function SheetViewer({ jobId, title, sheets, files, groups, start, find, onClose, params = [], measurements = [] }: {
   jobId: string; title: string; sheets: Sheet[]; files: PlanFile[];
+  /** The job's takeoff groups and shapes, drawn over the sheet. */
+  params?: Param[]; measurements?: Meas[];
   /** The line the section was read from: boxed wherever it is written on the sheet (Coy, 2026-10-09). */
   find?: string | null;
   /** The sheets listed first, by heading (the section's, then the other sections'). */
@@ -64,6 +70,14 @@ export function SheetViewer({ jobId, title, sheets, files, groups, start, find, 
   const [hits, setHits] = useState<Hit[] | null>(null);
   const [at, setAt] = useState(-1);
   const [k, setK] = useState(0); // CSS px per page point as drawn
+  const [dims, setDims] = useState<{ w: number; h: number } | null>(null); // the page in points as drawn
+  const [marks, setMarks] = useState(true);
+  const shapes = useMemo(() => {
+    if (!s) return [];
+    const byParam = new Map(params.map((p) => [p.id, p]));
+    return measurements.filter((m) => m.sheet_id === s.id && byParam.has(m.parameter_id) && m.geometry.length)
+      .map((m) => { const p = byParam.get(m.parameter_id)!; return { id: m.id, kind: p.kind, color: shapeColor(m, p), geometry: m.geometry, cutouts: m.cutouts ?? [] }; });
+  }, [s, params, measurements]);
   const focus = useRef<number | null>(null);
   const hitsRef = useRef<Hit[] | null>(null);
   useEffect(() => { hitsRef.current = hits; }, [hits]);
@@ -90,6 +104,7 @@ export function SheetViewer({ jobId, title, sheets, files, groups, start, find, 
         await job.done;
         if (off) return;
         setK(fit * zoom);
+        if (canvas.current) setDims({ w: (parseFloat(canvas.current.style.width) || 0) / (fit * zoom), h: (parseFloat(canvas.current.style.height) || 0) / (fit * zoom) });
         if (find) setHits(findOnSheet(await pageText(s.file_id, doc, s.page), find));
         const f = focus.current;
         if (f !== null && box.current && hitsRef.current?.[f]) {
@@ -175,6 +190,10 @@ export function SheetViewer({ jobId, title, sheets, files, groups, start, find, 
           <div style={{ fontSize: F.sm, fontWeight: 600, ...clip }}>{s ? name(s) : "No sheet"}</div>
           <div style={{ fontSize: 10.5, color: T.ink3, ...clip }}>{title}{file ? ` · ${file.name}` : ""}{order.length ? ` · ${i + 1} of ${order.length}` : ""}</div>
         </div>
+        {shapes.length > 0 && (
+          <button onClick={() => setMarks((v) => !v)} aria-pressed={marks} title={marks ? "Hide the takeoffs drawn on this sheet" : "Show the takeoffs drawn on this sheet"}
+            style={{ ...btn, fontSize: 11, background: marks ? T.ink : T.card, color: marks ? T.card : T.ink }}>{marks ? "✓ " : ""}Takeoffs</button>
+        )}
         <button onClick={() => setZoom((z) => Math.max(0.5, z / 1.25))} style={btn} aria-label="Zoom out">−</button>
         <button onClick={() => setZoom(1)} style={{ ...btn, fontSize: 11 }} aria-label="Fit the width">Fit</button>
         <button onClick={() => setZoom((z) => Math.min(6, z * 1.25))} style={btn} aria-label="Zoom in">+</button>
@@ -207,6 +226,20 @@ export function SheetViewer({ jobId, title, sheets, files, groups, start, find, 
               : (
                 <div style={{ position: "relative", width: "fit-content", margin: "0 auto" }}>
                   <canvas ref={canvas} style={{ display: "block", background: "#fff", boxShadow: "0 1px 4px rgba(0,0,0,.15)", opacity: busy ? 0.6 : 1 }} />
+                  {marks && k > 0 && dims && dims.w > 0 && shapes.length > 0 && (() => {
+                    const sw = Math.max(dims.w, dims.h) / 900;
+                    const path = (pts: number[][], close: boolean) => pts.map((p, n) => `${n ? "L" : "M"}${p[0]},${p[1]}`).join(" ") + (close ? " Z" : "");
+                    return (
+                      <svg viewBox={`0 0 ${dims.w} ${dims.h}`} preserveAspectRatio="none" aria-hidden="true"
+                        style={{ position: "absolute", left: 0, top: 0, width: dims.w * k, height: dims.h * k, pointerEvents: "none" }}>
+                        {shapes.map((x) => x.kind === "count"
+                          ? <g key={x.id}>{x.geometry.map((p, j) => <circle key={j} cx={p[0]} cy={p[1]} r={sw * 5} fill={x.color} stroke="#fff" strokeWidth={sw} />)}</g>
+                          : x.kind === "linear"
+                            ? <path key={x.id} d={path(x.geometry, false)} fill="none" stroke={x.color} strokeWidth={sw * 2.5} strokeLinejoin="round" strokeLinecap="round" />
+                            : <path key={x.id} d={path(x.geometry, true) + x.cutouts.map((c) => " " + path(c, true)).join("")} fillRule="evenodd" fill={x.color} fillOpacity={0.28} stroke={x.color} strokeWidth={sw * 1.6} />)}
+                      </svg>
+                    );
+                  })()}
                   {!busy && k > 0 && hits?.map((h, n) => (
                     <div key={n} aria-hidden="true" style={{ position: "absolute", left: h.x * k, top: h.y * k, width: h.w * k, height: h.h * k, pointerEvents: "none",
                       border: `2px solid ${T.hiviz}`, background: "rgba(255,170,0,.18)", borderRadius: 3, boxShadow: n === at ? `0 0 0 4px rgba(255,170,0,.35)` : "none" }} />

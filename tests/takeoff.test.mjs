@@ -201,3 +201,18 @@ test("discipline prefixes and split text lines", () => {
   assert.equal(lines[0].text, "1/8\" = 1'-0\"");
   assert.equal(lines.length, 2);
 });
+
+test("Fill's Cut out picks the shape a click is in, and only keeps holes inside it", async () => {
+  const { pointInPolygon, areaShapeAt, holeFits } = await import("../src/lib/takeoff.ts");
+  const lot = { id: "lot", geometry: [[0, 0], [100, 0], [100, 100], [0, 100]], cutouts: [[[10, 10], [20, 10], [20, 20], [10, 20]]] };
+  const pad = { id: "pad", geometry: [[40, 40], [60, 40], [60, 60], [40, 60]], cutouts: [] };
+  assert.ok(pointInPolygon([50, 50], lot.geometry));
+  assert.ok(!pointInPolygon([150, 50], lot.geometry));
+  assert.equal(areaShapeAt([50, 50], [lot, pad])?.id, "pad"); // the smallest that holds it
+  assert.equal(areaShapeAt([50, 50], [lot, pad], "lot")?.id, "lot"); // the selected one first
+  assert.equal(areaShapeAt([80, 80], [lot, pad])?.id, "lot");
+  assert.equal(areaShapeAt([15, 15], [lot, pad]), null); // already a hole
+  assert.equal(areaShapeAt([150, 15], [lot, pad]), null);
+  assert.ok(holeFits([[30, 30], [35, 30], [35, 35], [30, 35]], lot.geometry));
+  assert.ok(!holeFits([[90, 90], [120, 90], [120, 120], [90, 120]], lot.geometry));
+});

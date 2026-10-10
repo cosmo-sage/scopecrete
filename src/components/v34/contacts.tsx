@@ -22,6 +22,7 @@ import type { CardRead } from "@/lib/business-card";
 import { T, F, BUCKET, disp, eyebrow, clip, nums, relTime } from "@/lib/v34/tokens";
 import { PageHeader, SearchBubble, SearchToggle, Sheet } from "@/components/v34/primitives";
 import { useWide } from "@/lib/v34/use-wide";
+import { Emblem } from "@/components/site/marks";
 import { initials, ROLE_LABEL, type ContactRole } from "@/lib/v34/threads";
 import { BOOK_ROLES, formatNumber, matchesBook, sortBook, type BookEntry, type BookSort } from "@/lib/contacts-book";
 
@@ -116,7 +117,12 @@ export function ContactsPage() {
           <option value="az">A–Z</option><option value="recent">Recent</option>
         </select>
         <SearchToggle open={finding || !!q} onToggle={() => { if (finding || q) { setQ(""); setFinding(false); } else setFinding(true); }} label="Find a contact" />
-        <button onClick={() => setAdding(true)} className="sc-new-btn" style={btn(true)}>+ Contact</button>
+        {/* The ScopeCrete emblem: Dusty offers "Add contact" (Coy, 2026-10-10), as on Jobs. */}
+        <button onClick={() => { window.dispatchEvent(new Event("sc:dusty-open")); window.dispatchEvent(new Event("sc:dusty-contacts")); }}
+          className="shrink-0 flex items-center justify-center rounded" aria-label="Add a contact — ask Dusty" title="Add a contact"
+          style={{ width: 34, height: 34, border: `1px solid ${T.hiviz}`, background: T.card, cursor: "pointer" }}>
+          <Emblem size={22} spin />
+        </button>
       </>}>
       {(finding || q) && <div className="mt-2"><SearchBubble value={q} onChange={setQ} onClose={() => setFinding(false)} placeholder="Find a name, company, number, email, address…" /></div>}
     </PageHeader>
@@ -194,7 +200,7 @@ export function ContactsPage() {
           </div>
         )}
 
-      <Sheet open={adding} onClose={() => setAdding(false)} title="New contact" sub="Someone who hasn't called or texted yet">
+      <Sheet open={adding} cover onClose={() => setAdding(false)} title="New contact" sub="Someone who hasn't called or texted yet">
         <div className="px-4 py-3">
           {adding && <NewContactForm onCancel={() => setAdding(false)} onMade={(c) => { setAdding(false); setTick((n) => n + 1); window.location.href = bookHref(c); }} />}
         </div>

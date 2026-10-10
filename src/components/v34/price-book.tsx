@@ -80,7 +80,8 @@ export function PriceBook({ pick }: { pick?: PricePick } = {}) {
   const [view, setViewState] = useState<View>("group");
   const [tab, setTab] = useState<"cards" | "assemblies" | "defaults">("cards");
   const [q, setQ] = useState("");
-  const [retired, setRetired] = useState(false);
+  // "Show retired" is gone (Coy, 2026-10-10); retired cards stay out of the list.
+  const retired = false;
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [editing, setEditing] = useState<Partial<Card> | null>(null);
   const [addingGroup, setAddingGroup] = useState(false);
@@ -346,10 +347,6 @@ export function PriceBook({ pick }: { pick?: PricePick } = {}) {
       </div>
       {tab === "cards" && <>
         <div style={{ flex: 1, minWidth: 180, maxWidth: 360 }}><SearchBubble value={q} onChange={setQ} autoFocus={false} placeholder="Find: 3000, rebar, Angelle, item #…" /></div>
-        <label className="flex items-center gap-1.5" style={{ fontSize: F.xs, color: T.ink2 }}>
-          <input type="checkbox" checked={retired} onChange={(e) => setRetired(e.target.checked)} style={{ width: 15, height: 15, accentColor: T.chalk }} />
-          Show retired
-        </label>
         <span style={{ fontSize: F.xs, color: T.ink3 }}>{active.length} card{active.length === 1 ? "" : "s"} · {active.filter((c) => c.unit_cost === null).length} without a cost</span>
         {/* View and Columns sit at the right on a desktop (Coy, 2026-10-08). */}
         <div className="flex items-center gap-2" style={{ marginLeft: wide ? "auto" : undefined }}>

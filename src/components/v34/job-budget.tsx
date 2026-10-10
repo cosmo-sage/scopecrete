@@ -452,7 +452,7 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
       {err && <div className="px-3 pb-2" style={{ fontSize: F.xs, color: T.red }}>{err}</div>}
       {data.lines.length === 0 && (
         <div className="px-3 pb-3" style={{ fontSize: F.sm, color: T.ink3 }}>
-          {data.cards.length ? "No cost items yet. Add them inside each section above (+ Add items from the Price book), or load an assembly — quantities come from the section." : "No cost cards yet. Make or import them in the Price book, then add them here — or set up an assembly so new areas fill themselves."}
+          {data.cards.length ? "No cost items yet. Add them inside each section above (+ Add items), or load an assembly — quantities come from the section." : "No cost cards yet. Make or import them in the Price book, then add them here — or set up an assembly so new areas fill themselves."}
         </div>
       )}
 
@@ -465,8 +465,10 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
         // Coy, 2026-10-10: the Budget row reads as a part nested in its section — bold, the
         // section name's 13px, set in from the left on a tint, its fold button at the right.
         <div className="mx-3 mt-1 mb-2 rounded" style={{ borderLeft: `3px solid ${T.hairStrong}`, background: T.slab }}>
+          {/* + Add items sits on the Budget row itself (Coy, 2026-10-10). */}
+          <div className="flex items-center gap-1.5 pr-1">
           <button onClick={() => toggleFold(a.id as string)} aria-expanded={!folded.has(a.id as string)} aria-label={folded.has(a.id as string) ? "Show this section's budget" : "Fold this section's budget"}
-            className="w-full flex items-center gap-2 pl-2.5 pr-1 text-left" style={{ minHeight: 34, cursor: "pointer" }}>
+            className="flex-1 flex items-center gap-2 pl-2.5 text-left" style={{ minWidth: 0, minHeight: 34, cursor: "pointer" }}>
             <span style={{ minWidth: 0, flex: 1, fontSize: F.sm, fontWeight: 700, color: T.ink, ...nums }}>
               Budget
               {a.lines.length > 0 && <>
@@ -474,15 +476,15 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
                 {areaPriced(a.lines) && areaSize(a.id) ? ` · ${areaSize(a.id)!.per(sum(a.lines, "ext_price"))}` : ""}
               </>}
             </span>
-            <span aria-hidden="true" className="flex items-center justify-center shrink-0" style={{ width: 26, height: 26, color: T.ink2, fontSize: 12, transform: folded.has(a.id as string) ? "none" : "rotate(90deg)", transition: "transform .15s" }}>▸</span>
           </button>
-          {!folded.has(a.id as string) && <>
-          <div className="px-2.5 pb-1.5">
-            <button onClick={() => setBook({ area: a.id ?? "" })}
-              className="rounded px-2.5" style={{ height: 28, background: T.ink, color: T.card, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", letterSpacing: ".05em", cursor: "pointer" }}>
-              + Add items from the Price book
-            </button>
+          <button onClick={() => setBook({ area: a.id ?? "" })} title="Add items from the Price book"
+            className="rounded px-2.5 shrink-0" style={{ height: 28, background: T.ink, color: T.card, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", letterSpacing: ".05em", cursor: "pointer", whiteSpace: "nowrap" }}>
+            + Add items
+          </button>
+          <button onClick={() => toggleFold(a.id as string)} aria-hidden="true" tabIndex={-1}
+            className="flex items-center justify-center shrink-0" style={{ width: 26, height: 26, color: T.ink2, fontSize: 12, cursor: "pointer", transform: folded.has(a.id as string) ? "none" : "rotate(90deg)", transition: "transform .15s" }}>▸</button>
           </div>
+          {!folded.has(a.id as string) && <>
           {err && <div className="px-3 pb-1" style={{ fontSize: F.xs, color: T.red }}>{err}</div>}
           {a.lines.length === 0
             ? <div className="px-2.5 pb-2" style={{ fontSize: F.xs, color: T.ink3 }}>No cost items yet. Add them from the Price book — quantities come from this section.</div>

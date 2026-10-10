@@ -148,9 +148,11 @@ export function DustyPanel({ open, onClose, onBusy, onStream }: {
   // The Jobs page's emblem (Coy, 2026-10-09): a fresh chat where Dusty asks
   // "a new job, or one you have?" — his question is fixed text, no model call.
   const [jobAsk, setJobAsk] = useState(false);
+  // The Contacts page's emblem (Coy, 2026-10-10): an "Add contact" button, no model call.
+  const [contactAsk, setContactAsk] = useState(false);
   const select = useCallback((id: string | null) => {
     abort.current?.abort();
-    setRailOpen(false); setErr(null); setActiveId(id); setDraft(""); if (id) setJobAsk(false);
+    setRailOpen(false); setErr(null); setActiveId(id); setDraft(""); if (id) { setJobAsk(false); setContactAsk(false); }
     setItems([]); setLoadingConv(!!id);
     setWant((w) => ({ id, n: w.n + 1 }));
   }, []);
@@ -196,9 +198,11 @@ export function DustyPanel({ open, onClose, onBusy, onStream }: {
     return () => window.removeEventListener("sc:dusty-draft", put);
   }, []);
   useEffect(() => {
-    const on = () => { select(null); setJobAsk(true); };
+    const on = () => { select(null); setContactAsk(false); setJobAsk(true); };
+    const onContact = () => { select(null); setJobAsk(false); setContactAsk(true); };
     window.addEventListener("sc:dusty-jobs", on);
-    return () => window.removeEventListener("sc:dusty-jobs", on);
+    window.addEventListener("sc:dusty-contacts", onContact);
+    return () => { window.removeEventListener("sc:dusty-jobs", on); window.removeEventListener("sc:dusty-contacts", onContact); };
   }, [select]);
   useEffect(() => {
     const q = autoAsk.current;
@@ -497,7 +501,10 @@ export function DustyPanel({ open, onClose, onBusy, onStream }: {
               <JobAsk onNew={() => { setJobAsk(false); create("job"); }}
                 onPick={(id) => { setJobAsk(false); router.push(`/dashboard/scope/${id}/summary`); }} />
             )}
-            {!loadingConv && items.length === 0 && !jobAsk && (
+            {!loadingConv && items.length === 0 && contactAsk && !jobAsk && (
+              <ContactAsk onAdd={() => { setContactAsk(false); create("contact"); }} />
+            )}
+            {!loadingConv && items.length === 0 && !jobAsk && !contactAsk && (
               <DustyHello contactId={ref.kind === "thread" ? ref.id : null} onGo={onClose} />
             )}
             {/* The chat at Coy's text size: zoom scales the answers' tables and plans with the words. */}
@@ -684,6 +691,23 @@ function JobAsk({ onNew, onPick }: { onNew: () => void; onPick: (id: string) => 
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/** Dusty's offer from the Contacts page's emblem: one quick answer, Add contact. */
+function ContactAsk({ onAdd }: { onAdd: () => void }) {
+  return (
+    <div style={{ padding: "20px 4px 12px" }}>
+      <div className="flex items-start gap-2.5">
+        <Emblem size={30} spin />
+        <div style={{ fontFamily: agent, fontSize: F.md, color: T.ink, lineHeight: 1.45, paddingTop: 4 }}>
+          Who are we adding? Tap below for the form, or ask me anything about your contacts.
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-2" style={{ margin: "12px 0 0 40px" }}>
+        <button onClick={onAdd} style={{ height: 36, padding: "0 14px", borderRadius: 999, border: `1px solid ${T.hiviz}`, background: T.hiviz, color: T.onHiviz, fontFamily: agent, fontSize: F.sm, fontWeight: 600, cursor: "pointer" }}>Add contact</button>
+      </div>
     </div>
   );
 }

@@ -255,7 +255,7 @@ function PickPhotos({ jobId, sectionId, sectionName, onClose, onChange }: {
     </button>
   );
   return (
-    <Sheet open onClose={onClose} title={`Photos for ${sectionName || "this area"}`} sub="Tick the ones that show this area — they go under it here and on the proposal.">
+    <Sheet open cover onClose={onClose} title={`Photos for ${sectionName || "this area"}`} sub="Tick the ones that show this area — they go under it here and on the proposal.">
       <div className="px-4 py-3 flex flex-col gap-3">
         {err && <div style={{ color: T.red, fontSize: F.sm }}>{err}</div>}
         <div>

@@ -218,10 +218,12 @@ export const NavIcon = ({ k, on, color }: { k: string; on: boolean; color?: stri
 
 /* ------------------------------------------------------------------ Drawer */
 
-export function Drawer({ open, onClose, title, sub, right, children, hideClose, full, below, wide, left }: {
+export function Drawer({ open, onClose, title, sub, right, children, hideClose, full, below, wide, left, cover }: {
   open: boolean; onClose: () => void; title: string; sub?: string;
   right?: React.ReactNode; children: React.ReactNode;
   hideClose?: boolean; full?: boolean; below?: boolean; wide?: boolean;
+  /** The whole screen, its full width (Coy, 2026-10-10: area photos, New contact). */
+  cover?: boolean;
   /** Comes in from the left, where its ☰ is (Coy, 2026-10-09: folders). */
   left?: boolean;
 }) {
@@ -246,7 +248,7 @@ export function Drawer({ open, onClose, title, sub, right, children, hideClose, 
       onClick={full ? undefined : onClose}>
       <div onClick={(e) => e.stopPropagation()} role="dialog" aria-label={title}
         className={`absolute top-0 bottom-0 flex flex-col ${full ? "left-0 right-0" : left ? "left-0 sc-drawer-in-left" : "right-0 sc-drawer-in-right"}`}
-        style={{ width: full ? "auto" : wide ? "min(1180px, 100%)" : "min(408px, 90%)", background: T.card,
+        style={{ width: full ? "auto" : cover ? "100%" : wide ? "min(1180px, 100%)" : "min(408px, 90%)", background: T.card,
                  boxShadow: full ? "none" : left ? "14px 0 40px rgba(10,14,18,.22)" : "-14px 0 40px rgba(10,14,18,.22)" }}>
 
         <div className="sticky top-0 z-10 shrink-0 px-4 flex items-center gap-3"
@@ -279,10 +281,10 @@ export function Drawer({ open, onClose, title, sub, right, children, hideClose, 
 }
 
 /** Kept as `Sheet` so the panels that already used it don't change. */
-export function Sheet({ open, onClose, title, sub, children, below }: {
-  open: boolean; onClose: () => void; title: string; sub?: string; children: React.ReactNode; below?: boolean;
+export function Sheet({ open, onClose, title, sub, children, below, cover }: {
+  open: boolean; onClose: () => void; title: string; sub?: string; children: React.ReactNode; below?: boolean; cover?: boolean;
 }) {
-  return <Drawer open={open} onClose={onClose} title={title} sub={sub} below={below}>{children}</Drawer>;
+  return <Drawer open={open} onClose={onClose} title={title} sub={sub} below={below} cover={cover}>{children}</Drawer>;
 }
 
 /* -------------------------------------------------------------- EmptyState */

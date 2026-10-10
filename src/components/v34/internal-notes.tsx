@@ -14,6 +14,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { T, F, eyebrow, disp, relTime } from "@/lib/v34/tokens";
 import { insertTag, matchMembers, memberName, noteParts, typingTag, type Member } from "@/lib/mentions";
+import { PIN_MARK, pinLink, pinParts, readPin } from "@/lib/plan-pins";
 import { archiveNote } from "@/lib/archive";
 import { ArchiveNoteCard } from "@/components/v34/archive-actions";
 import { VoiceRecorder } from "@/components/v34/voice-recorder";
@@ -122,10 +123,12 @@ export function InternalNotes({ contactId, name, notes, onSaved, leadSource, mer
                   {n.message_id && <span>· on a call</span>}
                 </div>
                 <div style={{ fontSize: 13.5, lineHeight: 1.5, whiteSpace: "pre-wrap", marginTop: 2 }}>
-                  {noteParts(n.body).map((p, i) => p.user
+                  {noteParts(pinParts(n.body) ? `${PIN_MARK}${pinParts(n.body)?.where ?? "On the plans"}: ${pinParts(n.body)?.words}` : n.body).map((p, i) => p.user
                     ? <span key={i} className="rounded px-1" style={{ background: T.chalkDim, color: T.chalk, fontWeight: 600 }}>{p.text}</span>
                     : <React.Fragment key={i}>{p.text}</React.Fragment>)}
                 </div>
+                {/* A question pinned on a plan sheet (src/lib/plan-pins.ts): open the sheet zoomed to it. */}
+                {readPin(n.body) && <a href={pinLink(readPin(n.body)!)} style={{ display: "inline-block", marginTop: 4, fontSize: 12.5, fontWeight: 600, color: T.chalk }}>Open on the sheet ›</a>}
               </div>
             ))}
           </div>

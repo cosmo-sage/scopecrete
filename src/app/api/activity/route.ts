@@ -3,6 +3,7 @@ import { getApiSession, type ApiSession } from "@/lib/api-auth";
 import { myAccess } from "@/lib/access-server";
 import { plainSpeakers } from "@/lib/speakers";
 import { plainNote } from "@/lib/mentions";
+import { pinLink, readPin } from "@/lib/plan-pins";
 import { formatPhone } from "@/lib/v34/tokens";
 
 /**
@@ -356,7 +357,9 @@ async function tagItems(supabase: ApiSession["supabase"], orgId: string, userId:
     .eq("user_id", userId).eq("org_id", orgId).gte("created_at", weekAgo).order("created_at", { ascending: false }).limit(6);
   if (!error) {
     return ((rows ?? []) as Array<{ id: string; note_id: string | null; contact_id: string | null; job_id: string | null; title: string | null; body: string | null; created_at: string }>).map((n) => {
-      const href = limited ? (n.job_id ? `/dashboard/scope/${n.job_id}/summary` : null)
+      // A question pinned on a plan sheet opens the sheet at the pin (src/lib/plan-pins.ts).
+      const pin = readPin(n.body);
+      const href = pin ? pinLink(pin) : limited ? (n.job_id ? `/dashboard/scope/${n.job_id}/summary` : null)
         : n.contact_id ? `/dashboard/messages/${n.contact_id}?channel=notes` : n.job_id ? `/dashboard/scope/${n.job_id}/summary` : null;
       const words = plainNote(n.body ?? "");
       return { id: `tag-${n.note_id ?? n.id}`, at: n.created_at, kind: "reminder", contact_id: limited ? null : n.contact_id, href,

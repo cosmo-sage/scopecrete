@@ -20,6 +20,8 @@ import { Drawer, SlideDrawer } from "@/components/v34/primitives";
 import { ShapePhotos } from "./shape-photos";
 import { usePinchZoom, useWheelZoom } from "@/lib/v34/use-pinch";
 import { traceAt, type TraceOptions } from "@/lib/v34/plan-trace";
+import { useSearchParams } from "next/navigation";
+import { AskIcon, shapeMiddle, usePlanPins } from "./sheet-comments";
 
 type Tool = "select" | "area" | "rect" | "fill" | "linear" | "count" | "cutout" | "scale";
 const TOOL_KIND: Partial<Record<Tool, TakeoffKind>> = { area: "area", rect: "area", fill: "area", linear: "linear", count: "count" };
@@ -124,6 +126,17 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
   const selGroup = sel ? data.params.find((p) => p.id === sel.parameter_id) ?? null : null;
   const selName = sel ? sel.name ?? `${selGroup?.name ?? "Shape"} ${data.measurements.filter((m) => m.parameter_id === sel.parameter_id).findIndex((m) => m.id === sel.id) + 1}` : "";
   const selPhotos = sel ? files.filter((f) => f.takeoff_measurement_id === sel.id).length : 0;
+  // Questions pinned on the sheet for someone to answer (Coy, 2026-10-10) — ./sheet-comments.tsx.
+  const sp = useSearchParams();
+  const shapeName = useCallback((id: string | null) => {
+    const m = id ? data.measurements.find((x) => x.id === id) : null;
+    if (!m) return null;
+    const g = data.params.find((p) => p.id === m.parameter_id);
+    return m.name ?? `${g?.name ?? "Shape"} ${data.measurements.filter((x) => x.parameter_id === m.parameter_id).findIndex((x) => x.id === m.id) + 1}`;
+  }, [data.measurements, data.params]);
+  const setZoomTo = useCallback((z: number) => setZoom(z), []);
+  const pins = usePlanPins({ jobId, sheetId: sheet?.id ?? null, sheetName: sheet ? sheetLabel(sheet) : "", shapeName,
+    query: { pin: sp.get("pin"), z: sp.get("z"), m: sp.get("m"), sheet: sp.get("sheet") }, setZoom: setZoomTo, setSelId });
 
   const act = useCallback(async (fn: () => Promise<unknown>) => {
     setBusy(true); setMsg(null);
@@ -355,6 +368,11 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
           ))}
           <span className="flex-1" />
           {sheet && <span className="hidden md:inline" style={{ fontSize: F.xs, color: T.ink2, whiteSpace: "nowrap" }}>{sheetLabel(sheet)} · <ScaleBadge s={sheet} small /></span>}
+          <button onClick={() => { pins.setAskMode(!pins.askMode); setTool("select"); }} aria-pressed={pins.askMode} title="Ask someone about a spot: click the sheet where your question is"
+            className="flex items-center gap-1.5" style={{ ...tb(pins.askMode), padding: "0 8px" }}>
+            <AskIcon /><span className="hidden md:inline">Ask{pins.count ? ` · ${pins.count}` : ""}</span>
+          </button>
+          {sel && !pins.limited && <button onClick={() => pins.place(shapeMiddle(sel.geometry), sel.id)} title={`Ask someone about ${selName}`} style={tb(false)}>Ask about this</button>}
           {sel && <button onClick={() => setShapePhotos(true)} title={`Photos of ${selName} — they show on its budget section and the proposal`} style={tb(false)}>Shape photos{selPhotos ? ` (${selPhotos})` : ""}</button>}
           {sheet?.scale_ft_per_pt && sheets.length > 1 && <button onClick={() => setCopyScale({ k: sheet.scale_ft_per_pt as number, from: sheet.id })} title="Put this sheet's scale on every sheet, or the ones you pick" style={tb(false)}>Scale → other sheets</button>}
           <span className="inline-flex items-center" title="Zoom: the scroll wheel zooms where the pointer is" style={{ border: `1px solid ${T.hair}`, borderRadius: 3, flex: "0 0 auto" }}>
@@ -407,7 +425,8 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
           <Drawing key={sheet.id} sheet={sheet} fileUrl={file.url} zoom={zoom} setZoom={setZoom} tool={tool}
             data={data} groupId={groupId} selId={selId} setSelId={(id) => { setSelId(id); const m = data.measurements.find((x) => x.id === id); if (m) setGroupId(m.parameter_id); }}
             draft={draft} setDraft={setDraft} hover={hover} setHover={setHover} save={save} busy={busy || tracing} onTrace={(p) => void trace(p)} cutting={tool === "fill" && fillCut}
-            saveShape={(mid, pts) => act(() => call(`/api/jobs/${jobId}/takeoff/measurements/${mid}`, "PATCH", { geometry: pts }))} />
+            saveShape={(mid, pts) => act(() => call(`/api/jobs/${jobId}/takeoff/measurements/${mid}`, "PATCH", { geometry: pts }))}
+            onPin={pins.askMode ? (p) => pins.place(p, selId) : undefined} pinLayer={pins.layer} />
         ) : (
           <div className="flex-1 flex items-center justify-center p-6" style={{ fontSize: F.sm, color: T.ink3 }}>
             {sheet ? "This sheet's file can't be opened right now." : "No sheets yet — add a plan PDF on the job's Files page."}
@@ -415,6 +434,7 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
         )}
         </div>
 
+        {pins.panel}
         {sel && shapePhotos && <ShapePhotos jobId={jobId} shapeId={sel.id} shapeName={selName} files={files} open onClose={() => setShapePhotos(false)} onChanged={reload} />}
         {copyScale && <ScaleCopy k={copyScale.k} from={copyScale.from} all={!!copyScale.all} sheets={sheets} onClose={() => setCopyScale(null)}
           apply={(ids) => act(async () => {
@@ -582,7 +602,7 @@ function ScaleCopy({ k, from, all, sheets, apply, onClose }: { k: number; from: 
 
 /* --------------------------------------------------------------- drawing */
 
-function Drawing({ sheet, fileUrl, zoom, setZoom, tool, data, groupId, selId, setSelId, draft, setDraft, hover, setHover, save, busy, saveShape, onTrace, cutting }: {
+function Drawing({ sheet, fileUrl, zoom, setZoom, tool, data, groupId, selId, setSelId, draft, setDraft, hover, setHover, save, busy, saveShape, onTrace, cutting, onPin, pinLayer }: {
   sheet: Sheet; fileUrl: string; zoom: number; setZoom: (f: (z: number) => number) => void; tool: Tool;
   data: PlansData; groupId: string | null; selId: string | null; setSelId: (id: string | null) => void;
   draft: Pt[]; setDraft: React.Dispatch<React.SetStateAction<Pt[]>>; hover: Pt | null; setHover: (p: Pt | null) => void;
@@ -593,6 +613,10 @@ function Drawing({ sheet, fileUrl, zoom, setZoom, tool, data, groupId, selId, se
   onTrace: (p: Pt) => void;
   /** Fill is cutting a hole: the draft is drawn red. */
   cutting?: boolean;
+  /** Ask mode: a click drops a question pin here instead of drawing. */
+  onPin?: (p: Pt) => void;
+  /** The question pins over the drawing, at its scale. */
+  pinLayer?: (scale: number) => React.ReactNode;
 }) {
   // The corner being dragged on the selected shape, and the shape's points while it moves.
   const [edit, setEdit] = useState<{ id: string; pts: Pt[]; i: number; moved: boolean; start: Pt } | null>(null);
@@ -664,6 +688,7 @@ function Drawing({ sheet, fileUrl, zoom, setZoom, tool, data, groupId, selId, se
   const click = (e: React.PointerEvent<SVGSVGElement>) => {
     if (pinching.current) return;
     if (edit) { endEdit(); return; }
+    if (onPin) { onPin(toPage(e)); return; }
     if (busy || tool === "select") return;
     const p = toPage(e);
     if (tool === "fill") { onTrace(p); return; }
@@ -703,7 +728,7 @@ function Drawing({ sheet, fileUrl, zoom, setZoom, tool, data, groupId, selId, se
         <canvas ref={canvas} style={{ position: "absolute", inset: 0, width: w, height: h, opacity: drawn ? 1 : 0.4 }} />
         {scale > 0 && (
           <svg viewBox={`0 0 ${sheet.page_w} ${sheet.page_h}`} preserveAspectRatio="none" width={w} height={h}
-            style={{ position: "absolute", inset: 0, cursor: tool === "select" ? "default" : "crosshair", touchAction: draft.length ? "none" : "pan-x pan-y" }}
+            style={{ position: "absolute", inset: 0, cursor: tool === "select" && !onPin ? "default" : "crosshair", touchAction: draft.length ? "none" : "pan-x pan-y" }}
             onPointerUp={click} onDoubleClick={dbl}
             onPointerMove={(e) => {
               if (edit) { const p = toPage(e); setEdit({ ...edit, moved: edit.moved || dist(p, edit.start) * px > 3, pts: edit.pts.map((q, i) => (i === edit.i ? p : q)) }); return; }
@@ -774,6 +799,7 @@ function Drawing({ sheet, fileUrl, zoom, setZoom, tool, data, groupId, selId, se
             )}
           </svg>
         )}
+        {pinLayer?.(scale)}
         {/* the floating label on the selected shape */}
         {selM && selGroup && scale > 0 && (() => {
           const xs = selM.geometry.map((p) => p[0]), ys = selM.geometry.map((p) => p[1]);

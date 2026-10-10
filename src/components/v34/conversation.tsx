@@ -3,6 +3,7 @@
 import { ProposalChip } from "@/components/v34/proposal-send";
 import React, { useState, useEffect, useCallback } from "react";
 import { plainNote } from "@/lib/mentions";
+import { PIN_MARK, pinLink, pinParts, readPin } from "@/lib/plan-pins";
 import { archiveNote } from "@/lib/archive";
 import { ArchiveNoteCard } from "@/components/v34/archive-actions";
 import { Phone, CaretDown, CaretRight } from "@phosphor-icons/react";
@@ -653,7 +654,8 @@ function NoteRow({ n }: { n: Note }) {
       <div style={{ ...eyebrow, color: "#8A6D1A" }}>
         Your note · {new Date(n.created_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
       </div>
-      <div style={{ fontSize: F.sm, color: DA.textPrimary, lineHeight: 1.4, whiteSpace: "pre-wrap", marginTop: 2 }}>{plainNote(n.body)}</div>
+      <div style={{ fontSize: F.sm, color: DA.textPrimary, lineHeight: 1.4, whiteSpace: "pre-wrap", marginTop: 2 }}>{plainNote(pinParts(n.body) ? `${PIN_MARK}${pinParts(n.body)?.where ?? "On the plans"}: ${pinParts(n.body)?.words}` : n.body)}</div>
+      {readPin(n.body) && <a href={pinLink(readPin(n.body)!)} style={{ fontSize: F.xs, fontWeight: 600, color: "#1E5AA8" }}>Open on the sheet ›</a>}
     </div>
   );
 }

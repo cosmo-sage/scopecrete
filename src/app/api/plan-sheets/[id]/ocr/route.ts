@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
 import { SHEET_COLS } from "@/lib/plans-server";
+import { isStampTitle } from "@/lib/plan-sheets";
 
 /**
  * What the Plan Room's OCR read off one scanned sheet (migration 064), saved
@@ -27,7 +28,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const bad = (m: string, s = 400) => applyCookies(NextResponse.json({ error: m }, { status: s }));
   let b: Record<string, unknown>;
   try { b = await req.json(); } catch { return bad("Body must be JSON."); }
-  const { data: sh } = await supabase.from("plan_sheets").select("id, number_source").eq("org_id", orgId).eq("id", id).maybeSingle();
+  const { data: sh } = await supabase.from("plan_sheets").select("id, number_source, title").eq("org_id", orgId).eq("id", id).maybeSingle();
   if (!sh) return bad("No such sheet.", 404);
 
   const now = new Date().toISOString();
@@ -41,6 +42,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       if (number) { patch.number = number.toUpperCase(); patch.number_source = "read"; }
       const title = txt(b.title, 120);
       if (title) patch.title = title;
+      else if (isStampTitle(sh.title)) patch.title = null; // a plot stamp read off the text layer is no title
       const disc = txt(b.discipline, 12);
       if (disc && number) patch.discipline = disc;
       const scaleText = txt(b.scale_text, 60);

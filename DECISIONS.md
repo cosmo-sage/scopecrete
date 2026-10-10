@@ -3908,7 +3908,7 @@ expected start date per quoted job before it means anything. Add the field.
   the dense profile sheet read at 54 % with three parts timed out. Sheet
   numbers on DOTD sets are plain digits ("3"), which the reader does not
   take for a sheet number — they show as p.3. `findDimensions()` finds
-  12'-6", 5'-0", 6" in what was read (not the 2 of 1/2") for later use. Discipline filter, "Concrete scope" = civil + structural.
+  12'-6", 5'-0", 6" in what was read (not the 2 of 1/2") for later use. **A CAD set whose lettering is drawn as lines is read the same way (2026-10-10, Holden Pedestrian Bridge — Dusty said he couldn't read the 26 sheets).** Its only text is the plot stamp ("Sep 22, 2026 - 12:04pm") and the drawing file's path, which the title reader took as titles, so the sheets looked digital and OCR never started. `isStampTitle()` (`src/lib/plan-sheets.ts`, tested; copied into bid-intake's `sheets.ts`, waiting on a deploy) keeps them out of titles; a sheet with no number and only such a title is read by OCR, which clears the stamp. Dusty's job context says how many sheets are still waiting and where Coy starts the reading (**Plan sheets not read yet**), instead of telling him to paste notes. Discipline filter, "Concrete scope" = civil + structural.
   **The sheets slide in on a phone (Claude Design master package
   2026-10-03, phone drawers §1).** In Takeoff on a phone the drawing gets the
   screen: a row with **☰ Sheets · N** and the current sheet (scale set /

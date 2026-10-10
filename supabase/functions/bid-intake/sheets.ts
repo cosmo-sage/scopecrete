@@ -80,6 +80,23 @@ export interface SheetReading {
 const NUMBER = /^(FP|[A-Z])[-.\s]?(\d{1,3}(?:\.\d{1,2})?[A-Z]?)$/;
 const LABELS = /^(sheet|sheet\s*(no|number|title)|scale|date|drawn|checked|project|job|no\.?|rev(ision)?s?|title|issued?|by|description|approved|designed|drawing|dwg|of)\b[:.]?\s*$/i;
 
+/**
+ * Text a CAD program stamps on a printed sheet that is never its title: the
+ * plot date and time ("Sep 22, 2026 - 12:04pm") and the drawing file's path
+ * ("F:\\02020\\…\\Standards.dwg [101]"). On a set whose real lettering is
+ * drawn as lines (no text layer), these are the only words left, and taking
+ * them for titles made the sheets look digital, so they were never OCR'd
+ * (Holden Pedestrian Bridge, 2026-10-10).
+ */
+export function isStampTitle(t: string | null | undefined): boolean {
+  if (!t) return false;
+  const s = t.trim();
+  if (/\\|\.(dwg|dgn|dxf|pdf|plt)\b|^[A-Z]:[\\/]/i.test(s)) return true;
+  if (/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.? \d{1,2},? \d{4}\b/i.test(s) && /\d{1,2}:\d{2}/.test(s)) return true;
+  if (/^\d{1,2}:\d{2}(:\d{2})?\s*(am|pm)?$/i.test(s)) return true;
+  return false;
+}
+
 /** The prefix of a sheet number → its discipline. */
 export function disciplineOf(number: string | null): Discipline {
   const m = number?.toUpperCase().match(/^(FP|[A-Z])/);
@@ -136,6 +153,7 @@ export function readSheet(items: TextItem[], pageW: number, pageH: number): Shee
     if (number && t.toUpperCase().replace(/\s+/g, "") === number) return false;
     if (/\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}/.test(t) || /\(?\d{3}\)?[\s.-]\d{3}[\s.-]\d{4}/.test(t) || /@|www\.|\.com\b/i.test(t)) return false;
     if (parsePrintedScale(t)) return false;
+    if (isStampTitle(t)) return false;
     if (/^(sheet|scale|date|drawn|checked|project|job)\b/i.test(t)) return false;
     return true;
   });

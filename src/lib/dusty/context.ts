@@ -10,6 +10,7 @@ import type { ApiSession } from "@/lib/api-auth";
 import { plainSpeakers } from "@/lib/speakers";
 import { plainNote } from "@/lib/mentions";
 import { findDimensions } from "@/lib/plan-ocr";
+import { isStampTitle } from "@/lib/plan-sheets";
 import { priceBundle, proposalBundle } from "@/lib/proposal-server";
 import { termsText, warrantyText, type DocTemplate, type Draw, type ProposalDisplay } from "@/lib/proposal";
 import { takeoff, budget, jobMinimum, type BudgetLine, type OverheadItem, type SectionInput } from "@/lib/engine";
@@ -340,7 +341,7 @@ async function filesBlock(sb: Sb, orgId: string, by: { jobId?: string; contactId
       const facts = f.facts ? Object.entries(f.facts).filter(([k]) => !["prompt", "dropped"].includes(k))
         .map(([k, v]) => `${k.replace(/_/g, " ")}: ${Array.isArray(v) ? v.join(", ") : String(v)}`).join("; ") : "";
       const said = f.read_state === "read" ? `${f.summary ?? ""}${facts ? ` [${facts}]` : ""}`
-        : f.category === "plan" && f.read_state === "skipped" ? "plan sheets — their text is under \"What the plans and specs say\" when the bid reader read them"
+        : f.category === "plan" && f.read_state === "skipped" ? "plan sheets — what is written on them is in the plan-sheet blocks (\"Plan sheets read by OCR\", \"What the plans and specs say\", or \"Plan sheets not read yet\")"
         : f.read_state === "skipped" || f.read_state === "failed" ? `not read (${f.read_error ?? f.read_state})` : "not read yet";
       return `[${day(f.created_at)}] ${f.name}${f.category ? ` (${f.category})` : ""} — ${said}`.slice(0, 1500);
     }),
@@ -629,10 +630,18 @@ async function plansBlock(sb: Sb, orgId: string, jobId: string): Promise<Block |
 const OCR_CONCRETE = /\bconc|\bpsi\b|\brebar|\breinf|\bslab|\bfooting|\bpaving|\bpavement|\bcurb|\bgutter|\bsidewalk|\bwalk\b|\bdrives?\b|\bdriveway|\bramp|\bjoint|\bthick|\bwwf|\bmesh|\bsq\.? ?yd|\bdetectable|\bdome/gi;
 const OCR_ROOM = 24_000;
 async function ocrBlock(sb: Sb, orgId: string, jobId: string): Promise<Block | null> {
-  const { data } = await sb.from("plan_sheets").select("number, page, title, ocr_text, ocr_conf").eq("org_id", orgId).eq("job_id", jobId)
-    .not("ocr_text", "is", null).order("page").limit(200);
+  const [{ data }, { data: waiting }] = await Promise.all([
+    sb.from("plan_sheets").select("number, page, title, ocr_text, ocr_conf").eq("org_id", orgId).eq("job_id", jobId)
+      .not("ocr_text", "is", null).order("page").limit(200),
+    // Drawings whose words haven't been read: no text layer (a scan, or CAD lettering drawn as
+    // lines — all the bid reader found was a plot stamp) and no OCR yet.
+    sb.from("plan_sheets").select("number, page, title, number_source").eq("org_id", orgId).eq("job_id", jobId)
+      .is("ocr_at", null).neq("number_source", "coy").limit(400),
+  ]);
   const rows = (data ?? []) as Array<{ number: string | null; page: number; title: string | null; ocr_text: string; ocr_conf: number | null }>;
-  if (!rows.length) return null;
+  const unread = ((waiting ?? []) as Array<{ number: string | null; title: string | null }>).filter((w) => !w.number && (!w.title || isStampTitle(w.title))).length;
+  const notYet = unread ? `${unread} plan sheet${unread === 1 ? " hasn't" : "s haven't"} had ${unread === 1 ? "its" : "their"} words read yet: ${unread === 1 ? "it has" : "they have"} no text layer (a scan, or CAD lettering drawn as lines), so ${unread === 1 ? "it is" : "they are"} read by OCR in Takeoffs — on a computer it starts by itself when Coy opens this job's Takeoffs (a few seconds a sheet, the progress on the activity line); on a phone he taps "Read the rest" there. Until then you don't have those notes: say exactly that and where to start it. Never say you can't read plans, and never ask Coy to paste notes off the sheets.` : null;
+  if (!rows.length) return notYet ? { title: "Plan sheets not read yet", lines: [notYet] } : null;
   const name = (r: (typeof rows)[number]) => `${r.number ?? `p.${r.page}`}${r.title ? ` ${r.title}` : ""}`;
   const ranked = rows.map((r) => ({ r, hits: (r.ocr_text.match(OCR_CONCRETE) ?? []).length + findDimensions(r.ocr_text).length }))
     .filter((x) => x.hits > 0).sort((a, b) => b.hits - a.hits);
@@ -648,6 +657,7 @@ async function ocrBlock(sb: Sb, orgId: string, jobId: string): Promise<Block | n
   }
   const rest = rows.filter((r) => !shown.has(`${r.page}`));
   if (rest.length) lines.push(`Also read, not shown here (ask by sheet): ${rest.slice(0, 80).map(name).join("; ")}`);
+  if (notYet) lines.push(notYet);
   return { title: "Plan sheets read by OCR (scans)", lines };
 }
 

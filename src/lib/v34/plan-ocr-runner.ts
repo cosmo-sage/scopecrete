@@ -20,7 +20,7 @@
  */
 import { useSyncExternalStore } from "react";
 import { MAX_CANVAS_PX, openPdf, releasePage, renderRegion } from "@/lib/pdf";
-import { readSheet } from "@/lib/plan-sheets";
+import { isStampTitle, readSheet } from "@/lib/plan-sheets";
 import { chooseTitles, compactWords, inTitleCorner, meanConf, mergeItems, ocrText, scaleFor, titleCandidates, tilesFor, titleRegions, toItems, type OcrItem, type OcrWord, type Rect } from "@/lib/plan-ocr";
 
 export interface OcrSheet {
@@ -142,7 +142,9 @@ async function save(id: string, body: object): Promise<Partial<OcrSheet> | null>
  */
 export function ocrPending(sheets: OcrSheet[], urls: Map<string, string>) {
   // A scan has no text layer: nothing was read off it. A digital sheet already has its words.
-  const scans = sheets.filter((s) => s.number_source !== "coy" && (s.ocr_title_at || (!s.number && !s.title)));
+  // A CAD set whose lettering is drawn as lines is a scan too: all it has is the plot stamp
+  // or the drawing file's path, which is never a title (isStampTitle).
+  const scans = sheets.filter((s) => s.number_source !== "coy" && (s.ocr_title_at || (!s.number && (!s.title || isStampTitle(s.title)))));
   const titles = scans.filter((s) => !s.ocr_title_at && urls.has(s.file_id));
   const full = scans.filter((s) => !s.ocr_at && urls.has(s.file_id));
   return { scans: scans.length, read: scans.filter((s) => s.ocr_at).length, titles, full };

@@ -21,7 +21,7 @@ import { InternalNotes } from "@/components/v34/internal-notes";
 
 const BUCKET: Record<string, string> = { customer: "Customer", vendor: "Vendor", personal: "Personal", spam: "Spam" };
 
-export function ContactCard({ person, back, textHref, customerHref, vendorHref, onReload, onJoin }: {
+export function ContactCard({ person, back, textHref, customerHref, vendorHref, onReload, onJoin, startEditing }: {
   person: Person;
   back: { href: string; label: string };
   /** Where Text goes: their thread, where a text is sent through Quo. */
@@ -32,9 +32,11 @@ export function ContactCard({ person, back, textHref, customerHref, vendorHref, 
   onReload: () => void;
   /** "Or join another thread of theirs…" — the Same person as… merge. */
   onJoin: (otherId: string | null) => void;
+  /** Open with the editor already open — the thread's ⋯ Edit contact (Coy, 2026-10-10). */
+  startEditing?: boolean;
 }) {
   const c = person.contact;
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(!!startEditing);
   const [adding, setAdding] = useState<null | "phone">(null);
   const phones = c.phone_list?.length ? c.phone_list : c.phones.map((p, i) => ({ phone: p, label: null, is_primary: i === 0 }));
   const emails = c.email_list?.length ? c.email_list : c.email ? [{ email: c.email, label: null, is_primary: true }] : [];
@@ -216,23 +218,38 @@ function PhoneRow({ contactId, phone, label, main, editing, textHref, onSaved }:
   contactId: string; phone: string; label: string | null; main: boolean; editing: boolean; textHref: string; onSaved: () => void;
 }) {
   const [draft, setDraft] = useState(label ?? "");
+  const [num, setNum] = useState(formatPhone(phone));
   const [err, setErr] = useState<string | null>(null);
-  const save = async () => {
+  const save = async (body: Record<string, unknown>) => {
+    const r = await fetch(`/api/contacts/${encodeURIComponent(contactId)}/phones`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone, ...body }) });
+    if (!r.ok) { setErr(((await r.json().catch(() => ({}))) as { error?: string }).error ?? "Couldn't save it."); return false; }
+    setErr(null); onSaved(); return true;
+  };
+  const saveLabel = async () => {
     if ((draft.trim() || null) === (label ?? null)) return;
-    const r = await fetch(`/api/contacts/${encodeURIComponent(contactId)}/phones`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone, label: draft }) });
-    if (!r.ok) { setErr(((await r.json().catch(() => ({}))) as { error?: string }).error ?? "Couldn't save it."); return; }
-    setErr(null); onSaved();
+    await save({ label: draft });
+  };
+  // The number itself can be changed (Coy, 2026-10-10: "I need to be able to edit the phone number").
+  const saveNumber = async () => {
+    const d = num.replace(/\D/g, "");
+    const e164 = d.length === 10 ? `+1${d}` : d.length === 11 && d.startsWith("1") ? `+${d}` : null;
+    if (e164 === phone) { setNum(formatPhone(phone)); setErr(null); return; }
+    if (!e164) { setErr("A 10-digit number, like (225) 555-0100."); return; }
+    await save({ new_phone: e164, label: draft });
   };
   const name = label?.trim() || (main ? "Mobile" : "Phone");
   if (editing) {
+    const box: React.CSSProperties = { height: 30, width: "100%", maxWidth: 220, border: `1px solid ${T.hair}`, fontSize: F.sm, background: T.card, color: T.ink };
     return (
       <div className="flex items-center gap-4" style={{ padding: "8px 16px" }}>
         <span className="shrink-0" style={{ width: 22, display: "flex", justifyContent: "center" }}><Phone size={20} color={T.ink3} /></span>
         <span className="flex-1 min-w-0">
-          <span className="block" style={{ fontSize: 15.5, color: T.ink, ...nums }}>{formatPhone(phone)}</span>
-          <input value={draft} onChange={(e) => setDraft(e.target.value)} onBlur={() => void save()} onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+          <input value={num} onChange={(e) => setNum(e.target.value)} onBlur={() => void saveNumber()} onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+            inputMode="tel" type="tel" maxLength={20} aria-label="Phone number" className="rounded px-2 block"
+            style={{ ...box, height: 34, fontSize: 15.5, ...nums }} />
+          <input value={draft} onChange={(e) => setDraft(e.target.value)} onBlur={() => void saveLabel()} onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
             maxLength={30} placeholder={main ? "Mobile" : "Office, Work…"} aria-label={`What ${formatPhone(phone)} is`}
-            className="rounded px-2 mt-1" style={{ height: 30, width: "100%", maxWidth: 220, border: `1px solid ${T.hair}`, fontSize: F.sm, background: T.card, color: T.ink }} />
+            className="rounded px-2 mt-1 block" style={box} />
           {err && <span className="block" style={{ fontSize: F.xs, color: T.red }}>{err}</span>}
         </span>
       </div>

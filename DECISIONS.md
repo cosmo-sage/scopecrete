@@ -311,7 +311,7 @@ across the database … I also want to be able to upload a logo for my org."*
   graphite (`--sc-crete`, #5A6068; #A8AFB8 in Night Shift) and ".ai" is Inter
   300 with the "i" dotted by the green light, pulsing like a lighthouse
   (`BeaconI`, `scBeacon`). The favicon, app icons and `logo-34.png` are its
-  still pose (`public/favicon.svg`). — the
+  still pose (`public/favicon.svg`; `src/app/favicon.ico`, Next's own favicon file, is the same icon — it had kept the old one; the icon links carry `?v=4a` so browsers fetch the new one). — the
   block exactly the logo's height (Coy: "the same size as the Sacco
   Enterprises logo"; dropped under 340px). No logo, or one that fails to load → the
   emblem and the scopecrete.ai wordmark. **The logo can be switched off in

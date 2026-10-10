@@ -50,10 +50,10 @@ export const metadata: Metadata = {
   // tabs don't play animated icons reliably.
   icons: {
     icon: [
-      { url: "/favicon.ico", sizes: "any" },
-      { url: "/favicon.svg", type: "image/svg+xml" },
+      { url: "/favicon.ico?v=4a", sizes: "any" },
+      { url: "/favicon.svg?v=4a", type: "image/svg+xml" },
     ],
-    apple: "/apple-touch-icon.png",
+    apple: "/apple-touch-icon.png?v=4a",
   },
   manifest: "/site.webmanifest",
 };

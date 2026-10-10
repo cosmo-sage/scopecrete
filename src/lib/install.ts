@@ -20,7 +20,7 @@ export const APP_MANIFEST = {
   theme_color: "#FAF8F3",
   background_color: "#FAF8F3",
   icons: [
-    { src: "/icon-192.png", sizes: "192x192", type: "image/png" },
-    { src: "/icon-512.png", sizes: "512x512", type: "image/png" },
+    { src: "/icon-192.png?v=4a", sizes: "192x192", type: "image/png" },
+    { src: "/icon-512.png?v=4a", sizes: "512x512", type: "image/png" },
   ],
 } as const;

@@ -462,30 +462,31 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
       ))}
       {/* ---- each section's own cost items, drawn inside its card (Coy, 2026-10-04) ---- */}
       {areas.filter((a) => a.id && slots?.[a.id]).map((a) => createPortal(
-        <div style={{ borderTop: `1px solid ${T.hairSoft}` }}>
-          <div className="px-3 py-1.5 flex items-center gap-2 flex-wrap">
-            <button onClick={() => toggleFold(a.id as string)} aria-expanded={!folded.has(a.id as string)} aria-label={folded.has(a.id as string) ? "Show this section's budget" : "Fold this section's budget"}
-              className="flex items-center gap-1" style={{ ...eyebrow, cursor: "pointer" }}>
-              <span aria-hidden="true" style={{ display: "inline-block", width: 10, transform: folded.has(a.id as string) ? "none" : "rotate(90deg)", transition: "transform .15s" }}>▸</span>
+        // Coy, 2026-10-10: the Budget row reads as a part nested in its section — bold, the
+        // section name's 13px, set in from the left on a tint, its fold button at the right.
+        <div className="mx-3 mt-1 mb-2 rounded" style={{ borderLeft: `3px solid ${T.hairStrong}`, background: T.slab }}>
+          <button onClick={() => toggleFold(a.id as string)} aria-expanded={!folded.has(a.id as string)} aria-label={folded.has(a.id as string) ? "Show this section's budget" : "Fold this section's budget"}
+            className="w-full flex items-center gap-2 pl-2.5 pr-1 text-left" style={{ minHeight: 34, cursor: "pointer" }}>
+            <span style={{ minWidth: 0, flex: 1, fontSize: F.sm, fontWeight: 700, color: T.ink, ...nums }}>
               Budget
-            </button>
-            {a.lines.length > 0 && (
-              <span style={{ fontSize: F.xs, color: T.ink3, ...nums }}>
-                {a.lines.length} item{a.lines.length === 1 ? "" : "s"} · cost {money0(sum(a.lines, "ext_cost"))} · price {money0(sum(a.lines, "ext_price"))}
+              {a.lines.length > 0 && <>
+                {` · ${a.lines.length} item${a.lines.length === 1 ? "" : "s"} · cost ${money0(sum(a.lines, "ext_cost"))} · price ${money0(sum(a.lines, "ext_price"))}`}
                 {areaPriced(a.lines) && areaSize(a.id) ? ` · ${areaSize(a.id)!.per(sum(a.lines, "ext_price"))}` : ""}
-              </span>
-            )}
-            <span className="flex-1" />
+              </>}
+            </span>
+            <span aria-hidden="true" className="flex items-center justify-center shrink-0" style={{ width: 26, height: 26, color: T.ink2, fontSize: 12, transform: folded.has(a.id as string) ? "none" : "rotate(90deg)", transition: "transform .15s" }}>▸</span>
+          </button>
+          {!folded.has(a.id as string) && <>
+          <div className="px-2.5 pb-1.5">
             <button onClick={() => setBook({ area: a.id ?? "" })}
               className="rounded px-2.5" style={{ height: 28, background: T.ink, color: T.card, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", letterSpacing: ".05em", cursor: "pointer" }}>
               + Add items from the Price book
             </button>
           </div>
-          {!folded.has(a.id as string) && <>
           {err && <div className="px-3 pb-1" style={{ fontSize: F.xs, color: T.red }}>{err}</div>}
           {a.lines.length === 0
-            ? <div className="px-3 pb-2" style={{ fontSize: F.xs, color: T.ink3 }}>No cost items yet. Add them from the Price book — quantities come from this section.</div>
-            : <div className={wide ? "" : "px-3 pb-2"}>{areaBody(a, true)}</div>}
+            ? <div className="px-2.5 pb-2" style={{ fontSize: F.xs, color: T.ink3 }}>No cost items yet. Add them from the Price book — quantities come from this section.</div>
+            : <div className={wide ? "" : "px-2 pb-2"}>{areaBody(a, true)}</div>}
           </>}
         </div>,
         slots![a.id as string],
@@ -694,13 +695,13 @@ function GroupCard({ name, lines, res, optLabel, asmName, addons, onOpen, cost, 
   const [open, setOpen] = useState(true);
   return (
     <div className="rounded mt-1.5" style={{ border: `1px solid ${T.hair}`, background: T.card }}>
-      <button onClick={() => setOpen((o) => !o)} aria-expanded={open} className="w-full flex items-center justify-between px-2.5" style={{ height: 40, cursor: "pointer" }}>
-        <span className="flex items-center gap-1.5">
-          <span style={{ fontFamily: disp, fontSize: F.xs, color: T.ink3, width: 10 }}>{open ? "−" : "+"}</span>
-          <span style={{ fontFamily: disp, fontSize: F.md, fontWeight: 600, textTransform: "uppercase" }}>{name}</span>
+      <button onClick={() => setOpen((o) => !o)} aria-expanded={open} className="w-full flex items-center justify-between px-2.5" style={{ height: 34, cursor: "pointer" }}>
+        <span className="flex items-center gap-1.5" style={{ minWidth: 0 }}>
+          <span style={{ fontSize: F.xs, color: T.ink3, width: 10 }}>{open ? "−" : "+"}</span>
+          <span style={{ fontSize: F.xs, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".03em", ...clip }}>{name}</span>
         </span>
         <span style={{ textAlign: "right", ...nums }}>
-          <span style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 600 }}>{money0(price)}</span>
+          <span style={{ fontSize: F.sm, fontWeight: 600 }}>{money0(price)}</span>
           <span style={{ display: "block", fontSize: 9.5, color: T.ink3 }}>cost {money0(cost)}</span>
         </span>
       </button>
@@ -710,7 +711,7 @@ function GroupCard({ name, lines, res, optLabel, asmName, addons, onOpen, cost, 
           <button key={l.id} onClick={() => onOpen(l)} className="w-full flex items-baseline justify-between gap-2 px-2.5 py-1.5 text-left"
             style={{ borderTop: `1px solid ${i ? T.hairSoft : T.hair}`, cursor: "pointer" }}>
             <span style={{ minWidth: 0, flex: 1 }}>
-              <span style={{ display: "block", fontSize: F.sm, color: T.ink, ...clip }}>{l.name}</span>
+              <span style={{ display: "block", fontSize: F.xs, color: T.ink, ...clip }}>{l.name}</span>
               {isEstimate(l.description)
                 ? <span style={{ display: "block", fontSize: 10.5, color: T.hiviz, ...clip }}>ESTIMATE · {estimateBasis(l.description)} — open to confirm</span>
                 : l.description && <span style={{ display: "block", fontSize: 10.5, color: T.ink2, ...clip }}>{l.description}</span>}
@@ -723,7 +724,7 @@ function GroupCard({ name, lines, res, optLabel, asmName, addons, onOpen, cost, 
                 {asmName(l.assembly_id) ? ` · from ${asmName(l.assembly_id)}` : ""}
               </span>
             </span>
-            <span style={{ fontFamily: disp, fontSize: F.md, fontWeight: 600, ...nums }}>{r.ext_price === null ? "—" : money(r.ext_price)}</span>
+            <span style={{ fontSize: F.xs, fontWeight: 600, ...nums }}>{r.ext_price === null ? "—" : money(r.ext_price)}</span>
           </button>
         );
       })}

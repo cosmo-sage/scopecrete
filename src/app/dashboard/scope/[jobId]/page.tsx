@@ -94,6 +94,15 @@ async function send(url: string, method: string, body?: unknown) {
 export default function ScopeBuilder() {
   const { jobId } = useParams<{ jobId: string }>();
   const access = useAccess();
+  // The job header's height, so the sticky wrapper can park it above the screen while the
+  // dashboard header is hidden (the CSS under html[data-head-hide], v34-shell.css).
+  const measureHead = useCallback((el: HTMLDivElement | null) => {
+    const box = el?.parentElement;
+    if (!el || !box) return;
+    const ro = new ResizeObserver(() => box.style.setProperty("--sc-job-head-h", `${el.offsetHeight}px`));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   const [job, setJob] = useState<Job | null>(null);
   const [contact, setContact] = useState<Contact | null>(null);
   const [why, setWhy] = useState<Why | null>(null);
@@ -293,8 +302,10 @@ export default function ScopeBuilder() {
       <div style={{ minWidth: 0 }} className="pb-24 lg:pb-6">
         {/* On a phone the job's header and its numbers stay at the top while the page scrolls,
             and the dashboard header slides away above them (Coy, 2026-10-05). */}
-        <div className="sticky z-20 lg:static" style={{ top: "var(--sc-head)" }}>
-        <div className="px-3 pt-2.5 pb-2" style={{ background: T.card, borderBottom: `1px solid ${T.hair}` }}>
+        <div className="sc-job-sticky sticky z-20 lg:static" style={{ top: "var(--sc-head)" }}>
+        {/* Scrolling down slides this header away with the dashboard's; the dark strip of numbers under it
+            stays at the top (Coy, 2026-10-10) — the wrapper sticks this header's height above the screen. */}
+        <div ref={measureHead} className="px-3 pt-2.5 pb-2" style={{ background: T.card, borderBottom: `1px solid ${T.hair}` }}>
           {/* Coy, 2026-10-05: the job's name top left, Summary · Plan room · Budget · Proposal top right —
               the same row on every view (JobHeaderRow; centred on a phone). The chips, who it's for,
               the description and "Why this job" moved to the Summary to clear the clutter here. */}
@@ -490,6 +501,11 @@ function splitFt(v: number | null): [number | "", number | ""] {
   return [ft, inch === 0 ? "" : inch];
 }
 
+/** How a section is measured, each in its own colour (Coy, 2026-10-10: "color coded"). */
+const MODES: [ "dims" | "area" | "linear" | "count", string, string][] = [
+  ["dims", "Length × width", T.chalk], ["area", "Area only", T.green], ["linear", "Linear ft", T.hiviz], ["count", "Count", T.violet],
+];
+
 function SectionCard({ s, index, err, onLocal, onSave, onRemove, jobType, jobId, photos, sheets, hasPlans, onSheets, takeoff, takeoffUnit, onSlot, open, onToggle, money: m }: {
   s: Section; index: number; err?: string; rcards: RCard[]; jobType: string | null; jobId: string;
   /** Open, or folded to one line (Coy, 2026-10-08: "less busy and easier to read"). */
@@ -608,8 +624,11 @@ function SectionCard({ s, index, err, onLocal, onSave, onRemove, jobType, jobId,
     : "";
   const missingWhat = [...q.missing, ...(m && m.blocked ? [`${m.blocked} item${m.blocked === 1 ? "" : "s"} not priced`] : [])].join(", ");
   const missingAny = missingWhat.length > 0;
-  const seg = (on: boolean): React.CSSProperties => ({ height: 22, padding: "0 7px", fontSize: 10, fontFamily: disp, fontWeight: 600, letterSpacing: ".05em",
+  const unitSeg = (on: boolean): React.CSSProperties => ({ height: 22, padding: "0 7px", fontSize: 10, fontFamily: disp, fontWeight: 600, letterSpacing: ".05em",
     textTransform: "uppercase", whiteSpace: "nowrap", background: on ? T.ink : T.card, color: on ? T.card : T.ink2, cursor: "pointer" });
+  const seg = (on: boolean, c: string, divide: boolean): React.CSSProperties => ({ flex: "1 1 0", minWidth: 0, height: 30, padding: "0 4px",
+    fontSize: 11, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+    background: on ? c : T.card, color: on ? T.card : c, borderLeft: divide ? `1px solid ${T.hair}` : "none", cursor: "pointer" });
 
   return (
     <div style={{ background: T.card, borderBottom: `1px solid ${T.hair}`, marginTop: index === 0 ? 0 : 6 }}>
@@ -662,20 +681,20 @@ function SectionCard({ s, index, err, onLocal, onSave, onRemove, jobType, jobId,
           </div>
         </div>
       )}
-      {takeoff}
-      <div className="px-3 pt-1.5 flex items-center gap-x-2 gap-y-1 flex-wrap">
-        <span style={{ ...eyebrow }}>Measured by</span>
-        <span className="inline-flex rounded overflow-hidden" role="group" aria-label="Measured by" style={{ border: `1px solid ${T.hair}` }}>
-          <button onClick={() => toMode("dims")} aria-pressed={mode === "dims"} style={seg(mode === "dims")}>Length × width</button>
-          <button onClick={() => toMode("area")} aria-pressed={mode === "area"} style={seg(mode === "area")}>Area only</button>
-          <button onClick={() => toMode("linear")} aria-pressed={mode === "linear"} style={seg(mode === "linear")}>Linear ft</button>
-          <button onClick={() => toMode("count")} aria-pressed={mode === "count"} style={seg(mode === "count")}>Count</button>
+      {/* How the section is measured: the full width, a colour each, no "Measured by" over it, and
+          Takeoffs' button on the row under it (Coy, 2026-10-10). */}
+      <div className="px-3 pt-2 flex items-center gap-x-2 gap-y-1.5 flex-wrap">
+        <span className="flex w-full rounded overflow-hidden" role="group" aria-label="Measured by" style={{ border: `1px solid ${T.hair}` }}>
+          {MODES.map(([k, label, c], i) => (
+            <button key={k} onClick={() => toMode(k)} aria-pressed={mode === k} style={seg(mode === k, c, i > 0)}>{label}</button>
+          ))}
         </span>
         {bidQty && !bidQtyUsed && (
           <button onClick={useBidQty} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>
             Use the bid&apos;s {bidQty.n.toLocaleString("en-US")} {bidQty.u}
           </button>
         )}
+        {takeoff}
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 mt-2" style={{ borderTop: `1px solid ${T.hairSoft}` }}>
@@ -728,8 +747,8 @@ function SectionCard({ s, index, err, onLocal, onSave, onRemove, jobType, jobId,
                   onChange={(v) => onLocal({ sqft_override: v === "" ? null : unit === "sy" ? Number(v) * 9 : Number(v) })}
                   onBlur={() => onSave({ sqft_override: s.sqft_override })} />
                 <span className="inline-flex rounded overflow-hidden" role="group" aria-label="Area unit" style={{ border: `1px solid ${T.hair}` }}>
-                  <button onClick={() => setUnit("sf")} aria-pressed={unit === "sf"} style={seg(unit === "sf")}>sq ft</button>
-                  <button onClick={() => setUnit("sy")} aria-pressed={unit === "sy"} style={seg(unit === "sy")}>sq yd</button>
+                  <button onClick={() => setUnit("sf")} aria-pressed={unit === "sf"} style={unitSeg(unit === "sf")}>sq ft</button>
+                  <button onClick={() => setUnit("sy")} aria-pressed={unit === "sy"} style={unitSeg(unit === "sy")}>sq yd</button>
                 </span>
               </>
             ) : (

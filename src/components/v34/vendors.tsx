@@ -16,7 +16,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { T, F, disp, eyebrow, nums, clip, money, formatPhone } from "@/lib/v34/tokens";
 import { useWide } from "@/lib/v34/use-wide";
 import { PageHeader, SearchBubble, SearchToggle } from "@/components/v34/primitives";
@@ -389,7 +389,6 @@ interface VPage {
  */
 export function VendorPage({ id }: { id: string }) {
   const router = useRouter();
-  const search = useSearchParams();
   const [p, setP] = useState<VPage | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -420,10 +419,8 @@ export function VendorPage({ id }: { id: string }) {
     catch (e) { setErr(String((e as Error).message)); } finally { setTick((n) => n + 1); }
   };
 
-  const t = search.get("t");
-  const back = search.get("from") === "threads"
-    ? { href: `/dashboard/messages/${id}${t ? `?t=${encodeURIComponent(t)}` : ""}`, label: "Back to the thread" }
-    : { href: "/dashboard/vendors", label: "Vendors" };
+  // Back is always the Vendors list (Coy, 2026-10-11: like the customer page).
+  const back = { href: "/dashboard/vendors", label: "Vendors" };
   const v = p?.vendor;
   const receipts = p ? p.files.filter((f) => f.category === "receipt" || f.category === "vendor_quote").length : 0;
   const mine = (bids ?? []).flatMap((r) => r.recipients.filter((x) => x.contact_id === id).map((x) => ({ ...x, req: r })));

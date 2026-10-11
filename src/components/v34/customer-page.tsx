@@ -27,7 +27,6 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { T, F, eyebrow, nums, clip, money0, formatPhone, relTime, strong, BUCKET } from "@/lib/v34/tokens";
-import { RoleTag } from "@/components/v34/thread-list";
 import { RecordHeader, HeaderNote, OverviewGrid, PanelCard, SectionHead, Empty, Facts, ContactCard, ThreadChips, RecentCard, JobRow, Field,
   menuItem, btn, lbl, panelTitle, send, type CardPerson } from "@/components/v34/record-page";
 import { Sheet } from "@/components/v34/primitives";
@@ -80,7 +79,6 @@ const dur = (s: number | null) => (s == null ? "" : `${Math.floor(s / 60)}:${Str
 export function CustomerPage({ customerId, focusContact }: { customerId: string; focusContact?: string | null }) {
   const router = useRouter();
   const search = useSearchParams();
-  const fromThread = search.get("from") === "threads" && focusContact ? `/dashboard/messages/${focusContact}${search.get("t") ? `?t=${encodeURIComponent(search.get("t") as string)}` : ""}` : null;
   const [data, setData] = useState<Data | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
@@ -177,8 +175,8 @@ export function CustomerPage({ customerId, focusContact }: { customerId: string;
         </div>
       )}
       {/* ---- header (Threads v2 handoff §4; shared with the contact and vendor pages, record-page.tsx) ---- */}
-      <RecordHeader back={{ href: fromThread ?? "/dashboard/customers", label: fromThread ? "Back to the thread" : "Customers" }}
-        title={cu.name || "Unnamed customer"} tag={<RoleTag role="customer" />} wide={wide}
+      <RecordHeader back={{ href: "/dashboard/customers", label: "Customers" }}
+        title={cu.name || "Unnamed customer"} wide={wide}
         actions={[]}
         emblem={{ title: "Ask Dusty about this customer", onClick: openDusty }}
         menu={[

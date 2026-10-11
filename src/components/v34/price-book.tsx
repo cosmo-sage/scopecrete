@@ -67,7 +67,6 @@ export interface PricePick {
 }
 
 export function PriceBook({ pick }: { pick?: PricePick } = {}) {
-  const [pickHelp, setPickHelp] = useState(false);
   const [items, setItems] = useState<Card[] | null>(null);
   const [groups, setGroups] = useState<Group[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
@@ -365,18 +364,12 @@ export function PriceBook({ pick }: { pick?: PricePick } = {}) {
       {pick && <div className="flex items-end gap-2 flex-wrap">
           <div style={{ flex: 1, minWidth: 200 }}>
             <div style={{ ...eyebrow }}>Price book → budget</div>
-            {/* The how-to sits behind ⓘ beside the title (Coy, 2026-10-03). */}
-            <div className="flex items-center gap-2">
-              <div style={{ fontFamily: disp, fontSize: 20, fontWeight: 700, lineHeight: 1.1 }}>{pick.title}</div>
-              {pick.sub && (
-                <button onClick={() => setPickHelp((v) => !v)} aria-expanded={pickHelp} aria-label="How this works" title="How this works"
-                  className="shrink-0 flex items-center justify-center rounded-full" style={{ width: 22, height: 22, border: `1px solid ${pickHelp ? T.chalk : T.hairStrong}`, color: T.chalk, fontSize: 12, fontWeight: 700, cursor: "pointer", background: T.card }}>i</button>
-              )}
-            </div>
-            {pick.sub && pickHelp && <div style={{ fontSize: F.xs, color: T.ink2, marginTop: 4, maxWidth: 560, lineHeight: 1.45 }}>{pick.sub}</div>}
+            {/* No ⓘ how-to (Coy, 2026-10-11: "We already know what it is"). */}
+            <div style={{ fontFamily: disp, fontSize: 20, fontWeight: 700, lineHeight: 1.1 }}>{pick.title}</div>
           </div>
-        {pbActions}
       </div>}
+      {/* + Group and + Card on a row of their own under the title (Coy, 2026-10-11). */}
+      {pick && <div className="flex items-center gap-2 mt-2">{pbActions}</div>}
       {pick?.top && <div className="mt-2">{pick.top}</div>}
       {undoRetire && (
         <div role="status" aria-live="polite" className="fixed left-3 right-3 rounded px-3 py-2 flex items-center gap-3"

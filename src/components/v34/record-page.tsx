@@ -59,11 +59,10 @@ const askDusty: RecordAction = { label: "Ask Dusty", accent: true, onClick: () =
 /** Ask Dusty opens him HOT on the page that is open. */
 export const ASK_DUSTY = askDusty;
 
-export function RecordHeader({ back, title, tag, wide, actions, menu, meta, children, tabs, tab, onTab, emblem }: {
+export function RecordHeader({ back, title, wide, actions, menu, meta, children, tabs, tab, onTab, emblem }: {
   back: { href: string; label: string };
   /** The name — a heading, or the contact's NameEditor with its pencil. */
   title: React.ReactNode;
-  tag?: React.ReactNode;
   wide: boolean;
   actions: RecordAction[];
   /** Always under ⋯ (Call notes, File as…, Delete …). Elements keep the menu open (an ArchiveButton's dialog lives in it). */
@@ -78,6 +77,8 @@ export function RecordHeader({ back, title, tag, wide, actions, menu, meta, chil
   emblem?: { onClick: () => void; title: string };
 }) {
   const [more, setMore] = useState(false);
+  // The tab's word, without its count ("Jobs 2" → "Jobs").
+  const tabLabel = (tabs.find(([k]) => k === tab)?.[1] ?? "").replace(/\s+\d+$/, "");
   const [tabMenu, setTabMenu] = useState(false);
   // The ☰ panel opens under this header (Coy, 2026-10-06: "let this slide out
   // panel sit below the … page header"), or under the dashboard header when
@@ -105,17 +106,24 @@ export function RecordHeader({ back, title, tag, wide, actions, menu, meta, chil
     // Fixed at the top of the page (Coy, 2026-10-09: "the headers here in the
     // customer page should be fixed and not slide up"); it rides up to the top when the dashboard header slides away.
     <div ref={box} className="px-4 pt-3 sticky z-20" style={{ top: "var(--sc-head)", background: T.card, borderBottom: `1px solid ${T.hair}` }}>
+      {/* One line, like the main pages' subheader (Coy, 2026-10-11): "‹ Customers • Arts Apartments • Overview",
+          a green dot between each. The back link is always the list; no role tag. */}
       <div className="flex items-center gap-2">
-        <Link href={back.href} style={{ ...eyebrow, color: T.chalk, flex: 1, minWidth: 0 }}>‹ {back.label}</Link>
-        {!wide && tabs.length > 1 && <button onClick={openTabs} style={{ ...eyebrow, color: T.ink2, cursor: "pointer" }}>{tabs.find(([k]) => k === tab)?.[1] ?? ""} ▾</button>}
-      </div>
-      <div className="flex items-center gap-2 mt-0.5">
         {!wide && tabs.length > 1 && <MenuButton onClick={openTabs} label="Sections of this page" always />}
-        <div className="flex items-center gap-2 flex-1 min-w-0 flex-wrap">
-          {typeof title === "string"
-            ? <h1 style={{ fontFamily: strong, fontWeight: 700, fontSize: wide ? 24 : 20, lineHeight: 1.2, margin: 0, color: T.ink }}>{title}</h1>
-            : title}
-          {tag}
+        <div className="flex items-center flex-1 min-w-0" style={{ gap: wide ? 8 : 6 }}>
+          <Link href={back.href} style={{ ...eyebrow, color: T.chalk, flexShrink: 0, fontSize: wide ? 12 : 11 }}>‹ {back.label}</Link>
+          <span className="sc-subhead-sep" aria-hidden="true" />
+          <div style={{ minWidth: 0, flexShrink: 1, ...clip }}>
+            {typeof title === "string"
+              ? <h1 style={{ fontFamily: strong, fontWeight: 700, fontSize: wide ? 20 : 16, lineHeight: 1.2, margin: 0, color: T.ink, ...clip }}>{title}</h1>
+              : title}
+          </div>
+          {tabs.length > 0 && <span className="sc-subhead-sep" aria-hidden="true" />}
+          {tabs.length > 0 && (
+            !wide && tabs.length > 1
+              ? <button onClick={openTabs} style={{ ...eyebrow, color: T.ink2, cursor: "pointer", flexShrink: 0, fontSize: 11 }}>{tabLabel} ▾</button>
+              : <span style={{ ...eyebrow, color: T.ink2, flexShrink: 0, fontSize: wide ? 12 : 11 }}>{tabLabel}</span>
+          )}
         </div>
         <div className="flex gap-1.5 items-center shrink-0">
           {wide && actions.map((a) => a.href

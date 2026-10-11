@@ -29,7 +29,6 @@ import { DA, MergeSheet, Timeline, formatPhone, type MergeInfo, type Note, type 
 import { JOB_TYPE_LABEL, stageOf } from "@/lib/jobs/stages";
 import { NameEditor, FileAsSheet } from "@/components/v34/contact-edit";
 import { BucketPicker, type Bucket } from "@/components/v34/bucket-picker";
-import { RoleTag } from "@/components/v34/thread-list";
 import { useWide } from "@/lib/v34/use-wide";
 import { FilesPanel } from "@/components/v34/files-panel";
 import { FilesPage } from "@/components/v34/files-page";
@@ -39,6 +38,7 @@ import { ArchiveButton } from "@/components/v34/archive-actions";
 import { AddressInput } from "@/components/v34/address-input";
 import { roleOf, type Channel } from "@/lib/v34/threads";
 import { useLiveThreads } from "@/lib/v34/live-threads";
+import { SiteViews, AddressLink } from "@/components/v34/site-views";
 import {
   RecordHeader, HeaderNote, OverviewGrid, PanelCard, SectionHead, Facts, LocationPanel, ContactCard, ThreadChips, RecentCard, JobRow, Field,
   ASK_DUSTY, menuItem, btn, fieldStyle, send, type RecordAction, type CardMethod,
@@ -210,7 +210,8 @@ export function PersonView({ person, messages, channels, onReload, onMerge, back
     ASK_DUSTY,
   ];
   const menu: Array<RecordAction | React.ReactElement> = [
-    { label: "Call notes", title: "Notes while you're on the phone — they land on the call", onClick: () => setCallNotes(true) },
+    // No Call notes on a vendor's ☰ (Coy, 2026-10-11).
+    ...(isVendor ? [] : [{ label: "Call notes", title: "Notes while you're on the phone — they land on the call", onClick: () => setCallNotes(true) }]),
     { label: c.bucket ? "Change bucket" : "File as…", onClick: () => setFiling(true) },
     { label: "Same person as…", onClick: () => onMerge() },
     isVendor
@@ -243,7 +244,14 @@ export function PersonView({ person, messages, channels, onReload, onMerge, back
   const side = (compact?: boolean) => (
     <div className="flex flex-col gap-3" style={{ minWidth: 0 }}>
       <PanelCard>
-        <LocationPanel addr={address} note={addressNote} onAdd={edit} />
+        {/* The address and its satellite picture, as on the customer page (Coy, 2026-10-11). */}
+        {address ? (
+          <section style={{ padding: "14px 16px 12px", borderBottom: `1px solid ${T.hair}`, display: "flex", flexDirection: "column", gap: 8 }}>
+            <AddressLink addr={address} />
+            <SiteViews addr={address} stored={null} />
+            {addressNote && <span style={{ fontSize: 11, color: T.ink3 }}>{addressNote}</span>}
+          </section>
+        ) : <LocationPanel addr={null} onAdd={edit} />}
         {!compact && <Facts title={facts.title} rows={facts.rows} onEdit={edit} />}
       </PanelCard>
       {!compact && (
@@ -307,14 +315,9 @@ export function PersonView({ person, messages, channels, onReload, onMerge, back
       <RecordHeader back={back} wide={wide} actions={actions} menu={menu} meta={meta} tabs={tabs} tab={tab} onTab={setTab}
         title={
           <NameEditor contactId={c.id} name={c.name} fallback={title} onSaved={() => onReload()}
-            style={{ fontFamily: strong, fontWeight: 700, fontSize: wide ? 24 : 20, lineHeight: 1.2, color: c.name ? T.ink : T.ink2 }} />
+            style={{ fontFamily: strong, fontWeight: 700, fontSize: wide ? 20 : 16, lineHeight: 1.2, color: c.name ? T.ink : T.ink2 }} />
         }
-        tag={
-          <button onClick={() => setFiling(true)} title={c.bucket ? "Change bucket" : "File them"} aria-label={c.bucket ? "Change bucket" : "File them"}
-            style={{ background: "none", border: "none", padding: 0, cursor: "pointer", display: "inline-flex" }}>
-            <RoleTag role={role} auto={c.bucket_state === "auto"} />
-          </button>
-        }>
+        >
         {/* Not filed yet, or filed by Dusty: a contact needs to become a customer, vendor, personal or spam (Coy, 2026-10-05). */}
         {unfiled && (
           <div className="mt-2 rounded px-3 pb-2.5" style={{ border: `1.5px dashed ${BUCKET.unsorted}`, background: T.slab }}>

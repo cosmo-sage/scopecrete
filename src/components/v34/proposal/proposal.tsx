@@ -239,9 +239,9 @@ export function Proposal({ jobId }: { jobId: string }) {
       label: kind === "warranty" ? "in the warranty" : kind === "terms" ? "as the terms" : kind === "area" ? `as ${areaName}'s scope of work` : "as the scope intro",
       apply: (text) => {
         if (kind === "warranty") change("warranty", { ...p?.warranty, title: vm.warranty.title, body: plainText(text) });
-        else if (kind === "terms") { const c = parseClauses(text); if (c.length) change("terms", { ...p?.terms, clauses: c }); }
+        else if (kind === "terms") { const c = parseClauses(text); if (!c.length) return false; change("terms", { ...p?.terms, clauses: c }); }
         else if (kind === "area") {
-          const v = sowFromAnswer(text); if (!v || !area) return;
+          const v = sowFromAnswer(text); if (!v || !area) return false;
           setB((x) => (x ? { ...x, sections: x.sections.map((y) => (String(y.id) === area.id ? { ...y, prep_notes: v } : y)) } : x));
           call(`/api/jobs/${jobId}/sections/${area.id}`, "PATCH", { prep_notes: v }).catch((e) => setErr(`The scope of work wasn't saved: ${e instanceof Error ? e.message : String(e)}`));
         }

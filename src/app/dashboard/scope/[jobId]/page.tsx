@@ -796,7 +796,7 @@ function SectionCard({ s, index, err, onLocal, onSave, onRemove, jobType, jobId,
           <button type="button" title="Ask Dusty to write it" aria-label="Ask Dusty to write the scope of work"
             onClick={() => {
               setDustyUse({ label: `as ${s.name ?? "this section"}'s scope of work`, apply: (text) => {
-                const v = sowFromAnswer(text); if (!v) return; onLocal({ prep_notes: v }); onSave({ prep_notes: v });
+                const v = sowFromAnswer(text); if (!v) return false; onLocal({ prep_notes: v }); onSave({ prep_notes: v }); return true;
               } });
               window.dispatchEvent(new Event("sc:dusty-open"));
               setTimeout(() => window.dispatchEvent(new CustomEvent("sc:dusty-draft", { detail: {

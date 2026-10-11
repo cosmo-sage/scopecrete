@@ -29,7 +29,8 @@ export function useDustyLive(): string {
  * "Use this in the warranty" under each answer. Coy's tap puts it there: Dusty
  * never writes to the page himself (§6 — read-only toward the business).
  */
-export interface DustyUseTarget { label: string; apply: (text: string) => void }
+/** apply returns false when the answer held nothing it could use (no bullets), so the chat can say so. */
+export interface DustyUseTarget { label: string; apply: (text: string) => boolean | void }
 let target: DustyUseTarget | null = null;
 const useSubs = new Set<() => void>();
 export function setDustyUse(next: DustyUseTarget | null) {

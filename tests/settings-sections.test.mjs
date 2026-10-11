@@ -4,7 +4,7 @@ import { SETTINGS_SECTIONS, settingsSections, settingsSectionOf } from "../src/l
 import { accessFrom, redirectFor } from "../src/lib/access.ts";
 
 test("every section, or an estimator's two", () => {
-  assert.deepEqual(settingsSections(false).map((s) => s.k), ["account", "organization", "lines", "cost-book", "appearance", "ai", "menus"]);
+  assert.deepEqual(settingsSections(false).map((s) => s.k), ["account", "organization", "lines", "cost-book", "templates", "appearance", "ai", "menus"]);
   assert.deepEqual(settingsSections(true).map((s) => s.k), ["account", "appearance"]);
 });
 

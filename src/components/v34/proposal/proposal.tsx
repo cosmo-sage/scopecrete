@@ -13,7 +13,6 @@
  * makes its link; every opening of the link is listed.
  */
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { T, disp } from "@/lib/v34/tokens";
 import { useWide } from "@/lib/v34/use-wide";
 import { JobHeaderRow } from "@/components/v34/job-tabs";
@@ -28,6 +27,7 @@ import type { BudgetSettings, TakeoffTotal } from "@/lib/engine";
 import { ProposalDocument, usd, usd0, type DocArea, type DocVM } from "./document";
 import { areaVisuals } from "./area-visuals";
 import type { PlansData } from "@/components/v34/plan-room/shared";
+import Link from "next/link";
 import { ProposalPreview, type PropLink } from "./preview";
 import { formatProposalNumber, type NumberBase } from "@/lib/proposal-number";
 
@@ -293,6 +293,14 @@ export function Proposal({ jobId }: { jobId: string }) {
     catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(null); }
   }, [jobId, load]);
 
+  // Start over (Coy, 2026-10-11: "delete or void proposals and start from scratch"): a blank draft from
+  // the job's type, every unsigned customer link turned off. Sent versions stay in the list.
+  const startOver = useCallback(async () => {
+    if (!window.confirm("Start this proposal over? You get a blank draft from the job's type defaults. Every customer link that wasn't signed is turned off, so it shows as replaced. Sent versions stay in the version list.")) return;
+    try { setBusy("Starting over…"); await call(`/api/jobs/${jobId}/proposal/new-version`, "POST", { fresh: true }); setViewFinal(null); await load(); await loadLinks(); }
+    catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(null); }
+  }, [jobId, load, loadLinks]);
+
   if (err && !b) return <div style={{ padding: 20, color: T.red }}>{err}</div>;
   if (!b || !p || !vm || !priced) return <div style={{ padding: 20, color: T.ink3 }}>Opening the proposal…</div>;
   const numberOf = (v: number) => (b.number_base ? formatProposalNumber(b.number_base, v) : `v${v}`);
@@ -378,6 +386,10 @@ export function Proposal({ jobId }: { jobId: string }) {
           {!editable && !finalShown && (
             <button onClick={() => void newVersion()} disabled={!!busy} className="rounded"
               style={{ height: 30, padding: "0 12px", border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink, fontFamily: disp, fontSize: 12, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase" }}>{wide ? "New version" : "New ver."}</button>
+          )}
+          {!finalShown && (
+            <button onClick={() => void startOver()} disabled={!!busy} className="rounded" title="Void the sent links and start a blank proposal"
+              style={{ height: 30, padding: "0 12px", border: `1px solid ${T.hairStrong}`, background: T.card, color: T.red, fontFamily: disp, fontSize: 12, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase" }}>{wide ? "Start over" : "Redo"}</button>
           )}
     </>
   );
@@ -467,15 +479,11 @@ function ProposalSettings({ b, p, editable, onType, onWarrantyTpl, onTermsTpl, e
   const sel: React.CSSProperties = { height: 28, border: `1px solid ${T.hair}`, borderRadius: 3, background: T.card, color: T.ink, fontSize: 12, maxWidth: 220 };
   return (
     <div className="flex flex-wrap items-end gap-x-4 gap-y-2" style={{ padding: "8px 12px", color: T.ink, fontSize: 12 }}>
-      <div>
-        <div style={lbl}>Project type</div>
-        <div className="flex mt-1 rounded overflow-hidden" style={{ border: `1px solid ${T.hairStrong}` }}>
-          {b.types.map((t, i) => (
-            <button key={t.key} disabled={!editable} onClick={() => onType(t.key)}
-              style={{ height: 26, padding: "0 10px", fontSize: 12, background: p.project_type === t.key ? "#2A2A2A" : T.card, color: p.project_type === t.key ? "#FBF6EC" : T.ink2, borderLeft: i ? `1px solid ${T.hair}` : "none" }}>{t.label}</button>
-          ))}
-        </div>
-      </div>
+      {editable && b.job.job_type && p.project_type !== b.job.job_type && b.types.some((t) => t.key === b.job.job_type) && (
+        <button onClick={() => onType(b.job.job_type as string)} style={{ alignSelf: "center", fontSize: 12, color: T.chalk }}>
+          Load the {b.types.find((t) => t.key === b.job.job_type)?.label} defaults (the job&apos;s type)
+        </button>
+      )}
       <label className="block"><span style={lbl}>Warranty</span><br />
         <select disabled={!editable} value={p.warranty?.template_id ?? ""} onChange={(e) => onWarrantyTpl(e.target.value || null)} className="mt-1" style={sel}>
           <option value="">None</option>
@@ -488,12 +496,8 @@ function ProposalSettings({ b, p, editable, onType, onWarrantyTpl, onTermsTpl, e
           {forType("terms").map((t) => <option key={t.id} value={t.id}>{t.name}{t.starter ? " (starter)" : ""}</option>)}
         </select>
       </label>
+      <Link href="/dashboard/settings/templates" style={{ alignSelf: "center", fontSize: 12, color: T.chalk }}>Edit templates ›</Link>
       {extra && <div className="ml-auto flex items-center gap-2 flex-wrap justify-end">{extra}</div>}
-      <div style={{ fontSize: 11, color: T.ink3, flexBasis: "100%" }}>
-        One price per job: to offer an alternative, make its line an optional add-on (on the budget line, or in the price list below) — priced, not in the total.<br />
-        Margin, O.H., tax and the sub split are on the job&apos;s <Link href={`/dashboard/scope/${b.job.id}`} style={{ color: T.chalk }}>Budget</Link>. Defaults per type are in{" "}
-        <Link href="/dashboard/settings/cost-book" style={{ color: T.chalk }}>Settings → Cost book</Link>. Picking a template replaces this proposal&apos;s edits to that section.
-      </div>
     </div>
   );
 }

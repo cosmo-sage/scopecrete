@@ -72,7 +72,7 @@ export function BudgetStep({ jobId, data, b, sections, onSend }: { jobId: string
 
       <div className="mt-4 rounded overflow-hidden" style={{ background: T.card, border: `1px solid ${T.hair}` }}>
         <div className="hidden md:grid px-3 py-2 gap-2" style={{ gridTemplateColumns: "1.7fr 1.3fr 110px 80px 100px 120px", ...eyebrow, borderBottom: `1px solid ${T.hair}` }}>
-          <span>Budget line ← group</span><span>Sheet · method</span><span style={{ textAlign: "right" }}>Qty</span><span>Unit</span><span style={{ textAlign: "right" }}>Rate</span><span style={{ textAlign: "right" }}>Total</span>
+          <span>Takeoff parameters → group</span><span>Sheet · method</span><span style={{ textAlign: "right" }}>Qty</span><span>Unit</span><span style={{ textAlign: "right" }}>Rate</span><span style={{ textAlign: "right" }}>Total</span>
         </div>
         {!data.params.length && <div className="p-3" style={{ fontSize: F.sm, color: T.ink3 }}>No takeoff groups yet — add them on the Takeoff step.</div>}
         {data.params.map((p) => {

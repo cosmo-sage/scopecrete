@@ -3,13 +3,13 @@
  * The Scope Builder page (Coy, 2026-10-09) — a first cut, before Claude Design
  * works it up. Every scope with how far it has got (Files → Takeoffs → Budget →
  * Proposal → Sent), split Residential · Commercial & government, each row
- * opening the job on the step it needs next. + New scope opens the New job form.
+ * opening the job on the step it needs next. New scope is Dusty's quick select; the filters sit behind ☰.
  * The Jobs board stays the sales stages; this is the scope's own flow.
  */
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { T, F, disp, eyebrow, nums, money0 } from "@/lib/v34/tokens";
-import { PageHeader, SearchBubble, SearchToggle } from "@/components/v34/primitives";
+import { MenuButton, PageHeader, SearchBubble, SearchToggle, SlideDrawer } from "@/components/v34/primitives";
 import { SCOPE_STEPS, stepHref, type Market, type ScopeFacts, type ScopeProgress, type ScopeStep } from "@/lib/scope-builder";
 
 interface Scope {
@@ -54,6 +54,7 @@ export function ScopeBuilderPage() {
   const [step, setStep] = useState<ScopeStep | "all">("all");
   const [q, setQ] = useState("");
   const [searching, setSearching] = useState(false);
+  const [filters, setFilters] = useState(false);
   useEffect(() => {
     let off = false;
     fetch("/api/scope-builder").then(async (r) => { const b = await r.json().catch(() => ({})); if (!r.ok) throw new Error(b?.error || `HTTP ${r.status}`); return b; })
@@ -76,24 +77,34 @@ export function ScopeBuilderPage() {
 
   return (
     <div style={{ color: T.ink, minHeight: "100%" }}>
+      {/* The filters slide in from the left behind ☰, left of the org's name (Coy, 2026-10-11: "shrink
+          the header height"); + New scope is Dusty's quick select on this page. */}
       <PageHeader title="Scope Builder" count={scopes ? shown.length : undefined}
         sub="Every scope from files to a sent proposal: Files → Takeoffs → Budget → Proposal. A row opens the job on its next step."
-        actions={<>
-          <SearchToggle open={searching} onToggle={() => setSearching((x) => !x)} label="Find a scope" />
-          <Link href="/dashboard/scope?new=1" className="sc-new-btn rounded flex items-center" style={{ height: 30, padding: "0 12px", background: T.hiviz, color: T.onHiviz, fontFamily: disp, fontWeight: 700, fontSize: 13, letterSpacing: ".04em", textTransform: "uppercase", whiteSpace: "nowrap" }}>+ New scope</Link>
-        </>}>
+        menu={<MenuButton always onClick={() => setFilters(true)} label="Filter scopes" />}
+        actions={<SearchToggle open={searching} onToggle={() => setSearching((x) => !x)} label="Find a scope" />}>
         {searching && <div className="mt-2"><SearchBubble value={q} onChange={setQ} onClose={() => setSearching(false)} placeholder="Find a scope, customer or address" /></div>}
-        <div className="flex gap-1.5 mt-2 overflow-x-auto" style={{ paddingBottom: 2 }}>
-          <button style={pill(market === "all")} onClick={() => pickMarket("all")}>All</button>
-          <button style={pill(market === "residential")} onClick={() => pickMarket("residential")}>Residential · {mCount("residential")}</button>
-          <button style={pill(market === "commercial")} onClick={() => pickMarket("commercial")}>Commercial &amp; government · {mCount("commercial")}</button>
-        </div>
-        <div className="flex gap-1.5 mt-1.5 overflow-x-auto" style={{ paddingBottom: 2 }}>
+        {(market !== "all" || step !== "all") && (
+          <div className="flex gap-1.5 mt-1.5 flex-wrap">
+            {market !== "all" && <button style={{ ...pill(true), height: 24 }} onClick={() => pickMarket("all")}>{market === "residential" ? "Residential" : "Commercial & government"} ×</button>}
+            {step !== "all" && <button style={{ ...pill(true), height: 24 }} onClick={() => setStep("all")}>{step === "sent" ? "Sent" : `Needs ${(SCOPE_STEPS.find((x) => x.k === step)?.label ?? "").toLowerCase()}`} ×</button>}
+          </div>
+        )}
+      </PageHeader>
+      <SlideDrawer open={filters} onClose={() => setFilters(false)} width={280} label="Filter scopes">
+        <div className="p-3 flex flex-col gap-1" style={{ color: T.ink }}>
+          <div style={{ ...eyebrow, padding: "4px 2px" }}>Market</div>
+          {([["all", `All · ${(scopes ?? []).filter((s) => s.status !== "lost").length}`], ["residential", `Residential · ${mCount("residential")}`], ["commercial", `Commercial & government · ${mCount("commercial")}`]] as Array<[MarketPick, string]>).map(([k, l]) => (
+            <button key={k} onClick={() => pickMarket(k)} className="text-left rounded" style={{ padding: "8px 10px", fontSize: F.sm, background: market === k ? T.slab : "transparent", fontWeight: market === k ? 700 : 500, color: T.ink }}>{l}</button>
+          ))}
+          <div style={{ ...eyebrow, padding: "12px 2px 4px" }}>Next step</div>
           {([["all", "Every step"], ...SCOPE_STEPS.map((s) => [s.k, s.k === "sent" ? "Sent" : `Needs ${s.label.toLowerCase()}`])] as Array<[ScopeStep | "all", string]>).map(([k, l]) => (
-            <button key={k} style={{ ...pill(step === k), height: 24, fontWeight: 500 }} onClick={() => setStep(k)}>{l} {counts[k] ? `· ${counts[k]}` : ""}</button>
+            <button key={k} onClick={() => { setStep(k); setFilters(false); }} className="text-left rounded flex" style={{ padding: "8px 10px", fontSize: F.sm, background: step === k ? T.slab : "transparent", fontWeight: step === k ? 700 : 500, color: T.ink }}>
+              <span className="flex-1">{l}</span><span style={{ color: T.ink3, ...nums }}>{counts[k] ?? 0}</span>
+            </button>
           ))}
         </div>
-      </PageHeader>
+      </SlideDrawer>
 
       <div className="px-3 lg:px-5 py-3">
         {err && <div style={{ fontSize: F.sm, color: T.red }}>{err}</div>}

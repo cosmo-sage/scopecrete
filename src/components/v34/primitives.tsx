@@ -215,8 +215,8 @@ export const NavIcon = ({ k, on, color }: { k: string; on: boolean; color?: stri
 
 /* ------------------------------------------------------------------ Drawer */
 
-export function Drawer({ open, onClose, title, sub, right, children, hideClose, full, below, wide, left, cover, drop }: {
-  open: boolean; onClose: () => void; title: string; sub?: string;
+export function Drawer({ open, onClose, title, sub, right, children, hideClose, full, below, wide, left, cover, drop, small }: {
+  open: boolean; onClose: () => void; title: string; sub?: string; small?: boolean;
   right?: React.ReactNode; children: React.ReactNode;
   hideClose?: boolean; full?: boolean; below?: boolean; wide?: boolean;
   /** The whole screen, its full width (Coy, 2026-10-10: area photos, New contact). */
@@ -255,7 +255,7 @@ export function Drawer({ open, onClose, title, sub, right, children, hideClose, 
           style={{ minHeight: 54, background: T.card, borderBottom: `1px solid ${T.hair}` }}>
           <div style={{ minWidth: 0, flex: 1 }}>
             {/* A long title is set smaller on a phone so it fits its line (Coy, 2026-10-07: "Build a new draft budget"). */}
-            <div className={title.length > 18 ? "sc-drawer-title-long" : undefined} style={{ fontFamily: disp, fontSize: F.xl, fontWeight: 600, lineHeight: 1.05, ...clip }}>{title}</div>
+            <div className={title.length > 18 ? "sc-drawer-title-long" : undefined} style={{ fontFamily: disp, fontSize: small ? F.md : F.xl, fontWeight: 600, lineHeight: 1.05, ...clip }}>{title}</div>
             {sub && <div style={{ ...eyebrow, marginTop: 1, ...clip }}>{sub}</div>}
           </div>
           {right}

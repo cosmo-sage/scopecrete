@@ -30,6 +30,7 @@ import { createPortal } from "react-dom";
 import { T, F, disp, eyebrow, nums, clip, money, money0, formatPhone } from "@/lib/v34/tokens";
 import { Sheet, Drawer } from "@/components/v34/primitives";
 import { PriceBook } from "@/components/v34/price-book";
+import { DustyEmblemButton } from "@/components/v34/budget-tabs";
 import { budget as priceBudget, jobMinimum, quantities, type BudgetLine, type BudgetSettings, type SectionInput, type TakeoffTotal, type TierTotal } from "@/lib/engine";
 import { COMMISSION_STEPS, commissionSplit } from "@/lib/commission";
 import { COST_TYPES, COST_TYPE_LABEL, QTY_RULE_LABEL, type CostType } from "@/lib/cost-cards";
@@ -595,25 +596,21 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
           reload(); return null;
         }} />
       {book && (
-        <Drawer open wide drop onClose={() => { setBook(null); reload(); }} title="Add from the Price book"
-          sub={areaName(book.area || null)}>
+        <Drawer open wide drop small onClose={() => { setBook(null); reload(); }} title="Price Book">
           <PriceBook pick={{
-            // Coy, 2026-10-03: "Full Drive Replacement - Add Cost Items".
-            title: `${areaName(book.area || null).replace(/\b\w/g, (c) => c.toUpperCase())} - Add Cost Items`,
+            // Coy, 2026-10-11: "Add Cost Items -> (the Area drop-down)", one small line; no "Whole job" line under the title.
+            title: "Add Cost Items →",
             sub: "Tap + to put an item on this area of the budget, Add all for a whole group, Load for an assembly. Quantities come from the area by each item's rule.",
             top: (
               <div className="flex items-center gap-2 flex-wrap">
-                <label className="flex items-center gap-1.5" style={{ fontSize: F.sm }}>
-                  <span style={eyebrow}>Area</span>
-                  <select value={book.area} onChange={(e) => setBook({ area: e.target.value })} aria-label="Area"
-                    style={{ height: 32, border: `1px solid ${T.hair}`, background: T.card, fontSize: F.sm, borderRadius: 4, padding: "0 6px", maxWidth: 260 }}>
-                    <option value="">Whole job</option>
-                    {sections.map((x) => <option key={x.id} value={x.id}>{x.name || "Unnamed area"}</option>)}
-                  </select>
-                </label>
-                <button onClick={() => { const a = book.area; setBook(null); setPicker({ area: a }); }} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>
-                  Not in the Price book? Make it here
-                </button>
+                <select value={book.area} onChange={(e) => setBook({ area: e.target.value })} aria-label="Area"
+                  style={{ height: 30, border: `1px solid ${T.hair}`, background: T.card, fontSize: F.sm, borderRadius: 4, padding: "0 6px", maxWidth: 260 }}>
+                  <option value="">Whole job</option>
+                  {sections.map((x) => <option key={x.id} value={x.id}>{x.name || "Unnamed area"}</option>)}
+                </select>
+                {/* New items and groups are made with Dusty (Coy, 2026-10-11): the emblem asks him. */}
+                <DustyEmblemButton title="Ask Dusty to make a new cost item or group"
+                  ask={`Make a new Price book cost item or group for ${areaName(book.area || null)}: `} />
               </div>
             ),
             onCard: (c) => call(`/api/jobs/${jobId}/budget/lines`, "POST", { section_id: book.area || null, cost_item_id: c.id }).then(() => undefined),

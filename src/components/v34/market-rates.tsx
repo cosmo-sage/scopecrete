@@ -72,6 +72,8 @@ export function MarketRates({ jobId, refresh, onChanged, onSheets }: {
   const [err, setErr] = useState<string | null>(null);
   const [open, setOpen] = useState<Set<string>>(new Set());
   const [used, setUsed] = useState<Record<string, Used>>({});
+  // What a Use tap is doing, or why it didn't, shown on its own row (Coy, 2026-10-11: "these buttons don't do anything").
+  const [useNote, setUseNote] = useState<Record<string, string>>({});
   const [ref, wide] = useWide<HTMLDivElement>(900);
 
   const load = useCallback(async () => {
@@ -84,7 +86,9 @@ export function MarketRates({ jobId, refresh, onChanged, onSheets }: {
   }, [jobId, refresh]);
 
   const job = useMemo(() => ({ sqft: d?.sqft ?? null, lf: d?.lf ?? null }), [d]);
-  const rows = useMemo(() => (d ? marketRows(d.steps, d.rates?.rates ?? [], d.lines, d.areas, job) : []), [d, job]);
+  // Only steps with a line on this budget: an old driveway lookup's concrete and
+  // finishing steps don't belong on a removal job (Coy, 2026-10-11).
+  const rows = useMemo(() => (d ? marketRows(d.steps, d.rates?.rates ?? [], d.lines, d.areas, job).filter((r) => r.lines.length > 0) : []), [d, job]);
   const range = useMemo(() => (d ? jobRange(d.rates?.rates ?? []) : null), [d]);
   const secRows = useMemo(() => (d?.sections ? sectionRows(d.sections, d.lines, d.section_rates ?? []) : []), [d]);
   const [secBusy, setSecBusy] = useState<string | null>(null);
@@ -104,16 +108,19 @@ export function MarketRates({ jobId, refresh, onChanged, onSheets }: {
   });
 
   const use = async (row: StepRow, value: number) => {
-    if (!d || !row.rate || row.lines.length !== 1) return;
+    const note = (t: string) => setUseNote((n) => ({ ...n, [row.step]: t }));
+    if (!d || !row.rate || row.lines.length !== 1) return note("No single line on the budget to write it to.");
     const line = row.lines[0];
     const cost = unitCostFromRate(value, { unit: row.unit!, kind: row.kind! }, line, d.areas, job, d.money);
-    if (cost === null) return;
+    if (cost === null) return note(d.money.oh === null || d.money.margin === null ? "Set the job's O.H. and margin first, to turn an installed price into a cost." : `Can't turn a price per ${fmtUnit(row.unit)} into ${line.name}'s unit (${line.unit || "none"}) — give the section a size, or the line a quantity.`);
+    note("Writing it to the budget…");
     const basis = `going rate ${money(value)}/${fmtUnit(row.unit)} (${row.kind === "installed_price" ? "installed, at your O.H. and margin" : "cost"}), ${row.rate.site}, ${d.rates ? when(d.rates.asked_at) : ""}`.trim();
     try {
       await send(`/api/jobs/${jobId}/budget/lines/${line.id}`, "PATCH", { unit_cost: cost, description: markEstimate(line.description ?? null, basis) });
       setUsed((u) => ({ ...u, [row.step]: { value, unit: fmtUnit(row.unit), prevCost: line.unit_cost, prevDesc: line.description ?? null, site: row.rate!.site } }));
+      note("");
       await load(); onChanged();
-    } catch (e) { setErr(String((e as Error).message ?? e)); }
+    } catch (e) { note(String((e as Error).message ?? e)); }
   };
   const undo = async (row: StepRow) => {
     const u = used[row.step];
@@ -212,7 +219,7 @@ export function MarketRates({ jobId, refresh, onChanged, onSheets }: {
     if (r.lines.length !== 1) return <div style={{ fontSize: 11.5, color: T.ink3 }}>{r.lines.length ? `${r.lines.length} lines price this step — change them on the Proposed budget.` : "No line on the budget for this step."}</div>;
     const can = (v: number) => unitCostFromRate(v, { unit: r.unit!, kind: r.kind! }, r.lines[0], d.areas, job, d.money) !== null;
     const btn = (v: number) => (
-      <button key={v} disabled={!can(v)} onClick={() => void use(r, v)} title={can(v) ? undefined : "Can't turn this rate into the line's unit"}
+      <button key={v} onClick={() => void use(r, v)} title={can(v) ? undefined : "Can't turn this rate into the line's unit"}
         style={{ height: 28, padding: "0 8px", borderRadius: 3, border: `1px solid ${T.ink}`, background: T.card, color: T.ink, opacity: can(v) ? 1 : 0.4,
           fontFamily: disp, fontSize: 11, fontWeight: 700, letterSpacing: ".05em", textTransform: "uppercase", whiteSpace: "nowrap", cursor: can(v) ? "pointer" : "default" }}>
         Use {money(v)}/{fmtUnit(r.unit)}
@@ -222,6 +229,7 @@ export function MarketRates({ jobId, refresh, onChanged, onSheets }: {
       <div className="flex items-center gap-1.5 flex-wrap">
         {btn(r.low)}{r.high !== r.low && btn(r.high)}
         {!wide && r.mine !== null && <span style={{ fontSize: 11.5, color: T.ink3 }}>Keep {money(r.mine)}</span>}
+        {useNote[r.step] && <div style={{ flexBasis: "100%", fontSize: 11.5, color: useNote[r.step].endsWith("…") ? T.ink3 : T.red }}>{useNote[r.step]}</div>}
       </div>
     );
   };
@@ -273,7 +281,7 @@ export function MarketRates({ jobId, refresh, onChanged, onSheets }: {
         <span style={eyebrow}>By section</span>
         {secRows.some((r) => r.section.origin === "bid") && <span style={{ fontSize: 11, color: T.ink3 }}>from the plan set</span>}
         <span className="flex-1" />
-        <span style={{ fontSize: 11, color: T.ink3 }}>{secBusy ? "Dusty is researching…" : "The emblem reads a section's scope of work and prices each cost"}</span>
+        {secBusy && <span style={{ fontSize: 11, color: T.ink3 }}>Dusty is researching…</span>}
       </div>
       {wide && (
         <div className="grid items-center gap-2" style={{ gridTemplateColumns: "minmax(0,1.6fr) 110px 110px 150px 110px 80px", padding: "5px 12px", ...eyebrow, borderBottom: `1px solid ${T.hairSoft}` }}>

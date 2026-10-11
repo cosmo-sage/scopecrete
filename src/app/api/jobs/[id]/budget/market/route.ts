@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
 import { jobInOrg } from "@/lib/budget-server";
-import { lookupRates, searchRates, searchSectionRates, researchSection } from "@/lib/draft/build-server";
+import { lookupRates, searchRates, searchSectionRates, researchSection, researchItem } from "@/lib/draft/build-server";
 import { sectionUnit } from "@/lib/budget-v3";
 import { marketView, missing094 } from "@/lib/budget-v3-server";
 
@@ -37,7 +37,7 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   const { supabase, orgId, userId, applyCookies } = r.session;
   if (!(await jobInOrg(supabase, orgId, id))) return applyCookies(NextResponse.json({ error: "No such job." }, { status: 404 }));
   const { error: probe } = await supabase.from("market_lookups").select("id").limit(1);
-  const body = (await req.json().catch(() => ({}))) as { sections?: unknown };
+  const body = (await req.json().catch(() => ({}))) as { sections?: unknown; item?: unknown };
   if (Array.isArray(body.sections)) {
     const want = new Set(body.sections.filter((x): x is string => typeof x === "string"));
     const view = await marketView(supabase, orgId, id);
@@ -47,8 +47,13 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     // One section is researched from its scope of work, itemized (Coy, 2026-10-11); several, as before.
     const one = asks.length === 1 ? view.sections.find((x) => x.id === asks[0].id) : null;
     const u = one ? sectionUnit(one) : null;
-    const found = one && u
-      ? await researchSection(supabase, orgId, id, { ...asks[0], size: u.qty ? `${Math.round(u.qty)} ${u.unit === "each" ? "EA" : (u.unit ?? "").toUpperCase()}` : null })
+    const size = u?.qty ? `${Math.round(u.qty)} ${u.unit === "each" ? "EA" : (u.unit ?? "").toUpperCase()}` : null;
+    // A cost's AI icon digs deeper on that one cost (Coy, 2026-10-11).
+    const item = one && typeof body.item === "string" ? body.item : null;
+    const found = one && u && item
+      ? await researchItem(supabase, orgId, id, { ...asks[0], size }, { items: one.items, rates: view.section_rates.filter((x) => x.step === one.id) }, item)
+      : one && u
+      ? await researchSection(supabase, orgId, id, { ...asks[0], size })
       : await searchSectionRates(supabase, orgId, id, asks);
     if (!missing094(probe)) {
       const { error } = await supabase.from("market_lookups").insert({ org_id: orgId, job_id: id, lookup: found, created_by: userId });

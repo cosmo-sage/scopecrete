@@ -67,3 +67,22 @@ test("the itemizer is told demolition means removal, never installing", async ()
   const { ITEMIZE_SYSTEM } = await import("../src/lib/draft/rates.ts");
   assert.match(ITEMIZE_SYSTEM, /never installing/);
 });
+
+import { deepQueries, sanitizeTotal, renderRollup } from "../src/lib/draft/rates.ts";
+
+test("digging deeper on one cost keeps private words out and asks by its cost type", () => {
+  const it = { key: "i1", name: "Skid steer with breaker at 15900 Gulfline", cost_type: "equipment", unit: "day", from: "" };
+  const q = deepQueries("Walker, LA", it, ["Gulfline"]);
+  assert.equal(q.length, 3);
+  for (const x of q) assert.doesNotMatch(x, /15900|Gulfline/);
+  assert.match(q[0], /rental rate per day Walker, LA/);
+});
+
+test("a section's estimate is kept only when its numbers make sense", () => {
+  assert.equal(sanitizeTotal({ low: 900, high: 500 }, "lf"), null);
+  assert.equal(sanitizeTotal({ low: "x", high: 5 }, "lf"), null);
+  const t = sanitizeTotal({ low: 2400, high: 3800, per_low: 6, per_high: 9.5, basis: "2 days of skid steer" }, "lf");
+  assert.deepEqual(t, { low: 2400, high: 3800, unit: "lf", per_low: 6, per_high: 9.5, basis: "2 days of skid steer" });
+  assert.equal(sanitizeTotal({ low: 1, high: 2, per_low: 1, per_high: 2 }, null).per_low, null);
+  assert.match(renderRollup({ name: "Curb", size: "400 LF" }, [{ key: "i1", name: "Operator", cost_type: "labor", unit: "day", from: "" }], new Map()), /no price found/);
+});

@@ -8,7 +8,7 @@ import { takeoffTotalsFor } from "@/lib/plans-server";
 import { extract, modelSeen, type AreaDraft, type Evidence, type Extraction } from "./extract";
 import { approvalBlocks, checkRecipe, outcomeOf, RECIPE_VERSION, type DraftOutcome } from "./recipe";
 import { modelConfigured, modelJson, modelRead } from "./model-server";
-import { rateQueries, RATES_SYSTEM, renderAsks, renderResults, sanitizeRates, sectionQueries, SECTION_RATES_SYSTEM, ITEMIZE_SYSTEM, ITEM_RATES_SYSTEM, itemQueries, renderItems, renderSection, sanitizeItems, type RateLookup, type SectionAsk, type SowItem } from "./rates";
+import { rateQueries, RATES_SYSTEM, renderAsks, renderResults, sanitizeRates, sectionQueries, SECTION_RATES_SYSTEM, ITEMIZE_SYSTEM, ITEM_RATES_SYSTEM, itemQueries, renderItems, renderSection, sanitizeItems, deepQueries, ROLLUP_SYSTEM, renderRollup, sanitizeTotal, type SectionTotal, type RateUnit, type RateLookup, type SectionAsk, type SowItem } from "./rates";
 import { searchWeb } from "@/lib/web-search-server";
 import { cityOf } from "@/lib/dusty/web";
 import { scopePicks, scopeSteps, sectionOfStep, sectionVerdict, type ScopeSection } from "./scope";
@@ -525,10 +525,37 @@ async function privateWords(sb: Sb, orgId: string, jobId: string): Promise<strin
  * costs it takes, each with its cost type and unit; one search per item (its words and the city only);
  * a second read files each price on its item. Kept as a "sections" lookup with the items beside the rates.
  */
-export async function researchSection(sb: Sb, orgId: string, jobId: string, ask: SectionAsk & { id: string; size?: string | null }):
-  Promise<RateLookup & { kind: "sections"; section_ids: string[]; items: Record<string, SowItem[]> }> {
+type SectionLookup = RateLookup & { kind: "sections"; section_ids: string[]; items: Record<string, SowItem[]>; totals?: Record<string, SectionTotal> };
+type SecAsk = SectionAsk & { id: string; size?: string | null };
+
+/** Search for some costs and give each price found to its cost (rates keyed by section, `item` the cost). */
+async function priceSowItems(items: SowItem[], queries: string[], sectionId: string, max = 24) {
+  const web = await searchWeb(queries, max);
+  if (web.error) return { error: web.error, rates: [] as RateLookup["rates"], dropped: 0 };
+  if (!web.results.length) return { error: null, rates: [] as RateLookup["rates"], dropped: 0 };
+  const m = await modelJson(ITEM_RATES_SYSTEM, renderItems(items) + renderResults(web.results), 4000, 45_000);
+  if (!m.ok) return { error: `Couldn't read the prices: ${m.error}.`, rates: [] as RateLookup["rates"], dropped: 0 };
+  const got = sanitizeRates(m.json, web.results, new Set(items.map((i) => i.key)));
+  const typeOf = new Map(items.map((i) => [i.key, i.cost_type]));
+  return { error: null, dropped: got.dropped,
+    rates: got.rates.map((r) => ({ ...r, item: r.step, split: r.split === "all" ? (typeOf.get(r.step) ?? "all") : r.split, step: sectionId })) as RateLookup["rates"] };
+}
+
+/** Dusty's estimate of the whole section from its priced costs (Coy, 2026-10-11). */
+async function rollUp(ask: SecAsk, unit: RateUnit | null, items: SowItem[], rates: RateLookup["rates"]): Promise<SectionTotal | null> {
+  const ranges = new Map<string, { low: number; high: number; unit: string }>();
+  for (const it of items) {
+    const rs = rates.filter((r) => r.item === it.key);
+    if (rs.length) ranges.set(it.key, { low: Math.min(...rs.map((r) => r.low)), high: Math.max(...rs.map((r) => r.high)), unit: rs[0].unit });
+  }
+  if (!ranges.size) return null;
+  const m = await modelJson(ROLLUP_SYSTEM, renderRollup({ name: ask.name, size: ask.size ?? null }, items, ranges), 800, 30_000);
+  return m.ok ? sanitizeTotal(m.json, ask.size ? unit : null) : null;
+}
+
+export async function researchSection(sb: Sb, orgId: string, jobId: string, ask: SecAsk): Promise<SectionLookup> {
   const place = await jobPlace(sb, orgId, jobId);
-  const found: RateLookup & { kind: "sections"; section_ids: string[]; items: Record<string, SowItem[]> } =
+  const found: SectionLookup =
     { kind: "sections", section_ids: [ask.id], items: {}, place: place ?? "no city on the job", asked_at: new Date().toISOString(), queries: [], rates: [], dropped: 0, error: null };
   if (!modelConfigured()) { found.error = "Researching needs ANTHROPIC_API_KEY."; return found; }
   const it = await modelJson(ITEMIZE_SYSTEM, renderSection(ask), 1500, 30_000);
@@ -536,16 +563,41 @@ export async function researchSection(sb: Sb, orgId: string, jobId: string, ask:
   const items = sanitizeItems(it.json);
   found.items[ask.id] = items;
   if (!items.length) { found.error = "Dusty couldn't break this section into costs — write its scope of work first."; return found; }
-  found.queries = itemQueries(place, items, await privateWords(sb, orgId, jobId));
-  const web = await searchWeb(found.queries, 24);
-  if (web.error) { found.error = web.error; return found; }
-  if (!web.results.length) { found.error = "The search found nothing."; return found; }
-  const m = await modelJson(ITEM_RATES_SYSTEM, renderItems(items) + renderResults(web.results), 4000, 45_000);
-  if (!m.ok) { found.error = `Couldn't read the prices: ${m.error}.`; return found; }
-  const got = sanitizeRates(m.json, web.results, new Set(items.map((i) => i.key)));
-  const typeOf = new Map(items.map((i) => [i.key, i.cost_type]));
-  found.rates = got.rates.map((r) => ({ ...r, item: r.step, split: r.split === "all" ? (typeOf.get(r.step) ?? "all") : r.split, step: ask.id }));
+  const banned = await privateWords(sb, orgId, jobId);
+  found.queries = itemQueries(place, items, banned);
+  const first = await priceSowItems(items, found.queries, ask.id);
+  if (first.error) { found.error = first.error; return found; }
+  found.rates = first.rates; found.dropped = first.dropped;
+  // Every cost gets a price if one can be found: a second, wider look for up to four left bare.
+  const bare = items.filter((i) => !found.rates.some((r) => r.item === i.key)).slice(0, 4);
+  if (bare.length) {
+    const q = bare.flatMap((i) => deepQueries(place, i, banned).slice(0, 2));
+    found.queries.push(...q);
+    const more = await priceSowItems(bare, q, ask.id, 16);
+    found.rates.push(...more.rates); found.dropped += more.dropped;
+  }
+  if (!found.rates.length) { found.error = "The search found no prices for these costs."; return found; }
+  const total = await rollUp(ask, ask.unit, items, found.rates);
+  if (total) found.totals = { [ask.id]: total };
+  return found;
+}
+
+/** One cost looked into again, harder; the section's other prices are kept and its total re-added. */
+export async function researchItem(sb: Sb, orgId: string, jobId: string, ask: SecAsk, prior: { items: SowItem[]; rates: RateLookup["rates"] }, key: string): Promise<SectionLookup> {
+  const place = await jobPlace(sb, orgId, jobId);
+  const found: SectionLookup = { kind: "sections", section_ids: [ask.id], items: { [ask.id]: prior.items }, place: place ?? "no city on the job",
+    asked_at: new Date().toISOString(), queries: [], rates: prior.rates.filter((r) => r.item !== key), dropped: 0, error: null };
+  const item = prior.items.find((i) => i.key === key);
+  if (!item) { found.error = "That cost is no longer on the section — research the section again."; return found; }
+  if (!modelConfigured()) { found.error = "Researching needs ANTHROPIC_API_KEY."; return found; }
+  found.queries = deepQueries(place, item, await privateWords(sb, orgId, jobId));
+  const got = await priceSowItems([item], found.queries, ask.id, 18);
+  found.rates.push(...got.rates.length ? got.rates : prior.rates.filter((r) => r.item === key));
   found.dropped = got.dropped;
+  if (got.error) found.error = got.error;
+  else if (!got.rates.length) found.error = `Still no price found for ${item.name} — a vendor's quote is the way.`;
+  const total = await rollUp(ask, ask.unit, prior.items, found.rates);
+  if (total) found.totals = { [ask.id]: total };
   return found;
 }
 

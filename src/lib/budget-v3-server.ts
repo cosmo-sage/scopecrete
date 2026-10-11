@@ -11,7 +11,7 @@ import { LINE_COLUMNS, numLine, workingEstimate } from "@/lib/budget-server";
 import { pricingFor } from "@/lib/pricing-server";
 import { takeoffTotalsFor } from "@/lib/plans-server";
 import { DRIVEWAY_STEPS, stepsOf } from "@/lib/draft/recipe";
-import { restep, type RateLookup, type SowItem } from "@/lib/draft/rates";
+import { restep, type RateLookup, type SowItem, type SectionTotal } from "@/lib/draft/rates";
 import { sheetsFor } from "@/lib/section-sheets";
 import { compareActuals, suggestLine, type ChangeOrder, type JobCost } from "@/lib/budget-v3";
 
@@ -96,12 +96,12 @@ export async function marketView(sb: Sb, orgId: string, jobId: string) {
   if (rates) rates = { ...rates, rates: rates.rates.map(restep) };
   const canKeep = !missing094(mle);
   // Going rates for the job's own sections (kind "sections"), newest per section; before 094 on the latest build.
-  const sectionRates = new Map<string, { asked_at: string; rates: RateLookup["rates"]; items: SowItem[] }>();
-  const takeSections = (l: (RateLookup & { section_ids?: string[]; items?: Record<string, SowItem[]> }) | null | undefined) => {
+  const sectionRates = new Map<string, { asked_at: string; rates: RateLookup["rates"]; items: SowItem[]; total: SectionTotal | null }>();
+  const takeSections = (l: (RateLookup & { section_ids?: string[]; items?: Record<string, SowItem[]>; totals?: Record<string, SectionTotal> }) | null | undefined) => {
     if (!l || !Array.isArray(l.section_ids)) return;
     for (const id of l.section_ids) {
       const had = sectionRates.get(id);
-      if (!had || had.asked_at < l.asked_at) sectionRates.set(id, { asked_at: l.asked_at, rates: l.rates.filter((r) => r.step === id), items: l.items?.[id] ?? [] });
+      if (!had || had.asked_at < l.asked_at) sectionRates.set(id, { asked_at: l.asked_at, rates: l.rates.filter((r) => r.step === id), items: l.items?.[id] ?? [], total: l.totals?.[id] ?? null });
     }
   };
   for (const r of (runs ?? []) as Array<{ made: { section_rates?: RateLookup & { section_ids?: string[] } } | null }>) takeSections(r.made?.section_rates);
@@ -115,6 +115,7 @@ export async function marketView(sb: Sb, orgId: string, jobId: string) {
     ...a, sheets: sheetsFor(a.source_ref, sheets).map((x) => ({ id: x.id, number: x.number, title: x.title })),
     rates_at: sectionRates.get(a.id)?.asked_at ?? null,
     items: sectionRates.get(a.id)?.items ?? [],
+    total: sectionRates.get(a.id)?.total ?? null,
   }));
   const section_rates = [...sectionRates.values()].flatMap((v) => v.rates);
   const past = await pastJobs(sb, orgId, jobId, (b.job?.job_type as string | null) ?? null);

@@ -36,7 +36,8 @@ interface MarketData {
   past: Array<{ id: string; name: string; sqft: number; days: number | null; closed_at: string; per_sf: number; margin: number | null }>;
   can_keep: boolean;
   sections: Array<MarketSection & { sheets: Array<{ id: string; number: string | null; title: string | null }>; rates_at: string | null;
-    items?: Array<{ key: string; name: string; cost_type: string; unit: string; from: string }> }>;
+    items?: Array<{ key: string; name: string; cost_type: string; unit: string; from: string }>;
+    total?: { low: number; high: number; unit: string | null; per_low: number | null; per_high: number | null; basis: string } | null }>;
   section_rates: RateLite[];
   note?: string;
   error?: string;
@@ -98,6 +99,16 @@ export function MarketRates({ jobId, refresh, onChanged, onSheets }: {
     try { setD(await send(`/api/jobs/${jobId}/budget/market`, "POST", { sections: ids })); } catch (e) { setErr(String((e as Error).message ?? e)); }
     setSecBusy(null);
   };
+  const [digBusy, setDigBusy] = useState<string | null>(null);
+  // A cost with no price: the AI icon looks harder for that one (Coy, 2026-10-11).
+  const digItem = async (sectionId: string, key: string) => {
+    setDigBusy(`${sectionId}:${key}`); setErr(null);
+    try { setD(await send(`/api/jobs/${jobId}/budget/market`, "POST", { sections: [sectionId], item: key })); } catch (e) { setErr(String((e as Error).message ?? e)); }
+    setDigBusy(null);
+  };
+  // Dusty makes Price book items, a group and an assembly from the research — his plan, Coy's Apply.
+  const makeAsk = (sectionName: string, rows: Array<{ name: string; cost_type: string; range: string }>, whole: boolean) =>
+    `From the going-rate research on the section "${sectionName}", make ${whole ? `Price book cost items for its scope of work, in a group named "${sectionName}", and an assembly "${sectionName}" holding them` : "a Price book cost item"} — each priced at the middle of its range and marked as an estimate from the research:\n${rows.map((x) => `- ${x.name} (${COST_TYPE_LABEL[x.cost_type] ?? x.cost_type}): ${x.range}`).join("\n")}`;
   const mineSf = d?.totals && d.sqft ? d.totals.total / d.sqft : null;
 
 
@@ -258,8 +269,17 @@ export function MarketRates({ jobId, refresh, onChanged, onSheets }: {
 
   // ── By section: the job's own sections, the plan set's first (Coy, 2026-10-09). ──
   const secLabel = (r: SectionRow) => r.qty === null ? "no size yet" : `${Math.round(r.qty).toLocaleString()} ${fmtUnit(r.unit)}`;
+  const totOf = (r: SectionRow) => d.sections.find((x) => x.id === r.section.id)?.total ?? null;
   const secStatus = (r: SectionRow) => {
     const m: Record<string, { word: string; color: string }> = { ...STATUS, no_size: { word: "No size", color: T.hivizText }, no_line: { word: "No items", color: T.ink3 } };
+    // No going rate: a button that researches it, or Dusty's estimate once the costs are priced (Coy, 2026-10-11).
+    if (r.status === "no_data") {
+      const est = totOf(r);
+      return <button onClick={(e) => { e.stopPropagation(); if (!secBusy) void lookUpSections([r.section.id]); }} disabled={!!secBusy}
+        title={est ? "Dusty's estimate from the priced costs — tap to research again" : "No going rate found yet — tap to have Dusty research this section"}
+        style={{ fontFamily: disp, fontSize: 10.5, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", color: est ? T.chalk : T.hivizText, whiteSpace: "nowrap", cursor: secBusy ? "wait" : "pointer", textDecoration: "underline", textUnderlineOffset: 2 }}>
+        {secBusy === r.section.id ? "Researching…" : est ? "Estimate" : "Research"}</button>;
+    }
     const x = m[r.status];
     return <span style={{ fontFamily: disp, fontSize: 10.5, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", color: x.color, whiteSpace: "nowrap" }}>{x.word}</span>;
   };
@@ -291,7 +311,9 @@ export function MarketRates({ jobId, refresh, onChanged, onSheets }: {
       {secRows.map((r) => {
         const k = `sec:${r.section.id}`;
         const isOpen = open.has(k);
-        const rangeTxt = r.low !== null && r.high !== null ? `${money(r.low)}${r.high !== r.low ? `–${money(r.high)}` : ""}/${fmtUnit(r.unit)}` : "—";
+        const est = totOf(r);
+        const rangeTxt = r.low !== null && r.high !== null ? `${money(r.low)}${r.high !== r.low ? `–${money(r.high)}` : ""}/${fmtUnit(r.unit)}`
+          : est ? (est.per_low !== null && est.unit ? `≈${money(est.per_low)}–${money(est.per_high!)}/${fmtUnit(est.unit)}` : `≈${money(est.low)}–${money(est.high)}`) : "—";
         const yours = r.kind === "cost" ? r.per_cost : r.per_price;
         const bidLine = quotedLine(r.section.source_ref) ?? r.section.source_ref;
         return (
@@ -335,28 +357,56 @@ export function MarketRates({ jobId, refresh, onChanged, onSheets }: {
                 ) : <div style={{ color: T.hivizText }}>No scope of work yet. Write it (or have Dusty draft it) on the Proposed budget; the lookup reads it to find a price for each step.</div>}
                 {r.section.notes && <div style={{ color: T.ink2 }}><span style={eyebrow}>Notes</span> {r.section.notes}</div>}
                 {(() => {
-                  const items = d.sections.find((x) => x.id === r.section.id)?.items ?? [];
+                  const sec = d.sections.find((x) => x.id === r.section.id);
+                  const items = sec?.items ?? [];
                   if (!items.length) return null;
+                  const rangeOf = (key: string) => {
+                    const rs = r.rates.filter((x) => x.item === key);
+                    if (!rs.length) return null;
+                    const lo = Math.min(...rs.map((x) => x.low)), hi = Math.max(...rs.map((x) => x.high));
+                    return { rs, text: `${money(lo)}${hi !== lo ? `–${money(hi)}` : ""}/${[...new Set(rs.map((x) => fmtUnit(x.unit)))].join(", ")}` };
+                  };
+                  const priced = items.map((it) => ({ it, g: rangeOf(it.key) })).filter((x) => x.g);
+                  const tot = sec?.total ?? null;
                   return (
                     <div>
-                      <div style={{ ...eyebrow, marginBottom: 2 }}>Costs in the scope of work</div>
+                      <div className="flex items-center gap-2" style={{ marginBottom: 2 }}>
+                        <span style={eyebrow}>Costs in the scope of work</span>
+                        <span className="flex-1" />
+                        {priced.length > 0 && <button onClick={() => askDusty(makeAsk(r.section.name, priced.map((x) => ({ name: x.it.name, cost_type: x.it.cost_type, range: x.g!.text })), true), false)}
+                          title="Ask Dusty to make Price book items, a group and an assembly from these" style={{ color: T.chalk, fontWeight: 600, fontSize: 11.5, cursor: "pointer" }}>Make items, group & assembly ›</button>}
+                      </div>
                       {items.map((it) => {
-                        const rs = r.rates.filter((x) => x.item === it.key);
-                        const lo = rs.length ? Math.min(...rs.map((x) => x.low)) : null, hi = rs.length ? Math.max(...rs.map((x) => x.high)) : null;
-                        const units = [...new Set(rs.map((x) => fmtUnit(x.unit)))].join(", ");
+                        const g = rangeOf(it.key);
                         const k2 = `${k}:${it.key}`;
+                        const busy = digBusy === `${r.section.id}:${it.key}`;
                         return (
                           <div key={it.key} style={{ borderTop: `1px solid ${T.hairSoft}`, padding: "4px 0" }}>
-                            <div className="flex items-baseline gap-2" onClick={() => rs.length && setOpen((o) => { const n = new Set(o); if (n.has(k2)) n.delete(k2); else n.add(k2); return n; })} style={{ cursor: rs.length ? "pointer" : "default", color: T.ink2 }}>
-                              <span style={{ color: T.ink3 }}>-</span>
-                              <span style={{ flex: 1, minWidth: 0, ...clip }}>{it.name}</span>
+                            <div className="grid items-center gap-2" onClick={() => g && setOpen((o) => { const n = new Set(o); if (n.has(k2)) n.delete(k2); else n.add(k2); return n; })}
+                              style={{ gridTemplateColumns: "84px minmax(0,1fr) auto 22px", cursor: g ? "pointer" : "default", color: T.ink2 }}>
                               <span style={{ fontSize: 10.5, fontFamily: disp, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: T.ink3, whiteSpace: "nowrap" }}>{COST_TYPE_LABEL[it.cost_type] ?? it.cost_type}</span>
-                              <span style={{ ...nums, whiteSpace: "nowrap", minWidth: 96, textAlign: "right" }}>{lo === null ? <span style={{ color: T.ink3 }}>no price found</span> : `${money(lo)}${hi !== lo ? `–${money(hi!)}` : ""}/${units}`}</span>
+                              <span style={{ minWidth: 0, ...clip }}>{it.name}</span>
+                              <span style={{ ...nums, whiteSpace: "nowrap", textAlign: "right" }}>{g ? g.text : <span style={{ color: T.ink3 }}>{busy ? "digging…" : "no price found"}</span>}</span>
+                              {g ? (
+                                <button onClick={(e) => { e.stopPropagation(); askDusty(makeAsk(r.section.name, [{ name: it.name, cost_type: it.cost_type, range: g.text }], false), false); }}
+                                  title={`Ask Dusty to make "${it.name}" a Price book item`} aria-label={`Make ${it.name} an item`} style={{ color: T.chalk, fontWeight: 700, cursor: "pointer" }}>+</button>
+                              ) : (
+                                <button onClick={(e) => { e.stopPropagation(); if (!digBusy) void digItem(r.section.id, it.key); }} disabled={!!digBusy}
+                                  title={`Dig deeper for a price on ${it.name}`} aria-label={`Dig deeper on ${it.name}`} style={{ lineHeight: 0, cursor: digBusy ? "wait" : "pointer" }}>
+                                  <DustyEmblem size={18} state={busy ? "thinking" : "idle"} still={!busy} /></button>
+                              )}
                             </div>
-                            {open.has(k2) && <div className="flex flex-col gap-1" style={{ paddingLeft: 14, marginTop: 3 }}>{rs.map(quote)}</div>}
+                            {g && open.has(k2) && <div className="flex flex-col gap-1" style={{ paddingLeft: 92, marginTop: 3 }}>{g.rs.map(quote)}</div>}
                           </div>
                         );
                       })}
+                      {tot && (
+                        <div style={{ borderTop: `1px solid ${T.hair}`, padding: "5px 0 0", color: T.ink2 }}>
+                          <div className="flex items-baseline gap-2"><span style={{ fontWeight: 600 }}>Section, all in</span><span className="flex-1" />
+                            <span style={{ ...nums, fontWeight: 600 }}>{money(tot.low)}{tot.high !== tot.low ? `–${money(tot.high)}` : ""}{tot.per_low !== null && tot.unit ? ` · ${money(tot.per_low)}–${money(tot.per_high!)}/${fmtUnit(tot.unit)}` : ""}</span></div>
+                          <div style={{ fontSize: 11, color: T.ink3 }}>Dusty&rsquo;s estimate from the costs above, not a price{tot.basis ? `: ${tot.basis}` : "."}</div>
+                        </div>
+                      )}
                     </div>
                   );
                 })()}

@@ -17,6 +17,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { createPortal } from "react-dom";
 import { T, F, disp, eyebrow, nums, clip, relTime, BUCKET } from "@/lib/v34/tokens";
 import { EmptyState, MenuButton, Sheet, SearchBubble } from "@/components/v34/primitives";
 import { useThreads } from "@/components/v34/threads-ctx";
@@ -286,6 +287,10 @@ export function EmailConversation({ convKey, threadId, draftId }: { convKey: str
           canSend={d.can_send} signature={d.signature} convKeyForDusty={convKey}
           onClose={() => { setCompose(null); reload(); }}
           onSent={(m) => { setCompose(null); flash(m); reload(); router.refresh(); }}
+          quoted={compose.mode === "forward" ? null : (() => {
+            const m = [...d.messages].reverse().find((x) => x.direction !== "out") ?? d.messages[d.messages.length - 1];
+            return m ? <MessageCard m={m} ours={d.ours} startOpen /> : null;
+          })()}
         />
       )}
 
@@ -568,11 +573,15 @@ function AttachSheet({ open, onClose, jobId, contactId, picked, onPick }: { open
   );
 }
 
-export function EmailComposer({ mode, draft, messages = [], ours = [], conversation = null, replyToId = null, filing, canSend, signature, convKeyForDusty, initialTo, initialBody, draftFiles, onClose, onSent, asPage }: {
+export function EmailComposer({ mode, draft, messages = [], ours = [], conversation = null, replyToId = null, filing, canSend, signature, convKeyForDusty, initialTo, initialBody, draftFiles, onClose, onSent, asPage, quoted }: {
   mode: ComposeMode; draft?: DraftRow | null; messages?: MailRow[]; ours?: string[]; conversation?: string | null; replyToId?: string | null;
   filing: Filing; canSend: boolean; signature: string; convKeyForDusty?: string | null; initialTo?: string[]; initialBody?: string; draftFiles?: FileLite[];
   onClose: () => void; onSent: (msg: string, conversation?: string | null) => void; asPage?: boolean;
+  /** The email being answered, shown under the box when the composer covers the screen (phone). */
+  quoted?: React.ReactNode;
 }) {
+  const phone = usePhone();
+  const [showQuoted, setShowQuoted] = useState(true);
   const last = messages[messages.length - 1] as (MailRow & { text_body?: string | null; sent_files?: FileLite[]; attachments?: Array<{ file: FileLite | null }> }) | undefined;
   const first = useMemo(() => {
     if (draft) return { to: draft.to_addresses, cc: draft.cc_addresses, subject: draft.subject ?? "", body: draft.body ?? "" };
@@ -706,17 +715,56 @@ export function EmailComposer({ mode, draft, messages = [], ours = [], conversat
 
   if (asPage) return inner;
   const title = mode === "forward" ? "Forward" : mode === "reply_all" ? "Reply all" : mode === "reply" ? "Reply" : "New email";
+  const head = (
+    <div className="flex items-center gap-2" style={{ marginBottom: 4 }}>
+      <span style={{ ...eyebrow, color: T.hiviz }}>{title}</span>
+      <span style={{ flex: 1 }} />
+      <button onClick={() => void discard()} style={{ fontSize: 11.5, color: T.ink3, cursor: "pointer", background: "none" }}>{draftId ? "Delete draft" : "Discard"}</button>
+      <button onClick={() => void saveDraft(true)} aria-label="Close and keep a draft" style={{ fontSize: phone ? 24 : 18, color: T.ink2, cursor: "pointer", background: "none", lineHeight: 1, padding: phone ? "0 4px" : 0 }}>×</button>
+    </div>
+  );
+  // On a phone the composer covers the whole screen, header and footer too (Coy, 2026-10-11:
+  // "it needs to be a full overlay panel up to the top … I can't view the whole email"), with the
+  // email being answered under the box. Portalled so no ancestor can clip or shift it.
+  if (phone) {
+    return createPortal(
+      <div role="dialog" aria-label={title} className="flex flex-col"
+        style={{ position: "fixed", inset: 0, zIndex: 60, background: T.card, paddingTop: "env(safe-area-inset-top)" }}>
+        <div style={{ padding: "10px 14px 6px", borderBottom: `2px solid ${T.hiviz}`, flexShrink: 0 }}>{head}</div>
+        <div style={{ flex: 1, minHeight: 0, overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "8px 14px calc(16px + env(safe-area-inset-bottom))" }}>
+          {inner}
+          {quoted && (
+            <div style={{ marginTop: 14 }}>
+              <button onClick={() => setShowQuoted((v) => !v)} style={{ ...eyebrow, color: T.ink2, cursor: "pointer", background: "none", marginBottom: 6 }}>
+                {showQuoted ? "▾" : "▸"} The email you’re answering
+              </button>
+              {showQuoted && quoted}
+            </div>
+          )}
+        </div>
+      </div>,
+      document.body,
+    );
+  }
   return (
     <div style={{ position: "sticky", bottom: 0, zIndex: 8, margin: "0 0 0", background: T.card, borderTop: `2px solid ${T.hiviz}`, boxShadow: "0 -6px 18px rgba(0,0,0,.12)", padding: "10px 14px calc(12px + env(safe-area-inset-bottom))", maxHeight: "85dvh", overflowY: "auto" }}>
-      <div className="flex items-center gap-2" style={{ marginBottom: 4 }}>
-        <span style={{ ...eyebrow, color: T.hiviz }}>{title}</span>
-        <span style={{ flex: 1 }} />
-        <button onClick={() => void discard()} style={{ fontSize: 11.5, color: T.ink3, cursor: "pointer", background: "none" }}>{draftId ? "Delete draft" : "Discard"}</button>
-        <button onClick={() => void saveDraft(true)} aria-label="Close and keep a draft" style={{ fontSize: 18, color: T.ink2, cursor: "pointer", background: "none", lineHeight: 1 }}>×</button>
-      </div>
+      {head}
       {inner}
     </div>
   );
+}
+
+/** Under lg (1024px), where the composer covers the screen. */
+function usePhone(): boolean {
+  const [phone, setPhone] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 1023.98px)");
+    const on = () => setPhone(mq.matches);
+    on();
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, []);
+  return phone;
 }
 
 /** A new email, from Compose or a person's Email channel (`?to=`, `?contact=`, `?body=`, `?draft=`). */

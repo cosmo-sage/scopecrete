@@ -70,6 +70,8 @@ export interface ThreadMessage {
   status: string | null;
   /** An incoming call nobody answered (Quo: "no-answer"). */
   missed?: boolean;
+  /** The voicemail they left — its words once Quo has written them, and its seconds. */
+  voicemail?: { text: string | null; duration: number | null };
   artifact_kinds: string[];
   /** Files on this message (message_media). Fetched lazily by MessageMedia. */
   media_count: number;
@@ -194,7 +196,7 @@ export function CallRow({ m }: { m: ThreadMessage }) {
 
   // The recording plays from its own button; "details" are the words.
   // Next steps stay off the card (Coy, 2026-10-06: "it clutters the information card") — Dusty gives them.
-  const detailKinds = m.artifact_kinds.filter((k) => k !== "recording" && k !== "next_steps");
+  const detailKinds = m.artifact_kinds.filter((k) => k !== "recording" && k !== "next_steps" && !(k === "voicemail" && m.voicemail));
   const hasArtifacts = detailKinds.length > 0;
   const duration = formatDuration(m.duration_seconds);
   const isOut = m.direction === "outbound";
@@ -270,6 +272,20 @@ export function CallRow({ m }: { m: ThreadMessage }) {
       }}>
         {m.summary?.trim() || `No summary${duration ? ` · ${duration}` : ""}`}
       </div>}
+
+      {/* The voicemail on the card itself, as Quo shows it (Coy, 2026-10-11):
+          the caller's own words and a play button, no expanding. */}
+      {m.voicemail && (
+        <div className="mt-1.5">
+          <div className="text-[9px] uppercase tracking-wide" style={{ color: DA.accent }}>
+            Voicemail{m.voicemail.duration ? ` · ${formatDuration(m.voicemail.duration)}` : ""}
+          </div>
+          <div className="text-xs mt-0.5 whitespace-pre-wrap" style={{ color: m.voicemail.text ? DA.textPrimary : DA.textMuted, fontStyle: m.voicemail.text ? "normal" : "italic", overflowWrap: "anywhere" }}>
+            {m.voicemail.text ?? "Quo hasn't written down the words yet."}
+          </div>
+          <PlayAudio messageId={m.id} kind="voicemail" label={`Play voicemail${m.voicemail.duration ? ` · ${formatDuration(m.voicemail.duration)}` : ""}`} />
+        </div>
+      )}
 
       {m.artifact_kinds.includes("recording") && (
         <PlayAudio messageId={m.id} kind="recording" label={`Play recording${duration ? ` · ${duration}` : ""}`} />
@@ -466,6 +482,7 @@ export function SmsRow({ m }: { m: ThreadMessage }) {
       <div
         className="max-w-[78%] rounded-2xl px-3 py-2"
         style={{
+          minWidth: 0,
           background: isOut ? DA.bubbleOut : DA.bubbleIn,
           border: `1px solid ${DA.border}`, color: isOut ? T.outInk : DA.textPrimary,
         }}
@@ -474,7 +491,8 @@ export function SmsRow({ m }: { m: ThreadMessage }) {
             caption is not an empty message, and labelling it one is how two of
             Amber's photos read as blank bubbles. */}
         {(text || m.media_count === 0) && (
-          <div className="text-xs whitespace-pre-wrap" style={{ color: "inherit" }}>
+          // A long link breaks inside the bubble instead of running out of it (Coy, 2026-10-11).
+          <div className="text-xs whitespace-pre-wrap" style={{ color: "inherit", overflowWrap: "anywhere" }}>
             {text || <span style={{ fontStyle: "italic", opacity: 0.7 }}>(no text)</span>}
           </div>
         )}

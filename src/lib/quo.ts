@@ -80,6 +80,47 @@ export async function freshAudioUrl(callId: string, kind: "recording" | "voicema
 }
 
 /**
+ * A voicemail's words and link from the Quo API (GET /v1/call-voicemails/{callId};
+ * the shape supabase/functions/backfill-call-media reads). The webhook's
+ * call.completed carries only the audio link, never the transcript, so this is
+ * the one place the caller's words come from. `transcript` is a flat string;
+ * null while Quo is still writing it (status pending) — asked again later.
+ */
+export async function quoVoicemail(callId: string): Promise<{ transcript: string | null; url: string | null; duration: number | null } | null> {
+  const key = process.env.QUO_API_KEY;
+  if (!key || !callId) return null;
+  for (const auth of [key, `Bearer ${key}`]) {
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 8_000);
+      const res = await fetch(`${API_BASE}/call-voicemails/${encodeURIComponent(callId)}`, {
+        headers: { Authorization: auth, Accept: "application/json" }, signal: ctrl.signal, cache: "no-store",
+      }).finally(() => clearTimeout(t));
+      if (res.status === 401 || res.status === 403) continue;
+      if (!res.ok) return null;
+      const body = (await res.json().catch(() => null)) as { data?: unknown } | null;
+      return voicemailOf(body?.data);
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+/** Reads Quo's voicemail object (or a one-item list of them). Exported for tests. */
+export function voicemailOf(data: unknown): { transcript: string | null; url: string | null; duration: number | null } | null {
+  const o = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | undefined;
+  if (!o || typeof o !== "object") return null;
+  const t = o.transcript;
+  const u = o.recordingUrl ?? o.url ?? o.mediaUrl;
+  const d = Number(o.duration);
+  const transcript = typeof t === "string" && t.trim() ? t.trim() : null;
+  const url = typeof u === "string" && u ? u : null;
+  if (!transcript && !url) return null;
+  return { transcript, url, duration: Number.isFinite(d) && d > 0 ? d : null };
+}
+
+/**
  * Send one text through Quo's API (POST /v1/messages; Quo's own docs,
  * "Send your first message"). Server only, on Coy's tap. Quo answers 202 and
  * then sends; the text reaches the thread through the webhook like one sent

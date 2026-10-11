@@ -628,7 +628,7 @@ export function ThreadView({ contactId, embedded = false }: {
                     </div>
                     <div style={{ fontSize: 13.5, fontWeight: 600, marginTop: 2 }}>{e.subject || "(no subject)"}</div>
                     <div style={{ fontSize: 12, color: T.ink3 }}>{e.from}</div>
-                    {e.body && <div style={{ fontSize: 13.5, lineHeight: 1.5, marginTop: 6, whiteSpace: "pre-wrap", display: "-webkit-box", WebkitLineClamp: 8, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{e.body}</div>}
+                    {e.body && <div style={{ fontSize: 13.5, lineHeight: 1.5, marginTop: 6, whiteSpace: "pre-wrap", overflowWrap: "anywhere", display: "-webkit-box", WebkitLineClamp: 8, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{e.body}</div>}
                   </div>
                 ))}
               </div>

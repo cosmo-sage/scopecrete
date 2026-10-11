@@ -39,3 +39,15 @@ export function sowFromAnswer(answer: string): string | null {
     .map((l) => l.replace(/\*\*|__|`/g, "").replace(/(^|\s)[*_](\S[^*_]*\S|\S)[*_](?=\s|$)/g, "$1$2"));
   return sowText(use);
 }
+
+/**
+ * What the Scope of work emblem asks Dusty (Coy, 2026-10-11: "a bulleted list of items from start to
+ * finish to get a job done … based on the context in threads, the photos, drawings, notes, takeoffs and
+ * any other context he can find"). His job context already carries all of those; this asks him to use them.
+ */
+export function sowQuestion(name: string, current: string | null | undefined): string {
+  return `Write the scope of work for the ${name} section as short bullets, one line each, in the order the work is done, start to finish — what we do to get it done. ` +
+    `Build it from everything you have on this job: the calls, texts and emails, the photos and files you've read, the plan sheets and what they say, the takeoffs measured, the section's size and notes, and its budget items. ` +
+    `Written for the customer, no prices. Where something isn't known yet, say so in a bullet instead of guessing.` +
+    (current ? `\n\nWhat it says now:\n${current}` : "");
+}

@@ -20,7 +20,7 @@ import { markEstimate } from "@/lib/estimate-flag";
 import { askDusty } from "@/components/v34/budget-tabs";
 import { quotedLine } from "@/lib/find-on-sheet";
 import {
-  jobRange, marketRows, scaleOf, sectionRows, type MarketSection, type SectionRow, unitCostFromRate, rateStatus, RATE_UNIT_LABEL,
+  jobRange, marketRows, scaleOf, sectionRows, COST_TYPE_LABEL, type MarketSection, type SectionRow, unitCostFromRate, rateStatus, RATE_UNIT_LABEL,
   type AreaSize, type MarketLine, type RateLite, type StepRow,
 } from "@/lib/budget-v3";
 
@@ -322,6 +322,25 @@ export function MarketRates({ jobId, refresh, onChanged, onSheets }: {
             {isOpen && (
               <div className="flex flex-col gap-1.5" style={{ padding: "0 12px 10px", fontSize: 12 }}>
                 {bidLine && <div style={{ color: T.ink2 }}>From the plans: “{bidLine}”</div>}
+                {r.section.sow?.length ? (
+                  <div style={{ color: T.ink2 }}>
+                    <div style={{ ...eyebrow, marginBottom: 2 }}>Scope of work</div>
+                    <ul style={{ margin: 0, paddingLeft: 16 }}>{r.section.sow.map((l, i) => <li key={i}>{l}</li>)}</ul>
+                  </div>
+                ) : <div style={{ color: T.hivizText }}>No scope of work yet. Write it (or have Dusty draft it) on the Proposed budget; the lookup reads it to find a price for each step.</div>}
+                {r.section.notes && <div style={{ color: T.ink2 }}><span style={eyebrow}>Notes</span> {r.section.notes}</div>}
+                {r.by_type.length > 0 && (
+                  <div>
+                    <div style={{ ...eyebrow, marginBottom: 2 }}>Going rates by cost type</div>
+                    {r.by_type.map((t) => (
+                      <div key={`${t.split}|${t.kind}|${t.unit}`} className="flex items-baseline gap-2" style={{ color: T.ink2 }}>
+                        <span style={{ width: 92, flexShrink: 0, fontWeight: 600 }}>{COST_TYPE_LABEL[t.split] ?? t.split}</span>
+                        <span style={{ ...nums, whiteSpace: "nowrap" }}>{money(t.low)}{t.high !== t.low ? `–${money(t.high)}` : ""}/{fmtUnit(t.unit)}</span>
+                        <span style={{ flex: 1, minWidth: 0, fontSize: 11, color: T.ink3, ...clip }}>{t.kind === "installed_price" ? "what customers pay" : "your cost"} · {t.sources} source{t.sources === 1 ? "" : "s"}{t.what.length ? ` · ${t.what.slice(0, 3).join(", ")}` : ""}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 {r.status === "no_size" && <div style={{ color: T.hivizText }}>Measure it in Takeoffs (or type its size on the Proposed budget) to compare it per {r.unit ? fmtUnit(r.unit) : "unit"}.</div>}
                 {r.lines.map((l) => (
                   <div key={l.id} className="flex items-baseline gap-2" style={{ color: T.ink2 }}>

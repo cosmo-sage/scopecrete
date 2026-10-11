@@ -4,6 +4,7 @@
  * the session. Prices come from the engine's budget(), the same numbers as the
  * Proposed budget; nothing here prices anything new.
  */
+import { sowLines } from "@/lib/scope-of-work";
 import type { ApiSession } from "@/lib/api-auth";
 import { budget, quantities, type BudgetLine, type SectionInput } from "@/lib/engine";
 import { LINE_COLUMNS, numLine, workingEstimate } from "@/lib/budget-server";
@@ -46,6 +47,7 @@ export async function jobBudget(sb: Sb, orgId: string, jobId: string) {
       id: s.id as string, name: (s.name as string | null) || "Section", sqft: lf ? null : q.sqft, lf,
       count: lf ? null : q.count, count_unit: q.count_unit ?? null,
       origin: (s.origin as string | null) ?? null, source_ref: (s.source_ref as string | null) ?? null,
+      sow: sowLines(s.prep_notes as string | null), notes: (s.access_notes as string | null) ?? null,
     };
   });
   const sqft = areas.reduce((a, x) => a + (x.sqft ?? 0), 0) || null;

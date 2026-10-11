@@ -153,6 +153,8 @@ export function marketRows(steps: Array<{ key: string; label: string; line_ids: 
 export interface MarketSection {
   id: string; name: string; origin: string | null; source_ref: string | null;
   sqft: number | null; lf: number | null; count: number | null; count_unit: string | null;
+  /** Its scope of work bullets and Notes, pulled in from the budget (Coy, 2026-10-11). */
+  sow?: string[]; notes?: string | null;
 }
 export interface SectionRow {
   section: MarketSection;
@@ -163,6 +165,30 @@ export interface SectionRow {
   rates: RateLite[]; kind: RateLite["kind"] | null; low: number | null; high: number | null;
   mine: number | null;
   status: RateStatus | "no_data" | "no_line" | "no_size";
+  /** The going rates by cost type, each in the section's unit where it can be, else its own. */
+  by_type: TypeRange[];
+}
+export interface TypeRange { split: string; kind: RateLite["kind"]; unit: string; low: number; high: number; sources: number; what: string[] }
+
+/** Cost types in Coy's order (2026-10-11): labor, materials, equipment, management, overhead, misc, then all-in. */
+export const COST_TYPE_ORDER = ["labor", "material", "equipment", "management", "overhead", "misc", "all"];
+export const COST_TYPE_LABEL: Record<string, string> = { labor: "Labor", material: "Materials", equipment: "Equipment", management: "Management", overhead: "Overhead", misc: "Misc.", all: "All-in" };
+
+/** One range per cost type × kind × unit, the section's unit first (per SY read per SF ÷ 9). */
+export function typeRanges(rates: RateLite[], unit: SectionRow["unit"]): TypeRange[] {
+  const m = new Map<string, TypeRange>();
+  for (const r of rates) {
+    const u = inUnit(r, unit);
+    const ru = u ? unit! : r.unit;
+    const v = u ?? { low: r.low, high: r.high };
+    const k = `${r.split}|${r.kind}|${ru}`;
+    const x = m.get(k);
+    const what = r.what;
+    if (!x) m.set(k, { split: r.split, kind: r.kind, unit: ru, low: v.low, high: v.high, sources: 1, what: what ? [what] : [] });
+    else { x.low = Math.min(x.low, v.low); x.high = Math.max(x.high, v.high); x.sources++; if (what && !x.what.includes(what)) x.what.push(what); }
+  }
+  const rank = (s: string) => { const i = COST_TYPE_ORDER.indexOf(s); return i < 0 ? 99 : i; };
+  return [...m.values()].sort((a, b) => rank(a.split) - rank(b.split) || Number(a.unit !== unit) - Number(b.unit !== unit) || a.kind.localeCompare(b.kind));
 }
 
 /** A section's unit: linear feet when measured so, a count's each, else square feet. */
@@ -202,7 +228,7 @@ export function sectionRows(sections: MarketSection[], lines: MarketLine[], rate
     const high = usable.length ? Math.max(...usable.map((r) => r.high)) : null;
     const value = kind === "installed_price" ? per(price) : kind === "cost" ? per(cost) : null;
     const status: SectionRow["status"] = !ls.length ? "no_line" : !qty ? "no_size" : low === null ? "no_data" : rateStatus(value, low, high!);
-    return { section: x, unit, qty, lines: ls, unpriced, cost, price, per_cost: per(cost), per_price: per(price), rates: own, kind, low, high, mine: value, status };
+    return { section: x, unit, qty, lines: ls, unpriced, cost, price, per_cost: per(cost), per_price: per(price), rates: own, kind, low, high, mine: value, status, by_type: typeRanges(own, unit) };
   });
 }
 

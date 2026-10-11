@@ -96,6 +96,8 @@ export type DraftOutcome = "ready_for_review" | "needs_information" | "manual_re
 /** What a draft comes to, before prices: manual review, waiting on answers, or ready for Coy to look at. */
 export function outcomeOf(x: Extraction): DraftOutcome {
   if (x.kind === "unsupported") return "manual_review";
+  // A scope draft's sizes are the job's sections, checked on the budget itself.
+  if (x.kind === "scope") return x.conflicts.length ? "needs_information" : "ready_for_review";
   if (x.kind === "unknown" || x.conflicts.length) return "needs_information";
   const unsized = x.areas.some((a) => (a.length_ft === null || a.width_ft === null) && a.sqft === null);
   const thin = x.areas.some((a) => a.depth_in === null);
@@ -105,7 +107,7 @@ export function outcomeOf(x: Extraction): DraftOutcome {
 export const OUTCOME_LABEL: Record<DraftOutcome, string> = {
   ready_for_review: "Ready for your review",
   needs_information: "Needs information",
-  manual_review: "Needs you — not a driveway job",
+  manual_review: "Needs you",
 };
 
 /**

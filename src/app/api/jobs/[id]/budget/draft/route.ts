@@ -78,13 +78,15 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   let body: Record<string, unknown>;
   try { body = await req.json(); } catch { return bad("Body must be JSON."); }
   const step = typeof body.step === "string" ? body.step : "";
-  if (!DRIVEWAY_STEPS.some((s) => s.key === step)) return bad("No such step.");
+  // A driveway recipe step, or one of the job's own sections (a scope draft).
+  const sectionStep = /^s:[0-9a-f-]{36}$/i.test(step);
+  if (!sectionStep && !DRIVEWAY_STEPS.some((s) => s.key === step)) return bad("No such step.");
   const uuid = (v: unknown) => typeof v === "string" && /^[0-9a-f-]{36}$/i.test(v);
   if (uuid(body.item_id) || (body.make && typeof body.make === "object")) {
     let itemId = body.item_id as string | undefined;
     if (!uuid(itemId)) {
       const m = body.make as Record<string, unknown>;
-      const d = STEP_NEW[step];
+      const d = STEP_NEW[step] ?? { name: "", unit: "Each", cost_type: "other", qty_rule: "manual" };
       const cost = m.unit_cost === null || m.unit_cost === undefined || m.unit_cost === "" ? null : Number(m.unit_cost);
       if (cost !== null && !(Number.isFinite(cost) && cost >= 0)) return bad("The price must be a number.");
       const c = cleanCard({

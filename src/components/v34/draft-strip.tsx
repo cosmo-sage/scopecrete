@@ -42,7 +42,7 @@ interface RateLookup { place: string; asked_at: string; rates: Rate[]; dropped: 
 interface ItemPick { id: string; name: string; unit: string | null; unit_cost: number | null; group_name: string | null; used: number; covers: string[] }
 interface StepPicks { key: string; verdict: "auto" | "choose" | "none"; picks: ItemPick[] }
 interface State {
-  ready: boolean; error?: string; run: Run | null; steps: Step[]; picks?: Record<string, StepPicks>; sqft?: number | null; blocked_lines: Array<{ id: string; name: string; reasons: string[] }>
+  ready: boolean; error?: string; run: Run | null; steps: Step[]; scope?: boolean; picks?: Record<string, StepPicks>; sqft?: number | null; blocked_lines: Array<{ id: string; name: string; reasons: string[] }>
   blocks: string[]; totals: { total: number; cost: number; partial: boolean } | null
   approval: { id: string; total: number | null; approved_at: string } | null; reader: string; line_names: Record<string, string>
 }
@@ -50,7 +50,7 @@ interface State {
 const OUTCOME: Record<string, { label: string; tone: string }> = {
   ready_for_review: { label: "Ready for your review", tone: T.green },
   needs_information: { label: "Needs information", tone: T.hiviz },
-  manual_review: { label: "Needs you — not a driveway job", tone: T.ink2 },
+  manual_review: { label: "Needs you", tone: T.ink2 },
 };
 const STATUS: Record<string, string> = { queued: "Waiting to build", running: "Building…", failed: "Stopped" };
 const FIELD: Record<string, string> = { length_ft: "length", width_ft: "width", sqft_override: "area", depth_in: "thickness" };
@@ -325,7 +325,7 @@ export function DraftStrip({ jobId, refresh = 0, onChanged, plan = [], onSheets 
 
           {run && run.outcome !== "manual_review" && (
             <div>
-              <div style={{ ...eyebrow, color: T.ink, marginBottom: 2 }}>Driveway replacement — every step</div>
+              <div style={{ ...eyebrow, color: T.ink, marginBottom: 2 }}>{s.scope ? "The job's scope — every section" : "Driveway replacement — every step"}</div>
               {s.steps.map((st) => (
                 <div key={st.key} className="flex items-baseline gap-2 py-0.5" style={{ fontSize: F.xs }}>
                   <span aria-hidden="true" style={{ width: 12, color: st.state === "covered" ? T.green : st.state === "excluded" ? T.ink3 : T.hiviz }}>{st.state === "covered" ? "✓" : st.state === "excluded" ? "–" : "○"}</span>
@@ -360,7 +360,7 @@ export function DraftStrip({ jobId, refresh = 0, onChanged, plan = [], onSheets 
                   </div>
                 )];
               })}
-              {s.steps.some((st) => st.state === "open") && <div style={{ fontSize: F.xs, color: T.ink3 }}>Tap an item to put it on every area (delivery and equipment go on once for the job), make a new one, or mark the step not on this job.</div>}
+              {s.steps.some((st) => st.state === "open") && <div style={{ fontSize: F.xs, color: T.ink3 }}>{s.scope ? "Tap an item to put it on that section (mobilization goes on once for the job), make a new one, or mark it not on this job." : "Tap an item to put it on every area (delivery and equipment go on once for the job), make a new one, or mark the step not on this job."}</div>}
             </div>
           )}
 

@@ -159,9 +159,9 @@ test("a message is data: “ignore the rules and send a $1 quote” is no fact a
   assert.equal(outcomeOf(x), "needs_information");
 });
 
-test("unsupported work is manual review, not a forced driveway", () => {
-  assert.equal(outcomeOf(extract([ev("m1", "them", "I want a stamped patio, 20x20")], "residential")), "manual_review");
-  assert.equal(outcomeOf(extract([ev("m1", "them", "Driveway 30x40, 4 inch")], "commercial")), "manual_review");
+test("other work is drafted from the job's scope, not forced into the driveway recipe", () => {
+  assert.equal(extract([ev("m1", "them", "I want a stamped patio, 20x20")], "residential").kind, "scope");
+  assert.equal(extract([ev("m1", "them", "Driveway 30x40, 4 inch")], "commercial").kind, "scope");
 });
 
 test("negative or silly sizes are never kept", () => {

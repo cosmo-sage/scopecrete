@@ -58,7 +58,7 @@ export interface Conflict {
   facts: Fact[];
 }
 
-export type JobKind = "driveway_replacement" | "driveway_new" | "flatwork" | "unsupported" | "unknown";
+export type JobKind = "driveway_replacement" | "driveway_new" | "flatwork" | "scope" | "unsupported" | "unknown";
 
 export interface Extraction {
   kind: JobKind;
@@ -319,9 +319,10 @@ export function extract(evidence: Evidence[], jobType: string | null, extra: See
   let kind_reason: string;
   const works = [...byWork.keys()];
   if (jobType && jobType !== "residential") {
-    kind = "unsupported"; kind_reason = `${jobType} jobs aren't drafted yet — only residential driveway replacement`;
+    // Any other job is drafted from its own scope (Coy, 2026-10-11).
+    kind = "scope"; kind_reason = `a ${jobType} job — drafted from its sections' scope of work and the bid's lines`;
   } else if (unsupported.length) {
-    kind = "unsupported"; kind_reason = `they mentioned ${[...new Set(unsupported.map((f) => f.value))].join(", ")} ("${unsupported[0].quote}"), which the driveway recipe doesn't cover`;
+    kind = "scope"; kind_reason = `they mentioned ${[...new Set(unsupported.map((f) => f.value))].join(", ")} ("${unsupported[0].quote}") — drafted from the job's sections, not the driveway recipe`;
   } else if (!works.length) {
     kind = "unknown"; kind_reason = "nothing in the calls or texts says what the work is";
     questions.unshift("What is the work? (a driveway, a patio, a walk…)");
@@ -333,7 +334,7 @@ export function extract(evidence: Evidence[], jobType: string | null, extra: See
     kind = "flatwork"; kind_reason = `${works.join(" and ")} — drafted with the driveway recipe's steps`;
     if (!demo) questions.push("Is there old concrete to tear out and haul off?");
   }
-  if (demo?.value === true && !existing_depth && kind !== "unsupported") questions.push("How thick is the old concrete coming out? (for the haul-off)");
+  if (demo?.value === true && !existing_depth && kind !== "scope") questions.push("How thick is the old concrete coming out? (for the haul-off)");
 
   return { kind, kind_reason, areas, existing_depth, demo, conflicts, questions: [...new Set(questions)], facts: all };
 }

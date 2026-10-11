@@ -11,6 +11,8 @@ import { modelConfigured, modelJson, modelRead } from "./model-server";
 import { rateQueries, RATES_SYSTEM, renderAsks, renderResults, sanitizeRates, sectionQueries, SECTION_RATES_SYSTEM, type RateLookup, type SectionAsk } from "./rates";
 import { searchWeb } from "@/lib/web-search-server";
 import { cityOf } from "@/lib/dusty/web";
+import { scopePicks, scopeSteps, sectionOfStep, sectionVerdict, type ScopeSection } from "./scope";
+import { verdictFor } from "./fill";
 import { areaFor, autoFill, sqftOf, outcomeOnJob, picksForOpen, withJobAreas, WHOLE_JOB_STEPS, type JobArea, type PriceItem } from "./fill";
 
 /**
@@ -309,11 +311,13 @@ export async function buildDraft(sb: Sb, orgId: string, userId: string | null, j
     }
     // Every step the assembly left open takes Coy's one clear item for it, on
     // a budget this build started empty. A toss-up is left for him to pick.
-    if (fresh && x.kind !== "unsupported") made.filled = await fillOpenSteps(sb, orgId, jobId, est.id as string, x);
+    if (fresh && x.kind === "scope") made.filled = await fillScopeSteps(sb, orgId, jobId, est.id as string);
+    else if (fresh && x.kind !== "unsupported") made.filled = await fillOpenSteps(sb, orgId, jobId, est.id as string, x);
+    if (x.kind === "scope" && !sections.length && !x.areas.length) x.questions.unshift("The job has no sections yet — add them (or forward the bid) so there is a scope to price.");
     const sized = withJobAreas(x, (await areasOf(sb, orgId, jobId)));
     const reading = { ...x, scope: g.scope, evidence_count: g.evidence.length };
     const { data: done } = await sb.from("budget_runs").update({
-      status: "done", outcome: x.kind === "unsupported" ? outcome : outcomeOnJob(sized), reader, reading, made, suggestions, finished_at: new Date().toISOString(),
+      status: "done", outcome: x.kind === "unsupported" ? outcome : x.kind === "scope" ? (x.questions.length && !sections.length && !x.areas.length ? "needs_information" : outcome) : outcomeOnJob(sized), reader, reading, made, suggestions, finished_at: new Date().toISOString(),
     }).eq("org_id", orgId).eq("id", runId).select(RUN_COLS).single();
     return { ok: true, run: done ?? { id: runId, status: "done", outcome }, again: false };
   } catch (e) {
@@ -390,6 +394,38 @@ async function fillOpenSteps(sb: Sb, orgId: string, jobId: string, estimateId: s
   return out;
 }
 
+const SCOPE_COLS = "id, name, prep_notes, source_ref, sort_order";
+const scopeSectionsOf = async (sb: Sb, orgId: string, jobId: string) =>
+  ((await sb.from("job_sections").select(SCOPE_COLS).eq("org_id", orgId).eq("job_id", jobId)).data ?? []) as unknown as ScopeSection[];
+
+/**
+ * A scope draft's sections that still have no cost items each take Coy's
+ * clear matches for their words — his items at his prices, on that section.
+ */
+async function fillScopeSteps(sb: Sb, orgId: string, jobId: string, estimateId: string) {
+  const secs = await scopeSectionsOf(sb, orgId, jobId);
+  if (!secs.length) return [];
+  const { data: rows } = await sb.from("estimate_line_items").select("section_id").eq("estimate_id", estimateId);
+  const has = new Set(((rows ?? []) as Array<{ section_id: string | null }>).map((r) => r.section_id));
+  const items = await priceItems(sb, orgId);
+  const want = secs.filter((s) => !has.has(s.id)).map((s) => ({ s, auto: sectionVerdict(`s:${s.id}`, s, items).auto }))
+    .filter((w) => w.auto.length);
+  if (!want.length) return [];
+  const ids = [...new Set(want.flatMap((w) => w.auto.map((a) => a.id)))];
+  const { data: cards } = await sb.from("cost_items").select(CARD_COLS).eq("org_id", orgId).in("id", ids);
+  const byId = new Map(((cards ?? []) as Array<Record<string, unknown>>).map((c) => [c.id as string, c]));
+  let sort = await nextSort(sb, estimateId);
+  const out: Made["filled"] = [];
+  for (const w of want) {
+    const rowsIn = w.auto.map((a) => byId.get(a.id)).filter((c): c is Record<string, unknown> => !!c)
+      .map((c) => cardToLine(c, { orgId, estimateId, sectionId: w.s.id, optionId: null, sortOrder: sort++ }));
+    if (!rowsIn.length) continue;
+    const { error } = await sb.from("estimate_line_items").insert(rowsIn);
+    if (!error) out.push({ step: w.s.name ?? "Section", item: w.auto.map((a) => a.name).join(", "), lines: rowsIn.length });
+  }
+  return out;
+}
+
 /**
  * Coy's tap on a step: one of his items (or one he just made) onto the open
  * budget — on every area for an area step, once for the whole job for
@@ -400,7 +436,12 @@ export async function addStepItem(sb: Sb, orgId: string, jobId: string, step: st
   if (!est) return { ok: false as const, status: 500, error: "Couldn't open the budget." };
   const { data: c } = await sb.from("cost_items").select(CARD_COLS).eq("org_id", orgId).eq("id", itemId).maybeSingle();
   if (!c) return { ok: false as const, status: 404, error: "No such Price book item." };
-  const areas = WHOLE_JOB_STEPS.has(step) ? [] : await areasOf(sb, orgId, jobId);
+  const sid = sectionOfStep(step);
+  if (sid) {
+    const { data: sec } = await sb.from("job_sections").select("id").eq("org_id", orgId).eq("job_id", jobId).eq("id", sid).maybeSingle();
+    if (!sec) return { ok: false as const, status: 404, error: "No such section on this job." };
+  }
+  const areas = sid ? [{ id: sid }] : WHOLE_JOB_STEPS.has(step) ? [] : await areasOf(sb, orgId, jobId);
   let sort = await nextSort(sb, est.id as string);
   const rows = (areas.length ? areas.map((a) => a.id) : [null]).map((sectionId) =>
     cardToLine(c as Record<string, unknown>, { orgId, estimateId: est.id as string, sectionId, optionId: null, sortOrder: sort++ }));
@@ -417,7 +458,9 @@ export async function lookupRates(sb: Sb, orgId: string, jobId: string) {
   const state = await draftState(sb, orgId, jobId);
   if (!state.ready) return { ok: false as const, status: 503, error: state.error ?? DRAFT_TABLE_MISSING };
   if (!state.run?.id) return { ok: false as const, status: 409, error: "Build the draft budget first." };
-  const found = await searchRates(sb, orgId, jobId, state.steps.filter((s) => s.state === "open").map((s) => s.key));
+  const keys = state.steps.filter((s) => s.state === "open" && !sectionOfStep(s.key)).map((s) => s.key);
+  if (state.scope && !keys.length) return { ok: false as const, status: 409, error: "This job's going rates are per section: Budget → Market rate → Look up going rates." };
+  const found = await searchRates(sb, orgId, jobId, keys);
   const made = { ...((state.run.made as Record<string, unknown> | null) ?? {}), rates: found };
   await sb.from("budget_runs").update({ made }).eq("org_id", orgId).eq("id", state.run.id as string);
   return { ok: true as const };
@@ -505,7 +548,7 @@ export async function draftState(sb: Sb, orgId: string, jobId: string) {
   const run = ((runs ?? []) as Array<Record<string, unknown>>)[0] ?? null;
   const [{ data: rows }, { data: secs }, pricing, takeoff, { data: groups }, { data: appr }, { data: job }] = await Promise.all([
     est ? sb.from("estimate_line_items").select(LINE_COLUMNS).eq("estimate_id", est.id as string) : Promise.resolve({ data: [] }),
-    sb.from("job_sections").select("id, name, work_type, length_ft, width_ft, sqft_override, depth_in, psi, count_qty, count_unit").eq("org_id", orgId).eq("job_id", jobId),
+    sb.from("job_sections").select("id, name, work_type, length_ft, width_ft, sqft_override, depth_in, psi, count_qty, count_unit, prep_notes, source_ref, sort_order").eq("org_id", orgId).eq("job_id", jobId),
     pricingFor(sb, orgId, [jobId]),
     takeoffTotalsFor(sb, orgId, jobId),
     sb.from("cost_groups").select("id, name").eq("org_id", orgId),
@@ -520,13 +563,18 @@ export async function draftState(sb: Sb, orgId: string, jobId: string) {
   // The job's measured areas answer "how big" and "how thick" (Coy's 894 SF).
   const reading = rawReading && rawReading.areas ? withJobAreas(rawReading, (secs ?? []) as unknown as JobArea[]) : rawReading;
   const exclusions = est ? await readExclusions(sb, orgId, est.id as string) : {};
-  const steps = checkRecipe({ demo: reading?.demo ?? null }, lines.map((l) => ({
-    id: l.id, name: l.name, cost_type: l.cost_type, qty_rule: l.qty_rule, section_role: (l.section_role as string | null) ?? null,
-    group_name: l.cost_group_id ? gname.get(l.cost_group_id) ?? null : null,
-  })), exclusions);
+  // Any job that isn't a residential driveway is drafted from its own scope (Coy, 2026-10-11).
+  const scope = reading?.kind === "scope" || (!!job?.job_type && job.job_type !== "residential" && (!reading || reading.kind === "unsupported"));
+  const steps = scope
+    ? scopeSteps((secs ?? []) as unknown as ScopeSection[], lines.map((l) => ({ id: l.id, name: l.name, section_id: (l.section_id as string | null) ?? null,
+      group_name: l.cost_group_id ? gname.get(l.cost_group_id) ?? null : null })), exclusions)
+    : checkRecipe({ demo: reading?.demo ?? null }, lines.map((l) => ({
+      id: l.id, name: l.name, cost_type: l.cost_type, qty_rule: l.qty_rule, section_role: (l.section_role as string | null) ?? null,
+      group_name: l.cost_group_id ? gname.get(l.cost_group_id) ?? null : null,
+    })), exclusions);
   const blockedLines = res ? lines.filter((l) => res.lines[l.id]?.blocked.length).map((l) => ({ id: l.id, name: l.name, reasons: res.lines[l.id].blocked })) : [];
   const tier = res?.tiers[0] ?? null;
-  const manual = run?.outcome === "manual_review" || (job?.job_type && job.job_type !== "residential");
+  const manual = run?.outcome === "manual_review" && !scope;
   const blocks = approvalBlocks({ steps, blockedLines, lineCount: lines.length, manualReview: !!manual });
   // Dusty's estimates wait for Coy's Confirm on the budget (Coy, 2026-10-09).
   const estimated = lines.filter((l) => isEstimate((l as { description?: string | null }).description));
@@ -537,11 +585,11 @@ export async function draftState(sb: Sb, orgId: string, jobId: string) {
   const items = steps.some((s) => s.state === "open") ? await priceItems(sb, orgId) : [];
   const shownRun = run && reading ? {
     ...run, reading,
-    outcome: run.outcome && run.outcome !== "manual_review" && reading !== rawReading ? outcomeOnJob(reading as never) : run.outcome,
+    outcome: scope && run.outcome === "manual_review" ? "ready_for_review" : run.outcome && run.outcome !== "manual_review" && !scope && reading !== rawReading ? outcomeOnJob(reading as never) : run.outcome,
   } : run;
   return {
     ready: true as const,
-    run: shownRun, steps, picks: picksForOpen(steps, items),
+    run: shownRun, steps, scope, picks: scope ? scopePicks(steps, (secs ?? []) as unknown as ScopeSection[], items, (k, it) => verdictFor(k, it)) : picksForOpen(steps, items),
     sqft: ((secs ?? []) as unknown as JobArea[]).reduce((n, a) => n + (sqftOf(a) ?? 0), 0) || null, blocked_lines: blockedLines, blocks,
     line_names: Object.fromEntries(lines.map((l) => [l.id, l.name])),
     totals: tier ? { cost: tier.cost, overhead: tier.overhead, price: tier.price, tax: tier.tax, total: tier.total, partial: !tier.priced } : null,

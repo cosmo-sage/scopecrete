@@ -44,3 +44,26 @@ test("the SOW question asks for start-to-finish from every source", () => {
   assert.match(q, /takeoffs/);
   assert.match(q, /What it says now:\nHaul off/);
 });
+
+test("itemized costs: known types and units, ten at most, keys in order", async () => {
+  const { sanitizeItems } = await import("../src/lib/draft/rates.ts");
+  const items = sanitizeItems({ items: [
+    { name: "Skid steer with breaker rental", cost_type: "equipment", unit: "day", from: "Break out curb" },
+    { name: "Equipment operator", cost_type: "labor", unit: "day" },
+    { name: "x", cost_type: "labor", unit: "day" },
+    { name: "Something", cost_type: "profit", unit: "day" },
+    { name: "Equipment operator", cost_type: "labor", unit: "day" },
+  ] });
+  assert.deepEqual(items.map((i) => [i.key, i.cost_type]), [["i1", "equipment"], ["i2", "labor"]]);
+});
+
+test("item searches drop address numbers and private words", async () => {
+  const { itemQueries } = await import("../src/lib/draft/rates.ts");
+  const q = itemQueries("Walker, LA", [{ key: "i1", name: "Dump truck at 15900 Industry Way", cost_type: "equipment", unit: "day", from: "" }], ["15900 Industry Way", "Gulfline Paving"]);
+  assert.equal(q[0], "Dump truck at cost per day Walker, LA 2026");
+});
+
+test("the itemizer is told demolition means removal, never installing", async () => {
+  const { ITEMIZE_SYSTEM } = await import("../src/lib/draft/rates.ts");
+  assert.match(ITEMIZE_SYSTEM, /never installing/);
+});

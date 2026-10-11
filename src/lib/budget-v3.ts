@@ -29,7 +29,7 @@ export const tabOf = (v: string | null | undefined): BudgetTab => (v === "market
 export interface RateLite {
   step: string; what: string; low: number; high: number;
   unit: string; split: string; kind: "installed_price" | "cost";
-  url: string; site: string; quote: string;
+  url: string; site: string; quote: string; item?: string;
 }
 export interface MarketLine {
   id: string; name: string; section_id: string | null; cost_type: string;

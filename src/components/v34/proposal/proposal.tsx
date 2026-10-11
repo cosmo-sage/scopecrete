@@ -344,7 +344,10 @@ export function Proposal({ jobId }: { jobId: string }) {
   // The proposal's own buttons (Coy, 2026-10-05): beside Project type, Warranty and Contract on a
   // desktop; their own row under the header on a phone.
   // The newest version already went out: the same button resends it (Coy, 2026-10-11).
-  const sentNow = !editable && links.some((l) => !l.revoked_at && l.status !== "void" && l.version?.version === p.version && !!l.sent_at);
+  // An older final picked in the version list is sent from the same page, on its own link (Coy, 2026-10-11:
+  // "I should still be able to copy a link and resend a proposal that was frozen").
+  const sendVersion = finalShown?.version ?? p.version;
+  const sentNow = !editable && links.some((l) => !l.revoked_at && l.status !== "void" && l.version?.version === sendVersion && !!l.sent_at);
   const actions = (
     <>
           {b.finals.length > 0 && (
@@ -360,22 +363,18 @@ export function Proposal({ jobId }: { jobId: string }) {
               {wide ? "Print / PDF" : "PDF"}
             </button>
           )}
-          {!finalShown && (
             <button onClick={() => { flushSaves(); setPreview(true); }} disabled={!!busy} className="rounded"
               style={{ height: 30, padding: "0 12px", background: "#B85A3C", color: "#fff", fontFamily: disp, fontSize: 12, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase" }}>{sentNow ? (wide ? "Preview & resend" : "Resend") : wide ? "Preview & send" : "Send"}</button>
-          )}
           {/* Copy the link to send it yourself (Coy, 2026-10-07). With no link for this version yet, the
               Preview makes one — sending or copying there freezes a draft first. */}
-          {!finalShown && (
             <button onClick={() => {
-              const live = links.find((l) => !l.revoked_at && l.status !== "void" && l.version?.version === p.version);
+              const live = links.find((l) => !l.revoked_at && l.status !== "void" && l.version?.version === sendVersion);
               if (live && !editable) {
                 void navigator.clipboard.writeText(live.url).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2500); }).catch(() => {});
                 void call(`/api/proposal-links/${live.id}`, "PATCH", { sent: "copy" }).then(loadLinks).catch(() => {});
               } else { flushSaves(); setPreview(true); }
             }} disabled={!!busy} className="rounded" title="Copy the customer's link to paste anywhere"
               style={{ height: 30, padding: "0 12px", border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink, fontFamily: disp, fontSize: 12, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase" }}>{copied ? "Copied ✓" : "Copy link"}</button>
-          )}
           {!editable && !finalShown && (
             <button onClick={() => void newVersion()} disabled={!!busy} className="rounded"
               style={{ height: 30, padding: "0 12px", border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink, fontFamily: disp, fontSize: 12, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase" }}>{wide ? "New version" : "New ver."}</button>
@@ -433,7 +432,8 @@ export function Proposal({ jobId }: { jobId: string }) {
       </div>
 
       {preview && (
-        <ProposalPreview jobId={jobId} vm={vm} draft={editable} version={p.version} blocked={editable ? blocked : null} coverFileId={p.cover_file_id}
+        <ProposalPreview jobId={jobId} vm={vm} draft={editable} version={sendVersion} blocked={editable ? blocked : null} coverFileId={finalShown ? undefined : p.cover_file_id}
+          onOpenVersion={(v) => { setPreview(false); setViewFinal(v === p.version ? null : v); }}
           onFinalize={finalize} onClose={() => setPreview(false)} links={links} onLinks={loadLinks} />
       )}
       {coverPick && (

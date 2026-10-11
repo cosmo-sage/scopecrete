@@ -66,14 +66,19 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const { supabase, orgId, userId, applyCookies } = result.session;
   const bad = (m: string, s = 400) => applyCookies(NextResponse.json({ error: m }, { status: s }));
   if (!UUID.test(id)) return bad("No such job.", 404);
-  const body = (await req.json().catch(() => ({}))) as { cover_file_id?: unknown; photos?: unknown; maps?: unknown; auto?: unknown };
-  const auto = body.auto === true;
+  const body = (await req.json().catch(() => ({}))) as { cover_file_id?: unknown; photos?: unknown; maps?: unknown; auto?: unknown; version?: unknown };
+  // A version picked on the Proposal tab — an older final sent again (Coy, 2026-10-11).
+  const asked = typeof body.version === "number" && Number.isInteger(body.version) && body.version > 0 ? body.version : null;
+  const auto = body.auto === true && asked === null;
 
   const { data: job } = await supabase.from("jobs").select("id, customer_id, contact_id, title").eq("org_id", orgId).eq("id", id).maybeSingle();
   if (!job) return bad("No such job.", 404);
   const latestFinal = () => supabase.from("job_proposals").select("id, version, project_type, snapshot, cover_file_id").eq("org_id", orgId).eq("job_id", id)
     .eq("status", "final").order("version", { ascending: false }).limit(1).maybeSingle();
-  let { data: prop } = await latestFinal();
+  let { data: prop } = asked === null ? await latestFinal()
+    : await supabase.from("job_proposals").select("id, version, project_type, snapshot, cover_file_id").eq("org_id", orgId).eq("job_id", id)
+      .eq("status", "final").eq("version", asked).maybeSingle();
+  if (asked !== null && !prop) return bad(`Version ${asked} isn't a final version of this job's proposal.`, 404);
   if (auto) {
     // A draft newer than the last final is what Coy is looking at: freeze it, as Preview's send does.
     const { data: draft } = await supabase.from("job_proposals").select("id, version").eq("org_id", orgId).eq("job_id", id).eq("status", "draft").maybeSingle();
@@ -131,6 +136,8 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     body.cover_file_id = (prop.cover_file_id as string | null) ?? null;
     body.maps = [];
   }
+  // An older version sent again keeps its own cover unless the Preview named one.
+  if (asked !== null && body.cover_file_id === undefined) body.cover_file_id = (prop.cover_file_id as string | null) ?? null;
 
   // What the page shows beside the words — only this job's files.
   const photos: Record<string, string[]> = {};
@@ -173,6 +180,10 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     cover: cover ? paths.get(cover) ?? null : null, maps, photos,
   });
 
+  // An older version can't go out beside a newer one the customer signed: two live links, one signed.
+  const { data: signedNewer } = await supabase.from("documents").select("id, version").eq("org_id", orgId).eq("job_id", id)
+    .not("proposal_id", "is", null).is("revoked_at", null).eq("status", "accepted").gt("version", prop.version as number).limit(1).maybeSingle();
+  if (signedNewer) return bad(`The customer signed version ${signedNewer.version as number} — send that one, or start a new version.`, 409);
   // A new version's link retires the older ones: the customer sees "replaced". A signed one stays (097).
   await supabase.from("documents").update({ status: "void" }).eq("org_id", orgId).eq("job_id", id)
     .not("proposal_id", "is", null).is("revoked_at", null).not("status", "in", "(void,accepted)");

@@ -24,9 +24,12 @@ async function call(url: string, method: string, body?: unknown) {
 export interface Recipient { contact_id: string; name: string | null; phone: string | null; email: string | null }
 export interface LinkReply { link: { id: string; url: string; token: string }; recipient: Recipient | null; job: { id: string; title: string | null }; version: number }
 
-/** The live link for the job's newest version — made (and a draft frozen) if there isn't one. */
-export async function proposalLink(jobId: string): Promise<LinkReply> {
-  return (await call(`/api/jobs/${jobId}/proposal/link`, "POST", { auto: true })) as LinkReply;
+/**
+ * The live link for the job's newest version — made (and a draft frozen) if there isn't one. With a
+ * version, that final's own link (an older one picked on the Proposal tab), nothing frozen.
+ */
+export async function proposalLink(jobId: string, version?: number | null): Promise<LinkReply> {
+  return (await call(`/api/jobs/${jobId}/proposal/link`, "POST", version ? { version } : { auto: true })) as LinkReply;
 }
 
 /** The words as they will go: the link, the first name and the job put in. */

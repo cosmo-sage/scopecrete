@@ -64,8 +64,10 @@ async function textEach(list: Who[], step: (i: number) => void, one: (w: Who) =>
 
 const when = (iso: string) => new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
-export function ProposalPreview({ jobId, vm, draft, version, blocked, coverFileId, onFinalize, onClose, links, onLinks }: {
-  jobId: string; vm: DocVM; draft: boolean; version: number; blocked: string | null; coverFileId: string | null;
+export function ProposalPreview({ jobId, vm, draft, version, blocked: blockedIn, coverFileId, onFinalize, onClose, links, onLinks, onOpenVersion }: {
+  jobId: string; vm: DocVM; draft: boolean; version: number; blocked: string | null; coverFileId: string | null | undefined;
+  /** Show another version on the Proposal tab — the signed one, when this older one can't go out. */
+  onOpenVersion?: (version: number) => void;
   /** Freeze the draft (the old Mark final, without its prompt). */
   onFinalize: () => Promise<void>;
   onClose: () => void;
@@ -76,6 +78,11 @@ export function ProposalPreview({ jobId, vm, draft, version, blocked, coverFileI
   const [err, setErr] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const live = links.find((l) => !l.revoked_at && l.status !== "void" && l.version?.version === version) ?? null;
+  // An older version picked on the Proposal tab goes out again on its own link (Coy, 2026-10-11) —
+  // unless the customer signed a newer one: then that is the one to send.
+  const signedNewer = !draft && !live ? links.find((l) => !l.revoked_at && l.status === "accepted" && (l.version?.version ?? 0) > version) ?? null : null;
+  const replaces = !draft && !live && !signedNewer ? links.find((l) => !l.revoked_at && l.status !== "void" && (l.version?.version ?? 0) !== version) ?? null : null;
+  const blocked = blockedIn ?? (signedNewer ? `the customer signed ${signedNewer.number ?? `version ${signedNewer.version?.version}`} — send that one, or start a new version` : null);
   // The words go with the send (2026-10-05): they start from how Coy sent the last one, and he can change them.
   const [via, setVia] = useState<Via>("text");
   const [examples, setExamples] = useState<SendExample[] | null>(null);
@@ -135,7 +142,7 @@ export function ProposalPreview({ jobId, vm, draft, version, blocked, coverFileI
       if (v.photos.length) photos[a.id] = v.photos.slice(0, 4).map((p) => p.id);
       if (v.map) maps.push(a.id);
     }
-    const r = await call(`/api/jobs/${jobId}/proposal/link`, "POST", { cover_file_id: d.off?.cover ? null : coverFileId, photos, maps });
+    const r = await call(`/api/jobs/${jobId}/proposal/link`, "POST", { cover_file_id: d.off?.cover ? null : coverFileId ?? undefined, photos, maps, ...(draft ? {} : { version }) });
     const ups = (r.uploads ?? []) as Array<{ area_id: string; signed_url: string }>;
     for (const [i, u] of ups.entries()) {
       const map = vm.visuals?.[u.area_id]?.map;
@@ -167,13 +174,13 @@ export function ProposalPreview({ jobId, vm, draft, version, blocked, coverFileI
         await call(`/api/proposal-links/${link.id}`, "PATCH", { sent: "text" }).catch(() => {});
       } else if (how === "quo") {
         // A text each, through Quo, greeting each by their own first name.
-        const r = await proposalLink(jobId); // the link just made (or the live one), with who it is for
+        const r = await proposalLink(jobId, draft ? null : version); // the link just made (or the live one), with who it is for
         setSentMsg(await textEach(textable, (i) => setBusy(`Sending through Quo… ${i + 1} of ${textable.length}`),
           (w) => sendProposal({ jobId, via: "text", body: greetingSlot(shownWords), contactId: w.contact_id, contactName: w.name, link: r, names: [vm.customer.name, vm.customer.person] })));
       } else {
         // One email to everyone ticked; with several the greeting carries no name.
         setBusy("Opening your mail…");
-        const r = await proposalLink(jobId);
+        const r = await proposalLink(jobId, draft ? null : version);
         const one = mailable.length === 1 ? mailable[0] : null;
         const body = one ? greetingSlot(shownWords) : greetingSlot(shownWords).replace(/\{first\}/g, "").replace(/[ \t]+([,.!?])/g, "$1");
         const out = await sendProposal({ jobId, via: "email", body, subject: subject || start?.subject || null, email: mailable.map((w) => w.email).join(","),
@@ -244,11 +251,19 @@ export function ProposalPreview({ jobId, vm, draft, version, blocked, coverFileI
               </div>
             )}
           {blocked
-            ? <div className="mt-2" style={{ fontSize: 12.5, color: "#8E2B1C", background: "#F7DCD6", borderRadius: 4, padding: "8px 10px" }}>Can&apos;t send yet — {blocked}</div>
+            ? <div className="mt-2" style={{ fontSize: 12.5, color: "#8E2B1C", background: "#F7DCD6", borderRadius: 4, padding: "8px 10px" }}>
+                Can&apos;t send {signedNewer && !blockedIn ? "this version" : "yet"} — {blocked}
+                {signedNewer && !blockedIn && onOpenVersion && signedNewer.version && (
+                  <button type="button" onClick={() => onOpenVersion(signedNewer.version!.version)} style={{ display: "block", marginTop: 6, border: 0, background: "transparent", padding: 0, color: T.chalk, fontSize: 12.5, fontWeight: 600, cursor: "pointer", textDecoration: "underline" }}>
+                    Open {signedNewer.number ?? `version ${signedNewer.version.version}`} to copy or resend it ›
+                  </button>
+                )}
+              </div>
             : again
               ? <div className="mt-1" style={{ fontSize: 12, color: T.ink2 }}>{live?.status === "accepted"
                   ? "Signed by the customer. Resending shows them the signed copy; photos added since go on a New version."
                   : `Sent ${when(live!.sent_at!)}. Resending uses the same link, with any photos added to its sections since.`}</div>
+              : replaces ? <div className="mt-1" style={{ fontSize: 12, color: T.ink2 }}>This version&apos;s link was replaced by {replaces.number ?? `version ${replaces.version?.version}`}. Sending it again makes it the customer&apos;s link, and {replaces.number ?? "that one"} shows them &quot;replaced&quot;.</div>
               : draft && <div className="mt-1" style={{ fontSize: 12, color: T.ink3 }}>Sending freezes this as version {version}. Changes after that start version {version + 1}, with its own link.</div>}
           <div className="mt-2 flex items-center gap-2">
             <span className="inline-flex rounded overflow-hidden" style={{ border: `1px solid ${T.hairStrong}` }}>

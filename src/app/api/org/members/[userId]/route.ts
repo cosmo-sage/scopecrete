@@ -38,9 +38,9 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ userId: 
   const { supabase, orgId, applyCookies } = result.session;
   const { error } = await supabase.rpc("sc_remove_member", { p_org: orgId, p_user: who });
   if (error) {
-    // sc_remove_member waits on its own approval (DECISIONS §2g) — say so plainly until it is applied.
+    // sc_remove_member (migration 101) waits on Coy's word (DECISIONS §2g) — say so plainly until it is applied.
     const missing = /could not find the function|does not exist/i.test(error.message);
-    return applyCookies(NextResponse.json({ error: missing ? "Removing people isn't switched on yet — its database function is waiting to be applied."
+    return applyCookies(NextResponse.json({ error: missing ? "Removing people isn't switched on yet — migration 101 is waiting to be applied."
       : /not allowed/.test(error.message) ? "Only an owner can remove people." : error.message }, { status: missing ? 503 : 400 }));
   }
   return applyCookies(NextResponse.json({ ok: true }));

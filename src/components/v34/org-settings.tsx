@@ -353,6 +353,7 @@ function People({ people, canEdit, accessReady, onChanged }: { people: Person[];
   const [email, setEmail] = useState("");
   const [draft, setDraft] = useState<AccessDraft>({ role: "member", contact_id: null, pages: ["files", "plan_room"], all_jobs: false, job_ids: [] });
   const [editing, setEditing] = useState<string | null>(null);
+  const [nameDraft, setNameDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [made, setMade] = useState<{ email: string; link: string } | null>(null);
@@ -410,6 +411,11 @@ function People({ people, canEdit, accessReady, onChanged }: { people: Person[];
   }
   async function saveAccess(p: Person) {
     setBusy(true); setErr(null);
+    // Their name in the org (102): an owner can name anyone — invitees who signed in by an emailed link have none.
+    if (nameDraft.trim() !== (p.name ?? "")) {
+      const n = await fetch(`/api/org/members/${p.user_id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: nameDraft.trim() }) });
+      if (!n.ok) { setBusy(false); setErr(((await n.json().catch(() => ({}))) as { error?: string }).error ?? "Couldn't save the name."); return; }
+    }
     const r = await fetch(`/api/org/members/${p.user_id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(draft) });
     const b = await r.json().catch(() => ({}));
     setBusy(false);
@@ -426,7 +432,7 @@ function People({ people, canEdit, accessReady, onChanged }: { people: Person[];
     if (r.ok) onChanged(); else setErr(((await r.json().catch(() => ({}))) as { error?: string }).error ?? "Couldn't remove them.");
   }
   function startEdit(p: Person) {
-    setOpen(false); setMade(null); setErr(null); setEditing(p.user_id);
+    setOpen(false); setMade(null); setErr(null); setEditing(p.user_id); setNameDraft(p.name ?? "");
     setDraft({ role: p.role ?? "member", contact_id: p.contact_id ?? null, pages: p.pages ?? [], all_jobs: !!p.all_jobs, job_ids: p.job_ids ?? [] });
   }
   async function copy() { try { await navigator.clipboard.writeText(made!.link); setCopied(true); } catch { /* blocked */ } }
@@ -458,15 +464,20 @@ function People({ people, canEdit, accessReady, onChanged }: { people: Person[];
                 </div>}
               </div>
               {p.role && <span style={{ ...eyebrow, fontFamily: disp, color: T.ink2 }}>{roleLabel(p.role)}</span>}
-              {canEdit && accessReady && editing !== p.user_id && <button onClick={() => startEdit(p)} aria-label={`Change ${p.name ?? p.email}'s access`} title="Change access" style={{ color: T.ink3, cursor: "pointer", padding: "0 4px" }}>✎</button>}
+              {canEdit && accessReady && editing !== p.user_id && <button onClick={() => startEdit(p)} aria-label={`Change ${p.name ?? p.email}'s name and access`} title="Change name and access" style={{ color: T.ink3, cursor: "pointer", padding: "0 4px" }}>✎</button>}
               {canEdit && !p.you && <button onClick={() => void remove(p)} aria-label={`Remove ${p.name ?? p.email}`} title="Remove from the organization" style={{ color: T.ink3, cursor: "pointer", padding: "0 4px" }}>×</button>}
             </div>
             {editing === p.user_id && (
               <div className="flex flex-col gap-2" style={{ padding: "4px 10px 10px", background: T.slab }}>
+                <label className="flex items-center gap-2" style={{ fontSize: F.sm }}>
+                  <span style={{ ...eyebrow, color: T.ink2, flex: "none" }}>Name</span>
+                  <input value={nameDraft} onChange={(e) => setNameDraft(e.target.value)} maxLength={80} placeholder="Their name"
+                    style={{ flex: 1, minWidth: 0, height: 30, padding: "0 8px", border: `1px solid ${T.hair}`, borderRadius: 4, background: T.card, color: T.ink, fontSize: 16 }} />
+                </label>
                 {form}
                 <div className="flex gap-1.5 justify-end">
                   <button type="button" onClick={() => { setEditing(null); setErr(null); }} style={small}>Cancel</button>
-                  <button type="button" onClick={() => void saveAccess(p)} disabled={busy || !fieldReady} style={{ ...small, background: T.hiviz, color: T.onHiviz, border: "none" }}>{busy ? "Saving…" : "Save access"}</button>
+                  <button type="button" onClick={() => void saveAccess(p)} disabled={busy || !fieldReady} style={{ ...small, background: T.hiviz, color: T.onHiviz, border: "none" }}>{busy ? "Saving…" : "Save"}</button>
                 </div>
               </div>
             )}

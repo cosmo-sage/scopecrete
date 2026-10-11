@@ -18,6 +18,7 @@ import { useThreads } from "@/components/v34/threads-ctx";
 import { useLiveThreads } from "@/lib/v34/live-threads";
 import { describeRule, RULE_WHO, RULE_WINDOWS, type RuleChannel, type ThreadRule } from "@/lib/rule-threads";
 import type { CustomThread } from "@/lib/v34/threads";
+import { EmailInbox } from "@/components/v34/email-client";
 
 export const EMPTY_RULE: ThreadRule = { channels: ["call", "text"], lines: [], inboxes: [], window: "all", who: [], direction: "any", words: "" };
 
@@ -81,7 +82,6 @@ export function RuleForm({ rule, onChange }: { rule: ThreadRule; onChange: (r: T
         <div className={row}>
           {(["any", "in", "out"] as const).map((d) => <Chip key={d} on={rule.direction === d} onClick={() => set({ direction: d })}>{d === "any" ? "Both" : d === "in" ? "Coming in" : "Sent out"}</Chip>)}
         </div>
-        {mail && rule.direction === "out" && <span style={{ fontSize: F.xs, color: T.ink3 }}>Emails only come in, so “Sent out” leaves them out.</span>}
       </div>
       <div className="flex flex-col gap-1"><span style={eyebrow}>With {rule.who.length ? "" : "· anyone but spam"}</span>
         <div className={row}>{RULE_WHO.map((w) => <Chip key={w} color={bucketColor(w)} on={rule.who.includes(w)} onClick={() => set({ who: toggle(rule.who, w) })}>{WHO_LABEL[w]}</Chip>)}</div>
@@ -100,8 +100,26 @@ const ICON: Record<Item["kind"], React.ReactNode> = {
   email: <><rect x="3" y="5" width="14" height="10" rx="1" /><path d="M3.5 5.5l6.5 5 6.5-5" /></>,
 };
 
-/** The list pane for a rule thread. */
+/**
+ * The list pane for a rule thread. One that shows only email is the email
+ * client's inbox (migration 100) — Inbox · Needs reply · Sent · Drafts · Unfiled.
+ */
 export function RuleFeed({ thread, folded }: { thread: CustomThread; folded?: boolean }) {
+  const ctx = useThreads();
+  const [editing, setEditing] = useState(false);
+  const r = thread.rule;
+  if (r && r.channels.length === 1 && r.channels[0] === "email") {
+    return (
+      <>
+        <EmailInbox threadId={thread.id} title={thread.name} sub={describeRule(r, () => null)} folded={folded} onEditRule={() => setEditing(true)} />
+        {editing && <EditRule thread={thread} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); ctx?.refresh(); }} />}
+      </>
+    );
+  }
+  return <MixedFeed thread={thread} folded={folded} />;
+}
+
+function MixedFeed({ thread, folded }: { thread: CustomThread; folded?: boolean }) {
   const ctx = useThreads();
   const [data, setData] = useState<{ items: Item[]; lines: Line[]; capped: boolean } | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -162,7 +180,7 @@ export function RuleFeed({ thread, folded }: { thread: CustomThread; folded?: bo
                     <div style={{ fontSize: 12, color: T.ink2, lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
                       {it.direction === "out" ? "You: " : ""}{it.body}
                     </div>
-                    {it.line && <div style={{ fontSize: 10.5, color: T.ink3, ...clip }}>{it.kind === "email" ? "to " : "via "}{it.line}</div>}
+                    {it.line && <div style={{ fontSize: 10.5, color: T.ink3, ...clip }}>{it.kind === "email" ? (it.direction === "out" ? "from " : "to ") : "via "}{it.line}</div>}
                   </div>
                 </div>
               );
@@ -178,7 +196,7 @@ export function RuleFeed({ thread, folded }: { thread: CustomThread; folded?: bo
   );
 }
 
-function EditRule({ thread, onClose, onSaved }: { thread: CustomThread; onClose: () => void; onSaved: () => void }) {
+export function EditRule({ thread, onClose, onSaved }: { thread: CustomThread; onClose: () => void; onSaved: () => void }) {
   const [rule, setRule] = useState<ThreadRule>(thread.rule ?? EMPTY_RULE);
   const [name, setName] = useState(thread.name);
   const [busy, setBusy] = useState(false);

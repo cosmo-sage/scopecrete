@@ -4,7 +4,7 @@
    rest. Status colours are the design's, lighter in dark themes. */
 
 .adm { --a-green: #2F8A5B; --a-amber: #C98A12; --a-red: #B5412C; --a-blue: #1E5AA8; --a-violet: #6A55B0; --a-num: var(--sc-font-strong); font-size: 13px; line-height: 1.35; color: var(--sc-ink); }
-html[data-theme="night-shift"] .adm { --a-green: #5DBE88; --a-amber: #E0A93A; --a-red: #E06A52; --a-blue: #6FA3E6; --a-violet: #A594E0; }
+html[data-theme="night-shift"] .adm, html[data-theme="floodlight"] .adm { --a-green: #5DBE88; --a-amber: #E0A93A; --a-red: #E06A52; --a-blue: #6FA3E6; --a-violet: #A594E0; }
 .adm button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
 .adm a { color: var(--sc-hiviz-text); text-decoration: none; }
 .adm a:hover { text-decoration: underline; }

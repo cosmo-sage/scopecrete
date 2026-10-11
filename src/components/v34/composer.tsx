@@ -22,8 +22,8 @@
  *     recognition the mic is shown off with that reason.
  *
  * WHAT DOES NOT, AND SAYS SO
- *   - Send for email. Email has no sending at all, so Send is visibly off with
- *     the reason next to it. The old composer on this screen appended the
+ *   - Send for email here. Email Send opens the email composer (migration
+ *     100) with these words, where To, files and the two-tap Send live. The old composer on this screen appended the
  *     message locally and then faked a "Dusty" reply a second later; that is
  *     the thing this must never do again.
  *
@@ -53,7 +53,7 @@ type Channel = "text" | "email" | "note";
 /** Why each channel cannot send from here yet. Shown, not hidden. */
 const NOT_CONNECTED: Record<Channel, string> = {
   text: "Sends through Quo from your line.",
-  email: "Email isn't connected yet — copy it into your mail.",
+  email: "Send opens it in the email composer, with To, files and the two-tap Send.",
   note: "Saved to their page. Dusty reads your notes.",
 };
 
@@ -421,15 +421,15 @@ export function Composer({ contactId, phone, name, compact = false, onNoteSaved,
           );
         })()}
         {has && channel === "email" && (
-          // Email Send: present where v34 puts it, and visibly off. Never a
-          // button that looks like it worked.
-          <button disabled aria-label="Send — not connected" title={NOT_CONNECTED[channel]}
-            style={{ ...iconBtn, background: T.hairSoft, border: `1px dashed ${T.ink3}`, cursor: "not-allowed" }}>
-            <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true">
-              <path d="M7.5 12.4V2.8M3.4 6.9 7.5 2.6l4.1 4.3" fill="none" stroke="currentColor" style={{ color: T.ink3 }}
+          // Email goes through the email composer (migration 100): the words carry over, Send is two taps there.
+          <a href={`/dashboard/messages/email/new?contact=${encodeURIComponent(contactId)}&body=${encodeURIComponent(text.trim().slice(0, 1500))}`}
+            aria-label="Write this as an email" title="Open in the email composer"
+            style={{ ...iconBtn, background: T.hiviz, borderColor: T.hiviz, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+            <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true" style={{ color: T.onHiviz }}>
+              <path d="M7.5 12.4V2.8M3.4 6.9 7.5 2.6l4.1 4.3" fill="none" stroke="currentColor"
                 strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
-          </button>
+          </a>
         )}
       </div>
 

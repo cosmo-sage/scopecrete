@@ -6,7 +6,7 @@
  * Design ref: Claude Design · "ScopeCrete All Pages.dc.html", "Dusty Palette Options v2.dc.html" turn 4.
  */
 
-export type ThemeKey = "site-office" | "studio" | "blueprint" | "kraft-yard" | "night-shift" | "steel" | "signal" | "plex-office" | "kraft-clean";
+export type ThemeKey = "site-office" | "studio" | "blueprint" | "kraft-yard" | "night-shift" | "floodlight" | "steel" | "signal" | "plex-office" | "kraft-clean";
 
 export interface ThemeFonts { disp: string; body: string; strong: string; light: string; hand: string }
 
@@ -320,6 +320,75 @@ export const THEMES: Record<ThemeKey, Theme> = {
       "hand": "'Kalam', cursive"
     }
   },
+  /* Floodlight — a second dark theme (Claude Design, 2026-10-10): blue-slate, near-white text, amber work-light. */
+  "floodlight": {
+    "key": "floodlight",
+    "label": "Floodlight",
+    "note": "Dark — blue-slate, bright text, amber work-light",
+    "dark": true,
+    "slab": "#141920",
+    "card": "#1B222B",
+    "sunk": "#232C37",
+    "ink": "#F1F4F8",
+    "ink2": "#C9D1DB",
+    "ink3": "#9AA6B4",
+    "hair": "#2C3643",
+    "hairSoft": "#222A34",
+    "hairStrong": "#3B4756",
+    "hiviz": "#F5B041",
+    "onHiviz": "#141920",
+    "hivizDim": "#3A3020",
+    "hivizSoft": "#F5B041",
+    "hivizText": "#FFCB6B",
+    "chalk": "#8EC5FF",
+    "chalkDim": "#1E3350",
+    "green": "#5FD3A0",
+    "violet": "#B9A6FF",
+    "red": "#FF8F7A",
+    "teal": "#5ED6DE",
+    "outBg": "#1E3350",
+    "outInk": "#F1F4F8",
+    "dustyTint": "#1F2A36",
+    "dustyText": "#9FD0FF",
+    "dustyEdge": "#3E6A99",
+    "rail": "#11161C",
+    "railActive": "#232C37",
+    "railInk": "#A7B2BF",
+    "railInkOn": "#FFFFFF",
+    "paper": "#1B222B",
+    "paperGrid": "transparent",
+    "paperEdge": "#2C3643",
+    "paperRule": "transparent",
+    "pencil": "#E6EBF1",
+    "pencilMuted": "#9AA6B4",
+    "pencilLine": "rgba(230,235,241,.18)",
+    "paperBtn": "rgba(255,255,255,.05)",
+    "hatch": "#F1F4F8",
+    "hatchEdge": "#F1F4F8",
+    "guide": "transparent",
+    "crete": "#AEB9C6",
+    "bucket": {
+      "unsorted": "#F5B041",
+      "customer": "#5FD3A0",
+      "vendor": "#8EC5FF",
+      "personal": "#B9A6FF",
+      "spam": "#FF8F7A"
+    },
+    "workDot": {
+      "read": "#8EC5FF",
+      "reply": "#F5B041",
+      "done": "#5FD3A0",
+      "warn": "#FF8F7A",
+      "idle": "#4A5563"
+    },
+    "font": {
+      "disp": "'Barlow Condensed', system-ui, sans-serif",
+      "body": "'IBM Plex Sans', system-ui, sans-serif",
+      "strong": "'Lexend', system-ui, sans-serif",
+      "light": "'Inter', system-ui, sans-serif",
+      "hand": "'Inter', system-ui, sans-serif"
+    }
+  },
   "steel": {
     "key": "steel",
     "label": "Steel",
@@ -586,7 +655,7 @@ export const THEMES: Record<ThemeKey, Theme> = {
   },
 };
 
-export const THEME_ORDER: ThemeKey[] = ["site-office","studio","blueprint","kraft-yard","night-shift","steel","signal","plex-office","kraft-clean"];
+export const THEME_ORDER: ThemeKey[] = ["site-office","studio","blueprint","kraft-yard","night-shift","floodlight","steel","signal","plex-office","kraft-clean"];
 export const DEFAULT_THEME: ThemeKey = "site-office";
 
 /** Writes a theme onto <html> as CSS variables (--sc-*) + data-theme. Unchanged except it now also writes --sc-font-*. */

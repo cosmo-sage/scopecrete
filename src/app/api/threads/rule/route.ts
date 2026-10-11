@@ -64,7 +64,7 @@ export async function GET(req: NextRequest) {
   const since = windowStart(rule.window, new Date());
   const lineName = new Map(lines.map((l) => [l.id, l.label]));
   const wantCalls = rule.channels.includes("call"), wantTexts = rule.channels.includes("text");
-  const wantMail = rule.channels.includes("email") && rule.direction !== "out";
+  const wantMail = rule.channels.includes("email");
   const words = rule.words.split(" ").filter(Boolean);
 
   let mq = supabase.from("messages").select("id, contact_id, channel, direction, body_text, summary, duration_seconds, occurred_at, phone_number_id")
@@ -76,19 +76,34 @@ export async function GET(req: NextRequest) {
   // The first word narrows on the server (cleanWords left only letters, digits, spaces, ' and -); the rest in hasWords.
   if (words[0]) mq = mq.or(`body_text.ilike.%${words[0]}%,summary.ilike.%${words[0]}%`);
 
-  let eq = supabase.from("emails").select("id, created_at, sent_at, inbox, original_from_name, original_from_address, from_name, from_address, subject, text_body, contact_id, status")
+  // `direction` and `conversation` arrive with migration 100; before it every email came in.
+  const mailCols = "id, created_at, sent_at, inbox, original_from_name, original_from_address, from_name, from_address, subject, text_body, contact_id, status";
+  let eq = supabase.from("emails").select(`${mailCols}, direction, conversation, to_addresses`)
     .eq("org_id", orgId).order("created_at", { ascending: false }).limit(READ);
+  if (rule.direction !== "any") eq = eq.eq("direction", rule.direction);
   if (rule.inboxes.length) eq = eq.in("inbox", rule.inboxes);
   if (since) eq = eq.gte("created_at", since);
   if (words[0]) eq = eq.or(`subject.ilike.%${words[0]}%,text_body.ilike.%${words[0]}%`);
 
-  const [msgs, mails] = await Promise.all([
+  const [msgs, mailsNew] = await Promise.all([
     wantCalls || wantTexts ? mq : Promise.resolve({ data: [], error: null }),
     wantMail ? eq : Promise.resolve({ data: [], error: null }),
   ]);
   if (msgs.error) return json({ error: msgs.error.message }, 500);
+  // Before migration 100: read without its columns; nothing was ever sent.
+  let mails = mailsNew as { data: unknown[] | null; error: { message: string } | null };
+  if (mails.error && /direction|conversation|to_addresses/.test(mails.error.message)) {
+    if (rule.direction === "out") mails = { data: [], error: null };
+    else {
+      let old = supabase.from("emails").select(mailCols).eq("org_id", orgId).order("created_at", { ascending: false }).limit(READ);
+      if (rule.inboxes.length) old = old.in("inbox", rule.inboxes);
+      if (since) old = old.gte("created_at", since);
+      if (words[0]) old = old.or(`subject.ilike.%${words[0]}%,text_body.ilike.%${words[0]}%`);
+      mails = await old;
+    }
+  }
   const msgRows = (msgs.data ?? []) as Array<{ id: string; contact_id: string; channel: string; direction: string; body_text: string | null; summary: string | null; duration_seconds: number | null; occurred_at: string; phone_number_id: string | null }>;
-  const mailRows = (mails.error ? [] : mails.data ?? []) as Array<{ id: string; created_at: string; sent_at: string | null; inbox: string | null; original_from_name: string | null; original_from_address: string | null; from_name: string | null; from_address: string | null; subject: string | null; text_body: string | null; contact_id: string | null; status: string | null }>;
+  const mailRows = (mails.error ? [] : mails.data ?? []) as Array<{ id: string; created_at: string; sent_at: string | null; inbox: string | null; original_from_name: string | null; original_from_address: string | null; from_name: string | null; from_address: string | null; subject: string | null; text_body: string | null; contact_id: string | null; status: string | null; direction?: string | null; conversation?: string | null; to_addresses?: string[] | null }>;
 
   const ids = [...new Set([...msgRows.map((m) => m.contact_id), ...mailRows.map((e) => e.contact_id)].filter((x): x is string => !!x))];
   const { data: people } = ids.length
@@ -116,11 +131,12 @@ export async function GET(req: NextRequest) {
     const bucket = c ? bucketOf(c) : null;
     if (!whoMatches(rule, bucket)) continue;
     if (!hasWords(rule.words, e.subject, e.text_body)) continue;
-    const from = e.original_from_name || e.original_from_address || e.from_name || e.from_address;
+    const out = e.direction === "out";
+    const from = out ? (e.to_addresses ?? [])[0] : e.original_from_name || e.original_from_address || e.from_name || e.from_address;
     items.push({
-      id: `e:${e.id}`, kind: "email", at: e.created_at, direction: "in",
+      id: `e:${e.id}`, kind: "email", at: e.sent_at ?? e.created_at, direction: out ? "out" : "in",
       name: c?.name?.trim() || from || "Email", bucket, contact_id: e.contact_id,
-      href: `/dashboard/files?email=${e.id}`,
+      href: e.conversation ? `/dashboard/messages/email/${encodeURIComponent(e.conversation)}?t=${encodeURIComponent(id)}` : `/dashboard/files?email=${e.id}`,
       line: e.inbox, body: [e.subject?.trim() || "(no subject)", e.status === "quarantined" ? "held — not from a forwarder" : null].filter(Boolean).join(" · "),
     });
   }

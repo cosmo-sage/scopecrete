@@ -8,6 +8,7 @@
  */
 import React, { useEffect, useMemo, useState } from "react";
 import { answerTotal, type ShownScope } from "@/lib/bids";
+import { Emblem, Wordmark } from "@/components/site/marks";
 
 interface Bid {
   gone?: boolean; own?: boolean; org_name: string | null; job_title?: string | null; first_name?: string | null;
@@ -163,7 +164,13 @@ export function SharedBid({ token }: { token: string }) {
             </div>
           )}
         </section>
-        <div style={{ fontSize: 11, color: C.ink3, textAlign: "center" }}>Sent with ScopeCrete · scopecrete.ai</div>
+        <a href="https://scopecrete.ai" target="_blank" rel="noopener"
+          style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "8px 0 4px", textDecoration: "none", color: C.ink3 }}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 12 }}>
+            Sent with <Emblem size={22} spin={false} /> <Wordmark size={16} />
+          </span>
+          <span style={{ fontSize: 13, color: C.accent, textDecoration: "underline" }}>Click here to find out more</span>
+        </a>
       </div>
     </div>
   );

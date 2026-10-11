@@ -488,12 +488,12 @@ export async function searchSectionRates(sb: Sb, orgId: string, jobId: string, a
   const queries = sectionQueries(place, list);
   const found: RateLookup & { kind: "sections"; section_ids: string[] } = { kind: "sections", section_ids: list.map((a) => a.id), place: place ?? "no city on the job", asked_at: new Date().toISOString(), queries, rates: [], dropped: 0, error: null };
   if (!list.length) { found.error = "No sections to look up."; return found; }
-  const web = await searchWeb(queries);
+  const web = await searchWeb(queries, 20);
   if (web.error) found.error = web.error;
   else if (!web.results.length) found.error = "The search found nothing.";
   else if (!modelConfigured()) found.error = "Reading the prices needs ANTHROPIC_API_KEY.";
   else {
-    const m = await modelJson(SECTION_RATES_SYSTEM, renderAsks(list) + renderResults(web.results), 3000, 45_000);
+    const m = await modelJson(SECTION_RATES_SYSTEM, renderAsks(list) + renderResults(web.results), 4000, 50_000);
     if (!m.ok) found.error = `Couldn't read the prices: ${m.error}.`;
     else {
       const got = sanitizeRates(m.json, web.results, new Set(list.map((a) => a.key)));

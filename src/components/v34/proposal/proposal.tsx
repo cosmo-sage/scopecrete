@@ -492,7 +492,7 @@ function ProposalSettings({ b, p, editable, onType, onWarrantyTpl, onTermsTpl, e
       <div style={{ fontSize: 11, color: T.ink3, flexBasis: "100%" }}>
         One price per job: to offer an alternative, make its line an optional add-on (on the budget line, or in the price list below) — priced, not in the total.<br />
         Margin, O.H., tax and the sub split are on the job&apos;s <Link href={`/dashboard/scope/${b.job.id}`} style={{ color: T.chalk }}>Budget</Link>. Defaults per type are in{" "}
-        <Link href="/dashboard/price-book?tab=defaults" style={{ color: T.chalk }}>Price book → Defaults</Link>. Picking a template replaces this proposal&apos;s edits to that section.
+        <Link href="/dashboard/settings/cost-book" style={{ color: T.chalk }}>Settings → Cost book</Link>. Picking a template replaces this proposal&apos;s edits to that section.
       </div>
     </div>
   );

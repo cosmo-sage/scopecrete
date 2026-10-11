@@ -23,13 +23,9 @@ import { T, F, disp, eyebrow, nums, clip, money, formatPhone } from "@/lib/v34/t
 import { useWide } from "@/lib/v34/use-wide";
 import { isHorizontal } from "@/lib/swipe";
 import { Cell } from "@/components/v34/cell";
-import { PageHeader, SearchBubble } from "@/components/v34/primitives";
+import { PageHeader, SearchBubble, SearchToggle } from "@/components/v34/primitives";
 import { COST_TYPE_LABEL, QTY_RULE_LABEL, cardGaps, defaultTaxable, type CostType } from "@/lib/cost-cards";
 import { CardSheet, GroupSheet, call, numify, dateLabel, type Card, type Group, type Vendor } from "@/components/v34/cost-cards";
-import { ReceiptImport } from "@/components/v34/receipt-import";
-import { PriceImport } from "@/components/v34/price-import";
-import { ProjectTypes } from "@/components/v34/project-types";
-import { PricingDefaults } from "@/components/v34/money-settings";
 import { Assemblies } from "@/components/v34/assemblies";
 import { usePref } from "@/lib/v34/prefs";
 
@@ -79,16 +75,15 @@ export function PriceBook({ pick }: { pick?: PricePick } = {}) {
   const [note, setNote] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
   const [view, setViewState] = useState<View>("group");
-  const [tab, setTab] = useState<"cards" | "assemblies" | "defaults">("cards");
+  const [tab, setTab] = useState<"cards" | "assemblies">("cards");
+  const [finding, setFinding] = useState(false);
   const [q, setQ] = useState("");
   // "Show retired" is gone (Coy, 2026-10-10); retired cards stay out of the list.
   const retired = false;
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [editing, setEditing] = useState<Partial<Card> | null>(null);
   const [addingGroup, setAddingGroup] = useState(false);
-  const [importing, setImporting] = useState<null | "sheet" | "receipt">(null);
   const [sources, setSources] = useState<Src[]>([]);
-  const [menu, setMenu] = useState(false);
   const [measure, wide] = useWide<HTMLDivElement>(900);
   const [colPrefs, setColPrefs] = usePref<ColPrefs>("pricebook_cols", { w: {}, hidden: [] });
   const [liveW, setLiveW] = useState<Record<string, number> | null>(null);
@@ -136,7 +131,9 @@ export function PriceBook({ pick }: { pick?: PricePick } = {}) {
           try { const v = localStorage.getItem(VIEW_KEY); if (v === "vendor" || v === "group") setViewState(v); } catch { /* private mode */ }
           // The scope page's "Assemblies" button opens this tab.
           const want = new URLSearchParams(window.location.search).get("tab");
-          if (want === "assemblies" || want === "defaults") setTab(want);
+          if (want === "assemblies") setTab(want);
+          // Defaults moved to Settings → Cost book (Coy, 2026-10-11).
+          if (want === "defaults") window.location.replace("/dashboard/settings/cost-book");
         }
         // Hundreds of rows: draw them as a transition, which React breaks into
         // slices and pauses for a tap, so the page never locks up while it fills.
@@ -291,6 +288,20 @@ export function PriceBook({ pick }: { pick?: PricePick } = {}) {
       vendor_contact_id: null, rule_params: {}, unit_cost: null, markup_pct: null });
   };
 
+  // Dusty's quick selects (New group · New card) open the forms here: ?new= on
+  // arriving, sc:create when already on the page.
+  const newCardRef = useRef(newCard);
+  useEffect(() => { newCardRef.current = newCard; });
+  useEffect(() => {
+    if (pick) return;
+    const go = (what: unknown) => { if (what === "group") setAddingGroup(true); else if (what === "card") newCardRef.current(); };
+    const want = new URLSearchParams(window.location.search).get("new");
+    if (want) void Promise.resolve().then(() => go(want));
+    const on = (e: Event) => go((e as CustomEvent<string>).detail);
+    window.addEventListener("sc:create", on);
+    return () => window.removeEventListener("sc:create", on);
+  }, [pick]);
+
 
   const stale = (d: string | null) => !!d && now > 0 && now - new Date(`${d}T12:00:00`).getTime() > STALE_DAYS * 864e5;
   const active = (items ?? []).filter((c) => c.active);
@@ -330,23 +341,15 @@ export function PriceBook({ pick }: { pick?: PricePick } = {}) {
   const btn = (primary: boolean): React.CSSProperties => ({ height: 32, padding: "0 10px", borderRadius: 4, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase",
     letterSpacing: ".06em", background: primary ? T.ink : T.card, color: primary ? T.card : T.ink, border: primary ? "none" : `1px solid ${T.hair}`, cursor: "pointer", whiteSpace: "nowrap" });
 
+  // On the page itself the header carries only the search and the emblem (Coy,
+  // 2026-10-11: "Remove the +group and +card buttons from the header", Import
+  // and Defaults to Settings → Cost book); groups and cards are made from
+  // Dusty's quick selects or a group's own + Card. Picking for a budget keeps
+  // + Group and + Card on its title row.
   const pbActions = (
     <>
         <button onClick={() => setAddingGroup(true)} style={btn(false)}>+ Group</button>
         <button onClick={() => newCard()} style={btn(false)}>+ Card</button>
-        {!pick && <div className="relative">
-          <button onClick={() => setMenu((m) => !m)} aria-expanded={menu} style={btn(true)}>Import ▾</button>
-          {menu && (
-            <div className="absolute right-0 z-20 mt-1 rounded" style={{ background: T.card, border: `1px solid ${T.hair}`, boxShadow: "0 8px 24px rgba(10,14,18,.14)", width: 250 }}>
-              <button onClick={() => { setMenu(false); setImporting("sheet"); }} className="w-full text-left px-3 py-2" style={{ fontSize: F.sm, cursor: "pointer" }}>
-                A spreadsheet<span style={{ display: "block", fontSize: 10, color: T.ink3 }}>CSV or Excel from JobTread, another CRM, or your own</span>
-              </button>
-              <button onClick={() => { setMenu(false); setImporting("receipt"); }} className="w-full text-left px-3 py-2" style={{ fontSize: F.sm, cursor: "pointer", borderTop: `1px solid ${T.hairSoft}` }}>
-                A receipt, invoice or quote<span style={{ display: "block", fontSize: 10, color: T.ink3 }}>Photo or PDF — Dusty reads the vendor and the prices, you check them</span>
-              </button>
-            </div>
-          )}
-        </div>}
     </>
   );
 
@@ -354,7 +357,9 @@ export function PriceBook({ pick }: { pick?: PricePick } = {}) {
     <>
     {!pick && <PageHeader title="Price book" count={items ? active.length : null}
       sub="What you buy and charge for, with each vendor's price. A job's budget takes its prices from here."
-      actions={pbActions} />}
+      actions={<SearchToggle open={finding || !!q} onToggle={() => { if (finding || q) { setQ(""); setFinding(false); } else { setFinding(true); setTab("cards"); } }} label="Find in the Price book" />}>
+      {(finding || q) && <div className="mt-2"><SearchBubble value={q} onChange={setQ} onClose={() => setFinding(false)} placeholder="Find: 3000, rebar, Angelle, item #…" /></div>}
+    </PageHeader>}
     <div ref={measure} className={pick ? "px-3 py-3 lg:px-5" : "px-3 pb-3 lg:px-5"}>
       {/* ---- title + actions, while picking for a budget ---- */}
       {pick && <div className="flex items-end gap-2 flex-wrap">
@@ -392,19 +397,21 @@ export function PriceBook({ pick }: { pick?: PricePick } = {}) {
           (Coy, 2026-10-06: "put this whole row up on the same row"). */}
       <div className="flex items-center gap-2 flex-wrap mt-3">
       <div className="flex gap-1" role="tablist" aria-label="Price book">
-        {(pick ? (["cards", "assemblies"] as const) : (["cards", "assemblies", "defaults"] as const)).map((k) => (
+        {(["cards", "assemblies"] as const).map((k) => (
           <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)} className="rounded px-3"
             style={{ height: 32, background: tab === k ? T.ink : T.card, color: tab === k ? T.card : T.ink2, border: `1px solid ${tab === k ? T.ink : T.hair}`,
               fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", letterSpacing: ".06em", cursor: "pointer" }}>
-            {k === "cards" ? `Cards${items ? ` · ${active.length}` : ""}` : k === "assemblies" ? "Assemblies" : "Defaults"}
+            {k === "cards" ? `Cards${items ? ` · ${active.length}` : ""}` : "Assemblies"}
           </button>
         ))}
       </div>
       {tab === "cards" && <>
-        <div style={{ flex: 1, minWidth: 180, maxWidth: 360 }}><SearchBubble value={q} onChange={setQ} autoFocus={false} placeholder="Find: 3000, rebar, Angelle, item #…" /></div>
-        <span style={{ fontSize: F.xs, color: T.ink3 }}>{active.length} card{active.length === 1 ? "" : "s"} · {active.filter((c) => c.unit_cost === null).length} without a cost</span>
-        {/* View and Columns sit at the right on a desktop (Coy, 2026-10-08). */}
-        <div className="flex items-center gap-2" style={{ marginLeft: wide ? "auto" : undefined }}>
+        {/* The search is the header's magnifier on the page; picking for a budget keeps it here. */}
+        {pick && <div style={{ flex: 1, minWidth: 180, maxWidth: 360 }}><SearchBubble value={q} onChange={setQ} autoFocus={false} placeholder="Find: 3000, rebar, Angelle, item #…" /></div>}
+        {wide && <span style={{ fontSize: F.xs, color: T.ink3 }}>{active.length} card{active.length === 1 ? "" : "s"} · {active.filter((c) => c.unit_cost === null).length} without a cost</span>}
+        {/* By group / By vendor on the tabs' row, at its right (Coy, 2026-10-08;
+            on a phone too, 2026-10-11). */}
+        <div className="flex items-center gap-2" style={{ marginLeft: "auto" }}>
         <div className="flex rounded overflow-hidden" role="tablist" aria-label="View" style={{ border: `1px solid ${T.hair}` }}>
           {(["group", "vendor"] as const).map((v) => (
             <button key={v} role="tab" aria-selected={view === v} onClick={() => setView(v)} className="px-2.5"
@@ -439,8 +446,7 @@ export function PriceBook({ pick }: { pick?: PricePick } = {}) {
       </>}
       </div>
 
-      {tab === "defaults" ? <div className="mt-3 rounded" style={{ background: T.card, border: `1px solid ${T.hair}` }}><PricingDefaults /><ProjectTypes /></div>
-        : tab === "assemblies" ? <Assemblies cards={items ?? []}
+      {tab === "assemblies" ? <Assemblies cards={items ?? []}
           onPick={pick?.onAssembly ? (id, name) => void took(id, name, () => pick.onAssembly!(id, name)) : undefined} /> : (<>
 
       {note && <div className="mt-2 rounded px-3 py-2 flex items-center gap-2" style={{ fontSize: F.sm, background: T.greenDim, color: T.ink }}>
@@ -451,7 +457,7 @@ export function PriceBook({ pick }: { pick?: PricePick } = {}) {
       {items === null && !err && <div className="rounded animate-pulse mt-3" style={{ height: 120, background: T.hairSoft }} />}
       {items !== null && items.length === 0 && (
         <div className="mt-4 rounded p-4" style={{ background: T.card, border: `1px solid ${T.hair}`, fontSize: F.sm, color: T.ink2, lineHeight: 1.5 }}>
-          Nothing in the Price book yet. Import your catalog from JobTread or a spreadsheet, or start with a group — Ready mix, Steel, Forming, Labor, Equipment — and add what&apos;s in it.
+          Nothing in the Price book yet. Import your catalog from JobTread or a spreadsheet in <Link href="/dashboard/settings/cost-book" style={{ color: T.chalk }}>Settings → Cost book</Link>, or start with a group — Ready mix, Steel, Forming, Labor, Equipment — and add what&apos;s in it.
         </div>
       )}
       {items !== null && items.length > 0 && sections.length === 0 && (
@@ -670,13 +676,6 @@ export function PriceBook({ pick }: { pick?: PricePick } = {}) {
           cards={(items ?? []).filter((c) => c.active && c.cost_group_id === editGroup.id).length}
           onDelete={() => { const g = editGroup; setEditGroup(null);
             void retireMany((items ?? []).filter((c) => c.active && c.cost_group_id === g.id).map((c) => c.id), `${g.name}'s cards`, g); }} />
-      )}
-      {importing === "receipt" && (
-        <ReceiptImport open onClose={() => setImporting(null)} onDone={(m) => { setImporting(null); setNote(m); reload(); }} />
-      )}
-      {importing === "sheet" && (
-        <PriceImport key={importing} open start={importing} onClose={() => setImporting(null)} cards={items ?? []} vendors={vendors}
-          onDone={(m) => { setImporting(null); setNote(m); reload(); }} />
       )}
     </div>
     </>

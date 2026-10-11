@@ -184,7 +184,7 @@ export function monthlyNut(items: OverheadItem[]): number {
 export function jobMinimum(dayMinimum: number | null, days: number | null):
   { ok: true; minimum: number; day_minimum: number; days: number } | { ok: false; blocked: string[] } {
   const blocked: string[] = [];
-  if (!has(dayMinimum) || dayMinimum <= 0) blocked.push("Day minimum (Price book → Defaults)");
+  if (!has(dayMinimum) || dayMinimum <= 0) blocked.push("Day minimum (Settings → Cost book)");
   if (!has(days) || days <= 0) blocked.push("Days on this job");
   if (blocked.length) return { ok: false, blocked };
   return { ok: true, minimum: (dayMinimum as number) * (days as number), day_minimum: dayMinimum as number, days: days as number };
@@ -468,13 +468,13 @@ export function budget(
     const qty = q.ok ? q.qty : null;
     if (!q.ok) blocked.push(...q.missing);
     if (!has(l.unit_cost)) blocked.push(`${l.name}: unit cost`);
-    if (oh === null) blocked.push("O.H. % (Price book → Defaults, or this budget)");
+    if (oh === null) blocked.push("O.H. % (Settings → Cost book, or this budget)");
 
     let m: number | null = null;
     let from: LineResult["margin_from"] = null;
     if (has(l.margin_pct)) { m = l.margin_pct; from = "line"; }
     else if (has(s.margin_pct)) { m = s.margin_pct; from = "job"; }
-    else blocked.push("Margin % (Price book → Defaults, or this budget)");
+    else blocked.push("Margin % (Settings → Cost book, or this budget)");
     if (m !== null && m >= 100) { blocked.push(`${l.name}: margin must be under 100%`); m = null; }
     if (m !== null && m + ck >= 100) { blocked.push(`${l.name}: margin + carrying cost must be under 100%`); m = null; }
     for (const r of s.risk_missing ?? []) blocked.push(`Risk — ${r}`);

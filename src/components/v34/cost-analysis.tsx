@@ -194,7 +194,7 @@ export function CostAnalysis({ lines, sections, tax, discount, overheadPct, days
             const min = dayMinimum * days;
             const short = min - sold;
             return <>Job minimum {money0(min)} ({days} × {money0(dayMinimum)}) · {section !== "all" ? "for the whole job" : short > 0 ? <span style={{ color: T.red }}>short by {money0(short)}</span> : a.unpriced.length ? <span style={{ color: T.ink3 }}>not all priced yet</span> : <span style={{ color: T.green }}>cleared</span>}</>;
-          })() : <span style={{ color: T.ink3 }}>Job minimum needs {dayMinimum === null ? "a day minimum (Price book → Defaults)" : "days"}.</span>}
+          })() : <span style={{ color: T.ink3 }}>Job minimum needs {dayMinimum === null ? "a day minimum (Settings → Cost book)" : "days"}.</span>}
         </div>
       </div>
     </div>

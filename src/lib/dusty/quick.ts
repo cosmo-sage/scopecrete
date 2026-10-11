@@ -11,7 +11,7 @@ export interface Quick {
   /** "›" — put in the box for Coy to finish, not sent. */
   more?: string;
   /** Opens a form instead of asking (the + menu's own). */
-  create?: "contact" | "job" | "customer" | "vendor" | "receipt" | "quote" | "bill";
+  create?: "contact" | "job" | "customer" | "vendor" | "receipt" | "quote" | "bill" | "group" | "card";
 }
 
 /** The quick selects for a page: a job's views, the Dashboard, a thread or customer, and each main
@@ -67,8 +67,8 @@ export function quickFor(pathname: string): Quick[] {
     { label: "Bill", create: "bill" },
   ];
   if (p === "/dashboard/price-book") return [
-    { label: "New group", more: "Make a Price book group called " },
-    { label: "New card", more: "Add a Price book item: " },
+    { label: "New group", create: "group" },
+    { label: "New card", create: "card" },
     { label: "Build an assembly", more: "Build an assembly for " },
   ];
   if (p === "/dashboard/roadmap") return [

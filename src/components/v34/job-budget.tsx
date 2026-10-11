@@ -551,7 +551,7 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
           {riskOpen && (
             <div className="mt-2 rounded" style={{ border: `1px solid ${T.hair}`, background: T.card, padding: "8px 10px" }}>
               <RiskEditor value={data.risk ?? null} jobType={null}
-                note="This job's risk. Copied from its project type (Price book → Defaults) when the budget was made; changed here, it changes this job only."
+                note="This job's risk. Copied from its project type (Settings → Cost book) when the budget was made; changed here, it changes this job only."
                 onSave={(risk) => run(() => call(`/api/jobs/${jobId}/budget`, "PATCH", { risk }))} />
             </div>
           )}
@@ -1138,7 +1138,7 @@ function TaxSheet({ open, onClose, tax, onSave, onLookup }: {
         {lookErr && <div style={{ fontSize: F.xs, color: T.red, marginTop: -6, marginBottom: 8 }}>{lookErr}</div>}
         <div style={{ ...eyebrow, marginBottom: 4 }}>The job is in</div>
         {parishes === null ? <div style={{ fontSize: F.sm, color: T.ink3 }}>Loading…</div> : parishes.length === 0 ? (
-          <div style={{ fontSize: F.sm, color: T.ink3 }}>No parish rates yet — add them in Price book → Defaults.</div>
+          <div style={{ fontSize: F.sm, color: T.ink3 }}>No parish rates yet — add them in Settings → Cost book.</div>
         ) : parishes.map((p) => (
           <button key={p.parish} onClick={() => void onSave({ tax_parish: p.parish })} className="w-full flex items-center px-1 text-left" style={row}>
             <span className="flex-1" style={{ fontSize: F.sm, fontWeight: tax?.parish === p.parish && tax.source === "parish" ? 700 : 400 }}>{p.parish}</span>

@@ -154,7 +154,6 @@ export function Customers() {
       actions={<>
         {!wide && viewTabs}
         <SearchToggle open={finding || !!q} onToggle={() => { if (finding || q) { setQ(""); setFinding(false); } else setFinding(true); }} label="Find a customer" />
-        <button onClick={() => setAdding(true)} className="sc-new-btn" style={btn(true)}>+ New</button>
       </>}>
       {(finding || q) && <div className="mt-2"><SearchBubble value={q} onChange={setQ} onClose={() => setFinding(false)} placeholder="Find a name, address, phone, what was said…" /></div>}
     </PageHeader>
@@ -207,7 +206,7 @@ export function Customers() {
       {rows === null && !err && <div className="animate-pulse rounded" style={{ height: 80, background: T.hairSoft }} />}
       {rows !== null && shown.length === 0 && (
         <div className="rounded px-3 py-4" style={{ background: T.card, fontSize: F.sm, color: T.ink3 }}>
-          {rows.length ? "Nothing matches." : "No customers yet — + New customer, or file someone as Customer in Threads."}
+          {rows.length ? "Nothing matches." : "No customers yet — tap the emblem for New customer, or file someone as Customer in Threads."}
         </div>
       )}
 

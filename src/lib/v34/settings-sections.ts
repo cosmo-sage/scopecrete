@@ -16,6 +16,7 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
   { k: "account", label: "Account", note: "Your name, phone and email · switch company · sign out", href: `${SETTINGS_HOME}/account`, field: true },
   { k: "organization", label: "Organization", note: "Name, logo, office and radius · people, invites and permissions", href: `${SETTINGS_HOME}/organization` },
   { k: "lines", label: "Lines", note: "Your numbers, what runs them, and whether each is talking to the app", href: `${SETTINGS_HOME}/lines` },
+  { k: "cost-book", label: "Cost book", note: "Margin, O.H., day minimum and parish tax · project types · importing prices", href: `${SETTINGS_HOME}/cost-book` },
   { k: "appearance", label: "Appearance", note: "The color scheme — some change the typeface too", href: `${SETTINGS_HOME}/appearance`, field: true },
   { k: "ai", label: "AI", note: "Dusty's thought line, on a phone and on a desktop", href: `${SETTINGS_HOME}/ai` },
   { k: "menus", label: "Menus", note: "The order of your pages, the phone footer, and the icons' colors", href: `${SETTINGS_HOME}/menus` },

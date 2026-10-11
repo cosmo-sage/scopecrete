@@ -381,9 +381,9 @@ export function DustyPanel({ open, onClose, onBusy, onStream, onState }: {
     } catch (e) { setErr(`Voice message: ${e instanceof Error ? e.message : String(e)}`); }
     finally { setHearing(false); }
   }
-  function create(what: "contact" | "customer" | "job" | "receipt" | "vendor" | "quote" | "bill") {
+  function create(what: "contact" | "customer" | "job" | "receipt" | "vendor" | "quote" | "bill" | "group" | "card") {
     setPlusOpen(false);
-    const href = what === "contact" ? "/dashboard/contacts?new=1" : what === "customer" ? "/dashboard/customers?new=1" : what === "job" ? "/dashboard/scope?new=1"
+    const href = what === "group" || what === "card" ? `/dashboard/price-book?new=${what}` : what === "contact" ? "/dashboard/contacts?new=1" : what === "customer" ? "/dashboard/customers?new=1" : what === "job" ? "/dashboard/scope?new=1"
       : what === "vendor" ? "/dashboard/vendors?new=1" : `/dashboard/vendors?receipt=${what === "receipt" ? 1 : what}`;
     // On a phone Dusty covers the page, so he steps aside for the form.
     if (!window.matchMedia("(min-width: 1024px)").matches) onClose();

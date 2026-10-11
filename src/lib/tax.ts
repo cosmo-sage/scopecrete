@@ -127,6 +127,6 @@ export function jobTax(job: { tax_rate_pct?: number | null; tax_rate_source?: st
   const parish = job.tax_parish || parishFromAddr;
   if (!parish) return { rate: null, parish: null, source: null, missing: "parish unknown — set it on the job" };
   const r = rates.find((x) => x.parish.toLowerCase() === parish.toLowerCase());
-  if (!r) return { rate: null, parish, source: null, missing: `no rate for ${parish} — add it in Price book → Defaults` };
+  if (!r) return { rate: null, parish, source: null, missing: `no rate for ${parish} — add it in Settings → Cost book` };
   return { rate: Number(r.rate_pct), parish, source: "parish", missing: null };
 }

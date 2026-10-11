@@ -180,8 +180,6 @@ export function VendorList() {
       sub="Who you buy from and who you hire, by trade. Tick several and send one bid request to all of them."
       actions={<>
         <SearchToggle open={finding || !!q} onToggle={() => { if (finding || q) { setQ(""); setFinding(false); } else setFinding(true); }} label="Find a vendor" />
-        <button onClick={() => setAdding(true)} className="sc-new-btn" style={btn(false)}>+ Vendor</button>
-        <button onClick={() => setReceipt(true)} className="sc-new-btn" style={btn(true)}>+ Receipt or quote</button>
       </>}>
       {(finding || q) && <div className="mt-2"><SearchBubble value={q} onChange={setQ} onClose={() => setFinding(false)} placeholder="Find a vendor, trade, area, phone…" /></div>}
     </PageHeader>

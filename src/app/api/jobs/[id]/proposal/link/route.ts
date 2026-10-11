@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import { getApiSession } from "@/lib/api-auth";
 import { publicOrigin } from "@/lib/hosts";
 import { FILES_BUCKET } from "@/lib/files";
-import { linkAssets, newToken, publicSnapshot } from "@/lib/proposal-links";
+import { linkAssets, newToken, publicSnapshot, type LinkAssets } from "@/lib/proposal-links";
 import { POST as finalize } from "../final/route";
 import { proposalNumbers } from "@/lib/proposal-number-server";
 
@@ -93,31 +93,41 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const extra = { recipient, job: { id, title: (job.title as string | null) ?? null }, version: prop.version };
 
   const origin = publicOrigin(req.headers.get("host"), req.nextUrl.origin);
-  // Already a live link for this version: send that one again.
-  const { data: live } = await supabase.from("documents").select(LINK_COLS).eq("org_id", orgId).eq("proposal_id", prop.id)
+  // Already a live link for this version: send that one again — with the photos filed on its areas
+  // since it was made (Coy, 2026-10-11: "I'm not seeing the photos added to the section on the
+  // proposal links"). The words and prices stay frozen; a signed link (097) stays exactly as signed.
+  const { data: live } = await supabase.from("documents").select(`${LINK_COLS}, assets, shown, signed_at`).eq("org_id", orgId).eq("proposal_id", prop.id)
     .is("revoked_at", null).neq("status", "void").order("created_at", { ascending: false }).limit(1).maybeSingle();
-  if (live) return applyCookies(NextResponse.json({ link: { ...live, url: `${origin}/p/${live.token}` }, uploads: [], ...extra }));
+  if (live) {
+    const { assets: had, shown: liveShown, signed_at, ...row } = live as unknown as Record<string, unknown> & { id: string; token: string; assets: LinkAssets | null; shown: Record<string, unknown> | null; signed_at: string | null };
+    const uploads: Array<{ area_id: string; path: string; token: string; signed_url: string }> = [];
+    if (!signed_at && row.status !== "accepted") {
+      const prev = had ?? { paths: [] };
+      const disp = ((liveShown ?? {}).display ?? {}) as { hide_area_pics?: boolean; picsOff?: Record<string, boolean> };
+      const shows = (area: string) => !disp.hide_area_pics && !disp.picsOff?.[area];
+      const fresh = await areaPhotoPaths(supabase, orgId, id);
+      const photos: Record<string, string[]> = {};
+      for (const [area, ps] of Object.entries(fresh)) if (shows(area)) photos[area] = ps;
+      // An area that has a map now and didn't when the link was made: the browser draws it again.
+      const maps: Record<string, string> = { ...(prev.maps ?? {}) };
+      const newMaps = Array.isArray(body.maps) ? (body.maps as unknown[]).filter((a): a is string => typeof a === "string" && UUID.test(a) && shows(a) && !maps[a]).slice(0, 40) : [];
+      for (const a of newMaps) maps[a] = `${orgId}/proposal/${row.id}/map-${a}.jpg`;
+      const assets = linkAssets(orgId, { logo: prev.logo ?? null, logo_dark: prev.logo_dark ?? null, cover: prev.cover ?? null, maps, photos });
+      if (JSON.stringify(assets) !== JSON.stringify(prev)) {
+        const { error: upErr } = await supabase.from("documents").update({ assets }).eq("org_id", orgId).eq("id", row.id);
+        if (upErr) return bad(upErr.message, 500);
+      }
+      for (const a of newMaps) {
+        const { data: up } = await supabase.storage.from(FILES_BUCKET).createSignedUploadUrl(maps[a], { upsert: true });
+        if (up) uploads.push({ area_id: a, path: maps[a], token: up.token, signed_url: up.signedUrl });
+      }
+    }
+    return applyCookies(NextResponse.json({ link: { ...row, url: `${origin}/p/${row.token}` }, uploads, ...extra }));
+  }
 
   if (auto) {
     // What Preview would pick, read on the server: the proposal's cover, and up to four photos per area.
-    // A photo filed on the area, or on one of its takeoff shapes (as the Preview's areaVisuals reads them).
-    const { data: pics } = await supabase.from("files").select("id, section_id, takeoff_measurement_id, mime_type").eq("org_id", orgId).eq("job_id", id)
-      .is("deleted_at", null).or("category.is.null,category.neq.plan").or("section_id.not.is.null,takeoff_measurement_id.not.is.null").order("created_at", { ascending: true }).limit(400);
-    const shapeIds = [...new Set(((pics ?? []) as Array<{ takeoff_measurement_id: string | null }>).map((f) => f.takeoff_measurement_id).filter((x): x is string => !!x))];
-    const shapeArea = new Map<string, string>();
-    if (shapeIds.length) {
-      const { data: shapes } = await supabase.from("takeoff_measurements").select("id, section_id").eq("org_id", orgId).in("id", shapeIds);
-      for (const m of (shapes ?? []) as Array<{ id: string; section_id: string | null }>) if (m.section_id) shapeArea.set(m.id, m.section_id);
-    }
-    const per: Record<string, string[]> = {};
-    for (const f of (pics ?? []) as Array<{ id: string; section_id: string | null; takeoff_measurement_id: string | null; mime_type: string | null }>) {
-      if (!/^image\//.test(f.mime_type ?? "")) continue;
-      const area = f.section_id ?? (f.takeoff_measurement_id ? shapeArea.get(f.takeoff_measurement_id) : undefined);
-      if (!area) continue;
-      const list = (per[area] ??= []);
-      if (list.length < 4) list.push(f.id);
-    }
-    body.photos = per;
+    body.photos = await areaPhotoIds(supabase, orgId, id);
     body.cover_file_id = (prop.cover_file_id as string | null) ?? null;
     body.maps = [];
   }
@@ -197,4 +207,43 @@ async function recipientOf(sb: Sb, orgId: string, contactId: string | null, cust
   if (!p) return null;
   return { contact_id: p.id as string, name: (p.name as string | null) ?? null, phone: (p.phone as string | null) ?? null,
     email: (p.email as string | null) ?? ((em ?? [])[0]?.email as string | undefined) ?? null };
+}
+
+/**
+ * Each area's photos, up to four, oldest first: a photo filed on the area, or on one of its takeoff
+ * shapes (as the Preview's areaVisuals reads them). Plan clips are not photos.
+ */
+async function areaPhotoIds(sb: Sb, orgId: string, jobId: string): Promise<Record<string, string[]>> {
+  const rows = await areaPhotoRows(sb, orgId, jobId);
+  const per: Record<string, string[]> = {};
+  for (const f of rows) { const list = (per[f.area] ??= []); if (list.length < 4) list.push(f.id); }
+  return per;
+}
+
+/** The same photos as storage paths, for a link already made. */
+async function areaPhotoPaths(sb: Sb, orgId: string, jobId: string): Promise<Record<string, string[]>> {
+  const rows = await areaPhotoRows(sb, orgId, jobId);
+  const per: Record<string, string[]> = {};
+  for (const f of rows) { if (!f.path) continue; const list = (per[f.area] ??= []); if (list.length < 4) list.push(f.path); }
+  return per;
+}
+
+async function areaPhotoRows(sb: Sb, orgId: string, jobId: string) {
+  // One .or() only: the plan-clip filter. Whether a file is on an area or a shape is checked here.
+  const { data: pics } = await sb.from("files").select("id, storage_path, section_id, takeoff_measurement_id, mime_type").eq("org_id", orgId).eq("job_id", jobId)
+    .is("deleted_at", null).or("category.is.null,category.neq.plan").order("created_at", { ascending: true }).limit(400);
+  const all = ((pics ?? []) as Array<{ id: string; storage_path: string | null; section_id: string | null; takeoff_measurement_id: string | null; mime_type: string | null }>)
+    .filter((f) => /^image\//.test(f.mime_type ?? "") && (f.section_id || f.takeoff_measurement_id));
+  const shapeIds = [...new Set(all.map((f) => f.takeoff_measurement_id).filter((x): x is string => !!x))];
+  const shapeArea = new Map<string, string>();
+  if (shapeIds.length) {
+    const { data: shapes } = await sb.from("takeoff_measurements").select("id, section_id").eq("org_id", orgId).in("id", shapeIds);
+    for (const m of (shapes ?? []) as Array<{ id: string; section_id: string | null }>) if (m.section_id) shapeArea.set(m.id, m.section_id);
+  }
+  const out: Array<{ id: string; path: string | null; area: string }> = [];
+  for (const f of all) {
+    const area = f.section_id ?? (f.takeoff_measurement_id ? shapeArea.get(f.takeoff_measurement_id) : undefined);
+    if (area) out.push({ id: f.id, path: f.storage_path, area });
+  }
+  return out;
 }

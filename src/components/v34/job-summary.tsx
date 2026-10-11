@@ -283,6 +283,11 @@ function ProposalState({ jobId, links, card, onWon }: {
             <b>{live.number ?? `v${live.version?.version ?? "?"}`} final</b> · {live.sent_at ? `sent ${day(live.sent_at)}${live.sent_via?.length ? ` · ${live.sent_via.map((v) => (v === "copy" ? "link copied" : v === "text" ? "by text" : "by email")).join(", ")}` : ""}` : "link made, not sent yet"}
             <div style={{ color: live.view_count ? T.green : T.ink2 }}>{viewLine(live)}</div>
             {signed && <div style={{ color: T.green, fontWeight: 600 }}>✓ {signed} — on the link</div>}
+            {/* Send it again (Coy, 2026-10-11: "I don't see a way to resend proposals"). */}
+            <Link href={`/dashboard/scope/${jobId}/proposal?send=1`} className="inline-block rounded no-underline" title="Opens the Preview to send the same link again"
+              style={{ marginTop: 6, height: 28, lineHeight: "26px", padding: "0 10px", border: `1px solid ${T.hairStrong}`, color: T.ink, fontFamily: disp, fontSize: F.xs, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".05em" }}>
+              {live.sent_at ? "Resend" : "Send it"}
+            </Link>
           </div>
         ) : (
           <div style={{ fontSize: F.sm, color: T.ink2, marginTop: 6, lineHeight: 1.5 }}>

@@ -100,7 +100,8 @@ export function Proposal({ jobId }: { jobId: string }) {
     return Number.isInteger(v) && v > 0 ? v : null;
   });
   const [panel, setPanel] = useState(false);
-  const [preview, setPreview] = useState(false);
+  // ?send=1 (the Summary's Resend, 2026-10-11) opens the Preview's send panel.
+  const [preview, setPreview] = useState(() => typeof window !== "undefined" && new URLSearchParams(window.location.search).get("send") === "1");
   const [copied, setCopied] = useState(false);
   const [links, setLinks] = useState<PropLink[]>([]);
   const loadLinks = useCallback(() => {
@@ -342,6 +343,8 @@ export function Proposal({ jobId }: { jobId: string }) {
   });
   // The proposal's own buttons (Coy, 2026-10-05): beside Project type, Warranty and Contract on a
   // desktop; their own row under the header on a phone.
+  // The newest version already went out: the same button resends it (Coy, 2026-10-11).
+  const sentNow = !editable && links.some((l) => !l.revoked_at && l.status !== "void" && l.version?.version === p.version && !!l.sent_at);
   const actions = (
     <>
           {b.finals.length > 0 && (
@@ -359,7 +362,7 @@ export function Proposal({ jobId }: { jobId: string }) {
           )}
           {!finalShown && (
             <button onClick={() => { flushSaves(); setPreview(true); }} disabled={!!busy} className="rounded"
-              style={{ height: 30, padding: "0 12px", background: "#B85A3C", color: "#fff", fontFamily: disp, fontSize: 12, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase" }}>{wide ? "Preview & send" : "Send"}</button>
+              style={{ height: 30, padding: "0 12px", background: "#B85A3C", color: "#fff", fontFamily: disp, fontSize: 12, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase" }}>{sentNow ? (wide ? "Preview & resend" : "Resend") : wide ? "Preview & send" : "Send"}</button>
           )}
           {/* Copy the link to send it yourself (Coy, 2026-10-07). With no link for this version yet, the
               Preview makes one — sending or copying there freezes a draft first. */}

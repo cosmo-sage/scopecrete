@@ -120,9 +120,11 @@ export function ProposalPreview({ jobId, vm, draft, version, blocked, coverFileI
   }, [onClose]);
 
   const ensureLink = async (): Promise<PropLink> => {
-    if (live) return live;
-    if (draft) { setBusy("Freezing this version…"); await onFinalize(); }
-    setBusy("Making the link…");
+    // A link already made is sent again; asking the server for it brings in photos filed on the areas
+    // since (2026-10-11). A signed one stays exactly as signed.
+    if (live && live.status === "accepted") return live;
+    if (draft && !live) { setBusy("Freezing this version…"); await onFinalize(); }
+    setBusy(live ? "Updating the link's photos…" : "Making the link…");
     // What shows beside the words: each area's photos and its map (frozen as a picture).
     const d = vm.display;
     const photos: Record<string, string[]> = {};
@@ -191,6 +193,8 @@ export function ProposalPreview({ jobId, vm, draft, version, blocked, coverFileI
     background: on ? "#B85A3C" : T.card, color: on ? "#fff" : T.ink3, border: on ? "none" : `1px solid ${T.hair}`, cursor: on ? "pointer" : "default" });
   const seg = (on: boolean): React.CSSProperties => ({ height: 28, padding: "0 10px", fontFamily: disp, fontSize: 11.5, fontWeight: 600, letterSpacing: ".06em", textTransform: "uppercase", background: on ? T.ink : T.card, color: on ? T.card : T.ink2, border: "none", cursor: "pointer" });
   const canSend = !blocked && !busy;
+  // Sent already: the same buttons resend it (Coy, 2026-10-11: "I don't see a way to resend proposals").
+  const again = !!live?.sent_at;
   const older = links.filter((l) => l !== live);
 
   return (
@@ -241,7 +245,11 @@ export function ProposalPreview({ jobId, vm, draft, version, blocked, coverFileI
             )}
           {blocked
             ? <div className="mt-2" style={{ fontSize: 12.5, color: "#8E2B1C", background: "#F7DCD6", borderRadius: 4, padding: "8px 10px" }}>Can&apos;t send yet — {blocked}</div>
-            : draft && <div className="mt-1" style={{ fontSize: 12, color: T.ink3 }}>Sending freezes this as version {version}. Changes after that start version {version + 1}, with its own link.</div>}
+            : again
+              ? <div className="mt-1" style={{ fontSize: 12, color: T.ink2 }}>{live?.status === "accepted"
+                  ? "Signed by the customer. Resending shows them the signed copy; photos added since go on a New version."
+                  : `Sent ${when(live!.sent_at!)}. Resending uses the same link, with any photos added to its sections since.`}</div>
+              : draft && <div className="mt-1" style={{ fontSize: 12, color: T.ink3 }}>Sending freezes this as version {version}. Changes after that start version {version + 1}, with its own link.</div>}
           <div className="mt-2 flex items-center gap-2">
             <span className="inline-flex rounded overflow-hidden" style={{ border: `1px solid ${T.hairStrong}` }}>
               <button type="button" onClick={() => { setVia("text"); setWords(null); }} style={seg(via === "text")} aria-pressed={via === "text"}>Text</button>
@@ -258,8 +266,8 @@ export function ProposalPreview({ jobId, vm, draft, version, blocked, coverFileI
           <div style={{ fontSize: 11, color: T.ink3 }}>{live ? "" : "{link} becomes the link once it's made."}{start?.learned ? " Started from how you sent the last one." : ""} Dusty learns from what you send.</div>
           <div className="mt-2 flex flex-wrap gap-2">
             {via === "text"
-              ? <button type="button" disabled={!canSend || !textable.length} onClick={() => void send("quo")} style={btn(canSend && !!textable.length)} title={textable.length ? `Sends through Quo to ${textable.map((w) => w.name).join(", ")}` : "Tick someone with a phone"}>{textable.length > 1 ? `Send ${textable.length} texts` : "Send text"}</button>
-              : <button type="button" disabled={!canSend} onClick={() => void send("email")} style={btn(canSend)} title="Opens your mail with the words and the link">Email it</button>}
+              ? <button type="button" disabled={!canSend || !textable.length} onClick={() => void send("quo")} style={btn(canSend && !!textable.length)} title={textable.length ? `Sends through Quo to ${textable.map((w) => w.name).join(", ")}` : "Tick someone with a phone"}>{textable.length > 1 ? `${again ? "Resend" : "Send"} ${textable.length} texts` : again ? "Resend text" : "Send text"}</button>
+              : <button type="button" disabled={!canSend} onClick={() => void send("email")} style={btn(canSend)} title="Opens your mail with the words and the link">{again ? "Email it again" : "Email it"}</button>}
             <button type="button" disabled={!canSend} onClick={() => void send("copy")} style={{ ...btn(false), color: canSend ? T.ink : T.ink3, border: `1px solid ${T.hairStrong}`, cursor: canSend ? "pointer" : "default" }}>{copied ? "Copied ✓" : "Copy link"}</button>
           </div>
           <div className="mt-1.5" style={{ fontSize: 11, color: T.ink3 }}>

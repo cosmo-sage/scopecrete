@@ -18,6 +18,7 @@ import { bucketOf } from "@/lib/cost-analysis";
 import { COLORS } from "@/components/v34/cost-analysis";
 import { markEstimate } from "@/lib/estimate-flag";
 import { askDusty } from "@/components/v34/budget-tabs";
+import { DustyEmblem } from "@/components/v34/dusty-avatar";
 import { quotedLine } from "@/lib/find-on-sheet";
 import {
   jobRange, marketRows, scaleOf, sectionRows, COST_TYPE_LABEL, type MarketSection, type SectionRow, unitCostFromRate, rateStatus, RATE_UNIT_LABEL,
@@ -34,7 +35,8 @@ interface MarketData {
   days: number | null; crew_size: number | null;
   past: Array<{ id: string; name: string; sqft: number; days: number | null; closed_at: string; per_sf: number; margin: number | null }>;
   can_keep: boolean;
-  sections: Array<MarketSection & { sheets: Array<{ id: string; number: string | null; title: string | null }>; rates_at: string | null }>;
+  sections: Array<MarketSection & { sheets: Array<{ id: string; number: string | null; title: string | null }>; rates_at: string | null;
+    items?: Array<{ key: string; name: string; cost_type: string; unit: string; from: string }> }>;
   section_rates: RateLite[];
   note?: string;
   error?: string;
@@ -68,7 +70,6 @@ export function MarketRates({ jobId, refresh, onChanged, onSheets }: {
 }) {
   const [d, setD] = useState<MarketData | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState<Set<string>>(new Set());
   const [used, setUsed] = useState<Record<string, Used>>({});
   const [ref, wide] = useWide<HTMLDivElement>(900);
@@ -86,19 +87,15 @@ export function MarketRates({ jobId, refresh, onChanged, onSheets }: {
   const rows = useMemo(() => (d ? marketRows(d.steps, d.rates?.rates ?? [], d.lines, d.areas, job) : []), [d, job]);
   const range = useMemo(() => (d ? jobRange(d.rates?.rates ?? []) : null), [d]);
   const secRows = useMemo(() => (d?.sections ? sectionRows(d.sections, d.lines, d.section_rates ?? []) : []), [d]);
-  const [secBusy, setSecBusy] = useState(false);
+  const [secBusy, setSecBusy] = useState<string | null>(null);
+  // The emblem on a section researches it from its scope of work (Coy, 2026-10-11).
   const lookUpSections = async (ids: string[]) => {
-    setSecBusy(true); setErr(null);
+    setSecBusy(ids[0] ?? null); setErr(null);
     try { setD(await send(`/api/jobs/${jobId}/budget/market`, "POST", { sections: ids })); } catch (e) { setErr(String((e as Error).message ?? e)); }
-    setSecBusy(false);
+    setSecBusy(null);
   };
   const mineSf = d?.totals && d.sqft ? d.totals.total / d.sqft : null;
 
-  const lookUp = async () => {
-    setBusy(true); setErr(null);
-    try { setD(await send(`/api/jobs/${jobId}/budget/market`, "POST")); } catch (e) { setErr(String((e as Error).message ?? e)); }
-    setBusy(false);
-  };
 
   const toggle = (k: string) => setOpen((s) => {
     const n = new Set(wide ? s : []);
@@ -253,8 +250,6 @@ export function MarketRates({ jobId, refresh, onChanged, onSheets }: {
 
   // ── By section: the job's own sections, the plan set's first (Coy, 2026-10-09). ──
   const secLabel = (r: SectionRow) => r.qty === null ? "no size yet" : `${Math.round(r.qty).toLocaleString()} ${fmtUnit(r.unit)}`;
-  const notLooked = secRows.filter((r) => !d.sections.find((x) => x.id === r.section.id)?.rates_at).map((r) => r.section.id);
-  const nextAsk = (notLooked.length ? notLooked : secRows.map((r) => r.section.id)).slice(0, 4);
   const secStatus = (r: SectionRow) => {
     const m: Record<string, { word: string; color: string }> = { ...STATUS, no_size: { word: "No size", color: T.hivizText }, no_line: { word: "No items", color: T.ink3 } };
     const x = m[r.status];
@@ -278,9 +273,7 @@ export function MarketRates({ jobId, refresh, onChanged, onSheets }: {
         <span style={eyebrow}>By section</span>
         {secRows.some((r) => r.section.origin === "bid") && <span style={{ fontSize: 11, color: T.ink3 }}>from the plan set</span>}
         <span className="flex-1" />
-        <button onClick={() => void lookUpSections(nextAsk)} disabled={secBusy} style={{ fontSize: 12, color: T.chalk, fontWeight: 600, cursor: secBusy ? "wait" : "pointer" }}>
-          {secBusy ? "Looking up…" : notLooked.length ? `Look up going rates${notLooked.length > 4 ? ` (4 of ${notLooked.length})` : ""}` : "Look up again"}
-        </button>
+        <span style={{ fontSize: 11, color: T.ink3 }}>{secBusy ? "Dusty is researching…" : "The emblem reads a section's scope of work and prices each cost"}</span>
       </div>
       {wide && (
         <div className="grid items-center gap-2" style={{ gridTemplateColumns: "minmax(0,1.6fr) 110px 110px 150px 110px 80px", padding: "5px 12px", ...eyebrow, borderBottom: `1px solid ${T.hairSoft}` }}>
@@ -298,7 +291,9 @@ export function MarketRates({ jobId, refresh, onChanged, onSheets }: {
             {wide ? (
               <div className="grid items-center gap-2" onClick={() => toggle(k)} style={{ gridTemplateColumns: "minmax(0,1.6fr) 110px 110px 150px 110px 80px", padding: "7px 12px", cursor: "pointer" }}>
                 <div style={{ minWidth: 0 }}>
-                  <div className="flex items-center gap-1.5" style={{ minWidth: 0 }}><span style={{ fontSize: 13.5, ...clip }}>{r.section.name}</span>{sheetChips(r)}</div>
+                  <div className="flex items-center gap-1.5" style={{ minWidth: 0 }}><button onClick={(e) => { e.stopPropagation(); if (!secBusy) void lookUpSections([r.section.id]); }} disabled={!!secBusy}
+                    title={`Research ${r.section.name} from its scope of work`} aria-label={`Research ${r.section.name}`} style={{ flexShrink: 0, cursor: secBusy ? "wait" : "pointer", lineHeight: 0 }}>
+                    <DustyEmblem size={22} state={secBusy === r.section.id ? "thinking" : "idle"} still={secBusy !== r.section.id} /></button><span style={{ fontSize: 13.5, ...clip }}>{r.section.name}</span>{sheetChips(r)}</div>
                   <div style={{ fontSize: 11, color: T.ink3, ...clip }}>{r.lines.length ? `${r.lines.length} item${r.lines.length === 1 ? "" : "s"}${r.unpriced ? ` · ${r.unpriced} not priced` : ""}` : "no items yet"}</div>
                 </div>
                 <span style={{ fontSize: 12.5, color: r.qty === null ? T.hivizText : T.ink2, ...nums }}>{secLabel(r)}</span>
@@ -310,7 +305,9 @@ export function MarketRates({ jobId, refresh, onChanged, onSheets }: {
             ) : (
               <div className="grid items-center gap-2" onClick={() => toggle(k)} style={{ gridTemplateColumns: "minmax(0,1fr) 96px 74px", padding: "8px 12px", cursor: "pointer" }}>
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 13.5, ...clip }}>{r.section.name}</div>
+                  <div className="flex items-center gap-1.5" style={{ minWidth: 0 }}><button onClick={(e) => { e.stopPropagation(); if (!secBusy) void lookUpSections([r.section.id]); }} disabled={!!secBusy}
+                    title={`Research ${r.section.name} from its scope of work`} aria-label={`Research ${r.section.name}`} style={{ flexShrink: 0, cursor: secBusy ? "wait" : "pointer", lineHeight: 0 }}>
+                    <DustyEmblem size={22} state={secBusy === r.section.id ? "thinking" : "idle"} still={secBusy !== r.section.id} /></button><span style={{ fontSize: 13.5, ...clip }}>{r.section.name}</span></div>
                   <div className="flex items-center gap-1.5 flex-wrap" style={{ fontSize: 11, color: T.ink3, marginTop: 1 }}>
                     <span style={{ color: r.qty === null ? T.hivizText : T.ink3 }}>{secLabel(r)}</span>{sheetChips(r)}
                   </div>
@@ -329,6 +326,32 @@ export function MarketRates({ jobId, refresh, onChanged, onSheets }: {
                   </div>
                 ) : <div style={{ color: T.hivizText }}>No scope of work yet. Write it (or have Dusty draft it) on the Proposed budget; the lookup reads it to find a price for each step.</div>}
                 {r.section.notes && <div style={{ color: T.ink2 }}><span style={eyebrow}>Notes</span> {r.section.notes}</div>}
+                {(() => {
+                  const items = d.sections.find((x) => x.id === r.section.id)?.items ?? [];
+                  if (!items.length) return null;
+                  return (
+                    <div>
+                      <div style={{ ...eyebrow, marginBottom: 2 }}>Costs in the scope of work</div>
+                      {items.map((it) => {
+                        const rs = r.rates.filter((x) => x.item === it.key);
+                        const lo = rs.length ? Math.min(...rs.map((x) => x.low)) : null, hi = rs.length ? Math.max(...rs.map((x) => x.high)) : null;
+                        const units = [...new Set(rs.map((x) => fmtUnit(x.unit)))].join(", ");
+                        const k2 = `${k}:${it.key}`;
+                        return (
+                          <div key={it.key} style={{ borderTop: `1px solid ${T.hairSoft}`, padding: "4px 0" }}>
+                            <div className="flex items-baseline gap-2" onClick={() => rs.length && setOpen((o) => { const n = new Set(o); if (n.has(k2)) n.delete(k2); else n.add(k2); return n; })} style={{ cursor: rs.length ? "pointer" : "default", color: T.ink2 }}>
+                              <span style={{ color: T.ink3 }}>-</span>
+                              <span style={{ flex: 1, minWidth: 0, ...clip }}>{it.name}</span>
+                              <span style={{ fontSize: 10.5, fontFamily: disp, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: T.ink3, whiteSpace: "nowrap" }}>{COST_TYPE_LABEL[it.cost_type] ?? it.cost_type}</span>
+                              <span style={{ ...nums, whiteSpace: "nowrap", minWidth: 96, textAlign: "right" }}>{lo === null ? <span style={{ color: T.ink3 }}>no price found</span> : `${money(lo)}${hi !== lo ? `–${money(hi!)}` : ""}/${units}`}</span>
+                            </div>
+                            {open.has(k2) && <div className="flex flex-col gap-1" style={{ paddingLeft: 14, marginTop: 3 }}>{rs.map(quote)}</div>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
                 {r.by_type.length > 0 && (
                   <div>
                     <div style={{ ...eyebrow, marginBottom: 2 }}>Going rates by cost type</div>
@@ -361,15 +384,12 @@ export function MarketRates({ jobId, refresh, onChanged, onSheets }: {
 
   const lookedUp = d.rates
     ? `${d.rates.place} · looked up ${when(d.rates.asked_at)} · ${d.rates.queries.length} searches, ${kept} price${kept === 1 ? "" : "s"} kept`
-    : "Not looked up yet";
+    : "Tap the emblem on a section to research it from its scope of work.";
 
   return (
     <div ref={ref} className="px-3 py-3 flex flex-col gap-2" style={{ color: T.ink }}>
       <div className="flex items-center gap-2 flex-wrap" style={{ fontSize: 12, color: T.ink3 }}>
         <span style={{ minWidth: 0, flex: 1 }}>{lookedUp}</span>
-        <button onClick={() => void lookUp()} disabled={busy} style={{ color: T.chalk, fontWeight: 600, cursor: busy ? "wait" : "pointer" }}>
-          {busy ? "Looking up…" : d.rates ? "Look up again" : "Look up the going rates"}
-        </button>
       </div>
       {d.rates?.error && <div style={{ fontSize: 12, color: T.red }}>{d.rates.error}</div>}
       {d.note && <div style={{ fontSize: 12, color: T.hivizText }}>{d.note}</div>}
@@ -382,7 +402,8 @@ export function MarketRates({ jobId, refresh, onChanged, onSheets }: {
 
       {secRows.length > 0 && sectionCard}
 
-      <div className="rounded" style={{ background: T.card, border: `1px solid ${T.hair}` }}>
+      {/* By step shows an older driveway lookup only; steps now come from each section's scope of work (Coy, 2026-10-11). */}
+      {rows.length > 0 && <div className="rounded" style={{ background: T.card, border: `1px solid ${T.hair}` }}>
         <div className="flex items-baseline gap-2" style={{ padding: "8px 12px", borderBottom: `1px solid ${T.hair}` }}>
           <span style={eyebrow}>By step</span>
           {d.rates && <span style={{ fontSize: 11, color: T.ink3 }}>looked up {when(d.rates.asked_at)}</span>}
@@ -437,7 +458,7 @@ export function MarketRates({ jobId, refresh, onChanged, onSheets }: {
             {tally.inside} of {counted.length} step{counted.length === 1 ? "" : "s"} inside the going rate · {tally.under} under · {tally.over} over
           </div>
         )}
-      </div>
+      </div>}
       <div style={{ fontSize: 11.5, color: T.ink3 }}>
         Rates are references with their source. Nothing becomes a budget number until you tap Use — and then it is marked as an estimate until you confirm it on the Proposed budget. The Proposal reads the proposed budget only.
         {!d.can_keep && " Lookups are kept on the draft budget's build until migration 094 is applied."}

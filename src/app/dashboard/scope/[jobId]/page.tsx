@@ -34,7 +34,6 @@ import { setDustyUse } from "@/lib/v34/dusty-live";
 import { USE_ASK } from "@/lib/dusty/use-block";
 import { DustyEmblem } from "@/components/v34/dusty-avatar";
 import { isDetailFile, type SectionShape } from "@/lib/plan-details";
-import { DraftStrip } from "@/components/v34/draft-strip";
 import { JobHeaderRow } from "@/components/v34/job-tabs";
 import { JobBudget, type BudgetSummary } from "@/components/v34/job-budget";
 import { BudgetSubTabs, useBudgetTab } from "@/components/v34/budget-tabs";
@@ -372,13 +371,7 @@ export default function ScopeBuilder() {
         <div hidden={can(access, "budget") && tab !== "proposed"}>
         {/* The bid behind it is on the job's Summary only (Coy, 2026-10-10: "it should be in the summary page"). */}
 
-        {/* A draft budget from the job's own calls and texts (migration 087). */}
-        {can(access, "budget") && <DraftStrip jobId={jobId} refresh={budgetTick} onChanged={() => { void load(); setBudgetTick((n) => n + 1); }}
-          plan={sections.filter((x) => x.origin === "bid").map((x) => ({
-            id: x.id, name: x.name || "Section", sheets: sheetsOf(x).map((y) => ({ id: y.id, number: y.number })), quote: quotedLine(x.source_ref),
-            size: x.sqft_override || x.count_qty || (x.length_ft && x.width_ft) ? "sized" : null,
-          }))}
-          onSheets={(sid, sheet) => { const x = sections.find((y) => y.id === sid); if (x) openSheets(x, sheet); }} />}
+        {/* The Draft budget box is gone (Coy, 2026-10-11): the budget comes from each section's scope of work, and its research is on Market rate. */}
 
         {sections.length === 0 && (
           <EmptyState title="No sections yet"

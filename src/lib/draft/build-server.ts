@@ -8,7 +8,7 @@ import { takeoffTotalsFor } from "@/lib/plans-server";
 import { extract, modelSeen, type AreaDraft, type Evidence, type Extraction } from "./extract";
 import { approvalBlocks, checkRecipe, outcomeOf, RECIPE_VERSION, type DraftOutcome } from "./recipe";
 import { modelConfigured, modelJson, modelRead } from "./model-server";
-import { rateQueries, RATES_SYSTEM, renderAsks, renderResults, sanitizeRates, sectionQueries, SECTION_RATES_SYSTEM, type RateLookup, type SectionAsk } from "./rates";
+import { rateQueries, RATES_SYSTEM, renderAsks, renderResults, sanitizeRates, sectionQueries, SECTION_RATES_SYSTEM, ITEMIZE_SYSTEM, ITEM_RATES_SYSTEM, itemQueries, renderItems, renderSection, sanitizeItems, type RateLookup, type SectionAsk, type SowItem } from "./rates";
 import { searchWeb } from "@/lib/web-search-server";
 import { cityOf } from "@/lib/dusty/web";
 import { scopePicks, scopeSteps, sectionOfStep, sectionVerdict, type ScopeSection } from "./scope";
@@ -502,6 +502,50 @@ export async function searchSectionRates(sb: Sb, orgId: string, jobId: string, a
       found.dropped = got.dropped;
     }
   }
+  return found;
+}
+
+/** Words that must never reach a search: the job's address and its customer's and people's names. */
+async function privateWords(sb: Sb, orgId: string, jobId: string): Promise<string[]> {
+  const { data: job } = await sb.from("jobs").select("address, name_prefix, customer_id, contact_id").eq("org_id", orgId).eq("id", jobId).maybeSingle();
+  const out = [job?.address, job?.name_prefix].filter(Boolean) as string[];
+  if (job?.customer_id) {
+    const { data: c } = await sb.from("customers").select("name, address_line1").eq("org_id", orgId).eq("id", job.customer_id as string).maybeSingle();
+    out.push(...([c?.name, c?.address_line1].filter(Boolean) as string[]));
+  }
+  if (job?.contact_id) {
+    const { data: p } = await sb.from("contacts").select("name").eq("org_id", orgId).eq("id", job.contact_id as string).maybeSingle();
+    if (p?.name) out.push(p.name as string);
+  }
+  return out;
+}
+
+/**
+ * One section researched from its scope of work (Coy, 2026-10-11): the model itemizes the scope into the
+ * costs it takes, each with its cost type and unit; one search per item (its words and the city only);
+ * a second read files each price on its item. Kept as a "sections" lookup with the items beside the rates.
+ */
+export async function researchSection(sb: Sb, orgId: string, jobId: string, ask: SectionAsk & { id: string; size?: string | null }):
+  Promise<RateLookup & { kind: "sections"; section_ids: string[]; items: Record<string, SowItem[]> }> {
+  const place = await jobPlace(sb, orgId, jobId);
+  const found: RateLookup & { kind: "sections"; section_ids: string[]; items: Record<string, SowItem[]> } =
+    { kind: "sections", section_ids: [ask.id], items: {}, place: place ?? "no city on the job", asked_at: new Date().toISOString(), queries: [], rates: [], dropped: 0, error: null };
+  if (!modelConfigured()) { found.error = "Researching needs ANTHROPIC_API_KEY."; return found; }
+  const it = await modelJson(ITEMIZE_SYSTEM, renderSection(ask), 1500, 30_000);
+  if (!it.ok) { found.error = `Couldn't itemize the scope of work: ${it.error}.`; return found; }
+  const items = sanitizeItems(it.json);
+  found.items[ask.id] = items;
+  if (!items.length) { found.error = "Dusty couldn't break this section into costs — write its scope of work first."; return found; }
+  found.queries = itemQueries(place, items, await privateWords(sb, orgId, jobId));
+  const web = await searchWeb(found.queries, 24);
+  if (web.error) { found.error = web.error; return found; }
+  if (!web.results.length) { found.error = "The search found nothing."; return found; }
+  const m = await modelJson(ITEM_RATES_SYSTEM, renderItems(items) + renderResults(web.results), 4000, 45_000);
+  if (!m.ok) { found.error = `Couldn't read the prices: ${m.error}.`; return found; }
+  const got = sanitizeRates(m.json, web.results, new Set(items.map((i) => i.key)));
+  const typeOf = new Map(items.map((i) => [i.key, i.cost_type]));
+  found.rates = got.rates.map((r) => ({ ...r, item: r.step, split: r.split === "all" ? (typeOf.get(r.step) ?? "all") : r.split, step: ask.id }));
+  found.dropped = got.dropped;
   return found;
 }
 

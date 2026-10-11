@@ -383,7 +383,8 @@ export function FilesPage({ fixed, embedded, extra }: { fixed?: Partial<FileFilt
         {searching && <div className="mt-2">{search}</div>}
       </PageHeader>
     )}
-    <div ref={wrapRef} className="mx-auto" style={{ padding: embedded ? 0 : "0 12px 24px" }}>
+    {/* w-full: in a flex column mx-auto alone shrank this to its content, so a desktop Files tab read as a phone (Coy, 2026-10-11). */}
+    <div ref={wrapRef} className="mx-auto w-full" style={{ padding: embedded ? 0 : "0 12px 24px" }}>
       {embedded && (
         <div className="flex items-center gap-2" style={{ marginBottom: 8 }}>
           {!wide && <MenuButton onClick={() => setMenuOpen(true)} label="Folders" always />}

@@ -161,7 +161,7 @@ export function JobSummary({ jobId }: { jobId: string }) {
 
         <JobBids jobId={jobId} card={card} />
 
-        <FromThePlans jobId={jobId} />
+        <FromThePlans jobId={jobId} sections={sections} />
       </div>
 
       {/* Delete lives at the very bottom (moved here from the Budget, 2026-10-05). */}
@@ -183,7 +183,7 @@ export function JobSummary({ jobId }: { jobId: string }) {
  * Room's old Budget step (Coy, 2026-10-06: "we could move what's on this budget tab to the
  * summary page"). Shown only when the job has takeoff groups.
  */
-function FromThePlans({ jobId }: { jobId: string }) {
+function FromThePlans({ jobId, sections }: { jobId: string; sections: SectionInput[] }) {
   const [data, setData] = useState<PlansData | null>(null);
   const [tick, setTick] = useState(0);
   const [sending, setSending] = useState<Param | null>(null);
@@ -203,7 +203,7 @@ function FromThePlans({ jobId }: { jobId: string }) {
   return (
     <section aria-label="From the plans">
       <div style={{ ...eyebrow, padding: "6px 2px 0" }}>From the plans</div>
-      <div style={{ margin: "0 -12px" }}><BudgetStep jobId={jobId} data={scoped} b={b} onSend={setSending} /></div>
+      <div style={{ margin: "0 -12px" }}><BudgetStep jobId={jobId} data={scoped} b={b} sections={sections} onSend={setSending} /></div>
       <SendSheet jobId={jobId} p={sending} data={data} onClose={() => setSending(null)} onSent={() => setTick((n) => n + 1)} />
     </section>
   );

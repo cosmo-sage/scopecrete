@@ -10,7 +10,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { T, F, disp, eyebrow, clip, strong, light, nums } from "@/lib/v34/tokens";
-import { budget as priceBudget, takeoffUnit, type BudgetLine, type BudgetSettings, type TakeoffTotal } from "@/lib/engine";
+import { budget as priceBudget, takeoffUnit, type BudgetLine, type BudgetSettings, type SectionInput, type TakeoffTotal } from "@/lib/engine";
 import { fmtQty, KIND_UNIT } from "@/lib/takeoff";
 import { Sheet as Drawer } from "@/components/v34/primitives";
 import { call, KIND_LABEL, sheetLabel, type Param, type PlansData } from "./shared";
@@ -37,12 +37,25 @@ export function useBudget(jobId: string, tick: number) {
   return { b, err };
 }
 
-export function BudgetStep({ jobId, data, b, onSend }: { jobId: string; data: PlansData; b: Budget | null; onSend: (p: Param) => void }) {
-  const res = useMemo(() => b ? priceBudget(b.lines, b.options.map((o) => o.id), b.settings, [], null,
-    { tax_on: b.estimate?.tax_on ?? true, discount: b.estimate?.discount_amount ?? 0, takeoff: b.takeoff }) : null, [b]);
+export function BudgetStep({ jobId, data, b, sections, onSend }: { jobId: string; data: PlansData; b: Budget | null; sections?: SectionInput[]; onSend: (p: Param) => void }) {
+  // Priced with the job's sections, so lines counted from an area price as on the Budget.
+  const res = useMemo(() => b ? priceBudget(b.lines, b.options.map((o) => o.id), b.settings, sections ?? [], null,
+    { tax_on: b.estimate?.tax_on ?? true, discount: b.estimate?.discount_amount ?? 0, takeoff: b.takeoff }) : null, [b, sections]);
   const linkedLines = (p: Param) => (b?.lines ?? []).filter((l) => l.takeoff_parameter_id === p.id);
+  // Since 069 a group's takeoffs go into budget sections, priced by the section's own lines, not by
+  // a line counted from the group (Coy, 2026-10-11: "Why does it show no rate, when the budget is
+  // ready?"). The sections a group's shapes are in, and what their lines come to.
+  const inSections = (p: Param) => {
+    const ids = [...new Set(data.measurements.filter((m) => m.parameter_id === p.id && m.section_id).map((m) => m.section_id as string))];
+    if (!ids.length || !res) return null;
+    const lines = (b?.lines ?? []).filter((l) => l.section_id && ids.includes(l.section_id));
+    const priced = lines.map((l) => res.lines[l.id]?.ext_price).filter((x): x is number => typeof x === "number");
+    const names = ids.map((id) => (sections ?? []).find((x) => x.id === id)?.name || "a section");
+    return { names, lines: lines.length, total: priced.length ? priced.reduce((a, x) => a + x, 0) : null, unpriced: lines.length - priced.length };
+  };
   const sum = (unit: string) => data.params.filter((p) => KIND_UNIT[p.kind] === unit).reduce((a, p) => a + (data.totals[p.id]?.qty ?? 0), 0);
-  const fromPlans = (b?.lines ?? []).filter((l) => l.takeoff_parameter_id).reduce((a, l) => a + (res?.lines[l.id]?.ext_price ?? 0), 0);
+  const planSections = new Set(data.measurements.map((m) => m.section_id).filter(Boolean) as string[]);
+  const fromPlans = (b?.lines ?? []).filter((l) => l.takeoff_parameter_id || (l.section_id && planSections.has(l.section_id))).reduce((a, l) => a + (res?.lines[l.id]?.ext_price ?? 0), 0);
   const sheets = new Map(data.sheets.map((s) => [s.id, s]));
   return (
     <div className="p-3 lg:p-5" style={{ maxWidth: 1100 }}>
@@ -70,18 +83,21 @@ export function BudgetStep({ jobId, data, b, onSend }: { jobId: string; data: Pl
             <div key={p.id} style={{ borderTop: `1px solid ${T.hairSoft}` }}>
               {(ls.length ? ls : [null]).map((l, i) => {
                 const r = l ? res?.lines[l.id] : null;
+                const sec = l ? null : inSections(p);
                 return (
                   <div key={l?.id ?? "none"} className="md:grid px-3 py-2 gap-2" style={{ gridTemplateColumns: "1.7fr 1.3fr 110px 80px 100px 120px", background: T.slab, fontWeight: 600, alignItems: "center" }}>
                     <div style={{ minWidth: 0 }}>
                       <div style={{ fontSize: F.sm, ...clip }}><span style={{ display: "inline-block", width: 9, height: 9, borderRadius: 2, background: p.color, marginRight: 6 }} />{l ? `${l.name} ← ${p.name}` : p.name}</div>
-                      <div style={{ fontSize: 11, color: l ? T.ink3 : T.hivizText, fontWeight: 400 }}>{KIND_LABEL[p.kind]} · {shapes.length} section{shapes.length === 1 ? "" : "s"}{l ? "" : " · no budget line"}</div>
+                      <div style={{ fontSize: 11, color: l ? T.ink3 : T.hivizText, fontWeight: 400 }}>{KIND_LABEL[p.kind]} · {shapes.length} takeoff{shapes.length === 1 ? "" : "s"}{l ? "" : sec ? ` · in ${sec.names.join(", ")}` : " · no budget line"}</div>
                     </div>
-                    <div style={{ fontSize: F.xs, color: T.ink3, fontWeight: 400 }}>{r?.blocked.length ? <span style={{ color: T.hivizText }}>{r.blocked[0]}</span> : ""}</div>
+                    <div style={{ fontSize: F.xs, color: T.ink3, fontWeight: 400 }}>{r?.blocked.length ? <span style={{ color: T.hivizText }}>{r.blocked[0]}</span>
+                      : sec ? `${sec.lines} budget item${sec.lines === 1 ? "" : "s"}${sec.unpriced ? ` · ${sec.unpriced} not priced yet` : ""}` : ""}</div>
                     <div style={{ textAlign: "right", fontSize: F.sm, ...nums }}>{t?.qty !== null && t?.qty !== undefined ? (l && (takeoffUnit(l.unit) === "CY" || takeoffUnit(l.unit) === "SY" || (takeoffUnit(l.unit) === "LF" && t.unit === "SF")) ? `${(r?.qty ?? 0).toFixed(2)}` : fmtQty(t.qty, t.unit).replace(/ \w+$/, "")) : "—"}</div>
                     <div style={{ fontSize: F.sm }}>{l ? l.unit : t?.unit}</div>
-                    <div style={{ textAlign: "right", fontSize: F.sm, ...nums, color: l ? T.ink : T.hivizText }}>{l && l.unit_cost !== null ? `$${l.unit_cost}` : "no rate"}</div>
+                    <div style={{ textAlign: "right", fontSize: F.sm, ...nums, color: l || sec ? T.ink : T.hivizText }}>{l && l.unit_cost !== null ? `$${l.unit_cost}`
+                      : sec && sec.total !== null && t?.qty ? `$${(sec.total / t.qty).toFixed(2)}/${t.unit}` : sec ? "—" : "no rate"}</div>
                     <div style={{ textAlign: "right", fontFamily: strong, fontSize: 13, ...nums }}>
-                      {r?.ext_price !== null && r?.ext_price !== undefined ? money(r.ext_price) : l ? "—" : (
+                      {r?.ext_price !== null && r?.ext_price !== undefined ? money(r.ext_price) : l ? "—" : sec ? (sec.total !== null ? money(sec.total) : "—") : (
                         i === 0 && <button onClick={() => onSend(p)} style={{ fontFamily: disp, fontSize: 12, fontWeight: 600, letterSpacing: ".06em", textTransform: "uppercase", color: T.hivizText, cursor: "pointer" }}>Send to budget</button>
                       )}
                     </div>

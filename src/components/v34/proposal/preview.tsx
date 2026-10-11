@@ -15,6 +15,7 @@
  */
 import React, { useEffect, useState } from "react";
 import { T, disp, strong, nums } from "@/lib/v34/tokens";
+import { useWide } from "@/lib/v34/use-wide";
 import { ProposalDocument, type DocVM } from "./document";
 import { mapPicture } from "./area-visuals";
 import { sendBytes } from "@/components/v34/files-panel";
@@ -73,7 +74,9 @@ export function ProposalPreview({ jobId, vm, draft, version, blocked: blockedIn,
   onClose: () => void;
   links: PropLink[]; onLinks: () => void;
 }) {
-  const [view, setView] = useState<"phone" | "desktop">(() => (typeof window !== "undefined" && window.innerWidth < 900 ? "phone" : "desktop"));
+  // One document that fits the room it has (Coy, 2026-10-11: "I don't want to select between views") —
+  // the phone layout under 600px, the desktop one above, as the customer's own screen will draw it.
+  const [docRef, wideDoc] = useWide<HTMLDivElement>(600);
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -211,17 +214,13 @@ export function ProposalPreview({ jobId, vm, draft, version, blocked: blockedIn,
           <div style={{ fontFamily: strong, fontWeight: 600, fontSize: 14, color: T.ink }}>Preview · {vm.number}</div>
           <div style={{ fontSize: 11.5, color: T.ink3 }}>Exactly what {vm.customer.name ?? "the customer"} will see — hidden sections, groups and lines are gone.</div>
         </div>
-        <span className="inline-flex rounded overflow-hidden" style={{ border: `1px solid ${T.hairStrong}` }}>
-          <button type="button" onClick={() => setView("phone")} style={seg(view === "phone")} aria-pressed={view === "phone"}>Phone</button>
-          <button type="button" onClick={() => setView("desktop")} style={{ ...seg(view === "desktop"), borderLeft: `1px solid ${T.hair}` }} aria-pressed={view === "desktop"}>Desktop</button>
-        </span>
         <button type="button" onClick={onClose} aria-label="Close the preview" className="rounded" style={{ width: 32, height: 32, border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink2, fontSize: 18, cursor: "pointer" }}>×</button>
       </div>
 
       <div className="flex-1 flex flex-col lg:flex-row" style={{ minHeight: 0 }}>
-        <div className="flex-1 overflow-y-auto" style={{ padding: view === "phone" ? "16px 8px 40px" : "20px 16px 60px", minHeight: 0 }}>
-          <div style={{ maxWidth: view === "phone" ? 390 : 720, margin: "0 auto", border: view === "phone" ? `8px solid ${T.ink}` : "none", borderRadius: view === "phone" ? 22 : 0, overflow: "hidden", background: "#fff" }}>
-            <ProposalDocument vm={vm} edits={null} narrow={view === "phone"} />
+        <div ref={docRef} className="flex-1 overflow-y-auto" style={{ padding: wideDoc ? "20px 12px 60px" : "0 12px 40px", minHeight: 0 }}>
+          <div style={{ maxWidth: 720, margin: "0 auto", overflow: "hidden", background: "#fff" }}>
+            <ProposalDocument vm={vm} edits={null} narrow={!wideDoc} />
           </div>
         </div>
 

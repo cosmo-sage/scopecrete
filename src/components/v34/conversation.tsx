@@ -656,12 +656,12 @@ export interface Note { id: string; body: string; created_at: string }
 function NoteRow({ n }: { n: Note }) {
   if (archiveNote(n.body)) return <div className="my-1.5"><ArchiveNoteCard body={n.body} at={n.created_at} /></div>;
   return (
-    <div className="my-1.5 rounded px-2.5 py-2" style={{ background: "#FFF8E1", border: `1px solid #F0DDA0` }}>
-      <div style={{ ...eyebrow, color: "#8A6D1A" }}>
+    <div className="my-1.5 rounded px-2.5 py-2" style={{ background: T.hivizDim, border: `1px solid ${T.hair}` }}>
+      <div style={{ ...eyebrow, color: T.hivizText }}>
         Your note · {new Date(n.created_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
       </div>
-      <div style={{ fontSize: F.sm, color: DA.textPrimary, lineHeight: 1.4, whiteSpace: "pre-wrap", marginTop: 2 }}>{plainNote(pinParts(n.body) ? `${PIN_MARK}${pinParts(n.body)?.where ?? "On the plans"}: ${pinParts(n.body)?.words}` : n.body)}</div>
-      {readPin(n.body) && <a href={pinLink(readPin(n.body)!)} style={{ fontSize: F.xs, fontWeight: 600, color: "#1E5AA8" }}>Open on the sheet ›</a>}
+      <div style={{ fontSize: F.sm, color: T.ink, lineHeight: 1.4, whiteSpace: "pre-wrap", marginTop: 2 }}>{plainNote(pinParts(n.body) ? `${PIN_MARK}${pinParts(n.body)?.where ?? "On the plans"}: ${pinParts(n.body)?.words}` : n.body)}</div>
+      {readPin(n.body) && <a href={pinLink(readPin(n.body)!)} style={{ fontSize: F.xs, fontWeight: 600, color: T.chalk }}>Open on the sheet ›</a>}
     </div>
   );
 }

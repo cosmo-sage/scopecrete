@@ -42,7 +42,7 @@ async function brave(q: string, key: string, domain?: string | null): Promise<We
 }
 
 /** Runs each query (a query may be kept to one site); the results merged, one per page. An error names what Coy can do about it. */
-export async function searchWeb(queries: Array<string | { q: string; domain: string | null }>): Promise<{ results: WebResult[]; error: string | null; provider: string | null }> {
+export async function searchWeb(queries: Array<string | { q: string; domain: string | null }>, cap = 12): Promise<{ results: WebResult[]; error: string | null; provider: string | null }> {
   const tk = process.env.TAVILY_API_KEY, bk = process.env.BRAVE_SEARCH_API_KEY;
   if (!tk && !bk) {
     return { results: [], provider: null, error: "web search isn't switched on yet — it needs a search key in Vercel: TAVILY_API_KEY (free at tavily.com) or BRAVE_SEARCH_API_KEY." };
@@ -59,7 +59,7 @@ export async function searchWeb(queries: Array<string | { q: string; domain: str
     console.error("web search", why);
     return { results: [], provider: tk ? "tavily" : "brave", error: why };
   }
-  return { results: mergeResults(lists, 12), provider: tk ? "tavily" : "brave", error: null };
+  return { results: mergeResults(lists, cap), provider: tk ? "tavily" : "brave", error: null };
 }
 
 /** Reads pages with Tavily Extract (the same TAVILY_API_KEY). Only the links leave the app. */

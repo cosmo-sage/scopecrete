@@ -19,7 +19,7 @@ import { useWide } from "@/lib/v34/use-wide";
 import { JobHeaderRow } from "@/components/v34/job-tabs";
 import { setDustyUse } from "@/lib/v34/dusty-live";
 import { USE_ASK } from "@/lib/dusty/use-block";
-import { sowFromAnswer } from "@/lib/scope-of-work";
+import { sowFromAnswer, sowQuestion } from "@/lib/scope-of-work";
 import {
   drawsCheck, parseClauses, plainText, priceChoices, priceDraft, termsText, warrantyText,
   type Clause, type DocTemplate, type Draw, type DraftInput, type ProposalDisplay, type ProposalPrice,
@@ -233,7 +233,7 @@ export function Proposal({ jobId }: { jobId: string }) {
       : kind === "terms"
         ? `Tighten these terms for a ${vm.typeLabel.toLowerCase() || "residential"} job. Answer as a numbered list, each item "**Heading:** text".\n\n${vm.terms.clauses.map((c, i) => `${i + 1}. ${c.h}: ${c.b}`).join("\n")}`
         : kind === "area"
-          ? `Write the scope of work for the ${areaName} section as short bullets, one line each, for the customer — what we do, from its size, notes, items and the plans. No prices.${area!.scope ? `\n\nWhat it says now:\n${area!.scope}` : ""}`
+          ? sowQuestion(areaName, area!.scope)
           : `Write a two-sentence scope introduction for this proposal, for the customer, from the job's areas. No prices.${vm.scopeIntro ? `\n\nWhat it says now:\n${vm.scopeIntro}` : ""}`;
     setDustyUse({
       label: kind === "warranty" ? "in the warranty" : kind === "terms" ? "as the terms" : kind === "area" ? `as ${areaName}'s scope of work` : "as the scope intro",

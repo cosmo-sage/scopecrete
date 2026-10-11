@@ -42,7 +42,7 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     const want = new Set(body.sections.filter((x): x is string => typeof x === "string"));
     const view = await marketView(supabase, orgId, id);
     const asks = view.sections.filter((x) => want.has(x.id)).slice(0, 4)
-      .map((x, i) => ({ id: x.id, key: `s${i + 1}`, name: x.name, unit: sectionUnit(x).unit ?? "sf" as const }));
+      .map((x, i) => ({ id: x.id, key: `s${i + 1}`, name: x.name, unit: sectionUnit(x).unit ?? "sf" as const, sow: x.sow, notes: x.notes }));
     if (!asks.length) return applyCookies(NextResponse.json({ error: "No such sections on this job." }, { status: 400 }));
     const found = await searchSectionRates(supabase, orgId, id, asks);
     if (!missing094(probe)) {
@@ -79,7 +79,7 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     // after Look up), side by side so it fits the request's time: up to four, unlooked first.
     const view = await marketView(supabase, orgId, id);
     const asks = [...view.sections].sort((a, b) => Number(!!a.rates_at) - Number(!!b.rates_at)).slice(0, 4)
-      .map((x, i) => ({ id: x.id, key: `s${i + 1}`, name: x.name, unit: sectionUnit(x).unit ?? "sf" as const }));
+      .map((x, i) => ({ id: x.id, key: `s${i + 1}`, name: x.name, unit: sectionUnit(x).unit ?? "sf" as const, sow: x.sow, notes: x.notes }));
     const [found, secs] = await Promise.all([
       searchRates(supabase, orgId, id, []),
       asks.length ? searchSectionRates(supabase, orgId, id, asks) : Promise.resolve(null),

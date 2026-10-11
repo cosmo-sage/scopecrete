@@ -29,7 +29,7 @@
 
 import React, { useRef, useState } from "react";
 import { T, F, eyebrow, nums, clip } from "@/lib/v34/tokens";
-import { Sheet } from "@/components/v34/primitives";
+import { Drawer } from "@/components/v34/primitives";
 import { FileTile, FileViewer, sendBytes, type FileRow } from "@/components/v34/files-panel";
 import { AreaMap, mapPicture, sheetMarkup } from "@/components/v34/proposal/area-visuals";
 import { isAerialSheet, type PlansData } from "@/components/v34/plan-room/shared";
@@ -268,29 +268,42 @@ function PickPhotos({ jobId, sectionId, sectionName, plans, onClose, onChange }:
       }).catch((e) => { if (!off) setErr(e instanceof Error ? e.message : String(e)); });
     return () => { off = true; };
   }, [jobId]);
-  const toggle = async (f: FileRow) => {
-    const on = f.section_id !== sectionId;
-    setBusy(f.id); setErr(null);
+  // Ticks are a choice until "Add N photos" — nothing is filed on the tap itself.
+  const [pick, setPick] = useState<Set<string> | null>(null);
+  const [pickTexted, setPickTexted] = useState<Set<string>>(new Set());
+  const chosen = pick ?? new Set((files ?? []).filter((f) => f.section_id === sectionId).map((f) => f.id));
+  const flip = (id: string) => setPick(() => { const n = new Set(chosen); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const flipTexted = (id: string) => setPickTexted((s0) => { const n = new Set(s0); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const adding = (files ?? []).filter((f) => chosen.has(f.id) && f.section_id !== sectionId);
+  const removing = (files ?? []).filter((f) => !chosen.has(f.id) && f.section_id === sectionId);
+  const bringing = texted.filter((t) => pickTexted.has(t.id));
+  const nAdd = adding.length + bringing.length;
+  const apply = async () => {
+    setBusy("apply"); setErr(null);
     try {
-      const b = await call(`/api/files/${f.id}`, "PATCH", { section_id: on ? sectionId : null });
-      const next = (b.file as FileRow) ?? { ...f, section_id: on ? sectionId : null };
-      setFiles((l) => (l ?? []).map((x) => (x.id === f.id ? next : x)));
-      if (on) onChange(next); else onChange(null, f.id);
+      for (const f of [...adding, ...removing]) {
+        const on = chosen.has(f.id);
+        const b = await call(`/api/files/${f.id}`, "PATCH", { section_id: on ? sectionId : null });
+        const next = (b.file as FileRow) ?? { ...f, section_id: on ? sectionId : null };
+        setFiles((l) => (l ?? []).map((x) => (x.id === f.id ? next : x)));
+        if (on) onChange(next); else onChange(null, f.id);
+      }
+      if (bringing.length) {
+        const b = await call(`/api/jobs/${jobId}/texted-photos`, "POST", { media_ids: bringing.map((t) => t.id) });
+        for (const made of (b.files ?? []) as FileRow[]) {
+          const p = await call(`/api/files/${made.id}`, "PATCH", { section_id: sectionId });
+          const next = (p.file as FileRow) ?? { ...made, section_id: sectionId };
+          setFiles((l) => [next, ...(l ?? [])]);
+          onChange(next);
+        }
+        if (b.failed?.length) throw new Error(b.failed[0]?.reason ?? "Couldn't bring every texted photo in.");
+      }
+      setPick(null); setPickTexted(new Set());
+      onClose();
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(null); }
   };
-  const bring = async (t: Texted) => {
-    setBusy(t.id); setErr(null);
-    try {
-      const b = await call(`/api/jobs/${jobId}/texted-photos`, "POST", { media_ids: [t.id] });
-      const made = ((b.files ?? []) as FileRow[])[0];
-      if (!made) throw new Error(b.failed?.[0]?.reason ?? "Couldn't bring it in.");
-      const p = await call(`/api/files/${made.id}`, "PATCH", { section_id: sectionId });
-      const next = (p.file as FileRow) ?? { ...made, section_id: sectionId };
-      setTexted((l) => l.filter((x) => x.id !== t.id));
-      setFiles((l) => [next, ...(l ?? [])]);
-      onChange(next);
-    } catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(null); }
-  };
+  const applyLabel = busy === "apply" ? "Adding…" : nAdd ? `Add ${nAdd} photo${nAdd === 1 ? "" : "s"}${removing.length ? ` · take off ${removing.length}` : ""}`
+    : removing.length ? `Take off ${removing.length} photo${removing.length === 1 ? "" : "s"}` : "Tick photos to add";
   const tile = (key: string, url: string | null, on: boolean, label: string, act: () => void) => (
     <button key={key} onClick={act} disabled={!!busy} title={label} className="relative rounded overflow-hidden"
       style={{ aspectRatio: "1", border: `2px solid ${on ? T.hiviz : T.hair}`, background: T.slab, cursor: "pointer", opacity: busy === key ? 0.5 : 1 }}>
@@ -301,7 +314,7 @@ function PickPhotos({ jobId, sectionId, sectionName, plans, onClose, onChange }:
     </button>
   );
   return (
-    <Sheet open cover onClose={onClose} title={`Photos for ${sectionName || "this area"}`} sub="Tick the ones that show this area — they go under it here and on the proposal.">
+    <Drawer open drop onClose={onClose} title={`Photos for ${sectionName || "this area"}`} sub="Tick the ones that show this area, then add them. They go under it here and on the proposal.">
       <div className="px-4 py-3 flex flex-col gap-3">
         {err && <div style={{ color: T.red, fontSize: F.sm }}>{err}</div>}
         {marked.length > 0 && (
@@ -330,7 +343,7 @@ function PickPhotos({ jobId, sectionId, sectionName, plans, onClose, onChange }:
           <div style={{ ...eyebrow, marginBottom: 6 }}>On the job · from Takeoffs, emails and uploads</div>
           {files === null ? <div style={{ fontSize: F.sm, color: T.ink3 }}>…</div> : files.length ? (
             <div className="grid gap-1.5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(96px, 1fr))" }}>
-              {files.map((f) => tile(f.id, f.url, f.section_id === sectionId, f.name, () => void toggle(f)))}
+              {files.map((f) => tile(f.id, f.url, chosen.has(f.id), f.name, () => flip(f.id)))}
             </div>
           ) : <div style={{ fontSize: F.sm, color: T.ink3 }}>No photos on this job yet.</div>}
         </div>
@@ -338,12 +351,18 @@ function PickPhotos({ jobId, sectionId, sectionName, plans, onClose, onChange }:
           <div>
             <div style={{ ...eyebrow, marginBottom: 6 }}>Texted by the customer · not on the job yet</div>
             <div className="grid gap-1.5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(96px, 1fr))" }}>
-              {texted.map((t) => tile(t.id, t.url, false, `Texted by ${t.who ?? "them"}`, () => void bring(t)))}
+              {texted.map((t) => tile(t.id, t.url, pickTexted.has(t.id), `Texted by ${t.who ?? "them"}`, () => flipTexted(t.id)))}
             </div>
-            <div style={{ fontSize: F.xs, color: T.ink3, marginTop: 4, ...clip }}>Ticking one brings it onto the job and puts it on this area.</div>
+            <div style={{ fontSize: F.xs, color: T.ink3, marginTop: 4, ...clip }}>Adding one brings it onto the job and puts it on this area.</div>
           </div>
         )}
       </div>
-    </Sheet>
+      <div className="sticky bottom-0 px-4 py-2.5 flex items-center gap-2" style={{ background: T.card, borderTop: `1px solid ${T.hair}` }}>
+        <span style={{ flex: 1, minWidth: 0, fontSize: F.xs, color: T.ink3, ...clip }}>{chosen.size + pickTexted.size} ticked</span>
+        <button onClick={onClose} className="rounded px-3" style={{ height: 34, border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink, cursor: "pointer", fontSize: F.sm }}>Cancel</button>
+        <button onClick={() => void apply()} disabled={!!busy || (!nAdd && !removing.length)} className="rounded px-3"
+          style={{ height: 34, border: "none", background: nAdd || removing.length ? T.hiviz : T.slab, color: nAdd || removing.length ? T.onHiviz : T.ink3, cursor: "pointer", fontSize: F.sm, fontWeight: 700 }}>{applyLabel}</button>
+      </div>
+    </Drawer>
   );
 }

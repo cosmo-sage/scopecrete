@@ -37,7 +37,7 @@ import { isDetailFile, type SectionShape } from "@/lib/plan-details";
 import { DraftStrip } from "@/components/v34/draft-strip";
 import { JobHeaderRow } from "@/components/v34/job-tabs";
 import { JobBudget, type BudgetSummary } from "@/components/v34/job-budget";
-import { BudgetSubTabs, DustyEmblemButton, useBudgetTab } from "@/components/v34/budget-tabs";
+import { BudgetSubTabs, useBudgetTab } from "@/components/v34/budget-tabs";
 import { MarketRates } from "@/components/v34/market-rates";
 import { ActualCosts } from "@/components/v34/actual-costs";
 import { SheetViewer, type SheetGroup } from "@/components/v34/sheet-viewer";
@@ -330,11 +330,9 @@ export default function ScopeBuilder() {
             </div>
           )}
           {saveErr.job && <div style={{ fontSize: F.xs, color: T.red }}>{saveErr.job}</div>}
-          {/* Desktop: the Budget's three tabs open the tools row, the emblem (Dusty) at its far right. */}
+          {/* Desktop: the Budget's three tabs open the tools row (Dusty's emblem is on the job's tabs row). */}
           {can(access, "budget") && <div className="hidden lg:flex items-center gap-2 mt-2">
             <BudgetSubTabs tab={tab} onTab={setTab} />
-            <span className="flex-1" />
-            <DustyEmblemButton />
           </div>}
         </div>
 

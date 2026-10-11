@@ -320,7 +320,7 @@ export const THEMES: Record<ThemeKey, Theme> = {
       "hand": "'Kalam', cursive"
     }
   },
-  /* Floodlight — a second dark theme (Claude Design, 2026-10-10): blue-slate, near-white text, amber work-light. */
+  // Floodlight (Claude Design, 2026-10-10): a second dark theme — blue-slate, near-white text, amber work-light.
   "floodlight": {
     "key": "floodlight",
     "label": "Floodlight",

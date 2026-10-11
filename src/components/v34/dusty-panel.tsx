@@ -106,6 +106,20 @@ export function DustyPanel({ open, onClose, onBusy, onStream, onState }: {
   }, [open, refKey]);
   const [copied, setCopied] = useState<number | null>(null);
   const useTarget = useDustyUse();
+  // What a "Use this" tap did, shown in its place (Coy, 2026-10-11: on a phone the chat covers the page,
+  // so the scope of work was saved with nothing on screen saying so).
+  const [used, setUsed] = useState<{ i: number; ok: boolean; phone: boolean } | null>(null);
+  const applyUse = (i: number, text: string) => {
+    if (!useTarget) return;
+    let ok = true;
+    try { ok = useTarget.apply(text) !== false; } catch { ok = false; }
+    setUsed({ i, ok, phone: window.matchMedia("(max-width: 1023px)").matches });
+  };
+  const usedNote = (i: number) => used?.i === i ? (
+    <div role="status" style={{ fontSize: F.xs, marginTop: 6, color: used.ok ? T.green : T.red }}>
+      {used.ok ? `✓ Saved ${useTarget?.label ?? "on the page"}.${used.phone ? " Close the chat to see it." : ""}` : "Nothing in it to use. Ask Dusty for it as a list."}
+    </div>
+  ) : null;
   const [loadingConv, setLoadingConv] = useState(false);
   const [listTick, setListTick] = useState(0);
   const [openedFor, setOpenedFor] = useState<string | null>(null);
@@ -603,11 +617,12 @@ export function DustyPanel({ open, onClose, onBusy, onStream, onState }: {
                           <div style={{ ...eyebrow, color: T.hivizText, marginBottom: 4 }}>For the page</div>
                           <Markdown text={u.box} size={14} />
                           {useTarget && !streaming && (
-                            <button onClick={() => useTarget.apply(u.box!)} className="mt-2"
+                            <button type="button" onClick={() => applyUse(i, u.box!)} className="mt-2"
                               style={{ ...eyebrow, color: T.onHiviz, background: T.hiviz, padding: "5px 10px", borderRadius: 6, cursor: "pointer" }}>
-                              Use this {useTarget.label}
+                              {used?.i === i && used.ok ? "✓ Used" : `Use this ${useTarget.label}`}
                             </button>
                           )}
+                          {usedNote(i)}
                         </div>
                         {u.after && <Markdown text={u.after} size={14} />}
                       </>)}
@@ -624,10 +639,11 @@ export function DustyPanel({ open, onClose, onBusy, onStream, onState }: {
                   </button>
                 )}
                 {useTarget && it.content && !(busy && i === items.length - 1) && splitUse(it.content).box === null && (
-                  <button onClick={() => useTarget.apply(it.content)} className="mt-1.5 ml-4" style={{ ...eyebrow, color: T.hiviz, cursor: "pointer" }}>
-                    Use this {useTarget.label}
+                  <button type="button" onClick={() => applyUse(i, it.content)} className="mt-1.5 ml-4" style={{ ...eyebrow, color: T.hiviz, cursor: "pointer" }}>
+                    {used?.i === i && used.ok ? "✓ Used" : `Use this ${useTarget.label}`}
                   </button>
                 )}
+                {useTarget && it.content && splitUse(it.content).box === null && usedNote(i)}
                 </div>
               </div>
             ))}

@@ -4958,7 +4958,7 @@ expected start date per quoted job before it means anything. Add the field.
   internal. Dusty reads it as the section's "scope of work". The proposal's scope introduction is unchanged. **Dusty writes it (same evening, Coy: "the AI emblem so that Dusty can write the scope of work"):** the
   emblem beside Scope of work on the budget's section card opens Dusty and asks him for that section's
   bullets (its size, notes, items and the plans; no prices); **Use this** under his answer puts its list
-  items in as the bullets (`sowFromAnswer()`, tested), Coy's tap.
+  items in as the bullets (`sowFromAnswer()`, tested), Coy's tap. **The tap says what it did (2026-10-11, Coy: "it doesn't do anything on mobile")** — it had saved (the Walker High dugout slabs' five bullets were on the section), but the phone's chat covers the page, so nothing showed. Now the button reads ✓ Used and a line under it says "✓ Saved as …'s scope of work" (on a phone "Close the chat to see it"), or, when the answer held no bullets (or terms) to use, says so in red; a page's `apply` returns false for that (`DustyUseTarget`, `dusty-live.ts`).
 - **The customer picks add-ons (Coy, 2026-10-10: "a check box … so the customer can select it to add it
   to the total").** On the customer's link, the Preview and a final, each optional add-on (or a group that
   is all add-ons) has a tick box; ticked ones show as "Add-ons you picked" and a **Total with your

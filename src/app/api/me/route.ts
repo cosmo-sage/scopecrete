@@ -7,7 +7,8 @@ import { getApiSession } from "@/lib/api-auth";
  * 2026-10-04: a proposal's Prepared by carries "my phone number"). Saved on
  * your own auth account's metadata (full_name, phone), which only you can
  * change; teammates read the name through sc_org_people(). A blank phone
- * clears it.
+ * clears it. A new name is also this org's name for you (sc_set_member_name,
+ * 102), which teammates see first.
  */
 
 export const dynamic = "force-dynamic";
@@ -15,7 +16,7 @@ export const dynamic = "force-dynamic";
 export async function PATCH(req: NextRequest) {
   const result = await getApiSession(req);
   if (!result.ok) return result.response;
-  const { supabase, applyCookies } = result.session;
+  const { supabase, orgId, userId, applyCookies } = result.session;
   const body = await req.json().catch(() => ({}));
   const bad = (error: string) => applyCookies(NextResponse.json({ error }, { status: 400 }));
   const data: Record<string, string | null> = {};
@@ -34,6 +35,7 @@ export async function PATCH(req: NextRequest) {
   if (!Object.keys(data).length) return bad("Nothing to save.");
   const { data: saved, error } = await supabase.auth.updateUser({ data });
   if (error) return bad(error.message);
+  if (data.full_name) await supabase.rpc("sc_set_member_name", { p_org: orgId, p_user: userId, p_name: data.full_name }); // before 102: no function, the account name still shows
   const meta = (saved.user?.user_metadata ?? {}) as { full_name?: string; phone?: string | null };
   return applyCookies(NextResponse.json({ name: meta.full_name ?? null, phone: meta.phone ?? null }));
 }

@@ -6,7 +6,8 @@
  * Signed out: sign in with Google, or have a sign-in link emailed — either way
  * it must be the email the invite was made for. Signed in: who invited you, to
  * which org, as what — and Join. Only then is the membership written
- * (sc_accept_invite). The token is kept in this browser while you sign in, so
+ * (sc_accept_invite), with the name they type (saved on their account and as
+ * their name in the org — Coy, 2026-10-11). The token is kept in this browser while you sign in, so
  * the dashboard brings you back here if the sign-in lands there instead.
  */
 
@@ -30,6 +31,7 @@ export default function InvitePage() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [joined, setJoined] = useState(false);
+  const [name, setName] = useState("");
   const back = () => `${window.location.origin}/auth/callback?next=${encodeURIComponent(`/invite/${token}`)}`;
 
   useEffect(() => {
@@ -44,7 +46,7 @@ export default function InvitePage() {
       if (r.status === 401) { keep(true); setSignedOut(true); return; }
       keep(r.ok && !!b?.invite?.email_matches);
       if (!r.ok) { setErr(b?.error ?? `HTTP ${r.status}`); return; }
-      setPeek(b.invite as Peek); setYou(b.you ?? null);
+      setPeek(b.invite as Peek); setYou(b.you ?? null); setName(b.your_name ?? "");
     }).catch(() => { if (!off) setErr("Couldn't reach ScopeCrete."); });
     return () => { off = true; };
   }, [token]);
@@ -62,7 +64,7 @@ export default function InvitePage() {
   }
   async function join() {
     setBusy(true); setErr(null);
-    const r = await fetch(`/api/invites/${token}`, { method: "POST" });
+    const r = await fetch(`/api/invites/${token}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: name.trim() }) });
     const b = await r.json().catch(() => ({}));
     setBusy(false);
     if (!r.ok) { setErr(b?.error ?? `HTTP ${r.status}`); return; }
@@ -150,7 +152,13 @@ export default function InvitePage() {
               <p style={lede}>Your invite is for <strong style={{ color: "#12161A" }}>{peek.email}</strong>, as {roleWord(peek.role)}.</p>
             </div>
             {peek.email_matches ? (
-              <button className="sc-cta" onClick={() => void join()} disabled={busy} style={cta(busy)}>{busy ? <><Spinner /> Joining</> : `Join ${peek.org_name}`}</button>
+              <form onSubmit={(e) => { e.preventDefault(); void join(); }} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  <span style={label}>Your name</span>
+                  <input required maxLength={80} value={name} onChange={(e) => setName(e.target.value)} placeholder="First and last name" autoComplete="name" style={input} />
+                </label>
+                <button type="submit" className="sc-cta" disabled={busy || !name.trim()} style={{ ...cta(busy), opacity: !name.trim() ? 0.45 : 1 }}>{busy ? <><Spinner /> Joining</> : `Join ${peek.org_name}`}</button>
+              </form>
             ) : (
               <>
                 <div style={{ background: "#FFF1E7", border: "1px solid #F2C9AE", padding: "10px 12px", fontSize: 14, lineHeight: 1.45 }}>

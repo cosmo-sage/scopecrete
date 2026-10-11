@@ -7,6 +7,9 @@ import { readAccess } from "@/lib/access";
  * access (sc_set_member_access, 081: owners only; an onsite estimator must be
  * a vendor contact; never your own role, never the last owner; audited).
  *
+ * PATCH { name } → name them in this org (sc_set_member_name, 102: an owner
+ * names anyone, anyone names themselves; blank clears it).
+ *
  * DELETE → take someone out of the org (sc_remove_member: owners only, never
  * yourself, never the last owner; audited). Their account stays; they just
  * stop seeing this org.
@@ -19,6 +22,15 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ userId: s
   if (!result.ok) return result.response;
   const { supabase, orgId, applyCookies } = result.session;
   const b = await req.json().catch(() => ({}));
+  if (b && "name" in b && !("role" in b)) {
+    const { data, error } = await supabase.rpc("sc_set_member_name", { p_org: orgId, p_user: who, p_name: typeof b.name === "string" ? b.name : "" });
+    if (error) {
+      const missing = /could not find the function|does not exist/i.test(error.message);
+      return applyCookies(NextResponse.json({ error: missing ? "Naming people isn't switched on yet — migration 102 is waiting to be applied."
+        : /not allowed/.test(error.message) ? "Only an owner can name people." : error.message }, { status: missing ? 503 : 400 }));
+    }
+    return applyCookies(NextResponse.json({ name: data ?? null }));
+  }
   const a = readAccess(b);
   if (!a.role) return applyCookies(NextResponse.json({ error: "Which role?" }, { status: 400 }));
   const { error } = await supabase.rpc("sc_set_member_access", {

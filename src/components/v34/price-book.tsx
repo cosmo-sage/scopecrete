@@ -337,20 +337,6 @@ export function PriceBook({ pick }: { pick?: PricePick } = {}) {
     let left = rowBudget;
     return sections.map((s) => { if (open[s.key] === false) return 0; const n = Math.min(left, s.cards.length); left -= n; return n; });
   })();
-  const btn = (primary: boolean): React.CSSProperties => ({ height: 32, padding: "0 10px", borderRadius: 4, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase",
-    letterSpacing: ".06em", background: primary ? T.ink : T.card, color: primary ? T.card : T.ink, border: primary ? "none" : `1px solid ${T.hair}`, cursor: "pointer", whiteSpace: "nowrap" });
-
-  // On the page itself the header carries only the search and the emblem (Coy,
-  // 2026-10-11: "Remove the +group and +card buttons from the header", Import
-  // and Defaults to Settings → Cost book); groups and cards are made from
-  // Dusty's quick selects or a group's own + Card. Picking for a budget keeps
-  // + Group and + Card on its title row.
-  const pbActions = (
-    <>
-        <button onClick={() => setAddingGroup(true)} style={btn(false)}>+ Group</button>
-        <button onClick={() => newCard()} style={btn(false)}>+ Card</button>
-    </>
-  );
 
   return (
     <>
@@ -361,16 +347,12 @@ export function PriceBook({ pick }: { pick?: PricePick } = {}) {
     </PageHeader>}
     <div ref={measure} className={pick ? "px-3 py-3 lg:px-5" : "px-3 pb-3 lg:px-5"}>
       {/* ---- title + actions, while picking for a budget ---- */}
-      {pick && <div className="flex items-end gap-2 flex-wrap">
-          <div style={{ flex: 1, minWidth: 200 }}>
-            <div style={{ ...eyebrow }}>Price book → budget</div>
-            {/* No ⓘ how-to (Coy, 2026-10-11: "We already know what it is"). */}
-            <div style={{ fontFamily: disp, fontSize: 20, fontWeight: 700, lineHeight: 1.1 }}>{pick.title}</div>
-          </div>
+      {/* Picking for a budget: "Add Cost Items →" and the area on one small line; no + Group / + Card,
+          those are made with Dusty (Coy, 2026-10-11). */}
+      {pick && <div className="flex items-center gap-2 flex-wrap">
+          <span style={{ fontFamily: disp, fontSize: F.sm, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".04em" }}>{pick.title}</span>
+          {pick.top}
       </div>}
-      {/* + Group and + Card on a row of their own under the title (Coy, 2026-10-11). */}
-      {pick && <div className="flex items-center gap-2 mt-2">{pbActions}</div>}
-      {pick?.top && <div className="mt-2">{pick.top}</div>}
       {undoRetire && (
         <div role="status" aria-live="polite" className="fixed left-3 right-3 rounded px-3 py-2 flex items-center gap-3"
           style={{ bottom: "calc(var(--sc-foot, 58px) + 12px)", zIndex: 60, background: T.ink, color: T.card, fontSize: F.sm, boxShadow: "0 6px 18px rgba(0,0,0,.25)" }}>

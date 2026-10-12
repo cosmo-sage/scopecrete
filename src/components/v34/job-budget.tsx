@@ -560,12 +560,13 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
             {shownTiers.map((t) => (
               <div key={t.option_id ?? "one"} className="flex items-baseline gap-3 flex-wrap" style={{ ...nums }}>
                 <span style={{ fontFamily: disp, fontWeight: 700, textTransform: "uppercase", minWidth: 70 }}>{optLabel(t.option_id) ?? "Total"}</span>
-                <span style={{ fontSize: F.xs, color: T.ink2 }}>cost {money0(t.cost)}</span>
-                <span style={{ fontSize: F.xs, color: T.ink2 }}>price {money0(t.price)}</span>
-                {t.tax > 0 && <span style={{ fontSize: F.xs, color: T.ink2 }}>tax {money0(t.tax)}</span>}
+                {/* Cost, O.H. and profit at the total's size, each its colour; no "price" — the total is beside it (Coy, 2026-10-12). */}
+                <span style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 700, color: T.red }}>cost {money0(t.cost)}</span>
+                {t.tax > 0 && <span style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 700, color: T.ink }}>tax {money0(t.tax)}</span>}
                 {t.discount > 0 && <span style={{ fontSize: F.xs, color: T.ink2 }}>− {money0(t.discount)}</span>}
                 <span style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 700, color: t.priced ? T.ink : T.ink3 }}>{t.priced ? money0(t.total) : "not priced"}</span>
-                {t.priced && <span style={{ fontSize: F.xs, color: T.ink3 }}>O.H. {money0(t.overhead)}{t.risk + t.carry > 0 ? ` · risk ${money0(t.risk + t.carry)}` : ""} · profit {money0(t.profit)} · margin {pct(t.margin)}</span>}
+                {t.priced && <span style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 700, color: "#B8900A" }}>O.H. {money0(t.overhead)}{t.risk + t.carry > 0 ? ` · risk ${money0(t.risk + t.carry)}` : ""}</span>}
+                {t.priced && <span style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 700, color: T.green }}>profit {money0(t.profit)} · margin {pct(t.margin)}</span>}
                 {t.priced && minimum.ok && t.total < minimum.minimum && <span style={{ fontSize: F.xs, color: T.red }}>under the job minimum {money0(minimum.minimum)}</span>}
                 {!t.priced && t.blocked.length > 0 && <span style={{ fontSize: F.xs, color: T.hiviz, whiteSpace: "normal", overflowWrap: "anywhere", minWidth: 0 }}>needs {t.blocked.slice(0, 4).join(", ")}{t.blocked.length > 4 ? ` +${t.blocked.length - 4}` : ""}</span>}
               </div>

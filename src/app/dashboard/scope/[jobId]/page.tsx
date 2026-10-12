@@ -339,10 +339,7 @@ export default function ScopeBuilder() {
             numbers you read out loud ride along under the header. */}
         <div className="lg:hidden px-3 py-1.5 flex items-baseline gap-3"
           style={{ background: T.dark, color: "#fff", ...nums }}>
-          <span style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 700 }}>{t.sqft > 0 ? n1(t.sqft) : "—"}<span style={{ fontSize: F.xs, color: "#8E99A5" }}> sf</span></span>
-          <span style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 700, color: T.hiviz }}>
-            {(t.cy_order ?? t.cy_neat) > 0 ? n2(t.cy_order ?? t.cy_neat) : "—"}<span style={{ fontSize: F.xs, color: "#8E99A5" }}> cu yd{t.cy_order === null ? " neat" : ""}</span>
-          </span>
+          <span style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 700 }}>{railSize(t).n > 0 ? n1(railSize(t).n) : "—"}<span style={{ fontSize: F.xs, color: "#8E99A5" }}> {railSize(t).unit === "LF" ? "lf" : "sf"}</span></span>
           <span className="flex-1" />
           {budget?.has_lines ? (
             <span style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 700, ...nums }}>
@@ -987,6 +984,14 @@ function SectionNotes({ value, onLocal, onSave }: { value: string | null; onLoca
 
 /* ----------------------------------------------------------- takeoff rail */
 
+/** The job's size in its own unit: LF when every sized section is measured in linear feet (Coy, 2026-10-12: "showing Sq here even though the section is Lf"). */
+function railSize(t: ReturnType<typeof takeoffOf>): { n: number; unit: "SF" | "LF"; extra: string } {
+  const lf = t.sections.reduce((a, q) => a + (q.count !== null && (q.count_unit ?? "").toUpperCase() === "LF" ? q.count : 0), 0);
+  const area = t.sections.some((q) => q.sqft !== null && !(q.count !== null && (q.count_unit ?? "").toUpperCase() === "LF"));
+  if (lf > 0 && !area) return { n: lf, unit: "LF", extra: "" };
+  return { n: t.sqft, unit: "SF", extra: lf > 0 ? ` + ${n1(lf)} lin ft` : "" };
+}
+
 function TakeoffRail({ t, job, onCrewDays, budget, inPanel }: {
   t: ReturnType<typeof takeoffOf>;
   job: Job; onCrewDays: (v: number | null) => void; jobType: string | null; workType: string | null;
@@ -999,7 +1004,7 @@ function TakeoffRail({ t, job, onCrewDays, budget, inPanel }: {
   const dim = "#8E99A5";
   const line = { borderTop: `1px solid ${T.darkHair}` };
 
-  const orderCy = t.cy_order ?? t.cy_neat;
+  const size = railSize(t);
   return (
     <aside style={{ background: T.dark, color: "#fff", ...(inPanel ? { maxHeight: folded ? undefined : "45vh", overflowY: "auto" as const } : {}) }}
       className={inPanel ? "" : "lg:sticky lg:top-[var(--sc-head)] lg:self-start lg:max-h-[calc(100dvh-var(--sc-head))] lg:overflow-y-auto"}>
@@ -1007,7 +1012,7 @@ function TakeoffRail({ t, job, onCrewDays, budget, inPanel }: {
         <button onClick={() => setFolded((f) => !f)} aria-expanded={!folded} className="w-full flex items-baseline gap-2 px-4 py-2 text-left" style={{ color: "#fff", cursor: "pointer" }}>
           <span style={{ ...eyebrow, color: dim }}>This job</span>
           <span style={{ fontFamily: disp, fontSize: F.md, fontWeight: 700, ...nums }}>
-            {t.sqft > 0 ? `${n1(t.sqft)} sf` : "—"}
+            {size.n > 0 ? `${n1(size.n)} ${size.unit === "LF" ? "lf" : "sf"}` : "—"}
             {budget?.has_lines ? ` · ${budget.tiers.map((b) => (b.priced ? money0(b.total) : "not priced")).join(" · ")}` : ""}
           </span>
           <span className="flex-1" />
@@ -1018,28 +1023,11 @@ function TakeoffRail({ t, job, onCrewDays, budget, inPanel }: {
 
       <div className="px-4 py-3" style={inPanel ? line : undefined}>
         <div style={{ ...eyebrow, color: dim }}>Total area</div>
-        <div style={{ fontFamily: disp, fontSize: 40, fontWeight: 700, lineHeight: 1, ...nums }}>{t.sqft > 0 ? n1(t.sqft) : "—"}</div>
-        <div style={{ ...eyebrow, color: dim }}>sq ft · {t.sections.length} section{t.sections.length === 1 ? "" : "s"}{t.incomplete ? " · incomplete" : ""}</div>
+        <div style={{ fontFamily: disp, fontSize: 40, fontWeight: 700, lineHeight: 1, ...nums }}>{size.n > 0 ? n1(size.n) : "—"}</div>
+        <div style={{ ...eyebrow, color: dim }}>{size.unit === "LF" ? "lin ft" : "sq ft"}{size.extra} · {t.sections.length} section{t.sections.length === 1 ? "" : "s"}{t.incomplete ? " · incomplete" : ""}</div>
       </div>
 
-      <div className="px-4 py-3" style={line}>
-        <div style={{ ...eyebrow, color: dim }}>Concrete to order</div>
-        <div style={{ fontFamily: disp, fontSize: 40, fontWeight: 700, lineHeight: 1, ...nums, color: T.hiviz }}>
-          {orderCy > 0 ? n2(orderCy) : "—"}
-        </div>
-        <div style={{ ...eyebrow, color: dim }}>
-          cubic yards, neat · waste is added by the concrete card
-        </div>
-        {t.sections.map((q, i) => (
-          <div key={q.id ?? i} className="flex justify-between py-1.5" style={{ ...line, fontSize: F.sm, marginTop: i === 0 ? 8 : 0 }}>
-            <span style={{ color: "#C3CBD4", ...clip }}>{q.name || `Section ${i + 1}`}{q.sqft !== null ? ` · ${n1(q.sqft)} sf` : ""}</span>
-            <span style={{ ...nums, fontWeight: 600 }}>
-              {q.count !== null ? `${q.count} ${q.count_unit}${q.cy_neat !== null ? ` · ${n2(q.cy_neat)} cu yd` : ""}` : !q.concrete ? (q.work_type === "demo" ? "demo" : "no pour") : q.cy_neat === null ? `needs ${q.missing.join(", ")}` : `${n2(q.cy_neat)} cu yd`}
-            </span>
-          </div>
-        ))}
-      </div>
-
+      {/* No "Concrete to order" box (Coy, 2026-10-12: on a removal job it read the yards to tear out as concrete to buy). */}
       {budget?.has_lines ? (
         <BudgetRail budget={budget} sqft={t.sqft} crew={crew} setCrew={setCrew} onCrewDays={onCrewDays} />
       ) : (

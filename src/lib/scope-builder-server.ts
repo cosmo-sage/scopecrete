@@ -14,7 +14,7 @@ export async function scopeFacts(supabase: SupabaseClient, orgId: string, ids: s
     supabase.from("takeoff_measurements").select("takeoff_parameters!inner(job_id)").eq("org_id", orgId).in("takeoff_parameters.job_id", ids).limit(10000),
     supabase.from("job_sections").select("job_id, length_ft, width_ft, sqft_override, count_qty").eq("org_id", orgId).in("job_id", ids).limit(5000),
     supabase.from("estimates").select("id, job_id, estimate_line_items(count)").eq("org_id", orgId).eq("status", "draft").in("job_id", ids),
-    supabase.from("job_proposals").select("job_id, status").eq("org_id", orgId).eq("status", "final").in("job_id", ids),
+    supabase.from("job_proposals").select("job_id, status").eq("org_id", orgId).eq("status", "final").is("deleted_at", null).in("job_id", ids),
     supabase.from("documents").select("job_id, sent_at, view_count, revoked_at").eq("org_id", orgId).not("proposal_id", "is", null).in("job_id", ids),
   ]);
   const bump = (m: Map<string, number>, k: string | null | undefined, n = 1) => { if (k) m.set(k, (m.get(k) ?? 0) + n); };

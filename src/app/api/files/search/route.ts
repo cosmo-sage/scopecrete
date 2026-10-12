@@ -202,7 +202,7 @@ async function facets(sb: ApiSession["supabase"], orgId: string, custOr: string 
 /** The org's final proposals, newest first — number, job, total — filtered like the files (job, customer, since, words in the job's title). */
 async function finalProposals(sb: ApiSession["supabase"], orgId: string, p: URLSearchParams) {
   let q = sb.from("job_proposals").select("id, job_id, version, finalized_at, snapshot->>number, snapshot->price->>total, snapshot->job->>title, snapshot->customer->>name")
-    .eq("org_id", orgId).eq("status", "final").order("finalized_at", { ascending: false }).limit(100);
+    .eq("org_id", orgId).eq("status", "final").is("deleted_at", null).order("finalized_at", { ascending: false }).limit(100);
   const job = p.get("job");
   if (job && UUID.test(job)) q = q.eq("job_id", job);
   const cust = p.get("customer");

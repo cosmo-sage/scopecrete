@@ -337,7 +337,7 @@ export async function GET(
   let contract: Contract | null = null;
   if (WON_STATUSES.includes(data.status ?? "")) {
     const [{ data: props }, { data: cos }, { data: signedDocs }, numbers] = await Promise.all([
-      supabase.from("job_proposals").select("id, version, finalized_at, snapshot").eq("org_id", orgId).eq("job_id", id).eq("status", "final"),
+      supabase.from("job_proposals").select("id, version, finalized_at, snapshot").eq("org_id", orgId).eq("job_id", id).eq("status", "final").is("deleted_at", null),
       supabase.from("change_orders").select("price, signed_at").eq("org_id", orgId).eq("job_id", id),
       // A version the customer signed on its link (097) is the contract outright.
       supabase.from("documents").select("proposal_id, decided_name, decided_at, signed_total").eq("org_id", orgId).eq("job_id", id)

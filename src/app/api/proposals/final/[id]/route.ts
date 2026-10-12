@@ -22,7 +22,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   const nope = () => applyCookies(NextResponse.json({ error: "No such proposal." }, { status: 404 }));
   if (!UUID.test(id)) return nope();
   const { data: p } = await supabase.from("job_proposals").select("id, job_id, version, project_type, finalized_at, snapshot")
-    .eq("org_id", orgId).eq("id", id).eq("status", "final").maybeSingle();
+    .eq("org_id", orgId).eq("id", id).eq("status", "final").is("deleted_at", null).maybeSingle();
   if (!p || !p.snapshot) return nope();
   const snap = p.snapshot as Record<string, unknown>;
   const coverId = typeof snap.cover_file_id === "string" && UUID.test(snap.cover_file_id) ? snap.cover_file_id : null;

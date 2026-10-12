@@ -593,8 +593,17 @@ html[data-theme="floodlight"] .sc-proposal { --sc-doc-ground: #10141A; }
   .sc-job-tabs { display: inline-flex; width: auto; border: 1px solid var(--sc-hair-strong); border-radius: 4px; overflow: hidden; flex-shrink: 0; }
   .sc-job-tab { flex: none; height: 28px; margin: 0; padding: 0 10px; border-bottom: none; font-size: 11.5px; letter-spacing: .06em;
     text-transform: uppercase; color: var(--sc-ink2); background: var(--sc-card); }
-  .sc-job-tab + .sc-job-tab { border-left: 1px solid var(--sc-hair); }
   .sc-job-tab[aria-current="page"] { background: var(--sc-ink); color: var(--sc-card); }
+  /* The dividers are arrows pointing right, so the row reads as the flow Summary → Proposal
+     (Coy, 2026-10-12). Each is the previous tab's tip: a square turned 45°, its two right
+     edges drawn, filled with the previous tab's colour. */
+  .sc-job-tab { position: relative; }
+  .sc-job-tab { padding-right: 16px; }
+  .sc-job-tab + .sc-job-tab { padding-left: 18px; }
+  .sc-job-tab + .sc-job-tab::before { content: ""; position: absolute; left: -10px; top: 50%; width: 20px; height: 20px;
+    transform: translateY(-50%) rotate(45deg); background: var(--sc-card);
+    border-top: 1px solid var(--sc-hair-strong); border-right: 1px solid var(--sc-hair-strong); pointer-events: none; }
+  .sc-job-tab[aria-current="page"] + .sc-job-tab::before { background: var(--sc-ink); border-color: var(--sc-ink); }
 }
 
 /* A thread's contact name: 19px on a desktop, 15px on a phone (Coy, 2026-10-09). */

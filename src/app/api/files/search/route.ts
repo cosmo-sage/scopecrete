@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession, type ApiSession } from "@/lib/api-auth";
+import { viewAsFor } from "@/lib/access-server";
+import { VIEW_AS_COOKIE } from "@/lib/view-as";
 import { CATEGORIES } from "@/lib/files";
 import { FILE_COLUMNS, signFiles } from "@/lib/files-server";
 import { dateWindow, namePattern, readFilter } from "@/lib/files-filter";
@@ -103,6 +105,12 @@ export async function GET(req: NextRequest) {
     rows = [...seen.values()].sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 300);
   }
 
+  // Viewing as an estimator (src/lib/view-as.ts): only files on the jobs they were given — what RLS shows them.
+  const viewAs = req.cookies.get(VIEW_AS_COOKIE) ? await viewAsFor(req, result.session) : null;
+  if (viewAs?.access.limited) {
+    const ok = new Set(viewAs.access.job_ids);
+    rows = rows.filter((r) => typeof r.job_id === "string" && (viewAs.access.all_jobs || ok.has(r.job_id)));
+  }
   const jobIds = [...new Set(rows.map((r) => r.job_id).filter(Boolean) as string[])];
   const personIds = [...new Set(rows.map((r) => r.contact_id).filter(Boolean) as string[])];
   const [jobs, people, files, fac] = await Promise.all([

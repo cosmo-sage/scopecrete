@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse, after } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
+import { viewAsFor } from "@/lib/access-server";
+import { jobsFor, VIEW_AS_COOKIE } from "@/lib/view-as";
 import { ALL_STATUSES, LEAD_SOURCES } from "@/lib/jobs/stages";
 import { autoDraftOn, buildDraft, queueDraft } from "@/lib/draft/build-server";
 
@@ -80,7 +82,9 @@ export async function GET(req: NextRequest) {
     return applyCookies(NextResponse.json({ error: `jobs: ${error.message}` }, { status: 500 }));
   }
 
-  const jobs = (data ?? []) as JobRow[];
+  // Viewing as an estimator given some jobs: only theirs (RLS does this for them; the owner sees all).
+  const viewAs = req.cookies.get(VIEW_AS_COOKIE) ? await viewAsFor(req, result.session) : null;
+  const jobs = jobsFor((data ?? []) as JobRow[], viewAs?.access ?? null);
 
   // Contacts are joined in a second query rather than via a SQL join, because
   // `contacts` and `jobs` carry separate RLS policies and a PostgREST embed

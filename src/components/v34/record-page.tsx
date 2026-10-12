@@ -86,7 +86,8 @@ export function RecordHeader({ back, title, wide, actions, menu, meta, children,
   const box = useRef<HTMLDivElement>(null);
   const [drawerTop, setDrawerTop] = useState<number | null>(null);
   const openTabs = () => {
-    const head = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--sc-head")) || 0;
+    // --sc-head is a calc() (the View-as banner is added to it), so read the header's own bottom.
+    const head = Math.max(0, document.querySelector(".sc-head-wrap")?.getBoundingClientRect().bottom ?? 0);
     const bottom = box.current?.getBoundingClientRect().bottom ?? head;
     setDrawerTop(Math.max(head, Math.round(bottom)));
     setTabMenu(true);

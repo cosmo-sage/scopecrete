@@ -382,7 +382,28 @@ across the database … I also want to be able to upload a logo for my org."*
   named Tim (spaces tidied), 81 characters refused, the estimator named
   themselves and was refused naming Tim, a direct UPDATE changed no row, a
   stranger refused and saw no one, anon no execute. Owners and members read everything under
-  `get_user_org_ids()`; only owners manage the org. **Onsite estimators**
+  `get_user_org_ids()`; only owners manage the org.
+- **View as a teammate (Coy, 2026-10-12: "a button … that lets me view the
+  dashboard as that user to make sure that what they're viewing is what I want
+  them to be able to view … like JobTread"; no migration).** **View as** on
+  each other person in Settings → Organization → People (owners only) →
+  `POST /api/view-as` sets a host-only, httpOnly `sc_view_as` cookie (8 hours)
+  after checking the caller owns the org and the id is a member of it. With it
+  on, `/api/session/me` answers with the teammate's role and access
+  (`viewAsFor()`, `src/lib/access-server.ts` — checked again on every read), so
+  the menus, the pages they may open (`redirectFor()`), Settings' sections and
+  the Admin item follow; `/api/jobs` and `/api/files/search` keep only the jobs
+  an estimator was given; `/api/org` drops the owner controls. A purple strip
+  across the top of the window — "👁 Viewing as Jeremy Wright · Onsite
+  estimator · changes are off" with **Switch back** — is added to
+  `--sc-head` (`--sc-head-0` + `--sc-banner`), so everything under the header
+  moves down with it; the same button on their row in People reads Switch
+  back. **A preview, not a sign-in as them:** the data still comes through the
+  owner's own session under RLS, so inside the pages they can open the owner
+  may see a little more than the database would show them; and every write
+  is refused while the cookie is on (`writeBlocked()` in `getApiSession`,
+  403 `view_as`) except `/api/view-as` and the owner's own `/api/prefs`.
+  `src/lib/view-as.ts`, tested in `tests/view-as.test.mjs`. **Onsite estimators**
   (role `field`) see only the jobs and pages they are given — §2j.
 - Rehearsed before applying: owner renames and it is audited; blank refused;
   a path in another org's folder or with `..` refused; a direct UPDATE on

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookieDomain, hostKind } from "./hosts";
 import { myOrgs } from "./access-server";
+import { VIEW_AS_COOKIE, writeBlocked } from "./view-as";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
@@ -100,6 +101,17 @@ export async function getApiSession(req: NextRequest): Promise<ApiSessionResult>
       response: applyCookies(NextResponse.json({
         code: "no_org",
         error: "This account isn't a member of any organisation.",
+      }, { status: 403 })),
+    };
+  }
+
+  // Viewing as a teammate (src/lib/view-as.ts): a preview — nothing changes until the owner switches back.
+  if (writeBlocked(req.method, req.nextUrl.pathname, !!req.cookies.get(VIEW_AS_COOKIE)?.value)) {
+    return {
+      ok: false,
+      response: applyCookies(NextResponse.json({
+        code: "view_as",
+        error: "You're viewing as a teammate — switch back (the banner at the top) to make changes.",
       }, { status: 403 })),
     };
   }

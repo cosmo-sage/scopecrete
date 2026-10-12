@@ -54,7 +54,8 @@ import { cleanMenuColors, iconVar, type MenuColors } from "@/lib/v34/menu-colors
 import { usePref } from "@/lib/v34/prefs";
 import { useHideHeadOnScroll } from "@/lib/v34/use-hide-head";
 import { AccessContext } from "@/lib/v34/access-ctx";
-import { accessFrom, menuPages, redirectFor, FULL_ACCESS, type Access } from "@/lib/access";
+import { accessFrom, menuPages, redirectFor, roleLabel, FULL_ACCESS, type Access } from "@/lib/access";
+import { viewAsLine } from "@/lib/view-as";
 import { useRouter } from "next/navigation";
 import "@/styles/v34-shell.css";
 
@@ -178,6 +179,20 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }, [meRev]);
   const meCtx = useMemo(() => ({ me, reload: () => setMeRev((n) => n + 1) }), [me]);
 
+  // Viewing as a teammate (src/lib/view-as.ts, Coy 2026-10-12): the purple strip across the top.
+  const viewingAs = me?.viewing_as ?? null;
+  useEffect(() => {
+    if (viewingAs) document.documentElement.dataset.viewAs = "1";
+    else delete document.documentElement.dataset.viewAs;
+  }, [viewingAs]);
+  const [leaving, setLeaving] = useState(false);
+  const stopViewing = useCallback(async () => {
+    setLeaving(true);
+    await fetch("/api/view-as", { method: "DELETE" }).catch(() => null);
+    // A full load, so every page and list reads as the owner again; back where the button was.
+    window.location.assign("/dashboard/settings/organization#people");
+  }, []);
+
   // An onsite estimator (081) sees Jobs (and Files when given) and nothing else; any other
   // page sends them to the board. The database keeps them out regardless — this keeps them
   // from landing on pages that would come back empty.
@@ -245,6 +260,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <div className="flex flex-col min-h-screen" style={{ background: T.slab, color: T.ink, fontFamily: body }}>
       <div className="sc-head-wrap" style={{ position: "sticky", top: 0, zIndex: 40 }}>
+        {viewingAs && (
+          <div className="sc-view-as" role="status">
+            <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>👁 {viewAsLine(viewingAs.name, roleLabel(viewingAs.role))} · changes are off</span>
+            <button type="button" onClick={() => void stopViewing()} disabled={leaving}>{leaving ? "Switching…" : "Switch back"}</button>
+          </div>
+        )}
         <header className="px-2.5 lg:px-4 flex items-center gap-3 sc-paper" style={{ height: 54 }}>
           <Link href="/dashboard" className="no-underline shrink-0" aria-label="Dashboard">
             <OrgLockup name={me?.org_name ?? null} hasLight={!!me?.logo_light} hasDark={!!me?.logo_dark} stamp={me?.logo_stamp ?? null}

@@ -26,6 +26,7 @@ import { sendBytes } from "@/components/v34/files-panel";
 import { usePref } from "@/lib/v34/prefs";
 import { ROLES, FIELD_PAGES, roleLabel, accessSummary } from "@/lib/access";
 import { AddressInput } from "@/components/v34/address-input";
+import { useMe } from "@/lib/v34/me-ctx";
 import { radiusLabel, type Office } from "@/lib/map";
 
 export interface OrgInfo { id: string; name: string; logo_light: boolean; logo_dark: boolean; logo_stamp: string | null }
@@ -426,6 +427,17 @@ function People({ people, canEdit, accessReady, onChanged }: { people: Person[];
     const r = await fetch(`/api/org/invites/${id}`, { method: "DELETE" });
     if (r.ok) setTick((n) => n + 1); else setErr(((await r.json().catch(() => ({}))) as { error?: string }).error ?? "Couldn't withdraw it.");
   }
+  // View as (Coy, 2026-10-12): see the app as they do; the same button (or the banner) switches back.
+  const viewing = useMe().me?.viewing_as?.user_id ?? null;
+  const [viewBusy, setViewBusy] = useState<string | null>(null);
+  async function viewAs(p: Person) {
+    setViewBusy(p.user_id); setErr(null);
+    const r = await fetch("/api/view-as", viewing === p.user_id ? { method: "DELETE" }
+      : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ user_id: p.user_id }) });
+    if (!r.ok) { setViewBusy(null); setErr(((await r.json().catch(() => ({}))) as { error?: string }).error ?? "Couldn't switch the view."); return; }
+    // A full load, so every menu, page and list reads as them (or as you again).
+    window.location.assign(viewing === p.user_id ? "/dashboard/settings/organization#people" : "/dashboard");
+  }
   async function remove(p: Person) {
     if (!window.confirm(`Take ${p.name ?? p.email} out of the organization? Their account stays; they stop seeing it.`)) return;
     const r = await fetch(`/api/org/members/${p.user_id}`, { method: "DELETE" });
@@ -464,6 +476,14 @@ function People({ people, canEdit, accessReady, onChanged }: { people: Person[];
                 </div>}
               </div>
               {p.role && <span style={{ ...eyebrow, fontFamily: disp, color: T.ink2 }}>{roleLabel(p.role)}</span>}
+              {!p.you && (canEdit || viewing === p.user_id) && (
+                <button onClick={() => void viewAs(p)} disabled={viewBusy === p.user_id}
+                  aria-label={viewing === p.user_id ? "Switch back to your own view" : `View the app as ${p.name ?? p.email}`}
+                  title={viewing === p.user_id ? "Switch back to your own view" : "See the app as they see it — nothing can be changed while you look"}
+                  style={{ ...small, height: 24, fontSize: 11, padding: "0 7px", ...(viewing === p.user_id ? { background: "#7A3FBF", color: "#fff", border: "none" } : {}) }}>
+                  {viewBusy === p.user_id ? "…" : viewing === p.user_id ? "Switch back" : "View as"}
+                </button>
+              )}
               {canEdit && accessReady && editing !== p.user_id && <button onClick={() => startEdit(p)} aria-label={`Change ${p.name ?? p.email}'s name and access`} title="Change name and access" style={{ color: T.ink3, cursor: "pointer", padding: "0 4px" }}>✎</button>}
               {canEdit && !p.you && <button onClick={() => void remove(p)} aria-label={`Remove ${p.name ?? p.email}`} title="Remove from the organization" style={{ color: T.ink3, cursor: "pointer", padding: "0 4px" }}>×</button>}
             </div>

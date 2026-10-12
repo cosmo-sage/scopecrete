@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
 import { orgView } from "@/lib/org-server";
-import { myOrgs, myAccess } from "@/lib/access-server";
+import { myOrgs, myAccess, viewAsFor } from "@/lib/access-server";
 
 /**
  * Who is signed in, and which org they belong to.
@@ -31,7 +31,9 @@ export async function GET(req: NextRequest) {
   // before it draws the org or asks for anything else (2026-10-05: they ran
   // one after another). sc_my_orgs (081): an onsite estimator reads the org's
   // name and logos, not its row.
-  const [orgs, access, { data: auth }, { data: membership }, { data: line }, { data: admin }] = await Promise.all([
+  const [viewAs, orgs, access, { data: auth }, { data: membership }, { data: line }, { data: admin }] = await Promise.all([
+    // An owner viewing as a teammate (src/lib/view-as.ts): their role and access stand in for the owner's.
+    viewAsFor(req, result.session),
     myOrgs(supabase),
     myAccess(supabase, orgId),
     supabase.auth.getUser(),
@@ -73,9 +75,13 @@ export async function GET(req: NextRequest) {
     logo_light: brand?.logo_light ?? false,
     logo_dark: brand?.logo_dark ?? false,
     logo_stamp: brand?.logo_stamp ?? null,
-    role: membership?.role ?? access.role ?? null,
+    role: viewAs ? viewAs.role : membership?.role ?? access.role ?? null,
     // What an onsite estimator may open (081); everyone else { limited: false }.
-    admin: admin === true,
-    access: { limited: access.limited, pages: access.pages, all_jobs: access.all_jobs, job_ids: access.job_ids },
+    admin: viewAs ? false : admin === true,
+    access: viewAs
+      ? { limited: viewAs.access.limited, pages: viewAs.access.pages, all_jobs: viewAs.access.all_jobs, job_ids: viewAs.access.job_ids }
+      : { limited: access.limited, pages: access.pages, all_jobs: access.all_jobs, job_ids: access.job_ids },
+    // The banner: who the owner is looking at. Null when it's their own view.
+    viewing_as: viewAs ? { user_id: viewAs.user_id, name: viewAs.name ?? viewAs.email, role: viewAs.role } : null,
   }));
 }

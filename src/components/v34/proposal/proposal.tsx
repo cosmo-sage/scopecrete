@@ -301,6 +301,17 @@ export function Proposal({ jobId }: { jobId: string }) {
     catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(null); }
   }, [jobId, load, loadLinks]);
 
+  // Delete a version (Coy, 2026-10-12: "How do I delete proposals?"). A draft over an earlier version goes;
+  // a sent version is marked deleted and its customer link turned off; a signed one stays (the route says why).
+  const deleteVersion = useCallback(async (version: number, sent: boolean) => {
+    const q = sent
+      ? "Delete this sent version? It leaves the version list and the customer's link to it is turned off, so it shows as replaced. Its number isn't reused."
+      : "Delete this draft? The page goes back to the last sent version.";
+    if (!window.confirm(q)) return;
+    try { setBusy("Deleting…"); await call(`/api/jobs/${jobId}/proposal/version?version=${version}`, "DELETE"); setViewFinal(null); await load(); await loadLinks(); }
+    catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(null); }
+  }, [jobId, load, loadLinks]);
+
   if (err && !b) return <div style={{ padding: 20, color: T.red }}>{err}</div>;
   if (!b || !p || !vm || !priced) return <div style={{ padding: 20, color: T.ink3 }}>Opening the proposal…</div>;
   const numberOf = (v: number) => (b.number_base ? formatProposalNumber(b.number_base, v) : `v${v}`);
@@ -391,6 +402,17 @@ export function Proposal({ jobId }: { jobId: string }) {
             <button onClick={() => void startOver()} disabled={!!busy} className="rounded" title="Void the sent links and start a blank proposal"
               style={{ height: 30, padding: "0 12px", border: `1px solid ${T.hairStrong}`, background: T.card, color: T.red, fontFamily: disp, fontSize: 12, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase" }}>{wide ? "Start over" : "Redo"}</button>
           )}
+          {(() => {
+            // The version on screen: a draft only over an earlier version (a lone draft has Start over),
+            // a final unless the customer signed it.
+            const v = finalShown?.version ?? p.version;
+            const signed = links.some((l) => l.version?.version === v && l.status === "accepted");
+            const can = editable ? b.finals.some((f) => f.version < p.version) : !signed;
+            return can ? (
+              <button onClick={() => void deleteVersion(v, !editable)} disabled={!!busy} className="rounded" title={editable ? "Delete this draft" : "Delete this sent version"}
+                style={{ height: 30, padding: "0 12px", border: `1px solid ${T.hairStrong}`, background: T.card, color: T.red, fontFamily: disp, fontSize: 12, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase" }}>Delete</button>
+            ) : null;
+          })()}
     </>
   );
   // What used to be the slide-over "Job panel" (Coy, 2026-10-02): the money — margin, cost by type, the

@@ -5,6 +5,7 @@
  * caller cannot put words in Dusty's context or reach another org's rows.
  */
 
+import { fileRow } from "@/lib/dusty/reading";
 import { riskOf } from "@/lib/risk";
 import type { ApiSession } from "@/lib/api-auth";
 import { plainSpeakers } from "@/lib/speakers";
@@ -329,12 +330,13 @@ async function bidBlock(sb: Sb, orgId: string, jobId: string): Promise<Block | n
 }
 
 async function filesBlock(sb: Sb, orgId: string, by: { jobId?: string; contactId?: string }): Promise<Block | null> {
-  let q = sb.from("files").select("name, category, summary, facts, read_state, read_error, created_at")
+  let q = sb.from("files").select("name, category, summary, facts, read_state, read_error, read_at, read_attempts, created_at")
     .eq("org_id", orgId).is("deleted_at", null).order("created_at", { ascending: false }).limit(20);
   q = by.jobId ? q.eq("job_id", by.jobId) : q.eq("contact_id", by.contactId as string);
   const { data } = await q;
-  const rows = (data ?? []) as Array<{ name: string; category: string | null; summary: string | null; facts: Record<string, unknown> | null; read_state: string | null; read_error: string | null; created_at: string }>;
+  const rows = (data ?? []) as Array<{ name: string; category: string | null; summary: string | null; facts: Record<string, unknown> | null; read_state: string | null; read_error: string | null; read_at?: string | null; read_attempts?: number | null; created_at: string }>;
   if (!rows.length) return null;
+  const now = Date.now();
   return {
     title: "Files on it (uploaded; your earlier reads — suggestions, not confirmed)",
     trimmable: true,
@@ -343,7 +345,10 @@ async function filesBlock(sb: Sb, orgId: string, by: { jobId?: string; contactId
         .map(([k, v]) => `${k.replace(/_/g, " ")}: ${Array.isArray(v) ? v.join(", ") : String(v)}`).join("; ") : "";
       const said = f.read_state === "read" ? `${f.summary ?? ""}${facts ? ` [${facts}]` : ""}`
         : f.category === "plan" && f.read_state === "skipped" ? "plan sheets — what is written on them is in the plan-sheet blocks (\"Plan sheets read by OCR\", \"What the plans and specs say\", or \"Plan sheets not read yet\")"
-        : f.read_state === "skipped" || f.read_state === "failed" ? `not read (${f.read_error ?? f.read_state})` : "not read yet";
+        : f.read_state === "skipped" || f.read_state === "failed" ? `not read (${f.read_error ?? f.read_state})`
+        // What the reading card in the chat shows (reading.ts), so "what are you reading?" is answered from the same facts.
+        : f.read_state === "reading" ? `${fileRow({ id: "", name: f.name, category: f.category, kind: null, read_state: f.read_state, read_at: f.read_at ?? null, read_attempts: f.read_attempts ?? null, read_error: null, page_count: null, byte_size: null, fetch_state: null, created_at: f.created_at }, now).status.toLowerCase()} by the background reader — not read yet`
+        : "not read yet — waiting for the background reader";
       return `[${day(f.created_at)}] ${f.name}${f.category ? ` (${f.category})` : ""} — ${said}`.slice(0, 1500);
     }),
   };

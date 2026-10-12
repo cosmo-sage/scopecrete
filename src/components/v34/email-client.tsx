@@ -26,7 +26,7 @@ import { askDusty } from "@/components/v34/budget-tabs";
 import { sendBytes } from "@/components/v34/files-panel";
 import {
   MAIL_TABS, TEMPLATES, cleanSubject, fillTemplate, firstName, forwardBody, forwardSubject, isEmail, parseAddresses,
-  replySubject, replyTargets, writerOf, type ComposeMode, type Conversation, type MailRow, type MailTab,
+  replySubject, replyTargets, vendorFromEmail, writerOf, type ComposeMode, type Conversation, type MailRow, type MailTab,
 } from "@/lib/email-client";
 
 // ── shared bits ─────────────────────────────────────────────────────────────
@@ -199,7 +199,7 @@ interface ConvData {
   messages: Msg[];
   state: { summary: string | null; asks: Array<{ text: string; due: string | null; tone: string }> | null; triage: string | null; read_for: number | null; archived_at: string | null } | null;
   filing: { match: string | null; note: string | null; suggested_customer_id: string | null; suggested_customer_name: string | null; person_emails: string[] };
-  options: { customers: Array<{ id: string; name: string }>; jobs: Array<{ id: string; title: string | null; customer_id: string | null; status: string | null }> };
+  options: { customers: Array<{ id: string; name: string }>; vendors?: Array<{ id: string; name: string }>; jobs: Array<{ id: string; title: string | null; customer_id: string | null; status: string | null }> };
   drafts: DraftRow[];
   inboxes: string[]; ours: string[]; signature: string; can_send: boolean;
 }
@@ -347,6 +347,9 @@ function MessageCard({ m, ours, startOpen }: { m: Msg; ours: string[]; startOpen
 function FilingStrip({ d, onPatch }: { d: ConvData; onPatch: (b: Record<string, unknown>, msg?: string) => Promise<void> }) {
   const c = d.conversation;
   const [editing, setEditing] = useState(!c.filed);
+  const [newVendor, setNewVendor] = useState(false);
+  const vendors = d.options.vendors ?? [];
+  const onVendor = !c.customer_id && !!c.contact_id && vendors.some((v) => v.id === c.contact_id);
   const jobs = d.options.jobs.filter((j) => !c.customer_id || j.customer_id === c.customer_id || j.id === c.job_id);
   const writer = c.writer.address;
   const personMissing = c.contact_id && writer && !d.filing.person_emails.includes(writer.toLowerCase());
@@ -360,7 +363,8 @@ function FilingStrip({ d, onPatch }: { d: ConvData; onPatch: (b: Record<string, 
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <span style={eyebrow}>Filed on</span>
           {c.customer_id && <Link href={`/dashboard/customers/${c.customer_id}`} style={{ color: T.ink, fontWeight: 600 }}>{c.customer_name ?? "Customer"} ›</Link>}
-          {c.contact_name && <span style={{ color: T.ink2 }}>· {c.contact_name}</span>}
+          {onVendor && <Link href={`/dashboard/vendors/${c.contact_id}`} style={{ color: T.ink, fontWeight: 600 }}>Vendor · {vendors.find((v) => v.id === c.contact_id)?.name ?? c.contact_name ?? "Vendor"} ›</Link>}
+          {c.contact_name && !onVendor && <span style={{ color: T.ink2 }}>· {c.contact_name}</span>}
           {c.job_id && <Link href={`/dashboard/scope/${c.job_id}`} style={{ color: T.ink2 }}>· {c.job_title ?? "Job"} ›</Link>}
           {d.filing.match && d.filing.match !== "coy" && <span style={{ fontSize: 10.5, color: T.ink3 }}>{d.filing.match === "exact" ? "auto" : d.filing.match}</span>}
           <span style={{ flex: 1 }} />
@@ -385,10 +389,17 @@ function FilingStrip({ d, onPatch }: { d: ConvData; onPatch: (b: Record<string, 
                 <option value="">— no job —</option>
                 {jobs.map((x) => <option key={x.id} value={x.id}>{x.title || "Untitled job"}</option>)}
               </select></label>
+            <label className="flex flex-col gap-0.5"><span style={eyebrow}>Vendor</span>
+              <select value={onVendor ? c.contact_id ?? "" : ""} onChange={(e) => void onPatch(e.target.value ? { contact_id: e.target.value, customer_id: null } : { contact_id: null }, e.target.value ? "Filed on the vendor — its files went to their page." : "Taken off the vendor.")} style={field}>
+                <option value="">— not a vendor —</option>
+                {vendors.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+              </select></label>
           </div>
+          {newVendor && <NewVendorForm d={d} onDone={async (id, name, made) => { setNewVendor(false); if (id) await onPatch({ contact_id: id, customer_id: null }, made ? `${name} is a vendor now, and this email is on their page.` : `Filed on ${name}.`); }} />}
           <div className="flex flex-wrap items-center gap-2" style={{ fontSize: 11.5, color: T.ink3 }}>
             {d.filing.note && <span>{d.filing.note}</span>}
             <span style={{ flex: 1 }} />
+            {!newVendor && <button onClick={() => setNewVendor(true)} style={{ color: T.ink2, cursor: "pointer", background: "none", textDecoration: "underline" }}>New vendor from this ›</button>}
             <Link href="/dashboard/customers?new=1" style={{ color: T.ink2 }}>New customer from this ›</Link>
             {c.filed && <button style={{ ...btn(), height: 26 }} onClick={() => setEditing(false)}>Done</button>}
           </div>
@@ -399,6 +410,42 @@ function FilingStrip({ d, onPatch }: { d: ConvData; onPatch: (b: Record<string, 
           {writer} isn&apos;t on {c.contact_name ?? "this person"} yet. <button onClick={() => void addAddress()} style={{ color: T.hiviz, fontWeight: 600, cursor: "pointer", background: "none" }}>Add it</button>
         </div>
       )}
+    </div>
+  );
+}
+
+/** New vendor from this email (Coy, 2026-10-12): filled from what it shows (`vendorFromEmail()`),
+ *  made through + Vendor's own POST /api/vendors on Coy's tap, then the email is filed on them.
+ *  A phone or email already on someone is a 409 naming them: file it on them instead. */
+function NewVendorForm({ d, onDone }: { d: ConvData; onDone: (id: string | null, name: string, made: boolean) => Promise<void> }) {
+  const seed = useMemo(() => vendorFromEmail(d.messages, d.ours), [d.messages, d.ours]);
+  const [v, setV] = useState(seed);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [existing, setExisting] = useState<{ id: string; name: string | null } | null>(null);
+  const make = async () => {
+    setBusy(true); setErr(null); setExisting(null);
+    try {
+      const r = await fetch("/api/vendors", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: v.name, email: v.email || null, phone: v.phone || null }) });
+      const b = await r.json().catch(() => ({}));
+      if (r.status === 409 && b.existing) { setExisting(b.existing); setErr(b.error ?? "They're already one of your contacts."); return; }
+      if (!r.ok) { setErr(b.error ?? `HTTP ${r.status}`); return; }
+      await onDone(b.vendor.id as string, v.name, true);
+    } catch (e) { setErr(errText(e)); } finally { setBusy(false); }
+  };
+  const box = (k: keyof typeof v, label: string, ph: string) => (
+    <label className="flex flex-col gap-0.5" style={{ flex: "1 1 160px" }}><span style={eyebrow}>{label}</span>
+      <input value={v[k]} placeholder={ph} onChange={(e) => setV((o) => ({ ...o, [k]: e.target.value }))} style={field} /></label>
+  );
+  return (
+    <div style={{ padding: 8, borderRadius: 6, border: `1px solid ${T.hairStrong}`, background: T.paper }}>
+      <div style={{ ...eyebrow, marginBottom: 4 }}>New vendor</div>
+      <div className="flex flex-wrap gap-2">{box("name", "Name", "Company")}{box("email", "Email", "sales@…")}{box("phone", "Phone", "(225) …")}</div>
+      {err && <div style={{ color: T.red, fontSize: 11.5, marginTop: 6 }}>{err}{existing && <> <button onClick={() => void onDone(existing.id, existing.name ?? "them", false)} style={{ color: T.hiviz, fontWeight: 600, cursor: "pointer", background: "none" }}>File it on {existing.name ?? "them"}</button></>}</div>}
+      <div className="flex gap-2" style={{ marginTop: 8 }}>
+        <button style={{ ...btn(true), height: 28 }} disabled={busy || !v.name.trim()} onClick={() => void make()}>{busy ? "Adding…" : "Add vendor and file it"}</button>
+        <button style={{ ...btn(), height: 28 }} onClick={() => void onDone(null, "", false)}>Cancel</button>
+      </div>
     </div>
   );
 }

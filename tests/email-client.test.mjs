@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   groupConversations, inTab, tabCounts, matchesMail, cleanSubject, replySubject, forwardSubject, snippetOf,
-  replyTargets, parseAddresses, fillTemplate, TEMPLATES, signatureOf, forwardBody, writerOf,
+  replyTargets, parseAddresses, fillTemplate, TEMPLATES, signatureOf, forwardBody, writerOf, vendorFromEmail,
 } from "../src/lib/email-client.ts";
 
 const INBOX = "intake-concrete@agentmail.to", COY = "admin@saccobuilt.com";
@@ -114,4 +114,19 @@ test("a forward carries the message under it", () => {
   assert.match(b, /---------- Forwarded message ----------/);
   assert.match(b, /From: John Freeling <john.freeling@iconbuild.com>/);
   assert.match(b, /See the redlines\./);
+});
+
+test("a new vendor from an email starts from what it shows", () => {
+  const ours = [INBOX, COY];
+  // Coy writes the inbox himself: the subject names them, the text gives their address and phone.
+  const self = row({ subject: "Ace Hardware", original_from_address: null, original_from_name: null,
+    text_body: "New vendor\nsales@acehardware.com\nCall (225) 555-0142", customer_id: null, contact_id: null, status: "unfiled" });
+  assert.deepEqual(vendorFromEmail([self], ours), { name: "Ace Hardware", email: "sales@acehardware.com", phone: "(225) 555-0142" });
+  assert.equal(vendorFromEmail([row({ subject: "Fwd: New vendor: Angelle Materials", original_from_address: null, text_body: "" })], ours).name, "Angelle Materials");
+  // A forward from a supplier: the writer is theirs.
+  const fwd = row({ original_from_address: "Kim@angellematerials.com", original_from_name: "Kim Angelle", text_body: "Quote attached. 225.555.0199" });
+  assert.deepEqual(vendorFromEmail([fwd], ours), { name: "Kim Angelle", email: "kim@angellematerials.com", phone: "(225) 555-0199" });
+  // No name anywhere: the domain.
+  assert.equal(vendorFromEmail([row({ subject: "", original_from_address: "orders@syncor.com", original_from_name: null, text_body: "" })], ours).name, "Syncor");
+  assert.deepEqual(vendorFromEmail([], ours), { name: "", email: "", phone: "" });
 });

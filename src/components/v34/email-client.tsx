@@ -23,6 +23,8 @@ import { EmptyState, MenuButton, Sheet, SearchBubble } from "@/components/v34/pr
 import { useThreads } from "@/components/v34/threads-ctx";
 import { useLiveThreads } from "@/lib/v34/live-threads";
 import { askDusty } from "@/components/v34/budget-tabs";
+import { DustyEmblem } from "@/components/v34/dusty-avatar";
+import { isHorizontal } from "@/lib/swipe";
 import { sendBytes } from "@/components/v34/files-panel";
 import {
   MAIL_TABS, TEMPLATES, cleanSubject, fillTemplate, firstName, forwardBody, forwardSubject, isEmail, parseAddresses,
@@ -148,7 +150,7 @@ export function EmailInbox({ threadId, title, sub, folded, onEditRule }: { threa
           <EmptyState title={q ? "Nothing matches" : tab === "reply" ? "Nothing waiting on you" : tab === "sent" ? "Nothing sent yet" : tab === "unfiled" ? "Everything is filed" : "No email yet"}
             detail={tab === "inbox" && !q ? "Emails forwarded to the intake inbox, and replies to what you send, land here." : undefined} />
         ) : (
-          <div>{data.conversations.map((c) => <ConvRow key={c.key} c={c} threadId={threadId} />)}</div>
+          <div>{data.conversations.map((c) => <SwipeArchive key={c.key} c={c} onDone={() => setTick((n) => n + 1)}><ConvRow c={c} threadId={threadId} /></SwipeArchive>)}</div>
         )}
       <Link href={composeHref} aria-label="Compose" className="lg:hidden flex items-center justify-center"
         style={{ position: "fixed", right: 16, bottom: "calc(var(--sc-foot) + 16px)", width: 54, height: 54, borderRadius: 27, background: T.hiviz, color: T.onHiviz, boxShadow: "0 4px 14px rgba(0,0,0,.25)", zIndex: 8 }}>
@@ -184,6 +186,58 @@ function ConvRow({ c, threadId }: { c: ConvView; threadId?: string | null }) {
       </div>
     </Link>
   );
+}
+
+/** Swipe a row left on a phone for Archive (Coy, 2026-10-12). */
+function SwipeArchive({ c, onDone, children }: { c: ConvView; onDone: () => void; children: React.ReactNode }) {
+  const W = 88;
+  const [dx, setDx] = useState(0);
+  const [drag, setDrag] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const at = useRef<{ x: number; y: number; dx: number; h: boolean | null } | null>(null);
+  const go = async () => {
+    setBusy(true);
+    try { await call(`/api/emails/threads/${encodeURIComponent(c.key)}`, "PATCH", { archive: !c.archived }); setDx(0); onDone(); }
+    catch (e) { window.alert(errText(e)); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div className="relative overflow-hidden">
+      <div className="absolute top-0 bottom-0 right-0 flex" aria-hidden={dx ? undefined : true}>
+        <button type="button" tabIndex={dx ? 0 : -1} disabled={busy} onClick={() => void go()} aria-label={c.archived ? "Unarchive" : "Archive"}
+          style={{ width: W, background: T.ink2, color: "#fff", ...eyebrow, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3 }}>
+          <ArchiveIcon size={18} />{busy ? "…" : c.archived ? "Unarchive" : "Archive"}
+        </button>
+      </div>
+      <div
+        onTouchStart={(e) => { const t = e.touches[0]; at.current = { x: t.clientX, y: t.clientY, dx, h: null }; }}
+        onTouchMove={(e) => {
+          const a = at.current; if (!a) return;
+          const t = e.touches[0]; const mx = t.clientX - a.x, my = t.clientY - a.y;
+          if (a.h === null) { if (Math.abs(mx) < 6 && Math.abs(my) < 6) return; a.h = isHorizontal(mx, my); if (a.h) setDrag(true); }
+          if (a.h) setDx(Math.max(-W, Math.min(0, a.dx + mx)));
+        }}
+        onTouchEnd={() => { const a = at.current; at.current = null; if (a?.h) setDx((d) => (d < -W / 2 ? -W : 0)); setDrag(false); }}
+        onClickCapture={(e) => { if (dx) { e.stopPropagation(); e.preventDefault(); setDx(0); } }}
+        style={{ position: "relative", background: T.card, transform: `translateX(${dx}px)`, transition: drag ? "none" : "transform .18s ease" }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+const ico = { fill: "none", stroke: "currentColor", strokeWidth: 1.7, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
+function ArchiveIcon({ size = 20 }: { size?: number }) {
+  return <svg width={size} height={size} viewBox="0 0 24 24" {...ico} aria-hidden="true"><rect x="3" y="4" width="18" height="5" rx="1" /><path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9M10 13h4" /></svg>;
+}
+function TrashIcon({ size = 20 }: { size?: number }) {
+  return <svg width={size} height={size} viewBox="0 0 24 24" {...ico} aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6" /></svg>;
+}
+function StarIcon({ size = 20, on }: { size?: number; on: boolean }) {
+  return <svg width={size} height={size} viewBox="0 0 24 24" {...ico} fill={on ? "currentColor" : "none"} aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.8l-5.2 2.8 1-5.8-4.3-4.1 5.9-.9z" /></svg>;
+}
+function ReplyIcon({ size = 20 }: { size?: number }) {
+  return <svg width={size} height={size} viewBox="0 0 24 24" {...ico} aria-hidden="true"><path d="M10 6l-6 6 6 6M4 12h10a6 6 0 0 1 6 6" /></svg>;
 }
 
 function Tag({ color, children }: { color: string; children: React.ReactNode }) {
@@ -231,6 +285,15 @@ export function EmailConversation({ convKey, threadId, draftId }: { convKey: str
     try { await call(`/api/emails/threads/${encodeURIComponent(convKey)}`, "PATCH", b); if (msg) flash(msg); reload(); } catch (e) { flash(errText(e)); }
   };
 
+  const leave = () => { if (window.matchMedia("(max-width: 1023.98px)").matches) router.push(threadId ? `/dashboard/messages?t=${encodeURIComponent(threadId)}` : "/dashboard/messages"); };
+  const archive = async () => {
+    if (!d) return;
+    const was = d.conversation.archived;
+    await patch({ archive: !was }, was ? "Back in the inbox." : "Archived — it comes back if they write again.");
+    if (!was) leave();
+  };
+  const askAbout = () => { if (d) askDusty(`About the email "${cleanSubject(d.conversation.subject)}" from ${d.conversation.writer.name ?? d.conversation.writer.address ?? "them"}: `, false); };
+
   if (err) return <EmptyState tone="warn" title="Couldn't open this email" detail={err} />;
   if (!d) return <div className="p-4 space-y-3">{[1, 2, 3].map((i) => <div key={i} className="rounded animate-pulse" style={{ height: 80, background: T.hairSoft }} />)}</div>;
   const c = d.conversation;
@@ -249,8 +312,16 @@ export function EmailConversation({ convKey, threadId, draftId }: { convKey: str
               {c.archived ? " · archived" : ""}{d.state?.triage === "fyi" ? " · FYI" : ""}
             </div>
           </div>
+          <PhoneMenu items={[
+            { label: "Reply all", on: () => setCompose({ mode: "reply_all" }) },
+            { label: "Forward", on: () => setCompose({ mode: "forward" }) },
+            { label: d.state?.triage === "fyi" ? "Mark needs reply" : "Mark FYI — no reply needed", on: () => void patch({ fyi: d.state?.triage !== "fyi" }, d.state?.triage === "fyi" ? "Marked as needing a reply." : "Marked FYI — no reply needed.") },
+            { label: c.archived ? "Unarchive" : "Archive", on: () => void archive() },
+            { label: "Dusty: draft a reply", on: () => setCompose({ mode: "reply" }), off: !c.filed },
+            { label: "Ask Dusty about it", on: () => askAbout() },
+          ]} />
         </div>
-        <div className="flex flex-wrap gap-1.5" style={{ marginTop: 8 }}>
+        <div className="hidden lg:flex flex-wrap gap-1.5" style={{ marginTop: 8 }}>
           <button style={btn(true)} onClick={() => setCompose({ mode: "reply" })}>Reply</button>
           <button style={btn()} onClick={() => setCompose({ mode: "reply_all" })}>Reply all</button>
           <button style={btn()} onClick={() => setCompose({ mode: "forward" })}>Forward</button>
@@ -294,15 +365,82 @@ export function EmailConversation({ convKey, threadId, draftId }: { convKey: str
         />
       )}
 
-      {/* Phone reply bar */}
+      {/* Phone bar: Dusty · ⭐ · Archive · Delete … Reply (Coy, 2026-10-12) */}
       {!compose && (
-        <div className="lg:hidden flex gap-2" style={{ position: "fixed", left: 0, right: 0, bottom: "var(--sc-foot)", padding: "8px 12px", background: T.card, borderTop: `1px solid ${T.hair}`, zIndex: 7 }}>
-          <button style={{ ...btn(true), height: 44, flex: 1 }} onClick={() => setCompose({ mode: "reply" })}>Reply</button>
-          <button style={{ ...btn(), height: 44 }} onClick={() => setCompose({ mode: "reply_all" })}>All</button>
-          <button style={{ ...btn(), height: 44 }} onClick={() => setCompose({ mode: "forward" })}>Fwd</button>
-        </div>
+        <PhoneBar
+          starred={c.needs_reply}
+          archived={c.archived}
+          onDusty={askAbout}
+          onStar={() => {
+            if (c.needs_reply) void patch({ fyi: true }, "Unstarred — marked FYI, no reply needed.");
+            else if (c.last_direction === "out") flash("Nothing to answer — the last word is yours.");
+            else void patch({ fyi: false }, "Starred — it waits under Needs reply.");
+          }}
+          onArchive={() => void archive()}
+          onDelete={() => {
+            if (!window.confirm("Delete this email? It leaves the inbox and comes back only if they write again. Emails stay on record, like every call and text.")) return;
+            void patch({ archive: true, fyi: true }, "Deleted from the inbox.").then(leave);
+          }}
+          onReply={(mode) => setCompose({ mode })}
+        />
       )}
       {toast && <div role="status" style={{ position: "fixed", left: "50%", transform: "translateX(-50%)", bottom: "calc(var(--sc-foot) + 70px)", background: T.dark, color: "#fff", padding: "8px 14px", borderRadius: 6, fontSize: F.sm, zIndex: 60, maxWidth: "90vw" }}>{toast}</div>}
+    </div>
+  );
+}
+
+/** ☰ at the top right of an email on a phone — what the top buttons were. */
+function PhoneMenu({ items }: { items: Array<{ label: string; on: () => void; off?: boolean }> }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="lg:hidden shrink-0" style={{ position: "relative" }}>
+      <button onClick={() => setOpen((o) => !o)} aria-label="More" aria-expanded={open} className="flex items-center justify-center rounded"
+        style={{ width: 34, height: 32, border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink2, cursor: "pointer" }}>
+        <svg width="18" height="18" viewBox="0 0 24 24" {...ico} aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
+      </button>
+      {open && (<>
+        <div onClick={() => setOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 20 }} />
+        <div role="menu" style={{ position: "absolute", right: 0, top: 38, zIndex: 21, minWidth: 220, background: T.card, border: `1px solid ${T.hairStrong}`, borderRadius: 6, boxShadow: "0 8px 24px rgba(0,0,0,.18)", padding: 4 }}>
+          {items.map((it) => (
+            <button key={it.label} role="menuitem" disabled={it.off} onClick={() => { setOpen(false); it.on(); }} className="w-full text-left"
+              style={{ display: "block", padding: "10px 12px", fontSize: F.sm, color: it.off ? T.ink3 : T.ink, background: "none", cursor: it.off ? "default" : "pointer", borderRadius: 4 }}>
+              {it.label}
+            </button>
+          ))}
+        </div>
+      </>)}
+    </div>
+  );
+}
+
+/** The bottom bar on a phone: Dusty, ⭐, Archive, Delete, and Reply opening Reply · Reply all · Forward. */
+function PhoneBar({ starred, archived, onDusty, onStar, onArchive, onDelete, onReply }: {
+  starred: boolean; archived: boolean; onDusty: () => void; onStar: () => void; onArchive: () => void; onDelete: () => void; onReply: (m: ComposeMode) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const b: React.CSSProperties = { width: 46, height: 44, display: "flex", alignItems: "center", justifyContent: "center", color: T.ink2, background: "none", cursor: "pointer", borderRadius: 22 };
+  return (
+    <div className="lg:hidden flex items-center" style={{ position: "fixed", left: 0, right: 0, bottom: "var(--sc-foot)", padding: "4px 10px", background: T.card, borderTop: `1px solid ${T.hair}`, zIndex: 7 }}>
+      <button style={b} onClick={onDusty} aria-label="Ask Dusty about this email"><DustyEmblem size={28} hidden /></button>
+      <button style={{ ...b, color: starred ? T.hiviz : T.ink2 }} onClick={onStar} aria-label={starred ? "Starred — needs reply" : "Star — needs reply"} aria-pressed={starred}><StarIcon on={starred} /></button>
+      <button style={b} onClick={onArchive} aria-label={archived ? "Unarchive" : "Archive"}><ArchiveIcon /></button>
+      <button style={b} onClick={onDelete} aria-label="Delete"><TrashIcon /></button>
+      <span style={{ flex: 1 }} />
+      <div style={{ position: "relative" }}>
+        {open && (<>
+          <div onClick={() => setOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 8 }} />
+          <div role="menu" style={{ position: "absolute", right: 0, bottom: 52, zIndex: 9, minWidth: 170, background: T.card, border: `1px solid ${T.hairStrong}`, borderRadius: 6, boxShadow: "0 8px 24px rgba(0,0,0,.18)", padding: 4 }}>
+            {([["reply", "Reply"], ["reply_all", "Reply all"], ["forward", "Forward"]] as Array<[ComposeMode, string]>).map(([m, label]) => (
+              <button key={m} role="menuitem" onClick={() => { setOpen(false); onReply(m); }} className="w-full text-left"
+                style={{ display: "block", padding: "11px 12px", fontSize: F.sm, color: T.ink, background: "none", cursor: "pointer" }}>{label}</button>
+            ))}
+          </div>
+        </>)}
+        <button onClick={() => setOpen((o) => !o)} aria-label="Reply" aria-expanded={open} className="flex items-center gap-1.5"
+          style={{ height: 40, padding: "0 16px", borderRadius: 20, background: T.hiviz, color: T.onHiviz, cursor: "pointer", fontSize: F.sm, fontWeight: 700 }}>
+          <ReplyIcon size={18} /> <span aria-hidden="true">▴</span>
+        </button>
+      </div>
     </div>
   );
 }

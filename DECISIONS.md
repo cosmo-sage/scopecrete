@@ -1058,7 +1058,14 @@ that, and it replaces his Hermes agent. The §2a shape, for email:
     send it**). **On a phone the composer covers the whole screen**,
     header and footer too (Coy, 2026-10-11: "I can't view the whole email"),
     with the email being answered folded open under the box (`usePhone()`,
-    portalled to the page body); a desktop keeps it docked. `/dashboard/messages/email/new` writes one from nothing
+    portalled to the page body); a desktop keeps it docked. **An email on a phone (Coy, 2026-10-12)** has no buttons under its
+    subject: a ☰ at the top right drops down Reply all, Forward, Mark FYI /
+    needs reply, Archive and Dusty; the bar at the bottom is the emblem (Ask
+    Dusty), ⭐, Archive, Delete (trash) and Reply, which opens Reply · Reply
+    all · Forward. ⭐ is Needs reply (unstarring marks it FYI); **Delete is an
+    archive marked FYI** — emails are never deleted (§2), so it comes back only
+    if they write again. Archive and Delete return to the inbox, where a row
+    swipes left for Archive. A desktop keeps the buttons under the subject. `/dashboard/messages/email/new` writes one from nothing
     (`?contact=`, `?to=`, `?body=`, `?draft=`); a person's Email channel's
     Send opens it with the words. Before 100 the inbox says it switches on
     with it, and rule threads read email as before.

@@ -69,13 +69,13 @@ export async function GET(
     if (!msg) return none("call not found");
     if (!artifact && msg.channel !== "call") return none(`no ${kind} for this message`);
 
-    const fresh = await freshAudioUrl((msg.provider_message_id as string | null) ?? "", kind);
+    const fresh = await freshAudioUrl(orgId, (msg.provider_message_id as string | null) ?? "", kind);
     const sources = [fresh, artifact?.url ?? null].filter((u): u is string => !!u);
     if (!sources.length) return none(`Quo has no ${kind} for this call`);
 
     let got: Awaited<ReturnType<typeof fetchFromProvider>> = { error: "not tried" };
     for (const src of sources) {
-      got = await fetchFromProvider(src);
+      got = await fetchFromProvider(orgId, src);
       if (!("error" in got)) break;
     }
     if ("error" in got) return none(`Recording unavailable — ${got.error}`, 502);

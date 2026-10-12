@@ -3,6 +3,7 @@ import { getApiSession } from "@/lib/api-auth";
 import { LEAD_SOURCES } from "@/lib/jobs/stages";
 import { PROVIDERS, PROVIDER_CARDS } from "@/lib/lines";
 import { loadEvents, loadLines, webhookUrl } from "@/lib/lines-server";
+import { quoKeyFor, quoLineRefusal } from "@/lib/quo";
 
 /**
  * Lines (Claude Design package 9, `Lines.dc.html` A; migration 035): every
@@ -58,7 +59,7 @@ export async function GET(req: NextRequest) {
     const recent = events.some((e) => e.provider === p.k);
     const note = !p.built ? (n ? `${n} line${n === 1 ? "" : "s"} marked ${p.name} — its events can't reach the app until it's built` : "Not set up — this provider's intake isn't built yet")
       : n === 0 ? "No lines yet"
-      : `${recent ? "Connected" : "No events this week"} · ${n} line${n === 1 ? "" : "s"} · API key ${process.env.QUO_API_KEY ? "set" : "not set (recordings are fetched from the link Quo sends)"}`;
+      : `${recent ? "Connected" : "No events this week"} · ${n} line${n === 1 ? "" : "s"} · API key ${quoKeyFor(orgId) ? "set" : "not set (recordings are fetched from the link Quo sends)"}`;
     return { k: p.k, name: p.name, short: p.short, mark: p.mark, built: p.built, how: p.how, lines: n, connected: p.built && recent, note };
   });
   const unset = out.filter((l) => !l.provider).length;
@@ -85,6 +86,8 @@ export async function POST(req: NextRequest) {
   if (!phone) return fail("Type the number with its area code, e.g. (225) 555-0100.");
   const provider = typeof b.provider === "string" && b.provider ? b.provider : null;
   if (provider && !PROVIDERS.some((p) => p.k === provider)) return fail("Unknown provider.");
+  const noQuo = quoLineRefusal(orgId, provider);
+  if (noQuo) return fail(noQuo, 409);
   const source = typeof b.default_lead_source === "string" && b.default_lead_source ? b.default_lead_source : null;
   if (source && !LEAD_SOURCES.some((l) => l.k === source)) return fail("Unknown lead source.");
   const label = typeof b.label === "string" && b.label.trim() ? b.label.trim().slice(0, 40) : null;

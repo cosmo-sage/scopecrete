@@ -24,7 +24,7 @@ export interface MediaRow { id: string; url: string | null; storage_path: string
 export async function captureMedia(sb: Sb, orgId: string, messageId: string, row: MediaRow): Promise<{ path: string; mime: string | null } | { error: string }> {
   if (row.storage_path) return { path: row.storage_path, mime: row.mime_type };
   if (!row.url) return { error: "no source link on record" };
-  const got = await fetchFromProvider(row.url);
+  const got = await fetchFromProvider(orgId, row.url);
   if ("error" in got) return { error: got.error };
 
   const mime = row.mime_type ?? got.type ?? "application/octet-stream";

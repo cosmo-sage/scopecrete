@@ -45,7 +45,7 @@ export async function fillVoicemails(supabase: SupabaseClient, orgId: string, ca
     let text = row?.content?.trim() || null;
     if (!text && asked < ASK_QUO_PER_OPEN) {
       asked++;
-      const vm = await quoVoicemail(c.callId);
+      const vm = await quoVoicemail(orgId, c.callId);
       if (vm?.transcript) text = vm.transcript;
       const url = vm?.url ?? c.url;
       if (row) {

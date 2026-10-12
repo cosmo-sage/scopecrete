@@ -139,7 +139,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   if ("subtype" in b && v.contact_type === "vendor") {
     const { error } = await supabase.rpc("sc_classify_contact", { p_contact: id, p_bucket: "vendor", p_subtype: text(b.subtype, 40) });
     if (error) return bad(error.message, 500);
-  } else if (!Object.keys(patch).length) return bad("Nothing to change.");
+  } else if (!Object.keys(patch).length && !("website" in b)) return bad("Nothing to change.");
   const { data } = await supabase.from("contacts").select(COLS).eq("org_id", orgId).eq("id", id).single();
   return applyCookies(NextResponse.json({ vendor: data }));
 }

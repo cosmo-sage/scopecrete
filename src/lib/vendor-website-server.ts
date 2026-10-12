@@ -1,14 +1,26 @@
 import type { ApiSession } from "@/lib/api-auth";
-import { missingWebsite } from "@/lib/vendor-website";
+import { cleanWebsite, missingWebsite } from "@/lib/vendor-website";
 
 type Sb = ApiSession["supabase"];
 
-/** Websites for these contacts — an empty map before migration 105. */
+/**
+ * Websites for these contacts. Before migration 105 there is no column, so the
+ * newest "Website: …" note on each (what writeWebsite keeps) stands in.
+ */
 export async function readWebsites(sb: Sb, orgId: string, ids: string[]): Promise<Map<string, string>> {
   const out = new Map<string, string>();
   if (!ids.length) return out;
   const { data, error } = await sb.from("contacts").select("id, website").eq("org_id", orgId).in("id", ids.slice(0, 1000)).not("website", "is", null);
-  if (error) return out;
+  if (error) {
+    if (!missingWebsite(error)) return out;
+    const { data: notes } = await sb.from("contact_notes").select("contact_id, body, created_at").eq("org_id", orgId)
+      .in("contact_id", ids.slice(0, 1000)).like("body", "Website: %").order("created_at", { ascending: false }).limit(2000);
+    for (const n of (notes ?? []) as Array<{ contact_id: string; body: string }>) {
+      const url = cleanWebsite(n.body.slice("Website: ".length).trim());
+      if (url && !out.has(n.contact_id)) out.set(n.contact_id, url);
+    }
+    return out;
+  }
   for (const r of (data ?? []) as Array<{ id: string; website: string | null }>) if (r.website) out.set(r.id, r.website);
   return out;
 }

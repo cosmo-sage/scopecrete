@@ -3538,6 +3538,11 @@ expected start date per quoted job before it means anything. Add the field.
   its facts with **Website ↗**; `GET /api/vendors[/id]` return it, `POST` and `PATCH` take it. Before 105 the
   reads leave it out and a website given is kept as an internal note "Website: …" on them
   (`vendor-website-server.ts`); Edit sends it only when it changed, so no note is repeated.
+  **On the contact card too (Coy, same day: "Where is the website field?").** Contact info shows **Website**
+  (a link) when there is one, and its Edit has a Website box with Save → `PATCH /api/contacts/[id]/website`
+  (blank clears; session client, org from the session); `/api/people/[id]` returns `website`. Before 105 the
+  card, the vendor page and Dusty's reads take the newest "Website: …" note on them as the website
+  (`readWebsites()`), so what was saved shows; clearing one waits for 105.
   **Store prices (Coy, 2026-10-09: "Why can't Dusty look up pricing for
   2x4x16 number two pine on Home Depot and Lowe's and add it to the
   budget?").** The search above only ran for "find vendors …", so a price

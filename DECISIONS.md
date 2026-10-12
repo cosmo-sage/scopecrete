@@ -5494,6 +5494,24 @@ additive changes only, with confirmation.
   due for the first run).
   Compressing PDFs is not done: scanned plan sets are already 1-bit CCITT,
   and anything lossy would blur what Coy measures.
+  **Disk IO budget (2026-10-12, Supabase's "depleting its Disk IO Budget"
+  email).** Measured that day: the database is small and almost all of it is
+  read from memory (pg_stat_io: ~2,500 relation reads since May), and it
+  writes ~2 MB of WAL a day — Postgres itself is not reading or writing much.
+  What runs all day is CPU and memory: Realtime's change polling (580k
+  calls), `sc_enrich_claim` (85k calls, 40 ms, it aggregates every message
+  through `sc_enrich_due`), the three every-minute cron workers (each run a
+  cron row, a pg_net response, a heartbeat), enrich-contacts' rechecks every
+  minute (~200 REST reads a minute overnight), and `/api/activity` (~15
+  reads, `sc_enrich_status` 80 ms) every 20 s from any tab left visible. On
+  the free instance's small memory that pressure most likely spills to swap,
+  which is what spends the IO budget (inferred — the swap chart is on the
+  project's Observability → Database page). Done in the app: the activity
+  line polls every 60 s, and every background poll (activity, alerts,
+  Threads, Dusty's reading card) slows to every 5 minutes after ten minutes
+  with no input (`src/lib/v34/idle-poll.ts`); Threads polls once a minute
+  while Realtime is connected. The real fix is compute: Pro, with at least
+  the Micro instance its credit covers.
 - **Fonts are self-hosted (2026-10-05).** Every typeface the app and site
   load through Next is a woff2 in `src/fonts/` (latin, copied from Google
   Fonts, OFL), loaded with `next/font/local` — never `next/font/google`, so

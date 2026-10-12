@@ -22,6 +22,7 @@ import { useEffect, useRef } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 // supabase-js (~55 KB gzipped) is loaded only when a screen first listens,
 // not with the dashboard's first paint.
+import { shouldPoll } from "@/lib/v34/idle-poll";
 const client = () => import("@/lib/supabase").then((m) => m.supabase);
 
 type Listener = (contactId: string | null) => void;
@@ -51,8 +52,14 @@ function notify(contactId: string | null) {
   }, DEBOUNCE_MS);
 }
 
-async function poll() {
+let lastPoll = 0;
+let live = false;
+
+async function poll(force = false) {
   if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+  // With Realtime connected the poll is only a safety net: once a minute, or every 5 min on an idle tab.
+  if (!force && (!shouldPoll(lastPoll) || (live && Date.now() - lastPoll < 60_000))) return;
+  lastPoll = Date.now();
   try {
     const r = await fetch("/api/threads/latest", { cache: "no-store" });
     if (!r.ok) return;
@@ -63,11 +70,11 @@ async function poll() {
   } catch { /* offline: the next poll tries again */ }
 }
 
-const onVisible = () => { if (document.visibilityState === "visible") void poll(); };
+const onVisible = () => { if (document.visibilityState === "visible") void poll(true); };
 
 function start() {
-  void poll();
-  timer = setInterval(poll, POLL_MS);
+  void poll(true);
+  timer = setInterval(() => void poll(), POLL_MS);
   document.addEventListener("visibilitychange", onVisible);
   window.addEventListener("focus", onVisible);
   void (async () => {
@@ -81,7 +88,7 @@ function start() {
         const row = p.new as { contact_id?: string | null } | undefined;
         notify(row?.contact_id ?? null);
       })
-      .subscribe();
+      .subscribe((status) => { live = status === "SUBSCRIBED"; });
   })();
 }
 
@@ -92,6 +99,7 @@ function stop() {
   window.removeEventListener("focus", onVisible);
   if (channel) { const ch = channel; void client().then((sb) => sb.removeChannel(ch)); }
   channel = null;
+  live = false;
   stamp = null;
 }
 

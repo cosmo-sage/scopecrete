@@ -13,6 +13,7 @@ import { useRouter } from "next/navigation";
 import { T, F, agent, clip } from "@/lib/v34/tokens";
 import { usePlanOcr } from "@/lib/v34/plan-ocr-runner";
 import { fileRows, readingSummary, sheetLine, sheetProgress, stillReading, type ReadFile, type ReadSheet, type RowTone } from "@/lib/dusty/reading";
+import { shouldPoll } from "@/lib/v34/idle-poll";
 
 type Data = { files: Array<ReadFile & { in_plan_room: boolean | null }>; sheets: ReadSheet[]; reader: { status: string; detail: string | null; ticked_at: string } | null };
 
@@ -39,11 +40,16 @@ export function DustyReading({ jobId, onGo }: { jobId: string; onGo: () => void 
 
   useEffect(() => {
     let off = false;
-    const load = () => fetch(`/api/jobs/${jobId}/reading`).then((r) => (r.ok ? r.json() : null))
+    let last = 0;
+    const load = (force = false) => {
+      if (!force && !shouldPoll(last)) return Promise.resolve();
+      last = Date.now();
+      return fetch(`/api/jobs/${jobId}/reading`).then((r) => (r.ok ? r.json() : null))
       .then((b) => { if (!off && b) { setData(b as Data); setNow(Date.now()); } }).catch(() => {});
-    void load();
+    };
+    void load(true);
     // While something is still being read, look again every 15 s; otherwise once a minute keeps "5 min ago" honest.
-    const t = setInterval(load, moving ? 15_000 : 60_000);
+    const t = setInterval(() => void load(), moving ? 15_000 : 60_000);
     return () => { off = true; clearInterval(t); };
     // ocr.done: each sheet the browser finishes is saved, so the counts move.
   }, [jobId, moving, ocr.done]);

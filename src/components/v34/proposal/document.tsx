@@ -181,7 +181,7 @@ export function ProposalDocument({ vm, edits, narrow }: { vm: DocVM; edits: DocE
           : <div style={{ fontFamily: strong, fontWeight: 700, fontSize: 16 }}>{vm.org.name}</div>}
         <div style={{ textAlign: "right", minWidth: 0, marginLeft: "auto" }}>
           <div style={{ ...kicker, color: "#D97757" }}>{kind}</div>
-          <div style={{ fontFamily: strong, fontWeight: 700, fontSize: narrow ? 20 : 26, lineHeight: 1.15 }}>{vm.job.title || "Concrete work"}</div>
+          <div style={{ fontFamily: strong, fontWeight: 700, fontSize: narrow ? 17 : 20, lineHeight: 1.2 }}>{vm.job.title || "Concrete work"}</div>
         </div>
       </div>
 
@@ -216,6 +216,13 @@ export function ProposalDocument({ vm, edits, narrow }: { vm: DocVM; edits: DocE
 
       <Section k="scope" label="Scope" off={!!off.scope} onToggle={sectionToggle("scope")} narrow={narrow}>
         <div style={pad ? { padding: pad } : undefined}>
+          {/* The job's own address, above the scope (Coy, 2026-10-12: "a job Information Line above Scope of Work"). */}
+          {vm.job.address && (
+            <div className="flex items-baseline gap-2 flex-wrap" style={{ marginBottom: 12, paddingBottom: 10, borderBottom: "1px solid #E6DCC8" }}>
+              <span style={kicker}>Job information</span>
+              <span style={{ fontSize: 13 }}><span style={{ color: "#5E5A52" }}>Job site: </span><b style={{ fontWeight: 600 }}>{vm.job.address}</b></span>
+            </div>
+          )}
           <div style={kicker}>Scope of work</div>
           <h2 style={h2}>{vm.job.title || "The work"}</h2>
           <div className="flex items-start gap-1.5">

@@ -10,18 +10,21 @@
  * hidden sections, groups and lines gone), as a phone or a desktop. Sending
  * freezes the draft as a final version (the same server check as before), makes
  * its link (migration 075) with each area's map frozen as a picture, and opens
- * Coy's own Messages or mail app with the words — ScopeCrete sends nothing
- * (DECISIONS §10). Every time the customer opens the link it is listed here.
+ * the person's thread with the words and the link in its box — a text sent
+ * through Quo, or an email in the email composer — where Coy presses Send
+ * (Coy, 2026-10-11: "Sending the proposal should open up the threads for that
+ * customer"). Every time the customer opens the link it is listed here.
  */
 import React, { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { T, disp, strong, nums } from "@/lib/v34/tokens";
 import { useWide } from "@/lib/v34/use-wide";
 import { ProposalDocument, type DocVM } from "./document";
 import { mapPicture } from "./area-visuals";
 import { sendBytes } from "@/components/v34/files-panel";
-import { linkMessage, signedLine, smsHref, viewLine } from "@/lib/proposal-links";
+import { signedLine, viewLine } from "@/lib/proposal-links";
 import { firstName, greetingSlot, startingWords, type SendExample, type Via } from "@/lib/proposal-send";
-import { proposalLink, sendProposal } from "@/lib/v34/send-proposal";
+import { openInThreads, proposalLink } from "@/lib/v34/send-proposal";
 
 export interface PropLink {
   id: string; url: string; status: string; decided_name?: string | null; decided_at?: string | null; sent_at: string | null; sent_via: string[]; view_count: number;
@@ -48,21 +51,6 @@ const device = (ua: string | null) => {
 interface Who { key: string; contact_id: string | null; name: string | null; phone: string | null; email: string | null; note: string | null; internal: boolean }
 const fmtPhone = (p: string) => p.replace(/^\+1(\d{3})(\d{3})(\d{4})$/, "($1) $2-$3");
 
-const openUrl = (u: string) => { window.location.href = u; };
-
-/** A text to each person ticked, one after another; what happened to each, in one line. */
-async function textEach(list: Who[], step: (i: number) => void, one: (w: Who) => Promise<{ ok: boolean; text: string }>) {
-  const said: string[] = [];
-  let ok = true;
-  for (let i = 0; i < list.length; i++) {
-    step(i);
-    const out = await one(list[i]);
-    ok = ok && out.ok;
-    said.push(list.length > 1 ? `${list[i].name ?? "?"}: ${out.text}` : out.text);
-  }
-  return { ok, text: said.join(" · ") };
-}
-
 const when = (iso: string) => new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
 export function ProposalPreview({ jobId, vm, draft, version, blocked: blockedIn, coverFileId, onFinalize, onClose, links, onLinks, onOpenVersion }: {
@@ -77,6 +65,7 @@ export function ProposalPreview({ jobId, vm, draft, version, blocked: blockedIn,
   // One document that fits the room it has (Coy, 2026-10-11: "I don't want to select between views") —
   // the phone layout under 600px, the desktop one above, as the customer's own screen will draw it.
   const [docRef, wideDoc] = useWide<HTMLDivElement>(600);
+  const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -92,8 +81,8 @@ export function ProposalPreview({ jobId, vm, draft, version, blocked: blockedIn,
   const [words, setWords] = useState<string | null>(null);
   const [subject, setSubject] = useState<string>("");
   const [sentMsg, setSentMsg] = useState<{ ok: boolean; text: string } | null>(null);
-  // Who it goes to (Coy, 2026-10-10: "select which of the customer contacts I send the quote to via text …
-  // select multiple contacts inside the customer or internal users"). The job's person is ticked to start.
+  // Who it goes to: one person, whose thread opens (Coy, 2026-10-11). The job's person is picked to start;
+  // the customer's other people and Coy's team (an estimator with a contact) can be picked instead.
   const [people, setPeople] = useState<Who[] | null>(null);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   useEffect(() => {
@@ -111,9 +100,9 @@ export function ProposalPreview({ jobId, vm, draft, version, blocked: blockedIn,
     return () => { off = true; };
   }, [jobId]);
   const chosen = (people ?? []).filter((w) => picked.has(w.key));
-  const textable = chosen.filter((w) => w.contact_id && w.phone);
-  const mailable = chosen.filter((w) => w.email);
-  const flip = (k: string) => setPicked((s) => { const n = new Set(s); if (n.has(k)) n.delete(k); else n.add(k); return n; });
+  const who = chosen[0] ?? null;
+  const canOpen = via === "text" ? !!(who?.contact_id && who.phone) : !!(who?.contact_id || who?.email);
+  const flip = (k: string) => setPicked(new Set([k]));
   useEffect(() => {
     let off = false;
     fetch("/api/proposal-sends").then((r) => r.json()).then((b) => { if (!off) setExamples(b.examples ?? []); }).catch(() => { if (!off) setExamples([]); });
@@ -160,7 +149,7 @@ export function ProposalPreview({ jobId, vm, draft, version, blocked: blockedIn,
     return r.link as PropLink;
   };
 
-  const send = async (how: "quo" | "messages" | "email" | "copy") => {
+  const send = async (how: "threads" | "copy") => {
     setErr(null); setSentMsg(null);
     try {
       const link = await ensureLink();
@@ -170,27 +159,16 @@ export function ProposalPreview({ jobId, vm, draft, version, blocked: blockedIn,
         if (ok) { setCopied(true); setTimeout(() => setCopied(false), 2500); }
         else setErr(`Couldn't copy — select the link below and copy it: ${link.url}`);
         await call(`/api/proposal-links/${link.id}`, "PATCH", { sent: "copy" }).catch(() => {});
-      } else if (how === "messages") {
-        // The old way: Coy's own Messages app with the words.
-        const m = linkMessage({ customer: vm.customer.name, org: vm.org.name, title: vm.job.title, url: link.url });
-        openUrl(smsHref(textable[0]?.phone ?? vm.customer.phone, words ? shownWords.replace(/\{link\}/g, link.url) : m.body));
-        await call(`/api/proposal-links/${link.id}`, "PATCH", { sent: "text" }).catch(() => {});
-      } else if (how === "quo") {
-        // A text each, through Quo, greeting each by their own first name.
-        const r = await proposalLink(jobId, draft ? null : version); // the link just made (or the live one), with who it is for
-        setSentMsg(await textEach(textable, (i) => setBusy(`Sending through Quo… ${i + 1} of ${textable.length}`),
-          (w) => sendProposal({ jobId, via: "text", body: greetingSlot(shownWords), contactId: w.contact_id, contactName: w.name, link: r, names: [vm.customer.name, vm.customer.person] })));
-      } else {
-        // One email to everyone ticked; with several the greeting carries no name.
-        setBusy("Opening your mail…");
-        const r = await proposalLink(jobId, draft ? null : version);
-        const one = mailable.length === 1 ? mailable[0] : null;
-        const body = one ? greetingSlot(shownWords) : greetingSlot(shownWords).replace(/\{first\}/g, "").replace(/[ \t]+([,.!?])/g, "$1");
-        const out = await sendProposal({ jobId, via: "email", body, subject: subject || start?.subject || null, email: mailable.map((w) => w.email).join(","),
-          contactId: one?.contact_id ?? null, contactName: one?.name ?? null, link: r, names: [vm.customer.name, vm.customer.person] });
-        setSentMsg(out);
+        onLinks();
+        return;
       }
-      onLinks();
+      // Their thread, the words and the link in its box; Coy sends from there.
+      setBusy("Opening their thread…");
+      const r = await proposalLink(jobId, draft ? null : version); // the link just made (or the live one)
+      const out = await openInThreads({ jobId, via, body: greetingSlot(shownWords), subject: subject || start?.subject || null,
+        contactId: who?.contact_id ?? null, contactName: who?.name ?? null, email: who?.email ?? null, link: r, names: [vm.customer.name, vm.customer.person] });
+      if (!out.ok || !out.href) { setSentMsg(out); return; }
+      router.push(out.href);
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(null); }
   };
 
@@ -231,12 +209,12 @@ export function ProposalPreview({ jobId, vm, draft, version, blocked: blockedIn,
             : (
               <div className="mt-1 flex flex-col" style={{ gap: 2 }}>
                 {people.map((w, i) => {
-                  const can = via === "text" ? !!(w.contact_id && w.phone) : !!w.email;
+                  const can = via === "text" ? !!(w.contact_id && w.phone) : !!(w.contact_id || w.email);
                   return (
                     <React.Fragment key={w.key}>
                       {w.internal && !people[i - 1]?.internal && <div className="mt-1.5" style={{ fontFamily: disp, fontSize: 10.5, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase", color: T.ink3 }}>Your team</div>}
                       <label className="flex items-center gap-2" style={{ fontSize: 12.5, color: can ? T.ink : T.ink3, cursor: "pointer", padding: "3px 0" }}>
-                        <input type="checkbox" checked={picked.has(w.key)} onChange={() => flip(w.key)} />
+                        <input type="radio" name="proposal-send-to" checked={picked.has(w.key)} onChange={() => flip(w.key)} />
                         <span className="min-w-0 flex-1">
                           <b style={{ fontWeight: 600 }}>{w.name ?? "No name"}</b>{w.note ? <span style={{ color: T.ink3 }}> · {w.note}</span> : null}
                           <span className="block" style={{ fontSize: 11, color: T.ink3 }}>
@@ -269,24 +247,24 @@ export function ProposalPreview({ jobId, vm, draft, version, blocked: blockedIn,
               <button type="button" onClick={() => { setVia("text"); setWords(null); }} style={seg(via === "text")} aria-pressed={via === "text"}>Text</button>
               <button type="button" onClick={() => { setVia("email"); setWords(null); }} style={{ ...seg(via === "email"), borderLeft: `1px solid ${T.hair}` }} aria-pressed={via === "email"}>Email</button>
             </span>
-            <span style={{ fontSize: 11, color: T.ink3 }}>{via === "text"
-              ? (textable.length ? `through Quo, a text to each of ${textable.length}` : "tick someone with a phone")
-              : mailable.length ? `your mail, one email to ${mailable.length}` : "your mail — tick someone with an email"}</span>
+            <span style={{ fontSize: 11, color: T.ink3 }}>{!who ? "pick who it goes to"
+              : canOpen ? `opens ${who.name ?? "their"}${who.name ? "'s" : ""} thread`
+              : via === "text" ? "no phone to text — pick someone else" : "no thread or email — pick someone else"}</span>
           </div>
           {via === "email" && <input value={subject || start?.subject || ""} onChange={(e) => setSubject(e.target.value)} aria-label="Subject" className="mt-2 w-full"
             style={{ height: 32, border: `1px solid ${T.hair}`, borderRadius: 3, background: T.card, color: T.ink, fontSize: 12.5, padding: "0 8px" }} />}
           <textarea value={shownWords} onChange={(e) => setWords(e.target.value)} rows={4} aria-label="The words that go with the link" className="mt-2 w-full"
             style={{ border: `1px solid ${T.hair}`, borderRadius: 3, background: T.card, color: T.ink, fontSize: 12.5, lineHeight: 1.4, padding: "6px 8px", resize: "vertical", fontFamily: "inherit" }} />
-          <div style={{ fontSize: 11, color: T.ink3 }}>{live ? "" : "{link} becomes the link once it's made."}{start?.learned ? " Started from how you sent the last one." : ""} Dusty learns from what you send.</div>
+          <div style={{ fontSize: 11, color: T.ink3 }}>{live ? "" : "{link} becomes the link once it's made."}{start?.learned ? " Started from how you sent the last one." : ""} You can still change them in the thread.</div>
           <div className="mt-2 flex flex-wrap gap-2">
-            {via === "text"
-              ? <button type="button" disabled={!canSend || !textable.length} onClick={() => void send("quo")} style={btn(canSend && !!textable.length)} title={textable.length ? `Sends through Quo to ${textable.map((w) => w.name).join(", ")}` : "Tick someone with a phone"}>{textable.length > 1 ? `${again ? "Resend" : "Send"} ${textable.length} texts` : again ? "Resend text" : "Send text"}</button>
-              : <button type="button" disabled={!canSend} onClick={() => void send("email")} style={btn(canSend)} title="Opens your mail with the words and the link">{again ? "Email it again" : "Email it"}</button>}
+            <button type="button" disabled={!canSend || !canOpen} onClick={() => void send("threads")} style={btn(canSend && canOpen)}
+              title={via === "text" ? "Opens their thread with the words and the link in the box — Send there goes through Quo" : "Opens a new email to them with the words and the link — Send there"}>
+              {via === "text" ? (again ? "Text it again in Threads" : "Text it in Threads") : again ? "Email it again in Threads" : "Email it in Threads"}
+            </button>
             <button type="button" disabled={!canSend} onClick={() => void send("copy")} style={{ ...btn(false), color: canSend ? T.ink : T.ink3, border: `1px solid ${T.hairStrong}`, cursor: canSend ? "pointer" : "default" }}>{copied ? "Copied ✓" : "Copy link"}</button>
           </div>
           <div className="mt-1.5" style={{ fontSize: 11, color: T.ink3 }}>
-            {via === "text" ? <>Send text goes through Quo from your line. {(textable[0]?.phone ?? vm.customer.phone) && <button type="button" onClick={() => void send("messages")} disabled={!canSend} style={{ border: 0, background: "transparent", padding: 0, color: T.chalk, fontSize: 11, cursor: "pointer", textDecoration: "underline" }}>Or open it in your Messages app</button>}</>
-              : "Email opens your own mail app with everything filled in — you press send."}
+            Nothing goes until you press Send in the thread. The link counts as sent once it does.
           </div>
           {sentMsg && <div className="mt-2" style={{ fontSize: 12, color: sentMsg.ok ? "#1F5C3A" : T.red }}>{sentMsg.text}</div>}
           {busy && <div className="mt-2" style={{ fontSize: 12, color: T.ink2 }}>{busy}</div>}

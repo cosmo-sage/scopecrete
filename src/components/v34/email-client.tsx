@@ -573,9 +573,9 @@ function AttachSheet({ open, onClose, jobId, contactId, picked, onPick }: { open
   );
 }
 
-export function EmailComposer({ mode, draft, messages = [], ours = [], conversation = null, replyToId = null, filing, canSend, signature, convKeyForDusty, initialTo, initialBody, draftFiles, onClose, onSent, asPage, quoted }: {
+export function EmailComposer({ mode, draft, messages = [], ours = [], conversation = null, replyToId = null, filing, canSend, signature, convKeyForDusty, initialTo, initialBody, initialSubject, draftFiles, onClose, onSent, asPage, quoted }: {
   mode: ComposeMode; draft?: DraftRow | null; messages?: MailRow[]; ours?: string[]; conversation?: string | null; replyToId?: string | null;
-  filing: Filing; canSend: boolean; signature: string; convKeyForDusty?: string | null; initialTo?: string[]; initialBody?: string; draftFiles?: FileLite[];
+  filing: Filing; canSend: boolean; signature: string; convKeyForDusty?: string | null; initialTo?: string[]; initialBody?: string; initialSubject?: string; draftFiles?: FileLite[];
   onClose: () => void; onSent: (msg: string, conversation?: string | null) => void; asPage?: boolean;
   /** The email being answered, shown under the box when the composer covers the screen (phone). */
   quoted?: React.ReactNode;
@@ -586,7 +586,7 @@ export function EmailComposer({ mode, draft, messages = [], ours = [], conversat
   const first = useMemo(() => {
     if (draft) return { to: draft.to_addresses, cc: draft.cc_addresses, subject: draft.subject ?? "", body: draft.body ?? "" };
     const t = replyTargets(messages, mode, ours);
-    const subject = mode === "forward" ? forwardSubject(last?.subject) : mode === "new" ? "" : replySubject(last?.subject);
+    const subject = mode === "forward" ? forwardSubject(last?.subject) : mode === "new" ? initialSubject ?? "" : replySubject(last?.subject);
     return { to: initialTo?.length ? initialTo : t.to, cc: t.cc, subject, body: mode === "forward" && last ? forwardBody(last) : initialBody ?? "" };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -768,7 +768,7 @@ function usePhone(): boolean {
 }
 
 /** A new email, from Compose or a person's Email channel (`?to=`, `?contact=`, `?body=`, `?draft=`). */
-export function NewEmail({ threadId, to, contactId, draftId, body }: { threadId?: string | null; to?: string | null; contactId?: string | null; draftId?: string | null; body?: string | null }) {
+export function NewEmail({ threadId, to, contactId, draftId, body, subject }: { threadId?: string | null; to?: string | null; contactId?: string | null; draftId?: string | null; body?: string | null; subject?: string | null }) {
   const router = useRouter();
   const [ctx, setCtx] = useState<{ can_send: boolean; signature: string; ours: string[]; draft: DraftRow | null; draftFiles: FileLite[]; to: string[]; filing: Filing } | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -794,7 +794,7 @@ export function NewEmail({ threadId, to, contactId, draftId, body }: { threadId?
       {err ? <EmptyState tone="warn" title="Can't write email yet" detail={err} />
         : !ctx ? <div className="rounded animate-pulse" style={{ height: 240, background: T.hairSoft }} />
         : <EmailComposer asPage mode="new" draft={ctx.draft} ours={ctx.ours} filing={ctx.filing} canSend={ctx.can_send} signature={ctx.signature}
-            initialTo={ctx.to} initialBody={body ?? undefined} draftFiles={ctx.draftFiles} onClose={() => router.push(back)}
+            initialTo={ctx.to} initialBody={body ?? undefined} initialSubject={subject ?? undefined} draftFiles={ctx.draftFiles} onClose={() => router.push(back)}
             onSent={(_m, conv) => router.push(conv ? convHref(conv, threadId) : back)} />}
     </div>
   );

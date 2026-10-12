@@ -41,6 +41,13 @@ export function newToken(bytes: Uint8Array): string {
   return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
+/** The proposal link tokens in a text or email ("…/p/<token>"), each once, at most ten. */
+export function linkTokensIn(body: string): string[] {
+  const out = new Set<string>();
+  for (const m of body.matchAll(/\/p\/([A-Za-z0-9_-]{32})(?![A-Za-z0-9_-])/g)) out.add(m[1]);
+  return [...out].slice(0, 10);
+}
+
 const first = (name: string | null | undefined) => (name ?? "").trim().split(/\s+/)[0] || "";
 
 /** The words that go with the link. */

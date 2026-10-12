@@ -45,7 +45,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { T, F, disp, body, eyebrow, clip, formatPhone } from "@/lib/v34/tokens";
 import { segments } from "@/lib/texting";
-import { proposalLink } from "@/lib/v34/send-proposal";
+import { draftKey, proposalLink } from "@/lib/v34/send-proposal";
 import { sendBytes } from "@/components/v34/files-panel";
 
 type Channel = "text" | "email" | "note";
@@ -56,8 +56,6 @@ const NOT_CONNECTED: Record<Channel, string> = {
   email: "Send opens it in the email composer, with To, files and the two-tap Send.",
   note: "Saved to their page. Dusty reads your notes.",
 };
-
-const draftKey = (contactId: string) => `sc:draft:${contactId}`;
 
 async function postJson(url: string, body: unknown) {
   const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });

@@ -21,6 +21,9 @@ async function call(url: string, method: string, body?: unknown) {
   return b;
 }
 
+/** Where a thread's text box keeps its words on this device (the composer reads it when it opens). */
+export const draftKey = (contactId: string) => `sc:draft:${contactId}`;
+
 export interface Recipient { contact_id: string; name: string | null; phone: string | null; email: string | null }
 export interface LinkReply { link: { id: string; url: string; token: string }; recipient: Recipient | null; job: { id: string; title: string | null }; version: number }
 
@@ -79,4 +82,43 @@ export async function sendProposal(o: {
   } catch (e) {
     return { ok: false, text: `Proposal not sent: ${e instanceof Error ? e.message : String(e)}` };
   }
+}
+
+/**
+ * Send it from Threads (Coy, 2026-10-11: "Sending the proposal should open up the threads for that
+ * customer. I can email or text it from there"). The link is made (a draft frozen first), the words
+ * filled in, and Coy is taken to the person: a text waits in their thread's box, an email opens in
+ * the email composer with To, subject and words. Nothing goes until he presses Send there; the
+ * server marks the link sent when a text or email carrying it goes out (/api/texts, /api/emails/send).
+ * The words are kept now so the next send — and Dusty — start from how Coy writes them.
+ */
+export async function openInThreads(o: {
+  jobId: string; via: Via; body: string; subject?: string | null;
+  contactId: string | null; contactName?: string | null; email?: string | null;
+  link: LinkReply; names?: Array<string | null | undefined>;
+}): Promise<{ ok: boolean; text: string; href?: string }> {
+  const r = o.link;
+  const name = o.contactName ?? r.recipient?.name ?? null;
+  const words = wordsFor(o.body, r, name);
+  const subject = o.subject ? fromTemplate(o.subject, { first: firstName(name), title: r.job.title, url: "" }).trim() : `${r.job.title ? `${r.job.title} — ` : ""}proposal`;
+  let href: string;
+  if (o.via === "text") {
+    if (!o.contactId) return { ok: false, text: "They have no thread to text from — pick one of the customer's people." };
+    try { window.localStorage.setItem(draftKey(o.contactId), JSON.stringify({ channel: "text", text: words })); }
+    catch { return { ok: false, text: "This browser won't keep the words for the thread — use Copy link instead." }; }
+    href = `/dashboard/messages/${o.contactId}`;
+  } else {
+    const qs = new URLSearchParams();
+    if (o.contactId) qs.set("contact", o.contactId);
+    if (o.email) qs.set("to", o.email);
+    qs.set("subject", subject);
+    qs.set("body", words);
+    href = `/dashboard/messages/email/new?${qs}`;
+  }
+  await call("/api/proposal-sends", "POST", {
+    via: o.via, sent: words, subject: o.via === "email" ? subject : null, dusty: null,
+    first: firstName(name), title: r.job.title, url: r.link.url,
+    names: [name, r.recipient?.name, ...(o.names ?? [])].filter((n): n is string => !!n && !!n.trim()),
+  }).catch(() => {});
+  return { ok: true, text: "Opening the thread…", href };
 }

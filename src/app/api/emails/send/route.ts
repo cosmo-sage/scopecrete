@@ -1,3 +1,4 @@
+import { markLinksSent } from "@/lib/proposal-sent-server";
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
 import { FILES_BUCKET } from "@/lib/files";
@@ -148,6 +149,7 @@ export async function POST(req: NextRequest) {
   // It went: say so even if the record failed, and why — never send it again.
   if (recErr) return applyCookies(NextResponse.json({ sent: true, recorded: false, error: `Sent, but it couldn't be saved here: ${recErr.message}` }, { status: 207 }));
 
+  await markLinksSent(supabase, orgId, body, "email").catch(() => {});
   const conv = conversation ?? sent.thread_id ?? sent.message_id;
   if (b.draft_id) await supabase.from("email_drafts").delete().eq("org_id", orgId).eq("id", b.draft_id as string);
   // Answered: it no longer needs a reply, and it isn't archived out of sight.

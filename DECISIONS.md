@@ -5536,8 +5536,9 @@ additive changes only, with confirmation.
   app.scopecrete.ai and localhost get 404, so Chrome never offers to install
   them. Chrome's own banner shows when Chrome decides, so Settings → Account has
   **Install the app** whenever the browser says it can be installed there.
-  There is no service worker (next-pwa is a webpack plugin; the Turbopack
-  build never ran it).
+  There is no service worker (next-pwa was a webpack plugin the Turbopack
+  build never ran; removed 2026-10-12 with the move to Next 16.4.0, which fixed
+  security advisories including a Proxy bypass on Turbopack builds).
 
 **Per-org Hermes containers are under review.** Clean isolation, but N
 long-running processes per N contractors does not survive growth and is the

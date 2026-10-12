@@ -8,7 +8,10 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [master]
+    # claude/feedback too, so a break is caught on the review branch before
+    # "merge feedback" carries it to master.
+    branches: [master, claude/feedback]
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -43,3 +46,35 @@ jobs:
           NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder
           NEXT_TELEMETRY_DISABLED: "1"
         run: npm run build
+
+  # Clean-up and dependency report. It never turns the run red: it lists what
+  # to look at — files and exports nothing imports, packages nothing uses,
+  # and known security advisories in what ships — in the run's summary.
+  hygiene:
+    name: dead code · unused packages · advisories (report only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Unused files, exports and packages (knip)
+        run: |
+          {
+            echo "## Unused code and packages (knip)"
+            echo '```'
+            npx --yes knip@5 --no-progress --reporter compact --include files,dependencies,unlisted,exports,duplicates || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Security advisories in shipped packages (npm audit)
+        run: |
+          {
+            echo "## npm audit (production dependencies)"
+            echo '```'
+            npm audit --omit=dev || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

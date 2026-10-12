@@ -1,0 +1,25 @@
+# Dependabot — opens a PR when a package has a security fix or a new version.
+# Grouped so it is a few PRs a week, not dozens. Nothing merges on its own:
+# each PR runs CI and waits for Coy, like any other change.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      # Security fixes, all packages, one PR.
+      security:
+        applies-to: security-updates
+        patterns: ["*"]
+      # Routine minor and patch bumps, one PR.
+      minor-and-patch:
+        applies-to: version-updates
+        update-types: [minor, patch]
+    # Majors (pdfjs-dist 6, eslint 10 …) change APIs; they come one at a time.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly

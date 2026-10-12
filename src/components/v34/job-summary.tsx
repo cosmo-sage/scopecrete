@@ -24,6 +24,7 @@ import { budget as priceBudget, jobMinimum, takeoff as takeoffOf, type BudgetLin
 import { signedLine, viewLine } from "@/lib/proposal-links";
 import { dayLabel, todayCentral, validDay, whenLabel } from "@/lib/jobs/schedule";
 import { JobBids } from "@/components/v34/bids/job-bids";
+import { SpecsCard } from "@/components/v34/specs-card";
 import { BudgetStep, SendSheet, useBudget } from "@/components/v34/plan-room/budget-step";
 import { call as planCall, isDrawing, type Param, type PlansData } from "@/components/v34/plan-room/shared";
 import { BEFORE_WON, WON_STATUSES } from "@/lib/jobs/stages";
@@ -160,6 +161,9 @@ export function JobSummary({ jobId }: { jobId: string }) {
         </div>
 
         <JobBids jobId={jobId} card={card} />
+
+        {/* The spec book's concrete pages as one file Dusty can read (2026-10-12). */}
+        <SpecsCard jobId={jobId} card={card} />
 
         <FromThePlans jobId={jobId} sections={sections} />
       </div>

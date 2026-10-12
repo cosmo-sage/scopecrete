@@ -4,6 +4,8 @@ import { FILE_COLUMNS, signFiles } from "@/lib/files-server";
 import { SOURCE_COLUMNS, e164, numSource } from "@/lib/sources-server";
 import { cleanTrades } from "@/lib/bids";
 import { BIDS_MISSING, missing091 } from "@/lib/bids-server";
+import { cleanWebsite } from "@/lib/vendor-website";
+import { readWebsites, writeWebsite } from "@/lib/vendor-website-server";
 
 /**
  * One vendor's page (migration 051).
@@ -32,6 +34,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   const first = (await one(`${COLS}, trades, crew_size`)) as unknown as One;
   const v = missing091(first.error) ? ((await one(COLS)) as unknown as One).data : first.data;
   if (!v) return applyCookies(NextResponse.json({ error: "No such vendor." }, { status: 404 }));
+  const website = (await readWebsites(supabase, orgId, [id])).get(id) ?? null;
 
   const [{ data: src }, { data: files }, { data: jobs }, { count: messages }] = await Promise.all([
     supabase.from("cost_item_sources")
@@ -61,7 +64,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     ...r, is_default: r.item!.default_source_id === r.id, cheapest_other: best.get(r.item!.id) ?? null,
   })).sort((a, b) => a.item!.name.localeCompare(b.item!.name));
   return applyCookies(NextResponse.json({
-    vendor: { ...v, subtype: v.contact_subtype, auto: !v.classification_confirmed_at && !!v.auto_classified_at },
+    vendor: { ...v, website, subtype: v.contact_subtype, auto: !v.classification_confirmed_at && !!v.auto_classified_at },
     prices,
     files: await signFiles(supabase, (files ?? []) as Array<Record<string, unknown>>),
     jobs: ((jobs ?? []) as unknown as Array<{ role: string | null; job: Record<string, unknown> }>).filter((j) => !j.job.archived_at).map((j) => ({ ...j.job, role: j.role })),
@@ -126,6 +129,12 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       ({ error } = await supabase.from("contacts").update(patch).eq("org_id", orgId).eq("id", id));
     }
     if (error) return bad(error.message, 500);
+  }
+  if ("website" in b) {
+    const w = cleanWebsite(b.website);
+    if (typeof b.website === "string" && b.website.trim() && !w) return bad("That website doesn't look like a web address.");
+    const r = await writeWebsite(supabase, orgId, userId, id, w);
+    if (!r.ok) return bad(r.error ?? "Couldn't save the website.", 500);
   }
   if ("subtype" in b && v.contact_type === "vendor") {
     const { error } = await supabase.rpc("sc_classify_contact", { p_contact: id, p_bucket: "vendor", p_subtype: text(b.subtype, 40) });

@@ -3,6 +3,8 @@ import { getApiSession } from "@/lib/api-auth";
 import { e164 } from "@/lib/sources-server";
 import { bidStats, cleanTrades, type BidRow } from "@/lib/bids";
 import { missing091 } from "@/lib/bids-server";
+import { cleanWebsite } from "@/lib/vendor-website";
+import { readWebsites, writeWebsite } from "@/lib/vendor-website-server";
 
 /**
  * Vendors (migration 051) — the Vendors page. A vendor is a contact filed as
@@ -14,7 +16,7 @@ import { missing091 } from "@/lib/bids-server";
  *          bids: { sent, answered, median_hours, label, speed } }], bids_ready }
  *   trades, crew size and bid stats need migration 091 (Vendors v2); until
  *   then they are empty and bids_ready is false.
- * POST { name, subtype?, phone?, email?, address?, service_area?, trades? }
+ * POST { name, subtype?, phone?, email?, address?, service_area?, trades?, website? }
  *      → { vendor } — Coy's tap, so the bucket is his (a human confirmation,
  *        via sc_classify_contact, the one writer). No phone is needed: a
  *        vendor can come from a receipt alone. A phone or email already on
@@ -58,12 +60,14 @@ export async function GET(req: NextRequest) {
     if (v) def.set(v, (def.get(v) ?? 0) + 1);
   }
   for (const f of (files ?? []) as Array<{ contact_id: string }>) fc.set(f.contact_id, (fc.get(f.contact_id) ?? 0) + 1);
+  const sites = await readWebsites(supabase, orgId, ((people ?? []) as Array<{ id: string }>).map((c) => c.id));
   const vendors = ((people ?? []) as Array<Record<string, unknown>>).map((c) => ({
     id: c.id, name: (c.name as string | null)?.trim() || null, company_name: c.company_name ?? null, subtype: c.contact_subtype ?? null,
     phone: c.phone ?? null, email: c.email ?? null, address: c.address ?? null, service_area: c.service_area ?? null,
     auto: !c.classification_confirmed_at && !!c.auto_classified_at,
     items: count.get(c.id as string) ?? 0, defaults: def.get(c.id as string) ?? 0, newest_price: newest.get(c.id as string) ?? null, files: fc.get(c.id as string) ?? 0,
     trades: (c.trades as string[] | undefined) ?? [], crew_size: (c.crew_size as number | null | undefined) ?? null,
+    website: sites.get(c.id as string) ?? null,
     bids: bidStats(bids.get(c.id as string) ?? []),
   }));
   return applyCookies(NextResponse.json({ vendors, bids_ready: ready }));
@@ -86,6 +90,8 @@ export async function POST(req: NextRequest) {
   if (email && !/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(email)) return bad("That email doesn't look right.");
   const subtype = text(b.subtype, 40);
   const trades = cleanTrades(b.trades);
+  const website = cleanWebsite(b.website);
+  if (typeof b.website === "string" && b.website.trim() && !website) return bad("That website doesn't look like a web address.");
 
   // Already one of his contacts? Then it isn't new.
   for (const [col, val] of [["phone", phone], ["email", email]] as const) {
@@ -110,6 +116,8 @@ export async function POST(req: NextRequest) {
   }
   // Trades (091): kept when the column is there; a vendor is still made without it.
   if (trades.length) await supabase.from("contacts").update({ trades }).eq("org_id", orgId).eq("id", made.id);
+  // Website (105): before it, kept as a note on them.
+  const site = website ? await writeWebsite(supabase, orgId, userId, made.id, website) : null;
   const { data: vendor } = await supabase.from("contacts").select(COLS).eq("org_id", orgId).eq("id", made.id).single();
-  return applyCookies(NextResponse.json({ vendor }, { status: 201 }));
+  return applyCookies(NextResponse.json({ vendor: vendor ? { ...vendor, website } : vendor, website_noted: !!site?.noted }, { status: 201 }));
 }

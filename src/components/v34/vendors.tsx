@@ -27,12 +27,13 @@ import { ReceiptImport } from "@/components/v34/receipt-import";
 import { PENDING_VENDOR_KEY } from "@/components/v34/org-settings";
 import { InitialsBox } from "@/components/v34/thread-list";
 import { BidComposer } from "@/components/v34/bids/bid-composer";
+import { websiteLabel } from "@/lib/vendor-website";
 import { TRADES, bidStats, cleanTrades, hasTrade, hoursLabel, tradeCounts, type PriceLine, type ShownScope } from "@/lib/bids";
 
 interface VRow {
   id: string; name: string | null; company_name: string | null; subtype: string | null; phone: string | null; email: string | null;
   address: string | null; service_area: string | null; auto: boolean; items: number; defaults: number; newest_price: string | null; files: number;
-  trades?: string[]; crew_size?: number | null;
+  trades?: string[]; crew_size?: number | null; website?: string | null;
   bids?: { sent: number; answered: number; median_hours: number | null; label: string; speed: string | null };
 }
 const SUBTYPES: Array<[string, string]> = [["all", "All"], ["supplier", "Suppliers"], ["subcontractor", "Subs"], ["equipment", "Equipment"]];
@@ -330,7 +331,7 @@ function TradePicker({ value, onChange }: { value: string[]; onChange: (v: strin
 }
 
 function NewVendor({ onClose, onMade }: { onClose: () => void; onMade: (id: string) => void }) {
-  const [d, setD] = useState({ name: "", subtype: "supplier", phone: "", email: "", address: "", service_area: "", trades: [] as string[] });
+  const [d, setD] = useState({ name: "", subtype: "supplier", phone: "", email: "", website: "", address: "", service_area: "", trades: [] as string[] });
   const [err, setErr] = useState<string | null>(null);
   const [existing, setExisting] = useState<{ id: string; name: string | null; bucket: string | null } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -348,7 +349,7 @@ function NewVendor({ onClose, onMade }: { onClose: () => void; onMade: (id: stri
     <div className="fixed inset-0 sc-drawer z-50 flex items-start justify-center" style={{ background: "rgba(0,0,0,.35)", paddingTop: "calc(var(--sc-head) + 12px)" }} onClick={onClose}>
       <div className="rounded p-3 flex flex-col gap-2" style={{ background: T.card, width: "min(460px, calc(100vw - 24px))", maxHeight: "calc(100dvh - var(--sc-head) - 40px)", overflowY: "auto" }} onClick={(e) => e.stopPropagation()} role="dialog" aria-label="New vendor">
         <div style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 700, textTransform: "uppercase" }}>New vendor</div>
-        {([["name", "Name"], ["phone", "Phone (optional)"], ["email", "Email"], ["address", "Address"], ["service_area", "Where they deliver"]] as const).map(([k, l]) => (
+        {([["name", "Name"], ["phone", "Phone (optional)"], ["email", "Email"], ["website", "Website"], ["address", "Address"], ["service_area", "Where they deliver"]] as const).map(([k, l]) => (
           <label key={k} className="block"><span style={eyebrow}>{l}</span>
             <input value={d[k]} onChange={(e) => setD({ ...d, [k]: e.target.value })} style={field} aria-label={l} /></label>
         ))}
@@ -434,6 +435,7 @@ export function VendorPage({ id }: { id: string }) {
     actions: [
       { label: "Send a bid request", primary: true, onClick: () => setComposing(true) },
       { label: "+ Receipt or quote", onClick: () => setReceipt(true) },
+      ...(v?.website ? [{ label: "Website ↗", onClick: () => { window.open(v.website!, "_blank", "noopener,noreferrer"); } }] : []),
       { label: "App access", onClick: () => {
         // Settings → People opens with this vendor picked for an invite (081).
         try { sessionStorage.setItem(PENDING_VENDOR_KEY, JSON.stringify({ contact_id: id, email: v?.email ?? null })); } catch {}
@@ -447,6 +449,7 @@ export function VendorPage({ id }: { id: string }) {
         v.service_area ? `works ${v.service_area}` : null, stats.sent ? stats.label : null, `${p.prices.length} price${p.prices.length === 1 ? "" : "s"}`],
       facts: { title: "Vendor", rows: [
         ["Kind", v.subtype ? SUB_LABEL[v.subtype] ?? v.subtype : null],
+        ["Website", v.website ? websiteLabel(v.website) : null, "— add it in Edit"],
         ["Trades", (v.trades ?? []).length ? (v.trades ?? []).join(", ") : null, "— add them in Edit"],
         ["Crew", v.crew_size ? `${v.crew_size}` : null],
         ["Bids", stats.sent ? `${stats.label}${stats.speed ? ` · ${stats.speed}` : ""}` : null],
@@ -624,20 +627,22 @@ function VendorReceipts({ p, onImport }: { p: VPage; onImport: () => void }) {
 }
 
 function EditVendor({ v, onClose, onSaved }: { v: VRow; onClose: () => void; onSaved: () => void }) {
-  const [d, setD] = useState({ name: v.name ?? "", phone: v.phone ? formatPhone(v.phone) : "", email: v.email ?? "", address: v.address ?? "", service_area: v.service_area ?? "", subtype: v.subtype ?? "supplier",
+  const [d, setD] = useState({ name: v.name ?? "", phone: v.phone ? formatPhone(v.phone) : "", email: v.email ?? "", website: v.website ?? "", address: v.address ?? "", service_area: v.service_area ?? "", subtype: v.subtype ?? "supplier",
     trades: v.trades ?? [], crew_size: v.crew_size ? String(v.crew_size) : "" });
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const save = async () => {
     setBusy(true); setErr(null);
-    try { await call(`/api/vendors/${v.id}`, "PATCH", { ...d, crew_size: d.crew_size.trim() ? Number(d.crew_size) : null }); onSaved(); }
+    // The website goes only when it changed — before migration 105 each save would otherwise add it again as a note.
+    const { website, ...rest } = d;
+    try { await call(`/api/vendors/${v.id}`, "PATCH", { ...rest, crew_size: d.crew_size.trim() ? Number(d.crew_size) : null, ...(website.trim() !== (v.website ?? "") ? { website } : {}) }); onSaved(); }
     catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
   };
   return (
     <div className="fixed inset-0 sc-drawer z-50 flex items-start justify-center" style={{ background: "rgba(0,0,0,.35)", paddingTop: "calc(var(--sc-head) + 12px)" }} onClick={onClose}>
       <div className="rounded p-3 flex flex-col gap-2" style={{ background: T.card, width: "min(460px, calc(100vw - 24px))", maxHeight: "calc(100dvh - var(--sc-head) - 40px)", overflowY: "auto" }} onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Edit vendor">
         <div style={{ fontFamily: disp, fontSize: F.lg, fontWeight: 700, textTransform: "uppercase" }}>Edit vendor</div>
-        {([["name", "Name"], ["phone", "Phone"], ["email", "Email"], ["address", "Address"], ["service_area", "Where they deliver"]] as const).map(([k, l]) => (
+        {([["name", "Name"], ["phone", "Phone"], ["email", "Email"], ["website", "Website"], ["address", "Address"], ["service_area", "Where they deliver"]] as const).map(([k, l]) => (
           <label key={k} className="block"><span style={eyebrow}>{l}</span>
             <input value={d[k]} onChange={(e) => setD({ ...d, [k]: e.target.value })} style={field} aria-label={l} /></label>
         ))}

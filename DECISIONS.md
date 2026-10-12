@@ -845,6 +845,26 @@ Coy: *"I need to be able to upload documents and photos for Dusty to parse."*
   may be uploaded with no job or person (`/api/files`, "inbox"); it is filed
   on its vendor (`PATCH /api/files/[id] {contact_id}`) once Coy confirms who
   it is from (§3).
+- **What he is reading, in his chat (Coy, 2026-10-12: "open the dusty chat
+  and see the specifics of what he's reading and the status of the process").**
+  When the chat is about a job, a card at its top — **What I'm reading** (or
+  **What I've read**), open while anything is moving — lists each of the job's
+  files with the background reader's state, read off its own columns
+  (`fileRow()` / `fileRows()`, `src/lib/dusty/reading.ts`, tested): **reading
+  now** (started when, size, which of three tries), **longer than usual** past
+  3 minutes, **stopped mid-read** past 10 (tried again, or marked not read after
+  the third), **waiting** with how many ahead, **read** with its pages, **not
+  read** with the reason, and plan files pointing to the sheets. A **Plan
+  sheets** line counts the scanned drawings read ("0 of 12 scanned sheets
+  read"; they are read in the browser — a computer, or Read the rest on a
+  phone) and, while `plan-ocr-runner` reads this job in this tab, its live line
+  ("Reading the plans · … · sheet 3 of 74 · part 5/12"). A red line when the
+  reader hasn't checked in for 15 minutes. `GET /api/jobs/[id]/reading`
+  (session client), checked every 15 s while anything moves. Dusty's own
+  context says a file is "reading now · started 4 min ago" the same way, so
+  he can answer "what are you reading?". No migration. (Seen the same day:
+  Reserve Sidewalk's 11 MB spec book stopped the reader three times and was
+  marked not read; the card now says so instead of "Dusty is reading".)
 - Dusty's chat context on a job or person includes their files' reads
   (newest 20); the activity line shows each read, and "Reading …" spins the
   emblem.

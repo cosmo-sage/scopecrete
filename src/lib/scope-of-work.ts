@@ -46,8 +46,10 @@ export function sowFromAnswer(answer: string): string | null {
  * any other context he can find"). His job context already carries all of those; this asks him to use them.
  */
 export function sowQuestion(name: string, current: string | null | undefined): string {
-  return `Write the scope of work for the ${name} section as short bullets, one line each, in the order the work is done, start to finish — what we do to get it done. ` +
-    `Build it from everything you have on this job: the calls, texts and emails, the photos and files you've read, the plan sheets and what they say, the takeoffs measured, the section's size and notes, and its budget items. ` +
-    `Written for the customer, no prices. Where something isn't known yet, say so in a bullet instead of guessing.` +
+  // Short (Coy, 2026-10-13: "the AI scope of work needs to be more concise") — it goes on the customer's proposal.
+  return `Write the scope of work for the ${name} section as 4 to 8 short bullets, in the order the work is done, start to finish — what we do to get it done. ` +
+    `Each bullet one plain step of 10 words or fewer, like "Saw-cut and remove the broken corner" — no explanations, no "about", no reasons. ` +
+    `Build it from everything you have on this job: the calls, texts and emails, the photos and files you've read, the plan sheets, the takeoffs, the section's size and notes, and its budget items. ` +
+    `Written for the customer, no prices. Leave out what isn't known yet and what still needs confirming — say that in a line after the list, not as a bullet.` +
     (current ? `\n\nWhat it says now:\n${current}` : "");
 }

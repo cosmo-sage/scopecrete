@@ -45,6 +45,13 @@ test("the SOW question asks for start-to-finish from every source", () => {
   assert.match(q, /What it says now:\nHaul off/);
 });
 
+test("the SOW question asks for few, short bullets with unknowns left out of them", () => {
+  const q = sowQuestion("Corner Patch", null);
+  assert.match(q, /4 to 8 short bullets/);
+  assert.match(q, /10 words or fewer/);
+  assert.match(q, /not as a bullet/);
+});
+
 test("itemized costs: known types and units, ten at most, keys in order", async () => {
   const { sanitizeItems } = await import("../src/lib/draft/rates.ts");
   const items = sanitizeItems({ items: [

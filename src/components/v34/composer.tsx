@@ -42,7 +42,7 @@
  * blocked storage throw.
  */
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { T, F, disp, body, eyebrow, clip, formatPhone } from "@/lib/v34/tokens";
 import { segments } from "@/lib/texting";
 import { draftKey, proposalLink } from "@/lib/v34/send-proposal";
@@ -177,6 +177,18 @@ export function Composer({ contactId, phone, name, compact = false, onNoteSaved,
   }
 
   useEffect(() => { writeDraft(contactId, channel, text); }, [contactId, channel, text]);
+  // The box grows with what's in it, a typed message or a filled-in proposal text, up to
+  // ten lines or 40% of the screen, then scrolls (Coy, 2026-10-13: "does not allow me to
+  // view everything I've typed out").
+  const box = useRef<HTMLTextAreaElement | null>(null);
+  useLayoutEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    el.style.height = "auto";
+    const cap = Math.min(window.innerHeight * 0.4, 230);
+    el.style.height = `${Math.min(el.scrollHeight + 2, cap)}px`;
+    el.style.overflowY = el.scrollHeight + 2 > cap ? "auto" : "hidden";
+  }, [text]);
   useEffect(() => () => { if (copiedTimer.current) clearTimeout(copiedTimer.current); }, []);
   useEffect(() => () => { rec.current?.stop(); }, []);
 
@@ -356,12 +368,12 @@ export function Composer({ contactId, phone, name, compact = false, onNoteSaved,
       <div className="flex items-end gap-1.5">
         {/* The line it goes from is picked once, in the thread's toolbar (Coy, 2026-10-05: "it exists already at the top"). */}
         <div className="flex-1 relative" style={{ minWidth: 0 }}>
-          <textarea value={text} onChange={(e) => setText(e.target.value)} rows={compact ? 2 : 1}
+          <textarea ref={box} value={text} onChange={(e) => setText(e.target.value)} rows={compact ? 2 : 1}
             // An empty box, no words in it (Coy, 2026-10-05: "I know what to do with message box").
             aria-label={channel === "note" ? "Internal note" : channel === "email" ? "Email" : "Text message"}
             className="w-full py-2 rounded-lg outline-none resize-none block"
             style={{ border: `1px solid ${T.hair}`, background: T.card, fontSize: F.sm, paddingLeft: compact ? 10 : 34, paddingRight: 10,
-                     maxHeight: 120, lineHeight: 1.4, fontFamily: body, minWidth: 0 }} />
+                     lineHeight: 1.4, fontFamily: body, minWidth: 0 }} />
           {!compact && (
             <>
               <button type="button" onClick={() => pick.current?.click()} aria-label="Attach photos or files"

@@ -16,7 +16,7 @@ import Link from "next/link";
 import { T, F, disp, eyebrow, nums, money, money0, formatPhone } from "@/lib/v34/tokens";
 import { EmptyState } from "@/components/v34/primitives";
 import { AddressInput } from "@/components/v34/address-input";
-import { StreetView } from "@/components/v34/site-views";
+import { SiteViews } from "@/components/v34/site-views";
 import { JobChips } from "@/components/v34/job-chips";
 import { BidStrip } from "@/components/v34/bid-strip";
 import { JobHeaderRow } from "@/components/v34/job-tabs";
@@ -137,7 +137,7 @@ export function JobSummary({ jobId }: { jobId: string }) {
           <div className="flex flex-col gap-0.5" style={{ fontSize: F.sm, color: T.ink2, marginTop: 8, lineHeight: 1.45 }}>
             <JobCustomer jobId={jobId} customer={customer} who={who} contactId={contact?.id ?? null} onSaved={() => void reload()} />
             <JobAddress jobId={jobId} address={job.address} onSaved={() => void reload()} />
-            {job.address && <StreetView addr={[job.address, job.city, [job.state, job.zip].filter(Boolean).join(" ")].filter(Boolean).join(", ")} stored={null} />}
+            {job.address && <SiteViews addr={[job.address, job.city, [job.state, job.zip].filter(Boolean).join(" ")].filter(Boolean).join(", ")} stored={null} />}
             {job.created_at && <div>Created {day(job.created_at, true)}
               {job.origin === "classification" ? " · made when filed as a customer" : job.created_from_message_id ? " · drafted from a message" : ""}</div>}
             <div>{sections.length} section{sections.length === 1 ? "" : "s"}</div>

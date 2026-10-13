@@ -982,7 +982,13 @@ function ParamPanel({ jobId, data, groupId, setGroupId, selId, onSelect, act, on
 
 function MeasName({ jobId, m, fallback, act }: { jobId: string; m: Meas; fallback: string; act: (fn: () => Promise<unknown>) => Promise<void> }) {
   const [edit, setEdit] = useState(false);
-  if (!edit) return <div onDoubleClick={() => setEdit(true)} title="Double-click to rename" style={{ fontSize: 13, ...clip }}>{m.name ?? fallback}</div>;
+  if (!edit) return (
+    <div className="flex items-center gap-1" style={{ minWidth: 0 }}>
+      <div onDoubleClick={() => setEdit(true)} title="Double-click to rename" style={{ fontSize: 13, ...clip }}>{m.name ?? fallback}</div>
+      <button onClick={(e) => { e.stopPropagation(); setEdit(true); }} aria-label={`Rename ${m.name ?? fallback}`} title="Rename"
+        style={{ flex: "0 0 auto", width: 22, height: 22, fontSize: 12, color: T.ink3, cursor: "pointer" }}>✎</button>
+    </div>
+  );
   return (
     <input autoFocus defaultValue={m.name ?? ""} placeholder={fallback} aria-label="Name this takeoff" onClick={(e) => e.stopPropagation()}
       onBlur={(e) => { setEdit(false); const v = e.target.value.trim(); if (v !== (m.name ?? "")) void act(() => call(`/api/jobs/${jobId}/takeoff/measurements/${m.id}`, "PATCH", { name: v || null })); }}

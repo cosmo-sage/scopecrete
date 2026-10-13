@@ -118,3 +118,36 @@ export function AddressLink({ addr }: { addr: string }) {
       style={{ fontSize: 13.5, fontWeight: 500, color: T.chalk, textDecoration: "underline", textUnderlineOffset: 3, overflowWrap: "anywhere" }}>{addr}</a>
   );
 }
+
+/**
+ * Street view of the address (Coy, 2026-10-13: "google street view on the
+ * customer and job pages"). With Google's browser key
+ * (`NEXT_PUBLIC_GOOGLE_MAPS_EMBED_KEY`, the Maps Embed API — free, no usage
+ * charge) it is Google's own Street View in the page; without it, a link that
+ * opens street view in Google Maps (no key). Never the keyless embed.
+ */
+const EMBED_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_EMBED_KEY ?? "";
+
+export function streetViewUrl(p: Point): string {
+  return `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${p.lat},${p.lng}`;
+}
+
+export function StreetView({ addr, stored, height = 200 }: { addr: string; stored: Point | null; height?: number }) {
+  const { point } = usePoint(addr, stored);
+  if (!point) return null;
+  const link = (
+    <a href={streetViewUrl(point)} target="_blank" rel="noopener noreferrer"
+      style={{ fontSize: 12, fontWeight: 600, color: T.chalk, textDecoration: "none" }}>
+      {EMBED_KEY ? "Open in Google Maps ↗" : "Street view ↗"}
+    </a>
+  );
+  if (!EMBED_KEY) return link;
+  const src = `https://www.google.com/maps/embed/v1/streetview?key=${encodeURIComponent(EMBED_KEY)}&location=${point.lat},${point.lng}&fov=80`;
+  return (
+    <div className="flex flex-col gap-1">
+      <iframe title="Street view" src={src} loading="lazy" referrerPolicy="no-referrer-when-downgrade" allowFullScreen
+        style={{ width: "100%", height, border: `1px solid ${T.hair}`, borderRadius: 4, background: T.sunk }} />
+      <div style={{ textAlign: "right" }}>{link}</div>
+    </div>
+  );
+}

@@ -30,7 +30,7 @@ import { T, F, eyebrow, nums, clip, money0, formatPhone, relTime, strong, BUCKET
 import { RecordHeader, HeaderNote, OverviewGrid, PanelCard, SectionHead, Empty, Facts, ContactCard, ThreadChips, RecentCard, JobRow, Field,
   menuItem, btn, lbl, panelTitle, send, type CardPerson } from "@/components/v34/record-page";
 import { Sheet } from "@/components/v34/primitives";
-import { SiteViews, AddressLink } from "@/components/v34/site-views";
+import { SiteViews, AddressLink, StreetView } from "@/components/v34/site-views";
 import { useWide } from "@/lib/v34/use-wide";
 import { PlayAudio, MessageMedia } from "@/components/v34/conversation";
 import { Composer } from "@/components/v34/composer";
@@ -359,6 +359,7 @@ function LocationCard({ cu, heard, onEdit, onSaved }: { cu: Customer; maps: Data
         <>
           <AddressLink addr={addr} />
           <SiteViews addr={addr} stored={stored} />
+          <StreetView addr={addr} stored={stored} />
         </>
       ) : heard ? (
         <HeardAddress cu={cu} heard={heard} onEdit={onEdit} onSaved={onSaved} />

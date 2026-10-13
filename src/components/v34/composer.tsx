@@ -178,14 +178,15 @@ export function Composer({ contactId, phone, name, compact = false, onNoteSaved,
 
   useEffect(() => { writeDraft(contactId, channel, text); }, [contactId, channel, text]);
   // The box grows with what's in it, a typed message or a filled-in proposal text, up to
-  // ten lines or 40% of the screen, then scrolls (Coy, 2026-10-13: "does not allow me to
+  // about eight lines or 40% of the screen, then scrolls (Coy, 2026-10-13: "does not allow me to
   // view everything I've typed out").
   const box = useRef<HTMLTextAreaElement | null>(null);
+  const send = useRef<HTMLButtonElement | null>(null);
   useLayoutEffect(() => {
     const el = box.current;
     if (!el) return;
     el.style.height = "auto";
-    const cap = Math.min(window.innerHeight * 0.4, 230);
+    const cap = Math.min(window.innerHeight * 0.4, 200);
     el.style.height = `${Math.min(el.scrollHeight + 2, cap)}px`;
     el.style.overflowY = el.scrollHeight + 2 > cap ? "auto" : "hidden";
   }, [text]);
@@ -306,13 +307,21 @@ export function Composer({ contactId, phone, name, compact = false, onNoteSaved,
     }
   }
 
-  const iconBtn: React.CSSProperties = {
-    width: 34, height: 34, border: `1px solid ${T.hair}`, background: T.card, borderRadius: 8,
-    display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+  const roundBtn: React.CSSProperties = {
+    width: 30, height: 30, border: `1px solid ${T.hair}`, background: T.card, color: T.ink2, borderRadius: 15,
+    display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, cursor: "pointer",
   };
+  const sendLook = (off: boolean): React.CSSProperties => ({
+    border: 0, background: off ? T.hair : T.hiviz, color: off ? T.ink3 : T.onHiviz, cursor: off ? "default" : "pointer",
+  });
+  const arrow = (
+    <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M8 13.5V3M3.5 7.2 8 2.7l4.5 4.5" />
+    </svg>
+  );
 
   return (
-    <div style={{ background: T.card, borderTop: compact ? "none" : `1px solid ${T.hair}` }}
+    <div style={{ background: compact ? T.card : "transparent", borderTop: compact ? "none" : `1px solid ${T.hair}` }}
       className={compact ? "mt-2" : "shrink-0 px-2.5 pt-2 pb-2"}>
 
       {/* Which surface am I speaking on. */}
@@ -365,82 +374,78 @@ export function Composer({ contactId, phone, name, compact = false, onNoteSaved,
           ))}
         </div>
       )}
-      <div className="flex items-end gap-1.5">
-        {/* The line it goes from is picked once, in the thread's toolbar (Coy, 2026-10-05: "it exists already at the top"). */}
-        <div className="flex-1 relative" style={{ minWidth: 0 }}>
-          <textarea ref={box} value={text} onChange={(e) => setText(e.target.value)} rows={compact ? 2 : 1}
+      {/* The box, laid out like Dusty's (Coy, 2026-10-13: "more like the design of the dusty text box"): the words in a
+          card with no border of their own, then + on the left and the mic and a round send on the right. Enter is a new
+          line; Ctrl (⌘) + Enter sends, as the round arrow does. The line it goes from is picked in the thread's toolbar. */}
+      <div style={{ padding: compact ? "8px 8px 6px" : "10px 10px 8px", background: T.card, border: `1px solid ${T.hairStrong}`, borderRadius: 8 }}>
+        <div className="flex items-start gap-2">
+          <textarea ref={box} value={text} onChange={(e) => setText(e.target.value)} rows={2}
             // An empty box, no words in it (Coy, 2026-10-05: "I know what to do with message box").
             aria-label={channel === "note" ? "Internal note" : channel === "email" ? "Email" : "Text message"}
-            className="w-full py-2 rounded-lg outline-none resize-none block"
-            style={{ border: `1px solid ${T.hair}`, background: T.card, fontSize: F.sm, paddingLeft: compact ? 10 : 34, paddingRight: 10,
+            onKeyDown={(e) => {
+              if (e.key !== "Enter" || !(e.ctrlKey || e.metaKey)) return;
+              e.preventDefault();
+              send.current?.click();
+            }}
+            className="flex-1 outline-none resize-none block"
+            style={{ border: "none", background: "transparent", color: T.ink, fontSize: F.sm, padding: 0, minHeight: 40,
                      lineHeight: 1.4, fontFamily: body, minWidth: 0 }} />
+          {!compact && channel !== "note" && (
+            <span className="shrink-0 hidden lg:inline" style={{ fontSize: 10.5, color: T.ink3, paddingTop: 3 }}>Ctrl + Enter to send</span>
+          )}
+        </div>
+        <div className="flex items-center gap-2" style={{ marginTop: 6 }}>
           {!compact && (
             <>
               <button type="button" onClick={() => pick.current?.click()} aria-label="Attach photos or files"
-                title="Attach photos or files — saved on their Files"
-                style={{ position: "absolute", left: 4, bottom: 4, width: 26, height: 26, border: 0, borderRadius: 13,
-                         background: T.hairSoft, color: T.ink2, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <svg width="13" height="13" viewBox="0 0 13 13" aria-hidden="true">
-                  <path d="M6.5 1.8v9.4M1.8 6.5h9.4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-                </svg>
-              </button>
+                title="Attach photos or files — saved on their Files" style={{ ...roundBtn, fontSize: 18 }}>+</button>
               <input ref={pick} type="file" multiple hidden onChange={(e) => { void attach(e.target.files); e.target.value = ""; }} />
             </>
           )}
+          <span className="flex-1" />
+
+          {!compact && (
+            <button type="button" onClick={dictate} disabled={!canDictate}
+              aria-label={!canDictate ? "Dictation isn't available in this browser" : listening ? "Stop listening" : "Talk — the words land in the box"}
+              aria-pressed={listening}
+              title={!canDictate ? "This browser has no speech recognition" : listening ? "Listening — tap to stop" : "Tap and talk"}
+              className={listening ? "sc-rec" : undefined}
+              style={{ ...roundBtn, opacity: canDictate ? 1 : 0.45, cursor: canDictate ? "pointer" : "not-allowed",
+                       background: listening ? T.red : T.card, borderColor: listening ? T.red : T.hair, color: listening ? T.card : T.ink2 }}>
+              <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
+                <rect x="5.5" y="1.5" width="5" height="8.5" rx="2.5" fill="currentColor" stroke="none" />
+                <path d="M3 7.5a5 5 0 0 0 10 0M8 12.5v2.2" />
+              </svg>
+            </button>
+          )}
+
+          {channel === "note" && (() => {
+            const off = !has || saving;
+            return (
+              <button ref={send} type="button" onClick={() => void saveNote()} disabled={off} aria-label="Save note" title="Save note"
+                style={{ ...roundBtn, ...sendLook(off) }}>{arrow}</button>
+            );
+          })()}
+          {channel === "text" && (() => {
+            // Always there, far right (Coy, 2026-10-09: "I need a send button"); off until there is something to send.
+            const files = attached.length > 0;
+            const off = sending || !phone || (!has && !files) || attached.some((a) => a.state === "up");
+            return (
+              <button ref={send} type="button" onClick={() => void (files ? shareOut() : sendText())} disabled={off}
+                aria-label={files ? "Send with the files — opens your phone's share sheet" : phone ? `Send the text to ${formatPhone(phone)}` : "No number to text"}
+                title={files ? "Quo sends words only from here — the share sheet hands the files to the Quo app" : phone ? `Send through Quo to ${formatPhone(phone)}` : "They have no number to text"}
+                style={{ ...roundBtn, ...sendLook(off) }}>{sending ? "…" : arrow}</button>
+            );
+          })()}
+          {channel === "email" && (
+            // Email goes through the email composer (migration 100): the words carry over, Send is two taps there.
+            has ? (
+              <a href={`/dashboard/messages/email/new?contact=${encodeURIComponent(contactId)}&body=${encodeURIComponent(text.trim().slice(0, 1500))}`}
+                ref={send as unknown as React.Ref<HTMLAnchorElement>}
+                aria-label="Write this as an email" title="Open in the email composer" style={{ ...roundBtn, ...sendLook(false) }}>{arrow}</a>
+            ) : <span aria-hidden="true" style={{ ...roundBtn, ...sendLook(true) }}>{arrow}</span>
+          )}
         </div>
-
-        {!compact && (
-          <button onClick={dictate} disabled={!canDictate}
-            aria-label={!canDictate ? "Dictation isn't available in this browser" : listening ? "Stop listening" : "Talk — the words land in the box"}
-            aria-pressed={listening}
-            title={!canDictate ? "This browser has no speech recognition" : listening ? "Listening — tap to stop" : "Tap and talk"}
-            className={listening ? "sc-rec" : undefined}
-            style={{ ...iconBtn, opacity: canDictate ? 1 : 0.45, cursor: canDictate ? "pointer" : "not-allowed",
-                     background: listening ? T.red : T.card, borderColor: listening ? T.red : T.hair }}>
-            <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true" style={{ color: listening ? T.card : T.ink2 }}>
-              <rect x="5.4" y="1.6" width="4.2" height="7.6" rx="2.1" fill="none" stroke="currentColor" strokeWidth="1.5" />
-              <path d="M3 7.4a4.5 4.5 0 0 0 9 0" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-              <path d="M7.5 11.9v1.6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-            </svg>
-          </button>
-        )}
-
-        {has && channel === "note" && (
-          <button onClick={() => void saveNote()} disabled={saving} aria-label="Save note"
-            style={{ ...iconBtn, background: T.ink, borderColor: T.ink, cursor: saving ? "default" : "pointer", opacity: saving ? 0.5 : 1 }}>
-            <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true">
-              <path d="M7.5 12.4V2.8M3.4 6.9 7.5 2.6l4.1 4.3" fill="none" stroke="#fff"
-                strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </button>
-        )}
-        {channel === "text" && (() => {
-          // Always there, far right (Coy, 2026-10-09: "I need a send button"); off until there is something to send.
-          const files = attached.length > 0;
-          const off = sending || !phone || (!has && !files) || attached.some((a) => a.state === "up");
-          return (
-          <button onClick={() => void (files ? shareOut() : sendText())} disabled={off}
-            aria-label={files ? "Send with the files — opens your phone's share sheet" : phone ? `Send the text to ${formatPhone(phone)}` : "No number to text"}
-            title={files ? "Quo sends words only from here — the share sheet hands the files to the Quo app" : phone ? `Send through Quo to ${formatPhone(phone)}` : "They have no number to text"}
-            style={{ ...iconBtn, background: off ? T.card : T.hiviz, borderColor: off ? T.hair : T.hiviz, cursor: off ? "default" : "pointer", opacity: sending || !phone ? 0.5 : 1 }}>
-            <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true" style={{ color: off ? T.ink3 : T.onHiviz }}>
-              <path d="M7.5 12.4V2.8M3.4 6.9 7.5 2.6l4.1 4.3" fill="none" stroke="currentColor"
-                strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </button>
-          );
-        })()}
-        {has && channel === "email" && (
-          // Email goes through the email composer (migration 100): the words carry over, Send is two taps there.
-          <a href={`/dashboard/messages/email/new?contact=${encodeURIComponent(contactId)}&body=${encodeURIComponent(text.trim().slice(0, 1500))}`}
-            aria-label="Write this as an email" title="Open in the email composer"
-            style={{ ...iconBtn, background: T.hiviz, borderColor: T.hiviz, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
-            <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true" style={{ color: T.onHiviz }}>
-              <path d="M7.5 12.4V2.8M3.4 6.9 7.5 2.6l4.1 4.3" fill="none" stroke="currentColor"
-                strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </a>
-        )}
       </div>
 
       {/* Copy, and what Send does (or why it can't). Only while there is something to say: the Proposal button and the

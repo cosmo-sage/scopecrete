@@ -24,6 +24,17 @@ import { proposalNumbers } from "@/lib/proposal-number-server";
 
 export const dynamic = "force-dynamic";
 
+/** A customer or owner on the Summary. */
+interface Party {
+  id: string; name: string | null; type: string | null; address: string | null; point: { lat: number; lng: number } | null;
+  since: string | null; created_at: string | null; people: number; jobs: number; primary_contact_id: string | null;
+}
+/** A person on the job, and which side they work for. */
+interface JobPerson {
+  id: string; name: string | null; phone: string | null; email: string | null; role: string | null;
+  side: "customer" | "owner" | null; primary: boolean; party_primary: boolean;
+}
+
 const EDITABLE = ["title", "address", "city", "state", "zip", "job_number", "notes", "status",
   "job_type", "lead_source", "referred_by_contact_id"] as const;
 const JOB_TYPES = ["residential", "commercial", "public"];
@@ -202,6 +213,18 @@ export async function PATCH(
     }
   }
 
+  // Who the work is for, when it isn't the customer (migration 109, Claude Design "Job Summary",
+  // 2026-10-13): { owner_customer_id } — a customer of the org, or null for "same as the customer".
+  if ("owner_customer_id" in body) {
+    const o = body.owner_customer_id;
+    if (o === null || o === "") patch.owner_customer_id = null;
+    else if (typeof o === "string") {
+      const { data: ow } = await supabase.from("customers").select("id, archived_at, merged_into_customer_id").eq("org_id", orgId).eq("id", o).maybeSingle();
+      if (!ow || ow.archived_at || ow.merged_into_customer_id) return applyCookies(NextResponse.json({ error: "That owner isn't one of your customers." }, { status: 404 }));
+      patch.owner_customer_id = ow.id;
+    }
+  }
+
   if (accept) {
     patch.confirmed_at = new Date().toISOString();
     patch.confirmed_by = userId;
@@ -354,12 +377,56 @@ export async function GET(
         .map((d) => ({ proposal_id: d.proposal_id, name: d.decided_name, at: d.decided_at, total: d.signed_total == null ? null : Number(d.signed_total) })));
   }
 
-  // The customer's own name, for the Summary's Customer row (Coy, 2026-10-10).
-  let customer: { id: string; name: string | null } | null = null;
-  if (data.customer_id) {
-    const { data: cu } = await supabase.from("customers").select("id, name").eq("org_id", orgId).eq("id", data.customer_id).maybeSingle();
-    customer = cu ?? null;
+  // The parties (Claude Design "Job Summary", 2026-10-13): who pays (the customer), who the work is
+  // for (the owner, migration 109 — read on its own so the job opens before 109 is applied), the
+  // people on either side, and where the site is on the map (090's point while its address holds).
+  const { data: ow, error: owErr } = await supabase.from("jobs").select("owner_customer_id, lat, lng, geocode_query").eq("id", id).eq("org_id", orgId).maybeSingle();
+  const ownerSupported = !owErr || !/owner_customer_id/.test(owErr.message);
+  let site: { lat: number; lng: number } | null = null;
+  let ownerId: string | null = null;
+  if (!owErr && ow) {
+    ownerId = (ow.owner_customer_id as string | null) ?? null;
+    // Kept only while it was looked up for this address (the Map page writes it, 090).
+    const gq = (ow.geocode_query as string | null) ?? "";
+    if (typeof ow.lat === "number" && typeof ow.lng === "number" && data.address && gq.toLowerCase().startsWith(data.address.trim().toLowerCase())) site = { lat: ow.lat, lng: ow.lng };
   }
+  const partyIds = [data.customer_id, ownerId].filter((x): x is string => !!x);
+  const parties = new Map<string, Party>();
+  const people: JobPerson[] = [];
+  if (partyIds.length) {
+    const [{ data: cus }, { data: ppl }, { data: jbs }] = await Promise.all([
+      supabase.from("customers").select("id, name, customer_type, address_formatted, address_line1, city, state, zip, lat, lng, since, created_at, primary_contact_id")
+        .eq("org_id", orgId).in("id", partyIds),
+      supabase.from("contacts").select("id, name, phone, email, role, customer_id, company_name")
+        .eq("org_id", orgId).in("customer_id", partyIds).is("merged_into_contact_id", null).is("archived_at", null).limit(60),
+      supabase.from("jobs").select("customer_id").eq("org_id", orgId).in("customer_id", partyIds).is("archived_at", null).limit(500),
+    ]);
+    for (const c of (cus ?? []) as Array<Record<string, unknown>>) {
+      const cid = c.id as string;
+      const addr = (c.address_formatted as string | null) || [c.address_line1, c.city, [c.state, c.zip].filter(Boolean).join(" ")].filter(Boolean).join(", ") || null;
+      parties.set(cid, {
+        id: cid, name: (c.name as string | null) ?? null, type: (c.customer_type as string | null) ?? null, address: addr,
+        point: typeof c.lat === "number" && typeof c.lng === "number" ? { lat: c.lat, lng: c.lng } : null,
+        since: (c.since as string | null) ?? null, created_at: (c.created_at as string | null) ?? null,
+        people: ((ppl ?? []) as Array<{ customer_id: string }>).filter((p) => p.customer_id === cid).length,
+        jobs: ((jbs ?? []) as Array<{ customer_id: string }>).filter((j) => j.customer_id === cid).length,
+        primary_contact_id: (c.primary_contact_id as string | null) ?? null,
+      });
+    }
+    for (const p of (ppl ?? []) as Array<Record<string, unknown>>) {
+      const side = p.customer_id === data.customer_id ? "customer" : "owner";
+      people.push({ id: p.id as string, name: (p.name as string | null) ?? null, phone: (p.phone as string | null) ?? null, email: (p.email as string | null) ?? null,
+        role: (p.role as string | null) ?? null, side, primary: p.id === data.contact_id,
+        party_primary: parties.get(p.customer_id as string)?.primary_contact_id === p.id });
+    }
+  }
+  // The job's own person, when they aren't on either side (a caller not filed on a customer yet).
+  if (contact && !people.some((p) => p.id === contact!.id)) {
+    people.unshift({ id: contact.id, name: contact.name, phone: contact.phone, email: contact.email ?? null, role: null, side: null, primary: true, party_primary: false });
+  }
+  people.sort((a, b) => Number(b.primary) - Number(a.primary) || (a.side === b.side ? 0 : a.side === "customer" ? -1 : 1) || (a.name ?? "").localeCompare(b.name ?? ""));
+  const customer = data.customer_id ? parties.get(data.customer_id) ?? null : null;
+  const owner = ownerId ? parties.get(ownerId) ?? null : null;
 
-  return applyCookies(NextResponse.json({ job: data, contact, customer, why, crew, contract }));
+  return applyCookies(NextResponse.json({ job: data, contact, customer, owner, owner_supported: ownerSupported, people, site, why, crew, contract }));
 }

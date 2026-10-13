@@ -35,7 +35,7 @@ export function fitView(pts: Array<{ lat: number; lng: number }>, w: number, h: 
   return { lat: c.lat, lng: c.lng, zoom };
 }
 
-export function MapView({ view, onView, mode, provider = "mapbox", overlay, onSize, onBackgroundTap, children }: {
+export function MapView({ view, onView, mode, provider = "mapbox", overlay, onSize, onBackgroundTap, children, wheel = true, touchAction = "none" }: {
   view: View;
   onView: (v: View) => void;
   mode: "map" | "sat";
@@ -46,6 +46,10 @@ export function MapView({ view, onView, mode, provider = "mapbox", overlay, onSi
   onBackgroundTap?: () => void;
   /** Drawn over everything, fixed on the screen (search, buttons, the frame). */
   children?: React.ReactNode;
+  /** The scroll wheel zooms (off on a map set in a page that scrolls, like the job Summary's). */
+  wheel?: boolean;
+  /** "pan-y" leaves a vertical swipe to the page on a phone; sideways still drags the map. */
+  touchAction?: "none" | "pan-y";
 }) {
   const box = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
@@ -81,7 +85,7 @@ export function MapView({ view, onView, mode, provider = "mapbox", overlay, onSi
   // Wheel: passive: false so the page doesn't scroll under the map.
   useEffect(() => {
     const el = box.current;
-    if (!el) return;
+    if (!el || !wheel) return;
     const w = (e: WheelEvent) => {
       e.preventDefault();
       const px = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaMode === 2 ? e.deltaY * 400 : e.deltaY;
@@ -90,7 +94,7 @@ export function MapView({ view, onView, mode, provider = "mapbox", overlay, onSi
     };
     el.addEventListener("wheel", w, { passive: false });
     return () => el.removeEventListener("wheel", w);
-  }, [zoomAt]);
+  }, [zoomAt, wheel]);
 
   // Pointers: one drags, two pinch. A drag only starts after 4 px, so a tap on a pin is still a tap.
   const pts = useRef(new Map<number, { x: number; y: number }>());
@@ -162,7 +166,7 @@ export function MapView({ view, onView, mode, provider = "mapbox", overlay, onSi
   return (
     <div ref={box} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}
       onDoubleClick={(e) => { if (e.target !== e.currentTarget.querySelector("[data-tiles]")) return; const r = box.current!.getBoundingClientRect(); zoomAt(Math.round(view.zoom) + 1, e.clientX - r.left, e.clientY - r.top); }}
-      className="relative overflow-hidden select-none" style={{ overflow: "clip", width: "100%", height: "100%", background: mode === "sat" ? "#2b2e2b" : "#ECE7DC", touchAction: "none", cursor: "grab" }}>
+      className="relative overflow-hidden select-none" style={{ overflow: "clip", width: "100%", height: "100%", background: mode === "sat" ? "#2b2e2b" : "#ECE7DC", touchAction, cursor: "grab" }}>
       <div data-tiles="" style={{ position: "absolute", inset: 0 }}>
         {tiles.map((tl) => (
           // eslint-disable-next-line @next/next/no-img-element

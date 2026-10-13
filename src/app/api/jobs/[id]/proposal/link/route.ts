@@ -74,10 +74,10 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const { data: job } = await supabase.from("jobs").select("id, customer_id, contact_id, title").eq("org_id", orgId).eq("id", id).maybeSingle();
   if (!job) return bad("No such job.", 404);
   const latestFinal = () => supabase.from("job_proposals").select("id, version, project_type, snapshot, cover_file_id").eq("org_id", orgId).eq("job_id", id)
-    .eq("status", "final").order("version", { ascending: false }).limit(1).maybeSingle();
+    .eq("status", "final").is("deleted_at", null).order("version", { ascending: false }).limit(1).maybeSingle();
   let { data: prop } = asked === null ? await latestFinal()
     : await supabase.from("job_proposals").select("id, version, project_type, snapshot, cover_file_id").eq("org_id", orgId).eq("job_id", id)
-      .eq("status", "final").eq("version", asked).maybeSingle();
+      .eq("status", "final").eq("version", asked).is("deleted_at", null).maybeSingle();
   if (asked !== null && !prop) return bad(`Version ${asked} isn't a final version of this job's proposal.`, 404);
   if (auto) {
     // A draft newer than the last final is what Coy is looking at: freeze it, as Preview's send does.

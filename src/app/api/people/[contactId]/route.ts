@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
 import { plainSpeakers } from "@/lib/speakers";
 import { settleCallNotes } from "@/lib/call-notes-server";
+import { readWebsites } from "@/lib/vendor-website-server";
 
 /**
  * Everything about one person for their Customer or Vendor page (Coy,
@@ -111,9 +112,12 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ contactId: 
   const shown = !!(c.classification_confirmed_at || c.auto_classified_at);
   const bucket = shown && ["customer", "vendor", "personal", "spam"].includes(c.contact_type ?? "") ? c.contact_type : null;
 
+  const website = (await readWebsites(supabase, orgId, [c.id as string])).get(c.id as string) ?? null;
+
   return applyCookies(NextResponse.json({
     contact: {
       id: c.id,
+      website,
       customer_id: c.customer_id ?? null,
       name: c.name?.trim() || null,
       name_confirmed: !!c.name_confirmed_at || c.name_source === "human",

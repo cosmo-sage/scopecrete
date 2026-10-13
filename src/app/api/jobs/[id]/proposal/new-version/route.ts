@@ -45,12 +45,16 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     return applyCookies(NextResponse.json({ proposal: data, links_off: liveIds.length }, { status: 201 }));
   }
   if (draft) return bad("There is already a draft.", 409);
-  const { data: last } = await supabase.from("job_proposals").select(PROPOSAL_COLS).eq("org_id", orgId).eq("job_id", id)
-    .order("version", { ascending: false }).limit(1).maybeSingle();
+  // Copy the newest version not deleted; the new one's number is past every version, deleted ones too (104).
+  const [{ data: last }, { data: topAll }] = await Promise.all([
+    supabase.from("job_proposals").select(PROPOSAL_COLS).eq("org_id", orgId).eq("job_id", id).is("deleted_at", null)
+      .order("version", { ascending: false }).limit(1).maybeSingle(),
+    supabase.from("job_proposals").select("version").eq("org_id", orgId).eq("job_id", id).order("version", { ascending: false }).limit(1).maybeSingle(),
+  ]);
   if (!last) return bad("No proposal to copy.", 404);
   const l = last as Record<string, unknown>;
   const { data, error } = await supabase.from("job_proposals").insert({
-    org_id: orgId, job_id: id, version: (l.version as number) + 1, option_id: l.option_id, project_type: l.project_type,
+    org_id: orgId, job_id: id, version: Math.max(l.version as number, ((topAll as { version?: number } | null)?.version) ?? 0) + 1, option_id: l.option_id, project_type: l.project_type,
     display: l.display, draws: l.draws, warranty: l.warranty, terms: l.terms, scope_intro: l.scope_intro, cover_file_id: l.cover_file_id, split: l.split,
   }).select(PROPOSAL_COLS).single();
   if (error || !data) return bad(error?.message ?? "not saved", 500);

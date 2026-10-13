@@ -5,7 +5,7 @@
  * by the server against his org and the job. Nothing here is new authority:
  * it is exactly the taps Coy would make by hand, made for him once he says so.
  */
-import { CUST_KEY, JOB_KEY, RECORD_STEPS, needsJob, type PlanAction } from "@/lib/dusty/plan";
+import { CUST_KEY, JOB_KEY, RECORD_STEPS, VEND_KEY, needsJob, type PlanAction } from "@/lib/dusty/plan";
 import { markEstimate } from "@/lib/estimate-flag";
 
 const FULL_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -51,7 +51,10 @@ export const byRef = <T extends { id: string }>(list: T[], ref: string | null): 
   return hits.length === 1 ? hits[0] : null;
 };
 
-export async function applyPlan(jobId: string | null, actions: PlanAction[], look: PlanLookup, optionId: string | null = null): Promise<StepResult[]> {
+export async function applyPlan(jobId: string | null, actions: PlanAction[], look: PlanLookup, optionId: string | null = null,
+  vendors: Map<string, string> = new Map()): Promise<StepResult[]> {
+  // A vendor this plan made (vend1) → their contact id, from applyVendors, which runs first.
+  const vendorOf = (v: string) => (VEND_KEY.test(v) ? vendors.get(v.toLowerCase()) ?? null : v);
   const out: StepResult[] = [];
   const groups = [...look.groups];
   const groupId = (name: string | null | undefined) => (name ? groups.find((g) => g.name.trim().toLowerCase() === name.trim().toLowerCase())?.id ?? null : null);
@@ -199,10 +202,12 @@ export async function applyPlan(jobId: string | null, actions: PlanAction[], loo
         out.push({ ok: true, text: `Changed ${a.name ?? it.name}${a.estimate ? " (marked an estimate)" : ""}` });
       } else if (a.do === "new_item") {
         const ar = areaId(a.area);
+        const vendor = a.vendor ? vendorOf(a.vendor) : null;
+        if (a.vendor && !vendor) { out.push({ ok: false, text: `“${a.name}”: the vendor it was for wasn't added — skipped` }); continue; }
         // With a vendor, the price is theirs (their first, default price — the vendor page's Prices tab shows it).
         const b = await call("/api/cost-items", "POST", { name: a.name, unit: a.unit, cost_type: a.cost_type, unit_cost: a.unit_cost,
           qty_rule: a.qty_rule, rule_params: {}, cost_group_id: groupId(a.group), ...(a.estimate ? { description: markEstimate(a.note ?? null, a.estimate) } : a.note ? { description: a.note } : {}),
-          ...(a.vendor ? { vendor_contact_id: a.vendor, price_source: a.unit_cost === null ? undefined : "quote" } : {}) });
+          ...(vendor ? { vendor_contact_id: vendor, price_source: a.unit_cost === null ? undefined : "quote" } : {}) });
         look.items.push({ id: b.item.id, name: a.name, cost_group_id: b.item.cost_group_id ?? null });
         if (a.key) madeItem.set(a.key, b.item.id);
         if (a.add) {
@@ -213,7 +218,9 @@ export async function applyPlan(jobId: string | null, actions: PlanAction[], loo
       } else if (a.do === "vendor_price") {
         const it = itemOf(a.item);
         if (!it) { out.push({ ok: false, text: `Item ${a.item} isn't in the Price book — skipped` }); continue; }
-        await call(`/api/cost-items/${it.id}/sources`, "POST", { vendor_contact_id: a.vendor, unit_cost: a.unit_cost, unit: a.unit, note: `From Dusty's plan${a.note ? `: ${a.note}` : ""}${a.estimate ? ` · Estimate — ${a.estimate}` : ""}` });
+        const vendor = vendorOf(a.vendor);
+        if (!vendor) { out.push({ ok: false, text: `${it.name}: the vendor it was for wasn't added — skipped` }); continue; }
+        await call(`/api/cost-items/${it.id}/sources`, "POST", { vendor_contact_id: vendor, unit_cost: a.unit_cost, unit: a.unit, note: `From Dusty's plan${a.note ? `: ${a.note}` : ""}${a.estimate ? ` · Estimate — ${a.estimate}` : ""}` });
         out.push({ ok: true, text: `Put their price on ${it.name}${a.unit_cost !== null ? ` — $${a.unit_cost}${a.unit ? `/${a.unit}` : ""}` : ""}` });
       } else if (a.do === "add") {
         const it = itemOf(a.item), ar = areaId(a.area);
@@ -291,18 +298,7 @@ export async function applyRecords(actions: PlanAction[]): Promise<StepResult[]>
         }
         continue;
       }
-      if (a.do === "new_vendor") {
-        // Their own form's call (+ Vendor) — a phone or email already on someone answers 409 with who.
-        const r = await fetch("/api/vendors", { method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: a.name, subtype: a.kind, phone: a.phone, email: a.email, address: a.address, service_area: a.service_area }) });
-        const b = await r.json().catch(() => ({}));
-        if (r.status === 409) { out.push({ ok: false, text: `${a.name}: ${b.error ?? "already one of your contacts"} — not added again` }); continue; }
-        if (!r.ok) throw new Error(b?.error || `HTTP ${r.status}`);
-        const where = [a.website ? `Website: ${a.website}` : null, a.source !== a.website ? `Found on: ${a.source}` : null].filter(Boolean).join("\n");
-        await call(`/api/people/${b.vendor.id}/notes`, "POST", { body: `Found by Dusty on the web — check the details on their site.\n${where}` }).catch(() => {});
-        out.push({ ok: true, text: `Added ${a.name} to Vendors${a.phone ? " — a call to their number now lands on their thread" : " — no number yet; add it from their site"}` });
-        continue;
-      }
+      if (a.do === "new_vendor") continue; // applyVendors made them, before the Price book steps
       if (a.do === "set_name") {
         if (a.kind === "contact") await call(`/api/contacts/${a.id}/name`, "PATCH", { name: a.name });
         else await call(`/api/customers/${a.id}`, "PATCH", { name: a.name });
@@ -402,4 +398,81 @@ async function setAddress(a: Extract<PlanAction, { do: "set_address" }>): Promis
   const saved = m ? m.formatted : given;
   const note = m ? " — matched on the map" : !chk?.on ? " — the map check isn't set up (MAPBOX_TOKEN); check it" : chk.match ? ` — the map wasn't sure (it found ${chk.match.formatted}); check it` : " — the map didn't find it; check it";
   return { ok: true, text: `Address set to ${saved}${note}` };
+}
+
+type VendorStep = Extract<PlanAction, { do: "new_vendor" }>;
+
+/**
+ * Vendors first (Coy, 2026-10-12: Dusty read Teague Rental's rate sheet and nothing was made), so a
+ * new_item or vendor_price in the same plan can carry their price by the key (vend1). A number or
+ * email that is already a contact — or the contact Dusty named, their thread — is filed as the
+ * vendor and filled in where blank, never a second person and never written over; someone filed
+ * customer or personal is left alone and named.
+ */
+export async function applyVendors(actions: PlanAction[]): Promise<{ results: StepResult[]; made: Map<string, string> }> {
+  const results: StepResult[] = [];
+  const made = new Map<string, string>();
+  for (const a of actions) {
+    if (a.do !== "new_vendor") continue;
+    try {
+      const r = await vendorStep(a);
+      results.push(r.result);
+      if (r.id && a.key) made.set(a.key, r.id);
+    } catch (e) {
+      results.push({ ok: false, text: `${a.name}: ${e instanceof Error ? e.message : String(e)}` });
+    }
+  }
+  return { results, made };
+}
+
+async function vendorStep(a: VendorStep): Promise<{ result: StepResult; id: string | null }> {
+  let id = a.contact ?? null;
+  let existing = false;
+  if (!id) {
+    const r = await fetch("/api/vendors", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: a.name, subtype: a.kind, phone: a.phone, email: a.email, website: a.website, address: a.address, service_area: a.service_area, trades: a.trades ?? [] }) });
+    const b = await r.json().catch(() => ({}));
+    if (r.status === 409 && b.existing?.id) {
+      const bucket = b.existing.bucket as string | null;
+      if (bucket && bucket !== "vendor") {
+        return { id: null, result: { ok: false, text: `${a.name}: ${b.error ?? "already one of your contacts"} — filed ${bucket}, so not made a vendor; move them in Threads if they are one` } };
+      }
+      id = b.existing.id as string; existing = true;
+    } else if (!r.ok) throw new Error(b?.error || `HTTP ${r.status}`);
+    else id = b.vendor.id as string;
+  } else existing = true;
+  if (!id) return { id: null, result: { ok: false, text: `${a.name}: not added` } };
+  if (existing) {
+    // Their thread is the person: file them vendor (their tap in Threads would do the same), then fill the blanks.
+    const cur = await call(`/api/vendors/${id}`, "GET").catch(() => null) as { vendor?: Record<string, unknown> } | null;
+    const v = cur?.vendor ?? {};
+    if (v.contact_type !== "vendor") await call(`/api/contacts/${id}/bucket`, "PATCH", { bucket: "vendor", subtype: a.kind });
+    const blank = (k: string) => !(typeof v[k] === "string" && (v[k] as string).trim());
+    const patch: Record<string, unknown> = {};
+    if (blank("name")) patch.name = a.name;
+    if (blank("company_name")) patch.company_name = a.name;
+    if (a.phone && blank("phone")) patch.phone = a.phone;
+    if (a.email && blank("email")) patch.email = a.email;
+    if (a.website && blank("website")) patch.website = a.website;
+    if (a.address && blank("address")) patch.address = a.address;
+    if (a.service_area && blank("service_area")) patch.service_area = a.service_area;
+    const had = Array.isArray(v.trades) ? (v.trades as string[]) : [];
+    const more = (a.trades ?? []).filter((t) => !had.some((h) => h.toLowerCase() === t.toLowerCase()));
+    if (more.length) patch.trades = [...had, ...more];
+    if (Object.keys(patch).length) {
+      // A number or email on someone else is refused (409): keep the rest.
+      await call(`/api/vendors/${id}`, "PATCH", patch).catch(async () => {
+        delete patch.phone; delete patch.email;
+        if (Object.keys(patch).length) await call(`/api/vendors/${id}`, "PATCH", patch).catch(() => {});
+      });
+    }
+  }
+  const from = a.from === "web" ? `Found by Dusty on the web — check the details on their site.\nFound on: ${a.source}`
+    : a.from === "file" ? "Added by Dusty from a document in Files — check the details against it."
+    : `Added by Dusty from ${a.source === "Coy's words" ? "your words" : a.source} — check the details.`;
+  const lines = [from, a.note ? `What they do: ${a.note}` : null, a.website ? `Website: ${a.website}` : null].filter(Boolean).join("\n");
+  await call(`/api/people/${id}/notes`, "POST", { body: lines }).catch(() => {});
+  return { id, result: { ok: true, text: existing
+    ? `Filed ${a.name} as a vendor and filled in what was blank`
+    : `Added ${a.name} to Vendors${a.phone ? " — a call to their number now lands on their thread" : " — no number yet"}` } };
 }

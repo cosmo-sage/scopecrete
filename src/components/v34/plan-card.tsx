@@ -9,8 +9,8 @@
  */
 import { useEffect, useState } from "react";
 import { T, F, disp, eyebrow } from "@/lib/v34/tokens";
-import { CUST_KEY, describe, needsJob as stepNeedsJob, RECORD_STEPS, type PlanAction } from "@/lib/dusty/plan";
-import { applyPlan, applyRecords, byRef, loadLookup, type PlanLookup, type StepResult } from "@/lib/dusty/apply-plan";
+import { CUST_KEY, VEND_KEY, describe, needsJob as stepNeedsJob, RECORD_STEPS, type PlanAction } from "@/lib/dusty/plan";
+import { applyPlan, applyRecords, applyVendors, byRef, loadLookup, type PlanLookup, type StepResult } from "@/lib/dusty/apply-plan";
 
 export function PlanCard({ jobId, actions, dropped, done }: { jobId: string | null; actions: PlanAction[]; dropped: number; done: boolean }) {
   const [look, setLook] = useState<PlanLookup | null>(null);
@@ -35,7 +35,8 @@ export function PlanCard({ jobId, actions, dropped, done }: { jobId: string | nu
     : a.do === "file" ? [`file:${a.files.join(",")}`, /^(cust|job)\d/.test(a.id) ? "" : `${a.kind}:${a.id}`].filter(Boolean).join("|")
     : a.do === "file_email" ? [`email:${a.email}`, /^(cust|job)\d/.test(a.id) ? "" : `${a.kind}:${a.id}`].filter(Boolean).join("|") : ""))
     // Whose price a Price book step carries (a vendor's page: their call or quote).
-    .concat(budgetSteps.map((a) => (a.do === "vendor_price" ? `contact:${a.vendor}` : a.do === "new_item" && a.vendor ? `contact:${a.vendor}` : "")))
+    .concat(budgetSteps.map((a) => (a.do === "vendor_price" && !VEND_KEY.test(a.vendor) ? `contact:${a.vendor}` : a.do === "new_item" && a.vendor && !VEND_KEY.test(a.vendor) ? `contact:${a.vendor}` : "")))
+    .concat(recordSteps.map((a) => (a.do === "new_vendor" && a.contact ? `contact:${a.contact}` : a.do === "new_vendor" && a.from === "file" ? `file:${a.source}` : "")))
     .filter(Boolean).join("|");
   useEffect(() => {
     if (!done || !recKey) return;
@@ -65,7 +66,11 @@ export function PlanCard({ jobId, actions, dropped, done }: { jobId: string | nu
       if (made && made.do === "new_item") return `the new item “${made.name}”`;
       return look ? byRef(look.items, r)?.name ?? null : r;
     },
-    vendor: (id: string) => names[id] ?? null,
+    vendor: (id: string) => {
+      const made = actions.find((x) => x.do === "new_vendor" && x.key === id);
+      if (made && made.do === "new_vendor") return `the new vendor ${made.name}`;
+      return names[id] ?? null;
+    },
     assembly: (r: string) => {
       const made = actions.find((x) => x.do === "new_assembly" && x.key === r);
       if (made && made.do === "new_assembly") return `the new assembly “${made.name}”`;
@@ -76,7 +81,9 @@ export function PlanCard({ jobId, actions, dropped, done }: { jobId: string | nu
     if (!ready) return;
     setState("running"); setErr(null);
     try {
-      const a = budgetSteps.length && look ? await applyPlan(jobId, budgetSteps, look) : [];
+      // Vendors first, so the Price book steps can carry their prices (vend1).
+      const v = recordSteps.some((x) => x.do === "new_vendor") ? await applyVendors(recordSteps) : { results: [], made: new Map<string, string>() };
+      const a = budgetSteps.length && look ? await applyPlan(jobId, budgetSteps, look, null, v.made) : [];
       const edited = recordSteps.map((a) => {
         const i = actions.indexOf(a);
         const words = edits[i];
@@ -85,7 +92,7 @@ export function PlanCard({ jobId, actions, dropped, done }: { jobId: string | nu
         return a;
       });
       const b = recordSteps.length ? await applyRecords(edited) : [];
-      const all = [...a, ...b];
+      const all = [...v.results, ...a, ...b];
       setResults(all); setState("done");
       // Dusty's emblem plays "done" for a finished write; the chat's status line says what it did.
       const ok = all.filter((r) => r.ok);
@@ -147,7 +154,14 @@ export function PlanCard({ jobId, actions, dropped, done }: { jobId: string | nu
                 {!/^(cust|job)\d/.test(a.id) && <> → {names[a.id] ?? (Object.keys(names).length ? "not found — skipped" : "…")}</>}
               </div>
             )}
-            {a.do === "new_vendor" && (
+            {a.do === "new_vendor" && a.from !== "web" && (
+              <div style={{ fontSize: F.xs, color: T.ink2, lineHeight: 1.45, overflowWrap: "anywhere" }}>
+                {a.from === "file" ? <>From {names[a.source] ?? "a document in Files"}</> : <>From {a.source === "Coy's words" ? "your words" : a.source}</>}
+                {a.contact && <> · their thread: {names[a.contact] ?? "…"}</>}
+                {a.website && <> · <a href={a.website} target="_blank" rel="noopener noreferrer nofollow" style={{ color: T.hivizText, textDecoration: "underline" }}>their site</a></>}
+              </div>
+            )}
+            {a.do === "new_vendor" && a.from === "web" && (
               <div style={{ fontSize: F.xs, color: T.ink2, lineHeight: 1.45, overflowWrap: "anywhere" }}>
                 From the web: <a href={a.source} target="_blank" rel="noopener noreferrer nofollow" style={{ color: T.hivizText, textDecoration: "underline" }}>{a.source.replace(/^https?:\/\/(www\.)?/, "").slice(0, 60)}</a>
                 {a.website && a.website !== a.source && <> · <a href={a.website} target="_blank" rel="noopener noreferrer nofollow" style={{ color: T.hivizText, textDecoration: "underline" }}>their site</a></>}
@@ -165,7 +179,7 @@ export function PlanCard({ jobId, actions, dropped, done }: { jobId: string | nu
       {dropped > 0 && <div className="px-3 pb-2" style={{ fontSize: F.xs, color: T.ink3 }}>{dropped} step{dropped === 1 ? "" : "s"} didn&apos;t make sense and were left out.</div>}
       {needsJob && !jobId && <div className="px-3 pb-2" style={{ fontSize: F.xs, color: T.ink3 }}>Steps that touch a budget need the job open — they&apos;ll be skipped here. Open the job and ask there.</div>}
       {recordSteps.some((x) => x.do === "archive" || x.do === "restore") && state !== "done" && <div className="px-3 pb-2" style={{ fontSize: F.xs, color: T.ink3 }}>Archived threads come back if they call or text again; deleted things can be restored. Nothing is erased.</div>}
-      {actions.some((x) => x.do === "new_vendor") && state !== "done" && <div className="px-3 pb-2" style={{ fontSize: F.xs, color: T.ink3 }}>Found on the web — open the link and check the number before you call. Once they&apos;re added, a call to that number lands on their thread with its recording.</div>}
+      {actions.some((x) => x.do === "new_vendor") && state !== "done" && <div className="px-3 pb-2" style={{ fontSize: F.xs, color: T.ink3 }}>{actions.some((x) => x.do === "new_vendor" && x.from === "web") ? "Found on the web — open the link and check the number before you call. " : "Check the number against the document before you call. "}If their number is already a contact, that contact is filed as the vendor and filled in. Once they&apos;re added, a call to that number lands on their thread with its recording.</div>}
       {sends > 0 && state !== "done" && <div className="px-3 pb-2" style={{ fontSize: F.xs, color: T.ink3 }}>{texts ? "Texts go through Quo from your line; " : ""}{sends > texts ? "an email opens in your mail app for you to send; " : ""}nothing goes out until you tap {verb}. Change the words first if you like — Dusty learns from what you change.</div>}
       {state === "done" && (
         <div className="px-3 py-2" style={{ borderTop: `1px solid ${T.hair}`, fontSize: F.xs }}>

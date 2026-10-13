@@ -129,7 +129,10 @@ body {
 @keyframes scBlink  { 0%, 100% { opacity: 1 } 50% { opacity: .25 } }
 @keyframes scRing   { 0% { transform: scale(.6); opacity: .9 } 100% { transform: scale(2.4); opacity: 0 } }
 @keyframes scWobble { 0%, 100% { transform: rotateZ(var(--axis)) rotateZ(-4deg) } 50% { transform: rotateZ(var(--axis)) rotateZ(4deg) } }
+/* What Dusty is reading (dusty-reading.tsx): the dot of a file being read blinks. */
+.sc-read-pulse { animation: scBlink 1.4s ease-in-out infinite }
 @media (prefers-reduced-motion: reduce) {
+  .sc-read-pulse { animation: none }
   .sc-emblem * { animation: none !important }
   .sc-ai { animation: none !important; opacity: 1 }
 }

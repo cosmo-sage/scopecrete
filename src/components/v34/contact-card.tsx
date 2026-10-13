@@ -11,7 +11,8 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Phone, ChatText, Envelope, MapPin, MapTrifold, PencilSimple, Plus, Buildings } from "@phosphor-icons/react";
+import { Phone, ChatText, Envelope, MapPin, MapTrifold, PencilSimple, Plus, Buildings, Globe } from "@phosphor-icons/react";
+import { websiteLabel } from "@/lib/vendor-website";
 import { T, F, disp, eyebrow, nums } from "@/lib/v34/tokens";
 import { initials, initialsHue } from "@/lib/v34/threads";
 import { formatPhone } from "@/components/v34/conversation";
@@ -107,13 +108,16 @@ export function ContactCard({ person, back, textHref, customerHref, vendorHref, 
         {emails.map((e) => (
           <Row key={e.email} icon={<Envelope size={20} color={T.ink3} />} href={`mailto:${e.email}`} primary={e.email} secondary={e.label ?? "Email"} />
         ))}
+        {(c.website || editing) && (editing
+          ? <WebsiteField key={c.website ?? ""} contactId={c.id} website={c.website ?? null} onSaved={onReload} />
+          : <Row icon={<Globe size={20} color={T.ink3} />} href={c.website ?? undefined} primary={websiteLabel(c.website ?? "")} secondary="Website" />)}
         <CustomerRow contactId={c.id} customerId={c.customer_id ?? null} name={custName ?? c.customer_name ?? null} href={customerHref} onSaved={onReload} />
         {(c.address || editing) && (editing
           ? <AddressField contactId={c.id} address={c.address} onSaved={onReload} />
           : <Row icon={<MapPin size={20} color={T.ink3} />} href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(c.address ?? "")}`}
               primary={c.address ?? ""} secondary={c.address_source === "coy" ? "Address" : "Address · check it"} />)}
-        {!editing && phones.length === 0 && emails.length === 0 && !c.address && (
-          <div style={{ padding: "10px 16px", fontSize: F.sm, color: T.ink3 }}>Nothing on file yet. Tap Edit to add a number, an email or an address.</div>
+        {!editing && phones.length === 0 && emails.length === 0 && !c.address && !c.website && (
+          <div style={{ padding: "10px 16px", fontSize: F.sm, color: T.ink3 }}>Nothing on file yet. Tap Edit to add a number, an email, a website or an address.</div>
         )}
         {editing && (
           <div style={{ borderTop: `1px solid ${T.hairSoft}`, marginTop: 4, padding: "8px 16px" }}>
@@ -303,6 +307,38 @@ function EmailAdd({ contactId, onSaved }: { contactId: string; onSaved: () => vo
           style={{ height: 32, background: T.ink, color: T.card, fontSize: F.sm, fontWeight: 600, cursor: "pointer", opacity: !v.trim() || busy ? 0.5 : 1 }}>{busy ? "…" : "Add"}</button>
       </div>
       {err && <div style={{ fontSize: F.xs, color: T.red, marginTop: 4 }}>{err}</div>}
+    </div>
+  );
+}
+
+function WebsiteField({ contactId, website, onSaved }: { contactId: string; website: string | null; onSaved: () => void }) {
+  const [v, setV] = useState(website ?? "");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const changed = v.trim() !== (website ?? "");
+  const save = async () => {
+    if (!changed || busy) return;
+    setBusy(true); setErr(null); setSaved(false);
+    const r = await fetch(`/api/contacts/${encodeURIComponent(contactId)}/website`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ website: v }) });
+    setBusy(false);
+    if (!r.ok) { setErr(((await r.json().catch(() => ({}))) as { error?: string }).error ?? "Couldn't save it."); return; }
+    setSaved(true); onSaved();
+  };
+  return (
+    <div className="flex items-start gap-4" style={{ padding: "10px 16px" }}>
+      <span className="shrink-0" style={{ width: 22, display: "flex", justifyContent: "center", paddingTop: 6 }}><Globe size={20} color={T.ink3} /></span>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <input value={v} onChange={(e) => { setV(e.target.value); setSaved(false); }} onKeyDown={(e) => { if (e.key === "Enter") void save(); }} inputMode="url"
+            placeholder="Website (e.g. teaguerental.com)" aria-label="Website" className="flex-1 min-w-0 rounded px-2"
+            style={{ height: 32, border: `1px solid ${T.hair}`, fontSize: F.sm, background: T.card, color: T.ink }} />
+          <button onClick={() => void save()} disabled={!changed || busy} className="rounded px-3"
+            style={{ height: 32, background: T.ink, color: T.card, fontSize: F.sm, fontWeight: 600, cursor: "pointer", opacity: !changed || busy ? 0.5 : 1 }}>{busy ? "…" : "Save"}</button>
+        </div>
+        {err && <div style={{ fontSize: F.xs, color: T.red, marginTop: 4 }}>{err}</div>}
+        {saved && !err && <div style={{ fontSize: F.xs, color: T.ink3, marginTop: 4 }}>Saved.</div>}
+      </div>
     </div>
   );
 }

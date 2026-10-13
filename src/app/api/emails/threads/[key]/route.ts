@@ -42,12 +42,13 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ key: string
     const [conv] = conversationsOf(box);
     const ids = box.rows.map((r) => r.id);
     const sentFileIds = [...new Set(box.rows.flatMap((r) => (r.file_ids as string[] | null) ?? []))];
-    const [names, { data: atts }, { data: files }, { data: sentFiles }, { data: custs }, { data: jobs }, { data: st }, { data: drafts }, user, orgs] = await Promise.all([
+    const [names, { data: atts }, { data: files }, { data: sentFiles }, { data: custs }, { data: vends }, { data: jobs }, { data: st }, { data: drafts }, user, orgs] = await Promise.all([
       mailNames(supabase, orgId, [conv]),
       supabase.from("email_attachments").select("id, email_id, name, mime_type, byte_size, inline, file_id, fetch_state, fetch_error").eq("org_id", orgId).in("email_id", ids).order("created_at"),
       supabase.from("files").select(`${FILE_COLUMNS}, email_id`).eq("org_id", orgId).in("email_id", ids).is("deleted_at", null),
       sentFileIds.length ? supabase.from("files").select(FILE_COLUMNS).eq("org_id", orgId).in("id", sentFileIds) : Promise.resolve({ data: [] }),
       supabase.from("customers").select("id, name").eq("org_id", orgId).is("merged_into_customer_id", null).is("archived_at", null).not("name", "is", null).order("name").limit(500),
+      supabase.from("contacts").select("id, name, company_name").eq("org_id", orgId).eq("contact_type", "vendor").is("merged_into_contact_id", null).is("archived_at", null).order("name").limit(500),
       supabase.from("jobs").select("id, title, customer_id, status").eq("org_id", orgId).is("archived_at", null).order("created_at", { ascending: false }).limit(300),
       supabase.from("email_conversations").select("conversation, summary, asks, triage, read_for, read_by_dusty_at, archived_at, last_read_at").eq("org_id", orgId).eq("conversation", key).maybeSingle(),
       supabase.from("email_drafts").select("id, mode, to_addresses, cc_addresses, subject, body, file_ids, by, reply_to_email_id, updated_at").eq("org_id", orgId).eq("conversation", key).order("updated_at", { ascending: false }),
@@ -94,7 +95,11 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ key: string
         match: latestIn?.match ?? null, note: latestIn?.match_note ?? null,
         suggested_customer_id: suggested ?? null, suggested_customer_name: suggestedName, person_emails: personEmails,
       },
-      options: { customers: custs ?? [], jobs: jobs ?? [] },
+      options: {
+        customers: custs ?? [], jobs: jobs ?? [],
+        vendors: ((vends ?? []) as Array<{ id: string; name: string | null; company_name: string | null }>)
+          .map((v) => ({ id: v.id, name: v.company_name?.trim() || v.name?.trim() || "" })).filter((v) => v.name),
+      },
       drafts: drafts ?? [],
       inboxes: box.inboxes, ours: box.ours,
       signature: signatureOf({ name: meta.full_name ?? null, org: orgName, phone: meta.phone ?? null }),

@@ -12,25 +12,18 @@
     "test": "node --test tests/*.test.mjs"
   },
   "dependencies": {
-    "@dnd-kit/sortable": "^10.0.0",
-    "@dnd-kit/utilities": "^3.2.2",
-    "@emotion/react": "^11.14.0",
-    "@emotion/styled": "^11.14.1",
-    "@mui/material": "^9.1.1",
     "@phosphor-icons/react": "^2.1.10",
     "@supabase/ssr": "^0.10.3",
+    "@supabase/supabase-js": "^2.106.2",
     "@tesseract.js-data/eng": "^1.0.0",
-    "clsx": "^2.1.1",
     "date-fns": "^4.4.0",
     "fflate": "^0.8.2",
     "lucide-react": "^1.16.0",
-    "next": "16.2.6",
-    "next-pwa": "^5.6.0",
+    "next": "16.4.0",
     "pdfjs-dist": "^5.7.284",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "read-excel-file": "^9.3.10",
-    "tailwind-merge": "^3.6.0",
     "tesseract.js": "^7.0.0",
     "unpdf": "^1.8.1"
   },
@@ -40,7 +33,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.2.6",
+    "eslint-config-next": "16.4.0",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

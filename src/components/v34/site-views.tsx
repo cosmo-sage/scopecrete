@@ -68,22 +68,44 @@ function Satellite({ point, z, provider, height }: { point: Point; z: number; pr
   );
 }
 
-/** The satellite preview in the Location box; a tap opens it full size. */
+/** Satellite | Street view, one box with a toggle (Coy, 2026-10-13: "street
+ *  maps should be a toggle"). The pick is kept on the device. Satellite opens
+ *  full size on a tap; street view is Google's in the page with the embed key,
+ *  else a link to Google Maps. */
+const VIEW_KEY = "sc:site-view";
 export function SiteViews({ addr, stored }: { addr: string; stored: Point | null }) {
   const { point, provider, state } = usePoint(addr, stored);
   const [open, setOpen] = useState(false);
+  const [view, setView] = useState<"sat" | "street">(() => {
+    try { return typeof window !== "undefined" && localStorage.getItem(VIEW_KEY) === "street" ? "street" : "sat"; } catch { return "sat"; }
+  });
+  const pick = (v: "sat" | "street") => { setView(v); try { localStorage.setItem(VIEW_KEY, v); } catch { /* none */ } };
+  const tab = (v: "sat" | "street", label: string) => (
+    <button key={v} onClick={() => pick(v)} aria-pressed={view === v}
+      style={{ padding: "3px 10px", fontSize: 12, fontWeight: 600, border: "none", borderRadius: 3, cursor: "pointer",
+        background: view === v ? T.card : "transparent", color: view === v ? T.ink : T.ink3, boxShadow: view === v ? `0 0 0 1px ${T.hair}` : "none" }}>
+      {label}
+    </button>
+  );
   return (
-    <>
-      <button onClick={() => setOpen(true)} disabled={!point} aria-label="Open the satellite view" className="text-left"
-        style={{ position: "relative", display: "block", width: "100%", padding: 0, border: `1px solid ${T.hair}`, borderRadius: 4, overflow: "hidden", cursor: point ? "zoom-in" : "default", background: T.sunk }}>
-        {point
-          ? <Satellite point={point} z={19} provider={provider} height={170} />
-          : <div style={{ height: 70, display: "flex", alignItems: "center", justifyContent: "center", fontSize: F.sm, color: T.ink3 }}>
-              {state === "finding" ? "Finding it on the map…" : "The map couldn't place this address."}
-            </div>}
-      </button>
+    <div className="flex flex-col gap-1.5">
+      {point && (
+        <div role="group" aria-label="Map view" className="flex gap-0.5 self-start" style={{ padding: 2, borderRadius: 4, background: T.sunk }}>
+          {tab("sat", "Satellite")}{tab("street", "Street view")}
+        </div>
+      )}
+      {view === "street" && point
+        ? <StreetFrame point={point} height={200} />
+        : <button onClick={() => setOpen(true)} disabled={!point} aria-label="Open the satellite view" className="text-left"
+            style={{ position: "relative", display: "block", width: "100%", padding: 0, border: `1px solid ${T.hair}`, borderRadius: 4, overflow: "hidden", cursor: point ? "zoom-in" : "default", background: T.sunk }}>
+            {point
+              ? <Satellite point={point} z={19} provider={provider} height={170} />
+              : <div style={{ height: 70, display: "flex", alignItems: "center", justifyContent: "center", fontSize: F.sm, color: T.ink3 }}>
+                  {state === "finding" ? "Finding it on the map…" : "The map couldn't place this address."}
+                </div>}
+          </button>}
       {open && point && <SitePopup point={point} provider={provider} onClose={() => setOpen(false)} />}
-    </>
+    </div>
   );
 }
 
@@ -116,5 +138,37 @@ export function AddressLink({ addr }: { addr: string }) {
   return (
     <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addr)}`} target="_blank" rel="noopener noreferrer"
       style={{ fontSize: 13.5, fontWeight: 500, color: T.chalk, textDecoration: "underline", textUnderlineOffset: 3, overflowWrap: "anywhere" }}>{addr}</a>
+  );
+}
+
+/**
+ * Street view of the address (Coy, 2026-10-13: "google street view on the
+ * customer and job pages"). With Google's browser key
+ * (`NEXT_PUBLIC_GOOGLE_MAPS_EMBED_KEY`, the Maps Embed API — free, no usage
+ * charge) it is Google's own Street View in the page; without it, a link that
+ * opens street view in Google Maps (no key). Never the keyless embed.
+ */
+const EMBED_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_EMBED_KEY ?? "";
+
+export function streetViewUrl(p: Point): string {
+  return `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${p.lat},${p.lng}`;
+}
+
+export function StreetFrame({ point, height }: { point: Point; height: number | "fill" }) {
+  const link = (
+    <a href={streetViewUrl(point)} target="_blank" rel="noopener noreferrer"
+      style={{ fontSize: 12, fontWeight: 600, color: T.chalk, textDecoration: "none" }}>
+      {EMBED_KEY ? "Open in Google Maps ↗" : "Open street view in Google Maps ↗"}
+    </a>
+  );
+  const fill = height === "fill";
+  if (!EMBED_KEY) return <div style={{ padding: "18px 0", textAlign: "center", border: `1px solid ${T.hair}`, borderRadius: 4, background: T.sunk, height: fill ? "100%" : undefined }}>{link}</div>;
+  const src = `https://www.google.com/maps/embed/v1/streetview?key=${encodeURIComponent(EMBED_KEY)}&location=${point.lat},${point.lng}&fov=80`;
+  return (
+    <div className="flex flex-col gap-1" style={fill ? { height: "100%" } : undefined}>
+      <iframe title="Street view" src={src} loading="lazy" referrerPolicy="no-referrer-when-downgrade" allowFullScreen
+        style={{ width: "100%", height: fill ? undefined : height, flex: fill ? "1 1 auto" : undefined, minHeight: 0, border: `1px solid ${T.hair}`, borderRadius: 4, background: T.sunk }} />
+      <div style={{ textAlign: "right" }}>{link}</div>
+    </div>
   );
 }

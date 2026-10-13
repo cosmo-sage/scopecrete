@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { linkAssets, newToken, linkMessage, smsHref, mailtoHref, viewLine, publicSnapshot } from "../src/lib/proposal-links.ts";
+import { linkAssets, newToken, linkTokensIn, linkMessage, smsHref, mailtoHref, viewLine, publicSnapshot } from "../src/lib/proposal-links.ts";
 
 const ORG = "11111111-1111-1111-1111-111111111111";
 
@@ -71,4 +71,11 @@ test("pickedAddons keeps only shown add-ons, once each, and sums them", async ()
   assert.deepEqual(pickedAddons(price, ["a", "b", "c", "x", "a", "d"]), { ids: ["a", "d"], total: 570.5 });
   assert.deepEqual(pickedAddons(price, []), { ids: [], total: 0 });
   assert.deepEqual(pickedAddons({ ok: false }, ["a"]), { ids: [], total: 0 });
+});
+
+test("a text or email names the proposal links it carries", () => {
+  const t = "a".repeat(32), u = "B_-".repeat(10) + "zz";
+  assert.deepEqual(linkTokensIn(`Hi Jeremy, here it is: https://scopecrete.ai/p/${t} and again https://scopecrete.ai/p/${t}.`), [t]);
+  assert.deepEqual(linkTokensIn(`/p/${u}\n/p/${"c".repeat(33)}`), [u]);
+  assert.deepEqual(linkTokensIn("no link here, /p/short"), []);
 });

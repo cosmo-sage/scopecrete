@@ -44,6 +44,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { T, F, eyebrow, agent, clip, nums, relTime } from "@/lib/v34/tokens";
 import { usePlanOcr } from "@/lib/v34/plan-ocr-runner";
+import { onBack, shouldPoll } from "@/lib/v34/idle-poll";
 
 type Tone = "live" | "good" | "ask" | "warn" | "quiet";
 interface Item { id: string; at: string; kind: string; contact_id: string | null; href?: string | null; summary: string; detail: string | null; tone: Tone }
@@ -56,7 +57,8 @@ interface Activity {
   items: Item[];
 }
 
-const POLL_MS = 20_000;
+/** Every 60 s (was 20 — 2026-10-12, Supabase's Disk IO warning: ~15 reads a poll, all day); idle tabs every 5 min (idle-poll.ts). */
+const POLL_MS = 60_000;
 const CYCLE_MS = 4_000;
 /** Musings and dreams linger (Coy, 2026-10-01: "every 15-30 seconds"); news moves on quicker. */
 const MUSE_MS = 20_000;
@@ -146,17 +148,22 @@ export function ActivityLine({ onWorking, onReader, inline }: {
 
   useEffect(() => {
     let off = false;
-    const load = () => {
+    let last = 0;
+    const load = (force = false) => {
       if (document.visibilityState !== "visible") return;
+      if (!force && !shouldPoll(last)) return;
+      last = Date.now();
       fetch("/api/activity")
         .then((r) => (r.ok ? r.json() : null))
         .then((d: Activity | null) => { if (!off && d) apply(d); })
         .catch(() => { /* keep the last good state */ });
     };
-    load();
-    const t = setInterval(load, POLL_MS);
-    document.addEventListener("visibilitychange", load);
-    return () => { off = true; clearInterval(t); document.removeEventListener("visibilitychange", load); };
+    const now = () => load(true);
+    now();
+    const t = setInterval(() => load(), POLL_MS);
+    const unBack = onBack(now);
+    document.addEventListener("visibilitychange", now);
+    return () => { off = true; clearInterval(t); unBack(); document.removeEventListener("visibilitychange", now); };
   }, [apply]);
 
   // Walk the queue once; the last item stays until something new arrives.

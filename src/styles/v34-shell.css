@@ -7,7 +7,7 @@
 /* The sticky header's height: 54px glass bar + 38px activity line
    (activity-line.tsx always holds its row). Everything that sits under or
    beside the header measures from this — one number, not five. */
-:root { --sc-head: 92px; --sc-foot: 58px; --sc-dusty: 400px;
+:root { --sc-head-0: 92px; --sc-head: calc(var(--sc-head-0) + var(--sc-banner, 0px)); --sc-foot: 58px; --sc-dusty: 400px;
   /* Dusty's type, the same in every theme (Coy, 2026-10-05): Figtree, loaded by next/font as --font-agent. */
   --sc-font-agent: var(--font-agent, 'Figtree'), system-ui, -apple-system, 'Segoe UI', sans-serif;
   /* Machine text — event types, webhook URLs, payloads: JetBrains Mono. */
@@ -15,11 +15,11 @@
 .sc-sheets { top: var(--sc-head); bottom: 0; right: 0; left: 0; }
 /* Desktop (Coy, 2026-09-30): the activity line moved up into the 54px header
    beside the logo, so the header is one row. */
-@media (min-width: 1024px) { :root { --sc-head: 54px; } }
+@media (min-width: 1024px) { :root { --sc-head-0: 54px; } }
 /* Dusty's thought line switched off on a phone (Settings → Dusty (AI), Coy
    2026-10-05 — a phone and a desktop are set apart): no activity row, so the header is the 54px bar alone. Set on
    <html> before first paint (app/layout.tsx) and kept in step by the shell. */
-html[data-activity-phone="off"] { --sc-head: 54px; }
+html[data-activity-phone="off"] { --sc-head-0: 54px; }
 
 /* The footer's height on a phone (layout.tsx, border-box, safe area inside it).
    A page that must not scroll as a whole — a conversation, a person — is
@@ -559,8 +559,8 @@ html[data-theme="floodlight"] .sc-proposal { --sc-doc-ground: #10141A; }
 }
 @media (max-width: 639px) { .sc-drawer-title-long { font-size: 19px !important; } }
 @media (max-width: 1023px) {
-  html[data-head-hide] { --sc-head: 0px; }
-  html[data-head-hide] .sc-head-wrap { transform: translateY(-100%); }
+  html[data-head-hide] { --sc-head-0: 0px; }
+  html[data-head-hide] .sc-head-wrap { transform: translateY(calc(-100% + var(--sc-banner, 0px))); }
   /* The job page's own header goes with it; its dark numbers strip stays at the top (Coy, 2026-10-10). */
   html[data-head-hide] .sc-job-sticky { top: calc(-1 * var(--sc-job-head-h, 0px)) !important; }
 }
@@ -593,8 +593,17 @@ html[data-theme="floodlight"] .sc-proposal { --sc-doc-ground: #10141A; }
   .sc-job-tabs { display: inline-flex; width: auto; border: 1px solid var(--sc-hair-strong); border-radius: 4px; overflow: hidden; flex-shrink: 0; }
   .sc-job-tab { flex: none; height: 28px; margin: 0; padding: 0 10px; border-bottom: none; font-size: 11.5px; letter-spacing: .06em;
     text-transform: uppercase; color: var(--sc-ink2); background: var(--sc-card); }
-  .sc-job-tab + .sc-job-tab { border-left: 1px solid var(--sc-hair); }
   .sc-job-tab[aria-current="page"] { background: var(--sc-ink); color: var(--sc-card); }
+  /* The dividers are arrows pointing right, so the row reads as the flow Summary → Proposal
+     (Coy, 2026-10-12). Each is the previous tab's tip: a square turned 45°, its two right
+     edges drawn, filled with the previous tab's colour. */
+  .sc-job-tab { position: relative; }
+  .sc-job-tab { padding-right: 16px; }
+  .sc-job-tab + .sc-job-tab { padding-left: 18px; }
+  .sc-job-tab + .sc-job-tab::before { content: ""; position: absolute; left: -10px; top: 50%; width: 20px; height: 20px;
+    transform: translateY(-50%) rotate(45deg); background: var(--sc-card);
+    border-top: 1px solid var(--sc-hair-strong); border-right: 1px solid var(--sc-hair-strong); pointer-events: none; }
+  .sc-job-tab[aria-current="page"] + .sc-job-tab::before { background: var(--sc-ink); border-color: var(--sc-ink); }
 }
 
 /* A thread's contact name: 19px on a desktop, 15px on a phone (Coy, 2026-10-09). */
@@ -665,3 +674,11 @@ html[data-alerts-open="1"] .sc-pops { display: none; }
   .sc-set-link[data-desk-current] { background: var(--sc-hiviz-dim); border-left-color: var(--sc-hiviz); }
 }
 @media (hover: hover) { .sc-set-link:hover { background: var(--sc-slab); } .sc-set-link[aria-current="page"]:hover { background: var(--sc-hiviz-dim); } }
+
+/* View as a teammate (src/lib/view-as.ts, Coy 2026-10-12): a strip across the top while an owner
+   looks at the app as someone else. It is part of the header's height, so everything measured
+   from --sc-head moves down with it, and it stays when the header slides away on a phone. */
+html[data-view-as] { --sc-banner: 28px; }
+.sc-view-as { height: 28px; display: flex; align-items: center; justify-content: center; gap: 10px; padding: 0 10px;
+  background: #7A3FBF; color: #fff; font-size: 12.5px; font-weight: 600; white-space: nowrap; overflow: hidden; }
+.sc-view-as button { height: 20px; padding: 0 9px; border-radius: 10px; background: #fff; color: #4B1F80; font-size: 11.5px; font-weight: 700; cursor: pointer; flex: none; }

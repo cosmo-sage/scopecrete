@@ -803,7 +803,7 @@ function TextBubble({ m, who, showWho }: { m: Item; who: string; showWho: boolea
     <div className={`flex mb-2 ${out ? "justify-end" : "justify-start"}`}>
       <div style={{ maxWidth: "76%", background: out ? T.outBg : T.card, color: out ? T.outInk : T.ink, border: `1px solid ${T.hair}`, borderRadius: 10, padding: "7px 11px" }}>
         {showWho && !out && <div style={{ ...lbl, fontSize: 10, color: T.ink3 }}>{who}</div>}
-        {m.body && <div style={{ fontSize: 13.5, lineHeight: 1.45, whiteSpace: "pre-wrap" }}>{m.body}</div>}
+        {m.body && <div style={{ fontSize: 13.5, lineHeight: 1.45, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{m.body}</div>}
         {m.media_count > 0 && <MessageMedia messageId={m.id} count={m.media_count} isOut={out} />}
         <div style={{ fontSize: 10, opacity: 0.65, marginTop: 2, textAlign: out ? "right" : "left" }}>{time(m.at)}</div>
       </div>

@@ -23,10 +23,12 @@ import { EmptyState, MenuButton, Sheet, SearchBubble } from "@/components/v34/pr
 import { useThreads } from "@/components/v34/threads-ctx";
 import { useLiveThreads } from "@/lib/v34/live-threads";
 import { askDusty } from "@/components/v34/budget-tabs";
+import { DustyEmblem } from "@/components/v34/dusty-avatar";
+import { isHorizontal } from "@/lib/swipe";
 import { sendBytes } from "@/components/v34/files-panel";
 import {
   MAIL_TABS, TEMPLATES, cleanSubject, fillTemplate, firstName, forwardBody, forwardSubject, isEmail, parseAddresses,
-  replySubject, replyTargets, writerOf, type ComposeMode, type Conversation, type MailRow, type MailTab,
+  replySubject, replyTargets, vendorFromEmail, writerOf, type ComposeMode, type Conversation, type MailRow, type MailTab,
 } from "@/lib/email-client";
 
 // ── shared bits ─────────────────────────────────────────────────────────────
@@ -148,7 +150,7 @@ export function EmailInbox({ threadId, title, sub, folded, onEditRule }: { threa
           <EmptyState title={q ? "Nothing matches" : tab === "reply" ? "Nothing waiting on you" : tab === "sent" ? "Nothing sent yet" : tab === "unfiled" ? "Everything is filed" : "No email yet"}
             detail={tab === "inbox" && !q ? "Emails forwarded to the intake inbox, and replies to what you send, land here." : undefined} />
         ) : (
-          <div>{data.conversations.map((c) => <ConvRow key={c.key} c={c} threadId={threadId} />)}</div>
+          <div>{data.conversations.map((c) => <SwipeArchive key={c.key} c={c} onDone={() => setTick((n) => n + 1)}><ConvRow c={c} threadId={threadId} /></SwipeArchive>)}</div>
         )}
       <Link href={composeHref} aria-label="Compose" className="lg:hidden flex items-center justify-center"
         style={{ position: "fixed", right: 16, bottom: "calc(var(--sc-foot) + 16px)", width: 54, height: 54, borderRadius: 27, background: T.hiviz, color: T.onHiviz, boxShadow: "0 4px 14px rgba(0,0,0,.25)", zIndex: 8 }}>
@@ -186,6 +188,58 @@ function ConvRow({ c, threadId }: { c: ConvView; threadId?: string | null }) {
   );
 }
 
+/** Swipe a row left on a phone for Archive (Coy, 2026-10-12). */
+function SwipeArchive({ c, onDone, children }: { c: ConvView; onDone: () => void; children: React.ReactNode }) {
+  const W = 88;
+  const [dx, setDx] = useState(0);
+  const [drag, setDrag] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const at = useRef<{ x: number; y: number; dx: number; h: boolean | null } | null>(null);
+  const go = async () => {
+    setBusy(true);
+    try { await call(`/api/emails/threads/${encodeURIComponent(c.key)}`, "PATCH", { archive: !c.archived }); setDx(0); onDone(); }
+    catch (e) { window.alert(errText(e)); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div className="relative overflow-hidden">
+      <div className="absolute top-0 bottom-0 right-0 flex" aria-hidden={dx ? undefined : true}>
+        <button type="button" tabIndex={dx ? 0 : -1} disabled={busy} onClick={() => void go()} aria-label={c.archived ? "Unarchive" : "Archive"}
+          style={{ width: W, background: T.ink2, color: "#fff", ...eyebrow, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3 }}>
+          <ArchiveIcon size={18} />{busy ? "…" : c.archived ? "Unarchive" : "Archive"}
+        </button>
+      </div>
+      <div
+        onTouchStart={(e) => { const t = e.touches[0]; at.current = { x: t.clientX, y: t.clientY, dx, h: null }; }}
+        onTouchMove={(e) => {
+          const a = at.current; if (!a) return;
+          const t = e.touches[0]; const mx = t.clientX - a.x, my = t.clientY - a.y;
+          if (a.h === null) { if (Math.abs(mx) < 6 && Math.abs(my) < 6) return; a.h = isHorizontal(mx, my); if (a.h) setDrag(true); }
+          if (a.h) setDx(Math.max(-W, Math.min(0, a.dx + mx)));
+        }}
+        onTouchEnd={() => { const a = at.current; at.current = null; if (a?.h) setDx((d) => (d < -W / 2 ? -W : 0)); setDrag(false); }}
+        onClickCapture={(e) => { if (dx) { e.stopPropagation(); e.preventDefault(); setDx(0); } }}
+        style={{ position: "relative", background: T.card, transform: `translateX(${dx}px)`, transition: drag ? "none" : "transform .18s ease" }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+const ico = { fill: "none", stroke: "currentColor", strokeWidth: 1.7, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
+function ArchiveIcon({ size = 20 }: { size?: number }) {
+  return <svg width={size} height={size} viewBox="0 0 24 24" {...ico} aria-hidden="true"><rect x="3" y="4" width="18" height="5" rx="1" /><path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9M10 13h4" /></svg>;
+}
+function TrashIcon({ size = 20 }: { size?: number }) {
+  return <svg width={size} height={size} viewBox="0 0 24 24" {...ico} aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6" /></svg>;
+}
+function StarIcon({ size = 20, on }: { size?: number; on: boolean }) {
+  return <svg width={size} height={size} viewBox="0 0 24 24" {...ico} fill={on ? "currentColor" : "none"} aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.8l-5.2 2.8 1-5.8-4.3-4.1 5.9-.9z" /></svg>;
+}
+function ReplyIcon({ size = 20 }: { size?: number }) {
+  return <svg width={size} height={size} viewBox="0 0 24 24" {...ico} aria-hidden="true"><path d="M10 6l-6 6 6 6M4 12h10a6 6 0 0 1 6 6" /></svg>;
+}
+
 function Tag({ color, children }: { color: string; children: React.ReactNode }) {
   return <span style={{ fontSize: 10, lineHeight: "16px", padding: "0 5px", borderRadius: 3, border: `1px solid ${color}`, color, maxWidth: 180, ...clip }}>{children}</span>;
 }
@@ -199,7 +253,7 @@ interface ConvData {
   messages: Msg[];
   state: { summary: string | null; asks: Array<{ text: string; due: string | null; tone: string }> | null; triage: string | null; read_for: number | null; archived_at: string | null } | null;
   filing: { match: string | null; note: string | null; suggested_customer_id: string | null; suggested_customer_name: string | null; person_emails: string[] };
-  options: { customers: Array<{ id: string; name: string }>; jobs: Array<{ id: string; title: string | null; customer_id: string | null; status: string | null }> };
+  options: { customers: Array<{ id: string; name: string }>; vendors?: Array<{ id: string; name: string }>; jobs: Array<{ id: string; title: string | null; customer_id: string | null; status: string | null }> };
   drafts: DraftRow[];
   inboxes: string[]; ours: string[]; signature: string; can_send: boolean;
 }
@@ -231,6 +285,15 @@ export function EmailConversation({ convKey, threadId, draftId }: { convKey: str
     try { await call(`/api/emails/threads/${encodeURIComponent(convKey)}`, "PATCH", b); if (msg) flash(msg); reload(); } catch (e) { flash(errText(e)); }
   };
 
+  const leave = () => { if (window.matchMedia("(max-width: 1023.98px)").matches) router.push(threadId ? `/dashboard/messages?t=${encodeURIComponent(threadId)}` : "/dashboard/messages"); };
+  const archive = async () => {
+    if (!d) return;
+    const was = d.conversation.archived;
+    await patch({ archive: !was }, was ? "Back in the inbox." : "Archived — it comes back if they write again.");
+    if (!was) leave();
+  };
+  const askAbout = () => { if (d) askDusty(`About the email "${cleanSubject(d.conversation.subject)}" from ${d.conversation.writer.name ?? d.conversation.writer.address ?? "them"}: `, false); };
+
   if (err) return <EmptyState tone="warn" title="Couldn't open this email" detail={err} />;
   if (!d) return <div className="p-4 space-y-3">{[1, 2, 3].map((i) => <div key={i} className="rounded animate-pulse" style={{ height: 80, background: T.hairSoft }} />)}</div>;
   const c = d.conversation;
@@ -249,8 +312,16 @@ export function EmailConversation({ convKey, threadId, draftId }: { convKey: str
               {c.archived ? " · archived" : ""}{d.state?.triage === "fyi" ? " · FYI" : ""}
             </div>
           </div>
+          <PhoneMenu items={[
+            { label: "Reply all", on: () => setCompose({ mode: "reply_all" }) },
+            { label: "Forward", on: () => setCompose({ mode: "forward" }) },
+            { label: d.state?.triage === "fyi" ? "Mark needs reply" : "Mark FYI — no reply needed", on: () => void patch({ fyi: d.state?.triage !== "fyi" }, d.state?.triage === "fyi" ? "Marked as needing a reply." : "Marked FYI — no reply needed.") },
+            { label: c.archived ? "Unarchive" : "Archive", on: () => void archive() },
+            { label: "Dusty: draft a reply", on: () => setCompose({ mode: "reply" }), off: !c.filed },
+            { label: "Ask Dusty about it", on: () => askAbout() },
+          ]} />
         </div>
-        <div className="flex flex-wrap gap-1.5" style={{ marginTop: 8 }}>
+        <div className="hidden lg:flex flex-wrap gap-1.5" style={{ marginTop: 8 }}>
           <button style={btn(true)} onClick={() => setCompose({ mode: "reply" })}>Reply</button>
           <button style={btn()} onClick={() => setCompose({ mode: "reply_all" })}>Reply all</button>
           <button style={btn()} onClick={() => setCompose({ mode: "forward" })}>Forward</button>
@@ -294,15 +365,82 @@ export function EmailConversation({ convKey, threadId, draftId }: { convKey: str
         />
       )}
 
-      {/* Phone reply bar */}
+      {/* Phone bar: Dusty · ⭐ · Archive · Delete … Reply (Coy, 2026-10-12) */}
       {!compose && (
-        <div className="lg:hidden flex gap-2" style={{ position: "fixed", left: 0, right: 0, bottom: "var(--sc-foot)", padding: "8px 12px", background: T.card, borderTop: `1px solid ${T.hair}`, zIndex: 7 }}>
-          <button style={{ ...btn(true), height: 44, flex: 1 }} onClick={() => setCompose({ mode: "reply" })}>Reply</button>
-          <button style={{ ...btn(), height: 44 }} onClick={() => setCompose({ mode: "reply_all" })}>All</button>
-          <button style={{ ...btn(), height: 44 }} onClick={() => setCompose({ mode: "forward" })}>Fwd</button>
-        </div>
+        <PhoneBar
+          starred={c.needs_reply}
+          archived={c.archived}
+          onDusty={askAbout}
+          onStar={() => {
+            if (c.needs_reply) void patch({ fyi: true }, "Unstarred — marked FYI, no reply needed.");
+            else if (c.last_direction === "out") flash("Nothing to answer — the last word is yours.");
+            else void patch({ fyi: false }, "Starred — it waits under Needs reply.");
+          }}
+          onArchive={() => void archive()}
+          onDelete={() => {
+            if (!window.confirm("Delete this email? It leaves the inbox and comes back only if they write again. Emails stay on record, like every call and text.")) return;
+            void patch({ archive: true, fyi: true }, "Deleted from the inbox.").then(leave);
+          }}
+          onReply={(mode) => setCompose({ mode })}
+        />
       )}
       {toast && <div role="status" style={{ position: "fixed", left: "50%", transform: "translateX(-50%)", bottom: "calc(var(--sc-foot) + 70px)", background: T.dark, color: "#fff", padding: "8px 14px", borderRadius: 6, fontSize: F.sm, zIndex: 60, maxWidth: "90vw" }}>{toast}</div>}
+    </div>
+  );
+}
+
+/** ☰ at the top right of an email on a phone — what the top buttons were. */
+function PhoneMenu({ items }: { items: Array<{ label: string; on: () => void; off?: boolean }> }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="lg:hidden shrink-0" style={{ position: "relative" }}>
+      <button onClick={() => setOpen((o) => !o)} aria-label="More" aria-expanded={open} className="flex items-center justify-center rounded"
+        style={{ width: 34, height: 32, border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink2, cursor: "pointer" }}>
+        <svg width="18" height="18" viewBox="0 0 24 24" {...ico} aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
+      </button>
+      {open && (<>
+        <div onClick={() => setOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 20 }} />
+        <div role="menu" style={{ position: "absolute", right: 0, top: 38, zIndex: 21, minWidth: 220, background: T.card, border: `1px solid ${T.hairStrong}`, borderRadius: 6, boxShadow: "0 8px 24px rgba(0,0,0,.18)", padding: 4 }}>
+          {items.map((it) => (
+            <button key={it.label} role="menuitem" disabled={it.off} onClick={() => { setOpen(false); it.on(); }} className="w-full text-left"
+              style={{ display: "block", padding: "10px 12px", fontSize: F.sm, color: it.off ? T.ink3 : T.ink, background: "none", cursor: it.off ? "default" : "pointer", borderRadius: 4 }}>
+              {it.label}
+            </button>
+          ))}
+        </div>
+      </>)}
+    </div>
+  );
+}
+
+/** The bottom bar on a phone: Dusty, ⭐, Archive, Delete, and Reply opening Reply · Reply all · Forward. */
+function PhoneBar({ starred, archived, onDusty, onStar, onArchive, onDelete, onReply }: {
+  starred: boolean; archived: boolean; onDusty: () => void; onStar: () => void; onArchive: () => void; onDelete: () => void; onReply: (m: ComposeMode) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const b: React.CSSProperties = { width: 46, height: 44, display: "flex", alignItems: "center", justifyContent: "center", color: T.ink2, background: "none", cursor: "pointer", borderRadius: 22 };
+  return (
+    <div className="lg:hidden flex items-center" style={{ position: "fixed", left: 0, right: 0, bottom: "var(--sc-foot)", padding: "4px 10px", background: T.card, borderTop: `1px solid ${T.hair}`, zIndex: 7 }}>
+      <button style={b} onClick={onDusty} aria-label="Ask Dusty about this email"><DustyEmblem size={28} hidden /></button>
+      <button style={{ ...b, color: starred ? T.hiviz : T.ink2 }} onClick={onStar} aria-label={starred ? "Starred — needs reply" : "Star — needs reply"} aria-pressed={starred}><StarIcon on={starred} /></button>
+      <button style={b} onClick={onArchive} aria-label={archived ? "Unarchive" : "Archive"}><ArchiveIcon /></button>
+      <button style={b} onClick={onDelete} aria-label="Delete"><TrashIcon /></button>
+      <span style={{ flex: 1 }} />
+      <div style={{ position: "relative" }}>
+        {open && (<>
+          <div onClick={() => setOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 8 }} />
+          <div role="menu" style={{ position: "absolute", right: 0, bottom: 52, zIndex: 9, minWidth: 170, background: T.card, border: `1px solid ${T.hairStrong}`, borderRadius: 6, boxShadow: "0 8px 24px rgba(0,0,0,.18)", padding: 4 }}>
+            {([["reply", "Reply"], ["reply_all", "Reply all"], ["forward", "Forward"]] as Array<[ComposeMode, string]>).map(([m, label]) => (
+              <button key={m} role="menuitem" onClick={() => { setOpen(false); onReply(m); }} className="w-full text-left"
+                style={{ display: "block", padding: "11px 12px", fontSize: F.sm, color: T.ink, background: "none", cursor: "pointer" }}>{label}</button>
+            ))}
+          </div>
+        </>)}
+        <button onClick={() => setOpen((o) => !o)} aria-label="Reply" aria-expanded={open} className="flex items-center gap-1.5"
+          style={{ height: 40, padding: "0 16px", borderRadius: 20, background: T.hiviz, color: T.onHiviz, cursor: "pointer", fontSize: F.sm, fontWeight: 700 }}>
+          <ReplyIcon size={18} /> <span aria-hidden="true">▴</span>
+        </button>
+      </div>
     </div>
   );
 }
@@ -347,6 +485,9 @@ function MessageCard({ m, ours, startOpen }: { m: Msg; ours: string[]; startOpen
 function FilingStrip({ d, onPatch }: { d: ConvData; onPatch: (b: Record<string, unknown>, msg?: string) => Promise<void> }) {
   const c = d.conversation;
   const [editing, setEditing] = useState(!c.filed);
+  const [newVendor, setNewVendor] = useState(false);
+  const vendors = d.options.vendors ?? [];
+  const onVendor = !c.customer_id && !!c.contact_id && vendors.some((v) => v.id === c.contact_id);
   const jobs = d.options.jobs.filter((j) => !c.customer_id || j.customer_id === c.customer_id || j.id === c.job_id);
   const writer = c.writer.address;
   const personMissing = c.contact_id && writer && !d.filing.person_emails.includes(writer.toLowerCase());
@@ -360,7 +501,8 @@ function FilingStrip({ d, onPatch }: { d: ConvData; onPatch: (b: Record<string, 
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <span style={eyebrow}>Filed on</span>
           {c.customer_id && <Link href={`/dashboard/customers/${c.customer_id}`} style={{ color: T.ink, fontWeight: 600 }}>{c.customer_name ?? "Customer"} ›</Link>}
-          {c.contact_name && <span style={{ color: T.ink2 }}>· {c.contact_name}</span>}
+          {onVendor && <Link href={`/dashboard/vendors/${c.contact_id}`} style={{ color: T.ink, fontWeight: 600 }}>Vendor · {vendors.find((v) => v.id === c.contact_id)?.name ?? c.contact_name ?? "Vendor"} ›</Link>}
+          {c.contact_name && !onVendor && <span style={{ color: T.ink2 }}>· {c.contact_name}</span>}
           {c.job_id && <Link href={`/dashboard/scope/${c.job_id}`} style={{ color: T.ink2 }}>· {c.job_title ?? "Job"} ›</Link>}
           {d.filing.match && d.filing.match !== "coy" && <span style={{ fontSize: 10.5, color: T.ink3 }}>{d.filing.match === "exact" ? "auto" : d.filing.match}</span>}
           <span style={{ flex: 1 }} />
@@ -385,10 +527,17 @@ function FilingStrip({ d, onPatch }: { d: ConvData; onPatch: (b: Record<string, 
                 <option value="">— no job —</option>
                 {jobs.map((x) => <option key={x.id} value={x.id}>{x.title || "Untitled job"}</option>)}
               </select></label>
+            <label className="flex flex-col gap-0.5"><span style={eyebrow}>Vendor</span>
+              <select value={onVendor ? c.contact_id ?? "" : ""} onChange={(e) => void onPatch(e.target.value ? { contact_id: e.target.value, customer_id: null } : { contact_id: null }, e.target.value ? "Filed on the vendor — its files went to their page." : "Taken off the vendor.")} style={field}>
+                <option value="">— not a vendor —</option>
+                {vendors.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+              </select></label>
           </div>
+          {newVendor && <NewVendorForm d={d} onDone={async (id, name, made) => { setNewVendor(false); if (id) await onPatch({ contact_id: id, customer_id: null }, made ? `${name} is a vendor now, and this email is on their page.` : `Filed on ${name}.`); }} />}
           <div className="flex flex-wrap items-center gap-2" style={{ fontSize: 11.5, color: T.ink3 }}>
             {d.filing.note && <span>{d.filing.note}</span>}
             <span style={{ flex: 1 }} />
+            {!newVendor && <button onClick={() => setNewVendor(true)} style={{ color: T.ink2, cursor: "pointer", background: "none", textDecoration: "underline" }}>New vendor from this ›</button>}
             <Link href="/dashboard/customers?new=1" style={{ color: T.ink2 }}>New customer from this ›</Link>
             {c.filed && <button style={{ ...btn(), height: 26 }} onClick={() => setEditing(false)}>Done</button>}
           </div>
@@ -399,6 +548,42 @@ function FilingStrip({ d, onPatch }: { d: ConvData; onPatch: (b: Record<string, 
           {writer} isn&apos;t on {c.contact_name ?? "this person"} yet. <button onClick={() => void addAddress()} style={{ color: T.hiviz, fontWeight: 600, cursor: "pointer", background: "none" }}>Add it</button>
         </div>
       )}
+    </div>
+  );
+}
+
+/** New vendor from this email (Coy, 2026-10-12): filled from what it shows (`vendorFromEmail()`),
+ *  made through + Vendor's own POST /api/vendors on Coy's tap, then the email is filed on them.
+ *  A phone or email already on someone is a 409 naming them: file it on them instead. */
+function NewVendorForm({ d, onDone }: { d: ConvData; onDone: (id: string | null, name: string, made: boolean) => Promise<void> }) {
+  const seed = useMemo(() => vendorFromEmail(d.messages, d.ours), [d.messages, d.ours]);
+  const [v, setV] = useState(seed);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [existing, setExisting] = useState<{ id: string; name: string | null } | null>(null);
+  const make = async () => {
+    setBusy(true); setErr(null); setExisting(null);
+    try {
+      const r = await fetch("/api/vendors", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: v.name, email: v.email || null, phone: v.phone || null }) });
+      const b = await r.json().catch(() => ({}));
+      if (r.status === 409 && b.existing) { setExisting(b.existing); setErr(b.error ?? "They're already one of your contacts."); return; }
+      if (!r.ok) { setErr(b.error ?? `HTTP ${r.status}`); return; }
+      await onDone(b.vendor.id as string, v.name, true);
+    } catch (e) { setErr(errText(e)); } finally { setBusy(false); }
+  };
+  const box = (k: keyof typeof v, label: string, ph: string) => (
+    <label className="flex flex-col gap-0.5" style={{ flex: "1 1 160px" }}><span style={eyebrow}>{label}</span>
+      <input value={v[k]} placeholder={ph} onChange={(e) => setV((o) => ({ ...o, [k]: e.target.value }))} style={field} /></label>
+  );
+  return (
+    <div style={{ padding: 8, borderRadius: 6, border: `1px solid ${T.hairStrong}`, background: T.paper }}>
+      <div style={{ ...eyebrow, marginBottom: 4 }}>New vendor</div>
+      <div className="flex flex-wrap gap-2">{box("name", "Name", "Company")}{box("email", "Email", "sales@…")}{box("phone", "Phone", "(225) …")}</div>
+      {err && <div style={{ color: T.red, fontSize: 11.5, marginTop: 6 }}>{err}{existing && <> <button onClick={() => void onDone(existing.id, existing.name ?? "them", false)} style={{ color: T.hiviz, fontWeight: 600, cursor: "pointer", background: "none" }}>File it on {existing.name ?? "them"}</button></>}</div>}
+      <div className="flex gap-2" style={{ marginTop: 8 }}>
+        <button style={{ ...btn(true), height: 28 }} disabled={busy || !v.name.trim()} onClick={() => void make()}>{busy ? "Adding…" : "Add vendor and file it"}</button>
+        <button style={{ ...btn(), height: 28 }} onClick={() => void onDone(null, "", false)}>Cancel</button>
+      </div>
     </div>
   );
 }
@@ -573,9 +758,9 @@ function AttachSheet({ open, onClose, jobId, contactId, picked, onPick }: { open
   );
 }
 
-export function EmailComposer({ mode, draft, messages = [], ours = [], conversation = null, replyToId = null, filing, canSend, signature, convKeyForDusty, initialTo, initialBody, draftFiles, onClose, onSent, asPage, quoted }: {
+export function EmailComposer({ mode, draft, messages = [], ours = [], conversation = null, replyToId = null, filing, canSend, signature, convKeyForDusty, initialTo, initialBody, initialSubject, draftFiles, onClose, onSent, asPage, quoted }: {
   mode: ComposeMode; draft?: DraftRow | null; messages?: MailRow[]; ours?: string[]; conversation?: string | null; replyToId?: string | null;
-  filing: Filing; canSend: boolean; signature: string; convKeyForDusty?: string | null; initialTo?: string[]; initialBody?: string; draftFiles?: FileLite[];
+  filing: Filing; canSend: boolean; signature: string; convKeyForDusty?: string | null; initialTo?: string[]; initialBody?: string; initialSubject?: string; draftFiles?: FileLite[];
   onClose: () => void; onSent: (msg: string, conversation?: string | null) => void; asPage?: boolean;
   /** The email being answered, shown under the box when the composer covers the screen (phone). */
   quoted?: React.ReactNode;
@@ -586,7 +771,7 @@ export function EmailComposer({ mode, draft, messages = [], ours = [], conversat
   const first = useMemo(() => {
     if (draft) return { to: draft.to_addresses, cc: draft.cc_addresses, subject: draft.subject ?? "", body: draft.body ?? "" };
     const t = replyTargets(messages, mode, ours);
-    const subject = mode === "forward" ? forwardSubject(last?.subject) : mode === "new" ? "" : replySubject(last?.subject);
+    const subject = mode === "forward" ? forwardSubject(last?.subject) : mode === "new" ? initialSubject ?? "" : replySubject(last?.subject);
     return { to: initialTo?.length ? initialTo : t.to, cc: t.cc, subject, body: mode === "forward" && last ? forwardBody(last) : initialBody ?? "" };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -768,7 +953,7 @@ function usePhone(): boolean {
 }
 
 /** A new email, from Compose or a person's Email channel (`?to=`, `?contact=`, `?body=`, `?draft=`). */
-export function NewEmail({ threadId, to, contactId, draftId, body }: { threadId?: string | null; to?: string | null; contactId?: string | null; draftId?: string | null; body?: string | null }) {
+export function NewEmail({ threadId, to, contactId, draftId, body, subject }: { threadId?: string | null; to?: string | null; contactId?: string | null; draftId?: string | null; body?: string | null; subject?: string | null }) {
   const router = useRouter();
   const [ctx, setCtx] = useState<{ can_send: boolean; signature: string; ours: string[]; draft: DraftRow | null; draftFiles: FileLite[]; to: string[]; filing: Filing } | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -794,7 +979,7 @@ export function NewEmail({ threadId, to, contactId, draftId, body }: { threadId?
       {err ? <EmptyState tone="warn" title="Can't write email yet" detail={err} />
         : !ctx ? <div className="rounded animate-pulse" style={{ height: 240, background: T.hairSoft }} />
         : <EmailComposer asPage mode="new" draft={ctx.draft} ours={ctx.ours} filing={ctx.filing} canSend={ctx.can_send} signature={ctx.signature}
-            initialTo={ctx.to} initialBody={body ?? undefined} draftFiles={ctx.draftFiles} onClose={() => router.push(back)}
+            initialTo={ctx.to} initialBody={body ?? undefined} initialSubject={subject ?? undefined} draftFiles={ctx.draftFiles} onClose={() => router.push(back)}
             onSent={(_m, conv) => router.push(conv ? convHref(conv, threadId) : back)} />}
     </div>
   );

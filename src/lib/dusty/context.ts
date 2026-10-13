@@ -5,6 +5,7 @@
  * caller cannot put words in Dusty's context or reach another org's rows.
  */
 
+import { fileRow } from "@/lib/dusty/reading";
 import { riskOf } from "@/lib/risk";
 import type { ApiSession } from "@/lib/api-auth";
 import { plainSpeakers } from "@/lib/speakers";
@@ -329,12 +330,13 @@ async function bidBlock(sb: Sb, orgId: string, jobId: string): Promise<Block | n
 }
 
 async function filesBlock(sb: Sb, orgId: string, by: { jobId?: string; contactId?: string }): Promise<Block | null> {
-  let q = sb.from("files").select("name, category, summary, facts, read_state, read_error, created_at")
+  let q = sb.from("files").select("name, category, summary, facts, read_state, read_error, read_at, read_attempts, created_at")
     .eq("org_id", orgId).is("deleted_at", null).order("created_at", { ascending: false }).limit(20);
   q = by.jobId ? q.eq("job_id", by.jobId) : q.eq("contact_id", by.contactId as string);
   const { data } = await q;
-  const rows = (data ?? []) as Array<{ name: string; category: string | null; summary: string | null; facts: Record<string, unknown> | null; read_state: string | null; read_error: string | null; created_at: string }>;
+  const rows = (data ?? []) as Array<{ name: string; category: string | null; summary: string | null; facts: Record<string, unknown> | null; read_state: string | null; read_error: string | null; read_at?: string | null; read_attempts?: number | null; created_at: string }>;
   if (!rows.length) return null;
+  const now = Date.now();
   return {
     title: "Files on it (uploaded; your earlier reads — suggestions, not confirmed)",
     trimmable: true,
@@ -343,7 +345,10 @@ async function filesBlock(sb: Sb, orgId: string, by: { jobId?: string; contactId
         .map(([k, v]) => `${k.replace(/_/g, " ")}: ${Array.isArray(v) ? v.join(", ") : String(v)}`).join("; ") : "";
       const said = f.read_state === "read" ? `${f.summary ?? ""}${facts ? ` [${facts}]` : ""}`
         : f.category === "plan" && f.read_state === "skipped" ? "plan sheets — what is written on them is in the plan-sheet blocks (\"Plan sheets read by OCR\", \"What the plans and specs say\", or \"Plan sheets not read yet\")"
-        : f.read_state === "skipped" || f.read_state === "failed" ? `not read (${f.read_error ?? f.read_state})` : "not read yet";
+        : f.read_state === "skipped" || f.read_state === "failed" ? `not read (${f.read_error ?? f.read_state})${f.category === "spec" ? " — its concrete pages may be in \"Specs - read by Dusty\"; if there is none, Coy makes it from the job's Summary (Specs — read by Dusty → Make it)" : ""}`
+        // What the reading card in the chat shows (reading.ts), so "what are you reading?" is answered from the same facts.
+        : f.read_state === "reading" ? `${fileRow({ id: "", name: f.name, category: f.category, kind: null, read_state: f.read_state, read_at: f.read_at ?? null, read_attempts: f.read_attempts ?? null, read_error: null, page_count: null, byte_size: null, fetch_state: null, created_at: f.created_at }, now).status.toLowerCase()} by the background reader — not read yet`
+        : "not read yet — waiting for the background reader";
       return `[${day(f.created_at)}] ${f.name}${f.category ? ` (${f.category})` : ""} — ${said}`.slice(0, 1500);
     }),
   };
@@ -449,8 +454,8 @@ async function scopeContext(sb: Sb, orgId: string, jobId: string): Promise<Assem
   const t = takeoff(sections, null);
   const days = num(job.duration_days);
   const jp = pricing.get(jobId) ?? null;
-  const [bud, plans, prop, mail, bid, ocr, book, bidText, calls] = await Promise.all([budgetBlock(sb, orgId, jobId, sections, days, jp), plansBlock(sb, orgId, jobId), proposalBlock(sb, orgId, jobId), emailsBlock(sb, orgId, { jobId }), bidBlock(sb, orgId, jobId), ocrBlock(sb, orgId, jobId), priceBookBlock(sb, orgId), bidTextBlock(sb, orgId, jobId),
-    callsBlock(sb, orgId, job.contact_id as string | null, job.customer_id as string | null)]);
+  const [bud, plans, prop, mail, bid, ocr, book, bidText, specs, calls] = await Promise.all([budgetBlock(sb, orgId, jobId, sections, days, jp), plansBlock(sb, orgId, jobId), proposalBlock(sb, orgId, jobId), emailsBlock(sb, orgId, { jobId }), bidBlock(sb, orgId, jobId), ocrBlock(sb, orgId, jobId), priceBookBlock(sb, orgId), bidTextBlock(sb, orgId, jobId),
+    specsBlock(sb, orgId, jobId), callsBlock(sb, orgId, job.contact_id as string | null, job.customer_id as string | null)]);
   // Areas by ref, for a budget plan (src/lib/dusty/plan.ts).
   const areaRefs = ((secs ?? []) as Array<Record<string, unknown>>).map((r) => {
     const sq = num(r.sqft_override) ?? (num(r.length_ft) !== null && num(r.width_ft) !== null ? (num(r.length_ft) as number) * (num(r.width_ft) as number) : null);
@@ -477,6 +482,7 @@ async function scopeContext(sb: Sb, orgId: string, jobId: string): Promise<Assem
     ...(plans ? [plans] : []),
     ...(ocr ? [ocr] : []),
     ...(bidText ? [bidText] : []),
+    ...(specs ? [specs] : []),
     ...(prop ? [prop] : []),
     ...(mail ? [mail] : []),
     { title: "Section notes", lines: notes },
@@ -667,6 +673,28 @@ async function ocrBlock(sb: Sb, orgId: string, jobId: string): Promise<Block | n
   if (rest.length) lines.push(`Also read, not shown here (ask by sheet): ${rest.slice(0, 80).map(name).join("; ")}`);
   if (notYet) lines.push(notYet);
   return { title: "Plan sheets read by OCR (scans)", lines };
+}
+
+/**
+ * "Specs - read by Dusty" (2026-10-12): the concrete pages of a spec book too big
+ * to read whole, copied word for word on the job (specs-digest.ts). Its text is
+ * on the file from the moment it is made, so he has it before the background
+ * reader's summary.
+ */
+const SPECS_ROOM = 30_000;
+async function specsBlock(sb: Sb, orgId: string, jobId: string): Promise<Block | null> {
+  const { data } = await sb.from("files").select("name, note, extracted_text, created_at").eq("org_id", orgId).eq("job_id", jobId)
+    .like("source_url", "specs_digest:%").is("deleted_at", null).order("created_at", { ascending: false }).limit(1).maybeSingle();
+  const f = data as { name: string; note: string | null; extracted_text: string | null; created_at: string } | null;
+  if (!f?.extracted_text) return null;
+  const t = f.extracted_text.slice(0, SPECS_ROOM);
+  return {
+    title: "Specs - read by Dusty (the concrete pages of the spec book, as printed)",
+    lines: [
+      `${f.note ?? ""} Made ${day(f.created_at)}. Each page starts "## <book> · p.N · Section 03 30 00". Quote the section and page when you use it; it is on the job's Summary and in Files.`,
+      t + (t.length < f.extracted_text.length ? "\n(… the rest is in the file — ask by section)" : ""),
+    ],
+  };
 }
 
 /**

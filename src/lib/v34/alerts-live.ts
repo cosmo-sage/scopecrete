@@ -18,6 +18,7 @@ import { useEffect, useSyncExternalStore } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { mergeAlerts, unreadCount, type Alert, type LiveCall } from "@/lib/alerts";
 
+import { shouldPoll } from "@/lib/v34/idle-poll";
 const client = () => import("@/lib/supabase").then((m) => m.supabase);
 
 const POLL_MS = 30_000;
@@ -96,7 +97,9 @@ const onVisible = () => { if (document.visibilityState === "visible") void read(
 function start() {
   state = { ...state, seenAt: readSeen() };
   void read();
-  timer = setInterval(() => { if (document.visibilityState === "visible") void read(); }, POLL_MS);
+  let last = Date.now();
+  // Realtime nudges at once; the poll is the safety net, and an idle tab polls every 5 min (idle-poll.ts).
+  timer = setInterval(() => { if (shouldPoll(last)) { last = Date.now(); void read(); } }, POLL_MS);
   document.addEventListener("visibilitychange", onVisible);
   void (async () => {
     let supabase: Awaited<ReturnType<typeof client>>;

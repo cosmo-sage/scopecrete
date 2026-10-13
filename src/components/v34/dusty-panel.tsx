@@ -40,6 +40,7 @@ import { TEXT_SIZES } from "@/lib/v34/text-size";
 import { manrope } from "@/components/site/marks";
 import { quickFor, statusDetail, type Quick } from "@/lib/dusty/quick";
 import { JobPickList } from "@/components/v34/job-pick";
+import { DustyReading } from "@/components/v34/dusty-reading";
 import { firstName, partOfDay, pickThought, thoughtSource, QUIET_LINES, type Thought } from "@/lib/dusty/hello";
 
 type Ref = { kind: "thread" | "scope" | "customer"; id: string } | { kind: "cash" } | { kind: "cold" };
@@ -568,6 +569,8 @@ export function DustyPanel({ open, onClose, onBusy, onStream, onState }: {
         <div className="flex-1 min-h-0 relative flex flex-col">
         <div ref={scroller} className="flex-1 overflow-y-auto">
           <div className="mx-auto w-full px-4 pt-4" style={{ maxWidth: 760, paddingBottom: 12 }}>
+            {/* On a job: what he is reading and how far along (Coy, 2026-10-12). */}
+            {planJob && <DustyReading jobId={planJob} onGo={() => { if (!desktop) onClose(); }} />}
             {loadingConv && <div className="rounded animate-pulse" style={{ height: 80, background: T.hairSoft }} />}
             {!loadingConv && items.length === 0 && jobAsk && (
               <JobAsk onNew={() => { setJobAsk(false); create("job"); }}

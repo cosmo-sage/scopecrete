@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
 import { isOwner, orgRow, orgView } from "@/lib/org-server";
+import { viewAsFor } from "@/lib/access-server";
+import { VIEW_AS_COOKIE } from "@/lib/view-as";
 
 /**
  * Settings → Organization (migration 056; Coy on Vercel, 2026-09-30).
@@ -26,12 +28,15 @@ export async function GET(req: NextRequest) {
     supabase.rpc("sc_org_people", { p_org: orgId }),
   ]);
   if (!row) return applyCookies(NextResponse.json({ error: "No organisation." }, { status: 404 }));
+  // Viewing as a teammate: Settings reads as theirs — no owner controls (the View as / Switch back button still shows).
+  const viewAs = owner && req.cookies.get(VIEW_AS_COOKIE) ? await viewAsFor(req, result.session) : null;
+  const canEdit = owner && !(viewAs && viewAs.role !== "owner");
   // Owners: each person's vendor, pages and jobs (sc_org_access, 081). Before 081 the
   // function is missing — access_ready says so and the access editor stays off.
-  const access = owner ? await supabase.rpc("sc_org_access", { p_org: orgId }) : null;
+  const access = canEdit ? await supabase.rpc("sc_org_access", { p_org: orgId }) : null;
   const byUser = new Map(((access?.data ?? []) as Array<{ user_id: string }>).map((a) => [a.user_id, a]));
   return applyCookies(NextResponse.json({
-    org: orgView(row), can_edit: owner, access_ready: !!access && !access.error,
+    org: orgView(row), can_edit: canEdit, access_ready: !!access && !access.error,
     people: ((people.data ?? []) as Array<Record<string, unknown>>).map((p) => {
       const a = byUser.get(p.user_id as string) as Record<string, unknown> | undefined;
       return { ...p, you: p.user_id === userId, ...(a ? { contact_id: a.contact_id, contact_name: a.contact_name, pages: a.pages, all_jobs: a.all_jobs, job_ids: a.job_ids } : {}) };

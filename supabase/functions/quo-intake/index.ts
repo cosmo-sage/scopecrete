@@ -1,5 +1,23 @@
 /**
- * quo-intake v5 — ScopeCrete.ai
+ * quo-intake v12 — ScopeCrete.ai
+ *
+ * v12 changes — a Quo connection belongs to one company (Coy, 2026-10-12:
+ * "any VoIP service needs to be contained within that organization";
+ * migration 107, org_provider_accounts):
+ * - The webhook URL names the connection: …/quo-intake?a=<webhook_token>.
+ *   No token is the connection whose keys are this function's env secrets
+ *   (secrets_from_env — Sacco Enterprises' Quo workspace). An unknown token
+ *   is refused; a paused one is acknowledged and stored nowhere.
+ * - The signature is checked with THAT connection's signing key (vault, read
+ *   through sc_provider_account_for_webhook, service role only).
+ * - Every event is filed under the connection's company. The old lookup by
+ *   orgs.business_phone, and its fallback to QUO_ORG_ID for anything it
+ *   couldn't place, are gone: a company is never guessed from a number.
+ * - Before 107 is applied the function runs as v11 did for the env
+ *   connection (QUO_ORG_ID, QUO_SIGNING_KEY) and refuses any token.
+ * - A call follow-up only matches a call of the same company.
+ *
+ * quo-intake v5
  * File: supabase/functions/quo-intake/index.ts
  * Project: cxiusuewtrvcpqequueh
  *
@@ -169,10 +187,10 @@ function bytesToBase64(bytes: Uint8Array): string {
  * outside the handler's try/catch, so an unhandled throw here would 500 every
  * webhook and trigger endless provider retries.
  */
-async function verifyQuoSignature(req: Request, body: string): Promise<boolean> {
+async function verifyQuoSignature(req: Request, body: string, signingKey: string): Promise<boolean> {
   try {
-    if (!QUO_SIGNING_KEY) {
-      console.error('[auth] reject: QUO_SIGNING_KEY is not set')
+    if (!signingKey) {
+      console.error('[auth] reject: no signing key for this connection')
       return false
     }
     const sigHeader = req.headers.get('openphone-signature')
@@ -213,7 +231,7 @@ async function verifyQuoSignature(req: Request, body: string): Promise<boolean> 
 
     let keyBytes: Uint8Array
     try {
-      keyBytes = base64ToBytes(QUO_SIGNING_KEY)
+      keyBytes = base64ToBytes(signingKey)
     } catch {
       console.error('[auth] reject: QUO_SIGNING_KEY is not valid base64 — store the key exactly as the provider shows it')
       return false
@@ -363,15 +381,38 @@ function makeSupabase() {
 }
 
 // ---------------------------------------------------------------------------
-// Org resolution
+// The connection, and so the company
 // ---------------------------------------------------------------------------
 
-async function resolveOrg(supabase: ReturnType<typeof createClient>, quoPhone: string | null) {
-  if (quoPhone) {
-    const { data } = await supabase.from('orgs').select('id').eq('business_phone', quoPhone).maybeSingle()
-    if (data?.id) return { orgId: data.id, matchedBy: 'business_phone' as const }
+interface QuoAccount { accountId: string | null; orgId: string; signingKey: string; status: string }
+
+/**
+ * The connection a webhook belongs to, and so its company. `token` is the
+ * URL's ?a=; null means the env connection. Null back = refuse (unknown
+ * token, or nothing to file under).
+ */
+async function resolveAccount(
+  supabase: ReturnType<typeof createClient>,
+  token: string | null
+): Promise<QuoAccount | null> {
+  const { data, error } = await supabase.rpc('sc_provider_account_for_webhook', { p_provider: 'quo', p_token: token })
+  if (error) {
+    // Before migration 107: only the env connection exists.
+    if (/sc_provider_account_for_webhook|does not exist|schema cache/i.test(error.message)) {
+      if (token || !QUO_ORG_ID) return null
+      return { accountId: null, orgId: QUO_ORG_ID, signingKey: QUO_SIGNING_KEY, status: 'active' }
+    }
+    console.error(`[account] lookup failed: ${error.message}`)
+    return null
   }
-  return { orgId: QUO_ORG_ID, matchedBy: 'fallback' as const }
+  const row = (Array.isArray(data) ? data[0] : data) as
+    { account_id: string; org_id: string; status: string; secrets_from_env: boolean; signing_key: string | null } | undefined
+  if (!row) return null
+  if (row.secrets_from_env && QUO_ORG_ID && QUO_ORG_ID !== row.org_id) {
+    console.error('[account] QUO_ORG_ID disagrees with the database; filing under the database\'s company')
+  }
+  const signingKey = row.signing_key || (row.secrets_from_env ? QUO_SIGNING_KEY : '')
+  return { accountId: row.account_id, orgId: row.org_id, signingKey, status: row.status }
 }
 
 // ---------------------------------------------------------------------------
@@ -649,6 +690,7 @@ async function insertVoipCall(supabase: ReturnType<typeof createClient>, row: {
  */
 async function updateCallByQuoId(
   supabase: ReturnType<typeof createClient>,
+  orgId: string,
   quoCallId: string,
   patch: Record<string, unknown>
 ): Promise<{ id: string; org_id: string; contact_id: string; lead_id: string | null
@@ -656,6 +698,7 @@ async function updateCallByQuoId(
   const { data, error } = await supabase
     .from('voip_calls')
     .update(patch)
+    .eq('org_id', orgId)
     .eq('quo_call_id', quoCallId)
     .select('id, org_id, contact_id, lead_id, direction, from_phone, to_phone')
     .maybeSingle()
@@ -795,16 +838,27 @@ serve(async (req: Request) => {
   }
 
   const rawBody = await req.text()
+  const supabase = makeSupabase()
 
-  // Enforce the HMAC signature before doing anything with the payload.
-  // v4 defined verifyQuoSignature but never called it.
-  if (!(await verifyQuoSignature(req, rawBody))) {
-    return new Response(JSON.stringify({ error: 'Invalid signature' }), {
+  // v12: which company's Quo connection this is, from the URL's ?a= token.
+  const token = new URL(req.url).searchParams.get('a')
+  const acct = await resolveAccount(supabase, token && /^[a-f0-9]{16,64}$/.test(token) ? token : token ? 'invalid' : null)
+  if (!acct) {
+    return new Response(JSON.stringify({ error: 'Unknown connection' }), {
       status: 401, headers: { 'Content-Type': 'application/json' }
     })
   }
 
-  const supabase = makeSupabase()
+  // Enforce the HMAC signature (with this connection's key) before doing
+  // anything with the payload. v4 defined verifyQuoSignature but never called it.
+  if (!(await verifyQuoSignature(req, rawBody, acct.signingKey))) {
+    return new Response(JSON.stringify({ error: 'Invalid signature' }), {
+      status: 401, headers: { 'Content-Type': 'application/json' }
+    })
+  }
+  if (acct.status !== 'active') {
+    return new Response(JSON.stringify({ status: 'connection_paused' }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+  }
   let payload: Record<string, unknown>
   try { payload = JSON.parse(rawBody) } catch {
     return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400 })
@@ -827,7 +881,7 @@ serve(async (req: Request) => {
       const direction = callDirection(data.direction)
       const counterparty = counterpartyPhone(direction, fromPhone, toPhone)
       const ours = direction === 'outbound' ? fromPhone : toPhone
-      const { orgId } = await resolveOrg(supabase, toPhone)
+      const orgId = acct.orgId
       await noteLiveCall(supabase, { orgId, eventType, quoCallId, direction, fromPhone, toPhone, counterparty, ours, rawPayload: data })
       return new Response(JSON.stringify({ status: 'ok', live: eventType }), { status: 200, headers: { 'Content-Type': 'application/json' } })
     }
@@ -850,7 +904,7 @@ serve(async (req: Request) => {
         console.error(`[call.completed] no usable counterparty (from=${fromPhone} to=${toPhone})`)
         return new Response(JSON.stringify({ error: 'No counterparty phone' }), { status: 400 })
       }
-      const { orgId } = await resolveOrg(supabase, toPhone)
+      const orgId = acct.orgId
       if (await isOrgLine(supabase, orgId, contactPhone)) {
         await endLiveCall(supabase, quoCallId, null)
         return await storeOwnLineEvent(supabase, {
@@ -920,7 +974,7 @@ serve(async (req: Request) => {
         console.error(`[message.received] no usable counterparty (from=${fromPhone} to=${toPhone})`)
         return new Response(JSON.stringify({ error: 'No counterparty phone' }), { status: 400 })
       }
-      const { orgId } = await resolveOrg(supabase, toPhone)
+      const orgId = acct.orgId
       if (await isOrgLine(supabase, orgId, contactPhone)) {
         return await storeOwnLineEvent(supabase, {
           orgId, eventType, eventId: quoMessageId, direction, fromPhone, toPhone: toPhone ?? fromPhone,
@@ -1002,13 +1056,13 @@ serve(async (req: Request) => {
         bodyForEvent = summary
       }
 
-      const call = await updateCallByQuoId(supabase, quoCallId, patch)
+      const call = await updateCallByQuoId(supabase, acct.orgId, quoCallId, patch)
       if (!call) {
         // v10: store it anyway. No voip_calls row usually means the call was
         // between two of our own lines (stored raw-only above) or arrived out
         // of order; either way the projection attaches it to the call's
         // message by callId, or records artifact_without_call.
-        const { orgId } = await resolveOrg(supabase, null)
+        const orgId = acct.orgId
         const eventId = eventIdFor(eventType, payload, data) ?? `${quoCallId}:${eventType}`
         await insertQuoEvent(supabase, {
           orgId, contactId: null, eventType, eventId, direction: null, fromPhone: null, toPhone: null,
@@ -1075,7 +1129,7 @@ serve(async (req: Request) => {
         return new Response(JSON.stringify({ status: 'no_counterparty' }), { status: 200, headers: { 'Content-Type': 'application/json' } })
       }
 
-      const { orgId } = await resolveOrg(supabase, fromPhone)
+      const orgId = acct.orgId
       if (await isOrgLine(supabase, orgId, contactPhone)) {
         return await storeOwnLineEvent(supabase, {
           orgId, eventType, eventId: quoMessageId, direction: 'outbound',
@@ -1113,7 +1167,7 @@ serve(async (req: Request) => {
     // v10: the raw log comes first. Save the event with no contact and a note
     // for More -> Logs, and answer 200 — it is on disk. Only when that write
     // fails too does Quo get a 500 and retry.
-    if (await rescueEvent(supabase, eventType, payload, data, message)) {
+    if (await rescueEvent(supabase, acct.orgId, eventType, payload, data, message)) {
       return new Response(JSON.stringify({ status: 'saved_after_error', detail: message }), { status: 200, headers: { 'Content-Type': 'application/json' } })
     }
     return new Response(JSON.stringify({ error: 'Internal error', detail: message }), { status: 500 })
@@ -1123,6 +1177,7 @@ serve(async (req: Request) => {
 /** Stores an event the handler failed on. True when it is in quo_events. */
 async function rescueEvent(
   supabase: ReturnType<typeof createClient>,
+  orgId: string,
   eventType: string,
   payload: Record<string, unknown>,
   data: Record<string, unknown>,
@@ -1133,8 +1188,6 @@ async function rescueEvent(
     if (!eventType || !eventId) return false
     const fromPhone = normalizePhone((data.from as string) ?? '')
     const toPhone = normalizePhone((data.to as string) ?? '')
-    // message.delivered is ours, so its org is keyed on the sender.
-    const { orgId } = await resolveOrg(supabase, eventType === 'message.delivered' ? fromPhone : toPhone)
     if (!(await findQuoEventId(supabase, orgId, eventId))) {
       const stored = await insertQuoEvent(supabase, {
         orgId, contactId: null, eventType, eventId,

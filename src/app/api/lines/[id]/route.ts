@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
 import { LEAD_SOURCES } from "@/lib/jobs/stages";
 import { LINE_COLORS, PROVIDERS } from "@/lib/lines";
+import { quoLineRefusal } from "@/lib/quo";
 
 /**
  * Edit a line: label, provider, provider id, default lead source, its colour
@@ -33,6 +34,8 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     patch[f] = typeof v === "string" && v.trim() ? v.trim() : null;
   }
   if (patch.provider && !PROVIDERS.some((p) => p.k === patch.provider)) return fail(`provider must be one of ${PROVIDERS.map((p) => p.k).join(", ")}.`);
+  const noQuo = quoLineRefusal(orgId, typeof patch.provider === "string" ? patch.provider : null);
+  if (noQuo) return fail(noQuo, 409);
   if (patch.default_lead_source && !LEAD_SOURCES.some((l) => l.k === patch.default_lead_source)) return fail("Unknown lead source.");
   if ("color_token" in body) {
     const c = body.color_token;

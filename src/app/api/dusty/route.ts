@@ -38,12 +38,12 @@ import { readPages, searchWeb } from "@/lib/web-search-server";
  */
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 120;
+export const maxDuration = 300;
 
 const MAX_TURNS = 30;
 const MAX_USER_CHARS = 4000;
 const DEFAULT_MODEL = "anthropic/claude-haiku-4.5";
-const TIMEOUT_MS = 60_000;
+const TIMEOUT_MS = 280_000;
 /** Dusty's chat on Anthropic's API (DUSTY_MODEL overrides). */
 const DIRECT_MODEL = "claude-sonnet-5-5";
 
@@ -352,7 +352,8 @@ export async function POST(req: NextRequest) {
           ...(process.env.ANTHROPIC_WORKSPACE_ID?.trim() ? { "anthropic-workspace-id": process.env.ANTHROPIC_WORKSPACE_ID.trim() } : {}),
         },
         body: JSON.stringify({
-          model, stream: true, max_tokens: 4000, system,
+          // A budget plan for every section of a job runs long; 4,000 cut Coy's off (2026-10-12).
+          model, stream: true, max_tokens: 16000, system,
           messages: anthropicTurns(history, images),
         }),
       })
@@ -364,7 +365,7 @@ export async function POST(req: NextRequest) {
         model,
         stream: true,
         // A plan (a budget, or a list of threads to archive) rides at the end — room for it.
-        max_tokens: 4000,
+        max_tokens: 8000,
         messages: [{ role: "system", content: system },
           ...history.slice(0, -1),
           // The photos he looks at ride on this question only; the history keeps the words.
@@ -445,7 +446,9 @@ export async function POST(req: NextRequest) {
               } catch { /* a keep-alive or partial line — skip it */ }
             }
           }
-          if (finish === "length") emit("\n\n[Cut off — ask for the rest.]");
+          if (finish === "length") emit(/```scopecrete-plan(?![\s\S]*```)/.test(said)
+            ? "\n\n[The plan ran out of room before it finished, so there's nothing to apply. Ask for one section at a time.]"
+            : "\n\n[Cut off. Ask for the rest.]");
           if (finish === "content_filter") emit("\n\n[Dusty declined to answer that one.]");
         }
         console.log("dusty ok", JSON.stringify({ model, direct, ctx: ctx.label.slice(0, 40), truncated: ctx.truncated }));

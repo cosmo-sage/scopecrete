@@ -13,9 +13,10 @@
  */
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { T, F, disp, eyebrow, nums, money, money0, formatPhone } from "@/lib/v34/tokens";
+import { T, F, disp, strong, eyebrow, nums, money, money0 } from "@/lib/v34/tokens";
 import { EmptyState } from "@/components/v34/primitives";
-import { AddressInput } from "@/components/v34/address-input";
+import { CustomerCard, OwnerCard, ContactsCard, JobSiteCard, type Party, type JobPerson } from "@/components/v34/job-parties";
+import { useWide } from "@/lib/v34/use-wide";
 import { JobChips } from "@/components/v34/job-chips";
 import { BidStrip } from "@/components/v34/bid-strip";
 import { JobHeaderRow } from "@/components/v34/job-tabs";
@@ -24,19 +25,24 @@ import { budget as priceBudget, jobMinimum, takeoff as takeoffOf, type BudgetLin
 import { signedLine, viewLine } from "@/lib/proposal-links";
 import { dayLabel, todayCentral, validDay, whenLabel } from "@/lib/jobs/schedule";
 import { JobBids } from "@/components/v34/bids/job-bids";
+import { SpecsCard } from "@/components/v34/specs-card";
 import { BudgetStep, SendSheet, useBudget } from "@/components/v34/plan-room/budget-step";
 import { call as planCall, isDrawing, type Param, type PlansData } from "@/components/v34/plan-room/shared";
 import { BEFORE_WON, WON_STATUSES } from "@/lib/jobs/stages";
 import type { Contract } from "@/lib/jobs/won";
+import { SCOPE_STEPS, type ScopeProgress } from "@/lib/scope-builder";
+import { Emblem } from "@/components/site/marks";
+import { askDusty } from "@/components/v34/budget-tabs";
 
 interface Job {
   id: string; title: string | null; status: string | null; address: string | null;
+  city?: string | null; state?: string | null; zip?: string | null;
   contact_id: string | null; duration_days: number | null; created_from_message_id: string | null; customer_id?: string | null;
   job_type: string | null; lead_source: string | null; description?: string | null; origin?: string | null;
   archived_at?: string | null; archived_reason?: string | null; created_at?: string | null; won_at?: string | null;
   scheduled_start?: string | null; scheduled_end?: string | null; schedule_state?: string | null;
 }
-interface Contact { id: string; name: string | null; phone: string | null }
+interface Contact { id: string; name: string | null; phone: string | null; email?: string | null }
 export interface Why {
   filed_at: string | null; filed_by: "coy" | "dusty" | null;
   status_summary: string | null; recent_summary: string | null;
@@ -70,8 +76,13 @@ const day = (iso: string, year = false) => new Date(iso).toLocaleDateString("en-
 
 export function JobSummary({ jobId }: { jobId: string }) {
   const [job, setJob] = useState<Job | null>(null);
-  const [contact, setContact] = useState<Contact | null>(null);
-  const [customer, setCustomer] = useState<{ id: string; name: string | null } | null>(null);
+  const [, setContact] = useState<Contact | null>(null);
+  const [customer, setCustomer] = useState<Party | null>(null);
+  const [owner, setOwner] = useState<Party | null>(null);
+  const [ownerSupported, setOwnerSupported] = useState(true);
+  const [people, setPeople] = useState<JobPerson[]>([]);
+  const [site, setSite] = useState<{ lat: number; lng: number } | null>(null);
+  const [wideRef, wide] = useWide<HTMLDivElement>(600);
   const [sections, setSections] = useState<SectionInput[] | null>(null);
   const [bd, setBd] = useState<BudgetData | null>(null);
   const [budgetErr, setBudgetErr] = useState<string | null>(null);
@@ -80,12 +91,20 @@ export function JobSummary({ jobId }: { jobId: string }) {
   const [contract, setContract] = useState<Contract | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Everything GET /api/jobs/[id] gives the page, in one place so a reload reads the same.
+  const take = useCallback((j: Record<string, unknown>) => {
+    setJob(j.job as Job); setContact((j.contact as Contact | null) ?? null); setCustomer((j.customer as Party | null) ?? null);
+    setOwner((j.owner as Party | null) ?? null); setOwnerSupported(j.owner_supported !== false);
+    setPeople((j.people as JobPerson[] | undefined) ?? []); setSite((j.site as { lat: number; lng: number } | null) ?? null);
+    setContract((j.contract as Contract | null) ?? null);
+  }, []);
+
   useEffect(() => {
     let off = false;
     Promise.all([send(`/api/jobs/${jobId}`, "GET"), send(`/api/jobs/${jobId}/sections`, "GET")])
       .then(([j, s]) => {
         if (off) return;
-        setJob(j.job); setContact(j.contact ?? null); setCustomer(j.customer ?? null); setContract(j.contract ?? null);
+        take(j);
         setSections(((s.sections ?? []) as Array<Record<string, unknown>>).map((x) => ({
           ...(x as unknown as SectionInput), length_ft: num(x.length_ft), width_ft: num(x.width_ft), sqft_override: num(x.sqft_override),
           depth_in: num(x.depth_in), psi: num(x.psi), count_qty: num(x.count_qty),
@@ -96,10 +115,10 @@ export function JobSummary({ jobId }: { jobId: string }) {
     send(`/api/jobs/${jobId}/budget`, "GET").then((b) => { if (!off) setBd(b as BudgetData); }).catch((e) => { if (!off) setBudgetErr(e instanceof Error ? e.message : String(e)); });
     send(`/api/jobs/${jobId}/proposal/link`, "GET").then((b) => { if (!off) setLinks((b.links ?? []) as ProposalLink[]); }).catch(() => { if (!off) setLinks([]); });
     return () => { off = true; };
-  }, [jobId]);
+  }, [jobId, take]);
 
   // A status change can stamp or clear the win date, which moves the contract: read the job again.
-  const reload = useCallback(() => send(`/api/jobs/${jobId}`, "GET").then((j) => { setJob(j.job); setContact(j.contact ?? null); setCustomer(j.customer ?? null); setContract(j.contract ?? null); }), [jobId]);
+  const reload = useCallback(() => send(`/api/jobs/${jobId}`, "GET").then((j) => take(j)), [jobId, take]);
   const setChip = useCallback((field: string, value: string) => send(`/api/jobs/${jobId}`, "PATCH", { [field]: value })
     .then((b) => { setJob((j) => j && { ...j, status: b.job.status, job_type: b.job.job_type, lead_source: b.job.lead_source, won_at: b.job.won_at }); return field === "status" ? reload() : undefined; }), [jobId, reload]);
 
@@ -109,13 +128,23 @@ export function JobSummary({ jobId }: { jobId: string }) {
   }
 
   const realTitle = job.title && !PLACEHOLDER_TITLES.has(job.title.trim()) ? job.title : "";
-  const who = contact ? (contact.name || formatPhone(contact.phone)) : null;
   const card: React.CSSProperties = { background: T.card, border: `1px solid ${T.hair}`, borderRadius: 4 };
+  const siteParts = { address: job.address, city: job.city, state: job.state, zip: job.zip };
+  const siteAddress = job.address
+    ? (job.address.includes(",") ? job.address : [job.address, job.city, [job.state, job.zip].filter(Boolean).join(" ")].filter(Boolean).join(", "))
+    : null;
+  // The job's person, or the first person on it, is who "Make X the customer" offers.
+  const primary = people.find((p) => p.primary) ?? people[0] ?? null;
+  const created = job.created_at ? `Created ${day(job.created_at, true)}` : null;
+  const facts = [created, `${sections.length} section${sections.length === 1 ? "" : "s"}`,
+    job.origin === "classification" ? "made when filed as a customer" : job.created_from_message_id ? "drafted from a message" : null].filter(Boolean).join(" · ");
 
   return (
-    <div className="pb-24 lg:pb-8" style={{ color: T.ink, minHeight: "calc(100dvh - var(--sc-head))" }}>
+    <div ref={wideRef} className="pb-24 lg:pb-8" style={{ color: T.ink, minHeight: "calc(100dvh - var(--sc-head))" }}>
       <div className="px-3 pt-2.5 pb-2" style={{ background: T.card, borderBottom: `1px solid ${T.hair}` }}>
-        <JobHeaderRow jobId={jobId} active="summary" title={realTitle || "Unnamed job"} customerId={job.customer_id} />
+        {/* The chips sit right of the name on a desktop (Claude Design "Job Summary", 2026-10-13), in the body on a phone. */}
+        <JobHeaderRow jobId={jobId} active="summary" title={realTitle || "Unnamed job"} customerId={job.customer_id}
+          after={wide ? <span className="hidden lg:inline-flex" style={{ marginLeft: 20 }}><JobChips job={job} onSet={setChip} /></span> : undefined} />
       </div>
 
       {job.archived_at && (
@@ -126,20 +155,32 @@ export function JobSummary({ jobId }: { jobId: string }) {
         </div>
       )}
 
-      <div className="mx-auto px-3 pt-3 space-y-3" style={{ maxWidth: 960 }}>
-        {/* The job: its chips, who it's for, where, since when, and what it is. */}
-        <section aria-label="The job" className="px-3 py-2.5" style={card}>
-          <JobChips job={job} onSet={setChip} />
-          {/* One fact a row: the customer, the address, when it was created, the sections (Coy, 2026-10-09). */}
-          <div className="flex flex-col gap-0.5" style={{ fontSize: F.sm, color: T.ink2, marginTop: 8, lineHeight: 1.45 }}>
-            <JobCustomer jobId={jobId} customer={customer} who={who} contactId={contact?.id ?? null} onSaved={() => void reload()} />
-            <JobAddress jobId={jobId} address={job.address} onSaved={() => void reload()} />
-            {job.created_at && <div>Created {day(job.created_at, true)}
-              {job.origin === "classification" ? " · made when filed as a customer" : job.created_from_message_id ? " · drafted from a message" : ""}</div>}
-            <div>{sections.length} section{sections.length === 1 ? "" : "s"}</div>
+      {/* Full width, no cap (Claude Design "Job Summary": "full width, no max-width"). */}
+      <div className="flex flex-col" style={{ padding: wide ? "16px 24px 0" : "12px 12px 0", gap: 14 }}>
+        {/* The job: its name, when it was made, how many sections, and what it is. */}
+        <section aria-label="The job" className="flex flex-col gap-2">
+          <div className="lg:hidden"><JobChips job={job} onSet={setChip} /></div>
+          <div className="flex" style={{ flexDirection: wide ? "row" : "column", alignItems: wide ? "baseline" : "flex-start", gap: "4px 16px", flexWrap: "wrap" }}>
+            <span style={{ fontFamily: strong, fontWeight: 600, fontSize: 18, lineHeight: 1.2 }}>{realTitle || "Unnamed job"}</span>
+            <span style={{ fontSize: 12, color: T.ink3 }}>{facts}</span>
           </div>
-          {job.description && !bidSummary && <div style={{ fontSize: F.sm, color: T.ink2, lineHeight: 1.45, marginTop: 4 }}>{job.description}</div>}
+          {job.description && !bidSummary && <span style={{ fontSize: 13.5, lineHeight: 1.5, color: T.ink2, maxWidth: 900 }}>{job.description}</span>}
         </section>
+
+        {/* Who pays, who it's for, the people on it — and where it is. */}
+        <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 520px), 1fr))", alignItems: "stretch" }}>
+          <div className="flex flex-col gap-3" style={{ minWidth: 0 }}>
+            <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 260px), 1fr))" }}>
+              <CustomerCard jobId={jobId} customer={customer} primary={primary} jobType={job.job_type} siteAddress={siteAddress} site={siteParts} onSaved={() => void reload()} />
+              <OwnerCard jobId={jobId} owner={owner} customer={customer} supported={ownerSupported}
+                ownerPeople={people.filter((p) => p.side === "owner").length} onSaved={() => void reload()} />
+            </div>
+            <ContactsCard jobId={jobId} people={people} customer={customer} owner={owner} jobType={job.job_type} site={siteParts} onSaved={() => void reload()} />
+          </div>
+          <JobSiteCard jobId={jobId} address={siteAddress} stored={site} customer={customer} phone={!wide} onSaved={() => void reload()} />
+        </div>
+
+        {!job.archived_at && <NextUp jobId={jobId} card={card} />}
 
         {WON_STATUSES.includes(job.status ?? "") && (
           <WonCard jobId={jobId} job={job} contract={contract} card={card} onChange={() => void reload()} />
@@ -153,20 +194,23 @@ export function JobSummary({ jobId }: { jobId: string }) {
         {/* The bid behind it, when a forwarded bid email made or fed this job (migration 063). */}
         <BidStrip jobId={jobId} onSummary={setBidSummary} onUndone={() => { window.location.href = "/dashboard/scope"; }} />
 
-        <div className="grid gap-3 lg:grid-cols-2">
+        {/* Price, proposal and bids side by side as room allows (Claude Design "Job Summary"). */}
+        <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 300px), 1fr))", alignItems: "start" }}>
           <Totals jobId={jobId} job={job} sections={sections} bd={bd} err={budgetErr} card={card} />
           <ProposalState jobId={jobId} links={links} card={card}
             onWon={BEFORE_WON.includes(job.status ?? "") ? () => setChip("status", "won") : undefined} />
+          <JobBids jobId={jobId} card={card} />
         </div>
 
-        <JobBids jobId={jobId} card={card} />
+        {/* The spec book's concrete pages as one file Dusty can read (2026-10-12). */}
+        <SpecsCard jobId={jobId} card={card} />
 
         <FromThePlans jobId={jobId} sections={sections} />
       </div>
 
       {/* Delete lives at the very bottom (moved here from the Budget, 2026-10-05). */}
       {!job.archived_at && (
-        <div className="mx-auto px-3 pt-6" style={{ maxWidth: 960 }}>
+        <div style={{ padding: wide ? "24px 24px 0" : "24px 12px 0" }}>
           <div className="pt-3 flex items-center justify-between gap-2" style={{ borderTop: `1px solid ${T.hair}` }}>
             <span style={{ fontSize: F.xs, color: T.ink3 }}>Delete this job — it can be restored from Archived &amp; deleted.</span>
             <ArchiveButton kind="job" id={jobId} action="delete" what={realTitle ? `the job “${realTitle}”` : "this job"} then="/dashboard/scope"
@@ -175,6 +219,70 @@ export function JobSummary({ jobId }: { jobId: string }) {
         </div>
       )}
     </div>
+  );
+}
+
+/** Coy's question to Dusty from a job's What's next. */
+const NEXT_QUESTION = "What's left to finish scoping and pricing this job? Go through what they said on their calls and texts, their photos and what's measured, and list what I still need to do or ask them, in order.";
+
+interface NextTask { id: string; title: string; due_on: string | null; source: string; job_id: string | null }
+
+/**
+ * What's next on this job (Coy, 2026-10-13: a new job should "pull in the photos and prompt me for
+ * what was next to finish scoping and estimating"). On open it brings in, once, the photos the
+ * customer texted (POST texted-photos {auto}); then the step the scope is on (the Scope Builder's
+ * rule), the open next steps on their person, and Dusty asked what's left.
+ */
+function NextUp({ jobId, card }: { jobId: string; card: React.CSSProperties }) {
+  const [data, setData] = useState<{ progress: ScopeProgress; href: string; tasks: NextTask[] } | null>(null);
+  const [photos, setPhotos] = useState<number>(0);
+  const load = useCallback(() => send(`/api/jobs/${jobId}/next`, "GET").then((b) => setData(b)).catch(() => setData(null)), [jobId]);
+  useEffect(() => {
+    let off = false;
+    send(`/api/jobs/${jobId}/texted-photos`, "POST", { auto: true })
+      .then((b) => { if (!off && b.added > 0) setPhotos(b.added as number); })
+      .catch(() => undefined)
+      .finally(() => { if (!off) void load(); });
+    return () => { off = true; };
+  }, [jobId, load]);
+  if (!data) return null;
+  const { progress, href, tasks } = data;
+  if (progress.next === "sent" && !tasks.length && !photos) return null;
+  const step = SCOPE_STEPS.find((x) => x.k === progress.next);
+  const done = (t: NextTask) => void send(`/api/tasks/${t.id}`, "PATCH", { status: "done" }).then(load);
+  return (
+    <section aria-label="What's next" className="px-3 py-2.5" style={card}>
+      <div className="flex items-center gap-2">
+        <div style={{ ...eyebrow, flex: 1 }}>What&apos;s next</div>
+        <button onClick={() => askDusty(NEXT_QUESTION)} aria-label="Ask Dusty what's left to scope and price it" title="Ask Dusty what's left to scope and price it"
+          className="flex items-center justify-center shrink-0" style={{ width: 30, height: 30, borderRadius: 4, border: `1px solid ${T.hairStrong}`, background: T.card, cursor: "pointer" }}>
+          <Emblem size={18} spin={false} />
+        </button>
+      </div>
+      {photos > 0 && (
+        <div style={{ fontSize: F.sm, color: T.ink2, marginTop: 6 }}>
+          Brought in {photos} photo{photos === 1 ? "" : "s"} they texted · <Link href={`/dashboard/scope/${jobId}/files`} style={{ color: T.chalk }}>See them in Files ›</Link>
+        </div>
+      )}
+      <div className="flex items-center gap-2" style={{ marginTop: 6 }}>
+        <span style={{ fontSize: F.sm, color: T.ink, flex: 1 }}>{progress.line}</span>
+        {progress.next !== "sent" && step && (
+          <Link href={href} className="rounded px-2.5 no-underline inline-flex items-center"
+            style={{ height: 28, background: T.ink, color: T.card, fontSize: F.xs, fontWeight: 600, flexShrink: 0 }}>{step.label} ›</Link>
+        )}
+      </div>
+      {tasks.length > 0 && (
+        <ul className="mt-2 space-y-1" style={{ listStyle: "none", padding: 0, margin: 0 }}>
+          {tasks.map((t) => (
+            <li key={t.id} className="flex items-start gap-2" style={{ fontSize: F.sm, color: T.ink2, lineHeight: 1.4 }}>
+              <button onClick={() => done(t)} aria-label={`Done: ${t.title}`} title="Done"
+                style={{ width: 18, height: 18, marginTop: 1, borderRadius: 3, border: `1px solid ${T.hair}`, background: T.card, cursor: "pointer", flexShrink: 0 }} />
+              <span style={{ flex: 1 }}>{t.title}{t.due_on ? <span style={{ color: T.ink3 }}> · due {day(`${t.due_on}T12:00:00Z`)}</span> : null}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 
@@ -443,109 +551,5 @@ function WonCard({ jobId, job, contract, card, onChange }: {
       )}
       {err && <div style={{ fontSize: F.xs, color: T.red, marginTop: 4 }}>{err}</div>}
     </section>
-  );
-}
-
-/** The job's address, added or changed here (Coy, 2026-10-10: "I currently
- *  have no way to add or edit an address for a new or existing job"): the
- *  Map's address finder (Mapbox) fills street, city, state and zip; saved
- *  through the job's own PATCH. */
-/**
- * Who the job is for, and Change (Coy, 2026-10-10: "I seem to have no way of attaching a customer
- * to a job/scope from inside the job"): pick a customer and the job goes on it, its person becoming
- * the customer's primary unless already one of theirs (PATCH /api/jobs/[id] {customer_id}).
- */
-function JobCustomer({ jobId, customer, who, contactId, onSaved }: {
-  jobId: string; customer: { id: string; name: string | null } | null; who: string | null; contactId: string | null; onSaved: () => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [list, setList] = useState<Array<{ id: string; name: string; city: string | null }> | null>(null);
-  const [q, setQ] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  useEffect(() => {
-    if (!open || list) return;
-    fetch("/api/customers").then((r) => (r.ok ? r.json() : { customers: [] }))
-      .then((b) => setList(((b.customers ?? []) as Array<{ id: string; name: string; city: string | null }>).sort((a, b2) => a.name.localeCompare(b2.name))))
-      .catch(() => setList([]));
-  }, [open, list]);
-  const pick = async (id: string) => {
-    setBusy(true); setErr(null);
-    try { await send(`/api/jobs/${jobId}`, "PATCH", { customer_id: id }); setOpen(false); setQ(""); onSaved(); }
-    catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
-    finally { setBusy(false); }
-  };
-  const words = q.trim().toLowerCase();
-  const shown = (list ?? []).filter((x) => x.id !== customer?.id && (!words || x.name.toLowerCase().includes(words))).slice(0, 30);
-  const name = customer?.name || null;
-  const person = who && who !== name ? who : null;
-  return (
-    <div>
-      <div className="flex items-baseline gap-2 flex-wrap">
-        {name ? <Link href={`/dashboard/customers/${customer!.id}`} style={{ color: T.ink, fontWeight: 600 }}>{name}</Link>
-          : who && contactId ? <Link href={`/dashboard/messages/${contactId}`} style={{ color: T.ink, fontWeight: 600 }}>{who}</Link>
-          : <span style={{ color: T.hiviz, fontWeight: 600 }}>Not attached to a customer yet</span>}
-        {name && person && contactId && <Link href={`/dashboard/messages/${contactId}`} style={{ color: T.ink2 }}>{person}</Link>}
-        <button onClick={() => setOpen((v) => !v)} aria-expanded={open}
-          style={{ ...eyebrow, fontSize: 10.5, color: T.chalk, cursor: "pointer", background: "none", border: "none", padding: 0 }}>
-          {open ? "Close" : customer ? "✎ Change customer" : "+ Attach a customer"}
-        </button>
-      </div>
-      {open && (
-        <div style={{ maxWidth: 520, margin: "4px 0 6px" }}>
-          <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find a customer…" aria-label="Find a customer"
-            className="rounded px-2 w-full" style={{ height: 34, border: `1px solid ${T.hairStrong}`, fontSize: 14, background: T.card, color: T.ink }} />
-          <div className="flex flex-col mt-1" style={{ maxHeight: 260, overflowY: "auto" }}>
-            {list === null ? <span style={{ fontSize: F.sm, color: T.ink3, padding: "6px 0" }}>Loading…</span>
-              : shown.length === 0 ? <span style={{ fontSize: F.sm, color: T.ink3, padding: "6px 0" }}>No customer by that name. Make it on Customers → + New.</span>
-              : shown.map((x) => (
-                <button key={x.id} disabled={busy} onClick={() => void pick(x.id)} className="text-left flex items-baseline gap-2"
-                  style={{ padding: "8px 2px", borderBottom: `1px solid ${T.hairSoft}`, fontSize: F.sm, color: T.ink, cursor: "pointer", background: "none" }}>
-                  <span className="flex-1 min-w-0" style={{ fontWeight: 600 }}>{x.name}</span>
-                  {x.city && <span style={{ color: T.ink3, fontSize: 12 }}>{x.city}</span>}
-                </button>
-              ))}
-          </div>
-          {err && <div style={{ fontSize: 11, color: T.red, marginTop: 4 }}>{err}</div>}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function JobAddress({ jobId, address, onSaved }: { jobId: string; address: string | null; onSaved: () => void }) {
-  const [editing, setEditing] = useState(false);
-  const [v, setV] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  const save = async (body: Record<string, string | null>) => {
-    setBusy(true); setErr(null);
-    try { await send(`/api/jobs/${jobId}`, "PATCH", body); setEditing(false); onSaved(); }
-    catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
-    finally { setBusy(false); }
-  };
-  if (!editing) return (
-    <div className="flex items-baseline gap-2">
-      <span style={{ color: address ? T.ink2 : T.ink3 }}>{address || "No address yet"}</span>
-      <button onClick={() => { setV(address ?? ""); setEditing(true); }}
-        style={{ ...eyebrow, fontSize: 10.5, color: T.chalk, cursor: "pointer", background: "none", border: "none", padding: 0 }}>
-        {address ? "✎ Change" : "+ Add address"}
-      </button>
-    </div>
-  );
-  return (
-    <div className="flex flex-col gap-1.5" style={{ maxWidth: 520, margin: "2px 0 4px" }}>
-      <AddressInput value={v} onChange={setV}
-        style={{ width: "100%", height: 34, padding: "0 10px", border: `1px solid ${T.hairStrong}`, borderRadius: 3, background: T.card, color: T.ink, fontSize: 14 }}
-        onPick={(m) => void save({ address: m.line1, city: m.city ?? null, state: m.state ?? null, zip: m.zip ?? null })} />
-      <span style={{ fontSize: 11, color: T.ink3 }}>Start typing — pick the address from the list.</span>
-      <span className="flex gap-2">
-        <button disabled={busy || !v.trim()} onClick={() => void save({ address: v.trim() })} className="rounded px-3"
-          style={{ height: 30, background: T.ink, color: T.card, fontWeight: 600, cursor: "pointer", border: "none" }}>{busy ? "Saving…" : "Save as typed"}</button>
-        <button onClick={() => setEditing(false)} className="rounded px-3"
-          style={{ height: 30, border: `1px solid ${T.hair}`, background: T.card, color: T.ink, cursor: "pointer" }}>Cancel</button>
-      </span>
-      {err && <span style={{ color: T.red, fontSize: 11 }}>{err}</span>}
-    </div>
   );
 }

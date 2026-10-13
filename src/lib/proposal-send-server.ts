@@ -32,7 +32,7 @@ export async function sendableProposals(sb: Sb, orgId: string, where: { contactI
   if (!jobRows.length) return [];
   const ids = jobRows.map((j) => j.id);
   const [{ data: props }, { data: docs }, numbers] = await Promise.all([
-    sb.from("job_proposals").select("id, job_id, version, status, snapshot->price->total, finalized_at").eq("org_id", orgId).in("job_id", ids).order("version", { ascending: false }),
+    sb.from("job_proposals").select("id, job_id, version, status, snapshot->price->total, finalized_at").eq("org_id", orgId).in("job_id", ids).is("deleted_at", null).order("version", { ascending: false }),
     sb.from("documents").select("id, job_id, proposal_id, token, sent_at, sent_via, view_count, last_viewed_at, status, decided_name, decided_at, revoked_at, created_at")
       .eq("org_id", orgId).in("job_id", ids).not("proposal_id", "is", null).is("revoked_at", null).neq("status", "void").order("created_at", { ascending: false }),
     proposalNumbers(sb, orgId),

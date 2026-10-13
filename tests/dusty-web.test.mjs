@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { webAsk, webQueries, cityOf, mergeResults, renderWeb } from "../src/lib/dusty/web.ts";
-import { cleanAction, describe, RECORD_STEPS } from "../src/lib/dusty/plan.ts";
+import { cleanAction, describe, RECORD_STEPS, RECORD_RULES } from "../src/lib/dusty/plan.ts";
 
 test("a message asking for vendors on the web is a search; anything else isn't", () => {
   assert.deepEqual(webAsk("I need dusty to be able to search the web and find vendors for steel bollards"), { subject: "steel bollards", role: "vendors" });
@@ -38,9 +38,38 @@ test("new_vendor: a name and the page it came from; a phone only if it is one", 
   assert.equal(ok.phone, "+12255550100");
   assert.equal(RECORD_STEPS.has("new_vendor"), true);
   assert.match(describe(ok, { item: () => null, area: () => "" }), /New vendor “Gulf Steel” \(supplier\) — \(225\) 555-0100/);
-  assert.equal(cleanAction({ do: "new_vendor", name: "Gulf Steel" }), null, "no source, no vendor");
-  assert.equal(cleanAction({ do: "new_vendor", name: "Gulf Steel", source: "javascript:alert(1)" }), null);
-  assert.equal(cleanAction({ do: "new_vendor", name: "Gulf Steel", phone: "call them", source: "https://x.example" }), null);
+  assert.equal(ok.from, "web");
+  // No web link is Coy's words (Coy, 2026-10-12: a rate sheet's vendor was dropped for having none).
+  const words = cleanAction({ do: "new_vendor", name: "Gulf Steel" });
+  assert.equal(words.from, "words");
+  assert.equal(words.source, "Coy's words");
+  assert.equal(cleanAction({ do: "new_vendor", name: "Gulf Steel", source: "javascript:alert(1)" }).from, "words", "never a link");
+  // A number that isn't one is left off; the vendor is still offered.
+  assert.equal(cleanAction({ do: "new_vendor", name: "Gulf Steel", phone: "call them", source: "https://x.example" }).phone, null);
+  assert.equal(cleanAction({ do: "new_vendor", name: "(225) 555-0100" }), null, "a number is no name");
+});
+
+test("new_vendor from a document: file source, website, trades, their thread, a key for their rates", () => {
+  const f = "0b1c2d3e-0000-4000-8000-0000000000f1", c = "0b1c2d3e-0000-4000-8000-0000000000c1";
+  const v = cleanAction({ do: "new_vendor", key: "vend1", name: "Teague Rental Equipment", kind: "equipment", phone: "(225) 555-0100 ext. 4 / fax 225-555-0199",
+    website: "www.teaguerental.com", trades: ["equipment rental", "Equipment rental"], note: "rents skid steers", source: `file ${f.toUpperCase()}`, contact: c });
+  assert.equal(v.from, "file");
+  assert.equal(v.source, f);
+  assert.equal(v.phone, "+12255550100");
+  assert.equal(v.website, "https://www.teaguerental.com");
+  assert.deepEqual(v.trades, ["Equipment rental"]);
+  assert.equal(v.contact, c);
+  assert.equal(v.key, "vend1");
+  const d = describe(v, { item: () => null, area: () => "" });
+  assert.match(d, /File this contact as the vendor “Teague Rental Equipment” \(equipment\) — \(225\) 555-0100, teaguerental\.com/);
+  assert.match(d, /rents skid steers/);
+  assert.equal(cleanAction({ do: "new_vendor", name: "Teague", contact: "teague" }), null, "a made-up contact id");
+  // Their rates carry the vendor by its key.
+  const it = cleanAction({ do: "new_item", name: "Skid steer — day", unit: "Day", cost_type: "equipment", unit_cost: 275, qty_rule: "per_day", add: false, vendor: "VEND1" });
+  assert.equal(it.vendor, "vend1");
+  assert.equal(cleanAction({ do: "vendor_price", item: "3f2a91c0", vendor: "vend1", unit_cost: 275 }).vendor, "vend1");
+  assert.match(describe(it, { item: () => null, area: () => "", vendor: () => "the new vendor Teague" }), /the new vendor Teague's price/);
+  assert.match(RECORD_RULES, /Vendors from a document/);
 });
 
 test("a vendor's quoted price: on an item, or a new item with their price", () => {

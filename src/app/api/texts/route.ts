@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
 import { sendQuoText } from "@/lib/quo";
+import { markLinksSent } from "@/lib/proposal-sent-server";
 import { cleanBody, pickLine, quoError, segments, toE164, type TextLine } from "@/lib/texting";
 
 /**
@@ -66,9 +67,11 @@ export async function POST(req: NextRequest) {
   const line = pickLine(lines, lineId, (last?.phone_number_id as string | null) ?? null);
   if (!line.ok) return fail(line.error);
 
-  const sent = await sendQuoText(line.line.provider_number_id || line.line.phone_e164, to, text.body);
-  if (!sent.ok) return fail(sent.status === 503 ? "Texting isn't switched on — QUO_API_KEY isn't set in Vercel." : quoError(sent.status, sent.message), 502);
+  const sent = await sendQuoText(orgId, line.line.provider_number_id || line.line.phone_e164, to, text.body);
+  if (!sent.ok) return fail(sent.status === 409 ? (sent.message ?? "No Quo connection for this company.") : sent.status === 503 ? "Texting isn't switched on — QUO_API_KEY isn't set in Vercel." : quoError(sent.status, sent.message), 502);
 
+  // A proposal link in it is now sent (the Preview opens the thread with it in the box).
+  await markLinksSent(sb, orgId, text.body, "text").catch(() => {});
   return applyCookies(NextResponse.json({ ok: true, to, from_line: line.line.id, segments: segments(text.body), quo_id: sent.id }));
 }
 

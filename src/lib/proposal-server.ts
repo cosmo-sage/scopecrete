@@ -47,7 +47,7 @@ export async function draftFor(sb: Sb, orgId: string, jobId: string, jobType: st
   if (found) return found as Record<string, unknown>;
   // After a final, the page shows that final (with New version) — it never starts a draft on its own.
   const { data: fin } = await sb.from("job_proposals").select(PROPOSAL_COLS).eq("org_id", orgId).eq("job_id", jobId).eq("status", "final")
-    .order("version", { ascending: false }).limit(1).maybeSingle();
+    .is("deleted_at", null).order("version", { ascending: false }).limit(1).maybeSingle();
   if (fin) return fin as Record<string, unknown>;
   if (!create) return null;
   const [{ data: t }, { data: last }] = await Promise.all([
@@ -96,7 +96,7 @@ export async function proposalBundle(sb: Sb, orgId: string, jobId: string, opts:
   const est = await workingEstimate(sb, orgId, jobId, opts.create !== false);
   const [draft, { data: finals }, { data: optRows }, { data: lines }, { data: secs }, pricing, takeoff, org, { data: types }, { data: templates }, customer, contact, { data: photos }] = await Promise.all([
     draftFor(sb, orgId, jobId, (job.job_type as string | null) ?? null, opts.create !== false),
-    sb.from("job_proposals").select("id, version, finalized_at, snapshot").eq("org_id", orgId).eq("job_id", jobId).eq("status", "final").order("version", { ascending: false }),
+    sb.from("job_proposals").select("id, version, finalized_at, snapshot").eq("org_id", orgId).eq("job_id", jobId).eq("status", "final").is("deleted_at", null).order("version", { ascending: false }),
     Promise.resolve({ data: [] as Array<{ id: string; label: string }> }), /* one price per job — options not read (2026-10-05) */
     est ? sb.from("estimate_line_items").select(LINE_COLUMNS).eq("estimate_id", est.id as string).order("sort_order").order("name") : Promise.resolve({ data: [] }),
     sb.from("job_sections").select("id, name, work_type, length_ft, width_ft, sqft_override, depth_in, psi, rebar, prep_notes, sort_order, count_qty, count_unit").eq("org_id", orgId).eq("job_id", jobId).order("sort_order"),

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
 import { loadLines } from "@/lib/lines-server";
 import { buildChannels } from "@/lib/v34/threads";
+import { fillVoicemails, type VoicemailCall, type VoicemailShown } from "@/lib/voicemail-server";
 
 /**
  * One thread's messages, oldest first. Reads `messages` ONLY.
@@ -31,6 +32,8 @@ export interface ThreadMessage {
   status: string | null;
   /** An incoming call nobody picked up (Quo's call.completed said "no-answer") — the card says "Missed call" (Coy, 2026-10-10). */
   missed?: boolean;
+  /** The voicemail left on a missed call — its words (null until Quo has written them) and seconds. */
+  voicemail?: VoicemailShown;
   /** Artifact kinds present for this message, e.g. ["transcript","next_steps"]. */
   artifact_kinds: string[];
   /**
@@ -151,18 +154,28 @@ export async function GET(
   // Missed calls: Quo's call.completed for an incoming call says "no-answer";
   // the message itself only says "received". Read from the raw log by call id.
   const missedIds = new Set<string>();
+  const vmByCall = new Map<string, { url: string; duration: number | null }>();
   const callIds = raw.filter((r) => r.channel === "call" && r.direction === "inbound" && r.provider_message_id).map((r) => r.provider_message_id as string).slice(0, 400);
   if (callIds.length) {
     const { data: ends } = await supabase.from("quo_events")
-      .select("call_id:raw_payload->>id, call_status:raw_payload->>status")
+      .select("call_id:raw_payload->>id, call_status:raw_payload->>status, vm_url:raw_payload->voicemail->>url, vm_dur:raw_payload->voicemail->>duration")
       .eq("org_id", orgId).eq("event_type", "call.completed").in("raw_payload->>id", callIds);
-    for (const e of (ends ?? []) as Array<{ call_id: string | null; call_status: string | null }>) {
+    for (const e of (ends ?? []) as Array<{ call_id: string | null; call_status: string | null; vm_url: string | null; vm_dur: string | null }>) {
       if (e.call_id && e.call_status === "no-answer") missedIds.add(e.call_id);
+      if (e.call_id && e.vm_url) vmByCall.set(e.call_id, { url: e.vm_url, duration: Number(e.vm_dur) > 0 ? Number(e.vm_dur) : null });
     }
   }
+  // A voicemail on the call (call.completed's `voicemail`): its artifact and words (src/lib/voicemail-server.ts).
+  const vmCalls: VoicemailCall[] = raw.flatMap((r) => {
+    const v = r.provider_message_id ? vmByCall.get(r.provider_message_id) : undefined;
+    return v ? [{ messageId: r.id, callId: r.provider_message_id as string, url: v.url, duration: v.duration }] : [];
+  });
+  const voicemails = await fillVoicemails(supabase, orgId, vmCalls);
   const messages = raw.map((r) => {
     const { from_address, to_address, phone_number_id, provider_message_id, ...rest } = r;
     if (provider_message_id && missedIds.has(provider_message_id)) (rest as ThreadMessage).missed = true;
+    const vm = voicemails.get(rest.id);
+    if (vm) (rest as ThreadMessage).voicemail = vm;
     const counterparty = from_address && !ours.has(from_address) ? from_address : to_address && !ours.has(to_address) ? to_address : null;
     return { ...rest, counterparty, line: manyLines && phone_number_id ? lineName.get(phone_number_id) ?? null : null, line_id: manyLines ? phone_number_id : null };
   });
@@ -221,7 +234,7 @@ export async function GET(
 
   const withKinds: ThreadMessage[] = messages.map((m) => ({
     ...m,
-    artifact_kinds: (kindsByMessage.get(m.id) ?? []).sort(),
+    artifact_kinds: [...new Set([...(kindsByMessage.get(m.id) ?? []), ...(voicemails.has(m.id) ? ["voicemail"] : [])])].sort(),
     media_count: mediaByMessage.get(m.id) ?? 0,
     media_kinds: kindsOfMedia.get(m.id) ?? [],
   }));

@@ -257,3 +257,33 @@ export function signatureOf(v: { name?: string | null; org?: string | null; phon
   const parts = [v.name, v.org, v.phone].map((x) => x?.trim()).filter(Boolean);
   return parts.length ? `— \n${parts.join(" · ")}` : "";
 }
+
+/**
+ * A new vendor from an email (Coy, 2026-10-12: "I forwarded an email from a supplier … the only
+ * options that it gives me is to create a customer"). The form starts from what the email shows:
+ * the writer of the newest message that came in, unless that is one of our own addresses (Coy
+ * forwarding or writing it himself) — then the subject is the name ("New vendor: Ace Hardware" →
+ * "Ace Hardware") and the first outside email address in the text is theirs. A phone only as
+ * written, ten digits. Coy checks it before anything is made.
+ */
+export function vendorFromEmail(rows: MailRow[], ours: string[]): { name: string; email: string; phone: string } {
+  const mine = new Set(ours.map((a) => a.toLowerCase()));
+  const last = [...rows].reverse().find((r) => r.direction !== "out") ?? rows[rows.length - 1];
+  if (!last) return { name: "", email: "", phone: "" };
+  const w = writerOf(last);
+  const text = rows.map((r) => r.text_body ?? "").join("\n");
+  const outside = (a: string | null | undefined) => !!a && !mine.has(a.toLowerCase()) && !/@agentmail\.to$/i.test(a);
+  let name = "", email = "";
+  if (outside(w.address)) {
+    email = w.address ?? "";
+    // A forward's own name only — never the forwarder's (writerOf falls back to it).
+    const own = last.original_from_address ? last.original_from_name : last.from_name;
+    name = (own ?? "").replace(/["']/g, "").trim();
+  } else {
+    email = (text.match(/[^\s<>()"',;:]+@[^\s<>()"',;:]+\.[a-z]{2,}/gi) ?? []).map((a) => a.toLowerCase()).find(outside) ?? "";
+  }
+  if (!name) name = cleanSubject(last.subject).replace(/^\s*(new\s+)?(vendor|supplier)\s*[:\-–]?\s*/i, "").trim();
+  if (!name && email) name = email.split("@")[1].split(".")[0].replace(/^./, (c) => c.toUpperCase());
+  const ph = text.match(/(?:\+?1[\s.-]?)?\(?(\d{3})\)?[\s.-]?(\d{3})[\s.-](\d{4})\b/);
+  return { name: name.slice(0, 120), email, phone: ph ? `(${ph[1]}) ${ph[2]}-${ph[3]}` : "" };
+}

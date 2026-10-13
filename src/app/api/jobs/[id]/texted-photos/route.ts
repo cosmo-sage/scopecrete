@@ -4,7 +4,7 @@ import { jobInOrg } from "@/lib/budget-server";
 import { FILES_BUCKET, storagePath } from "@/lib/files";
 import { FILE_COLUMNS, signFiles } from "@/lib/files-server";
 import { MEDIA_BUCKET, MEDIA_EXT, captureMedia, type MediaRow } from "@/lib/message-media-server";
-import { textedPhotoName, textedMarker } from "@/lib/texted-photos";
+import { autoSince, textedPhotoName, textedMarker } from "@/lib/texted-photos";
 
 /**
  * Photos the customer texted, brought onto their job (Coy, 2026-10-03: "she
@@ -14,6 +14,10 @@ import { textedPhotoName, textedMarker } from "@/lib/texted-photos";
  *
  * GET  — the photos texted by the job's person and their customer's other
  *        people (newest first), each with `file_id` once it is on the job.
+ * POST { auto: true } — once per job, every photo texted from two weeks before the
+ *        job was made (Coy, 2026-10-13: a new job should "pull in the photos"
+ *        without him). Skipped when any texted photo was ever brought onto the
+ *        job, deleted ones included, so Coy's own picks and deletions stand.
  * POST { media_ids: [...] | all: true } — each one copied into the job's files
  *        (`job-files`, a files row with source 'text', In plan room), so the
  *        Plan Room, a section's photos and the proposal's cover can use it. A
@@ -88,13 +92,26 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const bad = (m: string, s = 400) => applyCookies(NextResponse.json({ error: m }, { status: s }));
   if (!(await jobInOrg(supabase, orgId, id))) return bad("No such job.", 404);
 
-  let b: { media_ids?: unknown; all?: unknown };
+  let b: { media_ids?: unknown; all?: unknown; auto?: unknown };
   try { b = await req.json(); } catch { return bad("Body must be JSON."); }
   const wanted = Array.isArray(b.media_ids) ? b.media_ids.filter((x): x is string => typeof x === "string" && UUID.test(x)).slice(0, 60) : [];
-  if (!wanted.length && b.all !== true) return bad("Which photos?");
+  const auto = b.auto === true;
+  if (!wanted.length && b.all !== true && !auto) return bad("Which photos?");
+
+  let since: number | null = null;
+  if (auto) {
+    const [{ count }, { data: j }] = await Promise.all([
+      supabase.from("files").select("id", { count: "exact", head: true }).eq("org_id", orgId).eq("job_id", id).eq("source", "text"),
+      supabase.from("jobs").select("created_at").eq("org_id", orgId).eq("id", id).maybeSingle(),
+    ]);
+    if ((count ?? 0) > 0 || !j?.created_at) return applyCookies(NextResponse.json({ added: 0, files: [], failed: [], skipped: "already brought in" }));
+    since = autoSince(j.created_at as string);
+  }
 
   // Only photos texted by this job's people can be brought onto it.
-  const list = (await texted(supabase, orgId, await people(supabase, orgId, id))).filter((m) => b.all === true || wanted.includes(m.id));
+  const list = (await texted(supabase, orgId, await people(supabase, orgId, id)))
+    .filter((m) => auto ? since !== null && !!m.sent_at && Date.parse(m.sent_at) >= since : b.all === true || wanted.includes(m.id))
+    .slice(0, 24);
   const have = await onJob(supabase, orgId, id);
   const made: string[] = [];
   const failed: Array<{ id: string; reason: string }> = [];

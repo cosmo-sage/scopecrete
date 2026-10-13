@@ -17,6 +17,8 @@ export interface Me {
   /** Every org they belong to — the switcher (src/lib/org-switch.ts). */
   orgs?: SwitchOrg[];
   org_id?: string | null;
+  /** An owner viewing as a teammate (src/lib/view-as.ts) — role and access above are theirs. */
+  viewing_as?: { user_id: string; name: string | null; role: string | null } | null;
 }
 
 export const MeContext = createContext<{ me: Me | null; reload: () => void }>({ me: null, reload: () => {} });

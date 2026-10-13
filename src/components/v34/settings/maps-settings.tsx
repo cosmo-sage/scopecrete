@@ -25,7 +25,7 @@ export function MapsSettings() {
   const pick = readMapProvider(pref);
   const [google, setGoogle] = useState<{ on: boolean; why?: string } | null>(null);
   useEffect(() => {
-    fetch("/api/map/provider").then((r) => (r.ok ? r.json() : null)).then((b) => setGoogle(b?.google ?? { on: false, why: "Couldn't check." })).catch(() => setGoogle({ on: false, why: "Couldn't check." }));
+    fetch("/api/map/provider?fresh=1").then((r) => (r.ok ? r.json() : null)).then((b) => setGoogle(b?.google ?? { on: false, why: "Couldn't check." })).catch(() => setGoogle({ on: false, why: "Couldn't check." }));
   }, []);
   return (
     <div>

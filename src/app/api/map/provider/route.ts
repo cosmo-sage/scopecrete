@@ -22,5 +22,5 @@ export async function GET(req: NextRequest) {
     const c = await googleCopyright(q.get("type") === "satellite" ? "satellite" : "roadmap", z, { n, s, e, w });
     return applyCookies(NextResponse.json({ copyright: c }));
   }
-  return applyCookies(NextResponse.json({ google: await googleTilesStatus() }));
+  return applyCookies(NextResponse.json({ google: await googleTilesStatus(q.get("fresh") === "1") }));
 }

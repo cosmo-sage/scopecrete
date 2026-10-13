@@ -5008,7 +5008,7 @@ expected start date per quoted job before it means anything. Add the field.
   to Mapbox — saved on the account (`map_provider`, no migration; `src/lib/map-provider.ts`, tested). The key
   is server-side: `GOOGLE_MAPS_TILES_KEY`, else `GOOGLE_MAPS_GEOCODE_KEY` with the Map Tiles API added to its
   allowed APIs. `GET /api/map/provider` says whether Google's tiles work; when they don't (no key, the API not
-  enabled — remembered ten minutes) the page draws Mapbox and Settings → Maps says why. The corner carries
+  enabled — remembered two minutes, Settings asking afresh) the page draws Mapbox and Settings → Maps says why in Google's own words — its status and reason, never the key — with what to change in Google Cloud (`refusalWhy()`: a key limited to websites or IP addresses, which a server call never passes; the API off in the key's project; the API not in the key's API restrictions; billing; tested). The corner carries
   Google's copyright for the view (`?copyright=1`, its viewport call). **Clip for takeoff is always Mapbox
   satellite** — Google's imagery is a look only, never saved or traced.
   **Not built:** vendors' delivery circles (their area is a line of text), a

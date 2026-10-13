@@ -27,6 +27,8 @@ import {
 } from "@/lib/map";
 import type { AddressSuggestion } from "@/lib/aerial";
 import { MapView, ZoomButtons, fitView, type View } from "./map-view";
+import { DEFAULT_MAP_PROVIDER, drawnProvider, readMapProvider } from "@/lib/map-provider";
+import { usePref } from "@/lib/v34/prefs";
 import { StreetFrame } from "@/components/v34/site-views";
 
 const FILTERS_KEY = "sc.map.filters";
@@ -283,6 +285,15 @@ export function MapPage() {
   const [f, setFState] = useState<MapFilters>(DEFAULT_FILTERS);
   const [view, setView] = useState<View>(HOME);
   const [mode, setMode] = useState<"map" | "sat">("map");
+  // Google's map by default, Mapbox when picked in Settings → Maps or when
+  // Google's tiles can't be reached (Coy, 2026-10-13). Clipping is always Mapbox.
+  const [providerPref] = usePref<string>("map_provider", DEFAULT_MAP_PROVIDER);
+  const [googleOn, setGoogleOn] = useState<boolean | null>(null);
+  useEffect(() => {
+    let live = true;
+    fetch("/api/map/provider").then((r) => (r.ok ? r.json() : null)).then((b) => { if (live) setGoogleOn(!!b?.google?.on); }).catch(() => { if (live) setGoogleOn(false); });
+    return () => { live = false; };
+  }, []);
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [sel, setSel] = useState<MapPin | null>(null);
   const [plain, setPlain] = useState<{ lat: number; lng: number; label: string } | null>(null);
@@ -597,7 +608,7 @@ export function MapPage() {
           </aside>
         )}
         <div className="flex-1 relative" style={{ minWidth: 0, isolation: "isolate", overflow: "clip" }}>
-          <MapView view={view} onView={(v) => { if (clip?.step !== "job") setView(v); }} mode={clip ? "sat" : mode} overlay={overlay} onSize={setSize}
+          <MapView view={view} onView={(v) => { if (clip?.step !== "job") setView(v); }} mode={clip ? "sat" : mode} provider={drawnProvider(readMapProvider(providerPref), googleOn !== false, !!clip)} overlay={overlay} onSize={setSize}
             onBackgroundTap={() => { if (!clip) setSel(null); }}>
             {/* Search (top left) */}
             {!clip && (

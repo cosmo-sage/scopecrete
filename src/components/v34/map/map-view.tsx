@@ -1,8 +1,8 @@
 "use client";
 /**
  * A slippy map drawn from our own tile route (/api/aerial/tile — the Mapbox
- * token stays on the server): Mapbox Streets for "Map", Mapbox Satellite for
- * "Satellite". Drag to pan, wheel or pinch to zoom (around the pointer),
+ * keys stay on the server): Google's roadmap and satellite by default, or
+ * Mapbox Streets and Satellite (`provider`, Settings → Maps). Drag to pan, wheel or pinch to zoom (around the pointer),
  * double-click to zoom in. Zoom is fractional; the tiles of the nearest whole
  * zoom are drawn scaled. What sits on the map (pins, the clip frame's marks) is
  * drawn by the page through `overlay`, given a function that places a point.
@@ -13,6 +13,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { T, F } from "@/lib/v34/tokens";
 import { TILE, fromWorldPx, worldPx } from "@/lib/map";
+import { attribution, tileParam, type MapProvider } from "@/lib/map-provider";
 
 export interface View { lat: number; lng: number; zoom: number }
 export type Place = (lat: number, lng: number) => { x: number; y: number };
@@ -34,10 +35,11 @@ export function fitView(pts: Array<{ lat: number; lng: number }>, w: number, h: 
   return { lat: c.lat, lng: c.lng, zoom };
 }
 
-export function MapView({ view, onView, mode, overlay, onSize, onBackgroundTap, children }: {
+export function MapView({ view, onView, mode, provider = "mapbox", overlay, onSize, onBackgroundTap, children }: {
   view: View;
   onView: (v: View) => void;
   mode: "map" | "sat";
+  provider?: MapProvider;
   /** Drawn over the tiles, moved with the map. */
   overlay?: (place: Place, size: { w: number; h: number }) => React.ReactNode;
   onSize?: (s: { w: number; h: number }) => void;
@@ -139,8 +141,9 @@ export function MapView({ view, onView, mode, overlay, onSize, onBackgroundTap, 
   };
 
   // Tiles at the nearest whole zoom, scaled to the fractional one.
-  const p = mode === "sat" ? "mapbox" : "streets";
+  const p = tileParam(provider, mode);
   const tz = Math.max(2, Math.min(22, Math.round(view.zoom)));
+  const copyright = useGoogleCopyright(provider === "google", mode, view, size);
   const k = 2 ** (view.zoom - tz);
   const c = worldPx(view.lat, view.lng, tz);
   const tiles: Array<{ k: string; x: number; y: number; left: number; top: number }> = [];
@@ -170,10 +173,31 @@ export function MapView({ view, onView, mode, overlay, onSize, onBackgroundTap, 
       {size.w > 0 && overlay?.(place, size)}
       {children}
       <div aria-hidden style={{ position: "absolute", right: 4, bottom: 2, fontSize: 9.5, color: mode === "sat" ? "rgba(255,255,255,.85)" : T.ink3, textShadow: mode === "sat" ? "0 0 2px #000" : "0 0 2px #fff", pointerEvents: "none", fontFamily: "inherit" }}>
-        © Mapbox © OpenStreetMap{mode === "sat" ? " © Maxar" : ""}
+        {attribution(provider, mode, copyright)}
       </div>
     </div>
   );
+}
+
+/** Google's copyright for what's on screen, asked half a second after the map stops moving. */
+function useGoogleCopyright(on: boolean, mode: "map" | "sat", view: View, size: { w: number; h: number }): string | null {
+  const [c, setC] = useState<string | null>(null);
+  const z = Math.round(view.zoom);
+  // Rounded so small drags don't ask again.
+  const key = on && size.w ? `${mode}|${z}|${view.lat.toFixed(2)}|${view.lng.toFixed(2)}|${size.w}x${size.h}` : "";
+  useEffect(() => {
+    if (!key) return;
+    const [, , la, ln, wh] = key.split("|");
+    const [w, h] = wh.split("x").map(Number);
+    const ctr = worldPx(Number(la), Number(ln), z);
+    const nw = fromWorldPx(ctr.x - w / 2, ctr.y - h / 2, z), se = fromWorldPx(ctr.x + w / 2, ctr.y + h / 2, z);
+    const t = setTimeout(() => {
+      fetch(`/api/map/provider?copyright=1&type=${mode === "sat" ? "satellite" : "roadmap"}&z=${z}&n=${nw.lat}&s=${se.lat}&e=${se.lng}&w=${nw.lng}`)
+        .then((r) => (r.ok ? r.json() : null)).then((b) => setC(typeof b?.copyright === "string" ? b.copyright : null)).catch(() => {});
+    }, 500);
+    return () => clearTimeout(t);
+  }, [key, mode, z]);
+  return on ? c : null;
 }
 
 /** + / − buttons for the map (bottom right). */

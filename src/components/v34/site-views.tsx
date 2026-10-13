@@ -154,7 +154,7 @@ export function streetViewUrl(p: Point): string {
   return `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${p.lat},${p.lng}`;
 }
 
-function StreetFrame({ point, height }: { point: Point; height: number }) {
+export function StreetFrame({ point, height }: { point: Point; height: number }) {
   const link = (
     <a href={streetViewUrl(point)} target="_blank" rel="noopener noreferrer"
       style={{ fontSize: 12, fontWeight: 600, color: T.chalk, textDecoration: "none" }}>

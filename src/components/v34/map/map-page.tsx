@@ -27,6 +27,7 @@ import {
 } from "@/lib/map";
 import type { AddressSuggestion } from "@/lib/aerial";
 import { MapView, ZoomButtons, fitView, type View } from "./map-view";
+import { StreetFrame } from "@/components/v34/site-views";
 
 const FILTERS_KEY = "sc.map.filters";
 const HOME: View = { lat: 30.4515, lng: -91.1371, zoom: 10 }; // Baton Rouge, until there are pins
@@ -137,7 +138,7 @@ function LayerPanel({ data, f, setF }: { data: MapPinsResponse | null; f: MapFil
 
 /* -------------------------------------------------------------- card */
 
-function PinCard({ pin, onClose, onClip }: { pin: MapPin; onClose: () => void; onClip: (p: MapPin) => void }) {
+function PinCard({ pin, onClose, onClip, onStreet }: { pin: MapPin; onClose: () => void; onClip: (p: MapPin) => void; onStreet: (p: MapPin) => void }) {
   const L = LAYER.get(pin.layer)!;
   const dirs = `https://www.google.com/maps/dir/?api=1&destination=${pin.lat},${pin.lng}`;
   const a: React.CSSProperties = { ...btn(), height: 40, display: "inline-flex", alignItems: "center", justifyContent: "center", textDecoration: "none" };
@@ -171,6 +172,7 @@ function PinCard({ pin, onClose, onClip }: { pin: MapPin; onClose: () => void; o
           <a href={dirs} target="_blank" rel="noreferrer" style={a}>Directions</a>
           {pin.email ? <a href={`mailto:${pin.email}`} style={a}>Email</a> : <span style={{ ...a, opacity: 0.45 }}>Email</span>}
         </>}
+        <button type="button" onClick={() => onStreet(pin)} style={{ ...a, gridColumn: "1 / -1", cursor: "pointer" }}>Street view</button>
       </div>
     </div>
   );
@@ -284,6 +286,11 @@ export function MapPage() {
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [sel, setSel] = useState<MapPin | null>(null);
   const [plain, setPlain] = useState<{ lat: number; lng: number; label: string } | null>(null);
+  // Street view of the spot on the map (Coy, 2026-10-13: "the option on the map
+  // to see the street view of the address i'm looking at from satellite"): the
+  // picked pin, else the searched address, else the middle of the map. Google's
+  // Maps Embed, a look only — its imagery is never saved.
+  const [street, setStreet] = useState<{ lat: number; lng: number; label: string } | null>(null);
   const [layersOpen, setLayersOpen] = useState(false);
   const [legendOpen, setLegendOpen] = useState(false);
   // On a phone, the keyboard opening for the search used to scroll the page
@@ -389,7 +396,7 @@ export function MapPage() {
   };
 
   useEffect(() => {
-    const k = (e: KeyboardEvent) => { if (e.key !== "Escape") return; if (clip) endClip(); else setSel(null); };
+    const k = (e: KeyboardEvent) => { if (e.key !== "Escape") return; if (street) setStreet(null); else if (clip) endClip(); else setSel(null); };
     window.addEventListener("keydown", k);
     return () => window.removeEventListener("keydown", k);
   });
@@ -515,7 +522,7 @@ export function MapPage() {
         const above = p.y > 330;
         items.push(
           <div key="card" className="rounded" style={{ position: "absolute", left, top: above ? undefined : p.y + 18, bottom: above ? s.h - p.y + 18 : undefined, width: 360, padding: 14, background: T.card, border: `1px solid ${T.hair}`, boxShadow: "0 10px 30px rgba(0,0,0,.22)", zIndex: 8 }}>
-            <PinCard pin={sel} onClose={() => setSel(null)} onClip={startClip} />
+            <PinCard pin={sel} onClose={() => setSel(null)} onClip={startClip} onStreet={(p) => setStreet({ lat: p.lat, lng: p.lng, label: p.addr || p.name })} />
           </div>,
         );
       }
@@ -543,9 +550,18 @@ export function MapPage() {
                     <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke={T.ink} strokeWidth="1.7" aria-hidden="true"><path d="M3 9.5 10 3.5l7 6M5 8.5V17h10V8.5M8.5 17v-4.5h3V17" /></svg>
                   </button>
   ) : null;
+  const openStreet = () => setStreet(sel ? { lat: sel.lat, lng: sel.lng, label: sel.addr || sel.name }
+    : plain ? plain : { lat: view.lat, lng: view.lng, label: "The middle of the map" });
+  const streetButton = (
+                  <button type="button" aria-label="Street view" title="Street view of the pin, the address searched, or the middle of the map" onClick={openStreet}
+                    className="flex items-center justify-center rounded" style={{ width: 36, height: 36, background: street ? T.ink : T.card, color: street ? T.card : T.ink, border: `1px solid ${T.hairStrong}`, boxShadow: "0 2px 8px rgba(0,0,0,.15)", cursor: "pointer" }}>
+                    <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><circle cx="10" cy="4" r="2.2" /><path d="M7 18v-5H5.5V9.5A2 2 0 0 1 7.5 7.5h5a2 2 0 0 1 2 2V13H13v5" /></svg>
+                  </button>
+  );
   const mapControls = (
     <>
                 {wide && modeToggle}
+                {streetButton}
                 {officeButton}
                 {!wide && (
                   <button type="button" aria-label="Where I am" title="Where I am" onClick={() => navigator.geolocation?.getCurrentPosition((p) => setView({ lat: p.coords.latitude, lng: p.coords.longitude, zoom: 16 }), () => {})}
@@ -614,10 +630,23 @@ export function MapPage() {
             {!clip && sel && !wide && (
               <div className="absolute left-0 right-0 bottom-0" style={{ zIndex: 12, background: T.card, borderRadius: "12px 12px 0 0", boxShadow: "0 -8px 26px rgba(0,0,0,.22)", padding: "6px 14px 14px" }}>
                 <div aria-hidden style={{ width: 36, height: 4, borderRadius: 99, background: T.hairStrong, margin: "0 auto 8px" }} />
-                <PinCard pin={sel} onClose={() => setSel(null)} onClip={startClip} />
+                <PinCard pin={sel} onClose={() => setSel(null)} onClip={startClip} onStreet={(p) => setStreet({ lat: p.lat, lng: p.lng, label: p.addr || p.name })} />
               </div>
             )}
 
+            {/* Street view: a box at the bottom right on a desktop, a sheet on a phone. */}
+            {!clip && street && (
+              <div {...stop} className={wide ? "absolute rounded" : "absolute left-0 right-0 bottom-0"} style={wide
+                ? { right: 10, bottom: 16, width: 520, maxWidth: "calc(100% - 80px)", zIndex: 13, padding: 10, background: T.card, border: `1px solid ${T.hair}`, boxShadow: "0 10px 30px rgba(0,0,0,.25)" }
+                : { zIndex: 14, background: T.card, borderRadius: "12px 12px 0 0", boxShadow: "0 -8px 26px rgba(0,0,0,.22)", padding: "10px 12px 12px" }}>
+                <div className="flex items-center gap-2" style={{ marginBottom: 6 }}>
+                  <span style={{ fontFamily: disp, fontSize: 12, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase", color: T.ink2 }}>Street view</span>
+                  <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: T.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{street.label}</span>
+                  <button type="button" onClick={() => setStreet(null)} aria-label="Close street view" style={{ width: 28, height: 28, color: T.ink2, fontSize: 18, cursor: "pointer" }}>×</button>
+                </div>
+                <StreetFrame key={`${street.lat},${street.lng}`} point={street} height={wide ? 320 : 280} />
+              </div>
+            )}
             {clip && frame && (wide || clip.step === "frame") && <ClipFrame frame={frame} view={view} size={size} plan={plan} centre={frameCentre} step={clip.step} wide={wide}
               onUse={useFrame} />}
             {clip && clip.step === "job" && clip.taken && (

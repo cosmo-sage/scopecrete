@@ -3194,7 +3194,7 @@ expected start date per quoted job before it means anything. Add the field.
   found for 'jobs' and 'contacts'" — `jobs` has two keys to `contacts` (`contact_id`,
   `referred_by_contact_id`), and the jobs a vendor is on were read with a bare `contacts(...)` embed,
   run only for someone in `job_vendors` (Luis alone that day). It names
-  `contacts!jobs_contact_id_fkey` now; any embed between those two tables must name its key. A card
+  `contacts!jobs_contact_id_fkey` now; any embed between those two tables must name its key. **The same for `jobs` and `customers` since migration 109** (`customer_id`, `owner_customer_id`): the Scope Builder's `customers(name)` failed on master with "more than one relationship was found" (2026-10-13) and names `customers!jobs_customer_id_fkey` now. A card
   that can't load says why on its page instead of falling back to the thread.
   **Since 2026-10-10 (Coy):** a **Map** button beside Call · Text · Email (off with no address) opens the
   address on the Map page (`/dashboard/map?addr=…`, looked up by `/api/aerial/suggest?find=` and pinned

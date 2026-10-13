@@ -76,8 +76,9 @@ const VIEW_KEY = "sc:site-view";
 export function SiteViews({ addr, stored }: { addr: string; stored: Point | null }) {
   const { point, provider, state } = usePoint(addr, stored);
   const [open, setOpen] = useState(false);
-  const [view, setView] = useState<"sat" | "street">("sat");
-  useEffect(() => { try { if (localStorage.getItem(VIEW_KEY) === "street") setView("street"); } catch { /* none */ } }, []);
+  const [view, setView] = useState<"sat" | "street">(() => {
+    try { return typeof window !== "undefined" && localStorage.getItem(VIEW_KEY) === "street" ? "street" : "sat"; } catch { return "sat"; }
+  });
   const pick = (v: "sat" | "street") => { setView(v); try { localStorage.setItem(VIEW_KEY, v); } catch { /* none */ } };
   const tab = (v: "sat" | "street", label: string) => (
     <button key={v} onClick={() => pick(v)} aria-pressed={view === v}

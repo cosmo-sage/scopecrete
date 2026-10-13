@@ -1,3 +1,4 @@
+import { appointmentsForDusty } from "@/lib/appointments-server";
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
 import { buildContext, parseRef, reachBlocks, renderReach } from "@/lib/dusty/context";
@@ -108,6 +109,8 @@ export async function POST(req: NextRequest) {
     const reach = renderReach(await reachBlocks(supabase, orgId, ref, asked));
     if (reach) ctx.text += `\n\n${reach}`;
   } catch { /* the page's own context still answers */ }
+  // The schedule (migration 110): today's date and what's booked, so he can book, move or confirm one.
+  ctx.text += `\n\n${await appointmentsForDusty(supabase, orgId)}`;
 
   // Vendors from the web (Coy, 2026-10-05: "search the web and find vendors for steel bollards").
   // The app searches — Dusty has no tools — and only when this message asks; the results are data.

@@ -5,6 +5,7 @@
  * by the server against his org and the job. Nothing here is new authority:
  * it is exactly the taps Coy would make by hand, made for him once he says so.
  */
+import { APPOINTMENTS_EVENT, whenText } from "@/lib/appointments";
 import { CUST_KEY, JOB_KEY, RECORD_STEPS, VEND_KEY, needsJob, type PlanAction } from "@/lib/dusty/plan";
 import { markEstimate } from "@/lib/estimate-flag";
 
@@ -90,7 +91,7 @@ export async function applyPlan(jobId: string | null, actions: PlanAction[], loo
   };
   // Groups first, so items can be filed in them; then changes; then the budget.
   const order = { new_group: 0, rename_group: 1, update_item: 1, new_area: 2, new_item: 3, vendor_price: 4, retire_item: 4, new_assembly: 5, add_to_assembly: 6, remove_from_assembly: 6,
-    add: 7, add_group: 8, load_assembly: 9, remove_group: 10, set_tax: 10, archive: 11, restore: 11, set_address: 11, new_job: 11, new_customer: 11, attach_contact: 11, new_contact: 11, set_name: 11, file: 11, file_email: 11, text: 11, send_proposal: 11, new_vendor: 11 } as const;
+    add: 7, add_group: 8, load_assembly: 9, remove_group: 10, set_tax: 10, archive: 11, restore: 11, set_address: 11, new_job: 11, new_customer: 11, attach_contact: 11, new_contact: 11, set_name: 11, file: 11, file_email: 11, text: 11, send_proposal: 11, new_vendor: 11, appointment: 11, update_appointment: 11 } as const;
   // Archive / restore steps run through applyRecords (no job needed).
   const steps = [...actions].filter((a) => !RECORD_STEPS.has(a.do)).sort((a, b) => order[a.do] - order[b.do]);
   for (const a of steps) {
@@ -357,6 +358,30 @@ export async function applyRecords(actions: PlanAction[]): Promise<StepResult[]>
           out.push({ ok: true, text: `Sent to ${String(r.to).replace(/^\+1(\d{3})(\d{3})(\d{4})$/, "($1) $2-$3")} through Quo — it shows in their thread once Quo confirms` });
         } catch (e) {
           out.push({ ok: false, text: `Text not sent: ${e instanceof Error ? e.message : String(e)}` });
+        }
+        continue;
+      }
+      if (a.do === "appointment") {
+        const job = a.job && JOB_KEY.test(a.job) ? madeJob.get(a.job)?.id ?? null : a.job;
+        if (a.job && !job) { out.push({ ok: false, text: "The job to book it on wasn't made — skipped" }); continue; }
+        try {
+          const r = await call("/api/appointments", "POST", { job_id: job ?? undefined, contact_id: a.contact ?? undefined, kind: a.kind, title: a.title ?? undefined,
+            day: a.day, start: a.start, end: a.end ?? undefined, address: a.address ?? undefined, note: a.note ?? undefined, source: "dusty" });
+          window.dispatchEvent(new Event(APPOINTMENTS_EVENT));
+          out.push({ ok: true, text: `On the schedule: ${r.appointment?.title ?? "the appointment"}, ${whenText(r.appointment.starts_at, r.appointment.ends_at)} — Add to calendar is on the job's Summary and their contact card` });
+        } catch (e) {
+          out.push({ ok: false, text: `Not booked: ${e instanceof Error ? e.message : String(e)}` });
+        }
+        continue;
+      }
+      if (a.do === "update_appointment") {
+        try {
+          await call(`/api/appointments/${a.id}`, "PATCH", { ...(a.status ? { status: a.status } : {}), ...(a.reason ? { canceled_reason: a.reason } : {}),
+            ...(a.day && a.start ? { day: a.day, start: a.start, end: a.end ?? "" } : {}) });
+          window.dispatchEvent(new Event(APPOINTMENTS_EVENT));
+          out.push({ ok: true, text: a.status === "canceled" ? "Canceled the appointment" : a.status === "confirmed" ? "Marked it confirmed" : a.status === "done" ? "Marked it done" : "Moved the appointment" });
+        } catch (e) {
+          out.push({ ok: false, text: `Appointment not changed: ${e instanceof Error ? e.message : String(e)}` });
         }
         continue;
       }

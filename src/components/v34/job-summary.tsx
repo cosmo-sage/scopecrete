@@ -33,6 +33,7 @@ import type { Contract } from "@/lib/jobs/won";
 import { SCOPE_STEPS, type ScopeProgress } from "@/lib/scope-builder";
 import { Emblem } from "@/components/site/marks";
 import { askDusty } from "@/components/v34/budget-tabs";
+import { AppointmentsCard } from "@/components/v34/appointments-card";
 
 interface Job {
   id: string; title: string | null; status: string | null; address: string | null;
@@ -181,6 +182,9 @@ export function JobSummary({ jobId }: { jobId: string }) {
         </div>
 
         {!job.archived_at && <NextUp jobId={jobId} card={card} />}
+
+        {/* Site visits and other appointments on this job (migration 110). */}
+        {!job.archived_at && <AppointmentsCard jobId={jobId} card={card} about={realTitle || null} address={siteAddress || null} />}
 
         {WON_STATUSES.includes(job.status ?? "") && (
           <WonCard jobId={jobId} job={job} contract={contract} card={card} onChange={() => void reload()} />

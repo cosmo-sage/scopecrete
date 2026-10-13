@@ -19,6 +19,7 @@ import { formatPhone } from "@/components/v34/conversation";
 import { AddressInput } from "@/components/v34/address-input";
 import type { Person } from "@/components/v34/person-view";
 import { InternalNotes } from "@/components/v34/internal-notes";
+import { AppointmentsCard } from "@/components/v34/appointments-card";
 
 const BUCKET: Record<string, string> = { customer: "Customer", vendor: "Vendor", personal: "Personal", spam: "Spam" };
 
@@ -127,6 +128,12 @@ export function ContactCard({ person, back, textHref, customerHref, vendorHref, 
             <EmailAdd contactId={c.id} onSaved={onReload} />
           </div>
         )}
+      </div>
+
+      {/* Their appointments — their own and those on their jobs (migration 110). */}
+      <div style={{ marginTop: 16 }}>
+        <AppointmentsCard contactId={c.id} about={c.name} address={c.address ?? null}
+          card={{ background: T.card, border: `1px solid ${T.hair}`, borderRadius: 12 }} />
       </div>
 
       {/* Notes on the contact, typed or dictated (Coy, 2026-10-09) — the thread's Internal notes. */}

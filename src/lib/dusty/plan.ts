@@ -19,6 +19,7 @@
 import { cleanBasis } from "../estimate-flag.ts";
 import { cleanTrades } from "../bids.ts";
 import { cleanWebsite } from "../vendor-website.ts";
+import { APPOINTMENT_KINDS, KIND_LABEL, centralToUtc, whenText, type AppointmentKind } from "../appointments.ts";
 
 export type PlanAction =
   | { do: "add"; item: string; area: string | null; qty: number | null; takeoff?: string; estimate?: string }
@@ -76,6 +77,14 @@ export type PlanAction =
   // A text to a person, sent through Quo when Coy taps Send (Coy, 2026-10-05: "send text messages through
   // the app through quo manually or through dusty"). to: one of their numbers, or null for the one they use.
   | { do: "text"; contact: string; to: string | null; body: string }
+  // An appointment on a job and/or a person (migration 110; Coy, 2026-10-13: "a way for Dusty to keep track of my
+  // schedule for each job and customer contact lead"). day "YYYY-MM-DD", start / end "HH:MM", Central time.
+  // job: a full job id, or job1 made above; contact: a full contact id. At least one.
+  | { do: "appointment"; job: string | null; contact: string | null; kind: AppointmentKind; title: string | null;
+      day: string; start: string; end: string | null; address: string | null; note: string | null }
+  // One already booked (its full id from "Appointments" in the CONTEXT): confirmed, done, canceled, or a new time.
+  | { do: "update_appointment"; id: string; status: "confirmed" | "done" | "canceled" | "scheduled" | null;
+      day: string | null; start: string | null; end: string | null; reason: string | null }
   // A job's proposal, by text or email, on Coy's tap (Coy, 2026-10-05: "for dusty to send them"). The body
   // carries {link}; Apply makes (or reuses) the link, freezing a draft first as Preview does.
   | { do: "send_proposal"; job: string; via: "text" | "email"; contact: string | null; body: string; subject: string | null; draft?: string }
@@ -89,7 +98,7 @@ export type PlanAction =
       from: "web" | "file" | "words"; contact?: string; key?: string; trades?: string[]; note?: string };
 
 /** Steps that change records rather than a budget — they need no job open. */
-export const RECORD_STEPS = new Set(["archive", "restore", "set_address", "new_job", "new_customer", "attach_contact", "new_contact", "set_name", "file", "file_email", "text", "send_proposal", "new_vendor"]);
+export const RECORD_STEPS = new Set(["archive", "restore", "set_address", "new_job", "new_customer", "attach_contact", "new_contact", "set_name", "file", "file_email", "text", "send_proposal", "new_vendor", "appointment", "update_appointment"]);
 /** A customer (cust1) or job (job1) made earlier in the same plan. */
 export const CUST_KEY = /^cust\d{1,2}$/i;
 export const JOB_KEY = /^job\d{1,2}$/i;
@@ -325,6 +334,29 @@ function cleanActionBase(raw: unknown): PlanAction | null {
       const ok = FULL_ID.test(id) || (kind === "customer" && CUST_KEY.test(id)) || (kind === "job" && JOB_KEY.test(id));
       return kind && email && ok ? { do: "file_email", email, kind, id } : null;
     }
+    case "appointment": {
+      const job = typeof r.job === "string" && (FULL_ID.test(r.job.trim()) || JOB_KEY.test(r.job.trim())) ? r.job.trim().toLowerCase() : null;
+      const contact = typeof r.contact === "string" && FULL_ID.test(r.contact.trim()) ? r.contact.trim().toLowerCase() : null;
+      if (!job && !contact) return null;
+      const day = typeof r.day === "string" ? r.day.trim() : "", start = typeof r.start === "string" ? r.start.trim() : "";
+      const end = typeof r.end === "string" && r.end.trim() ? r.end.trim() : null;
+      const at = centralToUtc(day, start);
+      if (!at) return null; // a day or time that isn't one is no guess
+      if (end) { const e = centralToUtc(day, end); if (!e || e <= at) return null; }
+      const kind = (APPOINTMENT_KINDS as readonly string[]).includes(String(r.kind)) ? (r.kind as AppointmentKind) : "site_visit";
+      return { do: "appointment", job, contact, kind, title: str(r.title, 120), day, start, end, address: str(r.address, 200), note: str(r.note, 500) };
+    }
+    case "update_appointment": {
+      const id = typeof r.id === "string" && FULL_ID.test(r.id.trim()) ? r.id.trim().toLowerCase() : null;
+      if (!id) return null;
+      const status = ["confirmed", "done", "canceled", "scheduled"].find((x) => x === r.status) as "confirmed" | "done" | "canceled" | "scheduled" | undefined;
+      const day = typeof r.day === "string" && r.day.trim() ? r.day.trim() : null, start = typeof r.start === "string" && r.start.trim() ? r.start.trim() : null;
+      const end = typeof r.end === "string" && r.end.trim() ? r.end.trim() : null;
+      if ((day || start) && !(day && start && centralToUtc(day, start))) return null;
+      if (end && (!day || !start || !centralToUtc(day, end) || centralToUtc(day, end)! <= centralToUtc(day, start)!)) return null;
+      if (!status && !day) return null;
+      return { do: "update_appointment", id, status: status ?? null, day, start, end, reason: str(r.reason, 300) };
+    }
     case "text": {
       const contact = typeof r.contact === "string" && FULL_ID.test(r.contact.trim()) ? r.contact.trim().toLowerCase() : null;
       const body = typeof r.body === "string" ? r.body.replace(/\r\n/g, "\n").trim() : "";
@@ -479,6 +511,17 @@ function describeBase(a: PlanAction, names: { item: (r: string) => string | null
       const where = a.kind === "job" ? "the job" : a.kind === "customer" ? "the customer" : "the person";
       return `File the email on ${/^(cust|job)\d/.test(a.id) ? `the new ${a.kind === "job" ? "job" : "customer"} above` : where}, with the files that came with it`;
     }
+    case "appointment": {
+      const at = centralToUtc(a.day, a.start)!;
+      const to = a.end ? centralToUtc(a.day, a.end) : null;
+      return `Put a ${KIND_LABEL[a.kind].toLowerCase()} on the schedule${a.title ? ` — “${a.title}”` : ""}: ${whenText(at, to)}${a.address ? ` at ${a.address}` : ""}${a.job && JOB_KEY.test(a.job) ? " (on the new job above)" : ""}`;
+    }
+    case "update_appointment": {
+      const when = a.day && a.start ? `move it to ${whenText(centralToUtc(a.day, a.start)!, a.end ? centralToUtc(a.day, a.end) : null)}` : "";
+      const st = a.status === "confirmed" ? "mark it confirmed" : a.status === "done" ? "mark it done" : a.status === "canceled" ? `cancel it${a.reason ? ` — ${a.reason}` : ""}` : "";
+      const what = [when, st].filter(Boolean).join(", and ");
+      return `Appointment: ${what || "no change"}`;
+    }
     case "text": {
       const d = a.to ? a.to.replace(/^\+1/, "") : "";
       const num = d.length === 10 ? ` at (${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}` : "";
@@ -542,6 +585,11 @@ Emails and their files. Forwarded emails are in the CONTEXT under the intake inb
 [{"do":"file_email","email":"<full email id>","kind":"customer|contact|job","id":"<full id from the CONTEXT>"}]
 \`\`\`
 "This customer", "this job", "them" means the one the chat is about (its id is in the CONTEXT). When the same email was forwarded twice, file both. Never ask Coy for a file id or which message he means when the CONTEXT shows it — the subject, the sender and the file names say which; ask only when two different emails could both be the one. Use "file" (file ids) only for a single file that came without an email, like a photo attached in this chat.
+Appointments. When Coy says he has booked (or wants to book) a site visit, consultation, pour or meeting with someone — "I have an appointment with Ms. Wilson Thursday between 12 and 1" — put it on the schedule:
+\`\`\`scopecrete-plan
+[{"do":"appointment","job":"<full job id, when it is about a job>","contact":"<full contact id of the person>","kind":"site_visit|consultation|pour|meeting|other","day":"2026-10-15","start":"12:00","end":"13:00","address":"<only as written in the CONTEXT or said>","note":"<what it's for, short>"}]
+\`\`\`
+day, start and end are Central time, 24-hour; work out the date from "Today" in the CONTEXT ("this Thursday" is the coming Thursday) and say the date in your words so Coy can check it. Leave out "end" when no end was said; leave out "address" when the job's address is the place (the app fills it). Never invent a time. Check "Appointments" in the CONTEXT first: if it is already there, say so instead of booking it twice, and to move, confirm or cancel one use {"do":"update_appointment","id":"<full appointment id>","status":"confirmed|done|canceled","day":"…","start":"…","end":"…","reason":"…"} (a new time needs day and start). Once it's booked Coy can add it to his calendar from the job's Summary or the person's contact card (Add to calendar). Offer to draft a confirmation text; when Coy asks for one, add a "text" step (below) in the same plan — the day, the time window and the street, his voice, no prices.
 Texts. When Coy asks you to text someone (or to write a text and send it), write it the way he would — short, plain, in his voice, signed only if he signs — and propose:
 \`\`\`scopecrete-plan
 [{"do":"text","contact":"<full contact id from the CONTEXT>","body":"Hi Johnette, this is Coy. I can come measure the driveway Thursday at 9 — does that work?"}]

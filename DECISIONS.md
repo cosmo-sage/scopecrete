@@ -5612,7 +5612,10 @@ additive changes only, with confirmation.
   Threads, Dusty's reading card) slows to every 5 minutes after ten minutes
   with no input (`src/lib/v34/idle-poll.ts`); Threads polls once a minute
   while Realtime is connected. The real fix is compute: Pro, with at least
-  the Micro instance its credit covers.
+  the Micro instance its credit covers. In the repo, waiting on Coy's
+  "deploy enrich-contacts" (one deploy with the new-caller changes):
+  enrich-contacts runs its name and bucket rechecks only on minutes ending
+  in 0, every 10 minutes instead of every minute.
 - **Fonts are self-hosted (2026-10-05).** Every typeface the app and site
   load through Next is a woff2 in `src/fonts/` (latin, copied from Google
   Fonts, OFL), loaded with `next/font/local` — never `next/font/google`, so

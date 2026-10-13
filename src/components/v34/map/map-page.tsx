@@ -546,11 +546,28 @@ export function MapPage() {
   const ink = clip ? "#fff" : T.ink;
   // Map · Satellite: over the map on a desktop; in the header beside Clip on a
   // phone (Coy, 2026-10-09).
+  // The picked pin, else the address searched, else a pin within 40 px of the
+  // middle of the map, else the middle itself.
+  const middlePin = () => {
+    const c = worldPx(view.lat, view.lng, view.zoom);
+    let best: MapPin | null = null, bd = 40;
+    for (const p of data?.pins ?? []) { const w = worldPx(p.lat, p.lng, view.zoom); const d = Math.hypot(w.x - c.x, w.y - c.y); if (d < bd) { bd = d; best = p; } }
+    return best;
+  };
+  const openStreet = () => {
+    const m = sel ?? (plain ? null : middlePin());
+    setStreet(m ? { lat: m.lat, lng: m.lng, label: m.addr || m.name } : plain ? plain : { lat: view.lat, lng: view.lng, label: "The middle of the map" });
+  };
+  // Map · Satellite · Street in the header (Coy, 2026-10-13: "it needs to
+  // replace the satellite view. I want to toggle between both in the map page
+  // header"). Street view fills the map's place until Map or Satellite is picked.
+  const viewNow: "map" | "sat" | "street" = street ? "street" : mode;
   const modeToggle = (
-                <div className="flex rounded overflow-hidden" style={{ border: `1px solid ${T.hairStrong}`, boxShadow: wide ? "0 2px 8px rgba(0,0,0,.15)" : undefined, flexShrink: 0 }}>
-                  {([["map", "Map"], ["sat", wide ? "Satellite" : "Sat"]] as const).map(([k, label]) => (
-                    <button key={k} type="button" aria-pressed={mode === k} aria-label={k === "sat" ? "Satellite" : "Map"} onClick={() => setMode(k)}
-                      style={{ height: 30, padding: wide ? "0 10px" : "0 8px", fontFamily: disp, fontSize: 12, fontWeight: 600, letterSpacing: ".06em", textTransform: "uppercase", background: mode === k ? T.ink : T.card, color: mode === k ? T.card : T.ink2, cursor: "pointer" }}>{label}</button>
+                <div className="flex rounded overflow-hidden" style={{ border: `1px solid ${T.hairStrong}`, flexShrink: 0 }}>
+                  {([["map", "Map"], ["sat", wide ? "Satellite" : "Sat"], ["street", "Street"]] as const).map(([k, label]) => (
+                    <button key={k} type="button" aria-pressed={viewNow === k} aria-label={k === "sat" ? "Satellite" : k === "street" ? "Street view" : "Map"}
+                      onClick={() => { if (k === "street") openStreet(); else { setStreet(null); setMode(k); } }}
+                      style={{ height: 30, padding: wide ? "0 10px" : "0 7px", fontFamily: disp, fontSize: 12, fontWeight: 600, letterSpacing: ".06em", textTransform: "uppercase", background: viewNow === k ? T.ink : T.card, color: viewNow === k ? T.card : T.ink2, cursor: "pointer" }}>{label}</button>
                   ))}
                 </div>
   );
@@ -561,18 +578,8 @@ export function MapPage() {
                     <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke={T.ink} strokeWidth="1.7" aria-hidden="true"><path d="M3 9.5 10 3.5l7 6M5 8.5V17h10V8.5M8.5 17v-4.5h3V17" /></svg>
                   </button>
   ) : null;
-  const openStreet = () => setStreet(sel ? { lat: sel.lat, lng: sel.lng, label: sel.addr || sel.name }
-    : plain ? plain : { lat: view.lat, lng: view.lng, label: "The middle of the map" });
-  const streetButton = (
-                  <button type="button" aria-label="Street view" title="Street view of the pin, the address searched, or the middle of the map" onClick={openStreet}
-                    className="flex items-center justify-center rounded" style={{ width: 36, height: 36, background: street ? T.ink : T.card, color: street ? T.card : T.ink, border: `1px solid ${T.hairStrong}`, boxShadow: "0 2px 8px rgba(0,0,0,.15)", cursor: "pointer" }}>
-                    <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><circle cx="10" cy="4" r="2.2" /><path d="M7 18v-5H5.5V9.5A2 2 0 0 1 7.5 7.5h5a2 2 0 0 1 2 2V13H13v5" /></svg>
-                  </button>
-  );
   const mapControls = (
     <>
-                {wide && modeToggle}
-                {streetButton}
                 {officeButton}
                 {!wide && (
                   <button type="button" aria-label="Where I am" title="Where I am" onClick={() => navigator.geolocation?.getCurrentPosition((p) => setView({ lat: p.coords.latitude, lng: p.coords.longitude, zoom: 16 }), () => {})}
@@ -590,8 +597,8 @@ export function MapPage() {
           sub="Every job and vendor with an address. Frame any spot on satellite and send it to a job's Takeoffs to measure."
           menu={<MenuButton onClick={() => setLayersOpen(true)} label="Layers" />}
           actions={<div className="flex items-center gap-2">
-            {!wide && modeToggle}
-            <button type="button" onClick={() => startClip()} style={btn(true)}>{wide ? "Clip for takeoff" : "Clip"}</button>
+            {modeToggle}
+            {!street && <button type="button" onClick={() => startClip()} style={btn(true)}>{wide ? "Clip for takeoff" : "Clip"}</button>}
           </div>} />
       ) : (
         <div className="flex items-center gap-2" style={{ minHeight: 48, padding: "6px 12px", background: "#1a1c1a", color: "#fff" }}>
@@ -613,7 +620,8 @@ export function MapPage() {
             {/* Search (top left) */}
             {!clip && (
               <div className="absolute flex flex-col gap-2" style={{ left: 10, top: 10, right: wide ? undefined : 10, width: wide ? 440 : undefined, maxWidth: wide ? "calc(100% - 200px)" : undefined, zIndex: 10 }}>
-                <SearchBox key={pullAddr ?? ""} initial={pullAddr ?? ""} pins={data?.pins ?? []} view={view} onPin={goPin} onAddress={(a) => { setSel(null); setPlain(a); setView({ lat: a.lat, lng: a.lng, zoom: 17 }); }} />
+                <SearchBox key={pullAddr ?? ""} initial={pullAddr ?? ""} pins={data?.pins ?? []} view={view} onPin={(p) => { goPin(p); if (street) setStreet({ lat: p.lat, lng: p.lng, label: p.addr || p.name }); }}
+                  onAddress={(a) => { setSel(null); setPlain(a); setView({ lat: a.lat, lng: a.lng, zoom: 17 }); if (street) setStreet(a); }} />
                 {pullNote && <div {...stop} className="rounded" style={{ padding: "6px 10px", background: T.card, color: T.ink2, fontSize: 12.5 }}>{pullNote}</div>}
                 {err && <div {...stop} className="rounded" style={{ padding: "6px 10px", background: T.card, color: T.red, fontSize: 12.5 }}>{err} <button onClick={() => void load()} style={{ color: T.chalk, fontWeight: 600 }}>Try again</button></div>}
                 {data && !data.stored && <div {...stop} className="rounded" style={{ padding: "4px 10px", background: T.card, color: T.ink3, fontSize: 11.5 }}>Addresses are looked up on each visit until migration 090 is applied.</div>}
@@ -645,19 +653,6 @@ export function MapPage() {
               </div>
             )}
 
-            {/* Street view: a box at the bottom right on a desktop, a sheet on a phone. */}
-            {!clip && street && (
-              <div {...stop} className={wide ? "absolute rounded" : "absolute left-0 right-0 bottom-0"} style={wide
-                ? { right: 10, bottom: 16, width: 520, maxWidth: "calc(100% - 80px)", zIndex: 13, padding: 10, background: T.card, border: `1px solid ${T.hair}`, boxShadow: "0 10px 30px rgba(0,0,0,.25)" }
-                : { zIndex: 14, background: T.card, borderRadius: "12px 12px 0 0", boxShadow: "0 -8px 26px rgba(0,0,0,.22)", padding: "10px 12px 12px" }}>
-                <div className="flex items-center gap-2" style={{ marginBottom: 6 }}>
-                  <span style={{ fontFamily: disp, fontSize: 12, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase", color: T.ink2 }}>Street view</span>
-                  <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: T.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{street.label}</span>
-                  <button type="button" onClick={() => setStreet(null)} aria-label="Close street view" style={{ width: 28, height: 28, color: T.ink2, fontSize: 18, cursor: "pointer" }}>×</button>
-                </div>
-                <StreetFrame key={`${street.lat},${street.lng}`} point={street} height={wide ? 320 : 280} />
-              </div>
-            )}
             {clip && frame && (wide || clip.step === "frame") && <ClipFrame frame={frame} view={view} size={size} plan={plan} centre={frameCentre} step={clip.step} wide={wide}
               onUse={useFrame} />}
             {clip && clip.step === "job" && clip.taken && (
@@ -676,6 +671,24 @@ export function MapPage() {
               </div>
             )}
           </MapView>
+          {/* Street view in the map's place; the search above it moves it. */}
+          {!clip && street && (
+            <div className="absolute inset-0 flex flex-col" style={{ zIndex: 30, background: T.card }}>
+              <div className="flex flex-col gap-1.5" style={{ padding: "8px 10px", borderBottom: `1px solid ${T.hair}` }}>
+                <div style={{ width: wide ? 440 : undefined, maxWidth: "100%" }}>
+                  <SearchBox key={`sv${pullAddr ?? ""}`} initial="" pins={data?.pins ?? []} view={view}
+                    onPin={(p) => { goPin(p); setStreet({ lat: p.lat, lng: p.lng, label: p.addr || p.name }); }}
+                    onAddress={(a) => { setSel(null); setPlain(a); setView({ lat: a.lat, lng: a.lng, zoom: 17 }); setStreet(a); }} />
+                </div>
+                <div className="flex items-center gap-2" style={{ fontSize: 12, color: T.ink3 }}>
+                  <span style={{ minWidth: 0, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><b style={{ color: T.ink }}>{street.label}</b> · Google Street View — to look at, not saved</span>
+                </div>
+              </div>
+              <div className="flex-1" style={{ minHeight: 0, padding: 8 }}>
+                <StreetFrame key={`${street.lat},${street.lng}`} point={street} height="fill" />
+              </div>
+            </div>
+          )}
         </div>
         {!wide && (
           <SlideDrawer open={layersOpen} onOpen={() => setLayersOpen(true)} onClose={() => setLayersOpen(false)} width={310} label="Layers">

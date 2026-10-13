@@ -10,7 +10,7 @@
 
 import {
   AUTO_STREAK, PROMPT_VERSION, SYSTEM_PROMPT, bucketOf, findSelfIdentification, greetedName, introducedName, relabelTranscript, renderConversation,
-  renderNotes, sanitize, spamSignal, titleKey, worthEnriching, type CoyNote, type Correction, type Proposal, type Turn,
+  renderNotes, sanitize, spamSignal, textedEmail, titleKey, worthEnriching, type CoyNote, type Correction, type Proposal, type Turn,
 } from './rules.ts'
 
 /**
@@ -497,6 +497,26 @@ export async function seedNextSteps(sb: Db, orgId: string, contactId: string, p:
   return error ? 0 : rows.length
 }
 
+/**
+ * The email they texted us goes on their contact (Coy, 2026-10-13), like the
+ * address they texted (migration 072): only onto someone with no email at all,
+ * never one already on another contact (contact_emails is unique per org), and
+ * marked source 'sms' — Coy changes it on the contact card.
+ */
+export async function saveTextedEmail(sb: Db, orgId: string, contactId: string, turns: Turn[]): Promise<boolean> {
+  const got = textedEmail(turns)
+  if (!got) return false
+  const [{ data: c }, { count }] = await Promise.all([
+    sb.from('contacts').select('email').eq('org_id', orgId).eq('id', contactId).maybeSingle(),
+    sb.from('contact_emails').select('id', { count: 'exact', head: true }).eq('org_id', orgId).eq('contact_id', contactId),
+  ])
+  if (!c || (c as { email: string | null }).email || (count ?? 0) > 0) return false
+  const { error } = await sb.from('contact_emails').insert({ org_id: orgId, contact_id: contactId, email: got.email, is_primary: true, source: 'sms' })
+  if (error) return false
+  await sb.from('contacts').update({ email: got.email }).eq('org_id', orgId).eq('id', contactId).is('email', null)
+  return true
+}
+
 export async function readContact(sb: Db, orgId: string, contactId: string, ask: Ask, model: string, learning: Learning = NO_LEARNING): Promise<ReadResult> {
   const [turns, numbers, { data: st }, { data: noteRows }] = await Promise.all([
     loadTurns(sb, orgId, contactId), contactNumbers(sb, orgId, contactId),
@@ -529,6 +549,7 @@ export async function readContact(sb: Db, orgId: string, contactId: string, ask:
   // they have no status line yet: that read is what writes it.
   if (pending && pending.source_fingerprint === fp && state.status_summary_at) {
     if (!named && !pending.proposed_name) await suggestGreeted(sb, orgId, pending.id, turns, numbers)
+    await saveTextedEmail(sb, orgId, contactId, turns)
     const auto = await applySelfIdentified(sb, orgId, contactId, { ...pending, proposed_name: introducedOver(pending.proposed_name, turns, numbers) }, turns, model)
     return auto.claim_id
       ? { outcome: 'named', proposal_id: pending.id, claim_id: auto.claim_id, note: auto.note }
@@ -543,6 +564,7 @@ export async function readContact(sb: Db, orgId: string, contactId: string, ask:
   if (!p.evidence_message_id) return { outcome: 'failed', note: 'no evidence line' }
 
   await writeStatus(sb, orgId, contactId, p)
+  await saveTextedEmail(sb, orgId, contactId, turns)
   await seedNextSteps(sb, orgId, contactId, p, sorted ? state.contact_type ?? null : null)
   const musing = p.musing ?? null
   if (!asking) return { outcome: 'summarized', note: p.status_summary ?? undefined, musing }

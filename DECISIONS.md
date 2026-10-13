@@ -1592,6 +1592,49 @@ them out. Trigger `contacts_bucket_jobs` → `sc_customer_job_for()`:
   name in front (067); with neither, no job — never "New job". Checked after
   applying: 7 archived, 0 uncounted left. Four older counted jobs still
   titled "New job" were left for Coy to name.
+- **A new caller becomes a customer and a job on their own (migration 108,
+  written 2026-10-13, NOT applied; `enrich-contacts` changes waiting on a
+  deploy).** Coy, on Brittany LaRochelle's thread: *"between the transcribed
+  voicemail, the text messages, and my responses, the system should have had
+  enough information to enrich the contact with her name, email, address. then
+  create a customer … then create a job and pull in the photos and prompt me
+  for what was next … But none of it happened without me."* Measured on her
+  thread: Dusty filed her customer at 94 an hour after her call and kept her
+  texted address, but (1) her name was never written — she texted "Brittany
+  LaRochelle / 8812 David Dr. … / britlarochelle@… / Please give me an
+  estimate …", and only "this is / my name is / … here" counted; (2) her email
+  went nowhere — the model left `proposed_email` blank; (3) a customer Dusty
+  files gets no `customers` row and, under 076, no job; (4) Coy's job by hand
+  had no customer (the person was filed after it) and no photos. Now:
+  **a name block** — a text of theirs whose first line is their whole name (two
+  words or more) and whose rest speaks in the first person — is their own
+  introduction (`nameBlock()` in `rules.ts`, tested in
+  `tests/caller-to-job.test.mjs`; a referral "John Smith / 225…" is not);
+  **the email they text** goes on a contact with none (`textedEmail()` /
+  `saveTextedEmail()`, `contact_emails` source `sms`; never ours, never two
+  different addresses); **076 is reversed on Coy's word** (he said then "later,
+  once the system is working correctly"): `sc_customer_job_for()` makes the
+  job for a customer Dusty filed too, uncounted with Accept until Coy keeps the
+  customer, and gives a person Dusty filed a `customers` row named as them
+  (relation left unconfirmed, `relation_source='default'`, so §2b's lead guard
+  is untouched; their texted address follows by 071's trigger); each job made
+  there leaves a next step on the person, due that day, linked to the job;
+  and trigger `contacts_jobs_customer` gives a person's open jobs with no
+  customer the one they are put on (backfilled: Wilson and LaRochelle). **The
+  job pulls in their photos** — the Summary, on open, asks
+  `POST /api/jobs/[id]/texted-photos {auto:true}`, which once per job copies
+  the photos the job's people texted from two weeks before it was made
+  (skipped when any texted photo was ever brought onto it, deleted ones
+  included) — and **What's next** on the Summary
+  (`/api/jobs/[id]/next`): the Scope Builder's step with a button to it, the
+  person's open next steps for this job (tick to finish), and the emblem asking
+  Dusty what is left to scope and price it (`scopeFacts()` in
+  `src/lib/scope-builder-server.ts`, shared with the Scope Builder page).
+  Rehearsed (rolled back) on the live data: an unnamed caller filed by Dusty
+  got nothing; named, they got a customer (unconfirmed), "McTest Driveway
+  Repair" uncounted on it, and one next step. Brittany's own records were
+  fixed by hand the same day: her email from her text, her job on her customer,
+  its next step; her photos come in when the job's Summary is opened.
 
 **Dusty seeds next steps (`enrich-contacts` v9+, 2026-09-28).** Each read
 may add up to three things waiting on Coy — "Send the walkway repair price" —

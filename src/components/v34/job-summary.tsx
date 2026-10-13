@@ -30,6 +30,9 @@ import { BudgetStep, SendSheet, useBudget } from "@/components/v34/plan-room/bud
 import { call as planCall, isDrawing, type Param, type PlansData } from "@/components/v34/plan-room/shared";
 import { BEFORE_WON, WON_STATUSES } from "@/lib/jobs/stages";
 import type { Contract } from "@/lib/jobs/won";
+import { SCOPE_STEPS, type ScopeProgress } from "@/lib/scope-builder";
+import { Emblem } from "@/components/site/marks";
+import { askDusty } from "@/components/v34/budget-tabs";
 
 interface Job {
   id: string; title: string | null; status: string | null; address: string | null;
@@ -145,6 +148,8 @@ export function JobSummary({ jobId }: { jobId: string }) {
           {job.description && !bidSummary && <div style={{ fontSize: F.sm, color: T.ink2, lineHeight: 1.45, marginTop: 4 }}>{job.description}</div>}
         </section>
 
+        {!job.archived_at && <NextUp jobId={jobId} card={card} />}
+
         {WON_STATUSES.includes(job.status ?? "") && (
           <WonCard jobId={jobId} job={job} contract={contract} card={card} onChange={() => void reload()} />
         )}
@@ -182,6 +187,70 @@ export function JobSummary({ jobId }: { jobId: string }) {
         </div>
       )}
     </div>
+  );
+}
+
+/** Coy's question to Dusty from a job's What's next. */
+const NEXT_QUESTION = "What's left to finish scoping and pricing this job? Go through what they said on their calls and texts, their photos and what's measured, and list what I still need to do or ask them, in order.";
+
+interface NextTask { id: string; title: string; due_on: string | null; source: string; job_id: string | null }
+
+/**
+ * What's next on this job (Coy, 2026-10-13: a new job should "pull in the photos and prompt me for
+ * what was next to finish scoping and estimating"). On open it brings in, once, the photos the
+ * customer texted (POST texted-photos {auto}); then the step the scope is on (the Scope Builder's
+ * rule), the open next steps on their person, and Dusty asked what's left.
+ */
+function NextUp({ jobId, card }: { jobId: string; card: React.CSSProperties }) {
+  const [data, setData] = useState<{ progress: ScopeProgress; href: string; tasks: NextTask[] } | null>(null);
+  const [photos, setPhotos] = useState<number>(0);
+  const load = useCallback(() => send(`/api/jobs/${jobId}/next`, "GET").then((b) => setData(b)).catch(() => setData(null)), [jobId]);
+  useEffect(() => {
+    let off = false;
+    send(`/api/jobs/${jobId}/texted-photos`, "POST", { auto: true })
+      .then((b) => { if (!off && b.added > 0) setPhotos(b.added as number); })
+      .catch(() => undefined)
+      .finally(() => { if (!off) void load(); });
+    return () => { off = true; };
+  }, [jobId, load]);
+  if (!data) return null;
+  const { progress, href, tasks } = data;
+  if (progress.next === "sent" && !tasks.length && !photos) return null;
+  const step = SCOPE_STEPS.find((x) => x.k === progress.next);
+  const done = (t: NextTask) => void send(`/api/tasks/${t.id}`, "PATCH", { status: "done" }).then(load);
+  return (
+    <section aria-label="What's next" className="px-3 py-2.5" style={card}>
+      <div className="flex items-center gap-2">
+        <div style={{ ...eyebrow, flex: 1 }}>What&apos;s next</div>
+        <button onClick={() => askDusty(NEXT_QUESTION)} aria-label="Ask Dusty what's left to scope and price it" title="Ask Dusty what's left to scope and price it"
+          className="flex items-center justify-center shrink-0" style={{ width: 30, height: 30, borderRadius: 4, border: `1px solid ${T.hairStrong}`, background: T.card, cursor: "pointer" }}>
+          <Emblem size={18} spin={false} />
+        </button>
+      </div>
+      {photos > 0 && (
+        <div style={{ fontSize: F.sm, color: T.ink2, marginTop: 6 }}>
+          Brought in {photos} photo{photos === 1 ? "" : "s"} they texted · <Link href={`/dashboard/scope/${jobId}/files`} style={{ color: T.chalk }}>See them in Files ›</Link>
+        </div>
+      )}
+      <div className="flex items-center gap-2" style={{ marginTop: 6 }}>
+        <span style={{ fontSize: F.sm, color: T.ink, flex: 1 }}>{progress.line}</span>
+        {progress.next !== "sent" && step && (
+          <Link href={href} className="rounded px-2.5 no-underline inline-flex items-center"
+            style={{ height: 28, background: T.ink, color: T.card, fontSize: F.xs, fontWeight: 600, flexShrink: 0 }}>{step.label} ›</Link>
+        )}
+      </div>
+      {tasks.length > 0 && (
+        <ul className="mt-2 space-y-1" style={{ listStyle: "none", padding: 0, margin: 0 }}>
+          {tasks.map((t) => (
+            <li key={t.id} className="flex items-start gap-2" style={{ fontSize: F.sm, color: T.ink2, lineHeight: 1.4 }}>
+              <button onClick={() => done(t)} aria-label={`Done: ${t.title}`} title="Done"
+                style={{ width: 18, height: 18, marginTop: 1, borderRadius: 3, border: `1px solid ${T.hair}`, background: T.card, cursor: "pointer", flexShrink: 0 }} />
+              <span style={{ flex: 1 }}>{t.title}{t.due_on ? <span style={{ color: T.ink3 }}> · due {day(`${t.due_on}T12:00:00Z`)}</span> : null}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 

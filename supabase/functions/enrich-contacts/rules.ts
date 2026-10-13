@@ -689,6 +689,7 @@ export function findSelfIdentification(name: string | null, turns: Turn[], ownNu
     const i = lines.findIndex(l => said.test(l) || signed.test(l))
     // The evidence is the line as they said it, spelling and all.
     if (i >= 0) hit = { turnId: t.id, channel: t.kind, quote: raw[i].trim().slice(0, 400) }
+    else if (nameBlock(n, t)) hit = { turnId: t.id, channel: t.kind, quote: t.text.trim().split(/\r?\n/).slice(0, 3).join(' / ').slice(0, 400) }
   }
   if (!hit) return null
 
@@ -697,6 +698,52 @@ export function findSelfIdentification(name: string | null, turns: Turn[], ownNu
   const names = introducedNames(all)
   for (const other of names) if (other !== first) return null
   return hit
+}
+
+/**
+ * A text that opens with their whole name on a line of its own, then speaks for
+ * themselves — the way people send their details (Coy, 2026-10-13, Brittany
+ * LaRochelle: "Brittany LaRochelle / 8812 David Dr. in Denham Springs /
+ * britlarochelle@bellsouth.net / Please give me an estimate … my driveway").
+ * Two words or more, typed by them in a text (never a transcript), the first
+ * line, and the rest of the text in the first person (I, me, my) — so a
+ * referral ("John Smith / 225-555-0100") or someone else's details is not it.
+ */
+export function nameBlock(name: string, t: Turn): boolean {
+  if (t.kind !== 'sms' || t.who !== 'THEM') return false
+  const n = name.trim().replace(/\s+/g, ' ')
+  if (n.split(' ').length < 2) return false
+  const lines = t.text.split(/\r?\n/).map(l => l.trim()).filter(Boolean)
+  if (lines.length < 2) return false
+  const first = lines[0].replace(/[.,;:!-]+$/, '').replace(/\s+/g, ' ')
+  if (first.toLowerCase() !== n.toLowerCase()) return false
+  return /\b(i|i'm|i’m|me|my|mine)\b/i.test(lines.slice(1).join(' '))
+}
+
+/** Domains that are ours or a relay's — never a person's own address. */
+const NOT_THEIR_DOMAINS = ['agentmail.to', 'saccobuilt.com', 'scopecrete.ai', 'batonrougeconcreters.com']
+
+/**
+ * The email address they typed to us in a text (Coy, 2026-10-13: Brittany
+ * texted hers and it never reached her contact). Only their own inbound texts,
+ * never a transcript (a heard address is too easily misheard), and only when
+ * every text of theirs that has one names the SAME one — two different
+ * addresses ("mine, or my husband's at …") is a question, not a fact.
+ */
+export function textedEmail(turns: Turn[]): { email: string; turnId: string } | null {
+  const re = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g
+  let found: { email: string; turnId: string } | null = null
+  for (const t of turns) {
+    if (t.kind !== 'sms' || t.who !== 'THEM') continue
+    for (const m of t.text.matchAll(re)) {
+      const email = m[0].replace(/\.+$/, '').toLowerCase()
+      const domain = email.split('@')[1] ?? ''
+      if (NOT_THEIR_DOMAINS.some(d => domain === d || domain.endsWith(`.${d}`))) continue
+      if (found && found.email !== email) return null
+      found ??= { email, turnId: t.id }
+    }
+  }
+  return found
 }
 
 // ---------------------------------------------------------------------------

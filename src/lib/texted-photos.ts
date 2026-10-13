@@ -19,3 +19,10 @@ export function textedPhotoName(who: string | null | undefined, sentAt: string |
   }
   return `Texted by ${sender}${when}.${ext.replace(/[^a-z0-9]/gi, "").slice(0, 5) || "jpg"}`.slice(0, 160);
 }
+
+/** How far back a new job's own photos reach: two weeks before it was made (Coy, 2026-10-13). */
+export const AUTO_PHOTO_DAYS = 14;
+export function autoSince(jobCreatedAt: string): number | null {
+  const t = Date.parse(jobCreatedAt);
+  return Number.isFinite(t) ? t - AUTO_PHOTO_DAYS * 86_400_000 : null;
+}

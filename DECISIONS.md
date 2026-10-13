@@ -1597,8 +1597,9 @@ them out. Trigger `contacts_bucket_jobs` → `sc_customer_job_for()`:
   applying: 7 archived, 0 uncounted left. Four older counted jobs still
   titled "New job" were left for Coy to name.
 - **A new caller becomes a customer and a job on their own (migration 108,
-  written 2026-10-13, NOT applied; `enrich-contacts` changes waiting on a
-  deploy).** Coy, on Brittany LaRochelle's thread: *"between the transcribed
+  applied 2026-10-13 on Coy's "Apply 108" — checked after: the new body,
+  SECURITY DEFINER, the trigger, anon no execute, every open job's customer
+  filled; `enrich-contacts` changes waiting on a deploy).** Coy, on Brittany LaRochelle's thread: *"between the transcribed
   voicemail, the text messages, and my responses, the system should have had
   enough information to enrich the contact with her name, email, address. then
   create a customer … then create a job and pull in the photos and prompt me

@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
   if (!result.ok) return result.response;
   const { supabase, orgId, applyCookies } = result.session;
   const { data: jobs, error } = await supabase.from("jobs")
-    .select("id, title, address, city, job_type, status, created_at, updated_at, duration_days, customer_id, customers(name), contacts!jobs_contact_id_fkey(name)")
+    .select("id, title, address, city, job_type, status, created_at, updated_at, duration_days, customer_id, customers!jobs_customer_id_fkey(name), contacts!jobs_contact_id_fkey(name)")
     .eq("org_id", orgId).is("archived_at", null).order("updated_at", { ascending: false }).limit(300);
   if (error) return applyCookies(NextResponse.json({ error: error.message }, { status: 500 }));
   const rows = (jobs ?? []) as unknown as Array<Record<string, unknown>>;

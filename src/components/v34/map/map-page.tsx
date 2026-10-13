@@ -316,6 +316,8 @@ export function MapPage() {
     return () => { window.removeEventListener("scroll", fix); vv?.removeEventListener("resize", fix); };
   }, []);
   const [clip, setClip] = useState<Clip>(null);
+  // While framing a clip, Google's picture can be looked at, never saved (its terms).
+  const [peek, setPeek] = useState(false);
   const [saved, setSaved] = useState<Saved[]>([]);
   const [toast, setToast] = useState<Saved | null>(null);
   const fitted = useRef(false);
@@ -402,6 +404,7 @@ export function MapPage() {
     setView((v) => (p ? { lat: p.lat, lng: p.lng, zoom: Math.max(19, v.zoom) } : { ...v, zoom: Math.max(18, v.zoom) }));
   };
   const endClip = () => {
+    setPeek(false);
     setClip(null);
     if (clipJob) router.replace("/dashboard/map", { scroll: false });
   };
@@ -435,6 +438,7 @@ export function MapPage() {
   // "Use this frame" saves the clip there and then; the job list only picks where it goes.
   const useFrame = () => {
     if (!frameCentre || !plan) return;
+    setPeek(false);
     const taken: Taken = { c: frameCentre, z: plan.z, w: plan.w, h: plan.h, zoom: view.zoom };
     if (wide) pendingCentre.current = frameCentre;
     setClip((c) => (c ? { ...c, step: "job", taken } : c));
@@ -615,7 +619,7 @@ export function MapPage() {
           </aside>
         )}
         <div className="flex-1 relative" style={{ minWidth: 0, isolation: "isolate", overflow: "clip" }}>
-          <MapView view={view} onView={(v) => { if (clip?.step !== "job") setView(v); }} mode={clip ? "sat" : mode} provider={drawnProvider(readMapProvider(providerPref), googleOn !== false, !!clip)} overlay={overlay} onSize={setSize}
+          <MapView view={view} onView={(v) => { if (clip?.step !== "job") setView(v); }} mode={clip ? "sat" : mode} provider={peek && clip?.step === "frame" ? drawnProvider("google", googleOn !== false, false) : drawnProvider(readMapProvider(providerPref), googleOn !== false, !!clip)} overlay={overlay} onSize={setSize}
             onBackgroundTap={() => { if (!clip) setSel(null); }}>
             {/* Search (top left) */}
             {!clip && (
@@ -654,7 +658,7 @@ export function MapPage() {
             )}
 
             {clip && frame && (wide || clip.step === "frame") && <ClipFrame frame={frame} view={view} size={size} plan={plan} centre={frameCentre} step={clip.step} wide={wide}
-              onUse={useFrame} />}
+              peek={peek && clip.step === "frame"} canPeek={googleOn !== false} onPeek={() => setPeek((v) => !v)} onUse={useFrame} />}
             {clip && clip.step === "job" && clip.taken && (
               <JobPicker wide={wide} jobs={data?.jobs ?? []} taken={clip.taken} pre={clip.jobId} onBack={() => setClip({ ...clip, step: "frame" })}
                 onDone={(s) => {
@@ -706,9 +710,10 @@ export function MapPage() {
 
 /* --------------------------------------------------------- clip frame */
 
-function ClipFrame({ frame, view, size, plan, centre, step, wide, onUse }: {
+function ClipFrame({ frame, view, size, plan, centre, step, wide, peek, canPeek, onPeek, onUse }: {
   frame: { x: number; y: number; w: number; h: number }; view: View; size: { w: number; h: number };
-  plan: { z: number; w: number; h: number } | null; centre: { lat: number; lng: number } | null; step: "frame" | "job"; wide: boolean; onUse: () => void;
+  plan: { z: number; w: number; h: number } | null; centre: { lat: number; lng: number } | null; step: "frame" | "job"; wide: boolean;
+  peek: boolean; canPeek: boolean; onPeek: () => void; onUse: () => void;
 }) {
   const lat = centre?.lat ?? view.lat;
   const bar = 50 / feetPerPixel(lat, view.zoom);
@@ -724,14 +729,20 @@ function ClipFrame({ frame, view, size, plan, centre, step, wide, onUse }: {
           <span>{scaleReadout(lat, view.zoom)}</span>
           {bar > 8 && bar < frame.w - 120 && <span className="flex items-center gap-1"><span style={{ width: bar, height: 6, borderLeft: "2px solid #fff", borderRight: "2px solid #fff", borderBottom: "2px solid #fff" }} />50 ft</span>}
         </div>
-        <div style={{ position: "absolute", right: 6, bottom: 4, color: "#fff", fontSize: 9.5, textShadow: "0 0 2px #000" }}>Mapbox Satellite · imagery date not known</div>
+        <div style={{ position: "absolute", right: 6, bottom: 4, color: "#fff", fontSize: 9.5, textShadow: "0 0 2px #000" }}>{peek ? "Google · to look at only — the clip saves Mapbox's picture" : "Mapbox Satellite · imagery date not known"}</div>
       </div>
       {step === "frame" && (
         <div {...stop} className="absolute flex flex-col items-center gap-2" style={{ left: 0, right: 0, top: Math.min(size.h - 110, frame.y + frame.h + 12), zIndex: 6, padding: "0 16px" }}>
           <div style={{ color: "#fff", fontSize: 12.5, textShadow: "0 1px 3px #000", textAlign: "center" }}>
             {plan ? (wide ? "Drag the map to move what's inside the frame. Scroll to zoom." : "Drag the map to move what's inside the frame. Pinch to zoom.") : "Zoom in closer to clip — street level or nearer (zoom 16)."}
           </div>
-          <button type="button" disabled={!plan} onClick={onUse} style={{ ...btn(true), height: 44, padding: "0 22px", fontSize: 14, opacity: plan ? 1 : 0.5, width: wide ? undefined : "100%", maxWidth: 420 }}>Use this frame ›</button>
+          <div className="flex items-center gap-2" style={{ width: wide ? undefined : "100%", maxWidth: 420 }}>
+            {canPeek && (
+              <button type="button" onClick={onPeek} aria-pressed={peek} title="Look at the same spot on Google's imagery. Google's terms don't allow saving it, so the clip is Mapbox's picture."
+                style={{ ...btn(peek), height: 44, padding: "0 14px", fontSize: 13, flexShrink: 0 }}>{peek ? "Back to Mapbox" : "Compare with Google"}</button>
+            )}
+            <button type="button" disabled={!plan} onClick={onUse} style={{ ...btn(true), height: 44, padding: "0 22px", fontSize: 14, opacity: plan ? 1 : 0.5, flex: wide ? undefined : 1 }}>Use this frame ›</button>
+          </div>
         </div>
       )}
     </>

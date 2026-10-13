@@ -5010,7 +5010,10 @@ expected start date per quoted job before it means anything. Add the field.
   allowed APIs. `GET /api/map/provider` says whether Google's tiles work; when they don't (no key, the API not
   enabled — remembered two minutes, Settings asking afresh) the page draws Mapbox and Settings → Maps says why in Google's own words — its status and reason, never the key — with what to change in Google Cloud (`refusalWhy()`: a key limited to websites or IP addresses, which a server call never passes; the API off in the key's project; the API not in the key's API restrictions; billing; tested). The corner carries
   Google's copyright for the view (`?copyright=1`, its viewport call). **Clip for takeoff is always Mapbox
-  satellite** — Google's imagery is a look only, never saved or traced.
+  satellite** — Google's imagery is a look only, never saved or traced. **Compare with Google** beside Use
+  this frame (Coy, 2026-10-13: "google maps is much better to clip from") swaps the map under the frame to
+  Google's satellite to line it up, the frame saying "to look at only — the clip saves Mapbox's picture";
+  Back to Mapbox, Use this frame or leaving the clip puts Mapbox back, so what is saved is always Mapbox's.
   **Not built:** vendors' delivery circles (their area is a line of text), a
   frame resized by its corner, customers' own pins, live directions or
   drive times.

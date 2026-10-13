@@ -4914,12 +4914,16 @@ expected start date per quoted job before it means anything. Add the field.
   says so under the search.
   `?addr=<address>` opens on that address, pinned (the contact card's Map button, 2026-10-10).
   **Street view on the Map (Coy, 2026-10-13: "the option on the map to see the street view of the address
-  i'm looking at from satellite").** A walking-figure button beside the map's controls, and **Street view** on
-  every pin's card, open Google's Street View (`StreetFrame`, the same Maps Embed as the customer and job
-  pages) of the picked pin, else the address searched, else the middle of the map — a box at the bottom
-  right on a desktop, a sheet on a phone; × or Esc closes it. **It is not clipped:** Google's terms don't
-  allow saving its imagery (the same reason Google is a look only for aerials, §6 Takeoffs), and the embed
-  can't be read by the page anyway. Clip for takeoff stays on the Mapbox satellite.
+  i'm looking at from satellite"; later that night: "it needs to replace the satellite view. I want to toggle
+  between both in the map page header").** The header's toggle is **Map · Satellite · Street** on every size
+  (it sat over the map on a desktop). Street fills the map's place with Google's Street View (`StreetFrame`,
+  the same Maps Embed as the customer and job pages) of the picked pin, else the address searched, else a pin
+  within 40 px of the middle of the map, else the middle itself; a search box above it moves it, and a pin
+  card's **Street view** opens it. Map or Satellite brings the map back (Esc too); Clip hides while it shows.
+  **It is not clipped, by Coy's ask or otherwise:** Google's terms don't allow saving or storing its imagery
+  (the same reason Google is a look only for aerials, §6 Takeoffs), and the embed can't be read by the page
+  anyway. A photo of the front of a house goes in from the site, or texted (Files → Photos). Clip for takeoff
+  stays on the Mapbox satellite.
   **Google Maps by default, Settings → Maps to switch (Coy, 2026-10-13: "set google maps as the default …
   a maps page in the settings where I can choose which one i want to use").** The Map page draws Google's
   roadmap and satellite (Map Tiles API, `p=google-map` / `google-sat` on `/api/aerial/tile`,

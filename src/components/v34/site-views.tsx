@@ -154,19 +154,20 @@ export function streetViewUrl(p: Point): string {
   return `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${p.lat},${p.lng}`;
 }
 
-export function StreetFrame({ point, height }: { point: Point; height: number }) {
+export function StreetFrame({ point, height }: { point: Point; height: number | "fill" }) {
   const link = (
     <a href={streetViewUrl(point)} target="_blank" rel="noopener noreferrer"
       style={{ fontSize: 12, fontWeight: 600, color: T.chalk, textDecoration: "none" }}>
       {EMBED_KEY ? "Open in Google Maps ↗" : "Open street view in Google Maps ↗"}
     </a>
   );
-  if (!EMBED_KEY) return <div style={{ padding: "18px 0", textAlign: "center", border: `1px solid ${T.hair}`, borderRadius: 4, background: T.sunk }}>{link}</div>;
+  const fill = height === "fill";
+  if (!EMBED_KEY) return <div style={{ padding: "18px 0", textAlign: "center", border: `1px solid ${T.hair}`, borderRadius: 4, background: T.sunk, height: fill ? "100%" : undefined }}>{link}</div>;
   const src = `https://www.google.com/maps/embed/v1/streetview?key=${encodeURIComponent(EMBED_KEY)}&location=${point.lat},${point.lng}&fov=80`;
   return (
-    <div className="flex flex-col gap-1">
+    <div className="flex flex-col gap-1" style={fill ? { height: "100%" } : undefined}>
       <iframe title="Street view" src={src} loading="lazy" referrerPolicy="no-referrer-when-downgrade" allowFullScreen
-        style={{ width: "100%", height, border: `1px solid ${T.hair}`, borderRadius: 4, background: T.sunk }} />
+        style={{ width: "100%", height: fill ? undefined : height, flex: fill ? "1 1 auto" : undefined, minHeight: 0, border: `1px solid ${T.hair}`, borderRadius: 4, background: T.sunk }} />
       <div style={{ textAlign: "right" }}>{link}</div>
     </div>
   );

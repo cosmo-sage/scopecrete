@@ -278,11 +278,11 @@ export async function GET(
 
   // Who the job is for, read separately: `contacts` and `jobs` carry their own
   // RLS policies and an embed would fail closed on either.
-  let contact: { id: string; name: string | null; phone: string | null } | null = null;
+  let contact: { id: string; name: string | null; phone: string | null; email?: string | null } | null = null;
   if (data.contact_id) {
     const { data: c } = await supabase
       .from("contacts")
-      .select("id, name, phone")
+      .select("id, name, phone, email")
       .eq("id", data.contact_id)
       .eq("org_id", orgId)
       .maybeSingle();

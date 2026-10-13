@@ -39,7 +39,7 @@ interface Job {
   archived_at?: string | null; archived_reason?: string | null; created_at?: string | null; won_at?: string | null;
   scheduled_start?: string | null; scheduled_end?: string | null; schedule_state?: string | null;
 }
-interface Contact { id: string; name: string | null; phone: string | null }
+interface Contact { id: string; name: string | null; phone: string | null; email?: string | null }
 export interface Why {
   filed_at: string | null; filed_by: "coy" | "dusty" | null;
   status_summary: string | null; recent_summary: string | null;
@@ -135,7 +135,7 @@ export function JobSummary({ jobId }: { jobId: string }) {
           <JobChips job={job} onSet={setChip} />
           {/* One fact a row: the customer, the address, when it was created, the sections (Coy, 2026-10-09). */}
           <div className="flex flex-col gap-0.5" style={{ fontSize: F.sm, color: T.ink2, marginTop: 8, lineHeight: 1.45 }}>
-            <JobCustomer jobId={jobId} customer={customer} who={who} contactId={contact?.id ?? null} onSaved={() => void reload()} />
+            <JobCustomer jobId={jobId} customer={customer} who={who} contact={contact} jobType={job.job_type} onSaved={() => void reload()} />
             <JobAddress jobId={jobId} address={job.address} onSaved={() => void reload()} />
             {job.address && <SiteViews addr={[job.address, job.city, [job.state, job.zip].filter(Boolean).join(" ")].filter(Boolean).join(", ")} stored={null} />}
             {job.created_at && <div>Created {day(job.created_at, true)}
@@ -462,9 +462,11 @@ function WonCard({ jobId, job, contract, card, onChange }: {
  * to a job/scope from inside the job"): pick a customer and the job goes on it, its person becoming
  * the customer's primary unless already one of theirs (PATCH /api/jobs/[id] {customer_id}).
  */
-function JobCustomer({ jobId, customer, who, contactId, onSaved }: {
-  jobId: string; customer: { id: string; name: string | null } | null; who: string | null; contactId: string | null; onSaved: () => void;
+function JobCustomer({ jobId, customer, who, contact, jobType, onSaved }: {
+  jobId: string; customer: { id: string; name: string | null } | null; who: string | null; contact: Contact | null;
+  jobType: string | null; onSaved: () => void;
 }) {
+  const contactId = contact?.id ?? null;
   const [open, setOpen] = useState(false);
   const [list, setList] = useState<Array<{ id: string; name: string; city: string | null }> | null>(null);
   const [q, setQ] = useState("");
@@ -482,22 +484,55 @@ function JobCustomer({ jobId, customer, who, contactId, onSaved }: {
     catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
   };
+  // A homeowner is their own customer (Coy, 2026-10-13: "a simple way to create a customer from a
+  // contact … most of the time the residential contacts are also the customer"): one tap makes a
+  // customer around the job's person (POST /api/customers {contact_id}) and puts the job on it.
+  // Already on a customer with other people → the job goes on that one.
+  const makeFromContact = async () => {
+    if (!contact?.name) return;
+    setBusy(true); setErr(null);
+    try {
+      const r = await fetch("/api/customers", { method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: contact.name, contact_id: contact.id,
+          customer_type: jobType === "commercial" || jobType === "public" ? jobType : "residential" }) });
+      const b = await r.json().catch(() => ({}));
+      const id = (b.customer?.id ?? b.existing?.customer_id) as string | undefined;
+      if (!id) throw new Error(b.error || "The customer wasn't made.");
+      await send(`/api/jobs/${jobId}`, "PATCH", { customer_id: id });
+      onSaved();
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(false); }
+  };
   const words = q.trim().toLowerCase();
   const shown = (list ?? []).filter((x) => x.id !== customer?.id && (!words || x.name.toLowerCase().includes(words))).slice(0, 30);
   const name = customer?.name || null;
-  const person = who && who !== name ? who : null;
   return (
     <div>
       <div className="flex items-baseline gap-2 flex-wrap">
         {name ? <Link href={`/dashboard/customers/${customer!.id}`} style={{ color: T.ink, fontWeight: 600 }}>{name}</Link>
           : who && contactId ? <Link href={`/dashboard/messages/${contactId}`} style={{ color: T.ink, fontWeight: 600 }}>{who}</Link>
           : <span style={{ color: T.hiviz, fontWeight: 600 }}>Not attached to a customer yet</span>}
-        {name && person && contactId && <Link href={`/dashboard/messages/${contactId}`} style={{ color: T.ink2 }}>{person}</Link>}
         <button onClick={() => setOpen((v) => !v)} aria-expanded={open}
           style={{ ...eyebrow, fontSize: 10.5, color: T.chalk, cursor: "pointer", background: "none", border: "none", padding: 0 }}>
           {open ? "Close" : customer ? "✎ Change customer" : "+ Attach a customer"}
         </button>
+        {!customer && contact?.name && !open && (
+          <button onClick={() => void makeFromContact()} disabled={busy}
+            style={{ ...eyebrow, fontSize: 10.5, color: T.chalk, cursor: "pointer", background: "none", border: "none", padding: 0 }}>
+            {busy ? "Making…" : `+ Make ${contact.name} the customer`}
+          </button>
+        )}
       </div>
+      {/* The person on the job and how to reach them (Coy, 2026-10-13: "the customer contact name and
+          info related to this customer and job listed here as well"). */}
+      {contact && (name || contact.phone || contact.email) && (
+        <div className="flex items-baseline gap-x-3 gap-y-0.5 flex-wrap" style={{ fontSize: F.sm }}>
+          {name && <span style={{ color: T.ink3 }}>Contact <Link href={`/dashboard/messages/${contact.id}?person=1`} style={{ color: T.ink, fontWeight: 600 }}>{contact.name || formatPhone(contact.phone)}</Link></span>}
+          {contact.phone && <a href={`tel:${contact.phone}`} style={{ color: T.chalk }}>{formatPhone(contact.phone)}</a>}
+          {contact.email && <a href={`mailto:${contact.email}`} style={{ color: T.chalk, overflowWrap: "anywhere" }}>{contact.email}</a>}
+        </div>
+      )}
+      {err && !open && <div style={{ fontSize: 11, color: T.red, marginTop: 2 }}>{err}</div>}
       {open && (
         <div style={{ maxWidth: 520, margin: "4px 0 6px" }}>
           <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find a customer…" aria-label="Find a customer"

@@ -314,3 +314,22 @@ test("a new contact needs no customer (Coy, 2026-10-10: Elena Sacco)", () => {
   assert.match(d(p.actions[1]), /to Contacts, filed personal/);
   assert.match(RECORD_RULES, /A contact does NOT need a customer/);
 });
+
+test("email: a draft into a conversation, quote marks and entities taken off", async () => {
+  const { emailBody } = await import("../src/lib/dusty/plan.ts");
+  const p = parsePlan("Here.\n```scopecrete-plan\n" + JSON.stringify([
+    { do: "email", mode: "reply", conversation: "thr_123@agentmail", body: "&gt; Hi Ben,\n&gt;\n&gt; **Thanks** — [date] works." },
+    { do: "email", mode: "reply", body: "no conversation" },
+    { do: "email", mode: "new", to: ["ben@lacontracting.com"], subject: "Sidewalk", body: "Hi" },
+    { do: "email", mode: "new", to: ["not an address"], body: "Hi" },
+    { do: "email", mode: "new", body: "nobody to send to" },
+  ]) + "\n```");
+  assert.equal(p.actions.length, 2);
+  assert.equal(p.dropped, 3);
+  assert.deepEqual(p.actions[0], { do: "email", mode: "reply", conversation: "thr_123@agentmail", contact: null, to: [], cc: [], subject: null, body: "Hi Ben,\n\nThanks — [date] works." });
+  assert.equal(p.actions[1].to[0], "ben@lacontracting.com");
+  assert.ok(RECORD_STEPS.has("email"));
+  assert.match(describe(p.actions[0]), /Draft a reply .*you send it/);
+  assert.match(RECORD_RULES, /"do":"email"/);
+  assert.equal(emailBody("Plain\nbody"), "Plain\nbody");
+});

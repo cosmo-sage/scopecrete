@@ -96,8 +96,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     // The emblem on a page's header toggles him (Coy, 2026-10-10).
     const toggle = () => setDustyOpen((o) => !o);
     window.addEventListener("sc:dusty-open", open);
+    // A plan's result opened on a phone (an email draft) closes him so the page shows (2026-10-14).
+    const close = () => setDustyOpen(false);
     window.addEventListener("sc:dusty-toggle", toggle);
-    return () => { window.removeEventListener("sc:dusty-open", open); window.removeEventListener("sc:dusty-toggle", toggle); };
+    window.addEventListener("sc:dusty-close", close);
+    return () => { window.removeEventListener("sc:dusty-open", open); window.removeEventListener("sc:dusty-toggle", toggle); window.removeEventListener("sc:dusty-close", close); };
   }, []);
   // A vendor's "App access" (081) opens Settings → Organization → People with them picked
   // (the vendor waits in sessionStorage, PENDING_VENDOR_KEY). `detail` may name a section.

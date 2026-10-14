@@ -77,6 +77,11 @@ export type PlanAction =
   // A text to a person, sent through Quo when Coy taps Send (Coy, 2026-10-05: "send text messages through
   // the app through quo manually or through dusty"). to: one of their numbers, or null for the one they use.
   | { do: "text"; contact: string; to: string | null; body: string }
+  // An email drafted into Threads (Coy, 2026-10-14: "I should be able to draft emails inside of threads from Dusty").
+  // Saved as a draft in that conversation (or a new email) — never sent: Coy opens it in the composer and taps Send.
+  // conversation: a key from "The email open" / the intake inbox; null for a new email (then contact or to is needed).
+  | { do: "email"; mode: "reply" | "reply_all" | "forward" | "new"; conversation: string | null; contact: string | null;
+      to: string[]; cc: string[]; subject: string | null; body: string }
   // An appointment on a job and/or a person (migration 110; Coy, 2026-10-13: "a way for Dusty to keep track of my
   // schedule for each job and customer contact lead"). day "YYYY-MM-DD", start / end "HH:MM", Central time.
   // job: a full job id, or job1 made above; contact: a full contact id. At least one.
@@ -98,7 +103,7 @@ export type PlanAction =
       from: "web" | "file" | "words"; contact?: string; key?: string; trades?: string[]; note?: string };
 
 /** Steps that change records rather than a budget — they need no job open. */
-export const RECORD_STEPS = new Set(["archive", "restore", "set_address", "new_job", "new_customer", "attach_contact", "new_contact", "set_name", "file", "file_email", "text", "send_proposal", "new_vendor", "appointment", "update_appointment"]);
+export const RECORD_STEPS = new Set(["archive", "restore", "set_address", "new_job", "new_customer", "attach_contact", "new_contact", "set_name", "file", "file_email", "text", "email", "send_proposal", "new_vendor", "appointment", "update_appointment"]);
 /** A customer (cust1) or job (job1) made earlier in the same plan. */
 export const CUST_KEY = /^cust\d{1,2}$/i;
 export const JOB_KEY = /^job\d{1,2}$/i;
@@ -107,6 +112,20 @@ export const VEND_KEY = /^vend\d{1,2}$/i;
 /** Steps that touch a job's budget — they need the job open. Everything else is the Price book. */
 export const needsJob = (a: PlanAction) =>
   a.do === "add" || a.do === "add_group" || a.do === "new_area" || a.do === "load_assembly" || (a.do === "new_item" && a.add);
+/** An email conversation's key (as /api/emails/drafts takes it) and an address. */
+export const EMAIL_CONV = /^[A-Za-z0-9._:@<>+-]{1,200}$/;
+const EMAIL_ADDR = /^[^\s@<>(),;:"]+@[^\s@<>(),;:"]+\.[a-z]{2,}$/i;
+/**
+ * An email's words as the model wrote them, made plain: "&gt;" and friends read back, and a draft quoted
+ * whole ("> Hi Ben," on every line — Coy, 2026-10-14) un-quoted. Markdown bold markers come off too.
+ */
+export function emailBody(v: unknown): string {
+  if (typeof v !== "string") return "";
+  let t = v.replace(/\r\n?/g, "\n").replace(/&gt;/g, ">").replace(/&lt;/g, "<").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, "&");
+  const lines = t.split("\n");
+  if (lines.filter((l) => l.trim()).every((l) => /^\s*>/.test(l))) t = lines.map((l) => l.replace(/^\s*>\s?/, "")).join("\n");
+  return t.replace(/\*\*([^*]+)\*\*/g, "$1").replace(/\n{3,}/g, "\n\n").trim();
+}
 const FULL_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const RECORD_KINDS = ["contact", "customer", "job"] as const;
 
@@ -369,6 +388,21 @@ function cleanActionBase(raw: unknown): PlanAction | null {
       }
       return { do: "text", contact, to, body };
     }
+    case "email": {
+      const mode = (["reply", "reply_all", "forward", "new"] as const).find((m) => m === r.mode) ?? (typeof r.conversation === "string" && r.conversation.trim() ? "reply" : "new");
+      const conversation = typeof r.conversation === "string" && EMAIL_CONV.test(r.conversation.trim()) ? r.conversation.trim() : null;
+      if (typeof r.conversation === "string" && r.conversation.trim() && r.conversation.trim() !== "null" && !conversation) return null;
+      if (mode !== "new" && !conversation) return null; // a reply needs the conversation it answers
+      const contact = typeof r.contact === "string" && FULL_ID.test(r.contact.trim()) ? r.contact.trim().toLowerCase() : null;
+      const list = (v: unknown) => (Array.isArray(v) ? v : typeof v === "string" ? v.split(/[,;]/) : [])
+        .filter((x): x is string => typeof x === "string").map((x) => x.trim().toLowerCase()).filter(Boolean);
+      const to = list(r.to), cc = list(r.cc);
+      if ([...to, ...cc].some((x) => !EMAIL_ADDR.test(x)) || to.length > 20 || cc.length > 20) return null; // an address that isn't one is no guess
+      const body = emailBody(r.body);
+      if (!body || body.length > 20_000) return null;
+      if (mode === "new" && !to.length && !contact) return null;
+      return { do: "email", mode, conversation, contact, to, cc, subject: str(r.subject, 200), body };
+    }
     case "send_proposal": {
       const job = typeof r.job === "string" && FULL_ID.test(r.job.trim()) ? r.job.trim().toLowerCase() : null;
       const via = r.via === "email" ? "email" : r.via === "text" || r.via === undefined ? "text" : null;
@@ -527,6 +561,11 @@ function describeBase(a: PlanAction, names: { item: (r: string) => string | null
       const num = d.length === 10 ? ` at (${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}` : "";
       return `Text them${num} through Quo: “${a.body}”`;
     }
+    case "email": {
+      const verb = a.mode === "reply" ? "Draft a reply" : a.mode === "reply_all" ? "Draft a reply to all" : a.mode === "forward" ? "Draft a forward" : "Draft a new email";
+      const who = a.to.length ? ` to ${a.to.join(", ")}` : "";
+      return `${verb}${who}${a.subject ? ` — “${a.subject}”` : ""} (saved as a draft in Threads; you send it): “${a.body.length > 400 ? `${a.body.slice(0, 400)}…` : a.body}”`;
+    }
     case "send_proposal": return `${a.via === "email" ? "Email" : "Text"} the proposal${a.via === "email" ? " (opens in your mail app)" : " through Quo"}: “${a.body}”${a.subject ? ` — subject “${a.subject}”` : ""}`;
     case "archive":
     case "restore": {
@@ -595,6 +634,11 @@ Texts. When Coy asks you to text someone (or to write a text and send it), write
 [{"do":"text","contact":"<full contact id from the CONTEXT>","body":"Hi Johnette, this is Coy. I can come measure the driveway Thursday at 9 — does that work?"}]
 \`\`\`
 Coy sees the words and who they go to, and nothing is sent until he taps Send; it then goes through Quo from his line. Only when Coy asks for a text — never on your own, never to someone he didn't name, never a price or a date he didn't give you. Leave out "to" (the app uses the number they text from); give "to" only when Coy names one of their numbers. Use only contact ids written in the CONTEXT; if two people could match, ask. One step per person — never one text to many.
+Emails. When Coy asks you to write, answer, reply to or forward an email, write it the way he would — plain, short, in his voice; no subject line, greeting name only if known, no signature (the app adds his) — and propose it as a draft:
+\`\`\`scopecrete-plan
+[{"do":"email","mode":"reply","conversation":"<the conversation key from The email open, or from the intake inbox>","body":"Hi Ben,\\n\\nThanks for sending the plans. I'll have the concrete price to you by [date]."}]
+\`\`\`
+mode: reply (to the writer), reply_all, forward (give "to"), or new (no conversation; give "to" addresses or "contact" — a full contact id). Leave "to" out on a reply: the app answers the writer. It is saved as a draft in that email's thread in Threads, with an Open link; nothing is sent until Coy taps Send there. Never write the draft as a quote: no ">" in front of lines, no markdown in the body. Never put a price, date or promise in it that Coy or the emails didn't give you — write [price] or [date] for him to fill in. Never say you can't draft emails.
 Proposals. When Coy asks you to send (or text, or email) a job's proposal, write the words the way he sends them — the examples under "Proposals to send" are his own, newest first; follow them closely — with {link} where the link goes, and propose:
 \`\`\`scopecrete-plan
 [{"do":"send_proposal","job":"<full job id from Proposals to send>","via":"text","body":"Hi {first}, here's the proposal for the driveway: {link} Let me know if you have any questions."},

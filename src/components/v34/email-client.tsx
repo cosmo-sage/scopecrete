@@ -263,7 +263,8 @@ export function EmailConversation({ convKey, threadId, draftId }: { convKey: str
   const [err, setErr] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
   const [compose, setCompose] = useState<{ mode: ComposeMode; draft?: DraftRow } | null>(null);
-  const opened = useRef(false);
+  // The draft named in the address that was opened last — a later one (Dusty's next draft) opens too.
+  const opened = useRef<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const router = useRouter();
   const reload = useCallback(() => setTick((n) => n + 1), []);
@@ -274,8 +275,8 @@ export function EmailConversation({ convKey, threadId, draftId }: { convKey: str
       if (off) return;
       setD(b); setErr(null);
       // A draft named in the address opens in the composer, once.
-      const dr = draftId && !opened.current ? b.drafts.find((x) => x.id === draftId) : null;
-      if (dr) { opened.current = true; setCompose({ mode: dr.mode, draft: dr }); }
+      const dr = draftId && opened.current !== draftId ? b.drafts.find((x) => x.id === draftId) : null;
+      if (dr) { opened.current = dr.id; setCompose({ mode: dr.mode, draft: dr }); }
     }).catch((e) => { if (!off) setErr(errText(e)); });
     return () => { off = true; };
   }, [convKey, tick, draftId]);
@@ -351,7 +352,7 @@ export function EmailConversation({ convKey, threadId, draftId }: { convKey: str
       </div>
 
       {compose && (
-        <EmailComposer
+        <EmailComposer key={compose.draft?.id ?? compose.mode}
           mode={compose.mode} draft={compose.draft ?? null} messages={d.messages} ours={d.ours}
           conversation={convKey} replyToId={compose.mode === "new" ? null : ([...d.messages].reverse().find((m) => m.direction !== "out")?.id ?? d.messages[d.messages.length - 1]?.id ?? null)}
           filing={{ customer_id: c.customer_id, contact_id: c.contact_id, job_id: c.job_id, job_title: c.job_title, filed: c.filed }}

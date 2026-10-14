@@ -2,6 +2,7 @@ import { appointmentsForDusty } from "@/lib/appointments-server";
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
 import { buildContext, parseRef, reachBlocks, renderReach } from "@/lib/dusty/context";
+import { emailOpenBlock } from "@/lib/dusty/email-open";
 import { DUSTY_SYSTEM } from "@/lib/dusty/prompt";
 import { PLAN_RULES, RECORD_RULES } from "@/lib/dusty/plan";
 import { FILES_BUCKET } from "@/lib/files";
@@ -68,7 +69,7 @@ export async function POST(req: NextRequest) {
     }, { status: 503 }));
   }
 
-  let body: { question?: unknown; conversation_id?: unknown; context?: unknown; file_ids?: unknown };
+  let body: { question?: unknown; conversation_id?: unknown; context?: unknown; file_ids?: unknown; email?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -109,6 +110,11 @@ export async function POST(req: NextRequest) {
     const reach = renderReach(await reachBlocks(supabase, orgId, ref, asked));
     if (reach) ctx.text += `\n\n${reach}`;
   } catch { /* the page's own context still answers */ }
+  // The email conversation open in Threads, so he can draft a reply into it (2026-10-14).
+  try {
+    const open = await emailOpenBlock(supabase, orgId, body.email);
+    if (open) ctx.text += `\n\n${open}`;
+  } catch { /* the rest of the context still answers */ }
   // The schedule (migration 110): today's date and what's booked, so he can book, move or confirm one.
   ctx.text += `\n\n${await appointmentsForDusty(supabase, orgId)}`;
 

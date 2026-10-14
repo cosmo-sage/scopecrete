@@ -33,6 +33,7 @@ import { PlanCard } from "@/components/v34/plan-card";
 import { hideIds, parsePlan } from "@/lib/dusty/plan";
 import { useDustyUse } from "@/lib/v34/dusty-live";
 import { splitUse } from "@/lib/dusty/use-block";
+import { shareText } from "@/lib/dusty/share";
 import { sendBytes } from "@/components/v34/files-panel";
 import { VoiceRecorder } from "@/components/v34/voice-recorder";
 import { usePref } from "@/lib/v34/prefs";
@@ -49,7 +50,16 @@ type Turn = { role: "user" | "assistant"; content: string; files?: TurnFile[] };
 type Att = { key: string; name: string; pct: number; id: string | null; error: string | null; preview: string | null };
 interface Conv { id: string; title: string; context_kind: string; context_id: string | null; context_label: string | null; updated_at: string }
 
+/** The email conversation open in Threads (/dashboard/messages/email/<key>), so Dusty can draft into it (2026-10-14). */
+export function emailKeyFor(pathname: string): string | null {
+  const m = pathname.match(/^\/dashboard\/messages\/email\/([^/?#]+)/);
+  if (!m || m[1] === "new") return null;
+  try { return decodeURIComponent(m[1]); } catch { return null; }
+}
+
 export function refFor(pathname: string): Ref {
+  // An email conversation is not a person's thread ("email" is no contact id).
+  if (/^\/dashboard\/messages\/email(\/|$)/.test(pathname)) return { kind: "cold" };
   const m = pathname.match(/^\/dashboard\/(messages|scope|customers)\/([^/?#]+)/);
   if (m) return { kind: m[1] === "messages" ? "thread" : m[1] === "scope" ? "scope" : "customer", id: m[2] };
   // A vendor's page is a person (its id is the contact's): Dusty reads them as on their thread.
@@ -86,6 +96,7 @@ export function DustyPanel({ open, onClose, onBusy, onStream, onState }: {
 }) {
   const pathname = usePathname();
   const ref = refFor(pathname);
+  const emailKey = emailKeyFor(pathname);
   const refKey = JSON.stringify(ref);
 
   const [convs, setConvs] = useState<Conv[] | null>(null);
@@ -129,6 +140,9 @@ export function DustyPanel({ open, onClose, onBusy, onStream, onState }: {
   const [fontKey, setFontKey] = usePref<string>("dusty_font", "m");
   const font = FONT_STEPS.find((f) => f.key === fontKey) ?? FONT_STEPS[1];
   const [fontOpen, setFontOpen] = useState(false);
+  // Share (Coy, 2026-10-14): the last answer or the whole chat, through the phone's share sheet; copied where there is none.
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareNote, setShareNote] = useState<string | null>(null);
   const scroller = useRef<HTMLDivElement | null>(null);
   const abort = useRef<AbortController | null>(null);
   const router = useRouter();
@@ -298,7 +312,7 @@ export function DustyPanel({ open, onClose, onBusy, onStream, onState }: {
     try {
       const r = await fetch("/api/dusty", {
         method: "POST", headers: { "Content-Type": "application/json" }, signal: ctrl.signal,
-        body: JSON.stringify({ question: q, conversation_id: convId, context: convId ? undefined : ref, file_ids: ready.map((a) => a.id) }),
+        body: JSON.stringify({ question: q, conversation_id: convId, context: convId ? undefined : ref, file_ids: ready.map((a) => a.id), email: emailKey ?? undefined }),
       });
       if (!r.ok || !r.body) {
         const b = await r.json().catch(() => ({}));
@@ -334,6 +348,21 @@ export function DustyPanel({ open, onClose, onBusy, onStream, onState }: {
     if (!window.confirm("Delete this conversation? It can't be brought back.")) return;
     const r = await fetch(`/api/dusty/conversations/${id}`, { method: "DELETE" });
     if (r.ok) { if (id === activeId) select(null); setListTick((n) => n + 1); }
+  }
+
+  async function share(which: "last" | "chat") {
+    setShareOpen(false);
+    const title = active?.title ? `Dusty · ${active.title}` : "Dusty";
+    const text = shareText(items, which, which === "chat" ? title : null);
+    if (!text) { setShareNote("Nothing to share yet"); setTimeout(() => setShareNote(null), 2200); return; }
+    const nav = navigator as Navigator & { share?: (d: { title?: string; text?: string }) => Promise<void> };
+    if (typeof nav.share === "function") {
+      try { await nav.share({ title, text }); return; }
+      catch (e) { if ((e as Error)?.name === "AbortError") return; /* no share sheet after all: copy */ }
+    }
+    try { await navigator.clipboard.writeText(text); setShareNote(which === "chat" ? "Chat copied" : "Answer copied"); }
+    catch { setShareNote("Couldn't copy — your browser blocked it"); }
+    setTimeout(() => setShareNote(null), 2200);
   }
 
   async function copy(i: number, text: string) {
@@ -501,6 +530,32 @@ export function DustyPanel({ open, onClose, onBusy, onStream, onState }: {
           <div className="flex-1 min-w-0" title={active ? active.title : undefined}
             style={{ fontFamily: disp, fontSize: 16, fontWeight: 700, letterSpacing: ".04em", textTransform: "uppercase", lineHeight: 1.1 }}>
             Dusty
+          </div>
+          {/* Share the last answer or the whole chat (2026-10-14). */}
+          <div className="relative">
+            <button onClick={() => setShareOpen((o) => !o)} aria-label="Share" aria-expanded={shareOpen} title="Share"
+              style={{ ...iconBtn, color: T.ink2, background: shareOpen ? T.chalkDim : T.card }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M12 3v12" /><path d="M7.5 7.5 12 3l4.5 4.5" /><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7" />
+              </svg>
+            </button>
+            {shareOpen && (
+              <>
+                <button aria-label="Close the menu" onClick={() => setShareOpen(false)} className="fixed inset-0" style={{ zIndex: 70, cursor: "default" }} />
+                <div role="menu" aria-label="Share" className="absolute right-0 mt-1 rounded overflow-hidden"
+                  style={{ zIndex: 71, width: 200, background: T.card, border: `1px solid ${T.hair}`, boxShadow: "0 10px 30px rgba(0,0,0,.18)" }}>
+                  <div className="px-3 pt-2 pb-1" style={{ ...eyebrow, color: T.ink3 }}>Share</div>
+                  {([["last", "The last answer"], ["chat", "The whole chat"]] as const).map(([k, label]) => (
+                    <button key={k} role="menuitem" onClick={() => void share(k)} className="w-full text-left px-3 py-2"
+                      style={{ borderTop: `1px solid ${T.hairSoft}`, cursor: "pointer", fontFamily: agent, fontSize: 14, color: T.ink }}>{label}</button>
+                  ))}
+                </div>
+              </>
+            )}
+            {shareNote && (
+              <div role="status" className="absolute right-0 mt-1 px-2.5 py-1.5 rounded whitespace-nowrap"
+                style={{ zIndex: 71, background: T.ink, color: T.card, fontSize: F.xs }}>{shareNote}</div>
+            )}
           </div>
           {/* The chat's text size, saved to the account (dusty_font). */}
           <div className="relative">

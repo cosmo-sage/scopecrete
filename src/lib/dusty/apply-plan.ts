@@ -13,6 +13,7 @@ const FULL_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 import { archiveNow } from "@/components/v34/archive-actions";
 import { expectMessage } from "@/lib/v34/live-threads";
 import { sendProposal } from "@/lib/v34/send-proposal";
+import { forwardBody, forwardSubject, replySubject, replyTargets, type MailRow } from "@/lib/email-client";
 
 export interface PlanLookup {
   items: Array<{ id: string; name: string; cost_group_id: string | null }>;
@@ -21,7 +22,8 @@ export interface PlanLookup {
   takeoff: Array<{ id: string; name: string }>;
   assemblies: Array<{ id: string; name: string; items: Array<{ id: string; cost_item_id: string }> }>;
 }
-export interface StepResult { ok: boolean; text: string }
+/** href: where the result can be seen — an email draft opens in its thread (Coy, 2026-10-14). */
+export interface StepResult { ok: boolean; text: string; href?: string; hrefLabel?: string }
 
 async function call(url: string, method: string, body?: unknown) {
   const r = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
@@ -91,7 +93,7 @@ export async function applyPlan(jobId: string | null, actions: PlanAction[], loo
   };
   // Groups first, so items can be filed in them; then changes; then the budget.
   const order = { new_group: 0, rename_group: 1, update_item: 1, new_area: 2, new_item: 3, vendor_price: 4, retire_item: 4, new_assembly: 5, add_to_assembly: 6, remove_from_assembly: 6,
-    add: 7, add_group: 8, load_assembly: 9, remove_group: 10, set_tax: 10, archive: 11, restore: 11, set_address: 11, new_job: 11, new_customer: 11, attach_contact: 11, new_contact: 11, set_name: 11, file: 11, file_email: 11, text: 11, send_proposal: 11, new_vendor: 11, appointment: 11, update_appointment: 11 } as const;
+    add: 7, add_group: 8, load_assembly: 9, remove_group: 10, set_tax: 10, archive: 11, restore: 11, set_address: 11, new_job: 11, new_customer: 11, attach_contact: 11, new_contact: 11, set_name: 11, file: 11, file_email: 11, text: 11, email: 11, send_proposal: 11, new_vendor: 11, appointment: 11, update_appointment: 11 } as const;
   // Archive / restore steps run through applyRecords (no job needed).
   const steps = [...actions].filter((a) => !RECORD_STEPS.has(a.do)).sort((a, b) => order[a.do] - order[b.do]);
   for (const a of steps) {
@@ -358,6 +360,44 @@ export async function applyRecords(actions: PlanAction[]): Promise<StepResult[]>
           out.push({ ok: true, text: `Sent to ${String(r.to).replace(/^\+1(\d{3})(\d{3})(\d{4})$/, "($1) $2-$3")} through Quo — it shows in their thread once Quo confirms` });
         } catch (e) {
           out.push({ ok: false, text: `Text not sent: ${e instanceof Error ? e.message : String(e)}` });
+        }
+        continue;
+      }
+      if (a.do === "email") {
+        try {
+          let to = a.to, cc = a.cc, subject = a.subject, body = a.body, replyTo: string | null = null;
+          let filing: Record<string, string | null> = {};
+          if (a.conversation) {
+            // The conversation as its page reads it: who a reply goes to, its subject, what a forward carries.
+            const c = await call(`/api/emails/threads/${encodeURIComponent(a.conversation)}`, "GET") as { messages: MailRow[]; ours: string[] };
+            const msgs = c.messages ?? [];
+            const last = msgs[msgs.length - 1];
+            if (a.mode === "reply" || a.mode === "reply_all") {
+              const t = replyTargets(msgs, a.mode, c.ours ?? []);
+              if (!to.length) to = t.to;
+              if (!cc.length) cc = t.cc;
+              subject = subject ?? replySubject(last?.subject);
+              replyTo = ([...msgs].reverse().find((m) => m.direction !== "out") ?? last)?.id ?? null;
+            } else if (a.mode === "forward" && last) {
+              subject = subject ?? forwardSubject(last.subject);
+              body = `${body}\n\n${forwardBody(last)}`;
+            }
+            if (last) filing = { customer_id: last.customer_id, contact_id: last.contact_id, job_id: last.job_id };
+          } else if (a.contact && !to.length) {
+            const p = await call(`/api/people/${a.contact}`, "GET") as { contact?: { email_list?: Array<{ email: string }> } };
+            const first = (p.contact?.email_list ?? [])[0]?.email;
+            if (first) to = [first.toLowerCase()];
+            filing = { contact_id: a.contact };
+          }
+          const r = await call("/api/emails/drafts", "POST", { mode: a.mode, conversation: a.conversation, reply_to_email_id: replyTo, to, cc,
+            subject: subject ?? "", body, file_ids: [], by: "dusty", ...filing });
+          const id = r.draft?.id as string;
+          const href = a.conversation
+            ? `/dashboard/messages/email/${encodeURIComponent(a.conversation)}?draft=${id}`
+            : `/dashboard/messages/email/new?draft=${id}`;
+          out.push({ ok: true, text: `Draft saved${to.length ? ` to ${to.join(", ")}` : " — add who it goes to"}. Open it, check it and tap Send — nothing has gone out`, href, hrefLabel: "Open the draft ›" });
+        } catch (e) {
+          out.push({ ok: false, text: `Draft not saved: ${e instanceof Error ? e.message : String(e)}` });
         }
         continue;
       }

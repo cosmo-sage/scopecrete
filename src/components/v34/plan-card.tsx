@@ -8,6 +8,7 @@
  * the real names they touch, read from the database — not Dusty's label.
  */
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { T, F, disp, eyebrow } from "@/lib/v34/tokens";
 import { CUST_KEY, VEND_KEY, describe, needsJob as stepNeedsJob, RECORD_STEPS, type PlanAction } from "@/lib/dusty/plan";
 import { applyPlan, applyRecords, applyVendors, byRef, loadLookup, type PlanLookup, type StepResult } from "@/lib/dusty/apply-plan";
@@ -15,6 +16,12 @@ import { applyPlan, applyRecords, applyVendors, byRef, loadLookup, type PlanLook
 export function PlanCard({ jobId, actions, dropped, done }: { jobId: string | null; actions: PlanAction[]; dropped: number; done: boolean }) {
   const [look, setLook] = useState<PlanLookup | null>(null);
   const [state, setState] = useState<"idle" | "running" | "done">("idle");
+  const router = useRouter();
+  // A result to look at (an email draft): opens its page; on a phone the chat steps aside so it shows.
+  const openResult = (href: string) => {
+    if (typeof window !== "undefined" && window.innerWidth < 1024) window.dispatchEvent(new Event("sc:dusty-close"));
+    router.push(href);
+  };
   const [results, setResults] = useState<StepResult[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [names, setNames] = useState<Record<string, string>>({});
@@ -51,7 +58,8 @@ export function PlanCard({ jobId, actions, dropped, done }: { jobId: string | nu
   const needsJob = budgetSteps.some(stepNeedsJob);
   const texts = actions.filter((a) => a.do === "text" || (a.do === "send_proposal" && a.via === "text")).length;
   const sends = actions.filter((a) => a.do === "text" || a.do === "send_proposal").length;
-  const verb = sends && sends === actions.length ? (sends === 1 ? "Send" : `Send ${sends}`) : "Apply";
+  const drafts = actions.filter((a) => a.do === "email").length;
+  const verb = sends && sends === actions.length ? (sends === 1 ? "Send" : `Send ${sends}`) : drafts && drafts === actions.length ? (drafts === 1 ? "Save draft" : `Save ${drafts} drafts`) : "Apply";
   const ready = budgetSteps.length ? !!look : done;
   const nm = {
     area: (r: string | null) => {
@@ -183,10 +191,19 @@ export function PlanCard({ jobId, actions, dropped, done }: { jobId: string | nu
       {needsJob && !jobId && <div className="px-3 pb-2" style={{ fontSize: F.xs, color: T.ink3 }}>Steps that touch a budget need the job open — they&apos;ll be skipped here. Open the job and ask there.</div>}
       {recordSteps.some((x) => x.do === "archive" || x.do === "restore") && state !== "done" && <div className="px-3 pb-2" style={{ fontSize: F.xs, color: T.ink3 }}>Archived threads come back if they call or text again; deleted things can be restored. Nothing is erased.</div>}
       {actions.some((x) => x.do === "new_vendor") && state !== "done" && <div className="px-3 pb-2" style={{ fontSize: F.xs, color: T.ink3 }}>{actions.some((x) => x.do === "new_vendor" && x.from === "web") ? "Found on the web — open the link and check the number before you call. " : "Check the number against the document before you call. "}If their number is already a contact, that contact is filed as the vendor and filled in. Once they&apos;re added, a call to that number lands on their thread with its recording.</div>}
+      {drafts > 0 && state !== "done" && <div className="px-3 pb-2" style={{ fontSize: F.xs, color: T.ink3 }}>Saved as a draft in the email&apos;s thread in Threads — open it, change anything, and tap Send there. Nothing goes out from here.</div>}
       {sends > 0 && state !== "done" && <div className="px-3 pb-2" style={{ fontSize: F.xs, color: T.ink3 }}>{texts ? "Texts go through Quo from your line; " : ""}{sends > texts ? "an email opens in your mail app for you to send; " : ""}nothing goes out until you tap {verb}. Change the words first if you like — Dusty learns from what you change.</div>}
       {state === "done" && (
         <div className="px-3 py-2" style={{ borderTop: `1px solid ${T.hair}`, fontSize: F.xs }}>
-          {results.map((r, i) => <div key={i} style={{ color: r.ok ? T.green : T.red }}>{r.ok ? "✓" : "✗"} {r.text}</div>)}
+          {results.map((r, i) => (
+            <div key={i} style={{ color: r.ok ? T.green : T.red }}>
+              {r.ok ? "✓" : "✗"} {r.text}
+              {r.href && (
+                <button type="button" onClick={() => openResult(r.href!)}
+                  style={{ marginLeft: 6, fontWeight: 700, color: T.ink, textDecoration: "underline", cursor: "pointer", background: "none" }}>{r.hrefLabel ?? "Open ›"}</button>
+              )}
+            </div>
+          ))}
         </div>
       )}
       {err && <div className="px-3 pb-2" style={{ fontSize: F.xs, color: T.red }}>{err}</div>}

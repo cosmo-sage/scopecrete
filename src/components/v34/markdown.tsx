@@ -8,7 +8,7 @@
 
 import React from "react";
 import { T, F, nums } from "@/lib/v34/tokens";
-import { parseMarkdown, type Inline } from "@/lib/markdown";
+import { parseMarkdown, type Inline, type MdBlock } from "@/lib/markdown";
 
 function Text({ parts }: { parts: Inline[] }) {
   return <>{parts.map((p, i) => p.t === "b" ? <b key={i}>{p.v}</b> : p.t === "i" ? <em key={i}>{p.v}</em>
@@ -16,15 +16,14 @@ function Text({ parts }: { parts: Inline[] }) {
     : <React.Fragment key={i}>{p.v}</React.Fragment>)}</>;
 }
 
-/** Memoised: while an answer streams, the earlier answers are not re-parsed. */
-export const Markdown = React.memo(function Markdown({ text, size = F.md }: { text: string; size?: number }) {
-  const blocks = parseMarkdown(text);
+function Blocks({ blocks }: { blocks: MdBlock[] }) {
   return (
-    <div className="sc-md" style={{ fontSize: size, lineHeight: 1.6, color: T.ink }}>
+    <>
       {blocks.map((b, i) => {
         const gap = { margin: i === 0 ? "0 0 8px" : "8px 0" };
         if (b.k === "h") return <div key={i} style={{ ...gap, fontWeight: 700, fontSize: b.level === 1 ? F.lg : F.md }}><Text parts={b.text} /></div>;
         if (b.k === "p") return <p key={i} style={gap}><Text parts={b.text} /></p>;
+        if (b.k === "quote") return <blockquote key={i} style={{ ...gap, borderLeft: `3px solid ${T.hairStrong}`, padding: "2px 0 2px 12px", color: T.ink }}><Blocks blocks={b.blocks} /></blockquote>;
         if (b.k === "code") return <pre key={i} style={{ ...gap, background: T.sunk, padding: 8, borderRadius: 4, fontSize: F.sm, overflowX: "auto", whiteSpace: "pre" }}>{b.v}</pre>;
         if (b.k === "ul") return <ul key={i} style={{ ...gap, paddingLeft: 20, listStyle: "disc" }}>{b.items.map((it, j) => <li key={j}><Text parts={it} /></li>)}</ul>;
         if (b.k === "ol") return <ol key={i} style={{ ...gap, paddingLeft: 20, listStyle: "decimal" }}>{b.items.map((it, j) => <li key={j}><Text parts={it} /></li>)}</ol>;
@@ -43,6 +42,15 @@ export const Markdown = React.memo(function Markdown({ text, size = F.md }: { te
           </div>
         );
       })}
+    </>
+  );
+}
+
+/** Memoised: while an answer streams, the earlier answers are not re-parsed. */
+export const Markdown = React.memo(function Markdown({ text, size = F.md }: { text: string; size?: number }) {
+  return (
+    <div className="sc-md" style={{ fontSize: size, lineHeight: 1.6, color: T.ink }}>
+      <Blocks blocks={parseMarkdown(text)} />
     </div>
   );
 });

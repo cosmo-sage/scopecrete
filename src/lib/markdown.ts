@@ -4,7 +4,8 @@
  * tests/markdown.test.mjs — and it returns data, never HTML: the chat renders
  * the tree with React, so nothing in a reply can become markup or script.
  *
- * Blocks: # headings, | tables |, - / * / 1. lists, ``` code, paragraphs.
+ * Blocks: # headings, | tables |, - / * / 1. lists, ``` code, > quotes,
+ * paragraphs. A quote may come as "&gt;" (a model escaping its own reply).
  * Inline: **bold**, *italic*, `code`.
  */
 
@@ -15,9 +16,14 @@ export type MdBlock =
   | { k: "ul"; items: Inline[][] }
   | { k: "ol"; items: Inline[][] }
   | { k: "table"; head: Inline[][]; rows: Inline[][][]; align: Array<"left" | "right" | "center"> }
-  | { k: "code"; v: string };
+  | { k: "code"; v: string }
+  | { k: "quote"; blocks: MdBlock[] };
 
-export function inline(s: string): Inline[] {
+/** "&gt;" and friends, written out by a model that escaped its own reply. */
+const unescape = (s: string) => s.replace(/&gt;/g, ">").replace(/&lt;/g, "<").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, "&");
+
+export function inline(raw: string): Inline[] {
+  const s = unescape(raw);
   const out: Inline[] = [];
   const re = /(\*\*([^*]+)\*\*|`([^`]+)`|\*([^*\s][^*]*)\*)/g;
   let last = 0;
@@ -35,6 +41,8 @@ export function inline(s: string): Inline[] {
 const cells = (row: string) => row.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((c) => c.trim());
 const isSep = (row: string) => /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/.test(row);
 
+const QUOTE = /^\s*(?:>|&gt;)\s?/;
+
 export function parseMarkdown(src: string): MdBlock[] {
   const lines = src.replace(/\r\n?/g, "\n").split("\n");
   const out: MdBlock[] = [];
@@ -47,6 +55,15 @@ export function parseMarkdown(src: string): MdBlock[] {
       const body: string[] = [];
       for (i++; i < lines.length && !/^\s*```/.test(lines[i]); i++) body.push(lines[i]);
       out.push({ k: "code", v: body.join("\n") });
+      continue;
+    }
+    if (QUOTE.test(l)) {
+      flush();
+      const body: string[] = [];
+      for (; i < lines.length && QUOTE.test(lines[i]); i++) body.push(lines[i].replace(QUOTE, ""));
+      i--;
+      const inner = parseMarkdown(body.join("\n"));
+      if (inner.length) out.push({ k: "quote", blocks: inner });
       continue;
     }
     const h = l.match(/^\s*(#{1,3})\s+(.*)$/);

@@ -181,9 +181,9 @@ const BID_STATE: Record<string, string> = {
  */
 async function inboxBlock(sb: Sb, orgId: string): Promise<Block> {
   const { data } = await sb.from("emails")
-    .select("id, subject, original_from_name, original_from_address, from_address, created_at, status, job_id, customer_id, contact_id, text_body")
+    .select("id, conversation, subject, original_from_name, original_from_address, from_address, created_at, status, job_id, customer_id, contact_id, text_body")
     .eq("org_id", orgId).order("created_at", { ascending: false }).limit(8);
-  const rows = (data ?? []) as Array<{ id: string; subject: string | null; original_from_name: string | null; original_from_address: string | null; from_address: string | null; created_at: string; status: string; job_id: string | null; customer_id: string | null; contact_id: string | null; text_body: string | null }>;
+  const rows = (data ?? []) as Array<{ id: string; conversation?: string | null; subject: string | null; original_from_name: string | null; original_from_address: string | null; from_address: string | null; created_at: string; status: string; job_id: string | null; customer_id: string | null; contact_id: string | null; text_body: string | null }>;
   const title = "The intake inbox — latest forwarded emails, newest first (times UTC)";
   if (!rows.length) return { title, lines: ["No emails have come in."] };
   const ids = rows.map((r) => r.id);
@@ -209,7 +209,7 @@ async function inboxBlock(sb: Sb, orgId: string): Promise<Block> {
     const p = pkg.get(e.id);
     const who = e.original_from_name || e.original_from_address || e.from_address || "unknown";
     const filed = [e.customer_id ? `customer "${cust.get(e.customer_id) ?? "unnamed"}"` : "", e.contact_id ? `person "${person.get(e.contact_id) ?? "unnamed"}"` : "", e.job_id ? `job "${job.get(e.job_id) ?? "untitled"}"` : ""].filter(Boolean);
-    const head = `- [${day(e.created_at)}] email ${e.id} from ${who} — "${e.subject || "(no subject)"}" · ${filed.length ? `filed on ${filed.join(", ")}` : e.status}${p ? ` · bid reader: ${BID_STATE[p.state] ?? p.state}${p.error ? ` (${p.error})` : ""}` : ""}${e.text_body ? "" : " · (its text didn't come through)"}`.slice(0, 500);
+    const head = `- [${day(e.created_at)}] email ${e.id}${e.conversation ? ` (conversation ${e.conversation})` : ""} from ${who} — "${e.subject || "(no subject)"}" · ${filed.length ? `filed on ${filed.join(", ")}` : e.status}${p ? ` · bid reader: ${BID_STATE[p.state] ?? p.state}${p.error ? ` (${p.error})` : ""}` : ""}${e.text_body ? "" : " · (its text didn't come through)"}`.slice(0, 500);
     return [head,
       ...filesOf(e.id).slice(0, 12).map((f) => `    came with: ${f.name.slice(0, 140)} (file ${f.id})`),
       ...waitingOf(e.id).slice(0, 6).map((a) => `    came with: ${a.name.slice(0, 140)} — not copied in yet (${a.fetch_state})`)];

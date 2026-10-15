@@ -94,6 +94,9 @@ export interface BudgetSummary {
   areas: Record<string, { lines: number; cost: number; price: number; blocked: number }>;
 }
 
+/** A cost code is the number a JobTread group's name starts with (migration 050 made codes into groups). */
+const costCode = (group: string | null | undefined) => group?.trim().match(/^(\d[\d.\-]*)\s/)?.[1] ?? null;
+
 async function call(url: string, method: string, body?: unknown) {
   const r = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
   const b = await r.json().catch(() => ({}));
@@ -355,6 +358,11 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
                                 style={{ position: "absolute", top: 4, left: 4, color: T.ink3, cursor: "pointer" }}><Trash /></button>
                               {/* Coy, 2026-10-05: "This line needs to be removed. And I should be able to add/edit the notes under this
                                   and any cost item." Only what changes the price stays as a tag; the note is edited in place. */}
+                              {/* Its cost code (read off its Price book group, "2800 Concrete" → 2800) and its cost type (Coy, 2026-10-15). */}
+                              <div style={{ fontSize: 9.5, color: T.ink3, ...clip }}>
+                                {costCode(l.cost_group_id ? data.groups.find((g) => g.id === l.cost_group_id)?.name : null) ? `${costCode(l.cost_group_id ? data.groups.find((g) => g.id === l.cost_group_id)?.name : null)} · ` : ""}
+                                {COST_TYPE_LABEL[l.cost_type as CostType] ?? "Other"}
+                              </div>
                               {(optLabel(l.option_id) || addons.has(l.id)) && (
                                 <div style={{ fontSize: 9.5, color: T.chalk, ...clip }}>
                                   {optLabel(l.option_id) ? `${optLabel(l.option_id)} only` : ""}

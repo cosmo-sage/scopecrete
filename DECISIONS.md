@@ -1626,7 +1626,7 @@ them out. Trigger `contacts_bucket_jobs` → `sc_customer_job_for()`:
 - **A new caller becomes a customer and a job on their own (migration 108,
   applied 2026-10-13 on Coy's "Apply 108" — checked after: the new body,
   SECURITY DEFINER, the trigger, anon no execute, every open job's customer
-  filled; `enrich-contacts` changes waiting on a deploy).** Coy, on Brittany LaRochelle's thread: *"between the transcribed
+  filled; `enrich-contacts` v30 deployed 2026-10-15 on Coy's "deploy enrich-contacts", read back equal to the repo).** Coy, on Brittany LaRochelle's thread: *"between the transcribed
   voicemail, the text messages, and my responses, the system should have had
   enough information to enrich the contact with her name, email, address. then
   create a customer … then create a job and pull in the photos and prompt me
@@ -1672,8 +1672,8 @@ them out. Trigger `contacts_bucket_jobs` → `sc_customer_job_for()`:
   Each is one line in fewer words (`shortTask()`: no "(#7)", no "per Jeremy's …" tail; a tap shows
   it whole), three then "+ N more", a tick for done and × to remove (dismissed). **+ Add to-do**
   files Coy's own on the job's person (else the customer's primary) for this job, through `POST
-  /api/people/[id]/tasks`. The reader (in the repo with the 108 changes, waiting on the same
-  deploy) asks for 3–7 words under 50 characters and adds no step that `sameTask()` matches with
+  /api/people/[id]/tasks`. The reader (`enrich-contacts` v30, deployed with the 108 changes
+  2026-10-15) asks for 3–7 words under 50 characters and adds no step that `sameTask()` matches with
   one the person already has, open, done or dismissed (prompt `enrich-v14-short-next-steps`).
   Rehearsed (rolled back) on the live data: an unnamed caller filed by Dusty
   got nothing; named, they got a customer (unconfirmed), "McTest Driveway
@@ -5796,8 +5796,8 @@ additive changes only, with confirmation.
   Threads, Dusty's reading card) slows to every 5 minutes after ten minutes
   with no input (`src/lib/v34/idle-poll.ts`); Threads polls once a minute
   while Realtime is connected. The real fix is compute: Pro, with at least
-  the Micro instance its credit covers. In the repo, waiting on Coy's
-  "deploy enrich-contacts" (one deploy with the new-caller changes):
+  the Micro instance its credit covers. Since `enrich-contacts` v30 (deployed
+  2026-10-15 on Coy's "deploy enrich-contacts", with the new-caller changes)
   enrich-contacts runs its name and bucket rechecks only on minutes ending
   in 0, every 10 minutes instead of every minute.
 - **Fonts are self-hosted (2026-10-05).** Every typeface the app and site

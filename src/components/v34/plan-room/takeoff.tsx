@@ -423,10 +423,11 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
             )} />
         </div>
       ) : (
-        <button onClick={() => setPanel(true)} aria-label="Show parameters" className="hidden lg:flex flex-col items-center pt-3 gap-2"
+        <button onClick={() => setPanel(true)} aria-label="Show parameters and sheets" className="hidden lg:flex flex-col items-center pt-3 gap-2"
           style={{ width: 44, borderRight: `1px solid ${T.hair}`, background: T.card, cursor: "pointer" }}>
           <span style={{ fontSize: 16 }}>›</span>
           <span style={{ ...eyebrow, writingMode: "vertical-rl", color: T.ink3 }}>Parameters · {data.params.length}</span>
+          <span style={{ ...eyebrow, writingMode: "vertical-rl", color: T.ink3 }}>Sheets · {sheets.length}</span>
         </button>
       )}
 
@@ -540,7 +541,7 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
           })()}
           {sel && !pins.limited && <button onClick={() => pins.place(shapeMiddle(sel.geometry), sel.id)} title={`Ask someone about ${selName}`} style={tb(false)}>Ask about this</button>}
           {sel && <button onClick={() => setShapePhotos(true)} title={`Photos of ${selName} — they show on its budget section and the proposal`} style={tb(false)}>Shape photos{selPhotos ? ` (${selPhotos})` : ""}</button>}
-          {sheet?.scale_ft_per_pt && sheets.length > 1 && <button onClick={() => setCopyScale({ k: sheet.scale_ft_per_pt as number, from: sheet.id })} title="Put this sheet's scale on every sheet, or the ones you pick" style={tb(false)}>Scale → other sheets</button>}
+          {sheet?.scale_ft_per_pt && sheets.length > 1 && <button onClick={() => setCopyScale({ k: sheet.scale_ft_per_pt as number, from: sheet.id })} title="Put this sheet's scale on every sheet, or the ones you pick" style={tb(false)}>Copy Sheet Scale</button>}
           <span className="inline-flex items-center" title="Zoom: the scroll wheel zooms where the pointer is" style={{ border: `1px solid ${T.hair}`, borderRadius: 3, flex: "0 0 auto" }}>
             <button onClick={() => setZoom((z) => Math.max(0.5, z / 1.25))} aria-label="Zoom out" style={zb}>−</button>
             <span style={{ fontFamily: strong, fontSize: 11, width: 40, textAlign: "center", ...nums }}>{Math.round(zoom * 100)}%</span>
@@ -664,7 +665,7 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
 
 const clipTxt: React.CSSProperties = { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
 
-const zb: React.CSSProperties = { width: 28, height: 28, background: "transparent", border: "none", cursor: "pointer", fontSize: 15, color: T.ink };
+const zb: React.CSSProperties = { width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, lineHeight: 1, background: "transparent", border: "none", cursor: "pointer", fontSize: 15, color: T.ink };
 const tb = (on: boolean): React.CSSProperties => ({
   height: 30, padding: "0 10px", borderRadius: 3, flex: "0 0 auto", cursor: "pointer",
   border: `1px solid ${on ? T.hiviz : T.hair}`, background: on ? T.hivizDim : T.card, color: on ? T.hivizText : T.ink,

@@ -2,6 +2,7 @@ import type { ApiSession } from "@/lib/api-auth";
 import { loadTakeoff, sheetScales } from "@/lib/plans-server";
 import { sectionPatch, sectionTakeoff, type SectionLink, type SectionTakeoff, type ShapeIn } from "@/lib/takeoff-sections";
 import type { ParameterIn } from "@/lib/takeoff";
+import { sizePatch, sizeTotals, type SizeRow } from "@/lib/section-sizes";
 
 type Sb = ApiSession["supabase"];
 
@@ -46,9 +47,14 @@ export async function syncTakeoffSections(sb: Sb, orgId: string, jobId: string, 
   const scales = sheetScales((sheets ?? []) as Parameters<typeof sheetScales>[0]);
   const touch = new Set(touched.filter(Boolean) as string[]);
   const linked = new Set(shapes.map((s) => s.section_id).filter(Boolean) as string[]);
+  const withRows = await sizeRowsBySection(sb, orgId, jobId);
   let n = 0;
   for (const s of sections) {
     if (!linked.has(s.id) && !touch.has(s.id)) continue;
+    if (withRows[s.id]?.length) {
+      if (await writeSizes(sb, orgId, jobId, s.id, withRows[s.id], s.takeoff_sync ? sectionTakeoff(s.id, shapes, ps, scales) : null)) n++;
+      continue;
+    }
     const patch = sectionPatch({ ...s, sqft_override: num(s.sqft_override), count_qty: num(s.count_qty), length_ft: num(s.length_ft), width_ft: num(s.width_ft), depth_in: num(s.depth_in) },
       sectionTakeoff(s.id, shapes, ps, scales), touch.has(s.id));
     if (!patch) continue;
@@ -67,4 +73,35 @@ export async function groupSection(sb: Sb, orgId: string, parameterId: string): 
   if (ids.size !== 1) return null;
   const [only] = [...ids];
   return only ?? null;
+}
+
+export const SIZE_ROW_COLS = "id, section_id, label, mode, length_ft, width_ft, sqft, qty, unit, width_in, depth_in, sort_order";
+
+/** Each section's size rows (migration 111); an empty map when the table isn't there yet. */
+export async function sizeRowsBySection(sb: Sb, orgId: string, jobId: string): Promise<Record<string, Array<SizeRow & { id: string; section_id: string }>>> {
+  const { data, error } = await sb.from("job_section_sizes").select(SIZE_ROW_COLS).eq("org_id", orgId).eq("job_id", jobId).order("sort_order").order("created_at");
+  if (error) return {};
+  const out: Record<string, Array<SizeRow & { id: string; section_id: string }>> = {};
+  for (const r of (data ?? []) as Array<Record<string, unknown>>) {
+    const row = { ...r } as unknown as SizeRow & { id: string; section_id: string };
+    for (const f of ["length_ft", "width_ft", "sqft", "qty", "width_in", "depth_in"] as const) row[f] = num(r[f]);
+    (out[row.section_id] ??= []).push(row);
+  }
+  return out;
+}
+
+async function writeSizes(sb: Sb, orgId: string, jobId: string, sectionId: string, rows: SizeRow[], t: SectionTakeoff | null): Promise<boolean> {
+  const patch = sizePatch(sizeTotals(rows, t && t.unit ? { unit: t.unit, total: t.total, depth_in: t.depth_in } : null));
+  if (!patch) return false;
+  const { error } = await sb.from("job_sections").update({ ...patch, updated_at: new Date().toISOString() }).eq("org_id", orgId).eq("job_id", jobId).eq("id", sectionId);
+  return !error;
+}
+
+/** After a size row changes: the section's size is the rows' total, plus its takeoffs when it follows them. */
+export async function syncSectionSizes(sb: Sb, orgId: string, jobId: string, sectionId: string): Promise<void> {
+  const rows = (await sizeRowsBySection(sb, orgId, jobId))[sectionId] ?? [];
+  if (!rows.length) return;
+  const { data: sec } = await sb.from("job_sections").select("takeoff_sync").eq("org_id", orgId).eq("job_id", jobId).eq("id", sectionId).maybeSingle();
+  const t = sec?.takeoff_sync ? (await sectionTakeoffs(sb, orgId, jobId))[sectionId] ?? null : null;
+  await writeSizes(sb, orgId, jobId, sectionId, rows, t);
 }

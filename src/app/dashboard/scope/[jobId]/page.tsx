@@ -50,6 +50,7 @@ import {
 import { isReinforcementCard } from "@/lib/cost-cards";
 import { useAccess } from "@/lib/v34/access-ctx";
 import { can } from "@/lib/access";
+import { SectionSizes } from "@/components/v34/section-sizes";
 import { SectionTakeoffStrip, groupOf, shapesOf } from "@/components/v34/section-takeoff";
 import { fmtQty } from "@/lib/takeoff";
 
@@ -461,6 +462,7 @@ export default function ScopeBuilder() {
                       money={budget?.areas?.[s.id] ?? null} err={saveErr[s.id]} rcards={rcards} jobType={job.job_type} jobId={jobId} onSlot={onSlot}
                       sheets={sheetsOf(s)} hasPlans={planSheets.length > 0} onSheets={(start) => openSheets(s, start)}
                       takeoffUnit={s.takeoff_sync !== false && sh.unit ? sh.unit : null}
+                      sizeTakeoff={s.takeoff_sync !== false && sh.unit ? { unit: sh.unit as "SF" | "LF" | "EA", total: sh.total, depth_in: null } : null}
                       takeoff={!can(access, "plan_room") ? null : <SectionTakeoffStrip jobId={jobId} sectionId={s.id} sectionName={s.name ?? null} following={s.takeoff_sync !== false}
                         plans={plans} sectionNames={names} onChanged={takeoffChanged} />}
                       photos={!can(access, "files") ? null : <>
@@ -552,7 +554,8 @@ const MODES: [ "dims" | "area" | "linear" | "count", string, string][] = [
   ["dims", "Length × width", T.chalk], ["area", "Area only", T.green], ["linear", "Linear ft", T.hiviz], ["count", "Count", T.violet],
 ];
 
-function SectionCard({ group, s, index, err, onLocal, onSave, onRemove, jobType, jobId, photos, sheets, hasPlans, onSheets, takeoff, takeoffUnit, onSlot, open, onToggle, onGrip, money: m }: {
+function SectionCard({ group, s, index, err, onLocal, onSave, onRemove, jobType, jobId, photos, sheets, hasPlans, onSheets, takeoff, takeoffUnit, sizeTakeoff, onSlot, open, onToggle, onGrip, money: m }: {
+  sizeTakeoff?: { unit: "SF" | "LF" | "EA" | null; total: number | null; depth_in: number | null } | null;
   /** Its takeoff group, shown on the header row (Coy, 2026-10-15: the heading above it was confusing). */
   group?: { name: string; color: string; kind: "area" | "linear" | "count"; note: string | null } | null;
   s: Section; index: number; err?: string; rcards: RCard[]; jobType: string | null; jobId: string;
@@ -575,6 +578,12 @@ function SectionCard({ group, s, index, err, onLocal, onSave, onRemove, jobType,
   const q = quantities(s);
   const concrete = q.concrete;
   const sid = s.id;
+  // Size rows (migration 111): while a section has them, its size is their total and the single size cells hide.
+  const [sizeRows, setSizeRows] = useState(0);
+  const onSizeSection = useCallback((x: Record<string, unknown>) => {
+    const n = (k: string) => (x[k] === null || x[k] === undefined ? null : Number(x[k]));
+    onLocal({ sqft_override: n("sqft_override"), length_ft: n("length_ft"), width_ft: n("width_ft"), count_qty: n("count_qty"), count_unit: (x.count_unit as string | null) ?? null, depth_in: n("depth_in") });
+  }, [onLocal]);
   const budgetSlot = useCallback((el: HTMLDivElement | null) => onSlot(sid, el), [onSlot, sid]);
 
   // Measured by length × width, or by its area alone (Coy, 2026-10-02: government
@@ -789,7 +798,9 @@ function SectionCard({ group, s, index, err, onLocal, onSave, onRemove, jobType,
         {takeoff}
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 mt-2" style={{ borderTop: `1px solid ${T.hairSoft}` }}>
+      <SectionSizes jobId={jobId} sectionId={s.id} mode={mode} concrete={concrete} takeoff={sizeTakeoff ?? null}
+        onSection={onSizeSection} onRows={setSizeRows} />
+      {sizeRows === 0 && <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 mt-2" style={{ borderTop: `1px solid ${T.hairSoft}` }}>
         {mode === "dims" && dimCell("Length", "length_ft")}
         {mode === "dims" && dimCell("Width", "width_ft")}
         {mode === "count" && (
@@ -870,7 +881,7 @@ function SectionCard({ group, s, index, err, onLocal, onSave, onRemove, jobType,
             <span style={{ fontSize: F.xs, color: T.ink3 }}> cu yd</span>
           </Cell>
         )}
-      </div>
+      </div>}
 
       {/* The section's own cost items (Coy, 2026-10-04: "the sections … have the budget line items in
           the sections themselves"). JobBudget draws them here; the panel below the sections is the job's totals. */}

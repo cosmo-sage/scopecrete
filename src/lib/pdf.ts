@@ -98,11 +98,12 @@ export function pageSize(p: Page) {
   return { w: v.width, h: v.height };
 }
 
-/** Read every page's title block. */
-export async function readPlanPages(doc: Doc, onPage?: (n: number, of: number) => void): Promise<Array<SheetReading & { page: number; page_w: number; page_h: number }>> {
-  const out: Array<SheetReading & { page: number; page_w: number; page_h: number }> = [];
-  for (let i = 1; i <= doc.numPages; i++) {
-    const p = await doc.getPage(i);
+export type PageReading = SheetReading & { page: number; page_w: number; page_h: number; /** Text runs on the page — none on a scan. */ words: number };
+
+/** Read one page's title block. */
+export async function readPlanPage(doc: Doc, i: number): Promise<PageReading> {
+  const p = await doc.getPage(i);
+  try {
     const v = p.getViewport({ scale: 1 });
     const tc = await p.getTextContent();
     const items: TextItem[] = [];
@@ -112,11 +113,55 @@ export async function readPlanPages(doc: Doc, onPage?: (n: number, of: number) =
       const h = Math.abs(raw.height || Math.hypot(raw.transform[2], raw.transform[3])) || 8;
       items.push({ str: raw.str, x, y: y - h, w: Math.abs(raw.width ?? raw.str.length * h * 0.5), h });
     }
-    out.push({ ...readSheet(items, v.width, v.height), page: i, page_w: v.width, page_h: v.height });
-    p.cleanup();
+    return { ...readSheet(items, v.width, v.height), page: i, page_w: v.width, page_h: v.height, words: items.filter((t) => t.str.trim()).length };
+  } finally { p.cleanup(); }
+}
+
+/** Read every page's title block. */
+export async function readPlanPages(doc: Doc, onPage?: (n: number, of: number) => void): Promise<PageReading[]> {
+  const out: PageReading[] = [];
+  for (let i = 1; i <= doc.numPages; i++) {
+    out.push(await readPlanPage(doc, i));
     onPage?.(i, doc.numPages);
   }
   return out;
+}
+
+/**
+ * A plan PDF still on Coy's device, opened before it is uploaded (Add plans reads its
+ * pages first). Not kept by id — it has none yet; keepLocalPdf() files the bytes once it does.
+ */
+export async function openLocalPdf(file: Blob): Promise<Doc> {
+  const m = await pdfjs();
+  const base = `${window.location.origin}/pdfjs/`;
+  const data = new Uint8Array(await file.arrayBuffer());
+  return m.getDocument({
+    data, wasmUrl: `${base}wasm/`, standardFontDataUrl: `${base}standard_fonts/`,
+    cMapUrl: `${base}cmaps/`, cMapPacked: true, iccUrl: `${base}iccs/`, canvasMaxAreaInBytes: MAX_CANVAS_PX * 4,
+  }).promise;
+}
+
+/** After the upload: the same bytes, kept on the device under the new file id, so Takeoffs doesn't download them again. */
+export async function keepLocalPdf(fileId: string, file: Blob) {
+  try {
+    if (typeof caches === "undefined") return;
+    await (await caches.open(CACHE)).put(cacheKey(fileId), new Response(file, { headers: { "content-type": "application/pdf" } }));
+  } catch { /* storage full or refused — it downloads once instead */ }
+}
+
+/** A small picture of a page of a local PDF, for Add plans. */
+export async function localThumb(doc: Doc, pageNo: number, width = 150): Promise<string> {
+  const p = await doc.getPage(pageNo);
+  const c = document.createElement("canvas");
+  try {
+    const v1 = p.getViewport({ scale: 1 });
+    const v = p.getViewport({ scale: width / v1.width });
+    c.width = Math.floor(v.width); c.height = Math.floor(v.height);
+    const ctx = c.getContext("2d");
+    if (!ctx) return "";
+    await (p.render({ canvasContext: ctx, viewport: v, canvas: c }) as unknown as { promise: Promise<void> }).promise;
+    return c.toDataURL("image/jpeg", 0.7);
+  } finally { p.cleanup(); c.width = 0; c.height = 0; }
 }
 
 /** A page's text runs in points, y down (box tops) — for finding a section's line on its sheet. */

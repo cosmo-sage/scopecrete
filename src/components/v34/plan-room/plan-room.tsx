@@ -20,6 +20,7 @@ import { call, isDrawing, type Param, type PlanFile, type PlansData, type Sheet 
 import { FilesStep } from "./files-sheets";
 import { TakeoffStep } from "./takeoff";
 import { SendSheet } from "./budget-step";
+import { AddPlans } from "./add-plans";
 
 // The Budget step moved to the job's Summary (Coy, 2026-10-06); an old ?step=budget link opens the room as usual.
 // Satellite (was the Aerial drawer) sits between them (Coy, 2026-10-07); since 2026-10-08 it opens the
@@ -123,8 +124,15 @@ export function PlanRoom({ jobId, view }: { jobId: string; view: Step }) {
     if (ocr.saved - lastSaved.current >= 4 || (!ocr.running && ocr.saved !== lastSaved.current)) { lastSaved.current = ocr.saved; void load(); }
   }, [ocr.saved, ocr.running, ocr.jobId, jobId, load]);
 
+  // A plan PDF goes through Add plans first (Coy, 2026-10-14: JobTread's review — names and
+  // scales read off each page, his to change before Save); photos and sketches go straight up.
+  const [adding, setAdding] = useState<File[] | null>(null);
   const upload = useCallback(async (list: FileList) => {
-    const files = Array.from(list);
+    const all = Array.from(list);
+    const pdfs = all.filter((f) => f.type === "application/pdf" || /\.pdf$/i.test(f.name));
+    if (pdfs.length) setAdding(pdfs);
+    const files = all.filter((f) => !pdfs.includes(f));
+    if (!files.length) return;
     for (let i = 0; i < files.length; i++) {
       const f = files[i];
       setUploading(`Uploading ${f.name}${files.length > 1 ? ` (${i + 1} of ${files.length})` : ""}…`);
@@ -194,6 +202,8 @@ export function PlanRoom({ jobId, view }: { jobId: string; view: Step }) {
           )}
         </div>
       )}
+      {adding && <AddPlans files={adding} jobId={jobId} onClose={() => setAdding(null)}
+        onUploaded={(id) => { started.current.add(id); }} onDone={load} />}
       <SendSheet jobId={jobId} p={sending?.p ?? null} initial={sending?.ids} data={data} onClose={() => setSendingState(null)} onSent={() => void reload()} />
     </div>
   );

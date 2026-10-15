@@ -9,6 +9,11 @@ import { SHEET_COLS } from "@/lib/plans-server";
  * number, title, discipline, scale_text, printed_ft_per_pt }] }. A first
  * reading only — a page already read keeps Coy's own number and title and
  * whatever scale he set; only what was read is refreshed.
+ *
+ * From Add plans (Coy, 2026-10-14: JobTread's review step) a page also carries what Coy left
+ * on it before Save — his tap: `named: true` when he typed its name (kept as his, so the scan
+ * reader never writes over it), and `scale_method` 'title_block' | 'manual' | 'none' with
+ * `scale_ft_per_pt`, set on a new page only (a page already there keeps the scale it has).
  */
 
 export const dynamic = "force-dynamic";
@@ -20,7 +25,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const { id } = await ctx.params;
   const result = await getApiSession(req);
   if (!result.ok) return result.response;
-  const { supabase, orgId, applyCookies } = result.session;
+  const { supabase, orgId, userId, applyCookies } = result.session;
   const bad = (m: string, s = 400) => applyCookies(NextResponse.json({ error: m }, { status: s }));
   if (!(await jobInOrg(supabase, orgId, id))) return bad("No such job.", 404);
 
@@ -45,12 +50,23 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       discipline: txt(raw.discipline, 12),
     };
     const was = byPage.get(page);
-    const named = { number: txt(raw.number, 20), title: txt(raw.title, 120) };
+    const named: Record<string, unknown> = { number: txt(raw.number, 20), title: txt(raw.title, 120) };
+    if (raw.named === true) named.number_source = "coy";
     if (was) {
-      const { error } = await supabase.from("plan_sheets").update(was.number_source === "coy" ? read : { ...read, ...named })
+      const { error } = await supabase.from("plan_sheets").update(was.number_source === "coy" && raw.named !== true ? read : { ...read, ...named })
         .eq("id", was.id).eq("org_id", orgId);
       if (error) return bad(error.message, 500);
-    } else fresh.push({ org_id: orgId, job_id: id, file_id: f.id, page, ...read, ...named });
+    } else {
+      const scale: Record<string, unknown> = {};
+      const m = raw.scale_method, k = pos(raw.scale_ft_per_pt);
+      const stamp = { scale_set_at: new Date().toISOString(), scale_set_by: userId };
+      if (m === "none") Object.assign(scale, { scale_ft_per_pt: null, scale_method: "none", ...stamp });
+      else if ((m === "title_block" || m === "manual") && k && k <= 100) {
+        if (m === "title_block" && !read.printed_ft_per_pt) return bad(`Page ${page} doesn't print a scale.`);
+        Object.assign(scale, { scale_ft_per_pt: m === "title_block" ? read.printed_ft_per_pt : k, scale_method: m, ...stamp });
+      } else if (m !== undefined && m !== null) return bad(`Page ${page}: that scale doesn't look right.`);
+      fresh.push({ org_id: orgId, job_id: id, file_id: f.id, page, ...read, ...named, ...scale });
+    }
   }
   if (fresh.length) {
     const { error } = await supabase.from("plan_sheets").insert(fresh);

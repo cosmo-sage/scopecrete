@@ -19,6 +19,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
+import { RailMarket } from "@/components/v34/market-rates";
 import { useDustyDocked } from "@/lib/v34/use-dusty-docked";
 import { VoiceRecorder } from "@/components/v34/voice-recorder";
 import { useParams } from "next/navigation";
@@ -1161,7 +1162,10 @@ function TakeoffRail({ t, job, onCrewDays, budget, inPanel }: {
 
       {/* No "Concrete to order" box (Coy, 2026-10-12: on a removal job it read the yards to tear out as concrete to buy). */}
       {budget?.has_lines ? (
-        <BudgetRail budget={budget} sqft={t.sqft} crew={crew} setCrew={setCrew} onCrewDays={onCrewDays} />
+        <>
+          <BudgetRail budget={budget} sqft={t.sqft} crew={crew} setCrew={setCrew} onCrewDays={onCrewDays} />
+          <RailMarket jobId={job.id} />
+        </>
       ) : (
         <>
           {/* No "No price yet" box or Assemblies button (Coy, 2026-10-02): assemblies load inside the budget's areas. */}

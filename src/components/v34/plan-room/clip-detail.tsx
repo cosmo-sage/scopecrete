@@ -5,7 +5,9 @@
  * section it belongs to (or name a new one) and Save: the box is drawn sharp
  * from the PDF (renderRegion), shrunk to a JPEG and filed on that section with
  * the sheet and box it came from (src/lib/plan-details.ts). It shows under the
- * section on the job page, where AI can read it.
+ * section on the job page, where AI can read it. Or **Job files — no section**
+ * (Coy, 2026-10-15): the clip goes on the job alone, in its Files and Photos, to
+ * note on and put on a section later from its Area.
  */
 import React, { useEffect, useState } from "react";
 import { T, F, disp } from "@/lib/v34/tokens";
@@ -15,6 +17,7 @@ import { clipScale, type DetailBox } from "@/lib/plan-details";
 import { call, sheetLabel, type Sheet } from "./shared";
 
 const NEW = "__new";
+const JOB = "__job";
 
 export function ClipBar({ jobId, sheet, url, box, onDone, onCancel }: {
   jobId: string; sheet: Sheet; url: string; box: DetailBox; onDone: (msg: string) => void; onCancel: () => void;
@@ -31,7 +34,7 @@ export function ClipBar({ jobId, sheet, url, box, onDone, onCancel }: {
       if (off) return;
       const list = (b.sections ?? []) as Array<{ id: string; name: string | null }>;
       setSections(list);
-      setPick((p) => (list.some((s) => s.id === p) ? p : list[0]?.id ?? NEW));
+      setPick((p) => (p === JOB || list.some((s) => s.id === p) ? p : list[0]?.id ?? NEW));
     }).catch((e) => { if (!off) setErr(e instanceof Error ? e.message : String(e)); });
     return () => { off = true; };
   }, [jobId]);
@@ -39,7 +42,7 @@ export function ClipBar({ jobId, sheet, url, box, onDone, onCancel }: {
   const save = async () => {
     setErr(null);
     try {
-      let sectionId = pick;
+      let sectionId: string | null = pick === JOB ? null : pick;
       let sectionName = sections?.find((s) => s.id === pick)?.name ?? null;
       if (pick === NEW) {
         if (!name.trim()) { setErr("Name the new section."); return; }
@@ -55,12 +58,13 @@ export function ClipBar({ jobId, sheet, url, box, onDone, onCancel }: {
       if (!blob) throw new Error("couldn't make the picture");
       setBusy("Saving…");
       const fname = `Detail · ${sheetLabel(sheet)}${sheet.title ? ` ${sheet.title}` : ""}.jpg`.replace(/[/\\]/g, "-").slice(0, 180);
-      const b = await call("/api/files", "POST", { name: fname, mime: "image/jpeg", size: blob.size, job_id: jobId, section_id: sectionId,
+      const b = await call("/api/files", "POST", { name: fname, mime: "image/jpeg", size: blob.size, job_id: jobId, ...(sectionId ? { section_id: sectionId } : {}),
         detail: { sheet_id: sheet.id, ...box } });
       await sendBytes(b.upload.signed_url, new File([blob], fname, { type: "image/jpeg" }), () => {});
       await call(`/api/files/${b.file.id}/done`, "POST");
-      try { localStorage.setItem(`sc:clip-section:${jobId}`, sectionId); } catch { /* fine */ }
-      onDone(`Clipped onto ${sectionName || "the section"} · read it on the Budget`);
+      try { localStorage.setItem(`sc:clip-section:${jobId}`, sectionId ?? JOB); } catch { /* fine */ }
+      onDone(sectionId ? `Clipped onto ${sectionName || "the section"} · read it on the Budget`
+        : "Saved to the job's files · add a note or put it on a section from Files");
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
     } finally { setBusy(null); }
@@ -70,10 +74,11 @@ export function ClipBar({ jobId, sheet, url, box, onDone, onCancel }: {
   return (
     <div className="flex flex-wrap items-center gap-2 px-3 py-2" style={{ background: T.card, borderTop: `1px solid ${T.hair}` }}>
       <span style={{ fontFamily: disp, fontWeight: 700, fontSize: F.sm, letterSpacing: ".06em", textTransform: "uppercase" }}>Clip to</span>
-      <select aria-label="Budget section" value={pick} onChange={(e) => setPick(e.target.value)} disabled={!sections || !!busy} style={{ ...input, flex: "1 1 160px" }}>
+      <select aria-label="Where the clip goes" value={pick} onChange={(e) => setPick(e.target.value)} disabled={!sections || !!busy} style={{ ...input, flex: "1 1 160px" }}>
         {!sections && <option>Loading sections…</option>}
         {sections?.map((s, i) => <option key={s.id} value={s.id}>{s.name || `Section ${i + 1}`}</option>)}
         <option value={NEW}>+ New section…</option>
+        <option value={JOB}>Job files — no section</option>
       </select>
       {pick === NEW && <input aria-label="New section's name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Grade beams" style={{ ...input, flex: "1 1 140px" }} />}
       <button onClick={onCancel} disabled={!!busy} style={{ ...input, cursor: "pointer", fontFamily: disp, fontWeight: 600 }}>Cancel</button>

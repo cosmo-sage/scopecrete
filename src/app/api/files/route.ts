@@ -141,12 +141,12 @@ export async function POST(req: NextRequest) {
     if (!c) return bad("No such person.", 404);
   }
 
-  // A detail clipped off a plan sheet (src/lib/plan-details.ts): the sheet must be on this
-  // section's job, the box on its page. Where it came from rides on source_url.
+  // A detail clipped off a plan sheet (src/lib/plan-details.ts), on a section or the job alone: the sheet must be on this
+  // job, the box on its page. Where it came from rides on source_url.
   let detail: string | null = null;
   if (b.detail !== undefined) {
     const d = (b.detail ?? {}) as Record<string, unknown>;
-    if (!sectionId || !jobId) return bad("A clip goes on a section.");
+    if (!jobId) return bad("A clip goes on a job.");
     const sheetId = id(d.sheet_id);
     if (!sheetId) return bad("Which sheet is the clip from?");
     const { data: sh } = await supabase.from("plan_sheets").select("id, job_id, page_w, page_h").eq("org_id", orgId).eq("id", sheetId).maybeSingle();

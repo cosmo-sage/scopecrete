@@ -725,7 +725,16 @@ function SectionCard({ group, s, index, err, onLocal, onSave, onRemove, jobType,
         )}
         {open ? (
           // No kind-of-area picker here (Coy, 2026-10-10: "remove the section type completely from here").
-          <Dictate jobId={jobId} s={s} onApply={(p) => { onLocal(p as Partial<Section>); onSave(p as Partial<Section>); }} />
+          <>
+            <Dictate jobId={jobId} s={s} onApply={(p) => { onLocal(p as Partial<Section>); onSave(p as Partial<Section>); }} />
+            {/* The totals stay on the header when open too (Coy, 2026-10-15). */}
+            <span className="flex items-baseline gap-2 text-right" style={{ marginLeft: "auto", fontSize: F.xs, color: T.ink2, ...nums }}>
+              <span>{sizeText}</span>
+              {m && m.lines > 0
+                ? <span style={{ fontFamily: disp, fontSize: F.md, fontWeight: 700, color: T.ink }}>{money0(m.price)}{perText ? <span style={{ fontFamily: "inherit", fontWeight: 400, fontSize: F.xs, color: T.ink3 }}> {perText}</span> : null}</span>
+                : <span style={{ color: T.ink3 }}>no items</span>}
+            </span>
+          </>
         ) : (
           <button onClick={onToggle} className="flex items-baseline gap-2 text-right" style={{ marginLeft: "auto", cursor: "pointer", fontSize: F.xs, color: T.ink2, ...nums }}>
             <span>{sizeText}</span>

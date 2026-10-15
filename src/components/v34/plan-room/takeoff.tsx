@@ -23,6 +23,7 @@ import { traceAt, type TraceOptions } from "@/lib/v34/plan-trace";
 import { useSearchParams } from "next/navigation";
 import { AskIcon, shapeMiddle, usePlanPins } from "./sheet-comments";
 import { useDustyZones } from "./dusty-zones";
+import { useDustyJoints } from "./dusty-joints";
 
 /** Count's subtract: each click takes off the counted point nearest it. */
 function dropNearest(geom: Pt[], picks: Pt[]): Pt[] {
@@ -187,6 +188,8 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
   }, [reload]);
   // Find zones (2026-10-15): Dusty points at each zone the legend tells apart, Fill traces it — ./dusty-zones.tsx.
   const zones = useDustyZones({ sheet, fileUrl: file?.url ?? null, data, act, jobId });
+  // Find joints: control joints read off the PDF's own lines — ./dusty-joints.tsx.
+  const joints = useDustyJoints({ sheet, fileUrl: file?.url ?? null, data, act, jobId });
 
   // Back / forward over what was done on the plans (Coy, 2026-10-15: "a back / forward button to
   // undo/redo actions"). Each step knows how to put itself back; a takeoff drawn again after an undo
@@ -553,6 +556,7 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
             <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" aria-hidden="true" style={{ margin: "auto" }}><path d="M15.5 8A6 6 0 1 0 16 12" /><path d="M16 3.5V8h-4.5" /></svg>
           </button>
           {zones.button}
+          {joints.button}
           <button onClick={() => { pins.setAskMode(!pins.askMode); setTool("select"); }} aria-pressed={pins.askMode} title="Ask someone about a spot: click the sheet where your question is"
             className="flex items-center gap-1.5" style={{ ...tb(pins.askMode), padding: "0 8px" }}>
             <AskIcon /><span className="hidden md:inline">Ask{pins.count ? ` · ${pins.count}` : ""}</span>
@@ -648,6 +652,7 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
         )}
 
         {zones.panel}
+        {joints.panel}
         {sheet && file?.url ? (
           <Drawing key={sheet.id} sheet={sheet} fileUrl={file.url} zoom={zoom} setZoom={setZoom} tool={tool}
             data={data} groupId={groupId} selId={selId} setSelId={(id) => { setSelId(id); const m = data.measurements.find((x) => x.id === id); if (m) setGroupId(m.parameter_id); }}
@@ -656,7 +661,7 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
             moveShape={(mid, d) => { const m = data.measurements.find((x) => x.id === mid); if (!m) return Promise.resolve();
               const sh = (l: Pt[]) => l.map(([x, y]) => [x + d[0], y + d[1]] as Pt);
               return patchRec(mid, { geometry: m.geometry, cutouts: m.cutouts ?? [] }, { geometry: sh(m.geometry), cutouts: (m.cutouts ?? []).map(sh) }, "Move"); }}
-            onPin={pins.askMode ? (p) => pins.place(p, selId) : undefined} pinLayer={(s) => <>{zones.layer(s)}{pins.layer(s)}</>} rot={rot} />
+            onPin={pins.askMode ? (p) => pins.place(p, selId) : undefined} pinLayer={(s) => <>{zones.layer(s)}{joints.layer(s)}{pins.layer(s)}</>} rot={rot} />
         ) : (
           <div className="flex-1 flex items-center justify-center p-6" style={{ fontSize: F.sm, color: T.ink3 }}>
             {sheet ? "This sheet's file can't be opened right now." : "No sheets yet — add a plan PDF on the job's Files page."}

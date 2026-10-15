@@ -5,6 +5,7 @@
  * visit and kept; pages are drawn on demand.
  */
 import { readSheet, type SheetReading, type TextItem } from "@/lib/plan-sheets";
+import { strokesFromOps, type Stroke } from "@/lib/plan-joints";
 
 // The legacy build: the modern one leans on JavaScript newer than most browsers
 // (and phones) have yet (Map.getOrInsertComputed).
@@ -186,6 +187,21 @@ export function pageText(fileId: string, doc: Doc, pageNo: number): Promise<Text
     texts.set(k, t);
   }
   return t;
+}
+
+/**
+ * A page's stroked lines and the CAD layer each is on (Find joints, src/lib/plan-joints.ts), in
+ * points, y down. Reads the page's drawing instructions, not its pixels.
+ */
+export async function pageStrokes(doc: Doc, pageNo: number): Promise<{ strokes: Stroke[]; layers: string[] }> {
+  const m = await pdfjs();
+  const p = await doc.getPage(pageNo);
+  const v = p.getViewport({ scale: 1 });
+  const [ol, cfg] = await Promise.all([p.getOperatorList(), doc.getOptionalContentConfig().catch(() => null)]);
+  const names: Record<string, string> = {};
+  if (cfg) for (const [id, g] of cfg as unknown as Iterable<[string, { name?: string | null }]>) if (g?.name) names[id] = g.name;
+  const strokes = strokesFromOps(ol.fnArray, ol.argsArray, m.OPS as unknown as Record<string, number>, v.transform, names);
+  return { strokes, layers: [...new Set(strokes.map((s) => s.layer).filter((l): l is string => !!l))] };
 }
 
 // The page each document last drew whole: moving to another sheet lets go of the last one

@@ -456,7 +456,7 @@ export default function ScopeBuilder() {
                   const sh = shapesOf(s.id, plans);
                   return (
                     <SectionCard key={s.id} s={s} index={sections.indexOf(s)}
-                      group={p ? { name: p.name, color: p.color, note: list.length > 1 && tot !== null ? `${list.length} sections · ${fmtQty(tot, { area: "SF", linear: "LF", count: "EA" }[p.kind])}` : null } : null}
+                      group={p ? { name: p.name, color: p.color, kind: p.kind, note: list.length > 1 && tot !== null ? `${list.length} sections · ${fmtQty(tot, { area: "SF", linear: "LF", count: "EA" }[p.kind])}` : null } : null}
                       open={openSecs ? openSecs.has(s.id) : sections.length === 1} onToggle={() => toggleSec(s.id, sections.map((x) => x.id))}
                       money={budget?.areas?.[s.id] ?? null} err={saveErr[s.id]} rcards={rcards} jobType={job.job_type} jobId={jobId} onSlot={onSlot}
                       sheets={sheetsOf(s)} hasPlans={planSheets.length > 0} onSheets={(start) => openSheets(s, start)}
@@ -554,7 +554,7 @@ const MODES: [ "dims" | "area" | "linear" | "count", string, string][] = [
 
 function SectionCard({ group, s, index, err, onLocal, onSave, onRemove, jobType, jobId, photos, sheets, hasPlans, onSheets, takeoff, takeoffUnit, onSlot, open, onToggle, onGrip, money: m }: {
   /** Its takeoff group, shown on the header row (Coy, 2026-10-15: the heading above it was confusing). */
-  group?: { name: string; color: string; note: string | null } | null;
+  group?: { name: string; color: string; kind: "area" | "linear" | "count"; note: string | null } | null;
   s: Section; index: number; err?: string; rcards: RCard[]; jobType: string | null; jobId: string;
   /** Open, or folded to one line (Coy, 2026-10-08: "less busy and easier to read"). */
   open: boolean; onToggle: () => void;
@@ -698,10 +698,15 @@ function SectionCard({ group, s, index, err, onLocal, onSave, onRemove, jobType,
         ) : (
           <button onClick={onToggle} className="text-left flex items-center gap-1.5" style={{ fontSize: F.sm, fontWeight: 600, minWidth: 0, flex: "1 1 120px", cursor: "pointer", ...clip }}>
             {missingAny && <span title={missingWhat} style={{ width: 7, height: 7, borderRadius: 4, background: T.hiviz, flex: "none" }} />}
+            {/* Tied to a takeoff: its kind in the group's colour, then ƒ (Coy, 2026-10-15). */}
+            {group && <span title={`Takeoff group: ${group.name}`} className="inline-flex items-center gap-1" style={{ flex: "none" }}>
+              <KindIcon kind={group.kind} color={group.color} />
+              <span style={{ color: T.green, fontStyle: "italic", fontWeight: 700 }}>ƒ</span>
+            </span>}
             <span style={clip}>{s.name || `Section ${index + 1}`}</span>
           </button>
         )}
-        {group && (
+        {group && open && (
           <span title={`Takeoff group: ${group.name}${group.note ? ` · ${group.note}` : ""}`} className="inline-flex items-center gap-1" style={{ fontSize: F.xs, color: T.ink3, flex: "0 1 auto", minWidth: 0, ...clip }}>
             <span style={{ width: 8, height: 8, borderRadius: 2, background: group.color, flex: "none" }} />
             <span style={clip}>{group.name}{group.note ? ` · ${group.note}` : ""}</span>
@@ -1191,4 +1196,15 @@ function detailShape(s: Section): SectionShape {
   const lf = linear && s.count_qty ? s.count_qty : null;
   const sqft = linear ? null : s.sqft_override ?? (s.length_ft && s.width_ft ? s.length_ft * s.width_ft : null);
   return { mode: linear ? "linear" : s.count_qty != null && sqft === null ? "count" : "area", lf, sqft };
+}
+
+/** A takeoff's kind as a small mark in its group's colour: a square for an area, a line, a dot for a count. */
+function KindIcon({ kind, color }: { kind: "area" | "linear" | "count"; color: string }) {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" aria-label={kind} style={{ flex: "none" }}>
+      {kind === "area" ? <rect x="2" y="2" width="10" height="10" rx="1.5" fill={color} fillOpacity=".35" stroke={color} strokeWidth="1.6" />
+        : kind === "linear" ? <path d="M2 11 12 3" stroke={color} strokeWidth="2.2" strokeLinecap="round" />
+        : <circle cx="7" cy="7" r="4" fill={color} />}
+    </svg>
+  );
 }

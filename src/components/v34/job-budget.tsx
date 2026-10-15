@@ -25,11 +25,11 @@
  */
 
 import { estimateBasis, isEstimate, unmark } from "@/lib/estimate-flag";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { T, F, disp, eyebrow, nums, clip, money, money0, formatPhone } from "@/lib/v34/tokens";
 import { Sheet, Drawer } from "@/components/v34/primitives";
-import { PriceBook } from "@/components/v34/price-book";
+import { PriceBook, SwipeRetire } from "@/components/v34/price-book";
 import { DustyEmblemButton } from "@/components/v34/budget-tabs";
 import { sectionItemsQuestion } from "@/lib/dusty/section-items";
 import { Emblem } from "@/components/site/marks";
@@ -293,14 +293,19 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
   const addons = new Set(data.proposal?.addons ?? []);
   const setAddon = (id: string, on: boolean) => run(() => call(`/api/jobs/${jobId}/proposal`, "PATCH", { addon: { line_id: id, on } }));
 
+  // Coy, 2026-10-15: "remove items from the budget easily. A delete icon on desktop. Swipe left on mobile".
+  const removeLine = (l: Line) => { if (window.confirm(`Take ${l.name} off the budget?`)) void run(() => call(`/api/jobs/${jobId}/budget/lines/${l.id}`, "DELETE")); };
+
   // One line of the grid.
   const lineRow = (l: Line) => {
                         const r = res.lines[l.id];
                         const blockedQty = r.qty === null;
                         return (
                           <tr key={l.id} style={{ borderTop: `1px solid ${T.hairSoft}` }}>
-                            <td style={{ padding: "4px 8px 4px 24px", maxWidth: 260 }}>
+                            <td style={{ padding: "4px 8px 4px 24px", maxWidth: 260, position: "relative" }}>
                               <button onClick={() => setEditing(l)} className="text-left" style={{ cursor: "pointer", color: T.ink, fontWeight: 500, ...clip, display: "block", maxWidth: 240 }}>{l.name}</button>
+                              <button onClick={() => removeLine(l)} title="Take off the budget" aria-label={`Take ${l.name} off the budget`}
+                                style={{ position: "absolute", top: 4, left: 4, color: T.ink3, cursor: "pointer" }}><Trash /></button>
                               {/* Coy, 2026-10-05: "This line needs to be removed. And I should be able to add/edit the notes under this
                                   and any cost item." Only what changes the price stays as a tag; the note is edited in place. */}
                               {(optLabel(l.option_id) || addons.has(l.id)) && (
@@ -437,7 +442,7 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
         </div>
       )}
       {!inSection && a.lines.length === 0 && <div style={{ fontSize: F.xs, color: T.ink3 }}>{a.id ? "No cost items yet." : "Costs for the whole job, not one section — mobilization, a permit, a pump day."}</div>}
-      {a.groups.map((g) => <GroupCard key={g.name} name={g.name} lines={g.lines} res={res} optLabel={optLabel} asmName={asmName} addons={addons} onOpen={setEditing}
+      {a.groups.map((g) => <GroupCard key={g.name} name={g.name} lines={g.lines} res={res} optLabel={optLabel} asmName={asmName} addons={addons} onOpen={setEditing} onRemove={removeLine}
                 cost={sum(g.lines, "ext_cost")} price={sum(g.lines, "ext_price")} />)}
     </div>
   );
@@ -698,12 +703,27 @@ function LineNote({ value, name, onSave }: { value: string | null; name: string;
   );
 }
 
-function GroupCard({ name, lines, res, optLabel, asmName, addons, onOpen, cost, price }: {
+function useTouch() {
+  return useSyncExternalStore(
+    (cb) => { const m = window.matchMedia("(pointer: coarse)"); m.addEventListener("change", cb); return () => m.removeEventListener("change", cb); },
+    () => window.matchMedia("(pointer: coarse)").matches, () => false);
+}
+
+function Trash() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" />
+    </svg>
+  );
+}
+
+function GroupCard({ name, lines, res, optLabel, asmName, addons, onOpen, onRemove, cost, price }: {
   name: string; lines: Line[]; res: ReturnType<typeof priceBudget>; optLabel: (id: string | null) => string | null;
   asmName: (id: string | null | undefined) => string | null; addons: Set<string>;
-  onOpen: (l: Line) => void; cost: number; price: number;
+  onOpen: (l: Line) => void; onRemove: (l: Line) => void; cost: number; price: number;
 }) {
   const [open, setOpen] = useState(true);
+  const touch = useTouch();
   return (
     <div className="rounded mt-1.5" style={{ border: `1px solid ${T.hair}`, background: T.card }}>
       <button onClick={() => setOpen((o) => !o)} aria-expanded={open} className="w-full flex items-center justify-between px-2.5" style={{ height: 34, cursor: "pointer" }}>
@@ -720,8 +740,10 @@ function GroupCard({ name, lines, res, optLabel, asmName, addons, onOpen, cost, 
         const r = res.lines[l.id];
         return (
           // Coy, 2026-10-10 (phone): each item reads as a subcategory of its group, set in with a "-".
-          <button key={l.id} onClick={() => onOpen(l)} className="w-full flex items-baseline justify-between gap-2 py-1.5 text-left"
-            style={{ borderTop: `1px solid ${i ? T.hairSoft : T.hair}`, cursor: "pointer", paddingLeft: 22, paddingRight: 10 }}>
+          <SwipeRetire key={l.id} on={touch} name={l.name} label="Delete" onRetire={() => onRemove(l)}>
+          <div className="flex items-baseline" style={{ borderTop: `1px solid ${i ? T.hairSoft : T.hair}` }}>
+          <button onClick={() => onOpen(l)} className="flex-1 flex items-baseline justify-between gap-2 py-1.5 text-left"
+            style={{ minWidth: 0, cursor: "pointer", paddingLeft: 22, paddingRight: touch ? 10 : 4 }}>
             <span aria-hidden="true" style={{ fontSize: F.xs, color: T.ink3, marginLeft: -12, width: 8, flexShrink: 0 }}>-</span>
             <span style={{ minWidth: 0, flex: 1 }}>
               <span style={{ display: "block", fontSize: F.xs, color: T.ink, ...clip }}>{l.name}</span>
@@ -739,6 +761,10 @@ function GroupCard({ name, lines, res, optLabel, asmName, addons, onOpen, cost, 
             </span>
             <span style={{ fontSize: F.xs, fontWeight: 600, ...nums }}>{r.ext_price === null ? "—" : money(r.ext_price)}</span>
           </button>
+          {!touch && <button onClick={() => onRemove(l)} title="Take off the budget" aria-label={`Take ${l.name} off the budget`}
+            style={{ color: T.ink3, cursor: "pointer", padding: "0 8px 0 2px", alignSelf: "center" }}><Trash /></button>}
+          </div>
+          </SwipeRetire>
         );
       })}
     </div>

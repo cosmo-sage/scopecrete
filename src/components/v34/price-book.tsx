@@ -661,7 +661,7 @@ export function PriceBook({ pick }: { pick?: PricePick } = {}) {
  * A card row that slides left to show Retire (Coy, 2026-10-09: "swipe left to
  * archive a cost item"). Touch only; a tap on the slid row closes it.
  */
-function SwipeRetire({ on, name, onRetire, children }: { on: boolean; name: string; onRetire: () => void; children: React.ReactNode }) {
+export function SwipeRetire({ on, name, onRetire, children, label = "Retire" }: { on: boolean; name: string; onRetire: () => void; children: React.ReactNode; label?: string }) {
   const W = 88;
   const [dx, setDx] = useState(0);
   const [drag, setDrag] = useState(false);
@@ -670,8 +670,8 @@ function SwipeRetire({ on, name, onRetire, children }: { on: boolean; name: stri
   return (
     <div className="relative overflow-hidden">
       <button type="button" onClick={() => { setDx(0); onRetire(); }} tabIndex={dx ? 0 : -1} aria-hidden={dx ? undefined : true}
-        aria-label={`Retire ${name}`} className="absolute top-0 bottom-0 right-0 flex items-center justify-center"
-        style={{ width: W, background: T.red, color: "#fff", ...eyebrow, cursor: "pointer" }}>Retire</button>
+        aria-label={`${label} ${name}`} className="absolute top-0 bottom-0 right-0 flex items-center justify-center"
+        style={{ width: W, background: T.red, color: "#fff", ...eyebrow, cursor: "pointer" }}>{label}</button>
       <div
         onTouchStart={(e) => { const t = e.touches[0]; at.current = { x: t.clientX, y: t.clientY, dx, h: null }; }}
         onTouchMove={(e) => {

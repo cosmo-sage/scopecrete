@@ -399,13 +399,13 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
         </div>
         <div className="flex items-center gap-1 px-2 overflow-x-auto" style={{ height: 42, flex: "0 0 auto", background: T.card, borderBottom: `1px solid ${T.hair}` }}>
           {TOOLS.map(([k, label, hint]) => (
-            <Fragment key={k}>
+            <Fragment key={k}><span className="contents md:hidden">
               <button onClick={() => pickTool(k)} title={`${label} (${TOOL_KEY[k]}) — ${hint}`} aria-label={label} aria-pressed={tool === k}
                 className="flex items-center gap-1.5" style={{ ...tb(tool === k), padding: "0 8px" }}>
                 <ToolIcon tool={k} /><span className="hidden md:inline">{label}</span>
               </button>
               {TOOL_BREAK.has(k) && <span aria-hidden="true" style={{ width: 1, height: 22, background: T.hair, margin: "0 3px", flex: "0 0 auto" }} />}
-            </Fragment>
+            </span></Fragment>
           ))}
           <span className="flex-1" />
           {sheet && <span className="hidden md:inline" style={{ fontSize: F.xs, color: T.ink2, whiteSpace: "nowrap" }}>{sheetLabel(sheet)} · <ScaleBadge s={sheet} small /></span>}
@@ -442,6 +442,19 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
 
         {sheet && <ScaleBar sheet={sheet} act={act} startScale={() => pickTool("scale")} />}
         <div style={{ position: "relative", flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+          {/* Desktop: the tools stand in a column on the sheet's right edge, like JobTread's Plans. */}
+          <div className="hidden md:flex flex-col items-center gap-1" role="toolbar" aria-label="Takeoff tools"
+            style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", zIndex: 6, padding: 5, background: T.card, border: `1px solid ${T.hair}`, borderRadius: 10, boxShadow: "0 2px 10px rgba(0,0,0,.12)" }}>
+            {TOOLS.map(([k, label, hint]) => (
+              <Fragment key={k}>
+                <button onClick={() => pickTool(k)} title={`${label} (${TOOL_KEY[k]}) — ${hint}`} aria-label={label} aria-pressed={tool === k}
+                  className="flex items-center justify-center" style={{ ...tb(tool === k), width: 34, height: 34, padding: 0 }}>
+                  <ToolIcon tool={k} />
+                </button>
+                {TOOL_BREAK.has(k) && <span aria-hidden="true" style={{ width: 22, height: 1, background: T.hair, margin: "2px 0" }} />}
+              </Fragment>
+            ))}
+          </div>
         {adj && sel && (
           <div className="flex items-center gap-2 px-3 py-1.5" style={{ position: "absolute", top: 8, left: "50%", transform: "translateX(-50%)", zIndex: 6, background: T.green, color: "#fff", borderRadius: 6, fontSize: F.xs, boxShadow: "0 2px 8px rgba(0,0,0,.2)", maxWidth: "calc(100% - 16px)" }}>
             <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{adj === "add" ? "Adding to" : "Taking from"} <b>{selName}</b> · {data.params.find((g) => g.id === sel.parameter_id)?.name}</span>

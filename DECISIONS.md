@@ -4493,7 +4493,23 @@ expected start date per quoted job before it means anything. Add the field.
   One takeoff holding several separate pieces would need a column (a migration) — not built.
   Not built: tracing a scanned sheet (it may work on
   a clean scan, untested), turning a PDF's CAD layers on and off, finding the concrete hatch by
-  itself, and Dusty labelling what a fill is. **A sheet's scale is only ever one Coy set** — "Use 1/8" =
+  itself, and Dusty labelling what a fill is. **Find zones (Coy, 2026-10-15: "dusty is smart enough to know
+  what sheet i need to find to measure the different thicknesses. But not smart enough to measure himself?").**
+  Takeoffs' toolbar has **Find zones** (the emblem): the whole sheet is drawn to a ~2,400 px JPEG in the browser
+  and sent with its printed words to `POST /api/plan-sheets/[id]/zones` (session client, one tool-less call to
+  the model API, Claude Opus unless `ZONES_MODEL`; nothing stored), which matches the legend's hatches to the
+  drawing and returns each legend entry (label, thickness as printed) and each zone as a point inside it and a
+  rough outline, in thousandths of the sheet (`ZONES_SYSTEM`, `cleanZones()`, `src/lib/plan-zones.ts`, tested in
+  `tests/plan-zones.test.mjs`). **Dusty points, Fill traces**: each point goes through Fill (`traceAt()`, the
+  point and four spots round it, then once skipping thin lines), and a trace is the zone only when its area is
+  within ~0.35–2.8× the rough outline (`judgeTrace()`); otherwise the rough outline is shown, marked rough; two
+  points that traced one patch are one zone (`sameZone()`). The zones are drawn dashed in a colour per legend
+  entry with their SF, in a panel headed **Dusty's estimate** — drop the wrong ones, then Keep (per entry or
+  all): each becomes an area takeoff in a group per entry (`5" Light duty concrete pavement`, the thickness as
+  its depth; an area group already named so, or with that depth and a shared word, is used —
+  `groupNameFor()` / `matchGroup()`). Nothing is saved before Keep. `dusty-zones.tsx` (`useDustyZones`).
+  Not built: learning from what Coy keeps and changes, reading a scanned sheet's hatching (the model sees it;
+  Fill on a scan is untested), and Dusty finding which sheet to run it on himself. **A sheet's scale is only ever one Coy set** — "Use 1/8" =
   1'-0"" (the printed one, his tap), or two clicks on a known dimension and
   its length; until then nothing drawn there is counted. **Add plans (Coy,
   2026-10-14: "take a lesson from how jobtread handles plan uploads and

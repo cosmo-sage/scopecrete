@@ -10,7 +10,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { T, F, disp, eyebrow } from "@/lib/v34/tokens";
-import { CUST_KEY, VEND_KEY, describe, needsJob as stepNeedsJob, RECORD_STEPS, type PlanAction } from "@/lib/dusty/plan";
+import { CUST_KEY, VEND_KEY, describe, needsJob as stepNeedsJob, outline, RECORD_STEPS, type PlanAction } from "@/lib/dusty/plan";
 import { applyPlan, applyRecords, applyVendors, byRef, loadLookup, type PlanLookup, type StepResult } from "@/lib/dusty/apply-plan";
 
 export function PlanCard({ jobId, actions, dropped, done }: { jobId: string | null; actions: PlanAction[]; dropped: number; done: boolean }) {
@@ -56,6 +56,9 @@ export function PlanCard({ jobId, actions, dropped, done }: { jobId: string | nu
   }, [done, recKey]);
   if (!actions.length && !dropped) return null;
   const needsJob = budgetSteps.some(stepNeedsJob);
+  // Main steps numbered, the items that go on them lettered under them (Coy, 2026-10-15).
+  const steps: { label: string; sub: boolean }[] = [];
+  outline(actions).forEach((o, n) => { steps[o.main] = { label: `${n + 1}.`, sub: false }; o.subs.forEach((k, m) => { steps[k] = { label: `${String.fromCharCode(97 + (m % 26))}.`, sub: true }; }); });
   const texts = actions.filter((a) => a.do === "text" || (a.do === "send_proposal" && a.via === "text")).length;
   const sends = actions.filter((a) => a.do === "text" || a.do === "send_proposal").length;
   const drafts = actions.filter((a) => a.do === "email").length;
@@ -120,9 +123,11 @@ export function PlanCard({ jobId, actions, dropped, done }: { jobId: string | nu
           </button>
         )}
       </div>
-      <ol className="px-3 py-2 flex flex-col gap-1" style={{ fontSize: F.sm, listStyle: "decimal", paddingLeft: 28 }}>
+      <ol className="px-3 py-2 flex flex-col gap-1" style={{ fontSize: F.sm, listStyle: "none", paddingLeft: 8 }}>
         {actions.map((a, i) => (
-          <li key={i}>
+          <li key={i} className="flex gap-1.5" style={{ paddingLeft: steps[i].sub ? 20 : 0, color: steps[i].sub ? T.ink2 : undefined, fontWeight: steps[i].sub ? 400 : 600 }}>
+            <span style={{ flex: "none", minWidth: 18, color: T.ink3, fontWeight: 600, ...{ fontVariantNumeric: "tabular-nums" } }}>{steps[i].label}</span>
+            <div style={{ minWidth: 0, flex: 1 }}>
             {(a.do === "text" || a.do === "send_proposal") && state !== "done"
               ? <>
                   <div>{a.do === "text" ? "Text them through Quo:" : a.via === "email" ? "Email the proposal (opens in your mail app):" : "Text the proposal through Quo:"}</div>
@@ -184,6 +189,7 @@ export function PlanCard({ jobId, actions, dropped, done }: { jobId: string | nu
                 {a.ids.length > 12 ? ` · +${a.ids.length - 12} more` : ""}
               </div>
             )}
+            </div>
           </li>
         ))}
       </ol>

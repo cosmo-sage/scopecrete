@@ -1032,7 +1032,9 @@ function LineSheet({ line, data, sections, res, addon, onAddon, onClose, onPatch
             </div>
           )}
           <label className="block mt-2"><span style={eyebrow}>Description · shows on the proposal</span>
-            <textarea defaultValue={line.description ?? ""} rows={2} maxLength={500} style={{ ...field, height: "auto", padding: "6px 8px", resize: "none" }}
+            <textarea defaultValue={line.description ?? ""} rows={2} maxLength={500} style={{ ...field, height: "auto", padding: "6px 8px", resize: "none", overflow: "hidden" }}
+              ref={(el) => { if (el) { el.style.height = "auto"; el.style.height = `${el.scrollHeight + 2}px`; } }}
+              onInput={(e) => { const el = e.currentTarget; el.style.height = "auto"; el.style.height = `${el.scrollHeight + 2}px`; }}
               onBlur={(e) => { if ((e.target.value.trim() || null) !== (line.description ?? null)) onPatch({ description: e.target.value }); }} /></label>
         </div>
 

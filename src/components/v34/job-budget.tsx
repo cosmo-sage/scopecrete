@@ -31,6 +31,8 @@ import { T, F, disp, eyebrow, nums, clip, money, money0, formatPhone } from "@/l
 import { Sheet, Drawer } from "@/components/v34/primitives";
 import { PriceBook } from "@/components/v34/price-book";
 import { DustyEmblemButton } from "@/components/v34/budget-tabs";
+import { sectionItemsQuestion } from "@/lib/dusty/section-items";
+import { Emblem } from "@/components/site/marks";
 import { budget as priceBudget, jobMinimum, quantities, type BudgetLine, type BudgetSettings, type SectionInput, type TakeoffTotal, type TierTotal } from "@/lib/engine";
 import { COMMISSION_STEPS, commissionSplit } from "@/lib/commission";
 import { COST_TYPES, COST_TYPE_LABEL, QTY_RULE_LABEL, type CostType } from "@/lib/cost-cards";
@@ -476,6 +478,16 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
               {/* Coy, 2026-10-10 (phone): "just say budget and the number of items with an add item button". */}
               {` · ${a.lines.length} item${a.lines.length === 1 ? "" : "s"}`}
             </span>
+          </button>
+          {/* Dusty fills the section from its size, takeoffs and specs (Coy, 2026-10-15). */}
+          <button type="button" title="Ask Dusty to add this section's items" aria-label="Ask Dusty to add this section's items"
+            onClick={() => {
+              window.dispatchEvent(new Event("sc:dusty-open"));
+              setTimeout(() => window.dispatchEvent(new CustomEvent("sc:dusty-draft", { detail: {
+                text: sectionItemsQuestion(areaName(a.id ?? null), (a.id ?? "").slice(0, 8) || null), send: true } })), 250);
+            }}
+            className="flex items-center justify-center shrink-0" style={{ width: 28, height: 28, cursor: "pointer", background: "transparent" }}>
+            <Emblem size={20} spin={false} />
           </button>
           <button onClick={() => setBook({ area: a.id ?? "" })} title="Add items from the Price book"
             className="rounded px-2.5 shrink-0" style={{ height: 28, background: T.ink, color: T.card, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", letterSpacing: ".05em", cursor: "pointer", whiteSpace: "nowrap" }}>

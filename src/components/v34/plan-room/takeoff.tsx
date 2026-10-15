@@ -989,12 +989,16 @@ function Drawing({ sheet, fileUrl, zoom, setZoom, tool, data, groupId, selId, se
       return;
     }
     if ((tool === "area" || tool === "cutout") && draft.length >= 3 && near(p, draft[0])) { void save(draft); return; }
-    if (draft.length && near(p, draft[draft.length - 1])) return; // a double-click's second click
+    if (draft.length && near(p, draft[draft.length - 1])) {
+      // A click back on the last point finishes a line (a double-click lands here too).
+      if (tool === "linear" && draft.length >= 2) void save(draft);
+      return;
+    }
     setDraft((d) => [...d, p]);
   };
   const dbl = () => {
     if (tool === "area" || tool === "cutout") { if (draft.length >= 3) void save(draft); }
-    else if (tool === "linear") { if (draft.length >= 2) void save(draft); }
+    // linear: its second click already finished it on the last point
   };
 
   const params = new Map(data.params.map((p) => [p.id, p]));

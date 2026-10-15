@@ -775,6 +775,17 @@ function SectionCard({ group, s, index, err, onLocal, onSave, onRemove, jobType,
             Use the bid&apos;s {bidQty.n.toLocaleString("en-US")} {bidQty.u}
           </button>
         )}
+        {/* Any section can carry a pour (Coy, 2026-10-15: "Some groups don't have a width and depth and
+            concrete volume"): a removal or prep section has none until this is ticked. */}
+        {mode !== "count" && (
+          <button type="button" aria-pressed={concrete}
+            title={concrete ? "Take the pour off: no thickness or concrete on this section" : "Add thickness, width and concrete yards to this section"}
+            onClick={() => { const w = concrete ? "demo" : "slab"; onLocal({ work_type: w }); onSave({ work_type: w }); }}
+            className="rounded px-2" style={{ height: 28, fontSize: F.sm, cursor: "pointer",
+              border: `1px solid ${concrete ? T.green : T.hairStrong}`, background: concrete ? T.sunk : T.card, color: concrete ? T.green : T.ink2 }}>
+            {concrete ? "✓ Concrete" : "+ Concrete"}
+          </button>
+        )}
         {takeoff}
       </div>
 

@@ -28,7 +28,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { T, F, disp, eyebrow, agent, clip, relTime, nums, formatPhone } from "@/lib/v34/tokens";
 import { DustyEmblem, DOING, type EmblemState } from "@/components/v34/dusty-avatar";
-import { Markdown } from "@/components/v34/markdown";
+import { Markdown, MdAsk } from "@/components/v34/markdown";
 import { PlanCard } from "@/components/v34/plan-card";
 import { hideIds, parsePlan } from "@/lib/dusty/plan";
 import { useDustyUse } from "@/lib/v34/dusty-live";
@@ -290,6 +290,11 @@ export function DustyPanel({ open, onClose, onBusy, onStream, onState }: {
     void ask(q);
   // eslint-disable-next-line react-hooks/exhaustive-deps -- ask() reads this render's chat; it runs once per tap
   }, [autoTick, open, convs, openedFor, openKey, loadingConv, busy]);
+
+  // A "search the web for …" in an answer is a button: asked as Coy's next question, in this chat (Coy, 2026-10-15).
+  const askRef = useRef<(q: string) => Promise<void>>(async () => {});
+  const askSearch = useCallback((q: string) => { void askRef.current(q); }, []);
+  useEffect(() => { askRef.current = ask; });
 
   async function ask(text: string) {
     const ready = atts.filter((a) => a.id && !a.error);
@@ -682,6 +687,7 @@ export function DustyPanel({ open, onClose, onBusy, onStream, onState }: {
             )}
             {/* The chat at Coy's text size: zoom scales the answers' tables and plans with the words. */}
             <div style={{ zoom: font.z }}>
+            <MdAsk.Provider value={busy ? null : askSearch}>
             {items.map((it, i) => it.role === "user" ? (
               <div key={i} style={{ margin: i === 0 ? "0 0 8px" : "22px 0 8px", paddingTop: i === 0 ? 0 : 16, borderTop: i === 0 ? "none" : `1px solid ${T.hair}` }}>
                 <h2 style={{ fontFamily: agent, fontSize: F.md + 1, fontWeight: 700, lineHeight: 1.35 }}>
@@ -738,6 +744,7 @@ export function DustyPanel({ open, onClose, onBusy, onStream, onState }: {
                 </div>
               </div>
             ))}
+            </MdAsk.Provider>
             </div>
             {err &&<div style={{ fontSize: F.sm, color: T.red, marginTop: 8 }}>{err}</div>}
           </div>

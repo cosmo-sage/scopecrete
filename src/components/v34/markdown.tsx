@@ -10,10 +10,38 @@ import React from "react";
 import { T, F, nums } from "@/lib/v34/tokens";
 import { parseMarkdown, type Inline, type MdBlock } from "@/lib/markdown";
 
+/** Set by Dusty's chat: a "search the web for …" his answer suggests becomes a button that asks it (Coy, 2026-10-15). */
+export const MdAsk = React.createContext<((q: string) => void) | null>(null);
+
+const SEARCH_ASK = /(search the web for [^"“”\n]+?)(?=["“”]|[.,;:)!?]*(?:\s*$|\n)|[.;)!?](?:\s|$))/gi;
+
+/** "…ask me to "search the web for X"" → the phrase as a button; anything else as it was. */
+function Asks({ v }: { v: string }) {
+  const onAsk = React.useContext(MdAsk);
+  if (!onAsk || !/search the web for /i.test(v)) return <>{v}</>;
+  const out: React.ReactNode[] = [];
+  let last = 0;
+  for (const m of v.matchAll(SEARCH_ASK)) {
+    const q = m[1].trim();
+    if (q.length < 22) continue;
+    out.push(v.slice(last, m.index));
+    out.push(
+      <button key={m.index} type="button" onClick={() => onAsk(q)} title="Ask Dusty to search the web for this"
+        style={{ color: T.chalk, textDecoration: "underline", textUnderlineOffset: 2, cursor: "pointer", font: "inherit", background: "none", padding: 0, textAlign: "left" }}>
+        🔍 {q}
+      </button>,
+    );
+    last = (m.index ?? 0) + m[1].length;
+  }
+  out.push(v.slice(last));
+  return <>{out}</>;
+}
+
 function Text({ parts }: { parts: Inline[] }) {
-  return <>{parts.map((p, i) => p.t === "b" ? <b key={i}>{p.v}</b> : p.t === "i" ? <em key={i}>{p.v}</em>
-    : p.t === "code" ? <code key={i} style={{ fontSize: "0.92em", background: T.sunk, padding: "0 3px", borderRadius: 3 }}>{p.v}</code>
-    : <React.Fragment key={i}>{p.v}</React.Fragment>)}</>;
+  return <>{parts.map((p, i) => p.t === "b" ? <b key={i}><Asks v={p.v} /></b> : p.t === "i" ? <em key={i}><Asks v={p.v} /></em>
+    : p.t === "code" ? (/search the web for /i.test(p.v) ? <Asks key={i} v={p.v} />
+      : <code key={i} style={{ fontSize: "0.92em", background: T.sunk, padding: "0 3px", borderRadius: 3 }}>{p.v}</code>)
+    : <Asks key={i} v={p.v} />)}</>;
 }
 
 function Blocks({ blocks }: { blocks: MdBlock[] }) {

@@ -30,7 +30,9 @@ export interface AnalysisLine {
   risk?: number | null;
 }
 /** An area with its size: sq ft for areas, LF for areas measured in linear feet (curb, grade beam). */
-export interface AnalysisArea { id: string; name: string; sqft: number | null; lf: number | null }
+export interface AnalysisArea { id: string; name: string; sqft: number | null; lf: number | null;
+  /** A pour. Base, demo and prep under it cover the same ground, so the whole job counts pours only when it has any. */
+  concrete?: boolean }
 
 export interface AnalysisRow { bucket: Bucket; label: string; cost: number; lines: AnalysisLine[] }
 export interface Analysis {
@@ -79,7 +81,8 @@ export function analyse(lines: AnalysisLine[], areas: AnalysisArea[], opts: { se
   const net = gross - overhead - risk;
   const sold = price - discount;
 
-  const inScope = all ? areas : areas.filter((a) => a.id === opts.section);
+  const pours = areas.filter((a) => a.concrete);
+  const inScope = all ? (pours.length ? pours : areas) : areas.filter((a) => a.id === opts.section);
   const sf = inScope.reduce((a, x) => a + (x.lf === null && x.sqft !== null && x.sqft > 0 ? x.sqft : 0), 0);
   const lf = inScope.reduce((a, x) => a + (x.lf !== null && x.lf > 0 ? x.lf : 0), 0);
 

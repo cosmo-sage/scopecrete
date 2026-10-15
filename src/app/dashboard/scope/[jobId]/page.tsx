@@ -19,6 +19,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
+import { RailMarket } from "@/components/v34/market-rates";
 import { useDustyDocked } from "@/lib/v34/use-dusty-docked";
 import { VoiceRecorder } from "@/components/v34/voice-recorder";
 import { useParams } from "next/navigation";
@@ -522,7 +523,7 @@ export default function ScopeBuilder() {
       {/* ================= takeoff rail ================= (hidden while the sheets are open beside the page) */}
       {!viewer && (() => {
         const rail = <TakeoffRail t={t} job={job} onCrewDays={(v) => void saveCrewDays(v)} jobType={job.job_type}
-          workType={sections[0]?.work_type ?? null} budget={budget} inPanel={!!railSlot} />;
+          workType={sections[0]?.work_type ?? null} budget={budget} inPanel={!!railSlot} crewSize={crew?.size ?? null} tick={budgetTick} />;
         return railSlot ? createPortal(rail, railSlot) : rail;
       })()}
     </div>
@@ -725,7 +726,16 @@ function SectionCard({ group, s, index, err, onLocal, onSave, onRemove, jobType,
         )}
         {open ? (
           // No kind-of-area picker here (Coy, 2026-10-10: "remove the section type completely from here").
-          <Dictate jobId={jobId} s={s} onApply={(p) => { onLocal(p as Partial<Section>); onSave(p as Partial<Section>); }} />
+          <>
+            <Dictate jobId={jobId} s={s} onApply={(p) => { onLocal(p as Partial<Section>); onSave(p as Partial<Section>); }} />
+            {/* The totals stay on the header when open too (Coy, 2026-10-15). */}
+            <span className="flex items-baseline gap-2 text-right" style={{ marginLeft: "auto", fontSize: F.xs, color: T.ink2, ...nums }}>
+              <span>{sizeText}</span>
+              {m && m.lines > 0
+                ? <span style={{ fontFamily: disp, fontSize: F.md, fontWeight: 700, color: T.ink }}>{money0(m.price)}{perText ? <span style={{ fontFamily: "inherit", fontWeight: 400, fontSize: F.xs, color: T.ink3 }}> {perText}</span> : null}</span>
+                : <span style={{ color: T.ink3 }}>no items</span>}
+            </span>
+          </>
         ) : (
           <button onClick={onToggle} className="flex items-baseline gap-2 text-right" style={{ marginLeft: "auto", cursor: "pointer", fontSize: F.xs, color: T.ink2, ...nums }}>
             <span>{sizeText}</span>
@@ -1115,8 +1125,8 @@ function railSize(t: ReturnType<typeof takeoffOf>): { n: number; unit: "SF" | "L
   return { n: t.sqft, unit: "SF", extra: lf > 0 ? ` + ${n1(lf)} lin ft` : "" };
 }
 
-function TakeoffRail({ t, job, onCrewDays, budget, inPanel }: {
-  t: ReturnType<typeof takeoffOf>;
+function TakeoffRail({ t, job, onCrewDays, budget, inPanel, crewSize = null, tick = 0 }: {
+  t: ReturnType<typeof takeoffOf>; crewSize?: number | null; tick?: number;
   job: Job; onCrewDays: (v: number | null) => void; jobType: string | null; workType: string | null;
   budget: BudgetSummary | null;
   /** Shown at the top of Dusty's docked panel: folded to the totals, scrolls on its own. */
@@ -1146,13 +1156,15 @@ function TakeoffRail({ t, job, onCrewDays, budget, inPanel }: {
 
       <div className="px-4 py-3" style={inPanel ? line : undefined}>
         <div style={{ ...eyebrow, color: dim }}>Total area</div>
-        <div style={{ fontFamily: disp, fontSize: 40, fontWeight: 700, lineHeight: 1, ...nums }}>{size.n > 0 ? n1(size.n) : "—"}</div>
-        <div style={{ ...eyebrow, color: dim }}>{size.unit === "LF" ? "lin ft" : "sq ft"}{size.extra} · {t.sections.length} section{t.sections.length === 1 ? "" : "s"}{t.incomplete ? " · incomplete" : ""}</div>
+        <div style={{ fontFamily: disp, fontSize: 28, fontWeight: 700, lineHeight: 1.05, ...nums }}>{size.n > 0 ? n1(size.n) : "—"}</div>
+        <div style={{ fontSize: 13, color: "#C3CBD4", marginTop: 4, lineHeight: 1.4, ...nums }}>{size.unit === "LF" ? "lin ft" : "sq ft"}{size.extra} · {t.sections.length} section{t.sections.length === 1 ? "" : "s"}{t.incomplete ? " · incomplete" : ""}</div>
       </div>
 
       {/* No "Concrete to order" box (Coy, 2026-10-12: on a removal job it read the yards to tear out as concrete to buy). */}
       {budget?.has_lines ? (
-        <BudgetRail budget={budget} sqft={t.sqft} crew={crew} setCrew={setCrew} onCrewDays={onCrewDays} />
+        <>
+          <BudgetRail budget={budget} sqft={t.sqft} crew={crew} crewSize={crewSize} />
+        </>
       ) : (
         <>
           {/* No "No price yet" box or Assemblies button (Coy, 2026-10-02): assemblies load inside the budget's areas. */}
@@ -1169,6 +1181,7 @@ function TakeoffRail({ t, job, onCrewDays, budget, inPanel }: {
           </div>
         </>
       )}
+      <RailMarket jobId={job.id} refresh={tick} />
       </>)}
     </aside>
   );
@@ -1180,9 +1193,8 @@ function TakeoffRail({ t, job, onCrewDays, budget, inPanel }: {
  * minimum (day minimum × days — Coy, 2026-09-30). The discount, O.H. and
  * margin live in the budget's own footer — one number, never two.
  */
-function BudgetRail({ budget, sqft, crew, setCrew, onCrewDays }: {
-  budget: BudgetSummary; sqft: number;
-  crew: number | ""; setCrew: (v: number | "") => void; onCrewDays: (v: number | null) => void;
+function BudgetRail({ budget, sqft, crew, crewSize }: {
+  budget: BudgetSummary; sqft: number; crew: number | ""; crewSize: number | null;
 }) {
   const dim = "#8E99A5";
   const line = { borderTop: `1px solid ${T.darkHair}` };
@@ -1196,11 +1208,14 @@ function BudgetRail({ budget, sqft, crew, setCrew, onCrewDays }: {
             <div style={{ ...eyebrow, color: b.priced ? dim : T.hiviz }}>{b.label ? `${b.label}` : "Price"} · budget</div>
             {b.priced ? (
               <>
-                <div style={{ fontFamily: disp, fontSize: budget.tiers.length > 1 ? 30 : 40, fontWeight: 700, lineHeight: 1, ...nums }}>{money0(b.total)}</div>
-                <div style={{ ...eyebrow, color: dim, ...nums }}>
-                  cost {money0(b.cost)} · O.H. {money0(b.overhead)} · margin {(b.margin * 100).toFixed(1)}%
-                  {b.tax > 0 ? ` · tax ${money0(b.tax)}` : budget.tax_on ? "" : " · no tax"}
-                  {sqft > 0 ? ` · ${money(b.total / sqft)}/sf` : ""}
+                <div style={{ fontFamily: disp, fontSize: 28, fontWeight: 700, lineHeight: 1.05, ...nums }}>{money0(b.total)}</div>
+                {/* Cost red, O.H. yellow, profit green, as the budget footer (Coy, 2026-10-15). */}
+                <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1" style={{ fontFamily: disp, fontSize: 14, fontWeight: 700, ...nums }}>
+                  <span style={{ color: "#F08A7A" }}>cost {money0(b.cost)}</span>
+                  <span style={{ color: "#E8C452" }}>O.H. {money0(b.overhead)}</span>
+                  <span style={{ color: "#7FD39C" }}>profit {money0(b.profit)} · {(b.margin * 100).toFixed(1)}%</span>
+                  {b.tax > 0 ? <span style={{ color: "#C3CBD4" }}>tax {money0(b.tax)}</span> : !budget.tax_on ? <span style={{ color: dim }}>no tax</span> : null}
+                  {sqft > 0 && <span style={{ color: "#C3CBD4" }}>{money(b.total / sqft)}/sf</span>}
                 </div>
                 {under && <div style={{ fontSize: F.xs, color: "#F3A89A", ...nums }}>under the job minimum of {money0(min.minimum)}</div>}
                 {min.ok && min.days > 0 && <div style={{ fontSize: F.xs, color: "#9FD8B4", marginTop: 2, ...nums }}>net {money0(b.profit / min.days)} a day · gross {money0((b.total - b.tax - b.cost) / min.days)} a day</div>}
@@ -1214,13 +1229,18 @@ function BudgetRail({ budget, sqft, crew, setCrew, onCrewDays }: {
         );
       })}
       <div className="px-4 py-3" style={line}>
-        <div style={{ fontSize: F.xs, color: "#C3CBD4", ...nums }}>Days on this job: {crew === "" ? "worked out from the sections" : crew}</div>
-        <div style={{ fontSize: F.xs, color: "#C3CBD4", marginTop: 6, lineHeight: 1.45, ...nums }}>
-          Job minimum: {min.ok ? `${money0(min.minimum)} — ${min.days} days × ${money0(min.day_minimum)} a day` : `needs ${min.blocked.join(" and ")}`}
-        </div>
-        <div style={{ fontSize: F.xs, color: dim, marginTop: 6, lineHeight: 1.45 }}>
-          Crew and days are in Job totals under Labor, worked out from the sections&apos; labor lines.
-        </div>
+        {/* Crew days, crew size and the labor budget (Coy, 2026-10-15). */}
+        {(() => {
+          const days = crew !== "" ? crew : budget.days_auto;
+          return (
+            <div className="grid gap-x-3 gap-y-1" style={{ gridTemplateColumns: "auto 1fr", fontSize: 13, color: "#C3CBD4", ...nums }}>
+              <span style={{ color: dim }}>Crew days</span><span>{days !== null ? `${days}${crew === "" ? " · from the labor lines" : ""}` : "no labor lines in days or hours"}</span>
+              <span style={{ color: dim }}>Crew size</span><span>{crewSize ? `${crewSize} people` : "not set"}</span>
+              <span style={{ color: dim }}>Labor budget</span><span>{money0(budget.labor)}</span>
+            </div>
+          );
+        })()}
+        {min.ok && <div style={{ fontSize: 12, color: dim, marginTop: 6, lineHeight: 1.45, ...nums }}>Job minimum {money0(min.minimum)}: {min.days} days × {money0(min.day_minimum)} a day</div>}
       </div>
     </>
   );

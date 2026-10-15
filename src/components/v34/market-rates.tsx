@@ -90,7 +90,6 @@ export function MarketRates({ jobId, refresh, onChanged, onSheets }: {
   // Only steps with a line on this budget: an old driveway lookup's concrete and
   // finishing steps don't belong on a removal job (Coy, 2026-10-11).
   const rows = useMemo(() => (d ? marketRows(d.steps, d.rates?.rates ?? [], d.lines, d.areas, job).filter((r) => r.lines.length > 0) : []), [d, job]);
-  const range = useMemo(() => (d ? jobRange(d.rates?.rates ?? []) : null), [d]);
   const secRows = useMemo(() => (d?.sections ? sectionRows(d.sections, d.lines, d.section_rates ?? []) : []), [d]);
   const [secBusy, setSecBusy] = useState<string | null>(null);
   // The emblem on a section researches it from its scope of work (Coy, 2026-10-11).
@@ -149,50 +148,7 @@ export function MarketRates({ jobId, refresh, onChanged, onSheets }: {
   const tally = { inside: counted.filter((r) => r.status === "inside").length, under: counted.filter((r) => r.status === "under").length, over: counted.filter((r) => r.status === "over").length };
   const kept = d.rates?.rates.length ?? 0;
   const lineName = (id: string) => d.lines.find((l) => l.id === id)?.name ?? "";
-  const jobFlag = mineSf !== null && range ? rateStatus(mineSf, range.low, range.high) : null;
 
-  const priceCard = (
-    <div className="rounded" style={{ background: DARK, color: "#fff", padding: "12px 14px" }}>
-      <div className="flex items-start gap-3">
-        <div style={{ minWidth: 0 }}>
-          <div style={{ ...eyebrow, color: DARK_LABEL }}>Your price</div>
-          <div style={{ fontFamily: strong, fontSize: 26, fontWeight: 700, lineHeight: 1.1, ...nums }}>{mineSf !== null ? `${money(mineSf)}/SF` : "—"}</div>
-          <div style={{ fontSize: 12, color: DARK_2, marginTop: 2 }}>
-            Going rate · installed {range ? `${money(range.low)}–${money(range.high)}/SF · typical ${money(range.typical)} · ${range.sources} source${range.sources === 1 ? "" : "s"}`
-              : d.rates ? `· none per SF in the ${when(d.rates.asked_at)} lookup` : "· not looked up yet"}
-          </div>
-        </div>
-        <span className="flex-1" />
-        {jobFlag && jobFlag !== "unpriced" && (
-          <span style={{ fontFamily: disp, fontSize: 11, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", whiteSpace: "nowrap",
-            color: jobFlag === "inside" ? DARK_GREEN : jobFlag === "under" ? ORANGE : DARK_RED }}>
-            {jobFlag === "inside" ? "Inside the range" : jobFlag === "under" ? "Under" : "Over"}
-          </span>
-        )}
-      </div>
-      {(() => {
-        const sc = scaleOf([range?.low, range?.high, mineSf, ...d.past.map((p) => p.per_sf)]);
-        if (!sc || (!range && mineSf === null)) return null;
-        const x = (v: number) => `${((v - sc.min) / (sc.max - sc.min)) * 100}%`;
-        return (
-          <>
-            <div className="relative" style={{ height: 18, marginTop: 12 }}>
-              <span style={{ position: "absolute", left: 0, right: 0, top: 8, height: 3, background: "#4A4A4A" }} />
-              {range && <span style={{ position: "absolute", left: x(range.low), width: `calc(${x(range.high)} - ${x(range.low)})`, top: 8, height: 3, background: DARK_LABEL }} />}
-              {d.past.map((p) => <span key={p.id} title={`${p.name} ${money(p.per_sf)}/SF`} style={{ position: "absolute", left: x(p.per_sf), top: 5, width: 9, height: 9, marginLeft: -4.5, borderRadius: 99, border: `1.5px solid ${DARK_2}` }} />)}
-              {mineSf !== null && <span style={{ position: "absolute", left: x(mineSf), top: 2, width: 3, height: 15, marginLeft: -1.5, background: ORANGE }} />}
-            </div>
-            <div className="flex justify-between" style={{ fontSize: 10.5, color: DARK_LABEL, ...nums }}>
-              <span>{money(sc.min)}</span>
-              <span className="flex gap-3"><span><span style={{ display: "inline-block", width: 10, height: 3, background: DARK_LABEL, verticalAlign: "middle" }} /> range</span>
-                {d.past.length > 0 && <span>○ past jobs</span>}<span style={{ color: ORANGE }}>▍ this job</span></span>
-              <span>{money(sc.max)}</span>
-            </div>
-          </>
-        );
-      })()}
-    </div>
-  );
 
   const pastCard = (
     <div className="rounded" style={{ background: T.card, border: `1px solid ${T.hair}`, padding: "10px 12px" }}>
@@ -454,9 +410,7 @@ export function MarketRates({ jobId, refresh, onChanged, onSheets }: {
       {err && <div style={{ fontSize: 12, color: T.red }}>{err}</div>}
       {!d.has_budget && <div style={{ fontSize: 12.5, color: T.ink2 }}>Add items on the Proposed budget, then compare them here.</div>}
 
-      {wide ? (
-        <div className="grid gap-2" style={{ gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)" }}>{priceCard}{pastCard}</div>
-      ) : <>{priceCard}{pastCard}</>}
+      {pastCard}
 
       {secRows.length > 0 && sectionCard}
 
@@ -523,4 +477,70 @@ export function MarketRates({ jobId, refresh, onChanged, onSheets }: {
       </div>
     </div>
   );
+}
+
+/** The job's price per SF against the going rate, with the size and total it is worked out from and
+ *  where the range came from (Coy, 2026-10-15: "merge … so I can see where I sit in the range and
+ *  understand how that range was calculated"). On Market rate, and in the job's dark totals box. */
+export function PriceVsRange({ d, flat }: { d: MarketData; flat?: boolean }) {
+  const range = jobRange(d.rates?.rates ?? []);
+  const mineSf = d.totals && d.sqft ? d.totals.total / d.sqft : null;
+  const jobFlag = mineSf !== null && range ? rateStatus(mineSf, range.low, range.high) : null;
+  const used = (d.rates?.rates ?? []).filter((r) => r.step === "job" && r.kind === "installed_price" && r.split === "all");
+  const sites = [...new Set(used.map((r) => r.site))];
+  const sc = scaleOf([range?.low, range?.high, mineSf, ...d.past.map((p) => p.per_sf)]);
+  const x = (v: number) => (sc ? `${((v - sc.min) / (sc.max - sc.min)) * 100}%` : "0%");
+  return (
+    <div className={flat ? "" : "rounded"} style={{ background: DARK, color: "#fff", padding: "12px 14px" }}>
+      <div className="flex items-start gap-3">
+        <div style={{ minWidth: 0 }}>
+          <div style={{ ...eyebrow, color: DARK_LABEL }}>Your price · market rate</div>
+          <div style={{ fontFamily: strong, fontSize: 26, fontWeight: 700, lineHeight: 1.1, ...nums }}>{mineSf !== null ? `${money(mineSf)}/SF` : "—"}</div>
+          <div style={{ fontSize: 12, color: DARK_2, marginTop: 2, ...nums }}>
+            {d.totals ? money(d.totals.total) : "No price yet"} ÷ {d.sqft ? `${Math.round(d.sqft).toLocaleString()} SF of concrete` : "no SF measured"}
+          </div>
+        </div>
+        <span className="flex-1" />
+        {jobFlag && jobFlag !== "unpriced" && (
+          <span style={{ fontFamily: disp, fontSize: 11, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", whiteSpace: "nowrap",
+            color: jobFlag === "inside" ? DARK_GREEN : jobFlag === "under" ? ORANGE : DARK_RED }}>
+            {jobFlag === "inside" ? "Inside the range" : jobFlag === "under" ? "Under" : "Over"}
+          </span>
+        )}
+      </div>
+      {sc && (range || mineSf !== null) && (
+        <>
+          <div className="relative" style={{ height: 18, marginTop: 12 }}>
+            <span style={{ position: "absolute", left: 0, right: 0, top: 8, height: 3, background: "#4A4A4A" }} />
+            {range && <span style={{ position: "absolute", left: x(range.low), width: `calc(${x(range.high)} - ${x(range.low)})`, top: 8, height: 3, background: DARK_LABEL }} />}
+            {range && <span title="typical" style={{ position: "absolute", left: x(range.typical), top: 6, width: 1, height: 7, background: "#fff" }} />}
+            {d.past.map((p) => <span key={p.id} title={`${p.name} ${money(p.per_sf)}/SF`} style={{ position: "absolute", left: x(p.per_sf), top: 5, width: 9, height: 9, marginLeft: -4.5, borderRadius: 99, border: `1.5px solid ${DARK_2}` }} />)}
+            {mineSf !== null && <span style={{ position: "absolute", left: x(mineSf), top: 2, width: 3, height: 15, marginLeft: -1.5, background: ORANGE }} />}
+          </div>
+          <div className="flex justify-between" style={{ fontSize: 10.5, color: DARK_LABEL, ...nums }}>
+            <span>{money(sc.min)}</span>
+            <span className="flex gap-3"><span>▬ range</span>{d.past.length > 0 && <span>○ past jobs</span>}<span style={{ color: ORANGE }}>▍ this job</span></span>
+            <span>{money(sc.max)}</span>
+          </div>
+        </>
+      )}
+      <div style={{ fontSize: 12, color: DARK_2, marginTop: 6, lineHeight: 1.45, whiteSpace: "normal", overflowWrap: "anywhere", ...nums }}>
+        {range
+          ? <>Going rate installed {money(range.low)}–{money(range.high)}/SF, typical {money(range.typical)}: the middle of {range.sources} installed price{range.sources === 1 ? "" : "s"} per SF{d.city ? ` near ${d.city}` : ""}{d.rates ? `, looked up ${when(d.rates.asked_at)}` : ""}{sites.length ? ` from ${sites.slice(0, 4).join(", ")}${sites.length > 4 ? ` and ${sites.length - 4} more` : ""}` : ""}.</>
+          : d.rates ? `No installed price per SF in the ${when(d.rates.asked_at)} lookup.` : "Going rate not looked up yet (Budget → Market rate)."}
+      </div>
+    </div>
+  );
+}
+
+/** The same card loading itself, for the job's dark totals box. */
+export function RailMarket({ jobId, refresh = 0 }: { jobId: string; refresh?: number }) {
+  const [d, setD] = useState<MarketData | null>(null);
+  useEffect(() => {
+    let off = false;
+    send(`/api/jobs/${jobId}/budget/market`, "GET").then((b) => { if (!off) setD(b); }).catch(() => {});
+    return () => { off = true; };
+  }, [jobId, refresh]);
+  if (!d) return null;
+  return <div style={{ borderTop: "1px solid #3A3A3A" }}><PriceVsRange d={d} flat /></div>;
 }

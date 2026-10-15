@@ -48,12 +48,15 @@ export function CostAnalysis({ lines, sections, tax, discount, overheadPct, days
   });
   const pickPer = (p: Per) => { setPer(p); try { localStorage.setItem("sc:cost-per", p); } catch { /* no storage */ } };
   const [open, setOpen] = useState<Set<string>>(new Set());
+  // Each row's lines by section or by product (Coy, 2026-10-15: "sort by section or product").
+  const [by, setBy] = useState<Record<string, "section" | "product">>({});
+  const [menu, setMenu] = useState<string | null>(null);
   const toggle = (k: string) => setOpen((s) => { const n = new Set(s); if (n.has(k)) n.delete(k); else n.add(k); return n; });
   const [err, setErr] = useState<string | null>(null);
 
   const areas = useMemo(() => sections.map((s) => {
     const q = quantities(s);
-    return { id: s.id, name: s.name || "Unnamed area", sqft: q.sqft, lf: q.count_unit === "LF" ? q.count : null };
+    return { id: s.id, name: s.name || "Unnamed area", sqft: q.sqft, concrete: q.concrete, lf: q.count_unit === "LF" ? q.count : null };
   }), [sections]);
   const a = useMemo(() => analyse(lines, areas, { section, tax, discount }), [lines, areas, section, tax, discount]);
   // Days are worked out from the sections' labor lines unless typed (Coy, 2026-10-15).
@@ -145,17 +148,48 @@ export function CostAnalysis({ lines, sections, tax, discount, overheadPct, days
           const can = (r.lines?.length ?? 0) > 0 || !!r.note;
           return (
             <div key={r.k} style={{ borderTop: i ? `1px solid ${T.hairSoft}` : "none" }}>
+              <div className="relative flex items-center">
               <button onClick={() => can && toggle(r.k)} aria-expanded={can ? isOpen : undefined} disabled={!can}
-                className="w-full flex items-center gap-2 px-2.5 text-left" style={{ minHeight: 40, cursor: can ? "pointer" : "default", ...nums }}>
+                className="flex-1 min-w-0 flex items-center gap-2 px-2.5 text-left" style={{ minHeight: 40, cursor: can ? "pointer" : "default", ...nums }}>
                 <span aria-hidden="true" style={{ width: 10, fontSize: 10, color: T.ink3, display: "inline-block", transform: isOpen ? "rotate(90deg)" : "none", transition: "transform .15s", visibility: can ? "visible" : "hidden" }}>▸</span>
                 <span style={{ width: 9, height: 9, borderRadius: 2, background: r.color, flex: "none" }} />
                 <span style={{ flex: 1, minWidth: 0, fontSize: F.sm, fontWeight: 600, ...clip }}>{r.label}</span>
                 <span style={{ fontSize: F.xs, color: T.ink3, width: 48, textAlign: "right" }}>{share(r.v)}</span>
                 <span style={{ fontFamily: disp, fontSize: F.md, fontWeight: 600, minWidth: 84, textAlign: "right" }}>{r.lines && !r.lines.length ? "—" : fmt(r.v)}</span>
               </button>
+              {(r.lines?.length ?? 0) > 0 && (
+                <button onClick={() => setMenu(menu === r.k ? null : r.k)} aria-label={`Sort ${r.label}`} title="Sort" className="flex items-center justify-center"
+                  style={{ width: 30, height: 40, color: by[r.k] ? T.chalk : T.ink3, cursor: "pointer", flex: "none" }}>
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden><path d="M2 3h12l-4.5 5.5V13l-3 1.5V8.5z" /></svg>
+                </button>
+              )}
+              {menu === r.k && (
+                <div className="absolute rounded z-10" style={{ right: 4, top: 38, background: T.card, border: `1px solid ${T.hair}`, boxShadow: "0 4px 14px rgba(0,0,0,.12)", minWidth: 150 }}>
+                  {(["section", "product"] as const).map((o) => (
+                    <button key={o} onClick={() => { setBy((m) => ({ ...m, [r.k]: o })); setMenu(null); setOpen((st) => new Set(st).add(r.k)); }}
+                      className="w-full text-left px-3" style={{ height: 34, fontSize: F.sm, cursor: "pointer" }}>
+                      {(by[r.k] ?? "section") === o ? "✓ " : ""}By {o}
+                    </button>
+                  ))}
+                </div>
+              )}
+              </div>
               {r.k === "labor" && <div className="px-2.5 pb-2.5" style={{ paddingLeft: 40 }}>{crewBox}</div>}
               {isOpen && r.note && <div className="px-2.5 pb-2" style={{ fontSize: F.xs, color: T.ink2, paddingLeft: 40 }}>{r.note}</div>}
-              {isOpen && r.lines && r.lines.length > 0 && (
+              {isOpen && r.lines && r.lines.length > 0 && by[r.k] === "product" && (
+                <div className="pb-1.5" style={{ background: T.slab }}>
+                  {byProduct(r.lines).map((g) => (
+                    <div key={g.key} className="flex items-baseline gap-2 py-1" style={{ paddingLeft: 40, paddingRight: 10, fontSize: F.xs, ...nums }}>
+                      <span style={{ flex: 1, minWidth: 0 }}>
+                        <span style={{ display: "block", color: T.ink, ...clip }}>{g.name}</span>
+                        <span style={{ display: "block", color: T.ink3, fontSize: 10 }}>{g.qty === null ? "—" : g.qty.toLocaleString("en-US", { maximumFractionDigits: 2 })} {g.unit}{g.count > 1 ? ` · ${g.count} lines` : ""}</span>
+                      </span>
+                      <span style={{ fontWeight: 600 }}>{fmt(g.cost)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {isOpen && r.lines && r.lines.length > 0 && by[r.k] !== "product" && (
                 <div className="pb-1.5" style={{ background: T.slab }}>
                   {[...new Set(r.lines.map((l) => l.section_id && areas.some((x) => x.id === l.section_id) ? l.section_id : null))].map((sid) => {
                     const ls = r.lines!.filter((l) => (l.section_id && areas.some((x) => x.id === l.section_id) ? l.section_id : null) === sid);
@@ -255,4 +289,16 @@ export function CostAnalysis({ lines, sections, tax, discount, overheadPct, days
       </div>
     </div>
   );
+}
+
+/** A row's lines added up by product — the same name and unit across sections (Coy, 2026-10-15), costliest first. */
+export function byProduct(lines: { name: string; unit: string | null; qty: number | null; ext_cost: number | null }[]) {
+  const m = new Map<string, { key: string; name: string; unit: string; qty: number | null; cost: number; count: number }>();
+  for (const l of lines) {
+    const key = `${l.name.trim().toLowerCase()}|${(l.unit ?? "").toLowerCase()}`;
+    const g = m.get(key) ?? { key, name: l.name.trim(), unit: l.unit ?? "", qty: 0, cost: 0, count: 0 };
+    g.qty = g.qty === null || l.qty === null ? null : g.qty + l.qty;
+    g.cost += l.ext_cost ?? 0; g.count += 1; m.set(key, g);
+  }
+  return [...m.values()].sort((a, b) => b.cost - a.cost);
 }

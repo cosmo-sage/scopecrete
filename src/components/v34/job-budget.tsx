@@ -1180,6 +1180,19 @@ function VendorField({ line, sources, onPin, onPick }: {
  */
 function VendorCompare({ line, sources, onPin }: { line: Line; sources: Source[]; onPin: (sourceId: string | null) => void }) {
   const [also, setAlso] = useState("");
+  // Each vendor's phone and address (Coy, 2026-10-15: "I want to see the vendor name, phone number, address").
+  const [info, setInfo] = useState<Record<string, { phone: string | null; address: string | null }>>({});
+  useEffect(() => {
+    let off = false;
+    fetch("/api/vendors").then((r) => r.json()).then((b) => { if (!off) setInfo(Object.fromEntries((b.vendors ?? []).map((v: { id: string; phone: string | null; address: string | null }) => [v.id, { phone: v.phone, address: v.address }]))); }).catch(() => {});
+    return () => { off = true; };
+  }, []);
+  // Their calls: Dusty reads the vendor's call recordings and transcripts for this item's price.
+  const fromCalls = (vendor: string) => {
+    const q = `Read ${vendor}'s calls and texts with me (recordings, transcripts and Quo's summaries) and find what they quoted for ${line.name}${line.unit ? ` per ${line.unit}` : ""} or anything like it. Quote the line they said it in and when, and give me vendor_price steps for each price they gave (marked estimate, "from their call on <date>"), so I can apply them. If they gave no price, say so.`;
+    window.dispatchEvent(new Event("sc:dusty-open"));
+    setTimeout(() => window.dispatchEvent(new CustomEvent("sc:dusty-draft", { detail: { text: q, send: true } })), 250);
+  };
   const rows = sources.filter((s) => s.vendor).slice().sort((a, b) => (a.unit_cost ?? Infinity) - (b.unit_cost ?? Infinity));
   const low = rows.find((r) => r.unit_cost !== null)?.unit_cost ?? null;
   const ask = () => {
@@ -1195,7 +1208,17 @@ function VendorCompare({ line, sources, onPin }: { line: Line; sources: Source[]
         const using = line.source_id === r.id;
         return (
           <div key={r.id} className="flex items-center gap-2" style={{ minHeight: 34, borderTop: `1px solid ${T.hairSoft}`, fontSize: F.sm }}>
-            <span style={{ flex: 1, minWidth: 0, ...clip }}>{vendorName(r.vendor)}</span>
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ display: "block", ...clip }}>{vendorName(r.vendor)}</span>
+              {r.vendor && (info[r.vendor.id]?.phone || info[r.vendor.id]?.address) && (
+                <span style={{ display: "block", fontSize: F.xs, color: T.ink3, ...clip }}>
+                  {info[r.vendor.id]?.phone && <a href={`tel:${info[r.vendor.id]!.phone}`} style={{ color: T.chalk }}>{fmtPhone(info[r.vendor.id]!.phone!)}</a>}
+                  {info[r.vendor.id]?.phone && info[r.vendor.id]?.address ? " · " : ""}{info[r.vendor.id]?.address}
+                </span>
+              )}
+            </span>
+            <button onClick={() => fromCalls(vendorName(r.vendor) ?? "this vendor")} title="Dusty reads their calls for this price"
+              style={{ fontSize: F.xs, color: T.chalk, cursor: "pointer", whiteSpace: "nowrap" }}>From calls</button>
             <span style={{ ...nums, color: r.unit_cost !== null && r.unit_cost === low ? T.green : T.ink }}>
               {r.unit_cost === null ? "no price" : `${money(r.unit_cost)}/${line.unit || "unit"}`}{r.unit_cost !== null && r.unit_cost === low && rows.length > 1 ? " · lowest" : ""}
             </span>
@@ -1277,3 +1300,5 @@ function TaxSheet({ open, onClose, tax, onSave, onLookup }: {
     </Sheet>
   );
 }
+
+function fmtPhone(p: string) { const d = p.replace(/\D/g, "").replace(/^1(?=\d{10}$)/, ""); return d.length === 10 ? `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}` : p; }

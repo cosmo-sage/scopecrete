@@ -32,6 +32,7 @@ import { Sheet, Drawer } from "@/components/v34/primitives";
 import { PriceBook, SwipeRetire } from "@/components/v34/price-book";
 import { DustyEmblemButton } from "@/components/v34/budget-tabs";
 import { sectionItemsQuestion } from "@/lib/dusty/section-items";
+import { vendorCompareQuestion } from "@/lib/dusty/vendor-compare";
 import { Emblem } from "@/components/site/marks";
 import { budget as priceBudget, jobMinimum, quantities, type BudgetLine, type BudgetSettings, type SectionInput, type TakeoffTotal, type TierTotal } from "@/lib/engine";
 import { COMMISSION_STEPS, commissionSplit } from "@/lib/commission";
@@ -322,7 +323,12 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
                               {r.blocked.length > 0 && <div style={{ fontSize: 9.5, color: T.hiviz, whiteSpace: "normal", overflowWrap: "anywhere" }}>needs {r.blocked.join(", ")}</div>}
                             </td>
                             <td style={{ padding: "2px 4px", color: T.ink2, maxWidth: 170, ...clip }}>
-                              <VendorPick line={l} sources={data.sources ?? []} name={vendorName} onPick={(id) => void patchLine(l.id, { source_id: id })} />
+                              {l.cost_item_id
+                                ? <button onClick={() => setEditing(l)} title="Compare vendors" style={{ cursor: "pointer", color: T.chalk, ...clip, display: "block", maxWidth: 166, textAlign: "left" }}>
+                                    {vendorName(l.vendor_contact_id) ?? "+ Vendor"}
+                                    {(() => { const n = (data.sources ?? []).filter((x) => x.cost_item_id === l.cost_item_id).length; return n > 1 ? <span style={{ color: T.ink3 }}> · {n} ▾</span> : null; })()}
+                                  </button>
+                                : <span style={{ padding: "0 4px" }}>—</span>}
                             </td>
                             <td style={{ padding: "2px 4px", textAlign: "right", whiteSpace: "nowrap" }}>
                               <Cell value={r.qty} placeholder={blockedQty ? "?" : ""} label={`Quantity of ${l.name}`} warn={blockedQty}
@@ -1066,7 +1072,10 @@ function LineSheet({ line, data, sections, res, addon, onAddon, onClose, onPatch
         <div style={box}>
           <div style={head}>Vendor</div>
           {line.cost_item_id
-            ? <VendorField line={line} sources={(data.sources ?? []).filter((x) => x.cost_item_id === line.cost_item_id)} onPin={(id) => onPatch({ source_id: id })} onPick={onPickVendor} />
+            ? <>
+                <VendorField line={line} sources={(data.sources ?? []).filter((x) => x.cost_item_id === line.cost_item_id)} onPin={(id) => onPatch({ source_id: id })} onPick={onPickVendor} />
+                <VendorCompare line={line} sources={(data.sources ?? []).filter((x) => x.cost_item_id === line.cost_item_id)} onPin={(id) => onPatch({ source_id: id })} />
+              </>
             : <div style={{ fontSize: F.xs, color: T.ink3 }}>A vendor goes on a Price book item; this line is on this budget only.</div>}
         </div>
 
@@ -1163,23 +1172,45 @@ function VendorField({ line, sources, onPin, onPick }: {
 }
 
 /**
- * Whose price a line uses (migration 051). "Default" follows the card's
- * default vendor; picking one vendor pins this line to their price only.
- * Shown as plain text when only one vendor prices the item.
+ * Vendor intelligence (Coy, 2026-10-15): every vendor pricing this item, cheapest first, with Use to put
+ * their price on this line, and the emblem asking Dusty for each one's current price (calls, texts, quotes,
+ * websites) and other local vendors, as vendor_price steps marked estimate for Coy to apply.
  */
-function VendorPick({ line, sources, name, onPick, full }: {
-  line: Line; sources: Source[]; name: (id: string | null) => string | null; onPick: (sourceId: string | null) => void; full?: boolean;
-}) {
-  const mine = sources.filter((x) => x.cost_item_id === line.cost_item_id);
-  if (mine.length < 2 && !full) return <span style={{ padding: "0 4px" }}>{name(line.vendor_contact_id) ?? "—"}</span>;
-  const label = (x: Source) => `${x.unit_cost === null ? "no price" : money(x.unit_cost)} · ${x.vendor?.name || x.vendor?.company_name || formatPhone(x.vendor?.phone ?? null)}`;
+function VendorCompare({ line, sources, onPin }: { line: Line; sources: Source[]; onPin: (sourceId: string | null) => void }) {
+  const [also, setAlso] = useState("");
+  const rows = sources.filter((s) => s.vendor).slice().sort((a, b) => (a.unit_cost ?? Infinity) - (b.unit_cost ?? Infinity));
+  const low = rows.find((r) => r.unit_cost !== null)?.unit_cost ?? null;
+  const ask = () => {
+    const q = vendorCompareQuestion(line.name, line.unit, rows.map((r) => ({ name: vendorName(r.vendor) ?? "Vendor", price: r.unit_cost })), also);
+    window.dispatchEvent(new Event("sc:dusty-open"));
+    setTimeout(() => window.dispatchEvent(new CustomEvent("sc:dusty-draft", { detail: { text: q, send: true } })), 250);
+  };
   return (
-    <select value={line.source_pinned && line.source_id ? line.source_id : ""} aria-label={`Vendor for ${line.name}`}
-      onChange={(e) => onPick(e.target.value || null)}
-      style={{ height: full ? 36 : 28, width: "100%", maxWidth: full ? undefined : 166, border: `1px solid ${T.hair}`, background: T.card, fontSize: full ? F.sm : F.xs, borderRadius: 4, padding: "0 4px" }}>
-      <option value="">Default{line.source_pinned ? "" : ` (${name(line.vendor_contact_id) ?? "none"})`}</option>
-      {mine.map((x) => <option key={x.id} value={x.id}>{label(x)}{line.source_pinned && line.source_id === x.id ? " ✎" : ""}</option>)}
-    </select>
+    <div className="mt-3">
+      <div style={{ fontSize: F.xs, color: T.ink3, marginBottom: 4 }}>Compare vendors</div>
+      {rows.length === 0 && <div style={{ fontSize: F.xs, color: T.ink3 }}>No vendor prices this item yet.</div>}
+      {rows.map((r) => {
+        const using = line.source_id === r.id;
+        return (
+          <div key={r.id} className="flex items-center gap-2" style={{ minHeight: 34, borderTop: `1px solid ${T.hairSoft}`, fontSize: F.sm }}>
+            <span style={{ flex: 1, minWidth: 0, ...clip }}>{vendorName(r.vendor)}</span>
+            <span style={{ ...nums, color: r.unit_cost !== null && r.unit_cost === low ? T.green : T.ink }}>
+              {r.unit_cost === null ? "no price" : `${money(r.unit_cost)}/${line.unit || "unit"}`}{r.unit_cost !== null && r.unit_cost === low && rows.length > 1 ? " · lowest" : ""}
+            </span>
+            {using ? <span style={{ fontSize: F.xs, color: T.ink3, width: 44, textAlign: "right" }}>✓ Using</span>
+              : <button onClick={() => onPin(r.id)} disabled={r.unit_cost === null} style={{ fontSize: F.xs, color: T.chalk, cursor: "pointer", width: 44, textAlign: "right" }}>Use</button>}
+          </div>
+        );
+      })}
+      <div className="flex items-center gap-2 mt-2">
+        <input value={also} onChange={(e) => setAlso(e.target.value)} placeholder="Other vendors to check (Casco…)" aria-label="Other vendors to check"
+          style={{ flex: 1, minWidth: 0, height: 32, border: `1px solid ${T.hair}`, borderRadius: 4, background: T.card, padding: "0 8px", fontSize: F.sm }} />
+        <button onClick={ask} title="Ask Dusty for each vendor's current price" className="flex items-center gap-1 rounded px-2"
+          style={{ height: 32, border: `1px solid ${T.hair}`, cursor: "pointer", fontSize: F.xs, whiteSpace: "nowrap" }}>
+          <Emblem size={16} spin={false} /> Research prices
+        </button>
+      </div>
+    </div>
   );
 }
 

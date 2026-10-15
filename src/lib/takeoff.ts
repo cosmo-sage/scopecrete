@@ -162,7 +162,8 @@ export function measurementQty(kind: TakeoffKind, m: Pick<MeasurementIn, "geomet
   if (!sheet) return { ok: false, reason: "its sheet was removed" };
   if (!sheet.ft_per_pt || sheet.ft_per_pt <= 0) return { ok: false, reason: `sheet ${sheet.label} scale not set` };
   const k = sheet.ft_per_pt;
-  if (kind === "linear") return { ok: true, qty: polylineLength(m.geometry) * k };
+  // A linear takeoff's cutouts are runs taken back off it (Coy, 2026-10-15).
+  if (kind === "linear") return { ok: true, qty: Math.max(0, polylineLength(m.geometry) - (m.cutouts ?? []).reduce((a, c) => a + polylineLength(c), 0)) * k };
   const holes = (m.cutouts ?? []).reduce((a, c) => a + polygonArea(c), 0);
   return { ok: true, qty: Math.max(0, polygonArea(m.geometry) - holes) * k * k };
 }

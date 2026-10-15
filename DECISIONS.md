@@ -4462,6 +4462,15 @@ expected start date per quoted job before it means anything. Add the field.
   outside the fill (`holeFits()`: 90% of its corners inside) is refused by name. Checked on a
   generated vector sheet: a 100 × 100 pt curbed box inside an L-shaped slab traced to its four
   corners and fit. No model reads the drawing — Fill and Cut out are geometry off the PDF.
+  **Add to or take from a takeoff (Coy, 2026-10-15: "add/subtract from linear ft, areas and counts
+  that are already measured in groups").** A picked takeoff shows **+ Add** and **− Subtract** on the
+  toolbar; draw, then Finish. A line: Add carries it on from its last point (the points join its
+  geometry); Subtract draws a run that is taken back off its length, kept in its `cutouts` (now allowed
+  on linear, two points or more; `measurementQty()` subtracts their length, tested in
+  `tests/takeoff-adjust.test.mjs`; no migration). A count: Add clicks more points onto it; Subtract takes
+  off the counted point nearest each click (never the last one — delete it instead). An area: Add draws
+  a new area in the same group (the group's row is their total), Subtract is the Cutout tool on it.
+  Sections follow as for any edit.
   **Fills add up in one group (Coy, 2026-10-10: "add to existing measurements so i can capture all
   the sidewalks together").** Fill's strip has **Add to: <group>** (the job's area groups, and
   + New group…): every fill kept goes into that group as its own takeoff, and the group's row is

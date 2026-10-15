@@ -23,6 +23,17 @@ import { traceAt, type TraceOptions } from "@/lib/v34/plan-trace";
 import { useSearchParams } from "next/navigation";
 import { AskIcon, shapeMiddle, usePlanPins } from "./sheet-comments";
 
+/** Count's subtract: each click takes off the counted point nearest it. */
+function dropNearest(geom: Pt[], picks: Pt[]): Pt[] {
+  const left = [...geom];
+  for (const q of picks) {
+    let bi = -1, bd = Infinity;
+    left.forEach((p, i) => { const d = Math.hypot(p[0] - q[0], p[1] - q[1]); if (d < bd) { bd = d; bi = i; } });
+    if (bi >= 0) left.splice(bi, 1);
+  }
+  return left;
+}
+
 type Tool = "select" | "area" | "rect" | "fill" | "linear" | "count" | "cutout" | "scale";
 const TOOL_KIND: Partial<Record<Tool, TakeoffKind>> = { area: "area", rect: "area", fill: "area", linear: "linear", count: "count" };
 
@@ -90,6 +101,8 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
   const sheet = sheets.find((s) => s.id === sheetId) ?? sheets[0] ?? null;
   const file = sheet ? files.find((f) => f.id === sheet.file_id) ?? null : null;
   const [tool, setTool] = useState<Tool>("select");
+  // Add to or take from the selected takeoff (Coy, 2026-10-15): draw, and Finish changes that shape.
+  const [adj, setAdj] = useState<"add" | "sub" | null>(null);
   const [groupId, setGroupId] = useState<string | null>(data.params[0]?.id ?? null);
   const [selId, setSelId] = useState<string | null>(null);
   // A draft belongs to one sheet and one tool; switching either drops it.
@@ -173,7 +186,7 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
   };
 
   const pickTool = (t: Tool) => {
-    setMsg(null);
+    setMsg(null); setAdj(null);
     const k = TOOL_KIND[t];
     if (k && (!group || group.kind !== k)) {
       const g = data.params.find((p) => p.kind === k);
@@ -189,6 +202,17 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
 
   const save = useCallback(async (pts: Pt[]) => {
     if (!sheet) return;
+    const kind = sel ? data.params.find((p) => p.id === sel.parameter_id)?.kind : undefined;
+    if (adj && sel && kind && kind !== "area") {
+      const body = kind === "count"
+        ? adj === "add" ? { geometry: [...sel.geometry, ...pts] } : { geometry: dropNearest(sel.geometry, pts) }
+        : adj === "add" ? { geometry: [...sel.geometry, ...pts.slice(1)] } : { cutouts: [...(sel.cutouts ?? []), pts] };
+      if ("geometry" in body && body.geometry && body.geometry.length < 1) { setMsg("That would take every point off. Delete the takeoff instead."); return; }
+      await act(() => call(`/api/jobs/${jobId}/takeoff/measurements/${sel.id}`, "PATCH", body));
+      setAdj(null); setTool("select"); setDraft([]);
+      return;
+    }
+    if (adj === "add" && sel && kind === "area") setAdj(null);
     const cutInto = tool === "fill" && fillCut ? data.measurements.find((m) => m.id === cutTarget) : tool === "cutout" ? sel : undefined;
     if (tool === "fill" && fillCut && !cutInto) { setMsg("Click inside a fill to cut a hole in it."); return; }
     if (cutInto) {
@@ -205,8 +229,8 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
         setSelId(b.measurement.id);
       });
     }
-    setDraft([]);
-  }, [act, group, jobId, sel, sheet, tool, setDraft, setScaleAsk, fillCut, cutTarget, data.measurements, setSelId]);
+    setDraft([]); setAdj(null);
+  }, [act, group, jobId, sel, sheet, tool, setDraft, setScaleAsk, fillCut, cutTarget, data.measurements, data.params, setSelId, adj]);
 
   const finish = useCallback(() => {
     const need = tool === "linear" || tool === "scale" ? 2 : tool === "count" ? 1 : 3; // fill: 3, like an area
@@ -238,7 +262,7 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement)?.tagName === "INPUT") return;
-      if (e.key === "Escape") { if (draft.length) setDraft([]); else if (fullscreen) setFullscreen(false); else setTool("select"); }
+      if (e.key === "Escape") { if (draft.length) setDraft([]); else if (fullscreen) setFullscreen(false); else setTool("select"); setAdj(null); }
       if (e.key === "Backspace" && draft.length) { e.preventDefault(); setDraft((d) => d.slice(0, -1)); }
       if (e.key === "Enter") finish();
       // A tool's key picks it, when nothing is being drawn and no modifier is held.
@@ -372,6 +396,21 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
             className="flex items-center gap-1.5" style={{ ...tb(pins.askMode), padding: "0 8px" }}>
             <AskIcon /><span className="hidden md:inline">Ask{pins.count ? ` · ${pins.count}` : ""}</span>
           </button>
+          {sel && (() => {
+            const k = data.params.find((p) => p.id === sel.parameter_id)?.kind;
+            if (!k) return null;
+            const start = (a: "add" | "sub") => {
+              setMsg(a === "add" ? (k === "linear" ? "Click on to carry the line on from its end, then Finish." : k === "count" ? "Click each one to add, then Finish." : "Draw the area to add; it goes in the same group, then Finish.")
+                : (k === "linear" ? "Draw along the part to take off, then Finish." : k === "count" ? "Click the ones to take off, then Finish." : "Draw the part to take out, then Finish."));
+              setAdj(a); setGroupId(sel.parameter_id);
+              setTool(a === "sub" && k === "area" ? "cutout" : k);
+              setDraft(a === "add" && k === "linear" && sel.geometry.length ? [sel.geometry[sel.geometry.length - 1]] : []);
+            };
+            return <>
+              <button onClick={() => start("add")} aria-pressed={adj === "add"} title={`Add to ${selName}`} style={tb(adj === "add")}>+ Add</button>
+              <button onClick={() => start("sub")} aria-pressed={adj === "sub"} title={`Take from ${selName}`} style={tb(adj === "sub")}>− Subtract</button>
+            </>;
+          })()}
           {sel && !pins.limited && <button onClick={() => pins.place(shapeMiddle(sel.geometry), sel.id)} title={`Ask someone about ${selName}`} style={tb(false)}>Ask about this</button>}
           {sel && <button onClick={() => setShapePhotos(true)} title={`Photos of ${selName} — they show on its budget section and the proposal`} style={tb(false)}>Shape photos{selPhotos ? ` (${selPhotos})` : ""}</button>}
           {sheet?.scale_ft_per_pt && sheets.length > 1 && <button onClick={() => setCopyScale({ k: sheet.scale_ft_per_pt as number, from: sheet.id })} title="Put this sheet's scale on every sheet, or the ones you pick" style={tb(false)}>Scale → other sheets</button>}

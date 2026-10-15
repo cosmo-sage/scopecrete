@@ -8,7 +8,7 @@
  */
 import { ClipBar } from "./clip-detail";
 import type { DetailBox } from "@/lib/plan-details";
-import { usePinchZoom } from "@/lib/v34/use-pinch";
+import { usePinchZoom, useWheelZoom } from "@/lib/v34/use-pinch";
 import Link from "next/link";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { T, F, disp, eyebrow, clip, strong } from "@/lib/v34/tokens";
@@ -170,7 +170,9 @@ function FileList({ files, sheets, reading, onToggle, onAdd, uploading, look, on
 /** The job's photos, newest first: large pictures, or a list. */
 function PhotoGrid({ files, jobId, onAdded, look, onDelete }: { files: PlanFile[]; jobId?: string; onAdded?: () => void | Promise<void>; look: Look; onDelete?: (f: PlanFile) => void }) {
   const photos = files.filter((f) => f.kind === "image").sort((a, b) => b.created_at.localeCompare(a.created_at));
-  const texted = jobId ? <TextedPhotos jobId={jobId} onAdded={onAdded ?? (() => {})} /> : null;
+  const [view, setView] = useState<number | null>(null);
+  const texted0 = jobId ? <TextedPhotos jobId={jobId} onAdded={onAdded ?? (() => {})} /> : null;
+  const texted = <>{texted0}{view !== null && <ImageReader photos={photos} start={view} onClose={() => setView(null)} />}</>;
   if (!photos.length) return <>{texted}<div style={{ fontSize: F.sm, color: T.ink3 }}>No photos on this job yet. Drop them in All files, or bring in the ones the customer texted above.</div></>;
   if (look === "list") return (
     <>
@@ -178,7 +180,7 @@ function PhotoGrid({ files, jobId, onAdded, look, onDelete }: { files: PlanFile[
     <div className="rounded overflow-hidden" style={{ border: `1px solid ${T.hair}`, background: T.card }}>
       {photos.map((f, i) => (
         <div key={f.id} className="flex items-center gap-3 px-3 py-2" style={{ borderTop: i ? `1px solid ${T.hairSoft}` : undefined }}>
-          <a href={f.url ?? undefined} target="_blank" rel="noreferrer" className="shrink-0 rounded overflow-hidden block" style={{ width: 44, height: 44, background: T.sunk }}><FileFace f={f} height={44} /></a>
+          <button type="button" onClick={() => setView(i)} aria-label={`Open ${f.name}`} className="shrink-0 rounded overflow-hidden block" style={{ width: 44, height: 44, background: T.sunk, cursor: "zoom-in" }}><FileFace f={f} height={44} /></button>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: F.sm, fontWeight: 600, ...clip }}>{f.name}</div>
             <div style={{ fontSize: F.xs, color: T.ink3 }}>{f.source === "text" ? "Texted" : f.source === "email" ? "Email" : "Uploaded"} · {new Date(f.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/Chicago" })}</div>
@@ -193,9 +195,9 @@ function PhotoGrid({ files, jobId, onAdded, look, onDelete }: { files: PlanFile[
     <>
     {texted}
     <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))" }}>
-      {photos.map((f) => (
+      {photos.map((f, i) => (
         <div key={f.id} className="rounded overflow-hidden" style={{ background: T.card, border: `1px solid ${T.hair}` }}>
-          <a href={f.url ?? undefined} target="_blank" rel="noreferrer" className="block"><FileFace f={f} height={120} /></a>
+          <button type="button" onClick={() => setView(i)} aria-label={`Open ${f.name}`} className="block w-full" style={{ cursor: "zoom-in" }}><FileFace f={f} height={120} /></button>
           <div className="flex items-center gap-1 pl-2">
             <span style={{ flex: 1, minWidth: 0, fontSize: F.xs, color: T.ink2, ...clip }}>{f.name}</span>
             {onDelete && <DeleteFile f={f} measuredSheets={0} onDelete={onDelete} />}
@@ -395,6 +397,52 @@ export function Thumb({ fileId, url, page, height = 104, width, aspect }: { file
  * Nothing is measured here. For a drawing (`onMeasure`) the bar has Measure ›, which opens
  * Takeoff on the sheet shown — a page that isn't a drawing has none.
  */
+/** A photo full screen, zoomed with the wheel or two fingers, ‹ › through the job's photos (Coy, 2026-10-15). */
+function ImageReader({ photos, start, onClose }: { photos: PlanFile[]; start: number; onClose: () => void }) {
+  const [i, setI] = useState(start);
+  const [zoom, setZoom] = useState(1);
+  const [nat, setNat] = useState<{ w: number; h: number; fit: number } | null>(null);
+  const scroller = useRef<HTMLDivElement>(null);
+  usePinchZoom(scroller, zoom, setZoom, 1, 8);
+  useWheelZoom(scroller, zoom, setZoom, 1, 8);
+  const f = photos[i];
+  const go = (n: number) => { setZoom(1); setNat(null); setI(Math.max(0, Math.min(photos.length - 1, n))); };
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+      if (e.key === "ArrowRight") go(i + 1);
+      if (e.key === "ArrowLeft") go(i - 1);
+    };
+    window.addEventListener("keydown", k);
+    return () => window.removeEventListener("keydown", k);
+  });
+  if (!f) return null;
+  // The picture fits the box at zoom 1 and grows from there.
+  const fit = nat?.fit ?? 0;
+  const btn: React.CSSProperties = { height: 32, minWidth: 32, padding: "0 10px", borderRadius: 4, border: `1px solid ${T.hairStrong}`, background: T.card, fontFamily: disp, fontSize: 13, fontWeight: 600, cursor: "pointer" };
+  return (
+    <div role="dialog" aria-label={f.name} className="fixed inset-0 flex flex-col" style={{ zIndex: 70, background: T.sunk }}>
+      <div className="flex items-center gap-2 px-3" style={{ height: 48, background: T.card, borderBottom: `1px solid ${T.hair}` }}>
+        <button onClick={onClose} style={btn} aria-label="Close">✕</button>
+        <div style={{ flex: 1, minWidth: 0, fontSize: F.sm, fontWeight: 600, ...clip }}>{f.name} <span style={{ fontWeight: 400, color: T.ink3 }}>· {i + 1} of {photos.length}</span></div>
+        <button onClick={() => setZoom((z) => Math.max(1, z / 1.25))} style={btn} aria-label="Zoom out">−</button>
+        <button onClick={() => setZoom((z) => Math.min(8, z * 1.25))} style={btn} aria-label="Zoom in">+</button>
+        <button onClick={() => go(i - 1)} disabled={i === 0} style={{ ...btn, opacity: i === 0 ? 0.4 : 1 }} aria-label="Previous photo">‹</button>
+        <button onClick={() => go(i + 1)} disabled={i === photos.length - 1} style={{ ...btn, opacity: i === photos.length - 1 ? 0.4 : 1 }} aria-label="Next photo">›</button>
+      </div>
+      <div ref={scroller} className="flex-1 overflow-auto" style={{ touchAction: "pan-x pan-y" }}>
+        <div style={{ minWidth: "100%", minHeight: "100%", display: "flex", alignItems: "center", justifyContent: "center", padding: 8, width: "max-content", height: "max-content" }}>
+          {f.url && /* eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL */
+            <img src={f.url} alt={f.name} draggable={false}
+              onLoad={(e) => { const w = e.currentTarget.naturalWidth, h = e.currentTarget.naturalHeight, b = scroller.current;
+                setNat({ w, h, fit: b ? Math.min((b.clientWidth - 16) / w, (b.clientHeight - 16) / h, 1) : 1 }); }}
+              style={nat && fit ? { width: nat.w * fit * zoom, height: nat.h * fit * zoom, maxWidth: "none" } : { maxWidth: "100%", maxHeight: "calc(100vh - 64px)" }} />}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function PageReader({ pages, files, start, onClose, onMeasure, jobId }: { pages: Sheet[]; files: PlanFile[]; start: number; onClose: () => void; onMeasure?: (s: Sheet) => void;
   /** With the job, a drawing can be clipped onto a budget section (Clip detail, clip-detail.tsx). */
   jobId?: string }) {
@@ -432,6 +480,8 @@ export function PageReader({ pages, files, start, onClose, onMeasure, jobId }: {
   }, [s, url, zoom]);
   // Two fingers zoom on a phone (Coy, 2026-10-09).
   usePinchZoom(scroller, zoom, setZoom, 0.5, onMeasure ? 6 : 4);
+  // And the scroll wheel on a desktop, about the pointer (Coy, 2026-10-15).
+  useWheelZoom(scroller, zoom, setZoom, 0.5, onMeasure ? 6 : 4);
   // A point on the canvas (CSS px) → page points.
   const toPt = (clientX: number, clientY: number) => {
     const c = canvas.current;

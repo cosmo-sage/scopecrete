@@ -524,7 +524,7 @@ export function PriceVsRange({ d, flat }: { d: MarketData; flat?: boolean }) {
           </div>
         </>
       )}
-      <div style={{ fontSize: 12, color: DARK_2, marginTop: 6, lineHeight: 1.45, whiteSpace: "normal", overflowWrap: "anywhere", ...nums }}>
+      <div style={{ fontSize: 12, color: DARK_2, marginTop: 6, lineHeight: 1.45, ...nums, whiteSpace: "normal", overflowWrap: "anywhere" }}>
         {range
           ? <>Going rate installed {money(range.low)}–{money(range.high)}/SF, typical {money(range.typical)}: the middle of {range.sources} installed price{range.sources === 1 ? "" : "s"} per SF{d.city ? ` near ${d.city}` : ""}{d.rates ? `, looked up ${when(d.rates.asked_at)}` : ""}{sites.length ? ` from ${sites.slice(0, 4).join(", ")}${sites.length > 4 ? ` and ${sites.length - 4} more` : ""}` : ""}.</>
           : d.rates ? `No installed price per SF in the ${when(d.rates.asked_at)} lookup.` : "Going rate not looked up yet (Budget → Market rate)."}

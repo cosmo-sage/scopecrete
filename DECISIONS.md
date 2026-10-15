@@ -4902,7 +4902,8 @@ expected start date per quoted job before it means anything. Add the field.
   org; trigger `jobs_owner_guard` keeps it in the org and never the customer itself). Before 109 the
   card says it waits for it. **Contacts:** the job's person, the customer's people and the owner's,
   each tagged with the side they work for (from their `customer_id`), primary first, with call and
-  email buttons, a filter by side when there is an owner, and + Add contact onto that side
+  email buttons (the email opens a new email to them in Threads, not the phone's mail app; Coy,
+  2026-10-13), a filter by side when there is an owner, and + Add contact onto that side
   (`sc_attach_contact`). **Job site:** Map · Satellite · Street view (the design's two, plus the map;
   remembered on the device `sc:site-view`), drawn by the Map page's own map on the provider Settings
   → Maps picks (Street view is Google's embed), a pin at the site and one at the customer's office when

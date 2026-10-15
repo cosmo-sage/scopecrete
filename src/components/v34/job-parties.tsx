@@ -329,7 +329,7 @@ export function ContactsCard({ jobId, people, customer, owner, jobType, site, on
             <div className="flex gap-1.5 shrink-0">
               {p.phone ? <a href={`tel:${p.phone}`} aria-label={`Call ${p.name ?? "them"}`} style={iconBtn}><PhoneIcon /></a>
                 : <span aria-hidden="true" style={{ ...iconBtn, opacity: 0.35 }}><PhoneIcon /></span>}
-              {p.email ? <a href={`mailto:${p.email}`} aria-label={`Email ${p.name ?? "them"}`} style={iconBtn}><MailIcon /></a>
+              {p.email ? <Link href={`/dashboard/messages/email/new?contact=${encodeURIComponent(p.id)}&to=${encodeURIComponent(p.email)}`} aria-label={`Email ${p.name ?? "them"} in Threads`} style={iconBtn}><MailIcon /></Link>
                 : <span aria-hidden="true" style={{ ...iconBtn, opacity: 0.35 }}><MailIcon /></span>}
               {!customer && p.name && (
                 <button onClick={() => void make(p)} disabled={!!busy}

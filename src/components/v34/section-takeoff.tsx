@@ -10,7 +10,7 @@
  * job by group, ticked when it is this section's, "in Patio" when it is
  * another's (ticking it moves it here). One kind per section.
  */
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { T, F, eyebrow, nums, clip, disp } from "@/lib/v34/tokens";
 import { Sheet } from "@/components/v34/primitives";
@@ -61,6 +61,12 @@ export function SectionTakeoffStrip({ jobId, sectionId, sectionName, following, 
 }) {
   const [open, setOpen] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // The desktop "Measured by" drop-down's Pull from Takeoffs opens the picker.
+  useEffect(() => {
+    const on = (e: Event) => { if ((e as CustomEvent).detail === sectionId) setOpen(true); };
+    window.addEventListener("sc:pull-takeoffs", on);
+    return () => window.removeEventListener("sc:pull-takeoffs", on);
+  }, [sectionId]);
   if (!plans) return null;
   const none = !plans.measurements.length;
   const s = shapesOf(sectionId, plans);

@@ -722,7 +722,19 @@ function SectionCard({ s, index, err, onLocal, onSave, onRemove, jobType, jobId,
       {/* How the section is measured: the full width, a colour each, no "Measured by" over it, and
           Takeoffs' button on the row under it (Coy, 2026-10-10). */}
       <div className="px-3 pt-2 flex items-center gap-x-2 gap-y-1.5 flex-wrap">
-        <span className="flex w-full rounded overflow-hidden" role="group" aria-label="Measured by" style={{ border: `1px solid ${T.hair}` }}>
+        {/* On a desktop a drop-down at the left, with Takeoffs' button beside it (Coy, 2026-10-15). */}
+        <select aria-label="Measured by" className="hidden lg:block rounded px-2"
+          value={takeoffUnit && s.takeoff_sync !== false ? "takeoffs" : mode}
+          onChange={(e) => {
+            const v = e.target.value;
+            if (v === "takeoffs") window.dispatchEvent(new CustomEvent("sc:pull-takeoffs", { detail: s.id }));
+            else toMode(v as "dims" | "area" | "linear" | "count");
+          }}
+          style={{ height: 28, border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink, fontSize: F.sm }}>
+          {MODES.map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+          {takeoff && <option value="takeoffs">Pull from Takeoffs</option>}
+        </select>
+        <span className="flex w-full lg:hidden rounded overflow-hidden" role="group" aria-label="Measured by" style={{ border: `1px solid ${T.hair}` }}>
           {MODES.map(([k, label, c], i) => (
             <button key={k} onClick={() => toMode(k)} aria-pressed={mode === k} style={seg(mode === k, c, i > 0)}>{label}</button>
           ))}

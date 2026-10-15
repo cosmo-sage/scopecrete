@@ -125,6 +125,23 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
   const setScaleAsk = useCallback((v: { a: Pt; b: Pt } | null) => setScaleAskState(v ? { ...v, k: draftKey } : null), [draftKey]);
   const group = data.params.find((p) => p.id === groupId) ?? null;
   const sel = data.measurements.find((m) => m.id === selId) ?? null;
+  // Add to / take from a shape already measured: from the toolbar, the measuring bar or its row in Parameters.
+  const startAdj = useCallback((m: typeof sel, a: "add" | "sub") => {
+    if (!m) return;
+    const k = data.params.find((p) => p.id === m.parameter_id)?.kind;
+    if (!k) return;
+    setSelId(m.id);
+    setMsg(a === "add" ? (k === "linear" ? "Click on to carry the line on from its end, then Finish." : k === "count" ? "Click each one to add, then Finish." : "Draw the area to add; it goes in the same group, then Finish.")
+      : (k === "linear" ? "Draw along the part to take off, then Finish." : k === "count" ? "Click the ones to take off, then Finish." : "Draw the part to take out, then Finish."));
+    setAdj(a); setGroupId(m.parameter_id);
+    setTool(a === "sub" && k === "area" ? "cutout" : k);
+    setDraft(a === "add" && k === "linear" && m.geometry.length ? [m.geometry[m.geometry.length - 1]] : []);
+  }, [data.params, setSelId, setDraft]);
+  useEffect(() => {
+    const on = (e: Event) => { const d = (e as CustomEvent<{ id: string; a: "add" | "sub" }>).detail; const m = data.measurements.find((x) => x.id === d.id); if (m) startAdj(m, d.a); };
+    window.addEventListener("sc:takeoff-adj", on);
+    return () => window.removeEventListener("sc:takeoff-adj", on);
+  }, [data.measurements, startAdj]);
   const [shapePhotos, setShapePhotos] = useState(false);
   // Click-to-fill (Coy, 2026-10-09): how forgiving the trace is, and whether one is running.
   const [fillOpt, setFillOpt] = useState<TraceOptions>({ gapPt: 0.5, thinPt: 0 });
@@ -399,13 +416,7 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
           {sel && (() => {
             const k = data.params.find((p) => p.id === sel.parameter_id)?.kind;
             if (!k) return null;
-            const start = (a: "add" | "sub") => {
-              setMsg(a === "add" ? (k === "linear" ? "Click on to carry the line on from its end, then Finish." : k === "count" ? "Click each one to add, then Finish." : "Draw the area to add; it goes in the same group, then Finish.")
-                : (k === "linear" ? "Draw along the part to take off, then Finish." : k === "count" ? "Click the ones to take off, then Finish." : "Draw the part to take out, then Finish."));
-              setAdj(a); setGroupId(sel.parameter_id);
-              setTool(a === "sub" && k === "area" ? "cutout" : k);
-              setDraft(a === "add" && k === "linear" && sel.geometry.length ? [sel.geometry[sel.geometry.length - 1]] : []);
-            };
+            const start = (a: "add" | "sub") => startAdj(sel, a);
             return <>
               <button onClick={() => start("add")} aria-pressed={adj === "add"} title={`Add to ${selName}`} style={tb(adj === "add")}>+ Add</button>
               <button onClick={() => start("sub")} aria-pressed={adj === "sub"} title={`Take from ${selName}`} style={tb(adj === "sub")}>− Subtract</button>
@@ -431,6 +442,16 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
 
         {sheet && <ScaleBar sheet={sheet} act={act} startScale={() => pickTool("scale")} />}
         <div style={{ position: "relative", flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+        {adj && sel && (
+          <div className="flex items-center gap-2 px-3 py-1.5" style={{ position: "absolute", top: 8, left: "50%", transform: "translateX(-50%)", zIndex: 6, background: T.green, color: "#fff", borderRadius: 6, fontSize: F.xs, boxShadow: "0 2px 8px rgba(0,0,0,.2)", maxWidth: "calc(100% - 16px)" }}>
+            <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{adj === "add" ? "Adding to" : "Taking from"} <b>{selName}</b> · {data.params.find((g) => g.id === sel.parameter_id)?.name}</span>
+            <span className="inline-flex" style={{ flex: "0 0 auto" }}>
+              {(["sub", "add"] as const).map((a) => <button key={a} onClick={() => startAdj(sel, a)} aria-pressed={adj === a} aria-label={a === "add" ? "Add" : "Subtract"}
+                style={{ width: 26, height: 22, border: "1px solid #fff", background: adj === a ? "#fff" : "transparent", color: adj === a ? T.green : "#fff", cursor: "pointer", fontWeight: 700, borderRadius: a === "sub" ? "3px 0 0 3px" : "0 3px 3px 0" }}>{a === "add" ? "+" : "−"}</button>)}
+            </span>
+            <button onClick={() => { setAdj(null); setDraft([]); setMsg(null); setTool("select"); }} style={{ border: "1px solid #fff", background: "transparent", color: "#fff", borderRadius: 3, padding: "0 8px", height: 22, cursor: "pointer" }}>Stop</button>
+          </div>
+        )}
         {/* Floats over the sheet so starting a shape never moves the drawing under the next click. */}
         {(msg || draft.length > 0 || scaleAsk || tool === "fill") && (
           <div className="flex items-center gap-2 px-3 py-1.5 flex-wrap" style={{ position: "absolute", bottom: 0, left: 0, right: 0, zIndex: 5, background: msg ? T.redDim : T.dustyTint, borderTop: `1px solid ${T.hair}`, fontSize: F.xs, boxShadow: "0 -2px 6px rgba(42,32,20,.08)" }}>
@@ -785,6 +806,13 @@ function Drawing({ sheet, fileUrl, zoom, setZoom, tool, data, groupId, selId, se
                   {m.geometry.map((pt, i) => <circle key={i} cx={pt[0]} cy={pt[1]} r={r * (isSel ? 1.3 : 1)} fill={shapeColor(m, p)} stroke="#fff" strokeWidth={sw / 2} />)}
                 </g>
               );
+              if (p.kind === "linear" && m.cutouts?.length) return (
+                <g key={m.id}>
+                  <path d={pathOf(m.geometry, false)} fill="none" stroke={shapeColor(m, p)} strokeWidth={sw * (isSel ? 2.2 : 1.6)} opacity={op}
+                    strokeLinejoin="round" strokeLinecap="round" onPointerUp={pick} style={{ cursor: tool === "select" ? "pointer" : undefined }} />
+                  {m.cutouts.map((c, ci) => <path key={ci} d={pathOf(c, false)} fill="none" stroke="#C0392B" strokeWidth={sw * 1.6} strokeDasharray={`${sw * 4} ${sw * 3}`} opacity={op} pointerEvents="none" />)}
+                </g>
+              );
               if (p.kind === "linear") return (
                 <path key={m.id} d={pathOf(m.geometry, false)} fill="none" stroke={shapeColor(m, p)} strokeWidth={sw * (isSel ? 2.2 : 1.6)} opacity={op}
                   strokeLinejoin="round" strokeLinecap="round" onPointerUp={pick} style={{ cursor: tool === "select" ? "pointer" : undefined }} />
@@ -947,6 +975,10 @@ function ParamPanel({ jobId, data, groupId, setGroupId, selId, onSelect, act, on
                             <MeasName jobId={jobId} m={m} fallback={`${p.name} ${i + 1}`} act={act} />
                             <div style={{ fontSize: 11, color: T.ink3 }}>{s ? sheetLabel(s) : "sheet removed"} · {m.method}{(m.cutouts?.length ?? 0) > 0 ? ` · ${m.cutouts.length} cutout${m.cutouts.length === 1 ? "" : "s"}` : ""}</div>
                           </div>
+                          {<span className="inline-flex" style={{ flex: "0 0 auto" }}>
+                            <button onClick={(e) => { e.stopPropagation(); window.dispatchEvent(new CustomEvent("sc:takeoff-adj", { detail: { id: m.id, a: "sub" } })); }} aria-label="Take from this takeoff" title="Take from this takeoff" style={{ width: 22, height: 22, border: `1px solid ${T.hair}`, borderRadius: "3px 0 0 3px", background: T.card, cursor: "pointer", fontSize: 13, lineHeight: 1 }}>−</button>
+                            <button onClick={(e) => { e.stopPropagation(); window.dispatchEvent(new CustomEvent("sc:takeoff-adj", { detail: { id: m.id, a: "add" } })); }} aria-label="Add to this takeoff" title="Add to this takeoff" style={{ width: 22, height: 22, border: `1px solid ${T.hair}`, borderLeft: 0, borderRadius: "0 3px 3px 0", background: T.card, cursor: "pointer", fontSize: 13, lineHeight: 1 }}>+</button>
+                          </span>}
                           {m.section_id && <span title="Counted in a budget section" style={{ fontSize: 10.5, color: T.green, fontWeight: 700 }}>$✓</span>}
                           <span style={{ fontSize: 12.5, ...nums, color: q?.qty === null ? T.hivizText : T.ink, textAlign: "right" }}>
                             {q?.qty !== null && q?.qty !== undefined ? fmtQty(q.qty, KIND_UNIT[p.kind]) : "scale not set"}

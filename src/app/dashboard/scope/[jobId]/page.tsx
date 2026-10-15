@@ -1163,7 +1163,7 @@ function TakeoffRail({ t, job, onCrewDays, budget, inPanel, crewSize = null, tic
       {/* No "Concrete to order" box (Coy, 2026-10-12: on a removal job it read the yards to tear out as concrete to buy). */}
       {budget?.has_lines ? (
         <>
-          <BudgetRail budget={budget} sqft={t.sqft} crew={crew} crewSize={crewSize} />
+          <BudgetRail budget={budget} sqft={t.sqft} crew={crew} crewSize={crewSize} jobId={job.id} />
         </>
       ) : (
         <>
@@ -1193,32 +1193,68 @@ function TakeoffRail({ t, job, onCrewDays, budget, inPanel, crewSize = null, tic
  * minimum (day minimum × days — Coy, 2026-09-30). The discount, O.H. and
  * margin live in the budget's own footer — one number, never two.
  */
-function BudgetRail({ budget, sqft, crew, crewSize }: {
-  budget: BudgetSummary; sqft: number; crew: number | ""; crewSize: number | null;
+function BudgetRail({ budget, sqft, crew, crewSize, jobId }: {
+  budget: BudgetSummary; sqft: number; crew: number | ""; crewSize: number | null; jobId?: string;
 }) {
   const dim = "#8E99A5";
+  const saved = budget.margin_pct ?? 0;
+  // The slider's value, kept only while the saved margin is the one it started from.
+  const [slide, setSlide] = useState<{ v: number; from: number } | null>(null);
+  const draft = slide && slide.from === saved ? slide.v : null;
+  const setDraft = (v: number | null) => setSlide(v === null ? null : { v, from: saved });
+  const [saveErr, setSaveErr] = useState<string | null>(null);
+  const pct = draft ?? saved;
+  const save = () => {
+    if (draft === null || draft === saved || !jobId) return;
+    setSaveErr(null);
+    send(`/api/jobs/${jobId}/budget`, "PATCH", { margin_pct: draft })
+      .then(() => window.dispatchEvent(new Event("sc:budget-changed")))
+      .catch((e) => { setSaveErr(`Margin not saved: ${e instanceof Error ? e.message : "try again"}`); setDraft(null); });
+  };
+  /** The tier at the slider's margin: price = (cost + O.H.) ÷ (1 − margin), tax and discount as they are. */
+  const at = (b: BudgetSummary["tiers"][number]) => {
+    if (draft === null || draft === saved || draft >= 100) return { total: b.total, profit: b.profit, margin: b.margin };
+    const base = b.cost + b.overhead;
+    const pre = base / (1 - draft / 100);
+    const oldPre = base + b.profit;
+    return { total: b.total - oldPre + pre, profit: pre - base, margin: draft / 100 };
+  };
   const line = { borderTop: `1px solid ${T.darkHair}` };
   const min = budget.minimum;
   return (
     <>
       {budget.tiers.map((b) => {
-        const under = min.ok && b.priced && b.total < min.minimum;
+        const view = at(b);
+        const under = min.ok && b.priced && view.total < min.minimum;
         return (
           <div key={b.option_id ?? "all"} className="px-4 py-3" style={b.priced ? line : { borderTop: `2px solid ${T.hiviz}`, background: "#2A1712" }}>
             <div style={{ ...eyebrow, color: b.priced ? dim : T.hiviz }}>{b.label ? `${b.label}` : "Price"} · budget</div>
             {b.priced ? (
               <>
-                <div style={{ fontFamily: disp, fontSize: 28, fontWeight: 700, lineHeight: 1.05, ...nums }}>{money0(b.total)}</div>
+                <div style={{ fontFamily: disp, fontSize: 28, fontWeight: 700, lineHeight: 1.05, ...nums }}>{money0(view.total)}</div>
                 {/* Cost red, O.H. yellow, profit green, as the budget footer (Coy, 2026-10-15). */}
                 <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1" style={{ fontFamily: disp, fontSize: 14, fontWeight: 700, ...nums }}>
                   <span style={{ color: "#F08A7A" }}>cost {money0(b.cost)}</span>
-                  <span style={{ color: "#E8C452" }}>O.H. {money0(b.overhead)}</span>
-                  <span style={{ color: "#7FD39C" }}>profit {money0(b.profit)} · {(b.margin * 100).toFixed(1)}%</span>
+                  <span style={{ color: "#E8C452" }}>O.H. {budget.overhead_pct !== null ? `${budget.overhead_pct}% · ` : ""}{money0(b.overhead)}</span>
+                  <span style={{ color: "#7FD39C" }}>profit {money0(view.profit)} · {(view.margin * 100).toFixed(1)}%</span>
                   {b.tax > 0 ? <span style={{ color: "#C3CBD4" }}>tax {money0(b.tax)}</span> : !budget.tax_on ? <span style={{ color: dim }}>no tax</span> : null}
-                  {sqft > 0 && <span style={{ color: "#C3CBD4" }}>{money(b.total / sqft)}/sf</span>}
+                  {sqft > 0 && <span style={{ color: "#C3CBD4" }}>{money(view.total / sqft)}/sf</span>}
                 </div>
+                {/* Margin slider (Coy, 2026-10-15): moves the profit live, saved as the job's margin on release. */}
+                {jobId && (
+                  <label className="flex items-center gap-2 mt-2" style={{ fontSize: 12, color: "#C3CBD4" }}>
+                    <span style={{ color: dim }}>Margin</span>
+                    <input type="range" min={0} max={60} step={0.5} value={pct}
+                      aria-label="Profit margin on this job"
+                      onChange={(e) => setDraft(Number(e.target.value))}
+                      onPointerUp={() => save()} onKeyUp={() => save()} onBlur={() => save()}
+                      className="flex-1" style={{ accentColor: "#7FD39C" }} />
+                    <span style={{ fontFamily: disp, fontWeight: 700, color: "#7FD39C", minWidth: 44, textAlign: "right", ...nums }}>{pct}%</span>
+                  </label>
+                )}
+                {saveErr && <div style={{ fontSize: F.xs, color: "#F3A89A" }}>{saveErr}</div>}
                 {under && <div style={{ fontSize: F.xs, color: "#F3A89A", ...nums }}>under the job minimum of {money0(min.minimum)}</div>}
-                {min.ok && min.days > 0 && <div style={{ fontSize: F.xs, color: "#9FD8B4", marginTop: 2, ...nums }}>net {money0(b.profit / min.days)} a day · gross {money0((b.total - b.tax - b.cost) / min.days)} a day</div>}
+                {min.ok && min.days > 0 && <div style={{ fontSize: F.xs, color: "#9FD8B4", marginTop: 2, ...nums }}>net {money0(view.profit / min.days)} a day · gross {money0((view.total - b.tax - b.cost) / min.days)} a day</div>}
               </>
             ) : (
               <ul className="mt-1" style={{ fontSize: F.sm, color: "#fff", lineHeight: 1.5, paddingLeft: 16, listStyle: "square" }}>

@@ -241,6 +241,52 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
   const areaName = (id: string | null) => (id ? sections.find((s) => s.id === id)?.name || "Unnamed area" : "Whole job");
   const groupName = (l: Line) => (l.cost_group_id ? data.groups.find((g) => g.id === l.cost_group_id)?.name : null) ?? COST_TYPE_LABEL[l.cost_type as CostType] ?? "Other";
   const optLabel = (id: string | null): string | null => { void id; return null; };
+  // A group's header says what kind of cost it is, from its lines (Coy, 2026-10-15): one type, or
+  // "Sub · mixed" when they are of several kinds, since a sub covers all of them.
+  const groupKind = (lines: Line[]) => {
+    const kinds = [...new Set(lines.map((l) => l.cost_type))];
+    return kinds.length === 1 ? COST_TYPE_LABEL[kinds[0] as CostType] ?? "Other" : kinds.length ? "Sub · mixed" : null;
+  };
+  // One vendor for every item in a group (Coy, 2026-10-15: "select Luis as the vendor for the concrete
+  // labor"): each Price book line is pinned to that vendor's price, given this line's price first when
+  // they don't price it yet. A one-off line has no item to hold a vendor price, and is left as it is.
+  const setGroupVendor = (lines: Line[], vendorId: string) => run(async () => {
+    for (const l of lines) {
+      if (!l.cost_item_id) continue;
+      let src = data.sources?.find((x) => x.cost_item_id === l.cost_item_id && x.vendor?.id === vendorId)?.id ?? null;
+      if (!src) src = (await call(`/api/cost-items/${l.cost_item_id}/sources`, "POST", { vendor_contact_id: vendorId, unit_cost: l.unit_cost, unit: l.unit || undefined })).source.id as string;
+      if (l.source_id !== src) await call(`/api/jobs/${jobId}/budget/lines/${l.id}`, "PATCH", { source_id: src });
+    }
+  });
+  const askGroupVendors = (name: string, lines: Line[]) => {
+    const list = lines.map((l) => `- ${l.name}${l.unit ? ` (per ${l.unit})` : ""}: now ${vendorName(l.vendor_contact_id) ?? "no vendor"}`).join("\n");
+    const q = `Find and pick the vendors for the "${name}" group on this job's budget:\n${list}\nUse my vendors first (their calls, texts, quotes and prices on file), then search for local ones. For each item give a vendor_price step with the vendor and their price (marked estimate, saying where it came from), and a new_vendor step first for one I don't have. Say which vendor you'd use for the whole group. End with one plan I can apply.`;
+    window.dispatchEvent(new Event("sc:dusty-open"));
+    setTimeout(() => window.dispatchEvent(new CustomEvent("sc:dusty-draft", { detail: { text: q, send: true } })), 250);
+  };
+  const groupTools = (name: string, lines: Line[]) => {
+    const kind = groupKind(lines);
+    const priced = lines.filter((l) => l.cost_item_id);
+    const one = new Set(priced.map((l) => l.vendor_contact_id ?? "")).size === 1 ? priced[0]?.vendor_contact_id ?? "" : "";
+    return (
+      <span className="flex items-center gap-1.5" style={{ minWidth: 0 }} onClick={(e) => e.stopPropagation()}>
+        {kind && <span className="rounded px-1.5" style={{ fontSize: 9.5, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".04em", background: T.card, border: `1px solid ${T.hair}`, color: T.ink2, whiteSpace: "nowrap" }}>{kind}</span>}
+        {priced.length > 0 && (
+          <select value={one} onChange={(e) => { if (e.target.value) void setGroupVendor(lines, e.target.value); }} aria-label={`Vendor for every item in ${name}`} title="Vendor for every item in this group"
+            style={{ fontSize: 10.5, fontWeight: 400, maxWidth: 140, background: "transparent", color: T.chalk, cursor: "pointer" }}>
+            <option value="">{one ? "Vendor" : "Vendor for all ▾"}</option>
+            {data.vendors.map((v) => <option key={v.id} value={v.id}>{v.name || formatPhone(v.phone ?? "") || "Vendor"}</option>)}
+          </select>
+        )}
+        {priced.length > 0 && (
+          <button type="button" onClick={() => askGroupVendors(name, lines)} title="Ask Dusty to find vendors for this group" aria-label="Ask Dusty to find vendors for this group"
+            className="flex items-center justify-center shrink-0" style={{ width: 22, height: 22, cursor: "pointer", background: "transparent" }}>
+            <Emblem size={16} spin={false} />
+          </button>
+        )}
+      </span>
+    );
+  };
   const asmName = (id: string | null | undefined) => (id ? data.assemblies?.find((a) => a.id === id)?.name ?? null : null);
   const vendorName = (id: string | null): string | null => {
     if (!id) return null;
@@ -409,7 +455,7 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
           {a.groups.map((g) => (
             <React.Fragment key={g.name}>
               <tr style={{ background: T.hairSoft }}>
-                <td colSpan={5} style={{ padding: "4px 8px 4px 16px", fontWeight: 600 }}>{g.name}</td>
+                <td colSpan={5} style={{ padding: "4px 8px 4px 16px", fontWeight: 600 }}><span className="flex items-center gap-2"><span>{g.name}</span>{groupTools(g.name, g.lines)}</span></td>
                 <td style={{ padding: "4px 8px", textAlign: "right", fontWeight: 600 }}>{money0(sum(g.lines, "ext_cost"))}</td>
                 <td style={{ padding: "4px 8px", textAlign: "right", color: T.ink2 }}>{money0(sum(g.lines, "overhead"))}</td>
                 <td style={{ padding: "4px 8px", textAlign: "right", color: T.ink3 }}>{marginOf(g.lines)}</td>
@@ -448,7 +494,7 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
         </div>
       )}
       {!inSection && a.lines.length === 0 && <div style={{ fontSize: F.xs, color: T.ink3 }}>{a.id ? "No cost items yet." : "Costs for the whole job, not one section — mobilization, a permit, a pump day."}</div>}
-      {a.groups.map((g) => <GroupCard key={g.name} name={g.name} lines={g.lines} res={res} optLabel={optLabel} asmName={asmName} addons={addons} onOpen={setEditing} onRemove={removeLine}
+      {a.groups.map((g) => <GroupCard key={g.name} name={g.name} tools={groupTools(g.name, g.lines)} lines={g.lines} res={res} optLabel={optLabel} asmName={asmName} addons={addons} onOpen={setEditing} onRemove={removeLine}
                 cost={sum(g.lines, "ext_cost")} price={sum(g.lines, "ext_price")} />)}
     </div>
   );
@@ -772,8 +818,8 @@ function Trash() {
   );
 }
 
-function GroupCard({ name, lines, res, optLabel, asmName, addons, onOpen, onRemove, cost, price }: {
-  name: string; lines: Line[]; res: ReturnType<typeof priceBudget>; optLabel: (id: string | null) => string | null;
+function GroupCard({ name, tools, lines, res, optLabel, asmName, addons, onOpen, onRemove, cost, price }: {
+  name: string; tools?: React.ReactNode; lines: Line[]; res: ReturnType<typeof priceBudget>; optLabel: (id: string | null) => string | null;
   asmName: (id: string | null | undefined) => string | null; addons: Set<string>;
   onOpen: (l: Line) => void; onRemove: (l: Line) => void; cost: number; price: number;
 }) {
@@ -791,6 +837,7 @@ function GroupCard({ name, lines, res, optLabel, asmName, addons, onOpen, onRemo
           <span style={{ display: "block", fontSize: 9.5, color: T.ink3 }}>cost {money0(cost)}</span>
         </span>
       </button>
+      {tools && <div className="px-2.5 pb-1" style={{ marginTop: -4 }}>{tools}</div>}
       {open && lines.map((l, i) => {
         const r = res.lines[l.id];
         return (

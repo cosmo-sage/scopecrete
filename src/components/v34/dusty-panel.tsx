@@ -51,6 +51,16 @@ type Att = { key: string; name: string; pct: number; id: string | null; error: s
 interface Conv { id: string; title: string; context_kind: string; context_id: string | null; context_label: string | null; updated_at: string }
 
 /** The email conversation open in Threads (/dashboard/messages/email/<key>), so Dusty can draft into it (2026-10-14). */
+const DUSTY_W_KEY = "sc:dusty-w";
+/** Sets the docked column's width (--sc-dusty), kept between 320px and what leaves the page 480px. */
+function setDustyWidth(px: number): number {
+  const rail = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--sc-rail-w")) || 232;
+  const max = Math.max(320, Math.min(1200, window.innerWidth - rail - 480));
+  const w = Math.round(Math.min(max, Math.max(320, px)));
+  document.documentElement.style.setProperty("--sc-dusty", `${w}px`);
+  return w;
+}
+
 export function emailKeyFor(pathname: string): string | null {
   const m = pathname.match(/^\/dashboard\/messages\/email\/([^/?#]+)/);
   if (!m || m[1] === "new") return null;
@@ -177,6 +187,12 @@ export function DustyPanel({ open, onClose, onBusy, onStream, onState }: {
   useEffect(() => { if (!doneNote) return; const t = setTimeout(() => setDoneNote(null), 4000); return () => clearTimeout(t); }, [doneNote]);
   const [desktop, setDesktop] = useState(false);
   useEffect(() => { const mq = window.matchMedia("(min-width: 1024px) and (pointer: fine)"); const on = () => setDesktop(mq.matches); on(); mq.addEventListener("change", on); return () => mq.removeEventListener("change", on); }, []);
+  // His docked column is widened by dragging its left edge (Coy, 2026-10-15): the width is kept on
+  // the device and set as --sc-dusty, which the page beside him already pads by.
+  useEffect(() => {
+    if (!desktop) return;
+    try { const w = Number(localStorage.getItem(DUSTY_W_KEY)); if (w) setDustyWidth(w); } catch { /* storage off */ }
+  }, [desktop]);
 
   useEffect(() => { onBusy(busy); }, [busy, onBusy]);
   useEffect(() => () => abort.current?.abort(), []);
@@ -507,6 +523,23 @@ export function DustyPanel({ open, onClose, onBusy, onStream, onState }: {
       {/* history: on a desktop it opens out to the LEFT of his column, over the
           page, the chat staying in view (Coy, 2026-10-10); on a phone from the
           left, over the chat. */}
+      {desktop && (
+        <div role="separator" aria-orientation="vertical" aria-label="Drag to widen Dusty" title="Drag to widen · double-click to reset"
+          onPointerDown={(e) => {
+            e.preventDefault();
+            let w = 0;
+            const mv = (ev: PointerEvent) => { w = setDustyWidth(window.innerWidth - ev.clientX); };
+            const up = () => {
+              window.removeEventListener("pointermove", mv); window.removeEventListener("pointerup", up);
+              document.documentElement.removeAttribute("data-dusty-drag");
+              if (w) try { localStorage.setItem(DUSTY_W_KEY, String(w)); } catch { /* storage off */ }
+            };
+            document.documentElement.setAttribute("data-dusty-drag", "");
+            window.addEventListener("pointermove", mv); window.addEventListener("pointerup", up);
+          }}
+          onDoubleClick={() => { document.documentElement.style.removeProperty("--sc-dusty"); try { localStorage.removeItem(DUSTY_W_KEY); } catch { /* storage off */ } }}
+          className="sc-dusty-grip" style={{ position: "absolute", left: -4, top: 0, bottom: 0, width: 8, cursor: "col-resize", zIndex: 61, touchAction: "none" }} />
+      )}
       {railOpen && desktop && (
         <div className="absolute top-0 bottom-0 sc-rail-in" style={{ right: "100%", width: 320, boxShadow: "-14px 0 40px rgba(10,14,18,.18)", borderRight: `1px solid ${T.hair}`, zIndex: 60 }}>
           {rail}

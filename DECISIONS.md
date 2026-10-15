@@ -3571,7 +3571,7 @@ expected start date per quoted job before it means anything. Add the field.
   main dashboard neatly so that I can see the rest of the dashboard").** At
   lg+ Dusty is a 400px column (`--sc-dusty`) under the header, no backdrop;
   `<main>` gains `.sc-with-dusty` (padding-right) so the page beside him stays
-  whole and usable. He stays HOT on the page that is open; a continued chat
+  whole and usable. **His column widens by its left edge (Coy, 2026-10-15: "widen the dusty chat window by clicking and dragging with my mouse")**: drag it (320px up to what leaves the page 480px), double-click to put it back to 400; kept on the device (`sc:dusty-w`) and set as `--sc-dusty`, so the page's padding and the drawers beside him follow. He stays HOT on the page that is open; a continued chat
   about something else offers "Ask about this page instead". History is behind
   ☰ in his header on every size. On a phone he is still the full page below.
   **Beyond the open page (Coy, 2026-10-04: "Dusty has trouble seeing other

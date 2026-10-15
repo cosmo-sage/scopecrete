@@ -127,6 +127,8 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
   const [rots, setRots] = useState<Record<string, number>>(() => { try { return JSON.parse(localStorage.getItem("sc:sheet-rot") || "{}"); } catch { return {}; } });
   const rot = (sheetId && rots[sheetId]) || 0;
   const turn = () => { if (!sheetId) return; const n = { ...rots, [sheetId]: (rot + 90) % 360 }; setRots(n); try { localStorage.setItem("sc:sheet-rot", JSON.stringify(n)); } catch { /* ignore */ } };
+  const [toolMenu, setToolMenu] = useState<DOMRect | null>(null);
+  const [lastMeasure, setLastMeasure] = useState<Tool>("linear");
   const [scaleMenu, setScaleMenu] = useState<DOMRect | null>(null);
   const [panel, setPanel] = useState(true);
   const [msg, setMsg] = useState<string | null>(null);
@@ -503,15 +505,36 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
           </SlideDrawer>
         </div>
         <div className="flex items-center gap-1 px-2 overflow-x-auto" style={{ height: 42, flex: "0 0 auto", background: T.card, borderBottom: `1px solid ${T.hair}` }}>
-          {TOOLS.map(([k, label, hint]) => (
-            <Fragment key={k}><span className="contents md:hidden">
-              <button onClick={() => pickTool(k)} title={`${label} (${TOOL_KEY[k]}) — ${hint}`} aria-label={label} aria-pressed={tool === k}
-                className="flex items-center gap-1.5" style={{ ...tb(tool === k), padding: "0 8px" }}>
-                <ToolIcon tool={k} /><span className="hidden md:inline">{label}</span>
-              </button>
-              {TOOL_BREAK.has(k) && <span aria-hidden="true" style={{ width: 1, height: 22, background: T.hair, margin: "0 3px", flex: "0 0 auto" }} />}
-            </span></Fragment>
-          ))}
+          {/* Phone: Pan and Select, then one drop-down with every measuring tool, so the row needn't scroll (Coy, 2026-10-15). */}
+          <span className="contents md:hidden">
+            {TOOLS.filter(([k]) => k === "pan" || k === "select").map(([k, label, hint]) => (
+              <button key={k} onClick={() => pickTool(k)} title={`${label} — ${hint}`} aria-label={label} aria-pressed={tool === k}
+                className="flex items-center" style={{ ...tb(tool === k), padding: "0 8px" }}><ToolIcon tool={k} /></button>
+            ))}
+            {(() => {
+              const measuring = tool !== "pan" && tool !== "select";
+              const shown = measuring ? tool : lastMeasure;
+              return (
+                <button onClick={(e) => setToolMenu(toolMenu ? null : e.currentTarget.getBoundingClientRect())} aria-expanded={!!toolMenu} aria-label="Measuring tools"
+                  className="flex items-center gap-1" style={{ ...tb(measuring || !!toolMenu), padding: "0 8px", whiteSpace: "nowrap" }}>
+                  <ToolIcon tool={shown} /><span style={{ fontSize: F.xs }}>{TOOLS.find((t) => t[0] === shown)?.[1]}</span> ▾
+                </button>
+              );
+            })()}
+          </span>
+          {toolMenu && <>
+            <div className="md:hidden" onClick={() => setToolMenu(null)} style={{ position: "fixed", inset: 0, zIndex: 80 }} />
+            <div className="md:hidden" role="menu" style={{ position: "fixed", top: toolMenu.bottom + 4, left: Math.max(8, Math.min(toolMenu.left, window.innerWidth - 228)), width: 220, zIndex: 81,
+              background: T.card, border: `1px solid ${T.hair}`, borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,.18)", padding: 4 }}>
+              {TOOLS.filter(([k]) => k !== "pan" && k !== "select").map(([k, label]) => (
+                <button key={k} role="menuitem" onClick={() => { pickTool(k); setLastMeasure(k); setToolMenu(null); }}
+                  className="flex items-center gap-2 w-full" style={{ padding: "9px 10px", borderRadius: 7, fontSize: F.sm, color: T.ink,
+                    background: tool === k ? T.sunk : "transparent", fontWeight: tool === k ? 600 : 400, textAlign: "left" }}>
+                  <ToolIcon tool={k} />{label}{tool === k && <span style={{ marginLeft: "auto" }}>✓</span>}
+                </button>
+              ))}
+            </div>
+          </>}
           <span className="flex-1" />
           {sheet && <span className="hidden md:inline" style={{ fontSize: F.xs, color: T.ink2, whiteSpace: "nowrap" }}>{sheetLabel(sheet)}</span>}
           {sheet && <button onClick={(e) => setScaleMenu(scaleMenu ? null : e.currentTarget.getBoundingClientRect())} aria-expanded={!!scaleMenu} title="Recalibrate: a preset scale, or two points on a known dimension"

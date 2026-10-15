@@ -16,6 +16,7 @@ import { STATUSES } from "@/lib/roadmap";
  * POST { action: "replay", event, reason }              → { ok, error }
  * POST { action: "feedback", item, status, reason }     → { ok }
  * POST { action: "create_org", name, slug, email, plan, reason } → { org_id, invite_url, expires_at }
+ * POST { action: "owner_link", org, email, reason }     → { invite_url, expires_at } (112)
  *
  * Every write asks for a reason and is written to admin_audit by the function.
  */
@@ -125,6 +126,22 @@ export async function POST(req: NextRequest) {
     const k = hostKind(req.headers.get("host")).kind;
     const origin = k === "other" ? req.nextUrl.origin : APP_ORIGIN;
     return applyCookies(NextResponse.json({ org_id: row.org_id, invite_url: `${origin}/invite/${row.token}`, expires_at: row.expires_at }, { status: 201 }));
+  }
+
+  // A fresh owner invite for a company that already exists (112) — the old open one is withdrawn.
+  if (b.action === "owner_link") {
+    if (typeof b.org !== "string" || !UUID.test(b.org)) return bad("Which company?");
+    const email = typeof b.email === "string" ? b.email.trim() : "";
+    const { data, error } = await supabase.rpc("sc_admin_owner_link", { p_org: b.org, p_email: email, p_reason: reason });
+    if (error) {
+      if (/sc_admin_owner_link/.test(error.message ?? "")) return bad("New owner link is waiting for migration 112.", 503);
+      return fail(error);
+    }
+    const row = (Array.isArray(data) ? data[0] : data) as { token: string; expires_at: string } | null;
+    if (!row?.token) return bad("No link was made.", 500);
+    const k = hostKind(req.headers.get("host")).kind;
+    const origin = k === "other" ? req.nextUrl.origin : APP_ORIGIN;
+    return applyCookies(NextResponse.json({ invite_url: `${origin}/invite/${row.token}`, expires_at: row.expires_at }, { status: 201 }));
   }
 
   return bad("Unknown action.");

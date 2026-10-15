@@ -65,6 +65,8 @@ export const metadata: Metadata = {
     apple: "/apple-touch-icon.png?v=4e",
   },
   manifest: "/site.webmanifest",
+  // Added to an iPhone's home screen, it opens full screen as "ScopeCrete" (2026-10-15).
+  appleWebApp: { capable: true, title: "ScopeCrete", statusBarStyle: "default" },
 };
 
 export default function RootLayout({

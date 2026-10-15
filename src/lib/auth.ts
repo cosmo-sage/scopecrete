@@ -29,10 +29,11 @@ export async function signInWithEmail(email: string) {
 export async function signOut() {
   const { error } = await supabase.auth.signOut();
   if (!error) {
-    // Signed out on scopecrete.ai's app or an org's address → the one sign-in
-    // page, app.scopecrete.ai/login. Elsewhere (previews) "/" is sign-in.
+    // Signed out on app.scopecrete.ai → its sign-in page; on an org's address →
+    // that address's own /login, so the app on a home screen stays in the app.
+    // Elsewhere (previews) "/" is sign-in.
     const k = hostKind(window.location.hostname).kind;
-    window.location.href = k === "app" || k === "org" ? LOGIN_URL : "/";
+    window.location.href = k === "app" ? LOGIN_URL : k === "org" ? "/login" : "/";
   }
   return { error };
 }

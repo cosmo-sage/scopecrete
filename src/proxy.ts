@@ -70,6 +70,13 @@ function loginWithNext(path: string) {
   return u;
 }
 
+/** An org's own sign-in page, carrying where they were going. */
+function orgLogin(request: NextRequest, path: string) {
+  const u = new URL("/login", request.url);
+  if (path.startsWith("/dashboard") && path !== "/dashboard") u.searchParams.set("next", path);
+  return u;
+}
+
 export async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
   const host = request.headers.get("host");
@@ -99,12 +106,15 @@ export async function proxy(request: NextRequest) {
   }
 
   // ── <slug>.app.scopecrete.ai: that org's dashboard, members only.
+  //    Its own /login too (2026-10-15): the app on an iPhone's home screen keeps its own
+  //    cookies, apart from Safari's, and opens on this address — sent to app.scopecrete.ai
+  //    to sign in, it would leave the app. The sign-in cookie is the same (.app.scopecrete.ai).
   if (kind.kind === "org") {
-    if (pathname === "/login") return NextResponse.redirect(LOGIN_URL);
     if (pathname === "/") return NextResponse.redirect(new URL("/dashboard", request.url));
-    if (!isDash) return NextResponse.next();
+    if (pathname !== "/login" && !isDash) return NextResponse.next();
     const s = await sessionFor(request, host);
-    if (!s.signedIn) return go(loginWithNext(pathname), s.response());
+    if (pathname === "/login") return s.signedIn ? go(new URL("/dashboard", request.url), s.response()) : s.response();
+    if (!s.signedIn) return go(orgLogin(request, pathname), s.response());
     const mine = await myOrgs(s.supabase);
     if (mine.some((o) => o.slug === kind.slug)) {
       const res = s.response();

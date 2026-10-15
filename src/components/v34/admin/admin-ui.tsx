@@ -290,3 +290,64 @@ export function useToast(): [React.ReactNode, (m: string) => void] {
   }, [msg]);
   return [msg ? <div className="toast" role="status">{msg}</div> : null, setMsg];
 }
+
+// ------------------------------------------------------------------ new owner link
+
+/** A fresh owner invite for a company that already exists (migration 112): the email,
+ *  a reason for the admin log, then the link — shown once. The open invite for that
+ *  email is withdrawn, so an old link stops working. Nothing is deleted. */
+export function OwnerLink({ org, name, email: start, onClose, post }: {
+  org: string; name: string; email: string; onClose: () => void;
+  post: (body: Record<string, unknown>) => Promise<{ invite_url: string; expires_at: string }>;
+}) {
+  const [email, setEmail] = useState(start);
+  const [reason, setReason] = useState("");
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [made, setMade] = useState<{ invite_url: string; expires_at: string } | null>(null);
+  const [copied, setCopied] = useState(false);
+  const make = async () => {
+    if (!/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(email.trim())) { setErr("The owner's email."); return; }
+    if (reason.trim().length < 3) { setErr("A note for the admin log."); return; }
+    setBusy(true); setErr(null);
+    try { setMade(await post({ action: "owner_link", org, email: email.trim(), reason: reason.trim() })); }
+    catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+    setBusy(false);
+  };
+  const copy = async () => {
+    if (!made) return;
+    try { await navigator.clipboard.writeText(made.invite_url); setCopied(true); } catch { setCopied(false); }
+  };
+  const body = made ? `Here's your link to set up ${name} on ScopeCrete:\n\n${made.invite_url}\n\nSign in with this email address (${email.trim()}). If you already have a ScopeCrete password, use it; if not, you'll set one after you join.` : "";
+  return (
+    <>
+      <div className="scrim" onMouseDown={() => { if (!busy) onClose(); }} />
+      <div className="drawer" role="dialog" aria-modal="true" aria-label="New owner link">
+        <div className="dh"><h3>New owner link</h3><button className="ib sm" onClick={onClose} disabled={busy}>Close</button></div>
+        <div className="db">
+          {made ? (
+            <div className="fld">
+              <label>{name}&apos;s owner link — shown once</label>
+              <div className="box" style={{ wordBreak: "break-all", fontFamily: "var(--sc-font-code, monospace)", fontSize: 11.5 }}>{made.invite_url}</div>
+              <div className="acts" style={{ justifyContent: "flex-start" }}>
+                <button className="ib pri" onClick={copy}>{copied ? "Copied" : "Copy link"}</button>
+                <a className="ib" href={`mailto:${encodeURIComponent(email.trim())}?subject=${encodeURIComponent("Your ScopeCrete account")}&body=${encodeURIComponent(body)}`}>Email it</a>
+              </div>
+              <span className="hint">Send it yourself — ScopeCrete sends nothing. It works once, for {email.trim()}, for 14 days. Any older link for that email no longer works.</span>
+            </div>
+          ) : (
+            <>
+              <p className="mut" style={{ fontSize: 13, margin: 0 }}>For {name}. The company, its data and anyone already in it stay as they are; the old open invite for this email is withdrawn.</p>
+              <div className="fld"><label htmlFor="ol-email">Owner email</label>
+                <input id="ol-email" type="email" autoFocus value={email} onChange={(e) => { setEmail(e.target.value); setErr(null); }} placeholder="owner@company.com" /></div>
+              <div className="fld"><label htmlFor="ol-reason">Reason (goes in the admin log)</label>
+                <textarea id="ol-reason" value={reason} onChange={(e) => { setReason(e.target.value); setErr(null); }} placeholder="e.g. The first link was lost" /></div>
+              {err && <p className="dn">{err}</p>}
+              <div className="acts"><button className="ib pri" onClick={make} disabled={busy}>{busy ? "Working…" : "Make the link"}</button></div>
+            </>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}

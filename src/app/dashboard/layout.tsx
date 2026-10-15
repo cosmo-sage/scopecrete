@@ -37,6 +37,7 @@ import { DustyPanel } from "@/components/v34/dusty-panel";
 import { DustyAvatar, type EmblemState } from "@/components/v34/dusty-avatar";
 import { ActivityLine } from "@/components/v34/activity-line";
 import { ArchiveToast } from "@/components/v34/archive-actions";
+import { InstallPrompt } from "@/components/v34/install-app";
 import { ThreadColorVars } from "@/components/v34/thread-colors";
 import { AlertsBell, AlertPopups } from "@/components/v34/incoming-alerts";
 import { useAlertsWatcher } from "@/lib/v34/alerts-live";
@@ -386,6 +387,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <AccessContext.Provider value={access}><OrgNameContext.Provider value={me?.org_name ?? null}><MeContext.Provider value={meCtx}>{children}</MeContext.Provider></OrgNameContext.Provider></AccessContext.Provider>
       </main>
       <ArchiveToast />
+      {me && <InstallPrompt />}
       <ThreadColorVars />
       {me && !limited && <AlertPopups />}
 

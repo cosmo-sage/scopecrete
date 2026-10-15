@@ -7,7 +7,11 @@
  * it must be the email the invite was made for. Signed in: who invited you, to
  * which org, as what — and Join. Only then is the membership written
  * (sc_accept_invite), with the name they type (saved on their account and as
- * their name in the org — Coy, 2026-10-11). The token is kept in this browser while you sign in, so
+ * their name in the org — Coy, 2026-10-11). Someone who already has a password
+ * signs in with it here. After Join, an account with no password sets one
+ * before going on (Coy, 2026-10-15: "prompt him to set up a password"; 112's
+ * sc_my_password_set), and Open goes to the company's own address, where the
+ * dashboard offers the home-screen install. The token is kept in this browser while you sign in, so
  * the dashboard brings you back here if the sign-in lands there instead.
  */
 
@@ -17,6 +21,7 @@ import { supabase } from "@/lib/supabase";
 import AuthShell, { GoogleG, OrRule, Spinner, cta, ghost, h1, input, label, lede } from "@/components/site/auth-shell";
 import { siteFonts } from "@/components/site/fonts";
 import { disp } from "@/components/site/marks";
+import { afterJoinUrl } from "@/lib/hosts";
 
 type Peek = { org_name: string | null; role: string | null; email: string | null; invited_by_name: string | null; state: string; email_matches: boolean };
 const PENDING_INVITE_KEY = "sc:pending-invite";
@@ -32,6 +37,12 @@ export default function InvitePage() {
   const [err, setErr] = useState<string | null>(null);
   const [joined, setJoined] = useState(false);
   const [name, setName] = useState("");
+  const [password, setPassword] = useState("");
+  const [password2, setPassword2] = useState("");
+  // After Join: where to open it, and whether the account still needs a password
+  // (false = none; null = couldn't tell, before 112 — asked with a skip).
+  const [openAt, setOpenAt] = useState("/dashboard?welcome=1");
+  const [needPw, setNeedPw] = useState<boolean | null>(false);
   const back = () => `${window.location.origin}/auth/callback?next=${encodeURIComponent(`/invite/${token}`)}`;
 
   useEffect(() => {
@@ -56,6 +67,23 @@ export default function InvitePage() {
     const { data, error } = await supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo: back() } });
     if (error) setErr(error.message); else if (data.url) window.location.href = data.url;
   }
+  async function passwordSignIn() {
+    setBusy(true); setErr(null);
+    const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+    setBusy(false);
+    if (error) { setErr(/invalid/i.test(error.message) ? "That email and password don't match. Use a sign-in link instead, or try again." : error.message); return; }
+    setPassword("");
+    window.location.reload();
+  }
+  async function setNewPassword() {
+    if (password.length < 8) { setErr("At least 8 characters."); return; }
+    if (password !== password2) { setErr("The two passwords don't match."); return; }
+    setBusy(true); setErr(null);
+    const { error } = await supabase.auth.updateUser({ password });
+    setBusy(false);
+    if (error) { setErr(error.message); return; }
+    setPassword(""); setPassword2(""); setNeedPw(false);
+  }
   async function emailLink() {
     setBusy(true); setErr(null);
     const { error } = await supabase.auth.signInWithOtp({ email: email.trim(), options: { emailRedirectTo: back() } });
@@ -69,13 +97,16 @@ export default function InvitePage() {
     setBusy(false);
     if (!r.ok) { setErr(b?.error ?? `HTTP ${r.status}`); return; }
     try { localStorage.removeItem(PENDING_INVITE_KEY); } catch { /* private mode */ }
+    setOpenAt(afterJoinUrl(window.location.host, b?.slug ?? null));
+    setNeedPw(b?.password_set === true ? false : b?.password_set === false ? true : null);
     setJoined(true);
   }
   async function signOut() { await supabase.auth.signOut(); window.location.reload(); }
 
   const roleWord = (r: string | null) => (r === "owner" ? "an owner" : r === "field" ? "field crew" : "a member");
   const roleTag = (r: string | null) => (r === "owner" ? "Owner" : r === "field" ? "Field crew" : "Member");
-  const step = joined ? 2 : peek && !signedOut ? 1 : 0;
+  const asking = joined && needPw !== false;
+  const step = joined ? (asking ? 2 : 3) : peek && !signedOut ? 1 : 0;
   const initials = (peek?.org_name ?? "").split(/\s+/).filter(Boolean).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
   const pad: React.CSSProperties = { padding: "26px 28px 30px", display: "flex", flexDirection: "column", gap: 18 };
 
@@ -83,8 +114,8 @@ export default function InvitePage() {
     <div className={siteFonts}>
       <AuthShell
         above={
-          <div style={{ width: "100%", maxWidth: 440, display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: 6 }}>
-            {["Sign in", "Join", "Done"].map((l, i) => (
+          <div style={{ width: "100%", maxWidth: 440, display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))", gap: 6 }}>
+            {["Sign in", "Join", "Password", "Done"].map((l, i) => (
               <div key={l} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 <span style={{ height: 3, background: i <= step ? "#F2610C" : "#C8CDD3" }} />
                 <span style={{ ...label, color: i <= step ? "#12161A" : "#8A95A1" }}>0{i + 1} · {l}</span>
@@ -105,15 +136,35 @@ export default function InvitePage() {
             <span style={{ flex: "none", padding: "4px 8px", border: "1px solid #B9C0C8", ...label }}>{roleTag(peek.role)}</span>
           </div>
         )}
-        {joined ? (
+        {asking ? (
+          <div style={pad}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <h1 style={h1}>Set your password</h1>
+              <p style={lede}>You&apos;re in {peek?.org_name ?? "the team"}. Pick a password so you can sign in with your email and password — on this phone and in the app on your home screen.</p>
+            </div>
+            <form onSubmit={(e) => { e.preventDefault(); void setNewPassword(); }} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              <input type="email" value={peek?.email ?? ""} autoComplete="username" readOnly hidden />
+              <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <span style={label}>Password</span>
+                <input type="password" required minLength={8} value={password} onChange={(e) => { setPassword(e.target.value); setErr(null); }} placeholder="At least 8 characters" autoComplete="new-password" autoFocus style={input} />
+              </label>
+              <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <span style={label}>Again</span>
+                <input type="password" required minLength={8} value={password2} onChange={(e) => { setPassword2(e.target.value); setErr(null); }} autoComplete="new-password" style={input} />
+              </label>
+              <button type="submit" className="sc-cta" disabled={busy || password.length < 8} style={{ ...cta(busy), opacity: password.length < 8 ? 0.45 : 1 }}>{busy ? <><Spinner /> Saving</> : "Save password"}</button>
+            </form>
+            {needPw === null && <button className="sc-ghost" onClick={() => setNeedPw(false)} style={{ ...ghost, fontSize: 14 }}>I already have a password — skip</button>}
+          </div>
+        ) : joined ? (
           <div style={pad}>
             <span style={{ width: 52, height: 52, borderRadius: "50%", background: "#1FA971", boxShadow: "0 0 0 6px rgba(31,169,113,.16)", display: "flex", alignItems: "center", justifyContent: "center", color: "#FFFFFF", fontSize: 26, fontWeight: 600 }}>✓</span>
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               <h1 style={h1}>You&apos;re in</h1>
               <p style={lede}>Welcome to {peek?.org_name ?? "the team"}.</p>
             </div>
-            <a href="/dashboard" className="sc-cta" style={cta()}>Open ScopeCrete</a>
-            <a href="/auth/reset-password" style={{ fontSize: 13, color: "#3A4249", textAlign: "center" }}>Set a password too (optional) — then you can sign in without a link</a>
+            <a href={openAt} className="sc-cta" style={cta()}>Open {peek?.org_name ?? "ScopeCrete"}</a>
+            <p style={{ ...lede, fontSize: 14 }}>Next time, sign in with {peek?.email ?? "your email"} and your password.</p>
           </div>
         ) : signedOut ? (
           <div style={pad}>
@@ -126,12 +177,17 @@ export default function InvitePage() {
             {sent ? (
               <div role="status" style={{ fontSize: 15, lineHeight: 1.45, color: "#0F8A4F" }}>Check {email} for a sign-in link. It brings you back here.</div>
             ) : (
-              <form onSubmit={(e) => { e.preventDefault(); void emailLink(); }} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              <form onSubmit={(e) => { e.preventDefault(); void (password ? passwordSignIn() : emailLink()); }} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                 <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                   <span style={label}>Your email</span>
                   <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com" autoComplete="email" style={input} />
                 </label>
-                <button type="submit" className="sc-cta" disabled={busy || !email.trim()} style={{ ...cta(busy), opacity: !email.trim() ? 0.45 : 1 }}>{busy ? <><Spinner /> Sending</> : "Email me a sign-in link"}</button>
+                <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  <span style={label}>Password, if you already have one</span>
+                  <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" style={input} />
+                </label>
+                <button type="submit" className="sc-cta" disabled={busy || !email.trim() || !password} style={{ ...cta(busy), opacity: !email.trim() || !password ? 0.45 : 1 }}>{busy && password ? <><Spinner /> Signing in</> : "Sign in"}</button>
+                <button type="button" className="sc-ghost" onClick={() => void emailLink()} disabled={busy || !email.trim()} style={{ ...ghost, opacity: !email.trim() ? 0.45 : 1 }}>{busy && !password ? <><Spinner /> Sending</> : "No password yet? Email me a sign-in link"}</button>
               </form>
             )}
           </div>

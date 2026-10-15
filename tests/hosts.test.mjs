@@ -1,7 +1,7 @@
 // Which door a request came in by (src/lib/hosts.ts) — `npm test`.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { hostKind, orgOrigin, cookieDomain, safeNext, publicOrigin, LOGIN_URL } from "../src/lib/hosts.ts";
+import { hostKind, orgOrigin, cookieDomain, safeNext, publicOrigin, afterJoinUrl, LOGIN_URL } from "../src/lib/hosts.ts";
 
 test("apex, app, an org's subdomain, and everything else", () => {
   assert.deepEqual(hostKind("scopecrete.ai"), { kind: "apex" });
@@ -47,4 +47,12 @@ test("a customer's link points at scopecrete.ai, never an org's dashboard", () =
   assert.equal(publicOrigin("app.scopecrete.ai", "https://app.scopecrete.ai"), "https://scopecrete.ai");
   assert.equal(publicOrigin("x-coy2.vercel.app", "https://x-coy2.vercel.app"), "https://scopecrete.ai");
   assert.equal(publicOrigin("localhost:3000", "http://localhost:3000"), "http://localhost:3000");
+});
+
+test("after joining from an invite: the company's own address on the live site", () => {
+  assert.equal(afterJoinUrl("app.scopecrete.ai", "gpaving"), "https://gpaving.app.scopecrete.ai/dashboard?welcome=1");
+  assert.equal(afterJoinUrl("sbuild.app.scopecrete.ai", "gpaving"), "https://gpaving.app.scopecrete.ai/dashboard?welcome=1");
+  assert.equal(afterJoinUrl("app.scopecrete.ai", null), "/dashboard?welcome=1");
+  assert.equal(afterJoinUrl("scopecrete-git-claude-feedback-coy2.vercel.app", "gpaving"), "/dashboard?welcome=1", "a preview stays on itself");
+  assert.equal(afterJoinUrl("localhost:3000", "gpaving"), "/dashboard?welcome=1");
 });

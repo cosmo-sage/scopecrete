@@ -383,6 +383,35 @@ across the database … I also want to be able to upload a logo for my org."*
   themselves and was refused naming Tim, a direct UPDATE changed no row, a
   stranger refused and saw no one, anon no execute. Owners and members read everything under
   `get_user_org_ids()`; only owners manage the org.
+- **A new owner link, a password, and the home screen (migration 112, written
+  2026-10-15, NOT applied; Coy: "I need to send Jeremy a new link … I want it
+  to prompt him to set up a password when he logs into the app, and I want the
+  app to ask him to install it in his home screen").** Admin has no delete for a
+  company and New company refuses a slug that is taken, so a company with no
+  owner yet (Gulfline, `gpaving`) gets a fresh link from **Admin → the company →
+  New owner link**: `sc_admin_owner_link(org, email, reason)` (SECURITY DEFINER,
+  `sc_admin_check()`, authenticated only) withdraws the open invites for that
+  email to that org, makes a 14-day owner invite (token shown once, SHA-256
+  kept), audited in `org_audit` and `admin_audit`. Nothing is deleted, and an
+  account that is in other companies is untouched. **The invite page** signs in
+  with a password as well as Google or an emailed link; after Join an account
+  with no password must set one (`sc_my_password_set()`, the caller's own row,
+  a boolean; before 112 the step shows with "I already have a password —
+  skip"); then **Open <company>** goes to that company's own address
+  (`afterJoinUrl()`, `src/lib/hosts.ts`, tested) with `?welcome=1`. **The
+  dashboard offers the home-screen install** (`InstallPrompt`,
+  `install-app.tsx`; `installHint()`, `src/lib/install.ts`, tested): on a
+  company's own address, or after `?welcome=1` — Install on Chrome / Edge,
+  Safari's Share → Add to Home Screen on an iPhone (iOS has no prompt; the
+  layout's `appleWebApp` makes it open full screen), the ⋮ menu on Android with
+  no prompt; Not now / Got it hides it on that device, and it never shows in the
+  installed app. **An org's address has its own /login** (`src/proxy.ts`; sign
+  out goes there too, `src/lib/auth.ts`): the app on an iPhone's home screen
+  keeps its own cookies apart from Safari's, so it signs in once there, and
+  sent to app.scopecrete.ai it would leave the app. Rehearsed (rolled back):
+  Coy made a 48-character link for Gulfline, the old invite withdrawn and one
+  open left, admin_audit written; a bad email refused; a signed-in non-admin
+  refused; anon can't run `sc_my_password_set`.
 - **View as a teammate (Coy, 2026-10-12: "a button … that lets me view the
   dashboard as that user to make sure that what they're viewing is what I want
   them to be able to view … like JobTread"; no migration).** **View as** on
@@ -506,7 +535,7 @@ itself — `platform_admins` (084) — not an org's owner.
   numbers, texts, transcripts or files.
 - **Every write asks for a reason and is audited** in `admin_audit` (who,
   what, which company, when, reason, before / after; RLS on, no policies, no
-  grants — read only through `sc_admin_log`). The writes are three:
+  grants — read only through `sc_admin_log`). The writes are three (four with 112's New owner link, §2g):
   **Replay** a failed Quo event of any company (`sc_admin_replay`, 077's
   projection without the membership check), **Publish / Not planned** a
   feedback item (`sc_admin_feedback` over 084's `sc_roadmap_admin`; Reword

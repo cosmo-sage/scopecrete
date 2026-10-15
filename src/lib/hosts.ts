@@ -72,3 +72,15 @@ export function publicOrigin(host: string | null | undefined, fallback: string):
   if (hostKind(host).kind === "other" && (h === "localhost" || h === "127.0.0.1" || h === "")) return fallback;
   return `https://${ROOT_DOMAIN}`;
 }
+
+/**
+ * Where "Open ScopeCrete" goes after joining a company from an invite: that
+ * company's own address on the live site (app.scopecrete.ai would send someone
+ * in two companies to the one they opened last), else this host's dashboard.
+ * `?welcome=1` lets the dashboard offer the home-screen install once.
+ */
+export function afterJoinUrl(host: string | null | undefined, slug: string | null | undefined): string {
+  const k = hostKind(host).kind;
+  const origin = k === "app" || k === "org" ? orgOrigin(slug) : null;
+  return `${origin ?? ""}/dashboard?welcome=1`;
+}

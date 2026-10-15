@@ -56,7 +56,7 @@ export function CostAnalysis({ lines, sections, tax, discount, overheadPct, days
 
   const areas = useMemo(() => sections.map((s) => {
     const q = quantities(s);
-    return { id: s.id, name: s.name || "Unnamed area", sqft: q.sqft, lf: q.count_unit === "LF" ? q.count : null };
+    return { id: s.id, name: s.name || "Unnamed area", sqft: q.sqft, concrete: q.concrete, lf: q.count_unit === "LF" ? q.count : null };
   }), [sections]);
   const a = useMemo(() => analyse(lines, areas, { section, tax, discount }), [lines, areas, section, tax, discount]);
   // Days are worked out from the sections' labor lines unless typed (Coy, 2026-10-15).

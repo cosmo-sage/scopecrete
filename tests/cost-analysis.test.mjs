@@ -89,3 +89,11 @@ test("days from the sections' labor lines", () => {
   assert.equal(daysFromLines([L("labor", 40, "hr")], { size: 4, hours: 10 }), 1);
   assert.equal(daysFromLines([L("labor", 900, "SqFt")], { size: 4, hours: null }), null);
 });
+
+test("whole job SF counts pours only, not the base under them", () => {
+  const a = analyse([], [
+    { id: "a", name: "Concrete", sqft: 1000, lf: null, concrete: true },
+    { id: "b", name: "Sub-base", sqft: 1000, lf: null, concrete: false },
+  ], { section: "all", tax: 0, discount: 0 });
+  assert.equal(a.units.sf, 1000);
+});

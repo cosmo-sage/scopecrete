@@ -3718,6 +3718,9 @@ expected start date per quoted job before it means anything. Add the field.
   Dusty with its own memory and tools on the VPS (§6, Hermes ran him as an agent), which shows as
   "I found a relevant past session" in his answers; that is fixed on the VPS or by moving Dusty to
   the model API, not here.
+  **A suggested search is a button (Coy, 2026-10-15: "make this search phrase clickable instead of making me type a specific phrase").**
+  When an answer says "search the web for …", the phrase is drawn as a 🔍 link (`MdAsk` in `markdown.tsx`); a tap
+  asks it as Coy's next question in the same chat, so the search runs with that conversation's context.
   **Share (Coy, 2026-10-14: "a share button right next to the text size adjuster button on the header in
   Dusty").** Beside Aa: **The last answer** or **The whole chat** as plain text (`shareText()`,
   `src/lib/dusty/share.ts`, tested — the plan block left out and counted, ids hidden), through the

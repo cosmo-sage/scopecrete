@@ -24,6 +24,7 @@ import { useSearchParams } from "next/navigation";
 import { AskIcon, shapeMiddle, usePlanPins } from "./sheet-comments";
 import { useDustyZones } from "./dusty-zones";
 import { useDustyJoints } from "./dusty-joints";
+import { AiTakeoffMenu } from "./ai-takeoff-menu";
 
 /** Count's subtract: each click takes off the counted point nearest it. */
 function dropNearest(geom: Pt[], picks: Pt[]): Pt[] {
@@ -555,8 +556,10 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
           <button onClick={turn} title="Rotate the sheet a quarter turn (view only)" aria-label="Rotate" style={{ ...tb(rot !== 0), width: 30, padding: 0 }}>
             <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" aria-hidden="true" style={{ margin: "auto" }}><path d="M15.5 8A6 6 0 1 0 16 12" /><path d="M16 3.5V8h-4.5" /></svg>
           </button>
-          {zones.button}
-          {joints.button}
+          <AiTakeoffMenu items={[
+            { key: "zones", label: "Find zones", hint: "Area takeoffs per thickness, from the legend's hatches", ...zones },
+            { key: "joints", label: "Find joints", hint: "Control joints read off the drawing's lines, split by thickness", ...joints },
+          ]} />
           <button onClick={() => { pins.setAskMode(!pins.askMode); setTool("select"); }} aria-pressed={pins.askMode} title="Ask someone about a spot: click the sheet where your question is"
             className="flex items-center gap-1.5" style={{ ...tb(pins.askMode), padding: "0 8px" }}>
             <AskIcon /><span className="hidden md:inline">Ask{pins.count ? ` · ${pins.count}` : ""}</span>

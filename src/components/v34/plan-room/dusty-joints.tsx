@@ -177,5 +177,7 @@ export function useDustyJoints({ sheet, fileUrl, data, act, jobId }: {
     </div>
   ) : null;
 
-  return { button, layer, panel };
+  const run = () => (on ? close() : void find());
+  const ready = !!sheet && !!fileUrl;
+  return { button, layer, panel, run, busy: busy && live, active: on, ready };
 }

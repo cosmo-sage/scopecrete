@@ -234,5 +234,8 @@ export function useDustyZones({ sheet, fileUrl, data, act, jobId }: {
     </div>
   ) : null;
 
-  return { button, layer, panel };
+  const active = live && phase.k !== "idle";
+  const run = () => (active ? close() : void find());
+  const ready = !!sheet && !!fileUrl;
+  return { button, layer, panel, run, busy: busy && live, active, ready };
 }

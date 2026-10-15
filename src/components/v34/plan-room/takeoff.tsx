@@ -85,7 +85,7 @@ function ToolIcon({ tool }: { tool: Tool }) {
 export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, onSend, fullscreen, setFullscreen }: {
   jobId: string; data: PlansData; files: PlanFile[];
   sheetId: string | null; setSheetId: (id: string) => void; reload: () => Promise<void>;
-  onSend: (p: Param, ids?: string[]) => void; fullscreen: boolean; setFullscreen: (v: boolean) => void;
+  onSend: (p: Param, ids?: string[], whole?: boolean) => void; fullscreen: boolean; setFullscreen: (v: boolean) => void;
 }) {
   const sheets = data.sheets;
   // The phone's sheets drawer: open on the first visit to this job's Plan Room, closed afterwards (remembered per job).
@@ -469,7 +469,7 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
           <SlideDrawer open={paramsOpen} onClose={() => openParams(false)} width={320} label="Parameters">
             <ParamPanel jobId={jobId} data={data} groupId={groupId} setGroupId={setGroupId} selId={selId} drawer
               onSelect={(m) => { setSelId(m.id); setGroupId(m.parameter_id); if (m.sheet_id !== sheet?.id) setSheetId(m.sheet_id); setTool("select"); openParams(false); }}
-              act={act} onDelete={deleteRec} onSend={(p, ids) => { openParams(false); onSend(p, ids); }} onCollapse={() => openParams(false)} />
+              act={act} onDelete={deleteRec} onSend={(p, ids, whole) => { openParams(false); onSend(p, ids, whole); }} onCollapse={() => openParams(false)} />
           </SlideDrawer>
         </div>
         <div className="flex items-center gap-1 px-2 overflow-x-auto" style={{ height: 42, flex: "0 0 auto", background: T.card, borderBottom: `1px solid ${T.hair}` }}>
@@ -1109,7 +1109,7 @@ function ParamPanel({ jobId, data, groupId, setGroupId, selId, onSelect, act, on
   /** Removing a takeoff, so Back can put it back. */
   onDelete?: (m: Meas) => Promise<void>;
   jobId: string; data: PlansData; groupId: string | null; setGroupId: (id: string) => void; selId: string | null;
-  onSelect: (m: Meas) => void; act: (fn: () => Promise<unknown>) => Promise<void>; onSend: (p: Param, ids?: string[]) => void; onCollapse: () => void;
+  onSelect: (m: Meas) => void; act: (fn: () => Promise<unknown>) => Promise<void>; onSend: (p: Param, ids?: string[], whole?: boolean) => void; onCollapse: () => void;
   /** Inside the phone's slide-out: the drawer's full height, no fold-to-a-strip. */
   drawer?: boolean;
 }) {
@@ -1171,6 +1171,8 @@ function ParamPanel({ jobId, data, groupId, setGroupId, selId, onSelect, act, on
                       </div>
                     )}
                   </div>
+                  {shapes.length > 0 && <button onClick={(e) => { e.stopPropagation(); onSend(p, shapes.map((m) => m.id), true); }} aria-label={`Send the whole ${p.name} group to the budget`}
+                    title="Send the whole group to the budget as one section. Takeoffs added to it later join that section." style={{ fontFamily: disp, fontSize: 10.5, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: T.hivizText, border: `1px solid ${T.hair}`, borderRadius: 3, padding: "2px 5px", background: T.card, cursor: "pointer", flex: "0 0 auto" }}>$ Group</button>}
                   <button onClick={(e) => { e.stopPropagation(); setEditing(editing === p.id ? null : p.id); }} aria-label={`Edit ${p.name}`} style={{ width: 22, color: T.ink3, cursor: "pointer" }}>⋯</button>
                 </div>
                 {t?.blocked && shapes.length > 0 && <div className="px-9 pb-1" style={{ fontSize: F.xs, color: T.hivizText }}>No total — {t.blocked}</div>}

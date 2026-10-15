@@ -142,7 +142,8 @@ export function BudgetStep({ jobId, data, b, sections, onSend }: { jobId: string
  * budget), all in one section, or into a section already there. Cost items are
  * added to the sections after — this prices nothing.
  */
-export function SendSheet({ jobId, p, initial, data, onClose, onSent }: {
+export function SendSheet({ jobId, p, initial, whole, data, onClose, onSent }: {
+  whole?: boolean;
   jobId: string; p: Param | null; data: PlansData | null; onClose: () => void; onSent: () => void;
   /** Takeoffs ticked in the Parameters panel — those come ticked here instead of the ones not yet sent. */
   initial?: string[];
@@ -152,7 +153,9 @@ export function SendSheet({ jobId, p, initial, data, onClose, onSent }: {
   const key = `${p?.id ?? ""}:${(initial ?? []).join(",")}`;
   const pick = pickState?.k === key ? pickState.ids
     : new Set(initial?.length ? initial : shapes.filter((m) => !m.section_id).map((m) => m.id));
-  const [mode, setMode] = useState<"each" | "one" | "into">("each");
+  const [modeState, setModeState] = useState<{ k: string; m: "each" | "one" | "into" } | null>(null);
+  const mode = modeState?.k === key ? modeState.m : whole ? "one" : "each";
+  const setMode = (m: "each" | "one" | "into") => setModeState({ k: key, m });
   const [name, setName] = useState("");
   const [work, setWork] = useState("");
   const [into, setInto] = useState("");

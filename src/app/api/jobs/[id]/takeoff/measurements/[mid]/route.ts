@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
 import { MEAS_COLS, cleanPoints, paramInJob } from "@/lib/plans-server";
-import { syncTakeoffSections } from "@/lib/takeoff-sections-server";
+import { groupSection, syncTakeoffSections } from "@/lib/takeoff-sections-server";
 
 /** Rename a shape, colour it, move it to another group of the same kind, redraw it, set its cutouts, or remove it. */
 
@@ -51,6 +51,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     if (!p) return bad("No such group.", 404);
     if (p.kind !== m.takeoff_parameters.kind) return bad(`That group is ${p.kind}, this shape is ${m.takeoff_parameters.kind}.`);
     patch.parameter_id = p.id;
+    if (p.id !== m.parameter_id) { const sec = await groupSection(supabase, orgId, p.id); if (sec) patch.section_id = sec; }
   }
   if (!Object.keys(patch).length) return bad("Nothing to change.");
   const { data, error } = await supabase.from("takeoff_measurements").update(patch).eq("id", mid).eq("org_id", orgId).select(MEAS_COLS).single();

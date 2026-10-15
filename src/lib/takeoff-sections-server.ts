@@ -59,3 +59,12 @@ export async function syncTakeoffSections(sb: Sb, orgId: string, jobId: string, 
 }
 
 const num = (v: unknown) => (v === null || v === undefined ? null : Number(v));
+
+/** The one budget section every takeoff of a group is in, else null — so a takeoff added to (or moved into) a group sent whole follows it. */
+export async function groupSection(sb: Sb, orgId: string, parameterId: string): Promise<string | null> {
+  const { data } = await sb.from("takeoff_measurements").select("section_id").eq("org_id", orgId).eq("parameter_id", parameterId);
+  const ids = new Set(((data ?? []) as Array<{ section_id: string | null }>).map((r) => r.section_id));
+  if (ids.size !== 1) return null;
+  const [only] = [...ids];
+  return only ?? null;
+}

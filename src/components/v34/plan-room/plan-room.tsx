@@ -42,8 +42,8 @@ export function PlanRoom({ jobId, view }: { jobId: string; view: Step }) {
   const [err, setErr] = useState<string | null>(null);
   const [reading, setReading] = useState<Record<string, string>>({});
   const [uploading, setUploading] = useState<string | null>(null);
-  const [sending, setSendingState] = useState<{ p: Param; ids?: string[] } | null>(null);
-  const setSending = (p: Param, ids?: string[]) => setSendingState({ p, ids });
+  const [sending, setSendingState] = useState<{ p: Param; ids?: string[]; whole?: boolean } | null>(null);
+  const setSending = (p: Param, ids?: string[], whole?: boolean) => setSendingState({ p, ids, whole });
   const [fullscreen, setFullscreen] = useState(false);
 
   const load = useCallback(() => call(`/api/jobs/${jobId}/plans`, "GET")
@@ -204,7 +204,7 @@ export function PlanRoom({ jobId, view }: { jobId: string; view: Step }) {
       )}
       {adding && <AddPlans files={adding} jobId={jobId} onClose={() => setAdding(null)}
         onUploaded={(id) => { started.current.add(id); }} onDone={load} />}
-      <SendSheet jobId={jobId} p={sending?.p ?? null} initial={sending?.ids} data={data} onClose={() => setSendingState(null)} onSent={() => void reload()} />
+      <SendSheet jobId={jobId} p={sending?.p ?? null} initial={sending?.ids} whole={sending?.whole} data={data} onClose={() => setSendingState(null)} onSent={() => void reload()} />
     </div>
   );
 }

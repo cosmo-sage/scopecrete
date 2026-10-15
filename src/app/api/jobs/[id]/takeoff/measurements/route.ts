@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
 import { MEAS_COLS, cleanPoints, paramInJob, sheetInJob } from "@/lib/plans-server";
+import { groupSection, syncTakeoffSections } from "@/lib/takeoff-sections-server";
 
 /**
  * A shape drawn on a plan sheet (migration 059): POST { parameter_id,
@@ -32,10 +33,13 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   if (p.kind === "area" && geometry.length < 3) return bad("An area needs at least three corners.");
   if (p.kind === "linear" && geometry.length < 2) return bad("A line needs two points.");
   const { count } = await supabase.from("takeoff_measurements").select("id", { count: "exact", head: true }).eq("org_id", orgId).eq("parameter_id", p.id);
+  // A group sent whole to one section keeps growing it: a new takeoff joins that section.
+  const section_id = await groupSection(supabase, orgId, p.id);
   const name = typeof b.name === "string" && b.name.trim() ? b.name.replace(/\s+/g, " ").trim().slice(0, 80) : null;
   const { data, error } = await supabase.from("takeoff_measurements").insert({
-    org_id: orgId, parameter_id: p.id, sheet_id: sh.id, name, geometry, cutouts: [], method, sort_order: count ?? 0,
+    org_id: orgId, parameter_id: p.id, sheet_id: sh.id, name, geometry, cutouts: [], method, sort_order: count ?? 0, ...(section_id ? { section_id } : {}),
   }).select(MEAS_COLS).single();
   if (error || !data) return bad(error?.message ?? "not saved", 500);
+  if (section_id) await syncTakeoffSections(supabase, orgId, id, [section_id]);
   return applyCookies(NextResponse.json({ measurement: data }, { status: 201 }));
 }

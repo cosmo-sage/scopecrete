@@ -34,7 +34,8 @@ function dropNearest(geom: Pt[], picks: Pt[]): Pt[] {
   return left;
 }
 
-type Tool = "select" | "area" | "rect" | "fill" | "linear" | "count" | "cutout" | "scale" | "ruler";
+type HistStep = { label: string; undo: () => Promise<unknown>; redo: () => Promise<unknown> };
+type Tool = "pan" | "select" | "area" | "rect" | "fill" | "linear" | "count" | "cutout" | "scale" | "ruler";
 const TOOL_KIND: Partial<Record<Tool, TakeoffKind>> = { area: "area", rect: "area", fill: "area", linear: "linear", count: "count" };
 
 function KindIcon({ kind, color }: { kind: TakeoffKind; color: string }) {
@@ -48,6 +49,7 @@ function KindIcon({ kind, color }: { kind: TakeoffKind; color: string }) {
 }
 
 const TOOLS: Array<[Tool, string, string]> = [
+  ["pan", "Pan", "Drag to move round the sheet (the wheel button drags with any tool)"],
   ["select", "Select", "Pick a shape"],
   ["area", "Area", "Click the corners; click the first one (or double-click) to close"],
   ["rect", "Rect", "Two opposite corners"],
@@ -59,13 +61,14 @@ const TOOLS: Array<[Tool, string, string]> = [
   ["ruler", "Ruler", "Click two points to read the distance; nothing is saved"],
 ];
 // One key per tool, like Togal (Coy, 2026-10-10: "take a lesson from Togal.ai").
-const TOOL_KEY: Record<Tool, string> = { select: "V", area: "A", rect: "R", fill: "F", cutout: "X", linear: "L", count: "C", scale: "S", ruler: "M" };
+const TOOL_KEY: Record<Tool, string> = { pan: "H", select: "V", area: "A", rect: "R", fill: "F", cutout: "X", linear: "L", count: "C", scale: "S", ruler: "M" };
 // A thin rule after these, so the bar reads in groups: pick · areas · lines · counts · scale.
 const TOOL_BREAK = new Set<Tool>(["select", "cutout", "linear", "count"]);
 
 function ToolIcon({ tool }: { tool: Tool }) {
   return (
     <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flex: "0 0 auto" }}>
+      {tool === "pan" && <path d="M7 10V4.5a1.2 1.2 0 0 1 2.4 0V9.5M9.4 9V3.5a1.2 1.2 0 0 1 2.4 0V9.5M11.8 9.5V4.5a1.2 1.2 0 0 1 2.4 0V11M7 10V7.5a1.2 1.2 0 0 0-2.4 0v4.5c0 3 2.2 5 5 5h1c2.6 0 4.6-2 4.6-4.6V7.5a1.2 1.2 0 0 0-2.4 0" fill="currentColor" fillOpacity=".12" />}
       {tool === "select" && <path d="M5 3l10 6.5-4.5 1L13 16l-2 1-2.5-5.5L5 15z" fill="currentColor" fillOpacity=".15" />}
       {tool === "area" && <><path d="M3 6l7-3 7 4-2 9H5z" fill="currentColor" fillOpacity=".15" />{[[3, 6], [10, 3], [17, 7], [15, 16], [5, 16]].map(([x, y]) => <circle key={`${x}${y}`} cx={x} cy={y} r="1.3" fill="currentColor" />)}</>}
       {tool === "rect" && <><rect x="3.5" y="5" width="13" height="10" fill="currentColor" fillOpacity=".15" /><circle cx="3.5" cy="5" r="1.3" fill="currentColor" /><circle cx="16.5" cy="15" r="1.3" fill="currentColor" /></>}
@@ -180,6 +183,62 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
     try { await fn(); await reload(); } catch (e) { setMsg(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
   }, [reload]);
 
+  // Back / forward over what was done on the plans (Coy, 2026-10-15: "a back / forward button to
+  // undo/redo actions"). Each step knows how to put itself back; a takeoff drawn again after an undo
+  // gets a new id, so later steps find it through `alias`.
+  const hist = useRef<{ back: HistStep[]; fwd: HistStep[] }>({ back: [], fwd: [] });
+  const alias = useRef(new Map<string, string>());
+  const [hc, setHc] = useState({ b: 0, f: 0 });
+  const bumpHist = useCallback(() => setHc({ b: hist.current.back.length, f: hist.current.fwd.length }), []);
+  const mUrl = useCallback((id: string) => {
+    let cur = id; for (let i = 0; i < 50 && alias.current.has(cur); i++) cur = alias.current.get(cur)!;
+    return `/api/jobs/${jobId}/takeoff/measurements/${cur}`;
+  }, [jobId]);
+  const record = useCallback((h: HistStep) => {
+    const H = hist.current; H.back.push(h); if (H.back.length > 60) H.back.shift(); H.fwd = []; bumpHist();
+  }, [bumpHist]);
+  /** A PATCH to a takeoff that Back can put back. */
+  const patchRec = useCallback((id: string, before: Record<string, unknown>, after: Record<string, unknown>, label: string) =>
+    act(async () => {
+      await call(mUrl(id), "PATCH", after);
+      record({ label, undo: () => call(mUrl(id), "PATCH", before), redo: () => call(mUrl(id), "PATCH", after) });
+    }), [act, mUrl, record]);
+  /** A takeoff made: Back deletes it, Forward makes it again. */
+  const recordMade = useCallback((m: { id: string; body: Record<string, unknown>; extra?: Record<string, unknown> }, label: string) => {
+    const base = `/api/jobs/${jobId}/takeoff/measurements`;
+    record({ label, undo: () => call(mUrl(m.id), "DELETE"), redo: async () => {
+      const b = await call(base, "POST", m.body);
+      alias.current.set(m.id, b.measurement.id); alias.current.delete(b.measurement.id);
+      if (m.extra && Object.keys(m.extra).length) await call(mUrl(m.id), "PATCH", m.extra);
+    } });
+  }, [jobId, mUrl, record]);
+  const deleteRec = useCallback((m: Meas) => act(async () => {
+    await call(mUrl(m.id), "DELETE");
+    const extra: Record<string, unknown> = {};
+    if (m.cutouts?.length) extra.cutouts = m.cutouts;
+    if (m.color) extra.color = m.color;
+    if (m.name) extra.name = m.name;
+    const body = { parameter_id: m.parameter_id, sheet_id: m.sheet_id, geometry: m.geometry, method: m.method };
+    const base = `/api/jobs/${jobId}/takeoff/measurements`;
+    record({ label: "Delete", undo: async () => {
+      const b = await call(base, "POST", body);
+      alias.current.set(m.id, b.measurement.id); alias.current.delete(b.measurement.id);
+      if (Object.keys(extra).length) await call(mUrl(m.id), "PATCH", extra);
+    }, redo: () => call(mUrl(m.id), "DELETE") });
+  }), [act, jobId, mUrl, record]);
+  const stepHist = useCallback((dir: "back" | "fwd") => {
+    const H = hist.current; const h = (dir === "back" ? H.back : H.fwd).pop();
+    if (!h) return;
+    bumpHist();
+    void act(async () => {
+      try { await (dir === "back" ? h.undo() : h.redo()); (dir === "back" ? H.fwd : H.back).push(h); }
+      catch (e) { (dir === "back" ? H.back : H.fwd).push(h); throw e; }
+      finally { bumpHist(); }
+    });
+  }, [act, bumpHist]);
+  const stepHistRef = useRef(stepHist);
+  useEffect(() => { stepHistRef.current = stepHist; });
+
   // × on a sheet in the Sheets drawer takes it out of Takeoffs (Coy, 2026-10-09). A sheet with
   // measurements is kept (they'd go with it); a plan file's only sheet takes the file out instead.
   const [removed, setRemoved] = useState<Sheet | null>(null);
@@ -232,7 +291,8 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
         ? adj === "add" ? { geometry: [...sel.geometry, ...pts] } : { geometry: dropNearest(sel.geometry, pts) }
         : adj === "add" ? { geometry: [...sel.geometry, ...pts.slice(1)] } : { cutouts: [...(sel.cutouts ?? []), pts] };
       if ("geometry" in body && body.geometry && body.geometry.length < 1) { setMsg("That would take every point off. Delete the takeoff instead."); return; }
-      await act(() => call(`/api/jobs/${jobId}/takeoff/measurements/${sel.id}`, "PATCH", body));
+      const before = "geometry" in body ? { geometry: sel.geometry } : { cutouts: sel.cutouts ?? [] };
+      await patchRec(sel.id, before, body, adj === "add" ? "Add to" : "Subtract");
       setAdj(null); setTool("select"); setDraft([]);
       return;
     }
@@ -241,7 +301,7 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
     if (tool === "fill" && fillCut && !cutInto) { setMsg("Click inside a fill to cut a hole in it."); return; }
     if (cutInto) {
       if (tool === "fill" && !holeFits(pts, cutInto.geometry)) { setMsg("That outline runs outside the fill, so it wasn't cut. Try tighter gaps, or draw it with Cutout."); return; }
-      await act(() => call(`/api/jobs/${jobId}/takeoff/measurements/${cutInto.id}`, "PATCH", { cutouts: [...(cutInto.cutouts ?? []), pts] }));
+      await patchRec(cutInto.id, { cutouts: cutInto.cutouts ?? [] }, { cutouts: [...(cutInto.cutouts ?? []), pts] }, "Cutout");
       setSelId(cutInto.id);
     } else if (tool === "ruler") {
       return;
@@ -251,12 +311,14 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
     } else if (group) {
       const method = tool === "rect" ? "rect" : tool === "area" || tool === "fill" ? "area" : tool;
       await act(async () => {
-        const b = await call(`/api/jobs/${jobId}/takeoff/measurements`, "POST", { parameter_id: group.id, sheet_id: sheet.id, geometry: pts, method });
+        const body = { parameter_id: group.id, sheet_id: sheet.id, geometry: pts, method };
+        const b = await call(`/api/jobs/${jobId}/takeoff/measurements`, "POST", body);
+        recordMade({ id: b.measurement.id, body }, "Draw");
         setSelId(b.measurement.id);
       });
     }
     setDraft([]); setAdj(null);
-  }, [act, group, jobId, sel, sheet, tool, setDraft, setScaleAsk, fillCut, cutTarget, data.measurements, data.params, setSelId, adj]);
+  }, [act, group, jobId, sel, sheet, tool, setDraft, setScaleAsk, fillCut, cutTarget, data.measurements, data.params, setSelId, adj, patchRec, recordMade]);
 
   const finish = useCallback(() => {
     const need = tool === "linear" || tool === "scale" ? 2 : tool === "count" ? 1 : 3; // fill: 3, like an area
@@ -287,7 +349,11 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
 
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement)?.tagName === "INPUT") return;
+      if ((e.target as HTMLElement)?.tagName === "INPUT" || (e.target as HTMLElement)?.tagName === "TEXTAREA") return;
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key.toLowerCase() === "z" || e.key.toLowerCase() === "y")) {
+        if (draft.length && e.key.toLowerCase() === "z" && !e.shiftKey) { e.preventDefault(); setDraft((d) => d.slice(0, -1)); return; }
+        e.preventDefault(); stepHistRef.current(e.key.toLowerCase() === "y" || e.shiftKey ? "fwd" : "back"); return;
+      }
       if (e.key === "Escape") { if (draft.length) setDraft([]); else if (fullscreen) setFullscreen(false); else setTool("select"); setAdj(null); }
       if (e.key === "Backspace" && draft.length) { e.preventDefault(); setDraft((d) => d.slice(0, -1)); }
       if (e.key === "Enter") finish();
@@ -328,7 +394,7 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
         <div className="hidden lg:flex" style={{ flex: "0 0 auto", minHeight: 0 }}>
           <ParamPanel jobId={jobId} data={data} groupId={groupId} setGroupId={setGroupId} selId={selId}
             onSelect={(m) => { setSelId(m.id); setGroupId(m.parameter_id); if (m.sheet_id !== sheet?.id) setSheetId(m.sheet_id); setTool("select"); }}
-            act={act} onSend={onSend} onCollapse={() => setPanel(false)} />
+            act={act} onDelete={deleteRec} onSend={onSend} onCollapse={() => setPanel(false)} />
         </div>
       ) : (
         <button onClick={() => setPanel(true)} aria-label="Show parameters" className="hidden lg:flex flex-col items-center pt-3 gap-2"
@@ -403,7 +469,7 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
           <SlideDrawer open={paramsOpen} onClose={() => openParams(false)} width={320} label="Parameters">
             <ParamPanel jobId={jobId} data={data} groupId={groupId} setGroupId={setGroupId} selId={selId} drawer
               onSelect={(m) => { setSelId(m.id); setGroupId(m.parameter_id); if (m.sheet_id !== sheet?.id) setSheetId(m.sheet_id); setTool("select"); openParams(false); }}
-              act={act} onSend={(p, ids) => { openParams(false); onSend(p, ids); }} onCollapse={() => openParams(false)} />
+              act={act} onDelete={deleteRec} onSend={(p, ids) => { openParams(false); onSend(p, ids); }} onCollapse={() => openParams(false)} />
           </SlideDrawer>
         </div>
         <div className="flex items-center gap-1 px-2 overflow-x-auto" style={{ height: 42, flex: "0 0 auto", background: T.card, borderBottom: `1px solid ${T.hair}` }}>
@@ -422,6 +488,14 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
             className="flex items-center gap-1" style={{ ...tb(!!scaleMenu), padding: "0 8px", whiteSpace: "nowrap" }}>
             <ScaleBadge s={sheet} small /> ▾
           </button>}
+          <button onClick={() => stepHist("back")} disabled={!hc.b || busy} title="Back: undo the last change on the plans (Ctrl + Z)" aria-label="Undo"
+            style={{ ...tb(false), width: 30, padding: 0, opacity: hc.b ? 1 : 0.4 }}>
+            <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ margin: "auto" }}><path d="M7.5 5 3.5 9l4 4" /><path d="M4 9h8a4.5 4.5 0 0 1 0 9h-2" /></svg>
+          </button>
+          <button onClick={() => stepHist("fwd")} disabled={!hc.f || busy} title="Forward: redo (Ctrl + Shift + Z)" aria-label="Redo"
+            style={{ ...tb(false), width: 30, padding: 0, opacity: hc.f ? 1 : 0.4 }}>
+            <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ margin: "auto" }}><path d="M12.5 5l4 4-4 4" /><path d="M16 9H8a4.5 4.5 0 0 0 0 9h2" /></svg>
+          </button>
           <button onClick={turn} title="Rotate the sheet a quarter turn (view only)" aria-label="Rotate" style={{ ...tb(rot !== 0), width: 30, padding: 0 }}>
             <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" aria-hidden="true" style={{ margin: "auto" }}><path d="M15.5 8A6 6 0 1 0 16 12" /><path d="M16 3.5V8h-4.5" /></svg>
           </button>
@@ -523,7 +597,10 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
           <Drawing key={sheet.id} sheet={sheet} fileUrl={file.url} zoom={zoom} setZoom={setZoom} tool={tool}
             data={data} groupId={groupId} selId={selId} setSelId={(id) => { setSelId(id); const m = data.measurements.find((x) => x.id === id); if (m) setGroupId(m.parameter_id); }}
             draft={draft} setDraft={setDraft} hover={hover} setHover={setHover} save={save} busy={busy || tracing} onTrace={(p) => void trace(p)} cutting={tool === "fill" && fillCut}
-            saveShape={(mid, pts) => act(() => call(`/api/jobs/${jobId}/takeoff/measurements/${mid}`, "PATCH", { geometry: pts }))}
+            saveShape={(mid, pts) => { const m = data.measurements.find((x) => x.id === mid); return patchRec(mid, { geometry: m?.geometry ?? pts }, { geometry: pts }, "Edit corners"); }}
+            moveShape={(mid, d) => { const m = data.measurements.find((x) => x.id === mid); if (!m) return Promise.resolve();
+              const sh = (l: Pt[]) => l.map(([x, y]) => [x + d[0], y + d[1]] as Pt);
+              return patchRec(mid, { geometry: m.geometry, cutouts: m.cutouts ?? [] }, { geometry: sh(m.geometry), cutouts: (m.cutouts ?? []).map(sh) }, "Move"); }}
             onPin={pins.askMode ? (p) => pins.place(p, selId) : undefined} pinLayer={pins.layer} rot={rot} />
         ) : (
           <div className="flex-1 flex items-center justify-center p-6" style={{ fontSize: F.sm, color: T.ink3 }}>
@@ -745,7 +822,9 @@ function ScaleCopy({ k, from, all, sheets, apply, onClose }: { k: number; from: 
 
 /* --------------------------------------------------------------- drawing */
 
-function Drawing({ sheet, fileUrl, zoom, setZoom, tool, data, groupId, selId, setSelId, draft, setDraft, hover, setHover, save, busy, saveShape, onTrace, cutting, onPin, pinLayer, rot = 0 }: {
+function Drawing({ sheet, fileUrl, zoom, setZoom, tool, data, groupId, selId, setSelId, draft, setDraft, hover, setHover, save, busy, saveShape, moveShape, onTrace, cutting, onPin, pinLayer, rot = 0 }: {
+  /** Select drags a whole shape (Coy, 2026-10-15); d is how far, in points. */
+  moveShape: (id: string, d: Pt) => Promise<void>;
   /** The view turned by 0, 90, 180 or 270 degrees; points stay in the page's own. */
   rot?: number;
   sheet: Sheet; fileUrl: string; zoom: number; setZoom: (f: (z: number) => number) => void; tool: Tool;
@@ -766,6 +845,28 @@ function Drawing({ sheet, fileUrl, zoom, setZoom, tool, data, groupId, selId, se
   // The corner being dragged on the selected shape, and the shape's points while it moves.
   const [edit, setEdit] = useState<{ id: string; pts: Pt[]; i: number; moved: boolean; start: Pt } | null>(null);
   const box = useRef<HTMLDivElement | null>(null);
+  // A whole shape being dragged with Select, and how far it has gone.
+  const [drag, setDrag] = useState<{ id: string; start: Pt; d: Pt; moved: boolean } | null>(null);
+  // Panning: the Pan tool's left button, or the wheel button with any tool (Coy, 2026-10-15).
+  const panning = useRef<{ x: number; y: number; l: number; t: number; id: number } | null>(null);
+  const [grabbing, setGrabbing] = useState(false);
+  const panDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!(e.button === 1 || (tool === "pan" && e.button === 0 && e.pointerType !== "touch"))) return;
+    const el = box.current; if (!el) return;
+    e.preventDefault(); e.stopPropagation();
+    el.setPointerCapture(e.pointerId);
+    panning.current = { x: e.clientX, y: e.clientY, l: el.scrollLeft, t: el.scrollTop, id: e.pointerId };
+    setGrabbing(true);
+  };
+  const panMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const p = panning.current, el = box.current; if (!p || !el || p.id !== e.pointerId) return;
+    el.scrollLeft = p.l - (e.clientX - p.x); el.scrollTop = p.t - (e.clientY - p.y);
+  };
+  const panUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!panning.current || panning.current.id !== e.pointerId) return;
+    panning.current = null; setGrabbing(false);
+    try { box.current?.releasePointerCapture(e.pointerId); } catch { /* already gone */ }
+  };
   // The last press on a corner: a second press on it soon after removes it. The svg holds the
   // pointer while a corner is dragged, so the browser's dblclick lands on the svg, not the corner.
   const [lastCorner, setLastCorner] = useState<{ id: string; i: number; at: number } | null>(null);
@@ -838,6 +939,8 @@ function Drawing({ sheet, fileUrl, zoom, setZoom, tool, data, groupId, selId, se
   const click = (e: React.PointerEvent<SVGSVGElement>) => {
     if (pinching.current) return;
     if (edit) { endEdit(); return; }
+    if (drag) { const d = drag; setDrag(null); if (d.moved) void moveShape(d.id, d.d); else setSelId(d.id); return; }
+    if (tool === "pan") return;
     if (onPin) { onPin(toPage(e)); return; }
     if (busy || tool === "select") return;
     const p = toPage(e);
@@ -863,7 +966,9 @@ function Drawing({ sheet, fileUrl, zoom, setZoom, tool, data, groupId, selId, se
   };
 
   const params = new Map(data.params.map((p) => [p.id, p]));
-  const mine = data.measurements.filter((m) => m.sheet_id === sheet.id);
+  const shift = (l: Pt[], d: Pt) => l.map(([x, y]) => [x + d[0], y + d[1]] as Pt);
+  const mine = data.measurements.filter((m) => m.sheet_id === sheet.id)
+    .map((m) => drag && drag.id === m.id ? { ...m, geometry: shift(m.geometry, drag.d), cutouts: (m.cutouts ?? []).map((c) => shift(c, drag.d)) } : m);
   const selM = mine.find((m) => m.id === selId) ?? null;
   const selGroup = selM ? params.get(selM.parameter_id) : null;
   const part = (m: Meas) => data.totals[m.parameter_id]?.parts.find((x) => x.id === m.id);
@@ -873,19 +978,22 @@ function Drawing({ sheet, fileUrl, zoom, setZoom, tool, data, groupId, selId, se
   const draftColor = tool === "cutout" || cutting ? T.red : tool === "scale" || tool === "ruler" ? "#1E5AA8" : grp?.color ?? T.hiviz;
 
   return (
-    <div ref={box} className="flex-1 overflow-auto" style={{ background: T.sunk, padding: 12, paddingBottom: 56, position: "relative", minHeight: 0 }}>
+    <div ref={box} className="flex-1 overflow-auto" style={{ background: T.sunk, padding: 12, paddingBottom: 56, position: "relative", minHeight: 0, cursor: grabbing ? "grabbing" : tool === "pan" ? "grab" : undefined }}
+      onPointerDownCapture={panDown} onPointerMove={panMove} onPointerUp={panUp} onPointerCancel={panUp}
+      onAuxClick={(e) => e.preventDefault()} onMouseDown={(e) => { if (e.button === 1) e.preventDefault(); }}>
       {err && <div style={{ fontSize: F.sm, color: T.red }}>Couldn&apos;t open the plan: {err}</div>}
       <div style={{ position: "relative", width: (rot % 180 ? h : w) || "100%", height: (rot % 180 ? w : h) || 200 }}>
       <div style={{ position: "absolute", left: "50%", top: "50%", width: w || "100%", height: h || 200, transform: `translate(-50%, -50%) rotate(${rot}deg)`, background: "#fff", boxShadow: "0 2px 10px rgba(42,32,20,.12)" }}>
         <canvas ref={canvas} style={{ position: "absolute", inset: 0, width: w, height: h, opacity: drawn ? 1 : 0.4 }} />
         {scale > 0 && (
           <svg viewBox={`0 0 ${sheet.page_w} ${sheet.page_h}`} preserveAspectRatio="none" width={w} height={h}
-            style={{ position: "absolute", inset: 0, cursor: tool === "select" && !onPin ? "default" : "crosshair", touchAction: draft.length ? "none" : "pan-x pan-y" }}
+            style={{ position: "absolute", inset: 0, cursor: grabbing ? "grabbing" : tool === "pan" ? "grab" : tool === "select" && !onPin ? "default" : "crosshair", touchAction: draft.length ? "none" : "pan-x pan-y" }}
             onPointerUp={click} onDoubleClick={dbl}
             onPointerMove={(e) => {
+              if (drag) { const p = toPage(e); const d: Pt = [p[0] - drag.start[0], p[1] - drag.start[1]]; setDrag({ ...drag, d, moved: drag.moved || Math.hypot(d[0], d[1]) * px > 3 }); return; }
               if (edit) { const p = toPage(e); setEdit({ ...edit, moved: edit.moved || dist(p, edit.start) * px > 3, pts: edit.pts.map((q, i) => (i === edit.i ? p : q)) }); return; }
               if (tool !== "select" && tool !== "fill") setHover(toPage(e));
-            }} onPointerLeave={() => setHover(null)} onPointerCancel={() => setEdit(null)}>
+            }} onPointerLeave={() => setHover(null)} onPointerCancel={() => { setEdit(null); setDrag(null); }}>
             {mine.map((m0) => {
               const m = edit && edit.id === m0.id ? { ...m0, geometry: edit.pts } : m0;
               const p = params.get(m.parameter_id);
@@ -893,26 +1001,34 @@ function Drawing({ sheet, fileUrl, zoom, setZoom, tool, data, groupId, selId, se
               const isSel = m.id === selId;
               const op = !selM ? 0.8 : isSel ? 1 : m.parameter_id === selM.parameter_id ? 0.7 : 0.14;
               const pick = (e: React.PointerEvent) => { if (tool === "select") { e.stopPropagation(); setSelId(m.id); } };
+              // Pressing on a shape with Select picks it and starts dragging it; a press that doesn't move just picks it.
+              const grabShape = (e: React.PointerEvent) => {
+                if (tool !== "select" || busy || onPin || e.button !== 0) return;
+                e.stopPropagation();
+                (e.currentTarget as SVGGraphicsElement).ownerSVGElement?.setPointerCapture?.(e.pointerId);
+                setDrag({ id: m.id, start: toPage(e), d: [0, 0], moved: false });
+              };
+              const mv = tool === "select" ? (isSel ? "move" : "pointer") : undefined;
               if (p.kind === "count") return (
-                <g key={m.id} opacity={op} onPointerUp={pick} style={{ cursor: tool === "select" ? "pointer" : undefined }}>
+                <g key={m.id} opacity={op} onPointerDown={grabShape} onPointerUp={pick} style={{ cursor: mv }}>
                   {m.geometry.map((pt, i) => <circle key={i} cx={pt[0]} cy={pt[1]} r={r * (isSel ? 1.3 : 1)} fill={shapeColor(m, p)} stroke="#fff" strokeWidth={sw / 2} />)}
                 </g>
               );
               if (p.kind === "linear" && m.cutouts?.length) return (
                 <g key={m.id}>
                   <path d={pathOf(m.geometry, false)} fill="none" stroke={shapeColor(m, p)} strokeWidth={sw * (isSel ? 2.2 : 1.6)} opacity={op}
-                    strokeLinejoin="round" strokeLinecap="round" onPointerUp={pick} style={{ cursor: tool === "select" ? "pointer" : undefined }} />
+                    strokeLinejoin="round" strokeLinecap="round" onPointerDown={grabShape} onPointerUp={pick} style={{ cursor: mv }} />
                   {m.cutouts.map((c, ci) => <path key={ci} d={pathOf(c, false)} fill="none" stroke="#C0392B" strokeWidth={sw * 1.6} strokeDasharray={`${sw * 4} ${sw * 3}`} opacity={op} pointerEvents="none" />)}
                 </g>
               );
               if (p.kind === "linear") return (
                 <path key={m.id} d={pathOf(m.geometry, false)} fill="none" stroke={shapeColor(m, p)} strokeWidth={sw * (isSel ? 2.2 : 1.6)} opacity={op}
-                  strokeLinejoin="round" strokeLinecap="round" onPointerUp={pick} style={{ cursor: tool === "select" ? "pointer" : undefined }} />
+                  strokeLinejoin="round" strokeLinecap="round" onPointerDown={grabShape} onPointerUp={pick} style={{ cursor: mv }} />
               );
               return (
                 <path key={m.id} d={pathOf(m.geometry, true) + (m.cutouts ?? []).map((c) => " " + pathOf(c, true)).join("")} fillRule="evenodd"
                   fill={shapeColor(m, p)} fillOpacity={isSel ? 0.35 : 0.22} stroke={shapeColor(m, p)} strokeWidth={sw * (isSel ? 1.6 : 1)} opacity={op}
-                  onPointerUp={pick} style={{ cursor: tool === "select" ? "pointer" : undefined }} />
+                  onPointerDown={grabShape} onPointerUp={pick} style={{ cursor: mv }} />
               );
             })}
             {/* Corners of the selected shape: drag to move, a mid-edge dot adds one, double-click removes one. */}
@@ -989,7 +1105,9 @@ function Drawing({ sheet, fileUrl, zoom, setZoom, tool, data, groupId, selId, se
 
 /* --------------------------------------------------------- parameter tree */
 
-function ParamPanel({ jobId, data, groupId, setGroupId, selId, onSelect, act, onSend, onCollapse, drawer }: {
+function ParamPanel({ jobId, data, groupId, setGroupId, selId, onSelect, act, onSend, onCollapse, drawer, onDelete }: {
+  /** Removing a takeoff, so Back can put it back. */
+  onDelete?: (m: Meas) => Promise<void>;
   jobId: string; data: PlansData; groupId: string | null; setGroupId: (id: string) => void; selId: string | null;
   onSelect: (m: Meas) => void; act: (fn: () => Promise<unknown>) => Promise<void>; onSend: (p: Param, ids?: string[]) => void; onCollapse: () => void;
   /** Inside the phone's slide-out: the drawer's full height, no fold-to-a-strip. */
@@ -1085,7 +1203,7 @@ function ParamPanel({ jobId, data, groupId, setGroupId, selId, onSelect, act, on
                             {q?.qty !== null && q?.qty !== undefined ? fmtQty(q.qty, KIND_UNIT[p.kind]) : "scale not set"}
                             {q?.perim_lf != null && <span title="Perimeter: feet of edge round this shape, cutouts included" style={{ display: "block", fontSize: 10.5, color: T.ink3 }}>{fmtQty(q.perim_lf, "LF")} edge</span>}
                           </span>
-                          <button onClick={(e) => { e.stopPropagation(); void act(() => call(`/api/jobs/${jobId}/takeoff/measurements/${m.id}`, "DELETE")); }}
+                          <button onClick={(e) => { e.stopPropagation(); void (onDelete ? onDelete(m) : act(() => call(`/api/jobs/${jobId}/takeoff/measurements/${m.id}`, "DELETE"))); }}
                             aria-label="Remove this takeoff" style={{ color: T.ink3, width: 18, cursor: "pointer" }}>×</button>
                         </div>
                         {painting === m.id && (

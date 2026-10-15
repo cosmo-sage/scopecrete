@@ -38,10 +38,11 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     patch.geometry = g;
   }
   if ("cutouts" in b) {
-    if (m.takeoff_parameters.kind !== "area") return bad("Only an area has cutouts.");
+    const lin = m.takeoff_parameters.kind === "linear";
+    if (!lin && m.takeoff_parameters.kind !== "area") return bad("A count has no cutouts.");
     if (!Array.isArray(b.cutouts) || b.cutouts.length > 100) return bad("Bad cutouts.");
     const cs = b.cutouts.map((c) => cleanPoints(c));
-    if (cs.some((c) => !c || c.length < 3)) return bad("A cutout needs at least three corners.");
+    if (cs.some((c) => !c || c.length < (lin ? 2 : 3))) return bad(lin ? "A run to take off needs two points." : "A cutout needs at least three corners.");
     patch.cutouts = cs;
   }
   if ("parameter_id" in b) {

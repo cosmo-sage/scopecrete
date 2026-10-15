@@ -23,7 +23,18 @@ import { traceAt, type TraceOptions } from "@/lib/v34/plan-trace";
 import { useSearchParams } from "next/navigation";
 import { AskIcon, shapeMiddle, usePlanPins } from "./sheet-comments";
 
-type Tool = "select" | "area" | "rect" | "fill" | "linear" | "count" | "cutout" | "scale";
+/** Count's subtract: each click takes off the counted point nearest it. */
+function dropNearest(geom: Pt[], picks: Pt[]): Pt[] {
+  const left = [...geom];
+  for (const q of picks) {
+    let bi = -1, bd = Infinity;
+    left.forEach((p, i) => { const d = Math.hypot(p[0] - q[0], p[1] - q[1]); if (d < bd) { bd = d; bi = i; } });
+    if (bi >= 0) left.splice(bi, 1);
+  }
+  return left;
+}
+
+type Tool = "select" | "area" | "rect" | "fill" | "linear" | "count" | "cutout" | "scale" | "ruler";
 const TOOL_KIND: Partial<Record<Tool, TakeoffKind>> = { area: "area", rect: "area", fill: "area", linear: "linear", count: "count" };
 
 function KindIcon({ kind, color }: { kind: TakeoffKind; color: string }) {
@@ -45,9 +56,10 @@ const TOOLS: Array<[Tool, string, string]> = [
   ["linear", "Linear", "Click along the line; double-click or Finish to end"],
   ["count", "Count", "Click each one; Finish when done"],
   ["scale", "Scale", "Click both ends of a dimension you know, then type it"],
+  ["ruler", "Ruler", "Click two points to read the distance; nothing is saved"],
 ];
 // One key per tool, like Togal (Coy, 2026-10-10: "take a lesson from Togal.ai").
-const TOOL_KEY: Record<Tool, string> = { select: "V", area: "A", rect: "R", fill: "F", cutout: "X", linear: "L", count: "C", scale: "S" };
+const TOOL_KEY: Record<Tool, string> = { select: "V", area: "A", rect: "R", fill: "F", cutout: "X", linear: "L", count: "C", scale: "S", ruler: "M" };
 // A thin rule after these, so the bar reads in groups: pick · areas · lines · counts · scale.
 const TOOL_BREAK = new Set<Tool>(["select", "cutout", "linear", "count"]);
 
@@ -61,6 +73,7 @@ function ToolIcon({ tool }: { tool: Tool }) {
       {tool === "cutout" && <><rect x="3" y="3" width="14" height="14" fill="currentColor" fillOpacity=".15" /><rect x="7" y="7" width="6" height="6" fill="var(--sc-card, #fff)" strokeDasharray="2 1.5" /></>}
       {tool === "linear" && <><path d="M3 15l5-6 4 3 5-8" /><circle cx="3" cy="15" r="1.3" fill="currentColor" /><circle cx="17" cy="4" r="1.3" fill="currentColor" /></>}
       {tool === "count" && <><circle cx="5" cy="6" r="2" fill="currentColor" /><circle cx="14" cy="5" r="2" fill="currentColor" /><circle cx="9" cy="14" r="2" fill="currentColor" /></>}
+      {tool === "ruler" && <><rect x="2" y="7" width="16" height="6" rx="1" /><path d="M5 7v2.5M8 7v3.5M11 7v2.5M14 7v3.5" /></>}
       {tool === "scale" && <><path d="M2.5 13.5l11-11 4 4-11 11z" /><path d="M6 10l1.5 1.5M8.5 7.5l1.5 1.5M11 5l1.5 1.5" /></>}
     </svg>
   );
@@ -90,6 +103,8 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
   const sheet = sheets.find((s) => s.id === sheetId) ?? sheets[0] ?? null;
   const file = sheet ? files.find((f) => f.id === sheet.file_id) ?? null : null;
   const [tool, setTool] = useState<Tool>("select");
+  // Add to or take from the selected takeoff (Coy, 2026-10-15): draw, and Finish changes that shape.
+  const [adj, setAdj] = useState<"add" | "sub" | null>(null);
   const [groupId, setGroupId] = useState<string | null>(data.params[0]?.id ?? null);
   const [selId, setSelId] = useState<string | null>(null);
   // A draft belongs to one sheet and one tool; switching either drops it.
@@ -104,6 +119,11 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
   }, [draftKey]);
   const [hover, setHover] = useState<Pt | null>(null);
   const [zoom, setZoom] = useState(1);
+  // The view's turn, per sheet, kept on the device (Coy, 2026-10-15: "the ability to rotate").
+  const [rots, setRots] = useState<Record<string, number>>(() => { try { return JSON.parse(localStorage.getItem("sc:sheet-rot") || "{}"); } catch { return {}; } });
+  const rot = (sheetId && rots[sheetId]) || 0;
+  const turn = () => { if (!sheetId) return; const n = { ...rots, [sheetId]: (rot + 90) % 360 }; setRots(n); try { localStorage.setItem("sc:sheet-rot", JSON.stringify(n)); } catch { /* ignore */ } };
+  const [scaleMenu, setScaleMenu] = useState<DOMRect | null>(null);
   const [panel, setPanel] = useState(true);
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -112,6 +132,23 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
   const setScaleAsk = useCallback((v: { a: Pt; b: Pt } | null) => setScaleAskState(v ? { ...v, k: draftKey } : null), [draftKey]);
   const group = data.params.find((p) => p.id === groupId) ?? null;
   const sel = data.measurements.find((m) => m.id === selId) ?? null;
+  // Add to / take from a shape already measured: from the toolbar, the measuring bar or its row in Parameters.
+  const startAdj = useCallback((m: typeof sel, a: "add" | "sub") => {
+    if (!m) return;
+    const k = data.params.find((p) => p.id === m.parameter_id)?.kind;
+    if (!k) return;
+    setSelId(m.id);
+    setMsg(a === "add" ? (k === "linear" ? "Click on to carry the line on from its end, then Finish." : k === "count" ? "Click each one to add, then Finish." : "Draw the area to add; it goes in the same group, then Finish.")
+      : (k === "linear" ? "Draw along the part to take off, then Finish." : k === "count" ? "Click the ones to take off, then Finish." : "Draw the part to take out, then Finish."));
+    setAdj(a); setGroupId(m.parameter_id);
+    setTool(a === "sub" && k === "area" ? "cutout" : k);
+    setDraft(a === "add" && k === "linear" && m.geometry.length ? [m.geometry[m.geometry.length - 1]] : []);
+  }, [data.params, setSelId, setDraft]);
+  useEffect(() => {
+    const on = (e: Event) => { const d = (e as CustomEvent<{ id: string; a: "add" | "sub" }>).detail; const m = data.measurements.find((x) => x.id === d.id); if (m) startAdj(m, d.a); };
+    window.addEventListener("sc:takeoff-adj", on);
+    return () => window.removeEventListener("sc:takeoff-adj", on);
+  }, [data.measurements, startAdj]);
   const [shapePhotos, setShapePhotos] = useState(false);
   // Click-to-fill (Coy, 2026-10-09): how forgiving the trace is, and whether one is running.
   const [fillOpt, setFillOpt] = useState<TraceOptions>({ gapPt: 0.5, thinPt: 0 });
@@ -173,7 +210,7 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
   };
 
   const pickTool = (t: Tool) => {
-    setMsg(null);
+    setMsg(null); setAdj(null);
     const k = TOOL_KIND[t];
     if (k && (!group || group.kind !== k)) {
       const g = data.params.find((p) => p.kind === k);
@@ -189,12 +226,25 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
 
   const save = useCallback(async (pts: Pt[]) => {
     if (!sheet) return;
+    const kind = sel ? data.params.find((p) => p.id === sel.parameter_id)?.kind : undefined;
+    if (adj && sel && kind && kind !== "area") {
+      const body = kind === "count"
+        ? adj === "add" ? { geometry: [...sel.geometry, ...pts] } : { geometry: dropNearest(sel.geometry, pts) }
+        : adj === "add" ? { geometry: [...sel.geometry, ...pts.slice(1)] } : { cutouts: [...(sel.cutouts ?? []), pts] };
+      if ("geometry" in body && body.geometry && body.geometry.length < 1) { setMsg("That would take every point off. Delete the takeoff instead."); return; }
+      await act(() => call(`/api/jobs/${jobId}/takeoff/measurements/${sel.id}`, "PATCH", body));
+      setAdj(null); setTool("select"); setDraft([]);
+      return;
+    }
+    if (adj === "add" && sel && kind === "area") setAdj(null);
     const cutInto = tool === "fill" && fillCut ? data.measurements.find((m) => m.id === cutTarget) : tool === "cutout" ? sel : undefined;
     if (tool === "fill" && fillCut && !cutInto) { setMsg("Click inside a fill to cut a hole in it."); return; }
     if (cutInto) {
       if (tool === "fill" && !holeFits(pts, cutInto.geometry)) { setMsg("That outline runs outside the fill, so it wasn't cut. Try tighter gaps, or draw it with Cutout."); return; }
       await act(() => call(`/api/jobs/${jobId}/takeoff/measurements/${cutInto.id}`, "PATCH", { cutouts: [...(cutInto.cutouts ?? []), pts] }));
       setSelId(cutInto.id);
+    } else if (tool === "ruler") {
+      return;
     } else if (tool === "scale") {
       if (pts.length === 2) setScaleAsk({ a: pts[0], b: pts[1] });
       return;
@@ -205,8 +255,8 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
         setSelId(b.measurement.id);
       });
     }
-    setDraft([]);
-  }, [act, group, jobId, sel, sheet, tool, setDraft, setScaleAsk, fillCut, cutTarget, data.measurements, setSelId]);
+    setDraft([]); setAdj(null);
+  }, [act, group, jobId, sel, sheet, tool, setDraft, setScaleAsk, fillCut, cutTarget, data.measurements, data.params, setSelId, adj]);
 
   const finish = useCallback(() => {
     const need = tool === "linear" || tool === "scale" ? 2 : tool === "count" ? 1 : 3; // fill: 3, like an area
@@ -238,7 +288,7 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement)?.tagName === "INPUT") return;
-      if (e.key === "Escape") { if (draft.length) setDraft([]); else if (fullscreen) setFullscreen(false); else setTool("select"); }
+      if (e.key === "Escape") { if (draft.length) setDraft([]); else if (fullscreen) setFullscreen(false); else setTool("select"); setAdj(null); }
       if (e.key === "Backspace" && draft.length) { e.preventDefault(); setDraft((d) => d.slice(0, -1)); }
       if (e.key === "Enter") finish();
       // A tool's key picks it, when nothing is being drawn and no modifier is held.
@@ -358,20 +408,36 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
         </div>
         <div className="flex items-center gap-1 px-2 overflow-x-auto" style={{ height: 42, flex: "0 0 auto", background: T.card, borderBottom: `1px solid ${T.hair}` }}>
           {TOOLS.map(([k, label, hint]) => (
-            <Fragment key={k}>
+            <Fragment key={k}><span className="contents md:hidden">
               <button onClick={() => pickTool(k)} title={`${label} (${TOOL_KEY[k]}) — ${hint}`} aria-label={label} aria-pressed={tool === k}
                 className="flex items-center gap-1.5" style={{ ...tb(tool === k), padding: "0 8px" }}>
                 <ToolIcon tool={k} /><span className="hidden md:inline">{label}</span>
               </button>
               {TOOL_BREAK.has(k) && <span aria-hidden="true" style={{ width: 1, height: 22, background: T.hair, margin: "0 3px", flex: "0 0 auto" }} />}
-            </Fragment>
+            </span></Fragment>
           ))}
           <span className="flex-1" />
-          {sheet && <span className="hidden md:inline" style={{ fontSize: F.xs, color: T.ink2, whiteSpace: "nowrap" }}>{sheetLabel(sheet)} · <ScaleBadge s={sheet} small /></span>}
+          {sheet && <span className="hidden md:inline" style={{ fontSize: F.xs, color: T.ink2, whiteSpace: "nowrap" }}>{sheetLabel(sheet)}</span>}
+          {sheet && <button onClick={(e) => setScaleMenu(scaleMenu ? null : e.currentTarget.getBoundingClientRect())} aria-expanded={!!scaleMenu} title="Recalibrate: a preset scale, or two points on a known dimension"
+            className="flex items-center gap-1" style={{ ...tb(!!scaleMenu), padding: "0 8px", whiteSpace: "nowrap" }}>
+            <ScaleBadge s={sheet} small /> ▾
+          </button>}
+          <button onClick={turn} title="Rotate the sheet a quarter turn (view only)" aria-label="Rotate" style={{ ...tb(rot !== 0), width: 30, padding: 0 }}>
+            <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" aria-hidden="true" style={{ margin: "auto" }}><path d="M15.5 8A6 6 0 1 0 16 12" /><path d="M16 3.5V8h-4.5" /></svg>
+          </button>
           <button onClick={() => { pins.setAskMode(!pins.askMode); setTool("select"); }} aria-pressed={pins.askMode} title="Ask someone about a spot: click the sheet where your question is"
             className="flex items-center gap-1.5" style={{ ...tb(pins.askMode), padding: "0 8px" }}>
             <AskIcon /><span className="hidden md:inline">Ask{pins.count ? ` · ${pins.count}` : ""}</span>
           </button>
+          {sel && (() => {
+            const k = data.params.find((p) => p.id === sel.parameter_id)?.kind;
+            if (!k) return null;
+            const start = (a: "add" | "sub") => startAdj(sel, a);
+            return <>
+              <button onClick={() => start("add")} aria-pressed={adj === "add"} title={`Add to ${selName}`} style={tb(adj === "add")}>+ Add</button>
+              <button onClick={() => start("sub")} aria-pressed={adj === "sub"} title={`Take from ${selName}`} style={tb(adj === "sub")}>− Subtract</button>
+            </>;
+          })()}
           {sel && !pins.limited && <button onClick={() => pins.place(shapeMiddle(sel.geometry), sel.id)} title={`Ask someone about ${selName}`} style={tb(false)}>Ask about this</button>}
           {sel && <button onClick={() => setShapePhotos(true)} title={`Photos of ${selName} — they show on its budget section and the proposal`} style={tb(false)}>Shape photos{selPhotos ? ` (${selPhotos})` : ""}</button>}
           {sheet?.scale_ft_per_pt && sheets.length > 1 && <button onClick={() => setCopyScale({ k: sheet.scale_ft_per_pt as number, from: sheet.id })} title="Put this sheet's scale on every sheet, or the ones you pick" style={tb(false)}>Scale → other sheets</button>}
@@ -391,7 +457,33 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
         </div>
 
         {sheet && <ScaleBar sheet={sheet} act={act} startScale={() => pickTool("scale")} />}
+        {sheet && scaleMenu && <ScaleMenu at={scaleMenu} sheet={sheet} onClose={() => setScaleMenu(null)}
+          points={() => { setScaleMenu(null); pickTool("scale"); }}
+          pick={(k) => { setScaleMenu(null); void act(() => call(`/api/plan-sheets/${sheet.id}`, "PATCH", k === null ? { scale_method: "none" } : { scale_method: "manual", scale_ft_per_pt: k })); }} />}
         <div style={{ position: "relative", flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+          {/* Desktop: the tools stand in a column on the sheet's right edge, like JobTread's Plans. */}
+          <div className="hidden md:flex flex-col items-center gap-1" role="toolbar" aria-label="Takeoff tools"
+            style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", zIndex: 6, padding: 5, background: T.card, border: `1px solid ${T.hair}`, borderRadius: 10, boxShadow: "0 2px 10px rgba(0,0,0,.12)" }}>
+            {TOOLS.map(([k, label, hint]) => (
+              <Fragment key={k}>
+                <button onClick={() => pickTool(k)} title={`${label} (${TOOL_KEY[k]}) — ${hint}`} aria-label={label} aria-pressed={tool === k}
+                  className="flex items-center justify-center" style={{ ...tb(tool === k), width: 34, height: 34, padding: 0 }}>
+                  <ToolIcon tool={k} />
+                </button>
+                {TOOL_BREAK.has(k) && <span aria-hidden="true" style={{ width: 22, height: 1, background: T.hair, margin: "2px 0" }} />}
+              </Fragment>
+            ))}
+          </div>
+        {adj && sel && (
+          <div className="flex items-center gap-2 px-3 py-1.5" style={{ position: "absolute", top: 8, left: "50%", transform: "translateX(-50%)", zIndex: 6, background: T.green, color: "#fff", borderRadius: 6, fontSize: F.xs, boxShadow: "0 2px 8px rgba(0,0,0,.2)", maxWidth: "calc(100% - 16px)" }}>
+            <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{adj === "add" ? "Adding to" : "Taking from"} <b>{selName}</b> · {data.params.find((g) => g.id === sel.parameter_id)?.name}</span>
+            <span className="inline-flex" style={{ flex: "0 0 auto" }}>
+              {(["sub", "add"] as const).map((a) => <button key={a} onClick={() => startAdj(sel, a)} aria-pressed={adj === a} aria-label={a === "add" ? "Add" : "Subtract"}
+                style={{ width: 26, height: 22, border: "1px solid #fff", background: adj === a ? "#fff" : "transparent", color: adj === a ? T.green : "#fff", cursor: "pointer", fontWeight: 700, borderRadius: a === "sub" ? "3px 0 0 3px" : "0 3px 3px 0" }}>{a === "add" ? "+" : "−"}</button>)}
+            </span>
+            <button onClick={() => { setAdj(null); setDraft([]); setMsg(null); setTool("select"); }} style={{ border: "1px solid #fff", background: "transparent", color: "#fff", borderRadius: 3, padding: "0 8px", height: 22, cursor: "pointer" }}>Stop</button>
+          </div>
+        )}
         {/* Floats over the sheet so starting a shape never moves the drawing under the next click. */}
         {(msg || draft.length > 0 || scaleAsk || tool === "fill") && (
           <div className="flex items-center gap-2 px-3 py-1.5 flex-wrap" style={{ position: "absolute", bottom: 0, left: 0, right: 0, zIndex: 5, background: msg ? T.redDim : T.dustyTint, borderTop: `1px solid ${T.hair}`, fontSize: F.xs, boxShadow: "0 -2px 6px rgba(42,32,20,.08)" }}>
@@ -403,7 +495,13 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
                 cut={fillCut} setCut={(v) => { setFillCut(v); setDraft([]); setCutTarget(null); lastFill.current = null; setMsg(null); }}
                 finish={finish} cancel={() => { setDraft([]); lastFill.current = null; }} />
             )}
-            {!msg && draft.length > 0 && !scaleAsk && tool !== "fill" && (
+            {!msg && draft.length > 0 && tool === "ruler" && sheet && (
+              <>
+                <span><b>Ruler</b> · {rulerText(sheet, draft[0], draft[1] ?? hover)} · nothing is saved</span>
+                <button onClick={() => setDraft([])} style={tb(false)}>Clear</button>
+              </>
+            )}
+            {!msg && draft.length > 0 && !scaleAsk && tool !== "fill" && tool !== "ruler" && (
               <>
                 <span>{tool === "count" ? `${draft.length} counted` : `${draft.length} point${draft.length === 1 ? "" : "s"}`} — {TOOLS.find((t) => t[0] === tool)?.[2]}</span>
                 {(tool === "area" || tool === "linear" || tool === "count" || tool === "cutout") && <button onClick={finish} style={tb(true)}>Finish</button>}
@@ -426,7 +524,7 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
             data={data} groupId={groupId} selId={selId} setSelId={(id) => { setSelId(id); const m = data.measurements.find((x) => x.id === id); if (m) setGroupId(m.parameter_id); }}
             draft={draft} setDraft={setDraft} hover={hover} setHover={setHover} save={save} busy={busy || tracing} onTrace={(p) => void trace(p)} cutting={tool === "fill" && fillCut}
             saveShape={(mid, pts) => act(() => call(`/api/jobs/${jobId}/takeoff/measurements/${mid}`, "PATCH", { geometry: pts }))}
-            onPin={pins.askMode ? (p) => pins.place(p, selId) : undefined} pinLayer={pins.layer} />
+            onPin={pins.askMode ? (p) => pins.place(p, selId) : undefined} pinLayer={pins.layer} rot={rot} />
         ) : (
           <div className="flex-1 flex items-center justify-center p-6" style={{ fontSize: F.sm, color: T.ink3 }}>
             {sheet ? "This sheet's file can't be opened right now." : "No sheets yet — add a plan PDF on the job's Files page."}
@@ -522,6 +620,51 @@ function FillBar({ draft, tracing, opt, setOpt, sheet, groups, groupId, setGroup
   );
 }
 
+/** "12'-6\" (150 pt on the sheet)" — the ruler's reading; the sheet's scale, or no scale. */
+function rulerText(sheet: Sheet, a: Pt, b: Pt | null): string {
+  if (!b) return "click the second point";
+  const k = sheet.scale_ft_per_pt;
+  if (!k) return "set the scale to read feet";
+  const ft = dist(a, b) * k;
+  let whole = Math.floor(ft), inch = Math.round((ft - whole) * 12);
+  if (inch === 12) { whole += 1; inch = 0; }
+  return `${whole}'-${inch}" (${ft.toFixed(2)} ft)`;
+}
+
+// JobTread's preset scales: architectural, then engineering. Feet per inch; a point is 1/72".
+const ARCH_PRESETS: Array<[string, number]> = [["1/16\" = 1'-0\"", 16], ["3/32\" = 1'-0\"", 32 / 3], ["1/8\" = 1'-0\"", 8], ["3/16\" = 1'-0\"", 16 / 3], ["1/4\" = 1'-0\"", 4],
+  ["3/8\" = 1'-0\"", 8 / 3], ["1/2\" = 1'-0\"", 2], ["3/4\" = 1'-0\"", 4 / 3], ["1\" = 1'-0\"", 1], ["1 1/2\" = 1'-0\"", 2 / 3], ["3\" = 1'-0\"", 1 / 3]];
+const ENG_PRESETS = [10, 20, 30, 40, 50, 60, 100, 200];
+
+/** Recalibrate a sheet: a preset scale, or two points on a known dimension (Coy, 2026-10-15). */
+function ScaleMenu({ at, sheet, pick, points, onClose }: { at: DOMRect; sheet: Sheet; pick: (k: number | null) => void; points: () => void; onClose: () => void }) {
+  useEffect(() => { const k = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, [onClose]);
+  const now = sheet.scale_ft_per_pt;
+  const item = (label: string, k: number) => {
+    const on = !!now && Math.abs(now - k) / k < 0.005;
+    return <button key={label} onClick={() => pick(k)} style={{ display: "block", width: "100%", textAlign: "left", padding: "5px 10px", background: on ? T.hivizDim : "transparent", border: "none", cursor: "pointer", fontSize: F.sm, color: T.ink, fontWeight: on ? 700 : 400, ...nums }}>{on ? "✓ " : ""}{label}</button>;
+  };
+  const head = (t: string) => <div style={{ ...eyebrow, fontSize: 10.5, color: T.ink3, padding: "8px 10px 2px" }}>{t}</div>;
+  const left = Math.max(8, Math.min(at.left, (typeof window !== "undefined" ? window.innerWidth : 400) - 248));
+  return (
+    <>
+      <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 60 }} />
+      <div role="menu" style={{ position: "fixed", left, top: at.bottom + 4, width: 240, maxHeight: `calc(100vh - ${at.bottom + 16}px)`, overflowY: "auto", zIndex: 61, background: T.card, border: `1px solid ${T.hair}`, borderRadius: 6, boxShadow: "0 6px 20px rgba(0,0,0,.18)", paddingBottom: 6 }}>
+        <div style={{ padding: "8px 10px 4px", fontSize: F.xs, color: T.ink2 }}>Now: <b>{now ? scaleLabel(now) : sheet.scale_method === "none" ? "not to scale" : "no scale"}</b></div>
+        {head("Manual scale")}
+        <button onClick={points} style={{ display: "block", width: "100%", textAlign: "left", padding: "5px 10px", background: "transparent", border: "none", cursor: "pointer", fontSize: F.sm, color: T.hivizText, fontWeight: 600 }}>Select points on a known dimension ›</button>
+        {sheet.printed_ft_per_pt ? <button onClick={() => pick(sheet.printed_ft_per_pt as number)} style={{ display: "block", width: "100%", textAlign: "left", padding: "5px 10px", background: "transparent", border: "none", cursor: "pointer", fontSize: F.sm, color: T.ink }}>{isAerialSheet(sheet) ? "The map's scale" : `As printed · ${scaleLabel(sheet.printed_ft_per_pt)}`}</button> : null}
+        {head("Architectural")}
+        {ARCH_PRESETS.map(([l, fpi]) => item(l, fpi / 72))}
+        {head("Engineering")}
+        {ENG_PRESETS.map((e) => item(`1" = ${e}'`, e / 72))}
+        <div style={{ borderTop: `1px solid ${T.hair}`, marginTop: 6 }} />
+        <button onClick={() => pick(null)} style={{ display: "block", width: "100%", textAlign: "left", padding: "6px 10px", background: "transparent", border: "none", cursor: "pointer", fontSize: F.sm, color: T.ink2 }}>Not to scale</button>
+      </div>
+    </>
+  );
+}
+
 /** The sheet's scale and what can be done about it. */
 function ScaleBar({ sheet, act, startScale }: { sheet: Sheet; act: (fn: () => Promise<unknown>) => Promise<void>; startScale: () => void }) {
   if (sheet.scale_ft_per_pt) return null;
@@ -602,7 +745,9 @@ function ScaleCopy({ k, from, all, sheets, apply, onClose }: { k: number; from: 
 
 /* --------------------------------------------------------------- drawing */
 
-function Drawing({ sheet, fileUrl, zoom, setZoom, tool, data, groupId, selId, setSelId, draft, setDraft, hover, setHover, save, busy, saveShape, onTrace, cutting, onPin, pinLayer }: {
+function Drawing({ sheet, fileUrl, zoom, setZoom, tool, data, groupId, selId, setSelId, draft, setDraft, hover, setHover, save, busy, saveShape, onTrace, cutting, onPin, pinLayer, rot = 0 }: {
+  /** The view turned by 0, 90, 180 or 270 degrees; points stay in the page's own. */
+  rot?: number;
   sheet: Sheet; fileUrl: string; zoom: number; setZoom: (f: (z: number) => number) => void; tool: Tool;
   data: PlansData; groupId: string | null; selId: string | null; setSelId: (id: string | null) => void;
   draft: Pt[]; setDraft: React.Dispatch<React.SetStateAction<Pt[]>>; hover: Pt | null; setHover: (p: Pt | null) => void;
@@ -661,8 +806,13 @@ function Drawing({ sheet, fileUrl, zoom, setZoom, tool, data, groupId, selId, se
   }, [sheet.file_id, sheet.page, fileUrl, scale]);
 
   const toPage = (e: React.PointerEvent | React.MouseEvent): Pt => {
+    // Undo the view's turn about the sheet's centre, then read the point off the unturned sheet.
     const r = (e.currentTarget as SVGSVGElement).getBoundingClientRect();
-    return [((e.clientX - r.left) / r.width) * sheet.page_w, ((e.clientY - r.top) / r.height) * sheet.page_h];
+    const dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height / 2);
+    const t = (-rot * Math.PI) / 180, c = Math.cos(t), sn = Math.sin(t);
+    const x = dx * c - dy * sn, y = dx * sn + dy * c;
+    const sw = rot % 180 ? r.height : r.width, sh = rot % 180 ? r.width : r.height;
+    return [(x / sw + 0.5) * sheet.page_w, (y / sh + 0.5) * sheet.page_h];
   };
   const px = scale || 1; // CSS px per point
   const near = (a: Pt, b: Pt) => dist(a, b) * px < 10;
@@ -697,6 +847,7 @@ function Drawing({ sheet, fileUrl, zoom, setZoom, tool, data, groupId, selId, se
       else void save(rectPoints(draft[0], p));
       return;
     }
+    if (tool === "ruler") { setDraft(draft.length === 1 ? [draft[0], p] : [p]); return; }
     if (tool === "scale") {
       if (!draft.length) setDraft([p]);
       else if (draft.length === 1) { const pts: Pt[] = [draft[0], p]; setDraft(pts); void save(pts); }
@@ -719,12 +870,13 @@ function Drawing({ sheet, fileUrl, zoom, setZoom, tool, data, groupId, selId, se
   const sw = 2 / px, r = 5 / px;
   const pathOf = (pts: Pt[], close: boolean) => pts.map((p, i) => `${i ? "L" : "M"}${p[0]},${p[1]}`).join(" ") + (close ? " Z" : "");
   const grp = data.params.find((p) => p.id === groupId);
-  const draftColor = tool === "cutout" || cutting ? T.red : tool === "scale" ? "#1E5AA8" : grp?.color ?? T.hiviz;
+  const draftColor = tool === "cutout" || cutting ? T.red : tool === "scale" || tool === "ruler" ? "#1E5AA8" : grp?.color ?? T.hiviz;
 
   return (
     <div ref={box} className="flex-1 overflow-auto" style={{ background: T.sunk, padding: 12, paddingBottom: 56, position: "relative", minHeight: 0 }}>
       {err && <div style={{ fontSize: F.sm, color: T.red }}>Couldn&apos;t open the plan: {err}</div>}
-      <div style={{ position: "relative", width: w || "100%", height: h || 200, background: "#fff", boxShadow: "0 2px 10px rgba(42,32,20,.12)" }}>
+      <div style={{ position: "relative", width: (rot % 180 ? h : w) || "100%", height: (rot % 180 ? w : h) || 200 }}>
+      <div style={{ position: "absolute", left: "50%", top: "50%", width: w || "100%", height: h || 200, transform: `translate(-50%, -50%) rotate(${rot}deg)`, background: "#fff", boxShadow: "0 2px 10px rgba(42,32,20,.12)" }}>
         <canvas ref={canvas} style={{ position: "absolute", inset: 0, width: w, height: h, opacity: drawn ? 1 : 0.4 }} />
         {scale > 0 && (
           <svg viewBox={`0 0 ${sheet.page_w} ${sheet.page_h}`} preserveAspectRatio="none" width={w} height={h}
@@ -744,6 +896,13 @@ function Drawing({ sheet, fileUrl, zoom, setZoom, tool, data, groupId, selId, se
               if (p.kind === "count") return (
                 <g key={m.id} opacity={op} onPointerUp={pick} style={{ cursor: tool === "select" ? "pointer" : undefined }}>
                   {m.geometry.map((pt, i) => <circle key={i} cx={pt[0]} cy={pt[1]} r={r * (isSel ? 1.3 : 1)} fill={shapeColor(m, p)} stroke="#fff" strokeWidth={sw / 2} />)}
+                </g>
+              );
+              if (p.kind === "linear" && m.cutouts?.length) return (
+                <g key={m.id}>
+                  <path d={pathOf(m.geometry, false)} fill="none" stroke={shapeColor(m, p)} strokeWidth={sw * (isSel ? 2.2 : 1.6)} opacity={op}
+                    strokeLinejoin="round" strokeLinecap="round" onPointerUp={pick} style={{ cursor: tool === "select" ? "pointer" : undefined }} />
+                  {m.cutouts.map((c, ci) => <path key={ci} d={pathOf(c, false)} fill="none" stroke="#C0392B" strokeWidth={sw * 1.6} strokeDasharray={`${sw * 4} ${sw * 3}`} opacity={op} pointerEvents="none" />)}
                 </g>
               );
               if (p.kind === "linear") return (
@@ -800,6 +959,14 @@ function Drawing({ sheet, fileUrl, zoom, setZoom, tool, data, groupId, selId, se
           </svg>
         )}
         {pinLayer?.(scale)}
+        {tool === "ruler" && draft.length > 0 && scale > 0 && (draft[1] ?? hover) && (() => {
+          const a = draft[0], b = (draft[1] ?? hover) as Pt;
+          return (
+            <div style={{ position: "absolute", left: ((a[0] + b[0]) / 2) * scale, top: ((a[1] + b[1]) / 2) * scale - 26, transform: `translateX(-50%) rotate(${-rot}deg)`, background: "#1E5AA8", color: "#fff", borderRadius: 3, padding: "2px 7px", fontSize: 12, fontWeight: 600, whiteSpace: "nowrap", pointerEvents: "none", ...nums }}>
+              {rulerText(sheet, a, b)}
+            </div>
+          );
+        })()}
         {/* the floating label on the selected shape */}
         {selM && selGroup && scale > 0 && (() => {
           const xs = selM.geometry.map((p) => p[0]), ys = selM.geometry.map((p) => p[1]);
@@ -814,6 +981,7 @@ function Drawing({ sheet, fileUrl, zoom, setZoom, tool, data, groupId, selId, se
             </div>
           );
         })()}
+      </div>
       </div>
     </div>
   );
@@ -908,6 +1076,10 @@ function ParamPanel({ jobId, data, groupId, setGroupId, selId, onSelect, act, on
                             <MeasName jobId={jobId} m={m} fallback={`${p.name} ${i + 1}`} act={act} />
                             <div style={{ fontSize: 11, color: T.ink3 }}>{s ? sheetLabel(s) : "sheet removed"} · {m.method}{(m.cutouts?.length ?? 0) > 0 ? ` · ${m.cutouts.length} cutout${m.cutouts.length === 1 ? "" : "s"}` : ""}</div>
                           </div>
+                          {<span className="inline-flex" style={{ flex: "0 0 auto" }}>
+                            <button onClick={(e) => { e.stopPropagation(); window.dispatchEvent(new CustomEvent("sc:takeoff-adj", { detail: { id: m.id, a: "sub" } })); }} aria-label="Take from this takeoff" title="Take from this takeoff" style={{ width: 22, height: 22, border: `1px solid ${T.hair}`, borderRadius: "3px 0 0 3px", background: T.card, cursor: "pointer", fontSize: 13, lineHeight: 1 }}>−</button>
+                            <button onClick={(e) => { e.stopPropagation(); window.dispatchEvent(new CustomEvent("sc:takeoff-adj", { detail: { id: m.id, a: "add" } })); }} aria-label="Add to this takeoff" title="Add to this takeoff" style={{ width: 22, height: 22, border: `1px solid ${T.hair}`, borderLeft: 0, borderRadius: "0 3px 3px 0", background: T.card, cursor: "pointer", fontSize: 13, lineHeight: 1 }}>+</button>
+                          </span>}
                           {m.section_id && <span title="Counted in a budget section" style={{ fontSize: 10.5, color: T.green, fontWeight: 700 }}>$✓</span>}
                           <span style={{ fontSize: 12.5, ...nums, color: q?.qty === null ? T.hivizText : T.ink, textAlign: "right" }}>
                             {q?.qty !== null && q?.qty !== undefined ? fmtQty(q.qty, KIND_UNIT[p.kind]) : "scale not set"}

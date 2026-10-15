@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { sectionOf, concreteSection, pickPages, buildDigest, DIGEST_NAME } from "../src/lib/specs-digest.ts";
+import { sectionOf, concreteSection, pickPages, pickNotes, buildDigest, DIGEST_NAME } from "../src/lib/specs-digest.ts";
 
 test("sectionOf reads headings, footers and old five-digit numbers", () => {
   assert.equal(sectionOf("SECTION 03 30 00\nCAST-IN-PLACE CONCRETE"), "03 30 00");
@@ -49,4 +49,18 @@ test("buildDigest labels each page and says what was left out for room", () => {
   assert.equal(small.pages, 1);
   assert.match(small.text, /1 more concrete page left out/);
   assert.equal(DIGEST_NAME, "Specs - read by Dusty.md");
+});
+
+test("pickNotes keeps a plan set's concrete notes, once each, under their heading", () => {
+  const sheet = (n) => `C${n}.0\nGRAPHIC SCALE IN FEET\n17.62\n17.85\nNOTES:\n1. ALL WORK SHALL CONFORM TO LATEST SPECIFICATIONS OF\nTHE STATE OF LOUISIANA.\n7. NEW SITE PAVEMENT SHALL BE 4000 PSI CONCRETE UNLESS\nNOTED OTHERWISE.\n8. NEW SIDEWALKS SHALL BE 4" THICK MINIMUM, 4000 PSI\nCONCRETE WITH LIGHT BROOM FINISH.\n10.RE-SOD SITE AREAS WHERE EXISTING GRASS IS AFFECTED.\n14.CONCRETE CURBS SHALL BE ISOLATED FROM CONCRETE WALKS; WALKS\nSHALL NOT LAP OVER PAVEMENT.\n6" PIN ON CONCRETE\nCURB (TYP.)`;
+  const kept = pickNotes("Civil.pdf", [sheet(2), sheet(3), "TITLE SHEET\nVICINITY MAP"], new Map([[1, "C2.0"]]));
+  assert.equal(kept.length, 1);
+  assert.equal(kept[0].sheet, "C2.0");
+  assert.match(kept[0].text, /^\*\*NOTES\*\*/);
+  assert.match(kept[0].text, /7\. NEW SITE PAVEMENT SHALL BE 4000 PSI CONCRETE UNLESS NOTED OTHERWISE\./);
+  assert.match(kept[0].text, /14\.CONCRETE CURBS .* WALKS SHALL NOT LAP OVER PAVEMENT\./);
+  assert.doesNotMatch(kept[0].text, /RE-SOD|LOUISIANA|PIN ON/);
+  const d = buildDigest([{ name: "Civil.pdf", pages: 3, kept, plans: true }], new Date("2026-10-15T00:00:00Z"));
+  assert.match(d.text, /## Civil\.pdf · Sheet C2\.0 · p\.1/);
+  assert.match(d.text, /no spec book filed/);
 });

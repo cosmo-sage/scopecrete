@@ -44,7 +44,7 @@ export function sectionOf(text: string): string | null {
 
 export const concreteHits = (text: string) => (text.match(CONCRETE) ?? []).length;
 
-export interface DigestPage { book: string; page: number; section: string | null; hits: number; text: string }
+export interface DigestPage { book: string; page: number; section: string | null; hits: number; text: string; sheet?: string | null }
 
 /**
  * The pages worth keeping from one book: a page carries the section of the last
@@ -71,22 +71,71 @@ export function tidy(text: string): string {
   return text.split("\n").map((l) => l.replace(/[ \t]+/g, " ").trimEnd()).join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
-export interface DigestBook { name: string; pages: number; kept: DigestPage[] }
+/**
+ * A plan set's concrete notes (Coy, 2026-10-15: "i'm not seeing the spec notes
+ * on the job" — HPC Ascension Campus has no spec book; its concrete specs are
+ * the numbered notes on the civil sheets: "7. NEW SITE PAVEMENT SHALL BE 4000
+ * PSI CONCRETE …"). A drawing's words are mostly labels, so only its numbered
+ * notes are kept — each with the lines that run on until it ends with a period —
+ * and only those that talk about concrete, under the NOTES heading above them,
+ * each note once (`seen`, shared across a job's plan sets).
+ */
+const NOTE_HEAD = /^[A-Z0-9 &,/'()-]*\bNOTES?\b[A-Z0-9 &,/'()-]*:?$/;
+const NOTE_START = /^(\(?\d{1,2}[.)]\s*|[A-Z][.)]\s+)\S/;
+/** A note has words, not a run of elevations ("17.62") or dimensions. */
+const wordy = (line: string) => (line.match(/[A-Za-z]{2,}/g) ?? []).length >= 2;
+const noteKey = (t: string) => t.replace(/^\(?\d{1,2}[.)]\s*|^[A-Z][.)]\s+/, "").replace(/[^A-Z0-9]/gi, "").toUpperCase();
+
+export function pickNotes(book: string, pages: string[], sheets: Map<number, string> = new Map(), seen: Set<string> = new Set()): DigestPage[] {
+  const out: DigestPage[] = [];
+  pages.forEach((raw, i) => {
+    const lines = tidy(raw).split("\n").map((l) => l.trim()).filter(Boolean);
+    const groups: Array<{ head: string | null; notes: string[] }> = [];
+    let head: string | null = null;
+    let cur: string[] | null = null;
+    const flush = () => {
+      // The same notes are printed on sheet after sheet: each is kept once, where it first appears.
+      const key = cur ? noteKey(cur.join(" ")) : "";
+      if (cur && concreteHits(cur.join(" ")) > 0 && !seen.has(key)) {
+        seen.add(key);
+        const last = groups[groups.length - 1];
+        const text = cur.join(" ");
+        if (last && last.head === head) last.notes.push(text); else groups.push({ head, notes: [text] });
+      }
+      cur = null;
+    };
+    for (const line of lines) {
+      if (line.length < 60 && NOTE_HEAD.test(line)) { flush(); head = line.replace(/:$/, ""); continue; }
+      if (NOTE_START.test(line) && wordy(line)) { flush(); cur = [line]; continue; }
+      const c = cur as string[] | null;
+      if (c && !/[.;]$/.test(c[c.length - 1]) && c.length < 12) c.push(line);
+      else flush();
+    }
+    flush();
+    if (!groups.length) return;
+    const text = groups.map((g) => (g.head ? `**${g.head}**\n\n` : "") + g.notes.join("\n")).join("\n\n");
+    out.push({ book, page: i + 1, section: null, hits: concreteHits(text), text, sheet: sheets.get(i + 1) ?? null });
+  });
+  return out;
+}
+
+export interface DigestBook { name: string; pages: number; kept: DigestPage[]; plans?: boolean }
 
 /** The Markdown file: what it is, the sections kept, then each page as printed. */
 export function buildDigest(books: DigestBook[], made: Date, max = DIGEST_MAX_CHARS): { text: string; pages: number; sections: string[]; left: number } {
   const sections = [...new Set(books.flatMap((b) => b.kept.map((p) => p.section).filter((s): s is string => !!s && concreteSection(s))))].sort();
   const kept = books.flatMap((b) => b.kept);
-  const head = [
-    "# Specs - read by Dusty",
-    "",
-    `The concrete pages of ${books.map((b) => `${b.name} (${b.kept.length} of ${b.pages} pages)`).join("; ")}, copied word for word on ${made.toISOString().slice(0, 10)}. The book${books.length === 1 ? " was" : "s were"} too big to read whole; this file keeps every page of a concrete section${sections.length ? ` (${sections.join(", ")})` : ""} and any other page that talks about concrete. Check anything you price against the book itself.`,
-    "",
-  ].join("\n");
+  const specs = books.filter((b) => !b.plans);
+  const plans = books.filter((b) => b.plans);
+  const day = made.toISOString().slice(0, 10);
+  const lines = ["# Specs - read by Dusty", ""];
+  if (specs.length) lines.push(`The concrete pages of ${specs.map((b) => `${b.name} (${b.kept.length} of ${b.pages} pages)`).join("; ")}, copied word for word on ${day}. The book${specs.length === 1 ? " was" : "s were"} too big to read whole; this file keeps every page of a concrete section${sections.length ? ` (${sections.join(", ")})` : ""} and any other page that talks about concrete. Check anything you price against the book itself.`, "");
+  if (plans.length) lines.push(`The notes about concrete on the sheets of ${plans.map((b) => `${b.name} (${b.kept.length} of ${b.pages} sheets)`).join("; ")}, copied word for word on ${day}. The job has no spec book filed, so these notes are its concrete specs. Check anything you price against the sheet itself.`, "");
+  const head = lines.join("\n");
   let body = "";
   let used = 0;
   for (const p of kept) {
-    const block = `## ${p.book} · p.${p.page}${p.section ? ` · Section ${p.section}` : ""}\n\n${p.text}\n\n`;
+    const block = `## ${p.book} · ${p.sheet ? `Sheet ${p.sheet} · ` : ""}p.${p.page}${p.section ? ` · Section ${p.section}` : ""}\n\n${p.text}\n\n`;
     if (head.length + body.length + block.length > max) break;
     body += block;
     used++;

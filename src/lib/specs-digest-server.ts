@@ -1,6 +1,6 @@
 import type { ApiSession } from "@/lib/api-auth";
 import { FILES_BUCKET, storagePath } from "@/lib/files";
-import { DIGEST_NAME, DIGEST_SOURCE, buildDigest, pickPages, type DigestBook } from "@/lib/specs-digest";
+import { DIGEST_NAME, DIGEST_SOURCE, buildDigest, pickNotes, pickPages, type DigestBook } from "@/lib/specs-digest";
 
 /**
  * Makes (or remakes) a job's "Specs - read by Dusty" file: each spec book on the
@@ -13,14 +13,22 @@ type Sb = ApiSession["supabase"];
 
 export const DIGEST_COLUMNS = "id, name, byte_size, note, page_count, read_state, read_at, read_error, summary, facts, source_url, created_at";
 
-export interface SpecBook { id: string; name: string; byte_size: number | null; storage_path: string | null; read_state: string | null; read_error: string | null }
+export interface SpecBook { id: string; name: string; byte_size: number | null; storage_path: string | null; read_state: string | null; read_error: string | null; from: "spec" | "plans" }
 
-/** The job's spec books: PDFs filed as specs, copied in, not deleted. */
+/**
+ * What the digest is made from: the job's spec books (PDFs filed as specs, copied
+ * in, not deleted) — or, when it has none, its plan sets, whose concrete notes
+ * are then its specs (pickNotes).
+ */
 export async function specBooks(sb: Sb, orgId: string, jobId: string): Promise<SpecBook[]> {
-  const { data } = await sb.from("files").select("id, name, byte_size, storage_path, read_state, read_error, kind, source_url")
-    .eq("org_id", orgId).eq("job_id", jobId).eq("category", "spec").eq("kind", "pdf").eq("fetch_state", "fetched")
+  const { data } = await sb.from("files").select("id, name, byte_size, storage_path, read_state, read_error, category, source_url")
+    .eq("org_id", orgId).eq("job_id", jobId).in("category", ["spec", "plan"]).eq("kind", "pdf").eq("fetch_state", "fetched")
     .is("deleted_at", null).order("created_at", { ascending: true });
-  return ((data ?? []) as Array<SpecBook & { source_url: string | null }>).filter((f) => !(f.source_url ?? "").startsWith(DIGEST_SOURCE));
+  const rows = ((data ?? []) as Array<Omit<SpecBook, "from"> & { category: string; source_url: string | null }>)
+    .filter((f) => !(f.source_url ?? "").startsWith(DIGEST_SOURCE));
+  const specs = rows.filter((f) => f.category === "spec");
+  const use = specs.length ? specs : rows.filter((f) => f.category === "plan");
+  return use.map((f) => ({ id: f.id, name: f.name, byte_size: f.byte_size, storage_path: f.storage_path, read_state: f.read_state, read_error: f.read_error, from: f.category === "spec" ? "spec" : "plans" }));
 }
 
 /** The job's current digest, if one was made. */
@@ -52,9 +60,20 @@ export type DigestResult = { ok: true; file: Record<string, unknown>; pages: num
 
 export async function makeDigest(sb: Sb, orgId: string, userId: string, jobId: string): Promise<DigestResult> {
   const books = await specBooks(sb, orgId, jobId);
-  if (!books.length) return { ok: false, error: "No spec book on this job — file a PDF as Spec in Files first." };
+  if (!books.length) return { ok: false, error: "No spec book or plan set on this job — add one in Files first." };
+  const plans = books[0].from === "plans";
+  const sheets = new Map<string, Map<number, string>>();
+  if (plans) {
+    const { data } = await sb.from("plan_sheets").select("file_id, page, number").eq("org_id", orgId).eq("job_id", jobId);
+    for (const r of (data ?? []) as Array<{ file_id: string; page: number; number: string | null }>) {
+      if (!r.number) continue;
+      if (!sheets.has(r.file_id)) sheets.set(r.file_id, new Map());
+      sheets.get(r.file_id)!.set(r.page, r.number);
+    }
+  }
 
   const read: DigestBook[] = [];
+  const seen = new Set<string>();
   const failed: string[] = [];
   for (const b of books) {
     if (!b.storage_path) continue;
@@ -62,13 +81,17 @@ export async function makeDigest(sb: Sb, orgId: string, userId: string, jobId: s
     if (error || !blob) { failed.push(b.name); continue; }
     try {
       const texts = await pageTexts(new Uint8Array(await blob.arrayBuffer()));
-      read.push({ name: b.name, pages: texts.length, kept: pickPages(b.name, texts) });
+      read.push(plans
+        ? { name: b.name, pages: texts.length, kept: pickNotes(b.name, texts, sheets.get(b.id), seen), plans: true }
+        : { name: b.name, pages: texts.length, kept: pickPages(b.name, texts) });
     } catch {
       failed.push(b.name);
     }
   }
   if (!read.length) return { ok: false, error: `Couldn't open ${failed.join(", ") || "the spec book"}.` };
-  if (!read.some((b) => b.kept.length)) return { ok: false, error: "No concrete pages found in its words — it may be a scan (no text to copy), or have no concrete sections." };
+  if (!read.some((b) => b.kept.length)) return { ok: false, error: plans
+    ? "No notes about concrete found in the plans' words — a scanned set has no text to copy."
+    : "No concrete pages found in its words — it may be a scan (no text to copy), or have no concrete sections." };
 
   const digest = buildDigest(read, new Date());
   const bytes = new TextEncoder().encode(digest.text);
@@ -83,7 +106,7 @@ export async function makeDigest(sb: Sb, orgId: string, userId: string, jobId: s
     mime_type: "text/markdown", byte_size: bytes.byteLength, storage_path: path,
     source: "upload", source_url: `${DIGEST_SOURCE}${books.map((b) => b.id).join(",")}`,
     fetch_state: "fetched", read_state: "waiting", extracted_text: digest.text.slice(0, 200_000),
-    page_count: digest.pages, note: `${digest.pages} concrete page${digest.pages === 1 ? "" : "s"} of ${read.map((b) => b.name).join("; ")}${digest.sections.length ? ` — sections ${digest.sections.join(", ")}` : ""}${digest.left ? ` (${digest.left} more left out for room)` : ""}`.slice(0, 2000),
+    page_count: digest.pages, note: `${plans ? `Concrete notes from ${digest.pages} sheet${digest.pages === 1 ? "" : "s"}` : `${digest.pages} concrete page${digest.pages === 1 ? "" : "s"}`} of ${read.map((b) => b.name).join("; ")}${digest.sections.length ? ` — sections ${digest.sections.join(", ")}` : ""}${digest.left ? ` (${digest.left} more left out for room)` : ""}`.slice(0, 2000),
     created_by: userId,
   }).select(DIGEST_COLUMNS).single();
   if (error || !row) {

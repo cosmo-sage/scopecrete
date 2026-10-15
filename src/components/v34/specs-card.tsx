@@ -4,7 +4,8 @@
  * specs consolidated into a new file called Specs - read by dusty … added to the
  * summary page of the job"). The digest file (specs-digest.ts) with what Dusty
  * made of it, and a button to make it — or make it again after a new addendum.
- * Shown when the job has a spec book or a digest.
+ * Shown when the job has a spec book, a plan set or a digest; with no spec book
+ * it is made from the plan sets' concrete notes.
  */
 import React, { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
@@ -12,7 +13,7 @@ import { T, F, disp, eyebrow } from "@/lib/v34/tokens";
 import { sizeLabel } from "@/lib/files";
 
 type Digest = { id: string; name: string; byte_size: number | null; note: string | null; page_count: number | null; read_state: string | null; read_at: string | null; read_error: string | null; summary: string | null; facts: Record<string, unknown> | null; created_at: string };
-type Book = { id: string; name: string; byte_size: number | null; read_state: string | null; read_error: string | null };
+type Book = { id: string; name: string; byte_size: number | null; read_state: string | null; read_error: string | null; from?: "spec" | "plans" };
 
 export function SpecsCard({ jobId, card }: { jobId: string; card: React.CSSProperties }) {
   const [data, setData] = useState<{ digest: Digest | null; books: Book[] } | null>(null);
@@ -82,7 +83,9 @@ export function SpecsCard({ jobId, card }: { jobId: string; card: React.CSSPrope
         </div>
       ) : (
         <div style={{ fontSize: F.xs, color: T.ink2, marginTop: 6, lineHeight: 1.45 }}>
-          {skipped.length
+          {data.books[0]?.from === "plans"
+            ? `No spec book on this job. Make it copies the notes about concrete off ${data.books.map((b) => b.name).join(", ")} into one short file for Dusty.`
+            : skipped.length
             ? `${skipped.map((b) => `${b.name} (${sizeLabel(b.byte_size)})`).join(", ")} ${skipped.length === 1 ? "was" : "were"} too big for Dusty to read whole. Make it copies the concrete pages into one file he can read.`
             : "Copy the spec book's concrete pages into one short file for Dusty."}
         </div>

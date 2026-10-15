@@ -220,6 +220,39 @@ export default function ScopeBuilder() {
 
   const t = useMemo(() => takeoffOf(sections ?? [], null), [sections]);
 
+  // Drag a folded section by its grip to reorder (Coy, 2026-10-15). The list moves as the pointer
+  // passes each card's middle; on release every section whose place changed gets its sort_order.
+  const dragRef = React.useRef<{ id: string; before: string[] } | null>(null);
+  const secsRef = React.useRef(sections); secsRef.current = sections;
+  const startDrag = (id: string, e: React.PointerEvent) => {
+    if (!sections) return;
+    e.preventDefault();
+    dragRef.current = { id, before: sections.map((x) => x.id) };
+    const move = (ev: PointerEvent) => {
+      const d = dragRef.current; if (!d) return;
+      const cards = [...document.querySelectorAll<HTMLElement>("[data-sec-id]")];
+      let to = cards.length - 1;
+      for (let i = 0; i < cards.length; i++) { const r = cards[i].getBoundingClientRect(); if (ev.clientY < r.top + r.height / 2) { to = i; break; } }
+      const target = cards[to]?.dataset.secId;
+      if (!target || target === d.id) return;
+      setSections((a) => {
+        if (!a) return a;
+        const from = a.findIndex((x) => x.id === d.id), at = a.findIndex((x) => x.id === target);
+        if (from < 0 || at < 0) return a;
+        const n = [...a]; const [m] = n.splice(from, 1); n.splice(at, 0, m); return n;
+      });
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up);
+      const d = dragRef.current; dragRef.current = null;
+      const a = secsRef.current;
+      if (!a || !d) return;
+      a.forEach((x, i) => { if (d.before[i] !== x.id) void send(`/api/jobs/${jobId}/sections/${x.id}`, "PATCH", { sort_order: i }).catch(() => {}); });
+      setSections(a.map((x, i) => ({ ...x, sort_order: i })));
+    };
+    window.addEventListener("pointermove", move); window.addEventListener("pointerup", up);
+  };
+
   const patchLocal = (id: string, patch: Partial<Section>) =>
     setSections((a) => (a ?? []).map((s) => (s.id === id ? { ...s, ...patch } : s)));
 
@@ -423,7 +456,8 @@ export default function ScopeBuilder() {
                           onUse={(p) => { patchLocal(s.id, p); void save(s.id, p); }} />}
                       </>}
                       onLocal={(p) => patchLocal(s.id, p)} onSave={(p) => void save(s.id, p)}
-                      onRemove={() => void removeSection(s.id)} />
+                      onRemove={() => void removeSection(s.id)}
+                      onGrip={sections.length > 1 ? (e) => startDrag(s.id, e) : undefined} />
                   );
                 })}
               </div>
@@ -500,10 +534,12 @@ const MODES: [ "dims" | "area" | "linear" | "count", string, string][] = [
   ["dims", "Length × width", T.chalk], ["area", "Area only", T.green], ["linear", "Linear ft", T.hiviz], ["count", "Count", T.violet],
 ];
 
-function SectionCard({ s, index, err, onLocal, onSave, onRemove, jobType, jobId, photos, sheets, hasPlans, onSheets, takeoff, takeoffUnit, onSlot, open, onToggle, money: m }: {
+function SectionCard({ s, index, err, onLocal, onSave, onRemove, jobType, jobId, photos, sheets, hasPlans, onSheets, takeoff, takeoffUnit, onSlot, open, onToggle, onGrip, money: m }: {
   s: Section; index: number; err?: string; rcards: RCard[]; jobType: string | null; jobId: string;
   /** Open, or folded to one line (Coy, 2026-10-08: "less busy and easier to read"). */
   open: boolean; onToggle: () => void;
+  /** Press on the grip to drag the section up or down (Coy, 2026-10-15). */
+  onGrip?: (e: React.PointerEvent) => void;
   /** Its own budget lines' totals, for the folded line. */
   money: { lines: number; cost: number; price: number; blocked: number } | null;
   /** Where the budget draws this section's cost items. */
@@ -625,8 +661,16 @@ function SectionCard({ s, index, err, onLocal, onSave, onRemove, jobType, jobId,
     background: on ? c : T.card, color: on ? T.card : c, borderLeft: divide ? `1px solid ${T.hair}` : "none", cursor: "pointer" });
 
   return (
-    <div style={{ background: T.card, borderBottom: `1px solid ${T.hair}`, marginTop: index === 0 ? 0 : 6 }}>
+    <div data-sec-id={s.id} style={{ background: T.card, borderBottom: `1px solid ${T.hair}`, marginTop: index === 0 ? 0 : 6 }}>
       <div className={`px-3 ${open ? "pt-2.5" : "py-2"} flex items-center gap-2 flex-wrap`}>
+        {!open && onGrip && (
+          <span role="button" aria-label="Drag to reorder" title="Drag to reorder" onPointerDown={onGrip}
+            style={{ cursor: "grab", touchAction: "none", color: T.ink3, flex: "none", display: "flex", padding: "2px 0" }}>
+            <svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor" aria-hidden>
+              {[3, 8, 13].flatMap((y) => [<circle key={`a${y}`} cx="2.5" cy={y} r="1.4" />, <circle key={`b${y}`} cx="7.5" cy={y} r="1.4" />])}
+            </svg>
+          </span>
+        )}
         {open ? (
           <input defaultValue={s.name ?? ""} placeholder={`Section ${index + 1} — name it`}
             onChange={(e) => onLocal({ name: e.target.value })} onBlur={(e) => onSave({ name: e.target.value })}

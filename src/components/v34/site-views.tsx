@@ -154,7 +154,61 @@ export function streetViewUrl(p: Point): string {
   return `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${p.lat},${p.lng}`;
 }
 
-export function StreetFrame({ point, height }: { point: Point; height: number | "fill" }) {
+/* Google's Maps JavaScript API, loaded once for a Street View with no address
+   card (Coy, 2026-10-13: "remove [the tag with the address] since it's taking
+   up screenspace"). The embed always draws that card; the JS API's panorama
+   has `addressControl: false`. It needs the Maps JavaScript API on the same
+   browser key; when Google refuses (gm_authFailure), the script fails or no
+   panorama answers, the embed is drawn as before. */
+type GPano = { setVisible(v: boolean): void };
+type GMaps = { StreetViewPanorama: new (el: HTMLElement, o: Record<string, unknown>) => GPano };
+let jsApi: Promise<GMaps> | null = null;
+let jsRefused = false;
+const refusedHooks = new Set<() => void>();
+function loadJsApi(): Promise<GMaps> {
+  if (jsRefused) return Promise.reject(new Error("refused"));
+  if (jsApi) return jsApi;
+  jsApi = new Promise<GMaps>((resolve, reject) => {
+    const w = window as unknown as Record<string, unknown>;
+    w.gm_authFailure = () => { jsRefused = true; refusedHooks.forEach((f) => f()); reject(new Error("refused")); };
+    const cb = "__scStreetReady";
+    w[cb] = () => {
+      const maps = (w.google as { maps?: GMaps } | undefined)?.maps;
+      if (maps?.StreetViewPanorama) resolve(maps); else reject(new Error("no street view"));
+    };
+    const s = document.createElement("script");
+    s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(EMBED_KEY)}&v=weekly&callback=${cb}`;
+    s.async = true;
+    s.onerror = () => { jsRefused = true; reject(new Error("load")); };
+    document.head.appendChild(s);
+  });
+  jsApi.catch(() => { jsApi = null; });
+  return jsApi;
+}
+
+function BarePanorama({ point, onFail }: { point: Point; onFail: () => void }) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    let live = true;
+    const fail = () => { if (live) onFail(); };
+    refusedHooks.add(fail);
+    const slow = window.setTimeout(fail, 8000);
+    loadJsApi().then((maps) => {
+      window.clearTimeout(slow);
+      if (!live || !ref.current) return;
+      new maps.StreetViewPanorama(ref.current, {
+        position: point, pov: { heading: 0, pitch: 0 }, zoom: 0,
+        addressControl: false, fullscreenControl: false, motionTracking: false, motionTrackingControl: false,
+      });
+    }).catch(() => { window.clearTimeout(slow); fail(); });
+    return () => { live = false; refusedHooks.delete(fail); window.clearTimeout(slow); };
+  }, [point, onFail]);
+  return <div ref={ref} style={{ width: "100%", height: "100%", border: `1px solid ${T.hair}`, borderRadius: 4, background: T.sunk }} />;
+}
+
+export function StreetFrame({ point, height, bare }: { point: Point; height: number | "fill"; bare?: boolean }) {
+  const [embed, setEmbed] = useState(!bare || jsRefused);
+  const toEmbed = React.useCallback(() => setEmbed(true), []);
   const link = (
     <a href={streetViewUrl(point)} target="_blank" rel="noopener noreferrer"
       style={{ fontSize: 12, fontWeight: 600, color: T.chalk, textDecoration: "none" }}>
@@ -163,6 +217,12 @@ export function StreetFrame({ point, height }: { point: Point; height: number | 
   );
   const fill = height === "fill";
   if (!EMBED_KEY) return <div style={{ padding: "18px 0", textAlign: "center", border: `1px solid ${T.hair}`, borderRadius: 4, background: T.sunk, height: fill ? "100%" : undefined }}>{link}</div>;
+  if (!embed && fill) return (
+    <div className="flex flex-col gap-1" style={{ height: "100%" }}>
+      <div style={{ flex: "1 1 auto", minHeight: 0 }}><BarePanorama point={point} onFail={toEmbed} /></div>
+      <div style={{ textAlign: "right" }}>{link}</div>
+    </div>
+  );
   const src = `https://www.google.com/maps/embed/v1/streetview?key=${encodeURIComponent(EMBED_KEY)}&location=${point.lat},${point.lng}&fov=80`;
   return (
     <div className="flex flex-col gap-1" style={fill ? { height: "100%" } : undefined}>

@@ -5019,7 +5019,12 @@ expected start date per quoted job before it means anything. Add the field.
   (it sat over the map on a desktop). Street fills the map's place with Google's Street View (`StreetFrame`,
   the same Maps Embed as the customer and job pages) of the picked pin, else the address searched, else a pin
   within 40 px of the middle of the map, else the middle itself; a search box above it moves it, and a pin
-  card's **Street view** opens it. Map or Satellite brings the map back (Esc too); Clip hides while it shows.
+  card's **Street view** opens it. Map or Satellite brings the map back (Esc too); Clip hides while it shows. **No address card (Coy, 2026-10-13, on a phone: "a tag with the address … Remove that … I already
+  have it in the header"):** the embed always draws Google's address card at the top left, so the Map's Street
+  view is drawn with the Maps JavaScript API's panorama (`addressControl: false`, `StreetFrame bare`) on the same
+  browser key; the key needs **Maps JavaScript API** added to its API restrictions (and enabled in the project),
+  else Google refuses (`gm_authFailure`) and the embed is drawn as before. On a phone the line under the search
+  ("<address> · Google Street View — to look at, not saved") is gone too. The customer and job pages keep the embed.
   **It is not clipped, by Coy's ask or otherwise:** Google's terms don't allow saving or storing its imagery
   (the same reason Google is a look only for aerials, §6 Takeoffs), and the embed can't be read by the page
   anyway. A photo of the front of a house goes in from the site, or texted (Files → Photos). Clip for takeoff

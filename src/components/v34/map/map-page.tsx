@@ -684,12 +684,12 @@ export function MapPage() {
                     onPin={(p) => { goPin(p); setStreet({ lat: p.lat, lng: p.lng, label: p.addr || p.name }); }}
                     onAddress={(a) => { setSel(null); setPlain(a); setView({ lat: a.lat, lng: a.lng, zoom: 17 }); setStreet(a); }} />
                 </div>
-                <div className="flex items-center gap-2" style={{ fontSize: 12, color: T.ink3 }}>
+                {wide && <div className="flex items-center gap-2" style={{ fontSize: 12, color: T.ink3 }}>
                   <span style={{ minWidth: 0, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><b style={{ color: T.ink }}>{street.label}</b> · Google Street View — to look at, not saved</span>
-                </div>
+                </div>}
               </div>
               <div className="flex-1" style={{ minHeight: 0, padding: 8 }}>
-                <StreetFrame key={`${street.lat},${street.lng}`} point={street} height="fill" />
+                <StreetFrame key={`${street.lat},${street.lng}`} point={street} height="fill" bare />
               </div>
             </div>
           )}

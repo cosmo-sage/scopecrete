@@ -10,7 +10,7 @@
  * kept, and its row says "scale not set" until Coy applies the printed scale
  * or measures a known dimension (src/lib/takeoff.ts).
  */
-import React, { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { Fragment, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { T, F, disp, eyebrow, clip, strong, light, nums } from "@/lib/v34/tokens";
 import { openPdf, drawPage } from "@/lib/pdf";
 import { areaShapeAt, dist, fmtQty, holeFits, measurementQty, parseFeet, rectPoints, scaleFromPoints, scaleLabel, KIND_UNIT, type Pt, type TakeoffKind } from "@/lib/takeoff";
@@ -998,8 +998,9 @@ function Drawing({ sheet, fileUrl, zoom, setZoom, tool, data, groupId, selId, se
   };
 
   const params = new Map(data.params.map((p) => [p.id, p]));
+  const [hiddenGroups] = useHiddenGroups(sheet.job_id);
   const shift = (l: Pt[], d: Pt) => l.map(([x, y]) => [x + d[0], y + d[1]] as Pt);
-  const mine = data.measurements.filter((m) => m.sheet_id === sheet.id)
+  const mine = data.measurements.filter((m) => m.sheet_id === sheet.id && (!hiddenGroups.has(m.parameter_id) || m.id === selId))
     .map((m) => drag && drag.id === m.id ? { ...m, geometry: shift(m.geometry, drag.d), cutouts: (m.cutouts ?? []).map((c) => shift(c, drag.d)) } : m);
   const selM = mine.find((m) => m.id === selId) ?? null;
   const selGroup = selM ? params.get(selM.parameter_id) : null;
@@ -1137,6 +1138,21 @@ function Drawing({ sheet, fileUrl, zoom, setZoom, tool, data, groupId, selId, se
 
 /* --------------------------------------------------------- parameter tree */
 
+// Groups hidden on the plans, kept on the device per job (Coy, 2026-10-15: "hide measurements on
+// the plans so i can read the plans clearly again"). One store, so the panel and the sheet agree.
+const hidKey = (job: string) => `sc:takeoff-hidden:${job}`;
+function readHidden(job: string): string { try { return localStorage.getItem(hidKey(job)) ?? "[]"; } catch { return "[]"; } }
+function useHiddenGroups(job: string): [Set<string>, (ids: Set<string>) => void] {
+  const sub = useCallback((cb: () => void) => { window.addEventListener("sc:takeoff-hidden", cb); return () => window.removeEventListener("sc:takeoff-hidden", cb); }, []);
+  const raw = useSyncExternalStore(sub, () => readHidden(job), () => "[]");
+  const hid = useMemo(() => { try { return new Set<string>(JSON.parse(raw)); } catch { return new Set<string>(); } }, [raw]);
+  const save = useCallback((ids: Set<string>) => {
+    try { localStorage.setItem(hidKey(job), JSON.stringify([...ids])); } catch { /* private window */ }
+    window.dispatchEvent(new CustomEvent("sc:takeoff-hidden", { detail: job }));
+  }, [job]);
+  return [hid, save];
+}
+
 function ParamPanel({ jobId, data, groupId, setGroupId, selId, onSelect, act, onSend, onCollapse, drawer, onDelete, sheetsView }: {
   /** The desktop panel's Sheets view (Coy, 2026-10-15): the sheets full width, each with ×. */
   sheetsView?: React.ReactNode;
@@ -1148,6 +1164,8 @@ function ParamPanel({ jobId, data, groupId, setGroupId, selId, onSelect, act, on
   drawer?: boolean;
 }) {
   const [open, setOpen] = useState<Record<string, boolean>>({});
+  const [hidden, setHidden] = useHiddenGroups(jobId);
+  const [q, setQ] = useState("");
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   // Takeoffs ticked to send to the budget (Coy, 2026-10-03: "a check box next to the measurement … select the
@@ -1191,12 +1209,30 @@ function ParamPanel({ jobId, data, groupId, setGroupId, selId, onSelect, act, on
         {showSheets ? <div className="flex-1 overflow-y-auto">{sheetsView}</div> : <>
         <div className="flex-1 overflow-y-auto">
           {!data.params.length && <div className="p-3" style={{ fontSize: F.sm, color: T.ink3 }}>No groups yet. Add one — Slab on grade (area), Curb &amp; gutter (linear), Piers (count) — then draw on the sheet.</div>}
+          {data.params.length > 0 && (
+            <div className="flex items-center gap-1.5 px-2.5 py-1.5" style={{ borderBottom: `1px solid ${T.hairSoft}` }}>
+              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search parameters" aria-label="Search parameters"
+                style={{ flex: 1, minWidth: 0, height: 28, padding: "0 8px", border: `1px solid ${T.hair}`, borderRadius: 3, background: T.card, color: T.ink, fontSize: 13 }} />
+              {(() => { const allOpen = data.params.every((p) => open[p.id] !== false); return (
+                <button onClick={() => setOpen(Object.fromEntries(data.params.map((p) => [p.id, !allOpen])))} title={allOpen ? "Collapse all" : "Expand all"}
+                  style={{ height: 28, padding: "0 7px", border: `1px solid ${T.hair}`, borderRadius: 3, background: T.card, fontSize: 11.5, color: T.ink2, cursor: "pointer", whiteSpace: "nowrap" }}>{allOpen ? "Collapse all" : "Expand all"}</button>
+              ); })()}
+              {(() => { const allHid = data.params.every((p) => hidden.has(p.id)); return (
+                <button onClick={() => setHidden(allHid ? new Set() : new Set(data.params.map((p) => p.id)))} aria-label={allHid ? "Show every takeoff on the plans" : "Hide every takeoff on the plans"}
+                  title={allHid ? "Show every takeoff on the plans" : "Hide every takeoff on the plans"} style={{ width: 28, height: 28, border: `1px solid ${T.hair}`, borderRadius: 3, background: T.card, color: allHid ? T.ink3 : T.ink, cursor: "pointer" }}><Eye off={allHid} /></button>
+              ); })()}
+            </div>
+          )}
           {data.params.map((p) => {
             const t = data.totals[p.id];
-            const isOpen = open[p.id] !== false;
+            const qq = q.trim().toLowerCase();
+            const nameHit = !qq || p.name.toLowerCase().includes(qq);
+            if (qq && !nameHit && !data.measurements.some((m) => m.parameter_id === p.id && (m.name ?? "").toLowerCase().includes(qq))) return null;
+            const isHid = hidden.has(p.id);
+            const isOpen = open[p.id] !== false || (!!qq && !nameHit);
             const line = linked(p);
             const [inB, ofB] = inBudget(p);
-            const shapes = data.measurements.filter((m) => m.parameter_id === p.id);
+            const shapes = data.measurements.filter((m) => m.parameter_id === p.id && (nameHit || (m.name ?? "").toLowerCase().includes(qq)));
             return (
               <div key={p.id} style={{ borderBottom: `1px solid ${T.hairSoft}` }}>
                 <div className="flex items-center gap-2 px-2.5 py-2" style={{ background: groupId === p.id ? T.slab : "transparent", cursor: "pointer" }} onClick={() => setGroupId(p.id)}>
@@ -1219,6 +1255,9 @@ function ParamPanel({ jobId, data, groupId, setGroupId, selId, onSelect, act, on
                   </div>
                   {shapes.length > 0 && <button onClick={(e) => { e.stopPropagation(); onSend(p, shapes.map((m) => m.id), true); }} aria-label={`Send the whole ${p.name} group to the budget`}
                     title="Send the whole group to the budget as one section. Takeoffs added to it later join that section." style={{ fontFamily: disp, fontSize: 10.5, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: T.hivizText, border: `1px solid ${T.hair}`, borderRadius: 3, padding: "2px 5px", background: T.card, cursor: "pointer", flex: "0 0 auto" }}>$ Group</button>}
+                  <button onClick={(e) => { e.stopPropagation(); const n = new Set(hidden); if (isHid) n.delete(p.id); else n.add(p.id); setHidden(n); }}
+                    aria-label={isHid ? `Show ${p.name} on the plans` : `Hide ${p.name} on the plans`} title={isHid ? "Show on the plans" : "Hide on the plans"}
+                    style={{ width: 22, color: isHid ? T.ink3 : T.ink2, cursor: "pointer", flex: "0 0 auto" }}><Eye off={isHid} /></button>
                   <button onClick={(e) => { e.stopPropagation(); setEditing(editing === p.id ? null : p.id); }} aria-label={`Edit ${p.name}`} style={{ width: 22, color: T.ink3, cursor: "pointer" }}>⋯</button>
                 </div>
                 {t?.blocked && shapes.length > 0 && <div className="px-9 pb-1" style={{ fontSize: F.xs, color: T.hivizText }}>No total — {t.blocked}</div>}
@@ -1391,5 +1430,14 @@ function ShapeColors({ current, group, onPick }: { current: string | null; group
       </span>
       {SHAPE_COLORS.filter((c) => c.toLowerCase() !== group.toLowerCase()).map((c) => sw(c, current?.toLowerCase() === c.toLowerCase(), c, c))}
     </div>
+  );
+}
+
+function Eye({ off }: { off?: boolean }) {
+  return (
+    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden style={{ display: "block", margin: "auto" }}>
+      <path d="M1 8s2.6-5 7-5 7 5 7 5-2.6 5-7 5-7-5-7-5z" /><circle cx="8" cy="8" r="2" />
+      {off && <path d="M2 2l12 12" />}
+    </svg>
   );
 }

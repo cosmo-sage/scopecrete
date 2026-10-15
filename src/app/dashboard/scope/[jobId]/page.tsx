@@ -220,37 +220,64 @@ export default function ScopeBuilder() {
 
   const t = useMemo(() => takeoffOf(sections ?? [], null), [sections]);
 
-  // Drag a folded section by its grip to reorder (Coy, 2026-10-15). The list moves as the pointer
-  // passes each card's middle; on release every section whose place changed gets its sort_order.
-  const dragRef = React.useRef<{ id: string; before: string[] } | null>(null);
+  // Drag a section by its grip to reorder (Coy, 2026-10-15: "click and drag it to an area and the 2 other
+  // sections separate and it snaps in when the click is released"). The card follows the pointer, the
+  // cards it passes slide out of its way, and on release the list is reordered and each section whose
+  // place changed gets its sort_order. Styles are set on the cards directly, so nothing re-renders mid-drag.
   const secsRef = React.useRef(sections); secsRef.current = sections;
   const startDrag = (id: string, e: React.PointerEvent) => {
-    if (!sections) return;
+    const list = secsRef.current;
+    if (!list) return;
     e.preventDefault();
-    dragRef.current = { id, before: sections.map((x) => x.id) };
-    const move = (ev: PointerEvent) => {
-      const d = dragRef.current; if (!d) return;
-      const cards = [...document.querySelectorAll<HTMLElement>("[data-sec-id]")];
-      let to = cards.length - 1;
-      for (let i = 0; i < cards.length; i++) { const r = cards[i].getBoundingClientRect(); if (ev.clientY < r.top + r.height / 2) { to = i; break; } }
-      const target = cards[to]?.dataset.secId;
-      if (!target || target === d.id) return;
-      setSections((a) => {
-        if (!a) return a;
-        const from = a.findIndex((x) => x.id === d.id), at = a.findIndex((x) => x.id === target);
-        if (from < 0 || at < 0) return a;
-        const n = [...a]; const [m] = n.splice(from, 1); n.splice(at, 0, m); return n;
+    const cards = [...document.querySelectorAll<HTMLElement>("[data-sec-id]")];
+    const from = cards.findIndex((c) => c.dataset.secId === id);
+    if (from < 0) return;
+    const rects = cards.map((c) => c.getBoundingClientRect());
+    const me = cards[from];
+    const step = rects[from].height + 6; // the card and the gap above the next
+    const startY = e.clientY, startScroll = window.scrollY;
+    let to = from;
+    me.style.position = "relative"; me.style.zIndex = "30"; me.style.boxShadow = "0 8px 24px rgba(0,0,0,.18)";
+    me.style.transition = "box-shadow .15s"; document.body.style.cursor = "grabbing"; document.body.style.userSelect = "none";
+    cards.forEach((c, i) => { if (i !== from) c.style.transition = "transform .18s ease"; });
+    const place = (clientY: number) => {
+      const dy = clientY - startY + (window.scrollY - startScroll);
+      me.style.transform = `translateY(${dy}px) scale(1.01)`;
+      const mid = rects[from].top + rects[from].height / 2 + dy;
+      to = from;
+      for (let i = 0; i < cards.length; i++) {
+        if (i === from) continue;
+        const m = rects[i].top + rects[i].height / 2;
+        if (i < from && mid < m) { to = Math.min(to, i); }
+        if (i > from && mid > m) { to = Math.max(to, i); }
+      }
+      cards.forEach((c, i) => {
+        if (i === from) return;
+        const shift = from < to && i > from && i <= to ? -step : from > to && i >= to && i < from ? step : 0;
+        c.style.transform = shift ? `translateY(${shift}px)` : "";
       });
+      // Near the screen's edge, scroll the page.
+      if (clientY < 80) window.scrollBy(0, -12); else if (clientY > window.innerHeight - 80) window.scrollBy(0, 12);
     };
+    let lastY = e.clientY;
+    const move = (ev: PointerEvent) => { lastY = ev.clientY; place(ev.clientY); };
+    const onScroll = () => place(lastY);
     const up = () => {
       window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up);
-      const d = dragRef.current; dragRef.current = null;
+      window.removeEventListener("pointercancel", up); window.removeEventListener("scroll", onScroll);
+      cards.forEach((c) => { c.style.transition = ""; c.style.transform = ""; c.style.zIndex = ""; c.style.boxShadow = ""; c.style.position = ""; });
+      document.body.style.cursor = ""; document.body.style.userSelect = "";
       const a = secsRef.current;
-      if (!a || !d) return;
-      a.forEach((x, i) => { if (d.before[i] !== x.id) void send(`/api/jobs/${jobId}/sections/${x.id}`, "PATCH", { sort_order: i }).catch(() => {}); });
-      setSections(a.map((x, i) => ({ ...x, sort_order: i })));
+      if (!a || to === from) return;
+      const order = cards.map((c) => c.dataset.secId as string);
+      const [m] = order.splice(from, 1); order.splice(to, 0, m);
+      const byId = new Map(a.map((x) => [x.id, x]));
+      const next = [...order.map((x) => byId.get(x)).filter((x): x is Section => !!x), ...a.filter((x) => !order.includes(x.id))];
+      next.forEach((x, i) => { if (a[i]?.id !== x.id || x.sort_order !== i) void send(`/api/jobs/${jobId}/sections/${x.id}`, "PATCH", { sort_order: i }).catch(() => {}); });
+      setSections(next.map((x, i) => ({ ...x, sort_order: i })));
     };
     window.addEventListener("pointermove", move); window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up); window.addEventListener("scroll", onScroll, { passive: true });
   };
 
   const patchLocal = (id: string, patch: Partial<Section>) =>
@@ -418,13 +445,13 @@ export default function ScopeBuilder() {
             if (!byKey.has(g)) { byKey.set(g, []); order.push(g); }
             byKey.get(g)!.push(x);
           }
-          return order.map((g) => {
-            const p = g ? plans?.params.find((x) => x.id === g) : null;
-            const list = byKey.get(g)!;
-            const tot = list.reduce((a, x) => { const t = shapesOf(x.id, plans); return t.total !== null && a !== null ? a + t.total : null; }, 0 as number | null);
-            return (
-              <div key={g ?? "none"}>
-                {list.map((s) => {
+          // In the sections' own order, so dragging one moves it where it lands (Coy, 2026-10-15);
+          // its takeoff group is named on its row.
+          return sections.map((s) => {
+                  const g = groupOf(s.id, plans);
+                  const p = g ? plans?.params.find((x) => x.id === g) : null;
+                  const list = byKey.get(g)!;
+                  const tot = list.reduce((a, x) => { const t = shapesOf(x.id, plans); return t.total !== null && a !== null ? a + t.total : null; }, 0 as number | null);
                   const shapeIds = new Set(shapesOf(s.id, plans).ids);
                   const sh = shapesOf(s.id, plans);
                   return (
@@ -453,9 +480,6 @@ export default function ScopeBuilder() {
                       onRemove={() => void removeSection(s.id)}
                       onGrip={sections.length > 1 ? (e) => startDrag(s.id, e) : undefined} />
                   );
-                })}
-              </div>
-            );
           });
         })()}
 
@@ -659,7 +683,7 @@ function SectionCard({ group, s, index, err, onLocal, onSave, onRemove, jobType,
   return (
     <div data-sec-id={s.id} style={{ background: T.card, borderBottom: `1px solid ${T.hair}`, marginTop: index === 0 ? 0 : 6 }}>
       <div className={`px-3 ${open ? "pt-2.5" : "py-2"} flex items-center gap-2 flex-wrap`}>
-        {!open && onGrip && (
+        {onGrip && (
           <span role="button" aria-label="Drag to reorder" title="Drag to reorder" onPointerDown={onGrip}
             style={{ cursor: "grab", touchAction: "none", color: T.ink3, flex: "none", display: "flex", padding: "2px 0" }}>
             <svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor" aria-hidden>

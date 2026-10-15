@@ -394,7 +394,33 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
         <div className="hidden lg:flex" style={{ flex: "0 0 auto", minHeight: 0 }}>
           <ParamPanel jobId={jobId} data={data} groupId={groupId} setGroupId={setGroupId} selId={selId}
             onSelect={(m) => { setSelId(m.id); setGroupId(m.parameter_id); if (m.sheet_id !== sheet?.id) setSheetId(m.sheet_id); setTool("select"); }}
-            act={act} onDelete={deleteRec} onSend={onSend} onCollapse={() => setPanel(false)} />
+            act={act} onDelete={deleteRec} onSend={onSend} onCollapse={() => setPanel(false)}
+            sheetsView={(
+              <div className="flex flex-col" style={{ padding: 8, gap: 6 }}>
+                {sheets.map((s) => {
+                  const on = s.id === sheet?.id;
+                  const f = files.find((x) => x.id === s.file_id);
+                  return (
+                    <div key={s.id} className="flex items-stretch rounded" style={{ border: `1px solid ${on ? T.hiviz : T.hair}`, background: on ? T.hivizDim : T.card }}>
+                      <button onClick={() => setSheetId(s.id)} aria-current={on ? "true" : undefined} className="text-left flex-1"
+                        style={{ padding: "6px 8px", minWidth: 0, background: "transparent", border: "none", cursor: "pointer" }}>
+                        <span style={{ display: "block", fontSize: 13, color: T.ink }}><b style={{ fontFamily: strong, fontWeight: 600 }}>{sheetLabel(s)}</b>{" "}<span style={{ color: T.ink2 }}>{s.title ?? "No title read"}</span></span>
+                        <span style={{ display: "block", fontSize: 10.5, color: T.ink3, ...clipTxt }}>p.{s.page}{f ? ` · ${f.name}` : ""} · <span style={{ color: s.scale_ft_per_pt ? T.green : T.ink3 }}>{s.scale_ft_per_pt ? "✓ scale set" : s.scale_method === "none" ? "not to scale" : "no scale yet"}</span></span>
+                      </button>
+                      <button type="button" onClick={() => void removeSheet(s)} aria-label={`Remove ${sheetLabel(s)} from Takeoffs`} title="Remove from Takeoffs"
+                        className="shrink-0 flex items-center justify-center" style={{ width: 34, background: "transparent", border: "none", color: T.ink3, fontSize: 18, cursor: "pointer" }}>×</button>
+                    </div>
+                  );
+                })}
+                {removed && (
+                  <div className="flex items-center gap-2 rounded" style={{ padding: "6px 8px", background: T.sunk, fontSize: 12, color: T.ink2 }}>
+                    <span style={{ flex: 1, minWidth: 0, ...clipTxt }}>Removed {sheetLabel(removed)}</span>
+                    <button type="button" onClick={() => void undoRemove()} style={{ background: "transparent", border: "none", color: T.hivizText, fontWeight: 600, cursor: "pointer" }}>Undo</button>
+                  </div>
+                )}
+                {!sheets.length && <div style={{ fontSize: F.xs, color: T.ink3, padding: 6 }}>No sheets yet. Add a plan PDF on the job&apos;s Files page.</div>}
+              </div>
+            )} />
         </div>
       ) : (
         <button onClick={() => setPanel(true)} aria-label="Show parameters" className="hidden lg:flex flex-col items-center pt-3 gap-2"
@@ -1105,7 +1131,9 @@ function Drawing({ sheet, fileUrl, zoom, setZoom, tool, data, groupId, selId, se
 
 /* --------------------------------------------------------- parameter tree */
 
-function ParamPanel({ jobId, data, groupId, setGroupId, selId, onSelect, act, onSend, onCollapse, drawer, onDelete }: {
+function ParamPanel({ jobId, data, groupId, setGroupId, selId, onSelect, act, onSend, onCollapse, drawer, onDelete, sheetsView }: {
+  /** The desktop panel's Sheets view (Coy, 2026-10-15): the sheets full width, each with ×. */
+  sheetsView?: React.ReactNode;
   /** Removing a takeoff, so Back can put it back. */
   onDelete?: (m: Meas) => Promise<void>;
   jobId: string; data: PlansData; groupId: string | null; setGroupId: (id: string) => void; selId: string | null;
@@ -1131,18 +1159,30 @@ function ParamPanel({ jobId, data, groupId, setGroupId, selId, onSelect, act, on
   // How many of a group's shapes are counted in budget sections (migration 069).
   const inBudget = (p: Param) => { const ms = data.measurements.filter((m) => m.parameter_id === p.id); return [ms.filter((m) => m.section_id).length, ms.length] as const; };
   const nShapes = data.measurements.length;
+  const [view, setView] = useState<"params" | "sheets">("params");
+  const showSheets = !!sheetsView && view === "sheets";
   return (
     <div className={drawer ? "flex flex-col" : "sc-param-panel flex flex-col"} style={drawer ? { width: "100%", height: "100%", background: T.card, minHeight: 0 }
       : { width: "100%", maxHeight: 260, flex: "0 0 auto", background: T.card, borderRight: `1px solid ${T.hair}`, borderBottom: `1px solid ${T.hair}`, minHeight: 0 }}>
       <style>{`@media (min-width:1024px){.sc-param-panel{width:340px!important;flex:0 0 340px!important;max-height:none!important;border-bottom:none!important}}`}</style>
       <div className="flex flex-col" style={{ width: "100%", minHeight: 0, flex: "1 1 auto" }}>
         <div className="flex items-center gap-2 px-3 pt-2 pb-1.5" style={{ borderBottom: `1px solid ${T.hairSoft}` }}>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontFamily: light, fontWeight: 300, fontSize: 20, lineHeight: 1.1 }}>Parameters</div>
-            <div style={{ fontSize: F.xs, color: T.ink3 }}>{data.params.length} group{data.params.length === 1 ? "" : "s"} · {nShapes} takeoff{nShapes === 1 ? "" : "s"}</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            {sheetsView ? (
+              <div className="flex" role="tablist" style={{ gap: 4 }}>
+                {(["params", "sheets"] as const).map((v) => (
+                  <button key={v} role="tab" aria-selected={view === v} onClick={() => setView(v)}
+                    style={{ height: 28, padding: "0 10px", borderRadius: 3, border: `1px solid ${view === v ? T.ink : T.hair}`, background: view === v ? T.ink : "transparent", color: view === v ? T.card : T.ink2, fontFamily: disp, fontWeight: 600, letterSpacing: ".06em", textTransform: "uppercase", fontSize: 12, cursor: "pointer" }}>
+                    {v === "params" ? "Parameters" : `Sheets · ${data.sheets.length}`}
+                  </button>
+                ))}
+              </div>
+            ) : <div style={{ fontFamily: light, fontWeight: 300, fontSize: 20, lineHeight: 1.1 }}>Parameters</div>}
+            <div style={{ fontSize: F.xs, color: T.ink3, marginTop: 2 }}>{showSheets ? `${data.sheets.filter((x) => x.scale_ft_per_pt).length} of ${data.sheets.length} scaled` : `${data.params.length} group${data.params.length === 1 ? "" : "s"} · ${nShapes} takeoff${nShapes === 1 ? "" : "s"}`}</div>
           </div>
           <button onClick={onCollapse} aria-label="Hide parameters" style={{ width: 28, height: 28, border: `1px solid ${T.hair}`, borderRadius: 3, cursor: "pointer" }}>‹</button>
         </div>
+        {showSheets ? <div className="flex-1 overflow-y-auto">{sheetsView}</div> : <>
         <div className="flex-1 overflow-y-auto">
           {!data.params.length && <div className="p-3" style={{ fontSize: F.sm, color: T.ink3 }}>No groups yet. Add one — Slab on grade (area), Curb &amp; gutter (linear), Piers (count) — then draw on the sheet.</div>}
           {data.params.map((p) => {
@@ -1267,6 +1307,7 @@ function ParamPanel({ jobId, data, groupId, setGroupId, selId, onSelect, act, on
             );
           })()}
         </div>
+        </>}
       </div>
     </div>
   );

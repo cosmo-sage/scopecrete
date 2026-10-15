@@ -47,6 +47,7 @@ const UNIT_RULE_SAYS: Record<string, string> = {
 };
 import { useWide } from "@/lib/v34/use-wide";
 import { CostAnalysis } from "@/components/v34/cost-analysis";
+import { bucketOf, daysFromLines } from "@/lib/cost-analysis";
 import { Cell } from "@/components/v34/cell";
 import { RiskEditor, riskSummary } from "@/components/v34/risk-editor";
 import { riskEmpty, type RiskSettings } from "@/lib/risk";
@@ -92,6 +93,8 @@ export interface BudgetSummary {
   overhead_pct: number | null; margin_pct: number | null;
   /** Each section's own lines, for its folded card: price, cost and how many are not priced. */
   areas: Record<string, { lines: number; cost: number; price: number; blocked: number }>;
+  /** The labor lines' cost, and the days worked out from them (daysFromLines), for the rail. */
+  labor: number; days_auto: number | null;
 }
 
 /** A cost code is the number a JobTread group's name starts with (migration 050 made codes into groups). */
@@ -218,6 +221,9 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
       has_lines: data.lines.length > 0, tax_on: data.estimate?.tax_on ?? true,
       tiers: res.tiers.map((t) => ({ ...t, label: null })),
       minimum, overhead_pct: data.settings.overhead_pct, margin_pct: data.settings.margin_pct,
+      labor: data.lines.reduce((a, l) => a + (bucketOf(String(l.cost_type)) === "labor" ? res.lines[l.id]?.ext_cost ?? 0 : 0), 0),
+      days_auto: daysFromLines(data.lines.map((l) => ({ cost_type: String(l.cost_type), qty: res.lines[l.id]?.qty ?? null, unit: l.unit })),
+        { size: crew?.size ?? null, hours: crew?.hours ?? null }),
       areas: Object.fromEntries(sections.map((s) => {
         const ls = data.lines.filter((l) => l.section_id === s.id);
         return [s.id, {
@@ -228,7 +234,7 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
         }];
       })),
     });
-  }, [data, res, onSummary, minimum, sections]);
+  }, [data, res, onSummary, minimum, sections, crew?.size, crew?.hours]);
 
   if (!data || !res) {
     return (

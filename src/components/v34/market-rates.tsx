@@ -149,7 +149,6 @@ export function MarketRates({ jobId, refresh, onChanged, onSheets }: {
   const kept = d.rates?.rates.length ?? 0;
   const lineName = (id: string) => d.lines.find((l) => l.id === id)?.name ?? "";
 
-  const priceCard = <PriceVsRange d={d} />;
 
   const pastCard = (
     <div className="rounded" style={{ background: T.card, border: `1px solid ${T.hair}`, padding: "10px 12px" }}>
@@ -411,9 +410,7 @@ export function MarketRates({ jobId, refresh, onChanged, onSheets }: {
       {err && <div style={{ fontSize: 12, color: T.red }}>{err}</div>}
       {!d.has_budget && <div style={{ fontSize: 12.5, color: T.ink2 }}>Add items on the Proposed budget, then compare them here.</div>}
 
-      {wide ? (
-        <div className="grid gap-2" style={{ gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)" }}>{priceCard}{pastCard}</div>
-      ) : <>{priceCard}{pastCard}</>}
+      {pastCard}
 
       {secRows.length > 0 && sectionCard}
 
@@ -527,7 +524,7 @@ export function PriceVsRange({ d, flat }: { d: MarketData; flat?: boolean }) {
           </div>
         </>
       )}
-      <div style={{ fontSize: 11, color: DARK_2, marginTop: 6, lineHeight: 1.4, ...nums }}>
+      <div style={{ fontSize: 12, color: DARK_2, marginTop: 6, lineHeight: 1.45, whiteSpace: "normal", overflowWrap: "anywhere", ...nums }}>
         {range
           ? <>Going rate installed {money(range.low)}–{money(range.high)}/SF, typical {money(range.typical)}: the middle of {range.sources} installed price{range.sources === 1 ? "" : "s"} per SF{d.city ? ` near ${d.city}` : ""}{d.rates ? `, looked up ${when(d.rates.asked_at)}` : ""}{sites.length ? ` from ${sites.slice(0, 4).join(", ")}${sites.length > 4 ? ` and ${sites.length - 4} more` : ""}` : ""}.</>
           : d.rates ? `No installed price per SF in the ${when(d.rates.asked_at)} lookup.` : "Going rate not looked up yet (Budget → Market rate)."}
@@ -537,13 +534,13 @@ export function PriceVsRange({ d, flat }: { d: MarketData; flat?: boolean }) {
 }
 
 /** The same card loading itself, for the job's dark totals box. */
-export function RailMarket({ jobId }: { jobId: string }) {
+export function RailMarket({ jobId, refresh = 0 }: { jobId: string; refresh?: number }) {
   const [d, setD] = useState<MarketData | null>(null);
   useEffect(() => {
     let off = false;
     send(`/api/jobs/${jobId}/budget/market`, "GET").then((b) => { if (!off) setD(b); }).catch(() => {});
     return () => { off = true; };
-  }, [jobId]);
-  if (!d || (!d.rates && !d.totals)) return null;
+  }, [jobId, refresh]);
+  if (!d) return null;
   return <div style={{ borderTop: "1px solid #3A3A3A" }}><PriceVsRange d={d} flat /></div>;
 }

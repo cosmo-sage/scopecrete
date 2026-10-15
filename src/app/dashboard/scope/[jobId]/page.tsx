@@ -424,18 +424,12 @@ export default function ScopeBuilder() {
             const tot = list.reduce((a, x) => { const t = shapesOf(x.id, plans); return t.total !== null && a !== null ? a + t.total : null; }, 0 as number | null);
             return (
               <div key={g ?? "none"}>
-                {p && (
-                  <div className="px-3 pt-3 pb-1 flex items-center gap-2" style={{ fontSize: F.sm }}>
-                    <span style={{ width: 10, height: 10, borderRadius: 2, background: p.color }} />
-                    <span style={{ fontFamily: disp, fontWeight: 700, letterSpacing: ".04em", textTransform: "uppercase" }}>{p.name}</span>
-                    <span style={{ color: T.ink3, fontSize: F.xs }}>takeoff group · {list.length} section{list.length === 1 ? "" : "s"}{tot !== null ? ` · ${fmtQty(tot, { area: "SF", linear: "LF", count: "EA" }[p.kind])}` : ""}</span>
-                  </div>
-                )}
                 {list.map((s) => {
                   const shapeIds = new Set(shapesOf(s.id, plans).ids);
                   const sh = shapesOf(s.id, plans);
                   return (
                     <SectionCard key={s.id} s={s} index={sections.indexOf(s)}
+                      group={p ? { name: p.name, color: p.color, note: list.length > 1 && tot !== null ? `${list.length} sections · ${fmtQty(tot, { area: "SF", linear: "LF", count: "EA" }[p.kind])}` : null } : null}
                       open={openSecs ? openSecs.has(s.id) : sections.length === 1} onToggle={() => toggleSec(s.id, sections.map((x) => x.id))}
                       money={budget?.areas?.[s.id] ?? null} err={saveErr[s.id]} rcards={rcards} jobType={job.job_type} jobId={jobId} onSlot={onSlot}
                       sheets={sheetsOf(s)} hasPlans={planSheets.length > 0} onSheets={(start) => openSheets(s, start)}
@@ -534,7 +528,9 @@ const MODES: [ "dims" | "area" | "linear" | "count", string, string][] = [
   ["dims", "Length × width", T.chalk], ["area", "Area only", T.green], ["linear", "Linear ft", T.hiviz], ["count", "Count", T.violet],
 ];
 
-function SectionCard({ s, index, err, onLocal, onSave, onRemove, jobType, jobId, photos, sheets, hasPlans, onSheets, takeoff, takeoffUnit, onSlot, open, onToggle, onGrip, money: m }: {
+function SectionCard({ group, s, index, err, onLocal, onSave, onRemove, jobType, jobId, photos, sheets, hasPlans, onSheets, takeoff, takeoffUnit, onSlot, open, onToggle, onGrip, money: m }: {
+  /** Its takeoff group, shown on the header row (Coy, 2026-10-15: the heading above it was confusing). */
+  group?: { name: string; color: string; note: string | null } | null;
   s: Section; index: number; err?: string; rcards: RCard[]; jobType: string | null; jobId: string;
   /** Open, or folded to one line (Coy, 2026-10-08: "less busy and easier to read"). */
   open: boolean; onToggle: () => void;
@@ -680,6 +676,12 @@ function SectionCard({ s, index, err, onLocal, onSave, onRemove, jobType, jobId,
             {missingAny && <span title={missingWhat} style={{ width: 7, height: 7, borderRadius: 4, background: T.hiviz, flex: "none" }} />}
             <span style={clip}>{s.name || `Section ${index + 1}`}</span>
           </button>
+        )}
+        {group && (
+          <span title={`Takeoff group: ${group.name}${group.note ? ` · ${group.note}` : ""}`} className="inline-flex items-center gap-1" style={{ fontSize: F.xs, color: T.ink3, flex: "0 1 auto", minWidth: 0, ...clip }}>
+            <span style={{ width: 8, height: 8, borderRadius: 2, background: group.color, flex: "none" }} />
+            <span style={clip}>{group.name}{group.note ? ` · ${group.note}` : ""}</span>
+          </span>
         )}
         {open ? (
           // No kind-of-area picker here (Coy, 2026-10-10: "remove the section type completely from here").
@@ -1147,19 +1149,12 @@ function BudgetRail({ budget, sqft, crew, setCrew, onCrewDays }: {
         );
       })}
       <div className="px-4 py-3" style={line}>
-        <label className="flex items-center gap-2" style={{ fontSize: F.xs, color: "#C3CBD4" }}>
-          Days on this job
-          <input type="number" inputMode="decimal" value={crew}
-            onChange={(e) => setCrew(e.target.value === "" ? "" : Number(e.target.value))}
-            onBlur={() => onCrewDays(crew === "" ? null : Number(crew))}
-            className="rounded px-1.5 outline-none" style={{ width: 60, height: 28, background: "#20262C", color: "#fff",
-              border: `1px solid ${T.darkHair}`, fontFamily: disp, fontSize: F.md, ...nums }} />
-        </label>
+        <div style={{ fontSize: F.xs, color: "#C3CBD4", ...nums }}>Days on this job: {crew === "" ? "worked out from the sections" : crew}</div>
         <div style={{ fontSize: F.xs, color: "#C3CBD4", marginTop: 6, lineHeight: 1.45, ...nums }}>
           Job minimum: {min.ok ? `${money0(min.minimum)} — ${min.days} days × ${money0(min.day_minimum)} a day` : `needs ${min.blocked.join(" and ")}`}
         </div>
         <div style={{ fontSize: F.xs, color: dim, marginTop: 6, lineHeight: 1.45 }}>
-          Crew, profit a day and cost per SF are in the Cost analysis under the sections.
+          Crew and days are in Job totals under Labor, worked out from the sections&apos; labor lines.
         </div>
       </div>
     </>

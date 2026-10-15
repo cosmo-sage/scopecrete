@@ -20,7 +20,7 @@ import React, { useMemo, useState } from "react";
 import { T, F, disp, eyebrow, nums, clip, money, money0 } from "@/lib/v34/tokens";
 import { Cell } from "@/components/v34/cell";
 import { quantities, type SectionInput } from "@/lib/engine";
-import { analyse, crewMath, perUnit, type AnalysisLine, type Bucket } from "@/lib/cost-analysis";
+import { analyse, daysFromLines, crewMath, perUnit, type AnalysisLine, type Bucket } from "@/lib/cost-analysis";
 
 export const COLORS: Record<Bucket | "overhead" | "risk" | "profit", string> = {
   risk: "#B5412C",
@@ -30,7 +30,7 @@ export const COLORS: Record<Bucket | "overhead" | "risk" | "profit", string> = {
 type Per = "$" | "sf" | "sy" | "lf";
 const PER_LABEL: Record<Per, string> = { $: "$", sf: "/SF", sy: "/SY", lf: "/LF" };
 
-export function CostAnalysis({ lines, sections, tax, discount, overheadPct, days, crew, dayMinimum, onCrew, wide }: {
+export function CostAnalysis({ lines, sections, tax, discount, overheadPct, days: typedDays, crew, dayMinimum, onCrew, wide }: {
   lines: AnalysisLine[];
   sections: Array<SectionInput & { id: string }>;
   tax: number; discount: number; overheadPct: number | null;
@@ -56,6 +56,9 @@ export function CostAnalysis({ lines, sections, tax, discount, overheadPct, days
     return { id: s.id, name: s.name || "Unnamed area", sqft: q.sqft, lf: q.count_unit === "LF" ? q.count : null };
   }), [sections]);
   const a = useMemo(() => analyse(lines, areas, { section, tax, discount }), [lines, areas, section, tax, discount]);
+  // Days are worked out from the sections' labor lines unless typed (Coy, 2026-10-15).
+  const autoDays = useMemo(() => daysFromLines(lines, { size: crew?.size ?? null, hours: crew?.hours ?? null }), [lines, crew?.size, crew?.hours]);
+  const days = typedDays ?? autoDays;
   const c = crewMath({ size: crew?.size ?? null, days, hours: crew?.hours ?? null }, a);
 
   // A per-unit choice that doesn't fit what's picked falls back to dollars.
@@ -90,6 +93,47 @@ export function CostAnalysis({ lines, sections, tax, discount, overheadPct, days
     </div>
   );
 
+  const numBox = (label: string, value: number | null, onSave: (v: number | null) => void, hint?: string, disabled?: boolean) => (
+    <label className="flex flex-col gap-0.5" style={{ minWidth: 0 }}>
+      <span style={{ ...eyebrow }}>{label}</span>
+      {disabled ? <span style={{ fontSize: F.xs, color: T.ink3, height: 28, display: "flex", alignItems: "center" }}>{hint}</span>
+        : <span className="inline-flex items-center rounded" style={{ border: `1px solid ${T.hair}`, background: T.card, height: 30, width: "100%", maxWidth: 110, paddingLeft: 2 }}>
+            <Cell value={value} label={label} placeholder={hint ?? ""} onSave={onSave} width={64} />
+          </span>}
+    </label>
+  );
+
+  const crewBox = (
+    <div style={{ minWidth: 0 }}>
+      <div style={{ ...eyebrow }}>Crew and days</div>
+      <div className="mt-1 grid grid-cols-3 gap-2">
+        {numBox("Crew", crew?.size ?? null, (v) => void save({ crew_size: v === null ? null : Math.round(v) }), crew ? "people" : "waits for 093", !crew)}
+        {numBox(typedDays === null && autoDays !== null ? "Days ƒ" : "Days", typedDays, (v) => void save({ duration_days: v }), autoDays !== null ? String(autoDays) : "days")}
+        {numBox("Hours a day", crew?.hours ?? null, (v) => void save({ crew_hours: v }), "8", !crew)}
+      </div>
+      <div style={{ fontSize: F.xs, color: T.ink3, marginTop: 4 }}>
+        {typedDays !== null ? <>Days typed{autoDays !== null ? <> · the sections&apos; labor works out to {autoDays} · <button onClick={() => void save({ duration_days: null })} style={{ color: T.chalk, textDecoration: "underline", cursor: "pointer" }}>↺ use it</button></> : ""}</>
+          : autoDays !== null ? <>ƒ {autoDays} days from the sections&apos; labor lines in days or hours · type to change</>
+          : <>No labor line is counted in days or hours, so type the days.</>}
+      </div>
+      {err && <div style={{ fontSize: F.xs, color: T.red, marginTop: 4 }}>{err}</div>}
+      <div className="mt-2" style={{ fontSize: F.xs, color: T.ink2, lineHeight: 1.6, ...nums }}>
+        {c.manDays !== null
+          ? <>{c.manDays.toLocaleString("en-US", { maximumFractionDigits: 1 })} man-days · {c.manHours!.toLocaleString("en-US", { maximumFractionDigits: 1 })} man-hours</>
+          : <span style={{ color: T.ink3 }}>Set {c.needs.join(" and ")} for man-days and man-hours.</span>}
+        {c.sfPerDay !== null && <> · {Math.round(c.sfPerDay).toLocaleString("en-US")} SF a crew day</>}
+        {c.laborPerHour !== null && <> · labor {money(c.laborPerHour)} a man-hour</>}
+        <div>
+          {dayMinimum !== null && days !== null && days > 0 ? (() => {
+            const min = dayMinimum * days;
+            const short = min - sold;
+            return <>Job minimum {money0(min)} ({days} × {money0(dayMinimum)}) · {section !== "all" ? "for the whole job" : short > 0 ? <span style={{ color: T.red }}>short by {money0(short)}</span> : a.unpriced.length ? <span style={{ color: T.ink3 }}>not all priced yet</span> : <span style={{ color: T.green }}>cleared</span>}</>;
+          })() : <span style={{ color: T.ink3 }}>Job minimum needs {dayMinimum === null ? "a day minimum (Settings → Cost book)" : "days"}.</span>}
+        </div>
+      </div>
+    </div>
+  );
+
   const breakdown = (
     <div style={{ minWidth: 0 }}>
       <div className="flex rounded overflow-hidden" style={{ height: 8, background: T.hairSoft }} aria-hidden="true">
@@ -109,6 +153,7 @@ export function CostAnalysis({ lines, sections, tax, discount, overheadPct, days
                 <span style={{ fontSize: F.xs, color: T.ink3, width: 48, textAlign: "right" }}>{share(r.v)}</span>
                 <span style={{ fontFamily: disp, fontSize: F.md, fontWeight: 600, minWidth: 84, textAlign: "right" }}>{r.lines && !r.lines.length ? "—" : fmt(r.v)}</span>
               </button>
+              {r.k === "labor" && <div className="px-2.5 pb-2.5" style={{ paddingLeft: 40 }}>{crewBox}</div>}
               {isOpen && r.note && <div className="px-2.5 pb-2" style={{ fontSize: F.xs, color: T.ink2, paddingLeft: 40 }}>{r.note}</div>}
               {isOpen && r.lines && r.lines.length > 0 && (
                 <div className="pb-1.5" style={{ background: T.slab }}>
@@ -164,42 +209,6 @@ export function CostAnalysis({ lines, sections, tax, discount, overheadPct, days
     </div>
   );
 
-  const numBox = (label: string, value: number | null, onSave: (v: number | null) => void, hint?: string, disabled?: boolean) => (
-    <label className="flex flex-col gap-0.5" style={{ minWidth: 0 }}>
-      <span style={{ ...eyebrow }}>{label}</span>
-      {disabled ? <span style={{ fontSize: F.xs, color: T.ink3, height: 28, display: "flex", alignItems: "center" }}>{hint}</span>
-        : <span className="inline-flex items-center rounded" style={{ border: `1px solid ${T.hair}`, background: T.card, height: 30, width: "100%", maxWidth: 110, paddingLeft: 2 }}>
-            <Cell value={value} label={label} placeholder={hint ?? ""} onSave={onSave} width={64} />
-          </span>}
-    </label>
-  );
-
-  const crewBox = (
-    <div style={{ minWidth: 0 }}>
-      <div style={{ ...eyebrow }}>Crew and days</div>
-      <div className="mt-1 grid grid-cols-3 gap-2">
-        {numBox("Crew", crew?.size ?? null, (v) => void save({ crew_size: v === null ? null : Math.round(v) }), crew ? "people" : "waits for 093", !crew)}
-        {numBox("Days", days, (v) => void save({ duration_days: v }), "days")}
-        {numBox("Hours a day", crew?.hours ?? null, (v) => void save({ crew_hours: v }), "8", !crew)}
-      </div>
-      {err && <div style={{ fontSize: F.xs, color: T.red, marginTop: 4 }}>{err}</div>}
-      <div className="mt-2" style={{ fontSize: F.xs, color: T.ink2, lineHeight: 1.6, ...nums }}>
-        {c.manDays !== null
-          ? <>{c.manDays.toLocaleString("en-US", { maximumFractionDigits: 1 })} man-days · {c.manHours!.toLocaleString("en-US", { maximumFractionDigits: 1 })} man-hours</>
-          : <span style={{ color: T.ink3 }}>Set {c.needs.join(" and ")} for man-days and man-hours.</span>}
-        {c.sfPerDay !== null && <> · {Math.round(c.sfPerDay).toLocaleString("en-US")} SF a crew day</>}
-        {c.laborPerHour !== null && <> · labor {money(c.laborPerHour)} a man-hour</>}
-        <div>
-          {dayMinimum !== null && days !== null && days > 0 ? (() => {
-            const min = dayMinimum * days;
-            const short = min - sold;
-            return <>Job minimum {money0(min)} ({days} × {money0(dayMinimum)}) · {section !== "all" ? "for the whole job" : short > 0 ? <span style={{ color: T.red }}>short by {money0(short)}</span> : a.unpriced.length ? <span style={{ color: T.ink3 }}>not all priced yet</span> : <span style={{ color: T.green }}>cleared</span>}</>;
-          })() : <span style={{ color: T.ink3 }}>Job minimum needs {dayMinimum === null ? "a day minimum (Settings → Cost book)" : "days"}.</span>}
-        </div>
-      </div>
-    </div>
-  );
-
   const profitBox = (
     <div style={{ minWidth: 0 }}>
       <div style={{ ...eyebrow }}>Profit{a.margin !== null ? ` · margin ${(a.margin * 100).toFixed(1)}%` : ""}
@@ -242,7 +251,6 @@ export function CostAnalysis({ lines, sections, tax, discount, overheadPct, days
         {breakdown}
         <div className="flex flex-col gap-3">
           {profitBox}
-          {crewBox}
         </div>
       </div>
     </div>

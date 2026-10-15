@@ -81,3 +81,11 @@ test("crew of 4 for 2 days: man-hours, SF a day, labor per hour, profit per day"
   near(n.netPerDay, 1206.5);
   assert.equal(n.manHours, null);
 });
+
+import { daysFromLines } from "../src/lib/cost-analysis.ts";
+test("days from the sections' labor lines", () => {
+  const L = (cost_type, qty, unit) => ({ cost_type, qty, unit });
+  assert.equal(daysFromLines([L("labor", 2, "Days"), L("labor", 1.2, "day"), L("material", 9, "Days")], { size: null, hours: null }), 3.5);
+  assert.equal(daysFromLines([L("labor", 40, "hr")], { size: 4, hours: 10 }), 1);
+  assert.equal(daysFromLines([L("labor", 900, "SqFt")], { size: 4, hours: null }), null);
+});

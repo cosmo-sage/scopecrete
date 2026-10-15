@@ -125,3 +125,25 @@ export function crewMath(c: Crew, a: Pick<Analysis, "gross" | "net" | "units" | 
     netPerManDay: manDays !== null ? a.net / manDays : null,
   };
 }
+
+/**
+ * Days on the job worked out from the sections' labor lines (Coy, 2026-10-15:
+ * "Days on the job should be an automatic calculation from the sections").
+ * A labor line counted in days adds its days (sections are worked one after
+ * another); one counted in hours adds hours ÷ (crew × hours a day), or ÷ hours a
+ * day with no crew set (crew-hours). Rounded up to the half day. Null when no
+ * labor line is counted in time — then the days are typed.
+ */
+export function daysFromLines(lines: Array<Pick<AnalysisLine, "cost_type" | "qty" | "unit">>, crew: { size: number | null; hours: number | null }): number | null {
+  const hours = crew.hours !== null && crew.hours > 0 ? crew.hours : 8;
+  const size = crew.size !== null && crew.size > 0 ? crew.size : 1;
+  let days = 0, any = false;
+  for (const l of lines) {
+    if (bucketOf(l.cost_type) !== "labor" || l.qty === null || !(l.qty > 0)) continue;
+    const u = (l.unit ?? "").trim().toLowerCase().replace(/\.$/, "");
+    if (/^(day|days|da|dy|crew ?days?)$/.test(u)) { days += l.qty; any = true; }
+    else if (/^(hr|hrs|hour|hours|h)$/.test(u)) { days += l.qty / (size * hours); any = true; }
+    else if (/^(man ?-?hours?|mh|mhr)$/.test(u)) { days += l.qty / (size * hours); any = true; }
+  }
+  return any ? Math.ceil(days * 2) / 2 : null;
+}

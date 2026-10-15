@@ -85,13 +85,20 @@ export function Emblem({ size, spin, state = "idle", className }: { size: number
     const color = i === 0 ? ORANGE : STEEL, rev = i === 1, th = (POSE[i] * Math.PI) / 180, dur = DUR[i] / (st.speed || 1);
     const base: CSSProperties = { position: "absolute", display: "block", inset: 0, border: `${bw}px solid ${color}`, borderRadius: "50%", boxSizing: "border-box" };
     // Shading goes on each slice, not a wrapper: opacity on an ancestor would flatten the 3D stack.
-    const slab = (key: string, extra: CSSProperties, anim: CSSProperties) =>
+    const slab = (key: string, extra: (c: string) => CSSProperties, anim: CSSProperties) =>
       Array.from({ length: LAYERS }, (_, k) => {
         const z = -depth / 2 + (depth * k) / (LAYERS - 1), edge = k === 0 || k === LAYERS - 1;
-        return <span key={key + k} style={{ ...base, ...extra, ...anim, transform: `translateZ(${z}px)`, ...(edge ? { borderColor: shade(color, 72) } : null) }} />;
+        const c = edge ? shade(color, 72) : color;
+        return <span key={key + k} style={{ ...base, ...extra(c), ...anim, transform: `translateZ(${z}px) rotateZ(-45deg)` }} />;
       });
-    const half = (key: string, clip: string, delay: number, still: number) =>
-      slab(key, { clipPath: clip }, turning ? { animation: `scShade ${dur}s linear infinite`, animationDelay: `${delay * dur}s` } : { opacity: st.dim ? 0.4 : still });
+    // A half ring is two of the circle's four border arcs, turned 45° — never a
+    // clip-path: Chrome projects a clipped 3D layer turning edge-on as a huge
+    // wedge across the page (Coy's recording, 2026-10-15), and the wrapper's
+    // clip-path didn't hold it.
+    const halfOf = (sides: [string, string]) => (c: string): CSSProperties => ({
+      borderColor: "transparent", [`border${sides[0]}Color`]: c, [`border${sides[1]}Color`]: c });
+    const half = (key: string, sides: [string, string], delay: number, still: number) =>
+      slab(key, halfOf(sides), turning ? { animation: `scShade ${dur}s linear infinite`, animationDelay: `${delay * dur}s` } : { opacity: st.dim ? 0.4 : still });
     const sL = 0.62 + 0.38 * Math.sin(th) * (rev ? -1 : 1), sR = 0.62 - 0.38 * Math.sin(th) * (rev ? -1 : 1);
     const turn: CSSProperties = { position: "absolute", display: "block", inset: 0, transformStyle: "preserve-3d" };
     if (turning) turn.animation = `${rev ? "scOrbitR" : "scOrbit"} ${dur}s linear infinite`;
@@ -102,8 +109,8 @@ export function Emblem({ size, spin, state = "idle", className }: { size: number
     return (
       <span key={i} style={outer}>
         <span style={turn}>
-          {half("l", "inset(0 50% 0 0)", rev ? -0.5 : 0, sL)}
-          {half("r", "inset(0 0 0 50%)", rev ? 0 : -0.5, sR)}
+          {half("l", ["Left", "Top"], rev ? -0.5 : 0, sL)}
+          {half("r", ["Right", "Bottom"], rev ? 0 : -0.5, sR)}
         </span>
       </span>
     );
@@ -139,6 +146,7 @@ export function Emblem({ size, spin, state = "idle", className }: { size: number
       </>
     );
   }
+  const pad = Math.round(size * 0.4);
   const dust = spin && st.dust ? Array.from({ length: st.dust }, (_, k) => {
     const a = (k / st.dust) * Math.PI * 2 + (k % 3) * 0.4, r = size * (0.34 + (k % 4) * 0.09), d = Math.max(1.5, (size * (1.3 + (k % 3))) / 100);
     const v = { ["--dx" as string]: `${Math.cos(a) * r}px`, ["--dy" as string]: `${Math.sin(a) * r}px` } as CSSProperties;
@@ -148,19 +156,23 @@ export function Emblem({ size, spin, state = "idle", className }: { size: number
       animationDelay: st.burst ? `${(k % 4) * 0.04}s` : `${-((k * 0.37) % 1.9)}s` }} />;
   }) : null;
   return (
-    // Clipped to its own neighbourhood: when a ring turns edge-on Chrome can
-    // smear a 3D layer into a long streak across the page (Coy saw orange
-    // lines flash over the header, 2026-10-10). The clip is on a flat wrapper,
-    // so the rings inside still turn in 3D; the dust still has room.
+    // Boxed in its own neighbourhood: when a ring turns edge-on Chrome can
+    // smear a 3D layer across the page (orange streaks 2026-10-10, an orange
+    // wedge 2026-10-15). An overflow box clips composited 3D layers where a
+    // clip-path didn't; it is flat, so the rings inside still turn in 3D, and
+    // it is 40% wider each side so the dust has room.
     <span className={`sc-emblem ${className ?? ""}`} aria-hidden="true"
-      style={{ position: "relative", display: "block", width: size, height: size, flex: "none", clipPath: "inset(-40%)", isolation: "isolate" }}>
-      <span style={{ position: "absolute", display: "block", inset: 0, perspective: `${size * 2.1}px`, transformStyle: "preserve-3d" }}>
-        <span style={{ position: "absolute", display: "block", inset: 0, transformStyle: "preserve-3d" }}>
-          {ring(0)}
-          {ring(1)}
-          {core}
+      style={{ position: "relative", display: "block", width: size, height: size, flex: "none" }}>
+      <span style={{ position: "absolute", display: "block", left: -pad, top: -pad, width: size + 2 * pad, height: size + 2 * pad,
+        overflow: "hidden", contain: "paint", isolation: "isolate", pointerEvents: "none" }}>
+        <span style={{ position: "absolute", display: "block", left: pad, top: pad, width: size, height: size, perspective: `${size * 2.1}px`, transformStyle: "preserve-3d" }}>
+          <span style={{ position: "absolute", display: "block", inset: 0, transformStyle: "preserve-3d" }}>
+            {ring(0)}
+            {ring(1)}
+            {core}
+          </span>
+          {dust}
         </span>
-        {dust}
       </span>
     </span>
   );

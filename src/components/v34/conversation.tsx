@@ -33,8 +33,13 @@ export const DA = {
   // on the eyes"): warm paper for them, soft slate for us, ink text on both.
   // Themed since 2026-09-30: theirs on the sunk ground, ours on the theme's
   // outgoing colour (terracotta-dim in Site Office).
-  bubbleIn: T.sunk,
-  bubbleOut: T.outBg,
+  // Matte since 2026-10-15 (Coy: "make the colors more matt and muted"): no
+  // border, theirs a quiet grey between the sunk ground and the card, ours the
+  // outgoing colour washed most of the way into that grey — ink text on both,
+  // in every theme (a dark outBg mixed this far keeps ink readable).
+  bubbleIn: `color-mix(in srgb, ${T.sunk} 70%, ${T.card})`,
+  bubbleOut: `color-mix(in srgb, ${T.outBg} 38%, ${T.sunk})`,
+  bubbleInk: T.ink,
 } as const;
 
 /**
@@ -229,9 +234,10 @@ export function CallRow({ m }: { m: ThreadMessage }) {
     : m.status && !["completed", "received", "delivered"].includes(m.status) ? m.status : null;
   return (
     <div className={`flex mb-2 ${isOut ? "justify-end" : "justify-start"}`}>
+    <div className={`flex flex-col ${isOut ? "items-end" : "items-start"}`} style={{ maxWidth: "min(78%, 420px)", minWidth: 0 }}>
     <div
       className="rounded-2xl px-3 py-2"
-      style={{ background: isOut ? DA.bubbleOut : DA.bubbleIn, border: `1px solid ${DA.border}`, maxWidth: "min(78%, 420px)", minWidth: 0, color: isOut ? T.outInk : DA.textPrimary }}
+      style={{ background: isOut ? DA.bubbleOut : DA.bubbleIn, minWidth: 0, maxWidth: "100%", color: DA.bubbleInk }}
     >
       <div className="flex items-center gap-2 flex-wrap">
         <Phone size={13} weight="fill" color={pill && m.missed ? DA.error : isOut ? DA.accent : DA.textMuted} className="shrink-0" aria-label={isOut ? "Call you made" : "Call to you"} />
@@ -251,9 +257,6 @@ export function CallRow({ m }: { m: ThreadMessage }) {
             <span title={m.line}>via {m.line_provider ?? m.line}</span>
           </span>
         )}
-        <span className="text-[10px] ml-auto shrink-0" style={{ color: DA.textMuted }}>
-          {formatMsgTime(m.occurred_at)}
-        </span>
       </div>
 
       {/* Glance line. summary_source distinguishes what this text IS: a
@@ -370,6 +373,17 @@ export function CallRow({ m }: { m: ThreadMessage }) {
         </div>
       )}
     </div>
+    <BubbleTime isOut={isOut}>{formatMsgTime(m.occurred_at)}</BubbleTime>
+    </div>
+    </div>
+  );
+}
+
+/** The date and time under a bubble, on its side, outside it (Coy, 2026-10-15). */
+function BubbleTime({ isOut, children }: { isOut: boolean; children: React.ReactNode }) {
+  return (
+    <div className="text-[10px] mt-0.5 px-1 tabular-nums" style={{ color: DA.textMuted, textAlign: isOut ? "right" : "left" }}>
+      {children}
     </div>
   );
 }
@@ -479,12 +493,13 @@ export function SmsRow({ m }: { m: ThreadMessage }) {
   const text = m.body_text?.trim();
   return (
     <div className={`flex mb-2 ${isOut ? "justify-end" : "justify-start"}`}>
+      <div className={`max-w-[78%] flex flex-col ${isOut ? "items-end" : "items-start"}`} style={{ minWidth: 0 }}>
       <div
-        className="max-w-[78%] rounded-2xl px-3 py-2"
+        className="rounded-2xl px-3 py-2"
         style={{
-          minWidth: 0,
+          minWidth: 0, maxWidth: "100%",
           background: isOut ? DA.bubbleOut : DA.bubbleIn,
-          border: `1px solid ${DA.border}`, color: isOut ? T.outInk : DA.textPrimary,
+          color: DA.bubbleInk,
         }}
       >
         {/* "(no text)" only when there is genuinely nothing — a photo with no
@@ -498,10 +513,9 @@ export function SmsRow({ m }: { m: ThreadMessage }) {
         )}
         {text && <ProposalChip text={text} isOut={isOut} />}
         {m.media_count > 0 && <MessageMedia messageId={m.id} count={m.media_count} isOut={isOut} />}
-        {/* Just the time, on the right — no IN / OUT, no "via" line (Coy, 2026-10-07: "it's just cluttering up the chat"). */}
-        <div className="text-[9px] mt-1 text-right" style={{ color: "inherit", opacity: 0.6 }}>
-          {formatTime(m.occurred_at)}
-        </div>
+      </div>
+      {/* Just the time — no IN / OUT, no "via" line (Coy, 2026-10-07); under the bubble on its side since 2026-10-15. */}
+      <BubbleTime isOut={isOut}>{formatTime(m.occurred_at)}</BubbleTime>
       </div>
     </div>
   );

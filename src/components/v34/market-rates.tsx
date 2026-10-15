@@ -482,9 +482,10 @@ export function MarketRates({ jobId, refresh, onChanged, onSheets }: {
 /** The job's price per SF against the going rate, with the size and total it is worked out from and
  *  where the range came from (Coy, 2026-10-15: "merge … so I can see where I sit in the range and
  *  understand how that range was calculated"). On Market rate, and in the job's dark totals box. */
-export function PriceVsRange({ d, flat }: { d: MarketData; flat?: boolean }) {
+export function PriceVsRange({ d, flat, scale = 1 }: { d: MarketData; flat?: boolean; scale?: number }) {
   const range = jobRange(d.rates?.rates ?? []);
-  const mineSf = d.totals && d.sqft ? d.totals.total / d.sqft : null;
+  const total = d.totals ? d.totals.total * scale : null;
+  const mineSf = total !== null && d.sqft ? total / d.sqft : null;
   const jobFlag = mineSf !== null && range ? rateStatus(mineSf, range.low, range.high) : null;
   const used = (d.rates?.rates ?? []).filter((r) => r.step === "job" && r.kind === "installed_price" && r.split === "all");
   const sites = [...new Set(used.map((r) => r.site))];
@@ -497,7 +498,7 @@ export function PriceVsRange({ d, flat }: { d: MarketData; flat?: boolean }) {
           <div style={{ ...eyebrow, color: DARK_LABEL }}>Your price · market rate</div>
           <div style={{ fontFamily: strong, fontSize: 26, fontWeight: 700, lineHeight: 1.1, ...nums }}>{mineSf !== null ? `${money(mineSf)}/SF` : "—"}</div>
           <div style={{ fontSize: 12, color: DARK_2, marginTop: 2, ...nums }}>
-            {d.totals ? money(d.totals.total) : "No price yet"} ÷ {d.sqft ? `${Math.round(d.sqft).toLocaleString()} SF of concrete` : "no SF measured"}
+            {total !== null ? money(total) : "No price yet"} ÷ {d.sqft ? `${Math.round(d.sqft).toLocaleString()} SF of concrete` : "no SF measured"}
           </div>
         </div>
         <span className="flex-1" />
@@ -541,6 +542,13 @@ export function RailMarket({ jobId, refresh = 0 }: { jobId: string; refresh?: nu
     send(`/api/jobs/${jobId}/budget/market`, "GET").then((b) => { if (!off) setD(b); }).catch(() => {});
     return () => { off = true; };
   }, [jobId, refresh]);
+  // The rail's margin slider previews its price here before it is saved.
+  const [scale, setScale] = useState(1);
+  useEffect(() => {
+    const on = (e: Event) => setScale((e as CustomEvent<{ ratio: number }>).detail?.ratio || 1);
+    window.addEventListener("sc:margin-preview", on);
+    return () => window.removeEventListener("sc:margin-preview", on);
+  }, []);
   if (!d) return null;
-  return <div style={{ borderTop: "1px solid #3A3A3A" }}><PriceVsRange d={d} flat /></div>;
+  return <div style={{ borderTop: "1px solid #3A3A3A" }}><PriceVsRange d={d} flat scale={scale} /></div>;
 }

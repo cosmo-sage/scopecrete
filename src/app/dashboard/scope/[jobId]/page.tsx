@@ -1219,6 +1219,12 @@ function BudgetRail({ budget, sqft, crew, crewSize, jobId }: {
     const oldPre = base + b.profit;
     return { total: b.total - oldPre + pre, profit: pre - base, margin: draft / 100 };
   };
+  // The market card moves with the slider: it scales its own total by this ratio (Coy, 2026-10-15).
+  const first = budget.tiers.find((t) => t.priced);
+  const ratio = first && first.total > 0 ? at(first).total / first.total : 1;
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent("sc:margin-preview", { detail: { ratio } }));
+  }, [ratio]);
   const line = { borderTop: `1px solid ${T.darkHair}` };
   const min = budget.minimum;
   return (

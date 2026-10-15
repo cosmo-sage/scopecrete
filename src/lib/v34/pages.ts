@@ -19,6 +19,8 @@ export const PAGES: PageDef[] = [
   { k: "scope", label: "Jobs", href: "/dashboard/scope", match: (p) => p === "/dashboard/scope" || p.startsWith("/dashboard/scope/") },
   // The Map (Claude Design 11; Coy, 2026-10-08: "add the map page to the main menu on desktop; toolbox on mobile").
   { k: "map", label: "Map", href: "/dashboard/map", match: (p) => p.startsWith("/dashboard/map") },
+  // The site camera (113; Coy, 2026-10-15: "our own little company cam app … take pictures on site really quickly").
+  { k: "camera", label: "Camera", href: "/dashboard/camera", match: (p) => p.startsWith("/dashboard/camera") },
   { k: "cash", label: "Cash", href: "/dashboard/cash", match: (p) => p.startsWith("/dashboard/cash"), soon: true },
   { k: "contacts", label: "Contacts", href: "/dashboard/contacts", match: (p) => p.startsWith("/dashboard/contacts") },
   { k: "customers", label: "Customers", href: "/dashboard/customers", match: (p) => p.startsWith("/dashboard/customers") },
@@ -35,7 +37,7 @@ export const PAGE = new Map(PAGES.map((p) => [p.k, p]));
 export interface Menus { rail: string[]; footer: string[] }
 /** Rail order includes "dusty"; the footer holds 4 pages around Dusty (2 · Dusty · 2 — the last slot is the Toolbox). */
 export const DEFAULT_MENUS: Menus = {
-  rail: ["dashboard", "threads", "dusty", "scopebuilder", "scope", "map", "contacts", "customers", "pricebook", "vendors", "files", "logs", "admin", "roadmap"],
+  rail: ["dashboard", "threads", "dusty", "scopebuilder", "scope", "map", "camera", "contacts", "customers", "pricebook", "vendors", "files", "logs", "admin", "roadmap"],
   footer: ["dashboard", "threads", "scope"],
 };
 

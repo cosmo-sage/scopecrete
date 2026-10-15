@@ -631,6 +631,19 @@ function NewJobSheet({ open, onClose }: { open: boolean; onClose: () => void }) 
   const [source, setSource] = useState<string | null>(null);
   const [referrer, setReferrer] = useState<PickThread | null>(null);
   const [picking, setPicking] = useState<"customer" | "referrer">("customer");
+  // ?new=1&site=<id> — a job made from a site on the Camera page (113): its address, pin and photos come with it.
+  const [site, setSite] = useState<{ id: string; label: string; address: string | null; shots?: number } | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const id = new URLSearchParams(window.location.search).get("site");
+    if (!id || !/^[0-9a-f-]{36}$/i.test(id)) return;
+    let cancelled = false;
+    fetch(`/api/sites/${id}`).then((r) => r.ok ? r.json() : null)
+      .then((b) => { if (!cancelled && b?.site) setSite({ id: b.site.id, label: b.site.label, address: b.site.address, shots: Array.isArray(b.shots) ? b.shots.length : undefined }); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [open]);
 
   useEffect(() => {
     if (!open || threads) return;
@@ -643,7 +656,7 @@ function NewJobSheet({ open, onClose }: { open: boolean; onClose: () => void }) 
   }, [open, threads]);
 
   function close() {
-    setCustomer(null); setJobType(null); setSource(null); setReferrer(null); setPicking("customer"); setQ(""); setErr(null);
+    setCustomer(null); setJobType(null); setSource(null); setReferrer(null); setPicking("customer"); setQ(""); setErr(null); setSite(null);
     onClose();
   }
 
@@ -655,6 +668,7 @@ function NewJobSheet({ open, onClose }: { open: boolean; onClose: () => void }) 
       if (jobType) body.job_type = jobType;
       if (source) body.lead_source = source;
       if (referrer) body.referred_by_contact_id = referrer.contact_id;
+      if (site) body.site_id = site.id;
       const r = await fetch("/api/jobs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const b = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(b?.error || `HTTP ${r.status}`);
@@ -682,6 +696,13 @@ function NewJobSheet({ open, onClose }: { open: boolean; onClose: () => void }) 
   return (
     <Sheet open={open} onClose={close} title="New job"
       sub={choosing ? (picking === "referrer" ? "Who sent it?" : undefined) : "What kind of job?"}>
+      {site && (
+        <div className="px-3 pt-3" style={{ fontSize: F.sm, color: T.ink2 }}>
+          From the site <b>{site.label}</b>{site.address && site.address !== site.label ? ` · ${site.address}` : ""}
+          {typeof site.shots === "number" ? ` · ${site.shots} photo${site.shots === 1 ? "" : "s"} come with it` : ""}
+          <button onClick={() => setSite(null)} style={{ marginLeft: 8, fontSize: F.xs, color: T.ink3, textDecoration: "underline", background: "none", border: 0, cursor: "pointer" }}>Not from it</button>
+        </div>
+      )}
       {choosing ? (
         <>
           <div className="p-3">

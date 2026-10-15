@@ -221,6 +221,26 @@ export async function POST(req: NextRequest) {
     if (cc?.customer_id) insert.customer_id = cc.customer_id;
   }
 
+  // Start from a site (migration 113; Coy, 2026-10-15: "whenever I create a customer or a job, I can
+  // choose to input a project from the company cam style photo capture"): its address and pin carry
+  // over, and once the job is made its photos and videos move onto it and the site names its job.
+  let siteId: string | null = null;
+  if (body.site_id !== undefined && body.site_id !== null) {
+    const sid = typeof body.site_id === "string" && /^[0-9a-f-]{36}$/i.test(body.site_id) ? body.site_id : null;
+    if (!sid) return applyCookies(NextResponse.json({ error: "Bad site id." }, { status: 400 }));
+    const { data: site, error: siteErr } = await supabase.from("sites").select("id, name, address, lat, lng, job_id, archived_at").eq("org_id", orgId).eq("id", sid).maybeSingle();
+    if (siteErr) return applyCookies(NextResponse.json({ error: `sites: ${siteErr.message}` }, { status: 500 }));
+    if (!site) return applyCookies(NextResponse.json({ error: "No such site." }, { status: 404 }));
+    if (site.job_id) return applyCookies(NextResponse.json({ error: "That site is already a job.", job_id: site.job_id }, { status: 409 }));
+    siteId = sid;
+    if (!insert.address && site.address) {
+      insert.address = site.address;
+      // The site's own pin, kept as the Map keeps a looked-up one (090), so it isn't looked up again.
+      insert.lat = site.lat; insert.lng = site.lng; insert.geocoded_at = new Date().toISOString(); insert.geocode_query = site.address;
+    }
+    if (!insert.title && site.name) insert.title = site.name;
+  }
+
   // job_number is left NULL unless the caller supplies one.
   //
   // The reference shape is 24-318-1, but the scheme has NOT been confirmed —
@@ -236,6 +256,12 @@ export async function POST(req: NextRequest) {
 
   if (error) {
     return applyCookies(NextResponse.json({ error: `jobs insert: ${error.message}` }, { status: 500 }));
+  }
+
+  if (siteId) {
+    await supabase.from("sites").update({ job_id: data.id }).eq("org_id", orgId).eq("id", siteId);
+    await supabase.from("files").update({ job_id: data.id, ...(data.contact_id ? { contact_id: data.contact_id } : {}) })
+      .eq("org_id", orgId).eq("site_id", siteId).is("job_id", null);
   }
 
   // A draft budget from their calls and texts (migration 087), behind

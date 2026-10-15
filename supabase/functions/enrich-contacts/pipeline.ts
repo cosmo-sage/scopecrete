@@ -10,7 +10,7 @@
 
 import {
   AUTO_STREAK, PROMPT_VERSION, SYSTEM_PROMPT, bucketOf, findSelfIdentification, greetedName, introducedName, relabelTranscript, renderConversation,
-  renderNotes, sanitize, spamSignal, textedEmail, titleKey, worthEnriching, type CoyNote, type Correction, type Proposal, type Turn,
+  renderNotes, sanitize, spamSignal, sameTask, textedEmail, titleKey, worthEnriching, type CoyNote, type Correction, type Proposal, type Turn,
 } from './rules.ts'
 
 /**
@@ -487,9 +487,11 @@ async function writeStatus(sb: Db, orgId: string, contactId: string, p: Proposal
 export async function seedNextSteps(sb: Db, orgId: string, contactId: string, p: Proposal, bucket: string | null): Promise<number> {
   const steps = p.next_steps ?? []
   if (!steps.length || bucket === 'personal' || bucket === 'spam') return 0
-  const { data: have } = await sb.from('contact_tasks').select('title_key').eq('org_id', orgId).eq('contact_id', contactId)
-  const seen = new Set(((have ?? []) as Array<{ title_key: string }>).map((t) => t.title_key))
-  const rows = steps.filter((x) => !seen.has(titleKey(x.title))).map((x) => ({
+  const { data: have } = await sb.from('contact_tasks').select('title_key, title').eq('org_id', orgId).eq('contact_id', contactId)
+  const had = (have ?? []) as Array<{ title_key: string; title: string }>
+  const seen = new Set(had.map((t) => t.title_key))
+  // The same ask in new words is still the same ask — open, done or dismissed (Coy, 2026-10-15).
+  const rows = steps.filter((x) => !seen.has(titleKey(x.title)) && !had.some((t) => !!t.title && sameTask(t.title, x.title))).map((x) => ({
     org_id: orgId, contact_id: contactId, title: x.title, due_on: x.due_on, source: 'dusty', evidence_quote: x.quote,
   }))
   if (!rows.length) return 0

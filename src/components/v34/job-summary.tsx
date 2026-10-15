@@ -229,17 +229,25 @@ export function JobSummary({ jobId }: { jobId: string }) {
 /** Coy's question to Dusty from a job's What's next. */
 const NEXT_QUESTION = "What's left to finish scoping and pricing this job? Go through what they said on their calls and texts, their photos and what's measured, and list what I still need to do or ask them, in order.";
 
-interface NextTask { id: string; title: string; due_on: string | null; source: string; job_id: string | null }
+interface NextTask { id: string; title: string; short: string; due_on: string | null; source: string }
 
 /**
  * What's next on this job (Coy, 2026-10-13: a new job should "pull in the photos and prompt me for
  * what was next to finish scoping and estimating"). On open it brings in, once, the photos the
  * customer texted (POST texted-photos {auto}); then the step the scope is on (the Scope Builder's
- * rule), the open next steps on their person, and Dusty asked what's left.
+ * rule), the open next steps on their person, and Dusty asked what's left. Since 2026-10-15 (Coy:
+ * "redundant repeat items … doesn't fit on the mobile screen … I can't add anything manually"): one
+ * line each in fewer words (a tap shows the whole), three then "+ N more", × removes one, and
+ * + Add to-do files Coy's own on the job's person for this job.
  */
 function NextUp({ jobId, card }: { jobId: string; card: React.CSSProperties }) {
-  const [data, setData] = useState<{ progress: ScopeProgress; href: string; tasks: NextTask[] } | null>(null);
+  const [data, setData] = useState<{ progress: ScopeProgress; href: string; contact_id: string | null; tasks: NextTask[] } | null>(null);
   const [photos, setPhotos] = useState<number>(0);
+  const [all, setAll] = useState(false);
+  const [open, setOpen] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [text, setText] = useState("");
+  const [err, setErr] = useState<string | null>(null);
   const load = useCallback(() => send(`/api/jobs/${jobId}/next`, "GET").then((b) => setData(b)).catch(() => setData(null)), [jobId]);
   useEffect(() => {
     let off = false;
@@ -251,13 +259,34 @@ function NextUp({ jobId, card }: { jobId: string; card: React.CSSProperties }) {
   }, [jobId, load]);
   if (!data) return null;
   const { progress, href, tasks } = data;
-  if (progress.next === "sent" && !tasks.length && !photos) return null;
   const step = SCOPE_STEPS.find((x) => x.k === progress.next);
-  const done = (t: NextTask) => void send(`/api/tasks/${t.id}`, "PATCH", { status: "done" }).then(load);
+  // Ticked or crossed off, it leaves the list at once; the server agrees a moment later.
+  const close = (t: NextTask, status: "done" | "dismissed") => {
+    setData((d) => d && { ...d, tasks: d.tasks.filter((x) => x.id !== t.id) });
+    void send(`/api/tasks/${t.id}`, "PATCH", { status }).catch(() => load());
+  };
+  const add = async () => {
+    const title = text.replace(/\s+/g, " ").trim();
+    if (!title || !data.contact_id) return;
+    setErr(null);
+    try {
+      await send(`/api/people/${data.contact_id}/tasks`, "POST", { title, job_id: jobId });
+      setText(""); setAdding(false); await load();
+    } catch (e) { setErr((e as Error).message); }
+  };
+  const SHOW = 3;
+  const shown = all ? tasks : tasks.slice(0, SHOW);
+  const box = { width: 22, height: 22, borderRadius: 3, border: `1px solid ${T.hair}`, background: T.card, cursor: "pointer", flexShrink: 0 } as const;
   return (
     <section aria-label="What's next" className="px-3 py-2.5" style={card}>
       <div className="flex items-center gap-2">
         <div style={{ ...eyebrow, flex: 1 }}>What&apos;s next</div>
+        {data.contact_id && (
+          <button onClick={() => { setAdding((v) => !v); setErr(null); }} className="rounded px-2"
+            style={{ height: 30, border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink, fontSize: F.xs, fontWeight: 600, cursor: "pointer" }}>
+            + Add to-do
+          </button>
+        )}
         <button onClick={() => askDusty(NEXT_QUESTION)} aria-label="Ask Dusty what's left to scope and price it" title="Ask Dusty what's left to scope and price it"
           className="flex items-center justify-center shrink-0" style={{ width: 30, height: 30, borderRadius: 4, border: `1px solid ${T.hairStrong}`, background: T.card, cursor: "pointer" }}>
           <Emblem size={18} spin={false} />
@@ -268,23 +297,49 @@ function NextUp({ jobId, card }: { jobId: string; card: React.CSSProperties }) {
           Brought in {photos} photo{photos === 1 ? "" : "s"} they texted · <Link href={`/dashboard/scope/${jobId}/files`} style={{ color: T.chalk }}>See them in Files ›</Link>
         </div>
       )}
-      <div className="flex items-center gap-2" style={{ marginTop: 6 }}>
-        <span style={{ fontSize: F.sm, color: T.ink, flex: 1 }}>{progress.line}</span>
-        {progress.next !== "sent" && step && (
+      {progress.next !== "sent" && step && (
+        <div className="flex items-center gap-2" style={{ marginTop: 6 }}>
+          <span style={{ fontSize: F.sm, color: T.ink, flex: 1, minWidth: 0 }}>{progress.line}</span>
           <Link href={href} className="rounded px-2.5 no-underline inline-flex items-center"
             style={{ height: 28, background: T.ink, color: T.card, fontSize: F.xs, fontWeight: 600, flexShrink: 0 }}>{step.label} ›</Link>
-        )}
-      </div>
+        </div>
+      )}
+      {adding && (
+        <form className="flex items-center gap-2" style={{ marginTop: 8 }} onSubmit={(e) => { e.preventDefault(); void add(); }}>
+          <input autoFocus value={text} onChange={(e) => setText(e.target.value)} maxLength={200} placeholder="A to-do for this job"
+            onKeyDown={(e) => { if (e.key === "Escape") { setAdding(false); setText(""); } }}
+            className="rounded px-2" style={{ flex: 1, minWidth: 0, height: 32, border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink, fontSize: 16 }} />
+          <button type="submit" disabled={!text.trim()} className="rounded px-3"
+            style={{ height: 32, background: T.ink, color: T.card, fontSize: F.xs, fontWeight: 600, border: 0, cursor: text.trim() ? "pointer" : "default", opacity: text.trim() ? 1 : 0.5 }}>Add</button>
+        </form>
+      )}
+      {err && <div style={{ fontSize: F.xs, color: T.red, marginTop: 4 }}>{err}</div>}
       {tasks.length > 0 && (
-        <ul className="mt-2 space-y-1" style={{ listStyle: "none", padding: 0, margin: 0 }}>
-          {tasks.map((t) => (
-            <li key={t.id} className="flex items-start gap-2" style={{ fontSize: F.sm, color: T.ink2, lineHeight: 1.4 }}>
-              <button onClick={() => done(t)} aria-label={`Done: ${t.title}`} title="Done"
-                style={{ width: 18, height: 18, marginTop: 1, borderRadius: 3, border: `1px solid ${T.hair}`, background: T.card, cursor: "pointer", flexShrink: 0 }} />
-              <span style={{ flex: 1 }}>{t.title}{t.due_on ? <span style={{ color: T.ink3 }}> · due {day(`${t.due_on}T12:00:00Z`)}</span> : null}</span>
-            </li>
-          ))}
+        <ul style={{ listStyle: "none", padding: 0, margin: "8px 0 0" }}>
+          {shown.map((t) => {
+            const full = open === t.id;
+            return (
+              <li key={t.id} className="flex items-center gap-2" style={{ fontSize: F.sm, color: T.ink2, lineHeight: 1.35, padding: "3px 0", borderTop: `1px solid ${T.hairSoft}` }}>
+                <button onClick={() => close(t, "done")} aria-label={`Done: ${t.title}`} title="Done" style={box} />
+                <button onClick={() => setOpen(full ? null : t.id)} title={t.title}
+                  style={{ flex: 1, minWidth: 0, textAlign: "left", background: "none", border: 0, padding: 0, color: "inherit", font: "inherit", cursor: "pointer",
+                    ...(full ? {} : { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }) }}>
+                  {full ? t.title : t.short}{t.due_on ? <span style={{ color: T.ink3 }}> · {day(`${t.due_on}T12:00:00Z`)}</span> : null}
+                </button>
+                <button onClick={() => close(t, "dismissed")} aria-label={`Remove: ${t.title}`} title="Remove"
+                  style={{ ...box, border: 0, background: "none", color: T.ink3, fontSize: 16, lineHeight: 1 }}>×</button>
+              </li>
+            );
+          })}
         </ul>
+      )}
+      {tasks.length > SHOW && (
+        <button onClick={() => setAll((v) => !v)} style={{ marginTop: 4, background: "none", border: 0, padding: 0, color: T.chalk, fontSize: F.xs, fontWeight: 600, cursor: "pointer" }}>
+          {all ? "Show less" : `+ ${tasks.length - SHOW} more`}
+        </button>
+      )}
+      {progress.next === "sent" && !tasks.length && !adding && (
+        <div style={{ fontSize: F.sm, color: T.ink3, marginTop: 6 }}>{progress.line}</div>
       )}
     </section>
   );

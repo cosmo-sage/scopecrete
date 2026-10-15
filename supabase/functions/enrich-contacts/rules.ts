@@ -8,7 +8,7 @@
  * the guarantee; the prompt is only a request.
  */
 
-export const PROMPT_VERSION = 'enrich-v13-spelled-names-2026-10-02'
+export const PROMPT_VERSION = 'enrich-v14-short-next-steps-2026-10-15'
 
 export const OUR_NAMES = ['Coy', 'Coy Sacco', 'Sacco', 'Sacco Builders', 'ScopeCrete', 'Dusty']
 
@@ -199,8 +199,9 @@ These describe the conversation; they classify nothing and name nobody.
     city, parish). Null for anyone else, or when it is not clear.
   next_steps — up to 3 things that are waiting on US (Coy), from the
     conversation: a price he owes, a call back, photos to look at, a payment
-    to send, a date to confirm. A short instruction under 80 characters
-    ("Send the walkway repair price"). due_on only when a date was actually
+    to send, a date to confirm. A short instruction of 3 to 7 words, under
+    50 characters ("Send the walkway repair price") — no reasons, dates or
+    who said it in the title. due_on only when a date was actually
     said, as YYYY-MM-DD, else null. quote: the line that shows it is owed,
     copied verbatim. An empty list when nothing is waiting on us — never
     invent work.
@@ -403,6 +404,30 @@ export interface Proposal {
 
 export interface NextStep { title: string; due_on: string | null; quote: string | null }
 
+// A copy of src/lib/next-tasks.ts sameTask() (tests/next-tasks.test.mjs checks they agree):
+// Dusty re-words the same ask on each read, which title_key alone never catches (Coy, 2026-10-15).
+const TASK_FILLER = new Set([
+  'a', 'an', 'the', 'to', 'on', 'in', 'at', 'of', 'for', 'and', 'or', 'with', 'by', 'per', 'from', 'about', 'if',
+  'whether', 'only', 'his', 'her', 'their', 'them', 'our', 'we', 'us', 'it', 'is', 'be', 'this', 'that', 'which',
+  'send', 'confirm', 'answer', 'reply', 'review', 'check', 'call', 'ask', 'get', 'back', 'question', 'clarify',
+  'follow', 'up', 'let', 'know', 'find', 'out', 'make', 'sure', 'see', 'look', 'give',
+])
+function taskWords(title: string): Set<string> {
+  const out = new Set<string>()
+  for (const w of title.toLowerCase().replace(/['’]s\b/g, '').split(/[^a-z0-9]+/)) {
+    if (!w || TASK_FILLER.has(w)) continue
+    out.add(w.length > 3 && w.endsWith('s') && !w.endsWith('ss') ? w.slice(0, -1) : w)
+  }
+  return out
+}
+export function sameTask(a: string, b: string): boolean {
+  const x = taskWords(a), y = taskWords(b)
+  if (!x.size || !y.size) return a.trim().toLowerCase() === b.trim().toLowerCase()
+  let both = 0
+  for (const w of x) if (y.has(w)) both++
+  return both >= 2 && both / (x.size + y.size - both) >= 0.6
+}
+
 /** Same as contact_tasks.title_key (migration 038): how "the same item" is recognised. */
 export function titleKey(title: string): string {
   return title.toLowerCase().replace(/[^a-z0-9]+/g, '')
@@ -504,7 +529,7 @@ export function sanitize(p: Proposal, turns: Turn[]): { p: Proposal; notes: stri
   const steps: NextStep[] = []
   for (const x of Array.isArray(p.next_steps) ? p.next_steps : []) {
     const title = line((x as NextStep)?.title, 120)
-    if (!title || !titleKey(title) || steps.some(s => titleKey(s.title) === titleKey(title))) continue
+    if (!title || !titleKey(title) || steps.some(s => titleKey(s.title) === titleKey(title) || sameTask(s.title, title))) continue
     const due = typeof (x as NextStep).due_on === 'string' && /^\d{4}-\d{2}-\d{2}$/.test((x as NextStep).due_on as string)
       ? (x as NextStep).due_on : null
     steps.push({ title, due_on: due, quote: line((x as NextStep).quote, 300) })

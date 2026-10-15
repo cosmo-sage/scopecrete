@@ -1662,6 +1662,19 @@ them out. Trigger `contacts_bucket_jobs` → `sc_customer_job_for()`:
   person's open next steps for this job (tick to finish), and the emblem asking
   Dusty what is left to scope and price it (`scopeFacts()` in
   `src/lib/scope-builder-server.ts`, shared with the Scope Builder page).
+  **What's next, shorter (Coy, 2026-10-15: "a lot of redundant repeat items and the full list
+  doesn't fit on the mobile screen and I can't add anything manually … less words"; no migration).**
+  Gulfline's HPC parking lot showed Jeremy's seven open steps — none filed on that job, two the same
+  ask in other words. Now the card lists the person's steps filed on this job, and steps filed on no
+  job only while it is their one open job; one of each ask (`sameTask()`, `src/lib/next-tasks.ts`,
+  tested: two or more words that say what it is about, 60% of them shared — "send", "confirm",
+  "answer" don't count); no "Finish scoping …" while the Scope Builder step shows; Coy's own first.
+  Each is one line in fewer words (`shortTask()`: no "(#7)", no "per Jeremy's …" tail; a tap shows
+  it whole), three then "+ N more", a tick for done and × to remove (dismissed). **+ Add to-do**
+  files Coy's own on the job's person (else the customer's primary) for this job, through `POST
+  /api/people/[id]/tasks`. The reader (in the repo with the 108 changes, waiting on the same
+  deploy) asks for 3–7 words under 50 characters and adds no step that `sameTask()` matches with
+  one the person already has, open, done or dismissed (prompt `enrich-v14-short-next-steps`).
   Rehearsed (rolled back) on the live data: an unnamed caller filed by Dusty
   got nothing; named, they got a customer (unconfirmed), "McTest Driveway
   Repair" uncounted on it, and one next step. Brittany's own records were

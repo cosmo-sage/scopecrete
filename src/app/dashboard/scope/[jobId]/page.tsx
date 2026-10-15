@@ -35,7 +35,7 @@ import { USE_ASK } from "@/lib/dusty/use-block";
 import { DustyEmblem } from "@/components/v34/dusty-avatar";
 import { isDetailFile, type SectionShape } from "@/lib/plan-details";
 import { JobHeaderRow } from "@/components/v34/job-tabs";
-import { JobBudget, type BudgetSummary } from "@/components/v34/job-budget";
+import { JobBudget, NotesToggle, type BudgetSummary } from "@/components/v34/job-budget";
 import { BudgetSubTabs, useBudgetTab } from "@/components/v34/budget-tabs";
 import { MarketRates } from "@/components/v34/market-rates";
 import { ActualCosts } from "@/components/v34/actual-costs";
@@ -393,6 +393,7 @@ export default function ScopeBuilder() {
           {/* Desktop: the Budget's three tabs open the tools row (Dusty's emblem is on the job's tabs row). */}
           {can(access, "budget") && <div className="hidden lg:flex items-center gap-2 mt-2">
             <BudgetSubTabs tab={tab} onTab={setTab} />
+            {tab === "proposed" && <><span className="flex-1" /><NotesToggle /></>}
           </div>}
         </div>
 
@@ -485,7 +486,8 @@ export default function ScopeBuilder() {
           });
         })()}
 
-        <div className="px-3 py-3">
+        <div className="px-3 py-3 flex items-center gap-2 flex-wrap">
+          <span className="lg:hidden"><NotesToggle /></span>
           <button onClick={() => void addSection()} disabled={adding} className="w-full lg:w-auto lg:px-5 rounded"
             style={{ height: 40, border: `1px dashed ${T.ink3}`, background: T.card, fontFamily: disp, fontSize: F.md,
                      fontWeight: 600, textTransform: "uppercase", letterSpacing: ".06em", color: T.ink, cursor: "pointer" }}>
@@ -789,7 +791,7 @@ function SectionCard({ group, s, index, err, onLocal, onSave, onRemove, jobType,
         {mode !== "count" && (
           <button type="button" aria-pressed={concrete}
             title={concrete ? "Take the pour off: no thickness or concrete on this section" : "Add thickness, width and concrete yards to this section"}
-            onClick={() => { const w = concrete ? "demo" : "slab"; onLocal({ work_type: w }); onSave({ work_type: w }); }}
+            onClick={() => { const w = concrete ? (mode === "linear" ? "other" : "demo") : (mode === "linear" ? "curb" : "slab"); onLocal({ work_type: w }); onSave({ work_type: w }); }}
             className="rounded px-2" style={{ height: 28, fontSize: F.sm, cursor: "pointer",
               border: `1px solid ${concrete ? T.green : T.hairStrong}`, background: concrete ? T.sunk : T.card, color: concrete ? T.green : T.ink2 }}>
             {concrete ? "✓ Concrete" : "+ Concrete"}
@@ -1051,6 +1053,11 @@ function SectionNotes({ value, onLocal, onSave }: { value: string | null; onLoca
   const [rec, setRec] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // A Save button while the box holds unsaved words (Coy, 2026-10-15: "Need a button to actually save the note").
+  const [saved, setSaved] = useState<string | null>(value?.trim() || null);
+  const [flash, setFlash] = useState(false);
+  const save = (v: string | null) => { setSaved(v); onSave(v); setFlash(true); setTimeout(() => setFlash(false), 1500); };
+  const dirty = (value?.trim() || null) !== saved;
   const said = async (blob: Blob) => {
     setRec(false); setBusy(true); setErr(null);
     try {
@@ -1060,7 +1067,7 @@ function SectionNotes({ value, onLocal, onSave }: { value: string | null; onLoca
       const b = await r.json().catch(() => ({}));
       if (!r.ok || !b.text) throw new Error(b.error || `HTTP ${r.status}`);
       const next = [value?.trim(), String(b.text).trim()].filter(Boolean).join("\n").slice(0, 2000);
-      onLocal(next); onSave(next);
+      onLocal(next); save(next);
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
   };
   return (
@@ -1068,6 +1075,13 @@ function SectionNotes({ value, onLocal, onSave }: { value: string | null; onLoca
       <div className="flex items-center gap-2">
         <span style={eyebrow}>Notes</span>
         <span className="flex-1" />
+        {flash && !dirty && <span style={{ fontSize: F.xs, color: T.green }}>✓ Saved</span>}
+        {dirty && !rec && (
+          <button onClick={() => save(value?.trim() || null)} onMouseDown={(e) => e.preventDefault()}
+            className="rounded px-2.5" style={{ height: 26, fontSize: F.sm, fontWeight: 600, background: T.chalk, color: "#fff", cursor: "pointer" }}>
+            Save
+          </button>
+        )}
         {!rec && (
           // The mic alone (Coy, 2026-10-05: "the microphone is enough"); recording shows the red dot and meter,
           // writing it down spins.
@@ -1083,7 +1097,7 @@ function SectionNotes({ value, onLocal, onSave }: { value: string | null; onLoca
         <div className="mt-1"><VoiceRecorder onSend={(b) => void said(b)} onCancel={() => setRec(false)} /></div>
       ) : (
         <textarea value={value ?? ""} placeholder="Anything about this area — access, the pump, demo, what they want…" rows={2}
-          onChange={(e) => onLocal(e.target.value || null)} onBlur={(e) => onSave(e.target.value.trim() || null)}
+          onChange={(e) => onLocal(e.target.value || null)} onBlur={(e) => { const v = e.target.value.trim() || null; if (v !== saved) save(v); }}
           className="w-full rounded px-2 py-1.5 outline-none mt-1" style={{ border: `1px solid ${T.hair}`, fontSize: F.sm, resize: "vertical", background: T.card, color: T.ink }} />
       )}
       {err && <div style={{ fontSize: F.xs, color: T.red }}>Didn&apos;t get that: {err}</div>}

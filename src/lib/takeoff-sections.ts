@@ -94,8 +94,9 @@ export function workTypeFor(name: string, kind: TakeoffKind): string {
   if (/patio|porch/.test(n)) return "patio";
   if (/side ?walk|walk/.test(n)) return "sidewalk";
   if (/footing|pier|grade beam|foundation/.test(n)) return "footing";
+  if (/joint|seal|caulk|saw ?cut|backer|dowel|rebar|mesh/.test(n)) return "other";
   if (/curb|gutter/.test(n)) return "curb";
   if (/demo|tear|remov|break ?out/.test(n)) return "demo";
   if (/slab|pad|floor|sog/.test(n)) return "slab";
-  return kind === "linear" ? "curb" : kind === "area" ? "slab" : "other";
+  return kind === "linear" ? "other" : kind === "area" ? "slab" : "other";
 }

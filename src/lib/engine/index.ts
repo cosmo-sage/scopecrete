@@ -66,6 +66,13 @@ export function isConcrete(workType: string): boolean {
   return workType !== "demo" && workType !== "prep";
 }
 
+/** A length in LF is a pour only for a pour's kind (Coy, 2026-10-15: an expansion joint
+ *  pulled from Takeoffs asked for width and depth — it is a product bought by the foot). */
+export const LF_POURS = new Set(["curb", "footing", "slab", "sidewalk", "driveway", "patio"]);
+export function isLinearPour(workType: string): boolean {
+  return LF_POURS.has(workType);
+}
+
 // ---------------------------------------------------------------------------
 // Quantities — arithmetic on numbers a person gave. Needs no settings.
 // ---------------------------------------------------------------------------
@@ -96,7 +103,7 @@ export function quantities(s: SectionInput): SectionQuantities {
   // take it. A grade beam's width (width_ft) and depth make its plan area and yards;
   // without them a pour names what it needs, and nothing per LF is held up.
   if (countUnit === "LF" && has(s.count_qty) && s.count_qty > 0 && !(has(s.sqft_override) && s.sqft_override > 0) && !has(s.length_ft)) {
-    const concrete = isConcrete(s.work_type);
+    const concrete = isLinearPour(s.work_type);
     const width = has(s.width_ft) && s.width_ft > 0 ? s.width_ft : null;
     const depth = has(s.depth_in) && s.depth_in > 0 ? s.depth_in : null;
     const sqft = width !== null ? s.count_qty * width : null;
@@ -353,6 +360,13 @@ export function ruleQty(
     // SqFt on an area of 894 SF said "needs quantity") — count it from the area.
     const own = UNIT_RULE[takeoffUnit(line.unit ?? "") ?? ""];
     if (own) return ruleQty({ ...line, qty_rule: own, qty_source: "rule" }, sections, days, takeoff);
+    // Nothing typed on a section's line: take the section's own quantity (Coy, 2026-10-15:
+    // "The quantities should be automatically pulled from the section quantities with the
+    // ability to manually override") — its count or LF, else its area. A typed number wins.
+    const sec = line.section_id ? sections.find((s) => s.id === line.section_id) : undefined;
+    const sq = sec ? quantities(sec) : null;
+    if (sq && sq.count !== null) return { ok: true, qty: sq.count, basis: "rule", note: `${sq.count} ${sq.count_unit} on the section` };
+    if (sq && sq.sqft !== null && !/^(ea|each|ls|lump ?sum)$/i.test((line.unit ?? "").trim())) return { ok: true, qty: Math.round(sq.sqft * 100) / 100, basis: "rule", note: `${Math.round(sq.sqft)} SF on the section` };
     return { ok: false, missing: [`${line.name}: quantity`] };
   }
   // Measured on the plans (migration 059): the group's total, in the card's unit.

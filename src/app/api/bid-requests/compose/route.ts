@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
     const job = await composeFor(supabase, orgId, jobId);
     if (!job) return applyCookies(NextResponse.json({ error: "No such job." }, { status: 404 }));
     // Storage paths stay on the server; the composer picks files by id.
-    return applyCookies(NextResponse.json({ job: { ...job, files: job.files.map((f) => ({ id: f.id, name: f.name, kind: f.kind })) } }));
+    return applyCookies(NextResponse.json({ job: { ...job, files: job.files.map((f) => ({ id: f.id, name: f.name, kind: f.kind, section: f.section ?? null })) } }));
   }
   const { data, error } = await supabase.from("jobs").select("id, title, address, status, created_at")
     .eq("org_id", orgId).is("archived_at", null).not("status", "in", "(complete,closed,lost)")

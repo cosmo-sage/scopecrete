@@ -1,27 +1,27 @@
 "use client";
 /**
- * The bid request as a vendor opens it from their link (migration 091): who
- * it's from, the job, the scopes with quantities (what the org supplies is
- * marked — they price labor), the address, the dates, photos, plans and the
- * aerial — and a form for their price: one number, a price per line, or their
- * usual rates filled in. No login. Never a cost of the org's.
+ * The bid request as a vendor opens it from their link (migration 091): the
+ * bid document (bid-document.tsx, laid out like the proposal — each section
+ * with its takeoff map, SF and SY, thickness, LF or count, the job's totals;
+ * what the org supplies marked; no days), photos, plans and the aerial — and a
+ * form for their price: one number, a price per line, or their usual rates
+ * filled in. No login. Never a cost of the org's.
  */
 import React, { useEffect, useMemo, useState } from "react";
 import { answerTotal, type ShownScope } from "@/lib/bids";
 import { Emblem, Wordmark } from "@/components/site/marks";
+import { BidDocument, lineQty, type DocScope } from "./bid-document";
 
 interface Bid {
   gone?: boolean; own?: boolean; org_name: string | null; job_title?: string | null; first_name?: string | null;
   price_mode?: "lump" | "per_item" | "their_rates"; price_by?: string | null; pour_date?: string | null;
   scopes?: ShownScope[]; note?: string | null; address?: string | null; access?: string | null;
-  files?: Array<{ id: string; name: string; kind: string; url: string }>; rates?: Record<string, number>;
+  files?: Array<{ id: string; name: string; kind: string; url: string; section?: string | null }>; maps?: Record<string, string>; rates?: Record<string, number>;
   answer?: { at: string; total: number | null; lines: Array<{ key: string; price: number }> | null; note: string | null } | null;
 }
 
 const C = { ink: "#2A2A2A", ink2: "#5B5650", ink3: "#8C857C", paper: "#FBF6EC", card: "#FFFFFF", hair: "#E4DCCB", accent: "#B85A3C", green: "#2F8A5B", red: "#B5412C" };
 const money = (n: number) => n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
-const day = (iso: string | null | undefined) => iso ? new Date(`${iso.slice(0, 10)}T12:00:00Z`).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" }) : null;
-const qtyLabel = (q: number | null, u: string | null) => q === null ? (u ?? "") : `${q.toLocaleString("en-US", { maximumFractionDigits: 2 })} ${u ?? ""}`.trim();
 const num = (s: string) => { const v = Number(s.replace(/[$,\s]/g, "")); return s.trim() && Number.isFinite(v) && v >= 0 ? v : null; };
 
 export function SharedBid({ token }: { token: string }) {
@@ -33,6 +33,13 @@ export function SharedBid({ token }: { token: string }) {
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState<string | null>(null);
   const [changing, setChanging] = useState(false);
+  const [narrow, setNarrow] = useState(false);
+  useEffect(() => {
+    const m = window.matchMedia("(max-width: 600px)");
+    const on = () => setNarrow(m.matches);
+    on(); m.addEventListener("change", on);
+    return () => m.removeEventListener("change", on);
+  }, []);
 
   useEffect(() => {
     let off = false;
@@ -74,6 +81,15 @@ export function SharedBid({ token }: { token: string }) {
   const answered = sent ?? (b.answer && !changing ? (b.answer.total !== null ? money(b.answer.total) : "your prices") : null);
   const photos = (b.files ?? []).filter((f) => f.kind === "photo");
   const docs = (b.files ?? []).filter((f) => f.kind !== "photo");
+  // A photo filed on a section shows under it; the rest below the scope.
+  const keys = new Set((b.scopes ?? []).map((s) => s.key));
+  const loose = photos.filter((f) => !f.section || !keys.has(f.section));
+  const docScopes: DocScope[] = (b.scopes ?? []).map((s) => ({
+    ...s,
+    // eslint-disable-next-line @next/next/no-img-element -- frozen when sent, signed link
+    map: b.maps?.[s.key] ? <img src={b.maps[s.key]} alt={`Where ${s.title} is`} style={{ height: narrow ? 150 : 200, maxWidth: "100%", border: `1px solid ${C.hair}`, borderRadius: 3, display: "block" }} /> : undefined,
+    photos: photos.filter((f) => f.section === s.key).map((f) => ({ id: f.id, url: f.url, name: f.name })),
+  }));
   const card: React.CSSProperties = { background: C.card, border: `1px solid ${C.hair}`, borderRadius: 6, padding: 14 };
   const h: React.CSSProperties = { fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 13, letterSpacing: ".12em", textTransform: "uppercase", color: C.ink3, margin: "0 0 8px" };
   const input: React.CSSProperties = { height: 40, border: `1px solid ${C.hair}`, borderRadius: 4, padding: "0 10px", fontSize: 16, width: "100%", background: "#fff", color: C.ink };
@@ -82,46 +98,22 @@ export function SharedBid({ token }: { token: string }) {
     <div style={{ minHeight: "100vh", background: C.paper, color: C.ink, fontFamily: "'IBM Plex Sans', system-ui, sans-serif" }}>
       <div style={{ maxWidth: 720, margin: "0 auto", padding: "20px 16px 60px", display: "flex", flexDirection: "column", gap: 14 }}>
         {b.own && <div style={{ ...card, background: "#FFF6D6", fontSize: 13 }}>This is what the vendor sees. Opening it yourself isn&apos;t counted, and you can&apos;t answer it.</div>}
-        <div>
-          <div style={{ fontSize: 13, letterSpacing: ".14em", textTransform: "uppercase", color: C.accent, fontWeight: 600 }}>Bid request{b.org_name ? ` · ${b.org_name}` : ""}</div>
-          <h1 style={{ margin: "4px 0 2px", fontSize: 26, lineHeight: 1.15 }}>{b.job_title ?? "A job for you"}</h1>
-          <div style={{ fontSize: 14, color: C.ink2 }}>
-            {[b.first_name ? `For ${b.first_name}` : null, b.address, b.pour_date ? `pour ${day(b.pour_date)}` : null, b.price_by ? `price by ${day(b.price_by)}` : null].filter(Boolean).join(" · ")}
-          </div>
-          {b.access && <div style={{ fontSize: 13, color: C.ink2, marginTop: 4 }}>Access: {b.access}</div>}
-          {b.note && <div style={{ fontSize: 14, marginTop: 8 }}>{b.note}</div>}
-        </div>
+        <BidDocument narrow={narrow} vm={{ org: b.org_name, jobTitle: b.job_title ?? null, forName: b.first_name, address: b.address, priceBy: b.price_by, pourDate: b.pour_date, note: b.note, scopes: docScopes }}
+          price={perItem && !answered ? (l) => (
+            <label style={{ display: "flex", alignItems: "center", gap: 4, width: 160, flex: "none" }}>
+              <span style={{ fontSize: 13, color: C.ink3 }}>$</span>
+              <input inputMode="decimal" value={prices[l.key] ?? ""} onChange={(e) => setPrices({ ...prices, [l.key]: e.target.value })} aria-label={lineQty(l) && l.unit ? `Price per ${l.unit} for ${l.name}` : `Price for ${l.name}`} style={{ ...input, height: 36 }} />
+              <span style={{ fontSize: 12, color: C.ink3, whiteSpace: "nowrap" }}>{lineQty(l) && l.unit ? `/${l.unit}` : "total"}</span>
+            </label>
+          ) : undefined} />
 
-        <section style={card}>
-          <h2 style={h}>What to price</h2>
-          {(b.scopes ?? []).map((s) => (
-            <div key={s.key} style={{ marginBottom: 12 }}>
-              <div style={{ fontWeight: 600 }}>{s.title}{s.size ? <span style={{ fontWeight: 400, color: C.ink3 }}> · {s.size}</span> : null}</div>
-              {s.lines.map((l) => (
-                <div key={l.key} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderTop: `1px solid ${C.hair}` }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 14 }}>{l.name}</div>
-                    <div style={{ fontSize: 12, color: l.supplied ? C.green : C.ink3 }}>{[qtyLabel(l.qty, l.unit) || null, l.supplied ? `${b.org_name ?? "We"} supplies — don't price it` : null].filter(Boolean).join(" · ")}</div>
-                  </div>
-                  {perItem && !l.supplied && !answered && (
-                    <label style={{ display: "flex", alignItems: "center", gap: 4, width: 150 }}>
-                      <span style={{ fontSize: 13, color: C.ink3 }}>$</span>
-                      <input inputMode="decimal" value={prices[l.key] ?? ""} onChange={(e) => setPrices({ ...prices, [l.key]: e.target.value })} aria-label={`Price per ${l.unit ?? "item"} for ${l.name}`} style={{ ...input, height: 36 }} />
-                      <span style={{ fontSize: 12, color: C.ink3, whiteSpace: "nowrap" }}>/{l.unit ?? "ea"}</span>
-                    </label>
-                  )}
-                </div>
-              ))}
-            </div>
-          ))}
-        </section>
-
-        {(photos.length > 0 || docs.length > 0) && (
+        {(loose.length > 0 || docs.length > 0) && (
           <section style={card}>
             <h2 style={h}>Photos, plans and the aerial</h2>
-            {photos.length > 0 && (
+            {loose.length > 0 && (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(96px, 1fr))", gap: 6, marginBottom: docs.length ? 10 : 0 }}>
-                {photos.map((f) => <a key={f.id} href={f.url} target="_blank" rel="noreferrer"><img src={f.url} alt={f.name} style={{ width: "100%", aspectRatio: "1", objectFit: "cover", borderRadius: 4, display: "block" }} /></a>)}
+                {/* eslint-disable-next-line @next/next/no-img-element -- signed link */}
+                {loose.map((f) => <a key={f.id} href={f.url} target="_blank" rel="noreferrer"><img src={f.url} alt={f.name} style={{ width: "100%", aspectRatio: "1", objectFit: "cover", borderRadius: 4, display: "block" }} /></a>)}
               </div>
             )}
             {docs.map((f) => (

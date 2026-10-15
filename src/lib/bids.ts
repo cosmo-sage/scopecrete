@@ -13,7 +13,7 @@
  */
 
 export const TRADES = [
-  "Flatwork", "Finishing", "Stamping", "Curb & gutter", "Foundations", "Rebar & steel", "Ready-mix", "Pumping",
+  "Labor", "Flatwork", "Finishing", "Stamping", "Curb & gutter", "Foundations", "Rebar & steel", "Ready-mix", "Pumping",
   "Excavation & grading", "Demolition", "Disposal", "Lumber & forms", "Equipment rental",
 ] as const;
 
@@ -52,15 +52,83 @@ export function tradeCounts(vendors: Array<{ trades?: string[] | null }>): Array
 
 export const hasTrade = (v: { trades?: string[] | null }, trade: string) => (v.trades ?? []).some((t) => t.toLowerCase() === trade.toLowerCase());
 
+/** A sub who prices labor: filed under the Labor trade, or as a subcontractor / looking for work (Coy, 2026-10-15: Luis). */
+export const laborVendor = (v: { trades?: string[] | null; subtype?: string | null }) =>
+  hasTrade(v, "Labor") || v.subtype === "subcontractor" || v.subtype === "looking_for_work";
+
 // ---------------------------------------------------------------- scopes
 
 /** A scope as the composer reads it (Coy's side: the line's type comes along, never its cost). */
 export interface ComposeLine { id: string; name: string; unit: string | null; qty: number | null; cost_type: string | null }
-export interface ComposeScope { key: string; title: string; size: string | null; lines: ComposeLine[] }
+/**
+ * A section's measurements, from its takeoffs or its typed size (the engine's quantities()):
+ * the area in SF (SY is SF ÷ 9), a length in LF, or a count, and the thickness. `concrete` is a pour —
+ * the job's total area counts pours only when there are any, so the base under them isn't counted twice.
+ */
+export interface Measure { sf: number | null; lf: number | null; count: number | null; count_unit: string | null; depth_in: number | null; concrete: boolean }
+export interface ComposeScope { key: string; title: string; size: string | null; measure?: Measure | null; lines: ComposeLine[] }
 
 /** What the vendor sees. */
 export interface ShownLine { key: string; name: string; qty: number | null; unit: string | null; supplied: boolean }
-export interface ShownScope { key: string; title: string; size: string | null; lines: ShownLine[] }
+export interface ShownScope { key: string; title: string; size: string | null; measure?: Measure | null; lines: ShownLine[] }
+
+/**
+ * A unit of time: days, man-days, hours, weeks. Those quantities are Coy's own estimate of the crew's
+ * time, never shown to a vendor (Coy, 2026-10-15: "I don't want to show the estimated amount of days") —
+ * the line goes with no quantity or unit, priced as one amount.
+ */
+export const isTimeUnit = (u: string | null | undefined) =>
+  /^\s*(man[\s-]*)?(days?|hrs?|hours?|weeks?|wks?|crew[\s-]*days?)\s*$/i.test(u ?? "") || /^\s*md\s*$/i.test(u ?? "");
+
+const r2 = (n: number) => Math.round(n * 100) / 100;
+const cleanMeasure = (m: Measure | null | undefined): Measure | null => {
+  if (!m) return null;
+  const n = (v: unknown) => (typeof v === "number" && Number.isFinite(v) && v > 0 ? r2(v) : null);
+  const out: Measure = { sf: n(m.sf), lf: n(m.lf), count: n(m.count), count_unit: m.count_unit ? String(m.count_unit).slice(0, 12) : null, depth_in: n(m.depth_in), concrete: m.concrete === true };
+  return out.sf || out.lf || out.count || out.depth_in ? out : null;
+};
+
+/** "2,583.81 SF · 287.09 SY · 7\" thick" — what a section measures, in the words the vendor reads. */
+export function measureLabel(m: Measure | null | undefined): string | null {
+  if (!m) return null;
+  const f = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 2 });
+  const parts: string[] = [];
+  if (m.lf) parts.push(`${f(m.lf)} LF`);
+  else if (m.sf) parts.push(`${f(m.sf)} SF`, `${f(r2(m.sf / 9))} SY`);
+  else if (m.count) parts.push(`${f(m.count)} ${m.count_unit ?? "EA"}`);
+  if (m.depth_in) parts.push(`${f(m.depth_in)}" thick`);
+  return parts.length ? parts.join(" · ") : null;
+}
+
+/**
+ * The job's totals over the sections shown: area (pours only when any section is a pour), SY,
+ * linear feet, and each count by its unit. Old requests carry no measure and add nothing.
+ */
+export function jobTotals(scopes: Array<Pick<ShownScope, "measure">>): { sf: number | null; sy: number | null; lf: number | null; counts: Array<{ unit: string; n: number }> } {
+  const ms = scopes.map((s) => s.measure).filter((m): m is Measure => !!m);
+  const areas = ms.filter((m) => !m.lf && m.sf);
+  const pours = areas.filter((m) => m.concrete);
+  const sf = (pours.length ? pours : areas).reduce((a, m) => a + (m.sf ?? 0), 0);
+  const lf = ms.reduce((a, m) => a + (m.lf ?? 0), 0);
+  const byUnit = new Map<string, number>();
+  for (const m of ms) if (!m.lf && !m.sf && m.count) { const u = (m.count_unit ?? "EA").toUpperCase(); byUnit.set(u, (byUnit.get(u) ?? 0) + m.count); }
+  return { sf: sf ? r2(sf) : null, sy: sf ? r2(sf / 9) : null, lf: lf ? r2(lf) : null, counts: [...byUnit].map(([unit, n]) => ({ unit, n: r2(n) })) };
+}
+
+/**
+ * What the composer ticks to start: every section that measures something or has a line, every line —
+ * or, for a labor sub, only the labor lines (Coy, 2026-10-15: "when sending the bid request to a sub like
+ * Luis … it should default to all the Labor cost items"); the sections still show what they measure.
+ */
+export function defaultPick(scopes: ComposeScope[], laborOnly: boolean): { scopes: Record<string, boolean>; lines: Record<string, boolean> } {
+  const sc: Record<string, boolean> = {}, ln: Record<string, boolean> = {};
+  for (const s of scopes) {
+    const labor = s.lines.filter((l) => l.cost_type === "labor");
+    for (const l of s.lines) ln[l.id] = !laborOnly || l.cost_type === "labor";
+    sc[s.key] = laborOnly ? !!s.measure || labor.length > 0 : !!s.measure || s.lines.length > 0;
+  }
+  return { scopes: sc, lines: ln };
+}
 
 /** A material line is supplied by the org unless Coy says otherwise (the sub prices labor). */
 export const suppliedByDefault = (l: Pick<ComposeLine, "cost_type">) => l.cost_type === "material";
@@ -83,15 +151,18 @@ export function shownScopes(scopes: ComposeScope[], pick: ScopePick): ShownScope
     const lines: ShownLine[] = [];
     for (const l of s.lines) {
       if (pick.lines?.[l.id] === false) continue;
+      const time = isTimeUnit(l.unit);
       lines.push({
         key: String(l.id).slice(0, 80),
         name: String(l.name ?? "").slice(0, 200),
-        qty: pick.quantities === false || l.qty === null || !Number.isFinite(Number(l.qty)) ? null : Math.round(Number(l.qty) * 100) / 100,
-        unit: l.unit ? String(l.unit).slice(0, 20) : null,
+        qty: time || pick.quantities === false || l.qty === null || !Number.isFinite(Number(l.qty)) ? null : Math.round(Number(l.qty) * 100) / 100,
+        unit: time || !l.unit ? null : String(l.unit).slice(0, 20),
         supplied: pick.supplied?.[l.id] ?? suppliedByDefault(l),
       });
     }
-    if (lines.length) out.push({ key: s.key.slice(0, 80), title: s.title.slice(0, 120), size: pick.quantities === false ? null : s.size ? s.size.slice(0, 80) : null, lines });
+    const measure = pick.quantities === false ? null : cleanMeasure(s.measure);
+    // A section shows with what it measures even with none of its lines ticked (a labor sub prices the slab).
+    if (lines.length || measure) out.push({ key: s.key.slice(0, 80), title: s.title.slice(0, 120), size: pick.quantities === false ? null : s.size ? s.size.slice(0, 80) : null, measure, lines });
   }
   return out;
 }
@@ -173,14 +244,14 @@ export function priorRates(lines: ShownLine[], past: Array<{ at: string; lines: 
   return out;
 }
 
-/** A price per line, added up: qty × price on each line they price; a line with no quantity counts its price once. */
+/** A price per line, added up: qty × price on each line they price; a line with no quantity (or one in days, whose quantity isn't shown) counts its price once. */
 export function answerTotal(lines: ShownLine[], prices: Record<string, number | null | undefined>): number | null {
   let t = 0, any = false;
   for (const l of lines) {
     const p = prices[l.key];
     if (p === null || p === undefined || !Number.isFinite(p) || l.supplied) continue;
     any = true;
-    t += (l.qty ?? 1) * p;
+    t += (isTimeUnit(l.unit) ? 1 : l.qty ?? 1) * p;
   }
   return any ? Math.round(t * 100) / 100 : null;
 }

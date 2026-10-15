@@ -4,9 +4,14 @@
  * The bid request composer (migration 091; Claude Design, Vendors v2 · V2/P2).
  * One composer, two doors: the Vendors page (start from who — the vendors Coy
  * ticked) and a job (start from what — the job filled in, vendors suggested by
- * trade). Five questions: which job · which scopes (the budget's areas and
- * their lines with quantities — costs are never shown, here or to the vendor)
- * · what they see · how they price it · who gets it, by text, email or both.
+ * trade). Since 2026-10-15 (Coy: "needs a revamp completely") the scope is the
+ * bid document itself, as the vendor will see it (bid-document.tsx, laid out
+ * like the proposal): each section with its takeoffs on the sheet, its SF and
+ * SY, thickness, LF or count, the job's totals, ticks for what goes in and who
+ * supplies the material. Beside it: which job · who gets it · what else they
+ * see · how they price it. For a labor sub (Luis — laborVendor()) every labor
+ * line is ticked to start and nothing else (defaultPick()); costs and the
+ * days on a line are never shown, here or to the vendor.
  *
  * Send makes one link per vendor (POST /api/bid-requests), then texts each one
  * through Quo (/api/texts — this tap is Coy's, §6) and leaves email to his own
@@ -14,25 +19,29 @@
  */
 
 import React, { useContext, useEffect, useMemo, useState } from "react";
-import { T, F, disp, eyebrow, nums, clip, formatPhone } from "@/lib/v34/tokens";
+import { T, F, disp, eyebrow, clip, formatPhone } from "@/lib/v34/tokens";
 import { Drawer, OrgNameContext } from "@/components/v34/primitives";
 import { InitialsBox } from "@/components/v34/thread-list";
 import { call } from "@/components/v34/cost-cards";
 import { waitForDelivery } from "@/components/v34/bids/delivery";
-import { bidText, shownScopes, suppliedByDefault, type ComposeScope } from "@/lib/bids";
+import { bidText, defaultPick, laborVendor, shownScopes, suppliedByDefault, type ComposeScope } from "@/lib/bids";
+import { useWide } from "@/lib/v34/use-wide";
+import { BidDocument, type DocScope } from "@/components/v34/bids/bid-document";
+import { AreaMap, areaVisuals, mapPicture, type AreaVisual } from "@/components/v34/proposal/area-visuals";
+import { sendBytes } from "@/components/v34/files-panel";
+import type { PlansData } from "@/components/v34/plan-room/shared";
 
 export interface BidVendor {
   id: string; name: string | null; company_name?: string | null; phone: string | null; email: string | null; subtype?: string | null;
   trades?: string[]; bids?: { sent: number; answered: number; label: string; speed: string | null; median_hours: number | null };
 }
 interface JobLite { id: string; title: string | null; address: string | null; status: string | null }
-interface PacketFile { id: string; name: string; kind: "photo" | "plan" | "aerial" }
+interface PacketFile { id: string; name: string; kind: "photo" | "plan" | "aerial"; section?: string | null }
 interface ComposeJob { id: string; title: string | null; address: string | null; street: string | null; scopes: ComposeScope[]; files: PacketFile[]; access: string | null }
 type Ch = "text" | "email" | "both";
 interface Made { id: string; contact_id: string; name: string | null; phone: string | null; email: string | null; channel: Ch; url: string; text: string; email_parts: { subject: string; body: string } }
 
 const vname = (v: Pick<BidVendor, "name" | "company_name" | "phone">) => v.name?.trim() || v.company_name || formatPhone(v.phone) || "Vendor";
-const qty = (n: number | null, u: string | null) => (n === null ? u ?? "" : `${n.toLocaleString("en-US", { maximumFractionDigits: 2 })} ${u ?? ""}`.trim());
 const MODES: Array<[string, string, string]> = [
   ["lump", "Lump sum", "Each sub sends one number for the scopes ticked."],
   ["per_item", "Per item", "Each sub prices every line: per SF, per LF, per EA."],
@@ -78,9 +87,12 @@ export function BidComposer({ open, onClose, vendors: start, jobId: startJob, fr
   const [jobId, setJobId] = useState<string | null>(startJob ?? null);
   const [job, setJob] = useState<ComposeJob | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [scopes, setScopes] = useState<Record<string, boolean>>({});
-  const [open2, setOpen2] = useState<Record<string, boolean>>({});
-  const [lines, setLines] = useState<Record<string, boolean>>({});
+  // Coy's ticks over the starting pick (defaultPick), so the pick follows the vendors until he changes it.
+  const [scopeTicks, setScopeTicks] = useState<Record<string, boolean>>({});
+  const [lineTicks, setLineTicks] = useState<Record<string, boolean>>({});
+  const [laborPick, setLaborPick] = useState<boolean | null>(null);
+  const [visuals, setVisuals] = useState<Record<string, AreaVisual>>({});
+  const [wideRef, wide] = useWide<HTMLDivElement>(1060);
   const [supplied, setSupplied] = useState<Record<string, boolean>>({});
   const [pk, setPk] = useState({ address: true, dates: true, quantities: true, photos: true, aerial: true });
   const [plans, setPlans] = useState<Record<string, boolean>>({});
@@ -114,20 +126,34 @@ export function BidComposer({ open, onClose, vendors: start, jobId: startJob, fr
       const j = b.job as ComposeJob;
       setJob(j); setErr(null);
       // Every scope with lines ticked; materials supplied by default (suppliedByDefault); every plan in.
-      setScopes(Object.fromEntries(j.scopes.filter((s) => s.lines.length).map((s) => [s.key, true])));
-      setLines({}); setSupplied({});
+      setScopeTicks({}); setLineTicks({}); setSupplied({}); setVisuals({});
       setPlans(Object.fromEntries(j.files.filter((f) => f.kind === "plan").map((f) => [f.id, true])));
+      // Each section's takeoffs on its sheet, drawn like the proposal's.
+      call(`/api/jobs/${j.id}/plans`, "GET").then((d: PlansData) => { if (!off) setVisuals(areaVisuals(d, j.scopes.map((s) => s.key))); }).catch(() => {});
     }).catch((e) => { if (!off) setErr(String(e?.message ?? e)); });
     return () => { off = true; };
   }, [open, jobId]);
 
   const picked = useMemo(() => pool.filter((v) => who[v.id]), [pool, who]);
+  // Labor subs only (Luis): every labor line to start, the materials left out.
+  const laborAuto = picked.length > 0 && picked.every(laborVendor);
+  const laborOnly = laborPick ?? laborAuto;
+  const startPick = useMemo(() => (job ? defaultPick(job.scopes, laborOnly) : { scopes: {}, lines: {} }), [job, laborOnly]);
+  const scopes = useMemo(() => ({ ...startPick.scopes, ...scopeTicks }), [startPick, scopeTicks]);
+  const lines = useMemo(() => ({ ...startPick.lines, ...lineTicks }), [startPick, lineTicks]);
   const shown = useMemo(() => (job ? shownScopes(job.scopes, { scopes, lines, supplied, quantities: pk.quantities }) : []), [job, scopes, lines, supplied, pk.quantities]);
+  const docScopes = useMemo<DocScope[]>(() => (job?.scopes ?? []).map((s) => {
+    const v = visuals[s.key];
+    return {
+      key: s.key, title: s.title, size: pk.quantities ? s.size : null, measure: pk.quantities ? s.measure ?? null : null, on: !!scopes[s.key],
+      lines: s.lines.map((l) => ({ key: l.id, name: l.name, qty: pk.quantities ? l.qty : null, unit: l.unit, supplied: supplied[l.id] ?? suppliedByDefault(l), on: lines[l.id] !== false })),
+      map: v?.map ? <AreaMap map={v.map} height={150} /> : undefined,
+    };
+  }), [job, scopes, lines, supplied, pk.quantities, visuals]);
   const files = useMemo(() => (job?.files ?? []).filter((f) => (f.kind === "photo" ? pk.photos : f.kind === "aerial" ? pk.aerial : plans[f.id])), [job, pk, plans]);
   const photosN = (job?.files ?? []).filter((f) => f.kind === "photo").length, aerialN = (job?.files ?? []).filter((f) => f.kind === "aerial").length;
   const texts = picked.filter((v) => who[v.id] !== "email" && v.phone).length;
   const emails = picked.filter((v) => who[v.id] !== "text" && v.email).length;
-  const anySupplied = shown.some((s) => s.lines.some((l) => l.supplied));
   // Suggestions from the job door: subs first, best responders first.
   const suggest = useMemo(() => pool.filter((v) => !who[v.id] && (!find.trim() || [v.name, v.company_name, ...(v.trades ?? [])].some((x) => (x ?? "").toLowerCase().includes(find.trim().toLowerCase()))))
     .sort((a, b) => Number(b.subtype === "subcontractor") - Number(a.subtype === "subcontractor") || (b.bids?.answered ?? 0) - (a.bids?.answered ?? 0) || vname(a).localeCompare(vname(b)))
@@ -153,11 +179,18 @@ export function BidComposer({ open, onClose, vendors: start, jobId: startJob, fr
     setBusy(true); setErr(null);
     try {
       const b = await call("/api/bid-requests", "POST", {
-        job_id: jobId, pick: { scopes, lines, supplied }, price_mode: mode, price_by: priceBy || null, pour_date: pour || null, note: note.trim() || null,
+        job_id: jobId, pick: { scopes, lines, supplied }, maps: shown.filter((x) => visuals[x.key]?.map).map((x) => x.key), price_mode: mode, price_by: priceBy || null, pour_date: pour || null, note: note.trim() || null,
         follow_up: follow, packet: { files: files.map((f) => f.id), quantities: pk.quantities, address: pk.address, dates: pk.dates },
         recipients: picked.map((v) => ({ contact_id: v.id, channel: who[v.id] })),
       });
       const rows = b.recipients as Made[];
+      // The takeoff maps go up before any text, so the link has them when it opens.
+      const ups = (b.uploads ?? []) as Array<{ key: string; signed_url: string }>;
+      for (const u of ups) {
+        const map = visuals[u.key]?.map;
+        if (!map) continue;
+        try { await sendBytes(u.signed_url, new File([await mapPicture(map)], "map.jpg", { type: "image/jpeg" }), () => {}); } catch { /* the section shows without its map */ }
+      }
       setMade(rows);
       // Texts go now, one by one, through Quo — this tap is Coy's.
       const st: Record<string, string> = {};
@@ -214,6 +247,8 @@ export function BidComposer({ open, onClose, vendors: start, jobId: startJob, fr
         <div className="p-3 lg:p-4 flex flex-col gap-3" style={{ background: T.slab, minHeight: "100%" }}>
           {err && <div className="rounded px-3 py-2" style={{ fontSize: F.sm, color: T.red, background: T.redDim }}>{err}</div>}
 
+          <div ref={wideRef} className={wide ? "grid gap-3 items-start" : "flex flex-col gap-3"} style={wide ? { gridTemplateColumns: "minmax(320px, 400px) minmax(0, 1fr)" } : undefined}>
+          <div className="flex flex-col gap-3" style={{ minWidth: 0 }}>
           {/* 1 · job */}
           <section style={card}>
             {stepHead(1, "Which job")}
@@ -242,85 +277,10 @@ export function BidComposer({ open, onClose, vendors: start, jobId: startJob, fr
             })()}
           </section>
 
-          {/* 2 · scopes */}
-          <section style={card}>
-            {stepHead(2, "Which scopes they price", job ? `from the ${job.title ?? "job"} budget · your costs stay hidden` : undefined)}
-            {!jobId ? <div style={{ fontSize: F.sm, color: T.ink3 }}>Pick the job first.</div> : !job ? <div style={{ fontSize: F.sm, color: T.ink3 }}>Loading…</div>
-              : job.scopes.length === 0 ? <div style={{ fontSize: F.sm, color: T.ink3 }}>This job has no areas yet. Add them on the job first.</div> : (
-              <div className="flex flex-col">
-                {job.scopes.map((s) => {
-                  const on = !!scopes[s.key];
-                  return (
-                    <div key={s.key} style={{ borderTop: `1px solid ${T.hairSoft}` }}>
-                      <div className="flex items-center gap-2 py-1.5" style={{ cursor: "pointer" }} onClick={() => setOpen2({ ...open2, [s.key]: !open2[s.key] })}>
-                        <Check on={on} onClick={() => setScopes({ ...scopes, [s.key]: !on })} label={`Include ${s.title}`} />
-                        <span style={{ fontWeight: 600, fontSize: F.sm, flex: 1, minWidth: 0, ...clip }}>{s.title}{s.size ? <span style={{ fontWeight: 400, color: T.ink3 }}> · {s.size}</span> : null}</span>
-                        <span style={{ fontSize: F.xs, color: T.ink3 }}>{s.lines.length ? `${s.lines.length} line${s.lines.length === 1 ? "" : "s"}` : "no lines"} {open2[s.key] ? "▾" : "▸"}</span>
-                      </div>
-                      {open2[s.key] && s.lines.map((l) => {
-                        const lon = lines[l.id] !== false, sup = supplied[l.id] ?? suppliedByDefault(l);
-                        return (
-                          <div key={l.id} className="flex items-center gap-2 py-1 pl-7" style={{ opacity: on ? 1 : 0.5 }}>
-                            <Check size={15} on={lon} onClick={() => setLines({ ...lines, [l.id]: !lon })} label={`Include ${l.name}`} />
-                            <span style={{ fontSize: F.sm, flex: 1, minWidth: 0, color: lon ? T.ink : T.ink3, ...clip }}>{l.name}</span>
-                            <span style={{ fontSize: F.xs, color: T.ink3, ...nums }}>{qty(l.qty, l.unit)}</span>
-                            <button onClick={() => setSupplied({ ...supplied, [l.id]: !sup })} title="Who supplies the material"
-                              style={{ ...chip(sup), height: 22, padding: "0 6px", fontSize: 10, background: sup ? T.greenDim : T.card, color: sup ? T.green : T.ink3, border: `1px solid ${sup ? T.green : T.hair}` }}>
-                              {sup ? `${org ?? "We"} supplies` : "They price it"}
-                            </button>
-                          </div>
-                        );
-                      })}
-                      {!s.lines.length && open2[s.key] && <div className="pl-7 pb-1" style={{ fontSize: F.xs, color: T.ink3 }}>No items on this area&apos;s budget.</div>}
-                    </div>
-                  );
-                })}
-                <div style={{ fontSize: F.xs, color: T.ink3, marginTop: 4 }}>
-                  {anySupplied ? `Material marked "${org ?? "We"} supplies" is listed for them, not priced — they price labor.` : "Tap an area to pick its lines, or mark the material as yours."}
-                </div>
-              </div>
-            )}
-          </section>
-
-          {/* 3 · packet */}
-          <section style={card}>
-            {stepHead(3, "What they see", "pulled from the job")}
-            <div className="flex flex-wrap gap-1.5">
-              {([["address", "Address & access", job?.address ?? "no address"], ["dates", "Pour date & price-by", null], ["quantities", "Quantities", null]] as const).map(([k, l, d]) => (
-                <button key={k} onClick={() => setPk({ ...pk, [k]: !pk[k] })} style={chip(pk[k])} title={d ?? undefined}>{pk[k] ? "✓ " : ""}{l}</button>
-              ))}
-              {aerialN > 0 && <button onClick={() => setPk({ ...pk, aerial: !pk.aerial })} style={chip(pk.aerial)}>{pk.aerial ? "✓ " : ""}Aerial{aerialN > 1 ? ` · ${aerialN}` : ""}</button>}
-              {photosN > 0 && <button onClick={() => setPk({ ...pk, photos: !pk.photos })} style={chip(pk.photos)}>{pk.photos ? "✓ " : ""}Site photos · {photosN}</button>}
-              {(job?.files ?? []).filter((f) => f.kind === "plan").map((f) => (
-                <button key={f.id} onClick={() => setPlans({ ...plans, [f.id]: !plans[f.id] })} style={{ ...chip(!!plans[f.id]), maxWidth: 240, ...clip }}>{plans[f.id] ? "✓ " : ""}{f.name}</button>
-              ))}
-            </div>
-            {job && !job.files.length && <div style={{ fontSize: F.xs, color: T.ink3, marginTop: 6 }}>No photos, plans or aerial on this job yet.</div>}
-          </section>
-
-          {/* 4 · pricing */}
-          <section style={card}>
-            {stepHead(4, "How they price it")}
-            <div className="flex flex-wrap gap-1.5 items-center">
-              {MODES.map(([k, l]) => <button key={k} onClick={() => setMode(k)} style={chip(mode === k)}>{l}</button>)}
-              <span style={{ fontSize: F.xs, color: T.ink3 }}>{MODES.find((m) => m[0] === mode)?.[2]}</span>
-            </div>
-            <div className="flex flex-wrap gap-3 items-end mt-2">
-              <label><span style={eyebrow}>Price by</span><br /><input type="date" value={priceBy} onChange={(e) => setPriceBy(e.target.value)} style={field} /></label>
-              <label><span style={eyebrow}>Pour</span><br /><input type="date" value={pour} onChange={(e) => setPour(e.target.value)} style={field} /></label>
-              <label className="flex items-center gap-1.5" style={{ fontSize: F.sm, height: 32 }}>
-                <Check on={follow} onClick={() => setFollow(!follow)} label="Remind me to follow up" />
-                <span>Remind me {priceBy ? "on the price-by date" : "in 3 days"} if they haven&apos;t answered</span>
-              </label>
-            </div>
-            <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} maxLength={2000} placeholder="A note for them (optional)" aria-label="Note for the vendors"
-              style={{ ...field, height: "auto", width: "100%", padding: 8, marginTop: 8 }} />
-          </section>
-
-          {/* 5 · who */}
+          {/* 2 · who */}
           <section style={card}>
             <div className="flex items-center">
-              <div style={{ flex: 1 }}>{stepHead(5, "Who gets it", tradeHint ?? undefined)}</div>
+              <div style={{ flex: 1 }}>{stepHead(2, "Who gets it", tradeHint ?? undefined)}</div>
               <button onClick={() => setAdding(!adding)} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>{adding ? "Done adding" : "+ Add vendor"}</button>
             </div>
             {picked.length === 0 && !adding && <div style={{ fontSize: F.sm, color: T.ink3, marginBottom: 6 }}>Nobody yet — pick from the vendors below.</div>}
@@ -365,6 +325,78 @@ export function BidComposer({ open, onClose, vendors: start, jobId: startJob, fr
               </div>
             )}
           </section>
+
+          {/* 3 · packet */}
+          <section style={card}>
+            {stepHead(3, "What else they see", "pulled from the job")}
+            <div className="flex flex-wrap gap-1.5">
+              {([["address", "Address & access", job?.address ?? "no address"], ["dates", "Pour date & price-by", null], ["quantities", "Quantities", null]] as const).map(([k, l, d]) => (
+                <button key={k} onClick={() => setPk({ ...pk, [k]: !pk[k] })} style={chip(pk[k])} title={d ?? undefined}>{pk[k] ? "✓ " : ""}{l}</button>
+              ))}
+              {aerialN > 0 && <button onClick={() => setPk({ ...pk, aerial: !pk.aerial })} style={chip(pk.aerial)}>{pk.aerial ? "✓ " : ""}Aerial{aerialN > 1 ? ` · ${aerialN}` : ""}</button>}
+              {photosN > 0 && <button onClick={() => setPk({ ...pk, photos: !pk.photos })} style={chip(pk.photos)}>{pk.photos ? "✓ " : ""}Site photos · {photosN}</button>}
+              {(job?.files ?? []).filter((f) => f.kind === "plan").map((f) => (
+                <button key={f.id} onClick={() => setPlans({ ...plans, [f.id]: !plans[f.id] })} style={{ ...chip(!!plans[f.id]), maxWidth: 240, ...clip }}>{plans[f.id] ? "✓ " : ""}{f.name}</button>
+              ))}
+            </div>
+            {job && !job.files.length && <div style={{ fontSize: F.xs, color: T.ink3, marginTop: 6 }}>No photos, plans or aerial on this job yet.</div>}
+          </section>
+
+          {/* 4 · pricing */}
+          <section style={card}>
+            {stepHead(4, "How they price it")}
+            <div className="flex flex-wrap gap-1.5 items-center">
+              {MODES.map(([k, l]) => <button key={k} onClick={() => setMode(k)} style={chip(mode === k)}>{l}</button>)}
+              <span style={{ fontSize: F.xs, color: T.ink3 }}>{MODES.find((m) => m[0] === mode)?.[2]}</span>
+            </div>
+            <div className="flex flex-wrap gap-3 items-end mt-2">
+              <label><span style={eyebrow}>Price by</span><br /><input type="date" value={priceBy} onChange={(e) => setPriceBy(e.target.value)} style={field} /></label>
+              <label><span style={eyebrow}>Pour</span><br /><input type="date" value={pour} onChange={(e) => setPour(e.target.value)} style={field} /></label>
+              <label className="flex items-center gap-1.5" style={{ fontSize: F.sm, height: 32 }}>
+                <Check on={follow} onClick={() => setFollow(!follow)} label="Remind me to follow up" />
+                <span>Remind me {priceBy ? "on the price-by date" : "in 3 days"} if they haven&apos;t answered</span>
+              </label>
+            </div>
+            <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} maxLength={2000} placeholder="A note for them (optional)" aria-label="Note for the vendors"
+              style={{ ...field, height: "auto", width: "100%", padding: 8, marginTop: 8 }} />
+          </section>
+
+          </div>
+
+          {/* The bid as they'll see it — tick what goes in, right on the page. */}
+          <div style={{ minWidth: 0, ...(wide ? { position: "sticky", top: 8 } : {}) }}>
+            <div className="flex items-center gap-2 flex-wrap mb-2">
+              <span style={{ ...eyebrow }}>What they see</span>
+              <span style={{ fontSize: F.xs, color: T.ink3, flex: 1, minWidth: 160 }}>Tick sections and lines · your costs and the days on a line never show</span>
+              {job && (
+                <button onClick={() => { setLaborPick(!laborOnly); setLineTicks({}); setScopeTicks({}); }} style={chip(laborOnly)} title={laborAuto ? "Picked for a labor sub" : undefined}>
+                  {laborOnly ? "✓ " : ""}Labor items only
+                </button>
+              )}
+            </div>
+            {laborOnly && laborAuto && laborPick === null && (
+              <div style={{ fontSize: F.xs, color: T.ink2, marginBottom: 6 }}>
+                {picked.length === 1 ? vname(picked[0]) : "They"} price{picked.length === 1 ? "s" : ""} labor, so every labor line is ticked and the materials are left out.
+              </div>
+            )}
+            {!jobId ? <div style={{ ...card, fontSize: F.sm, color: T.ink3 }}>Pick the job first.</div>
+              : !job ? <div style={{ ...card, fontSize: F.sm, color: T.ink3 }}>Loading…</div>
+              : job.scopes.length === 0 ? <div style={{ ...card, fontSize: F.sm, color: T.ink3 }}>This job has no sections yet. Add them on the job first.</div>
+              : (
+                <div style={{ background: "var(--sc-doc-ground, #E9E4DA)", borderRadius: 4, padding: wide ? 14 : 6 }}>
+                  <BidDocument narrow={!wide} edits={{
+                    scope: (k, on) => setScopeTicks((t) => ({ ...t, [k]: on })),
+                    line: (k, on) => setLineTicks((t) => ({ ...t, [k]: on })),
+                    supplied: (k, on) => setSupplied((t) => ({ ...t, [k]: on })),
+                  }} vm={{
+                    org, jobTitle: job.title, forName: picked.length === 1 ? vname(picked[0]).split(/\s+/)[0] : null,
+                    address: pk.address ? job.address : null, priceBy: pk.dates ? priceBy || null : null, pourDate: pk.dates ? pour || null : null,
+                    note: note.trim() || null, scopes: docScopes,
+                  }} />
+                </div>
+              )}
+          </div>
+          </div>
 
           <div className="flex items-center gap-3 flex-wrap sticky bottom-0 py-2" style={{ background: T.slab }}>
             <span style={{ fontSize: F.sm, color: T.ink2, flex: 1, minWidth: 180 }}>

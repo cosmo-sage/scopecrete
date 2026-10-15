@@ -3,7 +3,7 @@ import { budget, quantities, type BudgetLine, type SectionInput } from "@/lib/en
 import { numLine, workingEstimate } from "@/lib/budget-server";
 import { pricingFor } from "@/lib/pricing-server";
 import { takeoffTotalsFor } from "@/lib/plans-server";
-import type { ComposeScope } from "@/lib/bids";
+import type { ComposeScope, Measure } from "@/lib/bids";
 
 /**
  * What the bid request composer reads for one job (migration 091): its scopes
@@ -21,7 +21,7 @@ export const missing091 = (e: { message?: string; code?: string } | null | undef
   !!e && (e.code === "42P01" || e.code === "42703" || e.code === "PGRST205" || e.code === "PGRST204" || e.code === "PGRST202"
     || /bid_request|trades|crew_size|sc_shared_bid|sc_answer_bid/.test(e.message ?? ""));
 
-export interface PacketFile { id: string; name: string; path: string; kind: "photo" | "plan" | "aerial" }
+export interface PacketFile { id: string; name: string; path: string; kind: "photo" | "plan" | "aerial"; /** The section a photo is filed on, shown under it. */ section?: string | null }
 export interface ComposeJob {
   id: string; title: string | null; address: string | null; street: string | null; status: string | null;
   scopes: ComposeScope[]; files: PacketFile[]; access: string | null;
@@ -35,6 +35,17 @@ const sizeOf = (s: SectionInput): string | null => {
   if (q.depth_in) parts.push(`${fmt(q.depth_in)}"`);
   return parts.length ? parts.join(" · ") : null;
 };
+/** What a section measures, for the vendor's page: its area, length or count and its thickness. */
+const measureOf = (s: SectionInput): Measure | null => {
+  const q = quantities(s);
+  const lf = q.count_unit === "LF" && q.count ? q.count : null;
+  const m: Measure = {
+    sf: !lf && q.sqft ? q.sqft : null, lf,
+    count: !lf && !q.sqft && q.count ? q.count : null, count_unit: !lf && !q.sqft && q.count ? q.count_unit ?? "EA" : null,
+    depth_in: q.depth_in ?? null, concrete: !!q.concrete,
+  };
+  return m.sf || m.lf || m.count || m.depth_in ? m : null;
+};
 const fmt = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 2 });
 
 export async function composeFor(sb: Sb, orgId: string, jobId: string): Promise<ComposeJob | null> {
@@ -42,13 +53,13 @@ export async function composeFor(sb: Sb, orgId: string, jobId: string): Promise<
   if (!job) return null;
   const est = await workingEstimate(sb, orgId, jobId, false);
   const [{ data: secs }, { data: rows }, pricing, takeoff, { data: files }, { data: sheets }] = await Promise.all([
-    sb.from("job_sections").select("id, name, work_type, length_ft, width_ft, sqft_override, depth_in, psi, count_qty, count_unit, access_notes, sort_order")
+    sb.from("job_sections").select("id, name, work_type, length_ft, width_ft, sqft_override, depth_in, psi, count_qty, count_unit, sort_order")
       .eq("org_id", orgId).eq("job_id", jobId).order("sort_order").order("created_at"),
     est ? sb.from("estimate_line_items").select("id, section_id, option_id, cost_group_id, cost_item_id, name, cost_type, unit, unit_cost, margin_pct, taxable, qty_rule, rule_params, qty_source, quantity, takeoff_parameter_id, sort_order")
       .eq("org_id", orgId).eq("estimate_id", est.id as string).order("sort_order").order("name") : Promise.resolve({ data: [] }),
     pricingFor(sb, orgId, [jobId]),
     takeoffTotalsFor(sb, orgId, jobId),
-    sb.from("files").select("id, name, mime_type, storage_path, category, in_plan_room, created_at").eq("org_id", orgId).eq("job_id", jobId)
+    sb.from("files").select("id, name, mime_type, storage_path, category, in_plan_room, section_id, created_at").eq("org_id", orgId).eq("job_id", jobId)
       .is("deleted_at", null).not("storage_path", "is", null).order("created_at", { ascending: false }).limit(120),
     sb.from("plan_sheets").select("file_id, number").eq("org_id", orgId).eq("job_id", jobId).ilike("number", "AERIAL%"),
   ]);
@@ -62,7 +73,7 @@ export async function composeFor(sb: Sb, orgId: string, jobId: string): Promise<
   const toLine = (l: BudgetLine) => ({ id: l.id, name: l.name, unit: l.unit || null, qty: qtyOf(l), cost_type: (l.cost_type as string) ?? null });
 
   const scopes: ComposeScope[] = sections.map((s) => ({
-    key: s.id, title: s.name?.trim() || String(s.work_type ?? "Area").replace(/_/g, " "), size: sizeOf(s),
+    key: s.id, title: s.name?.trim() || String(s.work_type ?? "Area").replace(/_/g, " "), size: sizeOf(s), measure: measureOf(s),
     lines: lines.filter((l) => l.section_id === s.id).map(toLine),
   }));
   const whole = lines.filter((l) => !l.section_id || !sections.some((s) => s.id === l.section_id));
@@ -75,9 +86,10 @@ export async function composeFor(sb: Sb, orgId: string, jobId: string): Promise<
     const pdf = mime === "application/pdf" || /\.pdf$/i.test(name);
     const kind = aerialIds.has(f.id as string) ? "aerial" : mime.startsWith("image/") ? "photo" : pdf && (f.in_plan_room || f.category === "plan") ? "plan" : null;
     if (!kind) continue;
-    packet.push({ id: f.id as string, name, path: f.storage_path as string, kind });
+    packet.push({ id: f.id as string, name, path: f.storage_path as string, kind, section: kind === "photo" ? (f.section_id as string | null) ?? null : null });
   }
-  const access = sections.map((s) => s.access_notes?.trim()).filter(Boolean).join(" · ") || null;
+  // A section's Notes are Coy's own (they replaced Access, 2026-10-03) — never sent to a vendor.
+  const access = null;
   const address = (job.address as string | null) ?? null;
   return {
     id: job.id as string, title: (job.title as string | null) ?? null, address, street: address ? address.split(",")[0].trim() : null,

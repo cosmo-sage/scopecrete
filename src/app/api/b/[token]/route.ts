@@ -6,7 +6,8 @@ import { FILES_BUCKET } from "@/lib/files";
  * A vendor's bid link (migration 091) — scopecrete.ai/b/<token>, no login.
  * No service role: the request's own client (anon when signed out) calls the
  * two SECURITY DEFINER doors.
- * GET  → the vendor's copy (scopes and quantities, never a cost), the packet's
+ * GET  → the vendor's copy (scopes, their measurements and quantities, never a cost), each
+ *        section's takeoff map, the packet's
  *        files signed for an hour (the anon storage policy lets through only
  *        paths a live link lists), their answer if they sent one. Logs the
  *        opening unless the reader is in the org.
@@ -21,7 +22,7 @@ const headers = { "Cache-Control": "no-store", "X-Robots-Tag": "noindex" };
 interface Shared {
   gone: boolean; own?: boolean; org_name: string | null; job_title?: string | null; first_name?: string | null;
   price_mode?: string; price_by?: string | null; pour_date?: string | null; scopes?: unknown; note?: string | null;
-  packet?: { address?: string | null; access?: string | null; dates?: boolean; quantities?: boolean; files?: Array<{ id: string; name: string; kind: string; path: string }> };
+  packet?: { address?: string | null; access?: string | null; dates?: boolean; quantities?: boolean; files?: Array<{ id: string; name: string; kind: string; path: string; section?: string | null }>; maps?: Record<string, string> };
   rates?: Record<string, number> | null; answer?: unknown;
 }
 
@@ -36,13 +37,19 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ token: stri
   if (!r) return json({ error: "This link isn't right." }, 404);
   if (r.gone) return json({ gone: true, org_name: r.org_name });
   const files = r.packet?.files ?? [];
-  const { data: signed } = files.length ? await supabase.storage.from(FILES_BUCKET).createSignedUrls(files.map((f) => f.path), 3600) : { data: [] };
+  // Each section's takeoffs drawn on its sheet, frozen as a picture when it was sent.
+  const maps = Object.entries(r.packet?.maps ?? {}).filter(([, p]) => typeof p === "string");
+  const paths = [...files.map((f) => f.path), ...maps.map(([, p]) => p)];
+  const { data: signed } = paths.length ? await supabase.storage.from(FILES_BUCKET).createSignedUrls(paths, 3600) : { data: [] };
   const url = new Map((signed ?? []).filter((x) => x.signedUrl && x.path).map((x) => [x.path as string, x.signedUrl as string]));
   return json({
     gone: false, own: !!r.own, org_name: r.org_name, job_title: r.job_title ?? null, first_name: r.first_name ?? null,
     price_mode: r.price_mode, price_by: r.packet?.dates === false ? null : r.price_by ?? null, pour_date: r.packet?.dates === false ? null : r.pour_date ?? null,
-    scopes: r.scopes ?? [], note: r.note ?? null, address: r.packet?.address ?? null, access: r.packet?.access ?? null,
-    files: files.map((f) => ({ id: f.id, name: f.name, kind: f.kind, url: url.get(f.path) ?? null })).filter((f) => f.url),
+    scopes: r.scopes ?? [], note: r.note ?? null, address: r.packet?.address ?? null,
+    // An older request carried the sections' Notes as "access"; those are Coy's own and no longer shown.
+    access: null,
+    files: files.map((f) => ({ id: f.id, name: f.name, kind: f.kind, section: f.section ?? null, url: url.get(f.path) ?? null })).filter((f) => f.url),
+    maps: Object.fromEntries(maps.map(([k, p]) => [k, url.get(p) ?? null]).filter(([, u]) => u)),
     rates: r.rates ?? {}, answer: r.answer ?? null,
   });
 }

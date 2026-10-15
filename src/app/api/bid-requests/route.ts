@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { getApiSession } from "@/lib/api-auth";
 import { BIDS_MISSING, composeFor, missing091 } from "@/lib/bids-server";
 import { bidEmail, bidText, priorRates, shownScopes, type PriceLine, type ScopePick } from "@/lib/bids";
 import { newToken } from "@/lib/proposal-links";
 import { publicOrigin } from "@/lib/hosts";
 import { orgRow } from "@/lib/org-server";
+import { FILES_BUCKET } from "@/lib/files";
 
 /**
  * Bid requests (migration 091; Claude Design, Vendors v2).
@@ -24,6 +25,10 @@ import { orgRow } from "@/lib/org-server";
  *   one through /api/texts (Coy's tap) and opens his mail app for email.
  *   follow_up adds a next step on each vendor, due on the price-by date; their
  *   answer marks it done (sc_answer_bid).
+ *   maps: [section ids] — the sections whose takeoffs the browser draws on their
+ *   sheet as a picture (as the proposal's link does); the reply carries a signed
+ *   upload link for each (`uploads`), and the picture's path is in the
+ *   request's assets, so the vendor's link can read it.
  *
  * Session client, org from the session, every id checked against it (§7).
  */
@@ -110,8 +115,14 @@ export async function POST(req: NextRequest) {
     access: pk.address === false ? null : job.access,
     dates: pk.dates !== false,
     quantities: pick.quantities !== false,
-    files: files.map((f) => ({ id: f.id, name: f.name, kind: f.kind, path: f.path })),
+    files: files.map((f) => ({ id: f.id, name: f.name, kind: f.kind, path: f.path, section: f.section ?? null })),
+    maps: {} as Record<string, string>,
   };
+  // Each shown section's takeoffs on its sheet, as a picture the browser draws and uploads next.
+  const reqId = randomUUID();
+  const shownKeys = new Set(scopes.map((s) => s.key));
+  const mapKeys = Array.isArray(b.maps) ? (b.maps as unknown[]).filter((k): k is string => typeof k === "string" && UUID.test(k) && shownKeys.has(k)).slice(0, 40) : [];
+  for (const k of mapKeys) packet.maps[k] = `${orgId}/bid/${reqId}/map-${k}.jpg`;
 
   // The vendors: filed vendor in this org.
   const { data: people, error: pErr } = await supabase.from("contacts").select("id, name, company_name, phone, email, contact_type")
@@ -134,8 +145,8 @@ export async function POST(req: NextRequest) {
   }
 
   const { data: made, error } = await supabase.from("bid_requests").insert({
-    org_id: orgId, job_id: jobId, price_mode: mode, price_by: priceBy, pour_date: pour, scopes, packet,
-    assets: { paths: files.map((f) => f.path) }, note, created_by: userId,
+    id: reqId, org_id: orgId, job_id: jobId, price_mode: mode, price_by: priceBy, pour_date: pour, scopes, packet,
+    assets: { paths: [...files.map((f) => f.path), ...Object.values(packet.maps)] }, note, created_by: userId,
   }).select("id, created_at").single();
   if (missing091(error)) return fail(BIDS_MISSING, 503);
   if (error || !made) return fail(`Couldn't save the bid request: ${error?.message ?? "no row"}`, 500);
@@ -174,5 +185,10 @@ export async function POST(req: NextRequest) {
     return { id: r.id, contact_id: r.contact_id, name, phone: c.phone ?? null, email: c.email ?? null, channel: r.channel, url,
       text: bidText(words), email_parts: bidEmail(words) };
   });
-  return applyCookies(NextResponse.json({ request: { id: made.id, created_at: made.created_at }, recipients: out }, { status: 201 }));
+  const uploads: Array<{ key: string; signed_url: string }> = [];
+  for (const [key, path] of Object.entries(packet.maps)) {
+    const { data: up } = await supabase.storage.from(FILES_BUCKET).createSignedUploadUrl(path, { upsert: true });
+    if (up) uploads.push({ key, signed_url: up.signedUrl });
+  }
+  return applyCookies(NextResponse.json({ request: { id: made.id, created_at: made.created_at }, recipients: out, uploads }, { status: 201 }));
 }

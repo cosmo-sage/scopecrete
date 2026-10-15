@@ -32,7 +32,7 @@ import { RecordHeader, HeaderNote, OverviewGrid, PanelCard, SectionHead, Empty, 
 import { Sheet } from "@/components/v34/primitives";
 import { SiteViews, AddressLink } from "@/components/v34/site-views";
 import { useWide } from "@/lib/v34/use-wide";
-import { PlayAudio, MessageMedia } from "@/components/v34/conversation";
+import { DA, PlayAudio, MessageMedia } from "@/components/v34/conversation";
 import { Composer } from "@/components/v34/composer";
 import { FilesPage } from "@/components/v34/files-page";
 import { FilesPanel } from "@/components/v34/files-panel";
@@ -801,11 +801,13 @@ function TextBubble({ m, who, showWho }: { m: Item; who: string; showWho: boolea
   const out = m.direction === "out";
   return (
     <div className={`flex mb-2 ${out ? "justify-end" : "justify-start"}`}>
-      <div style={{ maxWidth: "76%", background: out ? T.outBg : T.card, color: out ? T.outInk : T.ink, border: `1px solid ${T.hair}`, borderRadius: 10, padding: "7px 11px" }}>
-        {showWho && !out && <div style={{ ...lbl, fontSize: 10, color: T.ink3 }}>{who}</div>}
-        {m.body && <div style={{ fontSize: 13.5, lineHeight: 1.45, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{m.body}</div>}
-        {m.media_count > 0 && <MessageMedia messageId={m.id} count={m.media_count} isOut={out} />}
-        <div style={{ fontSize: 10, opacity: 0.65, marginTop: 2, textAlign: out ? "right" : "left" }}>{time(m.at)}</div>
+      <div style={{ maxWidth: "76%", minWidth: 0, display: "flex", flexDirection: "column", alignItems: out ? "flex-end" : "flex-start" }}>
+        <div style={{ maxWidth: "100%", background: out ? DA.bubbleOut : DA.bubbleIn, color: DA.bubbleInk, borderRadius: 10, padding: "7px 11px" }}>
+          {showWho && !out && <div style={{ ...lbl, fontSize: 10, color: T.ink3 }}>{who}</div>}
+          {m.body && <div style={{ fontSize: 13.5, lineHeight: 1.45, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{m.body}</div>}
+          {m.media_count > 0 && <MessageMedia messageId={m.id} count={m.media_count} isOut={out} />}
+        </div>
+        <div style={{ fontSize: 10, color: T.ink3, marginTop: 2, padding: "0 4px", textAlign: out ? "right" : "left" }}>{time(m.at)}</div>
       </div>
     </div>
   );

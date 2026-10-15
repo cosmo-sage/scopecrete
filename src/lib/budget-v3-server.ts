@@ -44,13 +44,15 @@ export async function jobBudget(sb: Sb, orgId: string, jobId: string) {
     const q = quantities(s);
     const lf = q.count !== null && (q.count_unit ?? "").toUpperCase() === "LF" ? q.count : null;
     return {
-      id: s.id as string, name: (s.name as string | null) || "Section", sqft: lf ? null : q.sqft, lf,
+      id: s.id as string, name: (s.name as string | null) || "Section", sqft: lf ? null : q.sqft, lf, pour: !!q.concrete,
       count: lf ? null : q.count, count_unit: q.count_unit ?? null,
       origin: (s.origin as string | null) ?? null, source_ref: (s.source_ref as string | null) ?? null,
       sow: sowLines(s.prep_notes as string | null), notes: (s.access_notes as string | null) ?? null,
     };
   });
-  const sqft = areas.reduce((a, x) => a + (x.sqft ?? 0), 0) || null;
+  // The job's SF counts the pours only, not the base under them (Coy, 2026-10-15), as Cost analysis does.
+  const pours = areas.filter((x) => x.pour && x.sqft);
+  const sqft = (pours.length ? pours : areas).reduce((a, x) => a + (x.sqft ?? 0), 0) || null;
   const lf = areas.reduce((a, x) => a + (x.lf ?? 0), 0) || null;
   const gname = new Map(((groups ?? []) as Array<{ id: string; name: string }>).map((g) => [g.id, g.name]));
   const tier = res?.tiers[0] ?? null;

@@ -5056,7 +5056,7 @@ expected start date per quoted job before it means anything. Add the field.
   remembered on the device `sc:site-view`), drawn by the Map page's own map on the provider Settings
   → Maps picks (Street view is Google's embed), a pin at the site and one at the customer's office when
   it is elsewhere, fitted to both, with "N mi from site"; Copy and ✎ the address (the Mapbox street
-  finisher); on a phone the address under the map and a Directions button. The wheel doesn't zoom it
+  finisher); on a phone the address under the map. **Clip** beside the toggle (was Directions on a phone; Coy, 2026-10-16: "I already have an open in Google Maps button") opens the Map page on the job's address (`/dashboard/map?job=`), searched, ready for Clip for takeoff. The wheel doesn't zoom it
   (the page scrolls); + / − do. `GET /api/jobs/[id]` returns `customer`, `owner`, `owner_supported`,
   `people` and `site` for it.
 - **The job page gets the phone's whole screen (Coy, 2026-10-05: "when I

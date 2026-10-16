@@ -452,9 +452,9 @@ export function JobSiteCard({ jobId, address, stored, customer, phone, onSaved }
           {!phone && addrRow}
         </div>
         <div className="flex items-center gap-1.5">
-          {phone && site.point && (
-            <a href={`https://www.google.com/maps/dir/?api=1&destination=${site.point.lat},${site.point.lng}`} target="_blank" rel="noopener noreferrer" className="no-underline flex items-center"
-              style={{ height: 30, padding: "0 10px", border: `1px solid ${T.hairStrong}`, borderRadius: 2, color: T.ink2, fontFamily: disp, fontSize: 11.5, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase" }}>Directions</a>
+          {address && !access.limited && (
+            <Link href={`/dashboard/map?job=${jobId}`} title="Open the Map on this address to clip it for Takeoffs" className="no-underline flex items-center"
+              style={{ height: 30, padding: "0 10px", border: `1px solid ${T.hairStrong}`, borderRadius: 2, color: T.ink2, fontFamily: disp, fontSize: 11.5, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase" }}>Clip</Link>
           )}
           {site.point && toggle}
         </div>

@@ -699,6 +699,11 @@ html[data-nav="spaces"][data-drawer="folded"] { --sc-rail-w: 72px; }
    conversation takes the page without the old list beside it (Coy, 2026-10-17). */
 html[data-nav="spaces"] .sc-old-thread-rail,
 html[data-nav="spaces"] .sc-old-thread-list { display: none !important; }
+.sc-drawer-empty { display: none; }
+html[data-nav="spaces"] .sc-drawer-listed { display: none !important; }
+html[data-nav="spaces"] .sc-drawer-pane { display: block !important; flex: 1; }
+html[data-nav="spaces"] .sc-drawer-pane .sc-drawer-empty { display: flex; }
+html[data-nav="spaces"] .sc-drawer-pane .sc-drawer-old { display: none !important; }
 /* An open thread or email on a phone: no talk bar, so nothing at the foot. */
 @media (max-width: 1023px) { html[data-nav="spaces"][data-talk="off"] { --sc-foot: 0px; } }
 .sc-spaces { position: fixed; left: 0; bottom: 0; top: var(--sc-head); z-index: 30; display: flex; width: var(--sc-rail-w); font-family: var(--sc-font-body); }
@@ -740,14 +745,20 @@ html[data-nav="spaces"] .sc-old-thread-list { display: none !important; }
 .sc-space-av { width: 24px; height: 24px; border-radius: 6px; flex: none; display: flex; align-items: center; justify-content: center; font-family: var(--sc-font-disp); font-weight: 700; font-size: 11px; }
 .sc-space-empty { padding: 4px 16px 6px 30px; font-size: 12px; color: var(--sc-ink3); }
 .sc-space-empty a { color: var(--sc-hiviz-text); }
-.sc-space-more { display: block; padding: 3px 16px 6px 30px; font-size: 12px; color: var(--sc-hiviz-text); }
-/* Phone: over the page, from ☰ or a swipe from the left edge. */
-.sc-spaces-phone { top: 0; z-index: 60; width: min(352px, 92vw); transform: translateX(-105%); transition: transform .26s cubic-bezier(.2,.8,.2,1);
-  padding-top: env(safe-area-inset-top); background: var(--sc-rail); box-shadow: 8px 0 24px rgba(0,0,0,.18); }
-.sc-spaces-phone[data-open] { transform: none; }
-.sc-spaces-phone .sc-spaces-drawer { flex: 1; width: auto; min-width: 0; }
-.sc-spaces-scrim { position: fixed; inset: 0; z-index: 59; background: rgba(0,0,0,.32); }
-@media (prefers-reduced-motion: reduce) { .sc-spaces-phone { transition: none; } }
+.sc-space-more { display: block; padding: 3px 16px 6px 30px; font-size: 12px; color: var(--sc-hiviz-text); background: none; border: 0; cursor: pointer; text-align: left; }
+/* Phone: the Spaces UNDER the page (Coy, 2026-10-17). The page is a layer over them that a
+   swipe right or the header's ☰ slides aside, leaving its edge to tap back; picking a page
+   slides it back over. */
+@media (max-width: 1023px) {
+  .sc-spaces-under { top: 0; z-index: 0; width: calc(100vw - 56px); padding-top: env(safe-area-inset-top); background: var(--sc-rail); }
+  .sc-spaces-under .sc-spaces-drawer { flex: 1; width: auto; min-width: 0; border-right: 0; }
+  html[data-nav="spaces"] .sc-page-layer { position: relative; z-index: 1; transition: transform .28s cubic-bezier(.2,.8,.2,1); }
+  html[data-nav="spaces"][data-spaces-open] .sc-page-layer { position: fixed; top: 0; left: 0; width: 100vw; height: 100dvh; min-height: 0;
+    overflow: hidden; transform: translateX(calc(100vw - 56px)); box-shadow: -10px 0 28px rgba(0,0,0,.3); }
+  html[data-spaces-open] .sc-talk-bar { visibility: hidden; }
+  .sc-page-edge { position: fixed; top: 0; bottom: 0; right: 0; width: 56px; z-index: 2; cursor: pointer; }
+}
+@media (prefers-reduced-motion: reduce) { html[data-nav="spaces"] .sc-page-layer { transition: none; } }
 /* The header's ☰ is Settings in the old navigation; here Settings is the rail's gear, and on
    a desktop the ☰ goes. Dusty's column, closed, leaves a strip with his emblem to open it. */
 @media (min-width: 1024px) { html[data-nav="spaces"] .sc-burger { display: none; } }

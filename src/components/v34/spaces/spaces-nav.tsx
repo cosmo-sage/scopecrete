@@ -168,6 +168,9 @@ function HomeDrawer({ pages, active, onPick }: { pages: string[]; active: string
     }
     return m;
   }, [threads]);
+  // The whole bucket opens in place (Coy, 2026-10-17: the drawer is the list now).
+  const [all, setAll] = useState<Set<string>>(new Set());
+  const flip = (k: string) => setAll((m) => { const n = new Set(m); if (n.has(k)) n.delete(k); else n.add(k); return n; });
   return (
     <>
       <div className="sc-space-head">
@@ -189,17 +192,23 @@ function HomeDrawer({ pages, active, onPick }: { pages: string[]; active: string
           return (
             <Group key={b.k} title={b.label} count={list.length}>
               {list.length === 0 && <div className="sc-space-empty">No one here yet.</div>}
-              {list.slice(0, PER_BUCKET).map((t) => (
+              {(all.has(b.k) ? list : list.slice(0, PER_BUCKET)).map((t) => (
                 <Row key={t.contact_id} href={`/dashboard/messages/${t.contact_id}?t=${b.key}`} onPick={onPick}
                   label={t.display_name} sub={(t.numbers ?? 0) > 1 ? `${t.numbers} numbers` : undefined}
                   on={openContact === t.contact_id} avatar={monogram(t.display_name)} color={b.color} />
               ))}
               {list.length > PER_BUCKET && (
-                <Link href={`/dashboard/messages?t=${b.key}`} onClick={onPick} className="sc-space-more no-underline">All {list.length} ›</Link>
+                <button type="button" onClick={() => flip(b.k)} className="sc-space-more">{all.has(b.k) ? "Fewer" : `All ${list.length}`}</button>
               )}
             </Group>
           );
         })}
+        {threads && (
+          <Group title="More">
+            <Row href="/dashboard/messages?t=spam" label="Spam" onPick={onPick} indent />
+            <Row href="/dashboard/messages?t=archived" label="Archived" onPick={onPick} indent />
+          </Group>
+        )}
       </div>
     </>
   );
@@ -333,9 +342,9 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
     </div>
   );
 
-  // Phone: the rail and drawer slide over the page; a swipe left or the scrim closes them.
-  const drag = useRef<{ x: number; dx: number } | null>(null);
-  const [dx, setDx] = useState(0);
+  // Phone: the rail and drawer sit UNDER the page (Coy, 2026-10-17: "it should be underneath
+  // the pages"). The dashboard layout slides the page right to show them and back over them
+  // when a page is picked; here they are only kept out of reach while covered.
   useEffect(() => {
     if (desktop || !phoneOpen) return;
     const k = (e: KeyboardEvent) => { if (e.key === "Escape") onPhoneClose(); };
@@ -347,28 +356,35 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
     return <nav aria-label="Main" className="sc-spaces" data-folded={folded ? "" : undefined}>{railEl}{drawerEl}</nav>;
   }
   return (
-    <>
-      {phoneOpen && <div className="sc-spaces-scrim" onClick={onPhoneClose} aria-hidden="true" />}
-      <nav aria-label="Main" className="sc-spaces sc-spaces-phone" data-open={phoneOpen ? "" : undefined}
-        style={phoneOpen && dx < 0 ? { transform: `translateX(${dx}px)`, transition: "none" } : undefined}
-        onTouchStart={(e) => { drag.current = { x: e.touches[0].clientX, dx: 0 }; }}
-        onTouchMove={(e) => { if (!drag.current) return; const d = e.touches[0].clientX - drag.current.x; drag.current.dx = d; setDx(Math.min(0, d)); }}
-        onTouchEnd={() => { const g = drag.current; drag.current = null; setDx(0); if (g && g.dx < -80) onPhoneClose(); }}>
-        {railEl}{drawerEl}
-      </nav>
-    </>
+    <nav aria-label="Main" className="sc-spaces sc-spaces-under" aria-hidden={phoneOpen ? undefined : true} inert={!phoneOpen}>
+      {railEl}{drawerEl}
+    </nav>
   );
 }
 
 /**
- * A swipe right from the left edge of a phone's screen opens the Spaces (the design's
- * left-edge gesture). A pane that scrolls sideways (the plans, a budget grid) still
- * gets its own swipes: only a touch that starts within EDGE_PX of the edge counts.
- * That strip belongs to the rail: the touch is caught on the window before React
- * sees it, so a row that swipes (Threads, a customer's jobs, the Price book, email)
- * never starts its own swipe from there (Coy, 2026-10-17: "the row swipe right is
- * conflicting … I can't swipe the screen to reveal the drawer"). A tap still clicks.
- * Anything marked data-edge-own (a drawer's own pull tab) keeps its edge.
+ * The page's own edge while it is slid aside on a phone: a tap, or a swipe left, puts the
+ * page back over the Spaces.
+ */
+export function PageEdge({ onClose }: { onClose: () => void }) {
+  const at = useRef<number | null>(null);
+  return (
+    <div className="sc-page-edge" role="button" tabIndex={0} aria-label="Back to the page"
+      onClick={onClose} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onClose(); }}
+      onTouchStart={(e) => { at.current = e.touches[0].clientX; }}
+      onTouchMove={(e) => { if (at.current !== null && e.touches[0].clientX - at.current < -40) { at.current = null; onClose(); } }}
+      onTouchEnd={() => { at.current = null; }} />
+  );
+}
+
+/**
+ * A swipe right on a phone slides the page aside to show the Spaces under it (the design's
+ * left-edge gesture; since 2026-10-17 from anywhere on the page, as Slack does — Coy: "it
+ * should be underneath the pages"). A touch that starts on something that pans sideways
+ * itself (the plans, the map, a scrolling table or tab row, a text box, a dialog) is left
+ * to it, unless it starts within EDGE_PX of the edge: that strip always belongs to the
+ * Spaces, caught on the window before React sees it, so nothing under it starts its own
+ * swipe. A tap still clicks. Anything marked data-edge-own keeps even the edge.
  */
 export const EDGE_PX = 24;
 export function useEdgeSwipe(on: boolean, open: () => void) {
@@ -376,18 +392,26 @@ export function useEdgeSwipe(on: boolean, open: () => void) {
     if (!on) return;
     let start: { x: number; y: number } | null = null;
     const own = (e: TouchEvent) => e.target instanceof Element && !!e.target.closest("[data-edge-own], [role=dialog]");
+    let edge = false;
     const ts = (e: TouchEvent) => {
       const t = e.touches[0];
-      start = e.touches.length === 1 && t.clientX <= EDGE_PX && !own(e) ? { x: t.clientX, y: t.clientY } : null;
-      if (start) e.stopPropagation();
+      start = null; edge = false;
+      if (e.touches.length !== 1 || own(e)) return;
+      edge = t.clientX <= EDGE_PX;
+      if (!edge && pansSideways(e.target)) return;
+      start = { x: t.clientX, y: t.clientY };
+      if (edge) e.stopPropagation();
     };
     const tm = (e: TouchEvent) => {
       if (!start) return;
-      e.stopPropagation();
+      if (edge) e.stopPropagation();
       const t = e.touches[0];
-      if (t.clientX - start.x > 50 && Math.abs(t.clientY - start.y) < 50) { start = null; open(); }
+      const dx = t.clientX - start.x, dy = Math.abs(t.clientY - start.y);
+      // A scroll up or down, or a swipe left, is not this gesture.
+      if (dy > 30 && dy > dx) { start = null; return; }
+      if (dx > 60 && dy < 40) { start = null; open(); }
     };
-    const te = (e: TouchEvent) => { if (start) { start = null; e.stopPropagation(); } };
+    const te = (e: TouchEvent) => { if (start) { start = null; if (edge) e.stopPropagation(); } };
     const opt = { capture: true, passive: true } as const;
     window.addEventListener("touchstart", ts, opt);
     window.addEventListener("touchmove", tm, opt);
@@ -402,3 +426,14 @@ export function useEdgeSwipe(on: boolean, open: () => void) {
   }, [on, open]);
 }
 
+/** Does the touch land on something that moves sideways under a finger itself? */
+function pansSideways(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false;
+  if (target.closest("input, textarea, select, canvas, [contenteditable], [data-pan-x], .sc-drawer, .sc-sheet, .sc-dusty-sheet")) return true;
+  for (let el: Element | null = target; el && el !== document.body; el = el.parentElement) {
+    const cs = getComputedStyle(el);
+    if (cs.touchAction === "none" || cs.touchAction.includes("pan-y") && !cs.touchAction.includes("pan-x")) return true;
+    if ((cs.overflowX === "auto" || cs.overflowX === "scroll") && el.scrollWidth > el.clientWidth + 2) return true;
+  }
+  return false;
+}

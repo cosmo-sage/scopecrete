@@ -58,7 +58,7 @@ import { AccessContext } from "@/lib/v34/access-ctx";
 import { accessFrom, menuPages, redirectFor, roleLabel, FULL_ACCESS, type Access } from "@/lib/access";
 import { viewAsLine } from "@/lib/view-as";
 import { useRouter } from "next/navigation";
-import { SpacesNav, useEdgeSwipe } from "@/components/v34/spaces/spaces-nav";
+import { SpacesNav, PageEdge, useEdgeSwipe } from "@/components/v34/spaces/spaces-nav";
 import { TalkBar, talkPlaceholder } from "@/components/v34/spaces/talk-bar";
 import "@/styles/v34-shell.css";
 
@@ -176,7 +176,30 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }, [spaces, drawerFolded]);
   const openSpaces = useCallback(() => setSpacesOpen(true), []);
   const closeSpaces = useCallback(() => setSpacesOpen(false), []);
-  useEdgeSwipe(spaces && !desktop, openSpaces);
+  useEffect(() => {
+    window.addEventListener("sc:spaces-open", openSpaces);
+    return () => window.removeEventListener("sc:spaces-open", openSpaces);
+  }, [openSpaces]);
+  useEdgeSwipe(spaces && !desktop && !spacesOpen, openSpaces);
+  // On a phone the Spaces sit under the page, which slides right to show them (Coy,
+  // 2026-10-17: "it should be underneath the pages"). While aside the page is a fixed,
+  // viewport-high layer scrolled to where the window was, so it slides as it looked, and
+  // the window's scroll comes back when it slides back over.
+  const under = spaces && !desktop;
+  const layerRef = React.useRef<HTMLDivElement>(null);
+  const layerY = React.useRef(0);
+  React.useLayoutEffect(() => {
+    const html = document.documentElement;
+    const el = layerRef.current;
+    if (under && spacesOpen && el) {
+      layerY.current = window.scrollY;
+      html.dataset.spacesOpen = "";
+      el.scrollTop = layerY.current;
+    } else if ("spacesOpen" in html.dataset) {
+      delete html.dataset.spacesOpen;
+      window.scrollTo(0, layerY.current);
+    }
+  }, [under, spacesOpen]);
   // Dusty's column is open by default on a desktop in the new navigation (the design's window
   // beside every page); open or closed is kept on the device.
   const dustyColSeen = React.useRef(false);
@@ -301,8 +324,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                fontSize: 9.5, fontWeight: 700, lineHeight: 1, ...nums, ...style }}>{n}</span>
   );
 
+  const spacesNav = spaces && (
+    <SpacesNav desktop={desktop} pages={(allowed ?? menus.rail).filter((k) => k !== "dusty")} active={active} dustyState={dustyNow}
+      phoneOpen={spacesOpen} onPhoneClose={closeSpaces} folded={drawerFolded === true} onFold={() => setDrawerFolded(!drawerFolded)} />
+  );
+
   return (
-    <div className="flex flex-col min-h-screen" style={{ background: T.slab, color: T.ink, fontFamily: body }}>
+    <>
+    {/* Phone: the Spaces under the page; the page's edge, while it is aside, puts it back. */}
+    {under && spacesNav}
+    {under && spacesOpen && <PageEdge onClose={closeSpaces} />}
+    <div ref={layerRef} className="flex flex-col min-h-screen sc-page-layer" style={{ background: T.slab, color: T.ink, fontFamily: body }}>
       <div className="sc-head-wrap" style={{ position: "sticky", top: 0, zIndex: 40 }}>
         {viewingAs && (
           <div className="sc-view-as" role="status">
@@ -368,10 +400,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* ---- desktop left rail: every page, in Coy's order ----
           A sidebar since 2026-10-10 (Claude Design "Rail Icon Colors"): icon and label on
           one row, each icon in its colour from the book; folds to icons at the foot. */}
-      {spaces && (
-        <SpacesNav desktop={desktop} pages={(allowed ?? menus.rail).filter((k) => k !== "dusty")} active={active} dustyState={dustyNow}
-          phoneOpen={spacesOpen} onPhoneClose={closeSpaces} folded={drawerFolded === true} onFold={() => setDrawerFolded(!drawerFolded)} />
-      )}
+      {spaces && !under && spacesNav}
       {spaces && !limited && desktop && !dustyOpen && (
         <button type="button" className="sc-dusty-strip" onClick={() => setDustyOpen(true)} aria-label="Open Dusty">
           <DustyAvatar state={dustyNow} size={28} hidden />
@@ -495,6 +524,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {!limited && <DustyPanel open={dustyOpen} onClose={() => setDustyOpen(false)} onBusy={setDustyBusy} onStream={setDustyLive} onState={setPanelState} />}
 
     </div>
+    </>
   );
 }
 

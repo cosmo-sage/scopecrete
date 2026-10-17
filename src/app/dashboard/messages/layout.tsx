@@ -35,12 +35,18 @@ import { ThreadRail, ThreadDrawer, NewThreadSheet } from "@/components/v34/threa
  * conversation gets the room; › brings it back, and picking another thread
  * un-folds it.
  */
+const DRAWER_LISTED = new Set(["all", "customers", "vendors", "personal", "unsorted"]);
+
 function Panes({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const ctx = useThreads();
   // A conversation is open when the path goes deeper than /dashboard/messages.
   const conversationOpen = /^\/dashboard\/messages\/[^/]+/.test(pathname);
   const folded = conversationOpen && !!ctx?.folded;
+  // In the Spaces navigation the drawer lists these threads' people (Coy, 2026-10-17: "there
+  // is no more page list of channels … they are now listed in the drawer"), so with nobody
+  // open the page shows none; spam, the archive and the threads Coy made keep their list.
+  const inDrawer = !conversationOpen && DRAWER_LISTED.has(ctx?.thread ?? "all");
   return (
     <div className={`lg:flex lg:items-stretch ${conversationOpen ? "" : "min-h-[calc(100dvh-var(--sc-head)-var(--sc-foot))]"} lg:h-[calc(100dvh-var(--sc-head))] lg:min-h-0`}>
       <ThreadRail />
@@ -48,12 +54,12 @@ function Panes({ children }: { children: React.ReactNode }) {
           width: an inline width beats every Tailwind class, and once handed the
           whole row it left the conversation zero width (2026-09-27). */}
       <div
-        className={`${conversationOpen ? "sc-old-thread-list hidden lg:block" : "block"} w-full ${folded ? "lg:w-[56px]" : "lg:w-[380px] xl:w-[420px]"} lg:shrink-0 lg:overflow-y-auto`}
+        className={`${conversationOpen ? "sc-old-thread-list hidden lg:block" : "block"}${inDrawer ? " sc-drawer-listed" : ""} w-full ${folded ? "lg:w-[56px]" : "lg:w-[380px] xl:w-[420px]"} lg:shrink-0 lg:overflow-y-auto`}
         style={{ borderRight: `1px solid ${T.hair}`, background: T.card }}
       >
         <ThreadList folded={folded} />
       </div>
-      <div className={`${conversationOpen ? "block" : "hidden lg:block"} lg:flex-1 lg:min-w-0 lg:overflow-y-auto`}>
+      <div className={`${conversationOpen ? "block" : "hidden lg:block"}${inDrawer ? " sc-drawer-pane" : ""} lg:flex-1 lg:min-w-0 lg:overflow-y-auto`}>
         {children}
       </div>
       <ThreadDrawer />

@@ -121,7 +121,7 @@ function ThreadCells({ onPick, wide }: { onPick?: () => void; wide?: boolean }) 
 
 export function ThreadRail() {
   return (
-    <nav aria-label="Threads" className="hidden lg:flex shrink-0 flex-col"
+    <nav aria-label="Threads" className="sc-old-thread-rail hidden lg:flex shrink-0 flex-col"
       style={{ width: 72, background: T.card, borderRight: `1px solid ${T.hairSoft}`, position: "sticky", top: "var(--sc-head)", height: "calc(100dvh - var(--sc-head))", overflowY: "auto" }}>
       <ThreadCells />
     </nav>

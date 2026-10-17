@@ -695,6 +695,10 @@ html[data-dusty-drag] iframe { pointer-events: none; }
    page, drawer and sheet already measured from the rail moves with it. */
 html[data-nav="spaces"] { --sc-rail-w: 352px; --sc-dusty: 380px; }
 html[data-nav="spaces"][data-drawer="folded"] { --sc-rail-w: 72px; }
+/* The Spaces drawer is the threads now: the old bucket rail never shows, and an open
+   conversation takes the page without the old list beside it (Coy, 2026-10-17). */
+html[data-nav="spaces"] .sc-old-thread-rail,
+html[data-nav="spaces"] .sc-old-thread-list { display: none !important; }
 /* An open thread or email on a phone: no talk bar, so nothing at the foot. */
 @media (max-width: 1023px) { html[data-nav="spaces"][data-talk="off"] { --sc-foot: 0px; } }
 .sc-spaces { position: fixed; left: 0; bottom: 0; top: var(--sc-head); z-index: 30; display: flex; width: var(--sc-rail-w); font-family: var(--sc-font-body); }

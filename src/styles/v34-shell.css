@@ -719,7 +719,10 @@ html[data-nav="spaces"] .sc-old-thread-list { display: none !important; }
 .sc-spaces-foot { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: var(--sc-rail-ink); background: transparent; border: 0; cursor: pointer; flex: none; }
 .sc-spaces-foot:hover { background: var(--sc-rail-active); color: var(--sc-rail-ink-on); }
 .sc-spaces-drawer { width: 280px; flex: none; display: flex; flex-direction: column; min-height: 0; background: var(--sc-rail); border-right: 1px solid var(--sc-hair); color: var(--sc-rail-ink-on); }
-.sc-space-head { padding: 14px 14px 10px; border-bottom: 1px solid var(--sc-hair); display: flex; flex-direction: column; gap: 4px; }
+.sc-spaces-drawer { position: relative; }
+.sc-drawer-fold { position: absolute; top: 10px; right: 8px; z-index: 1; width: 28px; height: 28px; border-radius: 7px; border: 1px solid var(--sc-hair); background: var(--sc-card); color: var(--sc-ink2); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.sc-drawer-fold:hover { background: var(--sc-rail-active); color: var(--sc-rail-ink-on); }
+.sc-space-head { padding: 14px 44px 10px 14px; border-bottom: 1px solid var(--sc-hair); display: flex; flex-direction: column; gap: 4px; }
 .sc-space-name { font-family: var(--sc-font-strong); font-weight: 600; font-size: 15px; line-height: 1.25; color: var(--sc-ink); overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .sc-space-sub { font-size: 11.5px; color: var(--sc-ink3); }
 .sc-space-tag { align-self: flex-start; font-family: var(--sc-font-disp); font-weight: 700; font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; border: 1px solid; border-radius: 4px; padding: 1px 6px; }

@@ -10,7 +10,7 @@
  * Home the app's pages and every thread by bucket; in a job its Scope Builder tree
  * and its Phone · Email · Internal threads (one thread per number). Settings is the
  * gear at the rail's foot. On a desktop it is fixed at the left (`--sc-rail-w` is
- * 352px, 136px with the drawer folded); on a phone it slides over the page from ☰
+ * 352px, 72px with the drawer collapsed by « on its header or the rail's foot button); on a phone it slides over the page from ☰
  * or a swipe from the left edge. No migration: src/lib/v34/spaces.ts, /api/spaces.
  */
 
@@ -275,7 +275,7 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
 
   const railEl = (
     <div className="sc-spaces-rail" role="navigation" aria-label="Spaces">
-      <Tile label="Home" title="Home — Dusty" on={shown.kind === "home"} onPick={() => setPeek({ kind: "home" })}>
+      <Tile label="Home" title="Home — Dusty" on={shown.kind === "home"} onPick={() => { setPeek({ kind: "home" }); if (desktop && folded) onFold(); }}>
         <span className="sc-space-home"><DustyAvatar state={dustyState} size={40} hidden /></span>
       </Tile>
       <span className="sc-spaces-sep" aria-hidden="true" />
@@ -301,7 +301,7 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
       </Tile>
       <span style={{ flex: 1 }} />
       {desktop && (
-        <button type="button" className="sc-spaces-foot" onClick={onFold} aria-label={folded ? "Open the drawer" : "Fold the drawer"} title={folded ? "Open the drawer" : "Fold the drawer"}>
+        <button type="button" className="sc-spaces-foot" onClick={onFold} aria-label={folded ? "Open the drawer" : "Collapse the drawer"} title={folded ? "Open the drawer" : "Collapse the drawer"}>
           <svg width="18" height="18" viewBox="0 0 19 19" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
             <path d="M3 3.5h13v12H3zM7 3.5v12" /><path d={folded ? "M10.5 7.5l2 2-2 2" : "M12.5 7.5l-2 2 2 2"} />
           </svg>
@@ -318,6 +318,15 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
 
   const drawerEl = (!desktop || !folded) && (
     <div className="sc-spaces-drawer">
+      {desktop && (
+        // Coy, 2026-10-17: "the inner drawer … should be collapsible on desktop". The rail's
+        // foot button opens it again; a phone's drawer is covered by the page picked instead.
+        <button type="button" className="sc-drawer-fold" onClick={onFold} aria-label="Collapse the drawer" title="Collapse the drawer">
+          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M8.5 4L4.5 8l4 4M12.5 4l-4 4 4 4" />
+          </svg>
+        </button>
+      )}
       {shown.kind === "home"
         ? <HomeDrawer pages={pages} active={active} onPick={close} />
         : <JobDrawer id={shown.id} fallback={jobOf(shown.id)} onPick={close} />}

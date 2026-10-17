@@ -267,7 +267,10 @@ export function DustyPanel({ open, onClose, onBusy, onStream, onState }: {
       if (d?.send) { autoAsk.current = q.slice(0, 4000); setAutoTick((n) => n + 1); } else setDraft(q.slice(0, 4000));
     };
     window.addEventListener("sc:dusty-draft", put);
-    return () => window.removeEventListener("sc:dusty-draft", put);
+    // The phone's talk bar "+" (Spaces): pick files for this chat, as his own + paperclip does.
+    const pick = () => setTimeout(() => fileInput.current?.click(), 300);
+    window.addEventListener("sc:dusty-attach", pick);
+    return () => { window.removeEventListener("sc:dusty-draft", put); window.removeEventListener("sc:dusty-attach", pick); };
   }, []);
   useEffect(() => {
     const on = () => { select(null); setContactAsk(false); setCustomerAsk(null); setJobAsk(true); };

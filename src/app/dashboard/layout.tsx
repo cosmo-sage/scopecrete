@@ -59,6 +59,7 @@ import { accessFrom, menuPages, redirectFor, roleLabel, FULL_ACCESS, type Access
 import { viewAsLine } from "@/lib/view-as";
 import { useRouter } from "next/navigation";
 import { SpacesNav, useEdgeSwipe } from "@/components/v34/spaces/spaces-nav";
+import { TalkBar, talkPlaceholder } from "@/components/v34/spaces/talk-bar";
 import "@/styles/v34-shell.css";
 
 /** Desktop or not — decided after mount; the phone layout is the first paint. */
@@ -163,8 +164,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   // The Spaces navigation (Claude Design "Dusty Home", Coy 2026-10-17), behind Settings →
   // Appearance → New navigation. <html data-nav="spaces"> widens --sc-rail-w to the rail and
   // its drawer; app/layout.tsx sets it before first paint from the browser's copy.
-  const [newNav] = usePref<boolean>("new_nav", false);
-  const spaces = newNav === true;
+  // On unless switched off (Coy, 2026-10-17: "I'm not seeing it on feedback").
+  const [newNav] = usePref<boolean>("new_nav", true);
+  const spaces = newNav !== false;
   const [drawerFolded, setDrawerFolded] = usePref<boolean>("spaces_folded", false);
   const [spacesOpen, setSpacesOpen] = useState(false);
   useEffect(() => {
@@ -276,6 +278,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   // Dusty in the footer and header: his chat's state while it is open, else the reader's
   // (reading, broken, at rest — the activity line's); an answer streaming either way.
   const dustyNow: EmblemState = dustyOpen ? panelState : dustyBusy ? "answering" : readerState;
+  // Spaces replaces the phone footer with the talk bar; an open thread or email keeps its own text box.
+  const spacesFoot = spaces && !limited;
+  const threadOpen = /^\/dashboard\/messages\/[^/]+/.test(pathname ?? "");
+  const talkBar = spacesFoot && !threadOpen;
+  useEffect(() => {
+    const el = document.documentElement;
+    if (spacesFoot && !talkBar) el.dataset.talk = "off"; else delete el.dataset.talk;
+  }, [spacesFoot, talkBar]);
   const glassBtn = { width: 32, height: 32 } as const;
   const closeDrops = () => { setSearchOpen(false); };
 
@@ -434,8 +444,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <Toolbox open={toolOpen} onClose={() => setToolOpen(false)} keys={toolKeys} active={active} badge={badge} colors={menuColors} />
       {!limited && <MenuPanel open={menuPanel} onClose={closeMenuPanel} />}
 
+      {/* Spaces on a phone: no footer — the talk bar, Dusty on its right (Coy, 2026-10-17). */}
+      {talkBar && <TalkBar placeholder={talkPlaceholder(active, pathname ?? "")} dustyState={dustyNow} onOpen={() => { setToolOpen(false); setDustyOpen(true); }} />}
+
       {/* Above the open Toolbox (z 47) so Dusty's disc rising out of the bar stays whole. */}
-      <footer className="fixed bottom-0 left-0 right-0 flex items-stretch lg:hidden"
+      {!spacesFoot && <footer className="fixed bottom-0 left-0 right-0 flex items-stretch lg:hidden"
         style={{ zIndex: toolOpen ? 48 : 40, background: T.card, borderTop: `1px solid ${T.hair}`, height: 58, paddingBottom: "env(safe-area-inset-bottom)" }}>
         {markIdx >= 0 && <span className="sc-tab-mark" style={{ left: `${markIdx * slotPct}%`, width: `${slotPct}%` }} aria-hidden="true" />}
         {footerSlots.map((k) => {
@@ -476,7 +489,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </Link>
           );
         })}
-      </footer>
+      </footer>}
 
       {/* Dusty — full screen on a phone, docked right on a desktop; read-only toward the business. */}
       {!limited && <DustyPanel open={dustyOpen} onClose={() => setDustyOpen(false)} onBusy={setDustyBusy} onStream={setDustyLive} onState={setPanelState} />}

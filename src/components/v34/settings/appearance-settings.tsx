@@ -13,7 +13,7 @@ import { usePref } from "@/lib/v34/prefs";
 import { T, F } from "@/lib/v34/tokens";
 
 export function AppearanceSettings() {
-  const [newNav, setNewNav] = usePref<boolean>("new_nav", false);
+  const [newNav, setNewNav] = usePref<boolean>("new_nav", true);
   return (
     <div>
       <SettingsTitle title="Appearance" note="How the app looks on this account, on every device." />
@@ -23,7 +23,7 @@ export function AppearanceSettings() {
       <SettingsBlock title="New navigation" note="Being built: Dusty as Home, every open job a Space on the left rail with its pages and its threads. Switch it off to go back to today's menu.">
         <div className="flex items-center gap-3" style={{ padding: "4px 0" }}>
           <div className="flex-1 min-w-0" style={{ fontSize: F.sm, color: T.ink2 }}>Use the new navigation</div>
-          <Toggle on={newNav === true} label="Use the new navigation" onChange={setNewNav} />
+          <Toggle on={newNav !== false} label="Use the new navigation" onChange={setNewNav} />
         </div>
       </SettingsBlock>
     </div>

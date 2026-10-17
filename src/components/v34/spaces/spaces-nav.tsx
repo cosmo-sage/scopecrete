@@ -354,21 +354,42 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
 /**
  * A swipe right from the left edge of a phone's screen opens the Spaces (the design's
  * left-edge gesture). A pane that scrolls sideways (the plans, a budget grid) still
- * gets its own swipes: only a touch that starts within 18px of the edge counts.
+ * gets its own swipes: only a touch that starts within EDGE_PX of the edge counts.
+ * That strip belongs to the rail: the touch is caught on the window before React
+ * sees it, so a row that swipes (Threads, a customer's jobs, the Price book, email)
+ * never starts its own swipe from there (Coy, 2026-10-17: "the row swipe right is
+ * conflicting … I can't swipe the screen to reveal the drawer"). A tap still clicks.
+ * Anything marked data-edge-own (a drawer's own pull tab) keeps its edge.
  */
+export const EDGE_PX = 24;
 export function useEdgeSwipe(on: boolean, open: () => void) {
   useEffect(() => {
     if (!on) return;
     let start: { x: number; y: number } | null = null;
-    const ts = (e: TouchEvent) => { const t = e.touches[0]; start = t.clientX <= 18 ? { x: t.clientX, y: t.clientY } : null; };
+    const own = (e: TouchEvent) => e.target instanceof Element && !!e.target.closest("[data-edge-own], [role=dialog]");
+    const ts = (e: TouchEvent) => {
+      const t = e.touches[0];
+      start = e.touches.length === 1 && t.clientX <= EDGE_PX && !own(e) ? { x: t.clientX, y: t.clientY } : null;
+      if (start) e.stopPropagation();
+    };
     const tm = (e: TouchEvent) => {
       if (!start) return;
+      e.stopPropagation();
       const t = e.touches[0];
-      if (t.clientX - start.x > 60 && Math.abs(t.clientY - start.y) < 40) { start = null; open(); }
+      if (t.clientX - start.x > 50 && Math.abs(t.clientY - start.y) < 50) { start = null; open(); }
     };
-    window.addEventListener("touchstart", ts, { passive: true });
-    window.addEventListener("touchmove", tm, { passive: true });
-    return () => { window.removeEventListener("touchstart", ts); window.removeEventListener("touchmove", tm); };
+    const te = (e: TouchEvent) => { if (start) { start = null; e.stopPropagation(); } };
+    const opt = { capture: true, passive: true } as const;
+    window.addEventListener("touchstart", ts, opt);
+    window.addEventListener("touchmove", tm, opt);
+    window.addEventListener("touchend", te, opt);
+    window.addEventListener("touchcancel", te, opt);
+    return () => {
+      window.removeEventListener("touchstart", ts, opt);
+      window.removeEventListener("touchmove", tm, opt);
+      window.removeEventListener("touchend", te, opt);
+      window.removeEventListener("touchcancel", te, opt);
+    };
   }, [on, open]);
 }
 

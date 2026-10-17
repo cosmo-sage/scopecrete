@@ -358,7 +358,7 @@ export function SlideDrawer({ open, onOpen, onClose, width, label, tab, children
   const x = open ? dx : -width + dx;
   return (
     <>
-      {!open && onOpen && <div aria-hidden="true" onTouchStart={start} onTouchMove={move} onTouchEnd={end} style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 16, zIndex: 6 }} />}
+      {!open && onOpen && <div aria-hidden="true" data-edge-own onTouchStart={start} onTouchMove={move} onTouchEnd={end} style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 16, zIndex: 6 }} />}
       <div aria-hidden="true" onClick={onClose} className="sc-slide-scrim"
         style={{ position: "absolute", inset: 0, zIndex: 7, background: "rgba(20,20,20,.36)", opacity: open ? 1 : 0, pointerEvents: open ? "auto" : "none", transition: "opacity .28s" }} />
       <div ref={panel} role="dialog" aria-label={label} aria-hidden={!open} tabIndex={-1} onTouchStart={start} onTouchMove={move} onTouchEnd={end} className="sc-slide-panel"

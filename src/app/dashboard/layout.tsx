@@ -58,6 +58,7 @@ import { AccessContext } from "@/lib/v34/access-ctx";
 import { accessFrom, menuPages, redirectFor, roleLabel, FULL_ACCESS, type Access } from "@/lib/access";
 import { viewAsLine } from "@/lib/view-as";
 import { useRouter } from "next/navigation";
+import { SpacesNav, useEdgeSwipe } from "@/components/v34/spaces/spaces-nav";
 import "@/styles/v34-shell.css";
 
 /** Desktop or not — decided after mount; the phone layout is the first paint. */
@@ -159,6 +160,35 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const menuColors = cleanMenuColors(savedColors);
   // The phone keeps the icons' colours too (Coy, 2026-10-10); a page with none stays ink.
   const phoneIcon = (k: string, on: boolean) => (menuColors[k] ? iconVar(menuColors[k]) : on ? T.ink : T.ink3);
+  // The Spaces navigation (Claude Design "Dusty Home", Coy 2026-10-17), behind Settings →
+  // Appearance → New navigation. <html data-nav="spaces"> widens --sc-rail-w to the rail and
+  // its drawer; app/layout.tsx sets it before first paint from the browser's copy.
+  const [newNav] = usePref<boolean>("new_nav", false);
+  const spaces = newNav === true;
+  const [drawerFolded, setDrawerFolded] = usePref<boolean>("spaces_folded", false);
+  const [spacesOpen, setSpacesOpen] = useState(false);
+  useEffect(() => {
+    const el = document.documentElement;
+    if (spaces) el.dataset.nav = "spaces"; else delete el.dataset.nav;
+    if (spaces && drawerFolded) el.dataset.drawer = "folded"; else delete el.dataset.drawer;
+  }, [spaces, drawerFolded]);
+  const openSpaces = useCallback(() => setSpacesOpen(true), []);
+  const closeSpaces = useCallback(() => setSpacesOpen(false), []);
+  useEdgeSwipe(spaces && !desktop, openSpaces);
+  // Dusty's column is open by default on a desktop in the new navigation (the design's window
+  // beside every page); open or closed is kept on the device.
+  const dustyColSeen = React.useRef(false);
+  useEffect(() => {
+    if (!spaces || !desktop || dustyColSeen.current) return;
+    dustyColSeen.current = true;
+    let col: string | null = null;
+    try { col = localStorage.getItem("sc:dusty-col"); } catch { /* private mode */ }
+    if (col !== "closed") Promise.resolve().then(() => setDustyOpen(true));
+  }, [spaces, desktop]);
+  useEffect(() => {
+    if (!spaces || !desktop || !dustyColSeen.current) return;
+    try { localStorage.setItem("sc:dusty-col", dustyOpen ? "open" : "closed"); } catch { /* private mode */ }
+  }, [spaces, desktop, dustyOpen]);
   const [menuPanel, setMenuPanel] = useState(false);
   const closeMenuPanel = useCallback(() => setMenuPanel(false), []);
 
@@ -237,7 +267,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }, [pathname]);
   // Close the Toolbox when the page changes (a pick navigates).
   const [pathSeen, setPathSeen] = useState(pathname);
-  if (pathSeen !== pathname) { setPathSeen(pathname); setToolOpen(false); }
+  if (pathSeen !== pathname) { setPathSeen(pathname); setToolOpen(false); setSpacesOpen(false); }
 
   const active = activePage(pathname, search);
   const toolKeys = allowed ? [] : menus.rail.filter((k) => k !== "dusty" && !menus.footer.includes(k));
@@ -311,8 +341,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             {/* The header's + is gone (Coy, 2026-10-01): its menu opened under
                 Dusty. New customer / job / receipt live in Dusty's own + menu. */}
 
-            <button onClick={() => { closeDrops(); router.push(inSettings ? lastPage.current : SETTINGS_HOME); }} className="sc-burger sc-paper-btn"
-              data-status={inSettings ? "open" : "closed"} aria-label={inSettings ? "Close settings" : "Settings"}
+            <button onClick={() => { closeDrops(); if (spaces && !desktop && !inSettings) { setSpacesOpen(true); return; } router.push(inSettings ? lastPage.current : SETTINGS_HOME); }} className="sc-burger sc-paper-btn"
+              data-status={inSettings ? "open" : "closed"} aria-label={inSettings ? "Close settings" : spaces && !desktop ? "Spaces" : "Settings"}
               style={{ ...glassBtn, position: "relative" }}>
               <span className="sc-burger-bar" aria-hidden="true" />
             </button>
@@ -328,7 +358,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* ---- desktop left rail: every page, in Coy's order ----
           A sidebar since 2026-10-10 (Claude Design "Rail Icon Colors"): icon and label on
           one row, each icon in its colour from the book; folds to icons at the foot. */}
-      <nav aria-label="Main" className="hidden lg:flex fixed left-0 bottom-0 z-30 flex-col items-stretch overflow-y-auto sc-rail"
+      {spaces && (
+        <SpacesNav desktop={desktop} pages={(allowed ?? menus.rail).filter((k) => k !== "dusty")} active={active} dustyState={dustyNow}
+          phoneOpen={spacesOpen} onPhoneClose={closeSpaces} folded={drawerFolded === true} onFold={() => setDrawerFolded(!drawerFolded)} />
+      )}
+      {spaces && !limited && desktop && !dustyOpen && (
+        <button type="button" className="sc-dusty-strip" onClick={() => setDustyOpen(true)} aria-label="Open Dusty">
+          <DustyAvatar state={dustyNow} size={28} hidden />
+          <span className="sc-dusty-strip-l">Dusty</span>
+        </button>
+      )}
+      {!spaces && <nav aria-label="Main" className="hidden lg:flex fixed left-0 bottom-0 z-30 flex-col items-stretch overflow-y-auto sc-rail"
         style={{ top: "var(--sc-head)" }} onMouseLeave={() => setRailTip(null)}>
         {(allowed ?? menus.rail).map((k) => {
           // Dusty's desktop door is the header button (Coy, 2026-09-30).
@@ -374,8 +414,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </svg>
           <span className="sc-rail-label">Collapse</span>
         </button>
-      </nav>
-      {railIcons && railTip && (
+      </nav>}
+      {!spaces && railIcons && railTip && (
         <div role="tooltip" className="hidden lg:block fixed pointer-events-none"
           style={{ left: "calc(var(--sc-rail-w) + 6px)", top: railTip.top, transform: "translateY(-50%)", zIndex: 70,
             background: T.dark, color: "#fff", padding: "5px 9px", borderRadius: 6, fontSize: 12, fontFamily: body, whiteSpace: "nowrap", boxShadow: "0 2px 8px rgba(0,0,0,.18)" }}>

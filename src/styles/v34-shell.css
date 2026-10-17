@@ -688,3 +688,65 @@ html[data-view-as] { --sc-banner: 28px; }
 .sc-dusty-grip:hover, html[data-dusty-drag] .sc-dusty-grip { background: linear-gradient(to right, transparent 3px, var(--sc-hiviz, #D97757) 3px, var(--sc-hiviz, #D97757) 5px, transparent 5px); }
 html[data-dusty-drag], html[data-dusty-drag] * { cursor: col-resize !important; user-select: none !important; }
 html[data-dusty-drag] iframe { pointer-events: none; }
+
+/* ---- The Spaces navigation, step 1 (Claude Design "Dusty Home"; Coy, 2026-10-17) ----
+   Behind Settings → Appearance → New navigation: <html data-nav="spaces">.
+   A 72px rail of Spaces beside a 280px drawer; --sc-rail-w carries both, so every
+   page, drawer and sheet already measured from the rail moves with it. */
+html[data-nav="spaces"] { --sc-rail-w: 352px; --sc-dusty: 380px; }
+html[data-nav="spaces"][data-drawer="folded"] { --sc-rail-w: 72px; }
+.sc-spaces { position: fixed; left: 0; bottom: 0; top: var(--sc-head); z-index: 30; display: flex; width: var(--sc-rail-w); font-family: var(--sc-font-body); }
+.sc-spaces-rail { width: 72px; flex: none; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 0;
+  background: color-mix(in srgb, var(--sc-rail) 82%, var(--sc-ink) 6%); border-right: 1px solid var(--sc-hair); overflow-y: auto; scrollbar-width: none; }
+.sc-spaces-rail::-webkit-scrollbar { display: none; }
+.sc-spaces-sep { width: 32px; height: 1px; background: var(--sc-hair-strong); margin: 2px 0; flex: none; }
+.sc-spaces-note { font-size: 11px; color: var(--sc-ink3); }
+.sc-space-slot { position: relative; width: 72px; display: flex; justify-content: center; flex: none; }
+.sc-space-slot[data-on]::before { content: ""; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; border-radius: 0 3px 3px 0; background: var(--sc-hiviz); }
+.sc-space-tile { width: 48px; height: 48px; border-radius: 14px; display: flex; align-items: center; justify-content: center; cursor: pointer;
+  color: var(--sc-tile); background: color-mix(in srgb, var(--sc-tile) 13%, var(--sc-card)); border: 2px solid color-mix(in srgb, var(--sc-tile) 55%, transparent);
+  transition: border-radius .15s, transform .15s; padding: 0; }
+.sc-space-tile:hover, .sc-space-tile:focus-visible { border-radius: 11px; }
+.sc-space-slot[data-on] .sc-space-tile { border-radius: 11px; border-color: var(--sc-tile); box-shadow: 0 1px 0 var(--sc-hair-strong); }
+.sc-space-tile-new { border-style: dashed; border-color: var(--sc-hair-strong); color: var(--sc-ink3); background: transparent; }
+.sc-space-home { display: flex; align-items: center; justify-content: center; }
+.sc-spaces-foot { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: var(--sc-rail-ink); background: transparent; border: 0; cursor: pointer; flex: none; }
+.sc-spaces-foot:hover { background: var(--sc-rail-active); color: var(--sc-rail-ink-on); }
+.sc-spaces-drawer { width: 280px; flex: none; display: flex; flex-direction: column; min-height: 0; background: var(--sc-rail); border-right: 1px solid var(--sc-hair); color: var(--sc-rail-ink-on); }
+.sc-space-head { padding: 14px 14px 10px; border-bottom: 1px solid var(--sc-hair); display: flex; flex-direction: column; gap: 4px; }
+.sc-space-name { font-family: var(--sc-font-strong); font-weight: 600; font-size: 15px; line-height: 1.25; color: var(--sc-ink); overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.sc-space-sub { font-size: 11.5px; color: var(--sc-ink3); }
+.sc-space-tag { align-self: flex-start; font-family: var(--sc-font-disp); font-weight: 700; font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; border: 1px solid; border-radius: 4px; padding: 1px 6px; }
+.sc-space-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 6px 0 16px; }
+.sc-space-group { padding: 4px 0; }
+.sc-space-group-h { width: 100%; display: flex; align-items: center; gap: 6px; padding: 6px 14px 4px; background: none; border: 0; cursor: pointer;
+  font-family: var(--sc-font-disp); font-weight: 700; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--sc-ink3); text-align: left; }
+.sc-space-row { display: flex; align-items: center; gap: 9px; margin: 1px 8px; padding: 6px 8px; border-radius: 6px; color: var(--sc-rail-ink); min-height: 32px; }
+.sc-space-row:hover { background: var(--sc-rail-active); color: var(--sc-rail-ink-on); }
+.sc-space-row[aria-current="page"] { background: var(--sc-rail-active); color: var(--sc-rail-ink-on); box-shadow: inset 3px 0 0 var(--sc-hiviz); }
+.sc-space-row-l { display: block; font-size: 13.5px; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sc-space-row-s { display: block; font-size: 11.5px; color: var(--sc-ink3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sc-space-ico { width: 20px; display: flex; align-items: center; justify-content: center; flex: none; }
+.sc-space-ico svg { width: 18px; height: 18px; }
+.sc-space-av { width: 24px; height: 24px; border-radius: 6px; flex: none; display: flex; align-items: center; justify-content: center; font-family: var(--sc-font-disp); font-weight: 700; font-size: 11px; }
+.sc-space-empty { padding: 4px 16px 6px 30px; font-size: 12px; color: var(--sc-ink3); }
+.sc-space-empty a { color: var(--sc-hiviz-text); }
+.sc-space-more { display: block; padding: 3px 16px 6px 30px; font-size: 12px; color: var(--sc-hiviz-text); }
+/* Phone: over the page, from ☰ or a swipe from the left edge. */
+.sc-spaces-phone { top: 0; z-index: 60; width: min(352px, 92vw); transform: translateX(-105%); transition: transform .26s cubic-bezier(.2,.8,.2,1);
+  padding-top: env(safe-area-inset-top); background: var(--sc-rail); box-shadow: 8px 0 24px rgba(0,0,0,.18); }
+.sc-spaces-phone[data-open] { transform: none; }
+.sc-spaces-phone .sc-spaces-drawer { flex: 1; width: auto; min-width: 0; }
+.sc-spaces-scrim { position: fixed; inset: 0; z-index: 59; background: rgba(0,0,0,.32); }
+@media (prefers-reduced-motion: reduce) { .sc-spaces-phone { transition: none; } }
+/* The header's ☰ is Settings in the old navigation; here Settings is the rail's gear, and on
+   a desktop the ☰ goes. Dusty's column, closed, leaves a strip with his emblem to open it. */
+@media (min-width: 1024px) { html[data-nav="spaces"] .sc-burger { display: none; } }
+.sc-dusty-strip { display: none; }
+@media (min-width: 1024px) {
+  html[data-nav="spaces"]:not([data-dusty="open"]) main { padding-right: 44px; }
+  html[data-nav="spaces"]:not([data-dusty="open"]) .sc-dusty-strip {
+    display: flex; position: fixed; right: 0; bottom: 0; top: var(--sc-head); width: 44px; z-index: 30; flex-direction: column; align-items: center; gap: 12px;
+    padding-top: 12px; background: var(--sc-rail); border-left: 1px solid var(--sc-hair); border-top: 0; border-right: 0; border-bottom: 0; cursor: pointer; color: var(--sc-rail-ink); }
+  .sc-dusty-strip-l { writing-mode: vertical-rl; font-family: var(--sc-font-disp); font-weight: 700; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; }
+}

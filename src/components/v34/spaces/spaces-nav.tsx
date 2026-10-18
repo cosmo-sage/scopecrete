@@ -380,63 +380,115 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
  * page back over the Spaces.
  */
 export function PageEdge({ onClose }: { onClose: () => void }) {
-  const at = useRef<number | null>(null);
   return (
     <div className="sc-page-edge" role="button" tabIndex={0} aria-label="Back to the page"
-      onClick={onClose} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onClose(); }}
-      onTouchStart={(e) => { at.current = e.touches[0].clientX; }}
-      onTouchMove={(e) => { if (at.current !== null && e.touches[0].clientX - at.current < -40) { at.current = null; onClose(); } }}
-      onTouchEnd={() => { at.current = null; }} />
+      onClick={onClose} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onClose(); }} />
   );
 }
 
 /**
- * A swipe right on a phone slides the page aside to show the Spaces under it (the design's
- * left-edge gesture; since 2026-10-17 from anywhere on the page, as Slack does — Coy: "it
- * should be underneath the pages"). A touch that starts on something that pans sideways
- * itself (the plans, the map, a scrolling table or tab row, a text box, a dialog) is left
- * to it, unless it starts within EDGE_PX of the edge: that strip always belongs to the
- * Spaces, caught on the window before React sees it, so nothing under it starts its own
- * swipe. A tap still clicks. Anything marked data-edge-own keeps even the edge.
+ * The phone's page slides aside over the Spaces under the finger, Discord's way (Coy,
+ * 2026-10-18: "Need the page to slide over smooth from anywhere on the screen"). A drag
+ * right from anywhere on the page, or left on the open Spaces or the page's edge, moves the
+ * page with the finger (transform only, no transition while dragging); let go and it
+ * settles open or closed by a flick (over 0.5 px a millisecond) or by being past halfway.
+ * A move that is more up-and-down than sideways once it passes 8 px is a scroll and left
+ * alone. A touch on something that pans sideways itself (the plans, the map, a scrolling
+ * table or tab row, a text box, a dialog) is left to it, unless it starts within EDGE_PX of
+ * the edge: that strip always belongs to the Spaces, caught on the window before React sees
+ * it. Anything marked data-edge-own keeps even the edge. While aside the page is a fixed,
+ * screen-high layer scrolled to where the window was (data-spaces-open), so it slides as it
+ * looked, and the window's scroll comes back when it slides back over.
  */
 export const EDGE_PX = 24;
-export function useEdgeSwipe(on: boolean, open: () => void) {
+const EDGE_GAP = 56;
+export function usePageSlide(on: boolean, isOpen: boolean, setOpen: (v: boolean) => void,
+                             layerRef: React.RefObject<HTMLDivElement | null>) {
+  const savedY = useRef(0);
+  const aside = useCallback((v: boolean) => {
+    const html = document.documentElement, el = layerRef.current;
+    const now = "spacesOpen" in html.dataset;
+    if (v && !now && el) {
+      savedY.current = window.scrollY;
+      html.dataset.spacesOpen = "";
+      el.scrollTop = savedY.current;
+    } else if (!v && now) {
+      delete html.dataset.spacesOpen;
+      window.scrollTo(0, savedY.current);
+    }
+  }, [layerRef]);
+  const openRef = useRef(isOpen);
+  React.useLayoutEffect(() => { openRef.current = isOpen; aside(on && isOpen); }, [on, isOpen, aside]);
   useEffect(() => {
     if (!on) return;
-    let start: { x: number; y: number } | null = null;
+    type Start = { x: number; y: number; edge: boolean; from: number };
+    let s: Start | null = null;
+    let drag = false, x = 0, lastX = 0, lastT = 0, vel = 0;
     const own = (e: TouchEvent) => e.target instanceof Element && !!e.target.closest("[data-edge-own], [role=dialog]");
-    let edge = false;
+    const width = () => window.innerWidth - EDGE_GAP;
     const ts = (e: TouchEvent) => {
-      const t = e.touches[0];
-      start = null; edge = false;
+      s = null; drag = false;
       if (e.touches.length !== 1 || own(e)) return;
-      edge = t.clientX <= EDGE_PX;
+      const t = e.touches[0];
+      const open = openRef.current;
+      const edge = !open && t.clientX <= EDGE_PX;
       if (!edge && pansSideways(e.target)) return;
-      start = { x: t.clientX, y: t.clientY };
+      s = { x: t.clientX, y: t.clientY, edge, from: open ? width() : 0 };
+      lastX = t.clientX; lastT = e.timeStamp; vel = 0;
       if (edge) e.stopPropagation();
     };
     const tm = (e: TouchEvent) => {
-      if (!start) return;
-      if (edge) e.stopPropagation();
+      if (!s) return;
+      if (s.edge) e.stopPropagation();
       const t = e.touches[0];
-      const dx = t.clientX - start.x, dy = Math.abs(t.clientY - start.y);
-      // A scroll up or down, or a swipe left, is not this gesture.
-      if (dy > 30 && dy > dx) { start = null; return; }
-      if (dx > 60 && dy < 40) { start = null; open(); }
+      const dx = t.clientX - s.x, dy = t.clientY - s.y;
+      if (!drag) {
+        if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+        // Up and down is a scroll; and a closed page only opens, an open one only closes.
+        if (Math.abs(dy) >= Math.abs(dx) || (s.from === 0 ? dx < 0 : dx > 0)) { s = null; return; }
+        const el = layerRef.current;
+        if (!el) { s = null; return; }
+        drag = true;
+        el.style.transition = "none";
+        el.style.willChange = "transform";
+        el.style.transform = `translateX(${s.from}px)`;
+        aside(true);
+      }
+      if (e.cancelable) e.preventDefault();
+      x = Math.max(0, Math.min(width(), s.from + dx));
+      const el = layerRef.current;
+      if (el) el.style.transform = `translateX(${x}px)`;
+      const dt = e.timeStamp - lastT;
+      if (dt > 0) vel = 0.7 * ((t.clientX - lastX) / dt) + 0.3 * vel;
+      lastX = t.clientX; lastT = e.timeStamp;
     };
-    const te = (e: TouchEvent) => { if (start) { start = null; if (edge) e.stopPropagation(); } };
-    const opt = { capture: true, passive: true } as const;
-    window.addEventListener("touchstart", ts, opt);
-    window.addEventListener("touchmove", tm, opt);
-    window.addEventListener("touchend", te, opt);
-    window.addEventListener("touchcancel", te, opt);
+    const te = (e: TouchEvent) => {
+      if (!s) return;
+      if (s.edge) e.stopPropagation();
+      if (drag) {
+        // A pause before letting go is not a flick.
+        if (e.timeStamp - lastT > 90) vel = 0;
+        const target = Math.abs(vel) > 0.5 ? vel > 0 : x > width() / 2;
+        const el = layerRef.current;
+        if (el) { el.style.transition = ""; el.style.transform = ""; el.style.willChange = ""; }
+        aside(target);
+        if (target !== openRef.current) setOpen(target);
+      }
+      s = null; drag = false;
+    };
+    const cap = { capture: true, passive: true } as const;
+    const move = { capture: true, passive: false } as const;
+    window.addEventListener("touchstart", ts, cap);
+    window.addEventListener("touchmove", tm, move);
+    window.addEventListener("touchend", te, cap);
+    window.addEventListener("touchcancel", te, cap);
     return () => {
-      window.removeEventListener("touchstart", ts, opt);
-      window.removeEventListener("touchmove", tm, opt);
-      window.removeEventListener("touchend", te, opt);
-      window.removeEventListener("touchcancel", te, opt);
+      window.removeEventListener("touchstart", ts, cap);
+      window.removeEventListener("touchmove", tm, move);
+      window.removeEventListener("touchend", te, cap);
+      window.removeEventListener("touchcancel", te, cap);
     };
-  }, [on, open]);
+  }, [on, setOpen, aside, layerRef]);
 }
 
 /** Does the touch land on something that moves sideways under a finger itself? */

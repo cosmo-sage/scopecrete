@@ -58,7 +58,7 @@ import { AccessContext } from "@/lib/v34/access-ctx";
 import { accessFrom, menuPages, redirectFor, roleLabel, FULL_ACCESS, type Access } from "@/lib/access";
 import { viewAsLine } from "@/lib/view-as";
 import { useRouter } from "next/navigation";
-import { SpacesNav, PageEdge, useEdgeSwipe } from "@/components/v34/spaces/spaces-nav";
+import { SpacesNav, PageEdge, usePageSlide } from "@/components/v34/spaces/spaces-nav";
 import { TalkBar, talkPlaceholder } from "@/components/v34/spaces/talk-bar";
 import "@/styles/v34-shell.css";
 
@@ -180,26 +180,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     window.addEventListener("sc:spaces-open", openSpaces);
     return () => window.removeEventListener("sc:spaces-open", openSpaces);
   }, [openSpaces]);
-  useEdgeSwipe(spaces && !desktop && !spacesOpen, openSpaces);
   // On a phone the Spaces sit under the page, which slides right to show them (Coy,
   // 2026-10-17: "it should be underneath the pages"). While aside the page is a fixed,
   // viewport-high layer scrolled to where the window was, so it slides as it looked, and
   // the window's scroll comes back when it slides back over.
   const under = spaces && !desktop;
   const layerRef = React.useRef<HTMLDivElement>(null);
-  const layerY = React.useRef(0);
-  React.useLayoutEffect(() => {
-    const html = document.documentElement;
-    const el = layerRef.current;
-    if (under && spacesOpen && el) {
-      layerY.current = window.scrollY;
-      html.dataset.spacesOpen = "";
-      el.scrollTop = layerY.current;
-    } else if ("spacesOpen" in html.dataset) {
-      delete html.dataset.spacesOpen;
-      window.scrollTo(0, layerY.current);
-    }
-  }, [under, spacesOpen]);
+  usePageSlide(under, spacesOpen, setSpacesOpen, layerRef);
   // Dusty's column is open by default on a desktop in the new navigation (the design's window
   // beside every page); open or closed is kept on the device.
   const dustyColSeen = React.useRef(false);

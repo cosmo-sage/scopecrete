@@ -10,7 +10,7 @@
  * Home the app's pages and every thread by bucket; in a job its Scope Builder tree
  * and its Phone · Email · Internal threads (one thread per number). Settings is the
  * gear at the rail's foot. On a desktop it is fixed at the left (`--sc-rail-w` is
- * 352px, 72px with the drawer collapsed by « on its header or the rail's foot button); on a phone it slides over the page from ☰
+ * 352px, 136px with the drawer folded by « to a strip of icons, › opening it again — frame 11; tiles drawn as silhouettes by kind, Rail Silhouettes 1a); on a phone it slides over the page from ☰
  * or a swipe from the left edge. No migration: src/lib/v34/spaces.ts, /api/spaces.
  */
 
@@ -20,6 +20,7 @@ import { usePathname } from "next/navigation";
 import { T, disp } from "@/lib/v34/tokens";
 import { NavIcon } from "@/components/v34/primitives";
 import { DustyAvatar, type EmblemState } from "@/components/v34/dusty-avatar";
+import { SpaceSilhouette } from "@/components/v34/spaces/space-silhouette";
 import { PAGE } from "@/lib/v34/pages";
 import { SETTINGS_HOME } from "@/lib/v34/settings-sections";
 import {
@@ -104,14 +105,15 @@ function useHomeThreads(on: boolean) {
 
 /* ------------------------------------------------------------ pieces */
 
-function Tile({ label, title, color, on, href, onPick, children, dashed }: {
+function Tile({ label, title, color, on, href, onPick, children, dashed, bare, home }: {
   label: string; title: string; color?: string; on?: boolean; href?: string; onPick?: () => void; children?: React.ReactNode; dashed?: boolean;
+  bare?: boolean; home?: boolean;
 }) {
   const inner = children ?? <span style={{ fontFamily: disp, fontWeight: 700, fontSize: 15, letterSpacing: ".02em" }}>{label}</span>;
   const style: React.CSSProperties = {
     "--sc-tile": color ?? "var(--sc-rail-ink)",
   } as React.CSSProperties;
-  const cls = `sc-space-tile${dashed ? " sc-space-tile-new" : ""}`;
+  const cls = `sc-space-tile${dashed ? " sc-space-tile-new" : ""}${bare ? " sc-space-tile-bare" : ""}${home ? " sc-space-tile-home" : ""}`;
   return (
     <div className="sc-space-slot" data-on={on ? "" : undefined}>
       {href
@@ -277,6 +279,70 @@ function JobDrawer({ id, fallback, onPick }: { id: string; fallback: RailJob | n
   );
 }
 
+
+/* ------------------------------------------------------------ the folded drawer */
+
+// Claude Design "Dusty Home" frame 11 (Coy, 2026-10-18: "when I collapse the drawer it
+// disappears"): folded, the drawer is a 64px strip — › to open it, the pages as icons, then
+// the Space's groups as small chips in their colour, each opening the drawer.
+const TREE_ICON: Record<string, string> = { summary: "dashboard", plans: "scopebuilder", budget: "pricebook", tracker: "logs", files: "files" };
+
+function ProposalIcon() {
+  return (
+    <svg width="19" height="19" viewBox="0 0 19 19" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4.5 2.5h7l3 3v11h-10z" /><path d="M11.5 2.5v3h3" /><path d="M7 11l1.8 1.8L12.2 9" />
+    </svg>
+  );
+}
+
+function FoldedDrawer({ shown, pages, active, status, onOpen }: {
+  shown: { kind: "home" } | { kind: "job"; id: string }; pages: string[]; active: string; status: string | null; onOpen: () => void;
+}) {
+  const path = usePathname() ?? "";
+  const [search, setSearch] = useState("");
+  useEffect(() => {
+    let off = false;
+    Promise.resolve().then(() => { if (!off) setSearch(window.location.search); });
+    return () => { off = true; };
+  }, [path]);
+  const icon = (key: string, label: string, href: string, on: boolean, glyph: React.ReactNode) => (
+    <Link key={key} href={href} className="sc-strip-ico no-underline" title={label} aria-label={label} aria-current={on ? "page" : undefined}>{glyph}</Link>
+  );
+  const chip = (ab: string, label: string, color: string) => (
+    <button key={ab} type="button" className="sc-strip-chip" style={{ color, borderColor: color }} onClick={onOpen} title={label} aria-label={`${label} — open the drawer`}>{ab}</button>
+  );
+  let icons: React.ReactNode[];
+  let chips: React.ReactNode[];
+  if (shown.kind === "home") {
+    const order = [...BUCKET_PAGES.filter((k) => pages.includes(k)), ...pages.filter((k) => !BUCKET_PAGES.includes(k))];
+    icons = order.map((k) => {
+      const p = PAGE.get(k);
+      return p ? icon(k, p.label, p.href, active === k, <NavIcon k={k} on={active === k} color="currentColor" />) : null;
+    });
+    chips = BUCKETS.map((b) => chip(b.label.slice(0, 2).toUpperCase(), b.label, b.color));
+  } else {
+    const here = activeTreeRow(path, search);
+    icons = jobTree(shown.id, status).filter((r) => !r.sub).map((r) => {
+      const on = here === r.k || (r.k === "budget" && (here === "proposed" || here === "market"));
+      const glyph = r.k === "proposal" ? <ProposalIcon /> : <NavIcon k={TREE_ICON[r.k] ?? "files"} on={on} color="currentColor" />;
+      return icon(r.k, r.label, r.href, on, glyph);
+    });
+    chips = [chip("PH", "Phone", "var(--sc-bucket-customer)"), chip("EM", "Email", "var(--sc-chalk)"), chip("IN", "Internal", "var(--sc-violet)")];
+  }
+  return (
+    <div className="sc-spaces-strip">
+      <button type="button" className="sc-strip-open" onClick={onOpen} aria-label="Open the drawer" title="Open the drawer">
+        <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+          <path d="M4 2l5 5-5 5" /><path d="M9 2v10" opacity=".35" />
+        </svg>
+      </button>
+      {icons}
+      <span className="sc-strip-sep" aria-hidden="true" />
+      {chips}
+    </div>
+  );
+}
+
 /* ------------------------------------------------------------ the nav */
 
 export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPhoneClose, folded, onFold }: {
@@ -294,10 +360,16 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
   const jobs = rail?.jobs ?? [];
   const jobOf = (id: string) => jobs.find((j) => j.id === id) ?? null;
   const close = desktop ? () => {} : onPhoneClose;
+  const [threadParam, setThreadParam] = useState<string | null>(null);
+  useEffect(() => {
+    let off = false;
+    Promise.resolve().then(() => { if (!off) setThreadParam(new URLSearchParams(window.location.search).get("t")); });
+    return () => { off = true; };
+  }, [path]);
 
   const railEl = (
     <div className="sc-spaces-rail" role="navigation" aria-label="Spaces">
-      <Tile label="Home" title="Home — Dusty" on={shown.kind === "home"} onPick={() => { setPeek({ kind: "home" }); if (desktop && folded) onFold(); }}>
+      <Tile label="Home" title="Home — Dusty" on={shown.kind === "home"} home onPick={() => setPeek({ kind: "home" })}>
         <span className="sc-space-home"><DustyAvatar state={dustyState} size={40} hidden /></span>
       </Tile>
       <span className="sc-spaces-sep" aria-hidden="true" />
@@ -308,27 +380,30 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
         return (
           // A desktop opens the job (its Summary) as Discord opens a server; a phone looks into
           // its drawer first, so the tree is there to pick from before the panel closes.
-          <Tile key={j.id} label={monogram(j.title)} title={title} color={stageColor(j.status)} on={on}
+          <Tile key={j.id} label={monogram(j.title)} title={title} color={stageColor(j.status)} on={on} bare
             href={desktop ? `/dashboard/scope/${j.id}/summary` : undefined}
-            onPick={desktop ? undefined : () => setPeek({ kind: "job", id: j.id })} />
+            onPick={desktop ? undefined : () => setPeek({ kind: "job", id: j.id })}>
+            <SpaceSilhouette kind="job" color={stageColor(j.status)} initials={monogram(j.title)} on={on} />
+          </Tile>
         );
       })}
       {rail && rail.collections.length > 0 && <span className="sc-spaces-sep" aria-hidden="true" />}
-      {rail?.collections.map((c) => (
-        <Tile key={c.id} label={monogram(c.name)} title={`${c.name} · ${c.count} ${c.count === 1 ? "person" : "people"}`}
-          href={`/dashboard/messages?t=${c.id}`} onPick={close} color="var(--sc-bucket-vendor)" />
-      ))}
+      {rail?.collections.map((c) => {
+        // A thread made from a customer is that customer's address book; any other is a folder.
+        const customer = c.source === "customer";
+        const color = customer ? "var(--sc-chalk)" : "var(--sc-violet)";
+        const on = /^\/dashboard\/messages$/.test(path) && threadParam === c.id;
+        return (
+          <Tile key={c.id} label={monogram(c.name)} title={`${c.name} · ${c.count} ${c.count === 1 ? "person" : "people"}`}
+            href={`/dashboard/messages?t=${c.id}`} onPick={close} color={color} on={on} bare>
+            <SpaceSilhouette kind={customer ? "contact" : "collection"} color={color} initials={monogram(c.name)} on={on} />
+          </Tile>
+        );
+      })}
       <Tile label="+" title="New Space — start a job" href="/dashboard/scope?new=1" onPick={close} dashed>
         <span style={{ fontSize: 22, lineHeight: 1 }}>+</span>
       </Tile>
       <span style={{ flex: 1 }} />
-      {desktop && (
-        <button type="button" className="sc-spaces-foot" onClick={onFold} aria-label={folded ? "Open the drawer" : "Collapse the drawer"} title={folded ? "Open the drawer" : "Collapse the drawer"}>
-          <svg width="18" height="18" viewBox="0 0 19 19" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
-            <path d="M3 3.5h13v12H3zM7 3.5v12" /><path d={folded ? "M10.5 7.5l2 2-2 2" : "M12.5 7.5l-2 2 2 2"} />
-          </svg>
-        </button>
-      )}
       <Link href={SETTINGS_HOME} onClick={close} className="sc-spaces-foot no-underline" aria-label="Settings" title="Settings">
         <svg width="19" height="19" viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
           <circle cx="10" cy="10" r="2.6" />
@@ -338,11 +413,12 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
     </div>
   );
 
-  const drawerEl = (!desktop || !folded) && (
+  const drawerEl = desktop && folded ? <FoldedDrawer shown={shown} pages={pages} active={active} onOpen={onFold}
+    status={shown.kind === "job" ? jobOf(shown.id)?.status ?? null : null} /> : (
     <div className="sc-spaces-drawer">
       {desktop && (
-        // Coy, 2026-10-17: "the inner drawer … should be collapsible on desktop". The rail's
-        // foot button opens it again; a phone's drawer is covered by the page picked instead.
+        // Coy, 2026-10-17: "the inner drawer … should be collapsible on desktop". The folded
+        // strip's › opens it again; a phone's drawer is covered by the page picked instead.
         <button type="button" className="sc-drawer-fold" onClick={onFold} aria-label="Collapse the drawer" title="Collapse the drawer">
           <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
             <path d="M8.5 4L4.5 8l4 4M12.5 4l-4 4 4 4" />

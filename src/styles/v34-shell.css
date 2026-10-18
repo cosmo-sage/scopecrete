@@ -694,7 +694,7 @@ html[data-dusty-drag] iframe { pointer-events: none; }
    A 72px rail of Spaces beside a 280px drawer; --sc-rail-w carries both, so every
    page, drawer and sheet already measured from the rail moves with it. */
 html[data-nav="spaces"] { --sc-rail-w: 352px; --sc-dusty: 380px; }
-html[data-nav="spaces"][data-drawer="folded"] { --sc-rail-w: 72px; }
+html[data-nav="spaces"][data-drawer="folded"] { --sc-rail-w: 136px; }
 /* The Spaces drawer is the threads now: the old bucket rail never shows, and an open
    conversation takes the page without the old list beside it (Coy, 2026-10-17). */
 html[data-nav="spaces"] .sc-old-thread-rail,
@@ -721,6 +721,23 @@ html[data-nav="spaces"] .sc-drawer-pane .sc-drawer-old { display: none !importan
   transition: border-radius .15s, transform .15s; padding: 0; }
 .sc-space-tile:hover, .sc-space-tile:focus-visible { border-radius: 11px; }
 .sc-space-slot[data-on] .sc-space-tile { border-radius: 11px; border-color: var(--sc-tile); box-shadow: 0 1px 0 var(--sc-hair-strong); }
+/* Silhouettes (Rail Silhouettes 1a): the shape draws itself, the tile is only the hit area. */
+.sc-space-tile-bare, .sc-space-slot[data-on] .sc-space-tile-bare { width: 44px; height: 44px; border: 0; background: transparent; box-shadow: none; border-radius: 6px; }
+.sc-space-tile-bare:hover > span { filter: brightness(.97); }
+.sc-space-tile-home { width: 52px; height: 52px; border-radius: 26px; background: var(--sc-card); border: 2px solid var(--sc-hair-strong); box-shadow: 0 1px 2px rgba(20,20,20,.12); }
+.sc-space-slot[data-on] .sc-space-tile-home { border-radius: 16px; border-color: var(--sc-hiviz); }
+.sc-space-slot[data-on]:has(.sc-space-tile-bare)::before, .sc-space-slot[data-on]:has(.sc-space-tile-home)::before { top: 50%; bottom: auto; height: 36px; margin-top: -18px; }
+/* The folded drawer (frame 11): a 64px strip of icons and group chips. */
+.sc-spaces-strip { width: 64px; flex: none; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 0 10px; overflow-y: auto; scrollbar-width: none;
+  background: var(--sc-card); border-right: 1px solid var(--sc-hair); }
+.sc-strip-open { width: 32px; height: 32px; margin-bottom: 6px; border-radius: 4px; border: 0; background: transparent; color: var(--sc-ink3); display: flex; align-items: center; justify-content: center; cursor: pointer; flex: none; }
+.sc-strip-open:hover { background: var(--sc-sunk); color: var(--sc-ink); }
+.sc-strip-ico { width: 40px; height: 36px; border-radius: 5px; display: flex; align-items: center; justify-content: center; color: var(--sc-ink2); flex: none; }
+.sc-strip-ico:hover { background: var(--sc-sunk); color: var(--sc-ink); }
+.sc-strip-ico[aria-current="page"] { background: var(--sc-sunk); color: var(--sc-ink); box-shadow: inset 3px 0 0 var(--sc-hiviz); }
+.sc-strip-sep { width: 28px; height: 1px; background: var(--sc-hair-strong); margin: 8px 0; flex: none; }
+.sc-strip-chip { width: 30px; height: 30px; margin: 5px 0; border-radius: 4px; border: 1px solid; background: transparent; font-family: var(--sc-font-disp); font-weight: 600; font-size: 11px; letter-spacing: .04em; display: flex; align-items: center; justify-content: center; cursor: pointer; flex: none; }
+.sc-strip-chip:hover { background: var(--sc-sunk); }
 .sc-space-tile-new { border-style: dashed; border-color: var(--sc-hair-strong); color: var(--sc-ink3); background: transparent; }
 .sc-space-home { display: flex; align-items: center; justify-content: center; }
 .sc-spaces-foot { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: var(--sc-rail-ink); background: transparent; border: 0; cursor: pointer; flex: none; }

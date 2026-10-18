@@ -115,3 +115,83 @@ export function internalThreads(people: SpacePerson[]): ThreadRow[] {
   return people.map((p) => ({ key: `${p.id}:notes`, title: p.name?.trim() || (p.phones[0] ? fmtPhone(p.phones[0].phone) : "No name"),
     sub: "Internal notes", href: `/dashboard/messages/${p.id}?channel=notes`, avatar: monogram(p.name ?? "") }));
 }
+
+/* ------------------------------------------------------------ shelves */
+
+/**
+ * Shelves (Coy, 2026-10-18): the groups in a Space's drawer, like Discord's categories —
+ * renamed, added, removed, and any page put on any one. Home's are kept on Coy's account
+ * (`user_preferences.prefs.shelves`, no migration). Logs and Roadmap left the drawer for
+ * Settings; a page on no shelf lands on a last shelf, More, so nothing is ever lost.
+ */
+export interface Shelf { id: string; name: string; pages: string[] }
+
+export const DEFAULT_SHELVES: Shelf[] = [
+  { id: "buckets", name: "Buckets", pages: ["customers", "contacts", "vendors", "scope"] },
+  { id: "scope-builder", name: "Scope Builder", pages: ["scopebuilder"] },
+  { id: "toolbox", name: "Toolbox", pages: ["map", "camera", "pricebook", "files"] },
+];
+/** Pages that live in Settings under Spaces, not on a shelf. */
+export const SETTINGS_PAGES = ["logs", "roadmap"];
+export const MAX_SHELVES = 20;
+export const MAX_SHELF_NAME = 40;
+
+/** A saved value made safe: shelves with an id, a name and unique pages; else null. */
+export function cleanShelves(v: unknown): Shelf[] | null {
+  if (!Array.isArray(v)) return null;
+  const seenIds = new Set<string>();
+  const seenPages = new Set<string>();
+  const out: Shelf[] = [];
+  for (const s of v.slice(0, MAX_SHELVES)) {
+    if (!s || typeof s !== "object") continue;
+    const r = s as Record<string, unknown>;
+    const id = typeof r.id === "string" ? r.id.slice(0, 40) : "";
+    const name = typeof r.name === "string" ? r.name.trim().slice(0, MAX_SHELF_NAME) : "";
+    if (!id || !name || seenIds.has(id)) continue;
+    seenIds.add(id);
+    const pages: string[] = [];
+    for (const p of Array.isArray(r.pages) ? r.pages : []) {
+      if (typeof p !== "string" || seenPages.has(p)) continue;
+      seenPages.add(p);
+      pages.push(p);
+    }
+    out.push({ id, name, pages });
+  }
+  return out;
+}
+
+/** Home's shelves for these pages: Coy's (else the defaults), each page once, the rest on More. */
+export function homeShelves(saved: unknown, pages: string[]): Shelf[] {
+  const allowed = pages.filter((k) => !SETTINGS_PAGES.includes(k));
+  const base = cleanShelves(saved) ?? DEFAULT_SHELVES;
+  const placed = new Set<string>();
+  const shelves = base.map((s) => {
+    const mine = s.pages.filter((k) => allowed.includes(k) && !placed.has(k));
+    mine.forEach((k) => placed.add(k));
+    return { ...s, pages: mine };
+  });
+  const rest = allowed.filter((k) => !placed.has(k));
+  if (rest.length) {
+    const more = shelves.find((s) => s.id === "more");
+    if (more) more.pages.push(...rest);
+    else shelves.push({ id: "more", name: "More", pages: rest });
+  }
+  return shelves;
+}
+
+/** A page moved onto a shelf (at its end), off any other. */
+export function moveToShelf(shelves: Shelf[], page: string, to: string): Shelf[] {
+  return shelves.map((s) => ({
+    ...s,
+    pages: s.id === to ? [...s.pages.filter((k) => k !== page), page] : s.pages.filter((k) => k !== page),
+  }));
+}
+
+/** Swap an item with its neighbour (dir −1 up, +1 down); out of range changes nothing. */
+export function nudge<T>(list: T[], i: number, dir: -1 | 1): T[] {
+  const j = i + dir;
+  if (i < 0 || i >= list.length || j < 0 || j >= list.length) return list;
+  const n = list.slice();
+  [n[i], n[j]] = [n[j], n[i]];
+  return n;
+}

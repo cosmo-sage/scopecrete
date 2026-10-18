@@ -23,9 +23,11 @@ import { DustyAvatar, type EmblemState } from "@/components/v34/dusty-avatar";
 import { SpaceSilhouette } from "@/components/v34/spaces/space-silhouette";
 import { PAGE } from "@/lib/v34/pages";
 import { SETTINGS_HOME } from "@/lib/v34/settings-sections";
+import { usePref } from "@/lib/v34/prefs";
 import {
   activeTreeRow, internalThreads, jobTree, monogram, phoneThreads, spaceOf, stageColor, stageLabel,
-  type SpacePerson, type ThreadRow,
+  homeShelves, moveToShelf, nudge, MAX_SHELVES, MAX_SHELF_NAME,
+  type Shelf, type SpacePerson, type ThreadRow,
 } from "@/lib/v34/spaces";
 
 interface RailJob { id: string; title: string; status: string | null; customer: string | null }
@@ -156,10 +158,74 @@ function Row({ href, label, sub, on, icon, avatar, color, indent, onPick }: {
 
 /* ------------------------------------------------------------ drawers */
 
-const BUCKET_PAGES = ["customers", "contacts", "vendors", "scope"];
+/**
+ * Arranging Home's shelves (Coy, 2026-10-18: "my Shelves can be renamed and customized
+ * similar to how on discord I create categories and put any channels inside it").
+ */
+function ShelfArranger({ shelves, onChange, onReset }: { shelves: Shelf[]; onChange: (v: Shelf[]) => void; onReset: () => void }) {
+  const [adding, setAdding] = useState("");
+  const set = (i: number, patch: Partial<Shelf>) => onChange(shelves.map((sh, j) => (j === i ? { ...sh, ...patch } : sh)));
+  const add = () => {
+    const name = adding.trim().slice(0, MAX_SHELF_NAME);
+    if (!name || shelves.length >= MAX_SHELVES) return;
+    onChange([...shelves, { id: `s${Date.now().toString(36)}`, name, pages: [] }]);
+    setAdding("");
+  };
+  return (
+    <div className="sc-shelf-arr">
+      <p className="sc-shelf-hint">Rename a shelf, move it up or down, or put any page on another shelf. A shelf you remove sends its pages to More.</p>
+      {shelves.map((sh, i) => (
+        <div key={sh.id} className="sc-shelf-box">
+          <div className="sc-shelf-row">
+            <input className="sc-shelf-name" value={sh.name} maxLength={MAX_SHELF_NAME} aria-label="Shelf name"
+              onChange={(e) => set(i, { name: e.target.value })}
+              onBlur={(e) => { if (!e.target.value.trim()) set(i, { name: "Shelf" }); }} />
+            <button type="button" className="sc-shelf-btn" onClick={() => onChange(nudge(shelves, i, -1))} disabled={i === 0} aria-label="Move shelf up">↑</button>
+            <button type="button" className="sc-shelf-btn" onClick={() => onChange(nudge(shelves, i, 1))} disabled={i === shelves.length - 1} aria-label="Move shelf down">↓</button>
+            {sh.id !== "more" && (
+              <button type="button" className="sc-shelf-btn" aria-label={`Remove ${sh.name}`} title="Remove this shelf"
+                onClick={() => {
+                  const left = shelves.filter((_, j) => j !== i);
+                  const more = left.find((x) => x.id === "more");
+                  onChange(more ? left.map((x) => (x.id === "more" ? { ...x, pages: [...x.pages, ...sh.pages] } : x)) : [...left, { id: "more", name: "More", pages: sh.pages }]);
+                }}>×</button>
+            )}
+          </div>
+          {sh.pages.length === 0 && <div className="sc-space-empty">Empty — move a page here.</div>}
+          {sh.pages.map((k, pi) => {
+            const p = PAGE.get(k);
+            if (!p) return null;
+            return (
+              <div key={k} className="sc-shelf-page">
+                <span className="sc-space-ico"><NavIcon k={k} on={false} color="currentColor" /></span>
+                <span className="sc-shelf-page-l">{p.label}</span>
+                <button type="button" className="sc-shelf-btn" onClick={() => set(i, { pages: nudge(sh.pages, pi, -1) })} disabled={pi === 0} aria-label={`Move ${p.label} up`}>↑</button>
+                <button type="button" className="sc-shelf-btn" onClick={() => set(i, { pages: nudge(sh.pages, pi, 1) })} disabled={pi === sh.pages.length - 1} aria-label={`Move ${p.label} down`}>↓</button>
+                <select className="sc-shelf-move" value={sh.id} aria-label={`Shelf for ${p.label}`} onChange={(e) => onChange(moveToShelf(shelves, k, e.target.value))}>
+                  {shelves.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+                </select>
+              </div>
+            );
+          })}
+        </div>
+      ))}
+      {shelves.length < MAX_SHELVES && (
+        <form className="sc-shelf-row" onSubmit={(e) => { e.preventDefault(); add(); }}>
+          <input className="sc-shelf-name" value={adding} onChange={(e) => setAdding(e.target.value)} placeholder="New shelf name" maxLength={MAX_SHELF_NAME} aria-label="New shelf name" />
+          <button type="submit" className="sc-shelf-arrange" disabled={!adding.trim()}>+ Shelf</button>
+        </form>
+      )}
+      <button type="button" className="sc-space-more" onClick={onReset}>Put the default shelves back</button>
+    </div>
+  );
+}
 
 function HomeDrawer({ pages, active, onPick }: { pages: string[]; active: string; onPick: () => void }) {
   const threads = useHomeThreads(true);
+  const [saved, setSaved] = usePref<Shelf[] | null>("shelves", null);
+  const shelves = useMemo(() => homeShelves(saved, pages), [saved, pages]);
+  const [arranging, setArranging] = useState(false);
+  const saveShelves = (v: Shelf[] | null) => setSaved(v);
   const path = usePathname() ?? "";
   const openContact = /^\/dashboard\/messages\/([0-9a-f-]{36})/i.exec(path)?.[1] ?? null;
   const byBucket = useMemo(() => {
@@ -179,28 +245,26 @@ function HomeDrawer({ pages, active, onPick }: { pages: string[]; active: string
     <>
       <div className="sc-space-head">
         <span className="sc-space-name">Home</span>
-        <span className="sc-space-sub">Dusty · every page and thread</span>
+        <span className="sc-space-sub" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ flex: 1 }}>Dusty · your shelves and threads</span>
+          <button type="button" className="sc-shelf-arrange" onClick={() => setArranging(!arranging)} aria-pressed={arranging}>
+            {arranging ? "Done" : "Arrange"}
+          </button>
+        </span>
       </div>
       <div className="sc-space-scroll">
-        {/* Buckets above Pages (Coy, 2026-10-18), in his order. */}
-        {BUCKET_PAGES.some((k) => pages.includes(k)) && (
-          <Group title="Buckets">
-            {BUCKET_PAGES.filter((k) => pages.includes(k)).map((k) => {
-              const p = PAGE.get(k);
-              if (!p) return null;
-              return <Row key={k} href={p.href} label={p.label} on={active === k} onPick={onPick}
-                icon={<span className="sc-space-ico"><NavIcon k={k} on={active === k} color="currentColor" /></span>} />;
-            })}
-          </Group>
-        )}
-        <Group title="Pages">
-          {pages.filter((k) => !BUCKET_PAGES.includes(k)).map((k) => {
-            const p = PAGE.get(k);
-            if (!p) return null;
-            return <Row key={k} href={p.href} label={p.label} on={active === k} onPick={onPick}
-              icon={<span className="sc-space-ico"><NavIcon k={k} on={active === k} color="currentColor" /></span>} />;
-          })}
-        </Group>
+        {arranging
+          ? <ShelfArranger shelves={shelves} onChange={saveShelves} onReset={() => saveShelves(null)} />
+          : shelves.map((sh) => sh.pages.length > 0 && (
+            <Group key={sh.id} title={sh.name}>
+              {sh.pages.map((k) => {
+                const p = PAGE.get(k);
+                if (!p) return null;
+                return <Row key={k} href={p.href} label={p.label} on={active === k} onPick={onPick}
+                  icon={<span className="sc-space-ico"><NavIcon k={k} on={active === k} color="currentColor" /></span>} />;
+              })}
+            </Group>
+          ))}
         {threads === null && <div className="sc-space-empty">Loading threads…</div>}
         {threads && BUCKETS.map((b) => {
           const list = byBucket.get(b.k) ?? [];
@@ -299,6 +363,8 @@ function FoldedDrawer({ shown, pages, active, status, onOpen }: {
   shown: { kind: "home" } | { kind: "job"; id: string }; pages: string[]; active: string; status: string | null; onOpen: () => void;
 }) {
   const path = usePathname() ?? "";
+  const [saved] = usePref<Shelf[] | null>("shelves", null);
+  const shelves = useMemo(() => homeShelves(saved, pages), [saved, pages]);
   const [search, setSearch] = useState("");
   useEffect(() => {
     let off = false;
@@ -314,7 +380,7 @@ function FoldedDrawer({ shown, pages, active, status, onOpen }: {
   let icons: React.ReactNode[];
   let chips: React.ReactNode[];
   if (shown.kind === "home") {
-    const order = [...BUCKET_PAGES.filter((k) => pages.includes(k)), ...pages.filter((k) => !BUCKET_PAGES.includes(k))];
+    const order = shelves.flatMap((sh) => sh.pages);
     icons = order.map((k) => {
       const p = PAGE.get(k);
       return p ? icon(k, p.label, p.href, active === k, <NavIcon k={k} on={active === k} color="currentColor" />) : null;

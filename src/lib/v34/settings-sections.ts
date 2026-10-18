@@ -21,6 +21,8 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
   { k: "appearance", label: "Appearance", note: "The color scheme — some change the typeface too", href: `${SETTINGS_HOME}/appearance`, field: true },
   { k: "maps", label: "Maps", note: "Google Maps or Mapbox on the Map page", href: `${SETTINGS_HOME}/maps` },
   { k: "ai", label: "AI", note: "Dusty's thought line, on a phone and on a desktop", href: `${SETTINGS_HOME}/ai` },
+  { k: "logs", label: "Logs", note: "What happened behind the scenes — calls, texts and webhooks as they arrived, Dusty's reads, price changes", href: `${SETTINGS_HOME}/logs` },
+  { k: "roadmap", label: "Roadmap", note: "Send feedback, vote on what's next, see what's being built", href: `${SETTINGS_HOME}/roadmap`, field: true },
   { k: "menus", label: "Menus", note: "The order of your pages, the phone footer, and the icons' colors", href: `${SETTINGS_HOME}/menus` },
 ];
 

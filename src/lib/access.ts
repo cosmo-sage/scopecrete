@@ -58,7 +58,7 @@ export function redirectFor(a: Access, path: string): string | null {
   if (p === "/dashboard/roadmap") return null;
   // Settings (2026-10-10): their own details and the colors — the Settings sections marked
   // `field` in src/lib/v34/settings-sections.ts. Any other section goes back to Settings.
-  if (p === "/dashboard/settings" || p === "/dashboard/settings/account" || p === "/dashboard/settings/appearance") return null;
+  if (p === "/dashboard/settings" || p === "/dashboard/settings/account" || p === "/dashboard/settings/appearance" || p === "/dashboard/settings/roadmap") return null;
   if (p.startsWith("/dashboard/settings/")) return "/dashboard/settings";
   if (p === "/dashboard/files") return a.pages.includes("files") ? null : "/dashboard/scope";
   const job = /^\/dashboard\/scope\/([0-9a-f-]{36})(?:\/(plans|files|proposal|summary))?$/.exec(p);

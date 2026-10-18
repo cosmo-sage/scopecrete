@@ -55,3 +55,31 @@ test("stage colours are theme variables", () => {
   assert.match(stageColor("won"), /^var\(--sc-/);
   assert.match(stageColor("lead"), /^var\(--sc-hiviz\)$/);
 });
+
+import { DEFAULT_SHELVES, cleanShelves, homeShelves, moveToShelf, nudge } from "../src/lib/v34/spaces.ts";
+
+test("Home's default shelves; Logs and Roadmap left for Settings; the rest on More", () => {
+  const pages = ["dashboard", "scopebuilder", "scope", "map", "camera", "contacts", "customers", "pricebook", "vendors", "files", "logs", "admin", "roadmap"];
+  const s = homeShelves(null, pages);
+  assert.deepEqual(s.map((x) => x.name), ["Buckets", "Scope Builder", "Toolbox", "More"]);
+  assert.deepEqual(s[0].pages, ["customers", "contacts", "vendors", "scope"]);
+  assert.deepEqual(s[2].pages, ["map", "camera", "pricebook", "files"]);
+  assert.deepEqual(s[3].pages, ["dashboard", "admin"]);
+  assert.ok(!s.flatMap((x) => x.pages).includes("logs"));
+});
+
+test("Coy's own shelves: renamed, added, a page only once, unknown pages dropped", () => {
+  const saved = [{ id: "buckets", name: " People ", pages: ["customers", "customers", "nope"] }, { id: "s1", name: "Field", pages: ["camera", "map"] }, { id: "s1", name: "dup", pages: [] }, { name: "no id" }];
+  const s = homeShelves(saved, ["customers", "camera", "map", "files"]);
+  assert.deepEqual(s, [{ id: "buckets", name: "People", pages: ["customers"] }, { id: "s1", name: "Field", pages: ["camera", "map"] }, { id: "more", name: "More", pages: ["files"] }]);
+  assert.equal(cleanShelves("x"), null);
+  assert.deepEqual(cleanShelves([]), []);
+});
+
+test("moving a page between shelves, and nudging order", () => {
+  const m = moveToShelf(DEFAULT_SHELVES, "map", "buckets");
+  assert.deepEqual(m[0].pages.at(-1), "map");
+  assert.ok(!m[2].pages.includes("map"));
+  assert.deepEqual(nudge([1, 2, 3], 0, 1), [2, 1, 3]);
+  assert.deepEqual(nudge([1, 2, 3], 0, -1), [1, 2, 3]);
+});

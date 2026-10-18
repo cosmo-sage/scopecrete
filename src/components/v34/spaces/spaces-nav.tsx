@@ -154,6 +154,8 @@ function Row({ href, label, sub, on, icon, avatar, color, indent, onPick }: {
 
 /* ------------------------------------------------------------ drawers */
 
+const BUCKET_PAGES = ["customers", "contacts", "vendors", "scope"];
+
 function HomeDrawer({ pages, active, onPick }: { pages: string[]; active: string; onPick: () => void }) {
   const threads = useHomeThreads(true);
   const path = usePathname() ?? "";
@@ -178,8 +180,19 @@ function HomeDrawer({ pages, active, onPick }: { pages: string[]; active: string
         <span className="sc-space-sub">Dusty · every page and thread</span>
       </div>
       <div className="sc-space-scroll">
+        {/* Buckets above Pages (Coy, 2026-10-18), in his order. */}
+        {BUCKET_PAGES.some((k) => pages.includes(k)) && (
+          <Group title="Buckets">
+            {BUCKET_PAGES.filter((k) => pages.includes(k)).map((k) => {
+              const p = PAGE.get(k);
+              if (!p) return null;
+              return <Row key={k} href={p.href} label={p.label} on={active === k} onPick={onPick}
+                icon={<span className="sc-space-ico"><NavIcon k={k} on={active === k} color="currentColor" /></span>} />;
+            })}
+          </Group>
+        )}
         <Group title="Pages">
-          {pages.map((k) => {
+          {pages.filter((k) => !BUCKET_PAGES.includes(k)).map((k) => {
             const p = PAGE.get(k);
             if (!p) return null;
             return <Row key={k} href={p.href} label={p.label} on={active === k} onPick={onPick}

@@ -25,11 +25,11 @@ test("a job's pages are its Space; everything else is Home", () => {
   assert.deepEqual(spaceOf("/dashboard/messages"), { kind: "home" });
 });
 
-test("Scope tracker shows once the job is won", () => {
-  assert.equal(jobTree(ID, "quoted").some((r) => r.k === "tracker"), false);
-  const won = jobTree(ID, "won");
-  assert.equal(won.find((r) => r.k === "tracker")?.href, `/dashboard/scope/${ID}?tab=actuals`);
-  assert.deepEqual(won.map((r) => r.k), ["summary", "plans", "budget", "market", "proposed", "tracker", "proposal", "files"]);
+test("Market rate, Proposed budget and Actual costs are tools of their own", () => {
+  const t = jobTree(ID);
+  assert.equal(t.find((r) => r.k === "tracker")?.href, `/dashboard/scope/${ID}?tab=actuals`);
+  assert.deepEqual(t.map((r) => r.k), ["summary", "plans", "market", "proposed", "tracker", "proposal", "files"]);
+  assert.equal(t.some((r) => r.sub), false);
 });
 
 test("the tree row a page is on", () => {
@@ -123,4 +123,25 @@ test("channels can sit on a shelf; the rest stay loose", () => {
   assert.ok(sh.some((s) => s.id === "more" && s.pages.includes("files")));
   assert.deepEqual(looseChannels(sh), CHANNELS.map((c) => c.key).filter((k) => k !== "ch:vendor"));
   assert.deepEqual(offShelf(sh, "ch:vendor")[0].pages, ["map"]);
+});
+
+test("the rail keeps Coy's order, hides what he took off, and places new tiles beside their kind", async () => {
+  const { cleanRail, orderTiles, moveTile, hideTile, showTile } = await import("../src/lib/v34/spaces.ts");
+  const a = "job:" + "a".repeat(8) + "-0000-4000-8000-000000000001";
+  const b = "job:" + "a".repeat(8) + "-0000-4000-8000-000000000002";
+  const c = "job:" + "a".repeat(8) + "-0000-4000-8000-000000000003";
+  const v = "vendor:" + "b".repeat(8) + "-0000-4000-8000-000000000001";
+  assert.deepEqual(cleanRail({ order: [a, a, "nope", 5], hidden: "x" }), { order: [a], hidden: [] });
+  const none = cleanRail(null);
+  assert.deepEqual(orderTiles([a, b, v], none), [a, b, v]);
+  let p = moveTile(none, [a, b, v], v, 0);
+  assert.deepEqual(orderTiles([a, b, v], p), [v, a, b]);
+  // a new job lands after the job before it by default
+  assert.deepEqual(orderTiles([a, b, c, v], p), [v, a, b, c]);
+  p = hideTile(p, a);
+  assert.deepEqual(orderTiles([a, b, c, v], p), [v, b, c]);
+  p = showTile(p, a);
+  assert.deepEqual(orderTiles([a, b, v], p), [v, a, b]);
+  // a tile gone from the rail (job finished) is just skipped
+  assert.deepEqual(orderTiles([b, v], p), [v, b]);
 });

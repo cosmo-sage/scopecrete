@@ -84,7 +84,7 @@ export function JobTabs({ jobId, active, back = false, subnav }: { jobId: string
   return (
     <div className="relative flex flex-col items-start w-full lg:w-auto">
       {nav}
-      <div ref={subRef} className="lg:hidden relative" style={{ marginLeft: geo?.left ?? 0, paddingTop: 12, visibility: geo ? "visible" : "hidden" }}>
+      <div ref={subRef} className="sc-job-subnav lg:hidden relative" style={{ marginLeft: geo?.left ?? 0, paddingTop: 12, visibility: geo ? "visible" : "hidden" }}>
         {geo && geo.tabs.length > 0 && (() => {
           const line = T.hairStrong;
           const lo = Math.min(geo.stem, ...geo.tabs), hi = Math.max(geo.stem, ...geo.tabs);

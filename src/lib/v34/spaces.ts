@@ -15,7 +15,7 @@
  * Deliverables come later.
  */
 
-import { WON_STATUSES, stageOf } from "../jobs/stages.ts";
+import { stageOf } from "../jobs/stages.ts";
 
 /** Statuses whose job is not on the rail. */
 const CLOSED = new Set(["complete", "closed", "lost"]);
@@ -133,19 +133,19 @@ export interface TreeRow { k: string; label: string; href: string; sub?: boolean
 
 /**
  * A job's pages — the Scope Builder tree. Budget's own tabs are rows under it;
- * Actual costs is Scope tracker, its own page, shown once the job is won (the
- * design's assumption; Coy can say otherwise).
+ * Actual costs shows on every job, as its tab always did (Coy, 2026-10-18).
  */
-export function jobTree(id: string, status: string | null | undefined): TreeRow[] {
+export function jobTree(id: string): TreeRow[] {
   const base = `/dashboard/scope/${id}`;
   const rows: TreeRow[] = [
     { k: "summary", label: "Summary", href: `${base}/summary` },
     { k: "plans", label: "Takeoffs", href: `${base}/plans` },
-    { k: "budget", label: "Budget", href: base },
-    { k: "market", label: "Market rate", href: `${base}?tab=market`, sub: true },
-    { k: "proposed", label: "Proposed budget", href: base, sub: true },
+    // Coy, 2026-10-18: Market rate, Proposed budget and Actual costs are tools of their own on
+    // the shelf, "accessible the same way as the budget tool", not views nested inside Budget.
+    { k: "market", label: "Market rate", href: `${base}?tab=market` },
+    { k: "proposed", label: "Proposed budget", href: base },
+    { k: "tracker", label: "Actual costs", href: `${base}?tab=actuals` },
   ];
-  if (WON_STATUSES.includes(status ?? "")) rows.push({ k: "tracker", label: "Scope tracker", href: `${base}?tab=actuals` });
   rows.push({ k: "proposal", label: "Proposal", href: `${base}/proposal` }, { k: "files", label: "Files", href: `${base}/files` });
   return rows;
 }
@@ -300,4 +300,65 @@ export function nudge<T>(list: T[], i: number, dir: -1 | 1): T[] {
   const n = list.slice();
   [n[i], n[j]] = [n[j], n[i]];
   return n;
+}
+
+/* ------------------------------------------------------------ the rail's order */
+
+/**
+ * Coy's order and hidden tiles on the rail (Coy, 2026-10-18: "I need a way to remove and
+ * rearrange the Rail items"). Keys are "job:<id>", "col:<id>", "customer:<id>", "vendor:<id>".
+ * Hiding a job or a collection only takes it off the rail; the job and thread are untouched.
+ */
+export interface RailPrefs { order: string[]; hidden: string[] }
+const RAIL_KEY_RE = /^(job|col|customer|vendor):[0-9a-f-]{36}$/i;
+const MAX_RAIL_KEYS = 300;
+
+export function cleanRail(v: unknown): RailPrefs {
+  const r = v && typeof v === "object" ? (v as Record<string, unknown>) : {};
+  const list = (x: unknown) => {
+    if (!Array.isArray(x)) return [];
+    const out: string[] = [];
+    for (const k of x) if (typeof k === "string" && RAIL_KEY_RE.test(k) && !out.includes(k)) out.push(k);
+    return out.slice(0, MAX_RAIL_KEYS);
+  };
+  return { order: list(r.order), hidden: list(r.hidden) };
+}
+
+/**
+ * The rail's tiles in Coy's order, hidden ones left out. A tile he never moved keeps its
+ * default place: right after the default tile before it (so a new job lands among the jobs).
+ */
+export function orderTiles(keys: string[], prefs: RailPrefs): string[] {
+  const live = new Set(keys);
+  const out = prefs.order.filter((k) => live.has(k));
+  const placed = new Set(out);
+  keys.forEach((k, i) => {
+    if (placed.has(k)) return;
+    let at = 0;
+    for (let j = i - 1; j >= 0; j--) {
+      const p = out.indexOf(keys[j]);
+      if (p >= 0) { at = p + 1; break; }
+    }
+    out.splice(at, 0, k);
+    placed.add(k);
+  });
+  const hidden = new Set(prefs.hidden);
+  return out.filter((k) => !hidden.has(k));
+}
+
+/** Move a tile to another tile's place in the order shown; the whole order is saved. */
+export function moveTile(prefs: RailPrefs, shown: string[], key: string, to: number): RailPrefs {
+  const from = shown.indexOf(key);
+  if (from < 0) return prefs;
+  const next = shown.filter((k) => k !== key);
+  next.splice(Math.max(0, Math.min(to, next.length)), 0, key);
+  const rest = prefs.order.filter((k) => !next.includes(k));
+  return { order: [...next, ...rest].slice(0, MAX_RAIL_KEYS), hidden: prefs.hidden };
+}
+
+export function hideTile(prefs: RailPrefs, key: string): RailPrefs {
+  return prefs.hidden.includes(key) ? prefs : { order: prefs.order, hidden: [...prefs.hidden, key].slice(-MAX_RAIL_KEYS) };
+}
+export function showTile(prefs: RailPrefs, key: string): RailPrefs {
+  return { order: prefs.order, hidden: prefs.hidden.filter((k) => k !== key) };
 }

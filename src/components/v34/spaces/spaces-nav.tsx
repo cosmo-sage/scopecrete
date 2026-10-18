@@ -22,6 +22,7 @@ import { NavIcon } from "@/components/v34/primitives";
 import { DustyAvatar, type EmblemState } from "@/components/v34/dusty-avatar";
 import { SpaceSilhouette } from "@/components/v34/spaces/space-silhouette";
 import { NewSpaceDialog } from "@/components/v34/spaces/new-space";
+import { ArrangeRail, type RailTileInfo } from "@/components/v34/spaces/arrange-rail";
 import { PAGE } from "@/lib/v34/pages";
 import { SETTINGS_HOME } from "@/lib/v34/settings-sections";
 import { usePref } from "@/lib/v34/prefs";
@@ -30,6 +31,7 @@ import {
   homeShelves, moveToShelf, nudge, MAX_SHELVES, MAX_SHELF_NAME, CHANNELS, isChannel, looseChannels, offShelf,
   customerShelves, vendorShelves, activeTab, cleanPins, addPin, removePin,
   type Shelf, type SpaceRef, type SpacePerson, type ThreadRow, type SpacePin, type SpaceShelf,
+  cleanRail, orderTiles, moveTile, hideTile, showTile,
 } from "@/lib/v34/spaces";
 
 interface RailJob { id: string; title: string; status: string | null; customer: string | null }
@@ -112,9 +114,9 @@ function useHomeThreads(on: boolean) {
 
 /* ------------------------------------------------------------ pieces */
 
-function Tile({ label, title, color, on, href, onPick, children, dashed, bare, home }: {
+function Tile({ label, title, color, on, href, onPick, children, dashed, bare, home, drag }: {
   label: string; title: string; color?: string; on?: boolean; href?: string; onPick?: () => void; children?: React.ReactNode; dashed?: boolean;
-  bare?: boolean; home?: boolean;
+  bare?: boolean; home?: boolean; drag?: React.HTMLAttributes<HTMLDivElement> & { draggable?: boolean };
 }) {
   const inner = children ?? <span style={{ fontFamily: disp, fontWeight: 700, fontSize: 15, letterSpacing: ".02em" }}>{label}</span>;
   const style: React.CSSProperties = {
@@ -122,7 +124,7 @@ function Tile({ label, title, color, on, href, onPick, children, dashed, bare, h
   } as React.CSSProperties;
   const cls = `sc-space-tile${dashed ? " sc-space-tile-new" : ""}${bare ? " sc-space-tile-bare" : ""}${home ? " sc-space-tile-home" : ""}`;
   return (
-    <div className="sc-space-slot" data-on={on ? "" : undefined}>
+    <div className="sc-space-slot" data-on={on ? "" : undefined} {...drag}>
       {href
         ? <Link href={href} onClick={onPick} className={`${cls} no-underline`} style={style} aria-label={title} title={title} aria-current={on ? "page" : undefined}>{inner}</Link>
         : <button type="button" onClick={onPick} className={cls} style={style} aria-label={title} title={title}>{inner}</button>}
@@ -477,7 +479,7 @@ function JobDrawer({ id, fallback, onPick }: { id: string; fallback: RailJob | n
   const status = d?.job.status ?? fallback?.status ?? null;
   const title = d?.job.title ?? fallback?.title ?? "Job";
   const here = activeTreeRow(path, search);
-  const tree = jobTree(id, status);
+  const tree = jobTree(id);
   const phones: ThreadRow[] = d ? phoneThreads(d.people) : [];
   const notes: ThreadRow[] = d ? internalThreads(d.people) : [];
   const { closed, toggle, setAll } = useClosed();
@@ -595,7 +597,7 @@ function RecordDrawer({ kind, id, pins, setPins, onPick }: {
 // Claude Design "Dusty Home" frame 11 (Coy, 2026-10-18: "when I collapse the drawer it
 // disappears"): folded, the drawer is a 64px strip — › to open it, the pages as icons, then
 // the Space's groups as small chips in their colour, each opening the drawer.
-const TREE_ICON: Record<string, string> = { summary: "dashboard", plans: "scopebuilder", budget: "pricebook", tracker: "logs", files: "files" };
+const TREE_ICON: Record<string, string> = { summary: "dashboard", plans: "scopebuilder", market: "cash", proposed: "pricebook", tracker: "logs", files: "files" };
 const TAB_ICON: Record<string, string> = {
   overview: "dashboard", contacts: "contacts", jobs: "scope", threads: "threads", payments: "cash", schedule: "logs",
   files: "files", timeline: "threads", prices: "pricebook", receipts: "documents", bids: "vendors",
@@ -609,8 +611,8 @@ function ProposalIcon() {
   );
 }
 
-function FoldedDrawer({ shown, pages, active, status, onOpen, bar }: {
-  shown: SpaceRef; pages: string[]; active: string; status: string | null; onOpen: () => void; bar?: React.ReactNode;
+function FoldedDrawer({ shown, pages, active, onOpen, bar }: {
+  shown: SpaceRef; pages: string[]; active: string; onOpen: () => void; bar?: React.ReactNode;
 }) {
   const path = usePathname() ?? "";
   const [saved] = usePref<Shelf[] | null>("shelves", null);
@@ -644,8 +646,8 @@ function FoldedDrawer({ shown, pages, active, status, onOpen, bar }: {
     chips = sh.map((x) => chip(x.name.slice(0, 2).toUpperCase(), x.name, shown.kind === "customer" ? "var(--sc-chalk)" : "var(--sc-bucket-vendor)"));
   } else {
     const here = activeTreeRow(path, search);
-    icons = jobTree(shown.id, status).filter((r) => !r.sub).map((r) => {
-      const on = here === r.k || (r.k === "budget" && (here === "proposed" || here === "market"));
+    icons = jobTree(shown.id).filter((r) => !r.sub).map((r) => {
+      const on = here === r.k;
       const glyph = r.k === "proposal" ? <ProposalIcon /> : <NavIcon k={TREE_ICON[r.k] ?? "files"} on={on} color="currentColor" />;
       return icon(r.k, r.label, r.href, on, glyph);
     });
@@ -694,6 +696,97 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
     return () => { off = true; };
   }, [path]);
 
+  // The rail's tiles, in Coy's order (Coy, 2026-10-18: "remove and rearrange the Rail items").
+  const [railRaw, setRail] = usePref<unknown>("spaces_rail", {});
+  const railPrefs = useMemo(() => cleanRail(railRaw), [railRaw]);
+  const [arranging, setArranging] = useState(false);
+  type DragProps = React.HTMLAttributes<HTMLDivElement> & { draggable?: boolean };
+  interface RailTile { info: RailTileInfo; render: (drag: DragProps) => React.ReactNode }
+  const all: RailTile[] = [
+    ...jobs.map((j): RailTile => {
+      const on = shown.kind === "job" && shown.id === j.id;
+      const title = `${j.title}${j.customer ? ` · ${j.customer}` : ""} · ${stageLabel(j.status)}`;
+      const color = stageColor(j.status);
+      return {
+        info: { key: `job:${j.id}`, name: j.title, sub: `Job · ${stageLabel(j.status)}${j.customer ? ` · ${j.customer}` : ""}`, shape: "job", color, initials: monogram(j.title), pinned: false },
+        // A desktop opens the job (its Summary) as Discord opens a server; a phone looks into
+        // its drawer first, so the tree is there to pick from before the panel closes.
+        render: (drag) => (
+          <Tile key={j.id} label={monogram(j.title)} title={title} color={color} on={on} bare drag={drag}
+            href={desktop ? `/dashboard/scope/${j.id}/summary` : undefined}
+            onPick={desktop ? undefined : () => setPeek({ kind: "job", id: j.id })}>
+            <SpaceSilhouette kind="job" color={color} initials={monogram(j.title)} on={on} />
+          </Tile>
+        ),
+      };
+    }),
+    ...(rail?.collections ?? []).map((c): RailTile => {
+      // A thread made from a customer is that customer's address book; any other is a folder.
+      const customer = c.source === "customer";
+      const color = customer ? "var(--sc-chalk)" : "var(--sc-violet)";
+      const on = /^\/dashboard\/messages$/.test(path) && threadParam === c.id;
+      const people = `${c.count} ${c.count === 1 ? "person" : "people"}`;
+      return {
+        info: { key: `col:${c.id}`, name: c.name, sub: `Collection · ${people}`, shape: customer ? "contact" : "collection", color, initials: monogram(c.name), pinned: false },
+        render: (drag) => (
+          <Tile key={c.id} label={monogram(c.name)} title={`${c.name} · ${people}`} drag={drag}
+            href={`/dashboard/messages?t=${c.id}`} onPick={close} color={color} on={on} bare>
+            <SpaceSilhouette kind={customer ? "contact" : "collection"} color={color} initials={monogram(c.name)} on={on} />
+          </Tile>
+        ),
+      };
+    }),
+    ...pins.map((p): RailTile => {
+      const on = (shown.kind === "customer" || shown.kind === "vendor") && shown.kind === p.kind && shown.id === p.id;
+      const color = p.kind === "customer" ? "var(--sc-chalk)" : "var(--sc-bucket-vendor)";
+      const href = p.kind === "customer" ? `/dashboard/customers/${p.id}` : `/dashboard/vendors/${p.id}`;
+      const kindName = p.kind === "customer" ? "Customer" : "Vendor";
+      return {
+        info: { key: `${p.kind}:${p.id}`, name: p.name, sub: kindName, shape: p.kind === "customer" ? "contact" : "vendor", color, initials: monogram(p.name), pinned: true },
+        render: (drag) => (
+          <Tile key={`${p.kind}:${p.id}`} label={monogram(p.name)} title={`${p.name} · ${kindName}`} color={color} on={on} bare drag={drag}
+            href={desktop ? href : undefined} onPick={desktop ? undefined : () => setPeek({ kind: p.kind, id: p.id })}>
+            <SpaceSilhouette kind={p.kind === "customer" ? "contact" : "vendor"} color={color} initials={monogram(p.name)} on={on} />
+          </Tile>
+        ),
+      };
+    }),
+  ];
+  const byKey = new Map(all.map((t) => [t.info.key, t]));
+  const order = orderTiles(all.map((t) => t.info.key), railPrefs);
+  const tiles = order.map((k) => byKey.get(k)!);
+  const hiddenTiles = railPrefs.hidden.map((k) => byKey.get(k)?.info).filter((x): x is RailTileInfo => !!x);
+  const moveTo = (key: string, to: number) => setRail(moveTile(railPrefs, order, key, to));
+  const removeTile = (t: RailTileInfo) => {
+    if (t.pinned) {
+      const [kind, id] = t.key.split(":") as ["customer" | "vendor", string];
+      setPins(removePin(pins, kind, id));
+      setRail(showTile(railPrefs, t.key));
+    } else setRail(hideTile(railPrefs, t.key));
+  };
+  const arrangeMenu = (e: React.MouseEvent) => { e.preventDefault(); setArranging(true); };
+  // Desktop: drag a tile up or down the rail; right-click opens Arrange.
+  const [dragKey, setDragKey] = useState<string | null>(null);
+  const dragFor = (key: string, i: number): DragProps => ({
+    draggable: true,
+    onContextMenu: arrangeMenu,
+    onDragStart: (e) => { setDragKey(key); e.dataTransfer.effectAllowed = "move"; try { e.dataTransfer.setData("text/plain", key); } catch { /* old browsers */ } },
+    onDragOver: (e) => { if (dragKey && dragKey !== key) { e.preventDefault(); e.dataTransfer.dropEffect = "move"; } },
+    onDrop: (e) => {
+      e.preventDefault();
+      const k = dragKey;
+      setDragKey(null);
+      if (!k || k === key) return;
+      const from = order.indexOf(k);
+      const box = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      const below = e.clientY > box.top + box.height / 2;
+      let to = i + (below ? 1 : 0);
+      if (from < to) to -= 1;
+      moveTo(k, to);
+    },
+    onDragEnd: () => setDragKey(null),
+  });
+
   const railEl = (
     <div className="sc-spaces-rail" role="navigation" aria-label="Spaces">
       <Tile label="Home" title="Home — Dusty" on={shown.kind === "home"} home onPick={() => setPeek({ kind: "home" })}>
@@ -701,48 +794,27 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
       </Tile>
       <span className="sc-spaces-sep" aria-hidden="true" />
       {rail === null && <span className="sc-spaces-note">…</span>}
-      {jobs.map((j) => {
-        const on = shown.kind === "job" && shown.id === j.id;
-        const title = `${j.title}${j.customer ? ` · ${j.customer}` : ""} · ${stageLabel(j.status)}`;
+      {tiles.map((t, i) => {
+        const prev = tiles[i - 1];
+        const group = (k: string) => (k.startsWith("job:") ? "job" : k.startsWith("col:") ? "col" : "pin");
         return (
-          // A desktop opens the job (its Summary) as Discord opens a server; a phone looks into
-          // its drawer first, so the tree is there to pick from before the panel closes.
-          <Tile key={j.id} label={monogram(j.title)} title={title} color={stageColor(j.status)} on={on} bare
-            href={desktop ? `/dashboard/scope/${j.id}/summary` : undefined}
-            onPick={desktop ? undefined : () => setPeek({ kind: "job", id: j.id })}>
-            <SpaceSilhouette kind="job" color={stageColor(j.status)} initials={monogram(j.title)} on={on} />
-          </Tile>
-        );
-      })}
-      {rail && rail.collections.length > 0 && <span className="sc-spaces-sep" aria-hidden="true" />}
-      {rail?.collections.map((c) => {
-        // A thread made from a customer is that customer's address book; any other is a folder.
-        const customer = c.source === "customer";
-        const color = customer ? "var(--sc-chalk)" : "var(--sc-violet)";
-        const on = /^\/dashboard\/messages$/.test(path) && threadParam === c.id;
-        return (
-          <Tile key={c.id} label={monogram(c.name)} title={`${c.name} · ${c.count} ${c.count === 1 ? "person" : "people"}`}
-            href={`/dashboard/messages?t=${c.id}`} onPick={close} color={color} on={on} bare>
-            <SpaceSilhouette kind={customer ? "contact" : "collection"} color={color} initials={monogram(c.name)} on={on} />
-          </Tile>
-        );
-      })}
-      {pins.length > 0 && <span className="sc-spaces-sep" aria-hidden="true" />}
-      {pins.map((p) => {
-        const on = (shown.kind === "customer" || shown.kind === "vendor") && shown.kind === p.kind && shown.id === p.id;
-        const color = p.kind === "customer" ? "var(--sc-chalk)" : "var(--sc-bucket-vendor)";
-        const href = p.kind === "customer" ? `/dashboard/customers/${p.id}` : `/dashboard/vendors/${p.id}`;
-        return (
-          <Tile key={`${p.kind}:${p.id}`} label={monogram(p.name)} title={`${p.name} · ${p.kind === "customer" ? "Customer" : "Vendor"}`} color={color} on={on} bare
-            href={desktop ? href : undefined} onPick={desktop ? undefined : () => setPeek({ kind: p.kind, id: p.id })}>
-            <SpaceSilhouette kind={p.kind === "customer" ? "contact" : "vendor"} color={color} initials={monogram(p.name)} on={on} />
-          </Tile>
+          <React.Fragment key={t.info.key}>
+            {prev && group(prev.info.key) !== group(t.info.key) && <span className="sc-spaces-sep" aria-hidden="true" />}
+            {t.render(desktop ? dragFor(t.info.key, i) : { onContextMenu: arrangeMenu })}
+          </React.Fragment>
         );
       })}
       <Tile label="+" title="New Space — a job, customer, vendor or collection" onPick={() => setMaking(true)} dashed>
         <span style={{ fontSize: 22, lineHeight: 1 }}>+</span>
       </Tile>
       <span style={{ flex: 1 }} />
+      {(tiles.length > 0 || railPrefs.hidden.length > 0) && (
+        <button type="button" className="sc-spaces-foot" onClick={() => setArranging(true)} aria-label="Arrange the rail" title="Arrange the rail — move or take off Spaces">
+          <svg width="19" height="19" viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M6 3v14M3 6l3-3 3 3M14 17V3M11 14l3 3 3-3" />
+          </svg>
+        </button>
+      )}
       <Link href={SETTINGS_HOME} onClick={close} className="sc-spaces-foot no-underline" aria-label="Settings" title="Settings">
         <svg width="19" height="19" viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
           <circle cx="10" cy="10" r="2.6" />
@@ -752,8 +824,7 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
     </div>
   );
 
-  const drawerEl = desktop && folded ? <FoldedDrawer shown={shown} pages={pages} active={active} onOpen={onFold} bar={bar}
-    status={shown.kind === "job" ? jobOf(shown.id)?.status ?? null : null} /> : (
+  const drawerEl = desktop && folded ? <FoldedDrawer shown={shown} pages={pages} active={active} onOpen={onFold} bar={bar} /> : (
     <div className="sc-spaces-drawer">
       {desktop && (
         // Coy, 2026-10-17: "the inner drawer … should be collapsible on desktop". The folded
@@ -784,7 +855,13 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
   }, [desktop, phoneOpen, onPhoneClose]);
 
   // Made outside the nav, so a phone's covered Spaces (inert) never hold it.
-  const dialog = making && <NewSpaceDialog onClose={() => setMaking(false)} onMade={() => window.dispatchEvent(new Event("sc:spaces-reload"))} />;
+  const dialog = (
+    <>
+      {making && <NewSpaceDialog onClose={() => setMaking(false)} onMade={() => window.dispatchEvent(new Event("sc:spaces-reload"))} />}
+      {arranging && <ArrangeRail shown={tiles.map((t) => t.info)} hidden={hiddenTiles} onMove={moveTo} onRemove={removeTile}
+        onShow={(k) => setRail(showTile(railPrefs, k))} onReset={() => setRail({ order: [], hidden: railPrefs.hidden })} onClose={() => setArranging(false)} />}
+    </>
+  );
   if (desktop) {
     return <><nav aria-label="Main" className="sc-spaces" data-folded={folded ? "" : undefined}>{railEl}{drawerEl}</nav>{dialog}</>;
   }

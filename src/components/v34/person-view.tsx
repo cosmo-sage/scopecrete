@@ -339,17 +339,20 @@ export function PersonView({ person, messages, channels, onReload, onMerge, back
       {tab === "overview" && (
         <OverviewGrid wide={wide} meta={meta} side={side()} sideCompact={side(true)}>
           {(person.possible_duplicates?.length ?? 0) > 0 && <SamePerson person={person} onMerge={onMerge} className="" />}
-          <DustyRead person={person} />
+          {/* A vendor's Overview has no Where it stands or Next steps (Coy, 2026-10-18). */}
+          {!isVendor && <DustyRead person={person} />}
           <section>
             <SectionHead title={isVendor ? "Their contact details" : "Contact"} />
             <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))" }}>
               <ContactCard c={{ id: c.id, name: c.name, role: c.subtype_label, methods, href: threadHref }} />
             </div>
           </section>
-          <section>
-            <SectionHead title="Next steps" />
-            <NextSteps contactId={c.id} tasks={person.tasks} onChanged={onReload} onError={setError} />
-          </section>
+          {!isVendor && (
+            <section>
+              <SectionHead title="Next steps" />
+              <NextSteps contactId={c.id} tasks={person.tasks} onChanged={onReload} onError={setError} />
+            </section>
+          )}
           {jobsSection}
           <section>
             <SectionHead title="Threads they're in" />

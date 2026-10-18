@@ -60,8 +60,16 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       if (!cur || n < cur.unit_cost) best.set(o.cost_item_id, { unit_cost: n, vendor: o.vendor?.name ?? null });
     }
   }
+  // Their cost book is grouped by the Price book's own groups (Coy, 2026-10-18: "View, by group").
+  const groupIds = [...new Set(rows.map((r) => r.item?.cost_group_id).filter((x): x is string => !!x))];
+  const groupName = new Map<string, string>();
+  if (groupIds.length) {
+    const { data: gs } = await supabase.from("cost_groups").select("id, name").eq("org_id", orgId).in("id", groupIds.slice(0, 500));
+    for (const g of (gs ?? []) as Array<{ id: string; name: string }>) groupName.set(g.id, g.name);
+  }
   const prices = rows.filter((r) => r.item && r.item.active).map((r) => ({
     ...r, is_default: r.item!.default_source_id === r.id, cheapest_other: best.get(r.item!.id) ?? null,
+    group: r.item!.cost_group_id ? groupName.get(r.item!.cost_group_id) ?? null : null,
   })).sort((a, b) => a.item!.name.localeCompare(b.item!.name));
   return applyCookies(NextResponse.json({
     vendor: { ...v, website, subtype: v.contact_subtype, auto: !v.classification_confirmed_at && !!v.auto_classified_at },

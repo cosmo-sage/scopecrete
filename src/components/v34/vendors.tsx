@@ -373,6 +373,7 @@ function NewVendor({ onClose, onMade }: { onClose: () => void; onMade: (id: stri
 interface Price {
   id: string; unit_cost: number | null; vendor_sku: string | null; unit: string | null; price_as_of: string | null; price_source: string | null;
   tax_pct_seen: number | null; is_default: boolean; cheapest_other: { unit_cost: number; vendor: string | null } | null;
+  group?: string | null;
   item: { id: string; name: string; unit: string | null; cost_type: string };
 }
 interface VFile { id: string; name: string; category: string | null; read_state: string | null; summary: string | null; created_at: string; url: string | null; facts: Record<string, unknown> | null }
@@ -429,7 +430,7 @@ export function VendorPage({ id }: { id: string }) {
   const extra: RecordExtras = {
     tabs: [
       { key: "bids", label: `Bid requests ${bids ? mine.length : ""}`.trim(), render: () => p ? <VendorBids rows={mine} stats={stats} jobs={p.jobs.length} missing={bidsMissing} onSend={() => setComposing(true)} /> : <Empty text={err ?? "Loading…"} /> },
-      { key: "prices", label: `Prices ${p?.prices.length ?? ""}`.trim(), render: () => p ? <VendorPrices p={p} onDefault={(pr) => void makeDefault(pr)} /> : <Empty text={err ?? "Loading…"} /> },
+      { key: "prices", label: `Cost book ${p?.prices.length ?? ""}`.trim(), render: () => p ? <VendorPrices p={p} onDefault={(pr) => void makeDefault(pr)} /> : <Empty text={err ?? "Loading…"} /> },
       { key: "receipts", label: `Receipts & quotes ${p ? receipts : ""}`.trim(), render: () => p ? <VendorReceipts p={p} onImport={() => setReceipt(true)} /> : <Empty text={err ?? "Loading…"} /> },
     ],
     actions: [
@@ -549,48 +550,78 @@ function VendorBids({ rows, stats, jobs, missing, onSend }: { rows: Array<BidRec
   );
 }
 
-/** Prices: theirs on each item, ★ the one budgets use (tap to make it so); their cards under it. */
+/**
+ * Their cost book (Coy, 2026-10-18: "Every vendor has it's own isolated cost book with Cost
+ * Groups and Cost items" — chosen "View, by group"): the items they price, under the Price
+ * book's own groups, each with their price; ★ the one budgets use (tap to make it so). One
+ * catalog, so Compare vendors and default prices still work; their cards are added under it.
+ */
 function VendorPrices({ p, onDefault }: { p: VPage; onDefault: (pr: Price) => void }) {
   const [q, setQ] = useState("");
   const [cards, setCards] = useState(false);
+  const [shut, setShut] = useState<Set<string>>(new Set());
   const s = q.trim().toLowerCase();
-  const prices = p.prices.filter((x) => !s || x.item.name.toLowerCase().includes(s) || (x.vendor_sku ?? "").toLowerCase().includes(s));
+  const prices = p.prices.filter((x) => !s || x.item.name.toLowerCase().includes(s) || (x.vendor_sku ?? "").toLowerCase().includes(s) || (x.group ?? "").toLowerCase().includes(s));
+  const groups = vendorGroups(prices);
+  const flip = (g: string) => setShut((m) => { const n = new Set(m); if (n.has(g)) n.delete(g); else n.add(g); return n; });
+  const row = (pr: Price) => (
+    <div key={pr.id} className="flex items-center gap-2 px-3 py-1.5" style={{ borderTop: `1px solid ${T.hairSoft}`, paddingLeft: 22 }}>
+      <button onClick={() => { if (!pr.is_default) onDefault(pr); }} aria-label={pr.is_default ? `Default for ${pr.item.name}` : `Make default for ${pr.item.name}`}
+        title={pr.is_default ? "Their price is the one budgets use" : "Make theirs the price budgets use"}
+        style={{ fontSize: 18, lineHeight: 1, color: pr.is_default ? T.hiviz : T.hair, cursor: pr.is_default ? "default" : "pointer", width: 22 }}>★</button>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: F.sm, fontWeight: 600, ...clip }}>{pr.item.name}</div>
+        <div style={{ fontSize: 10, color: T.ink3, ...clip }}>
+          {[pr.item.cost_type, pr.vendor_sku ? `#${pr.vendor_sku}` : null, pr.price_as_of ? dateLabel(pr.price_as_of) : null, pr.price_source,
+            pr.cheapest_other ? `${pr.cheapest_other.unit_cost < (pr.unit_cost ?? Infinity) ? "cheaper" : "next"}: ${money(pr.cheapest_other.unit_cost)} ${pr.cheapest_other.vendor ?? ""}` : null].filter(Boolean).join(" · ")}
+        </div>
+      </div>
+      <span style={{ ...nums, fontSize: F.sm }}>{pr.unit_cost === null ? <span style={{ color: T.hiviz }}>blank</span> : money(pr.unit_cost)}<span style={{ fontSize: 10, color: T.ink3 }}>/{pr.unit ?? pr.item.unit ?? "?"}</span></span>
+    </div>
+  );
   return (
     <div className="p-4 flex flex-col gap-3" style={{ maxWidth: 900 }}>
       <section className="rounded" style={{ background: T.card, border: `1px solid ${T.hair}` }}>
         <div className="flex items-center gap-2 px-3 py-2" style={{ borderBottom: `1px solid ${T.hairSoft}` }}>
-          <h3 style={{ ...panelTitle, flex: 1 }}>Prices</h3>
-          {p.prices.length > 8 && <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find" aria-label="Find a price" style={{ ...field, width: 160, height: 28 }} />}
+          <h3 style={{ ...panelTitle, flex: 1 }}>Their cost book · {p.prices.length} item{p.prices.length === 1 ? "" : "s"} in {vendorGroups(p.prices).length} group{vendorGroups(p.prices).length === 1 ? "" : "s"}</h3>
+          {p.prices.length > 8 && <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find" aria-label="Find in their cost book" style={{ ...field, width: 160, height: 28 }} />}
         </div>
         {prices.length === 0 ? (
           <div className="px-3 py-3" style={{ fontSize: F.sm, color: T.ink3, lineHeight: 1.5 }}>
             {p.prices.length ? "Nothing matches." : "No prices yet. Add a receipt or quote and Dusty reads their prices; or add them to an item in the Price book."}
           </div>
-        ) : prices.map((pr) => (
-          <div key={pr.id} className="flex items-center gap-2 px-3 py-1.5" style={{ borderTop: `1px solid ${T.hairSoft}` }}>
-            <button onClick={() => { if (!pr.is_default) onDefault(pr); }} aria-label={pr.is_default ? `Default for ${pr.item.name}` : `Make default for ${pr.item.name}`}
-              title={pr.is_default ? "Their price is the one budgets use" : "Make theirs the price budgets use"}
-              style={{ fontSize: 18, lineHeight: 1, color: pr.is_default ? T.hiviz : T.hair, cursor: pr.is_default ? "default" : "pointer", width: 22 }}>★</button>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: F.sm, fontWeight: 600, ...clip }}>{pr.item.name}</div>
-              <div style={{ fontSize: 10, color: T.ink3, ...clip }}>
-                {[pr.vendor_sku ? `#${pr.vendor_sku}` : null, pr.price_as_of ? dateLabel(pr.price_as_of) : null, pr.price_source,
-                  pr.cheapest_other ? `${pr.cheapest_other.unit_cost < (pr.unit_cost ?? Infinity) ? "cheaper" : "next"}: ${money(pr.cheapest_other.unit_cost)} ${pr.cheapest_other.vendor ?? ""}` : null].filter(Boolean).join(" · ")}
-              </div>
-            </div>
-            <span style={{ ...nums, fontSize: F.sm }}>{pr.unit_cost === null ? <span style={{ color: T.hiviz }}>blank</span> : money(pr.unit_cost)}<span style={{ fontSize: 10, color: T.ink3 }}>/{pr.unit ?? pr.item.unit ?? "?"}</span></span>
+        ) : groups.map(([g, list]) => (
+          <div key={g}>
+            <button onClick={() => flip(g)} className="flex items-center gap-2 w-full text-left px-3 py-1.5" aria-expanded={!shut.has(g)}
+              style={{ borderTop: `1px solid ${T.hairSoft}`, background: T.sunk, cursor: "pointer" }}>
+              <span style={{ fontSize: 10, color: T.ink3, width: 12 }}>{shut.has(g) ? "▸" : "▾"}</span>
+              <span style={{ ...eyebrow, flex: 1, color: T.ink2 }}>{g}</span>
+              <span style={{ fontSize: 10, color: T.ink3 }}>{list.length}</span>
+            </button>
+            {!shut.has(g) && list.map(row)}
           </div>
         ))}
         <div className="px-3 py-2" style={{ fontSize: 10, color: T.ink3, borderTop: `1px solid ${T.hairSoft}` }}>
-          ★ = their price is the one budgets use for that item. <Link href="/dashboard/price-book" style={{ color: T.chalk }}>Price book →</Link>
+          ★ = their price is the one budgets use for that item. Groups are your Price book&apos;s. <Link href="/dashboard/price-book" style={{ color: T.chalk }}>Price book →</Link>
         </div>
       </section>
       <div>
-        <button onClick={() => setCards((x) => !x)} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>{cards ? "▾" : "▸"} Cards with them as vendor — edit or add</button>
+        <button onClick={() => setCards((x) => !x)} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>{cards ? "▾" : "▸"} Add or edit items in their cost book</button>
         {cards && <div className="mt-2"><CostCards vendorId={p.vendor.id} vendorName={label(p.vendor)} /></div>}
       </div>
     </div>
   );
+}
+
+/** A vendor's prices under their Price book groups, A–Z, with no group last. */
+function vendorGroups(prices: Price[]): Array<[string, Price[]]> {
+  const m = new Map<string, Price[]>();
+  for (const pr of prices) {
+    const g = pr.group ?? "No group";
+    if (!m.has(g)) m.set(g, []);
+    m.get(g)!.push(pr);
+  }
+  return [...m.entries()].sort(([a], [b]) => (a === "No group" ? 1 : b === "No group" ? -1 : a.localeCompare(b)));
 }
 
 /** Receipts & quotes filed on them, what Dusty read off each, and Import prices from one. */

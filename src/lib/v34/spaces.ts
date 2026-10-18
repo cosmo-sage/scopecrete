@@ -138,11 +138,11 @@ export function customerShelves(id: string): SpaceShelf[] {
   ];
 }
 
-/** A vendor Space: Supply (Summary, Price sheets, Receipts & quotes, Bid requests, Jobs) and a Toolbox (Files, Timeline). */
+/** A vendor Space: Supply (Summary, Cost book, Receipts & quotes, Bid requests, Jobs) and a Toolbox (Files, Timeline). */
 export function vendorShelves(id: string): SpaceShelf[] {
   const t = (k: string, label: string) => ({ k, label, href: `/dashboard/vendors/${id}?tab=${k}` });
   return [
-    { id: "supply", name: "Supply", rows: [t("overview", "Summary"), t("prices", "Price sheets"), t("receipts", "Receipts & quotes"), t("bids", "Bid requests"), t("jobs", "Jobs"), t("threads", "Threads")] },
+    { id: "supply", name: "Supply", rows: [t("overview", "Summary"), t("prices", "Cost book"), t("receipts", "Receipts & quotes"), t("bids", "Bid requests"), t("jobs", "Jobs"), t("threads", "Threads")] },
     { id: "toolbox", name: "Toolbox", rows: [t("files", "Files"), t("timeline", "Timeline")] },
   ];
 }

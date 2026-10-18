@@ -7,8 +7,8 @@
  *
  * A 72px rail of Spaces — Dusty (Home) first, then every open job as a tile in its
  * stage's colour (look 1b), then the threads Coy made — beside a 280px drawer: on
- * Home the app's pages and every thread by bucket; in a job its Scope Builder tree
- * and its Phone · Email · Internal threads (one thread per number). Settings is the
+ * Home the app's pages and every thread by bucket; in a job its Customer Account pages
+ * and a Channels shelf of its Phone · Email · Internal threads (one thread per number). Settings is the
  * gear at the rail's foot. On a desktop it is fixed at the left (`--sc-rail-w` is
  * 352px, 136px with the drawer folded by « to a strip of icons, › opening it again — frame 11; tiles drawn as silhouettes by kind, Rail Silhouettes 1a); on a phone it slides over the page from ☰
  * or a swipe from the left edge. No migration: src/lib/v34/spaces.ts, /api/spaces.
@@ -30,13 +30,14 @@ import {
   activeTreeRow, internalThreads, jobTree, monogram, phoneThreads, spaceOf, stageColor, stageLabel,
   homeShelves, moveToShelf, nudge, MAX_SHELVES, MAX_SHELF_NAME, CHANNELS, isChannel, looseChannels, offShelf,
   customerShelves, vendorShelves, activeTab, cleanPins, addPin, removePin,
-  type Shelf, type SpaceRef, type SpacePerson, type ThreadRow, type SpacePin, type SpaceShelf,
+  emailThreads, SPACES_HREF,
+  type Shelf, type SpaceRef, type SpacePerson, type SpaceEmail, type ThreadRow, type SpacePin, type SpaceShelf,
   cleanRail, orderTiles, moveTile, hideTile, showTile, cleanCollectionPicks, setPicks, cleanMembers, setMembers,
 } from "@/lib/v34/spaces";
 
 interface RailJob { id: string; title: string; status: string | null; customer: string | null }
 interface RailCollection { id: string; name: string; count: number; source: string }
-interface JobDetail { job: { id: string; title: string; status: string | null }; people: SpacePerson[]; emails: Array<{ key: string; subject: string; at: string | null }> }
+interface JobDetail { job?: { id: string; title: string; status: string | null }; people: SpacePerson[]; emails: SpaceEmail[] }
 interface HomeThread { contact_id: string; display_name: string; bucket: string | null; numbers?: number; occurred_at: string | null }
 
 const BUCKETS: Array<{ k: string; label: string; key: string; color: string }> = [
@@ -78,21 +79,23 @@ function useRail(on: boolean) {
   return d;
 }
 
-function useJob(id: string | null) {
-  const [d, setD] = useState<JobDetail | null>(id ? jobCache.get(id)?.d ?? null : null);
+/** A Space's people and email (a job's, a customer's or a vendor's), for its Channels shelf. */
+function useSpaceDetail(kind: "job" | "customer" | "vendor", id: string | null) {
+  const ck = id ? `${kind}:${id}` : "";
+  const [d, setD] = useState<JobDetail | null>(ck ? jobCache.get(ck)?.d ?? null : null);
   useEffect(() => {
     if (!id) return;
     let off = false;
-    const hit = jobCache.get(id);
+    const hit = jobCache.get(ck);
     Promise.resolve().then(() => { if (!off) setD(hit?.d ?? null); });
     if (hit && Date.now() - hit.at < FRESH) return () => { off = true; };
-    fetch(`/api/spaces?job=${id}`).then((r) => (r.ok ? r.json() : null)).then((j) => {
-      if (off || !j?.job) return;
-      jobCache.set(id, { at: Date.now(), d: j });
+    fetch(`/api/spaces?${kind}=${id}`).then((r) => (r.ok ? r.json() : null)).then((j) => {
+      if (off || !j?.people) return;
+      jobCache.set(ck, { at: Date.now(), d: j });
       setD(j);
     }).catch(() => {});
     return () => { off = true; };
-  }, [id]);
+  }, [kind, id, ck]);
   return d;
 }
 
@@ -224,6 +227,9 @@ function Row({ href, label, sub, on, icon, avatar, color, indent, onPick }: {
     </Link>
   );
 }
+
+/** A page's row is lit on its own page, and Jobs on the Scope Builder's, which it opens under Spaces. */
+const isOn = (active: string, k: string) => active === k || (k === "scope" && active === "scopebuilder");
 
 /* ------------------------------------------------------------ drawers */
 
@@ -447,8 +453,8 @@ function HomeDrawer({ pages, active, onPick }: { pages: string[]; active: string
                 if (isChannel(k)) return <React.Fragment key={k}>{channelRows(k, true)}</React.Fragment>;
                 const p = PAGE.get(k);
                 if (!p) return null;
-                return <Row key={k} href={p.href} label={p.label} on={active === k} onPick={onPick}
-                  icon={<span className="sc-space-ico"><NavIcon k={k} on={active === k} color="currentColor" /></span>} />;
+                return <Row key={k} href={SPACES_HREF[k] ?? p.href} label={p.label} on={isOn(active, k)} onPick={onPick}
+                  icon={<span className="sc-space-ico"><NavIcon k={k} on={isOn(active, k)} color="currentColor" /></span>} />;
               })}
             </Group>
           ))}
@@ -471,7 +477,7 @@ function HomeDrawer({ pages, active, onPick }: { pages: string[]; active: string
 }
 
 function JobDrawer({ id, fallback, onPick }: { id: string; fallback: RailJob | null; onPick: () => void }) {
-  const d = useJob(id);
+  const d = useSpaceDetail("job", id);
   const path = usePathname() ?? "";
   const [search, setSearch] = useState("");
   useEffect(() => {
@@ -481,12 +487,10 @@ function JobDrawer({ id, fallback, onPick }: { id: string; fallback: RailJob | n
   }, [path]);
   // A link inside the same page (Budget's ?tab=) doesn't change the path; read it after the tap.
   const pick = useCallback(() => { onPick(); window.setTimeout(() => setSearch(window.location.search), 50); }, [onPick]);
-  const status = d?.job.status ?? fallback?.status ?? null;
-  const title = d?.job.title ?? fallback?.title ?? "Job";
+  const status = d?.job?.status ?? fallback?.status ?? null;
+  const title = d?.job?.title ?? fallback?.title ?? "Job";
   const here = activeTreeRow(path, search);
   const tree = jobTree(id);
-  const phones: ThreadRow[] = d ? phoneThreads(d.people) : [];
-  const notes: ThreadRow[] = d ? internalThreads(d.people) : [];
   const { closed, toggle, setAll } = useClosed();
   const g = { closed, onToggle: toggle };
   return (
@@ -496,30 +500,59 @@ function JobDrawer({ id, fallback, onPick }: { id: string; fallback: RailJob | n
         <span className="sc-space-tag" style={{ color: stageColor(status), borderColor: stageColor(status) }}>{stageLabel(status)}</span>
       </div>
       <div className="sc-space-scroll">
-        <div style={{ display: "flex" }}><FoldAll keys={["job:scope", "job:phone", "job:email", "job:internal"]} closed={closed} setAll={setAll} /></div>
-        <Group title="Scope Builder" id="job:scope" {...g}>
+        <div style={{ display: "flex" }}><FoldAll keys={["job:scope", ...CHANNEL_KEYS("job")]} closed={closed} setAll={setAll} /></div>
+        <Group title="Customer Account" id="job:scope" {...g}>
           {tree.map((r) => (
             <Row key={r.k} href={r.href} label={r.label} indent={r.sub} on={here === r.k} onPick={pick} />
           ))}
         </Group>
-        <Group title="Phone" id="job:phone" {...g} count={d ? phones.length : undefined}>
-          {!d && <div className="sc-space-empty">Loading…</div>}
-          {d && phones.length === 0 && <div className="sc-space-empty">No numbers on this job yet. <Link href={`/dashboard/scope/${id}/summary`} onClick={pick}>+ Add a contact</Link></div>}
-          {phones.map((t) => <Row key={t.key} href={t.href} label={t.title} sub={t.sub} avatar={t.avatar} onPick={pick} />)}
-        </Group>
-        <Group title="Email" id="job:email" {...g} count={d ? d.emails.length : undefined}>
-          {d && d.emails.length === 0 && <div className="sc-space-empty">No email filed on this job.</div>}
-          {d?.emails.map((e) => (
-            <Row key={e.key} href={`/dashboard/messages/email/${encodeURIComponent(e.key)}`} label={e.subject} onPick={pick}
-              icon={<span className="sc-space-ico" aria-hidden="true">✉</span>} />
-          ))}
-        </Group>
-        <Group title="Internal" id="job:internal" {...g} count={d ? notes.length : undefined}>
-          {d && notes.length === 0 && <div className="sc-space-empty">No one on this job yet.</div>}
-          {notes.map((t) => <Row key={t.key} href={t.href} label={t.title} sub={t.sub} avatar={t.avatar} onPick={pick} />)}
-        </Group>
+        <ChannelsShelf scope="job" d={d} onPick={pick} {...g}
+          empty={<>No numbers on this job yet. <Link href={`/dashboard/scope/${id}/summary`} onClick={pick}>+ Add a contact</Link></>} />
       </div>
     </>
+  );
+}
+
+const CHANNEL_KEYS = (scope: string) => [`${scope}:channels`, `${scope}:phone`, `${scope}:email`, `${scope}:internal`];
+
+/**
+ * The Channels shelf (Coy, 2026-10-18: "Every customer gets a 'Channels' shelf that lists the
+ * channels by type 'Phone', 'Email', 'Internal'. and under each channel type will be the
+ * individual threads shown by the phone number, email address, and 'contact name' under the
+ * internal channel"): one shelf, its three channels folding on their own, each thread under it.
+ */
+function ChannelsShelf({ scope, d, onPick, closed, onToggle, empty }: {
+  scope: string; d: JobDetail | null; onPick: () => void; closed: Set<string>; onToggle: (k: string) => void; empty?: React.ReactNode;
+}) {
+  const phones: ThreadRow[] = d ? phoneThreads(d.people) : [];
+  const mails: ThreadRow[] = d ? emailThreads(d.people, d.emails) : [];
+  const notes: ThreadRow[] = d ? internalThreads(d.people) : [];
+  const sub = (k: string, label: string, rows: ThreadRow[], none: React.ReactNode) => {
+    const key = `${scope}:${k}`;
+    const open = !closed.has(key);
+    return (
+      <div key={k}>
+        <button type="button" className="sc-space-sub-h" onClick={() => onToggle(key)} aria-expanded={open}>
+          <span aria-hidden="true" style={{ display: "inline-block", width: 10, transform: open ? "rotate(90deg)" : undefined, transition: "transform .15s" }}>›</span>
+          <span style={{ flex: 1 }}>{label}</span>
+          {d && <span style={{ opacity: .7 }}>{rows.length}</span>}
+        </button>
+        {open && <>
+          {!d && <div className="sc-space-empty">Loading…</div>}
+          {d && rows.length === 0 && <div className="sc-space-empty" style={{ paddingLeft: 30 }}>{none}</div>}
+          {rows.map((t) => (
+            <Row key={t.key} href={t.href} label={t.title} sub={t.sub} indent onPick={onPick} avatar={t.avatar} />
+          ))}
+        </>}
+      </div>
+    );
+  };
+  return (
+    <Group title="Channels" id={`${scope}:channels`} closed={closed} onToggle={onToggle}>
+      {sub("phone", "Phone", phones, empty ?? "No numbers here yet.")}
+      {sub("email", "Email", mails, "No email addresses or filed email.")}
+      {sub("internal", "Internal", notes, "No one here yet.")}
+    </Group>
   );
 }
 
@@ -571,6 +604,7 @@ function RecordDrawer({ kind, id, pins, setPins, onPick }: {
   const onPage = path.startsWith(kind === "customer" ? `/dashboard/customers/${id}` : `/dashboard/vendors/${id}`);
   const here = onPage ? activeTab(search) : "";
   const shelves: SpaceShelf[] = kind === "customer" ? customerShelves(id) : vendorShelves(id);
+  const detail = useSpaceDetail(kind, id);
   const { closed, toggle, setAll } = useClosed();
   const color = kind === "customer" ? "var(--sc-chalk)" : "var(--sc-bucket-vendor)";
   return (
@@ -586,11 +620,15 @@ function RecordDrawer({ kind, id, pins, setPins, onPick }: {
         </span>
       </div>
       <div className="sc-space-scroll">
-        <div style={{ display: "flex" }}><FoldAll keys={shelves.map((sh) => `${kind}:${sh.id}`)} closed={closed} setAll={setAll} /></div>
-        {shelves.map((sh) => (
-          <Group key={sh.id} id={`${kind}:${sh.id}`} closed={closed} onToggle={toggle} title={sh.name}>
-            {sh.rows.map((r) => <Row key={r.k} href={r.href} label={r.label} on={here === r.k} onPick={pick} />)}
-          </Group>
+        <div style={{ display: "flex" }}><FoldAll keys={[...shelves.map((sh) => `${kind}:${sh.id}`), ...CHANNEL_KEYS(kind)]} closed={closed} setAll={setAll} /></div>
+        {shelves.map((sh, i) => (
+          <React.Fragment key={sh.id}>
+            <Group id={`${kind}:${sh.id}`} closed={closed} onToggle={toggle} title={sh.name}>
+              {sh.rows.map((r) => <Row key={r.k} href={r.href} label={r.label} on={here === r.k} onPick={pick} />)}
+            </Group>
+            {/* Channels after the first shelf (Account or Supply), before the Toolbox. */}
+            {i === 0 && <ChannelsShelf scope={kind} d={detail} onPick={pick} closed={closed} onToggle={toggle} />}
+          </React.Fragment>
         ))}
       </div>
     </>
@@ -667,8 +705,8 @@ function CollectionDrawer({ col, id, pages, active, onPick }: {
             <Group id={`col:${id}:tools`} closed={closed} onToggle={toggle} title="Tools">
               {tools.map((k) => {
                 const p = PAGE.get(k)!;
-                return <Row key={k} href={p.href} label={p.label} on={active === k} onPick={onPick}
-                  icon={<span className="sc-space-ico"><NavIcon k={k} on={active === k} color="currentColor" /></span>} />;
+                return <Row key={k} href={SPACES_HREF[k] ?? p.href} label={p.label} on={isOn(active, k)} onPick={onPick}
+                  icon={<span className="sc-space-ico"><NavIcon k={k} on={isOn(active, k)} color="currentColor" /></span>} />;
               })}
             </Group>
           )}
@@ -690,7 +728,7 @@ function CollectionDrawer({ col, id, pages, active, onPick }: {
 // Claude Design "Dusty Home" frame 11 (Coy, 2026-10-18: "when I collapse the drawer it
 // disappears"): folded, the drawer is a 64px strip — › to open it, the pages as icons, then
 // the Space's groups as small chips in their colour, each opening the drawer.
-const TREE_ICON: Record<string, string> = { summary: "dashboard", plans: "scopebuilder", market: "cash", proposed: "pricebook", tracker: "logs", files: "files" };
+const TREE_ICON: Record<string, string> = { summary: "dashboard", plans: "scopebuilder", market: "cash", proposed: "pricebook", tracker: "logs", schedule: "logs", locations: "map", files: "files" };
 const TAB_ICON: Record<string, string> = {
   overview: "dashboard", contacts: "contacts", jobs: "scope", threads: "threads", payments: "cash", schedule: "logs",
   files: "files", timeline: "threads", prices: "pricebook", receipts: "documents", bids: "vendors",
@@ -729,7 +767,7 @@ function FoldedDrawer({ shown, pages, active, onOpen, bar }: {
     const order = shelves.flatMap((sh) => sh.pages);
     icons = order.map((k) => {
       const p = PAGE.get(k);
-      return p ? icon(k, p.label, p.href, active === k, <NavIcon k={k} on={active === k} color="currentColor" />) : null;
+      return p ? icon(k, p.label, SPACES_HREF[k] ?? p.href, isOn(active, k), <NavIcon k={k} on={isOn(active, k)} color="currentColor" />) : null;
     });
     chips = BUCKETS.map((b) => chip(b.label.slice(0, 2).toUpperCase(), b.label, b.color));
   } else if (shown.kind === "customer" || shown.kind === "vendor") {
@@ -737,12 +775,13 @@ function FoldedDrawer({ shown, pages, active, onOpen, bar }: {
     const here = onPage ? activeTab(search) : "";
     const sh = shown.kind === "customer" ? customerShelves(shown.id) : vendorShelves(shown.id);
     icons = sh.flatMap((x) => x.rows).map((r) => icon(r.k, r.label, r.href, here === r.k, <NavIcon k={TAB_ICON[r.k] ?? "files"} on={here === r.k} color="currentColor" />));
-    chips = sh.map((x) => chip(x.name.slice(0, 2).toUpperCase(), x.name, shown.kind === "customer" ? "var(--sc-chalk)" : "var(--sc-bucket-vendor)"));
+    chips = [...sh.map((x) => chip(x.name.slice(0, 2).toUpperCase(), x.name, shown.kind === "customer" ? "var(--sc-chalk)" : "var(--sc-bucket-vendor)")),
+      chip("CH", "Channels", "var(--sc-bucket-customer)")];
   } else if (shown.kind === "collection") {
     const tools = (cleanCollectionPicks(colRaw)[shown.id] ?? []).filter((k) => PAGE.has(k));
     icons = [
       icon("people", "People", `/dashboard/messages?t=${shown.id}`, false, <NavIcon k="threads" on={false} color="currentColor" />),
-      ...tools.map((k) => icon(k, PAGE.get(k)!.label, PAGE.get(k)!.href, active === k, <NavIcon k={k} on={active === k} color="currentColor" />)),
+      ...tools.map((k) => icon(k, PAGE.get(k)!.label, SPACES_HREF[k] ?? PAGE.get(k)!.href, isOn(active, k), <NavIcon k={k} on={isOn(active, k)} color="currentColor" />)),
     ];
     chips = [chip("CO", "Collection", "var(--sc-violet)")];
   } else {
@@ -752,7 +791,7 @@ function FoldedDrawer({ shown, pages, active, onOpen, bar }: {
       const glyph = r.k === "proposal" ? <ProposalIcon /> : <NavIcon k={TREE_ICON[r.k] ?? "files"} on={on} color="currentColor" />;
       return icon(r.k, r.label, r.href, on, glyph);
     });
-    chips = [chip("PH", "Phone", "var(--sc-bucket-customer)"), chip("EM", "Email", "var(--sc-chalk)"), chip("IN", "Internal", "var(--sc-violet)")];
+    chips = [chip("CH", "Channels", "var(--sc-bucket-customer)")];
   }
   return (
     <div className="sc-spaces-strip">

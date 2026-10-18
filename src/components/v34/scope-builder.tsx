@@ -10,6 +10,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { T, F, disp, eyebrow, nums, money0 } from "@/lib/v34/tokens";
 import { MenuButton, PageHeader, SearchBubble, SearchToggle, SlideDrawer } from "@/components/v34/primitives";
+import { usePref } from "@/lib/v34/prefs";
 import { SCOPE_STEPS, stepHref, type Market, type ScopeFacts, type ScopeProgress, type ScopeStep } from "@/lib/scope-builder";
 
 interface Scope {
@@ -75,11 +76,13 @@ export function ScopeBuilderPage() {
   const pill = (on: boolean): React.CSSProperties => ({ height: 28, padding: "0 10px", borderRadius: 14, fontSize: F.xs, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap",
     border: `1px solid ${on ? T.ink : T.hairStrong}`, background: on ? T.ink : T.card, color: on ? T.card : T.ink2 });
 
+  // Under Spaces this page is the Jobs bucket (Coy, 2026-10-18).
+  const [spaces] = usePref("new_nav", true);
   return (
     <div style={{ color: T.ink, minHeight: "100%" }}>
       {/* The filters slide in from the left behind ☰, left of the org's name (Coy, 2026-10-11: "shrink
           the header height"); + New scope is Dusty's quick select on this page. */}
-      <PageHeader title="Scope Builder" count={scopes ? shown.length : undefined}
+      <PageHeader title={spaces ? "Jobs" : "Scope Builder"} count={scopes ? shown.length : undefined}
         sub="Every scope from files to a sent proposal: Files → Takeoffs → Budget → Proposal. A row opens the job on its next step."
         menu={<MenuButton always onClick={() => setFilters(true)} label="Filter scopes" />}
         actions={<SearchToggle open={searching} onToggle={() => setSearching((x) => !x)} label="Find a scope" />}>

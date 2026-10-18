@@ -33,6 +33,7 @@ export interface JobRow {
   confirmed_at: string | null;
   created_from_message_id: string | null;
   contact_id: string | null;
+  customer_id?: string | null;
   address: string | null;
   city: string | null;
   state: string | null;
@@ -69,7 +70,7 @@ export async function GET(req: NextRequest) {
 
   let q = supabase
     .from("jobs")
-    .select("id, job_number, title, status, origin, confirmed_at, created_from_message_id, contact_id, address, city, state, zip, created_at, job_type, lead_source, referred_by_contact_id, stage_changed_at, updated_at, flag_reason, description, scheduled_start")
+    .select("id, job_number, title, status, origin, confirmed_at, created_from_message_id, contact_id, customer_id, address, city, state, zip, created_at, job_type, lead_source, referred_by_contact_id, stage_changed_at, updated_at, flag_reason, description, scheduled_start")
     .eq("org_id", orgId)
     // Archived jobs (a customer re-filed by mistake, migration 038) are off the board.
     .is("archived_at", null)

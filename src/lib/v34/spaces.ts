@@ -187,17 +187,18 @@ export function activeTab(search: string): string {
 
 /** The four kinds of Space New Space makes, with the shelves each one gets (frame 18). */
 export const SPACE_KINDS: Array<{ kind: "job" | "customer" | "vendor" | "collection"; label: string; shelves: string; blurb: string }> = [
-  { kind: "job", label: "Job", shelves: "Scope Builder · Phone · Email · Internal", blurb: "Work to price and win — opens the New job form." },
-  { kind: "customer", label: "Customer", shelves: "Account · Toolbox", blurb: "A household, business or school, with its people and jobs." },
-  { kind: "vendor", label: "Vendor", shelves: "Supply · Toolbox", blurb: "A supplier or sub, with their prices and bid requests." },
+  { kind: "job", label: "Job", shelves: "Customer Account · Channels", blurb: "Work to price and win — opens the New job form." },
+  { kind: "customer", label: "Customer", shelves: "Account · Channels · Toolbox", blurb: "A household, business or school, with its people and jobs." },
+  { kind: "vendor", label: "Vendor", shelves: "Supply · Channels · Toolbox", blurb: "A supplier or sub, with their prices and bid requests." },
   { kind: "collection", label: "Collection", shelves: "Threads · Files", blurb: "Any set of people kept together, like a thread you make." },
 ];
 
 export interface TreeRow { k: string; label: string; href: string; sub?: boolean }
 
 /**
- * A job's pages — the Scope Builder tree. Budget's own tabs are rows under it;
- * Actual costs shows on every job, as its tab always did (Coy, 2026-10-18).
+ * A job's pages — its Customer Account shelf (Coy, 2026-10-18: "rename 'scope builder' to
+ * 'Customer Account'"). Budget's own tabs are rows of their own; Actual costs shows on every
+ * job, as its tab always did; Schedule and Locations are pages of their own (same day).
  */
 export function jobTree(id: string): TreeRow[] {
   const base = `/dashboard/scope/${id}`;
@@ -210,7 +211,12 @@ export function jobTree(id: string): TreeRow[] {
     { k: "proposed", label: "Proposed budget", href: base },
     { k: "tracker", label: "Actual costs", href: `${base}?tab=actuals` },
   ];
-  rows.push({ k: "proposal", label: "Proposal", href: `${base}/proposal` }, { k: "files", label: "Files", href: `${base}/files` });
+  rows.push(
+    { k: "proposal", label: "Proposal", href: `${base}/proposal` },
+    { k: "schedule", label: "Schedule", href: `${base}/schedule` },
+    { k: "locations", label: "Locations", href: `${base}/locations` },
+    { k: "files", label: "Files", href: `${base}/files` },
+  );
   return rows;
 }
 
@@ -223,6 +229,8 @@ export function activeTreeRow(path: string, search: string): string {
   if (tail === "/plans") return "plans";
   if (tail === "/proposal") return "proposal";
   if (tail === "/files") return "files";
+  if (tail === "/schedule") return "schedule";
+  if (tail === "/locations") return "locations";
   const tab = new URLSearchParams(search).get("tab");
   if (tab === "market") return "market";
   if (tab === "actuals") return "tracker";
@@ -230,7 +238,9 @@ export function activeTreeRow(path: string, search: string): string {
 }
 
 export interface SpacePhone { phone: string; label: string | null }
-export interface SpacePerson { id: string; name: string | null; phones: SpacePhone[]; email: string | null }
+export interface SpacePerson { id: string; name: string | null; phones: SpacePhone[]; email: string | null; emails?: string[] }
+/** An email conversation filed on the Space, with the outside address it is with. */
+export interface SpaceEmail { key: string; subject: string; at: string | null; address?: string | null }
 
 /** "(225) 555-0118" from +12255550118; anything else as it is. */
 export function fmtPhone(raw: string): string {
@@ -255,6 +265,35 @@ export function phoneThreads(people: SpacePerson[]): ThreadRow[] {
   return out;
 }
 
+/**
+ * Email threads by address (Coy, 2026-10-18: "under each channel type will be the individual threads
+ * shown by the phone number, email address …"): each address of each person opens their Email channel;
+ * an address on a filed conversation that is no one's opens that conversation, newest first.
+ */
+export function emailThreads(people: SpacePerson[], emails: SpaceEmail[]): ThreadRow[] {
+  const out: ThreadRow[] = [];
+  const seen = new Set<string>();
+  for (const p of people) {
+    const list = [...new Set([...(p.email ? [p.email] : []), ...(p.emails ?? [])].map((e) => e.trim().toLowerCase()).filter(Boolean))];
+    for (const e of list) {
+      if (seen.has(e)) continue;
+      seen.add(e);
+      const n = emails.filter((m) => (m.address ?? "").toLowerCase() === e).length;
+      out.push({ key: `${p.id}:${e}`, title: e, sub: [p.name?.trim(), n ? `${n} conversation${n === 1 ? "" : "s"}` : null].filter(Boolean).join(" · "),
+        href: `/dashboard/messages/${p.id}?channel=${encodeURIComponent(`email:${e}`)}`, avatar: monogram(p.name ?? e) });
+    }
+  }
+  for (const m of emails) {
+    const e = (m.address ?? "").trim().toLowerCase();
+    if (!e || seen.has(e)) continue;
+    seen.add(e);
+    const n = emails.filter((x) => (x.address ?? "").toLowerCase() === e).length;
+    out.push({ key: `addr:${e}`, title: e, sub: n > 1 ? `${n} conversations` : m.subject,
+      href: `/dashboard/messages/email/${encodeURIComponent(m.key)}`, avatar: monogram(e) });
+  }
+  return out;
+}
+
 /** Internal: one note stream per person on the job (their Internal notes). */
 export function internalThreads(people: SpacePerson[]): ThreadRow[] {
   return people.map((p) => ({ key: `${p.id}:notes`, title: p.name?.trim() || (p.phones[0] ? fmtPhone(p.phones[0].phone) : "No name"),
@@ -273,7 +312,6 @@ export interface Shelf { id: string; name: string; pages: string[] }
 
 export const DEFAULT_SHELVES: Shelf[] = [
   { id: "buckets", name: "Buckets", pages: ["customers", "contacts", "vendors", "scope"] },
-  { id: "scope-builder", name: "Scope Builder", pages: ["scopebuilder"] },
   { id: "toolbox", name: "Toolbox", pages: ["map", "camera", "pricebook", "files"] },
 ];
 /**
@@ -292,6 +330,14 @@ export const isChannel = (k: string) => k.startsWith("ch:");
 
 /** Pages that live in Settings under Spaces, not on a shelf. */
 export const SETTINGS_PAGES = ["logs", "roadmap"];
+/**
+ * Pages folded into another under Spaces (Coy, 2026-10-18: "replace the job's bucket with this
+ * Scopebuilder page layout"): Jobs on the Buckets shelf opens the Scope Builder's layout, so the
+ * Scope Builder isn't a row of its own.
+ */
+export const MERGED_PAGES = ["scopebuilder"];
+/** Where a page's row goes under Spaces, when it isn't its own address. */
+export const SPACES_HREF: Record<string, string> = { scope: "/dashboard/scope-builder" };
 export const MAX_SHELVES = 20;
 export const MAX_SHELF_NAME = 40;
 
@@ -321,7 +367,7 @@ export function cleanShelves(v: unknown): Shelf[] | null {
 
 /** Home's shelves for these pages: Coy's (else the defaults), each page once, the rest on More. */
 export function homeShelves(saved: unknown, pages: string[]): Shelf[] {
-  const allowed = pages.filter((k) => !SETTINGS_PAGES.includes(k));
+  const allowed = pages.filter((k) => !SETTINGS_PAGES.includes(k) && !MERGED_PAGES.includes(k));
   const base = cleanShelves(saved) ?? DEFAULT_SHELVES;
   const placed = new Set<string>();
   const shelves = base.map((s) => {

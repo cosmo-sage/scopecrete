@@ -28,7 +28,7 @@ test("a job's pages are its Space; everything else is Home", () => {
 test("Market rate, Proposed budget and Actual costs are tools of their own", () => {
   const t = jobTree(ID);
   assert.equal(t.find((r) => r.k === "tracker")?.href, `/dashboard/scope/${ID}?tab=actuals`);
-  assert.deepEqual(t.map((r) => r.k), ["summary", "plans", "market", "proposed", "tracker", "proposal", "files"]);
+  assert.deepEqual(t.map((r) => r.k), ["summary", "plans", "market", "proposed", "tracker", "proposal", "schedule", "locations", "files"]);
   assert.equal(t.some((r) => r.sub), false);
 });
 
@@ -37,6 +37,8 @@ test("the tree row a page is on", () => {
   assert.equal(activeTreeRow(`/dashboard/scope/${ID}`, "?tab=market"), "market");
   assert.equal(activeTreeRow(`/dashboard/scope/${ID}`, "?tab=actuals"), "tracker");
   assert.equal(activeTreeRow(`/dashboard/scope/${ID}`, ""), "proposed");
+  assert.equal(activeTreeRow(`/dashboard/scope/${ID}/schedule`, ""), "schedule");
+  assert.equal(activeTreeRow(`/dashboard/scope/${ID}/locations`, ""), "locations");
   assert.equal(activeTreeRow("/dashboard/messages", ""), "");
 });
 
@@ -56,16 +58,20 @@ test("stage colours are theme variables", () => {
   assert.match(stageColor("lead"), /^var\(--sc-hiviz\)$/);
 });
 
-import { DEFAULT_SHELVES, cleanShelves, homeShelves, moveToShelf, nudge } from "../src/lib/v34/spaces.ts";
+import { DEFAULT_SHELVES, SPACES_HREF, cleanShelves, homeShelves, moveToShelf, nudge, emailThreads } from "../src/lib/v34/spaces.ts";
 
 test("Home's default shelves; Logs and Roadmap left for Settings; the rest on More", () => {
   const pages = ["dashboard", "scopebuilder", "scope", "map", "camera", "contacts", "customers", "pricebook", "vendors", "files", "logs", "admin", "roadmap"];
   const s = homeShelves(null, pages);
-  assert.deepEqual(s.map((x) => x.name), ["Buckets", "Scope Builder", "Toolbox", "More"]);
+  assert.deepEqual(s.map((x) => x.name), ["Buckets", "Toolbox", "More"]);
   assert.deepEqual(s[0].pages, ["customers", "contacts", "vendors", "scope"]);
-  assert.deepEqual(s[2].pages, ["map", "camera", "pricebook", "files"]);
-  assert.deepEqual(s[3].pages, ["dashboard", "admin"]);
+  assert.deepEqual(s[1].pages, ["map", "camera", "pricebook", "files"]);
+  assert.deepEqual(s[2].pages, ["dashboard", "admin"]);
   assert.ok(!s.flatMap((x) => x.pages).includes("logs"));
+  // The Jobs bucket is the Scope Builder layout now (Coy, 2026-10-18): no Scope Builder row.
+  assert.ok(!s.flatMap((x) => x.pages).includes("scopebuilder"));
+  assert.equal(homeShelves([{ id: "a", name: "A", pages: ["scopebuilder", "map"] }], pages)[0].pages.join(), "map");
+  assert.equal(SPACES_HREF.scope, "/dashboard/scope-builder");
 });
 
 test("Coy's own shelves: renamed, added, a page only once, unknown pages dropped", () => {
@@ -79,7 +85,7 @@ test("Coy's own shelves: renamed, added, a page only once, unknown pages dropped
 test("moving a page between shelves, and nudging order", () => {
   const m = moveToShelf(DEFAULT_SHELVES, "map", "buckets");
   assert.deepEqual(m[0].pages.at(-1), "map");
-  assert.ok(!m[2].pages.includes("map"));
+  assert.ok(!m[1].pages.includes("map"));
   assert.deepEqual(nudge([1, 2, 3], 0, 1), [2, 1, 3]);
   assert.deepEqual(nudge([1, 2, 3], 0, -1), [1, 2, 3]);
 });
@@ -173,4 +179,14 @@ test("a collection keeps the tools and channels picked for it", async () => {
   assert.deepEqual(togglePick(p, "map", false), ["ch:customer"]);
   assert.deepEqual(setPicks({}, id, p), { [id]: p });
   assert.deepEqual(setPicks({ [id]: p }, id, []), {});
+});
+
+test("the Channels shelf's Email threads: one per address, then filed mail from no one", () => {
+  const people = [{ id: "p1", name: "Jeremy", phones: [], email: "J@Gulf.com", emails: ["j@gulf.com", "jw@home.net"] }];
+  const emails = [{ key: "c1", subject: "Bid", at: null, address: "j@gulf.com" }, { key: "c2", subject: "Re", at: null, address: "j@gulf.com" }, { key: "c3", subject: "PO", at: null, address: "ap@other.com" }];
+  const rows = emailThreads(people, emails);
+  assert.deepEqual(rows.map((r) => r.title), ["j@gulf.com", "jw@home.net", "ap@other.com"]);
+  assert.match(rows[0].href, /\/dashboard\/messages\/p1\?channel=email%3Aj%40gulf\.com/);
+  assert.match(rows[0].sub ?? "", /2 conversations/);
+  assert.equal(rows[2].href, "/dashboard/messages/email/c3");
 });

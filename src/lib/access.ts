@@ -61,11 +61,11 @@ export function redirectFor(a: Access, path: string): string | null {
   if (p === "/dashboard/settings" || p === "/dashboard/settings/account" || p === "/dashboard/settings/appearance" || p === "/dashboard/settings/roadmap") return null;
   if (p.startsWith("/dashboard/settings/")) return "/dashboard/settings";
   if (p === "/dashboard/files") return a.pages.includes("files") ? null : "/dashboard/scope";
-  const job = /^\/dashboard\/scope\/([0-9a-f-]{36})(?:\/(plans|files|proposal|summary))?$/.exec(p);
+  const job = /^\/dashboard\/scope\/([0-9a-f-]{36})(?:\/(plans|files|proposal|summary|schedule|locations))?$/.exec(p);
   if (job) {
     if (!a.all_jobs && !a.job_ids.includes(job[1])) return "/dashboard/scope";
     // The summary carries the job's money and its customer — never an estimator's (2026-10-05).
-    if (job[2] === "proposal" || job[2] === "summary") return `/dashboard/scope/${job[1]}`;
+    if (job[2] === "proposal" || job[2] === "summary" || job[2] === "schedule" || job[2] === "locations") return `/dashboard/scope/${job[1]}`;
     if ((job[2] === "plans" || job[2] === "files") && !a.pages.includes("plan_room")) return `/dashboard/scope/${job[1]}`;
     return null;
   }

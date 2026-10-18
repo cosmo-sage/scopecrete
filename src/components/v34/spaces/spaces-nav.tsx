@@ -21,7 +21,7 @@ import { T, disp } from "@/lib/v34/tokens";
 import { NavIcon } from "@/components/v34/primitives";
 import { DustyAvatar, type EmblemState } from "@/components/v34/dusty-avatar";
 import { SpaceSilhouette } from "@/components/v34/spaces/space-silhouette";
-import { NewSpaceDialog, PickList } from "@/components/v34/spaces/new-space";
+import { NewSpaceDialog, PickList, ItemPicker, peopleOf } from "@/components/v34/spaces/new-space";
 import { ArrangeRail, type RailTileInfo } from "@/components/v34/spaces/arrange-rail";
 import { PAGE } from "@/lib/v34/pages";
 import { SETTINGS_HOME } from "@/lib/v34/settings-sections";
@@ -31,7 +31,7 @@ import {
   homeShelves, moveToShelf, nudge, MAX_SHELVES, MAX_SHELF_NAME, CHANNELS, isChannel, looseChannels, offShelf,
   customerShelves, vendorShelves, activeTab, cleanPins, addPin, removePin,
   type Shelf, type SpaceRef, type SpacePerson, type ThreadRow, type SpacePin, type SpaceShelf,
-  cleanRail, orderTiles, moveTile, hideTile, showTile, cleanCollectionPicks, setPicks,
+  cleanRail, orderTiles, moveTile, hideTile, showTile, cleanCollectionPicks, setPicks, cleanMembers, setMembers,
 } from "@/lib/v34/spaces";
 
 interface RailJob { id: string; title: string; status: string | null; customer: string | null }
@@ -608,12 +608,27 @@ function CollectionDrawer({ col, id, pages, active, onPick }: {
   const [raw, setRaw] = usePref<unknown>("spaces_collections", {});
   const all = useMemo(() => cleanCollectionPicks(raw), [raw]);
   const picks = all[id] ?? [];
+  const [memRaw, setMemRaw] = usePref<unknown>("spaces_col_members", {});
+  const allMembers = useMemo(() => cleanMembers(memRaw), [memRaw]);
+  const members = allMembers[id] ?? [];
   const [editing, setEditing] = useState(false);
   const { closed, toggle, setAll } = useClosed();
   const { channelRows, chCount } = useChannels(onPick);
   const tools = picks.filter((k) => !isChannel(k) && PAGE.has(k));
   const chans = picks.filter((k) => isChannel(k));
-  const keys = [`col:${id}:people`, ...(tools.length ? [`col:${id}:tools`] : []), ...chans.map((c) => `col:${id}:${c}`)];
+  const memberKinds = (["job", "customer", "vendor"] as const).filter((k) => members.some((m) => m.kind === k));
+  const keys = [`col:${id}:people`, ...memberKinds.map((k) => `col:${id}:m:${k}`), ...(tools.length ? [`col:${id}:tools`] : []), ...chans.map((c) => `col:${id}:${c}`)];
+  // Jobs, customers and vendors added while editing put their people on its thread.
+  const changeMembers = (v: SpacePin[]) => {
+    const added = v.filter((m) => !members.some((x) => x.kind === m.kind && x.id === m.id));
+    setMemRaw(setMembers(allMembers, id, v));
+    if (added.length) void peopleOf(added).then(async (contact_ids) => {
+      if (!contact_ids.length) return;
+      await fetch(`/api/threads/custom/${id}/contacts`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contact_ids }) });
+      window.dispatchEvent(new Event("sc:spaces-reload"));
+    }).catch(() => {});
+  };
+  const memberHref = (m: SpacePin) => m.kind === "job" ? `/dashboard/scope/${m.id}/summary` : m.kind === "customer" ? `/dashboard/customers/${m.id}` : `/dashboard/vendors/${m.id}`;
   const name = col?.name ?? "Collection";
   const people = col ? `${col.count} ${col.count === 1 ? "person" : "people"}` : "";
   return (
@@ -624,12 +639,14 @@ function CollectionDrawer({ col, id, pages, active, onPick }: {
           <span className="sc-space-tag" style={{ color: "var(--sc-violet)", borderColor: "var(--sc-violet)" }}>Collection</span>
           <span style={{ flex: 1 }} />
           <button type="button" className="sc-shelf-arrange" onClick={() => setEditing(!editing)} aria-pressed={editing}
-            title="Pick the tools and channels this collection holds">{editing ? "Done" : "Tools & channels"}</button>
+            title="Pick the jobs, customers, vendors, tools and channels this collection holds">{editing ? "Done" : "Edit"}</button>
         </span>
       </div>
       <div className="sc-space-scroll">
         {editing ? (
           <div className="sc-shelf-edit">
+            <span className="sc-shelf-edit-h">Jobs, customers and vendors</span>
+            <ItemPicker kinds={["job", "customer", "vendor"]} picked={members} onChange={changeMembers} />
             <PickList pages={pages} picks={picks} onChange={(v) => setRaw(setPicks(all, id, v))} />
             <div className="sc-shelf-row" style={{ justifyContent: "flex-end" }}>
               <button type="button" className="sc-shelf-arrange" onClick={() => setEditing(false)}>Done</button>
@@ -640,6 +657,12 @@ function CollectionDrawer({ col, id, pages, active, onPick }: {
           <Group id={`col:${id}:people`} closed={closed} onToggle={toggle} title="People">
             <Row href={`/dashboard/messages?t=${id}`} label={`Everyone${people ? ` · ${people}` : ""}`} onPick={onPick} />
           </Group>
+          {memberKinds.map((k) => (
+            <Group key={k} id={`col:${id}:m:${k}`} closed={closed} onToggle={toggle} count={members.filter((m) => m.kind === k).length}
+              title={k === "job" ? "Jobs" : k === "customer" ? "Customers" : "Vendors"}>
+              {members.filter((m) => m.kind === k).map((m) => <Row key={m.id} href={memberHref(m)} label={m.name} onPick={onPick} />)}
+            </Group>
+          ))}
           {tools.length > 0 && (
             <Group id={`col:${id}:tools`} closed={closed} onToggle={toggle} title="Tools">
               {tools.map((k) => {
@@ -655,7 +678,7 @@ function CollectionDrawer({ col, id, pages, active, onPick }: {
               {channelRows(ch)}
             </Group>
           ))}
-          {picks.length === 0 && <div className="sc-space-empty">No tools or channels yet — Tools &amp; channels picks them.</div>}
+          {picks.length === 0 && members.length === 0 && <div className="sc-space-empty">Nothing in it yet — Edit picks its jobs, customers, vendors, tools and channels.</div>}
         </>}
       </div>
     </>
@@ -820,7 +843,21 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
         ),
       };
     }),
-    ...pins.map((p): RailTile => {
+    // Jobs picked in New Space that aren't open (a complete or lost one) are pins of their own.
+    ...pins.filter((p) => p.kind === "job" && !jobs.some((j) => j.id === p.id)).map((p): RailTile => {
+      const on = shown.kind === "job" && shown.id === p.id;
+      const color = "var(--sc-ink3)";
+      return {
+        info: { key: `job:${p.id}`, name: p.name, sub: "Job", shape: "job", color, initials: monogram(p.name), pinned: true },
+        render: (drag) => (
+          <Tile key={`pin-job:${p.id}`} label={monogram(p.name)} title={`${p.name} · Job`} color={color} on={on} bare drag={drag}
+            href={desktop ? `/dashboard/scope/${p.id}/summary` : undefined} onPick={desktop ? undefined : () => setPeek({ kind: "job", id: p.id })}>
+            <SpaceSilhouette kind="job" color={color} initials={monogram(p.name)} on={on} />
+          </Tile>
+        ),
+      };
+    }),
+    ...pins.filter((p): p is SpacePin & { kind: "customer" | "vendor" } => p.kind !== "job").map((p): RailTile => {
       const on = (shown.kind === "customer" || shown.kind === "vendor") && shown.kind === p.kind && shown.id === p.id;
       const color = p.kind === "customer" ? "var(--sc-chalk)" : "var(--sc-bucket-vendor)";
       const href = p.kind === "customer" ? `/dashboard/customers/${p.id}` : `/dashboard/vendors/${p.id}`;
@@ -843,7 +880,7 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
   const moveTo = (key: string, to: number) => setRail(moveTile(railPrefs, order, key, to));
   const removeTile = (t: RailTileInfo) => {
     if (t.pinned) {
-      const [kind, id] = t.key.split(":") as ["customer" | "vendor", string];
+      const [kind, id] = t.key.split(":") as [SpacePin["kind"], string];
       setPins(removePin(pins, kind, id));
       setRail(showTile(railPrefs, t.key));
     } else setRail(hideTile(railPrefs, t.key));
@@ -944,7 +981,7 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
   // Made outside the nav, so a phone's covered Spaces (inert) never hold it.
   const dialog = (
     <>
-      {making && <NewSpaceDialog pages={pages} onClose={() => setMaking(false)} onMade={() => window.dispatchEvent(new Event("sc:spaces-reload"))} />}
+      {making && <NewSpaceDialog pages={pages} openJobs={jobs.map((j) => j.id)} onClose={() => setMaking(false)} onMade={() => window.dispatchEvent(new Event("sc:spaces-reload"))} />}
       {arranging && <ArrangeRail shown={tiles.map((t) => t.info)} hidden={hiddenTiles} onMove={moveTo} onRemove={removeTile}
         onShow={(k) => setRail(showTile(railPrefs, k))} onReset={() => setRail({ order: [], hidden: railPrefs.hidden })} onClose={() => setArranging(false)}
         onDelete={(t) => {

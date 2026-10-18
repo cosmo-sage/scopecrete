@@ -96,12 +96,27 @@ test("a customer's or vendor's page is its own Space", () => {
 });
 
 test("pins are cleaned, deduped, added once and removed", () => {
-  const p = cleanPins([{ kind: "customer", id: ID, name: " Art " }, { kind: "customer", id: ID, name: "Again" }, { kind: "job", id: ID }, { kind: "vendor", id: "nope" }, null]);
+  const p = cleanPins([{ kind: "customer", id: ID, name: " Art " }, { kind: "customer", id: ID, name: "Again" }, { kind: "lead", id: ID }, { kind: "vendor", id: "nope" }, null]);
   assert.deepEqual(p, [{ kind: "customer", id: ID, name: "Art" }]);
+  assert.deepEqual(cleanPins([{ kind: "job", id: ID }]), [{ kind: "job", id: ID, name: "Job" }]);
   assert.equal(addPin(p, { kind: "customer", id: ID, name: "Art Apartments" }).length, 1);
   assert.equal(addPin(p, { kind: "vendor", id: ID, name: "Casco" }).length, 2);
   assert.deepEqual(removePin(p, "customer", ID), []);
   assert.deepEqual(cleanPins("x"), []);
+});
+
+test("a collection's jobs, customers and vendors are cleaned, set and ticked", async () => {
+  const { cleanMembers, setMembers, toggleItem } = await import("../src/lib/v34/spaces.ts");
+  const job = { kind: "job", id: ID, name: "Wilson Driveway" };
+  const ven = { kind: "vendor", id: ID, name: "Casco" };
+  assert.deepEqual(cleanMembers({ [ID]: [job, job, { kind: "x", id: ID }], nope: [job] }), { [ID]: [job] });
+  assert.deepEqual(cleanMembers([]), {});
+  let items = toggleItem([], job, true);
+  items = toggleItem(items, ven, true);
+  assert.equal(toggleItem(items, job, true).length, 2);
+  assert.deepEqual(toggleItem(items, job, false), [ven]);
+  assert.deepEqual(setMembers({}, ID, items), { [ID]: [job, ven] });
+  assert.deepEqual(setMembers({ [ID]: items }, ID, []), {});
 });
 
 test("a customer Space is Account and Toolbox; a vendor's Supply and Toolbox, linking tabs", () => {

@@ -873,3 +873,44 @@ html[data-nav="spaces"] .sc-record-tabs { display: none !important; }
 .sc-newspace-picks .sc-shelf-edit-h { grid-column: 1 / -1; }
 .sc-newspace-field .sc-newspace-picks input { height: auto; padding: 0; }
 .sc-newspace { max-height: calc(100dvh - 32px); overflow-y: auto; }
+/* Two steps (Coy, 2026-10-18): the kinds, then slid in from the right, a searchable list ticked several at a time. */
+.sc-newspace-step { display: flex; flex-direction: column; gap: 12px; min-height: 0; flex: 1; overflow-y: auto; animation: scNewspaceIn .22s ease-out; }
+.sc-newspace-step[data-from="left"] { animation-name: scNewspaceBack; }
+@keyframes scNewspaceIn { from { transform: translateX(40px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes scNewspaceBack { from { transform: translateX(-40px); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .sc-newspace-step { animation: none; } }
+.sc-newspace-title { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+.sc-newspace-back, .sc-newspace-x { border: 0; background: transparent; color: var(--sc-ink2); cursor: pointer; font-size: 15px; padding: 4px 6px; border-radius: 6px; }
+.sc-newspace-x { font-size: 22px; line-height: 1; width: 34px; height: 34px; }
+.sc-newspace-back:hover, .sc-newspace-x:hover { background: var(--sc-sunk); color: var(--sc-ink); }
+.sc-newspace-head { gap: 8px; }
+.sc-newspace-kind:hover { border-color: var(--sc-hiviz); }
+.sc-newspace-grow { flex: 1; min-height: 0; }
+.sc-newspace-pick { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+.sc-newspace-search { height: 38px; padding: 0 12px; border-radius: 19px; border: 1px solid var(--sc-hair-strong); background: var(--sc-sunk); color: var(--sc-ink); font-size: 15px; }
+.sc-newspace-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.sc-newspace-chips button { padding: 4px 10px; border-radius: 14px; border: 1px solid var(--sc-hair-strong); background: transparent; color: var(--sc-ink2); font-size: 12.5px; cursor: pointer; }
+.sc-newspace-chips button[data-on] { border-color: var(--sc-hiviz); color: var(--sc-ink); background: color-mix(in srgb, var(--sc-hiviz) 12%, var(--sc-card)); }
+.sc-newspace-list { display: flex; flex-direction: column; max-height: 46vh; overflow-y: auto; border: 1px solid var(--sc-hair); border-radius: 8px; }
+.sc-newspace-row { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border: 0; border-bottom: 1px solid var(--sc-hair); background: transparent; color: var(--sc-ink); text-align: left; cursor: pointer; font-size: 13.5px; }
+.sc-newspace-row:last-child { border-bottom: 0; }
+.sc-newspace-row:hover { background: var(--sc-sunk); }
+.sc-newspace-row[data-on] { background: color-mix(in srgb, var(--sc-hiviz) 10%, var(--sc-card)); }
+.sc-newspace-row input { width: 17px; height: 17px; flex: none; accent-color: var(--sc-hiviz); }
+.sc-newspace-rn { display: flex; flex-direction: column; min-width: 0; }
+.sc-newspace-rn b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sc-newspace-rn small { font-size: 11.5px; color: var(--sc-ink3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sc-newspace-new { color: var(--sc-ink2); }
+.sc-newspace-plus { width: 26px; text-align: center; font-size: 18px; color: var(--sc-hiviz); }
+.sc-newspace-fold { align-self: flex-start; border: 0; background: transparent; color: var(--sc-ink2); font-size: 13px; cursor: pointer; padding: 2px 0; }
+.sc-newspace-count { font-size: 12.5px; color: var(--sc-ink3); }
+.sc-shelf-edit .sc-newspace-list { max-height: 260px; }
+/* On a phone the Space creator is the whole screen, × at its top right (Coy, 2026-10-18). */
+@media (max-width: 1023px) {
+  .sc-newspace-scrim { padding: 0; }
+  .sc-newspace { width: 100%; height: 100dvh; max-height: none; border: 0; border-radius: 0; box-shadow: none;
+    padding: calc(10px + env(safe-area-inset-top)) 14px calc(12px + env(safe-area-inset-bottom)); }
+  .sc-newspace-list { max-height: none; flex: 1; }
+  .sc-newspace-grow .sc-newspace-pick { flex: 1; }
+  .sc-newspace-grow { display: flex; flex-direction: column; }
+}

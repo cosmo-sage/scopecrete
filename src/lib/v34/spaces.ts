@@ -63,7 +63,7 @@ export function spaceOf(path: string | null | undefined): SpaceRef {
  * A customer or vendor Space on the rail (Coy, 2026-10-18: "A space can currently be 1 of 4
  * different things. A job is just one"). Pinned by Coy, kept on his account, newest last.
  */
-export interface SpacePin { kind: "customer" | "vendor"; id: string; name: string }
+export interface SpacePin { kind: "customer" | "vendor" | "job"; id: string; name: string }
 export const MAX_PINS = 40;
 const UUID_RE = /^[0-9a-f-]{36}$/i;
 
@@ -74,11 +74,11 @@ export function cleanPins(v: unknown): SpacePin[] {
   for (const x of v) {
     if (!x || typeof x !== "object") continue;
     const r = x as Record<string, unknown>;
-    const kind = r.kind === "customer" || r.kind === "vendor" ? r.kind : null;
+    const kind = r.kind === "customer" || r.kind === "vendor" || r.kind === "job" ? r.kind : null;
     const id = typeof r.id === "string" && UUID_RE.test(r.id) ? r.id : null;
     if (!kind || !id || seen.has(`${kind}:${id}`)) continue;
     seen.add(`${kind}:${id}`);
-    const name = typeof r.name === "string" && r.name.trim() ? r.name.trim().slice(0, 120) : kind === "customer" ? "Customer" : "Vendor";
+    const name = typeof r.name === "string" && r.name.trim() ? r.name.trim().slice(0, 120) : kind === "customer" ? "Customer" : kind === "job" ? "Job" : "Vendor";
     out.push({ kind, id, name });
     if (out.length >= MAX_PINS) break;
   }
@@ -124,6 +124,39 @@ export function setPicks(all: CollectionPicks, id: string, picks: string[]): Col
 /** A pick ticked on or off, keeping the order it was ticked in. */
 export function togglePick(picks: string[], k: string, on: boolean): string[] {
   return on ? (picks.includes(k) ? picks : [...picks, k]) : picks.filter((x) => x !== k);
+}
+
+/**
+ * The jobs, customers and vendors a collection holds (Coy, 2026-10-18: "when I select to create
+ * a 'Collection' Space, it should allow me to select from any number of Jobs, Customers,
+ * Vendors"). Kept on the account (`spaces_col_members`: thread id → items), no migration; the
+ * collection's thread also gets their people.
+ */
+export type CollectionMembers = Record<string, SpacePin[]>;
+export const MAX_MEMBERS = 120;
+export function cleanMembers(v: unknown): CollectionMembers {
+  const out: CollectionMembers = {};
+  if (!v || typeof v !== "object" || Array.isArray(v)) return out;
+  let n = 0;
+  for (const [id, list] of Object.entries(v as Record<string, unknown>)) {
+    if (!UUID_RE.test(id)) continue;
+    const items = cleanPins(list).slice(0, MAX_MEMBERS);
+    if (items.length) out[id] = items;
+    if (++n >= 200) break;
+  }
+  return out;
+}
+export function setMembers(all: CollectionMembers, id: string, items: SpacePin[]): CollectionMembers {
+  const next = { ...all };
+  const clean = cleanPins(items).slice(0, MAX_MEMBERS);
+  if (clean.length) next[id] = clean; else delete next[id];
+  return next;
+}
+/** An item ticked on or off a list of picked items, in the order picked. */
+export function toggleItem(items: SpacePin[], item: SpacePin, on: boolean): SpacePin[] {
+  const has = items.some((p) => p.kind === item.kind && p.id === item.id);
+  if (on) return has ? items : [...items, item];
+  return items.filter((p) => !(p.kind === item.kind && p.id === item.id));
 }
 
 /** A shelf of a customer or vendor Space: rows that open the record page's tabs. */

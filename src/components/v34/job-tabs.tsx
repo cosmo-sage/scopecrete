@@ -66,7 +66,7 @@ export function JobTabs({ jobId, active, back = false, subnav }: { jobId: string
   // keeps the segmented switch. Both looks are `.sc-job-tabs` in v34-shell.css.
   const nav = (
     <nav aria-label="This job" className="sc-no-print flex items-center gap-1.5 min-w-0 w-full lg:w-auto">
-      {back && <Link href="/dashboard/scope" className="no-underline shrink-0" style={{ fontFamily: disp, fontSize: 11, letterSpacing: ".1em", textTransform: "uppercase", color: T.ink3 }}>‹ Jobs</Link>}
+      {back && <Link href="/dashboard/scope" className="sc-back-link no-underline shrink-0" style={{ fontFamily: disp, fontSize: 11, letterSpacing: ".1em", textTransform: "uppercase", color: T.ink3 }}>‹ Jobs</Link>}
       <span className="sc-job-tabs">
         {tabs.map((t) => {
           const on = t.k === active;
@@ -154,12 +154,12 @@ export function JobHeaderRow({ jobId, active, title, after, sub, customerId, sub
       <div className="relative lg:flex-[1_1_220px]" style={{ minWidth: 0 }}>
         {/* On a phone ‹ Jobs is just ‹ so a long name has the width (Coy, 2026-10-06). */}
         <div className="flex items-center justify-center gap-2 px-6 lg:justify-start lg:px-0" style={{ minWidth: 0, minHeight: 26 }}>
-          <Link href={back} aria-label={toCustomer ? "Back to the customer" : "Jobs"} className="no-underline shrink-0 absolute left-0 inset-y-0 flex items-center lg:static"
+          <Link href={back} aria-label={toCustomer ? "Back to the customer" : "Jobs"} className="sc-back-link no-underline shrink-0 absolute left-0 inset-y-0 flex items-center lg:static"
             style={{ fontFamily: disp, fontSize: 11, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase", color: T.ink2 }}>
             <span className="lg:hidden" style={{ fontSize: 20, lineHeight: 1 }}>‹</span><span className="hidden lg:inline">{toCustomer ? "‹ Customer" : "‹ Jobs"}</span>
           </Link>
           {/* A divider between the back link and the name on a desktop (Coy, 2026-10-10: "jobs | (job name)"). */}
-          <span aria-hidden="true" className="hidden lg:inline-block shrink-0" style={{ width: 1, height: 16, background: T.hairStrong }} />
+          <span aria-hidden="true" className="sc-back-link hidden lg:inline-block shrink-0" style={{ width: 1, height: 16, background: T.hairStrong }} />
           {typeof title === "string" && editing
             ? (
               <input autoFocus defaultValue={String(shownTitle)} aria-label="Job name" className="sc-job-name rounded px-1.5 outline-none"

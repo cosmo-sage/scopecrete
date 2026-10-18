@@ -699,6 +699,8 @@ html[data-nav="spaces"][data-drawer="folded"] { --sc-rail-w: 72px; }
    conversation takes the page without the old list beside it (Coy, 2026-10-17). */
 html[data-nav="spaces"] .sc-old-thread-rail,
 html[data-nav="spaces"] .sc-old-thread-list { display: none !important; }
+/* No back links at the top left under Spaces (Coy, 2026-10-18): the rail and drawer are a swipe away. */
+html[data-nav="spaces"] .sc-back-link { display: none !important; }
 .sc-drawer-empty { display: none; }
 html[data-nav="spaces"] .sc-drawer-listed { display: none !important; }
 html[data-nav="spaces"] .sc-drawer-pane { display: block !important; flex: 1; }

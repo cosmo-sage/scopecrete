@@ -112,8 +112,8 @@ export function RecordHeader({ back, title, wide, actions, menu, meta, children,
       <div className="flex items-center gap-2">
         {!wide && tabs.length > 1 && <MenuButton onClick={openTabs} label="Sections of this page" always />}
         <div className="flex items-center flex-1 min-w-0" style={{ gap: wide ? 8 : 6 }}>
-          <Link href={back.href} style={{ ...eyebrow, color: T.chalk, flexShrink: 0, fontSize: wide ? 12 : 11 }}>‹ {back.label}</Link>
-          <span className="sc-subhead-sep" aria-hidden="true" />
+          <Link href={back.href} className="sc-back-link" style={{ ...eyebrow, color: T.chalk, flexShrink: 0, fontSize: wide ? 12 : 11 }}>‹ {back.label}</Link>
+          <span className="sc-subhead-sep sc-back-link" aria-hidden="true" />
           <div style={{ minWidth: 0, flexShrink: 1, ...clip }}>
             {typeof title === "string"
               ? <h1 style={{ fontFamily: strong, fontWeight: 700, fontSize: wide ? 20 : 16, lineHeight: 1.2, margin: 0, color: T.ink, ...clip }}>{title}</h1>

@@ -321,7 +321,7 @@ export function ThreadView({ contactId, embedded = false }: {
               {/* Phone: the thread's back link sits top left, on the buttons' row (Coy, 2026-10-09), and says
                   Threads whichever list it returns to (Coy, 2026-10-09: "so that I know that I'm just going back to the main threads page"). */}
               {!embedded && (
-                <Link href={`/dashboard/messages${threadKey ? `?t=${encodeURIComponent(threadKey)}` : ""}`} className="lg:hidden min-w-0"
+                <Link href={`/dashboard/messages${threadKey ? `?t=${encodeURIComponent(threadKey)}` : ""}`} className="sc-back-link lg:hidden min-w-0"
                   style={{ ...eyebrow, fontSize: 14, color: T.ink, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>‹ Threads</Link>
               )}
               {/* On a phone the name is in the breadcrumb rows below; this row keeps the buttons (Coy, 2026-10-09). */}

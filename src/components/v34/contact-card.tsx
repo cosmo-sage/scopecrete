@@ -58,7 +58,7 @@ export function ContactCard({ person, back, textHref, customerHref, vendorHref, 
     <div className="w-full" style={{ maxWidth: 560, margin: "0 auto", padding: "10px 16px 40px" }}>
       <div className="flex items-center gap-2">
         {/* Back to wherever this card was opened from (Coy, 2026-10-09); the thread when it was opened by a link. */}
-        <Link href={back.href} style={{ ...eyebrow, color: T.chalk }}
+        <Link href={back.href} className="sc-back-link" style={{ ...eyebrow, color: T.chalk }}
           onClick={(e) => { if (window.history.length > 1) { e.preventDefault(); router.back(); } }}>‹ Back</Link>
         <span className="flex-1" />
         {/* Merge lives here, not in the thread's menu (Coy, 2026-10-07): another contact's calls, texts and

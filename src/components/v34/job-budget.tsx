@@ -756,38 +756,11 @@ function EstimateTag({ basis, onConfirm, wide }: { basis: string | null; onConfi
   );
 }
 
-/* Cost item notes fold one by one, and all at once from the budget's header (Coy, 2026-10-15:
-   "expandable/colapsable individually and a collapse / expand all button in the bugdet header").
-   The all switch is kept on the device; flipping it resets every note's own fold. */
-const NOTES_KEY = "sc:budget-notes-open";
-let notesOpen = (() => { try { return typeof window !== "undefined" && window.localStorage.getItem(NOTES_KEY) === "1"; } catch { return false; } })();
-let notesVer = 0;
-const notesSubs = new Set<() => void>();
-const useNotesVer = () => useSyncExternalStore((cb) => { notesSubs.add(cb); return () => { notesSubs.delete(cb); }; }, () => notesVer, () => 0);
-function setAllNotes(open: boolean) {
-  notesOpen = open; notesVer += 1;
-  try { window.localStorage.setItem(NOTES_KEY, open ? "1" : "0"); } catch { /* private window */ }
-  notesSubs.forEach((f) => f());
-}
-
-/** Expand notes / Collapse notes, for the budget's header. */
-export function NotesToggle() {
-  useNotesVer();
-  return (
-    <button onClick={() => setAllNotes(!notesOpen)} title={notesOpen ? "Fold every cost item's note to one line" : "Open every cost item's note in full"}
-      className="rounded px-2" style={{ height: 26, fontSize: F.xs, fontWeight: 600, border: `1px solid ${T.hair}`, background: T.card, color: T.ink2, cursor: "pointer", whiteSpace: "nowrap" }}>
-      {notesOpen ? "▾ Collapse notes" : "▸ Expand notes"}
-    </button>
-  );
-}
-
 /** A cost item's note, edited where it sits (it is the line's description — it shows on the proposal). */
 function LineNote({ value, name, onSave }: { value: string | null; name: string; onSave: (v: string | null) => void }) {
   const [v, setV] = useState(value ?? "");
-  const ver = useNotesVer();
-  const [own, setOwn] = useState<{ ver: number; open: boolean } | null>(null);
-  const open = own && own.ver === ver ? own.open : notesOpen;
-  const toggle = () => setOwn({ ver, open: !open });
+  const [open, setOpen] = useState(false);
+  const toggle = () => setOpen(!open);
   const save = () => { const t = v.trim() || null; if (t !== (value ?? null)) onSave(t); };
   if (!value && !v) {
     return (

@@ -311,8 +311,30 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                fontSize: 9.5, fontWeight: 700, lineHeight: 1, ...nums, ...style }}>{n}</span>
   );
 
+  // Under Spaces the app's header is gone (Coy, 2026-10-18: "We are going to remove the header
+  // entirely from mobile and desktop"); search, alerts and what Dusty is doing sit at the top of
+  // the drawer instead.
+  const spacesBar = (
+    <div className="sc-spaces-bar">
+      <div className="sc-spaces-bar-row">
+        {!limited && (
+          <button type="button" className="sc-spaces-search" onClick={() => setSearchOpen(true)} aria-label="Search" aria-expanded={searchOpen}>
+            <svg width="14" height="14" viewBox="0 0 15 15" aria-hidden="true">
+              <circle cx="6.4" cy="6.4" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
+              <path d="M9.8 9.8 L13.4 13.4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+            </svg>
+            <span>Search everything</span>
+          </button>
+        )}
+        {me && !limited && <AlertsBell glassBtn={glassBtn} />}
+      </div>
+      {(desktop ? deskLineOn : phoneLineOn) && <div className="sc-spaces-line"><ActivityLine inline busy={dustyBusy} onReader={setReaderState} /></div>}
+      {searchOpen && <SearchPanel onClose={() => setSearchOpen(false)} />}
+    </div>
+  );
+
   const spacesNav = spaces && (
-    <SpacesNav desktop={desktop} pages={(allowed ?? menus.rail).filter((k) => k !== "dusty" && k !== "threads")} active={active} dustyState={dustyNow}
+    <SpacesNav bar={spacesBar} desktop={desktop} pages={(allowed ?? menus.rail).filter((k) => k !== "dusty" && k !== "threads")} active={active} dustyState={dustyNow}
       phoneOpen={spacesOpen} onPhoneClose={closeSpaces} folded={drawerFolded === true} onFold={() => setDrawerFolded(!drawerFolded)} />
   );
 
@@ -329,7 +351,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <button type="button" onClick={() => void stopViewing()} disabled={leaving}>{leaving ? "Switching…" : "Switch back"}</button>
           </div>
         )}
-        <header className="px-2.5 lg:px-4 flex items-center gap-3 sc-paper" style={{ height: 54 }}>
+        {!spaces && <header className="px-2.5 lg:px-4 flex items-center gap-3 sc-paper" style={{ height: 54 }}>
           <Link href="/dashboard" className="no-underline shrink-0" aria-label="Dashboard">
             <OrgLockup name={me?.org_name ?? null} hasLight={!!me?.logo_light} hasDark={!!me?.logo_dark} stamp={me?.logo_stamp ?? null}
               dark={theme.dark} phone={!desktop} showLogo={headerLogo !== false} />
@@ -378,10 +400,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
             {searchOpen && <SearchPanel onClose={() => setSearchOpen(false)} />}
           </div>
-        </header>
+        </header>}
 
         {/* Phone: what Dusty is doing, a row under the header. */}
-        {!desktop && phoneLineOn && <ActivityLine busy={dustyBusy} onReader={setReaderState} />}
+        {!spaces && !desktop && phoneLineOn && <ActivityLine busy={dustyBusy} onReader={setReaderState} />}
       </div>
 
       {/* ---- desktop left rail: every page, in Coy's order ----
@@ -389,9 +411,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           one row, each icon in its colour from the book; folds to icons at the foot. */}
       {spaces && !under && spacesNav}
       {spaces && !limited && desktop && !dustyOpen && (
-        <button type="button" className="sc-dusty-strip" onClick={() => setDustyOpen(true)} aria-label="Open Dusty">
+        <button type="button" className="sc-dusty-strip" onClick={() => setDustyOpen(true)} aria-label="Open Dusty" title="Open Dusty">
+          <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M8.5 4l-4 4 4 4M12.5 4l-4 4 4 4" />
+          </svg>
           <DustyAvatar state={dustyNow} size={28} hidden />
-          <span className="sc-dusty-strip-l">Dusty</span>
+          <span className="sc-dusty-strip-l">Dusty{PAGE.get(active) ? ` · on ${PAGE.get(active)!.label}` : ""}</span>
         </button>
       )}
       {!spaces && <nav aria-label="Main" className="hidden lg:flex fixed left-0 bottom-0 z-30 flex-col items-stretch overflow-y-auto sc-rail"

@@ -9,7 +9,10 @@
  *     Scope Builder tree as its pages and its people's numbers, emails and notes as
  *     its Phone · Email · Internal threads (one thread per number — Coy, 2026-10-16).
  *   - A collection: a thread Coy made (migration 073), opened in Threads.
- * Customer and vendor Spaces, pinning, arranging pages and deliverables come later.
+ *   - A customer or vendor Space: one Coy pinned to the rail (New Space, or "Add to the
+ *     rail" on its drawer), kept on his account (`spaces_pins`); its drawer is the record
+ *     page's tabs as shelves (Account · Supply) and a Toolbox.
+ * Deliverables come later.
  */
 
 import { WON_STATUSES, stageOf } from "../jobs/stages.ts";
@@ -40,13 +43,91 @@ export function monogram(name: string | null | undefined): string {
   return (words[0][0] + words[1][0]).toUpperCase();
 }
 
-export type SpaceRef = { kind: "home" } | { kind: "job"; id: string };
+export type SpaceRef = { kind: "home" } | { kind: "job"; id: string } | { kind: "customer"; id: string } | { kind: "vendor"; id: string };
 
-/** Which Space a page belongs to: a job's own pages are its Space, everything else Home. */
+/** Which Space a page belongs to: a job's, a customer's or a vendor's own pages are its Space, everything else Home. */
 export function spaceOf(path: string | null | undefined): SpaceRef {
-  const m = /^\/dashboard\/scope\/([0-9a-f-]{36})(?:\/|$)/i.exec(path ?? "");
-  return m ? { kind: "job", id: m[1] } : { kind: "home" };
+  const p = path ?? "";
+  const m = /^\/dashboard\/scope\/([0-9a-f-]{36})(?:\/|$)/i.exec(p);
+  if (m) return { kind: "job", id: m[1] };
+  const c = /^\/dashboard\/customers\/([0-9a-f-]{36})(?:\/|$)/i.exec(p);
+  if (c) return { kind: "customer", id: c[1] };
+  const v = /^\/dashboard\/vendors\/([0-9a-f-]{36})(?:\/|$)/i.exec(p);
+  if (v) return { kind: "vendor", id: v[1] };
+  return { kind: "home" };
 }
+
+/* ------------------------------------------------------------ customer and vendor Spaces */
+
+/**
+ * A customer or vendor Space on the rail (Coy, 2026-10-18: "A space can currently be 1 of 4
+ * different things. A job is just one"). Pinned by Coy, kept on his account, newest last.
+ */
+export interface SpacePin { kind: "customer" | "vendor"; id: string; name: string }
+export const MAX_PINS = 40;
+const UUID_RE = /^[0-9a-f-]{36}$/i;
+
+export function cleanPins(v: unknown): SpacePin[] {
+  if (!Array.isArray(v)) return [];
+  const seen = new Set<string>();
+  const out: SpacePin[] = [];
+  for (const x of v) {
+    if (!x || typeof x !== "object") continue;
+    const r = x as Record<string, unknown>;
+    const kind = r.kind === "customer" || r.kind === "vendor" ? r.kind : null;
+    const id = typeof r.id === "string" && UUID_RE.test(r.id) ? r.id : null;
+    if (!kind || !id || seen.has(`${kind}:${id}`)) continue;
+    seen.add(`${kind}:${id}`);
+    const name = typeof r.name === "string" && r.name.trim() ? r.name.trim().slice(0, 120) : kind === "customer" ? "Customer" : "Vendor";
+    out.push({ kind, id, name });
+    if (out.length >= MAX_PINS) break;
+  }
+  return out;
+}
+
+/** The pin added (or renamed if it is there); unchanged when the list is full. */
+export function addPin(pins: SpacePin[], pin: SpacePin): SpacePin[] {
+  const i = pins.findIndex((p) => p.kind === pin.kind && p.id === pin.id);
+  if (i >= 0) return pins.map((p, j) => (j === i ? { ...p, name: pin.name || p.name } : p));
+  return pins.length >= MAX_PINS ? pins : [...pins, pin];
+}
+export function removePin(pins: SpacePin[], kind: SpacePin["kind"], id: string): SpacePin[] {
+  return pins.filter((p) => !(p.kind === kind && p.id === id));
+}
+
+/** A shelf of a customer or vendor Space: rows that open the record page's tabs. */
+export interface SpaceShelf { id: string; name: string; rows: TreeRow[] }
+
+/** A customer Space: Account (Summary, Contacts, Jobs, Threads, Payments, Schedule) and a Toolbox (Files, Timeline). */
+export function customerShelves(id: string): SpaceShelf[] {
+  const t = (k: string, label: string) => ({ k, label, href: `/dashboard/customers/${id}?tab=${k}` });
+  return [
+    { id: "account", name: "Account", rows: [t("overview", "Summary"), t("contacts", "Contacts"), t("jobs", "Jobs"), t("threads", "Threads"), t("payments", "Payments"), t("schedule", "Schedule")] },
+    { id: "toolbox", name: "Toolbox", rows: [t("files", "Files"), t("timeline", "Timeline")] },
+  ];
+}
+
+/** A vendor Space: Supply (Summary, Price sheets, Receipts & quotes, Bid requests, Jobs) and a Toolbox (Files, Timeline). */
+export function vendorShelves(id: string): SpaceShelf[] {
+  const t = (k: string, label: string) => ({ k, label, href: `/dashboard/vendors/${id}?tab=${k}` });
+  return [
+    { id: "supply", name: "Supply", rows: [t("overview", "Summary"), t("prices", "Price sheets"), t("receipts", "Receipts & quotes"), t("bids", "Bid requests"), t("jobs", "Jobs")] },
+    { id: "toolbox", name: "Toolbox", rows: [t("files", "Files"), t("timeline", "Timeline")] },
+  ];
+}
+
+/** The tab a customer or vendor page is on (its ?tab=, else Summary). */
+export function activeTab(search: string): string {
+  return new URLSearchParams(search).get("tab") || "overview";
+}
+
+/** The four kinds of Space New Space makes, with the shelves each one gets (frame 18). */
+export const SPACE_KINDS: Array<{ kind: "job" | "customer" | "vendor" | "collection"; label: string; shelves: string; blurb: string }> = [
+  { kind: "job", label: "Job", shelves: "Scope Builder · Phone · Email · Internal", blurb: "Work to price and win — opens the New job form." },
+  { kind: "customer", label: "Customer", shelves: "Account · Toolbox", blurb: "A household, business or school, with its people and jobs." },
+  { kind: "vendor", label: "Vendor", shelves: "Supply · Toolbox", blurb: "A supplier or sub, with their prices and bid requests." },
+  { kind: "collection", label: "Collection", shelves: "Threads · Files", blurb: "Any set of people kept together, like a thread you make." },
+];
 
 export interface TreeRow { k: string; label: string; href: string; sub?: boolean }
 
@@ -131,6 +212,20 @@ export const DEFAULT_SHELVES: Shelf[] = [
   { id: "scope-builder", name: "Scope Builder", pages: ["scopebuilder"] },
   { id: "toolbox", name: "Toolbox", pages: ["map", "camera", "pricebook", "files"] },
 ];
+/**
+ * Channels a shelf can hold besides pages (Coy, 2026-10-18: "add/remove whatever tools /
+ * channels into the group i want"): Home's thread buckets, and More (Spam, Archived). A
+ * channel on no shelf shows under the shelves as before.
+ */
+export const CHANNELS: Array<{ key: string; label: string }> = [
+  { key: "ch:customer", label: "Customers threads" },
+  { key: "ch:vendor", label: "Vendors threads" },
+  { key: "ch:personal", label: "Personal threads" },
+  { key: "ch:unsorted", label: "Unsorted threads" },
+  { key: "ch:more", label: "Spam and Archived" },
+];
+export const isChannel = (k: string) => k.startsWith("ch:");
+
 /** Pages that live in Settings under Spaces, not on a shelf. */
 export const SETTINGS_PAGES = ["logs", "roadmap"];
 export const MAX_SHELVES = 20;
@@ -166,7 +261,7 @@ export function homeShelves(saved: unknown, pages: string[]): Shelf[] {
   const base = cleanShelves(saved) ?? DEFAULT_SHELVES;
   const placed = new Set<string>();
   const shelves = base.map((s) => {
-    const mine = s.pages.filter((k) => allowed.includes(k) && !placed.has(k));
+    const mine = s.pages.filter((k) => (allowed.includes(k) || CHANNELS.some((c) => c.key === k)) && !placed.has(k));
     mine.forEach((k) => placed.add(k));
     return { ...s, pages: mine };
   });
@@ -177,6 +272,17 @@ export function homeShelves(saved: unknown, pages: string[]): Shelf[] {
     else shelves.push({ id: "more", name: "More", pages: rest });
   }
   return shelves;
+}
+
+/** Channels on no shelf, in their usual order (shown under the shelves). */
+export function looseChannels(shelves: Shelf[]): string[] {
+  const on = new Set(shelves.flatMap((s) => s.pages));
+  return CHANNELS.map((c) => c.key).filter((k) => !on.has(k));
+}
+
+/** A page or channel taken off a shelf (a page then lands on More through homeShelves). */
+export function offShelf(shelves: Shelf[], item: string): Shelf[] {
+  return shelves.map((s) => ({ ...s, pages: s.pages.filter((k) => k !== item) }));
 }
 
 /** A page moved onto a shelf (at its end), off any other. */

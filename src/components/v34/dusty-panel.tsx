@@ -645,9 +645,19 @@ export function DustyPanel({ open, onClose, onBusy, onStream, onState }: {
               </>
             )}
           </div>
-          <button onClick={onClose} aria-label="Close Dusty" style={iconBtn}>
-            <svg width="12" height="12" viewBox="0 0 13 13" aria-hidden="true"><path d="M1 1 L12 12 M12 1 L1 12" stroke="currentColor" style={{ color: T.ink }} strokeWidth="1.8" /></svg>
-          </button>
+          {/* On a desktop his column is the tool window's right panel and folds to a strip
+              (Coy, 2026-10-18: "the right panel (for chat and artifacts) should be collapsible"). */}
+          {desktop ? (
+            <button onClick={onClose} aria-label="Collapse Dusty" title="Collapse Dusty" style={iconBtn}>
+              <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" style={{ color: T.ink2 }}>
+                <path d="M7.5 4l4 4-4 4M3.5 4l4 4-4 4" />
+              </svg>
+            </button>
+          ) : (
+            <button onClick={onClose} aria-label="Close Dusty" style={iconBtn}>
+              <svg width="12" height="12" viewBox="0 0 13 13" aria-hidden="true"><path d="M1 1 L12 12 M12 1 L1 12" stroke="currentColor" style={{ color: T.ink }} strokeWidth="1.8" /></svg>
+            </button>
+          )}
         </header>
 
         {active && ref.kind !== "cold" && !sameRef(active, ref) && (

@@ -83,3 +83,44 @@ test("moving a page between shelves, and nudging order", () => {
   assert.deepEqual(nudge([1, 2, 3], 0, 1), [2, 1, 3]);
   assert.deepEqual(nudge([1, 2, 3], 0, -1), [1, 2, 3]);
 });
+
+// Customer and vendor Spaces, New Space and shelf channels (Coy, 2026-10-18).
+import {
+  cleanPins, addPin, removePin, customerShelves, vendorShelves, activeTab, looseChannels, offShelf, CHANNELS, SPACE_KINDS,
+} from "../src/lib/v34/spaces.ts";
+
+test("a customer's or vendor's page is its own Space", () => {
+  assert.deepEqual(spaceOf(`/dashboard/customers/${ID}`), { kind: "customer", id: ID });
+  assert.deepEqual(spaceOf(`/dashboard/vendors/${ID}/x`), { kind: "vendor", id: ID });
+  assert.deepEqual(spaceOf("/dashboard/customers"), { kind: "home" });
+});
+
+test("pins are cleaned, deduped, added once and removed", () => {
+  const p = cleanPins([{ kind: "customer", id: ID, name: " Art " }, { kind: "customer", id: ID, name: "Again" }, { kind: "job", id: ID }, { kind: "vendor", id: "nope" }, null]);
+  assert.deepEqual(p, [{ kind: "customer", id: ID, name: "Art" }]);
+  assert.equal(addPin(p, { kind: "customer", id: ID, name: "Art Apartments" }).length, 1);
+  assert.equal(addPin(p, { kind: "vendor", id: ID, name: "Casco" }).length, 2);
+  assert.deepEqual(removePin(p, "customer", ID), []);
+  assert.deepEqual(cleanPins("x"), []);
+});
+
+test("a customer Space is Account and Toolbox; a vendor's Supply and Toolbox, linking tabs", () => {
+  assert.deepEqual(customerShelves(ID).map((s) => s.name), ["Account", "Toolbox"]);
+  assert.deepEqual(vendorShelves(ID).map((s) => s.name), ["Supply", "Toolbox"]);
+  assert.equal(customerShelves(ID)[0].rows[0].href, `/dashboard/customers/${ID}?tab=overview`);
+  assert.ok(vendorShelves(ID)[0].rows.some((r) => r.k === "prices"));
+  assert.equal(activeTab("?tab=jobs"), "jobs");
+  assert.equal(activeTab(""), "overview");
+});
+
+test("New Space offers four kinds", () => {
+  assert.deepEqual(SPACE_KINDS.map((k) => k.kind), ["job", "customer", "vendor", "collection"]);
+});
+
+test("channels can sit on a shelf; the rest stay loose", () => {
+  const sh = homeShelves([{ id: "a", name: "Mine", pages: ["map", "ch:vendor"] }], ["map", "files"]);
+  assert.deepEqual(sh[0].pages, ["map", "ch:vendor"]);
+  assert.ok(sh.some((s) => s.id === "more" && s.pages.includes("files")));
+  assert.deepEqual(looseChannels(sh), CHANNELS.map((c) => c.key).filter((k) => k !== "ch:vendor"));
+  assert.deepEqual(offShelf(sh, "ch:vendor")[0].pages, ["map"]);
+});

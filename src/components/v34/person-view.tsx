@@ -22,7 +22,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { T, F, disp, eyebrow, clip, relTime, strong, BUCKET } from "@/lib/v34/tokens";
 import { Composer } from "@/components/v34/composer";
 import { DA, MergeSheet, Timeline, formatPhone, type MergeInfo, type Note, type ThreadMessage } from "@/components/v34/conversation";
@@ -131,7 +131,11 @@ export function PersonView({ person, messages, channels, onReload, onMerge, back
   const isVendor = c.bucket === "vendor";
   const phone = c.phones[0] ?? null;
   const title = c.name ?? formatPhone(phone);
-  const [tab, setTab] = useState<string>("overview");
+  // A vendor's Space drawer links each tab by ?tab= (Coy, 2026-10-18).
+  const tabParam = useSearchParams().get("tab");
+  const [tab, setTab] = useState<string>(tabParam ?? "overview");
+  const [tabSeen, setTabSeen] = useState(tabParam);
+  if (tabSeen !== tabParam) { setTabSeen(tabParam); setTab(tabParam ?? "overview"); }
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<{ text: string; href?: string; link?: string } | null>(null);
   const [filing, setFiling] = useState(false);

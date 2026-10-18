@@ -83,10 +83,12 @@ export function CustomerPage({ customerId, focusContact }: { customerId: string;
   const [err, setErr] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
   // ?tab=jobs opens a tab (a job's ‹ comes back to the customer's Jobs, Coy 2026-10-07).
-  const [tab, setTab] = useState<Tab>(() => {
-    const t = search.get("tab");
-    return t && (["overview", "contacts", "jobs", "threads", "files", "timeline", "payments", "schedule"] as string[]).includes(t) ? (t as Tab) : "overview";
-  });
+  const TABS = ["overview", "contacts", "jobs", "threads", "files", "timeline", "payments", "schedule"] as string[];
+  const tabParam = search.get("tab");
+  const [tab, setTab] = useState<Tab>(() => (tabParam && TABS.includes(tabParam) ? (tabParam as Tab) : "overview"));
+  // The customer's Space drawer links each tab by ?tab= (Coy, 2026-10-18); follow it when it changes.
+  const [tabSeen, setTabSeen] = useState(tabParam);
+  if (tabSeen !== tabParam) { setTabSeen(tabParam); setTab(tabParam && TABS.includes(tabParam) ? (tabParam as Tab) : "overview"); }
   const [editing, setEditing] = useState(false);
   const [callNotes, setCallNotes] = useState(false);
   const [note, setNote] = useState<{ text: string; undo?: string } | null>(null);

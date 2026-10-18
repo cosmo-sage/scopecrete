@@ -806,3 +806,53 @@ html[data-nav="spaces"] .sc-drawer-pane .sc-drawer-old { display: none !importan
     padding-top: 12px; background: var(--sc-rail); border-left: 1px solid var(--sc-hair); border-top: 0; border-right: 0; border-bottom: 0; cursor: pointer; color: var(--sc-rail-ink); }
   .sc-dusty-strip-l { writing-mode: vertical-rl; font-family: var(--sc-font-disp); font-weight: 700; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; }
 }
+/* No app header under Spaces (Coy, 2026-10-18): search, alerts and Dusty's line are at the
+   top of the drawer, and Dusty's column runs the window's full height beside the page. */
+html[data-nav="spaces"][data-nav] { --sc-head-0: 0px; }
+.sc-spaces-bar { padding: 8px 8px 6px; border-bottom: 1px solid var(--sc-hair); display: flex; flex-direction: column; gap: 4px; }
+.sc-spaces-bar-row { display: flex; align-items: center; gap: 6px; padding-right: 36px; }
+.sc-spaces-search { flex: 1; min-width: 0; height: 32px; display: flex; align-items: center; gap: 7px; padding: 0 10px; border-radius: 6px; border: 1px solid var(--sc-hair-strong);
+  background: var(--sc-card); color: var(--sc-ink3); font-size: 12.5px; cursor: pointer; text-align: left; }
+.sc-spaces-search:hover { color: var(--sc-ink); border-color: var(--sc-ink3); }
+.sc-spaces-search span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sc-spaces-line { min-height: 22px; display: flex; overflow: hidden; font-size: 12px; }
+.sc-spaces-bar .sc-alerts-panel { position: fixed; top: calc(var(--sc-head) + 46px); left: 80px; right: auto; width: min(380px, calc(100vw - 96px)); }
+@media (max-width: 1023px) { .sc-spaces-bar .sc-alerts-panel { left: 8px; right: 64px; width: auto; top: calc(env(safe-area-inset-top) + 48px); } }
+.sc-spaces-under .sc-spaces-bar-row { padding-right: 0; }
+/* Shelves: collapse all, and each shelf's gear (Coy, 2026-10-18). */
+.sc-space-group-h .sc-shelf-gear { margin-left: auto; width: 22px; height: 22px; border-radius: 4px; display: flex; align-items: center; justify-content: center; color: var(--sc-ink3); opacity: .55; }
+.sc-space-group-h:hover .sc-shelf-gear, .sc-shelf-gear:focus-visible, .sc-shelf-gear[aria-pressed="true"] { opacity: 1; }
+.sc-shelf-gear:hover { background: var(--sc-rail-active); color: var(--sc-ink); }
+.sc-shelf-edit { margin: 2px 8px 8px; padding: 8px; border: 1px solid var(--sc-hair-strong); border-radius: 6px; background: var(--sc-card); display: flex; flex-direction: column; gap: 6px; }
+.sc-shelf-edit-h { font-family: var(--sc-font-disp); font-weight: 700; font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--sc-ink3); margin-top: 2px; }
+.sc-shelf-tick { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--sc-ink2); cursor: pointer; }
+.sc-shelf-tick small { margin-left: auto; color: var(--sc-ink3); font-size: 11px; }
+/* New Space (frame 18). */
+.sc-newspace-scrim { position: fixed; inset: 0; z-index: 320; background: rgba(10,14,18,.4); display: flex; align-items: flex-start; justify-content: center; padding: 8vh 12px 12px; overflow-y: auto; }
+.sc-newspace { width: min(640px, 100%); background: var(--sc-card); color: var(--sc-ink); border: 1px solid var(--sc-hair); border-radius: 10px; box-shadow: 0 20px 60px rgba(0,0,0,.25); padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 12px; }
+.sc-newspace-head { display: flex; align-items: center; justify-content: space-between; font-family: var(--sc-font-strong); font-weight: 600; font-size: 17px; }
+.sc-newspace-kinds { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+@media (max-width: 560px) { .sc-newspace-kinds { grid-template-columns: repeat(2, 1fr); } }
+.sc-newspace-kind { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 6px 10px; border-radius: 8px; border: 1.5px solid var(--sc-hair-strong); background: var(--sc-sunk); color: var(--sc-ink); cursor: pointer; text-align: center; }
+.sc-newspace-kind[data-on] { border-color: var(--sc-hiviz); background: var(--sc-card); box-shadow: 0 0 0 2px color-mix(in srgb, var(--sc-hiviz) 25%, transparent); }
+.sc-newspace-kl { font-family: var(--sc-font-disp); font-weight: 700; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; }
+.sc-newspace-ks { font-size: 11px; color: var(--sc-ink3); line-height: 1.3; }
+.sc-newspace-blurb { margin: 0; font-size: 13px; color: var(--sc-ink2); }
+.sc-newspace-field { display: flex; flex-direction: column; gap: 5px; }
+.sc-newspace-field > span { font-family: var(--sc-font-disp); font-weight: 700; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--sc-ink3); }
+.sc-newspace-field input { height: 38px; padding: 0 10px; border-radius: 6px; border: 1px solid var(--sc-hair-strong); background: var(--sc-sunk); color: var(--sc-ink); font-size: 15px; }
+.sc-newspace-opts { display: flex; flex-direction: column; gap: 3px; max-height: 240px; overflow-y: auto; }
+.sc-newspace-opt { text-align: left; padding: 7px 10px; border-radius: 6px; border: 1px solid transparent; background: transparent; color: var(--sc-ink); font-size: 13.5px; cursor: pointer; }
+.sc-newspace-opt:hover { background: var(--sc-sunk); }
+.sc-newspace-opt[data-on] { border-color: var(--sc-hiviz); background: color-mix(in srgb, var(--sc-hiviz) 10%, var(--sc-card)); }
+.sc-newspace-err { margin: 0; font-size: 13px; color: var(--sc-red); }
+.sc-newspace-foot { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+.sc-newspace-foot .sc-space-more { padding: 6px 10px; }
+.sc-newspace-go { height: 36px; padding: 0 14px; border-radius: 6px; border: 0; background: var(--sc-hiviz); color: var(--sc-on-hiviz); font-family: var(--sc-font-disp); font-weight: 700; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; cursor: pointer; }
+.sc-newspace-go:disabled { opacity: .5; cursor: default; }
+/* Folded, the bar is two icons: search and alerts. */
+.sc-strip-bar { width: 100%; margin-bottom: 6px; }
+.sc-strip-bar .sc-spaces-bar { padding: 0; border: 0; align-items: center; }
+.sc-strip-bar .sc-spaces-bar-row { flex-direction: column; padding: 0; gap: 4px; }
+.sc-strip-bar .sc-spaces-search { flex: none; width: 36px; height: 32px; padding: 0; justify-content: center; }
+.sc-strip-bar .sc-spaces-search span, .sc-strip-bar .sc-spaces-line { display: none; }

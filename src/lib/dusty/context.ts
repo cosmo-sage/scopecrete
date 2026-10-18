@@ -542,21 +542,28 @@ const fmt0 = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 1
  * session (RLS); names, units, costs, rules and groups only.
  */
 async function priceBookBlock(sb: Sb, orgId: string): Promise<Block | null> {
-  const [{ data: items }, { data: groups }, { data: asm }] = await Promise.all([
-    sb.from("cost_items").select("id, name, unit, unit_cost, cost_type, qty_rule, cost_group_id").eq("org_id", orgId).eq("active", true).order("name").limit(1500),
+  const [{ data: items }, { data: groups }, { data: asm }, { data: srcs }] = await Promise.all([
+    sb.from("cost_items").select("id, name, unit, unit_cost, cost_type, qty_rule, cost_group_id, default_source_id").eq("org_id", orgId).eq("active", true).order("name").limit(1500),
     sb.from("cost_groups").select("id, name, cost_type").eq("org_id", orgId).order("sort_order").order("name"),
     sb.from("cost_assemblies").select("id, name, job_type, work_type, auto_load, cost_assembly_items(cost_item_id, quantity, sort_order)").eq("org_id", orgId).order("sort_order").order("name"),
+    // Every vendor's price on each item (Coy, 2026-10-18: "ask Dusty for any cost item and he'll know the group and see all the vendors that offer that item").
+    sb.from("cost_item_sources").select("id, cost_item_id, unit_cost, vendor:contacts!cost_item_sources_vendor_contact_id_fkey(name, company_name)").eq("org_id", orgId).eq("active", true).limit(3000),
   ]);
   if (!items?.length && !groups?.length) return { title: "Price book", lines: ["Empty — no items yet. Propose new_item steps if Coy asks."] };
   const gName = new Map(((groups ?? []) as Array<{ id: string; name: string }>).map((g) => [g.id, g.name]));
+  type Src = { id: string; cost_item_id: string; unit_cost: number | null; vendor: { name: string | null; company_name: string | null } | null };
+  const vendorsOf = new Map<string, Src[]>();
+  for (const v of (srcs ?? []) as unknown as Src[]) vendorsOf.set(v.cost_item_id, [...(vendorsOf.get(v.cost_item_id) ?? []), v]);
   const byGroup = new Map<string, string[]>();
   for (const r of (items ?? []) as Array<Record<string, unknown>>) {
     const g = gName.get(r.cost_group_id as string) ?? "Not in a group";
     const cost = r.unit_cost === null || r.unit_cost === undefined ? "no cost" : `$${Number(r.unit_cost)}`;
-    const line = `  ${String(r.id).slice(0, 8)} | ${String(r.name).slice(0, 70)} | ${r.unit} | ${cost} | ${r.qty_rule} | ${r.cost_type}`;
+    const vs = (vendorsOf.get(r.id as string) ?? [])
+      .map((v) => `${(v.vendor?.company_name || v.vendor?.name || "?").slice(0, 30)} ${v.unit_cost === null ? "no price" : `$${Number(v.unit_cost)}`}${v.id === r.default_source_id ? "★" : ""}`).join(", ");
+    const line = `  ${String(r.id).slice(0, 8)} | ${String(r.name).slice(0, 70)} | ${r.unit} | ${cost} | ${r.qty_rule} | ${r.cost_type}${vs ? ` | vendors: ${vs}` : ""}`;
     byGroup.set(g, [...(byGroup.get(g) ?? []), line]);
   }
-  const out = [`${items?.length ?? 0} items in ${groups?.length ?? 0} groups. Each line: ref | name | unit | unit cost | how counted | type.`];
+  const out = [`${items?.length ?? 0} items in ${groups?.length ?? 0} groups. Each line: ref | name | unit | unit cost | how counted | type | vendors who price it (★ = the one budgets use). Groups carry across vendors: to find who offers something, look in its group.`];
   for (const g of (groups ?? []) as Array<{ name: string }>) if (!byGroup.has(g.name)) out.push(`GROUP ${g.name}: (empty)`);
   for (const [g, ls] of byGroup) out.push(`GROUP ${g}:`, ...ls);
   // Assemblies by ref, with their items by ref — to load onto an area, add to, or to see one is missing.

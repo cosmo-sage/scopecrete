@@ -164,8 +164,14 @@ export function PriceBook({ pick }: { pick?: PricePick } = {}) {
     if (view === "group") {
       for (const g of groups) {
         const cards = visible.filter((c) => c.cost_group_id === g.id);
+        // Groups carry across vendors (Coy, 2026-10-18): the group's row names every vendor
+        // who prices something in it.
+        const ids = new Set(cards.map((c) => c.id));
+        const who = [...new Set([...cards.map((c) => c.vendor_contact_id), ...sources.filter((x) => ids.has(x.cost_item_id)).map((x) => x.vendor_contact_id)]
+          .filter((v): v is string => !!v))].map((v) => vendorLabel(v)).filter((v): v is string => !!v).sort((a, b) => a.localeCompare(b));
+        const vend = who.length ? `${who.slice(0, 4).join(", ")}${who.length > 4 ? ` +${who.length - 4}` : ""}` : "";
         if (cards.length || !q.trim()) out.push({ key: g.id, groupId: g.id, title: g.name, cards,
-          sub: `${g.cost_type ? COST_TYPE_LABEL[g.cost_type] : ""}` });
+          sub: [g.cost_type ? COST_TYPE_LABEL[g.cost_type] : "", vend].filter(Boolean).join(" · ") });
       }
       const loose = visible.filter((c) => !c.cost_group_id || !groups.some((g) => g.id === c.cost_group_id));
       if (loose.length) out.push({ key: "none", title: "Not in a group", sub: "", cards: loose });

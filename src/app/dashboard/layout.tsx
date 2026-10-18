@@ -325,7 +325,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   );
 
   const spacesNav = spaces && (
-    <SpacesNav desktop={desktop} pages={(allowed ?? menus.rail).filter((k) => k !== "dusty")} active={active} dustyState={dustyNow}
+    <SpacesNav desktop={desktop} pages={(allowed ?? menus.rail).filter((k) => k !== "dusty" && k !== "threads")} active={active} dustyState={dustyNow}
       phoneOpen={spacesOpen} onPhoneClose={closeSpaces} folded={drawerFolded === true} onFold={() => setDrawerFolded(!drawerFolded)} />
   );
 

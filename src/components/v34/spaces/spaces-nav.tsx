@@ -21,7 +21,7 @@ import { T, disp } from "@/lib/v34/tokens";
 import { NavIcon } from "@/components/v34/primitives";
 import { DustyAvatar, type EmblemState } from "@/components/v34/dusty-avatar";
 import { SpaceSilhouette } from "@/components/v34/spaces/space-silhouette";
-import { NewSpaceDialog } from "@/components/v34/spaces/new-space";
+import { NewSpaceDialog, PickList } from "@/components/v34/spaces/new-space";
 import { ArrangeRail, type RailTileInfo } from "@/components/v34/spaces/arrange-rail";
 import { PAGE } from "@/lib/v34/pages";
 import { SETTINGS_HOME } from "@/lib/v34/settings-sections";
@@ -31,7 +31,7 @@ import {
   homeShelves, moveToShelf, nudge, MAX_SHELVES, MAX_SHELF_NAME, CHANNELS, isChannel, looseChannels, offShelf,
   customerShelves, vendorShelves, activeTab, cleanPins, addPin, removePin,
   type Shelf, type SpaceRef, type SpacePerson, type ThreadRow, type SpacePin, type SpaceShelf,
-  cleanRail, orderTiles, moveTile, hideTile, showTile,
+  cleanRail, orderTiles, moveTile, hideTile, showTile, cleanCollectionPicks, setPicks,
 } from "@/lib/v34/spaces";
 
 interface RailJob { id: string; title: string; status: string | null; customer: string | null }
@@ -357,14 +357,9 @@ function ShelfEditor({ shelves, shelf, pages, onChange, onDone }: {
   );
 }
 
-function HomeDrawer({ pages, active, onPick }: { pages: string[]; active: string; onPick: () => void }) {
+/** The rows of Home's thread channels — each bucket's people, or Spam and Archived — shared by Home and collections. */
+function useChannels(onPick: () => void) {
   const threads = useHomeThreads(true);
-  const [saved, setSaved] = usePref<Shelf[] | null>("shelves", null);
-  const shelves = useMemo(() => homeShelves(saved, pages), [saved, pages]);
-  const [arranging, setArranging] = useState(false);
-  const [editing, setEditing] = useState<string | null>(null);
-  const { closed, toggle, setAll } = useClosed();
-  const saveShelves = (v: Shelf[] | null) => setSaved(v);
   const path = usePathname() ?? "";
   const openContact = /^\/dashboard\/messages\/([0-9a-f-]{36})/i.exec(path)?.[1] ?? null;
   const byBucket = useMemo(() => {
@@ -380,9 +375,7 @@ function HomeDrawer({ pages, active, onPick }: { pages: string[]; active: string
   // The whole bucket opens in place (Coy, 2026-10-17: the drawer is the list now).
   const [all, setAllOpen] = useState<Set<string>>(new Set());
   const flip = (k: string) => setAllOpen((m) => { const n = new Set(m); if (n.has(k)) n.delete(k); else n.add(k); return n; });
-  const loose = looseChannels(shelves);
 
-  // A channel's rows: a bucket's people, or Spam and Archived.
   const channelRows = (ch: string, indent?: boolean): React.ReactNode => {
     if (ch === "ch:more") return <>
       <Row href="/dashboard/messages?t=spam" label="Spam" onPick={onPick} indent />
@@ -409,6 +402,18 @@ function HomeDrawer({ pages, active, onPick }: { pages: string[]; active: string
     const b = BUCKETS.find((x) => `ch:${x.k}` === ch);
     return b && threads ? (byBucket.get(b.k) ?? []).length : undefined;
   };
+  return { channelRows, chCount };
+}
+
+function HomeDrawer({ pages, active, onPick }: { pages: string[]; active: string; onPick: () => void }) {
+  const [saved, setSaved] = usePref<Shelf[] | null>("shelves", null);
+  const shelves = useMemo(() => homeShelves(saved, pages), [saved, pages]);
+  const [arranging, setArranging] = useState(false);
+  const [editing, setEditing] = useState<string | null>(null);
+  const { closed, toggle, setAll } = useClosed();
+  const saveShelves = (v: Shelf[] | null) => setSaved(v);
+  const loose = looseChannels(shelves);
+  const { channelRows, chCount } = useChannels(onPick);
   const groupKeys = [
     ...shelves.filter((sh) => sh.pages.length > 0 || sh.id !== "more").map((sh) => `home:${sh.id}`),
     ...loose.map((ch) => `home:${ch}`),
@@ -592,6 +597,71 @@ function RecordDrawer({ kind, id, pins, setPins, onPick }: {
   );
 }
 
+/**
+ * A collection's Space (Coy, 2026-10-18: "Collections aren't allowing me to actually pick
+ * tools/channels"): its people (the thread), then the tools and channels picked for it in New
+ * Space, changed with the gear (`spaces_collections`).
+ */
+function CollectionDrawer({ col, id, pages, active, onPick }: {
+  col: RailCollection | null; id: string; pages: string[]; active: string; onPick: () => void;
+}) {
+  const [raw, setRaw] = usePref<unknown>("spaces_collections", {});
+  const all = useMemo(() => cleanCollectionPicks(raw), [raw]);
+  const picks = all[id] ?? [];
+  const [editing, setEditing] = useState(false);
+  const { closed, toggle, setAll } = useClosed();
+  const { channelRows, chCount } = useChannels(onPick);
+  const tools = picks.filter((k) => !isChannel(k) && PAGE.has(k));
+  const chans = picks.filter((k) => isChannel(k));
+  const keys = [`col:${id}:people`, ...(tools.length ? [`col:${id}:tools`] : []), ...chans.map((c) => `col:${id}:${c}`)];
+  const name = col?.name ?? "Collection";
+  const people = col ? `${col.count} ${col.count === 1 ? "person" : "people"}` : "";
+  return (
+    <>
+      <div className="sc-space-head">
+        <span className="sc-space-name" title={name}>{name}</span>
+        <span className="sc-space-sub" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span className="sc-space-tag" style={{ color: "var(--sc-violet)", borderColor: "var(--sc-violet)" }}>Collection</span>
+          <span style={{ flex: 1 }} />
+          <button type="button" className="sc-shelf-arrange" onClick={() => setEditing(!editing)} aria-pressed={editing}
+            title="Pick the tools and channels this collection holds">{editing ? "Done" : "Tools & channels"}</button>
+        </span>
+      </div>
+      <div className="sc-space-scroll">
+        {editing ? (
+          <div className="sc-shelf-edit">
+            <PickList pages={pages} picks={picks} onChange={(v) => setRaw(setPicks(all, id, v))} />
+            <div className="sc-shelf-row" style={{ justifyContent: "flex-end" }}>
+              <button type="button" className="sc-shelf-arrange" onClick={() => setEditing(false)}>Done</button>
+            </div>
+          </div>
+        ) : <>
+          <div style={{ display: "flex" }}><FoldAll keys={keys} closed={closed} setAll={setAll} /></div>
+          <Group id={`col:${id}:people`} closed={closed} onToggle={toggle} title="People">
+            <Row href={`/dashboard/messages?t=${id}`} label={`Everyone${people ? ` · ${people}` : ""}`} onPick={onPick} />
+          </Group>
+          {tools.length > 0 && (
+            <Group id={`col:${id}:tools`} closed={closed} onToggle={toggle} title="Tools">
+              {tools.map((k) => {
+                const p = PAGE.get(k)!;
+                return <Row key={k} href={p.href} label={p.label} on={active === k} onPick={onPick}
+                  icon={<span className="sc-space-ico"><NavIcon k={k} on={active === k} color="currentColor" /></span>} />;
+              })}
+            </Group>
+          )}
+          {chans.map((ch) => (
+            <Group key={ch} id={`col:${id}:${ch}`} closed={closed} onToggle={toggle} count={chCount(ch)}
+              title={ch === "ch:more" ? "More" : BUCKETS.find((b) => `ch:${b.k}` === ch)?.label ?? ch}>
+              {channelRows(ch)}
+            </Group>
+          ))}
+          {picks.length === 0 && <div className="sc-space-empty">No tools or channels yet — Tools &amp; channels picks them.</div>}
+        </>}
+      </div>
+    </>
+  );
+}
+
 /* ------------------------------------------------------------ the folded drawer */
 
 // Claude Design "Dusty Home" frame 11 (Coy, 2026-10-18: "when I collapse the drawer it
@@ -616,6 +686,7 @@ function FoldedDrawer({ shown, pages, active, onOpen, bar }: {
 }) {
   const path = usePathname() ?? "";
   const [saved] = usePref<Shelf[] | null>("shelves", null);
+  const [colRaw] = usePref<unknown>("spaces_collections", {});
   const shelves = useMemo(() => homeShelves(saved, pages), [saved, pages]);
   const [search, setSearch] = useState("");
   useEffect(() => {
@@ -644,6 +715,13 @@ function FoldedDrawer({ shown, pages, active, onOpen, bar }: {
     const sh = shown.kind === "customer" ? customerShelves(shown.id) : vendorShelves(shown.id);
     icons = sh.flatMap((x) => x.rows).map((r) => icon(r.k, r.label, r.href, here === r.k, <NavIcon k={TAB_ICON[r.k] ?? "files"} on={here === r.k} color="currentColor" />));
     chips = sh.map((x) => chip(x.name.slice(0, 2).toUpperCase(), x.name, shown.kind === "customer" ? "var(--sc-chalk)" : "var(--sc-bucket-vendor)"));
+  } else if (shown.kind === "collection") {
+    const tools = (cleanCollectionPicks(colRaw)[shown.id] ?? []).filter((k) => PAGE.has(k));
+    icons = [
+      icon("people", "People", `/dashboard/messages?t=${shown.id}`, false, <NavIcon k="threads" on={false} color="currentColor" />),
+      ...tools.map((k) => icon(k, PAGE.get(k)!.label, PAGE.get(k)!.href, active === k, <NavIcon k={k} on={active === k} color="currentColor" />)),
+    ];
+    chips = [chip("CO", "Collection", "var(--sc-violet)")];
   } else {
     const here = activeTreeRow(path, search);
     icons = jobTree(shown.id).filter((r) => !r.sub).map((r) => {
@@ -684,8 +762,9 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
   const pins = useMemo(() => cleanPins(pinsRaw), [pinsRaw]);
   const [making, setMaking] = useState(false);
   const [pathSeen, setPathSeen] = useState(path);
-  if (pathSeen !== path) { setPathSeen(path); setPeek(null); }
-  const shown = peek ?? here;
+  // A collection's drawer stays while its own tools and threads are opened from it.
+  const [keep, setKeep] = useState<SpaceRef | null>(null);
+  if (pathSeen !== path) { setPathSeen(path); setPeek(keep); setKeep(null); }
   const jobs = rail?.jobs ?? [];
   const jobOf = (id: string) => jobs.find((j) => j.id === id) ?? null;
   const close = desktop ? () => {} : onPhoneClose;
@@ -695,6 +774,9 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
     Promise.resolve().then(() => { if (!off) setThreadParam(new URLSearchParams(window.location.search).get("t")); });
     return () => { off = true; };
   }, [path]);
+  const colHere = /^\/dashboard\/messages$/.test(path) && threadParam && (rail?.collections ?? []).some((c) => c.id === threadParam)
+    ? { kind: "collection" as const, id: threadParam } : null;
+  const shown: SpaceRef = peek ?? colHere ?? here;
 
   // The rail's tiles, in Coy's order (Coy, 2026-10-18: "remove and rearrange the Rail items").
   const [railRaw, setRail] = usePref<unknown>("spaces_rail", {});
@@ -724,13 +806,15 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
       // A thread made from a customer is that customer's address book; any other is a folder.
       const customer = c.source === "customer";
       const color = customer ? "var(--sc-chalk)" : "var(--sc-violet)";
-      const on = /^\/dashboard\/messages$/.test(path) && threadParam === c.id;
+      const on = shown.kind === "collection" && shown.id === c.id;
+      const col = { kind: "collection" as const, id: c.id };
       const people = `${c.count} ${c.count === 1 ? "person" : "people"}`;
       return {
         info: { key: `col:${c.id}`, name: c.name, sub: `Collection · ${people}`, shape: customer ? "contact" : "collection", color, initials: monogram(c.name), pinned: false },
         render: (drag) => (
           <Tile key={c.id} label={monogram(c.name)} title={`${c.name} · ${people}`} drag={drag}
-            href={`/dashboard/messages?t=${c.id}`} onPick={close} color={color} on={on} bare>
+            href={desktop ? `/dashboard/messages?t=${c.id}` : undefined}
+            onPick={() => { setPeek(col); if (desktop) setKeep(col); }} color={color} on={on} bare>
             <SpaceSilhouette kind={customer ? "contact" : "collection"} color={color} initials={monogram(c.name)} on={on} />
           </Tile>
         ),
@@ -840,7 +924,10 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
         ? <HomeDrawer pages={pages} active={active} onPick={close} />
         : shown.kind === "job"
           ? <JobDrawer id={shown.id} fallback={jobOf(shown.id)} onPick={close} />
-          : <RecordDrawer kind={shown.kind} id={shown.id} pins={pins} setPins={setPins} onPick={close} />}
+          : shown.kind === "collection"
+            ? <CollectionDrawer id={shown.id} col={(rail?.collections ?? []).find((c) => c.id === shown.id) ?? null} pages={pages} active={active}
+                onPick={() => { setKeep({ kind: "collection", id: shown.id }); close(); }} />
+            : <RecordDrawer kind={shown.kind} id={shown.id} pins={pins} setPins={setPins} onPick={close} />}
     </div>
   );
 
@@ -857,9 +944,16 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
   // Made outside the nav, so a phone's covered Spaces (inert) never hold it.
   const dialog = (
     <>
-      {making && <NewSpaceDialog onClose={() => setMaking(false)} onMade={() => window.dispatchEvent(new Event("sc:spaces-reload"))} />}
+      {making && <NewSpaceDialog pages={pages} onClose={() => setMaking(false)} onMade={() => window.dispatchEvent(new Event("sc:spaces-reload"))} />}
       {arranging && <ArrangeRail shown={tiles.map((t) => t.info)} hidden={hiddenTiles} onMove={moveTo} onRemove={removeTile}
-        onShow={(k) => setRail(showTile(railPrefs, k))} onReset={() => setRail({ order: [], hidden: railPrefs.hidden })} onClose={() => setArranging(false)} />}
+        onShow={(k) => setRail(showTile(railPrefs, k))} onReset={() => setRail({ order: [], hidden: railPrefs.hidden })} onClose={() => setArranging(false)}
+        onDelete={(t) => {
+          void fetch(`/api/threads/custom/${t.key.slice(4)}`, { method: "DELETE" }).then((r) => {
+            if (!r.ok) { window.alert("Couldn't delete that collection — try again."); return; }
+            setRail(showTile(railPrefs, t.key));
+            window.dispatchEvent(new Event("sc:spaces-reload"));
+          });
+        }} />}
     </>
   );
   if (desktop) {

@@ -225,7 +225,7 @@ export function PersonView({ person, messages, channels, onReload, onMerge, back
 
   const tabs: Array<[string, string]> = [
     ["overview", "Overview"],
-    ...(extra?.tabs ?? []).map((t) => [t.key, t.label] as [string, string]),
+    ...(isVendor ? [] : [["steps", `Next steps ${openSteps}`] as [string, string]]),
     ["steps", `Next steps ${openSteps}`],
     ["jobs", `Jobs ${jobCount}`],
     ["threads", `Threads ${theirThreads.length + 1}`],

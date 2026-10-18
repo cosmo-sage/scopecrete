@@ -5,7 +5,7 @@
  * Every Space on the rail in its order, ↑ ↓ to move one, × to take it off: a pinned customer
  * or vendor is unpinned, a job or collection is only hidden from the rail (the job and its
  * thread are untouched) and listed under "Off the rail" with Put back. Kept on the account
- * (`spaces_rail`, `spaces_pins`). Dragging a tile on a desktop's rail does the same moves.
+ * (`spaces_rail`, `spaces_pins`). A collection can also be deleted (retired). Dragging a tile on a desktop's rail does the same moves.
  */
 
 import React, { useEffect } from "react";
@@ -17,8 +17,10 @@ export interface RailTileInfo {
   pinned: boolean;
 }
 
-export function ArrangeRail({ shown, hidden, onMove, onRemove, onShow, onReset, onClose }: {
+export function ArrangeRail({ shown, hidden, onMove, onRemove, onShow, onReset, onClose, onDelete }: {
   shown: RailTileInfo[]; hidden: RailTileInfo[];
+  /** A collection (a thread Coy made) deleted for good — retired, its people untouched. */
+  onDelete?: (t: RailTileInfo) => void;
   onMove: (key: string, to: number) => void; onRemove: (t: RailTileInfo) => void;
   onShow: (key: string) => void; onReset: () => void; onClose: () => void;
 }) {
@@ -35,6 +37,10 @@ export function ArrangeRail({ shown, hidden, onMove, onRemove, onShow, onReset, 
         <span className="sc-arrange-n">{t.name}</span>
         <span className="sc-arrange-s">{t.sub}</span>
       </span>
+      {onDelete && t.key.startsWith("col:") && (
+        <button type="button" className="sc-space-more" style={{ color: "var(--sc-red)" }}
+          onClick={() => { if (window.confirm(`Delete the collection "${t.name}"? The people and their threads stay.`)) onDelete(t); }}>Delete</button>
+      )}
       {i === null ? (
         <button type="button" className="sc-space-more" onClick={() => onShow(t.key)}>Put back</button>
       ) : (

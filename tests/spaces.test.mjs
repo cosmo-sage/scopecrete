@@ -145,3 +145,17 @@ test("the rail keeps Coy's order, hides what he took off, and places new tiles b
   // a tile gone from the rail (job finished) is just skipped
   assert.deepEqual(orderTiles([b, v], p), [v, b]);
 });
+
+test("a collection keeps the tools and channels picked for it", async () => {
+  const { cleanCollectionPicks, setPicks, togglePick } = await import("../src/lib/v34/spaces.ts");
+  const id = "0a30aea5-8258-461c-b457-643926b4f1cc";
+  assert.deepEqual(cleanCollectionPicks(null), {});
+  assert.deepEqual(cleanCollectionPicks({ nope: ["map"], [id]: ["map", "map", 3, "ch:vendor"] }), { [id]: ["map", "ch:vendor"] });
+  let p = togglePick([], "map", true);
+  p = togglePick(p, "ch:customer", true);
+  p = togglePick(p, "map", true);
+  assert.deepEqual(p, ["map", "ch:customer"]);
+  assert.deepEqual(togglePick(p, "map", false), ["ch:customer"]);
+  assert.deepEqual(setPicks({}, id, p), { [id]: p });
+  assert.deepEqual(setPicks({ [id]: p }, id, []), {});
+});

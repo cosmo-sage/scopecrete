@@ -8,7 +8,8 @@
  *   - Job → the New job form (`/dashboard/scope?new=1`), as before.
  *   - Customer / Vendor → an existing one, or a new one made through + New customer's or
  *     + Vendor's own route; either way it is pinned to the rail (`spaces_pins`).
- *   - Collection → a thread Coy makes (migration 073), which the rail already shows.
+ *   - Collection → a thread Coy makes (migration 073), which the rail already shows, with the
+ *     tools and channels ticked here (`spaces_collections`, Coy 2026-10-18).
  * No migration.
  */
 
@@ -16,7 +17,28 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { SpaceSilhouette } from "@/components/v34/spaces/space-silhouette";
 import { usePref } from "@/lib/v34/prefs";
-import { SPACE_KINDS, addPin, cleanPins, monogram, type SpacePin } from "@/lib/v34/spaces";
+import { PAGE } from "@/lib/v34/pages";
+import {
+  SPACE_KINDS, CHANNELS, addPin, cleanPins, cleanCollectionPicks, monogram, setPicks, togglePick, type SpacePin,
+} from "@/lib/v34/spaces";
+
+/** The tools and channels a collection can hold, ticked in the order they were picked. */
+export function PickList({ pages, picks, onChange }: { pages: string[]; picks: string[]; onChange: (v: string[]) => void }) {
+  const box = (k: string, label: string) => (
+    <label key={k} className="sc-shelf-tick">
+      <input type="checkbox" checked={picks.includes(k)} onChange={(e) => onChange(togglePick(picks, k, e.target.checked))} />
+      {label}
+    </label>
+  );
+  return (
+    <div className="sc-newspace-picks">
+      <span className="sc-shelf-edit-h">Tools</span>
+      {pages.filter((k) => PAGE.has(k)).map((k) => box(k, PAGE.get(k)!.label))}
+      <span className="sc-shelf-edit-h">Channels</span>
+      {CHANNELS.map((c) => box(c.key, c.label))}
+    </div>
+  );
+}
 
 type Kind = (typeof SPACE_KINDS)[number]["kind"];
 interface Option { id: string; name: string }
@@ -26,7 +48,7 @@ const COLOR: Record<Kind, string> = {
 };
 const SHAPE: Record<Kind, "job" | "contact" | "vendor" | "collection"> = { job: "job", customer: "contact", vendor: "vendor", collection: "collection" };
 
-export function NewSpaceDialog({ onClose, onMade }: { onClose: () => void; onMade: () => void }) {
+export function NewSpaceDialog({ onClose, onMade, pages }: { onClose: () => void; onMade: () => void; pages: string[] }) {
   const router = useRouter();
   const [kind, setKind] = useState<Kind>("job");
   const [name, setName] = useState("");
@@ -36,6 +58,8 @@ export function NewSpaceDialog({ onClose, onMade }: { onClose: () => void; onMad
   const [err, setErr] = useState<string | null>(null);
   const [pinsRaw, setPins] = usePref<unknown>("spaces_pins", []);
   const pins = useMemo(() => cleanPins(pinsRaw), [pinsRaw]);
+  const [colRaw, setCol] = usePref<unknown>("spaces_collections", {});
+  const [picks, setPickList] = useState<string[]>([]);
 
   useEffect(() => {
     const k = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -75,6 +99,7 @@ export function NewSpaceDialog({ onClose, onMade }: { onClose: () => void; onMad
         const r = await fetch("/api/threads/custom", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: name.trim(), source: "manual" }) });
         const j = await r.json().catch(() => ({}));
         if (!r.ok || !j.thread) throw new Error(j.error ?? "Couldn't make it.");
+        if (picks.length) setCol(setPicks(cleanCollectionPicks(colRaw), j.thread.id as string, picks));
         onMade(); onClose(); router.push(`/dashboard/messages?t=${j.thread.id}`);
         return;
       }
@@ -123,6 +148,13 @@ export function NewSpaceDialog({ onClose, onMade }: { onClose: () => void; onMad
               placeholder={kind === "collection" ? "Fort Polk crew" : kind === "customer" ? "Art Apartments" : "Casco"}
               onKeyDown={(e) => { if (e.key === "Enter" && canCreate && !busy) void create(); }} />
           </label>
+        )}
+        {kind === "collection" && (
+          <div className="sc-newspace-field">
+            <span>What it holds</span>
+            <p className="sc-newspace-blurb" style={{ margin: 0 }}>Its people are added in its thread. Tick the tools and channels to keep beside them.</p>
+            <PickList pages={pages} picks={picks} onChange={setPickList} />
+          </div>
         )}
         {(kind === "customer" || kind === "vendor") && (
           <div className="sc-newspace-field">

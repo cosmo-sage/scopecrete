@@ -177,7 +177,7 @@ function TabDrawer({ open, top, onClose, tabs, tab, onTab }: { open: boolean; to
 /** One row of tabs on every size (Threads v2 handoff §4). */
 export function RecordTabs({ tabs, tab, onTab }: { tabs: Array<[string, string]>; tab: string; onTab: (k: string) => void }) {
   return (
-    <div role="tablist" className="flex gap-4 mt-2 overflow-x-auto">
+    <div role="tablist" className="sc-record-tabs flex gap-4 mt-2 overflow-x-auto">
       {tabs.map(([k, l]) => (
         <button key={k} role="tab" aria-selected={tab === k} onClick={() => onTab(k)}
           style={{ fontFamily: disp, fontSize: 12, letterSpacing: ".1em", textTransform: "uppercase", padding: "6px 0 7px", whiteSpace: "nowrap", cursor: "pointer",

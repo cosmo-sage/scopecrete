@@ -43,7 +43,7 @@ export function monogram(name: string | null | undefined): string {
   return (words[0][0] + words[1][0]).toUpperCase();
 }
 
-export type SpaceRef = { kind: "home" } | { kind: "job"; id: string } | { kind: "customer"; id: string } | { kind: "vendor"; id: string };
+export type SpaceRef = { kind: "home" } | { kind: "job"; id: string } | { kind: "customer"; id: string } | { kind: "vendor"; id: string } | { kind: "collection"; id: string };
 
 /** Which Space a page belongs to: a job's, a customer's or a vendor's own pages are its Space, everything else Home. */
 export function spaceOf(path: string | null | undefined): SpaceRef {
@@ -95,6 +95,37 @@ export function removePin(pins: SpacePin[], kind: SpacePin["kind"], id: string):
   return pins.filter((p) => !(p.kind === kind && p.id === id));
 }
 
+/**
+ * What a collection holds besides its people (Coy, 2026-10-18: "Collections aren't allowing me
+ * to actually pick tools/channels to add to the collection. it should be done inside the Space
+ * creator"): the tools (pages) and channels ticked in New Space, or later on its drawer's gear.
+ * Kept on the account (`spaces_collections`: thread id → picks), no migration.
+ */
+export type CollectionPicks = Record<string, string[]>;
+export const MAX_PICKS = 30;
+export function cleanCollectionPicks(v: unknown): CollectionPicks {
+  const out: CollectionPicks = {};
+  if (!v || typeof v !== "object" || Array.isArray(v)) return out;
+  let n = 0;
+  for (const [id, list] of Object.entries(v as Record<string, unknown>)) {
+    if (!UUID_RE.test(id) || !Array.isArray(list)) continue;
+    const seen = new Set<string>();
+    out[id] = list.filter((k): k is string => typeof k === "string" && k.length <= 40 && !seen.has(k) && !!seen.add(k)).slice(0, MAX_PICKS);
+    if (++n >= 200) break;
+  }
+  return out;
+}
+/** A collection's picks set (or cleared when empty). */
+export function setPicks(all: CollectionPicks, id: string, picks: string[]): CollectionPicks {
+  const next = { ...all };
+  if (picks.length) next[id] = [...new Set(picks)].slice(0, MAX_PICKS); else delete next[id];
+  return next;
+}
+/** A pick ticked on or off, keeping the order it was ticked in. */
+export function togglePick(picks: string[], k: string, on: boolean): string[] {
+  return on ? (picks.includes(k) ? picks : [...picks, k]) : picks.filter((x) => x !== k);
+}
+
 /** A shelf of a customer or vendor Space: rows that open the record page's tabs. */
 export interface SpaceShelf { id: string; name: string; rows: TreeRow[] }
 
@@ -111,7 +142,7 @@ export function customerShelves(id: string): SpaceShelf[] {
 export function vendorShelves(id: string): SpaceShelf[] {
   const t = (k: string, label: string) => ({ k, label, href: `/dashboard/vendors/${id}?tab=${k}` });
   return [
-    { id: "supply", name: "Supply", rows: [t("overview", "Summary"), t("prices", "Price sheets"), t("receipts", "Receipts & quotes"), t("bids", "Bid requests"), t("jobs", "Jobs")] },
+    { id: "supply", name: "Supply", rows: [t("overview", "Summary"), t("prices", "Price sheets"), t("receipts", "Receipts & quotes"), t("bids", "Bid requests"), t("jobs", "Jobs"), t("threads", "Threads")] },
     { id: "toolbox", name: "Toolbox", rows: [t("files", "Files"), t("timeline", "Timeline")] },
   ];
 }

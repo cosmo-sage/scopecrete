@@ -41,3 +41,21 @@ function subscribeUse(f: () => void) { useSubs.add(f); return () => { useSubs.de
 export function useDustyUse(): DustyUseTarget | null {
   return useSyncExternalStore(subscribeUse, () => target, () => null);
 }
+
+/**
+ * The open chat, for the artifacts column beside Dusty on Home (Coy, 2026-10-19). The panel
+ * publishes it when a chat loads, a question goes out and an answer finishes — never per token.
+ */
+export interface DustyChatTurn { role: "user" | "assistant"; content: string; files?: Array<{ id: string; name: string; kind?: string; url: string | null }> }
+export interface DustyChat { id: string | null; title: string | null; items: DustyChatTurn[]; streaming: number | null }
+let chat: DustyChat = { id: null, title: null, items: [], streaming: null };
+const chatSubs = new Set<() => void>();
+export function setDustyChat(next: DustyChat) {
+  chat = next;
+  for (const f of chatSubs) f();
+}
+function subscribeChat(f: () => void) { chatSubs.add(f); return () => { chatSubs.delete(f); }; }
+const EMPTY_CHAT: DustyChat = { id: null, title: null, items: [], streaming: null };
+export function useDustyChat(): DustyChat {
+  return useSyncExternalStore(subscribeChat, () => chat, () => EMPTY_CHAT);
+}

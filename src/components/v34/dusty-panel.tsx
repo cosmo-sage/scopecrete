@@ -31,7 +31,7 @@ import { DustyEmblem, DOING, type EmblemState } from "@/components/v34/dusty-ava
 import { Markdown, MdAsk } from "@/components/v34/markdown";
 import { PlanCard } from "@/components/v34/plan-card";
 import { hideIds, parsePlan } from "@/lib/dusty/plan";
-import { useDustyUse } from "@/lib/v34/dusty-live";
+import { useDustyUse, setDustyChat } from "@/lib/v34/dusty-live";
 import { splitUse } from "@/lib/dusty/use-block";
 import { shareText } from "@/lib/dusty/share";
 import { sendBytes } from "@/components/v34/files-panel";
@@ -452,6 +452,28 @@ export function DustyPanel({ open, onClose, onBusy, onStream, onState }: {
     : mood === "error" ? "warn" : doneNote ? "done" : "idle";
   useEffect(() => { onState?.(dustyState); }, [dustyState, onState]);
 
+  // The chat, for the artifacts column on Dusty's Home (Coy, 2026-10-19) — published when it loads,
+  // a question goes out or an answer lands, never per token.
+  const chatTitle = convs?.find((c) => c.id === activeId)?.title ?? null;
+  useEffect(() => {
+    setDustyChat({ id: activeId, title: chatTitle, items, streaming: busy ? items.length - 1 : null });
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- items change per token while streaming; length and busy are enough
+  }, [activeId, chatTitle, items.length, busy, loadingConv]);
+  // "Show it in the chat" from the artifacts column: scroll to that turn and mark it a moment.
+  useEffect(() => {
+    const go = (e: Event) => {
+      const n = (e as CustomEvent<{ turn?: number }>).detail?.turn;
+      const el = typeof n === "number" ? document.getElementById(`sc-dusty-turn-${n}`) : null;
+      if (!el) return;
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+      el.setAttribute("data-flash", "");
+      setTimeout(() => el.removeAttribute("data-flash"), 1600);
+    };
+    window.addEventListener("sc:dusty-turn", go);
+    return () => window.removeEventListener("sc:dusty-turn", go);
+  }, []);
+  const onHome = pathname === "/dashboard/dusty";
+
   if (!open) return null;
 
   const active = convs?.find((c) => c.id === activeId) ?? null;
@@ -653,11 +675,18 @@ export function DustyPanel({ open, onClose, onBusy, onStream, onState }: {
                 <path d="M7.5 4l4 4-4 4M3.5 4l4 4-4 4" />
               </svg>
             </button>
-          ) : (
+          ) : (<>
+            {onHome && (
+              <button onClick={onClose} aria-label="What Dusty made — the artifacts" title="Artifacts" style={iconBtn}>
+                <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinejoin="round" style={{ color: T.ink2 }}>
+                  <rect x="2" y="2" width="5" height="5" rx="1" /><rect x="9" y="2" width="5" height="5" rx="1" /><rect x="2" y="9" width="5" height="5" rx="1" /><rect x="9" y="9" width="5" height="5" rx="1" />
+                </svg>
+              </button>
+            )}
             <button onClick={onClose} aria-label="Close Dusty" style={iconBtn}>
               <svg width="12" height="12" viewBox="0 0 13 13" aria-hidden="true"><path d="M1 1 L12 12 M12 1 L1 12" stroke="currentColor" style={{ color: T.ink }} strokeWidth="1.8" /></svg>
             </button>
-          )}
+          </>)}
         </header>
 
         {active && ref.kind !== "cold" && !sameRef(active, ref) && (
@@ -702,7 +731,7 @@ export function DustyPanel({ open, onClose, onBusy, onStream, onState }: {
             <div style={{ zoom: font.z }}>
             <MdAsk.Provider value={busy ? null : askSearch}>
             {items.map((it, i) => it.role === "user" ? (
-              <div key={i} style={{ margin: i === 0 ? "0 0 8px" : "22px 0 8px", paddingTop: i === 0 ? 0 : 16, borderTop: i === 0 ? "none" : `1px solid ${T.hair}` }}>
+              <div key={i} id={`sc-dusty-turn-${i}`} className="sc-dusty-turn" style={{ margin: i === 0 ? "0 0 8px" : "22px 0 8px", paddingTop: i === 0 ? 0 : 16, borderTop: i === 0 ? "none" : `1px solid ${T.hair}` }}>
                 <h2 style={{ fontFamily: agent, fontSize: F.md + 1, fontWeight: 700, lineHeight: 1.35 }}>
                   {it.files?.length ? it.content.replace(/\n\n📎 [^\n]*$/, "") : it.content}
                 </h2>
@@ -710,7 +739,7 @@ export function DustyPanel({ open, onClose, onBusy, onStream, onState }: {
                 {!!it.files?.length && <ChatFiles files={it.files} />}
               </div>
             ) : (
-              <div key={i}>
+              <div key={i} id={`sc-dusty-turn-${i}`} className="sc-dusty-turn">
                 <div style={{ minWidth: 0 }}>
                 <div style={{ fontFamily: agent }}>
                   {it.content ? (() => {

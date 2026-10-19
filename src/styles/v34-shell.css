@@ -920,3 +920,33 @@ html[data-nav="spaces"] .sc-record-tabs { display: none !important; }
   .sc-newspace-grow .sc-newspace-pick { flex: 1; }
   .sc-newspace-grow { display: flex; flex-direction: column; }
 }
+
+/* Dusty's Home (Coy, 2026-10-19: "selecting the Dusty Home in the rail should open up dusty chat in
+   the main window with the right panel becoming an artifacts panel"). On /dashboard/dusty his
+   column stretches across the main window and the page is the artifacts column on the right. */
+:root { --sc-art: 360px; }
+.sc-art-col { display: flex; flex-direction: column; min-height: calc(100dvh - var(--sc-head) - var(--sc-foot)); background: var(--sc-card); }
+.sc-art-head { padding: 14px 14px 10px; border-bottom: 1px solid var(--sc-hair); display: flex; flex-direction: column; gap: 4px; }
+.sc-art-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.sc-art-chip { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--sc-hair); color: var(--sc-ink2); background: var(--sc-card); cursor: pointer; }
+.sc-art-chip[aria-selected="true"] { background: var(--sc-ink); border-color: var(--sc-ink); color: var(--sc-card); }
+.sc-art-list { flex: 1; overflow-y: auto; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
+.sc-art-card { border: 1px solid var(--sc-hair); border-radius: 8px; background: var(--sc-card); }
+.sc-art-card[data-open] { border-color: var(--sc-hair-strong); }
+.sc-art-row { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 8px 10px; cursor: pointer; background: none; border: 0; }
+.sc-art-ico { width: 30px; height: 30px; flex: none; border-radius: 6px; display: grid; place-items: center; font-size: 14px; background: var(--sc-sunk); color: var(--sc-ink2); }
+.sc-art-ico[data-kind="plan"] { background: color-mix(in srgb, var(--sc-hiviz) 16%, var(--sc-card)); color: var(--sc-hiviz-text); }
+.sc-art-ico[data-kind="table"] { background: color-mix(in srgb, var(--sc-chalk) 16%, var(--sc-card)); color: var(--sc-chalk); }
+.sc-art-ico[data-kind="words"] { background: color-mix(in srgb, var(--sc-green) 16%, var(--sc-card)); color: var(--sc-green); }
+.sc-art-thumb { width: 30px; height: 30px; flex: none; border-radius: 6px; object-fit: cover; }
+.sc-art-body { padding: 0 10px 10px; border-top: 1px solid var(--sc-hair-soft); padding-top: 8px; }
+.sc-art-back { margin: 8px 10px 12px; padding: 9px; border-radius: 8px; border: 1px solid var(--sc-hair); background: var(--sc-card); font-weight: 600; font-size: 13px; color: var(--sc-ink); cursor: pointer; }
+.sc-dusty-turn[data-flash] { animation: scTurnFlash 1.6s ease-out; border-radius: 6px; }
+@keyframes scTurnFlash { 0%, 40% { background: color-mix(in srgb, var(--sc-hiviz) 14%, transparent); } 100% { background: transparent; } }
+@media (min-width: 1024px) {
+  html[data-dusty-main][data-dusty="open"] .sc-dusty-sheet { left: var(--sc-rail-w) !important; right: var(--sc-art) !important; width: auto !important; box-shadow: none !important; animation: none; }
+  html[data-dusty-main] .sc-dusty-grip { display: none; }
+  html[data-dusty-main][data-dusty="open"] .sc-with-dusty { padding-right: 0; }
+  html[data-dusty-main][data-dusty="open"] .sc-art-col { position: fixed; top: var(--sc-head); right: 0; bottom: 0; width: var(--sc-art); min-height: 0; z-index: 40; border-left: 1px solid var(--sc-hair); }
+  html[data-dusty-main][data-dusty="open"] .sc-art-back { display: none; }
+}

@@ -412,6 +412,7 @@ function useChannels(onPick: () => void) {
 }
 
 function HomeDrawer({ pages, active, onPick }: { pages: string[]; active: string; onPick: () => void }) {
+  const pathname = usePathname();
   const [saved, setSaved] = usePref<Shelf[] | null>("shelves", null);
   const shelves = useMemo(() => homeShelves(saved, pages), [saved, pages]);
   const [arranging, setArranging] = useState(false);
@@ -437,6 +438,9 @@ function HomeDrawer({ pages, active, onPick }: { pages: string[]; active: string
         </span>
       </div>
       <div className="sc-space-scroll">
+        {/* Dusty's chat in the main window, what he made beside it (Coy, 2026-10-19). */}
+        {!arranging && <Row href="/dashboard/dusty" label="Chat with Dusty" sub="His answers here, what he made beside them" on={pathname === "/dashboard/dusty"} onPick={onPick}
+          icon={<span className="sc-space-av" style={{ background: "transparent" }}><DustyAvatar state="idle" size={22} hidden /></span>} />}
         {!arranging && <div style={{ display: "flex" }}><FoldAll keys={groupKeys} closed={closed} setAll={setAll} /></div>}
         {arranging
           ? <ShelfArranger shelves={shelves} onChange={saveShelves} onReset={() => saveShelves(null)} />
@@ -977,7 +981,7 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
 
   const railEl = (
     <div className="sc-spaces-rail" role="navigation" aria-label="Spaces">
-      <Tile label="Home" title="Home — Dusty" on={shown.kind === "home"} home onPick={() => setPeek({ kind: "home" })}>
+      <Tile label="Home" title="Home — Dusty" on={shown.kind === "home"} home href={desktop ? "/dashboard/dusty" : undefined} onPick={() => setPeek({ kind: "home" })}>
         <span className="sc-space-home"><DustyAvatar state={dustyState} size={40} hidden /></span>
       </Tile>
       <span className="sc-spaces-sep" aria-hidden="true" />

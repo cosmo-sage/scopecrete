@@ -640,6 +640,25 @@ function RecordDrawer({ kind, id, pins, setPins, onPick }: {
  * tools/channels"): its people (the thread), then the tools and channels picked for it in New
  * Space, changed with the gear (`spaces_collections`).
  */
+/** A collection's people, read from its thread (073) — listed in its drawer, not a side panel. */
+function useCollectionPeople(id: string) {
+  const [d, setD] = useState<HomeThread[] | null>(null);
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const on = () => setTick((n) => n + 1);
+    window.addEventListener("sc:spaces-reload", on);
+    return () => window.removeEventListener("sc:spaces-reload", on);
+  }, []);
+  useEffect(() => {
+    let off = false;
+    fetch(`/api/threads?thread=${id}`).then((r) => (r.ok ? r.json() : null)).then((j) => {
+      if (!off) setD(Array.isArray(j?.threads) ? j.threads : []);
+    }).catch(() => { if (!off) setD([]); });
+    return () => { off = true; };
+  }, [id, tick]);
+  return d;
+}
+
 function CollectionDrawer({ col, id, pages, active, onPick }: {
   col: RailCollection | null; id: string; pages: string[]; active: string; onPick: () => void;
 }) {
@@ -652,6 +671,9 @@ function CollectionDrawer({ col, id, pages, active, onPick }: {
   const [editing, setEditing] = useState(false);
   const { closed, toggle, setAll } = useClosed();
   const { channelRows, chCount } = useChannels(onPick);
+  const folk = useCollectionPeople(id);
+  const path = usePathname() ?? "";
+  const openContact = /^\/dashboard\/messages\/([0-9a-f-]{36})/i.exec(path)?.[1] ?? null;
   const tools = picks.filter((k) => !isChannel(k) && PAGE.has(k));
   const chans = picks.filter((k) => isChannel(k));
   const memberKinds = (["job", "customer", "vendor"] as const).filter((k) => members.some((m) => m.kind === k));
@@ -668,7 +690,6 @@ function CollectionDrawer({ col, id, pages, active, onPick }: {
   };
   const memberHref = (m: SpacePin) => m.kind === "job" ? `/dashboard/scope/${m.id}/summary` : m.kind === "customer" ? `/dashboard/customers/${m.id}` : `/dashboard/vendors/${m.id}`;
   const name = col?.name ?? "Collection";
-  const people = col ? `${col.count} ${col.count === 1 ? "person" : "people"}` : "";
   return (
     <>
       <div className="sc-space-head">
@@ -692,8 +713,15 @@ function CollectionDrawer({ col, id, pages, active, onPick }: {
           </div>
         ) : <>
           <div style={{ display: "flex" }}><FoldAll keys={keys} closed={closed} setAll={setAll} /></div>
-          <Group id={`col:${id}:people`} closed={closed} onToggle={toggle} title="People">
-            <Row href={`/dashboard/messages?t=${id}`} label={`Everyone${people ? ` · ${people}` : ""}`} onPick={onPick} />
+          <Group id={`col:${id}:people`} closed={closed} onToggle={toggle} title="People" count={folk?.length}>
+            {folk === null && <div className="sc-space-empty">Loading people…</div>}
+            {folk?.length === 0 && <div className="sc-space-empty">No one in it yet — Edit adds jobs, customers and vendors, and their people.</div>}
+            {folk?.map((t) => {
+              const b = BUCKETS.find((x) => x.k === (t.bucket ?? "unsorted"));
+              return <Row key={t.contact_id} href={`/dashboard/messages/${t.contact_id}?t=${id}`} onPick={onPick}
+                label={t.display_name} sub={(t.numbers ?? 0) > 1 ? `${t.numbers} numbers` : undefined}
+                on={openContact === t.contact_id} avatar={monogram(t.display_name)} color={b?.color ?? "var(--sc-violet)"} />;
+            })}
           </Group>
           {memberKinds.map((k) => (
             <Group key={k} id={`col:${id}:m:${k}`} closed={closed} onToggle={toggle} count={members.filter((m) => m.kind === k).length}
@@ -836,7 +864,7 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
     Promise.resolve().then(() => { if (!off) setThreadParam(new URLSearchParams(window.location.search).get("t")); });
     return () => { off = true; };
   }, [path]);
-  const colHere = /^\/dashboard\/messages$/.test(path) && threadParam && (rail?.collections ?? []).some((c) => c.id === threadParam)
+  const colHere = /^\/dashboard\/messages(\/[^/]+)?$/.test(path) && threadParam && (rail?.collections ?? []).some((c) => c.id === threadParam)
     ? { kind: "collection" as const, id: threadParam } : null;
   const shown: SpaceRef = peek ?? colHere ?? here;
 

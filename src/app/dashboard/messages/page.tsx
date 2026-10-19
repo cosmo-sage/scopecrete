@@ -32,7 +32,9 @@ export default function ThreadsIndexPane() {
       <div style={{ maxWidth: 340, textAlign: "center" }}>
         <div style={{ fontFamily: disp, fontSize: F.xl, fontWeight: 600, lineHeight: 1.1 }}>Pick someone in the drawer</div>
         <p style={{ fontSize: F.sm, color: T.ink3, marginTop: 8, lineHeight: 1.5 }}>
-          Customers, vendors, personal and unsorted are listed there, each opening their thread here.
+          {ctx?.custom?.some((t) => t.id === ctx.thread)
+            ? `${label.name}'s people are listed there, each opening their thread here.`
+            : "Customers, vendors, personal and unsorted are listed there, each opening their thread here."}
         </p>
         <button type="button" className="lg:hidden" onClick={() => window.dispatchEvent(new Event("sc:spaces-open"))}
           style={{ marginTop: 14, padding: "9px 16px", borderRadius: 8, ...eyebrow, background: T.hiviz, color: T.onHiviz, fontFamily: disp, fontWeight: 700 }}>

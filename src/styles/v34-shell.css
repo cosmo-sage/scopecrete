@@ -870,6 +870,8 @@ html[data-nav="spaces"][data-nav] { --sc-head-0: 0px; }
 .sc-space-slot[draggable="true"] { cursor: grab; }
 /* Under Spaces the drawer's shelf has Market rate, Proposed budget and Actual costs as tools of their own (Coy, 2026-10-18). */
 html[data-nav="spaces"] .sc-budget-tabs, html[data-nav="spaces"] .sc-job-subnav { display: none !important; }
+/* A job's views are the drawer's Customer Account shelf (Coy, 2026-10-19: "already in the drawer"). */
+html[data-nav="spaces"] .sc-job-tabs-nav { display: none !important; }
 /* A customer's or vendor's tabs are their Space's shelves in the drawer (Coy, 2026-10-18). */
 html[data-nav="spaces"] .sc-record-tabs { display: none !important; }
 /* A collection's tools and channels, ticked in New Space and on its drawer's gear. */

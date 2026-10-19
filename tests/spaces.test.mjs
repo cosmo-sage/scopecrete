@@ -126,7 +126,7 @@ test("a collection's jobs, customers and vendors are cleaned, set and ticked", a
 });
 
 test("a customer Space is Account and Toolbox; a vendor's Supply and Toolbox, linking tabs", () => {
-  assert.deepEqual(customerShelves(ID).map((s) => s.name), ["Account", "Toolbox"]);
+  assert.deepEqual(customerShelves(ID).map((s) => s.name), ["Customer Account", "Toolbox"]);
   assert.deepEqual(vendorShelves(ID).map((s) => s.name), ["Supply", "Toolbox"]);
   assert.equal(customerShelves(ID)[0].rows[0].href, `/dashboard/customers/${ID}?tab=overview`);
   assert.ok(vendorShelves(ID)[0].rows.some((r) => r.k === "prices"));

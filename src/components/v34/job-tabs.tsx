@@ -65,7 +65,7 @@ export function JobTabs({ jobId, active, back = false, subnav }: { jobId: string
   // 2026-10-09: "full width of the mobile screen … cleaner … not buttons but just tabs"); a desktop
   // keeps the segmented switch. Both looks are `.sc-job-tabs` in v34-shell.css.
   const nav = (
-    <nav aria-label="This job" className="sc-no-print flex items-center gap-1.5 min-w-0 w-full lg:w-auto">
+    <nav aria-label="This job" className="sc-job-tabs-nav sc-no-print flex items-center gap-1.5 min-w-0 w-full lg:w-auto">
       {back && <Link href="/dashboard/scope" className="sc-back-link no-underline shrink-0" style={{ fontFamily: disp, fontSize: 11, letterSpacing: ".1em", textTransform: "uppercase", color: T.ink3 }}>‹ Jobs</Link>}
       <span className="sc-job-tabs">
         {tabs.map((t) => {

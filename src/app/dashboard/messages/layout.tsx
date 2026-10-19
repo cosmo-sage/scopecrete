@@ -46,7 +46,10 @@ function Panes({ children }: { children: React.ReactNode }) {
   // In the Spaces navigation the drawer lists these threads' people (Coy, 2026-10-17: "there
   // is no more page list of channels … they are now listed in the drawer"), so with nobody
   // open the page shows none; spam, the archive and the threads Coy made keep their list.
-  const inDrawer = !conversationOpen && DRAWER_LISTED.has(ctx?.thread ?? "all");
+  // A collection's people are in its drawer too (Coy, 2026-10-19: "should be in the drawer. Not
+  // in an additional side panel"); a rule thread has no people, so it keeps its feed.
+  const custom = ctx?.custom?.find((t) => t.id === ctx.thread);
+  const inDrawer = !conversationOpen && (DRAWER_LISTED.has(ctx?.thread ?? "all") || (!!custom && custom.source !== "rule"));
   return (
     <div className={`lg:flex lg:items-stretch ${conversationOpen ? "" : "min-h-[calc(100dvh-var(--sc-head)-var(--sc-foot))]"} lg:h-[calc(100dvh-var(--sc-head))] lg:min-h-0`}>
       <ThreadRail />

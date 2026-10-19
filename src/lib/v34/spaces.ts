@@ -166,7 +166,7 @@ export interface SpaceShelf { id: string; name: string; rows: TreeRow[] }
 export function customerShelves(id: string): SpaceShelf[] {
   const t = (k: string, label: string) => ({ k, label, href: `/dashboard/customers/${id}?tab=${k}` });
   return [
-    { id: "account", name: "Account", rows: [t("overview", "Summary"), t("contacts", "Contacts"), t("jobs", "Jobs"), t("threads", "Threads"), t("payments", "Payments"), t("schedule", "Schedule")] },
+    { id: "account", name: "Customer Account", rows: [t("overview", "Summary"), t("contacts", "Contacts"), t("jobs", "Jobs"), t("threads", "Threads"), t("payments", "Payments"), t("schedule", "Schedule")] },
     { id: "toolbox", name: "Toolbox", rows: [t("files", "Files"), t("timeline", "Timeline")] },
   ];
 }

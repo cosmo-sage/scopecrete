@@ -26,6 +26,7 @@ import { ArrangeRail, type RailTileInfo } from "@/components/v34/spaces/arrange-
 import { PAGE } from "@/lib/v34/pages";
 import { SETTINGS_HOME } from "@/lib/v34/settings-sections";
 import { usePref } from "@/lib/v34/prefs";
+import { setVendorFilter, useVendorFilter } from "@/lib/v34/vendor-filter";
 import {
   activeTreeRow, internalThreads, jobTree, monogram, phoneThreads, spaceOf, stageColor, stageLabel,
   homeShelves, moveToShelf, nudge, MAX_SHELVES, MAX_SHELF_NAME, CHANNELS, isChannel, looseChannels, offShelf,
@@ -211,8 +212,8 @@ function GearIcon() {
   );
 }
 
-function Row({ href, label, sub, on, icon, avatar, color, indent, onPick }: {
-  href: string; label: string; sub?: string; on?: boolean; icon?: React.ReactNode; avatar?: string; color?: string; indent?: boolean; onPick?: () => void;
+function Row({ href, label, sub, on, icon, avatar, color, indent, onPick, when }: {
+  href: string; label: string; sub?: string; on?: boolean; icon?: React.ReactNode; avatar?: string; color?: string; indent?: boolean; onPick?: () => void; when?: string | null;
 }) {
   return (
     <Link href={href} onClick={onPick} className="sc-space-row no-underline" aria-current={on ? "page" : undefined}
@@ -224,6 +225,7 @@ function Row({ href, label, sub, on, icon, avatar, color, indent, onPick }: {
         <span className="sc-space-row-l">{label}</span>
         {sub && <span className="sc-space-row-s">{sub}</span>}
       </span>
+      {when && <span className="sc-space-row-s" style={{ flexShrink: 0, alignSelf: "flex-start", paddingTop: 2, fontVariantNumeric: "tabular-nums" }}>{when}</span>}
     </Link>
   );
 }
@@ -411,6 +413,30 @@ function useChannels(onPick: () => void) {
   return { channelRows, chCount };
 }
 
+/**
+ * The Vendors list's trades and kinds, under its row in the drawer while that page is open, folded
+ * away otherwise (Coy, 2026-10-19: "nested under the Vendors bucket … stay collapsed … expand once
+ * the page is selected"). The page publishes them (`vendor-filter.ts`); a pick filters it.
+ */
+function VendorTrades({ onPick }: { onPick: () => void }) {
+  const f = useVendorFilter();
+  if (!f.trades) return null;
+  const item = (key: string, label: string, n: number, on: boolean, act: () => void) => (
+    <button key={key} type="button" className="sc-space-row" aria-current={on ? "true" : undefined} onClick={() => { act(); onPick(); }}
+      style={{ paddingLeft: 40, border: 0, width: "100%", background: on ? undefined : "none", textAlign: "left", cursor: "pointer", minHeight: 30 }}>
+      <span className="sc-space-row-l" style={{ flex: 1, fontWeight: on ? 600 : 400 }}>{label}</span>
+      <span className="sc-space-row-s" style={{ fontVariantNumeric: "tabular-nums" }}>{n}</span>
+    </button>
+  );
+  return (
+    <div role="group" aria-label="Vendors by trade">
+      {f.trades.map((t) => item(`t:${t.trade}`, t.trade, t.n, f.trade === t.trade, () => setVendorFilter({ trade: t.trade })))}
+      {f.kinds.length > 0 && <div className="sc-space-row-s" style={{ padding: "8px 0 2px 40px", textTransform: "uppercase", letterSpacing: ".06em", fontSize: 10 }}>Kind</div>}
+      {f.kinds.filter((k) => k.k === "all" || k.n > 0).map((k) => item(`k:${k.k}`, k.label, k.n, f.sub === k.k, () => setVendorFilter({ sub: k.k })))}
+    </div>
+  );
+}
+
 function HomeDrawer({ pages, active, onPick }: { pages: string[]; active: string; onPick: () => void }) {
   const pathname = usePathname();
   const [saved, setSaved] = usePref<Shelf[] | null>("shelves", null);
@@ -457,8 +483,13 @@ function HomeDrawer({ pages, active, onPick }: { pages: string[]; active: string
                 if (isChannel(k)) return <React.Fragment key={k}>{channelRows(k, true)}</React.Fragment>;
                 const p = PAGE.get(k);
                 if (!p) return null;
-                return <Row key={k} href={SPACES_HREF[k] ?? p.href} label={p.label} on={isOn(active, k)} onPick={onPick}
-                  icon={<span className="sc-space-ico"><NavIcon k={k} on={isOn(active, k)} color="currentColor" /></span>} />;
+                return (
+                  <React.Fragment key={k}>
+                    <Row href={SPACES_HREF[k] ?? p.href} label={p.label} on={isOn(active, k)} onPick={onPick}
+                      icon={<span className="sc-space-ico"><NavIcon k={k} on={isOn(active, k)} color="currentColor" /></span>} />
+                    {k === "vendors" && <VendorTrades onPick={onPick} />}
+                  </React.Fragment>
+                );
               })}
             </Group>
           ))}
@@ -545,7 +576,7 @@ function ChannelsShelf({ scope, d, onPick, closed, onToggle, empty }: {
           {!d && <div className="sc-space-empty">Loading…</div>}
           {d && rows.length === 0 && <div className="sc-space-empty" style={{ paddingLeft: 30 }}>{none}</div>}
           {rows.map((t) => (
-            <Row key={t.key} href={t.href} label={t.title} sub={t.sub} indent onPick={onPick} avatar={t.avatar} />
+            <Row key={t.key} href={t.href} label={t.title} sub={t.sub} when={t.when} indent onPick={onPick} avatar={t.avatar} />
           ))}
         </>}
       </div>
@@ -592,8 +623,8 @@ function useRecordName(kind: "customer" | "vendor", id: string, pinned: string |
  * A customer's or vendor's Space (Claude Design "Dusty Home" SPEC): its record page's tabs as
  * shelves — Account (a customer) or Supply (a vendor) — and a Toolbox, with Add to the rail.
  */
-function RecordDrawer({ kind, id, pins, setPins, onPick }: {
-  kind: "customer" | "vendor"; id: string; pins: SpacePin[]; setPins: (v: SpacePin[]) => void; onPick: () => void;
+function RecordDrawer({ kind, id, pins, setPins, onPick, onBack }: {
+  kind: "customer" | "vendor"; id: string; pins: SpacePin[]; setPins: (v: SpacePin[]) => void; onPick: () => void; onBack: () => void;
 }) {
   const path = usePathname() ?? "";
   const [search, setSearch] = useState("");
@@ -614,6 +645,8 @@ function RecordDrawer({ kind, id, pins, setPins, onPick }: {
   return (
     <>
       <div className="sc-space-head">
+        {/* Back to Home's buckets (Coy, 2026-10-19: "I need a back button here once I click into a customer or vendor"). */}
+        <button type="button" className="sc-space-back" onClick={onBack}>‹ {kind === "customer" ? "Customers" : "Vendors"}</button>
         <span className="sc-space-name" title={name ?? undefined}>{name ?? (kind === "customer" ? "Customer" : "Vendor")}</span>
         <span className="sc-space-sub" style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <span className="sc-space-tag" style={{ color, borderColor: color }}>{kind === "customer" ? "Customer" : "Vendor"}</span>
@@ -1035,7 +1068,7 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
           : shown.kind === "collection"
             ? <CollectionDrawer id={shown.id} col={(rail?.collections ?? []).find((c) => c.id === shown.id) ?? null} pages={pages} active={active}
                 onPick={() => { setKeep({ kind: "collection", id: shown.id }); close(); }} />
-            : <RecordDrawer kind={shown.kind} id={shown.id} pins={pins} setPins={setPins} onPick={close} />}
+            : <RecordDrawer kind={shown.kind} id={shown.id} pins={pins} setPins={setPins} onPick={close} onBack={() => setPeek({ kind: "home" })} />}
     </div>
   );
 

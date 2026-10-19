@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
 import { loadCustomThreads } from "@/lib/threads-server";
-import { isOpenJob, type SpaceEmail, type SpacePerson } from "@/lib/v34/spaces";
+import { isOpenJob, type SpaceEmail, type SpaceLast, type SpacePerson } from "@/lib/v34/spaces";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 /**
@@ -85,15 +85,33 @@ async function loadPeople(supabase: SupabaseClient, orgId: string, ids: string[]
     supabase.from("contact_phones").select("contact_id, phone_e164, label, is_primary").eq("org_id", orgId).in("contact_id", ids),
     supabase.from("contact_emails").select("contact_id, email, is_primary").eq("org_id", orgId).in("contact_id", ids),
   ]);
+  // The newest call or text on each number, for the drawer's preview (Threads v3, 2026-10-19).
+  const { data: msgs } = await supabase.from("messages").select("contact_id, channel, direction, occurred_at, body_text, summary, duration_seconds, from_address, to_address")
+    .eq("org_id", orgId).in("contact_id", ids).order("occurred_at", { ascending: false }).limit(400);
+  const lastOn = new Map<string, SpaceLast>();
+  type M = { contact_id: string; channel: string | null; direction: string | null; occurred_at: string; body_text: string | null; summary: string | null;
+    duration_seconds: number | null; from_address: string | null; to_address: string | null };
+  for (const m of (msgs ?? []) as M[]) {
+    const out = m.direction === "outbound" || m.direction === "out";
+    const other = out ? m.to_address : m.from_address;
+    if (!other) continue;
+    const k = `${m.contact_id}:${other}`;
+    if (lastOn.has(k)) continue;
+    const call = m.channel === "call" || m.channel === "voicemail";
+    const words = (m.body_text ?? "").replace(/\s+/g, " ").trim();
+    const text = call ? (m.channel === "voicemail" ? "Voicemail" : `Call${m.duration_seconds ? ` · ${Math.max(1, Math.round(m.duration_seconds / 60))} min` : ""}`)
+      : words || (m.summary ?? "").trim() || "Photo or file";
+    lastOn.set(k, { text: text.slice(0, 90), at: m.occurred_at, out });
+  }
   const byId = new Map(((cs ?? []) as Array<{ id: string; name: string | null; phone: string | null; email: string | null }>).map((c) => [c.id, c]));
   for (const id of ids) {
     const c = byId.get(id);
     if (!c) continue;
     const list = ((phones ?? []) as Array<{ contact_id: string; phone_e164: string; label: string | null; is_primary: boolean | null }>)
       .filter((p) => p.contact_id === id).sort((a, b) => Number(!!b.is_primary) - Number(!!a.is_primary))
-      .map((p) => ({ phone: p.phone_e164, label: p.label }));
+      .map((p) => ({ phone: p.phone_e164, label: p.label, last: lastOn.get(`${id}:${p.phone_e164}`) ?? null }));
     // The number on the contact row is always a thread, listed or not (Threads v2).
-    if (c.phone && !list.some((p) => p.phone === c.phone)) list.unshift({ phone: c.phone, label: null });
+    if (c.phone && !list.some((p) => p.phone === c.phone)) list.unshift({ phone: c.phone, label: null, last: lastOn.get(`${id}:${c.phone}`) ?? null });
     const addrs = ((mails ?? []) as Array<{ contact_id: string; email: string; is_primary: boolean | null }>)
       .filter((m) => m.contact_id === id).sort((a, b) => Number(!!b.is_primary) - Number(!!a.is_primary)).map((m) => m.email);
     const email = c.email ?? addrs[0] ?? null;

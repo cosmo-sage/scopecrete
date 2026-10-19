@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  isOpenJob, monogram, spaceOf, jobTree, activeTreeRow, fmtPhone, phoneThreads, internalThreads, stageColor,
+  isOpenJob, monogram, spaceOf, jobTree, activeTreeRow, fmtPhone, phoneThreads, internalThreads, stageColor, shortWhen,
 } from "../src/lib/v34/spaces.ts";
 
 const ID = "0123abcd-0000-4000-8000-123456789abc";
@@ -189,4 +189,17 @@ test("the Channels shelf's Email threads: one per address, then filed mail from 
   assert.match(rows[0].href, /\/dashboard\/messages\/p1\?channel=email%3Aj%40gulf\.com/);
   assert.match(rows[0].sub ?? "", /2 conversations/);
   assert.equal(rows[2].href, "/dashboard/messages/email/c3");
+});
+
+test("a Phone thread previews its last call or text, with when", () => {
+  const now = new Date("2026-10-19T18:00:00Z");
+  const rows = phoneThreads([{ id: "a", name: "Jeremy Wright", email: null,
+    phones: [{ phone: "+12255550118", label: null, last: { text: "On my way", at: "2026-10-19T15:05:00Z", out: true } }, { phone: "+12255550119", label: "Office" }] }]);
+  assert.equal(rows[0].sub, "You: On my way");
+  assert.equal(rows[1].sub, "(225) 555-0119");
+  assert.equal(rows[1].when ?? null, null);
+  assert.equal(shortWhen("2026-10-19T15:05:00Z", now), "10:05 AM");
+  assert.equal(shortWhen("2026-10-17T15:05:00Z", now), "Sat");
+  assert.equal(shortWhen("2026-09-30T15:05:00Z", now), "Sep 30");
+  assert.equal(shortWhen(null, now), null);
 });

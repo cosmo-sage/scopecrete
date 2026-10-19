@@ -29,6 +29,7 @@ import { InitialsBox } from "@/components/v34/thread-list";
 import { BidComposer } from "@/components/v34/bids/bid-composer";
 import { websiteLabel } from "@/lib/vendor-website";
 import { TRADES, bidStats, cleanTrades, hasTrade, hoursLabel, tradeCounts, type PriceLine, type ShownScope } from "@/lib/bids";
+import { clearVendorFilter, setVendorFilter, useVendorFilter } from "@/lib/v34/vendor-filter";
 
 interface VRow {
   id: string; name: string | null; company_name: string | null; subtype: string | null; phone: string | null; email: string | null;
@@ -70,8 +71,11 @@ export function VendorList() {
   const [note, setNote] = useState<string | null>(null);
   const [q, setQ] = useState("");
   const [finding, setFinding] = useState(false);
-  const [sub, setSub] = useState("all");
-  const [trade, setTrade] = useState("All");
+  // The trade and kind live in a small store the Spaces drawer reads too (Coy, 2026-10-19).
+  const filter = useVendorFilter();
+  const sub = filter.sub, trade = filter.trade;
+  const setSub = (v: string) => setVendorFilter({ sub: v });
+  const setTrade = (v: string) => setVendorFilter({ trade: v });
   const [sort, setSort] = useState("name");
   const [sel, setSel] = useState<string[]>([]);
   const [composing, setComposing] = useState(false);
@@ -111,6 +115,14 @@ export function VendorList() {
   }, [tick]);
 
   const trades = useMemo(() => tradeCounts(rows ?? []).filter((t) => t.n > 0), [rows]);
+  useEffect(() => {
+    if (!rows) return;
+    setVendorFilter({
+      trades: [{ trade: "All", n: rows.length }, ...trades],
+      kinds: SUBTYPES.map(([k, l]) => ({ k, label: l, n: k === "all" ? rows.length : rows.filter((v) => v.subtype === k).length })),
+    });
+  }, [rows, trades]);
+  useEffect(() => () => clearVendorFilter(), []);
   const shown = useMemo(() => {
     const s = q.trim().toLowerCase();
     const list = (rows ?? []).filter((v) => (sub === "all" || v.subtype === sub) && (trade === "All" || hasTrade(v, trade)) &&
@@ -194,13 +206,20 @@ export function VendorList() {
           {[{ trade: "All", n: rows?.length ?? 0 }, ...trades].map((t) => {
             const on = t.trade === trade;
             return (
-              <button key={t.trade} role="tab" aria-selected={on} onClick={() => setTrade(t.trade)} className="shrink-0 rounded px-2.5"
+              <button key={t.trade} role="tab" aria-selected={on} onClick={() => setTrade(t.trade)} className="shrink-0 rounded px-2.5 sc-old-nav-only"
                 style={{ height: 30, background: on ? T.ink : T.card, color: on ? T.card : T.ink2, border: `1px solid ${on ? T.ink : T.hairStrong}`, fontSize: F.xs, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
                 {t.trade} <span style={{ opacity: 0.7 }}>{t.n}</span>
               </button>
             );
           })}
-          <select value={sub} onChange={(e) => setSub(e.target.value)} aria-label="Kind" style={{ ...field, width: "auto", height: 30 }}>
+          {/* Under Spaces the trades are in the drawer; the pick shows here with × to clear it. */}
+          {(trade !== "All" || sub !== "all") && (
+            <button type="button" className="shrink-0 rounded px-2.5 sc-spaces-only" onClick={() => setVendorFilter({ trade: "All", sub: "all" })}
+              style={{ height: 30, background: T.ink, color: T.card, border: `1px solid ${T.ink}`, fontSize: F.xs, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
+              {[trade !== "All" ? trade : null, sub !== "all" ? SUB_LABEL[sub] ?? sub : null].filter(Boolean).join(" · ")} ×
+            </button>
+          )}
+          <select value={sub} onChange={(e) => setSub(e.target.value)} aria-label="Kind" className="sc-old-nav-only" style={{ ...field, width: "auto", height: 30 }}>
             {SUBTYPES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
           </select>
           <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Sort" style={{ ...field, width: "auto", height: 30 }}>
@@ -210,7 +229,7 @@ export function VendorList() {
       )}
 
       <div className="flex gap-4 items-start">
-        {wide && <div className="shrink-0 sticky" style={{ top: "calc(var(--sc-head) + var(--sc-subhead, 0px) + 8px)" }}>{tradeList}</div>}
+        {wide && <div className="shrink-0 sticky sc-old-nav-only" style={{ top: "calc(var(--sc-head) + var(--sc-subhead, 0px) + 8px)" }}>{tradeList}</div>}
         <div style={{ flex: 1, minWidth: 0 }}>
           {wide && (
             <div className="flex items-center gap-2 mb-2">

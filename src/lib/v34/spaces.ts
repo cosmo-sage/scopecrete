@@ -237,7 +237,9 @@ export function activeTreeRow(path: string, search: string): string {
   return "proposed";
 }
 
-export interface SpacePhone { phone: string; label: string | null }
+/** The last call or text on a number, for the drawer's preview (Threads v3, 2026-10-19). */
+export interface SpaceLast { text: string; at: string; out: boolean }
+export interface SpacePhone { phone: string; label: string | null; last?: SpaceLast | null }
 export interface SpacePerson { id: string; name: string | null; phones: SpacePhone[]; email: string | null; emails?: string[] }
 /** An email conversation filed on the Space, with the outside address it is with. */
 export interface SpaceEmail { key: string; subject: string; at: string | null; address?: string | null }
@@ -249,7 +251,20 @@ export function fmtPhone(raw: string): string {
   return ten.length === 10 ? `(${ten.slice(0, 3)}) ${ten.slice(3, 6)}-${ten.slice(6)}` : raw;
 }
 
-export interface ThreadRow { key: string; title: string; sub: string; href: string; avatar: string }
+export interface ThreadRow { key: string; title: string; sub: string; href: string; avatar: string; when?: string | null }
+
+/** "3:41 PM" today, "Mon" this week, else "Oct 17" — Central time, like the rest of the app. */
+export function shortWhen(iso: string | null | undefined, now: Date = new Date()): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const tz = "America/Chicago";
+  const day = (x: Date) => x.toLocaleDateString("en-US", { timeZone: tz });
+  if (day(d) === day(now)) return d.toLocaleTimeString("en-US", { timeZone: tz, hour: "numeric", minute: "2-digit" });
+  const ms = now.getTime() - d.getTime();
+  if (ms >= 0 && ms < 6 * 864e5) return d.toLocaleDateString("en-US", { timeZone: tz, weekday: "short" });
+  return d.toLocaleDateString("en-US", { timeZone: tz, month: "short", day: "numeric" });
+}
 
 /** A job Space's Phone threads: one row per number of each person on it. */
 export function phoneThreads(people: SpacePerson[]): ThreadRow[] {
@@ -258,7 +273,9 @@ export function phoneThreads(people: SpacePerson[]): ThreadRow[] {
     p.phones.forEach((ph, i) => {
       const label = ph.label?.trim() || (i === 0 ? "Cell" : `Phone ${i + 1}`);
       const who = p.name?.trim() || fmtPhone(ph.phone);
-      out.push({ key: `${p.id}:${ph.phone}`, title: p.name?.trim() ? `${who} · ${label}` : who, sub: fmtPhone(ph.phone),
+      // The last call or text under it, as a messages app does (Threads v3); the number when there is none.
+      const last = ph.last ? `${ph.last.out ? "You: " : ""}${ph.last.text}` : null;
+      out.push({ key: `${p.id}:${ph.phone}`, title: p.name?.trim() ? `${who} · ${label}` : who, sub: last ?? fmtPhone(ph.phone), when: shortWhen(ph.last?.at),
         href: `/dashboard/messages/${p.id}?channel=${encodeURIComponent(`phone:${ph.phone}`)}`, avatar: monogram(p.name ?? "") });
     });
   }

@@ -63,6 +63,7 @@ const tag: React.CSSProperties = { fontSize: 10.5, padding: "1px 6px", borderRad
  * they answer bids; ticking rows brings up the black bar — Send a bid request.
  */
 export function VendorList() {
+  const router = useRouter();
   const [rows, setRows] = useState<VRow[] | null>(null);
   const [ready, setReady] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -229,7 +230,7 @@ export function VendorList() {
             ) : wide ? (
               <table className="w-full" style={{ borderCollapse: "collapse", fontSize: F.sm, background: T.card }}>
                 <thead><tr style={{ background: T.slab }}>
-                  {["", "Vendor", "Trade", "Reach them", "Bids answered", "Prices on file", ""].map((h, i) => (
+                  {["", "Vendor", "Trade", "Reach them", "Bids answered", "Prices on file"].map((h, i) => (
                     <th key={i} style={{ ...eyebrow, textAlign: "left", padding: "6px 8px", borderBottom: `1px solid ${T.hair}` }}>{h}</th>
                   ))}
                 </tr></thead>
@@ -237,8 +238,8 @@ export function VendorList() {
                   {shown.map((v) => {
                     const on = sel.includes(v.id);
                     return (
-                      <tr key={v.id} onClick={() => toggle(v.id)} style={{ borderTop: `1px solid ${T.hairSoft}`, background: on ? T.sunk : "transparent", cursor: "pointer" }}>
-                        <td style={{ padding: "6px 8px", width: 30 }}><Tick on={on} onClick={() => toggle(v.id)} label={`Pick ${label(v)}`} /></td>
+                      <tr key={v.id} onClick={() => router.push(`/dashboard/vendors/${v.id}`)} style={{ borderTop: `1px solid ${T.hairSoft}`, background: on ? T.sunk : "transparent", cursor: "pointer" }}>
+                        <td onClick={(e) => { e.stopPropagation(); toggle(v.id); }} style={{ padding: "6px 8px", width: 30 }}><Tick on={on} onClick={() => toggle(v.id)} label={`Pick ${label(v)}`} /></td>
                         <td style={{ padding: "6px 8px", maxWidth: 280 }}>
                           <span className="flex items-center gap-2">
                             <InitialsBox name={label(v) || null} size={28} />
@@ -252,9 +253,6 @@ export function VendorList() {
                         <td style={{ padding: "6px 8px" }}>{reach(v)}</td>
                         <td style={{ padding: "6px 8px" }}>{bidsCell(v)}</td>
                         <td style={{ padding: "6px 8px" }}>{pricesCell(v)}</td>
-                        <td style={{ padding: "6px 8px", textAlign: "right" }}>
-                          <Link href={`/dashboard/vendors/${v.id}`} onClick={(e) => e.stopPropagation()} style={{ ...eyebrow, color: T.chalk }}>Open</Link>
-                        </td>
                       </tr>
                     );
                   })}
@@ -265,14 +263,14 @@ export function VendorList() {
                 {shown.map((v) => {
                   const on = sel.includes(v.id);
                   return (
-                    <div key={v.id} className="px-3 py-2 flex items-center gap-2.5" style={{ borderTop: `1px solid ${T.hairSoft}`, background: on ? T.sunk : "transparent" }}>
+                    <div key={v.id} onClick={() => router.push(`/dashboard/vendors/${v.id}`)} className="px-3 py-2 flex items-center gap-2.5" style={{ borderTop: `1px solid ${T.hairSoft}`, background: on ? T.sunk : "transparent", cursor: "pointer" }}>
                       <Tick on={on} onClick={() => toggle(v.id)} label={`Pick ${label(v)}`} />
-                      <Link href={`/dashboard/vendors/${v.id}`} style={{ flex: 1, minWidth: 0, color: T.ink }}>
+                      <div style={{ flex: 1, minWidth: 0, color: T.ink }}>
                         <div style={{ fontWeight: 600, fontSize: F.sm, ...clip }}>{label(v)}</div>
                         <div style={{ fontSize: 10.5, color: T.ink3, ...clip }}>
                           {[(v.trades ?? []).join(" · ") || (v.subtype ? SUB_LABEL[v.subtype] ?? v.subtype : null), v.bids?.speed ?? (v.bids?.sent ? v.bids.label : null)].filter(Boolean).join(" · ") || "—"}
                         </div>
-                      </Link>
+                      </div>
                       <span style={{ fontSize: 10.5, color: T.ink3, whiteSpace: "nowrap" }}>{v.phone && v.email ? "Text · Email" : v.phone ? "Text only" : v.email ? "Email only" : "—"}</span>
                     </div>
                   );

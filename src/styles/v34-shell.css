@@ -7,7 +7,7 @@
 /* The sticky header's height: 54px glass bar + 38px activity line
    (activity-line.tsx always holds its row). Everything that sits under or
    beside the header measures from this — one number, not five. */
-:root { --sc-head-0: 92px; --sc-head: calc(var(--sc-head-0) + var(--sc-banner, 0px)); --sc-foot: 58px; --sc-dusty: 400px;
+:root { --sc-head-0: 92px; --sc-head: calc(var(--sc-head-0) + var(--sc-banner, 0px) + var(--sc-ticker, 0px)); --sc-foot: 58px; --sc-dusty: 400px;
   /* Dusty's type, the same in every theme (Coy, 2026-10-05): Figtree, loaded by next/font as --font-agent. */
   --sc-font-agent: var(--font-agent, 'Figtree'), system-ui, -apple-system, 'Segoe UI', sans-serif;
   /* Machine text — event types, webhook URLs, payloads: JetBrains Mono. */
@@ -965,3 +965,39 @@ html[data-nav="spaces"] .sc-thread-call { background: var(--sc-green) !important
 html[data-nav="spaces"] .sc-ch-tab { padding: 4px 11px !important; flex: none !important; }
 html[data-nav="spaces"] .sc-ch-tab > span:first-child { font-size: 12px !important; }
 html[data-nav="spaces"] .sc-ch-sub { display: none !important; }
+
+/* Dusty's banner (DustyTicker, Coy 2026-10-21): the very top of the app, the window's full width,
+   his thoughts and background work sliding slowly by, each kind its own colour. It is part of the
+   header's height (--sc-ticker), so the rail, drawer and Dusty's column start under it. Always a dark
+   band, like a news ticker, so the colours read in every theme. */
+html[data-ticker] { --sc-ticker: 24px; }
+html[data-nav="spaces"][data-head-hide] .sc-head-wrap { transform: none; }
+.sc-ticker { height: 24px; overflow: hidden; background: #15181C; border-bottom: 1px solid #2A2F36; position: relative;
+  font-family: var(--site-manrope), 'Manrope', system-ui, sans-serif; font-size: 12px; font-weight: 500; letter-spacing: .01em; }
+.sc-ticker::before, .sc-ticker::after { content: ""; position: absolute; top: 0; bottom: 0; width: 28px; z-index: 1; pointer-events: none; }
+.sc-ticker::before { left: 0; background: linear-gradient(to right, #15181C, transparent); }
+.sc-ticker::after { right: 0; background: linear-gradient(to left, #15181C, transparent); }
+.sc-ticker-track { display: flex; width: max-content; height: 100%; animation: scTick var(--sc-tick-ms, 60s) linear infinite; }
+.sc-ticker:hover .sc-ticker-track, .sc-ticker:focus-within .sc-ticker-track { animation-play-state: paused; }
+.sc-ticker-run { display: flex; align-items: center; flex: none; }
+@keyframes scTick { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+.sc-tick { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 22px 0 0; background: none; border: 0; cursor: pointer; white-space: nowrap; color: var(--tk); }
+.sc-tick::after { content: "◆"; margin-left: 16px; font-size: 7px; color: #4A515B; }
+.sc-tick-k { font-size: 9.5px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; padding: 1px 5px; border-radius: 3px;
+  color: #15181C; background: var(--tk); }
+.sc-tick-t { color: var(--tk); }
+.sc-tick-at { color: #7D8590; font-size: 11px; }
+.sc-tick:hover .sc-tick-t { text-decoration: underline; }
+.sc-tick[data-kind="thought"] { --tk: #4DB88C; }
+.sc-tick[data-kind="dream"] { --tk: #B49AF0; }
+.sc-tick[data-kind="reading"] { --tk: #6FA8F2; }
+.sc-tick[data-kind="plans"] { --tk: #5FC9D6; }
+.sc-tick[data-kind="mail"] { --tk: #E8C35A; }
+.sc-tick[data-kind="proposal"] { --tk: #F0A35E; }
+.sc-tick[data-kind="reminder"] { --tk: #F07F5E; }
+.sc-tick[data-kind="warn"] { --tk: #F26B6B; }
+@media (prefers-reduced-motion: reduce) {
+  .sc-ticker { overflow-x: auto; scrollbar-width: none; }
+  .sc-ticker-track { animation: none; }
+  .sc-ticker-run[aria-hidden="true"] { display: none; }
+}

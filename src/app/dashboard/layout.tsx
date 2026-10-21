@@ -35,7 +35,7 @@ import { T, disp, body, eyebrow, nums } from "@/lib/v34/tokens";
 import { NavIcon, OrgNameContext } from "@/components/v34/primitives";
 import { DustyPanel } from "@/components/v34/dusty-panel";
 import { DustyAvatar, type EmblemState } from "@/components/v34/dusty-avatar";
-import { ActivityLine } from "@/components/v34/activity-line";
+import { ActivityLine, DustyTicker } from "@/components/v34/activity-line";
 import { ArchiveToast } from "@/components/v34/archive-actions";
 import { InstallPrompt } from "@/components/v34/install-app";
 import { ThreadColorVars } from "@/components/v34/thread-colors";
@@ -328,7 +328,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         )}
         {me && !limited && <AlertsBell glassBtn={glassBtn} />}
       </div>
-      {(desktop ? deskLineOn : phoneLineOn) && <div className="sc-spaces-line"><ActivityLine inline busy={dustyBusy} onReader={setReaderState} /></div>}
       {searchOpen && <SearchPanel onClose={() => setSearchOpen(false)} />}
     </div>
   );
@@ -345,6 +344,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     {under && spacesOpen && <PageEdge onClose={closeSpaces} />}
     <div ref={layerRef} className="flex flex-col min-h-screen sc-page-layer" style={{ background: T.slab, color: T.ink, fontFamily: body }}>
       <div className="sc-head-wrap" style={{ position: "sticky", top: 0, zIndex: 40 }}>
+        {/* Dusty's banner across the very top (Coy, 2026-10-21); his line left the drawer for it. */}
+        {spaces && (desktop ? deskLineOn : phoneLineOn) && <DustyTicker onReader={setReaderState} />}
         {viewingAs && (
           <div className="sc-view-as" role="status">
             <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>👁 {viewAsLine(viewingAs.name, roleLabel(viewingAs.role))} · changes are off</span>

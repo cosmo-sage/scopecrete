@@ -63,7 +63,7 @@ import { DEFAULT_SHELVES, SPACES_HREF, cleanShelves, homeShelves, moveToShelf, n
 test("Home's default shelves; Logs and Roadmap left for Settings; the rest on More", () => {
   const pages = ["dashboard", "scopebuilder", "scope", "map", "camera", "contacts", "customers", "pricebook", "vendors", "files", "logs", "admin", "roadmap"];
   const s = homeShelves(null, pages);
-  assert.deepEqual(s.map((x) => x.name), ["Buckets", "Toolbox", "More"]);
+  assert.deepEqual(s.map((x) => x.name), ["Collections", "Toolbox", "More"]);
   assert.deepEqual(s[0].pages, ["customers", "contacts", "vendors", "scope"]);
   assert.deepEqual(s[1].pages, ["map", "camera", "pricebook", "files"]);
   assert.deepEqual(s[2].pages, ["dashboard", "admin"]);
@@ -202,4 +202,19 @@ test("a Phone thread previews its last call or text, with when", () => {
   assert.equal(shortWhen("2026-10-17T15:05:00Z", now), "Sat");
   assert.equal(shortWhen("2026-09-30T15:05:00Z", now), "Sep 30");
   assert.equal(shortWhen(null, now), null);
+});
+
+test("customers with an open job are Work Spaces; Buckets shelf reads Collections", async () => {
+  const { openJobCustomers, homeShelves } = await import("../src/lib/v34/spaces.ts");
+  const jobs = [
+    { status: "estimating", customer_id: "c1", customer: "Gulfline Paving" },
+    { status: "lost", customer_id: "c2", customer: "Wilson" },
+    { status: "new", customer_id: "c1", customer: "Gulfline Paving" },
+    { status: "new", customer_id: null, customer: null },
+    { status: "won", customer_id: "c3", customer: "  " },
+  ];
+  assert.deepEqual(openJobCustomers(jobs), [{ id: "c1", name: "Gulfline Paving" }]);
+  const sh = homeShelves([{ id: "buckets", name: "Buckets", pages: ["customers"] }], ["customers"]);
+  assert.equal(sh[0].name, "Collections");
+  assert.equal(homeShelves([{ id: "buckets", name: "My lists", pages: [] }], [])[0].name, "My lists");
 });

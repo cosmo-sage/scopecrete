@@ -38,6 +38,7 @@ import {
 } from "@/lib/v34/spaces";
 
 interface RailJob { id: string; title: string; status: string | null; customer: string | null }
+interface RailCustomer { id: string; name: string }
 interface RailCollection { id: string; name: string; count: number; source: string }
 interface JobDetail { job?: { id: string; title: string; status: string | null }; people: SpacePerson[]; emails: SpaceEmail[] }
 interface HomeThread { contact_id: string; display_name: string; bucket: string | null; numbers?: number; occurred_at: string | null; role?: string; customer_id?: string | null; company?: string | null }
@@ -53,7 +54,7 @@ const PER_BUCKET = 6;
 /* ------------------------------------------------------------ data */
 
 // Read once per tab and kept between page changes; the rail refreshes on its own every few minutes.
-let railCache: { at: number; jobs: RailJob[]; collections: RailCollection[] } | null = null;
+let railCache: { at: number; jobs: RailJob[]; customers: RailCustomer[]; collections: RailCollection[] } | null = null;
 let homeCache: { at: number; threads: HomeThread[] } | null = null;
 const jobCache = new Map<string, { at: number; d: JobDetail }>();
 const FRESH = 3 * 60_000;
@@ -67,7 +68,7 @@ function useRail(on: boolean) {
       if (railCache && Date.now() - railCache.at < FRESH) { setD(railCache); return; }
       fetch("/api/spaces").then((r) => (r.ok ? r.json() : null)).then((j) => {
         if (off || !j) return;
-        railCache = { at: Date.now(), jobs: j.jobs ?? [], collections: j.collections ?? [] };
+        railCache = { at: Date.now(), jobs: j.jobs ?? [], customers: j.customers ?? [], collections: j.collections ?? [] };
         setD(railCache);
       }).catch(() => {});
     };
@@ -347,7 +348,7 @@ function ShelfEditor({ shelves, shelf, pages, onChange, onDone }: {
       ))}
       <span className="sc-shelf-edit-h">Tools</span>
       {pages.filter((k) => PAGE.has(k)).map(box)}
-      <span className="sc-shelf-edit-h">Channels</span>
+      <span className="sc-shelf-edit-h">People by bucket</span>
       {CHANNELS.map((c) => box(c.key))}
       <div className="sc-shelf-row" style={{ justifyContent: "space-between" }}>
         {shelf.id !== "more" ? (
@@ -653,7 +654,7 @@ function RecordDrawer({ kind, id, pins, setPins, onPick, onBack }: {
           <span className="sc-space-tag" style={{ color, borderColor: color }}>{kind === "customer" ? "Customer" : "Vendor"}</span>
           <span style={{ flex: 1 }} />
           {pin
-            ? <button type="button" className="sc-shelf-arrange" onClick={() => setPins(removePin(pins, kind, id))} title="Take this Space off the rail">Off the rail</button>
+            ? <button type="button" className="sc-shelf-arrange" onClick={() => setPins(removePin(pins, kind, id))} title="Take this Work Space off the rail">Off the rail</button>
             : <button type="button" className="sc-shelf-arrange" disabled={!name} onClick={() => name && setPins(addPin(pins, { kind, id, name }))}>Add to the rail</button>}
         </span>
       </div>
@@ -746,16 +747,16 @@ function CollectionDrawer({ col, id, pages, active, onPick }: {
     }).catch(() => {});
   };
   const memberHref = (m: SpacePin) => m.kind === "job" ? `/dashboard/scope/${m.id}/summary` : m.kind === "customer" ? `/dashboard/customers/${m.id}` : `/dashboard/vendors/${m.id}`;
-  const name = col?.name ?? "Collection";
+  const name = col?.name ?? "Work Space";
   return (
     <>
       <div className="sc-space-head">
         <span className="sc-space-name" title={name}>{name}</span>
         <span className="sc-space-sub" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span className="sc-space-tag" style={{ color: "var(--sc-violet)", borderColor: "var(--sc-violet)" }}>Collection</span>
+          <span className="sc-space-tag" style={{ color: "var(--sc-violet)", borderColor: "var(--sc-violet)" }}>Work Space</span>
           <span style={{ flex: 1 }} />
           <button type="button" className="sc-shelf-arrange" onClick={() => setEditing(!editing)} aria-pressed={editing}
-            title="Pick the jobs, customers, vendors, tools and channels this collection holds">{editing ? "Done" : "Edit"}</button>
+            title="Pick the jobs, customers, vendors, tools and channels this Work Space holds">{editing ? "Done" : "Edit"}</button>
         </span>
       </div>
       <div className="sc-space-scroll">
@@ -863,7 +864,7 @@ function FoldedDrawer({ shown, pages, active, onOpen, bar }: {
       icon("contacts", "Who's in it", `/dashboard/messages?t=${shown.id}`, false, <NavIcon k="contacts" on={false} color="currentColor" />),
       ...tools.map((k) => icon(k, PAGE.get(k)!.label, SPACES_HREF[k] ?? PAGE.get(k)!.href, isOn(active, k), <NavIcon k={k} on={isOn(active, k)} color="currentColor" />)),
     ];
-    chips = [chip("CO", "Collection", "var(--sc-violet)")];
+    chips = [chip("WS", "Work Space", "var(--sc-violet)")];
   } else {
     const here = activeTreeRow(path, search);
     icons = jobTree(shown.id).filter((r) => !r.sub).map((r) => {
@@ -965,7 +966,7 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
       const col = { kind: "collection" as const, id: c.id };
       const people = `${c.count} ${c.count === 1 ? "person" : "people"}`;
       return {
-        info: { key: `col:${c.id}`, name: c.name, sub: `Collection · ${people}`, shape: customer ? "contact" : "collection", color, initials: monogram(c.name), pinned: false },
+        info: { key: `col:${c.id}`, name: c.name, sub: `Work Space · ${people}`, shape: customer ? "contact" : "collection", color, initials: monogram(c.name), pinned: false },
         render: (drag) => (
           <Tile key={c.id} label={monogram(c.name)} title={`${c.name} · ${people}`} drag={drag}
             href={desktop ? `/dashboard/messages?t=${c.id}` : undefined}
@@ -985,6 +986,20 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
           <Tile key={`pin-job:${p.id}`} label={monogram(p.name)} title={`${p.name} · Job`} color={color} on={on} bare drag={drag}
             href={desktop ? `/dashboard/scope/${p.id}/summary` : undefined} onPick={desktop ? undefined : () => setPeek({ kind: "job", id: p.id })}>
             <SpaceSilhouette kind="job" color={color} initials={monogram(p.name)} on={on} />
+          </Tile>
+        ),
+      };
+    }),
+    // A customer with an open job is a Work Space of its own; one Coy pinned keeps its pin.
+    ...(rail?.customers ?? []).filter((c) => !pins.some((p) => p.kind === "customer" && p.id === c.id)).map((c): RailTile => {
+      const on = shown.kind === "customer" && shown.id === c.id;
+      const color = "var(--sc-chalk)";
+      return {
+        info: { key: `customer:${c.id}`, name: c.name, sub: "Customer · open job", shape: "contact", color, initials: monogram(c.name), pinned: false },
+        render: (drag) => (
+          <Tile key={`cust:${c.id}`} label={monogram(c.name)} title={`${c.name} · Customer`} color={color} on={on} bare drag={drag}
+            href={desktop ? `/dashboard/customers/${c.id}` : undefined} onPick={desktop ? undefined : () => setPeek({ kind: "customer", id: c.id })}>
+            <SpaceSilhouette kind="contact" color={color} initials={monogram(c.name)} on={on} />
           </Tile>
         ),
       };
@@ -1041,7 +1056,7 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
   });
 
   const railEl = (
-    <div className="sc-spaces-rail" role="navigation" aria-label="Spaces">
+    <div className="sc-spaces-rail" role="navigation" aria-label="Work Spaces">
       <Tile label="Home" title="Home — Dusty" on={shown.kind === "home"} home href={desktop ? "/dashboard/dusty" : undefined} onPick={() => { setPeek({ kind: "home" }); setStay(null); }}>
         <span className="sc-space-home"><DustyAvatar state={dustyState} size={40} hidden /></span>
       </Tile>
@@ -1057,12 +1072,12 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
           </React.Fragment>
         );
       })}
-      <Tile label="+" title="New Space — a job, customer, vendor or collection" onPick={() => setMaking(true)} dashed>
+      <Tile label="+" title="New Work Space — a job, customer, vendor or your own" onPick={() => setMaking(true)} dashed>
         <span style={{ fontSize: 22, lineHeight: 1 }}>+</span>
       </Tile>
       <span style={{ flex: 1 }} />
       {(tiles.length > 0 || railPrefs.hidden.length > 0) && (
-        <button type="button" className="sc-spaces-foot" onClick={() => setArranging(true)} aria-label="Arrange the rail" title="Arrange the rail — move or take off Spaces">
+        <button type="button" className="sc-spaces-foot" onClick={() => setArranging(true)} aria-label="Arrange the rail" title="Arrange the rail — move or take off Work Spaces">
           <svg width="19" height="19" viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
             <path d="M6 3v14M3 6l3-3 3 3M14 17V3M11 14l3 3 3-3" />
           </svg>
@@ -1118,7 +1133,7 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
         onShow={(k) => setRail(showTile(railPrefs, k))} onReset={() => setRail({ order: [], hidden: railPrefs.hidden })} onClose={() => setArranging(false)}
         onDelete={(t) => {
           void fetch(`/api/threads/custom/${t.key.slice(4)}`, { method: "DELETE" }).then((r) => {
-            if (!r.ok) { window.alert("Couldn't delete that collection — try again."); return; }
+            if (!r.ok) { window.alert("Couldn't delete that Work Space — try again."); return; }
             setRail(showTile(railPrefs, t.key));
             window.dispatchEvent(new Event("sc:spaces-reload"));
           });

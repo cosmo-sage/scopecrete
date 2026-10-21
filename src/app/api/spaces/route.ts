@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
 import { loadCustomThreads } from "@/lib/threads-server";
-import { isOpenJob, type SpaceEmail, type SpaceLast, type SpacePerson } from "@/lib/v34/spaces";
+import { isOpenJob, openJobCustomers, type SpaceEmail, type SpaceLast, type SpacePerson } from "@/lib/v34/spaces";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 /**
  * The Spaces rail and a job Space's drawer (Claude Design "Dusty Home", step 1 — no
  * migration; src/lib/v34/spaces.ts). Session client, org from the session, RLS decides.
  *
- *   GET            → { jobs: open jobs, newest first; collections: the threads Coy made }
+ *   GET            → { jobs: open jobs, newest first; customers: those with an open job; collections: the threads Coy made }
  *   GET ?job=<id>       → { job, people (each number and address), emails (conversations filed on the job, with their address) }
  *   GET ?customer=<id>  → { people (the customer's), emails (filed on the customer) }  — its Channels shelf
  *   GET ?vendor=<id>    → { people (the vendor's contact), emails (filed on them) }
@@ -34,10 +34,10 @@ export async function GET(req: NextRequest) {
       loadCustomThreads(supabase, orgId).catch(() => []),
     ]);
     if (error) return bad(`jobs: ${error.message}`, 500);
-    const rows = ((jobs ?? []) as unknown as Array<{ id: string; title: string | null; status: string | null; customers: { name: string | null } | null }>)
+    const rows = ((jobs ?? []) as unknown as Array<{ id: string; title: string | null; status: string | null; customer_id: string | null; customers: { name: string | null } | null }>)
       .filter((j) => isOpenJob(j.status))
-      .map((j) => ({ id: j.id, title: j.title?.trim() || "Untitled job", status: j.status, customer: j.customers?.name ?? null }));
-    return ok({ jobs: rows, collections: collections.map((c) => ({ id: c.id, name: c.name, count: c.count, source: c.source })) });
+      .map((j) => ({ id: j.id, title: j.title?.trim() || "Untitled job", status: j.status, customer: j.customers?.name ?? null, customer_id: j.customer_id }));
+    return ok({ jobs: rows, customers: openJobCustomers(rows), collections: collections.map((c) => ({ id: c.id, name: c.name, count: c.count, source: c.source })) });
   }
 
   if (!UUID.test(jobId)) return bad("Not a job id.");

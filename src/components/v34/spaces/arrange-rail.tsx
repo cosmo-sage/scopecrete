@@ -39,7 +39,7 @@ export function ArrangeRail({ shown, hidden, onMove, onRemove, onShow, onReset, 
       </span>
       {onDelete && t.key.startsWith("col:") && (
         <button type="button" className="sc-space-more" style={{ color: "var(--sc-red)" }}
-          onClick={() => { if (window.confirm(`Delete the collection "${t.name}"? The people and their threads stay.`)) onDelete(t); }}>Delete</button>
+          onClick={() => { if (window.confirm(`Delete the Work Space "${t.name}"? The people and their threads stay.`)) onDelete(t); }}>Delete</button>
       )}
       {i === null ? (
         <button type="button" className="sc-space-more" onClick={() => onShow(t.key)}>Put back</button>
@@ -62,7 +62,7 @@ export function ArrangeRail({ shown, hidden, onMove, onRemove, onShow, onReset, 
           <button type="button" className="sc-shelf-btn" onClick={onClose} aria-label="Close">×</button>
         </div>
         {shown.length === 0
-          ? <p className="sc-newspace-blurb">Nothing on the rail but Home. + adds a Space.</p>
+          ? <p className="sc-newspace-blurb">Nothing on the rail but Home. + adds a Work Space.</p>
           : <ul className="sc-arrange-list">{shown.map((t, i) => row(t, i))}</ul>}
         {hidden.length > 0 && (
           <>

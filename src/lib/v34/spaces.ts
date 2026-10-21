@@ -23,6 +23,24 @@ export function isOpenJob(status: string | null | undefined): boolean {
   return !CLOSED.has(status ?? "");
 }
 
+/**
+ * Customers with an open job are Work Spaces of their own (Coy, 2026-10-21: "Only customer with open
+ * jobs gets a space"): one per customer, named, in the order their newest open job came in. Every
+ * customer stays in the Customers collection either way.
+ */
+export function openJobCustomers(jobs: Array<{ status: string | null; customer_id?: string | null; customer?: string | null }>): Array<{ id: string; name: string }> {
+  const out: Array<{ id: string; name: string }> = [];
+  const seen = new Set<string>();
+  for (const j of jobs) {
+    const id = j.customer_id ?? "";
+    const name = (j.customer ?? "").trim();
+    if (!id || !name || seen.has(id) || !isOpenJob(j.status)) continue;
+    seen.add(id);
+    out.push({ id, name });
+  }
+  return out;
+}
+
 /** The stage's colour on a rail tile, as a theme variable (the Jobs board's palette). */
 const STAGE_VAR: Record<string, string> = {
   new: "--sc-hiviz", consult: "--sc-violet", estimating: "--sc-chalk", follow: "--sc-hiviz-text",
@@ -190,7 +208,7 @@ export const SPACE_KINDS: Array<{ kind: "job" | "customer" | "vendor" | "collect
   { kind: "job", label: "Job", shelves: "Customer Account · Channels", blurb: "Work to price and win — opens the New job form." },
   { kind: "customer", label: "Customer", shelves: "Account · Channels · Toolbox", blurb: "A household, business or school, with its people and jobs." },
   { kind: "vendor", label: "Vendor", shelves: "Supply · Channels · Toolbox", blurb: "A supplier or sub, with their prices and bid requests." },
-  { kind: "collection", label: "Collection", shelves: "Threads · Files", blurb: "Any set of people kept together, like a thread you make." },
+  { kind: "collection", label: "Your own", shelves: "Jobs · Customers · Vendors · Channels", blurb: "A Work Space you make, like Fort Polk: any jobs, customers and vendors kept together." },
 ];
 
 export interface TreeRow { k: string; label: string; href: string; sub?: boolean }
@@ -328,7 +346,7 @@ export function internalThreads(people: SpacePerson[]): ThreadRow[] {
 export interface Shelf { id: string; name: string; pages: string[] }
 
 export const DEFAULT_SHELVES: Shelf[] = [
-  { id: "buckets", name: "Buckets", pages: ["customers", "contacts", "vendors", "scope"] },
+  { id: "buckets", name: "Collections", pages: ["customers", "contacts", "vendors", "scope"] },
   { id: "toolbox", name: "Toolbox", pages: ["map", "camera", "pricebook", "files"] },
 ];
 /**
@@ -337,10 +355,10 @@ export const DEFAULT_SHELVES: Shelf[] = [
  * channel on no shelf shows under the shelves as before.
  */
 export const CHANNELS: Array<{ key: string; label: string }> = [
-  { key: "ch:customer", label: "Customers threads" },
-  { key: "ch:vendor", label: "Vendors threads" },
-  { key: "ch:personal", label: "Personal threads" },
-  { key: "ch:unsorted", label: "Unsorted threads" },
+  { key: "ch:customer", label: "Customers (people)" },
+  { key: "ch:vendor", label: "Vendors (people)" },
+  { key: "ch:personal", label: "Personal (people)" },
+  { key: "ch:unsorted", label: "Unsorted (people)" },
   { key: "ch:more", label: "Spam and Archived" },
 ];
 export const isChannel = (k: string) => k.startsWith("ch:");
@@ -368,7 +386,9 @@ export function cleanShelves(v: unknown): Shelf[] | null {
     if (!s || typeof s !== "object") continue;
     const r = s as Record<string, unknown>;
     const id = typeof r.id === "string" ? r.id.slice(0, 40) : "";
-    const name = typeof r.name === "string" ? r.name.trim().slice(0, MAX_SHELF_NAME) : "";
+    let name = typeof r.name === "string" ? r.name.trim().slice(0, MAX_SHELF_NAME) : "";
+    // The list pages' shelf is Collections (Coy, 2026-10-21); a shelf saved under the old default name follows.
+    if (id === "buckets" && name === "Buckets") name = "Collections";
     if (!id || !name || seenIds.has(id)) continue;
     seenIds.add(id);
     const pages: string[] = [];

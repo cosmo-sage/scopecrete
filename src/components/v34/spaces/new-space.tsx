@@ -37,7 +37,7 @@ export function PickList({ pages, picks, onChange }: { pages: string[]; picks: s
     <div className="sc-newspace-picks">
       <span className="sc-shelf-edit-h">Tools</span>
       {pages.filter((k) => PAGE.has(k)).map((k) => box(k, PAGE.get(k)!.label))}
-      <span className="sc-shelf-edit-h">Channels</span>
+      <span className="sc-shelf-edit-h">People by bucket</span>
       {CHANNELS.map((c) => box(c.key, c.label))}
     </div>
   );
@@ -275,19 +275,19 @@ export function NewSpaceDialog({ onClose, onMade, pages, openJobs = [] }: {
   const canCreate = kind === "collection" ? !!name.trim() : picked.length > 0;
   const n = picked.length;
   const goLabel = busy ? "Working…" : kind === "collection"
-    ? `Create collection${n ? ` · ${n}` : ""}`
+    ? `Create Work Space${n ? ` · ${n}` : ""}`
     : n === 1 ? `Add ${picked[0].name} to the rail` : `Add ${n || ""} ${NOUN[(kind ?? "job") as ItemKind][n === 1 ? 0 : 1]} to the rail`.replace("  ", " ");
 
   return (
     <div className="sc-newspace-scrim" onClick={onClose}>
-      <div className="sc-newspace" role="dialog" aria-modal="true" aria-label="New Space" onClick={(e) => e.stopPropagation()}>
+      <div className="sc-newspace" role="dialog" aria-modal="true" aria-label="New Work Space" onClick={(e) => e.stopPropagation()}>
         {!kind ? (
           <div key="kind" className="sc-newspace-step" data-from={back ? "left" : undefined}>
             <div className="sc-newspace-head">
-              <span className="sc-newspace-title">New Space</span>
+              <span className="sc-newspace-title">New Work Space</span>
               <button type="button" className="sc-newspace-x" onClick={onClose} aria-label="Close">×</button>
             </div>
-            <div className="sc-newspace-kinds" role="list" aria-label="What kind of Space">
+            <div className="sc-newspace-kinds" role="list" aria-label="What kind of Work Space">
               {SPACE_KINDS.map((k) => (
                 <button key={k.kind} type="button" role="listitem" className="sc-newspace-kind"
                   onClick={() => { setBack(false); setKind(k.kind); setPicked([]); setErr(null); }}>
@@ -297,7 +297,7 @@ export function NewSpaceDialog({ onClose, onMade, pages, openJobs = [] }: {
                 </button>
               ))}
             </div>
-            <p className="sc-newspace-blurb">Pick what kind of Space, then pick one or several to put on the rail.</p>
+            <p className="sc-newspace-blurb">Pick what kind of Work Space, then pick one or several to put on the rail.</p>
           </div>
         ) : (
           <div key={kind} className="sc-newspace-step" data-from="right">
@@ -305,7 +305,7 @@ export function NewSpaceDialog({ onClose, onMade, pages, openJobs = [] }: {
               <button type="button" className="sc-newspace-back" onClick={goBack} aria-label="Back">‹ Back</button>
               <span className="sc-newspace-title">
                 <SpaceSilhouette kind={SHAPE[kind]} color={COLOR[kind]} initials={monogram(name || meta!.label)} size={22} />
-                {kind === "collection" ? "New collection" : `${meta!.label} Spaces`}
+                {kind === "collection" ? "Your own Work Space" : `${meta!.label} Work Spaces`}
               </span>
               <button type="button" className="sc-newspace-x" onClick={onClose} aria-label="Close">×</button>
             </div>
@@ -321,7 +321,7 @@ export function NewSpaceDialog({ onClose, onMade, pages, openJobs = [] }: {
                 </div>
                 <div className="sc-newspace-field">
                   <button type="button" className="sc-newspace-fold" onClick={() => setShowTools(!showTools)} aria-expanded={showTools}>
-                    {showTools ? "▾" : "▸"} Tools &amp; channels{picks.length ? ` · ${picks.length}` : ""}
+                    {showTools ? "▾" : "▸"} Tools &amp; people{picks.length ? ` · ${picks.length}` : ""}
                   </button>
                   {showTools && <PickList pages={pages} picks={picks} onChange={setPickList} />}
                 </div>

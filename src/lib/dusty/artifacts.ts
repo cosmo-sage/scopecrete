@@ -7,8 +7,9 @@
  */
 import { parsePlan } from "./plan.ts";
 import { splitUse } from "./use-block.ts";
+import { parseDrawing } from "./drawing.ts";
 
-export type ArtifactKind = "plan" | "words" | "table" | "file" | "link";
+export type ArtifactKind = "plan" | "words" | "table" | "drawing" | "file" | "link";
 export interface Artifact {
   /** Stable within the chat: "<turn>:<kind>:<n>". */
   key: string;
@@ -105,13 +106,23 @@ export function artifactsOf(items: Turn[], opts: { streaming?: number | null } =
       const first = u.box.split("\n").find((l) => l.trim()) ?? "";
       out.push({ key: `${i}:words:0`, kind: "words", turn: i, title: "Words for the page", sub: first.replace(/^[-*•]\s*/, "").slice(0, 90), body: u.box });
     }
-    tablesIn(p.shown).forEach((t, n) => {
+    // Drawings (a ```drawing block of plain SVG shapes), taken out before tables and links so a
+    // drawing's xmlns never lands in Links.
+    const DRAW = /```(?:drawing|svg)[^\n]*\n([\s\S]*?)```/g;
+    let nd = 0;
+    for (const m of p.shown.matchAll(DRAW)) {
+      const d = parseDrawing(m[1]);
+      if (!d) continue;
+      out.push({ key: `${i}:drawing:${nd++}`, kind: "drawing", turn: i, title: d.title, sub: "Drawing", body: "```drawing\n" + m[1] + "\n```" });
+    }
+    const prose = p.shown.replace(DRAW, " ");
+    tablesIn(prose).forEach((t, n) => {
       const rows = t.split("\n");
       const head = cells(rows[0]).filter(Boolean);
       out.push({ key: `${i}:table:${n}`, kind: "table", turn: i, title: head.slice(0, 3).join(" · ") || "Table",
         sub: `${rows.length - 2} row${rows.length - 2 === 1 ? "" : "s"}`, body: t });
     });
-    linksIn(p.shown).forEach((l, n) => {
+    linksIn(prose).forEach((l, n) => {
       const app = l.href.startsWith("/");
       out.push({ key: `${i}:link:${n}`, kind: "link", turn: i, title: l.label, sub: app ? "In ScopeCrete" : hostOf(l.href).split("/")[0], href: l.href });
     });
@@ -121,5 +132,6 @@ export function artifactsOf(items: Turn[], opts: { streaming?: number | null } =
 
 export const ARTIFACT_KINDS: Array<{ k: "all" | ArtifactKind; label: string }> = [
   { k: "all", label: "All" }, { k: "plan", label: "Plans" }, { k: "table", label: "Tables" },
+  { k: "drawing", label: "Drawings" },
   { k: "words", label: "Words" }, { k: "file", label: "Files" }, { k: "link", label: "Links" },
 ];

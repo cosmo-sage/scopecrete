@@ -41,3 +41,10 @@ test("a chat's artifacts, newest first, the streaming turn left out", () => {
   assert.equal(a[3].thumb, "https://x/y.jpg");
   assert.equal(artifactsOf(items).length, 5);
 });
+
+test("a drawing is its own artifact, titled from its <title>, and its xmlns is no link", () => {
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 60"><title>Driveway layout</title><rect x="10" y="10" width="80" height="40"/></svg>';
+  const a = artifactsOf([{ role: "user", content: "Draw it" }, { role: "assistant", content: "Here:\n\n```drawing\n" + svg + "\n```" }]);
+  assert.deepEqual(a.map((x) => x.kind), ["drawing"]);
+  assert.equal(a[0].title, "Driveway layout");
+});

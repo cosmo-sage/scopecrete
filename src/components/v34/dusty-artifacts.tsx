@@ -26,7 +26,7 @@ export function DustyHome() {
   return <DustyArtifacts />;
 }
 
-const ICON: Record<ArtifactKind, string> = { plan: "☰", table: "▦", words: "¶", file: "📎", link: "↗" };
+const ICON: Record<ArtifactKind, string> = { plan: "☰", table: "▦", drawing: "✎", words: "¶", file: "📎", link: "↗" };
 
 function DustyArtifacts() {
   const chat = useDustyChat();

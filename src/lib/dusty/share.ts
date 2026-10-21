@@ -10,7 +10,7 @@ export interface ShareTurn { role: "user" | "assistant"; content: string }
 function answerText(content: string): string {
   const p = parsePlan(content);
   const steps = p.actions.length ? `\n\n(Dusty proposed ${p.actions.length} step${p.actions.length === 1 ? "" : "s"} — open the chat in ScopeCrete to apply them.)` : "";
-  return `${p.shown.replace(/```proposal\s*\n?/g, "").replace(/```/g, "").trim()}${steps}`.trim();
+  return `${p.shown.replace(/```(?:drawing|svg)[^\n]*\n[\s\S]*?(?:```|$)/g, "(Dusty made a drawing — open the chat in ScopeCrete to see it.)").replace(/```proposal\s*\n?/g, "").replace(/```/g, "").trim()}${steps}`.trim();
 }
 
 export function shareText(items: ShareTurn[], which: "last" | "chat", title?: string | null): string {

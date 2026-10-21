@@ -32,6 +32,8 @@ export interface Party {
 export interface JobPerson {
   id: string; name: string | null; phone: string | null; email: string | null; role: string | null;
   side: "customer" | "owner" | null; primary: boolean; party_primary: boolean;
+  /** On this job (migration 115, job_contacts); undefined before it. */
+  on_job?: boolean;
 }
 type Pt = { lat: number; lng: number };
 
@@ -257,21 +259,38 @@ export function OwnerCard({ jobId, owner, customer, supported, ownerPeople, onSa
 const PhoneIcon = () => <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z" /></svg>;
 const MailIcon = () => <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2" /><path d="m22 7-10 6L2 7" /></svg>;
 
-export function ContactsCard({ jobId, people, customer, owner, jobType, site, onSaved }: {
+export function ContactsCard({ jobId, people, customer, owner, jobType, site, onSaved, picks = false }: {
   jobId: string; people: JobPerson[]; customer: Party | null; owner: Party | null; jobType: string | null;
   site: { address: string | null; city?: string | null; state?: string | null; zip?: string | null }; onSaved: () => void;
+  /** Migration 115 (job_contacts): who is on this job is picked from the customer's people. */
+  picks?: boolean;
 }) {
   const [filter, setFilter] = useState<"all" | "customer" | "owner">("all");
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const shown = people.filter((p) => filter === "all" || p.side === filter);
+  const sided = people.filter((p) => filter === "all" || p.side === filter);
+  // With 115 the card lists who is on this job; the customer's other people sit under it to put on.
+  const shown = picks ? sided.filter((p) => p.on_job) : sided;
+  const others = picks ? sided.filter((p) => !p.on_job) : [];
+  const onJob = async (p: JobPerson, on: boolean) => {
+    setBusy(p.id); setErr(null);
+    try {
+      if (on) await send(`/api/jobs/${jobId}/contacts`, "POST", { contact_id: p.id, side: p.side ?? "other" });
+      else await send(`/api/jobs/${jobId}/contacts?contact_id=${encodeURIComponent(p.id)}`, "DELETE");
+      onSaved();
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(null); }
+  };
   // Who a new person goes on: the side picked in the filter, else the customer.
   const addTo = filter === "owner" && owner ? owner : customer ?? owner;
   const attach = async (contactId: string) => {
     if (!addTo) return;
     setBusy("add"); setErr(null);
-    try { await send(`/api/customers/${addTo.id}/contacts`, "POST", { contact_id: contactId }); setAdding(false); onSaved(); }
+    try {
+      await send(`/api/customers/${addTo.id}/contacts`, "POST", { contact_id: contactId });
+      if (picks) await send(`/api/jobs/${jobId}/contacts`, "POST", { contact_id: contactId, side: addTo === owner ? "owner" : "customer" });
+      setAdding(false); onSaved();
+    }
     catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(null); }
   };
   const make = async (p: JobPerson) => {
@@ -287,7 +306,7 @@ export function ContactsCard({ jobId, people, customer, owner, jobType, site, on
   return (
     <section aria-label="Contacts on this job" style={{ background: T.card, border: `1px solid ${T.hair}`, borderTop: `3px solid ${T.chalk}`, borderRadius: 3, display: "flex", flexDirection: "column", minWidth: 0 }}>
       <div className="flex items-center gap-2" style={{ padding: "12px 14px 6px" }}>
-        <span style={kicker(T.chalk)}>Contacts on this job · {people.length}</span>
+        <span style={kicker(T.chalk)}>Contacts on this job · {picks ? people.filter((p) => p.on_job).length : people.length}</span>
         <button onClick={() => setAdding((v) => !v)} style={linkBtn}>{adding ? "Close" : "+ Add contact"}</button>
       </div>
       {owner && (
@@ -331,6 +350,13 @@ export function ContactsCard({ jobId, people, customer, owner, jobType, site, on
                 : <span aria-hidden="true" style={{ ...iconBtn, opacity: 0.35 }}><PhoneIcon /></span>}
               {p.email ? <Link href={`/dashboard/messages/email/new?contact=${encodeURIComponent(p.id)}&to=${encodeURIComponent(p.email)}`} aria-label={`Email ${p.name ?? "them"} in Threads`} style={iconBtn}><MailIcon /></Link>
                 : <span aria-hidden="true" style={{ ...iconBtn, opacity: 0.35 }}><MailIcon /></span>}
+              {picks && !p.primary && (
+                <button onClick={() => void onJob(p, false)} disabled={!!busy} aria-label={`Take ${p.name ?? "them"} off this job`}
+                  style={{ height: 36, padding: "0 10px", border: `1px solid ${T.hairStrong}`, borderRadius: 2, background: "transparent", color: T.ink3,
+                    fontFamily: disp, fontSize: 12, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase", whiteSpace: "nowrap", cursor: "pointer" }}>
+                  {busy === p.id ? "…" : "Take off"}
+                </button>
+              )}
               {!customer && p.name && (
                 <button onClick={() => void make(p)} disabled={!!busy}
                   style={{ height: 36, padding: "0 10px", border: `1px solid ${T.hiviz}`, borderRadius: 2, background: "transparent", color: T.hivizText,
@@ -342,6 +368,20 @@ export function ContactsCard({ jobId, people, customer, owner, jobType, site, on
           </div>
         );
       })}
+      {others.length > 0 && (
+        <div style={{ padding: "10px 14px", borderTop: `1px solid ${T.hair}` }}>
+          <div style={{ fontSize: 12, color: T.ink3, marginBottom: 6 }}>Also at {filter === "owner" ? owner?.name || "the owner" : filter === "customer" ? customer?.name || "the customer" : "the customer and owner"} · not on this job</div>
+          {others.map((p) => (
+            <div key={p.id} className="flex gap-2 items-center" style={{ padding: "4px 0" }}>
+              <InitialsBox name={p.name} size={26} />
+              <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, color: T.ink2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {p.name || formatPhone(p.phone) || "No name"}{p.role ? ` · ${p.role}` : ""}
+              </span>
+              <button onClick={() => void onJob(p, true)} disabled={!!busy} style={linkBtn}>{busy === p.id ? "Adding…" : "+ On this job"}</button>
+            </div>
+          ))}
+        </div>
+      )}
       {err && <div style={{ padding: "0 14px 10px", fontSize: 12, color: T.red }}>{err}</div>}
     </section>
   );

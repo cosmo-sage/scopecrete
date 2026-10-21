@@ -33,6 +33,8 @@ interface Party {
 interface JobPerson {
   id: string; name: string | null; phone: string | null; email: string | null; role: string | null;
   side: "customer" | "owner" | null; primary: boolean; party_primary: boolean;
+  /** On this job (migration 115, job_contacts); undefined before it. */
+  on_job?: boolean;
 }
 
 const EDITABLE = ["title", "address", "city", "state", "zip", "job_number", "notes", "status",
@@ -424,9 +426,25 @@ export async function GET(
   if (contact && !people.some((p) => p.id === contact!.id)) {
     people.unshift({ id: contact.id, name: contact.name, phone: contact.phone, email: contact.email ?? null, role: null, side: null, primary: true, party_primary: false });
   }
+  // Who is on THIS job (migration 115): flagged on each person, and anyone on it from neither side
+  // (a vendor, someone else) added. Before 115 every person of either side counts, as before.
+  const jc = await supabase.from("job_contacts").select("contact_id, side").eq("org_id", orgId).eq("job_id", id);
+  const jobContactsSupported = !jc.error;
+  if (!jc.error) {
+    const onJob = new Map(((jc.data ?? []) as Array<{ contact_id: string; side: string }>).map((r) => [r.contact_id, r.side]));
+    for (const p of people) p.on_job = onJob.has(p.id) || p.primary;
+    const extra = [...onJob.keys()].filter((cid) => !people.some((p) => p.id === cid));
+    if (extra.length) {
+      const { data: xs } = await supabase.from("contacts").select("id, name, phone, email, role").eq("org_id", orgId).in("id", extra).is("merged_into_contact_id", null);
+      for (const x of (xs ?? []) as Array<Record<string, unknown>>) {
+        people.push({ id: x.id as string, name: (x.name as string | null) ?? null, phone: (x.phone as string | null) ?? null, email: (x.email as string | null) ?? null,
+          role: (x.role as string | null) ?? onJob.get(x.id as string) ?? null, side: null, primary: false, party_primary: false, on_job: true });
+      }
+    }
+  }
   people.sort((a, b) => Number(b.primary) - Number(a.primary) || (a.side === b.side ? 0 : a.side === "customer" ? -1 : 1) || (a.name ?? "").localeCompare(b.name ?? ""));
   const customer = data.customer_id ? parties.get(data.customer_id) ?? null : null;
   const owner = ownerId ? parties.get(ownerId) ?? null : null;
 
-  return applyCookies(NextResponse.json({ job: data, contact, customer, owner, owner_supported: ownerSupported, people, site, why, crew, contract }));
+  return applyCookies(NextResponse.json({ job: data, contact, customer, owner, owner_supported: ownerSupported, people, job_contacts_supported: jobContactsSupported, site, why, crew, contract }));
 }

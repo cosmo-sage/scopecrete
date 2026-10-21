@@ -78,6 +78,7 @@ export function JobSummary({ jobId }: { jobId: string }) {
   const [owner, setOwner] = useState<Party | null>(null);
   const [ownerSupported, setOwnerSupported] = useState(true);
   const [people, setPeople] = useState<JobPerson[]>([]);
+  const [jobContacts, setJobContacts] = useState(false);
   const [wideRef, wide] = useWide<HTMLDivElement>(600);
   const [sections, setSections] = useState<SectionInput[] | null>(null);
   const [bd, setBd] = useState<BudgetData | null>(null);
@@ -91,7 +92,7 @@ export function JobSummary({ jobId }: { jobId: string }) {
   const take = useCallback((j: Record<string, unknown>) => {
     setJob(j.job as Job); setContact((j.contact as Contact | null) ?? null); setCustomer((j.customer as Party | null) ?? null);
     setOwner((j.owner as Party | null) ?? null); setOwnerSupported(j.owner_supported !== false);
-    setPeople((j.people as JobPerson[] | undefined) ?? []);
+    setPeople((j.people as JobPerson[] | undefined) ?? []); setJobContacts(j.job_contacts_supported === true);
     setContract((j.contract as Contract | null) ?? null);
   }, []);
 
@@ -174,7 +175,7 @@ export function JobSummary({ jobId }: { jobId: string }) {
               <OwnerCard jobId={jobId} owner={owner} customer={customer} supported={ownerSupported}
                 ownerPeople={people.filter((p) => p.side === "owner").length} onSaved={() => void reload()} />
             </div>
-            <ContactsCard jobId={jobId} people={people} customer={customer} owner={owner} jobType={job.job_type} site={siteParts} onSaved={() => void reload()} />
+            <ContactsCard jobId={jobId} people={people} customer={customer} owner={owner} jobType={job.job_type} site={siteParts} onSaved={() => void reload()} picks={jobContacts} />
           </div>
         </div>
         {/* The Job site map is on Locations, appointments and the schedule on Schedule, and What's

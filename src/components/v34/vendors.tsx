@@ -26,6 +26,7 @@ import { Empty, panelTitle } from "@/components/v34/record-page";
 import { ReceiptImport } from "@/components/v34/receipt-import";
 import { PENDING_VENDOR_KEY } from "@/components/v34/org-settings";
 import { InitialsBox } from "@/components/v34/thread-list";
+import { ContactPicker } from "@/components/v34/contacts";
 import { BidComposer } from "@/components/v34/bids/bid-composer";
 import { websiteLabel } from "@/lib/vendor-website";
 import { TRADES, bidStats, cleanTrades, hasTrade, hoursLabel, tradeCounts, type PriceLine, type ShownScope } from "@/lib/bids";
@@ -397,6 +398,66 @@ interface VFile { id: string; name: string; category: string | null; read_state:
 interface VPage {
   vendor: VRow & { contact_type: string; status_summary: string | null };
   prices: Price[]; files: VFile[]; jobs: Array<{ id: string; title: string | null; status: string; address: string | null; role: string | null }>; messages: number;
+  /** Their account (a customers row) and its people; absent on an older server. */
+  account?: { id: string; name: string | null; relation: string } | null;
+  people?: VPerson[];
+}
+interface VPerson { id: string; name: string | null; phone: string | null; email: string | null; role: string | null; bucket: string | null; primary: boolean }
+
+/**
+ * The people at a vendor (Coy, 2026-10-21: "a vendor account will have contacts inside it just like a
+ * customer account"). Their account is the customers row filing them vendor made (relation vendor · sub);
+ * + Add person files the pick as a vendor first, then puts them on it through the customer page's own
+ * routes (sc_attach_contact, undoable). Migration 116 keeps a second person there when they are filed again.
+ */
+function VendorPeople({ p, vendorId, onSaved }: { p: VPage; vendorId: string; onSaved: () => void }) {
+  const [adding, setAdding] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const people = p.people ?? [];
+  const acct = p.account;
+  const add = async (contactId: string, bucket: string | null) => {
+    if (!acct) return;
+    setBusy("add"); setErr(null);
+    try {
+      if (bucket !== "vendor") await call(`/api/contacts/${contactId}/bucket`, "PATCH", { bucket: "vendor" });
+      await call(`/api/customers/${acct.id}/contacts`, "POST", { contact_id: contactId });
+      setAdding(false); onSaved();
+    } catch (e) { setErr(String((e as Error).message)); } finally { setBusy(null); }
+  };
+  const remove = async (x: VPerson) => {
+    if (!acct || !confirm(`Take ${x.name ?? "them"} off ${acct.name ?? "this vendor"}? Their calls and texts stay with them.`)) return;
+    setBusy(x.id); setErr(null);
+    try { await call(`/api/customers/${acct.id}/contacts/${x.id}`, "DELETE"); onSaved(); }
+    catch (e) { setErr(String((e as Error).message)); } finally { setBusy(null); }
+  };
+  return (
+    <div style={{ padding: "12px 0", display: "flex", flexDirection: "column", gap: 8, maxWidth: 720 }}>
+      <div className="flex items-center gap-2">
+        <span style={panelTitle}>People at {acct?.name || label(p.vendor)} · {people.length}</span>
+        {acct && <button onClick={() => setAdding((v) => !v)} style={{ marginLeft: "auto", height: 30, padding: "0 10px", border: `1px solid ${T.hairStrong}`, borderRadius: 2,
+          background: "transparent", color: T.ink2, fontFamily: disp, fontSize: 12, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase", cursor: "pointer" }}>{adding ? "Close" : "+ Add person"}</button>}
+      </div>
+      {!acct && <Empty text="Keep them as a vendor first (the tag under their name) — that makes their account, and people go on it." />}
+      {adding && acct && <ContactPicker exclude={people.map((x) => x.id)} onPick={(c) => void add(c.id, c.role === "vendor" || c.role === "sub" ? "vendor" : null)} busy={busy === "add"} bucket="vendor" />}
+      {people.map((x) => (
+        <div key={x.id} className="flex items-center gap-2.5" style={{ padding: "8px 10px", background: T.card, border: `1px solid ${T.hair}`, borderRadius: 3 }}>
+          <InitialsBox name={x.name} size={32} />
+          <div className="flex flex-col" style={{ flex: 1, minWidth: 0 }}>
+            <span className="flex gap-1.5 items-center">
+              <Link href={x.id === vendorId ? `/dashboard/vendors/${x.id}` : `/dashboard/messages/${x.id}?person=1`} className="no-underline" style={{ fontSize: 14, fontWeight: 600, color: T.ink }}>{x.name || formatPhone(x.phone) || "No name"}</Link>
+              {x.primary && <span style={{ fontFamily: disp, fontSize: 11, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase", color: T.hivizText }}>Primary</span>}
+              {x.role && <span style={{ fontSize: 12, color: T.ink3 }}>{x.role}</span>}
+            </span>
+            <span style={{ fontSize: 12.5, color: T.ink3, overflowWrap: "anywhere" }}>{[x.phone ? formatPhone(x.phone) : null, x.email].filter(Boolean).join(" · ") || "No number or email"}</span>
+          </div>
+          {x.phone && <a href={`tel:${x.phone}`} style={{ fontSize: 13, color: T.ink2 }}>Call</a>}
+          {!x.primary && <button onClick={() => void remove(x)} disabled={!!busy} style={{ border: 0, background: "transparent", color: T.ink3, fontSize: 13, cursor: "pointer" }}>{busy === x.id ? "…" : "Take off"}</button>}
+        </div>
+      ))}
+      {err && <span style={{ fontSize: 12, color: T.red }}>{err}</span>}
+    </div>
+  );
 }
 
 /**
@@ -447,6 +508,7 @@ export function VendorPage({ id }: { id: string }) {
   const extra: RecordExtras = {
     tabs: [
       { key: "bids", label: `Bid requests ${bids ? mine.length : ""}`.trim(), render: () => p ? <VendorBids rows={mine} stats={stats} jobs={p.jobs.length} missing={bidsMissing} onSend={() => setComposing(true)} /> : <Empty text={err ?? "Loading…"} /> },
+      { key: "people", label: `People ${p?.people ? p.people.length : ""}`.trim(), render: () => p ? <VendorPeople p={p} vendorId={id} onSaved={() => setTick((n) => n + 1)} /> : <Empty text={err ?? "Loading…"} /> },
       { key: "prices", label: `Cost book ${p?.prices.length ?? ""}`.trim(), render: () => p ? <VendorPrices p={p} onDefault={(pr) => void makeDefault(pr)} /> : <Empty text={err ?? "Loading…"} /> },
       { key: "receipts", label: `Receipts & quotes ${p ? receipts : ""}`.trim(), render: () => p ? <VendorReceipts p={p} onImport={() => setReceipt(true)} /> : <Empty text={err ?? "Loading…"} /> },
     ],

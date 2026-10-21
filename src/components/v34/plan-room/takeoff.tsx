@@ -25,6 +25,15 @@ import { AskIcon, shapeMiddle, usePlanPins } from "./sheet-comments";
 import { useDustyZones } from "./dusty-zones";
 import { useDustyJoints } from "./dusty-joints";
 import { AiTakeoffMenu } from "./ai-takeoff-menu";
+import { CompareBar, CompareToast, PaneGrid, PaneHead, PaneNote, paneBtn, useCompare, usePhoneWidth } from "./sheet-compare";
+import { useWide } from "@/lib/v34/use-wide";
+
+const noop = () => {};
+const noopDraft: React.Dispatch<React.SetStateAction<Pt[]>> = () => {};
+const noopAsync = async () => {};
+const NO_PTS: Pt[] = [];
+/** A scanned sheet: the OCR reader has read it (migration 064). A phone holds one decoded scan at a time. */
+const isScan = (s: Sheet) => !!(s.ocr_title_at || s.ocr_at);
 
 /** Count's subtract: each click takes off the counted point nearest it. */
 function dropNearest(geom: Pt[], picks: Pt[]): Pt[] {
@@ -191,6 +200,23 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
   const zones = useDustyZones({ sheet, fileUrl: file?.url ?? null, data, act, jobId });
   // Find joints: control joints read off the PDF's own lines — ./dusty-joints.tsx.
   const joints = useDustyJoints({ sheet, fileUrl: file?.url ?? null, data, act, jobId });
+
+  // Sheets side by side (Coy, 2026-10-21; Claude Design "Sheet Compare") — ./sheet-compare.tsx.
+  const phone = usePhoneWidth();
+  const cmp = useCompare({ jobId, sheets, sheetId: sheet?.id ?? null, setSheetId, zoom, setZoom: setZoomTo, phone, drafting: draft.length > 0 });
+  const [ticks, setTicks] = useState<string[]>([]);
+  const downAt = useRef<[number, number] | null>(null);
+  const saveShape = (mid: string, pts: Pt[]) => { const m = data.measurements.find((x) => x.id === mid); return patchRec(mid, { geometry: m?.geometry ?? pts }, { geometry: pts }, "Edit corners"); };
+  const moveShape = (mid: string, d: Pt) => { const m = data.measurements.find((x) => x.id === mid); if (!m) return Promise.resolve();
+    const sh = (l: Pt[]) => l.map(([x, y]) => [x + d[0], y + d[1]] as Pt);
+    return patchRec(mid, { geometry: m.geometry, cutouts: m.cutouts ?? [] }, { geometry: sh(m.geometry), cutouts: (m.cutouts ?? []).map(sh) }, "Move"); };
+  const [gridRef, gridWide] = useWide<HTMLDivElement>(760);
+  /** A sheet picked from Parameters or a list: the pane that shows it, else the active pane. */
+  const goSheet = useCallback((id: string) => {
+    const i = cmp.view ? cmp.view.panes.indexOf(id) : -1;
+    if (cmp.view && i >= 0 && i !== cmp.view.active) cmp.activate(i);
+    else if (id !== sheet?.id) setSheetId(id);
+  }, [cmp, sheet?.id, setSheetId]);
 
   // Back / forward over what was done on the plans (Coy, 2026-10-15: "a back / forward button to
   // undo/redo actions"). Each step knows how to put itself back; a takeoff drawn again after an undo
@@ -402,7 +428,7 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
       {panel ? (
         <div className="hidden lg:flex" style={{ flex: "0 0 auto", minHeight: 0 }}>
           <ParamPanel jobId={jobId} data={data} groupId={groupId} setGroupId={setGroupId} selId={selId}
-            onSelect={(m) => { setSelId(m.id); setGroupId(m.parameter_id); if (m.sheet_id !== sheet?.id) setSheetId(m.sheet_id); setTool("select"); }}
+            onSelect={(m) => { setSelId(m.id); setGroupId(m.parameter_id); goSheet(m.sheet_id); setTool("select"); }}
             act={act} onDelete={deleteRec} onSend={onSend} onCollapse={() => setPanel(false)}
             sheetsView={(
               <div className="flex flex-col" style={{ padding: 8, gap: 6 }}>
@@ -411,7 +437,11 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
                   const f = files.find((x) => x.id === s.file_id);
                   return (
                     <div key={s.id} className="flex items-stretch rounded" style={{ border: `1px solid ${on ? T.hiviz : T.hair}`, background: on ? T.hivizDim : T.card }}>
-                      <button onClick={() => setSheetId(s.id)} aria-current={on ? "true" : undefined} className="text-left flex-1"
+                      <label className="shrink-0 flex items-center justify-center" title="Tick two to four to compare them side by side" style={{ width: 28, cursor: "pointer" }}>
+                        <input type="checkbox" checked={ticks.includes(s.id)} aria-label={`Compare ${sheetLabel(s)}`}
+                          onChange={(e) => setTicks((t) => e.target.checked ? [...t.filter((x) => x !== s.id), s.id] : t.filter((x) => x !== s.id))} />
+                      </label>
+                      <button onClick={() => goSheet(s.id)} aria-current={on ? "true" : undefined} className="text-left flex-1"
                         style={{ padding: "6px 8px", minWidth: 0, background: "transparent", border: "none", cursor: "pointer" }}>
                         <span style={{ display: "block", fontSize: 13, color: T.ink }}>{(() => { const n = data.measurements.filter((m) => m.sheet_id === s.id).length; return n ? <span title={`${n} takeoff${n === 1 ? "" : "s"} measured on this sheet`} aria-label={`${n} takeoffs on this sheet`} style={{ display: "inline-flex", alignItems: "center", gap: 2, marginRight: 4, padding: "0 4px", borderRadius: 3, background: T.greenDim, color: T.green, fontSize: 10.5, fontWeight: 700, verticalAlign: "1px" }}><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M2 11 11 2l3 3-9 9H2z M8 5l1.5 1.5M6 7l1 1M10 3l1.5 1.5" /></svg>{n}</span> : null; })()}<b style={{ fontFamily: strong, fontWeight: 600 }}>{sheetLabel(s)}</b>{" "}<span style={{ color: T.ink2 }}>{s.title ?? "No title read"}</span></span>
                         <span style={{ display: "block", fontSize: 10.5, color: T.ink3, ...clipTxt }}>p.{s.page}{f ? ` · ${f.name}` : ""} · <span style={{ color: s.scale_ft_per_pt ? T.green : T.ink3 }}>{s.scale_ft_per_pt ? "✓ scale set" : s.scale_method === "none" ? "not to scale" : "no scale yet"}</span></span>
@@ -428,6 +458,15 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
                   </div>
                 )}
                 {!sheets.length && <div style={{ fontSize: F.xs, color: T.ink3, padding: 6 }}>No sheets yet. Add a plan PDF on the job&apos;s Files page.</div>}
+                {sheets.length > 1 && (
+                  <div className="flex items-center gap-2 flex-wrap" style={{ position: "sticky", bottom: 0, background: T.card, padding: "6px 2px", borderTop: `1px solid ${T.hairSoft}` }}>
+                    <button onClick={() => { if (cmp.start(ticks)) setTicks([]); }} disabled={ticks.length < 2}
+                      style={{ ...paneBtn(ticks.length >= 2), opacity: ticks.length >= 2 ? 1 : 0.5, cursor: ticks.length >= 2 ? "pointer" : "default" }}>
+                      Compare {ticks.length >= 2 ? `${Math.min(ticks.length, 4)} sheets` : "sheets"}
+                    </button>
+                    <span style={{ fontSize: 11, color: T.ink3 }}>{ticks.length > 4 ? "The first four ticked" : "Tick two to four to see them side by side"}</span>
+                  </div>
+                )}
               </div>
             )} />
         </div>
@@ -504,7 +543,7 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
         <div className="lg:hidden">
           <SlideDrawer open={paramsOpen} onClose={() => openParams(false)} width={320} label="Parameters">
             <ParamPanel jobId={jobId} data={data} groupId={groupId} setGroupId={setGroupId} selId={selId} drawer
-              onSelect={(m) => { setSelId(m.id); setGroupId(m.parameter_id); if (m.sheet_id !== sheet?.id) setSheetId(m.sheet_id); setTool("select"); openParams(false); }}
+              onSelect={(m) => { setSelId(m.id); setGroupId(m.parameter_id); goSheet(m.sheet_id); setTool("select"); openParams(false); }}
               act={act} onDelete={deleteRec} onSend={(p, ids, whole) => { openParams(false); onSend(p, ids, whole); }} onCollapse={() => openParams(false)} />
           </SlideDrawer>
         </div>
@@ -545,6 +584,13 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
             className="flex items-center gap-1" style={{ ...tb(!!scaleMenu), padding: "0 8px", whiteSpace: "nowrap" }}>
             <ScaleBadge s={sheet} small /> ▾
           </button>}
+          {sheets.length > 1 && !cmp.view && (
+            <button onClick={() => cmp.start()} title="Compare sheets side by side: this one and another" aria-label="Compare sheets"
+              className="flex items-center gap-1.5" style={{ ...tb(false), padding: "0 8px" }}>
+              <svg width="16" height="14" viewBox="0 0 16 14" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true"><rect x="1" y="1" width="14" height="12" rx="1" /><path d="M8 1v12" /></svg>
+              <span className="hidden md:inline">Compare</span>
+            </button>
+          )}
           <button onClick={() => stepHist("back")} disabled={!hc.b || busy} title="Back: undo the last change on the plans (Ctrl + Z)" aria-label="Undo"
             style={{ ...tb(false), width: 30, padding: 0, opacity: hc.b ? 1 : 0.4 }}>
             <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ margin: "auto" }}><path d="M7.5 5 3.5 9l4 4" /><path d="M4 9h8a4.5 4.5 0 0 1 0 9h-2" /></svg>
@@ -591,6 +637,7 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
           </button>
         </div>
 
+        <CompareBar c={cmp} phone={phone} />
         {sheet && <ScaleBar sheet={sheet} act={act} startScale={() => pickTool("scale")} />}
         {sheet && scaleMenu && <ScaleMenu at={scaleMenu} sheet={sheet} onClose={() => setScaleMenu(null)}
           points={() => { setScaleMenu(null); pickTool("scale"); }}
@@ -609,6 +656,9 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
               </Fragment>
             ))}
           </div>
+        {(() => {
+        // The active pane: today's drawing with every tool; in a compare it is one cell of the grid.
+        const body = (i: number | null) => (<>
         {adj && sel && (
           <div className="flex items-center gap-2 px-3 py-1.5" style={{ position: "absolute", top: 8, left: "50%", transform: "translateX(-50%)", zIndex: 6, background: T.green, color: "#fff", borderRadius: 6, fontSize: F.xs, boxShadow: "0 2px 8px rgba(0,0,0,.2)", maxWidth: "calc(100% - 16px)" }}>
             <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{adj === "add" ? "Adding to" : "Taking from"} <b>{selName}</b> · {data.params.find((g) => g.id === sel.parameter_id)?.name}</span>
@@ -657,19 +707,52 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
         {zones.panel}
         {joints.panel}
         {sheet && file?.url ? (
-          <Drawing key={sheet.id} sheet={sheet} fileUrl={file.url} zoom={zoom} setZoom={setZoom} tool={tool}
+          <Drawing key={i === null ? sheet.id : `${sheet.id}:${i}`} slot={i === null ? undefined : `p${i}`} onBox={i === null ? undefined : cmp.boxRef(i)} sheet={sheet} fileUrl={file.url} zoom={zoom} setZoom={setZoom} tool={tool}
             data={data} groupId={groupId} selId={selId} setSelId={(id) => { setSelId(id); const m = data.measurements.find((x) => x.id === id); if (m) setGroupId(m.parameter_id); }}
             draft={draft} setDraft={setDraft} hover={hover} setHover={setHover} save={save} busy={busy || tracing} onTrace={(p) => void trace(p)} cutting={tool === "fill" && fillCut}
-            saveShape={(mid, pts) => { const m = data.measurements.find((x) => x.id === mid); return patchRec(mid, { geometry: m?.geometry ?? pts }, { geometry: pts }, "Edit corners"); }}
-            moveShape={(mid, d) => { const m = data.measurements.find((x) => x.id === mid); if (!m) return Promise.resolve();
-              const sh = (l: Pt[]) => l.map(([x, y]) => [x + d[0], y + d[1]] as Pt);
-              return patchRec(mid, { geometry: m.geometry, cutouts: m.cutouts ?? [] }, { geometry: sh(m.geometry), cutouts: (m.cutouts ?? []).map(sh) }, "Move"); }}
+            saveShape={saveShape} moveShape={moveShape}
             onPin={pins.askMode ? (p) => pins.place(p, selId) : undefined} pinLayer={(s) => <>{zones.layer(s)}{joints.layer(s)}{pins.layer(s)}</>} rot={rot} />
         ) : (
           <div className="flex-1 flex items-center justify-center p-6" style={{ fontSize: F.sm, color: T.ink3 }}>
             {sheet ? "This sheet's file can't be opened right now." : "No sheets yet — add a plan PDF on the job's Files page."}
           </div>
         )}
+        </>);
+        const v = cmp.view;
+        if (!v) return body(null);
+        const cell = (i: number) => {
+          const id = v.panes[i];
+          const s = cmp.byId.get(id) ?? null;
+          const same = v.panes.findIndex((x, j) => j !== i && x === id);
+          const head = <PaneHead i={i} sheet={s} sheets={sheets} active={i === v.active} c={cmp} phone={phone} sameAs={same >= 0 ? same : null} />;
+          if (i === v.active) return <>{head}<div style={{ position: "relative", flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>{body(i)}</div></>;
+          const f = s ? files.find((x) => x.id === s.file_id) : null;
+          let inner: React.ReactNode;
+          if (!s) inner = <PaneNote title="This sheet was removed" body="It was taken out of Takeoffs." actions={<button onClick={() => cmp.close(i)} style={paneBtn(false)}>Close pane</button>} />;
+          else if (!f?.url) inner = <PaneNote title="Can't open this sheet" body="Its file can't be opened right now." />;
+          // A phone holds one decoded scan at a time: the other waits until it is the one drawn in.
+          else if (phone && isScan(s)) inner = <PaneNote title={sheetLabel(s)} body="A scanned sheet is drawn one at a time on a phone." actions={<button onClick={() => cmp.activate(i)} style={paneBtn(true)}>Draw it here</button>} />;
+          else inner = (
+            <div style={{ position: "relative", flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}
+              onPointerDownCapture={(e) => { downAt.current = [e.clientX, e.clientY]; }}
+              onClickCapture={(e) => { const d = downAt.current; if (!d || Math.hypot(e.clientX - d[0], e.clientY - d[1]) < 5) cmp.activate(i); }}>
+              <Drawing key={`${s.id}:${i}`} slot={`p${i}`} onBox={cmp.boxRef(i)} sheet={s} fileUrl={f.url} zoom={cmp.zoomOf(i)}
+                setZoom={(fn) => cmp.setPaneZoom(i, fn(cmp.zoomOf(i)))} tool="pan" data={data} groupId={null} selId={null} setSelId={noop}
+                draft={NO_PTS} setDraft={noopDraft} hover={null} setHover={noop} save={noopAsync} busy={false} onTrace={noop}
+                saveShape={noopAsync} moveShape={noopAsync} rot={rots[s.id] || 0} />
+            </div>
+          );
+          return <>{head}{inner}</>;
+        };
+        return (
+          <>
+            <CompareToast c={cmp} phone={phone} />
+            <div ref={gridRef} style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", paddingRight: phone ? 0 : 56 }}>
+              <PaneGrid c={cmp} phone={phone} narrow={!gridWide} cell={cell} />
+            </div>
+          </>
+        );
+        })()}
         </div>
 
         {pins.panel}
@@ -885,7 +968,11 @@ function ScaleCopy({ k, from, all, sheets, apply, onClose }: { k: number; from: 
 
 /* --------------------------------------------------------------- drawing */
 
-function Drawing({ sheet, fileUrl, zoom, setZoom, tool, data, groupId, selId, setSelId, draft, setDraft, hover, setHover, save, busy, saveShape, moveShape, onTrace, cutting, onPin, pinLayer, rot = 0 }: {
+export function Drawing({ sheet, fileUrl, zoom, setZoom, tool, data, groupId, selId, setSelId, draft, setDraft, hover, setHover, save, busy, saveShape, moveShape, onTrace, cutting, onPin, pinLayer, rot = 0, slot, onBox }: {
+  /** Where it's drawn, for pdf.js's memory: one per pane when sheets are compared side by side. */
+  slot?: string;
+  /** The scrolling box, for a linked compare to keep the panes together. */
+  onBox?: (el: HTMLDivElement | null) => void;
   /** Select drags a whole shape (Coy, 2026-10-15); d is how far, in points. */
   moveShape: (id: string, d: Pt) => Promise<void>;
   /** The view turned by 0, 90, 180 or 270 degrees; points stay in the page's own. */
@@ -943,8 +1030,9 @@ function Drawing({ sheet, fileUrl, zoom, setZoom, tool, data, groupId, selId, se
     if (!el) return;
     const ro = new ResizeObserver(() => setFitW(el.clientWidth - 24));
     ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
+    onBox?.(el);
+    return () => { ro.disconnect(); onBox?.(null); };
+  }, [onBox]);
   const scale = fitW > 0 ? (fitW / sheet.page_w) * zoom : 0;
   const w = sheet.page_w * scale, h = sheet.page_h * scale;
   // Two fingers zoom on a phone (Coy, 2026-10-09); the fingers lifting never add a point.
@@ -961,13 +1049,13 @@ function Drawing({ sheet, fileUrl, zoom, setZoom, tool, data, groupId, selId, se
     const t = setTimeout(() => {
       openPdf(sheet.file_id, fileUrl).then((doc) => {
         if (off || !canvas.current) return;
-        const job = drawPage(doc, sheet.page, canvas.current, scale);
+        const job = drawPage(doc, sheet.page, canvas.current, scale, slot);
         cancel = job.cancel;
         return job.done.then(() => { if (!off) setDrawn(true); });
       }).catch((e) => { if (!off) setErr(e instanceof Error ? e.message : String(e)); });
     }, 120);
     return () => { off = true; clearTimeout(t); cancel?.(); };
-  }, [sheet.file_id, sheet.page, fileUrl, scale]);
+  }, [sheet.file_id, sheet.page, fileUrl, scale, slot]);
 
   const toPage = (e: React.PointerEvent | React.MouseEvent): Pt => {
     // Undo the view's turn about the sheet's centre, then read the point off the unturned sheet.

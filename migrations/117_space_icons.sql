@@ -1,4 +1,4 @@
--- 117 — An icon per Work Space, drawn by Dusty (2026-10-21).
+-- 117 — An icon per Work Space, drawn by Dusty (2026-10-21; applied 2026-10-21 on Coy's "apply 117").
 --
 -- Coy: "I'm leaning away from the 4 different silhouette space shapes and want to look at
 -- generating custom space icons/images for new and existing spaces in the rail." He picked

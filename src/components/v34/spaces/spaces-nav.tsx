@@ -1124,7 +1124,7 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
       </Tile>
       <span style={{ flex: 1 }} />
       {(tiles.length > 0 || railPrefs.hidden.length > 0) && (
-        <button type="button" className="sc-spaces-foot" onClick={() => setArranging(true)} aria-label="Arrange the rail" title="Arrange the rail — move or take off Work Spaces">
+        <button type="button" className="sc-spaces-foot" onClick={() => setArranging(true)} aria-label="Rail settings" title="Rail settings — move or take off Work Spaces">
           <svg width="19" height="19" viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
             <path d="M6 3v14M3 6l3-3 3 3M14 17V3M11 14l3 3 3-3" />
           </svg>

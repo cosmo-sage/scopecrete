@@ -861,10 +861,15 @@ html[data-nav="spaces"][data-nav] { --sc-head-0: 0px; }
 .sc-strip-bar .sc-spaces-search { flex: none; width: 36px; height: 32px; padding: 0; justify-content: center; }
 .sc-strip-bar .sc-spaces-search span, .sc-strip-bar .sc-spaces-line { display: none; }
 /* Arrange the rail (Coy, 2026-10-18) */
-.sc-arrange-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; max-height: 56vh; overflow-y: auto; }
-.sc-arrange-row { display: flex; align-items: center; gap: 10px; padding: 6px 4px; border-bottom: 1px solid var(--sc-hair); }
+.sc-arrange-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; max-height: 64vh; overflow-y: auto; }
+.sc-arrange-row { display: flex; flex-direction: column; gap: 2px; padding: 8px 4px 4px; border-bottom: 1px solid var(--sc-hair); }
+.sc-arrange-top { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.sc-arrange-tools { display: flex; align-items: center; gap: 6px; padding-left: 42px; }
+.sc-arrange-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--sc-hair); }
+.sc-arrange-tabs button { flex: 1; border: 0; background: none; padding: 8px 4px; font-family: var(--sc-font-disp); font-weight: 700; font-size: 13px; letter-spacing: .04em; text-transform: uppercase; color: var(--sc-ink3); border-bottom: 2px solid transparent; cursor: pointer; }
+.sc-arrange-tabs button[aria-selected="true"] { color: var(--sc-ink); border-bottom-color: var(--sc-hiviz); }
 .sc-arrange-name { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.sc-arrange-n { font-size: 14px; font-weight: 600; color: var(--sc-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sc-arrange-n { font-size: 14px; font-weight: 600; color: var(--sc-ink); overflow-wrap: anywhere; }
 .sc-arrange-s { font-size: 12px; color: var(--sc-ink3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sc-arrange-label { font-family: var(--sc-font-disp); font-weight: 700; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--sc-ink3); }
 .sc-space-slot[draggable="true"] { cursor: grab; }

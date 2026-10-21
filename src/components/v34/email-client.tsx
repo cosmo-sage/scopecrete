@@ -617,19 +617,20 @@ function DustyCard({ convKey, d, onDraft, flash }: { convKey: string; d: ConvDat
 
 interface Filing { customer_id: string | null; contact_id: string | null; job_id: string | null; job_title?: string | null; filed?: boolean }
 
-function AddressField({ label, list, onChange }: { label: string; list: string[]; onChange: (l: string[]) => void }) {
+export function AddressField({ label, list, onChange }: { label: string; list: string[]; onChange: (l: string[]) => void }) {
   const [text, setText] = useState("");
   const [hits, setHits] = useState<Array<{ id: string; name: string | null; email: string; role: string }>>([]);
   const [bad, setBad] = useState<string | null>(null);
+  // People in Contacts by their email, then addresses already on the inbox's mail (Coy, 2026-10-20).
   useEffect(() => {
     const q = text.trim();
     if (q.length < 2 || isEmail(q)) return;
     let off = false;
     const t = setTimeout(() => {
-      fetch(`/api/contacts?q=${encodeURIComponent(q)}&limit=8`).then((r) => (r.ok ? r.json() : { contacts: [] }))
-        .then((b: { contacts: Array<{ id: string; name: string | null; role_label: string; emails: Array<{ address: string }> }> }) => {
+      fetch(`/api/emails/addresses?q=${encodeURIComponent(q)}`).then((r) => (r.ok ? r.json() : { hits: [] }))
+        .then((b: { hits: Array<{ email: string; name: string | null; role: string }> }) => {
           if (off) return;
-          setHits(b.contacts.flatMap((c) => c.emails.map((e) => ({ id: `${c.id}:${e.address}`, name: c.name, email: e.address.toLowerCase(), role: c.role_label }))).slice(0, 8));
+          setHits(b.hits.map((h) => ({ id: h.email, name: h.name, email: h.email, role: h.role })));
         }).catch(() => {});
     }, 200);
     return () => { off = true; clearTimeout(t); };
@@ -653,7 +654,7 @@ function AddressField({ label, list, onChange }: { label: string; list: string[]
         <input value={text} onChange={(e) => setText(e.target.value)} aria-label={label}
           onKeyDown={(e) => { if (e.key === "Enter" || e.key === "," || e.key === ";" || e.key === "Tab") { if (text.trim()) { e.preventDefault(); commit(text); } } else if (e.key === "Backspace" && !text && list.length) onChange(list.slice(0, -1)); }}
           onBlur={() => { if (text.trim()) setTimeout(() => commit(text), 150); }}
-          placeholder={list.length ? "" : "Name or email"} style={{ flex: 1, minWidth: 140, height: 30, border: "none", outline: "none", background: "transparent", color: T.ink, fontSize: F.sm }} />
+          placeholder={list.length ? "" : "Name or email"} style={{ flex: 1, minWidth: 90, height: 30, border: "none", outline: "none", background: "transparent", color: T.ink, fontSize: F.sm }} />
       </div>
       {bad && <div style={{ fontSize: 11, color: T.red }}>{bad}</div>}
       {hits.length > 0 && text.trim().length >= 2 && !isEmail(text.trim()) && (

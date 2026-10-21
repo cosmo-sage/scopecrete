@@ -9,6 +9,7 @@
 import React from "react";
 import { T, F, nums } from "@/lib/v34/tokens";
 import { parseMarkdown, type Inline, type MdBlock } from "@/lib/markdown";
+import { DustyDrawing } from "@/components/v34/dusty-drawing";
 
 /** Set by Dusty's chat: a "search the web for …" his answer suggests becomes a button that asks it (Coy, 2026-10-15). */
 export const MdAsk = React.createContext<((q: string) => void) | null>(null);
@@ -52,6 +53,7 @@ function Blocks({ blocks }: { blocks: MdBlock[] }) {
         if (b.k === "h") return <div key={i} style={{ ...gap, fontWeight: 700, fontSize: b.level === 1 ? F.lg : F.md }}><Text parts={b.text} /></div>;
         if (b.k === "p") return <p key={i} style={gap}><Text parts={b.text} /></p>;
         if (b.k === "quote") return <blockquote key={i} style={{ ...gap, borderLeft: `3px solid ${T.hairStrong}`, padding: "2px 0 2px 12px", color: T.ink }}><Blocks blocks={b.blocks} /></blockquote>;
+        if (b.k === "drawing") return <DustyDrawing key={i} src={b.v} open={b.open} />;
         if (b.k === "code") return <pre key={i} style={{ ...gap, background: T.sunk, padding: 8, borderRadius: 4, fontSize: F.sm, overflowX: "auto", whiteSpace: "pre" }}>{b.v}</pre>;
         if (b.k === "ul") return <ul key={i} style={{ ...gap, paddingLeft: 20, listStyle: "disc" }}>{b.items.map((it, j) => <li key={j}><Text parts={it} /></li>)}</ul>;
         if (b.k === "ol") return <ol key={i} style={{ ...gap, paddingLeft: 20, listStyle: "decimal" }}>{b.items.map((it, j) => <li key={j}><Text parts={it} /></li>)}</ol>;

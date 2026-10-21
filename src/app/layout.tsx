@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 // Fonts are self-hosted from src/fonts (latin, from Google Fonts) so a build
 // never downloads them — a failed fetch once failed a production deploy.
 import localFont from "next/font/local";
+import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 
 const outfit = localFont({
@@ -86,6 +87,7 @@ export default function RootLayout({
       </head>
       <body className="font-sans antialiased">
         {children}
+        <Analytics />
       </body>
     </html>
   );

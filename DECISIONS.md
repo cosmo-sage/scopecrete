@@ -5848,6 +5848,10 @@ additive changes only, with confirmation.
   it mirrors. Once a real bid lands correctly, Coy turns off his own Hermes
   agent's AgentMail webhook — ScopeCrete replaces it (Coy, 2026-10-01).
 - Do not run two production paths for the web app.
+- **Vercel Web Analytics (Coy, 2026-10-21: "npm i @vercel/analytics").** `<Analytics />`
+  from `@vercel/analytics/next` in the root layout (`src/app/layout.tsx`) counts page views on
+  every page; it records nothing until Web Analytics is switched on in the Vercel project
+  (Analytics tab). Page views only, no custom events.
 - **Supabase quota (2026-10-06, Coy: "what's using up my quota").** Free
   plan: 5 GB egress, 1 GB storage, 500 MB database a month. Measured that
   day: storage 148 MB (job-files 98 MB, almost all bid PDFs; photos are tens

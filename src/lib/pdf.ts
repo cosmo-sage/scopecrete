@@ -204,17 +204,20 @@ export async function pageStrokes(doc: Doc, pageNo: number): Promise<{ strokes: 
   return { strokes, layers: [...new Set(strokes.map((s) => s.layer).filter((l): l is string => !!l))] };
 }
 
-// The page each document last drew whole: moving to another sheet lets go of the last one
-// (a zoom redraws the same page and keeps its decoded picture).
-const lastDrawn = new WeakMap<Doc, number>();
+// The page each document last drew whole, per place it is drawn (`slot` — one per pane when
+// Takeoffs compares sheets side by side): moving a slot to another sheet lets go of the last one
+// unless another slot still shows it (a zoom redraws the same page and keeps its decoded picture).
+const lastDrawn = new WeakMap<Doc, Map<string, number>>();
 
 /** Draw a page onto a canvas at `scale` (points → CSS px), sharp on high-DPI screens. Returns a cancel. */
-export function drawPage(doc: Doc, pageNo: number, canvas: HTMLCanvasElement, scale: number): { done: Promise<void>; cancel: () => void } {
+export function drawPage(doc: Doc, pageNo: number, canvas: HTMLCanvasElement, scale: number, slot = "main"): { done: Promise<void>; cancel: () => void } {
   let task: { cancel: () => void; promise: Promise<void> } | null = null;
   let cancelled = false;
-  const prev = lastDrawn.get(doc);
-  if (prev !== undefined && prev !== pageNo) releasePage(doc, prev);
-  lastDrawn.set(doc, pageNo);
+  let slots = lastDrawn.get(doc);
+  if (!slots) { slots = new Map(); lastDrawn.set(doc, slots); }
+  const prev = slots.get(slot);
+  slots.set(slot, pageNo);
+  if (prev !== undefined && prev !== pageNo && ![...slots.values()].includes(prev)) releasePage(doc, prev);
   const done = doc.getPage(pageNo).then((p) => {
     if (cancelled) return;
     let dpr = Math.min(typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1, 2);

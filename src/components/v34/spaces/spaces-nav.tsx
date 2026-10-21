@@ -20,7 +20,7 @@ import { usePathname } from "next/navigation";
 import { T, disp } from "@/lib/v34/tokens";
 import { NavIcon } from "@/components/v34/primitives";
 import { DustyAvatar, type EmblemState } from "@/components/v34/dusty-avatar";
-import { SpaceSilhouette } from "@/components/v34/spaces/space-silhouette";
+import { SpaceIcon, useDrawMissing } from "@/components/v34/spaces/space-icon";
 import { NewSpaceDialog, PickList, ItemPicker, peopleOf } from "@/components/v34/spaces/new-space";
 import { ArrangeRail, type RailTileInfo } from "@/components/v34/spaces/arrange-rail";
 import { PAGE } from "@/lib/v34/pages";
@@ -953,7 +953,7 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
           <Tile key={j.id} label={monogram(j.title)} title={title} color={color} on={on} bare drag={drag}
             href={desktop ? `/dashboard/scope/${j.id}/summary` : undefined}
             onPick={desktop ? undefined : () => setPeek({ kind: "job", id: j.id })}>
-            <SpaceSilhouette kind="job" color={color} initials={monogram(j.title)} on={on} />
+            <SpaceIcon spaceKey={`job:${j.id}`} kind="job" color={color} initials={monogram(j.title)} on={on} />
           </Tile>
         ),
       };
@@ -971,7 +971,7 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
           <Tile key={c.id} label={monogram(c.name)} title={`${c.name} · ${people}`} drag={drag}
             href={desktop ? `/dashboard/messages?t=${c.id}` : undefined}
             onPick={() => { setPeek(col); if (desktop) setStay(col); }} color={color} on={on} bare>
-            <SpaceSilhouette kind={customer ? "contact" : "collection"} color={color} initials={monogram(c.name)} on={on} />
+            <SpaceIcon spaceKey={`col:${c.id}`} kind={customer ? "contact" : "collection"} color={color} initials={monogram(c.name)} on={on} />
           </Tile>
         ),
       };
@@ -985,7 +985,7 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
         render: (drag) => (
           <Tile key={`pin-job:${p.id}`} label={monogram(p.name)} title={`${p.name} · Job`} color={color} on={on} bare drag={drag}
             href={desktop ? `/dashboard/scope/${p.id}/summary` : undefined} onPick={desktop ? undefined : () => setPeek({ kind: "job", id: p.id })}>
-            <SpaceSilhouette kind="job" color={color} initials={monogram(p.name)} on={on} />
+            <SpaceIcon spaceKey={`job:${p.id}`} kind="job" color={color} initials={monogram(p.name)} on={on} />
           </Tile>
         ),
       };
@@ -999,7 +999,7 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
         render: (drag) => (
           <Tile key={`cust:${c.id}`} label={monogram(c.name)} title={`${c.name} · Customer`} color={color} on={on} bare drag={drag}
             href={desktop ? `/dashboard/customers/${c.id}` : undefined} onPick={desktop ? undefined : () => setPeek({ kind: "customer", id: c.id })}>
-            <SpaceSilhouette kind="contact" color={color} initials={monogram(c.name)} on={on} />
+            <SpaceIcon spaceKey={`customer:${c.id}`} kind="contact" color={color} initials={monogram(c.name)} on={on} />
           </Tile>
         ),
       };
@@ -1014,7 +1014,7 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
         render: (drag) => (
           <Tile key={`${p.kind}:${p.id}`} label={monogram(p.name)} title={`${p.name} · ${kindName}`} color={color} on={on} bare drag={drag}
             href={desktop ? href : undefined} onPick={desktop ? undefined : () => setPeek({ kind: p.kind, id: p.id })}>
-            <SpaceSilhouette kind={p.kind === "customer" ? "contact" : "vendor"} color={color} initials={monogram(p.name)} on={on} />
+            <SpaceIcon spaceKey={`${p.kind}:${p.id}`} kind={p.kind === "customer" ? "contact" : "vendor"} color={color} initials={monogram(p.name)} on={on} />
           </Tile>
         ),
       };
@@ -1023,6 +1023,8 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
   const byKey = new Map(all.map((t) => [t.info.key, t]));
   const order = orderTiles(all.map((t) => t.info.key), railPrefs);
   const tiles = order.map((k) => byKey.get(k)!);
+  // Dusty draws an icon for each Space on the rail that has none yet (migration 117).
+  useDrawMissing(order);
   const hiddenTiles = railPrefs.hidden.map((k) => byKey.get(k)?.info).filter((x): x is RailTileInfo => !!x);
   const moveTo = (key: string, to: number) => setRail(moveTile(railPrefs, order, key, to));
   const removeTile = (t: RailTileInfo) => {

@@ -6,10 +6,11 @@
  * or vendor is unpinned, a job or collection is only hidden from the rail (the job and its
  * thread are untouched) and listed under "Off the rail" with Put back. Kept on the account
  * (`spaces_rail`, `spaces_pins`). A collection can also be deleted (retired). Dragging a tile on a desktop's rail does the same moves.
+ * ↻ has Dusty draw a Space's icon again and ◇ puts the plain shape back (migration 117, space-icon.tsx).
  */
 
-import React, { useEffect } from "react";
-import { SpaceSilhouette } from "@/components/v34/spaces/space-silhouette";
+import React, { useEffect, useState } from "react";
+import { SpaceIcon, drawIcon, setShapeIcon, useSpaceIcons } from "@/components/v34/spaces/space-icon";
 
 export interface RailTileInfo {
   key: string; name: string; sub: string;
@@ -30,13 +31,37 @@ export function ArrangeRail({ shown, hidden, onMove, onRemove, onShow, onReset, 
     return () => window.removeEventListener("keydown", k);
   }, [onClose]);
 
+  // Each Space's icon (migration 117): Dusty draws it again, or it goes back to the shape.
+  const icons = useSpaceIcons();
+  const [iconErr, setIconErr] = useState<Record<string, string>>({});
+  const redraw = async (key: string) => {
+    const err = await drawIcon(key);
+    setIconErr((e) => { const n = { ...e }; if (err) n[key] = err; else delete n[key]; return n; });
+  };
+  const iconButtons = (t: RailTileInfo) => {
+    if (icons.supported !== true) return null;
+    const row = icons.icons.get(t.key);
+    const busy = icons.drawing.has(t.key);
+    return (
+      <>
+        <button type="button" className="sc-shelf-btn" disabled={busy} onClick={() => { void redraw(t.key); }}
+          aria-label={`Dusty draws a new icon for ${t.name}`} title={busy ? "Dusty is drawing…" : "Draw the icon again"}>{busy ? "…" : "↻"}</button>
+        {row?.source !== "shape" && (
+          <button type="button" className="sc-shelf-btn" onClick={() => { void setShapeIcon(t.key); }}
+            aria-label={`Use the plain shape for ${t.name}`} title="Use the plain shape instead">◇</button>
+        )}
+      </>
+    );
+  };
+
   const row = (t: RailTileInfo, i: number | null) => (
     <li key={t.key} className="sc-arrange-row">
-      <SpaceSilhouette kind={t.shape} color={t.color} initials={t.initials} size={32} />
+      <SpaceIcon spaceKey={t.key} kind={t.shape} color={t.color} initials={t.initials} size={32} />
       <span className="sc-arrange-name">
         <span className="sc-arrange-n">{t.name}</span>
-        <span className="sc-arrange-s">{t.sub}</span>
+        <span className="sc-arrange-s">{iconErr[t.key] ? <span style={{ color: "var(--sc-red)" }}>{iconErr[t.key]}</span> : t.sub}</span>
       </span>
+      {iconButtons(t)}
       {onDelete && t.key.startsWith("col:") && (
         <button type="button" className="sc-space-more" style={{ color: "var(--sc-red)" }}
           onClick={() => { if (window.confirm(`Delete the Work Space "${t.name}"? The people and their threads stay.`)) onDelete(t); }}>Delete</button>

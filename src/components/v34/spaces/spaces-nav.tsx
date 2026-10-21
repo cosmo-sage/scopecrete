@@ -746,6 +746,26 @@ function CollectionDrawer({ col, id, pages, active, onPick }: {
       window.dispatchEvent(new Event("sc:spaces-reload"));
     }).catch(() => {});
   };
+  // Taking something out (Coy, 2026-10-21: "I have Elena Sacco there … I want to remove her"):
+  // a person leaves the thread; a picked customer or vendor takes its people with it.
+  const takePerson = async (contactId: string) => {
+    await fetch(`/api/threads/custom/${id}/contacts?contact_id=${contactId}`, { method: "DELETE" }).catch(() => {});
+    window.dispatchEvent(new Event("sc:spaces-reload"));
+  };
+  const takeMember = async (m: SpacePin) => {
+    setMemRaw(setMembers(allMembers, id, members.filter((x) => !(x.kind === m.kind && x.id === m.id))));
+    const theirs = (folk ?? []).filter((t) => (m.kind === "vendor" && t.contact_id === m.id) || (m.kind === "customer" && t.customer_id === m.id));
+    await Promise.all(theirs.map((t) => fetch(`/api/threads/custom/${id}/contacts?contact_id=${t.contact_id}`, { method: "DELETE" }).catch(() => {})));
+    window.dispatchEvent(new Event("sc:spaces-reload"));
+  };
+  const [nameDraft, setNameDraft] = useState<string | null>(null);
+  const rename = async () => {
+    const v = (nameDraft ?? "").replace(/\s+/g, " ").trim();
+    setNameDraft(null);
+    if (!v || v === col?.name) return;
+    await fetch(`/api/threads/custom/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: v }) }).catch(() => {});
+    window.dispatchEvent(new Event("sc:spaces-reload"));
+  };
   const memberHref = (m: SpacePin) => m.kind === "job" ? `/dashboard/scope/${m.id}/summary` : m.kind === "customer" ? `/dashboard/customers/${m.id}` : `/dashboard/vendors/${m.id}`;
   const name = col?.name ?? "Work Space";
   return (
@@ -756,13 +776,38 @@ function CollectionDrawer({ col, id, pages, active, onPick }: {
           <span className="sc-space-tag" style={{ color: "var(--sc-violet)", borderColor: "var(--sc-violet)" }}>Work Space</span>
           <span style={{ flex: 1 }} />
           <button type="button" className="sc-shelf-arrange" onClick={() => setEditing(!editing)} aria-pressed={editing}
-            title="Pick the jobs, customers, vendors, tools and channels this Work Space holds">{editing ? "Done" : "Edit"}</button>
+            title="Rename it, take things out, or add jobs, customers, vendors, tools and channels">{editing ? "Done" : "Edit"}</button>
         </span>
       </div>
       <div className="sc-space-scroll">
         {editing ? (
           <div className="sc-shelf-edit">
-            <span className="sc-shelf-edit-h">Jobs, customers and vendors</span>
+            <div className="sc-shelf-row">
+              <input className="sc-shelf-name" value={nameDraft ?? name} maxLength={80} aria-label="Work Space name"
+                onChange={(e) => setNameDraft(e.target.value)} onBlur={() => void rename()}
+                onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} />
+            </div>
+            <span className="sc-shelf-edit-h">In it now · × takes it out</span>
+            {members.length === 0 && (folk ?? []).length === 0 && <div className="sc-space-empty">Nothing yet.</div>}
+            {members.map((m) => (
+              <div key={`${m.kind}:${m.id}`} className="sc-shelf-page">
+                <span className="sc-shelf-page-l">{m.name} <small style={{ color: "var(--sc-ink3)" }}>{m.kind === "job" ? "Job" : m.kind === "customer" ? "Customer" : "Vendor"}</small></span>
+                <button type="button" className="sc-shelf-btn" onClick={() => void takeMember(m)} aria-label={`Take ${m.name} out`} title="Take out of this Work Space">×</button>
+              </div>
+            ))}
+            {(folk ?? []).filter((t) => !covered(t)).map((t) => (
+              <div key={t.contact_id} className="sc-shelf-page">
+                <span className="sc-shelf-page-l">{t.display_name} <small style={{ color: "var(--sc-ink3)" }}>{BUCKETS.find((b) => b.k === kindOf(t))?.label ?? "Unsorted"}</small></span>
+                <button type="button" className="sc-shelf-btn" onClick={() => void takePerson(t.contact_id)} aria-label={`Take ${t.display_name} out`} title="Take out of this Work Space">×</button>
+              </div>
+            ))}
+            {tools.map((k) => (
+              <div key={k} className="sc-shelf-page">
+                <span className="sc-shelf-page-l">{PAGE.get(k)!.label} <small style={{ color: "var(--sc-ink3)" }}>Tool</small></span>
+                <button type="button" className="sc-shelf-btn" onClick={() => setRaw(setPicks(all, id, picks.filter((x) => x !== k)))} aria-label={`Take ${PAGE.get(k)!.label} out`} title="Take out of this Work Space">×</button>
+              </div>
+            ))}
+            <span className="sc-shelf-edit-h">Add jobs, customers and vendors</span>
             <ItemPicker kinds={["job", "customer", "vendor"]} picked={members} onChange={changeMembers} />
             <PickList pages={pages} picks={picks} onChange={(v) => setRaw(setPicks(all, id, v))} />
             <div className="sc-shelf-row" style={{ justifyContent: "flex-end" }}>

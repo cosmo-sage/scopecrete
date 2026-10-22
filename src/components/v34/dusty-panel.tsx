@@ -31,7 +31,7 @@ import { DustyEmblem, DOING, type EmblemState } from "@/components/v34/dusty-ava
 import { Markdown, MdAsk } from "@/components/v34/markdown";
 import { PlanCard } from "@/components/v34/plan-card";
 import { hideIds, parsePlan } from "@/lib/dusty/plan";
-import { useDustyUse, setDustyChat } from "@/lib/v34/dusty-live";
+import { useDustyUse, setDustyChat, setDustyFileTarget, type DustyFileTarget } from "@/lib/v34/dusty-live";
 import { splitUse } from "@/lib/dusty/use-block";
 import { shareText } from "@/lib/dusty/share";
 import { sendBytes } from "@/components/v34/files-panel";
@@ -395,7 +395,7 @@ export function DustyPanel({ open, onClose, onBusy, onStream, onState }: {
 
   // Where an attachment is filed: on what the chat is about — the job, the
   // person, the customer — else unfiled in Files. Dusty's reader reads it.
-  function attachTarget(): Record<string, unknown> {
+  function attachTarget(): DustyFileTarget {
     const a = convs?.find((c) => c.id === activeId);
     const kind = a ? a.context_kind : ref.kind;
     const id = a ? a.context_id : "id" in ref ? ref.id : null;
@@ -404,6 +404,7 @@ export function DustyPanel({ open, onClose, onBusy, onStream, onState }: {
     if (id && kind === "customer") return { customer_id: id };
     return { from_dusty: true };
   }
+  useEffect(() => { setDustyFileTarget(attachTarget()); });
   async function attach(list: FileList | null) {
     const picked = Array.from(list ?? []).slice(0, 8);
     if (fileInput.current) fileInput.current.value = "";

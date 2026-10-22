@@ -59,3 +59,10 @@ const EMPTY_CHAT: DustyChat = { id: null, title: null, items: [], streaming: nul
 export function useDustyChat(): DustyChat {
   return useSyncExternalStore(subscribeChat, () => chat, () => EMPTY_CHAT);
 }
+
+// Where something Dusty made is saved in Files (a drawing's "Save to Files"): what the open chat is about —
+// the job, the person, the customer — else unfiled. Read on the tap, so no subscription.
+export type DustyFileTarget = { job_id: string } | { contact_id: string } | { customer_id: string } | { from_dusty: true };
+let fileTarget: DustyFileTarget = { from_dusty: true };
+export function setDustyFileTarget(next: DustyFileTarget) { fileTarget = next; }
+export function dustyFileTarget(): DustyFileTarget { return fileTarget; }

@@ -284,8 +284,8 @@ export function CompareBar({ c, phone }: { c: CompareApi; phone: boolean }) {
         </span>
       )}
       <button onClick={() => c.set({ link: !v.link })} aria-pressed={v.link} style={btn(v.link)}
-        title={v.link ? (byFeet ? "Zoom matched in feet; the same spot on each page in view. Tap to unlink." : "One sheet has no scale: zoom matched by the page, the same spot on each page in view. Tap to unlink.")
-          : "Move the panes together: zoom and the spot in view"}>
+        title={v.link ? (byFeet ? `The other panes copy pane ${v.active + 1}: the same zoom in real feet, and they scroll with it. Tap to unlink.` : `The other panes copy pane ${v.active + 1}: the same zoom by the page (a sheet has no scale), and they scroll with it. Tap to unlink.`)
+          : `Make the other panes copy pane ${v.active + 1}'s zoom and scroll`}>
         <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" aria-hidden="true"><path d="M8.5 11.5a3.5 3.5 0 0 0 5 0l3-3a3.5 3.5 0 0 0-5-5l-1 1" /><path d="M11.5 8.5a3.5 3.5 0 0 0-5 0l-3 3a3.5 3.5 0 0 0 5 5l1-1" /></svg>
         {v.link ? (byFeet ? "Linked · by distance" : "Linked · by page") : "Link"}
       </button>
@@ -317,6 +317,13 @@ export function PaneHead({ i, sheet, sheets, active, c, phone, sameAs }: {
           {sheets.map((s) => <option key={s.id} value={s.id}>{sheetLabel(s)}{s.title ? ` · ${s.title}` : ""}</option>)}
         </select>
       ) : <span style={{ flex: 1, fontSize: 12, color: T.ink3 }}>Sheet removed</span>}
+      {v.link && (
+        <span title={active ? "Zoom or scroll here; the other panes copy it" : `Copies pane ${v.active + 1}'s zoom and scroll`}
+          style={{ flex: "0 0 auto", fontFamily: disp, fontSize: 10, letterSpacing: ".06em", textTransform: "uppercase", padding: "1px 5px", borderRadius: 3, whiteSpace: "nowrap",
+            background: active ? T.ink : T.sunk, color: active ? T.card : T.ink2 }}>
+          {active ? "Leads" : `Follows ${v.active + 1}`}
+        </span>
+      )}
       {sameAs !== null && <span title={`Pane ${sameAs + 1} shows this sheet too; takeoffs drawn on either land on it once`} style={{ fontSize: 10.5, color: T.ink2, background: T.sunk, borderRadius: 3, padding: "1px 5px", whiteSpace: "nowrap" }}>same as {sameAs + 1}</span>}
       {sheet && (
         <span title={scaled ? `Scale ${scaleLabel(sheet.scale_ft_per_pt as number)}` : "Takeoffs here won't count until a scale is set"}
@@ -413,16 +420,29 @@ export function PaneGrid({ c, phone, cell, narrow }: { c: CompareApi; phone: boo
 export function CompareToast({ c, phone }: { c: CompareApi; phone: boolean }) {
   const [seen, setSeen] = useState(true);
   useEffect(() => { Promise.resolve().then(() => { try { setSeen(localStorage.getItem("sc:compare-hint") === "1"); } catch { /* no storage */ } }); }, []);
+  // A word when Link is turned on, since at Fit two sheets of one scale look no different.
+  const [linkNote, setLinkNote] = useState(false);
+  const wasLinked = useRef(!!c.view?.link);
+  const linked = !!c.view?.link;
+  useEffect(() => {
+    const on = linked && !wasLinked.current;
+    wasLinked.current = linked;
+    if (!on) { if (!linked) Promise.resolve().then(() => setLinkNote(false)); return; }
+    Promise.resolve().then(() => setLinkNote(true));
+    const t = setTimeout(() => setLinkNote(false), 9000);
+    return () => clearTimeout(t);
+  }, [linked]);
   const v = c.view;
   if (!v) return null;
-  const text = c.restored ?? (!seen ? (phone ? "Tap a pane to draw in it" : `Click a pane, or press 1 – ${v.panes.length}, to make it the one you draw in`) : null);
+  const link = linkNote && v.link ? `Linked: zoom in and drag on pane ${v.active + 1} — the other ${v.panes.length > 2 ? "panes follow" : "pane follows"} to the same spot at the same scale` : null;
+  const text = link ?? c.restored ?? (!seen ? (phone ? "Tap a pane to draw in it" : `Click a pane, or press 1 – ${v.panes.length}, to make it the one you draw in`) : null);
   if (!text) return null;
-  const done = () => { if (c.restored) c.dismissRestored(); else { setSeen(true); try { localStorage.setItem("sc:compare-hint", "1"); } catch { /* no storage */ } } };
+  const done = () => { if (link) setLinkNote(false); else if (c.restored) c.dismissRestored(); else { setSeen(true); try { localStorage.setItem("sc:compare-hint", "1"); } catch { /* no storage */ } } };
   return (
     <div className="flex items-center gap-3" role="status" style={{ position: "absolute", top: 46, left: "50%", transform: "translateX(-50%)", zIndex: 7, background: T.ink, color: T.card,
       borderRadius: 6, padding: "7px 12px", fontSize: 12.5, boxShadow: "0 4px 14px rgba(0,0,0,.22)", maxWidth: "calc(100% - 24px)" }}>
       <span>{text}</span>
-      {c.restored && <button onClick={() => { c.dismissRestored(); c.exit(); }} style={{ color: T.hivizSoft, fontFamily: disp, fontSize: 11, letterSpacing: ".08em", textTransform: "uppercase", border: "none", background: "transparent", cursor: "pointer", whiteSpace: "nowrap" }}>Start over</button>}
+      {c.restored && !link && <button onClick={() => { c.dismissRestored(); c.exit(); }} style={{ color: T.hivizSoft, fontFamily: disp, fontSize: 11, letterSpacing: ".08em", textTransform: "uppercase", border: "none", background: "transparent", cursor: "pointer", whiteSpace: "nowrap" }}>Start over</button>}
       <button onClick={done} style={{ color: T.hivizSoft, fontFamily: disp, fontSize: 11, letterSpacing: ".08em", textTransform: "uppercase", border: "none", background: "transparent", cursor: "pointer", whiteSpace: "nowrap" }}>Got it</button>
     </div>
   );

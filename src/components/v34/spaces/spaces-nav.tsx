@@ -1165,8 +1165,10 @@ function personSub(t: HomeThread): string | undefined {
   return [role, t.company].filter(Boolean).join(" · ") || undefined;
 }
 
-function CollectionDrawer({ col, id, pages, active, onPick }: {
+function CollectionDrawer({ col, id, pages, active, onPick, onDeleted }: {
   col: RailCollection | null; id: string; pages: string[]; active: string; onPick: () => void;
+  /** After Delete this Work Space: the drawer goes back to Home. */
+  onDeleted: () => void;
 }) {
   const [raw, setRaw] = usePref<unknown>("spaces_collections", {});
   const all = useMemo(() => cleanCollectionPicks(raw), [raw]);
@@ -1239,6 +1241,19 @@ function CollectionDrawer({ col, id, pages, active, onPick }: {
     setShRaw(addColShelf(allShelves, id, v, `s${Date.now().toString(36)}`));
     setNewShelf("");
   };
+  // Deleting it from its own gear (Coy, 2026-10-22: "How do I easily delete a work space?") — the
+  // same delete as Rail settings: the thread is retired, its people and their threads stay.
+  const [deleting, setDeleting] = useState(false);
+  const deleteSpace = async () => {
+    if (!window.confirm(`Delete the Work Space "${name}"? The people and their threads stay.`)) return;
+    setDeleting(true);
+    const r = await fetch(`/api/threads/custom/${id}`, { method: "DELETE" }).catch(() => null);
+    setDeleting(false);
+    if (!r?.ok) { window.alert("Couldn't delete that Work Space — try again."); return; }
+    setEditing(false);
+    onDeleted();
+    window.dispatchEvent(new Event("sc:spaces-reload"));
+  };
   const dropShelf = (sid: string) => {
     const r = removeColShelf(allShelves, allMembers, id, sid);
     setShRaw(r.shelves);
@@ -1259,6 +1274,15 @@ function CollectionDrawer({ col, id, pages, active, onPick }: {
         </span>
         {(adding !== null) && <button type="button" className="sc-shelf-arrange" onClick={() => setAdding(null)}>Done</button>}
       </div>
+      {/* One place to add (Coy, 2026-10-22: "why is there an + add button AND an add shelf button.
+          There should just be one place to add and name at the top"): a new shelf is named here. */}
+      {!to && (
+        <form className="sc-shelf-row" onSubmit={(e) => { e.preventDefault(); makeShelf(); }}>
+          <input className="sc-shelf-name" value={newShelf} onChange={(e) => setNewShelf(e.target.value)} placeholder="New shelf, like North Baton Rouge" maxLength={40} aria-label="New shelf name" />
+          <button type="submit" className="sc-shelf-arrange" disabled={!newShelf.trim()}>+ Shelf</button>
+        </form>
+      )}
+      {!to && <span className="sc-shelf-edit-h">Jobs, customers and vendors</span>}
       <ItemPicker kinds={["job", "customer", "vendor"]} picked={members} onChange={(v) => changeMembers(v, to || null)} />
       {!to && <>
         {/* A person on their own, say a vendor being vetted (Coy, 2026-10-22: "add a contact
@@ -1291,7 +1315,7 @@ function CollectionDrawer({ col, id, pages, active, onPick }: {
       {/* No kind tag (Coy, 2026-10-22: "there will be only 1 kind of a space moving forward: a
           custom one") — what it holds says enough. */}
       <SpaceHead name={name} color="var(--sc-violet)" editing={editing} onGear={() => setEditing(!editing)}
-        gearLabel="Rename it, take things out, or add jobs, customers, vendors, tools and channels"
+        gearLabel="Rename it, take things out, arrange its shelves, or delete it"
         sub={holds || "Empty — + Add puts jobs, customers, vendors and tools in it"} />
       <div className="sc-space-scroll">
         {editing ? (
@@ -1301,7 +1325,7 @@ function CollectionDrawer({ col, id, pages, active, onPick }: {
                 onChange={(e) => setNameDraft(e.target.value)} onBlur={() => void rename()}
                 onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} />
             </div>
-            <span className="sc-shelf-edit-h">Shelves</span>
+            {shelves.length > 0 && <span className="sc-shelf-edit-h">Shelves</span>}
             {shelves.map((x, i) => (
               <div key={x.id} className="sc-shelf-row">
                 <ShelfIconPick shelf={x} onPick={(icon) => setShRaw(iconColShelf(allShelves, id, x.id, icon))} />
@@ -1314,10 +1338,6 @@ function CollectionDrawer({ col, id, pages, active, onPick }: {
                 <button type="button" className="sc-shelf-btn" onClick={() => dropShelf(x.id)} aria-label={`Remove ${x.name}`} title="Remove this shelf — what is on it goes to the top">×</button>
               </div>
             ))}
-            <form className="sc-shelf-row" onSubmit={(e) => { e.preventDefault(); makeShelf(); }}>
-              <input className="sc-shelf-name" value={newShelf} onChange={(e) => setNewShelf(e.target.value)} placeholder="New shelf, like North Baton Rouge" maxLength={40} aria-label="New shelf name" />
-              <button type="submit" className="sc-shelf-arrange" disabled={!newShelf.trim()}>+ Shelf</button>
-            </form>
             <span className="sc-shelf-edit-h">In it now · × takes it out</span>
             {members.length === 0 && (folk ?? []).length === 0 && <div className="sc-space-empty">Nothing yet.</div>}
             {members.map((m) => (
@@ -1345,7 +1365,9 @@ function CollectionDrawer({ col, id, pages, active, onPick }: {
                 <button type="button" className="sc-shelf-btn" onClick={() => setRaw(setPicks(all, id, picks.filter((x) => x !== k)))} aria-label={`Take ${PAGE.get(k)!.label} out`} title="Take out of this Work Space">×</button>
               </div>
             ))}
-            <div className="sc-shelf-row" style={{ justifyContent: "flex-end" }}>
+            <div className="sc-shelf-row" style={{ justifyContent: "space-between" }}>
+              <button type="button" className="sc-shelf-arrange" onClick={() => void deleteSpace()} disabled={deleting}
+                style={{ color: "var(--sc-red)", borderColor: "var(--sc-red)" }}>{deleting ? "Deleting…" : "Delete this Work Space"}</button>
               <button type="button" className="sc-shelf-arrange" onClick={() => setEditing(false)}>Done</button>
             </div>
           </div>
@@ -1393,12 +1415,6 @@ function CollectionDrawer({ col, id, pages, active, onPick }: {
               {channelRows(ch)}
             </Group>
           ))}
-          {addingTo === null && (
-            <form className="sc-shelf-row" style={{ padding: "6px 14px" }} onSubmit={(e) => { e.preventDefault(); makeShelf(); }}>
-              <input className="sc-shelf-name" value={newShelf} onChange={(e) => setNewShelf(e.target.value)} placeholder="New shelf, like North Baton Rouge" maxLength={40} aria-label="New shelf name" />
-              <button type="submit" className="sc-shelf-arrange" disabled={!newShelf.trim()}>+ Shelf</button>
-            </form>
-          )}
         </>}
       </div>
     </>
@@ -1887,7 +1903,7 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
           ? <JobDrawer id={shown.id} fallback={jobOf(shown.id)} onPick={picked(shown)} rail={railFor("job", shown.id)} />
           : shown.kind === "collection"
             ? <CollectionDrawer id={shown.id} col={(rail?.collections ?? []).find((c) => c.id === shown.id) ?? null} pages={pages} active={active}
-                onPick={picked(shown)} />
+                onPick={picked(shown)} onDeleted={() => { setPeek({ kind: "home" }); setStay(null); }} />
             : <RecordDrawer kind={shown.kind} id={shown.id} rail={railFor(shown.kind, shown.id)} onPick={picked(shown)}
                 pinnedName={pins.find((p) => p.kind === shown.kind && p.id === shown.id)?.name ?? (rail?.customers ?? []).find((c) => shown.kind === "customer" && c.id === shown.id)?.name ?? null}
                 onBack={() => { setPeek({ kind: "home" }); setStay(null); }} />}

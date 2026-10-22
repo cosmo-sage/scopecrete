@@ -12,7 +12,7 @@
  *    New job · Ask Dusty …; on a phone they fold into ⋯) · the one-line facts
  *    · a slot under it · ONE row of tabs.
  *  - PanelCard / panelTitle / Facts / AddressRow — the right column's cards.
- *  - ContactCard — a person with a line per number and email, "Open in Threads ›".
+ *  - ContactCard — a person with a line per number and email, "Open Contact Thread ›" (calls, texts and email happen in the thread).
  *  - ThreadChips — their bucket and every thread Coy made that holds them.
  *  - SectionHead, Empty, RecentCard, JobRow — the Overview's parts.
  */
@@ -286,11 +286,10 @@ export function LocationPanel({ addr, note, onAdd }: { addr: string | null; note
 export interface CardMethod { kind: "phone" | "email"; label: string; value: string; can_text?: boolean | null }
 export interface CardPerson { id: string; name: string | null; role: string | null; primary?: boolean; methods: CardMethod[]; href: string }
 
-/** A person: who, their role, ★ Primary, a line per number and email (Call · Text · Email), and into Threads. */
+/** A person: who, their role, ★ Primary, a line per number and email, and Open Contact Thread. */
 export function ContactCard({ c, compact }: { c: CardPerson; compact?: boolean }) {
   const phones = c.methods.filter((m) => m.kind === "phone");
   const sub = [c.role, phones.length > 1 ? `${phones.length} numbers` : null, c.methods.some((m) => m.kind === "email") ? "email" : null].filter(Boolean).join(" · ");
-  const act: React.CSSProperties = { ...lbl, fontSize: 10, color: T.chalk };
   return (
     <div className="rounded" style={{ background: T.card, border: `1px solid ${T.hair}`, padding: compact ? "8px 10px" : "10px 12px" }}>
       <div className="flex items-center gap-2.5">
@@ -311,16 +310,13 @@ export function ContactCard({ c, compact }: { c: CardPerson; compact?: boolean }
               <div key={m.kind + m.value} className="flex items-baseline gap-2" style={{ fontSize: 12.5 }}>
                 <span style={{ ...eyebrow, fontSize: 9.5, width: 52, color: T.ink3, ...clip }}>{m.label}</span>
                 {m.kind === "email"
-                  ? <a href={`mailto:${m.value}`} style={{ color: T.ink, flex: 1, minWidth: 0, ...clip }}>{m.value}</a>
-                  : <a href={`tel:${m.value}`} style={{ color: T.ink, flex: 1, minWidth: 0, ...nums }}>{formatPhone(m.value)}</a>}
-                {m.kind === "email"
-                  ? <a href={`mailto:${m.value}`} style={act}>Email</a>
-                  : <><a href={`tel:${m.value}`} style={act}>Call</a>{m.can_text !== false && <a href={`sms:${m.value}`} style={act}>Text</a>}</>}
+                  ? <span style={{ color: T.ink, flex: 1, minWidth: 0, ...clip }}>{m.value}</span>
+                  : <span style={{ color: T.ink, flex: 1, minWidth: 0, ...nums }}>{formatPhone(m.value)}</span>}
               </div>
             ))}
             {!c.methods.length && <div style={{ fontSize: 12, color: T.ink3 }}>No number or email on file.</div>}
           </div>
-          <Link href={c.href} className="inline-block mt-1.5" style={{ ...eyebrow, color: T.chalk }}>Open in Threads ›</Link>
+          <Link href={c.href} className="inline-block mt-1.5" style={{ ...eyebrow, color: T.chalk }}>Open Contact Thread ›</Link>
         </>
       )}
     </div>

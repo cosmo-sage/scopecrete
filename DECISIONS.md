@@ -3380,8 +3380,12 @@ expected start date per quoted job before it means anything. Add the field.
   thread Coy made that holds one of them), and on the right the location and
   **Recent, across every contact and channel**. On a phone: the map, then
   contacts as rows with Threads ›, jobs, the thread chips. The second icon
-  rail for the tabs is gone; one row of tabs on every size. What follows
-  below about the old tabs is history.
+  rail for the tabs is gone; one row of tabs on every size. **Since
+  2026-10-22 (Coy: "only 1 thread per contact now")** the Overview has no
+  thread chips, and a contact card has no Call · Text · Email (they happen in
+  the thread): its numbers and emails as text, then **Open Contact Thread ›**
+  (`ContactCard` in `record-page.tsx`, the vendor and contact pages too).
+  What follows below about the old tabs is history.
 - **The customer page (2026-09-30, migration 055)** —
   `/dashboard/customers/[customerId]` (`src/components/v34/customer-page.tsx`)
   and the **Customers list** `/dashboard/customers` (one row per customer,

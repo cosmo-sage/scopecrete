@@ -26,8 +26,8 @@ import { MentionField } from "@/components/v34/mention-field";
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { T, F, eyebrow, nums, clip, money0, formatPhone, relTime, strong, BUCKET } from "@/lib/v34/tokens";
-import { RecordHeader, HeaderNote, OverviewGrid, PanelCard, SectionHead, Empty, Facts, ContactCard, ThreadChips, RecentCard, JobRow, Field,
+import { T, F, eyebrow, nums, clip, money0, formatPhone, relTime, strong } from "@/lib/v34/tokens";
+import { RecordHeader, HeaderNote, OverviewGrid, PanelCard, SectionHead, Empty, Facts, ContactCard, RecentCard, JobRow, Field,
   menuItem, btn, lbl, panelTitle, send, type CardPerson } from "@/components/v34/record-page";
 import { Sheet } from "@/components/v34/primitives";
 import { SiteViews, AddressLink } from "@/components/v34/site-views";
@@ -92,7 +92,6 @@ export function CustomerPage({ customerId, focusContact }: { customerId: string;
   const [editing, setEditing] = useState(false);
   const [callNotes, setCallNotes] = useState(false);
   const [note, setNote] = useState<{ text: string; undo?: string } | null>(null);
-  const [custom, setCustom] = useState<Array<{ id: string; name: string; contact_ids: string[]; count: number }>>([]);
   const [measure, wide] = useWide<HTMLDivElement>(1000);
   const reload = () => setTick((n) => n + 1);
 
@@ -103,12 +102,6 @@ export function CustomerPage({ customerId, focusContact }: { customerId: string;
       .catch((e) => { if (!off) setErr(e instanceof Error ? e.message : String(e)); });
     return () => { off = true; };
   }, [customerId, tick, router]);
-  // The threads Coy made (migration 073) — the chips say which of them hold these people.
-  useEffect(() => {
-    let off = false;
-    send("/api/threads/custom", "GET").then((b) => { if (!off) setCustom(b.threads ?? []); }).catch(() => {});
-    return () => { off = true; };
-  }, [tick]);
 
   // Dusty's answers on the emblem (dusty-panel.tsx CustomerAsk) act here: Edit opens the form, New job
   // makes one for the customer's primary person, a job picked there reloads the page.
@@ -138,8 +131,6 @@ export function CustomerPage({ customerId, focusContact }: { customerId: string;
 
   const { customer: cu, contacts, jobs } = data;
   const primary = contacts.find((c) => c.primary) ?? contacts[0];
-  const ids = new Set(contacts.map((c) => c.id));
-  const theirThreads = custom.filter((t) => t.contact_ids.some((id) => ids.has(id)));
   const quoted = jobs.reduce((n, j) => n + (j.quote ?? 0), 0);
   const meta = [
     cu.customer_type ? TYPE_LABEL[cu.customer_type] ?? cu.customer_type : null,
@@ -148,7 +139,6 @@ export function CustomerPage({ customerId, focusContact }: { customerId: string;
     `${jobs.length} job${jobs.length === 1 ? "" : "s"}`,
     quoted ? `${money0(quoted)} quoted` : null,
   ].filter(Boolean).join(" · ");
-  const customerBucket = { label: "Customer", colour: BUCKET.customer, href: contacts[0] ? `/dashboard/messages/${contacts[0].id}?t=customers` : "/dashboard/messages?t=customers" };
   const tabs: Array<[Tab, string]> = [["overview", "Overview"], ["contacts", `Contacts ${contacts.length}`], ["jobs", `Jobs ${jobs.length}`], ["threads", "Threads"],
     ["files", "Files"], ["timeline", "Timeline"], ["payments", "Payments"], ["schedule", "Schedule"]];
 
@@ -214,10 +204,6 @@ export function CustomerPage({ customerId, focusContact }: { customerId: string;
               ))}
               {!jobs.length && <NoJobs customerId={cu.id} canNew={!!primary} onNew={() => void newScope()} onAdded={reload} />}
             </div>
-          </section>
-          <section>
-            <SectionHead title="Threads these contacts are in" />
-            <ThreadChips bucket={customerBucket} threads={theirThreads} />
           </section>
         </OverviewGrid>
       )}

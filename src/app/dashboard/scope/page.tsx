@@ -633,6 +633,8 @@ function NewJobSheet({ open, onClose }: { open: boolean; onClose: () => void }) 
   const [picking, setPicking] = useState<"customer" | "referrer">("customer");
   // ?new=1&site=<id> — a job made from a site on the Camera page (113): its address, pin and photos come with it.
   const [site, setSite] = useState<{ id: string; label: string; address: string | null; shots?: number } | null>(null);
+  const [title, setTitle] = useState("");
+  const [address, setAddress] = useState("");
 
   useEffect(() => {
     if (!open) return;
@@ -656,7 +658,7 @@ function NewJobSheet({ open, onClose }: { open: boolean; onClose: () => void }) 
   }, [open, threads]);
 
   function close() {
-    setCustomer(null); setJobType(null); setSource(null); setReferrer(null); setPicking("customer"); setQ(""); setErr(null); setSite(null);
+    setCustomer(null); setJobType(null); setSource(null); setReferrer(null); setPicking("customer"); setQ(""); setErr(null); setSite(null); setTitle(""); setAddress("");
     onClose();
   }
 
@@ -669,6 +671,8 @@ function NewJobSheet({ open, onClose }: { open: boolean; onClose: () => void }) 
       if (source) body.lead_source = source;
       if (referrer) body.referred_by_contact_id = referrer.contact_id;
       if (site) body.site_id = site.id;
+      if (title.trim()) body.title = title.trim().slice(0, 200);
+      if (address.trim()) body.address = address.trim().slice(0, 300);
       const r = await fetch("/api/jobs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const b = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(b?.error || `HTTP ${r.status}`);
@@ -695,7 +699,7 @@ function NewJobSheet({ open, onClose }: { open: boolean; onClose: () => void }) 
 
   return (
     <Sheet open={open} onClose={close} title="New job"
-      sub={choosing ? (picking === "referrer" ? "Who sent it?" : undefined) : "What kind of job?"}>
+      sub={choosing ? (picking === "referrer" ? "Who sent it?" : "Step 1 of 2 · Who is it for?") : "Step 2 of 2 · Name it and pick its type"}>
       {site && (
         <div className="px-3 pt-3" style={{ fontSize: F.sm, color: T.ink2 }}>
           From the site <b>{site.label}</b>{site.address && site.address !== site.label ? ` · ${site.address}` : ""}
@@ -706,15 +710,21 @@ function NewJobSheet({ open, onClose }: { open: boolean; onClose: () => void }) 
       {choosing ? (
         <>
           <div className="p-3">
+            {picking === "customer" && (
+              <div style={{ fontSize: F.sm, color: T.ink2, marginBottom: 8 }}>
+                Pick the customer or contact the job is for, or skip this and attach them later.
+              </div>
+            )}
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search a name or number" autoFocus
               className="w-full rounded px-2.5 outline-none" style={{ height: 40, border: `1px solid ${T.hair}`, fontSize: F.sm }} />
             {picking === "customer" && (
               <button disabled={busy} onClick={() => setCustomer("none")} className="w-full rounded mt-2"
                 style={{ height: 38, border: `1px dashed ${T.ink3}`, background: T.card, fontFamily: disp, fontSize: F.sm,
                          textTransform: "uppercase", letterSpacing: ".06em", cursor: "pointer" }}>
-                Nobody yet — attach later
+                Skip — no customer yet ›
               </button>
             )}
+            {picking === "customer" && <div style={{ ...eyebrow, color: T.ink3, marginTop: 12 }}>Or pick who it&apos;s for</div>}
             {err && <div style={{ fontSize: F.xs, color: T.red, marginTop: 6 }}>{err}</div>}
           </div>
           {threads === null && !err && <div className="px-3" style={{ fontSize: F.sm, color: T.ink3 }}>Loading threads…</div>}
@@ -737,6 +747,16 @@ function NewJobSheet({ open, onClose }: { open: boolean; onClose: () => void }) 
               <span style={{ fontFamily: disp, fontSize: F.md, fontWeight: 600, flex: 1, ...clip }}>{label(customer)}</span>
               <button onClick={() => { setCustomer(null); setPicking("customer"); }} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>Change</button>
             </div>
+          </div>
+          <div>
+            <div style={{ ...eyebrow, color: T.ink3, marginBottom: 4 }}>Job name</div>
+            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. HPC parking lot" autoFocus
+              className="w-full rounded px-2.5 outline-none" style={{ height: 40, border: `1px solid ${T.hair}`, fontSize: 16 }} />
+          </div>
+          <div>
+            <div style={{ ...eyebrow, color: T.ink3, marginBottom: 4 }}>Job site address</div>
+            <input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Street, city"
+              className="w-full rounded px-2.5 outline-none" style={{ height: 40, border: `1px solid ${T.hair}`, fontSize: 16 }} />
           </div>
           <div>
             <div style={{ ...eyebrow, color: T.ink3, marginBottom: 4 }}>Type</div>
@@ -771,10 +791,10 @@ function NewJobSheet({ open, onClose }: { open: boolean; onClose: () => void }) 
           <button disabled={busy || !jobType} onClick={() => void create()} className="w-full rounded"
             style={{ height: 40, background: jobType ? T.hiviz : T.hair, color: T.onHiviz, fontFamily: disp, fontSize: F.md, fontWeight: 600,
                      textTransform: "uppercase", letterSpacing: ".06em", cursor: "pointer" }}>
-            {busy ? "Creating…" : jobType ? "Create and open the scope" : "Pick a type first"}
+            {busy ? "Creating…" : jobType ? "Create the job" : "Pick a type first"}
           </button>
           <div style={{ fontSize: F.xs, color: T.ink3 }}>
-            Type is required — the database would otherwise quietly call it residential. Source can be set later. It starts in New lead.
+            Only the type is required; the rest can be filled in on the job. Next, add plans in the job&apos;s Files.
           </div>
         </div>
       )}

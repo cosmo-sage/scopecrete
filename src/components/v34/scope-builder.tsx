@@ -98,11 +98,18 @@ export function ScopeBuilderPage() {
   return (
     <div style={{ color: T.ink, minHeight: "100%" }}>
       {/* The filters slide in from the left behind ☰, left of the org's name (Coy, 2026-10-11: "shrink
-          the header height"); + New scope is Dusty's quick select on this page. */}
+          the header height"); + New job sits on the header beside the search. */}
       <PageHeader title={spaces ? "Jobs" : "Scope Builder"} count={scopes ? shown.length : undefined}
         sub="Every scope from files to a sent proposal: Files → Takeoffs → Budget → Proposal. A row opens the job on its next step."
         menu={<MenuButton always onClick={() => setFilters(true)} label="Filter scopes" />}
-        actions={<SearchToggle open={searching} onToggle={() => setSearching((x) => !x)} label="Find a scope" />}>
+        actions={<>
+          <SearchToggle open={searching} onToggle={() => setSearching((x) => !x)} label="Find a scope" />
+          {/* Back on the header (Coy, 2026-10-22: "the add new job button doesn't make a clear path"). */}
+          <Link href="/dashboard/scope?new=1" className="sc-new-btn rounded inline-flex items-center"
+            style={{ height: 32, padding: "0 12px", background: T.hiviz, color: T.onHiviz, fontSize: F.sm, fontWeight: 600, whiteSpace: "nowrap" }}>
+            + New job
+          </Link>
+        </>}>
         {searching && <div className="mt-2"><SearchBubble value={q} onChange={setQ} onClose={() => setSearching(false)} placeholder="Find a scope, customer or address" /></div>}
         {(market !== "all" || step !== "all") && (
           <div className="flex gap-1.5 mt-1.5 flex-wrap">

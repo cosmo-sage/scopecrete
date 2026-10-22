@@ -37,7 +37,7 @@ const STEP_WORDS: Record<string, string> = {
   archive: "archive", restore: "restore", set_address: "address", new_job: "new job", new_customer: "new customer",
   attach_contact: "person on a customer", new_contact: "new contact", set_name: "name", file: "file filed",
   file_email: "email filed", text: "text", email: "email draft", send_proposal: "proposal to send",
-  appointment: "appointment", update_appointment: "appointment change",
+  appointment: "appointment", update_appointment: "appointment change", work_space: "Work Space",
 };
 
 /** "budget line ×3 · new item" — what a plan holds, by kind of step. */

@@ -333,3 +333,22 @@ test("email: a draft into a conversation, quote marks and entities taken off", a
   assert.match(RECORD_RULES, /"do":"email"/);
   assert.equal(emailBody("Plain\nbody"), "Plain\nbody");
 });
+
+test("work_space: a Work Space of Coy's own, members on named shelves, ids from the CONTEXT only", () => {
+  const job = "11111111-2222-3333-4444-555555555555", cust = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+  const a = cleanAction({ do: "work_space", name: "  North shore ", shelves: ["Mandeville", "mandeville", "Covington", ""],
+    members: [{ kind: "job", id: job, name: "Wilson Driveway", shelf: "MANDEVILLE" }, { kind: "customer", id: cust, name: "Wilson", shelf: "Elsewhere" },
+      { kind: "job", id: job }, { kind: "job", id: "job1" }, { kind: "contact", id: cust }],
+    tools: ["map", "Bad Key", "files"] });
+  assert.equal(a.name, "North shore");
+  assert.deepEqual(a.shelves, ["Mandeville", "Covington"]);
+  assert.deepEqual(a.members, [{ kind: "job", id: job, name: "Wilson Driveway", shelf: "Mandeville" }, { kind: "customer", id: cust, name: "Wilson", shelf: null }]);
+  assert.deepEqual(a.tools, ["map", "files"]);
+  assert.ok(RECORD_STEPS.has("work_space"));
+  assert.equal(needsJob(a), false);
+  assert.match(describe(a), /North shore/);
+  // Blank is fine; no name is not.
+  assert.deepEqual(cleanAction({ do: "work_space", name: "Phase 2" }), { do: "work_space", name: "Phase 2", shelves: [], members: [], tools: [] });
+  assert.equal(cleanAction({ do: "work_space", name: " " }), null);
+  assert.match(RECORD_RULES, /"do":"work_space"/);
+});

@@ -93,7 +93,7 @@ export async function applyPlan(jobId: string | null, actions: PlanAction[], loo
   };
   // Groups first, so items can be filed in them; then changes; then the budget.
   const order = { new_group: 0, rename_group: 1, update_item: 1, new_area: 2, new_item: 3, vendor_price: 4, retire_item: 4, new_assembly: 5, add_to_assembly: 6, remove_from_assembly: 6,
-    add: 7, add_group: 8, load_assembly: 9, remove_group: 10, set_tax: 10, archive: 11, restore: 11, set_address: 11, new_job: 11, new_customer: 11, attach_contact: 11, new_contact: 11, set_name: 11, file: 11, file_email: 11, text: 11, email: 11, send_proposal: 11, new_vendor: 11, appointment: 11, update_appointment: 11 } as const;
+    add: 7, add_group: 8, load_assembly: 9, remove_group: 10, set_tax: 10, archive: 11, restore: 11, set_address: 11, new_job: 11, new_customer: 11, attach_contact: 11, new_contact: 11, set_name: 11, file: 11, file_email: 11, text: 11, email: 11, send_proposal: 11, new_vendor: 11, appointment: 11, update_appointment: 11, work_space: 12 } as const;
   // Archive / restore steps run through applyRecords (no job needed).
   const steps = [...actions].filter((a) => !RECORD_STEPS.has(a.do)).sort((a, b) => order[a.do] - order[b.do]);
   for (const a of steps) {
@@ -274,6 +274,24 @@ export async function applyRecords(actions: PlanAction[]): Promise<StepResult[]>
           out.push({ ok: true, text: `Made the customer “${r.customer?.name ?? a.name}”` });
         } catch (e) {
           out.push({ ok: false, text: `New customer “${a.name}”: ${e instanceof Error ? e.message : String(e)}` });
+        }
+        continue;
+      }
+      if (a.do === "work_space") {
+        try {
+          // The people its thread holds: each job's and customer's (as + Add does), and each vendor's own contact.
+          const ids = new Set(a.members.filter((m) => m.kind === "vendor").map((m) => m.id));
+          await Promise.all(a.members.filter((m) => m.kind !== "vendor").slice(0, 40).map((m) =>
+            fetch(`/api/threads/custom?${m.kind}=${m.id}`).then((r) => (r.ok ? r.json() : null))
+              .then((j) => { for (const p of (j?.preview ?? []) as Array<{ id: string }>) ids.add(p.id); }).catch(() => {})));
+          const r = await call("/api/threads/custom", "POST", { name: a.name, source: "manual", contact_ids: [...ids].slice(0, 500) });
+          const id = r.thread?.id as string | undefined;
+          if (!id) throw new Error("Couldn't make it.");
+          // The rail's prefs are written by the drawer, which holds them (spaces-nav.tsx listens).
+          if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("sc:space-build", { detail: { id, shelves: a.shelves, members: a.members, tools: a.tools } }));
+          out.push({ ok: true, text: `Made the Work Space “${a.name}”${a.members.length ? ` with ${a.members.length} in it` : ""} — it's on the rail` });
+        } catch (e) {
+          out.push({ ok: false, text: `Work Space “${a.name}”: ${e instanceof Error ? e.message : String(e)}` });
         }
         continue;
       }

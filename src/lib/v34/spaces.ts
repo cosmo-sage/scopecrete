@@ -81,11 +81,12 @@ export function spaceOf(path: string | null | undefined): SpaceRef {
  * A customer or vendor Space on the rail (Coy, 2026-10-18: "A space can currently be 1 of 4
  * different things. A job is just one"). Pinned by Coy, kept on his account, newest last.
  */
-export interface SpacePin { kind: "customer" | "vendor" | "job"; id: string; name: string }
+export interface SpacePin { kind: "customer" | "vendor" | "job"; id: string; name: string; /** In your own Work Space: the shelf it sits on. */ shelf?: string }
 export const MAX_PINS = 40;
 const UUID_RE = /^[0-9a-f-]{36}$/i;
 
-export function cleanPins(v: unknown): SpacePin[] {
+const SHELF_ID_RE = /^[a-z0-9-]{1,40}$/;
+export function cleanPins(v: unknown, max = MAX_PINS): SpacePin[] {
   if (!Array.isArray(v)) return [];
   const seen = new Set<string>();
   const out: SpacePin[] = [];
@@ -97,8 +98,9 @@ export function cleanPins(v: unknown): SpacePin[] {
     if (!kind || !id || seen.has(`${kind}:${id}`)) continue;
     seen.add(`${kind}:${id}`);
     const name = typeof r.name === "string" && r.name.trim() ? r.name.trim().slice(0, 120) : kind === "customer" ? "Customer" : kind === "job" ? "Job" : "Vendor";
-    out.push({ kind, id, name });
-    if (out.length >= MAX_PINS) break;
+    const shelf = typeof r.shelf === "string" && SHELF_ID_RE.test(r.shelf) ? r.shelf : undefined;
+    out.push(shelf ? { kind, id, name, shelf } : { kind, id, name });
+    if (out.length >= max) break;
   }
   return out;
 }
@@ -158,7 +160,7 @@ export function cleanMembers(v: unknown): CollectionMembers {
   let n = 0;
   for (const [id, list] of Object.entries(v as Record<string, unknown>)) {
     if (!UUID_RE.test(id)) continue;
-    const items = cleanPins(list).slice(0, MAX_MEMBERS);
+    const items = cleanPins(list, MAX_MEMBERS);
     if (items.length) out[id] = items;
     if (++n >= 200) break;
   }
@@ -166,7 +168,7 @@ export function cleanMembers(v: unknown): CollectionMembers {
 }
 export function setMembers(all: CollectionMembers, id: string, items: SpacePin[]): CollectionMembers {
   const next = { ...all };
-  const clean = cleanPins(items).slice(0, MAX_MEMBERS);
+  const clean = cleanPins(items, MAX_MEMBERS);
   if (clean.length) next[id] = clean; else delete next[id];
   return next;
 }
@@ -175,6 +177,84 @@ export function toggleItem(items: SpacePin[], item: SpacePin, on: boolean): Spac
   const has = items.some((p) => p.kind === item.kind && p.id === item.id);
   if (on) return has ? items : [...items, item];
   return items.filter((p) => !(p.kind === item.kind && p.id === item.id));
+}
+
+/**
+ * Shelves of your own inside a Work Space (Coy, 2026-10-22: "I might create a space. Name it
+ * Customers, and put specific customers in a geographic area inside that space"). Each holds
+ * some of its jobs, customers and vendors (their `shelf`); one on none sits at the top. Kept on
+ * the account (`spaces_col_shelves`: thread id → shelves), no migration.
+ */
+export interface ColShelf { id: string; name: string }
+export type ColShelves = Record<string, ColShelf[]>;
+export const MAX_COL_SHELVES = 20;
+export function cleanColShelves(v: unknown): ColShelves {
+  const out: ColShelves = {};
+  if (!v || typeof v !== "object" || Array.isArray(v)) return out;
+  let n = 0;
+  for (const [id, list] of Object.entries(v as Record<string, unknown>)) {
+    if (!UUID_RE.test(id) || !Array.isArray(list)) continue;
+    const seen = new Set<string>();
+    const shelves: ColShelf[] = [];
+    for (const x of list) {
+      const r = (x && typeof x === "object" ? x : {}) as Record<string, unknown>;
+      const sid = typeof r.id === "string" && SHELF_ID_RE.test(r.id) ? r.id : null;
+      const name = typeof r.name === "string" ? r.name.trim().slice(0, 40) : "";
+      if (!sid || !name || seen.has(sid)) continue;
+      seen.add(sid);
+      shelves.push({ id: sid, name });
+      if (shelves.length >= MAX_COL_SHELVES) break;
+    }
+    if (shelves.length) out[id] = shelves;
+    if (++n >= 200) break;
+  }
+  return out;
+}
+/** A new shelf in a Work Space, and its id; unchanged when full or the name is blank. */
+export function addColShelf(all: ColShelves, col: string, name: string, id: string): ColShelves {
+  const list = all[col] ?? [];
+  const nm = name.trim().slice(0, 40);
+  if (!nm || list.length >= MAX_COL_SHELVES || !SHELF_ID_RE.test(id) || list.some((s) => s.id === id)) return all;
+  return { ...all, [col]: [...list, { id, name: nm }] };
+}
+export function renameColShelf(all: ColShelves, col: string, id: string, name: string): ColShelves {
+  const nm = name.trim().slice(0, 40);
+  if (!nm) return all;
+  return { ...all, [col]: (all[col] ?? []).map((s) => (s.id === id ? { ...s, name: nm } : s)) };
+}
+/** A shelf moved up (-1) or down (+1). */
+export function moveColShelf(all: ColShelves, col: string, id: string, by: -1 | 1): ColShelves {
+  const list = [...(all[col] ?? [])];
+  const i = list.findIndex((s) => s.id === id);
+  const j = i + by;
+  if (i < 0 || j < 0 || j >= list.length) return all;
+  [list[i], list[j]] = [list[j], list[i]];
+  return { ...all, [col]: list };
+}
+/** A shelf removed; what was on it goes back to the top. */
+export function removeColShelf(all: ColShelves, members: CollectionMembers, col: string, id: string): { shelves: ColShelves; members: CollectionMembers } {
+  const list = (all[col] ?? []).filter((s) => s.id !== id);
+  const shelves = { ...all };
+  if (list.length) shelves[col] = list; else delete shelves[col];
+  const items = (members[col] ?? []).map((m) => (m.shelf === id ? { kind: m.kind, id: m.id, name: m.name } : m));
+  return { shelves, members: setMembers(members, col, items) };
+}
+/** A job, customer or vendor put on a shelf (or none). */
+export function setMemberShelf(items: SpacePin[], kind: SpacePin["kind"], id: string, shelf: string | null): SpacePin[] {
+  return items.map((m) => {
+    if (m.kind !== kind || m.id !== id) return m;
+    const { shelf: _old, ...rest } = m;
+    void _old;
+    return shelf ? { ...rest, shelf } : rest;
+  });
+}
+/** A Work Space's members by shelf: the loose ones, then each shelf's (members on a shelf that is gone are loose). */
+export function membersByShelf(items: SpacePin[], shelves: ColShelf[]): { loose: SpacePin[]; shelves: Array<ColShelf & { items: SpacePin[] }> } {
+  const ids = new Set(shelves.map((s) => s.id));
+  return {
+    loose: items.filter((m) => !m.shelf || !ids.has(m.shelf)),
+    shelves: shelves.map((s) => ({ ...s, items: items.filter((m) => m.shelf === s.id) })),
+  };
 }
 
 /** A shelf of a customer or vendor Space: rows that open the record page's tabs. */
@@ -228,6 +308,12 @@ export function defaultLayout(kind: LayoutKind): KindLayout {
 }
 
 /** A saved layout made safe for its kind: known pages once each, shelf ids unique, else the default. */
+/**
+ * A tool or list from Home put on a job's, customer's or vendor's shelf (Coy, 2026-10-22: "There
+ * is no + button to add a tool, or channel or page or collection"): "p:<page>", the app's own page.
+ */
+const TOOL_ROW_RE = /^p:[a-z_]{1,30}$/;
+export const isToolRow = (k: string) => TOOL_ROW_RE.test(k);
 export function cleanLayout(kind: LayoutKind, v: unknown): KindLayout {
   if (!v || typeof v !== "object" || !Array.isArray((v as { shelves?: unknown }).shelves)) return defaultLayout(kind);
   const known = new Set(kindRows(kind, "x").map((r) => r.k));
@@ -243,7 +329,7 @@ export function cleanLayout(kind: LayoutKind, v: unknown): KindLayout {
     ids.add(id);
     const rows: string[] = [];
     if (id !== CHANNELS_SHELF) for (const k of Array.isArray(r.rows) ? r.rows : []) {
-      if (typeof k !== "string" || !known.has(k) || seen.has(k)) continue;
+      if (typeof k !== "string" || !(known.has(k) || TOOL_ROW_RE.test(k)) || seen.has(k)) continue;
       seen.add(k);
       rows.push(k);
     }
@@ -276,7 +362,7 @@ export function cleanSpaceLayouts(v: unknown): SpaceLayouts {
 export function placeRow(l: KindLayout, k: string, to: string | null): KindLayout {
   const shelves = l.shelves.map((s) => ({ ...s, rows: s.rows.filter((x) => x !== k) }));
   const hidden = l.hidden.filter((x) => x !== k);
-  if (to === null) return { shelves, hidden: [...hidden, k] };
+  if (to === null) return { shelves, hidden: isToolRow(k) ? hidden : [...hidden, k] };
   return { shelves: shelves.map((s) => (s.id === to ? { ...s, rows: [...s.rows, k] } : s)), hidden };
 }
 
@@ -284,7 +370,7 @@ export function placeRow(l: KindLayout, k: string, to: string | null): KindLayou
 export function removeKindShelf(l: KindLayout, id: string): KindLayout {
   const sh = l.shelves.find((s) => s.id === id);
   if (!sh) return l;
-  return { shelves: l.shelves.filter((s) => s.id !== id), hidden: [...l.hidden, ...(id === CHANNELS_SHELF ? [CHANNELS_SHELF] : sh.rows)] };
+  return { shelves: l.shelves.filter((s) => s.id !== id), hidden: [...l.hidden, ...(id === CHANNELS_SHELF ? [CHANNELS_SHELF] : sh.rows.filter((k) => !isToolRow(k)))] };
 }
 
 /** The tab a customer or vendor page is on (its ?tab=, else Summary). */

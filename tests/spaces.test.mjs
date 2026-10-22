@@ -262,3 +262,43 @@ test("holdsSpace: a Work Space keeps its drawer on its members' own pages", asyn
   assert.equal(holdsSpace(m, { kind: "job", id: "j2" }), false);
   assert.equal(holdsSpace(m, { kind: "home" }), false);
 });
+
+test("a Work Space's own shelves: members on them, renamed, moved, removed", async () => {
+  const { cleanColShelves, addColShelf, renameColShelf, moveColShelf, removeColShelf, setMemberShelf, membersByShelf, cleanMembers } = await import("../src/lib/v34/spaces.ts");
+  const C = "0123abcd-0000-4000-8000-000000000001";
+  const J = "0123abcd-0000-4000-8000-000000000002";
+  const K = "0123abcd-0000-4000-8000-000000000003";
+  let sh = addColShelf({}, C, " North BR ", "s1");
+  sh = addColShelf(sh, C, "South", "s2");
+  assert.deepEqual(sh[C].map((s) => s.name), ["North BR", "South"]);
+  assert.equal(addColShelf(sh, C, "  ", "s3"), sh);
+  sh = renameColShelf(sh, C, "s2", "Gonzales");
+  sh = moveColShelf(sh, C, "s2", -1);
+  assert.deepEqual(sh[C].map((s) => s.id), ["s2", "s1"]);
+  assert.deepEqual(cleanColShelves({ [C]: [{ id: "s1", name: "A" }, { id: "BAD ID", name: "x" }, { id: "s1", name: "dup" }], nope: [] }), { [C]: [{ id: "s1", name: "A" }] });
+  let items = [{ kind: "job", id: J, name: "Drive" }, { kind: "customer", id: K, name: "Icon" }];
+  items = setMemberShelf(items, "job", J, "s1");
+  const mem = cleanMembers({ [C]: items });
+  assert.equal(mem[C][0].shelf, "s1");
+  const by = membersByShelf(mem[C], sh[C]);
+  assert.equal(by.loose.length, 1);
+  assert.equal(by.shelves.find((s) => s.id === "s1").items[0].id, J);
+  const r = removeColShelf(sh, mem, C, "s1");
+  assert.deepEqual(r.shelves[C].map((s) => s.id), ["s2"]);
+  assert.equal(r.members[C][0].shelf, undefined);
+  // the member cap is the Work Space's, not the rail's 40
+  const many = Array.from({ length: 60 }, (_, i) => ({ kind: "job", id: `0123abcd-0000-4000-8000-${String(i).padStart(12, "0")}`, name: "J" }));
+  assert.equal(cleanMembers({ [C]: many })[C].length, 60);
+});
+
+test("a tool from Home on a job's shelf: kept, taken off without hiding", async () => {
+  const { cleanLayout, placeRow, removeKindShelf, defaultLayout } = await import("../src/lib/v34/spaces.ts");
+  const d = defaultLayout("job");
+  let l = placeRow(d, "p:map", d.shelves[0].id);
+  l = cleanLayout("job", JSON.parse(JSON.stringify({ ...l, shelves: l.shelves.map((s, i) => (i === 0 ? { ...s, rows: [...s.rows, "p:Bad!"] } : s)) })));
+  assert.ok(l.shelves[0].rows.includes("p:map"));
+  assert.ok(!l.shelves[0].rows.includes("p:Bad!"));
+  const off = placeRow(l, "p:map", null);
+  assert.ok(!off.hidden.includes("p:map"));
+  assert.ok(!removeKindShelf(l, l.shelves[0].id).hidden.includes("p:map"));
+});

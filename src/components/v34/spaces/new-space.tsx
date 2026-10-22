@@ -1,18 +1,14 @@
 "use client";
 
 /**
- * New Space (Claude Design "Dusty Home" frame 18; Coy, 2026-10-18). Two steps:
- *   1. the kind — Job · Customer · Vendor · Collection;
- *   2. slides to a searchable list of that kind, ticked several at a time (Coy: "it should
- *      slide to the next selection window (providing a back button at the top left) … I am
- *      able to select multiple vendors, and multiple customers and multiple jobs"):
- *      - Jobs, customers, vendors → each one ticked goes on the rail (`spaces_pins`, an open
- *        job already there is put back if it was taken off); + New makes one (a job opens the
- *        New job form; a customer or vendor is made through + New customer's / + Vendor's route).
- *      - Collection → a name, any number of jobs, customers and vendors (`spaces_col_members`,
- *        their people put on its thread, migration 073), and the tools and channels to keep
- *        beside them (`spaces_collections`).
- * On a phone it is the whole screen, × at the top right. No migration.
+ * New Work Space (Coy, 2026-10-22: "every new space will be a blank space whether I click a button
+ * or chat with dusty"). No kinds to pick: a name and Create makes a blank Work Space of your own
+ * (a thread, migration 073, with nobody on it); its drawer opens on + Add, where jobs, customers,
+ * vendors, tools and threads go in, onto shelves you name (by area, by phase …). Or **Build it with
+ * Dusty**: he asks what it is for and answers with a work_space plan step Coy applies.
+ * Pinning one job, customer or vendor to the rail stays, as a smaller second step (the old picker:
+ * searched, ticked several at a time, + New). On a phone it is the whole screen, × at the top
+ * right. No migration.
  */
 
 import React, { Fragment, useEffect, useMemo, useState } from "react";
@@ -21,7 +17,7 @@ import { SpaceSilhouette } from "@/components/v34/spaces/space-silhouette";
 import { usePref } from "@/lib/v34/prefs";
 import { PAGE } from "@/lib/v34/pages";
 import {
-  SPACE_KINDS, CHANNELS, pickSections, addPin, cleanPins, cleanCollectionPicks, cleanMembers, monogram, setPicks, setMembers,
+  SPACE_KINDS, CHANNELS, pickSections, addPin, cleanPins, monogram,
   togglePick, toggleItem, cleanRail, showTile, stageColor, stageLabel, type SpacePin,
 } from "@/lib/v34/spaces";
 
@@ -52,7 +48,6 @@ interface Option { kind: ItemKind; id: string; name: string; sub: string; status
 const COLOR: Record<Kind, string> = {
   job: "var(--sc-hiviz)", customer: "var(--sc-chalk)", vendor: "var(--sc-bucket-vendor)", collection: "var(--sc-violet)",
 };
-const SHAPE: Record<Kind, "job" | "contact" | "vendor" | "collection"> = { job: "job", customer: "contact", vendor: "vendor", collection: "collection" };
 const NOUN: Record<ItemKind, [string, string]> = { job: ["job", "jobs"], customer: ["customer", "customers"], vendor: ["vendor", "vendors"] };
 
 // The lists, read once per visit and shared by every picker on the page.
@@ -177,28 +172,24 @@ export async function peopleOf(items: SpacePin[]): Promise<string[]> {
   return [...ids].slice(0, 500);
 }
 
-export function NewSpaceDialog({ onClose, onMade, pages, openJobs = [] }: {
-  onClose: () => void; onMade: () => void; pages: string[];
+export function NewSpaceDialog({ onClose, onMade, openJobs = [] }: {
+  onClose: () => void; onMade: () => void; pages?: string[];
   /** The open jobs already on the rail by default. */
   openJobs?: string[];
 }) {
   const router = useRouter();
-  const [kind, setKind] = useState<Kind | null>(null);
+  const [step, setStep] = useState<"name" | "pin">("name");
   const [back, setBack] = useState(false);
   const [name, setName] = useState("");
   const [picked, setPicked] = useState<SpacePin[]>([]);
-  const [picks, setPickList] = useState<string[]>([]);
-  const [showTools, setShowTools] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [pinsRaw, setPins] = usePref<unknown>("spaces_pins", []);
   const pins = useMemo(() => cleanPins(pinsRaw), [pinsRaw]);
-  const [colRaw, setCol] = usePref<unknown>("spaces_collections", {});
-  const [memRaw, setMem] = usePref<unknown>("spaces_col_members", {});
   const [railRaw, setRail] = usePref<unknown>("spaces_rail", {});
   const rail = useMemo(() => cleanRail(railRaw), [railRaw]);
 
-  const goBack = () => { setBack(true); setKind(null); setPicked([]); setErr(null); };
+  const goBack = () => { setBack(true); setStep("name"); setPicked([]); setErr(null); };
   useEffect(() => {
     const k = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", k);
@@ -233,39 +224,19 @@ export function NewSpaceDialog({ onClose, onMade, pages, openJobs = [] }: {
     finally { setBusy(false); }
   };
 
-  const create = async () => {
-    if (!kind) return;
+  /** A blank Work Space: a thread with nobody on it, named. Its drawer opens on + Add. */
+  const createBlank = async () => {
+    if (!name.trim()) return;
     setErr(null);
     setBusy(true);
     try {
-      if (kind === "collection") {
-        const contact_ids = await peopleOf(picked);
-        const r = await fetch("/api/threads/custom", {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: name.trim(), source: "manual", contact_ids }),
-        });
-        const j = await r.json().catch(() => ({}));
-        if (!r.ok || !j.thread) throw new Error(j.error ?? "Couldn't make it.");
-        const id = j.thread.id as string;
-        if (picks.length) setCol(setPicks(cleanCollectionPicks(colRaw), id, picks));
-        if (picked.length) setMem(setMembers(cleanMembers(memRaw), id, picked));
-        onMade(); onClose(); router.push(`/dashboard/messages?t=${id}`);
-        return;
-      }
-      // Jobs, customers, vendors: every one ticked goes on the rail.
-      let next = pins;
-      let nextRail = rail;
-      for (const p of picked) {
-        nextRail = showTile(nextRail, `${p.kind}:${p.id}`);
-        if (!(p.kind === "job" && openJobs.includes(p.id))) next = addPin(next, p);
-      }
-      if (next !== pins) setPins(next);
-      if (nextRail !== rail) setRail(nextRail);
-      onMade(); onClose();
-      if (picked.length === 1) {
-        const p = picked[0];
-        router.push(p.kind === "job" ? `/dashboard/scope/${p.id}/summary` : p.kind === "customer" ? `/dashboard/customers/${p.id}` : `/dashboard/vendors/${p.id}`);
-      }
+      const r = await fetch("/api/threads/custom", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: name.trim(), source: "manual", contact_ids: [] }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.thread) throw new Error(j.error ?? "Couldn't make it.");
+      onMade(); onClose(); router.push(`/dashboard/messages?t=${j.thread.id as string}`);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Couldn't make it.");
     } finally {
@@ -273,72 +244,82 @@ export function NewSpaceDialog({ onClose, onMade, pages, openJobs = [] }: {
     }
   };
 
-  const meta = kind ? SPACE_KINDS.find((k) => k.kind === kind)! : null;
-  const canCreate = kind === "collection" ? !!name.trim() : picked.length > 0;
-  const n = picked.length;
-  const goLabel = busy ? "Working…" : kind === "collection"
-    ? `Create Work Space${n ? ` · ${n}` : ""}`
-    : n === 1 ? `Add ${picked[0].name} to the rail` : `Add ${n || ""} ${NOUN[(kind ?? "job") as ItemKind][n === 1 ? 0 : 1]} to the rail`.replace("  ", " ");
+  const withDusty = () => {
+    const n = name.trim();
+    onClose();
+    window.dispatchEvent(new Event("sc:dusty-open"));
+    window.setTimeout(() => window.dispatchEvent(new CustomEvent("sc:dusty-draft", { detail: {
+      text: `Help me build a new Work Space${n ? ` called "${n}"` : ""}. Ask me what it's for, then suggest the jobs, customers, vendors and tools to put in it and the shelves to group them on (by area, by phase …), as a work_space step I can apply.`,
+      send: true,
+    } })), 250);
+  };
 
+  const pinThem = () => {
+    let next = pins;
+    let nextRail = rail;
+    for (const p of picked) {
+      nextRail = showTile(nextRail, `${p.kind}:${p.id}`);
+      if (!(p.kind === "job" && openJobs.includes(p.id))) next = addPin(next, p);
+    }
+    if (next !== pins) setPins(next);
+    if (nextRail !== rail) setRail(nextRail);
+    onMade(); onClose();
+    if (picked.length === 1) {
+      const p = picked[0];
+      router.push(p.kind === "job" ? `/dashboard/scope/${p.id}/summary` : p.kind === "customer" ? `/dashboard/customers/${p.id}` : `/dashboard/vendors/${p.id}`);
+    }
+  };
+
+  const n = picked.length;
   return (
     <div className="sc-newspace-scrim" onClick={onClose}>
       <div className="sc-newspace" role="dialog" aria-modal="true" aria-label="New Work Space" onClick={(e) => e.stopPropagation()}>
-        {!kind ? (
-          <div key="kind" className="sc-newspace-step" data-from={back ? "left" : undefined}>
+        {step === "name" ? (
+          <div key="name" className="sc-newspace-step" data-from={back ? "left" : undefined}>
             <div className="sc-newspace-head">
-              <span className="sc-newspace-title">New Work Space</span>
-              <button type="button" className="sc-newspace-x" onClick={onClose} aria-label="Close">×</button>
-            </div>
-            <div className="sc-newspace-kinds" role="list" aria-label="What kind of Work Space">
-              {SPACE_KINDS.map((k) => (
-                <button key={k.kind} type="button" role="listitem" className="sc-newspace-kind"
-                  onClick={() => { setBack(false); setKind(k.kind); setPicked([]); setErr(null); }}>
-                  <SpaceSilhouette kind={SHAPE[k.kind]} color={COLOR[k.kind]} initials={monogram(k.label)} size={40} />
-                  <span className="sc-newspace-kl">{k.label}</span>
-                  <span className="sc-newspace-ks">{k.shelves}</span>
-                </button>
-              ))}
-            </div>
-            <p className="sc-newspace-blurb">Pick what kind of Work Space, then pick one or several to put on the rail.</p>
-          </div>
-        ) : (
-          <div key={kind} className="sc-newspace-step" data-from="right">
-            <div className="sc-newspace-head">
-              <button type="button" className="sc-newspace-back" onClick={goBack} aria-label="Back">‹ Back</button>
               <span className="sc-newspace-title">
-                <SpaceSilhouette kind={SHAPE[kind]} color={COLOR[kind]} initials={monogram(name || meta!.label)} size={22} />
-                {kind === "collection" ? "Your own Work Space" : `${meta!.label} Work Spaces`}
+                <SpaceSilhouette kind="collection" color={COLOR.collection} initials={monogram(name || "New")} size={22} />
+                New Work Space
               </span>
               <button type="button" className="sc-newspace-x" onClick={onClose} aria-label="Close">×</button>
             </div>
-            {kind === "collection" ? (
-              <>
-                <label className="sc-newspace-field">
-                  <span>Name</span>
-                  <input value={name} maxLength={80} onChange={(e) => setName(e.target.value)} placeholder="Fort Polk crew" />
-                </label>
-                <div className="sc-newspace-field sc-newspace-grow">
-                  <span>Jobs, customers and vendors in it</span>
-                  <ItemPicker kinds={["job", "customer", "vendor"]} picked={picked} onChange={setPicked} />
-                </div>
-                <div className="sc-newspace-field">
-                  <button type="button" className="sc-newspace-fold" onClick={() => setShowTools(!showTools)} aria-expanded={showTools}>
-                    {showTools ? "▾" : "▸"} Tools &amp; people{picks.length ? ` · ${picks.length}` : ""}
-                  </button>
-                  {showTools && <PickList pages={pages} picks={picks} onChange={setPickList} />}
-                </div>
-              </>
-            ) : (
-              <div className="sc-newspace-field sc-newspace-grow">
-                <ItemPicker kinds={[kind]} picked={picked} onChange={setPicked} onRail={onRail} onNew={(k, q) => void onNew(k, q)} />
+            <form onSubmit={(e) => { e.preventDefault(); void createBlank(); }} style={{ display: "contents" }}>
+              <label className="sc-newspace-field">
+                <span>Name</span>
+                <input autoFocus value={name} maxLength={80} onChange={(e) => setName(e.target.value)} placeholder="North shore customers" />
+              </label>
+              <p className="sc-newspace-blurb">It starts blank. Put jobs, customers, vendors and tools in it with + Add, and group them on shelves of your own.</p>
+              {err && <p className="sc-newspace-err">{err}</p>}
+              <div className="sc-newspace-foot">
+                <button type="button" className="sc-space-more" onClick={withDusty} title="Dusty asks what it's for and builds it out">
+                  <span aria-hidden>✦</span> Build it with Dusty
+                </button>
+                <span style={{ flex: 1 }} />
+                <button type="submit" className="sc-newspace-go" disabled={!name.trim() || busy}>{busy ? "Working…" : "Create"}</button>
               </div>
-            )}
+            </form>
+            <button type="button" className="sc-newspace-fold" onClick={() => { setBack(false); setStep("pin"); setErr(null); }}>
+              Or pin a job, customer or vendor to the rail ›
+            </button>
+          </div>
+        ) : (
+          <div key="pin" className="sc-newspace-step" data-from="right">
+            <div className="sc-newspace-head">
+              <button type="button" className="sc-newspace-back" onClick={goBack} aria-label="Back">‹ Back</button>
+              <span className="sc-newspace-title">Pin to Rail</span>
+              <button type="button" className="sc-newspace-x" onClick={onClose} aria-label="Close">×</button>
+            </div>
+            <div className="sc-newspace-field sc-newspace-grow">
+              <ItemPicker kinds={["job", "customer", "vendor"]} picked={picked} onChange={setPicked} onRail={onRail} onNew={(k, q) => void onNew(k, q)} />
+            </div>
             {err && <p className="sc-newspace-err">{err}</p>}
             <div className="sc-newspace-foot">
               {n > 0 && <span className="sc-newspace-count">{n} picked</span>}
               <span style={{ flex: 1 }} />
               <button type="button" className="sc-space-more" onClick={onClose}>Cancel</button>
-              <button type="button" className="sc-newspace-go" disabled={!canCreate || busy} onClick={() => void create()}>{goLabel}</button>
+              <button type="button" className="sc-newspace-go" disabled={!n || busy} onClick={pinThem}>
+                {busy ? "Working…" : n === 1 ? `Pin ${picked[0].name} to Rail` : `Pin ${n || ""} to Rail`.replace("  ", " ")}
+              </button>
             </div>
           </div>
         )}

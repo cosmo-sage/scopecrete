@@ -708,9 +708,18 @@ export function nudge<T>(list: T[], i: number, dir: -1 | 1): T[] {
  * rearrange the Rail items"). Keys are "job:<id>", "col:<id>", "customer:<id>", "vendor:<id>".
  * Hiding a job or a collection only takes it off the rail; the job and thread are untouched.
  */
-export interface RailPrefs { order: string[]; hidden: string[] }
+export interface RailPrefs { order: string[]; hidden: string[]; groups: RailGroup[] }
+/**
+ * A group of Work Spaces on the rail (Coy, 2026-10-22: "add workspaces to groups inside the rail by
+ * clicking and dragging one workspace on top of another workspace, just the same way Discord does
+ * it"). A tile is in one group at most; a group of fewer than two is no group. It sits on the rail
+ * where its first member does.
+ */
+export interface RailGroup { id: string; name: string; keys: string[] }
 const RAIL_KEY_RE = /^(job|col|customer|vendor):[0-9a-f-]{36}$/i;
+const GROUP_ID_RE = /^g[a-z0-9]{1,20}$/;
 const MAX_RAIL_KEYS = 300;
+const MAX_GROUPS = 40;
 
 export function cleanRail(v: unknown): RailPrefs {
   const r = v && typeof v === "object" ? (v as Record<string, unknown>) : {};
@@ -720,7 +729,19 @@ export function cleanRail(v: unknown): RailPrefs {
     for (const k of x) if (typeof k === "string" && RAIL_KEY_RE.test(k) && !out.includes(k)) out.push(k);
     return out.slice(0, MAX_RAIL_KEYS);
   };
-  return { order: list(r.order), hidden: list(r.hidden) };
+  const groups: RailGroup[] = [];
+  const taken = new Set<string>();
+  for (const g of Array.isArray(r.groups) ? r.groups : []) {
+    if (groups.length >= MAX_GROUPS || !g || typeof g !== "object") continue;
+    const o = g as Record<string, unknown>;
+    if (typeof o.id !== "string" || !GROUP_ID_RE.test(o.id) || groups.some((x) => x.id === o.id)) continue;
+    const keys = list(o.keys).filter((k) => !taken.has(k));
+    if (keys.length < 2) continue;
+    keys.forEach((k) => taken.add(k));
+    const name = typeof o.name === "string" ? o.name.replace(/\s+/g, " ").trim().slice(0, 30) : "";
+    groups.push({ id: o.id, name: name || "Group", keys });
+  }
+  return { order: list(r.order), hidden: list(r.hidden), groups };
 }
 
 /**
@@ -752,14 +773,110 @@ export function moveTile(prefs: RailPrefs, shown: string[], key: string, to: num
   const next = shown.filter((k) => k !== key);
   next.splice(Math.max(0, Math.min(to, next.length)), 0, key);
   const rest = prefs.order.filter((k) => !next.includes(k));
-  return { order: [...next, ...rest].slice(0, MAX_RAIL_KEYS), hidden: prefs.hidden };
+  return { ...prefs, order: [...next, ...rest].slice(0, MAX_RAIL_KEYS) };
 }
 
+/** Taking a tile off the rail also takes it out of its group. */
 export function hideTile(prefs: RailPrefs, key: string): RailPrefs {
-  return prefs.hidden.includes(key) ? prefs : { order: prefs.order, hidden: [...prefs.hidden, key].slice(-MAX_RAIL_KEYS) };
+  if (prefs.hidden.includes(key)) return prefs;
+  return { ...ungroupTile(prefs, key), hidden: [...prefs.hidden, key].slice(-MAX_RAIL_KEYS) };
 }
 export function showTile(prefs: RailPrefs, key: string): RailPrefs {
-  return { order: prefs.order, hidden: prefs.hidden.filter((k) => k !== key) };
+  return { ...prefs, hidden: prefs.hidden.filter((k) => k !== key) };
+}
+
+/** One thing on the rail: a tile, or a group of the tiles shown (in the order shown). */
+export type RailItem = { kind: "tile"; key: string } | { kind: "group"; group: RailGroup; keys: string[] };
+
+/** The rail's items: each group where its first shown member is; a group with one shown is that tile. */
+export function railItems(shown: string[], groups: RailGroup[]): RailItem[] {
+  const groupOf = new Map<string, RailGroup>();
+  for (const g of groups) for (const k of g.keys) groupOf.set(k, g);
+  const out: RailItem[] = [];
+  const done = new Set<string>();
+  for (const k of shown) {
+    const g = groupOf.get(k);
+    if (!g) { out.push({ kind: "tile", key: k }); continue; }
+    if (done.has(g.id)) continue;
+    done.add(g.id);
+    const keys = shown.filter((x) => groupOf.get(x) === g);
+    if (keys.length < 2) out.push({ kind: "tile", key: k });
+    else out.push({ kind: "group", group: g, keys });
+  }
+  return out;
+}
+
+export function groupOfTile(prefs: RailPrefs, key: string): RailGroup | null {
+  return prefs.groups.find((g) => g.keys.includes(key)) ?? null;
+}
+
+/** A tile leaves its group; a group left with one is no group. */
+export function ungroupTile(prefs: RailPrefs, key: string): RailPrefs {
+  if (!prefs.groups.some((g) => g.keys.includes(key))) return prefs;
+  const groups = prefs.groups.map((g) => ({ ...g, keys: g.keys.filter((k) => k !== key) })).filter((g) => g.keys.length >= 2);
+  return { ...prefs, groups };
+}
+
+/** A name for a new group from what is in it: Jobs, Customers, Vendors, Work Spaces, else Group. */
+export function groupName(keys: string[]): string {
+  const kinds = new Set(keys.map((k) => k.split(":")[0]));
+  if (kinds.size !== 1) return "Group";
+  const k = [...kinds][0];
+  return k === "job" ? "Jobs" : k === "customer" ? "Customers" : k === "vendor" ? "Vendors" : "Work Spaces";
+}
+
+/**
+ * Put a run of keys before or after another key in the order shown (a tile or a whole group
+ * moved); the whole order is saved.
+ */
+export function placeKeys(prefs: RailPrefs, shown: string[], keys: string[], anchor: string, after: boolean): RailPrefs {
+  if (keys.includes(anchor) || !shown.includes(anchor)) return prefs;
+  const moving = shown.filter((k) => keys.includes(k));
+  const next = shown.filter((k) => !keys.includes(k));
+  const at = next.indexOf(anchor) + (after ? 1 : 0);
+  next.splice(at, 0, ...moving);
+  const rest = prefs.order.filter((k) => !next.includes(k));
+  return { ...prefs, order: [...next, ...rest].slice(0, MAX_RAIL_KEYS) };
+}
+
+/**
+ * Drop one tile on another: the two make a group (Discord's folder), or the tile joins the group
+ * the other is in, or the group dropped on (target "group:<id>"). The tile leaves any group it was
+ * in, and lands right after the target in the order.
+ */
+export function groupTiles(prefs: RailPrefs, shown: string[], key: string, target: string, newId: string): RailPrefs {
+  if (key === target) return prefs;
+  let p = ungroupTile(prefs, key);
+  const into = target.startsWith("group:") ? p.groups.find((g) => g.id === target.slice(6))
+    : p.groups.find((g) => g.keys.includes(target));
+  let last: string;
+  if (into) {
+    const members = shown.filter((k) => into.keys.includes(k));
+    if (!members.length) return prefs;
+    last = members[members.length - 1];
+    p = { ...p, groups: p.groups.map((g) => (g.id === into.id ? { ...g, keys: [...g.keys, key] } : g)) };
+  } else {
+    if (target.startsWith("group:") || !GROUP_ID_RE.test(newId) || p.groups.length >= MAX_GROUPS) return prefs;
+    last = target;
+    p = { ...p, groups: [...p.groups, { id: newId, name: groupName([target, key]), keys: [target, key] }] };
+  }
+  return placeKeys(p, shown, [key], last, true);
+}
+
+/** A fresh group id. */
+export function newGroupId(): string {
+  return `g${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+}
+
+export function renameGroup(prefs: RailPrefs, id: string, name: string): RailPrefs {
+  const n = name.replace(/\s+/g, " ").trim().slice(0, 30);
+  if (!n) return prefs;
+  return { ...prefs, groups: prefs.groups.map((g) => (g.id === id ? { ...g, name: n } : g)) };
+}
+
+/** Undo a group: its tiles stay where they are, loose. */
+export function dissolveGroup(prefs: RailPrefs, id: string): RailPrefs {
+  return { ...prefs, groups: prefs.groups.filter((g) => g.id !== id) };
 }
 
 /**

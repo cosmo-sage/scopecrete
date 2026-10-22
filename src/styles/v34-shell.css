@@ -741,6 +741,29 @@ html[data-nav="spaces"] .sc-drawer-pane .sc-drawer-old { display: none !importan
 .sc-space-tile-home { width: 52px; height: 52px; border-radius: 26px; background: var(--sc-card); border: 2px solid var(--sc-hair-strong); box-shadow: 0 1px 2px rgba(20,20,20,.12); }
 .sc-space-slot[data-on] .sc-space-tile-home { border-radius: 16px; border-color: transparent; box-shadow: none; }
 .sc-space-slot[data-on]:has(.sc-space-tile-bare)::before, .sc-space-slot[data-on]:has(.sc-space-tile-home)::before { top: 50%; bottom: auto; height: 36px; margin-top: -18px; }
+/* Groups on the rail (Coy, 2026-10-22: drag one Work Space onto another, Discord's way). */
+.sc-spaces-rail { -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; }
+.sc-spaces-rail a, .sc-spaces-rail button { -webkit-user-drag: none; }
+.sc-rail-folder { padding: 5px; background: color-mix(in srgb, var(--sc-ink) 9%, var(--sc-card)); border-color: var(--sc-hair-strong); border-radius: 14px; }
+.sc-rail-folder-grid { display: grid; grid-template-columns: 18px 18px; grid-template-rows: 18px 18px; gap: 2px; }
+.sc-rail-folder-grid > span { display: flex; align-items: center; justify-content: center; overflow: hidden; border-radius: 4px; }
+.sc-rail-group { position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px; padding-bottom: 6px; flex: none; width: 72px; }
+.sc-rail-group::before { content: ""; position: absolute; left: 10px; right: 10px; top: -2px; bottom: 0; border-radius: 16px; background: color-mix(in srgb, var(--sc-ink) 8%, transparent); pointer-events: none; }
+.sc-rail-folder-head { width: 44px; height: 30px; border-radius: 10px; color: var(--sc-ink2); background: transparent; border: 0; }
+.sc-rail-folder-head:hover { color: var(--sc-ink); background: color-mix(in srgb, var(--sc-ink) 8%, transparent); }
+.sc-space-slot[data-dragging] { opacity: .35; }
+.sc-space-slot[data-drop="into"] .sc-space-tile { outline: 2px solid var(--sc-hiviz); outline-offset: 2px; transform: scale(1.08); }
+.sc-space-slot[data-drop="before"]::before, .sc-space-slot[data-drop="after"]::before { content: ""; position: absolute; left: 14px; right: 14px; height: 3px; border-radius: 2px; background: var(--sc-hiviz); z-index: 3; }
+.sc-space-slot[data-drop="before"]::before { top: -5px; bottom: auto; width: auto; margin: 0; }
+.sc-space-slot[data-drop="after"]::before { bottom: -5px; top: auto; width: auto; margin: 0; }
+html[data-rail-drag], html[data-rail-drag] * { cursor: grabbing !important; }
+.sc-rail-ghost { position: fixed; z-index: 2000; pointer-events: none; transform: translate(-50%, -50%) scale(1.05); opacity: .9; filter: drop-shadow(0 6px 12px rgba(0,0,0,.25)); }
+.sc-rail-ghost .sc-rail-folder-grid { padding: 5px; border-radius: 14px; background: var(--sc-card); border: 2px solid var(--sc-hair-strong); }
+.sc-rail-gmenu { position: fixed; z-index: 1500; width: 220px; padding: 10px; display: flex; flex-direction: column; gap: 6px; border-radius: 8px; background: var(--sc-card); border: 1px solid var(--sc-hair-strong); box-shadow: 0 10px 28px rgba(0,0,0,.18); font-family: var(--sc-font-body); }
+.sc-rail-gmenu-l { font-size: 11px; color: var(--sc-ink3); letter-spacing: .06em; text-transform: uppercase; }
+.sc-rail-gmenu-b { height: 30px; border: 1px solid var(--sc-hair-strong); border-radius: 5px; background: var(--sc-card); color: var(--sc-ink); font-size: 13px; cursor: pointer; text-align: left; padding: 0 10px; }
+.sc-rail-gmenu-b:hover { background: var(--sc-sunk); }
+.sc-rail-gmenu-tip { margin: 2px 0 0; font-size: 11.5px; line-height: 1.35; color: var(--sc-ink3); }
 /* Shelves: arranging Home's (Coy, 2026-10-18). */
 .sc-shelf-arrange { flex: none; height: 24px; padding: 0 9px; border-radius: 4px; border: 1px solid var(--sc-hair-strong); background: var(--sc-card); color: var(--sc-ink2);
   font-family: var(--sc-font-disp); font-weight: 600; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; cursor: pointer; }

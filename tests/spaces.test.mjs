@@ -152,7 +152,7 @@ test("the rail keeps Coy's order, hides what he took off, and places new tiles b
   const b = "job:" + "a".repeat(8) + "-0000-4000-8000-000000000002";
   const c = "job:" + "a".repeat(8) + "-0000-4000-8000-000000000003";
   const v = "vendor:" + "b".repeat(8) + "-0000-4000-8000-000000000001";
-  assert.deepEqual(cleanRail({ order: [a, a, "nope", 5], hidden: "x" }), { order: [a], hidden: [] });
+  assert.deepEqual(cleanRail({ order: [a, a, "nope", 5], hidden: "x" }), { order: [a], hidden: [], groups: [] });
   const none = cleanRail(null);
   assert.deepEqual(orderTiles([a, b, v], none), [a, b, v]);
   let p = moveTile(none, [a, b, v], v, 0);
@@ -165,6 +165,47 @@ test("the rail keeps Coy's order, hides what he took off, and places new tiles b
   assert.deepEqual(orderTiles([a, b, v], p), [v, a, b]);
   // a tile gone from the rail (job finished) is just skipped
   assert.deepEqual(orderTiles([b, v], p), [v, b]);
+});
+
+test("rail groups: drop a tile on a tile to group, join, leave, move and rename", async () => {
+  const { cleanRail, orderTiles, railItems, groupTiles, ungroupTile, placeKeys, renameGroup, dissolveGroup, hideTile, groupName } = await import("../src/lib/v34/spaces.ts");
+  const j = (n) => "job:aaaaaaaa-0000-4000-8000-00000000000" + n;
+  const v = "vendor:bbbbbbbb-0000-4000-8000-000000000001";
+  const keys = [j(1), j(2), j(3), v];
+  let p = cleanRail(null);
+  let shown = orderTiles(keys, p);
+  // v dropped on job 1: a group of the two, v right after job 1
+  p = groupTiles(p, shown, v, j(1), "g1");
+  shown = orderTiles(keys, p);
+  assert.deepEqual(shown, [j(1), v, j(2), j(3)]);
+  assert.deepEqual(p.groups, [{ id: "g1", name: "Group", keys: [j(1), v] }]);
+  assert.deepEqual(railItems(shown, p.groups).map((i) => i.kind), ["group", "tile", "tile"]);
+  // job 3 dropped on the group joins it
+  p = groupTiles(p, shown, j(3), "group:g1", "g2");
+  shown = orderTiles(keys, p);
+  assert.deepEqual(shown, [j(1), v, j(3), j(2)]);
+  assert.equal(p.groups.length, 1);
+  assert.deepEqual(p.groups[0].keys, [j(1), v, j(3)]);
+  // the whole group moves after job 2
+  p = placeKeys(p, shown, p.groups[0].keys, j(2), true);
+  shown = orderTiles(keys, p);
+  assert.deepEqual(shown, [j(2), j(1), v, j(3)]);
+  p = renameGroup(p, "g1", "  Fort   Polk ");
+  assert.equal(p.groups[0].name, "Fort Polk");
+  // leaving: two left is still a group; one left is none
+  p = ungroupTile(p, j(3));
+  assert.deepEqual(p.groups[0].keys, [j(1), v]);
+  p = hideTile(p, v);
+  assert.deepEqual(p.groups, []);
+  // a hidden member leaves; a group with one shown reads as a tile
+  const two = { order: [], hidden: [], groups: [{ id: "g9", name: "X", keys: [j(1), j(2)] }] };
+  assert.deepEqual(railItems([j(1), j(3)], two.groups), [{ kind: "tile", key: j(1) }, { kind: "tile", key: j(3) }]);
+  assert.deepEqual(dissolveGroup(two, "g9").groups, []);
+  // cleaning: a key in two groups counts once, bad ids and one-tile groups go
+  const c = cleanRail({ groups: [{ id: "g1", name: "A", keys: [j(1), j(2)] }, { id: "g2", keys: [j(2), j(3)] }, { id: "bad id", keys: [j(1), j(3)] }] });
+  assert.deepEqual(c.groups, [{ id: "g1", name: "A", keys: [j(1), j(2)] }]);
+  assert.equal(groupName([j(1), j(2)]), "Jobs");
+  assert.equal(groupName([j(1), v]), "Group");
 });
 
 test("a collection keeps the tools and channels picked for it", async () => {

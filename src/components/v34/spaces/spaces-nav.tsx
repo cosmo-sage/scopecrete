@@ -24,6 +24,7 @@ import { SpaceIcon, useDrawMissing } from "@/components/v34/spaces/space-icon";
 import { NewSpaceDialog, PickList, ItemPicker, peopleOf } from "@/components/v34/spaces/new-space";
 import { ContactPicker } from "@/components/v34/contacts";
 import { ArrangeRail, type RailTileInfo } from "@/components/v34/spaces/arrange-rail";
+import { useRailDrag, useOpenGroups, DragGhost, MiniGrid, GroupMenu, type DragLoad, type DropAt } from "@/components/v34/spaces/rail-groups";
 import { PAGE } from "@/lib/v34/pages";
 import { SETTINGS_HOME } from "@/lib/v34/settings-sections";
 import { usePref } from "@/lib/v34/prefs";
@@ -37,7 +38,7 @@ import {
   cleanColShelves, addColShelf, renameColShelf, moveColShelf, removeColShelf, setMemberShelf, membersByShelf, type ColShelf,
   type LayoutKind, type KindLayout, type TreeRow,
   type Shelf, type SpaceRef, type SpacePerson, type SpaceEmail, type SpacePin,
-  cleanRail, orderTiles, moveTile, hideTile, showTile, cleanCollectionPicks, setPicks, cleanMembers, setMembers, holdsSpace,
+  cleanRail, orderTiles, moveTile, hideTile, showTile, railItems, groupTiles, ungroupTile, placeKeys, renameGroup, dissolveGroup, newGroupId, type RailGroup, cleanCollectionPicks, setPicks, cleanMembers, setMembers, holdsSpace,
 } from "@/lib/v34/spaces";
 
 interface RailJob { id: string; title: string; status: string | null; customer: string | null }
@@ -1562,7 +1563,7 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
     if (t.pinned) {
       const [kind, id] = t.key.split(":") as [SpacePin["kind"], string];
       setPins(removePin(pins, kind, id));
-      setRail(showTile(railPrefs, t.key));
+      setRail(ungroupTile(showTile(railPrefs, t.key), t.key));
     } else setRail(hideTile(railPrefs, t.key));
   };
   // On or off the rail, from a Space's drawer editor: a tile taken off is hidden (a pin unpinned);
@@ -1579,28 +1580,70 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
       },
     };
   };
-  const arrangeMenu = (e: React.MouseEvent) => { e.preventDefault(); setArranging(true); };
-  // Desktop: drag a tile up or down the rail; right-click opens Arrange.
-  const [dragKey, setDragKey] = useState<string | null>(null);
-  const dragFor = (key: string, i: number): DragProps => ({
-    draggable: true,
-    onContextMenu: arrangeMenu,
-    onDragStart: (e) => { setDragKey(key); e.dataTransfer.effectAllowed = "move"; try { e.dataTransfer.setData("text/plain", key); } catch { /* old browsers */ } },
-    onDragOver: (e) => { if (dragKey && dragKey !== key) { e.preventDefault(); e.dataTransfer.dropEffect = "move"; } },
-    onDrop: (e) => {
-      e.preventDefault();
-      const k = dragKey;
-      setDragKey(null);
-      if (!k || k === key) return;
-      const from = order.indexOf(k);
-      const box = (e.currentTarget as HTMLElement).getBoundingClientRect();
-      const below = e.clientY > box.top + box.height / 2;
-      let to = i + (below ? 1 : 0);
-      if (from < to) to -= 1;
-      moveTo(k, to);
-    },
-    onDragEnd: () => setDragKey(null),
+  // Drag a tile up or down the rail, or onto another to group them (Coy, 2026-10-22: "just the
+  // same way Discord does it"), with a mouse or a held finger; right-click or a hold opens Arrange,
+  // or on a group its menu (rail-groups.tsx).
+  const allKeys = all.map((t) => t.info.key);
+  const items = railItems(order, railPrefs.groups);
+  const [openGroups, setGroupOpen] = useOpenGroups();
+  const [gmenu, setGmenu] = useState<{ id: string; at: DOMRect } | null>(null);
+  const onRailDrop = (load: DragLoad, at: DropAt) => {
+    const grp = (id: string) => railPrefs.groups.find((g) => g.id === id);
+    const edge = (g: RailGroup | undefined, last: boolean) => {
+      const m = g ? order.filter((k) => g.keys.includes(k)) : [];
+      return last ? m[m.length - 1] : m[0];
+    };
+    let p = railPrefs;
+    if (at.id === "end") {
+      const last = order.filter((k) => !load.keys.includes(k)).pop();
+      if (!load.group) p = ungroupTile(p, load.keys[0]);
+      if (last) p = placeKeys(p, order, load.keys, last, true);
+      setRail(p);
+      return;
+    }
+    const kind = at.id.slice(0, at.id.indexOf(":")), ref = at.id.slice(at.id.indexOf(":") + 1);
+    const after = at.zone === "after";
+    if (load.group) {
+      // A whole group moves before or after what it is dropped by (beside an open group, not into it).
+      const anchor = kind === "t" && !at.inGroup ? ref : edge(grp(kind === "t" ? at.inGroup! : ref), after);
+      if (anchor) setRail(placeKeys(p, order, load.keys, anchor, after));
+      return;
+    }
+    const key = load.keys[0];
+    if (at.zone === "into") {
+      setRail(groupTiles(p, order, key, kind === "t" ? ref : `group:${ref}`, newGroupId()));
+      return;
+    }
+    if (kind === "t" && at.inGroup) {
+      // Between the tiles of an open group: it joins that group there.
+      if (!grp(at.inGroup)?.keys.includes(key)) p = groupTiles(p, order, key, `group:${at.inGroup}`, "");
+      setRail(placeKeys(p, orderTiles(allKeys, p), [key], ref, after));
+      return;
+    }
+    const anchor = kind === "t" ? ref : edge(grp(ref), after);
+    p = ungroupTile(p, key);
+    if (anchor) setRail(placeKeys(p, orderTiles(allKeys, p), [key], anchor, after));
+  };
+  const { drag, over, start } = useRailDrag({
+    onDrop: onRailDrop,
+    onHold: (load, el) => (load.group ? setGmenu({ id: load.group, at: el.getBoundingClientRect() }) : setArranging(true)),
   });
+  const slotProps = (dropId: string, load: DragLoad | null, inGroup?: string): DragProps => ({
+    "data-rail-drop": dropId,
+    "data-rail-in": inGroup,
+    "data-drop": over?.id === dropId ? over.zone : undefined,
+    "data-dragging": drag && load && drag.load.keys.join() === load.keys.join() ? "" : undefined,
+    onDragStart: (e: React.DragEvent) => e.preventDefault(),
+    ...(load ? {
+      onPointerDown: start(load),
+      onContextMenu: (e: React.MouseEvent) => {
+        e.preventDefault();
+        if (load.group) setGmenu({ id: load.group, at: (e.currentTarget as HTMLElement).getBoundingClientRect() });
+        else setArranging(true);
+      },
+    } : {}),
+  }) as DragProps;
+  const shownKey = shown.kind === "home" ? "" : `${shown.kind === "collection" ? "col" : shown.kind}:${shown.id}`;
 
   const railEl = (
     <div className="sc-spaces-rail" role="navigation" aria-label="Work Spaces">
@@ -1609,15 +1652,38 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
       </Tile>
       <span className="sc-spaces-sep" aria-hidden="true" />
       {rail === null && <span className="sc-spaces-note">…</span>}
-      {tiles.map((t, i) => {
-        // One line only, under Home (Coy, 2026-10-22: "keep the line under home and drop the others").
+      {/* One line only, under Home (Coy, 2026-10-22: "keep the line under home and drop the others"). */}
+      {items.map((it) => {
+        if (it.kind === "tile") return <React.Fragment key={it.key}>{byKey.get(it.key)!.render(slotProps(`t:${it.key}`, { keys: [it.key] }))}</React.Fragment>;
+        const g = it.group;
+        const open = openGroups.has(g.id);
+        const infos = it.keys.map((k) => byKey.get(k)!.info);
+        const holds = it.keys.includes(shownKey);
+        const label = `${g.name} · ${it.keys.length} Work Spaces`;
+        const load = { keys: it.keys, group: g.id };
+        if (!open) {
+          return (
+            <div key={`g:${g.id}`} className="sc-space-slot" data-on={holds ? "" : undefined} {...slotProps(`g:${g.id}`, load)}>
+              <button type="button" className="sc-space-tile sc-rail-folder" onClick={() => setGroupOpen(g.id, true)} aria-label={label} aria-expanded={false} title={label}>
+                <MiniGrid infos={infos} />
+              </button>
+            </div>
+          );
+        }
         return (
-          <React.Fragment key={t.info.key}>
-            {t.render(desktop ? dragFor(t.info.key, i) : { onContextMenu: arrangeMenu })}
-          </React.Fragment>
+          <div key={`g:${g.id}`} className="sc-rail-group" role="group" aria-label={g.name}>
+            <div className="sc-space-slot" {...slotProps(`gh:${g.id}`, load)}>
+              <button type="button" className="sc-space-tile sc-rail-folder-head" onClick={() => setGroupOpen(g.id, false)} aria-label={`${g.name} — close the group`} aria-expanded title={`${g.name} — close the group`}>
+                <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinejoin="round">
+                  <path d="M2.5 5.5a1 1 0 011-1h4l1.6 1.8h7.4a1 1 0 011 1v8.2a1 1 0 01-1 1h-13a1 1 0 01-1-1z" />
+                </svg>
+              </button>
+            </div>
+            {it.keys.map((k) => <React.Fragment key={k}>{byKey.get(k)!.render(slotProps(`t:${k}`, { keys: [k] }, g.id))}</React.Fragment>)}
+          </div>
         );
       })}
-      <Tile label="+" title="New Work Space" onPick={() => setMaking(true)} dashed>
+      <Tile label="+" title="New Work Space" onPick={() => setMaking(true)} dashed drag={drag ? slotProps("end", null) : undefined}>
         <span style={{ fontSize: 22, lineHeight: 1 }}>+</span>
       </Tile>
       <span style={{ flex: 1 }} />
@@ -1684,9 +1750,17 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
   // Made outside the nav, so a phone's covered Spaces (inert) never hold it.
   const dialog = (
     <>
+      {drag && <DragGhost x={drag.x} y={drag.y} infos={drag.load.keys.map((k) => byKey.get(k)?.info).filter((x): x is RailTileInfo => !!x)} />}
+      {gmenu && (() => {
+        const g = railPrefs.groups.find((x) => x.id === gmenu.id);
+        if (!g) return null;
+        return <GroupMenu name={g.name} at={gmenu.at} open={openGroups.has(g.id)} onClose={() => setGmenu(null)}
+          onRename={(n) => setRail(renameGroup(railPrefs, g.id, n))} onToggle={() => setGroupOpen(g.id, !openGroups.has(g.id))}
+          onUngroup={() => setRail(dissolveGroup(railPrefs, g.id))} />;
+      })()}
       {making && <NewSpaceDialog pages={pages} openJobs={jobs.map((j) => j.id)} onClose={() => setMaking(false)} onMade={() => window.dispatchEvent(new Event("sc:spaces-reload"))} />}
       {arranging && <ArrangeRail shown={tiles.map((t) => t.info)} hidden={hiddenTiles} onMove={moveTo} onRemove={removeTile}
-        onShow={(k) => setRail(showTile(railPrefs, k))} onReset={() => setRail({ order: [], hidden: railPrefs.hidden })} onClose={() => setArranging(false)}
+        onShow={(k) => setRail(showTile(railPrefs, k))} onReset={() => setRail({ ...railPrefs, order: [] })} onClose={() => setArranging(false)}
         onDelete={(t) => {
           void fetch(`/api/threads/custom/${t.key.slice(4)}`, { method: "DELETE" }).then((r) => {
             if (!r.ok) { window.alert("Couldn't delete that Work Space — try again."); return; }
@@ -1776,6 +1850,8 @@ export function usePageSlide(on: boolean, isOpen: boolean, setOpen: (v: boolean)
       if (s.edge) e.stopPropagation();
       const t = e.touches[0];
       const dx = t.clientX - s.x, dy = t.clientY - s.y;
+      // A Work Space being dragged on the rail (rail-groups.tsx) is not a slide.
+      if (!drag && "railDrag" in document.documentElement.dataset) { s = null; return; }
       if (!drag) {
         if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
         // Up and down is a scroll; and a closed page only opens, an open one only closes.

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserSession } from "@/lib/api-auth";
 import { myOrgs } from "@/lib/access-server";
+import { deviceLabel } from "@/lib/invite-funnel";
 
 /**
  * The invitee's side (migration 062). Signed in, with or without an org.
@@ -44,6 +45,8 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ token: str
   const { data, error } = await supabase.rpc("sc_accept_invite", { p_token: token });
   if (error) return applyCookies(NextResponse.json({ error: error.message }, { status: 400 }));
   if (data) await supabase.rpc("sc_set_member_name", { p_org: data, p_user: userId, p_name: name });
+  // Invite tracking (122): Join worked. Nothing before 122.
+  if (data) await supabase.rpc("sc_invite_track", { p_token: token, p_step: "joined", p_device: deviceLabel(req.headers.get("user-agent")) });
   // Where to open it, and whether to ask for a password next (112; unknown before it).
   const [orgs, pw] = await Promise.all([myOrgs(supabase), supabase.rpc("sc_my_password_set")]);
   const slug = orgs.find((o) => o.id === data)?.slug ?? null;

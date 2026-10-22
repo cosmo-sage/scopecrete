@@ -31,6 +31,7 @@ import {
   ICONS, Ico, Panel, Tile, Dot, Tag, Bar, Spark, DayBars, Conveyor, Empty, BarRow, Confirm, NewCompany, OwnerLink, ViewCompany, useToast,
   type ConfirmAsk,
 } from "./admin-ui";
+import { FUNNEL_STEPS as INVITE_STEPS, funnelState, type FunnelRow } from "@/lib/invite-funnel";
 import "@/styles/admin.css";
 
 // ------------------------------------------------------------------ data shapes
@@ -70,6 +71,7 @@ interface Build { env: string; branch: string | null; sha: string | null; messag
 interface Data {
   companies?: AdminCompany[]; people?: People; pipelines?: Pipelines; failures?: Failure[]; dusty?: DustyData;
   usage?: UsageData; platform?: Platform; log?: LogRow[]; build?: Build; missing?: boolean;
+  invites?: FunnelRow[] | null; invites_missing?: boolean;
 }
 
 async function call(url: string, method = "GET", body?: unknown) {
@@ -581,12 +583,33 @@ function Company({ c, d, tab, setTab, alarms, items, now, go, coName, replay, de
           </table></div>
           {!p.members.length && <div className="pb mut">Nobody has joined yet.</div>}
         </Panel>
-        {p.invites.length > 0 && (
+        {d.invites && d.invites.length > 0 ? (
+          <Panel title="Invite links" right={`${d.invites.length}`} pad={false}>
+            <div className="tscroll"><table className="t">
+              <thead><tr><th>Email</th><th>Role</th><th>Sent</th><th className="r">Opens</th><th>Steps</th><th>Where it stands</th><th>Last device</th></tr></thead>
+              <tbody>{d.invites.map((i) => {
+                const st = funnelState(i, now.getTime());
+                return (
+                  <tr key={i.invite_id}>
+                    <td>{i.email}</td><td>{ROLE[i.role]?.replace(/s$/, "") ?? i.role}</td><td className="mut">{day(i.sent_at)}</td>
+                    <td className="r tn">{i.opens}</td>
+                    <td><span style={{ display: "inline-flex", gap: 3, flexWrap: "wrap" }}>{INVITE_STEPS.map((f) => (
+                      <span key={f.key} className={`tag${i.steps.includes(f.key) ? " g" : ""}`} title={i.steps.includes(f.key) ? "Done" : "Not yet"}>{f.label}</span>
+                    ))}</span></td>
+                    <td className={st.tone === "bad" ? "dn" : st.tone === "warn" ? "wn" : st.tone === "ok" ? "up" : "mut"}>{st.line}</td>
+                    <td className="mut">{i.last_device ?? "—"}</td>
+                  </tr>
+                );
+              })}</tbody>
+            </table></div>
+          </Panel>
+        ) : p.invites.length > 0 && (
           <Panel title="Invited, not yet joined" right={`${p.invites.length}`} pad={false}>
             <div className="tscroll"><table className="t"><tbody>{p.invites.map((i) => (
               <tr key={i.email + i.sent}><td>{i.email}</td><td>{ROLE[i.role]?.replace(/s$/, "") ?? i.role}</td><td className="mut">sent {day(i.sent)}</td>
                 <td className={Date.parse(i.expires) < now.getTime() ? "dn" : "mut"}>{Date.parse(i.expires) < now.getTime() ? "expired" : `expires ${day(i.expires)}`}</td></tr>
             ))}</tbody></table></div>
+            {d.invites_missing && <div className="pb mut">Whether the link was opened, and where they stopped, shows here once migration 122 is applied.</div>}
           </Panel>
         )}
       </>

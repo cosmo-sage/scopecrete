@@ -176,7 +176,7 @@ export const readScreen = (v: unknown): AdminScreen =>
 export const PARTS: Record<AdminScreen, string[]> = {
   pulse: ["companies", "pipelines", "platform"],
   companies: ["companies"],
-  company: ["companies", "people", "pipelines", "failures", "dusty", "usage", "log"],
+  company: ["companies", "people", "invites", "pipelines", "failures", "dusty", "usage", "log"],
   pipelines: ["companies", "pipelines", "failures"],
   dusty: ["companies", "dusty"],
   usage: ["companies", "usage"],
@@ -185,7 +185,7 @@ export const PARTS: Record<AdminScreen, string[]> = {
   costs: ["companies", "platform"],
   log: ["companies", "log"],
 };
-export const PART_NAMES = ["companies", "people", "pipelines", "failures", "dusty", "usage", "platform", "log"] as const;
+export const PART_NAMES = ["companies", "people", "invites", "pipelines", "failures", "dusty", "usage", "platform", "log"] as const;
 export function readParts(v: string | null): string[] {
   const want = (v ?? "").split(",").map((s) => s.trim());
   return PART_NAMES.filter((p) => want.includes(p));

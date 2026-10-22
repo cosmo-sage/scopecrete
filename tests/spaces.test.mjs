@@ -378,3 +378,34 @@ test("contactThreads: one row per person, opening their one thread page", async 
   assert.equal(rows[0].sub, "You: Newer");
   assert.equal(rows[1].title, "a@b.co");
 });
+
+import { collectionListAt, collectionRecordAt, collectionListRows, filterListRows, homeLooseGroups } from "../src/lib/v34/spaces.ts";
+
+test("collection list pages and the records opened from them", () => {
+  assert.equal(collectionListAt("/dashboard/customers"), "customers");
+  assert.equal(collectionListAt("/dashboard/scope-builder"), "scope");
+  assert.equal(collectionListAt("/dashboard/customers/abc"), null);
+  assert.equal(collectionRecordAt("customers", "/dashboard/customers/11111111-1111-1111-1111-111111111111"), "11111111-1111-1111-1111-111111111111");
+  assert.equal(collectionRecordAt("customers", "/dashboard/vendors/11111111-1111-1111-1111-111111111111"), null);
+  assert.equal(collectionRecordAt("contacts", "/dashboard/messages/11111111-1111-1111-1111-111111111111"), "11111111-1111-1111-1111-111111111111");
+  assert.equal(collectionRecordAt("contacts", "/dashboard/vendors/11111111-1111-1111-1111-111111111111"), "11111111-1111-1111-1111-111111111111");
+  assert.equal(collectionRecordAt("scope", "/dashboard/scope/11111111-1111-1111-1111-111111111111/budget"), "11111111-1111-1111-1111-111111111111");
+});
+
+test("list rows: vendors by name, contacts' phone and hrefs, search by every word", () => {
+  const v = collectionListRows("vendors", { vendors: [{ id: "b", name: "Zed" }, { id: "a", name: "Acme" }] });
+  assert.deepEqual(v.map((r) => r.id), ["a", "b"]);
+  const c = collectionListRows("contacts", { contacts: [{ id: "x", name: "Amber", phones: [{ number: "(225) 555-0100" }], role: "vendor" }] });
+  assert.equal(c[0].href, "/dashboard/vendors/x");
+  const n = collectionListRows("contacts", { contacts: [{ id: "y", name: null, phones: [{ number: "(225) 555-0100" }], role: "unsorted" }] });
+  assert.equal(n[0].name, "(225) 555-0100");
+  assert.equal(n[0].href, "/dashboard/messages/y?person=1");
+  const j = collectionListRows("scope", { jobs: [{ id: "j", title: "Wilson Driveway", status: "won", contact_name: "Johnette", city: "Baton Rouge" }] });
+  assert.equal(j[0].href, "/dashboard/scope/j/summary");
+  assert.equal(filterListRows(j, "wilson baton").length, 1);
+  assert.equal(filterListRows(j, "wilson patio").length, 0);
+});
+
+test("Home keeps only the More group below its shelves", () => {
+  assert.deepEqual(homeLooseGroups(homeShelves(null, ["customers", "contacts", "vendors", "map", "files", "dashboard"])).filter((k) => k !== "ch:more"), []);
+});

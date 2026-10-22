@@ -887,3 +887,87 @@ export function dissolveGroup(prefs: RailPrefs, id: string): RailPrefs {
 export function holdsSpace(members: SpacePin[], ref: SpaceRef): boolean {
   return ref.kind !== "home" && ref.kind !== "collection" && members.some((m) => m.kind === ref.kind && m.id === ref.id);
 }
+
+/* ------------------------------------------------------------ a collection's list in the drawer */
+
+/**
+ * A collection opened from Home's Collections shelf, then one of its records (Coy, 2026-10-22: "if
+ * I'm looking at a Customer list page after clicking it in the 'Collections' shelf in the drawer,
+ * and THEN click into a customer, the drawer would change into an expanded list of customers with
+ * a back button … This same format would apply for all of the collection pages"). The drawer then
+ * lists that collection, the record open lit and opened to its shelves.
+ */
+export type CollectionList = "customers" | "vendors" | "contacts" | "scope";
+export const COLLECTION_LIST_LABEL: Record<CollectionList, string> = { customers: "Customers", vendors: "Vendors", contacts: "Contacts", scope: "Jobs" };
+
+/** Which collection's list page this is (Jobs under Spaces is the Scope Builder's page), or none. */
+export function collectionListAt(path: string | null | undefined): CollectionList | null {
+  const p = (path ?? "").replace(/\/+$/, "");
+  if (p === "/dashboard/customers") return "customers";
+  if (p === "/dashboard/vendors") return "vendors";
+  if (p === "/dashboard/contacts") return "contacts";
+  if (p === "/dashboard/scope-builder" || p === "/dashboard/scope") return "scope";
+  return null;
+}
+
+/** The record of that collection this page is, or null when it isn't one of its records. */
+export function collectionRecordAt(list: CollectionList, path: string | null | undefined): string | null {
+  const p = path ?? "";
+  const one = (re: RegExp) => re.exec(p)?.[1] ?? null;
+  if (list === "customers") return one(/^\/dashboard\/customers\/([0-9a-f-]{36})(?:\/|$)/i);
+  if (list === "vendors") return one(/^\/dashboard\/vendors\/([0-9a-f-]{36})(?:\/|$)/i);
+  if (list === "scope") return one(/^\/dashboard\/scope\/([0-9a-f-]{36})(?:\/|$)/i);
+  // A contact's page is their thread; a vendor in Contacts opens their vendor page.
+  return one(/^\/dashboard\/messages\/([0-9a-f-]{36})(?:\/|$)/i) ?? one(/^\/dashboard\/vendors\/([0-9a-f-]{36})(?:\/|$)/i);
+}
+
+export interface ListRow { id: string; name: string; sub: string | null; status?: string | null; href: string }
+
+/** The rows of a collection, read off its list API's answer, in that answer's order. */
+export function collectionListRows(list: CollectionList, body: unknown): ListRow[] {
+  const b = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
+  const arr = (k: string) => (Array.isArray(b[k]) ? (b[k] as Array<Record<string, unknown>>) : []);
+  const s = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
+  const out: ListRow[] = [];
+  if (list === "customers") {
+    for (const c of arr("customers")) {
+      const id = s(c.id), name = s(c.name);
+      if (id && name) out.push({ id, name, sub: [s(c.person), s(c.city)].filter(Boolean).join(" · ") || null, href: `/dashboard/customers/${id}` });
+    }
+  } else if (list === "vendors") {
+    for (const v of arr("vendors")) {
+      const id = s(v.id), name = s(v.company_name) ?? s(v.name) ?? s(v.phone);
+      const person = s(v.company_name) && s(v.name) !== s(v.company_name) ? s(v.name) : null;
+      if (id && name) out.push({ id, name, sub: person ?? (Array.isArray(v.trades) && typeof v.trades[0] === "string" ? v.trades[0] : null), href: `/dashboard/vendors/${id}` });
+    }
+    out.sort((x, y) => x.name.localeCompare(y.name));
+  } else if (list === "contacts") {
+    for (const c of arr("contacts")) {
+      const id = s(c.id);
+      const phone = Array.isArray(c.phones) ? s((c.phones[0] as Record<string, unknown> | undefined)?.number) : null;
+      const name = s(c.name) ?? phone;
+      if (!id || !name) continue;
+      const vendor = c.role === "vendor" || c.role === "sub";
+      out.push({ id, name, sub: [s(c.role_label), s(c.company) ?? s(c.customer_name)].filter(Boolean).join(" · ") || null,
+        href: vendor ? `/dashboard/vendors/${id}` : `/dashboard/messages/${id}?person=1` });
+    }
+  } else {
+    for (const j of arr("jobs")) {
+      const id = s(j.id);
+      if (id) out.push({ id, name: s(j.title) ?? "Untitled job", sub: [s(j.contact_name), s(j.city)].filter(Boolean).join(" · ") || null, status: s(j.status), href: `/dashboard/scope/${id}/summary` });
+    }
+  }
+  return out;
+}
+
+/** Rows whose name or second line hold every word typed. */
+export function filterListRows(rows: ListRow[], q: string): ListRow[] {
+  const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+  if (!words.length) return rows;
+  return rows.filter((r) => { const t = `${r.name} ${r.sub ?? ""}`.toLowerCase(); return words.every((w) => t.includes(w)); });
+}
+
+/** Home's loose groups: only Spam and Archived now — the people are in the Collections' list pages. */
+export function homeLooseGroups(shelves: Shelf[]): string[] {
+  return looseChannels(shelves).filter((k) => k === "ch:more");
+}

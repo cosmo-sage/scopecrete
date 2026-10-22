@@ -32,13 +32,14 @@ import { setVendorFilter, useVendorFilter } from "@/lib/v34/vendor-filter";
 import { ROLE_LABEL, type ContactRole } from "@/lib/v34/threads";
 import {
   activeTreeRow, contactThreads, jobTree, monogram, spaceOf, stageColor, stageLabel,
-  homeShelves, moveToShelf, nudge, MAX_SHELVES, MAX_SHELF_NAME, CHANNELS, isChannel, looseChannels, pickSections, COLLECTION_PAGES, offShelf,
+  homeShelves, moveToShelf, nudge, MAX_SHELVES, MAX_SHELF_NAME, CHANNELS, isChannel, pickSections, COLLECTION_PAGES, offShelf,
   customerShelves, vendorShelves, activeTab, cleanPins, addPin, removePin,
   SPACES_HREF, shelfIcon, isStandardShelf, SHELF_ICONS, iconColShelf, cleanLayout, kindRows, placeRow, removeKindShelf, JOBS_SHELF, isSpecialShelf, specialShelves, isToolRow,
   cleanColShelves, addColShelf, renameColShelf, moveColShelf, removeColShelf, setMemberShelf, membersByShelf, type ColShelf,
   type LayoutKind, type KindLayout, type TreeRow,
   type Shelf, type SpaceRef, type SpacePerson, type SpaceEmail, type SpacePin,
   cleanRail, orderTiles, moveTile, hideTile, showTile, railItems, groupTiles, ungroupTile, placeKeys, renameGroup, dissolveGroup, newGroupId, type RailGroup, cleanCollectionPicks, setPicks, cleanMembers, setMembers, holdsSpace,
+  collectionListAt, collectionRecordAt, collectionListRows, filterListRows, homeLooseGroups, COLLECTION_LIST_LABEL, type CollectionList, type ListRow,
 } from "@/lib/v34/spaces";
 
 interface RailJob { id: string; title: string; status: string | null; customer: string | null }
@@ -424,8 +425,8 @@ function ShelfEditor({ shelves, shelf, pages, onChange, onDone }: {
 }
 
 /** The rows of Home's thread channels — each bucket's people, or Spam and Archived — shared by Home and collections. */
-function useChannels(onPick: () => void) {
-  const threads = useHomeThreads(true);
+function useChannels(onPick: () => void, on = true) {
+  const threads = useHomeThreads(on);
   const path = usePathname() ?? "";
   const openContact = /^\/dashboard\/messages\/([0-9a-f-]{36})/i.exec(path)?.[1] ?? null;
   const byBucket = useMemo(() => {
@@ -713,10 +714,14 @@ function HomeDrawer({ pages, active, onPick }: { pages: string[]; active: string
   const [editing, setEditing] = useState<string | null>(null);
   const { closed, toggle, setAll } = useClosed();
   const saveShelves = (v: Shelf[] | null) => setSaved(v);
-  const loose = looseChannels(shelves);
-  const { channelRows, chCount } = useChannels(onPick);
+  // The people are in the Collections' list pages, not repeated under them (Coy, 2026-10-22); only
+  // Spam and Archived stay loose, and a bucket put on a shelf with its gear still lists its people.
+  // Spam and Archived go under the More shelf when there is one, so there is one More, not two.
+  const moreShelf = shelves.some((sh) => sh.id === "more");
+  const loose = homeLooseGroups(shelves).filter((ch) => !(moreShelf && ch === "ch:more"));
+  const { channelRows, chCount } = useChannels(onPick, shelves.some((sh) => sh.pages.some((k) => isChannel(k) && k !== "ch:more")));
   const groupKeys = [
-    ...shelves.filter((sh) => sh.pages.length > 0 || sh.id !== "more").map((sh) => `home:${sh.id}`),
+    ...shelves.map((sh) => `home:${sh.id}`),
     ...loose.map((ch) => `home:${ch}`),
   ];
 
@@ -731,7 +736,8 @@ function HomeDrawer({ pages, active, onPick }: { pages: string[]; active: string
         {!arranging && <div style={{ display: "flex" }}><FoldAll keys={groupKeys} closed={closed} setAll={setAll} /></div>}
         {arranging
           ? <ShelfArranger shelves={shelves} pages={pages} onChange={saveShelves} onReset={() => saveShelves(null)} />
-          : shelves.map((sh) => (sh.pages.length > 0 || sh.id !== "more" || editing === sh.id) && (
+          : shelves.map((sh) => (
+
             <Group key={sh.id} id={`home:${sh.id}`} closed={closed} onToggle={toggle} title={sh.name} icon={shelfIcon(sh)}
               gear={(
                 <button type="button" className="sc-shelf-gear" aria-label={`Edit the ${sh.name} shelf`} title="Edit this shelf"
@@ -739,7 +745,7 @@ function HomeDrawer({ pages, active, onPick }: { pages: string[]; active: string
                   style={{ border: 0, background: "none", cursor: "pointer", padding: 0 }}><GearIcon /></button>
               )}>
               {editing === sh.id && <ShelfEditor shelves={shelves} shelf={sh} pages={pages} onChange={saveShelves} onDone={() => setEditing(null)} />}
-              {sh.pages.length === 0 && editing !== sh.id && <div className="sc-space-empty">Empty — the gear puts tools and channels here.</div>}
+              {sh.pages.length === 0 && editing !== sh.id && sh.id !== "more" && <div className="sc-space-empty">Empty — the gear puts tools and channels here.</div>}
               {sh.pages.map((k) => {
                 if (isChannel(k)) return <React.Fragment key={k}>{channelRows(k, true)}</React.Fragment>;
                 const p = PAGE.get(k);
@@ -752,6 +758,7 @@ function HomeDrawer({ pages, active, onPick }: { pages: string[]; active: string
                   </React.Fragment>
                 );
               })}
+              {sh.id === "more" && channelRows("ch:more", true)}
             </Group>
           ))}
         {!arranging && loose.map((ch) => (
@@ -804,10 +811,12 @@ function JobDrawer({ id, fallback, onPick, rail }: { id: string; fallback: RailJ
  * A job's, customer's or vendor's shelves, laid out as Coy set them for that kind of Space
  * (`space_layouts`), or the editor while the head's gear is on.
  */
-function LayoutDrawer({ kind, id, here, pick, editing, setEditing, rail, d }: {
+function LayoutDrawer({ kind, id, here, pick, editing, setEditing, rail, d, nested }: {
   kind: LayoutKind; id: string; here: string; pick: () => void; editing: boolean; setEditing: (v: boolean) => void;
   rail: { on: boolean; set: (on: boolean) => void };
   d: JobDetail | null;
+  /** Opened under its row in a collection's list, not a drawer of its own. */
+  nested?: boolean;
 }) {
   const { layout, set } = useKindLayout(kind);
   const rows = useMemo(() => kindRows(kind, id), [kind, id]);
@@ -823,8 +832,8 @@ function LayoutDrawer({ kind, id, here, pick, editing, setEditing, rail, d }: {
   }
   const keys = layout.shelves.map((sh) => `${kind}:${sh.id}`);
   return (
-    <div className="sc-space-scroll">
-      <div style={{ display: "flex" }}><FoldAll keys={keys} closed={closed} setAll={setAll} /></div>
+    <div className={nested ? "sc-space-nest" : "sc-space-scroll"}>
+      {!nested && <div style={{ display: "flex" }}><FoldAll keys={keys} closed={closed} setAll={setAll} /></div>}
       {layout.shelves.map((sh) => isSpecialShelf(sh.id)
         ? (
           <Group key={sh.id} title={sh.name} id={`${kind}:${sh.id}`} icon={shelfIcon(sh)} count={sh.id === JOBS_SHELF ? d?.jobs?.length : d?.people.length} {...g}>
@@ -928,6 +937,99 @@ function MemberShelf({ colId, m, closed, onToggle, onPick }: {
   );
 }
 
+
+/* ------------------------------------------------------------ a collection's list */
+
+const LIST_API: Record<CollectionList, string> = { customers: "/api/customers", vendors: "/api/vendors", contacts: "/api/contacts", scope: "/api/jobs" };
+const listCache = new Map<CollectionList, { at: number; rows: ListRow[] }>();
+/** A collection's records, kept a minute between drawers. */
+function useCollectionList(list: CollectionList) {
+  const [rows, setRows] = useState<ListRow[] | null>(listCache.get(list)?.rows ?? null);
+  useEffect(() => {
+    let off = false;
+    const hit = listCache.get(list);
+    if (hit) Promise.resolve().then(() => { if (!off) setRows(hit.rows); });
+    if (hit && Date.now() - hit.at < FRESH) return () => { off = true; };
+    fetch(LIST_API[list]).then((r) => (r.ok ? r.json() : null)).then((j) => {
+      if (off || !j) return;
+      const next = collectionListRows(list, j);
+      listCache.set(list, { at: Date.now(), rows: next });
+      setRows(next);
+    }).catch(() => { if (!off && !hit) setRows([]); });
+    return () => { off = true; };
+  }, [list]);
+  return rows;
+}
+
+const LIST_SHOWN = 150;
+
+/**
+ * A collection's list in the drawer (Coy, 2026-10-22: "if I'm looking at a Customer list page after
+ * clicking it in the 'Collections' shelf … and THEN click into a customer, the drawer would change
+ * into an expanded list of customers with a back button on the top left … to bring me back to the
+ * home drawer"). Every record, found by a word; the one open lit and opened to its shelves.
+ */
+function CollectionListDrawer({ list, current, onPick, onBack }: {
+  list: CollectionList; current: string; onPick: () => void; onBack: () => void;
+}) {
+  const rows = useCollectionList(list);
+  const [q, setQ] = useState("");
+  const path = usePathname() ?? "";
+  const [search, setSearch] = useState("");
+  useEffect(() => {
+    let off = false;
+    Promise.resolve().then(() => { if (!off) setSearch(window.location.search); });
+    return () => { off = true; };
+  }, [path]);
+  const pick = useCallback(() => { onPick(); window.setTimeout(() => setSearch(window.location.search), 50); }, [onPick]);
+  const kind: LayoutKind | null = list === "customers" ? "customer" : list === "vendors" ? "vendor" : list === "scope" ? "job" : null;
+  const detail = useSpaceDetail(kind ?? "customer", kind ? current : null);
+  const here = kind === "job" ? activeTreeRow(path, search) : activeTab(search);
+  const label = COLLECTION_LIST_LABEL[list];
+  const found = filterListRows(rows ?? [], q);
+  // Long lists show their first rows, and the one open wherever it sits.
+  const at = found.findIndex((r) => r.id === current);
+  const show = found.length > LIST_SHOWN ? [...found.slice(0, LIST_SHOWN), ...(at >= LIST_SHOWN ? [found[at]] : [])] : found;
+  const curRef = useRef<HTMLDivElement>(null);
+  const loaded = rows !== null;
+  useEffect(() => { if (loaded) curRef.current?.scrollIntoView({ block: "nearest" }); }, [current, loaded]);
+  const color = list === "customers" ? "var(--sc-chalk)" : list === "vendors" ? "var(--sc-bucket-vendor)" : list === "contacts" ? "var(--sc-bucket-customer)" : "var(--sc-hiviz)";
+  const listHref = SPACES_HREF[list] ?? PAGE.get(list)?.href ?? "/dashboard";
+  return (
+    <>
+      <SpaceHead name={label} kind="Collection" color={color} icon={<NavIcon k={list} on={false} color="currentColor" />}
+        sub={rows ? `${rows.length} ${rows.length === 1 ? "record" : "records"}` : undefined}
+        back={<button type="button" className="sc-space-back" onClick={onBack}>‹ Home</button>} />
+      <div className="sc-space-find">
+        <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder={`Find in ${label.toLowerCase()}`} aria-label={`Find in ${label}`} />
+      </div>
+      <div className="sc-space-scroll">
+        <Row href={listHref} label={`All ${label.toLowerCase()} — the list page`} onPick={onPick}
+          icon={<span className="sc-space-ico"><NavIcon k={list} on={false} color="currentColor" /></span>} />
+        {rows === null && <div className="sc-space-empty">Loading…</div>}
+        {rows !== null && found.length === 0 && <div className="sc-space-empty">{q ? "Nothing by that name." : "None yet."}</div>}
+        {show.map((r) => {
+          const on = r.id === current;
+          const row = (
+            <Row href={r.href} label={r.name} sub={r.status != null ? [stageLabel(r.status), r.sub].filter(Boolean).join(" · ") : r.sub ?? undefined} on={on} onPick={pick}
+              {...(list === "scope"
+                ? { icon: <span className="sc-space-ico" style={{ color: stageColor(r.status ?? null) }}><NavIcon k="scope" on={false} color="currentColor" /></span> }
+                : { avatar: monogram(r.name), color })} />
+          );
+          if (!on) return <React.Fragment key={r.id}>{row}</React.Fragment>;
+          return (
+            <div key={r.id} ref={curRef} className="sc-space-open-rec">
+              {row}
+              {kind && <LayoutDrawer nested kind={kind} id={current} here={here} pick={pick} editing={false} setEditing={() => {}}
+                rail={{ on: true, set: () => {} }} d={detail} />}
+            </div>
+          );
+        })}
+        {found.length > show.length && <div className="sc-space-empty">{found.length - show.length} more — type a name to find them.</div>}
+      </div>
+    </>
+  );
+}
 
 /** Names of customers and vendors, for a Space opened by link before it is pinned. */
 const nameCache = new Map<string, string>();
@@ -1307,7 +1409,7 @@ function FoldedDrawer({ shown, pages, active, onOpen, bar }: {
       const p = PAGE.get(k);
       return p ? icon(k, p.label, SPACES_HREF[k] ?? p.href, isOn(active, k), <NavIcon k={k} on={isOn(active, k)} color="currentColor" />) : null;
     });
-    chips = BUCKETS.map((b) => chip(b.label.slice(0, 2).toUpperCase(), b.label, b.color));
+    chips = [];
   } else if (shown.kind === "customer" || shown.kind === "vendor") {
     const onPage = path.startsWith(shown.kind === "customer" ? `/dashboard/customers/${shown.id}` : `/dashboard/vendors/${shown.id}`);
     const here = onPage ? activeTab(search) : "";
@@ -1353,6 +1455,8 @@ function FoldedDrawer({ shown, pages, active, onOpen, bar }: {
 
 // The Space you are in, kept across remounts of the nav (a page change on a phone can remount it).
 let stayed: SpaceRef | null = null;
+// The collection list page you came from, so a record opened from it shows that list in the drawer.
+let listStayed: CollectionList | null = null;
 
 // Where the open tile's tab meets the drawer, so the drawer's coloured edge can leave that stretch
 // out and the tab reads as part of the drawer (Coy, 2026-10-22). Set on the nav as --sc-tab-a /
@@ -1446,11 +1550,18 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
     return () => window.removeEventListener("sc:space-build", on);
   }, [pages, setColMemRaw, setColPickRaw, setColShRaw]);
   const keepCol = stay?.kind === "collection" && holdsSpace(colMembers[stay.id] ?? [], here);
+  // A record opened from a collection's list page shows that list in the drawer, with ‹ Home back
+  // (Coy, 2026-10-22: "click into a customer, the drawer would change into an expanded list of
+  // customers with a back button on the top left of the drawer to bring me back to the home drawer").
+  const [list, setList] = useState<CollectionList | null>(() => listStayed ?? collectionListAt(path));
   if (pathSeen !== path) {
     setPathSeen(path); setPeek(null);
     if (here.kind !== "home" && !keepCol) setStayState(here);
+    const at = collectionListAt(path);
+    if (at) setList(at); else if (list && !collectionRecordAt(list, path)) setList(null);
   }
   useEffect(() => { stayed = stay; }, [stay]);
+  useEffect(() => { listStayed = list; }, [list]);
   const jobs = rail?.jobs ?? [];
   const jobOf = (id: string) => jobs.find((j) => j.id === id) ?? null;
   const close = desktop ? () => {} : onPhoneClose;
@@ -1462,7 +1573,8 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
   }, [path]);
   const colHere = /^\/dashboard\/messages(\/[^/]+)?$/.test(path) && threadParam && (rail?.collections ?? []).some((c) => c.id === threadParam)
     ? { kind: "collection" as const, id: threadParam } : null;
-  const shown: SpaceRef = peek ?? colHere ?? (keepCol && stay ? stay : here.kind !== "home" ? here : stay ?? here);
+  const listRec = !peek && list ? collectionRecordAt(list, path) : null;
+  const shown: SpaceRef = listRec ? { kind: "home" } : peek ?? colHere ?? (keepCol && stay ? stay : here.kind !== "home" ? here : stay ?? here);
   // A row picked in a drawer makes that drawer's Space the one you are in.
   const picked = (from: SpaceRef) => () => { setStay(from.kind === "home" ? null : from); close(); };
 
@@ -1646,7 +1758,7 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
   const shownKey = shown.kind === "home" ? "" : `${shown.kind === "collection" ? "col" : shown.kind}:${shown.id}`;
 
   const railEl = (
-    <div className="sc-spaces-rail" role="navigation" aria-label="Work Spaces">
+    <div className="sc-spaces-rail" role="navigation" aria-label="Work Spaces" onClickCapture={() => setList(null)}>
       <Tile label="Home" title="Home — Dusty" on={shown.kind === "home"} home href={desktop ? "/dashboard/dusty" : undefined} onPick={() => { setPeek({ kind: "home" }); setStay(null); }}>
         <span className="sc-space-home"><DustyAvatar state={dustyState} size={40} hidden /></span>
       </Tile>
@@ -1723,7 +1835,10 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
       )}
       {bar}
       <PagesCtx.Provider value={pages}>
-      {shown.kind === "home"
+      {listRec && list
+        ? <CollectionListDrawer list={list} current={listRec} onPick={close}
+            onBack={() => { setList(null); setPeek({ kind: "home" }); setStay(null); }} />
+        : shown.kind === "home"
         ? <HomeDrawer pages={pages} active={active} onPick={picked(shown)} />
         : shown.kind === "job"
           ? <JobDrawer id={shown.id} fallback={jobOf(shown.id)} onPick={picked(shown)} rail={railFor("job", shown.id)} />

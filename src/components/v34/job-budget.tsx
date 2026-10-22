@@ -213,6 +213,8 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
   }, [reload]);
 
   // The open line as the latest load has it, so its sheet shows what a change saved.
+  const dragId = useRef<string | null>(null);
+  const [dropOn, setDropOn] = useState<string | null>(null);
   const editingNow = editing ? data?.lines.find((l) => l.id === editing.id) ?? editing : null;
   const res = useMemo(() => {
     if (!data) return null;
@@ -359,12 +361,37 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
   const removeLine = (l: Line) => { if (window.confirm(`Take ${l.name} off the budget?`)) void run(() => call(`/api/jobs/${jobId}/budget/lines/${l.id}`, "DELETE")); };
 
   // One line of the grid.
-  const lineRow = (l: Line) => {
+  // Cost items reorder by a grip at the row's left (Coy, 2026-10-22: "rearrange this list … by simply clicking and dragging on the left of the row").
+  const moveLine = (list: Line[], from: string, to: string) => {
+    const ids = list.map((l) => l.id);
+    const fi = ids.indexOf(from), ti = ids.indexOf(to);
+    if (fi < 0 || ti < 0 || fi === ti) return;
+    ids.splice(ti, 0, ids.splice(fi, 1)[0]);
+    const changes = ids.map((id, i) => ({ id, so: (i + 1) * 10 })).filter((c) => list.find((l) => l.id === c.id)?.sort_order !== c.so);
+    void run(() => Promise.all(changes.map((c) => call(`/api/jobs/${jobId}/budget/lines/${c.id}`, "PATCH", { sort_order: c.so }))));
+  };
+  const dropTarget = (list: Line[], id: string) => ({
+    onDragOver: (e: React.DragEvent) => {
+      const f = dragId.current;
+      if (f && f !== id && list.some((l) => l.id === f)) { e.preventDefault(); e.dataTransfer.dropEffect = "move"; if (dropOn !== id) setDropOn(id); }
+    },
+    onDragLeave: () => setDropOn((d) => (d === id ? null : d)),
+    onDrop: (e: React.DragEvent) => { e.preventDefault(); const f = dragId.current; dragId.current = null; setDropOn(null); if (f) moveLine(list, f, id); },
+  });
+  const grip = (l: Line, style?: React.CSSProperties) => (
+    <span draggable title="Drag to move" aria-label={`Drag ${l.name} to move it`}
+      onDragStart={(e) => { dragId.current = l.id; e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", l.id); }}
+      onDragEnd={() => { dragId.current = null; setDropOn(null); }}
+      style={{ cursor: "grab", color: T.ink3, fontSize: 12, letterSpacing: -2, userSelect: "none", ...style }}>⋮⋮</span>
+  );
+  const lineRow = (l: Line, _i: number, list: Line[]) => {
                         const r = res.lines[l.id];
                         const blockedQty = r.qty === null;
                         return (
-                          <tr key={l.id} style={{ borderTop: `1px solid ${T.hairSoft}` }}>
+                          <React.Fragment key={l.id}>
+                          <tr {...dropTarget(list, l.id)} style={{ borderTop: dropOn === l.id ? `2px solid ${T.chalk}` : `1px solid ${T.hairSoft}`, background: editing?.id === l.id ? T.hairSoft : undefined }}>
                             <td style={{ padding: "4px 8px 4px 24px", maxWidth: 260, position: "relative" }}>
+                              {grip(l, { position: "absolute", top: 24, left: 5 })}
                               <button onClick={() => setEditing(l)} className="text-left" style={{ cursor: "pointer", color: T.ink, fontWeight: 500, ...clip, display: "block", maxWidth: 240 }}>{l.name}</button>
                               <button onClick={() => removeLine(l)} title="Take off the budget" aria-label={`Take ${l.name} off the budget`}
                                 style={{ position: "absolute", top: 4, left: 4, color: T.ink3, cursor: "pointer" }}><Trash /></button>
@@ -431,6 +458,8 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
                                 style={{ width: 16, height: 16, accentColor: T.chalk }} />
                             </td>
                           </tr>
+                          {editing?.id === l.id && <tr><td colSpan={11} style={{ padding: "0 6px" }}>{linePanel}</td></tr>}
+                          </React.Fragment>
                         );
   };
   const head = (
@@ -515,11 +544,32 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
         </div>
       )}
       {!inSection && a.lines.length === 0 && <div style={{ fontSize: F.xs, color: T.ink3 }}>{a.id ? "No cost items yet." : "Costs for the whole job, not one section — mobilization, a permit, a pump day."}</div>}
-      {a.groups.map((g) => <GroupCard key={g.name} name={g.name} tools={groupTools(g.name, g.lines)} lines={g.lines} res={res} optLabel={optLabel} asmName={asmName} addons={addons} onOpen={setEditing} onRemove={removeLine}
+      {a.groups.map((g) => <GroupCard key={g.name} editingId={editing?.id ?? null} panel={linePanel} grip={grip} dropTarget={dropTarget} dropOn={dropOn} name={g.name} tools={groupTools(g.name, g.lines)} lines={g.lines} res={res} optLabel={optLabel} asmName={asmName} addons={addons} onOpen={setEditing} onRemove={removeLine}
                 cost={sum(g.lines, "ext_cost")} price={sum(g.lines, "ext_price")} onAdd={() => setBook({ area: a.id ?? "" })} />)}
     </div>
   );
 
+      const linePanel = <LineSheet line={editingNow} data={data} sections={sections} res={editingNow ? res.lines[editingNow.id] : null}
+        onPickVendor={async (v) => {
+          // A vendor who doesn't price this item yet: made (if typed new), given this line's price on the item, then pinned here.
+          if (!editingNow?.cost_item_id) return "This line isn't a Price book item.";
+          try {
+            let vendorId = "id" in v ? v.id : null;
+            if (!vendorId) {
+              const r = await fetch("/api/vendors", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: (v as { name: string }).name }) });
+              const b = await r.json().catch(() => ({}));
+              if (!r.ok) return b?.error || `HTTP ${r.status}`;
+              vendorId = b.vendor.id as string;
+            }
+            const s = await call(`/api/cost-items/${editingNow.cost_item_id}/sources`, "POST", { vendor_contact_id: vendorId, unit_cost: editingNow.unit_cost, unit: editingNow.unit || undefined });
+            await run(() => call(`/api/jobs/${jobId}/budget/lines/${editingNow.id}`, "PATCH", { source_id: s.source.id }));
+            return null;
+          } catch (e) { return e instanceof Error ? e.message : String(e); }
+        }}
+        addon={editing ? addons.has(editing.id) : false} onAddon={(on) => editing && void setAddon(editing.id, on)}
+        onClose={() => setEditing(null)}
+        onPatch={(body) => editing && run(() => call(`/api/jobs/${jobId}/budget/lines/${editing.id}`, "PATCH", body))}
+        onDelete={() => { if (editing && window.confirm(`Take ${editing.name} off the budget?`)) { const id = editing.id; setEditing(null); void run(() => call(`/api/jobs/${jobId}/budget/lines/${id}`, "DELETE")); } }} />;
   return (
     <section ref={measure} aria-label="Budget" className="rounded" style={{ background: T.card, border: `1px solid ${T.hair}` }}>
       {/* ---- header ---- */}
@@ -722,27 +772,6 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
           await run(() => call(`/api/jobs/${jobId}/budget/lines`, "POST", { ...line, cost_item_id: b.item.id }));
         }}
         onLoadAssembly={(assemblyId, sectionId) => run(() => call(`/api/jobs/${jobId}/budget/assembly`, "POST", { assembly_id: assemblyId, section_id: sectionId }))} />
-      <LineSheet line={editingNow} data={data} sections={sections} res={editingNow ? res.lines[editingNow.id] : null}
-        onPickVendor={async (v) => {
-          // A vendor who doesn't price this item yet: made (if typed new), given this line's price on the item, then pinned here.
-          if (!editingNow?.cost_item_id) return "This line isn't a Price book item.";
-          try {
-            let vendorId = "id" in v ? v.id : null;
-            if (!vendorId) {
-              const r = await fetch("/api/vendors", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: (v as { name: string }).name }) });
-              const b = await r.json().catch(() => ({}));
-              if (!r.ok) return b?.error || `HTTP ${r.status}`;
-              vendorId = b.vendor.id as string;
-            }
-            const s = await call(`/api/cost-items/${editingNow.cost_item_id}/sources`, "POST", { vendor_contact_id: vendorId, unit_cost: editingNow.unit_cost, unit: editingNow.unit || undefined });
-            await run(() => call(`/api/jobs/${jobId}/budget/lines/${editingNow.id}`, "PATCH", { source_id: s.source.id }));
-            return null;
-          } catch (e) { return e instanceof Error ? e.message : String(e); }
-        }}
-        addon={editing ? addons.has(editing.id) : false} onAddon={(on) => editing && void setAddon(editing.id, on)}
-        onClose={() => setEditing(null)}
-        onPatch={(body) => editing && run(() => call(`/api/jobs/${jobId}/budget/lines/${editing.id}`, "PATCH", body))}
-        onDelete={() => { if (editing && window.confirm(`Take ${editing.name} off the budget?`)) { const id = editing.id; setEditing(null); void run(() => call(`/api/jobs/${jobId}/budget/lines/${id}`, "DELETE")); } }} />
     </section>
   );
 }
@@ -812,7 +841,9 @@ function Trash() {
   );
 }
 
-function GroupCard({ name, tools, lines, res, optLabel, asmName, addons, onOpen, onRemove, cost, price, onAdd }: {
+function GroupCard({ name, tools, lines, res, optLabel, asmName, addons, onOpen, onRemove, cost, price, onAdd, editingId, panel, grip, dropTarget, dropOn }: {
+  editingId: string | null; panel: React.ReactNode; grip: (l: Line, style?: React.CSSProperties) => React.ReactNode;
+  dropTarget: (list: Line[], id: string) => React.HTMLAttributes<HTMLDivElement>; dropOn: string | null;
   name: string; onAdd?: () => void; tools?: React.ReactNode; lines: Line[]; res: ReturnType<typeof priceBudget>; optLabel: (id: string | null) => string | null;
   asmName: (id: string | null | undefined) => string | null; addons: Set<string>;
   onOpen: (l: Line) => void; onRemove: (l: Line) => void; cost: number; price: number;
@@ -837,8 +868,10 @@ function GroupCard({ name, tools, lines, res, optLabel, asmName, addons, onOpen,
         const r = res.lines[l.id];
         return (
           // Coy, 2026-10-10 (phone): each item reads as a subcategory of its group, set in with a "-".
-          <SwipeRetire key={l.id} on={touch} name={l.name} label="Delete" onRetire={() => onRemove(l)}>
-          <div className="flex items-baseline" style={{ borderTop: `1px solid ${i ? T.hairSoft : T.hair}` }}>
+          <React.Fragment key={l.id}>
+          <SwipeRetire on={touch} name={l.name} label="Delete" onRetire={() => onRemove(l)}>
+          <div {...(touch ? {} : dropTarget(lines, l.id))} className="flex items-baseline" style={{ borderTop: dropOn === l.id ? `2px solid ${T.chalk}` : `1px solid ${i ? T.hairSoft : T.hair}` }}>
+          {!touch && grip(l, { alignSelf: "center", paddingLeft: 4 })}
           <button onClick={() => onOpen(l)} className="flex-1 flex items-baseline justify-between gap-2 py-1.5 text-left"
             style={{ minWidth: 0, cursor: "pointer", paddingLeft: 22, paddingRight: touch ? 10 : 4 }}>
             <span aria-hidden="true" style={{ fontSize: F.xs, color: T.ink3, marginLeft: -12, width: 8, flexShrink: 0 }}>-</span>
@@ -862,6 +895,8 @@ function GroupCard({ name, tools, lines, res, optLabel, asmName, addons, onOpen,
             style={{ color: T.ink3, cursor: "pointer", padding: "0 8px 0 2px", alignSelf: "center" }}><Trash /></button>}
           </div>
           </SwipeRetire>
+          {editingId === l.id && <div className="px-1.5">{panel}</div>}
+          </React.Fragment>
         );
       })}
     </div>
@@ -1023,13 +1058,33 @@ function CardPicker({ open, initialArea, onClose, data, sections, tier, tierLabe
   );
 }
 
+function ItemPanel({ title, sub, onClose, children }: { title: string; sub: string; onClose: () => void; children: React.ReactNode }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  return (
+    <div className="sc-item-drop" style={{ margin: "2px 0 8px", border: `2px solid ${T.chalk}`, borderRadius: 8, background: T.card, boxShadow: "0 10px 28px rgba(0,0,0,.18)", textAlign: "left", whiteSpace: "normal", fontWeight: 400 }}>
+      <div className="flex items-center gap-3 px-4" style={{ minHeight: 44, borderBottom: `1px solid ${T.hair}`, background: T.slab, borderRadius: "6px 6px 0 0" }}>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{ fontWeight: 700, fontSize: F.md, ...clip }}>{title}</div>
+          <div style={{ fontSize: F.xs, color: T.ink3 }}>{sub}</div>
+        </div>
+        <button onClick={onClose} aria-label="Close" style={{ fontSize: 20, color: T.ink2, cursor: "pointer", padding: "0 4px" }}>×</button>
+      </div>
+      {children}
+    </div>
+  );
+}
+
 function LineSheet({ line, data, sections, res, addon, onAddon, onClose, onPatch, onDelete, onPickVendor }: {
   line: Line | null; data: Data; sections: Array<SectionInput & { id: string }>; res: ReturnType<typeof priceBudget>["lines"][string] | null;
   addon: boolean; onAddon: (on: boolean) => void;
   onClose: () => void; onPatch: (body: Record<string, unknown>) => void; onDelete: () => void;
   onPickVendor: (vendor: { id: string } | { name: string }) => Promise<string | null>;
 }) {
-  if (!line || !res) return <Sheet open={false} onClose={onClose} title="">{null}</Sheet>;
+  if (!line || !res) return null;
   const field: React.CSSProperties = { height: 36, border: `1px solid ${T.hair}`, background: T.card, fontSize: F.sm, borderRadius: 4, padding: "0 8px", width: "100%", minWidth: 0 };
   const shown: React.CSSProperties = { ...field, background: T.slab, display: "flex", alignItems: "center", justifyContent: "flex-end", ...nums, color: T.ink };
   const num = (v: string) => (v.trim() === "" ? null : Number(v));
@@ -1038,7 +1093,8 @@ function LineSheet({ line, data, sections, res, addon, onAddon, onClose, onPatch
   const want = ruleForUnit(line.unit, line.qty_rule);
   const m = (n: number | null) => (n === null ? "—" : money(n));
   return (
-    <Sheet open onClose={onClose} title={line.name} sub={line.qty_rule === "from_takeoff" ? "Measured in Takeoffs" : line.cost_item_id ? "From the Price book" : "This budget only"}>
+    // Drops down from its own row, the budget's full width (Coy, 2026-10-22: "drop down from the item itself … so it's clear that these settings are for that item").
+    <ItemPanel onClose={onClose} title={line.name} sub={line.qty_rule === "from_takeoff" ? "Measured in Takeoffs" : line.cost_item_id ? "From the Price book" : "This budget only"}>
       {/* Laid out like JobTread's cost item (Coy, 2026-10-06): the item, then quantity → cost → price
           in one grid with the worked-out columns shown, then its vendor, then where it sits and the switches. */}
       <div className="px-4 py-3 flex flex-col gap-3" key={line.id + line.updated_at}>
@@ -1134,7 +1190,7 @@ function LineSheet({ line, data, sections, res, addon, onAddon, onClose, onPatch
         </div>
         <button onClick={onDelete} className="self-start" style={{ ...eyebrow, color: T.red, cursor: "pointer" }}>Take off the budget</button>
       </div>
-    </Sheet>
+    </ItemPanel>
   );
 }
 

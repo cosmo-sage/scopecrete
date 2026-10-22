@@ -356,7 +356,8 @@ export function FilesPage({ fixed, embedded, extra }: { fixed?: Partial<FileFilt
         </div>
       ) : null}
       onSaved={(nf) => { setFiles((a) => (a ?? []).map((x) => (x.id === nf.id ? nf : x))); setOpen(nf); }}
-      onDeleted={(id) => { setFiles((a) => (a ?? []).filter((x) => x.id !== id)); setOpen(null); }} />
+      onDeleted={(id) => { setFiles((a) => (a ?? []).filter((x) => x.id !== id)); setOpen(null); }}
+      onAdded={(nf) => setFiles((a) => [nf as Row, ...(a ?? [])])} />
     );
   };
 

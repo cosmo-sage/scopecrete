@@ -374,6 +374,7 @@ export function CardSheet({ card, groups, vendors, lockVendor, onClose, onSaved,
         )}
         {card.id && !lockVendor && <VendorPrices card={card as Card} vendors={vendors} onChanged={onSaved} />}
         {card.id && !lockVendor && card.active !== false && items && <SameItem card={card as Card} items={items} onDone={onSaved} />}
+        {card.id && <ItemImages itemId={card.id} />}
         {card.id && <PriceHistory cardId={card.id} unit={card.unit ?? ""} key={`${card.id}${card.updated_at ?? ""}`} />}
       </div>
     </Sheet>
@@ -500,6 +501,73 @@ function SameItem({ card, items, onDone }: { card: Card; items: Card[]; onDone: 
         </div>
       )}
       {err && <div style={{ fontSize: F.xs, color: T.red }}>{err}</div>}
+    </div>
+  );
+}
+
+/**
+ * Pictures of the item (Coy, 2026-10-22: "add images to cost items from the
+ * cost book") — a product photo, a spec sheet's picture. Kept as files marked
+ * for the item (/api/cost-items/[id]/images); a tap shows it large.
+ */
+function ItemImages({ itemId }: { itemId: string }) {
+  const [rows, setRows] = useState<Array<{ id: string; name: string; url: string | null }> | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [big, setBig] = useState<string | null>(null);
+  const load = React.useCallback(() => {
+    call(`/api/cost-items/${itemId}/images`, "GET").then((b) => setRows(b.images)).catch((e) => setErr(e instanceof Error ? e.message : String(e)));
+  }, [itemId]);
+  useEffect(() => { load(); }, [load]);
+  const add = async (list: FileList | null) => {
+    if (!list?.length) return;
+    setBusy(true); setErr(null);
+    try {
+      for (const f of Array.from(list)) {
+        const made = await call(`/api/cost-items/${itemId}/images`, "POST", { name: f.name, mime: f.type, size: f.size });
+        const body = new FormData(); body.append("cacheControl", "3600"); body.append("", f);
+        const r = await fetch(made.upload.signed_url, { method: "PUT", headers: { "x-upsert": "false" }, body });
+        if (!r.ok) throw new Error(`upload failed (${r.status})`);
+        await call(`/api/files/${made.file.id}/done`, "POST");
+      }
+      load();
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
+  };
+  const remove = async (id: string) => {
+    if (!window.confirm("Take this picture off the item?")) return;
+    try { await call(`/api/files/${id}`, "DELETE"); load(); } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+  };
+  return (
+    <div className="mt-1" style={{ borderTop: `1px solid ${T.hairSoft}`, paddingTop: 8 }}>
+      <div className="flex items-center justify-between">
+        <div style={{ ...eyebrow, color: T.ink }}>Images</div>
+        <label style={{ fontSize: F.xs, color: T.chalk, fontWeight: 600, cursor: "pointer" }}>
+          {busy ? "Adding…" : "+ Add images"}
+          <input type="file" accept="image/*" multiple hidden onChange={(e) => { void add(e.target.files); e.target.value = ""; }} />
+        </label>
+      </div>
+      {err && <div style={{ fontSize: F.xs, color: T.red }}>{err}</div>}
+      {rows !== null && rows.length === 0 && <div style={{ fontSize: F.xs, color: T.ink3 }}>No pictures yet.</div>}
+      {rows !== null && rows.length > 0 && (
+        <div className="flex gap-2 flex-wrap mt-1">
+          {rows.map((r) => (
+            <div key={r.id} style={{ position: "relative" }}>
+              {r.url
+                // eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL
+                ? <img src={r.url} alt={r.name} onClick={() => setBig(r.url)} style={{ width: 84, height: 84, objectFit: "cover", borderRadius: 4, border: `1px solid ${T.hair}`, cursor: "zoom-in" }} />
+                : <div style={{ width: 84, height: 84, borderRadius: 4, background: T.hairSoft }} />}
+              <button onClick={() => void remove(r.id)} aria-label={`Remove ${r.name}`}
+                style={{ position: "absolute", top: 2, right: 2, width: 20, height: 20, borderRadius: 10, background: "rgba(0,0,0,.55)", color: "#fff", fontSize: 13, lineHeight: 1, cursor: "pointer" }}>×</button>
+            </div>
+          ))}
+        </div>
+      )}
+      {big && (
+        <div role="dialog" aria-label="Picture" onClick={() => setBig(null)} className="fixed inset-0 flex items-center justify-center" style={{ zIndex: 90, background: "rgba(0,0,0,.85)", cursor: "zoom-out" }}>
+          {/* eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL */}
+          <img src={big} alt="" style={{ maxWidth: "94vw", maxHeight: "90vh", objectFit: "contain" }} />
+        </div>
+      )}
     </div>
   );
 }

@@ -135,7 +135,8 @@ export function SectionPhotos({ jobId, sectionId, sectionName, photos, sections,
       {picking && <PickPhotos jobId={jobId} sectionId={sectionId} sectionName={sectionName} plans={plans} onClose={() => setPicking(false)} onChange={onChange} />}
       <FileViewer f={open} sections={sections} onClose={() => setOpen(null)}
         onSaved={(f) => { setOpen(f); onChange(f); }}
-        onDeleted={(id) => { setOpen(null); onChange(null, id); }} />
+        onDeleted={(id) => { setOpen(null); onChange(null, id); }}
+        onAdded={(f) => onChange(f)} />
     </div>
   );
 }

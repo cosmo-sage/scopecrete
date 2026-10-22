@@ -76,6 +76,8 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   if ("unit_cost" in b) { const v = numOrNull(b.unit_cost, 0, 1_000_000, "Unit cost"); if (v instanceof Error) return bad(v.message); patch.unit_cost = v; }
   if ("margin_pct" in b) { const v = numOrNull(b.margin_pct, 0, 99.9, "Margin"); if (v instanceof Error) return bad(v.message); patch.margin_pct = v; }
   if ("taxable" in b) patch.taxable = b.taxable === true;
+  // Its place in its section (Coy, 2026-10-22: drag a cost item up or down).
+  if ("sort_order" in b) { const v = Number(b.sort_order); if (!Number.isInteger(v) || v < 0 || v > 1_000_000) return bad("Bad place."); patch.sort_order = v; }
   for (const k of ["show_on_doc", "show_qty", "show_price"] as const) if (k in b) patch[k] = b[k] === true;
   if ("name" in b) {
     const n = typeof b.name === "string" ? b.name.replace(/\s+/g, " ").trim().slice(0, 120) : "";

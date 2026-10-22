@@ -21,6 +21,7 @@ import { T, F, disp, eyebrow, clip, relTime } from "@/lib/v34/tokens";
 import { Sheet } from "@/components/v34/primitives";
 import { CATEGORIES, CATEGORY_LABEL, sizeLabel, type Category } from "@/lib/files";
 import { FilePreview } from "@/components/v34/file-preview";
+import { PhotoMarkup } from "@/components/v34/photo-markup";
 
 export interface FileRow {
   id: string; job_id: string | null; contact_id: string | null; section_id: string | null;
@@ -224,7 +225,8 @@ export function FilesPanel({ jobId, contactId, sectionId, sections, title = "Fil
 
       <FileViewer f={open} sections={sections} onClose={() => setOpen(null)}
         onSaved={(nf) => { setFiles((a) => (a ?? []).map((x) => (x.id === nf.id ? nf : x))); setOpen(nf); }}
-        onDeleted={(id) => { setFiles((a) => (a ?? []).filter((x) => x.id !== id)); setOpen(null); }} />
+        onDeleted={(id) => { setFiles((a) => (a ?? []).filter((x) => x.id !== id)); setOpen(null); }}
+        onAdded={(nf) => setFiles((a) => [nf, ...(a ?? [])])} />
     </section>
   );
 }
@@ -290,6 +292,8 @@ type ViewerProps = {
   /** Extra doors at the top of the sheet (Files: its job, their page). */
   links?: React.ReactNode;
   onClose: () => void; onSaved: (f: FileRow) => void; onDeleted: (id: string) => void;
+  /** A marked-up copy saved beside the photo (photo-markup.tsx). */
+  onAdded?: (f: FileRow) => void;
 };
 
 /** The one-line description under a file's name; `noType` leaves the kind out
@@ -305,21 +309,42 @@ export async function patchFile(id: string, patch: Record<string, unknown>): Pro
   return b.file as FileRow;
 }
 
+function CenterViewer({ f, onClose, children }: { f: FileRow; onClose: () => void; children: React.ReactNode }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  return (
+    <div className="fixed inset-0 flex items-start justify-center" style={{ zIndex: 80, background: "rgba(10,12,14,.55)", padding: "max(12px, env(safe-area-inset-top)) 10px 10px" }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div role="dialog" aria-label={f.name} className="flex flex-col" style={{ width: "100%", maxWidth: 1100, maxHeight: "calc(100dvh - 24px)", background: T.card, borderRadius: 10, overflow: "hidden", boxShadow: "0 18px 50px rgba(0,0,0,.35)" }}>
+        <div className="flex items-center gap-3 px-4 shrink-0" style={{ minHeight: 48, borderBottom: `1px solid ${T.hair}` }}>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ fontWeight: 700, fontSize: F.md, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.name}</div>
+            <div style={{ fontSize: F.xs, color: T.ink3 }}>{fileSub(f)}</div>
+          </div>
+          <button onClick={onClose} aria-label="Close" style={{ fontSize: 22, color: T.ink2, cursor: "pointer" }}>×</button>
+        </div>
+        <div style={{ overflowY: "auto" }}>{children}</div>
+      </div>
+    </div>
+  );
+}
+
 export function FileViewer(p: ViewerProps) {
   const { f, onClose } = p;
   if (!f) return <Sheet open={false} onClose={onClose} title="">{null}</Sheet>;
-  return (
-    <Sheet open onClose={onClose} title={f.name} sub={fileSub(f)}>
-      <FileDetails {...p} f={f} />
-    </Sheet>
-  );
+  // Front and centre over the page, not a side panel (Coy, 2026-10-22).
+  return <CenterViewer f={f} onClose={onClose}><FileDetails {...p} f={f} /></CenterViewer>;
 }
 
 /** A file's preview and details, drawn in a sheet (FileViewer) or in the
  *  Files page's own preview panel (Coy, 2026-10-07). `big` is that panel: its
  *  name is edited in the panel's header and its kind in the file list, and it
  *  has no Note (Coy, 2026-10-08), so those three fields are left out. */
-export function FileDetails({ f, sections, onSaved, onDeleted, links, big }: ViewerProps & { f: FileRow; big?: boolean }) {
+export function FileDetails({ f, sections, onSaved, onDeleted, onAdded, links, big }: ViewerProps & { f: FileRow; big?: boolean }) {
+  const [markup, setMarkup] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const save = async (patch: Record<string, unknown>) => {
@@ -343,9 +368,13 @@ export function FileDetails({ f, sections, onSaved, onDeleted, links, big }: Vie
       <div className="px-4 py-3 flex flex-col gap-3">
         {links}
         {f.url && f.kind === "image" && (
-          // eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL
-          <img src={f.url} alt={f.name} style={{ width: "100%", maxHeight: big ? "70vh" : "50vh", objectFit: "contain", background: T.slab, borderRadius: 4 }} />
+          <div style={{ position: "relative" }}>
+            {/* eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL */}
+            <img src={f.url} alt={f.name} onClick={() => setMarkup(true)} style={{ width: "100%", maxHeight: big ? "70vh" : "62vh", objectFit: "contain", background: T.slab, borderRadius: 4, cursor: "crosshair" }} />
+            <button onClick={() => setMarkup(true)} style={{ position: "absolute", top: 8, right: 8, height: 32, padding: "0 12px", borderRadius: 16, background: T.ink, color: T.card, fontSize: F.sm, fontWeight: 600, cursor: "pointer" }}>✎ Draw & comment</button>
+          </div>
         )}
+        {markup && f.url && <PhotoMarkup f={f} onClose={() => setMarkup(false)} onSaved={onAdded} />}
         {f.kind !== "image" && <FilePreview f={f} big={big} />}
 
         <div className="rounded px-3 py-2" style={{ background: T.slab }}>

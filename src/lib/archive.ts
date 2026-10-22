@@ -44,7 +44,7 @@ export function cleanIds(v: unknown): string[] | null {
 
 export function archiveLabel(kind: ArchiveKind, action: ArchiveAction, n: number): string {
   const what = kind === "job" ? (n === 1 ? "job" : "jobs") : kind === "customer" ? (n === 1 ? "customer" : "customers")
-    : action === "delete" ? (n === 1 ? "vendor" : "vendors") : (n === 1 ? "thread" : "threads");
+    : action === "delete" ? (n === 1 ? "contact" : "contacts") : (n === 1 ? "thread" : "threads");
   return `${action === "delete" ? "Deleted" : "Archived"} ${n} ${what}`;
 }
 

@@ -29,7 +29,7 @@ test("ids are checked, every one", () => {
 
 test("what the toast says", () => {
   assert.equal(archiveLabel("contact", "archive", 18), "Archived 18 threads");
-  assert.equal(archiveLabel("contact", "delete", 1), "Deleted 1 vendor");
+  assert.equal(archiveLabel("contact", "delete", 1), "Deleted 1 contact");
   assert.equal(archiveLabel("customer", "delete", 1), "Deleted 1 customer");
   assert.equal(archiveLabel("job", "delete", 2), "Deleted 2 jobs");
 });

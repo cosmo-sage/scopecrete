@@ -43,7 +43,7 @@ export function ArchiveDialog({ open, kind, action, what, count = 1, vendor = fa
   if (!open) return null;
   const extra = kind === "customer" ? " Their people and open jobs go with them." : "";
   const q = vendor
-    ? `Delete ${what} as a vendor? Their prices stay in the Price book.`
+    ? `Delete ${what}${count > 1 ? "" : " as a vendor"}? Their prices stay in the Price book.`
     : action === "delete"
     ? `Delete ${what}?${extra} It leaves every list; the calls, texts and files stay on record, and you can restore it.`
     : `Archive ${what}? ${count > 1 ? "Each comes" : "It comes"} back on its own if they call or text again.`;

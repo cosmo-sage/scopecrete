@@ -11,6 +11,9 @@ import Link from "next/link";
 import { T, F, disp, eyebrow, nums, money0 } from "@/lib/v34/tokens";
 import { MenuButton, PageHeader, SearchBubble, SearchToggle, SlideDrawer } from "@/components/v34/primitives";
 import { usePref } from "@/lib/v34/prefs";
+import { BulkBar, BulkTick, send, type BulkEdit } from "@/components/v34/bulk-bar";
+import { useWide } from "@/lib/v34/use-wide";
+import { STAGES } from "@/lib/jobs/stages";
 import { SCOPE_STEPS, stepHref, type Market, type ScopeFacts, type ScopeProgress, type ScopeStep } from "@/lib/scope-builder";
 
 interface Scope {
@@ -56,12 +59,15 @@ export function ScopeBuilderPage() {
   const [q, setQ] = useState("");
   const [searching, setSearching] = useState(false);
   const [filters, setFilters] = useState(false);
+  const [reload, setReload] = useState(0);
+  const [sel, setSel] = useState<string[]>([]);
+  const [measure, wide] = useWide<HTMLDivElement>(700);
   useEffect(() => {
     let off = false;
     fetch("/api/scope-builder").then(async (r) => { const b = await r.json().catch(() => ({})); if (!r.ok) throw new Error(b?.error || `HTTP ${r.status}`); return b; })
       .then((b) => { if (!off) setScopes(b.scopes as Scope[]); }).catch((e) => { if (!off) setErr(e instanceof Error ? e.message : String(e)); });
     return () => { off = true; };
-  }, []);
+  }, [reload]);
   const pickMarket = (m: MarketPick) => { setMarket(m); try { localStorage.setItem("sc:scope-market", m); } catch { /* private */ } };
 
   const inMarket = useMemo(() => (scopes ?? []).filter((s) => !["lost"].includes(s.status) && (market === "all" || s.market === market)), [scopes, market]);
@@ -72,6 +78,17 @@ export function ScopeBuilderPage() {
   }, [inMarket]);
   const shown = inMarket.filter((s) => (step === "all" || s.progress.next === step)
     && (!q.trim() || `${s.title} ${s.customer ?? ""} ${s.address ?? ""} ${s.city ?? ""}`.toLowerCase().includes(q.trim().toLowerCase())));
+  // Bulk (Coy, 2026-10-22): tick jobs, then move their stage, change their type or delete them together.
+  const toggle = (id: string) => setSel((x) => (x.includes(id) ? x.filter((y) => y !== id) : [...x, id]));
+  const allOn = shown.length > 0 && shown.every((j) => sel.includes(j.id));
+  const toggleAll = () => setSel(allOn ? sel.filter((id) => !shown.some((j) => j.id === id)) : [...new Set([...sel, ...shown.map((j) => j.id)])]);
+  const picked = (scopes ?? []).filter((j) => sel.includes(j.id));
+  const bulkEdits: BulkEdit[] = [
+    { k: "stage", label: "Stage", options: STAGES.map((st) => ({ k: st.enter, label: st.label })),
+      apply: async (id, v) => { await send(`/api/jobs/${id}`, "PATCH", { status: v }); }, did: (l) => `Moved {n} to ${l}` },
+    { k: "type", label: "Type", options: [{ k: "residential", label: "Residential" }, { k: "commercial", label: "Commercial" }, { k: "public", label: "Government" }],
+      apply: async (id, v) => { await send(`/api/jobs/${id}`, "PATCH", { job_type: v }); }, did: (l) => `Set {n} to ${l}` },
+  ];
   const mCount = (m: Market) => (scopes ?? []).filter((s) => s.market === m && s.status !== "lost").length;
   const pill = (on: boolean): React.CSSProperties => ({ height: 28, padding: "0 10px", borderRadius: 14, fontSize: F.xs, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap",
     border: `1px solid ${on ? T.ink : T.hairStrong}`, background: on ? T.ink : T.card, color: on ? T.card : T.ink2 });
@@ -109,14 +126,20 @@ export function ScopeBuilderPage() {
         </div>
       </SlideDrawer>
 
-      <div className="px-3 lg:px-5 py-3">
+      <div ref={measure} className="px-3 lg:px-5 py-3" style={{ paddingBottom: picked.length ? 90 : undefined }}>
         {err && <div style={{ fontSize: F.sm, color: T.red }}>{err}</div>}
         {!scopes && !err && <div style={{ fontSize: F.sm, color: T.ink3 }}>Loading scopes…</div>}
         {scopes && shown.length === 0 && <div style={{ fontSize: F.sm, color: T.ink3 }}>No scopes here. <Link href="/dashboard/scope?new=1" style={{ color: T.chalk }}>Start a new one</Link>.</div>}
+        {shown.length > 0 && (
+          <label className="flex items-center gap-2 mb-2" style={{ fontSize: F.xs, color: T.ink3, cursor: "pointer" }}>
+            <BulkTick on={allOn} onClick={toggleAll} label="Tick every job shown" /> {allOn ? "Untick all" : `Tick all ${shown.length}`}
+          </label>
+        )}
         <div className="flex flex-col gap-2" style={{ maxWidth: 1100 }}>
           {shown.map((s) => (
-            <div key={s.id} className="rounded" style={{ border: `1px solid ${T.hair}`, background: T.card, padding: "10px 12px" }}>
+            <div key={s.id} className="rounded" style={{ border: `1px solid ${sel.includes(s.id) ? T.green : T.hair}`, background: sel.includes(s.id) ? T.greenDim : T.card, padding: "10px 12px" }}>
               <div className="flex items-start gap-2 flex-wrap">
+                <span style={{ paddingTop: 3 }}><BulkTick on={sel.includes(s.id)} onClick={() => toggle(s.id)} label={`Tick ${s.title}`} /></span>
                 <div style={{ minWidth: 0, flex: "1 1 260px" }}>
                   <Link href={stepHref(s.id, s.progress.next)} style={{ fontFamily: disp, fontSize: F.md, fontWeight: 700, color: T.ink }}>{s.title}</Link>
                   <div style={{ fontSize: F.xs, color: T.ink3 }}>
@@ -141,6 +164,10 @@ export function ScopeBuilderPage() {
           ))}
         </div>
       </div>
+      {picked.length > 0 && (
+        <BulkBar kind="job" ids={picked.map((j) => j.id)} what={["job", "jobs"]} names={picked.map((j) => j.title)} wide={wide}
+          onClear={() => setSel([])} onDone={() => { setSel([]); setReload((n) => n + 1); }} edits={bulkEdits} />
+      )}
     </div>
   );
 }

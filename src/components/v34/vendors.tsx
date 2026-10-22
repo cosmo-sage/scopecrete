@@ -28,6 +28,8 @@ import { PENDING_VENDOR_KEY } from "@/components/v34/org-settings";
 import { InitialsBox } from "@/components/v34/thread-list";
 import { ContactPicker } from "@/components/v34/contacts";
 import { BidComposer } from "@/components/v34/bids/bid-composer";
+import { BulkBar, send, type BulkEdit } from "@/components/v34/bulk-bar";
+import { withTrade } from "@/lib/bulk";
 import { websiteLabel } from "@/lib/vendor-website";
 import { TRADES, bidStats, cleanTrades, hasTrade, hoursLabel, tradeCounts, type PriceLine, type ShownScope } from "@/lib/bids";
 import { clearVendorFilter, setVendorFilter, useVendorFilter } from "@/lib/v34/vendor-filter";
@@ -138,6 +140,17 @@ export function VendorList() {
   const toggleAll = () => setSel((s) => (allOn ? s.filter((id) => !shown.some((v) => v.id === id)) : [...new Set([...s, ...shown.map((v) => v.id)])]));
   const phones = picked.map((v) => v.phone).filter((p): p is string => !!p);
   const groupText = () => { if (phones.length) window.location.assign(`sms:${phones.join(",")}`); };
+  // Bulk edit (Coy, 2026-10-22): the kind, or a trade added or taken off, on every ticked vendor.
+  const tradesOf = (id: string) => (rows ?? []).find((v) => v.id === id)?.trades ?? [];
+  const tradeOpts = [...new Set([...TRADES, ...picked.flatMap((v) => v.trades ?? [])])].map((t) => ({ k: t, label: t }));
+  const bulkEdits = ([
+    { k: "kind", label: "Kind", options: SUBTYPES.filter(([k]) => k !== "all").map(([k, l]) => ({ k, label: l.replace(/s$/, "") })),
+      apply: async (id, v) => { await send(`/api/vendors/${id}`, "PATCH", { subtype: v }); }, did: (l) => `Set {n} to ${l}` },
+    { k: "trade+", label: "Add a trade", options: tradeOpts,
+      apply: async (id, v) => { await send(`/api/vendors/${id}`, "PATCH", { trades: withTrade(tradesOf(id), v, true) }); }, did: (l) => `Added ${l} to {n}` },
+    { k: "trade-", label: "Take a trade off", options: tradeOpts.filter((o) => picked.some((v) => hasTrade(v, o.k))),
+      apply: async (id, v) => { await send(`/api/vendors/${id}`, "PATCH", { trades: withTrade(tradesOf(id), v, false) }); }, did: (l) => `Took ${l} off {n}` },
+  ] as BulkEdit[]).filter((e) => e.options.length > 0);
   const countLabel = trade === "All" ? (rows ? `${shown.length}` : null) : `${shown.length} ${trade.toLowerCase()}`;
 
   const tradeList = (
@@ -301,18 +314,15 @@ export function VendorList() {
       </div>
 
       {picked.length > 0 && (
-        <div className="fixed sc-select-bar flex items-center gap-3 px-4" role="region" aria-label="Picked vendors"
-          style={{ left: 0, right: 0, bottom: "calc(var(--sc-foot, 0px) + 10px)", margin: "0 auto", width: "min(980px, calc(100% - 24px))", minHeight: 52, background: "#1F1D1A", color: "#fff", borderRadius: 6, zIndex: 40, boxShadow: "0 10px 30px rgba(0,0,0,.25)" }}>
-          <span style={{ fontFamily: disp, fontSize: F.md, fontWeight: 700, whiteSpace: "nowrap" }}>{picked.length} selected</span>
-          {wide && <span style={{ fontSize: F.xs, color: "#C9C3B8", flex: 1, minWidth: 0, ...clip }}>{picked.map((v) => label(v)).join(", ")}</span>}
-          {wide && <span style={{ fontSize: F.xs, color: "#C9C3B8", whiteSpace: "nowrap" }}>{phones.length} by text · {picked.filter((v) => v.email).length} by email</span>}
-          {!wide && <span style={{ flex: 1 }} />}
-          <button onClick={() => setSel([])} style={{ fontSize: F.xs, color: "#C9C3B8", textDecoration: "underline", cursor: "pointer" }}>Clear</button>
-          {wide && phones.length > 1 && <button onClick={groupText} title="Opens a group text on your phone" style={{ height: 32, padding: "0 10px", borderRadius: 4, border: "1px solid #5A554E", color: "#fff", fontSize: F.xs, cursor: "pointer" }}>Group text</button>}
-          <button onClick={() => setComposing(true)} style={{ height: 34, padding: "0 14px", borderRadius: 4, background: T.hiviz, color: T.onHiviz, fontFamily: disp, fontSize: F.sm, textTransform: "uppercase", letterSpacing: ".06em", whiteSpace: "nowrap", cursor: "pointer" }}>
-            {wide ? "Send a bid request →" : "Bid request →"}
-          </button>
-        </div>
+        <BulkBar kind="contact" vendor ids={picked.map((v) => v.id)} what={["vendor", "vendors"]} names={picked.map((v) => label(v) ?? "")} wide={wide}
+          onClear={() => setSel([])} onDone={() => { setSel([]); setTick((n) => n + 1); }} edits={bulkEdits}
+          summary={<span style={{ fontSize: F.xs, color: "#C9C3B8", whiteSpace: "nowrap" }}>{phones.length} by text · {picked.filter((v) => v.email).length} by email</span>}
+          extra={<>
+            {wide && phones.length > 1 && <button onClick={groupText} title="Opens a group text on your phone" style={{ height: 32, padding: "0 10px", borderRadius: 4, border: "1px solid #5A554E", color: "#fff", fontSize: F.xs, cursor: "pointer" }}>Group text</button>}
+            <button onClick={() => setComposing(true)} style={{ height: 34, padding: "0 14px", borderRadius: 4, background: T.hiviz, color: T.onHiviz, fontFamily: disp, fontSize: F.sm, textTransform: "uppercase", letterSpacing: ".06em", whiteSpace: "nowrap", cursor: "pointer" }}>
+              {wide ? "Send a bid request →" : "Bid →"}
+            </button>
+          </>} />
       )}
 
       {composing && <BidComposer open onClose={() => setComposing(false)} vendors={picked}

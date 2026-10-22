@@ -507,7 +507,7 @@ the customer notes and get a notification."*
   reached them linked to the job; switched to Budget on another job, they saw
   only that job, its estimate and the 430 Price book items.
 
-## 2k. The ScopeCrete admin — every company at once (migration 092, written 2026-10-08, NOT applied)
+## 2k. The ScopeCrete admin — every company at once (migration 092, applied 2026-10-09 on Coy's word)
 
 Coy: *"a new Dashboard for me to manage the scopecrete Saas With"* (Claude
 Design "Super Admin" package, from the brief in
@@ -580,8 +580,10 @@ itself — `platform_admins` (084) — not an org's owner.
 - Rehearsed (rolled back) on the live data: every read as Coy; a signed-in
   stranger refused on each; nobody can run `sc_admin_audit` or read
   `admin_audit` directly; create_org makes the org, the invite and both
-  audit rows. Until 092 is
-  applied the page says "Waiting for migration 092".
+  audit rows. **Applied 2026-10-09** (Coy: "Migrate 092 if it's ready");
+  checked after: 13 functions, RLS on `admin_audit` with no grants, anon
+  can't run them, authenticated can't run `sc_admin_audit`; confirmed again
+  2026-10-22 (`sc_admin_check`, `sc_admin_companies`, `sc_admin_create_org` live).
 
 ## 2a. The raw log and the spine — migration 016
 

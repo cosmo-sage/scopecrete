@@ -94,7 +94,8 @@ function ToolIcon({ tool }: { tool: Tool }) {
   );
 }
 
-export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, onSend, fullscreen, setFullscreen }: {
+export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, onSend, fullscreen, setFullscreen, toolbarExtra }: {
+  toolbarExtra?: React.ReactNode;
   jobId: string; data: PlansData; files: PlanFile[];
   sheetId: string | null; setSheetId: (id: string) => void; reload: () => Promise<void>;
   onSend: (p: Param, ids?: string[], whole?: boolean) => void; fullscreen: boolean; setFullscreen: (v: boolean) => void;
@@ -579,6 +580,7 @@ export function TakeoffStep({ jobId, data, files, sheetId, setSheetId, reload, o
             </div>
           </>}
           <span className="flex-1" />
+          {toolbarExtra}
           {sheet && <span className="hidden md:inline" style={{ fontSize: F.xs, color: T.ink2, whiteSpace: "nowrap" }}>{sheetLabel(sheet)}</span>}
           {sheet && <button onClick={(e) => setScaleMenu(scaleMenu ? null : e.currentTarget.getBoundingClientRect())} aria-expanded={!!scaleMenu} title="Recalibrate: a preset scale, or two points on a known dimension"
             className="flex items-center gap-1" style={{ ...tb(!!scaleMenu), padding: "0 8px", whiteSpace: "nowrap" }}>

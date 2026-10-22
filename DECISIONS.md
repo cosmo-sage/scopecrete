@@ -4035,6 +4035,7 @@ expected start date per quoted job before it means anything. Add the field.
   with its link and offers `vendor_price` steps marked estimate. Nothing changes until Coy applies them.
   A vendor with no web prices (a ready-mix plant) still needs their quote or invoice.
   **Show retired is gone (Coy, 2026-10-10)**: retired cards stay out of the list; the swipe's Undo is the way back.
+  **Coy's notes of 2026-10-22:** the Price book's By group / By vendor is one **Sort by: Group ▾** button with a menu; picked from a budget on a desktop, its title and area share the Cards · Assemblies row, and its search is the magnifier, the bubble dropping full width under the row. An assembly opens its editor under its own row (▸ / ▾), not as a sheet from the bottom. On Takeoffs the "N of M scanned sheets read" chip sits on the drawing's toolbar row, not a row of its own.
   **Swipe a card left on a phone to retire it (Coy, 2026-10-09)** — the
   card slides to a red Retire (`SwipeRetire`), the same retire as the card
   sheet's (`DELETE /api/cost-items/[id]`, `active=false`), with Undo for 6 s;

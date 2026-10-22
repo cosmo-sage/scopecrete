@@ -899,19 +899,69 @@ function ContactRows({ d, onPick, empty, add }: { d: JobDetail | null; onPick: (
   );
 }
 
-/** A customer's or vendor's Jobs shelf: each of their jobs, open ones first, to its Summary. */
+/**
+ * A customer's or vendor's Jobs shelf: each of their jobs, open ones first, opening in place to its
+ * pages and its contacts (Coy, 2026-10-22: "all the pages for that job … listed and expandable
+ * underneath the job list for that customer in the customer drawer … so I can easily navigate back
+ * to the drawer I was in"). The drawer stays the customer's on those pages; the job's own tile on
+ * the rail still opens the job's drawer.
+ */
 function JobRows({ d, onPick }: { d: JobDetail | null; onPick: () => void }) {
   const path = usePathname() ?? "";
   const jobs = d?.jobs ?? [];
+  const [open, setOpen] = useState<Set<string>>(() => new Set());
+  const flip = (id: string) => setOpen((o) => { const n = new Set(o); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   return (
     <>
       {!d && <div className="sc-space-empty">Loading…</div>}
       {d && jobs.length === 0 && <div className="sc-space-empty">No jobs yet.</div>}
-      {jobs.map((j) => (
-        <Row key={j.id} href={`/dashboard/scope/${j.id}/summary`} label={j.title} sub={stageLabel(j.status)} on={path.startsWith(`/dashboard/scope/${j.id}`)} onPick={onPick}
-          icon={<span className="sc-space-ico" style={{ color: stageColor(j.status) }}><NavIcon k="scope" on={false} color="currentColor" /></span>} />
-      ))}
+      {jobs.map((j) => {
+        const onJob = path.startsWith(`/dashboard/scope/${j.id}`);
+        // The job open is opened; a tap on its row folds it like any other.
+        const isOpen = open.has(j.id) !== onJob;
+        return <JobNest key={j.id} job={j} open={isOpen} onJob={onJob} onToggle={() => flip(j.id)} onPick={onPick} />;
+      })}
     </>
+  );
+}
+
+/** One job under a customer's or vendor's Jobs shelf: its name, then (open) its pages and contacts. */
+function JobNest({ job, open, onJob, onToggle, onPick }: {
+  job: { id: string; title: string; status: string | null }; open: boolean; onJob: boolean; onToggle: () => void; onPick: () => void;
+}) {
+  const path = usePathname() ?? "";
+  const [search, setSearch] = useState("");
+  useEffect(() => {
+    let off = false;
+    Promise.resolve().then(() => { if (!off) setSearch(window.location.search); });
+    return () => { off = true; };
+  }, [path]);
+  const pick = useCallback(() => { onPick(); window.setTimeout(() => setSearch(window.location.search), 50); }, [onPick]);
+  const { layout } = useKindLayout("job");
+  const d = useSpaceDetail("job", open ? job.id : null);
+  const rows = useMemo(() => kindRows("job", job.id), [job.id]);
+  const byK = new Map(rows.map((r) => [r.k, r]));
+  const order = layout.shelves.flatMap((sh) => sh.rows).filter((k) => byK.has(k) || isToolRow(k));
+  const here = onJob ? activeTreeRow(path, search) : "";
+  return (
+    <div>
+      <button type="button" className="sc-space-row" onClick={onToggle} aria-expanded={open}
+        style={{ width: "calc(100% - 16px)", background: "none", border: 0, font: "inherit", textAlign: "left", cursor: "pointer" }}>
+        <span className="sc-space-ico" style={{ color: stageColor(job.status) }}><NavIcon k="scope" on={false} color="currentColor" /></span>
+        <span style={{ minWidth: 0, flex: 1 }}>
+          <span className="sc-space-row-l">{job.title}</span>
+          <span className="sc-space-row-s">{stageLabel(job.status)}</span>
+        </span>
+        <span aria-hidden="true" style={{ display: "inline-block", width: 10, transform: open ? "rotate(90deg)" : undefined, transition: "transform .15s", color: "var(--sc-ink3)" }}>›</span>
+      </button>
+      {open && (
+        <div className="sc-space-nest" style={{ paddingLeft: 18 }}>
+          {order.map((k) => <LayoutRow key={k} k={k} byK={byK} here={here} pick={pick} />)}
+          <div className="sc-space-sub-h" style={{ cursor: "default" }}>Contacts</div>
+          <ContactRows d={d} onPick={pick} add={addContactHref("job", job.id)} empty="No one on this job yet." />
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -1608,14 +1658,21 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
     window.addEventListener("sc:space-build", on);
     return () => window.removeEventListener("sc:space-build", on);
   }, [pages, setColMemRaw, setColPickRaw, setColShRaw]);
-  const keepCol = stay?.kind === "collection" && holdsSpace(colMembers[stay.id] ?? [], here);
+  const recJobs = (k: string, id: string) => jobCache.get(`${k}:${id}`)?.d.jobs ?? [];
+  const keepCol = stay?.kind === "collection" && (holdsSpace(colMembers[stay.id] ?? [], here)
+    || (here.kind === "job" && (colMembers[stay.id] ?? []).some((m) => m.kind !== "job" && recJobs(m.kind, m.id).some((j) => j.id === here.id))));
+  // A customer's or vendor's drawer stays on its own jobs' pages, opened from its Jobs shelf
+  // (Coy, 2026-10-22); the job's own tile on the rail makes the job the Space you are in.
+  const keepRec = (stay?.kind === "customer" || stay?.kind === "vendor") && here.kind === "job"
+    && recJobs(stay.kind, stay.id).some((j) => j.id === here.id);
+  const keep = keepCol || keepRec;
   // A record opened from a collection's list page shows that list in the drawer, with ‹ Home back
   // (Coy, 2026-10-22: "click into a customer, the drawer would change into an expanded list of
   // customers with a back button on the top left of the drawer to bring me back to the home drawer").
   const [list, setList] = useState<CollectionList | null>(() => listStayed ?? collectionListAt(path));
   if (pathSeen !== path) {
     setPathSeen(path); setPeek(null);
-    if (here.kind !== "home" && !keepCol) setStayState(here);
+    if (here.kind !== "home" && !keep) setStayState(here);
     const at = collectionListAt(path);
     if (at) setList(at); else if (list && !collectionRecordAt(list, path)) setList(null);
   }
@@ -1633,7 +1690,7 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
   const colHere = /^\/dashboard\/messages(\/[^/]+)?$/.test(path) && threadParam && (rail?.collections ?? []).some((c) => c.id === threadParam)
     ? { kind: "collection" as const, id: threadParam } : null;
   const listRec = !peek && list ? collectionRecordAt(list, path) : null;
-  const shown: SpaceRef = listRec ? { kind: "home" } : peek ?? colHere ?? (keepCol && stay ? stay : here.kind !== "home" ? here : stay ?? here);
+  const shown: SpaceRef = listRec ? { kind: "home" } : peek ?? colHere ?? (keep && stay ? stay : here.kind !== "home" ? here : stay ?? here);
   // A row picked in a drawer makes that drawer's Space the one you are in.
   const picked = (from: SpaceRef) => () => { setStay(from.kind === "home" ? null : from); close(); };
 

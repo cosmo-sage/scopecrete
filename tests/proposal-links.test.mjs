@@ -53,6 +53,8 @@ test("the customer's copy carries no cost, profit, hidden lines or notes", () =>
   assert.ok(!text.includes("u-secret"));
   assert.equal(publicSnapshot({ ...snap, prepared_by: undefined }, { project_type: null, type_label: "" }).prepared_by, null);
   assert.equal(out.price.groups[0].items.find((i) => i.id === "l3").sell, 0);
+  const withCover = publicSnapshot({ ...snap, display: { ...snap.display, cover: { style: "pour", dark: "#01224b", lines: ["Licensed"], junk: 1 } } }, { project_type: null, type_label: "" });
+  assert.deepEqual(withCover.display.cover, { style: "pour", dark: "#01224B", lines: ["Licensed"] });
 });
 
 test("signedLine names who signed and when, only for a signed link", async () => {

@@ -42,6 +42,60 @@ export interface ProposalDisplay {
   all_options?: boolean;
   /** Marked a preliminary estimate: the band, the quote's name and a line above the price say so (Coy, 2026-10-07). */
   preliminary?: boolean;
+  /** The cover page (Coy, 2026-10-22: "the cover to be built into the proposal itself and fill a full sheet of paper"). */
+  cover?: ProposalCover;
+}
+
+/** How the cover is drawn: a full letter-size sheet (Field or Pour) or the old photo strip. */
+export interface ProposalCover {
+  style?: "field" | "pour" | "strip";
+  /** The sheet's dark colour and its accent, as #rrggbb. */
+  dark?: string;
+  accent?: string;
+  /** Field's line by the logo — a license number, "Licensed & insured" (blank = none). */
+  tag?: string;
+  /** Pour's three short lines along the foot (blank ones left out). */
+  lines?: string[];
+}
+
+export const COVER_STYLES: Array<[NonNullable<ProposalCover["style"]>, string]> = [["field", "Field"], ["pour", "Pour"], ["strip", "Photo strip"]];
+/** Colour pairs offered on the cover; the first is the default (Sacco's navy and orange, from the logo). */
+export const COVER_COLORS: Array<{ name: string; dark: string; accent: string }> = [
+  { name: "Navy & orange", dark: "#01224B", accent: "#DC5509" },
+  { name: "Charcoal & terracotta", dark: "#2A2A2A", accent: "#D97757" },
+  { name: "Forest & gold", dark: "#173B2C", accent: "#D19A2A" },
+  { name: "Steel & red", dark: "#26313D", accent: "#C8372D" },
+  { name: "Black & yellow", dark: "#151515", accent: "#F2B705" },
+];
+const HEX = /^#[0-9a-fA-F]{6}$/;
+// Line breaks and tabs become spaces; spaces are kept, so a word can still be typed after one.
+const clip = (x: unknown, max: number) => (typeof x === "string" ? x.replace(/[\r\n\t]+/g, " ").slice(0, max) : "");
+
+/** The name a printed or saved proposal gets: its job's title and number, nothing a file name can't hold. */
+export function proposalFileName(title: string | null | undefined, number: string | null | undefined): string {
+  const clean = (x: string | null | undefined) => (x ?? "").replace(/[\\/:*?"<>|\r\n\t]+/g, " ").replace(/\s+/g, " ").trim();
+  return [clean(title) || "Proposal", clean(number)].filter(Boolean).join(" - ").slice(0, 120);
+}
+
+/** A cover as it may be saved: known style, real colours, short words. Nothing usable → undefined. */
+export function cleanCover(x: unknown): ProposalCover | undefined {
+  if (!x || typeof x !== "object") return undefined;
+  const r = x as Record<string, unknown>;
+  const out: ProposalCover = {};
+  if (r.style === "field" || r.style === "pour" || r.style === "strip") out.style = r.style;
+  if (typeof r.dark === "string" && HEX.test(r.dark)) out.dark = r.dark.toUpperCase();
+  if (typeof r.accent === "string" && HEX.test(r.accent)) out.accent = r.accent.toUpperCase();
+  const tag = clip(r.tag, 60);
+  if (tag.trim()) out.tag = tag;
+  if (Array.isArray(r.lines)) out.lines = r.lines.slice(0, 3).map((l) => clip(l, 48));
+  return Object.keys(out).length ? out : undefined;
+}
+
+/** The cover to draw: what was saved, else Field in the first colours. */
+export function coverOf(d: ProposalDisplay | null | undefined): Required<Omit<ProposalCover, "tag">> & { tag: string } {
+  const c = cleanCover(d?.cover) ?? {};
+  const lines = [0, 1, 2].map((i) => c.lines?.[i] ?? "");
+  return { style: c.style ?? "field", dark: c.dark ?? COVER_COLORS[0].dark, accent: c.accent ?? COVER_COLORS[0].accent, tag: c.tag ?? "", lines };
 }
 
 export interface ProposalArea { id: string; name: string | null; sqft: number | null }

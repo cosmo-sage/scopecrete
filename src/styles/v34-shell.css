@@ -503,7 +503,9 @@ html[data-theme="floodlight"] .sc-proposal { --sc-doc-ground: #10141A; }
 @media print {
   .sc-print-only { display: inline; }
   .sc-doc-edit::placeholder { color: transparent; }
-  @page { margin: 12mm; }
+  /* A margin box of our own turns off the browser's date, title and address lines (Chrome 131+);
+     the page number is all that prints in the margin (Coy, 2026-10-22). */
+  @page { margin: 12mm; @bottom-right { content: counter(page) " / " counter(pages); font: 8pt sans-serif; color: #8C8578; } }
   body * { visibility: hidden !important; }
   .sc-doc, .sc-doc * { visibility: visible !important; }
   .sc-doc { position: absolute !important; left: 0; top: 0; width: 100% !important; max-width: none !important; box-shadow: none !important; }
@@ -513,6 +515,10 @@ html[data-theme="floodlight"] .sc-proposal { --sc-doc-ground: #10141A; }
      dark band dark when "Background graphics" is off. */
   .sc-doc { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .sc-doc .sc-doc-cover { height: 3.4in !important; }
+  /* The full-sheet cover (Coy, 2026-10-22: "fill a full sheet of paper when printed out") is page 1
+     on its own: letter height inside the 12mm margins, every size in cqw so it scales to the page. */
+  .sc-doc .sc-cover-sheet { aspect-ratio: auto !important; height: calc(11in - 24mm - 2px) !important; }
+  .sc-doc section[data-section="cover"]:has(.sc-cover-sheet) { break-after: page; }
   .sc-doc section[data-section="cover"], .sc-doc [data-band] { break-after: avoid; }
   .sc-doc section[data-section="warranty"], .sc-doc section[data-section="terms"] { break-before: auto; }
   .sc-doc section[data-section="sign"] { break-inside: avoid; }

@@ -57,6 +57,7 @@ import { useHideHeadOnScroll } from "@/lib/v34/use-hide-head";
 import { AccessContext } from "@/lib/v34/access-ctx";
 import { accessFrom, menuPages, redirectFor, roleLabel, FULL_ACCESS, type Access } from "@/lib/access";
 import { viewAsLine } from "@/lib/view-as";
+import { viewCompanyLine } from "@/lib/view-company";
 import { useRouter } from "next/navigation";
 import { SpacesNav, PageEdge, usePageSlide } from "@/components/v34/spaces/spaces-nav";
 import { TalkBar, talkPlaceholder } from "@/components/v34/spaces/talk-bar";
@@ -230,11 +231,20 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   // Viewing as a teammate (src/lib/view-as.ts, Coy 2026-10-12): the purple strip across the top.
   const viewingAs = me?.viewing_as ?? null;
+  // A ScopeCrete admin viewing another company read only (migration 121): the same strip, in red.
+  const viewingCo = me?.viewing_company ?? null;
   useEffect(() => {
-    if (viewingAs) document.documentElement.dataset.viewAs = "1";
+    if (viewingAs || viewingCo) document.documentElement.dataset.viewAs = "1";
     else delete document.documentElement.dataset.viewAs;
-  }, [viewingAs]);
+  }, [viewingAs, viewingCo]);
   const [leaving, setLeaving] = useState(false);
+  const endCompanyView = useCallback(async () => {
+    setLeaving(true);
+    const org = viewingCo?.org_id;
+    await fetch("/api/admin/view", { method: "DELETE" }).catch(() => null);
+    // A full load, back to the company in Admin.
+    window.location.assign(org ? `/dashboard/admin?s=company&id=${org}` : "/dashboard/admin");
+  }, [viewingCo?.org_id]);
   const stopViewing = useCallback(async () => {
     setLeaving(true);
     await fetch("/api/view-as", { method: "DELETE" }).catch(() => null);
@@ -349,7 +359,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <div className="sc-head-wrap" style={{ position: "sticky", top: 0, zIndex: 40 }}>
         {/* Dusty's banner across the very top (Coy, 2026-10-21); his line left the drawer for it. */}
         {spaces && (desktop ? deskLineOn : phoneLineOn) && <DustyTicker onReader={setReaderState} />}
-        {viewingAs && (
+        {viewingCo && (
+          <div className="sc-view-as sc-view-co" role="status">
+            <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>👁 {viewCompanyLine(viewingCo.name, viewingCo.expires_at)} · changes are off</span>
+            <button type="button" onClick={() => void endCompanyView()} disabled={leaving}>{leaving ? "Ending…" : "End view"}</button>
+          </div>
+        )}
+        {viewingAs && !viewingCo && (
           <div className="sc-view-as" role="status">
             <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>👁 {viewAsLine(viewingAs.name, roleLabel(viewingAs.role))} · changes are off</span>
             <button type="button" onClick={() => void stopViewing()} disabled={leaving}>{leaving ? "Switching…" : "Switch back"}</button>

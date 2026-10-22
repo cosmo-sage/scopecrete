@@ -19,6 +19,8 @@ export interface Me {
   org_id?: string | null;
   /** An owner viewing as a teammate (src/lib/view-as.ts) — role and access above are theirs. */
   viewing_as?: { user_id: string; name: string | null; role: string | null } | null;
+  /** A ScopeCrete admin viewing another company read only (migration 121). */
+  viewing_company?: { org_id: string; name: string | null; expires_at: string | null } | null;
 }
 
 export const MeContext = createContext<{ me: Me | null; reload: () => void }>({ me: null, reload: () => {} });

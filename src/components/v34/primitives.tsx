@@ -12,6 +12,8 @@
 import React, { useEffect } from "react";
 import { T, F, disp, body, eyebrow, nums, clip, STATUS, StatusStyle } from "@/lib/v34/tokens";
 import { Emblem } from "@/components/site/marks";
+import { useAccess } from "@/lib/v34/access-ctx";
+import { can } from "@/lib/access";
 
 /* ------------------------------------------------------------ Badge/Avatar */
 
@@ -190,6 +192,12 @@ export const NavIcon = ({ k, on, color }: { k: string; on: boolean; color?: stri
       <path {...p} d="M6.8 2.8v11.6M12.2 5v11.6" />
     </svg>
   );
+  if (k === "camera") return (
+    <svg {...box}>
+      <path {...p} d="M2.5 6.2h3l1.4-2h5.2l1.4 2h3v9.3h-14z" />
+      <circle {...p} cx="9.5" cy="10.6" r="2.9" />
+    </svg>
+  );
   if (k === "admin") return (
     // Claude Design "Admin Icon Options" 1b Pulse (2026-10-10): a heartbeat inside a ring.
     <svg {...box}><path {...p} strokeWidth={1.5} d="M2.5 9.5h3l1.5-4 2.5 8 2-6 1.5 2h3.5M9.5 15.5a6.5 6.5 0 1 0-6.4-7.5" /></svg>
@@ -215,7 +223,7 @@ export const NavIcon = ({ k, on, color }: { k: string; on: boolean; color?: stri
 
 /* ------------------------------------------------------------------ Drawer */
 
-export function Drawer({ open, onClose, title, sub, right, children, hideClose, full, below, wide, left, cover, drop, small }: {
+export function Drawer({ open, onClose, title, sub, right, children, hideClose, full, below, wide, left, cover, drop, small, under }: {
   open: boolean; onClose: () => void; title: string; sub?: string; small?: boolean;
   right?: React.ReactNode; children: React.ReactNode;
   hideClose?: boolean; full?: boolean; below?: boolean; wide?: boolean;
@@ -226,6 +234,9 @@ export function Drawer({ open, onClose, title, sub, right, children, hideClose, 
   /** Slides DOWN from the page's subheader, the page's own width, beside Dusty
    *  when he is docked (Coy, 2026-10-10: the bid request and the import). */
   drop?: boolean;
+  /** Opens under the page's own header at this many pixels from the top, the
+   *  screen's full width, down over the talk bar (Coy, 2026-10-22: Files' folders). */
+  under?: number;
 }) {
   useEffect(() => {
     if (!open) return;
@@ -244,12 +255,12 @@ export function Drawer({ open, onClose, title, sub, right, children, hideClose, 
     // sc-drawer: on a desktop with Dusty docked it opens in the page beside
     // him, between the rail and his column — never under him (Coy, 2026-10-01).
     <div className={drop ? "fixed bottom-0 sc-drop-panel z-30" : `fixed left-0 right-0 bottom-0 sc-drawer ${full ? "z-30" : "z-50"}`}
-      style={drop ? { background: "rgba(18,22,26,.32)" } : { top: full || below ? "var(--sc-head)" : 0, background: full ? "transparent" : "rgba(18,22,26,.44)" }}
+      style={drop ? { background: "rgba(18,22,26,.32)" } : { top: under != null ? under : full || below ? "var(--sc-head)" : 0, background: full ? "transparent" : "rgba(18,22,26,.44)" }}
       onClick={full ? undefined : onClose}>
       <div onClick={(e) => e.stopPropagation()} role="dialog" aria-label={title}
-        className={drop ? "absolute top-0 left-0 right-0 flex flex-col sc-drop-in" : `absolute top-0 bottom-0 flex flex-col ${full ? "left-0 right-0" : left ? "left-0 sc-drawer-in-left" : "right-0 sc-drawer-in-right"}`}
-        style={drop ? { maxHeight: "100%", background: T.card, boxShadow: "0 14px 40px rgba(10,14,18,.22)", borderBottom: `1px solid ${T.hair}` } : { width: full ? "auto" : cover ? "100%" : wide ? "min(1180px, 100%)" : "min(408px, 90%)", background: T.card,
-                 boxShadow: full ? "none" : left ? "14px 0 40px rgba(10,14,18,.22)" : "-14px 0 40px rgba(10,14,18,.22)" }}>
+        className={drop ? "absolute top-0 left-0 right-0 flex flex-col sc-drop-in" : `absolute top-0 bottom-0 flex flex-col ${full || under != null ? "left-0 right-0" : left ? "left-0 sc-drawer-in-left" : "right-0 sc-drawer-in-right"}${under != null ? " sc-drop-in" : ""}`}
+        style={drop ? { maxHeight: "100%", background: T.card, boxShadow: "0 14px 40px rgba(10,14,18,.22)", borderBottom: `1px solid ${T.hair}` } : { width: full || under != null ? "auto" : cover ? "100%" : wide ? "min(1180px, 100%)" : "min(408px, 90%)", background: T.card,
+                 boxShadow: full ? "none" : under != null ? "0 14px 40px rgba(10,14,18,.22)" : left ? "14px 0 40px rgba(10,14,18,.22)" : "-14px 0 40px rgba(10,14,18,.22)" }}>
 
         <div className="sticky top-0 z-10 shrink-0 px-4 flex items-center gap-3"
           style={{ minHeight: 54, background: T.card, borderBottom: `1px solid ${T.hair}` }}>
@@ -352,7 +363,7 @@ export function SlideDrawer({ open, onOpen, onClose, width, label, tab, children
   const x = open ? dx : -width + dx;
   return (
     <>
-      {!open && onOpen && <div aria-hidden="true" onTouchStart={start} onTouchMove={move} onTouchEnd={end} style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 16, zIndex: 6 }} />}
+      {!open && onOpen && <div aria-hidden="true" data-edge-own onTouchStart={start} onTouchMove={move} onTouchEnd={end} style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 16, zIndex: 6 }} />}
       <div aria-hidden="true" onClick={onClose} className="sc-slide-scrim"
         style={{ position: "absolute", inset: 0, zIndex: 7, background: "rgba(20,20,20,.36)", opacity: open ? 1 : 0, pointerEvents: open ? "auto" : "none", transition: "opacity .28s" }} />
       <div ref={panel} role="dialog" aria-label={label} aria-hidden={!open} tabIndex={-1} onTouchStart={start} onTouchMove={move} onTouchEnd={end} className="sc-slide-panel"
@@ -463,9 +474,12 @@ export function InfoTip({ text, label = "About this page" }: { text: React.React
  *  the header of every main menu page"): opens his chat on this page, with the
  *  page's own quick selects (quickFor(), src/lib/dusty/quick.ts). */
 export function DustyPageButton({ onClick, label = "Ask Dusty" }: { onClick?: () => void; label?: string }) {
+  // An onsite estimator denied Dusty (120) gets no door to him.
+  const access = useAccess();
+  if (!can(access, "dusty")) return null;
   return (
     <button type="button" onClick={onClick ?? (() => window.dispatchEvent(new Event("sc:dusty-toggle")))}
-      className="shrink-0 flex items-center justify-center rounded" aria-label={label} title={label}
+      className="sc-dusty-page-btn shrink-0 flex items-center justify-center rounded" aria-label={label} title={label}
       style={{ width: 34, height: 34, border: `1px solid ${T.hiviz}`, background: T.card, cursor: "pointer" }}>
       <Emblem size={22} spin />
     </button>

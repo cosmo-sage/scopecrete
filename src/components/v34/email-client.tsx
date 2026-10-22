@@ -24,7 +24,6 @@ import { useThreads } from "@/components/v34/threads-ctx";
 import { useLiveThreads } from "@/lib/v34/live-threads";
 import { askDusty } from "@/components/v34/budget-tabs";
 import { DustyEmblem } from "@/components/v34/dusty-avatar";
-import { isHorizontal } from "@/lib/swipe";
 import { sendBytes } from "@/components/v34/files-panel";
 import {
   MAIL_TABS, TEMPLATES, cleanSubject, fillTemplate, firstName, forwardBody, forwardSubject, isEmail, parseAddresses,
@@ -189,41 +188,9 @@ function ConvRow({ c, threadId }: { c: ConvView; threadId?: string | null }) {
 }
 
 /** Swipe a row left on a phone for Archive (Coy, 2026-10-12). */
-function SwipeArchive({ c, onDone, children }: { c: ConvView; onDone: () => void; children: React.ReactNode }) {
-  const W = 88;
-  const [dx, setDx] = useState(0);
-  const [drag, setDrag] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const at = useRef<{ x: number; y: number; dx: number; h: boolean | null } | null>(null);
-  const go = async () => {
-    setBusy(true);
-    try { await call(`/api/emails/threads/${encodeURIComponent(c.key)}`, "PATCH", { archive: !c.archived }); setDx(0); onDone(); }
-    catch (e) { window.alert(errText(e)); }
-    finally { setBusy(false); }
-  };
-  return (
-    <div className="relative overflow-hidden">
-      <div className="absolute top-0 bottom-0 right-0 flex" aria-hidden={dx ? undefined : true}>
-        <button type="button" tabIndex={dx ? 0 : -1} disabled={busy} onClick={() => void go()} aria-label={c.archived ? "Unarchive" : "Archive"}
-          style={{ width: W, background: T.ink2, color: "#fff", ...eyebrow, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3 }}>
-          <ArchiveIcon size={18} />{busy ? "…" : c.archived ? "Unarchive" : "Archive"}
-        </button>
-      </div>
-      <div
-        onTouchStart={(e) => { const t = e.touches[0]; at.current = { x: t.clientX, y: t.clientY, dx, h: null }; }}
-        onTouchMove={(e) => {
-          const a = at.current; if (!a) return;
-          const t = e.touches[0]; const mx = t.clientX - a.x, my = t.clientY - a.y;
-          if (a.h === null) { if (Math.abs(mx) < 6 && Math.abs(my) < 6) return; a.h = isHorizontal(mx, my); if (a.h) setDrag(true); }
-          if (a.h) setDx(Math.max(-W, Math.min(0, a.dx + mx)));
-        }}
-        onTouchEnd={() => { const a = at.current; at.current = null; if (a?.h) setDx((d) => (d < -W / 2 ? -W : 0)); setDrag(false); }}
-        onClickCapture={(e) => { if (dx) { e.stopPropagation(); e.preventDefault(); setDx(0); } }}
-        style={{ position: "relative", background: T.card, transform: `translateX(${dx}px)`, transition: drag ? "none" : "transform .18s ease" }}>
-        {children}
-      </div>
-    </div>
-  );
+function SwipeArchive({ children }: { c: ConvView; onDone: () => void; children: React.ReactNode }) {
+  // Rows don't swipe since the Spaces navigation (Coy, 2026-10-17): a swipe opens the drawer. Archive is in the email's ☰.
+  return <>{children}</>;
 }
 
 const ico = { fill: "none", stroke: "currentColor", strokeWidth: 1.7, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
@@ -650,19 +617,20 @@ function DustyCard({ convKey, d, onDraft, flash }: { convKey: string; d: ConvDat
 
 interface Filing { customer_id: string | null; contact_id: string | null; job_id: string | null; job_title?: string | null; filed?: boolean }
 
-function AddressField({ label, list, onChange }: { label: string; list: string[]; onChange: (l: string[]) => void }) {
+export function AddressField({ label, list, onChange }: { label: string; list: string[]; onChange: (l: string[]) => void }) {
   const [text, setText] = useState("");
   const [hits, setHits] = useState<Array<{ id: string; name: string | null; email: string; role: string }>>([]);
   const [bad, setBad] = useState<string | null>(null);
+  // People in Contacts by their email, then addresses already on the inbox's mail (Coy, 2026-10-20).
   useEffect(() => {
     const q = text.trim();
     if (q.length < 2 || isEmail(q)) return;
     let off = false;
     const t = setTimeout(() => {
-      fetch(`/api/contacts?q=${encodeURIComponent(q)}&limit=8`).then((r) => (r.ok ? r.json() : { contacts: [] }))
-        .then((b: { contacts: Array<{ id: string; name: string | null; role_label: string; emails: Array<{ address: string }> }> }) => {
+      fetch(`/api/emails/addresses?q=${encodeURIComponent(q)}`).then((r) => (r.ok ? r.json() : { hits: [] }))
+        .then((b: { hits: Array<{ email: string; name: string | null; role: string }> }) => {
           if (off) return;
-          setHits(b.contacts.flatMap((c) => c.emails.map((e) => ({ id: `${c.id}:${e.address}`, name: c.name, email: e.address.toLowerCase(), role: c.role_label }))).slice(0, 8));
+          setHits(b.hits.map((h) => ({ id: h.email, name: h.name, email: h.email, role: h.role })));
         }).catch(() => {});
     }, 200);
     return () => { off = true; clearTimeout(t); };
@@ -686,7 +654,7 @@ function AddressField({ label, list, onChange }: { label: string; list: string[]
         <input value={text} onChange={(e) => setText(e.target.value)} aria-label={label}
           onKeyDown={(e) => { if (e.key === "Enter" || e.key === "," || e.key === ";" || e.key === "Tab") { if (text.trim()) { e.preventDefault(); commit(text); } } else if (e.key === "Backspace" && !text && list.length) onChange(list.slice(0, -1)); }}
           onBlur={() => { if (text.trim()) setTimeout(() => commit(text), 150); }}
-          placeholder={list.length ? "" : "Name or email"} style={{ flex: 1, minWidth: 140, height: 30, border: "none", outline: "none", background: "transparent", color: T.ink, fontSize: F.sm }} />
+          placeholder={list.length ? "" : "Name or email"} style={{ flex: 1, minWidth: 90, height: 30, border: "none", outline: "none", background: "transparent", color: T.ink, fontSize: F.sm }} />
       </div>
       {bad && <div style={{ fontSize: 11, color: T.red }}>{bad}</div>}
       {hits.length > 0 && text.trim().length >= 2 && !isEmail(text.trim()) && (

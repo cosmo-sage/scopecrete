@@ -44,7 +44,7 @@ export function cleanIds(v: unknown): string[] | null {
 
 export function archiveLabel(kind: ArchiveKind, action: ArchiveAction, n: number): string {
   const what = kind === "job" ? (n === 1 ? "job" : "jobs") : kind === "customer" ? (n === 1 ? "customer" : "customers")
-    : action === "delete" ? (n === 1 ? "vendor" : "vendors") : (n === 1 ? "thread" : "threads");
+    : action === "delete" ? (n === 1 ? "contact" : "contacts") : (n === 1 ? "thread" : "threads");
   return `${action === "delete" ? "Deleted" : "Archived"} ${n} ${what}`;
 }
 
@@ -59,4 +59,13 @@ export function archiveNote(body: string | null | undefined): { verb: "Archived"
   if (!m) return null;
   const byDusty = /\(Dusty's plan\)\s*$/.test(m[2]);
   return { verb: m[1] as "Archived" | "Deleted", reason: m[2].replace(/\s*\(Dusty's plan\)\s*$/, "").trim(), byDusty };
+}
+
+/**
+ * The internal note left when a vendor is deleted but the contact is kept
+ * (Coy, 2026-10-22): "Taken off Vendors — <why>". Null with no reason given.
+ */
+export function vendorRemovedNote(reason: string | null | undefined): string | null {
+  const r = (reason ?? "").trim();
+  return r ? `Taken off Vendors — ${r.slice(0, 300)}` : null;
 }

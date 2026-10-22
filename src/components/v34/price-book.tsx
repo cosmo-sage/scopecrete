@@ -76,6 +76,7 @@ export function PriceBook({ pick }: { pick?: PricePick } = {}) {
   const [view, setViewState] = useState<View>("group");
   const [tab, setTab] = useState<"cards" | "assemblies">("cards");
   const [finding, setFinding] = useState(false);
+  const [sortMenu, setSortMenu] = useState(false);
   const [q, setQ] = useState("");
   // "Show retired" is gone (Coy, 2026-10-10); retired cards stay out of the list.
   const retired = false;
@@ -164,8 +165,14 @@ export function PriceBook({ pick }: { pick?: PricePick } = {}) {
     if (view === "group") {
       for (const g of groups) {
         const cards = visible.filter((c) => c.cost_group_id === g.id);
+        // Groups carry across vendors (Coy, 2026-10-18): the group's row names every vendor
+        // who prices something in it.
+        const ids = new Set(cards.map((c) => c.id));
+        const who = [...new Set([...cards.map((c) => c.vendor_contact_id), ...sources.filter((x) => ids.has(x.cost_item_id)).map((x) => x.vendor_contact_id)]
+          .filter((v): v is string => !!v))].map((v) => vendorLabel(v)).filter((v): v is string => !!v).sort((a, b) => a.localeCompare(b));
+        const vend = who.length ? `${who.slice(0, 4).join(", ")}${who.length > 4 ? ` +${who.length - 4}` : ""}` : "";
         if (cards.length || !q.trim()) out.push({ key: g.id, groupId: g.id, title: g.name, cards,
-          sub: `${g.cost_type ? COST_TYPE_LABEL[g.cost_type] : ""}` });
+          sub: [g.cost_type ? COST_TYPE_LABEL[g.cost_type] : "", vend].filter(Boolean).join(" · ") });
       }
       const loose = visible.filter((c) => !c.cost_group_id || !groups.some((g) => g.id === c.cost_group_id));
       if (loose.length) out.push({ key: "none", title: "Not in a group", sub: "", cards: loose });
@@ -349,7 +356,8 @@ export function PriceBook({ pick }: { pick?: PricePick } = {}) {
       {/* ---- title + actions, while picking for a budget ---- */}
       {/* Picking for a budget: "Add Cost Items →" and the area on one small line; no + Group / + Card,
           those are made with Dusty (Coy, 2026-10-11). */}
-      {pick && <div className="flex items-center gap-2 flex-wrap">
+      {/* On a desktop the title shares the tabs' row (Coy, 2026-10-22). */}
+      {pick && !wide && <div className="flex items-center gap-2 flex-wrap">
           <span style={{ fontFamily: disp, fontSize: F.sm, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".04em" }}>{pick.title}</span>
           {pick.top}
       </div>}
@@ -370,7 +378,11 @@ export function PriceBook({ pick }: { pick?: PricePick } = {}) {
 
       {/* The tabs and, on Cards, the find / view / columns row beside them
           (Coy, 2026-10-06: "put this whole row up on the same row"). */}
-      <div className="flex items-center gap-2 flex-wrap mt-3">
+      <div className={`flex items-center gap-2 flex-wrap ${pick && wide ? "" : "mt-3"}`}>
+      {pick && wide && <>
+        <span style={{ fontFamily: disp, fontSize: F.sm, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".04em" }}>{pick.title}</span>
+        {pick.top}
+      </>}
       <div className="flex gap-1" role="tablist" aria-label="Price book">
         {(["cards", "assemblies"] as const).map((k) => (
           <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)} className="rounded px-3"
@@ -382,19 +394,29 @@ export function PriceBook({ pick }: { pick?: PricePick } = {}) {
       </div>
       {tab === "cards" && <>
         {/* The search is the header's magnifier on the page; picking for a budget keeps it here. */}
-        {pick && <div style={{ flex: 1, minWidth: 180, maxWidth: 360 }}><SearchBubble value={q} onChange={setQ} autoFocus={false} placeholder="Find: 3000, rebar, Angelle, item #…" /></div>}
+
         {wide && <span style={{ fontSize: F.xs, color: T.ink3 }}>{active.length} card{active.length === 1 ? "" : "s"} · {active.filter((c) => c.unit_cost === null).length} without a cost</span>}
         {/* By group / By vendor on the tabs' row, at its right (Coy, 2026-10-08;
             on a phone too, 2026-10-11). */}
         <div className="flex items-center gap-2" style={{ marginLeft: "auto" }}>
-        <div className="flex rounded overflow-hidden" role="tablist" aria-label="View" style={{ border: `1px solid ${T.hair}` }}>
-          {(["group", "vendor"] as const).map((v) => (
-            <button key={v} role="tab" aria-selected={view === v} onClick={() => setView(v)} className="px-2.5"
-              style={{ height: 30, background: view === v ? T.ink : T.card, color: view === v ? T.card : T.ink2, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", letterSpacing: ".05em", cursor: "pointer" }}>
-              By {v}
-            </button>
-          ))}
+        {/* "Sort by: Vendor ▾" (Coy, 2026-10-22; was a By group | By vendor toggle). */}
+        <div className="relative">
+          <button onClick={() => setSortMenu((m) => !m)} aria-expanded={sortMenu} aria-haspopup="menu" className="rounded px-2.5"
+            style={{ height: 30, border: `1px solid ${T.hair}`, background: T.card, color: T.ink2, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", letterSpacing: ".05em", cursor: "pointer" }}>
+            Sort by: {view === "group" ? "Group" : "Vendor"} ▾
+          </button>
+          {sortMenu && (
+            <div role="menu" className="absolute right-0 z-20 mt-1 rounded py-1" style={{ background: T.card, border: `1px solid ${T.hair}`, boxShadow: "0 8px 24px rgba(10,14,18,.14)", width: 160 }}>
+              {(["group", "vendor"] as const).map((v) => (
+                <button key={v} role="menuitemradio" aria-checked={view === v} onClick={() => { setView(v); setSortMenu(false); }}
+                  className="w-full text-left px-3 py-1.5 flex items-center gap-2" style={{ fontSize: F.sm, color: T.ink, cursor: "pointer" }}>
+                  <span style={{ width: 12 }}>{view === v ? "✓" : ""}</span>{v === "group" ? "Group" : "Vendor"}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
+        {pick && <SearchToggle open={finding || !!q} onToggle={() => { if (finding || q) { setQ(""); setFinding(false); } else setFinding(true); }} label="Find in the Price book" />}
         {wide && (
           <div className="relative">
             <button onClick={() => setColMenu((m) => !m)} aria-expanded={colMenu} className="rounded px-2.5"
@@ -420,6 +442,7 @@ export function PriceBook({ pick }: { pick?: PricePick } = {}) {
         </div>
       </>}
       </div>
+      {pick && tab === "cards" && (finding || q) && <div className="mt-2"><SearchBubble value={q} onChange={setQ} onClose={() => setFinding(false)} placeholder="Find: 3000, rebar, Angelle, item #…" /></div>}
 
       {tab === "assemblies" ? <Assemblies cards={items ?? []}
           onPick={pick?.onAssembly ? (id, name) => void took(id, name, () => pick.onAssembly!(id, name)) : undefined} /> : (<>

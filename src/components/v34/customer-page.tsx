@@ -26,8 +26,8 @@ import { MentionField } from "@/components/v34/mention-field";
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { T, F, eyebrow, nums, clip, money0, formatPhone, relTime, strong, BUCKET } from "@/lib/v34/tokens";
-import { RecordHeader, HeaderNote, OverviewGrid, PanelCard, SectionHead, Empty, Facts, ContactCard, ThreadChips, RecentCard, JobRow, Field,
+import { T, F, eyebrow, nums, clip, money0, formatPhone, relTime, strong } from "@/lib/v34/tokens";
+import { RecordHeader, HeaderNote, OverviewGrid, PanelCard, SectionHead, Empty, Facts, ContactCard, RecentCard, JobRow, Field,
   menuItem, btn, lbl, panelTitle, send, type CardPerson } from "@/components/v34/record-page";
 import { Sheet } from "@/components/v34/primitives";
 import { SiteViews, AddressLink } from "@/components/v34/site-views";
@@ -46,6 +46,7 @@ import { ContactPicker, NewContactForm } from "@/components/v34/contacts";
 import { ThreadView } from "@/components/v34/thread-view";
 import { initialsHue } from "@/lib/v34/threads";
 import { JobPickList } from "@/components/v34/job-pick";
+import { useAccess } from "@/lib/v34/access-ctx";
 
 interface Method { kind: "mobile" | "office" | "home" | "phone" | "email"; value: string; can_text: boolean | null; primary: boolean }
 interface Contact { id: string; name: string | null; role: string | null; primary: boolean; bucket: string | null; status_summary: string | null; recent_summary: string | null; last_contacted: string | null; methods: Method[] }
@@ -77,20 +78,22 @@ const time = (iso: string) => new Date(iso).toLocaleTimeString("en-US", { hour: 
 const dur = (s: number | null) => (s == null ? "" : `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`);
 
 export function CustomerPage({ customerId, focusContact }: { customerId: string; focusContact?: string | null }) {
+  const access = useAccess();
   const router = useRouter();
   const search = useSearchParams();
   const [data, setData] = useState<Data | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
   // ?tab=jobs opens a tab (a job's ‹ comes back to the customer's Jobs, Coy 2026-10-07).
-  const [tab, setTab] = useState<Tab>(() => {
-    const t = search.get("tab");
-    return t && (["overview", "contacts", "jobs", "threads", "files", "timeline", "payments", "schedule"] as string[]).includes(t) ? (t as Tab) : "overview";
-  });
+  const TABS = ["overview", "contacts", "jobs", "threads", "files", "timeline", "payments", "schedule"] as string[];
+  const tabParam = search.get("tab");
+  const [tab, setTab] = useState<Tab>(() => (tabParam && TABS.includes(tabParam) ? (tabParam as Tab) : "overview"));
+  // The customer's Space drawer links each tab by ?tab= (Coy, 2026-10-18); follow it when it changes.
+  const [tabSeen, setTabSeen] = useState(tabParam);
+  if (tabSeen !== tabParam) { setTabSeen(tabParam); setTab(tabParam && TABS.includes(tabParam) ? (tabParam as Tab) : "overview"); }
   const [editing, setEditing] = useState(false);
   const [callNotes, setCallNotes] = useState(false);
   const [note, setNote] = useState<{ text: string; undo?: string } | null>(null);
-  const [custom, setCustom] = useState<Array<{ id: string; name: string; contact_ids: string[]; count: number }>>([]);
   const [measure, wide] = useWide<HTMLDivElement>(1000);
   const reload = () => setTick((n) => n + 1);
 
@@ -101,12 +104,6 @@ export function CustomerPage({ customerId, focusContact }: { customerId: string;
       .catch((e) => { if (!off) setErr(e instanceof Error ? e.message : String(e)); });
     return () => { off = true; };
   }, [customerId, tick, router]);
-  // The threads Coy made (migration 073) — the chips say which of them hold these people.
-  useEffect(() => {
-    let off = false;
-    send("/api/threads/custom", "GET").then((b) => { if (!off) setCustom(b.threads ?? []); }).catch(() => {});
-    return () => { off = true; };
-  }, [tick]);
 
   // Dusty's answers on the emblem (dusty-panel.tsx CustomerAsk) act here: Edit opens the form, New job
   // makes one for the customer's primary person, a job picked there reloads the page.
@@ -136,8 +133,6 @@ export function CustomerPage({ customerId, focusContact }: { customerId: string;
 
   const { customer: cu, contacts, jobs } = data;
   const primary = contacts.find((c) => c.primary) ?? contacts[0];
-  const ids = new Set(contacts.map((c) => c.id));
-  const theirThreads = custom.filter((t) => t.contact_ids.some((id) => ids.has(id)));
   const quoted = jobs.reduce((n, j) => n + (j.quote ?? 0), 0);
   const meta = [
     cu.customer_type ? TYPE_LABEL[cu.customer_type] ?? cu.customer_type : null,
@@ -146,9 +141,10 @@ export function CustomerPage({ customerId, focusContact }: { customerId: string;
     `${jobs.length} job${jobs.length === 1 ? "" : "s"}`,
     quoted ? `${money0(quoted)} quoted` : null,
   ].filter(Boolean).join(" · ");
-  const customerBucket = { label: "Customer", colour: BUCKET.customer, href: contacts[0] ? `/dashboard/messages/${contacts[0].id}?t=customers` : "/dashboard/messages?t=customers" };
   const tabs: Array<[Tab, string]> = [["overview", "Overview"], ["contacts", `Contacts ${contacts.length}`], ["jobs", `Jobs ${jobs.length}`], ["threads", "Threads"],
     ["files", "Files"], ["timeline", "Timeline"], ["payments", "Payments"], ["schedule", "Schedule"]];
+  // An onsite estimator given Customers (120) reads the customer, its people and their jobs — not its talk or money.
+  const shownTabs = access.limited ? tabs.filter(([k]) => k === "overview" || k === "contacts" || k === "jobs") : tabs;
 
   const newScope = async () => {
     try {
@@ -183,7 +179,7 @@ export function CustomerPage({ customerId, focusContact }: { customerId: string;
           <ArchiveButton key="del" kind="customer" id={cu.id} action="delete" what={cu.name || "this customer"} then="/dashboard/customers"
             style={{ ...menuItem, color: T.red }}>Delete customer</ArchiveButton>,
         ]}
-        meta={meta} tabs={tabs} tab={tab} onTab={(k) => setTab(k as Tab)}>
+        meta={meta} tabs={shownTabs} tab={tab} onTab={(k) => setTab(k as Tab)}>
         {note && <HeaderNote text={note.text} onDismiss={() => setNote(null)}
           action={note.undo ? { label: "Undo", onClick: () => void send(`/api/customer-moves/${note.undo}/undo`, "POST").then(() => { setNote(null); reload(); }).catch((e) => setNote({ text: String(e.message ?? e) })) } : undefined} />}
       </RecordHeader>
@@ -212,10 +208,6 @@ export function CustomerPage({ customerId, focusContact }: { customerId: string;
               ))}
               {!jobs.length && <NoJobs customerId={cu.id} canNew={!!primary} onNew={() => void newScope()} onAdded={reload} />}
             </div>
-          </section>
-          <section>
-            <SectionHead title="Threads these contacts are in" />
-            <ThreadChips bucket={customerBucket} threads={theirThreads} />
           </section>
         </OverviewGrid>
       )}

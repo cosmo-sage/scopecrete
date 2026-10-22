@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
-import { readAccess } from "@/lib/access";
+import { before120, readAccess, WAITING_120 } from "@/lib/access";
 
 /**
  * Settings → Organization → People: invites (migration 062; Coy, 2026-10-01).
@@ -42,8 +42,14 @@ export async function POST(req: NextRequest) {
   if (!email) return applyCookies(NextResponse.json({ error: "Whose email?" }, { status: 400 }));
   // sc_invite_member (081) carries the vendor, pages and jobs; before 081 only sc_create_invite exists,
   // and an onsite estimator can't be invited until it does.
-  let { data, error } = await supabase.rpc("sc_invite_member", {
-    p_org: orgId, p_email: email, p_role: role, p_contact: a.contact_id, p_pages: a.pages, p_all_jobs: a.all_jobs, p_jobs: a.job_ids });
+  const invite = (pages: string[]) => supabase.rpc("sc_invite_member", {
+    p_org: orgId, p_email: email, p_role: role, p_contact: a.contact_id, p_pages: pages, p_all_jobs: a.all_jobs, p_jobs: a.job_ids });
+  let { data, error } = await invite(a.pages);
+  if (error && /Unknown page/.test(error.message)) {
+    const old = before120(a.pages);
+    if (old.blocked.length) return applyCookies(NextResponse.json({ error: WAITING_120 }, { status: 503 }));
+    ({ data, error } = await invite(old.pages));
+  }
   const missing = !!error && /could not find the function|does not exist/i.test(error.message);
   if (missing && role === "field") return applyCookies(NextResponse.json({ error: "Onsite estimators aren't switched on yet — migration 081 is waiting to be applied." }, { status: 503 }));
   if (missing) ({ data, error } = await supabase.rpc("sc_create_invite", { p_org: orgId, p_email: email, p_role: role }));

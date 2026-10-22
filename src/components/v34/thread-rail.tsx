@@ -107,7 +107,7 @@ function ThreadCells({ onPick, wide }: { onPick?: () => void; wide?: boolean }) 
       <button onClick={() => setPainting(true)} aria-label="Thread colors" title="Thread colors"
         className={wide ? "flex items-center gap-2.5 px-3 text-left" : "flex flex-col items-center justify-center gap-0.5 shrink-0"}
         style={{ ...cell(false, T.ink2), height: wide ? 44 : 52, marginTop: wide ? 0 : "auto" }}>
-        <Icon color={T.ink2}><circle cx="10" cy="10" r="2.6" /><path d="M10 2.5v2M10 15.5v2M2.5 10h2M15.5 10h2M4.7 4.7l1.4 1.4M13.9 13.9l1.4 1.4M4.7 15.3l1.4-1.4M13.9 6.1l1.4-1.4" /></Icon>
+        <Icon color={T.ink2}><circle cx="10" cy="10" r="2.4" /><path d="M15.96 7.96L18.3 8.72L18.3 11.28L15.96 12.04A6.3 6.3 0 0 1 15.66 12.77L16.78 14.96L14.96 16.78L12.77 15.66A6.3 6.3 0 0 1 12.04 15.96L11.28 18.3L8.72 18.3L7.96 15.96A6.3 6.3 0 0 1 7.23 15.66L5.04 16.78L3.22 14.96L4.34 12.77A6.3 6.3 0 0 1 4.04 12.04L1.7 11.28L1.7 8.72L4.04 7.96A6.3 6.3 0 0 1 4.34 7.23L3.22 5.04L5.04 3.22L7.23 4.34A6.3 6.3 0 0 1 7.96 4.04L8.72 1.7L11.28 1.7L12.04 4.04A6.3 6.3 0 0 1 12.77 4.34L14.96 3.22L16.78 5.04L15.66 7.23A6.3 6.3 0 0 1 15.96 7.96Z" strokeLinejoin="round" /></Icon>
         <span style={{ fontFamily: disp, fontSize: wide ? F.sm : 9.5, letterSpacing: ".06em", textTransform: "uppercase" }}>{wide ? "Thread colors" : "Colors"}</span>
       </button>
       <ThreadColorsPanel open={painting} onClose={() => setPainting(false)}
@@ -121,7 +121,7 @@ function ThreadCells({ onPick, wide }: { onPick?: () => void; wide?: boolean }) 
 
 export function ThreadRail() {
   return (
-    <nav aria-label="Threads" className="hidden lg:flex shrink-0 flex-col"
+    <nav aria-label="Threads" className="sc-old-thread-rail hidden lg:flex shrink-0 flex-col"
       style={{ width: 72, background: T.card, borderRight: `1px solid ${T.hairSoft}`, position: "sticky", top: "var(--sc-head)", height: "calc(100dvh - var(--sc-head))", overflowY: "auto" }}>
       <ThreadCells />
     </nav>

@@ -7,7 +7,7 @@
 /* The sticky header's height: 54px glass bar + 38px activity line
    (activity-line.tsx always holds its row). Everything that sits under or
    beside the header measures from this — one number, not five. */
-:root { --sc-head-0: 92px; --sc-head: calc(var(--sc-head-0) + var(--sc-banner, 0px)); --sc-foot: 58px; --sc-dusty: 400px;
+:root { --sc-head-0: 92px; --sc-head: calc(var(--sc-head-0) + var(--sc-banner, 0px) + var(--sc-ticker, 0px)); --sc-foot: 58px; --sc-dusty: 400px;
   /* Dusty's type, the same in every theme (Coy, 2026-10-05): Figtree, loaded by next/font as --font-agent. */
   --sc-font-agent: var(--font-agent, 'Figtree'), system-ui, -apple-system, 'Segoe UI', sans-serif;
   /* Machine text — event types, webhook URLs, payloads: JetBrains Mono. */
@@ -688,3 +688,394 @@ html[data-view-as] { --sc-banner: 28px; }
 .sc-dusty-grip:hover, html[data-dusty-drag] .sc-dusty-grip { background: linear-gradient(to right, transparent 3px, var(--sc-hiviz, #D97757) 3px, var(--sc-hiviz, #D97757) 5px, transparent 5px); }
 html[data-dusty-drag], html[data-dusty-drag] * { cursor: col-resize !important; user-select: none !important; }
 html[data-dusty-drag] iframe { pointer-events: none; }
+
+/* ---- The Spaces navigation, step 1 (Claude Design "Dusty Home"; Coy, 2026-10-17) ----
+   Behind Settings → Appearance → New navigation: <html data-nav="spaces">.
+   A 72px rail of Spaces beside a 280px drawer; --sc-rail-w carries both, so every
+   page, drawer and sheet already measured from the rail moves with it. */
+html[data-nav="spaces"] { --sc-rail-w: 352px; --sc-dusty: 380px; }
+html[data-nav="spaces"][data-drawer="folded"] { --sc-rail-w: 136px; }
+/* The Spaces drawer is the threads now: the old bucket rail never shows, and an open
+   conversation takes the page without the old list beside it (Coy, 2026-10-17). */
+html[data-nav="spaces"] .sc-old-thread-rail,
+html[data-nav="spaces"] .sc-old-thread-list { display: none !important; }
+/* No back links at the top left under Spaces (Coy, 2026-10-18): the rail and drawer are a swipe away. */
+html[data-nav="spaces"] .sc-back-link { display: none !important; }
+.sc-drawer-empty { display: none; }
+html[data-nav="spaces"] .sc-drawer-listed { display: none !important; }
+html[data-nav="spaces"] .sc-drawer-pane { display: block !important; flex: 1; }
+html[data-nav="spaces"] .sc-drawer-pane .sc-drawer-empty { display: flex; }
+html[data-nav="spaces"] .sc-drawer-pane .sc-drawer-old { display: none !important; }
+/* An open thread or email on a phone: no talk bar, so nothing at the foot. */
+@media (max-width: 1023px) { html[data-nav="spaces"][data-talk="off"] { --sc-foot: 0px; } }
+.sc-spaces { position: fixed; left: 0; bottom: 0; top: var(--sc-head); z-index: 30; display: flex; width: var(--sc-rail-w); font-family: var(--sc-font-body); }
+.sc-spaces-rail { width: 72px; flex: none; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 0;
+  background: color-mix(in srgb, var(--sc-rail) 82%, var(--sc-ink) 6%); box-shadow: inset -1px 0 0 var(--sc-hair); overflow-y: auto; overflow-x: hidden; scrollbar-width: none; }
+.sc-spaces-rail::-webkit-scrollbar { display: none; }
+.sc-spaces-sep { width: 32px; height: 1px; background: var(--sc-hair-strong); margin: 2px 0; flex: none; }
+.sc-spaces-note { font-size: 11px; color: var(--sc-ink3); }
+.sc-space-slot { position: relative; width: 72px; display: flex; justify-content: center; flex: none; }
+.sc-space-slot[data-on]::before { content: ""; position: absolute; left: 0; top: 8px; bottom: 8px; width: 4px; border-radius: 0 3px 3px 0; background: var(--sc-space-c, var(--sc-hiviz)); z-index: 1; }
+/* The open Space's tile sits in a tab that runs into its drawer (Coy, 2026-10-22: "clear visually
+   what workspace is open on the rail … connected to the drawer under it"): the tab is the
+   drawer's own ground, outlined in the Space's colour, and the drawer's left edge carries it on. */
+.sc-space-slot[data-on]::after { content: ""; position: absolute; left: 7px; right: 0; top: -4px; bottom: -4px; z-index: 0;
+  background: var(--sc-rail); border: 2px solid var(--sc-space-c, var(--sc-hiviz)); border-right: 0; border-radius: 14px 0 0 14px; }
+.sc-space-slot > * { position: relative; z-index: 1; }
+/* The drawer's coloured edge, broken where the tab meets it so the tab opens into the drawer like a
+   file folder's (Coy, 2026-10-22). SpacesNav measures the open slot into --sc-tab-a / --sc-tab-b. */
+.sc-spaces .sc-spaces-drawer, .sc-spaces .sc-spaces-strip {
+  background-image: linear-gradient(to bottom, var(--sc-space-c, var(--sc-hiviz)) var(--sc-tab-a, 0px), transparent var(--sc-tab-a, 0px), transparent var(--sc-tab-b, 0px), var(--sc-space-c, var(--sc-hiviz)) var(--sc-tab-b, 0px));
+  background-size: 2px 100%; background-repeat: no-repeat; background-position: left top; }
+.sc-space-head { background: color-mix(in srgb, var(--sc-head-c, var(--sc-hiviz)) 8%, transparent); box-shadow: inset 0 3px 0 var(--sc-head-c, var(--sc-hiviz)); }
+.sc-space-head-ico { flex: none; width: 22px; height: 22px; margin-top: -1px; display: flex; align-items: center; justify-content: center; }
+.sc-space-head-ico svg { width: 20px; height: 20px; }
+.sc-space-tile { width: 48px; height: 48px; border-radius: 14px; display: flex; align-items: center; justify-content: center; cursor: pointer;
+  color: var(--sc-tile); background: color-mix(in srgb, var(--sc-tile) 13%, var(--sc-card)); border: 2px solid color-mix(in srgb, var(--sc-tile) 55%, transparent);
+  transition: border-radius .15s, transform .15s; padding: 0; }
+.sc-space-tile:hover, .sc-space-tile:focus-visible { border-radius: 11px; }
+.sc-space-slot[data-on] .sc-space-tile { border-radius: 11px; border-color: transparent; box-shadow: none; }
+/* Silhouettes (Rail Silhouettes 1a): the shape draws itself, the tile is only the hit area. */
+.sc-space-tile-bare, .sc-space-slot[data-on] .sc-space-tile-bare { width: 44px; height: 44px; border: 0; background: transparent; box-shadow: none; border-radius: 6px; }
+.sc-space-tile-bare:hover > span { filter: brightness(.97); }
+.sc-space-tile-home { width: 52px; height: 52px; border-radius: 26px; background: var(--sc-card); border: 2px solid var(--sc-hair-strong); box-shadow: 0 1px 2px rgba(20,20,20,.12); }
+.sc-space-slot[data-on] .sc-space-tile-home { border-radius: 16px; border-color: transparent; box-shadow: none; }
+.sc-space-slot[data-on]:has(.sc-space-tile-bare)::before, .sc-space-slot[data-on]:has(.sc-space-tile-home)::before { top: 50%; bottom: auto; height: 36px; margin-top: -18px; }
+/* Groups on the rail (Coy, 2026-10-22: drag one Work Space onto another, Discord's way). */
+.sc-spaces-rail { -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; }
+.sc-spaces-rail a, .sc-spaces-rail button { -webkit-user-drag: none; }
+.sc-rail-folder { padding: 5px; background: color-mix(in srgb, var(--sc-ink) 9%, var(--sc-card)); border-color: var(--sc-hair-strong); border-radius: 14px; }
+.sc-rail-folder-grid { display: grid; grid-template-columns: 18px 18px; grid-template-rows: 18px 18px; gap: 2px; }
+.sc-rail-folder-grid > span { display: flex; align-items: center; justify-content: center; overflow: hidden; border-radius: 4px; }
+.sc-rail-group { position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px; padding-bottom: 6px; flex: none; width: 72px; }
+.sc-rail-group::before { content: ""; position: absolute; left: 10px; right: 10px; top: -2px; bottom: 0; border-radius: 16px; background: color-mix(in srgb, var(--sc-ink) 8%, transparent); pointer-events: none; }
+.sc-rail-folder-head { width: 44px; height: 30px; border-radius: 10px; color: var(--sc-ink2); background: transparent; border: 0; }
+.sc-rail-folder-head:hover { color: var(--sc-ink); background: color-mix(in srgb, var(--sc-ink) 8%, transparent); }
+.sc-space-slot[data-dragging] { opacity: .35; }
+.sc-space-slot[data-drop="into"] .sc-space-tile { outline: 2px solid var(--sc-hiviz); outline-offset: 2px; transform: scale(1.08); }
+.sc-space-slot[data-drop="before"]::before, .sc-space-slot[data-drop="after"]::before { content: ""; position: absolute; left: 14px; right: 14px; height: 3px; border-radius: 2px; background: var(--sc-hiviz); z-index: 3; }
+.sc-space-slot[data-drop="before"]::before { top: -5px; bottom: auto; width: auto; margin: 0; }
+.sc-space-slot[data-drop="after"]::before { bottom: -5px; top: auto; width: auto; margin: 0; }
+html[data-rail-drag], html[data-rail-drag] * { cursor: grabbing !important; }
+.sc-rail-ghost { position: fixed; z-index: 2000; pointer-events: none; transform: translate(-50%, -50%) scale(1.05); opacity: .9; filter: drop-shadow(0 6px 12px rgba(0,0,0,.25)); }
+.sc-rail-ghost .sc-rail-folder-grid { padding: 5px; border-radius: 14px; background: var(--sc-card); border: 2px solid var(--sc-hair-strong); }
+.sc-rail-gmenu { position: fixed; z-index: 1500; width: 220px; padding: 10px; display: flex; flex-direction: column; gap: 6px; border-radius: 8px; background: var(--sc-card); border: 1px solid var(--sc-hair-strong); box-shadow: 0 10px 28px rgba(0,0,0,.18); font-family: var(--sc-font-body); }
+.sc-rail-gmenu-l { font-size: 11px; color: var(--sc-ink3); letter-spacing: .06em; text-transform: uppercase; }
+.sc-rail-gmenu-b { height: 30px; border: 1px solid var(--sc-hair-strong); border-radius: 5px; background: var(--sc-card); color: var(--sc-ink); font-size: 13px; cursor: pointer; text-align: left; padding: 0 10px; }
+.sc-rail-gmenu-b:hover { background: var(--sc-sunk); }
+.sc-rail-gmenu-tip { margin: 2px 0 0; font-size: 11.5px; line-height: 1.35; color: var(--sc-ink3); }
+/* Shelves: arranging Home's (Coy, 2026-10-18). */
+.sc-shelf-arrange { flex: none; height: 24px; padding: 0 9px; border-radius: 4px; border: 1px solid var(--sc-hair-strong); background: var(--sc-card); color: var(--sc-ink2);
+  font-family: var(--sc-font-disp); font-weight: 600; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; cursor: pointer; }
+.sc-shelf-arrange[aria-pressed="true"] { background: var(--sc-hiviz); border-color: var(--sc-hiviz); color: var(--sc-on-hiviz); }
+.sc-shelf-arrange:disabled { opacity: .5; cursor: default; }
+.sc-shelf-arr { padding: 4px 10px 10px; display: flex; flex-direction: column; gap: 8px; }
+.sc-shelf-hint { margin: 0; font-size: 11.5px; line-height: 1.4; color: var(--sc-ink3); border: 1px dashed var(--sc-hair-strong); border-radius: 6px; padding: 7px 9px; }
+.sc-shelf-box { border: 1px solid var(--sc-hair); border-radius: 6px; background: var(--sc-card); padding: 6px; }
+.sc-shelf-row { display: flex; align-items: center; gap: 4px; }
+.sc-shelf-name { flex: 1; min-width: 0; height: 28px; padding: 0 8px; border: 1px solid var(--sc-hair-strong); border-radius: 4px; background: var(--sc-sunk); color: var(--sc-ink);
+  font-family: var(--sc-font-disp); font-weight: 600; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; }
+.sc-shelf-btn { flex: none; width: 26px; height: 26px; border: 0; border-radius: 4px; background: transparent; color: var(--sc-ink2); cursor: pointer; font-size: 14px; }
+.sc-shelf-btn:hover:not(:disabled) { background: var(--sc-sunk); color: var(--sc-ink); }
+.sc-shelf-btn:disabled { opacity: .3; cursor: default; }
+.sc-shelf-page { display: flex; align-items: center; gap: 4px; padding: 3px 0 3px 4px; color: var(--sc-ink2); }
+.sc-shelf-page-l { flex: 1; min-width: 0; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sc-shelf-move { flex: none; max-width: 92px; height: 26px; border: 1px solid var(--sc-hair-strong); border-radius: 4px; background: var(--sc-card); color: var(--sc-ink2); font-size: 11.5px; }
+/* On a phone a shelf editor's row is two lines: the page's whole name, then its buttons (Coy, 2026-10-22). */
+@media (max-width: 1023px) {
+  .sc-shelf-page { flex-wrap: wrap; row-gap: 2px; padding: 5px 0 5px 4px; border-bottom: 1px solid var(--sc-hair); }
+  .sc-shelf-page-l { flex: 1 1 100%; white-space: normal; overflow: visible; overflow-wrap: anywhere; }
+  .sc-shelf-page-l + * { margin-left: auto; }
+  .sc-shelf-row { flex-wrap: wrap; row-gap: 4px; }
+  .sc-shelf-row > .sc-shelf-name { flex: 1 1 150px; }
+  .sc-shelf-name + .sc-shelf-btn { margin-left: auto; }
+  .sc-shelf-move { max-width: 140px; }
+}
+/* + Add to <shelf> and × to take a row off (Coy, 2026-10-22). */
+.sc-shelf-x { color: var(--sc-ink3); }
+.sc-shelf-x:hover:not(:disabled) { color: var(--sc-red, #B5412C); }
+.sc-add-pick { margin-top: 4px; }
+.sc-add-pick-btn { width: 100%; height: 28px; border: 1px dashed var(--sc-hair-strong); border-radius: 5px; background: transparent; color: var(--sc-hiviz-text); font-size: 12.5px; font-weight: 600; cursor: pointer; text-align: left; padding: 0 9px; }
+.sc-add-pick-btn:hover, .sc-add-pick-btn[aria-expanded="true"] { background: var(--sc-sunk); }
+.sc-add-pick-row { width: 100%; display: flex; align-items: center; gap: 8px; padding: 5px 6px; border: 0; border-radius: 4px; background: none; color: var(--sc-ink); font-size: 13px; cursor: pointer; text-align: left; }
+.sc-add-pick-row:hover { background: var(--sc-sunk); }
+/* A shelf's icon (Coy, 2026-10-22). */
+.sc-shelf-ico { flex: none; display: inline-flex; width: 16px; height: 16px; align-items: center; justify-content: center; color: var(--sc-ink2); }
+.sc-shelf-ico svg { width: 15px; height: 15px; }
+.sc-shelf-ico-btn { flex: none; width: 28px; height: 28px; border: 1px solid var(--sc-hair-strong); border-radius: 5px; background: var(--sc-card); color: var(--sc-ink2); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; }
+.sc-shelf-ico-btn svg { width: 16px; height: 16px; }
+.sc-shelf-ico-btn[aria-selected="true"] { border-color: var(--sc-hiviz); color: var(--sc-hiviz-text); }
+.sc-shelf-ico-grid { position: absolute; z-index: 5; top: 32px; left: 0; width: 196px; display: grid; grid-template-columns: repeat(6, 28px); gap: 4px; padding: 6px; background: var(--sc-card); border: 1px solid var(--sc-hair-strong); border-radius: 7px; box-shadow: 0 6px 18px rgba(20,20,20,.16); }
+/* The folded drawer (frame 11): a 64px strip of icons and group chips. */
+.sc-spaces-strip { width: 64px; flex: none; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 0 10px; overflow-y: auto; scrollbar-width: none;
+  background: var(--sc-card); border-right: 1px solid var(--sc-hair); }
+.sc-strip-open { width: 32px; height: 32px; margin-bottom: 6px; border-radius: 4px; border: 0; background: transparent; color: var(--sc-ink3); display: flex; align-items: center; justify-content: center; cursor: pointer; flex: none; }
+.sc-strip-open:hover { background: var(--sc-sunk); color: var(--sc-ink); }
+.sc-strip-ico { width: 40px; height: 36px; border-radius: 5px; display: flex; align-items: center; justify-content: center; color: var(--sc-ink2); flex: none; }
+.sc-strip-ico:hover { background: var(--sc-sunk); color: var(--sc-ink); }
+.sc-strip-ico[aria-current="page"] { background: var(--sc-sunk); color: var(--sc-ink); box-shadow: inset 3px 0 0 var(--sc-hiviz); }
+.sc-strip-sep { width: 28px; height: 1px; background: var(--sc-hair-strong); margin: 8px 0; flex: none; }
+.sc-strip-chip { width: 30px; height: 30px; margin: 5px 0; border-radius: 4px; border: 1px solid; background: transparent; font-family: var(--sc-font-disp); font-weight: 600; font-size: 11px; letter-spacing: .04em; display: flex; align-items: center; justify-content: center; cursor: pointer; flex: none; }
+.sc-strip-chip:hover { background: var(--sc-sunk); }
+.sc-space-tile-new { border-style: dashed; border-color: var(--sc-hair-strong); color: var(--sc-ink3); background: transparent; }
+.sc-space-home { display: flex; align-items: center; justify-content: center; }
+.sc-spaces-foot { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: var(--sc-rail-ink); background: transparent; border: 0; cursor: pointer; flex: none; }
+.sc-spaces-foot:hover { background: var(--sc-rail-active); color: var(--sc-rail-ink-on); }
+.sc-spaces-drawer { width: 280px; flex: none; display: flex; flex-direction: column; min-height: 0; background: var(--sc-rail); border-right: 1px solid var(--sc-hair); color: var(--sc-rail-ink-on); }
+.sc-spaces-drawer { position: relative; }
+.sc-drawer-fold { position: absolute; top: 10px; right: 8px; z-index: 1; width: 28px; height: 28px; border-radius: 7px; border: 1px solid var(--sc-hair); background: var(--sc-card); color: var(--sc-ink2); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.sc-drawer-fold:hover { background: var(--sc-rail-active); color: var(--sc-rail-ink-on); }
+.sc-space-head { padding: 12px 8px 10px 14px; border-bottom: 1px solid var(--sc-hair); display: flex; flex-direction: column; gap: 4px; }
+.sc-space-name { font-family: var(--sc-font-strong); font-weight: 600; font-size: 15px; line-height: 1.25; color: var(--sc-ink); overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.sc-space-sub { font-size: 11.5px; color: var(--sc-ink3); }
+/* The Space's name with its gear across from it, top right (Coy, 2026-10-22). */
+.sc-space-top { display: flex; align-items: flex-start; gap: 8px; }
+.sc-space-top .sc-space-name { flex: 1; min-width: 0; }
+.sc-space-gear { flex: none; min-width: 30px; height: 30px; margin-top: -4px; padding: 0 6px; border-radius: 7px; border: 0; background: none; color: var(--sc-ink3); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.sc-space-gear:hover { background: var(--sc-rail-active); color: var(--sc-rail-ink-on); }
+.sc-space-gear[aria-pressed="true"] { background: var(--sc-rail-active); color: var(--sc-hiviz-text); }
+.sc-space-tag { align-self: flex-start; font-family: var(--sc-font-disp); font-weight: 700; font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; border: 1px solid; border-radius: 4px; padding: 1px 6px; }
+.sc-space-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 6px 0 16px; }
+.sc-space-group { padding: 4px 0; }
+.sc-space-group-h { width: auto; margin: 0 10px 3px; display: flex; align-items: center; gap: 6px; padding: 6px 4px 4px; background: none; border: 0; border-bottom: 2px solid var(--sc-hiviz); cursor: pointer;
+  font-family: var(--sc-font-disp); font-weight: 700; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--sc-ink3); text-align: left; }
+/* A channel inside the Channels shelf (Phone · Email · Internal), its threads under it. */
+.sc-space-sub-h { width: calc(100% - 16px); margin: 2px 8px 0; display: flex; align-items: center; gap: 6px; padding: 5px 8px 3px 14px; background: none; border: 0; cursor: pointer;
+  font-family: var(--sc-font-strong); font-weight: 600; font-size: 12.5px; color: var(--sc-rail-ink); text-align: left; border-radius: 6px; }
+.sc-space-sub-h:hover { background: var(--sc-rail-active); }
+.sc-space-row { display: flex; align-items: center; gap: 9px; margin: 1px 8px; padding: 6px 8px; border-radius: 6px; color: var(--sc-rail-ink); min-height: 32px; }
+.sc-space-row:hover { background: var(--sc-rail-active); color: var(--sc-rail-ink-on); }
+.sc-space-row[aria-current="page"] { background: var(--sc-rail-active); color: var(--sc-rail-ink-on); box-shadow: inset 3px 0 0 var(--sc-hiviz); }
+.sc-space-row-l { display: block; font-size: 13.5px; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sc-space-row-s { display: block; font-size: 11.5px; color: var(--sc-ink3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sc-space-ico { width: 20px; display: flex; align-items: center; justify-content: center; flex: none; }
+.sc-space-ico svg { width: 18px; height: 18px; }
+.sc-space-av { width: 24px; height: 24px; border-radius: 6px; flex: none; display: flex; align-items: center; justify-content: center; font-family: var(--sc-font-disp); font-weight: 700; font-size: 11px; }
+.sc-space-empty { padding: 4px 16px 6px 30px; font-size: 12px; color: var(--sc-ink3); }
+.sc-space-empty a { color: var(--sc-hiviz-text); }
+.sc-space-more { display: block; padding: 3px 16px 6px 30px; font-size: 12px; color: var(--sc-hiviz-text); background: none; border: 0; cursor: pointer; text-align: left; }
+/* Phone: the Spaces UNDER the page (Coy, 2026-10-17). The page is a layer over them that a
+   swipe right or the header's ☰ slides aside, leaving its edge to tap back; picking a page
+   slides it back over. */
+@media (max-width: 1023px) {
+  .sc-spaces-under { top: 0; z-index: 0; width: calc(100vw - 56px); padding-top: env(safe-area-inset-top); background: var(--sc-rail); }
+  .sc-spaces-under .sc-spaces-drawer { flex: 1; width: auto; min-width: 0; border-right: 0; }
+  html[data-nav="spaces"] .sc-page-layer { position: relative; z-index: 1; transition: transform .28s cubic-bezier(.2,.8,.2,1); }
+  html[data-nav="spaces"][data-spaces-open] .sc-page-layer { position: fixed; top: 0; left: 0; width: 100vw; height: 100dvh; min-height: 0;
+    overflow: hidden; transform: translateX(calc(100vw - 56px)); box-shadow: -10px 0 28px rgba(0,0,0,.3); }
+  html[data-spaces-open] .sc-talk-bar { visibility: hidden; }
+  .sc-page-edge { position: fixed; top: 0; bottom: 0; right: 0; width: 56px; z-index: 2; cursor: pointer; }
+}
+@media (prefers-reduced-motion: reduce) { html[data-nav="spaces"] .sc-page-layer { transition: none; } }
+/* The header's ☰ is Settings in the old navigation; here Settings is the rail's gear, and on
+   a desktop the ☰ goes. Dusty's column, closed, leaves a strip with his emblem to open it. */
+@media (min-width: 1024px) { html[data-nav="spaces"] .sc-burger { display: none; } }
+.sc-dusty-strip { display: none; }
+@media (min-width: 1024px) {
+  html[data-nav="spaces"]:not([data-dusty="open"]) main { padding-right: 44px; }
+  html[data-nav="spaces"]:not([data-dusty="open"]) .sc-dusty-strip {
+    display: flex; position: fixed; right: 0; bottom: 0; top: var(--sc-head); width: 44px; z-index: 30; flex-direction: column; align-items: center; gap: 12px;
+    padding-top: 12px; background: var(--sc-rail); border-left: 1px solid var(--sc-hair); border-top: 0; border-right: 0; border-bottom: 0; cursor: pointer; color: var(--sc-rail-ink); }
+  .sc-dusty-strip-l { writing-mode: vertical-rl; font-family: var(--sc-font-disp); font-weight: 700; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; }
+}
+/* No app header under Spaces (Coy, 2026-10-18): search, alerts and Dusty's line are at the
+   top of the drawer, and Dusty's column runs the window's full height beside the page. */
+html[data-nav="spaces"][data-nav] { --sc-head-0: 0px; }
+.sc-spaces-bar { padding: 8px 8px 6px; border-bottom: 1px solid var(--sc-hair); display: flex; flex-direction: column; gap: 4px; }
+.sc-spaces-bar-row { display: flex; align-items: center; gap: 6px; padding-right: 36px; }
+.sc-spaces-search { flex: 1; min-width: 0; height: 32px; display: flex; align-items: center; gap: 7px; padding: 0 10px; border-radius: 6px; border: 1px solid var(--sc-hair-strong);
+  background: var(--sc-card); color: var(--sc-ink3); font-size: 12.5px; cursor: pointer; text-align: left; }
+.sc-spaces-search:hover { color: var(--sc-ink); border-color: var(--sc-ink3); }
+.sc-spaces-search span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sc-spaces-line { min-height: 22px; display: flex; overflow: hidden; font-size: 12px; }
+.sc-spaces-bar .sc-alerts-panel { position: fixed; top: calc(var(--sc-head) + 46px); left: 80px; right: auto; width: min(380px, calc(100vw - 96px)); }
+@media (max-width: 1023px) { .sc-spaces-bar .sc-alerts-panel { left: 8px; right: 64px; width: auto; top: calc(env(safe-area-inset-top) + 48px); } }
+.sc-spaces-under .sc-spaces-bar-row { padding-right: 0; }
+/* Shelves: collapse all, and each shelf's gear (Coy, 2026-10-18). */
+.sc-space-group-h .sc-shelf-gear { margin-left: auto; width: 22px; height: 22px; border-radius: 4px; display: flex; align-items: center; justify-content: center; color: var(--sc-ink3); opacity: .55; }
+.sc-space-group-h:hover .sc-shelf-gear, .sc-shelf-gear:focus-visible, .sc-shelf-gear[aria-pressed="true"] { opacity: 1; }
+.sc-shelf-gear:hover { background: var(--sc-rail-active); color: var(--sc-ink); }
+.sc-shelf-edit { margin: 2px 8px 8px; padding: 8px; border: 1px solid var(--sc-hair-strong); border-radius: 6px; background: var(--sc-card); display: flex; flex-direction: column; gap: 6px; }
+.sc-shelf-edit-h { font-family: var(--sc-font-disp); font-weight: 700; font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--sc-ink3); margin-top: 2px; }
+.sc-shelf-tick { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--sc-ink2); cursor: pointer; }
+.sc-shelf-tick small { margin-left: auto; color: var(--sc-ink3); font-size: 11px; }
+/* New Space (frame 18). */
+.sc-newspace-scrim { position: fixed; inset: 0; z-index: 320; background: rgba(10,14,18,.4); display: flex; align-items: flex-start; justify-content: center; padding: 8vh 12px 12px; overflow-y: auto; }
+.sc-newspace { width: min(640px, 100%); background: var(--sc-card); color: var(--sc-ink); border: 1px solid var(--sc-hair); border-radius: 10px; box-shadow: 0 20px 60px rgba(0,0,0,.25); padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 12px; }
+.sc-newspace-head { display: flex; align-items: center; justify-content: space-between; font-family: var(--sc-font-strong); font-weight: 600; font-size: 17px; }
+.sc-newspace-kinds { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+@media (max-width: 560px) { .sc-newspace-kinds { grid-template-columns: repeat(2, 1fr); } }
+.sc-newspace-kind { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 6px 10px; border-radius: 8px; border: 1.5px solid var(--sc-hair-strong); background: var(--sc-sunk); color: var(--sc-ink); cursor: pointer; text-align: center; }
+.sc-newspace-kind[data-on] { border-color: var(--sc-hiviz); background: var(--sc-card); box-shadow: 0 0 0 2px color-mix(in srgb, var(--sc-hiviz) 25%, transparent); }
+.sc-newspace-kl { font-family: var(--sc-font-disp); font-weight: 700; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; }
+.sc-newspace-ks { font-size: 11px; color: var(--sc-ink3); line-height: 1.3; }
+.sc-newspace-blurb { margin: 0; font-size: 13px; color: var(--sc-ink2); }
+.sc-newspace-field { display: flex; flex-direction: column; gap: 5px; }
+.sc-newspace-field > span { font-family: var(--sc-font-disp); font-weight: 700; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--sc-ink3); }
+.sc-newspace-field input { height: 38px; padding: 0 10px; border-radius: 6px; border: 1px solid var(--sc-hair-strong); background: var(--sc-sunk); color: var(--sc-ink); font-size: 15px; }
+.sc-newspace-opts { display: flex; flex-direction: column; gap: 3px; max-height: 240px; overflow-y: auto; }
+.sc-newspace-opt { text-align: left; padding: 7px 10px; border-radius: 6px; border: 1px solid transparent; background: transparent; color: var(--sc-ink); font-size: 13.5px; cursor: pointer; }
+.sc-newspace-opt:hover { background: var(--sc-sunk); }
+.sc-newspace-opt[data-on] { border-color: var(--sc-hiviz); background: color-mix(in srgb, var(--sc-hiviz) 10%, var(--sc-card)); }
+.sc-newspace-err { margin: 0; font-size: 13px; color: var(--sc-red); }
+.sc-newspace-foot { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+.sc-newspace-foot .sc-space-more { padding: 6px 10px; }
+.sc-newspace-go { height: 36px; padding: 0 14px; border-radius: 6px; border: 0; background: var(--sc-hiviz); color: var(--sc-on-hiviz); font-family: var(--sc-font-disp); font-weight: 700; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; cursor: pointer; }
+.sc-newspace-go:disabled { opacity: .5; cursor: default; }
+/* Folded, the bar is two icons: search and alerts. */
+.sc-strip-bar { width: 100%; margin-bottom: 6px; }
+.sc-strip-bar .sc-spaces-bar { padding: 0; border: 0; align-items: center; }
+.sc-strip-bar .sc-spaces-bar-row { flex-direction: column; padding: 0; gap: 4px; }
+.sc-strip-bar .sc-spaces-search { flex: none; width: 36px; height: 32px; padding: 0; justify-content: center; }
+.sc-strip-bar .sc-spaces-search span, .sc-strip-bar .sc-spaces-line { display: none; }
+/* Arrange the rail (Coy, 2026-10-18) */
+.sc-arrange-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; max-height: 64vh; overflow-y: auto; }
+.sc-arrange-row { display: flex; flex-direction: column; gap: 2px; padding: 8px 4px 4px; border-bottom: 1px solid var(--sc-hair); }
+.sc-arrange-top { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.sc-arrange-tools { display: flex; align-items: center; gap: 6px; padding-left: 42px; }
+.sc-arrange-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--sc-hair); }
+.sc-arrange-tabs button { flex: 1; border: 0; background: none; padding: 8px 4px; font-family: var(--sc-font-disp); font-weight: 700; font-size: 13px; letter-spacing: .04em; text-transform: uppercase; color: var(--sc-ink3); border-bottom: 2px solid transparent; cursor: pointer; }
+.sc-arrange-tabs button[aria-selected="true"] { color: var(--sc-ink); border-bottom-color: var(--sc-hiviz); }
+.sc-arrange-name { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.sc-arrange-n { font-size: 14px; font-weight: 600; color: var(--sc-ink); overflow-wrap: anywhere; }
+.sc-arrange-s { font-size: 12px; color: var(--sc-ink3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sc-arrange-label { font-family: var(--sc-font-disp); font-weight: 700; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--sc-ink3); }
+.sc-space-slot[draggable="true"] { cursor: grab; }
+/* Under Spaces the drawer's shelf has Market rate, Proposed budget and Actual costs as tools of their own (Coy, 2026-10-18). */
+html[data-nav="spaces"] .sc-budget-tabs, html[data-nav="spaces"] .sc-job-subnav { display: none !important; }
+/* A job's views are the drawer's Customer Account shelf (Coy, 2026-10-19: "already in the drawer"). */
+html[data-nav="spaces"] .sc-job-tabs-nav { display: none !important; }
+/* A customer's or vendor's tabs are their Space's shelves in the drawer (Coy, 2026-10-18). */
+html[data-nav="spaces"] .sc-record-tabs { display: none !important; }
+/* A collection's tools and channels, ticked in New Space and on its drawer's gear. */
+.sc-newspace-picks { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; max-height: 260px; overflow-y: auto; padding: 4px 0; }
+.sc-newspace-picks .sc-shelf-edit-h { grid-column: 1 / -1; }
+.sc-newspace-field .sc-newspace-picks input { height: auto; padding: 0; }
+.sc-newspace { max-height: calc(100dvh - 32px); overflow-y: auto; }
+/* Two steps (Coy, 2026-10-18): the kinds, then slid in from the right, a searchable list ticked several at a time. */
+.sc-newspace-step { display: flex; flex-direction: column; gap: 12px; min-height: 0; flex: 1; overflow-y: auto; animation: scNewspaceIn .22s ease-out; }
+.sc-newspace-step[data-from="left"] { animation-name: scNewspaceBack; }
+@keyframes scNewspaceIn { from { transform: translateX(40px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes scNewspaceBack { from { transform: translateX(-40px); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .sc-newspace-step { animation: none; } }
+.sc-newspace-title { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+.sc-newspace-back, .sc-newspace-x { border: 0; background: transparent; color: var(--sc-ink2); cursor: pointer; font-size: 15px; padding: 4px 6px; border-radius: 6px; }
+.sc-newspace-x { font-size: 22px; line-height: 1; width: 34px; height: 34px; }
+.sc-newspace-back:hover, .sc-newspace-x:hover { background: var(--sc-sunk); color: var(--sc-ink); }
+.sc-newspace-head { gap: 8px; }
+.sc-newspace-kind:hover { border-color: var(--sc-hiviz); }
+.sc-newspace-grow { flex: 1; min-height: 0; }
+.sc-newspace-pick { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+.sc-newspace-search { height: 38px; padding: 0 12px; border-radius: 19px; border: 1px solid var(--sc-hair-strong); background: var(--sc-sunk); color: var(--sc-ink); font-size: 15px; }
+.sc-newspace-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.sc-newspace-chips button { padding: 4px 10px; border-radius: 14px; border: 1px solid var(--sc-hair-strong); background: transparent; color: var(--sc-ink2); font-size: 12.5px; cursor: pointer; }
+.sc-newspace-chips button[data-on] { border-color: var(--sc-hiviz); color: var(--sc-ink); background: color-mix(in srgb, var(--sc-hiviz) 12%, var(--sc-card)); }
+.sc-newspace-list { display: flex; flex-direction: column; max-height: 46vh; overflow-y: auto; border: 1px solid var(--sc-hair); border-radius: 8px; }
+.sc-newspace-row { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border: 0; border-bottom: 1px solid var(--sc-hair); background: transparent; color: var(--sc-ink); text-align: left; cursor: pointer; font-size: 13.5px; }
+.sc-newspace-row:last-child { border-bottom: 0; }
+.sc-newspace-row:hover { background: var(--sc-sunk); }
+.sc-newspace-row[data-on] { background: color-mix(in srgb, var(--sc-hiviz) 10%, var(--sc-card)); }
+.sc-newspace-row input { width: 17px; height: 17px; flex: none; accent-color: var(--sc-hiviz); }
+.sc-newspace-rn { display: flex; flex-direction: column; min-width: 0; }
+.sc-newspace-rn b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sc-newspace-rn small { font-size: 11.5px; color: var(--sc-ink3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sc-newspace-new { color: var(--sc-ink2); }
+.sc-newspace-plus { width: 26px; text-align: center; font-size: 18px; color: var(--sc-hiviz); }
+.sc-newspace-fold { align-self: flex-start; border: 0; background: transparent; color: var(--sc-ink2); font-size: 13px; cursor: pointer; padding: 2px 0; }
+.sc-newspace-count { font-size: 12.5px; color: var(--sc-ink3); }
+.sc-shelf-edit .sc-newspace-list { max-height: 260px; }
+/* On a phone the Space creator is the whole screen, × at its top right (Coy, 2026-10-18). */
+@media (max-width: 1023px) {
+  .sc-newspace-scrim { padding: 0; }
+  .sc-newspace { width: 100%; height: 100dvh; max-height: none; border: 0; border-radius: 0; box-shadow: none;
+    padding: calc(10px + env(safe-area-inset-top)) 14px calc(12px + env(safe-area-inset-bottom)); }
+  .sc-newspace-list { max-height: none; flex: 1; }
+  .sc-newspace-grow .sc-newspace-pick { flex: 1; }
+  .sc-newspace-grow { display: flex; flex-direction: column; }
+}
+
+/* Dusty's Home (Coy, 2026-10-19: "selecting the Dusty Home in the rail should open up dusty chat in
+   the main window with the right panel becoming an artifacts panel"). On /dashboard/dusty his
+   column stretches across the main window and the page is the artifacts column on the right. */
+:root { --sc-art: 360px; }
+.sc-art-col { display: flex; flex-direction: column; min-height: calc(100dvh - var(--sc-head) - var(--sc-foot)); background: var(--sc-card); }
+.sc-art-head { padding: 14px 14px 10px; border-bottom: 1px solid var(--sc-hair); display: flex; flex-direction: column; gap: 4px; }
+.sc-art-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.sc-art-chip { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--sc-hair); color: var(--sc-ink2); background: var(--sc-card); cursor: pointer; }
+.sc-art-chip[aria-selected="true"] { background: var(--sc-ink); border-color: var(--sc-ink); color: var(--sc-card); }
+.sc-art-list { flex: 1; overflow-y: auto; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
+.sc-art-card { border: 1px solid var(--sc-hair); border-radius: 8px; background: var(--sc-card); }
+.sc-art-card[data-open] { border-color: var(--sc-hair-strong); }
+.sc-art-row { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 8px 10px; cursor: pointer; background: none; border: 0; }
+.sc-art-ico { width: 30px; height: 30px; flex: none; border-radius: 6px; display: grid; place-items: center; font-size: 14px; background: var(--sc-sunk); color: var(--sc-ink2); }
+.sc-art-ico[data-kind="plan"] { background: color-mix(in srgb, var(--sc-hiviz) 16%, var(--sc-card)); color: var(--sc-hiviz-text); }
+.sc-art-ico[data-kind="table"] { background: color-mix(in srgb, var(--sc-chalk) 16%, var(--sc-card)); color: var(--sc-chalk); }
+.sc-art-ico[data-kind="words"] { background: color-mix(in srgb, var(--sc-green) 16%, var(--sc-card)); color: var(--sc-green); }
+.sc-art-thumb { width: 30px; height: 30px; flex: none; border-radius: 6px; object-fit: cover; }
+.sc-art-body { padding: 0 10px 10px; border-top: 1px solid var(--sc-hair-soft); padding-top: 8px; }
+.sc-art-back { margin: 8px 10px 12px; padding: 9px; border-radius: 8px; border: 1px solid var(--sc-hair); background: var(--sc-card); font-weight: 600; font-size: 13px; color: var(--sc-ink); cursor: pointer; }
+.sc-dusty-turn[data-flash] { animation: scTurnFlash 1.6s ease-out; border-radius: 6px; }
+@keyframes scTurnFlash { 0%, 40% { background: color-mix(in srgb, var(--sc-hiviz) 14%, transparent); } 100% { background: transparent; } }
+@media (min-width: 1024px) {
+  html[data-dusty-main][data-dusty="open"] .sc-dusty-sheet { left: var(--sc-rail-w) !important; right: var(--sc-art) !important; width: auto !important; box-shadow: none !important; animation: none; }
+  html[data-dusty-main] .sc-dusty-grip { display: none; }
+  html[data-dusty-main][data-dusty="open"] .sc-with-dusty { padding-right: 0; }
+  html[data-dusty-main][data-dusty="open"] .sc-art-col { position: fixed; top: var(--sc-head); right: 0; bottom: 0; width: var(--sc-art); min-height: 0; z-index: 40; border-left: 1px solid var(--sc-hair); }
+  html[data-dusty-main][data-dusty="open"] .sc-art-back { display: none; }
+}
+
+/* Shown only in one navigation or the other (2026-10-19: the Vendors trades moved into the drawer). */
+.sc-spaces-only { display: none !important; }
+html[data-nav="spaces"] .sc-spaces-only { display: revert !important; }
+html[data-nav="spaces"] .sc-old-nav-only { display: none !important; }
+/* A Space's way back to Home's drawer (Coy, 2026-10-19). */
+.sc-space-back { align-self: flex-start; border: 0; background: none; padding: 0 0 4px; cursor: pointer; font-size: 12px; color: var(--sc-ink3); text-align: left; }
+.sc-space-back:hover { color: var(--sc-ink); }
+/* A collection's list in the drawer, after opening a record from its list page (Coy, 2026-10-22). */
+.sc-space-find { padding: 6px 12px 4px; }
+.sc-space-find input { width: 100%; height: 32px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--sc-pencil-rule); background: var(--sc-card); color: var(--sc-ink); font-size: 13px; }
+.sc-space-open-rec { margin: 2px 6px; border-radius: 8px; background: color-mix(in srgb, var(--sc-rail-active) 70%, transparent); box-shadow: inset 2px 0 0 var(--sc-space-c, var(--sc-hiviz)); padding-bottom: 4px; }
+.sc-space-nest { padding: 0 0 2px 10px; }
+/* Threads v3 under Spaces (Claude Design "Dusty Threads", 2026-10-19): a green Call pill on every
+   size, and the channel tabs as small chips with no counts under them. */
+@media (min-width: 1024px) { html:not([data-nav="spaces"]) .sc-thread-call { display: none !important; } }
+html[data-nav="spaces"] .sc-thread-call { background: var(--sc-green) !important; border-color: var(--sc-green) !important; color: #fff !important; padding: 0 10px !important; gap: 5px; }
+html[data-nav="spaces"] .sc-ch-tab { padding: 4px 11px !important; flex: none !important; }
+html[data-nav="spaces"] .sc-ch-tab > span:first-child { font-size: 12px !important; }
+html[data-nav="spaces"] .sc-ch-sub { display: none !important; }
+
+/* Dusty's banner (DustyTicker, Coy 2026-10-21): the very top of the app, the window's full width,
+   his thoughts and background work sliding slowly by, each kind its own colour. It is part of the
+   header's height (--sc-ticker), so the rail, drawer and Dusty's column start under it. Always a dark
+   band, like a news ticker, so the colours read in every theme. */
+html[data-ticker] { --sc-ticker: 24px; }
+html[data-nav="spaces"][data-head-hide] .sc-head-wrap { transform: none; }
+.sc-ticker { height: 24px; overflow: hidden; background: #15181C; border-bottom: 1px solid #2A2F36; position: relative;
+  font-family: var(--site-manrope), 'Manrope', system-ui, sans-serif; font-size: 12px; font-weight: 500; letter-spacing: .01em; }
+.sc-ticker::before, .sc-ticker::after { content: ""; position: absolute; top: 0; bottom: 0; width: 28px; z-index: 1; pointer-events: none; }
+.sc-ticker::before { left: 0; background: linear-gradient(to right, #15181C, transparent); }
+.sc-ticker::after { right: 0; background: linear-gradient(to left, #15181C, transparent); }
+.sc-ticker-track { display: flex; width: max-content; height: 100%; animation: scTick var(--sc-tick-ms, 60s) linear infinite; }
+.sc-ticker:hover .sc-ticker-track, .sc-ticker:focus-within .sc-ticker-track { animation-play-state: paused; }
+.sc-ticker-run { display: flex; align-items: center; flex: none; }
+@keyframes scTick { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+.sc-tick { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 22px 0 0; background: none; border: 0; cursor: pointer; white-space: nowrap; color: var(--tk); }
+.sc-tick::after { content: "◆"; margin-left: 16px; font-size: 7px; color: #4A515B; }
+.sc-tick-k { font-size: 9.5px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; padding: 1px 5px; border-radius: 3px;
+  color: #15181C; background: var(--tk); }
+.sc-tick-t { color: var(--tk); }
+.sc-tick-at { color: #7D8590; font-size: 11px; }
+.sc-tick:hover .sc-tick-t { text-decoration: underline; }
+.sc-tick[data-kind="thought"] { --tk: #4DB88C; }
+.sc-tick[data-kind="dream"] { --tk: #B49AF0; }
+.sc-tick[data-kind="reading"] { --tk: #6FA8F2; }
+.sc-tick[data-kind="plans"] { --tk: #5FC9D6; }
+.sc-tick[data-kind="mail"] { --tk: #E8C35A; }
+.sc-tick[data-kind="proposal"] { --tk: #F0A35E; }
+.sc-tick[data-kind="reminder"] { --tk: #F07F5E; }
+.sc-tick[data-kind="warn"] { --tk: #F26B6B; }
+@media (prefers-reduced-motion: reduce) {
+  .sc-ticker { overflow-x: auto; scrollbar-width: none; }
+  .sc-ticker-track { animation: none; }
+  .sc-ticker-run[aria-hidden="true"] { display: none; }
+}

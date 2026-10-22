@@ -7,7 +7,7 @@
  * left (project type, cost → price with the margin, the sub split, which
  * warranty and contract load), the document in the middle. The budget is the
  * only pricer — priceDraft() runs the engine's budget() and rounds the
- * customer's price up to the next $50 (the proposal only). Every change is
+ * customer's price up to the next whole dollar (the proposal only). Every change is
  * saved to the draft. Preview shows the document as the customer gets it and
  * sends it (migration 075): sending freezes the draft as a final version and
  * makes its link; every opening of the link is listed.
@@ -442,7 +442,7 @@ export function Proposal({ jobId }: { jobId: string }) {
             <b style={{ color: T.ink2 }}>{shownNumber}{isFinal || finalShown ? " · final" : " · draft"}</b>
             {shownNumber !== vm.number && <>{" · "}sent as {vm.number}</>}
             {" · "}{vm.choices ? `${vm.choices.list.length} options · ${vm.choices.list.map((c) => `${c.label} ${c.total !== null ? usd0(c.total) : "—"}`).join(" · ")}`
-              : ok ? `${usd(ok.total)}${ok.rounded !== ok.calc ? ` (rounded up from ${usd(ok.calc)})` : ""}` : `no price yet${!vm.priced.ok ? ` — ${vm.priced.blocked[0]}` : ""}`}
+              : ok ? `${usd(ok.total)}${ok.rounded !== ok.calc ? ` (${usd(ok.rounded)} rounded up from ${usd(ok.calc)}${ok.tax ? `, plus ${usd(ok.tax)} tax` : ""})` : ""}` : `no price yet${!vm.priced.ok ? ` — ${vm.priced.blocked[0]}` : ""}`}
             {/* Sent / opened: on the Summary and in Preview. */}
           </div>
           {!wide && <div className="flex items-center gap-2 flex-wrap" style={{ padding: "6px 12px 0" }}>{actions}</div>}

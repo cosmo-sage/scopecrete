@@ -18,6 +18,9 @@ import { PricingDefaults } from "@/components/v34/money-settings";
 import { ProjectTypes } from "@/components/v34/project-types";
 import { PriceImport } from "@/components/v34/price-import";
 import { ReceiptImport } from "@/components/v34/receipt-import";
+import { usePref } from "@/lib/v34/prefs";
+import { sectionGroups } from "@/lib/section-groups";
+import { COST_TYPES, COST_TYPE_LABEL, type CostType } from "@/lib/cost-cards";
 import { call, numify, type Card, type Vendor } from "@/components/v34/cost-cards";
 
 export function CostBookSettings() {
@@ -49,6 +52,7 @@ export function CostBookSettings() {
       <SettingsTitle title="Cost book" note={<>Defaults for new budgets and bringing prices into the <Link href="/dashboard/price-book" style={{ color: T.chalk }}>Price book</Link>.</>} />
       {note && <div className="mb-3 rounded px-3 py-2 flex gap-2" style={{ fontSize: F.sm, background: T.greenDim }}><span style={{ flex: 1 }}>{note}</span><button onClick={() => setNote(null)} aria-label="Dismiss">×</button></div>}
       {err && <div className="mb-3 rounded px-3 py-2" style={{ fontSize: F.sm, color: T.red, background: T.redDim }}>{err}</div>}
+      <SectionGroupsBlock />
       <SettingsBlock title="Import"
         note={<>Undo an import on <Link href="/dashboard/more/logs?tab=pricebook" style={{ color: T.chalk }}>Logs → Price book</Link>.</>}>
         <div className="flex flex-col gap-2">
@@ -76,5 +80,24 @@ export function CostBookSettings() {
           onDone={(m) => { setImporting(null); setNote(m); setTick((n) => n + 1); }} />
       )}
     </div>
+  );
+}
+
+/** Which cost groups every budget section starts with (Coy, 2026-10-21). */
+function SectionGroupsBlock() {
+  const [pref, setPref] = usePref<unknown>("section_groups", null);
+  const on = sectionGroups(pref);
+  const toggle = (t: CostType) => setPref(on.includes(t) ? on.filter((x) => x !== t) : COST_TYPES.filter((x) => x === t || on.includes(x)));
+  return (
+    <SettingsBlock title="Section cost groups" note="The groups every budget section shows, even before it has items. Job totals break down the same way.">
+      <div className="flex flex-wrap gap-2 mt-2">
+        {COST_TYPES.map((t) => (
+          <label key={t} className="flex items-center gap-1.5 rounded px-2.5" style={{ height: 32, border: `1px solid ${T.hair}`, fontSize: F.sm, cursor: "pointer" }}>
+            <input type="checkbox" checked={on.includes(t)} onChange={() => toggle(t)} style={{ accentColor: T.chalk }} />
+            {COST_TYPE_LABEL[t]}
+          </label>
+        ))}
+      </div>
+    </SettingsBlock>
   );
 }

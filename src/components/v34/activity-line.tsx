@@ -249,6 +249,115 @@ export function ActivityLine({ onWorking, onReader, inline }: {
   );
 }
 
+/** What kind of line a ticker item is — each its own colour (Coy, 2026-10-21: "different colors for
+ *  different kinds of thoughts: dreams, activities"). */
+export type TickKind = "dream" | "thought" | "reading" | "mail" | "proposal" | "reminder" | "warn" | "plans";
+export function tickKind(it: { id: string; kind: string; tone?: string }): TickKind {
+  if (it.tone === "warn") return "warn";
+  if (it.kind === "musing") return it.id.startsWith("dream-") ? "dream" : "thought";
+  if (it.kind === "email" || it.kind === "bid") return "mail";
+  if (it.kind === "proposal") return "proposal";
+  if (it.kind === "reminder") return "reminder";
+  return "reading";
+}
+export const TICK_LABEL: Record<TickKind, string> = {
+  dream: "Dream", thought: "Thought", reading: "Reading", mail: "Mail", proposal: "Proposal", reminder: "Due", warn: "Needs you", plans: "Plans",
+};
+/** The banner's pace, pixels a second — slow, to read as it goes by. */
+const TICK_PX_S = 45;
+
+/** Dusty's thoughts as a banner across the very top of the app (Coy, 2026-10-21: "moved to the very
+ *  top of the site above everything else on a little row that is the full width of the page. It can
+ *  scroll across slowly as a banner"). Everything of the last day and his recent thoughts and dreams,
+ *  one after another, each in its kind's colour; it pauses under the pointer, a tap opens what it
+ *  came from (a thought opens Dusty on it), and a still list scrolls by hand under reduced motion. */
+export function DustyTicker({ onReader }: { onReader?: (s: "reading" | "warn" | "idle") => void }) {
+  const ocr = usePlanOcr();
+  const [data, setData] = useState<Activity | null>(null);
+  // Items of the last day — decided when the data arrives, not in render.
+  const [news, setNews] = useState<Item[]>([]);
+  const router = useRouter();
+  const trackRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    let off = false;
+    let last = 0;
+    const load = (force = false) => {
+      if (document.visibilityState !== "visible") return;
+      if (!force && !shouldPoll(last)) return;
+      last = Date.now();
+      fetch("/api/activity").then((r) => (r.ok ? r.json() : null))
+        .then((d: Activity | null) => {
+          if (off || !d) return;
+          const cutoff = Date.now() - DAY_MS;
+          setData(d);
+          setNews(d.items.filter((i) => ON_LINE(i) && (i.kind === "running" || i.kind === "reminder" || new Date(i.at).getTime() > cutoff)));
+        }).catch(() => { /* keep the last */ });
+    };
+    const now = () => load(true);
+    now();
+    const t = setInterval(() => load(), POLL_MS);
+    const unBack = onBack(now);
+    document.addEventListener("visibilitychange", now);
+    return () => { off = true; clearInterval(t); unBack(); document.removeEventListener("visibilitychange", now); };
+  }, []);
+  useEffect(() => {
+    document.documentElement.dataset.ticker = "on";
+    return () => { delete document.documentElement.dataset.ticker; };
+  }, []);
+
+  const running = news.some((i) => i.kind === "running");
+  const readerState = data?.pinned ? "warn" : running || ocr.running ? "reading" : "idle";
+  useEffect(() => { onReader?.(readerState); }, [readerState, onReader]);
+
+  type Tick = { id: string; kind: TickKind; text: string; at: string | null; go: () => void };
+  const toLog = () => router.push("/dashboard/more/logs?tab=dusty");
+  const talkAbout = (it: Item) => {
+    if (it.contact_id) router.push(`/dashboard/messages/${it.contact_id}`);
+    setTimeout(() => {
+      window.dispatchEvent(new Event("sc:dusty-open"));
+      setTimeout(() => window.dispatchEvent(new CustomEvent("sc:dusty-draft", { detail: { text: `About your thought — "${it.summary}" — ` } })), 300);
+    }, it.contact_id ? 700 : 0);
+  };
+  const ticks: Tick[] = [];
+  if (data?.pinned) ticks.push({ id: "pinned", kind: "warn", text: data.pinned.summary, at: null, go: toLog });
+  if (ocr.running) ticks.push({ id: "ocr", kind: "plans", text: ocr.label, at: null, go: () => {} });
+  for (const it of news) {
+    const to = it.href ?? (it.contact_id ? `/dashboard/messages/${it.contact_id}` : null);
+    ticks.push({ id: it.id, kind: tickKind(it), text: it.summary, at: it.kind === "reminder" ? null : it.at, go: to ? () => router.push(to) : toLog });
+  }
+  for (const m of (data?.musings ?? []).slice(0, 12)) ticks.push({ id: m.id, kind: tickKind(m), text: m.summary, at: m.at, go: () => talkAbout(m) });
+  if (!ticks.length) {
+    ticks.push({ id: "idle", kind: "thought", at: null, go: toLog,
+      text: !data ? "…" : data.last_read_at ? `All caught up · last read ${ago(data.last_read_at)}${data.waiting ? ` · ${data.waiting} waiting` : ""}` : "Nothing read yet" });
+  }
+  const sig = ticks.map((t) => t.id).join("|");
+
+  // One pass of the track takes its width at TICK_PX_S; the copy after it makes the loop seamless.
+  useEffect(() => {
+    const el = trackRef.current;
+    if (!el) return;
+    const half = el.scrollWidth / 2;
+    el.style.setProperty("--sc-tick-ms", `${Math.max(20_000, Math.round((half / TICK_PX_S) * 1000))}ms`);
+  }, [sig]);
+
+  const row = (copy: number) => ticks.map((t) => (
+    <button key={`${copy}-${t.id}`} type="button" className="sc-tick" data-kind={t.kind} onClick={t.go}
+      tabIndex={copy ? -1 : 0} aria-hidden={copy ? true : undefined} title={t.text}>
+      <span className="sc-tick-k">{TICK_LABEL[t.kind]}</span>
+      <span className="sc-tick-t">{t.text}</span>
+      {t.at && <span className="sc-tick-at">{relTime(t.at)}</span>}
+    </button>
+  ));
+  return (
+    <div className="sc-ticker" role="marquee" aria-label="What Dusty is doing and thinking">
+      <div ref={trackRef} className="sc-ticker-track" key={sig}>
+        <div className="sc-ticker-run">{row(0)}</div>
+        <div className="sc-ticker-run" aria-hidden="true">{row(1)}</div>
+      </div>
+    </div>
+  );
+}
+
 /** Logs → Dusty (Coy, 2026-10-10: "The history of dusty's thoughts should be
  *  in the logs page instead of being a drop down from the header"): what was
  *  the header's drop-down — the reader's warning, his thoughts (tap one to talk

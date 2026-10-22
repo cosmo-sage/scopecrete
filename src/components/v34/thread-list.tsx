@@ -37,7 +37,6 @@ import Link from "next/link";
 import { T, F, disp, eyebrow, nums, clip, relTime } from "@/lib/v34/tokens";
 import { EmptyState, MenuButton, SearchBubble, SearchToggle, Sheet, DustyPageButton } from "@/components/v34/primitives";
 import { JOB_TYPE_LABEL } from "@/lib/jobs/stages";
-import { TRAY_PX, ACTIONS_PX, decideSwipe, isHorizontal, clampDrag } from "@/lib/swipe";
 import { BucketPicker, BUCKETS, SUGGESTS, type Bucket, type Subtype } from "@/components/v34/bucket-picker";
 import { BUCKET } from "@/lib/v34/tokens";
 import { useThreads } from "@/components/v34/threads-ctx";
@@ -148,7 +147,7 @@ const WHY_EMPTY: Record<string, string> = {
   all: "Nobody has called or texted yet — or everyone is archived or spam.",
   archived: "Nothing is archived. Select threads and tap Archive — they come back on their own if that number calls or texts again.",
   unsorted: "Everyone who has called or texted is in a bucket.",
-  customers: "Nobody is filed as a customer yet. In Unsorted, swipe a row right and tap Customer.",
+  customers: "Nobody is filed as a customer yet. In Unsorted, open a row with ▾ and tap Customer.",
   vendors: "Nobody is filed as a vendor yet — subs, suppliers, rental yards and people looking for work go here.",
   personal: "Nobody is filed as personal.",
   spam: "Nothing is filed as spam.",
@@ -321,7 +320,7 @@ function AutoNameStrip({ a, name, busy, onName }: {
 function BucketTag({ label, c, state }: { label: string; c: string; state: "confirmed" | "auto" | "suggested" }) {
   const title = state === "confirmed" ? "Confirmed by you"
     : state === "auto" ? "Filed by Dusty — Keep or undo it in the row"
-    : "Dusty's guess — swipe left to accept, right for all four";
+    : "Dusty's guess — ▾ to file them";
   return (
     <span className="shrink-0 rounded" title={title}
       style={{ ...eyebrow, lineHeight: "15px", padding: "0 4px", letterSpacing: ".06em",
@@ -373,7 +372,7 @@ function subLine(t: Thread): string {
   return [t.company, t.person_role, (t.numbers ?? 0) > 1 ? `${t.numbers} numbers` : null, t.has_email ? "email" : null].filter(Boolean).join(" · ");
 }
 
-function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, onName, onBucket, subtypes, deciding, tray, onTray, onArchive, chipShown, selected, boxTint }: {
+function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, onName, onBucket, subtypes, deciding, chipShown, selected, boxTint }: {
   t: Thread; first: boolean; expanded: boolean; onToggle: () => void; onOpen: () => void;
   /** This contact is the one open beside the list. */
   selected: boolean;
@@ -381,11 +380,6 @@ function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, onName, onB
   boxTint?: string;
   /** The open chip already says the bucket (Coy, 2026-09-28: the tag is redundant there). */
   chipShown: boolean;
-  /** Swipe right: the four buckets; swipe left: Archive. One row at a time. */
-  tray: "buckets" | "actions" | null;
-  onTray: (side: "buckets" | "actions" | null) => void;
-  /** Archive this thread (asks why first). */
-  onArchive: () => void;
   onDecide: (proposalId: string, body: Record<string, unknown>) => void;
   onName: (claimId: string, action: "keep" | "undo") => void;
   onBucket: (contactId: string, bucket: Bucket | null, subtype?: string | null) => void;
@@ -397,7 +391,7 @@ function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, onName, onB
   const live = calls.length ? liveCallFor(calls, t.contact_id) ?? liveCallFor(calls, null, t.phone) : null;
   const badge = t.bucket ? BUCKETS.find((b) => b.k === t.bucket) : null;
   // Dusty's guess, shown on the collapsed row so the list can be read without
-  // opening anything, and marked in the buckets a right swipe opens.
+  // opening anything, and marked in the buckets under ▾.
   const guess = !t.bucket && t.proposal ? SUGGESTS[t.proposal.classification] ?? null : null;
   const guessB = guess ? BUCKETS.find((b) => b.k === guess)! : null;
   const when = relTime(t.occurred_at);
@@ -409,33 +403,9 @@ function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, onName, onB
     : t.job_type_hint ? { l: JOB_TYPE_LABEL[t.job_type_hint] ?? t.job_type_hint, sure: false }
     : null;
 
-  // Swipe: right opens the buckets, left opens Archive (Coy, 2026-10-05; Spam out 2026-10-10).
-  // touch-action: pan-y leaves vertical scrolling to the browser.
-  const [drag, setDrag] = useState<number | null>(null);
+  // Rows don't swipe (Coy, 2026-10-17: "I'm still seeing the swipable rows. That needs to be
+  // removed"): a swipe opens the Spaces drawer; filing and Archive are under ▾ and ⋯.
   const [rebucket, setRebucket] = useState(false);
-  const start = React.useRef<{ x: number; y: number; w: number; on: boolean } | null>(null);
-  const swipeable = !expanded;
-  const rest = tray === "buckets" ? TRAY_PX : tray === "actions" ? -ACTIONS_PX : 0;
-  const offset = drag ?? rest;
-  const onTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
-    if (!swipeable) return;
-    const p = e.touches[0];
-    start.current = { x: p.clientX, y: p.clientY, w: e.currentTarget.clientWidth, on: false };
-  };
-  const onTouchMove = (e: React.TouchEvent) => {
-    const st = start.current; if (!st) return;
-    const p = e.touches[0];
-    const dx = p.clientX - st.x + rest, dy = p.clientY - st.y;
-    if (!st.on) { if (!isHorizontal(p.clientX - st.x, dy)) return; st.on = true; }
-    setDrag(clampDrag(dx));
-  };
-  const onTouchEnd = () => {
-    const st = start.current; start.current = null;
-    if (!st?.on || drag === null) { setDrag(null); return; }
-    const r = decideSwipe(drag);
-    setDrag(null);
-    onTray(r === "open" ? "buckets" : r === "actions" ? "actions" : null);
-  };
   const isVoicemail = t.summary_source === "quo_voicemail";
   // The role tag says what the thread doesn't already: a customer's other
   // person or a sub in Customer / Vendor, everyone in a thread Coy made.
@@ -446,42 +416,12 @@ function ThreadRow({ t, first, expanded, onToggle, onOpen, onDecide, onName, onB
 
   return (
     <div className="relative overflow-hidden" style={{ borderTop: first ? "none" : `1px solid ${T.hair}` }}>
-      {/* Behind the row, left: the four buckets (swipe right). */}
-      {offset > 0 && (
-        <div className="absolute inset-y-0 left-0 flex" style={{ width: TRAY_PX }} aria-label="File as">
-          {BUCKETS.map((b) => (
-            <button key={b.k} disabled={deciding} onClick={() => { onTray(null); onBucket(t.contact_id, b.k, guess === b.k && t.proposal?.classification === "sub" ? "subcontractor" : null); }}
-              className="flex-1 flex flex-col items-center justify-center gap-0.5"
-              style={{ background: b.c, color: T.card, fontFamily: disp, fontSize: F.micro, fontWeight: 700, textTransform: "uppercase",
-                       letterSpacing: 0, boxShadow: guess === b.k ? "inset 0 0 0 3px rgba(255,255,255,.85)" : undefined }}>
-              {b.l}
-              {guess === b.k && <span style={{ fontSize: F.micro, opacity: 0.9 }}>Dusty</span>}
-            </button>
-          ))}
-        </div>
-      )}
-      {/* Behind the row, right: Archive (swipe left; Coy, 2026-10-05 — Spam left it 2026-10-10, it is in the buckets). */}
-      {offset < 0 && (
-        <div className="absolute inset-y-0 right-0 flex" style={{ width: ACTIONS_PX }} aria-label="Archive">
-          <button onClick={() => { onTray(null); onArchive(); }}
-            className="flex-1 flex flex-col items-center justify-center gap-1"
-            style={{ background: T.ink2, color: T.card, fontFamily: disp, fontSize: F.micro, fontWeight: 700, textTransform: "uppercase" }}>
-            <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" aria-hidden="true"><rect x="2.5" y="3.5" width="15" height="4" /><path d="M4 7.5v9h12v-9M8 11h4" /></svg>
-            Archive
-          </button>
-        </div>
-      )}
-      <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} onTouchCancel={onTouchEnd}
-        style={{ background: T.card, position: "relative", touchAction: "pan-y",
-                 transform: offset ? `translateX(${offset}px)` : undefined,
-                 transition: drag === null ? "transform .18s ease-out" : "none" }}>
-      {/* A grip at each end says the row swipes — touch screens only (Coy, 2026-10-09). */}
-      {swipeable && <><span className="sc-swipe-grip" style={{ left: 1 }} aria-hidden="true" /><span className="sc-swipe-grip" style={{ right: 1 }} aria-hidden="true" /></>}
+      <div style={{ background: T.card, position: "relative" }}>
       {/* Threads v2 row: initials, name, role tag, age · who they are · the latest.
           A tap opens them; ▾ (only while there is something to decide about
           who they are) drops down the filing tools. */}
       <div className="flex items-stretch" style={{ borderLeft: `3px solid ${selected ? T.hiviz : "transparent"}`, background: selected ? T.hivizDim : "transparent" }}>
-      <button onClick={() => (tray ? onTray(null) : onOpen())} aria-current={selected ? "true" : undefined}
+      <button onClick={onOpen} aria-current={selected ? "true" : undefined}
         className="flex-1 min-w-0 flex gap-2.5 items-start text-left" style={{ padding: "9px 4px 9px 7px", cursor: "pointer" }}>
         <InitialsBox name={t.name_is_phone ? null : t.display_name} on={selected} size={30} color={boxTint} />
         <span style={{ minWidth: 0, flex: 1, display: "block" }}>
@@ -699,8 +639,7 @@ export function ThreadList({ folded = false }: { folded?: boolean }) {
   const [saidBy, setSaidBy] = useState<{ q: string; ids: Set<string> } | null>(null);
   const findQ = find.trim().toLowerCase();
   const [openRow, setOpenRow] = useState<string | null>(null);
-  // Swipe tray: one row at a time. Toast: what was just filed, with Undo.
-  const [trayRow, setTrayRow] = useState<{ id: string; side: "buckets" | "actions" } | null>(null);
+  // Toast: what was just filed, with Undo.
   const [toast, setToast] = useState<{ contactId: string; label: string } | null>(null);
   const [deciding, setDeciding] = useState(false);
   // Archive (migration 066): pick rows, archive them with Undo; the Archived view brings them back.
@@ -781,7 +720,7 @@ export function ThreadList({ folded = false }: { folded?: boolean }) {
     }
   }, []);
 
-  /** File from the row or a swipe, then offer Undo for five seconds. */
+  /** File from the row, then offer Undo for five seconds. */
   const fileAndToast = useCallback((contactId: string, bucket: Bucket | null, subtype?: string | null) => {
     void bucketDecide(contactId, bucket, subtype);
     if (bucket) {
@@ -1065,7 +1004,7 @@ export function ThreadList({ folded = false }: { folded?: boolean }) {
             )}
             {/* Select, as an icon beside sort and search (Coy, 2026-10-05). */}
             {!loading && !error && visible.length > 0 && (
-              <button onClick={() => { if (selecting) { setSelecting(false); setPicked(new Set()); } else { setSelecting(true); setPicked(new Set()); setOpenRow(null); setTrayRow(null); } }}
+              <button onClick={() => { if (selecting) { setSelecting(false); setPicked(new Set()); } else { setSelecting(true); setPicked(new Set()); setOpenRow(null); } }}
                 aria-label="Select threads" aria-pressed={selecting} title="Select threads to archive"
                 className="shrink-0 flex items-center justify-center rounded" style={{ width: 26, height: 26, border: `1px solid ${selecting ? T.hiviz : T.hairStrong}`, background: selecting ? T.hivizDim : T.card, cursor: "pointer" }}>
                 <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke={selecting ? T.hiviz : T.ink2} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -1209,9 +1148,7 @@ export function ThreadList({ folded = false }: { folded?: boolean }) {
               subtypes={subtypes} deciding={deciding}
               chipShown={!q && isSystemKey(filter) && filter !== "all"}
               boxTint={boxColor(filter, colors, t.bucket)}
-              tray={trayRow?.id === t.contact_id ? trayRow.side : null}
-              onTray={(side) => setTrayRow(side ? { id: t.contact_id, side } : null)}
-              onArchive={() => setAsking([t.contact_id])} />
+ />
           ))}
         </div>
       )}

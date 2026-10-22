@@ -22,7 +22,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { T, F, disp, eyebrow, clip, relTime, strong, BUCKET } from "@/lib/v34/tokens";
 import { Composer } from "@/components/v34/composer";
 import { DA, MergeSheet, Timeline, formatPhone, type MergeInfo, type Note, type ThreadMessage } from "@/components/v34/conversation";
@@ -131,7 +131,11 @@ export function PersonView({ person, messages, channels, onReload, onMerge, back
   const isVendor = c.bucket === "vendor";
   const phone = c.phones[0] ?? null;
   const title = c.name ?? formatPhone(phone);
-  const [tab, setTab] = useState<string>("overview");
+  // A vendor's Space drawer links each tab by ?tab= (Coy, 2026-10-18).
+  const tabParam = useSearchParams().get("tab");
+  const [tab, setTab] = useState<string>(tabParam ?? "overview");
+  const [tabSeen, setTabSeen] = useState(tabParam);
+  if (tabSeen !== tabParam) { setTabSeen(tabParam); setTab(tabParam ?? "overview"); }
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<{ text: string; href?: string; link?: string } | null>(null);
   const [filing, setFiling] = useState(false);
@@ -215,13 +219,13 @@ export function PersonView({ person, messages, channels, onReload, onMerge, back
     { label: c.bucket ? "Change bucket" : "File as…", onClick: () => setFiling(true) },
     { label: "Same person as…", onClick: () => onMerge() },
     isVendor
-      ? <ArchiveButton key="del" kind="contact" id={c.id} action="delete" what={title} then="/dashboard/vendors" style={{ ...menuItem, color: T.red }}>Delete vendor</ArchiveButton>
+      ? <ArchiveButton key="del" kind="contact" id={c.id} action="delete" vendor what={title} then="/dashboard/vendors" style={{ ...menuItem, color: T.red }}>Delete vendor</ArchiveButton>
       : <ArchiveButton key="arch" kind="contact" id={c.id} action="archive" what={title} then="/dashboard/messages" style={menuItem}>Archive</ArchiveButton>,
   ];
 
   const tabs: Array<[string, string]> = [
     ["overview", "Overview"],
-    ...(extra?.tabs ?? []).map((t) => [t.key, t.label] as [string, string]),
+    ...(isVendor ? [] : [["steps", `Next steps ${openSteps}`] as [string, string]]),
     ["steps", `Next steps ${openSteps}`],
     ["jobs", `Jobs ${jobCount}`],
     ["threads", `Threads ${theirThreads.length + 1}`],
@@ -335,17 +339,20 @@ export function PersonView({ person, messages, channels, onReload, onMerge, back
       {tab === "overview" && (
         <OverviewGrid wide={wide} meta={meta} side={side()} sideCompact={side(true)}>
           {(person.possible_duplicates?.length ?? 0) > 0 && <SamePerson person={person} onMerge={onMerge} className="" />}
-          <DustyRead person={person} />
+          {/* A vendor's Overview has no Where it stands or Next steps (Coy, 2026-10-18). */}
+          {!isVendor && <DustyRead person={person} />}
           <section>
             <SectionHead title={isVendor ? "Their contact details" : "Contact"} />
             <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))" }}>
               <ContactCard c={{ id: c.id, name: c.name, role: c.subtype_label, methods, href: threadHref }} />
             </div>
           </section>
-          <section>
-            <SectionHead title="Next steps" />
-            <NextSteps contactId={c.id} tasks={person.tasks} onChanged={onReload} onError={setError} />
-          </section>
+          {!isVendor && (
+            <section>
+              <SectionHead title="Next steps" />
+              <NextSteps contactId={c.id} tasks={person.tasks} onChanged={onReload} onError={setError} />
+            </section>
+          )}
           {jobsSection}
           <section>
             <SectionHead title="Threads they're in" />

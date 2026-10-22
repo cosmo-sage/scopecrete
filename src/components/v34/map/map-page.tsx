@@ -76,7 +76,7 @@ function LayerPanel({ data, f, setF }: { data: MapPinsResponse | null; f: MapFil
   return (
     <div className="p-3 flex flex-col gap-1" style={{ fontSize: F.sm }}>
       {data && (
-        <div style={{ padding: "0 2px 8px", fontSize: 12.5, color: T.ink2 }}>
+        <div style={{ padding: "0 34px 8px 2px", fontSize: 12.5, color: T.ink2 }}>
           <b style={{ color: T.ink }}>{data.pins.length}</b> pinned{data.unmapped.customers ? <> · <b style={{ color: T.ink }}>{data.unmapped.customers}</b> customers with no address</> : null}
         </div>
       )}
@@ -337,6 +337,10 @@ export function MapPage() {
     const t = setTimeout(() => { try { const s = localStorage.getItem(FILTERS_KEY); if (s) setFState(cleanFilters(JSON.parse(s))); } catch { /* none kept */ } }, 0);
     return () => clearTimeout(t);
   }, []);
+  // The desktop's Layers panel folds to a strip (Coy, 2026-10-22: "This panel needs to be colapsable"), kept on the device.
+  const [foldedAside, setFoldedAside] = useState(false);
+  useEffect(() => { const t = setTimeout(() => { try { setFoldedAside(localStorage.getItem("sc:map-layers-folded") === "1"); } catch { /* none kept */ } }, 0); return () => clearTimeout(t); }, []);
+  const foldAside = (v: boolean) => { setFoldedAside(v); try { localStorage.setItem("sc:map-layers-folded", v ? "1" : "0"); } catch { /* not kept */ } };
   const setF = (n: MapFilters) => { setFState(n); try { localStorage.setItem(FILTERS_KEY, JSON.stringify(n)); } catch { /* not kept */ } };
 
   const load = useCallback(() => call("/api/map/pins").then((d) => { setData(d as MapPinsResponse); setErr(null); }).catch((e) => setErr(e instanceof Error ? e.message : String(e))), []);
@@ -613,11 +617,19 @@ export function MapPage() {
       )}
 
       <div className="flex-1 flex" style={{ minHeight: 0, position: "relative", overflow: "clip" }}>
-        {wide && (
-          <aside style={{ width: 300, flexShrink: 0, background: T.card, borderRight: `1px solid ${T.hair}`, overflowY: "auto", opacity: clip ? 0.45 : 1, pointerEvents: clip ? "none" : undefined }} aria-hidden={!!clip}>
+        {wide && (foldedAside ? (
+          <aside style={{ width: 40, flexShrink: 0, background: T.card, borderRight: `1px solid ${T.hair}`, display: "flex", flexDirection: "column", alignItems: "center", paddingTop: 8, opacity: clip ? 0.45 : 1, pointerEvents: clip ? "none" : undefined }} aria-hidden={!!clip}>
+            <button type="button" onClick={() => foldAside(false)} title="Show layers and filters" aria-label="Show layers and filters"
+              style={{ width: 30, height: 30, borderRadius: 6, border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink, cursor: "pointer", fontSize: 15 }}>»</button>
+            <span style={{ writingMode: "vertical-rl", marginTop: 10, fontFamily: disp, fontSize: 12, fontWeight: 600, letterSpacing: ".12em", textTransform: "uppercase", color: T.ink3 }}>Layers</span>
+          </aside>
+        ) : (
+          <aside style={{ width: 300, flexShrink: 0, background: T.card, borderRight: `1px solid ${T.hair}`, overflowY: "auto", position: "relative", opacity: clip ? 0.45 : 1, pointerEvents: clip ? "none" : undefined }} aria-hidden={!!clip}>
+            <button type="button" onClick={() => foldAside(true)} title="Hide layers and filters" aria-label="Hide layers and filters"
+              style={{ position: "absolute", top: 8, right: 8, zIndex: 2, width: 28, height: 28, borderRadius: 6, border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink, cursor: "pointer", fontSize: 15 }}>«</button>
             {layersBody}
           </aside>
-        )}
+        ))}
         <div className="flex-1 relative" style={{ minWidth: 0, isolation: "isolate", overflow: "clip" }}>
           <MapView view={view} onView={(v) => { if (clip?.step !== "job") setView(v); }} mode={clip ? "sat" : mode} provider={peek && clip?.step === "frame" ? drawnProvider("google", googleOn !== false, false) : drawnProvider(readMapProvider(providerPref), googleOn !== false, !!clip)} overlay={overlay} onSize={setSize}
             onBackgroundTap={() => { if (!clip) setSel(null); }}>

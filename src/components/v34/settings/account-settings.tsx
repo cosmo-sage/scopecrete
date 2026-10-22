@@ -3,7 +3,8 @@
 /**
  * Settings → Account: you (name and phone — they go on the proposals you
  * prepare — email, organization and role), Switch company for someone in two
- * orgs or more (Coy, 2026-10-09), Install the app, and Sign out.
+ * orgs or more (Coy, 2026-10-09), the tour and sample data (2026-10-22), Install the app, and
+ * Sign out.
  */
 
 import React from "react";
@@ -13,6 +14,8 @@ import { YouSection } from "@/components/v34/org-settings";
 import { InstallApp } from "@/components/v34/install-app";
 import { switchRows } from "@/lib/org-switch";
 import { SettingsBlock, SettingsTitle } from "@/components/v34/settings/parts";
+import { TourAgain } from "@/components/v34/tour";
+import { SampleData } from "@/components/v34/settings/sample-data";
 
 export function AccountSettings() {
   const { me, reload } = useMe();
@@ -46,6 +49,14 @@ export function AccountSettings() {
           </div>
         </SettingsBlock>
       )}
+
+      <SettingsBlock title="Tour" note="The walk-through that showed the first time you signed in.">
+        <TourAgain />
+      </SettingsBlock>
+
+      <SettingsBlock title="Sample data" note="Practice records for a new company, each marked sample.">
+        <SampleData />
+      </SettingsBlock>
 
       <div className="flex flex-col">
         <InstallApp />

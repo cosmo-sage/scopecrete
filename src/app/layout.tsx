@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 // Fonts are self-hosted from src/fonts (latin, from Google Fonts) so a build
 // never downloads them — a failed fetch once failed a production deploy.
 import localFont from "next/font/local";
+import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 
 const outfit = localFont({
@@ -82,10 +83,11 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: "try{document.documentElement.dataset.theme=localStorage.getItem('sc-theme')||'site-office'}catch(e){}" }} />
         {/* Dusty's thought line switched off (Settings → Dusty (AI)): the header is
             one row from the first paint, so nothing jumps as the app loads. */}
-        <script dangerouslySetInnerHTML={{ __html: "try{var p=JSON.parse(localStorage.getItem('sc:prefs')||'{}');if((p.activity_line_phone===undefined?p.activity_line:p.activity_line_phone)===false)document.documentElement.dataset.activityPhone='off';if(p.rail_icons===true)document.documentElement.dataset.rail='icons'}catch(e){}" }} />
+        <script dangerouslySetInnerHTML={{ __html: "try{var p=JSON.parse(localStorage.getItem('sc:prefs')||'{}');if((p.activity_line_phone===undefined?p.activity_line:p.activity_line_phone)===false)document.documentElement.dataset.activityPhone='off';if(p.rail_icons===true)document.documentElement.dataset.rail='icons';if(p.new_nav!==false&&location.pathname.indexOf('/dashboard')===0){document.documentElement.dataset.nav='spaces';if(p.spaces_folded===true)document.documentElement.dataset.drawer='folded'}}catch(e){}" }} />
       </head>
       <body className="font-sans antialiased">
         {children}
+        <Analytics />
       </body>
     </html>
   );

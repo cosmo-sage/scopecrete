@@ -21,7 +21,7 @@ import { readWebsites, writeWebsite } from "@/lib/vendor-website-server";
  */
 
 export const dynamic = "force-dynamic";
-const COLS = "id, name, company_name, contact_subtype, contact_type, phone, email, address, service_area, classification_confirmed_at, auto_classified_at, status_summary";
+const COLS = "id, name, company_name, customer_id, contact_subtype, contact_type, phone, email, address, service_area, classification_confirmed_at, auto_classified_at, status_summary";
 
 export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
@@ -35,6 +35,20 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   const v = missing091(first.error) ? ((await one(COLS)) as unknown as One).data : first.data;
   if (!v) return applyCookies(NextResponse.json({ error: "No such vendor." }, { status: 404 }));
   const website = (await readWebsites(supabase, orgId, [id])).get(id) ?? null;
+
+  // The vendor's account (a customers row, relation vendor or sub) and the people on it — Coy, 2026-10-21:
+  // "a vendor account will have contacts inside it just like a customer account".
+  const accountId = (v.customer_id as string | null) ?? null;
+  const [{ data: acct }, { data: folks }] = accountId ? await Promise.all([
+    supabase.from("customers").select("id, name, relation, primary_contact_id").eq("org_id", orgId).eq("id", accountId).maybeSingle(),
+    supabase.from("contacts").select("id, name, phone, email, role, contact_type").eq("org_id", orgId).eq("customer_id", accountId)
+      .is("merged_into_contact_id", null).is("archived_at", null).limit(50),
+  ]) : [{ data: null }, { data: null }];
+  const account = acct as { id: string; name: string | null; relation: string; primary_contact_id: string | null } | null;
+  const people = ((folks ?? []) as Array<Record<string, unknown>>).map((x) => ({
+    id: x.id as string, name: (x.name as string | null) ?? null, phone: (x.phone as string | null) ?? null, email: (x.email as string | null) ?? null,
+    role: (x.role as string | null) ?? null, bucket: (x.contact_type as string | null) ?? null, primary: account?.primary_contact_id === x.id,
+  })).sort((a, b) => Number(b.primary) - Number(a.primary) || (a.name ?? "").localeCompare(b.name ?? ""));
 
   const [{ data: src }, { data: files }, { data: jobs }, { count: messages }] = await Promise.all([
     supabase.from("cost_item_sources")
@@ -60,8 +74,16 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       if (!cur || n < cur.unit_cost) best.set(o.cost_item_id, { unit_cost: n, vendor: o.vendor?.name ?? null });
     }
   }
+  // Their cost book is grouped by the Price book's own groups (Coy, 2026-10-18: "View, by group").
+  const groupIds = [...new Set(rows.map((r) => r.item?.cost_group_id).filter((x): x is string => !!x))];
+  const groupName = new Map<string, string>();
+  if (groupIds.length) {
+    const { data: gs } = await supabase.from("cost_groups").select("id, name").eq("org_id", orgId).in("id", groupIds.slice(0, 500));
+    for (const g of (gs ?? []) as Array<{ id: string; name: string }>) groupName.set(g.id, g.name);
+  }
   const prices = rows.filter((r) => r.item && r.item.active).map((r) => ({
     ...r, is_default: r.item!.default_source_id === r.id, cheapest_other: best.get(r.item!.id) ?? null,
+    group: r.item!.cost_group_id ? groupName.get(r.item!.cost_group_id) ?? null : null,
   })).sort((a, b) => a.item!.name.localeCompare(b.item!.name));
   return applyCookies(NextResponse.json({
     vendor: { ...v, website, subtype: v.contact_subtype, auto: !v.classification_confirmed_at && !!v.auto_classified_at },
@@ -69,6 +91,8 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     files: await signFiles(supabase, (files ?? []) as Array<Record<string, unknown>>),
     jobs: ((jobs ?? []) as unknown as Array<{ role: string | null; job: Record<string, unknown> }>).filter((j) => !j.job.archived_at).map((j) => ({ ...j.job, role: j.role })),
     messages: messages ?? 0,
+    account: account ? { id: account.id, name: account.name, relation: account.relation } : null,
+    people,
   }));
 }
 

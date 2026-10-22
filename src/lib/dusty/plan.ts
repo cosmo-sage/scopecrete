@@ -98,12 +98,16 @@ export type PlanAction =
   // information in the document"). Made only on Coy's tap; where it came from is kept as a note on them. Phone, email
   // and website only as written there. contact: someone already in the CONTEXT (the thread with their number) filed as
   // the vendor instead of a second person. key (vend1) lets a later new_item / vendor_price carry their price.
+  // A Work Space of Coy's own on the rail (Coy, 2026-10-22: "talk to dusty about creating a space and he could build
+  // it out the way i need it"). members: jobs, customers and vendors by full id from the CONTEXT, each on one of
+  // the shelves named here (by area, phase …) or at the top; tools: page keys (map, price_book, files …).
+  | { do: "work_space"; name: string; shelves: string[]; members: Array<{ kind: "job" | "customer" | "vendor"; id: string; name: string; shelf: string | null }>; tools: string[] }
   | { do: "new_vendor"; name: string; kind: "supplier" | "subcontractor" | "equipment"; phone: string | null; email: string | null;
       website: string | null; address: string | null; service_area: string | null; source: string;
       from: "web" | "file" | "words"; contact?: string; key?: string; trades?: string[]; note?: string };
 
 /** Steps that change records rather than a budget — they need no job open. */
-export const RECORD_STEPS = new Set(["archive", "restore", "set_address", "new_job", "new_customer", "attach_contact", "new_contact", "set_name", "file", "file_email", "text", "email", "send_proposal", "new_vendor", "appointment", "update_appointment"]);
+export const RECORD_STEPS = new Set(["archive", "restore", "set_address", "new_job", "new_customer", "attach_contact", "new_contact", "set_name", "file", "file_email", "text", "email", "send_proposal", "new_vendor", "appointment", "update_appointment", "work_space"]);
 /** A customer (cust1) or job (job1) made earlier in the same plan. */
 export const CUST_KEY = /^cust\d{1,2}$/i;
 export const JOB_KEY = /^job\d{1,2}$/i;
@@ -322,6 +326,23 @@ function cleanActionBase(raw: unknown): PlanAction | null {
       const customer = typeof r.customer === "string" && (FULL_ID.test(r.customer.trim()) || CUST_KEY.test(r.customer.trim())) ? r.customer.trim().toLowerCase() : null;
       return contact && customer ? { do: "attach_contact", contact, customer } : null;
     }
+    case "work_space": {
+      const name = str(r.name, 80);
+      if (!name) return null;
+      const shelves = (Array.isArray(r.shelves) ? r.shelves : []).map((x) => str(x, 40)).filter((x): x is string => !!x)
+        .filter((x, i, l) => l.findIndex((y) => y.toLowerCase() === x.toLowerCase()) === i).slice(0, 20);
+      const members: Array<{ kind: "job" | "customer" | "vendor"; id: string; name: string; shelf: string | null }> = [];
+      for (const m of Array.isArray(r.members) ? r.members.slice(0, 120) : []) {
+        const o = (m ?? {}) as Record<string, unknown>;
+        const kind = (["job", "customer", "vendor"] as const).find((k) => k === o.kind);
+        const id = typeof o.id === "string" && FULL_ID.test(o.id.trim()) ? o.id.trim().toLowerCase() : null;
+        if (!kind || !id || members.some((x) => x.kind === kind && x.id === id)) continue;
+        const sh = str(o.shelf, 40);
+        members.push({ kind, id, name: str(o.name, 120) ?? "", shelf: sh ? shelves.find((x) => x.toLowerCase() === sh.toLowerCase()) ?? null : null });
+      }
+      const tools = (Array.isArray(r.tools) ? r.tools : []).filter((x): x is string => typeof x === "string" && /^[a-z_]{1,30}$/.test(x)).slice(0, 20);
+      return { do: "work_space", name, shelves, members, tools };
+    }
     case "new_contact": {
       const customer = typeof r.customer === "string" && (FULL_ID.test(r.customer.trim()) || CUST_KEY.test(r.customer.trim())) ? r.customer.trim().toLowerCase() : null;
       const name = str(r.name, 120), phone = str(r.phone, 30), email = str(r.email, 160);
@@ -534,6 +555,10 @@ function describeBase(a: PlanAction, names: { item: (r: string) => string | null
       ? `New customer “${a.name}”${a.customer_type ? ` (${a.customer_type === "public" ? "government" : a.customer_type})` : ""}, with this person as its contact`
       : `New customer “${a.name}”${a.customer_type ? ` (${a.customer_type === "public" ? "government" : a.customer_type})` : ""}${a.person && a.person !== a.name ? ` — ${a.person}` : ""}${[a.phone, a.email].filter(Boolean).length ? `, ${[a.phone, a.email].filter(Boolean).join(", ")}` : ""}${a.address ? `, ${[a.address, a.city].filter(Boolean).join(", ")}` : ""}`;
     case "attach_contact": return `Put them on ${CUST_KEY.test(a.customer) ? "the new customer above" : "the customer"} as one of its contacts`;
+    case "work_space": {
+      const n = a.members.length;
+      return `Make the Work Space “${a.name}”${n ? ` with ${n} job${n === 1 ? "" : "s"}, customer${n === 1 ? "" : "s"} or vendor${n === 1 ? "" : "s"}` : " (blank)"}${a.shelves.length ? ` on shelves ${a.shelves.map((x) => `“${x}”`).join(", ")}` : ""}${a.tools.length ? `, tools: ${a.tools.join(", ")}` : ""}`;
+    }
     case "new_contact": return `Add “${a.name}”${a.label ? ` (${a.label})` : ""} ${!a.customer ? `to Contacts${a.bucket ? `, filed ${a.bucket}` : ""}` : `to ${CUST_KEY.test(a.customer) ? "the new customer above" : "the customer"}`} — ${[a.phone, a.email].filter(Boolean).join(", ")}`;
     case "set_name": return `Name ${a.kind === "customer" ? "the customer" : "them"} “${a.name}”`;
     case "file": {
@@ -629,6 +654,11 @@ Appointments. When Coy says he has booked (or wants to book) a site visit, consu
 [{"do":"appointment","job":"<full job id, when it is about a job>","contact":"<full contact id of the person>","kind":"site_visit|consultation|pour|meeting|other","day":"2026-10-15","start":"12:00","end":"13:00","address":"<only as written in the CONTEXT or said>","note":"<what it's for, short>"}]
 \`\`\`
 day, start and end are Central time, 24-hour; work out the date from "Today" in the CONTEXT ("this Thursday" is the coming Thursday) and say the date in your words so Coy can check it. Leave out "end" when no end was said; leave out "address" when the job's address is the place (the app fills it). Never invent a time. Check "Appointments" in the CONTEXT first: if it is already there, say so instead of booking it twice, and to move, confirm or cancel one use {"do":"update_appointment","id":"<full appointment id>","status":"confirmed|done|canceled","day":"…","start":"…","end":"…","reason":"…"} (a new time needs day and start). Once it's booked Coy can add it to his calendar from the job's Summary or the person's contact card (Add to calendar). Offer to draft a confirmation text; when Coy asks for one, add a "text" step (below) in the same plan — the day, the time window and the street, his voice, no prices.
+Work Spaces. A Work Space is a space of Coy's own on the rail: it starts blank and holds the jobs, customers and vendors he puts in it, grouped on shelves he names (by area, by phase, by crew …), plus any tools. When he asks you to make or build one, ask what it is for if he hasn't said, then suggest what goes in it from the CONTEXT and propose:
+\`\`\`scopecrete-plan
+[{"do":"work_space","name":"North shore","shelves":["Mandeville","Covington"],"members":[{"kind":"customer","id":"<full customer id>","name":"Wilson","shelf":"Mandeville"},{"kind":"job","id":"<full job id>","name":"Wilson Driveway","shelf":"Mandeville"},{"kind":"vendor","id":"<full vendor contact id>","name":"Angelle Concrete","shelf":null}],"tools":["map","files"]}]
+\`\`\`
+Only ids written in the CONTEXT ("job <id>", "customer <id>", a vendor's "contact <id>"); "shelf" is one of "shelves" or null for the top; "tools" are page keys (map, files, price_book, camera, dashboard) or left empty. A blank Work Space is fine — members [] — when Coy only wants the name.
 Texts. When Coy asks you to text someone (or to write a text and send it), write it the way he would — short, plain, in his voice, signed only if he signs — and propose:
 \`\`\`scopecrete-plan
 [{"do":"text","contact":"<full contact id from the CONTEXT>","body":"Hi Johnette, this is Coy. I can come measure the driveway Thursday at 9 — does that work?"}]

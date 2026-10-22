@@ -542,21 +542,28 @@ const fmt0 = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 1
  * session (RLS); names, units, costs, rules and groups only.
  */
 async function priceBookBlock(sb: Sb, orgId: string): Promise<Block | null> {
-  const [{ data: items }, { data: groups }, { data: asm }] = await Promise.all([
-    sb.from("cost_items").select("id, name, unit, unit_cost, cost_type, qty_rule, cost_group_id").eq("org_id", orgId).eq("active", true).order("name").limit(1500),
+  const [{ data: items }, { data: groups }, { data: asm }, { data: srcs }] = await Promise.all([
+    sb.from("cost_items").select("id, name, unit, unit_cost, cost_type, qty_rule, cost_group_id, default_source_id").eq("org_id", orgId).eq("active", true).order("name").limit(1500),
     sb.from("cost_groups").select("id, name, cost_type").eq("org_id", orgId).order("sort_order").order("name"),
     sb.from("cost_assemblies").select("id, name, job_type, work_type, auto_load, cost_assembly_items(cost_item_id, quantity, sort_order)").eq("org_id", orgId).order("sort_order").order("name"),
+    // Every vendor's price on each item (Coy, 2026-10-18: "ask Dusty for any cost item and he'll know the group and see all the vendors that offer that item").
+    sb.from("cost_item_sources").select("id, cost_item_id, unit_cost, vendor:contacts!cost_item_sources_vendor_contact_id_fkey(name, company_name)").eq("org_id", orgId).eq("active", true).limit(3000),
   ]);
   if (!items?.length && !groups?.length) return { title: "Price book", lines: ["Empty — no items yet. Propose new_item steps if Coy asks."] };
   const gName = new Map(((groups ?? []) as Array<{ id: string; name: string }>).map((g) => [g.id, g.name]));
+  type Src = { id: string; cost_item_id: string; unit_cost: number | null; vendor: { name: string | null; company_name: string | null } | null };
+  const vendorsOf = new Map<string, Src[]>();
+  for (const v of (srcs ?? []) as unknown as Src[]) vendorsOf.set(v.cost_item_id, [...(vendorsOf.get(v.cost_item_id) ?? []), v]);
   const byGroup = new Map<string, string[]>();
   for (const r of (items ?? []) as Array<Record<string, unknown>>) {
     const g = gName.get(r.cost_group_id as string) ?? "Not in a group";
     const cost = r.unit_cost === null || r.unit_cost === undefined ? "no cost" : `$${Number(r.unit_cost)}`;
-    const line = `  ${String(r.id).slice(0, 8)} | ${String(r.name).slice(0, 70)} | ${r.unit} | ${cost} | ${r.qty_rule} | ${r.cost_type}`;
+    const vs = (vendorsOf.get(r.id as string) ?? [])
+      .map((v) => `${(v.vendor?.company_name || v.vendor?.name || "?").slice(0, 30)} ${v.unit_cost === null ? "no price" : `$${Number(v.unit_cost)}`}${v.id === r.default_source_id ? "★" : ""}`).join(", ");
+    const line = `  ${String(r.id).slice(0, 8)} | ${String(r.name).slice(0, 70)} | ${r.unit} | ${cost} | ${r.qty_rule} | ${r.cost_type}${vs ? ` | vendors: ${vs}` : ""}`;
     byGroup.set(g, [...(byGroup.get(g) ?? []), line]);
   }
-  const out = [`${items?.length ?? 0} items in ${groups?.length ?? 0} groups. Each line: ref | name | unit | unit cost | how counted | type.`];
+  const out = [`${items?.length ?? 0} items in ${groups?.length ?? 0} groups. Each line: ref | name | unit | unit cost | how counted | type | vendors who price it (★ = the one budgets use). Groups carry across vendors: to find who offers something, look in its group.`];
   for (const g of (groups ?? []) as Array<{ name: string }>) if (!byGroup.has(g.name)) out.push(`GROUP ${g.name}: (empty)`);
   for (const [g, ls] of byGroup) out.push(`GROUP ${g}:`, ...ls);
   // Assemblies by ref, with their items by ref — to load onto an area, add to, or to see one is missing.
@@ -600,7 +607,7 @@ async function proposalBlock(sb: Sb, orgId: string, jobId: string): Promise<Bloc
     `Proposal ${formatProposalNumber(b.number_base, Number(p.version))}${frozenAs(p, formatProposalNumber(b.number_base, Number(p.version)))} · ${p.status === "final" ? `FINAL (frozen ${String(p.finalized_at).slice(0, 10)} — what the customer was shown)` : "draft"} · type ${type?.label ?? "not set"}`,
   ];
   if (priced.ok) {
-    lines.push(`Customer's total ${priced.total.toFixed(2)} (budget price ${priced.calc.toFixed(2)} rounded UP to ${priced.rounded} — the proposal rounds to the next $50, the budget keeps the exact number; tax ${priced.tax.toFixed(2)}${priced.tax_shown ? " shown as a line" : " folded into the areas"}${priced.discount ? `; discount ${priced.discount.toFixed(2)}` : ""})`);
+    lines.push(`Customer's total ${priced.total.toFixed(2)} (budget price ${priced.calc.toFixed(2)} rounded UP to ${priced.rounded} — the proposal rounds up to the next whole dollar, the budget keeps the exact number; tax ${priced.tax.toFixed(2)}${priced.tax_shown ? " shown as a line" : " folded into the areas"}${priced.discount ? `; discount ${priced.discount.toFixed(2)}` : ""})`);
     lines.push(`Cost ${priced.cost.toFixed(2)}, O.H. ${priced.overhead.toFixed(2)}, profit ${priced.profit.toFixed(2)}${priced.addons_total ? `; optional add-ons not in the total ${priced.addons_total.toFixed(2)}` : ""}`);
     for (const g of priced.groups) lines.push(`- ${g.name}: ${g.hidden ? "HIDDEN from the proposal" : g.price_hidden ? "price hidden (still counted)" : g.sell.toFixed(2)}${g.items.some((i) => i.hidden) ? ` (${g.items.filter((i) => i.hidden).length} line(s) hidden)` : ""}`);
   } else lines.push(`No price yet: ${priced.blocked.slice(0, 5).join("; ")}`);

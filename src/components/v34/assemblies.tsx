@@ -14,7 +14,6 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { T, F, disp, eyebrow, nums, clip, money } from "@/lib/v34/tokens";
-import { Sheet } from "@/components/v34/primitives";
 import { QTY_RULE_LABEL, type QtyRule } from "@/lib/cost-cards";
 import { JOB_TYPES, JOB_TYPE_LABEL, WORK_TYPES, WORK_TYPE_LABEL, appliesTo } from "@/lib/assemblies";
 import { call, type Card } from "@/components/v34/cost-cards";
@@ -73,9 +72,10 @@ export function Assemblies({ cards, onPick }: { cards: Card[]; onPick?: (id: str
         {(list ?? []).map((a) => {
           const r = a.reinforcement_item_id ? cardById.get(a.reinforcement_item_id) : null;
           return (
-            <div key={a.id} role="button" tabIndex={0} onClick={() => setOpen(a.id)} onKeyDown={(e) => { if (e.key === "Enter") setOpen(a.id); }}
+            <div key={a.id}>
+            <div role="button" tabIndex={0} aria-expanded={open === a.id} onClick={() => setOpen(open === a.id ? null : a.id)} onKeyDown={(e) => { if (e.key === "Enter") setOpen(open === a.id ? null : a.id); }}
               className="w-full text-left rounded px-3 py-2.5 flex items-center gap-3"
-              style={{ background: T.card, border: `1px solid ${T.hair}`, cursor: "pointer" }}>
+              style={{ background: T.card, border: `1px solid ${open === a.id ? T.ink : T.hair}`, borderBottomLeftRadius: open === a.id ? 0 : undefined, borderBottomRightRadius: open === a.id ? 0 : undefined, cursor: "pointer" }}>
               <span style={{ minWidth: 0, flex: 1 }}>
                 <span style={{ display: "block", fontFamily: disp, fontSize: F.md, fontWeight: 600, ...clip }}>{a.name}</span>
                 <span style={{ display: "block", fontSize: F.xs, color: T.ink3, ...clip }}>
@@ -87,13 +87,17 @@ export function Assemblies({ cards, onPick }: { cards: Card[]; onPick?: (id: str
                 <button onClick={(e) => { e.stopPropagation(); onPick(a.id, a.name); }} className="rounded px-2.5 shrink-0"
                   style={{ height: 30, background: T.ink, color: T.card, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", cursor: "pointer" }}>Load</button>
               )}
+              <span aria-hidden style={{ color: T.ink3, fontSize: F.sm }}>{open === a.id ? "▾" : "▸"}</span>
+            </div>
+            {/* The editor drops down under its own assembly, so it's clear what is being edited
+                (Coy, 2026-10-22; it was a sheet from the bottom). */}
+            {editing && editing.id === a.id && <AssemblySheet a={editing} cards={cards} cardById={cardById} onClose={() => setOpen(null)} onChanged={reload}
+              onLocal={(p) => setList((l) => (l ?? []).map((x) => (x.id === editing.id ? { ...x, ...p } : x)))}
+              onDeleted={() => { setOpen(null); reload(); }} />}
             </div>
           );
         })}
       </div>
-      {editing && <AssemblySheet a={editing} cards={cards} cardById={cardById} onClose={() => setOpen(null)} onChanged={reload}
-        onLocal={(p) => setList((l) => (l ?? []).map((x) => (x.id === editing.id ? { ...x, ...p } : x)))}
-        onDeleted={() => { setOpen(null); reload(); }} />}
     </div>
   );
 }
@@ -117,8 +121,12 @@ function AssemblySheet({ a, cards, cardById, onClose, onChanged, onLocal, onDele
     : [];
 
   return (
-    <Sheet open onClose={onClose} title={a.name} sub={appliesTo(a)}>
+    <div className="rounded-b" style={{ background: T.card, border: `1px solid ${T.ink}`, borderTop: "none" }}>
       <div className="px-4 py-3 flex flex-col gap-3" key={a.id}>
+        <div className="flex items-center gap-2">
+          <span style={{ ...eyebrow, flex: 1 }}>Editing {a.name}</span>
+          <button onClick={onClose} aria-label="Close the editor" style={{ color: T.ink3, fontSize: F.md, cursor: "pointer" }}>×</button>
+        </div>
         <label className="block"><span style={eyebrow}>Name</span>
           <input defaultValue={a.name} style={field} aria-label="Assembly name"
             onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== a.name) void patch({ name: v }); }} /></label>
@@ -196,6 +204,6 @@ function AssemblySheet({ a, cards, cardById, onClose, onChanged, onLocal, onDele
         <button onClick={() => { if (window.confirm(`Delete ${a.name}? Its cards stay in the Price book, and budgets it already filled keep their lines.`)) void call(`/api/assemblies/${a.id}`, "DELETE").then(onDeleted).catch((e) => setErr(String(e?.message ?? e))); }}
           className="self-start" style={{ ...eyebrow, color: T.red, cursor: "pointer" }}>Delete assembly</button>
       </div>
-    </Sheet>
+    </div>
   );
 }

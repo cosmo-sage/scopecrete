@@ -167,15 +167,8 @@ export function PlanRoom({ jobId, view }: { jobId: string; view: Step }) {
   const docPages = useMemo(() => roomSheets.filter((s) => !isDrawing(s) && !measured.has(s.id)), [roomSheets, measured]);
   const scoped = data ? { ...data, sheets } : null;
   const current: Step = view;
-
-  return (
-    <div className="flex flex-col" style={{ minHeight: "calc(100dvh - var(--sc-head))" }}>
-      <div style={{ background: T.card, borderBottom: `1px solid ${T.hair}`, padding: "10px 16px 0" }}>
-        <JobHeaderRow jobId={jobId} active={view === "files" ? "files" : "plans"} title={data?.job?.title || (view === "files" ? "Files" : "Takeoffs")} customerId={data?.job?.customer_id} />
-        {/* The reading chip on its own row under the name's row, only while there is one. */}
-        <div className={`${(ocr.running && ocr.jobId === jobId) || (ocrInput && ocrInput.left.scans > 0) ? "flex" : "hidden"} items-end gap-x-4 gap-y-2 flex-wrap mt-2`}>
-          <div className="ml-auto flex items-center gap-2 flex-wrap justify-end" style={{ paddingBottom: 4 }}>
-          {ocr.running && ocr.jobId === jobId ? (
+  // On Takeoffs the reading chip sits on the toolbar row below (Coy, 2026-10-22).
+  const readingChip = ocr.running && ocr.jobId === jobId ? (
             <span className="flex items-center gap-1.5" title={ocr.label} style={{ fontSize: 11.5, borderRadius: 3, padding: "3px 8px", background: T.dustyTint, color: T.ink2, fontWeight: 600 }}>
               Reading {ocr.phase === "title" ? "sheet titles" : "the plans"} · {ocr.done + 1} of {ocr.total}
               <button onClick={() => pausePlanOcr(jobId)} style={{ color: T.chalk, cursor: "pointer", fontWeight: 600 }}>Pause</button>
@@ -185,7 +178,16 @@ export function PlanRoom({ jobId, view }: { jobId: string; view: Step }) {
               {ocrInput.left.read} of {ocrInput.left.scans} scanned sheets read
               {ocrLeft > 0 && <button onClick={readPlans} style={{ color: T.chalk, cursor: "pointer", fontWeight: 600 }}>Read the rest</button>}
             </span>
-          ) : null}
+          ) : null;
+
+  return (
+    <div className="flex flex-col" style={{ minHeight: "calc(100dvh - var(--sc-head))" }}>
+      <div style={{ background: T.card, borderBottom: `1px solid ${T.hair}`, padding: "10px 16px 0" }}>
+        <JobHeaderRow jobId={jobId} active={view === "files" ? "files" : "plans"} title={data?.job?.title || (view === "files" ? "Files" : "Takeoffs")} customerId={data?.job?.customer_id} />
+        {/* The reading chip on its own row under the name's row, only while there is one. */}
+        <div className={`${view !== "takeoff" && readingChip ? "flex" : "hidden"} items-end gap-x-4 gap-y-2 flex-wrap mt-2`}>
+          <div className="ml-auto flex items-center gap-2 flex-wrap justify-end" style={{ paddingBottom: 4 }}>
+          {readingChip}
           </div>
         </div>
       </div>
@@ -198,7 +200,7 @@ export function PlanRoom({ jobId, view }: { jobId: string; view: Step }) {
             onAdd={(l) => void upload(l)} uploading={uploading} onOpen={(s) => go("takeoff", s.id)} jobId={jobId} onAdded={load} initial={sp.get("step") === "sheets" || roomSheets.length ? "sheets" : "files"} />}
           {current === "takeoff" && (
             <TakeoffStep jobId={jobId} data={scoped} files={data.files} sheetId={sheetParam} setSheetId={(id) => go("takeoff", id)}
-              reload={reload} onSend={setSending} fullscreen={fullscreen} setFullscreen={setFullscreen} />
+              reload={reload} onSend={setSending} fullscreen={fullscreen} setFullscreen={setFullscreen} toolbarExtra={readingChip} />
           )}
         </div>
       )}

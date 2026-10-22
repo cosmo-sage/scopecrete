@@ -4,7 +4,7 @@
  * tests/markdown.test.mjs — and it returns data, never HTML: the chat renders
  * the tree with React, so nothing in a reply can become markup or script.
  *
- * Blocks: # headings, | tables |, - / * / 1. lists, ``` code, > quotes,
+ * Blocks: # headings, | tables |, - / * / 1. lists, ``` code, ```drawing sketches, > quotes,
  * paragraphs. A quote may come as "&gt;" (a model escaping its own reply).
  * Inline: **bold**, *italic*, `code`.
  */
@@ -17,6 +17,8 @@ export type MdBlock =
   | { k: "ol"; items: Inline[][] }
   | { k: "table"; head: Inline[][]; rows: Inline[][][]; align: Array<"left" | "right" | "center"> }
   | { k: "code"; v: string }
+  /** A ```drawing block (src/lib/dusty/drawing.ts); `open` while it is still being written. */
+  | { k: "drawing"; v: string; open: boolean }
   | { k: "quote"; blocks: MdBlock[] };
 
 /** "&gt;" and friends, written out by a model that escaped its own reply. */
@@ -52,9 +54,11 @@ export function parseMarkdown(src: string): MdBlock[] {
     const l = lines[i];
     if (/^\s*```/.test(l)) {
       flush();
+      const lang = l.trim().slice(3).trim().toLowerCase();
       const body: string[] = [];
       for (i++; i < lines.length && !/^\s*```/.test(lines[i]); i++) body.push(lines[i]);
-      out.push({ k: "code", v: body.join("\n") });
+      if (lang === "drawing" || lang === "svg") out.push({ k: "drawing", v: body.join("\n"), open: i >= lines.length });
+      else out.push({ k: "code", v: body.join("\n") });
       continue;
     }
     if (QUOTE.test(l)) {

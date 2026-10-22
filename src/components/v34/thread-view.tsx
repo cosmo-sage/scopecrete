@@ -15,7 +15,7 @@ import { NameEditor, FileAsSheet } from "@/components/v34/contact-edit";
 import { ArchiveButton } from "@/components/v34/archive-actions";
 import { useThreads } from "@/components/v34/threads-ctx";
 import { threadLabel } from "@/components/v34/thread-rail";
-import { RoleTag } from "@/components/v34/thread-list";
+import { InitialsBox, RoleTag } from "@/components/v34/thread-list";
 import { ThreadSearch } from "@/components/v34/thread-search";
 import { InternalNotes } from "@/components/v34/internal-notes";
 import { inChannel, roleOf, type Channel, type ChannelFilter } from "@/lib/v34/threads";
@@ -321,11 +321,40 @@ export function ThreadView({ contactId, embedded = false }: {
               {/* Phone: the thread's back link sits top left, on the buttons' row (Coy, 2026-10-09), and says
                   Threads whichever list it returns to (Coy, 2026-10-09: "so that I know that I'm just going back to the main threads page"). */}
               {!embedded && (
-                <Link href={`/dashboard/messages${threadKey ? `?t=${encodeURIComponent(threadKey)}` : ""}`} className="lg:hidden min-w-0"
+                <Link href={`/dashboard/messages${threadKey ? `?t=${encodeURIComponent(threadKey)}` : ""}`} className="sc-back-link lg:hidden min-w-0"
                   style={{ ...eyebrow, fontSize: 14, color: T.ink, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>‹ Threads</Link>
               )}
+              {/* Threads v3 under Spaces (Claude Design, 2026-10-19): a square with their initials, the name and
+                  tag, and under it which channel this is — "Cell · (225) 320-4143" — on every size. */}
+              {!embedded && (
+                <span className="sc-spaces-only min-w-0" style={{ flex: 1 }}>
+                  <span className="flex items-center gap-2.5 min-w-0">
+                    <span className="shrink-0"><InitialsBox name={name || null} size={38} /></span>
+                    <span className="min-w-0 flex flex-col">
+                      <span className="flex items-center gap-2 min-w-0">
+                        <Link href={cardHref} className="min-w-0" title="Their contact card"
+                          style={{ fontFamily: "var(--sc-font-strong)", fontSize: 16, fontWeight: 700, color: T.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {loading ? headerTitle : (name || formatPhone(phone))}
+                        </Link>
+                        {/* "Jeremy Wright w/ Gulfline Paving", the company opening its customer or vendor page; no role tag
+                            here — who they are is on the contact card (Coy, 2026-10-22). */}
+                        {!loading && crumbOrg && crumbOrg.label !== name && (
+                          <span className="min-w-0" style={{ fontSize: 14, color: T.ink3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            w/ <Link href={crumbOrg.href} title={`${crumbOrg.kind} page`} style={{ color: crumbOrg.color, fontWeight: 600 }}>{crumbOrg.label}</Link>
+                          </span>
+                        )}
+                      </span>
+                      <span style={{ fontSize: 12, color: T.ink3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", ...nums }}>
+                        {channel?.kind === "phone" && channel.value ? `${channel.label} · ${formatPhone(channel.value)}`
+                          : channel?.kind === "email" ? (channel.value ?? "Email")
+                          : channel?.kind === "notes" ? "Internal notes" : ""}
+                      </span>
+                    </span>
+                  </span>
+                </span>
+              )}
               {/* On a phone the name is in the breadcrumb rows below; this row keeps the buttons (Coy, 2026-10-09). */}
-              <span className={embedded ? "contents" : "hidden lg:contents"}>
+              <span className={embedded ? "contents" : "hidden lg:contents sc-old-nav-only"}>
               {loading ? (
                 <div style={{ fontFamily: "var(--sc-font-strong)", fontSize: "var(--sc-thread-name)", fontWeight: 700, color: T.ink }}>{headerTitle}</div>
               ) : (
@@ -339,7 +368,7 @@ export function ThreadView({ contactId, embedded = false }: {
               )}
               </span>
               {/* No tag on a phone: the thread's name at the left already says it (Coy, 2026-10-05). */}
-              {c && <span className="hidden lg:inline-flex"><RoleTag role={role} auto={c.bucket_state === "auto"} /></span>}
+              {c && <span className={`hidden lg:inline-flex${embedded ? "" : " sc-old-nav-only"}`}><RoleTag role={role} auto={c.bucket_state === "auto"} /></span>}
             </div>
             {/* Notes is an icon beside the menu (Coy, 2026-10-07), its count on it. */}
             <button onClick={() => pickChannel(channel?.kind === "notes" ? (channels[0]?.key ?? "") : "notes")} aria-pressed={channel?.kind === "notes"}
@@ -349,9 +378,9 @@ export function ThreadView({ contactId, embedded = false }: {
             </button>
             {/* Call on the top row on a phone (Coy, 2026-10-09); the desktop keeps Call from ▾ in the toolbar. */}
             {channel?.kind === "phone" && channel.value && (
-              <a href={`tel:${channel.value}`} className="lg:hidden flex items-center justify-center shrink-0" style={{ ...pill, padding: "0 8px" }}
+              <a href={`tel:${channel.value}`} className={`flex items-center justify-center shrink-0${embedded ? " lg:hidden" : " sc-thread-call"}`} style={{ ...pill, padding: "0 8px" }}
                 aria-label={`Call ${formatPhone(channel.value)}${outLine ? ` from ${outLine.name}` : ""}`} title={outLine ? `Your phone dials — choose ${outLine.name} in Quo` : undefined}>
-                <Phone size={15} weight="fill" />
+                <Phone size={15} weight="fill" /><span className="sc-spaces-only">Call</span>
               </a>
             )}
             {/* Search sits beside Notes on the top row (Coy, 2026-10-09). */}
@@ -406,7 +435,7 @@ export function ThreadView({ contactId, embedded = false }: {
           {/* Phone: under the buttons, the person, then their customer or vendor, one per row (Coy, 2026-10-09: "stack them"), each saying what it opens in its own colour. */}
           {!embedded && (
             // The labels in one column and the names lined up beside them (Coy, 2026-10-09: "better symmetry").
-            <nav aria-label="Where you are" className="lg:hidden grid mt-1.5 min-w-0 items-baseline"
+            <nav aria-label="Where you are" className="lg:hidden grid mt-1.5 min-w-0 items-baseline sc-old-nav-only"
               style={{ ...eyebrow, fontSize: 13, whiteSpace: "nowrap", gridTemplateColumns: "auto auto minmax(0, 1fr)", columnGap: 8, rowGap: 3 }}>
               <span style={{ color: T.ink3 }}>Contact</span>
               <span aria-hidden style={{ color: T.hairStrong }}>|</span>
@@ -440,7 +469,7 @@ export function ThreadView({ contactId, embedded = false }: {
                       return;
                     }
                     setTabMenu(null); pickChannel(ch.key);
-                  }} className={`text-left flex-1 lg:flex-none shrink-0${spare ? " hidden lg:block" : ""}`}
+                  }} className={`sc-ch-tab text-left flex-1 lg:flex-none shrink-0${spare ? " hidden lg:block" : ""}`}
                   // Rounded buttons, the open one filled (Coy, 2026-10-09: "more like beautiful buttons").
                   style={{ minWidth: 0, padding: "7px 12px", borderRadius: 999, border: `1px solid ${on ? (chLive ? T.green : T.hiviz) : chLive ? T.green : T.hairStrong}`,
                     background: on ? T.hivizDim : T.card, boxShadow: on ? "0 1px 3px rgba(0,0,0,.10)" : "none", opacity: ch.reachable || on ? 1 : 0.5, cursor: "pointer" }}>
@@ -460,7 +489,7 @@ export function ThreadView({ contactId, embedded = false }: {
                     )}
                   </span>
                   {chLive ? <span className="hidden lg:block"><LiveCallBadge call={chLive} compact /></span>
-                    : <span className="hidden lg:block" style={{ fontSize: 11, color: T.ink3, ...nums, whiteSpace: "nowrap" }}>{sub}</span>}
+                    : <span className="hidden lg:block sc-ch-sub" style={{ fontSize: 11, color: T.ink3, ...nums, whiteSpace: "nowrap" }}>{sub}</span>}
                 </button>
               );
             })}

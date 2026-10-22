@@ -27,7 +27,7 @@ import { readWebsites, writeWebsite } from "@/lib/vendor-website-server";
  */
 
 export const dynamic = "force-dynamic";
-const COLS = "id, name, company_name, contact_subtype, phone, email, address, service_area, classification_confirmed_at, auto_classified_at";
+const COLS = "id, name, company_name, contact_subtype, phone, email, address, service_area, classification_confirmed_at, auto_classified_at, customer_id";
 
 export async function GET(req: NextRequest) {
   const result = await getApiSession(req);
@@ -68,6 +68,7 @@ export async function GET(req: NextRequest) {
     items: count.get(c.id as string) ?? 0, defaults: def.get(c.id as string) ?? 0, newest_price: newest.get(c.id as string) ?? null, files: fc.get(c.id as string) ?? 0,
     trades: (c.trades as string[] | undefined) ?? [], crew_size: (c.crew_size as number | null | undefined) ?? null,
     website: sites.get(c.id as string) ?? null,
+    account_id: (c.customer_id as string | null | undefined) ?? null,
     bids: bidStats(bids.get(c.id as string) ?? []),
   }));
   return applyCookies(NextResponse.json({ vendors, bids_ready: ready }));

@@ -41,7 +41,7 @@ type Row = FileRow & { matched?: string | null; customer_id?: string | null };
 
 const CAT_LABEL = (c: string) => CATEGORY_FOLDERS.find(([k]) => k === c)?.[1] ?? c;
 /** The expandable folder groups: [facet list, filter key, label]. */
-const GROUPS = [["jobs", "job", "Jobs"], ["customers", "customer", "Customers"], ["vendors", "vendor", "Vendors"], ["people", "contact", "People"]] as const;
+const GROUPS = [["jobs", "job", "Jobs"], ["customers", "customer", "Customers"], ["vendors", "vendor", "Vendors"], ["people", "contact", "Contacts"]] as const;
 
 /**
  * `fixed` pins filters (the customer page's Files tab pins its customer); `embedded`
@@ -55,7 +55,13 @@ export function FilesPage({ fixed, embedded, extra }: { fixed?: Partial<FileFilt
   const [facets, setFacets] = useState<Facets | null>(null);
   const [fileParam, setFileParam] = useState<string | null>(null);
   const [wrapRef, wide] = useWide<HTMLDivElement>(900);
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuOpen, setMenuOpenRaw] = useState(false);
+  // On a phone the folders open under the Files header, full width (Coy, 2026-10-22).
+  const [menuTop, setMenuTop] = useState(0);
+  const setMenuOpen = (o: boolean) => {
+    if (o) setMenuTop(Math.max(0, Math.round(document.querySelector(".sc-subhead")?.getBoundingClientRect().bottom ?? 0)));
+    setMenuOpenRaw(o);
+  };
   const [searching, setSearching] = useState(false);
   const [groupsOpen, setGroupsOpen] = useState<Record<string, boolean>>({});
   const [storage, setStorage] = useState<{ used_bytes: number; limit_bytes: number; texted_bytes: number } | null>(null);
@@ -537,7 +543,7 @@ export function FilesPage({ fixed, embedded, extra }: { fixed?: Partial<FileFilt
         )}
       </div>
 
-      {!wide && <Drawer left open={menuOpen} onClose={() => setMenuOpen(false)} title="Folders" sub={folderName}>{menu}</Drawer>}
+      {!wide && <Drawer under={menuTop} open={menuOpen} onClose={() => setMenuOpen(false)} title="Folders" sub={folderName}>{menu}</Drawer>}
 
       {!wide && preview && open && (
         <div role="dialog" aria-label={open.name} className="fixed inset-0 flex flex-col" style={{ zIndex: 70, background: T.card, paddingTop: "env(safe-area-inset-top)", paddingBottom: "env(safe-area-inset-bottom)" }}>

@@ -29,7 +29,7 @@ test("ids are checked, every one", () => {
 
 test("what the toast says", () => {
   assert.equal(archiveLabel("contact", "archive", 18), "Archived 18 threads");
-  assert.equal(archiveLabel("contact", "delete", 1), "Deleted 1 vendor");
+  assert.equal(archiveLabel("contact", "delete", 1), "Deleted 1 contact");
   assert.equal(archiveLabel("customer", "delete", 1), "Deleted 1 customer");
   assert.equal(archiveLabel("job", "delete", 2), "Deleted 2 jobs");
 });
@@ -40,4 +40,11 @@ test("an archive note is recognised, with who made it", async () => {
   assert.deepEqual(archiveNote("Deleted — duplicate (Dusty's plan)"), { verb: "Deleted", reason: "duplicate", byDusty: true });
   assert.equal(archiveNote("Archived the old plans in the file"), null, "an ordinary note that starts with the word isn't one");
   assert.equal(archiveNote(null), null);
+});
+
+test("vendorRemovedNote: a reason makes the note, none makes none", async () => {
+  const { vendorRemovedNote } = await import("../src/lib/archive.ts");
+  assert.equal(vendorRemovedNote("  never sold us anything "), "Taken off Vendors — never sold us anything");
+  assert.equal(vendorRemovedNote(""), null);
+  assert.equal(vendorRemovedNote(null), null);
 });

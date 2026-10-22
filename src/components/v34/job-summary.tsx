@@ -15,7 +15,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { T, F, disp, strong, eyebrow, nums, money, money0 } from "@/lib/v34/tokens";
 import { EmptyState } from "@/components/v34/primitives";
-import { CustomerCard, OwnerCard, ContactsCard, JobSiteCard, type Party, type JobPerson } from "@/components/v34/job-parties";
+import { CustomerCard, OwnerCard, ContactsCard, type Party, type JobPerson } from "@/components/v34/job-parties";
 import { useWide } from "@/lib/v34/use-wide";
 import { JobChips } from "@/components/v34/job-chips";
 import { BidStrip } from "@/components/v34/bid-strip";
@@ -30,12 +30,8 @@ import { BudgetStep, SendSheet, useBudget } from "@/components/v34/plan-room/bud
 import { call as planCall, isDrawing, type Param, type PlansData } from "@/components/v34/plan-room/shared";
 import { BEFORE_WON, WON_STATUSES } from "@/lib/jobs/stages";
 import type { Contract } from "@/lib/jobs/won";
-import { SCOPE_STEPS, type ScopeProgress } from "@/lib/scope-builder";
-import { Emblem } from "@/components/site/marks";
-import { askDusty } from "@/components/v34/budget-tabs";
-import { AppointmentsCard } from "@/components/v34/appointments-card";
 
-interface Job {
+export interface Job {
   id: string; title: string | null; status: string | null; address: string | null;
   city?: string | null; state?: string | null; zip?: string | null;
   contact_id: string | null; duration_days: number | null; created_from_message_id: string | null; customer_id?: string | null;
@@ -82,7 +78,7 @@ export function JobSummary({ jobId }: { jobId: string }) {
   const [owner, setOwner] = useState<Party | null>(null);
   const [ownerSupported, setOwnerSupported] = useState(true);
   const [people, setPeople] = useState<JobPerson[]>([]);
-  const [site, setSite] = useState<{ lat: number; lng: number } | null>(null);
+  const [jobContacts, setJobContacts] = useState(false);
   const [wideRef, wide] = useWide<HTMLDivElement>(600);
   const [sections, setSections] = useState<SectionInput[] | null>(null);
   const [bd, setBd] = useState<BudgetData | null>(null);
@@ -96,7 +92,7 @@ export function JobSummary({ jobId }: { jobId: string }) {
   const take = useCallback((j: Record<string, unknown>) => {
     setJob(j.job as Job); setContact((j.contact as Contact | null) ?? null); setCustomer((j.customer as Party | null) ?? null);
     setOwner((j.owner as Party | null) ?? null); setOwnerSupported(j.owner_supported !== false);
-    setPeople((j.people as JobPerson[] | undefined) ?? []); setSite((j.site as { lat: number; lng: number } | null) ?? null);
+    setPeople((j.people as JobPerson[] | undefined) ?? []); setJobContacts(j.job_contacts_supported === true);
     setContract((j.contract as Contract | null) ?? null);
   }, []);
 
@@ -117,6 +113,9 @@ export function JobSummary({ jobId }: { jobId: string }) {
     send(`/api/jobs/${jobId}/proposal/link`, "GET").then((b) => { if (!off) setLinks((b.links ?? []) as ProposalLink[]); }).catch(() => { if (!off) setLinks([]); });
     return () => { off = true; };
   }, [jobId, take]);
+
+  // The photos the job's people texted come onto it once (migration 108) — kept from What's next.
+  useEffect(() => { void send(`/api/jobs/${jobId}/texted-photos`, "POST", { auto: true }).catch(() => undefined); }, [jobId]);
 
   // A status change can stamp or clear the win date, which moves the contract: read the job again.
   const reload = useCallback(() => send(`/api/jobs/${jobId}`, "GET").then((j) => take(j)), [jobId, take]);
@@ -176,21 +175,14 @@ export function JobSummary({ jobId }: { jobId: string }) {
               <OwnerCard jobId={jobId} owner={owner} customer={customer} supported={ownerSupported}
                 ownerPeople={people.filter((p) => p.side === "owner").length} onSaved={() => void reload()} />
             </div>
-            <ContactsCard jobId={jobId} people={people} customer={customer} owner={owner} jobType={job.job_type} site={siteParts} onSaved={() => void reload()} />
+            <ContactsCard jobId={jobId} people={people} customer={customer} owner={owner} jobType={job.job_type} site={siteParts} onSaved={() => void reload()} picks={jobContacts} />
           </div>
-          <JobSiteCard jobId={jobId} address={siteAddress} stored={site} customer={customer} phone={!wide} onSaved={() => void reload()} />
         </div>
-
-        {!job.archived_at && <NextUp jobId={jobId} card={card} />}
-
-        {/* Site visits and other appointments on this job (migration 110). */}
-        {!job.archived_at && <AppointmentsCard jobId={jobId} card={card} about={realTitle || null} address={siteAddress || null} />}
+        {/* The Job site map is on Locations, appointments and the schedule on Schedule, and What's
+            next is gone (Coy, 2026-10-18 — the job Space's Customer Account shelf). */}
 
         {WON_STATUSES.includes(job.status ?? "") && (
           <WonCard jobId={jobId} job={job} contract={contract} card={card} onChange={() => void reload()} />
-        )}
-        {["won", "scheduled", "in_progress"].includes(job.status ?? "") && (
-          <ScheduleCard jobId={jobId} job={job} card={card} onChange={() => void reload()} />
         )}
 
         {/* "Why this job" is gone — what it said is in the facts above (Coy, 2026-10-09: "redundant"). */}
@@ -223,125 +215,6 @@ export function JobSummary({ jobId }: { jobId: string }) {
         </div>
       )}
     </div>
-  );
-}
-
-/** Coy's question to Dusty from a job's What's next. */
-const NEXT_QUESTION = "What's left to finish scoping and pricing this job? Go through what they said on their calls and texts, their photos and what's measured, and list what I still need to do or ask them, in order.";
-
-interface NextTask { id: string; title: string; short: string; due_on: string | null; source: string }
-
-/**
- * What's next on this job (Coy, 2026-10-13: a new job should "pull in the photos and prompt me for
- * what was next to finish scoping and estimating"). On open it brings in, once, the photos the
- * customer texted (POST texted-photos {auto}); then the step the scope is on (the Scope Builder's
- * rule), the open next steps on their person, and Dusty asked what's left. Since 2026-10-15 (Coy:
- * "redundant repeat items … doesn't fit on the mobile screen … I can't add anything manually"): one
- * line each in fewer words (a tap shows the whole), three then "+ N more", × removes one, and
- * + Add to-do files Coy's own on the job's person for this job.
- */
-function NextUp({ jobId, card }: { jobId: string; card: React.CSSProperties }) {
-  const [data, setData] = useState<{ progress: ScopeProgress; href: string; contact_id: string | null; tasks: NextTask[] } | null>(null);
-  const [photos, setPhotos] = useState<number>(0);
-  const [all, setAll] = useState(false);
-  const [open, setOpen] = useState<string | null>(null);
-  const [adding, setAdding] = useState(false);
-  const [text, setText] = useState("");
-  const [err, setErr] = useState<string | null>(null);
-  const load = useCallback(() => send(`/api/jobs/${jobId}/next`, "GET").then((b) => setData(b)).catch(() => setData(null)), [jobId]);
-  useEffect(() => {
-    let off = false;
-    send(`/api/jobs/${jobId}/texted-photos`, "POST", { auto: true })
-      .then((b) => { if (!off && b.added > 0) setPhotos(b.added as number); })
-      .catch(() => undefined)
-      .finally(() => { if (!off) void load(); });
-    return () => { off = true; };
-  }, [jobId, load]);
-  if (!data) return null;
-  const { progress, href, tasks } = data;
-  const step = SCOPE_STEPS.find((x) => x.k === progress.next);
-  // Ticked or crossed off, it leaves the list at once; the server agrees a moment later.
-  const close = (t: NextTask, status: "done" | "dismissed") => {
-    setData((d) => d && { ...d, tasks: d.tasks.filter((x) => x.id !== t.id) });
-    void send(`/api/tasks/${t.id}`, "PATCH", { status }).catch(() => load());
-  };
-  const add = async () => {
-    const title = text.replace(/\s+/g, " ").trim();
-    if (!title || !data.contact_id) return;
-    setErr(null);
-    try {
-      await send(`/api/people/${data.contact_id}/tasks`, "POST", { title, job_id: jobId });
-      setText(""); setAdding(false); await load();
-    } catch (e) { setErr((e as Error).message); }
-  };
-  const SHOW = 3;
-  const shown = all ? tasks : tasks.slice(0, SHOW);
-  const box = { width: 22, height: 22, borderRadius: 3, border: `1px solid ${T.hair}`, background: T.card, cursor: "pointer", flexShrink: 0 } as const;
-  return (
-    <section aria-label="What's next" className="px-3 py-2.5" style={card}>
-      <div className="flex items-center gap-2">
-        <div style={{ ...eyebrow, flex: 1 }}>What&apos;s next</div>
-        {data.contact_id && (
-          <button onClick={() => { setAdding((v) => !v); setErr(null); }} className="rounded px-2"
-            style={{ height: 30, border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink, fontSize: F.xs, fontWeight: 600, cursor: "pointer" }}>
-            + Add to-do
-          </button>
-        )}
-        <button onClick={() => askDusty(NEXT_QUESTION)} aria-label="Ask Dusty what's left to scope and price it" title="Ask Dusty what's left to scope and price it"
-          className="flex items-center justify-center shrink-0" style={{ width: 30, height: 30, borderRadius: 4, border: `1px solid ${T.hairStrong}`, background: T.card, cursor: "pointer" }}>
-          <Emblem size={18} spin={false} />
-        </button>
-      </div>
-      {photos > 0 && (
-        <div style={{ fontSize: F.sm, color: T.ink2, marginTop: 6 }}>
-          Brought in {photos} photo{photos === 1 ? "" : "s"} they texted · <Link href={`/dashboard/scope/${jobId}/files`} style={{ color: T.chalk }}>See them in Files ›</Link>
-        </div>
-      )}
-      {progress.next !== "sent" && step && (
-        <div className="flex items-center gap-2" style={{ marginTop: 6 }}>
-          <span style={{ fontSize: F.sm, color: T.ink, flex: 1, minWidth: 0 }}>{progress.line}</span>
-          <Link href={href} className="rounded px-2.5 no-underline inline-flex items-center"
-            style={{ height: 28, background: T.ink, color: T.card, fontSize: F.xs, fontWeight: 600, flexShrink: 0 }}>{step.label} ›</Link>
-        </div>
-      )}
-      {adding && (
-        <form className="flex items-center gap-2" style={{ marginTop: 8 }} onSubmit={(e) => { e.preventDefault(); void add(); }}>
-          <input autoFocus value={text} onChange={(e) => setText(e.target.value)} maxLength={200} placeholder="A to-do for this job"
-            onKeyDown={(e) => { if (e.key === "Escape") { setAdding(false); setText(""); } }}
-            className="rounded px-2" style={{ flex: 1, minWidth: 0, height: 32, border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink, fontSize: 16 }} />
-          <button type="submit" disabled={!text.trim()} className="rounded px-3"
-            style={{ height: 32, background: T.ink, color: T.card, fontSize: F.xs, fontWeight: 600, border: 0, cursor: text.trim() ? "pointer" : "default", opacity: text.trim() ? 1 : 0.5 }}>Add</button>
-        </form>
-      )}
-      {err && <div style={{ fontSize: F.xs, color: T.red, marginTop: 4 }}>{err}</div>}
-      {tasks.length > 0 && (
-        <ul style={{ listStyle: "none", padding: 0, margin: "8px 0 0" }}>
-          {shown.map((t) => {
-            const full = open === t.id;
-            return (
-              <li key={t.id} className="flex items-center gap-2" style={{ fontSize: F.sm, color: T.ink2, lineHeight: 1.35, padding: "3px 0", borderTop: `1px solid ${T.hairSoft}` }}>
-                <button onClick={() => close(t, "done")} aria-label={`Done: ${t.title}`} title="Done" style={box} />
-                <button onClick={() => setOpen(full ? null : t.id)} title={t.title}
-                  style={{ flex: 1, minWidth: 0, textAlign: "left", background: "none", border: 0, padding: 0, color: "inherit", font: "inherit", cursor: "pointer",
-                    ...(full ? {} : { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }) }}>
-                  {full ? t.title : t.short}{t.due_on ? <span style={{ color: T.ink3 }}> · {day(`${t.due_on}T12:00:00Z`)}</span> : null}
-                </button>
-                <button onClick={() => close(t, "dismissed")} aria-label={`Remove: ${t.title}`} title="Remove"
-                  style={{ ...box, border: 0, background: "none", color: T.ink3, fontSize: 16, lineHeight: 1 }}>×</button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-      {tasks.length > SHOW && (
-        <button onClick={() => setAll((v) => !v)} style={{ marginTop: 4, background: "none", border: 0, padding: 0, color: T.chalk, fontSize: F.xs, fontWeight: 600, cursor: "pointer" }}>
-          {all ? "Show less" : `+ ${tasks.length - SHOW} more`}
-        </button>
-      )}
-      {progress.next === "sent" && !tasks.length && !adding && (
-        <div style={{ fontSize: F.sm, color: T.ink3, marginTop: 6 }}>{progress.line}</div>
-      )}
-    </section>
   );
 }
 
@@ -484,7 +357,7 @@ function ProposalState({ jobId, links, card, onWon }: {
  * work give the last day in work days (Mon–Fri). A start moves Won → Scheduled, clearing it moves it
  * back; "Told the customer" marks the date confirmed (schedule_state committed) rather than pencilled in.
  */
-function ScheduleCard({ jobId, job, card, onChange }: {
+export function ScheduleCard({ jobId, job, card, onChange }: {
   jobId: string; job: Job; card: React.CSSProperties; onChange: () => void;
 }) {
   const [err, setErr] = useState<string | null>(null);

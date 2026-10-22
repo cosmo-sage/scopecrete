@@ -26,9 +26,13 @@ import { Empty, panelTitle } from "@/components/v34/record-page";
 import { ReceiptImport } from "@/components/v34/receipt-import";
 import { PENDING_VENDOR_KEY } from "@/components/v34/org-settings";
 import { InitialsBox } from "@/components/v34/thread-list";
+import { ContactPicker } from "@/components/v34/contacts";
 import { BidComposer } from "@/components/v34/bids/bid-composer";
+import { BulkBar, send, type BulkEdit } from "@/components/v34/bulk-bar";
+import { withTrade } from "@/lib/bulk";
 import { websiteLabel } from "@/lib/vendor-website";
 import { TRADES, bidStats, cleanTrades, hasTrade, hoursLabel, tradeCounts, type PriceLine, type ShownScope } from "@/lib/bids";
+import { clearVendorFilter, setVendorFilter, useVendorFilter } from "@/lib/v34/vendor-filter";
 
 interface VRow {
   id: string; name: string | null; company_name: string | null; subtype: string | null; phone: string | null; email: string | null;
@@ -63,14 +67,18 @@ const tag: React.CSSProperties = { fontSize: 10.5, padding: "1px 6px", borderRad
  * they answer bids; ticking rows brings up the black bar — Send a bid request.
  */
 export function VendorList() {
+  const router = useRouter();
   const [rows, setRows] = useState<VRow[] | null>(null);
   const [ready, setReady] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [q, setQ] = useState("");
   const [finding, setFinding] = useState(false);
-  const [sub, setSub] = useState("all");
-  const [trade, setTrade] = useState("All");
+  // The trade and kind live in a small store the Spaces drawer reads too (Coy, 2026-10-19).
+  const filter = useVendorFilter();
+  const sub = filter.sub, trade = filter.trade;
+  const setSub = (v: string) => setVendorFilter({ sub: v });
+  const setTrade = (v: string) => setVendorFilter({ trade: v });
   const [sort, setSort] = useState("name");
   const [sel, setSel] = useState<string[]>([]);
   const [composing, setComposing] = useState(false);
@@ -110,6 +118,14 @@ export function VendorList() {
   }, [tick]);
 
   const trades = useMemo(() => tradeCounts(rows ?? []).filter((t) => t.n > 0), [rows]);
+  useEffect(() => {
+    if (!rows) return;
+    setVendorFilter({
+      trades: [{ trade: "All", n: rows.length }, ...trades],
+      kinds: SUBTYPES.map(([k, l]) => ({ k, label: l, n: k === "all" ? rows.length : rows.filter((v) => v.subtype === k).length })),
+    });
+  }, [rows, trades]);
+  useEffect(() => () => clearVendorFilter(), []);
   const shown = useMemo(() => {
     const s = q.trim().toLowerCase();
     const list = (rows ?? []).filter((v) => (sub === "all" || v.subtype === sub) && (trade === "All" || hasTrade(v, trade)) &&
@@ -124,6 +140,17 @@ export function VendorList() {
   const toggleAll = () => setSel((s) => (allOn ? s.filter((id) => !shown.some((v) => v.id === id)) : [...new Set([...s, ...shown.map((v) => v.id)])]));
   const phones = picked.map((v) => v.phone).filter((p): p is string => !!p);
   const groupText = () => { if (phones.length) window.location.assign(`sms:${phones.join(",")}`); };
+  // Bulk edit (Coy, 2026-10-22): the kind, or a trade added or taken off, on every ticked vendor.
+  const tradesOf = (id: string) => (rows ?? []).find((v) => v.id === id)?.trades ?? [];
+  const tradeOpts = [...new Set([...TRADES, ...picked.flatMap((v) => v.trades ?? [])])].map((t) => ({ k: t, label: t }));
+  const bulkEdits = ([
+    { k: "kind", label: "Kind", options: SUBTYPES.filter(([k]) => k !== "all").map(([k, l]) => ({ k, label: l.replace(/s$/, "") })),
+      apply: async (id, v) => { await send(`/api/vendors/${id}`, "PATCH", { subtype: v }); }, did: (l) => `Set {n} to ${l}` },
+    { k: "trade+", label: "Add a trade", options: tradeOpts,
+      apply: async (id, v) => { await send(`/api/vendors/${id}`, "PATCH", { trades: withTrade(tradesOf(id), v, true) }); }, did: (l) => `Added ${l} to {n}` },
+    { k: "trade-", label: "Take a trade off", options: tradeOpts.filter((o) => picked.some((v) => hasTrade(v, o.k))),
+      apply: async (id, v) => { await send(`/api/vendors/${id}`, "PATCH", { trades: withTrade(tradesOf(id), v, false) }); }, did: (l) => `Took ${l} off {n}` },
+  ] as BulkEdit[]).filter((e) => e.options.length > 0);
   const countLabel = trade === "All" ? (rows ? `${shown.length}` : null) : `${shown.length} ${trade.toLowerCase()}`;
 
   const tradeList = (
@@ -193,13 +220,20 @@ export function VendorList() {
           {[{ trade: "All", n: rows?.length ?? 0 }, ...trades].map((t) => {
             const on = t.trade === trade;
             return (
-              <button key={t.trade} role="tab" aria-selected={on} onClick={() => setTrade(t.trade)} className="shrink-0 rounded px-2.5"
+              <button key={t.trade} role="tab" aria-selected={on} onClick={() => setTrade(t.trade)} className="shrink-0 rounded px-2.5 sc-old-nav-only"
                 style={{ height: 30, background: on ? T.ink : T.card, color: on ? T.card : T.ink2, border: `1px solid ${on ? T.ink : T.hairStrong}`, fontSize: F.xs, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
                 {t.trade} <span style={{ opacity: 0.7 }}>{t.n}</span>
               </button>
             );
           })}
-          <select value={sub} onChange={(e) => setSub(e.target.value)} aria-label="Kind" style={{ ...field, width: "auto", height: 30 }}>
+          {/* Under Spaces the trades are in the drawer; the pick shows here with × to clear it. */}
+          {(trade !== "All" || sub !== "all") && (
+            <button type="button" className="shrink-0 rounded px-2.5 sc-spaces-only" onClick={() => setVendorFilter({ trade: "All", sub: "all" })}
+              style={{ height: 30, background: T.ink, color: T.card, border: `1px solid ${T.ink}`, fontSize: F.xs, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
+              {[trade !== "All" ? trade : null, sub !== "all" ? SUB_LABEL[sub] ?? sub : null].filter(Boolean).join(" · ")} ×
+            </button>
+          )}
+          <select value={sub} onChange={(e) => setSub(e.target.value)} aria-label="Kind" className="sc-old-nav-only" style={{ ...field, width: "auto", height: 30 }}>
             {SUBTYPES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
           </select>
           <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Sort" style={{ ...field, width: "auto", height: 30 }}>
@@ -209,7 +243,7 @@ export function VendorList() {
       )}
 
       <div className="flex gap-4 items-start">
-        {wide && <div className="shrink-0 sticky" style={{ top: "calc(var(--sc-head) + var(--sc-subhead, 0px) + 8px)" }}>{tradeList}</div>}
+        {wide && <div className="shrink-0 sticky sc-old-nav-only" style={{ top: "calc(var(--sc-head) + var(--sc-subhead, 0px) + 8px)" }}>{tradeList}</div>}
         <div style={{ flex: 1, minWidth: 0 }}>
           {wide && (
             <div className="flex items-center gap-2 mb-2">
@@ -229,7 +263,7 @@ export function VendorList() {
             ) : wide ? (
               <table className="w-full" style={{ borderCollapse: "collapse", fontSize: F.sm, background: T.card }}>
                 <thead><tr style={{ background: T.slab }}>
-                  {["", "Vendor", "Trade", "Reach them", "Bids answered", "Prices on file", ""].map((h, i) => (
+                  {["", "Vendor", "Trade", "Reach them", "Bids answered", "Prices on file"].map((h, i) => (
                     <th key={i} style={{ ...eyebrow, textAlign: "left", padding: "6px 8px", borderBottom: `1px solid ${T.hair}` }}>{h}</th>
                   ))}
                 </tr></thead>
@@ -237,8 +271,8 @@ export function VendorList() {
                   {shown.map((v) => {
                     const on = sel.includes(v.id);
                     return (
-                      <tr key={v.id} onClick={() => toggle(v.id)} style={{ borderTop: `1px solid ${T.hairSoft}`, background: on ? T.sunk : "transparent", cursor: "pointer" }}>
-                        <td style={{ padding: "6px 8px", width: 30 }}><Tick on={on} onClick={() => toggle(v.id)} label={`Pick ${label(v)}`} /></td>
+                      <tr key={v.id} onClick={() => router.push(`/dashboard/vendors/${v.id}`)} style={{ borderTop: `1px solid ${T.hairSoft}`, background: on ? T.sunk : "transparent", cursor: "pointer" }}>
+                        <td onClick={(e) => { e.stopPropagation(); toggle(v.id); }} style={{ padding: "6px 8px", width: 30 }}><Tick on={on} onClick={() => toggle(v.id)} label={`Pick ${label(v)}`} /></td>
                         <td style={{ padding: "6px 8px", maxWidth: 280 }}>
                           <span className="flex items-center gap-2">
                             <InitialsBox name={label(v) || null} size={28} />
@@ -252,9 +286,6 @@ export function VendorList() {
                         <td style={{ padding: "6px 8px" }}>{reach(v)}</td>
                         <td style={{ padding: "6px 8px" }}>{bidsCell(v)}</td>
                         <td style={{ padding: "6px 8px" }}>{pricesCell(v)}</td>
-                        <td style={{ padding: "6px 8px", textAlign: "right" }}>
-                          <Link href={`/dashboard/vendors/${v.id}`} onClick={(e) => e.stopPropagation()} style={{ ...eyebrow, color: T.chalk }}>Open</Link>
-                        </td>
                       </tr>
                     );
                   })}
@@ -265,14 +296,14 @@ export function VendorList() {
                 {shown.map((v) => {
                   const on = sel.includes(v.id);
                   return (
-                    <div key={v.id} className="px-3 py-2 flex items-center gap-2.5" style={{ borderTop: `1px solid ${T.hairSoft}`, background: on ? T.sunk : "transparent" }}>
+                    <div key={v.id} onClick={() => router.push(`/dashboard/vendors/${v.id}`)} className="px-3 py-2 flex items-center gap-2.5" style={{ borderTop: `1px solid ${T.hairSoft}`, background: on ? T.sunk : "transparent", cursor: "pointer" }}>
                       <Tick on={on} onClick={() => toggle(v.id)} label={`Pick ${label(v)}`} />
-                      <Link href={`/dashboard/vendors/${v.id}`} style={{ flex: 1, minWidth: 0, color: T.ink }}>
+                      <div style={{ flex: 1, minWidth: 0, color: T.ink }}>
                         <div style={{ fontWeight: 600, fontSize: F.sm, ...clip }}>{label(v)}</div>
                         <div style={{ fontSize: 10.5, color: T.ink3, ...clip }}>
                           {[(v.trades ?? []).join(" · ") || (v.subtype ? SUB_LABEL[v.subtype] ?? v.subtype : null), v.bids?.speed ?? (v.bids?.sent ? v.bids.label : null)].filter(Boolean).join(" · ") || "—"}
                         </div>
-                      </Link>
+                      </div>
                       <span style={{ fontSize: 10.5, color: T.ink3, whiteSpace: "nowrap" }}>{v.phone && v.email ? "Text · Email" : v.phone ? "Text only" : v.email ? "Email only" : "—"}</span>
                     </div>
                   );
@@ -283,18 +314,15 @@ export function VendorList() {
       </div>
 
       {picked.length > 0 && (
-        <div className="fixed sc-select-bar flex items-center gap-3 px-4" role="region" aria-label="Picked vendors"
-          style={{ left: 0, right: 0, bottom: "calc(var(--sc-foot, 0px) + 10px)", margin: "0 auto", width: "min(980px, calc(100% - 24px))", minHeight: 52, background: "#1F1D1A", color: "#fff", borderRadius: 6, zIndex: 40, boxShadow: "0 10px 30px rgba(0,0,0,.25)" }}>
-          <span style={{ fontFamily: disp, fontSize: F.md, fontWeight: 700, whiteSpace: "nowrap" }}>{picked.length} selected</span>
-          {wide && <span style={{ fontSize: F.xs, color: "#C9C3B8", flex: 1, minWidth: 0, ...clip }}>{picked.map((v) => label(v)).join(", ")}</span>}
-          {wide && <span style={{ fontSize: F.xs, color: "#C9C3B8", whiteSpace: "nowrap" }}>{phones.length} by text · {picked.filter((v) => v.email).length} by email</span>}
-          {!wide && <span style={{ flex: 1 }} />}
-          <button onClick={() => setSel([])} style={{ fontSize: F.xs, color: "#C9C3B8", textDecoration: "underline", cursor: "pointer" }}>Clear</button>
-          {wide && phones.length > 1 && <button onClick={groupText} title="Opens a group text on your phone" style={{ height: 32, padding: "0 10px", borderRadius: 4, border: "1px solid #5A554E", color: "#fff", fontSize: F.xs, cursor: "pointer" }}>Group text</button>}
-          <button onClick={() => setComposing(true)} style={{ height: 34, padding: "0 14px", borderRadius: 4, background: T.hiviz, color: T.onHiviz, fontFamily: disp, fontSize: F.sm, textTransform: "uppercase", letterSpacing: ".06em", whiteSpace: "nowrap", cursor: "pointer" }}>
-            {wide ? "Send a bid request →" : "Bid request →"}
-          </button>
-        </div>
+        <BulkBar kind="contact" vendor ids={picked.map((v) => v.id)} what={["vendor", "vendors"]} names={picked.map((v) => label(v) ?? "")} wide={wide}
+          onClear={() => setSel([])} onDone={() => { setSel([]); setTick((n) => n + 1); }} edits={bulkEdits}
+          summary={<span style={{ fontSize: F.xs, color: "#C9C3B8", whiteSpace: "nowrap" }}>{phones.length} by text · {picked.filter((v) => v.email).length} by email</span>}
+          extra={<>
+            {wide && phones.length > 1 && <button onClick={groupText} title="Opens a group text on your phone" style={{ height: 32, padding: "0 10px", borderRadius: 4, border: "1px solid #5A554E", color: "#fff", fontSize: F.xs, cursor: "pointer" }}>Group text</button>}
+            <button onClick={() => setComposing(true)} style={{ height: 34, padding: "0 14px", borderRadius: 4, background: T.hiviz, color: T.onHiviz, fontFamily: disp, fontSize: F.sm, textTransform: "uppercase", letterSpacing: ".06em", whiteSpace: "nowrap", cursor: "pointer" }}>
+              {wide ? "Send a bid request →" : "Bid →"}
+            </button>
+          </>} />
       )}
 
       {composing && <BidComposer open onClose={() => setComposing(false)} vendors={picked}
@@ -373,12 +401,73 @@ function NewVendor({ onClose, onMade }: { onClose: () => void; onMade: (id: stri
 interface Price {
   id: string; unit_cost: number | null; vendor_sku: string | null; unit: string | null; price_as_of: string | null; price_source: string | null;
   tax_pct_seen: number | null; is_default: boolean; cheapest_other: { unit_cost: number; vendor: string | null } | null;
+  group?: string | null;
   item: { id: string; name: string; unit: string | null; cost_type: string };
 }
 interface VFile { id: string; name: string; category: string | null; read_state: string | null; summary: string | null; created_at: string; url: string | null; facts: Record<string, unknown> | null }
 interface VPage {
   vendor: VRow & { contact_type: string; status_summary: string | null };
   prices: Price[]; files: VFile[]; jobs: Array<{ id: string; title: string | null; status: string; address: string | null; role: string | null }>; messages: number;
+  /** Their account (a customers row) and its people; absent on an older server. */
+  account?: { id: string; name: string | null; relation: string } | null;
+  people?: VPerson[];
+}
+interface VPerson { id: string; name: string | null; phone: string | null; email: string | null; role: string | null; bucket: string | null; primary: boolean }
+
+/**
+ * The people at a vendor (Coy, 2026-10-21: "a vendor account will have contacts inside it just like a
+ * customer account"). Their account is the customers row filing them vendor made (relation vendor · sub);
+ * + Add person files the pick as a vendor first, then puts them on it through the customer page's own
+ * routes (sc_attach_contact, undoable). Migration 116 keeps a second person there when they are filed again.
+ */
+function VendorPeople({ p, vendorId, onSaved }: { p: VPage; vendorId: string; onSaved: () => void }) {
+  const [adding, setAdding] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const people = p.people ?? [];
+  const acct = p.account;
+  const add = async (contactId: string, bucket: string | null) => {
+    if (!acct) return;
+    setBusy("add"); setErr(null);
+    try {
+      if (bucket !== "vendor") await call(`/api/contacts/${contactId}/bucket`, "PATCH", { bucket: "vendor" });
+      await call(`/api/customers/${acct.id}/contacts`, "POST", { contact_id: contactId });
+      setAdding(false); onSaved();
+    } catch (e) { setErr(String((e as Error).message)); } finally { setBusy(null); }
+  };
+  const remove = async (x: VPerson) => {
+    if (!acct || !confirm(`Take ${x.name ?? "them"} off ${acct.name ?? "this vendor"}? Their calls and texts stay with them.`)) return;
+    setBusy(x.id); setErr(null);
+    try { await call(`/api/customers/${acct.id}/contacts/${x.id}`, "DELETE"); onSaved(); }
+    catch (e) { setErr(String((e as Error).message)); } finally { setBusy(null); }
+  };
+  return (
+    <div style={{ padding: "12px 0", display: "flex", flexDirection: "column", gap: 8, maxWidth: 720 }}>
+      <div className="flex items-center gap-2">
+        <span style={panelTitle}>People at {acct?.name || label(p.vendor)} · {people.length}</span>
+        {acct && <button onClick={() => setAdding((v) => !v)} style={{ marginLeft: "auto", height: 30, padding: "0 10px", border: `1px solid ${T.hairStrong}`, borderRadius: 2,
+          background: "transparent", color: T.ink2, fontFamily: disp, fontSize: 12, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase", cursor: "pointer" }}>{adding ? "Close" : "+ Add person"}</button>}
+      </div>
+      {!acct && <Empty text="Keep them as a vendor first (the tag under their name) — that makes their account, and people go on it." />}
+      {adding && acct && <ContactPicker exclude={people.map((x) => x.id)} onPick={(c) => void add(c.id, c.role === "vendor" || c.role === "sub" ? "vendor" : null)} busy={busy === "add"} bucket="vendor" />}
+      {people.map((x) => (
+        <div key={x.id} className="flex items-center gap-2.5" style={{ padding: "8px 10px", background: T.card, border: `1px solid ${T.hair}`, borderRadius: 3 }}>
+          <InitialsBox name={x.name} size={32} />
+          <div className="flex flex-col" style={{ flex: 1, minWidth: 0 }}>
+            <span className="flex gap-1.5 items-center">
+              <Link href={x.id === vendorId ? `/dashboard/vendors/${x.id}` : `/dashboard/messages/${x.id}?person=1`} className="no-underline" style={{ fontSize: 14, fontWeight: 600, color: T.ink }}>{x.name || formatPhone(x.phone) || "No name"}</Link>
+              {x.primary && <span style={{ fontFamily: disp, fontSize: 11, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase", color: T.hivizText }}>Primary</span>}
+              {x.role && <span style={{ fontSize: 12, color: T.ink3 }}>{x.role}</span>}
+            </span>
+            <span style={{ fontSize: 12.5, color: T.ink3, overflowWrap: "anywhere" }}>{[x.phone ? formatPhone(x.phone) : null, x.email].filter(Boolean).join(" · ") || "No number or email"}</span>
+          </div>
+          {x.phone && <a href={`tel:${x.phone}`} style={{ fontSize: 13, color: T.ink2 }}>Call</a>}
+          {!x.primary && <button onClick={() => void remove(x)} disabled={!!busy} style={{ border: 0, background: "transparent", color: T.ink3, fontSize: 13, cursor: "pointer" }}>{busy === x.id ? "…" : "Take off"}</button>}
+        </div>
+      ))}
+      {err && <span style={{ fontSize: 12, color: T.red }}>{err}</span>}
+    </div>
+  );
 }
 
 /**
@@ -429,7 +518,8 @@ export function VendorPage({ id }: { id: string }) {
   const extra: RecordExtras = {
     tabs: [
       { key: "bids", label: `Bid requests ${bids ? mine.length : ""}`.trim(), render: () => p ? <VendorBids rows={mine} stats={stats} jobs={p.jobs.length} missing={bidsMissing} onSend={() => setComposing(true)} /> : <Empty text={err ?? "Loading…"} /> },
-      { key: "prices", label: `Prices ${p?.prices.length ?? ""}`.trim(), render: () => p ? <VendorPrices p={p} onDefault={(pr) => void makeDefault(pr)} /> : <Empty text={err ?? "Loading…"} /> },
+      { key: "people", label: `People ${p?.people ? p.people.length : ""}`.trim(), render: () => p ? <VendorPeople p={p} vendorId={id} onSaved={() => setTick((n) => n + 1)} /> : <Empty text={err ?? "Loading…"} /> },
+      { key: "prices", label: `Cost book ${p?.prices.length ?? ""}`.trim(), render: () => p ? <VendorPrices p={p} onDefault={(pr) => void makeDefault(pr)} /> : <Empty text={err ?? "Loading…"} /> },
       { key: "receipts", label: `Receipts & quotes ${p ? receipts : ""}`.trim(), render: () => p ? <VendorReceipts p={p} onImport={() => setReceipt(true)} /> : <Empty text={err ?? "Loading…"} /> },
     ],
     actions: [
@@ -549,48 +639,78 @@ function VendorBids({ rows, stats, jobs, missing, onSend }: { rows: Array<BidRec
   );
 }
 
-/** Prices: theirs on each item, ★ the one budgets use (tap to make it so); their cards under it. */
+/**
+ * Their cost book (Coy, 2026-10-18: "Every vendor has it's own isolated cost book with Cost
+ * Groups and Cost items" — chosen "View, by group"): the items they price, under the Price
+ * book's own groups, each with their price; ★ the one budgets use (tap to make it so). One
+ * catalog, so Compare vendors and default prices still work; their cards are added under it.
+ */
 function VendorPrices({ p, onDefault }: { p: VPage; onDefault: (pr: Price) => void }) {
   const [q, setQ] = useState("");
   const [cards, setCards] = useState(false);
+  const [shut, setShut] = useState<Set<string>>(new Set());
   const s = q.trim().toLowerCase();
-  const prices = p.prices.filter((x) => !s || x.item.name.toLowerCase().includes(s) || (x.vendor_sku ?? "").toLowerCase().includes(s));
+  const prices = p.prices.filter((x) => !s || x.item.name.toLowerCase().includes(s) || (x.vendor_sku ?? "").toLowerCase().includes(s) || (x.group ?? "").toLowerCase().includes(s));
+  const groups = vendorGroups(prices);
+  const flip = (g: string) => setShut((m) => { const n = new Set(m); if (n.has(g)) n.delete(g); else n.add(g); return n; });
+  const row = (pr: Price) => (
+    <div key={pr.id} className="flex items-center gap-2 px-3 py-1.5" style={{ borderTop: `1px solid ${T.hairSoft}`, paddingLeft: 22 }}>
+      <button onClick={() => { if (!pr.is_default) onDefault(pr); }} aria-label={pr.is_default ? `Default for ${pr.item.name}` : `Make default for ${pr.item.name}`}
+        title={pr.is_default ? "Their price is the one budgets use" : "Make theirs the price budgets use"}
+        style={{ fontSize: 18, lineHeight: 1, color: pr.is_default ? T.hiviz : T.hair, cursor: pr.is_default ? "default" : "pointer", width: 22 }}>★</button>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: F.sm, fontWeight: 600, ...clip }}>{pr.item.name}</div>
+        <div style={{ fontSize: 10, color: T.ink3, ...clip }}>
+          {[pr.item.cost_type, pr.vendor_sku ? `#${pr.vendor_sku}` : null, pr.price_as_of ? dateLabel(pr.price_as_of) : null, pr.price_source,
+            pr.cheapest_other ? `${pr.cheapest_other.unit_cost < (pr.unit_cost ?? Infinity) ? "cheaper" : "next"}: ${money(pr.cheapest_other.unit_cost)} ${pr.cheapest_other.vendor ?? ""}` : null].filter(Boolean).join(" · ")}
+        </div>
+      </div>
+      <span style={{ ...nums, fontSize: F.sm }}>{pr.unit_cost === null ? <span style={{ color: T.hiviz }}>blank</span> : money(pr.unit_cost)}<span style={{ fontSize: 10, color: T.ink3 }}>/{pr.unit ?? pr.item.unit ?? "?"}</span></span>
+    </div>
+  );
   return (
     <div className="p-4 flex flex-col gap-3" style={{ maxWidth: 900 }}>
       <section className="rounded" style={{ background: T.card, border: `1px solid ${T.hair}` }}>
         <div className="flex items-center gap-2 px-3 py-2" style={{ borderBottom: `1px solid ${T.hairSoft}` }}>
-          <h3 style={{ ...panelTitle, flex: 1 }}>Prices</h3>
-          {p.prices.length > 8 && <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find" aria-label="Find a price" style={{ ...field, width: 160, height: 28 }} />}
+          <h3 style={{ ...panelTitle, flex: 1 }}>Their cost book · {p.prices.length} item{p.prices.length === 1 ? "" : "s"} in {vendorGroups(p.prices).length} group{vendorGroups(p.prices).length === 1 ? "" : "s"}</h3>
+          {p.prices.length > 8 && <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find" aria-label="Find in their cost book" style={{ ...field, width: 160, height: 28 }} />}
         </div>
         {prices.length === 0 ? (
           <div className="px-3 py-3" style={{ fontSize: F.sm, color: T.ink3, lineHeight: 1.5 }}>
             {p.prices.length ? "Nothing matches." : "No prices yet. Add a receipt or quote and Dusty reads their prices; or add them to an item in the Price book."}
           </div>
-        ) : prices.map((pr) => (
-          <div key={pr.id} className="flex items-center gap-2 px-3 py-1.5" style={{ borderTop: `1px solid ${T.hairSoft}` }}>
-            <button onClick={() => { if (!pr.is_default) onDefault(pr); }} aria-label={pr.is_default ? `Default for ${pr.item.name}` : `Make default for ${pr.item.name}`}
-              title={pr.is_default ? "Their price is the one budgets use" : "Make theirs the price budgets use"}
-              style={{ fontSize: 18, lineHeight: 1, color: pr.is_default ? T.hiviz : T.hair, cursor: pr.is_default ? "default" : "pointer", width: 22 }}>★</button>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: F.sm, fontWeight: 600, ...clip }}>{pr.item.name}</div>
-              <div style={{ fontSize: 10, color: T.ink3, ...clip }}>
-                {[pr.vendor_sku ? `#${pr.vendor_sku}` : null, pr.price_as_of ? dateLabel(pr.price_as_of) : null, pr.price_source,
-                  pr.cheapest_other ? `${pr.cheapest_other.unit_cost < (pr.unit_cost ?? Infinity) ? "cheaper" : "next"}: ${money(pr.cheapest_other.unit_cost)} ${pr.cheapest_other.vendor ?? ""}` : null].filter(Boolean).join(" · ")}
-              </div>
-            </div>
-            <span style={{ ...nums, fontSize: F.sm }}>{pr.unit_cost === null ? <span style={{ color: T.hiviz }}>blank</span> : money(pr.unit_cost)}<span style={{ fontSize: 10, color: T.ink3 }}>/{pr.unit ?? pr.item.unit ?? "?"}</span></span>
+        ) : groups.map(([g, list]) => (
+          <div key={g}>
+            <button onClick={() => flip(g)} className="flex items-center gap-2 w-full text-left px-3 py-1.5" aria-expanded={!shut.has(g)}
+              style={{ borderTop: `1px solid ${T.hairSoft}`, background: T.sunk, cursor: "pointer" }}>
+              <span style={{ fontSize: 10, color: T.ink3, width: 12 }}>{shut.has(g) ? "▸" : "▾"}</span>
+              <span style={{ ...eyebrow, flex: 1, color: T.ink2 }}>{g}</span>
+              <span style={{ fontSize: 10, color: T.ink3 }}>{list.length}</span>
+            </button>
+            {!shut.has(g) && list.map(row)}
           </div>
         ))}
         <div className="px-3 py-2" style={{ fontSize: 10, color: T.ink3, borderTop: `1px solid ${T.hairSoft}` }}>
-          ★ = their price is the one budgets use for that item. <Link href="/dashboard/price-book" style={{ color: T.chalk }}>Price book →</Link>
+          ★ = their price is the one budgets use for that item. Groups are your Price book&apos;s. <Link href="/dashboard/price-book" style={{ color: T.chalk }}>Price book →</Link>
         </div>
       </section>
       <div>
-        <button onClick={() => setCards((x) => !x)} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>{cards ? "▾" : "▸"} Cards with them as vendor — edit or add</button>
+        <button onClick={() => setCards((x) => !x)} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>{cards ? "▾" : "▸"} Add or edit items in their cost book</button>
         {cards && <div className="mt-2"><CostCards vendorId={p.vendor.id} vendorName={label(p.vendor)} /></div>}
       </div>
     </div>
   );
+}
+
+/** A vendor's prices under their Price book groups, A–Z, with no group last. */
+function vendorGroups(prices: Price[]): Array<[string, Price[]]> {
+  const m = new Map<string, Price[]>();
+  for (const pr of prices) {
+    const g = pr.group ?? "No group";
+    if (!m.has(g)) m.set(g, []);
+    m.get(g)!.push(pr);
+  }
+  return [...m.entries()].sort(([a], [b]) => (a === "No group" ? 1 : b === "No group" ? -1 : a.localeCompare(b)));
 }
 
 /** Receipts & quotes filed on them, what Dusty read off each, and Import prices from one. */

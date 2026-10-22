@@ -22,6 +22,7 @@ import { useWide } from "@/lib/v34/use-wide";
 import { PageHeader, SearchBubble, SearchToggle } from "@/components/v34/primitives";
 import { usePref } from "@/lib/v34/prefs";
 import { STAGES } from "@/lib/jobs/stages";
+import { BulkBar, BulkTick, send, type BulkEdit } from "@/components/v34/bulk-bar";
 
 interface Row {
   id: string; name: string; customer_type: string | null; status: string | null; address: string | null; city: string | null; state: string | null; zip: string | null;
@@ -73,6 +74,8 @@ export function Customers() {
   const [stage, setStage] = useState("any");
   const [adding, setAdding] = useState(false);
   const [colsOpen, setColsOpen] = useState(false);
+  const [ticked, setTicked] = useState<string[]>([]);
+  const [reload, setReload] = useState(0);
   const [saved, setSaved] = usePref<View>("customers_view", DEFAULT_VIEW);
   const v: View = { ...DEFAULT_VIEW, ...saved, cols: (saved?.cols ?? DEFAULT_VIEW.cols).filter((k) => COL.has(k)) };
   const [measure, wide] = useWide<HTMLDivElement>(900);
@@ -94,7 +97,7 @@ export function Customers() {
       .then((b) => { if (!off) { setRows(b.customers as Row[]); } })
       .catch((e) => { if (!off) setErr(e instanceof Error ? e.message : String(e)); });
     return () => { off = true; };
-  }, []);
+  }, [reload]);
 
   const shown = useMemo(() => {
     const t = q.trim().toLowerCase();
@@ -111,6 +114,18 @@ export function Customers() {
       return (typeof x === "number" && typeof y === "number" ? x - y : String(x).localeCompare(String(y))) * v.dir;
     });
   }, [rows, q, type, stage, v.sort, v.dir]);
+
+  // Bulk edit and delete (Coy, 2026-10-22): tick rows, then the bar's Edit ▾ or Delete.
+  const toggle = (id: string) => setTicked((x) => (x.includes(id) ? x.filter((y) => y !== id) : [...x, id]));
+  const allOn = shown.length > 0 && shown.every((r) => ticked.includes(r.id));
+  const toggleAll = () => setTicked((x) => (allOn ? x.filter((id) => !shown.some((r) => r.id === id)) : [...new Set([...x, ...shown.map((r) => r.id)])]));
+  const picked = (rows ?? []).filter((r) => ticked.includes(r.id));
+  const bulkEdits: BulkEdit[] = [
+    { k: "type", label: "Type", options: TYPES.filter(([k]) => k !== "all" && k !== "none").map(([k, l]) => ({ k, label: l })),
+      apply: async (id, t) => { await send(`/api/customers/${id}`, "PATCH", { customer_type: t }); }, did: (l) => `Set {n} to ${l}` },
+    { k: "source", label: "Source", options: Object.entries(SOURCE).map(([k, l]) => ({ k, label: l })),
+      apply: async (id, t) => { await send(`/api/customers/${id}`, "PATCH", { lead_source: t }); }, did: (l) => `Set {n}'s source to ${l}` },
+  ];
 
   const set = (p: Partial<View>) => setSaved({ ...v, ...p });
   const sortBy = (k: string) => set(v.sort === k ? { dir: v.dir === 1 ? -1 : 1 } : { sort: k, dir: k === "last" || k === "first" || k === "since" || k === "jobs" ? -1 : 1 });
@@ -157,7 +172,7 @@ export function Customers() {
       </>}>
       {(finding || q) && <div className="mt-2"><SearchBubble value={q} onChange={setQ} onClose={() => setFinding(false)} placeholder="Find a name, address, phone, what was said…" /></div>}
     </PageHeader>
-    <div ref={measure} className="px-3 pb-6 lg:px-5">
+    <div ref={measure} className="px-3 pb-6 lg:px-5" style={{ paddingBottom: picked.length ? 90 : undefined }}>
 
       <div className="flex gap-2 flex-wrap items-center mb-2">
         {wide ? (
@@ -214,15 +229,17 @@ export function Customers() {
         <div className="overflow-x-auto rounded" style={{ border: `1px solid ${T.hair}`, background: T.card }}>
           <table style={{ borderCollapse: "collapse", fontSize: F.sm, width: "100%", minWidth: 600 }}>
             <thead><tr style={{ background: T.slab }}>
-              <th onClick={() => sortBy("name")} style={{ ...eyebrow, textAlign: "left", padding: "6px 8px", cursor: "pointer", position: "sticky", left: 0, background: T.slab, minWidth: 180 }}>Customer{arrow("name")}</th>
+              <th style={{ width: 30, padding: "6px 0 6px 8px", position: "sticky", left: 0, background: T.slab, zIndex: 1 }}><BulkTick on={allOn} onClick={toggleAll} label={allOn ? "Clear these" : "Pick every customer shown"} /></th>
+              <th onClick={() => sortBy("name")} style={{ ...eyebrow, textAlign: "left", padding: "6px 8px", cursor: "pointer", position: "sticky", left: 30, background: T.slab, minWidth: 180 }}>Customer{arrow("name")}</th>
               {v.cols.map((k) => { const c = COL.get(k)!; return (
                 <th key={k} onClick={() => sortBy(k)} style={{ ...eyebrow, textAlign: c.right ? "right" : "left", padding: "6px 8px", cursor: "pointer", whiteSpace: "nowrap" }}>{c.label}{arrow(k)}</th>
               ); })}
             </tr></thead>
             <tbody>
               {shown.map((r) => (
-                <tr key={r.id} style={{ borderTop: `1px solid ${T.hairSoft}` }}>
-                  <td style={{ padding: "6px 8px", position: "sticky", left: 0, background: T.card, maxWidth: 240 }}>
+                <tr key={r.id} style={{ borderTop: `1px solid ${T.hairSoft}`, background: ticked.includes(r.id) ? T.greenDim : undefined }}>
+                  <td style={{ width: 30, padding: "6px 0 6px 8px", position: "sticky", left: 0, background: T.card, zIndex: 1 }}><BulkTick on={ticked.includes(r.id)} onClick={() => toggle(r.id)} label={`Pick ${r.name}`} /></td>
+                  <td style={{ padding: "6px 8px", position: "sticky", left: 30, background: T.card, maxWidth: 240 }}>
                     <Link href={`/dashboard/customers/${r.id}`} style={{ fontWeight: 600, color: T.ink, display: "block", ...clip }}>{r.name}</Link>
                     {(r.person || r.auto) && <span style={{ display: "block", fontSize: 10, color: T.ink3, ...clip }}>{[r.person, r.auto ? "auto" : null].filter(Boolean).join(" · ")}</span>}
                   </td>
@@ -247,7 +264,12 @@ export function Customers() {
               {sortControls}
             </div>
           )}
-          {shown.map((r) => <Card key={r.id} r={r} />)}
+          {shown.map((r) => (
+            <div key={r.id} className="flex items-center" style={{ borderTop: `1px solid ${T.hairSoft}`, background: ticked.includes(r.id) ? T.greenDim : undefined }}>
+              <span className="pl-3"><BulkTick on={ticked.includes(r.id)} onClick={() => toggle(r.id)} label={`Pick ${r.name}`} /></span>
+              <div style={{ flex: 1, minWidth: 0 }}><Card r={r} compact /></div>
+            </div>
+          ))}
         </div>
       )}
 
@@ -268,6 +290,10 @@ export function Customers() {
         </div>
       )}
 
+      {picked.length > 0 && (
+        <BulkBar kind="customer" ids={picked.map((r) => r.id)} what={["customer", "customers"]} names={picked.map((r) => r.name)} wide={wide}
+          onClear={() => setTicked([])} onDone={() => { setTicked([]); setReload((n) => n + 1); }} edits={bulkEdits} />
+      )}
       {adding && <NewCustomer onClose={() => setAdding(false)} onMade={(id) => { setAdding(false); window.location.href = `/dashboard/customers/${id}`; }} />}
     </div>
     </>

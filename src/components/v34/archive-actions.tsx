@@ -8,7 +8,7 @@
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { T, F, eyebrow } from "@/lib/v34/tokens";
-import { archiveNote, type ArchiveAction, type ArchiveKind } from "@/lib/archive";
+import { archiveNote, vendorRemovedNote, type ArchiveAction, type ArchiveKind } from "@/lib/archive";
 
 export async function archiveNow(kind: ArchiveKind, ids: string[], action: ArchiveAction, via: "coy" | "dusty" = "coy", note: string | null = null) {
   const r = await fetch("/api/archive", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind, ids, action, via, note }) });
@@ -25,12 +25,15 @@ export async function archiveNow(kind: ArchiveKind, ids: string[], action: Archi
  * context"). The reason is optional; it is saved on the record and, for a
  * person, as an internal note.
  */
-export function ArchiveDialog({ open, kind, action, what, count = 1, onCancel, onConfirm }: {
+export function ArchiveDialog({ open, kind, action, what, count = 1, vendor = false, onCancel, onConfirm }: {
   open: boolean; kind: ArchiveKind; action: ArchiveAction; what: string; count?: number;
-  onCancel: () => void; onConfirm: (note: string | null) => void;
+  /** Deleting a vendor: ask whether the contact is archived too (ticked to start). */
+  vendor?: boolean;
+  onCancel: () => void; onConfirm: (note: string | null, alsoArchive: boolean) => void;
 }) {
   const [note, setNote] = useState("");
-  useEffect(() => { if (!open) return; const t = setTimeout(() => setNote(""), 0); return () => clearTimeout(t); }, [open]);
+  const [also, setAlso] = useState(true);
+  useEffect(() => { if (!open) return; const t = setTimeout(() => { setNote(""); setAlso(true); }, 0); return () => clearTimeout(t); }, [open]);
   useEffect(() => {
     if (!open) return;
     const k = (e: KeyboardEvent) => { if (e.key === "Escape") onCancel(); };
@@ -39,10 +42,12 @@ export function ArchiveDialog({ open, kind, action, what, count = 1, onCancel, o
   }, [open, onCancel]);
   if (!open) return null;
   const extra = kind === "customer" ? " Their people and open jobs go with them." : "";
-  const q = action === "delete"
+  const q = vendor
+    ? `Delete ${what}${count > 1 ? "" : " as a vendor"}? Their prices stay in the Price book.`
+    : action === "delete"
     ? `Delete ${what}?${extra} It leaves every list; the calls, texts and files stay on record, and you can restore it.`
     : `Archive ${what}? ${count > 1 ? "Each comes" : "It comes"} back on its own if they call or text again.`;
-  const go = () => onConfirm(note.trim() || null);
+  const go = () => onConfirm(note.trim() || null, vendor ? also : true);
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label={action === "delete" ? "Delete" : "Archive"}>
       <button aria-label="Cancel" onClick={onCancel} className="absolute inset-0" style={{ background: "rgba(0,0,0,.4)", border: "none" }} />
@@ -55,6 +60,15 @@ export function ArchiveDialog({ open, kind, action, what, count = 1, onCancel, o
             onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); go(); } }}
             style={{ width: "100%", marginTop: 4, border: `1px solid ${T.hair}`, borderRadius: 6, padding: "8px 10px", fontSize: F.sm, resize: "none", background: T.card, color: T.ink }} />
         </label>
+        {vendor && (
+          <label className="flex items-start gap-2" style={{ marginTop: 8, fontSize: F.sm, cursor: "pointer" }}>
+            <input type="checkbox" checked={also} onChange={(e) => setAlso(e.target.checked)} style={{ marginTop: 3, accentColor: T.red }} />
+            <span><b>Also archive the contact</b>
+              <span className="block" style={{ fontSize: F.xs, color: T.ink3 }}>
+                {also ? "Out of Contacts and Threads until they call or text again; you can restore it." : "They stay in Contacts and Threads, back in Unsorted."}
+              </span></span>
+          </label>
+        )}
         {count > 1 && <div style={{ fontSize: F.xs, color: T.ink3, marginTop: 2 }}>The same reason goes on all {count}.</div>}
         <div className="flex justify-end gap-2" style={{ marginTop: 10 }}>
           <button onClick={onCancel} className="rounded px-3" style={{ height: 34, border: `1px solid ${T.hairStrong}`, background: T.card, color: T.ink, fontSize: F.sm, cursor: "pointer" }}>Cancel</button>
@@ -71,21 +85,36 @@ export function ArchiveDialog({ open, kind, action, what, count = 1, onCancel, o
  * One button: ask (with why), archive or delete, then go back to the list.
  * `what` is how the question names it ("Delete Angelle Materials?").
  */
-export function ArchiveButton({ kind, id, action, what, then, style, children }: {
-  kind: ArchiveKind; id: string; action: ArchiveAction; what: string; then: string; style?: React.CSSProperties; children: React.ReactNode;
+export function ArchiveButton({ kind, id, action, what, then, vendor = false, style, children }: {
+  kind: ArchiveKind; id: string; action: ArchiveAction; what: string; then: string;
+  /** Delete vendor (Coy, 2026-10-22): take the vendor filing off, and archive the contact only if ticked. */
+  vendor?: boolean;
+  style?: React.CSSProperties; children: React.ReactNode;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [asking, setAsking] = useState(false);
-  const go = async (note: string | null) => {
+  const go = async (note: string | null, also: boolean) => {
     setAsking(false); setBusy(true);
-    try { await archiveNow(kind, [id], action, "coy", note); router.push(then); }
+    try {
+      if (vendor) {
+        const r = await fetch(`/api/contacts/${id}/bucket`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ bucket: null }) });
+        if (!r.ok) throw new Error((await r.json().catch(() => ({})))?.error || `HTTP ${r.status}`);
+        if (!also) {
+          const body = vendorRemovedNote(note);
+          if (body) await fetch(`/api/people/${id}/notes`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ body }) }).catch(() => {});
+          window.dispatchEvent(new CustomEvent("sc:archived", { detail: { label: "Taken off Vendors · still in Contacts, Unsorted", logId: null } }));
+          router.push(then); return;
+        }
+      }
+      await archiveNow(kind, [id], action, "coy", note); router.push(then);
+    }
     catch (e) { window.alert(e instanceof Error ? e.message : String(e)); setBusy(false); }
   };
   return (
     <>
       <button onClick={() => setAsking(true)} disabled={busy} style={{ cursor: "pointer", opacity: busy ? 0.5 : 1, ...style }}>{busy ? "…" : children}</button>
-      <ArchiveDialog open={asking} kind={kind} action={action} what={what} onCancel={() => setAsking(false)} onConfirm={(n) => void go(n)} />
+      <ArchiveDialog open={asking} kind={kind} action={action} what={what} vendor={vendor} onCancel={() => setAsking(false)} onConfirm={(n, a) => void go(n, a)} />
     </>
   );
 }

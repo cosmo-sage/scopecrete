@@ -47,6 +47,8 @@ import { T, F, disp, body, eyebrow, clip, formatPhone } from "@/lib/v34/tokens";
 import { segments } from "@/lib/texting";
 import { draftKey, proposalLink } from "@/lib/v34/send-proposal";
 import { sendBytes } from "@/components/v34/files-panel";
+import { AddressField } from "@/components/v34/email-client";
+import { atEmail } from "@/lib/email-mention";
 
 type Channel = "text" | "email" | "note";
 
@@ -64,20 +66,24 @@ async function postJson(url: string, body: unknown) {
   return b;
 }
 
-function readDraft(contactId: string): { channel: Channel; text: string } {
+/** An email written in the box with @email: its To, Cc and subject (the words are the body). */
+interface MailBlock { to: string[]; cc: string[]; subject: string; showCc: boolean }
+
+function readDraft(contactId: string): { channel: Channel; text: string; mail: MailBlock | null } {
   try {
     const raw = window.localStorage.getItem(draftKey(contactId));
-    if (!raw) return { channel: "text", text: "" };
-    const v = JSON.parse(raw) as { channel?: Channel; text?: string };
-    return { channel: v.channel ?? "text", text: typeof v.text === "string" ? v.text : "" };
+    if (!raw) return { channel: "text", text: "", mail: null };
+    const v = JSON.parse(raw) as { channel?: Channel; text?: string; mail?: MailBlock | null };
+    const m = v.mail && Array.isArray(v.mail.to) ? { to: v.mail.to, cc: Array.isArray(v.mail.cc) ? v.mail.cc : [], subject: String(v.mail.subject ?? ""), showCc: !!v.mail.showCc } : null;
+    return { channel: v.channel ?? "text", text: typeof v.text === "string" ? v.text : "", mail: m };
   } catch {
-    return { channel: "text", text: "" };
+    return { channel: "text", text: "", mail: null };
   }
 }
 
-function writeDraft(contactId: string, channel: Channel, text: string) {
+function writeDraft(contactId: string, channel: Channel, text: string, mail: MailBlock | null = null) {
   try {
-    if (text.trim()) window.localStorage.setItem(draftKey(contactId), JSON.stringify({ channel, text }));
+    if (text.trim() || mail) window.localStorage.setItem(draftKey(contactId), JSON.stringify({ channel, text, mail }));
     else window.localStorage.removeItem(draftKey(contactId));
   } catch {
     /* storage unavailable — the draft simply lives only as long as the screen */
@@ -130,6 +136,13 @@ export function Composer({ contactId, phone, name, compact = false, onNoteSaved,
   const channel: Channel = only ?? chosen;
   const [text, setText] = useState(() =>
     typeof window === "undefined" ? "" : readDraft(contactId).text);
+  // @email (Coy, 2026-10-20): the box becomes an email draft — To / Cc / Subject over the words, sent from the
+  // org's inbox on two taps through /api/emails/send, like the email composer.
+  const [mail, setMail] = useState<MailBlock | null>(() => (typeof window === "undefined" ? null : readDraft(contactId).mail));
+  const [mailInfo, setMailInfo] = useState<{ can_send: boolean; signature: string; customer_id: string | null } | null>(null);
+  const [mailConfirm, setMailConfirm] = useState(false);
+  const [mailBusy, setMailBusy] = useState<"send" | "draft" | null>(null);
+  const [mailMsg, setMailMsg] = useState<{ ok: boolean; text: string; href?: string } | null>(null);
   const [copied, setCopied] = useState<"ok" | "failed" | null>(null);
   const [saving, setSaving] = useState(false);
   const [sending, setSending] = useState(false);
@@ -176,7 +189,59 @@ export function Composer({ contactId, phone, name, compact = false, onNoteSaved,
     } finally { setSlashBusy(false); }
   }
 
-  useEffect(() => { writeDraft(contactId, channel, text); }, [contactId, channel, text]);
+  useEffect(() => { writeDraft(contactId, channel, text, mail); }, [contactId, channel, text, mail]);
+  // What a new email to them starts from: their address in To, whether sending is on, the signature.
+  useEffect(() => {
+    if (!mail || mailInfo) return;
+    let off = false;
+    fetch(`/api/emails/compose?contact=${encodeURIComponent(contactId)}`).then((r) => r.json().then((b) => ({ ok: r.ok, b })))
+      .then(({ ok, b }) => {
+        if (off) return;
+        if (!ok) { setMailInfo({ can_send: false, signature: "", customer_id: null }); setMailMsg({ ok: false, text: b?.error ?? "Email isn't set up here." }); return; }
+        setMailInfo({ can_send: !!b.can_send, signature: b.signature ?? "", customer_id: b.filing?.customer_id ?? null });
+        const first = (b.to as string[] | undefined)?.[0];
+        if (first) setMail((m) => (m && !m.to.length ? { ...m, to: [first] } : m));
+      }).catch(() => { if (!off) setMailInfo({ can_send: false, signature: "", customer_id: null }); });
+    return () => { off = true; };
+  }, [mail, mailInfo, contactId]);
+  function onType(v: string) {
+    const rest = channel !== "note" ? atEmail(v) : null;
+    if (rest === null) { setText(v); return; }
+    setText(rest);
+    setMail((m) => m ?? { to: [], cc: [], subject: "", showCc: false });
+    setMailConfirm(false); setMailMsg(null);
+  }
+  function closeMail() { setMail(null); setMailConfirm(false); setMailMsg(null); }
+  async function sendMail() {
+    if (!mail || mailBusy) return;
+    setMailBusy("send"); setMailMsg(null);
+    try {
+      const b = await postJson("/api/emails/send", {
+        to: mail.to, cc: mail.cc, subject: mail.subject, body: text.trim(),
+        contact_id: contactId, customer_id: mailInfo?.customer_id ?? undefined,
+      });
+      setText(""); setMail(null); setMailConfirm(false);
+      setMailMsg({ ok: true, text: b.recorded === false ? b.error : `Emailed ${mail.to.join(", ")}. It's in their Email channel.`,
+        href: b.conversation ? `/dashboard/messages/email/${encodeURIComponent(b.conversation)}` : undefined });
+      onSent?.();
+    } catch (e) {
+      setMailMsg({ ok: false, text: e instanceof Error ? e.message : String(e) });
+    } finally { setMailBusy(null); }
+  }
+  async function saveMailDraft() {
+    if (!mail || mailBusy) return;
+    setMailBusy("draft"); setMailMsg(null);
+    try {
+      const b = await postJson("/api/emails/drafts", {
+        mode: "new", to: mail.to, cc: mail.cc, subject: mail.subject, body: text.trim(),
+        contact_id: contactId, customer_id: mailInfo?.customer_id ?? undefined,
+      });
+      setText(""); setMail(null); setMailConfirm(false);
+      setMailMsg({ ok: true, text: "Saved in your email drafts.", href: `/dashboard/messages/email/new?draft=${b.draft.id}` });
+    } catch (e) {
+      setMailMsg({ ok: false, text: e instanceof Error ? e.message : String(e) });
+    } finally { setMailBusy(null); }
+  }
   // The box grows with what's in it, a typed message or a filled-in proposal text, up to
   // about eight lines or 40% of the screen, then scrolls (Coy, 2026-10-13: "does not allow me to
   // view everything I've typed out").
@@ -378,10 +443,29 @@ export function Composer({ contactId, phone, name, compact = false, onNoteSaved,
           card with no border of their own, then + on the left and the mic and a round send on the right. Enter is a new
           line; Ctrl (⌘) + Enter sends, as the round arrow does. The line it goes from is picked in the thread's toolbar. */}
       <div style={{ padding: compact ? "8px 8px 6px" : "10px 10px 8px", background: T.card, border: `1px solid ${T.hairStrong}`, borderRadius: 8 }}>
+        {mail && (
+          <div style={{ marginBottom: 8 }}>
+            <div className="flex items-center gap-2" style={{ paddingBottom: 4, borderBottom: `1px solid ${T.hairSoft}` }}>
+              <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ color: T.ink2 }}>
+                <rect x="1.5" y="3" width="13" height="10" rx="1.5" /><path d="m2 4 6 5 6-5" />
+              </svg>
+              <span style={{ ...eyebrow, fontSize: 10, color: T.ink2 }}>Email draft</span>
+              <span className="flex-1" />
+              {!mail.showCc && <button type="button" onClick={() => setMail({ ...mail, showCc: true })}
+                style={{ border: 0, background: "transparent", color: T.ink3, fontSize: 11.5, cursor: "pointer" }}>Cc</button>}
+              <button type="button" onClick={closeMail} aria-label="Back to a text — keeps the words" title="Back to a text — keeps the words"
+                style={{ border: 0, background: "transparent", color: T.ink3, cursor: "pointer", fontSize: 16, lineHeight: 1 }}>×</button>
+            </div>
+            <AddressField label="To" list={mail.to} onChange={(l) => { setMail({ ...mail, to: l }); setMailConfirm(false); }} />
+            {mail.showCc && <AddressField label="Cc" list={mail.cc} onChange={(l) => { setMail({ ...mail, cc: l }); setMailConfirm(false); }} />}
+            <input value={mail.subject} onChange={(e) => setMail({ ...mail, subject: e.target.value })} aria-label="Subject" placeholder="Subject"
+              style={{ width: "100%", height: 32, border: "none", borderBottom: `1px solid ${T.hairSoft}`, outline: "none", background: "transparent", color: T.ink, fontSize: F.sm, fontWeight: 600 }} />
+          </div>
+        )}
         <div className="flex items-start gap-2">
-          <textarea ref={box} value={text} onChange={(e) => setText(e.target.value)} rows={2}
+          <textarea ref={box} value={text} onChange={(e) => onType(e.target.value)} rows={2}
             // An empty box, no words in it (Coy, 2026-10-05: "I know what to do with message box").
-            aria-label={channel === "note" ? "Internal note" : channel === "email" ? "Email" : "Text message"}
+            aria-label={mail ? "Email body" : channel === "note" ? "Internal note" : channel === "email" ? "Email" : "Text message"}
             onKeyDown={(e) => {
               if (e.key !== "Enter" || !(e.ctrlKey || e.metaKey)) return;
               e.preventDefault();
@@ -402,6 +486,16 @@ export function Composer({ contactId, phone, name, compact = false, onNoteSaved,
               <input ref={pick} type="file" multiple hidden onChange={(e) => { void attach(e.target.files); e.target.value = ""; }} />
             </>
           )}
+          {/* Which of your lines it goes from, under the box (Threads v3, 2026-10-19: "From Office line ▾"). */}
+          {!compact && channel === "text" && fromLine && fromLine.lines.length > 1 && (
+            <label className="flex items-center gap-1 min-w-0" style={{ fontSize: 11.5, color: T.ink3 }}>
+              <span className="shrink-0">From</span>
+              <select value={fromLine.value ?? ""} onChange={(e) => fromLine.onPick(e.target.value)} aria-label="Send from which of your lines"
+                style={{ border: "none", background: "transparent", color: T.ink2, fontWeight: 600, fontSize: 11.5, maxWidth: 150, cursor: "pointer", padding: 0 }}>
+                {fromLine.lines.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+              </select>
+            </label>
+          )}
           <span className="flex-1" />
 
           {!compact && (
@@ -419,14 +513,29 @@ export function Composer({ contactId, phone, name, compact = false, onNoteSaved,
             </button>
           )}
 
-          {channel === "note" && (() => {
+          {mail && (
+            <button type="button" onClick={() => void saveMailDraft()} disabled={!!mailBusy || (!has && !mail.to.length && !mail.subject.trim())}
+              style={{ height: 30, padding: "0 10px", borderRadius: 15, border: `1px solid ${T.hair}`, background: T.card, color: T.ink2, fontSize: F.xs, cursor: "pointer" }}>
+              {mailBusy === "draft" ? "Saving…" : "Save draft"}
+            </button>
+          )}
+          {mail && (() => {
+            const off = !!mailBusy || !has || !mail.to.length || !mailInfo?.can_send;
+            return (
+              <button ref={send} type="button" onClick={() => setMailConfirm(true)} disabled={off}
+                aria-label={mail.to.length ? `Send the email to ${mail.to.join(", ")}` : "Add someone in To"}
+                title={!mailInfo?.can_send ? "Sending email is off here — Save draft keeps it" : !mail.to.length ? "Add someone in To" : "Send the email"}
+                style={{ ...roundBtn, ...sendLook(off) }}>{mailBusy === "send" ? "…" : arrow}</button>
+            );
+          })()}
+          {!mail && channel === "note" && (() => {
             const off = !has || saving;
             return (
               <button ref={send} type="button" onClick={() => void saveNote()} disabled={off} aria-label="Save note" title="Save note"
                 style={{ ...roundBtn, ...sendLook(off) }}>{arrow}</button>
             );
           })()}
-          {channel === "text" && (() => {
+          {!mail && channel === "text" && (() => {
             // Always there, far right (Coy, 2026-10-09: "I need a send button"); off until there is something to send.
             const files = attached.length > 0;
             const off = sending || !phone || (!has && !files) || attached.some((a) => a.state === "up");
@@ -437,7 +546,7 @@ export function Composer({ contactId, phone, name, compact = false, onNoteSaved,
                 style={{ ...roundBtn, ...sendLook(off) }}>{sending ? "…" : arrow}</button>
             );
           })()}
-          {channel === "email" && (
+          {!mail && channel === "email" && (
             // Email goes through the email composer (migration 100): the words carry over, Send is two taps there.
             has ? (
               <a href={`/dashboard/messages/email/new?contact=${encodeURIComponent(contactId)}&body=${encodeURIComponent(text.trim().slice(0, 1500))}`}
@@ -448,9 +557,29 @@ export function Composer({ contactId, phone, name, compact = false, onNoteSaved,
         </div>
       </div>
 
+      {mail && mailConfirm && (
+        <div className="flex items-center gap-2 flex-wrap rounded-md" style={{ marginTop: 6, padding: "6px 8px", background: T.hairSoft }}>
+          <span style={{ fontSize: F.xs, color: T.ink, flex: "1 1 180px" }}>
+            Send to {mail.to.join(", ")}{mail.cc.length ? `, cc ${mail.cc.join(", ")}` : ""}?{mailInfo?.signature ? " Your signature goes under it." : ""}
+          </span>
+          <button type="button" onClick={() => void sendMail()} disabled={!!mailBusy}
+            style={{ height: 28, padding: "0 12px", borderRadius: 4, border: 0, background: T.hiviz, color: T.onHiviz, fontFamily: disp, fontSize: F.xs, textTransform: "uppercase", cursor: "pointer" }}>
+            {mailBusy === "send" ? "Sending…" : "Yes, send it"}
+          </button>
+          <button type="button" onClick={() => setMailConfirm(false)}
+            style={{ height: 28, padding: "0 10px", borderRadius: 4, border: `1px solid ${T.hair}`, background: T.card, color: T.ink2, fontSize: F.xs, cursor: "pointer" }}>Not yet</button>
+        </div>
+      )}
+      {(mail || mailMsg) && !mailConfirm && (
+        <div style={{ marginTop: 6, fontSize: F.xs, lineHeight: 1.3, color: mailMsg ? (mailMsg.ok ? T.green : T.red) : T.ink3 }}>
+          {mailMsg ? <>{mailMsg.text}{mailMsg.href && <> <a href={mailMsg.href} style={{ color: T.chalk, textDecoration: "underline" }}>Open it ›</a></>}</>
+            : mailInfo && !mailInfo.can_send ? "Sending email is off here — Save draft keeps it for later."
+            : "Goes from your intake inbox. The words in the box are the email. × goes back to a text."}
+        </div>
+      )}
       {/* Copy, and what Send does (or why it can't). Only while there is something to say: the Proposal button and the
           idle "Drafts stay on this device" line are gone (Coy, 2026-10-09: he asks Dusty to send a proposal). */}
-      {(has || attached.length > 0 || micError || listening || sending || sendMsg || noteMsg) && (
+      {!mail && (has || attached.length > 0 || micError || listening || sending || sendMsg || noteMsg) && (
       <div className="flex items-center gap-2 flex-wrap" style={{ marginTop: 6 }}>
         {has && channel !== "note" && (
           <button onClick={() => void copy()} className="rounded px-2.5"

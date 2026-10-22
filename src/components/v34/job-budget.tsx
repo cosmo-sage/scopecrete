@@ -46,6 +46,8 @@ const UNIT_RULE_SAYS: Record<string, string> = {
   per_day: "the days on the job", per_job: "1, once for the job", per_sheet: "the sheets the area needs", per_stick: "the sticks the area needs", manual: "typed",
 };
 import { useWide } from "@/lib/v34/use-wide";
+import { usePref } from "@/lib/v34/prefs";
+import { groupOrder, sectionGroups } from "@/lib/section-groups";
 import { CostAnalysis } from "@/components/v34/cost-analysis";
 import { bucketOf, daysFromLines } from "@/lib/cost-analysis";
 import { Cell } from "@/components/v34/cell";
@@ -145,6 +147,10 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
   const [picker, setPicker] = useState<{ area: string } | null>(null);
   // The Price book itself, opened over the job (Coy, 2026-10-02) — "+ Add" goes here.
   const [book, setBook] = useState<{ area: string } | null>(null);
+  // A section's groups are its cost types, Labor · Materials · Equipment by default, shown even
+  // empty (Coy, 2026-10-21); set in Settings → Cost book.
+  const [groupPref] = usePref<unknown>("section_groups", null);
+  const defaultGroups = sectionGroups(groupPref);
   // A section card's "Add items" opens the book on that area.
   useEffect(() => {
     const on = (e: Event) => { const area = (e as CustomEvent<{ area?: string }>).detail?.area ?? ""; setBook({ area }); };
@@ -248,7 +254,6 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
   // add-ons on the proposal. Option rows and tags left in the database are not read.
   const visible = data.lines;
   const areaName = (id: string | null) => (id ? sections.find((s) => s.id === id)?.name || "Unnamed area" : "Whole job");
-  const groupName = (l: Line) => (l.cost_group_id ? data.groups.find((g) => g.id === l.cost_group_id)?.name : null) ?? COST_TYPE_LABEL[l.cost_type as CostType] ?? "Other";
   const optLabel = (id: string | null): string | null => { void id; return null; };
   // A group's header says what kind of cost it is, from its lines (Coy, 2026-10-15): one type, or
   // "Sub · mixed" when they are of several kinds, since a sub covers all of them.
@@ -322,7 +327,8 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
   // bid's three items had no way onto the budget).
   const areas = [...sections.map((s) => s.id), null].map((aid) => {
     const inArea = visible.filter((l) => (l.section_id ?? null) === aid || (aid === null && l.section_id && !sections.some((s) => s.id === l.section_id)));
-    const groups = [...new Set(inArea.map(groupName))].map((g) => ({ name: g, lines: inArea.filter((l) => groupName(l) === g) }));
+    const groups = groupOrder(aid ? defaultGroups : [], inArea.map((l) => l.cost_type))
+      .map((t) => ({ name: COST_TYPE_LABEL[t], lines: inArea.filter((l) => l.cost_type === t) }));
     return { id: aid, name: areaName(aid), lines: inArea, groups };
   });
   // An area's size, and its price per unit of it — how a unit-price bid reads ("$/SY").
@@ -478,6 +484,7 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
                 <td />
               </tr>
               {g.lines.map(lineRow)}
+              {g.lines.length === 0 && <tr><td colSpan={11} style={{ padding: "3px 8px 3px 24px", fontSize: F.xs, color: T.ink3 }}>Nothing yet · <button onClick={() => setBook({ area: a.id ?? "" })} style={{ color: T.chalk, cursor: "pointer" }}>+ Add</button></td></tr>}
             </React.Fragment>
           ))}
           {inSection && a.lines.length > 0 && (
@@ -509,7 +516,7 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
       )}
       {!inSection && a.lines.length === 0 && <div style={{ fontSize: F.xs, color: T.ink3 }}>{a.id ? "No cost items yet." : "Costs for the whole job, not one section — mobilization, a permit, a pump day."}</div>}
       {a.groups.map((g) => <GroupCard key={g.name} name={g.name} tools={groupTools(g.name, g.lines)} lines={g.lines} res={res} optLabel={optLabel} asmName={asmName} addons={addons} onOpen={setEditing} onRemove={removeLine}
-                cost={sum(g.lines, "ext_cost")} price={sum(g.lines, "ext_price")} />)}
+                cost={sum(g.lines, "ext_cost")} price={sum(g.lines, "ext_price")} onAdd={() => setBook({ area: a.id ?? "" })} />)}
     </div>
   );
 
@@ -756,38 +763,11 @@ function EstimateTag({ basis, onConfirm, wide }: { basis: string | null; onConfi
   );
 }
 
-/* Cost item notes fold one by one, and all at once from the budget's header (Coy, 2026-10-15:
-   "expandable/colapsable individually and a collapse / expand all button in the bugdet header").
-   The all switch is kept on the device; flipping it resets every note's own fold. */
-const NOTES_KEY = "sc:budget-notes-open";
-let notesOpen = (() => { try { return typeof window !== "undefined" && window.localStorage.getItem(NOTES_KEY) === "1"; } catch { return false; } })();
-let notesVer = 0;
-const notesSubs = new Set<() => void>();
-const useNotesVer = () => useSyncExternalStore((cb) => { notesSubs.add(cb); return () => { notesSubs.delete(cb); }; }, () => notesVer, () => 0);
-function setAllNotes(open: boolean) {
-  notesOpen = open; notesVer += 1;
-  try { window.localStorage.setItem(NOTES_KEY, open ? "1" : "0"); } catch { /* private window */ }
-  notesSubs.forEach((f) => f());
-}
-
-/** Expand notes / Collapse notes, for the budget's header. */
-export function NotesToggle() {
-  useNotesVer();
-  return (
-    <button onClick={() => setAllNotes(!notesOpen)} title={notesOpen ? "Fold every cost item's note to one line" : "Open every cost item's note in full"}
-      className="rounded px-2" style={{ height: 26, fontSize: F.xs, fontWeight: 600, border: `1px solid ${T.hair}`, background: T.card, color: T.ink2, cursor: "pointer", whiteSpace: "nowrap" }}>
-      {notesOpen ? "▾ Collapse notes" : "▸ Expand notes"}
-    </button>
-  );
-}
-
 /** A cost item's note, edited where it sits (it is the line's description — it shows on the proposal). */
 function LineNote({ value, name, onSave }: { value: string | null; name: string; onSave: (v: string | null) => void }) {
   const [v, setV] = useState(value ?? "");
-  const ver = useNotesVer();
-  const [own, setOwn] = useState<{ ver: number; open: boolean } | null>(null);
-  const open = own && own.ver === ver ? own.open : notesOpen;
-  const toggle = () => setOwn({ ver, open: !open });
+  const [open, setOpen] = useState(false);
+  const toggle = () => setOpen(!open);
   const save = () => { const t = v.trim() || null; if (t !== (value ?? null)) onSave(t); };
   if (!value && !v) {
     return (
@@ -832,8 +812,8 @@ function Trash() {
   );
 }
 
-function GroupCard({ name, tools, lines, res, optLabel, asmName, addons, onOpen, onRemove, cost, price }: {
-  name: string; tools?: React.ReactNode; lines: Line[]; res: ReturnType<typeof priceBudget>; optLabel: (id: string | null) => string | null;
+function GroupCard({ name, tools, lines, res, optLabel, asmName, addons, onOpen, onRemove, cost, price, onAdd }: {
+  name: string; onAdd?: () => void; tools?: React.ReactNode; lines: Line[]; res: ReturnType<typeof priceBudget>; optLabel: (id: string | null) => string | null;
   asmName: (id: string | null | undefined) => string | null; addons: Set<string>;
   onOpen: (l: Line) => void; onRemove: (l: Line) => void; cost: number; price: number;
 }) {
@@ -852,6 +832,7 @@ function GroupCard({ name, tools, lines, res, optLabel, asmName, addons, onOpen,
         </span>
       </button>
       {tools && <div className="px-2.5 pb-1" style={{ marginTop: -4 }}>{tools}</div>}
+      {open && lines.length === 0 && <div className="px-2.5 py-1.5" style={{ borderTop: `1px solid ${T.hair}`, fontSize: F.xs, color: T.ink3 }}>Nothing yet{onAdd && <> · <button onClick={onAdd} style={{ color: T.chalk, cursor: "pointer" }}>+ Add</button></>}</div>}
       {open && lines.map((l, i) => {
         const r = res.lines[l.id];
         return (

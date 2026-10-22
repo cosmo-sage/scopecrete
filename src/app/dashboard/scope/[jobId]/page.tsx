@@ -36,7 +36,7 @@ import { USE_ASK } from "@/lib/dusty/use-block";
 import { DustyEmblem } from "@/components/v34/dusty-avatar";
 import { isDetailFile, type SectionShape } from "@/lib/plan-details";
 import { JobHeaderRow } from "@/components/v34/job-tabs";
-import { JobBudget, NotesToggle, type BudgetSummary } from "@/components/v34/job-budget";
+import { JobBudget, type BudgetSummary } from "@/components/v34/job-budget";
 import { BudgetSubTabs, useBudgetTab } from "@/components/v34/budget-tabs";
 import { MarketRates } from "@/components/v34/market-rates";
 import { ActualCosts } from "@/components/v34/actual-costs";
@@ -394,7 +394,6 @@ export default function ScopeBuilder() {
           {/* Desktop: the Budget's three tabs open the tools row (Dusty's emblem is on the job's tabs row). */}
           {can(access, "budget") && <div className="hidden lg:flex items-center gap-2 mt-2">
             <BudgetSubTabs tab={tab} onTab={setTab} />
-            {tab === "proposed" && <><span className="flex-1" /><NotesToggle /></>}
           </div>}
         </div>
 
@@ -488,7 +487,7 @@ export default function ScopeBuilder() {
         })()}
 
         <div className="px-3 py-3 flex items-center gap-2 flex-wrap">
-          <span className="lg:hidden"><NotesToggle /></span>
+          
           <button onClick={() => void addSection()} disabled={adding} className="w-full lg:w-auto lg:px-5 rounded"
             style={{ height: 40, border: `1px dashed ${T.ink3}`, background: T.card, fontFamily: disp, fontSize: F.md,
                      fontWeight: 600, textTransform: "uppercase", letterSpacing: ".06em", color: T.ink, cursor: "pointer" }}>

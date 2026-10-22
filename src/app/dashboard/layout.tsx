@@ -35,7 +35,7 @@ import { T, disp, body, eyebrow, nums } from "@/lib/v34/tokens";
 import { NavIcon, OrgNameContext } from "@/components/v34/primitives";
 import { DustyPanel } from "@/components/v34/dusty-panel";
 import { DustyAvatar, type EmblemState } from "@/components/v34/dusty-avatar";
-import { ActivityLine } from "@/components/v34/activity-line";
+import { ActivityLine, DustyTicker } from "@/components/v34/activity-line";
 import { ArchiveToast } from "@/components/v34/archive-actions";
 import { InstallPrompt } from "@/components/v34/install-app";
 import { ThreadColorVars } from "@/components/v34/thread-colors";
@@ -58,6 +58,9 @@ import { AccessContext } from "@/lib/v34/access-ctx";
 import { accessFrom, menuPages, redirectFor, roleLabel, FULL_ACCESS, type Access } from "@/lib/access";
 import { viewAsLine } from "@/lib/view-as";
 import { useRouter } from "next/navigation";
+import { SpacesNav, PageEdge, usePageSlide } from "@/components/v34/spaces/spaces-nav";
+import { TalkBar, talkPlaceholder } from "@/components/v34/spaces/talk-bar";
+import { TourHost } from "@/components/v34/tour";
 import "@/styles/v34-shell.css";
 
 /** Desktop or not — decided after mount; the phone layout is the first paint. */
@@ -159,6 +162,48 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const menuColors = cleanMenuColors(savedColors);
   // The phone keeps the icons' colours too (Coy, 2026-10-10); a page with none stays ink.
   const phoneIcon = (k: string, on: boolean) => (menuColors[k] ? iconVar(menuColors[k]) : on ? T.ink : T.ink3);
+  // The Spaces navigation (Claude Design "Dusty Home", Coy 2026-10-17), behind Settings →
+  // Appearance → New navigation. <html data-nav="spaces"> widens --sc-rail-w to the rail and
+  // its drawer; app/layout.tsx sets it before first paint from the browser's copy.
+  // On unless switched off (Coy, 2026-10-17: "I'm not seeing it on feedback").
+  const [newNav] = usePref<boolean>("new_nav", true);
+  const spaces = newNav !== false;
+  const [drawerFolded, setDrawerFolded] = usePref<boolean>("spaces_folded", false);
+  const [spacesOpen, setSpacesOpen] = useState(false);
+  useEffect(() => {
+    const el = document.documentElement;
+    if (spaces) el.dataset.nav = "spaces"; else delete el.dataset.nav;
+    if (spaces && drawerFolded) el.dataset.drawer = "folded"; else delete el.dataset.drawer;
+  }, [spaces, drawerFolded]);
+  const openSpaces = useCallback(() => setSpacesOpen(true), []);
+  const closeSpaces = useCallback(() => setSpacesOpen(false), []);
+  useEffect(() => {
+    window.addEventListener("sc:spaces-open", openSpaces);
+    // The tour slides them back once its steps about them are done (2026-10-22).
+    window.addEventListener("sc:spaces-close", closeSpaces);
+    return () => { window.removeEventListener("sc:spaces-open", openSpaces); window.removeEventListener("sc:spaces-close", closeSpaces); };
+  }, [openSpaces, closeSpaces]);
+  // On a phone the Spaces sit under the page, which slides right to show them (Coy,
+  // 2026-10-17: "it should be underneath the pages"). While aside the page is a fixed,
+  // viewport-high layer scrolled to where the window was, so it slides as it looked, and
+  // the window's scroll comes back when it slides back over.
+  const under = spaces && !desktop;
+  const layerRef = React.useRef<HTMLDivElement>(null);
+  usePageSlide(under, spacesOpen, setSpacesOpen, layerRef);
+  // Dusty's column is open by default on a desktop in the new navigation (the design's window
+  // beside every page); open or closed is kept on the device.
+  const dustyColSeen = React.useRef(false);
+  useEffect(() => {
+    if (!spaces || !desktop || dustyColSeen.current) return;
+    dustyColSeen.current = true;
+    let col: string | null = null;
+    try { col = localStorage.getItem("sc:dusty-col"); } catch { /* private mode */ }
+    if (col !== "closed") Promise.resolve().then(() => setDustyOpen(true));
+  }, [spaces, desktop]);
+  useEffect(() => {
+    if (!spaces || !desktop || !dustyColSeen.current) return;
+    try { localStorage.setItem("sc:dusty-col", dustyOpen ? "open" : "closed"); } catch { /* private mode */ }
+  }, [spaces, desktop, dustyOpen]);
   const [menuPanel, setMenuPanel] = useState(false);
   const closeMenuPanel = useCallback(() => setMenuPanel(false), []);
 
@@ -237,7 +282,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }, [pathname]);
   // Close the Toolbox when the page changes (a pick navigates).
   const [pathSeen, setPathSeen] = useState(pathname);
-  if (pathSeen !== pathname) { setPathSeen(pathname); setToolOpen(false); }
+  if (pathSeen !== pathname) { setPathSeen(pathname); setToolOpen(false); setSpacesOpen(false); }
 
   const active = activePage(pathname, search);
   const toolKeys = allowed ? [] : menus.rail.filter((k) => k !== "dusty" && !menus.footer.includes(k));
@@ -246,6 +291,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   // Dusty in the footer and header: his chat's state while it is open, else the reader's
   // (reading, broken, at rest — the activity line's); an answer streaming either way.
   const dustyNow: EmblemState = dustyOpen ? panelState : dustyBusy ? "answering" : readerState;
+  // Spaces replaces the phone footer with the talk bar; an open thread or email keeps its own text box.
+  const spacesFoot = spaces && !limited;
+  const threadOpen = /^\/dashboard\/messages\/[^/]+/.test(pathname ?? "");
+  const talkBar = spacesFoot && !threadOpen;
+  useEffect(() => {
+    const el = document.documentElement;
+    if (spacesFoot && !talkBar) el.dataset.talk = "off"; else delete el.dataset.talk;
+  }, [spacesFoot, talkBar]);
   const glassBtn = { width: 32, height: 32 } as const;
   const closeDrops = () => { setSearchOpen(false); };
 
@@ -261,16 +314,48 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                fontSize: 9.5, fontWeight: 700, lineHeight: 1, ...nums, ...style }}>{n}</span>
   );
 
+  // Under Spaces the app's header is gone (Coy, 2026-10-18: "We are going to remove the header
+  // entirely from mobile and desktop"); search, alerts and what Dusty is doing sit at the top of
+  // the drawer instead.
+  const spacesBar = (
+    <div className="sc-spaces-bar">
+      <div className="sc-spaces-bar-row">
+        {!limited && (
+          <button type="button" className="sc-spaces-search" onClick={() => setSearchOpen(true)} aria-label="Search" aria-expanded={searchOpen}>
+            <svg width="14" height="14" viewBox="0 0 15 15" aria-hidden="true">
+              <circle cx="6.4" cy="6.4" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
+              <path d="M9.8 9.8 L13.4 13.4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+            </svg>
+            <span>Search everything</span>
+          </button>
+        )}
+        {me && !limited && <AlertsBell glassBtn={glassBtn} />}
+      </div>
+      {searchOpen && <SearchPanel onClose={() => setSearchOpen(false)} />}
+    </div>
+  );
+
+  const spacesNav = spaces && (
+    <SpacesNav bar={spacesBar} desktop={desktop} pages={(allowed ?? menus.rail).filter((k) => k !== "dusty" && k !== "threads")} active={active} dustyState={dustyNow}
+      phoneOpen={spacesOpen} onPhoneClose={closeSpaces} folded={drawerFolded === true} onFold={() => setDrawerFolded(!drawerFolded)} />
+  );
+
   return (
-    <div className="flex flex-col min-h-screen" style={{ background: T.slab, color: T.ink, fontFamily: body }}>
+    <>
+    {/* Phone: the Spaces under the page; the page's edge, while it is aside, puts it back. */}
+    {under && spacesNav}
+    {under && spacesOpen && <PageEdge onClose={closeSpaces} />}
+    <div ref={layerRef} className="flex flex-col min-h-screen sc-page-layer" style={{ background: T.slab, color: T.ink, fontFamily: body }}>
       <div className="sc-head-wrap" style={{ position: "sticky", top: 0, zIndex: 40 }}>
+        {/* Dusty's banner across the very top (Coy, 2026-10-21); his line left the drawer for it. */}
+        {spaces && (desktop ? deskLineOn : phoneLineOn) && <DustyTicker onReader={setReaderState} />}
         {viewingAs && (
           <div className="sc-view-as" role="status">
             <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>👁 {viewAsLine(viewingAs.name, roleLabel(viewingAs.role))} · changes are off</span>
             <button type="button" onClick={() => void stopViewing()} disabled={leaving}>{leaving ? "Switching…" : "Switch back"}</button>
           </div>
         )}
-        <header className="px-2.5 lg:px-4 flex items-center gap-3 sc-paper" style={{ height: 54 }}>
+        {!spaces && <header className="px-2.5 lg:px-4 flex items-center gap-3 sc-paper" style={{ height: 54 }}>
           <Link href="/dashboard" className="no-underline shrink-0" aria-label="Dashboard">
             <OrgLockup name={me?.org_name ?? null} hasLight={!!me?.logo_light} hasDark={!!me?.logo_dark} stamp={me?.logo_stamp ?? null}
               dark={theme.dark} phone={!desktop} showLogo={headerLogo !== false} />
@@ -311,24 +396,34 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             {/* The header's + is gone (Coy, 2026-10-01): its menu opened under
                 Dusty. New customer / job / receipt live in Dusty's own + menu. */}
 
-            <button onClick={() => { closeDrops(); router.push(inSettings ? lastPage.current : SETTINGS_HOME); }} className="sc-burger sc-paper-btn"
-              data-status={inSettings ? "open" : "closed"} aria-label={inSettings ? "Close settings" : "Settings"}
+            <button onClick={() => { closeDrops(); if (spaces && !desktop && !inSettings) { setSpacesOpen(true); return; } router.push(inSettings ? lastPage.current : SETTINGS_HOME); }} className="sc-burger sc-paper-btn"
+              data-status={inSettings ? "open" : "closed"} aria-label={inSettings ? "Close settings" : spaces && !desktop ? "Spaces" : "Settings"}
               style={{ ...glassBtn, position: "relative" }}>
               <span className="sc-burger-bar" aria-hidden="true" />
             </button>
 
             {searchOpen && <SearchPanel onClose={() => setSearchOpen(false)} />}
           </div>
-        </header>
+        </header>}
 
         {/* Phone: what Dusty is doing, a row under the header. */}
-        {!desktop && phoneLineOn && <ActivityLine busy={dustyBusy} onReader={setReaderState} />}
+        {!spaces && !desktop && phoneLineOn && <ActivityLine busy={dustyBusy} onReader={setReaderState} />}
       </div>
 
       {/* ---- desktop left rail: every page, in Coy's order ----
           A sidebar since 2026-10-10 (Claude Design "Rail Icon Colors"): icon and label on
           one row, each icon in its colour from the book; folds to icons at the foot. */}
-      <nav aria-label="Main" className="hidden lg:flex fixed left-0 bottom-0 z-30 flex-col items-stretch overflow-y-auto sc-rail"
+      {spaces && !under && spacesNav}
+      {spaces && !limited && desktop && !dustyOpen && (
+        <button type="button" className="sc-dusty-strip" onClick={() => setDustyOpen(true)} aria-label="Open Dusty" title="Open Dusty">
+          <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M8.5 4l-4 4 4 4M12.5 4l-4 4 4 4" />
+          </svg>
+          <DustyAvatar state={dustyNow} size={28} hidden />
+          <span className="sc-dusty-strip-l">Dusty{PAGE.get(active) ? ` · on ${PAGE.get(active)!.label}` : ""}</span>
+        </button>
+      )}
+      {!spaces && <nav aria-label="Main" className="hidden lg:flex fixed left-0 bottom-0 z-30 flex-col items-stretch overflow-y-auto sc-rail"
         style={{ top: "var(--sc-head)" }} onMouseLeave={() => setRailTip(null)}>
         {(allowed ?? menus.rail).map((k) => {
           // Dusty's desktop door is the header button (Coy, 2026-09-30).
@@ -374,8 +469,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </svg>
           <span className="sc-rail-label">Collapse</span>
         </button>
-      </nav>
-      {railIcons && railTip && (
+      </nav>}
+      {!spaces && railIcons && railTip && (
         <div role="tooltip" className="hidden lg:block fixed pointer-events-none"
           style={{ left: "calc(var(--sc-rail-w) + 6px)", top: railTip.top, transform: "translateY(-50%)", zIndex: 70,
             background: T.dark, color: "#fff", padding: "5px 9px", borderRadius: 6, fontSize: 12, fontFamily: body, whiteSpace: "nowrap", boxShadow: "0 2px 8px rgba(0,0,0,.18)" }}>
@@ -388,14 +483,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </main>
       <ArchiveToast />
       {me && <InstallPrompt />}
+      {/* The first-login tour (2026-10-22); not while viewing as a teammate. */}
+      <TourHost desktop={desktop} spaces={spaces} name={me?.name ?? null} enabled={!!me && !viewingAs} />
       <ThreadColorVars />
       {me && !limited && <AlertPopups />}
 
       <Toolbox open={toolOpen} onClose={() => setToolOpen(false)} keys={toolKeys} active={active} badge={badge} colors={menuColors} />
       {!limited && <MenuPanel open={menuPanel} onClose={closeMenuPanel} />}
 
+      {/* Spaces on a phone: no footer — the talk bar, Dusty on its right (Coy, 2026-10-17). */}
+      {talkBar && <TalkBar placeholder={talkPlaceholder(active, pathname ?? "")} dustyState={dustyNow} onOpen={() => { setToolOpen(false); setDustyOpen(true); }} />}
+
       {/* Above the open Toolbox (z 47) so Dusty's disc rising out of the bar stays whole. */}
-      <footer className="fixed bottom-0 left-0 right-0 flex items-stretch lg:hidden"
+      {!spacesFoot && <footer className="fixed bottom-0 left-0 right-0 flex items-stretch lg:hidden"
         style={{ zIndex: toolOpen ? 48 : 40, background: T.card, borderTop: `1px solid ${T.hair}`, height: 58, paddingBottom: "env(safe-area-inset-bottom)" }}>
         {markIdx >= 0 && <span className="sc-tab-mark" style={{ left: `${markIdx * slotPct}%`, width: `${slotPct}%` }} aria-hidden="true" />}
         {footerSlots.map((k) => {
@@ -436,12 +536,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </Link>
           );
         })}
-      </footer>
+      </footer>}
 
       {/* Dusty — full screen on a phone, docked right on a desktop; read-only toward the business. */}
-      {!limited && <DustyPanel open={dustyOpen} onClose={() => setDustyOpen(false)} onBusy={setDustyBusy} onStream={setDustyLive} onState={setPanelState} />}
+      {(!limited || access.pages.includes("dusty")) && <DustyPanel open={dustyOpen} onClose={() => setDustyOpen(false)} onBusy={setDustyBusy} onStream={setDustyLive} onState={setPanelState} />}
 
     </div>
+    </>
   );
 }
 

@@ -16,6 +16,7 @@
     "@supabase/ssr": "^0.10.3",
     "@supabase/supabase-js": "^2.106.2",
     "@tesseract.js-data/eng": "^1.0.0",
+    "@vercel/analytics": "^2.0.1",
     "date-fns": "^4.4.0",
     "fflate": "^0.8.2",
     "lucide-react": "^1.16.0",

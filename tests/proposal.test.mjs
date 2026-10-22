@@ -1,4 +1,4 @@
-// The proposal's maths — `npm test`. Rounded to $50 on the proposal only;
+// The proposal's maths — `npm test`. Rounded up to the whole dollar on the proposal only;
 // sell prices add up to the total to the cent; hiding, add-ons, tax, draws.
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -22,30 +22,31 @@ const price = (d = {}, opts = { tax_on: true, discount: 0 }, ls = lines) => {
 };
 const near = (a, b, eps = 0.005) => assert.ok(Math.abs(a - b) < eps, `${a} ≈ ${b}`);
 
-test("rounds up to the next $50, and only up", () => {
-  assert.equal(roundUp(12312), 12350);
+test("rounds up to the next whole dollar, and only up", () => {
+  assert.equal(roundUp(17841.82), 17842);
   assert.equal(roundUp(12350), 12350);
-  assert.equal(roundUp(12350.01), 12400);
+  assert.equal(roundUp(12350.01), 12351);
+  assert.equal(roundUp(12312, 50), 12350);
   assert.equal(roundUp(0), 0);
 });
 
 test("the rounded price is the budget's price rounded; the extra is profit", () => {
   const p = price();
   assert.ok(p.ok);
-  // cost 3,480 → +15% = 4,002 → ÷0.8 = 5,002.50 → 5,050
+  // cost 3,480 → +15% = 4,002 → ÷0.8 = 5,002.50 → 5,003
   near(p.cost, 3480); near(p.overhead, 522); near(p.calc, 5002.5);
-  assert.equal(p.rounded, 5050);
-  near(p.profit, 5050 - 3480 - 522);
+  assert.equal(p.rounded, 5003);
+  near(p.profit, 5003 - 3480 - 522);
   near(p.by_type.labor, 1940); near(p.by_type.material, 1380); near(p.by_type.equipment, 160);
 });
 
 test("sell prices add up to the rounded price exactly, to the cent", () => {
   const p = price({ show_tax_line: true });
   const items = p.groups.flatMap((g) => g.items);
-  near(items.reduce((a, i) => a + i.sell, 0), 5050, 0.001);
-  near(p.subtotal, 5050, 0.001);
+  near(items.reduce((a, i) => a + i.sell, 0), 5003, 0.001);
+  near(p.subtotal, 5003, 0.001);
   // the tax line: 10% of the taxed line's cost (1,190) — a pass-through
-  near(p.tax, 119); near(p.total, 5169);
+  near(p.tax, 119); near(p.total, 5122);
 });
 
 test("tax folded into the groups gives the same total", () => {
@@ -72,17 +73,17 @@ test("a hidden line or group drops out of the total; a hidden price still counts
 
 test("an add-on is priced and listed, never in the total, and doesn't change the rounding of the rest", () => {
   const p = price({ show_tax_line: true, addons: ["seal"] });
-  // without the sealer: cost 3,290 → ×1.15 ÷0.8 = 4,729.38 → 4,750
-  assert.equal(p.rounded, 4750);
-  near(p.total, 4750 + 119);
+  // without the sealer: cost 3,290 → ×1.15 ÷0.8 = 4,729.38 → 4,730
+  assert.equal(p.rounded, 4730);
+  near(p.total, 4730 + 119);
   assert.ok(p.addons_total > 0);
   assert.equal(p.groups.flatMap((g) => g.items).find((i) => i.id === "seal").addon, true);
 });
 
 test("a discount comes off the price only", () => {
   const p = price({ show_tax_line: true }, { tax_on: true, discount: 250 });
-  near(p.total, 5050 + 119 - 250);
-  near(p.profit, 5050 - 3480 - 522); // profit shown before the discount, as the budget does
+  near(p.total, 5003 + 119 - 250);
+  near(p.profit, 5003 - 3480 - 522); // profit shown before the discount, as the budget does
 });
 
 test("a blocked budget gives no price, and says why", () => {

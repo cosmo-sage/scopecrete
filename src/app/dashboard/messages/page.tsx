@@ -26,7 +26,22 @@ export default function ThreadsIndexPane() {
   const [colors] = useThreadColors();
   const label = ctx ? threadLabel(ctx.thread, ctx.custom, colors) : { name: "Threads", color: T.ink3 };
   return (
-    <div className="hidden lg:flex items-center justify-center h-full px-8"
+    <>
+    {/* The Spaces navigation: the drawer holds the list (Coy, 2026-10-17). */}
+    <div className="sc-drawer-empty items-center justify-center px-8" style={{ minHeight: "calc(100dvh - var(--sc-head) - var(--sc-foot))" }}>
+      <div style={{ maxWidth: 340, textAlign: "center" }}>
+        {/* Coy, 2026-10-22: say how to get there, on each size. */}
+        <div className="lg:hidden" style={{ fontFamily: disp, fontSize: F.xl, fontWeight: 600, lineHeight: 1.15 }}>Swipe right to reveal the Drawer and Work Spaces.</div>
+        <p className="hidden lg:block" style={{ fontSize: F.md, color: T.ink2, lineHeight: 1.5 }}>
+          Select an item from the Shelf to the left to dig into a Customer, Vendor, Job or some other tool in your Shelves.
+        </p>
+        <button type="button" className="lg:hidden" onClick={() => window.dispatchEvent(new Event("sc:spaces-open"))}
+          style={{ marginTop: 14, padding: "9px 16px", borderRadius: 8, ...eyebrow, background: T.hiviz, color: T.onHiviz, fontFamily: disp, fontWeight: 700 }}>
+          Open the drawer
+        </button>
+      </div>
+    </div>
+    <div className="sc-drawer-old hidden lg:flex items-center justify-center h-full px-8"
       style={{ minHeight: "calc(100vh - var(--sc-head) - 58px)" }}>
       <div style={{ maxWidth: 380, textAlign: "center" }}>
         <div style={{ ...eyebrow, color: label.color }}>{label.name}</div>
@@ -39,5 +54,6 @@ export default function ThreadsIndexPane() {
         </p>
       </div>
     </div>
+    </>
   );
 }

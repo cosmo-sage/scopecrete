@@ -34,7 +34,7 @@ export function useBudgetTab(): [BudgetTab, (t: BudgetTab) => void] {
  */
 export function BudgetSubTabs({ tab, onTab, counts, hang = false }: { tab: BudgetTab; onTab: (t: BudgetTab) => void; counts?: Partial<Record<BudgetTab, number>>; hang?: boolean }) {
   return (
-    <div role="tablist" aria-label="Budget" className={`flex shrink-0 ${hang ? "gap-2.5" : "gap-4"}`}>
+    <div role="tablist" aria-label="Budget" className={`sc-budget-tabs flex shrink-0 ${hang ? "gap-2.5" : "gap-4"}`}>
       {BUDGET_TABS.map((t) => {
         const on = t.k === tab;
         const n = counts?.[t.k];

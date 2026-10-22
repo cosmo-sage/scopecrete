@@ -23,8 +23,8 @@ export type MenuColors = Record<string, IconRole>;
 
 export const BOOK_PRESETS: Record<string, MenuColors> = {
   Mono: {},
-  Suggested: { dashboard: "hiviz", threads: "chalk", scopebuilder: "teal", scope: "green", map: "violet", contacts: "chalk", customers: "green", pricebook: "reply", vendors: "unsorted", admin: "red", roadmap: "violet" },
-  "By kind": { threads: "chalk", scopebuilder: "hiviz", scope: "hiviz", map: "hiviz", contacts: "chalk", customers: "chalk", pricebook: "green", vendors: "green", admin: "red" },
+  Suggested: { dashboard: "hiviz", threads: "chalk", scopebuilder: "teal", scope: "green", map: "violet", camera: "reply", contacts: "chalk", customers: "green", pricebook: "reply", vendors: "unsorted", admin: "red", roadmap: "violet" },
+  "By kind": { threads: "chalk", scopebuilder: "hiviz", scope: "hiviz", map: "hiviz", camera: "hiviz", contacts: "chalk", customers: "chalk", pricebook: "green", vendors: "green", admin: "red" },
 };
 
 /** A saved book made safe: only known roles on page-like keys; "ink" is dropped (it is the default).

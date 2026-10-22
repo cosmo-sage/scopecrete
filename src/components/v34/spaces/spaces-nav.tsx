@@ -1347,6 +1347,43 @@ function FoldedDrawer({ shown, pages, active, onOpen, bar }: {
 // The Space you are in, kept across remounts of the nav (a page change on a phone can remount it).
 let stayed: SpaceRef | null = null;
 
+// Where the open tile's tab meets the drawer, so the drawer's coloured edge can leave that stretch
+// out and the tab reads as part of the drawer (Coy, 2026-10-22). Set on the nav as --sc-tab-a /
+// --sc-tab-b, the gap's top and bottom in px; re-measured as the rail scrolls or its tiles change.
+function useTabGap() {
+  const [el, setEl] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    if (!el) return;
+    const rail = el.querySelector<HTMLElement>(".sc-spaces-rail");
+    let raf = 0;
+    const measure = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const slot = el.querySelector<HTMLElement>(".sc-spaces-rail .sc-space-slot[data-on]");
+        const nav = el.getBoundingClientRect();
+        let a = 0, b = 0;
+        if (slot && rail) {
+          const r = slot.getBoundingClientRect(), rr = rail.getBoundingClientRect();
+          // The tab is the slot plus 4px each way with a 2px border: the gap is its inside.
+          const top = Math.max(r.top - 2, rr.top), bottom = Math.min(r.bottom + 2, rr.bottom);
+          if (bottom > top) { a = top - nav.top; b = bottom - nav.top; }
+        }
+        el.style.setProperty("--sc-tab-a", `${Math.round(a)}px`);
+        el.style.setProperty("--sc-tab-b", `${Math.round(b)}px`);
+      });
+    };
+    measure();
+    rail?.addEventListener("scroll", measure, { passive: true });
+    window.addEventListener("resize", measure);
+    const mo = new MutationObserver(measure);
+    if (rail) mo.observe(rail, { subtree: true, childList: true, attributes: true, attributeFilter: ["data-on"] });
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => { cancelAnimationFrame(raf); rail?.removeEventListener("scroll", measure); window.removeEventListener("resize", measure); mo.disconnect(); ro.disconnect(); };
+  }, [el]);
+  return setEl;
+}
+
 export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPhoneClose, folded, onFold, bar }: {
   bar?: React.ReactNode;
   desktop: boolean; pages: string[]; active: string; dustyState: EmblemState;
@@ -1602,6 +1639,7 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
     : shown.kind === "customer" ? "var(--sc-chalk)" : shown.kind === "vendor" ? "var(--sc-bucket-vendor)"
       : shown.kind === "collection" ? "var(--sc-violet)" : "var(--sc-hiviz)";
   const navStyle = { "--sc-space-c": spaceColor } as React.CSSProperties;
+  const navRef = useTabGap();
   const drawerEl = desktop && folded ? <FoldedDrawer shown={shown} pages={pages} active={active} onOpen={onFold} bar={bar} /> : (
     <div className="sc-spaces-drawer">
       {desktop && (
@@ -1655,11 +1693,11 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
     </>
   );
   if (desktop) {
-    return <><nav aria-label="Main" className="sc-spaces" style={navStyle} data-folded={folded ? "" : undefined}>{railEl}{drawerEl}</nav>{dialog}</>;
+    return <><nav ref={navRef} aria-label="Main" className="sc-spaces" style={navStyle} data-folded={folded ? "" : undefined}>{railEl}{drawerEl}</nav>{dialog}</>;
   }
   return (
     <>
-      <nav aria-label="Main" className="sc-spaces sc-spaces-under" style={navStyle} aria-hidden={phoneOpen ? undefined : true} inert={!phoneOpen}>
+      <nav ref={navRef} aria-label="Main" className="sc-spaces sc-spaces-under" style={navStyle} aria-hidden={phoneOpen ? undefined : true} inert={!phoneOpen}>
         {railEl}{drawerEl}
       </nav>
       {dialog}

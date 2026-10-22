@@ -98,7 +98,7 @@ export function SpaceIcon({ spaceKey, kind, color, initials, size = 44, on }: {
   }
   return (
     <svg viewBox={d.root.attrs.viewBox} width={size} height={size} aria-hidden="true" fontFamily="Inter, Arial, sans-serif"
-      style={{ display: "block", flex: "none", borderRadius: Math.round(size * 0.22), boxShadow: on ? `0 0 0 2px var(--sc-card), 0 0 0 4px ${color}` : undefined }}>
+      style={{ display: "block", flex: "none", borderRadius: Math.round(size * 0.22) }}>
       {d.root.kids.map((c, i) => draw(c, i))}
     </svg>
   );

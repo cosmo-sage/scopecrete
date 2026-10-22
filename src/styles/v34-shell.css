@@ -722,7 +722,11 @@ html[data-nav="spaces"] .sc-drawer-pane .sc-drawer-old { display: none !importan
 .sc-space-slot[data-on]::after { content: ""; position: absolute; left: 7px; right: 0; top: -4px; bottom: -4px; z-index: 0;
   background: var(--sc-rail); border: 2px solid var(--sc-space-c, var(--sc-hiviz)); border-right: 0; border-radius: 14px 0 0 14px; }
 .sc-space-slot > * { position: relative; z-index: 1; }
-.sc-spaces .sc-spaces-drawer, .sc-spaces .sc-spaces-strip { box-shadow: inset 2px 0 0 var(--sc-space-c, var(--sc-hiviz)); }
+/* The drawer's coloured edge, broken where the tab meets it so the tab opens into the drawer like a
+   file folder's (Coy, 2026-10-22). SpacesNav measures the open slot into --sc-tab-a / --sc-tab-b. */
+.sc-spaces .sc-spaces-drawer, .sc-spaces .sc-spaces-strip {
+  background-image: linear-gradient(to bottom, var(--sc-space-c, var(--sc-hiviz)) var(--sc-tab-a, 0px), transparent var(--sc-tab-a, 0px), transparent var(--sc-tab-b, 0px), var(--sc-space-c, var(--sc-hiviz)) var(--sc-tab-b, 0px));
+  background-size: 2px 100%; background-repeat: no-repeat; background-position: left top; }
 .sc-space-head { background: color-mix(in srgb, var(--sc-head-c, var(--sc-hiviz)) 8%, transparent); box-shadow: inset 0 3px 0 var(--sc-head-c, var(--sc-hiviz)); }
 .sc-space-head-ico { flex: none; width: 22px; height: 22px; margin-top: -1px; display: flex; align-items: center; justify-content: center; }
 .sc-space-head-ico svg { width: 20px; height: 20px; }
@@ -730,12 +734,12 @@ html[data-nav="spaces"] .sc-drawer-pane .sc-drawer-old { display: none !importan
   color: var(--sc-tile); background: color-mix(in srgb, var(--sc-tile) 13%, var(--sc-card)); border: 2px solid color-mix(in srgb, var(--sc-tile) 55%, transparent);
   transition: border-radius .15s, transform .15s; padding: 0; }
 .sc-space-tile:hover, .sc-space-tile:focus-visible { border-radius: 11px; }
-.sc-space-slot[data-on] .sc-space-tile { border-radius: 11px; border-color: var(--sc-tile); box-shadow: 0 1px 0 var(--sc-hair-strong); }
+.sc-space-slot[data-on] .sc-space-tile { border-radius: 11px; border-color: transparent; box-shadow: none; }
 /* Silhouettes (Rail Silhouettes 1a): the shape draws itself, the tile is only the hit area. */
 .sc-space-tile-bare, .sc-space-slot[data-on] .sc-space-tile-bare { width: 44px; height: 44px; border: 0; background: transparent; box-shadow: none; border-radius: 6px; }
 .sc-space-tile-bare:hover > span { filter: brightness(.97); }
 .sc-space-tile-home { width: 52px; height: 52px; border-radius: 26px; background: var(--sc-card); border: 2px solid var(--sc-hair-strong); box-shadow: 0 1px 2px rgba(20,20,20,.12); }
-.sc-space-slot[data-on] .sc-space-tile-home { border-radius: 16px; border-color: var(--sc-hiviz); }
+.sc-space-slot[data-on] .sc-space-tile-home { border-radius: 16px; border-color: transparent; box-shadow: none; }
 .sc-space-slot[data-on]:has(.sc-space-tile-bare)::before, .sc-space-slot[data-on]:has(.sc-space-tile-home)::before { top: 50%; bottom: auto; height: 36px; margin-top: -18px; }
 /* Shelves: arranging Home's (Coy, 2026-10-18). */
 .sc-shelf-arrange { flex: none; height: 24px; padding: 0 9px; border-radius: 4px; border: 1px solid var(--sc-hair-strong); background: var(--sc-card); color: var(--sc-ink2);

@@ -1,4 +1,4 @@
--- 119 — Sample data for a new company (2026-10-22; written, NOT applied — waits on Coy's "apply 119").
+-- 119 — Sample data for a new company (applied 2026-10-22 on Coy's "Apply 119"; Gulfline seeded the same day).
 --
 -- Coy: "can we seed a new org with a little sample data in Gulfline Pavings company dashboard
 -- along with some kind of Tour … so he's not confused when he first logs in?"

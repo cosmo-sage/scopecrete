@@ -48,9 +48,9 @@ const Initials = ({ name, size = 30 }: { name: string | null; size?: number }) =
 export const bookName = (e: Pick<BookEntry, "name" | "company" | "phones" | "emails">) =>
   e.name || e.company || (e.phones[0] ? formatNumber(e.phones[0].number) : e.emails[0]?.address ?? "No name");
 
-/** Their page: a vendor's is the vendor page; everyone else's is their contact page. */
+/** Their contact card, for everyone (Coy, 2026-10-22). */
 export const bookHref = (e: Pick<BookEntry, "id" | "role">) =>
-  e.role === "vendor" || e.role === "sub" ? `/dashboard/vendors/${e.id}` : `/dashboard/messages/${e.id}?person=1`;
+  `/dashboard/messages/${e.id}?person=1`;
 
 async function call(url: string, method = "GET", body?: unknown) {
   const r = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });

@@ -917,8 +917,8 @@ export function collectionRecordAt(list: CollectionList, path: string | null | u
   if (list === "customers") return one(/^\/dashboard\/customers\/([0-9a-f-]{36})(?:\/|$)/i);
   if (list === "vendors") return one(/^\/dashboard\/vendors\/([0-9a-f-]{36})(?:\/|$)/i);
   if (list === "scope") return one(/^\/dashboard\/scope\/([0-9a-f-]{36})(?:\/|$)/i);
-  // A contact's page is their thread; a vendor in Contacts opens their vendor page.
-  return one(/^\/dashboard\/messages\/([0-9a-f-]{36})(?:\/|$)/i) ?? one(/^\/dashboard\/vendors\/([0-9a-f-]{36})(?:\/|$)/i);
+  // Every contact opens their contact card (Coy, 2026-10-22), customer and vendor alike.
+  return one(/^\/dashboard\/messages\/([0-9a-f-]{36})(?:\/|$)/i);
 }
 
 export interface ListRow { id: string; name: string; sub: string | null; status?: string | null; href: string }
@@ -947,9 +947,8 @@ export function collectionListRows(list: CollectionList, body: unknown): ListRow
       const phone = Array.isArray(c.phones) ? s((c.phones[0] as Record<string, unknown> | undefined)?.number) : null;
       const name = s(c.name) ?? phone;
       if (!id || !name) continue;
-      const vendor = c.role === "vendor" || c.role === "sub";
       out.push({ id, name, sub: [s(c.role_label), s(c.company) ?? s(c.customer_name)].filter(Boolean).join(" · ") || null,
-        href: vendor ? `/dashboard/vendors/${id}` : `/dashboard/messages/${id}?person=1` });
+        href: `/dashboard/messages/${id}?person=1` });
     }
   } else {
     for (const j of arr("jobs")) {

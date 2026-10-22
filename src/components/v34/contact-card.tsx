@@ -112,7 +112,8 @@ export function ContactCard({ person, back, textHref, customerHref, vendorHref, 
         {(c.website || editing) && (editing
           ? <WebsiteField key={c.website ?? ""} contactId={c.id} website={c.website ?? null} onSaved={onReload} />
           : <Row icon={<Globe size={20} color={T.ink3} />} href={c.website ?? undefined} primary={websiteLabel(c.website ?? "")} secondary="Website" />)}
-        <CustomerRow contactId={c.id} customerId={c.customer_id ?? null} name={custName ?? c.customer_name ?? null} href={customerHref} onSaved={onReload} />
+        <CustomerRow contactId={c.id} customerId={c.customer_id ?? null} name={custName ?? c.customer_name ?? null} bucket={c.bucket ?? null}
+          href={c.bucket === "vendor" ? vendorHref ?? null : customerHref ?? null} onSaved={onReload} />
         {(c.address || editing) && (editing
           ? <AddressField contactId={c.id} address={c.address} onSaved={onReload} />
           : <Row icon={<MapPin size={20} color={T.ink3} />} href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(c.address ?? "")}`}
@@ -156,40 +157,58 @@ export function ContactCard({ person, back, textHref, customerHref, vendorHref, 
  * customer from inside the contact page … drop down and select Art Apartments"). Picking one puts them
  * under it through the customer page's own + Add contact (sc_attach_contact: their jobs come along). No Undo line (Coy, 2026-10-10: changing it again is the undo).
  */
-function CustomerRow({ contactId, customerId, name, href, onSaved }: {
-  contactId: string; customerId: string | null; name: string | null; href: string | null; onSaved: () => void;
+function CustomerRow({ contactId, customerId, name, bucket, href, onSaved }: {
+  contactId: string; customerId: string | null; name: string | null; bucket: string | null; href: string | null; onSaved: () => void;
 }) {
+  // A vendor's account is a customers row too (116); the row and its picker say which (Coy, 2026-10-22:
+  // "On the contact information page there is the ability to connect a contact to a customer/vendor").
+  const isVendor = bucket === "vendor";
   const [open, setOpen] = useState(false);
-  const [list, setList] = useState<Array<{ id: string; name: string; city: string | null }> | null>(null);
+  const [list, setList] = useState<Array<{ id: string; name: string; city: string | null; kind: "customer" | "vendor" }> | null>(null);
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => {
     if (!open || list) return;
-    fetch("/api/customers").then((r) => (r.ok ? r.json() : { customers: [] }))
-      .then((b) => setList(((b.customers ?? []) as Array<{ id: string; name: string; city: string | null }>).sort((a, b2) => a.name.localeCompare(b2.name))))
-      .catch(() => setList([]));
+    const get = (u: string, k: string) => fetch(u).then((r) => (r.ok ? r.json() : {})).then((b: Record<string, unknown>) => (b[k] ?? []) as Array<Record<string, unknown>>).catch(() => []);
+    void Promise.all([get("/api/customers", "customers"), get("/api/vendors", "vendors")]).then(([cs, vs]) => {
+      const out: Array<{ id: string; name: string; city: string | null; kind: "customer" | "vendor" }> = [];
+      for (const x of cs) if (typeof x.id === "string" && typeof x.name === "string") out.push({ id: x.id, name: x.name, city: (x.city as string | null) ?? null, kind: "customer" });
+      const seen = new Set<string>();
+      for (const v of vs) {
+        const acct = v.account_id as string | null;
+        const nm = ((v.company_name as string | null) ?? (v.name as string | null) ?? "").trim();
+        if (!acct || !nm || seen.has(acct)) continue;
+        seen.add(acct);
+        out.push({ id: acct, name: nm, city: null, kind: "vendor" });
+      }
+      setList(out.sort((a, b2) => a.name.localeCompare(b2.name)));
+    });
   }, [open, list]);
-  const pick = async (to: { id: string; name: string }) => {
+  const pick = async (to: { id: string; name: string; kind: "customer" | "vendor" }) => {
     setBusy(true); setErr(null);
-    const r = await fetch(`/api/customers/${to.id}/contacts`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contact_id: contactId }) });
-    const b = await r.json().catch(() => ({}));
-    setBusy(false);
-    if (!r.ok) { setErr(b?.error ?? "Couldn't move them."); return; }
-    setOpen(false); setQ(""); onSaved();
+    try {
+      if (bucket !== to.kind) {
+        const f = await fetch(`/api/contacts/${contactId}/bucket`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ bucket: to.kind }) });
+        if (!f.ok) throw new Error((await f.json().catch(() => ({})))?.error ?? "Couldn't file them.");
+      }
+      const r = await fetch(`/api/customers/${to.id}/contacts`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contact_id: contactId }) });
+      if (!r.ok) throw new Error((await r.json().catch(() => ({})))?.error ?? "Couldn't move them.");
+      setOpen(false); setQ(""); onSaved();
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
   };
   const shown = (list ?? []).filter((x) => x.id !== customerId && (!q.trim() || x.name.toLowerCase().includes(q.trim().toLowerCase()))).slice(0, 30);
   return (
     <div style={{ borderTop: `1px solid ${T.hairSoft}` }}>
-      <Row icon={<Buildings size={20} color={T.ink3} />} href={undefined} primary={name ?? "Not on a customer"}
-        secondary={href ? "Customer" : "Customer — pick one to put them under it"}
+      <Row icon={<Buildings size={20} color={T.ink3} />} href={undefined} primary={name ?? (isVendor ? "Not on a vendor" : "Not on a customer")}
+        secondary={customerId ? (isVendor ? "Vendor" : "Customer") : "Customer or vendor — pick one to put them under it"}
         right={<span className="flex items-center gap-3 shrink-0">
           {href && name && <Link href={href} style={{ ...eyebrow, color: T.chalk }}>Open ›</Link>}
           <button onClick={() => setOpen((v) => !v)} aria-expanded={open} style={{ ...eyebrow, color: T.chalk, cursor: "pointer" }}>{open ? "Close" : "Change"}</button>
         </span>} />
       {open && (
         <div style={{ padding: "0 16px 10px" }}>
-          <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find a customer: Art Apartments…" aria-label="Find a customer"
+          <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find a customer or vendor…" aria-label="Find a customer or vendor"
             className="rounded px-2 w-full" style={{ height: 34, border: `1px solid ${T.hair}`, fontSize: F.sm, background: T.card, color: T.ink }} />
           <div className="flex flex-col mt-1" style={{ maxHeight: 260, overflowY: "auto" }}>
             {list === null ? <span style={{ fontSize: F.sm, color: T.ink3, padding: "6px 0" }}>Loading…</span>
@@ -199,6 +218,7 @@ function CustomerRow({ contactId, customerId, name, href, onSaved }: {
                   style={{ padding: "8px 2px", borderBottom: `1px solid ${T.hairSoft}`, fontSize: F.sm, color: T.ink, cursor: "pointer" }}>
                   <span className="flex-1 min-w-0" style={{ fontWeight: 600 }}>{x.name}</span>
                   {x.city && <span style={{ color: T.ink3, fontSize: 12 }}>{x.city}</span>}
+                  <span style={{ ...eyebrow, fontSize: 10, color: x.kind === "vendor" ? T.chalk : T.green }}>{x.kind === "vendor" ? "Vendor" : "Customer"}</span>
                 </button>
               ))}
           </div>

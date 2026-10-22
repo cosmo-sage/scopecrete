@@ -388,7 +388,7 @@ test("collection list pages and the records opened from them", () => {
   assert.equal(collectionRecordAt("customers", "/dashboard/customers/11111111-1111-1111-1111-111111111111"), "11111111-1111-1111-1111-111111111111");
   assert.equal(collectionRecordAt("customers", "/dashboard/vendors/11111111-1111-1111-1111-111111111111"), null);
   assert.equal(collectionRecordAt("contacts", "/dashboard/messages/11111111-1111-1111-1111-111111111111"), "11111111-1111-1111-1111-111111111111");
-  assert.equal(collectionRecordAt("contacts", "/dashboard/vendors/11111111-1111-1111-1111-111111111111"), "11111111-1111-1111-1111-111111111111");
+  assert.equal(collectionRecordAt("contacts", "/dashboard/vendors/11111111-1111-1111-1111-111111111111"), null);
   assert.equal(collectionRecordAt("scope", "/dashboard/scope/11111111-1111-1111-1111-111111111111/budget"), "11111111-1111-1111-1111-111111111111");
 });
 
@@ -396,7 +396,7 @@ test("list rows: vendors by name, contacts' phone and hrefs, search by every wor
   const v = collectionListRows("vendors", { vendors: [{ id: "b", name: "Zed" }, { id: "a", name: "Acme" }] });
   assert.deepEqual(v.map((r) => r.id), ["a", "b"]);
   const c = collectionListRows("contacts", { contacts: [{ id: "x", name: "Amber", phones: [{ number: "(225) 555-0100" }], role: "vendor" }] });
-  assert.equal(c[0].href, "/dashboard/vendors/x");
+  assert.equal(c[0].href, "/dashboard/messages/x?person=1");
   const n = collectionListRows("contacts", { contacts: [{ id: "y", name: null, phones: [{ number: "(225) 555-0100" }], role: "unsorted" }] });
   assert.equal(n[0].name, "(225) 555-0100");
   assert.equal(n[0].href, "/dashboard/messages/y?person=1");

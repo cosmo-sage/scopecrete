@@ -613,3 +613,12 @@ export function hideTile(prefs: RailPrefs, key: string): RailPrefs {
 export function showTile(prefs: RailPrefs, key: string): RailPrefs {
   return { order: prefs.order, hidden: prefs.hidden.filter((k) => k !== key) };
 }
+
+/**
+ * Whether a Work Space of your own holds a job, customer or vendor (Coy, 2026-10-22: "adding a
+ * customer to a space should not be attaching a link to the customer space, but referencing that
+ * customer"): while you work in one of its members' pages from its drawer, the drawer stays yours.
+ */
+export function holdsSpace(members: SpacePin[], ref: SpaceRef): boolean {
+  return ref.kind !== "home" && ref.kind !== "collection" && members.some((m) => m.kind === ref.kind && m.id === ref.id);
+}

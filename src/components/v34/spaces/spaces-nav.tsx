@@ -35,7 +35,7 @@ import {
   emailThreads, SPACES_HREF, cleanLayout, kindRows, placeRow, removeKindShelf, CHANNELS_SHELF,
   type LayoutKind, type KindLayout, type TreeRow,
   type Shelf, type SpaceRef, type SpacePerson, type SpaceEmail, type ThreadRow, type SpacePin,
-  cleanRail, orderTiles, moveTile, hideTile, showTile, cleanCollectionPicks, setPicks, cleanMembers, setMembers,
+  cleanRail, orderTiles, moveTile, hideTile, showTile, cleanCollectionPicks, setPicks, cleanMembers, setMembers, holdsSpace,
 } from "@/lib/v34/spaces";
 
 interface RailJob { id: string; title: string; status: string | null; customer: string | null }
@@ -724,6 +724,17 @@ const CHANNEL_KEYS = (scope: string) => [`${scope}:channels`, `${scope}:phone`, 
 function ChannelsShelf({ title = "Channels", scope, d, onPick, closed, onToggle, empty }: {
   title?: string; scope: string; d: JobDetail | null; onPick: () => void; closed: Set<string>; onToggle: (k: string) => void; empty?: React.ReactNode;
 }) {
+  return (
+    <Group title={title} id={`${scope}:channels`} closed={closed} onToggle={onToggle}>
+      <ChannelSubs scope={scope} d={d} onPick={onPick} closed={closed} onToggle={onToggle} empty={empty} />
+    </Group>
+  );
+}
+
+/** Phone · Email · Internal, each folding on its own, with their threads under them. */
+function ChannelSubs({ scope, d, onPick, closed, onToggle, empty }: {
+  scope: string; d: JobDetail | null; onPick: () => void; closed: Set<string>; onToggle: (k: string) => void; empty?: React.ReactNode;
+}) {
   const phones: ThreadRow[] = d ? phoneThreads(d.people) : [];
   const mails: ThreadRow[] = d ? emailThreads(d.people, d.emails) : [];
   const notes: ThreadRow[] = d ? internalThreads(d.people) : [];
@@ -748,10 +759,53 @@ function ChannelsShelf({ title = "Channels", scope, d, onPick, closed, onToggle,
     );
   };
   return (
-    <Group title={title} id={`${scope}:channels`} closed={closed} onToggle={onToggle}>
+    <>
       {sub("phone", "Phone", phones, empty ?? "No numbers here yet.")}
       {sub("email", "Email", mails, "No email addresses or filed email.")}
       {sub("internal", "Internal", notes, "No one here yet.")}
+    </>
+  );
+}
+
+/**
+ * A job, customer or vendor in a Work Space of your own, as a shelf of its pages (Coy,
+ * 2026-10-22: "adding a customer to a space should not be attaching a link to the customer
+ * space, but referencing that customer (with all the pages and contacts and vendors associated
+ * with the customer) … Perhaps the job needs to be a shelf inside a custom space that brings all
+ * the pages to the space"). Its pages in the order its kind's drawer has them, then its Phone ·
+ * Email · Internal threads; nothing is copied, and the drawer stays this Work Space.
+ */
+function MemberShelf({ colId, m, closed, onToggle, onPick }: {
+  colId: string; m: SpacePin; closed: Set<string>; onToggle: (k: string) => void; onPick: () => void;
+}) {
+  const key = `col:${colId}:m:${m.kind}:${m.id}`;
+  const open = !closed.has(key);
+  const { layout } = useKindLayout(m.kind);
+  const d = useSpaceDetail(m.kind, open ? m.id : null);
+  const path = usePathname() ?? "";
+  const [search, setSearch] = useState("");
+  useEffect(() => {
+    let off = false;
+    Promise.resolve().then(() => { if (!off) setSearch(window.location.search); });
+    return () => { off = true; };
+  }, [path]);
+  const pick = useCallback(() => { onPick(); window.setTimeout(() => setSearch(window.location.search), 50); }, [onPick]);
+  const rows = useMemo(() => kindRows(m.kind, m.id), [m.kind, m.id]);
+  const byK = new Map(rows.map((r) => [r.k, r]));
+  const order = layout.shelves.flatMap((sh) => sh.rows).filter((k) => byK.has(k));
+  const onPage = m.kind === "job" ? path.startsWith(`/dashboard/scope/${m.id}`)
+    : path.startsWith(m.kind === "customer" ? `/dashboard/customers/${m.id}` : `/dashboard/vendors/${m.id}`);
+  const here = !onPage ? "" : m.kind === "job" ? activeTreeRow(path, search) : activeTab(search);
+  const word = m.kind === "job" ? "Job" : m.kind === "customer" ? "Customer" : "Vendor";
+  const color = m.kind === "job" ? "var(--sc-hiviz)" : m.kind === "customer" ? "var(--sc-chalk)" : "var(--sc-bucket-vendor)";
+  return (
+    <Group id={key} closed={closed} onToggle={onToggle} title={m.name}
+      gear={<span className="sc-space-tag" style={{ color, borderColor: color, flexShrink: 0 }}>{word}</span>}>
+      {order.map((k) => {
+        const r = byK.get(k)!;
+        return <Row key={k} href={r.href} label={r.label} indent={r.sub} on={here === k} onPick={pick} />;
+      })}
+      <ChannelSubs scope={`col:${colId}:${m.kind}:${m.id}`} d={d} onPick={pick} closed={closed} onToggle={onToggle} />
     </Group>
   );
 }
@@ -872,15 +926,10 @@ function CollectionDrawer({ col, id, pages, active, onPick }: {
   const covered = (t: HomeThread) => members.some((m) => (m.kind === "vendor" && m.id === t.contact_id) || (m.kind === "customer" && !!t.customer_id && m.id === t.customer_id));
   const loose = (folk ?? []).filter((t) => !covered(t));
   const kindOf = (t: HomeThread) => (BUCKETS.some((b) => b.k === t.bucket) ? t.bucket! : "unsorted");
-  const sections = [
-    { k: "job", title: "Jobs", color: "var(--sc-hiviz)" },
-    ...BUCKETS.map((b) => ({ k: b.k, title: b.label, color: b.color })),
-  ].map((g) => ({
-    ...g,
-    picked: members.filter((m) => m.kind === g.k),
-    people: loose.filter((t) => g.k !== "job" && kindOf(t) === g.k),
-  })).filter((g) => g.picked.length + g.people.length > 0);
-  const keys = [...sections.map((g) => `col:${id}:m:${g.k}`), ...(tools.length ? [`col:${id}:tools`] : []), ...chans.map((c) => `col:${id}:${c}`)];
+  const sections = BUCKETS.map((b) => ({ k: b.k, title: b.label, color: b.color, people: loose.filter((t) => kindOf(t) === b.k) }))
+    .filter((g) => g.people.length > 0);
+  const keys = [...members.map((m) => `col:${id}:m:${m.kind}:${m.id}`), ...sections.map((g) => `col:${id}:m:${g.k}`),
+    ...(tools.length ? [`col:${id}:collections`, `col:${id}:tools`] : []), ...chans.map((c) => `col:${id}:${c}`)];
   // Jobs, customers and vendors added while editing put their people on its thread.
   const changeMembers = (v: SpacePin[]) => {
     const added = v.filter((m) => !members.some((x) => x.kind === m.kind && x.id === m.id));
@@ -911,7 +960,6 @@ function CollectionDrawer({ col, id, pages, active, onPick }: {
     await fetch(`/api/threads/custom/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: v }) }).catch(() => {});
     window.dispatchEvent(new Event("sc:spaces-reload"));
   };
-  const memberHref = (m: SpacePin) => m.kind === "job" ? `/dashboard/scope/${m.id}/summary` : m.kind === "customer" ? `/dashboard/customers/${m.id}` : `/dashboard/vendors/${m.id}`;
   const name = col?.name ?? "Work Space";
   const count = (n: number, one: string, many: string) => (n ? `${n} ${n === 1 ? one : many}` : "");
   const holds = [
@@ -965,9 +1013,9 @@ function CollectionDrawer({ col, id, pages, active, onPick }: {
         ) : <>
           <div style={{ display: "flex" }}><FoldAll keys={keys} closed={closed} setAll={setAll} /></div>
           {folk === null && members.length === 0 && <div className="sc-space-empty">Loading…</div>}
+          {members.map((m) => <MemberShelf key={`${m.kind}:${m.id}`} colId={id} m={m} closed={closed} onToggle={toggle} onPick={onPick} />)}
           {sections.map((g) => (
-            <Group key={g.k} id={`col:${id}:m:${g.k}`} closed={closed} onToggle={toggle} count={g.picked.length + g.people.length} title={g.title}>
-              {g.picked.map((m) => <Row key={m.id} href={memberHref(m)} label={m.name} onPick={onPick} avatar={monogram(m.name)} color={g.color} />)}
+            <Group key={g.k} id={`col:${id}:m:${g.k}`} closed={closed} onToggle={toggle} count={g.people.length} title={g.title}>
               {g.people.map((t) => (
                 <Row key={t.contact_id} href={`/dashboard/messages/${t.contact_id}?t=${id}`} onPick={onPick}
                   label={t.display_name} sub={personSub(t)}
@@ -1023,6 +1071,7 @@ function FoldedDrawer({ shown, pages, active, onOpen, bar }: {
   const path = usePathname() ?? "";
   const [saved] = usePref<Shelf[] | null>("shelves", null);
   const [colRaw] = usePref<unknown>("spaces_collections", {});
+  const [memRaw] = usePref<unknown>("spaces_col_members", {});
   const shelves = useMemo(() => homeShelves(saved, pages), [saved, pages]);
   const [search, setSearch] = useState("");
   useEffect(() => {
@@ -1034,7 +1083,7 @@ function FoldedDrawer({ shown, pages, active, onOpen, bar }: {
     <Link key={key} href={href} className="sc-strip-ico no-underline" title={label} aria-label={label} aria-current={on ? "page" : undefined}>{glyph}</Link>
   );
   const chip = (ab: string, label: string, color: string) => (
-    <button key={ab} type="button" className="sc-strip-chip" style={{ color, borderColor: color }} onClick={onOpen} title={label} aria-label={`${label} — open the drawer`}>{ab}</button>
+    <button key={`${ab}:${label}`} type="button" className="sc-strip-chip" style={{ color, borderColor: color }} onClick={onOpen} title={label} aria-label={`${label} — open the drawer`}>{ab}</button>
   );
   let icons: React.ReactNode[];
   let chips: React.ReactNode[];
@@ -1058,7 +1107,10 @@ function FoldedDrawer({ shown, pages, active, onOpen, bar }: {
       icon("contacts", "Who's in it", `/dashboard/messages?t=${shown.id}`, false, <NavIcon k="contacts" on={false} color="currentColor" />),
       ...tools.map((k) => icon(k, PAGE.get(k)!.label, SPACES_HREF[k] ?? PAGE.get(k)!.href, isOn(active, k), <NavIcon k={k} on={isOn(active, k)} color="currentColor" />)),
     ];
-    chips = [chip("WS", "Work Space", "var(--sc-violet)")];
+    // Each job, customer and vendor in it is a shelf of its own in the open drawer.
+    const members = cleanMembers(memRaw)[shown.id] ?? [];
+    chips = [chip("WS", "Work Space", "var(--sc-violet)"),
+      ...members.map((m) => chip(monogram(m.name), m.name, m.kind === "job" ? "var(--sc-hiviz)" : m.kind === "customer" ? "var(--sc-chalk)" : "var(--sc-bucket-vendor)"))];
   } else {
     const here = activeTreeRow(path, search);
     icons = jobTree(shown.id).filter((r) => !r.sub).map((r) => {
@@ -1108,9 +1160,14 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
   // by landing on a Space's own page; only Home's rows and its tile go back to Home.
   const [stay, setStayState] = useState<SpaceRef | null>(stayed);
   const setStay = setStayState;
+  // A Work Space of your own keeps its drawer on its jobs', customers' and vendors' own pages
+  // (Coy, 2026-10-22: "click on that customer in the drawer, it takes me to a different space").
+  const [colMemRaw] = usePref<unknown>("spaces_col_members", {});
+  const colMembers = useMemo(() => cleanMembers(colMemRaw), [colMemRaw]);
+  const keepCol = stay?.kind === "collection" && holdsSpace(colMembers[stay.id] ?? [], here);
   if (pathSeen !== path) {
     setPathSeen(path); setPeek(null);
-    if (here.kind !== "home") setStayState(here);
+    if (here.kind !== "home" && !keepCol) setStayState(here);
   }
   useEffect(() => { stayed = stay; }, [stay]);
   const jobs = rail?.jobs ?? [];
@@ -1124,7 +1181,7 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
   }, [path]);
   const colHere = /^\/dashboard\/messages(\/[^/]+)?$/.test(path) && threadParam && (rail?.collections ?? []).some((c) => c.id === threadParam)
     ? { kind: "collection" as const, id: threadParam } : null;
-  const shown: SpaceRef = peek ?? colHere ?? (here.kind !== "home" ? here : stay ?? here);
+  const shown: SpaceRef = peek ?? colHere ?? (keepCol && stay ? stay : here.kind !== "home" ? here : stay ?? here);
   // A row picked in a drawer makes that drawer's Space the one you are in.
   const picked = (from: SpaceRef) => () => { setStay(from.kind === "home" ? null : from); close(); };
 
@@ -1146,7 +1203,7 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
         render: (drag) => (
           <Tile key={j.id} label={monogram(j.title)} title={title} color={color} on={on} bare drag={drag}
             href={desktop ? `/dashboard/scope/${j.id}/summary` : undefined}
-            onPick={desktop ? undefined : () => setPeek({ kind: "job", id: j.id })}>
+            onPick={desktop ? () => setStay({ kind: "job", id: j.id }) : () => setPeek({ kind: "job", id: j.id })}>
             <SpaceIcon spaceKey={`job:${j.id}`} kind="job" color={color} initials={monogram(j.title)} on={on} />
           </Tile>
         ),
@@ -1178,7 +1235,7 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
         info: { key: `job:${p.id}`, name: p.name, sub: "Job", shape: "job", color, initials: monogram(p.name), pinned: true },
         render: (drag) => (
           <Tile key={`pin-job:${p.id}`} label={monogram(p.name)} title={`${p.name} · Job`} color={color} on={on} bare drag={drag}
-            href={desktop ? `/dashboard/scope/${p.id}/summary` : undefined} onPick={desktop ? undefined : () => setPeek({ kind: "job", id: p.id })}>
+            href={desktop ? `/dashboard/scope/${p.id}/summary` : undefined} onPick={desktop ? () => setStay({ kind: "job", id: p.id }) : () => setPeek({ kind: "job", id: p.id })}>
             <SpaceIcon spaceKey={`job:${p.id}`} kind="job" color={color} initials={monogram(p.name)} on={on} />
           </Tile>
         ),
@@ -1192,7 +1249,7 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
         info: { key: `customer:${c.id}`, name: c.name, sub: "Customer · open job", shape: "contact", color, initials: monogram(c.name), pinned: false },
         render: (drag) => (
           <Tile key={`cust:${c.id}`} label={monogram(c.name)} title={`${c.name} · Customer`} color={color} on={on} bare drag={drag}
-            href={desktop ? `/dashboard/customers/${c.id}` : undefined} onPick={desktop ? undefined : () => setPeek({ kind: "customer", id: c.id })}>
+            href={desktop ? `/dashboard/customers/${c.id}` : undefined} onPick={desktop ? () => setStay({ kind: "customer", id: c.id }) : () => setPeek({ kind: "customer", id: c.id })}>
             <SpaceIcon spaceKey={`customer:${c.id}`} kind="contact" color={color} initials={monogram(c.name)} on={on} />
           </Tile>
         ),
@@ -1207,7 +1264,7 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
         info: { key: `${p.kind}:${p.id}`, name: p.name, sub: kindName, shape: p.kind === "customer" ? "contact" : "vendor", color, initials: monogram(p.name), pinned: true },
         render: (drag) => (
           <Tile key={`${p.kind}:${p.id}`} label={monogram(p.name)} title={`${p.name} · ${kindName}`} color={color} on={on} bare drag={drag}
-            href={desktop ? href : undefined} onPick={desktop ? undefined : () => setPeek({ kind: p.kind, id: p.id })}>
+            href={desktop ? href : undefined} onPick={desktop ? () => setStay({ kind: p.kind, id: p.id }) : () => setPeek({ kind: p.kind, id: p.id })}>
             <SpaceIcon spaceKey={`${p.kind}:${p.id}`} kind={p.kind === "customer" ? "contact" : "vendor"} color={color} initials={monogram(p.name)} on={on} />
           </Tile>
         ),

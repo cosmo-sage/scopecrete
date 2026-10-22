@@ -252,3 +252,13 @@ test("pickers name the four lists Collections, apart from tools and threads", as
   assert.deepEqual(s[1].keys, ["map", "pricebook"]);
   assert.ok(CHANNELS.every((c) => !/people/i.test(c.label)));
 });
+
+test("holdsSpace: a Work Space keeps its drawer on its members' own pages", async () => {
+  const { holdsSpace } = await import("../src/lib/v34/spaces.ts");
+  const m = [{ kind: "customer", id: "c1", name: "Icon" }, { kind: "job", id: "j1", name: "Lot" }];
+  assert.equal(holdsSpace(m, { kind: "customer", id: "c1" }), true);
+  assert.equal(holdsSpace(m, { kind: "job", id: "j1" }), true);
+  assert.equal(holdsSpace(m, { kind: "vendor", id: "c1" }), false);
+  assert.equal(holdsSpace(m, { kind: "job", id: "j2" }), false);
+  assert.equal(holdsSpace(m, { kind: "home" }), false);
+});

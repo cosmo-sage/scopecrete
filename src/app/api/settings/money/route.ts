@@ -1,6 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
 import { moneySettings } from "@/lib/pricing-server";
+import { sectionGroups } from "@/lib/section-groups";
+
+type Sb = Parameters<typeof moneySettings>[0];
+
+/** The company's section cost groups (118), or null when not set or before 118. */
+async function orgSectionGroups(sb: Sb, orgId: string): Promise<string[] | null> {
+  const r = await sb.from("org_money_settings").select("section_groups").eq("org_id", orgId).maybeSingle();
+  if (r.error) return null;
+  const v = (r.data as { section_groups?: unknown } | null)?.section_groups;
+  return Array.isArray(v) ? sectionGroups(v) : null;
+}
 
 /**
  * The org's pricing defaults and pay-yourself (migration 057, Coy
@@ -33,7 +44,7 @@ export async function GET(req: NextRequest) {
     supabase.from("overhead_items").select("id, label, category, amount, cadence, active, notes, due_day").eq("org_id", orgId).order("created_at"),
   ]);
   if (oh.error) return applyCookies(NextResponse.json({ error: `overhead_items: ${oh.error.message}` }, { status: 500 }));
-  return applyCookies(NextResponse.json({ settings: money, overhead: oh.data ?? [] }));
+  return applyCookies(NextResponse.json({ settings: money, overhead: oh.data ?? [], section_groups: await orgSectionGroups(supabase, orgId) }));
 }
 
 export async function PATCH(req: NextRequest) {
@@ -55,8 +66,14 @@ export async function PATCH(req: NextRequest) {
     if (b.comp_mode !== null && b.comp_mode !== "fixed_draw" && b.comp_mode !== "pct_profit") return bad("Pay-yourself is a fixed draw or a percent of profit.");
     row.comp_mode = b.comp_mode;
   }
+  if ("section_groups" in b) {
+    // Migration 118: the company's section cost groups; null = the defaults.
+    if (b.section_groups === null) row.section_groups = null;
+    else if (!Array.isArray(b.section_groups)) return bad("Section groups are a list of cost types.");
+    else row.section_groups = sectionGroups(b.section_groups);
+  }
   if (Object.keys(row).length <= 2) return bad("Nothing to change.");
   const { error } = await supabase.from("org_money_settings").upsert(row, { onConflict: "org_id" });
   if (error) return applyCookies(NextResponse.json({ error: error.message }, { status: 500 }));
-  return applyCookies(NextResponse.json({ settings: await moneySettings(supabase, orgId) }));
+  return applyCookies(NextResponse.json({ settings: await moneySettings(supabase, orgId), section_groups: await orgSectionGroups(supabase, orgId) }));
 }

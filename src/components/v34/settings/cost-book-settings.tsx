@@ -85,11 +85,23 @@ export function CostBookSettings() {
 
 /** Which cost groups every budget section starts with (Coy, 2026-10-21). */
 function SectionGroupsBlock() {
-  const [pref, setPref] = usePref<unknown>("section_groups", null);
-  const on = sectionGroups(pref);
-  const toggle = (t: CostType) => setPref(on.includes(t) ? on.filter((x) => x !== t) : COST_TYPES.filter((x) => x === t || on.includes(x)));
+  // The company's list since migration 118; the person's own saved list until it is set.
+  const [pref] = usePref<unknown>("section_groups", null);
+  const [org, setOrg] = useState<unknown>(undefined);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => {
+    fetch("/api/settings/money").then((r) => r.json()).then((j) => setOrg(j.section_groups ?? null)).catch(() => setOrg(null));
+  }, []);
+  const on = sectionGroups(org ?? pref);
+  const toggle = (t: CostType) => {
+    const next = on.includes(t) ? on.filter((x) => x !== t) : COST_TYPES.filter((x) => x === t || on.includes(x));
+    setOrg(next); setErr(null);
+    fetch("/api/settings/money", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ section_groups: next }) })
+      .then(async (r) => { if (!r.ok) setErr((await r.json().catch(() => ({}))).error ?? "Couldn't save."); })
+      .catch(() => setErr("Couldn't save."));
+  };
   return (
-    <SettingsBlock title="Section cost groups" note="The groups every budget section shows, even before it has items. Job totals break down the same way.">
+    <SettingsBlock title="Section cost groups" note="The groups every budget section shows, even before it has items, for everyone in the company. Job totals break down the same way.">
       <div className="flex flex-wrap gap-2 mt-2">
         {COST_TYPES.map((t) => (
           <label key={t} className="flex items-center gap-1.5 rounded px-2.5" style={{ height: 32, border: `1px solid ${T.hair}`, fontSize: F.sm, cursor: "pointer" }}>
@@ -98,6 +110,7 @@ function SectionGroupsBlock() {
           </label>
         ))}
       </div>
+      {err && <div style={{ color: T.red, fontSize: F.sm, marginTop: 6 }}>{err}</div>}
     </SettingsBlock>
   );
 }

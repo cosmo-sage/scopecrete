@@ -3,8 +3,8 @@
  * created it needs to default with cost groups: Labor, materials, equipment … a place to set the
  * default groups … this same grouping transposes directly into the job totals"). A section's lines
  * are grouped by their cost type — the same split Cost analysis totals the job by — and the
- * default groups show on every section even with nothing in them. Kept on the account
- * (`user_preferences.prefs.section_groups`), set in Settings → Cost book.
+ * default groups show on every section even with nothing in them. Kept for the company
+ * (`org_money_settings.section_groups`, migration 118), set in Settings → Cost book.
  */
 import { COST_TYPES, type CostType } from "./cost-cards.ts";
 

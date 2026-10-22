@@ -149,8 +149,16 @@ export function JobBudget({ jobId, sections, days, onSummary, refresh = 0, slots
   const [book, setBook] = useState<{ area: string } | null>(null);
   // A section's groups are its cost types, Labor · Materials · Equipment by default, shown even
   // empty (Coy, 2026-10-21); set in Settings → Cost book.
+  // Since migration 118 the company's (org_money_settings.section_groups); the person's own
+  // saved list, then the default, while the company has none.
   const [groupPref] = usePref<unknown>("section_groups", null);
-  const defaultGroups = sectionGroups(groupPref);
+  const [orgGroups, setOrgGroups] = useState<unknown>(null);
+  useEffect(() => {
+    let live = true;
+    fetch("/api/settings/money").then((r) => (r.ok ? r.json() : null)).then((j) => { if (live && j) setOrgGroups(j.section_groups ?? null); }).catch(() => {});
+    return () => { live = false; };
+  }, []);
+  const defaultGroups = sectionGroups(orgGroups ?? groupPref);
   // A section card's "Add items" opens the book on that area.
   useEffect(() => {
     const on = (e: Event) => { const area = (e as CustomEvent<{ area?: string }>).detail?.area ?? ""; setBook({ area }); };

@@ -272,8 +272,8 @@ function ShelfColorPick({ shelf, onPick }: { shelf: { color?: string }; onPick: 
 function GearIcon({ size = 13 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round">
-      <circle cx="10" cy="10" r="2.6" />
-      <path d="M10 2.5v2M10 15.5v2M2.5 10h2M15.5 10h2M4.7 4.7l1.4 1.4M13.9 13.9l1.4 1.4M4.7 15.3l1.4-1.4M13.9 6.1l1.4-1.4" />
+      <circle cx="10" cy="10" r="2.4" />
+      <path d="M15.96 7.96L18.3 8.72L18.3 11.28L15.96 12.04A6.3 6.3 0 0 1 15.66 12.77L16.78 14.96L14.96 16.78L12.77 15.66A6.3 6.3 0 0 1 12.04 15.96L11.28 18.3L8.72 18.3L7.96 15.96A6.3 6.3 0 0 1 7.23 15.66L5.04 16.78L3.22 14.96L4.34 12.77A6.3 6.3 0 0 1 4.04 12.04L1.7 11.28L1.7 8.72L4.04 7.96A6.3 6.3 0 0 1 4.34 7.23L3.22 5.04L5.04 3.22L7.23 4.34A6.3 6.3 0 0 1 7.96 4.04L8.72 1.7L11.28 1.7L12.04 4.04A6.3 6.3 0 0 1 12.77 4.34L14.96 3.22L16.78 5.04L15.66 7.23A6.3 6.3 0 0 1 15.96 7.96Z" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -1851,8 +1851,8 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
       )}
       <Link href={SETTINGS_HOME} onClick={close} className="sc-spaces-foot no-underline" aria-label="Settings" title="Settings">
         <svg width="19" height="19" viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="10" cy="10" r="2.6" />
-          <path d="M10 2.5v2M10 15.5v2M2.5 10h2M15.5 10h2M4.7 4.7l1.4 1.4M13.9 13.9l1.4 1.4M4.7 15.3l1.4-1.4M13.9 6.1l1.4-1.4" />
+          <circle cx="10" cy="10" r="2.4" />
+          <path d="M15.96 7.96L18.3 8.72L18.3 11.28L15.96 12.04A6.3 6.3 0 0 1 15.66 12.77L16.78 14.96L14.96 16.78L12.77 15.66A6.3 6.3 0 0 1 12.04 15.96L11.28 18.3L8.72 18.3L7.96 15.96A6.3 6.3 0 0 1 7.23 15.66L5.04 16.78L3.22 14.96L4.34 12.77A6.3 6.3 0 0 1 4.04 12.04L1.7 11.28L1.7 8.72L4.04 7.96A6.3 6.3 0 0 1 4.34 7.23L3.22 5.04L5.04 3.22L7.23 4.34A6.3 6.3 0 0 1 7.96 4.04L8.72 1.7L11.28 1.7L12.04 4.04A6.3 6.3 0 0 1 12.77 4.34L14.96 3.22L16.78 5.04L15.66 7.23A6.3 6.3 0 0 1 15.96 7.96Z" strokeLinejoin="round" />
         </svg>
       </Link>
     </div>

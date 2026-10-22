@@ -218,3 +218,28 @@ test("customers with an open job are Work Spaces; Buckets shelf reads Collection
   assert.equal(sh[0].name, "Collections");
   assert.equal(homeShelves([{ id: "buckets", name: "My lists", pages: [] }], [])[0].name, "My lists");
 });
+
+test("a job's, customer's or vendor's drawer: default, cleaned, pages moved and shelves removed", async () => {
+  const { defaultLayout, cleanLayout, placeRow, removeKindShelf, kindRows, CHANNELS_SHELF } = await import("../src/lib/v34/spaces.ts");
+  const job = defaultLayout("job");
+  assert.deepEqual(job.shelves.map((s) => s.name), ["Job", "Channels"]);
+  assert.deepEqual(job.shelves[0].rows, kindRows("job", ID).map((r) => r.k));
+  assert.deepEqual(defaultLayout("customer").shelves.map((s) => s.id), ["account", CHANNELS_SHELF, "toolbox"]);
+  // junk falls back; unknown pages dropped; a page twice kept once; a forgotten page goes on the first shelf
+  assert.deepEqual(cleanLayout("job", "nope"), job);
+  const c = cleanLayout("job", { shelves: [{ id: "a", name: "Mine", rows: ["summary", "summary", "nonsense"] }, { id: "b", name: "Rest", rows: ["files"] }], hidden: ["proposal"] });
+  assert.equal(c.shelves[0].rows[0], "summary");
+  assert.equal(c.shelves[0].rows.filter((k) => k === "summary").length, 1);
+  assert.ok(!c.shelves.some((s) => s.rows.includes("nonsense")));
+  assert.ok(!c.shelves.some((s) => s.rows.includes("proposal")));
+  assert.ok(c.hidden.includes("proposal"));
+  assert.ok(c.shelves.some((s) => s.id === CHANNELS_SHELF), "channels come back unless taken out");
+  // move a page, hide a page, remove a shelf
+  const moved = placeRow(job, "files", null);
+  assert.ok(moved.hidden.includes("files") && !moved.shelves[0].rows.includes("files"));
+  const back = placeRow(moved, "files", "job");
+  assert.ok(back.shelves[0].rows.includes("files") && !back.hidden.includes("files"));
+  const gone = removeKindShelf(job, CHANNELS_SHELF);
+  assert.ok(!gone.shelves.some((s) => s.id === CHANNELS_SHELF) && gone.hidden.includes(CHANNELS_SHELF));
+  assert.ok(!cleanLayout("job", gone).shelves.some((s) => s.id === CHANNELS_SHELF));
+});

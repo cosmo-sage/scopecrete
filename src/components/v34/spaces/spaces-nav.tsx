@@ -7,7 +7,7 @@
  *
  * A 72px rail of Spaces — Dusty (Home) first, then every open job as a tile in its
  * stage's colour (look 1b), then the threads Coy made — beside a 280px drawer: on
- * Home the app's pages and every thread by bucket; in a job its Customer Account pages
+ * Home the app's pages and every thread by bucket; in a job its Job pages
  * and a Channels shelf of its Phone · Email · Internal threads (one thread per number). Settings is the
  * gear at the rail's foot. On a desktop it is fixed at the left (`--sc-rail-w` is
  * 352px, 136px with the drawer folded by « to a strip of icons, › opening it again — frame 11; tiles drawn as silhouettes by kind, Rail Silhouettes 1a); on a phone it slides over the page from ☰
@@ -32,8 +32,9 @@ import {
   activeTreeRow, internalThreads, jobTree, monogram, phoneThreads, spaceOf, stageColor, stageLabel,
   homeShelves, moveToShelf, nudge, MAX_SHELVES, MAX_SHELF_NAME, CHANNELS, isChannel, looseChannels, offShelf,
   customerShelves, vendorShelves, activeTab, cleanPins, addPin, removePin,
-  emailThreads, SPACES_HREF,
-  type Shelf, type SpaceRef, type SpacePerson, type SpaceEmail, type ThreadRow, type SpacePin, type SpaceShelf,
+  emailThreads, SPACES_HREF, cleanLayout, kindRows, placeRow, removeKindShelf, CHANNELS_SHELF,
+  type LayoutKind, type KindLayout, type TreeRow,
+  type Shelf, type SpaceRef, type SpacePerson, type SpaceEmail, type ThreadRow, type SpacePin,
   cleanRail, orderTiles, moveTile, hideTile, showTile, cleanCollectionPicks, setPicks, cleanMembers, setMembers,
 } from "@/lib/v34/spaces";
 
@@ -205,9 +206,9 @@ function FoldAll({ keys, closed, setAll }: { keys: string[]; closed: Set<string>
   );
 }
 
-function GearIcon() {
+function GearIcon({ size = 13 }: { size?: number }) {
   return (
-    <svg width="13" height="13" viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round">
+    <svg width={size} height={size} viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round">
       <circle cx="10" cy="10" r="2.6" />
       <path d="M10 2.5v2M10 15.5v2M2.5 10h2M15.5 10h2M4.7 4.7l1.4 1.4M13.9 13.9l1.4 1.4M4.7 15.3l1.4-1.4M13.9 6.1l1.4-1.4" />
     </svg>
@@ -439,6 +440,141 @@ function VendorTrades({ onPick }: { onPick: () => void }) {
   );
 }
 
+/**
+ * The top of every Space's drawer (Coy, 2026-10-22: "it should define what type of space it
+ * is. Is it a vendor? collection? … a gear icon further in the top right corner … across from
+ * the job name"): its name with the gear at the right, then what kind of Space it is.
+ */
+function SpaceHead({ name, kind, color, tags, sub, back, editing, onGear, gearLabel }: {
+  name: string; kind: string; color: string; tags?: React.ReactNode; sub?: React.ReactNode; back?: React.ReactNode;
+  editing?: boolean; onGear?: () => void; gearLabel?: string;
+}) {
+  return (
+    <div className="sc-space-head">
+      {back}
+      <div className="sc-space-top">
+        <span className="sc-space-name" title={name}>{name}</span>
+        {onGear && (
+          <button type="button" className="sc-space-gear" onClick={onGear} aria-pressed={!!editing}
+            aria-label={gearLabel ?? "Edit this drawer"} title={editing ? "Done" : (gearLabel ?? "Edit this drawer")}>
+            {editing ? <span style={{ fontSize: 12, fontWeight: 600 }}>Done</span> : <GearIcon size={16} />}
+          </button>
+        )}
+      </div>
+      <span className="sc-space-sub" style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+        <span className="sc-space-tag" style={{ color, borderColor: color }}>{kind}</span>
+        {tags}
+        {sub && <span>{sub}</span>}
+      </span>
+    </div>
+  );
+}
+
+const KIND_WORD: Record<LayoutKind, string> = { job: "job", customer: "customer", vendor: "vendor" };
+
+/**
+ * Editing a job's, customer's or vendor's drawer (Coy, 2026-10-22: "Everything on the rail is
+ * supposed to be a kind of 'workspace' that has an editable drawer"): its shelves renamed, moved,
+ * added and removed, each page moved to another shelf or out of the drawer, and the Space put on
+ * or taken off the rail. One layout per kind (`space_layouts`).
+ */
+function KindLayoutEditor({ kind, layout, rows, onChange, onReset, onDone, rail }: {
+  kind: LayoutKind; layout: KindLayout; rows: TreeRow[]; onChange: (l: KindLayout) => void; onReset: () => void; onDone: () => void;
+  rail?: { on: boolean; set: (on: boolean) => void };
+}) {
+  const [adding, setAdding] = useState("");
+  const label = (k: string) => rows.find((r) => r.k === k)?.label ?? k;
+  const setShelf = (i: number, patch: Partial<KindLayout["shelves"][number]>) =>
+    onChange({ ...layout, shelves: layout.shelves.map((sh, j) => (j === i ? { ...sh, ...patch } : sh)) });
+  const pageShelves = layout.shelves.filter((sh) => sh.id !== CHANNELS_SHELF);
+  const add = () => {
+    const name = adding.trim().slice(0, MAX_SHELF_NAME);
+    if (!name || layout.shelves.length >= MAX_SHELVES) return;
+    onChange({ ...layout, shelves: [...layout.shelves, { id: `s${Date.now().toString(36)}`, name, rows: [] }] });
+    setAdding("");
+  };
+  return (
+    <div className="sc-shelf-arr">
+      <p className="sc-shelf-hint">This is how every {KIND_WORD[kind]}&apos;s drawer reads. Rename a shelf, move it, or move any page to another shelf or out of the drawer.</p>
+      {rail && (
+        <div className="sc-shelf-row" style={{ justifyContent: "space-between" }}>
+          <span className="sc-shelf-page-l">{rail.on ? "On the rail" : "Not on the rail"}</span>
+          <button type="button" className="sc-shelf-arrange" onClick={() => rail.set(!rail.on)}>{rail.on ? "Take it off the rail" : "Put it on the rail"}</button>
+        </div>
+      )}
+      {layout.shelves.map((sh, i) => (
+        <div key={sh.id} className="sc-shelf-box">
+          <div className="sc-shelf-row">
+            <input className="sc-shelf-name" value={sh.name} maxLength={MAX_SHELF_NAME} aria-label="Shelf name"
+              onChange={(e) => setShelf(i, { name: e.target.value })}
+              onBlur={(e) => { if (!e.target.value.trim()) setShelf(i, { name: "Shelf" }); }} />
+            <button type="button" className="sc-shelf-btn" onClick={() => onChange({ ...layout, shelves: nudge(layout.shelves, i, -1) })} disabled={i === 0} aria-label="Move shelf up">↑</button>
+            <button type="button" className="sc-shelf-btn" onClick={() => onChange({ ...layout, shelves: nudge(layout.shelves, i, 1) })} disabled={i === layout.shelves.length - 1} aria-label="Move shelf down">↓</button>
+            <button type="button" className="sc-shelf-btn" aria-label={`Remove ${sh.name}`} title="Remove this shelf — its pages leave the drawer"
+              onClick={() => onChange(removeKindShelf(layout, sh.id))}>×</button>
+          </div>
+          {sh.id === CHANNELS_SHELF
+            ? <div className="sc-space-empty">Phone · Email · Internal threads</div>
+            : sh.rows.length === 0 && <div className="sc-space-empty">Empty — move a page here.</div>}
+          {sh.rows.map((k, ri) => (
+            <div key={k} className="sc-shelf-page">
+              <span className="sc-shelf-page-l">{label(k)}</span>
+              <button type="button" className="sc-shelf-btn" onClick={() => setShelf(i, { rows: nudge(sh.rows, ri, -1) })} disabled={ri === 0} aria-label={`Move ${label(k)} up`}>↑</button>
+              <button type="button" className="sc-shelf-btn" onClick={() => setShelf(i, { rows: nudge(sh.rows, ri, 1) })} disabled={ri === sh.rows.length - 1} aria-label={`Move ${label(k)} down`}>↓</button>
+              <select className="sc-shelf-move" value={sh.id} aria-label={`Shelf for ${label(k)}`} onChange={(e) => onChange(placeRow(layout, k, e.target.value || null))}>
+                {pageShelves.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+                <option value="">Not in the drawer</option>
+              </select>
+            </div>
+          ))}
+        </div>
+      ))}
+      {layout.hidden.length > 0 && (
+        <div className="sc-shelf-box">
+          <span className="sc-shelf-edit-h">Not in the drawer</span>
+          {layout.hidden.map((k) => (
+            <div key={k} className="sc-shelf-page">
+              <span className="sc-shelf-page-l">{k === CHANNELS_SHELF ? "Channels" : label(k)}</span>
+              {k === CHANNELS_SHELF
+                ? <button type="button" className="sc-shelf-arrange" onClick={() => onChange({ shelves: [...layout.shelves, { id: CHANNELS_SHELF, name: "Channels", rows: [] }], hidden: layout.hidden.filter((x) => x !== k) })}>Put back</button>
+                : pageShelves.length > 0 && (
+                  <select className="sc-shelf-move" value="" aria-label={`Put ${label(k)} on a shelf`} onChange={(e) => e.target.value && onChange(placeRow(layout, k, e.target.value))}>
+                    <option value="">Put it on…</option>
+                    {pageShelves.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+                  </select>
+                )}
+            </div>
+          ))}
+        </div>
+      )}
+      {layout.shelves.length < MAX_SHELVES && (
+        <form className="sc-shelf-row" onSubmit={(e) => { e.preventDefault(); add(); }}>
+          <input className="sc-shelf-name" value={adding} onChange={(e) => setAdding(e.target.value)} placeholder="New shelf name" maxLength={MAX_SHELF_NAME} aria-label="New shelf name" />
+          <button type="submit" className="sc-shelf-arrange" disabled={!adding.trim()}>+ Shelf</button>
+        </form>
+      )}
+      <div className="sc-shelf-row" style={{ justifyContent: "space-between" }}>
+        <button type="button" className="sc-space-more" style={{ padding: "4px 0" }} onClick={onReset}>Put the default drawer back</button>
+        <button type="button" className="sc-shelf-arrange" onClick={onDone}>Done</button>
+      </div>
+    </div>
+  );
+}
+
+/** A kind of Space's drawer layout, saved on the account (`space_layouts`). */
+function useKindLayout(kind: LayoutKind) {
+  const [raw, setRaw] = usePref<Record<string, unknown> | null>("space_layouts", null);
+  const layout = useMemo(() => cleanLayout(kind, raw?.[kind]), [kind, raw]);
+  const set = (l: KindLayout | null) => {
+    const next: Record<string, unknown> = { ...(raw && typeof raw === "object" ? raw : {}) };
+    if (l) next[kind] = l; else delete next[kind];
+    setRaw(next);
+  };
+  return { layout, set };
+}
+
+export type RailCtl = { on: boolean; set: (on: boolean, name: string) => void };
+
 function HomeDrawer({ pages, active, onPick }: { pages: string[]; active: string; onPick: () => void }) {
   const pathname = usePathname();
   const [saved, setSaved] = usePref<Shelf[] | null>("shelves", null);
@@ -456,15 +592,8 @@ function HomeDrawer({ pages, active, onPick }: { pages: string[]; active: string
 
   return (
     <>
-      <div className="sc-space-head">
-        <span className="sc-space-name">Home</span>
-        <span className="sc-space-sub" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ flex: 1 }}>Dusty · your shelves and threads</span>
-          <button type="button" className="sc-shelf-arrange" onClick={() => { setArranging(!arranging); setEditing(null); }} aria-pressed={arranging}>
-            {arranging ? "Done" : "Arrange"}
-          </button>
-        </span>
-      </div>
+      <SpaceHead name="Home" kind="Home" color="var(--sc-hiviz)" sub="Dusty · your shelves and threads"
+        editing={arranging} onGear={() => { setArranging(!arranging); setEditing(null); }} gearLabel="Arrange Home's shelves" />
       <div className="sc-space-scroll">
         {/* Dusty's chat in the main window, what he made beside it (Coy, 2026-10-19). */}
         {!arranging && <Row href="/dashboard/dusty" label="Chat with Dusty" sub="His answers here, what he made beside them" on={pathname === "/dashboard/dusty"} onPick={onPick}
@@ -513,7 +642,7 @@ function HomeDrawer({ pages, active, onPick }: { pages: string[]; active: string
   );
 }
 
-function JobDrawer({ id, fallback, onPick }: { id: string; fallback: RailJob | null; onPick: () => void }) {
+function JobDrawer({ id, fallback, onPick, rail }: { id: string; fallback: RailJob | null; onPick: () => void; rail: RailCtl }) {
   const d = useSpaceDetail("job", id);
   const path = usePathname() ?? "";
   const [search, setSearch] = useState("");
@@ -527,26 +656,58 @@ function JobDrawer({ id, fallback, onPick }: { id: string; fallback: RailJob | n
   const status = d?.job?.status ?? fallback?.status ?? null;
   const title = d?.job?.title ?? fallback?.title ?? "Job";
   const here = activeTreeRow(path, search);
-  const tree = jobTree(id);
-  const { closed, toggle, setAll } = useClosed();
-  const g = { closed, onToggle: toggle };
+  const [editing, setEditing] = useState(false);
+  const customer = fallback?.customer ?? null;
   return (
     <>
-      <div className="sc-space-head">
-        <span className="sc-space-name" title={title}>{title}</span>
-        <span className="sc-space-tag" style={{ color: stageColor(status), borderColor: stageColor(status) }}>{stageLabel(status)}</span>
-      </div>
-      <div className="sc-space-scroll">
-        <div style={{ display: "flex" }}><FoldAll keys={["job:scope", ...CHANNEL_KEYS("job")]} closed={closed} setAll={setAll} /></div>
-        <Group title="Customer Account" id="job:scope" {...g}>
-          {tree.map((r) => (
-            <Row key={r.k} href={r.href} label={r.label} indent={r.sub} on={here === r.k} onPick={pick} />
-          ))}
-        </Group>
-        <ChannelsShelf scope="job" d={d} onPick={pick} {...g}
-          empty={<>No numbers on this job yet. <Link href={`/dashboard/scope/${id}/summary`} onClick={pick}>+ Add a contact</Link></>} />
-      </div>
+      <SpaceHead name={title} kind="Job" color="var(--sc-hiviz)" editing={editing} onGear={() => setEditing(!editing)} gearLabel="Edit every job's drawer"
+        tags={<span className="sc-space-tag" style={{ color: stageColor(status), borderColor: stageColor(status) }}>{stageLabel(status)}</span>}
+        sub={customer ?? undefined} />
+      <LayoutDrawer kind="job" id={id} here={here} pick={pick} editing={editing} setEditing={setEditing}
+        rail={{ on: rail.on, set: (on) => rail.set(on, title) }}
+        channels={(name, g) => <ChannelsShelf title={name} scope="job" d={d} onPick={pick} {...g}
+          empty={<>No numbers on this job yet. <Link href={`/dashboard/scope/${id}/summary`} onClick={pick}>+ Add a contact</Link></>} />} />
     </>
+  );
+}
+
+/**
+ * A job's, customer's or vendor's shelves, laid out as Coy set them for that kind of Space
+ * (`space_layouts`), or the editor while the head's gear is on.
+ */
+function LayoutDrawer({ kind, id, here, pick, editing, setEditing, rail, channels }: {
+  kind: LayoutKind; id: string; here: string; pick: () => void; editing: boolean; setEditing: (v: boolean) => void;
+  rail: { on: boolean; set: (on: boolean) => void };
+  channels: (name: string, g: { closed: Set<string>; onToggle: (k: string) => void }) => React.ReactNode;
+}) {
+  const { layout, set } = useKindLayout(kind);
+  const rows = useMemo(() => kindRows(kind, id), [kind, id]);
+  const byK = useMemo(() => new Map(rows.map((r) => [r.k, r])), [rows]);
+  const { closed, toggle, setAll } = useClosed();
+  const g = { closed, onToggle: toggle };
+  if (editing) {
+    return (
+      <div className="sc-space-scroll">
+        <KindLayoutEditor kind={kind} layout={layout} rows={rows} onChange={set} onReset={() => set(null)} onDone={() => setEditing(false)} rail={rail} />
+      </div>
+    );
+  }
+  const keys = layout.shelves.flatMap((sh) => (sh.id === CHANNELS_SHELF ? CHANNEL_KEYS(kind) : [`${kind}:${sh.id}`]));
+  return (
+    <div className="sc-space-scroll">
+      <div style={{ display: "flex" }}><FoldAll keys={keys} closed={closed} setAll={setAll} /></div>
+      {layout.shelves.map((sh) => sh.id === CHANNELS_SHELF
+        ? <React.Fragment key={sh.id}>{channels(sh.name, g)}</React.Fragment>
+        : (
+          <Group key={sh.id} title={sh.name} id={`${kind}:${sh.id}`} {...g}>
+            {sh.rows.length === 0 && <div className="sc-space-empty">Empty — the gear moves pages here.</div>}
+            {sh.rows.map((k) => {
+              const r = byK.get(k);
+              return r ? <Row key={k} href={r.href} label={r.label} indent={r.sub} on={here === k} onPick={pick} /> : null;
+            })}
+          </Group>
+        ))}
+    </div>
   );
 }
 
@@ -558,8 +719,8 @@ const CHANNEL_KEYS = (scope: string) => [`${scope}:channels`, `${scope}:phone`, 
  * individual threads shown by the phone number, email address, and 'contact name' under the
  * internal channel"): one shelf, its three channels folding on their own, each thread under it.
  */
-function ChannelsShelf({ scope, d, onPick, closed, onToggle, empty }: {
-  scope: string; d: JobDetail | null; onPick: () => void; closed: Set<string>; onToggle: (k: string) => void; empty?: React.ReactNode;
+function ChannelsShelf({ title = "Channels", scope, d, onPick, closed, onToggle, empty }: {
+  title?: string; scope: string; d: JobDetail | null; onPick: () => void; closed: Set<string>; onToggle: (k: string) => void; empty?: React.ReactNode;
 }) {
   const phones: ThreadRow[] = d ? phoneThreads(d.people) : [];
   const mails: ThreadRow[] = d ? emailThreads(d.people, d.emails) : [];
@@ -585,7 +746,7 @@ function ChannelsShelf({ scope, d, onPick, closed, onToggle, empty }: {
     );
   };
   return (
-    <Group title="Channels" id={`${scope}:channels`} closed={closed} onToggle={onToggle}>
+    <Group title={title} id={`${scope}:channels`} closed={closed} onToggle={onToggle}>
       {sub("phone", "Phone", phones, empty ?? "No numbers here yet.")}
       {sub("email", "Email", mails, "No email addresses or filed email.")}
       {sub("internal", "Internal", notes, "No one here yet.")}
@@ -625,8 +786,8 @@ function useRecordName(kind: "customer" | "vendor", id: string, pinned: string |
  * A customer's or vendor's Space (Claude Design "Dusty Home" SPEC): its record page's tabs as
  * shelves — Account (a customer) or Supply (a vendor) — and a Toolbox, with Add to the rail.
  */
-function RecordDrawer({ kind, id, pins, setPins, onPick, onBack }: {
-  kind: "customer" | "vendor"; id: string; pins: SpacePin[]; setPins: (v: SpacePin[]) => void; onPick: () => void; onBack: () => void;
+function RecordDrawer({ kind, id, rail, onPick, onBack, pinnedName }: {
+  kind: "customer" | "vendor"; id: string; rail: RailCtl; onPick: () => void; onBack: () => void; pinnedName: string | null;
 }) {
   const path = usePathname() ?? "";
   const [search, setSearch] = useState("");
@@ -636,40 +797,22 @@ function RecordDrawer({ kind, id, pins, setPins, onPick, onBack }: {
     return () => { off = true; };
   }, [path]);
   const pick = useCallback(() => { onPick(); window.setTimeout(() => setSearch(window.location.search), 50); }, [onPick]);
-  const pin = pins.find((p) => p.kind === kind && p.id === id) ?? null;
-  const name = useRecordName(kind, id, pin?.name ?? null);
+  const name = useRecordName(kind, id, pinnedName);
   const onPage = path.startsWith(kind === "customer" ? `/dashboard/customers/${id}` : `/dashboard/vendors/${id}`);
   const here = onPage ? activeTab(search) : "";
-  const shelves: SpaceShelf[] = kind === "customer" ? customerShelves(id) : vendorShelves(id);
   const detail = useSpaceDetail(kind, id);
-  const { closed, toggle, setAll } = useClosed();
+  const [editing, setEditing] = useState(false);
   const color = kind === "customer" ? "var(--sc-chalk)" : "var(--sc-bucket-vendor)";
+  const word = kind === "customer" ? "Customer" : "Vendor";
   return (
     <>
-      <div className="sc-space-head">
-        {/* Back to Home's buckets (Coy, 2026-10-19: "I need a back button here once I click into a customer or vendor"). */}
-        <button type="button" className="sc-space-back" onClick={onBack}>‹ {kind === "customer" ? "Customers" : "Vendors"}</button>
-        <span className="sc-space-name" title={name ?? undefined}>{name ?? (kind === "customer" ? "Customer" : "Vendor")}</span>
-        <span className="sc-space-sub" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span className="sc-space-tag" style={{ color, borderColor: color }}>{kind === "customer" ? "Customer" : "Vendor"}</span>
-          <span style={{ flex: 1 }} />
-          {pin
-            ? <button type="button" className="sc-shelf-arrange" onClick={() => setPins(removePin(pins, kind, id))} title="Take this Work Space off the rail">Off the rail</button>
-            : <button type="button" className="sc-shelf-arrange" disabled={!name} onClick={() => name && setPins(addPin(pins, { kind, id, name }))}>Add to the rail</button>}
-        </span>
-      </div>
-      <div className="sc-space-scroll">
-        <div style={{ display: "flex" }}><FoldAll keys={[...shelves.map((sh) => `${kind}:${sh.id}`), ...CHANNEL_KEYS(kind)]} closed={closed} setAll={setAll} /></div>
-        {shelves.map((sh, i) => (
-          <React.Fragment key={sh.id}>
-            <Group id={`${kind}:${sh.id}`} closed={closed} onToggle={toggle} title={sh.name}>
-              {sh.rows.map((r) => <Row key={r.k} href={r.href} label={r.label} on={here === r.k} onPick={pick} />)}
-            </Group>
-            {/* Channels after the first shelf (Account or Supply), before the Toolbox. */}
-            {i === 0 && <ChannelsShelf scope={kind} d={detail} onPick={pick} closed={closed} onToggle={toggle} />}
-          </React.Fragment>
-        ))}
-      </div>
+      <SpaceHead name={name ?? word} kind={word} color={color} editing={editing} onGear={() => setEditing(!editing)}
+        gearLabel={`Edit every ${kind}'s drawer`} sub={rail.on ? undefined : "Not on the rail"}
+        back={/* Back to Home (Coy, 2026-10-19: "I need a back button here once I click into a customer or vendor"). */
+          <button type="button" className="sc-space-back" onClick={onBack}>‹ {kind === "customer" ? "Customers" : "Vendors"}</button>} />
+      <LayoutDrawer kind={kind} id={id} here={here} pick={pick} editing={editing} setEditing={setEditing}
+        rail={{ on: rail.on, set: (on) => name && rail.set(on, name) }}
+        channels={(n, g) => <ChannelsShelf title={n} scope={kind} d={detail} onPick={pick} {...g} />} />
     </>
   );
 }
@@ -768,17 +911,20 @@ function CollectionDrawer({ col, id, pages, active, onPick }: {
   };
   const memberHref = (m: SpacePin) => m.kind === "job" ? `/dashboard/scope/${m.id}/summary` : m.kind === "customer" ? `/dashboard/customers/${m.id}` : `/dashboard/vendors/${m.id}`;
   const name = col?.name ?? "Work Space";
+  const count = (n: number, one: string, many: string) => (n ? `${n} ${n === 1 ? one : many}` : "");
+  const holds = [
+    count(members.filter((m) => m.kind === "job").length, "job", "jobs"),
+    count(members.filter((m) => m.kind === "customer").length, "customer", "customers"),
+    count(members.filter((m) => m.kind === "vendor").length, "vendor", "vendors"),
+    count(loose.length, "person", "people"),
+  ].filter(Boolean).join(" · ");
   return (
     <>
-      <div className="sc-space-head">
-        <span className="sc-space-name" title={name}>{name}</span>
-        <span className="sc-space-sub" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span className="sc-space-tag" style={{ color: "var(--sc-violet)", borderColor: "var(--sc-violet)" }}>Work Space</span>
-          <span style={{ flex: 1 }} />
-          <button type="button" className="sc-shelf-arrange" onClick={() => setEditing(!editing)} aria-pressed={editing}
-            title="Rename it, take things out, or add jobs, customers, vendors, tools and channels">{editing ? "Done" : "Edit"}</button>
-        </span>
-      </div>
+      {/* What kind of Space it is (Coy, 2026-10-22: "What is fort polk; a job or a customer?"): one
+          you made, holding only what was picked into it. */}
+      <SpaceHead name={name} kind="Your own Work Space" color="var(--sc-violet)" editing={editing} onGear={() => setEditing(!editing)}
+        gearLabel="Rename it, take things out, or add jobs, customers, vendors, tools and channels"
+        sub={holds || "Empty — the gear adds jobs, customers and vendors"} />
       <div className="sc-space-scroll">
         {editing ? (
           <div className="sc-shelf-edit">
@@ -1079,6 +1225,20 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
       setRail(showTile(railPrefs, t.key));
     } else setRail(hideTile(railPrefs, t.key));
   };
+  // On or off the rail, from a Space's drawer editor: a tile taken off is hidden (a pin unpinned);
+  // put back, a hidden tile shows again, else the job, customer or vendor is pinned.
+  const railFor = (kind: SpacePin["kind"], id: string): RailCtl => {
+    const key = `${kind}:${id}`;
+    return {
+      on: order.includes(key),
+      set: (on, name) => {
+        const t = byKey.get(key);
+        if (!on) { if (t) removeTile(t.info); return; }
+        if (railPrefs.hidden.includes(key)) setRail(showTile(railPrefs, key));
+        if (!t) setPins(addPin(pins, { kind, id, name }));
+      },
+    };
+  };
   const arrangeMenu = (e: React.MouseEvent) => { e.preventDefault(); setArranging(true); };
   // Desktop: drag a tile up or down the rail; right-click opens Arrange.
   const [dragKey, setDragKey] = useState<string | null>(null);
@@ -1154,11 +1314,13 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
       {shown.kind === "home"
         ? <HomeDrawer pages={pages} active={active} onPick={picked(shown)} />
         : shown.kind === "job"
-          ? <JobDrawer id={shown.id} fallback={jobOf(shown.id)} onPick={picked(shown)} />
+          ? <JobDrawer id={shown.id} fallback={jobOf(shown.id)} onPick={picked(shown)} rail={railFor("job", shown.id)} />
           : shown.kind === "collection"
             ? <CollectionDrawer id={shown.id} col={(rail?.collections ?? []).find((c) => c.id === shown.id) ?? null} pages={pages} active={active}
                 onPick={picked(shown)} />
-            : <RecordDrawer kind={shown.kind} id={shown.id} pins={pins} setPins={setPins} onPick={picked(shown)} onBack={() => { setPeek({ kind: "home" }); setStay(null); }} />}
+            : <RecordDrawer kind={shown.kind} id={shown.id} rail={railFor(shown.kind, shown.id)} onPick={picked(shown)}
+                pinnedName={pins.find((p) => p.kind === shown.kind && p.id === shown.id)?.name ?? (rail?.customers ?? []).find((c) => shown.kind === "customer" && c.id === shown.id)?.name ?? null}
+                onBack={() => { setPeek({ kind: "home" }); setStay(null); }} />}
     </div>
   );
 

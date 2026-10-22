@@ -198,6 +198,95 @@ export function vendorShelves(id: string): SpaceShelf[] {
   ];
 }
 
+/**
+ * A job's, customer's or vendor's drawer, edited (Coy, 2026-10-22: "Everything on the rail is
+ * supposed to be a kind of 'workspace' that has an editable drawer"): its shelves renamed, moved,
+ * added or removed, any page moved to another shelf or taken out of the drawer. One layout per
+ * kind, so every job's drawer reads the same; kept on the account as `space_layouts` (and shared
+ * from the org's layout like Home's shelves). The Channels shelf is a shelf of its own
+ * (id "channels") that holds no pages. A page that is neither on a shelf nor taken out (one added
+ * to the app later) goes on the first shelf.
+ */
+export type LayoutKind = "job" | "customer" | "vendor";
+export interface KindShelf { id: string; name: string; rows: string[] }
+export interface KindLayout { shelves: KindShelf[]; hidden: string[] }
+export type SpaceLayouts = Partial<Record<LayoutKind, KindLayout>>;
+export const CHANNELS_SHELF = "channels";
+
+/** The pages a kind of Space can show, in their usual order. */
+export function kindRows(kind: LayoutKind, id: string): TreeRow[] {
+  if (kind === "job") return jobTree(id);
+  return (kind === "customer" ? customerShelves(id) : vendorShelves(id)).flatMap((sh) => sh.rows);
+}
+
+/** The drawer a kind of Space starts with: a job's Job shelf (Coy, 2026-10-22: "it's really a job right?"), then Channels. */
+export function defaultLayout(kind: LayoutKind): KindLayout {
+  const ch: KindShelf = { id: CHANNELS_SHELF, name: "Channels", rows: [] };
+  if (kind === "job") return { shelves: [{ id: "job", name: "Job", rows: jobTree("x").map((r) => r.k) }, ch], hidden: [] };
+  const [first, ...rest] = (kind === "customer" ? customerShelves("x") : vendorShelves("x")).map((sh) => ({ id: sh.id, name: sh.name, rows: sh.rows.map((r) => r.k) }));
+  return { shelves: [first, ch, ...rest], hidden: [] };
+}
+
+/** A saved layout made safe for its kind: known pages once each, shelf ids unique, else the default. */
+export function cleanLayout(kind: LayoutKind, v: unknown): KindLayout {
+  if (!v || typeof v !== "object" || !Array.isArray((v as { shelves?: unknown }).shelves)) return defaultLayout(kind);
+  const known = new Set(kindRows(kind, "x").map((r) => r.k));
+  const seen = new Set<string>();
+  const ids = new Set<string>();
+  const shelves: KindShelf[] = [];
+  for (const s of ((v as { shelves: unknown[] }).shelves).slice(0, MAX_SHELVES)) {
+    if (!s || typeof s !== "object") continue;
+    const r = s as Record<string, unknown>;
+    const id = typeof r.id === "string" ? r.id.slice(0, 40) : "";
+    const name = typeof r.name === "string" ? r.name.trim().slice(0, MAX_SHELF_NAME) : "";
+    if (!id || !name || ids.has(id)) continue;
+    ids.add(id);
+    const rows: string[] = [];
+    if (id !== CHANNELS_SHELF) for (const k of Array.isArray(r.rows) ? r.rows : []) {
+      if (typeof k !== "string" || !known.has(k) || seen.has(k)) continue;
+      seen.add(k);
+      rows.push(k);
+    }
+    shelves.push({ id, name, rows });
+  }
+  const rawHidden = (v as { hidden?: unknown }).hidden;
+  const hidden = (Array.isArray(rawHidden) ? rawHidden : []).filter((k): k is string => typeof k === "string" && (known.has(k) || k === CHANNELS_SHELF) && !seen.has(k));
+  const hasCh = shelves.some((s) => s.id === CHANNELS_SHELF);
+  const missing = [...known].filter((k) => !seen.has(k) && !hidden.includes(k));
+  if (missing.length) {
+    const first = shelves.find((s) => s.id !== CHANNELS_SHELF);
+    if (first) first.rows.push(...missing);
+    else shelves.unshift({ id: kind, name: defaultLayout(kind).shelves[0].name, rows: missing });
+  }
+  if (!hasCh && !hidden.includes(CHANNELS_SHELF)) shelves.push({ id: CHANNELS_SHELF, name: "Channels", rows: [] });
+  return { shelves, hidden: [...new Set(hidden)] };
+}
+
+export function cleanSpaceLayouts(v: unknown): SpaceLayouts {
+  const out: SpaceLayouts = {};
+  if (!v || typeof v !== "object") return out;
+  for (const k of ["job", "customer", "vendor"] as const) {
+    const x = (v as Record<string, unknown>)[k];
+    if (x) out[k] = cleanLayout(k, x);
+  }
+  return out;
+}
+
+/** A page moved to a shelf (or out of the drawer when `to` is null). */
+export function placeRow(l: KindLayout, k: string, to: string | null): KindLayout {
+  const shelves = l.shelves.map((s) => ({ ...s, rows: s.rows.filter((x) => x !== k) }));
+  const hidden = l.hidden.filter((x) => x !== k);
+  if (to === null) return { shelves, hidden: [...hidden, k] };
+  return { shelves: shelves.map((s) => (s.id === to ? { ...s, rows: [...s.rows, k] } : s)), hidden };
+}
+
+/** A shelf removed: its pages leave the drawer with it (put back from "Not in the drawer"). */
+export function removeKindShelf(l: KindLayout, id: string): KindLayout {
+  const sh = l.shelves.find((s) => s.id === id);
+  if (!sh) return l;
+  return { shelves: l.shelves.filter((s) => s.id !== id), hidden: [...l.hidden, ...(id === CHANNELS_SHELF ? [CHANNELS_SHELF] : sh.rows)] };
+}
+
 /** The tab a customer or vendor page is on (its ?tab=, else Summary). */
 export function activeTab(search: string): string {
   return new URLSearchParams(search).get("tab") || "overview";
@@ -205,7 +294,7 @@ export function activeTab(search: string): string {
 
 /** The four kinds of Space New Space makes, with the shelves each one gets (frame 18). */
 export const SPACE_KINDS: Array<{ kind: "job" | "customer" | "vendor" | "collection"; label: string; shelves: string; blurb: string }> = [
-  { kind: "job", label: "Job", shelves: "Customer Account · Channels", blurb: "Work to price and win — opens the New job form." },
+  { kind: "job", label: "Job", shelves: "Job · Channels", blurb: "Work to price and win — opens the New job form." },
   { kind: "customer", label: "Customer", shelves: "Account · Channels · Toolbox", blurb: "A household, business or school, with its people and jobs." },
   { kind: "vendor", label: "Vendor", shelves: "Supply · Channels · Toolbox", blurb: "A supplier or sub, with their prices and bid requests." },
   { kind: "collection", label: "Your own", shelves: "Jobs · Customers · Vendors · Channels", blurb: "A Work Space you make, like Fort Polk: any jobs, customers and vendors kept together." },
@@ -214,8 +303,8 @@ export const SPACE_KINDS: Array<{ kind: "job" | "customer" | "vendor" | "collect
 export interface TreeRow { k: string; label: string; href: string; sub?: boolean }
 
 /**
- * A job's pages — its Customer Account shelf (Coy, 2026-10-18: "rename 'scope builder' to
- * 'Customer Account'"). Budget's own tabs are rows of their own; Actual costs shows on every
+ * A job's pages — its Job shelf (Coy, 2026-10-18 called it Customer Account; 2026-10-22: "Its
+ * confusing for this shelf to say 'customer account' when it's really a job"). Budget's own tabs are rows of their own; Actual costs shows on every
  * job, as its tab always did; Schedule and Locations are pages of their own (same day).
  */
 export function jobTree(id: string): TreeRow[] {

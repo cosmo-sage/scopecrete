@@ -763,9 +763,15 @@ html[data-nav="spaces"] .sc-drawer-pane .sc-drawer-old { display: none !importan
 .sc-spaces-drawer { position: relative; }
 .sc-drawer-fold { position: absolute; top: 10px; right: 8px; z-index: 1; width: 28px; height: 28px; border-radius: 7px; border: 1px solid var(--sc-hair); background: var(--sc-card); color: var(--sc-ink2); display: flex; align-items: center; justify-content: center; cursor: pointer; }
 .sc-drawer-fold:hover { background: var(--sc-rail-active); color: var(--sc-rail-ink-on); }
-.sc-space-head { padding: 14px 44px 10px 14px; border-bottom: 1px solid var(--sc-hair); display: flex; flex-direction: column; gap: 4px; }
+.sc-space-head { padding: 12px 8px 10px 14px; border-bottom: 1px solid var(--sc-hair); display: flex; flex-direction: column; gap: 4px; }
 .sc-space-name { font-family: var(--sc-font-strong); font-weight: 600; font-size: 15px; line-height: 1.25; color: var(--sc-ink); overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .sc-space-sub { font-size: 11.5px; color: var(--sc-ink3); }
+/* The Space's name with its gear across from it, top right (Coy, 2026-10-22). */
+.sc-space-top { display: flex; align-items: flex-start; gap: 8px; }
+.sc-space-top .sc-space-name { flex: 1; min-width: 0; }
+.sc-space-gear { flex: none; min-width: 30px; height: 30px; margin-top: -4px; padding: 0 6px; border-radius: 7px; border: 0; background: none; color: var(--sc-ink3); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.sc-space-gear:hover { background: var(--sc-rail-active); color: var(--sc-rail-ink-on); }
+.sc-space-gear[aria-pressed="true"] { background: var(--sc-rail-active); color: var(--sc-hiviz-text); }
 .sc-space-tag { align-self: flex-start; font-family: var(--sc-font-disp); font-weight: 700; font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; border: 1px solid; border-radius: 4px; padding: 1px 6px; }
 .sc-space-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 6px 0 16px; }
 .sc-space-group { padding: 4px 0; }

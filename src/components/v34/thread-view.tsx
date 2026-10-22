@@ -336,13 +336,18 @@ export function ThreadView({ contactId, embedded = false }: {
                           style={{ fontFamily: "var(--sc-font-strong)", fontSize: 16, fontWeight: 700, color: T.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                           {loading ? headerTitle : (name || formatPhone(phone))}
                         </Link>
-                        {c && <span className="shrink-0"><RoleTag role={role} auto={c.bucket_state === "auto"} /></span>}
+                        {/* "Jeremy Wright w/ Gulfline Paving", the company opening its customer or vendor page; no role tag
+                            here — who they are is on the contact card (Coy, 2026-10-22). */}
+                        {!loading && crumbOrg && crumbOrg.label !== name && (
+                          <span className="min-w-0" style={{ fontSize: 14, color: T.ink3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            w/ <Link href={crumbOrg.href} title={`${crumbOrg.kind} page`} style={{ color: crumbOrg.color, fontWeight: 600 }}>{crumbOrg.label}</Link>
+                          </span>
+                        )}
                       </span>
                       <span style={{ fontSize: 12, color: T.ink3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", ...nums }}>
                         {channel?.kind === "phone" && channel.value ? `${channel.label} · ${formatPhone(channel.value)}`
                           : channel?.kind === "email" ? (channel.value ?? "Email")
                           : channel?.kind === "notes" ? "Internal notes" : ""}
-                        {!loading && crumbOrg ? <> · <Link href={crumbOrg.href} style={{ color: crumbOrg.color }}>{crumbOrg.label}</Link></> : null}
                       </span>
                     </span>
                   </span>

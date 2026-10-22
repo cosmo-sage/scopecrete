@@ -73,7 +73,7 @@ function shellSteps(o: TourOpts): TourStep[] {
       {
         id: "home", targets: [".sc-spaces-rail .sc-space-home"], spaces: true,
         title: "Home is Dusty",
-        body: "The top tile is Home: your chat with Dusty, and the shelves of tools you use every day.",
+        body: "The top tile is Home: your chat with Dusty, and the shelves of tools you use every day. Your full list of Customers, Jobs, Vendors and Contacts can also be found here.",
       },
       {
         id: "drawer", targets: [".sc-spaces-drawer", ".sc-spaces-strip"], spaces: true,

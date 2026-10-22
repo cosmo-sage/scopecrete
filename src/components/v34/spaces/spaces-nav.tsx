@@ -374,7 +374,7 @@ function ShelfArranger({ shelves, pages, onChange, onReset }: { shelves: Shelf[]
           <button type="submit" className="sc-shelf-arrange" disabled={!adding.trim()}>+ Shelf</button>
         </form>
       )}
-      <button type="button" className="sc-space-more" onClick={onReset}>Put the default shelves back</button>
+      <button type="button" className="sc-space-more" onClick={onReset}>Restore defaults</button>
     </div>
   );
 }
@@ -645,7 +645,7 @@ function KindLayoutEditor({ kind, layout, rows, onChange, onReset, onDone, rail 
         </form>
       )}
       <div className="sc-shelf-row" style={{ justifyContent: "space-between" }}>
-        <button type="button" className="sc-space-more" style={{ padding: "4px 0" }} onClick={onReset}>Put the default drawer back</button>
+        <button type="button" className="sc-space-more" style={{ padding: "4px 0" }} onClick={onReset}>Restore defaults</button>
         <button type="button" className="sc-shelf-arrange" onClick={onDone}>Done</button>
       </div>
     </div>

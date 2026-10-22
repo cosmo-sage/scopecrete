@@ -30,11 +30,10 @@ export default function ThreadsIndexPane() {
     {/* The Spaces navigation: the drawer holds the list (Coy, 2026-10-17). */}
     <div className="sc-drawer-empty items-center justify-center px-8" style={{ minHeight: "calc(100dvh - var(--sc-head) - var(--sc-foot))" }}>
       <div style={{ maxWidth: 340, textAlign: "center" }}>
-        <div style={{ fontFamily: disp, fontSize: F.xl, fontWeight: 600, lineHeight: 1.1 }}>Pick someone in the drawer</div>
-        <p style={{ fontSize: F.sm, color: T.ink3, marginTop: 8, lineHeight: 1.5 }}>
-          {ctx?.custom?.some((t) => t.id === ctx.thread)
-            ? `${label.name}'s people are listed there, each opening their thread here.`
-            : "Customers, vendors, personal and unsorted are listed there, each opening their thread here."}
+        {/* Coy, 2026-10-22: say how to get there, on each size. */}
+        <div className="lg:hidden" style={{ fontFamily: disp, fontSize: F.xl, fontWeight: 600, lineHeight: 1.15 }}>Swipe right to reveal the Drawer and Work Spaces.</div>
+        <p className="hidden lg:block" style={{ fontSize: F.md, color: T.ink2, lineHeight: 1.5 }}>
+          Select an item from the Shelf to the left to dig into a Customer, Vendor, Job or some other tool in your Shelves.
         </p>
         <button type="button" className="lg:hidden" onClick={() => window.dispatchEvent(new Event("sc:spaces-open"))}
           style={{ marginTop: 14, padding: "9px 16px", borderRadius: 8, ...eyebrow, background: T.hiviz, color: T.onHiviz, fontFamily: disp, fontWeight: 700 }}>

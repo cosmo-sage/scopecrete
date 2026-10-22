@@ -4988,6 +4988,22 @@ expected start date per quoted job before it means anything. Add the field.
   price says the final price is confirmed after a site visit and exact
   measurements. It reaches the customer's link (`publicSnapshot()`), and
   Dusty's proposal context says whether it is on.
+  **A full-sheet cover (Coy, 2026-10-22: "I'd like the cover to be built into the proposal itself and
+  fill a full sheet of paper when printed out"; no migration).** The Cover is a letter-shaped sheet
+  drawn from the job (`cover-page.tsx`), in one of three styles picked on the cover's bar: **Field**
+  (the default: white, the logo and a tag at the top, the job photo slanted under it, then the word,
+  date, title, number and who prepared it beside the customer and site, an accent stripe and dark
+  wedge in the corner) · **Pour** (a dark sheet, the photo cut on a slant, the logo on a tab, the
+  number, title, Prepared for / by, and up to three lines along the foot) · **Photo strip** (the old
+  cover). Two colours (presets, Navy & orange first, or any picked), the tag and the foot lines are
+  Coy's to type. Kept as `display.cover` {style, dark, accent, tag, lines} on the draft (`cleanCover()`
+  / `coverOf()`, `src/lib/proposal.ts`, tested), frozen with a final and carried on the customer's
+  link (`publicSnapshot()`). Sizes are in container units, so it scales from a phone to the page;
+  printed, it fills page 1 inside the 12mm margins and the band opens page 2. **Printing names the
+  file after the proposal** ("Wilson Driveway Repair - SE-26-0013-A", `proposalFileName()`; the tab's
+  title is swapped on beforeprint and put back after), and a margin box of our own (page N / M, bottom
+  right) turns off the browser's date, title and address lines (Chrome 131+; an older browser still
+  prints them unless Headers and footers is unticked).
   **Maps & photos per area (2026-10-03, Coy:
   "the customer can easily understand what this section is covering. They
   will have the map view + photos for that map area"):** under the Scope's

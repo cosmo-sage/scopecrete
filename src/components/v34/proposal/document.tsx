@@ -15,7 +15,8 @@ import { disp, strong, light, hand, nums, formatPhone } from "@/lib/v34/tokens";
 import { AreaMap, type AreaVisual } from "./area-visuals";
 import { ScopeBullets } from "../scope-of-work";
 import { DustyEmblem } from "../dusty-avatar";
-import { drawAmount, fixLastDraw, type Clause, type Draw, type ProposalChoice, type ProposalDisplay, type ProposalPrice, type ProposalGroup } from "@/lib/proposal";
+import { CoverPage, CoverControls } from "./cover-page";
+import { coverOf, proposalFileName, drawAmount, fixLastDraw, type Clause, type Draw, type ProposalChoice, type ProposalDisplay, type ProposalPrice, type ProposalGroup } from "@/lib/proposal";
 
 export const SECTIONS: Array<[string, string]> = [
   ["cover", "Cover"], ["header", "Header"], ["scope", "Scope"], ["pricing", "Pricing"],
@@ -148,6 +149,17 @@ export function ProposalDocument({ vm, edits, narrow }: { vm: DocVM; edits: DocE
   const prelim = d.preliminary === true;
   const kind = prelim ? "Preliminary estimate" : vm.typeKey === "public" ? "Bid submission" : vm.typeKey === "commercial" ? "Bid proposal" : "Proposal";
   const signer = vm.typeKey === "public" ? "Awarding authority" : vm.typeKey === "commercial" ? "Authorized representative" : vm.typeKey === "residential" ? "Owner" : "Customer";
+  const cover = coverOf(d);
+  // Printing or saving as PDF names the file after the proposal, not the app's tab title (Coy, 2026-10-22).
+  const printName = proposalFileName(vm.job.title, vm.number);
+  useEffect(() => {
+    let was: string | null = null;
+    const before = () => { was = document.title; document.title = printName; };
+    const after = () => { if (was !== null) document.title = was; was = null; };
+    window.addEventListener("beforeprint", before);
+    window.addEventListener("afterprint", after);
+    return () => { window.removeEventListener("beforeprint", before); window.removeEventListener("afterprint", after); };
+  }, [printName]);
   const dateStr = new Date(vm.date).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
   // A photo opens full screen over the page, never in a new window (Coy, 2026-10-10).
   const [viewer, setViewer] = useState<{ photos: Photo[]; i: number } | null>(null);
@@ -156,7 +168,10 @@ export function ProposalDocument({ vm, edits, narrow }: { vm: DocVM; edits: DocE
   return (
     <div className="sc-doc" style={{ width: "100%", maxWidth: 720, margin: "0 auto", background: "#fff", color: "#2A2A2A", boxShadow: "0 2px 10px rgba(42,32,20,.1)", fontSize: 13, lineHeight: 1.5 }}>
       <Section k="cover" label="Cover" off={!!off.cover} onToggle={sectionToggle("cover")} narrow={narrow}>
-        {(vm.coverUrl || edits) && <div className={vm.coverUrl ? "sc-doc-cover" : "sc-no-print"} style={{ position: "relative", height: narrow ? 150 : 420, background: vm.coverUrl ? "#2A2A2A" : "#E9E4DA", overflow: "hidden" }}>
+        {/* A full sheet (Field or Pour) drawn from the job, or the old photo strip (Coy, 2026-10-22). */}
+        {cover.style !== "strip" && <CoverPage vm={vm} edits={edits} kind={kind} dateStr={dateStr} />}
+        {cover.style === "strip" && edits && <CoverControls c={cover} set={(patch) => setD({ cover: { ...cover, ...patch } })} pickCover={edits.pickCover} hasPhoto={!!vm.coverUrl} />}
+        {cover.style === "strip" && (vm.coverUrl || edits) && <div className={vm.coverUrl ? "sc-doc-cover" : "sc-no-print"} style={{ position: "relative", height: narrow ? 150 : 420, background: vm.coverUrl ? "#2A2A2A" : "#E9E4DA", overflow: "hidden" }}>
           {/* An <img>, not a CSS background: browsers leave backgrounds out of a print unless asked. */}
           {/* eslint-disable-next-line @next/next/no-img-element -- signed link, printed */}
           {vm.coverUrl && <img src={vm.coverUrl} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />}

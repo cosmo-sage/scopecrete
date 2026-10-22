@@ -2133,8 +2133,11 @@ percentage of labour — all three contradict this section and §4.
   the budget made presentable; it never prices anything. `priceDraft()`
   (`src/lib/proposal.ts`, tested in `tests/proposal.test.mjs`) runs the
   engine's `budget()` for the chosen option, then **rounds the price (before
-  tax and discount) UP to the next $50 — on the proposal only** (Coy); the
-  budget, the Dashboard and Dusty keep the exact number. The extra is profit.
+  tax and discount) UP to the next whole dollar — on the proposal only**
+  (Coy, 2026-10-22: "round up to the nearest dollar, but that's it"; it was
+  the next $50); the budget, the Dashboard and Dusty keep the exact number.
+  The extra is profit. The proposal's header reads "$total ($rounded rounded
+  up from $calc, plus $tax tax)", so tax is never shown as rounding.
   Each line sells at its own price × rounded ÷ calculated, the largest line
   taking the last cent, so the lines add up to the total exactly. A hidden
   line or area drops out of the total; a hidden price shows "—" and still

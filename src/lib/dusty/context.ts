@@ -607,7 +607,7 @@ async function proposalBlock(sb: Sb, orgId: string, jobId: string): Promise<Bloc
     `Proposal ${formatProposalNumber(b.number_base, Number(p.version))}${frozenAs(p, formatProposalNumber(b.number_base, Number(p.version)))} · ${p.status === "final" ? `FINAL (frozen ${String(p.finalized_at).slice(0, 10)} — what the customer was shown)` : "draft"} · type ${type?.label ?? "not set"}`,
   ];
   if (priced.ok) {
-    lines.push(`Customer's total ${priced.total.toFixed(2)} (budget price ${priced.calc.toFixed(2)} rounded UP to ${priced.rounded} — the proposal rounds to the next $50, the budget keeps the exact number; tax ${priced.tax.toFixed(2)}${priced.tax_shown ? " shown as a line" : " folded into the areas"}${priced.discount ? `; discount ${priced.discount.toFixed(2)}` : ""})`);
+    lines.push(`Customer's total ${priced.total.toFixed(2)} (budget price ${priced.calc.toFixed(2)} rounded UP to ${priced.rounded} — the proposal rounds up to the next whole dollar, the budget keeps the exact number; tax ${priced.tax.toFixed(2)}${priced.tax_shown ? " shown as a line" : " folded into the areas"}${priced.discount ? `; discount ${priced.discount.toFixed(2)}` : ""})`);
     lines.push(`Cost ${priced.cost.toFixed(2)}, O.H. ${priced.overhead.toFixed(2)}, profit ${priced.profit.toFixed(2)}${priced.addons_total ? `; optional add-ons not in the total ${priced.addons_total.toFixed(2)}` : ""}`);
     for (const g of priced.groups) lines.push(`- ${g.name}: ${g.hidden ? "HIDDEN from the proposal" : g.price_hidden ? "price hidden (still counted)" : g.sell.toFixed(2)}${g.items.some((i) => i.hidden) ? ` (${g.items.filter((i) => i.hidden).length} line(s) hidden)` : ""}`);
   } else lines.push(`No price yet: ${priced.blocked.slice(0, 5).join("; ")}`);

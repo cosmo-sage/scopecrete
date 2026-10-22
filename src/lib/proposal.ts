@@ -4,9 +4,10 @@
  *
  * A proposal is the job's budget made presentable; it never prices anything
  * itself. budget() in src/lib/engine prices every line; this file only:
- *   - rounds the customer's price UP to the nearest $50 (Coy, 2026-09-30:
- *     the proposal total only — the budget, the Dashboard and Dusty keep the
- *     exact number); the extra is profit;
+ *   - rounds the customer's price UP to the next whole dollar (Coy,
+ *     2026-10-22: "round up to the nearest dollar, but that's it" — it was
+ *     $50); the proposal total only, the budget, the Dashboard and Dusty keep
+ *     the exact number; the extra is profit;
  *   - spreads that rounded price over the lines in proportion to their own
  *     prices, so the visible items add up to the total exactly, to the cent;
  *   - applies what Coy hides: a hidden line or group drops out of the total, a
@@ -72,10 +73,10 @@ export type ProposalPrice =
     addons_total: number;
   };
 
-export const ROUND_TO = 50;
+export const ROUND_TO = 1;
 const cents = (n: number) => Math.round(n * 100) / 100;
 
-/** Up to the next $50. A price already on $50 stays. */
+/** Up to the next whole dollar. A price already on a whole dollar stays. */
 export function roundUp(n: number, step = ROUND_TO): number {
   return n > 0 ? Math.ceil(Math.round(n * 100) / 100 / step) * step : 0;
 }

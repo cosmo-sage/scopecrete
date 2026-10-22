@@ -196,7 +196,7 @@ export function BidDocument({ vm, edits, price, narrow }: {
               {on && pics.length > 0 && (
                 <div className="flex gap-2" style={{ marginTop: 8, paddingLeft: edits ? 46 : 26, overflowX: "auto" }}>
                   {pics.slice(0, 8).map((p, i) => (
-                    <button key={p.url} type="button" onClick={() => setView({ pics, at: i })} aria-label={`Open ${p.name}`}
+                    <button key={`${i}-${p.url}`} type="button" onClick={() => setView({ pics, at: i })} aria-label={`Open ${p.name}`}
                       style={{ flex: "none", padding: 0, border: `1px solid ${P.hair}`, borderRadius: 4, background: "#fff", cursor: "zoom-in", position: "relative" }}>
                       {/* eslint-disable-next-line @next/next/no-img-element -- signed link */}
                       <img src={p.url} alt={p.name} style={{ width: thumb, height: thumb, objectFit: "cover", borderRadius: 3, display: "block" }} />

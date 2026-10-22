@@ -47,6 +47,7 @@ import { ThreadView } from "@/components/v34/thread-view";
 import { initialsHue } from "@/lib/v34/threads";
 import { JobPickList } from "@/components/v34/job-pick";
 import { useAccess } from "@/lib/v34/access-ctx";
+import { PortalCard } from "@/components/v34/portal/portal-card";
 
 interface Method { kind: "mobile" | "office" | "home" | "phone" | "email"; value: string; can_text: boolean | null; primary: boolean }
 interface Contact { id: string; name: string | null; role: string | null; primary: boolean; bucket: string | null; status_summary: string | null; recent_summary: string | null; last_contacted: string | null; methods: Method[] }
@@ -209,6 +210,7 @@ export function CustomerPage({ customerId, focusContact }: { customerId: string;
               {!jobs.length && <NoJobs customerId={cu.id} canNew={!!primary} onNew={() => void newScope()} onAdded={reload} />}
             </div>
           </section>
+          {!access.limited && <PortalCard customerId={cu.id} customerName={cu.name} contactId={primary?.id ?? null} email={firstEmail(primary)} />}
         </OverviewGrid>
       )}
       {tab === "contacts" && (

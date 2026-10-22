@@ -1,4 +1,5 @@
 -- 116 — Vendor accounts keep their people (2026-10-21).
+-- APPLIED 2026-10-22 on Coy's "apply 114, 115 and 116".
 --
 -- Coy, answering the database-vs-UI audit: "Yes a vendor account will have contacts inside
 -- it just like a customer account."

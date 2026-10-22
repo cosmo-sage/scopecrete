@@ -1,4 +1,5 @@
 -- 114 — The org's layout, shared with every internal user (2026-10-21).
+-- APPLIED 2026-10-22 on Coy's "apply 114, 115 and 116".
 --
 -- Coy, answering the database-vs-UI audit: "The Organization work space is shared
 -- by default for all internal users of that Org, but it's also customizable per

@@ -21,20 +21,20 @@
 -- Additive: one new table and two triggers on jobs that only ADD rows. RLS by
 -- get_user_org_ids(), members insert, read, update and delete their org's rows; anon nothing.
 
-create table if not exists public.job_contacts (
-  id uuid primary key default gen_random_uuid(),
-  org_id uuid not null references public.orgs(id) on delete cascade,
-  job_id uuid not null references public.jobs(id) on delete cascade,
-  contact_id uuid not null references public.contacts(id) on delete cascade,
-  side text not null default 'customer' check (side in ('customer', 'owner', 'vendor', 'other')),
-  is_primary boolean not null default false,
-  role text check (role is null or length(role) <= 60),
-  source text not null default 'coy' check (source in ('default', 'coy', 'bid', 'dusty')),
-  created_by uuid default auth.uid(),
-  created_at timestamptz not null default now(),
-  unique (job_id, contact_id)
-);
-create index if not exists job_contacts_contact_idx on public.job_contacts (contact_id);
+-- APPLIED 2026-10-22 on Coy's "apply 114, 115 and 116". The database already had an
+-- empty job_contacts from an early migration (role customer · vendor · other NOT NULL,
+-- status invited → done, unique (job_id, contact_id, role), member policies by
+-- get_user_org_ids(), sc_merge_contacts moving its rows), so 115 extends that table
+-- rather than making a new one: role becomes optional (its check stays; null passes), and
+-- side, is_primary, source and created_by are added, with one row per job and person.
+
+alter table public.job_contacts alter column role drop not null;
+alter table public.job_contacts
+  add column if not exists side text not null default 'customer' check (side in ('customer', 'owner', 'vendor', 'other')),
+  add column if not exists is_primary boolean not null default false,
+  add column if not exists source text not null default 'coy' check (source in ('default', 'coy', 'bid', 'dusty')),
+  add column if not exists created_by uuid default auth.uid();
+create unique index if not exists job_contacts_job_contact_uniq on public.job_contacts (job_id, contact_id);
 create unique index if not exists job_contacts_one_primary on public.job_contacts (job_id) where is_primary;
 
 create or replace function public.sc_job_contact_guard() returns trigger
@@ -52,11 +52,10 @@ create trigger job_contacts_guard before insert or update on public.job_contacts
   for each row execute function public.sc_job_contact_guard();
 
 alter table public.job_contacts enable row level security;
+-- The live policies job_contacts_select / job_contacts_write already scope by
+-- get_user_org_ids(); anon loses its grants.
 revoke all on public.job_contacts from anon, authenticated;
 grant select, insert, update, delete on public.job_contacts to authenticated;
-create policy job_contacts_member on public.job_contacts
-  for all to authenticated using (org_id = any (public.get_user_org_ids()))
-  with check (org_id = any (public.get_user_org_ids()));
 
 -- A new job: its customer's only person when it was made with none.
 create or replace function public.sc_job_default_contact() returns trigger

@@ -14,7 +14,7 @@
  * or a swipe from the left edge. No migration: src/lib/v34/spaces.ts, /api/spaces.
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { T, disp } from "@/lib/v34/tokens";
@@ -30,7 +30,7 @@ import { setVendorFilter, useVendorFilter } from "@/lib/v34/vendor-filter";
 import { ROLE_LABEL, type ContactRole } from "@/lib/v34/threads";
 import {
   activeTreeRow, internalThreads, jobTree, monogram, phoneThreads, spaceOf, stageColor, stageLabel,
-  homeShelves, moveToShelf, nudge, MAX_SHELVES, MAX_SHELF_NAME, CHANNELS, isChannel, looseChannels, offShelf,
+  homeShelves, moveToShelf, nudge, MAX_SHELVES, MAX_SHELF_NAME, CHANNELS, isChannel, looseChannels, pickSections, COLLECTION_PAGES, offShelf,
   customerShelves, vendorShelves, activeTab, cleanPins, addPin, removePin,
   emailThreads, SPACES_HREF, cleanLayout, kindRows, placeRow, removeKindShelf, CHANNELS_SHELF,
   type LayoutKind, type KindLayout, type TreeRow,
@@ -347,10 +347,12 @@ function ShelfEditor({ shelves, shelf, pages, onChange, onDone }: {
           <button type="button" className="sc-shelf-btn" onClick={() => set({ pages: nudge(shelf.pages, pi, 1) })} disabled={pi === shelf.pages.length - 1} aria-label={`Move ${label(k)} down`}>↓</button>
         </div>
       ))}
-      <span className="sc-shelf-edit-h">Tools</span>
-      {pages.filter((k) => PAGE.has(k)).map(box)}
-      <span className="sc-shelf-edit-h">People by bucket</span>
-      {CHANNELS.map((c) => box(c.key))}
+      {pickSections(pages.filter((k) => PAGE.has(k))).map((sec) => (
+        <Fragment key={sec.title}>
+          <span className="sc-shelf-edit-h">{sec.title}</span>
+          {sec.keys.map(box)}
+        </Fragment>
+      ))}
       <div className="sc-shelf-row" style={{ justifyContent: "space-between" }}>
         {shelf.id !== "more" ? (
           <button type="button" className="sc-space-more" style={{ padding: "4px 0", color: "var(--sc-red)" }}
@@ -949,7 +951,7 @@ function CollectionDrawer({ col, id, pages, active, onPick }: {
             ))}
             {tools.map((k) => (
               <div key={k} className="sc-shelf-page">
-                <span className="sc-shelf-page-l">{PAGE.get(k)!.label} <small style={{ color: "var(--sc-ink3)" }}>Tool</small></span>
+                <span className="sc-shelf-page-l">{PAGE.get(k)!.label} <small style={{ color: "var(--sc-ink3)" }}>{COLLECTION_PAGES.includes(k) ? "Collection" : "Tool"}</small></span>
                 <button type="button" className="sc-shelf-btn" onClick={() => setRaw(setPicks(all, id, picks.filter((x) => x !== k)))} aria-label={`Take ${PAGE.get(k)!.label} out`} title="Take out of this Work Space">×</button>
               </div>
             ))}
@@ -973,15 +975,16 @@ function CollectionDrawer({ col, id, pages, active, onPick }: {
               ))}
             </Group>
           ))}
-          {tools.length > 0 && (
-            <Group id={`col:${id}:tools`} closed={closed} onToggle={toggle} title="Tools">
-              {tools.map((k) => {
+          {([["collections", "Collections", tools.filter((k) => COLLECTION_PAGES.includes(k))],
+            ["tools", "Tools", tools.filter((k) => !COLLECTION_PAGES.includes(k))]] as const).map(([gk, gt, list]) => list.length > 0 && (
+            <Group key={gk} id={`col:${id}:${gk}`} closed={closed} onToggle={toggle} title={gt}>
+              {list.map((k) => {
                 const p = PAGE.get(k)!;
                 return <Row key={k} href={SPACES_HREF[k] ?? p.href} label={p.label} on={isOn(active, k)} onPick={onPick}
                   icon={<span className="sc-space-ico"><NavIcon k={k} on={isOn(active, k)} color="currentColor" /></span>} />;
               })}
             </Group>
-          )}
+          ))}
           {chans.map((ch) => (
             <Group key={ch} id={`col:${id}:${ch}`} closed={closed} onToggle={toggle} count={chCount(ch)}
               title={ch === "ch:more" ? "More" : BUCKETS.find((b) => `ch:${b.k}` === ch)?.label ?? ch}>

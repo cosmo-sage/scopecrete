@@ -243,3 +243,12 @@ test("a job's, customer's or vendor's drawer: default, cleaned, pages moved and 
   assert.ok(!gone.shelves.some((s) => s.id === CHANNELS_SHELF) && gone.hidden.includes(CHANNELS_SHELF));
   assert.ok(!cleanLayout("job", gone).shelves.some((s) => s.id === CHANNELS_SHELF));
 });
+
+test("pickers name the four lists Collections, apart from tools and threads", async () => {
+  const { pickSections, CHANNELS } = await import("../src/lib/v34/spaces.ts");
+  const s = pickSections(["map", "customers", "scope", "pricebook", "vendors", "contacts"]);
+  assert.deepEqual(s.map((x) => x.title), ["Collections", "Tools", "Threads"]);
+  assert.deepEqual(s[0].keys, ["customers", "contacts", "vendors", "scope"]);
+  assert.deepEqual(s[1].keys, ["map", "pricebook"]);
+  assert.ok(CHANNELS.every((c) => !/people/i.test(c.label)));
+});

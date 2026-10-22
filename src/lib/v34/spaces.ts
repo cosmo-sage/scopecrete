@@ -444,12 +444,27 @@ export const DEFAULT_SHELVES: Shelf[] = [
  * channel on no shelf shows under the shelves as before.
  */
 export const CHANNELS: Array<{ key: string; label: string }> = [
-  { key: "ch:customer", label: "Customers (people)" },
-  { key: "ch:vendor", label: "Vendors (people)" },
-  { key: "ch:personal", label: "Personal (people)" },
-  { key: "ch:unsorted", label: "Unsorted (people)" },
+  { key: "ch:customer", label: "Customer threads" },
+  { key: "ch:vendor", label: "Vendor threads" },
+  { key: "ch:personal", label: "Personal threads" },
+  { key: "ch:unsorted", label: "Unsorted threads" },
   { key: "ch:more", label: "Spam and Archived" },
 ];
+/**
+ * The four list pages (Coy, 2026-10-22: "I want to call customers: customers, and the same for
+ * each of the different collections of lists") — shown once in a picker, as Collections, apart
+ * from the tools.
+ */
+export const COLLECTION_PAGES = ["customers", "contacts", "vendors", "scope"];
+/** A picker's sections: Collections, Tools, then the thread lists by how people are filed. */
+export function pickSections(pages: string[]): Array<{ title: string; keys: string[] }> {
+  return [
+    { title: "Collections", keys: COLLECTION_PAGES.filter((k) => pages.includes(k)) },
+    // Logs and Roadmap live in Settings, and the Scope Builder is Jobs, under Spaces.
+    { title: "Tools", keys: pages.filter((k) => !COLLECTION_PAGES.includes(k) && !SETTINGS_PAGES.includes(k) && !MERGED_PAGES.includes(k)) },
+    { title: "Threads", keys: CHANNELS.map((c) => c.key) },
+  ].filter((x) => x.keys.length > 0);
+}
 export const isChannel = (k: string) => k.startsWith("ch:");
 
 /** Pages that live in Settings under Spaces, not on a shelf. */

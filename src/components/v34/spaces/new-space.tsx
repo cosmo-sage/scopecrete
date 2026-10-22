@@ -15,13 +15,13 @@
  * On a phone it is the whole screen, × at the top right. No migration.
  */
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { Fragment, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { SpaceSilhouette } from "@/components/v34/spaces/space-silhouette";
 import { usePref } from "@/lib/v34/prefs";
 import { PAGE } from "@/lib/v34/pages";
 import {
-  SPACE_KINDS, CHANNELS, addPin, cleanPins, cleanCollectionPicks, cleanMembers, monogram, setPicks, setMembers,
+  SPACE_KINDS, CHANNELS, pickSections, addPin, cleanPins, cleanCollectionPicks, cleanMembers, monogram, setPicks, setMembers,
   togglePick, toggleItem, cleanRail, showTile, stageColor, stageLabel, type SpacePin,
 } from "@/lib/v34/spaces";
 
@@ -35,10 +35,12 @@ export function PickList({ pages, picks, onChange }: { pages: string[]; picks: s
   );
   return (
     <div className="sc-newspace-picks">
-      <span className="sc-shelf-edit-h">Tools</span>
-      {pages.filter((k) => PAGE.has(k)).map((k) => box(k, PAGE.get(k)!.label))}
-      <span className="sc-shelf-edit-h">People by bucket</span>
-      {CHANNELS.map((c) => box(c.key, c.label))}
+      {pickSections(pages.filter((k) => PAGE.has(k))).map((sec) => (
+        <Fragment key={sec.title}>
+          <span className="sc-shelf-edit-h">{sec.title}</span>
+          {sec.keys.map((k) => box(k, CHANNELS.find((c) => c.key === k)?.label ?? PAGE.get(k)!.label))}
+        </Fragment>
+      ))}
     </div>
   );
 }

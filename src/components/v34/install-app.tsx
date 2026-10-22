@@ -23,6 +23,13 @@ if (typeof window !== "undefined") {
 
 export function InstallApp() {
   const [ev, setEv] = useState<InstallEvent | null>(saved);
+  // Invite tracking (122): opened from the home screen — once a device, on the company's address.
+  useEffect(() => {
+    const standalone = window.matchMedia?.("(display-mode: standalone)").matches || (navigator as Navigator & { standalone?: boolean }).standalone === true;
+    if (!standalone || hostKind(window.location.host).kind !== "org") return;
+    try { if (localStorage.getItem(INSTALLED_SENT) === "1") return; localStorage.setItem(INSTALLED_SENT, "1"); } catch { return; }
+    void fetch("/api/invites/installed", { method: "POST" }).catch(() => {});
+  }, []);
   useEffect(() => {
     const f = () => setEv(saved);
     listeners.add(f);
@@ -41,6 +48,7 @@ export function InstallApp() {
 }
 
 const DISMISSED = "sc:install-dismissed";
+const INSTALLED_SENT = "sc:install-reported";
 
 /**
  * The home-screen install, offered once on the dashboard (Coy, 2026-10-15: "I want

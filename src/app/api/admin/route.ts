@@ -67,14 +67,17 @@ export async function GET(req: NextRequest) {
     usage: () => supabase.rpc("sc_admin_usage", { p_org: org, p_since: since }),
     platform: () => supabase.rpc("sc_admin_platform"),
     log: () => supabase.rpc("sc_admin_log", { p_org: org, p_limit: 200 }),
+    invites: () => supabase.rpc("sc_admin_invite_funnel", { p_org: org }),
   };
   // People is one company's; without one there is nothing to ask for.
-  const want = parts.filter((p) => p !== "people" || org);
+  const want = parts.filter((p) => (p !== "people" && p !== "invites") || org);
   const results = await Promise.all(want.map((p) => calls[p]()));
   const out: Record<string, unknown> = { build: build(), since };
   for (let i = 0; i < want.length; i++) {
     const { data, error } = results[i];
     if (error) {
+      // Invite tracking waits for migration 122; the rest of the screen still answers.
+      if (want[i] === "invites" && /sc_admin_invite_funnel/.test(error.message ?? "")) { out.invites = null; out.invites_missing = true; continue; }
       if (missing092(error)) return applyCookies(NextResponse.json({ missing: true, build: build() }));
       return applyCookies(NextResponse.json({ error: `${want[i]}: ${error.message}` }, { status: 500 }));
     }

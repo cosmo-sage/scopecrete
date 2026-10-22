@@ -51,6 +51,8 @@ export default function InvitePage() {
     // dashboard can bring them back here after signing in. An owner opening someone else's invite
     // to check it must not keep it — it sent Coy to Jeremy's invite later (2026-10-10).
     const keep = (on: boolean) => { try { if (on) localStorage.setItem(PENDING_INVITE_KEY, token); else if (localStorage.getItem(PENDING_INVITE_KEY) === token) localStorage.removeItem(PENDING_INVITE_KEY); } catch { /* private mode */ } };
+    // Invite tracking (122): every load of the link counts as an opening, signed in or not.
+    void fetch(`/api/invites/${token}/track`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ step: "opened" }) }).catch(() => {});
     fetch(`/api/invites/${token}`).then(async (r) => {
       const b = await r.json().catch(() => ({}));
       if (off) return;
@@ -83,6 +85,7 @@ export default function InvitePage() {
     setBusy(false);
     if (error) { setErr(error.message); return; }
     setPassword(""); setPassword2(""); setNeedPw(false);
+    void fetch(`/api/invites/${token}/track`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ step: "password_set" }) }).catch(() => {});
   }
   async function emailLink() {
     setBusy(true); setErr(null);

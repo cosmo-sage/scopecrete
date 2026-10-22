@@ -398,7 +398,7 @@ across the database … I also want to be able to upload a logo for my org."*
   account that is in other companies is untouched. **The invite page** signs in
   with a password as well as Google or an emailed link; after Join an account
   with no password must set one (`sc_my_password_set()`, the caller's own row,
-  a boolean; before 112 the step shows with "I already have a password —
+  a boolean; without 112 the step showed with "I already have a password —
   skip"); then **Open <company>** goes to that company's own address
   (`afterJoinUrl()`, `src/lib/hosts.ts`, tested) with `?welcome=1`. **The
   dashboard offers the home-screen install** (`InstallPrompt`,

@@ -19,6 +19,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { T, disp } from "@/lib/v34/tokens";
 import { NavIcon } from "@/components/v34/primitives";
+import { iconVar, BOOK_LABEL, type IconRole } from "@/lib/v34/menu-colors";
 import { DustyAvatar, type EmblemState } from "@/components/v34/dusty-avatar";
 import { SpaceIcon, useDrawMissing } from "@/components/v34/spaces/space-icon";
 import { NewSpaceDialog, PickList, ItemPicker, peopleOf } from "@/components/v34/spaces/new-space";
@@ -34,7 +35,7 @@ import {
   activeTreeRow, contactThreads, jobTree, monogram, spaceOf, stageColor, stageLabel,
   homeShelves, moveToShelf, nudge, MAX_SHELVES, MAX_SHELF_NAME, CHANNELS, isChannel, pickSections, COLLECTION_PAGES, offShelf,
   customerShelves, vendorShelves, activeTab, cleanPins, addPin, removePin,
-  SPACES_HREF, shelfIcon, isStandardShelf, SHELF_ICONS, iconColShelf, cleanLayout, kindRows, placeRow, removeKindShelf, JOBS_SHELF, isSpecialShelf, specialShelves, isToolRow,
+  SPACES_HREF, shelfIcon, isStandardShelf, SHELF_ICONS, iconColShelf, colorColShelf, shelfLine, SHELF_LINES, SHELF_LINE_DEFAULT, cleanLayout, kindRows, placeRow, removeKindShelf, JOBS_SHELF, isSpecialShelf, specialShelves, isToolRow,
   cleanColShelves, addColShelf, renameColShelf, moveColShelf, removeColShelf, setMemberShelf, membersByShelf, type ColShelf,
   type LayoutKind, type KindLayout, type TreeRow,
   type Shelf, type SpaceRef, type SpacePerson, type SpaceEmail, type SpacePin,
@@ -180,16 +181,18 @@ function useClosed() {
   return { closed: v, toggle, setAll };
 }
 
-function Group({ title, children, count, id, closed, onToggle, gear, icon }: {
+function Group({ title, children, count, id, closed, onToggle, gear, icon, line }: {
   title: string; children: React.ReactNode; count?: number;
   id?: string; closed?: Set<string>; onToggle?: (k: string) => void; gear?: React.ReactNode; icon?: string;
+  /** The line under the shelf's name, a colour role (Coy, 2026-10-22: "a line under the name of the shelf and an editable color"). */
+  line?: string;
 }) {
   const [own, setOwn] = useState(true);
   const open = id && closed ? !closed.has(id) : own;
   const flip = () => (id && onToggle ? onToggle(id) : setOwn(!own));
   return (
     <div className="sc-space-group">
-      <div className="sc-space-group-h" style={{ cursor: "default" }}>
+      <div className="sc-space-group-h" style={{ cursor: "default", borderBottomColor: iconVar((line ?? SHELF_LINE_DEFAULT) as IconRole) }}>
         <button type="button" onClick={flip} aria-expanded={open}
           style={{ display: "flex", alignItems: "center", gap: 6, flex: 1, minWidth: 0, background: "none", border: 0, padding: 0, cursor: "pointer", font: "inherit", color: "inherit", letterSpacing: "inherit", textTransform: "inherit", textAlign: "left" }}>
           <span aria-hidden="true" style={{ display: "inline-block", width: 10, transform: open ? "rotate(90deg)" : undefined, transition: "transform .15s" }}>›</span>
@@ -246,6 +249,26 @@ function ShelfIconPick({ shelf, onPick }: { shelf: { id: string; icon?: string }
   );
 }
 
+/** Picking the colour of a shelf's line, from the menu's colour book, so it follows the theme. */
+function ShelfColorPick({ shelf, onPick }: { shelf: { color?: string }; onPick: (color: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const cur = shelfLine(shelf);
+  const swatch = (k: string) => <span aria-hidden="true" style={{ width: 14, height: 14, borderRadius: 3, background: iconVar(k as IconRole) }} />;
+  return (
+    <span style={{ position: "relative", flex: "none" }}>
+      <button type="button" className="sc-shelf-ico-btn" aria-expanded={open} aria-label="Pick the colour of this shelf's line" title="Line colour" onClick={() => setOpen(!open)}>{swatch(cur)}</button>
+      {open && (
+        <span className="sc-shelf-ico-grid" role="listbox" aria-label="Line colours" style={{ gridTemplateColumns: "repeat(5, 28px)", width: 166 }}>
+          {SHELF_LINES.map((k) => (
+            <button key={k} type="button" role="option" aria-selected={k === cur} className="sc-shelf-ico-btn" aria-label={BOOK_LABEL[k as IconRole] ?? k} title={BOOK_LABEL[k as IconRole] ?? k}
+              onClick={() => { onPick(k); setOpen(false); }}>{swatch(k)}</button>
+          ))}
+        </span>
+      )}
+    </span>
+  );
+}
+
 function GearIcon({ size = 13 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round">
@@ -255,8 +278,9 @@ function GearIcon({ size = 13 }: { size?: number }) {
   );
 }
 
-function Row({ href, label, sub, on, icon, avatar, color, indent, onPick, when }: {
+function Row({ href, label, sub, on, icon, avatar, color, indent, onPick, when, count }: {
   href: string; label: string; sub?: string; on?: boolean; icon?: React.ReactNode; avatar?: string; color?: string; indent?: boolean; onPick?: () => void; when?: string | null;
+  count?: React.ReactNode;
 }) {
   return (
     <Link href={href} onClick={onPick} className="sc-space-row no-underline" aria-current={on ? "page" : undefined}
@@ -269,6 +293,7 @@ function Row({ href, label, sub, on, icon, avatar, color, indent, onPick, when }
         {sub && <span className="sc-space-row-s">{sub}</span>}
       </span>
       {when && <span className="sc-space-row-s" style={{ flexShrink: 0, alignSelf: "flex-start", paddingTop: 2, fontVariantNumeric: "tabular-nums" }}>{when}</span>}
+      {count != null && <span className="sc-space-row-s" style={{ flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>{count}</span>}
     </Link>
   );
 }
@@ -300,6 +325,7 @@ function ShelfArranger({ shelves, pages, onChange, onReset }: { shelves: Shelf[]
         <div key={sh.id} className="sc-shelf-box">
           <div className="sc-shelf-row">
             <ShelfIconPick shelf={sh} onPick={(icon) => set(i, { icon })} />
+            <ShelfColorPick shelf={sh} onPick={(color) => set(i, { color })} />
             <input className="sc-shelf-name" value={sh.name} maxLength={MAX_SHELF_NAME} aria-label="Shelf name"
               onChange={(e) => set(i, { name: e.target.value })}
               onBlur={(e) => { if (!e.target.value.trim()) set(i, { name: "Shelf" }); }} />
@@ -388,6 +414,7 @@ function ShelfEditor({ shelves, shelf, pages, onChange, onDone }: {
     <div className="sc-shelf-edit">
       <div className="sc-shelf-row">
         <ShelfIconPick shelf={shelf} onPick={(icon) => set({ icon })} />
+        <ShelfColorPick shelf={shelf} onPick={(color) => set({ color })} />
         <input className="sc-shelf-name" value={shelf.name} maxLength={MAX_SHELF_NAME} aria-label="Shelf name"
           onChange={(e) => set({ name: e.target.value })} onBlur={(e) => { if (!e.target.value.trim()) set({ name: "Shelf" }); }} />
         <button type="button" className="sc-shelf-btn" onClick={() => onChange(nudge(shelves, i, -1))} disabled={i <= 0} aria-label="Move shelf up">↑</button>
@@ -566,6 +593,7 @@ function KindLayoutEditor({ kind, layout, rows, onChange, onReset, onDone, rail 
         <div key={sh.id} className="sc-shelf-box">
           <div className="sc-shelf-row">
             <ShelfIconPick shelf={sh} onPick={(icon) => setShelf(i, { icon })} />
+            <ShelfColorPick shelf={sh} onPick={(color) => setShelf(i, { color })} />
             <input className="sc-shelf-name" value={sh.name} maxLength={MAX_SHELF_NAME} aria-label="Shelf name"
               onChange={(e) => setShelf(i, { name: e.target.value })}
               onBlur={(e) => { if (!e.target.value.trim()) setShelf(i, { name: "Shelf" }); }} />
@@ -686,7 +714,7 @@ function LayoutRow({ k, byK, here, pick }: { k: string; byK: Map<string, TreeRow
     const key = k.slice(2);
     const p = PAGE.get(key);
     if (!p) return null;
-    return <Row href={SPACES_HREF[key] ?? p.href} label={p.label} onPick={pick} icon={<span className="sc-space-ico"><NavIcon k={key} on={false} color="currentColor" /></span>} />;
+    return <Row href={SPACES_HREF[key] ?? p.href} label={p.label} onPick={pick} count={<CollCount k={key} />} icon={<span className="sc-space-ico"><NavIcon k={key} on={false} color="currentColor" /></span>} />;
   }
   const r = byK.get(k);
   return r ? <Row href={r.href} label={r.label} indent={r.sub} on={here === k} onPick={pick} /> : null;
@@ -738,7 +766,7 @@ function HomeDrawer({ pages, active, onPick }: { pages: string[]; active: string
           ? <ShelfArranger shelves={shelves} pages={pages} onChange={saveShelves} onReset={() => saveShelves(null)} />
           : shelves.map((sh) => (
 
-            <Group key={sh.id} id={`home:${sh.id}`} closed={closed} onToggle={toggle} title={sh.name} icon={shelfIcon(sh)}
+            <Group key={sh.id} id={`home:${sh.id}`} closed={closed} onToggle={toggle} title={sh.name} icon={shelfIcon(sh)} line={shelfLine(sh)}
               gear={(
                 <button type="button" className="sc-shelf-gear" aria-label={`Edit the ${sh.name} shelf`} title="Edit this shelf"
                   aria-pressed={editing === sh.id} onClick={() => setEditing(editing === sh.id ? null : sh.id)}
@@ -752,7 +780,7 @@ function HomeDrawer({ pages, active, onPick }: { pages: string[]; active: string
                 if (!p) return null;
                 return (
                   <React.Fragment key={k}>
-                    <Row href={SPACES_HREF[k] ?? p.href} label={p.label} on={isOn(active, k)} onPick={onPick}
+                    <Row href={SPACES_HREF[k] ?? p.href} label={p.label} on={isOn(active, k)} onPick={onPick} count={<CollCount k={k} />}
                       icon={<span className="sc-space-ico"><NavIcon k={k} on={isOn(active, k)} color="currentColor" /></span>} />
                     {k === "vendors" && <VendorTrades onPick={onPick} />}
                   </React.Fragment>
@@ -836,13 +864,13 @@ function LayoutDrawer({ kind, id, here, pick, editing, setEditing, rail, d, nest
       {!nested && <div style={{ display: "flex" }}><FoldAll keys={keys} closed={closed} setAll={setAll} /></div>}
       {layout.shelves.map((sh) => isSpecialShelf(sh.id)
         ? (
-          <Group key={sh.id} title={sh.name} id={`${kind}:${sh.id}`} icon={shelfIcon(sh)} count={sh.id === JOBS_SHELF ? d?.jobs?.length : d?.people.length} {...g}>
+          <Group key={sh.id} title={sh.name} id={`${kind}:${sh.id}`} icon={shelfIcon(sh)} line={shelfLine(sh)} count={sh.id === JOBS_SHELF ? d?.jobs?.length : d?.people.length} {...g}>
             {sh.id === JOBS_SHELF ? <JobRows d={d} onPick={pick} />
               : <ContactRows d={d} onPick={pick} add={addContactHref(kind, id)} empty={kind === "job" ? "No one on this job yet." : undefined} />}
           </Group>
         )
         : (
-          <Group key={sh.id} title={sh.name} id={`${kind}:${sh.id}`} icon={shelfIcon(sh)} {...g}>
+          <Group key={sh.id} title={sh.name} id={`${kind}:${sh.id}`} icon={shelfIcon(sh)} line={shelfLine(sh)} {...g}>
             {sh.rows.length === 0 && <div className="sc-space-empty">Empty — the gear adds pages and tools here.</div>}
             {sh.rows.map((k) => <LayoutRow key={k} k={k} byK={byK} here={here} pick={pick} />)}
           </Group>
@@ -962,6 +990,20 @@ function useCollectionList(list: CollectionList) {
 }
 
 const LIST_SHOWN = 150;
+
+/**
+ * How many are in a collection, to the right of its row (Coy, 2026-10-22: "Show the count of
+ * customers, contacts, jobs and vendors to the right of each of those collections"). Jobs leave
+ * out lost ones, as the Scope Builder's list does. Nothing for a tool.
+ */
+function CollCount({ k }: { k: string }) {
+  return COLLECTION_PAGES.includes(k) ? <CollCountOf list={k as CollectionList} /> : null;
+}
+function CollCountOf({ list }: { list: CollectionList }) {
+  const rows = useCollectionList(list);
+  if (!rows) return null;
+  return <>{(list === "scope" ? rows.filter((r) => r.status !== "lost") : rows).length}</>;
+}
 
 /**
  * A collection's list in the drawer (Coy, 2026-10-22: "if I'm looking at a Customer list page after
@@ -1263,6 +1305,7 @@ function CollectionDrawer({ col, id, pages, active, onPick }: {
             {shelves.map((x, i) => (
               <div key={x.id} className="sc-shelf-row">
                 <ShelfIconPick shelf={x} onPick={(icon) => setShRaw(iconColShelf(allShelves, id, x.id, icon))} />
+                <ShelfColorPick shelf={x} onPick={(color) => setShRaw(colorColShelf(allShelves, id, x.id, color))} />
                 <input className="sc-shelf-name" defaultValue={x.name} maxLength={40} aria-label="Shelf name"
                   onBlur={(e) => setShRaw(renameColShelf(allShelves, id, x.id, e.target.value))}
                   onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} />
@@ -1317,7 +1360,7 @@ function CollectionDrawer({ col, id, pages, active, onPick }: {
           {folk === null && members.length === 0 && <div className="sc-space-empty">Loading…</div>}
           {byShelf.loose.map(memberShelf)}
           {byShelf.shelves.map((x) => (
-            <Group key={x.id} id={`col:${id}:s:${x.id}`} closed={closed} onToggle={toggle} title={x.name} icon={shelfIcon(x)} count={x.items.length}
+            <Group key={x.id} id={`col:${id}:s:${x.id}`} closed={closed} onToggle={toggle} title={x.name} icon={shelfIcon(x)} line={shelfLine(x)} count={x.items.length}
               gear={<button type="button" className="sc-shelf-gear" aria-label={`Add to ${x.name}`} title={`Add to ${x.name}`}
                 onClick={() => setAdding(adding === x.id ? null : x.id)} style={{ border: 0, background: "none", cursor: "pointer", padding: "0 2px", fontSize: 15, lineHeight: 1, color: "inherit" }}>+</button>}>
               {addingTo === x.id && addPanel(x.id)}
@@ -1339,7 +1382,7 @@ function CollectionDrawer({ col, id, pages, active, onPick }: {
             <Group key={gk} id={`col:${id}:${gk}`} closed={closed} onToggle={toggle} title={gt}>
               {list.map((k) => {
                 const p = PAGE.get(k)!;
-                return <Row key={k} href={SPACES_HREF[k] ?? p.href} label={p.label} on={isOn(active, k)} onPick={onPick}
+                return <Row key={k} href={SPACES_HREF[k] ?? p.href} label={p.label} on={isOn(active, k)} onPick={onPick} count={<CollCount k={k} />}
                   icon={<span className="sc-space-ico"><NavIcon k={k} on={isOn(active, k)} color="currentColor" /></span>} />;
               })}
             </Group>

@@ -185,7 +185,7 @@ export function toggleItem(items: SpacePin[], item: SpacePin, on: boolean): Spac
  * some of its jobs, customers and vendors (their `shelf`); one on none sits at the top. Kept on
  * the account (`spaces_col_shelves`: thread id → shelves), no migration.
  */
-export interface ColShelf { id: string; name: string; icon?: string }
+export interface ColShelf { id: string; name: string; icon?: string; color?: string }
 export type ColShelves = Record<string, ColShelf[]>;
 export const MAX_COL_SHELVES = 20;
 export function cleanColShelves(v: unknown): ColShelves {
@@ -202,8 +202,7 @@ export function cleanColShelves(v: unknown): ColShelves {
       const name = typeof r.name === "string" ? r.name.trim().slice(0, 40) : "";
       if (!sid || !name || seen.has(sid)) continue;
       seen.add(sid);
-      const icon = cleanShelfIcon(r.icon);
-      shelves.push(icon ? { id: sid, name, icon } : { id: sid, name });
+      shelves.push({ id: sid, name, ...shelfLook(r) });
       if (shelves.length >= MAX_COL_SHELVES) break;
     }
     if (shelves.length) out[id] = shelves;
@@ -227,6 +226,11 @@ export function iconColShelf(all: ColShelves, col: string, id: string, icon: str
   const ic = cleanShelfIcon(icon);
   if (!ic) return all;
   return { ...all, [col]: (all[col] ?? []).map((s) => (s.id === id ? { ...s, icon: ic } : s)) };
+}
+export function colorColShelf(all: ColShelves, col: string, id: string, color: string): ColShelves {
+  const c = cleanShelfColor(color);
+  if (!c) return all;
+  return { ...all, [col]: (all[col] ?? []).map((s) => (s.id === id ? { ...s, color: c } : s)) };
 }
 /** A shelf moved up (-1) or down (+1). */
 export function moveColShelf(all: ColShelves, col: string, id: string, by: -1 | 1): ColShelves {
@@ -301,7 +305,7 @@ export function vendorShelves(id: string): SpaceShelf[] {
  * (one added to the app later) goes on the first shelf.
  */
 export type LayoutKind = "job" | "customer" | "vendor";
-export interface KindShelf { id: string; name: string; rows: string[]; icon?: string }
+export interface KindShelf { id: string; name: string; rows: string[]; icon?: string; color?: string }
 export interface KindLayout { shelves: KindShelf[]; hidden: string[] }
 export type SpaceLayouts = Partial<Record<LayoutKind, KindLayout>>;
 export const CHANNELS_SHELF = "channels";
@@ -355,8 +359,7 @@ export function cleanLayout(kind: LayoutKind, v: unknown): KindLayout {
       seen.add(k);
       rows.push(k);
     }
-    const icon = cleanShelfIcon(r.icon);
-    shelves.push(icon ? { id, name, rows, icon } : { id, name, rows });
+    shelves.push({ id, name, rows, ...shelfLook(r) });
   }
   const rawHidden = (v as { hidden?: unknown }).hidden;
   const hidden = (Array.isArray(rawHidden) ? rawHidden : []).filter((k): k is string => typeof k === "string" && (known.has(k) || specials.some((x) => x.id === k)) && !seen.has(k));
@@ -559,7 +562,7 @@ export function internalThreads(people: SpacePerson[]): ThreadRow[] {
  * (`user_preferences.prefs.shelves`, no migration). Logs and Roadmap left the drawer for
  * Settings; a page on no shelf lands on a last shelf, More, so nothing is ever lost.
  */
-export interface Shelf { id: string; name: string; pages: string[]; icon?: string }
+export interface Shelf { id: string; name: string; pages: string[]; icon?: string; color?: string }
 
 export const DEFAULT_SHELVES: Shelf[] = [
   { id: "buckets", name: "Collections", pages: ["customers", "contacts", "vendors", "scope"] },
@@ -631,8 +634,7 @@ export function cleanShelves(v: unknown): Shelf[] | null {
       seenPages.add(p);
       pages.push(p);
     }
-    const icon = cleanShelfIcon(r.icon);
-    out.push(icon ? { id, name, pages, icon } : { id, name, pages });
+    out.push({ id, name, pages, ...shelfLook(r) });
   }
   return out;
 }
@@ -652,6 +654,27 @@ export function cleanShelfIcon(v: unknown): string | undefined {
 }
 export function shelfIcon(sh: { id: string; icon?: string }): string {
   return STANDARD_SHELF_ICON[sh.id] ?? sh.icon ?? "folder";
+}
+
+/**
+ * The line under a shelf's name (Coy, 2026-10-22: "all Shelves in every drawer to be more distinct
+ * visually like a line under the name of the shelf and an editable color for the line"). A colour
+ * is a role from the menu's colour book, never a hex, so it follows every theme; none saved is the
+ * accent. Kept on the shelf beside its icon, so Home's, a kind's and a Work Space's shelves all
+ * carry it.
+ */
+export const SHELF_LINES = ["hiviz", "chalk", "green", "teal", "violet", "red", "reply", "unsorted", "ink"] as const;
+export const SHELF_LINE_DEFAULT = "hiviz";
+export function cleanShelfColor(v: unknown): string | undefined {
+  return typeof v === "string" && (SHELF_LINES as readonly string[]).includes(v) ? v : undefined;
+}
+export function shelfLine(sh: { color?: string } | null | undefined): string {
+  return cleanShelfColor(sh?.color) ?? SHELF_LINE_DEFAULT;
+}
+/** A saved shelf's icon and line colour, each only when it is a known one. */
+function shelfLook(r: Record<string, unknown>): { icon?: string; color?: string } {
+  const icon = cleanShelfIcon(r.icon), color = cleanShelfColor(r.color);
+  return { ...(icon ? { icon } : {}), ...(color ? { color } : {}) };
 }
 
 /** Home's shelves for these pages: Coy's (else the defaults), each page once, the rest on More. */

@@ -409,3 +409,23 @@ test("list rows: vendors by name, contacts' phone and hrefs, search by every wor
 test("Home keeps only the More group below its shelves", () => {
   assert.deepEqual(homeLooseGroups(homeShelves(null, ["customers", "contacts", "vendors", "map", "files", "dashboard"])).filter((k) => k !== "ch:more"), []);
 });
+
+test("shelf lines: a colour from the book is kept on every kind of shelf, anything else is the accent", async () => {
+  const { shelfLine, cleanShelfColor, cleanShelves, cleanLayout, cleanColShelves, colorColShelf, SHELF_LINE_DEFAULT } = await import("../src/lib/v34/spaces.ts");
+  assert.equal(SHELF_LINE_DEFAULT, "hiviz");
+  assert.equal(shelfLine({}), "hiviz");
+  assert.equal(shelfLine({ color: "teal" }), "teal");
+  assert.equal(shelfLine({ color: "#ff0000" }), "hiviz");
+  assert.equal(cleanShelfColor("red; background:url(x)"), undefined);
+  const home = cleanShelves([{ id: "s9", name: "Mine", pages: [], color: "violet" }, { id: "s8", name: "Bad", pages: [], color: "pink" }]);
+  assert.equal(home.find((s) => s.id === "s9")?.color, "violet");
+  assert.equal(home.find((s) => s.id === "s8")?.color, undefined);
+  const job = cleanLayout("job", null);
+  const colored = cleanLayout("job", { ...job, shelves: job.shelves.map((s, i) => (i === 0 ? { ...s, color: "green" } : s)) });
+  assert.equal(colored.shelves[0].color, "green");
+  const C = "11111111-1111-4111-8111-111111111111";
+  const col = colorColShelf({ [C]: [{ id: "s1", name: "A" }] }, C, "s1", "chalk");
+  assert.equal(col[C][0].color, "chalk");
+  assert.equal(cleanColShelves(col)[C][0].color, "chalk");
+  assert.deepEqual(colorColShelf(col, C, "s1", "nope"), col);
+});

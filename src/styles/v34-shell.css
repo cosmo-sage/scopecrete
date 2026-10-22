@@ -827,7 +827,7 @@ html[data-rail-drag], html[data-rail-drag] * { cursor: grabbing !important; }
 .sc-space-tag { align-self: flex-start; font-family: var(--sc-font-disp); font-weight: 700; font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; border: 1px solid; border-radius: 4px; padding: 1px 6px; }
 .sc-space-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 6px 0 16px; }
 .sc-space-group { padding: 4px 0; }
-.sc-space-group-h { width: 100%; display: flex; align-items: center; gap: 6px; padding: 6px 14px 4px; background: none; border: 0; cursor: pointer;
+.sc-space-group-h { width: auto; margin: 0 10px 3px; display: flex; align-items: center; gap: 6px; padding: 6px 4px 4px; background: none; border: 0; border-bottom: 2px solid var(--sc-hiviz); cursor: pointer;
   font-family: var(--sc-font-disp); font-weight: 700; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--sc-ink3); text-align: left; }
 /* A channel inside the Channels shelf (Phone · Email · Internal), its threads under it. */
 .sc-space-sub-h { width: calc(100% - 16px); margin: 2px 8px 0; display: flex; align-items: center; gap: 6px; padding: 5px 8px 3px 14px; background: none; border: 0; cursor: pointer;

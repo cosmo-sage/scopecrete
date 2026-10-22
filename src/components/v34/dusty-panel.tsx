@@ -733,9 +733,7 @@ export function DustyPanel({ open, onClose, onBusy, onStream, onState }: {
             <MdAsk.Provider value={busy ? null : askSearch}>
             {items.map((it, i) => it.role === "user" ? (
               <div key={i} id={`sc-dusty-turn-${i}`} className="sc-dusty-turn" style={{ margin: i === 0 ? "0 0 8px" : "22px 0 8px", paddingTop: i === 0 ? 0 : 16, borderTop: i === 0 ? "none" : `1px solid ${T.hair}` }}>
-                <h2 style={{ fontFamily: agent, fontSize: F.md + 1, fontWeight: 700, lineHeight: 1.35 }}>
-                  {it.files?.length ? it.content.replace(/\n\n📎 [^\n]*$/, "") : it.content}
-                </h2>
+                <AskHeading text={it.files?.length ? it.content.replace(/\n\n📎 [^\n]*$/, "") : it.content} />
                 {/* The photos and files this question carried (079) — kept in Files, tap to open. */}
                 {!!it.files?.length && <ChatFiles files={it.files} />}
               </div>
@@ -878,6 +876,30 @@ export function DustyPanel({ open, onClose, onBusy, onStream, onState }: {
         </form>
       </div>
     </section>
+  );
+}
+
+/** A question as the chat's heading. A long one (the prompts the emblems write) shows two lines
+ *  with ▾ to read the rest, as Claude does (Coy, 2026-10-22). */
+function AskHeading({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+  const long = text.length > 180 || text.split("\n").length > 3;
+  const h = (
+    <h2 style={{ fontFamily: agent, fontSize: F.md + 1, fontWeight: 700, lineHeight: 1.35, whiteSpace: "pre-wrap",
+      ...(long && !open ? { display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" } : null) }}>
+      {text}
+    </h2>
+  );
+  if (!long) return h;
+  return (
+    <div>
+      {h}
+      <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open}
+        style={{ marginTop: 2, fontSize: F.xs, color: T.ink3, display: "inline-flex", alignItems: "center", gap: 4 }}>
+        <span aria-hidden style={{ display: "inline-block", transform: open ? "rotate(180deg)" : undefined }}>▾</span>
+        {open ? "Show less" : "Show the whole message"}
+      </button>
+    </div>
   );
 }
 

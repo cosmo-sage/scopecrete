@@ -3653,6 +3653,7 @@ expected start date per quoted job before it means anything. Add the field.
   proposal's own cover's job (the proposal builder redesign, after Roof Squad's SquadQuote cover). Not
   built: putting a saved drawing on a proposal, and photo-like renderings — Dusty's model makes no images;
   that needs an image model from another provider, Coy's call.
+- **A long question folds (Coy, 2026-10-22: "only show 1 or 2 lines in the chat panel with an expand arrow down … similar to how Claude does it").** A question over ~180 characters or three lines (the prompts the emblems write for a proposal section or a scope of work) shows its first two lines as the chat's heading with ▾ **Show the whole message** under it (`AskHeading`, `dusty-panel.tsx`); what is sent to Dusty is unchanged.
 - **Dusty answers in Markdown (2026-09-30).** Coy: *"showing the
   calculations in .md format in the chat panel."* His prompt asks for
   lists, bold and, for a job, a table per area (area · qty · cost · O.H. ·

@@ -3,6 +3,7 @@ import { createServerClient } from "@supabase/ssr";
 import { cookieDomain, hostKind } from "./hosts";
 import { myOrgs } from "./access-server";
 import { VIEW_AS_COOKIE, writeBlocked } from "./view-as";
+import { readViewCompany, VIEW_COMPANY_COOKIE, VIEW_COMPANY_HEADER, viewWriteBlocked } from "./view-company";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
@@ -37,7 +38,11 @@ export interface ApiSession {
   userId: string;
   /** Copies any refreshed auth cookies onto the outgoing response. */
   applyCookies: (res: NextResponse) => NextResponse;
+  /** A ScopeCrete admin looking at another company read only (migration 121): orgId is that company. */
+  viewingCompany?: ViewingCompany | null;
 }
+
+export interface ViewingCompany { org_id: string; name: string | null; slug: string | null; expires_at: string | null }
 
 export type ApiSessionResult =
   | { ok: true; session: ApiSession }
@@ -46,8 +51,12 @@ export type ApiSessionResult =
 export async function getApiSession(req: NextRequest): Promise<ApiSessionResult> {
   const cookiesToSet: { name: string; value: string; options: Record<string, unknown> }[] = [];
 
+  // View company (src/lib/view-company.ts): the company rides on every query as a header, and the
+  // database honours it only for an admin with an open view, in a read-only transaction (121).
+  const viewOrg = readViewCompany(req.cookies.get(VIEW_COMPANY_COOKIE)?.value);
   const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
     cookieOptions: cookieOptionsFor(req),
+    ...(viewOrg ? { global: { headers: { [VIEW_COMPANY_HEADER]: viewOrg } } } : {}),
     cookies: {
       getAll: () => req.cookies.getAll(),
       setAll: (toSet) => { cookiesToSet.push(...toSet); },
@@ -69,6 +78,25 @@ export async function getApiSession(req: NextRequest): Promise<ApiSessionResult>
   const userId = typeof claimsData?.claims?.sub === "string" ? claimsData.claims.sub : null;
   if (authErr || !userId) {
     return { ok: false, response: applyCookies(NextResponse.json({ error: "Not authenticated" }, { status: 401 })) };
+  }
+
+  // Viewing a company: the database says whether this admin has an open view of it. If so that
+  // company is the session's org, and nothing but ending the view may write.
+  if (viewOrg) {
+    const { data } = await supabase.rpc("sc_admin_viewing");
+    const row = (Array.isArray(data) ? data[0] : data) as ViewingCompany | null | undefined;
+    if (row?.org_id === viewOrg) {
+      if (viewWriteBlocked(req.method, req.nextUrl.pathname, true)) {
+        return {
+          ok: false,
+          response: applyCookies(NextResponse.json({
+            code: "view_company",
+            error: `You're viewing ${row.name ?? "another company"} read only — end the view (the banner at the top) to make changes.`,
+          }, { status: 403 })),
+        };
+      }
+      return { ok: true, session: { supabase, orgId: row.org_id, userId, applyCookies, viewingCompany: row } };
+    }
   }
 
   // On an org's own address (<slug>.app.scopecrete.ai) the org is the one the

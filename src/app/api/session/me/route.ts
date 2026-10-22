@@ -25,7 +25,7 @@ export const dynamic = "force-dynamic";
 export async function GET(req: NextRequest) {
   const result = await getApiSession(req);
   if (!result.ok) return result.response;
-  const { supabase, orgId, userId, applyCookies } = result.session;
+  const { supabase, orgId, userId, applyCookies, viewingCompany } = result.session;
 
   // Five independent reads, side by side — the header waits on this route
   // before it draws the org or asks for anything else (2026-10-05: they ran
@@ -46,7 +46,13 @@ export async function GET(req: NextRequest) {
     // Runs ScopeCrete itself (084's platform_admins): Settings shows the admin.
     supabase.rpc("sc_is_platform_admin"),
   ]);
-  const org = orgs.find((o) => o.id === orgId) ?? null;
+  // Viewing another company (121): its row is readable in this read-only request; the admin sees
+  // it as its owner would, read only.
+  const viewed = viewingCompany
+    ? ((await supabase.from("orgs").select("id, slug, name, logo_light_path, logo_dark_path").eq("id", orgId).maybeSingle()).data ?? {
+        id: orgId, slug: viewingCompany.slug, name: viewingCompany.name, logo_light_path: null, logo_dark_path: null })
+    : null;
+  const org = viewed ?? orgs.find((o) => o.id === orgId) ?? null;
 
   const email = auth?.user?.email ?? null;
   // user_metadata is whatever the identity provider supplied; it is often
@@ -75,13 +81,15 @@ export async function GET(req: NextRequest) {
     logo_light: brand?.logo_light ?? false,
     logo_dark: brand?.logo_dark ?? false,
     logo_stamp: brand?.logo_stamp ?? null,
-    role: viewAs ? viewAs.role : membership?.role ?? access.role ?? null,
+    role: viewingCompany ? "owner" : viewAs ? viewAs.role : membership?.role ?? access.role ?? null,
     // What an onsite estimator may open (081); everyone else { limited: false }.
     admin: viewAs ? false : admin === true,
-    access: viewAs
+    access: viewingCompany ? { limited: false, pages: [], all_jobs: true, job_ids: [] } : viewAs
       ? { limited: viewAs.access.limited, pages: viewAs.access.pages, all_jobs: viewAs.access.all_jobs, job_ids: viewAs.access.job_ids }
       : { limited: access.limited, pages: access.pages, all_jobs: access.all_jobs, job_ids: access.job_ids },
     // The banner: who the owner is looking at. Null when it's their own view.
-    viewing_as: viewAs ? { user_id: viewAs.user_id, name: viewAs.name ?? viewAs.email, role: viewAs.role } : null,
+    // View company (121): the banner, and End view.
+    viewing_company: viewingCompany ? { org_id: viewingCompany.org_id, name: org?.name ?? viewingCompany.name, expires_at: viewingCompany.expires_at } : null,
+    viewing_as: viewingCompany ? null : viewAs ? { user_id: viewAs.user_id, name: viewAs.name ?? viewAs.email, role: viewAs.role } : null,
   }));
 }

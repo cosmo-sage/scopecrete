@@ -28,7 +28,7 @@ import {
 } from "@/lib/admin";
 import { BOARD, statusLabel, type RoadmapItem } from "@/lib/roadmap";
 import {
-  ICONS, Ico, Panel, Tile, Dot, Tag, Bar, Spark, DayBars, Conveyor, Empty, BarRow, Confirm, NewCompany, OwnerLink, useToast,
+  ICONS, Ico, Panel, Tile, Dot, Tag, Bar, Spark, DayBars, Conveyor, Empty, BarRow, Confirm, NewCompany, OwnerLink, ViewCompany, useToast,
   type ConfirmAsk,
 } from "./admin-ui";
 import "@/styles/admin.css";
@@ -110,6 +110,7 @@ export function AdminApp() {
   const [ask, setAsk] = useState<ConfirmAsk | null>(null);
   const [newCo, setNewCo] = useState(false);
   const [ownerFor, setOwnerFor] = useState<{ org: string; name: string; email: string } | null>(null);
+  const [viewFor, setViewFor] = useState<{ org: string; name: string } | null>(null);
   const [menu, setMenu] = useState(false);
   const [ready, setReady] = useState(false);
   const [toast, say] = useToast();
@@ -265,7 +266,7 @@ export function AdminApp() {
   else if (screen === "company") {
     const c = companies.find((x) => x.id === detail);
     body = c ? <Company c={c} d={d} tab={tab} setTab={setTab} alarms={al} items={items} now={now} go={go} coName={coName} replay={replay} decide={decide}
-      ownerLink={(email) => setOwnerFor({ org: c.id, name: c.name, email })} />
+      ownerLink={(email) => setOwnerFor({ org: c.id, name: c.name, email })} viewCompany={() => setViewFor({ org: c.id, name: c.name })} />
       : <Empty title="No such company">It may have been removed. <a href="#" onClick={(e) => { e.preventDefault(); go("companies"); }}>All companies ›</a></Empty>;
   }
   else if (screen === "pipelines") body = <PipelinesView d={d} cos={scoped} now={now} go={go} coName={coName} replay={replay} />;
@@ -296,6 +297,7 @@ export function AdminApp() {
         {ask && <Confirm ask={ask} admin="you" onClose={(msg) => { setAsk(null); if (msg) say(msg); }} />}
         {newCo && <NewCompany onClose={() => setNewCo(false)} post={(b) => call("/api/admin", "POST", b)}
           onCreated={(c) => { say(`${c.name} is made`); reload(); }} />}
+        {viewFor && <ViewCompany {...viewFor} onClose={() => setViewFor(null)} post={(b) => call("/api/admin/view", "POST", b)} />}
         {ownerFor && <OwnerLink {...ownerFor} onClose={() => { setOwnerFor(null); reload(); }} post={(b) => call("/api/admin", "POST", b)} />}
         {toast}
       </div>
@@ -509,10 +511,11 @@ const TABS: Array<[string, string]> = [
   ["dusty", "Dusty"], ["usage", "Usage"], ["feedback", "Feedback"], ["log", "Admin log"],
 ];
 
-function Company({ c, d, tab, setTab, alarms, items, now, go, coName, replay, decide, ownerLink }: {
+function Company({ c, d, tab, setTab, alarms, items, now, go, coName, replay, decide, ownerLink, viewCompany }: {
   c: AdminCompany; d: Data; tab: string; setTab: (t: string) => void; alarms: Alarm[]; items: RoadmapItem[] | null; now: Date; go: Go;
   coName: (id: string | null) => string; replay: (f: Failure) => void; decide: (it: RoadmapItem, s: "considering" | "declined") => void;
   ownerLink: (email: string) => void;
+  viewCompany: () => void;
 }) {
   const h = companyHealth(c, now);
   const done = setupCount(c.setup);
@@ -605,8 +608,12 @@ function Company({ c, d, tab, setTab, alarms, items, now, go, coName, replay, de
             <span>Created <b>{day(c.created_at)}</b></span><span>Owner <b>{c.owner ?? "not joined"}</b></span><StatusTag c={c} now={now} />
           </div>
         </div>
-        <button className="ib" onClick={() => ownerLink(d.people?.invites.find((i) => i.role === "owner")?.email ?? "")}
-          title="A fresh invite link for the owner — the old one stops working">New owner link</button>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          <button className="ib pri" onClick={viewCompany}
+            title="Open their app read only, as its owner sees it — logged with your reason">View company</button>
+          <button className="ib" onClick={() => ownerLink(d.people?.invites.find((i) => i.role === "owner")?.email ?? "")}
+            title="A fresh invite link for the owner — the old one stops working">New owner link</button>
+        </div>
       </div>
       <div className="tabs" role="tablist">
         {TABS.map(([k, l]) => <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? "on" : ""} onClick={() => setTab(k)}>{l}</button>)}

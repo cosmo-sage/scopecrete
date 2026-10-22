@@ -351,3 +351,41 @@ export function OwnerLink({ org, name, email: start, onClose, post }: {
     </>
   );
 }
+
+// ------------------------------------------------------------------ view company
+
+/** Open a company's app read only (migration 121): a reason for the admin log, then the whole
+ *  app as its owner sees it, for up to 8 hours. Postgres refuses every write while the view is
+ *  on; the red strip at the top ends it. */
+export function ViewCompany({ org, name, onClose, post }: {
+  org: string; name: string; onClose: () => void;
+  post: (body: Record<string, unknown>) => Promise<unknown>;
+}) {
+  const [reason, setReason] = useState("");
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const open = async () => {
+    if (reason.trim().length < 3) { setErr("A note for the admin log."); return; }
+    setBusy(true); setErr(null);
+    try { await post({ org, reason: reason.trim() }); window.location.assign("/dashboard"); }
+    catch (e) { setErr(e instanceof Error ? e.message : String(e)); setBusy(false); }
+  };
+  return (
+    <>
+      <div className="scrim" onMouseDown={() => { if (!busy) onClose(); }} />
+      <div className="drawer" role="dialog" aria-modal="true" aria-label="View company">
+        <div className="dh"><h3>View {name}</h3><button className="ib sm" onClick={onClose} disabled={busy}>Close</button></div>
+        <div className="db">
+          <p className="mut" style={{ fontSize: 13, margin: 0 }}>
+            Opens {name}&apos;s app as its owner sees it — jobs, threads, customers, budgets — read only, for up to 8 hours.
+            Nothing can be changed while you look. It goes in the admin log with your reason.
+          </p>
+          <div className="fld"><label htmlFor="vc-reason">Reason (goes in the admin log)</label>
+            <textarea id="vc-reason" autoFocus value={reason} onChange={(e) => { setReason(e.target.value); setErr(null); }} placeholder="e.g. Checking their setup with Jeremy" /></div>
+          {err && <p className="dn">{err}</p>}
+          <div className="acts"><button className="ib pri" onClick={open} disabled={busy}>{busy ? "Opening…" : "View company"}</button></div>
+        </div>
+      </div>
+    </>
+  );
+}

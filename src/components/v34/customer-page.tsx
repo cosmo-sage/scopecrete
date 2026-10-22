@@ -46,6 +46,7 @@ import { ContactPicker, NewContactForm } from "@/components/v34/contacts";
 import { ThreadView } from "@/components/v34/thread-view";
 import { initialsHue } from "@/lib/v34/threads";
 import { JobPickList } from "@/components/v34/job-pick";
+import { useAccess } from "@/lib/v34/access-ctx";
 
 interface Method { kind: "mobile" | "office" | "home" | "phone" | "email"; value: string; can_text: boolean | null; primary: boolean }
 interface Contact { id: string; name: string | null; role: string | null; primary: boolean; bucket: string | null; status_summary: string | null; recent_summary: string | null; last_contacted: string | null; methods: Method[] }
@@ -77,6 +78,7 @@ const time = (iso: string) => new Date(iso).toLocaleTimeString("en-US", { hour: 
 const dur = (s: number | null) => (s == null ? "" : `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`);
 
 export function CustomerPage({ customerId, focusContact }: { customerId: string; focusContact?: string | null }) {
+  const access = useAccess();
   const router = useRouter();
   const search = useSearchParams();
   const [data, setData] = useState<Data | null>(null);
@@ -141,6 +143,8 @@ export function CustomerPage({ customerId, focusContact }: { customerId: string;
   ].filter(Boolean).join(" · ");
   const tabs: Array<[Tab, string]> = [["overview", "Overview"], ["contacts", `Contacts ${contacts.length}`], ["jobs", `Jobs ${jobs.length}`], ["threads", "Threads"],
     ["files", "Files"], ["timeline", "Timeline"], ["payments", "Payments"], ["schedule", "Schedule"]];
+  // An onsite estimator given Customers (120) reads the customer, its people and their jobs — not its talk or money.
+  const shownTabs = access.limited ? tabs.filter(([k]) => k === "overview" || k === "contacts" || k === "jobs") : tabs;
 
   const newScope = async () => {
     try {
@@ -175,7 +179,7 @@ export function CustomerPage({ customerId, focusContact }: { customerId: string;
           <ArchiveButton key="del" kind="customer" id={cu.id} action="delete" what={cu.name || "this customer"} then="/dashboard/customers"
             style={{ ...menuItem, color: T.red }}>Delete customer</ArchiveButton>,
         ]}
-        meta={meta} tabs={tabs} tab={tab} onTab={(k) => setTab(k as Tab)}>
+        meta={meta} tabs={shownTabs} tab={tab} onTab={(k) => setTab(k as Tab)}>
         {note && <HeaderNote text={note.text} onDismiss={() => setNote(null)}
           action={note.undo ? { label: "Undo", onClick: () => void send(`/api/customer-moves/${note.undo}/undo`, "POST").then(() => { setNote(null); reload(); }).catch((e) => setNote({ text: String(e.message ?? e) })) } : undefined} />}
       </RecordHeader>

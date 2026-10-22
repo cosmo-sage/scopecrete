@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
-import { readAccess } from "@/lib/access";
+import { before120, readAccess, WAITING_120 } from "@/lib/access";
 
 /**
  * PATCH { role, contact_id, pages, all_jobs, job_ids } → change someone's
@@ -33,8 +33,14 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ userId: s
   }
   const a = readAccess(b);
   if (!a.role) return applyCookies(NextResponse.json({ error: "Which role?" }, { status: 400 }));
-  const { error } = await supabase.rpc("sc_set_member_access", {
-    p_org: orgId, p_user: who, p_role: a.role, p_contact: a.contact_id, p_pages: a.pages, p_all_jobs: a.all_jobs, p_jobs: a.job_ids });
+  const setAccess = (pages: string[]) => supabase.rpc("sc_set_member_access", {
+    p_org: orgId, p_user: who, p_role: a.role, p_contact: a.contact_id, p_pages: pages, p_all_jobs: a.all_jobs, p_jobs: a.job_ids });
+  let { error } = await setAccess(a.pages);
+  if (error && /Unknown page/.test(error.message)) {
+    const old = before120(a.pages);
+    if (old.blocked.length) return applyCookies(NextResponse.json({ error: WAITING_120 }, { status: 503 }));
+    ({ error } = await setAccess(old.pages));
+  }
   if (error) {
     const missing = /could not find the function|does not exist/i.test(error.message);
     return applyCookies(NextResponse.json({ error: missing ? "Access settings aren't switched on yet — migration 081 is waiting to be applied."

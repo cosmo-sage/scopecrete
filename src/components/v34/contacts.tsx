@@ -17,6 +17,8 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useAccess } from "@/lib/v34/access-ctx";
+import type { Access } from "@/lib/access";
 import { IdentificationCard } from "@phosphor-icons/react";
 import type { CardRead } from "@/lib/business-card";
 import { T, F, BUCKET, disp, eyebrow, clip, nums, relTime } from "@/lib/v34/tokens";
@@ -53,6 +55,20 @@ export const bookName = (e: Pick<BookEntry, "name" | "company" | "phones" | "ema
 export const bookHref = (e: Pick<BookEntry, "id" | "role">) =>
   `/dashboard/messages/${e.id}?person=1`;
 
+/**
+ * An onsite estimator (120) has no Threads: a row opens the vendor's page or the customer's when
+ * they were given that page, else nothing.
+ */
+function rowHref(c: BookEntry, a: Access): string | null {
+  if (!a.limited) return bookHref(c);
+  if ((c.role === "vendor" || c.role === "sub") && a.pages.includes("vendors")) return `/dashboard/vendors/${c.id}`;
+  if (c.customer_id && a.pages.includes("customers")) return `/dashboard/customers/${c.customer_id}`;
+  return null;
+}
+function RowLink({ href, className, style, children }: { href: string | null; className?: string; style?: React.CSSProperties; children: React.ReactNode }) {
+  return href ? <Link href={href} className={className} style={style}>{children}</Link> : <span className={className} style={style}>{children}</span>;
+}
+
 async function call(url: string, method = "GET", body?: unknown) {
   const r = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
   const b = await r.json().catch(() => ({}));
@@ -72,6 +88,7 @@ const SORT_KEY = "sc:contacts-sort";
 // ------------------------------------------------------------------ the page
 
 export function ContactsPage() {
+  const access = useAccess();
   const [rows, setRows] = useState<BookEntry[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [q, setQ] = useState("");
@@ -173,13 +190,13 @@ export function ContactsPage() {
                 <tr key={c.id} style={{ borderTop: `1px solid ${T.hairSoft}`, background: sel.includes(c.id) ? T.greenDim : undefined }}>
                   <td style={{ padding: "6px 0 6px 8px" }}><BulkTick on={sel.includes(c.id)} onClick={() => toggle(c.id)} label={`Tick ${bookName(c)}`} /></td>
                   <td style={{ padding: "6px 8px", maxWidth: 260 }}>
-                    <Link href={bookHref(c)} className="flex items-center gap-2" style={{ color: T.ink }}>
+                    <RowLink href={rowHref(c, access)} className="flex items-center gap-2" style={{ color: T.ink }}>
                       <Initials name={c.name ?? c.company} size={26} />
                       <span style={{ minWidth: 0 }}>
                         <span style={{ display: "block", fontWeight: 600, ...clip }}>{bookName(c)}</span>
                         {(c.company || c.customer_name) && <span style={{ display: "block", fontSize: 10.5, color: T.ink3, ...clip }}>{c.company ?? c.customer_name}</span>}
                       </span>
-                    </Link>
+                    </RowLink>
                   </td>
                   <td style={{ padding: "6px 8px" }}><BookTag role={c.role} /></td>
                   <td style={{ padding: "6px 8px", ...nums }}>
@@ -201,7 +218,7 @@ export function ContactsPage() {
             {shown.map((c) => (
               <div key={c.id} className="flex items-center pl-3" style={{ borderTop: `1px solid ${T.hairSoft}`, background: sel.includes(c.id) ? T.greenDim : undefined }}>
               <BulkTick on={sel.includes(c.id)} onClick={() => toggle(c.id)} label={`Tick ${bookName(c)}`} />
-              <Link href={bookHref(c)} className="px-3 py-2 flex items-center gap-2.5 flex-1" style={{ color: T.ink, minWidth: 0 }}>
+              <RowLink href={rowHref(c, access)} className="px-3 py-2 flex items-center gap-2.5 flex-1" style={{ color: T.ink, minWidth: 0 }}>
                 <Initials name={c.name ?? c.company} />
                 <span style={{ flex: 1, minWidth: 0 }}>
                   <span className="flex items-center gap-2">
@@ -212,7 +229,7 @@ export function ContactsPage() {
                     {[c.company ?? c.customer_name, c.phones[0] && c.name ? formatNumber(c.phones[0].number) : null, c.emails[0]?.address].filter(Boolean).join(" · ") || "No number or email"}
                   </span>
                 </span>
-              </Link>
+              </RowLink>
               </div>
             ))}
           </div>

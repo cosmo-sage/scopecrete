@@ -24,7 +24,7 @@ import { T, F, disp, eyebrow, clip, strong } from "@/lib/v34/tokens";
 import { SettingsBlock } from "@/components/v34/settings/parts";
 import { sendBytes } from "@/components/v34/files-panel";
 import { usePref } from "@/lib/v34/prefs";
-import { ROLES, FIELD_PAGES, roleLabel, accessSummary } from "@/lib/access";
+import { ROLES, FIELD_PAGES, roleLabel, accessSummary, jobsOn } from "@/lib/access";
 import { AddressInput } from "@/components/v34/address-input";
 import { useMe } from "@/lib/v34/me-ctx";
 import { radiusLabel, type Office } from "@/lib/map";
@@ -352,7 +352,7 @@ function People({ people, canEdit, accessReady, onChanged }: { people: Person[];
   const [invites, setInvites] = useState<Invite[]>([]);
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
-  const [draft, setDraft] = useState<AccessDraft>({ role: "member", contact_id: null, pages: ["files", "plan_room"], all_jobs: false, job_ids: [] });
+  const [draft, setDraft] = useState<AccessDraft>({ role: "member", contact_id: null, pages: ["jobs", "files", "plan_room"], all_jobs: false, job_ids: [] });
   const [editing, setEditing] = useState<string | null>(null);
   const [nameDraft, setNameDraft] = useState("");
   const [busy, setBusy] = useState(false);
@@ -445,7 +445,9 @@ function People({ people, canEdit, accessReady, onChanged }: { people: Person[];
   }
   function startEdit(p: Person) {
     setOpen(false); setMade(null); setErr(null); setEditing(p.user_id); setNameDraft(p.name ?? "");
-    setDraft({ role: p.role ?? "member", contact_id: p.contact_id ?? null, pages: p.pages ?? [], all_jobs: !!p.all_jobs, job_ids: p.job_ids ?? [] });
+    // Set up before 120, Jobs was always on: show it ticked.
+    const pages = p.pages ?? [];
+    setDraft({ role: p.role ?? "member", contact_id: p.contact_id ?? null, pages: jobsOn(pages) && !pages.includes("jobs") ? ["jobs", ...pages] : pages, all_jobs: !!p.all_jobs, job_ids: p.job_ids ?? [] });
   }
   async function copy() { try { await navigator.clipboard.writeText(made!.link); setCopied(true); } catch { /* blocked */ } }
   const mail = made ? `mailto:${made.email}?subject=${encodeURIComponent("Join me on ScopeCrete")}&body=${encodeURIComponent(`Here's your invite to our ScopeCrete dashboard:\n\n${made.link}\n\nSign in with this email address (${made.email}). The link works once and expires in 14 days.`)}` : "";
@@ -461,7 +463,7 @@ function People({ people, canEdit, accessReady, onChanged }: { people: Person[];
     <>
       <div className="flex items-center" style={{ marginBottom: canEdit && !open ? 6 : 0 }}>
         <span className="flex-1" />
-        {canEdit && !open && <button onClick={() => { setOpen(true); setEditing(null); setMade(null); setDraft({ role: "member", contact_id: null, pages: ["files", "plan_room"], all_jobs: false, job_ids: [] }); }} style={small}>+ Invite</button>}
+        {canEdit && !open && <button onClick={() => { setOpen(true); setEditing(null); setMade(null); setDraft({ role: "member", contact_id: null, pages: ["jobs", "files", "plan_room"], all_jobs: false, job_ids: [] }); }} style={small}>+ Invite</button>}
       </div>
       <div className="mt-1" style={{ border: `1px solid ${T.hair}`, borderRadius: 4, background: T.card }}>
         {people.length === 0 && <div style={{ padding: "8px 10px", fontSize: F.sm, color: T.ink3 }}>No one listed.</div>}
@@ -590,14 +592,38 @@ function AccessForm({ draft, setDraft, vendors, jobs, accessReady, small, onVend
           )}
           <div style={{ fontSize: F.xs, color: T.ink3 }}>Not listed? File them as a vendor or put them on a customer (Threads or <Link href="/dashboard/contacts" style={{ color: T.chalk }}>Contacts</Link>) first.</div>
 
-          <div style={{ ...eyebrow, color: T.ink2, marginTop: 4 }}>Pages</div>
-          <div style={{ fontSize: F.xs, color: T.ink3 }}>Their jobs&apos; areas always; tick what else they may open.</div>
-          {FIELD_PAGES.map((pg) => (
-            <label key={pg.k} className="flex items-start gap-2" style={{ fontSize: F.sm, cursor: "pointer" }}>
-              <input type="checkbox" checked={draft.pages.includes(pg.k)} onChange={() => set({ pages: toggle(draft.pages, pg.k) })} style={{ marginTop: 3 }} />
-              <span><b style={{ fontWeight: 600 }}>{pg.label}</b> <span style={{ color: T.ink3, fontSize: F.xs }}>— {pg.note}</span></span>
-            </label>
+          {([["page", "Pages", "What's on their menu. Customers, Contacts and Vendors are read only."],
+             ["job", "Inside their jobs", "Their jobs' areas always; tick what else they may open on a job."]] as const).map(([g, title, note]) => (
+            <React.Fragment key={g}>
+              <div style={{ ...eyebrow, color: T.ink2, marginTop: 4 }}>{title}</div>
+              <div style={{ fontSize: F.xs, color: T.ink3 }}>{note}</div>
+              {FIELD_PAGES.filter((pg) => pg.group === g).map((pg) => {
+                // Jobs stays on while they have nowhere else to land.
+                const stuck = pg.k === "jobs" && draft.pages.includes("jobs") && jobsOn(draft.pages.filter((x) => x !== "jobs"));
+                return (
+                  <label key={pg.k} className="flex items-start gap-2" style={{ fontSize: F.sm, cursor: stuck ? "default" : "pointer" }}
+                    title={stuck ? "Give them Customers, Contacts or Vendors first — Jobs is where they land otherwise" : undefined}>
+                    <input type="checkbox" checked={draft.pages.includes(pg.k)} disabled={stuck}
+                      onChange={() => set({ pages: toggle(draft.pages, pg.k) })} style={{ marginTop: 3 }} />
+                    <span><b style={{ fontWeight: 600 }}>{pg.label}</b> <span style={{ color: T.ink3, fontSize: F.xs }}>— {pg.note}</span></span>
+                  </label>
+                );
+              })}
+            </React.Fragment>
           ))}
+
+          <div style={{ ...eyebrow, color: T.ink2, marginTop: 4 }}>Dusty</div>
+          <div className="flex gap-1.5 items-center" role="group" aria-label="Dusty">
+            {([[true, "Allow"], [false, "Deny"]] as const).map(([on, label]) => {
+              const now = draft.pages.includes("dusty") === on;
+              return (
+                <button key={label} type="button" aria-pressed={now}
+                  onClick={() => set({ pages: on ? [...draft.pages.filter((x) => x !== "dusty"), "dusty"] : draft.pages.filter((x) => x !== "dusty") })}
+                  style={{ ...small, background: now ? T.ink : T.card, color: now ? T.card : T.ink }}>{label}</button>
+              );
+            })}
+          </div>
+          <div style={{ fontSize: F.xs, color: T.ink3 }}>{FIELD_PAGES.find((x) => x.k === "dusty")?.note}. He can&apos;t text or email for them.</div>
 
           <div style={{ ...eyebrow, color: T.ink2, marginTop: 4 }}>Jobs</div>
           <label className="flex items-center gap-2" style={{ fontSize: F.sm, cursor: "pointer" }}>

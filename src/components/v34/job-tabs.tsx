@@ -195,7 +195,7 @@ export function JobHeaderRow({ jobId, active, title, after, sub, customerId, sub
       </div>
       <div className="flex justify-center items-center gap-2 w-full lg:w-auto shrink-0 lg:ml-auto"><JobTabs jobId={jobId} active={active} subnav={subnav} />
         {/* Dusty on the desktop, since the header's button left for the pages' own (Coy, 2026-10-10); the phone has him in the footer. */}
-        {!access.limited && <span className="hidden lg:inline-flex"><DustyPageButton /></span>}</div>
+        {can(access, "dusty") && <span className="hidden lg:inline-flex"><DustyPageButton /></span>}</div>
       <JobSwitcher open={switching} onClose={() => setSwitching(false)} jobId={jobId} href={viewHref} />
     </div>
   );

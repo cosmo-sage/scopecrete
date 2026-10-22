@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
 import { FILES_BUCKET } from "@/lib/files";
 import { isEmail, signatureOf } from "@/lib/email-client";
-import { myOrgs } from "@/lib/access-server";
+import { myAccess, myOrgs } from "@/lib/access-server";
 import { sendAgentMail } from "@/lib/mail-server";
 
 /**
@@ -47,6 +47,8 @@ export async function POST(req: NextRequest) {
   if (!result.ok) return result.response;
   const { supabase, orgId, applyCookies } = result.session;
   const bad = (error: string, status = 400) => applyCookies(NextResponse.json({ error }, { status }));
+  // An onsite estimator reads contacts (120) but never sends mail from the org's inbox.
+  if ((await myAccess(supabase, orgId)).limited) return bad("Onsite estimators can't send email from ScopeCrete.", 403);
   const b = (await req.json().catch(() => null)) as Record<string, unknown> | null;
   if (!b) return bad("Body must be JSON.");
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
+import { myAccess } from "@/lib/access-server";
 import { sendQuoText } from "@/lib/quo";
 import { markLinksSent } from "@/lib/proposal-sent-server";
 import { cleanBody, pickLine, quoError, segments, toE164, type TextLine } from "@/lib/texting";
@@ -28,6 +29,8 @@ export async function POST(req: NextRequest) {
   const result = await getApiSession(req);
   if (!result.ok) return result.response;
   const { supabase: sb, orgId, applyCookies } = result.session;
+  // An onsite estimator reads contacts (120) but never texts from the org's lines.
+  if ((await myAccess(sb, orgId)).limited) return applyCookies(NextResponse.json({ error: "Onsite estimators can't send texts from ScopeCrete." }, { status: 403 }));
   const fail = (error: string, status = 400) => applyCookies(NextResponse.json({ error }, { status }));
 
   const b = (await req.json().catch(() => ({}))) as { contact_id?: unknown; body?: unknown; to?: unknown; line_id?: unknown };

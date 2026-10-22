@@ -220,11 +220,17 @@ test("customers with an open job are Work Spaces; Buckets shelf reads Collection
 });
 
 test("a job's, customer's or vendor's drawer: default, cleaned, pages moved and shelves removed", async () => {
-  const { defaultLayout, cleanLayout, placeRow, removeKindShelf, kindRows, CHANNELS_SHELF } = await import("../src/lib/v34/spaces.ts");
+  const { defaultLayout, cleanLayout, placeRow, removeKindShelf, kindRows, CHANNELS_SHELF, JOBS_SHELF } = await import("../src/lib/v34/spaces.ts");
   const job = defaultLayout("job");
-  assert.deepEqual(job.shelves.map((s) => s.name), ["Job", "Channels"]);
+  assert.deepEqual(job.shelves.map((s) => s.name), ["Job", "Contacts"]);
   assert.deepEqual(job.shelves[0].rows, kindRows("job", ID).map((r) => r.k));
-  assert.deepEqual(defaultLayout("customer").shelves.map((s) => s.id), ["account", CHANNELS_SHELF, "toolbox"]);
+  assert.deepEqual(defaultLayout("customer").shelves.map((s) => s.id), ["account", JOBS_SHELF, CHANNELS_SHELF, "toolbox"]);
+  assert.deepEqual(defaultLayout("vendor").shelves.map((s) => s.name), ["Supply", "Jobs", "Contacts", "Toolbox"]);
+  // a saved Channels shelf reads Contacts, and a customer drawer saved before Jobs gets it before Contacts
+  const old = cleanLayout("customer", { shelves: [{ id: "account", name: "Customer Account", rows: ["overview", "threads", "payments"] }, { id: CHANNELS_SHELF, name: "Channels", rows: [] }], hidden: [] });
+  assert.deepEqual(old.shelves.slice(0, 3).map((s) => s.name), ["Customer Account", "Jobs", "Contacts"]);
+  assert.deepEqual(old.shelves[0].rows, ["overview", "files"], "gone tabs dropped, a page with no shelf goes on the first");
+  assert.ok(!cleanLayout("job", { shelves: [{ id: JOBS_SHELF, name: "Jobs", rows: [] }], hidden: [] }).shelves.some((s) => s.id === JOBS_SHELF), "a job has no Jobs shelf");
   // junk falls back; unknown pages dropped; a page twice kept once; a forgotten page goes on the first shelf
   assert.deepEqual(cleanLayout("job", "nope"), job);
   const c = cleanLayout("job", { shelves: [{ id: "a", name: "Mine", rows: ["summary", "summary", "nonsense"] }, { id: "b", name: "Rest", rows: ["files"] }], hidden: ["proposal"] });
@@ -244,10 +250,10 @@ test("a job's, customer's or vendor's drawer: default, cleaned, pages moved and 
   assert.ok(!cleanLayout("job", gone).shelves.some((s) => s.id === CHANNELS_SHELF));
 });
 
-test("pickers name the four lists Collections, apart from tools and threads", async () => {
+test("pickers name the four lists Collections, apart from tools — no thread lists", async () => {
   const { pickSections, CHANNELS } = await import("../src/lib/v34/spaces.ts");
   const s = pickSections(["map", "customers", "scope", "pricebook", "vendors", "contacts"]);
-  assert.deepEqual(s.map((x) => x.title), ["Collections", "Tools", "Threads"]);
+  assert.deepEqual(s.map((x) => x.title), ["Collections", "Tools"]);
   assert.deepEqual(s[0].keys, ["customers", "contacts", "vendors", "scope"]);
   assert.deepEqual(s[1].keys, ["map", "pricebook"]);
   assert.ok(CHANNELS.every((c) => !/people/i.test(c.label)));
@@ -318,4 +324,16 @@ test("shelf icons: standard shelves keep theirs, a custom shelf takes the one pi
   const C = "11111111-1111-4111-8111-111111111111";
   const next = iconColShelf({ [C]: [{ id: "s1", name: "A" }] }, C, "s1", "map");
   assert.equal(next[C][0].icon, "map");
+});
+
+test("contactThreads: one row per person, opening their one thread page", async () => {
+  const { contactThreads } = await import("../src/lib/v34/spaces.ts");
+  const rows = contactThreads([
+    { id: "p1", name: "Amber Lee", phones: [{ phone: "+12255550118", label: null, last: { text: "Old", at: "2026-10-01T10:00:00Z", out: false } }, { phone: "+12255550119", label: "Office", last: { text: "Newer", at: "2026-10-02T10:00:00Z", out: true } }], email: null },
+    { id: "p2", name: null, phones: [], email: "a@b.co" },
+  ]);
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0].href, "/dashboard/messages/p1");
+  assert.equal(rows[0].sub, "You: Newer");
+  assert.equal(rows[1].title, "a@b.co");
 });

@@ -7,8 +7,8 @@
  *
  * A 72px rail of Spaces — Dusty (Home) first, then every open job as a tile in its
  * stage's colour (look 1b), then the threads Coy made — beside a 280px drawer: on
- * Home the app's pages and every thread by bucket; in a job its Job pages
- * and a Channels shelf of its Phone · Email · Internal threads (one thread per number). Settings is the
+ * Home the app's pages and every contact by bucket; in a job its Job pages and a Contacts shelf
+ * of the people on it, each opening their one thread page. Settings is the
  * gear at the rail's foot. On a desktop it is fixed at the left (`--sc-rail-w` is
  * 352px, 136px with the drawer folded by « to a strip of icons, › opening it again — frame 11; tiles drawn as silhouettes by kind, Rail Silhouettes 1a); on a phone it slides over the page from ☰
  * or a swipe from the left edge. No migration: src/lib/v34/spaces.ts, /api/spaces.
@@ -22,6 +22,7 @@ import { NavIcon } from "@/components/v34/primitives";
 import { DustyAvatar, type EmblemState } from "@/components/v34/dusty-avatar";
 import { SpaceIcon, useDrawMissing } from "@/components/v34/spaces/space-icon";
 import { NewSpaceDialog, PickList, ItemPicker, peopleOf } from "@/components/v34/spaces/new-space";
+import { ContactPicker } from "@/components/v34/contacts";
 import { ArrangeRail, type RailTileInfo } from "@/components/v34/spaces/arrange-rail";
 import { PAGE } from "@/lib/v34/pages";
 import { SETTINGS_HOME } from "@/lib/v34/settings-sections";
@@ -29,20 +30,20 @@ import { usePref } from "@/lib/v34/prefs";
 import { setVendorFilter, useVendorFilter } from "@/lib/v34/vendor-filter";
 import { ROLE_LABEL, type ContactRole } from "@/lib/v34/threads";
 import {
-  activeTreeRow, internalThreads, jobTree, monogram, phoneThreads, spaceOf, stageColor, stageLabel,
+  activeTreeRow, contactThreads, jobTree, monogram, spaceOf, stageColor, stageLabel,
   homeShelves, moveToShelf, nudge, MAX_SHELVES, MAX_SHELF_NAME, CHANNELS, isChannel, looseChannels, pickSections, COLLECTION_PAGES, offShelf,
   customerShelves, vendorShelves, activeTab, cleanPins, addPin, removePin,
-  emailThreads, SPACES_HREF, shelfIcon, isStandardShelf, SHELF_ICONS, iconColShelf, cleanLayout, kindRows, placeRow, removeKindShelf, CHANNELS_SHELF, isToolRow,
+  SPACES_HREF, shelfIcon, isStandardShelf, SHELF_ICONS, iconColShelf, cleanLayout, kindRows, placeRow, removeKindShelf, JOBS_SHELF, isSpecialShelf, specialShelves, isToolRow,
   cleanColShelves, addColShelf, renameColShelf, moveColShelf, removeColShelf, setMemberShelf, membersByShelf, type ColShelf,
   type LayoutKind, type KindLayout, type TreeRow,
-  type Shelf, type SpaceRef, type SpacePerson, type SpaceEmail, type ThreadRow, type SpacePin,
+  type Shelf, type SpaceRef, type SpacePerson, type SpaceEmail, type SpacePin,
   cleanRail, orderTiles, moveTile, hideTile, showTile, cleanCollectionPicks, setPicks, cleanMembers, setMembers, holdsSpace,
 } from "@/lib/v34/spaces";
 
 interface RailJob { id: string; title: string; status: string | null; customer: string | null }
 interface RailCustomer { id: string; name: string }
 interface RailCollection { id: string; name: string; count: number; source: string }
-interface JobDetail { job?: { id: string; title: string; status: string | null }; people: SpacePerson[]; emails: SpaceEmail[] }
+interface JobDetail { job?: { id: string; title: string; status: string | null }; people: SpacePerson[]; emails: SpaceEmail[]; jobs?: Array<{ id: string; title: string; status: string | null }> }
 interface HomeThread { contact_id: string; display_name: string; bucket: string | null; numbers?: number; occurred_at: string | null; role?: string; customer_id?: string | null; company?: string | null }
 
 const BUCKETS: Array<{ k: string; label: string; key: string; color: string }> = [
@@ -542,7 +543,8 @@ function KindLayoutEditor({ kind, layout, rows, onChange, onReset, onDone, rail 
   const label = (k: string) => (isToolRow(k) ? PAGE.get(k.slice(2))?.label : rows.find((r) => r.k === k)?.label) ?? k;
   const setShelf = (i: number, patch: Partial<KindLayout["shelves"][number]>) =>
     onChange({ ...layout, shelves: layout.shelves.map((sh, j) => (j === i ? { ...sh, ...patch } : sh)) });
-  const pageShelves = layout.shelves.filter((sh) => sh.id !== CHANNELS_SHELF);
+  const pageShelves = layout.shelves.filter((sh) => !isSpecialShelf(sh.id));
+  const listName = (id: string) => specialShelves(kind).find((x) => x.id === id)?.name ?? id;
   const add = () => {
     const name = adding.trim().slice(0, MAX_SHELF_NAME);
     if (!name || layout.shelves.length >= MAX_SHELVES) return;
@@ -570,8 +572,8 @@ function KindLayoutEditor({ kind, layout, rows, onChange, onReset, onDone, rail 
             <button type="button" className="sc-shelf-btn" aria-label={`Remove ${sh.name}`} title="Remove this shelf — its pages leave the drawer"
               onClick={() => onChange(removeKindShelf(layout, sh.id))}>×</button>
           </div>
-          {sh.id === CHANNELS_SHELF
-            ? <div className="sc-space-empty">Phone · Email · Internal threads</div>
+          {isSpecialShelf(sh.id)
+            ? <div className="sc-space-empty">{sh.id === JOBS_SHELF ? `Every job of this ${KIND_WORD[kind]}` : "The people on it, each opening their thread"}</div>
             : <AddToShelf shelf={sh} layout={layout} rows={rows} pages={pages} label={label} onChange={onChange} />}
           {sh.rows.map((k, ri) => (
             <div key={k} className="sc-shelf-page">
@@ -593,9 +595,9 @@ function KindLayoutEditor({ kind, layout, rows, onChange, onReset, onDone, rail 
           <span className="sc-shelf-edit-h">Not in the drawer</span>
           {layout.hidden.map((k) => (
             <div key={k} className="sc-shelf-page">
-              <span className="sc-shelf-page-l">{k === CHANNELS_SHELF ? "Channels" : label(k)}</span>
-              {k === CHANNELS_SHELF
-                ? <button type="button" className="sc-shelf-arrange" onClick={() => onChange({ shelves: [...layout.shelves, { id: CHANNELS_SHELF, name: "Channels", rows: [] }], hidden: layout.hidden.filter((x) => x !== k) })}>Put back</button>
+              <span className="sc-shelf-page-l">{isSpecialShelf(k) ? listName(k) : label(k)}</span>
+              {isSpecialShelf(k)
+                ? <button type="button" className="sc-shelf-arrange" onClick={() => onChange({ shelves: [...layout.shelves, { id: k, name: listName(k), rows: [] }], hidden: layout.hidden.filter((x) => x !== k) })}>Put back</button>
                 : pageShelves.length > 0 && (
                   <select className="sc-shelf-move" value="" aria-label={`Put ${label(k)} on a shelf`} onChange={(e) => e.target.value && onChange(placeRow(layout, k, e.target.value))}>
                     <option value="">Put it on…</option>
@@ -630,16 +632,17 @@ function AddToShelf({ shelf, layout, rows, pages, label, onChange }: {
   const on = new Set(layout.shelves.flatMap((x) => x.rows));
   const where = (k: string) => layout.shelves.find((x) => x.rows.includes(k))?.name;
   const own = rows.filter((r) => !shelf.rows.includes(r.k));
-  const secs = pickSections(pages.filter((k) => PAGE.has(k))).filter((x) => x.title !== "Threads")
+  const secs = pickSections(pages.filter((k) => PAGE.has(k)))
     .map((x) => ({ title: x.title, items: x.keys.map((k) => `p:${k}`).filter((k) => !on.has(k)).map((k) => ({ k, label: label(k) })) }));
-  const chHidden = layout.hidden.includes(CHANNELS_SHELF);
+  const gone = layout.hidden.filter(isSpecialShelf);
+  const listName = (id: string) => (id === JOBS_SHELF ? "Jobs" : "Contacts");
   return (
     <AddPicker to={shelf.name} sections={[
       { title: "This Space's pages", items: own.map((r) => ({ k: r.k, label: r.label, note: where(r.k) ? `on ${where(r.k)}` : "not in the drawer" })) },
       ...secs,
-      { title: "Channels", items: chHidden ? [{ k: CHANNELS_SHELF, label: "Phone · Email · Internal" }] : [] },
+      { title: "Lists", items: gone.map((k) => ({ k, label: listName(k) })) },
     ]} onAdd={(k) => {
-      if (k === CHANNELS_SHELF) onChange({ shelves: [...layout.shelves, { id: CHANNELS_SHELF, name: "Channels", rows: [] }], hidden: layout.hidden.filter((x) => x !== k) });
+      if (isSpecialShelf(k)) onChange({ shelves: [...layout.shelves, { id: k, name: listName(k), rows: [] }], hidden: layout.hidden.filter((x) => x !== k) });
       else onChange(placeRow(layout, k, shelf.id));
     }} />
   );
@@ -791,8 +794,7 @@ function JobDrawer({ id, fallback, onPick, rail }: { id: string; fallback: RailJ
         sub={customer ?? undefined} />
       <LayoutDrawer kind="job" id={id} here={here} pick={pick} editing={editing} setEditing={setEditing}
         rail={{ on: rail.on, set: (on) => rail.set(on, title) }}
-        channels={(name, g) => <ChannelsShelf title={name} scope="job" d={d} onPick={pick} {...g}
-          empty={<>No numbers on this job yet. <Link href={`/dashboard/scope/${id}/summary`} onClick={pick}>+ Add a contact</Link></>} />} />
+        d={d} />
     </>
   );
 }
@@ -801,10 +803,10 @@ function JobDrawer({ id, fallback, onPick, rail }: { id: string; fallback: RailJ
  * A job's, customer's or vendor's shelves, laid out as Coy set them for that kind of Space
  * (`space_layouts`), or the editor while the head's gear is on.
  */
-function LayoutDrawer({ kind, id, here, pick, editing, setEditing, rail, channels }: {
+function LayoutDrawer({ kind, id, here, pick, editing, setEditing, rail, d }: {
   kind: LayoutKind; id: string; here: string; pick: () => void; editing: boolean; setEditing: (v: boolean) => void;
   rail: { on: boolean; set: (on: boolean) => void };
-  channels: (name: string, g: { closed: Set<string>; onToggle: (k: string) => void }) => React.ReactNode;
+  d: JobDetail | null;
 }) {
   const { layout, set } = useKindLayout(kind);
   const rows = useMemo(() => kindRows(kind, id), [kind, id]);
@@ -818,12 +820,17 @@ function LayoutDrawer({ kind, id, here, pick, editing, setEditing, rail, channel
       </div>
     );
   }
-  const keys = layout.shelves.flatMap((sh) => (sh.id === CHANNELS_SHELF ? CHANNEL_KEYS(kind) : [`${kind}:${sh.id}`]));
+  const keys = layout.shelves.map((sh) => `${kind}:${sh.id}`);
   return (
     <div className="sc-space-scroll">
       <div style={{ display: "flex" }}><FoldAll keys={keys} closed={closed} setAll={setAll} /></div>
-      {layout.shelves.map((sh) => sh.id === CHANNELS_SHELF
-        ? <React.Fragment key={sh.id}>{channels(sh.name, g)}</React.Fragment>
+      {layout.shelves.map((sh) => isSpecialShelf(sh.id)
+        ? (
+          <Group key={sh.id} title={sh.name} id={`${kind}:${sh.id}`} icon={shelfIcon(sh)} count={sh.id === JOBS_SHELF ? d?.jobs?.length : d?.people.length} {...g}>
+            {sh.id === JOBS_SHELF ? <JobRows d={d} onPick={pick} />
+              : <ContactRows d={d} onPick={pick} add={addContactHref(kind, id)} empty={kind === "job" ? "No one on this job yet." : undefined} />}
+          </Group>
+        )
         : (
           <Group key={sh.id} title={sh.name} id={`${kind}:${sh.id}`} icon={shelfIcon(sh)} {...g}>
             {sh.rows.length === 0 && <div className="sc-space-empty">Empty — the gear adds pages and tools here.</div>}
@@ -834,58 +841,45 @@ function LayoutDrawer({ kind, id, here, pick, editing, setEditing, rail, channel
   );
 }
 
-const CHANNEL_KEYS = (scope: string) => [`${scope}:channels`, `${scope}:phone`, `${scope}:email`, `${scope}:internal`];
-
 /**
- * The Channels shelf (Coy, 2026-10-18: "Every customer gets a 'Channels' shelf that lists the
- * channels by type 'Phone', 'Email', 'Internal'. and under each channel type will be the
- * individual threads shown by the phone number, email address, and 'contact name' under the
- * internal channel"): one shelf, its three channels folding on their own, each thread under it.
+ * The Contacts shelf (Coy, 2026-10-22: "Any contact will have one single thread page … nested
+ * under it"): the people on this job, customer or vendor, each opening their one thread —
+ * phone, email and notes together — with their newest call or text under the name.
  */
-function ChannelsShelf({ title = "Channels", scope, d, onPick, closed, onToggle, empty }: {
-  title?: string; scope: string; d: JobDetail | null; onPick: () => void; closed: Set<string>; onToggle: (k: string) => void; empty?: React.ReactNode;
-}) {
+function ContactRows({ d, onPick, empty, add }: { d: JobDetail | null; onPick: () => void; empty?: React.ReactNode; add?: string }) {
+  const path = usePathname() ?? "";
+  const rows = d ? contactThreads(d.people) : [];
   return (
-    <Group title={title} id={`${scope}:channels`} closed={closed} onToggle={onToggle} icon="threads">
-      <ChannelSubs scope={scope} d={d} onPick={onPick} closed={closed} onToggle={onToggle} empty={empty} />
-    </Group>
+    <>
+      {!d && <div className="sc-space-empty">Loading…</div>}
+      {d && rows.length === 0 && <div className="sc-space-empty">{empty ?? "No one here yet."}</div>}
+      {rows.map((t) => (
+        <Row key={t.key} href={t.href} label={t.title} sub={t.sub} when={t.when} on={path.startsWith(t.href)} onPick={onPick} avatar={t.avatar} />
+      ))}
+      {d && add && <Link className="sc-space-more" href={add} onClick={onPick} style={{ paddingLeft: 14 }}>+ Add contact</Link>}
+    </>
   );
 }
 
-/** Phone · Email · Internal, each folding on its own, with their threads under them. */
-function ChannelSubs({ scope, d, onPick, closed, onToggle, empty }: {
-  scope: string; d: JobDetail | null; onPick: () => void; closed: Set<string>; onToggle: (k: string) => void; empty?: React.ReactNode;
-}) {
-  const phones: ThreadRow[] = d ? phoneThreads(d.people) : [];
-  const mails: ThreadRow[] = d ? emailThreads(d.people, d.emails) : [];
-  const notes: ThreadRow[] = d ? internalThreads(d.people) : [];
-  const sub = (k: string, label: string, rows: ThreadRow[], none: React.ReactNode) => {
-    const key = `${scope}:${k}`;
-    const open = !closed.has(key);
-    return (
-      <div key={k}>
-        <button type="button" className="sc-space-sub-h" onClick={() => onToggle(key)} aria-expanded={open}>
-          <span aria-hidden="true" style={{ display: "inline-block", width: 10, transform: open ? "rotate(90deg)" : undefined, transition: "transform .15s" }}>›</span>
-          <span style={{ flex: 1 }}>{label}</span>
-          {d && <span style={{ opacity: .7 }}>{rows.length}</span>}
-        </button>
-        {open && <>
-          {!d && <div className="sc-space-empty">Loading…</div>}
-          {d && rows.length === 0 && <div className="sc-space-empty" style={{ paddingLeft: 30 }}>{none}</div>}
-          {rows.map((t) => (
-            <Row key={t.key} href={t.href} label={t.title} sub={t.sub} when={t.when} indent onPick={onPick} avatar={t.avatar} />
-          ))}
-        </>}
-      </div>
-    );
-  };
+/** A customer's or vendor's Jobs shelf: each of their jobs, open ones first, to its Summary. */
+function JobRows({ d, onPick }: { d: JobDetail | null; onPick: () => void }) {
+  const path = usePathname() ?? "";
+  const jobs = d?.jobs ?? [];
   return (
     <>
-      {sub("phone", "Phone", phones, empty ?? "No numbers here yet.")}
-      {sub("email", "Email", mails, "No email addresses or filed email.")}
-      {sub("internal", "Internal", notes, "No one here yet.")}
+      {!d && <div className="sc-space-empty">Loading…</div>}
+      {d && jobs.length === 0 && <div className="sc-space-empty">No jobs yet.</div>}
+      {jobs.map((j) => (
+        <Row key={j.id} href={`/dashboard/scope/${j.id}/summary`} label={j.title} sub={stageLabel(j.status)} on={path.startsWith(`/dashboard/scope/${j.id}`)} onPick={onPick}
+          icon={<span className="sc-space-ico" style={{ color: stageColor(j.status) }}><NavIcon k="scope" on={false} color="currentColor" /></span>} />
+      ))}
     </>
   );
+}
+
+/** Where "+ Add contact" goes for each kind of Space. */
+function addContactHref(kind: LayoutKind, id: string) {
+  return kind === "job" ? `/dashboard/scope/${id}/summary` : kind === "customer" ? `/dashboard/customers/${id}?tab=contacts` : `/dashboard/vendors/${id}?tab=people`;
 }
 
 /**
@@ -893,8 +887,8 @@ function ChannelSubs({ scope, d, onPick, closed, onToggle, empty }: {
  * 2026-10-22: "adding a customer to a space should not be attaching a link to the customer
  * space, but referencing that customer (with all the pages and contacts and vendors associated
  * with the customer) … Perhaps the job needs to be a shelf inside a custom space that brings all
- * the pages to the space"). Its pages in the order its kind's drawer has them, then its Phone ·
- * Email · Internal threads; nothing is copied, and the drawer stays this Work Space.
+ * the pages to the space"). Its pages in the order its kind's drawer has them, then its jobs and
+ * its contacts, each opening their one thread; nothing is copied, and the drawer stays this Work Space.
  */
 function MemberShelf({ colId, m, closed, onToggle, onPick }: {
   colId: string; m: SpacePin; closed: Set<string>; onToggle: (k: string) => void; onPick: () => void;
@@ -923,7 +917,12 @@ function MemberShelf({ colId, m, closed, onToggle, onPick }: {
     <Group id={key} closed={closed} onToggle={onToggle} title={m.name}
       gear={<span className="sc-space-tag" style={{ color, borderColor: color, flexShrink: 0 }}>{word}</span>}>
       {order.map((k) => <LayoutRow key={k} k={k} byK={byK} here={here} pick={pick} />)}
-      <ChannelSubs scope={`col:${colId}:${m.kind}:${m.id}`} d={d} onPick={pick} closed={closed} onToggle={onToggle} />
+      {m.kind !== "job" && <>
+        <div className="sc-space-sub-h" style={{ cursor: "default" }}>Jobs</div>
+        <JobRows d={d} onPick={pick} />
+      </>}
+      <div className="sc-space-sub-h" style={{ cursor: "default" }}>Contacts</div>
+      <ContactRows d={d} onPick={pick} />
     </Group>
   );
 }
@@ -986,7 +985,7 @@ function RecordDrawer({ kind, id, rail, onPick, onBack, pinnedName }: {
           <button type="button" className="sc-space-back" onClick={onBack}>‹ {kind === "customer" ? "Customers" : "Vendors"}</button>} />
       <LayoutDrawer kind={kind} id={id} here={here} pick={pick} editing={editing} setEditing={setEditing}
         rail={{ on: rail.on, set: (on) => name && rail.set(on, name) }}
-        channels={(n, g) => <ChannelsShelf title={n} scope={kind} d={detail} onPick={pick} {...g} />} />
+        d={detail} />
     </>
   );
 }
@@ -1117,7 +1116,14 @@ function CollectionDrawer({ col, id, pages, active, onPick }: {
       </div>
       <ItemPicker kinds={["job", "customer", "vendor"]} picked={members} onChange={(v) => changeMembers(v, to || null)} />
       {!to && <>
-        <span className="sc-shelf-edit-h">Lists, tools and threads</span>
+        {/* A person on their own, say a vendor being vetted (Coy, 2026-10-22: "add a contact
+            directly to a new workspace individually"): picked from the contact book onto its thread. */}
+        <span className="sc-shelf-edit-h">Contacts</span>
+        <ContactPicker autoFocus={false} exclude={(folk ?? []).map((t) => t.contact_id)} onPick={(c) => {
+          void fetch(`/api/threads/custom/${id}/contacts`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contact_ids: [c.id] }) })
+            .then(() => window.dispatchEvent(new Event("sc:spaces-reload"))).catch(() => {});
+        }} />
+        <span className="sc-shelf-edit-h">Lists and tools</span>
         <PickList pages={pages} picks={picks} onChange={(v) => setRaw(setPicks(all, id, v))} />
       </>}
       {!to && (
@@ -1604,11 +1610,9 @@ export function SpacesNav({ desktop, pages, active, dustyState, phoneOpen, onPho
       <span className="sc-spaces-sep" aria-hidden="true" />
       {rail === null && <span className="sc-spaces-note">…</span>}
       {tiles.map((t, i) => {
-        const prev = tiles[i - 1];
-        const group = (k: string) => (k.startsWith("job:") ? "job" : k.startsWith("col:") ? "col" : "pin");
+        // One line only, under Home (Coy, 2026-10-22: "keep the line under home and drop the others").
         return (
           <React.Fragment key={t.info.key}>
-            {prev && group(prev.info.key) !== group(t.info.key) && <span className="sc-spaces-sep" aria-hidden="true" />}
             {t.render(desktop ? dragFor(t.info.key, i) : { onContextMenu: arrangeMenu })}
           </React.Fragment>
         );

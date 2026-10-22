@@ -10,8 +10,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
  *
  *   GET            → { jobs: open jobs, newest first; customers: those with an open job; collections: the threads Coy made }
  *   GET ?job=<id>       → { job, people (each number and address), emails (conversations filed on the job, with their address) }
- *   GET ?customer=<id>  → { people (the customer's), emails (filed on the customer) }  — its Channels shelf
- *   GET ?vendor=<id>    → { people (the vendor's contact), emails (filed on them) }
+ *   GET ?customer=<id>  → { people (the customer's), emails (filed on the customer), jobs (theirs, newest first) }  — its Contacts and Jobs shelves
+ *   GET ?vendor=<id>    → { people (the vendor and the people on their account, 116), emails (filed on them), jobs (they're on) }
  */
 
 export const dynamic = "force-dynamic";
@@ -46,20 +46,26 @@ export async function GET(req: NextRequest) {
   if (jobErr) return bad(`jobs: ${jobErr.message}`, 500);
   if (!job) return bad("Job not found.", 404);
 
-  // Who is on it: its person, its customer's people, and its crew and suppliers.
-  const [{ data: custPeople }, { data: crew }] = await Promise.all([
-    job.customer_id
-      ? supabase.from("contacts").select("id").eq("org_id", orgId).eq("customer_id", job.customer_id).is("merged_into_contact_id", null).is("archived_at", null).limit(30)
-      : Promise.resolve({ data: [] }),
+  // Who is on it: the job's own contacts (115), else its person and its customer's people; then
+  // its crew and suppliers.
+  const [{ data: onJob }, { data: crew }] = await Promise.all([
+    supabase.from("job_contacts").select("contact_id, is_primary").eq("org_id", orgId).eq("job_id", jobId).limit(40),
     supabase.from("job_vendors").select("contact_id").eq("org_id", orgId).eq("job_id", jobId).limit(30),
   ]);
-  const ids = [...new Set([job.contact_id, ...((custPeople ?? []) as Array<{ id: string }>).map((c) => c.id),
+  let own = ((onJob ?? []) as Array<{ contact_id: string; is_primary: boolean | null }>)
+    .sort((a, b) => Number(!!b.is_primary) - Number(!!a.is_primary)).map((r) => r.contact_id);
+  if (!own.length && job.customer_id) {
+    const { data: custPeople } = await supabase.from("contacts").select("id").eq("org_id", orgId).eq("customer_id", job.customer_id)
+      .is("merged_into_contact_id", null).is("archived_at", null).limit(30);
+    own = ((custPeople ?? []) as Array<{ id: string }>).map((c) => c.id);
+  }
+  const ids = [...new Set([job.contact_id, ...own,
     ...((crew ?? []) as Array<{ contact_id: string }>).map((c) => c.contact_id)].filter((x): x is string => !!x))];
   const [people, emails] = await Promise.all([loadPeople(supabase, orgId, ids), loadEmails(supabase, orgId, "job_id", jobId)]);
   return ok({ job: { id: job.id, title: job.title?.trim() || "Untitled job", status: job.status }, people, emails });
 }
 
-/** A customer's or vendor's people and email, for its Space's Channels shelf. */
+/** A customer's or vendor's people, email and jobs, for its Space's Contacts and Jobs shelves. */
 async function recordDetail(req: NextRequest, supabase: SupabaseClient, orgId: string, ok: (b: unknown) => NextResponse, bad: (m: string, s?: number) => NextResponse) {
   const customerId = req.nextUrl.searchParams.get("customer");
   const vendorId = req.nextUrl.searchParams.get("vendor");
@@ -70,11 +76,33 @@ async function recordDetail(req: NextRequest, supabase: SupabaseClient, orgId: s
       .is("merged_into_contact_id", null).is("archived_at", null).limit(40);
     if (error) return bad(`contacts: ${error.message}`, 500);
     const ids = ((cs ?? []) as Array<{ id: string }>).map((c) => c.id);
-    const [people, emails] = await Promise.all([loadPeople(supabase, orgId, ids), loadEmails(supabase, orgId, "customer_id", id)]);
-    return ok({ people, emails });
+    const [people, emails, { data: js }] = await Promise.all([loadPeople(supabase, orgId, ids), loadEmails(supabase, orgId, "customer_id", id),
+      supabase.from("jobs").select("id, title, status, created_at").eq("org_id", orgId).eq("customer_id", id).is("archived_at", null)
+        .order("created_at", { ascending: false }).limit(40)]);
+    return ok({ people, emails, jobs: jobRows(js) });
   }
-  const [people, emails] = await Promise.all([loadPeople(supabase, orgId, [id]), loadEmails(supabase, orgId, "contact_id", id)]);
-  return ok({ people, emails });
+  // A vendor: their own contact first, then the people on their account (116).
+  const { data: me } = await supabase.from("contacts").select("id, customer_id").eq("org_id", orgId).eq("id", id).maybeSingle();
+  let ids = [id];
+  if (me?.customer_id) {
+    const { data: cs } = await supabase.from("contacts").select("id").eq("org_id", orgId).eq("customer_id", me.customer_id)
+      .is("merged_into_contact_id", null).is("archived_at", null).limit(40);
+    ids = [...new Set([id, ...((cs ?? []) as Array<{ id: string }>).map((c) => c.id)])];
+  }
+  const { data: on } = await supabase.from("job_vendors").select("job_id").eq("org_id", orgId).in("contact_id", ids).limit(80);
+  const jobIds = [...new Set(((on ?? []) as Array<{ job_id: string }>).map((r) => r.job_id))];
+  const [people, emails, { data: js }] = await Promise.all([loadPeople(supabase, orgId, ids), loadEmails(supabase, orgId, "contact_id", id),
+    jobIds.length
+      ? supabase.from("jobs").select("id, title, status, created_at").eq("org_id", orgId).in("id", jobIds).is("archived_at", null).order("created_at", { ascending: false }).limit(40)
+      : Promise.resolve({ data: [] })]);
+  return ok({ people, emails, jobs: jobRows(js) });
+}
+
+/** A customer's or vendor's jobs for its Jobs shelf: open ones first, newest first. */
+function jobRows(js: unknown) {
+  return ((js ?? []) as Array<{ id: string; title: string | null; status: string | null }>)
+    .map((j) => ({ id: j.id, title: j.title?.trim() || "Untitled job", status: j.status }))
+    .sort((a, b) => Number(isOpenJob(b.status)) - Number(isOpenJob(a.status)));
 }
 
 async function loadPeople(supabase: SupabaseClient, orgId: string, ids: string[]): Promise<SpacePerson[]> {

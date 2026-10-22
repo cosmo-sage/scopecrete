@@ -266,21 +266,26 @@ export function membersByShelf(items: SpacePin[], shelves: ColShelf[]): { loose:
 /** A shelf of a customer or vendor Space: rows that open the record page's tabs. */
 export interface SpaceShelf { id: string; name: string; rows: TreeRow[] }
 
-/** A customer Space: Account (Summary, Contacts, Jobs, Threads, Payments, Schedule) and a Toolbox (Files, Timeline). */
+/**
+ * A customer Space: its one page, Summary (Coy, 2026-10-22: "everything in the app should pivot
+ * around jobs" — Schedule and Payments are the job's, and its jobs and contacts are shelves of
+ * their own), and a Toolbox (Files). Contacts, Jobs, Threads, Payments, Schedule and Timeline left
+ * the drawer; the page's tabs still open by address.
+ */
 export function customerShelves(id: string): SpaceShelf[] {
   const t = (k: string, label: string) => ({ k, label, href: `/dashboard/customers/${id}?tab=${k}` });
   return [
-    { id: "account", name: "Customer Account", rows: [t("overview", "Summary"), t("contacts", "Contacts"), t("jobs", "Jobs"), t("threads", "Threads"), t("payments", "Payments"), t("schedule", "Schedule")] },
-    { id: "toolbox", name: "Toolbox", rows: [t("files", "Files"), t("timeline", "Timeline")] },
+    { id: "account", name: "Customer Account", rows: [t("overview", "Summary")] },
+    { id: "toolbox", name: "Toolbox", rows: [t("files", "Files")] },
   ];
 }
 
-/** A vendor Space: Supply (Summary, Cost book, Receipts & quotes, Bid requests, Jobs) and a Toolbox (Files, Timeline). */
+/** A vendor Space: Supply (Summary, Cost book, Receipts & quotes, Bid requests) and a Toolbox (Files); its jobs and contacts are shelves. */
 export function vendorShelves(id: string): SpaceShelf[] {
   const t = (k: string, label: string) => ({ k, label, href: `/dashboard/vendors/${id}?tab=${k}` });
   return [
-    { id: "supply", name: "Supply", rows: [t("overview", "Summary"), t("prices", "Cost book"), t("receipts", "Receipts & quotes"), t("bids", "Bid requests"), t("jobs", "Jobs"), t("threads", "Threads")] },
-    { id: "toolbox", name: "Toolbox", rows: [t("files", "Files"), t("timeline", "Timeline")] },
+    { id: "supply", name: "Supply", rows: [t("overview", "Summary"), t("prices", "Cost book"), t("receipts", "Receipts & quotes"), t("bids", "Bid requests")] },
+    { id: "toolbox", name: "Toolbox", rows: [t("files", "Files")] },
   ];
 }
 
@@ -289,15 +294,24 @@ export function vendorShelves(id: string): SpaceShelf[] {
  * supposed to be a kind of 'workspace' that has an editable drawer"): its shelves renamed, moved,
  * added or removed, any page moved to another shelf or taken out of the drawer. One layout per
  * kind, so every job's drawer reads the same; kept on the account as `space_layouts` (and shared
- * from the org's layout like Home's shelves). The Channels shelf is a shelf of its own
- * (id "channels") that holds no pages. A page that is neither on a shelf nor taken out (one added
- * to the app later) goes on the first shelf.
+ * from the org's layout like Home's shelves). Two shelves hold no pages: Contacts (id "channels",
+ * its people, each opening their one thread page — Coy, 2026-10-22: "Any contact will have one
+ * single thread page … nested under it"; it was Channels: Phone · Email · Internal) and, on a
+ * customer or vendor, Jobs (id "joblist", theirs). A page that is neither on a shelf nor taken out
+ * (one added to the app later) goes on the first shelf.
  */
 export type LayoutKind = "job" | "customer" | "vendor";
 export interface KindShelf { id: string; name: string; rows: string[]; icon?: string }
 export interface KindLayout { shelves: KindShelf[]; hidden: string[] }
 export type SpaceLayouts = Partial<Record<LayoutKind, KindLayout>>;
 export const CHANNELS_SHELF = "channels";
+export const JOBS_SHELF = "joblist";
+/** The shelves of a kind that list records instead of pages, with their default names. */
+export function specialShelves(kind: LayoutKind): KindShelf[] {
+  const contacts = { id: CHANNELS_SHELF, name: "Contacts", rows: [] };
+  return kind === "job" ? [contacts] : [{ id: JOBS_SHELF, name: "Jobs", rows: [] }, contacts];
+}
+export const isSpecialShelf = (id: string) => id === CHANNELS_SHELF || id === JOBS_SHELF;
 
 /** The pages a kind of Space can show, in their usual order. */
 export function kindRows(kind: LayoutKind, id: string): TreeRow[] {
@@ -305,12 +319,11 @@ export function kindRows(kind: LayoutKind, id: string): TreeRow[] {
   return (kind === "customer" ? customerShelves(id) : vendorShelves(id)).flatMap((sh) => sh.rows);
 }
 
-/** The drawer a kind of Space starts with: a job's Job shelf (Coy, 2026-10-22: "it's really a job right?"), then Channels. */
+/** The drawer a kind of Space starts with: a job's Job shelf (Coy, 2026-10-22: "it's really a job right?"), then Contacts; a customer's or vendor's first shelf, Jobs, Contacts, Toolbox. */
 export function defaultLayout(kind: LayoutKind): KindLayout {
-  const ch: KindShelf = { id: CHANNELS_SHELF, name: "Channels", rows: [] };
-  if (kind === "job") return { shelves: [{ id: "job", name: "Job", rows: jobTree("x").map((r) => r.k) }, ch], hidden: [] };
+  if (kind === "job") return { shelves: [{ id: "job", name: "Job", rows: jobTree("x").map((r) => r.k) }, ...specialShelves(kind)], hidden: [] };
   const [first, ...rest] = (kind === "customer" ? customerShelves("x") : vendorShelves("x")).map((sh) => ({ id: sh.id, name: sh.name, rows: sh.rows.map((r) => r.k) }));
-  return { shelves: [first, ch, ...rest], hidden: [] };
+  return { shelves: [first, ...specialShelves(kind), ...rest], hidden: [] };
 }
 
 /** A saved layout made safe for its kind: known pages once each, shelf ids unique, else the default. */
@@ -326,15 +339,18 @@ export function cleanLayout(kind: LayoutKind, v: unknown): KindLayout {
   const seen = new Set<string>();
   const ids = new Set<string>();
   const shelves: KindShelf[] = [];
+  const specials = specialShelves(kind);
   for (const s of ((v as { shelves: unknown[] }).shelves).slice(0, MAX_SHELVES)) {
     if (!s || typeof s !== "object") continue;
     const r = s as Record<string, unknown>;
     const id = typeof r.id === "string" ? r.id.slice(0, 40) : "";
-    const name = typeof r.name === "string" ? r.name.trim().slice(0, MAX_SHELF_NAME) : "";
-    if (!id || !name || ids.has(id)) continue;
+    let name = typeof r.name === "string" ? r.name.trim().slice(0, MAX_SHELF_NAME) : "";
+    // Channels became Contacts (2026-10-22); a shelf saved under the old default name follows.
+    if (id === CHANNELS_SHELF && name === "Channels") name = "Contacts";
+    if (!id || !name || ids.has(id) || (isSpecialShelf(id) && !specials.some((x) => x.id === id))) continue;
     ids.add(id);
     const rows: string[] = [];
-    if (id !== CHANNELS_SHELF) for (const k of Array.isArray(r.rows) ? r.rows : []) {
+    if (!isSpecialShelf(id)) for (const k of Array.isArray(r.rows) ? r.rows : []) {
       if (typeof k !== "string" || !(known.has(k) || TOOL_ROW_RE.test(k)) || seen.has(k)) continue;
       seen.add(k);
       rows.push(k);
@@ -343,15 +359,19 @@ export function cleanLayout(kind: LayoutKind, v: unknown): KindLayout {
     shelves.push(icon ? { id, name, rows, icon } : { id, name, rows });
   }
   const rawHidden = (v as { hidden?: unknown }).hidden;
-  const hidden = (Array.isArray(rawHidden) ? rawHidden : []).filter((k): k is string => typeof k === "string" && (known.has(k) || k === CHANNELS_SHELF) && !seen.has(k));
-  const hasCh = shelves.some((s) => s.id === CHANNELS_SHELF);
+  const hidden = (Array.isArray(rawHidden) ? rawHidden : []).filter((k): k is string => typeof k === "string" && (known.has(k) || specials.some((x) => x.id === k)) && !seen.has(k));
   const missing = [...known].filter((k) => !seen.has(k) && !hidden.includes(k));
   if (missing.length) {
-    const first = shelves.find((s) => s.id !== CHANNELS_SHELF);
+    const first = shelves.find((s) => !isSpecialShelf(s.id));
     if (first) first.rows.push(...missing);
     else shelves.unshift({ id: kind, name: defaultLayout(kind).shelves[0].name, rows: missing });
   }
-  if (!hasCh && !hidden.includes(CHANNELS_SHELF)) shelves.push({ id: CHANNELS_SHELF, name: "Channels", rows: [] });
+  // A list shelf not saved yet (Jobs is new on 2026-10-22) goes in before Contacts, else after the first shelf.
+  for (const sp of specials) {
+    if (shelves.some((s) => s.id === sp.id) || hidden.includes(sp.id)) continue;
+    const at = shelves.findIndex((s) => s.id === CHANNELS_SHELF);
+    shelves.splice(at >= 0 ? at : Math.min(1, shelves.length), 0, { ...sp });
+  }
   return { shelves, hidden: [...new Set(hidden)] };
 }
 
@@ -377,7 +397,7 @@ export function placeRow(l: KindLayout, k: string, to: string | null): KindLayou
 export function removeKindShelf(l: KindLayout, id: string): KindLayout {
   const sh = l.shelves.find((s) => s.id === id);
   if (!sh) return l;
-  return { shelves: l.shelves.filter((s) => s.id !== id), hidden: [...l.hidden, ...(id === CHANNELS_SHELF ? [CHANNELS_SHELF] : sh.rows.filter((k) => !isToolRow(k)))] };
+  return { shelves: l.shelves.filter((s) => s.id !== id), hidden: [...l.hidden, ...(isSpecialShelf(id) ? [id] : sh.rows.filter((k) => !isToolRow(k)))] };
 }
 
 /** The tab a customer or vendor page is on (its ?tab=, else Summary). */
@@ -387,10 +407,10 @@ export function activeTab(search: string): string {
 
 /** The four kinds of Space New Space makes, with the shelves each one gets (frame 18). */
 export const SPACE_KINDS: Array<{ kind: "job" | "customer" | "vendor" | "collection"; label: string; shelves: string; blurb: string }> = [
-  { kind: "job", label: "Job", shelves: "Job · Channels", blurb: "Work to price and win — opens the New job form." },
-  { kind: "customer", label: "Customer", shelves: "Account · Channels · Toolbox", blurb: "A household, business or school, with its people and jobs." },
-  { kind: "vendor", label: "Vendor", shelves: "Supply · Channels · Toolbox", blurb: "A supplier or sub, with their prices and bid requests." },
-  { kind: "collection", label: "Your own", shelves: "Jobs · Customers · Vendors · Channels", blurb: "A Work Space you make, like Fort Polk: any jobs, customers and vendors kept together." },
+  { kind: "job", label: "Job", shelves: "Job · Contacts", blurb: "Work to price and win — opens the New job form." },
+  { kind: "customer", label: "Customer", shelves: "Account · Jobs · Contacts · Toolbox", blurb: "A household, business or school, with its people and jobs." },
+  { kind: "vendor", label: "Vendor", shelves: "Supply · Jobs · Contacts · Toolbox", blurb: "A supplier or sub, with their prices and bid requests." },
+  { kind: "collection", label: "Your own", shelves: "Jobs · Customers · Vendors · Contacts", blurb: "A Work Space you make, like Fort Polk: any jobs, customers and vendors kept together." },
 ];
 
 export interface TreeRow { k: string; label: string; href: string; sub?: boolean }
@@ -511,6 +531,20 @@ export function emailThreads(people: SpacePerson[], emails: SpaceEmail[]): Threa
   return out;
 }
 
+/**
+ * The Contacts shelf: one row per person, opening their one thread page — every number, email and
+ * their notes (Coy, 2026-10-22: "Any contact will have one single thread page nested under it").
+ * Under the name, the newest call or text on any of their numbers, else their number or email.
+ */
+export function contactThreads(people: SpacePerson[]): ThreadRow[] {
+  return people.map((p) => {
+    const last = p.phones.map((ph) => ph.last).filter((x): x is SpaceLast => !!x).sort((a, b) => b.at.localeCompare(a.at))[0] ?? null;
+    const reach = p.phones[0] ? fmtPhone(p.phones[0].phone) : (p.email ?? "No number or email");
+    return { key: p.id, title: p.name?.trim() || reach, sub: last ? `${last.out ? "You: " : ""}${last.text}` : reach, when: shortWhen(last?.at),
+      href: `/dashboard/messages/${p.id}`, avatar: monogram(p.name ?? "") };
+  });
+}
+
 /** Internal: one note stream per person on the job (their Internal notes). */
 export function internalThreads(people: SpacePerson[]): ThreadRow[] {
   return people.map((p) => ({ key: `${p.id}:notes`, title: p.name?.trim() || (p.phones[0] ? fmtPhone(p.phones[0].phone) : "No name"),
@@ -549,13 +583,16 @@ export const CHANNELS: Array<{ key: string; label: string }> = [
  * from the tools.
  */
 export const COLLECTION_PAGES = ["customers", "contacts", "vendors", "scope"];
-/** A picker's sections: Collections, Tools, then the thread lists by how people are filed. */
+/**
+ * A picker's sections: Collections, then Tools. The thread lists left the pickers (Coy,
+ * 2026-10-22: "Instead of adding a 'thread' I would rather select a 'Contact'") — the buckets sit
+ * under Contacts on Home, and a Work Space takes contacts one by one.
+ */
 export function pickSections(pages: string[]): Array<{ title: string; keys: string[] }> {
   return [
     { title: "Collections", keys: COLLECTION_PAGES.filter((k) => pages.includes(k)) },
     // Logs and Roadmap live in Settings, and the Scope Builder is Jobs, under Spaces.
     { title: "Tools", keys: pages.filter((k) => !COLLECTION_PAGES.includes(k) && !SETTINGS_PAGES.includes(k) && !MERGED_PAGES.includes(k)) },
-    { title: "Threads", keys: CHANNELS.map((c) => c.key) },
   ].filter((x) => x.keys.length > 0);
 }
 export const isChannel = (k: string) => k.startsWith("ch:");
@@ -607,7 +644,7 @@ export function cleanShelves(v: unknown): Shelf[] | null {
  */
 export const SHELF_ICONS = ["folder", "star", "pin", "contacts", "customers", "vendors", "scope", "files", "map", "camera", "pricebook", "toolbox", "threads", "dashboard", "cash", "roadmap"] as const;
 const STANDARD_SHELF_ICON: Record<string, string> = {
-  buckets: "contacts", toolbox: "toolbox", more: "more", job: "scope", channels: "threads", account: "customers", supply: "vendors",
+  buckets: "contacts", toolbox: "toolbox", more: "more", job: "scope", channels: "contacts", joblist: "scope", account: "customers", supply: "vendors",
 };
 export const isStandardShelf = (id: string) => id in STANDARD_SHELF_ICON;
 export function cleanShelfIcon(v: unknown): string | undefined {

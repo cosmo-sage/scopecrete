@@ -383,8 +383,10 @@ across the database … I also want to be able to upload a logo for my org."*
   themselves and was refused naming Tim, a direct UPDATE changed no row, a
   stranger refused and saw no one, anon no execute. Owners and members read everything under
   `get_user_org_ids()`; only owners manage the org.
-- **A new owner link, a password, and the home screen (migration 112, written
-  2026-10-15, NOT applied; Coy: "I need to send Jeremy a new link … I want it
+- **A new owner link, a password, and the home screen (migration 112, applied
+  2026-10-22 on Coy's "apply 112" — checked after: both functions SECURITY
+  DEFINER, authenticated may run them and anon not, Gulfline's one open invite
+  and 0 members unchanged; Coy: "I need to send Jeremy a new link … I want it
   to prompt him to set up a password when he logs into the app, and I want the
   app to ask him to install it in his home screen").** Admin has no delete for a
   company and New company refuses a slug that is taken, so a company with no

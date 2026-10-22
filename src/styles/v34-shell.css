@@ -781,6 +781,16 @@ html[data-rail-drag], html[data-rail-drag] * { cursor: grabbing !important; }
 .sc-shelf-page { display: flex; align-items: center; gap: 4px; padding: 3px 0 3px 4px; color: var(--sc-ink2); }
 .sc-shelf-page-l { flex: 1; min-width: 0; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sc-shelf-move { flex: none; max-width: 92px; height: 26px; border: 1px solid var(--sc-hair-strong); border-radius: 4px; background: var(--sc-card); color: var(--sc-ink2); font-size: 11.5px; }
+/* On a phone a shelf editor's row is two lines: the page's whole name, then its buttons (Coy, 2026-10-22). */
+@media (max-width: 1023px) {
+  .sc-shelf-page { flex-wrap: wrap; row-gap: 2px; padding: 5px 0 5px 4px; border-bottom: 1px solid var(--sc-hair); }
+  .sc-shelf-page-l { flex: 1 1 100%; white-space: normal; overflow: visible; overflow-wrap: anywhere; }
+  .sc-shelf-page-l + * { margin-left: auto; }
+  .sc-shelf-row { flex-wrap: wrap; row-gap: 4px; }
+  .sc-shelf-row > .sc-shelf-name { flex: 1 1 150px; }
+  .sc-shelf-name + .sc-shelf-btn { margin-left: auto; }
+  .sc-shelf-move { max-width: 140px; }
+}
 /* + Add to <shelf> and × to take a row off (Coy, 2026-10-22). */
 .sc-shelf-x { color: var(--sc-ink3); }
 .sc-shelf-x:hover:not(:disabled) { color: var(--sc-red, #B5412C); }

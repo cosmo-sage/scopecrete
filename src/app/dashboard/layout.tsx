@@ -60,6 +60,7 @@ import { viewAsLine } from "@/lib/view-as";
 import { useRouter } from "next/navigation";
 import { SpacesNav, PageEdge, usePageSlide } from "@/components/v34/spaces/spaces-nav";
 import { TalkBar, talkPlaceholder } from "@/components/v34/spaces/talk-bar";
+import { TourHost } from "@/components/v34/tour";
 import "@/styles/v34-shell.css";
 
 /** Desktop or not — decided after mount; the phone layout is the first paint. */
@@ -178,8 +179,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const closeSpaces = useCallback(() => setSpacesOpen(false), []);
   useEffect(() => {
     window.addEventListener("sc:spaces-open", openSpaces);
-    return () => window.removeEventListener("sc:spaces-open", openSpaces);
-  }, [openSpaces]);
+    // The tour slides them back once its steps about them are done (2026-10-22).
+    window.addEventListener("sc:spaces-close", closeSpaces);
+    return () => { window.removeEventListener("sc:spaces-open", openSpaces); window.removeEventListener("sc:spaces-close", closeSpaces); };
+  }, [openSpaces, closeSpaces]);
   // On a phone the Spaces sit under the page, which slides right to show them (Coy,
   // 2026-10-17: "it should be underneath the pages"). While aside the page is a fixed,
   // viewport-high layer scrolled to where the window was, so it slides as it looked, and
@@ -480,6 +483,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </main>
       <ArchiveToast />
       {me && <InstallPrompt />}
+      {/* The first-login tour (2026-10-22); not while viewing as a teammate. */}
+      <TourHost desktop={desktop} spaces={spaces} name={me?.name ?? null} enabled={!!me && !viewingAs} />
       <ThreadColorVars />
       {me && !limited && <AlertPopups />}
 

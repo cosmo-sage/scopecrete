@@ -13,6 +13,8 @@ type Prefs = Record<string, unknown>;
 const LS = "sc:prefs";
 let cache: Prefs | null = null;
 let loading: Promise<Prefs> | null = null;
+/** The account's copy has been read (or failed to) — not just this browser's. */
+let ready = false;
 const listeners = new Set<(p: Prefs) => void>();
 const timers = new Map<string, ReturnType<typeof setTimeout>>();
 
@@ -24,10 +26,11 @@ function load(): Promise<Prefs> {
   if (!loading) {
     loading = fetch("/api/prefs").then((r) => (r.ok ? r.json() : null)).then((b) => {
       cache = { ...local(), ...((b?.prefs as Prefs) ?? {}) };
+      ready = true;
       try { localStorage.setItem(LS, JSON.stringify(cache)); } catch { /* private mode */ }
       listeners.forEach((f) => f(cache as Prefs));
       return cache;
-    }).catch(() => (cache = local()));
+    }).catch(() => { cache = local(); ready = true; listeners.forEach((f) => f(cache as Prefs)); return cache; });
   }
   return loading;
 }
@@ -52,4 +55,16 @@ export function usePref<T>(key: string, fallback: T): [T, (v: T) => void] {
   }, [key]);
   const v = prefs[key];
   return [(v === undefined || v === null ? fallback : v) as T, set];
+}
+
+/** True once the account's settings have been read — for anything that must not act on a stale browser copy (the tour). */
+export function usePrefsReady(): boolean {
+  const [r, setR] = useState(ready);
+  useEffect(() => {
+    const on = () => setR(ready);
+    listeners.add(on);
+    if (!ready) void load(); else on();
+    return () => { listeners.delete(on); };
+  }, []);
+  return r;
 }

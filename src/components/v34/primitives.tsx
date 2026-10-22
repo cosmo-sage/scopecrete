@@ -471,7 +471,7 @@ export function InfoTip({ text, label = "About this page" }: { text: React.React
 export function DustyPageButton({ onClick, label = "Ask Dusty" }: { onClick?: () => void; label?: string }) {
   return (
     <button type="button" onClick={onClick ?? (() => window.dispatchEvent(new Event("sc:dusty-toggle")))}
-      className="shrink-0 flex items-center justify-center rounded" aria-label={label} title={label}
+      className="sc-dusty-page-btn shrink-0 flex items-center justify-center rounded" aria-label={label} title={label}
       style={{ width: 34, height: 34, border: `1px solid ${T.hiviz}`, background: T.card, cursor: "pointer" }}>
       <Emblem size={22} spin />
     </button>

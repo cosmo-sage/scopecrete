@@ -5,7 +5,8 @@
  * with its takeoff map, SF and SY, thickness, LF or count, the job's totals;
  * what the org supplies marked; no days), photos, plans and the aerial — and a
  * form for their price: one number, a price per line, or their usual rates
- * filled in. No login. Never a cost of the org's.
+ * filled in, the total and Send pinned to the bottom of the screen. No login.
+ * Never a cost of the org's.
  */
 import React, { useEffect, useMemo, useState } from "react";
 import { answerTotal, type ShownScope } from "@/lib/bids";
@@ -86,8 +87,7 @@ export function SharedBid({ token }: { token: string }) {
   const loose = photos.filter((f) => !f.section || !keys.has(f.section));
   const docScopes: DocScope[] = (b.scopes ?? []).map((s) => ({
     ...s,
-    // eslint-disable-next-line @next/next/no-img-element -- frozen when sent, signed link
-    map: b.maps?.[s.key] ? <img src={b.maps[s.key]} alt={`Where ${s.title} is`} style={{ height: narrow ? 150 : 200, maxWidth: "100%", border: `1px solid ${C.hair}`, borderRadius: 3, display: "block" }} /> : undefined,
+    mapUrl: b.maps?.[s.key] ?? null,
     photos: photos.filter((f) => f.section === s.key).map((f) => ({ id: f.id, url: f.url, name: f.name })),
   }));
   const card: React.CSSProperties = { background: C.card, border: `1px solid ${C.hair}`, borderRadius: 6, padding: 14 };
@@ -100,16 +100,19 @@ export function SharedBid({ token }: { token: string }) {
         {b.own && <div style={{ ...card, background: "#FFF6D6", fontSize: 13 }}>This is what the vendor sees. Opening it yourself isn&apos;t counted, and you can&apos;t answer it.</div>}
         <BidDocument narrow={narrow} vm={{ org: b.org_name, jobTitle: b.job_title ?? null, forName: b.first_name, address: b.address, priceBy: b.price_by, pourDate: b.pour_date, note: b.note, scopes: docScopes }}
           price={perItem && !answered ? (l) => (
-            <label style={{ display: "flex", alignItems: "center", gap: 4, width: 160, flex: "none" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 4, width: narrow ? "100%" : 160, flex: "none" }}>
               <span style={{ fontSize: 13, color: C.ink3 }}>$</span>
               <input inputMode="decimal" value={prices[l.key] ?? ""} onChange={(e) => setPrices({ ...prices, [l.key]: e.target.value })} aria-label={lineQty(l) && l.unit ? `Price per ${l.unit} for ${l.name}` : `Price for ${l.name}`} style={{ ...input, height: 36 }} />
               <span style={{ fontSize: 12, color: C.ink3, whiteSpace: "nowrap" }}>{lineQty(l) && l.unit ? `/${l.unit}` : "total"}</span>
+              {lineQty(l) && l.qty !== null && priced[l.key] != null && (
+                <span style={{ fontSize: 12.5, color: C.ink, fontWeight: 600, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>= {money((priced[l.key] as number) * l.qty)}</span>
+              )}
             </label>
           ) : undefined} />
 
         {(loose.length > 0 || docs.length > 0) && (
           <section style={card}>
-            <h2 style={h}>Photos, plans and the aerial</h2>
+            <h2 style={h}>Plans, photos and the aerial</h2>
             {loose.length > 0 && (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(96px, 1fr))", gap: 6, marginBottom: docs.length ? 10 : 0 }}>
                 {/* eslint-disable-next-line @next/next/no-img-element -- signed link */}
@@ -136,8 +139,8 @@ export function SharedBid({ token }: { token: string }) {
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {perItem ? (
                 <div style={{ fontSize: 14, color: C.ink2 }}>
-                  {b.price_mode === "their_rates" && Object.keys(b.rates ?? {}).length ? "Your rates from last time are filled in — change any. " : "Put a price per unit on each line above. "}
-                  Total: <b style={{ color: C.ink }}>{sum === null ? "—" : money(sum)}</b>
+                  {b.price_mode === "their_rates" && Object.keys(b.rates ?? {}).length ? "Your rates from last time are filled in — change any. " : "Put a price on each line above. "}
+                  The total adds itself up at the bottom.
                 </div>
               ) : (
                 <label style={{ display: "block" }}>
@@ -150,12 +153,21 @@ export function SharedBid({ token }: { token: string }) {
                 <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} maxLength={2000} aria-label="Note" style={{ ...input, height: "auto", padding: 10, marginTop: 4 }} />
               </label>
               {err && <div style={{ color: C.red, fontSize: 14 }}>{err}</div>}
-              <button onClick={() => void submit()} disabled={busy || b.own || (perItem ? sum === null : num(total) === null)}
-                style={{ height: 46, borderRadius: 4, border: "none", background: C.accent, color: "#fff", fontSize: 16, fontWeight: 600, cursor: "pointer",
-                  opacity: busy || b.own || (perItem ? sum === null : num(total) === null) ? 0.5 : 1 }}>{busy ? "Sending…" : "Send my price"}</button>
             </div>
           )}
         </section>
+        {!answered && (
+          // The total and Send stay on screen while the lines are priced (Coy, 2026-10-22).
+          <div style={{ position: "sticky", bottom: 0, zIndex: 5, margin: "0 -16px", padding: "10px 16px calc(10px + env(safe-area-inset-bottom))", background: C.paper, boxShadow: "0 -4px 12px rgba(42,32,20,.08)", borderTop: `1px solid ${C.hair}`, display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ flex: 1, minWidth: 0, fontSize: 13, color: C.ink2, lineHeight: 1.2 }}>
+              Your total
+              <div style={{ fontSize: 19, fontWeight: 700, color: C.ink, fontVariantNumeric: "tabular-nums" }}>{(perItem ? sum : num(total)) === null ? "—" : money((perItem ? sum : num(total)) as number)}</div>
+            </div>
+            <button onClick={() => void submit()} disabled={busy || b.own || (perItem ? sum === null : num(total) === null)}
+              style={{ height: 46, padding: "0 22px", borderRadius: 4, border: "none", background: C.accent, color: "#fff", fontSize: 16, fontWeight: 600, cursor: "pointer",
+                opacity: busy || b.own || (perItem ? sum === null : num(total) === null) ? 0.5 : 1 }}>{busy ? "Sending…" : "Send my price"}</button>
+          </div>
+        )}
         <a href="https://scopecrete.ai" target="_blank" rel="noopener"
           style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "8px 0 4px", textDecoration: "none", color: C.ink3 }}>
           <span style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 12 }}>

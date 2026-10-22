@@ -74,3 +74,23 @@ test("who prices labor: the Labor trade, or a sub", () => {
 test("a price on a line in days counts once, not times the hidden days", () => {
   assert.equal(answerTotal([{ key: "x", name: "Form", qty: 9, unit: "Days", supplied: false }], { x: 4000 }), 4000);
 });
+
+test("the phone summary: yards only for a pour with area and thickness, the size in two short parts", async () => {
+  const { sectionYards, sizeParts } = await import("../src/lib/bids.ts");
+  assert.equal(sectionYards(M({ sf: 18299.64, depth_in: 6, concrete: true })), 338.9);
+  assert.equal(sectionYards(M({ sf: 18299.64, depth_in: 6 })), null, "base is not a pour");
+  assert.equal(sectionYards(M({ lf: 1866.99, depth_in: 6, concrete: true })), null, "a curb has no width here");
+  assert.deepEqual(sizeParts(M({ sf: 900, depth_in: 4, concrete: true })), { main: "900 SF", sub: "100 SY · 4\" · ≈ 11.1 CY" });
+  assert.deepEqual(sizeParts(M({ lf: 430 })), { main: "430 LF", sub: null });
+  assert.deepEqual(sizeParts(M({ count: 4, count_unit: "EA" })), { main: "4 EA", sub: null });
+  assert.equal(sizeParts(null), null);
+});
+
+test("the price-by date reads as a day and how far off, close when 2 days or less", async () => {
+  const { dueLabel } = await import("../src/lib/bids.ts");
+  assert.deepEqual(dueLabel("2026-10-24", "2026-10-22"), { text: "Sat, Oct 24 · in 2 days", soon: true });
+  assert.deepEqual(dueLabel("2026-10-30", "2026-10-22"), { text: "Fri, Oct 30 · in 8 days", soon: false });
+  assert.equal(dueLabel("2026-10-22", "2026-10-22").text, "Thu, Oct 22 · today");
+  assert.equal(dueLabel("2026-10-20", "2026-10-22").text, "Tue, Oct 20 · 2 days ago");
+  assert.equal(dueLabel(null, "2026-10-22"), null);
+});

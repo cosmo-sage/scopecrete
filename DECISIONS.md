@@ -4284,6 +4284,19 @@ expected start date per quoted job before it means anything. Add the field.
   `/api/b/[token]` drops it from older requests. Luis was filed under Labor (trades, subtype subcontractor)
   the same day. A request sent before this keeps its frozen copy: no section sizes or maps, but its days are
   hidden.
+  **Laid out for a phone (Coy, 2026-10-22: "need to be improved dramatically to be clear and simple to
+  understand in a page or 2 on a phone"; no migration).** `BidDocument` reads top to bottom: "Bid request ·
+  from <org>", the job, the address (a Google Maps link), **Price by Sat, Oct 24 · in 2 days** as a chip (red
+  when 2 days or less or past, `dueLabel()`, Central) and the pour day, "Hi <name>, <org> would like your price
+  on the work below", the note; then **The work at a glance** — one row a section, its size on the right
+  (`sizeParts()`: SF with SY, thickness and the yards worked out for a pour with area and thickness,
+  `sectionYards()` = SF × in ÷ 324 — never for a curb in LF, whose width isn't on it; LF; counts), a tap
+  jumping to it, and a **Total** row; then **What to price**, each line with its quantity on the right ("one
+  price" for a line with none), "<org> supplies — don't price" as a tag. The takeoff map (`mapUrl`, frozen when
+  sent) and photos are 64px thumbnails that open full screen (‹ ›, Esc). On the vendor's link a line's price box
+  sits under it full width on a phone, with "= $X" once priced, and **Your total** and **Send my price** are
+  pinned to the bottom of the screen. The composer previews the same page (its live map unchanged). Tested in
+  `tests/bid-document.test.mjs`.
 - **A receipt → the vendor and their prices (2026-09-29)** —
   `src/components/v34/receipt-import.tsx`, from the Vendors list, a
   vendor's page, or Price book → Import → "A receipt, invoice or quote".

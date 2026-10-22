@@ -116,6 +116,43 @@ export function jobTotals(scopes: Array<Pick<ShownScope, "measure">>): { sf: num
 }
 
 /**
+ * The yards of concrete in a section, worked out from its area and thickness (SF × in ÷ 324), only for
+ * a pour with both — a curb in LF has no width here, so it says none rather than guessing.
+ */
+export function sectionYards(m: Measure | null | undefined): number | null {
+  if (!m || !m.concrete || m.lf || !m.sf || !m.depth_in) return null;
+  return Math.round((m.sf * m.depth_in) / 324 * 10) / 10;
+}
+
+/**
+ * A section's size as two short parts for the phone's summary table: the main number ("18,299.64 SF",
+ * "1,866.99 LF", "4 EA") and what goes beside it ("6\" · ≈ 338.8 CY", "2,033.29 SY").
+ */
+export function sizeParts(m: Measure | null | undefined): { main: string; sub: string | null } | null {
+  if (!m) return null;
+  const f = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 2 });
+  const main = m.lf ? `${f(m.lf)} LF` : m.sf ? `${f(m.sf)} SF` : m.count ? `${f(m.count)} ${m.count_unit ?? "EA"}` : null;
+  const yd = sectionYards(m);
+  const sub = [m.sf && !m.lf ? `${f(r2(m.sf / 9))} SY` : null, m.depth_in ? `${f(m.depth_in)}"` : null, yd ? `≈ ${f(yd)} CY` : null].filter(Boolean).join(" · ");
+  if (!main && !sub) return null;
+  return { main: main ?? sub, sub: main ? sub || null : null };
+}
+
+/**
+ * "Fri, Oct 24 · in 2 days" for a price-by date (a day, read in Central), and whether it is close
+ * (2 days or less, or past). `today` is a YYYY-MM-DD in Central.
+ */
+export function dueLabel(iso: string | null | undefined, today: string): { text: string; soon: boolean } | null {
+  if (!iso || !/^\d{4}-\d{2}-\d{2}/.test(iso)) return null;
+  const d = Date.parse(`${iso.slice(0, 10)}T12:00:00Z`), t = Date.parse(`${today.slice(0, 10)}T12:00:00Z`);
+  if (!Number.isFinite(d) || !Number.isFinite(t)) return null;
+  const days = Math.round((d - t) / 86_400_000);
+  const name = new Date(d).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
+  const rel = days === 0 ? "today" : days === 1 ? "tomorrow" : days > 1 ? `in ${days} days` : days === -1 ? "yesterday" : `${-days} days ago`;
+  return { text: `${name} · ${rel}`, soon: days <= 2 };
+}
+
+/**
  * What the composer ticks to start: every section that measures something or has a line, every line —
  * or, for a labor sub, only the labor lines (Coy, 2026-10-15: "when sending the bid request to a sub like
  * Luis … it should default to all the Labor cost items"); the sections still show what they measure.

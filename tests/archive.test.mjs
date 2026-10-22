@@ -41,3 +41,10 @@ test("an archive note is recognised, with who made it", async () => {
   assert.equal(archiveNote("Archived the old plans in the file"), null, "an ordinary note that starts with the word isn't one");
   assert.equal(archiveNote(null), null);
 });
+
+test("vendorRemovedNote: a reason makes the note, none makes none", async () => {
+  const { vendorRemovedNote } = await import("../src/lib/archive.ts");
+  assert.equal(vendorRemovedNote("  never sold us anything "), "Taken off Vendors — never sold us anything");
+  assert.equal(vendorRemovedNote(""), null);
+  assert.equal(vendorRemovedNote(null), null);
+});

@@ -219,7 +219,7 @@ export function PersonView({ person, messages, channels, onReload, onMerge, back
     { label: c.bucket ? "Change bucket" : "File as…", onClick: () => setFiling(true) },
     { label: "Same person as…", onClick: () => onMerge() },
     isVendor
-      ? <ArchiveButton key="del" kind="contact" id={c.id} action="delete" what={title} then="/dashboard/vendors" style={{ ...menuItem, color: T.red }}>Delete vendor</ArchiveButton>
+      ? <ArchiveButton key="del" kind="contact" id={c.id} action="delete" vendor what={title} then="/dashboard/vendors" style={{ ...menuItem, color: T.red }}>Delete vendor</ArchiveButton>
       : <ArchiveButton key="arch" kind="contact" id={c.id} action="archive" what={title} then="/dashboard/messages" style={menuItem}>Archive</ArchiveButton>,
   ];
 

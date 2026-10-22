@@ -12,6 +12,8 @@
 import React, { useEffect } from "react";
 import { T, F, disp, body, eyebrow, nums, clip, STATUS, StatusStyle } from "@/lib/v34/tokens";
 import { Emblem } from "@/components/site/marks";
+import { useAccess } from "@/lib/v34/access-ctx";
+import { can } from "@/lib/access";
 
 /* ------------------------------------------------------------ Badge/Avatar */
 
@@ -469,6 +471,9 @@ export function InfoTip({ text, label = "About this page" }: { text: React.React
  *  the header of every main menu page"): opens his chat on this page, with the
  *  page's own quick selects (quickFor(), src/lib/dusty/quick.ts). */
 export function DustyPageButton({ onClick, label = "Ask Dusty" }: { onClick?: () => void; label?: string }) {
+  // An onsite estimator denied Dusty (120) gets no door to him.
+  const access = useAccess();
+  if (!can(access, "dusty")) return null;
   return (
     <button type="button" onClick={onClick ?? (() => window.dispatchEvent(new Event("sc:dusty-toggle")))}
       className="sc-dusty-page-btn shrink-0 flex items-center justify-center rounded" aria-label={label} title={label}

@@ -539,7 +539,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </footer>}
 
       {/* Dusty — full screen on a phone, docked right on a desktop; read-only toward the business. */}
-      {!limited && <DustyPanel open={dustyOpen} onClose={() => setDustyOpen(false)} onBusy={setDustyBusy} onStream={setDustyLive} onState={setPanelState} />}
+      {(!limited || access.pages.includes("dusty")) && <DustyPanel open={dustyOpen} onClose={() => setDustyOpen(false)} onBusy={setDustyBusy} onStream={setDustyLive} onState={setPanelState} />}
 
     </div>
     </>

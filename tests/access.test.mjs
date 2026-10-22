@@ -74,3 +74,33 @@ test("an access request is cleaned before it reaches the database", async () => 
   assert.equal(readAccess({ role: "superadmin" }).role, null);
   assert.deepEqual(readAccess(null), { role: null, contact_id: null, pages: [], all_jobs: false, job_ids: [] });
 });
+
+test("120: Jobs, Customers, Contacts, Vendors and Dusty", async () => {
+  const { jobsOn, homeFor, before120 } = await import("../src/lib/access.ts");
+  // Set up before 120: no "jobs" saved, nowhere else to land — Jobs is on.
+  assert.equal(jobsOn(["files", "plan_room"]), true);
+  assert.equal(jobsOn(["customers"]), false);
+  assert.equal(jobsOn(["jobs", "customers"]), true);
+  const a = accessFrom({ role: "field", pages: ["customers", "vendors", "dusty", "files"], all_jobs: false, job_ids: [J1] });
+  assert.equal(can(a, "jobs"), false);
+  assert.equal(can(a, "dusty"), true);
+  assert.deepEqual(menuPages(a), ["customers", "dusty", "vendors", "files", "roadmap"]);
+  assert.equal(homeFor(a), "/dashboard/customers");
+  assert.equal(redirectFor(a, "/dashboard/scope"), "/dashboard/customers");
+  assert.equal(redirectFor(a, `/dashboard/scope/${J1}`), "/dashboard/customers");
+  assert.equal(redirectFor(a, "/dashboard/customers"), null);
+  assert.equal(redirectFor(a, `/dashboard/customers/${J2}`), null);
+  assert.equal(redirectFor(a, `/dashboard/vendors/${J2}`), null);
+  assert.equal(redirectFor(a, "/dashboard/contacts"), "/dashboard/customers");
+  assert.equal(redirectFor(a, `/dashboard/messages/${J2}`), "/dashboard/customers");
+  const b = accessFrom({ role: "field", pages: ["jobs", "contacts"], all_jobs: true, job_ids: [] });
+  assert.deepEqual(menuPages(b), ["scope", "contacts", "roadmap"]);
+  assert.equal(redirectFor(b, "/dashboard/contacts"), null);
+  assert.equal(redirectFor(b, "/dashboard/vendors"), "/dashboard/scope");
+  assert.equal(can(b, "dusty"), false);
+  assert.equal(accessSummary({ pages: ["jobs", "files", "contacts", "dusty"], all_jobs: true, job_ids: [] }), "every job · Photos & files · Contacts · Dusty");
+  assert.equal(accessSummary({ pages: ["vendors"], all_jobs: true, job_ids: [] }), "no jobs board · Vendors");
+  // Before 120 only "jobs" can be dropped quietly.
+  assert.deepEqual(before120(["jobs", "files"]), { pages: ["files"], blocked: [] });
+  assert.deepEqual(before120(["jobs", "dusty", "budget"]), { pages: ["budget"], blocked: ["dusty"] });
+});

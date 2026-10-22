@@ -185,7 +185,7 @@ export function toggleItem(items: SpacePin[], item: SpacePin, on: boolean): Spac
  * some of its jobs, customers and vendors (their `shelf`); one on none sits at the top. Kept on
  * the account (`spaces_col_shelves`: thread id → shelves), no migration.
  */
-export interface ColShelf { id: string; name: string }
+export interface ColShelf { id: string; name: string; icon?: string }
 export type ColShelves = Record<string, ColShelf[]>;
 export const MAX_COL_SHELVES = 20;
 export function cleanColShelves(v: unknown): ColShelves {
@@ -202,7 +202,8 @@ export function cleanColShelves(v: unknown): ColShelves {
       const name = typeof r.name === "string" ? r.name.trim().slice(0, 40) : "";
       if (!sid || !name || seen.has(sid)) continue;
       seen.add(sid);
-      shelves.push({ id: sid, name });
+      const icon = cleanShelfIcon(r.icon);
+      shelves.push(icon ? { id: sid, name, icon } : { id: sid, name });
       if (shelves.length >= MAX_COL_SHELVES) break;
     }
     if (shelves.length) out[id] = shelves;
@@ -221,6 +222,11 @@ export function renameColShelf(all: ColShelves, col: string, id: string, name: s
   const nm = name.trim().slice(0, 40);
   if (!nm) return all;
   return { ...all, [col]: (all[col] ?? []).map((s) => (s.id === id ? { ...s, name: nm } : s)) };
+}
+export function iconColShelf(all: ColShelves, col: string, id: string, icon: string): ColShelves {
+  const ic = cleanShelfIcon(icon);
+  if (!ic) return all;
+  return { ...all, [col]: (all[col] ?? []).map((s) => (s.id === id ? { ...s, icon: ic } : s)) };
 }
 /** A shelf moved up (-1) or down (+1). */
 export function moveColShelf(all: ColShelves, col: string, id: string, by: -1 | 1): ColShelves {
@@ -288,7 +294,7 @@ export function vendorShelves(id: string): SpaceShelf[] {
  * to the app later) goes on the first shelf.
  */
 export type LayoutKind = "job" | "customer" | "vendor";
-export interface KindShelf { id: string; name: string; rows: string[] }
+export interface KindShelf { id: string; name: string; rows: string[]; icon?: string }
 export interface KindLayout { shelves: KindShelf[]; hidden: string[] }
 export type SpaceLayouts = Partial<Record<LayoutKind, KindLayout>>;
 export const CHANNELS_SHELF = "channels";
@@ -333,7 +339,8 @@ export function cleanLayout(kind: LayoutKind, v: unknown): KindLayout {
       seen.add(k);
       rows.push(k);
     }
-    shelves.push({ id, name, rows });
+    const icon = cleanShelfIcon(r.icon);
+    shelves.push(icon ? { id, name, rows, icon } : { id, name, rows });
   }
   const rawHidden = (v as { hidden?: unknown }).hidden;
   const hidden = (Array.isArray(rawHidden) ? rawHidden : []).filter((k): k is string => typeof k === "string" && (known.has(k) || k === CHANNELS_SHELF) && !seen.has(k));
@@ -518,7 +525,7 @@ export function internalThreads(people: SpacePerson[]): ThreadRow[] {
  * (`user_preferences.prefs.shelves`, no migration). Logs and Roadmap left the drawer for
  * Settings; a page on no shelf lands on a last shelf, More, so nothing is ever lost.
  */
-export interface Shelf { id: string; name: string; pages: string[] }
+export interface Shelf { id: string; name: string; pages: string[]; icon?: string }
 
 export const DEFAULT_SHELVES: Shelf[] = [
   { id: "buckets", name: "Collections", pages: ["customers", "contacts", "vendors", "scope"] },
@@ -587,9 +594,27 @@ export function cleanShelves(v: unknown): Shelf[] | null {
       seenPages.add(p);
       pages.push(p);
     }
-    out.push({ id, name, pages });
+    const icon = cleanShelfIcon(r.icon);
+    out.push(icon ? { id, name, pages, icon } : { id, name, pages });
   }
   return out;
+}
+
+/**
+ * A shelf's icon (Coy, 2026-10-22: "an icon for the shelf inside the drawers … I could select the
+ * icon for a custom shelf. But the standard shelves would use standard icons"). The standard
+ * shelves keep a fixed one by their id; a shelf Coy made takes one he picks, else a folder.
+ */
+export const SHELF_ICONS = ["folder", "star", "pin", "contacts", "customers", "vendors", "scope", "files", "map", "camera", "pricebook", "toolbox", "threads", "dashboard", "cash", "roadmap"] as const;
+const STANDARD_SHELF_ICON: Record<string, string> = {
+  buckets: "contacts", toolbox: "toolbox", more: "more", job: "scope", channels: "threads", account: "customers", supply: "vendors",
+};
+export const isStandardShelf = (id: string) => id in STANDARD_SHELF_ICON;
+export function cleanShelfIcon(v: unknown): string | undefined {
+  return typeof v === "string" && (SHELF_ICONS as readonly string[]).includes(v) ? v : undefined;
+}
+export function shelfIcon(sh: { id: string; icon?: string }): string {
+  return STANDARD_SHELF_ICON[sh.id] ?? sh.icon ?? "folder";
 }
 
 /** Home's shelves for these pages: Coy's (else the defaults), each page once, the rest on More. */

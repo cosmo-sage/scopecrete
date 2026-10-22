@@ -302,3 +302,20 @@ test("a tool from Home on a job's shelf: kept, taken off without hiding", async 
   assert.ok(!off.hidden.includes("p:map"));
   assert.ok(!removeKindShelf(l, l.shelves[0].id).hidden.includes("p:map"));
 });
+
+test("shelf icons: standard shelves keep theirs, a custom shelf takes the one picked", async () => {
+  const { shelfIcon, cleanShelfIcon, isStandardShelf, cleanShelves, iconColShelf } = await import("../src/lib/v34/spaces.ts");
+  assert.equal(shelfIcon({ id: "toolbox", icon: "star" }), "toolbox");
+  assert.equal(isStandardShelf("buckets"), true);
+  assert.equal(isStandardShelf("s123"), false);
+  assert.equal(shelfIcon({ id: "s123", icon: "camera" }), "camera");
+  assert.equal(shelfIcon({ id: "s123" }), "folder");
+  assert.equal(cleanShelfIcon("<script>"), undefined);
+  assert.equal(cleanShelfIcon("pin"), "pin");
+  const kept = cleanShelves([{ id: "s9", name: "Mine", pages: [], icon: "star" }, { id: "s8", name: "Bad", pages: [], icon: "nope" }]);
+  assert.equal(kept.find((s) => s.id === "s9")?.icon, "star");
+  assert.equal(kept.find((s) => s.id === "s8")?.icon, undefined);
+  const C = "11111111-1111-4111-8111-111111111111";
+  const next = iconColShelf({ [C]: [{ id: "s1", name: "A" }] }, C, "s1", "map");
+  assert.equal(next[C][0].icon, "map");
+});

@@ -25,6 +25,11 @@ import { useAlerts, markAlertsSeen, dropFresh, dropAllFresh } from "@/lib/v34/al
 const ICON: Record<Alert["kind"], React.ComponentType<{ size?: number; color?: string; weight?: "fill" | "regular" }>> = {
   text: ChatText, call: Phone, email: Envelope, bid: FileText,
 };
+/** A kind this copy of the app doesn't know yet (a tab opened before an update adds one) gets the bell, not a crash. */
+function AlertIcon({ kind, ...p }: { kind: string; size?: number; color?: string; weight?: "fill" | "regular" }) {
+  const Ico = ICON[kind as Alert["kind"]] ?? Bell;
+  return <Ico {...p} />;
+}
 
 /** Ticks once a second while something live is on screen. */
 function useNow(on: boolean): number {
@@ -125,12 +130,11 @@ export function AlertsBell({ glassBtn }: { glassBtn: React.CSSProperties }) {
             {items.length === 0 ? (
               <div className="px-3 py-6 text-center" style={{ fontSize: F.sm, color: T.ink3 }}>Nothing has come in for three days.</div>
             ) : items.map((a) => {
-              const Ico = ICON[a.kind];
               const isNew = !!seenAt && a.at > seenAt;
               return (
                 <button key={a.id} onClick={() => go(a.href)} className="w-full text-left flex items-start gap-2.5 px-3 py-2"
                   style={{ borderBottom: `1px solid ${T.hairSoft}`, cursor: a.href ? "pointer" : "default" }}>
-                  <span style={{ marginTop: 2 }}><Ico size={15} color={T.ink2} /></span>
+                  <span style={{ marginTop: 2 }}><AlertIcon kind={a.kind} size={15} color={T.ink2} /></span>
                   <span className="flex-1 min-w-0">
                     <span className="flex items-baseline gap-2">
                       <span className="flex-1 min-w-0" style={{ fontSize: F.sm, fontWeight: 600, color: T.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.title}</span>
@@ -162,12 +166,11 @@ function Pop({ a, onGo }: { a: Alert; onGo: (a: Alert) => void }) {
     const t = setTimeout(() => dropFresh(a.id), POP_MS);
     return () => clearTimeout(t);
   }, [a.id]);
-  const Ico = ICON[a.kind];
   return (
     <div role="status" className="sc-pop flex items-start gap-2.5"
       style={{ background: T.card, border: `1px solid ${T.hair}`, borderLeft: `3px solid ${T.hiviz}`, borderRadius: 6, padding: "9px 10px 9px 12px", boxShadow: "0 8px 24px rgba(0,0,0,.16)" }}>
       <button onClick={() => onGo(a)} className="flex-1 min-w-0 text-left flex items-start gap-2.5" style={{ cursor: a.href ? "pointer" : "default" }}>
-        <span style={{ marginTop: 2 }}><Ico size={16} color={T.ink2} weight="fill" /></span>
+        <span style={{ marginTop: 2 }}><AlertIcon kind={a.kind} size={16} color={T.ink2} weight="fill" /></span>
         <span className="flex-1 min-w-0">
           <span className="block" style={{ fontSize: F.sm, fontWeight: 700, color: T.ink }}>{a.title}</span>
           <span className="block" style={{ fontSize: 12.5, color: T.ink2, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{a.body}</span>

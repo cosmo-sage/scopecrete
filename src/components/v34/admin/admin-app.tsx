@@ -20,9 +20,10 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { PageHeader, OrgNameContext, MenuButton, SlideDrawer } from "@/components/v34/primitives";
 import { useWide } from "@/lib/v34/use-wide";
+import { usePref } from "@/lib/v34/prefs";
 import {
-  alarms as findAlarms, companyStatus, companyHealth, riskLine, setupCount, stepDone, workerState, workerLimitMin,
-  SETUP_STEPS, SCREENS, STATUS_LABEL, PARTS, RANGES, WORKER_LABEL, PLAN_LIMITS,
+  alarms as findAlarms, companyStatus, companyHealth, riskLine, setupCount, stepDone, stepSkipped, cleanSkips, withSkips, workerState, workerLimitMin,
+  SETUP_STEPS, COMMS_STEPS, SCREENS, STATUS_LABEL, PARTS, RANGES, WORKER_LABEL, PLAN_LIMITS,
   readRange, readScreen, planLabel, bytes, ago, day, dayGap, dropPct,
   type AdminCompany, type AdminRange, type AdminScreen, type AdminWorker, type Alarm, type PlatformUse,
 } from "@/lib/admin";
@@ -103,7 +104,16 @@ export function AdminApp() {
   const [tab, setTab] = useState("overview");
   const [range, setRange] = useState<AdminRange>("today");
   const [data, setData] = useState<Data | null>(null);
-  const [companies, setCompanies] = useState<AdminCompany[]>([]);
+  const [rawCompanies, setCompanies] = useState<AdminCompany[]>([]);
+  // Steps Coy marked not needed for a company (Quo, intake email, phone lines while only Sacco has them).
+  const [skipPref, setSkipPref] = usePref<unknown>("admin_setup_skip", {});
+  const skips = useMemo(() => cleanSkips(skipPref), [skipPref]);
+  const companies = useMemo(() => rawCompanies.map((c) => withSkips(c, skips)), [rawCompanies, skips]);
+  const setSkip = useCallback((org: string, keys: string[]) => {
+    const next = { ...skips };
+    if (keys.length) next[org] = keys; else delete next[org];
+    setSkipPref(next);
+  }, [skips, setSkipPref]);
   const [items, setItems] = useState<RoadmapItem[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [forbidden, setForbidden] = useState(false);
@@ -268,6 +278,7 @@ export function AdminApp() {
   else if (screen === "company") {
     const c = companies.find((x) => x.id === detail);
     body = c ? <Company c={c} d={d} tab={tab} setTab={setTab} alarms={al} items={items} now={now} go={go} coName={coName} replay={replay} decide={decide}
+      setSkip={(keys) => setSkip(c.id, keys)}
       ownerLink={(email) => setOwnerFor({ org: c.id, name: c.name, email })} viewCompany={() => setViewFor({ org: c.id, name: c.name })} />
       : <Empty title="No such company">It may have been removed. <a href="#" onClick={(e) => { e.preventDefault(); go("companies"); }}>All companies ›</a></Empty>;
   }
@@ -513,11 +524,12 @@ const TABS: Array<[string, string]> = [
   ["dusty", "Dusty"], ["usage", "Usage"], ["feedback", "Feedback"], ["log", "Admin log"],
 ];
 
-function Company({ c, d, tab, setTab, alarms, items, now, go, coName, replay, decide, ownerLink, viewCompany }: {
+function Company({ c, d, tab, setTab, alarms, items, now, go, coName, replay, decide, setSkip, ownerLink, viewCompany }: {
   c: AdminCompany; d: Data; tab: string; setTab: (t: string) => void; alarms: Alarm[]; items: RoadmapItem[] | null; now: Date; go: Go;
   coName: (id: string | null) => string; replay: (f: Failure) => void; decide: (it: RoadmapItem, s: "considering" | "declined") => void;
   ownerLink: (email: string) => void;
   viewCompany: () => void;
+  setSkip: (keys: string[]) => void;
 }) {
   const h = companyHealth(c, now);
   const done = setupCount(c.setup);
@@ -547,21 +559,33 @@ function Company({ c, d, tab, setTab, alarms, items, now, go, coName, replay, de
     </>
   );
   else if (tab === "setup") {
-    const next = SETUP_STEPS.find((s) => stepDone(c.setup, s.k) === null);
+    const skip = c.setup?.skip ?? [];
+    const next = SETUP_STEPS.find((s) => stepDone(c.setup, s.k) === null && !stepSkipped(c.setup, s.k));
+    const commsOpen = COMMS_STEPS.filter((k) => stepDone(c.setup, k) === null && !skip.includes(k));
+    const mark = (k: string, on: boolean) => setSkip(on ? [...skip, k] : skip.filter((x) => x !== k));
+    const link: React.CSSProperties = { marginLeft: 8, fontSize: 11.5 };
     body = (
       <>
         <Panel title="Setup checklist" right={<span className="tn">{done} of 9</span>}>
           {SETUP_STEPS.map((s) => {
             const w = stepDone(c.setup, s.k);
+            const off = stepSkipped(c.setup, s.k);
             return (
-              <div key={s.k} className={`ck${w ? " d" : ""}`}>
-                <span className="bx">{w ? <Ico d={ICONS.check} size={12} /> : null}</span>
+              <div key={s.k} className={`ck${w || off ? " d" : ""}`}>
+                <span className="bx">{w || off ? <Ico d={ICONS.check} size={12} /> : null}</span>
                 <span>{s.label}</span>
-                <span className="w">{w === true ? "done" : w ? `done ${day(w)}` : "not done"}</span>
+                <span className="w">
+                  {w === true ? "done" : w ? `done ${day(w)}` : off ? "not needed" : "not done"}
+                  {!w && <a href="#" style={link} onClick={(e) => { e.preventDefault(); mark(s.k, !off); }}>{off ? "Undo" : "Not needed"}</a>}
+                </span>
               </div>
             );
           })}
         </Panel>
+        {commsOpen.length > 0 && (
+          <div className="note"><b>Calls, texts and email</b>Quo, the intake email and phone lines are Sacco&apos;s only for now — there is no way to connect another company&apos;s yet.{" "}
+            <a href="#" onClick={(e) => { e.preventDefault(); setSkip([...skip, ...commsOpen]); }}>Mark them not needed ›</a></div>
+        )}
         {next && <div className="note"><b>Next nudge</b>They haven&apos;t {next.nudge} yet. Company is {Math.floor(dayGap(c.created_at, now.toISOString()) ?? 0)} days old.</div>}
       </>
     );

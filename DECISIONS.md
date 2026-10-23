@@ -622,6 +622,17 @@ itself — `platform_admins` (084) — not an org's owner.
   The setup checklist is nine steps read from the data: Quo events, an
   intake address, a phone line, a logo, a parish tax rate, a Price book item,
   an assembly, an invite, a proposal sent.
+  **A step can be marked Not needed (Coy, 2026-10-23: Jeremy "doesn't have quo
+  or Agentmail or AI phone lines and I don't have a pipeline for him to onboard
+  those things yet … I would like to show his onboarding as complete"; no
+  migration).** Each step not done has **Not needed** (and Undo) on the company's
+  Setup checklist, and while Quo, the intake email or phone lines are open a note
+  says only Sacco has those pipelines, with **Mark them not needed**. A step
+  marked counts toward setup and status ("not needed", ticked); a step done stays
+  done. Kept on the admin's own prefs as `admin_setup_skip` {org id: step keys}
+  (`cleanSkips()` / `withSkips()` / `stepSkipped()` in `src/lib/admin.ts`,
+  tested), so another admin account doesn't see the marks. Gulfline's seven open
+  steps were marked for admin@saccobuilt.com the same day.
 - **Not built — said on the page, never faked:** AI cost per call (no
   `model_calls`; easiest while moving Dusty to the model API), app errors (no
   error collector), page views (no `usage_events`), deploy history, plan

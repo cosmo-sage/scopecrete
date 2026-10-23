@@ -93,3 +93,21 @@ test("small formatters", () => {
   assert.equal(readReason("  ok "), null);
   assert.equal(readReason("customer asked"), "customer asked");
 });
+
+test("steps marked not needed count toward setup, never over a done step", async () => {
+  const { cleanSkips, withSkips, setupCount, stepSkipped, companyStatus } = await import("../src/lib/admin.ts");
+  const setup = { quo: null, email: null, lines: null, logo: null, logo_set: false, tax: null, pricebook: "2026-10-22T00:00:00Z",
+    assemblies: null, people: "2026-10-20T00:00:00Z", proposal: null };
+  const c = { id: "g", created_at: "2026-10-20T00:00:00Z", last_active: "2026-10-23T00:00:00Z", setup };
+  assert.equal(setupCount(c.setup), 2);
+  const skips = cleanSkips({ g: ["quo", "email", "lines", "bogus", "quo"], x: "no" });
+  assert.deepEqual(skips, { g: ["quo", "email", "lines"] });
+  const g = withSkips(c, skips);
+  assert.equal(setupCount(g.setup), 5);
+  assert.equal(stepSkipped(g.setup, "quo"), true);
+  assert.equal(withSkips({ ...c, id: "other" }, skips).setup.skip, undefined);
+  const all = withSkips(c, cleanSkips({ g: ["quo", "email", "lines", "logo", "tax", "assemblies", "proposal", "people"] }));
+  assert.equal(setupCount(all.setup), 9);
+  assert.equal(stepSkipped(all.setup, "people"), false); // done stays done
+  assert.equal(companyStatus(all, new Date("2026-10-23T12:00:00Z")), "active");
+});

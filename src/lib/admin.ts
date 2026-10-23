@@ -28,6 +28,32 @@ export function sinceFor(range: AdminRange, now: Date): string {
 export interface AdminSetup {
   quo: string | null; email: string | null; lines: string | null; logo: string | null; logo_set: boolean;
   tax: string | null; pricebook: string | null; assemblies: string | null; people: string | null; proposal: string | null;
+  /** Steps a ScopeCrete admin marked not needed for this company (kept on the admin's own prefs, `admin_setup_skip`). */
+  skip?: string[];
+}
+
+/** Steps marked not needed, per company: { org id: step keys }. */
+export type SetupSkips = Record<string, string[]>;
+/** Quo, intake email and phone lines: pipelines only Sacco has today, so another company can't do them yet. */
+export const COMMS_STEPS: Array<keyof AdminSetup> = ["quo", "email", "lines"];
+
+/** Clean a saved `admin_setup_skip` value: known step keys only. */
+export function cleanSkips(v: unknown): SetupSkips {
+  const out: SetupSkips = {};
+  if (!v || typeof v !== "object" || Array.isArray(v)) return out;
+  const keys = new Set(SETUP_STEPS.map((x) => x.k as string));
+  for (const [id, list] of Object.entries(v as Record<string, unknown>).slice(0, 200)) {
+    if (!Array.isArray(list)) continue;
+    const ks = [...new Set(list.filter((k): k is string => typeof k === "string" && keys.has(k)))];
+    if (ks.length) out[id] = ks;
+  }
+  return out;
+}
+
+/** The company with the admin's not-needed marks on its setup. */
+export function withSkips<C extends { id: string; setup: AdminSetup }>(c: C, skips: SetupSkips): C {
+  const skip = skips[c.id];
+  return skip?.length ? { ...c, setup: { ...c.setup, skip } } : c;
 }
 
 export interface AdminCompany {
@@ -60,7 +86,11 @@ export function stepDone(s: AdminSetup | null | undefined, k: keyof AdminSetup):
   const v = s[k];
   return typeof v === "string" && v ? v : null;
 }
-export const setupCount = (s: AdminSetup | null | undefined) => SETUP_STEPS.filter((x) => stepDone(s, x.k) !== null).length;
+/** Marked not needed and not done. */
+export const stepSkipped = (s: AdminSetup | null | undefined, k: keyof AdminSetup) => !!s?.skip?.includes(k) && stepDone(s, k) === null;
+/** Done, or marked not needed: what counts toward setup. */
+const stepCounts = (s: AdminSetup | null | undefined, k: keyof AdminSetup) => stepDone(s, k) !== null || stepSkipped(s, k);
+export const setupCount = (s: AdminSetup | null | undefined) => SETUP_STEPS.filter((x) => stepCounts(s, x.k)).length;
 
 export type AdminStatus = "active" | "setup" | "quiet" | "risk";
 export type Health = "g" | "a" | "r";

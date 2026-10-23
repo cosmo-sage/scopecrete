@@ -43,7 +43,7 @@ interface Made { id: string; contact_id: string; name: string | null; phone: str
 /** A request already sent, opened to edit (migration 124): its job, ticks, packet and words. */
 export interface EditBid {
   id: string; job_id: string; price_mode: string; price_by: string | null; pour_date: string | null; note: string | null; scopes: ShownScope[];
-  packet: { address?: string | null; dates?: boolean; quantities?: boolean; files?: Array<{ id: string; kind: string }>; requirements?: string[] } | null;
+  packet: { address?: string | null; dates?: boolean; quantities?: boolean; files?: Array<{ id: string; kind: string; name?: string }>; requirements?: string[] } | null;
   recipients: Array<{ contact_id: string; name: string; answered_at: string | null; revoked_at: string | null }>;
 }
 
@@ -113,6 +113,14 @@ export function BidComposer({ open, onClose, vendors: start, jobId: startJob, fr
   // went out with "Site photos" and there was no way to take them off): false leaves one out.
   const [photoPick, setPhotoPick] = useState<Record<string, boolean>>({});
   const [photosOpen, setPhotosOpen] = useState(false);
+  // Photos from elsewhere (Coy, 2026-10-23: "pull from the job or organization files or uploading my
+  // own photos"): any photo in the company's Files, or one uploaded here (filed on the job).
+  const [extra, setExtra] = useState<PacketFile[]>([]);
+  const [orgOpen, setOrgOpen] = useState(false);
+  const [orgQ, setOrgQ] = useState("");
+  const [orgList, setOrgList] = useState<Array<{ id: string; name: string; url: string | null; job_id: string | null }> | null>(null);
+  const [upMsg, setUpMsg] = useState<string | null>(null);
+  const upRef = useRef<HTMLInputElement>(null);
   const [mode, setMode] = useState(edit?.price_mode ?? "lump");
   const [priceBy, setPriceBy] = useState(edit?.price_by ?? "");
   const [pour, setPour] = useState(edit?.pour_date ?? "");
@@ -152,7 +160,7 @@ export function BidComposer({ open, onClose, vendors: start, jobId: startJob, fr
       // Every scope with lines ticked; materials supplied by default (suppliedByDefault); every plan in.
       setScopeTicks({}); setLineTicks({}); setSupplied({}); setVisuals({});
       setPlans(Object.fromEntries(j.files.filter((f) => f.kind === "plan").map((f) => [f.id, true])));
-      setPhotoPick({});
+      setPhotoPick({}); setExtra([]); setOrgOpen(false);
       const edit = editRef.current;
       if (edit && edit.job_id === j.id) {
         // Open on what was sent: its sections, lines, who supplies and its plans.
@@ -162,6 +170,9 @@ export function BidComposer({ open, onClose, vendors: start, jobId: startJob, fr
         setPlans(Object.fromEntries(j.files.filter((f) => f.kind === "plan").map((f) => [f.id, sent.has(f.id)])));
         // A photo that wasn't sent stays out (one taken off before, or added to the job since).
         if ((edit.packet?.files ?? []).some((f) => f.kind === "photo")) setPhotoPick(Object.fromEntries(j.files.filter((f) => f.kind === "photo").map((f) => [f.id, sent.has(f.id)])));
+        // Photos it sent from the company's Files (not on the job) come back as extras.
+        const onJob = new Set(j.files.map((f) => f.id));
+        setExtra((edit.packet?.files ?? []).filter((f) => f.kind === "photo" && !onJob.has(f.id)).map((f) => ({ id: f.id, name: f.name ?? "Photo", kind: "photo" as const, section: null })));
       }
       // Each section's takeoffs on its sheet, drawn like the proposal's.
       call(`/api/jobs/${j.id}/plans`, "GET").then((d: PlansData) => { if (!off) setVisuals(areaVisuals(d, j.scopes.map((s) => s.key))); }).catch(() => {});
@@ -185,7 +196,45 @@ export function BidComposer({ open, onClose, vendors: start, jobId: startJob, fr
       map: v?.map ? <AreaMap map={v.map} height={150} /> : undefined,
     };
   }), [job, scopes, lines, supplied, pk.quantities, visuals]);
-  const files = useMemo(() => (job?.files ?? []).filter((f) => (f.kind === "photo" ? pk.photos && photoPick[f.id] !== false : f.kind === "aerial" ? pk.aerial : plans[f.id])), [job, pk, plans, photoPick]);
+  const files = useMemo(() => {
+    const own = (job?.files ?? []).filter((f) => (f.kind === "photo" ? pk.photos && photoPick[f.id] !== false : f.kind === "aerial" ? pk.aerial : plans[f.id]));
+    const ids = new Set(own.map((f) => f.id));
+    return [...own, ...extra.filter((f) => !ids.has(f.id))];
+  }, [job, pk, plans, photoPick, extra]);
+  // The company's photos, searched by any word or name (the Files page's own search).
+  useEffect(() => {
+    if (!orgOpen) return;
+    let off = false;
+    const t = setTimeout(() => {
+      call(`/api/files/search?kind=image${orgQ.trim() ? `&q=${encodeURIComponent(orgQ.trim())}` : ""}`, "GET")
+        .then((b) => { if (!off) setOrgList(((b.files ?? []) as Array<{ id: string; name: string; url: string | null; job_id: string | null }>).slice(0, 60)); })
+        .catch(() => { if (!off) setOrgList([]); });
+    }, 250);
+    return () => { off = true; clearTimeout(t); };
+  }, [orgOpen, orgQ]);
+  const addPhoto = (f: { id: string; name: string }) => {
+    if ((job?.files ?? []).some((x) => x.id === f.id)) { setPk({ ...pk, photos: true }); setPhotoPick({ ...photoPick, [f.id]: true }); return; }
+    if (!extra.some((x) => x.id === f.id)) setExtra([...extra, { id: f.id, name: f.name, kind: "photo", section: null }]);
+  };
+  const upload = async (list: FileList | null) => {
+    const picked = Array.from(list ?? []).filter((f) => f.type.startsWith("image/"));
+    if (!job || !picked.length) return;
+    const added: PacketFile[] = [];
+    for (const [i, file] of picked.entries()) {
+      setUpMsg(`Uploading ${i + 1} of ${picked.length}…`);
+      try {
+        const made = await call("/api/files", "POST", { name: file.name, mime: file.type, size: file.size, job_id: job.id, category: "photo" });
+        await sendBytes(made.upload.signed_url, file, () => {});
+        const done = await call(`/api/files/${made.file.id}/done`, "POST");
+        added.push({ id: done.file.id as string, name: done.file.name as string, kind: "photo", section: null });
+      } catch (e) {
+        setUpMsg(`${file.name}: ${e instanceof Error ? e.message : String(e)}`);
+        setExtra((x) => [...x, ...added]);
+        return;
+      }
+    }
+    setExtra((x) => [...x, ...added]); setUpMsg(null);
+  };
   const photoFiles = (job?.files ?? []).filter((f) => f.kind === "photo");
   const photosOn = photoFiles.filter((f) => photoPick[f.id] !== false).length;
   const photosN = photoFiles.length, aerialN = (job?.files ?? []).filter((f) => f.kind === "aerial").length;
@@ -385,7 +434,7 @@ export function BidComposer({ open, onClose, vendors: start, jobId: startJob, fr
 
           {/* 3 · packet */}
           <section style={card}>
-            {stepHead(3, "What else they see", "pulled from the job")}
+            {stepHead(3, "What else they see", "from the job, your files or new photos")}
             <div className="flex flex-wrap gap-1.5">
               {([["address", "Address & access", job?.address ?? "no address"], ["dates", "Pour date & price-by", null], ["quantities", "Quantities", null]] as const).map(([k, l, d]) => (
                 <button key={k} onClick={() => setPk({ ...pk, [k]: !pk[k] })} style={chip(pk[k])} title={d ?? undefined}>{pk[k] ? "✓ " : ""}{l}</button>
@@ -408,7 +457,40 @@ export function BidComposer({ open, onClose, vendors: start, jobId: startJob, fr
                 </div>
               </div>
             )}
-            {job && !job.files.length && <div style={{ fontSize: F.xs, color: T.ink3, marginTop: 6 }}>No photos, plans or aerial on this job yet.</div>}
+            <div className="flex flex-wrap gap-1.5" style={{ marginTop: 8, alignItems: "center" }}>
+              <span style={{ fontSize: F.xs, color: T.ink3 }}>More photos:</span>
+              <button onClick={() => setOrgOpen(!orgOpen)} style={{ ...chip(false), borderStyle: "dashed" }}>{orgOpen ? "Done ▴" : "From your files ▾"}</button>
+              <button onClick={() => upRef.current?.click()} disabled={!job} style={{ ...chip(false), borderStyle: "dashed" }}>↑ Upload photos</button>
+              <input ref={upRef} type="file" accept="image/*" multiple hidden onChange={(e) => { void upload(e.target.files); e.target.value = ""; }} />
+              {extra.map((f) => (
+                <span key={f.id} style={{ ...chip(true), maxWidth: 260, ...clip, display: "inline-flex", alignItems: "center", gap: 4 }} title={f.name}>
+                  ✓ {f.name}
+                  <button aria-label={`Take ${f.name} off`} onClick={() => setExtra(extra.filter((x) => x.id !== f.id))} style={{ border: 0, background: "none", cursor: "pointer", color: "inherit", padding: 0 }}>×</button>
+                </span>
+              ))}
+            </div>
+            {upMsg && <div style={{ fontSize: F.xs, color: upMsg.includes(":") ? T.red : T.ink3, marginTop: 4 }}>{upMsg}</div>}
+            {orgOpen && (
+              <div style={{ marginTop: 8 }}>
+                <input value={orgQ} onChange={(e) => setOrgQ(e.target.value)} placeholder="Search your photos — a word, a job, a customer"
+                  style={{ width: "100%", fontSize: 16, padding: "6px 10px", border: `1px solid ${T.hair}`, borderRadius: 8, background: T.card, color: T.ink }} />
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(92px, 1fr))", gap: 6, marginTop: 6, maxHeight: 320, overflowY: "auto" }}>
+                  {orgList === null && <div style={{ fontSize: F.xs, color: T.ink3 }}>Loading…</div>}
+                  {orgList?.length === 0 && <div style={{ fontSize: F.xs, color: T.ink3 }}>No photos found.</div>}
+                  {orgList?.map((f) => {
+                    const on = extra.some((x) => x.id === f.id) || (pk.photos && (job?.files ?? []).some((x) => x.id === f.id) && photoPick[f.id] !== false);
+                    return (
+                      <button key={f.id} onClick={() => (on ? setExtra(extra.filter((x) => x.id !== f.id)) : addPhoto(f))} title={f.name}
+                        style={{ padding: 0, border: `2px solid ${on ? T.hiviz : T.hair}`, borderRadius: 8, overflow: "hidden", background: T.sunk, cursor: "pointer", textAlign: "left" }}>
+                        {/* eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL */}
+                        {f.url ? <img src={f.url} alt="" style={{ width: "100%", height: 72, objectFit: "cover", display: "block" }} /> : <div style={{ height: 72 }} />}
+                        <div style={{ fontSize: 10, padding: "2px 4px", color: T.ink2, ...clip }}>{on ? "✓ " : ""}{f.name}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </section>
 
           {/* 4 · pricing */}

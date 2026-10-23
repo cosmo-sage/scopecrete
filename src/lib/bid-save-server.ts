@@ -68,6 +68,18 @@ export async function saveBidRequest(req: NextRequest, session: ApiSession, edit
 
   const wantFiles = new Set(Array.isArray(pk.files) ? (pk.files as unknown[]).filter((x): x is string => typeof x === "string") : []);
   const files = job.files.filter((f) => wantFiles.has(f.id)).slice(0, 30);
+  // Photos picked from the company's Files that aren't on the job (2026-10-23): checked as the
+  // org's own photos under RLS, then their paths listed like the job's so the vendor's link signs them.
+  const onJob = new Set(job.files.map((f) => f.id));
+  const others = [...wantFiles].filter((id) => UUID.test(id) && !onJob.has(id)).slice(0, Math.max(0, 30 - files.length));
+  if (others.length) {
+    const { data: rows } = await supabase.from("files").select("id, name, mime_type, storage_path").eq("org_id", orgId).in("id", others)
+      .is("deleted_at", null).not("storage_path", "is", null);
+    for (const r of (rows ?? []) as Array<{ id: string; name: string | null; mime_type: string | null; storage_path: string }>) {
+      if (!String(r.mime_type ?? "").startsWith("image/")) continue;
+      files.push({ id: r.id, name: r.name ?? "Photo", path: r.storage_path, kind: "photo", section: null });
+    }
+  }
   const packet = {
     address: pk.address === false ? null : job.address,
     access: pk.address === false ? null : job.access,

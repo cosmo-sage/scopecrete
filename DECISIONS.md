@@ -937,6 +937,7 @@ Coy: *"I need to be able to upload documents and photos for Dusty to parse."*
   (Coy, later) is one module.
 - **Texted photos are in the same list** ("From texts") — `message_media`,
   copied in lazily by the thread's media route as before.
+- **A refused upload says why (2026-10-23, Jeremy's 56 MB bid set refused three times from a phone).** Storage refuses a file past the project's upload limit (50 MB by default, raised in Supabase → Project Settings → Storage → Upload file size limit). `sendBytes()` (`files-panel.tsx`), which every upload uses, now says the file's size and that the limit must be raised, or that the connection dropped, instead of "upload failed (400)".
 - **Dusty reads them in the background** — edge function `read-files`,
   pg_cron every minute, claim `sc_files_claim` (service role), the enricher's
   vault token, heartbeat `read-files`. JPEG/PNG photos go to Hermes as images

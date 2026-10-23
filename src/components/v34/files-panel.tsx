@@ -52,8 +52,15 @@ export function sendBytes(url: string, file: File, onPct: (n: number) => void): 
     x.open("PUT", url);
     x.setRequestHeader("x-upsert", "false");
     x.upload.onprogress = (e) => { if (e.lengthComputable) onPct(Math.round((e.loaded / e.total) * 100)); };
-    x.onload = () => (x.status >= 200 && x.status < 300 ? resolve() : reject(new Error(`upload failed (${x.status})`)));
-    x.onerror = () => reject(new Error("upload failed — check the connection"));
+    x.onload = () => {
+      if (x.status >= 200 && x.status < 300) return resolve();
+      const mb = Math.round(file.size / 1e6);
+      // Storage answers 400 / 413 "Payload too large" past the project's upload limit.
+      if (x.status === 413 || /too large|maximum allowed size|exceeded/i.test(x.responseText || ""))
+        return reject(new Error(`This file is ${mb} MB, over the upload limit. Ask the owner to raise it in Supabase → Storage settings, then try again.`));
+      reject(new Error(`The upload didn't go through (${x.status}). Try again.`));
+    };
+    x.onerror = () => reject(new Error("The connection dropped during the upload. Try again on Wi-Fi."));
     const body = new FormData();
     body.append("cacheControl", "3600");
     body.append("", file);

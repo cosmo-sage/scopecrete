@@ -36,7 +36,8 @@ export function JobBids({ jobId, card }: { jobId: string; card: React.CSSPropert
   const [composing, setComposing] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
-  const [openId, setOpenId] = useState<string | null>(null);
+  // ?bid=<request> (an alert that a vendor opened it) opens that request once the list has loaded.
+  const [openId, setOpenId] = useState<string | null>(() => (typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("bid")));
   const openReq = reqs?.find((r) => r.id === openId) ?? null;
   const [editing, setEditing] = useState<Req | null>(null);
   useEffect(() => {

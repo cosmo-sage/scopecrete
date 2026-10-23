@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { messageAlert, emailAlert, mergeAlerts, unreadCount, liveCallFor, liveLabel, who, isFiledSpam } from "../src/lib/alerts.ts";
+import { messageAlert, emailAlert, mergeAlerts, unreadCount, liveCallFor, liveLabel, who, isFiledSpam, bidOpenAlert } from "../src/lib/alerts.ts";
 
 const person = (o = {}) => ({ id: "c1", name: "Dylan Ordoyne", phone: "+12255551234", contact_type: "customer", classification_confirmed_at: null, auto_classified_at: null, ...o });
 
@@ -68,4 +68,26 @@ test("ringing, then on a call with its length", () => {
 test("a name that is only a number is no name", () => {
   assert.equal(who("+1 225 555 1234", "+12255551234"), "(225) 555-1234");
   assert.equal(who(null, null), "Unknown number");
+});
+
+test("a vendor opening a bid request is an alert that opens the request on the job", () => {
+  const row = { id: "r1", bid_request_id: "q1", view_count: 4, last_viewed_at: "2026-10-23T13:59:22Z", answered_at: null,
+    vendor: { name: "Luis", phone: "+12255550000" }, request: { job_id: "j1", job: { title: "HPC New Parking Lot" } } };
+  const a = bidOpenAlert(row);
+  assert.equal(a.kind, "bid");
+  assert.equal(a.title, "Luis opened your bid request");
+  assert.equal(a.body, "HPC New Parking Lot · opened 4 times · no price yet");
+  assert.equal(a.href, "/dashboard/scope/j1/summary?bid=q1");
+  assert.equal(a.at, row.last_viewed_at);
+  // A later opening is a new alert; the same one read again is not.
+  assert.notEqual(bidOpenAlert({ ...row, last_viewed_at: "2026-10-23T15:00:00Z" }).id, a.id);
+  assert.equal(bidOpenAlert(row).id, a.id);
+  const first = bidOpenAlert({ ...row, view_count: 1, answered_at: "2026-10-23T14:00:00Z", vendor: { name: null, phone: "2255550000" } });
+  assert.equal(first.title, "(225) 555-0000 opened your bid request");
+  assert.equal(first.body, "HPC New Parking Lot · first time opened · already priced");
+});
+
+test("mergeAlerts takes a third list", () => {
+  const mk = (id, at) => ({ id, kind: "text", at, title: id, body: "", href: null, contact_id: null });
+  assert.deepEqual(mergeAlerts([mk("a", "2026-10-06T10:00:00Z")], [], 40, [mk("b", "2026-10-06T12:00:00Z")]).map((x) => x.id), ["b", "a"]);
 });

@@ -1079,6 +1079,7 @@ html[data-nav="spaces"][data-head-hide] .sc-head-wrap { transform: none; }
 .sc-tick[data-kind="plans"] { --tk: #5FC9D6; }
 .sc-tick[data-kind="mail"] { --tk: #E8C35A; }
 .sc-tick[data-kind="proposal"] { --tk: #F0A35E; }
+.sc-tick[data-kind="opened"] { --tk: #7FD39B; }
 .sc-tick[data-kind="reminder"] { --tk: #F07F5E; }
 .sc-tick[data-kind="warn"] { --tk: #F26B6B; }
 @media (prefers-reduced-motion: reduce) {

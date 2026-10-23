@@ -109,6 +109,10 @@ export function BidComposer({ open, onClose, vendors: start, jobId: startJob, fr
     return { address: p.address != null, dates: p.dates !== false, quantities: p.quantities !== false, photos: kinds.has("photo"), aerial: kinds.has("aerial") };
   });
   const [plans, setPlans] = useState<Record<string, boolean>>({});
+  // Each photo on its own (Coy, 2026-10-23: texted screenshots that had nothing to do with the job
+  // went out with "Site photos" and there was no way to take them off): false leaves one out.
+  const [photoPick, setPhotoPick] = useState<Record<string, boolean>>({});
+  const [photosOpen, setPhotosOpen] = useState(false);
   const [mode, setMode] = useState(edit?.price_mode ?? "lump");
   const [priceBy, setPriceBy] = useState(edit?.price_by ?? "");
   const [pour, setPour] = useState(edit?.pour_date ?? "");
@@ -148,6 +152,7 @@ export function BidComposer({ open, onClose, vendors: start, jobId: startJob, fr
       // Every scope with lines ticked; materials supplied by default (suppliedByDefault); every plan in.
       setScopeTicks({}); setLineTicks({}); setSupplied({}); setVisuals({});
       setPlans(Object.fromEntries(j.files.filter((f) => f.kind === "plan").map((f) => [f.id, true])));
+      setPhotoPick({});
       const edit = editRef.current;
       if (edit && edit.job_id === j.id) {
         // Open on what was sent: its sections, lines, who supplies and its plans.
@@ -155,6 +160,8 @@ export function BidComposer({ open, onClose, vendors: start, jobId: startJob, fr
         setScopeTicks(was.scopes); setLineTicks(was.lines); setSupplied(was.supplied); setLaborPick(false);
         const sent = new Set((edit.packet?.files ?? []).map((f) => f.id));
         setPlans(Object.fromEntries(j.files.filter((f) => f.kind === "plan").map((f) => [f.id, sent.has(f.id)])));
+        // A photo that wasn't sent stays out (one taken off before, or added to the job since).
+        if ((edit.packet?.files ?? []).some((f) => f.kind === "photo")) setPhotoPick(Object.fromEntries(j.files.filter((f) => f.kind === "photo").map((f) => [f.id, sent.has(f.id)])));
       }
       // Each section's takeoffs on its sheet, drawn like the proposal's.
       call(`/api/jobs/${j.id}/plans`, "GET").then((d: PlansData) => { if (!off) setVisuals(areaVisuals(d, j.scopes.map((s) => s.key))); }).catch(() => {});
@@ -178,8 +185,10 @@ export function BidComposer({ open, onClose, vendors: start, jobId: startJob, fr
       map: v?.map ? <AreaMap map={v.map} height={150} /> : undefined,
     };
   }), [job, scopes, lines, supplied, pk.quantities, visuals]);
-  const files = useMemo(() => (job?.files ?? []).filter((f) => (f.kind === "photo" ? pk.photos : f.kind === "aerial" ? pk.aerial : plans[f.id])), [job, pk, plans]);
-  const photosN = (job?.files ?? []).filter((f) => f.kind === "photo").length, aerialN = (job?.files ?? []).filter((f) => f.kind === "aerial").length;
+  const files = useMemo(() => (job?.files ?? []).filter((f) => (f.kind === "photo" ? pk.photos && photoPick[f.id] !== false : f.kind === "aerial" ? pk.aerial : plans[f.id])), [job, pk, plans, photoPick]);
+  const photoFiles = (job?.files ?? []).filter((f) => f.kind === "photo");
+  const photosOn = photoFiles.filter((f) => photoPick[f.id] !== false).length;
+  const photosN = photoFiles.length, aerialN = (job?.files ?? []).filter((f) => f.kind === "aerial").length;
   const texts = picked.filter((v) => who[v.id] !== "email" && v.phone).length;
   const emails = picked.filter((v) => who[v.id] !== "text" && v.email).length;
   // Suggestions from the job door: subs first, best responders first.
@@ -382,11 +391,23 @@ export function BidComposer({ open, onClose, vendors: start, jobId: startJob, fr
                 <button key={k} onClick={() => setPk({ ...pk, [k]: !pk[k] })} style={chip(pk[k])} title={d ?? undefined}>{pk[k] ? "✓ " : ""}{l}</button>
               ))}
               {aerialN > 0 && <button onClick={() => setPk({ ...pk, aerial: !pk.aerial })} style={chip(pk.aerial)}>{pk.aerial ? "✓ " : ""}Aerial{aerialN > 1 ? ` · ${aerialN}` : ""}</button>}
-              {photosN > 0 && <button onClick={() => setPk({ ...pk, photos: !pk.photos })} style={chip(pk.photos)}>{pk.photos ? "✓ " : ""}Site photos · {photosN}</button>}
+              {photosN > 0 && <button onClick={() => setPk({ ...pk, photos: !pk.photos })} style={chip(pk.photos)}>{pk.photos ? "✓ " : ""}Site photos · {pk.photos && photosOn < photosN ? `${photosOn} of ${photosN}` : photosN}</button>}
+              {photosN > 0 && pk.photos && <button onClick={() => setPhotosOpen(!photosOpen)} style={{ ...chip(false), borderStyle: "dashed" }}>{photosOpen ? "Done picking ▴" : "Pick photos ▾"}</button>}
               {(job?.files ?? []).filter((f) => f.kind === "plan").map((f) => (
                 <button key={f.id} onClick={() => setPlans({ ...plans, [f.id]: !plans[f.id] })} style={{ ...chip(!!plans[f.id]), maxWidth: 240, ...clip }}>{plans[f.id] ? "✓ " : ""}{f.name}</button>
               ))}
             </div>
+            {photosOpen && pk.photos && photosN > 0 && (
+              <div style={{ marginTop: 8 }}>
+                <div style={{ fontSize: F.xs, color: T.ink3, marginBottom: 4 }}>Tap a photo to leave it out of this bid request. It stays on the job.</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {photoFiles.map((f) => {
+                    const on = photoPick[f.id] !== false;
+                    return <button key={f.id} onClick={() => setPhotoPick({ ...photoPick, [f.id]: !on })} style={{ ...chip(on), maxWidth: 260, ...clip, textDecoration: on ? undefined : "line-through" }} title={f.name}>{on ? "✓ " : ""}{f.name}</button>;
+                  })}
+                </div>
+              </div>
+            )}
             {job && !job.files.length && <div style={{ fontSize: F.xs, color: T.ink3, marginTop: 6 }}>No photos, plans or aerial on this job yet.</div>}
           </section>
 

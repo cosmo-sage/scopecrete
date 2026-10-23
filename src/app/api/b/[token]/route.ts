@@ -43,8 +43,20 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ token: stri
   const paths = [...files.map((f) => f.path), ...maps.map(([, p]) => p)];
   const { data: signed } = paths.length ? await supabase.storage.from(FILES_BUCKET).createSignedUrls(paths, 3600) : { data: [] };
   const url = new Map((signed ?? []).filter((x) => x.signedUrl && x.path).map((x) => [x.path as string, x.signedUrl as string]));
+  // Opened by someone in the org (Coy, 2026-10-23: "I want to see it on the document itself from my
+  // login"): how often the vendor has opened it, read under the session's RLS (members read their
+  // org's recipients); never shown to the vendor.
+  let opens: { name: string | null; view_count: number; opened_at: string | null; last_viewed_at: string | null; answered_at: string | null; revoked_at: string | null } | null = null;
+  if (r.own) {
+    const { data: o } = await supabase.from("bid_request_recipients")
+      .select("view_count, opened_at, last_viewed_at, answered_at, revoked_at, vendor:contacts(name)").eq("token", token).maybeSingle();
+    if (o) {
+      const v = o as unknown as { view_count: number; opened_at: string | null; last_viewed_at: string | null; answered_at: string | null; revoked_at: string | null; vendor: { name: string | null } | null };
+      opens = { name: v.vendor?.name ?? null, view_count: v.view_count ?? 0, opened_at: v.opened_at, last_viewed_at: v.last_viewed_at, answered_at: v.answered_at, revoked_at: v.revoked_at };
+    }
+  }
   return json({
-    gone: false, own: !!r.own, org_name: r.org_name, job_title: r.job_title ?? null, first_name: r.first_name ?? null,
+    gone: false, own: !!r.own, opens, org_name: r.org_name, job_title: r.job_title ?? null, first_name: r.first_name ?? null,
     price_mode: r.price_mode, price_by: r.packet?.dates === false ? null : r.price_by ?? null, pour_date: r.packet?.dates === false ? null : r.pour_date ?? null,
     scopes: r.scopes ?? [], note: r.note ?? null, address: r.packet?.address ?? null, requirements: cleanRequirements(r.packet?.requirements),
     // An older request carried the sections' Notes as "access"; those are Coy's own and no longer shown.

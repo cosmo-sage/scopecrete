@@ -8,10 +8,10 @@
  * (src/components/v34/incoming-alerts.tsx). Tested in tests/alerts.test.mjs.
  */
 
-export type AlertKind = "text" | "call" | "email";
+export type AlertKind = "text" | "call" | "email" | "bid";
 
 export interface Alert {
-  /** "m:<message id>" or "e:<email id>" — stable, so a re-read never doubles one. */
+  /** "m:<message id>", "e:<email id>" or "b:<recipient id>:<when opened>" — stable, so a re-read never doubles one. */
   id: string;
   kind: AlertKind;
   /** When it reached ScopeCrete (not when it was sent). */
@@ -115,10 +115,36 @@ export function emailAlert(e: EmailRow): Alert {
   return { id: `e:${e.id}`, kind: "email", at: e.created_at, title: `Email from ${from}`, body: clip(subject, 120) + filed, href: `/dashboard/files?email=${e.id}`, contact_id: e.contact_id };
 }
 
+/** A vendor's bid request link, opened (Coy, 2026-10-23: "a notification of when they open the
+ *  document"). Each vendor's row keeps only its last opening (migration 091), so an opening is that
+ *  row at that moment — a later one is a new alert. */
+export interface BidOpenRow {
+  id: string;
+  bid_request_id: string;
+  view_count: number;
+  last_viewed_at: string;
+  answered_at: string | null;
+  vendor: { name: string | null; phone: string | null } | null;
+  request: { job_id: string | null; job: { title: string | null } | null } | null;
+}
+
+export function bidOpenAlert(r: BidOpenRow): Alert {
+  const name = who(r.vendor?.name, r.vendor?.phone);
+  const job = (r.request?.job?.title ?? "").trim();
+  const times = r.view_count > 1 ? `opened ${r.view_count} times` : "first time opened";
+  const href = r.request?.job_id ? `/dashboard/scope/${r.request.job_id}/summary?bid=${r.bid_request_id}` : null;
+  return {
+    id: `b:${r.id}:${r.last_viewed_at}`, kind: "bid", at: r.last_viewed_at,
+    title: `${name} opened your bid request`,
+    body: clip(`${job || "A job"} · ${times}${r.answered_at ? " · already priced" : " · no price yet"}`, 140),
+    href, contact_id: null,
+  };
+}
+
 /** Newest first, one per id. */
-export function mergeAlerts(a: Alert[], b: Alert[], max = 40): Alert[] {
+export function mergeAlerts(a: Alert[], b: Alert[], max = 40, c: Alert[] = []): Alert[] {
   const seen = new Set<string>();
-  return [...a, ...b]
+  return [...a, ...b, ...c]
     .sort((x, y) => (x.at < y.at ? 1 : x.at > y.at ? -1 : 0))
     .filter((x) => (seen.has(x.id) ? false : (seen.add(x.id), true)))
     .slice(0, max);

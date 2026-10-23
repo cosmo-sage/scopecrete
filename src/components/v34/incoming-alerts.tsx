@@ -7,7 +7,8 @@
  * channel to show it's active.")
  *
  *  - AlertsBell: a bell in the header with the count not yet seen; it opens
- *    the last three days of texts, calls and emails, newest first.
+ *    the last three days of texts, calls, emails and vendors opening a bid
+ *    request, newest first.
  *  - AlertPopups: a card for each one that arrives while the app is open
  *    (gone after 8 s, a tap opens it), and a card that stays while a call is
  *    live — Ringing, then On a call with its length.
@@ -16,13 +17,13 @@
  */
 import React, { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { Bell, ChatText, Envelope, Phone, PhoneIncoming, X } from "@phosphor-icons/react";
+import { Bell, ChatText, Envelope, FileText, Phone, PhoneIncoming, X } from "@phosphor-icons/react";
 import { T, F, disp, eyebrow, nums, relTime } from "@/lib/v34/tokens";
 import { liveLabel, type Alert, type LiveCall } from "@/lib/alerts";
 import { useAlerts, markAlertsSeen, dropFresh, dropAllFresh } from "@/lib/v34/alerts-live";
 
 const ICON: Record<Alert["kind"], React.ComponentType<{ size?: number; color?: string; weight?: "fill" | "regular" }>> = {
-  text: ChatText, call: Phone, email: Envelope,
+  text: ChatText, call: Phone, email: Envelope, bid: FileText,
 };
 
 /** Ticks once a second while something live is on screen. */
@@ -106,7 +107,7 @@ export function AlertsBell({ glassBtn }: { glassBtn: React.CSSProperties }) {
           <div className="flex items-center gap-2 px-3" style={{ height: 40, borderBottom: `1px solid ${T.hair}` }}>
             <span style={{ ...eyebrow, color: T.ink, fontSize: 11 }}>Incoming</span>
             <span className="flex-1" />
-            <span style={{ fontSize: 11, color: T.ink3 }}>Texts, calls and emails · last 3 days</span>
+            <span style={{ fontSize: 11, color: T.ink3 }}>Texts, calls, emails and bid opens · last 3 days</span>
           </div>
           {live.map((c) => (
             <button key={c.id} onClick={() => go(c.href)} className="w-full text-left flex items-start gap-2.5 px-3 py-2.5"

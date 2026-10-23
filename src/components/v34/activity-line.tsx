@@ -251,17 +251,18 @@ export function ActivityLine({ onWorking, onReader, inline }: {
 
 /** What kind of line a ticker item is — each its own colour (Coy, 2026-10-21: "different colors for
  *  different kinds of thoughts: dreams, activities"). */
-export type TickKind = "dream" | "thought" | "reading" | "mail" | "proposal" | "reminder" | "warn" | "plans";
+export type TickKind = "dream" | "thought" | "reading" | "mail" | "proposal" | "opened" | "reminder" | "warn" | "plans";
 export function tickKind(it: { id: string; kind: string; tone?: string }): TickKind {
   if (it.tone === "warn") return "warn";
   if (it.kind === "musing") return it.id.startsWith("dream-") ? "dream" : "thought";
+  if (it.id.startsWith("bidopen-")) return "opened";
   if (it.kind === "email" || it.kind === "bid") return "mail";
   if (it.kind === "proposal") return "proposal";
   if (it.kind === "reminder") return "reminder";
   return "reading";
 }
 export const TICK_LABEL: Record<TickKind, string> = {
-  dream: "Dream", thought: "Thought", reading: "Reading", mail: "Mail", proposal: "Proposal", reminder: "Due", warn: "Needs you", plans: "Plans",
+  dream: "Dream", thought: "Thought", reading: "Reading", mail: "Mail", proposal: "Proposal", opened: "Opened", reminder: "Due", warn: "Needs you", plans: "Plans",
 };
 /** The banner's pace, pixels a second — slow, to read as it goes by. */
 const TICK_PX_S = 45;

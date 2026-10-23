@@ -20,6 +20,8 @@ interface Bid {
   files?: Array<{ id: string; name: string; kind: string; url: string; section?: string | null }>; maps?: Record<string, string>; rates?: Record<string, number>;
   answer?: { at: string; total: number | null; lines: Array<{ key: string; price: number }> | null; note: string | null } | null;
   edited_at?: string | null;
+  /** Only for someone in the org: how often this vendor has opened their link. */
+  opens?: { name: string | null; view_count: number; opened_at: string | null; last_viewed_at: string | null; answered_at: string | null; revoked_at: string | null } | null;
 }
 
 const C = { ink: "#2A2A2A", ink2: "#5B5650", ink3: "#8C857C", paper: "#FBF6EC", card: "#FFFFFF", hair: "#E4DCCB", accent: "#B85A3C", green: "#2F8A5B", red: "#B5412C" };
@@ -99,6 +101,7 @@ export function SharedBid({ token }: { token: string }) {
     <div style={{ minHeight: "100vh", background: C.paper, color: C.ink, fontFamily: "'IBM Plex Sans', system-ui, sans-serif" }}>
       <div style={{ maxWidth: 720, margin: "0 auto", padding: "20px 16px 60px", display: "flex", flexDirection: "column", gap: 14 }}>
         {b.own && <div style={{ ...card, background: "#FFF6D6", fontSize: 13 }}>This is what the vendor sees. Opening it yourself isn&apos;t counted, and you can&apos;t answer it.</div>}
+        {b.own && b.opens && <OpenedBanner o={b.opens} card={card} />}
         {b.edited_at && (
           <div style={{ ...card, background: "#FFF6D6", fontSize: 14, lineHeight: 1.45 }}>
             <b>Updated {new Date(b.edited_at).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/Chicago" })}.</b>{" "}
@@ -182,6 +185,39 @@ export function SharedBid({ token }: { token: string }) {
           </span>
           <span style={{ fontSize: 13, color: C.accent, textDecoration: "underline" }}>Click here to find out more</span>
         </a>
+      </div>
+    </div>
+  );
+}
+
+const at = (iso: string) => new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/Chicago" });
+function ago(iso: string): string {
+  const m = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 60_000));
+  if (m < 1) return "just now";
+  if (m < 60) return `${m} min ago`;
+  const h = Math.round(m / 60);
+  if (h < 24) return `${h} hr ago`;
+  const d = Math.round(h / 24);
+  return `${d} day${d === 1 ? "" : "s"} ago`;
+}
+
+/** Seen only from the contractor's login (Coy, 2026-10-23): whether the vendor has opened this, how
+ *  often and when — the counts sc_shared_bid keeps on their row. */
+function OpenedBanner({ o, card }: { o: NonNullable<Bid["opens"]>; card: React.CSSProperties }) {
+  const who = o.name?.trim() || "The vendor";
+  const opened = o.view_count > 0 && o.opened_at;
+  return (
+    <div style={{ ...card, background: opened ? "#E6F4EC" : "#F3EFE6", borderColor: opened ? "#B9DEC8" : C.hair, fontSize: 14, lineHeight: 1.5 }}>
+      {opened ? (
+        <>
+          <b style={{ color: C.green }}>👁 {who} opened this {o.view_count} time{o.view_count === 1 ? "" : "s"}</b>
+          <div style={{ fontSize: 13, color: C.ink2 }}>
+            Last opened {ago(o.last_viewed_at ?? o.opened_at!)} ({at(o.last_viewed_at ?? o.opened_at!)}) · first {at(o.opened_at!)}
+          </div>
+        </>
+      ) : <b style={{ color: C.ink2 }}>{who} hasn&apos;t opened this yet.</b>}
+      <div style={{ fontSize: 13, color: o.answered_at ? C.green : C.ink3 }}>
+        {o.revoked_at ? "Their link is off." : o.answered_at ? `Priced ${at(o.answered_at)}.` : "No price yet."} Only you see this.
       </div>
     </div>
   );

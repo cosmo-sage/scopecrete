@@ -186,7 +186,7 @@ export async function GET(req: NextRequest) {
   }
   // Everything below reads independently — one round trip's wait, not six
   // (2026-10-05: they ran one after another, every 20 s, on every open tab).
-  const [{ data: fileRows }, { data: mailRows }, { data: bidRows }, { data: openRows }, { data: archRows }, tagged] = await Promise.all([
+  const [{ data: fileRows }, { data: mailRows }, { data: bidRows }, { data: openRows }, { data: archRows }, tagged, { data: bidOpenRows }] = await Promise.all([
     supabase.from("files")
       .select("id, name, contact_id, read_state, read_at, summary, read_error")
       .eq("org_id", orgId).is("deleted_at", null).in("read_state", ["reading", "read", "failed"])
@@ -204,6 +204,11 @@ export async function GET(req: NextRequest) {
     supabase.from("contacts").select("id, name, phone, archived_at, archived_reason")
       .eq("org_id", orgId).not("archived_at", "is", null).is("merged_into_contact_id", null).limit(300),
     tagItems(supabase, orgId, userId, false),
+    // A vendor opening their bid request link (091) in the last two days — its last opening.
+    supabase.from("bid_request_recipients")
+      .select("id, bid_request_id, view_count, last_viewed_at, vendor:contacts(name), request:bid_requests(job_id, job:jobs(title))")
+      .eq("org_id", orgId).gte("last_viewed_at", new Date(Date.now() - 48 * 3600_000).toISOString())
+      .order("last_viewed_at", { ascending: false }).limit(8),
   ]);
   // Files Dusty read (migration 045/046): each read is a line; one being read
   // is "running", so the emblem spins for it too.
@@ -259,6 +264,13 @@ export async function GET(req: NextRequest) {
     }
     items.push({ id: `opened-${e.id}`, at: e.occurred_at, kind: "proposal", contact_id: null, href: job ? `/dashboard/scope/${job}/proposal` : undefined,
       summary: `Proposal opened: ${title}`, detail: "The customer opened the link you sent.", tone: "good" });
+  }
+  for (const r of (bidOpenRows ?? []) as unknown as Array<{ id: string; bid_request_id: string; view_count: number; last_viewed_at: string; vendor: { name: string | null } | null; request: { job_id: string | null; job: { title: string | null } | null } | null }>) {
+    const job = r.request?.job_id ?? null;
+    items.push({ id: `bidopen-${r.id}-${r.last_viewed_at}`, at: r.last_viewed_at, kind: "bid", contact_id: null,
+      href: job ? `/dashboard/scope/${job}/summary?bid=${r.bid_request_id}` : undefined,
+      summary: `Bid request opened: ${clipq(r.vendor?.name ?? "a vendor", 60)} · ${clipq(r.request?.job?.title ?? "a job", 120)}`,
+      detail: `Opened ${r.view_count} time${r.view_count === 1 ? "" : "s"}.`, tone: "good" });
   }
   // Back after being archived (Coy, 2026-10-04): someone archived who called or texted since, this week,
   // with the reason Coy gave — the context comes back with them.

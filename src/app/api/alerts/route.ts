@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession } from "@/lib/api-auth";
 import {
-  emailAlert, isFiledSpam, messageAlert, mergeAlerts, who, LIVE_MAX_MS,
-  type Alert, type ContactRow, type EmailRow, type LiveCall, type MessageRow,
+  bidOpenAlert, emailAlert, isFiledSpam, messageAlert, mergeAlerts, who, LIVE_MAX_MS,
+  type Alert, type BidOpenRow, type ContactRow, type EmailRow, type LiveCall, type MessageRow,
 } from "@/lib/alerts";
 
 /**
  * Incoming alerts (Coy, 2026-10-06) — what came in since `since`: texts and
- * calls from people (spam left out), forwarded emails, and any call happening
- * now (live_calls, migration 086). The bell and the pop-ups read this
+ * calls from people (spam left out), forwarded emails, a vendor opening a bid
+ * request's link (2026-10-23), and any call happening now (live_calls, migration 086). The bell and the pop-ups read this
  * (src/components/v34/incoming-alerts.tsx).
  *
  * Small on purpose: at most 30 messages and 15 emails newer than `since`
@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
   const since = new Date(Number.isFinite(asked) ? Math.max(asked, now - MAX_BACK_MS) : now - 24 * 60 * 60 * 1000).toISOString();
   const liveFrom = new Date(now - LIVE_MAX_MS).toISOString();
 
-  const [msgs, mails, live, lines] = await Promise.all([
+  const [msgs, mails, live, lines, bidOpens] = await Promise.all([
     supabase.from("messages").select("id, contact_id, channel, body_text, summary, created_at")
       .eq("org_id", orgId).eq("direction", "inbound").gt("created_at", since)
       .order("created_at", { ascending: false }).limit(30),
@@ -41,6 +41,10 @@ export async function GET(req: NextRequest) {
       .eq("org_id", orgId).is("ended_at", null).gt("started_at", liveFrom)
       .order("started_at", { ascending: false }).limit(5),
     supabase.from("org_phone_numbers").select("id, label").eq("org_id", orgId),
+    // A vendor opening their bid link (091): the opening counts only when the reader isn't in the org.
+    supabase.from("bid_request_recipients")
+      .select("id, bid_request_id, view_count, last_viewed_at, answered_at, vendor:contacts(name, phone), request:bid_requests(job_id, job:jobs(title))")
+      .eq("org_id", orgId).gt("last_viewed_at", since).order("last_viewed_at", { ascending: false }).limit(15),
   ]);
   if (msgs.error) return applyCookies(NextResponse.json({ error: msgs.error.message }, { status: 500 }));
 
@@ -68,6 +72,7 @@ export async function GET(req: NextRequest) {
     .map((m) => messageAlert({ ...m, media: mediaCount.get(m.id) ?? 0 }, m.contact_id ? byId.get(m.contact_id) : undefined))
     .filter((a): a is Alert => !!a);
   const fromMail = mails.error ? [] : ((mails.data ?? []) as EmailRow[]).map(emailAlert);
+  const fromBids = bidOpens.error ? [] : ((bidOpens.data ?? []) as unknown as BidOpenRow[]).map(bidOpenAlert);
   const lineName = new Map(((lines.data ?? []) as Array<{ id: string; label: string | null }>).map((l) => [l.id, l.label]));
 
   const liveCalls: LiveCall[] = liveRows.map((c): LiveCall => {
@@ -83,7 +88,7 @@ export async function GET(req: NextRequest) {
   }).filter((c) => !(c.contact_id && isFiledSpam(byId.get(c.contact_id))));
 
   return applyCookies(NextResponse.json({
-    items: mergeAlerts(fromMsgs, fromMail),
+    items: mergeAlerts(fromMsgs, fromMail, 40, fromBids),
     live: liveCalls,
     live_ready: !live.error,
     now: new Date(now).toISOString(),

@@ -32,6 +32,9 @@ import { publicOrigin } from "@/lib/hosts";
 export const dynamic = "force-dynamic";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const REC_COLS = "id, bid_request_id, contact_id, channel, token, sent_at, sent_via, opened_at, view_count, last_viewed_at, answered_at, answer_count, price_total, price_lines, answer_note, revoked_at, created_at";
+// Coy's won / lost mark (migration 126); read without it until 126 is applied.
+const OUTCOME_COLS = ", outcome, outcome_at";
+const noOutcome = (e: { message?: string } | null) => !!e && /outcome/.test(e.message ?? "");
 
 export async function GET(req: NextRequest) {
   const result = await getApiSession(req);
@@ -45,10 +48,12 @@ export async function GET(req: NextRequest) {
   let reqIds: string[] | null = null;
   let recs: Array<Record<string, unknown>> = [];
   if (vendor) {
-    const { data, error } = await supabase.from("bid_request_recipients").select(REC_COLS).eq("org_id", orgId).eq("contact_id", vendor).order("created_at", { ascending: false }).limit(100);
+    const byVendor = (cols: string) => supabase.from("bid_request_recipients").select(cols).eq("org_id", orgId).eq("contact_id", vendor).order("created_at", { ascending: false }).limit(100);
+    let { data, error } = await byVendor(REC_COLS + OUTCOME_COLS);
+    if (noOutcome(error)) ({ data, error } = await byVendor(REC_COLS));
     if (missing091(error)) return json({ requests: [], missing: BIDS_MISSING });
     if (error) return json({ error: error.message }, 500);
-    recs = (data ?? []) as Array<Record<string, unknown>>;
+    recs = (data ?? []) as unknown as Array<Record<string, unknown>>;
     reqIds = [...new Set(recs.map((r) => r.bid_request_id as string))];
   }
   let q = supabase.from("bid_requests").select("id, job_id, price_mode, price_by, pour_date, scopes, packet, note, created_at, job:jobs(title, address)").eq("org_id", orgId);
@@ -59,8 +64,10 @@ export async function GET(req: NextRequest) {
   if (error) return json({ error: error.message }, 500);
   const ids = ((rows ?? []) as Array<{ id: string }>).map((r) => r.id);
   if (!vendor && ids.length) {
-    const { data } = await supabase.from("bid_request_recipients").select(REC_COLS).eq("org_id", orgId).in("bid_request_id", ids);
-    recs = (data ?? []) as Array<Record<string, unknown>>;
+    const byReq = (cols: string) => supabase.from("bid_request_recipients").select(cols).eq("org_id", orgId).in("bid_request_id", ids);
+    const first = await byReq(REC_COLS + OUTCOME_COLS);
+    const { data } = noOutcome(first.error) ? await byReq(REC_COLS) : first;
+    recs = (data ?? []) as unknown as Array<Record<string, unknown>>;
   }
   const cids = [...new Set(recs.map((r) => r.contact_id as string))];
   const { data: people } = cids.length ? await supabase.from("contacts").select("id, name, company_name, phone").eq("org_id", orgId).in("id", cids) : { data: [] };

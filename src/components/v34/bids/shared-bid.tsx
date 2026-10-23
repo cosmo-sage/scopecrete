@@ -102,6 +102,10 @@ export function SharedBid({ token }: { token: string }) {
       <div style={{ maxWidth: 720, margin: "0 auto", padding: "20px 16px 60px", display: "flex", flexDirection: "column", gap: 14 }}>
         {b.own && <div style={{ ...card, background: "#FFF6D6", fontSize: 13 }}>This is what the vendor sees. Opening it yourself isn&apos;t counted, and you can&apos;t answer it.</div>}
         {b.own && b.opens && <OpenedBanner o={b.opens} card={card} />}
+        {/* Their other requests, won and not won (migration 126). */}
+        <a href={`/b/${encodeURIComponent(token)}/all`} style={{ alignSelf: "flex-end", fontSize: 14, color: C.accent, textDecoration: "none", fontWeight: 600 }}>
+          All your bid requests{b.org_name ? ` from ${b.org_name}` : ""} ›
+        </a>
         {b.edited_at && (
           <div style={{ ...card, background: "#FFF6D6", fontSize: 14, lineHeight: 1.45 }}>
             <b>Updated {new Date(b.edited_at).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/Chicago" })}.</b>{" "}

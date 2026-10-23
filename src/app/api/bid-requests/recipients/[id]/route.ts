@@ -68,20 +68,24 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   const { id } = await ctx.params;
   const result = await getApiSession(req);
   if (!result.ok) return result.response;
-  const { supabase, orgId, applyCookies } = result.session;
+  const { supabase, orgId, userId, applyCookies } = result.session;
   const fail = (error: string, status = 400) => applyCookies(NextResponse.json({ error }, { status }));
   if (!UUID.test(id)) return fail("No such link.", 404);
-  const b = (await req.json().catch(() => ({}))) as { sent?: unknown; revoke?: unknown };
+  const b = (await req.json().catch(() => ({}))) as { sent?: unknown; revoke?: unknown; outcome?: unknown };
   const { data: row, error } = await supabase.from("bid_request_recipients").select("id, sent_at, sent_via").eq("org_id", orgId).eq("id", id).maybeSingle();
   if (missing091(error)) return fail(BIDS_MISSING, 503);
   if (!row) return fail("No such link.", 404);
   let patch: Record<string, unknown>;
   if (b.revoke === true) patch = { revoked_at: new Date().toISOString() };
+  // Coy's won / lost mark (migration 126), shown on the vendor's portal; null clears it.
+  else if (b.outcome === "awarded" || b.outcome === "not_chosen" || b.outcome === null) {
+    patch = { outcome: b.outcome, outcome_at: b.outcome ? new Date().toISOString() : null, outcome_by: b.outcome ? userId : null };
+  }
   else if (b.sent === "text" || b.sent === "email") {
     const via = [...new Set([...((row.sent_via as string[] | null) ?? []), b.sent])];
     patch = { sent_at: (row.sent_at as string | null) ?? new Date().toISOString(), sent_via: via };
   } else return fail("Say sent or revoke.");
   const { error: uErr } = await supabase.from("bid_request_recipients").update(patch).eq("org_id", orgId).eq("id", id);
-  if (uErr) return fail(uErr.message, 500);
+  if (uErr) return /outcome/.test(uErr.message ?? "") ? fail("Won / not chosen waits for migration 126.", 503) : fail(uErr.message, 500);
   return applyCookies(NextResponse.json({ ok: true, ...patch }));
 }

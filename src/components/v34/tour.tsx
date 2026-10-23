@@ -5,9 +5,10 @@
  * and ringed, and a bubble beside it: what it is, Back · Next, Skip. The steps and where the
  * bubble sits are src/lib/v34/tour.ts.
  *
- * Starts by itself the first time someone opens the dashboard (the shell tour) and the first time
- * they open a job (the job tour), once the account's settings are read so a tour already seen on
- * another device never flashes up. `sc:tour` (detail "shell" | "job") starts one again — Settings →
+ * Starts by itself the first time someone opens the dashboard (the shell tour), the first time
+ * they open a job (the job tour), and the first time after that they open Takeoffs or the Budget
+ * (their own short tours, 2026-10-23), once the account's settings are read so a tour already seen on
+ * another device never flashes up. `sc:tour` (detail a TourKind) starts one again — Settings →
  * Account → Take the tour again. A step whose part isn't on screen (an onsite estimator has no
  * rail, say) is passed over. On a phone the Work Spaces slide out for the steps about them and back
  * when the tour leaves them.
@@ -18,7 +19,9 @@ import { createPortal } from "react-dom";
 import { usePathname, useRouter } from "next/navigation";
 import { T, F, disp, body } from "@/lib/v34/tokens";
 import { usePref, usePrefsReady } from "@/lib/v34/prefs";
-import { autoTour, markSeen, placeBubble, seenTours, tourSteps, type Box, type TourKind, type TourStep } from "@/lib/v34/tour";
+import { TOUR_KINDS, autoTour, markSeen, placeBubble, seenTours, tourSteps, type Box, type TourKind, type TourStep } from "@/lib/v34/tour";
+
+const LABEL: Record<TourKind, string> = { shell: "Tour", job: "Jobs", takeoffs: "Takeoffs", budget: "Budget" };
 
 const PAD = 6;
 
@@ -75,7 +78,7 @@ export function TourHost({ desktop, spaces, name, enabled }: { desktop: boolean;
   useEffect(() => {
     const on = (e: Event) => {
       const d = (e as CustomEvent<TourKind | undefined>).detail;
-      const k: TourKind = d === "job" ? "job" : "shell";
+      const k: TourKind = d && TOUR_KINDS.includes(d) ? d : "shell";
       if (k === "shell") setSeen([]);
       autoKey.current = k;
       void start(k);
@@ -172,7 +175,7 @@ export function TourHost({ desktop, spaces, name, enabled }: { desktop: boolean;
       <div ref={bubbleRef} style={{ position: "fixed", top: at.top, left: at.left, width, background: T.card, color: T.ink, borderRadius: 12,
         boxShadow: "0 18px 50px rgba(0,0,0,.35)", padding: "14px 16px 12px", transition: "top .25s, left .25s", border: `1px solid ${T.hair}` }}>
         <div style={{ fontFamily: disp, fontSize: 11, letterSpacing: ".1em", textTransform: "uppercase", color: T.ink3 }}>
-          {kind === "job" ? "Jobs" : "Tour"} · {i + 1} of {steps.length}
+          {LABEL[kind]} · {i + 1} of {steps.length}
         </div>
         <div style={{ fontFamily: "var(--sc-font-strong)", fontWeight: 700, fontSize: 17, lineHeight: 1.2, marginTop: 4 }}>{step.title}</div>
         <div style={{ fontSize: F.sm, color: T.ink2, lineHeight: 1.5, marginTop: 6 }}>{step.body}</div>
@@ -204,7 +207,7 @@ export function TourAgain() {
         style={{ height: 34, padding: "0 12px", borderRadius: 8, border: `1px solid ${T.hiviz}`, background: T.card, color: T.ink, fontSize: F.sm, cursor: "pointer" }}>
         Take the tour again
       </button>
-      <span style={{ fontSize: F.xs, color: T.ink3 }}>The job tour shows again the next time you open a job.</span>
+      <span style={{ fontSize: F.xs, color: T.ink3 }}>The job, Takeoffs and Budget tours show again the next time you open them.</span>
     </div>
   );
 }

@@ -10,7 +10,8 @@
  * Settings → Account → Take the tour again clears both.
  */
 
-export type TourKind = "shell" | "job";
+export type TourKind = "shell" | "job" | "takeoffs" | "budget";
+export const TOUR_KINDS: TourKind[] = ["shell", "job", "takeoffs", "budget"];
 export type TourLayout = "desktop" | "phone";
 
 export interface TourStep {
@@ -40,7 +41,7 @@ const first = (name?: string | null) => {
 };
 
 export function tourSteps(kind: TourKind, o: TourOpts): TourStep[] {
-  return kind === "job" ? jobSteps(o) : shellSteps(o);
+  return kind === "job" ? jobSteps(o) : kind === "takeoffs" ? takeoffSteps(o) : kind === "budget" ? budgetSteps(o) : shellSteps(o);
 }
 
 function shellSteps(o: TourOpts): TourStep[] {
@@ -166,10 +167,139 @@ function jobSteps(o: TourOpts): TourStep[] {
   ];
 }
 
+/**
+ * Takeoffs, the first time it is opened (Coy, 2026-10-23: "a tour guide of Takeoffs and budgets").
+ * Its parts are found by the labels takeoff.tsx already gives them, so the page carries no tour hooks.
+ */
+function takeoffSteps(o: TourOpts): TourStep[] {
+  const phone = o.layout === "phone";
+  return [
+    {
+      id: "tk-welcome",
+      title: "Takeoffs",
+      body: "This is where you measure the plans. Pick a sheet, set its scale, then draw areas, lines and counts. What you measure becomes the budget's sections.",
+    },
+    {
+      id: "tk-sheets",
+      targets: phone ? ['[aria-label^="Sheets, "]'] : ['.sc-param-panel [role="tablist"]', ".sc-param-panel"],
+      title: "Sheets",
+      body: phone
+        ? "Every page of the plans you added on Files, and any satellite clip from the Map. Tap one to measure on it."
+        : "Every page of the plans you added on Files, and any satellite clip from the Map. Pick one to measure on, or tick two to four to compare them side by side.",
+    },
+    {
+      id: "tk-scale",
+      targets: ['[title^="Recalibrate"]'],
+      title: "Set the scale first",
+      body: "Nothing on a sheet is counted until it has a scale. Use the scale it prints, pick a preset, or click the two ends of a dimension you know.",
+    },
+    {
+      id: "tk-tools",
+      targets: phone ? ['[aria-label="Measuring tools"]'] : ['[aria-label="Takeoff tools"]'],
+      title: "Measuring tools",
+      body: phone
+        ? "Pan and Select, then this button for every measuring tool: Area, Rectangle, Fill, Cutout, Linear, Count. Finish a line by tapping its last point again."
+        : "Area, Rectangle, Fill (click inside an outline and it is traced for you), Cutout, Linear, Count and the Ruler. Each one's key is in its tooltip. Finish a line by clicking its last point again.",
+    },
+    {
+      id: "tk-params",
+      targets: phone ? ['[aria-label^="Parameters, "]'] : [".sc-param-panel"],
+      title: "Parameters",
+      body: "Your measurements in groups (Sidewalk 4\", Curb …) with their totals. The eye hides a group on the sheet, and $ Group sends a whole group to the budget as a section that keeps following your edits.",
+    },
+    {
+      id: "tk-ai",
+      targets: ['[title^="AI Takeoff"]'],
+      title: "AI Takeoff",
+      body: "Dusty finds the thickness zones from the legend, or the control joints, and draws them for you to check. Nothing is saved until you press Keep.",
+    },
+    {
+      id: "tk-undo",
+      targets: ['[aria-label="Undo"]'],
+      title: "Back and Forward",
+      body: phone ? "Undo or redo your last changes on the plans." : "Undo or redo your last changes on the plans (Ctrl + Z, Ctrl + Shift + Z).",
+    },
+    {
+      id: "tk-ask",
+      targets: ['[title^="Ask someone about a spot"]'],
+      title: "Ask about a spot",
+      body: "Pin a question on the sheet. It goes to that person's thread with a link that opens the sheet right at the spot.",
+    },
+    {
+      id: "tk-done",
+      title: "That's Takeoffs",
+      body: "Measure, send it to the budget, then price each section there. Settings → Account → Take the tour again shows these again.",
+    },
+  ];
+}
+
+/** The Budget (the job page itself), the first time it is opened. Found by the page's own labels. */
+function budgetSteps(o: TourOpts): TourStep[] {
+  const phone = o.layout === "phone";
+  const items = "Ask Dusty to add this section's items";
+  return [
+    {
+      id: "bd-welcome",
+      title: "The budget",
+      body: "Each section is one piece of the work, a driveway or a curb run, with its size and its cost items. The price comes only from those items.",
+    },
+    {
+      id: "bd-section",
+      targets: ["[data-sec-id]"],
+      title: "A section",
+      body: phone
+        ? "Tap it to open. Its size comes from Takeoffs, or type it in. Hold the grip and drag to reorder."
+        : "Click it to open. Its size comes from Takeoffs, or type it in. Drag the grip to reorder.",
+    },
+    {
+      id: "bd-measured",
+      targets: ['[aria-label="Measured by"]'],
+      title: "How it's measured",
+      body: "Length × width, area, linear feet or a count. A cost item in the same unit takes its quantity from here.",
+    },
+    {
+      id: "bd-sow",
+      targets: ['[aria-label="Ask Dusty to write the scope of work"]'],
+      title: "Scope of work",
+      body: "The steps from start to finish, as bullets. The emblem has Dusty write them, and they show on the proposal too.",
+    },
+    {
+      id: "bd-items",
+      targets: [`div:has(> [aria-label="${items}"])`, `[aria-label="${items}"]`],
+      title: "Cost items",
+      body: "+ Add item opens your Price book. The emblem asks Dusty to fill the section from its size, the plans and the specs, and nothing goes on until you press Apply.",
+    },
+    {
+      id: "bd-totals",
+      targets: ['section[aria-label="Budget"]'],
+      title: "Job totals",
+      body: "Whole-job costs (mobilization, a pump day), sales tax, and the cost analysis: labor, materials, equipment, overhead and profit, per SF and per day.",
+    },
+    {
+      id: "bd-price",
+      targets: ['aside:has([aria-label="Profit margin on this job"])'],
+      title: "The price",
+      body: "Cost, overhead and profit, the margin slider, and where your price sits in the going-rate range near the job.",
+    },
+    {
+      id: "bd-tools",
+      targets: [".sc-budget-tabs", ".sc-spaces-drawer"],
+      spaces: o.spaces,
+      title: "Market rate and Actual costs",
+      body: "Market rate looks up going prices for each section. Actual costs tracks what the job really costs once it's won, against this budget.",
+    },
+    {
+      id: "bd-done",
+      title: "That's the budget",
+      body: "When it's priced, the Proposal turns it into what the customer sees and signs. Settings → Account → Take the tour again shows these again.",
+    },
+  ];
+}
+
 /** `tours_seen` as saved; anything else reads as nothing seen. */
 export function seenTours(v: unknown): TourKind[] {
   if (!Array.isArray(v)) return [];
-  return v.filter((k): k is TourKind => k === "shell" || k === "job");
+  return v.filter((k): k is TourKind => (TOUR_KINDS as unknown[]).includes(k));
 }
 
 export function markSeen(v: unknown, kind: TourKind): TourKind[] {
@@ -180,7 +310,13 @@ export function markSeen(v: unknown, kind: TourKind): TourKind[] {
 /** Which tour, if any, starts on its own on this page. */
 export function autoTour(path: string, seen: TourKind[]): TourKind | null {
   if (!seen.includes("shell")) return path.startsWith("/dashboard") ? "shell" : null;
-  if (!seen.includes("job") && /^\/dashboard\/scope\/[0-9a-f-]{36}(\/|$)/.test(path)) return "job";
+  const job = /^\/dashboard\/scope\/[0-9a-f-]{36}(\/.*)?$/.exec(path);
+  if (!job) return null;
+  // The job tour first; each page's own the first time that page is opened after it.
+  if (!seen.includes("job")) return "job";
+  const rest = job[1] ?? "";
+  if (/^\/plans\/?$/.test(rest) && !seen.includes("takeoffs")) return "takeoffs";
+  if (/^\/?$/.test(rest) && !seen.includes("budget")) return "budget";
   return null;
 }
 

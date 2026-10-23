@@ -18,6 +18,7 @@ import { usePathname } from "next/navigation";
 import { T, F, disp } from "@/lib/v34/tokens";
 import { PageHeader } from "@/components/v34/primitives";
 import { useAccess } from "@/lib/v34/access-ctx";
+import { CompanyCard } from "@/components/v34/settings/company-card";
 import { SETTINGS_HOME, settingsSections, settingsSectionOf } from "@/lib/v34/settings-sections";
 
 export function SettingsShell({ children }: { children: React.ReactNode }) {
@@ -30,6 +31,7 @@ export function SettingsShell({ children }: { children: React.ReactNode }) {
   return (
     <div style={{ color: T.ink }}>
       <PageHeader title="Settings" sub="Your account, your organization, lines, appearance, Dusty and the menus." />
+      <CompanyCard />
       <div className="flex gap-5 items-start mx-auto px-3 lg:px-4 pb-8" style={{ maxWidth: 1180 }}>
         <nav aria-label="Settings" className={`${home ? "flex" : "hidden lg:flex"} flex-col w-full lg:w-[240px] shrink-0 lg:sticky sc-set-nav`}
           style={{ top: "calc(var(--sc-head) + var(--sc-subhead, 0px) + 4px)" }}>

@@ -21,6 +21,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { T, F, eyebrow, clip } from "@/lib/v34/tokens";
 import { MapView, ZoomButtons, type View } from "@/components/v34/map/map-view";
 import { PHOTO_MAX, THUMB_MAX, TAGS, TAG_LABEL, VIDEO_MAX_SECONDS, fitWithin, type Tag } from "@/lib/capture";
+import { useAccess } from "@/lib/v34/access-ctx";
 import { addShot, dropShot, retryAll, watchShots, type Shot } from "@/lib/v34/capture-queue";
 
 type Target = { kind: "job" | "site"; id: string; label: string } | null;
@@ -54,6 +55,9 @@ const ago = (m: number) => (m < 1000 ? `${m} m` : `${(m / 1609).toFixed(1)} mi`)
 export function CameraPage() {
   const router = useRouter();
   const params = useSearchParams();
+  // An onsite estimator (2026-10-23): shots go only onto one of their jobs — no sites, no inbox,
+  // since the database lets them add files to their jobs alone.
+  const jobsOnly = useAccess().limited;
   const video = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const fallback = useRef<HTMLInputElement | null>(null);
@@ -136,6 +140,7 @@ export function CameraPage() {
 
   const keep = useCallback(async (blob: Blob, thumb: Blob | null, kind: "image" | "video", mime: string) => {
     const f = fix;
+    if (jobsOnly && target?.kind !== "job") { setMsg("Pick one of your jobs first — tap the strip at the top."); setPanel("place"); return; }
     await addShot({
       client_id: crypto.randomUUID(), kind, mime, blob, thumb, taken_at: new Date().toISOString(),
       lat: f?.lat ?? null, lng: f?.lng ?? null, accuracy: f ? Math.round(f.acc) : null,
@@ -144,7 +149,7 @@ export function CameraPage() {
       tag, note: note.trim() || null,
     });
     if (note) { setNote(""); setNoteOpen(false); }
-  }, [fix, target, section, tag, note]);
+  }, [fix, target, section, tag, note, jobsOnly]);
 
   const snap = async () => {
     const v = video.current;
@@ -212,7 +217,7 @@ export function CameraPage() {
             {target ? (target.kind === "job" ? "Job" : "Site") : "Going to"}{gps === "finding" ? " · finding you…" : gps === "off" ? " · no location" : ""}
           </div>
           <div style={{ fontSize: F.sm, fontWeight: 600, ...clip }}>
-            {target ? `${target.label}${section ? ` · ${section.name}` : ""}` : "Photo inbox — tap to pick"} ▾
+            {target ? `${target.label}${section ? ` · ${section.name}` : ""}` : jobsOnly ? "Pick one of your jobs" : "Photo inbox — tap to pick"} ▾
           </div>
         </button>
         {target?.kind === "site" && (
@@ -254,7 +259,7 @@ export function CameraPage() {
               <button onClick={() => setNoteOpen(false)} style={{ ...eyebrow, color: T.hivizText, cursor: "pointer" }}>Done</button></div>
           </div>
         )}
-        {panel === "place" && <PlacePanel nearby={nearby} target={target} sections={sections} section={section} fix={fix}
+        {panel === "place" && <PlacePanel jobsOnly={jobsOnly} nearby={nearby} target={target} sections={sections} section={section} fix={fix}
           onPick={pick} onSection={(s) => { setSection(s); setPanel(null); }} onNewSite={() => setPanel("site")} onClose={() => setPanel(null)} />}
         {panel === "site" && <NewSite fix={fix} onClose={() => setPanel("place")}
           onMade={(s) => { pick({ kind: "site", id: s.id, label: s.label }); void loadNearby(fix); }} />}
@@ -302,8 +307,8 @@ export function CameraPage() {
 }
 
 /** Where shots go: near here first, then + New site here, sites, jobs, and the inbox. */
-function PlacePanel({ nearby, target, sections, section, fix, onPick, onSection, onNewSite, onClose }: {
-  nearby: Nearby | null; target: Target; sections: Array<{ id: string; name: string }>; section: { id: string; name: string } | null; fix: Fix | null;
+function PlacePanel({ jobsOnly, nearby, target, sections, section, fix, onPick, onSection, onNewSite, onClose }: {
+  jobsOnly: boolean; nearby: Nearby | null; target: Target; sections: Array<{ id: string; name: string }>; section: { id: string; name: string } | null; fix: Fix | null;
   onPick: (t: Target) => void; onSection: (s: { id: string; name: string } | null) => void; onNewSite: () => void; onClose: () => void;
 }) {
   const [q, setQ] = useState("");
@@ -336,15 +341,15 @@ function PlacePanel({ nearby, target, sections, section, fix, onPick, onSection,
         )}
         {nearby?.near.length ? <div className="px-4 pt-3 pb-1" style={eyebrow}>Near you</div> : null}
         {nearby?.near.map((p) => row(`n${p.kind}${p.id}`, target?.id === p.id, p.label, `${p.kind === "job" ? "Job" : "Site"} · ${ago(p.dist_m)} away`, () => onPick({ kind: p.kind, id: p.id, label: p.label })))}
-        {nearby && !nearby.sites_ready ? (
+        {jobsOnly ? null : nearby && !nearby.sites_ready ? (
           <div className="px-4 py-3" style={{ fontSize: F.xs, color: T.ink3 }}>New sites switch on with migration 113.</div>
         ) : (
           <button onClick={onNewSite} className="w-full text-left px-4 py-3" style={{ borderBottom: `1px solid ${T.hairSoft}`, color: T.hivizText, fontWeight: 700, fontSize: F.sm, cursor: "pointer" }}>
             + New site here{fix ? "" : " (drop a pin)"}
           </button>
         )}
-        {row("inbox", !target, "Photo inbox", "No job yet — file them later", () => onPick(null))}
-        <div className="px-4 pt-3 pb-1"><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search jobs and sites"
+        {!jobsOnly && row("inbox", !target, "Photo inbox", "No job yet — file them later", () => onPick(null))}
+        <div className="px-4 pt-3 pb-1"><input value={q} onChange={(e) => setQ(e.target.value)} placeholder={jobsOnly ? "Search your jobs" : "Search jobs and sites"}
           className="w-full rounded-lg px-3 outline-none" style={{ height: 38, fontSize: 16, border: `1px solid ${T.hair}`, background: T.card }} /></div>
         {sites.length > 0 && <div className="px-4 pt-3 pb-1" style={eyebrow}>Sites</div>}
         {sites.map((s) => row(`s${s.id}`, target?.id === s.id, s.label, s.address, () => onPick({ kind: "site", id: s.id, label: s.label })))}

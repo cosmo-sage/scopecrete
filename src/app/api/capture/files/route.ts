@@ -54,8 +54,15 @@ export async function POST(req: NextRequest) {
   if (typeof b === "string") return bad(b);
 
   const uploads = async (row: Record<string, unknown>) => {
-    const main = await supabase.storage.from(FILES_BUCKET).createSignedUploadUrl(row.storage_path as string, { upsert: true });
-    const thumb = row.thumb_path ? await supabase.storage.from(FILES_BUCKET).createSignedUploadUrl(row.thumb_path as string, { upsert: true }) : null;
+    // An onsite estimator has insert on their jobs' files but no update, which an upsert also
+    // needs — and the thumbnail has no files row of its own, so it may be refused them. Fall back
+    // to a plain upload, then to no thumbnail.
+    const sign = async (path: string) => {
+      const up = await supabase.storage.from(FILES_BUCKET).createSignedUploadUrl(path, { upsert: true });
+      return up.error ? supabase.storage.from(FILES_BUCKET).createSignedUploadUrl(path) : up;
+    };
+    const main = await sign(row.storage_path as string);
+    const thumb = row.thumb_path ? await sign(row.thumb_path as string) : null;
     if (main.error || !main.data) return null;
     return {
       upload: { path: main.data.path, token: main.data.token, signed_url: main.data.signedUrl },

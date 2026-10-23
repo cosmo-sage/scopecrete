@@ -19,7 +19,7 @@ export const FIELD_PAGES = [
   { k: "customers", group: "page", label: "Customers", note: "Every customer and its people — names, numbers, address. Read only; not their texts or calls" },
   { k: "contacts", group: "page", label: "Contacts", note: "The contacts book — everyone's numbers and emails. Read only" },
   { k: "vendors", group: "page", label: "Vendors", note: "Every vendor and their prices on file. Read only" },
-  { k: "files", group: "job", label: "Photos & files", note: "See and add photos, plans and files on their jobs" },
+  { k: "files", group: "job", label: "Photos & files", note: "See and add photos, plans and files on their jobs, and the Camera for site photos" },
   { k: "plan_room", group: "job", label: "Takeoffs", note: "Plan sheets, scales and takeoff measurements" },
   { k: "budget", group: "job", label: "Budget", note: "The job's budget, with costs and margins, and the Price book to pick from" },
   { k: "dusty", group: "dusty", label: "Dusty", note: "Chat with Dusty. He sees only what these pages let them see" },
@@ -75,7 +75,8 @@ export function menuPages(a: Access): string[] | null {
     ...(jobsOn(a.pages) ? ["scope"] : []), ...(has("customers") ? ["customers"] : []),
     ...(has("dusty") ? ["dusty"] : []),
     ...(has("contacts") ? ["contacts"] : []), ...(has("vendors") ? ["vendors"] : []),
-    ...(has("files") ? ["files"] : []), "roadmap",
+    // The site Camera (Coy, 2026-10-23: Jeremy taking photos on Sacco's jobs) — onto their jobs only.
+    ...(has("files") ? ["files", "camera"] : []), "roadmap",
   ];
 }
 
@@ -99,7 +100,7 @@ export function redirectFor(a: Access, path: string): string | null {
   // `field` in src/lib/v34/settings-sections.ts. Any other section goes back to Settings.
   if (p === "/dashboard/settings" || p === "/dashboard/settings/account" || p === "/dashboard/settings/appearance" || p === "/dashboard/settings/roadmap") return null;
   if (p.startsWith("/dashboard/settings/")) return "/dashboard/settings";
-  if (p === "/dashboard/files") return a.pages.includes("files") ? null : home;
+  if (p === "/dashboard/files" || p === "/dashboard/camera") return a.pages.includes("files") ? null : home;
   const job = /^\/dashboard\/scope\/([0-9a-f-]{36})(?:\/(plans|files|proposal|summary|schedule|locations))?$/.exec(p);
   if (job) {
     if (!jobsOn(a.pages)) return home;

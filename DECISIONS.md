@@ -5959,7 +5959,13 @@ expected start date per quoted job before it means anything. Add the field.
   checked. **Before 113 was applied** the page worked and the shots wait on the phone ("held", tried every five
   minutes): the routes answer `waiting` and `files`' read columns are unchanged (the capture routes read their
   own, `SHOT_COLUMNS`). Onsite estimators read no sites (RLS by `get_user_org_ids()`), and the page is not
-  theirs. Not built yet (Roadmap cards): the Photo inbox and job galleries on their own pages, markup,
+  theirs — **except the Camera: an estimator with Photos & files has it since 2026-10-23** (Coy:
+  Jeremy, Gulfline's owner and Sacco's estimator, taking photos on Sacco's jobs; no migration).
+  It is on their menu (`menuPages()`, `redirectFor()`); shots go only onto one of their jobs — no
+  + New site, no Photo inbox, a shot with no job asks for one — under 081's `files_field` and
+  storage policies; an upload link falls back from upsert to a plain one, and a refused thumbnail
+  never holds a shot back. That is how photos cross companies: one login in both, switched in
+  Settings. Not built yet (Roadmap cards): the Photo inbox and job galleries on their own pages, markup,
   before/after pairs, a customer timeline, moving storage to R2.
 - **Appointments (migration 110, applied 2026-10-13 on Coy's "apply 110" — checked after: RLS on, one member policy, the guard trigger, authenticated may select, insert and update and anon nothing, 0 rows; Coy: "I need a way for Dusty
   to keep track of my schedule for each job and customer contact lead … add that to my calendar
@@ -6279,7 +6285,10 @@ additive changes only, with confirmation.
   cookie (a slug only, for `.app.scopecrete.ai`), and sign-in on app goes
   back there instead of to the first membership; membership is still checked
   on every request. On a preview or localhost the rows open the live
-  addresses. **Any other host** (*.vercel.app,
+  addresses. **Since 2026-10-23 (Coy: "Top and center of the settings page it should show what
+  company he is on and a button to switch")** every Settings page opens with a card, "You're
+  working in <company>" and the role there, and for someone in two or more a **Switch company ▾**
+  that drops down the others (`company-card.tsx`); Account keeps the full list. **Any other host** (*.vercel.app,
   previews, localhost) works as before. The auth cookie is written for
   `.app.scopecrete.ai` on app and org hosts (`cookieDomain()`, passed to
   every Supabase client), so one sign-in covers both. Customer links

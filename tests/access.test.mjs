@@ -23,7 +23,9 @@ test("an estimator keeps only the pages they were given, unknown ones dropped", 
   assert.equal(can(a, "plan_room"), true);
   assert.equal(can(a, "budget"), false);
   assert.deepEqual(menuPages(a), ["scope", "roadmap"]);
-  assert.deepEqual(menuPages({ ...a, pages: ["files"] }), ["scope", "files", "roadmap"]);
+  assert.deepEqual(menuPages({ ...a, pages: ["files"] }), ["scope", "files", "camera", "roadmap"]);
+  assert.notEqual(redirectFor(a, "/dashboard/camera"), null);
+  assert.equal(redirectFor({ ...a, pages: ["files"] }, "/dashboard/camera"), null);
 });
 
 test("an estimator is sent to the board from anywhere else", () => {
@@ -84,7 +86,7 @@ test("120: Jobs, Customers, Contacts, Vendors and Dusty", async () => {
   const a = accessFrom({ role: "field", pages: ["customers", "vendors", "dusty", "files"], all_jobs: false, job_ids: [J1] });
   assert.equal(can(a, "jobs"), false);
   assert.equal(can(a, "dusty"), true);
-  assert.deepEqual(menuPages(a), ["customers", "dusty", "vendors", "files", "roadmap"]);
+  assert.deepEqual(menuPages(a), ["customers", "dusty", "vendors", "files", "camera", "roadmap"]);
   assert.equal(homeFor(a), "/dashboard/customers");
   assert.equal(redirectFor(a, "/dashboard/scope"), "/dashboard/customers");
   assert.equal(redirectFor(a, `/dashboard/scope/${J1}`), "/dashboard/customers");

@@ -120,7 +120,8 @@ async function sendOne(s: Shot): Promise<void> {
     const up = r.b.upload as { signed_url: string };
     const tu = r.b.thumb_upload as { signed_url: string } | null;
     if (s.blob) await sendTo(up.signed_url, s.blob, file.name);
-    if (tu && s.thumb) await sendTo(tu.signed_url, s.thumb, "thumb.jpg");
+    // The thumbnail is a nicety: one storage refuses (an estimator's) never holds the shot back.
+    if (tu && s.thumb) await sendTo(tu.signed_url, s.thumb, "thumb.jpg").catch(() => {});
     const d = await call(`/api/files/${file.id}/done`, {});
     if (!d.ok) throw new Error(String(d.b.error ?? `HTTP ${d.status}`));
   }
